@@ -1,2 +1,2 @@
-# genix
-Genix - EPR para Mypes
+# gerpv2
+GERP v2

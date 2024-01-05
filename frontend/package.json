@@ -1,0 +1,33 @@
+{
+  "name": "genix",
+  "type": "module",
+  "scripts": {
+    "dev": "vinxi dev --port 3588",
+    "build": "vinxi build",
+    "start": "vinxi start --port 3588"
+  },
+  "dependencies": {
+    "@solidjs/meta": "^0.29.3",
+    "@solidjs/router": "^0.10.5",
+    "@solidjs/start": "^0.4.2",
+    "@tanstack/solid-virtual": "^3.0.0-beta.6",
+    "@tanstack/virtual-core": "^3.0.0-alpha.1",
+    "@types/d3": "^7.4.3",
+    "axios": "^1.6.3",
+    "billboard.js": "^3.10.3",
+    "d3": "^7.8.5",
+    "dexie": "^3.2.4",
+    "notiflix": "^3.2.6",
+    "simple-statistics": "^7.8.3",
+    "solid-js": "^1.8.7",
+    "vinxi": "0.0.62",
+    "vite-plugin-html": "^3.2.0",
+    "vite-plugin-ssr": "^0.4.142"
+  },
+  "overrides": {
+    "vinxi": "0.0.62"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
