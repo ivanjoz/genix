@@ -1,0 +1,13 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "hf-operaciones-food-safety-athena-etl"
+s3_bucket = "developer-librarys"
+s3_prefix = "hf_operaciones_food_safety_athena_etl"
+region = "us-west-2"
+profile = "hortifrut_prod"
+confirm_changeset = true
+#capabilities = "CAPABILITY_IAM"
+parameter_overrides = "VaultToken=\"\""
+image_repositories = []

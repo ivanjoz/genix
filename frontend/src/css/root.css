@@ -1,0 +1,231 @@
+@font-face { 
+  font-family: 'main'; src: url("/libs/nunito-v12-latin-regular.woff") 
+}
+@font-face { 
+  font-family: 'bold'; src: url("/libs/nunito-v12-latin-600.woff") 
+}
+
+a {
+  margin-right: 1rem;
+}
+
+main {
+  text-align: center;
+  padding: 1em;
+  margin: 0 auto;
+}
+
+h1 {
+  color: #335d92;
+  text-transform: uppercase;
+  font-size: 4rem;
+  font-weight: 100;
+  line-height: 1.1;
+  margin: 4rem auto;
+  max-width: 14rem;
+}
+
+p {
+  max-width: 14rem;
+  margin: 2rem auto;
+  line-height: 1.35;
+}
+
+@media (min-width: 480px) {
+  h1 {
+    max-width: none;
+  }
+
+  p {
+    max-width: none;
+  }
+}
+
+
+/*  CSS de la tabla */
+.qtable {
+  /* display: contents; */
+  width: 100%;
+  border-spacing: 0px;
+  border-left: 2px solid white;
+  border-right: 2px solid white;
+}
+
+.qtable-c {
+  box-shadow: 0 0 20px #0000001f;
+  border-radius: 9px;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  background-color: white;
+}
+
+.qtable-c.selectable > table > tbody > tr {
+  cursor: pointer;
+}
+
+.qtable-c.selectable > table > tbody > tr:hover {
+  background-color: #efebff;
+  color: #4834a2;
+}
+
+
+.qtable > thead {
+  z-index: 51;
+  background-color: white;
+  border-bottom: 1px solid black;
+}
+
+.qtable.fixed-header > thead {
+  position: sticky;
+  top: 0
+}
+
+/*  border-bottom: 1px solid #8182c6; */
+
+.qtable.fixed-header > thead th {
+  border-bottom: 1px solid #babbd6
+}
+.qtable > thead th {
+  height: 2.2rem;
+}
+.qtable .tr-even {
+  background-color: white;
+}
+.qtable .tr-odd {
+  background-color: #F7F7FE;
+}
+
+.qtable > tbody td {
+  padding: 0 6px 0 6px;
+  border-bottom: 1px solid #f4f1ff;
+}
+.qtable > tbody td:last-of-type, .qtable > tbody tr.tr-final td {
+  border-bottom-color: transparent
+}
+.cell-ed-c {
+  height: 100%;
+  border: 1px solid transparent;
+  padding-left: 6px;
+}
+.cell-ed-c:not(:focus-within):hover {
+  border: 1px solid rgb(165, 133, 255);
+}
+.cell-ed-c .cell-ed {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.cell-ed-c .cell-ed input {
+  outline: none;
+  padding-left: 5px;
+  border: 1px solid rgb(188, 164, 255);
+  outline: 1px solid rgb(149, 111, 238);
+  background-color: white;
+}
+.cell-ed-c.s2 {
+  background-color: white;
+  border-radius: 7px;
+}
+.qtable > tbody td:last-of-type {
+  border-bottom: none;
+}
+.qtable > tbody > tr.selected {
+  background-color: var(--light-3);
+  color: var(--purple-2);
+  outline: 2px solid var(--color-11);
+  border-radius: 5px;
+  position: relative;
+  z-index: 52;
+}
+.qtable > tbody > tr.tr-final > td:first-of-type {
+  border-bottom-left-radius: 7px;
+}
+.qtable > tbody > tr.tr-final > td:last-of-type {
+  border-bottom-right-radius: 7px;
+}
+.qtable td.empty-message, .empty-message {
+  background-color: var(--light-4);
+  color: #7855aa;
+  pointer-events: none;
+  height: 4rem; 
+  border-radius: 7px;
+  padding-left: 0.6rem;
+  margin: 4px 0 2px 0;
+}
+.card-ct {
+  background-color: white;
+  padding: 3px 5px;
+  box-shadow: 0px 2px 9px #0000001f;
+  border-radius: 7px;
+  line-height: 1.1;
+  border: 1px solid transparent;
+}
+.card-ct > div {
+  min-height: 1.2rem;
+}
+.card-ct.selected {
+  outline: 1px solid rgb(199, 156, 224);
+  border-color: rgb(199, 156, 224);
+}
+/* LOADING */
+.pm-loading {
+  height: calc(100% - 7px);
+  margin-bottom: 1px;
+  width: 10rem;
+  text-align: left;
+  position: relative;
+  line-height: 1;
+  display: flex;
+  z-index: 210;
+  padding: 0.6px 8px 0.6px 1.8rem;
+  color: #ffffff;
+  overflow: hidden;
+  align-items: center;
+  border-radius: 7px;
+}
+
+.pm-loading > .pm-counter {
+  height: calc(100% - 8px);
+  background-color: black;
+  color: #fff324;
+  width: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  left: 4px;
+}
+
+.pm-loading > .bg {
+  position: absolute;
+  left: -46px;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: -1;
+
+  background: repeating-linear-gradient(-55deg,
+      #000000 1px,
+      #323538 2px,
+      #393d42 11px,
+      #292827 12px,
+      #000000 20px);
+
+  animation-name: MOVE-BG;
+  animation-duration: 0.4s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+/* LOADING BAR */
+@keyframes MOVE-BG {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(46px);
+  }
+}
