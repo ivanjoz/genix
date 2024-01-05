@@ -29,6 +29,19 @@ type Almacen struct {
 	CreatedBy   int32           `db:"created_by"`
 }
 
+type ProductoStock struct {
+	TAGS             `table:"producto_stock"`
+	EmpresaID        int32   `db:"empresa_id,pk"`
+	ProductoID       int32   `db:"id,pk"`
+	AlmacenID        int32   `db:"almacen_id"`
+	LayoutID         int16   `db:"layout_id"`
+	LayoutPosicionID int16   `db:"layout_posicion_id"`
+	Stock            float32 `db:"stock"`
+	SKU              string  `db:"sku"`
+	Updated          int64   `json:"upd" db:"updated,view"`
+	UpdatedBy        int32   `db:"updated_by"`
+}
+
 type AlmacenLayout struct {
 	ID      int16
 	Name    string

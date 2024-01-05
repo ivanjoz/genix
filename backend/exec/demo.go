@@ -338,7 +338,7 @@ func Test22(args *core.ExecArgs) core.FuncResponse {
 func Test23(args *core.ExecArgs) core.FuncResponse {
 
 	for _, controller := range MakeScyllaControllers() {
-		controller.InitTable(0)
+		controller.InitTable(2)
 	}
 
 	return core.FuncResponse{}
