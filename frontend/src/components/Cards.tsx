@@ -1,4 +1,4 @@
-import { JSX, JSXElement, Show, createEffect, createSignal } from "solid-js";
+import { For, JSX, JSXElement, Show, createEffect, createSignal, on } from "solid-js";
 
 interface ILayerAutoHide {
   children: JSXElement
@@ -61,5 +61,35 @@ export const LayerSelect = (props: ILayerAutoHide) => {
         </div>
       </Show>
     </div>
+  </div>
+}
+
+interface IBarOptions {
+  options: [number,string][]
+  selectedID: number
+  class?: string
+  onSelect: (e: number) => void
+}
+
+export const BarOptions = (props: IBarOptions) => {
+
+  return <div class={"bar-1 flex p-rel" + (props.class ? " " + props.class : "")}>
+    <For each={props.options}>
+    {e => {
+      const getClass = () => {
+        let cn = "bn-e1 s1 flex-center"
+        if(props.selectedID === e[0]){ cn += " selected" }
+        return cn
+      }
+
+      return <div class={getClass()} onClick={ev =>{
+        ev.stopPropagation()
+        if(props.onSelect){ props.onSelect(e[0]) }
+      }}>
+        {e[1]}
+      </div>
+    }}
+    </For>
+    <div class="ln-1 p-abs z10"></div>
   </div>
 }

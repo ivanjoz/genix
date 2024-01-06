@@ -1,4 +1,6 @@
 import { Show, createSignal } from "solid-js";
+import { BarOptions } from "~/components/Cards";
+import { Input } from "~/components/Input";
 import { SideLayer, openLayers, setOpenLayers } from "~/components/Modals";
 import { QTable } from "~/components/QTable";
 import { throttle } from "~/core/main";
@@ -14,6 +16,7 @@ export default function Productos() {
 
   const [filterText, setFilterText] = createSignal("")
   const [productoForm, setProductoForm] = createSignal({} as IProducto)
+  const [layerView, setLayerView] = createSignal(1)
   const layerWidth = 0.48
   
   return <PageContainer title="Productos"
@@ -64,6 +67,60 @@ export default function Productos() {
         }}
       >
         <div></div>
+        <BarOptions selectedID={layerView()} class="w100"
+          options={[[1,'Información'],[2,'Descripción'],[3,'Fotos']]}
+          onSelect={id => {
+            setLayerView(id)
+          }}
+        />
+        <Show when={layerView() === 1}>
+          <div class="flex-wrap w100 mt-12">
+            <Input saveOn={productoForm()} save="Nombre" 
+              css="w-14x mb-10" label="Nombre" 
+            />
+            <Input saveOn={productoForm()} save="Descripcion" 
+              css="w-10x mb-10" label="Descripción" 
+            />
+            <Input saveOn={productoForm()} save="Precio" 
+              css="w-06x mb-10" label="Precio Base" type="number"
+            />
+            <Input saveOn={productoForm()} save="Descuento" 
+              css="w-06x mb-10" label="Descuento" type="number"
+            />
+            <Input saveOn={productoForm()} save="PreciFinal" 
+              css="w-06x mb-10" label="Precio Final" type="number"
+            />
+          </div>
+          <div class="w100 py-04 px-04">
+            <QTable data={productos().productos || []}
+              maxHeight="40rem" 
+              columns={[
+                { header: "Categoría", headerStyle: { width: '8rem' },
+                  getValue: e => e.ID
+                },
+                { header: "Opciones", cardColumn: [3,2],
+                  getValue: e => e.Nombre, cardCss: "h5 c-steel",
+                },
+                { header: <div>
+                    <button class="bn1 s2 b-green">
+                      <i class="icon-plus"></i>
+                    </button>
+                  </div>, 
+                  headerStyle: { width: '2.6rem' }, css: "t-c",
+                  cardColumn: [1,2],
+                  render: (e,i) => {
+                    const onclick = (ev: MouseEvent) => {
+                      ev.stopPropagation()
+                    }
+                    return <button class="bnr2 b-blue b-card-1" onClick={onclick}>
+                      <i class="icon-pencil"></i>
+                    </button>
+                  }
+                }
+              ]}    
+            />
+          </div>
+        </Show>
       </SideLayer>
     </Show>
   </PageContainer>

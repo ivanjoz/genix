@@ -4,14 +4,14 @@
   "name": "Genix - ERP",
   "short_name": "Genix",
   "display": "standalone",
-  "background_color": "#4a4ca0",
+  "background_color": "#ffffff",
   "lang": "es",
   "scope": "/",
   "display_override": [
     "tabbed"
   ],
   "description": "Genix, ERP para Mypes",
-  "theme_color": "#4042A3",
+  "theme_color": "#4a4ca0",
   "icons": [
     {
       "src": "images/pwa-32x32.png",
