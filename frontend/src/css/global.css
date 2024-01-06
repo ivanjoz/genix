@@ -1612,6 +1612,11 @@ th {
   padding-left: 0.6rem;
   padding-right: 0.6rem;
 }
+.bn1.s2 {
+  height: 1.9rem;
+  padding-left: 7px;
+  padding-right: 7px;
+}
 .bn1.big {
   height: 2.5rem;
   font-size: 1.1rem;
