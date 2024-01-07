@@ -6,6 +6,7 @@ export interface ICellEditable<T> {
   class?: string
   contentClass?: string
   onChange?: (newValue: (string|number)) => void
+  required?: boolean
 }
 
 export function CellEditable<T>(props: ICellEditable<T>) {
@@ -35,6 +36,9 @@ export function CellEditable<T>(props: ICellEditable<T>) {
         setIsEditing(true)
       }}>
       { currentValue() }
+      { !currentValue() && props.required &&
+        <i class="icon-attention c-red"></i>
+      }
     </div>
     { isEditing() && 
       <div class="flex ai-center cell-ed h100 w100">

@@ -43,17 +43,17 @@ type ProductoStock struct {
 }
 
 type AlmacenLayout struct {
-	ID      int16
-	Name    string
-	RowCant int8
-	ColCant int8
-	Bloques []AlmacenLayoutBloque
+	ID      int16                 `ms:"i"`
+	Name    string                `ms:"n"`
+	RowCant int8                  `ms:"r"`
+	ColCant int8                  `ms:"c"`
+	Bloques []AlmacenLayoutBloque `ms:"b"`
 }
 
 type AlmacenLayoutBloque struct {
-	Row    int8   `json:"rw"`
-	Column int8   `json:"co"`
-	Name   string `json:"nm"`
+	Row    int8   `json:"rw" ms:"r"`
+	Column int8   `json:"co" ms:"c"`
+	Name   string `json:"nm" ms:"n"`
 }
 
 type Sede struct {

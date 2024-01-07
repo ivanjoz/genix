@@ -8,10 +8,13 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/gob"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/kelindar/binary"
 )
 
 func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
@@ -176,27 +179,36 @@ func Test17(args *core.ExecArgs) core.FuncResponse {
 }
 
 type DemoStruct1 struct {
-	Hola  string  `json:"hola"`
-	Value float32 `json:"value"`
+	Hola  string  `json:"a,omitempty" ms:"h"`
+	Value float32 `json:"b,omitempty" ms:"v"`
+	Hola2 int     `json:"c,omitempty" ms:"c"`
 }
 
 type DemoStruct2 struct {
-	Demo int32 `json:"demo"`
+	Hola   string  `json:"a" ms:"h"`
+	Value  float32 `json:"b" ms:"v"`
+	Value2 float32 `json:"c" ms:"v2"`
+}
+
+type DemoStruct3 struct {
+	Nombre string `json:"nombre1" msgpack:"1,omitempty"`
+	Demo   int32  `json:"demo" msgpack:"2,omitempty"`
 }
 
 type DemoStruct struct {
 	types.TAGS `table:"demo_structs"`
-	CompanyID  int32       `json:"companyID" db:"company_id,pk"`
-	ID         int32       `json:"id" db:"id,pk"`
-	Edad       int32       `json:"edad" db:"edad,zx1,zx2"`
-	Nombre     string      `json:"nombre" db:"nombre,zx1"`
-	Palabras   []string    `json:"palabras" db:"palabras"`
-	Peso       float32     `json:"peso" db:"peso"`
-	Peso64     float64     `json:"peso64" db:"peso_64"`
-	Rangos     []int32     `json:"rangos" db:"rangos"`
-	Smallint   int16       `json:"small_int" db:"small_int,zx2"`
-	Struct1    DemoStruct1 `json:"struct_1" db:"struct_1"`
-	Struct2    DemoStruct2 `json:"struct_2" db:"struct_2"`
+	CompanyID  int32         `json:"companyID" db:"company_id,pk"`
+	ID         int32         `json:"id" db:"id,pk"`
+	Edad       int32         `json:"edad" db:"edad,zx1,zx2"`
+	Nombre     string        `json:"nombre" db:"nombre,zx1"`
+	Palabras   []string      `json:"palabras" db:"palabras"`
+	Peso       float32       `json:"peso" db:"peso"`
+	Peso64     float64       `json:"peso64" db:"peso_64"`
+	Rangos     []int32       `json:"rangos" db:"rangos"`
+	Smallint   int16         `json:"small_int" db:"small_int,zx2"`
+	Struct1    DemoStruct1   `json:"struct_1" db:"struct_1"`
+	Struct2    DemoStruct3   `json:"struct_2" db:"struct_2"`
+	Struct3    []DemoStruct1 `json:"struct_3" db:"struct_3"`
 }
 
 type DemoStruct4 struct {
@@ -216,7 +228,7 @@ func Test18(args *core.ExecArgs) core.FuncResponse {
 
 	registros := []DemoStruct{}
 	err := core.DBSelect(&registros).
-		Where("company_id").Equals(1).Where("edad").GreatThan(20).Exec()
+		Where("company_id").Equals(1).Where("id").GreatThan(2).Exec()
 
 	if err != nil {
 		panic(err)
@@ -230,7 +242,13 @@ func Test18(args *core.ExecArgs) core.FuncResponse {
 func Test19(args *core.ExecArgs) core.FuncResponse {
 
 	st1 := DemoStruct1{Hola: "hola", Value: 3.123}
-	st2 := DemoStruct2{Demo: 555}
+	st2 := DemoStruct3{Nombre: "lalademo1234", Demo: 555}
+	st3 := []DemoStruct1{
+		{Hola: "hola", Value: 3.123},
+		{Hola: "gato", Value: 123.12300109863281},
+		{Hola: "perro", Value: 222.12300109863282},
+		{Hola: "dada", Value: 222.1423},
+		{Hola: "demo", Value: 123.123}}
 
 	id, err := core.GetCounter("demo_structs_1", 1)
 	if err != nil {
@@ -249,6 +267,7 @@ func Test19(args *core.ExecArgs) core.FuncResponse {
 		Smallint:  44,
 		Struct1:   st1,
 		Struct2:   st2,
+		Struct3:   st3,
 	}
 
 	registros := []DemoStruct{demo}
@@ -261,12 +280,62 @@ func Test19(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test20(args *core.ExecArgs) core.FuncResponse {
+	/*
+		words := []string{"dasd", "dasdasdad", "12312312", "dasdasd123123", "dqw986nwqd9a"}
 
-	words := []string{"dasd", "dasdasdad", "12312312", "dasdasd123123", "dqw986nwqd9a"}
+		for _, w := range words {
+			fmt.Println(core.BasicHashInt(w))
+		}
+	*/
 
-	for _, w := range words {
-		fmt.Println(core.BasicHashInt(w))
+	demo1 := []DemoStruct1{
+		{Hola: "hola", Value: 3},
+		{Hola: "gato", Value: 123},
+		{Hola: "perro", Value: 222.12300109863281},
+		/*
+			{Hola: "perro", Value: 222},
+			{Hola: "perro", Value: 222.1423},
+			{Hola: "perro", Value: 222.1423},
+			{Hola: "perro", Value: 222.1423},
+			{Hola: "dada", Value: 222.1423},
+			{Hola: "gato", Value: 123.3},
+			{Hola: "perro", Value: 222.1423},
+			{Hola: "perro", Value: 222.1423},
+			{Hola: "perro", Value: 222.1423},
+			{Hola: "perro", Value: 222.1423},
+			{Hola: "perro", Value: 222.1423},
+			{Hola: "dada", Value: 222.1423},
+		*/
+		{Hola: "demo", Value: 123.12300109863282}}
+
+	var buffer1 bytes.Buffer
+	enc := gob.NewEncoder(&buffer1)
+
+	enc.Encode(demo1)
+	core.Log("Bytes encoding .gob:", len(buffer1.Bytes()), " | ", buffer1.String())
+
+	encoded1, _ := core.MsgPEncode(&demo1)
+	core.Log("Bytes encoding .msgpack:", len(encoded1), " | ", string(encoded1))
+
+	demo2 := []DemoStruct2{}
+	err := core.MsgPDecode(encoded1, &demo2)
+	if err != nil {
+		panic(err)
 	}
+	core.Print(demo2)
+
+	encoded, _ := binary.Marshal(&demo1)
+	core.Log("Bytes encoding .binary:", len(encoded), " | ", string(encoded))
+
+	var demo3 []DemoStruct1
+	err = binary.Unmarshal(encoded, &demo3)
+	if err != nil {
+		panic(err)
+	}
+	core.Print(demo3)
+
+	jsonBytes, _ := json.Marshal(&demo1)
+	core.Log("Bytes encoding .json:", len(string(jsonBytes)), " | ", string(jsonBytes))
 
 	return core.FuncResponse{}
 }
@@ -331,15 +400,6 @@ func Test22(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	core.Log("Agregando a Body:: ", filePath, " | Lines:", lines, " | Size:", size)
-
-	return core.FuncResponse{}
-}
-
-func Test23(args *core.ExecArgs) core.FuncResponse {
-
-	for _, controller := range MakeScyllaControllers() {
-		controller.InitTable(2)
-	}
 
 	return core.FuncResponse{}
 }

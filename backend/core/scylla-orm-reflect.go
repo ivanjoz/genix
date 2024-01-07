@@ -87,7 +87,7 @@ func MakeScyllaTable[T any](newType T) ScyllaTable {
 			}
 
 			if column.IsComplexType {
-				column.Type = "text"
+				column.Type = "blob"
 			}
 
 			for i, v := range values {
