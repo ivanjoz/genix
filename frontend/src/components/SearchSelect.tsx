@@ -109,7 +109,6 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
     if(props.clearOnSelect){
       if(props.onChange){ props.onChange(selected) }
     } else if(props.saveOn && props.save){
-      debugger
       const current = (props.saveOn[props.save as keyof T] || null) as number
       if(current !== newValue){
         props.saveOn[props.save as keyof T] = newValue

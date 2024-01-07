@@ -72,7 +72,7 @@ p {
 
 
 .qtable > thead {
-  z-index: 51;
+  z-index: 11;
   background-color: white;
   border-bottom: 1px solid black;
 }
@@ -90,10 +90,10 @@ p {
 .qtable > thead th {
   height: 2.2rem;
 }
-.qtable .tr-even {
+.qtable .tr-even, .qtable.single.color .tr-odd {
   background-color: white;
 }
-.qtable .tr-odd {
+.qtable:not(.single-color) .tr-odd {
   background-color: #F7F7FE;
 }
 
@@ -137,7 +137,7 @@ p {
   outline: 2px solid var(--color-11);
   border-radius: 5px;
   position: relative;
-  z-index: 52;
+  z-index: 12;
 }
 .qtable > tbody > tr.tr-final > td:first-of-type {
   border-bottom-left-radius: 7px;

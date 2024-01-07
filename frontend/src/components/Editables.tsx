@@ -1,4 +1,4 @@
-import { createEffect, createSignal } from "solid-js";
+import { For, createEffect, createSignal } from "solid-js";
 
 export interface ICellEditable<T> {
   saveOn: T,
@@ -62,5 +62,86 @@ export function CellEditable<T>(props: ICellEditable<T>) {
         />
       </div>
     }
+  </div>
+}
+
+interface ICellTextOptions<T> {
+  saveOn: T
+  class?: string
+  save?: string
+}
+
+export function CellTextOptions<T>(props: ICellTextOptions<T>) {
+
+  const values = ((props.saveOn[props.save as keyof T] || []) as string[]
+    ).filter(x => x)
+  values.push("")
+
+  const [currentValues, setCurrentValues] = createSignal(values)
+    
+  return <div class={"flex-wrap ai-center p-rel " +(props.class||"")}>
+    { currentValues().map((e,i) => {
+      return <CellTextOption 
+        defaultValue={e}
+        onBlur={content => {
+          let values = [...currentValues()]
+          values[i] = content
+          values = values.filter(x => x)
+          props.saveOn[props.save as keyof T] = values as never
+          values.push("")
+          console.log("nuevos valores:: ", [...values])
+          setCurrentValues(values)
+        }}/>
+      })
+    }
+  </div>
+}
+
+interface ICellTextOption {
+  defaultValue?: string
+  onBlur: ((e: string) => void)
+}
+
+export function CellTextOption(props: ICellTextOption) {
+
+  const [value, setValue] = createSignal(props.defaultValue)
+  const [show, setShow] = createSignal(false)
+
+  createEffect(() => {
+    setValue(props.defaultValue)
+  })
+
+  let input: HTMLInputElement
+
+  createEffect(() => {
+    if(show() && input){ input.focus() }
+  })
+
+  return <div class="card-c3 flex ai-center mt-03 mb-03 ml-04 mr-04 p-rel overflow-hidden"
+    onClick={ev => {
+      ev.stopPropagation()
+      setShow(true)
+      console.log("hizo click()")
+    }}
+  >
+    { show() && 
+      <input class="p-abs" autofocus={true} ref={input}
+        style={{ "padding-right": '0' }}
+        value={value()}
+        onKeyUp={ev => {
+          ev.stopPropagation()
+          setValue(ev.target['value'])
+        }}
+        onBlur={()=> {
+          props.onBlur(value())
+          setShow(false)
+        }}
+      /> 
+    }
+    <div class="nowrap px-06 mt-01"
+      style={{ 'padding-right': show() ? '0.8rem' : undefined }}
+    >
+      { value() }
+    </div>
   </div>
 }

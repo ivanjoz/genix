@@ -935,3 +935,44 @@ body.is-animated .main-menu {
   box-shadow: #898add 0 -1px 0 2px;
   z-index: 11;
 }
+.card-c3 {
+  min-width: 4.5rem;
+  height: 1.8rem;
+  background-color: #F7F7FE;
+  border-radius: 7px;
+  /* box-shadow: #4d486d73 0px 0px 2px; */
+  border: 1px solid transparent;
+  outline: 1px solid #d7d7e5;
+}
+.card-c3:hover {
+  outline: 1px solid rgb(154, 132, 255);
+}
+.card-c3:focus-within {
+  outline: 1px solid #8c72ff;
+  border: 1px solid #c3b5ff;
+} 
+.card-c3 > input {
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 100%;
+  outline: none;
+  border: none;
+  background-color: #F7F7FE;
+}
+.wc-60-40 > div:nth-child(1){
+  width: 60%;
+}
+.wc-60-40 > div:nth-child(2){
+  width: 40%;
+}
+.wc-65-35 > div:nth-child(1){
+  width: 65%;
+}
+.wc-65-35 > div:nth-child(2){
+  width: 35%;
+}
+.in-5c > .pos-v {
+  right: 8px;
+  bottom: 0.4rem;
+}
