@@ -124,3 +124,12 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	return core.FuncResponse{}
 }
+
+func Homologate(args *core.ExecArgs) core.FuncResponse {
+
+	for _, controller := range MakeScyllaControllers() {
+		controller.InitTable(2)
+	}
+
+	return core.FuncResponse{}
+}

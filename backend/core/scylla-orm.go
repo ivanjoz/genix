@@ -2,6 +2,7 @@ package core
 
 import (
 	"app/types"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -80,12 +81,14 @@ func (e *BDColumn) ParseValue(field reflect.Value) string {
 	fType := strings.ReplaceAll(e.FieldType, "*", "")
 
 	if e.IsComplexType {
-		jsonBytes, err := json.Marshal(v)
+		recordBytes, err := MsgPEncode(v)
 		if err != nil {
-			Log("Error al json.Marshal:: ", e.FieldName, err.Error())
+			Log("Error al encoded .gob:: ", e.FieldName, err.Error())
 			return ""
 		}
-		return `'` + string(jsonBytes) + `'`
+		hexString := hex.EncodeToString(recordBytes)
+		Log("Hex String: ", "0x"+hexString)
+		return "0x" + hexString
 	} else if fType == "string" {
 		return fmt.Sprintf(`'%v'`, v)
 	} else if fType[0:2] == "[]" {
@@ -470,10 +473,24 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 				mapField(&field, value, column.IsPointer)
 				// Revisa si necesita parsearse un string a un struct como JSON
 			} else if column.IsComplexType {
+				Log("complex type::", column.FieldName)
 				if vl, ok := value.(*string); ok {
 					newStruct := column.RefType.Interface()
 					// fmt.Printf("Type: %T \n", newStruct)
 					err := json.Unmarshal([]byte(*vl), newStruct)
+					if err != nil {
+						fmt.Println("Error al convertir: ", newStruct, *vl, err.Error())
+					}
+
+					if column.IsPointer {
+						ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct))
+					} else {
+						ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct).Elem())
+					}
+				} else if vl, ok := value.(*[]uint8); ok {
+					Log("Valor:: ", strings.TrimSpace(string(*vl)), len(string(*vl)))
+					newStruct := column.RefType.Interface()
+					err = MsgPDecode(*vl, &newStruct)
 					if err != nil {
 						fmt.Println("Error al convertir: ", newStruct, *vl, err.Error())
 					}

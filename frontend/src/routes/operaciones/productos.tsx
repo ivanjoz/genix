@@ -1,5 +1,6 @@
 import { Show, createSignal } from "solid-js";
 import { BarOptions } from "~/components/Cards";
+import { CellEditable } from "~/components/Editables";
 import { Input } from "~/components/Input";
 import { SideLayer, openLayers, setOpenLayers } from "~/components/Modals";
 import { QTable } from "~/components/QTable";
@@ -37,7 +38,7 @@ export default function Productos() {
           <button class="bn1 b-green" onClick={ev => {
             ev.stopPropagation()
             setOpenLayers([1])
-            setProductoForm({ ss: 1 } as IProducto)
+            setProductoForm({ ss: 1, propiedades: [] } as IProducto)
           }}>
             <i class="icon-plus"></i>
           </button>
@@ -92,17 +93,26 @@ export default function Productos() {
             />
           </div>
           <div class="w100 py-04 px-04">
-            <QTable data={productos().productos || []}
+            <QTable data={productoForm().propiedades||[]}
               maxHeight="40rem" 
               columns={[
-                { header: "Categoría", headerStyle: { width: '8rem' },
-                  getValue: e => e.ID
+                { header: "Propiedad", headerStyle: { width: '8rem' },
+                  render: e => {
+                    return  <CellEditable save="nombre" saveOn={e} 
+                      contentClass="flex ai-center" required={true} />
+                  }
                 },
                 { header: "Opciones", cardColumn: [3,2],
                   getValue: e => e.Nombre, cardCss: "h5 c-steel",
                 },
                 { header: <div>
-                    <button class="bn1 s2 b-green">
+                    <button class="bn1 s2 b-green" onclick={ev => {
+                      ev.stopPropagation()
+                      const propiedades = [...productoForm().propiedades]
+                      propiedades.push({})
+                      productoForm().propiedades = propiedades
+                      setProductoForm({...productoForm()})
+                    }}>
                       <i class="icon-plus"></i>
                     </button>
                   </div>, 
@@ -112,8 +122,14 @@ export default function Productos() {
                     const onclick = (ev: MouseEvent) => {
                       ev.stopPropagation()
                     }
-                    return <button class="bnr2 b-blue b-card-1" onClick={onclick}>
-                      <i class="icon-pencil"></i>
+                    return <button class="bnr2 b-red b-card-1" onClick={ev => {
+                      ev.stopPropagation()
+                      const propiedades = [...productoForm().propiedades]
+                      propiedades.push({})
+                      productoForm().propiedades = propiedades
+                      setProductoForm({...productoForm()})
+                    }}>
+                      <i class="icon-trash"></i>
                     </button>
                   }
                 }

@@ -907,6 +907,7 @@ body.is-animated .main-menu {
   height: 3px;
   background-color: #898add;
   border: 1px solid transparent;
+  z-index: 13;
 }
 .bn-e1 {
   background-color: #e2e2f0;
@@ -924,6 +925,13 @@ body.is-animated .main-menu {
 }
 .bn-e1.selected {
   background-color: #6365cc;
-  z-index: 5;
+  z-index: 12;
   color: #fff;
+}
+.bn-e1:not(.selected):hover {
+  background-color: #fff;
+}
+.bn-e1:hover {
+  box-shadow: #898add 0 -1px 0 2px;
+  z-index: 11;
 }

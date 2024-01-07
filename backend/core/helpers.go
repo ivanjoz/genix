@@ -34,6 +34,7 @@ import (
 	"github.com/mashingan/smapping"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/rodaine/table"
+	"github.com/vmihailenco/msgpack/v5"
 	"golang.org/x/exp/constraints"
 )
 
@@ -330,6 +331,32 @@ func BytesToBase64(source []byte, useUrlEncoded ...bool) string {
 func Base64ToStruct[T any](base64Str *string, target *T) error {
 	contentBytes := Base64ToBytes(*base64Str)
 	err := json.Unmarshal(contentBytes, target)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func MsgPEncode(msg any) ([]byte, error) {
+	var buffer bytes.Buffer
+	msgEncoder := msgpack.NewEncoder(&buffer)
+	msgEncoder.SetCustomStructTag("ms")
+	msgEncoder.SetOmitEmpty(true)
+	msgEncoder.UseCompactInts(true)
+	msgEncoder.UseCompactFloats(true)
+	// msgEncoder.UseArrayEncodedStructs(true)
+	// msgEncoder.UseInternedStrings(true)
+	err := msgEncoder.Encode(msg)
+
+	return buffer.Bytes(), err
+}
+
+func MsgPDecode(msgBytes []byte, msg any) error {
+	buffer := bytes.NewBuffer(msgBytes)
+	msgDecoder := msgpack.NewDecoder(buffer)
+	msgDecoder.SetCustomStructTag("ms")
+
+	err := msgDecoder.Decode(msg)
 	if err != nil {
 		return err
 	}
