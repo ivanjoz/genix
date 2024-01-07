@@ -5,6 +5,9 @@ export interface IProducto {
   ID: number,
   Nombre: string
   Descripcion: string
+  Precio?: number
+  Descuento?: number
+  PrecioFinal?: number
   ss: number
   upd: number
 }

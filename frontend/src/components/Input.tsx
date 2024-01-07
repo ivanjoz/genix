@@ -1,7 +1,8 @@
-import { For, createEffect, createSignal } from "solid-js";
+import { For, JSX, createEffect, createSignal } from "solid-js";
 import { on } from "solid-js";
 
 interface IInput<T> {
+  id?: number
   saveOn: T
   save: keyof T
   label?: string
@@ -13,6 +14,18 @@ interface IInput<T> {
   placeholder?: string
   disabled?: boolean
   onChange?: (() => void)
+  postValue?: JSX.Element
+}
+
+const [inputUpdater, setInputUpdater] = createSignal(new Map as Map<number,number>)
+
+export const refreshInput = (ids: number[]) => {
+  const map = new Map(inputUpdater())
+  for(let id of ids){
+    const currentValue = map.get(id) || 0
+    map.set(id, currentValue + 1)
+  }
+  setInputUpdater(map)
 }
 
 export function Input<T>(props: IInput<T>) {
@@ -55,13 +68,13 @@ export function Input<T>(props: IInput<T>) {
   }
   
   createEffect(on(
-    () => props.saveOn, 
+    () => [props.saveOn, props.id ? inputUpdater().get(props.id)|| 0 : 0], 
     () => {
       setInputValue((props.saveOn[props.save]||"") as string)
       setIsInputValid(chekIfInputIsValid(props))
     }
   ))
-
+  
   let cN = "in-5c p-rel flex-column a-start"
   if(props.css){ cN += " " + props.css }
     
@@ -96,6 +109,7 @@ export function Input<T>(props: IInput<T>) {
       disabled={props.disabled}
     />
     { !props.label && iconValid() }
+    { props.postValue || null  }
   </div>
 }
 
