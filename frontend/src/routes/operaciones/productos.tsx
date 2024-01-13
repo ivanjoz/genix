@@ -1,3 +1,5 @@
+import { Loading, Notify } from "notiflix";
+import { max } from "simple-statistics";
 import { Show, createSignal } from "solid-js";
 import { BarOptions } from "~/components/Cards";
 import { CellEditable, CellTextOptions } from "~/components/Editables";
@@ -8,8 +10,9 @@ import { SearchSelect } from "~/components/SearchSelect";
 import { throttle } from "~/core/main";
 import { pageView } from "~/core/menu";
 import { PageContainer } from "~/core/page";
-import { IProducto, useProductosAPI } from "~/services/operaciones/productos";
+import { IProducto, IProductoPropiedad, postProducto, useProductosAPI } from "~/services/operaciones/productos";
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
+import { formatN } from "~/shared/main";
 
 export default function Productos() {
 
@@ -20,6 +23,36 @@ export default function Productos() {
   const [productoForm, setProductoForm] = createSignal({} as IProducto)
   const [layerView, setLayerView] = createSignal(1)
   const layerWidth = 0.48
+
+  const saveProducto = async (isDelete?: boolean) => {
+    const form = productoForm()
+    if((form.Nombre?.length||0) < 4){
+      Notify.failure("El nombre debe tener al menos 4 caracteres.")
+      return
+    }
+
+    Loading.standard("Creando /Actualizando Producto...")
+    try {
+      var result = await postProducto([form])
+    } catch (error) {
+      Notify.failure(error as string); Loading.remove(); return
+    }
+
+    let productos_ = [...productos().productos]
+
+    if(form.ID){
+      const selected = productos().productos.find(x => x.ID === form.ID)
+      if(selected){ Object.assign(selected, form) }
+      if(isDelete){ productos_ = productos_.filter(x => x.ID !== form.ID) }
+    } else {
+      form.ID = result[0].ID
+      productos_.unshift(form)
+    }
+
+    setProductos({...productos(), productos: productos_})
+    setOpenLayers([])
+    Loading.remove()
+  }
   
   return <PageContainer title="Productos"
     views={[[1,"Productos"],[2,"Parámetros"]]}
@@ -39,38 +72,70 @@ export default function Productos() {
           <button class="bn1 b-green" onClick={ev => {
             ev.stopPropagation()
             setOpenLayers([1])
-            setProductoForm({ ss: 1, propiedades: [] } as IProducto)
+            setProductoForm({ ss: 1, Propiedades: [] } as IProducto)
           }}>
             <i class="icon-plus"></i>
           </button>
         </div>
       </div>
-      <QTable data={productos().productos || []} tableCss="w-page"
+      <QTable data={productos().productos || []} 
+        css="selectable" tableCss="w-page"
+        isSelected={(e,id) => e.ID === id as number}
+        selected={productoForm().ID}
+        filterText={filterText()} filterKeys={["Nombre"]}
         style={{ width: openLayers().length > 0 
           ? `calc(var(--page-width) * ${1-layerWidth})` : undefined  
         }}
         maxHeight="calc(80vh - 13rem)" 
         columns={[
-          { header: "ID", headerStyle: { width: '3.4rem' }, css: "t-c c-purple",
+          { header: "ID", headerStyle: { width: '3rem' }, css: "t-c c-purple",
             getValue: e => e.ID
           },
-          { header: "Nombre", cardColumn: [3,2],
+          { header: "Nombre", cardColumn: [3,2], field: "Nombre",
             getValue: e => e.Nombre, cardCss: "h5 c-steel",
           },
-        ]}    
+          { header: "Precio", cardColumn: [3,2], cardCss: "h5 c-steel", css: "t-c",
+            getValue: e => e.Precio ? formatN(e.Precio,2) : "", 
+          },
+          { header: "Descuento", cardColumn: [3,2],  css: "t-c",
+            getValue: e => e.Descuento ? formatN(e.Descuento,1) + "%" : "",
+          },
+          { header: "Precio Final", cardColumn: [3,2],  css: "t-c",
+            getValue: e => e.PrecioFinal ? formatN(e.PrecioFinal,2) : "",
+          },
+          { header: "Sub-Unidades", cardColumn: [3,2],
+            getValue: e => {
+              if(!e.SbnUnidad) return ""
+              return `${e.SbnCantidad} x ${e.SbnUnidad}`
+            }
+          },
+          { header: "Grupos", cardColumn: [3,2],  css: "t-c",
+            getValue: e => ""
+          },
+        ]}
+        onRowCLick={e => {
+          if(e.ID === productoForm().ID){
+            setProductoForm({} as IProducto) 
+            setOpenLayers([]) 
+          } else {
+            setProductoForm({...e})
+            setOpenLayers([1]) 
+          }
+        }}
       />
       <SideLayer id={1} style={{ width: `calc(var(--page-width) * ${layerWidth})` }}
         title={"Producto " + (productoForm()?.Nombre||"(Nuevo)") }
         onClose={() => {
-
+          setProductoForm({} as IProducto) 
         }}
         onSave={() => {
-
+          saveProducto()
         }}
       >
         <div></div>
         <BarOptions selectedID={layerView()} class="w100"
           options={[[1,'Información'],[2,'Ficha'],[3,'Fotos']]}
+          buttonStyle={{ "min-height": '2.1rem' }} buttonClass="ff-bold"
           onSelect={id => {
             setLayerView(id)
           }}
@@ -135,13 +200,14 @@ export default function Productos() {
             <Input saveOn={productoForm()} save="SbnCantidad" 
               css="w-04x mb-10" label="Cantidad" type="number"
             />
-            <Input saveOn={productoForm()} save="SubUnidad" 
-              css="w-06x mb-10" label="Nombre" 
+            <Input saveOn={productoForm()} save="SbnUnidad" 
+              css="w-06x mb-10" label="Nombre"
             />
             <Input saveOn={productoForm()} save="SbnPrecio" 
               css="w-05x mb-10" label="Precio Base" type="number"
             />
             <Input saveOn={productoForm()} save="SbnDescuento" 
+              postValue={<div class="p-abs pos-v c-steel1">%</div>}
               css="w-04x mb-10" label="Descuento" type="number"
             />
             <Input saveOn={productoForm()} save="SbnPreciFinal" 
@@ -149,26 +215,27 @@ export default function Productos() {
             />
           </div>
           <div class="w100 py-04 px-04">
-            <QTable data={productoForm().propiedades||[]}
+            <QTable data={productoForm().Propiedades||[]}
               maxHeight="40rem" tableCss="single-color"
               columns={[
                 { header: "Propiedad", headerStyle: { width: '8rem' },
                   render: e => {
-                    return  <CellEditable save="nombre" saveOn={e} 
+                    return  <CellEditable save="Nombre" saveOn={e} 
                       contentClass="flex ai-center nowrap" required={true} />
                   }
                 },
                 { header: "Opciones", cardColumn: [3,2],
                   render: e => {
-                    return <CellTextOptions saveOn={e} save="options" />
+                    return <CellTextOptions saveOn={e} save="Options" />
                   }
                 },
                 { header: <div>
                     <button class="bn1 s2 b-green" onclick={ev => {
                       ev.stopPropagation()
-                      const propiedades = [...productoForm().propiedades]
-                      propiedades.push({})
-                      productoForm().propiedades = propiedades
+                      const propiedades = [...productoForm().Propiedades]
+                      const id = propiedades.length > 0 ? max(propiedades.map(x => x.ID)) : 0
+                      propiedades.push({ ID: id + 1, Options: [] } as IProductoPropiedad)
+                      productoForm().Propiedades = propiedades
                       setProductoForm({...productoForm()})
                     }}>
                       <i class="icon-plus"></i>
@@ -176,15 +243,11 @@ export default function Productos() {
                   </div>, 
                   headerStyle: { width: '2.6rem' }, css: "t-c",
                   cardColumn: [1,2],
-                  render: (e,i) => {
-                    const onclick = (ev: MouseEvent) => {
-                      ev.stopPropagation()
-                    }
+                  render: e => {
                     return <button class="bnr2 b-red b-card-1" onClick={ev => {
                       ev.stopPropagation()
-                      const propiedades = [...productoForm().propiedades]
-                      propiedades.push({})
-                      productoForm().propiedades = propiedades
+                      const propiedades = productoForm().Propiedades.filter(x => x !== e)
+                      productoForm().Propiedades = propiedades
                       setProductoForm({...productoForm()})
                     }}>
                       <i class="icon-trash"></i>

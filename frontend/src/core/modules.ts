@@ -17,10 +17,11 @@ export const AdminModule: IModule = {
     usuarios: "id",
     seguridad_accesos: "id",
     perfiles: "id",
-    productos: "id",
     fetchedIDBTables: 'key',
     cacheUpdates: 'key,route',
     cacheStatic: 'key',
+    // Scylla
+    productos: "ID",
     sedes_almacenes: '[_pk+ID]',  
     pais_ciudades: '[PaisID+ID]', 
   },

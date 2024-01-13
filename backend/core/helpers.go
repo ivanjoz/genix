@@ -19,7 +19,6 @@ import (
 	"math"
 	"math/big"
 	"net/http"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -633,12 +632,6 @@ func DecompressGzip(content *[]byte) string {
 	return string(decompressedData)
 }
 
-func HoraM100ToSeconds(horaMin int32) int32 {
-	horas := int32(math.Floor((float64(horaMin) / 100)))
-	minutes := horaMin - (horas * 100)
-	return (horas*60 + minutes) * 60
-}
-
 func DecompressBrotli64(content *string) string {
 	compressedBytes, err := base64.StdEncoding.DecodeString(*content)
 	if err != nil {
@@ -836,27 +829,6 @@ func Round(h float32) int32 {
 		return 0
 	}
 	return int32(math.Round(float64(h)))
-}
-
-func Round10(h float32) float32 {
-	if h == 0 {
-		return h
-	}
-	return float32(math.Round(float64(h)*10)/10) + 0.00004
-}
-
-func Round100(h float32) float32 {
-	if h == 0 {
-		return h
-	}
-	return float32(math.Round(float64(h)*100)/100) + 0.00001
-}
-
-func Round1000(h float32) float32 {
-	if h == 0 {
-		return h
-	}
-	return float32(math.Round(float64(h)*1000)/1000) + 0.000002
 }
 
 func HashSlice[T any](structSlice []T) string {
@@ -1083,23 +1055,6 @@ func ArrayToString[T Number1](a []T, delim string) string {
 	return strings.Trim(strings.Replace(fmt.Sprint(a), " ", delim, -1), "[]")
 }
 
-func LogWorkDir() {
-	path, _ := os.Getwd()
-	Log(path)
-	entries, _ := os.ReadDir(path)
-	names := []string{}
-	for _, e := range entries {
-		names = append(names, e.Name())
-	}
-	Log(names)
-	entries2, _ := os.ReadDir("/")
-	names2 := []string{}
-	for _, e := range entries2 {
-		names2 = append(names2, e.Name())
-	}
-	Log(names2)
-}
-
 func Coalesce[T Number2](num1, num2 T) T {
 	if num1 == 0 {
 		return num2
@@ -1144,61 +1099,12 @@ func SafeNull[T Number2](num *T) T {
 	}
 }
 
-func SafeInt(input *string) int16 {
-	inputX := "0"
-	if input != nil {
-		if *input != "0n" && *input != "Off" {
-			inputX = *input
-		} else {
-			if *input == "0n" {
-				inputX = "1"
-			}
-		}
-	}
-	output, err := strconv.ParseInt(inputX, 10, 64)
-	if err != nil {
-		Log("Error convert to int16:: ", err.Error())
-		return 0
-	}
-	return int16(output)
-}
-
-func SafeString(input *string) string {
-	outputX := "0"
-	if input != nil {
-		outputX = *input
-	}
-	return outputX
-}
-
-func SafeIntToInt(input *int32) int32 {
-	inputX := int32(0)
-	if input != nil {
-		inputX = *input
-	}
-
-	return inputX
-}
-
-func SafeFloat(input *string) float32 {
-	inputX := "0"
-	if input != nil {
-		inputX = *input
-	}
-	output, err := strconv.ParseFloat(inputX, 32)
-	if err != nil {
-		Log("Error convert to float32:: ", err.Error())
-		return 0
-	}
-	return float32(output)
-}
-
 func PrintTable[T any](records []T, maxLenSlice, maxLenContent int, columns ...string) {
 	if maxLenSlice > 0 && len(records) > maxLenSlice {
 		records = records[0:maxLenSlice]
 	}
 
-	Log("registros mapeados:: ", len(records))
+	// Log("registros mapeados:: ", len(records))
 	// Print(records)
 	recordsMapped := []map[string]any{}
 	avoidKeys := map[string]bool{}

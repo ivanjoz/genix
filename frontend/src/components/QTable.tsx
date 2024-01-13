@@ -129,7 +129,7 @@ export function QTable<T>(props: IQTable<T>) {
             content.push(String(e[key_]))
           }
         }
-        return content.join(" ")
+        return content.join(" ").toLowerCase()
       }
     }
 
