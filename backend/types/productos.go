@@ -1,17 +1,37 @@
 package types
 
 type Producto struct {
-	TAGS        `table:"productos"`
-	EmpresaID   int32   `json:"empresaID" db:"empresa_id,pk"`
-	ID          int32   `json:"id" db:"id,pk"`
-	Nombre      string  `json:"nombre" db:"nombre"`
-	Descripcion string  `json:"descripcion" db:"descripcion"`
-	GruposIDs   []int32 `json:"gruposIDs" db:"grupos_ids"`
-	Status      int8    `json:"ss" db:"status,view"`
-	Updated     int64   `json:"upd" db:"updated,view"`
-	UpdatedBy   int32   `json:"updatedBy" db:"updated_by"`
-	Created     int64   `json:"created" db:"created"`
-	CreatedBy   int32   `json:"createdBy" db:"created_by"`
+	TAGS          `table:"productos"`
+	EmpresaID     int32   `json:",omitempty" db:"empresa_id,pk"`
+	ID            int32   `db:"id,pk"`
+	TempID        int32   `json:"-" db:"temp_id"`
+	Nombre        string  `db:"nombre"`
+	Descripcion   string  `json:",omitempty" db:"descripcion"`
+	GruposIDs     []int32 `json:",omitempty" db:"grupos_ids"`
+	Precio        float32 `json:",omitempty" db:"precio"`
+	Descuento     float32 `json:",omitempty" db:"descuento"`
+	PrecioFinal   float32 `json:",omitempty" db:"precio_final"`
+	Peso          float32 `json:",omitempty" db:"peso"`
+	Volumen       float32 `json:",omitempty" db:"volumen"`
+	SbnCantidad   float32 `json:",omitempty" db:"sbn_cantidad"`
+	SbnUnidad     string  `json:",omitempty" db:"sbn_unidad"`
+	SbnPrecio     float32 `json:",omitempty" db:"sbn_precio"`
+	SbnDescuento  float32 `json:",omitempty" db:"sbn_decuento"`
+	SbnPreciFinal float32 `json:",omitempty" db:"sbn_precio_final"`
+
+	Propiedades []ProductoPropiedad `json:",omitempty" db:"propiedades"`
+	// Propiedades generales
+	Status    int8  `json:"ss,omitempty" db:"status,view"`
+	Updated   int64 `json:"upd,omitempty" db:"updated,view"`
+	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
+	Created   int64 `json:",omitempty" db:"created"`
+	CreatedBy int32 `json:",omitempty" db:"created_by"`
+}
+
+type ProductoPropiedad struct {
+	ID      int16    `ms:"i"`
+	Nombre  string   `ms:"n"`
+	Options []string `ms:"o"`
 }
 
 type Almacen struct {
@@ -22,11 +42,12 @@ type Almacen struct {
 	Nombre      string          `db:"nombre"`
 	Descripcion string          `db:"descripcion"`
 	Layout      []AlmacenLayout `db:"layout"`
-	Status      int8            `json:"ss" db:"status"`
-	Updated     int64           `json:"upd" db:"updated,view"`
-	UpdatedBy   int32           `db:"updated_by"`
-	Created     int64           `db:"created"`
-	CreatedBy   int32           `db:"created_by"`
+	// Propiedades generales
+	Status    int8  `json:"ss,omitempty" db:"status,view"`
+	Updated   int64 `json:"upd,omitempty" db:"updated,view"`
+	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
+	Created   int64 `json:",omitempty" db:"created"`
+	CreatedBy int32 `json:",omitempty" db:"created_by"`
 }
 
 type ProductoStock struct {

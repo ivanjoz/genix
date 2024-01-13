@@ -23,6 +23,7 @@ var ScyllaColumnsMap map[string][]ScyllaColumns
 var ScyllaViewsMap map[string][]ScyllaViews
 
 func InitTable[T any](mode int8) {
+	Log("Homologando Estructuras: Mode::", mode)
 	conn := ScyllaConnect()
 
 	if ScyllaColumnsMap == nil {
@@ -64,6 +65,7 @@ func InitTable[T any](mode int8) {
 	}
 
 	dbcolumns := ScyllaColumnsMap[scyllaTable.NameSingle]
+	// Si no existe la tabla entonces la crea...
 	if dbcolumns == nil {
 		Logx(6, "No se encontró la tabla: "+scyllaTable.Name+"\n")
 		if mode > 2 {
@@ -82,8 +84,7 @@ func InitTable[T any](mode int8) {
 		}
 
 		query := `
-		CREATE TABLE %v
-		(
+		CREATE TABLE %v (
 			%v,
 			PRIMARY KEY (%v)
 		)
@@ -127,6 +128,15 @@ func InitTable[T any](mode int8) {
 	// Revisa las columnas
 	for _, column := range columnNamesMap {
 		Logx(5, fmt.Sprintf(`La columna "%v" con struct type "%v" no existe en la BD de origen.`+"\n", column.Name, column.FieldType))
+		if mode == 2 {
+			query := fmt.Sprintf(`ALTER TABLE %v ADD %v %v`, scyllaTable.Name, column.Name, column.Type)
+			Log(fmt.Sprintf(`EJecutando agregar columna: "%v"...`, query))
+			err := conn.Query(query).Exec()
+			if err != nil {
+				panic(fmt.Sprintf(`Error agregando columna "%v" | %v`, column.Name, err))
+			}
+			Logx(2, fmt.Sprintf(`Columna Agregada: "%v"`+"\n", column.Name))
+		}
 	}
 
 	tableViewsSlice := SliceInclude[string]{}
@@ -172,6 +182,7 @@ func InitTable[T any](mode int8) {
 
 		err := conn.Query(query).Exec()
 		if err != nil {
+			Log(err)
 			panic(fmt.Sprintf(`Error creando view "%v"`, viewName))
 		}
 

@@ -17,4 +17,5 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.sedes":             PostSedes,
 	"POST.almacenes":         PostAlmacen,
 	"GET.productos":          GetProductos,
+	"POST.productos":         PostProductos,
 }

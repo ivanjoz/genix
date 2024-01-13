@@ -85,7 +85,7 @@ p {
 /*  border-bottom: 1px solid #8182c6; */
 
 .qtable.fixed-header > thead th {
-  border-bottom: 1px solid #babbd6
+  border-bottom: 1px solid #d1d2e8;
 }
 .qtable > thead th {
   height: 2.2rem;

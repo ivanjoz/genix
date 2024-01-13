@@ -67,6 +67,8 @@ export const LayerSelect = (props: ILayerAutoHide) => {
 interface IBarOptions {
   options: [number,string][]
   selectedID: number
+  buttonStyle?: JSX.CSSProperties
+  buttonClass?: string
   class?: string
   onSelect: (e: number) => void
 }
@@ -79,13 +81,16 @@ export const BarOptions = (props: IBarOptions) => {
       const getClass = () => {
         let cn = "bn-e1 s1 flex-center"
         if(props.selectedID === e[0]){ cn += " selected" }
+        if(props.buttonClass){ cn += " " + props.buttonClass }
         return cn
       }
 
-      return <div class={getClass()} onClick={ev =>{
-        ev.stopPropagation()
-        if(props.onSelect){ props.onSelect(e[0]) }
-      }}>
+      return <div class={getClass()} 
+        style={props.buttonStyle}
+        onClick={ev =>{
+          ev.stopPropagation()
+          if(props.onSelect){ props.onSelect(e[0]) }
+        }}>
         {e[1]}
       </div>
     }}
