@@ -10,6 +10,7 @@ import "billboard.js/dist/billboard.css";
 
 // or theme style. Find more themes from 'theme' folder
 import "billboard.js/dist/theme/insight.css"
+import { DatePicker } from '~/components/Datepicker';
 
 export default function ChartTest() {
 
@@ -70,7 +71,8 @@ export default function ChartTest() {
     })
   },[])
 
-  return <PageContainer title="Virtualize Scroll">
+  return <PageContainer title="Table demo">
+    <DatePicker />
     <div style={{ padding: '1rem' }}>
       <div id="chart-1" style={{ width: '54rem', height: '600px', "background-color": 'white' }} ></div>
     </div>

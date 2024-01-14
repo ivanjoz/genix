@@ -976,3 +976,73 @@ body.is-animated .main-menu {
   right: 8px;
   bottom: 0.4rem;
 }
+
+/* Date Picker */
+.date-picker-c {
+  background-color: white;
+  position: absolute;
+  width: fit-content;
+  z-index: 100;
+  user-select: none;
+  padding: 2px 4px 4px 4px; 
+  border-radius: 7px;
+  box-shadow: rgba(0, 0, 0, 0.24) 0px 3px 8px;
+}
+.date-picker-c .dp-week {
+  width: 1.8rem;
+  cursor: pointer;
+  margin-right: 4px;
+}
+.date-picker-c .dp-week:not(.base) {
+  background-color: #f6f0ff;
+}
+.date-picker-c .dp-day, .date-picker-c .dp-col {
+  width: 2.3rem;
+}
+.date-picker-c .dp-day {
+  height: 2rem;
+  cursor: pointer;
+  outline: 1px solid transparent;
+ }
+ .date-picker-c .dp-day:hover {
+  outline-color: black;
+  z-index: 5;
+ }
+ .date-picker-c > div > .dp-day.selected {
+  background-color: #845ddf;
+  color: white;
+  font-family: bold;
+ }
+.date-picker-c > div:nth-child(even) > .dp-day:not(.is-out):not(.selected):nth-child(even),
+.date-picker-c > div:nth-child(odd) > .dp-day:not(.is-out):not(.selected):nth-child(odd)   {
+  background-color: rgb(242, 242, 253);
+}
+ .date-picker-c .dp-day.is-out {
+   /*background-color: rgb(243, 243, 243);*/
+   color: rgb(105, 105, 105);
+ }
+.date-picker-c .ln-today {
+  position: absolute;
+  height: 4px;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  background-color: rgb(163, 124, 255);
+}
+.date-picker-c .bn-d1 {
+  height: 2rem;
+  margin: 2px 1px;
+  width: 14%;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.date-picker-c > div > .dp-day.focused {
+  outline-color: black;
+  z-index: 6;
+}
+.date-picker-c .bn-d1:hover {
+  background-color: rgb(224, 224, 245);
+}
+.date-picker-c .bn-d2 {
+  width: calc(100% - (14% * 4));
+}
