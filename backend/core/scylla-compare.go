@@ -66,7 +66,7 @@ func InitTable[T any](mode int8) {
 
 	dbcolumns := ScyllaColumnsMap[scyllaTable.NameSingle]
 	// Si no existe la tabla entonces la crea...
-	if dbcolumns == nil {
+	if len(dbcolumns) == 0 {
 		Logx(6, "No se encontró la tabla: "+scyllaTable.Name+"\n")
 		if mode > 2 {
 			return
@@ -118,24 +118,23 @@ func InitTable[T any](mode int8) {
 		}
 	}
 
-	// Revisa las columnas
-	if dbcolumns != nil {
+	if len(dbcolumns) > 0 {
+		// Revisa las columnas existentes en la BD per no mapeadas
 		for name, dbType := range columnsScyllaMap {
 			Logx(5, fmt.Sprintf(`La columna "%v" con type "%v" existe en la BD origen no está mapeada en el Struct.`+"\n", name, dbType))
 		}
-	}
-
-	// Revisa las columnas
-	for _, column := range columnNamesMap {
-		Logx(5, fmt.Sprintf(`La columna "%v" con struct type "%v" no existe en la BD de origen.`+"\n", column.Name, column.FieldType))
-		if mode == 2 {
-			query := fmt.Sprintf(`ALTER TABLE %v ADD %v %v`, scyllaTable.Name, column.Name, column.Type)
-			Log(fmt.Sprintf(`EJecutando agregar columna: "%v"...`, query))
-			err := conn.Query(query).Exec()
-			if err != nil {
-				panic(fmt.Sprintf(`Error agregando columna "%v" | %v`, column.Name, err))
+		// Revisa las columnas que deben crearse en BD
+		for _, column := range columnNamesMap {
+			Logx(5, fmt.Sprintf(`La columna "%v" con struct type "%v" no existe en la BD de origen.`+"\n", column.Name, column.FieldType))
+			if mode == 2 {
+				query := fmt.Sprintf(`ALTER TABLE %v ADD %v %v`, scyllaTable.Name, column.Name, column.Type)
+				Log(fmt.Sprintf(`EJecutando agregar columna: "%v"...`, query))
+				err := conn.Query(query).Exec()
+				if err != nil {
+					panic(fmt.Sprintf(`Error agregando columna "%v" | %v`, column.Name, err))
+				}
+				Logx(2, fmt.Sprintf(`Columna Agregada: "%v"`+"\n", column.Name))
 			}
-			Logx(2, fmt.Sprintf(`Columna Agregada: "%v"`+"\n", column.Name))
 		}
 	}
 

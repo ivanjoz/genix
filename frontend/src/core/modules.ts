@@ -23,6 +23,7 @@ export const AdminModule: IModule = {
     // Scylla
     productos: "ID",
     sedes_almacenes: '[_pk+ID]',  
+    listas_compartidas: 'ID',
     pais_ciudades: '[PaisID+ID]', 
   },
   menus: [
