@@ -13,7 +13,7 @@ import "billboard.js/dist/theme/insight.css"
 import { DatePicker } from '~/components/Datepicker';
 
 export default function ChartTest() {
-
+  
   createEffect(() => {
     var chart = bb.generate({
       data: {
