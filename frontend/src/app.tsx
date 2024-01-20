@@ -1,6 +1,6 @@
 // @refresh reload
 import { MetaProvider, Title } from "@solidjs/meta";
-import { Router } from "@solidjs/router";
+import { Route, Router } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start";
 import { Show, Suspense, createEffect, createSignal } from "solid-js";
 import LoginPage from "./core/login";
@@ -8,6 +8,7 @@ import { MainMenu, MainMenuMobile, MainTopMenu } from "./core/menu";
 import Modules from "./core/modules";
 import { createIndexDB } from "./shared/main";
 import { Params } from "./shared/security";
+import PageBuilder from "./pages/page";
 
 const defaultModule = Modules[0]
 export const [appModule, setAppModule] = createSignal(defaultModule)
@@ -72,7 +73,11 @@ export default function Root() {
     }
   }
 
-  const isLogin = () => loginStatus() && isClient
+  const isLogin = () => {
+    if(window.location.pathname.substring(0,5) === '/page'){ return 1 }
+    else if(loginStatus() && isClient){ return 2 }
+    else { return 3 }
+  }
   
   createEffect(() => {
     if(viewType() === 2 && deviceType() === 1){
@@ -81,6 +86,8 @@ export default function Root() {
       document.body.classList.remove('view-min')
     }
   })
+
+  console.log("is login:: ", isLogin())
   
   return <>
     <Router root={props => (
@@ -89,14 +96,16 @@ export default function Root() {
           <Suspense>{props.children}</Suspense>
         </MetaProvider>
       )}>
-      <Show when={isLogin()}>
+      <Route path="/pages" component={PageBuilder} />
+      <Route path="/pages/:name" component={PageBuilder} />
+      <Show when={isLogin() === 2}>
         <FileRoutes />
       </Show>
     </Router>
-    <Show when={!loginStatus() && isClient}>
+    <Show when={isLogin() === 3}>
       <LoginPage setLogin={setLoginStatus} />
     </Show>
-    <Show when={isLogin()}>
+    <Show when={isLogin() === 2}>
       <Show when={[1].includes(deviceType())}><MainMenu/></Show>
       <Show when={[2,3].includes(deviceType()) && showMenu()}>
         <MainMenuMobile/>
@@ -104,39 +113,4 @@ export default function Root() {
       <MainTopMenu />
     </Show>
   </>
-     
-  
-
-  return (
-    <html lang="es">
-      <head>
-        <base href="/"/>
-        <meta charset="utf-8"/>
-        <link rel="stylesheet" href="libs/fontello-embedded.css"/>
-      </head>
-      <body classList={{ 'view-min': viewType() === 2 && deviceType() === 1 }}>  
-      <Router root={props => (
-              <MetaProvider>
-                <Title>GENIX - MyPes</Title>
-                <Suspense>{props.children}</Suspense>
-              </MetaProvider>
-            )}>
-            <FileRoutes />
-          </Router>  
-        <Show when={true}>
-          <Show when={[1].includes(deviceType())}><MainMenu/></Show>
-          <Show when={[2,3].includes(deviceType()) && showMenu()}>
-            <MainMenuMobile/>
-          </Show>
-          <MainTopMenu />
-        </Show>
-        {/*
-        <Show when={!loginStatus() && isClient}>
-          <LoginPage setLogin={setLoginStatus} /> 
-        </Show>
-            */
-        }
-      </body>
-    </html>
-  )
 }
