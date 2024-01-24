@@ -27,17 +27,26 @@ interface IPageRenderer {
   sections: IPageSection[]
 }
 
+interface IPageSectionRenderer {
+  type: number
+  args: IPageSection
+}
+
+const PageSectionRenderer = (e: IPageSectionRenderer) => {
+  if(e.type === 10){ return <Header1 args={e.args} /> }
+  else if(e.type === 21){ return <LayerImage21 args={e.args} /> }
+  else if(e.type === 9998){ return <Demo1 args={e.args} /> }
+  else if(e.type === 9999){ return <BigScroll args={e.args} /> }
+  else {
+    return <div></div>
+  }
+}
+
 export const PageRenderer = (props: IPageRenderer) => {
 
   return <For each={props.sections}>
     {e => {
-      if(e.type === 10){ return <Header1 args={e} /> }
-      else if(e.type === 21){ return <LayerImage21 args={e} /> }
-      else if(e.type === 9998){ return <Demo1 args={e} /> }
-      else if(e.type === 9999){ return <BigScroll args={e} /> }
-      else {
-        return <div></div>
-      }
+      return <PageSectionRenderer args={e} type={e.type} />
     }}
   </For>
 }

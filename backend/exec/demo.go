@@ -12,6 +12,8 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"time"
 
 	"github.com/kelindar/binary"
@@ -400,6 +402,33 @@ func Test22(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	core.Log("Agregando a Body:: ", filePath, " | Lines:", lines, " | Size:", size)
+
+	return core.FuncResponse{}
+}
+
+func Test23(args *core.ExecArgs) core.FuncResponse {
+
+	wd, _ := os.Getwd()
+	tmpDir := wd + "/tmp"
+	core.Log("tmpDir:", tmpDir)
+
+	if runtime.GOOS == "windows" {
+		fmt.Println("Can't Execute this on a windows machine")
+	} else {
+		inputFile := tmpDir + "/demo.png"
+		outputFile := tmpDir + "/demo.avif"
+
+		cmd := fmt.Sprintf("%v/libs/cavif_linux_x64", wd)
+		args := []string{"-i", inputFile, "-o", outputFile, "--resize-mode", "fixed", "--resize-denominator_", "16"}
+
+		cmdToExec := exec.Command(cmd, args...)
+		core.Log("Ejecutando: ", cmdToExec.String())
+		out, err := cmdToExec.Output()
+		core.Log(string(out))
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	return core.FuncResponse{}
 }
