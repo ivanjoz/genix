@@ -83,6 +83,7 @@ dependencies = [
 name = "avif-converter"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "image",
  "imgref",
  "libavif",
@@ -100,6 +101,12 @@ checksum = "876c75a42f6364451a033496a14c44bffe41f5f4a8236f697391f11024e596d2"
 dependencies = [
  "arrayvec",
 ]
+
+[[package]]
+name = "base64"
+version = "0.21.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
 name = "bit_field"

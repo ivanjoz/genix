@@ -1,0 +1,1 @@
+./target/release/avif-converter ./test_inputs/demo_2.webp -avif -output=./test_outputs -resolutions=300,600
