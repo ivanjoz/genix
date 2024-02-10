@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"strings"
 
@@ -16,6 +17,19 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/rs/cors"
 )
+
+func init() {
+	switch runtime.GOOS {
+	case "windows":
+		fmt.Println("// +build windows")
+		fmt.Println("// +build linux")
+	case "linux":
+		fmt.Println("// +build linux")
+		fmt.Println("// +build windows")
+	default:
+		fmt.Println("// +build !windows,!linux")
+	}
+}
 
 func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (*events.APIGatewayV2HTTPResponse, error) {
 	clearEnvVariables()

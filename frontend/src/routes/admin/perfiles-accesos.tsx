@@ -1,4 +1,4 @@
-import { Loading, Notify } from "notiflix";
+import { Loading, Notify } from "~/core/main";
 import { Show, Switch, createEffect, createSignal, on } from "solid-js";
 import { CheckBoxContainer, Input } from "~/components/Input";
 import { ContentLayer, Modal, setOpenModals } from "~/components/Modals";

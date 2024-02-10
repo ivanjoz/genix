@@ -432,3 +432,11 @@ func Test23(args *core.ExecArgs) core.FuncResponse {
 
 	return core.FuncResponse{}
 }
+
+func Test24(args *core.ExecArgs) core.FuncResponse {
+	/*
+		core.Log(ExecutableLinux)
+		core.Log(ExecutableWindows)
+	*/
+	return core.FuncResponse{}
+}

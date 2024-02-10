@@ -1,4 +1,4 @@
-import { Loading } from "notiflix";
+import { Loading } from "~/core/main";
 import { createSignal } from "solid-js";
 import { Input } from "~/components/Input";
 import { sendUserLogin } from "~/services/admin/login";

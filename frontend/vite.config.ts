@@ -1,14 +1,14 @@
 import { defineConfig } from "@solidjs/start/config";
 
 export default defineConfig({
-  start: { ssr: false, 
+  start: { 
+    ssr: true, 
     server: { 
-      hmr: false,
-      /*
       prerender: {
-        crawlLinks: true
+        // autoSubfolderIndex: true,
+        routes: ["/admin/demo3"],
+        // crawlLinks: false,
       }
-      */
     } 
   },
   server: { hmr: false },
@@ -16,32 +16,19 @@ export default defineConfig({
 })
 
 /*
+
 export default defineConfig({
-  server: {
-     port: 3588,  hmr: false,
+  start: { 
+    ssr: true, 
+    server: { 
+      prerender: {
+        // autoSubfolderIndex: true,
+        routes: ["/"],
+        // crawlLinks: false,
+      }
+    } 
   },
-  start: { ssr: false, server: {  } },
+  server: { hmr: false },
   base: '/',
-  // optimizeDeps: { force: false },
-  plugins: [
-    { name: 'html-transform',
-      transformIndexHtml(html) {
-        console.log("html::", html)
-        return html.replace(
-          `<body ></body>`,
-          `
-          <head>
-            <title>GENIX - MyPes</title>
-            <base href="/"/>
-            <meta charset="utf-8"/>
-            <meta name="viewport" content="width=device-width, initial-scale=1" />
-            <meta name="theme-color" content="#4285f4" />
-            <link rel="manifest" href="manifest.webmanifest" />
-          </head>
-          <body ></body>`,
-        )
-      },
-    },
-  ],
-});
+})
 */

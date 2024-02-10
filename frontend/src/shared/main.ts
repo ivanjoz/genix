@@ -1,6 +1,6 @@
 import Dexie from "dexie";
 import { Params, checksum } from "./security";
-import { Loading, Notify } from "notiflix";
+import { Loading, Notify } from "~/core/main";
 import { IModule } from "~/core/modules";
 
 export const camelToSnakeCase = (str: string) => {
