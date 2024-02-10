@@ -10,7 +10,7 @@ import (
 
 func restore(backupName string) {
 
-	backupDirectory := BACKUP_MAIN_DIR + "/" + backupName
+	backupDirectory := BACKUP_MAIN_DIR + backupName
 
 	if _, err := os.Stat(backupDirectory); !os.IsNotExist(err) {
 		if err := os.RemoveAll(backupDirectory); err != nil {
@@ -28,6 +28,7 @@ func restore(backupName string) {
 		log.Fatal("Backup File Don't Exists:", backupTarFile)
 	}
 
+	fmt.Println("Uncompressing backup file...")
 	cmdString := fmt.Sprintf("--zstd -xvf %v.tar.zst -C %v", backupDirectory, backupDirectory)
 
 	cmd := exec.Command("tar", strings.Split(cmdString, " ")...)
@@ -43,15 +44,19 @@ func restore(backupName string) {
 
 	backupToTablePathMap := map[string]string{}
 
+	fmt.Println("Reading backup entries...")
+
 	for _, dir := range backupDirEntries {
 		name := dir.Name()
 		path := backupDirectory + "/" + name
 		backupToTablePathMap[name] = path
 		tableName := strings.Split(name, "-")[0]
 		if _, ok := backupToTablePathMap[tableName]; !ok {
-			backupToTablePathMap[name] = path
+			backupToTablePathMap[tableName] = path
 		}
 	}
+
+	fmt.Println(backupToTablePathMap)
 
 	const DATA_DIR = SCYLLA_DATA + KEYSPACE
 
@@ -69,8 +74,8 @@ func restore(backupName string) {
 		tableDirName := tableDirectories.Name()
 		tableBackupPath := ""
 
-		if _, ok := backupToTablePathMap[tableBackupPath]; ok {
-			tableBackupPath = backupToTablePathMap[tableBackupPath]
+		if _, ok := backupToTablePathMap[tableDirName]; ok {
+			tableBackupPath = backupToTablePathMap[tableDirName]
 		} else {
 			tablaDirNameSingle := strings.Split(tableDirName, "-")[0]
 			if _, ok := backupToTablePathMap[tablaDirNameSingle]; ok {
