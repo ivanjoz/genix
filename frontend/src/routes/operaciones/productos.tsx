@@ -1,4 +1,4 @@
-import { Loading, Notify } from "notiflix";
+import { Loading, Notify } from "~/core/main";
 import { max } from "simple-statistics";
 import { Show, createSignal } from "solid-js";
 import { BarOptions } from "~/components/Cards";

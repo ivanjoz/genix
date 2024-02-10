@@ -1,7 +1,7 @@
 import { keyID, keyUpdated, log1, log2 } from "./http"
 import Dexie, { Table } from 'dexie';
 import { camelToSnakeCase } from "./main";
-import { Notify } from "notiflix";
+import { Notify, Loading } from "~/core/main";
 
 export type httpProps = {
   id?: number // window._params = { fetchID: 1001 }

@@ -1,3 +1,6 @@
+import pkg from "notiflix";
+export const { Notify, Loading } = pkg;
+
 export const throttle = (func: () => void, delay: number) => {
   if(window._throttleTimer){ clearTimeout(window._throttleTimer) }
   window._throttleTimer = setTimeout(() => {

@@ -1,4 +1,4 @@
-import { Loading, Notify } from "notiflix";
+import { Loading, Notify } from "~/core/main";
 import axios from 'axios'
 import { getRecordsFromIDB, httpProps, saveRecordsToIndexDB, UriMerger } from './httpHelpers'
 import { formatN, throttle } from './main'
