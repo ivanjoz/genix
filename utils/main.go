@@ -1,6 +1,9 @@
 package main
 
-import "os"
+import (
+	"fmt"
+	"os"
+)
 
 /*
 const SCYLLA_DATA = "/var/lib/scylla/data/"
@@ -14,13 +17,19 @@ const BACKUP_MAIN_DIR = "/home/ivanjoz/Documents/backup_demo/"
 
 func main() {
 	args := os.Args[1:]
-	mode := "r"
+	mode := "b"
 	backupName := ""
-	if len(args) > 0 {
-		mode = args[0]
-	}
-	if len(args) > 1 {
-		mode = args[1]
+
+	for i, e := range args {
+		if e == "r" {
+			mode = "r"
+			if len(args) > (i + 1) {
+				backupName = args[i+1]
+			} else {
+				fmt.Println("Backup name missing in args.")
+				return
+			}
+		}
 	}
 
 	if mode == "r" {
