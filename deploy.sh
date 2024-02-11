@@ -5,7 +5,7 @@ FUNCTION_NAME="jobfinder6-p-app"
 PUBLICAR_ASSETS=""
 
 echo "Seleccione assets a publicar: (Es posible escoger más de 1. Ejemplo: '123')"
-echo "[1] Frontend [2] Backend [3] Frontend (Assets)"
+echo "[1] Frontend [2] Backend [3] Frontend (Assets) [4] db-backup"
 read ACCIONES
 
 echo "Obteniendo los últimos cambios del repositorio (GIT PULL)..."
@@ -48,6 +48,18 @@ if [[ $ACCIONES == *"1"* ]]; then
 fi
 
 #PUBLICAR BACKEND
+if [[ $ACCIONES == *"2"* ]]; then
+
+    echo "=== PUBLICANDO BACKEND ==="
+
+    cd ./cloud
+    go run . accion=1
+
+    echo "El deploy backend-node finalizado!"
+
+fi
+
+#PUBLICAR DB BACKUP BINARY
 if [[ $ACCIONES == *"2"* ]]; then
 
     echo "=== PUBLICANDO BACKEND ==="
