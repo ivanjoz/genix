@@ -15,9 +15,19 @@ import (
 )
 
 func backup() {
+	if Env.IS_PRODUCTION {
+		fmt.Println("Executing database flush...")
+		cmd := exec.Command("nodetool", "flush", Env.KEYSPACE)
+		if err := cmd.Run(); err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		fmt.Println("Scylla-db installation not found!.")
+	}
+
 	fmt.Println("Starting Backup...")
-	const DATA_DIR = SCYLLA_DATA + KEYSPACE
-	BACKUP_DIR := fmt.Sprintf("%vbackup-%v", BACKUP_MAIN_DIR, time.Now().Unix())
+	DATA_DIR := Env.SCYLLA_DATA + Env.KEYSPACE
+	BACKUP_DIR := fmt.Sprintf("%vbackup-%v", Env.BACKUP_MAIN_DIR, time.Now().Unix())
 
 	if err := os.Mkdir(BACKUP_DIR, os.ModePerm); err != nil {
 		log.Fatal("Error creating backup directory:", BACKUP_DIR, "|", err)

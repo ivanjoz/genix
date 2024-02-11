@@ -15,9 +15,9 @@ import (
 
 func restore(backupName string) {
 
-	backupDirectory := BACKUP_MAIN_DIR + backupName
+	backupDirectory := Env.BACKUP_MAIN_DIR + backupName
 	backupFileName := backupName + ".tar.zst"
-	backupTarFile := BACKUP_MAIN_DIR + backupFileName
+	backupTarFile := Env.BACKUP_MAIN_DIR + backupFileName
 
 	if _, err := os.Stat(backupTarFile); !os.IsNotExist(err) {
 
@@ -89,7 +89,7 @@ func restore(backupName string) {
 		}
 	}
 
-	const DATA_DIR = SCYLLA_DATA + KEYSPACE
+	DATA_DIR := Env.SCYLLA_DATA + Env.KEYSPACE
 
 	dirEntries, err := os.ReadDir(DATA_DIR)
 	if err != nil {

@@ -12,22 +12,17 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 )
 
-/*
 const SCYLLA_DATA = "/var/lib/scylla/data/"
-const KEYSPACE = "genix"
 const BACKUP_MAIN_DIR = "/home/ubuntu/"
-*/
-// /home/ivanjoz/Documents/gerp
-const SCYLLA_DATA = "/home/ivanjoz/Documents/"
-const KEYSPACE = "gerp"
-const BACKUP_MAIN_DIR = "/home/ivanjoz/Documents/backup_demo/"
-const AWS_PROFILE = "ivanjoz"
-const S3_PROFILE = "gerp-v2-frontend"
 
 type EnvStruct struct {
-	AWS_PROFILE string
-	AWS_REGION  string
-	S3_BUCKET   string
+	IS_PRODUCTION   bool
+	AWS_PROFILE     string
+	AWS_REGION      string
+	S3_BUCKET       string
+	SCYLLA_DATA     string
+	KEYSPACE        string
+	BACKUP_MAIN_DIR string
 }
 
 var Env EnvStruct
@@ -84,6 +79,17 @@ func populateVariables() {
 	if err != nil {
 		fmt.Println("Error parsing credentials.json:", err)
 		return
+	}
+
+	Env.KEYSPACE = "genix"
+	// Check if is a Scylla instalation
+	if _, err := os.Stat(SCYLLA_DATA); os.IsNotExist(err) || os.IsPermission(err) {
+		Env.SCYLLA_DATA = "/home/ivanjoz/Documents/"
+		Env.BACKUP_MAIN_DIR = "/home/ivanjoz/Documents/backup_demo/"
+	} else {
+		Env.SCYLLA_DATA = SCYLLA_DATA
+		Env.BACKUP_MAIN_DIR = BACKUP_MAIN_DIR
+		Env.IS_PRODUCTION = true
 	}
 }
 
