@@ -1,31 +1,64 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 func restore(backupName string) {
 
 	backupDirectory := BACKUP_MAIN_DIR + backupName
+	backupFileName := backupName + ".tar.zst"
+	backupTarFile := BACKUP_MAIN_DIR + backupFileName
+
+	if _, err := os.Stat(backupTarFile); !os.IsNotExist(err) {
+
+		cfg, err := makeAwsConfig()
+		if err != nil {
+			panic(err)
+		}
+
+		// Open the file to upload
+		file, err := os.Create(backupTarFile)
+		if err != nil {
+			fmt.Println("Error opening file to download:", err)
+			return
+		}
+		defer file.Close()
+
+		fmt.Println("Downloading backup file.", backupFileName)
+		downloader := manager.NewDownloader(s3.NewFromConfig(cfg))
+
+		_, err = downloader.Download(context.TODO(), file, &s3.GetObjectInput{
+			Bucket: &Env.S3_BUCKET,
+			Key:    aws.String("_backups/" + backupFileName),
+		})
+
+		if err != nil {
+			fmt.Println("Error downloading backup from s3:", err)
+			return
+		}
+	} else {
+		fmt.Println("Backup file already exists.")
+	}
 
 	if _, err := os.Stat(backupDirectory); !os.IsNotExist(err) {
 		if err := os.RemoveAll(backupDirectory); err != nil {
-			log.Fatal("Error removing previous backup directory:", backupDirectory, "|", err)
+			fmt.Println("Error cleaning backup directory:", err)
+			return
 		}
 	}
 
 	if err := os.Mkdir(backupDirectory, os.ModePerm); err != nil {
 		log.Fatal("Error creating backup directory:", backupDirectory, "|", err)
-	}
-
-	backupTarFile := backupDirectory + ".tar.zst"
-
-	if _, err := os.Stat(backupDirectory); os.IsNotExist(err) {
-		log.Fatal("Backup File Don't Exists:", backupTarFile)
 	}
 
 	fmt.Println("Uncompressing backup file...")
@@ -55,8 +88,6 @@ func restore(backupName string) {
 			backupToTablePathMap[tableName] = path
 		}
 	}
-
-	fmt.Println(backupToTablePathMap)
 
 	const DATA_DIR = SCYLLA_DATA + KEYSPACE
 
