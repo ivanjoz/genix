@@ -76,7 +76,6 @@ func PopulateVariables() {
 			return
 		}
 	} else {
-
 		configJsonBase64 := os.Getenv("CONFIG")
 		if len(configJsonBase64) == 0 {
 			panic("No se encontraron las variables de entorno.")
@@ -85,6 +84,7 @@ func PopulateVariables() {
 		baseBytes := Base64ToBytes(configJsonBase64)
 		variablesBytes = []byte(DecompressZstd(&baseBytes))
 	}
+
 	err := json.Unmarshal(variablesBytes, &Env)
 	if err != nil {
 		fmt.Println("Error parsing credentials.json:", err)
