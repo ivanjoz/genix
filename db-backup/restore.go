@@ -77,7 +77,15 @@ func restore(backupName string) {
 
 	backupToTablePathMap := map[string]string{}
 
-	fmt.Println("Reading backup entries...")
+	if Env.IS_PRODUCTION {
+		fmt.Println("Stoping Scylla-Server...")
+		cmd = exec.Command("sudo", "systemctl", "stop", "scylla-server")
+		if err := cmd.Run(); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	fmt.Println("Replacing backup files...")
 
 	for _, dir := range backupDirEntries {
 		name := dir.Name()
@@ -159,5 +167,19 @@ func restore(backupName string) {
 				log.Fatal("Error writing backup file:", tableFileDestPath, "|", err)
 			}
 		}
+	}
+
+	if Env.IS_PRODUCTION {
+		fmt.Println("Updating data owner to scylla...")
+		cmd := exec.Command("sudo", "chown", "-R", "scylla", "/var/lib/scylla/data/"+Env.KEYSPACE)
+		if err := cmd.Run(); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	fmt.Println("Starting Scylla-Server...")
+	cmd = exec.Command("sudo", "systemctl", "start", "scylla-server")
+	if err := cmd.Run(); err != nil {
+		log.Fatal(err)
 	}
 }
