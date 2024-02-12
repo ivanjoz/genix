@@ -60,14 +60,15 @@ if [[ $ACCIONES == *"2"* ]]; then
 fi
 
 #PUBLICAR DB BACKUP BINARY
-if [[ $ACCIONES == *"2"* ]]; then
+if [[ $ACCIONES == *"4"* ]]; then
 
-    echo "=== PUBLICANDO BACKEND ==="
+    echo "=== PUBLICANDO DB-BACKUP ==="
 
-    cd ./cloud
-    go run . accion=1
+    cd ./db-backup
+    GOOS=linux GOARCH=arm64 go build -ldflags '-s -w' .
 
-    echo "El deploy backend-node finalizado!"
+    aws --profile $AWS_PROFILE s3 cp ./db-backup s3://$AWS_S3/_bin/db-backup.bin
+    echo "El deploy del ejecutable finalizó."
 
 fi
 

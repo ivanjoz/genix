@@ -12,8 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 )
 
-const SCYLLA_DATA = "/var/lib/scylla/data/"
-const BACKUP_MAIN_DIR = "/home/ubuntu/"
+const SCYLLA_DATA = "/var/lib/scylla/data"
+const BACKUP_MAIN_DIR = "/home/ubuntu"
 
 type EnvStruct struct {
 	IS_PRODUCTION   bool
@@ -57,9 +57,21 @@ func main() {
 
 func populateVariables() {
 
+	IS_PRODUCTION := false
+	if _, err := os.Stat(SCYLLA_DATA); !os.IsNotExist(err) {
+		IS_PRODUCTION = true
+	}
+
+	fmt.Println("IS_PRODUCTION =", IS_PRODUCTION)
+
 	wd, _ := os.Getwd()
 	dirname := strings.Split(wd, "/")
-	dirname[len(dirname)-1] = "credentials.json"
+	if IS_PRODUCTION {
+		dirname = append(dirname, "credentials.json")
+	} else {
+		dirname[len(dirname)-1] = "credentials.json"
+	}
+
 	credentialsJson := strings.Join(dirname, "/")
 	file, err := os.Open(credentialsJson)
 	if err != nil {
@@ -82,14 +94,14 @@ func populateVariables() {
 	}
 
 	Env.KEYSPACE = "genix"
+	Env.IS_PRODUCTION = IS_PRODUCTION
 	// Check if is a Scylla instalation
-	if _, err := os.Stat(SCYLLA_DATA); os.IsNotExist(err) || os.IsPermission(err) {
+	if Env.IS_PRODUCTION {
+		Env.SCYLLA_DATA = SCYLLA_DATA + "/"
+		Env.BACKUP_MAIN_DIR = BACKUP_MAIN_DIR + "/"
+	} else {
 		Env.SCYLLA_DATA = "/home/ivanjoz/Documents/"
 		Env.BACKUP_MAIN_DIR = "/home/ivanjoz/Documents/backup_demo/"
-	} else {
-		Env.SCYLLA_DATA = SCYLLA_DATA
-		Env.BACKUP_MAIN_DIR = BACKUP_MAIN_DIR
-		Env.IS_PRODUCTION = true
 	}
 }
 
