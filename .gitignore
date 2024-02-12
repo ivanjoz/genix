@@ -5,3 +5,4 @@ cloud/main-compiled
 cloud/main-compiled.zip
 cloud/main_compiled
 utils/backup-db
+db-backup/db-backup
