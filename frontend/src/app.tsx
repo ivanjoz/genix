@@ -30,7 +30,7 @@ if(isClient){
   window._dexieVersion = 1
   window._cache = {}
   window._params = { fetchID: 1001, fetchProcesses: new Map() }
-  window.appId = "gerp"
+  window.appId = "genix"
   window._pendingRequests = []
   window._counterID = 1
   createIndexDB(Modules)

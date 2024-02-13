@@ -1,5 +1,11 @@
 package types
 
+type Increment struct {
+	TAGS         `table:"sequences"`
+	TableName    string `db:"name"`
+	CurrentValue int64  `db:"current_value"`
+}
+
 type Producto struct {
 	TAGS          `table:"productos"`
 	EmpresaID     int32   `json:",omitempty" db:"empresa_id,pk"`
@@ -80,12 +86,12 @@ type AlmacenLayoutBloque struct {
 type Sede struct {
 	TAGS        `table:"sedes"`
 	EmpresaID   int32  `db:"empresa_id,pk"`
-	ID          int32  `db:"id"`
+	ID          int32  `db:"id,pk"`
 	Nombre      string `db:"nombre"`
 	Descripcion string `db:"descripcion"`
 	Direccion   string `db:"direccion"`
 	CiudadID    string `db:"pais_ciudad_id"`
-	Status      int8   `json:"ss" db:"status"`
+	Status      int8   `json:"ss" db:"status,view"`
 	Updated     int64  `json:"upd" db:"updated,view"`
 	UpdatedBy   int32  `db:"updated_by"`
 	Created     int64  `db:"created"`

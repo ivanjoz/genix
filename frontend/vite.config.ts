@@ -1,8 +1,19 @@
 import { defineConfig } from "@solidjs/start/config";
 
 export default defineConfig({
+  start: {
+    ssr: false,
+  },
+  server: {
+    hmr: false
+  }
+})
+
+/*
+export default defineConfig({
   start: { 
-    ssr: true, 
+    ssr: false, 
+    
     server: { 
       prerender: {
         // autoSubfolderIndex: true,
@@ -14,6 +25,7 @@ export default defineConfig({
   server: { hmr: false },
   base: '/',
 })
+*/
 
 /*
 

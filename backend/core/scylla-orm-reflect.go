@@ -12,6 +12,7 @@ var ScyllaFieldToColumnTypesMap = map[string]string{
 	"int":     "int",
 	"int32":   "int",
 	"int64":   "bigint",
+	"int64.1": "counter",
 	"int16":   "smallint",
 	"int8":    "tinyint",
 	"float32": "float",

@@ -292,7 +292,6 @@ export default function SedesAlmacenes() {
         />
         <Input saveOn={almacenForm()} save="Nombre" 
           css="w-12x mb-10" label="Nombre" required={true}
-          disabled={sedeForm()?.ID > 0}
         />
         <Input saveOn={almacenForm()} save="Descripcion" 
           css="w-12x mb-10" label="Descripción" 

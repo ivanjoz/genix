@@ -23,7 +23,6 @@ var ScyllaColumnsMap map[string][]ScyllaColumns
 var ScyllaViewsMap map[string][]ScyllaViews
 
 func InitTable[T any](mode int8) {
-	Log("Homologando Estructuras: Mode::", mode)
 	conn := ScyllaConnect()
 
 	if ScyllaColumnsMap == nil {

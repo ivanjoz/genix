@@ -357,6 +357,7 @@ func MsgPDecode(msgBytes []byte, msg any) error {
 
 	err := msgDecoder.Decode(msg)
 	if err != nil {
+		Log("Error decoding MsgPack: ", err)
 		return err
 	}
 	return nil
