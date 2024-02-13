@@ -44,7 +44,7 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		err := query.Exec()
 		if err != nil {
-			err = fmt.Errorf("error al obtener los almacenes: %v", err)
+			err = fmt.Errorf("error al obtener las sedes: %v", err)
 		}
 		return err
 	})

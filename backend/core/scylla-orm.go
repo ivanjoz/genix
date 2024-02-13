@@ -74,6 +74,8 @@ func (e *BDColumn) ParseValue(field reflect.Value) string {
 		} else {
 			v = field.Elem().Interface()
 		}
+	} else if field.Kind() == reflect.Slice && field.Len() == 0 && e.IsComplexType {
+		return "NULL"
 	} else {
 		v = field.Interface()
 	}
@@ -82,6 +84,11 @@ func (e *BDColumn) ParseValue(field reflect.Value) string {
 
 	if e.IsComplexType {
 		recordBytes, err := MsgPEncode(v)
+
+		Log("Encoding type::", e.Name, " | Is Null:", v == nil, " | Kind:", field.Kind(), " | Len:", field.Len())
+		Print(recordBytes)
+		Print(v)
+
 		if err != nil {
 			Log("Error al encoded .gob:: ", e.FieldName, err.Error())
 			return ""
@@ -130,15 +137,9 @@ type ScyllaTable struct {
 
 var TypeToScyllaTableMap = map[string]ScyllaTable{}
 
-type Increment struct {
-	types.TAGS   `table:"sequences"`
-	TableName    string `db:"name"`
-	CurrentValue int64  `db:"current_value"`
-}
-
 func GetCounter(name string, incrementCount int) (int64, error) {
 
-	registros := []Increment{}
+	registros := []types.Increment{}
 	err := DBSelect(&registros).Where("name").Equals(name).Exec()
 	if err != nil {
 		return 0, Err("Error al obtener el counter: ", err)
@@ -150,12 +151,13 @@ func GetCounter(name string, incrementCount int) (int64, error) {
 	}
 
 	queryUpdateStr := fmt.Sprintf(
-		"UPDATE gerp.sequences SET current_value = current_value + %v WHERE name = '%v'",
-		incrementCount, name,
+		"UPDATE %v.sequences SET current_value = current_value + %v WHERE name = '%v'",
+		Env.DB_NAME, incrementCount, name,
 	)
 
 	queryUpdate := ScyllaConnect().Query(queryUpdateStr)
 	if err := queryUpdate.Exec(); err != nil {
+		Log(queryUpdate)
 		panic(err)
 	}
 
@@ -216,7 +218,8 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 	Log(queryStr)
 
 	if err := conn.Query(queryStr).Exec(); err != nil {
-		panic(err)
+		Log("--------------")
+		return err
 	}
 
 	return nil
@@ -457,6 +460,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 		rowValues := rd.Values
 		err := scanner.Scan(rowValues...)
 		if err != nil {
+			Log(queryStr)
 			return err
 		}
 
@@ -488,13 +492,15 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 						ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct).Elem())
 					}
 				} else if vl, ok := value.(*[]uint8); ok {
-					Log("Valor:: ", strings.TrimSpace(string(*vl)), len(string(*vl)))
+					if len(*vl) <= 2 {
+						continue
+					}
+					Log("Valor Columna:", column.Name, " | ", strings.TrimSpace(string(*vl)), "Len:", len(*vl), "")
 					newStruct := column.RefType.Interface()
 					err = MsgPDecode(*vl, &newStruct)
 					if err != nil {
 						fmt.Println("Error al convertir: ", newStruct, *vl, err.Error())
 					}
-
 					if column.IsPointer {
 						ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct))
 					} else {
@@ -510,6 +516,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 
 	err := scanner.Err()
 	if err != nil {
+		Log(queryStr)
 		return Err(err)
 	}
 

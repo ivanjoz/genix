@@ -18,6 +18,7 @@ func MakeScyllaControllers() []ScyllaController {
 		makeController[s.Producto](),
 		makeController[s.ProductoStock](),
 		makeController[s.ListaCompartidaRegistro](),
+		makeController[s.Increment](),
 	}
 }
 

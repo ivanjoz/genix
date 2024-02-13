@@ -50,6 +50,7 @@ export default function Productos() {
     }
 
     setProductos({...productos(), productos: productos_})
+    setProductoForm({} as IProducto)
     setOpenLayers([])
     Loading.remove()
   }
