@@ -2,6 +2,7 @@ package aws
 
 import (
 	"app/core"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ type FileToS3Args struct {
 	Account       uint8
 	Bucket        string
 	LocalFilePath string
+	FileContent   []byte
 	Name          string
 	Path          string
 	Prefix        string
@@ -44,6 +46,8 @@ func SendFileToS3(args FileToS3Args) error {
 			return err
 		}
 		input.Body = file
+	} else if len(args.FileContent) > 0 {
+		input.Body = bytes.NewReader(args.FileContent)
 	} else {
 		core.Log("No hay acciones a realizar")
 		return errors.New("no hay acciones a realizar")
@@ -55,8 +59,7 @@ func SendFileToS3(args FileToS3Args) error {
 		return err
 	}
 
-	core.Log("Respuesta recibida::")
-	core.Print(output.ETag)
+	core.Log("Respuesta recibida (ok):", output.ETag)
 	return nil
 }
 

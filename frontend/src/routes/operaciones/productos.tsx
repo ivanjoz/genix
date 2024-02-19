@@ -48,7 +48,7 @@ export default function Productos() {
       form.ID = result[0].ID
       productos_.unshift(form)
     }
-
+    
     setProductos({...productos(), productos: productos_})
     setProductoForm({} as IProducto)
     setOpenLayers([])

@@ -1,10 +1,7 @@
 import { GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
-import { arrayToMapN, arrayToMapS } from "~/shared/main"
 
 export interface IProductoPropiedad {
-  ID: number
-  Nombre: string
-  Options: string[]
+  ID: number, Nombre: string, Options: string[]
 }
 
 export interface IProducto {

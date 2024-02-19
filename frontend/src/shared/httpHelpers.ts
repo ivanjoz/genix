@@ -2,6 +2,9 @@ import { keyID, keyUpdated, log1, log2 } from "./http"
 import Dexie, { Table } from 'dexie';
 import { camelToSnakeCase } from "./main";
 import { Notify, Loading } from "~/core/main";
+import { AxiosProgressEvent } from "axios";
+
+export interface IHttpStatus { code: number, message: string }
 
 export type httpProps = {
   id?: number // window._params = { fetchID: 1001 }
@@ -32,7 +35,7 @@ export type httpProps = {
   filterIdb?: {[e: string]: string | number } | 
     ((tableName: string) => {[e: string]: string | number }),
   updatedQuery?: {[e: string]: string | number }
-  status?: { code: number, message: string }
+  status?: IHttpStatus
   startTime?: number
   startTimeMs?: number
   recordUpdated?: number
@@ -40,7 +43,7 @@ export type httpProps = {
   makeTransform?: (e: any) => void
   resolver?: (e: any) => void
   rejecter?: (e: any) => void
-  onUploadProgress?: (e: any) => void
+  onUploadProgress?: (e: AxiosProgressEvent) => void
   localRecordsToDelete?: string[]
   readyForFetch?: number
   resultCached?: any

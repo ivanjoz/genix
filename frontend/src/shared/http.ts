@@ -1,9 +1,10 @@
+import axios from 'axios';
+import Dexie from "dexie";
+import { Accessor, Setter, createSignal } from "solid-js";
 import { Loading, Notify } from "~/core/main";
-import axios from 'axios'
-import { getRecordsFromIDB, httpProps, saveRecordsToIndexDB, UriMerger } from './httpHelpers'
-import { formatN, throttle } from './main'
-import { Accessor, Setter, createSignal } from "solid-js"
-import { Params, accessHelper } from "./security"
+import { UriMerger, getRecordsFromIDB, httpProps, saveRecordsToIndexDB } from './httpHelpers';
+import { formatN, throttle } from './main';
+import { accessHelper } from "./security";
 
 export const defaultCacheExp = 20 * 60
 export const keyID = 'id'
@@ -82,7 +83,7 @@ const setFetchProgress = (bytesLen?: number) => {
 }
 
 // Parsea los headers de la respuesta crear un reader
-const parseResponseAsStream = (fetchResponse: Response, props): Promise<any> => {
+const parseResponseAsStream = (fetchResponse: Response, props: IHttpStatus): Promise<any> => {
   console.log("Headers:: ", fetchResponse.headers)
   const contentType = fetchResponse.headers.get("content-type")
   if (fetchResponse.status) {
@@ -95,7 +96,7 @@ const parseResponseAsStream = (fetchResponse: Response, props): Promise<any> => 
     const stream = new ReadableStream({
       start(controller) {
         fetchStreamOnCourse++
-        function pump() {
+        function pump(): any {
           return reader.read().then(({ done, value }) => {
             // When no more data needs to be consumed, close the stream
             if (done) {
@@ -279,7 +280,7 @@ export const buildHeaders = (props: httpProps, contentType?: string) => {
 // Busca en el caché de Index DB
 const searchOnCache = (props: httpProps) => {
   console.log('buscando en caché indexeddb', props.route)
-  const db = window['DexieDB']
+  const db = window.DexieDB as Dexie
 
   return new Promise(resolve => {
     if (!db.isOpen()) resolve(null)
@@ -815,23 +816,23 @@ export const POST_XMLHR = (props: httpProps): Promise<any> => {
         'authorization': `Bearer ${getToken()}`
       },
     })
-      .then(result => {
-        const data = result.data
-        if (result.status !== 200) {
-          let message = data.message || data.error || data.errorMessage
-          if (!message) message = String(data)
-          Notify.failure(data)
-          reject(data)
-        } else {
-          resolve(data)
-        }
-      })
-      .catch(error => {
-        if (error.response && error.response.data) error = error.response.data
-        const message = error.message || error.error || error.errorMessage
-        Notify.failure(String(message || error))
-        reject(error)
-      })
+    .then(result => {
+      const data = result.data
+      if (result.status !== 200) {
+        let message = data.message || data.error || data.errorMessage
+        if (!message) message = String(data)
+        Notify.failure(data)
+        reject(data)
+      } else {
+        resolve(data)
+      }
+    })
+    .catch(error => {
+      if (error.response && error.response.data) error = error.response.data
+      const message = error.message || error.error || error.errorMessage
+      Notify.failure(String(message || error))
+      reject(error)
+    })
   })
 }
 
