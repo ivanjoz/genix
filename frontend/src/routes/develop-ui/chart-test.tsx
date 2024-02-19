@@ -1,16 +1,15 @@
-import { CellEditable } from '~/components/Editables';
-import { ITableColumn, QTable } from '~/components/QTable';
-import { PageContainer } from '~/core/page';
-import bb, {bar, spline, line, area, step, areaSpline } from "billboard.js";
-import { createEffect } from 'solid-js';
+import bb, { spline } from "billboard.js";
 import * as d3 from "d3";
+import { createEffect } from 'solid-js';
+import { PageContainer } from '~/core/page';
 
 // 2) import css if your dev-env supports. If don't, include them via <link>
 import "billboard.js/dist/billboard.css";
 
 // or theme style. Find more themes from 'theme' folder
-import "billboard.js/dist/theme/insight.css"
+import "billboard.js/dist/theme/insight.css";
 import { DatePicker } from '~/components/Datepicker';
+import { ImageUploader } from '~/components/Uploaders';
 
 export default function ChartTest() {
   
@@ -73,6 +72,7 @@ export default function ChartTest() {
 
   return <PageContainer title="Table demo">
     <DatePicker />
+    <ImageUploader />
     <div style={{ padding: '1rem' }}>
       <div id="chart-1" style={{ width: '54rem', height: '600px', "background-color": 'white' }} ></div>
     </div>

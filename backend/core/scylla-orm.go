@@ -28,6 +28,7 @@ func ScyllaConnect() *gocql.Session {
 	cluster.Consistency = gocql.One
 	cluster.ProtoVersion = 4
 	cluster.ConnectTimeout = time.Second * 10
+	cluster.Compressor = gocql.SnappyCompressor{}
 	cluster.Authenticator = gocql.PasswordAuthenticator{
 		Username:              Env.DB_USER,
 		Password:              Env.DB_PASSWORD,
