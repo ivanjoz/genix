@@ -119,8 +119,9 @@ Resources:
       Architectures: [arm64]
       Role: $LAMBDA_IAM_ROLE
       Runtime: provided.al2
-      Environment:
-        APP_CODE: gerp-prd
+      Environment:           
+        Variables:             
+          APP_CODE: gerp-prd
   # Lambda Log Group
   LambdaGOLogGroup:
     Type: AWS::Logs::LogGroup
@@ -245,6 +246,55 @@ Resources:
         AttributeName: ttl
         Enabled: true
       BillingMode: PAY_PER_REQUEST
+
+  #SOLO PARA PRUEBAS!!
+  LambdaGOAmd:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: $DEPLOYMENT_BUCKET
+        S3Key: $S3_COMPILED_PATH
+      Description: Lambda Berryweek on GO
+      FunctionName: $LAMBDA_NAME_AMD
+      Handler: index.handler
+      MemorySize: 192
+      Timeout: 300
+      Architectures: [x86_64]
+      Role: $LAMBDA_IAM_ROLE
+      Runtime: provided.al2
+      Environment:
+        Variables:             
+          APP_CODE: gerp-prd
+  # Lambda Log Group
+  LambdaGOAmdLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/$LAMBDA_NAME_AMD
+      RetentionInDays: 30
+  # URL de la lambda
+  LambdaGOAmdFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref LambdaGOAmd
+      AuthType: NONE
+      Cors:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - HEAD
+          - PUT
+  LambdaGOAmdPermisionForURLInvoke:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LambdaGOAmd
+      FunctionUrlAuthType: 'NONE'
+      Action: lambda:InvokeFunctionUrl
+      Principal: '*'
+
 Outputs:
   WebsiteURL:
     Value: !GetAtt 

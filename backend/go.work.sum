@@ -1,5 +1,0 @@
-github.com/ivanjoz/avif-webp-encoder v0.1.1 h1:U1De3N9kYUdEg86bXBstpAF/mnv3DaWVDHmJVNsHQWE=
-github.com/ivanjoz/avif-webp-encoder v0.1.1/go.mod h1:gs9+qLiBN27aW5o7nOchG6Q486H4uYvMfUbf4wJwWpE=
-golang.org/x/mod v0.13.0/go.mod h1:hTbmBsO62+eylJbnUtE2MGJUyE7QWk4xUqPFrRgJ+7c=
-golang.org/x/text v0.13.0/go.mod h1:TvPlkZtksWOMsz7fbANvkp4WM8x/WCo/om8BMLbz+aE=
-golang.org/x/tools v0.14.0/go.mod h1:uYBEerGOWcJyEORxN+Ek8+TT266gXkNlHdJBwexUsBg=

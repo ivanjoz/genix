@@ -25,7 +25,6 @@ require (
 )
 
 require (
-	github.com/amenzhinsky/go-memexec v0.7.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.10 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.26 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.13.4 // indirect
@@ -59,7 +58,7 @@ require (
 
 require (
 	github.com/DmitriyVTitov/size v1.5.0
-	github.com/ivanjoz/avif-webp-encoder v0.1.1
+	github.com/amenzhinsky/go-memexec v0.7.1
 	github.com/kelindar/binary v1.0.18
 	github.com/kr/pretty v0.3.1
 	github.com/mitchellh/hashstructure/v2 v2.0.2

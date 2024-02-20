@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"runtime"
 	"runtime/debug"
 	"strings"
 
@@ -17,19 +16,6 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/rs/cors"
 )
-
-func init() {
-	switch runtime.GOOS {
-	case "windows":
-		fmt.Println("// +build windows")
-		fmt.Println("// +build linux")
-	case "linux":
-		fmt.Println("// +build linux")
-		fmt.Println("// +build windows")
-	default:
-		fmt.Println("// +build !windows,!linux")
-	}
-}
 
 func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (*events.APIGatewayV2HTTPResponse, error) {
 	clearEnvVariables()
@@ -43,7 +29,7 @@ func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (
 		core.Log("*body enviado: ", request.Body[0:(blen-1)])
 	}
 	// Revisa si lo que se está pidiendo es ejecutar una funcion
-	if len(request.Body) > 5 && request.Body[0:5] == "exec:" {
+	if len(request.Body) > 11 && request.Body[0:11] == `{"fn_exec":` {
 		ExecFuncHandler(request.Body[5:])
 		return nil, nil
 	}
@@ -112,10 +98,6 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 func OnPanic(panicMessage interface{}) {
 	core.Logx(5, "Error 500 (Panic): ", panicMessage)
 	core.Log(string(debug.Stack()))
-	/*
-		msg := core.Concat(" | ", core.Env.APP_CODE,
-			"Panic Error: ", panicMessage, string(debug.Stack()))
-	*/
 }
 
 func main() {

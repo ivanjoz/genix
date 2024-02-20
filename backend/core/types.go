@@ -6,15 +6,26 @@ import (
 )
 
 type ExecArgs struct {
-	Params  map[string]string
-	Param2  int
-	Param3  string
-	Message string
+	LambdaName string         `json:"-"`
+	FuncToExec string         `json:"fn,omitempty"`
+	InvokeType string         `json:"invokeType,omitempty"`
+	Params     map[string]any `json:"pm,omitempty"`
+	Param2     int32          `json:"p2,omitempty"`
+	Param3     int32          `json:"p3,omitempty"`
+	Param4     int64          `json:"p4,omitempty"`
+	Param5     int64          `json:"p5,omitempty"`
+	Param6     string         `json:"p6,omitempty"`
+	Param7     string         `json:"p7,omitempty"`
+	Param8     []int32        `json:"p8,omitempty"`
+	Param9     []int32        `json:"p9,omitempty"`
+	Message    string         `json:"ms,omitempty"`
 }
 
 type FuncResponse struct {
-	Message string
-	Error   string
+	ElapsedTime int
+	Message     string
+	Error       string
+	Content     map[string]any
 }
 
 type AppRouterType map[string]func(args *HandlerArgs) HandlerResponse

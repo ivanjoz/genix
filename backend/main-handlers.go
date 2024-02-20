@@ -5,6 +5,7 @@ import (
 	"app/core"
 	"app/exec"
 	"app/handlers"
+	"encoding/json"
 	"fmt"
 
 	"reflect"
@@ -182,88 +183,108 @@ func GetFunctionName(i interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 }
 
-func ExecFuncHandler(funcToExec string) {
-	core.Env.LOGS_ONLY_SAVE = true
-	hourMinCurrent := ""
+type ExecLambdaInput struct {
+	ExecArgs core.ExecArgs `json:"fn_exec"`
+}
 
-	if len(funcToExec) == 5 && strings.Contains(funcToExec, ":") {
-		hourMinCurrent = funcToExec
-		funcToExec = "cron"
+func ExecFuncHandler(funcToExec string) core.FuncResponse {
+	core.Env.LOGS_ONLY_SAVE = true
+
+	input := ExecLambdaInput{}
+	err := json.Unmarshal([]byte(funcToExec), &input)
+	if err != nil {
+		return core.FuncResponse{
+			Error: "no se pudieron interpretar los argumentos recibidos: " + funcToExec,
+		}
 	}
 
+	args := input.ExecArgs
 	core.Log("func to exec:: ", funcToExec)
+
+	type FuncToInvoke struct {
+		HourMin  string
+		Name     string
+		Priority int32
+		Exec     func(args *core.ExecArgs) core.FuncResponse
+	}
+
 	// Revisa si hay una función asignada a esta hora
-	if funcToExec == "cron" {
-		if len(hourMinCurrent) == 0 {
-			hourMinCurrent = core.GetHoursMinutes()
+	if args.FuncToExec == "cron" {
+		if len(args.Param6) == 0 {
+			args.Param6 = core.GetHoursMinutes()
 		}
 
-		core.Log("*Search Time Function:: ", hourMinCurrent)
-		funcsToInvoke := map[string]func(args *core.ExecArgs) core.FuncResponse{}
+		core.Log("*Search Time Function:: ", args.Param6)
+		funcsToInvokeMap := map[string]FuncToInvoke{}
 
-		funcHandlers := []*exec.ExecRouterType{&exec.ExecHandlers}
-
-		if core.Env.IS_PROD {
-			funcHandlers = append(funcHandlers, &exec.ExecHandlersProd)
-		} else {
-			funcHandlers = append(funcHandlers, &exec.ExecHandlersQAs)
-		}
-
-		for _, funcHandler := range funcHandlers {
-			for hourMin := range *funcHandler {
-				setFuncToInvoke := func() {
-					funcName := GetFunctionName(exec.ExecHandlers[hourMin])
-					funcName = core.ToSnakeCase(strings.ReplaceAll(funcName, "app/", ""))
-					funcsToInvoke[funcName] = exec.ExecHandlers[hourMin]
+		for hourMin := range exec.ExecHandlersCron {
+			addFuncToInvoke := func() {
+				funcName := GetFunctionName(exec.ExecHandlers[hourMin])
+				funcName = core.ToSnakeCase(strings.ReplaceAll(funcName, "app/", ""))
+				funcsToInvokeMap[funcName] = FuncToInvoke{
+					Name:    funcName,
+					HourMin: hourMin,
+					Exec:    (exec.ExecHandlersCron)[hourMin],
 				}
-				if len(hourMin) < 5 {
-					continue
+			}
+			if len(hourMin) < 5 {
+				continue
+			}
+			if args.Param6 == hourMin[0:5] {
+				addFuncToInvoke()
+			} else if strings.Contains(hourMin, "|") {
+				for _, h := range strings.Split(hourMin, "|") {
+					if h[:2] != args.Param6[:2] || !strings.Contains(h, ":") {
+						continue
+					}
+					minutes := strings.Split(h, ":")[1]
+					isIncluded := strings.Contains(minutes, ",") && core.Contains(strings.Split(minutes, ","), args.Param6[3:])
+
+					if minutes == "*" || args.Param6 == h || isIncluded {
+						addFuncToInvoke()
+						break
+					}
 				}
-				if hourMinCurrent == hourMin[0:5] {
-					setFuncToInvoke()
-				} else if strings.Contains(hourMin, "|") {
-					for _, h := range strings.Split(hourMin, "|") {
-						// core.Log("revisando horas: ", h)
-						if hourMinCurrent == h {
-							setFuncToInvoke()
-							continue
-						}
-					}
-				} else if strings.Contains(hourMin, "-") {
-					values := strings.Split(hourMin, "-")
-					hourStart := values[0]
-					hourEnd := values[1]
-					if hourMinCurrent >= hourStart && hourMinCurrent <= hourEnd {
-						setFuncToInvoke()
-					}
+			} else if strings.Contains(hourMin, "-") {
+				values := strings.Split(hourMin, "-")
+				hourStart := values[0]
+				hourEnd := values[1]
+				if args.Param6 >= hourStart && args.Param6 <= hourEnd {
+					addFuncToInvoke()
 				}
 			}
 		}
 
-		if len(funcsToInvoke) == 0 {
-			return
+		if len(funcsToInvokeMap) == 0 {
+			return core.FuncResponse{}
 		}
 
 		messages := []string{}
-		core.Log("*Funciones encontradas:: ", funcsToInvoke)
 
-		for funcName, funcToInvoke := range funcsToInvoke {
+		for funcName, funcToInvoke := range funcsToInvokeMap {
 			nowTime := time.Now().Unix()
-			core.Log("*Ejecutando función:: ", hourMinCurrent, " | ", funcName)
+			core.Log("*Ejecutando función:: ", funcToInvoke.HourMin, " | ", funcName)
 			core.LogsSaved = []string{}
 
 			args := core.ExecArgs{Message: ""}
-			funcMessage := funcToInvoke(&args).Message
+			funcMessage := funcToInvoke.Exec(&args).Message
 			duration := int(time.Now().Unix() - nowTime)
-
-			// Guarda el log de la función
 			aws.PutFuncLog(funcName, funcMessage, duration)
 
 			message := core.Concat(" | ", "Func: "+funcName, core.Concats(duration, "s"))
 			messages = append(messages, message)
 		}
 		core.Log(messages)
+		// Función a ejecutarse con nombre específico
+	} else if len(funcToExec) > 0 {
+		for key := range exec.ExecHandlersCron {
+			if funcToExec == key {
+				core.Log("invocando funcion:: ", funcToExec)
+				return exec.ExecHandlersCron[key](&args)
+			}
+		}
 	}
+	return core.FuncResponse{}
 }
 
 func prepareResponse(args core.HandlerArgs, handlerResponse *core.HandlerResponse) core.MainResponse {
@@ -302,4 +323,41 @@ func prepareResponse(args core.HandlerArgs, handlerResponse *core.HandlerRespons
 		aws.MakeTableLogs2().PutItem(&logRecord, 1)
 	}
 	return response
+}
+
+func ExecFunc(
+	funcToInvoke func(*core.ExecArgs) core.FuncResponse,
+	args *core.ExecArgs,
+	secondsTimeout time.Duration,
+) core.FuncResponse {
+
+	nowTime := time.Now().Unix()
+	chanResult := make(chan core.FuncResponse, 1)
+	funcResponse := core.FuncResponse{}
+
+	go func() {
+		defer func() {
+			// recover from panic
+			if r := recover(); r != nil {
+				funcResponse.Error = fmt.Sprintf("Error (PANIC): %v", r)
+			}
+		}()
+		chanResult <- funcToInvoke(args)
+	}()
+
+	hasTimeout := false
+
+	select {
+	case <-time.After(secondsTimeout * time.Second):
+		hasTimeout = true
+	case funcResponse = <-chanResult:
+	}
+
+	funcResponse.ElapsedTime = int(time.Now().Unix() - nowTime)
+
+	if hasTimeout {
+		funcResponse.Error = fmt.Sprintf("Error (TIMEOUT): %vs", funcResponse.ElapsedTime)
+	}
+
+	return funcResponse
 }
