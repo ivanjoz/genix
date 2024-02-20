@@ -11,7 +11,11 @@ var ExecHandlers = ExecRouterType{
 	"fn-importar-ciudades": ImportCiudades,
 	"fn-backup":            CreateBackupFile,
 	"fn-homologate":        Homologate,
+}
 
+var ExecHandlersCron = ExecRouterType{}
+
+var ExecHandlersTesting = ExecRouterType{
 	"fn10":  TestScyllaDBConnection,
 	"fn11":  TestScyllaDBInsert,
 	"fn12":  TestZstdCompression,
@@ -26,9 +30,3 @@ var ExecHandlers = ExecRouterType{
 	"fn022": Test22,
 	"fn023": Test23,
 }
-
-var ExecHandlersProd = ExecRouterType{}
-
-var ExecHandlersQAs = ExecRouterType{}
-
-var ExecHandlersTesting = ExecRouterType{}

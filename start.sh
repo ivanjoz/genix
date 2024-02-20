@@ -10,7 +10,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then # comando para LINUX
   qdbus org.kde.konsole-$! /Sessions/1 runCommand 'cd ./frontend && npm run dev'
 
   qdbus org.kde.konsole-$! /Sessions/2 setTitle 1 'BACKEND'
-  qdbus org.kde.konsole-$! /Sessions/2 runCommand 'cd ./backend && air dev'
+  qdbus org.kde.konsole-$! /Sessions/2 runCommand 'cd ./backend && air --build.cmd "go build -tags local ."'
 
   qdbus org.kde.konsole-$! /Windows/2 org.kde.konsole.Window.setCurrentSession 1
   qdbus org.kde.konsole-$! /Sessions/0 setTitle 1 'GERP'

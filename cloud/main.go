@@ -25,6 +25,7 @@ type DeployParams struct {
 }
 
 const s3CompiledPath = "gerp-artifacts/lambda-compiled.zip"
+const compilePath = "/cloud/main-compiled"
 
 func GetBaseWD() string {
 	wd, _ := os.Getwd()
@@ -57,7 +58,7 @@ func main() {
 		panic(err)
 	}
 
-	params := DeployParams{}
+	params := DeployParams{S3_COMPILED_PATH: s3CompiledPath}
 	err = json.Unmarshal(credentialsJson, &params)
 
 	if err != nil {
@@ -78,10 +79,13 @@ func main() {
 	}
 
 	if w1 == "1" {
-		CompileBackendToS3(params, false)
-		DeployLambda(params)
+		CompileBackendToS3(params, false, false)
+		DeployLambda(params, false)
+		CompileBackendToS3(params, false, true)
+		DeployLambda(params, true)
 	} else if w1 == "2" {
-		UpdateEnviromentVariables(params)
+		UpdateEnviromentVariables(params, false)
+		UpdateEnviromentVariables(params, true)
 	} else if w1 == "3" {
 		DeployIfraestructure(params)
 	} else {
@@ -93,10 +97,17 @@ func main() {
 }
 
 // Compila el código Backend y lo envía a S3
-func CompileBackendToS3(params DeployParams, sendToS3 bool) {
+func CompileBackendToS3(params DeployParams, sendToS3, useAmd64 bool) {
 
-	compiledPath := GetBaseWD() + "/cloud/main-compiled"
-	command := `GOOS=linux GOARCH=arm64 /usr/local/go/bin/go build -ldflags '-s -w' -o %v`
+	compiledPath := GetBaseWD() + compilePath
+	command := `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 /usr/local/go/bin/go build -ldflags '-s -w' -o %v`
+
+	if useAmd64 {
+		compiledPath += "-amd"
+		command = strings.Replace(command, "arm64", "amd64", 1)
+		params.S3_COMPILED_PATH = strings.Replace(
+			params.S3_COMPILED_PATH, "lambda-", "lambda-amd-", 1)
+	}
 
 	command = fmt.Sprintf(command, compiledPath)
 	fmt.Println("Compilando con:: ", command)
@@ -119,10 +130,6 @@ func CompileBackendToS3(params DeployParams, sendToS3 bool) {
 		awsConfig, _ := MakeAwsConfig(params.AWS_PROFILE, params.AWS_REGION)
 		s3Client := s3.NewFromConfig(awsConfig)
 
-		if len(params.S3_COMPILED_PATH) == 0 {
-			params.S3_COMPILED_PATH = s3CompiledPath
-		}
-
 		s3Args := FileToS3Args{
 			Bucket:        params.DEPLOYMENT_BUCKET,
 			LocalFilePath: compiledZipPath,
@@ -135,10 +142,16 @@ func CompileBackendToS3(params DeployParams, sendToS3 bool) {
 }
 
 // Despliega el código compilado de la Lambda
-func DeployLambda(params DeployParams) {
+func DeployLambda(params DeployParams, useAmd64 bool) {
 
 	lambdaName := params.STACK_NAME + "-backend"
-	zipFile, err := ReadFile(GetBaseWD() + "/cloud/main-compiled.zip")
+	compilePath_ := compilePath
+	if useAmd64 {
+		compilePath_ += "-amd"
+		lambdaName += "-amd"
+	}
+
+	zipFile, err := ReadFile(GetBaseWD() + compilePath_ + ".zip")
 
 	if err != nil {
 		panic("Error al leer el compilado.zip: " + err.Error())
@@ -165,9 +178,12 @@ func DeployLambda(params DeployParams) {
 }
 
 // Actualiza las variables de entorno de la Lambda
-func UpdateEnviromentVariables(params DeployParams) {
+func UpdateEnviromentVariables(params DeployParams, useAmd64 bool) {
 
 	lambdaName := params.STACK_NAME + "-backend"
+	if useAmd64 {
+		lambdaName += "-amd"
+	}
 	fmt.Println("Actulizando variables de entorno...")
 
 	enviromentVars := map[string]any{}
@@ -256,6 +272,7 @@ func DeployIfraestructure(params DeployParams) {
 		"$DEPLOYMENT_BUCKET": params.DEPLOYMENT_BUCKET,
 		"$DYNAMODB_TABLE":    params.STACK_NAME + "-db",
 		"$LAMBDA_NAME":       params.STACK_NAME + "-backend",
+		"$LAMBDA_NAME_AMD":   params.STACK_NAME + "-backend-amd",
 		"$LAMBDA_IAM_ROLE":   params.LAMBDA_IAM_ROLE,
 		"$S3_COMPILED_PATH":  s3CompiledPath,
 	}
@@ -264,7 +281,7 @@ func DeployIfraestructure(params DeployParams) {
 		cloudTemplate = strings.ReplaceAll(cloudTemplate, key, value)
 	}
 
-	CompileBackendToS3(params, true)
+	CompileBackendToS3(params, true, false)
 
 	if stackStatus == 0 {
 

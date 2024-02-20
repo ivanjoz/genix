@@ -28,7 +28,6 @@ import (
 
 	"github.com/andybalholm/brotli"
 	"github.com/klauspost/compress/zstd"
-	"github.com/kr/pretty"
 	"github.com/martinlindhe/base36"
 	"github.com/mashingan/smapping"
 	"github.com/mitchellh/hashstructure/v2"
@@ -36,13 +35,6 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 	"golang.org/x/exp/constraints"
 )
-
-func Print(Struct any) {
-	if Env != nil && !Env.IS_LOCAL {
-		return
-	}
-	pretty.Println(Struct)
-}
 
 func Filter[T any](slice []T, f func(T) bool) []T {
 	var n []T

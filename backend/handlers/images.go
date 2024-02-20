@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivanjoz/avif-webp-encoder/imageconv"
+	"app/imageconv"
 )
 
 type imageBody struct {
@@ -18,6 +18,8 @@ type imageBody struct {
 }
 
 func PostImage(req *core.HandlerArgs) core.HandlerResponse {
+	core.Env.LOGS_FULL = true
+	fmt.Println("hola!")
 
 	resolutionsMap := map[uint16]string{
 		900: "x6", 500: "x4", 340: "x2",
@@ -51,10 +53,12 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 	imageName := fmt.Sprintf("%v", time.Now().UnixMilli())
 
 	images, err := imageconv.Convert(imageconv.ImageConvertInput{
-		Image:       bytes,
-		UseWebp:     true,
-		UseAvif:     true,
-		Resolutions: resolutions,
+		Image:              bytes,
+		UseWebp:            true,
+		UseAvif:            true,
+		Resolutions:        resolutions,
+		UseDebugLogs:       true,
+		TempDirOfExecution: core.Env.TMP_DIR,
 	})
 
 	if err != nil {

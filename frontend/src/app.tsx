@@ -20,8 +20,9 @@ const isClient = typeof window !== 'undefined'
 if(isClient){
   document.head.querySelector('title')?.remove()
 
-  let api = "http://localhost:3589/api/"
-  
+   // let api = "http://localhost:3589/api/"
+  let api = "https://asdxv2tjzpe2biexmp7p2robau0uussc.lambda-url.us-east-1.on.aws/api/"
+
   if(DEV_HOSTS.includes(window.location.host)){
     api = "https://dnh72xkkh3junf57p3vexemlvm0emgys.lambda-url.us-east-1.on.aws/api/"
   }

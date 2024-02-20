@@ -6,3 +6,7 @@ cloud/main-compiled.zip
 cloud/main_compiled
 utils/backup-db
 db-backup/db-backup
+backend/binaries/*
+backend/imageconv/*
+cloud/main-compiled-amd
+cloud/main-compiled-amd.zip
