@@ -28,10 +28,13 @@ func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (
 	if blen > 0 {
 		core.Log("*body enviado: ", request.Body[0:(blen-1)])
 	}
+
 	// Revisa si lo que se está pidiendo es ejecutar una funcion
 	if len(request.Body) > 11 && request.Body[0:11] == `{"fn_exec":` {
-		ExecFuncHandler(request.Body[5:])
-		return nil, nil
+		funcResponse := ExecFuncHandler(request.Body)
+		body := core.ToJsonNoErr(funcResponse)
+		response := core.HandlerResponse{Body: &body}
+		return core.MakeResponseFinal(&response), nil
 	}
 
 	route := request.RequestContext.HTTP.Path
@@ -55,43 +58,59 @@ func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (
 }
 
 func LocalHandler(w http.ResponseWriter, request *http.Request) {
+	core.Log("hola aquí!!")
 	clearEnvVariables()
 	core.Env.REQ_IP = request.RemoteAddr
 
 	bodyBytes, _ := io.ReadAll(request.Body)
 	body := string(bodyBytes)
 
+	args := core.HandlerArgs{
+		Body:           &body,
+		Method:         strings.ToUpper(request.Method),
+		Route:          request.URL.Path,
+		ResponseWriter: &w,
+	}
+
+	blen := len(body)
+	if blen > 500 {
+		blen = 500
+	}
+	if blen > 0 {
+		core.Log("*body enviado (LOCAL): ", body[0:(blen-1)])
+		core.Log(body[0:11])
+		core.Log(body[0:11] == `{"fn_exec":`)
+	} else {
+		core.Log("no se encontró body")
+	}
+
 	// Revisa si lo que se está pidiendo es ejecutar una funcion
-	if len(body) > 5 && body[0:5] == "exec:" {
-		ExecFuncHandler(body[5:])
+	if len(body) > 11 && body[0:11] == `{"fn_exec":` {
+		core.Log("Ejecutando funcion...")
+		funcResponse := ExecFuncHandler(body)
+		body := core.ToJsonNoErr(funcResponse)
+		response := core.HandlerResponse{Body: &body}
+		core.SendLocalResponse(args, response)
 		return
 	}
 
 	// Convierte los query params en un map[string]: stirng
 	queryString := request.URL.Query()
-	query := make(map[string]string)
+	args.Query = make(map[string]string)
 
 	for key, values := range queryString {
 		value := strings.Join(values[:], ",")
-		query[key] = value
+		args.Query[key] = value
 	}
 
 	// Convierte los headers en un map[string]: string
-	headers := make(map[string]string)
+	args.Headers = make(map[string]string)
 
 	for key, values := range request.Header {
 		value := strings.Join(values[:], ",")
-		headers[key] = value
+		args.Headers[key] = value
 	}
 
-	args := core.HandlerArgs{
-		Body:           &body,
-		Query:          query,
-		Headers:        headers,
-		Method:         strings.ToUpper(request.Method),
-		Route:          request.URL.Path,
-		ResponseWriter: &w,
-	}
 	mainHandler(args)
 }
 

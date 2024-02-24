@@ -83,7 +83,7 @@ func (params DynamoTableRecords[T]) PutItem(record *T, accion uint8) error {
 		return err
 	}
 
-	client := dynamodb.NewFromConfig(core.GetAwsConfig(params.Account))
+	client := dynamodb.NewFromConfig(core.GetAwsConfig())
 	putRequest := dynamodb.PutItemInput{
 		TableName:              aws.String(params.TableName),
 		Item:                   *Item,
@@ -125,7 +125,7 @@ func (params DynamoTableRecords[T]) DynamoAccionToItems(recordsToSend []T, accio
 		*group = append(*group, record)
 	}
 
-	client := dynamodb.NewFromConfig(core.GetAwsConfig(params.Account))
+	client := dynamodb.NewFromConfig(core.GetAwsConfig())
 
 	for _, records := range recordsGroups {
 
@@ -207,7 +207,7 @@ func parseDynamoDBItem[T any](dynamoItem DynamoDBItem) (*T, error) {
 func (params *DynamoTableRecords[T]) GetItem(sk string) (*T, error) {
 
 	core.Log("Enviando registros a Tabla DynamoDB:: ", params.TableName)
-	client := dynamodb.NewFromConfig(core.GetAwsConfig(params.Account))
+	client := dynamodb.NewFromConfig(core.GetAwsConfig())
 
 	getRequest := dynamodb.GetItemInput{
 		TableName: aws.String(params.TableName),
@@ -240,7 +240,7 @@ func (params *DynamoTableRecords[T]) GetItem(sk string) (*T, error) {
 
 func GetDynamoDBTables() error {
 
-	client := dynamodb.NewFromConfig(core.GetAwsConfig(1))
+	client := dynamodb.NewFromConfig(core.GetAwsConfig())
 
 	output, err := client.ListTables(context.TODO(), &dynamodb.ListTablesInput{})
 	if err != nil {
@@ -328,7 +328,9 @@ func (e DynamoTableRecords[T]) QueryBatch(querys []DynamoQueryParam) ([]T, error
 		queryInputs = append(queryInputs, dynamoInput)
 	}
 
-	client := dynamodb.NewFromConfig(core.GetAwsConfig(e.Account))
+	core.Log("estamo aqui...")
+
+	client := dynamodb.NewFromConfig(core.GetAwsConfig())
 	records := []T{}
 
 	// Itera por cada query input
@@ -350,6 +352,7 @@ func (e DynamoTableRecords[T]) QueryBatch(querys []DynamoQueryParam) ([]T, error
 
 			output, err := client.Query(context.TODO(), &queryInput)
 			if err != nil {
+				core.Log("Error al ejecutar la DynamoDB")
 				panic(err)
 			}
 

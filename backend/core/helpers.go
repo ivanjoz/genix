@@ -328,6 +328,11 @@ func Base64ToStruct[T any](base64Str *string, target *T) error {
 	return nil
 }
 
+func ToJsonNoErr(v any) string {
+	bytes, _ := json.Marshal(v)
+	return string(bytes)
+}
+
 func MsgPEncode(msg any) ([]byte, error) {
 	var buffer bytes.Buffer
 	msgEncoder := msgpack.NewEncoder(&buffer)
@@ -335,8 +340,6 @@ func MsgPEncode(msg any) ([]byte, error) {
 	msgEncoder.SetOmitEmpty(true)
 	msgEncoder.UseCompactInts(true)
 	msgEncoder.UseCompactFloats(true)
-	// msgEncoder.UseArrayEncodedStructs(true)
-	// msgEncoder.UseInternedStrings(true)
 	err := msgEncoder.Encode(msg)
 
 	return buffer.Bytes(), err
@@ -1252,4 +1255,12 @@ func Decrypt(encryptedData []byte, cypherKey_ ...string) ([]byte, error) {
 	}
 
 	return plaintext, nil
+}
+
+func StrSlice(content string, size int) string {
+	if len(content) < size {
+		return content
+	} else {
+		return content[0:size]
+	}
 }

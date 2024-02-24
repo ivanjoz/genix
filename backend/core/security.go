@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 
@@ -36,6 +35,7 @@ type EnvStruct struct {
 	S3_BUCKET      string
 	DYNAMO_TABLE   string
 	REQ_LAMBDA_ID  string
+	API_ROUTE      string
 	LOGS_FULL      bool
 	LOGS_ONLY_SAVE bool
 	DB_DISABLE_SSL bool
@@ -96,6 +96,9 @@ func PopulateVariables() {
 	if len(Env.DYNAMO_TABLE) == 0 {
 		Env.DYNAMO_TABLE = Env.STACK_NAME + "-db"
 	}
+	if len(Env.API_ROUTE) == 0 {
+		Env.API_ROUTE = "http://localhost:3589"
+	}
 
 	Env.APP_CODE = APP_CODE
 	Env.IS_LOCAL = IS_LOCAL
@@ -112,7 +115,7 @@ func PopulateVariables() {
 
 var REQ_PATHS = []string{}
 
-func makeAwsConfig(mode uint8) (aws_sdk.Config, error) {
+func GetAwsConfig() aws_sdk.Config {
 	var cfg aws_sdk.Config
 	var err error
 
@@ -123,21 +126,15 @@ func makeAwsConfig(mode uint8) (aws_sdk.Config, error) {
 
 	accessKeyEnv := os.Getenv("AWS_ACCESS_KEY_ID")
 	if len(accessKeyEnv) > 0 {
+		Log("Generando AWS Config con ACCESS_KEY en Región:", Env.AWS_REGION)
 		cfg, err = config.LoadDefaultConfig(context.TODO(), setConfig)
 	} else {
+		Log("Generando AWS Config con profile:", Env.AWS_PROFILE, "|", Env.AWS_REGION)
 		cfg, err = config.LoadDefaultConfig(
 			context.TODO(), config.WithSharedConfigProfile(Env.AWS_PROFILE), setConfig)
 	}
 	if err != nil {
-		return cfg, err
-	}
-	return cfg, nil
-}
-
-func GetAwsConfig(acount uint8) aws_sdk.Config {
-	cfg, err := makeAwsConfig(acount)
-	if err != nil {
-		log.Fatalf("unable to load SDK config, %v", err)
+		panic(Concat(" ", "No se pudo obtener la configuración de AWS.", err))
 	}
 	return cfg
 }

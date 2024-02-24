@@ -82,7 +82,7 @@ func parseLogsResults(cloudWachRecords [][]types.ResultField) []CloudLogRecord {
 
 func QueryLogsInsights(args QueryLogsArgs) ([]CloudLogRecord, error) {
 
-	client := cloudwatchlogs.NewFromConfig(core.GetAwsConfig(args.Account))
+	client := cloudwatchlogs.NewFromConfig(core.GetAwsConfig())
 
 	startQueryInput := cloudwatchlogs.StartQueryInput{
 		QueryString:   &args.Query,
@@ -298,7 +298,7 @@ func GetDBMetrics(args GetDBMetricsArgs) ([]DataPoint, error) {
 
 	core.Print(args)
 
-	client := cloudwatch.NewFromConfig(core.GetAwsConfig(args.Account))
+	client := cloudwatch.NewFromConfig(core.GetAwsConfig())
 	result, err := client.GetMetricStatistics(context.TODO(), &input)
 	if err != nil {
 		core.Log("Error en cloudwatch::")

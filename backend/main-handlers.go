@@ -187,19 +187,19 @@ type ExecLambdaInput struct {
 	ExecArgs core.ExecArgs `json:"fn_exec"`
 }
 
-func ExecFuncHandler(funcToExec string) core.FuncResponse {
+func ExecFuncHandler(lambdaInput string) core.FuncResponse {
 	core.Env.LOGS_ONLY_SAVE = true
 
 	input := ExecLambdaInput{}
-	err := json.Unmarshal([]byte(funcToExec), &input)
+	err := json.Unmarshal([]byte(lambdaInput), &input)
 	if err != nil {
 		return core.FuncResponse{
-			Error: "no se pudieron interpretar los argumentos recibidos: " + funcToExec,
+			Error: "no se pudieron interpretar los argumentos recibidos: " + core.StrSlice(lambdaInput, 200),
 		}
 	}
 
 	args := input.ExecArgs
-	core.Log("func to exec:: ", funcToExec)
+	core.Log("func to exec:: ", lambdaInput)
 
 	type FuncToInvoke struct {
 		HourMin  string
@@ -276,13 +276,14 @@ func ExecFuncHandler(funcToExec string) core.FuncResponse {
 		}
 		core.Log(messages)
 		// Función a ejecutarse con nombre específico
-	} else if len(funcToExec) > 0 {
-		for key := range exec.ExecHandlersCron {
-			if funcToExec == key {
-				core.Log("invocando funcion:: ", funcToExec)
-				return exec.ExecHandlersCron[key](&args)
+	} else if len(args.FuncToExec) > 0 {
+		for key := range exec.ExecHandlers {
+			if args.FuncToExec == key {
+				core.Log("invocando funcion:: ", args.FuncToExec)
+				return exec.ExecHandlers[key](&args)
 			}
 		}
+		core.Log("No se encontró la función e ejecutar::", args.FuncToExec)
 	}
 	return core.FuncResponse{}
 }
