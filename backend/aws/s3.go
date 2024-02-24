@@ -25,18 +25,23 @@ type FileToS3Args struct {
 	Path          string
 	Prefix        string
 	StartAfter    string
+	ContentType   string
 }
 
 func SendFileToS3(args FileToS3Args) error {
-	core.Log("Enviando a s3:", args.Bucket, "| Folder: ", args.Path, " | ", args.Name)
+	core.Log("Enviando a s3:", args.Bucket, "| Folder:", args.Path, "|", args.Name, "|", args.ContentType)
 
-	client := s3.NewFromConfig(core.GetAwsConfig(args.Account))
+	client := s3.NewFromConfig(core.GetAwsConfig())
 
 	key := args.Path + "/" + args.Name
 
 	input := s3.PutObjectInput{
 		Bucket: &args.Bucket,
 		Key:    &key,
+	}
+
+	if len(args.ContentType) > 0 {
+		input.ContentType = &args.ContentType
 	}
 
 	if len(args.LocalFilePath) > 1 {
@@ -75,7 +80,7 @@ func GetFileFromS3(args FileToS3Args) ([]byte, error) {
 	*/
 
 	buf := manager.NewWriteAtBuffer([]byte{})
-	client := s3.NewFromConfig(core.GetAwsConfig(args.Account))
+	client := s3.NewFromConfig(core.GetAwsConfig())
 
 	downloader := manager.NewDownloader(client)
 
@@ -96,7 +101,7 @@ func GetObjectFromFileS3[T any](args FileToS3Args, obj *T) (*T, error) {
 	core.Log("Obteniendo archivo de s3::")
 	core.Print(args)
 
-	client := s3.NewFromConfig(core.GetAwsConfig(args.Account))
+	client := s3.NewFromConfig(core.GetAwsConfig())
 
 	requestInput := &s3.GetObjectInput{
 		Bucket: aws_sdk.String(args.Bucket),
@@ -136,7 +141,7 @@ func GetObjectFromFileS3[T any](args FileToS3Args, obj *T) (*T, error) {
 func S3ListFiles(args FileToS3Args) ([]types.Object, error) {
 	core.Log("Envío de archivo a s3::")
 
-	client := s3.NewFromConfig(core.GetAwsConfig(args.Account))
+	client := s3.NewFromConfig(core.GetAwsConfig())
 	input := &s3.ListObjectsV2Input{
 		Bucket: aws_sdk.String(args.Bucket),
 	}

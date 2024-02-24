@@ -12,9 +12,22 @@
 }
 
 .card_image_layer {
-  background: linear-gradient(0deg, rgba(0,0,0,0.40) 0%, rgba(255,255,255,0) 25%);
   top: 0;
   padding: 6px
+}
+.card_image_layer:not(:hover) .card_image_layer_bn_close2 {
+  display: none;
+}
+
+.card_image_layer:hover, .card_image_layer.s1 {
+  background: linear-gradient(0deg, rgba(0,0,0,0.40) 0%, rgba(255,255,255,0) 25%);
+}
+
+.card_image_layer_loading {
+  top: 0px;
+  left: 0px;
+  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.34);
 }
 
 .card_image_layer_botton {

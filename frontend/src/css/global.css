@@ -1735,3 +1735,7 @@ th {
 .b-white:hover {
   outline: 1px solid #686481;
 }
+
+.dsp-cont {
+  display: 'contents';
+}

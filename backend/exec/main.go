@@ -11,6 +11,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-importar-ciudades": ImportCiudades,
 	"fn-backup":            CreateBackupFile,
 	"fn-homologate":        Homologate,
+	"compress-image":       CompressImage,
 }
 
 var ExecHandlersCron = ExecRouterType{}

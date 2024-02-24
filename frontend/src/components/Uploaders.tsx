@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js"
 import styles from "./components.module.css"
 import { POST } from "~/shared/http"
+import { Notify } from "notiflix"
 
 export interface IImageInput {
   content: string
@@ -20,10 +21,15 @@ interface InputEvent extends Event {
   currentTarget: HTMLInputElement
 }
 
+interface ImageSrc {
+  src?: string
+  types?: string[]
+}
+
 export const ImageUploader = () => {
 
   const [progress, setProgress] = createSignal(0)
-  const [imageSrc, setImageSrc] = createSignal("")
+  const [imageSrc, setImageSrc] = createSignal({ src: "" } as ImageSrc)
 
   const onFileChange = async (ev: InputEvent) => {
     const files: FileList = ev.target.files
@@ -33,13 +39,15 @@ export const ImageUploader = () => {
     const imageB64 = await resizeImageCanvasWebp({ 
       source: imageFile, size: 1.2, quality: 0.89 })
     setProgress(-1)
-    setImageSrc(imageB64)
+    setImageSrc({ src: imageB64 })
   }
 
   const uploadImage = async () => {
+    let result: { imageName: string }
+    setProgress(0.001)
     try {
-      await POST({
-        data: { content: imageSrc(), folder: "images", name: "" },
+      result = await POST({
+        data: { content: imageSrc().src, folder: "images", name: "" },
         route: "images",
         onUploadProgress: e => {
           const progress = Math.round((e.loaded * 100) / e.total)
@@ -48,34 +56,69 @@ export const ImageUploader = () => {
         }
       })
     } catch (error) {
-      
+      Notify.failure("Error guardando la imagen:", error)
+      return
     }
+
+    const imageName = `${window.S3_URL}${result.imageName}-x2`
+    setImageSrc({ src: imageName, types: ["webp","avif"] })
+    setProgress(-1)
+  }
+
+  const isImageBase64 = () => {
+    return (imageSrc()?.types||[]).length === 0
   }
 
   return <div class={`p-rel ${styles.card_image_1}`}>
-    <input onChange={ev => onFileChange(ev)} type="file" 
-      accept="image/png, image/jpeg, image/webp" />
-    { imageSrc().length > 0 &&
-      <img class={`w100 h100 p-abs ${styles.card_image_img1}`} src={imageSrc()} alt="" />
+    { (imageSrc()?.src||"").length === 0 &&
+      <input onChange={ev => onFileChange(ev)} type="file" 
+        accept="image/png, image/jpeg, image/webp" 
+      />
     }
-    { progress() != 0 &&
-      <div class={`w100 h100 p-abs ${styles.card_image_layer}`}>
-        <textarea class={`w100 ${styles.card_image_textarea}`} rows={3}
-          placeholder="Nombre..."
-        >
-
-        </textarea>
+    { imageSrc()?.src?.length > 0 &&
+      <picture class="dsp-cont">
+        { imageSrc().types?.includes("avif") &&
+          <source type="image/avif" srcset={imageSrc().src + ".avif"} />
+        }
+        { imageSrc().types?.includes("webp") &&
+          <source type="image/webp" srcset={imageSrc().src + ".webp"} />
+        }
+        <img class={`w100 h100 p-abs ${styles.card_image_img1}`}
+          src={imageSrc().src + 
+            (imageSrc().types?.length > 0 ? `.${imageSrc().types[0]}` : "")}/>
+      </picture>
+    }
+    { progress() == -1 &&
+      <div class={`w100 h100 p-abs ${styles.card_image_layer}${isImageBase64() ? " s1" : ""}`}>
+        { isImageBase64() &&
+          <textarea class={`w100 ${styles.card_image_textarea}`} rows={3}
+            placeholder="Nombre..."
+          />
+        }
         <div class={`w100 p-abs flex-center ${styles.card_image_layer_botton}`}>
-          <button class="bnr2 b-red mr-04">
+          <button class={`bnr2 b-red mr-04 ${isImageBase64() 
+            ? "" : styles.card_image_layer_bn_close2}`} 
+            onClick={ev => {
+              ev.stopPropagation()
+              setImageSrc({ src: "" })
+              setProgress(0)
+            }}>
             <i class="icon-cancel"></i>
           </button>
-          <button class="bnr2 b-blue" onClick={ev => {
-            ev.stopPropagation()
-            uploadImage()
-          }}>
-            <i class="icon-ok"></i>
-          </button>
+          { isImageBase64() &&
+            <button class="bnr2 b-blue" onClick={ev => {
+              ev.stopPropagation()
+              uploadImage()
+            }}>
+              <i class="icon-ok"></i>
+            </button>
+          }
         </div>
+      </div>
+    }
+    { progress() > 0 &&
+      <div class={`w100 h100 p-abs flex-center ${styles.card_image_layer_loading}`}>
+        <div class="c-white h3 ff-bold">Loading...</div>
       </div>
     }
   </div>
@@ -98,7 +141,6 @@ const resizeImageInCanvas = (
       reader.readAsDataURL(blob)
       reader.onloadend = () => {
         const base64data = reader.result  
-        console.log('Base 64 image:::',base64data)
         resolve((base64data as string))
       }
     },type,quality)
