@@ -79,6 +79,7 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 			}
 
 			lambdaInput := core.ExecArgs{
+				LambdaName:    core.Env.LAMBDA_NAME,
 				FuncToExec:    "compress-image",
 				Param6:        image.Content,
 				Param7:        string(convertInputJson),

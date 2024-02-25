@@ -33,7 +33,7 @@ func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (
 	if len(request.Body) > 11 && request.Body[0:11] == `{"fn_exec":` {
 		funcResponse := ExecFuncHandler(request.Body)
 		body := core.ToJsonNoErr(funcResponse)
-		response := core.HandlerResponse{Body: &body}
+		response := core.HandlerResponse{Body: &body, Headers: map[string]string{}}
 		return core.MakeResponseFinal(&response), nil
 	}
 
