@@ -6,6 +6,11 @@ type Increment struct {
 	CurrentValue int64  `db:"current_value"`
 }
 
+type ProductoImagen struct {
+	Name        string `ms:"n" json:"n"`
+	Descripcion string `ms:"d" json:"d"`
+}
+
 type Producto struct {
 	TAGS          `table:"productos"`
 	EmpresaID     int32   `json:",omitempty" db:"empresa_id,pk"`
@@ -26,6 +31,7 @@ type Producto struct {
 	SbnPreciFinal float32 `json:",omitempty" db:"sbn_precio_final"`
 
 	Propiedades []ProductoPropiedad `json:",omitempty" db:"propiedades"`
+	Images      []ProductoImagen    `json:",omitempty" db:"images"`
 	// Propiedades generales
 	Status    int8  `json:"ss,omitempty" db:"status,view"`
 	Updated   int64 `json:"upd,omitempty" db:"updated,view"`

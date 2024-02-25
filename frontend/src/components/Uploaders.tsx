@@ -1,6 +1,6 @@
-import { createSignal } from "solid-js"
+import { JSX, createSignal } from "solid-js"
 import styles from "./components.module.css"
-import { POST } from "~/shared/http"
+import { POST, POST_XMLHR } from "~/shared/http"
 import { Notify } from "notiflix"
 
 export interface IImageInput {
@@ -9,27 +9,34 @@ export interface IImageInput {
   folder: string
 }
 
-export const postProducto = (data: IImageInput) => {
-  return POST({
-    data,
-    route: "images",
-  })
-}
-
 interface InputEvent extends Event {
   target: HTMLInputElement
   currentTarget: HTMLInputElement
 }
 
-interface ImageSrc {
-  src?: string
-  types?: string[]
+export interface ImageData {
+  Content: string
+  Folder?: string
+  Description?: string
 }
 
-export const ImageUploader = () => {
+export interface IImageUploader {
+  src?: string
+  types?: string[]
+  saveAPI?: string
+  refreshIndexDBCache?: string
+  onUploaded?: (src: string) => void
+  setDataToSend?: (e: any) => void
+  clearOnUpload?: boolean
+  description?: string
+  cardStyle?: JSX.CSSProperties
+  onDelete?: (src: string) => void
+}
 
-  const [progress, setProgress] = createSignal(0)
-  const [imageSrc, setImageSrc] = createSignal({ src: "" } as ImageSrc)
+export const ImageUploader = (props?: IImageUploader) => {
+
+  const [imageSrc, setImageSrc] = createSignal(props || { src: "" } as IImageUploader)
+  const [progress, setProgress] = createSignal(props.src ? -1 : 0)
 
   const onFileChange = async (ev: InputEvent) => {
     const files: FileList = ev.target.files
@@ -45,10 +52,15 @@ export const ImageUploader = () => {
   const uploadImage = async () => {
     let result: { imageName: string }
     setProgress(0.001)
+    const data = { 
+      Content: imageSrc().src, Folder: "img-uploads", Description: imageSrc().description }
+    if(props.setDataToSend){ props.setDataToSend(data) }
+
     try {
-      result = await POST({
-        data: { content: imageSrc().src, folder: "images", name: "" },
-        route: "images",
+      result = await POST_XMLHR({
+        data,
+        route: props.saveAPI || "images",
+        refreshIndexDBCache: props.refreshIndexDBCache || "",
         onUploadProgress: e => {
           const progress = Math.round((e.loaded * 100) / e.total)
           console.log("progress:: ", progress)
@@ -59,17 +71,32 @@ export const ImageUploader = () => {
       Notify.failure("Error guardando la imagen:", error)
       return
     }
-
-    const imageName = `${window.S3_URL}${result.imageName}-x2`
-    setImageSrc({ src: imageName, types: ["webp","avif"] })
+    if(props.clearOnUpload){
+      setImageSrc({ src: "" })
+    } else {
+      setImageSrc({ src: `${result.imageName}-x2`, types: ["webp","avif"] })
+    }
     setProgress(-1)
+    if(props.onUploaded){ props.onUploaded(result.imageName) }
   }
 
   const isImageBase64 = () => {
-    return (imageSrc()?.types||[]).length === 0
+    return imageSrc().src?.length > 0 && (imageSrc()?.types||[]).length === 0
   }
 
-  return <div class={`p-rel ${styles.card_image_1}`}>
+  const makeImageSrc = () => {
+    let src = imageSrc().src
+    if(src.substring(0,5) !== "data:"){
+      if(src.substring(0,8) !== "https://" && src.substring(0,7) !== "http://"){
+        src = window.S3_URL + src
+      }
+    }
+    return src
+  }
+  
+  return <div class={`p-rel ${styles.card_image_1}`}
+    style={props.cardStyle}
+  >
     { (imageSrc()?.src||"").length === 0 &&
       <input onChange={ev => onFileChange(ev)} type="file" 
         accept="image/png, image/jpeg, image/webp" 
@@ -78,13 +105,13 @@ export const ImageUploader = () => {
     { imageSrc()?.src?.length > 0 &&
       <picture class="dsp-cont">
         { imageSrc().types?.includes("avif") &&
-          <source type="image/avif" srcset={imageSrc().src + ".avif"} />
+          <source type="image/avif" srcset={makeImageSrc() + ".avif"} />
         }
         { imageSrc().types?.includes("webp") &&
-          <source type="image/webp" srcset={imageSrc().src + ".webp"} />
+          <source type="image/webp" srcset={makeImageSrc() + ".webp"} />
         }
         <img class={`w100 h100 p-abs ${styles.card_image_img1}`}
-          src={imageSrc().src + 
+          src={makeImageSrc() + 
             (imageSrc().types?.length > 0 ? `.${imageSrc().types[0]}` : "")}/>
       </picture>
     }
@@ -93,6 +120,10 @@ export const ImageUploader = () => {
         { isImageBase64() &&
           <textarea class={`w100 ${styles.card_image_textarea}`} rows={3}
             placeholder="Nombre..."
+            onBlur={ev => {
+              ev.stopPropagation()
+              imageSrc().description = ev.target.value || ""
+            }}
           />
         }
         <div class={`w100 p-abs flex-center ${styles.card_image_layer_botton}`}>
@@ -100,6 +131,9 @@ export const ImageUploader = () => {
             ? "" : styles.card_image_layer_bn_close2}`} 
             onClick={ev => {
               ev.stopPropagation()
+              if(props.onDelete){
+                props.onDelete(props.src); return
+              }
               setImageSrc({ src: "" })
               setProgress(0)
             }}>

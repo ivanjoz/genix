@@ -12,17 +12,36 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type imageBody struct {
-	Content string `json:"content"` /* Base64 webp image */
-	Folder  string `json:"filter"`
-	Name    string `json:"name"`
+type ImageArgs struct {
+	Content     string /* Base64 webp image */
+	Folder      string
+	Name        string
+	Description string
 }
 
 const USE_MULTILAMBDA = true
-const IMAGE_S3_PATH = "img-productos"
 
 func PostImage(req *core.HandlerArgs) core.HandlerResponse {
-	core.Env.LOGS_FULL = true
+	image := ImageArgs{}
+	err := json.Unmarshal([]byte(*req.Body), &image)
+	if err != nil {
+		return req.MakeErr("Error al deserilizar el body: " + err.Error())
+	}
+
+	image.Name = fmt.Sprintf("%v", time.Now().UnixMilli())
+	image.Folder = "img-productos"
+	_, err = saveImage(image)
+	if err != nil {
+		return req.MakeErr("Error al guardar la imagen: " + err.Error())
+	}
+
+	response := map[string]string{
+		"imageName": image.Folder + "/" + image.Name,
+	}
+	return req.MakeResponse(response)
+}
+
+func saveImage(args ImageArgs) ([]imageconv.Image, error) {
 	fmt.Println("API de conversión de imágenes. Usando Multilambda:", USE_MULTILAMBDA)
 
 	resolutionsMap := map[uint16]string{
@@ -34,14 +53,8 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 		resolutions = append(resolutions, r)
 	}
 
-	image := imageBody{}
-	err := json.Unmarshal([]byte(*req.Body), &image)
-	if err != nil {
-		return req.MakeErr("Error al deserilizar el body: " + err.Error())
-	}
-
-	if len(image.Content) < 40 {
-		return req.MakeErr("No se ha recibido el contenido de la imagen")
+	if len(args.Content) < 40 {
+		return nil, core.Err("No se ha recibido el contenido de la imagen")
 	}
 
 	convertInputBase := imageconv.ImageConvertInput{
@@ -51,18 +64,20 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 		UseDebugLogs: true,
 	}
 
-	imageName := fmt.Sprintf("%v", time.Now().UnixMilli())
+	images := []imageconv.Image{}
 
 	saveImage := func(image imageconv.Image) {
 		args := aws.FileToS3Args{
 			Bucket:      core.Env.S3_BUCKET,
-			Path:        IMAGE_S3_PATH,
+			Path:        args.Folder,
 			FileContent: image.Content,
 			ContentType: fmt.Sprintf("image/%v", image.Format),
-			Name: fmt.Sprintf("%v-%v.%v", imageName,
+			Name: fmt.Sprintf("%v-%v.%v", args.Name,
 				resolutionsMap[uint16(image.Resolution)], image.Format),
 		}
 		aws.SendFileToS3(args)
+		image.Content = nil
+		images = append(images, image)
 	}
 
 	if USE_MULTILAMBDA {
@@ -75,13 +90,13 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 			convertInputJson, err := json.Marshal(convertInput)
 
 			if err != nil {
-				return req.MakeErr("No pudo convertir el input de la Lambda a JSON (Imágenes)")
+				return nil, core.Err("No pudo convertir el input de la Lambda a JSON (Imágenes)")
 			}
 
 			lambdaInput := core.ExecArgs{
 				LambdaName:    core.Env.LAMBDA_NAME + "_2",
 				FuncToExec:    "compress-image",
-				Param6:        image.Content,
+				Param6:        args.Content,
 				Param7:        string(convertInputJson),
 				ParseResponse: true,
 			}
@@ -109,17 +124,17 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		if err := group.Wait(); err != nil {
-			return req.MakeErr(err)
+			return nil, err
 		}
 	} else {
-		if strings.Contains(image.Content[0:40], "base64,") {
-			image.Content = strings.Split(image.Content, "base64,")[1]
+		if strings.Contains(args.Content[0:40], "base64,") {
+			args.Content = strings.Split(args.Content, "base64,")[1]
 		}
 
-		bytes := core.Base64ToBytes(image.Content)
+		bytes := core.Base64ToBytes(args.Content)
 
 		if len(bytes) == 0 {
-			return req.MakeErr("Error al convertir el contenido de la imagen a bytes")
+			return nil, core.Err("Error al convertir el contenido de la imagen a bytes")
 		}
 
 		images, err := imageconv.Convert(imageconv.ImageConvertInput{
@@ -131,7 +146,7 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 		})
 
 		if err != nil {
-			return req.MakeErr("Error al convertir la imagen: " + err.Error())
+			return nil, core.Err("Error al convertir la imagen:", err)
 		}
 
 		for _, e := range images {
@@ -142,7 +157,5 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 			saveImage(e)
 		}
 	}
-
-	response := map[string]string{"imageName": IMAGE_S3_PATH + "/" + imageName}
-	return req.MakeResponse(response)
+	return images, nil
 }

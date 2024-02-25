@@ -1,7 +1,8 @@
 .card_image_1 {
   overflow: hidden;
   width: 10rem;
-  height: 10rem;
+  aspect-ratio: 1 / 1;
+  height: auto;
   border-radius: 7px;
   border: 1px solid gray;
 }

@@ -1,7 +1,7 @@
 import { Loading, Notify } from "~/core/main";
 import { max } from "simple-statistics";
 import { Show, createSignal } from "solid-js";
-import { BarOptions } from "~/components/Cards";
+import { BarOptions, ConfirmWarn } from "~/components/Cards";
 import { CellEditable, CellTextOptions } from "~/components/Editables";
 import { Input, refreshInput } from "~/components/Input";
 import { SideLayer, openLayers, setOpenLayers } from "~/components/Modals";
@@ -10,9 +10,11 @@ import { SearchSelect } from "~/components/SearchSelect";
 import { throttle } from "~/core/main";
 import { pageView } from "~/core/menu";
 import { PageContainer } from "~/core/page";
-import { IProducto, IProductoPropiedad, postProducto, useProductosAPI } from "~/services/operaciones/productos";
+import { IProducto, IProductoImage, IProductoPropiedad, postProducto, useProductosAPI } from "~/services/operaciones/productos";
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
 import { formatN } from "~/shared/main";
+import { ImageUploader } from "~/components/Uploaders";
+import { POST } from "~/shared/http";
 
 export default function Productos() {
 
@@ -53,6 +55,21 @@ export default function Productos() {
     setProductoForm({} as IProducto)
     setOpenLayers([])
     Loading.remove()
+  }
+  
+  const deleteProductoImage = async (ImageToDelete: string) => {
+    try {
+      await POST({
+        data: { ProductoID: productoForm().ID, ImageToDelete },
+        route: "producto-image",
+        refreshIndexDBCache: "productos",
+      }) 
+    } catch (error) {
+      Notify.failure(`Error al guardar el producto: ${error}`)
+      return
+    }    
+    productoForm().Images = productoForm().Images.filter(e => e.n !== ImageToDelete)
+    setProductoForm({...productoForm()})
   }
   
   return <PageContainer title="Productos"
@@ -257,6 +274,44 @@ export default function Productos() {
                 }
               ]}    
             />
+          </div>
+        </Show>
+        <Show when={layerView() === 3}>
+          <div class="w100 px-02 py-08"
+            style={{ display: 'grid', 
+              'grid-template-columns': '1fr 1fr 1fr 1fr', 'grid-gap': '8px' }}
+          >
+            <ImageUploader saveAPI="producto-image"
+              refreshIndexDBCache="productos"
+              clearOnUpload={true}
+              cardStyle={{ width: '100%' }}
+              setDataToSend={e => {
+                e.ProductoID = productoForm().ID
+              }}
+              onUploaded={src => {
+                const name = src.split("/")[1]
+                const images = productoForm().Images || []
+                images.push({ n: name } as IProductoImage)
+                productoForm().Images = images
+                setProductoForm({...productoForm()})
+              }}
+            />
+            { (productoForm().Images||[]).map(e => {
+                return <ImageUploader src={"img-productos/"+ e.n + "-x2"}
+                  cardStyle={{ width: '100%' }}
+                  types={["avif","webp"]} 
+                  onDelete={() => {
+                    ConfirmWarn("ELIMINAR IMAGEN",
+                      `Eliminar la imagen ${e.d ? `"${e.d}"` : "seleccionada"}`,
+                      "SI","NO",
+                      () => {
+                        deleteProductoImage(e.n)
+                      }
+                    )
+                  }}  
+                />
+              })
+            }
           </div>
         </Show>
       </SideLayer>

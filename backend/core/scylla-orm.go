@@ -85,11 +85,11 @@ func (e *BDColumn) ParseValue(field reflect.Value) string {
 
 	if e.IsComplexType {
 		recordBytes, err := MsgPEncode(v)
-
-		Log("Encoding type::", e.Name, " | Is Null:", v == nil, " | Kind:", field.Kind(), " | Len:", field.Len())
-		Print(recordBytes)
-		Print(v)
-
+		/*
+			Log("Encoding type::", e.Name, " | Is Null:", v == nil, " | Kind:", field.Kind(), " | Len:", field.Len())
+			Print(recordBytes)
+			Print(v)
+		*/
 		if err != nil {
 			Log("Error al encoded .gob:: ", e.FieldName, err.Error())
 			return ""
