@@ -26,7 +26,7 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 	fmt.Println("API de conversión de imágenes. Usando Multilambda:", USE_MULTILAMBDA)
 
 	resolutionsMap := map[uint16]string{
-		/*	900: "x6", */ 500: "x4", 340: "x2",
+		960: "x6", 520: "x4", 340: "x2",
 	}
 
 	resolutions := []uint16{}
@@ -79,7 +79,7 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 			}
 
 			lambdaInput := core.ExecArgs{
-				LambdaName:    core.Env.LAMBDA_NAME,
+				LambdaName:    core.Env.LAMBDA_NAME + "_2",
 				FuncToExec:    "compress-image",
 				Param6:        image.Content,
 				Param7:        string(convertInputJson),
@@ -98,6 +98,7 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 				err = json.Unmarshal([]byte(lambdaOuput.Response.ContentJson), &images)
 
 				if err != nil {
+					core.Log("*" + core.StrCut(lambdaOuput.Response.ContentJson, 400))
 					return fmt.Errorf("%v", "No se pudo parsear la respuesta como JSON (Imágenes)")
 				}
 				for _, e := range images {

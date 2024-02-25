@@ -21,18 +21,15 @@ func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (
 	clearEnvVariables()
 
 	core.Env.REQ_IP = request.RequestContext.HTTP.SourceIP
-	blen := len(request.Body)
-	if blen > 500 {
-		blen = 500
-	}
-	if blen > 0 {
-		core.Log("*body enviado: ", request.Body[0:(blen-1)])
+	if len(request.Body) > 0 {
+		core.Log("*body enviado: ", core.StrCut(request.Body, 400))
 	}
 
 	// Revisa si lo que se está pidiendo es ejecutar una funcion
 	if len(request.Body) > 11 && request.Body[0:11] == `{"fn_exec":` {
 		funcResponse := ExecFuncHandler(request.Body)
 		body := core.ToJsonNoErr(funcResponse)
+		core.Log("*Body response::" + core.StrCut(body, 400))
 		response := core.HandlerResponse{Body: &body, Headers: map[string]string{}}
 		return core.MakeResponseFinal(&response), nil
 	}
@@ -88,7 +85,14 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 	if len(body) > 11 && body[0:11] == `{"fn_exec":` {
 		core.Log("Ejecutando funcion...")
 		funcResponse := ExecFuncHandler(body)
-		body := core.ToJsonNoErr(funcResponse)
+		lambdaResponse := map[string]any{
+			"statusCode": 200,
+			"body":       core.ToJsonNoErr(funcResponse),
+			"headers": map[string]string{
+				"Content-Type": "application/json; charset=utf-8",
+			},
+		}
+		body := core.ToJsonNoErr(lambdaResponse)
 		response := core.HandlerResponse{Body: &body}
 		core.SendLocalResponse(args, response)
 		return

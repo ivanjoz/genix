@@ -194,12 +194,12 @@ func ExecFuncHandler(lambdaInput string) core.FuncResponse {
 	err := json.Unmarshal([]byte(lambdaInput), &input)
 	if err != nil {
 		return core.FuncResponse{
-			Error: "no se pudieron interpretar los argumentos recibidos: " + core.StrSlice(lambdaInput, 200),
+			Error: "no se pudieron interpretar los argumentos recibidos: " + core.StrCut(lambdaInput, 200),
 		}
 	}
 
 	args := input.ExecArgs
-	core.Log("func to exec:: ", lambdaInput)
+	core.Log("func to exec:: ", core.StrCut(lambdaInput, 200))
 
 	type FuncToInvoke struct {
 		HourMin  string

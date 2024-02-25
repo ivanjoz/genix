@@ -79,13 +79,13 @@ func main() {
 	}
 
 	if w1 == "1" {
-		CompileBackendToS3(params, false, false)
-		DeployLambda(params, false)
-		CompileBackendToS3(params, false, true)
-		DeployLambda(params, true)
+		CompileBackendToS3(params, false)
+		DeployLambda(params, 0)
+		CompileBackendToS3(params, false)
+		DeployLambda(params, 2)
 	} else if w1 == "2" {
-		UpdateEnviromentVariables(params, false)
-		UpdateEnviromentVariables(params, true)
+		UpdateEnviromentVariables(params, 0)
+		UpdateEnviromentVariables(params, 2)
 	} else if w1 == "3" {
 		DeployIfraestructure(params)
 	} else {
@@ -97,17 +97,10 @@ func main() {
 }
 
 // Compila el código Backend y lo envía a S3
-func CompileBackendToS3(params DeployParams, sendToS3, useAmd64 bool) {
+func CompileBackendToS3(params DeployParams, sendToS3 bool) {
 
 	compiledPath := GetBaseWD() + compilePath
 	command := `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 /usr/local/go/bin/go build -ldflags '-s -w' -o %v`
-
-	if useAmd64 {
-		compiledPath += "-amd"
-		command = strings.Replace(command, "arm64", "amd64", 1)
-		params.S3_COMPILED_PATH = strings.Replace(
-			params.S3_COMPILED_PATH, "lambda-", "lambda-amd-", 1)
-	}
 
 	command = fmt.Sprintf(command, compiledPath)
 	fmt.Println("Compilando con:: ", command)
@@ -142,16 +135,14 @@ func CompileBackendToS3(params DeployParams, sendToS3, useAmd64 bool) {
 }
 
 // Despliega el código compilado de la Lambda
-func DeployLambda(params DeployParams, useAmd64 bool) {
+func DeployLambda(params DeployParams, lambdaNro uint8) {
 
 	lambdaName := params.STACK_NAME + "-backend"
-	compilePath_ := compilePath
-	if useAmd64 {
-		compilePath_ += "-amd"
-		lambdaName += "-amd"
+	if lambdaNro == 2 {
+		lambdaName += "_2"
 	}
 
-	zipFile, err := ReadFile(GetBaseWD() + compilePath_ + ".zip")
+	zipFile, err := ReadFile(GetBaseWD() + compilePath + ".zip")
 
 	if err != nil {
 		panic("Error al leer el compilado.zip: " + err.Error())
@@ -178,14 +169,14 @@ func DeployLambda(params DeployParams, useAmd64 bool) {
 }
 
 // Actualiza las variables de entorno de la Lambda
-func UpdateEnviromentVariables(params DeployParams, useAmd64 bool) {
+func UpdateEnviromentVariables(params DeployParams, lambdaNro uint8) {
 
 	lambdaName := params.STACK_NAME + "-backend"
-	if useAmd64 {
-		lambdaName += "-amd"
+	if lambdaNro == 2 {
+		lambdaName += "_2"
 	}
-	fmt.Println("Actulizando variables de entorno...")
 
+	fmt.Println("Actulizando variables de entorno...")
 	enviromentVars := map[string]any{}
 
 	jsonFileBytes, err := ReadFile(GetBaseWD() + "/credentials.json")
@@ -204,8 +195,7 @@ func UpdateEnviromentVariables(params DeployParams, useAmd64 bool) {
 	jsonBase64 := BytesToBase64(CompressZstd(&jsonString), true)
 
 	variables := map[string]string{
-		"APP_CODE": "gerp_prd",
-		"CONFIG":   jsonBase64,
+		"APP_CODE": "gerp_prd", "CONFIG": jsonBase64,
 	}
 
 	configInput := lambda.UpdateFunctionConfigurationInput{
@@ -272,7 +262,6 @@ func DeployIfraestructure(params DeployParams) {
 		"$DEPLOYMENT_BUCKET": params.DEPLOYMENT_BUCKET,
 		"$DYNAMODB_TABLE":    params.STACK_NAME + "-db",
 		"$LAMBDA_NAME":       params.STACK_NAME + "-backend",
-		"$LAMBDA_NAME_AMD":   params.STACK_NAME + "-backend-amd",
 		"$LAMBDA_IAM_ROLE":   params.LAMBDA_IAM_ROLE,
 		"$S3_COMPILED_PATH":  s3CompiledPath,
 	}
@@ -281,7 +270,7 @@ func DeployIfraestructure(params DeployParams) {
 		cloudTemplate = strings.ReplaceAll(cloudTemplate, key, value)
 	}
 
-	CompileBackendToS3(params, true, false)
+	CompileBackendToS3(params, true)
 
 	if stackStatus == 0 {
 
