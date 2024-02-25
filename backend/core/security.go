@@ -36,6 +36,7 @@ type EnvStruct struct {
 	DYNAMO_TABLE   string
 	REQ_LAMBDA_ID  string
 	API_ROUTE      string
+	LAMBDA_NAME    string
 	LOGS_FULL      bool
 	LOGS_ONLY_SAVE bool
 	DB_DISABLE_SSL bool
@@ -100,6 +101,7 @@ func PopulateVariables() {
 		Env.API_ROUTE = "http://localhost:3589"
 	}
 
+	Env.LAMBDA_NAME = Env.STACK_NAME + "-backend"
 	Env.APP_CODE = APP_CODE
 	Env.IS_LOCAL = IS_LOCAL
 	Env.TMP_DIR = If(Env.IS_LOCAL, wd+"/tmp/", "/tmp/")
