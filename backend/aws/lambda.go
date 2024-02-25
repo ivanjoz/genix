@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 )
@@ -33,7 +34,7 @@ func ExecLambda(args core.ExecArgs) LambdaExecOutput {
 
 	input := ExecLambdaInput{ExecArgs: args}
 	body := core.ToJsonNoErr(input)
-	responseBody := []byte{}
+	lambdaAPIResponse := []byte{}
 
 	// core.Log("*Body a enviar a Lambda", body)
 	output := LambdaExecOutput{Response: core.FuncResponse{}}
@@ -51,8 +52,7 @@ func ExecLambda(args core.ExecArgs) LambdaExecOutput {
 			go core.SendHttpRequestNoTLS(req, &reponseBody)
 			return LambdaExecOutput{}
 		} else {
-			responseBody, _ = core.SendHttpRequestT(req, false)
-
+			lambdaAPIResponse, _ = core.SendHttpRequestT(req, false)
 		}
 	} else {
 		payloadBytes, _ := json.Marshal(map[string]string{"body": body})
@@ -75,7 +75,9 @@ func ExecLambda(args core.ExecArgs) LambdaExecOutput {
 			core.Log("*Función Ejecutada (ERROR): ", args.FuncToExec, "|", err.Error())
 		} else {
 			output.StatusCode = response.StatusCode
-			responseBody = response.Payload
+
+			lambdaAPIResponse = response.Payload
+			core.Log("*Lambda Reponse:", core.StrCut(string(lambdaAPIResponse), 400))
 			if response.LogResult != nil {
 				output.Logs = *response.LogResult
 			}
@@ -87,18 +89,24 @@ func ExecLambda(args core.ExecArgs) LambdaExecOutput {
 		}
 	}
 
-	if args.ParseResponse && !args.InvokeAsEvent {
-		err := json.Unmarshal(responseBody, &output.Response)
-		if err != nil {
-			output.Error = fmt.Sprintf("Error al parsear el body: %v", err)
-		}
-		if len(output.Response.Error) > 0 {
-			output.Error = output.Response.Error
-		}
-	} else {
-		output.Body = string(responseBody)
-	}
+	response := events.APIGatewayV2HTTPResponse{}
 
+	err := json.Unmarshal(lambdaAPIResponse, &response)
+	if err != nil {
+		output.Error = fmt.Sprintf("Error al parsear el Lambda Response: %v", err)
+	} else {
+		if args.ParseResponse && !args.InvokeAsEvent {
+			err := json.Unmarshal([]byte(response.Body), &output.Response)
+			if err != nil {
+				output.Error = fmt.Sprintf("Error al parsear el body: %v", err)
+			}
+			if len(output.Response.Error) > 0 {
+				output.Error = output.Response.Error
+			}
+		} else {
+			output.Body = response.Body
+		}
+	}
 	return output
 }
 

@@ -1257,7 +1257,7 @@ func Decrypt(encryptedData []byte, cypherKey_ ...string) ([]byte, error) {
 	return plaintext, nil
 }
 
-func StrSlice(content string, size int) string {
+func StrCut(content string, size int) string {
 	if len(content) < size {
 		return content
 	} else {
