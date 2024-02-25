@@ -4,6 +4,11 @@ export interface IProductoPropiedad {
   ID: number, Nombre: string, Options: string[]
 }
 
+export interface IProductoImage {
+  n: string /* Nombre del imagen */
+  d: string /* descripcion de la imagen */
+}
+
 export interface IProducto {
   ID: number,
   Nombre: string
@@ -19,6 +24,7 @@ export interface IProducto {
   SbnPrecio?: number
   SbnDescuento?: number
   SbnPreciFinal?: number
+  Images?: IProductoImage[]
   ss: number
   upd: number
 }

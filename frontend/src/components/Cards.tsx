@@ -1,3 +1,4 @@
+import { Confirm, IConfirmOptions } from "notiflix";
 import { For, JSX, JSXElement, Show, createEffect, createSignal, on } from "solid-js";
 
 interface ILayerAutoHide {
@@ -97,4 +98,20 @@ export const BarOptions = (props: IBarOptions) => {
     </For>
     <div class="ln-1 p-abs z10"></div>
   </div>
+}
+
+export const ConfirmWarn = (
+  a: string, b: string, c: string, d?: string,
+  e?: () => void, f?: () => void,
+) =>{
+  Confirm.init({
+    fontFamily:'main',
+    messageFontSize:'0.96rem',
+    titleColor:'#db3030',
+    titleFontSize:'1.06rem',
+    messageColor:'#1e1e1e',
+    okButtonColor:'#f8f8f8',
+    okButtonBackground:'#f35c5c',
+  })
+  Confirm.show(a,b,c,d,e,f)
 }

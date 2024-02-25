@@ -95,3 +95,81 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	return req.MakeResponse(records)
 }
+
+type productoImage struct {
+	Content       string
+	Folder        string
+	Description   string
+	ProductoID    int32
+	ImageToDelete string
+}
+
+func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
+	image := productoImage{}
+	err := json.Unmarshal([]byte(*req.Body), &image)
+	if err != nil {
+		return req.MakeErr("Error al deserilizar el body:", err)
+	}
+
+	core.Log("Image to delete 1:", image.ImageToDelete)
+
+	if len(image.ImageToDelete) == 0 {
+		if image.ProductoID == 0 || len(image.Content) == 0 {
+			return req.MakeErr("NO se encontraron los parámetros: [ProductoID] [Content]")
+		}
+	}
+
+	productos := []s.Producto{}
+
+	err = core.DBSelect(&productos).
+		Where("empresa_id").Equals(req.Usuario.EmpresaID).
+		Where("id").Equals(image.ProductoID).Exec()
+
+	if err != nil {
+		return req.MakeErr("Error al obtener el producto:", err)
+	}
+
+	if len(productos) == 0 {
+		return req.MakeErr("No se encontró el producto con ID:", image.ProductoID)
+	}
+
+	producto := productos[0]
+	response := map[string]string{}
+
+	if len(image.ImageToDelete) > 0 {
+		images := []s.ProductoImagen{}
+		for _, e := range producto.Images {
+			if e.Name != image.ImageToDelete {
+				images = append(images, e)
+			}
+		}
+		producto.Images = images
+	} else {
+		imageArgs := ImageArgs{
+			Content: image.Content,
+			Folder:  "img-productos",
+			Name:    fmt.Sprintf("%v", time.Now().UnixMilli()),
+		}
+
+		_, err = saveImage(imageArgs)
+		if err != nil {
+			return req.MakeErr("Error al guardar la imagen: " + err.Error())
+		}
+
+		response["imageName"] = image.Folder + "/" + imageArgs.Name
+
+		producto.Images = append(producto.Images, s.ProductoImagen{
+			Name: imageArgs.Name, Descripcion: image.Description})
+	}
+
+	producto.Updated = time.Now().Unix()
+	producto.UpdatedBy = req.Usuario.ID
+
+	err = core.DBInsert(&[]s.Producto{producto})
+
+	if err != nil {
+		return req.MakeErr("Error al actualizar el producto:", err)
+	}
+
+	return req.MakeResponse(response)
+}
