@@ -76,7 +76,7 @@ export const ComercialModule: IModule = {
 
   },
   menus: [
-    { name: "Productos", minName: "PRD",  id: 2,
+    { name: "Productos", minName: "PRD",  id: 2, icon: "icon-flow-merge",
       options: [
         { name: "Módulo de Venta",
         },
@@ -84,6 +84,20 @@ export const ComercialModule: IModule = {
         },
         { name: "Almacenes",
         },
+      ]  
+    },
+    { name: "Página Web", minName: "PGW",  id: 3, icon: "icon-buffer",
+      options: [
+        { name: "Inicio", route: "/cms/webpage/1"
+        },
+        { name: "Nosotros", route: "/cms/webpage/2"
+        },
+        { name: "Tienda", route: "/cms/webpage/3"
+        },
+        { name: "Producto", route: "/cms/webpage/4"
+        },
+        { name: "Carrito Compra", route: "/cms/webpage/5"
+        }, 
       ]  
     },
   ]

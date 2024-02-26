@@ -19,6 +19,10 @@
   padding-left: 7px;
   width: 100%;
 }
+.in-5.s5 {
+  border-radius: 0;
+  box-shadow: #57555c52 0px 1px 2px -1px;
+}
 .in-5.s2 {
   background-color: #464672d4;
   border: none;

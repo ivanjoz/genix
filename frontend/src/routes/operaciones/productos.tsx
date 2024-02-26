@@ -1,7 +1,7 @@
-import { Loading, Notify } from "~/core/main";
+import { ConfirmWarn, Loading, Notify } from "~/core/main";
 import { max } from "simple-statistics";
 import { Show, createSignal } from "solid-js";
-import { BarOptions, ConfirmWarn } from "~/components/Cards";
+import { BarOptions } from "~/components/Cards";
 import { CellEditable, CellTextOptions } from "~/components/Editables";
 import { Input, refreshInput } from "~/components/Input";
 import { SideLayer, openLayers, setOpenLayers } from "~/components/Modals";

@@ -1,5 +1,5 @@
 import pkg from "notiflix";
-export const { Notify, Loading } = pkg;
+export const { Notify, Loading, Confirm } = pkg;
 
 export const throttle = (func: () => void, delay: number) => {
   if(window._throttleTimer){ clearTimeout(window._throttleTimer) }
@@ -135,4 +135,20 @@ export function include(e: string, h: string | string[]) {
       && e.includes(h[2]) && e.includes(h[3]) && e.includes(h[4])
       && e.includes(h[5])
   }
+}
+
+export const ConfirmWarn = (
+  a: string, b: string, c: string, d?: string,
+  e?: () => void, f?: () => void,
+) =>{
+  Confirm.init({
+    fontFamily:'main',
+    messageFontSize:'0.96rem',
+    titleColor:'#db3030',
+    titleFontSize:'1.06rem',
+    messageColor:'#1e1e1e',
+    okButtonColor:'#f8f8f8',
+    okButtonBackground:'#f35c5c',
+  })
+  Confirm.show(a,b,c,d,e,f)
 }

@@ -1,0 +1,35 @@
+.webpage_dev_card {
+  border-right: 4px solid rgb(253, 215, 215);
+  background-color: #f0f1f7;
+}
+.cms_editable_card_selected {
+  outline: 2px dashed red;
+  z-index: 180;
+  box-shadow: rgb(255 255 255) 0px 0px 0px 2px;
+}
+.cms_editable_card:hover {
+  outline: 2px solid red;
+  z-index: 181;
+  box-shadow: rgb(255 255 255) 0px 0px 0px 2px;
+}
+.cms_card_buttons {
+  left: 2rem;
+}
+.cms_card_button {
+  background-color: #e54848;
+  color: white;
+  padding: 0px 8px 0px 4px;
+  height: 1.6rem;
+  cursor: pointer;
+  opacity: 0;
+  z-index: 199;
+}
+.cs1 {
+  padding: 0px 10px 0px 10px;
+}
+.cms_editable_card:hover .cms_card_button {
+  opacity: 1;
+}
+.cms_card_button:hover {
+  outline: 2px solid black;
+}

@@ -25,6 +25,13 @@
   background-color: #fff;
   box-shadow: 0 0 5px rgba(0,0,0,.2);
 }
+.cms-1 .header1-menu1 {
+  margin-bottom: 0;
+}
+.cms-1 .header1-menu2 {
+  position: relative;
+  top: unset;
+}
 .header1-menu2.menu-on {
   position: fixed;
   top: 0;
