@@ -12,6 +12,7 @@ interface IPageContainer {
   title?: string
   views?: [number, string][] /* [id, nombre][] */
   accesos?: number[]
+  pageStyle?: JSX.CSSProperties
 }
 
 export const PageContainer = (props: IPageContainer) => {
@@ -55,7 +56,7 @@ export const PageContainer = (props: IPageContainer) => {
     }
   }
   
-  return <div class={cN()}>
+  return <div class={cN()} style={props.pageStyle}>
     <Show when={!isLoading()}>
       { props.children }       
     </Show> 

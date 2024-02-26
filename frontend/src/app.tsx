@@ -9,14 +9,18 @@ import Modules from "./core/modules";
 import { createIndexDB } from "./shared/main";
 import { Params } from "./shared/security";
 import PageBuilder from "./pages/page";
+import CmsWebpage from "./routes/cms/webpage";
 
-const defaultModule = Modules[0]
+let defaultModule = Modules[0]
+const isClient = typeof window !== 'undefined'
+if(isClient){
+  const moduleSelected = Params.getValueInt("moduleSelected")
+  if(moduleSelected){ defaultModule = Modules.find(x => x.id === moduleSelected) }
+}
 export const [appModule, setAppModule] = createSignal(defaultModule)
 export const [showMenu, setShowMenu] = createSignal(false)
 
 const DEV_HOSTS = ["d16qwm950j0pjf.cloudfront.net","genix-dev.un.pe"]
-
-const isClient = typeof window !== 'undefined'
 if(isClient){
   document.head.querySelector('title')?.remove()
 
@@ -100,6 +104,7 @@ export default function Root() {
       )}>
       <Route path="/pages" component={PageBuilder} />
       <Route path="/pages/:name" component={PageBuilder} />
+      <Route path="/cms/webpage/:name" component={CmsWebpage} />
       <Show when={isLogin() === 2}>
         <FileRoutes />
       </Show>

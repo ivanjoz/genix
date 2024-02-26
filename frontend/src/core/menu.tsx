@@ -17,14 +17,16 @@ export const [pageViews, setPageViews] = createSignal([])
 export const [pageView, setPageView] = createSignal(0)
 
 export function MainTopMenu() {
-
+  
   return <div class="main-header flex ai-center">
     <Show when={[1].includes(deviceType())}>
       <div class="header-program">
         <SearchSelect selected={appModule().id} options={Modules} keys="id.name"
           css="menu-s1" notEmpty={true}
           onChange={mod => {
+            Params.setValue("moduleSelected",mod.id)
             if(mod){ setAppModule(mod) }
+            return
           }}
         />
       </div>
@@ -303,7 +305,7 @@ const MakeMenuRecord = (props: IMenuElement, opt: IMenuRecord, selected?: boolea
         </div>
       }
       <div class="submenu-label">
-        <span class="mn-1">{opt.name}</span>
+        <span class="mn-1 jc-center t-c">{opt.name}</span>
         { /* jc-center t-c */}
         <span class="mn-2 ff-bold jc-center t-c">{opt.name.substring(0,5).trim()}</span>
       </div>

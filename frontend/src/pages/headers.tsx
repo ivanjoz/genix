@@ -1,5 +1,5 @@
 import { createEffect } from "solid-js"
-import { IPageSection } from "./page"
+import { IPageSection, ISectionParams } from "./page"
 
 export interface IHeader1 {
   args: IPageSection
@@ -43,6 +43,10 @@ export function Header1(props: IHeader1) { // type: 10
 
   createEffect(() => {
     handleScroll()
+  })
+
+  createEffect(() => {
+    console.log(props.args)
   })
 
   return <>
