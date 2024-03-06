@@ -1,15 +1,27 @@
 import { GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
 import { arrayToMapN } from "~/shared/main"
 
-interface IEmpresa {
+export interface IEmpresa {
   id: number,
   email: string
   nombre: string
   razonSocial: string
-  ruc: number
+  ruc: string
   telefono: string
+  representante: string
+  direccion: string
+  ciudad: string
+  smtp: IEmpresaSmtp
   ss: number
   upd: number
+}
+
+export interface IEmpresaSmtp {
+  host: string
+  port: string
+  user: string
+  pwd: string
+  email: string
 }
 
 export const useEmpresasAPI = (): GetSignal<IEmpresa[]> => {
@@ -20,10 +32,33 @@ export const useEmpresasAPI = (): GetSignal<IEmpresa[]> => {
       useIndexDBCache: 'empresas',
     },
     (result) => {
-      console.log("resultado obtenido:: ", result.Records)
-      return result.Records
+      const empresa = result.Records.filter(x => x)[0] || {}
+      empresa.smtp = empresa.smtp || {}
+      return [empresa]
     }
   )
+}
+
+export const useParametrosEmpresaAPI = (): GetSignal<IEmpresa> => {
+  return  makeGETFetchHandler(
+    { route: "empresa", emptyValue: [],
+      errorMessage: 'Hubo un error al obtener las empresa.',
+      cacheSyncTime: 1, // mergeRequest: true,
+      useIndexDBCache: 'empresa',
+    },
+    (result) => {
+      console.log("resultado obtenido:: ", result.Records)
+      return result.Records[0]|| {}
+    }
+  )
+}
+
+export const postEmpresaParametros = (data: IEmpresa) => {
+  return POST({
+    data,
+    route: "empresa-parametros",
+    refreshIndexDBCache: "empresa"
+  })
 }
 
 export interface IUsuario {

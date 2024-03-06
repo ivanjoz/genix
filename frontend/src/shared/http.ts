@@ -83,9 +83,8 @@ const setFetchProgress = (bytesLen?: number) => {
 }
 
 // Parsea los headers de la respuesta crear un reader
-const parseResponseAsStream = (fetchResponse: Response, props: IHttpStatus): Promise<any> => {
-  console.log("Headers:: ", fetchResponse.headers)
-  const contentType = fetchResponse.headers.get("content-type")
+const parseResponseAsStream = async (fetchResponse: Response, props: IHttpStatus): Promise<any> => {
+
   if (fetchResponse.status) {
     props.code = fetchResponse.status
     props.message = fetchResponse.statusText
@@ -124,11 +123,14 @@ const parseResponseAsStream = (fetchResponse: Response, props: IHttpStatus): Pro
   }
   else if (fetchResponse.status !== 200) {
     console.log(fetchResponse)
-    if (!contentType || contentType.indexOf("/json") === -1) {
-      throw(fetchResponse.text())
-    } else {
-      throw(fetchResponse.json())
+    let content = ""
+    try {
+      content = await fetchResponse.text()
+    } catch (error) {
+      throw(`Error status: ${fetchResponse.status}`)
     }
+
+    throw(extractError(content))
   }
 }
 
@@ -169,7 +171,7 @@ const checkIdbTables = (props: httpProps) => {
   if (!table) {
     const err = `No se encontró la tabla en IndexedDB: ${idbTable}`
     console.warn(err)
-    Notify.failure(err)
+    Notify.failure(`Err-1: ${err}`)
     return
   }
 
@@ -181,19 +183,38 @@ const checkIdbTables = (props: httpProps) => {
   }
 }
 
-const checkErrorResponse = (result: any, status: IHttpStatus) => {
-  console.log('revisando error en respuesta::', status)
-  if (!status.code || status.code !== 200 || result.errorMessage) {
-    let message = ''
-    if (typeof result === 'string') {
-      message = result
-    } else if (result.message || result.error || result.errorMessage) {
-      message = result.message || result.error || result.errorMessage
-    } else {
-      message = JSON.stringify(result)
+const extractError = (result: any): string => {
+  let errorJson
+  let errorString = ""
+
+  if(typeof result === 'string'){
+    errorString = result.trim()
+    if(errorString[0] === "{" || errorString[0] === "["){
+      try {
+        errorJson = JSON.parse(errorString)
+      } catch {}
     }
-    Notify.failure(message)
+  } else {
+    errorJson = result
+  }
+  if(errorJson){
+    if(Array.isArray(errorJson)){
+      errorJson = errorJson[0]
+    }
+    if(errorJson.message || errorJson.error || errorJson.errorMessage){
+      errorJson = errorJson.message || errorJson.error || errorJson.errorMessage
+    }
+    errorString = typeof errorJson === 'string' 
+      ?  errorJson 
+      : JSON.stringify(errorJson)
+  }
+  return errorString
+}
+
+const checkErrorResponse = (result: any, status: IHttpStatus) => {
+  if (!status.code || status.code !== 200 || result.errorMessage) {
     console.warn(result)
+    Notify.failure(extractError(result))
     return false
   } else {
     return true
@@ -507,24 +528,27 @@ const doFetchPendingRequests = async (requests: httpProps[]) => {
   // Crea la URL y envía el request
   const url = makeRoute('merged?' + mergedUri, requests[0].apiName)
   let results: IMergeResult[]
-  
+  let error
+
   try {
     const re1 = await fetch(url, { headers: buildHeaders(requests[0]) })
     results = await parseResponseAsStream(re1, status)
-  } catch (error) {
-    console.warn(error)
-    Notify.failure(error as string)
-    Loading.remove()
+  } catch (error_) {
+    error = error_
   }
   
-  results = (results||[]).sort((a,b) => a.id - b.id)
   updateFechOnCourse(requests[0],2)
 
   // Si hay un error en la respuesta general, recchaza todas las promesas
-  if (!results || !checkErrorResponse(results, status)) {
+  if(error){
+    console.warn(error)
+    Notify.failure(error as string)
     for (let e of requests) { e.rejecter && e.rejecter(null) }
+    Loading.remove()
     return
   }
+
+  results = (results||[]).sort((a,b) => a.id - b.id)
 
   // Revisa si hay Errores Individuales
   for (let i = 0; i < requests.length; i++) {

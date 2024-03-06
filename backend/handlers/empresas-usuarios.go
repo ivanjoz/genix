@@ -80,6 +80,54 @@ func GetEmpresas(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &records)
 }
 
+func GetEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
+	if req.Usuario.ID != 1 {
+		return req.MakeErr("No está autorizado para realizar esta solicitud.")
+	}
+
+	dynamoTable := MakeEmpresaTable()
+	record, err := dynamoTable.GetItem(fmt.Sprintf("%v", req.Usuario.EmpresaID))
+	if err != nil {
+		panic(err)
+	}
+	records := []s.Empresa{*record}
+
+	return core.MakeResponse(req, &records)
+}
+
+func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
+	record := s.Empresa{}
+	err := json.Unmarshal([]byte(*req.Body), &record)
+	if err != nil {
+		return req.MakeErr("Error al deserilizar el body: " + err.Error())
+	}
+
+	if len(record.Nombre) == 0 || len(record.RUC) == 0 ||
+		len(record.RazonSocial) == 0 || len(record.Email) == 0 {
+		return req.MakeErr("Falta alguno de los siguiente parámetros: Nombre, Razon-Social, RUC, Email.")
+	}
+
+	if req.Usuario.ID != 1 {
+		return req.MakeErr("No está autorizado para realizar esta solicitud.")
+	}
+
+	record.Updated = time.Now().Unix()
+	dynamoTable := MakeEmpresaTable()
+	/*
+		current, err := dynamoTable.GetItem(fmt.Sprintf("%v", req.Usuario.EmpresaID))
+		if err != nil {
+			return req.MakeErr("No se pudo obtener la empresa buscada: ", err)
+		}
+	*/
+
+	err = dynamoTable.PutItem(&record, 1)
+	if err != nil {
+		return req.MakeErr("Error al guardar el registro de la empresa:", err)
+	}
+
+	return core.MakeResponse(req, &record)
+}
+
 // USUARIOS
 func MakeUsuarioTable(empresaID int32) aws.DynamoTableRecords[s.Usuario] {
 	return aws.DynamoTableRecords[s.Usuario]{
