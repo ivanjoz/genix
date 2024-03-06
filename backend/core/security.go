@@ -44,6 +44,11 @@ type EnvStruct struct {
 	USUARIO_ID     int32
 	ADMIN_PASSWORD string
 	SECRET_PHRASE  string
+	SMTP_HOST      string
+	SMTP_EMAIL     string
+	SMTP_USER      string
+	SMTP_PASSWORD  string
+	SMTP_PORT      int32
 }
 
 var Env *EnvStruct

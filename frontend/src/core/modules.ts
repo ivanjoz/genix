@@ -14,6 +14,7 @@ export const AdminModule: IModule = {
   code: "admin",
   indexedDBTables: {
     empresas: "id",
+    empresa: "id",
     usuarios: "id",
     seguridad_accesos: "id",
     perfiles: "id",
@@ -30,6 +31,8 @@ export const AdminModule: IModule = {
     { name: "Gestión", minName: "Ges", id: 1, icon: "icon-flow-merge",
       options: [
         { name: "Empresas", route: "/admin/empresas"
+        },
+        { name: "Parámetros", route: "/admin/parametros"
         },
         { name: "Usuarios", route: "/admin/usuarios"
         },

@@ -11,12 +11,14 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"runtime"
 	"time"
 
 	"github.com/kelindar/binary"
+	mail "github.com/xhit/go-simple-mail/v2"
 )
 
 func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
@@ -434,9 +436,60 @@ func Test23(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test24(args *core.ExecArgs) core.FuncResponse {
+	if core.Env.SMTP_PORT == 0 || len(core.Env.SMTP_EMAIL) == 0 ||
+		len(core.Env.SMTP_PASSWORD) == 0 || len(core.Env.SMTP_HOST) == 0 {
+		panic("faltan datos para enviar el SMTP")
+	}
+
+	const htmlBody = `<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		<title>Hello Gophers!</title>
+	</head>
+	<body>
+		<p>This is the <b>Go gopher</b>.</p>
+	</body>
+</html>`
+
+	server := mail.NewSMTPClient()
+
+	// SMTP Server
+	server.Host = core.Env.SMTP_HOST
+	server.Port = int(core.Env.SMTP_PORT)
+	server.Username = core.Env.SMTP_USER
+	server.Password = core.Env.SMTP_PASSWORD
+	server.Encryption = mail.EncryptionSTARTTLS
+
+	smtpClient, err := server.Connect()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// New email simple html with inline and CC
+	email := mail.NewMSG()
+	email.SetFrom(fmt.Sprintf("From Ivan <%v>", core.Env.SMTP_EMAIL)).
+		AddTo("anguloivan3@gmail.com").
+		SetSubject("Email test from Go")
+
+	email.SetBody(mail.TextHTML, htmlBody)
 	/*
 		core.Log(ExecutableLinux)
 		core.Log(ExecutableWindows)
 	*/
+
+	// always check error after send
+	if email.Error != nil {
+		log.Fatal(email.Error)
+	}
+
+	// Call Send and pass the client
+	err = email.Send(smtpClient)
+	if err != nil {
+		log.Println(err)
+	} else {
+		log.Println("Email Sent")
+	}
+
 	return core.FuncResponse{}
 }

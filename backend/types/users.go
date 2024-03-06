@@ -4,16 +4,29 @@ type TAGS struct{}
 
 type Empresa struct { // DynamoDB
 	TAGS               `table:"empresas"`
-	ID                 int32  `json:"id"`
-	Nombre             string `json:"nombre"`
-	RazonSocial        string `json:"razonSocial"`
-	RUC                string `json:"ruc"`
-	Email              string `json:"email"`
-	Telefono           string `json:"telefono"`
-	EmailVerificado    int8   `json:"emailVeridicado,omitempty"`
-	TelefonoVerificado int8   `json:"telefonoVerificado,omitempty"`
-	Updated            int64  `json:"upd"`
-	Status             int8   `json:"ss"`
+	ID                 int32      `json:"id"`
+	Nombre             string     `json:"nombre"`
+	RazonSocial        string     `json:"razonSocial"`
+	RUC                string     `json:"ruc"`
+	Email              string     `json:"email"`
+	NotificacionEmail  string     `json:"notifEmail"`
+	Telefono           string     `json:"telefono"`
+	Representante      string     `json:"representante"`
+	Direccion          string     `json:"direccion"`
+	Ciudad             string     `json:"ciudad"`
+	EmailVerificado    int8       `json:"emailVeridicado,omitempty"`
+	TelefonoVerificado int8       `json:"telefonoVerificado,omitempty"`
+	SmtpConfig         SmtpConfig `json:"smtp"`
+	Updated            int64      `json:"upd"`
+	Status             int8       `json:"ss"`
+}
+
+type SmtpConfig struct {
+	Email    string `json:"email,omitempty"`
+	User     string `json:"user,omitempty"`
+	Password string `json:"pwd,omitempty"`
+	Post     int32  `json:"port,omitempty"`
+	Host     string `json:"host,omitempty"`
 }
 
 type Usuario struct { // DynamoDB
