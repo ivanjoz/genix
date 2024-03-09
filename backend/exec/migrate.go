@@ -115,14 +115,12 @@ func CreateBackupFile(args *core.ExecArgs) core.FuncResponse {
 		core.Log("Registros obtenidos: ", len(records))
 
 		hdr := &tar.Header{
-			Name: name,
-			Mode: 0600,
-			Size: int64(len(records)),
+			Name: name, Mode: 0600, Size: int64(len(records)),
 		}
 		if err := tw.WriteHeader(hdr); err != nil {
 			panic("Error al escribir TAR header: " + name + "| " + err.Error())
 		}
-		if _, err := tw.Write([]byte(records)); err != nil {
+		if _, err := tw.Write(records); err != nil {
 			panic("Error al escribir TAR body: " + name + "| " + err.Error())
 		}
 	}

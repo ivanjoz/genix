@@ -11,6 +11,7 @@ import (
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"io"
 	"math"
 	"math/big"
+	mrand "math/rand"
 	"net/http"
 	"regexp"
 	"sort"
@@ -1263,4 +1265,27 @@ func StrCut(content string, size int) string {
 	} else {
 		return content[0:size]
 	}
+}
+
+const base36Chars = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+func MakeRandomBase36String(length int) string {
+	bytes := make([]byte, length)
+	const ln = len(base36Chars)
+	for i := 0; i < length; i++ {
+		bytes[i] = base36Chars[mrand.Intn(ln)]
+	}
+	return string(bytes)
+}
+
+func GobEncode(records any) ([]byte, error) {
+	var buffer bytes.Buffer
+	encoder := gob.NewEncoder(&buffer)
+
+	err := encoder.Encode(records)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	return buffer.Bytes(), nil
 }

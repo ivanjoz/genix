@@ -41,7 +41,7 @@ export const useEmpresasAPI = (): GetSignal<IEmpresa[]> => {
 
 export const useParametrosEmpresaAPI = (): GetSignal<IEmpresa> => {
   return  makeGETFetchHandler(
-    { route: "empresa", emptyValue: [],
+    { route: "empresa-parametros", emptyValue: [],
       errorMessage: 'Hubo un error al obtener las empresa.',
       cacheSyncTime: 1, // mergeRequest: true,
       useIndexDBCache: 'empresa',

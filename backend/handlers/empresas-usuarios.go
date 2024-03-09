@@ -111,6 +111,10 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No está autorizado para realizar esta solicitud.")
 	}
 
+	if len(record.FormApiKey) == 0 {
+		record.FormApiKey = core.MakeRandomBase36String(18)
+	}
+
 	record.Updated = time.Now().Unix()
 	dynamoTable := MakeEmpresaTable()
 	/*
