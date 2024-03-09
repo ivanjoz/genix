@@ -3,7 +3,7 @@ import { formatTime } from "~/core/main"
 import { PageContainer } from "~/core/page"
 import { useEmpresasAPI, useUsuariosAPI } from "~/services/admin/empresas"
 
-export default function TestTable() {
+export default function Empresas() {
 
   const [empresas] = useEmpresasAPI()
   const [usuarios] = useUsuariosAPI()

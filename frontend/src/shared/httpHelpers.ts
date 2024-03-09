@@ -167,9 +167,7 @@ export const getRecordsFromIDB = (props: httpProps): Promise<any[]> => {
     Promise.all(tables.map(table => getTable(table)))
     .then(results => {
       for(let i=0; i< tables.length; i++){
-        const result = results[i] as any[]
-        const idx1 = result.findIndex(x => x[keyID] === -1)
-        if(idx1 !== -1){ result.splice(idx1,1) }
+        results[i] = results[i].filter(x => !x._IS_META)
       }
       if(tables.length === 1) results = results[0] as any[]
       const elapsed = (Date.now() - (props.startTimeMs || 0))

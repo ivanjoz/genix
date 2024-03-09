@@ -80,6 +80,7 @@ export default function Root() {
   }
 
   const isLogin = () => {
+    if(!isClient){ return 3 }
     if(window.location.pathname.substring(0,5) === '/page'){ return 1 }
     else if(loginStatus() && isClient){ return 2 }
     else { return 3 }

@@ -179,10 +179,6 @@ export default function PerfilesAccesos() {
     setPerfiles({...perfiles()})
     setOpenModals([])
   }
-
-  const checkIfSelected = () => {
-    return perfilForm().id
-  }
   
   return <PageContainer title="Perfiles & Accesos" fetchLoading={true}>
 
