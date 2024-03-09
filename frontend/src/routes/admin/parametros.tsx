@@ -13,8 +13,8 @@ export default function AdminParametros() {
   
   const saveEmpresa = async () => {
     const form = empresa()
-    if((form.ruc||"").length > 0 || (form.nombre||"").length > 0 || 
-      (form.razonSocial||"").length > 0 || (form.email||"").length > 0 ){
+    if((form.ruc||"").length === 0 || (form.nombre||"").length === 0 || 
+      (form.razonSocial||"").length === 0 || (form.email||"").length === 0 ){
       Notify.failure("Faltan datos a guardar.")
       return
     }
@@ -64,8 +64,8 @@ export default function AdminParametros() {
             <Input css="w-12x mb-10" inputCss="s3" label="Host" save="host" saveOn={empresa().smtp} />
             <Input css="w-12x mb-10" inputCss="s3" label="Port" save="port" saveOn={empresa().smtp} type="number" />
             <Input css="w-12x mb-10" inputCss="s3" label="Usuario" save="user" saveOn={empresa().smtp} />
-            <Input css="w-12x mb-10" inputCss="s3" label="Password" save="pwd" saveOn={empresa().smtp} type="number" />
-            <Input css="w-24x mb-10" inputCss="s3" label="Email" save="email" saveOn={empresa().smtp} type="number" />
+            <Input css="w-12x mb-10" inputCss="s3" label="Password" save="pwd" saveOn={empresa().smtp} />
+            <Input css="w-24x mb-10" inputCss="s3" label="Email" save="email" saveOn={empresa().smtp} />
           </div>
         </div>
       </div>

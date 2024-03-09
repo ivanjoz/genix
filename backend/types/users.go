@@ -14,6 +14,7 @@ type Empresa struct { // DynamoDB
 	Representante      string     `json:"representante"`
 	Direccion          string     `json:"direccion"`
 	Ciudad             string     `json:"ciudad"`
+	FormApiKey         string     `json:"formApiKey"`
 	EmailVerificado    int8       `json:"emailVeridicado,omitempty"`
 	TelefonoVerificado int8       `json:"telefonoVerificado,omitempty"`
 	SmtpConfig         SmtpConfig `json:"smtp"`
