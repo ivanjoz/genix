@@ -152,3 +152,18 @@ export const ConfirmWarn = (
   })
   Confirm.show(a,b,c,d,e,f)
 }
+
+export const downloadFile = (url?: string) =>{
+  const aElement = document.createElement("a")
+  const names = url.split("/").filter(x => x)
+  const name = names[names.length - 1]
+  aElement.setAttribute("download", name);
+  /*
+  const href = URL.createObjectURL(res);
+  console.log(href);
+  */
+  aElement.href = url // href;
+  aElement.setAttribute("target", "_blank");
+  aElement.click();
+  // URL.revokeObjectURL(href);
+}

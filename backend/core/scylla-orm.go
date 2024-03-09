@@ -478,7 +478,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 				mapField(&field, value, column.IsPointer)
 				// Revisa si necesita parsearse un string a un struct como JSON
 			} else if column.IsComplexType {
-				Log("complex type::", column.FieldName)
+				// Log("complex type::", column.FieldName)
 				if vl, ok := value.(*string); ok {
 					newStruct := column.RefType.Interface()
 					// fmt.Printf("Type: %T \n", newStruct)
@@ -496,7 +496,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 					if len(*vl) <= 2 {
 						continue
 					}
-					Log("Valor Columna:", column.Name, " | ", strings.TrimSpace(string(*vl)), "Len:", len(*vl), "")
+					// Log("Valor Columna:", column.Name, " | ", strings.TrimSpace(string(*vl)), "Len:", len(*vl), "")
 					newStruct := column.RefType.Interface()
 					err = MsgPDecode(*vl, &newStruct)
 					if err != nil {

@@ -18,6 +18,7 @@ import (
 
 // Agrupa los handlers de los módulos en uns solo map
 var appHandlersModules = []core.AppRouterType{
+	exec.ModuleHandlers,
 	handlers.ModuleHandlers,
 }
 

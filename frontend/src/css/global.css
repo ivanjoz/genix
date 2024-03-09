@@ -1473,6 +1473,9 @@ th {
   padding-left: 7px;
   padding-right: 7px;
 }
+.bn1.s4 {
+  height: 2.1rem;
+}
 .bn1.big {
   height: 2.5rem;
   font-size: 1.1rem;
@@ -1520,6 +1523,14 @@ th {
 .d-blue:hover {
   background-color: #6a8df7;
   border: 2px solid #6a8df7;
+  outline: 1px solid black;
+}
+.d-purple {
+  background-color: #8f5dfd;
+  color: #ffffff;
+  border: 2px solid #8454eb;
+}
+.d-purple:hover {
   outline: 1px solid black;
 }
 .b-blue2:hover {

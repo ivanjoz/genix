@@ -6,10 +6,14 @@ import (
 
 type ExecRouterType map[string]func(args *core.ExecArgs) core.FuncResponse
 
+var ModuleHandlers = core.AppRouterType{
+	"GET.backups": GetBackups,
+}
+
 var ExecHandlers = ExecRouterType{
 	"fn-init":              ConfigInit,
 	"fn-importar-ciudades": ImportCiudades,
-	"fn-backup":            CreateBackupFile,
+	"fn-backup":            DoSaveBackup,
 	"fn-homologate":        Homologate,
 	"compress-image":       CompressImage,
 }

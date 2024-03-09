@@ -53,6 +53,26 @@ export const useParametrosEmpresaAPI = (): GetSignal<IEmpresa> => {
   )
 }
 
+export interface IBackup {
+  Name: string
+  Size: number
+  upd: number
+}
+
+export const useBackupsAPI = (): GetSignal<IBackup[]> => {
+  return  makeGETFetchHandler(
+    { route: "backups", emptyValue: [],
+      errorMessage: 'Hubo un error al obtener los backups.',
+      cacheSyncTime: 0, mergeRequest: true,
+      useIndexDBCache: 'backups',
+    },
+    ({ Records }) => {
+      console.log("Backups obtenidos::", Records)
+      return (Records || []) as IBackup[]
+    }
+  )
+}
+
 export const postEmpresaParametros = (data: IEmpresa) => {
   return POST({
     data,

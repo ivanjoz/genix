@@ -26,6 +26,7 @@ type FileToS3Args struct {
 	Prefix        string
 	StartAfter    string
 	ContentType   string
+	MaxKeys       int32
 }
 
 func SendFileToS3(args FileToS3Args) error {
@@ -150,6 +151,9 @@ func S3ListFiles(args FileToS3Args) ([]types.Object, error) {
 	}
 	if len(args.StartAfter) > 0 {
 		input.StartAfter = &args.StartAfter
+	}
+	if args.MaxKeys > 0 {
+		input.MaxKeys = &args.MaxKeys
 	}
 
 	result, err := client.ListObjectsV2(context.TODO(), input)

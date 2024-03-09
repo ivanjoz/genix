@@ -21,6 +21,7 @@ export const AdminModule: IModule = {
     fetchedIDBTables: 'key',
     cacheUpdates: 'key,route',
     cacheStatic: 'key',
+    backups: 'Name',
     // Scylla
     productos: "ID",
     sedes_almacenes: '[_pk+ID]',  
@@ -37,6 +38,8 @@ export const AdminModule: IModule = {
         { name: "Usuarios", route: "/admin/usuarios"
         },
         { name: "Perfiles & Accesos", route: "/admin/perfiles-accesos",
+        },
+        { name: "Backups", route: "/admin/backups"
         },
       ]
     },

@@ -28,9 +28,9 @@ export default function AdminParametros() {
     Loading.remove()
   }
 
-  return <PageContainer title="Empresas" fetchLoading={true}>
+  return <PageContainer title="Parámetros" fetchLoading={true}>
     <div class="flex jc-between ai-center mb-08">
-      <div><div class="h3">Parámetros de la Empresa</div></div>
+      <div><div class="h3 ff-bold">Parámetros de la Empresa</div></div>
       <div class="flex ai-center">
         <button class="bn1 b-blue" onclick={ev => {
           ev.stopPropagation()
