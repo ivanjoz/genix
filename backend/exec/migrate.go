@@ -112,12 +112,6 @@ func makeController[T any]() ScyllaController {
 					rec := any(e).(s.Increment)
 					recordsParsed = append(recordsParsed, rec)
 					keys = append(keys, rec.TableName)
-
-					statement := fmt.Sprintf(
-						"UPDATE %v.sequences SET current_value = current_value + %v WHERE name = '%v'",
-						core.Env.DB_NAME, rec.CurrentValue, rec.TableName)
-
-					updateStatements = append(updateStatements, statement)
 				}
 
 				currentRecords := []s.Increment{}
@@ -126,6 +120,7 @@ func makeController[T any]() ScyllaController {
 					return core.Err("Error al seleccionar registros:", err)
 				}
 
+				core.Log("registros obtenidos:", len(currentRecords))
 				currentRecordsMap := core.SliceToMapK(currentRecords,
 					func(e s.Increment) string { return e.TableName })
 
@@ -134,6 +129,7 @@ func makeController[T any]() ScyllaController {
 					if current, ok := currentRecordsMap[e.TableName]; ok {
 						currentValue = current.CurrentValue
 					}
+					core.Log("current value:", currentValue)
 					if e.CurrentValue == currentValue {
 						continue
 					}

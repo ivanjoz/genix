@@ -9,6 +9,7 @@ type ExecRouterType map[string]func(args *core.ExecArgs) core.FuncResponse
 var ModuleHandlers = core.AppRouterType{
 	"GET.backups":         GetBackups,
 	"POST.backup-restore": RestoreBackup,
+	"POST.backup-create":  CreateBackup,
 }
 
 var ExecHandlers = ExecRouterType{

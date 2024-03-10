@@ -67,7 +67,9 @@ func MakeScyllaTable[T any](newType T) ScyllaTable {
 				column.IsPointer = true
 			}
 
-			if column.FieldType[0:2] == "[]" {
+			if len(values) == 2 && values[1] == "counter" {
+				column.Type = "counter"
+			} else if column.FieldType[0:2] == "[]" {
 				ft := column.FieldType[2:]
 				if ft, ok := ScyllaFieldToColumnTypesMap[ft]; ok {
 					ft = ScyllaFieldToColumnTypesMap[ft]
