@@ -92,3 +92,13 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 
 	return req.MakeResponse(map[string]int{"ok": 1})
 }
+
+func CreateBackup(req *core.HandlerArgs) core.HandlerResponse {
+
+	err := SaveBackup(req.Usuario.EmpresaID)
+	if err != nil {
+		req.MakeErr("Error al crear el backup:", err)
+	}
+
+	return req.MakeResponse(map[string]int{"ok": 1})
+}

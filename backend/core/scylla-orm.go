@@ -140,7 +140,7 @@ var TypeToScyllaTableMap = map[string]ScyllaTable{}
 
 func GetCounter(name string, incrementCount int, empresaID ...int32) (int64, error) {
 	if len(empresaID) == 1 {
-		name = fmt.Sprintf("x%v_%v", empresaID, name)
+		name = fmt.Sprintf("x%v_%v", empresaID[0], name)
 	}
 
 	registros := []types.Increment{}

@@ -3,7 +3,7 @@ package types
 type Increment struct {
 	TAGS         `table:"sequences"`
 	TableName    string `db:"name,pk"`
-	CurrentValue int64  `db:"current_value"`
+	CurrentValue int64  `db:"current_value,counter"`
 }
 
 type ProductoImagen struct {

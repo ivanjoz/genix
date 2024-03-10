@@ -69,14 +69,9 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 		ResponseWriter: &w,
 	}
 
-	blen := len(body)
-	if blen > 500 {
-		blen = 500
-	}
+	blen := core.If(len(body) > 500, 500, len(body))
 	if blen > 0 {
 		core.Log("*body enviado (LOCAL): ", body[0:(blen-1)])
-		core.Log(body[0:11])
-		core.Log(body[0:11] == `{"fn_exec":`)
 	} else {
 		core.Log("no se encontró body")
 	}

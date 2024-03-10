@@ -12,6 +12,17 @@ export default function Backups() {
   const [backups] = useBackupsAPI()
   const [backupSelected, setBackupSelected] = createSignal(null as IBackup)
 
+  const generarBackup = async () => {
+    Loading.standard("Generando Backup...")
+    try {
+      await POST({ data: {}, route: "backup-create" })
+    } catch (error) {
+      Loading.remove()
+      return
+    }
+    Loading.remove()
+  }
+
   const restaurar = async (name: string) => {
     Loading.standard("Rstaurando Backup...")
     try {
@@ -32,7 +43,12 @@ export default function Backups() {
         <div class="flex jc-between ai-center mb-06">
           <div><h2 class="mb-08">Backups</h2></div>
           <div class="flex ai-center">
-            <button class="bn1 s4 b-green mr-08">
+            <button class="bn1 s4 b-green mr-08" onclick={ev => {
+                ev.stopPropagation()
+                ConfirmWarn("Generar Backup",
+                  `¿Desea generar el backup ahora?`, "SI","NO", 
+                  ()=> { generarBackup() })
+              }}>
               <i class="icon-plus"></i>
             </button>
             <button class="bn1 s4 d-blue">
