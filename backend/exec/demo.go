@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/kelindar/binary"
 	mail "github.com/xhit/go-simple-mail/v2"
 )
 
@@ -327,17 +326,17 @@ func Test20(args *core.ExecArgs) core.FuncResponse {
 		panic(err)
 	}
 	core.Print(demo2)
+	/*
+		encoded, _ := binary.Marshal(&demo1)
+		core.Log("Bytes encoding .binary:", len(encoded), " | ", string(encoded))
 
-	encoded, _ := binary.Marshal(&demo1)
-	core.Log("Bytes encoding .binary:", len(encoded), " | ", string(encoded))
-
-	var demo3 []DemoStruct1
-	err = binary.Unmarshal(encoded, &demo3)
-	if err != nil {
-		panic(err)
-	}
-	core.Print(demo3)
-
+		var demo3 []DemoStruct1
+		err = binary.Unmarshal(encoded, &demo3)
+		if err != nil {
+			panic(err)
+		}
+		core.Print(demo3)
+	*/
 	jsonBytes, _ := json.Marshal(&demo1)
 	core.Log("Bytes encoding .json:", len(string(jsonBytes)), " | ", string(jsonBytes))
 
@@ -490,6 +489,50 @@ func Test24(args *core.ExecArgs) core.FuncResponse {
 	} else {
 		log.Println("Email Sent")
 	}
+
+	return core.FuncResponse{}
+}
+
+type Hola1 struct {
+	Hola   string
+	Nombre string
+	Edad   int
+}
+
+func (e *Hola1) Saludar(num int32) {
+	core.Log("numero:", num)
+}
+
+type SaludarInterface interface {
+	Saludar(num int32)
+}
+
+func TestGeneric[T any](obj T) {
+	if r, ok := any(obj).(SaludarInterface); ok {
+		r.Saludar(1234)
+		core.Log("implementa la interfaz::", r)
+	} else {
+		core.Log("NO implementa la interfaz::")
+	}
+}
+
+func TestInterface(obj SaludarInterface) {
+	obj.Saludar(1234)
+}
+
+func Test25(args *core.ExecArgs) core.FuncResponse {
+
+	obj := Hola1{Hola: "dasd", Edad: 22}
+	TestGeneric(&obj)
+	TestInterface(&obj)
+
+	num := int64(1111)
+	base62encode := core.EncodeToBase62(num)
+	fmt.Println("Base62 encoded:", base62encode)
+	fmt.Println("Base62 decoded:", core.DecodeFromBase62(base62encode))
+
+	key := core.Concat62(123987, 12387, 23, "dasd11")
+	fmt.Println(key)
 
 	return core.FuncResponse{}
 }
