@@ -5,6 +5,7 @@ import (
 	s "app/types"
 	"bytes"
 	"encoding/gob"
+	"fmt"
 )
 
 func MakeScyllaControllers() []ScyllaController {
@@ -101,8 +102,64 @@ func makeController[T any]() ScyllaController {
 			// Las secuencias no se insertan sino se actualizan
 			core.Log("Tabla:", scyllaTable.Name, "| Guardando", len(records), "registros...")
 
+			// Lógica específica para secuencias
 			if scyllaTable.NameSingle == "sequences" {
-				err = core.DBUpdate(&records)
+				keys := []any{}
+				updateStatements := []string{}
+				recordsParsed := []s.Increment{}
+
+				for _, e := range records {
+					rec := any(e).(s.Increment)
+					recordsParsed = append(recordsParsed, rec)
+					keys = append(keys, rec.TableName)
+
+					statement := fmt.Sprintf(
+						"UPDATE %v.sequences SET current_value = current_value + %v WHERE name = '%v'",
+						core.Env.DB_NAME, rec.CurrentValue, rec.TableName)
+
+					updateStatements = append(updateStatements, statement)
+				}
+
+				currentRecords := []s.Increment{}
+				err = core.DBSelect(&currentRecords).Where("name").In(keys).Exec()
+				if err != nil {
+					return core.Err("Error al seleccionar registros:", err)
+				}
+
+				currentRecordsMap := core.SliceToMapK(currentRecords,
+					func(e s.Increment) string { return e.TableName })
+
+				for _, e := range recordsParsed {
+					currentValue := int64(0)
+					if current, ok := currentRecordsMap[e.TableName]; ok {
+						currentValue = current.CurrentValue
+					}
+					if e.CurrentValue == currentValue {
+						continue
+					}
+					increment := ""
+					if e.CurrentValue > currentValue {
+						increment = fmt.Sprintf("+ %v", e.CurrentValue-currentValue)
+					} else {
+						increment = fmt.Sprintf("- %v", currentValue-e.CurrentValue)
+					}
+
+					statement := fmt.Sprintf(
+						"UPDATE %v.sequences SET current_value = current_value %v WHERE name = '%v'",
+						core.Env.DB_NAME, increment, e.TableName)
+					updateStatements = append(updateStatements, statement)
+				}
+
+				core.Log("Registros a actualizar:", len(updateStatements))
+
+				for _, statement := range updateStatements {
+					core.Log("Enviando Statement:", statement)
+					err = core.ScyllaConnect().Query(statement).Exec()
+					if err != nil {
+						core.Log("Error en statement: ", statement)
+						return core.Err("Error al actualizar registros:", err)
+					}
+				}
 			} else {
 				err = core.DBInsert(&records)
 			}

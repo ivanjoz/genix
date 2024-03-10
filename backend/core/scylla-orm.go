@@ -168,6 +168,17 @@ func GetCounter(name string, incrementCount int, empresaID ...int32) (int64, err
 	return currentValue, nil
 }
 
+func MakeQueryStatement(statements []string) string {
+	queryStr := ""
+	if len(statements) == 1 {
+		queryStr = statements[0]
+	} else {
+		statements := strings.Join(statements, "\n")
+		queryStr = fmt.Sprintf("BEGIN BATCH\n%v\nAPPLY BATCH;", statements)
+	}
+	return queryStr
+}
+
 func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 	conn := ScyllaConnect()
 
@@ -210,19 +221,11 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 		queryStatements = append(queryStatements, statement)
 	}
 
-	queryStr := ""
-	if len(queryStatements) == 1 {
-		queryStr = queryStatements[0]
-	} else {
-		statements := strings.Join(queryStatements, "\n")
-		queryStr = fmt.Sprintf("BEGIN BATCH\n%v\nAPPLY BATCH;", statements)
-	}
-
+	queryStr := MakeQueryStatement(queryStatements)
 	if err := conn.Query(queryStr).Exec(); err != nil {
 		Log(queryStr)
 		return err
 	}
-
 	return nil
 }
 
@@ -233,10 +236,12 @@ func DBUpdate[T any](records *[]T, columnsToInclude ...string) error {
 	scyllaTable := MakeScyllaTable(newType)
 
 	columnsToUpdate := []BDColumn{}
-	includeAll := Contains(columnsToInclude, "*")
+	columnsWhere := []BDColumn{}
+	includeAll := len(columnsToInclude) == 0 || Contains(columnsToInclude, "*")
 
 	for _, e := range scyllaTable.Columns {
 		if e.IsPrimaryKey > 0 {
+			columnsWhere = append(columnsWhere, e)
 			continue
 		}
 		if includeAll || Contains(columnsToInclude, e.Name) {
@@ -248,16 +253,15 @@ func DBUpdate[T any](records *[]T, columnsToInclude ...string) error {
 
 	for _, rec := range *records {
 		refValue := reflect.ValueOf(rec)
-		setStatements := []string{}
 
+		setStatements := []string{}
 		for _, col := range columnsToUpdate {
 			v := col.ParseValue(refValue.Field(col.FieldIdx))
 			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
 		}
 
 		whereStatements := []string{}
-		if len(scyllaTable.PartitionKey) > 0 {
-			col := scyllaTable.ColumnsMap[scyllaTable.PartitionKey]
+		for _, col := range columnsWhere {
 			v := col.ParseValue(refValue.Field(col.FieldIdx))
 			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
 		}
@@ -270,20 +274,12 @@ func DBUpdate[T any](records *[]T, columnsToInclude ...string) error {
 		queryStatements = append(queryStatements, queryStatement)
 	}
 
-	queryStr := ""
-	if len(queryStatements) == 1 {
-		queryStr = queryStatements[0]
-	} else {
-		statements := strings.Join(queryStatements, "\n")
-		queryStr = fmt.Sprintf("BEGIN BATCH\n%v\nAPPLY BATCH;", statements)
-	}
-
+	queryStr := MakeQueryStatement(queryStatements)
 	Log(queryStr)
 	if err := conn.Query(queryStr).Exec(); err != nil {
 		// Log(queryStr)
 		return err
 	}
-
 	return nil
 }
 
