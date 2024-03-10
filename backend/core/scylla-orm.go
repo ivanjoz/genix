@@ -539,7 +539,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 			}
 			if mapField, ok := fieldMapping[column.FieldType]; ok {
 				field := ref.Field(column.FieldIdx)
-				Log("Mapeando valor::", field, column.Name, column.FieldType, value)
+				//Log("Mapeando valor::", field, column.Name, column.FieldType, value)
 				mapField(&field, value, column.IsPointer)
 				// Revisa si necesita parsearse un string a un struct como JSON
 			} else if column.IsComplexType {
@@ -577,7 +577,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 				Log("Columna no-mapeada:: ", column)
 			}
 		}
-		Print(rec)
+		//Print(rec)
 		(*e.Records) = append((*e.Records), *rec)
 	}
 

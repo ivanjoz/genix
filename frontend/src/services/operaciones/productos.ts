@@ -1,4 +1,5 @@
-import { GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
+import { Notify } from "notiflix"
+import { GET, GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
 
 export interface IProductoPropiedad {
   ID: number, Nombre: string, Options: string[]
@@ -59,4 +60,21 @@ export const postProducto = (data: IProducto[]) => {
     route: "productos",
     refreshIndexDBCache: "productos"
   })
+}
+
+export const getProductosStock = async (almacenID: number): Promise<any[]> => {
+  let records = []
+  try {
+    const result = await GET({ 
+      route: "productos-stock", emptyValue: [],
+      errorMessage: 'Hubo un error al obtener el stock.',
+      cacheSyncTime: 1, mergeRequest: true,
+      useIndexDBCache: 'productos_stock',
+      partition: { key: 'AlmacenID', value: almacenID, param: 'almacen-id' }
+    })
+    records = result.Records || []
+  } catch (error) {
+    Notify.failure(error as string)
+  }
+  return records
 }

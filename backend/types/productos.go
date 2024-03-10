@@ -150,13 +150,7 @@ type AlmacenMovimiento struct {
 }
 
 func (e *AlmacenMovimiento) SelfParse() {
-	if e.AlmacenID > 0 && e.Created > 0 {
-		e.AlmacenCreated = int64(e.AlmacenID)*10_000_000_000 + e.Created
-	}
-	if e.AlmacenOrigenID > 0 && e.Created > 0 {
-		e.AlmacenOrigenCreated = int64(e.AlmacenOrigenID)*10_000_000_000 + e.Created
-	}
-	if e.ProductoID > 0 && e.Created > 0 {
-		e.ProductoCreated = int64(e.ProductoID)*10_000_000_000 + e.Created
-	}
+	e.AlmacenCreated = ConcatInt64(int64(e.AlmacenID), e.Created)
+	e.AlmacenOrigenCreated = ConcatInt64(int64(e.AlmacenOrigenID), e.Created)
+	e.ProductoCreated = ConcatInt64(int64(e.ProductoID), e.Created)
 }
