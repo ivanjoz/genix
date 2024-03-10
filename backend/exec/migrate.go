@@ -157,6 +157,15 @@ func makeController[T any]() ScyllaController {
 					}
 				}
 			} else {
+				if scyllaTable.PartitionKey == "empresa_id" {
+					statement := fmt.Sprintf(`DELETE FROM %v WHERE empresa_id = %v`,
+						scyllaTable.Name, empresaID)
+					err = core.ScyllaConnect().Query(statement).Exec()
+					if err != nil {
+						core.Log("Error en statement: ", statement)
+						return core.Err("Error al eliminar registros:", err)
+					}
+				}
 				err = core.DBInsert(&records)
 			}
 
