@@ -3,7 +3,7 @@ import { max } from "simple-statistics";
 import { Show, createSignal } from "solid-js";
 import { BarOptions } from "~/components/Cards";
 import { CellEditable, CellTextOptions } from "~/components/Editables";
-import { Input, refreshInput } from "~/components/Input";
+import { CheckBoxContainer, Input, refreshInput } from "~/components/Input";
 import { SideLayer, openLayers, setOpenLayers } from "~/components/Modals";
 import { QTable } from "~/components/QTable";
 import { SearchSelect } from "~/components/SearchSelect";
@@ -214,6 +214,10 @@ export default function Productos() {
                 refreshInput([1])
               }}
             />
+            <div class="w-24x mb-10 flex jc-end">
+              <CheckBoxContainer options={[ { v: 1, n: 'SKU Individual' } ]} 
+                keys="v.n" saveOn={productoForm()} save="Params" />
+            </div>
             <div class="w-24x">Sub-Unidades</div>
             <Input saveOn={productoForm()} save="SbnCantidad" 
               css="w-04x mb-10" label="Cantidad" type="number"

@@ -53,13 +53,13 @@ func MakeScyllaTable[T any](newType T) ScyllaTable {
 
 		if _, ok := f.Tag.Lookup("db"); ok {
 			tagString := schemaTypes.Field(i).Tag.Get("db")
-			values := strings.Split(tagString, ",")
+			tagValues := strings.Split(tagString, ",")
 
 			column := BDColumn{
 				FieldIdx:  i,
 				FieldType: f.Type.String(),
 				FieldName: f.Name,
-				Name:      values[0],
+				Name:      tagValues[0],
 			}
 
 			if column.FieldType[:1] == "*" {
@@ -67,13 +67,13 @@ func MakeScyllaTable[T any](newType T) ScyllaTable {
 				column.IsPointer = true
 			}
 
-			if len(values) == 2 && values[1] == "counter" {
+			if len(tagValues) == 2 && tagValues[1] == "counter" {
 				column.Type = "counter"
 			} else if column.FieldType[0:2] == "[]" {
 				ft := column.FieldType[2:]
-				if ft, ok := ScyllaFieldToColumnTypesMap[ft]; ok {
-					ft = ScyllaFieldToColumnTypesMap[ft]
-					column.Type = fmt.Sprintf("set<%v>", ft)
+				if dbType, ok := ScyllaFieldToColumnTypesMap[ft]; ok {
+					Log("type encontrado::", ft, dbType)
+					column.Type = fmt.Sprintf("set<%v>", dbType)
 				} else {
 					column.IsComplexType = true
 				}
@@ -93,7 +93,7 @@ func MakeScyllaTable[T any](newType T) ScyllaTable {
 				column.Type = "blob"
 			}
 
-			for i, v := range values {
+			for i, v := range tagValues {
 				if i == 0 {
 					continue
 				}
@@ -106,6 +106,10 @@ func MakeScyllaTable[T any](newType T) ScyllaTable {
 					table.PrimaryKey = column.Name
 				} else if v == "view" {
 					table.Views[column.Name] = fmt.Sprintf(`%v__%v_view`, table.Name, column.Name)
+					column.HasView = true
+				} else if v == "exclude" {
+					table.ViewsExcluded = append(table.ViewsExcluded, column.Name)
+					column.IsViewExcluded = true
 				} else if len(v) == 3 && v[:2] == "zx" {
 					sl := indexNameToColumns[v]
 					indexNameToColumns[v] = append(sl, column.Name)
@@ -217,46 +221,61 @@ var fieldMapping = map[string]func(e *reflect.Value, value any, isPointer bool){
 	},
 	"int32": func(e *reflect.Value, v any, ip bool) {
 		if vl, ok := v.(*int); ok {
-			setReflectInt[int32, int](e, vl, ip)
+			setReflectInt[int32](e, vl, ip)
 		}
 	},
 	"int": func(e *reflect.Value, v any, ip bool) {
 		if vl, ok := v.(*int); ok {
-			setReflectInt[int, int](e, vl, ip)
+			setReflectInt[int](e, vl, ip)
 		}
 	},
 	"int16": func(e *reflect.Value, v any, ip bool) {
 		if vl, ok := v.(*int16); ok {
-			setReflectInt[int, int16](e, vl, ip)
+			setReflectInt[int](e, vl, ip)
 		} else if vl, ok := v.(*int); ok {
-			setReflectInt[int, int](e, vl, ip)
+			setReflectInt[int](e, vl, ip)
 		}
 	},
 	"int8": func(e *reflect.Value, v any, ip bool) {
 		if vl, ok := v.(*int8); ok {
-			setReflectInt[int, int8](e, vl, ip)
+			setReflectInt[int](e, vl, ip)
 		} else if vl, ok := v.(*int); ok {
-			setReflectInt[int, int](e, vl, ip)
+			setReflectInt[int](e, vl, ip)
 		}
 	},
 	"int64": func(e *reflect.Value, v any, ip bool) {
 		if vl, ok := v.(*int64); ok {
-			setReflectInt[int, int64](e, vl, ip)
+			setReflectInt[int](e, vl, ip)
 		}
 	},
 	"[]int32": func(e *reflect.Value, v any, ip bool) {
 		if vl, ok := v.(*[]int); ok {
-			setReflectIntSlice[int32, int](e, vl, ip)
+			setReflectIntSlice[int32](e, vl, ip)
 		}
 	},
 	"[]int16": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*[]int); ok {
-			setReflectIntSlice[int16, int](e, vl, ip)
+		if vl, ok := v.(*[]int16); ok {
+			setReflectIntSlice[int16](e, vl, ip)
+		} else if vl, ok := v.(*[]int8); ok {
+			setReflectIntSlice[int8](e, vl, ip)
+		} else if vl, ok := v.(*[]int); ok {
+			setReflectIntSlice[int](e, vl, ip)
+		}
+	},
+	"[]int8": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*[]int8); ok {
+			setReflectIntSlice[int8](e, vl, ip)
+		} else if vl, ok := v.(*[]int16); ok {
+			setReflectIntSlice[int16](e, vl, ip)
+		} else if vl, ok := v.(*[]int); ok {
+			setReflectIntSlice[int](e, vl, ip)
 		}
 	},
 	"[]int64": func(e *reflect.Value, v any, ip bool) {
 		if vl, ok := v.(*[]int64); ok {
-			setReflectIntSlice[int64, int64](e, vl, ip)
+			setReflectIntSlice[int64](e, vl, ip)
+		} else if vl, ok := v.(*[]int); ok {
+			setReflectIntSlice[int](e, vl, ip)
 		}
 	},
 	"[]string": func(e *reflect.Value, v any, ip bool) {
@@ -270,12 +289,12 @@ var fieldMapping = map[string]func(e *reflect.Value, value any, isPointer bool){
 	},
 	"float32": func(e *reflect.Value, v any, ip bool) {
 		if vl, ok := v.(*float32); ok {
-			setReflectFloat[float32](e, vl, ip)
+			setReflectFloat(e, vl, ip)
 		}
 	},
 	"float64": func(e *reflect.Value, v any, ip bool) {
 		if vl, ok := v.(*float64); ok {
-			setReflectFloat[float64](e, vl, ip)
+			setReflectFloat(e, vl, ip)
 		}
 	},
 }

@@ -164,9 +164,21 @@ func InitTable[T any](mode int8) {
 			whereColumnsNotNull = append(whereColumnsNotNull, e+" IS NOT NULL")
 		}
 
+		selectColumns := "*"
+
+		if len(scyllaTable.ViewsExcluded) > 0 {
+			selectColumnNames := []string{}
+			for _, e := range scyllaTable.Columns {
+				if e.Name == columnName || !Contains(scyllaTable.ViewsExcluded, e.Name) {
+					selectColumnNames = append(selectColumnNames, e.Name)
+				}
+			}
+			selectColumns = strings.Join(selectColumnNames, ", ")
+		}
+
 		query := fmt.Sprintf(`CREATE MATERIALIZED VIEW %v
 			AS
-			SELECT * FROM %v
+			SELECT %v FROM %v
 			WHERE %v
 			PRIMARY KEY (%v)
 			WITH caching = {'keys': 'ALL', 'rows_per_partition': 'ALL'}
@@ -174,7 +186,7 @@ func InitTable[T any](mode int8) {
 			and compression = {'compression_level': '3', 'sstable_compression': 'org.apache.cassandra.io.compress.ZstdCompressor'}
 			and dclocal_read_repair_chance = 0
 			and speculative_retry = '99.0PERCENTILE';`,
-			viewName, scyllaTable.Name, strings.Join(whereColumnsNotNull, " AND "), pk)
+			viewName, selectColumns, scyllaTable.Name, strings.Join(whereColumnsNotNull, " AND "), pk)
 
 		Log(query)
 

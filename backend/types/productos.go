@@ -19,6 +19,7 @@ type Producto struct {
 	Nombre        string  `db:"nombre"`
 	Descripcion   string  `json:",omitempty" db:"descripcion"`
 	GruposIDs     []int32 `json:",omitempty" db:"grupos_ids"`
+	Params        []int8  `json:",omitempty" db:"params_ids"`
 	Precio        float32 `json:",omitempty" db:"precio"`
 	Descuento     float32 `json:",omitempty" db:"descuento"`
 	PrecioFinal   float32 `json:",omitempty" db:"precio_final"`
@@ -103,4 +104,59 @@ type Sede struct {
 	Created     int64  `db:"created"`
 	CreatedBy   int32  `db:"created_by"`
 	Ciudad      string
+}
+
+type AlmacenProducto struct {
+	TAGS      `table:"almacen_producto"`
+	EmpresaID int32 `json:",omitempty" db:"empresa_id,pk"`
+	// [Almacen-ID] [status] [Producto-ID] [SKU]
+	ID             string `db:"id,pk"`
+	SKU            string `json:",omitempty" db:"sku,view"`
+	AlmacenID      int32  `json:",omitempty" db:"almacen_id"`
+	ProductoID     int32  `json:",omitempty" db:"producto_id,view"`
+	UpdatedBy      int32  `json:",omitempty" db:"updated_by"`
+	Cantidad       int32  `json:",omitempty" db:"cantidad"`
+	SubCantidad    int32  `json:",omitempty" db:"sub_cantidad"`
+	Status         int8   `json:"ss,omitempty" db:"status"`
+	Updated        int64  `json:"upd,omitempty" db:"updated"`
+	AlmacenUpdated int64  `json:"-" db:"sk_almacen_updated,view,exclude"`
+}
+
+func (e *AlmacenProducto) SelfParse() {
+	if e.AlmacenID > 0 && e.Updated > 0 {
+		e.AlmacenUpdated = int64(e.AlmacenID)*10_000_000_000 + e.Updated
+	}
+}
+
+type AlmacenMovimiento struct {
+	TAGS      `table:"almacen_producto"`
+	EmpresaID int32 `json:",omitempty" db:"empresa_id,pk"`
+	// [Almacen-ID] [Producto-ID] [SKU] [Ramdom String]
+	ID                    string `db:"id,pk"`
+	SKU                   string `json:",omitempty" db:"sku,view"`
+	AlmacenID             int32  `json:",omitempty" db:"almacen_id"`
+	AlmacenOrigenID       int32  `json:",omitempty" db:"almacen_origen_id"`
+	VentaID               int32  `json:",omitempty" db:"venta_id"`
+	ProductoID            int32  `json:",omitempty" db:"producto_id"`
+	Cantidad              int32  `json:",omitempty" db:"cantidad"`
+	AlmacenCantidad       int32  `json:",omitempty" db:"almacen_cantidad"`
+	AlmacenOrigenCantidad int32  `json:",omitempty" db:"almacen_origen_cantidad"`
+	SubCantidad           int32  `json:",omitempty" db:"sub_cantidad"`
+	Tipo                  int8   `json:",omitempty" db:"tipo"`
+	Created               int64  `json:",omitempty" db:"created"`
+	ProductoCreated       int64  `json:"-" db:"sk_producto_created,view,exclude"`
+	AlmacenCreated        int64  `json:"-" db:"sk_almacen_created,view,exclude"`
+	AlmacenOrigenCreated  int64  `json:"-" db:"sk_almacen_origen_created,view,exclude"`
+}
+
+func (e *AlmacenMovimiento) SelfParse() {
+	if e.AlmacenID > 0 && e.Created > 0 {
+		e.AlmacenCreated = int64(e.AlmacenID)*10_000_000_000 + e.Created
+	}
+	if e.AlmacenOrigenID > 0 && e.Created > 0 {
+		e.AlmacenOrigenCreated = int64(e.AlmacenOrigenID)*10_000_000_000 + e.Created
+	}
+	if e.ProductoID > 0 && e.Created > 0 {
+		e.ProductoCreated = int64(e.ProductoID)*10_000_000_000 + e.Created
+	}
 }

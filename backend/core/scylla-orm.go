@@ -25,7 +25,7 @@ func ScyllaConnect() *gocql.Session {
 	fallback := gocql.RoundRobinHostPolicy()
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(fallback)
 	cluster.Port = int(Env.DB_PORT)
-	cluster.Consistency = gocql.One
+	cluster.Consistency = gocql.LocalOne
 	cluster.ProtoVersion = 4
 	cluster.ConnectTimeout = time.Second * 10
 	cluster.Compressor = gocql.SnappyCompressor{}
@@ -47,16 +47,18 @@ func ScyllaConnect() *gocql.Session {
 }
 
 type BDColumn struct {
-	Name          string
-	FieldType     string
-	FieldName     string
-	NameAlias     string
-	Type          string
-	RefType       reflect.Value
-	FieldIdx      int
-	IsPointer     bool
-	IsPrimaryKey  int8
-	IsComplexType bool
+	Name           string
+	FieldType      string
+	FieldName      string
+	NameAlias      string
+	Type           string
+	RefType        reflect.Value
+	FieldIdx       int
+	IsPrimaryKey   int8
+	IsPointer      bool
+	IsViewExcluded bool
+	HasView        bool
+	IsComplexType  bool
 }
 
 type BDIndex struct {
@@ -105,6 +107,8 @@ func (e *BDColumn) ParseValue(field reflect.Value) string {
 			concatenatedValues = Concatx(",", sl)
 		} else if sl, ok := v.([]int16); ok {
 			concatenatedValues = Concatx(",", sl)
+		} else if sl, ok := v.([]int8); ok {
+			concatenatedValues = Concatx(",", sl)
 		} else if sl, ok := v.([]int); ok {
 			concatenatedValues = Concatx(",", sl)
 		} else if sl, ok := v.([]int64); ok {
@@ -126,14 +130,15 @@ func (e *BDColumn) ParseValue(field reflect.Value) string {
 }
 
 type ScyllaTable struct {
-	Name         string
-	NameSingle   string
-	PrimaryKey   string
-	PartitionKey string
-	Columns      []BDColumn
-	ColumnsMap   map[string]BDColumn
-	Indexes      map[string]BDIndex
-	Views        map[string]string
+	Name          string
+	NameSingle    string
+	PrimaryKey    string
+	PartitionKey  string
+	Columns       []BDColumn
+	ColumnsMap    map[string]BDColumn
+	Indexes       map[string]BDIndex
+	Views         map[string]string
+	ViewsExcluded []string
 }
 
 var TypeToScyllaTableMap = map[string]ScyllaTable{}
@@ -222,6 +227,7 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 	}
 
 	queryStr := MakeQueryStatement(queryStatements)
+	Log(queryStr)
 	if err := conn.Query(queryStr).Exec(); err != nil {
 		Log(queryStr)
 		return err
@@ -516,6 +522,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 	for scanner.Next() {
 
 		rowValues := rd.Values
+
 		err := scanner.Scan(rowValues...)
 		if err != nil {
 			Log(queryStr)
@@ -532,6 +539,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 			}
 			if mapField, ok := fieldMapping[column.FieldType]; ok {
 				field := ref.Field(column.FieldIdx)
+				Log("Mapeando valor::", field, column.Name, column.FieldType, value)
 				mapField(&field, value, column.IsPointer)
 				// Revisa si necesita parsearse un string a un struct como JSON
 			} else if column.IsComplexType {
@@ -569,6 +577,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 				Log("Columna no-mapeada:: ", column)
 			}
 		}
+		Print(rec)
 		(*e.Records) = append((*e.Records), *rec)
 	}
 
