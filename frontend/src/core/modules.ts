@@ -25,6 +25,7 @@ export const AdminModule: IModule = {
     // Scylla
     productos: "ID",
     sedes_almacenes: '[_pk+ID]',  
+    productos_stock: '[AlmacenID+ID]',
     listas_compartidas: 'ID',
     pais_ciudades: '[PaisID+ID]', 
   },
@@ -49,7 +50,13 @@ export const AdminModule: IModule = {
         },
         { name: "Productos", route: "/operaciones/productos"
         },
+        { name: "Productos Stock", route: "/operaciones/productos-stock"
+        },
+        { name: "Almacén Movimientos", route: "/operaciones/almacen-movimientos"
+        },
         { name: "Cajas", route: "/operaciones/cajas"
+        },
+        { name: "Cajas Movimientos", route: "/operaciones/cajas-movimientos"
         },
       ]
   
