@@ -62,8 +62,8 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 
 	var counter int64
 	if createCounter > 0 {
-		key := core.Concatn("lista_registros", req.Usuario.EmpresaID, records[0].ListaID)
-		counter, err = core.GetCounter(key, createCounter)
+		key := core.Concatn("lista_registros", records[0].ListaID)
+		counter, err = core.GetCounter(key, createCounter, req.Usuario.EmpresaID)
 		if err != nil {
 			return req.MakeErr("Error al obtener el counter.", counter)
 		}

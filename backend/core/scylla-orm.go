@@ -138,7 +138,10 @@ type ScyllaTable struct {
 
 var TypeToScyllaTableMap = map[string]ScyllaTable{}
 
-func GetCounter(name string, incrementCount int) (int64, error) {
+func GetCounter(name string, incrementCount int, empresaID ...int32) (int64, error) {
+	if len(empresaID) == 1 {
+		name = fmt.Sprintf("x%v_%v", empresaID, name)
+	}
 
 	registros := []types.Increment{}
 	err := DBSelect(&registros).Where("name").Equals(name).Exec()
@@ -171,7 +174,6 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 	var newType T
 	scyllaTable := MakeScyllaTable(newType)
 
-	// values := []string{}
 	columnsToSave := scyllaTable.Columns
 	columnsNames := []string{}
 	for _, e := range columnsToSave {
@@ -216,10 +218,69 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 		queryStr = fmt.Sprintf("BEGIN BATCH\n%v\nAPPLY BATCH;", statements)
 	}
 
-	Log(queryStr)
-
 	if err := conn.Query(queryStr).Exec(); err != nil {
-		Log("--------------")
+		Log(queryStr)
+		return err
+	}
+
+	return nil
+}
+
+func DBUpdate[T any](records *[]T, columnsToInclude ...string) error {
+	conn := ScyllaConnect()
+
+	var newType T
+	scyllaTable := MakeScyllaTable(newType)
+
+	columnsToUpdate := []BDColumn{}
+	includeAll := Contains(columnsToInclude, "*")
+
+	for _, e := range scyllaTable.Columns {
+		if e.IsPrimaryKey > 0 {
+			continue
+		}
+		if includeAll || Contains(columnsToInclude, e.Name) {
+			columnsToUpdate = append(columnsToUpdate, e)
+		}
+	}
+
+	queryStatements := []string{}
+
+	for _, rec := range *records {
+		refValue := reflect.ValueOf(rec)
+		setStatements := []string{}
+
+		for _, col := range columnsToUpdate {
+			v := col.ParseValue(refValue.Field(col.FieldIdx))
+			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
+		}
+
+		whereStatements := []string{}
+		if len(scyllaTable.PartitionKey) > 0 {
+			col := scyllaTable.ColumnsMap[scyllaTable.PartitionKey]
+			v := col.ParseValue(refValue.Field(col.FieldIdx))
+			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
+		}
+
+		queryStatement := fmt.Sprintf(
+			"UPDATE %v SET %v WHERE %v",
+			scyllaTable.Name, Concatx(", ", setStatements), Concatx(" and ", whereStatements),
+		)
+
+		queryStatements = append(queryStatements, queryStatement)
+	}
+
+	queryStr := ""
+	if len(queryStatements) == 1 {
+		queryStr = queryStatements[0]
+	} else {
+		statements := strings.Join(queryStatements, "\n")
+		queryStr = fmt.Sprintf("BEGIN BATCH\n%v\nAPPLY BATCH;", statements)
+	}
+
+	Log(queryStr)
+	if err := conn.Query(queryStr).Exec(); err != nil {
+		// Log(queryStr)
 		return err
 	}
 
