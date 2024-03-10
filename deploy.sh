@@ -35,7 +35,7 @@ if [[ $ACCIONES == *"1"* ]]; then
     aws --profile $AWS_PROFILE $S3_SYNC/_build s3://$AWS_S3/_build --size-only --exclude "*" --include "*.css" --content-type text/css --delete
     aws --profile $AWS_PROFILE $S3_CP/sw.js s3://$AWS_S3/sw.js --content-type application/javascript
     aws --profile $AWS_PROFILE $S3_CP/manifest.webmanifest s3://$AWS_S3/manifest.webmanifest --content-type application/json
-    aws --profile $AWS_PROFILE $S3_CP/index s3://$AWS_S3/index.html --content-type text/html
+    aws --profile $AWS_PROFILE $S3_CP/index.html s3://$AWS_S3/index.html --content-type text/html
 
     if [[ $ACCIONES == *"3"* ]]; then
        aws --profile $AWS_PROFILE $S3_SYNC/images s3://$AWS_S3/images --size-only
