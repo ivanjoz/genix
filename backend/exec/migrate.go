@@ -3,12 +3,8 @@ package exec
 import (
 	"app/core"
 	s "app/types"
-	"archive/tar"
 	"bytes"
 	"encoding/gob"
-	"fmt"
-	"log"
-	"os"
 )
 
 func MakeScyllaControllers() []ScyllaController {
@@ -24,30 +20,31 @@ func MakeScyllaControllers() []ScyllaController {
 }
 
 type ScyllaController struct {
-	ScyllaTable   core.ScyllaTable
-	GetRecords    func(partitionID, limit int32, lastKey any) ([]any, error)
-	GetRecordsGob func(partitionID, limit int32, lastKey any) ([]byte, error)
-	InitTable     func(mode int8)
+	ScyllaTable       core.ScyllaTable
+	GetRecords        func(empresaID, limit int32, lastKey any) ([]any, error)
+	GetRecordsGob     func(empresaID, limit int32, lastKey any) ([]byte, error)
+	RestoreGobRecords func(empresaID int32, content []byte) error
+	InitTable         func(mode int8)
 }
 
 func makeController[T any]() ScyllaController {
 	var newType T
 	scyllaTable := core.MakeScyllaTable(newType)
 
-	GetRecords := func(partitionID, limit int32, lastKey any) ([]T, error) {
+	GetRecords := func(empresaID, limit int32, lastKey any) ([]T, error) {
 		records := []T{}
 
 		query := core.DBSelect(&records)
-		if len(scyllaTable.PartitionKey) > 0 {
-			query = query.Where(scyllaTable.PartitionKey).Equals(partitionID)
+		query.Limit = core.If(limit > 0, limit, 0)
+
+		if _, ok := scyllaTable.ColumnsMap["empresa_id"]; ok {
+			query = query.Where("empresa_id").Equals(empresaID)
+		} else {
+			core.Log("No hay key de particionado (empresa_id): ", scyllaTable.Name)
 		}
 
 		if lastKey != nil {
 			query = query.Where(scyllaTable.PrimaryKey).GreatThan(lastKey)
-		}
-
-		if limit > 0 {
-			query.Limit = limit
 		}
 
 		err := query.Exec()
@@ -60,8 +57,8 @@ func makeController[T any]() ScyllaController {
 
 	return ScyllaController{
 		ScyllaTable: scyllaTable,
-		GetRecords: func(partitionID, limit int32, lastKey any) ([]any, error) {
-			records, err := GetRecords(partitionID, limit, lastKey)
+		GetRecords: func(empresaID, limit int32, lastKey any) ([]any, error) {
+			records, err := GetRecords(empresaID, limit, lastKey)
 
 			if err != nil {
 				return []any{}, err
@@ -74,8 +71,8 @@ func makeController[T any]() ScyllaController {
 
 			return recordsInterface, nil
 		},
-		GetRecordsGob: func(partitionID, limit int32, lastKey any) ([]byte, error) {
-			records, err := GetRecords(partitionID, limit, lastKey)
+		GetRecordsGob: func(empresaID, limit int32, lastKey any) ([]byte, error) {
+			records, err := GetRecords(empresaID, limit, lastKey)
 
 			if err != nil {
 				return []byte{}, err
@@ -91,52 +88,32 @@ func makeController[T any]() ScyllaController {
 
 			return buffer.Bytes(), nil
 		},
+		RestoreGobRecords: func(empresaID int32, content []byte) error {
+			reader := bytes.NewReader(content)
+			dec := gob.NewDecoder(reader)
+
+			records := []T{}
+			err := dec.Decode(&records)
+			if err != nil {
+				return core.Err("Error al decodificar registros de:", scyllaTable.Name, ".", err)
+			}
+
+			// Las secuencias no se insertan sino se actualizan
+			core.Log("Tabla:", scyllaTable.Name, "| Guardando", len(records), "registros...")
+
+			if scyllaTable.NameSingle == "sequences" {
+				err = core.DBUpdate(&records)
+			} else {
+				err = core.DBInsert(&records)
+			}
+
+			if err != nil {
+				return core.Err("Error al insertar registros:", err)
+			}
+			return nil
+		},
 		InitTable: func(mode int8) {
 			core.InitTable[T](mode)
 		},
 	}
-}
-
-func CreateBackupFile(args *core.ExecArgs) core.FuncResponse {
-
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-
-	for _, controller := range MakeScyllaControllers() {
-		name := fmt.Sprintf("%v|%v", controller.ScyllaTable.Name, 1)
-
-		core.Log("Obteniendo registros de: ", name, "...")
-
-		records, err := controller.GetRecordsGob(1, 100000, nil)
-		if err != nil {
-			panic(err)
-		}
-
-		core.Log("Registros obtenidos: ", len(records))
-
-		hdr := &tar.Header{
-			Name: name, Mode: 0600, Size: int64(len(records)),
-		}
-		if err := tw.WriteHeader(hdr); err != nil {
-			panic("Error al escribir TAR header: " + name + "| " + err.Error())
-		}
-		if _, err := tw.Write(records); err != nil {
-			panic("Error al escribir TAR body: " + name + "| " + err.Error())
-		}
-	}
-
-	if err := tw.Close(); err != nil {
-		panic("Error al cerrar TAR: " + err.Error())
-	}
-
-	tarPath := core.Env.TMP_DIR + "backup.tar"
-
-	err := os.WriteFile(tarPath, buf.Bytes(), 0644)
-	if err != nil {
-		log.Fatal("error writing to file:", err)
-	}
-
-	core.Log("Backup TAR generado en: ", tarPath)
-
-	return core.FuncResponse{}
 }

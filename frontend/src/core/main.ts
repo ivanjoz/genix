@@ -157,13 +157,14 @@ export const downloadFile = (url?: string) =>{
   const aElement = document.createElement("a")
   const names = url.split("/").filter(x => x)
   const name = names[names.length - 1]
-  aElement.setAttribute("download", name);
+  aElement.setAttribute("download", name)
   /*
   const href = URL.createObjectURL(res);
   console.log(href);
   */
   aElement.href = url // href;
-  aElement.setAttribute("target", "_blank");
-  aElement.click();
+  aElement.setAttribute("target", "_blank")
+  aElement.click()
+  aElement.remove()
   // URL.revokeObjectURL(href);
 }

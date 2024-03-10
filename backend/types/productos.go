@@ -2,7 +2,7 @@ package types
 
 type Increment struct {
 	TAGS         `table:"sequences"`
-	TableName    string `db:"name"`
+	TableName    string `db:"name,pk"`
 	CurrentValue int64  `db:"current_value"`
 }
 

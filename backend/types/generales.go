@@ -18,7 +18,6 @@ type ListaCompartidaRegistro struct {
 	ListaID   int32  `db:"lista_id"`
 	ID        string `db:"id,pk"`
 	Nombre    string `db:"nombre"`
-	TempID    int32  `json:",omitempty"`
 	// Propiedades generales
 	Status    int8  `json:"ss,omitempty" db:"status,view"`
 	Updated   int64 `json:"upd,omitempty" db:"updated,view"`

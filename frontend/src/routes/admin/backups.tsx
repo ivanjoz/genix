@@ -1,16 +1,30 @@
 import { QTable } from "~/components/QTable"
-import { downloadFile, formatTime } from "~/core/main"
+import { ConfirmWarn, Loading, downloadFile, formatTime } from "~/core/main"
 import { PageContainer } from "~/core/page"
-import { IBackup, useBackupsAPI, useEmpresasAPI, useUsuariosAPI } from "~/services/admin/empresas"
+import { IBackup, useBackupsAPI } from "~/services/admin/empresas"
 import css from "../../css/layout.module.css"
 import { formatN } from "~/shared/main"
-import { Show, Switch, createSignal } from "solid-js"
-import { Params } from "~/shared/security"
+import { Show, createSignal } from "solid-js"
+import { POST } from "~/shared/http"
 
 export default function Backups() {
 
   const [backups] = useBackupsAPI()
   const [backupSelected, setBackupSelected] = createSignal(null as IBackup)
+
+  const restaurar = async (name: string) => {
+    Loading.standard("Rstaurando Backup...")
+    try {
+      await POST({
+        data: { Name: name  },
+        route: "backup-restore",
+      })
+    } catch (error) {
+      Loading.remove()
+      return
+    }
+    Loading.remove()
+  }
 
   return <PageContainer title="Backups & Restore" fetchLoading={true}>
     <div class="w100 grid" style={{ "grid-template-columns": "4fr 3fr" }}>
@@ -69,6 +83,18 @@ export default function Backups() {
                 downloadFile(url)
               }}>
                 <i class="icon-download"></i>
+              </button>
+            </div>
+            <div class="flex jc-center w100 mt-16">
+              <button class="bn1 d-blue" onclick={ev => {
+                ev.stopPropagation()
+                ConfirmWarn("Restaurar Backup",
+                  `Restaurar el backup realizado el ${formatTime(backupSelected().upd,"Y-m-d h:n")}`,
+                  "SI","NO", ()=> {
+                    restaurar(backupSelected().Name)
+                  })
+              }}>
+                Restaurar <i class="icon-database"></i>
               </button>
             </div>
           </Show>

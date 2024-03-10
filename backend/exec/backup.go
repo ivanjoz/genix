@@ -49,17 +49,19 @@ func SaveBackup(empresaID int32) error {
 	}
 
 	// Accesos
-	accesosTable := handlers.MakeAccesoTable()
-	accesos, err := accesosTable.QueryBatch([]aws.DynamoQueryParam{
-		{Index: "sk", GreaterThan: "0"},
-	})
+	if empresaID == 1 {
+		accesosTable := handlers.MakeAccesoTable()
+		accesos, err := accesosTable.QueryBatch([]aws.DynamoQueryParam{
+			{Index: "sk", GreaterThan: "0"},
+		})
 
-	if err != nil {
-		return core.Err("Error al obtener los accesos:", err)
-	}
+		if err != nil {
+			return core.Err("Error al obtener los accesos:", err)
+		}
 
-	if err := addTarRecord("accesos|1", accesos); err != nil {
-		return core.Err(err)
+		if err := addTarRecord("accesos|1", accesos); err != nil {
+			return core.Err(err)
+		}
 	}
 
 	// Usuarios
@@ -90,9 +92,9 @@ func SaveBackup(empresaID int32) error {
 		return core.Err(err)
 	}
 
-	// Scylla Tables / Controllers
+	// Scylla Tables - Controllers
 	for _, controller := range MakeScyllaControllers() {
-		name := fmt.Sprintf("%v|%v", controller.ScyllaTable.Name, 1)
+		name := fmt.Sprintf("%v|%v", controller.ScyllaTable.NameSingle, 1)
 
 		core.Log("Obteniendo registros de: ", name, "...")
 
