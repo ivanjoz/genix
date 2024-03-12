@@ -5,6 +5,7 @@ import (
 	"app/core"
 	"app/exec"
 	"app/handlers"
+	"app/operaciones"
 	"encoding/json"
 	"fmt"
 
@@ -20,6 +21,7 @@ import (
 var appHandlersModules = []core.AppRouterType{
 	exec.ModuleHandlers,
 	handlers.ModuleHandlers,
+	operaciones.ModuleHandlers,
 }
 
 var appHandlers = core.AppRouterType{}

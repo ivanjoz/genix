@@ -109,9 +109,10 @@ type Sede struct {
 type AlmacenProducto struct {
 	TAGS      `table:"almacen_producto"`
 	EmpresaID int32 `json:",omitempty" db:"empresa_id,pk"`
-	// [Almacen-ID] [status] [Producto-ID] [SKU]
+	// [Almacen-ID] [status] [Producto-ID] [SKU] [Lote]
 	ID             string `db:"id,pk"`
 	SKU            string `json:",omitempty" db:"sku,view"`
+	Lote           string `json:",omitempty" db:"lote,view"`
 	AlmacenID      int32  `json:",omitempty" db:"almacen_id"`
 	ProductoID     int32  `json:",omitempty" db:"producto_id,view"`
 	UpdatedBy      int32  `json:",omitempty" db:"updated_by"`
@@ -126,14 +127,16 @@ func (e *AlmacenProducto) SelfParse() {
 	if e.AlmacenID > 0 && e.Updated > 0 {
 		e.AlmacenUpdated = int64(e.AlmacenID)*10_000_000_000 + e.Updated
 	}
+	e.ID = Concat62(e.AlmacenID, e.Status, e.ProductoID, e.SKU, e.Lote)
 }
 
 type AlmacenMovimiento struct {
-	TAGS      `table:"almacen_producto"`
+	TAGS      `table:"almacen_movimiento"`
 	EmpresaID int32 `json:",omitempty" db:"empresa_id,pk"`
-	// [Almacen-ID] [Producto-ID] [SKU] [Ramdom String]
+	// [Almacen-ID] [Producto-ID] [Created] [SKU] [Random String]
 	ID                    string `db:"id,pk"`
 	SKU                   string `json:",omitempty" db:"sku,view"`
+	Lote                  string `json:",omitempty" db:"lote,view"`
 	AlmacenID             int32  `json:",omitempty" db:"almacen_id"`
 	AlmacenOrigenID       int32  `json:",omitempty" db:"almacen_origen_id"`
 	VentaID               int32  `json:",omitempty" db:"venta_id"`
@@ -153,4 +156,9 @@ func (e *AlmacenMovimiento) SelfParse() {
 	e.AlmacenCreated = ConcatInt64(int64(e.AlmacenID), e.Created)
 	e.AlmacenOrigenCreated = ConcatInt64(int64(e.AlmacenOrigenID), e.Created)
 	e.ProductoCreated = ConcatInt64(int64(e.ProductoID), e.Created)
+}
+
+func (e *AlmacenMovimiento) AssignID() {
+	rnd := MakeRandomBase36String(4)
+	e.ID = Concat62(e.AlmacenID, e.ProductoID, e.Created, e.SKU, e.Lote, rnd)
 }

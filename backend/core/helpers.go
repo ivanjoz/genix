@@ -447,26 +447,6 @@ func Concatn(slice1 ...any) string {
 	return Concat("_", slice1...)
 }
 
-func Concat62(values ...any) string {
-	valuesStrings := []string{}
-	for _, va := range values {
-		str := ""
-		if v, ok := va.(int32); ok {
-			str = EncodeToBase62(int64(v))
-		} else if v, ok := va.(int64); ok {
-			str = EncodeToBase62(int64(v))
-		} else if v, ok := va.(int); ok {
-			str = EncodeToBase62(int64(v))
-		} else if v, ok := va.(int16); ok {
-			str = EncodeToBase62(int64(v))
-		} else {
-			str = fmt.Sprintf("%v", v)
-		}
-		valuesStrings = append(valuesStrings, str)
-	}
-	return strings.Join(valuesStrings, "_")
-}
-
 func IntToPointer[T Number1](num T) *T {
 	if num == 0 {
 		return nil
@@ -1311,6 +1291,26 @@ func GobEncode(records any) ([]byte, error) {
 	}
 
 	return buffer.Bytes(), nil
+}
+
+func Concat62(values ...any) string {
+	valuesStrings := []string{}
+	for _, va := range values {
+		str := ""
+		if v, ok := va.(int32); ok {
+			str = EncodeToBase62(int64(v))
+		} else if v, ok := va.(int64); ok {
+			str = EncodeToBase62(int64(v))
+		} else if v, ok := va.(int); ok {
+			str = EncodeToBase62(int64(v))
+		} else if v, ok := va.(int16); ok {
+			str = EncodeToBase62(int64(v))
+		} else {
+			str = fmt.Sprintf("%v", v)
+		}
+		valuesStrings = append(valuesStrings, str)
+	}
+	return strings.Join(valuesStrings, "_")
 }
 
 // characters used for conversion

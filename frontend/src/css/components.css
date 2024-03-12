@@ -896,13 +896,23 @@ body.is-animated .main-menu {
 }
 .side-layer1 {
   position: fixed;
-  background-color: white;
+  background-color: rgb(245, 245, 245);
   top: 3rem;
   right: 0;
   height: calc(100vh - 3rem);
   z-index: 125;
   box-shadow: rgb(36 36 43 / 24%) -1px 0px 24px -4px;
 }
+.corner-layer {
+  position: fixed;
+  background-color: white;
+  bottom: 0;
+  right: 0;
+  height: 24rem;
+  width: 40rem;
+  box-shadow: rgb(0 0 0 / 24%) 0px 0px 16px -2px;
+}
+
 .bar-1 > .ln-1 {
   pointer-events: none;
   bottom: -1px;
