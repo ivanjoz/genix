@@ -1,5 +1,6 @@
 import { Notify } from "notiflix"
 import { GET, GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
+import { arrayToMapN } from "~/shared/main"
 
 export interface IProductoPropiedad {
   ID: number, Nombre: string, Options: string[]
@@ -33,6 +34,7 @@ export interface IProducto {
 export interface IProductoResult {
   Records?: IProducto[]
   productos: IProducto[]
+  productosMap: Map<number,IProducto>
 }
 
 export const useProductosAPI = (): GetSignal<IProductoResult> => {
@@ -49,6 +51,7 @@ export const useProductosAPI = (): GetSignal<IProductoResult> => {
       }
       console.log("result productos:: ", result)
       result.productos = (result.Records || []).filter(x => x.ss > 0)
+      result.productosMap = arrayToMapN(result.productos,'ID')
       return result
     }
   )
@@ -62,7 +65,19 @@ export const postProducto = (data: IProducto[]) => {
   })
 }
 
-export const getProductosStock = async (almacenID: number): Promise<any[]> => {
+export interface IProductoStock {
+  ID: string
+  SKU?: string
+  AlmacenID: number
+  ProductoID: number
+  Cantidad: number
+  SubCantidad: number
+  Lote?: string
+  CostoUn?: number
+  _cantidadPrev?: number
+}
+
+export const getProductosStock = async (almacenID: number): Promise<IProductoStock[]> => {
   let records = []
   try {
     const result = await GET({ 
@@ -77,4 +92,12 @@ export const getProductosStock = async (almacenID: number): Promise<any[]> => {
     Notify.failure(error as string)
   }
   return records
+}
+
+export const postProductosStock = (data: IProductoStock[]) => {
+  return POST({
+    data,
+    route: "productos-stock",
+    refreshIndexDBCache: "productos_stock"
+  })
 }

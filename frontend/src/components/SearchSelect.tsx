@@ -54,6 +54,7 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
   const [filteredOptions, setFilteredOptions] = createSignal([...props.options])
   const [arrowSelected, setArrowSelected] = createSignal(-1)
   const [avoidhover, setAvoidhover] = createSignal(false)
+  const [isValid, setIsValid] = createSignal(0)
 
   const [keyId, keyName] = props.keys.split(".") as [keyof T, keyof T]
 
@@ -82,9 +83,10 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
       } else {
         inputRef.value = ""
       }
+      if(props.required){ setIsValid(selected ? 1 : 2) }
     }
   ))
-
+  
   let prevSetValueTime = Date.now()
 
   const setValueSaveOn = (selected?: T, setOnInput?: boolean) => {
@@ -105,6 +107,7 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
     }
 
     const newValue = selected ? selected[keyId] : null
+    if(props.required){ setIsValid(newValue ? 1 : 2) }
 
     if(props.clearOnSelect){
       if(props.onChange){ props.onChange(selected) }
@@ -183,8 +186,20 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
   let cN = "in-5c p-rel flex-column a-start"
   if(props.css){ cN += " " + props.css }
 
+  const iconValid = (): any => {
+    if(!isValid()){ return null }
+    if(isValid() === 1){ return <i class="v-icon icon-ok c-green"></i>  }
+    else { 
+      return <i class="v-icon icon-attention c-red"></i> 
+    }
+  }
+
   return <div class={cN}>
-    {props.label && <div class="mr-auto label">{props.label}</div>}
+    { props.label && 
+      <div class="mr-auto label">
+        {props.label} { iconValid() }
+      </div>
+    }
     <input class="in-5 increment" onkeyup={onKeyUp} ref={inputRef}
       onPaste={onKeyUp as any}
       onCut={onKeyUp as any}

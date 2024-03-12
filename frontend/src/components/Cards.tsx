@@ -12,7 +12,7 @@ interface ILayerAutoHide {
 
 export const LayerSelect = (props: ILayerAutoHide) => {
   const [show, setShow] = createSignal(false)
-
+  
   let refInput: HTMLInputElement
   let refLayer: HTMLDivElement
   let avoidHideOnBlur = false
