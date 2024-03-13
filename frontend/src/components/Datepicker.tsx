@@ -3,8 +3,15 @@ import { For, Show, createSignal } from "solid-js";
 import { throttle } from "~/core/main";
 import { arrayToMapN } from "~/shared/main";
 
-export interface IDatePicker {
+export interface IDatePicker<T> {
   label?: string
+  css?: string
+  saveOn?: any
+  save?: string | keyof T
+  onChange?: (e: T) => void
+  required?: boolean
+  clearOnSelect?: boolean
+  inputCss?: string
 }
 
 const weekDaysNames = [
@@ -178,9 +185,12 @@ export function DatePicker(props: IDatePicker) {
   const regexKeys = new Set(['1','2','3','4','5','6','7','8','9','0','-','/'])
   const regexKeysPress = new Set([...(regexKeys),'Backspace','Control','c','v','x'])
 
-  return <div>
-    <div>{props.label}</div>
-    <input ref={input} type="text" class="ff-mono" 
+  let cN = "in-5c p-rel flex-column a-start"
+  if(props.css){ cN += " " + props.css }
+
+  return <div class={cN}>
+    <div class="label">{props.label}</div>
+    <input ref={input} type="text" class="ff-mono in-5" 
       value={makeFechaFormat(fechaSelected())}
       placeholder="DD-MM-YYYY"
       onFocus={ev => {

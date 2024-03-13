@@ -168,3 +168,41 @@ export function CheckBoxContainer<T>(props: ICheckBoxContainer<T>) {
     </For>
   </div>
 }
+
+interface ICheckBox<T> {
+  saveOn?: any
+  save?: string
+  label?: string
+  css?: string
+  required?: boolean
+  onChange?: (b:boolean) => void
+  checked?: boolean
+}
+
+export function CheckBox<T>(props: ICheckBox<T>) {
+  const [optionsSelected, setOptionsSelected] = createSignal([] as (number|string)[])
+
+  createEffect(on(
+    () => [props.saveOn], 
+    () => { 
+      if(!props.saveOn){ return }
+      setOptionsSelected([...(props.saveOn[props.save] || [])])
+    }
+  ))
+
+  const checked = () =>{
+    if(typeof props.checked === 'boolean'){ return props.checked }
+    return props.saveOn ? props.saveOn[props.save] : false
+  }
+  
+  return <div class="checkbox-cnt mr-06 ">
+    <div class={"checkbox-s1"+ (checked() ? " checked" : "")} 
+      onClick={ev => {
+        ev.stopPropagation()
+        if(props.onChange){ props.onChange(!checked()) }
+      }}>
+      <i class="icon-ok"></i>
+    </div>
+    <label>{props.label}</label>
+  </div>
+}
