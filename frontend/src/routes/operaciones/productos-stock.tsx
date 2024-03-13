@@ -1,10 +1,11 @@
 import { Notify } from "notiflix"
 import { Show, createSignal } from "solid-js"
-import { Input } from "~/components/Input"
+import { CellEditable } from "~/components/Editables"
+import { CheckBox, Input } from "~/components/Input"
 import { CornerLayer, setOpenLayers } from "~/components/Modals"
 import { QTable } from "~/components/QTable"
 import { SearchSelect } from "~/components/SearchSelect"
-import { Loading } from "~/core/main"
+import { Loading, throttle } from "~/core/main"
 import { PageContainer } from "~/core/page"
 import { IProductoStock, getProductosStock, postProductosStock, useProductosAPI } from "~/services/operaciones/productos"
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes"
@@ -19,6 +20,7 @@ export default function ProductosStock() {
   const [formStock, setFormStock] = createSignal({} as IProductoStock)
   const [almacenSelected, setAlmacenSelected] = createSignal(0)
   const [keysUpdated, setKeysUpdated] = createSignal(new Set() as Set<string>)
+  const [todosProductosCheck, setTodosProductosCheck] = createSignal(false)
 
   let productoStockMap: Map<string,IProductoStock> = new Map()
 
@@ -54,11 +56,13 @@ export default function ProductosStock() {
       current.Cantidad = rec.Cantidad
       current.CostoUn = rec.CostoUn || current.CostoUn
       current._cantidadPrev = current._cantidadPrev || current.Cantidad || -1
+      current._hasUpdated = true
     } else {
       productoStockMap.set(key, rec)
       currentStock.unshift(rec)
       rec._cantidadPrev = -1
       rec.AlmacenID = almacenSelected()
+      rec._hasUpdated = true
     }
     setKeysUpdated(new Set(keysUpdated()))
     setProductosStock([...currentStock])
@@ -66,7 +70,7 @@ export default function ProductosStock() {
   }
 
   const guardarRegistros = async () => {
-    const recordsForUpdate = productosStock().filter(e => e._cantidadPrev)
+    const recordsForUpdate = productosStock().filter(e => e._hasUpdated)
     if(recordsForUpdate.length === 0){
       Notify.failure("No hay registros a actualizar."); return
     }
@@ -74,7 +78,7 @@ export default function ProductosStock() {
     Loading.standard("Enviando registros...")
     let result
     try {
-      result = postProductosStock(recordsForUpdate)
+      result = await postProductosStock(recordsForUpdate)
     } catch (error) {
       Loading.remove(); return
     }
@@ -87,16 +91,65 @@ export default function ProductosStock() {
     Loading.remove()
   }
 
+  const [filterText, setFilterText] = createSignal("")
+
+  const populateProductos = (productosStock: IProductoStock[], almacenID: number) => {
+    const usedProductosIDSet = new Set(productosStock.map(x => x.ProductoID))
+    const newProductosStock = [...productosStock]
+
+    for(let producto of productos().productos){
+      if(usedProductosIDSet.has(producto.ID)){ continue }
+      newProductosStock.push({
+        AlmacenID: almacenID,
+        ProductoID: producto.ID,
+        Cantidad: 0,
+        _isVirtual: true
+      } as IProductoStock)
+    }
+    return newProductosStock
+  }
+
   return <PageContainer title="Almacén Stock">
     <div class="flex ai-center jc-between mb-06">
-      <SearchSelect saveOn={form()} save="almacenID" css="w20rem"
-        label="" keys="ID.Nombre" options={almacenes()?.Almacenes || []}
-        placeholder=" ALMACÉN"
-        onChange={e => {
-          setAlmacenSelected(e?.ID||0)
-          if(e){ getStock(e.ID); return }
-        }}
-      />
+      <div class="flex ai-center">
+        <SearchSelect saveOn={form()} save="almacenID" css="w20rem s6 mb-02 mr-12"
+          label="" keys="ID.Nombre" options={almacenes()?.Almacenes || []}
+          placeholder=" ALMACÉN"
+          onChange={e => {
+            setAlmacenSelected(e?.ID||0)
+            if(e){ getStock(e.ID); return }
+          }}
+        />
+        <Show when={almacenSelected() > 0}>
+          <div class="search-c4 mr-16 w14rem">
+            <div><i class="icon-search"></i></div>
+            <input class="w100" autocomplete="off" type="text" onKeyUp={ev => {
+              ev.stopPropagation()
+              throttle(() => {
+                setFilterText(((ev.target as any).value||"").toLowerCase().trim())
+              },150)
+            }}/>
+          </div>
+          <CheckBox label="Todos Productos" checked={todosProductosCheck()}
+            onChange={bool =>{
+              setTodosProductosCheck(bool)
+              let records = []
+              if(bool){
+                records = populateProductos(productosStock(), almacenSelected())
+              } else {
+                records = productosStock().filter(x => !x._isVirtual)
+              }
+              setProductosStock(records)
+            }}
+          />
+        </Show>
+        <Show when={!almacenSelected()}>
+          <div class="flex ai-center c-red"> 
+            <i class="icon-attention"></i> 
+            Debe seleccionar un almacén.
+          </div>
+        </Show>
+      </div>
       <div class="flex ai-center">
         <Show when={keysUpdated().size > 0}>
           <button class="bn1 b-blue mr-08" onClick={ev => {
@@ -135,24 +188,56 @@ export default function ProductosStock() {
           getValue: e => ""
         },
         { header: "Stock", cardColumn: [3,2], field: "Nombre",
-          cardCss: "h5 c-steel",
+          css: "t-r", headerStyle: { width: '8rem' },
           render: e => {
-            if(e._cantidadPrev && e._cantidadPrev !== e.Cantidad){
-              const prev = e._cantidadPrev === -1 ? 0 : e._cantidadPrev
-              return <div class="flex ai-center jc-end">
-                <div>{prev}</div>
-                <div class="mr-02 ml-02">→</div>
-                <div class="c-red ff-bold">{e.Cantidad}</div>
-              </div>
-            } else {
-              return String(e.Cantidad)
-            }
+            return <CellEditable saveOn={e} save="" 
+              contentClass="px-06 flex ai-center jc-end"
+              inputClass="t-c" type="number"
+              onChange={c => {
+                if(e.Cantidad === c){ return }
+                e._cantidadPrev = e._cantidadPrev || e.Cantidad || -1
+                e.Cantidad = parseInt(c as string||"0")
+                const key = [e.ProductoID,e.SKU||"0",e.Lote||"0"].join("_")
+                keysUpdated().add(key)
+                setKeysUpdated(new Set(keysUpdated()))
+              }}
+              render={() => {
+                if(e._cantidadPrev && e._cantidadPrev !== e.Cantidad){
+                  const prev = e._cantidadPrev === -1 ? 0 : e._cantidadPrev
+                  return <div class="flex ai-center jc-end">
+                    <div>{prev}</div>
+                    <div class="mr-02 ml-02">→</div>
+                    <div class="c-red ff-bold">{e.Cantidad}</div>
+                  </div>
+                } else {
+                  if(!e.Cantidad){
+                    return <div class="c-red ff-bold">{e.Cantidad}</div>
+                  }
+                  return String(e.Cantidad)
+                }
+              }}
+            />
           },
         },
         { header: "Costo UN", cardColumn: [3,2], cardCss: "h5 c-steel", css: "t-c",
           getValue: e => e.CostoUn ? formatN(e.CostoUn,2) : "", 
+          render: e => {
+            return <CellEditable saveOn={e} save="CostoUn" 
+              contentClass="px-06 flex ai-center jc-end"
+              inputClass="t-c" type="number"
+              onChange={c => {
+                e._hasUpdated = true
+                const key = [e.ProductoID,e.SKU||"0",e.Lote||"0"].join("_")
+                keysUpdated().add(key)
+                setKeysUpdated(new Set(keysUpdated()))                
+              }}
+              render={() => {
+                return e.CostoUn ? formatN(e.CostoUn,2) : ""
+              }}
+            />
+          },
         },
-        { header: "Precio UN", cardColumn: [3,2], cardCss: "h5 c-steel", css: "t-c",
+        { header: "Stock Min", cardColumn: [3,2], cardCss: "h5 c-steel", css: "t-c",
           getValue: e => "", 
         },
       ]}

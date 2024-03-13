@@ -1,12 +1,15 @@
-import { For, createEffect, createSignal } from "solid-js";
+import { For, JSX, createEffect, createSignal } from "solid-js";
 
 export interface ICellEditable<T> {
   saveOn: T,
   save: string
   class?: string
   contentClass?: string
+  inputClass?: string
   onChange?: (newValue: (string|number)) => void
+  render?: (value: (number|string), isEditing: boolean) => JSX.Element
   required?: boolean
+  type?: string
 }
 
 export function CellEditable<T>(props: ICellEditable<T>) {
@@ -15,8 +18,15 @@ export function CellEditable<T>(props: ICellEditable<T>) {
     props.saveOn[props.save as keyof T] as (number|string)
   )
 
+  const extractValue = (newValue?: (string|number)) => {
+    if(props.type === 'number'){ 
+      newValue = parseFloat(newValue as string||'0') 
+    }
+    return newValue
+  }
+
   const reSetValue = (newValue?: (string|number)) => {
-    props.saveOn[props.save as keyof T] = newValue as any
+    props.saveOn[props.save as keyof T] = extractValue(newValue) as any
     setCurrentValue(newValue as any)
   }
 
@@ -27,6 +37,10 @@ export function CellEditable<T>(props: ICellEditable<T>) {
     if(isEditing() && inputRef){ inputRef.focus() }
   })
 
+  const renderContent = () => {
+    return props.render ? props.render(currentValue(), isEditing()) : currentValue() 
+  }
+
   return <div class={"cell-ed-c flex ai-center p-rel " +(props.class||"")}>
     <div class={"h100 w100 " +(props.contentClass||"")} 
       style={{ visibility: isEditing() ? "hidden" : "visible" }}
@@ -35,29 +49,29 @@ export function CellEditable<T>(props: ICellEditable<T>) {
         prevValue = currentValue()
         setIsEditing(true)
       }}>
-      { currentValue() }
+      { renderContent() }
       { !currentValue() && props.required &&
         <i class="icon-attention c-red"></i>
       }
     </div>
     { isEditing() && 
       <div class="flex ai-center cell-ed h100 w100">
-        <input value={currentValue()||""} type="text" ref={inputRef}
-          class="w100"
-          autofocus={true}
+        <input value={currentValue()||""} type={props.type || "text"}
+          class={"w100 " + (props.inputClass||"")}
+          autofocus={true} ref={inputRef}
           onKeyUp={ev => {
             ev.stopPropagation()
-            const target = ev.target as HTMLInputElement
-            reSetValue(target.value)
+            reSetValue((ev.target as HTMLInputElement).value)
           }}
           onBlur={ev => {
             ev.stopPropagation()
-            setIsEditing(false)
-            const newValue = currentValue()
+            debugger
+            const newValue = extractValue(ev.target.value)
             if(prevValue !== newValue){
               prevValue = newValue
               if(props.onChange){ props.onChange(newValue) }
             }
+            setIsEditing(false)
           }}
         />
       </div>

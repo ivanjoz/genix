@@ -75,6 +75,8 @@ export interface IProductoStock {
   Lote?: string
   CostoUn?: number
   _cantidadPrev?: number
+  _isVirtual?: boolean
+  _hasUpdated?: boolean
 }
 
 export const getProductosStock = async (almacenID: number): Promise<IProductoStock[]> => {

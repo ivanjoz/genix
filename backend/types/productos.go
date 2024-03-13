@@ -110,17 +110,18 @@ type AlmacenProducto struct {
 	TAGS      `table:"almacen_producto"`
 	EmpresaID int32 `json:",omitempty" db:"empresa_id,pk"`
 	// [Almacen-ID] [status] [Producto-ID] [SKU] [Lote]
-	ID             string `db:"id,pk"`
-	SKU            string `json:",omitempty" db:"sku,view"`
-	Lote           string `json:",omitempty" db:"lote,view"`
-	AlmacenID      int32  `json:",omitempty" db:"almacen_id"`
-	ProductoID     int32  `json:",omitempty" db:"producto_id,view"`
-	UpdatedBy      int32  `json:",omitempty" db:"updated_by"`
-	Cantidad       int32  `json:",omitempty" db:"cantidad"`
-	SubCantidad    int32  `json:",omitempty" db:"sub_cantidad"`
-	Status         int8   `json:"ss,omitempty" db:"status"`
-	Updated        int64  `json:"upd,omitempty" db:"updated"`
-	AlmacenUpdated int64  `json:"-" db:"sk_almacen_updated,view,exclude"`
+	ID             string  `db:"id,pk"`
+	SKU            string  `json:",omitempty" db:"sku,view"`
+	Lote           string  `json:",omitempty" db:"lote,view"`
+	AlmacenID      int32   `json:",omitempty" db:"almacen_id"`
+	ProductoID     int32   `json:",omitempty" db:"producto_id,view"`
+	UpdatedBy      int32   `json:",omitempty" db:"updated_by"`
+	Cantidad       int32   `json:",omitempty" db:"cantidad"`
+	SubCantidad    int32   `json:",omitempty" db:"sub_cantidad"`
+	CostoUn        float32 `json:",omitempty" db:"costo_un"`
+	Status         int8    `json:"ss,omitempty" db:"status"`
+	Updated        int64   `json:"upd,omitempty" db:"updated"`
+	AlmacenUpdated int64   `json:"-" db:"sk_almacen_updated,view,exclude"`
 }
 
 func (e *AlmacenProducto) SelfParse() {
