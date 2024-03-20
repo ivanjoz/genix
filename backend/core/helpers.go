@@ -141,15 +141,6 @@ func MergeSliceUnique[T NumberStr](slice1 *[]T, slice2 *[]T) {
 	}
 }
 
-func MakePgIntArray[T Number2](slice1 []T) string {
-	sliceOfStrings := []string{}
-
-	for _, value := range slice1 {
-		sliceOfStrings = append(sliceOfStrings, fmt.Sprintf("%v", value))
-	}
-	return "{" + strings.Join(sliceOfStrings, ",") + "}"
-}
-
 func MakeUniqueInts[T any, N Number1](slice []T, f func(T) N) []N {
 	keys := map[N]bool{}
 	list := []N{}
@@ -524,6 +515,14 @@ func Containx[T NumberStr](e T, s ...T) bool {
 		}
 	}
 	return false
+}
+
+func ToAny[T NumberStr](values []T) []any {
+	valuesAsAny := []any{}
+	for _, v := range values {
+		valuesAsAny = append(valuesAsAny, any(v))
+	}
+	return valuesAsAny
 }
 
 func RemoveSpaces(input string) string {
@@ -1071,13 +1070,6 @@ func IfNull[T any](num1 *T, num2 T) T {
 	}
 }
 
-func SrtNull(str *string) string {
-	if str == nil {
-		return ""
-	}
-	return *str
-}
-
 func If[T any](ok bool, A T, B T) T {
 	if ok {
 		return A
@@ -1089,14 +1081,6 @@ func If[T any](ok bool, A T, B T) T {
 func IF(ok bool, exec func()) {
 	if ok {
 		exec()
-	}
-}
-
-func SafeNull[T Number2](num *T) T {
-	if num == nil {
-		return 0
-	} else {
-		return *num
 	}
 }
 

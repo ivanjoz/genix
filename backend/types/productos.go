@@ -148,6 +148,7 @@ type AlmacenMovimiento struct {
 	SubCantidad           int32  `json:",omitempty" db:"sub_cantidad"`
 	Tipo                  int8   `json:",omitempty" db:"tipo"`
 	Created               int64  `json:",omitempty" db:"created"`
+	CreatedBy             int32  `json:",omitempty" db:"created_by"`
 	ProductoCreated       int64  `json:"-" db:"sk_producto_created,view,exclude"`
 	AlmacenCreated        int64  `json:"-" db:"sk_almacen_created,view,exclude"`
 	AlmacenOrigenCreated  int64  `json:"-" db:"sk_almacen_origen_created,view,exclude"`

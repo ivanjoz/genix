@@ -314,11 +314,12 @@ type QueryParams struct {
 }
 
 type QuerySelect[T any] struct {
-	Records        *[]T
-	ColumnsToAvoid []string
-	ComandsWhere   []QueryParams
-	Limit          int32
-	GroupCount     int32
+	Records          *[]T
+	ColumnsToAvoid   []string
+	ColumnsToInclude []string
+	ComandsWhere     []QueryParams
+	Limit            int32
+	GroupCount       int32
 }
 
 func (e *QuerySelect[T]) Where(names ...string) *QuerySelect[T] {
@@ -330,6 +331,11 @@ func (e *QuerySelect[T]) Where(names ...string) *QuerySelect[T] {
 	}
 	e.ComandsWhere = append(e.ComandsWhere,
 		QueryParams{Columns: names, Group: e.GroupCount})
+	return e
+}
+
+func (e *QuerySelect[T]) Columns(names ...string) *QuerySelect[T] {
+	e.ColumnsToInclude = append(e.ColumnsToInclude, names...)
 	return e
 }
 
@@ -508,11 +514,22 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 		queryStr += " ALLOW FILTERING"
 	}
 
+	//Revisa que las columnas existan
+	for _, col := range e.ColumnsToInclude {
+		if _, ok := scyllaTable.ColumnsMap[col]; !ok {
+			return Err("La columna: ", col, " no existe en la tabla: ", scyllaTable.Name)
+		}
+	}
+
 	isUsingView := scyllaTable.Name != viewTableName
 	columnNames := []string{}
+	columnsToInclude := MakeSliceInclude(e.ColumnsToInclude)
 	columnsIdxMap := map[int]BDColumn{}
 
 	for _, co := range scyllaTable.Columns {
+		if !columnsToInclude.IncludeN(co.Name) {
+			continue
+		}
 		if co.IsViewExcluded {
 			if isUsingView && !columnsWhere.Include(co.Name) {
 				continue

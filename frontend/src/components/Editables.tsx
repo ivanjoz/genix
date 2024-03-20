@@ -8,15 +8,19 @@ export interface ICellEditable<T> {
   inputClass?: string
   onChange?: (newValue: (string|number)) => void
   render?: (value: (number|string), isEditing: boolean) => JSX.Element
+  getValue?: (e: T) => (number|string)
   required?: boolean
   type?: string
 }
 
 export function CellEditable<T>(props: ICellEditable<T>) {
   const [isEditing, setIsEditing] = createSignal(false)
-  const [currentValue, setCurrentValue] = createSignal(
-    props.saveOn[props.save as keyof T] as (number|string)
-  )
+
+  let prevValue = props.getValue
+    ? props.getValue(props.saveOn)
+    : (props.saveOn||{} as T)[props.save as keyof T] as (number|string)
+  
+  const [currentValue, setCurrentValue] = createSignal(prevValue)
 
   const extractValue = (newValue?: (string|number)) => {
     if(props.type === 'number'){ 
@@ -31,7 +35,6 @@ export function CellEditable<T>(props: ICellEditable<T>) {
   }
 
   let inputRef: HTMLInputElement = undefined as unknown as HTMLInputElement
-  let prevValue = currentValue()
   
   createEffect(()=> {
     if(isEditing() && inputRef){ inputRef.focus() }

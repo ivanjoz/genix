@@ -193,10 +193,12 @@ export default function ProductosStock() {
             return <CellEditable saveOn={e} save="" 
               contentClass="px-06 flex ai-center jc-end"
               inputClass="t-c" type="number"
+              getValue={() => { return e.Cantidad }}
               onChange={c => {
                 if(e.Cantidad === c){ return }
                 e._cantidadPrev = e._cantidadPrev || e.Cantidad || -1
                 e.Cantidad = parseInt(c as string||"0")
+                e._hasUpdated = true
                 const key = [e.ProductoID,e.SKU||"0",e.Lote||"0"].join("_")
                 keysUpdated().add(key)
                 setKeysUpdated(new Set(keysUpdated()))

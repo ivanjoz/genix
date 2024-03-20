@@ -30,22 +30,22 @@ type SmtpConfig struct {
 	Host     string `json:"host,omitempty"`
 }
 
-type Usuario struct { // DynamoDB
+type Usuario struct { // DynamoDB + ScyllaDB
 	TAGS         `table:"usuarios"`
-	ID           int32   `json:"id" db:"usuario_id,pk"`
-	EmpresaID    int32   `json:"empresaID" db:"empresa_id,pk"`
+	ID           int32   `json:"id" db:"id,pk"`
+	EmpresaID    int32   `json:"empresaID,omitempty" db:"empresa_id,pk"`
 	Usuario      string  `json:"usuario" db:"usuario"`
-	Apellidos    string  `json:"apellidos" db:"apellidos"`
-	Nombres      string  `json:"nombres" db:"nombres"`
-	Created      int64   `json:"created" db:"created"`
-	CreatedBy    int32   `json:"createdBy" db:"created_by"`
-	UpdatedBy    int32   `json:"updatedBy" db:"updated_by"`
-	PerfilesIDs  []int32 `json:"perfilesIDs" db:"perfiles_ids"`
-	RolesIDs     []int32 `json:"rolesIDs" db:"roles_ids"`
-	Email        string  `json:"email" db:"email"`
-	PasswordHash string  `json:"passwordHash" db:"password_hash"`
-	Status       int8    `json:"ss" db:"status"`
-	Updated      int64   `json:"upd" db:"updated"`
+	Apellidos    string  `json:"apellidos,omitempty" db:"apellidos"`
+	Nombres      string  `json:"nombres,omitempty" db:"nombres"`
+	Created      int64   `json:"created,omitempty" db:"created"`
+	CreatedBy    int32   `json:"createdBy,omitempty" db:"created_by"`
+	UpdatedBy    int32   `json:"updatedBy,omitempty" db:"updated_by"`
+	PerfilesIDs  []int32 `json:"perfilesIDs,omitempty" db:"perfiles_ids"`
+	RolesIDs     []int32 `json:"rolesIDs,omitempty" db:"roles_ids"`
+	Email        string  `json:"email,omitempty" db:"email"`
+	PasswordHash string  `json:"passwordHash,omitempty"`
+	Status       int8    `json:"ss,omitempty" db:"status"`
+	Updated      int64   `json:"upd,omitempty" db:"updated"`
 	Password     string  `json:"password1,omitempty"`
 }
 
