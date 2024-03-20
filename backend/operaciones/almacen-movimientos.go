@@ -54,8 +54,8 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	movimientos := []s.AlmacenMovimiento{}
 
 	for _, e := range stock {
-
 		movimiento := s.AlmacenMovimiento{
+			EmpresaID:  req.Usuario.EmpresaID,
 			AlmacenID:  e.AlmacenID,
 			ProductoID: e.ProductoID,
 			SKU:        e.SKU,
@@ -86,4 +86,31 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	return req.MakeResponse(stock)
+}
+
+func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
+
+	almacenID := req.GetQueryInt64("almacen-id")
+	fechaHoraInicio := req.GetQueryInt64("fecha-hora-inicio")
+	fechaHoraFin := req.GetQueryInt64("fecha-hora-fin")
+
+	if almacenID == 0 || fechaHoraInicio == 0 || fechaHoraFin == 0 {
+		return req.MakeErr("Faltan parámetros.")
+	}
+
+	almacenMovimientos := []s.AlmacenMovimiento{}
+	query := core.DBSelect(&almacenMovimientos).
+		Where("empresa_id").Equals(req.Usuario.EmpresaID).
+		Where("sk_almacen_created").GreatEq(core.ConcatInt64(almacenID, fechaHoraInicio)).
+		Where("sk_almacen_created").LessEq(core.ConcatInt64(almacenID, fechaHoraFin))
+
+	query.Limit = 1000
+	err := query.Exec()
+	if err != nil {
+		return req.MakeErr("Error al obtener los registros del almacén:", err)
+	}
+
+	core.Log("movimientos encontrados:", len(almacenMovimientos))
+
+	return req.MakeResponse(almacenMovimientos)
 }

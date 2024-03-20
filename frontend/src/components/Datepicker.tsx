@@ -1,5 +1,5 @@
 import { addDays, addMonths, endOfMonth, format, getDay, getISOWeek, getISOWeekYear, getMonth, isFirstDayOfMonth, startOfISOWeek, startOfMonth } from "date-fns";
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal, on } from "solid-js";
 import { throttle } from "~/core/main";
 import { arrayToMapN } from "~/shared/main";
 
@@ -39,7 +39,7 @@ const monthsNames = [
   { n: 12, name: 'Diciembre' },
 ]
 
-export function DatePicker(props: IDatePicker) {
+export function DatePicker<T>(props: IDatePicker<T>) {
   const fechaToday = new Date()
   const offset = fechaToday.getTimezoneOffset() * 60
   const fechaTodayUnix = Math.floor(fechaToday.getTime() / 86400000)
@@ -182,6 +182,28 @@ export function DatePicker(props: IDatePicker) {
     }
   }
 
+  const changeFechaSelected = (fechaUnix: number) => {
+    if(props.save && props.saveOn){
+      props.saveOn[props.save] = fechaUnix
+    }
+    setFechaSelected(fechaUnix)
+  }
+  
+  createEffect(() => {
+    if(props.saveOn && props.save){
+      const fechaUnix = props.saveOn[props.save]
+      if(fechaUnix){
+        const value = makeFechaFormat(fechaUnix)
+        setAutocompletedValue(value)
+        input.value = value
+      } else {
+        input.value = ""
+        setMonthSelected(0)
+      }
+      setFechaSelected(0)
+    }
+  })
+
   const regexKeys = new Set(['1','2','3','4','5','6','7','8','9','0','-','/'])
   const regexKeysPress = new Set([...(regexKeys),'Backspace','Control','c','v','x'])
 
@@ -201,7 +223,20 @@ export function DatePicker(props: IDatePicker) {
         ev.stopPropagation()
         if(avoidCloseOnBlur){ avoidCloseOnBlur = false; return }
         setShowCalendar(false)
-        setFechaFocus(0)
+        if(fechaFocus() !== 0){
+          const value = (ev.target.value||"").trim()
+          const acv = parseValue(value)
+          console.log("autocompleted value::", acv, value)
+          if(value.length === 10 && acv.isCompleted){
+            changeFechaSelected(acv.fechaUnixAutocomplated)
+          } else {
+            ev.target.value = ""
+            if(props.saveOn && props.save){
+              delete props.saveOn[props.save]
+            }
+          }
+          setFechaFocus(0)
+        }
       }}
       onkeydown={ev => {
         console.log(`User pressed: ${ev.key} | ${ev.altKey}`);
@@ -262,7 +297,7 @@ export function DatePicker(props: IDatePicker) {
                 return <div class={cN}
                   onClick={ev => {
                     ev.stopPropagation()
-                    setFechaSelected(e.fechaUnix)
+                    changeFechaSelected(e.fechaUnix)
                     setShowCalendar(false)
                     setFechaFocus(0)
                     avoidCloseOnBlur = false
