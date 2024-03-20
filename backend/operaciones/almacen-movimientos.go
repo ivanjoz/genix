@@ -5,6 +5,8 @@ import (
 	s "app/types"
 	"encoding/json"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
@@ -63,6 +65,7 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 			Cantidad:   e.Cantidad,
 			Tipo:       1, // Movimiento Manual
 			Created:    nowTime,
+			CreatedBy:  req.Usuario.ID,
 		}
 		if current, ok := currentStockMap[e.ID]; ok {
 			movimiento.AlmacenCantidad = current.Cantidad
@@ -98,8 +101,15 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Faltan parámetros.")
 	}
 
-	almacenMovimientos := []s.AlmacenMovimiento{}
-	query := core.DBSelect(&almacenMovimientos).
+	type Result struct {
+		AlmacenMovimientos []s.AlmacenMovimiento
+		Usuarios           []s.Usuario
+		Productos          []s.Producto
+	}
+
+	result := Result{}
+
+	query := core.DBSelect(&result.AlmacenMovimientos, "id", "empresa_id").
 		Where("empresa_id").Equals(req.Usuario.EmpresaID).
 		Where("sk_almacen_created").GreatEq(core.ConcatInt64(almacenID, fechaHoraInicio)).
 		Where("sk_almacen_created").LessEq(core.ConcatInt64(almacenID, fechaHoraFin))
@@ -110,7 +120,49 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)
 	}
 
-	core.Log("movimientos encontrados:", len(almacenMovimientos))
+	core.Log("movimientos encontrados:", len(result.AlmacenMovimientos))
 
-	return req.MakeResponse(almacenMovimientos)
+	if len(result.AlmacenMovimientos) == 0 {
+		return req.MakeResponse(result)
+	}
+
+	usuariosSet := core.SliceInclude[int32]{}
+	productosSet := core.SliceInclude[int32]{}
+
+	for _, e := range result.AlmacenMovimientos {
+		usuariosSet.Add(e.CreatedBy)
+		productosSet.Add(e.ProductoID)
+	}
+
+	errGroup := errgroup.Group{}
+
+	errGroup.Go(func() error {
+		err := core.DBSelect(&result.Productos).
+			Columns("id", "nombre", "precio").
+			Where("empresa_id").Equals(req.Usuario.EmpresaID).
+			Where("id").In(core.ToAny(productosSet.Values)).Exec()
+
+		if err != nil {
+			err = core.Err("Error al obtener los productos:", err)
+		}
+		return err
+	})
+
+	errGroup.Go(func() error {
+		err := core.DBSelect(&result.Usuarios).
+			Columns("id", "usuario", "nombres", "apellidos").
+			Where("empresa_id").Equals(req.Usuario.EmpresaID).
+			Where("id").In(core.ToAny(usuariosSet.Values)).Exec()
+
+		if err != nil {
+			err = core.Err("Error al obtener los usuarios:", err)
+		}
+		return err
+	})
+
+	if err := errGroup.Wait(); err != nil {
+		return req.MakeErr(err.Error())
+	}
+
+	return req.MakeResponse(result)
 }

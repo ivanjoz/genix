@@ -2,6 +2,7 @@ import { addDays, addMonths, endOfMonth, format, getDay, getISOWeek, getISOWeekY
 import { For, Show, createEffect, createSignal, on } from "solid-js";
 import { throttle } from "~/core/main";
 import { arrayToMapN } from "~/shared/main";
+import { Params } from "~/shared/security";
 
 export interface IDatePicker<T> {
   label?: string
@@ -42,7 +43,7 @@ const monthsNames = [
 export function DatePicker<T>(props: IDatePicker<T>) {
   const fechaToday = new Date()
   const offset = fechaToday.getTimezoneOffset() * 60
-  const fechaTodayUnix = Math.floor(fechaToday.getTime() / 86400000)
+  const fechaTodayUnix = Params.getFechaUnix()
   const month_ = fechaToday.getFullYear() * 100 + (fechaToday.getMonth() + 1)
 
   const [monthSelected, setMonthSelected] = createSignal(month_)

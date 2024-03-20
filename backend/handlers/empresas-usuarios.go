@@ -193,6 +193,7 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	if body.ID == 1 {
 		body.Usuario = "admin"
 	}
+	body.EmpresaID = req.Usuario.EmpresaID
 
 	dynamoTable := MakeUsuarioTable(req.Usuario.EmpresaID)
 
@@ -209,6 +210,8 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("No se encontró el usuario a actualizar")
 		}
 		body.PasswordHash = usuario.PasswordHash
+		body.Created = usuario.Created
+		body.CreatedBy = usuario.CreatedBy
 	}
 
 	if len(body.Password) >= 6 {
@@ -218,10 +221,16 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 
 	body.Password = ""
 	body.Updated = time.Now().Unix()
-	err = dynamoTable.PutItem(&body, 1)
+	body.UpdatedBy = req.Usuario.ID
 
+	err = dynamoTable.PutItem(&body, 1)
 	if err != nil {
-		return req.MakeErr("Error al actualizar el usuario: " + err.Error())
+		return req.MakeErr("Error al actualizar el usuario (DynamoDB): " + err.Error())
+	}
+
+	err = core.DBInsert(&[]s.Usuario{body})
+	if err != nil {
+		return req.MakeErr("Error al actualizar el usuario (SQL): " + err.Error())
 	}
 
 	return req.MakeResponse(body)

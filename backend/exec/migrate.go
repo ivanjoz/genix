@@ -19,6 +19,7 @@ func MakeScyllaControllers() []ScyllaController {
 		makeController[s.AlmacenProducto](),
 		makeController[s.AlmacenMovimiento](),
 		makeController[s.Increment](),
+		makeController[s.Usuario](),
 	}
 }
 

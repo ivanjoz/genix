@@ -4,13 +4,16 @@ AWS_S3="gerp-v2-frontend"
 FUNCTION_NAME="jobfinder6-p-app"
 PUBLICAR_ASSETS=""
 
-echo "Seleccione assets a publicar: (Es posible escoger más de 1. Ejemplo: '123')"
-echo "[1] Frontend [2] Backend [3] Frontend (Assets) [4] db-backup"
+echo "Seleccione acciones a realizar: (Es posible escoger más de 1. Ejemplo: '123')"
+echo "Publicar Código ----------------"
+echo "[1] Frontend [2] Backend [3] Frontend (Assets) [4] Backup Lib"
+echo "Ejecutar Proceso ---------------"
+echo "[5] Recrear Tablas [6] Poblar Estructuras"
 read ACCIONES
 
 echo "Obteniendo los últimos cambios del repositorio (GIT PULL)..."
 
-if [[ $ACCIONES != *"x"* ]]; then
+if [[ $ACCIONES == *"1"* || $ACCIONES == *"2"* || $ACCIONES == *"3"* ]]; then
     git pull
 fi
 
@@ -72,6 +75,16 @@ if [[ $ACCIONES == *"4"* ]]; then
 
 fi
 
-echo "La publicación ha finalizado!. Presione cualquier tecla para salir"
+#PUBLICAR DB BACKUP BINARY
+if [[ $ACCIONES == *"5"* ]]; then
+
+    echo "=== RECREANDO TABLAS ==="
+
+    cd ./backend
+    go run . fn-homologate
+
+fi
+
+echo "Finalizado!. Presione cualquier tecla para salir"
 read
 kill -9 $PPID
