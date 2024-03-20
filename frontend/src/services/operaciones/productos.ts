@@ -103,3 +103,34 @@ export const postProductosStock = (data: IProductoStock[]) => {
     refreshIndexDBCache: "productos_stock"
   })
 }
+
+
+interface IQueryAlmacenMovimientos {
+  almacenID: number
+  fechaInicio: number
+  fechaFin: number
+}
+
+export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): Promise<any[]> => {
+  let records = []
+  let route = `almacen-movimientos?almacen-id=${args.almacenID}`
+  
+  if(!args.fechaInicio || !args.fechaFin){
+    throw("No se encontró una fecha de inicio o fin.")
+  }
+  
+  route += `&fecha-hora-inicio=${args.fechaInicio*24*60*60 + window._zoneOffset}`
+  route += `&fecha-hora-fin=${(args.fechaFin+1)*24*60*60 + window._zoneOffset}`
+
+  try {
+    const result = await GET({ 
+      route, emptyValue: [],
+      errorMessage: 'Hubo un error al obtener los movimientos del almacén',
+    })
+    records = result.Records || []
+  } catch (error) {
+    Notify.failure(error as string)
+  }
+
+  return records
+}

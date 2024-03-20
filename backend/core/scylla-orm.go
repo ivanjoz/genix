@@ -413,17 +413,10 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 	scyllaTable := MakeScyllaTable(newType)
 	Log("Views::", scyllaTable.Name, scyllaTable.Views)
 
-	columnNames := []string{}
-	columnsIdxMap := map[int]BDColumn{}
-
-	for _, co := range scyllaTable.Columns {
-		columnsIdxMap[len(columnNames)] = co
-		columnNames = append(columnNames, co.Name)
-	}
-
-	tableName := scyllaTable.Name
+	viewTableName := scyllaTable.Name
 	queryStr := "SELECT %v FROM %v"
 	indexOperators := MakeSliceInclude([]string{"=", "IN"})
+	columnsWhere := SliceInclude[string]{}
 
 	whereGroups := SliceToMap(e.ComandsWhere, func(e QueryParams) int32 { return e.Group })
 	for _, whereGroup := range whereGroups {
@@ -431,10 +424,13 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 		for _, qp := range whereGroup {
 			var wh string
 
+			for _, col := range qp.Columns {
+				columnsWhere.Add(col)
+			}
 			// Revisa si hay un view para esa columna
 			if len(qp.Columns) == 1 {
 				if view, ok := scyllaTable.Views[qp.Columns[0]]; ok {
-					tableName = view
+					viewTableName = view
 				}
 			}
 
@@ -512,7 +508,21 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 		queryStr += " ALLOW FILTERING"
 	}
 
-	queryStr = fmt.Sprintf(queryStr, strings.Join(columnNames, ", "), tableName)
+	isUsingView := scyllaTable.Name != viewTableName
+	columnNames := []string{}
+	columnsIdxMap := map[int]BDColumn{}
+
+	for _, co := range scyllaTable.Columns {
+		if co.IsViewExcluded {
+			if isUsingView && !columnsWhere.Include(co.Name) {
+				continue
+			}
+		}
+		columnsIdxMap[len(columnNames)] = co
+		columnNames = append(columnNames, co.Name)
+	}
+
+	queryStr = fmt.Sprintf(queryStr, strings.Join(columnNames, ", "), viewTableName)
 	Log(queryStr)
 
 	iter := conn.Query(queryStr).Iter()

@@ -176,4 +176,7 @@ export const Params = {
     const value: string | number = localStorage.getItem(key) || '0'
     return parseInt(value)
   },
+  getFechaUnix(){
+    return Math.floor(((Date.now()/1000) - window._zoneOffset) / 86400)
+  }
 }

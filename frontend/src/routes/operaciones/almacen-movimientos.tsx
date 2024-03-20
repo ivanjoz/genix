@@ -1,5 +1,5 @@
 import { Notify } from "notiflix"
-import { Show, createSignal } from "solid-js"
+import { Show, createEffect, createSignal } from "solid-js"
 import { DatePicker } from "~/components/Datepicker"
 import { CellEditable } from "~/components/Editables"
 import { CheckBox, Input } from "~/components/Input"
@@ -8,19 +8,39 @@ import { QTable } from "~/components/QTable"
 import { SearchSelect } from "~/components/SearchSelect"
 import { Loading, throttle } from "~/core/main"
 import { PageContainer } from "~/core/page"
-import { IProductoStock, getProductosStock, postProductosStock, useProductosAPI } from "~/services/operaciones/productos"
+import { IProductoStock, getProductosStock, postProductosStock, queryAlmacenMovimientos, useProductosAPI } from "~/services/operaciones/productos"
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes"
 import { formatN } from "~/shared/main"
+import { Params } from "~/shared/security"
 
 export default function AlmacenMovimientos() {
 
   const [productos] = useProductosAPI()
   const [almacenes] = useSedesAlmacenesAPI()
-  const [form, setForm] = createSignal({})
+
+  const fechaFin = Params.getFechaUnix()
+  const fechaInicio = fechaFin - 7
+  const [form, setForm] = createSignal({ fechaFin, fechaInicio, almacenID: 0 })
   const [almacenMovimientos, setAlmacenMovimientos] = createSignal([])
 
-  const guardarRegistros = async () => {
-    
+  createEffect(() => {
+    const almacenID = (almacenes().Almacenes||[])[0]?.ID
+    if(almacenID && almacenID !== form().almacenID){ 
+      setForm({ ...form(), almacenID }) 
+    }
+  })
+  
+  const consultarRegistros = async () => {
+    Loading.standard("Consultando registros...")
+    let records: any[] = []
+    try {
+      records = await queryAlmacenMovimientos(form())
+    } catch (error) {
+      Loading.remove(); return
+    }
+
+    console.log("registros obtenidos: ", records)
+    Loading.remove()
   }
 
   const [filterText, setFilterText] = createSignal("")
@@ -28,19 +48,19 @@ export default function AlmacenMovimientos() {
 
   return <PageContainer title="Almacén Stock">
     <div class="flex ai-center jc-between mb-06">
-      <div class="flex ai-center">
-        <SearchSelect saveOn={form()} save="almacenID" css="w20rem mb-02 mr-12"
+      <div class="flex ai-center w100-10" style={{ "max-width": "64rem" }}>
+        <SearchSelect saveOn={form()} save="almacenID" css="w-08x mb-02 mr-12"
           label="Almacén" keys="ID.Nombre" options={almacenes()?.Almacenes || []}
           placeholder="" required={true}
           onChange={e => {
             
           }}
         />
-        <DatePicker label="Fecha Inicio"/>
-        <DatePicker label="Fecha Fin"/>
-        <button class="bn1 b-blue" onClick={ev => {
+        <DatePicker label="Fecha Inicio" css="w-045x" save="fechaInicio" saveOn={form()} />
+        <DatePicker label="Fecha Fin" css="w-045x" save="fechaFin" saveOn={form()}/>
+        <button class="bn1 b-blue ml-10" onClick={ev => {
           ev.stopPropagation()
-          setOpenLayers([2])
+          consultarRegistros()
         }}>
           <i class="icon-search"></i>
         </button>

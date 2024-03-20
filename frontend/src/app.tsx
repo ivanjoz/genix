@@ -39,6 +39,7 @@ if(isClient){
   window._pendingRequests = []
   window._counterID = 1
   window.S3_URL = "https://genix-dev.un.pe/"
+  window._zoneOffset = (new Date()).getTimezoneOffset() * 60
   createIndexDB(Modules)
 }
 
