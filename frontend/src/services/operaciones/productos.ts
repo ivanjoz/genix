@@ -1,6 +1,7 @@
 import { Notify } from "notiflix"
 import { GET, GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
 import { arrayToMapN } from "~/shared/main"
+import { IUsuario } from "../admin/empresas"
 
 export interface IProductoPropiedad {
   ID: number, Nombre: string, Options: string[]
@@ -111,8 +112,35 @@ interface IQueryAlmacenMovimientos {
   fechaFin: number
 }
 
-export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): Promise<any[]> => {
-  let records = []
+export interface IAlmacenMovimiento {
+  ID: string
+  SKU: string
+  Lote: string
+  AlmacenID: number
+  AlmacenOrigenID: number
+  VentaID: number
+  ProductoID: number
+  Cantidad: number
+  AlmacenCantidad: number
+  AlmacenOrigenCantidad: number
+  SubCantidad: number
+  Tipo: number
+  Created: number
+  CreatedBy: number
+}
+
+export interface IAlmacenMovimientosResult {
+  Movimientos: IAlmacenMovimiento[]
+  Usuarios: IUsuario[]
+  Productos: IProducto[]
+}
+
+export const movimientoTipos = [
+  { id: 1, name: 'Entrada Manual' }, 
+  { id: 2, name: 'Salida Manual' }, 
+]
+
+export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): Promise<IAlmacenMovimientosResult> => {
   let route = `almacen-movimientos?almacen-id=${args.almacenID}`
   
   if(!args.fechaInicio || !args.fechaFin){
@@ -122,15 +150,21 @@ export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): P
   route += `&fecha-hora-inicio=${args.fechaInicio*24*60*60 + window._zoneOffset}`
   route += `&fecha-hora-fin=${(args.fechaFin+1)*24*60*60 + window._zoneOffset}`
 
+  let result: IAlmacenMovimientosResult
+
   try {
-    const result = await GET({ 
+    result = await GET({ 
       route, emptyValue: [],
       errorMessage: 'Hubo un error al obtener los movimientos del almacén',
     })
-    records = result.Records || []
   } catch (error) {
     Notify.failure(error as string)
   }
+  
+  result.Usuarios = result.Usuarios || []
+  result.Productos = result.Productos || []
+  result.Movimientos = result.Movimientos || []
+  result.Movimientos.sort((a,b) => b.Created - a.Created)
 
-  return records
+  return result
 }

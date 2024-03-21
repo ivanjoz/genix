@@ -48,6 +48,12 @@ export function highlString(phrase: string, words: string[]) {
   return arr.filter(x => x)
 }
 
+export function makeHighlString(content: string, search: string){
+  return <span class="_highlight">
+    {highlString(content, search.split(" "))}
+  </span>
+}
+
 export function SearchSelect<T>(props: SearchSelect<T>) {
 
   const [show, setShow] = createSignal(false)

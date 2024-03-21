@@ -318,8 +318,9 @@ type QuerySelect[T any] struct {
 	ColumnsToAvoid   []string
 	ColumnsToInclude []string
 	ComandsWhere     []QueryParams
-	Limit            int32
 	GroupCount       int32
+	OrderBy          string
+	limit            int32
 }
 
 func (e *QuerySelect[T]) Where(names ...string) *QuerySelect[T] {
@@ -402,6 +403,18 @@ func (e *QuerySelect[T]) Contains(value any) *QuerySelect[T] {
 }
 func (e *QuerySelect[T]) Like(value any) *QuerySelect[T] {
 	return e.addOperator("LIKE", value)
+}
+func (e *QuerySelect[T]) OrderAscending() *QuerySelect[T] {
+	e.OrderBy = "ORDER BY %v ASC"
+	return e
+}
+func (e *QuerySelect[T]) OrderDescending() *QuerySelect[T] {
+	e.OrderBy = "ORDER BY %v DESC"
+	return e
+}
+func (e *QuerySelect[T]) Limit(limit int32) *QuerySelect[T] {
+	e.limit = limit
+	return e
 }
 
 func parseValueToString(v any) string {
@@ -540,6 +553,14 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 	}
 
 	queryStr = fmt.Sprintf(queryStr, strings.Join(columnNames, ", "), viewTableName)
+	if len(e.OrderBy) > 0 {
+		if strings.Contains(e.OrderBy, "%v") {
+			e.OrderBy = fmt.Sprintf(e.OrderBy, columnsWhere.Values[len(columnsWhere.Values)-1])
+		}
+		queryStr += " " + e.OrderBy
+	}
+
+	Log("query string::")
 	Log(queryStr)
 
 	iter := conn.Query(queryStr).Iter()

@@ -5,12 +5,13 @@ import { CellEditable } from "~/components/Editables"
 import { CheckBox, Input } from "~/components/Input"
 import { CornerLayer, setOpenLayers } from "~/components/Modals"
 import { QTable } from "~/components/QTable"
-import { SearchSelect } from "~/components/SearchSelect"
-import { Loading, throttle } from "~/core/main"
+import { SearchSelect, highlString, makeHighlString } from "~/components/SearchSelect"
+import { Loading, formatTime, throttle } from "~/core/main"
 import { PageContainer } from "~/core/page"
-import { IProductoStock, getProductosStock, postProductosStock, queryAlmacenMovimientos, useProductosAPI } from "~/services/operaciones/productos"
+import { IUsuario } from "~/services/admin/empresas"
+import { IAlmacenMovimiento, IAlmacenMovimientosResult, IProducto, IProductoStock, getProductosStock, movimientoTipos, postProductosStock, queryAlmacenMovimientos, useProductosAPI } from "~/services/operaciones/productos"
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes"
-import { formatN } from "~/shared/main"
+import { arrayToMapN, formatN } from "~/shared/main"
 import { Params } from "~/shared/security"
 
 export default function AlmacenMovimientos() {
@@ -21,7 +22,7 @@ export default function AlmacenMovimientos() {
   const fechaFin = Params.getFechaUnix()
   const fechaInicio = fechaFin - 7
   const [form, setForm] = createSignal({ fechaFin, fechaInicio, almacenID: 0 })
-  const [almacenMovimientos, setAlmacenMovimientos] = createSignal([])
+  const [almacenMovimientos, setAlmacenMovimientos] = createSignal([] as IAlmacenMovimiento[])
 
   createEffect(() => {
     const almacenID = (almacenes().Almacenes||[])[0]?.ID
@@ -30,21 +31,40 @@ export default function AlmacenMovimientos() {
     }
   })
   
+  const usuariosMap: Map<number,IUsuario> = new Map()
+  const productosMap: Map<number,IProducto> = new Map()
+  const movimientoTiposMap = arrayToMapN(movimientoTipos,'id')
+
   const consultarRegistros = async () => {
     Loading.standard("Consultando registros...")
-    let records: any[] = []
+    let result: IAlmacenMovimientosResult
     try {
-      records = await queryAlmacenMovimientos(form())
+      result = await queryAlmacenMovimientos(form())
     } catch (error) {
       Loading.remove(); return
     }
 
-    console.log("registros obtenidos: ", records)
+    console.log("registros obtenidos: ", result)
+
+    for(let e of result.Productos){ productosMap.set(e.ID,e) }
+    for(let e of result.Usuarios){ usuariosMap.set(e.id,e) }
+
+    setAlmacenMovimientos(result.Movimientos)
     Loading.remove()
   }
 
   const [filterText, setFilterText] = createSignal("")
 
+  const almacenRender = (almacenID: number, cant: number) => {
+    if(!almacenID){ return "" }
+    const name = almacenes().AlmacenesMap.get(almacenID)?.Nombre || `Almacen-${almacenID}`
+    return <div class="flex a-center">
+      <div class="mr-08">{name}</div>
+      <div class="ff-mono c-blue">(</div>
+      <div class="ff-mono">{cant}</div>
+      <div class="ff-mono c-blue">)</div>
+    </div>
+  }
 
   return <PageContainer title="Almacén Stock">
     <div class="flex ai-center jc-between mb-06">
@@ -77,26 +97,54 @@ export default function AlmacenMovimientos() {
       </div>
     </div>
     <QTable data={almacenMovimientos()} 
-      css="" tableCss="w-page"
-      maxHeight="calc(80vh - 13rem)" 
+      css="w100" tableCss="w-page w100"
+      maxHeight="calc(100vh - 8rem - 12px)" 
+      makeFilter={e => {
+        const producto = productosMap.get(e.ProductoID)?.Nombre || ""
+        const usuario = usuariosMap.get(e.CreatedBy||1)?.usuario || ""
+        return [producto, usuario].join(" ")
+      }}
+      filterText={filterText()}
       columns={[
+        { header: "Fecha Hora", css: "ff-mono",
+          getValue: e => formatTime(e.Created,"d-M h:n") as string
+        },
+        { header: "Almacén Origen", css: "",
+          render: e => almacenRender(e.AlmacenOrigenID, e.AlmacenOrigenCantidad)
+        },
+        { header: "Almacén Destino", css: "",
+          render: e => almacenRender(e.AlmacenID, e.AlmacenCantidad)
+        },
         { header: "Producto", css: "",
-          getValue: e => {
-            const producto = productos().productosMap.get(e.ProductoID)
-            return producto?.Nombre || `Producto-${e.ProductoID}`
+            render: e => {
+            const nombre = productosMap.get(e.ProductoID)?.Nombre || `Producto-${e.ProductoID}`
+            return makeHighlString(nombre, filterText())
           }
         },
-        { header: "Lote", css: "c-purple",
+        { header: "Lote", css: "c-purple t-c",
           getValue: e => e.Lote
         },
-        { header: "SKU", css: "c-purple",
+        { header: "SKU", css: "c-purple t-c",
           getValue: e => e.SKU
         },
-        { header: "Propiedades", css: "",
-          getValue: e => ""
+        { header: "Movimiento", css: "t-c",
+          render: e => {
+            const mov = movimientoTiposMap.get(e.Tipo)
+            return mov?.name || "-"
+          }
         },
-        { header: "Stock Min", cardColumn: [3,2], cardCss: "h5 c-steel", css: "t-c",
-          getValue: e => "", 
+        { header: "Cantidad", css: "t-r ff-mono",
+          render: e => {
+            return <div class={"flex jc-end " + (e.Cantidad < 0 ? "c-red" : "c-blue")}>
+              {e.Cantidad}
+            </div>
+          }
+        },
+        { header: "Usuario", cardColumn: [3,2], cardCss: "h5 c-steel", css: "t-c",
+          render: e => {
+            const usuario = usuariosMap.get(e.CreatedBy||1)?.usuario || `Usuario-${e.CreatedBy}`
+            return makeHighlString(usuario, filterText())
+          }
         },
       ]}
     />
