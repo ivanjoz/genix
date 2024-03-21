@@ -58,23 +58,35 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	for _, e := range stock {
 		movimiento := s.AlmacenMovimiento{
 			EmpresaID:  req.Usuario.EmpresaID,
-			AlmacenID:  e.AlmacenID,
 			ProductoID: e.ProductoID,
 			SKU:        e.SKU,
 			Lote:       e.Lote,
-			Cantidad:   e.Cantidad,
-			Tipo:       1, // Movimiento Manual
 			Created:    nowTime,
 			CreatedBy:  req.Usuario.ID,
 		}
+
+		stockCurrent := int32(0)
 		if current, ok := currentStockMap[e.ID]; ok {
-			movimiento.AlmacenCantidad = current.Cantidad
-			movimiento.Cantidad = e.Cantidad - current.Cantidad
+			stockCurrent = current.Cantidad
 		}
+		movimiento.Cantidad = e.Cantidad - stockCurrent
+
+		if movimiento.Cantidad > 0 {
+			movimiento.Tipo = 1
+			movimiento.AlmacenID = e.AlmacenID
+			movimiento.AlmacenCantidad = stockCurrent
+		} else {
+			movimiento.Tipo = 2
+			movimiento.AlmacenOrigenID = e.AlmacenID
+			movimiento.AlmacenOrigenCantidad = stockCurrent
+		}
+
 		movimiento.SelfParse()
 		movimiento.AssignID()
 		movimientos = append(movimientos, movimiento)
 	}
+
+	core.Print(movimientos)
 
 	core.Log("movimientos a insertar::", len(movimientos), "|", len(currentStock))
 
@@ -102,34 +114,43 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	type Result struct {
-		AlmacenMovimientos []s.AlmacenMovimiento
-		Usuarios           []s.Usuario
-		Productos          []s.Producto
+		Movimientos []s.AlmacenMovimiento
+		Usuarios    []s.Usuario
+		Productos   []s.Producto
 	}
 
 	result := Result{}
 
-	query := core.DBSelect(&result.AlmacenMovimientos, "id", "empresa_id").
+	err := core.DBSelect(&result.Movimientos, "id", "empresa_id").
 		Where("empresa_id").Equals(req.Usuario.EmpresaID).
 		Where("sk_almacen_created").GreatEq(core.ConcatInt64(almacenID, fechaHoraInicio)).
-		Where("sk_almacen_created").LessEq(core.ConcatInt64(almacenID, fechaHoraFin))
+		Where("sk_almacen_created").LessEq(core.ConcatInt64(almacenID, fechaHoraFin)).
+		OrderDescending().Limit(1000).Exec()
 
-	query.Limit = 1000
-	err := query.Exec()
 	if err != nil {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)
 	}
 
-	core.Log("movimientos encontrados:", len(result.AlmacenMovimientos))
+	err = core.DBSelect(&result.Movimientos, "id", "empresa_id").
+		Where("empresa_id").Equals(req.Usuario.EmpresaID).
+		Where("sk_almacen_origen_created").GreatEq(core.ConcatInt64(almacenID, fechaHoraInicio)).
+		Where("sk_almacen_origen_created").LessEq(core.ConcatInt64(almacenID, fechaHoraFin)).
+		OrderDescending().Limit(1000).Exec()
 
-	if len(result.AlmacenMovimientos) == 0 {
+	if err != nil {
+		return req.MakeErr("Error al obtener los registros del almacén:", err)
+	}
+
+	core.Log("movimientos encontrados:", len(result.Movimientos))
+
+	if len(result.Movimientos) == 0 {
 		return req.MakeResponse(result)
 	}
 
 	usuariosSet := core.SliceInclude[int32]{}
 	productosSet := core.SliceInclude[int32]{}
 
-	for _, e := range result.AlmacenMovimientos {
+	for _, e := range result.Movimientos {
 		usuariosSet.Add(e.CreatedBy)
 		productosSet.Add(e.ProductoID)
 	}

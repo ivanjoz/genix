@@ -17,6 +17,22 @@ export const throttle = (func: () => void, delay: number) => {
   n (minutos) = 20
   s (segundos)
 */
+
+const mesesMap = new Map([
+  ['01', { es: 'ENE', en: 'JAN' } ],
+  ['02', { es: 'FEB', en: 'FEB' } ],
+  ['03', { es: 'MAR', en: 'MAR' } ],
+  ['04', { es: 'ABR', en: 'APR' } ],
+  ['05', { es: 'MAY', en: 'MAY' } ],
+  ['06', { es: 'JUN', en: 'JUN' } ],
+  ['07', { es: 'JUL', en: 'JUL' } ],
+  ['08', { es: 'AGO', en: 'AGO' } ],
+  ['09', { es: 'SEP', en: 'SEP' } ],
+  ['10', { es: 'OCT', en: 'OCT' } ],
+  ['11', { es: 'NOV', en: 'NOV' } ],
+  ['12', { es: 'DIC', en: 'DEC' } ],
+])
+
 export const formatTime = (date: Date | number | string, layout?: string): (Date | string) => {
   
   let d // Objeto fecha a parsear
@@ -93,6 +109,8 @@ export const formatTime = (date: Date | number | string, layout?: string): (Date
         fechaStr += year; break
       case "m":
         fechaStr += mes; break
+      case "M":
+        fechaStr += mesesMap.get(mes)?.es || "?"; break
       case "d":
         fechaStr += dia; break
       case "h":

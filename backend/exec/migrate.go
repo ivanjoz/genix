@@ -38,8 +38,7 @@ func makeController[T any]() ScyllaController {
 	GetRecords := func(empresaID, limit int32, lastKey any) ([]T, error) {
 		records := []T{}
 
-		query := core.DBSelect(&records)
-		query.Limit = core.If(limit > 0, limit, 0)
+		query := core.DBSelect(&records).Limit(core.If(limit > 0, limit, 0))
 
 		if _, ok := scyllaTable.ColumnsMap["empresa_id"]; ok {
 			query = query.Where("empresa_id").Equals(empresaID)
