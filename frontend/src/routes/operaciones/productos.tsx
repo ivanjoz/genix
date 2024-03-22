@@ -10,7 +10,7 @@ import { SearchSelect } from "~/components/SearchSelect";
 import { throttle } from "~/core/main";
 import { pageView } from "~/core/menu";
 import { PageContainer } from "~/core/page";
-import { IProducto, IProductoImage, IProductoPropiedad, postProducto, useProductosAPI } from "~/services/operaciones/productos";
+import { IProducto, IProductoImage, IProductoPropiedad, IProductoPropiedades, postProducto, useProductosAPI } from "~/services/operaciones/productos";
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
 import { formatN } from "~/shared/main";
 import { ImageUploader } from "~/components/Uploaders";
@@ -71,6 +71,8 @@ export default function Productos() {
     productoForm().Images = productoForm().Images.filter(e => e.n !== ImageToDelete)
     setProductoForm({...productoForm()})
   }
+
+  let counter = -1
   
   return <PageContainer title="Productos"
     views={[[1,"Productos"],[2,"Parámetros"]]}
@@ -163,81 +165,94 @@ export default function Productos() {
             <Input saveOn={productoForm()} save="Nombre" required={true}
               css="w-24x mb-10" label="Nombre" 
             />
-            <div class="w-08x flex ai-center mb-10 wc-60-40 z20">
-              <Input saveOn={productoForm()} save="Peso" 
-                label="Peso" type="number"
-              />
-              <SearchSelect saveOn={productoForm()} save="PesoT" placeholder=" "
-                label="-" keys="i.v" options={[
-                  {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
-                ]}
-              />
+            <div class="flex w100-10">
+              <div class="w-05x no-shrink">
+                <ImageUploader cardStyle={{ width: 'calc(100% - 4px)', "margin-left": '4px' }}/>
+              </div>
+              <div class="flex-wrap grow-1 ac-baseline">
+                <Input saveOn={productoForm()} save="Peso" css="w-07x mb-10"
+                  label="Peso" type="number"
+                />
+                <SearchSelect saveOn={productoForm()} save="PesoT" placeholder=" "
+                  label="-" keys="i.v" css="w-05x mb-10"
+                  options={[
+                    {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
+                  ]}
+                />
+                <Input saveOn={productoForm()} save="Volumen" css="w-07x mb-10"
+                  label="Volumen" type="number"
+                />
+                <SearchSelect saveOn={productoForm()} save="VolumenT" placeholder=" "
+                  label="-" keys="i.v" css="w-05x mb-10"
+                  options={[
+                    {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
+                  ]}
+                />
+                <Input saveOn={productoForm()} save="Precio" id={1}
+                  css="w-07x mb-10" label="Precio Base" type="number"
+                  onChange={() => {
+                    const form = productoForm()
+                    form.PrecioFinal = form.Precio * (1-(form.Descuento||100)/100)
+                    refreshInput([3])
+                  }}
+                />
+                <Input saveOn={productoForm()} save="Descuento" 
+                  css="w-05x mb-10" label="Desc." type="number"
+                  postValue={<div class="p-abs pos-v c-steel1">%</div>}
+                  onChange={() => {
+                    const form = productoForm()
+                    form.PrecioFinal = form.Precio * (1-(form.Descuento||100)/100)
+                    refreshInput([3])
+                  }}
+                />
+                <Input saveOn={productoForm()} save="PrecioFinal" id={3}
+                  css="w-07x mb-10" label="Precio Final" type="number"
+                  onChange={() => {
+                    const form = productoForm()
+                    form.Precio = form.PrecioFinal / (1-(form.Descuento||100)/100)
+                    refreshInput([1])
+                  }}
+                />
+                <SearchSelect saveOn={productoForm()} save="Moneda" placeholder=" "
+                  css="w-05x mb-10" 
+                  label="Moneda" keys="i.v" options={[
+                    {i:1, v:"PEN (S/.)"},{i:2, v:"g"},{i:3, v:"Libras"}
+                  ]}
+                />
+              </div>
             </div>
-            <div class="w-08x flex ai-center mb-10 wc-60-40 z20">
-              <Input saveOn={productoForm()} save="Volumen" 
-                label="Volumen" type="number"
-              />
-              <SearchSelect saveOn={productoForm()} save="VolumenT" placeholder=" "
-                label="-" keys="i.v" options={[
-                  {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
-                ]}
-              />
-            </div>
-            <SearchSelect saveOn={productoForm()} save="Moneda" placeholder=" "
-              css="w-08x mb-10" 
-              label="Moneda" keys="i.v" options={[
-                {i:1, v:"PEN (S/.)"},{i:2, v:"g"},{i:3, v:"Libras"}
-              ]}
-            />
-            <Input saveOn={productoForm()} save="Precio" id={1}
-              css="w-05x mb-10" label="Precio Base" type="number"
-              onChange={() => {
-                const form = productoForm()
-                form.PrecioFinal = form.Precio * (1-(form.Descuento||100)/100)
-                refreshInput([3])
-              }}
-            />
-            <Input saveOn={productoForm()} save="Descuento" 
-              css="w-05x mb-10" label="Descuento" type="number"
-              postValue={<div class="p-abs pos-v c-steel1">%</div>}
-              onChange={() => {
-                const form = productoForm()
-                form.PrecioFinal = form.Precio * (1-(form.Descuento||100)/100)
-                refreshInput([3])
-              }}
-            />
-            <Input saveOn={productoForm()} save="PrecioFinal" id={3}
-              css="w-06x mb-10" label="Precio Final" type="number"
-              onChange={() => {
-                const form = productoForm()
-                form.Precio = form.PrecioFinal / (1-(form.Descuento||100)/100)
-                refreshInput([1])
-              }}
-            />
             <div class="w-24x mb-10 flex jc-end">
               <CheckBoxContainer options={[ { v: 1, n: 'SKU Individual' } ]} 
                 keys="v.n" saveOn={productoForm()} save="Params" />
             </div>
-            <div class="w-24x">Sub-Unidades</div>
-            <Input saveOn={productoForm()} save="SbnCantidad" 
-              css="w-04x mb-10" label="Cantidad" type="number"
-            />
-            <Input saveOn={productoForm()} save="SbnUnidad" 
-              css="w-06x mb-10" label="Nombre"
-            />
-            <Input saveOn={productoForm()} save="SbnPrecio" 
-              css="w-05x mb-10" label="Precio Base" type="number"
-            />
-            <Input saveOn={productoForm()} save="SbnDescuento" 
-              postValue={<div class="p-abs pos-v c-steel1">%</div>}
-              css="w-04x mb-10" label="Descuento" type="number"
-            />
-            <Input saveOn={productoForm()} save="SbnPreciFinal" 
-              css="w-05x mb-10" label="Precio Final" type="number"
-            />
+            <div class="ff-bold h3 mb-08">
+              <div class="ml-08">Sub-Unidades</div>
+            </div>
+            <div class="flex w100">
+              <div class="w-05x no-shrink">
+                <Input saveOn={productoForm()} save="SbnUnidad" 
+                  css="w100 mb-10" label="Nombre"
+                />
+              </div>
+              <div class="flex-wrap grow-1">
+                <Input saveOn={productoForm()} save="SbnPrecio" 
+                  css="w-07x mb-10" label="Precio Base" type="number"
+                />
+                <Input saveOn={productoForm()} save="SbnDescuento" 
+                  postValue={<div class="p-abs pos-v c-steel1">%</div>}
+                  css="w-05x mb-10" label="Descuento" type="number"
+                />
+                <Input saveOn={productoForm()} save="SbnPreciFinal" 
+                  css="w-07x mb-10" label="Precio Final" type="number"
+                />
+                <Input saveOn={productoForm()} save="SbnCantidad" 
+                  css="w-05x mb-10" label="Cantidad" type="number"
+                />
+              </div>
+            </div>
           </div>
           <div class="w100 py-04 px-04">
-            <QTable data={productoForm().Propiedades||[]}
+            <QTable data={(productoForm().Propiedades||[]).filter(x => x.Status)}
               maxHeight="40rem" tableCss="single-color"
               columns={[
                 { header: "Propiedad", headerStyle: { width: '8rem' },
@@ -248,7 +263,16 @@ export default function Productos() {
                 },
                 { header: "Opciones", cardColumn: [3,2],
                   render: e => {
-                    return <CellTextOptions saveOn={e} save="Options" />
+                    return <CellTextOptions saveOn={e} save="Options" 
+                      getValue={(e: IProductoPropiedad) => e.nm}
+                      skipt={e => !e.ss}
+                      setValue={(e,content) => {
+                        e.nm = content
+                        e.ss = 1
+                        if(!e.id){ e.id = counter; counter-- }
+                        return e
+                      }}
+                    />
                   }
                 },
                 { header: <div>
@@ -256,7 +280,7 @@ export default function Productos() {
                       ev.stopPropagation()
                       const propiedades = [...productoForm().Propiedades]
                       const id = propiedades.length > 0 ? max(propiedades.map(x => x.ID)) : 0
-                      propiedades.push({ ID: id + 1, Options: [] } as IProductoPropiedad)
+                      propiedades.push({ ID: id + 1, Status: 1, Options: [] } as IProductoPropiedades)
                       productoForm().Propiedades = propiedades
                       setProductoForm({...productoForm()})
                     }}>

@@ -31,8 +31,8 @@ type Producto struct {
 	SbnDescuento  float32 `json:",omitempty" db:"sbn_decuento"`
 	SbnPreciFinal float32 `json:",omitempty" db:"sbn_precio_final"`
 
-	Propiedades []ProductoPropiedad `json:",omitempty" db:"propiedades"`
-	Images      []ProductoImagen    `json:",omitempty" db:"images"`
+	Propiedades []ProductoPropiedades `json:",omitempty" db:"propiedades"`
+	Images      []ProductoImagen      `json:",omitempty" db:"images"`
 	// Propiedades generales
 	Status    int8  `json:"ss,omitempty" db:"status,view"`
 	Updated   int64 `json:"upd,omitempty" db:"updated,view"`
@@ -42,9 +42,17 @@ type Producto struct {
 }
 
 type ProductoPropiedad struct {
-	ID      int16    `ms:"i"`
-	Nombre  string   `ms:"n"`
-	Options []string `ms:"o"`
+	ID     int16  `json:"id,omitempty" ms:"i"`
+	Nombre string `json:"nm,omitempty" ms:"n"`
+	Status int8   `json:"ss,omitempty" ms:"s"`
+}
+
+type ProductoPropiedades struct {
+	ID         int16                         `ms:"i"`
+	Nombre     string                        `ms:"n"`
+	Options    []ProductoPropiedad           `ms:"o"`
+	Status     int8                          `ms:"s"`
+	OptionsMap map[string]*ProductoPropiedad `json:"-" ms:"-"`
 }
 
 type Almacen struct {

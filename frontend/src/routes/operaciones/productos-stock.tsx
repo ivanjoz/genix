@@ -1,24 +1,25 @@
 import { Notify } from "notiflix"
-import { Show, createSignal } from "solid-js"
+import { Show, createEffect, createSignal } from "solid-js"
 import { CellEditable } from "~/components/Editables"
 import { CheckBox, Input } from "~/components/Input"
 import { CornerLayer, setOpenLayers } from "~/components/Modals"
 import { QTable } from "~/components/QTable"
-import { SearchSelect } from "~/components/SearchSelect"
+import { SearchSelect, makeHighlString } from "~/components/SearchSelect"
 import { Loading, throttle } from "~/core/main"
 import { PageContainer } from "~/core/page"
 import { IProductoStock, getProductosStock, postProductosStock, useProductosAPI } from "~/services/operaciones/productos"
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes"
 import { formatN } from "~/shared/main"
+import { Params } from "~/shared/security"
 
 export default function ProductosStock() {
 
   const [productosStock, setProductosStock] = createSignal([] as IProductoStock[])
   const [productos] = useProductosAPI()
   const [almacenes] = useSedesAlmacenesAPI()
-  const [form, setForm] = createSignal({})
+  const [form, setForm] = createSignal({ almacenID: 0 })
   const [formStock, setFormStock] = createSignal({} as IProductoStock)
-  const [almacenSelected, setAlmacenSelected] = createSignal(0)
+  const [almacenSelected, setAlmacenSelected] = createSignal(-1)
   const [keysUpdated, setKeysUpdated] = createSignal(new Set() as Set<string>)
   const [todosProductosCheck, setTodosProductosCheck] = createSignal(false)
 
@@ -34,13 +35,25 @@ export default function ProductosStock() {
     }
     console.log("productos stock::", stock)
     setProductosStock(stock)
-
+    Params.setValue("almacen_id", almacenID)
+    
     for(let e of stock){
       const key = [e.ProductoID,e.SKU||"0",e.Lote||"0"].join("_")
       productoStockMap.set(key,e)
     }
     Loading.remove(); return
   }
+
+  createEffect(() => {
+    if(almacenSelected() == -1 && almacenes()?.Almacenes?.length > 0){
+      const form_ = form()
+      form_.almacenID = Params.getValueInt("almacen_id") || 0
+      if(!form_.almacenID){ form_.almacenID = almacenes().Almacenes[0].ID }
+      setAlmacenSelected(form_.almacenID)
+      setForm({...form_ })
+      getStock(form_.almacenID)
+    }
+  })
 
   const addProductoStock = (rec: IProductoStock) => {
     if(!rec.ProductoID || !rec.Cantidad){
@@ -171,11 +184,16 @@ export default function ProductosStock() {
     <QTable data={productosStock()} 
       css="" tableCss="w-page"
       maxHeight="calc(80vh - 13rem)" 
+      filterText={filterText()}
+      makeFilter={e => {
+        const producto = productos().productosMap.get(e.ProductoID)?.Nombre || ""
+        return producto
+      }}
       columns={[
         { header: "Producto", css: "",
-          getValue: e => {
-            const producto = productos().productosMap.get(e.ProductoID)
-            return producto?.Nombre || `Producto-${e.ProductoID}`
+          render: e => {
+            const producto = productos().productosMap.get(e.ProductoID)?.Nombre || `P-${e.ProductoID}`
+            return makeHighlString(producto, filterText())
           }
         },
         { header: "Lote", css: "c-purple",

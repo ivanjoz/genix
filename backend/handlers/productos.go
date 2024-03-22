@@ -44,18 +44,21 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
-	records := []s.Producto{}
-	err := json.Unmarshal([]byte(*req.Body), &records)
+	productos := []s.Producto{}
+	err := json.Unmarshal([]byte(*req.Body), &productos)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
+	productosIDsSet := core.SliceInclude[int32]{}
 	createCounter := 0
 
-	for _, e := range records {
+	for _, e := range productos {
 		if e.ID < 1 {
 			createCounter++
 			e.TempID = e.ID
+		} else {
+			productosIDsSet.Add(e.ID)
 		}
 		if len(e.Nombre) < 4 {
 			return req.MakeErr("Faltan propiedades de en el producto.")
@@ -70,10 +73,21 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
+	productosCurrent := []s.Producto{}
+	err = core.DBSelect(&productosCurrent).
+		Where("id").In(core.ToAny(productosIDsSet.Values)).Exec()
+
+	if err != nil {
+		return req.MakeErr("Error al obtener los productos actuales.", counter)
+	}
+
+	productosCurrentMap := core.SliceToMapK(productosCurrent,
+		func(e s.Producto) int32 { return e.ID })
+
 	nowTime := time.Now().Unix()
 
-	for i := range records {
-		e := &records[i]
+	for i := range productos {
+		e := &productos[i]
 		if e.ID < 1 {
 			e.ID = int32(counter)
 			e.Created = nowTime
@@ -85,14 +99,79 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		e.EmpresaID = req.Usuario.EmpresaID
 		e.Updated = nowTime
+
+		current := productosCurrentMap[e.ID]
+
+		// Lógica para hacer un merge de las propiedades de los productos
+		optionMaxID := int16(0)
+		propiedadesMap := map[int16]*s.ProductoPropiedades{}
+
+		if current != nil {
+			for i := range current.Propiedades {
+				e := &current.Propiedades[i]
+				e.Status = 0
+				e.OptionsMap = map[string]*s.ProductoPropiedad{}
+				propiedadesMap[e.ID] = e
+				for _, opt := range e.Options {
+					if opt.ID > optionMaxID {
+						optionMaxID = opt.ID
+					}
+					e.OptionsMap[core.NormaliceString(&opt.Nombre)] = &opt
+				}
+			}
+		}
+
+		for _, propiedad := range e.Propiedades {
+			if _, ok := propiedadesMap[propiedad.ID]; !ok {
+				propiedadesMap[propiedad.ID] = &s.ProductoPropiedades{
+					ID:         propiedad.ID,
+					Nombre:     propiedad.Nombre,
+					OptionsMap: map[string]*s.ProductoPropiedad{},
+					Status:     1,
+				}
+			}
+			propiedadCurrent := propiedadesMap[propiedad.ID]
+			propiedadCurrent.Nombre = propiedad.Nombre
+			propiedadCurrent.Status = propiedad.Status
+			nombresUsedSet := core.SliceInclude[string]{}
+
+			for i := range propiedad.Options {
+				opt := &propiedad.Options[i]
+				if len(opt.Nombre) == 0 {
+					continue
+				}
+
+				nombre := core.NormaliceString(&opt.Nombre)
+				nombresUsedSet.Add(nombre)
+
+				if optCurrent, ok := propiedadCurrent.OptionsMap[nombre]; ok {
+					optCurrent.Status = opt.Status
+				} else {
+					opt.ID = int16(optionMaxID) + 1
+					optionMaxID++
+					opt.Status = 1
+					propiedadCurrent.OptionsMap[nombre] = opt
+				}
+			}
+
+			for nombre, opt := range propiedadCurrent.OptionsMap {
+				if !nombresUsedSet.Include(nombre) {
+					opt.Status = 0
+				}
+			}
+
+			propiedadCurrent.Options = core.MapToSlice(propiedadCurrent.OptionsMap)
+		}
+
+		e.Propiedades = core.MapToSlice(propiedadesMap)
 	}
 
-	err = core.DBInsert(&records)
+	err = core.DBInsert(&productos)
 	if err != nil {
 		return req.MakeErr("Error al actualizar / insertar la sede: " + err.Error())
 	}
 
-	return req.MakeResponse(records)
+	return req.MakeResponse(productos)
 }
 
 type productoImage struct {

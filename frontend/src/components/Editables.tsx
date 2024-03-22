@@ -82,30 +82,37 @@ export function CellEditable<T>(props: ICellEditable<T>) {
   </div>
 }
 
-interface ICellTextOptions<T> {
+interface ICellTextOptions<T,Y> {
   saveOn: T
   class?: string
   save?: string
+  getValue?: (e: Y) => string
+  setValue?: (e: Y, value: string) => Y
+  skipt?: (e: Y) => boolean
 }
 
-export function CellTextOptions<T>(props: ICellTextOptions<T>) {
+export function CellTextOptions<T,Y>(props: ICellTextOptions<T,Y>) {
+  const getValue = props.getValue || ((e: Y) => e)  
+  const setValue = props.setValue || ((_: Y, v: string) => v)  
 
-  const values = ((props.saveOn[props.save as keyof T] || []) as string[]
+  const values = ((props.saveOn[props.save as keyof T] || []) as (Y|string)[]
     ).filter(x => x)
-  values.push("")
+  
+  values.push(setValue({} as Y,""))
 
   const [currentValues, setCurrentValues] = createSignal(values)
-    
+
   return <div class={"flex-wrap ai-center p-rel " +(props.class||"")}>
     { currentValues().map((e,i) => {
+      if(props.skipt && props.skipt(e as Y)){ return null }
       return <CellTextOption 
-        defaultValue={e}
+        defaultValue={getValue(e as Y) as string}
         onBlur={content => {
           let values = [...currentValues()]
-          values[i] = content
-          values = values.filter(x => x)
+          values[i] = setValue(values[i] as Y, content)
+          values = values.filter(x => getValue(x as Y))
           props.saveOn[props.save as keyof T] = values as never
-          values.push("")
+          values.push(setValue({} as Y,""))
           console.log("nuevos valores:: ", [...values])
           setCurrentValues(values)
         }}/>
@@ -119,7 +126,7 @@ interface ICellTextOption {
   onBlur: ((e: string) => void)
 }
 
-export function CellTextOption(props: ICellTextOption) {
+export function CellTextOption<Y>(props: ICellTextOption) {
 
   const [value, setValue] = createSignal(props.defaultValue)
   const [show, setShow] = createSignal(false)
