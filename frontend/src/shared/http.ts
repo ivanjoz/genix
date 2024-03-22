@@ -181,6 +181,10 @@ const checkIdbTables = (props: httpProps) => {
   } else {
     for(let key of keyPath) props.idbTableSchema[key] = -1
   }
+
+  if(props.partition){
+    props.idbTableSchema[props.partition.key] = props.partition.value
+  }
 }
 
 const extractError = (result: any): string => {
@@ -672,7 +676,7 @@ const searchOnIndexDB = async (props: httpProps): Promise<any[]> => {
   props.recordUpdated = record ? record[keyUpdated] : 0
   props.collections = record?.collections || {}
   
-  console.log('objeto flag de actualizacion::',record)
+  console.log('objeto flag de actualizacion::',record,baseObject)
   props.startTimeMs = Date.now()
   props.startTime = Math.floor(props.startTimeMs / 1000)
   const refreshTime = props.startTime - (60 * 60 * 2)

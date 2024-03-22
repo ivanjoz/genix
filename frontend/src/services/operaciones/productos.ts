@@ -4,7 +4,11 @@ import { arrayToMapN } from "~/shared/main"
 import { IUsuario } from "../admin/empresas"
 
 export interface IProductoPropiedad {
-  ID: number, Nombre: string, Options: string[]
+  id: number, nm: string, ss: number
+}
+
+export interface IProductoPropiedades {
+  ID: number, Nombre: string, Options: IProductoPropiedad[], Status: number
 }
 
 export interface IProductoImage {
@@ -19,7 +23,7 @@ export interface IProducto {
   Precio?: number
   Descuento?: number
   PrecioFinal?: number
-  Propiedades?: IProductoPropiedad[]
+  Propiedades?: IProductoPropiedades[]
   Peso?: number
   Volumen?: number
   SbnCantidad?: number
