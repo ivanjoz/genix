@@ -190,6 +190,7 @@ export default function Productos() {
                 />
                 <Input saveOn={productoForm()} save="Precio" id={1}
                   css="w-07x mb-10" label="Precio Base" type="number"
+                  baseDecimals={2}
                   onChange={() => {
                     const form = productoForm()
                     form.PrecioFinal = form.Precio * (1-(form.Descuento||100)/100)
@@ -203,10 +204,12 @@ export default function Productos() {
                     const form = productoForm()
                     form.PrecioFinal = form.Precio * (1-(form.Descuento||100)/100)
                     refreshInput([3])
+                    console.log("form::", form)
                   }}
                 />
                 <Input saveOn={productoForm()} save="PrecioFinal" id={3}
                   css="w-07x mb-10" label="Precio Final" type="number"
+                  baseDecimals={2}
                   onChange={() => {
                     const form = productoForm()
                     form.Precio = form.PrecioFinal / (1-(form.Descuento||100)/100)
@@ -235,14 +238,14 @@ export default function Productos() {
                 />
               </div>
               <div class="flex-wrap grow-1">
-                <Input saveOn={productoForm()} save="SbnPrecio" 
+                <Input saveOn={productoForm()} save="SbnPrecio" baseDecimals={2}
                   css="w-07x mb-10" label="Precio Base" type="number"
                 />
                 <Input saveOn={productoForm()} save="SbnDescuento" 
                   postValue={<div class="p-abs pos-v c-steel1">%</div>}
                   css="w-05x mb-10" label="Descuento" type="number"
                 />
-                <Input saveOn={productoForm()} save="SbnPreciFinal" 
+                <Input saveOn={productoForm()} save="SbnPreciFinal" baseDecimals={2}
                   css="w-07x mb-10" label="Precio Final" type="number"
                 />
                 <Input saveOn={productoForm()} save="SbnCantidad" 
