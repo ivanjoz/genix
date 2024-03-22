@@ -15,6 +15,7 @@ interface IInput<T> {
   disabled?: boolean
   onChange?: (() => void)
   postValue?: JSX.Element
+  baseDecimals?: number
 }
 
 const [inputUpdater, setInputUpdater] = createSignal(new Map as Map<number,number>)
@@ -29,6 +30,8 @@ export const refreshInput = (ids: number[]) => {
 }
 
 export function Input<T>(props: IInput<T>) {
+
+  const baseDecimals = props.baseDecimals ? 10 ** props.baseDecimals : 0
 
   const chekIfInputIsValid = (_props: IInput<T>): number => {
     if(!_props.required || _props.disabled){ return 0 }
@@ -52,19 +55,19 @@ export function Input<T>(props: IInput<T>) {
   const onKeyUp = (ev: KeyboardEvent) => {
     ev.stopPropagation()
     const target = ev.target as HTMLInputElement
-    setInputValue(target.value||"")
-    if(props.saveOn){
-      let value = target.value as (number|string)
-      if(props.type === 'number'){
-        if(isNaN(value as number)){ value === undefined }
-        else {
-          value = parseFloat(value as string)
-        }
+    let value = target.value as (number|string)
+    if(props.type === 'number'){
+      if(isNaN(value as number)){ value === undefined }
+      else {
+        value = parseFloat(value as string)
+        if(baseDecimals){ value = Math.round(value * baseDecimals)}
       }
+    }
+    if(props.saveOn && props.save){
       props.saveOn[props.save] = value as T[keyof T]
-      // console.log("is valid:: ", chekIfInputIsValid(props))
       setIsInputValid(chekIfInputIsValid(props))
     }
+    setInputValue(value)
   }
   
   createEffect(on(
@@ -86,13 +89,20 @@ export function Input<T>(props: IInput<T>) {
     }
   }
 
+  const getValue = () => {
+    const value = inputValue()
+    if(typeof value !== 'number'){ return value || "" }
+    return baseDecimals ? (value as number / baseDecimals) : value
+  }
+
   return <div class={cN}>
     { props.label && 
       <div class="mr-auto label">
         {props.label} { iconValid() }
       </div>
     }
-    <input class={"in-5 " + (props.inputCss||"") } value={inputValue()} 
+    <input class={"in-5 " + (props.inputCss||"") } 
+      value={getValue()} 
       onkeyup={ev => {
         onKeyUp(ev)
         isChange++

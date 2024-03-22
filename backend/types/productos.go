@@ -20,16 +20,16 @@ type Producto struct {
 	Descripcion   string  `json:",omitempty" db:"descripcion"`
 	GruposIDs     []int32 `json:",omitempty" db:"grupos_ids"`
 	Params        []int8  `json:",omitempty" db:"params_ids"`
-	Precio        float32 `json:",omitempty" db:"precio"`
+	Precio        int32   `json:",omitempty" db:"precio"`
 	Descuento     float32 `json:",omitempty" db:"descuento"`
-	PrecioFinal   float32 `json:",omitempty" db:"precio_final"`
+	PrecioFinal   int32   `json:",omitempty" db:"precio_final"`
 	Peso          float32 `json:",omitempty" db:"peso"`
 	Volumen       float32 `json:",omitempty" db:"volumen"`
-	SbnCantidad   float32 `json:",omitempty" db:"sbn_cantidad"`
+	SbnCantidad   int32   `json:",omitempty" db:"sbn_cantidad"`
 	SbnUnidad     string  `json:",omitempty" db:"sbn_unidad"`
-	SbnPrecio     float32 `json:",omitempty" db:"sbn_precio"`
+	SbnPrecio     int32   `json:",omitempty" db:"sbn_precio"`
 	SbnDescuento  float32 `json:",omitempty" db:"sbn_decuento"`
-	SbnPreciFinal float32 `json:",omitempty" db:"sbn_precio_final"`
+	SbnPreciFinal int32   `json:",omitempty" db:"sbn_precio_final"`
 
 	Propiedades []ProductoPropiedades `json:",omitempty" db:"propiedades"`
 	Images      []ProductoImagen      `json:",omitempty" db:"images"`
