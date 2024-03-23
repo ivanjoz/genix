@@ -1,7 +1,7 @@
 import { ConfirmWarn, Loading, Notify } from "~/core/main";
 import { max } from "simple-statistics";
 import { Show, createSignal } from "solid-js";
-import { BarOptions } from "~/components/Cards";
+import { BarOptions, CardSelect } from "~/components/Cards";
 import { CellEditable, CellTextOptions } from "~/components/Editables";
 import { CheckBoxContainer, Input, refreshInput } from "~/components/Input";
 import { SideLayer, openLayers, setOpenLayers } from "~/components/Modals";
@@ -15,6 +15,11 @@ import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
 import { formatN } from "~/shared/main";
 import { ImageUploader } from "~/components/Uploaders";
 import { POST } from "~/shared/http";
+
+const demooptions = [
+  { id: 1, name: "Option 1" },
+  { id: 2, name: "Option 2" },  
+]
 
 export default function Productos() {
 
@@ -165,93 +170,95 @@ export default function Productos() {
             <Input saveOn={productoForm()} save="Nombre" required={true}
               css="w-24x mb-10" label="Nombre" 
             />
-            <div class="flex w100-10">
-              <div class="w-05x no-shrink">
-                <ImageUploader cardStyle={{ width: 'calc(100% - 4px)', "margin-left": '4px' }}/>
-              </div>
-              <div class="flex-wrap grow-1 ac-baseline">
-                <Input saveOn={productoForm()} save="Peso" css="w-07x mb-10"
-                  label="Peso" type="number"
-                />
-                <SearchSelect saveOn={productoForm()} save="PesoT" placeholder=" "
-                  label="-" keys="i.v" css="w-05x mb-10"
-                  options={[
-                    {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
-                  ]}
-                />
-                <Input saveOn={productoForm()} save="Volumen" css="w-07x mb-10"
-                  label="Volumen" type="number"
-                />
-                <SearchSelect saveOn={productoForm()} save="VolumenT" placeholder=" "
-                  label="-" keys="i.v" css="w-05x mb-10"
-                  options={[
-                    {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
-                  ]}
-                />
-                <Input saveOn={productoForm()} save="Precio" id={1}
-                  css="w-07x mb-10" label="Precio Base" type="number"
-                  baseDecimals={2}
-                  onChange={() => {
-                    const form = productoForm()
-                    form.PrecioFinal = form.Precio * (1-(form.Descuento||100)/100)
-                    refreshInput([3])
-                  }}
-                />
-                <Input saveOn={productoForm()} save="Descuento" 
-                  css="w-05x mb-10" label="Desc." type="number"
-                  postValue={<div class="p-abs pos-v c-steel1">%</div>}
-                  onChange={() => {
-                    const form = productoForm()
-                    form.PrecioFinal = form.Precio * (1-(form.Descuento||100)/100)
-                    refreshInput([3])
-                    console.log("form::", form)
-                  }}
-                />
-                <Input saveOn={productoForm()} save="PrecioFinal" id={3}
-                  css="w-07x mb-10" label="Precio Final" type="number"
-                  baseDecimals={2}
-                  onChange={() => {
-                    const form = productoForm()
-                    form.Precio = form.PrecioFinal / (1-(form.Descuento||100)/100)
-                    refreshInput([1])
-                  }}
-                />
-                <SearchSelect saveOn={productoForm()} save="Moneda" placeholder=" "
-                  css="w-05x mb-10" 
-                  label="Moneda" keys="i.v" options={[
-                    {i:1, v:"PEN (S/.)"},{i:2, v:"g"},{i:3, v:"Libras"}
-                  ]}
-                />
-              </div>
+            <div class="flex-wrap ac-baseline w100 p-rel" 
+                style={{ "min-height": 'calc(14vh + 1rem)' }}>
+              <div class="w-05x p-rel">
+                <ImageUploader  cardStyle={{ width: '100%', position: 'absolute', 
+                  top: '0' }}/>
+              </div>            
+              <Input saveOn={productoForm()} save="Peso" css="w-055x mb-10"
+                label="Peso" type="number"
+              />
+              <SearchSelect saveOn={productoForm()} save="PesoT" placeholder=" "
+                label="-" keys="i.v" css="w-04x mb-10"
+                options={[
+                  {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
+                ]}
+              />
+              <Input saveOn={productoForm()} save="Volumen" css="w-055x mb-10"
+                label="Volumen" type="number"
+              />
+              <SearchSelect saveOn={productoForm()} save="VolumenT" placeholder=" "
+                label="-" keys="i.v" css="w-04x mb-10"
+                options={[
+                  {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
+                ]}
+              />
+              <div class="w-05x p-rel"></div>
+              <Input saveOn={productoForm()} save="Precio" id={1}
+                css="w-055x mb-10" label="Precio Base" type="number"
+                baseDecimals={2}
+                onChange={() => {
+                  const form = productoForm()
+                  form.PrecioFinal = form.Precio * (1-(form.Descuento||100)/100)
+                  refreshInput([3])
+                }}
+              />
+              <Input saveOn={productoForm()} save="Descuento" 
+                css="w-04x mb-10" label="Desc." type="number"
+                postValue={<div class="p-abs pos-v c-steel1">%</div>}
+                onChange={() => {
+                  const form = productoForm()
+                  form.PrecioFinal = form.Precio * (1-(form.Descuento||100)/100)
+                  refreshInput([3])
+                  console.log("form::", form)
+                }}
+              />
+              <Input saveOn={productoForm()} save="PrecioFinal" id={3}
+                css="w-055x mb-10" label="Precio Final" type="number"
+                baseDecimals={2}
+                onChange={() => {
+                  const form = productoForm()
+                  form.Precio = form.PrecioFinal / (1-(form.Descuento||100)/100)
+                  refreshInput([1])
+                }}
+              />
+              <SearchSelect saveOn={productoForm()} save="Moneda" placeholder=" "
+                css="w-04x mb-10" 
+                label="Moneda" keys="i.v" options={[
+                  {i:1, v:"PEN (S/.)"},{i:2, v:"g"},{i:3, v:"Libras"}
+                ]}
+              />
+             
             </div>
-            <div class="w-24x mb-10 flex jc-end">
+            <div class="w-24x mb-02 flex jc-end">
               <CheckBoxContainer options={[ { v: 1, n: 'SKU Individual' } ]} 
                 keys="v.n" saveOn={productoForm()} save="Params" />
+            </div>
+            <div class="w100 mb-08">
+              <CardSelect label="Categorías" options={demooptions} keys="id.name"
+                css="w-145x" />
             </div>
             <div class="ff-bold h3 mb-08">
               <div class="ml-08">Sub-Unidades</div>
             </div>
             <div class="flex w100">
-              <div class="w-05x no-shrink">
-                <Input saveOn={productoForm()} save="SbnUnidad" 
-                  css="w100 mb-10" label="Nombre"
-                />
-              </div>
-              <div class="flex-wrap grow-1">
-                <Input saveOn={productoForm()} save="SbnPrecio" baseDecimals={2}
-                  css="w-07x mb-10" label="Precio Base" type="number"
-                />
-                <Input saveOn={productoForm()} save="SbnDescuento" 
-                  postValue={<div class="p-abs pos-v c-steel1">%</div>}
-                  css="w-05x mb-10" label="Descuento" type="number"
-                />
-                <Input saveOn={productoForm()} save="SbnPreciFinal" baseDecimals={2}
-                  css="w-07x mb-10" label="Precio Final" type="number"
-                />
-                <Input saveOn={productoForm()} save="SbnCantidad" 
-                  css="w-05x mb-10" label="Cantidad" type="number"
-                />
-              </div>
+              <Input saveOn={productoForm()} save="SbnUnidad" 
+                css="w-05x mb-10" label="Nombre"
+              />
+              <Input saveOn={productoForm()} save="SbnPrecio" baseDecimals={2}
+                css="w-055x mb-10" label="Precio Base" type="number"
+              />
+              <Input saveOn={productoForm()} save="SbnDescuento" 
+                postValue={<div class="p-abs pos-v c-steel1">%</div>}
+                css="w-04x mb-10" label="Descuento" type="number"
+              />
+              <Input saveOn={productoForm()} save="SbnPreciFinal" baseDecimals={2}
+                css="w-055x mb-10" label="Precio Final" type="number"
+              />
+              <Input saveOn={productoForm()} save="SbnCantidad" 
+                css="w-04x mb-10" label="Cantidad" type="number"
+              />
             </div>
           </div>
           <div class="w100 py-04 px-04">

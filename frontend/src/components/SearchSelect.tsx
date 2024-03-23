@@ -19,6 +19,7 @@ interface SearchSelect<T> {
   clearOnSelect?: boolean
   avoidIDs?: number[]
   inputCss?: string
+  icon?: string
 }
 
 export function highlString(phrase: string, words: string[]) {
@@ -232,8 +233,8 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
         setShow(false)
       }}
     />
-    <div class={"_icon" + (show() ? " show" : "")}>
-      <i class="icon-down-open-1"></i>
+    <div class={"_icon" + ((show() && !props.icon) ? " show" : "")}>
+      <i class={props.icon || "icon-down-open-1"}></i>
     </div>
     { show() &&
       <div class={"search-ctn z20 w100" + (arrowSelected() >= 0 ? " on-arrow" : "")}
