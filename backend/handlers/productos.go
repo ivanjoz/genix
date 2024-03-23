@@ -74,11 +74,13 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	productosCurrent := []s.Producto{}
-	err = core.DBSelect(&productosCurrent).
-		Where("id").In(core.ToAny(productosIDsSet.Values)).Exec()
+	if len(productosIDsSet.Values) > 0 {
+		err = core.DBSelect(&productosCurrent).
+			Where("id").In(core.ToAny(productosIDsSet.Values)).Exec()
 
-	if err != nil {
-		return req.MakeErr("Error al obtener los productos actuales.", counter)
+		if err != nil {
+			return req.MakeErr("Error al obtener los productos actuales:", err)
+		}
 	}
 
 	productosCurrentMap := core.SliceToMapK(productosCurrent,

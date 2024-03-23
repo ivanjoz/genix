@@ -1,5 +1,7 @@
 import { Confirm, IConfirmOptions } from "notiflix";
-import { For, JSX, JSXElement, Show, createEffect, createSignal, on } from "solid-js";
+import { For, JSX, JSXElement, Show, createEffect, createMemo, createSignal, on } from "solid-js";
+import { SearchSelect } from "./SearchSelect";
+import { arrayToMapN } from "~/shared/main";
 
 interface ILayerAutoHide {
   children: JSXElement
@@ -97,5 +99,62 @@ export const BarOptions = (props: IBarOptions) => {
     }}
     </For>
     <div class="ln-1 p-abs z10"></div>
+  </div>
+}
+
+interface ICardSelect<T> {
+  label: string
+  options: T[]
+  keys: string
+  css: string
+}
+
+export function CardSelect<T>(props: ICardSelect<T>){
+
+  const [keyId, keyName] = props.keys.split(".") as [keyof T, keyof T]
+
+  const [selected, setSelected] = createSignal([])
+  const optionsMap = createMemo(() => {
+    return arrayToMapN(props.options, keyId as string)
+  })
+
+  return <div class={"p-rel search-c1 "+(props.css)}>
+    <div class="flex">
+      <SearchSelect options={props.options||[]} icon="icon-search"
+        label={""} placeholder={props.label} keys={props.keys}
+        clearOnSelect={true}
+        avoidIDs={selected()}
+        onChange={e => {
+          if(!e){ return }
+          console.log(e)
+          selected().push(e[keyId])
+          setSelected([...selected()])
+        }}
+      />
+    </div>
+    <div class="search-opts ac-center p-rel z10 flex-wrap">
+      <For each={selected()}>
+      {e => {
+        const opt = optionsMap().get(e)
+        let name = ""
+        if(opt){  name = opt[keyName] as string }
+        else {
+          name = `key-${keyId as string}`
+        }
+        return <div class="search-opt flex-center p-rel">
+          { name }
+          <div class="bn-close flex-center" onclick={ev =>{
+            ev.stopPropagation()
+            const newSelected = selected().filter(id => id !== e)
+            console.log("new selected::", newSelected)
+            setSelected(newSelected)
+          }}>
+            <i class="icon-cancel h5"></i>
+          </div>
+        </div>
+      }}
+      </For>
+      <div class="ln-1 p-abs z10"></div>
+    </div>
   </div>
 }
