@@ -1114,18 +1114,18 @@ body.is-animated .main-menu {
   color: var(--purple-3);
 }
 .search-opts {
-  min-height: 2.4rem;
-  padding-bottom: 1px;
+  min-height: calc(1.7rem + 9px);
   background-color: #e2e2f0;
   border-radius: 0 7px 7px 7px;
-  padding: 0 6px;
+  padding: 1px 6px 0 6px;
+  box-shadow: #5d588736 0px 2px 2px 0px;
 }
 .search-opt {
   background-color: white;
   border-radius: 5px;
   padding: 0 7px;
-  height: 1.8rem;
-  margin: 3px;
+  height: 1.7rem;
+  margin: 3px 3px 3px 3px; 
   line-height: 1;
   cursor: pointer;
 }
@@ -1134,8 +1134,8 @@ body.is-animated .main-menu {
 }
 .search-opt .bn-close {
   opacity: 0;
-  height: calc(1.8rem - 2px);
-  width: calc(1.8rem - 2px);
+  height: calc(1.7rem - 2px);
+  width: calc(1.7rem - 2px);
   border-radius: 35%;
   background-color: rgb(255, 205, 205);
   position: absolute;

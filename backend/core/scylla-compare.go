@@ -59,7 +59,7 @@ func InitTable[T any](mode int8) {
 
 	columnNamesMap := map[string]BDColumn{}
 
-	for _, e := range scyllaTable.Columns {
+	for _, e := range scyllaTable.ColumnsMap {
 		columnNamesMap[e.Name] = e
 	}
 
@@ -142,21 +142,21 @@ func InitTable[T any](mode int8) {
 		tableViewsSlice.Add(e.ViewName)
 	}
 
-	for columnName, viewName := range scyllaTable.Views {
+	for _, view := range scyllaTable.Views {
 
-		if tableViewsSlice.Include(strings.Split(viewName, ".")[1]) {
+		if tableViewsSlice.Include(strings.Split(view.Name, ".")[1]) {
 			continue
 		}
 
-		Logx(5, fmt.Sprintf(`No se encontró la view "%v" en la tabla "%v". Preparando creación...`+"\n", viewName, scyllaTable.NameSingle))
+		Logx(5, fmt.Sprintf(`No se encontró la view "%v" en la tabla "%v". Preparando creación...`+"\n", view.Name, scyllaTable.NameSingle))
 
-		whereColumns := []string{columnName, scyllaTable.PrimaryKey}
+		whereColumns := []string{view.ColumnName, scyllaTable.PrimaryKey}
 		pk := strings.Join(whereColumns, ",")
 
 		if len(scyllaTable.PartitionKey) > 0 {
-			whereColumns = []string{scyllaTable.PartitionKey, columnName, scyllaTable.PrimaryKey}
+			whereColumns = []string{scyllaTable.PartitionKey, view.ColumnName, scyllaTable.PrimaryKey}
 			pk = fmt.Sprintf("(%v), %v, %v",
-				scyllaTable.PartitionKey, columnName, scyllaTable.PrimaryKey)
+				scyllaTable.PartitionKey, view.ColumnName, scyllaTable.PrimaryKey)
 		}
 
 		whereColumnsNotNull := []string{}
@@ -169,7 +169,7 @@ func InitTable[T any](mode int8) {
 		if len(scyllaTable.ViewsExcluded) > 0 {
 			selectColumnNames := []string{}
 			for _, e := range scyllaTable.Columns {
-				if e.Name == columnName || !Contains(scyllaTable.ViewsExcluded, e.Name) {
+				if e.Name == view.ColumnName || !Contains(scyllaTable.ViewsExcluded, e.Name) {
 					selectColumnNames = append(selectColumnNames, e.Name)
 				}
 			}
@@ -186,16 +186,16 @@ func InitTable[T any](mode int8) {
 			and compression = {'compression_level': '3', 'sstable_compression': 'org.apache.cassandra.io.compress.ZstdCompressor'}
 			and dclocal_read_repair_chance = 0
 			and speculative_retry = '99.0PERCENTILE';`,
-			viewName, selectColumns, scyllaTable.Name, strings.Join(whereColumnsNotNull, " AND "), pk)
+			view.Name, selectColumns, scyllaTable.Name, strings.Join(whereColumnsNotNull, " AND "), pk)
 
 		Log(query)
 
 		err := conn.Query(query).Exec()
 		if err != nil {
 			Log(err)
-			panic(fmt.Sprintf(`Error creando view "%v"`, viewName))
+			panic(fmt.Sprintf(`Error creando view "%v"`, view.Name))
 		}
 
-		Logx(2, fmt.Sprintf(`View creada: "%v"`+"\n", viewName))
+		Logx(2, fmt.Sprintf(`View creada: "%v"`+"\n", view.Name))
 	}
 }

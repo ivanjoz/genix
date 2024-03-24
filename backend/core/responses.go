@@ -39,6 +39,7 @@ type HandlerArgs struct {
 }
 
 func PrintMemUsage() {
+	return
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 	// memory := m.TotalAlloc / 1024 / 1024
@@ -64,14 +65,14 @@ func CompressBrotliOnFile(filePath string) []byte {
 	}
 	defer fileOutput.Close()
 
-	writer := brotli.NewWriterLevel(fileOutput, 5)
+	writer := brotli.NewWriterV2(fileOutput, 4)
 
 	_, err = io.Copy(writer, fileInput)
 	if err != nil {
 		panic("Error al comprimir output file brotli. " + err.Error())
 	}
 
-	err = writer.Flush()
+	err = writer.Close()
 	if err != nil {
 		panic(err)
 	}
@@ -235,7 +236,7 @@ func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTT
 		// Log(body)
 		bodyBytes := []byte(body)
 		bodyCompressed := bytes.Buffer{}
-		writer := brotli.NewWriterOptions(&bodyCompressed, brotli.WriterOptions{Quality: 2})
+		writer := brotli.NewWriterV2(&bodyCompressed, 4)
 		in := bytes.NewReader(bodyBytes)
 		n, err := io.Copy(writer, in)
 		if err != nil {

@@ -38,4 +38,5 @@ var ExecHandlersTesting = ExecRouterType{
 	"fn023": Test23,
 	"fn024": Test24,
 	"fn025": Test25,
+	"fn026": Test26,
 }

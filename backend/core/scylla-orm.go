@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"reflect"
-	"sort"
 	"strings"
 	"time"
 
@@ -137,7 +136,7 @@ type ScyllaTable struct {
 	Columns       []BDColumn
 	ColumnsMap    map[string]BDColumn
 	Indexes       map[string]BDIndex
-	Views         map[string]string
+	Views         map[string]ScyllaView
 	ViewsExcluded []string
 }
 
@@ -202,6 +201,12 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 		indexes = append(indexes, index)
 	}
 
+	for _, view := range scyllaTable.Views {
+		if view.Idx > 0 {
+			columnsNames = append(columnsNames, view.ColumnName)
+		}
+	}
+
 	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES `,
 		scyllaTable.Name, strings.Join(columnsNames, ", "))
 
@@ -220,6 +225,15 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 		for _, index := range indexes {
 			v := fmt.Sprintf("%v", index.MakeIntHash(refValue))
 			recordInsertValues = append(recordInsertValues, v)
+		}
+
+		for _, view := range scyllaTable.Views {
+			if view.Idx > 0 {
+				if baseI, ok := any(rec).(IGetView); ok {
+					v := parseValueToString(baseI.GetView(view.Idx))
+					recordInsertValues = append(recordInsertValues, v)
+				}
+			}
 		}
 
 		statement := " " + queryStrInsert + "(" + strings.Join(recordInsertValues, ", ") + ")"
@@ -306,7 +320,6 @@ func DBSelectReflect(records *[]reflect.Type, columnsToAvoid ...string) *QuerySe
 type QueryParams struct {
 	Type      int8
 	Columns   []string
-	Value     any
 	Values    []any
 	Operator  string
 	Connector string
@@ -353,13 +366,17 @@ func (e *QuerySelect[T]) checkError(name string) (string, *QueryParams) {
 	}
 }
 
-func (e *QuerySelect[T]) addOperator(name string, value any) *QuerySelect[T] {
+func (e *QuerySelect[T]) addOperator(name string, values []any) *QuerySelect[T] {
 	errMsg, current := e.checkError(name)
 	if len(errMsg) > 0 {
 		panic(errMsg)
 	}
+	if len(current.Columns) != len(values) {
+		panic(fmt.Sprintf(`El número de columnas no corresponde con los valores: "%v" != "%v"`, current.Columns, values))
+	}
+
 	current.Operator = name
-	current.Value = value
+	current.Values = values
 	return e
 }
 
@@ -375,22 +392,22 @@ func (e *QuerySelect[T]) addOperatorValues(name string, values []any) *QuerySele
 
 func (e *QuerySelect[T]) Equals(values ...any) *QuerySelect[T] {
 	if len(values) == 1 {
-		return e.addOperator("=", values[0])
+		return e.addOperator("=", values)
 	} else {
 		return e.addOperatorValues("=", values)
 	}
 }
-func (e *QuerySelect[T]) GreatThan(value any) *QuerySelect[T] {
-	return e.addOperator(">", value)
+func (e *QuerySelect[T]) GreatThan(values ...any) *QuerySelect[T] {
+	return e.addOperator(">", values)
 }
-func (e *QuerySelect[T]) GreatEq(value any) *QuerySelect[T] {
-	return e.addOperator(">=", value)
+func (e *QuerySelect[T]) GreatEq(values ...any) *QuerySelect[T] {
+	return e.addOperator(">=", values)
 }
-func (e *QuerySelect[T]) LessThan(value any) *QuerySelect[T] {
-	return e.addOperator("<", value)
+func (e *QuerySelect[T]) LessThan(values ...any) *QuerySelect[T] {
+	return e.addOperator("<", values)
 }
-func (e *QuerySelect[T]) LessEq(value any) *QuerySelect[T] {
-	return e.addOperator("<=", value)
+func (e *QuerySelect[T]) LessEq(values ...any) *QuerySelect[T] {
+	return e.addOperator("<=", values)
 }
 func (e *QuerySelect[T]) In(values []any) *QuerySelect[T] {
 	return e.addOperatorValues("IN", values)
@@ -398,11 +415,11 @@ func (e *QuerySelect[T]) In(values []any) *QuerySelect[T] {
 func (e *QuerySelect[T]) IN(values ...any) *QuerySelect[T] {
 	return e.addOperatorValues("IN", values)
 }
-func (e *QuerySelect[T]) Contains(value any) *QuerySelect[T] {
-	return e.addOperator("CONTAINS", value)
+func (e *QuerySelect[T]) Contains(values ...any) *QuerySelect[T] {
+	return e.addOperator("CONTAINS", values)
 }
-func (e *QuerySelect[T]) Like(value any) *QuerySelect[T] {
-	return e.addOperator("LIKE", value)
+func (e *QuerySelect[T]) Like(values ...any) *QuerySelect[T] {
+	return e.addOperator("LIKE", values)
 }
 func (e *QuerySelect[T]) OrderAscending() *QuerySelect[T] {
 	e.OrderBy = "ORDER BY %v ASC"
@@ -430,7 +447,6 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 
 	var newType T
 	scyllaTable := MakeScyllaTable(newType)
-	Log("Views::", scyllaTable.Name, scyllaTable.Views)
 
 	viewTableName := scyllaTable.Name
 	queryStr := "SELECT %v FROM %v"
@@ -439,6 +455,8 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 
 	whereGroups := SliceToMap(e.ComandsWhere, func(e QueryParams) int32 { return e.Group })
 	for _, whereGroup := range whereGroups {
+		// Print(whereGroup)
+
 		wheres := []string{}
 		for _, qp := range whereGroup {
 			var wh string
@@ -447,18 +465,37 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 				columnsWhere.Add(col)
 			}
 			// Revisa si hay un view para esa columna
-			if len(qp.Columns) == 1 {
-				if view, ok := scyllaTable.Views[qp.Columns[0]]; ok {
-					viewTableName = view
+			if len(qp.Columns) >= 1 {
+				colnames := strings.Join(qp.Columns, "_")
+				if view, ok := scyllaTable.Views[colnames]; ok {
+					viewTableName = view.Name
+					// Columnas combinadas
+					if view.Idx > 0 {
+						base := new(T)
+						ref := reflect.ValueOf(base).Elem()
+
+						for i, colname := range qp.Columns {
+							if column, ok := scyllaTable.ColumnsMap[colname]; ok {
+								ref.Field(column.FieldIdx).Set(reflect.ValueOf(qp.Values[i]))
+							}
+						}
+
+						Print(base)
+
+						// Convierte los valores multiples en un sólo valor y una cola columna que representa el sk de la vista creada
+						if baseI, ok := any(base).(IGetView); ok {
+							// qp.Value = baseI.GetView(view.Idx)
+							qp.Values = []any{baseI.GetView(view.Idx)}
+							qp.Columns = []string{view.ColumnName}
+						}
+					}
 				}
 			}
 
 			// Revisa si se puede utilizar un indice compuesto
 			indexCols := ""
-			if len(qp.Columns) > 0 && indexOperators.Include(qp.Operator) {
-				cols := qp.Columns
-				sort.Strings(cols)
-				indexCols = strings.Join(cols, "+")
+			if len(qp.Columns) > 1 && indexOperators.Include(qp.Operator) {
+				indexCols = strings.Join(qp.Columns, "+")
 			}
 
 			if index, ok := scyllaTable.Indexes[indexCols]; ok {
@@ -469,7 +506,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 							equalValues = append(equalValues, fmt.Sprintf("%v", v))
 						}
 					} else {
-						vs := strings.Split(fmt.Sprintf("%v", qp.Value), "+")
+						vs := strings.Split(fmt.Sprintf("%v", qp.Values[0]), "+")
 						equalValues = append(equalValues, vs...)
 					}
 					if len(equalValues) != len(qp.Columns) {
@@ -496,27 +533,22 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 					wh = fmt.Sprintf(`%v IN (%v)`, index.Name, strings.Join(hashSlice, ", "))
 				}
 				// Revisa si hay más de 1 valor en values
-			} else if len(qp.Values) > 0 {
+			} else if qp.Operator == "IN" {
 				inValues := []string{}
-
 				for _, v := range qp.Values {
 					inValues = append(inValues, parseValueToString(v))
 				}
-				if qp.Operator == "IN" {
-					wh = fmt.Sprintf(`%v IN (%v)`, qp.Columns[0], strings.Join(inValues, ", "))
-				} else {
-					if len(qp.Values) != len(qp.Columns) {
-						return Err("El numero de valores no coincide con el número de columnas.")
-					}
-					wheresToJoin := []string{}
-					for _, col := range qp.Columns {
-						wheresToJoin = append(wheresToJoin, fmt.Sprintf(`%v %v %v`, col, qp.Operator, qp.Values[0]))
-					}
-					wh = strings.Join(wheresToJoin, " AND ")
-				}
+				wh = fmt.Sprintf(`%v IN (%v)`, qp.Columns[0], strings.Join(inValues, ", "))
 			} else {
-				wh = fmt.Sprintf(`%v %v %v`,
-					qp.Columns[0], qp.Operator, parseValueToString(qp.Value))
+				if len(qp.Values) != len(qp.Columns) {
+					return Err("El numero de valores no coincide con el número de columnas.")
+				}
+				wheresToJoin := []string{}
+				for i, col := range qp.Columns {
+					v := parseValueToString(qp.Values[i])
+					wheresToJoin = append(wheresToJoin, fmt.Sprintf(`%v %v %v`, col, qp.Operator, v))
+				}
+				wh = strings.Join(wheresToJoin, " AND ")
 			}
 			wheres = append(wheres, wh)
 		}
@@ -587,7 +619,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 			}
 			if mapField, ok := fieldMapping[column.FieldType]; ok {
 				field := ref.Field(column.FieldIdx)
-				//Log("Mapeando valor::", field, column.Name, column.FieldType, value)
+				//Log("Mapeando valor::", field, column.Name, column.FieldType, values)
 				mapField(&field, value, column.IsPointer)
 				// Revisa si necesita parsearse un string a un struct como JSON
 			} else if column.IsComplexType {

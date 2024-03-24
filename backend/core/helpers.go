@@ -573,7 +573,7 @@ func CompressBrotli(content *string, quality int) ([]byte, error) {
 	contentBytes := []byte(*content)
 	contentCompressed := bytes.Buffer{}
 
-	writer := brotli.NewWriterOptions(&contentCompressed, brotli.WriterOptions{Quality: quality})
+	writer := brotli.NewWriterV2(&contentCompressed, quality)
 
 	reader := bytes.NewReader(contentBytes)
 	bodySize, err := io.Copy(writer, reader)

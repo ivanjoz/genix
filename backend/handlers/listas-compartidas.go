@@ -4,7 +4,6 @@ import (
 	"app/core"
 	s "app/types"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -12,34 +11,55 @@ import (
 
 func GetListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt64("upd")
+	listasIDs := req.GetQueryIntSlice("ids")
 
-	listasRegistros := []s.ListaCompartidaRegistro{}
+	if len(listasIDs) == 0 {
+		return req.MakeErr("No se enviaron los ids de las listas a consultar.")
+	}
+
+	listasRegistrosMap := map[int32]*[]s.ListaCompartidaRegistro{}
+	for _, listaID := range listasIDs {
+		listasRegistrosMap[listaID] = &[]s.ListaCompartidaRegistro{}
+	}
 	errGroup := errgroup.Group{}
 
-	errGroup.Go(func() error {
-		query := core.DBSelect(&listasRegistros, "empresa_id").
+	for _, listaID := range listasIDs {
+		query := core.DBSelect(listasRegistrosMap[listaID], "empresa_id").
 			Where("empresa_id").Equals(req.Usuario.EmpresaID)
 
+		/*
+			base := s.ListaCompartidaRegistro{ListaID: listaID, Updated: updated, Status: 1}
+			base.SelfParse()
+		*/
+
 		if updated > 0 {
-			query = query.Where("updated").GreatEq(updated)
+			query = query.Where("lista_id", "updated").GreatEq(listaID, updated)
 		} else {
-			query = query.Where("status").Equals(1)
+			query = query.Where("lista_id", "status").Equals(listaID, int8(1))
 		}
-		err := query.Exec()
-		if err != nil {
-			err = fmt.Errorf("error al obtener las listas compartidas: %v", err)
-		}
-		return err
-	})
+
+		errGroup.Go(func() error {
+			return query.Exec()
+		})
+	}
 
 	err := errGroup.Wait()
 	if err != nil {
 		return req.MakeErr(err)
 	}
 
+	listasRegistros := []s.ListaCompartidaRegistro{}
+	for _, registros := range listasRegistrosMap {
+		listasRegistros = append(listasRegistros, *registros...)
+	}
+
 	core.Log("Listas compartidas registros obtenidos::", len(listasRegistros))
 
-	return core.MakeResponse(req, &listasRegistros)
+	type Result struct {
+		Registros []s.ListaCompartidaRegistro `json:"registros"`
+	}
+
+	return core.MakeResponse(req, &Result{listasRegistros})
 }
 
 func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
@@ -75,8 +95,8 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 		e := &records[i]
 		if e.ID == "" {
 			e.ID = core.Concat(".", e.ListaID, counter)
-			e.Created = nowTime
-			e.CreatedBy = req.Usuario.ID
+			e.Updated = nowTime
+			e.UpdatedBy = req.Usuario.ID
 			e.Status = 1
 			counter++
 		} else {

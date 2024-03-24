@@ -1,36 +1,37 @@
 import { GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
 import { arrayToMapN, arrayToMapS } from "~/shared/main"
 
-export interface IProductoPropiedad {
-  ID: number
-  Nombre: string
-  Options: string[]
-}
-
 export interface IListaRegistro {
+  ID: number
   ListaID: number
-  ID: string,
   Nombre: string
+  Images?: string[]
+  Descripcion?: string
+  UpdatedBy?: number
   ss: number
   upd: number
 }
 
-export interface IListasResult {
-  Records?: IListaRegistro[]
+export interface IListas {
   registros: IListaRegistro[]
-  registrosMap: Map<number,IListaRegistro[]>
+  registrosMap: Map<number,IListaRegistro>
 }
 
-export const useListasCompartidasAPI = (): GetSignal<IListasResult> => {
+export const useListasCompartidasAPI = (ids: number[]): GetSignal<IListas> => {
+  const pk = ids.sort().join(",")
+
   return  makeGETFetchHandler(
-    { route: "listas-compartidas", emptyValue: [],
+    { route: "listas-compartidas",
       errorMessage: 'Hubo un error al obtener las listas compartidas.',
       cacheSyncTime: 1, mergeRequest: true,
+      partition: { key: '_pk', value: pk, param: 'ids' },
       useIndexDBCache: 'listas_compartidas',
+      makeTransform: e => { e._pk = pk }
     },
     (result_) => {
-      const result = result_ as IListasResult
-
+      const result = result_ as IListas
+      result.registros = []
+      result.registrosMap = arrayToMapN(result.registros, 'ID')
       return result
     }
   )
