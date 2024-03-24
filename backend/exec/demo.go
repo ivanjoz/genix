@@ -536,3 +536,12 @@ func Test25(args *core.ExecArgs) core.FuncResponse {
 
 	return core.FuncResponse{}
 }
+
+func Test26(args *core.ExecArgs) core.FuncResponse {
+
+	scyllaTable := core.MakeScyllaTable(types.ListaCompartidaRegistro{})
+
+	core.Print(scyllaTable)
+
+	return core.FuncResponse{}
+}

@@ -1,6 +1,6 @@
 import { ConfirmWarn, Loading, Notify } from "~/core/main";
 import { max } from "simple-statistics";
-import { Show, createSignal } from "solid-js";
+import { Show, createEffect, createSignal } from "solid-js";
 import { BarOptions, CardSelect } from "~/components/Cards";
 import { CellEditable, CellTextOptions } from "~/components/Editables";
 import { CheckBoxContainer, Input, refreshInput } from "~/components/Input";
@@ -15,6 +15,7 @@ import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
 import { formatN } from "~/shared/main";
 import { ImageUploader } from "~/components/Uploaders";
 import { POST } from "~/shared/http";
+import { useListasCompartidasAPI } from "~/services/admin/listas-compartidas";
 
 const demooptions = [
   { id: 1, name: "Option 1" },
@@ -23,7 +24,8 @@ const demooptions = [
 
 export default function Productos() {
 
-  const [almacenes, setAlmacenes] = useSedesAlmacenesAPI()
+  const [almacenes] = useSedesAlmacenesAPI()
+  const [listasCompartidas] = useListasCompartidasAPI([1])
   const [productos, setProductos] = useProductosAPI()
 
   const [filterText, setFilterText] = createSignal("")
@@ -31,6 +33,10 @@ export default function Productos() {
   const [layerView, setLayerView] = createSignal(1)
   const layerWidth = 0.48
 
+  createEffect(() => {
+    console.log("listas compartidas::",listasCompartidas())
+  })
+  
   const saveProducto = async (isDelete?: boolean) => {
     const form = productoForm()
     if((form.Nombre?.length||0) < 4){

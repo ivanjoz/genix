@@ -26,7 +26,7 @@ export const AdminModule: IModule = {
     productos: "ID",
     sedes_almacenes: '[_pk+ID]',  
     productos_stock: '[AlmacenID+ID]',
-    listas_compartidas: 'ID',
+    listas_compartidas: '[_pk+ID]',
     pais_ciudades: '[PaisID+ID]', 
   },
   menus: [

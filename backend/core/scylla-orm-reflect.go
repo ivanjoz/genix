@@ -19,6 +19,18 @@ var ScyllaFieldToColumnTypesMap = map[string]string{
 	"float64": "double",
 }
 
+type ScyllaView struct {
+	Name       string
+	Idx        int8
+	Type       string
+	FieldType  string
+	ColumnName string
+}
+
+type IGetView interface {
+	GetView(view int8) any
+}
+
 func MakeScyllaTable[T any](newType T) ScyllaTable {
 
 	typeName := fmt.Sprintf("%v", reflect.TypeOf(newType))
@@ -30,8 +42,10 @@ func MakeScyllaTable[T any](newType T) ScyllaTable {
 	table := ScyllaTable{
 		Indexes:    map[string]BDIndex{},
 		ColumnsMap: map[string]BDColumn{},
-		Views:      map[string]string{},
+		Views:      map[string]ScyllaView{},
 	}
+
+	viewsCombinedMap := map[int8][]string{}
 
 	schemaTypes := reflect.ValueOf(newType).Type()
 	indexNameToColumns := map[string][]string{}
@@ -105,8 +119,17 @@ func MakeScyllaTable[T any](newType T) ScyllaTable {
 					}
 					table.PrimaryKey = column.Name
 				} else if v == "view" {
-					table.Views[column.Name] = fmt.Sprintf(`%v__%v_view`, table.Name, column.Name)
+					table.Views[column.Name] = ScyllaView{
+						Name:       fmt.Sprintf(`%v__%v_view`, table.Name, column.Name),
+						ColumnName: column.Name,
+					}
 					column.HasView = true
+				} else if len(v) > 5 && v[0:5] == "view." {
+					viewIdx := int8(SrtToInt(v[5:]))
+					if viewIdx == 0 {
+						panic(fmt.Sprintf(`No se reconoció el número de la view "%v"`, v))
+					}
+					viewsCombinedMap[viewIdx] = append(viewsCombinedMap[viewIdx], column.Name)
 				} else if v == "exclude" {
 					table.ViewsExcluded = append(table.ViewsExcluded, column.Name)
 					column.IsViewExcluded = true
@@ -117,9 +140,55 @@ func MakeScyllaTable[T any](newType T) ScyllaTable {
 			}
 
 			table.Columns = append(table.Columns, column)
-			table.ColumnsMap[column.Name] = column
 		}
 	}
+
+	for idx, columns := range viewsCombinedMap {
+		if len(columns) == 1 {
+			panic(fmt.Sprintf(`La view "view.%v" en la columna "%v" necesita otra columna para ser combinada. Si sólo es necesario una columna colocar sólo "view"`, idx, columns[0]))
+		}
+		cnames := strings.Join(columns, "_")
+		view := ScyllaView{
+			Idx:        idx,
+			Name:       fmt.Sprintf(`%v__%v_view`, table.Name, cnames),
+			ColumnName: fmt.Sprintf(`zv_%v`, cnames),
+		}
+
+		if baseI, ok := any(new(T)).(IGetView); ok {
+			va := baseI.GetView(view.Idx)
+			view.FieldType = fmt.Sprintf("%T", va)
+			if scyllaType, ok := ScyllaFieldToColumnTypesMap[view.FieldType]; ok {
+				view.Type = scyllaType
+			} else {
+				panic(fmt.Sprintf(`El type "%v" en "view.%v" no se pudo convertir al type de Scylla.`, view.FieldType, view.Idx))
+			}
+		} else {
+			panic(fmt.Sprintf(`No se encontró el método "GetView(view int8) any" que debería ser implementado como el siguiente ejemplo: 
+				func (e *Struct) GetView(view int8) any {
+					if view == %v {
+						return e.param1*100 + int32(e.param2)
+					}
+				}
+			`, idx))
+		}
+
+		table.Views[cnames] = view
+		table.ViewsExcluded = append(table.ViewsExcluded, view.ColumnName)
+
+		table.Columns = append(table.Columns, BDColumn{
+			Name:           view.ColumnName,
+			FieldIdx:       -1,
+			Type:           view.Type,
+			FieldType:      view.FieldType,
+			IsViewExcluded: true,
+		})
+	}
+
+	for _, e := range table.Columns {
+		table.ColumnsMap[e.Name] = e
+	}
+
+	//Print(table)
 
 	for indexName, columnNames := range indexNameToColumns {
 		sort.Strings(columnNames)

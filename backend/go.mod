@@ -3,7 +3,7 @@ module app
 go 1.22.0
 
 require (
-	github.com/andybalholm/brotli v1.0.5
+	github.com/andybalholm/brotli v1.1.0
 	github.com/aws/aws-lambda-go v1.32.0
 	github.com/aws/aws-sdk-go-v2 v1.25.2
 	github.com/aws/aws-sdk-go-v2/config v1.27.4
@@ -62,7 +62,6 @@ require (
 	github.com/DmitriyVTitov/size v1.5.0
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.53.1
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
-	github.com/kelindar/binary v1.0.18
 	github.com/kr/pretty v0.3.1
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/vmihailenco/msgpack/v5 v5.4.1
