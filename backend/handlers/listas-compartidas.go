@@ -54,12 +54,12 @@ func GetListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	core.Log("Listas compartidas registros obtenidos::", len(listasRegistros))
-
-	type Result struct {
-		Registros []s.ListaCompartidaRegistro `json:"registros"`
-	}
-
-	return core.MakeResponse(req, &Result{listasRegistros})
+	/*
+		type Result struct {
+			Registros []s.ListaCompartidaRegistro `json:"registros"`
+		}
+	*/
+	return core.MakeResponse(req, &listasRegistros)
 }
 
 func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
@@ -72,7 +72,7 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 
 	createCounter := 0
 	for _, e := range records {
-		if e.ID == "" {
+		if e.ID <= 0 {
 			createCounter++
 		}
 		if len(e.Nombre) < 4 || e.ListaID == 0 {
@@ -82,8 +82,7 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 
 	var counter int64
 	if createCounter > 0 {
-		key := core.Concatn("lista_registros", records[0].ListaID)
-		counter, err = core.GetCounter(key, createCounter, req.Usuario.EmpresaID)
+		counter, err = core.GetCounter("lista_registros", createCounter, req.Usuario.EmpresaID)
 		if err != nil {
 			return req.MakeErr("Error al obtener el counter.", counter)
 		}
@@ -93,8 +92,8 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 
 	for i := range records {
 		e := &records[i]
-		if e.ID == "" {
-			e.ID = core.Concat(".", e.ListaID, counter)
+		if e.ID <= 0 {
+			e.ID = int32(counter)
 			e.Updated = nowTime
 			e.UpdatedBy = req.Usuario.ID
 			e.Status = 1
@@ -108,7 +107,7 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 
 	err = core.DBInsert(&records)
 	if err != nil {
-		return req.MakeErr("Error al actualizar / insertar el almacén: " + err.Error())
+		return req.MakeErr("Error al actualizar / insertar el registro de lista compartida: " + err.Error())
 	}
 
 	return req.MakeResponse(records)

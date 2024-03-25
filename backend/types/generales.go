@@ -15,7 +15,7 @@ type PaisCiudad struct {
 type ListaCompartidaRegistro struct {
 	TAGS        `table:"lista_compartida_registros"`
 	EmpresaID   int32    `db:"empresa_id,pk"`
-	ID          string   `db:"id,pk"`
+	ID          int32    `db:"id,pk"`
 	ListaID     int32    `db:"lista_id,view,view.1,view.2"`
 	Nombre      string   `json:",omitempty" db:"nombre"`
 	Images      []string `json:",omitempty" db:"images"`

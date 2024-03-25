@@ -16,6 +16,7 @@ import { formatN } from "~/shared/main";
 import { ImageUploader } from "~/components/Uploaders";
 import { POST } from "~/shared/http";
 import { useListasCompartidasAPI } from "~/services/admin/listas-compartidas";
+import { ListasCompartidasLayer } from "~/routes-components/admin/listas-compartidas";
 
 const demooptions = [
   { id: 1, name: "Option 1" },
@@ -360,5 +361,11 @@ export default function Productos() {
         </Show>
       </SideLayer>
     </Show>
+    <Show when={pageView() === 2}>
+      <div class="flex ai-center jc-between mb-06">
+        <ListasCompartidasLayer listaID={1} listas={listasCompartidas()} />
+      </div>
+    </Show>
   </PageContainer>
 }
+

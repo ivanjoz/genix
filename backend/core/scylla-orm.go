@@ -189,10 +189,14 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 	var newType T
 	scyllaTable := MakeScyllaTable(newType)
 
-	columnsToSave := scyllaTable.Columns
+	columnsToSave := []BDColumn{}
 	columnsNames := []string{}
-	for _, e := range columnsToSave {
+	for _, e := range scyllaTable.Columns {
+		if e.FieldIdx < 0 {
+			continue
+		}
 		columnsNames = append(columnsNames, e.Name)
+		columnsToSave = append(columnsToSave, e)
 	}
 
 	indexes := []BDIndex{}
@@ -228,10 +232,14 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 		}
 
 		for _, view := range scyllaTable.Views {
+			Log("agregando view::", view.Name, view.ColumnName, view.Idx)
 			if view.Idx > 0 {
-				if baseI, ok := any(rec).(IGetView); ok {
+				if baseI, ok := any(&rec).(IGetView); ok {
 					v := parseValueToString(baseI.GetView(view.Idx))
+					Log("value del view::", v)
 					recordInsertValues = append(recordInsertValues, v)
+				} else {
+					fmt.Sprintf("Record no posee: IGetView: %T", rec)
 				}
 			}
 		}
