@@ -1,7 +1,7 @@
 // @refresh reload
 import { MetaProvider, Title } from "@solidjs/meta";
 import { Route, Router } from "@solidjs/router";
-import { FileRoutes } from "@solidjs/start";
+import { FileRoutes } from "@solidjs/start/router";
 import { Show, Suspense, createEffect, createSignal } from "solid-js";
 import LoginPage from "./core/login";
 import { MainMenu, MainMenuMobile, MainTopMenu } from "./core/menu";
