@@ -123,6 +123,9 @@ p {
   border: 1px solid rgb(188, 164, 255);
   outline: 1px solid rgb(149, 111, 238);
   background-color: white;
+  padding-top: 0;
+  padding-bottom: 0;
+  height: 100%;
 }
 .cell-ed-c.s2 {
   background-color: white;

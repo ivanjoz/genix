@@ -1574,6 +1574,14 @@ th {
   background-color: #c44040;
   border-color: #c44040;
 }
+.d-red {
+  background-color: #ffe3e3;
+  color: #e13333;
+}
+.d-red:hover {
+  color: white;
+  background-color: #c44040;
+}
 .b-yellow2 {
   background-color: #fff3d9;
   color: #de8011;

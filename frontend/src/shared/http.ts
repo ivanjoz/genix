@@ -348,6 +348,7 @@ const updateFechOnCourse = (props: httpProps, event: 1 | 2) => {
 }
 
 const parseResults = (props: httpProps, records: any[]) => {
+  debugger
   if(!Array.isArray(records)){ return records }
 
   if(!props.collections || Object.keys(props.collections).length === 0){
@@ -403,6 +404,7 @@ export function GET(props: httpProps): Promise<any> {
       awaitDexieOpen()
         .then(() => searchOnIndexDB(props))
         .then(result => {
+          debugger
           if(props.readyForFetch === 1){ return }
           return result ? resolve(parseResults(props, result)) : makeFetch() 
         })
@@ -433,7 +435,7 @@ export const makeGETFetchHandler = <T>(
 ): (GetSignal<T>) => {
   
   const props = typeof props_ === 'function' ? props_() : props_
-  
+
   if(!props.id){
     props.id = window._params.fetchID
     window._params.fetchID++
@@ -459,6 +461,7 @@ export const makeGETFetchHandler = <T>(
   // Primer GET donde obtiene desde IndexedDB
   GET(props)
   .then((result: T) => {
+    debugger
     props.resultCached = result
     if(parseResult){ result = parseResult(result as Exclude<T,unknown>) }
     setFetchedRecords(result as Exclude<T,unknown>)
@@ -620,6 +623,7 @@ const searchOnIndexDB = async (props: httpProps): Promise<any[]> => {
 
   checkIdbTables(props)
   const cache = window._cache
+  debugger
 
   // Limpia el flag para user el caché
   if (props.clearCache){ delete cache[idbTable] }
@@ -670,6 +674,7 @@ const searchOnIndexDB = async (props: httpProps): Promise<any[]> => {
   }
 
   const record = await db.table(idbTable).get(baseObject)
+  console.log("record obtenido::", record, props.useIndexDBCache)
   // console.log('Buscando si se debe actualizar::',searchUpdatePromises)
   // console.log('Buscando en Table indexed-db : 1',props.route)      
   // Revisa cuando fue la última ves que se sincronizó

@@ -13,8 +13,8 @@ export interface IListaRegistro {
 }
 
 export interface IListas {
-  registros: IListaRegistro[]
-  registrosMap: Map<number,IListaRegistro>
+  Records: IListaRegistro[]
+  RecordsMap: Map<number,IListaRegistro>
 }
 
 export const useListasCompartidasAPI = (ids: number[]): GetSignal<IListas> => {
@@ -24,14 +24,14 @@ export const useListasCompartidasAPI = (ids: number[]): GetSignal<IListas> => {
     { route: "listas-compartidas",
       errorMessage: 'Hubo un error al obtener las listas compartidas.',
       cacheSyncTime: 1, mergeRequest: true,
-      partition: { key: '_pk', value: pk, param: 'ids' },
+      partition: { key: 'pk', value: pk, param: 'ids' },
       useIndexDBCache: 'listas_compartidas',
-      makeTransform: e => { e._pk = pk }
+      makeTransform: e => { e.pk = pk }
     },
     (result_) => {
       const result = result_ as IListas
-      result.registros = []
-      result.registrosMap = arrayToMapN(result.registros, 'ID')
+      result.RecordsMap = arrayToMapN(result.Records, 'ID')
+      console.log("listas compartidas API::",result)
       return result
     }
   )
