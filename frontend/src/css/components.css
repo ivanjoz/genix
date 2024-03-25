@@ -1128,6 +1128,7 @@ body.is-animated .main-menu {
   margin: 3px 3px 3px 3px; 
   line-height: 1;
   cursor: pointer;
+  user-select: none;
 }
 .search-opt:hover {
   outline: 1px solid rgb(248, 126, 126);

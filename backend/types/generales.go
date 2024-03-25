@@ -35,3 +35,8 @@ func (e *ListaCompartidaRegistro) GetView(view int8) any {
 		return 0
 	}
 }
+
+type NewIDToID struct {
+	NewID  int32
+	TempID int32
+}

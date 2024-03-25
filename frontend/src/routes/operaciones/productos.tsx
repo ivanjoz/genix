@@ -1,6 +1,6 @@
 import { ConfirmWarn, Loading, Notify } from "~/core/main";
 import { max } from "simple-statistics";
-import { Show, createEffect, createSignal } from "solid-js";
+import { Show, createEffect, createMemo, createSignal } from "solid-js";
 import { BarOptions, CardSelect } from "~/components/Cards";
 import { CellEditable, CellTextOptions } from "~/components/Editables";
 import { CheckBoxContainer, Input, refreshInput } from "~/components/Input";
@@ -18,11 +18,6 @@ import { POST } from "~/shared/http";
 import { useListasCompartidasAPI } from "~/services/admin/listas-compartidas";
 import { ListasCompartidasLayer } from "~/routes-components/admin/listas-compartidas";
 
-const demooptions = [
-  { id: 1, name: "Option 1" },
-  { id: 2, name: "Option 2" },  
-]
-
 export default function Productos() {
 
   const [almacenes] = useSedesAlmacenesAPI()
@@ -36,6 +31,10 @@ export default function Productos() {
 
   createEffect(() => {
     console.log("listas compartidas::",listasCompartidas())
+  })
+
+  const categorias = createMemo(() => {
+    return listasCompartidas()?.Records?.filter(x => x.ListaID === 1) || []
   })
   
   const saveProducto = async (isDelete?: boolean) => {
@@ -243,7 +242,7 @@ export default function Productos() {
                 keys="v.n" saveOn={productoForm()} save="Params" />
             </div>
             <div class="w100 mb-08">
-              <CardSelect label="Categorías" options={demooptions} keys="id.name"
+              <CardSelect label="Categorías" options={categorias()} keys="ID.Nombre"
                 css="w-145x" />
             </div>
             <div class="ff-bold h3 mb-08">

@@ -27,11 +27,6 @@ func GetListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 		query := core.DBSelect(listasRegistrosMap[listaID], "empresa_id").
 			Where("empresa_id").Equals(req.Usuario.EmpresaID)
 
-		/*
-			base := s.ListaCompartidaRegistro{ListaID: listaID, Updated: updated, Status: 1}
-			base.SelfParse()
-		*/
-
 		if updated > 0 {
 			query = query.Where("lista_id", "updated").GreatEq(listaID, updated)
 		} else {
@@ -89,11 +84,14 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	nowTime := time.Now().Unix()
+	newIDs := []s.NewIDToID{}
 
 	for i := range records {
 		e := &records[i]
 		if e.ID <= 0 {
-			e.ID = int32(counter)
+			id := int32(counter)
+			newIDs = append(newIDs, s.NewIDToID{id, e.ID})
+			e.ID = id
 			e.Updated = nowTime
 			e.UpdatedBy = req.Usuario.ID
 			e.Status = 1
@@ -110,5 +108,5 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al actualizar / insertar el registro de lista compartida: " + err.Error())
 	}
 
-	return req.MakeResponse(records)
+	return req.MakeResponse(newIDs)
 }
