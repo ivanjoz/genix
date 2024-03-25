@@ -58,6 +58,7 @@ type BDColumn struct {
 	IsViewExcluded bool
 	HasView        bool
 	IsComplexType  bool
+	ViewIdx        int8
 }
 
 type BDIndex struct {
@@ -192,9 +193,6 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 	columnsToSave := []BDColumn{}
 	columnsNames := []string{}
 	for _, e := range scyllaTable.Columns {
-		if e.FieldIdx < 0 {
-			continue
-		}
 		columnsNames = append(columnsNames, e.Name)
 		columnsToSave = append(columnsToSave, e)
 	}
@@ -203,12 +201,6 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 	for _, index := range scyllaTable.Indexes {
 		columnsNames = append(columnsNames, index.Name)
 		indexes = append(indexes, index)
-	}
-
-	for _, view := range scyllaTable.Views {
-		if view.Idx > 0 {
-			columnsNames = append(columnsNames, view.ColumnName)
-		}
 	}
 
 	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES `,
@@ -222,26 +214,20 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 		recordInsertValues := []string{}
 
 		for _, col := range columnsToSave {
-			v := col.ParseValue(refValue.Field(col.FieldIdx))
+			v := ""
+			if col.ViewIdx > 0 {
+				if baseI, ok := any(&rec).(IGetView); ok {
+					v = parseValueToString(baseI.GetView(col.ViewIdx))
+				}
+			} else {
+				v = col.ParseValue(refValue.Field(col.FieldIdx))
+			}
 			recordInsertValues = append(recordInsertValues, v)
 		}
 
 		for _, index := range indexes {
 			v := fmt.Sprintf("%v", index.MakeIntHash(refValue))
 			recordInsertValues = append(recordInsertValues, v)
-		}
-
-		for _, view := range scyllaTable.Views {
-			Log("agregando view::", view.Name, view.ColumnName, view.Idx)
-			if view.Idx > 0 {
-				if baseI, ok := any(&rec).(IGetView); ok {
-					v := parseValueToString(baseI.GetView(view.Idx))
-					Log("value del view::", v)
-					recordInsertValues = append(recordInsertValues, v)
-				} else {
-					fmt.Sprintf("Record no posee: IGetView: %T", rec)
-				}
-			}
 		}
 
 		statement := " " + queryStrInsert + "(" + strings.Join(recordInsertValues, ", ") + ")"

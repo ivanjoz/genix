@@ -31,10 +31,16 @@ export const useListasCompartidasAPI = (ids: number[]): GetSignal<IListas> => {
     (result_) => {
       const result = result_ as IListas
       result.RecordsMap = arrayToMapN(result.Records, 'ID')
-      console.log("listas compartidas API::",result)
+      // console.log("listas compartidas API::",result)
+      result.Records = result.Records.filter(x => x.ss)
       return result
     }
   )
+}
+
+export interface INewIDToID {
+  NewID:  number
+	TempID: number
 }
 
 export const postListaRegistros = (data: IListaRegistro[]) => {

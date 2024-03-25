@@ -181,14 +181,13 @@ func MakeScyllaTable[T any](newType T) ScyllaTable {
 			Type:           view.Type,
 			FieldType:      view.FieldType,
 			IsViewExcluded: true,
+			ViewIdx:        view.Idx,
 		})
 	}
 
 	for _, e := range table.Columns {
 		table.ColumnsMap[e.Name] = e
 	}
-
-	//Print(table)
 
 	for indexName, columnNames := range indexNameToColumns {
 		sort.Strings(columnNames)
