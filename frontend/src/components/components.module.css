@@ -5,6 +5,13 @@
   height: auto;
   border-radius: 7px;
   border: 1px solid gray;
+  background-color: white;
+  cursor: pointer;
+}
+
+.card_image_1.card_input:hover {
+  border: 1px solid rgb(110, 105, 122);
+  outline: 1px solid rgb(48, 46, 51);
 }
 
 .card_image_img1 {
@@ -53,9 +60,21 @@
   padding: 4px 4px;
 }
 .card_image_textarea:focus {
-  outline: 1px solid rgba(0, 0, 0, 0.7);
+  outline: 1px solid rgb(93, 62, 133);
 }
 .card_image_textarea::placeholder {
   text-shadow: none;
   color: white;
+}
+.card_image_1 input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 100%;
+  opacity: 0;
+}
+.card_image_1:hover .card_input_layer {
+  background-color: rgb(247, 241, 255);
+  color: rgb(95, 66, 133);
 }

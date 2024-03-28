@@ -32,6 +32,7 @@ export interface IProducto {
   SbnDescuento?: number
   SbnPreciFinal?: number
   Images?: IProductoImage[]
+  CategoriasIDs?: number[]
   ss: number
   upd: number
 }
