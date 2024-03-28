@@ -67,6 +67,8 @@ export const AdminModule: IModule = {
         },
         { name: "Chart Demo 1", route: "/develop-ui/chart-test"
         },
+        { name: "API Test", route: "/develop-ui/api-test"
+      },
       ]
 
     },

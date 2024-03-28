@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/fxamacker/cbor/v2"
 	mail "github.com/xhit/go-simple-mail/v2"
 )
 
@@ -200,31 +201,31 @@ type DemoStruct3 struct {
 
 type DemoStruct struct {
 	types.TAGS `table:"demo_structs"`
-	CompanyID  int32         `json:"companyID" db:"company_id,pk"`
-	ID         int32         `json:"id" db:"id,pk"`
-	Edad       int32         `json:"edad" db:"edad,zx1,zx2"`
-	Nombre     string        `json:"nombre" db:"nombre,zx1"`
-	Palabras   []string      `json:"palabras" db:"palabras"`
-	Peso       float32       `json:"peso" db:"peso"`
-	Peso64     float64       `json:"peso64" db:"peso_64"`
-	Rangos     []int32       `json:"rangos" db:"rangos"`
-	Smallint   int16         `json:"small_int" db:"small_int,zx2"`
-	Struct1    DemoStruct1   `json:"struct_1" db:"struct_1"`
-	Struct2    DemoStruct3   `json:"struct_2" db:"struct_2"`
-	Struct3    []DemoStruct1 `json:"struct_3" db:"struct_3"`
+	CompanyID  int32         `json:"companyID,omitempty" db:"company_id,pk"`
+	ID         int32         `json:"id,omitempty" db:"id,pk"`
+	Edad       int32         `json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre     string        `json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras   []string      `json:"palabras,omitempty" db:"palabras"`
+	Peso       float32       `json:"peso,omitempty" db:"peso"`
+	Peso64     float64       `json:"peso64,omitempty" db:"peso_64"`
+	Rangos     []int32       `json:"rangos,omitempty" db:"rangos"`
+	Smallint   int16         `json:"small_int,omitempty" db:"small_int,zx2"`
+	Struct1    DemoStruct1   `json:"struct_1,omitempty" db:"struct_1"`
+	Struct2    DemoStruct3   `json:"struct_2,omitempty" db:"struct_2"`
+	Struct3    []DemoStruct1 `json:"struct_3,omitempty" db:"struct_3"`
 }
 
 type DemoStruct4 struct {
 	types.TAGS `table:"demo_structs"`
-	CompanyID  int32    `json:"companyID" db:"company_id,pk"`
-	ID         int32    `json:"id" db:"id,pk"`
-	Edad       int32    `json:"edad" db:"edad,zx1,zx2"`
-	Nombre     string   `json:"nombre" db:"nombre,zx1"`
-	Palabras   []string `json:"palabras" db:"palabras"`
-	Rangos     []int32  `json:"rangos" db:"rangos"`
-	Smallint   int16    `json:"small_int" db:"small_int,zx2"`
-	Peso       float32  `json:"peso" db:"peso"`
-	Peso64     float64  `json:"peso64" db:"peso_64"`
+	CompanyID  int32    `json:"companyID,omitempty" db:"company_id,pk"`
+	ID         int32    `json:"id,omitempty" db:"id,pk"`
+	Edad       int32    `json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre     string   `json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras   []string `json:"palabras,omitempty" db:"palabras"`
+	Rangos     []int32  `json:"rangos,omitempty" db:"rangos"`
+	Smallint   int16    `json:"small_int,omitempty" db:"small_int,zx2"`
+	Peso       float32  `json:"peso,omitempty" db:"peso"`
+	Peso64     float64  `json:"peso64,omitempty" db:"peso_64"`
 }
 
 func Test18(args *core.ExecArgs) core.FuncResponse {
@@ -542,6 +543,83 @@ func Test26(args *core.ExecArgs) core.FuncResponse {
 	scyllaTable := core.MakeScyllaTable(types.ListaCompartidaRegistro{})
 
 	core.Print(scyllaTable)
+
+	return core.FuncResponse{}
+}
+
+func Test27(args *core.ExecArgs) core.FuncResponse {
+	/*
+		dest := bytes.Buffer{}
+		encoder := cbor.new(&dest)
+	*/
+	/*
+		opts := cbor.CoreDetEncOptions()
+		tags := cbor.NewTagSet()
+		tags.Add(
+			cbor.TagOptions{EncTag: cbor.EncTagRequired, DecTag: cbor.DecTagRequired},
+			reflect.TypeOf(signedCWT{}),
+			18)
+		opts.EncModeWithTags()
+	*/
+
+	array1 := []DemoStruct4{
+		{Nombre: "ho1",
+			Edad:      1,
+			CompanyID: 1,
+			Smallint:  1,
+		},
+		{Nombre: "ho1",
+			Edad:      1,
+			CompanyID: 1,
+			Smallint:  1,
+		},
+	}
+
+	array2 := []DemoStruct4{
+		{Nombre: "demo1",
+			Edad:      1,
+			CompanyID: 1,
+			Smallint:  1,
+		},
+		{Nombre: "dasdasd",
+			Edad:      1,
+			CompanyID: 1,
+			Smallint:  1,
+		},
+		{Nombre: "dasda 123",
+			Edad:      1,
+			CompanyID: 1,
+			Smallint:  1,
+		},
+		{Nombre: "dasd",
+			Edad:      1,
+			CompanyID: 1,
+			Smallint:  1,
+		},
+		{Nombre: "11",
+			Edad:      1,
+			CompanyID: 1,
+			Smallint:  1,
+		},
+		{Nombre: "222",
+			Edad:      1,
+			CompanyID: 1,
+			Smallint:  1,
+		},
+	}
+
+	bytes1, err := cbor.Marshal(array1)
+	if err != nil {
+		panic(err)
+	}
+
+	bytes2, err := cbor.Marshal(array2)
+	if err != nil {
+		panic(err)
+	}
+
+	core.Log("comparing len::", len(bytes1), " | ", len(bytes2))
+	core.Log(string(bytes2))
 
 	return core.FuncResponse{}
 }

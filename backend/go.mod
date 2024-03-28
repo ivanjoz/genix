@@ -42,6 +42,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.23.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.28.1 // indirect
 	github.com/aws/smithy-go v1.20.1 // indirect
+	github.com/fxamacker/cbor/v2 v2.6.0 // indirect
 	github.com/go-test/deep v1.1.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
@@ -53,6 +54,7 @@ require (
 	github.com/stretchr/testify v1.8.1 // indirect
 	github.com/toorop/go-dkim v0.0.0-20201103131630-e1cd1a0a5208 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/sys v0.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
