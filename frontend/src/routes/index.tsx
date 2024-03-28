@@ -27,25 +27,6 @@ export default function Home() {
   const [form, setfForm] = createSignal({})
   
   return <PageContainer title="Index">
-    <Title>Hello World</Title>
-    <h1>Hello world!</h1>
-    <Counter />
-    <div class="flex" style={{ width: '100%' }}>
-  
-    </div>
-    <button onClick={ev => {
-      ev.stopPropagation()
-      console.log("form:: ", form)
-      setfForm({})
-    }}>
-      Enviar
-    </button>
-    <p>
-      Visit{" "}
-      <a href="https://start.solidjs.com" target="_blank">
-        start.solidjs.com
-      </a>{" "}
-      to learn how to build SolidStart apps. s
-    </p>
+    <h1>Sistema de Gestión de Mypes</h1>
   </PageContainer>
 }
