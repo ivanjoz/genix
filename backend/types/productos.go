@@ -18,7 +18,7 @@ type Producto struct {
 	TempID        int32   `json:"-" db:"temp_id"`
 	Nombre        string  `db:"nombre"`
 	Descripcion   string  `json:",omitempty" db:"descripcion"`
-	GruposIDs     []int32 `json:",omitempty" db:"grupos_ids"`
+	CategoriasIDs []int32 `json:",omitempty" db:"categorias_ids"`
 	Params        []int8  `json:",omitempty" db:"params_ids"`
 	Precio        int32   `json:",omitempty" db:"precio"`
 	Descuento     float32 `json:",omitempty" db:"descuento"`

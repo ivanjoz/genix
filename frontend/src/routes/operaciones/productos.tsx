@@ -180,7 +180,7 @@ export default function Productos() {
                 style={{ "min-height": 'calc(14vh + 1rem)' }}>
               <div class="w-05x p-rel">
                 <ImageUploader  cardStyle={{ width: '100%', position: 'absolute', 
-                  top: '0' }}/>
+                  top: '0', "z-index": 12 }}/>
               </div>            
               <Input saveOn={productoForm()} save="Peso" css="w-055x mb-10"
                 label="Peso" type="number"
@@ -243,7 +243,7 @@ export default function Productos() {
             </div>
             <div class="w100 mb-08">
               <CardSelect label="Categorías" options={categorias()} keys="ID.Nombre"
-                css="w-145x" />
+                css="w-145x" saveOn={productoForm()} save="CategoriasIDs" />
             </div>
             <div class="ff-bold h3 mb-08">
               <div class="ml-08">Sub-Unidades</div>

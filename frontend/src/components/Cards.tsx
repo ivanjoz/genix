@@ -102,20 +102,34 @@ export const BarOptions = (props: IBarOptions) => {
   </div>
 }
 
-interface ICardSelect<T> {
+interface ICardSelect<T,Y> {
   label: string
   options: T[]
   keys: string
   css: string
+  saveOn?: Y
+  save?: keyof Y
 }
 
-export function CardSelect<T>(props: ICardSelect<T>){
+export function CardSelect<T,Y>(props: ICardSelect<T,Y>){
 
   const [keyId, keyName] = props.keys.split(".") as [keyof T, keyof T]
 
   const [selected, setSelected] = createSignal([])
   const optionsMap = createMemo(() => {
     return arrayToMapN(props.options, keyId as string)
+  })
+
+  const setSelectedOnSave = () => {
+    if(props.saveOn && props.save){
+      props.saveOn[props.save] = selected() as Y[keyof Y]
+    }
+  }
+
+  createEffect(() => {
+    if(props.saveOn && props.save){
+      setSelected(props.saveOn[props.save] as (number|string)[])
+    }
   })
 
   return <div class={"p-rel search-c1 "+(props.css)}>
@@ -129,6 +143,7 @@ export function CardSelect<T>(props: ICardSelect<T>){
           console.log(e)
           selected().push(e[keyId])
           setSelected([...selected()])
+          setSelectedOnSave()
         }}
       />
     </div>
@@ -146,8 +161,8 @@ export function CardSelect<T>(props: ICardSelect<T>){
           <div class="bn-close flex-center" onclick={ev =>{
             ev.stopPropagation()
             const newSelected = selected().filter(id => id !== e)
-            console.log("new selected::", newSelected)
             setSelected(newSelected)
+            setSelectedOnSave()
           }}>
             <i class="icon-cancel h5"></i>
           </div>

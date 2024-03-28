@@ -73,10 +73,11 @@ export const ImageUploader = (props?: IImageUploader) => {
     }
     if(props.clearOnUpload){
       setImageSrc({ src: "" })
+      setProgress(0)
     } else {
+      setProgress(-1)
       setImageSrc({ src: `${result.imageName}-x2`, types: ["webp","avif"] })
     }
-    setProgress(-1)
     if(props.onUploaded){ props.onUploaded(result.imageName) }
   }
 
@@ -94,13 +95,19 @@ export const ImageUploader = (props?: IImageUploader) => {
     return src
   }
   
-  return <div class={`p-rel ${styles.card_image_1}`}
+  return <div class={`p-rel ${styles.card_image_1} ${imageSrc()?.src ? "" : styles.card_input}`}
     style={props.cardStyle}
   >
     { (imageSrc()?.src||"").length === 0 &&
-      <input onChange={ev => onFileChange(ev)} type="file" 
-        accept="image/png, image/jpeg, image/webp" 
-      />
+      <div class={`w100 h100 p-rel flex-column ai-center jc-center ${styles.card_input_layer}`}>
+        <input onChange={ev => onFileChange(ev)} type="file" 
+          accept="image/png, image/jpeg, image/webp" 
+        />
+        <div style={{ "font-size": "2.4rem" }}>
+          <i class="icon-upload"></i>
+        </div>
+        <div class="h5">Subir Imagen</div>
+      </div>
     }
     { imageSrc()?.src?.length > 0 &&
       <picture class="dsp-cont">
