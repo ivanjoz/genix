@@ -53,7 +53,8 @@ export const ImageUploader = (props?: IImageUploader) => {
     let result: { imageName: string }
     setProgress(0.001)
     const data = { 
-      Content: imageSrc().src, Folder: "img-uploads", Description: imageSrc().description }
+      Content: imageSrc().src, Folder: "img-uploads", 
+      Description: imageSrc().description }
     if(props.setDataToSend){ props.setDataToSend(data) }
 
     try {

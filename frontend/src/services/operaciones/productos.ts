@@ -32,6 +32,7 @@ export interface IProducto {
   SbnDescuento?: number
   SbnPreciFinal?: number
   Images?: IProductoImage[]
+  Image?: IProductoImage
   CategoriasIDs?: number[]
   ss: number
   upd: number
@@ -54,6 +55,9 @@ export const useProductosAPI = (): GetSignal<IProductoResult> => {
       const result = result_ as IProductoResult
       for(let e of result.Records){
         e.Propiedades = e.Propiedades || []
+        if(e.Images?.length > 0){
+          e.Image = e.Images[e.Images.length - 1]
+        }
       }
       console.log("result productos:: ", result)
       result.productos = (result.Records || []).filter(x => x.ss > 0)

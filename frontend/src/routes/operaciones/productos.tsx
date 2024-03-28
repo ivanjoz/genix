@@ -180,8 +180,12 @@ export default function Productos() {
                 style={{ "min-height": 'calc(14vh + 1rem)' }}>
               <div class="w-05x p-rel">
                 <ImageUploader  cardStyle={{ width: '100%', position: 'absolute', 
-                  top: '0', "z-index": 12 }}/>
-              </div>            
+                  top: '0', "z-index": 12 }}
+                  types={["avif","webp"]}
+                  src={productoForm().Image
+                    ? `img-productos/${productoForm().Image.n}-x2` : ""}
+                />
+              </div>
               <Input saveOn={productoForm()} save="Peso" css="w-055x mb-10"
                 label="Peso" type="number"
               />
@@ -241,11 +245,11 @@ export default function Productos() {
               <CheckBoxContainer options={[ { v: 1, n: 'SKU Individual' } ]} 
                 keys="v.n" saveOn={productoForm()} save="Params" />
             </div>
-            <div class="w100 mb-08">
+            <div class="w100 mb-10">
               <CardSelect label="Categorías" options={categorias()} keys="ID.Nombre"
                 css="w-145x" saveOn={productoForm()} save="CategoriasIDs" />
             </div>
-            <div class="ff-bold h3 mb-08">
+            <div class="ff-bold h3 mb-06">
               <div class="ml-08">Sub-Unidades</div>
             </div>
             <div class="flex w100">
