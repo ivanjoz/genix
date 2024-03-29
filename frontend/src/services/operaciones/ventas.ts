@@ -10,6 +10,7 @@ export interface ICaja {
 	FechaDeCuadre: number
 	MontoCurrent: number
 	MontoCuadre: number
+  Tipo: number
 	ss: number
 	upd: number
 }
@@ -38,7 +39,7 @@ export const useCajasAPI = (): GetSignal<ICajaResult> => {
 export const postCaja = (data: ICaja) => {
   return POST({
     data,
-    route: "caja",
+    route: "cajas",
     refreshIndexDBCache: "cajas"
   })
 }

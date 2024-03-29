@@ -12,6 +12,12 @@ import (
 var LogsSaved = []string{}
 var LogCounter = new(int32)
 
+func LogDebug(args ...any) {
+	if Env.LOGS_DEBUG {
+		Log(args)
+	}
+}
+
 func Log(args ...any) {
 	if len(args) == 0 {
 		return

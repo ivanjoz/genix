@@ -40,17 +40,16 @@ export default function Cajas() {
       Notify.failure("Los inputs Nombre, Tipo y Sede son obligatorios")
       return
     }
-
     Loading.standard("Guardando caja...")
     try {
-      postCaja(caja)
+      await postCaja(caja)
     } catch (error) {
       console.warn(error)
       return
     }
     Loading.remove()
   }
-
+  
   return <PageContainer title="Cajas & Cuentas">
     <div class="flex jc-between mb-06"
       classList={{ "column": [2,3].includes(deviceType()) }}

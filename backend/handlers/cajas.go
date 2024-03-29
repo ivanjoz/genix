@@ -3,6 +3,7 @@ package handlers
 import (
 	"app/core"
 	s "app/types"
+	"encoding/json"
 	"time"
 )
 
@@ -28,14 +29,23 @@ func GetCajas(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
+	core.Env.LOGS_DEBUG = true
 
 	body := s.Caja{}
+	err := json.Unmarshal([]byte(*req.Body), &body)
+	if err != nil {
+		return req.MakeErr("Error al deserilizar el body: " + err.Error())
+	}
+
 	if body.ID == 0 || len(body.Nombre) == 0 || body.Tipo == 0 || body.SedeID == 0 {
+		core.Print(body)
 		return req.MakeErr("Faltan parámetros a enviar: (ID, Nombre, Tipo o SedeID)")
 	}
 
 	nowTime := time.Now().Unix()
 	body.Updated = nowTime
+	body.EmpresaID = req.Usuario.EmpresaID
+
 	if body.ID < 0 {
 		counter, err := core.GetCounter("cajas", 1, req.Usuario.EmpresaID)
 		if err != nil {
@@ -48,11 +58,17 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 		body.UpdatedBy = req.Usuario.ID
 	}
 
-	core.DBUpdateInsert(
+	core.Print(body)
+
+	err = core.DBUpdateInsert(
 		&[]s.Caja{body},
 		func(e s.Caja) bool { return e.Created == nowTime },
 		[]string{"fecha_cuadre", "monto_cuadre", "monto_current"},
 	)
+
+	if err != nil {
+		return req.MakeErr("Error al insertar/actualizar registros:", err)
+	}
 
 	return req.MakeResponse(body)
 }

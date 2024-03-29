@@ -235,8 +235,9 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 	}
 
 	queryStr := MakeQueryStatement(queryStatements)
-	Log(queryStr)
+	LogDebug(queryStr)
 	if err := conn.Query(queryStr).Exec(); err != nil {
+		Log("Error al insertar registros: ", err)
 		Log(queryStr)
 		return err
 	}
@@ -294,9 +295,10 @@ func DBUpdate[T any](records *[]T, columnsToInclude ...string) error {
 	}
 
 	queryStr := MakeQueryStatement(queryStatements)
-	Log(queryStr)
+	LogDebug(queryStr)
 	if err := conn.Query(queryStr).Exec(); err != nil {
-		// Log(queryStr)
+		Log("Error al actualizar registros: ", err)
+		Log(queryStr)
 		return err
 	}
 	return nil
@@ -321,6 +323,8 @@ func DBUpdateInsert[T any](
 	}
 
 	if len(recordsToUpdate) > 0 {
+		LogDebug("Registros a actualizar:", len(recordsToUpdate))
+
 		columnsToAvoidUpdate = append([]string{"-"}, columnsToAvoidUpdate...)
 		err := DBUpdate(&recordsToUpdate, columnsToAvoidUpdate...)
 		if err != nil {
@@ -329,6 +333,8 @@ func DBUpdateInsert[T any](
 	}
 
 	if len(recordsToInsert) > 0 {
+		LogDebug("Registros a insertar:", len(recordsToInsert))
+
 		err := DBInsert(&recordsToInsert, columnsToAvoidInsert...)
 		if err != nil {
 			return err
