@@ -38,6 +38,7 @@ type EnvStruct struct {
 	API_ROUTE      string
 	LAMBDA_NAME    string
 	LOGS_FULL      bool
+	LOGS_DEBUG     bool
 	LOGS_ONLY_SAVE bool
 	DB_DISABLE_SSL bool
 	DB_PORT        int32
