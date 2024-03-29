@@ -184,8 +184,7 @@ func MakeQueryStatement(statements []string) string {
 	return queryStr
 }
 
-func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
-	conn := ScyllaConnect()
+func MakeInsertQuery[T any](records *[]T, columnsToAvoid ...string) []string {
 
 	var newType T
 	scyllaTable := MakeScyllaTable(newType)
@@ -234,9 +233,15 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 		queryStatements = append(queryStatements, statement)
 	}
 
+	return queryStatements
+}
+
+func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
+	queryStatements := MakeInsertQuery(records, columnsToAvoid...)
+
 	queryStr := MakeQueryStatement(queryStatements)
 	LogDebug(queryStr)
-	if err := conn.Query(queryStr).Exec(); err != nil {
+	if err := ScyllaConnect().Query(queryStr).Exec(); err != nil {
 		Log("Error al insertar registros: ", err)
 		Log(queryStr)
 		return err
@@ -244,9 +249,7 @@ func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 	return nil
 }
 
-func DBUpdate[T any](records *[]T, columnsToInclude ...string) error {
-	conn := ScyllaConnect()
-
+func MakeUpdateQuery[T any](records *[]T, columnsToInclude ...string) []string {
 	var newType T
 	scyllaTable := MakeScyllaTable(newType)
 
@@ -261,8 +264,8 @@ func DBUpdate[T any](records *[]T, columnsToInclude ...string) error {
 			continue
 		}
 		if useExclude {
-			if Contains(columnsToInclude, e.Name) {
-				continue
+			if !Contains(columnsToInclude, e.Name) {
+				columnsToUpdate = append(columnsToUpdate, e)
 			}
 		} else if includeAll || Contains(columnsToInclude, e.Name) {
 			columnsToUpdate = append(columnsToUpdate, e)
@@ -293,10 +296,15 @@ func DBUpdate[T any](records *[]T, columnsToInclude ...string) error {
 
 		queryStatements = append(queryStatements, queryStatement)
 	}
+	return queryStatements
+}
+
+func DBUpdate[T any](records *[]T, columnsToInclude ...string) error {
+	queryStatements := MakeUpdateQuery(records, columnsToInclude...)
 
 	queryStr := MakeQueryStatement(queryStatements)
 	LogDebug(queryStr)
-	if err := conn.Query(queryStr).Exec(); err != nil {
+	if err := ScyllaConnect().Query(queryStr).Exec(); err != nil {
 		Log("Error al actualizar registros: ", err)
 		Log(queryStr)
 		return err

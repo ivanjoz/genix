@@ -210,6 +210,7 @@ select:disabled {
 .h5, h5 { font-size: 0.94rem; }
 .h6, h6 { font-size: 0.88rem; }
 .hx5 {  font-size: 0.92rem; }
+.lh-10 { line-height: 1; }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: bold;
@@ -1531,6 +1532,31 @@ th {
   background-color: white;
   outline: 1px solid #2b2b2b;
 }
+
+.b-yellow {
+  background-color: #fffad8;
+  border: 1px solid #e9b22c;
+  outline: 1px solid #d49908;
+  color: #d29500;
+  box-shadow: 0px 3px 9px -1px #ac8c28ab;
+}
+.b-yellow:hover {
+  background-color: white;
+  outline: 1px solid #2b2b2b;
+}
+
+.b-purple {
+  background-color: #f0e3ff;
+  border: 1px solid #c095ed;
+  outline: 1px solid #a05fe4;
+  color: #703ea5;
+  box-shadow: 0px 3px 9px -1px #8959bba1;
+}
+.b-purple:hover {
+  background-color: white;
+  outline: 1px solid #2b2b2b;
+}
+
 
 .b-blue2 {
   background-color: #e3eaff;
