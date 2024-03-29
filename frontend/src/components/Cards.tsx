@@ -173,3 +173,35 @@ export function CardSelect<T,Y>(props: ICardSelect<T,Y>){
     </div>
   </div>
 }
+
+export interface ILayerLoading<T> {
+  baseObject: T
+  startPromise: (e: T) => Promise<any>
+  lodingElement?: JSX.Element
+  children: JSX.Element | JSX.Element[]
+}
+
+export function LayerLoading<T>(props: ILayerLoading<T>){
+  const [isLoading, setIsLoading] = createSignal(false)
+  
+  createEffect(on(() => [props.baseObject], 
+    () => {
+      setIsLoading(true)
+      props.startPromise(props.baseObject)
+      .then(() => {
+        setIsLoading(false)
+      })
+    }
+  ))
+
+  return <div class={"w100"}>
+    { isLoading() &&
+      <div>
+        <h1>Loading...</h1>
+      </div>
+    }
+    { !isLoading() &&
+      props.children
+    }
+  </div>
+}

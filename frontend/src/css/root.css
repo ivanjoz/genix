@@ -58,6 +58,8 @@ p {
   overflow-y: auto;
   overflow-x: auto;
   padding-bottom: 2px;
+  padding-right: 1px;
+  padding-left: 1px;
   background-color: white;
 }
 
@@ -83,7 +85,6 @@ p {
 }
 
 /*  border-bottom: 1px solid #8182c6; */
-
 .qtable.fixed-header > thead th {
   border-bottom: 1px solid #d1d2e8;
 }

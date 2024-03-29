@@ -960,7 +960,7 @@ body.is-animated .main-menu {
 }
 .bn-e1.selected {
   background-color: #6365cc;
-  z-index: 12;
+  z-index: 14;
   color: #fff;
 }
 .bn-e1:not(.selected):hover {

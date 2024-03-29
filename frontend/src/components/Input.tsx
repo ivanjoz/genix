@@ -1,7 +1,7 @@
 import { For, JSX, createEffect, createSignal } from "solid-js";
 import { on } from "solid-js";
 
-interface IInput<T> {
+export interface IInput<T> {
   id?: number
   saveOn: T
   save: keyof T
@@ -16,6 +16,7 @@ interface IInput<T> {
   onChange?: (() => void)
   postValue?: JSX.Element
   baseDecimals?: number
+  content?: (string|JSX.Element)
 }
 
 const [inputUpdater, setInputUpdater] = createSignal(new Map as Map<number,number>)
@@ -73,7 +74,8 @@ export function Input<T>(props: IInput<T>) {
   createEffect(on(
     () => [props.saveOn, props.id ? inputUpdater().get(props.id)|| 0 : 0], 
     () => {
-      setInputValue((props.saveOn[props.save]||"") as string)
+      const v = props.saveOn[props.save]
+      setInputValue(typeof v === 'number' ? v as number : (v as string||""))
       setIsInputValid(chekIfInputIsValid(props))
     }
   ))
@@ -91,7 +93,8 @@ export function Input<T>(props: IInput<T>) {
 
   const getValue = () => {
     const value = inputValue()
-    if(typeof value !== 'number'){ return value || "" }
+    if(typeof value !== 'number'){ console.log("valor 1:", value) ; return value || "" }
+   console.log("value 2:", value)
     return baseDecimals ? (value as number / baseDecimals) : value
   }
 
@@ -224,5 +227,34 @@ export function CheckBox<T>(props: ICheckBox<T>) {
       <i class="icon-ok"></i>
     </div>
     <label>{props.label}</label>
+  </div>
+}
+
+export interface IInputDisabled<T> {
+  label?: string
+  css?: string
+  inputCss?: string
+  content?: (string|JSX.Element)
+  getContent?: () => (string|JSX.Element)
+  postValue?: JSX.Element
+}
+
+export function InputDisabled<T>(props: IInputDisabled<T>) {
+
+  const getContent = props.getContent ? props.getContent : () => props.content
+
+  let cN = "in-5c p-rel flex-column a-start"
+  if(props.css){ cN += " " + props.css }
+
+  return <div class={cN}>
+    { props.label && 
+      <div class="mr-auto label">
+        {props.label}
+      </div>
+    }
+    <div class={"in-5 flex ai-center " + (props.inputCss||"") }>
+      {getContent()}
+    </div>
+    { props.postValue || null  }
   </div>
 }

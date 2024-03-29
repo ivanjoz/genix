@@ -191,6 +191,10 @@ type SliceInclude[T NumberStr] struct {
 	valuesMap map[T]bool
 }
 
+func (e *SliceInclude[T]) IsEmpty() bool {
+	return len(e.Values) == 0
+}
+
 func (e *SliceInclude[T]) Add(value T) {
 	if e.valuesMap == nil {
 		e.valuesMap = map[T]bool{}
@@ -199,6 +203,14 @@ func (e *SliceInclude[T]) Add(value T) {
 		e.Values = append(e.Values, value)
 		e.valuesMap[value] = true
 	}
+}
+
+func (e *SliceInclude[T]) ToAny() []any {
+	anySlice := []any{}
+	for _, v := range e.Values {
+		anySlice = append(anySlice, v)
+	}
+	return anySlice
 }
 
 func (e *SliceInclude[T]) AddIf(value T) {
