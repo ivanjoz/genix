@@ -190,26 +190,36 @@ interface ICheckBox<T> {
 }
 
 export function CheckBox<T>(props: ICheckBox<T>) {
-  const [optionsSelected, setOptionsSelected] = createSignal([] as (number|string)[])
+  const [checked, setChecked] = createSignal(false as boolean)
 
   createEffect(on(
-    () => [props.saveOn], 
+    () => [props.saveOn, props.checked], 
     () => { 
-      if(!props.saveOn){ return }
-      setOptionsSelected([...(props.saveOn[props.save] || [])])
+      if(typeof props.checked === 'boolean'){
+        setChecked(props.checked)
+        return
+      }
+      if(props.saveOn && props.save){
+        setChecked(props.saveOn[props.save] || false)
+      }
     }
   ))
 
-  const checked = () =>{
-    if(typeof props.checked === 'boolean'){ return props.checked }
-    return props.saveOn ? props.saveOn[props.save] : false
+  const updateChecked = () =>{
+    if(typeof props.checked === 'boolean'){ return }
+    if(props.saveOn && props.save){
+      props.saveOn[props.save] = checked()
+    }
   }
   
   return <div class="checkbox-cnt mr-06 ">
     <div class={"checkbox-s1"+ (checked() ? " checked" : "")} 
       onClick={ev => {
         ev.stopPropagation()
-        if(props.onChange){ props.onChange(!checked()) }
+        const newCheched = !checked()
+        setChecked(newCheched)
+        updateChecked()
+        if(props.onChange){ props.onChange(newCheched) }
       }}>
       <i class="icon-ok"></i>
     </div>

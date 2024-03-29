@@ -4,6 +4,7 @@ type Caja struct {
 	TAGS          `table:"cajas"`
 	EmpresaID     int32  `db:"empresa_id,pk"`
 	ID            int32  `db:"id,pk"`
+	Tipo          int32  `db:"tipo"`
 	SedeID        int32  `db:"sede_id"`
 	Nombre        string `db:"nombre"`
 	Descripcion   string `db:"descripcion"`

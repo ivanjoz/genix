@@ -22,6 +22,7 @@ export const AdminModule: IModule = {
     cacheUpdates: 'key,route',
     cacheStatic: 'key',
     backups: 'Name',
+    cajas: "ID",
     // Scylla
     productos: "ID",
     sedes_almacenes: '[_pk+ID]',  

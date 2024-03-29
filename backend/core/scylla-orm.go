@@ -252,13 +252,18 @@ func DBUpdate[T any](records *[]T, columnsToInclude ...string) error {
 	columnsToUpdate := []BDColumn{}
 	columnsWhere := []BDColumn{}
 	includeAll := len(columnsToInclude) == 0 || Contains(columnsToInclude, "*")
+	useExclude := len(columnsToInclude) > 0 && columnsToInclude[0] == "-"
 
 	for _, e := range scyllaTable.Columns {
 		if e.IsPrimaryKey > 0 {
 			columnsWhere = append(columnsWhere, e)
 			continue
 		}
-		if includeAll || Contains(columnsToInclude, e.Name) {
+		if useExclude {
+			if Contains(columnsToInclude, e.Name) {
+				continue
+			}
+		} else if includeAll || Contains(columnsToInclude, e.Name) {
 			columnsToUpdate = append(columnsToUpdate, e)
 		}
 	}
@@ -294,6 +299,42 @@ func DBUpdate[T any](records *[]T, columnsToInclude ...string) error {
 		// Log(queryStr)
 		return err
 	}
+	return nil
+}
+
+func DBUpdateInsert[T any](
+	records *[]T,
+	isRecordForInsert func(e T) bool,
+	columnsToAvoidUpdate []string,
+	columnsToAvoidInsert ...string,
+) error {
+
+	recordsToInsert := []T{}
+	recordsToUpdate := []T{}
+
+	for _, e := range *records {
+		if isRecordForInsert(e) {
+			recordsToInsert = append(recordsToInsert, e)
+		} else {
+			recordsToUpdate = append(recordsToUpdate, e)
+		}
+	}
+
+	if len(recordsToUpdate) > 0 {
+		columnsToAvoidUpdate = append([]string{"-"}, columnsToAvoidUpdate...)
+		err := DBUpdate(&recordsToUpdate, columnsToAvoidUpdate...)
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(recordsToInsert) > 0 {
+		err := DBInsert(&recordsToInsert, columnsToAvoidInsert...)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

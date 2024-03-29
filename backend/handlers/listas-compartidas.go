@@ -90,7 +90,7 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 		e := &records[i]
 		if e.ID <= 0 {
 			id := int32(counter)
-			newIDs = append(newIDs, s.NewIDToID{id, e.ID})
+			newIDs = append(newIDs, s.NewIDToID{NewID: id, TempID: e.ID})
 			e.ID = id
 			e.Updated = nowTime
 			e.UpdatedBy = req.Usuario.ID

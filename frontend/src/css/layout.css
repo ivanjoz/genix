@@ -143,6 +143,13 @@
 .card-16e.open > .icon-c1 {
   transform: rotateX(180deg);
 }
+.card-c4 {
+  margin-top: -0.8rem;
+  padding: 1rem;
+  background-color: #0000000f;
+  height: calc(100vh - var(--header-height));
+  margin-right: -1rem;
+}
 
 @media (max-width: 600px) {
   .main-menu-c {
