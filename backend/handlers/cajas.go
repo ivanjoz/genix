@@ -75,6 +75,10 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 
 func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	cajaID := req.GetQueryInt("caja-id")
+	if cajaID == 0 {
+		return req.MakeErr("No se envió la Caja-ID")
+	}
+
 	lastRegistros := req.GetQueryInt("last-registros")
 	lastRegistros = core.If(lastRegistros > 1000, 1000, lastRegistros)
 
@@ -108,7 +112,7 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	if !usuariosIDs.IsEmpty() {
 		err := core.DBSelect(&usuarios).
 			Where("empresa_id").Equals(req.Usuario.EmpresaID).
-			Where("id").IN(usuariosIDs.ToAny())
+			Where("id").In(usuariosIDs.ToAny()).Exec()
 
 		if err != nil {
 			return req.MakeErr("Error al obtener los usuarios.", err)
@@ -150,7 +154,7 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 	caja := caja_[0]
 
 	if record.SaldoSistema != caja.SaldoCurrent {
-		re := map[string]any{"SaldoCurrent": caja_[0].SaldoCurrent}
+		re := map[string]any{"NeedUpdateSaldo": caja_[0].SaldoCurrent}
 		return req.MakeResponse(&re)
 	}
 
@@ -164,10 +168,12 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 	// Guarda la caja
 	caja.CuadreSaldo = record.SaldoReal
 	caja.CuadreFecha = nowTime
+	caja.SaldoCurrent = record.SaldoReal
 	caja.Updated = nowTime
 	caja.UpdatedBy = req.Usuario.ID
 	statements = append(statements, core.MakeUpdateQuery(
-		&[]s.Caja{caja}, "cuadre_fecha", "cuadre_saldo", "updated", "updated_by")...)
+		&[]s.Caja{caja}, "cuadre_fecha", "cuadre_saldo", "saldo_current", "updated",
+		"updated_by")...)
 
 	// Guarda el movimiento
 	movimiento := s.CajaMovimiento{
@@ -184,8 +190,13 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 	statements = append(statements,
 		core.MakeInsertQuery(&[]s.CajaMovimiento{movimiento})...)
 
-	core.Log("statements a enviar..")
-	core.Print(statements)
+	statement := core.MakeQueryStatement(statements)
+	core.Log(statement)
+
+	if err := core.ScyllaConnect().Query(statement).Exec(); err != nil {
+		core.Log("Error ScyllaDB: ", err)
+		return req.MakeErr("Error al registrar el cuadre:", err)
+	}
 
 	return req.MakeResponse(&record)
 }

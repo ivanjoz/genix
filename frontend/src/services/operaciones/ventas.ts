@@ -2,6 +2,7 @@ import { Notify } from "notiflix"
 import { GET, GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
 import { arrayToMapN } from "~/shared/main"
 import { IAlmacenMovimientosResult } from "./productos"
+import { IUsuario } from "../admin/empresas"
 
 export interface ICaja {
 	ID: number
@@ -9,9 +10,9 @@ export interface ICaja {
 	Nombre: string
 	Descripcion: string
 	MonedaTipo: number
-	FechaDeCuadre: number
-	MontoCurrent: number
-	MontoCuadre: number
+	CuadreFecha: number
+	SaldoCurrent: number
+	CuadreSaldo: number
   Tipo: number
 	ss: number
 	upd: number
@@ -33,6 +34,9 @@ export const useCajasAPI = (): GetSignal<ICajaResult> => {
       console.log("result cajas::",result_)
       const result = result_ as ICajaResult
       result.Cajas = result.Cajas || []
+      for(let e of result.Cajas){
+        e.SaldoCurrent = e.SaldoCurrent || 0
+      }
       result.CajasMap = arrayToMapN(result.Cajas,'ID')
       return result
     }
@@ -54,17 +58,24 @@ export interface IGetCajaMovimientos {
   lastRegistros?: number
 }
 
-export interface ICajaMovimientos {
+export interface ICajaMovimiento {
 	CajaID: number
 	VentaID: number
   Tipo: number
   Monto: number
+  SaldoFinal: number
   Created: number
   CreatedBy: number
+  Usuario?: IUsuario
 }
 
-export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICajaMovimientos[]> => {
-  let route = `caja-movimientos?almacen-id=${args.cajaID}`
+export interface ICajaMovimientosResult {
+  movimientos: ICajaMovimiento[]
+  usuarios: IUsuario[]
+}
+
+export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICajaMovimiento[]> => {
+  let route = `caja-movimientos?caja-id=${args.cajaID}`
   
   if((!args.fechaInicio || !args.fechaFin) && !args.lastRegistros){
     throw("No se encontró una fecha de inicio o fin.")
@@ -76,7 +87,7 @@ export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICa
     route += `&last-registros=${args.lastRegistros}`
   }
 
-  let result: ICajaMovimientos[]
+  let result: ICajaMovimientosResult
 
   try {
     result = await GET({ 
@@ -87,5 +98,30 @@ export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICa
     Notify.failure(error as string)
   }
 
-  return result
+  const usuariosMap = arrayToMapN(result.usuarios, 'id')
+  for(let e of result.movimientos){
+    e.Usuario = usuariosMap.get(e.CreatedBy)
+  }
+
+  return result.movimientos
+}
+
+export interface ICajaCuadre {
+  ID: number
+  Tipo: number
+	CajaID: number
+	SaldoSistema: number
+  SaldoDiferencia: number
+  SaldoReal: number
+  Created: number
+  CreatedBy: number
+  _error?: string
+}
+
+export const postCajaCuadre = (data: ICajaCuadre) => {
+  return POST({
+    data,
+    route: "caja-cuadre",
+    refreshIndexDBCache: "cajas"
+  })
 }

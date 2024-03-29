@@ -229,7 +229,7 @@ func MakeInsertQuery[T any](records *[]T, columnsToAvoid ...string) []string {
 			recordInsertValues = append(recordInsertValues, v)
 		}
 
-		statement := " " + queryStrInsert + "(" + strings.Join(recordInsertValues, ", ") + ")"
+		statement := /*" " +*/ queryStrInsert + "(" + strings.Join(recordInsertValues, ", ") + ")"
 		queryStatements = append(queryStatements, statement)
 	}
 
