@@ -7,18 +7,21 @@ import { ITableColumn, QTable } from "~/components/QTable";
 import { SearchSelect } from "~/components/SearchSelect";
 import { Loading, Notify, formatTime, throttle } from "~/core/main";
 import { PageContainer } from "~/core/page";
-import { cajaTipos } from "~/services/admin/shared";
+import { cajaMovimientoTipos, cajaTipos } from "~/services/admin/shared";
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
-import { ICaja, getCajaMovimientos, postCaja, useCajasAPI } from "~/services/operaciones/ventas";
-import { formatN } from "~/shared/main";
+import { ICaja, ICajaCuadre, ICajaMovimiento, getCajaMovimientos, postCaja, postCajaCuadre, useCajasAPI } from "~/services/operaciones/ventas";
+import { arrayToMapN, formatN } from "~/shared/main";
 
 export default function Cajas() {
+  const cajaMovimientoTiposMap = arrayToMapN(cajaMovimientoTipos,'id')
+
   const [almacenes] = useSedesAlmacenesAPI()
   
   const [filterText, setFilterText] = createSignal("")
   const [layerView, setLayerView] = createSignal(1)
   const [cajaForm, setCajaForm] = createSignal({} as ICaja)
-  const [cajaCuadreForm, setCajaCuadreForm] = createSignal({} as any)
+  const [cajaCuadreForm, setCajaCuadreForm] = createSignal({} as ICajaCuadre)
+  const [cajaMovimientos, setCajaMovimientos] = createSignal([] as ICajaMovimiento[])
   const [cajas, setCajas] = useCajasAPI()
   
   const columns: ITableColumn<ICaja>[] = [
@@ -43,7 +46,7 @@ export default function Cajas() {
     },
     { header: "Saldo", field: "Nombre", css: 't-c',
       render: e => {
-        return <div>{formatN(e.MontoCurrent/100,2) as string}</div>
+        return <div>{formatN(e.SaldoCurrent/100,2) as string}</div>
       }
     },
   ]
@@ -66,7 +69,26 @@ export default function Cajas() {
 
   const saveCajaCuadre = async () => {
     const form = cajaCuadreForm()
-    form.SaldoSistema = cajaForm().MontoCurrent
+    form.SaldoSistema = cajaForm().SaldoCurrent
+
+    Loading.standard("Guardando caja...")
+    let result: any
+    try {
+      result = await postCajaCuadre(form)
+    } catch (error) {
+      console.warn(error)
+      return
+    }
+    Loading.remove()
+    if(typeof result?.NeedUpdateSaldo === 'number'){
+      const caja = cajas().CajasMap.get(form.CajaID)
+      caja.SaldoCurrent = result.NeedUpdateSaldo
+      setCajaForm({...caja})
+      const newForm = {...cajaCuadreForm()}
+      newForm._error = `Hubo una actualización en el saldo de la caja. El saldo actual es "${formatN(caja.SaldoCurrent/100),2}". Intente nuevamente con el cálculo actualizado.`
+      newForm.SaldoDiferencia = newForm.SaldoReal - caja.SaldoCurrent
+      setCajaCuadreForm(newForm)
+    }
   }
 
   return <PageContainer title="Cajas & Bancos">
@@ -129,7 +151,7 @@ export default function Cajas() {
               } catch (error) {
                 Notify.failure(error as string); return
               }
-              console.log("results::", result)
+              setCajaMovimientos(result)
             }}
           >
             <Show when={!cajaForm().ID}>
@@ -150,25 +172,28 @@ export default function Cajas() {
               <QTable css="w100 mt-08"
                 maxHeight="calc(100vh - 8rem - 16px)"
                 styleMobile={{ height: '100vh' }}
-                data={[]}
-                onRowCLick={e => {
-                  const el = cajaForm().ID === e.ID ? {} as ICaja : {...e}
-                  setCajaForm(el)
-                }}
+                data={cajaMovimientos()}
                 columns={[
                   { header: "Fecha Hora",
                     getValue: e => {
-                      return ""
+                      return formatTime(e.Created,"Y-m-d h:n") as string
                     }
                   },
                   { header: "Tipo Mov.",
                     getValue: e => {
-                      return ""
+                      return cajaMovimientoTiposMap.get(e.Tipo)?.name || ""
                     }
                   },
-                  { header: "Monto",
+                  { header: "Monto", css: "ff-mono t-r",
+                    render: e => {
+                      return <span class={e.Monto < 0 ? "c-red" : ""}>
+                        {formatN(e.Monto/100,2) as string}
+                      </span>
+                    }
+                  },
+                  { header: "Saldo Final", css: "ff-mono t-r",
                     getValue: e => {
-                      return ""
+                      return formatN(e.SaldoFinal/100,2) as string
                     }
                   },
                   { header: "Nº Documento",
@@ -176,9 +201,9 @@ export default function Cajas() {
                       return ""
                     }
                   },
-                  { header: "Usuario",
+                  { header: "Usuario", css: "t-c",
                     getValue: e => {
-                      return ""
+                      return e.Usuario?.usuario || ""
                     }
                   }
                 ]} 
@@ -212,6 +237,7 @@ export default function Cajas() {
                   <button class="bn1 b-green" onClick={ev => {
                     ev.stopPropagation()
                     setOpenModals([2])
+                    setCajaCuadreForm({ CajaID: cajaForm().ID } as ICajaCuadre)
                   }}>
                     <i class="icon-plus"></i>
                   </button> 
@@ -289,13 +315,13 @@ export default function Cajas() {
     </Modal>
     <Modal id={2} title="Cuadre de Caja"
       onSave={() => {
-        saveCaja()
+        saveCajaCuadre()
       }}
     >
       <div class="w100-10 flex-wrap in-s2">        
         <InputDisabled css="w-14x mb-10" label="Saldo Sistema" 
           inputCss="h3 ff-mono jc-center"
-          content={formatN(cajaForm().MontoCurrent/100,2)}
+          content={formatN(cajaForm().SaldoCurrent/100,2)}
         />
         <div class="w-10x">
           <button class="bn1 b-purple" style={{ "margin-top": "0.9rem" }}>
@@ -315,13 +341,18 @@ export default function Cajas() {
         <InputDisabled css="w-14x mb-10" label="Diferencia" 
           inputCss="h3 ff-mono jc-center"
           getContent={() => {
-            const diff = (cajaCuadreForm().SaldoReal||0) - cajaForm().MontoCurrent
+            const diff = (cajaCuadreForm().SaldoReal||0) - cajaForm().SaldoCurrent
             if(!diff){ return "" }
             return <span class={diff > 0 ? "c-blue" : "c-red"}>
               {formatN(diff/100,2)}
             </span>
           }}
         />
+        <Show when={cajaCuadreForm()._error}>
+          <div class="w100 c-red ff-bold">
+            <i class="icon-attention"></i>{cajaCuadreForm()._error}
+          </div>
+        </Show>
       </div>
     </Modal>
   </PageContainer>
