@@ -25,6 +25,7 @@ type CajaMovimiento struct {
 	EmpresaID  int32 `json:",omitempty" db:"empresa_id,pk"`
 	ID         int64 `db:"id,pk"`
 	CajaID     int32 `db:"caja_id"`
+	CajaRefID  int32 `db:"caja_ref_id"`
 	VentaID    int32 `json:",omitempty" db:"venta_id,view"`
 	Tipo       int8  `json:",omitempty" db:"tipo"`
 	SaldoFinal int32 `db:"saldo_final"`

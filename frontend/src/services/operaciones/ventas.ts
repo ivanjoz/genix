@@ -60,6 +60,7 @@ export interface IGetCajaMovimientos {
 
 export interface ICajaMovimiento {
 	CajaID: number
+  CajaRefID: number
 	VentaID: number
   Tipo: number
   Monto: number

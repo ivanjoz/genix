@@ -163,7 +163,6 @@ func GetCajaCuadres(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
-	core.Env.LOGS_DEBUG = true
 
 	nowTimeMill := time.Now().UnixMilli()
 	nowTime := nowTimeMill / 1000
@@ -178,18 +177,13 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Faltan Parámetros: [Caja-ID]")
 	}
 
-	caja_ := []s.Caja{}
-	err = core.DBSelect(&caja_).
-		Where("empresa_id").Equals(req.Usuario.EmpresaID).
-		Where("id").Equals(record.CajaID).Exec()
-
+	caja, err := shared.GetCaja(req.Usuario.EmpresaID, record.CajaID)
 	if err != nil {
-		return req.MakeErr("Error al obtener información de la caja.", err)
+		return req.MakeErr(err)
 	}
-	caja := caja_[0]
 
 	if record.SaldoSistema != caja.SaldoCurrent {
-		re := map[string]any{"NeedUpdateSaldo": caja_[0].SaldoCurrent}
+		re := map[string]any{"NeedUpdateSaldo": caja.SaldoCurrent}
 		return req.MakeResponse(&re)
 	}
 
@@ -225,6 +219,60 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 
 	statements = append(statements,
 		core.MakeInsertQuery(&[]s.CajaMovimiento{movimiento})...)
+
+	statement := core.MakeQueryStatement(statements)
+	core.Log(statement)
+
+	if err := core.ScyllaConnect().Query(statement).Exec(); err != nil {
+		core.Log("Error ScyllaDB: ", err)
+		return req.MakeErr("Error al registrar el cuadre:", err)
+	}
+
+	return req.MakeResponse(&record)
+}
+
+func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
+
+	nowTimeMill := time.Now().UnixMilli()
+	nowTime := nowTimeMill / 1000
+
+	record := s.CajaMovimiento{}
+	err := json.Unmarshal([]byte(*req.Body), &record)
+	if err != nil {
+		return req.MakeErr("Error al deserilizar el body:", err)
+	}
+
+	if record.Tipo == 0 || record.Monto == 0 || record.CajaID == 0 {
+		return req.MakeErr("Hay parámetros faltantes (Tipo, Monto o Caja-ID)")
+	}
+
+	caja, err := shared.GetCaja(req.Usuario.EmpresaID, record.CajaID)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+
+	saldoSistema := record.SaldoFinal - record.Monto
+
+	if saldoSistema != caja.SaldoCurrent {
+		re := map[string]any{"NeedUpdateSaldo": caja.SaldoCurrent}
+		return req.MakeResponse(&re)
+	}
+
+	// Statement para guardar el movimiento
+	record.EmpresaID = req.Usuario.EmpresaID
+	record.Created = nowTime
+	record.CreatedBy = req.Usuario.ID
+	record.SetID(nowTimeMill)
+
+	statements := core.MakeInsertQuery(&[]s.CajaMovimiento{record})
+
+	// Statement para actualizar la caja
+	caja.SaldoCurrent = record.SaldoFinal
+	caja.Updated = nowTime
+	caja.UpdatedBy = req.Usuario.ID
+	statements = append(statements, core.MakeUpdateQuery(
+		&[]s.Caja{caja}, "cuadre_fecha", "cuadre_saldo", "saldo_current", "updated",
+		"updated_by")...)
 
 	statement := core.MakeQueryStatement(statements)
 	core.Log(statement)
