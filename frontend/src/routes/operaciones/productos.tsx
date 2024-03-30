@@ -110,7 +110,7 @@ export default function Productos() {
         </div>
       </div>
       <QTable data={productos().productos || []} 
-        css="selectable" tableCss="w-page"
+        css="selectable" tableCss="w-page-t"
         isSelected={(e,id) => e.ID === id as number}
         selected={productoForm().ID}
         filterText={filterText()} filterKeys={["Nombre"]}

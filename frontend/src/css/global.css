@@ -148,6 +148,7 @@ select:disabled {
 .w-minc { width: min-content; }
 .mw-100 { max-width: 100%; }
 .w-page { width: var(--page-width); }
+.w-page-t { width: calc(var(--page-width) - 2px); }
 .w-page-40 { width: calc(var(--page-width) * 0.40); }
 .w-page-42 { width: calc(var(--page-width) * 0.42); }
 .w-page-44 { width: calc(var(--page-width) * 0.44); }

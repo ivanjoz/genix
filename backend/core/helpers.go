@@ -457,6 +457,14 @@ func IntToPointer[T Number1](num T) *T {
 	return &num
 }
 
+func Map[S any, T NumberStr](records []S, getValue func(S) T) []T {
+	values := SliceInclude[T]{}
+	for _, e := range records {
+		values.AddIf(getValue(e))
+	}
+	return values.Values
+}
+
 func SliceToMap[T any, N NumberStr](slice []T, makeKey func(T) N) map[N][]*T {
 	sliceMap := map[N][]*T{}
 

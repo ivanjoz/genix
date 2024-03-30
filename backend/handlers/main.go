@@ -28,6 +28,7 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.cajas":                GetCajas,
 	"POST.cajas":               PostCajas,
 	"GET.caja-movimientos":     GetCajaMovimientos,
+	"GET.caja-cuadres":         GetCajaCuadres,
 	"POST.caja-cuadre":         PostCajaCuadre,
 	"GET.p-demo-serialization": Demo1,
 }

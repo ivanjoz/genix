@@ -115,6 +115,7 @@ export interface ICajaCuadre {
   SaldoReal: number
   Created: number
   CreatedBy: number
+  Usuario?: IUsuario
   _error?: string
 }
 
@@ -124,4 +125,42 @@ export const postCajaCuadre = (data: ICajaCuadre) => {
     route: "caja-cuadre",
     refreshIndexDBCache: "cajas"
   })
+}
+
+
+export interface ICajaCuadresResult {
+  cuadres: ICajaCuadre[]
+  usuarios: IUsuario[]
+}
+
+export const getCajaCuadres = async (args: IGetCajaMovimientos): Promise<ICajaCuadre[]> => {
+  let route = `caja-cuadres?caja-id=${args.cajaID}`
+  
+  if((!args.fechaInicio || !args.fechaFin) && !args.lastRegistros){
+    throw("No se encontró una fecha de inicio o fin.")
+  }
+  
+  route += `&fecha-hora-inicio=${args.fechaInicio*24*60*60 + window._zoneOffset}`
+  route += `&fecha-hora-fin=${(args.fechaFin+1)*24*60*60 + window._zoneOffset}`
+  if(args.lastRegistros){
+    route += `&last-registros=${args.lastRegistros}`
+  }
+
+  let result: ICajaCuadresResult
+
+  try {
+    result = await GET({ 
+      route, emptyValue: [],
+      errorMessage: 'Hubo un error al obtener los movimientos de la caja.',
+    })
+  } catch (error) {
+    Notify.failure(error as string)
+  }
+
+  const usuariosMap = arrayToMapN(result.usuarios, 'id')
+  for(let e of result.cuadres){
+    e.Usuario = usuariosMap.get(e.CreatedBy)
+  }
+
+  return result.cuadres
 }
