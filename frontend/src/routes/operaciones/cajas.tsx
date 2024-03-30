@@ -1,4 +1,4 @@
-import { Show, createSignal } from "solid-js";
+import { Show, createMemo, createSignal } from "solid-js";
 import { deviceType } from "~/app";
 import { BarOptions, LayerLoading } from "~/components/Cards";
 import { CheckBox, Input, InputDisabled } from "~/components/Input";
@@ -27,7 +27,7 @@ export default function Cajas() {
   const [cajas, setCajas] = useCajasAPI()
   
   const columns: ITableColumn<ICaja>[] = [
-    { header: "ID", headerStyle: { width: '2.6rem' }, css: 't-c c-purple2',
+    { header: "ID", headerStyle: { width: '2rem' }, css: 't-c c-purple2',
       getValue: e => e.ID
     },
     { header: "Nombre", field: "Nombre", 
@@ -43,10 +43,14 @@ export default function Cajas() {
     },
     { header: "Cuadre", field: "Nombre",
       render: e => {
-        return ""
+        if(!e.CuadreFecha){ return "" }
+        return <div class="lh-10 t-r">
+          <div class="ff-mono h5">{formatN(e.CuadreSaldo/100,2)}</div>
+          <div class="h5 c-steel">{formatTime(e.CuadreFecha,"d-M h:n") as string}</div>
+        </div>
       }
     },
-    { header: "Saldo", field: "Nombre", css: 't-c',
+    { header: "Saldo", field: "Nombre", css: 't-r ff-mono',
       render: e => {
         return <div>{formatN(e.SaldoCurrent/100,2) as string}</div>
       }
@@ -96,6 +100,10 @@ export default function Cajas() {
       setCajaCuadreForm(newForm)
     }
   }
+
+  const isCajaMovimiento = createMemo(() => {
+    return [3].includes(cajaMovimientoForm().Tipo)
+  })
 
   return <PageContainer title="Cajas & Bancos">
     <div class="flex jc-between mb-06"
@@ -178,7 +186,9 @@ export default function Cajas() {
                   <button class="bn1 b-green" onClick={ev => {
                     ev.stopPropagation()
                     setOpenModals([3])
-                    setCajaMovimientoForm({ CajaID: cajaForm().ID } as ICajaMovimiento)
+                    setCajaMovimientoForm({ 
+                      CajaID: cajaForm().ID, SaldoFinal: cajaForm().SaldoCurrent,
+                    } as ICajaMovimiento)
                   }}>
                     <i class="icon-plus"></i>
                   </button> 
@@ -367,13 +377,48 @@ export default function Cajas() {
         </Show>
       </div>
     </Modal>
-    <Modal id={3} title="Cuadre de Caja"
+    <Modal id={3} title="Movimiento de Caja"
       onSave={() => {
         // saveCajaCuadre()
       }}
     >
       <div class="w100-10 flex-wrap in-s2">        
-        
+        <SearchSelect saveOn={cajaMovimientoForm()} save="Tipo" css="w-12x mb-10"
+          label="Tipo" keys="id.name" 
+          options={cajaMovimientoTipos.filter(x => x.group === 2)}
+          placeholder="" required={true}
+          onChange={() => {
+            cajaMovimientoForm().CajaRefID = 0
+            setCajaMovimientoForm({...cajaMovimientoForm()})
+          }}
+        />
+        <SearchSelect saveOn={cajaMovimientoForm()} save="CajaRefID" css="w-12x mb-10"
+          label="Caja Destino" keys="id.name" options={cajaTipos}
+          disabled={!isCajaMovimiento()}
+          placeholder={isCajaMovimiento() ? "seleccione" : "no aplica"} 
+          required={true} 
+        />
+        <Input saveOn={cajaMovimientoForm()} save="Monto" inputCss="ff-mono h3 t-c"
+          css="w-12x mb-10" label="Monto" baseDecimals={2}
+          required={true} type="number"
+          onChange={() => {
+            const form = {...cajaMovimientoForm()}
+            form.SaldoFinal = cajaForm().SaldoCurrent - (form.Monto||0)
+            setCajaMovimientoForm(form)
+          }}
+        />
+        <div class="w-12x"></div>
+        <InputDisabled css="w-12x mb-10" label="Saldo Inicial" 
+          inputCss="h3 ff-mono jc-center"
+          content={formatN(cajaForm().SaldoCurrent/100,2)}
+        />
+        <InputDisabled css="w-12x mb-10" label="Saldo Final" 
+          inputCss="h3 ff-mono jc-center"
+          getContent={()=> {
+            const saldo = cajaMovimientoForm().SaldoFinal
+            return <span class={saldo >= 0 ? "" : "c-red"}>{formatN(saldo/100,2)}</span>
+          }}
+        />
       </div>
     </Modal>
   </PageContainer>

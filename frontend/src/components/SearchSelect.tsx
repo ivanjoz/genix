@@ -16,6 +16,7 @@ interface SearchSelect<T> {
   selected?: (number|string)
   notEmpty?: boolean
   required?: boolean
+  disabled?: boolean
   clearOnSelect?: boolean
   avoidIDs?: number[]
   inputCss?: string
@@ -80,6 +81,10 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
     return selected
   }
 
+  const isRequired = () => {
+    return props.required && !props.disabled
+  }
+
   createEffect(on(
     () => [props.saveOn, props.selected||""], 
     () => {
@@ -90,7 +95,7 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
       } else {
         inputRef.value = ""
       }
-      if(props.required){ setIsValid(selected ? 1 : 2) }
+      if(isRequired()){ setIsValid(selected ? 1 : 2) }
     }
   ))
   
@@ -114,7 +119,7 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
     }
 
     const newValue = selected ? selected[keyId] : null
-    if(props.required){ setIsValid(newValue ? 1 : 2) }
+    if(isRequired()){ setIsValid(newValue ? 1 : 2) }
 
     if(props.clearOnSelect){
       if(props.onChange){ props.onChange(selected) }
@@ -204,7 +209,7 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
   return <div class={cN}>
     { props.label && 
       <div class="mr-auto label">
-        {props.label} { iconValid() }
+        {props.label} { !props.disabled && iconValid() }
       </div>
     }
     <input class="in-5 increment" onkeyup={onKeyUp} ref={inputRef}
@@ -216,6 +221,7 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
         ev.stopPropagation()
         console.log(ev)
       }}
+      disabled={props.disabled}
       onFocus={ev=> {
         ev.stopPropagation()
         words = []
@@ -233,9 +239,11 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
         setShow(false)
       }}
     />
-    <div class={"_icon" + ((show() && !props.icon) ? " show" : "")}>
-      <i class={props.icon || "icon-down-open-1"}></i>
-    </div>
+    <Show when={!props.disabled}>
+      <div class={"_icon" + ((show() && !props.icon) ? " show" : "")}>
+        <i class={props.icon || "icon-down-open-1"}></i>
+      </div>
+    </Show>
     { show() &&
       <div class={"search-ctn z20 w100" + (arrowSelected() >= 0 ? " on-arrow" : "")}
         onMouseMove={avoidhover() ? (ev) => {

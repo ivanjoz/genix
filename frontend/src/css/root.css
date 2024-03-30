@@ -136,12 +136,14 @@ p {
   border-bottom: none;
 }
 .qtable > tbody > tr.selected {
-  background-color: var(--light-3);
   color: var(--purple-2);
   outline: 2px solid var(--color-11);
   border-radius: 5px;
   position: relative;
   z-index: 12;
+}
+.qtable > tbody > tr.selected > td {
+  background-color: var(--light-3);
 }
 .qtable > tbody > tr.tr-final > td:first-of-type {
   border-bottom-left-radius: 7px;
