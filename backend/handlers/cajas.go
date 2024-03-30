@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"app/core"
+	"app/shared"
 	s "app/types"
 	"encoding/json"
 	"time"
@@ -102,26 +103,60 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los movimientos de las cajas:", err)
 	}
 
-	usuariosIDs := core.SliceInclude[int32]{}
-	for _, e := range movimientos {
-		usuariosIDs.Add(e.CreatedBy)
-	}
+	usuarios, err := shared.GetUsuarios(req.Usuario.EmpresaID,
+		core.Map(movimientos, func(e s.CajaMovimiento) int32 { return e.CreatedBy }))
 
-	usuarios := []s.Usuario{}
-
-	if !usuariosIDs.IsEmpty() {
-		err := core.DBSelect(&usuarios).
-			Where("empresa_id").Equals(req.Usuario.EmpresaID).
-			Where("id").In(usuariosIDs.ToAny()).Exec()
-
-		if err != nil {
-			return req.MakeErr("Error al obtener los usuarios.", err)
-		}
+	if err != nil {
+		return req.MakeErr("Error al obtener los usuarios.", err)
 	}
 
 	response := map[string]any{
 		"movimientos": movimientos,
 		"usuarios":    usuarios,
+	}
+
+	return core.MakeResponse(req, &response)
+}
+
+func GetCajaCuadres(req *core.HandlerArgs) core.HandlerResponse {
+	cajaID := req.GetQueryInt("caja-id")
+	if cajaID == 0 {
+		return req.MakeErr("No se envió la Caja-ID")
+	}
+
+	lastRegistros := req.GetQueryInt("last-registros")
+	lastRegistros = core.If(lastRegistros > 1000, 1000, lastRegistros)
+
+	cuadres := []s.CajaCuadre{}
+	query := core.DBSelect(&cuadres).
+		Where("empresa_id").Equals(req.Usuario.EmpresaID)
+
+	baseRecord := s.CajaCuadre{CajaID: cajaID}
+	if lastRegistros > 0 {
+		baseRecord.SetID(9_999_999_999_999)
+		query = query.Where("id").LessEq(baseRecord.ID)
+		baseRecord.SetID(0)
+		query = query.Where("id").GreatEq(baseRecord.ID)
+		query.Limit(lastRegistros)
+	} else {
+
+	}
+
+	err := query.OrderDescending().Exec()
+	if err != nil {
+		return req.MakeErr("Error al obtener los movimientos de las cajas:", err)
+	}
+
+	usuarios, err := shared.GetUsuarios(req.Usuario.EmpresaID,
+		core.Map(cuadres, func(e s.CajaCuadre) int32 { return e.CreatedBy }))
+
+	if err != nil {
+		return req.MakeErr("Error al obtener los usuarios.", err)
+	}
+
+	response := map[string]any{
+		"usuarios": usuarios,
+		"cuadres":  cuadres,
 	}
 
 	return core.MakeResponse(req, &response)
@@ -162,6 +197,7 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 	record.EmpresaID = req.Usuario.EmpresaID
 	record.SetID(nowTimeMill)
 	record.Created = nowTime
+	record.CreatedBy = req.Usuario.ID
 	record.SaldoDiferencia = record.SaldoReal - caja.SaldoCurrent
 	statements := core.MakeInsertQuery(&[]s.CajaCuadre{record})
 

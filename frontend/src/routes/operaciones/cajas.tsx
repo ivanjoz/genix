@@ -9,7 +9,7 @@ import { Loading, Notify, formatTime, throttle } from "~/core/main";
 import { PageContainer } from "~/core/page";
 import { cajaMovimientoTipos, cajaTipos } from "~/services/admin/shared";
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
-import { ICaja, ICajaCuadre, ICajaMovimiento, getCajaMovimientos, postCaja, postCajaCuadre, useCajasAPI } from "~/services/operaciones/ventas";
+import { ICaja, ICajaCuadre, ICajaMovimiento, getCajaCuadres, getCajaMovimientos, postCaja, postCajaCuadre, useCajasAPI } from "~/services/operaciones/ventas";
 import { arrayToMapN, formatN } from "~/shared/main";
 
 export default function Cajas() {
@@ -21,7 +21,9 @@ export default function Cajas() {
   const [layerView, setLayerView] = createSignal(1)
   const [cajaForm, setCajaForm] = createSignal({} as ICaja)
   const [cajaCuadreForm, setCajaCuadreForm] = createSignal({} as ICajaCuadre)
+  const [cajaMovimientoForm, setCajaMovimientoForm] = createSignal({} as ICajaMovimiento)
   const [cajaMovimientos, setCajaMovimientos] = createSignal([] as ICajaMovimiento[])
+  const [cajaCuadres, setCajaCuadres] = createSignal([] as ICajaCuadre[])
   const [cajas, setCajas] = useCajasAPI()
   
   const columns: ITableColumn<ICaja>[] = [
@@ -65,6 +67,10 @@ export default function Cajas() {
       return
     }
     Loading.remove()
+    Object.assign(cajas().CajasMap.get(caja.ID),caja)
+    cajas().Cajas = [...cajas().Cajas]
+    setCajas({...cajas()})
+    setOpenModals([])
   }
 
   const saveCajaCuadre = async () => {
@@ -159,14 +165,23 @@ export default function Cajas() {
             </Show>
             <Show when={!!cajaForm().ID}>
               <div class="flex w100 jc-between mt-08">
-                <div></div>
                 <div class="flex ai-center">
+                  <div class="h3 ff-bold mr-08">{cajaForm()?.Nombre||""}</div>
                   <button class="bn1 b-yellow" onclick={ev =>{
                     ev.stopPropagation()
                     setOpenModals([1])
                   }}>
                     <i class="icon-pencil"></i>
                   </button>
+                </div>
+                <div class="flex ai-center">
+                  <button class="bn1 b-green" onClick={ev => {
+                    ev.stopPropagation()
+                    setOpenModals([3])
+                    setCajaMovimientoForm({ CajaID: cajaForm().ID } as ICajaMovimiento)
+                  }}>
+                    <i class="icon-plus"></i>
+                  </button> 
                 </div>
               </div>
               <QTable css="w100 mt-08"
@@ -176,7 +191,7 @@ export default function Cajas() {
                 columns={[
                   { header: "Fecha Hora",
                     getValue: e => {
-                      return formatTime(e.Created,"Y-m-d h:n") as string
+                      return formatTime(e.Created,"d-M h:n") as string
                     }
                   },
                   { header: "Tipo Mov.",
@@ -214,17 +229,14 @@ export default function Cajas() {
         <Show when={layerView() === 2}>
           <LayerLoading baseObject={cajaForm()}
             startPromise={async (e) => {
-              return
-              /*
               if(!e.ID){ return }
-              let result 
+              let records: ICajaCuadre[]
               try {
-                result = await getCajaMovimientos({ cajaID: e.ID, lastRegistros: 200 })
+                records = await getCajaCuadres({ cajaID: e.ID, lastRegistros: 200 })
               } catch (error) {
                 Notify.failure(error as string); return
               }
-              console.log("results::", result)
-              */
+              setCajaCuadres(records)
             }}
           >
             <Show when={!cajaForm().ID}>
@@ -246,35 +258,35 @@ export default function Cajas() {
               <QTable css="w100 mt-08"
                 maxHeight="calc(100vh - 8rem - 16px)"
                 styleMobile={{ height: '100vh' }}
-                data={[]}
+                data={cajaCuadres()}
                 onRowCLick={e => {
                   const el = cajaForm().ID === e.ID ? {} as ICaja : {...e}
-                  setCajaForm(el)
+                  setCajaForm(el as ICaja)
                 }}
                 columns={[
                   { header: "Fecha Hora",
                     getValue: e => {
-                      return ""
+                      return formatTime(e.Created,"d-M h:n") as string
                     }
                   },
-                  { header: "Saldo Sistema",
+                  { header: "Saldo Sistema", css: 'ff-mono t-r',
                     getValue: e => {
-                      return ""
+                      return formatN((e.SaldoSistema||0)/100,2)
                     }
                   },
-                  { header: "Diferencia",
+                  { header: "Diferencia",  css: 'ff-mono t-r',
                     getValue: e => {
-                      return ""
+                      return formatN((e.SaldoDiferencia||0)/100,2)
                     }
                   },
-                  { header: "Saldo Real",
+                  { header: "Saldo Real",  css: 'ff-mono t-r',
                     getValue: e => {
-                      return ""
+                      return formatN((e.SaldoReal||0)/100,2)
                     }
                   },
-                  { header: "Usuario",
+                  { header: "Usuario", css: 't-c',
                     getValue: e => {
-                      return ""
+                      return e.Usuario?.usuario||""
                     }
                   }
                 ]} 
@@ -353,6 +365,15 @@ export default function Cajas() {
             <i class="icon-attention"></i>{cajaCuadreForm()._error}
           </div>
         </Show>
+      </div>
+    </Modal>
+    <Modal id={3} title="Cuadre de Caja"
+      onSave={() => {
+        // saveCajaCuadre()
+      }}
+    >
+      <div class="w100-10 flex-wrap in-s2">        
+        
       </div>
     </Modal>
   </PageContainer>

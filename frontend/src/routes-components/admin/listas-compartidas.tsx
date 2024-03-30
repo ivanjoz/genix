@@ -134,7 +134,7 @@ export const ListasCompartidasLayer = (props: IListasCompartidasLayer) => {
       </div>
     </div>
     <QTable data={registros()} 
-      css="" tableCss="w-page" maxHeight="calc(80vh - 13rem)" 
+      css="" tableCss="w-page-t" maxHeight="calc(80vh - 13rem)" 
       columns={columns}
     />
   </div>

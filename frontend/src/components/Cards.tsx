@@ -196,8 +196,9 @@ export function LayerLoading<T>(props: ILayerLoading<T>){
 
   return <div class={"w100"}>
     { isLoading() &&
-      <div>
-        <h1>Loading...</h1>
+      <div class="pm-loading mt-12" style={{ padding: '7px' }}>
+        <div class="bg"></div>
+        <span>{"Cargando..."}</span>
       </div>
     }
     { !isLoading() &&

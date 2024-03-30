@@ -179,7 +179,7 @@ export default function SedesAlmacenes() {
           </div>
         </div>
         <QTable data={almacenes().Almacenes || []}
-          tableCss="w-page"
+          tableCss="w-page-t"
           style={{ width: openLayers().length > 0 
             ? `calc(var(--page-width) * ${1-layerWidth})` : undefined  
           }}
