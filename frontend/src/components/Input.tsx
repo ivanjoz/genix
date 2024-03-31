@@ -17,6 +17,7 @@ export interface IInput<T> {
   postValue?: JSX.Element
   baseDecimals?: number
   content?: (string|JSX.Element)
+  transform?: (v: (string|number)) => (string|number)
 }
 
 const [inputUpdater, setInputUpdater] = createSignal(new Map as Map<number,number>)
@@ -53,17 +54,22 @@ export function Input<T>(props: IInput<T>) {
   
   let isChange = 0
 
-  const onKeyUp = (ev: KeyboardEvent) => {
+  const onKeyUp = (ev: KeyboardEvent, isBlur?: boolean) => {
     ev.stopPropagation()
     const target = ev.target as HTMLInputElement
     let value = target.value as (number|string)
+
     if(props.type === 'number'){
+      if(!isBlur && !value && ev.key === "-"){ return }
       if(isNaN(value as number)){ value === undefined }
       else {
         value = parseFloat(value as string)
         if(baseDecimals){ value = Math.round(value * baseDecimals)}
       }
     }
+
+    if(props.transform && isBlur){ value = props.transform(value) }
+
     if(props.saveOn && props.save){
       props.saveOn[props.save] = value as T[keyof T]
       setIsInputValid(chekIfInputIsValid(props))
@@ -106,13 +112,10 @@ export function Input<T>(props: IInput<T>) {
     }
     <input class={"in-5 " + (props.inputCss||"") } 
       value={getValue()} 
-      onkeyup={ev => {
-        onKeyUp(ev)
-        isChange++
-      }}
+      onkeyup={ev => { onKeyUp(ev); isChange++ }}
       type={props.type || "text"}
       onBlur={(ev) => {
-        onKeyUp(ev as unknown as any)
+        onKeyUp(ev as unknown as any, true)
         if(props.onChange && isChange){ 
           props.onChange() 
           isChange = 0

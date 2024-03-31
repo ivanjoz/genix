@@ -34,6 +34,10 @@ type CajaMovimiento struct {
 	CreatedBy  int32 `json:",omitempty" db:"created_by,view"`
 }
 
+func (e *CajaMovimiento) MakeID(unixTimeMill int64) int64 {
+	return int64(e.CajaID)*10_000_000_000_000 + unixTimeMill
+}
+
 func (e *CajaMovimiento) SetID(unixTimeMill int64) {
 	e.ID = int64(e.CajaID)*10_000_000_000_000 + unixTimeMill
 }
