@@ -154,14 +154,22 @@ func InitTable[T any](mode int8) {
 		pk := strings.Join(whereColumns, ",")
 
 		if len(scyllaTable.PartitionKey) > 0 {
-			whereColumns = []string{scyllaTable.PartitionKey, view.ColumnName, scyllaTable.PrimaryKey}
-			pk = fmt.Sprintf("(%v), %v, %v",
-				scyllaTable.PartitionKey, view.ColumnName, scyllaTable.PrimaryKey)
+			whereColumns = append([]string{scyllaTable.PartitionKey}, whereColumns...)
+			pk = fmt.Sprintf("(%v), %v", scyllaTable.PartitionKey, pk)
 		}
 
 		whereColumnsNotNull := []string{}
 		for _, e := range whereColumns {
-			whereColumnsNotNull = append(whereColumnsNotNull, e+" IS NOT NULL")
+			if e == view.ColumnName {
+				col := scyllaTable.ColumnsMap[e]
+				if col.Type == "text" {
+					whereColumnsNotNull = append(whereColumnsNotNull, e+" > ''")
+				} else {
+					whereColumnsNotNull = append(whereColumnsNotNull, e+" > 0")
+				}
+			} else {
+				whereColumnsNotNull = append(whereColumnsNotNull, e+" IS NOT NULL")
+			}
 		}
 
 		selectColumns := "*"

@@ -366,6 +366,11 @@ func DBSelectReflect(records *[]reflect.Type, columnsToAvoid ...string) *QuerySe
 	}
 }
 
+func ExecuteStatements(statements []string) error {
+	batchStatement := MakeQueryStatement(statements)
+	return ScyllaConnect().Query(batchStatement).Exec()
+}
+
 type QueryParams struct {
 	Type      int8
 	Columns   []string
@@ -510,9 +515,6 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 		for _, qp := range whereGroup {
 			var wh string
 
-			for _, col := range qp.Columns {
-				columnsWhere.Add(col)
-			}
 			// Revisa si hay un view para esa columna
 			if len(qp.Columns) >= 1 {
 				colnames := strings.Join(qp.Columns, "_")
@@ -524,8 +526,38 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 						ref := reflect.ValueOf(base).Elem()
 
 						for i, colname := range qp.Columns {
+							va := qp.Values[i]
 							if column, ok := scyllaTable.ColumnsMap[colname]; ok {
-								ref.Field(column.FieldIdx).Set(reflect.ValueOf(qp.Values[i]))
+								rType := reflect.TypeOf(va).Name()
+
+								if rType != column.FieldType {
+									if _va, ok := va.(int64); ok {
+										if column.FieldType == "int32" {
+											va = int32(_va)
+										} else if column.FieldType == "int" {
+											va = int(_va)
+										}
+									} else if _va, ok := va.(int32); ok {
+										if column.FieldType == "int64" {
+											va = int64(_va)
+										} else if column.FieldType == "int" {
+											va = int(_va)
+										}
+									} else if _va, ok := va.(int); ok {
+										if column.FieldType == "int64" {
+											va = int64(_va)
+										} else if column.FieldType == "int32" {
+											va = int32(_va)
+										}
+									}
+								}
+
+								rType = reflect.TypeOf(va).Name()
+								if rType != column.FieldType {
+									panic(fmt.Sprintf(`%v | Los tipos de datos de la columna "%v" no coinciden ("%v" != "%v") | Valor: %v`, scyllaTable.Name, view.ColumnName, rType, column.FieldType, va))
+								}
+								fmt.Println("columna tipo::", view.ColumnName, rType, column.FieldType, va)
+								ref.Field(column.FieldIdx).Set(reflect.ValueOf(va))
 							}
 						}
 
@@ -600,6 +632,9 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 				wh = strings.Join(wheresToJoin, " AND ")
 			}
 			wheres = append(wheres, wh)
+			for _, col := range qp.Columns {
+				columnsWhere.Add(col)
+			}
 		}
 		queryStr += " WHERE " + strings.Join(wheres, " AND ")
 	}
@@ -641,8 +676,8 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 		queryStr += " " + e.OrderBy
 	}
 
-	Log("query string::")
-	Log(queryStr)
+	Log("query string::", scyllaTable.Name)
+	Log("|" + queryStr)
 
 	iter := conn.Query(queryStr).Iter()
 	rd, _ := iter.RowData()
@@ -654,7 +689,6 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 
 		err := scanner.Scan(rowValues...)
 		if err != nil {
-			Log(queryStr)
 			return err
 		}
 
@@ -663,7 +697,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 
 		for idx, column := range columnsIdxMap {
 			value := rowValues[idx]
-			if value == nil {
+			if value == nil || column.FieldIdx < 0 {
 				continue
 			}
 			if mapField, ok := fieldMapping[column.FieldType]; ok {
@@ -675,12 +709,10 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 				// Log("complex type::", column.FieldName)
 				if vl, ok := value.(*string); ok {
 					newStruct := column.RefType.Interface()
-					// fmt.Printf("Type: %T \n", newStruct)
 					err := json.Unmarshal([]byte(*vl), newStruct)
 					if err != nil {
 						fmt.Println("Error al convertir: ", newStruct, *vl, err.Error())
 					}
-
 					if column.IsPointer {
 						ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct))
 					} else {
@@ -690,7 +722,6 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 					if len(*vl) <= 2 {
 						continue
 					}
-					// Log("Valor Columna:", column.Name, " | ", strings.TrimSpace(string(*vl)), "Len:", len(*vl), "")
 					newStruct := column.RefType.Interface()
 					err = MsgPDecode(*vl, &newStruct)
 					if err != nil {

@@ -348,7 +348,7 @@ const updateFechOnCourse = (props: httpProps, event: 1 | 2) => {
 }
 
 const parseResults = (props: httpProps, records: any[]) => {
-  debugger
+  //debugger
   if(!Array.isArray(records)){ return records }
 
   if(!props.collections || Object.keys(props.collections).length === 0){
@@ -681,7 +681,7 @@ const searchOnIndexDB = async (props: httpProps): Promise<any[]> => {
   props.recordUpdated = record ? record[keyUpdated] : 0
   props.collections = record?.collections || {}
   
-  console.log('objeto flag de actualizacion::',record,baseObject)
+  // console.log('objeto flag de actualizacion::',record,baseObject)
   props.startTimeMs = Date.now()
   props.startTime = Math.floor(props.startTimeMs / 1000)
   const refreshTime = props.startTime - (60 * 60 * 2)
