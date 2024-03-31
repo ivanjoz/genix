@@ -80,6 +80,8 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se envió la Caja-ID")
 	}
 
+	fechaHoraInicio := req.GetQueryInt64("fecha-hora-inicio")
+	fechaHoraFin := req.GetQueryInt64("fecha-hora-fin")
 	lastRegistros := req.GetQueryInt("last-registros")
 	lastRegistros = core.If(lastRegistros > 1000, 1000, lastRegistros)
 
@@ -89,13 +91,12 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	baseRecord := s.CajaMovimiento{CajaID: cajaID}
 	if lastRegistros > 0 {
-		baseRecord.SetID(9_999_999_999_999)
-		query = query.Where("id").LessEq(baseRecord.ID)
-		baseRecord.SetID(0)
-		query = query.Where("id").GreatEq(baseRecord.ID)
+		query = query.Where("id").LessEq(baseRecord.MakeID(9_999_999_999_999)).
+			Where("id").GreatEq(baseRecord.MakeID(0))
 		query.Limit(lastRegistros)
-	} else {
-
+	} else if fechaHoraInicio > 0 && fechaHoraFin > 0 {
+		query = query.Where("id").LessEq(baseRecord.MakeID((fechaHoraFin + 1) * 1000)).
+			Where("id").GreatEq(baseRecord.MakeID(fechaHoraInicio * 1000))
 	}
 
 	err := query.OrderDescending().Exec()
@@ -232,6 +233,7 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
+	core.Env.LOGS_DEBUG = true
 
 	nowTimeMill := time.Now().UnixMilli()
 	nowTime := nowTimeMill / 1000
@@ -246,6 +248,10 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Hay parámetros faltantes (Tipo, Monto o Caja-ID)")
 	}
 
+	if record.Tipo == 3 && record.CajaRefID == 0 {
+		return req.MakeErr("Las trasferencias necesitan especificar una caja de destino.")
+	}
+
 	caja, err := shared.GetCaja(req.Usuario.EmpresaID, record.CajaID)
 	if err != nil {
 		return req.MakeErr(err)
@@ -255,6 +261,7 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
 
 	if saldoSistema != caja.SaldoCurrent {
 		re := map[string]any{"NeedUpdateSaldo": caja.SaldoCurrent}
+		core.Log("El saldo de la caja no coincide con el del movimiento:", saldoSistema, caja.SaldoCurrent)
 		return req.MakeResponse(&re)
 	}
 

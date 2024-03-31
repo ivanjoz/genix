@@ -55,7 +55,7 @@ export const AdminModule: IModule = {
         },
         { name: "Almacén Movimientos", route: "/operaciones/almacen-movimientos"
         },
-        { name: "Cajas", route: "/operaciones/cajas"
+        { name: "Cajas & Bancos", route: "/operaciones/cajas"
         },
         { name: "Cajas Movimientos", route: "/operaciones/cajas-movimientos"
         },

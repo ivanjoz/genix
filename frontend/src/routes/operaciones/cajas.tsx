@@ -9,7 +9,7 @@ import { Loading, Notify, formatTime, throttle } from "~/core/main";
 import { PageContainer } from "~/core/page";
 import { cajaMovimientoTipos, cajaTipos } from "~/services/admin/shared";
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
-import { ICaja, ICajaCuadre, ICajaMovimiento, getCajaCuadres, getCajaMovimientos, postCaja, postCajaCuadre, useCajasAPI } from "~/services/operaciones/ventas";
+import { ICaja, ICajaCuadre, ICajaMovimiento, getCajaCuadres, getCajaMovimientos, postCaja, postCajaCuadre, postCajaMovimiento, useCajasAPI } from "~/services/operaciones/ventas";
 import { arrayToMapN, formatN } from "~/shared/main";
 
 export default function Cajas() {
@@ -90,15 +90,44 @@ export default function Cajas() {
       return
     }
     Loading.remove()
+    const caja = cajas().CajasMap.get(form.CajaID)
     if(typeof result?.NeedUpdateSaldo === 'number'){
-      const caja = cajas().CajasMap.get(form.CajaID)
       caja.SaldoCurrent = result.NeedUpdateSaldo
       setCajaForm({...caja})
       const newForm = {...cajaCuadreForm()}
       newForm._error = `Hubo una actualización en el saldo de la caja. El saldo actual es "${formatN(caja.SaldoCurrent/100),2}". Intente nuevamente con el cálculo actualizado.`
       newForm.SaldoDiferencia = newForm.SaldoReal - caja.SaldoCurrent
       setCajaCuadreForm(newForm)
+    } else {
+      caja.SaldoCurrent = form.SaldoReal
+      cajas().Cajas = [...cajas().Cajas]
+      setCajas({...cajas()})
+      Object.assign(cajaForm(),caja)
+      setOpenModals([])
     }
+  }
+
+  const saveCajaMovimiento = async () => {
+    const form = cajaMovimientoForm()
+    if(!form.Tipo || !form.Monto){
+      Notify.failure("Se necesita seleccionar un monto y un tipo.")
+    }
+    Loading.standard("Guardando Movimiento...")
+    let result: any
+    try {
+      result = await postCajaMovimiento(form)
+    } catch (error) {
+      console.warn(error)
+      return
+    }
+    Loading.remove() 
+
+    const caja = cajas().CajasMap.get(form.CajaID)
+    caja.SaldoCurrent = form.SaldoFinal
+    cajas().Cajas = [...cajas().Cajas]
+    setCajas({...cajas()})
+    Object.assign(cajaForm(),caja)
+    setOpenModals([])
   }
 
   const isCajaMovimiento = createMemo(() => {
@@ -159,9 +188,9 @@ export default function Cajas() {
           <LayerLoading baseObject={cajaForm()}
             startPromise={async (e) => {
               if(!e.ID){ return }
-              let result 
+              let result: ICajaMovimiento[]
               try {
-                result = await getCajaMovimientos({ cajaID: e.ID, lastRegistros: 200 })
+                result = await getCajaMovimientos({ CajaID: e.ID, lastRegistros: 200 })
               } catch (error) {
                 Notify.failure(error as string); return
               }
@@ -242,7 +271,7 @@ export default function Cajas() {
               if(!e.ID){ return }
               let records: ICajaCuadre[]
               try {
-                records = await getCajaCuadres({ cajaID: e.ID, lastRegistros: 200 })
+                records = await getCajaCuadres({ CajaID: e.ID, lastRegistros: 200 })
               } catch (error) {
                 Notify.failure(error as string); return
               }
@@ -379,7 +408,7 @@ export default function Cajas() {
     </Modal>
     <Modal id={3} title="Movimiento de Caja"
       onSave={() => {
-        // saveCajaCuadre()
+        saveCajaMovimiento()
       }}
     >
       <div class="w100-10 flex-wrap in-s2">        
@@ -401,9 +430,15 @@ export default function Cajas() {
         <Input saveOn={cajaMovimientoForm()} save="Monto" inputCss="ff-mono h3 t-c"
           css="w-12x mb-10" label="Monto" baseDecimals={2}
           required={true} type="number"
+          transform={v => {
+            const movTipo = cajaMovimientoTiposMap.get(cajaMovimientoForm().Tipo)
+            console.log("movimiento tipo::", movTipo)
+            if(movTipo?.isNegative && typeof v === 'number' && v > 0){ v = v * -1 }
+            return v
+          }}
           onChange={() => {
             const form = {...cajaMovimientoForm()}
-            form.SaldoFinal = cajaForm().SaldoCurrent - (form.Monto||0)
+            form.SaldoFinal = cajaForm().SaldoCurrent + (form.Monto||0)
             setCajaMovimientoForm(form)
           }}
         />

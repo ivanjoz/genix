@@ -52,7 +52,7 @@ export const postCaja = (data: ICaja) => {
 }
 
 export interface IGetCajaMovimientos {
-  cajaID: number
+  CajaID: number
   fechaInicio?: number
   fechaFin?: number
   lastRegistros?: number
@@ -76,7 +76,7 @@ export interface ICajaMovimientosResult {
 }
 
 export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICajaMovimiento[]> => {
-  let route = `caja-movimientos?caja-id=${args.cajaID}`
+  let route = `caja-movimientos?caja-id=${args.CajaID}`
   
   if((!args.fechaInicio || !args.fechaFin) && !args.lastRegistros){
     throw("No se encontró una fecha de inicio o fin.")
@@ -107,6 +107,14 @@ export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICa
   return result.movimientos
 }
 
+export const postCajaMovimiento = (data: ICajaMovimiento) => {
+  return POST({
+    data,
+    route: "caja-movimiento",
+    refreshIndexDBCache: "cajas"
+  })
+}
+
 export interface ICajaCuadre {
   ID: number
   Tipo: number
@@ -135,7 +143,7 @@ export interface ICajaCuadresResult {
 }
 
 export const getCajaCuadres = async (args: IGetCajaMovimientos): Promise<ICajaCuadre[]> => {
-  let route = `caja-cuadres?caja-id=${args.cajaID}`
+  let route = `caja-cuadres?caja-id=${args.CajaID}`
   
   if((!args.fechaInicio || !args.fechaFin) && !args.lastRegistros){
     throw("No se encontró una fecha de inicio o fin.")
