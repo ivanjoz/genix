@@ -3,6 +3,7 @@ import { GET, GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
 import { arrayToMapN } from "~/shared/main"
 import { IAlmacenMovimientosResult } from "./productos"
 import { IUsuario } from "../admin/empresas"
+import { fechaUnixToSunix } from "~/core/main"
 
 export interface ICaja {
 	ID: number
@@ -82,8 +83,8 @@ export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICa
     throw("No se encontró una fecha de inicio o fin.")
   }
   
-  route += `&fecha-hora-inicio=${args.fechaInicio*24*60*60 + window._zoneOffset}`
-  route += `&fecha-hora-fin=${(args.fechaFin+1)*24*60*60 + window._zoneOffset}`
+  route += `&fecha-hora-inicio=${fechaUnixToSunix(args.fechaInicio)}`
+  route += `&fecha-hora-fin=${fechaUnixToSunix(args.fechaFin + 1)}`
   if(args.lastRegistros){
     route += `&last-registros=${args.lastRegistros}`
   }

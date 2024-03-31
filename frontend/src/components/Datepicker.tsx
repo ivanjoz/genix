@@ -13,6 +13,7 @@ export interface IDatePicker<T> {
   required?: boolean
   clearOnSelect?: boolean
   inputCss?: string
+  type?: "unix" | "sunix"
 }
 
 const weekDaysNames = [

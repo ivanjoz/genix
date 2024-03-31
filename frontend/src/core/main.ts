@@ -1,6 +1,13 @@
 import pkg from "notiflix";
 export const { Notify, Loading, Confirm } = pkg;
 
+export const fechaUnixToSunix = (fechaUnix: number) => {
+  if(!fechaUnix){ return 0 }
+  const fechaHoraUnix = fechaUnix*24*60*60 + (window._zoneOffset||0)
+  const fechaSunix = Math.floor((fechaHoraUnix - (10**9)) / 2)
+  return fechaSunix
+}
+
 export const throttle = (func: () => void, delay: number) => {
   if(window._throttleTimer){ clearTimeout(window._throttleTimer) }
   window._throttleTimer = setTimeout(() => {
@@ -42,8 +49,10 @@ export const formatTime = (date: Date | number | string, layout?: string): (Date
     if(date < 30000){
       // Si es por día, le agrega 10 horas por desface GTM Perú
       date = date * 1000 * 86400 + 36000000
+    } else if (date < 800000000) { //SunixTime
+      date = (10 ** 9) + (date * 2)
     }
-    else if (date < 180000000000) { date = date * 1000 }
+    if (date < 180000000000) { date = date * 1000 }
     d = new Date(date)
   }
   else if (typeof date === 'object' && date.constructor === Date) {
