@@ -39,6 +39,7 @@ export default function CajasMovimientos() {
       Notify.failure(error as string); return
     }
     Loading.remove()
+    setCajaMovimientos(result)
     console.log("movimientos obtenidos: ", result)
   }
 
@@ -60,8 +61,10 @@ export default function CajasMovimientos() {
             
           }}
         />
-        <DatePicker label="Fecha Inicio" css="w-045x" save="fechaInicio" saveOn={form()} />
-        <DatePicker label="Fecha Fin" css="w-045x" save="fechaFin" saveOn={form()}/>
+        <DatePicker label="Fecha Inicio" css="w-045x" 
+          save="fechaInicio" saveOn={form()} />
+        <DatePicker label="Fecha Fin" css="w-045x" save="fechaFin" 
+          saveOn={form()}/>
         <button class="bn1 b-blue ml-10" onClick={ev => {
           ev.stopPropagation()
           consultarRegistros()

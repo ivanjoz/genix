@@ -561,8 +561,6 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 							}
 						}
 
-						Print(base)
-
 						// Convierte los valores multiples en un sólo valor y una cola columna que representa el sk de la vista creada
 						if baseI, ok := any(base).(IGetView); ok {
 							// qp.Value = baseI.GetView(view.Idx)
@@ -677,7 +675,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 	}
 
 	Log("query string::", scyllaTable.Name)
-	Log("|" + queryStr)
+	Log(queryStr)
 
 	iter := conn.Query(queryStr).Iter()
 	rd, _ := iter.RowData()

@@ -171,6 +171,23 @@ func UnixToSunix(unixTime int64) int32 {
 func SunixToUnix(sunixTime int32) int32 {
 	return int32((sunixTime + 1e9) * 2)
 }
+
+func SunixTimeUUIDx2() int64 {
+	return SunixTimeMilli()*100 + int64(mrand.Intn(100))
+}
+func SunixUUIDx2FromID(id int32, sunixUUID ...int64) int64 {
+	var uuid int64
+	if len(sunixUUID) == 1 {
+		uuid = sunixUUID[0]
+		for uuid > 0 && uuid < 1e13 {
+			uuid = uuid * 10
+		}
+	} else {
+		uuid = SunixTimeUUIDx2()
+	}
+	return int64(id)*1e14 + uuid
+}
+
 func SunixTimeUUIDx3() int64 {
 	return SunixTimeMilli()*1000 + int64(mrand.Intn(1000))
 }
@@ -178,6 +195,9 @@ func SunixUUIDx3FromID(id int32, sunixUUID ...int64) int64 {
 	var uuid int64
 	if len(sunixUUID) == 1 {
 		uuid = sunixUUID[0]
+		for uuid > 0 && uuid < 1e14 {
+			uuid = uuid * 10
+		}
 	} else {
 		uuid = SunixTimeUUIDx3()
 	}
