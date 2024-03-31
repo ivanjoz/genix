@@ -7,7 +7,7 @@ import (
 
 func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	almacenID := req.GetQueryInt("almacen-id")
-	updated := req.GetQueryInt64("upd")
+	updated := req.GetQueryInt("upd")
 
 	almacenProductos := []s.AlmacenProducto{}
 
@@ -16,8 +16,8 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 
 	if updated > 0 {
 		query = query.
-			Where("sk_almacen_updated").GreatThan(s.ConcatInt64(int64(almacenID), updated)).
-			Where("sk_almacen_updated").LessThan(s.ConcatInt64(int64(almacenID+1), 0))
+			Where("almacen_id", "updated").GreatEq(almacenID, updated).
+			Where("almacen_id", "updated").LessThan(almacenID+1, 0)
 	} else {
 		query = query.
 			Where("id").GreatThan(core.Concat62(almacenID, 0)).

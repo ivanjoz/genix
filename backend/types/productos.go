@@ -118,57 +118,55 @@ type AlmacenProducto struct {
 	TAGS      `table:"almacen_producto"`
 	EmpresaID int32 `json:",omitempty" db:"empresa_id,pk"`
 	// [Almacen-ID] [status] [Producto-ID] [SKU] [Lote]
-	ID             string  `db:"id,pk"`
-	SKU            string  `json:",omitempty" db:"sku,view"`
-	Lote           string  `json:",omitempty" db:"lote,view"`
-	AlmacenID      int32   `json:",omitempty" db:"almacen_id"`
-	ProductoID     int32   `json:",omitempty" db:"producto_id,view"`
-	UpdatedBy      int32   `json:",omitempty" db:"updated_by"`
-	Cantidad       int32   `json:",omitempty" db:"cantidad"`
-	SubCantidad    int32   `json:",omitempty" db:"sub_cantidad"`
-	CostoUn        float32 `json:",omitempty" db:"costo_un"`
-	Status         int8    `json:"ss,omitempty" db:"status"`
-	Updated        int64   `json:"upd,omitempty" db:"updated"`
-	AlmacenUpdated int64   `json:"-" db:"sk_almacen_updated,view,exclude"`
+	ID          string  `db:"id,pk"`
+	SKU         string  `json:",omitempty" db:"sku,view"`
+	Lote        string  `json:",omitempty" db:"lote,view"`
+	AlmacenID   int32   `json:",omitempty" db:"almacen_id,view.1"`
+	ProductoID  int32   `json:",omitempty" db:"producto_id,view"`
+	UpdatedBy   int32   `json:",omitempty" db:"updated_by"`
+	Cantidad    int32   `json:",omitempty" db:"cantidad"`
+	SubCantidad int32   `json:",omitempty" db:"sub_cantidad"`
+	CostoUn     float32 `json:",omitempty" db:"costo_un"`
+	Updated     int32   `json:"upd,omitempty" db:"updated,view.1"`
+	Status      int8    `json:"ss,omitempty" db:"status"`
 }
 
 func (e *AlmacenProducto) SelfParse() {
-	if e.AlmacenID > 0 && e.Updated > 0 {
-		e.AlmacenUpdated = int64(e.AlmacenID)*10_000_000_000 + e.Updated
-	}
 	e.ID = Concat62(e.AlmacenID, e.Status, e.ProductoID, e.SKU, e.Lote)
+}
+
+func (e *AlmacenProducto) GetView(view int8) any {
+	if view == 1 {
+		return int64(e.AlmacenID)*1e9 + int64(e.Updated)
+	} else {
+		return 0
+	}
 }
 
 type AlmacenMovimiento struct {
 	TAGS      `table:"almacen_movimiento"`
 	EmpresaID int32 `json:",omitempty" db:"empresa_id,pk"`
-	// [Almacen-ID] [Producto-ID] [Created] [SKU] [Random String]
-	ID                    string `db:"id,pk"`
-	SKU                   string `json:",omitempty" db:"sku,view"`
-	Lote                  string `json:",omitempty" db:"lote,view"`
-	AlmacenID             int32  `json:",omitempty" db:"almacen_id"`
-	AlmacenOrigenID       int32  `json:",omitempty" db:"almacen_origen_id"`
-	VentaID               int32  `json:",omitempty" db:"venta_id"`
-	ProductoID            int32  `json:",omitempty" db:"producto_id"`
-	Cantidad              int32  `json:",omitempty" db:"cantidad"`
-	AlmacenCantidad       int32  `json:",omitempty" db:"almacen_cantidad"`
-	AlmacenOrigenCantidad int32  `json:",omitempty" db:"almacen_origen_cantidad"`
-	SubCantidad           int32  `json:",omitempty" db:"sub_cantidad"`
-	Tipo                  int8   `json:",omitempty" db:"tipo"`
-	Created               int64  `json:",omitempty" db:"created"`
-	CreatedBy             int32  `json:",omitempty" db:"created_by"`
-	ProductoCreated       int64  `json:"-" db:"sk_producto_created,view,exclude"`
-	AlmacenCreated        int64  `json:"-" db:"sk_almacen_created,view,exclude"`
-	AlmacenOrigenCreated  int64  `json:"-" db:"sk_almacen_origen_created,view,exclude"`
+	// [Almacen-ID] + [Created] + [Ramdom Number]
+	ID                 int64  `db:"id,pk"`
+	SKU                string `json:",omitempty" db:"sku,view"`
+	Lote               string `json:",omitempty" db:"lote,view"`
+	AlmacenID          int32  `json:",omitempty" db:"almacen_id"`
+	AlmacenRefID       int32  `json:",omitempty" db:"almacen_ref_id,view.1"`
+	AlmacenRefCantidad int32  `json:",omitempty" db:"almacen_ref_cantidad"`
+	VentaID            int32  `json:",omitempty" db:"venta_id"`
+	ProductoID         int32  `json:",omitempty" db:"producto_id"`
+	Cantidad           int32  `json:",omitempty" db:"cantidad"`
+	AlmacenCantidad    int32  `json:",omitempty" db:"almacen_cantidad"`
+	SubCantidad        int32  `json:",omitempty" db:"sub_cantidad"`
+	Tipo               int8   `json:",omitempty" db:"tipo"`
+	Created            int32  `json:",omitempty" db:"created,view.1"`
+	CreatedBy          int32  `json:",omitempty" db:"created_by"`
 }
 
-func (e *AlmacenMovimiento) SelfParse() {
-	e.AlmacenCreated = ConcatInt64(int64(e.AlmacenID), e.Created)
-	e.AlmacenOrigenCreated = ConcatInt64(int64(e.AlmacenOrigenID), e.Created)
-	e.ProductoCreated = ConcatInt64(int64(e.ProductoID), e.Created)
-}
-
-func (e *AlmacenMovimiento) AssignID() {
-	rnd := MakeRandomBase36String(4)
-	e.ID = Concat62(e.AlmacenID, e.ProductoID, e.Created, e.SKU, e.Lote, rnd)
+func (e *AlmacenMovimiento) GetView(view int8) any {
+	if view == 1 {
+		return int64(e.AlmacenRefID)*1e9 + int64(e.Created)
+	} else {
+		return 0
+	}
 }

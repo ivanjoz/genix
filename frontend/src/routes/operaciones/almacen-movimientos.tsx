@@ -105,12 +105,6 @@ export default function AlmacenMovimientos() {
         { header: "Fecha Hora", css: "ff-mono",
           getValue: e => formatTime(e.Created,"d-M h:n") as string
         },
-        { header: "Almacén Origen", css: "",
-          render: e => almacenRender(e.AlmacenOrigenID, e.AlmacenOrigenCantidad)
-        },
-        { header: "Almacén Destino", css: "",
-          render: e => almacenRender(e.AlmacenID, e.AlmacenCantidad)
-        },
         { header: "Producto", css: "",
             render: e => {
             const nombre = productosMap.get(e.ProductoID)?.Nombre || `Producto-${e.ProductoID}`
@@ -135,6 +129,12 @@ export default function AlmacenMovimientos() {
               {e.Cantidad}
             </div>
           }
+        },
+        { header: "Almacén Origen", css: "",
+          render: e => almacenRender(e.AlmacenOrigenID, e.AlmacenOrigenCantidad)
+        },
+        { header: "Almacén Destino", css: "",
+          render: e => almacenRender(e.AlmacenID, e.AlmacenCantidad)
         },
         { header: "Usuario", cardColumn: [3,2], cardCss: "h5 c-steel", css: "t-c",
           render: e => {

@@ -4,7 +4,7 @@ import (
 	"app/core"
 	s "app/types"
 	"encoding/json"
-	"time"
+	"slices"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -12,7 +12,7 @@ import (
 func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 
 	stock := []s.AlmacenProducto{}
-	nowTime := time.Now().Unix()
+	nowTime := core.SunixTime()
 
 	err := json.Unmarshal([]byte(*req.Body), &stock)
 	if err != nil {
@@ -54,50 +54,39 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 
 	//Genera los movimientos correspondientes al stock actual
 	movimientos := []s.AlmacenMovimiento{}
+	uuid := core.SunixTimeUUIDx3()
 
 	for _, e := range stock {
 		movimiento := s.AlmacenMovimiento{
+			ID:         core.SunixUUIDx3FromID(e.AlmacenID, uuid),
 			EmpresaID:  req.Usuario.EmpresaID,
 			ProductoID: e.ProductoID,
 			SKU:        e.SKU,
 			Lote:       e.Lote,
-			Created:    nowTime,
+			Created:    core.SunixTime(),
 			CreatedBy:  req.Usuario.ID,
+			AlmacenID:  e.AlmacenID,
+			Tipo:       core.If(e.Cantidad > 0, int8(1), 2),
 		}
+		uuid++
 
-		stockCurrent := int32(0)
+		currentCantidad := int32(0)
 		if current, ok := currentStockMap[e.ID]; ok {
-			stockCurrent = current.Cantidad
+			currentCantidad = current.Cantidad
 		}
-		movimiento.Cantidad = e.Cantidad - stockCurrent
-
-		if movimiento.Cantidad > 0 {
-			movimiento.Tipo = 1
-			movimiento.AlmacenID = e.AlmacenID
-			movimiento.AlmacenCantidad = stockCurrent
-		} else {
-			movimiento.Tipo = 2
-			movimiento.AlmacenOrigenID = e.AlmacenID
-			movimiento.AlmacenOrigenCantidad = stockCurrent
-		}
-
-		movimiento.SelfParse()
-		movimiento.AssignID()
+		movimiento.Cantidad = e.Cantidad - currentCantidad
+		movimiento.AlmacenCantidad = currentCantidad + movimiento.Cantidad
+		core.Print(movimiento)
 		movimientos = append(movimientos, movimiento)
 	}
 
-	core.Print(movimientos)
+	statements := slices.Concat(
+		core.MakeInsertQuery(&movimientos), core.MakeInsertQuery(&stock))
+	core.Print(statements)
 
-	core.Log("movimientos a insertar::", len(movimientos), "|", len(currentStock))
-
-	err = core.DBInsert(&movimientos)
+	err = core.ExecuteStatements(statements)
 	if err != nil {
-		return req.MakeErr("Error al insertar movimientos:", err)
-	}
-
-	err = core.DBInsert(&stock)
-	if err != nil {
-		return req.MakeErr("Error al insertar el stock de productos:", err)
+		return req.MakeErr("Error al obtener el stock previo:", err)
 	}
 
 	return req.MakeResponse(stock)
@@ -105,9 +94,9 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 
 func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
-	almacenID := req.GetQueryInt64("almacen-id")
-	fechaHoraInicio := req.GetQueryInt64("fecha-hora-inicio")
-	fechaHoraFin := req.GetQueryInt64("fecha-hora-fin")
+	almacenID := req.GetQueryInt("almacen-id")
+	fechaHoraInicio := core.UnixToSunix(req.GetQueryInt64("fecha-hora-inicio"))
+	fechaHoraFin := core.UnixToSunix(req.GetQueryInt64("fecha-hora-fin"))
 
 	if almacenID == 0 || fechaHoraInicio == 0 || fechaHoraFin == 0 {
 		return req.MakeErr("Faltan parámetros.")
@@ -123,8 +112,8 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	err := core.DBSelect(&result.Movimientos, "id", "empresa_id").
 		Where("empresa_id").Equals(req.Usuario.EmpresaID).
-		Where("sk_almacen_created").GreatEq(core.ConcatInt64(almacenID, fechaHoraInicio)).
-		Where("sk_almacen_created").LessEq(core.ConcatInt64(almacenID, fechaHoraFin)).
+		Where("id").GreatEq(core.SunixUUIDx3FromID(almacenID, int64(fechaHoraInicio)*1e6)).
+		Where("id").LessEq(core.SunixUUIDx3FromID(almacenID+1, int64(0))).
 		OrderDescending().Limit(1000).Exec()
 
 	if err != nil {
@@ -133,12 +122,12 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	err = core.DBSelect(&result.Movimientos, "id", "empresa_id").
 		Where("empresa_id").Equals(req.Usuario.EmpresaID).
-		Where("sk_almacen_origen_created").GreatEq(core.ConcatInt64(almacenID, fechaHoraInicio)).
-		Where("sk_almacen_origen_created").LessEq(core.ConcatInt64(almacenID, fechaHoraFin)).
+		Where("almacen_ref_id", "created").GreatEq(almacenID, fechaHoraInicio).
+		Where("almacen_ref_id", "created").LessEq(almacenID, fechaHoraFin).
 		OrderDescending().Limit(1000).Exec()
 
 	if err != nil {
-		return req.MakeErr("Error al obtener los registros del almacén:", err)
+		return req.MakeErr("Error al obtener los registros del almacén (2):", err)
 	}
 
 	core.Log("movimientos encontrados:", len(result.Movimientos))
@@ -190,7 +179,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	almacenID := req.GetQueryInt("almacen-id")
-	updated := req.GetQueryInt64("upd")
+	updated := core.UnixToSunix(req.GetQueryInt64("upd"))
 
 	almacenProductos := []s.AlmacenProducto{}
 
@@ -199,14 +188,15 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 
 	if updated > 0 {
 		query = query.
-			Where("sk_almacen_updated").GreatThan(s.ConcatInt64(int64(almacenID), updated)).
-			Where("sk_almacen_updated").LessThan(s.ConcatInt64(int64(almacenID+1), 0))
+			Where("almacen_id", "updated").GreatEq(almacenID, updated).
+			Where("almacen_id", "updated").LessThan(almacenID+1, 0)
 	} else {
 		query = query.
 			Where("id").GreatThan(core.Concat62(almacenID, 0)).
 			Where("id").LessThan(core.Concat62(almacenID+1, 0))
 	}
 
+	core.Log("ejecutando query: 1")
 	err := query.Exec()
 	if err != nil {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)

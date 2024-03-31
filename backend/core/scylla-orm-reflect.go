@@ -86,7 +86,7 @@ func MakeScyllaTable[T any](newType T) ScyllaTable {
 			} else if column.FieldType[0:2] == "[]" {
 				ft := column.FieldType[2:]
 				if dbType, ok := ScyllaFieldToColumnTypesMap[ft]; ok {
-					Log("type encontrado::", ft, dbType)
+					//Log("type encontrado::", ft, dbType)
 					column.Type = fmt.Sprintf("set<%v>", dbType)
 				} else {
 					column.IsComplexType = true

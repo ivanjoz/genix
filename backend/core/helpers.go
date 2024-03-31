@@ -6,7 +6,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/md5"
-	"crypto/rand"
 	"crypto/tls"
 	"encoding/base32"
 	"encoding/base64"
@@ -20,6 +19,7 @@ import (
 	"math"
 	"math/big"
 	mrand "math/rand"
+	"math/rand/v2"
 	"net/http"
 	"regexp"
 	"sort"
@@ -157,6 +157,31 @@ func MakeUniqueInts[T any, N Number1](slice []T, f func(T) N) []N {
 	}
 
 	return list
+}
+
+func SunixTime() int32 {
+	return int32((time.Now().Unix() - 1e9) / 2)
+}
+func SunixTimeMilli() int64 {
+	return int64((time.Now().UnixMilli() - 1e12) / 2)
+}
+func UnixToSunix(unixTime int64) int32 {
+	return int32((unixTime - 1e9) / 2)
+}
+func SunixToUnix(sunixTime int32) int32 {
+	return int32((sunixTime + 1e9) * 2)
+}
+func SunixTimeUUIDx3() int64 {
+	return SunixTimeMilli()*1000 + int64(mrand.Intn(1000))
+}
+func SunixUUIDx3FromID(id int32, sunixUUID ...int64) int64 {
+	var uuid int64
+	if len(sunixUUID) == 1 {
+		uuid = sunixUUID[0]
+	} else {
+		uuid = SunixTimeUUIDx3()
+	}
+	return int64(id)*1e15 + uuid
 }
 
 func MakeUniqueIntsInclude[T any, N Number1](slice []T, f func(T) N) SliceInclude[N] {
@@ -1220,8 +1245,8 @@ func Encrypt(data []byte, cypherKey_ ...string) ([]byte, error) {
 
 	// Generate a random nonce
 	nonce := make([]byte, 12)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, err
+	for i := range nonce {
+		nonce[i] = uint8(rand.N(256))
 	}
 
 	aesgcm, err := cipher.NewGCM(block)

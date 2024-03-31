@@ -623,3 +623,14 @@ func Test27(args *core.ExecArgs) core.FuncResponse {
 
 	return core.FuncResponse{}
 }
+
+func Test28(args *core.ExecArgs) core.FuncResponse {
+
+	fmt.Printf("Tunix Time: %v\n", core.SunixTime())
+	fmt.Printf("Tunix Time Milli: %v\n", core.SunixTimeMilli())
+	fmt.Print("Probando UUID")
+	fmt.Printf("Tunix UUID: %v\n", core.SunixTimeUUIDx3())
+	fmt.Printf("Tunix ID + UUID: %v\n", core.SunixUUIDx3FromID(120))
+
+	return core.FuncResponse{}
+}
