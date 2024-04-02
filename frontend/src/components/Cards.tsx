@@ -1,7 +1,7 @@
-import { Confirm, IConfirmOptions } from "notiflix";
 import { For, JSX, JSXElement, Show, createEffect, createMemo, createSignal, on } from "solid-js";
-import { SearchSelect } from "./SearchSelect";
+import { VList } from "../components/virtua/solid";
 import { arrayToMapN } from "~/shared/main";
+import { SearchSelect } from "./SearchSelect";
 
 interface ILayerAutoHide {
   children: JSXElement
@@ -204,5 +204,22 @@ export function LayerLoading<T>(props: ILayerLoading<T>){
     { !isLoading() &&
       props.children
     }
+  </div>
+}
+
+
+export interface ICardsList<T> {
+  data: T[]
+  render: (d: T, i: number) => JSX.Element
+}
+
+export function CardsList<T>(props: ICardsList<T>){
+
+  return <div class={"w100"}>
+    <VList data={props.data} style={{ height: "70vh" }}>
+      {(d, i) => {
+        return props.render(d,i)
+      }}
+    </VList>
   </div>
 }

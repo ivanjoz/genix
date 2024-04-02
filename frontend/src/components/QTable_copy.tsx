@@ -3,6 +3,7 @@ import { For, JSX, Show, createEffect, createMemo, createSignal, on } from "soli
 import { include } from "~/core/main"
 import { highlString } from "./SearchSelect"
 import { deviceType, viewType } from "~/app"
+import { VList } from "../components/virtua/solid";
 
 export interface ITableColumn<T> {
   id?: number
@@ -103,7 +104,7 @@ export function QTable<T>(props: IQTable<T>) {
       cardColumns = makeCardColumns()
     }
   ))
-  
+
   const makeVirtualizer = (props: IQTable<T>, length?: number) => {
     return createVirtualizer({
       count: (typeof length === 'number' ? length : props.data.length) || 1,
@@ -159,6 +160,7 @@ export function QTable<T>(props: IQTable<T>) {
   
   const tableSize = createMemo(() => {
     const _records = recordRows()
+    console.log("registros render:: ", Virtualizer.getTotalSize() , Virtualizer.getVirtualItems().length, _records.length)
     if(_records.length === 0){ return 50 }
     return Virtualizer.getTotalSize() - _records[0].size * _records.length
   })
@@ -167,6 +169,8 @@ export function QTable<T>(props: IQTable<T>) {
     if(isCardView()){ return "w100" }
     else { return "qtable-c" + (props.css  ? " " + props.css : "") }
   }
+
+  console.log("style 11::", props.style)
 
   return <div class={divClass()} 
     ref={inputRef} style={{ 
@@ -181,38 +185,18 @@ export function QTable<T>(props: IQTable<T>) {
           <QTableHeaders columns={props.columns}/>
         </thead>
         <tbody>
-          <For each={recordRows()}>
-            {(row,i) => {
-              const records_ = records()
-              const record = records_[row.index]
-              
-              const isSelected = createMemo(() => {
-                const selected = props.selected && props.isSelected
-                  ? props.isSelected(record, props.selected) 
-                  : false
-                return selected
-              })
-
-              if(records_.length === 0 && i() === 0){
-                return <tr>
-                  <td colSpan={99}>
-                    <div class="empty-message flex ai-center">
-                      No se encontraron registros.
-                    </div>
-                  </td>
-                </tr>
-              }
-              return <QTableRow row={row} record={record}
-                isFinal={recordRows().length - 1 === i()}
+          <VList data={props.data} style={{ height: "70vh" }}>
+            {(record, i) => {
+              return <QTableRow row={{ index: i }} record={record}
                 firstItemStart={recordRows()[0].start}
-                tableSize={tableSize()} isSelected={isSelected()}
+                tableSize={tableSize()}
                 columns={props.columns}
                 onRowCLick={props.onRowCLick}
                 filterText={props.filterText}
                 filterKeys={props.filterKeys}
               />
             }}
-          </For>
+          </VList>
         </tbody>
       </table>
     </Show>
@@ -292,9 +276,9 @@ export function QTableRow<T>(props: ITableRow<T>) {
 
     let content: (string|number|JSX.Element) = ""
     if(column.render){ 
-      content = column.render(props.record, props.row.index, makeRerender) 
+      content = column.render(props.record, 1, makeRerender) 
     } else if(column.getValue){
-      content = column.getValue(props.record, props.row.index)
+      content = column.getValue(props.record, 1)
     }
 
     if(typeof content === 'string' && column.field && props.filterText){
@@ -308,11 +292,7 @@ export function QTableRow<T>(props: ITableRow<T>) {
     }
   }
 
-  return <>
-    <tr class={cn + (props.isSelected ? " selected" : "")} 
-      style={{ 
-        height: `${props.row.size}px`, transform: `translateY(${props.firstItemStart}px)`,
-      }}
+  return <tr class={cn + (props.isSelected ? " selected" : "")} 
       onClick={ev => {
         ev.stopPropagation()
         if(props.onRowCLick){ props.onRowCLick(props.record) }
@@ -331,12 +311,6 @@ export function QTableRow<T>(props: ITableRow<T>) {
         }}
       </For>
     </tr>
-    { props.isFinal &&
-      <tr style={{ height: `${props.tableSize}px`, visibility: 'hidden' }}>
-        <td style={{ border: 'none'}}></td>
-      </tr>
-    }
-  </>
 }
 
 export function QTableHeaders<T>(props: IQTableBase<T>) {

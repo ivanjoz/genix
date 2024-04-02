@@ -59,12 +59,19 @@ export const AdminModule: IModule = {
         },
         { name: "Cajas Movimientos", route: "/operaciones/cajas-movimientos"
         },
-      ]
-  
+      ]  
     },
-    { name: "UI Components", minName: "UIC",  id: 3, icon: "icon-buffer",
+    { name: "Comercial", minName: "Com",  id: 3, icon: "icon-tasks",
+      options: [
+        { name: "Ventas", route: "/comercial/ventas"
+        },
+      ]  
+    },
+    { name: "UI Components", minName: "UIC",  id: 4, icon: "icon-buffer",
       options: [
         { name: "Test Table", route: "/develop-ui/test-table"
+        },
+        { name: "Test Cards", route: "/develop-ui/test-cards"
         },
         { name: "Chart Demo 1", route: "/develop-ui/chart-test"
         },
@@ -73,7 +80,7 @@ export const AdminModule: IModule = {
       ]
 
     },
-    { name: "Reportes", minName: "Rep",  id: 4, icon: "icon-tasks",
+    { name: "Reportes", minName: "Rep",  id: 5, icon: "icon-tasks",
       options: [
         { name: "Productos",
         },

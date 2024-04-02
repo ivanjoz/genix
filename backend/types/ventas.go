@@ -63,3 +63,24 @@ func (e *CajaCuadre) SetID(unixTimeMill int64) {
 	e.ID = int64(e.CajaID)*10_000_000_000_00 + unixTimeMill
 }
 */
+
+type VentaProducto struct {
+	ProductoID int32 `cbor:"1,keyasint"`
+	Cantidad   int32 `cbor:"2,keyasint"`
+	Monto      int32 `cbor:"3,keyasint"`
+}
+
+type Venta struct {
+	TAGS           `table:"ventas"`
+	EmpresaID      int32 `db:"empresa_id,pk"`
+	ID             int64 `db:"id,pk"` // [Fecha Unix + Autoincrement]
+	Monto          int32 `db:"monto"`
+	MontoPorCobrar int32 `db:"monto_por_cobrar"`
+	ClienteID      int32 `db:"cliente_id"`
+	Tipo           int8  `db:"tipo"`
+	Status         int8  `db:"ss"`
+	EntregaStatus  int8  `db:"entrega_status"`
+	Productos      int32 `db:"productos"`
+	Created        int32 `db:"created"`
+	CreatedBY      int32 `db:"created_by"`
+}
