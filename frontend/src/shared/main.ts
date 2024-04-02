@@ -257,3 +257,24 @@ export const arrayToMapN = <T>(array: T[], keys?: string | string[]):
   else { console.warn('No es un array::', array) }
   return map
 }
+
+
+export const arrayToMapG = <T>(array: T[], keys?: string | string[]):
+  Map<(string | number), T[]> => {
+  const map = new Map()
+  if (typeof keys === 'string') {
+    for (let e of array||[]) {
+      const keyValue = e[keys as keyof T]
+      map.has(keyValue) ? map.get(keyValue).push(e) : map.set(keyValue, [e])
+    }
+  }
+  else if (Array.isArray(keys)) {
+    for (let e of array) {
+      const keyGrouped = keys.map(key => (e[key  as keyof T] || "")).join("_")
+      map.has(keyGrouped) ? map.get(keyGrouped).push(e) : map.set(keyGrouped, [e])
+    }
+  } else {
+    console.warn('No es un array::', array)
+  }
+  return map
+}

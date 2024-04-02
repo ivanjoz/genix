@@ -126,13 +126,13 @@ export default function Productos() {
             getValue: e => e.Nombre, cardCss: "h5 c-steel",
           },
           { header: "Precio", cardColumn: [3,2], cardCss: "h5 c-steel", css: "t-c",
-            getValue: e => e.Precio ? formatN(e.Precio,2) : "", 
+            getValue: e => e.Precio ? formatN(e.Precio/100,2) : "", 
           },
           { header: "Descuento", cardColumn: [3,2],  css: "t-c",
             getValue: e => e.Descuento ? formatN(e.Descuento,1) + "%" : "",
           },
           { header: "Precio Final", cardColumn: [3,2],  css: "t-c",
-            getValue: e => e.PrecioFinal ? formatN(e.PrecioFinal,2) : "",
+            getValue: e => e.PrecioFinal ? formatN(e.PrecioFinal/100,2) : "",
           },
           { header: "Sub-Unidades", cardColumn: [3,2],
             getValue: e => {
@@ -210,7 +210,7 @@ export default function Productos() {
                 baseDecimals={2}
                 onChange={() => {
                   const form = productoForm()
-                  form.PrecioFinal = form.Precio * (1-(form.Descuento||100)/100)
+                  form.PrecioFinal = form.Precio * (1-(form.Descuento||0)/100)
                   refreshInput([3])
                 }}
               />
@@ -219,7 +219,7 @@ export default function Productos() {
                 postValue={<div class="p-abs pos-v c-steel1">%</div>}
                 onChange={() => {
                   const form = productoForm()
-                  form.PrecioFinal = form.Precio * (1-(form.Descuento||100)/100)
+                  form.PrecioFinal = form.Precio * (1-(form.Descuento||0)/100)
                   refreshInput([3])
                   console.log("form::", form)
                 }}
@@ -229,7 +229,7 @@ export default function Productos() {
                 baseDecimals={2}
                 onChange={() => {
                   const form = productoForm()
-                  form.Precio = form.PrecioFinal / (1-(form.Descuento||100)/100)
+                  form.Precio = form.PrecioFinal / (1-(form.Descuento||0)/100)
                   refreshInput([1])
                 }}
               />

@@ -36,6 +36,7 @@ export interface IProducto {
   CategoriasIDs?: number[]
   ss: number
   upd: number
+  _stock?: number
 }
 
 export interface IProductoResult {
