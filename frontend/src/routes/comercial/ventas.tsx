@@ -1,10 +1,12 @@
-import { createSignal } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 import { deviceType } from "~/app";
+import { CardsList } from "~/components/Cards";
 import { SearchSelect } from "~/components/SearchSelect";
 import { Loading, throttle } from "~/core/main";
 import { PageContainer } from "~/core/page";
 import { IProductoStock, getProductosStock, useProductosAPI } from "~/services/operaciones/productos";
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
+import { arrayToMapG, arrayToMapN, arrayToMapS } from "~/shared/main";
 import { Params } from "~/shared/security";
 
 export default function Ventas() {
@@ -27,9 +29,9 @@ export default function Ventas() {
     setProductosStock(stock)
     Params.setValue("almacen_id", almacenID)
     
-    for(let e of stock){
+    const productosStockMap = arrayToMapG(stock, "ProductoID")
 
-    }
+
     Loading.remove(); return
   }
   
@@ -54,6 +56,18 @@ export default function Ventas() {
             },150)
           }}/>
         </div>
+      </div>
+      <div>
+        <CardsList data={productos()?.productos||[]}
+          render={e => {
+            return <div>
+              <div class="flex">
+                <div class="w12rem">{e.Nombre}</div>
+                <div class="w12rem">{e.Precio}</div>
+              </div>
+            </div>
+          }}
+        />
       </div>
     </div>
     <div class="grow-1">
