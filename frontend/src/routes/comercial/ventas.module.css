@@ -1,0 +1,13 @@
+.card_venta {
+  background-color: white;
+ /*  border-radius: 11px; */
+  min-height: 2.6rem;
+  padding: 7px;
+  box-shadow: #5a5e6330 0px 1px 8px 0px;
+  user-select: none;
+  outline: 1px solid transparent;
+  cursor: pointer;
+}
+.card_venta:hover {
+  outline-color: black;
+}

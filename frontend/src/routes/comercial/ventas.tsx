@@ -1,4 +1,4 @@
-import { createEffect, createSignal } from "solid-js";
+import { createEffect, createMemo, createSignal } from "solid-js";
 import { deviceType } from "~/app";
 import { CardsList } from "~/components/Cards";
 import { SearchSelect } from "~/components/SearchSelect";
@@ -6,8 +6,10 @@ import { Loading, throttle } from "~/core/main";
 import { PageContainer } from "~/core/page";
 import { IProductoStock, getProductosStock, useProductosAPI } from "~/services/operaciones/productos";
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
-import { arrayToMapG, arrayToMapN, arrayToMapS } from "~/shared/main";
+import { arrayToMapG, arrayToMapN, arrayToMapS, formatN } from "~/shared/main";
 import { Params } from "~/shared/security";
+import style from "./ventas.module.css";
+import { CheckBox } from "~/components/Input";
 
 export default function Ventas() {
 
@@ -34,6 +36,16 @@ export default function Ventas() {
 
     Loading.remove(); return
   }
+
+  const [productosParsed, setProdustosParsed] = createSignal([])
+
+  createEffect(() => {    
+      let newProductos = []
+      for(let i = 0; i < 40; i ++){
+        newProductos = newProductos.concat(productos()?.productos||[])
+      }
+      setProdustosParsed(newProductos)      
+  })
   
   return <PageContainer title="Ventas" class="flex">
     <div class="jc-between mb-06" style={{ width: "46%" }}
@@ -57,13 +69,25 @@ export default function Ventas() {
           }}/>
         </div>
       </div>
-      <div>
-        <CardsList data={productos()?.productos||[]}
-          render={e => {
-            return <div>
-              <div class="flex">
-                <div class="w12rem">{e.Nombre}</div>
-                <div class="w12rem">{e.Precio}</div>
+      <div class="flex jc-between w100">
+        <div class="mr-auto"></div>
+        <CheckBox label="Buscar SKU"></CheckBox>
+      </div>
+      <div style={{ height: '70vh', position: 'relative' }}>
+        <CardsList data={productosParsed()}
+          render={(e,i) => {
+            return <div class="px-04 py-02" 
+              style={{ "margin-top": i === 0 ? '8px' : undefined }}>
+              <div class={`flex jc-between ${style.card_venta}`}>
+                <div class="w100 grid" 
+                  style={{ "grid-template-columns": '1fr 3rem 5rem' }}>
+                  
+                  <div>{e.Nombre}  </div>
+                  <div class="ff-mono t-r">2</div>
+                  <div class="ff-mono t-r">
+                    {formatN(e.Precio/100,2) as string}
+                  </div>
+                </div>
               </div>
             </div>
           }}
