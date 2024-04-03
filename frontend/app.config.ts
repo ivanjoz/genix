@@ -15,6 +15,7 @@ export default defineConfig({
     }
     */
   },
+  devOverlay: false,
   solid: {
     hot: false,
     ssr: false,

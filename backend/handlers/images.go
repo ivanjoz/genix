@@ -45,7 +45,7 @@ func saveImage(args ImageArgs) ([]imageconv.Image, error) {
 	fmt.Println("API de conversión de imágenes. Usando Multilambda:", USE_MULTILAMBDA)
 
 	resolutionsMap := map[uint16]string{
-		960: "x6", 520: "x4", 340: "x2",
+		980: "x6", 540: "x4", 340: "x2",
 	}
 
 	resolutions := []uint16{}

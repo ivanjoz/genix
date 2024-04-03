@@ -215,11 +215,9 @@ export interface ICardsList<T> {
 
 export function CardsList<T>(props: ICardsList<T>){
 
-  return <div class={"w100"}>
-    <VList data={props.data} style={{ height: "70vh" }}>
-      {(d, i) => {
-        return props.render(d,i)
-      }}
-    </VList>
-  </div>
+  return <VList data={props.data}>
+    {(d, i) => {
+      return props.render(d,i)
+    }}
+  </VList>
 }
