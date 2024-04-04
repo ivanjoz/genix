@@ -240,12 +240,27 @@ export const Virtualizer = <T,>(props: VirtualizerProps<T>): JSX.Element => {
     });
   });
 
+  /*
   createComputed(
     on(
       () => props.data.length,
       (len, prevLen) => {
+        setRerender([])
         if (exists(prevLen) && len !== prevLen) {
           store._update(ACTION_ITEMS_LENGTH_CHANGE, [len, props.shift]);
+        }
+      }
+    )
+  );
+  */
+
+  createComputed(
+    on(
+      () => props.data,
+      (data, prevData) => {
+        setRerender([])
+        if (exists(prevData) && data.length !== prevData.length) {
+          store._update(ACTION_ITEMS_LENGTH_CHANGE, [data.length, props.shift]);
         }
       }
     )

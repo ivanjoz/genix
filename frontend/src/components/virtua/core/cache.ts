@@ -85,6 +85,7 @@ export const computeOffset = (
  * @internal
  */
 export const computeTotalSize = (cache: Cache): number => {
+  console.log("computing size::", cache)
   if (!cache._length) return 0;
   return (
     computeOffset(cache, cache._length - 1) +

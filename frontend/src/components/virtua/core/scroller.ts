@@ -78,6 +78,12 @@ const createScrollObserver = (
     if (getStartOffset) {
       store._update(ACTION_START_OFFSET_CHANGE, getStartOffset());
     }
+    /*
+    setInterval(() => {
+      store._update(ACTION_SCROLL, getScrollOffset());
+    },1000)
+    */
+
     store._update(ACTION_SCROLL, getScrollOffset());
 
     onScrollEnd();
@@ -214,7 +220,7 @@ export const createScroller = (
       ];
     };
 
-    if (smooth && isSmoothScrollSupported()) {
+    if (smooth && isSmoothScrollSupported()) {      
       while (true) {
         store._update(ACTION_BEFORE_MANUAL_SMOOTH_SCROLL, getTargetOffset());
 
@@ -266,12 +272,13 @@ export const createScroller = (
   return {
     _observe(viewport) {
       viewportElement = viewport;
-
       scrollObserver = createScrollObserver(
         store,
         viewport,
         isHorizontal,
-        () => normalizeOffset(viewport[scrollOffsetKey], isHorizontal),
+        () => {
+          return normalizeOffset(viewport[scrollOffsetKey], isHorizontal)
+        },
         (jump, shift, isMomentumScrolling) => {
           // If we update scroll position while touching on iOS, the position will be reverted.
           // However iOS WebKit fires touch events only once at the beginning of momentum scrolling.
@@ -300,15 +307,17 @@ export const createScroller = (
       scrollObserver && scrollObserver._dispose();
     },
     _scrollTo(offset) {
+      console.log("scroll 1234")
       scheduleImperativeScroll(() => offset);
     },
     _scrollBy(offset) {
+      console.log("scroll 1234")
       offset += store._getScrollOffset();
       scheduleImperativeScroll(() => offset);
     },
     _scrollToIndex(index, { align, smooth, offset = 0 } = {}) {
       index = clamp(index, 0, store._getItemsLength() - 1);
-
+      console.log("scroll 1234")
       if (align === "nearest") {
         const itemOffset = store._getItemOffset(index);
         const scrollOffset = store._getScrollOffset();
@@ -327,6 +336,7 @@ export const createScroller = (
       }
 
       scheduleImperativeScroll(() => {
+        console.log("scroll 1234")
         return (
           offset +
           store._getStartSpacerSize() +
@@ -340,6 +350,7 @@ export const createScroller = (
       }, smooth);
     },
     _fixScrollJump: () => {
+      console.log("scroll 1234")
       scrollObserver && scrollObserver._fixScrollJump();
     },
   };
