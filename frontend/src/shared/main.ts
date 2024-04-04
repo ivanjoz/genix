@@ -3,6 +3,10 @@ import { Params, checksum } from "./security";
 import { Loading, Notify } from "~/core/main";
 import { IModule } from "~/core/modules";
 
+export const joinb = (...args: any[]) => {
+  return args.filter(x => x).join(" ")
+}
+
 export const camelToSnakeCase = (str: string) => {
   const arr = str.split(/(?=[A-Z0-9])/)
   let final = ""; let lastLeng = 0
