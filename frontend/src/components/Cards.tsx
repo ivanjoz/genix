@@ -215,9 +215,11 @@ export interface ICardsList<T> {
 
 export function CardsList<T>(props: ICardsList<T>){
 
-  return <VList data={props.data}>
+  const records = createMemo(() => props.data)
+
+  return <VList data={records()}>
     {(d, i) => {
-      return props.render(d,i)
+      return props.render(records()[i],i)
     }}
   </VList>
 }
