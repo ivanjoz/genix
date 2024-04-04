@@ -1,6 +1,5 @@
 .card_venta {
   background-color: white;
- /*  border-radius: 11px; */
   min-height: 2.6rem;
   padding: 0 7px;
   box-shadow: #5a5e6330 0px 1px 8px 0px;
@@ -8,7 +7,7 @@
   outline: 1px solid transparent;
   cursor: pointer;
 }
-.card_venta:hover, .card_venta_selected {
+.card_venta:hover, :global(.sld) > .card_venta {
   outline-color: black;
 }
 .card_venta_nombre {
@@ -32,11 +31,11 @@
   border-left: 1px solid black;
 }
 .card_venta:hover .card_venta_nombre,
-.card_venta_selected .card_venta_nombre {
+:global(.sld) .card_venta .card_venta_nombre {
   display: flex;
 }
 .card_venta:hover .card_venta_producto,
-.card_venta_selected .card_venta_producto {
+:global(.sld) .card_venta .card_venta_producto {
   display: none;
 }
 .buttons_cantidad {
@@ -45,7 +44,7 @@
   z-index: 6;
 }
 .card_venta:hover .buttons_cantidad,
-.card_venta_selected .buttons_cantidad {
+:global(.sld) .buttons_cantidad {
   display: flex;
 }
 .button_venta_cantidad {
@@ -58,4 +57,22 @@
 .button_venta_cantidad:hover {
   color: white;
   background-color: rgb(56, 99, 209);
+}
+.input_cantidad > * {
+  display: none;
+}
+.card_venta:hover .input_cantidad > *,
+:global(.sld) .input_cantidad > * {
+  display: block;
+}
+
+.input_cantidad > input {
+  padding: 0 2px;
+  height: 2rem;
+  text-align: center;
+  border: 1px solid rgb(173, 172, 189);
+}
+.input_cantidad > input:focus {
+  border: 1px solid rgb(162, 160, 196);
+  outline: 1px solid rgb(114, 111, 168);
 }

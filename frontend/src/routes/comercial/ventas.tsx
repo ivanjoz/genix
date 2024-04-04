@@ -6,7 +6,7 @@ import { Loading, include, throttle } from "~/core/main";
 import { PageContainer } from "~/core/page";
 import { IProducto, IProductoStock, getProductosStock, useProductosAPI } from "~/services/operaciones/productos";
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
-import { arrayToMapG, arrayToMapN, arrayToMapS, formatN } from "~/shared/main";
+import { arrayToMapG, arrayToMapN, arrayToMapS, formatN, joinb } from "~/shared/main";
 import { Params } from "~/shared/security";
 import style from "./ventas.module.css";
 import { CheckBox } from "~/components/Input";
@@ -59,22 +59,31 @@ export default function Ventas() {
       setProdustosParsed(newProductos) 
       setProductosParsedAll(newProductos)        
   })
+  
+    
+  const letters = "abcdefghijklmnopqrstuvwxyz"
+  const numbers = "123456789"
+  let lastSearchText = ""
 
   const filterProductos = (text: string) => {
-    if(text === filterText()){ return }
-    const textSlice = text.toLowerCase().split(" ")
-    const filtered = []
-    for(let e of productosParsedAll()){
-      if(include(e.searchText, textSlice)){
-        filtered.push(e)
+    if(text === filterText() || text === lastSearchText){ return }
+    console.log("buscando:: ", text)
+    lastSearchText = text
+    throttle(() => {
+      const textSlice = text.toLowerCase().split(" ")
+      const filtered = []
+      for(let e of productosParsedAll()){
+        if(include(e.searchText, textSlice)){
+          filtered.push(e)
+        }
       }
-    }
-    console.log("filtrados::", filtered)
-    setProdustosParsed(filtered)
-    setFilterText(text)
-    setProductoSelected(-1)
+      console.log("filtrados::", filtered)
+      setProdustosParsed(filtered)
+      setFilterText(text)
+      setProductoSelected(-1)
+    },80)
   }
-  
+
   return <PageContainer title="Ventas" class="flex">
     <div class="jc-between mb-06" style={{ width: "46%" }}
       classList={{ "column": [2,3].includes(deviceType()) }}
@@ -92,10 +101,11 @@ export default function Ventas() {
           <input class="w100" autocomplete="off" type="text" 
             onKeyUp={ev => {
               ev.stopPropagation()
-              throttle(() => {
-                const text = ((ev.target as any).value||"").toLowerCase().trim()
-                filterProductos(text)
-              },120)
+              const text = ((ev.target as any).value||"").toLowerCase().trim()
+              filterProductos(text)
+            }}
+            onkeypress={() => {
+              return false
             }}
             onkeydown={ev => {
               ev.stopPropagation()
@@ -105,6 +115,13 @@ export default function Ventas() {
                 setProductoSelected(newIdx)
               } else if(ev.key === 'ArrowDown'){
                 setProductoSelected(productoSelected()+1)
+              } else {
+                const key = ev.key.toLocaleLowerCase()
+                if(productoSelected() >= 0 && numbers.includes(key)){
+                  ev.preventDefault()
+                } else if(letters.includes(key) || numbers.includes(key)){
+                  filterProductos(lastSearchText + ev.key)
+                }
               }
             }}
           />
@@ -114,45 +131,19 @@ export default function Ventas() {
         <div class="mr-auto"></div>
         <CheckBox label="Buscar SKU"></CheckBox>
       </div>
-      <div style={{ height: '70vh', position: 'relative' }}>
+      <div style={{ height: 'calc(100% - 12px - 4.2rem)', position: 'relative' }}>
         <CardsList data={productosParsed()}
           render={(e,i) => {
             const isSelected = () => { return i === productoSelected() }
-
-            return <div class="px-04 py-02" 
-              style={{ "margin-top": i === 0 ? '8px' : undefined }}
-              onmouseover={ev => {
-                ev.stopPropagation()
+            return <ProductoVentaCard idx={i}
+              isSelected={isSelected()}
+              productoStock={e}
+              setProductoSelected={setProductoSelected}
+              filterText={filterText()}
+              onmouseover={() => {
                 if(productoSelected() >= 0){ setProductoSelected(-1) }
               }}
-            >
-              <div class={["flex p-rel jc-between",
-                  style.card_venta,
-                  isSelected() && style.card_venta_selected,
-                ].filter(x => x).join(" ")}
-                onClick={() => {
-                  setProductoSelected(i)
-                }}  
-              >
-                <div class={style.card_venta_nombre}>
-                  <div class={style.card_venta_nombre_line}></div>
-                    { makeHighlString(e.producto.Nombre, filterText()) }
-                </div>
-                <div class="w100 grid ai-center"
-                  style={{ "grid-template-columns": '1fr 3rem 5rem' }}>                  
-                  <div class={`flex ai-center h100`}>
-                    <div class={`${style.card_venta_producto}`}>
-                      { makeHighlString(e.producto.Nombre, filterText()) }
-                    </div>
-                    <ProductoCantidad />             
-                  </div>
-                  <div class="ff-mono t-r">2</div>
-                  <div class="ff-mono t-r">
-                    {formatN(e.producto.Precio/100,2) as string}
-                  </div>
-                </div>
-              </div>
-            </div>
+            />
           }}
         />
       </div>
@@ -173,5 +164,56 @@ function ProductoCantidad(){
         return <div class={`flex-center ff-bold ${style.button_venta_cantidad}`}>{e}</div>
       }} 
     </For>
+  </div>
+}
+
+interface IProductoVentaCard {
+  productoStock: ProductoStock
+  isSelected: boolean
+  filterText: string
+  idx: number
+  setProductoSelected: (e: number) => void
+  onmouseover: () => void
+}
+
+const ProductoVentaCard = (props: IProductoVentaCard) => {
+
+  return <div class={"px-04 py-02"}
+    classList={{ "sld": props.isSelected }}
+    style={{ "margin-top": props.idx === 0 ? '8px' : undefined }}
+    onmouseover={ev => {
+      ev.stopPropagation()
+      props.onmouseover()
+    }}
+  >
+    <div class={joinb("flex p-rel jc-between", style.card_venta)}
+      onClick={() => {
+        props.setProductoSelected(props.idx)
+      }}
+    >
+      <div class={style.card_venta_nombre}>
+        <div class={style.card_venta_nombre_line}></div>
+          { makeHighlString(props.productoStock.producto.Nombre, props.filterText) }
+      </div>
+      <div class="w100 grid ai-center"
+        style={{ "grid-template-columns": '1fr 3.8rem 2.8rem 5rem' }}>                  
+        <div class={`flex ai-center h100`}>
+          <div class={`${style.card_venta_producto}`}>
+            { makeHighlString(props.productoStock.producto.Nombre, props.filterText) }
+          </div>
+          <ProductoCantidad />             
+        </div>
+        <div class={joinb("p-rel flex ai-center",style.input_cantidad)}>
+          <input type="number" value="1"
+            class="ff-mono w100"
+          />
+          <div class="ml-04">/</div>
+        </div>
+        <div class="ff-mono t-r">2</div>
+        <div class="ff-mono t-r">
+          {formatN(props.productoStock.producto.Precio/100,2) as string}
+        </div>
+      </div>
+    </div>
   </div>
 }
