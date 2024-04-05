@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, on } from "solid-js";
 import { deviceType } from "~/app";
 import { CardsList } from "~/components/Cards";
 import { SearchSelect, makeHighlString } from "~/components/SearchSelect";
@@ -13,9 +13,14 @@ import { CheckBox } from "~/components/Input";
 
 export interface ProductoStock {
   key: string
+  cant: number
   producto: IProducto
   searchText: string
+  isSubunidad?: boolean
+  skus?: IProductoStock[]
 }
+
+const [ventaProductoInput, setVentaProductoInput] = createSignal(null as HTMLInputElement)
 
 export default function Ventas() {
 
@@ -25,6 +30,7 @@ export default function Ventas() {
   const [form, setForm] = createSignal({ })
   const [filterText, setFilterText] = createSignal("")
   const [productoSelected, setProductoSelected] = createSignal(-1)
+  const [almacenSelected, setAlmacenSelected] = createSignal(-1)
 
   const getStock = async (almacenID: number) => {
     let stock: IProductoStock[] = []
@@ -37,27 +43,65 @@ export default function Ventas() {
     console.log("productos stock::", stock)
     setProductosStock(stock)
     Params.setValue("almacen_id", almacenID)
-    
-    const productosStockMap = arrayToMapG(stock, "ProductoID")
     Loading.remove(); return
   }
+
+  createEffect(() => {
+    if(almacenSelected() == -1 && almacenes()?.Almacenes?.length > 0){
+      const form_ = form()
+      let almacenID = Params.getValueInt("almacen_id") || 0
+      if(!almacenID){ almacenID = almacenes().Almacenes[0].ID }
+      setAlmacenSelected(almacenID)
+      getStock(almacenID)
+    }
+  })
 
   const [productosParsed, setProdustosParsed] = createSignal([] as ProductoStock[])
   const [productosParsedAll, setProductosParsedAll] = createSignal([] as ProductoStock[])
 
   createEffect(() => {    
-      let newProductos: ProductoStock[] = []
-      for(let i = 0; i < 40; i ++){
-        for(let e of productos()?.productos||[]){
-          newProductos.push({ 
-            key: `p_${i}_${e.ID}`, 
-            producto: e,
-            searchText: e.Nombre.toLowerCase()
-          })
-        }
+    const productoToStockMap = arrayToMapG(productosStock(), "ProductoID")
+    console.log("productos stock map::", productosStock(), productoToStockMap)
+    const newProductos: ProductoStock[] = []
+
+    for(let producto of productos()?.productos||[]){
+      const stocks = productoToStockMap.get(producto.ID) || []
+      if(stocks.length === 0){ continue }
+
+      const base = { 
+        producto: producto, cant: 0,  key: `M${producto.ID}`,
+        searchText: producto.Nombre.toLowerCase()
+      } as ProductoStock
+
+      const skusStock: IProductoStock[] = []
+      const mainStock: IProductoStock[] = []
+
+      for(let e of stocks){
+        e.SKU ? skusStock.push(e) : mainStock.push(e)
       }
-      setProdustosParsed(newProductos) 
-      setProductosParsedAll(newProductos)        
+
+      if(skusStock.length > 0){
+        const clone = {...base, skus: skusStock, key: `P${producto.ID}`}
+        for(let e of skusStock){ clone.cant += e.Cantidad }
+        newProductos.push(clone)
+      }
+
+      if(mainStock.length > 0){
+        let clone: ProductoStock
+        if(producto.SbnCantidad > 1){
+          clone = {...base, key: `S${producto.ID}`}
+          clone.isSubunidad = true
+          clone.cant = producto.SbnCantidad
+        }
+
+        for(let e of mainStock){ base.cant += e.Cantidad }
+        newProductos.push(base)
+        if(clone){ newProductos.push(clone) }
+      }
+    }
+
+    setProdustosParsed(newProductos) 
+    setProductosParsedAll(newProductos)        
   })
   
     
@@ -89,9 +133,9 @@ export default function Ventas() {
       classList={{ "column": [2,3].includes(deviceType()) }}
     >
       <div class="flex">
-        <SearchSelect saveOn={form()} save="almacenID" css="w16rem s6 mb-02 mr-12"
+        <SearchSelect css="w16rem s6 mb-02 mr-12"
           label="" keys="ID.Nombre" options={almacenes()?.Almacenes || []}
-          placeholder=" ALMACÉN"
+          placeholder=" ALMACÉN" selected={almacenSelected()}
           onChange={e => {
             if(e){ getStock(e.ID); return }
           }}
@@ -109,6 +153,7 @@ export default function Ventas() {
             }}
             onkeydown={ev => {
               ev.stopPropagation()
+              console.log(ev.key)
               if(ev.key === 'ArrowUp'){
                 const newIdx = productoSelected()-1
                 if(newIdx < -1){ return }
@@ -117,8 +162,21 @@ export default function Ventas() {
                 setProductoSelected(productoSelected()+1)
               } else {
                 const key = ev.key.toLocaleLowerCase()
-                if(productoSelected() >= 0 && numbers.includes(key)){
-                  ev.preventDefault()
+                if(productoSelected() >= 0 && (numbers.includes(key) || ev.key === 'Backspace')){
+                  // Cambia el valor del input del element
+                  const input = ventaProductoInput()
+                  console.log("key backspace:: ", input.value)
+                  if(input){
+                    if(ev.key === 'Backspace'){
+                      if(input.value){
+                        input.value = ""
+                        ev.preventDefault()
+                      }
+                    } else {
+                      input.value += key
+                      ev.preventDefault()
+                    }
+                  }
                 } else if(letters.includes(key) || numbers.includes(key)){
                   filterProductos(lastSearchText + ev.key)
                 }
@@ -134,6 +192,7 @@ export default function Ventas() {
       <div style={{ height: 'calc(100% - 12px - 4.2rem)', position: 'relative' }}>
         <CardsList data={productosParsed()}
           render={(e,i) => {
+            console.log("card rerender:: ", i, e)
             const isSelected = () => { return i === productoSelected() }
             return <ProductoVentaCard idx={i}
               isSelected={isSelected()}
@@ -158,7 +217,7 @@ function ProductoCantidad(){
 
   const cantidades = [2,3,4,5,6,8,10,12]
 
-  return <div class={["flex ai-end h100",style.buttons_cantidad].join(" ")}>
+  return <div class={["flex p-rel ai-end h100",style.buttons_cantidad].join(" ")}>
     <For each={cantidades}>
       {e => {
         return <div class={`flex-center ff-bold ${style.button_venta_cantidad}`}>{e}</div>
@@ -178,8 +237,39 @@ interface IProductoVentaCard {
 
 const ProductoVentaCard = (props: IProductoVentaCard) => {
 
+  let inputRef: HTMLInputElement
+  createEffect(on(() => props.isSelected, () => {
+    if(props.isSelected){ setVentaProductoInput(inputRef) }
+  }))
+
+  const makeNombre = () => {
+    const nombre = makeHighlString(props.productoStock.producto.Nombre, props.filterText)
+    if(props.productoStock.isSubunidad || props.productoStock.skus?.length > 0){
+      return <div class="flex ai-center">
+        {nombre}
+        <Show when={props.productoStock.isSubunidad}>
+          <div class="ml-04 mr-04">|</div>
+          <div class="ff-bold c-purple2">{props.productoStock.producto.SbnUnidad}</div>
+        </Show>
+        <Show when={!props.productoStock.isSubunidad}>
+          <div class="ff-bold ml-04 c-purple2">(SKU)</div>
+        </Show>
+      </div> 
+    } else {
+      return nombre
+    }
+  }
+
+  const isSku = () => props.productoStock.skus?.length > 0
+
+  const firstSkus = createMemo(() => {
+    let skus = props.productoStock.skus || []
+    if(skus.length > 4){ skus = skus.slice(0,4) }
+    return skus
+  })
+
   return <div class={"px-04 py-02"}
-    classList={{ "sld": props.isSelected }}
+    classList={{ "sld": props.isSelected, "sku": isSku() }}
     style={{ "margin-top": props.idx === 0 ? '8px' : undefined }}
     onmouseover={ev => {
       ev.stopPropagation()
@@ -193,23 +283,38 @@ const ProductoVentaCard = (props: IProductoVentaCard) => {
     >
       <div class={style.card_venta_nombre}>
         <div class={style.card_venta_nombre_line}></div>
-          { makeHighlString(props.productoStock.producto.Nombre, props.filterText) }
+          { makeNombre() }
       </div>
       <div class="w100 grid ai-center"
         style={{ "grid-template-columns": '1fr 3.8rem 2.8rem 5rem' }}>                  
-        <div class={`flex ai-center h100`}>
+        <div class={`h100 ${style.card_venta_producto_ctn}`}
+            classList={{ "flex ai-center": !isSku() }}
+          >
           <div class={`${style.card_venta_producto}`}>
-            { makeHighlString(props.productoStock.producto.Nombre, props.filterText) }
+            { makeNombre() }
           </div>
-          <ProductoCantidad />             
+          <Show when={isSku()}>
+            <div class="flex-wrap z20 p-rel" style={{ margin: '0 -3px' }}>
+              <For each={firstSkus()}>
+              {e => {
+                return <div class={`h5 ${style.producto_sku}`}>
+                  {e.SKU}
+                </div>
+              }}
+              </For>
+            </div>
+          </Show>
+          <Show when={!isSku()}>
+            <ProductoCantidad/>
+          </Show>           
         </div>
         <div class={joinb("p-rel flex ai-center",style.input_cantidad)}>
-          <input type="number" value="1"
+          <input type="number" value="" ref={inputRef}
             class="ff-mono w100"
           />
           <div class="ml-04">/</div>
         </div>
-        <div class="ff-mono t-r">2</div>
+        <div class="ff-mono t-r">{props.productoStock.cant}</div>
         <div class="ff-mono t-r">
           {formatN(props.productoStock.producto.Precio/100,2) as string}
         </div>

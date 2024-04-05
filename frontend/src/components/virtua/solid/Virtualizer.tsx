@@ -258,10 +258,22 @@ export const Virtualizer = <T,>(props: VirtualizerProps<T>): JSX.Element => {
     on(
       () => props.data,
       (data, prevData) => {
-        setRerender([])
-        if (exists(prevData) && data.length !== prevData.length) {
+        if(!exists(prevData)){ return}
+        
+        const currentFirst = data[0] || 0
+        const prevFirst = prevData[0] || 0
+        const currentLast = data[data.length - 1] || 0
+        const prevLast = prevData[prevData.length - 1] || 0
+
+        if(data.length !== prevData.length 
+          || currentFirst !== prevFirst || currentLast !== prevLast){
+          //TODO: Mejorar aquí
+          setTimeout(()=>{ setRerender([]) },50)
+        }        
+        
+        if (data.length !== prevData.length) {
           store._update(ACTION_ITEMS_LENGTH_CHANGE, [data.length, props.shift]);
-        }
+        }        
       }
     )
   );
