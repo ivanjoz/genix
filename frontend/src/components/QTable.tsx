@@ -202,6 +202,7 @@ export function QTable<T>(props: IQTable<T>) {
                   </td>
                 </tr>
               }
+
               return <QTableRow row={row} record={record}
                 isFinal={recordRows().length - 1 === i()}
                 firstItemStart={recordRows()[0].start}
@@ -272,10 +273,6 @@ export function QTable<T>(props: IQTable<T>) {
 }
 
 export function QTableRow<T>(props: ITableRow<T>) {
-
-  let cn = props.row.index % 2 === 0 ? "tr-even" : "tr-odd"
-  if(props.isFinal){ cn += " tr-final" }
-
   const [columns] = createSignal(props.columns)
 
   const renderMap: Map<number,(() => void)> = new Map()
@@ -309,7 +306,12 @@ export function QTableRow<T>(props: ITableRow<T>) {
   }
 
   return <>
-    <tr class={cn + (props.isSelected ? " selected" : "")} 
+    <tr classList={{ 
+        "selected": props.isSelected,
+        "is-final": props.isFinal,
+        "tr-even": props.row.index % 2 === 0,
+        "tr-odd": props.row.index % 2 !== 0,
+      }}
       style={{ 
         height: `${props.row.size}px`, transform: `translateY(${props.firstItemStart}px)`,
       }}

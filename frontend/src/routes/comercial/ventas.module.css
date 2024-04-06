@@ -1,5 +1,5 @@
 .card_venta {
-  background-color: white;
+  background-color: var(--white-4);
   height: 2.6rem;
   padding: 0 7px;
   box-shadow: #5a5e6330 0px 1px 8px 0px;
@@ -11,17 +11,17 @@
   height: 3.6rem;
 }
 .card_venta:hover, :global(.sld) > .card_venta {
-  outline-color: black;
+  outline-color: var(--black-1);
 }
 .card_venta_nombre {
-  background-color: white;
+  background-color: var(--white-4);
   position: absolute;
   top: -10px;
   left: -1px;
   height: 1.6rem;
   z-index: 5;
   padding: 0 1rem 0 7px;
-  border: 1px solid black;
+  border: 1px solid var(--black-1);
   border-bottom: none;
   border-right: none;
   display: none;
@@ -31,7 +31,7 @@
   right: 0px;
   height: 9px;
   top: 0px;
-  border-left: 1px solid black;
+  border-left: 1px solid var(--black-1);
 }
 .card_venta:hover .card_venta_nombre,
 :global(.sld) .card_venta .card_venta_nombre {
@@ -60,6 +60,9 @@
   height: 1.7rem;
   width: 2rem;
   background-color: rgb(226, 230, 240);
+}
+body:global(.dark) .button_venta_cantidad {
+  background-color: rgb(50, 65, 102);
 }
 .button_venta_cantidad:hover {
   color: white;
