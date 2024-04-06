@@ -97,6 +97,20 @@ export function MainTopMenu() {
           }}>
             <i class="icon-logout-1"></i>Salir
           </button>
+          <div class="w100"></div>
+          <div>Tema</div>
+          <div class="flex w100">
+            <button class="bn1" onClick={ev => {
+              ev.stopPropagation()
+              document.body.classList.remove("dark")
+              localStorage.setItem("ui-color","light")
+            }}>Claro</button>
+            <button class="bn1" onClick={ev => {
+              ev.stopPropagation()
+              document.body.classList.add("dark")
+              localStorage.setItem("ui-color","dark")
+            }}>Oscuro</button>
+          </div>
         </LayerSelect>
       </Show>
       <button class="bnr-4" onClick={ev => {

@@ -47,8 +47,8 @@ p {
   /* display: contents; */
   width: 100%;
   border-spacing: 0px;
-  border-left: 2px solid white;
-  border-right: 2px solid white;
+  border-left: 2px solid var(--white-2);
+  border-right: 2px solid var(--white-2);
 }
 
 .qtable-c {
@@ -60,7 +60,7 @@ p {
   padding-bottom: 2px;
   padding-right: 1px;
   padding-left: 1px;
-  background-color: white;
+  background-color: var(--white-2);
 }
 
 .qtable-c.selectable > table > tbody > tr {
@@ -72,13 +72,14 @@ p {
   color: #4834a2;
 }
 
-
 .qtable > thead {
   z-index: 11;
   background-color: white;
   border-bottom: 1px solid black;
 }
-
+body.dark .qtable > thead {
+  background-color: #413e55;
+}
 .qtable.fixed-header > thead {
   position: sticky;
   top: 0
@@ -88,22 +89,42 @@ p {
 .qtable.fixed-header > thead th {
   border-bottom: 1px solid #d1d2e8;
 }
+body.dark .qtable.fixed-header > thead th {
+  border-bottom: 1px solid transparent;
+  border-top: 2px solid var(--white-2);
+}
 .qtable > thead th {
   height: 2.2rem;
 }
+.qtable > thead tr:first-of-type > th:first-of-type {
+  border-top-left-radius: 9px;
+}
+.qtable > thead tr:first-of-type > th:last-of-type {
+  border-top-right-radius: 9px;
+}
 .qtable .tr-even, .qtable.single.color .tr-odd {
-  background-color: white;
+  background-color: var(--white-1);
 }
 .qtable:not(.single-color) .tr-odd {
-  background-color: #F7F7FE;
+  background-color: var(--light-1);
 }
 
 .qtable > tbody td {
   padding: 0 6px 0 6px;
-  border-bottom: 1px solid #f4f1ff;
+  border-bottom: 1px solid var(--light-2);
 }
-.qtable > tbody td:last-of-type, .qtable > tbody tr.tr-final td {
+/*.qtable > tbody td:last-of-type, */ .qtable > tbody tr.tr-final td {
   border-bottom-color: transparent
+}
+.qtable > tbody tr.is-final {
+  border-bottom-left-radius: 7px;
+  border-bottom-right-radius: 7px;
+}
+.qtable > tbody tr.is-final td:first-of-type {
+  border-bottom-left-radius: 7px;
+}
+.qtable > tbody tr.is-final td:last-of-type {
+  border-bottom-right-radius: 7px;
 }
 .cell-ed-c {
   height: 100%;
@@ -132,9 +153,11 @@ p {
   background-color: white;
   border-radius: 7px;
 }
+/*
 .qtable > tbody td:last-of-type {
   border-bottom: none;
 }
+*/
 .qtable > tbody > tr.selected {
   color: var(--purple-2);
   outline: 2px solid var(--color-11);
@@ -144,6 +167,7 @@ p {
 }
 .qtable > tbody > tr.selected > td {
   background-color: var(--light-3);
+  border-bottom-color: transparent;
 }
 .qtable > tbody > tr.tr-final > td:first-of-type {
   border-bottom-left-radius: 7px;
