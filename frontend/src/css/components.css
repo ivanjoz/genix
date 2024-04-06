@@ -69,6 +69,9 @@
   line-height: 1;
   font-size: 0.94rem;
 }
+body.dark .in-5c > .label, .in-label {
+  color: #eacfa7;
+}
 
 .in-5c.big-1 .in-5 {
   height: 2.8rem;
@@ -140,7 +143,7 @@ body .search-ctn:not(.on-arrow) > div:hover, .search-ctn > div._selected {
 .search-ctn > div > .txt i, ._highlight > i, ._highlight > i > i {
   font-style: normal;
   text-decoration: underline;
-  color: rgb(218, 60, 60);
+  color: var(--red-1);
 }
 ._highlight.s1 > i, ._highlight.s1 > i > i {
   color: rgb(255, 233, 159);
@@ -588,13 +591,14 @@ body.is-animated .main-menu {
   overflow: overlay;
   box-shadow: #5a5e6330 0px 1px 8px 0px;
   height: 2.2rem;
+  border: 1px solid #ffffff30
 }
 .search-c4 > div {
   border-radius: 6px 0 0 6px;
   height: 100%;
   display: flex;
   align-items: center;
-  background-color: #fff;
+  background-color: var(--white-3);
   color: #696370;
   width: 2rem;
   justify-content: center;
@@ -607,6 +611,18 @@ body.is-animated .main-menu {
   outline: none;
   border-radius: 0 6px 6px 0;
   height: 100%;
+  background-color: var(--white-3);
+}
+body.dark .search-c4 > input  {
+  color: white;
+}
+body:not(.dark) .search-c4:focus-within {
+  border-color: #738dff;
+  box-shadow: #5a5e6330 0 1px 6px, #738dff 0 0 1px 1px;
+}
+body.dark .search-c4:focus-within {
+  border-color: #ffc273;
+  box-shadow: #5a5e6330 0 1px 6px, #ffc273 0 0 1px 1px;
 }
 
 .card-c12 {
@@ -707,10 +723,10 @@ body.is-animated .main-menu {
 }
 .checkbox-cnt > span, .checkbox-s1 {
   display: flex;
-  background-color: #ffffff;
+  background-color: var(--white-3);
   border: 1px solid rgb(143, 143, 143);
   border-radius: 4px;
-  color: white;
+  color: transparent;
   justify-content: center;
   align-items: center;
   width: 1.6rem;
@@ -758,6 +774,7 @@ body.is-animated .main-menu {
 .checkbox-cnt input:checked ~ span, .checkbox-s1.checked {
   background-color: #1ab985;
   border: 1px solid #1eb886;
+  color: #FFFFFF;
 }
 .checkbox-cnt input:checked:disabled ~ span{
   background-color: #688293;

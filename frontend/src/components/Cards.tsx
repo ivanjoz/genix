@@ -223,3 +223,35 @@ export function CardsList<T>(props: ICardsList<T>){
     }}
   </VList>
 }
+
+export interface IButtonList<T> {
+  options: T[]
+  keys: string
+  onClick: (e: T) => void
+  selected?: keyof T
+}
+
+export function ButtonList<T>(props: IButtonList<T>){
+
+  const [keyId, keyName] = props.keys.split(".") as [keyof T, keyof T]
+  const [selected, setSelected] = createSignal(props.selected)
+
+  return <div class="flex ai-center">
+    <For each={props.options}>
+    {e => {
+      const isSelected = createMemo(() => e[keyId] === selected())
+
+      return <button class="bn1 mr-06" 
+        classList={{ "b-blue": isSelected() }}
+        onClick={ev => {
+        ev.stopPropagation()
+        setSelected(e[keyId] as any)
+        if(props.onClick){ props.onClick(e) }
+      }}>
+        {e[keyName] as string}
+      </button>
+    }}
+    </For>
+  </div>
+
+}

@@ -37,6 +37,9 @@ body {
   --light-4: #ebebf4;
   --white-4: #ffffff;
   --black-1: #000000;
+  --light-5: #f4f0ff;
+  --light-6: #ebebf4;
+  --red-1: #da3c3c;
 
   --screen-w1: 560;
   --header-height: 3rem;
@@ -47,7 +50,6 @@ body {
   --white: #ffffff;
   --white-5: #ffffff;
   --white-6: #ffffff;
-  --light-3: #f4f0ff;
   --light-5: #fbfbfd;
   --light-purple-1: #F7F7FE;
   --light-purple-2: #f4f1ff;
@@ -72,6 +74,8 @@ body {
 }
 
 body.dark {
+  color: #f3f2f6;
+  background-color: #27262a;
   --light-bg-1: #404250;
   --white-1: #1d1d1f; /* tr-even */
   --light-1: #27272d; /* tr-odd */
@@ -82,8 +86,10 @@ body.dark {
   --light-4: #000000; /* input border */
   --white-4: #27272d;
   --black-1: #ffd69c;
-  
-  --light-5: #282836;
+  --light-5: #4a3f63;
+  --light-6: #212025;
+  --red-1: #ffa3a3;
+
   --purple-2: #d8d3ff;
   --purple-3: #c7c0eb;
   --purple-6: #f6f2ff;
@@ -107,8 +113,6 @@ body.dark {
   --color-11: #8181b4;
   --placehlder: #77789b;
   --shadow-1: #00000075 0px 1px 8px 0px;
-  color: #dddaee;
-  background-color: #27262a;
 }
 
 body.compact {
@@ -339,6 +343,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
 /*clases generales cuando es mobile*/
 .c-white { color: #ffffff; }
 .c-red { color: #ca2e2e; }
+body.dark .c-red { color: #ff9494; }
 .c-green { color: rgb(17, 156, 80); }
 .c-red2 { color: #a33434; }
 .c-yellow { color: #e5a000; }
@@ -367,9 +372,8 @@ body.dark .c-steel2 { color: #d5e6ff; }
 }
 .c-purple { color: #6840a6; }
 body.dark .c-purple { color: #c3a7ef; }
-.c-blue {
-  color: #0065e9;
-}
+.c-blue { color: #0065e9; }
+body.dark .c-blue { color: #7bb4ff; }
 
 .c-blue2 {
   color: #174993;
@@ -1517,17 +1521,32 @@ body.dark th {
   height: 2.1rem;
 }
 
-.b-blue {
+body:not(.dark) .b-blue {
   background-color: #e1e5ff;
   border: 1px solid #a4b6ff;
   outline: 1px solid #718cf9;
   color: #3955c3;
   box-shadow: 0px 3px 9px -1px #4a80d399;
 }
-.b-blue:hover {
+body:not(.dark) .b-blue:hover {
   background-color: white;
   outline: 1px solid #2b2b2b;
 }
+
+body.dark .b-blue {
+  background-color: #6977d0;
+  border: 1px solid #8fa1ea;
+  outline: 1px solid #8fa1ea;
+  color: #fbfcff;
+  box-shadow: 0px 3px 9px -1px #000000b0;
+}
+body.dark .b-blue:hover {
+  background-color: #e1e5ff;
+  color: #000000;
+}
+
+
+
 .b-green {
   background-color: #d3ffee;
   border: 1px solid #83e2a7;

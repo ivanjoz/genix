@@ -5,7 +5,7 @@ import { appModule, deviceType, setAppModule, setShowMenu, setViewType, showMenu
 import Modules, { IModule } from "./modules"
 import { Params, accessHelper } from "~/shared/security"
 import { fetchOnCourse } from "~/shared/http"
-import { LayerSelect } from "~/components/Cards"
+import { ButtonList, LayerSelect } from "~/components/Cards"
 
 export interface IMenuRecord {
   name: string, minName?: string, id?: number, route?: string,
@@ -15,6 +15,11 @@ export interface IMenuRecord {
 export const [innerPageName, setInnerPageName] = createSignal("")
 export const [pageViews, setPageViews] = createSignal([])
 export const [pageView, setPageView] = createSignal(0)
+
+const uicolors = [
+  { id: "light", name: "Claro" },
+  { id: "dark", name: "Oscuro" }
+]
 
 export function MainTopMenu() {
   
@@ -99,18 +104,14 @@ export function MainTopMenu() {
           </button>
           <div class="w100"></div>
           <div>Tema</div>
-          <div class="flex w100">
-            <button class="bn1" onClick={ev => {
-              ev.stopPropagation()
-              document.body.classList.remove("dark")
-              localStorage.setItem("ui-color","light")
-            }}>Claro</button>
-            <button class="bn1" onClick={ev => {
-              ev.stopPropagation()
-              document.body.classList.add("dark")
-              localStorage.setItem("ui-color","dark")
-            }}>Oscuro</button>
-          </div>
+          <ButtonList options={uicolors}
+            keys="id.name" selected={localStorage.getItem("ui-color") as any}
+            onClick={e => {
+              for(let x of uicolors){ document.body.classList.remove(x.id) }
+              document.body.classList.add(e.id)
+              localStorage.setItem("ui-color",e.id)
+            }}
+          />
         </LayerSelect>
       </Show>
       <button class="bnr-4" onClick={ev => {
