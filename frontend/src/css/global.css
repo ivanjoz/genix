@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@200;300;400;500;600;700&display=swap');
-
 :root {
   --width-1: 10px;
   --width-modern: 25px;
@@ -22,7 +20,7 @@
 
 body {
   margin: 0;
-  font-family: nunito;
+  font-family: main;
   overflow-x: hidden;
   height: 100%;
   color: #282a2e;
@@ -80,10 +78,10 @@ body.dark {
   --white-1: #1d1d1f; /* tr-even */
   --light-1: #27272d; /* tr-odd */
   --light-2: #000000; /* black line */
-  --white-2: #181818; /* table -lines */
-  --light-3: #363439; /*  layer*/
-  --white-3:#1f1f22; /* input */
-  --light-4: #000000; /* input border */
+  --white-2: #27272d; /* table -lines */
+  --light-3: #383843;/* #363439; */ /*  layer*/
+  --white-3:#2c2c33; /* input */ /* #1f1f22 */
+  --light-4: #00000026; /* input border */
   --white-4: #27272d;
   --black-1: #ffd69c;
   --light-5: #4a3f63;
@@ -112,7 +110,7 @@ body.dark {
   --gray-5: #5d5e7c;
   --color-11: #8181b4;
   --placehlder: #77789b;
-  --shadow-1: #00000075 0px 1px 8px 0px;
+  --shadow-1: #00000054 0px 2px 4px 0px;  /*#00000075 0px 1px 8px 0px; */
 }
 
 body.compact {
@@ -127,7 +125,7 @@ body.view-min {
 button { cursor: pointer; }
 input, textarea, select, button, p {
   font-size: 1rem;
-  font-family: nunito;
+  font-family: main;
   box-sizing: border-box;
   padding: 4px 6px 3px 6px;
 }
@@ -233,7 +231,7 @@ h1, h2, h3, h4, h5, h6 {
 
 p { margin: 0.4rem 0; }
 .ff-bold { font-family: bold; }
-.ff-main { font-family: nunito; }
+.ff-main { font-family: main; }
 .ff-light { font-family: light; }
 .ff-mono, .ff-mono p { font-family: monospace; }
 .fs-italic { font-style: italic; }
@@ -1130,45 +1128,15 @@ body.dark .c-purple2 { color: #c1acff; }
   margin-bottom: auto;
 }
 
-.mr-02 {
-  margin-right: 2px;
-}
-
-.mr-04 {
-  margin-right: 4px;
-}
-
-.mr-05 {
-  margin-right: 5px;
-}
-
-.mr-06 {
-  margin-right: 6px;
-}
-
-.mr-08 {
-  margin-right: 08px;
-}
-
-.mr-10 {
-  margin-right: 10px;
-}
-
-.mr-12 {
-  margin-right: 12px;
-}
-
-.mr-14 {
-  margin-right: 14px;
-}
-
-.mr-16 {
-  margin-right: 16px;
-}
-
-.mr-20 {
-  margin-right: 20px;
-}
+.mr-02 { margin-right: 2px; }
+.mr-04 { margin-right: 4px; }
+.mr-06 { margin-right: 6px; }
+.mr-08 { margin-right: 08px; }
+.mr-10 { margin-right: 10px; }
+.mr-12 { margin-right: 12px; }
+.mr-14 { margin-right: 14px; }
+.mr-16 { margin-right: 16px; }
+.mr-20 { margin-right: 20px; }
 
 .pr-02 {
   padding-right: 2px;
@@ -1394,20 +1362,27 @@ body.dark .c-purple2 { color: #c1acff; }
   margin-bottom: -14px;
 }
 
-.mb-n16 { margin-bottom: -16px; }
+
+.ml-02  { margin-left: 2px; }
 .ml-04  { margin-left: 4px; }
 .ml-06  { margin-left: 6px; }
 .ml-08  { margin-left: 8px; }
 .ml-10  { margin-left: 10px; }
 .ml-12  { margin-left: 12px; }
-.ml-n02 { margin-left: -2px; }
-.ml-n04 { margin-left: -4px; }
-.ml-n08 { margin-left: -8px; }
-.ml-n10 { margin-left: -10px; }
-.mr-n02 { margin-right: -2px; }
-.mr-n04 { margin-right: -4px;}
-.mr-n08 { margin-right: -8px; }
-.mr-n10 { margin-right: -10px; }
+.ml-14  { margin-left: 14px; }
+.ml-16  { margin-left: 16px; }
+.ml-20  { margin-left: 20px; }
+
+.mr-02 { margin-right: 2px; }
+.mr-04 { margin-right: 4px; }
+.mr-06 { margin-right: 6px; }
+.mr-08 { margin-right: 08px; }
+.mr-10 { margin-right: 10px; }
+.mr-12 { margin-right: 12px; }
+.mr-14 { margin-right: 14px; }
+.mr-16 { margin-right: 16px; }
+.mr-20 { margin-right: 20px; }
+
 
 .no-shrink { flex-shrink: 0; }
 

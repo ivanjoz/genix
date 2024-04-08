@@ -128,6 +128,7 @@ export function CardSelect<T,Y>(props: ICardSelect<T,Y>){
 
   createEffect(() => {
     if(props.saveOn && props.save){
+      props.saveOn[props.save] = props.saveOn[props.save] || [] as Y[keyof Y]
       setSelected(props.saveOn[props.save] as (number|string)[])
     }
   })
@@ -254,4 +255,44 @@ export function ButtonList<T>(props: IButtonList<T>){
     </For>
   </div>
 
+}
+
+
+interface ISpinnerProps {
+  mensaje?: string, className?: string
+  size?: string
+}
+
+export const Spinner = (props: ISpinnerProps) => {
+  let className = "spinner1 flex a-center j-center"
+  if (props.className) { className += (" " + props.className) }
+
+  let mensaje = props.mensaje || ''
+
+  if (mensaje.includes(' ...')) {
+    mensaje = mensaje.replace(' ...', '...')
+  }
+
+  if (mensaje.includes('...')) {
+    // Comprobar si los puntos suspensivos están al final
+    if (mensaje.indexOf('...') === mensaje.length - 3) {
+      // Si es así, quitarlos, traducir y volver a añadirlos
+      mensaje = mensaje.replace('...', '')
+      mensaje = mensaje + '...'
+    }
+  }
+
+  return (
+    <div class={className}>
+      {mensaje &&
+        <div class="mr-08">
+          {mensaje || `Cargando...`}
+        </div>
+      }
+    <div class="lds-spinner">
+      <div></div><div></div><div></div><div></div><div></div>
+      <div></div><div></div><div></div><div></div><div></div>
+      <div></div><div></div></div>
+    </div>
+  )
 }

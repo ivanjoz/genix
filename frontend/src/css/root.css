@@ -1,5 +1,5 @@
 @font-face { 
-  font-family: 'main'; src: url("/libs/nunito-v12-latin-regular.woff") 
+  font-family: 'main'; src: url("/libs/open-sans-regular.woff2") 
 }
 @font-face { 
   font-family: 'bold'; src: url("/libs/nunito-v12-latin-600.woff") 
@@ -71,6 +71,14 @@ p {
   background-color: #efebff;
   color: #4834a2;
 }
+.qtable-c.selectable > table > tbody > tr:hover > td:first-of-type{
+  border-bottom-left-radius: 7px;
+  border-top-left-radius: 7px; 
+}
+.qtable-c.selectable > table > tbody > tr:hover > td:last-of-type{
+  border-bottom-right-radius: 7px;
+  border-top-right-radius: 7px; 
+}
 
 .qtable > thead {
   z-index: 11;
@@ -112,7 +120,7 @@ body.dark .qtable.fixed-header > thead th {
   padding: 0 6px 0 6px;
   border-bottom: 1px solid var(--light-2);
 }
-.qtable > tbody tr.tr-final td {
+.qtable > tbody tr.is-final td {
   border-bottom-color: transparent
 }
 .qtable > tbody tr.is-final {
