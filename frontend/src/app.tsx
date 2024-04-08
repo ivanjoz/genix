@@ -81,11 +81,6 @@ export default function Root() {
     if(localStorage.getItem("ui-color") === "dark"){
       document.body.classList.add('dark')
     }
-    if(viewType() === 2 && deviceType() === 1){
-      document.body.classList.add('view-min')
-    } else {
-      document.body.classList.remove('view-min')
-    }
   }
 
   const isLogin = () => {
@@ -95,7 +90,13 @@ export default function Root() {
     else { return 3 }
   }
 
-  // console.log("is login:: ", isLogin())
+  createEffect(() => {
+    if(viewType() === 2 && deviceType() === 1){
+      document.body.classList.add('view-min')
+    } else {
+      document.body.classList.remove('view-min')
+    }
+  })
   
   return <>
     <Router root={props => (
