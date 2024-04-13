@@ -57,7 +57,7 @@
 .button_venta_cantidad {
   border-radius: 7px;
   margin: 0 2px;
-  height: 1.7rem;
+  height: 1.6rem;
   width: 2rem;
   background-color: rgb(226, 230, 240);
 }
@@ -67,6 +67,10 @@ body:global(.dark) .button_venta_cantidad {
 .button_venta_cantidad:hover {
   color: white;
   background-color: rgb(56, 99, 209);
+}
+body:global(.dark) .button_venta_cantidad:hover {
+  color: rgb(58, 55, 255);
+  background-color: rgb(255, 255, 255);
 }
 .input_cantidad > * {
   display: none;

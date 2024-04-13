@@ -11,13 +11,21 @@ import { Params } from "~/shared/security";
 import style from "./ventas.module.css";
 import { CheckBox } from "~/components/Input";
 
-export interface ProductoStock {
+export interface ProductoVenta {
   key: string
   cant: number
   producto: IProducto
   searchText: string
   isSubunidad?: boolean
   skus?: IProductoStock[]
+}
+
+export interface VentaProducto {
+  productoID: number
+  sku?: string
+  lote?: string
+  cantidad: number
+  subCantidad: number
 }
 
 const [ventaProductoInput, setVentaProductoInput] = createSignal(null as HTMLInputElement)
@@ -56,13 +64,13 @@ export default function Ventas() {
     }
   })
 
-  const [productosParsed, setProdustosParsed] = createSignal([] as ProductoStock[])
-  const [productosParsedAll, setProductosParsedAll] = createSignal([] as ProductoStock[])
+  const [productosParsed, setProdustosParsed] = createSignal([] as ProductoVenta[])
+  const [productosParsedAll, setProductosParsedAll] = createSignal([] as ProductoVenta[])
 
   createEffect(() => {    
     const productoToStockMap = arrayToMapG(productosStock(), "ProductoID")
     console.log("productos stock map::", productosStock(), productoToStockMap)
-    const newProductos: ProductoStock[] = []
+    const newProductos: ProductoVenta[] = []
 
     for(let producto of productos()?.productos||[]){
       const stocks = productoToStockMap.get(producto.ID) || []
@@ -71,7 +79,7 @@ export default function Ventas() {
       const base = { 
         producto: producto, cant: 0,  key: `M${producto.ID}`,
         searchText: producto.Nombre.toLowerCase()
-      } as ProductoStock
+      } as ProductoVenta
 
       const skusStock: IProductoStock[] = []
       const mainStock: IProductoStock[] = []
@@ -87,7 +95,7 @@ export default function Ventas() {
       }
 
       if(mainStock.length > 0){
-        let clone: ProductoStock
+        let clone: ProductoVenta
         if(producto.SbnCantidad > 1){
           clone = {...base, key: `S${producto.ID}`}
           clone.isSubunidad = true
@@ -128,6 +136,12 @@ export default function Ventas() {
     },80)
   }
 
+  const agregarStock = (e: ProductoVenta, cant: number) => {
+    const producto = productosParsed()[productoSelected()]
+    if(!producto){ return }
+    console.log("agregar producto:: ", producto)
+  }
+
   return <PageContainer title="Ventas" class="flex">
     <div class="jc-between mb-06" style={{ width: "46%" }}
       classList={{ "column": [2,3].includes(deviceType()) }}
@@ -160,6 +174,8 @@ export default function Ventas() {
                 setProductoSelected(newIdx)
               } else if(ev.key === 'ArrowDown'){
                 setProductoSelected(productoSelected()+1)
+              } else if(ev.key === 'Enter' && productoSelected() >= 0){
+                
               } else {
                 const key = ev.key.toLocaleLowerCase()
                 if(productoSelected() >= 0 && (numbers.includes(key) || ev.key === 'Backspace')){
@@ -227,7 +243,7 @@ function ProductoCantidad(){
 }
 
 interface IProductoVentaCard {
-  productoStock: ProductoStock
+  productoStock: ProductoVenta
   isSelected: boolean
   filterText: string
   idx: number
