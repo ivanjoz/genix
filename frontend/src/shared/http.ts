@@ -623,7 +623,6 @@ const searchOnIndexDB = async (props: httpProps): Promise<any[]> => {
 
   checkIdbTables(props)
   const cache = window._cache
-  debugger
 
   // Limpia el flag para user el caché
   if (props.clearCache){ delete cache[idbTable] }

@@ -75,9 +75,9 @@ body.dark {
   color: #f3f2f6;
   background-color: #27262a;
   --light-bg-1: #404250;
-  --white-1: #1d1d1f; /* tr-even */
-  --light-1: #27272d; /* tr-odd */
-  --light-2: #000000; /* black line */
+  --white-1: #222225; /* tr-even */
+  --light-1: #2a2a30; /* tr-odd */
+  --light-2: #00000080; /* black line */
   --white-2: #27272d; /* table -lines */
   --light-3: #383843;/* #363439; */ /*  layer*/
   --white-3:#2c2c33; /* input */ /* #1f1f22 */
@@ -369,7 +369,7 @@ body.dark .c-steel2 { color: #d5e6ff; }
   color: #5c6676;
 }
 .c-purple { color: #6840a6; }
-body.dark .c-purple { color: #c3a7ef; }
+body.dark .c-purple { color: #d5baff; }
 .c-blue { color: #0065e9; }
 body.dark .c-blue { color: #7bb4ff; }
 
