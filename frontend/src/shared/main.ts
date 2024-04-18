@@ -94,6 +94,11 @@ export function normalizeStringN(string: string): string {
   return normalized
 }
 
+export function formatMo(moneda: number): string {
+  if(typeof moneda !== 'number'){ return "" }
+  return formatN(moneda / 100, 2)
+}
+
 export function formatN(
   x: number, decimal?: number, fixedLen?: number, charF?: string
 ){

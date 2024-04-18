@@ -240,6 +240,7 @@ export interface IInputDisabled<T> {
   content?: (string|JSX.Element)
   getContent?: () => (string|JSX.Element)
   postValue?: JSX.Element
+  decimals?: number
 }
 
 export function InputDisabled<T>(props: IInputDisabled<T>) {
