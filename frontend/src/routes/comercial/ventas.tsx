@@ -6,10 +6,11 @@ import { Loading, include, throttle } from "~/core/main";
 import { PageContainer } from "~/core/page";
 import { IProducto, IProductoStock, getProductosStock, useProductosAPI } from "~/services/operaciones/productos";
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
-import { arrayToMapG, arrayToMapN, arrayToMapS, formatN, joinb } from "~/shared/main";
+import { arrayToMapG, arrayToMapN, arrayToMapS, formatMo, formatN, joinb } from "~/shared/main";
 import { Params } from "~/shared/security";
 import style from "./ventas.module.css";
-import { CheckBox } from "~/components/Input";
+import { CheckBox, Input, InputDisabled } from "~/components/Input";
+import { QTable } from "~/components/QTable";
 
 export interface ProductoVenta {
   key: string
@@ -21,11 +22,19 @@ export interface ProductoVenta {
 }
 
 export interface VentaProducto {
+  key: string
   productoID: number
   sku?: string
   lote?: string
   cantidad: number
-  subCantidad: number
+  subCantidad?: number
+}
+
+export interface IVenta {
+  clienteID: number
+  subtotal: number
+  igv: number
+  total: number
 }
 
 const [ventaProductoInput, setVentaProductoInput] = createSignal(null as HTMLInputElement)
@@ -35,10 +44,16 @@ export default function Ventas() {
   const [productosStock, setProductosStock] = createSignal([] as IProductoStock[])
   const [productos] = useProductosAPI()
   const [almacenes] = useSedesAlmacenesAPI()
-  const [form, setForm] = createSignal({ })
+  const [form, setForm] = createSignal({ } as IVenta)
   const [filterText, setFilterText] = createSignal("")
   const [productoSelected, setProductoSelected] = createSignal(-1)
   const [almacenSelected, setAlmacenSelected] = createSignal(-1)
+  const [ventaErrorMessage, setVentaErrorMessage] = createSignal("")
+  const [ventaProductos, setVentaProductos] = createSignal([] as VentaProducto[])
+
+  const ventaProductosMap = createMemo(() => {
+    return arrayToMapS(ventaProductos(), "key")
+  })
 
   const getStock = async (almacenID: number) => {
     let stock: IProductoStock[] = []
@@ -137,13 +152,40 @@ export default function Ventas() {
   }
 
   const agregarStock = (e: ProductoVenta, cant: number) => {
-    const producto = productosParsed()[productoSelected()]
-    if(!producto){ return }
-    console.log("agregar producto:: ", producto)
+    const ventaCant = ventaProductosMap().get(e.key)?.cantidad || 0
+    const stock = e.cant - ventaCant
+    if(stock < cant){ 
+      setVentaErrorMessage(`No hay suficiente stock de "${e.producto.Nombre}" para agregar ${cant} unidades.`)
+      return
+    }
+    const ventaProducto = ventaProductos().find(x => x.key === e.key)
+    if(ventaProducto){
+      ventaProducto.cantidad += cant
+    } else {
+      ventaProductos().push({ 
+        key: e.key, cantidad: cant, productoID: e.producto.ID 
+      })
+    }
+    const newVentaProductos = [...ventaProductos()]
+    const newForm = {...form(), total: 0, subtotal: 0, igv: 0}
+
+    for(let vp of newVentaProductos){
+      const producto = productos().productosMap.get(vp.productoID)
+      const monto = producto.PrecioFinal * vp.cantidad
+      newForm.total += monto
+    }
+    newForm.subtotal = Math.floor(newForm.total / 1.18)
+    newForm.igv = newForm.total - newForm.subtotal
+
+    setVentaProductos(newVentaProductos)
+    setForm(newForm)
+   // setFilterText("")
+  // setProdustosParsed([...productosParsedAll()])
+    setProductoSelected(-1)
   }
 
   return <PageContainer title="Ventas" class="flex">
-    <div class="jc-between mb-06" style={{ width: "46%" }}
+    <div class="jc-between mb-06 mr-16" style={{ width: "46%" }}
       classList={{ "column": [2,3].includes(deviceType()) }}
     >
       <div class="flex">
@@ -175,7 +217,10 @@ export default function Ventas() {
               } else if(ev.key === 'ArrowDown'){
                 setProductoSelected(productoSelected()+1)
               } else if(ev.key === 'Enter' && productoSelected() >= 0){
-                
+                const input = ventaProductoInput()
+                const cant = parseInt(input.value||"0") || 1
+                const producto = productosParsed()[productoSelected()]
+                agregarStock(producto, cant)
               } else {
                 const key = ev.key.toLocaleLowerCase()
                 if(productoSelected() >= 0 && (numbers.includes(key) || ev.key === 'Backspace')){
@@ -211,7 +256,7 @@ export default function Ventas() {
             console.log("card rerender:: ", i, e)
             const isSelected = () => { return i === productoSelected() }
             return <ProductoVentaCard idx={i}
-              isSelected={isSelected()}
+              isSelected={isSelected()} ventasProductosMap={ventaProductosMap()}
               productoStock={e}
               setProductoSelected={setProductoSelected}
               filterText={filterText()}
@@ -223,8 +268,57 @@ export default function Ventas() {
         />
       </div>
     </div>
-    <div class="grow-1">
-      <h1>hola</h1>
+    <div class="side-layer1 grow-1 px-12 py-08" style={{ width: "calc(47.5% - 1rem)" }}>
+      { ventaErrorMessage() &&
+        <div class="box-error-ms mb-08">{ventaErrorMessage()}</div>
+      }
+      <div class="ff-bold h3 mb-04">DETALLE DE VENTA</div>
+      <div class="w100-10 flex-wrap">
+        <Input label="Cliente" css="w-06x" saveOn={form()} save="clienteID" />
+        <InputDisabled label="Código" css="w-05x" />
+        <InputDisabled label="Sub Total" css="ff-mono w-045x" 
+          getContent={() => formatMo(form().subtotal)}/>
+        <InputDisabled label="IGV" css="ff-mono w-04x" 
+          getContent={() => formatMo(form().igv)}/>
+        <InputDisabled label="Total" css="ff-mono w-045x" content={form().total}
+          getContent={() => formatMo(form().total)}/>
+      </div>
+      <QTable data={ventaProductos()} 
+        css="w100 mt-12" tableCss="w-page-t w100"
+        maxHeight="calc(100vh - 12rem - 12px)"
+        columns={[
+          { header: "Nº",
+            getValue: (e,idx) => {
+              return String(idx + 1)
+            }
+          },
+          { header: "Producto",
+            render: e => {
+              const producto = productos().productosMap.get(e.productoID)
+              return producto?.Nombre || ""
+            }
+          },
+          { header: "SKU",
+            render: e => {
+              return e.sku || ""
+            }
+          },
+          { header: "Cantidad",
+            render: e => {
+              return formatN(e.cantidad)
+            }
+          },
+          { header: "Monto", css: "ff-mono t-r",
+            render: e => {
+              const producto = productos().productosMap.get(e.productoID)
+              const monto = producto.PrecioFinal * e.cantidad
+              return <span>
+                {formatN(monto/100,2) as string}
+              </span>
+            }
+          },
+        ]}
+      />
     </div>
   </PageContainer>
 }
@@ -243,10 +337,11 @@ function ProductoCantidad(){
 }
 
 interface IProductoVentaCard {
+  idx: number
   productoStock: ProductoVenta
   isSelected: boolean
   filterText: string
-  idx: number
+  ventasProductosMap: Map<string,VentaProducto>
   setProductoSelected: (e: number) => void
   onmouseover: () => void
 }
@@ -277,6 +372,10 @@ const ProductoVentaCard = (props: IProductoVentaCard) => {
   }
 
   const isSku = () => props.productoStock.skus?.length > 0
+  const getCant = createMemo(() => {    
+    const ventaCant = props.ventasProductosMap.get(props.productoStock.key)?.cantidad || 0
+    return props.productoStock.cant - ventaCant
+  })
 
   const firstSkus = createMemo(() => {
     let skus = props.productoStock.skus || []
@@ -330,7 +429,7 @@ const ProductoVentaCard = (props: IProductoVentaCard) => {
           />
           <div class="ml-04">/</div>
         </div>
-        <div class="ff-mono t-r">{props.productoStock.cant}</div>
+        <div class="ff-mono t-r">{getCant()}</div>
         <div class="ff-mono t-r">
           {formatN(props.productoStock.producto.Precio/100,2) as string}
         </div>

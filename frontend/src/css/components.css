@@ -72,6 +72,8 @@ body.dark .in-s2 .in-5 {
   padding-left: 0.45rem;
   line-height: 1;
   font-size: 0.94rem;
+  margin-bottom: 1px;
+  z-index: 1;
 }
 body.dark .in-5c > .label, .in-label {
   color: #eacfa7;
@@ -970,7 +972,7 @@ body.dark .search-c4:focus-within {
   box-shadow: rgb(36 36 43 / 24%) -1px 0px 24px -4px;
 }
 body.dark .side-layer1 {
-  box-shadow: rgb(0 0 0 / 55%) -1px 0px 15px 0px;
+  box-shadow: rgb(0 0 0 / 50%) -1px 0px 15px 0px;
 }
 .corner-layer {
   position: fixed;
