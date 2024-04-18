@@ -17,7 +17,7 @@ export interface ProductoVenta {
   cant: number
   producto: IProducto
   searchText: string
-  isSubunidad?: boolean
+  isSubUnidad?: boolean
   skus?: IProductoStock[]
 }
 
@@ -27,7 +27,7 @@ export interface VentaProducto {
   sku?: string
   lote?: string
   cantidad: number
-  subCantidad?: number
+  isSubUnidad?: boolean
 }
 
 export interface IVenta {
@@ -92,7 +92,7 @@ export default function Ventas() {
       if(stocks.length === 0){ continue }
 
       const base = { 
-        producto: producto, cant: 0,  key: `M${producto.ID}`,
+        producto: producto, cant: 0,  key: `P${producto.ID}`,
         searchText: producto.Nombre.toLowerCase()
       } as ProductoVenta
 
@@ -104,7 +104,7 @@ export default function Ventas() {
       }
 
       if(skusStock.length > 0){
-        const clone = {...base, skus: skusStock, key: `P${producto.ID}`}
+        const clone = {...base, skus: skusStock, key: `K${producto.ID}`}
         for(let e of skusStock){ clone.cant += e.Cantidad }
         newProductos.push(clone)
       }
@@ -113,7 +113,7 @@ export default function Ventas() {
         let clone: ProductoVenta
         if(producto.SbnCantidad > 1){
           clone = {...base, key: `S${producto.ID}`}
-          clone.isSubunidad = true
+          clone.isSubUnidad = true
           clone.cant = producto.SbnCantidad
         }
 
@@ -151,19 +151,21 @@ export default function Ventas() {
     },80)
   }
 
-  const agregarStock = (e: ProductoVenta, cant: number) => {
+  const agregarProductoVenta = (e: ProductoVenta, cant: number) => {
     const ventaCant = ventaProductosMap().get(e.key)?.cantidad || 0
     const stock = e.cant - ventaCant
     if(stock < cant){ 
       setVentaErrorMessage(`No hay suficiente stock de "${e.producto.Nombre}" para agregar ${cant} unidades.`)
       return
     }
+    
     const ventaProducto = ventaProductos().find(x => x.key === e.key)
     if(ventaProducto){
       ventaProducto.cantidad += cant
     } else {
       ventaProductos().push({ 
-        key: e.key, cantidad: cant, productoID: e.producto.ID 
+        key: e.key, cantidad: cant, productoID: e.producto.ID,
+        isSubUnidad: e.isSubUnidad || false
       })
     }
     const newVentaProductos = [...ventaProductos()]
@@ -179,13 +181,17 @@ export default function Ventas() {
 
     setVentaProductos(newVentaProductos)
     setForm(newForm)
+    const input = ventaProductoInput()
+    if(input){ input.value = "" }
    // setFilterText("")
   // setProdustosParsed([...productosParsedAll()])
     setProductoSelected(-1)
   }
 
+  const layerWidth = 52
+
   return <PageContainer title="Ventas" class="flex">
-    <div class="jc-between mb-06 mr-16" style={{ width: "46%" }}
+    <div class="jc-between mb-06 mr-16" style={{ width: `${100 - layerWidth}%` }}
       classList={{ "column": [2,3].includes(deviceType()) }}
     >
       <div class="flex">
@@ -220,7 +226,7 @@ export default function Ventas() {
                 const input = ventaProductoInput()
                 const cant = parseInt(input.value||"0") || 1
                 const producto = productosParsed()[productoSelected()]
-                agregarStock(producto, cant)
+                agregarProductoVenta(producto, cant)
               } else {
                 const key = ev.key.toLocaleLowerCase()
                 if(productoSelected() >= 0 && (numbers.includes(key) || ev.key === 'Backspace')){
@@ -268,11 +274,22 @@ export default function Ventas() {
         />
       </div>
     </div>
-    <div class="side-layer1 grow-1 px-12 py-08" style={{ width: "calc(47.5% - 1rem)" }}>
+    <div class="side-layer1 grow-1 px-12 py-08" 
+      style={{ width: `calc(var(--page-width) * ${layerWidth/100})` }}>
       { ventaErrorMessage() &&
         <div class="box-error-ms mb-08">{ventaErrorMessage()}</div>
       }
-      <div class="ff-bold h3 mb-04">DETALLE DE VENTA</div>
+      <div class="flex ai-center jc-between w100 mb-12">
+        <div class="ff-bold h3 mb-04">
+          DETALLE DE VENTA
+        </div>
+        <div class="flex ai-center">
+          <button class="bn1 b-blue">
+            Guardar
+            <i class="icon-floppy"></i>
+          </button>
+        </div>
+      </div>
       <div class="w100-10 flex-wrap">
         <Input label="Cliente" css="w-06x" saveOn={form()} save="clienteID" />
         <InputDisabled label="Código" css="w-05x" />
@@ -295,7 +312,11 @@ export default function Ventas() {
           { header: "Producto",
             render: e => {
               const producto = productos().productosMap.get(e.productoID)
-              return producto?.Nombre || ""
+              let nombre = producto?.Nombre || ""
+              if(e.isSubUnidad){
+                nombre = `${producto.SbnUnidad} de ${nombre}`
+              }
+              return nombre
             }
           },
           { header: "SKU",
@@ -355,14 +376,14 @@ const ProductoVentaCard = (props: IProductoVentaCard) => {
 
   const makeNombre = () => {
     const nombre = makeHighlString(props.productoStock.producto.Nombre, props.filterText)
-    if(props.productoStock.isSubunidad || props.productoStock.skus?.length > 0){
+    if(props.productoStock.isSubUnidad || props.productoStock.skus?.length > 0){
       return <div class="flex ai-center">
         {nombre}
-        <Show when={props.productoStock.isSubunidad}>
+        <Show when={props.productoStock.isSubUnidad}>
           <div class="ml-04 mr-04">|</div>
           <div class="ff-bold c-purple2">{props.productoStock.producto.SbnUnidad}</div>
         </Show>
-        <Show when={!props.productoStock.isSubunidad}>
+        <Show when={!props.productoStock.isSubUnidad}>
           <div class="ff-bold ml-04 c-purple2">(SKU)</div>
         </Show>
       </div> 
@@ -373,7 +394,17 @@ const ProductoVentaCard = (props: IProductoVentaCard) => {
 
   const isSku = () => props.productoStock.skus?.length > 0
   const getCant = createMemo(() => {    
-    const ventaCant = props.ventasProductosMap.get(props.productoStock.key)?.cantidad || 0
+    const key = props.productoStock.key
+    let ventaCant = props.ventasProductosMap.get(key)?.cantidad || 0
+    // revisa si hay sub-unidades agregadas
+    if(key[0] === 'P'){
+      const keySub = `S${key.slice(1)}`
+      const subUnidadCant = props.ventasProductosMap.get(keySub)?.cantidad || 0
+      if(subUnidadCant > 0){
+        const producto = props.productoStock.producto
+        ventaCant = ventaCant + Math.ceil(subUnidadCant / producto.SbnCantidad)
+      }
+    }
     return props.productoStock.cant - ventaCant
   })
 
@@ -431,7 +462,7 @@ const ProductoVentaCard = (props: IProductoVentaCard) => {
         </div>
         <div class="ff-mono t-r">{getCant()}</div>
         <div class="ff-mono t-r">
-          {formatN(props.productoStock.producto.Precio/100,2) as string}
+          {formatN(props.productoStock.producto.PrecioFinal/100,2) as string}
         </div>
       </div>
     </div>
