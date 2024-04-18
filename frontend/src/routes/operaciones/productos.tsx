@@ -210,7 +210,7 @@ export default function Productos() {
                 baseDecimals={2}
                 onChange={() => {
                   const form = productoForm()
-                  form.PrecioFinal = form.Precio * (1-(form.Descuento||0)/100)
+                  form.PrecioFinal = Math.floor(form.Precio * (1-(form.Descuento||0)/100))
                   refreshInput([3])
                 }}
               />
@@ -219,7 +219,7 @@ export default function Productos() {
                 postValue={<div class="p-abs pos-v c-steel1">%</div>}
                 onChange={() => {
                   const form = productoForm()
-                  form.PrecioFinal = form.Precio * (1-(form.Descuento||0)/100)
+                  form.PrecioFinal = Math.floor(form.Precio * (1-(form.Descuento||0)/100))
                   refreshInput([3])
                   console.log("form::", form)
                 }}
@@ -229,7 +229,7 @@ export default function Productos() {
                 baseDecimals={2}
                 onChange={() => {
                   const form = productoForm()
-                  form.Precio = form.PrecioFinal / (1-(form.Descuento||0)/100)
+                  form.Precio = Math.floor(form.PrecioFinal / (1-(form.Descuento||0)/100))
                   refreshInput([1])
                 }}
               />
