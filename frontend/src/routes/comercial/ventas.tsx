@@ -51,6 +51,8 @@ export default function Ventas() {
   const [ventaErrorMessage, setVentaErrorMessage] = createSignal("")
   const [ventaProductos, setVentaProductos] = createSignal([] as VentaProducto[])
 
+  let searchInput: HTMLInputElement
+
   const ventaProductosMap = createMemo(() => {
     return arrayToMapS(ventaProductos(), "key")
   })
@@ -150,8 +152,8 @@ export default function Ventas() {
       setProductoSelected(-1)
     },80)
   }
-
-  const agregarProductoVenta = (e: ProductoVenta, cant: number) => {
+  
+  const agregarProductoVenta = (e: ProductoVenta, cant: number, sku?: string) => {
     const ventaCant = ventaProductosMap().get(e.key)?.cantidad || 0
     const stock = e.cant - ventaCant
     if(stock < cant){ 
@@ -169,6 +171,17 @@ export default function Ventas() {
       })
     }
     const newVentaProductos = [...ventaProductos()]
+    setVentaProductos(newVentaProductos)
+    const input = ventaProductoInput()
+    if(input){ input.value = "" }
+    if(searchInput){ searchInput.value = "" }
+    setFilterText("")
+    setProdustosParsed([...productosParsedAll()])
+    setProductoSelected(-1)
+  }
+
+  const recalcVentaTotales = (newVentaProductos: VentaProducto[]) => {
+    console.log("recalculando::", newVentaProductos)
     const newForm = {...form(), total: 0, subtotal: 0, igv: 0}
 
     for(let vp of newVentaProductos){
@@ -178,15 +191,13 @@ export default function Ventas() {
     }
     newForm.subtotal = Math.floor(newForm.total / 1.18)
     newForm.igv = newForm.total - newForm.subtotal
-
-    setVentaProductos(newVentaProductos)
     setForm(newForm)
-    const input = ventaProductoInput()
-    if(input){ input.value = "" }
-   // setFilterText("")
-  // setProdustosParsed([...productosParsedAll()])
-    setProductoSelected(-1)
   }
+
+  createEffect(on(()=> ventaProductos(), 
+    () => {
+      recalcVentaTotales(ventaProductos())
+    }))
 
   const layerWidth = 52
 
@@ -204,7 +215,7 @@ export default function Ventas() {
         />
         <div class="search-c4 mr-16 w14rem">
           <div><i class="icon-search"></i></div>
-          <input class="w100" autocomplete="off" type="text" 
+          <input class="w100" autocomplete="off" type="text" ref={searchInput}
             onKeyUp={ev => {
               ev.stopPropagation()
               const text = ((ev.target as any).value||"").toLowerCase().trim()
@@ -215,7 +226,11 @@ export default function Ventas() {
             }}
             onkeydown={ev => {
               ev.stopPropagation()
+              if(ventaErrorMessage()?.length > 0){
+                setVentaErrorMessage("")
+              }
               console.log(ev.key)
+              
               if(ev.key === 'ArrowUp'){
                 const newIdx = productoSelected()-1
                 if(newIdx < -1){ return }
@@ -226,6 +241,10 @@ export default function Ventas() {
                 const input = ventaProductoInput()
                 const cant = parseInt(input.value||"0") || 1
                 const producto = productosParsed()[productoSelected()]
+                if(producto.skus?.length > 0){
+                  setVentaErrorMessage("Debe seleccionar 1 SKU.")
+                  return
+                }
                 agregarProductoVenta(producto, cant)
               } else {
                 const key = ev.key.toLocaleLowerCase()
@@ -264,6 +283,7 @@ export default function Ventas() {
             return <ProductoVentaCard idx={i}
               isSelected={isSelected()} ventasProductosMap={ventaProductosMap()}
               productoStock={e}
+              agregarProductoVenta={agregarProductoVenta}
               setProductoSelected={setProductoSelected}
               filterText={filterText()}
               onmouseover={() => {
@@ -338,6 +358,17 @@ export default function Ventas() {
               </span>
             }
           },
+          { header: "...", headerStyle: { width: '2rem' }, cellStyle: { padding: '0 4px' },
+            render: e => {
+              return  <button class="bn1 s5 b-red" onClick={ev => {
+                ev.stopPropagation()
+                const newVentaProductos = ventaProductos().filter(x => x.key !== e.key)
+                setVentaProductos(newVentaProductos)
+              }}>
+                <i class="icon-trash"></i>
+              </button>
+            }
+          },
         ]}
       />
     </div>
@@ -364,6 +395,7 @@ interface IProductoVentaCard {
   filterText: string
   ventasProductosMap: Map<string,VentaProducto>
   setProductoSelected: (e: number) => void
+  agregarProductoVenta: () => void
   onmouseover: () => void
 }
 

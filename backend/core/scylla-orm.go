@@ -8,17 +8,43 @@ import (
 	"log"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gocql/gocql"
 )
 
+var mu sync.Mutex
 var scyllaSession *gocql.Session
+var isConnectingTime int64 = 0
 
-func ScyllaConnect() *gocql.Session {
-	if scyllaSession != nil {
+func ScyllaConnect(reconect_ ...bool) *gocql.Session {
+	reconect := false
+	if len(reconect_) == 1 {
+		reconect = reconect_[0]
+	}
+
+	nowTime := time.Now().Unix()
+
+	if (isConnectingTime + 12) > nowTime {
+		for scyllaSession == nil {
+			time.Sleep(2 * time.Millisecond)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if reconect {
+		if scyllaSession != nil {
+			scyllaSession.Close()
+			scyllaSession = nil
+		}
+	} else if scyllaSession != nil {
 		return scyllaSession
 	}
+
+	isConnectingTime = nowTime
 
 	cluster := gocql.NewCluster(Env.DB_HOST)
 	fallback := gocql.RoundRobinHostPolicy()
@@ -234,6 +260,21 @@ func MakeInsertQuery[T any](records *[]T, columnsToAvoid ...string) []string {
 	}
 
 	return queryStatements
+}
+
+func DBExec(query *gocql.Query) error {
+	if err := query.Exec(); err != nil {
+		if strings.Contains(err.Error(), "no hosts available") {
+			Log(`Error en conexión db: "no hosts available", reconectando...`)
+			ScyllaConnect(true)
+			Log(`Ejecutando query luego de reconexión...`)
+			err = query.Exec()
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {

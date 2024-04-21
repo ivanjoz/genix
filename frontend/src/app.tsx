@@ -58,7 +58,7 @@ export const checkDevice = () => {
 }
 
 export const [deviceType, setDeviceType] = createSignal(checkDevice())
-export const [viewType, setViewType] = createSignal(1)
+export const [viewType, setViewType] = createSignal(Params.getValueInt('viewType')||1)
 
 export default function Root() {
 
@@ -96,6 +96,7 @@ export default function Root() {
     } else {
       document.body.classList.remove('view-min')
     }
+    Params.setValue("viewType", viewType())
   })
   
   return <>
