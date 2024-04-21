@@ -102,3 +102,8 @@ body:global(.dark) .button_venta_cantidad:hover {
   border-radius: 7px;
   line-height: 1;
 }
+.producto_sku:hover {
+  outline: 1px solid rgb(144, 72, 144);
+  background-color: rgb(144, 72, 144);
+  color: rgb(255, 235, 255);
+}

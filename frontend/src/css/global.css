@@ -1467,6 +1467,11 @@ body.dark th {
 .bn1.s4 {
   height: 2.1rem;
 }
+.bn1.s5 {
+  height: 1.8rem;
+  padding-left: 6px;
+  padding-right: 6px;
+}
 .bn1.big {
   height: 2.5rem;
   font-size: 1.1rem;
