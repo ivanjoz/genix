@@ -252,7 +252,7 @@ async (props: httpProps, results: any[]): Promise<any> => {
     const updatedTime = e[keyUpdated]
     
     if(!updatedTime){
-      Notify.failure(`El registro ${e.sk || e.id} no posee un campo [${keyUpdated}]. Tabla : ${idbTable}.`)
+      Notify.failure(`El registro ${e.sk || e.id || "?"} no posee un campo [${keyUpdated}]. Tabla : ${idbTable}.`)
       console.log("Registros sin campo::",keyUpdated,results)
       return Promise.reject(null)
     }

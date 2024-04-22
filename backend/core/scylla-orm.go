@@ -190,9 +190,8 @@ func GetCounter(name string, incrementCount int, empresaID ...int32) (int64, err
 		Env.DB_NAME, incrementCount, name,
 	)
 
-	queryUpdate := ScyllaConnect().Query(queryUpdateStr)
-	if err := queryUpdate.Exec(); err != nil {
-		Log(queryUpdate)
+	if err := DBExec(queryUpdateStr); err != nil {
+		Log(queryUpdateStr)
 		panic(err)
 	}
 
@@ -262,7 +261,8 @@ func MakeInsertQuery[T any](records *[]T, columnsToAvoid ...string) []string {
 	return queryStatements
 }
 
-func DBExec(query *gocql.Query) error {
+func DBExec(queryStr string) error {
+	query := ScyllaConnect().Query(queryStr)
 	if err := query.Exec(); err != nil {
 		if strings.Contains(err.Error(), "no hosts available") {
 			Log(`Error en conexión db: "no hosts available", reconectando...`)
@@ -277,12 +277,29 @@ func DBExec(query *gocql.Query) error {
 	return nil
 }
 
+/*
+func DBExecQuery(query *gocql.Query) error {
+	if err := query.Exec(); err != nil {
+		if strings.Contains(err.Error(), "no hosts available") {
+			Log(`Error en conexión db: "no hosts available", reconectando...`)
+			ScyllaConnect(true)
+			Log(`Ejecutando query luego de reconexión...`)
+			err = query.Exec()
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+*/
+
 func DBInsert[T any](records *[]T, columnsToAvoid ...string) error {
 	queryStatements := MakeInsertQuery(records, columnsToAvoid...)
 
 	queryStr := MakeQueryStatement(queryStatements)
 	LogDebug(queryStr)
-	if err := ScyllaConnect().Query(queryStr).Exec(); err != nil {
+	if err := DBExec(queryStr); err != nil {
 		Log("Error al insertar registros: ", err)
 		Log(queryStr)
 		return err
@@ -345,7 +362,7 @@ func DBUpdate[T any](records *[]T, columnsToInclude ...string) error {
 
 	queryStr := MakeQueryStatement(queryStatements)
 	LogDebug(queryStr)
-	if err := ScyllaConnect().Query(queryStr).Exec(); err != nil {
+	if err := DBExec(queryStr); err != nil {
 		Log("Error al actualizar registros: ", err)
 		Log(queryStr)
 		return err
@@ -409,7 +426,7 @@ func DBSelectReflect(records *[]reflect.Type, columnsToAvoid ...string) *QuerySe
 
 func ExecuteStatements(statements []string) error {
 	batchStatement := MakeQueryStatement(statements)
-	return ScyllaConnect().Query(batchStatement).Exec()
+	return DBExec(batchStatement)
 }
 
 type QueryParams struct {
@@ -538,7 +555,6 @@ func parseValueToString(v any) string {
 }
 
 func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
-	conn := ScyllaConnect()
 
 	var newType T
 	scyllaTable := MakeScyllaTable(newType)
@@ -718,7 +734,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 	Log("query string::", scyllaTable.Name)
 	Log(queryStr)
 
-	iter := conn.Query(queryStr).Iter()
+	iter := ScyllaConnect().Query(queryStr).Iter()
 	rd, _ := iter.RowData()
 	scanner := iter.Scanner()
 

@@ -23,8 +23,6 @@ var ScyllaColumnsMap map[string][]ScyllaColumns
 var ScyllaViewsMap map[string][]ScyllaViews
 
 func InitTable[T any](mode int8) {
-	conn := ScyllaConnect()
-
 	if ScyllaColumnsMap == nil {
 		Log("Consultando columns... ")
 		scyllaColumns := []ScyllaColumns{}
@@ -96,7 +94,7 @@ func InitTable[T any](mode int8) {
 		query = fmt.Sprintf(query, scyllaTable.Name, strings.Join(columnsTypes, ", "), pk)
 		Log(query)
 
-		err := conn.Query(query).Exec()
+		err := DBExec(query)
 		if err != nil {
 			panic(fmt.Sprintf(`Error creando tabla "%v" | `, scyllaTable.Name) + err.Error())
 		}
@@ -128,8 +126,8 @@ func InitTable[T any](mode int8) {
 			if mode == 2 {
 				query := fmt.Sprintf(`ALTER TABLE %v ADD %v %v`, scyllaTable.Name, column.Name, column.Type)
 				Log(fmt.Sprintf(`EJecutando agregar columna: "%v"...`, query))
-				err := conn.Query(query).Exec()
-				if err != nil {
+
+				if err := DBExec(query); err != nil {
 					panic(fmt.Sprintf(`Error agregando columna "%v" | %v`, column.Name, err))
 				}
 				Logx(2, fmt.Sprintf(`Columna Agregada: "%v"`+"\n", column.Name))
@@ -198,8 +196,7 @@ func InitTable[T any](mode int8) {
 
 		Log(query)
 
-		err := conn.Query(query).Exec()
-		if err != nil {
+		if err := DBExec(query); err != nil {
 			Log(err)
 			panic(fmt.Sprintf(`Error creando view "%v"`, view.Name))
 		}

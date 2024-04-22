@@ -155,8 +155,7 @@ func makeController[T any]() ScyllaController {
 
 				for _, statement := range updateStatements {
 					core.Log("Enviando Statement:", statement)
-					err = core.ScyllaConnect().Query(statement).Exec()
-					if err != nil {
+					if err := core.DBExec(statement); err != nil {
 						core.Log("Error en statement: ", statement)
 						return core.Err("Error al actualizar registros:", err)
 					}
@@ -165,8 +164,7 @@ func makeController[T any]() ScyllaController {
 				if scyllaTable.PartitionKey == "empresa_id" {
 					statement := fmt.Sprintf(`DELETE FROM %v WHERE empresa_id = %v`,
 						scyllaTable.Name, empresaID)
-					err = core.ScyllaConnect().Query(statement).Exec()
-					if err != nil {
+					if err := core.DBExec(statement); err != nil {
 						core.Log("Error en statement: ", statement)
 						return core.Err("Error al eliminar registros:", err)
 					}
