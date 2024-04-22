@@ -21,6 +21,14 @@ func GetCajas(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	query.Exec()
 
+	//TODO: Eliminar luego
+	for i := range cajas {
+		e := &cajas[i]
+		if e.Updated == 0 {
+			e.Updated = 1
+		}
+	}
+
 	response := map[string]any{
 		"Cajas": cajas,
 	}
@@ -219,7 +227,7 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 	statement := core.MakeQueryStatement(statements)
 	core.Log(statement)
 
-	if err := core.ScyllaConnect().Query(statement).Exec(); err != nil {
+	if err := core.DBExec(statement); err != nil {
 		core.Log("Error ScyllaDB: ", err)
 		return req.MakeErr("Error al registrar el cuadre:", err)
 	}
@@ -276,7 +284,7 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
 	statement := core.MakeQueryStatement(statements)
 	core.Log(statement)
 
-	if err := core.ScyllaConnect().Query(statement).Exec(); err != nil {
+	if err := core.DBExec(statement); err != nil {
 		core.Log("Error ScyllaDB: ", err)
 		return req.MakeErr("Error al registrar el cuadre:", err)
 	}
