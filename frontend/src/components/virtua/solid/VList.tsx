@@ -1,6 +1,4 @@
-/**
- * @jsxImportSource solid-js
- */
+
 import { JSX } from "solid-js";
 import { ViewportComponentAttributes } from "./types";
 import {

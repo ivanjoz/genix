@@ -345,7 +345,7 @@ body.is-animated .main-menu {
   height: 2.3rem;
   flex-shrink: 0;
   align-items: center;
-  padding: 2px 6px 2px 4px;
+  padding: 2px 6px 2px 0px;
   cursor: pointer;
   overflow: hidden;
   white-space: nowrap;
@@ -383,7 +383,7 @@ body.is-animated .main-menu {
   display: flex;
   align-items: center;
   width: 100%;
-  border-radius: 8px;
+  /*border-radius: 8px;*/
   padding-top: 1px;
   padding-left: 6px;
 }
@@ -458,6 +458,16 @@ body.is-animated .main-menu {
   padding: 8px 4px;
 }
 
+.logo-ctn2 {
+  width: var(--menu-width);
+  padding: 2px;
+}
+.logo-ctn2 > div {
+  background-color: #00000027;
+  border-radius: 9px;
+  padding: 4px;
+}
+
 .menu-main-label .icon-c1 {
   display: flex;
   align-items: center;
@@ -471,7 +481,7 @@ body.is-animated .main-menu {
   padding: 0 9px 0 7px;
 }
 .main-header .title {
-  min-width: 35vw;
+  min-width: 46vw;
 }
 .square-m1 {
   background-color: rgba(0, 0, 0, 0.185);
