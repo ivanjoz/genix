@@ -25,7 +25,13 @@ export function MainTopMenu() {
   
   return <div class="main-header flex ai-center">
     <Show when={[1].includes(deviceType())}>
-      <div class="header-program">
+      <div class="logo-ctn2 h100 mr-12">
+        <div class="h100 w100">
+          <img class="w100 h100" src="/images/genix_logo_w.svg" alt="" />
+        </div>
+      </div>
+        {/*
+         <div class="header-program">
         <SearchSelect selected={appModule().id} options={Modules} keys="id.name"
           css="menu-s1" notEmpty={true}
           onChange={mod => {
@@ -34,7 +40,9 @@ export function MainTopMenu() {
             return
           }}
         />
-      </div>
+              </div>
+        */}
+      { /*
       <div class="square-m1 mr-16 flex-center" onClick={ev => {
         ev.stopPropagation()
         document.body.classList.add("is-animated")
@@ -43,6 +51,7 @@ export function MainTopMenu() {
       }}>
         <i class="icon-left-open" classList={{'rotatey-180g': viewType() === 2 }}></i>
       </div>
+      */}
     </Show>
     <Show when={(pageViews()||[]).length === 0}>
       <div class="h3 h100 flex ai-center c-white title">
@@ -206,9 +215,11 @@ export function MainMenu() {
       <div class="main-ctn" style={{ height: '3rem' }}>
         
       </div>
+      {/*
       <div class="logo-ctn">
         <img class="w100 h100" src="/images/genix_logo_w.svg" alt="" />
       </div>
+      */}
       <div class={"menu-main-c1"}
         onMouseEnter={() => mouseEnterHandler(1)}
         onMouseLeave={() => mouseEnterHandler(0)}
@@ -320,9 +331,9 @@ const MakeMenuRecord = (props: IMenuElement, opt: IMenuRecord, selected?: boolea
         </div>
       }
       <div class="submenu-label">
-        <span class="mn-1 jc-center t-c">{opt.name}</span>
+        <span class="mn-1">{opt.name}</span>
         { /* jc-center t-c */}
-        <span class="mn-2 ff-bold jc-center t-c">{opt.name.substring(0,5).trim()}</span>
+        <span class="mn-2">{opt.name.substring(0,5).trim()}</span>
       </div>
     </div>
   </a>

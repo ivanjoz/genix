@@ -1,6 +1,4 @@
-/**
- * @jsxImportSource solid-js
- */
+
 import {
   createMemo,
   createRoot,
