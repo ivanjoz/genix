@@ -385,7 +385,7 @@ body.is-animated .main-menu {
   width: 100%;
   /*border-radius: 8px;*/
   padding-top: 1px;
-  padding-left: 6px;
+  padding-left: 3px;
 }
 .menu-option-c1:hover .submenu-label {
   color: #fff3cb;

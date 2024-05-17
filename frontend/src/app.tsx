@@ -25,8 +25,6 @@ if(isClient){
   document.head.querySelector('title')?.remove()
 
   let api = "http://localhost:3589/api/"
-  // let api = "https://asdxv2tjzpe2biexmp7p2robau0uussc.lambda-url.us-east-1.on.aws/api/"
-
   if(DEV_HOSTS.includes(window.location.host)){
     api = "https://dnh72xkkh3junf57p3vexemlvm0emgys.lambda-url.us-east-1.on.aws/api/"
   }
@@ -58,7 +56,7 @@ export const checkDevice = () => {
 }
 
 export const [deviceType, setDeviceType] = createSignal(checkDevice())
-export const [viewType, setViewType] = createSignal(Params.getValueInt('viewType')||1)
+export const [viewType, setViewType] = createSignal(Params.getValueInt('viewType')||2)
 
 export default function Root() {
 

@@ -1436,7 +1436,7 @@ body.dark th {
 }
 
 .ml-auto { margin-left: auto; }
-
+.mr-auto { margin-right: auto; }
 .bn1 {
   display: inline-flex;
   height: 2.25rem;
