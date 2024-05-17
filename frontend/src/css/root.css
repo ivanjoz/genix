@@ -186,7 +186,7 @@ body.dark .qtable.fixed-header > thead th {
   padding-left: 0.6rem;
   margin: 4px 0 2px 0;
 }
-body.dark .qtable td.empty-message, .empty-message {
+body.dark .qtable td.empty-message, body.dark .empty-message {
   color: #cabfda;
 }
 .card-ct {

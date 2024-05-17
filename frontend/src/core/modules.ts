@@ -33,37 +33,45 @@ export const AdminModule: IModule = {
   menus: [
     { name: "Gestión", minName: "Ges", id: 1, icon: "icon-flow-merge",
       options: [
-        { name: "Empresas", route: "/admin/empresas"
+        { name: "Empresas", route: "/admin/empresas", icon: "icon-black-tie",
         },
-        { name: "Parámetros", route: "/admin/parametros"
+        { name: "Parámetros", route: "/admin/parametros", icon: "icon-cog",
         },
-        { name: "Usuarios", route: "/admin/usuarios"
+        { name: "Usuarios", route: "/admin/usuarios", icon: "icon-adult",
         },
         { name: "Perfiles & Accesos", route: "/admin/perfiles-accesos",
+          icon: "icon-shield",
         },
-        { name: "Backups", route: "/admin/backups"
+        { name: "Backups", route: "/admin/backups", icon: "icon-database"
         },
       ]
     },
     { name: "Operaciones", minName: "Ope",  id: 2, icon: "icon-cube",
       options: [
-        { name: "Sedes & Almacenes", route: "/operaciones/sedes-almacenes"
+        { name: "Sedes & Almacenes", route: "/operaciones/sedes-almacenes",
+          icon: "icon-home-1"
         },
-        { name: "Productos", route: "/operaciones/productos"
+        { name: "Productos", route: "/operaciones/productos",
+          icon: "icon-cube"
         },
-        { name: "Productos Stock", route: "/operaciones/productos-stock"
+        { name: "Productos Stock", route: "/operaciones/productos-stock",
+          icon: "icon-chart-bar"
         },
-        { name: "Almacén Movimientos", route: "/operaciones/almacen-movimientos"
+        { name: "Almacén Movimientos", route: "/operaciones/almacen-movimientos",
+          icon: "icon-truck"
         },
-        { name: "Cajas & Bancos", route: "/operaciones/cajas"
+        { name: "Cajas & Bancos", route: "/operaciones/cajas",
+          icon: "icon-suitcase"
         },
-        { name: "Cajas Movimientos", route: "/operaciones/cajas-movimientos"
+        { name: "Cajas Movimientos", route: "/operaciones/cajas-movimientos",
+          icon: "icon-exchange"
         },
       ]  
     },
     { name: "Comercial", minName: "Com",  id: 3, icon: "icon-tasks",
       options: [
-        { name: "Ventas", route: "/comercial/ventas"
+        { name: "Ventas", route: "/comercial/ventas",
+          icon: "icon-flash"
         },
       ]  
     },
@@ -80,7 +88,21 @@ export const AdminModule: IModule = {
       ]
 
     },
-    { name: "Reportes", minName: "Rep",  id: 5, icon: "icon-tasks",
+    { name: "CMS", minName: "CMS",  id: 5, icon: "icon-buffer",
+      options: [
+        { name: "Inicio", route: "/cms/webpage/1"
+        },
+        { name: "Nosotros", route: "/cms/webpage/2"
+        },
+        { name: "Tienda", route: "/cms/webpage/3"
+        },
+        { name: "Producto", route: "/cms/webpage/4"
+        },
+        { name: "Carrito Compra", route: "/cms/webpage/5"
+        }, 
+      ]  
+    },
+    { name: "Reportes", minName: "Rep",  id: 6, icon: "icon-tasks",
       options: [
         { name: "Productos",
         },

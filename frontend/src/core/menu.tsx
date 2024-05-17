@@ -27,7 +27,7 @@ export function MainTopMenu() {
     <Show when={[1].includes(deviceType())}>
       <div class="logo-ctn2 h100 mr-12">
         <div class="h100 w100">
-          <img class="w100 h100" src="/images/genix_logo_w.svg" alt="" />
+          <img class="w100 h100" src="/images/genix_logo4.svg" alt="" />
         </div>
       </div>
         {/*
@@ -275,12 +275,14 @@ export function MenuElement(props: IMenuElement) {
         props.setMenuOpen([...props.menuOpen])
       }}
     >
-      <div class="flex ai-center">
+      <div class="flex ai-center w100">
+        {/* 
         <div class="flex ai-center lh-10" style={{ width: '1.5rem' }}>
           <i class={props.menu.icon}></i>
         </div>
-        <div class="m-label">{props.menu.name}</div> 
-        <div class="m-label-min">{props.menu.minName}</div> 
+        */}
+        <div class="m-label ml-06">{props.menu.name.toUpperCase()}</div> 
+        <div class="m-label-min ml-auto mr-auto">{props.menu.minName.toUpperCase()}</div> 
       </div>
       <span class="icon-c1">
         <i class="icon-down-open-1"></i>
@@ -331,9 +333,10 @@ const MakeMenuRecord = (props: IMenuElement, opt: IMenuRecord, selected?: boolea
         </div>
       }
       <div class="submenu-label">
+        <i class={opt.icon || "icon-cube"}></i>
         <span class="mn-1">{opt.name}</span>
         { /* jc-center t-c */}
-        <span class="mn-2">{opt.name.substring(0,5).trim()}</span>
+        <span class="mn-2">{opt.name.substring(0,3).trim()}</span>
       </div>
     </div>
   </a>
