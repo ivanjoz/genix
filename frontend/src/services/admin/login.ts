@@ -1,7 +1,6 @@
-import { setLoginStatus } from "~/app"
 import { POST } from "~/shared/http"
-import { decrypt, makeRamdomString } from "~/shared/main"
-import { AccessHelper, accessHelper } from "~/shared/security"
+import { makeRamdomString } from "~/shared/main"
+import { accessHelper, setLoginStatus } from "~/shared/security"
 
 export interface ILogin {
   EmpresaID: number

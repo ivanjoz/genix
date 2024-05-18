@@ -7,7 +7,7 @@ import LoginPage from "./core/login";
 import { MainMenu, MainMenuMobile, MainTopMenu } from "./core/menu";
 import Modules from "./core/modules";
 import { createIndexDB } from "./shared/main";
-import { Params } from "./shared/security";
+import { Params, loginStatus, setLoginStatus } from "./shared/security";
 import PageBuilder from "./pages/page";
 import CmsWebpage from "./routes/cms/webpage";
 
@@ -33,15 +33,12 @@ if(isClient){
   window._dexieVersion = 1
   window._cache = {}
   window._params = { fetchID: 1001, fetchProcesses: new Map() }
-  window.appId = "genix"
   window._pendingRequests = []
   window._counterID = 1
   window.S3_URL = "https://genix-dev.un.pe/"
   window._zoneOffset = (new Date()).getTimezoneOffset() * 60
   createIndexDB(Modules)
 }
-
-export const [loginStatus, setLoginStatus] = createSignal(isClient && Params.checkAcceso(1))
 
 export const checkDevice = () => {
   if(!isClient) return 1

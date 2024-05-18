@@ -1,6 +1,7 @@
-import { setLoginStatus } from "~/app"
-import { decrypt } from "./main"
+import { decrypt, throttle } from "./main"
 import { ILoginResult } from "~/services/admin/login"
+import { Loading, Notify } from "notiflix"
+import { createSignal } from "solid-js"
 
 interface UserInfo {
   d: number // userID
@@ -16,6 +17,40 @@ interface UserInfoParsed {
   email: string
   names: string
 }
+
+window.appId = "genix"
+
+// Función para obtener el Token
+export const getToken = (noError?: boolean) => {
+  const userToken = localStorage.getItem(window.appId + "UserToken")
+  const expTime = parseInt(localStorage.getItem(window.appId + "TokenExpTime") || '0')
+  const nowTime = Math.floor(Date.now()/1000)
+
+  if (!userToken) {
+    console.error('No se encontró la data del usuario. ¿Está logeado?:',window.appId)
+    return
+  }
+  else if (!expTime || nowTime > expTime) {
+    accessHelper.clearAccesos()
+    if(!noError){
+      Notify.failure('La sesión ha expirado, vuelva a iniciar sesión.')
+    }
+    Loading.remove()
+    return
+  }
+  // revisa si la sesión está por expirar
+  if ((expTime - nowTime) < (60 * 15)) {
+    throttle(() => { Notify.warning(`La sesión expirará en 15 minutos`) }, 20)
+  }
+  else if ((expTime - nowTime) < (60 * 5)) {
+    throttle(() => { Notify.warning(`La sesión expirará en 5 minutos`) }, 20)
+  }
+
+  return userToken
+}
+
+const isClient = typeof window !== 'undefined'
+export const [loginStatus, setLoginStatus] = createSignal(isClient && !!getToken(true))
 
 export class AccessHelper {
   constructor() {
