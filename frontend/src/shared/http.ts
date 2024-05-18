@@ -4,7 +4,7 @@ import { Accessor, Setter, createSignal } from "solid-js";
 import { Loading, Notify } from "~/core/main";
 import { UriMerger, getRecordsFromIDB, httpProps, saveRecordsToIndexDB } from './httpHelpers';
 import { formatN, throttle } from './main';
-import { accessHelper } from "./security";
+import { accessHelper, getToken } from "./security";
 
 export const defaultCacheExp = 20 * 60
 export const keyID = 'id'
@@ -12,33 +12,6 @@ export const keyUpdated = 'upd'
 
 export const [fetchPending, setfetchPending] = createSignal(new Set() as Set<number>)
 export const [fetchOnCourse, setfetchOnCourse] = createSignal(new Map() as Map<number,any>)
-
-// Función para obtener el Token
-const getToken = () => {
-  const userToken = localStorage.getItem(window.appId + "UserToken")
-  const expTime = parseInt(localStorage.getItem(window.appId + "TokenExpTime") || '0')
-  const nowTime = Math.floor(Date.now()/1000)
-
-  if (!userToken) {
-    console.error('No se encontró la data del usuario. ¿Está logeado?')
-    return
-  }
-  else if (!expTime || nowTime > expTime) {
-    accessHelper.clearAccesos()
-    Notify.failure('La sesión ha expirado, vuelva a iniciar sesión.')
-    Loading.remove()
-    return
-  }
-  // revisa si la sesión está por expirar
-  if ((expTime - nowTime) < (60 * 15)) {
-    throttle(() => { Notify.warning(`La sesión expirará en 15 minutos`) }, 20)
-  }
-  else if ((expTime - nowTime) < (60 * 5)) {
-    throttle(() => { Notify.warning(`La sesión expirará en 5 minutos`) }, 20)
-  }
-
-  return userToken
-}
 
 export function log1(m: string){ 
   console.log(`%c${m}`, 'background: #222; color: #bada55') }
