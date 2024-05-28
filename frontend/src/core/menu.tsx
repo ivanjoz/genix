@@ -282,8 +282,8 @@ export function MenuElement(props: IMenuElement) {
         </div>
         */}
         <div class="m-label ff-mono500 ml-06">{props.menu.name.toUpperCase()}</div> 
-        <div class="m-label-min ff-mono500 ml-auto mr-auto">
-          {props.menu.name.substring(0,4).toUpperCase()}
+        <div class="m-label-min ff-mono500 mr-auto ml-06">
+          {props.menu.minName.toUpperCase()}
         </div> 
       </div>
       <span class="icon-c1">
