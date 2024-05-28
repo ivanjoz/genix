@@ -42,7 +42,7 @@ body {
   --screen-w1: 560;
   --header-height: 3rem;
   --menu-width: 14rem;
-  --menu-w1: 14rem;
+  --menu-w1: 14.5rem;
   --menu-w1m: 4.5rem;
   --page-width: calc(100vw - var(--menu-width) - 2rem);
   --white: #ffffff;

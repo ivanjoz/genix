@@ -342,10 +342,10 @@ body.is-animated .main-menu {
 .menu-option-c1 {
   position: relative;
   display: flex;
-  height: 2.3rem;
+  height: 2.35rem;
   flex-shrink: 0;
   align-items: center;
-  padding: 2px 6px 2px 0px;
+  padding: 1px 6px 1px 0px;
   cursor: pointer;
   overflow: hidden;
   white-space: nowrap;
@@ -474,6 +474,10 @@ body.is-animated .main-menu {
   position: absolute;
   left: calc(var(--menu-w1) - 1.2rem - 16px);
   transition: transform .3s ease;
+}
+
+.view-min .main-menu-c:not(:hover) .menu-main-label .icon-c1 {
+  left: calc(var(--menu-w1m) - 1.2rem - 11px);
 }
 
 .header-program {
