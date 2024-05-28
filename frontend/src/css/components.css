@@ -418,8 +418,8 @@ body.is-animated .main-menu {
   flex-shrink: 0;
   border-left-color: #5b5e83;
   background-color: #1f1f25;
-  font-weight: 700;
-  font-size: 1.05rem;
+  /*font-weight: 700;*/
+  font-size: 1.1rem;
   border-left: 3px solid transparent;
   white-space: nowrap;
 }
