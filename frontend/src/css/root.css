@@ -4,6 +4,12 @@
 @font-face { 
   font-family: 'bold'; src: url("/libs/nunito-v12-latin-600.woff") 
 }
+@font-face { 
+  font-family: 'mono'; src: url("/libs/jetbrains-mono-regular.woff2") 
+}
+@font-face { 
+  font-family: 'mono500'; src: url("/libs/jetbrains-mono-500.woff2") 
+}
 
 a {
   margin-right: 1rem;
