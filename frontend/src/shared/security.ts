@@ -19,6 +19,13 @@ interface UserInfoParsed {
 }
 
 window.appId = "genix"
+const isClient = typeof window !== 'undefined'
+
+const clearAccesos = () => {
+  localStorage.removeItem(window.appId+ "Accesos")
+  localStorage.removeItem(window.appId+ "UserInfo")
+  setLoginStatus(false)
+}
 
 // Función para obtener el Token
 export const getToken = (noError?: boolean) => {
@@ -31,9 +38,9 @@ export const getToken = (noError?: boolean) => {
     return
   }
   else if (!expTime || nowTime > expTime) {
-    accessHelper.clearAccesos()
     if(!noError){
       Notify.failure('La sesión ha expirado, vuelva a iniciar sesión.')
+      clearAccesos()
     }
     Loading.remove()
     return
@@ -45,11 +52,9 @@ export const getToken = (noError?: boolean) => {
   else if ((expTime - nowTime) < (60 * 5)) {
     throttle(() => { Notify.warning(`La sesión expirará en 5 minutos`) }, 20)
   }
-
   return userToken
 }
 
-const isClient = typeof window !== 'undefined'
 export const [loginStatus, setLoginStatus] = createSignal(isClient && !!getToken(true))
 
 export class AccessHelper {
@@ -75,6 +80,8 @@ export class AccessHelper {
       this.#userInfo = JSON.parse(userInfoJson)
     }
   }
+  clearAccesos = clearAccesos
+  getUserInfo(){ return this.#userInfo }
 
   async parseAccesos(login: ILoginResult, cipherKey?: string) {
     const userInfoStr = await decrypt(login.UserInfo, cipherKey)
@@ -155,16 +162,6 @@ export class AccessHelper {
     const accesosInternal = accesos.substring(2, accesos.length - 2)
     const cks = accesos.substring(0, 2) + accesos.substring(accesos.length - 2)
     return (cks === checksum(accesosInternal))
-  }
-
-  clearAccesos(){
-    localStorage.removeItem(window.appId+ "Accesos")
-    localStorage.removeItem(window.appId+ "UserInfo")
-    setLoginStatus(false)
-  }
-
-  getUserInfo(){
-    return this.#userInfo
   }
 }
 

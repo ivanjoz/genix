@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -85,7 +84,7 @@ func (params DynamoTableRecords[T]) PutItem(record *T, accion uint8) error {
 
 	client := dynamodb.NewFromConfig(core.GetAwsConfig())
 	putRequest := dynamodb.PutItemInput{
-		TableName:              aws.String(params.TableName),
+		TableName:              core.PtrString(params.TableName),
 		Item:                   *Item,
 		ReturnConsumedCapacity: "TOTAL",
 	}
@@ -210,7 +209,7 @@ func (params *DynamoTableRecords[T]) GetItem(sk string) (*T, error) {
 	client := dynamodb.NewFromConfig(core.GetAwsConfig())
 
 	getRequest := dynamodb.GetItemInput{
-		TableName: aws.String(params.TableName),
+		TableName: core.PtrString(params.TableName),
 		Key: map[string]types.AttributeValue{
 			"pk": &types.AttributeValueMemberS{Value: params.PK},
 			"sk": &types.AttributeValueMemberS{Value: sk},
@@ -271,7 +270,7 @@ type dynamoQueryInput struct {
 func (e DynamoTableRecords[T]) QueryBatch(querys []DynamoQueryParam) ([]T, error) {
 
 	queryInputs := []dynamoQueryInput{}
-	TableName := aws.String(core.Env.DYNAMO_TABLE)
+	TableName := core.PtrString(core.Env.DYNAMO_TABLE)
 
 	for _, query := range querys {
 		// Crea la query según el tipo de lógica
@@ -286,7 +285,7 @@ func (e DynamoTableRecords[T]) QueryBatch(querys []DynamoQueryParam) ([]T, error
 		}
 
 		if query.Index != "sk" {
-			queryInput.IndexName = aws.String(query.Index)
+			queryInput.IndexName = core.PtrString(query.Index)
 		}
 
 		expression := "pk = :pk and "

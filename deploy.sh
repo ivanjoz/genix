@@ -8,7 +8,7 @@ echo "Seleccione acciones a realizar: (Es posible escoger más de 1. Ejemplo: '1
 echo "Publicar Código ----------------"
 echo "[1] Frontend [2] Backend [3] Frontend (Assets) [4] Backup Lib"
 echo "Ejecutar Proceso ---------------"
-echo "[5] Recrear Tablas [6] Poblar Estructuras"
+echo "[5] Recrear Tablas [6] Poblar Estructuras [7] Inspeccionar Backend"
 read ACCIONES
 
 echo "Obteniendo los últimos cambios del repositorio (GIT PULL)..."
@@ -82,6 +82,16 @@ if [[ $ACCIONES == *"5"* ]]; then
 
     cd ./backend
     go run . fn-homologate
+
+fi
+
+if [[ $ACCIONES == *"7"* ]]; then
+
+    echo "=== COMPILANDO BACKEND ==="
+
+    cd ./backend
+    go build -v .
+    gsa app
 
 fi
 
