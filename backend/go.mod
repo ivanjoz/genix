@@ -42,7 +42,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.23.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.28.1 // indirect
 	github.com/aws/smithy-go v1.20.1 // indirect
-	github.com/fxamacker/cbor/v2 v2.6.0 // indirect
 	github.com/go-test/deep v1.1.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
@@ -54,7 +53,6 @@ require (
 	github.com/stretchr/testify v1.8.1 // indirect
 	github.com/toorop/go-dkim v0.0.0-20201103131630-e1cd1a0a5208 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
-	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/sys v0.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -63,13 +61,15 @@ require (
 require (
 	github.com/DmitriyVTitov/size v1.5.0
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.53.1
+	github.com/fxamacker/cbor/v2 v2.6.0
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
 	github.com/kr/pretty v0.3.1
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/vmihailenco/msgpack/v5 v5.4.1
+	github.com/x448/float16 v0.8.4
 	github.com/xhit/go-simple-mail/v2 v2.16.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/sync v0.5.0
 )
 
-replace github.com/gocql/gocql v1.6.0 => github.com/scylladb/gocql v1.12.0
+replace github.com/gocql/gocql v1.6.0 => github.com/scylladb/gocql v1.13.0

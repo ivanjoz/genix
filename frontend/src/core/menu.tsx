@@ -281,8 +281,10 @@ export function MenuElement(props: IMenuElement) {
           <i class={props.menu.icon}></i>
         </div>
         */}
-        <div class="m-label ml-06">{props.menu.name.toUpperCase()}</div> 
-        <div class="m-label-min ml-auto mr-auto">{props.menu.minName.toUpperCase()}</div> 
+        <div class="m-label ff-mono500 ml-06">{props.menu.name.toUpperCase()}</div> 
+        <div class="m-label-min ff-mono500 ml-auto mr-auto">
+          {props.menu.name.substring(0,4).toUpperCase()}
+        </div> 
       </div>
       <span class="icon-c1">
         <i class="icon-down-open-1"></i>
@@ -333,10 +335,14 @@ const MakeMenuRecord = (props: IMenuElement, opt: IMenuRecord, selected?: boolea
         </div>
       }
       <div class="submenu-label">
-        <i class={opt.icon || "icon-cube"}></i>
-        <span class="mn-1">{opt.name}</span>
-        { /* jc-center t-c */}
-        <span class="mn-2">{opt.name.substring(0,3).trim()}</span>
+        <i class={(opt.icon || "icon-cube") + " h3 mr-01"}></i>
+        <span class="mn-1 ff-mono" style={{ "margin-bottom": '-2px' }}>
+        { opt.name.split(" ").map(x => {
+            return <span class="mr-05">{x}</span>
+          })
+        }
+        </span>
+        <span class="mn-2 ff-mono500" style={{ "margin-bottom": '-2px' }}>{opt.name.substring(0,3).trim()}</span>
       </div>
     </div>
   </a>

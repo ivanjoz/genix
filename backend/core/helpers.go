@@ -386,6 +386,10 @@ func ToJsonNoErr(v any) string {
 	return string(bytes)
 }
 
+func PtrString(v string) *string {
+	return &v
+}
+
 func MsgPEncode(msg any) ([]byte, error) {
 	var buffer bytes.Buffer
 	msgEncoder := msgpack.NewEncoder(&buffer)

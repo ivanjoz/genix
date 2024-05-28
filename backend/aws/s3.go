@@ -10,7 +10,6 @@ import (
 	"log"
 	"os"
 
-	aws_sdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -86,8 +85,8 @@ func GetFileFromS3(args FileToS3Args) ([]byte, error) {
 	downloader := manager.NewDownloader(client)
 
 	_, err := downloader.Download(context.TODO(), buf, &s3.GetObjectInput{
-		Bucket: aws_sdk.String(args.Bucket),
-		Key:    aws_sdk.String(args.Path + "/" + args.Name),
+		Bucket: core.PtrString(args.Bucket),
+		Key:    core.PtrString(args.Path + "/" + args.Name),
 	})
 
 	if err != nil {
@@ -105,8 +104,8 @@ func GetObjectFromFileS3[T any](args FileToS3Args, obj *T) (*T, error) {
 	client := s3.NewFromConfig(core.GetAwsConfig())
 
 	requestInput := &s3.GetObjectInput{
-		Bucket: aws_sdk.String(args.Bucket),
-		Key:    aws_sdk.String(args.Path + "/" + args.Name),
+		Bucket: core.PtrString(args.Bucket),
+		Key:    core.PtrString(args.Path + "/" + args.Name),
 	}
 
 	result, err := client.GetObject(context.TODO(), requestInput)
@@ -144,7 +143,7 @@ func S3ListFiles(args FileToS3Args) ([]types.Object, error) {
 
 	client := s3.NewFromConfig(core.GetAwsConfig())
 	input := &s3.ListObjectsV2Input{
-		Bucket: aws_sdk.String(args.Bucket),
+		Bucket: core.PtrString(args.Bucket),
 	}
 	if len(args.Prefix) > 0 {
 		input.Prefix = &args.Prefix

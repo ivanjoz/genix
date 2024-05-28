@@ -29,7 +29,7 @@ echo "Ejecutando:  GOOS=linux GOARCH=arm64 go build -ldflags -X main.ENVIROMENT=
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then # comando para LINUX
     # GOOS=linux GOARCH=arm64 go build -ldflags "-s -w -X main.ENVIROMENT=$ENVIROMENT_NAME" -o .aws-sam/build/main
-    GOOS=linux GOARCH=arm64 /usr/local/go/bin/go build -ldflags "-s -w -X main.ENVIROMENT=$ENVIROMENT_NAME" -o .aws-sam/build/main
+    GOOS=linux GOARCH=arm64 /usr/local/go/bin/go build -ldflags "-s -w" -o .aws-sam/build/main
 else # comando para WINDOWS
     GOOS=linux GOARCH=arm64 go build -ldflags "-s -w -X main.ENVIROMENT=$ENVIROMENT_NAME" -o .aws-sam/build/main
 fi
