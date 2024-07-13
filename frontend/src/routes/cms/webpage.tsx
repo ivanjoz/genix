@@ -1,11 +1,13 @@
 import { useLocation } from "@solidjs/router";
-import { For, JSX, createEffect, createSignal } from "solid-js";
+import { For, JSX, createEffect, createMemo, createSignal } from "solid-js";
 import { PageContainer } from "~/core/page";
-import { IPageParams, IPageSection, ISectionParams, PageSectionRenderer } from "~/pages/page";
+import { IPageParams, IPageSection, ISectionParams, PageSectionRenderer, PageSectionsDefs } from "~/pages/page";
 import { pageExample } from "~/pages/page-example";
 import styles from "./webpage.module.css"
 import { Input } from "~/components/Input";
-import { pageParams } from "~/pages/page-params";
+import { coponentsRenders } from "~/pages/page-components";
+import { pageView } from "~/core/menu";
+import { arrayToMapN } from "~/shared/main";
 
 export const [pageViews, setPageViews] = createSignal({})
 
@@ -13,7 +15,7 @@ const sectionsParamsMap: Map<number,IPageParams> = new Map()
 
 const getPageSectionParams = (type: number): IPageParams => {
   if(sectionsParamsMap.size === 0){
-    for(let e of pageParams){ sectionsParamsMap.set(e.id,e) }
+    for(let e of coponentsRenders){ sectionsParamsMap.set(e.type,e) }
   }
   return sectionsParamsMap.get(type)
 }
@@ -22,8 +24,9 @@ export default function CmsWebpage() {
 
   const location = useLocation()
   const [pageSections, setPageSections] = createSignal(pageExample)
-  const [sectionSelected, setSectionSelected] = createSignal(-1)
+  const [sectionSelected, setSectionSelected] = createSignal<IPageSection>()
   const [sectionParams, setSectionParams] = createSignal([] as ISectionParams[])
+  const pageSectionsDefsMap = arrayToMapN(PageSectionsDefs,'id')
 
   createEffect(() => {
     console.log(location.pathname)
@@ -61,12 +64,27 @@ export default function CmsWebpage() {
     setPageSections(newSections)
   }
 
+  const updateSectionSelected = (selected: IPageSection) => {
+    const newPageSections = []
+    for(const ps of pageSections()){
+      if(ps.id === selected.id){ newPageSections.push(selected) }
+      else { newPageSections.push(ps) }
+    }
+    setSectionSelected(selected)
+    setPageSections(newPageSections)
+  }
+
   return <PageContainer title="Webpage" class=""
-    views={[[2,"Creador",],[1,"Secciones"]]}
+    views={[[1,"Editor",],[2,"Secciones"]]}
     pageStyle={{ display: 'grid', "grid-template-columns": "1.1fr 4fr", 
       padding: '0', "background-color": "white" }}
   >
+    { 
+    pageView() === 1 &&
     <div class={`h100 px-08 py-08 p-rel flex-column ${styles.webpage_dev_card}`}>
+      { !sectionSelected() &&
+        <div>Seleccione una sección para editar su contenido.</div>
+      }
       <For each={sectionParams()}>
         {e => {
           if(e.type === 1){
@@ -74,11 +92,9 @@ export default function CmsWebpage() {
               save="content" saveOn={e} 
               onChange={() => {
                 console.log(e.content)
-                const sec = pageSections()[sectionSelected()]
-                sec[e.key] = e.content as never
-                // console.log(sec)
-                pageSections()[sectionSelected()] = {...sec}
-                setPageSections([...pageSections()])
+                const selected = {...sectionSelected()}
+                selected[e.key] = e.content as never
+                updateSectionSelected(selected)
               }}
             />
           }
@@ -86,44 +102,67 @@ export default function CmsWebpage() {
         }}
       </For>
     </div>
+    }
+    { 
+    pageView() === 2 &&
+    <div class={`h100 px-08 py-08 p-rel flex-column ${styles.webpage_dev_card}`}>
+      { coponentsRenders.map(e => {
+          const isSelected = createMemo(() => sectionSelected()?.type === e.type)
+          return <SeccionCard params={e} isSelected={isSelected()} 
+            onSelect={() => {
+              if(sectionSelected()){
+                const selected = {...sectionSelected()}
+                selected.type = e.type
+                updateSectionSelected(selected)
+              }
+            }}
+          />
+        })
+      }
+    </div>
+    }
     <div class="h100 p-rel cms-1" style={{ 
       overflow: 'auto', "max-height": `calc(100vh - var(--header-height))`,
       padding: '2px', "z-index": 999, "margin-left": "-2px",
     }}>
-    <For each={pageSections()}>
-      {(e,i) => {
-        const cN = () => {
-          let cN_ = `p-rel w100 ${styles.cms_editable_card}`
-          if(sectionSelected() === i()){ cN_ += ` ${styles.cms_editable_card_selected}`}
-          return cN_
-        }
+      <For each={pageSections()}>
+        {(e,i) => {
+          const cN = () => {
+            let cN_ = `p-rel w100 ${styles.cms_editable_card}`
+            if(sectionSelected()?.id === e.id){ cN_ += ` ${styles.cms_editable_card_selected}`}
+            return cN_
+          }
+          if(e.marginTop){ e.marginTop = undefined }
+          if(e.marginBottom){ e.marginBottom = undefined }
 
-        return <div class={cN()}
-          onClick={ev => {
-            ev.stopPropagation()
-            setSectionSelected(i())
-            const paramsBase = getPageSectionParams(e.type)?.params || []
-            const params: ISectionParams[] = []
-            for(let p_ of paramsBase){
-              const p = {...p_}
-              if(e[p.key]){ p.content = e[p.key] }
-              params.push(p)
-            }
-            setSectionParams(params)
-          }}
-        >
-          <SeccionButtons mode={1} onAddSeccion={() => addSection(i(),1)}
-            onMoveSeccion={() => moveSection(i(),1)}
-          />
-          <PageSectionRenderer args={e} type={e.type} 
-            
-          />
-          <SeccionButtons mode={2} onAddSeccion={() => addSection(i(),2)}
-            onMoveSeccion={() => moveSection(i(),2)}
-          />
-        </div>
-      }}
-    </For>
+          return <div class={cN()}
+            onClick={ev => {
+              ev.stopPropagation()
+              setSectionSelected(e)
+              const params: ISectionParams[] = []
+              for(const param of (getPageSectionParams(e.type)?.params || [])){
+                const id = typeof param === 'number' ? param : param[0] 
+                const p = {...pageSectionsDefsMap.get(id)}
+                const nameCustom = typeof param === 'number' ? "" : param[1]
+                if(nameCustom){ p.name = nameCustom }
+
+                if(e[p.key]){ p.content = e[p.key] }
+                params.push(p)
+              }
+              console.log("params a renderizar::", params)
+              setSectionParams(params)
+            }}
+          >
+            <SeccionButtons mode={1} onAddSeccion={() => addSection(i(),1)}
+              onMoveSeccion={() => moveSection(i(),1)}
+            />
+            <PageSectionRenderer args={e} type={e.type} />
+            <SeccionButtons mode={2} onAddSeccion={() => addSection(i(),2)}
+              onMoveSeccion={() => moveSection(i(),2)}
+            />
+          </div>
+        }}
+      </For>
     </div>
   </PageContainer>
 }
@@ -157,5 +196,23 @@ const SeccionButtons = (props: ISeccionButtons) => {
       { props.mode === 1 && <i class="icon-up-1"></i> }
       { props.mode === 2 && <i class="icon-down-1"></i> }
     </div>
+  </div>
+}
+
+interface ISeccionCard {
+  params: IPageParams
+  isSelected: boolean
+  onSelect?: () => void
+}
+
+const SeccionCard = (props: ISeccionCard) => {
+  const getCN = () => {
+    let cN = `mt-04 mb-04 ${styles.seccion_card}`
+    if(props.isSelected){ cN += " selected" }
+    return cN
+  }
+  return <div class={getCN()} 
+    onClick={ev => { ev.stopPropagation(); props.onSelect() }}>
+    {props.params.name}
   </div>
 }

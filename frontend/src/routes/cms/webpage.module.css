@@ -33,3 +33,17 @@
 .cms_card_button:hover {
   outline: 2px solid black;
 }
+.seccion_card {
+  border: 1px solid rgba(0, 0, 0, 0.24);
+  padding: 4px 6px;
+  background-color: white;
+  cursor: pointer;
+}
+.seccion_card:hover {
+  outline: 1px solid rgb(0, 0, 0);
+  color: blue;
+}
+.seccion_card:global(.selected) {
+  background-color: rgb(79, 79, 180);
+  color: white;
+}
