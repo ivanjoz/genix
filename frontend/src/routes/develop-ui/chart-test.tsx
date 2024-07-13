@@ -38,11 +38,11 @@ export default function ChartTest() {
       onrendered: function() {
         // Access D3 selection
         var svg = d3.select("#chart-1 svg g");
-        console.log('chart:: ', chart)
+        console.log('chart:: ', chart.internal?.state?.current?.maxTickSize?.y)
 
         console.log("box:.", svg.node().getBBox())
 
-        svg.append("g").html(`<rect x="0" y="-20" width="100" height="32" fill="gray" />
+        svg.append("g").html(`<line x1="10" y1="3" x2="100" y2="3" stroke-dasharray="4" />
         <text class="svg-text-1"
             x="50"
             y="-2" 
