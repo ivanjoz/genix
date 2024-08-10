@@ -7,9 +7,9 @@
     "start": "vinxi start --port 3588"
   },
   "dependencies": {
-    "@solidjs/meta": "^0.29.3",
+    "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.14.1",
-    "@solidjs/start": "^1.0.4",
+    "@solidjs/start": "^1.0.6",
     "@tanstack/solid-virtual": "^3.2.0",
     "@tanstack/virtual-core": "^3.2.0",
     "@types/d3": "^7.4.3",
@@ -21,8 +21,8 @@
     "dexie": "^3.2.4",
     "notiflix": "^3.2.6",
     "simple-statistics": "^7.8.3",
-    "solid-js": "^1.8.18",
-    "vinxi": "^0.3.14",
+    "solid-js": "^1.8.20",
+    "vinxi": "^0.4.1",
     "virtua": "^0.29.1",
     "vite-plugin-html": "^3.2.0",
     "vite-plugin-ssr": "^0.4.142"

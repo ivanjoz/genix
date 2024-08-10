@@ -1,4 +1,4 @@
-import { Loading, Notify } from "notiflix"
+import { Loading, Notify } from "~/core/main"
 import { createSignal } from "solid-js"
 import { Input } from "~/components/Input"
 import { Modal, setOpenModals } from "~/components/Modals"

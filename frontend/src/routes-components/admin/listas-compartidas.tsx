@@ -1,4 +1,4 @@
-import { Notify } from "notiflix"
+import { Notify } from "~/core/main"
 import { createEffect, createSignal } from "solid-js"
 import { CellEditable } from "~/components/Editables"
 import { ITableColumn, QTable } from "~/components/QTable"

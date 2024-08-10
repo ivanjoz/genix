@@ -1,7 +1,7 @@
 import { JSX, createSignal } from "solid-js"
 import styles from "./components.module.css"
 import { POST, POST_XMLHR } from "~/shared/http"
-import { Notify } from "notiflix"
+import { Notify } from "~/core/main"
 
 export interface IImageInput {
   content: string

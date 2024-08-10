@@ -3,7 +3,7 @@ import { Input } from "~/components/Input"
 import { PageContainer } from "~/core/page"
 import { postEmpresaParametros, useEmpresasAPI, useParametrosEmpresaAPI } from "~/services/admin/empresas"
 import css from "../../css/layout.module.css"
-import { Loading, Notify } from "notiflix"
+import { Loading, Notify } from "~/core/main"
 
 export default function AdminParametros() {
 
