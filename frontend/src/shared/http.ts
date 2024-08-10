@@ -3,7 +3,7 @@ import Dexie from "dexie";
 import { Accessor, Setter, createSignal } from "solid-js";
 import { Loading, Notify } from "~/core/main";
 import { UriMerger, getRecordsFromIDB, httpProps, saveRecordsToIndexDB } from './httpHelpers';
-import { formatN, throttle } from './main';
+import { formatN } from './main';
 import { accessHelper, getToken } from "./security";
 
 export const defaultCacheExp = 20 * 60

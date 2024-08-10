@@ -101,8 +101,8 @@ export default function Root() {
           <Suspense>{props.children}</Suspense>
         </MetaProvider>
       )}>
-      <Route path="/pages" component={PageBuilder} />
-      <Route path="/pages/:name" component={PageBuilder} />
+      <Route path="/page" component={PageBuilder} />
+      <Route path="/page/:name" component={PageBuilder} />
       <Route path="/cms/webpage/:name" component={CmsWebpage} />
       <Show when={isLogin() === 2}>
         <FileRoutes />

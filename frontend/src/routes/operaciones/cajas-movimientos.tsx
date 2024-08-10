@@ -1,4 +1,4 @@
-import { Notify } from "notiflix"
+import { Notify } from "~/core/main"
 import { createEffect, createSignal, on } from "solid-js"
 import { DatePicker } from "~/components/Datepicker"
 import { QTable } from "~/components/QTable"

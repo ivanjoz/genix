@@ -8,12 +8,6 @@ console.log("IS_PROD:", IS_PRD)
 export default defineConfig({
   ssr: false, // IS_PRD,
   server: {
-    /*
-    preset: "githubPages",
-    prerender: {
-      routes: ["/"],
-    }
-    */
   },
   devOverlay: false,
   solid: {

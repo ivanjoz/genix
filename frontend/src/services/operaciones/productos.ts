@@ -1,4 +1,4 @@
-import { Notify } from "notiflix"
+import { Notify } from "~/core/main"
 import { GET, GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
 import { arrayToMapN } from "~/shared/main"
 import { IUsuario } from "../admin/empresas"

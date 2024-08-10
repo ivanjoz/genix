@@ -1,4 +1,4 @@
-import { Notify } from "notiflix"
+import { Notify } from "~/core/main"
 import { Show, createEffect, createSignal } from "solid-js"
 import { CellEditable } from "~/components/Editables"
 import { CheckBox, Input } from "~/components/Input"
