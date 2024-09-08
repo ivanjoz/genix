@@ -1,12 +1,19 @@
 package db
 
 import (
+	"fmt"
 	"reflect"
+	"slices"
 )
 
 type Col[T any] struct {
 	Name  string
 	Value T
+}
+
+type ColPoint[T any] struct {
+	Name  string
+	Value *T
 }
 
 type IColumnStatement interface {
@@ -20,6 +27,7 @@ type ColumnStatement struct {
 }
 type TableSchema struct {
 	Name        string
+	Partition   ColInfo
 	Indexes     []ColInfo
 	HashIndexes [][]ColInfo
 	Views       []TableView
@@ -42,12 +50,14 @@ type TableView struct {
 func (q Col[T]) GetInfo() columnInfo {
 	typ := *new(T)
 	fieldType := reflect.TypeOf(typ).String()
-	col := columnInfo{Name: q.Name}
-	if fieldType[0:1] == "*" {
-		col.IsPointer = true
-		fieldType = fieldType[1:]
-	}
-	col.FieldType = fieldType
+	col := columnInfo{Name: q.Name, IsPointer: true, FieldType: fieldType}
+	return col
+}
+
+func (q ColPoint[T]) GetInfo() columnInfo {
+	typ := *new(T)
+	fieldType := reflect.TypeOf(typ).String()
+	col := columnInfo{Name: q.Name, IsPointer: true, FieldType: fieldType}
 	return col
 }
 
@@ -98,13 +108,13 @@ type CsInt = ColSlice[int]
 type CsI32 = ColSlice[int32]
 type CsI16 = ColSlice[int16]
 type CsStr = ColSlice[string]
-type CpInt = Col[*int]
-type CpI32 = Col[*int32]
-type CpI16 = Col[*int16]
-type CpStr = Col[*string]
-type CpI64 = Col[*int64]
-type CpF32 = Col[*float32]
-type CpF64 = Col[*float64]
+type CpInt = ColPoint[int]
+type CpI32 = ColPoint[int32]
+type CpI16 = ColPoint[int16]
+type CpStr = ColPoint[string]
+type CpI64 = ColPoint[int64]
+type CpF32 = ColPoint[float32]
+type CpF64 = ColPoint[float64]
 
 type statementGroup struct {
 	group []ColumnStatement
@@ -115,12 +125,23 @@ type TableSchemaInterface interface {
 }
 
 type Query[T TableSchemaInterface] struct {
-	T          T
-	statements []statementGroup
+	T              T
+	statements     []statementGroup
+	columnsInclude []ColInfo
+	columnsExclude []ColInfo
 }
 
 func (q *Query[T]) init() {
 	q.T = *new(T)
+}
+
+func (q *Query[T]) Columns(columns ...ColInfo) *Query[T] {
+	q.columnsInclude = append(q.columnsInclude, columns...)
+	return q
+}
+func (q *Query[T]) Exclude(columns ...ColInfo) *Query[T] {
+	q.columnsExclude = append(q.columnsExclude, columns...)
+	return q
 }
 
 func (q *Query[T]) Where(ce ColumnStatement) *Query[T] {
@@ -147,63 +168,77 @@ type viewInfo struct {
 	Int64ConcatRadix int8
 }
 
+type QueryResult struct {
+	Error   error
+	Records any
+}
+
+func QuerySelect[T TableSchemaInterface](func(query *Query[T], e *T)) QueryResult {
+
+	return QueryResult{}
+}
+
 func (q *Query[T]) Exec() ([]T, error) {
-	/*
-		scyllaTable := makeTable[T]()
-			viewTableName := scyllaTable.Name
-			queryStr := "SELECT %v FROM %v"
-			indexOperators := []string{"=", "IN"}
 
-			statements := []ColumnStatement{}
-			columnsWhere := []string{}
-			for _, st := range q.statements {
-				statements = append(statements, st.group[0])
-				columnsWhere = append(columnsWhere, st.group[0].Column)
-			}
+	scyllaTable := makeTable[T]()
+	viewTableName := scyllaTable.Name
+	queryStr := "SELECT %v FROM %v"
+	indexOperators := []string{"=", "IN"}
 
-			posibleViews := []viewInfo{}
-			posibleHashIndexes := [][]ColInfo{}
+	statements := []ColumnStatement{}
+	columnsWhere := []string{}
+	for _, st := range q.statements {
+		statements = append(statements, st.group[0])
+		columnsWhere = append(columnsWhere, st.group[0].Column)
+	}
 
-			if len(statements) > 1 {
-				// Revisa si puede usar una vista
-				for _, view := range scyllaTable.views {
-					isIncluded := true
-					for _, col := range view.Columns {
-						if slices.Contains(columnsWhere, col.GetInfo().Name) {
-							isIncluded = false
-						}
-					}
-					if isIncluded {
-						posibleViews = append(posibleViews, view)
-					}
-				}
+	posibleViews := []viewInfo{}
+	posibleHashIndexes := []viewInfo{}
 
-				// Revisa si puede user un índice compuesto (sólo para operadores IN y =)
-				findComposeIndex := true
-				for _, st := range statements {
-					if !slices.Contains(indexOperators, st.Operator) {
-						findComposeIndex = false
-					}
-				}
-
-				if findComposeIndex {
-					for _, index := range scyllaTable.indexes {
-						isIncluded := true
-						for _, col := range index.Columns {
-							if slices.Contains(columnsWhere, col.GetInfo().Name) {
-								isIncluded = false
-							}
-						}
-					}
+	if len(statements) > 1 {
+		// Revisa si puede usar una vista
+		for _, view := range scyllaTable.views {
+			isIncluded := true
+			for _, col := range view.Columns {
+				if slices.Contains(columnsWhere, col.GetInfo().Name) {
+					isIncluded = false
 				}
 			}
-
-			// Revisa si hay un view que satisfaga este request
-			if len(posibleViews) > 0 {
-				view := posibleViews[0]
-				viewTableName = view.Name
+			if isIncluded {
+				posibleViews = append(posibleViews, view)
 			}
-	*/
+		}
+
+		// Revisa si puede user un índice compuesto (sólo para operadores IN y =)
+		findComposeIndex := true
+		for _, st := range statements {
+			if !slices.Contains(indexOperators, st.Operator) {
+				findComposeIndex = false
+			}
+		}
+
+		if findComposeIndex {
+			for _, index := range scyllaTable.indexes {
+				isIncluded := true
+				for _, col := range index.Columns {
+					if slices.Contains(columnsWhere, col.GetInfo().Name) {
+						isIncluded = false
+					}
+				}
+				if isIncluded {
+					posibleHashIndexes = append(posibleHashIndexes, index)
+				}
+			}
+		}
+	}
+
+	// Revisa si hay un view que satisfaga este request
+	if len(posibleViews) > 0 {
+		view := posibleViews[0]
+		viewTableName = view.Name
+	}
+
+	queryStr = fmt.Sprintf(queryStr, "", viewTableName)
 
 	return []T{}, nil
 }
