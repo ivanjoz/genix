@@ -562,7 +562,7 @@ func (e *QuerySelect[T]) Exec(allowFiltering ...bool) error {
 	viewTableName := scyllaTable.Name
 	queryStr := "SELECT %v FROM %v"
 	indexOperators := MakeSliceInclude([]string{"=", "IN"})
-	columnsWhere := SliceInclude[string]{}
+	columnsWhere := SliceSet[string]{}
 
 	whereGroups := SliceToMap(e.ComandsWhere, func(e QueryParams) int32 { return e.Group })
 	for _, whereGroup := range whereGroups {

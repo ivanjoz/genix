@@ -50,7 +50,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	productosIDsSet := core.SliceInclude[int32]{}
+	productosIDsSet := core.SliceSet[int32]{}
 	createCounter := 0
 
 	for _, e := range productos {
@@ -135,7 +135,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 			propiedadCurrent := propiedadesMap[propiedad.ID]
 			propiedadCurrent.Nombre = propiedad.Nombre
 			propiedadCurrent.Status = propiedad.Status
-			nombresUsedSet := core.SliceInclude[string]{}
+			nombresUsedSet := core.SliceSet[string]{}
 
 			for i := range propiedad.Options {
 				opt := &propiedad.Options[i]
