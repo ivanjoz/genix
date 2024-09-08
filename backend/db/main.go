@@ -39,6 +39,7 @@ func (q ColumnStatement) GetValue() any {
 
 type ColInfo interface {
 	GetInfo() columnInfo
+	GetValue() any
 }
 
 type TableView struct {
@@ -53,12 +54,17 @@ func (q Col[T]) GetInfo() columnInfo {
 	col := columnInfo{Name: q.Name, IsPointer: true, FieldType: fieldType}
 	return col
 }
-
+func (q Col[T]) GetValue() any {
+	return any(q.Value)
+}
 func (q ColPoint[T]) GetInfo() columnInfo {
 	typ := *new(T)
 	fieldType := reflect.TypeOf(typ).String()
 	col := columnInfo{Name: q.Name, IsPointer: true, FieldType: fieldType}
 	return col
+}
+func (q ColPoint[T]) GetValue() any {
+	return any(*q.Value)
 }
 
 // Generic

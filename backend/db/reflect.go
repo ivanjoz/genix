@@ -10,10 +10,10 @@ type columnInfo struct {
 	Name      string
 	FieldType string
 	//FieldName      string
-	NameAlias      string
-	Type           string
-	IsSlice        bool
-	RefType        reflect.Value
+	NameAlias string
+	Type      string
+	IsSlice   bool
+	// RefType        reflect.Value
 	MethodIdx      int
 	IsPrimaryKey   int8
 	IsPointer      bool
@@ -21,6 +21,7 @@ type columnInfo struct {
 	HasView        bool
 	IsComplexType  bool
 	ViewIdx        int8
+	getValue       func(s *reflect.Value) any
 }
 
 var scyllaFieldToColumnTypesMap = map[string]string{
@@ -35,13 +36,18 @@ var scyllaFieldToColumnTypesMap = map[string]string{
 	"float64": "double",
 }
 
-func makeTable[T any]() scyllaTable {
+func makeTable[T TableSchemaInterface]() scyllaTable {
+	newT := *new(T)
+	schema := newT.GetTableSchema()
+
 	dbTable := scyllaTable{
+		Name: schema.Name,
 		// Indexes:    map[string]BDIndex{},
 		columnsMap: map[string]columnInfo{},
 		// Views:      map[string]ScyllaView{},
 	}
-	refTyp := reflect.ValueOf(*new(T))
+
+	refTyp := reflect.ValueOf(newT)
 	methodsPrefix := []string{"func() db.ColSlice[", "func() db.Col["}
 
 	for i := 0; i < refTyp.NumMethod(); i++ {
@@ -61,20 +67,22 @@ func makeTable[T any]() scyllaTable {
 		if col, ok := colBase.Interface().(ColInfo); ok {
 			columnInfo := col.GetInfo()
 			fmt.Println("Column Name:", columnInfo.Name, "| Type:", columnInfo.FieldType, "| Is Slice:", columnInfo.IsSlice)
+
+			columnInfo.getValue = func(rv *reflect.Value) any {
+				if cb, ok := rv.Method(i).Call(nil)[0].Interface().(ColInfo); ok {
+					return cb.GetValue()
+				}
+				return nil
+			}
 			columnInfo.Type = scyllaFieldToColumnTypesMap[columnInfo.FieldType]
 			if columnInfo.Type == "" {
 				columnInfo.IsComplexType = true
+				columnInfo.Type = "blob"
 			} else if columnInfo.IsSlice {
 				columnInfo.Type = fmt.Sprintf("set<%v>", columnInfo.Type)
 			}
 			dbTable.columnsMap[columnInfo.Name] = columnInfo
 		}
-	}
-
-	if e, ok := refTyp.Interface().(TableSchemaInterface); ok {
-		schema := e.GetTableSchema()
-		dbTable.Name = schema.Name
-		// dbTable.Name = e.GetTable()
 	}
 
 	return dbTable
