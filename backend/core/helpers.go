@@ -204,10 +204,10 @@ func SunixUUIDx3FromID(id int32, sunixUUID ...int64) int64 {
 	return int64(id)*1e15 + uuid
 }
 
-func MakeUniqueIntsInclude[T any, N Number1](slice []T, f func(T) N) SliceInclude[N] {
+func MakeUniqueIntsInclude[T any, N Number1](slice []T, f func(T) N) SliceSet[N] {
 	values := MakeUniqueInts(slice, f)
 
-	reg := SliceInclude[N]{
+	reg := SliceSet[N]{
 		Values:    values,
 		valuesMap: map[N]bool{},
 	}
@@ -217,8 +217,8 @@ func MakeUniqueIntsInclude[T any, N Number1](slice []T, f func(T) N) SliceInclud
 	return reg
 }
 
-func MakeSliceInclude[N NumberStr](values []N) SliceInclude[N] {
-	reg := SliceInclude[N]{
+func MakeSliceInclude[N NumberStr](values []N) SliceSet[N] {
+	reg := SliceSet[N]{
 		Values:    []N{},
 		valuesMap: map[N]bool{},
 	}
@@ -231,16 +231,16 @@ func MakeSliceInclude[N NumberStr](values []N) SliceInclude[N] {
 	return reg
 }
 
-type SliceInclude[T NumberStr] struct {
+type SliceSet[T NumberStr] struct {
 	Values    []T
 	valuesMap map[T]bool
 }
 
-func (e *SliceInclude[T]) IsEmpty() bool {
+func (e *SliceSet[T]) IsEmpty() bool {
 	return len(e.Values) == 0
 }
 
-func (e *SliceInclude[T]) Add(value T) {
+func (e *SliceSet[T]) Add(value T) {
 	if e.valuesMap == nil {
 		e.valuesMap = map[T]bool{}
 	}
@@ -250,7 +250,7 @@ func (e *SliceInclude[T]) Add(value T) {
 	}
 }
 
-func (e *SliceInclude[T]) ToAny() []any {
+func (e *SliceSet[T]) ToAny() []any {
 	anySlice := []any{}
 	for _, v := range e.Values {
 		anySlice = append(anySlice, v)
@@ -258,7 +258,7 @@ func (e *SliceInclude[T]) ToAny() []any {
 	return anySlice
 }
 
-func (e *SliceInclude[T]) AddIf(value T) {
+func (e *SliceSet[T]) AddIf(value T) {
 	if e.valuesMap == nil {
 		e.valuesMap = map[T]bool{}
 	}
@@ -288,7 +288,7 @@ func (e *SliceInclude[T]) AddIf(value T) {
 	}
 }
 
-func (e *SliceInclude[T]) Include(id T) bool {
+func (e *SliceSet[T]) Include(id T) bool {
 	if _, ok := e.valuesMap[id]; ok {
 		return true
 	} else {
@@ -297,7 +297,7 @@ func (e *SliceInclude[T]) Include(id T) bool {
 }
 
 // Si el slice no contiene valores devuelve TRUE
-func (e *SliceInclude[T]) IncludeN(id T) bool {
+func (e *SliceSet[T]) IncludeN(id T) bool {
 	if len(e.Values) == 0 {
 		return true
 	}
@@ -507,7 +507,7 @@ func IntToPointer[T Number1](num T) *T {
 }
 
 func Map[S any, T NumberStr](records []S, getValue func(S) T) []T {
-	values := SliceInclude[T]{}
+	values := SliceSet[T]{}
 	for _, e := range records {
 		values.AddIf(getValue(e))
 	}

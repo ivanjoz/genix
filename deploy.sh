@@ -18,6 +18,7 @@ if [[ $ACCIONES == *"1"* || $ACCIONES == *"2"* || $ACCIONES == *"3"* ]]; then
 fi
 
 echo "Usando AWS Profile: $AWS_PROFILE"
+export PATH=$HOME/.nvm/versions/node/v20.16.0/bin:$PATH
 
 #PUBLICAR FRONTEND
 if [[ $ACCIONES == *"1"* ]]; then

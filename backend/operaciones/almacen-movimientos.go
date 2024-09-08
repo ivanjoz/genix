@@ -136,8 +136,8 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeResponse(result)
 	}
 
-	usuariosSet := core.SliceInclude[int32]{}
-	productosSet := core.SliceInclude[int32]{}
+	usuariosSet := core.SliceSet[int32]{}
+	productosSet := core.SliceSet[int32]{}
 
 	for _, e := range result.Movimientos {
 		usuariosSet.Add(e.CreatedBy)

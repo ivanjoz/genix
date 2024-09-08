@@ -135,7 +135,7 @@ func InitTable[T any](mode int8) {
 		}
 	}
 
-	tableViewsSlice := SliceInclude[string]{}
+	tableViewsSlice := SliceSet[string]{}
 	for _, e := range ScyllaViewsMap[scyllaTable.NameSingle] {
 		tableViewsSlice.Add(e.ViewName)
 	}

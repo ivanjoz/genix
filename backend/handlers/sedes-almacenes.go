@@ -55,7 +55,7 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Mapea las Sedes con las ciudades
-	ubigeosSlice := core.SliceInclude[string]{}
+	ubigeosSlice := core.SliceSet[string]{}
 
 	for _, e := range sedes {
 		if len(e.CiudadID) == 6 {
