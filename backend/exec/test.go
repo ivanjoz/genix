@@ -6,6 +6,7 @@ import (
 )
 
 type Usuario struct {
+	CompanyID int32
 	ID        int32
 	Nombre    string
 	Apellido  string
@@ -22,6 +23,7 @@ type _U = Usuario
 func (e _U) GetTableSchema() TableSchema {
 	return TableSchema{
 		Name:        "ztest_usuarios",
+		Partition:   e.CompanyID_(),
 		Indexes:     []ColInfo{e.Edad_()},
 		HashIndexes: [][]ColInfo{{e.Nombre_(), e.Apellidos_()}},
 		Views: []TableView{
@@ -30,6 +32,8 @@ func (e _U) GetTableSchema() TableSchema {
 		},
 	}
 }
+
+func (e _U) CompanyID_() CoI32 { return CoI32{"company_id", e.CompanyID} }
 func (e _U) ID_() CoI32        { return CoI32{"usuario_id", e.ID} }
 func (e _U) Nombre_() CoStr    { return CoStr{"nombre", e.Nombre} }
 func (e _U) Edad_() CoI32      { return CoI32{"edad", e.Edad} }
@@ -41,16 +45,16 @@ func (e _U) Proyectos_() CsStr { return CsStr{"proyectos", e.Proyectos} }
 func (e _U) Peso_() CpF32      { return CpF32{"peso", e.Peso} }
 
 func TestQuery(args *core.ExecArgs) core.FuncResponse {
-	query := Query[Usuario]{}
-	records, err := query.
-		Where(query.T.Nombre_().Equals("hola")).
-		Where(query.T.Updated_().Equals(1)).
-		Where(query.T.Accesos_().Contains(4)).Exec()
 
-	if err != nil {
-		core.Log(err)
-	}
-	core.Log(records)
+	result := QuerySelect(func(query *Query[Usuario], t *Usuario) {
+		query.
+			Exclude(t.Peso_(), t.Updated_()).
+			Where(t.Nombre_().Equals("hola")).
+			Where(t.Updated_().Equals(1)).
+			Where(t.Accesos_().Contains(4))
+	})
+
+	core.Print(result.Records)
 
 	return core.FuncResponse{}
 }
