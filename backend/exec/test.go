@@ -11,6 +11,7 @@ type Usuario struct {
 	Nombre    string
 	Apellido  string
 	Direccion string
+	Rol       string
 	Edad      int32
 	Updated   int64
 	Accesos   []int32
@@ -22,10 +23,11 @@ type _u = Usuario
 
 func (e _u) GetTableSchema() TableSchema {
 	return TableSchema{
-		Name:        "ztest_usuarios",
-		Partition:   e.CompanyID_(),
-		Indexes:     []ColInfo{e.Edad_()},
-		HashIndexes: [][]ColInfo{{e.Nombre_(), e.Apellidos_()}},
+		Name:          "ztest_usuarios",
+		Partition:     e.CompanyID_(),
+		GlobalIndexes: []ColInfo{e.Edad_()},
+		LocalIndexes:  []ColInfo{e.Nombre_()},
+		HashIndexes:   [][]ColInfo{{e.Rol_(), e.Edad_()}},
 		Views: []TableView{
 			{Cols: []ColInfo{e.Nombre_(), e.Edad_()}},
 			{Cols: []ColInfo{e.Edad_(), e.Updated_()}, Int64ConcatRadix: 9},
@@ -36,6 +38,7 @@ func (e _u) GetTableSchema() TableSchema {
 func (e _u) CompanyID_() CoI32 { return CoI32{"company_id", e.CompanyID} }
 func (e _u) ID_() CoI32        { return CoI32{"usuario_id", e.ID} }
 func (e _u) Nombre_() CoStr    { return CoStr{"nombre", e.Nombre} }
+func (e _u) Rol_() CoStr       { return CoStr{"rol", e.Rol} }
 func (e _u) Edad_() CoI32      { return CoI32{"edad", e.Edad} }
 func (e _u) Apellidos_() CoStr { return CoStr{"apellidos", e.Apellido} }
 func (e _u) Direccion_() CoStr { return CoStr{"direccion", e.Direccion} }
