@@ -41,10 +41,12 @@ func makeTable[T TableSchemaInterface]() scyllaTable {
 	schema := newT.GetTableSchema()
 
 	dbTable := scyllaTable{
-		Name: schema.Name,
-		// Indexes:    map[string]BDIndex{},
-		columnsMap: map[string]columnInfo{},
-		// Views:      map[string]ScyllaView{},
+		name:         schema.Name,
+		partitionKey: schema.Partition.GetInfo(),
+		primaryKey:   schema.Partition.GetInfo(),
+		columnsMap:   map[string]columnInfo{},
+		indexes:      map[string]viewInfo{},
+		views:        map[string]viewInfo{},
 	}
 
 	refTyp := reflect.ValueOf(newT)
@@ -82,7 +84,88 @@ func makeTable[T TableSchemaInterface]() scyllaTable {
 				columnInfo.Type = fmt.Sprintf("set<%v>", columnInfo.Type)
 			}
 			dbTable.columnsMap[columnInfo.Name] = columnInfo
+			dbTable.columns = append(dbTable.columns, columnInfo)
 		}
+	}
+
+	idxCount := int8(1)
+	for _, column := range schema.GlobalIndexes {
+		colInfo := dbTable.columnsMap[column.GetInfo().Name]
+		index := viewInfo{
+			iType:   1,
+			name:    fmt.Sprintf(`%v__%v_index_g`, dbTable.name, colInfo.Name),
+			idx:     idxCount,
+			columns: []columnInfo{colInfo},
+			getValue: func(s *reflect.Value) any {
+				return colInfo.getValue(s)
+			},
+		}
+		idxCount++
+		dbTable.indexes[index.name] = index
+	}
+
+	for _, column := range schema.LocalIndexes {
+		colInfo := column.GetInfo()
+		index := viewInfo{
+			iType:   2,
+			name:    fmt.Sprintf(`%v__%v_index_l`, dbTable.name, colInfo.Name),
+			idx:     idxCount,
+			columns: []columnInfo{dbTable.partitionKey, colInfo},
+			getValue: func(s *reflect.Value) any {
+				return colInfo.getValue(s)
+			},
+		}
+		idxCount++
+		dbTable.indexes[index.name] = index
+	}
+
+	for _, indexColumns := range schema.HashIndexes {
+		columns := []columnInfo{}
+		names := []string{}
+
+		for _, col := range indexColumns {
+			name := col.GetInfo().Name
+			names = append(names, name)
+			columns = append(columns, dbTable.columnsMap[name])
+		}
+		colnames := strings.Join(names, "_")
+
+		index := viewInfo{
+			iType:         2,
+			name:          fmt.Sprintf(`%v__%v_index`, dbTable.name, colnames),
+			idx:           idxCount,
+			columns:       columns,
+			virtualColumn: fmt.Sprintf(`zz_%v`, colnames),
+			getValue: func(s *reflect.Value) any {
+				values := []string{}
+				for _, e := range columns {
+					values = append(values, fmt.Sprintf("%v", e.getValue(s)))
+				}
+				return BasicHashInt(strings.Join(values, "|"))
+			},
+		}
+		idxCount++
+		dbTable.indexes[index.name] = index
+	}
+
+	for _, viewConfig := range schema.Views {
+		columns := []columnInfo{}
+		names := []string{}
+
+		for _, col := range viewConfig.Cols {
+			name := col.GetInfo().Name
+			names = append(names, name)
+			columns = append(columns, dbTable.columnsMap[name])
+		}
+
+		colnames := strings.Join(names, "_")
+		view := viewInfo{
+			iType:   4,
+			name:    fmt.Sprintf(`%v__%v_view`, dbTable.name, colnames),
+			columns: columns,
+		}
+
+		dbTable.views[view.name] = view
 	}
 
 	return dbTable

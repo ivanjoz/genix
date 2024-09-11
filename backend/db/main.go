@@ -26,11 +26,12 @@ type ColumnStatement struct {
 	Value    any
 }
 type TableSchema struct {
-	Name        string
-	Partition   ColInfo
-	Indexes     []ColInfo
-	HashIndexes [][]ColInfo
-	Views       []TableView
+	Name          string
+	Partition     ColInfo
+	GlobalIndexes []ColInfo
+	LocalIndexes  []ColInfo
+	HashIndexes   [][]ColInfo
+	Views         []TableView
 }
 
 func (q ColumnStatement) GetValue() any {
@@ -165,13 +166,14 @@ func (q *Query[T]) WhereOr(ce ...ColumnStatement) *Query[T] {
 }
 
 type viewInfo struct {
-	Name      string
-	Idx       int8
-	Type      string
-	KeyColumn string
-	Columns   []ColInfo
+	iType         int8 /* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
+	name          string
+	idx           int8
+	virtualColumn string
+	columns       []columnInfo
 	// Para concatenar numeros como = int64(e.AlmacenID)*1e9 + int64(e.Updated)
-	Int64ConcatRadix int8
+	int64ConcatRadix int8
+	getValue         func(s *reflect.Value) any
 }
 
 type QueryResult struct {
@@ -187,7 +189,7 @@ func QuerySelect[T TableSchemaInterface](func(query *Query[T], e *T)) QueryResul
 func (q *Query[T]) Exec() ([]T, error) {
 
 	scyllaTable := makeTable[T]()
-	viewTableName := scyllaTable.Name
+	viewTableName := scyllaTable.name
 	queryStr := "SELECT %v FROM %v"
 	indexOperators := []string{"=", "IN"}
 
@@ -205,8 +207,8 @@ func (q *Query[T]) Exec() ([]T, error) {
 		// Revisa si puede usar una vista
 		for _, view := range scyllaTable.views {
 			isIncluded := true
-			for _, col := range view.Columns {
-				if slices.Contains(columnsWhere, col.GetInfo().Name) {
+			for _, col := range view.columns {
+				if slices.Contains(columnsWhere, col.Name) {
 					isIncluded = false
 				}
 			}
@@ -226,8 +228,8 @@ func (q *Query[T]) Exec() ([]T, error) {
 		if findComposeIndex {
 			for _, index := range scyllaTable.indexes {
 				isIncluded := true
-				for _, col := range index.Columns {
-					if slices.Contains(columnsWhere, col.GetInfo().Name) {
+				for _, col := range index.columns {
+					if slices.Contains(columnsWhere, col.Name) {
 						isIncluded = false
 					}
 				}
@@ -241,7 +243,7 @@ func (q *Query[T]) Exec() ([]T, error) {
 	// Revisa si hay un view que satisfaga este request
 	if len(posibleViews) > 0 {
 		view := posibleViews[0]
-		viewTableName = view.Name
+		viewTableName = view.name
 	}
 
 	queryStr = fmt.Sprintf(queryStr, "", viewTableName)
@@ -250,10 +252,10 @@ func (q *Query[T]) Exec() ([]T, error) {
 }
 
 type scyllaTable struct {
-	Name          string
-	NameSingle    string
-	PrimaryKey    string
-	PartitionKey  string
+	name          string
+	nameSingle    string
+	primaryKey    columnInfo
+	partitionKey  columnInfo
 	columns       []columnInfo
 	columnsMap    map[string]columnInfo
 	indexes       map[string]viewInfo
