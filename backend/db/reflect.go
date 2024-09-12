@@ -95,9 +95,17 @@ func makeTable[T TableSchemaInterface]() scyllaTable {
 			iType:   1,
 			name:    fmt.Sprintf(`%v__%v_index_g`, dbTable.name, colInfo.Name),
 			idx:     idxCount,
+			column:  colInfo,
 			columns: []columnInfo{colInfo},
 			getValue: func(s *reflect.Value) any {
 				return colInfo.getValue(s)
+			},
+			getStatement: func(statements ...ColumnStatement) string {
+				if len(statements) != 1 {
+					panic(fmt.Sprintf("Error columna %v: El número de valores debe ser = 1", colInfo.Name))
+				}
+				st := statements[0]
+				return fmt.Sprintf("%v %v %v", colInfo.Name, st.Operator, st.Value)
 			},
 		}
 		idxCount++
@@ -113,6 +121,12 @@ func makeTable[T TableSchemaInterface]() scyllaTable {
 			columns: []columnInfo{dbTable.partitionKey, colInfo},
 			getValue: func(s *reflect.Value) any {
 				return colInfo.getValue(s)
+			},
+			getStatement: func(sts ...ColumnStatement) string {
+				if len(sts) != 2 {
+					panic(fmt.Sprintf("Error columna %v: El número de valores debe ser = 2", colInfo.Name))
+				}
+				return fmt.Sprintf("%v = %v AND %v %v %v", dbTable.partitionKey.Name, sts[0].Value, colInfo.Name, sts[1].Operator, sts[1].Value)
 			},
 		}
 		idxCount++
@@ -144,6 +158,20 @@ func makeTable[T TableSchemaInterface]() scyllaTable {
 				return BasicHashInt(strings.Join(values, "|"))
 			},
 		}
+		index.getStatement = func(statements ...ColumnStatement) string {
+			if len(statements) < 2 {
+				panic(fmt.Sprintf("Error columna %v: El número de valores debe ser >= 2", index.name))
+			}
+
+			values := []string{}
+			for _, e := range statements {
+				values = append(values, fmt.Sprintf("%v", e.Value))
+			}
+			hashInt := BasicHashInt(strings.Join(values, "|"))
+			// Revisar casuísica IN
+			return fmt.Sprintf("%v %v %v", index.virtualColumn, statements[0].Operator, hashInt)
+		}
+
 		idxCount++
 		dbTable.indexes[index.name] = index
 	}

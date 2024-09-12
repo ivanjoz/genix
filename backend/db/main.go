@@ -24,6 +24,7 @@ type ColumnStatement struct {
 	Column   string
 	Operator string
 	Value    any
+	Values   []any
 }
 type TableSchema struct {
 	Name          string
@@ -70,22 +71,26 @@ func (q ColPoint[T]) GetValue() any {
 
 // Generic
 func (e Col[T]) Equals(v T) ColumnStatement {
-	return ColumnStatement{e.Name, "=", any(e.Value)}
+	return ColumnStatement{e.Name, "=", any(v), nil}
 }
-func (e Col[T]) In(v ...T) ColumnStatement {
-	return ColumnStatement{e.Name, "IN", any(e.Value)}
+func (e Col[T]) In(values_ ...T) ColumnStatement {
+	values := []any{}
+	for _, v := range values_ {
+		values = append(values, any(v))
+	}
+	return ColumnStatement{e.Name, "IN", any(*new(T)), values}
 }
 func (e Col[T]) GreaterThan(v T) ColumnStatement {
-	return ColumnStatement{e.Name, ">", any(e.Value)}
+	return ColumnStatement{e.Name, ">", any(v), nil}
 }
 func (e Col[T]) GreaterEqual(v T) ColumnStatement {
-	return ColumnStatement{e.Name, ">=", any(e.Value)}
+	return ColumnStatement{e.Name, ">=", any(v), nil}
 }
 func (e Col[T]) LessThan(v T) ColumnStatement {
-	return ColumnStatement{e.Name, "<", any(e.Value)}
+	return ColumnStatement{e.Name, "<", any(v), nil}
 }
 func (e Col[T]) LessEqual(v T) ColumnStatement {
-	return ColumnStatement{e.Name, "<=", any(e.Value)}
+	return ColumnStatement{e.Name, "<=", any(v), nil}
 }
 
 // Generic Array
@@ -94,13 +99,17 @@ type ColSlice[T any] struct {
 	Values []T
 }
 
+func (q ColSlice[T]) GetValue() any {
+	return any(q.Values)
+}
+
 func (q ColSlice[T]) GetInfo() columnInfo {
 	typ := *new(T)
 	return columnInfo{Name: q.Name, FieldType: reflect.TypeOf(typ).String(), IsSlice: true}
 }
 
 func (e ColSlice[T]) Contains(v T) ColumnStatement {
-	return ColumnStatement{e.Name, "CONTAINS", any(e.Values)}
+	return ColumnStatement{e.Name, "CONTAINS", any(v), nil}
 }
 
 type CoAny = Col[any]
@@ -170,20 +179,26 @@ type viewInfo struct {
 	name          string
 	idx           int8
 	virtualColumn string
+	column        columnInfo
 	columns       []columnInfo
 	// Para concatenar numeros como = int64(e.AlmacenID)*1e9 + int64(e.Updated)
 	int64ConcatRadix int8
 	getValue         func(s *reflect.Value) any
+	getStatement     func(statements ...ColumnStatement) string
 }
 
 type QueryResult struct {
-	Error   error
 	Records any
+	Error   error
 }
 
-func QuerySelect[T TableSchemaInterface](func(query *Query[T], e *T)) QueryResult {
+func QuerySelect[T TableSchemaInterface](handler func(query *Query[T], e *T)) QueryResult {
 
-	return QueryResult{}
+	query := Query[T]{}
+	handler(&query, &query.T)
+	records, err := query.Exec()
+
+	return QueryResult{records, err}
 }
 
 func (q *Query[T]) Exec() ([]T, error) {
@@ -201,7 +216,7 @@ func (q *Query[T]) Exec() ([]T, error) {
 	}
 
 	posibleViews := []viewInfo{}
-	posibleHashIndexes := []viewInfo{}
+	posibleIndexes := []viewInfo{}
 
 	if len(statements) > 1 {
 		// Revisa si puede usar una vista
@@ -234,7 +249,7 @@ func (q *Query[T]) Exec() ([]T, error) {
 					}
 				}
 				if isIncluded {
-					posibleHashIndexes = append(posibleHashIndexes, index)
+					posibleIndexes = append(posibleIndexes, index)
 				}
 			}
 		}
@@ -244,6 +259,9 @@ func (q *Query[T]) Exec() ([]T, error) {
 	if len(posibleViews) > 0 {
 		view := posibleViews[0]
 		viewTableName = view.name
+	} else if len(posibleIndexes) > 0 {
+		index := posibleIndexes[0]
+		viewTableName = index.name
 	}
 
 	queryStr = fmt.Sprintf(queryStr, "", viewTableName)

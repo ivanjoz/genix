@@ -29,7 +29,7 @@ func (e _u) GetTableSchema() TableSchema {
 		LocalIndexes:  []ColInfo{e.Nombre_()},
 		HashIndexes:   [][]ColInfo{{e.Rol_(), e.Edad_()}},
 		Views: []TableView{
-			{Cols: []ColInfo{e.Nombre_(), e.Edad_()}},
+			{Cols: []ColInfo{e.Nombre_(), e.Accesos_()}},
 			{Cols: []ColInfo{e.Edad_(), e.Updated_()}, Int64ConcatRadix: 9},
 		},
 	}
@@ -58,6 +58,13 @@ func TestQuery(args *core.ExecArgs) core.FuncResponse {
 	})
 
 	core.Print(result.Records)
+
+	return core.FuncResponse{}
+}
+
+func TestDeploy(args *core.ExecArgs) core.FuncResponse {
+
+	DeployScylla(Usuario{})
 
 	return core.FuncResponse{}
 }
