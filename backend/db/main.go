@@ -145,6 +145,8 @@ type Query[T TableSchemaInterface] struct {
 	statements     []statementGroup
 	columnsInclude []ColInfo
 	columnsExclude []ColInfo
+	recordsToJoin  []T
+	columnsJoin    []ColInfo
 }
 
 func (q *Query[T]) init() {
@@ -174,17 +176,34 @@ func (q *Query[T]) WhereOr(ce ...ColumnStatement) *Query[T] {
 	return q
 }
 
+type withJoin[T TableSchemaInterface] struct {
+	query         *Query[T]
+	recordsToJoin []T
+}
+
+func (e *withJoin[T]) Join(columns ...ColInfo) *Query[T] {
+	e.query.recordsToJoin = e.recordsToJoin
+	e.query.columnsJoin = columns
+	return e.query
+}
+
+func (q *Query[T]) With(records ...T) withJoin[T] {
+	q.init()
+	wj := withJoin[T]{query: q, recordsToJoin: records}
+	return wj
+}
+
 type viewInfo struct {
-	iType         int8 /* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
-	name          string
-	idx           int8
-	virtualColumn string
-	column        columnInfo
-	columns       []columnInfo
+	iType   int8 /* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
+	name    string
+	idx     int8
+	column  columnInfo
+	columns []string
 	// Para concatenar numeros como = int64(e.AlmacenID)*1e9 + int64(e.Updated)
 	int64ConcatRadix int8
 	getValue         func(s *reflect.Value) any
 	getStatement     func(statements ...ColumnStatement) string
+	getCreateScript  func() string
 }
 
 type QueryResult struct {
@@ -215,20 +234,19 @@ func (q *Query[T]) Exec() ([]T, error) {
 		columnsWhere = append(columnsWhere, st.group[0].Column)
 	}
 
-	posibleViews := []viewInfo{}
-	posibleIndexes := []viewInfo{}
+	posibleViewsOrIndexes := []viewInfo{}
 
 	if len(statements) > 1 {
 		// Revisa si puede usar una vista
 		for _, view := range scyllaTable.views {
 			isIncluded := true
 			for _, col := range view.columns {
-				if slices.Contains(columnsWhere, col.Name) {
+				if slices.Contains(columnsWhere, col) {
 					isIncluded = false
 				}
 			}
 			if isIncluded {
-				posibleViews = append(posibleViews, view)
+				posibleViewsOrIndexes = append(posibleViewsOrIndexes, view)
 			}
 		}
 
@@ -244,24 +262,37 @@ func (q *Query[T]) Exec() ([]T, error) {
 			for _, index := range scyllaTable.indexes {
 				isIncluded := true
 				for _, col := range index.columns {
-					if slices.Contains(columnsWhere, col.Name) {
+					if slices.Contains(columnsWhere, col) {
 						isIncluded = false
 					}
 				}
 				if isIncluded {
-					posibleIndexes = append(posibleIndexes, index)
+					posibleViewsOrIndexes = append(posibleViewsOrIndexes, index)
 				}
 			}
 		}
 	}
 
+	var statementsRemain []ColumnStatement
+	whereStatements := []string{}
+
 	// Revisa si hay un view que satisfaga este request
-	if len(posibleViews) > 0 {
-		view := posibleViews[0]
-		viewTableName = view.name
-	} else if len(posibleIndexes) > 0 {
-		index := posibleIndexes[0]
-		viewTableName = index.name
+	if len(posibleViewsOrIndexes) > 0 {
+		//TODO: aquí debe escoger el mejor índice o view en caso existan 2
+		viewOrIndex := posibleViewsOrIndexes[0]
+
+		// Revisa qué columnas satisfacen el índice
+		statementsSelected := []ColumnStatement{}
+		for _, st := range statements {
+			if slices.Contains(viewOrIndex.columns, st.Column) {
+				statementsSelected = append(statementsSelected, st)
+			} else {
+				statementsRemain = append(statementsRemain, st)
+			}
+		}
+		whereStatements = append(whereStatements, viewOrIndex.getStatement(statementsSelected...))
+	} else {
+		statementsRemain = statements
 	}
 
 	queryStr = fmt.Sprintf(queryStr, "", viewTableName)
