@@ -37,7 +37,7 @@ func (e ScyllaViews) Table_() CoStr    { return CoStr{"column_name", e.Table} }
 func DeployScylla(tables ...TableSchemaInterface) {
 
 	result := QuerySelect(func(query *Query[ScyllaColumns], t *ScyllaColumns) {
-		query.Where(t.Keyspace_().Equals("")).Exec()
+		query.Where(t.Keyspace_().Equals(""))
 	})
 
 	fmt.Printf("%v | %v", result.Records, result.Error)
