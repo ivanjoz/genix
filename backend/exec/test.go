@@ -2,7 +2,7 @@ package exec
 
 import (
 	"app/core"
-	. "app/db"
+	"app/db"
 )
 
 type Usuario struct {
@@ -19,52 +19,71 @@ type Usuario struct {
 	Peso      *float32
 }
 
-type _u = Usuario
+type UsuarioSchema struct {
+	CompanyID db.Col[int32]      `db:"company_id"`
+	ID        db.Col[int32]      `db:"id"`
+	Edad      db.Col[int32]      `db:"edad"`
+	Nombre    db.Col[string]     `db:"nombre"`
+	Apellido  db.Col[string]     `db:"apellido"`
+	Accesos   db.ColSlice[int32] `db:"accesos"`
+	Updated   db.Col[int64]      `db:"updated"`
+	Rol       db.Col[string]     `db:"rol"`
+}
 
-func (e _u) GetTableSchema() TableSchema {
-	return TableSchema{
+func (e UsuarioSchema) GetSchema() db.TableSchema[Usuario] {
+	/*
+		e1 := UsuarioSchema{}
+		hola := &e1.Edad
+		hola.SetName("dasda")
+	*/
+
+	return db.TableSchema[Usuario]{
+		StructType:    Usuario{},
 		Name:          "ztest_usuarios",
-		Partition:     e.CompanyID_(),
-		GlobalIndexes: []ColInfo{e.Edad_()},
-		LocalIndexes:  []ColInfo{e.Nombre_()},
-		HashIndexes:   [][]ColInfo{{e.Rol_(), e.Edad_()}},
-		Views: []TableView{
-			{Cols: []ColInfo{e.Nombre_(), e.Accesos_()}},
-			{Cols: []ColInfo{e.Edad_(), e.Updated_()}, Int64ConcatRadix: 9},
+		Partition:     e.CompanyID,
+		PrimaryKey:    e.ID,
+		GlobalIndexes: []db.Column{e.Edad},
+		LocalIndexes:  []db.Column{e.Nombre},
+		HashIndexes:   [][]db.Column{{e.Rol, e.Edad}},
+		Views: []db.TableView{
+			{Cols: []db.Column{e.Rol, e.Accesos}},
+			{Cols: []db.Column{e.Edad, e.Updated}, Int64ConcatRadix: 9},
 		},
 	}
 }
 
-func (e _u) CompanyID_() CoI32 { return CoI32{"company_id", e.CompanyID} }
-func (e _u) ID_() CoI32        { return CoI32{"usuario_id", e.ID} }
-func (e _u) Nombre_() CoStr    { return CoStr{"nombre", e.Nombre} }
-func (e _u) Rol_() CoStr       { return CoStr{"rol", e.Rol} }
-func (e _u) Edad_() CoI32      { return CoI32{"edad", e.Edad} }
-func (e _u) Apellidos_() CoStr { return CoStr{"apellidos", e.Apellido} }
-func (e _u) Direccion_() CoStr { return CoStr{"direccion", e.Direccion} }
-func (e _u) Updated_() CoI64   { return CoI64{"updated", e.Updated} }
-func (e _u) Accesos_() CsI32   { return CsI32{"accesos", e.Accesos} }
-func (e _u) Proyectos_() CsStr { return CsStr{"proyectos", e.Proyectos} }
-func (e _u) Peso_() CpF32      { return CpF32{"peso", e.Peso} }
-
 func TestQuery(args *core.ExecArgs) core.FuncResponse {
 
-	result := QuerySelect(func(query *Query[Usuario], t *Usuario) {
-		query.
-			Exclude(t.Peso_(), t.Updated_()).
-			Where(t.Nombre_().Equals("hola")).
-			Where(t.Updated_().Equals(1)).
-			Where(t.Accesos_().Contains(4))
+	result := db.QuerySelect(func(q *db.Query[Usuario], col UsuarioSchema) {
+		q.Exclude(col.Apellido).
+			Where(col.Nombre.Equals("hola")).
+			Where(col.Updated.Equals(1)).
+			Where(col.Accesos.Contains(4))
 	})
 
 	core.Print(result.Records)
+
+	result2 := db.QuerySelect(func(q *db.Query[Usuario], col UsuarioSchema) {
+		q.Exclude(col.Apellido).
+			With([]Usuario{}...).Join(col.Nombre, col.Apellido)
+	})
+
+	core.Print(result2.Records)
 
 	return core.FuncResponse{}
 }
 
 func TestDeploy(args *core.ExecArgs) core.FuncResponse {
 
-	DeployScylla(Usuario{})
+	db.MakeScyllaConnection(db.DBConnParams{
+		Host:     core.Env.DB_HOST,
+		Port:     int(core.Env.DB_PORT),
+		User:     core.Env.DB_USER,
+		Password: core.Env.DB_PASSWORD,
+		Keyspace: core.Env.DB_NAME,
+	})
+
+	db.DeployScylla(UsuarioSchema{})
 
 	return core.FuncResponse{}
 }

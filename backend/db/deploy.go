@@ -1,44 +1,57 @@
 package db
 
-import (
-	"fmt"
-)
+import "fmt"
 
 type ScyllaColumns struct {
-	Keyspace string `db:"keyspace_name"`
-	Table    string `db:"table_name"`
-	Name     string `db:"column_name"`
-	Type     string `db:"type"`
+	Keyspace string
+	Table    string
+	Name     string
+	Type     string
 }
 
-func (e ScyllaColumns) GetTableSchema() TableSchema {
-	return TableSchema{
-		Name: "system_schema.columns",
+type ScyllaColumnsSchema struct {
+	Keyspace Col[string] `db:"keyspace_name"`
+	Table    Col[string] `db:"table_name"`
+	Name     Col[string] `db:"column_name"`
+	Type     Col[string] `db:"type"`
+}
+
+func (e ScyllaColumnsSchema) GetSchema() TableSchema[ScyllaColumns] {
+	return TableSchema[ScyllaColumns]{
+		Keyspace:   "system_schema",
+		Name:       "columns",
+		PrimaryKey: e.Table,
 	}
 }
-func (e ScyllaColumns) Keyspace_() CoStr { return CoStr{"keyspace_name", e.Keyspace} }
-func (e ScyllaColumns) Table_() CoStr    { return CoStr{"table_name", e.Table} }
-func (e ScyllaColumns) Name_() CoStr     { return CoStr{"column_name", e.Name} }
-func (e ScyllaColumns) Type_() CoStr     { return CoStr{"type", e.Type} }
 
 type ScyllaViews struct {
-	ViewName string `db:"view_name"`
-	Table    string `db:"base_table_name"`
+	ViewName string
+	Table    string
 }
 
-func (e ScyllaViews) GetTableSchema() TableSchema {
-	return TableSchema{
+type ScyllaViewsSchema struct {
+	ViewName Col[string] `db:"view_name"`
+	Table    Col[string] `db:"base_table_name"`
+}
+
+func (e ScyllaViewsSchema) GetSchema() TableSchema[ScyllaViews] {
+	return TableSchema[ScyllaViews]{
 		Name: "system_schema.views",
 	}
 }
 func (e ScyllaViews) ViewName_() CoStr { return CoStr{"table_name", e.ViewName} }
 func (e ScyllaViews) Table_() CoStr    { return CoStr{"column_name", e.Table} }
 
-func DeployScylla(tables ...TableSchemaInterface) {
+func DeployScylla[T any](tables ...TableSchemaInterface[T]) {
 
-	result := QuerySelect(func(query *Query[ScyllaColumns], t *ScyllaColumns) {
-		query.Where(t.Keyspace_().Equals(""))
+	fmt.Println("ejecutando select...")
+	result := QuerySelect(func(q *Query[ScyllaColumns], col ScyllaColumnsSchema) {
+		q.Where(col.Keyspace.Equals(connParams.Keyspace))
 	})
 
-	fmt.Printf("%v | %v", result.Records, result.Error)
+	if result.Error != nil {
+		fmt.Println("Error:", result.Error)
+	}
+
+	fmt.Print(result.Records)
 }

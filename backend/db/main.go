@@ -1,9 +1,15 @@
 package db
 
 import (
+	"app/core"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
+
+	"github.com/fxamacker/cbor/v2"
 )
 
 type Col[T any] struct {
@@ -26,34 +32,50 @@ type ColumnStatement struct {
 	Value    any
 	Values   []any
 }
-type TableSchema struct {
+type TableSchema[T any] struct {
+	Keyspace      string
+	StructType    T
 	Name          string
-	Partition     ColInfo
-	GlobalIndexes []ColInfo
-	LocalIndexes  []ColInfo
-	HashIndexes   [][]ColInfo
+	PrimaryKey    Column
+	Partition     Column
+	GlobalIndexes []Column
+	LocalIndexes  []Column
+	HashIndexes   [][]Column
 	Views         []TableView
 }
 
 func (q ColumnStatement) GetValue() any {
-	return any(q.Value)
+	if len(q.Values) > 0 {
+		return ""
+	} else if str, ok := q.Value.(string); ok {
+		return `'` + str + `'`
+	} else {
+		return q.Value
+	}
 }
 
-type ColInfo interface {
+type Column interface {
 	GetInfo() columnInfo
 	GetValue() any
 }
 
+type ColumnSetName interface {
+	SetName(string)
+}
+
 type TableView struct {
-	Cols []ColInfo
+	Cols []Column
 	// Para concatenar numeros como = int64(e.AlmacenID)*1e9 + int64(e.Updated)
 	Int64ConcatRadix int8
 }
 
+func (q *Col[T]) SetName(name string) {
+	q.Name = name
+}
 func (q Col[T]) GetInfo() columnInfo {
 	typ := *new(T)
 	fieldType := reflect.TypeOf(typ).String()
-	col := columnInfo{Name: q.Name, IsPointer: true, FieldType: fieldType}
+	col := columnInfo{Name: q.Name, FieldType: fieldType}
 	return col
 }
 func (q Col[T]) GetValue() any {
@@ -136,28 +158,28 @@ type statementGroup struct {
 	group []ColumnStatement
 }
 
-type TableSchemaInterface interface {
-	GetTableSchema() TableSchema
+type TableSchemaInterface[T any] interface {
+	GetSchema() TableSchema[T]
 }
 
-type Query[T TableSchemaInterface] struct {
+type Query[T any] struct {
 	T              T
 	statements     []statementGroup
-	columnsInclude []ColInfo
-	columnsExclude []ColInfo
+	columnsInclude []Column
+	columnsExclude []Column
 	recordsToJoin  []T
-	columnsJoin    []ColInfo
+	columnsJoin    []Column
 }
 
 func (q *Query[T]) init() {
 	q.T = *new(T)
 }
 
-func (q *Query[T]) Columns(columns ...ColInfo) *Query[T] {
+func (q *Query[T]) Columns(columns ...Column) *Query[T] {
 	q.columnsInclude = append(q.columnsInclude, columns...)
 	return q
 }
-func (q *Query[T]) Exclude(columns ...ColInfo) *Query[T] {
+func (q *Query[T]) Exclude(columns ...Column) *Query[T] {
 	q.columnsExclude = append(q.columnsExclude, columns...)
 	return q
 }
@@ -176,21 +198,21 @@ func (q *Query[T]) WhereOr(ce ...ColumnStatement) *Query[T] {
 	return q
 }
 
-type withJoin[T TableSchemaInterface] struct {
+type WithJoin[T any] struct {
 	query         *Query[T]
 	recordsToJoin []T
 }
 
-func (e *withJoin[T]) Join(columns ...ColInfo) *Query[T] {
+func (e *WithJoin[T]) Join(columns ...Column) *Query[T] {
 	e.query.recordsToJoin = e.recordsToJoin
 	e.query.columnsJoin = columns
 	return e.query
 }
 
-func (q *Query[T]) With(records ...T) withJoin[T] {
+func (q *Query[T]) With(records ...T) *WithJoin[T] {
 	q.init()
-	wj := withJoin[T]{query: q, recordsToJoin: records}
-	return wj
+	wj := WithJoin[T]{query: q, recordsToJoin: records}
+	return &wj
 }
 
 type viewInfo struct {
@@ -206,30 +228,39 @@ type viewInfo struct {
 	getCreateScript  func() string
 }
 
-type QueryResult struct {
-	Records any
+type QueryResult[T any] struct {
+	Records []T
 	Error   error
 }
 
-func QuerySelect[T TableSchemaInterface](handler func(query *Query[T], e *T)) QueryResult {
+func QuerySelect[T TableSchemaInterface[E], E any](handler func(query *Query[E], schemaTable T)) QueryResult[E] {
 
-	query := Query[T]{}
-	handler(&query, &query.T)
-	records, err := query.Exec()
+	query := Query[E]{}
+	scyllaTable := MakeTable[T]()
+	handler(&query, scyllaTable.baseType)
+	records, err := selectExec[E, T](&query)
 
-	return QueryResult{records, err}
+	return QueryResult[E]{records, err}
 }
 
-func (q *Query[T]) Exec() ([]T, error) {
+func selectExec[T any, E TableSchemaInterface[T]](query *Query[T]) ([]T, error) {
 
-	scyllaTable := makeTable[T]()
+	scyllaTable := MakeTable[E]()
 	viewTableName := scyllaTable.name
-	queryStr := "SELECT %v FROM %v"
+
+	if len(scyllaTable.keyspace) == 0 {
+		scyllaTable.keyspace = connParams.Keyspace
+	}
+	if len(scyllaTable.keyspace) == 0 {
+		return nil, errors.New("no se ha especificado un keyspace")
+	}
+
+	queryStr := "SELECT * FROM %v.%v WHERE %v"
 	indexOperators := []string{"=", "IN"}
 
 	statements := []ColumnStatement{}
 	columnsWhere := []string{}
-	for _, st := range q.statements {
+	for _, st := range query.statements {
 		statements = append(statements, st.group[0])
 		columnsWhere = append(columnsWhere, st.group[0].Column)
 	}
@@ -276,6 +307,8 @@ func (q *Query[T]) Exec() ([]T, error) {
 	var statementsRemain []ColumnStatement
 	whereStatements := []string{}
 
+	fmt.Println("posible index::", len(posibleViewsOrIndexes))
+
 	// Revisa si hay un view que satisfaga este request
 	if len(posibleViewsOrIndexes) > 0 {
 		//TODO: aquí debe escoger el mejor índice o view en caso existan 2
@@ -290,19 +323,115 @@ func (q *Query[T]) Exec() ([]T, error) {
 				statementsRemain = append(statementsRemain, st)
 			}
 		}
+		fmt.Println("hola???")
 		whereStatements = append(whereStatements, viewOrIndex.getStatement(statementsSelected...))
 	} else {
 		statementsRemain = statements
 	}
 
-	queryStr = fmt.Sprintf(queryStr, "", viewTableName)
+	// fmt.Println("where statements::", whereStatements)
 
-	return []T{}, nil
+	for _, st := range statementsRemain {
+		fmt.Println("column 1::", st.Column)
+		fmt.Println("column 2::", st.Operator)
+		fmt.Println("column 3::", st.GetValue())
+
+		where := fmt.Sprintf("%v %v %v", st.Column, st.Operator, st.GetValue())
+		// fmt.Println("where::", where)
+		whereStatements = append(whereStatements, where)
+	}
+
+	whereStatementsConcat := strings.Join(whereStatements, " AND ")
+	queryStr = fmt.Sprintf(queryStr, scyllaTable.keyspace, viewTableName, whereStatementsConcat)
+
+	fmt.Println("query string::", queryStr)
+
+	iter := getScyllaConnection().Query(queryStr).Iter()
+	rd, err := iter.RowData()
+	if err != nil {
+		fmt.Println("Error on RowData::", err)
+		return nil, err
+	}
+
+	scanner := iter.Scanner()
+	records := []T{}
+
+	fmt.Println("starting iterator")
+	fmt.Println("columns::", len(scyllaTable.columns))
+
+	for scanner.Next() {
+
+		rowValues := rd.Values
+
+		err := scanner.Scan(rowValues...)
+		if err != nil {
+			fmt.Println("Error on scan::", err)
+			return nil, err
+		}
+
+		rec := new(T)
+		ref := reflect.ValueOf(rec).Elem()
+
+		for idx, column := range scyllaTable.columns {
+			value := rowValues[idx]
+			if value == nil {
+				continue
+			}
+			if mapField, ok := fieldMapping[column.FieldType]; ok {
+				field := ref.Field(column.FieldIdx)
+				val := reflect.ValueOf(value)
+				if val.Kind() == reflect.Ptr {
+					// Dereference the pointer to get the underlying value
+					val = val.Elem()
+				}
+				fmt.Printf("Mapeando valor | F: %v N: %v C: %v | %v\n", field, column.Name, column.FieldType, val)
+				mapField(&field, value, column.IsPointer)
+				// Revisa si necesita parsearse un string a un struct como JSON
+			} else if column.IsComplexType {
+				// Log("complex type::", column.FieldName)
+				if vl, ok := value.(*string); ok {
+					newStruct := column.RefType.Interface()
+					err := json.Unmarshal([]byte(*vl), newStruct)
+					if err != nil {
+						fmt.Println("Error al convertir: ", newStruct, *vl, err.Error())
+					}
+					if column.IsPointer {
+						ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct))
+					} else {
+						ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct).Elem())
+					}
+				} else if vl, ok := value.(*[]uint8); ok {
+					if len(*vl) <= 2 {
+						continue
+					}
+					newStruct := column.RefType.Interface()
+					err = cbor.Unmarshal(*vl, &newStruct)
+					if err != nil {
+						fmt.Println("Error al convertir: ", newStruct, *vl, err.Error())
+					}
+					if column.IsPointer {
+						ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct))
+					} else {
+						ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct).Elem())
+					}
+				}
+			} else {
+				fmt.Print("Column is not mapped:: ", column)
+			}
+		}
+		//Print(rec)
+		records = append(records, *rec)
+	}
+
+	core.Print(records)
+
+	return records, nil
 }
 
-type scyllaTable struct {
+type scyllaTable[T any] struct {
+	baseType      T
 	name          string
-	nameSingle    string
+	keyspace      string
 	primaryKey    columnInfo
 	partitionKey  columnInfo
 	columns       []columnInfo

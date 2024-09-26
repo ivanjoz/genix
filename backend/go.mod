@@ -61,7 +61,7 @@ require (
 require (
 	github.com/DmitriyVTitov/size v1.5.0
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.53.1
-	github.com/fxamacker/cbor/v2 v2.6.0
+	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
 	github.com/kr/pretty v0.3.1
 	github.com/mitchellh/hashstructure/v2 v2.0.2
