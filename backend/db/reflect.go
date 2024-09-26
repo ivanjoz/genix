@@ -1,6 +1,7 @@
 package db
 
 import (
+	"app/core"
 	"fmt"
 	"reflect"
 	"strings"
@@ -14,7 +15,8 @@ type columnInfo struct {
 	Type      string
 	IsSlice   bool
 	// RefType        reflect.Value
-	MethodIdx       int
+	FieldIdx        int
+	RefType         reflect.Value
 	IsPrimaryKey    int8
 	IsPointer       bool
 	IsViewExcluded  bool
@@ -44,46 +46,83 @@ var makeStatementWith string = `
 	and dclocal_read_repair_chance = 0
 	and speculative_retry = '99.0PERCENTILE'`
 
-func makeTable[T TableSchemaInterface]() scyllaTable {
-	newT := *new(T)
-	schema := newT.GetTableSchema()
+func MakeTable[T TableSchemaInterface[E], E any]() scyllaTable[T] {
 
-	dbTable := scyllaTable{
-		name:         schema.Name,
-		partitionKey: schema.Partition.GetInfo(),
-		primaryKey:   schema.Partition.GetInfo(),
-		columnsMap:   map[string]columnInfo{},
-		indexes:      map[string]viewInfo{},
-		views:        map[string]viewInfo{},
+	schemaType := *new(T)
+	schema := schemaType.GetSchema()
+	schemaRefValue := reflect.ValueOf(&schemaType).Elem()
+	schemaRefType := schemaRefValue.Type()
+
+	fmt.Println("schema type!!", reflect.TypeOf(schemaType).Name())
+	fmt.Println("struct type!!", reflect.TypeOf(*new(E)).Name())
+
+	if schema.PrimaryKey == nil {
+		panic("No se ha especificado una PrimaryKey")
 	}
 
-	refTyp := reflect.ValueOf(newT)
-	methodsPrefix := []string{"func() db.ColSlice[", "func() db.Col["}
+	dbTable := scyllaTable[T]{
+		keyspace:   schema.Keyspace,
+		name:       schema.Name,
+		primaryKey: schema.PrimaryKey.GetInfo(),
+		columnsMap: map[string]columnInfo{},
+		indexes:    map[string]viewInfo{},
+		views:      map[string]viewInfo{},
+	}
 
-	for i := 0; i < refTyp.NumMethod(); i++ {
-		method := refTyp.Method(i)
-		methodType := method.Type().String()
-		founded := false
-		for _, mp := range methodsPrefix {
-			if strings.HasPrefix(methodType, mp) {
-				founded = true
+	if schema.Partition != nil {
+		dbTable.partitionKey = schema.Partition.GetInfo()
+	}
+
+	type fieldIdxType struct {
+		Idx  int
+		Type string
+	}
+
+	fieldNameIdxMap := map[string]fieldIdxType{}
+	refValue := reflect.ValueOf(schema.StructType)
+	refType := refValue.Type()
+
+	for i := 0; i < refType.NumField(); i++ {
+		fieldNameIdxMap[refType.Field(i).Name] = fieldIdxType{
+			Idx: i, Type: refType.Field(i).Type.Name(),
+		}
+	}
+
+	for i := 0; i < schemaRefType.NumField(); i++ {
+		schemaField := schemaRefType.Field(i)
+		// fieldValue := refValue.Field(i)
+		schemaFieldValue := schemaRefValue.Field(i)
+		fmt.Println("typee::", schemaRefValue.Field(i).Type().Name())
+
+		if _, ok := schemaField.Tag.Lookup("db"); ok {
+			tagValues := strings.Split(schemaField.Tag.Get("db"), ",")
+			if col, ok := schemaRefValue.Field(i).Addr().Interface().(ColumnSetName); ok {
+				col.SetName(tagValues[0])
 			}
 		}
-		if !method.IsValid() || !founded {
-			continue
+
+		if _, ok := fieldNameIdxMap[schemaField.Name]; !ok {
+			msg := fmt.Sprintf(`No se encontró el field "%v" en el struct "%v" pero sí en el schema "%v"`, schemaField.Name, refType.Name(), schemaRefType.Name())
+			panic(msg)
 		}
 
-		colBase := method.Call(nil)[0]
-		if col, ok := colBase.Interface().(ColInfo); ok {
+		if col, ok := schemaFieldValue.Interface().(Column); ok {
 			columnInfo := col.GetInfo()
+			if field, ok := fieldNameIdxMap[schemaField.Name]; ok {
+				columnInfo.FieldIdx = field.Idx
+				columnInfo.FieldType = field.Type
+			} else {
+				panic("No se encontró en el struct origen: " + schemaField.Name)
+			}
+
 			fmt.Println("Column Name:", columnInfo.Name, "| Type:", columnInfo.FieldType, "| Is Slice:", columnInfo.IsSlice)
 
-			columnInfo.getValue = func(rv *reflect.Value) any {
-				if cb, ok := rv.Method(i).Call(nil)[0].Interface().(ColInfo); ok {
-					return cb.GetValue()
-				}
-				return nil
+			fieldBaseIdx := fieldNameIdxMap[schemaField.Name].Idx
+
+			columnInfo.getValue = func(s *reflect.Value) any {
+				return s.Field(fieldBaseIdx).Interface()
 			}
+
 			columnInfo.Type = scyllaFieldToColumnTypesMap[columnInfo.FieldType]
 			if columnInfo.Type == "" {
 				columnInfo.IsComplexType = true
@@ -95,6 +134,10 @@ func makeTable[T TableSchemaInterface]() scyllaTable {
 			dbTable.columns = append(dbTable.columns, columnInfo)
 		}
 	}
+
+	core.Print(schemaType)
+
+	dbTable.baseType = schemaType
 
 	idxCount := int8(1)
 	for _, column := range schema.GlobalIndexes {
@@ -173,11 +216,11 @@ func makeTable[T TableSchemaInterface]() scyllaTable {
 			columns: names,
 			column:  column,
 			getValue: func(s *reflect.Value) any {
-				values := []string{}
+				values := []any{}
 				for _, e := range columns {
-					values = append(values, fmt.Sprintf("%v", e.getValue(s)))
+					values = append(values, e.getValue(s))
 				}
-				return BasicHashInt(strings.Join(values, "|"))
+				return HashInt(values...)
 			},
 		}
 		index.getStatement = func(statements ...ColumnStatement) string {
@@ -185,11 +228,11 @@ func makeTable[T TableSchemaInterface]() scyllaTable {
 				panic(fmt.Sprintf("Error columna %v: El número de valores debe ser >= 2", index.name))
 			}
 
-			values := []string{}
+			values := []any{}
 			for _, e := range statements {
-				values = append(values, fmt.Sprintf("%v", e.Value))
+				values = append(values, e.Value)
 			}
-			hashInt := BasicHashInt(strings.Join(values, "|"))
+			hashInt := HashInt(values...)
 			// Revisar casuísica IN
 			return fmt.Sprintf("%v %v %v", index.column.Name, statements[0].Operator, hashInt)
 		}
@@ -281,4 +324,131 @@ func makeTable[T TableSchemaInterface]() scyllaTable {
 	}
 
 	return dbTable
+}
+
+type number1 interface {
+	int | int32 | int8 | uint8 | int16 | uint16 | int64
+}
+type numfloat interface {
+	float32 | float64
+}
+
+func setReflectInt[T number1, E number1](e *reflect.Value, vl *E, isPointer bool) {
+	if isPointer && vl != nil {
+		pv := T(*vl)
+		(*e).Set(reflect.ValueOf(&pv))
+	} else if !isPointer {
+		(*e).SetInt(int64(*vl))
+	}
+}
+
+func setReflectIntSlice[T number1, E number1](e *reflect.Value, vl *[]E, isPointer bool) {
+	newSlice := []T{}
+	for _, v := range *vl {
+		newSlice = append(newSlice, T(v))
+	}
+	if isPointer {
+		(*e).Set(reflect.ValueOf(&newSlice))
+	} else {
+		(*e).Set(reflect.ValueOf(newSlice))
+	}
+}
+
+func setReflectFloat[T numfloat](e *reflect.Value, vl *T, isPointer bool) {
+	if isPointer {
+		pv := T(*vl)
+		(*e).Set(reflect.ValueOf(&pv))
+	} else {
+		(*e).SetFloat(float64(*vl))
+	}
+}
+
+var fieldMapping = map[string]func(e *reflect.Value, value any, isPointer bool){
+	"string": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*string); ok {
+			if ip {
+				(*e).Set(reflect.ValueOf(vl))
+			} else {
+				(*e).SetString(*vl)
+			}
+		}
+	},
+	"int32": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*int); ok {
+			setReflectInt[int32](e, vl, ip)
+		}
+	},
+	"int": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*int); ok {
+			setReflectInt[int](e, vl, ip)
+		}
+	},
+	"int16": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*int16); ok {
+			setReflectInt[int](e, vl, ip)
+		} else if vl, ok := v.(*int); ok {
+			setReflectInt[int](e, vl, ip)
+		}
+	},
+	"int8": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*int8); ok {
+			setReflectInt[int](e, vl, ip)
+		} else if vl, ok := v.(*int); ok {
+			setReflectInt[int](e, vl, ip)
+		}
+	},
+	"int64": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*int64); ok {
+			setReflectInt[int](e, vl, ip)
+		}
+	},
+	"[]int32": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*[]int); ok {
+			setReflectIntSlice[int32](e, vl, ip)
+		}
+	},
+	"[]int16": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*[]int16); ok {
+			setReflectIntSlice[int16](e, vl, ip)
+		} else if vl, ok := v.(*[]int8); ok {
+			setReflectIntSlice[int8](e, vl, ip)
+		} else if vl, ok := v.(*[]int); ok {
+			setReflectIntSlice[int](e, vl, ip)
+		}
+	},
+	"[]int8": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*[]int8); ok {
+			setReflectIntSlice[int8](e, vl, ip)
+		} else if vl, ok := v.(*[]int16); ok {
+			setReflectIntSlice[int16](e, vl, ip)
+		} else if vl, ok := v.(*[]int); ok {
+			setReflectIntSlice[int](e, vl, ip)
+		}
+	},
+	"[]int64": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*[]int64); ok {
+			setReflectIntSlice[int64](e, vl, ip)
+		} else if vl, ok := v.(*[]int); ok {
+			setReflectIntSlice[int](e, vl, ip)
+		}
+	},
+	"[]string": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*[]string); ok {
+			if ip {
+				(*e).Set(reflect.ValueOf(vl))
+			} else {
+				(*e).Set(reflect.ValueOf(*vl))
+			}
+		}
+	},
+	"float32": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*float32); ok {
+			setReflectFloat(e, vl, ip)
+		}
+	},
+	"float64": func(e *reflect.Value, v any, ip bool) {
+		if vl, ok := v.(*float64); ok {
+			setReflectFloat(e, vl, ip)
+		}
+	},
 }

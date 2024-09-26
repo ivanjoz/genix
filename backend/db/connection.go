@@ -12,21 +12,27 @@ import (
 var mu sync.Mutex
 var scyllaSession *gocql.Session
 var isConnectingTime int64 = 0
-var connectionParams ConnectionParameters = ConnectionParameters{}
+var connParams DBConnParams = DBConnParams{}
 
-type ConnectionParameters struct {
-	Host      string
-	Port      int
-	User      string
-	Password  string
-	Reconnect bool
+type DBConnParams struct {
+	Host        string
+	Port        int
+	User        string
+	Password    string
+	Reconnect   bool
+	ConnTimeout int64 //Seconds
+	Keyspace    string
 }
 
-func SetConnectionParameters(args ConnectionParameters) {
-	connectionParams = args
+func MakeScyllaConnection(params DBConnParams) *gocql.Session {
+	if params.ConnTimeout == 0 {
+		params.ConnTimeout = 10
+	}
+	connParams = params
+	return getScyllaConnection()
 }
 
-func ScyllaConnect() *gocql.Session {
+func getScyllaConnection() *gocql.Session {
 	nowTime := time.Now().Unix()
 
 	if (isConnectingTime + 12) > nowTime {
@@ -38,7 +44,7 @@ func ScyllaConnect() *gocql.Session {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if connectionParams.Reconnect {
+	if connParams.Reconnect {
 		if scyllaSession != nil {
 			scyllaSession.Close()
 			scyllaSession = nil
@@ -49,17 +55,17 @@ func ScyllaConnect() *gocql.Session {
 
 	isConnectingTime = nowTime
 
-	cluster := gocql.NewCluster(connectionParams.Host)
+	cluster := gocql.NewCluster(connParams.Host)
 	fallback := gocql.RoundRobinHostPolicy()
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(fallback)
-	cluster.Port = connectionParams.Port
+	cluster.Port = connParams.Port
 	cluster.Consistency = gocql.LocalOne
 	cluster.ProtoVersion = 4
-	cluster.ConnectTimeout = time.Second * 10
+	cluster.ConnectTimeout = time.Second * time.Duration(connParams.ConnTimeout)
 	cluster.Compressor = gocql.SnappyCompressor{}
 	cluster.Authenticator = gocql.PasswordAuthenticator{
-		Username:              connectionParams.User,
-		Password:              connectionParams.Password,
+		Username:              connParams.User,
+		Password:              connParams.Password,
 		AllowedAuthenticators: []string{"org.apache.cassandra.auth.PasswordAuthenticator"},
 	}
 

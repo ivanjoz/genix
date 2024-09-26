@@ -201,31 +201,31 @@ type DemoStruct3 struct {
 
 type DemoStruct struct {
 	types.TAGS `table:"demo_structs"`
-	CompanyID  int32         `json:"companyID,omitempty" db:"company_id,pk"`
-	ID         int32         `json:"id,omitempty" db:"id,pk"`
-	Edad       int32         `json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre     string        `json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras   []string      `json:"palabras,omitempty" db:"palabras"`
-	Peso       float32       `json:"peso,omitempty" db:"peso"`
-	Peso64     float64       `json:"peso64,omitempty" db:"peso_64"`
-	Rangos     []int32       `json:"rangos,omitempty" db:"rangos"`
-	Smallint   int16         `json:"small_int,omitempty" db:"small_int,zx2"`
-	Struct1    DemoStruct1   `json:"struct_1,omitempty" db:"struct_1"`
-	Struct2    DemoStruct3   `json:"struct_2,omitempty" db:"struct_2"`
-	Struct3    []DemoStruct1 `json:"struct_3,omitempty" db:"struct_3"`
+	CompanyID  int32         `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
+	ID         int32         `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
+	Edad       int32         `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre     string        `cbor:"4,keyasint,omitempty" json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras   []string      `cbor:"5,keyasint,omitempty" json:"palabras,omitempty" db:"palabras"`
+	Peso       float32       `cbor:"6,keyasint,omitempty" json:"peso,omitempty" db:"peso"`
+	Peso64     float64       `cbor:"7,keyasint,omitempty" json:"peso64,omitempty" db:"peso_64"`
+	Rangos     []int32       `cbor:"8,keyasint,omitempty" json:"rangos,omitempty" db:"rangos"`
+	Smallint   int16         `cbor:"9,keyasint,omitempty" db:"small_int,zx2"`
+	Struct1    DemoStruct1   `cbor:"10,keyasint,omitempty" json:"struct_1,omitempty" db:"struct_1"`
+	Struct2    DemoStruct3   `cbor:"11,keyasint,omitempty" json:"struct_2,omitempty" db:"struct_2"`
+	Struct3    []DemoStruct1 `cbor:"12,keyasint,omitempty" json:"struct_3,omitempty" db:"struct_3"`
 }
 
 type DemoStruct4 struct {
 	types.TAGS `table:"demo_structs"`
-	CompanyID  int32    `json:"companyID,omitempty" db:"company_id,pk"`
-	ID         int32    `json:"id,omitempty" db:"id,pk"`
-	Edad       int32    `json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre     string   `json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras   []string `json:"palabras,omitempty" db:"palabras"`
-	Rangos     []int32  `json:"rangos,omitempty" db:"rangos"`
-	Smallint   int16    `json:"small_int,omitempty" db:"small_int,zx2"`
-	Peso       float32  `json:"peso,omitempty" db:"peso"`
-	Peso64     float64  `json:"peso64,omitempty" db:"peso_64"`
+	CompanyID  int32    `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
+	ID         int32    `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
+	Edad       int32    `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre     string   `cbor:"4,keyasint,omitempty" json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras   []string `cbor:"5,keyasint,omitempty" json:"palabras,omitempty" db:"palabras"`
+	Rangos     []int32  `cbor:"6,keyasint,omitempty" json:"rangos,omitempty" db:"rangos"`
+	Smallint   int16    `cbor:"7,keyasint,omitempty" json:"small_int,omitempty" db:"small_int,zx2"`
+	Peso       float32  `cbor:"8,keyasint,omitempty" json:"peso,omitempty" db:"peso"`
+	Peso64     float64  `cbor:"9,keyasint,omitempty" json:"peso64,omitempty" db:"peso_64"`
 }
 
 func Test18(args *core.ExecArgs) core.FuncResponse {
@@ -364,7 +364,7 @@ func Test21(args *core.ExecArgs) core.FuncResponse {
 		panic(err)
 	}
 
-	fmt.Println("Encoded Struct ", b.Bytes())
+	fmt.Println("Encoded Struct ", string(b.Bytes()))
 
 	var demoDecode DemoStruct4
 	d := gob.NewDecoder(&b)
