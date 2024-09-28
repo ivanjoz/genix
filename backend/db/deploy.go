@@ -9,18 +9,16 @@ type ScyllaColumns struct {
 	Type     string
 }
 
-type ScyllaColumnsSchema struct {
-	Keyspace Col[string] `db:"keyspace_name"`
-	Table    Col[string] `db:"table_name"`
-	Name     Col[string] `db:"column_name"`
-	Type     Col[string] `db:"type"`
-}
+func (e ScyllaColumns) Keyspace_() CoStr { return CoStr{"keyspace_name"} }
+func (e ScyllaColumns) Table_() CoStr    { return CoStr{"keyspace_name"} }
+func (e ScyllaColumns) Name_() CoStr     { return CoStr{"keyspace_name"} }
+func (e ScyllaColumns) Type_() CoStr     { return CoStr{"keyspace_name"} }
 
-func (e ScyllaColumnsSchema) GetSchema() TableSchema[ScyllaColumns] {
-	return TableSchema[ScyllaColumns]{
+func (e ScyllaColumns) GetSchema() TableSchema {
+	return TableSchema{
 		Keyspace:   "system_schema",
 		Name:       "columns",
-		PrimaryKey: e.Table,
+		PrimaryKey: e.Keyspace_(),
 	}
 }
 
@@ -29,24 +27,14 @@ type ScyllaViews struct {
 	Table    string
 }
 
-type ScyllaViewsSchema struct {
-	ViewName Col[string] `db:"view_name"`
-	Table    Col[string] `db:"base_table_name"`
-}
+func (e ScyllaViews) ViewName_() CoStr { return CoStr{"view_name"} }
+func (e ScyllaViews) Table_() CoStr    { return CoStr{"base_table_name"} }
 
-func (e ScyllaViewsSchema) GetSchema() TableSchema[ScyllaViews] {
-	return TableSchema[ScyllaViews]{
-		Name: "system_schema.views",
-	}
-}
-func (e ScyllaViews) ViewName_() CoStr { return CoStr{"table_name", e.ViewName} }
-func (e ScyllaViews) Table_() CoStr    { return CoStr{"column_name", e.Table} }
-
-func DeployScylla[T any](tables ...TableSchemaInterface[T]) {
+func DeployScylla(tables ...TableSchemaInterface) {
 
 	fmt.Println("ejecutando select...")
-	result := QuerySelect(func(q *Query[ScyllaColumns], col ScyllaColumnsSchema) {
-		q.Where(col.Keyspace.Equals(connParams.Keyspace))
+	result := Select(func(q *Query[ScyllaColumns], col ScyllaColumns) {
+		q.Where(col.Keyspace_().Equals(connParams.Keyspace))
 	})
 
 	if result.Error != nil {

@@ -13,13 +13,7 @@ import (
 )
 
 type Col[T any] struct {
-	Name  string
-	Value T
-}
-
-type ColPoint[T any] struct {
-	Name  string
-	Value *T
+	C string
 }
 
 type IColumnStatement interface {
@@ -32,9 +26,9 @@ type ColumnStatement struct {
 	Value    any
 	Values   []any
 }
-type TableSchema[T any] struct {
-	Keyspace      string
-	StructType    T
+type TableSchema struct {
+	Keyspace string
+	// StructType    T
 	Name          string
 	PrimaryKey    Column
 	Partition     Column
@@ -56,7 +50,6 @@ func (q ColumnStatement) GetValue() any {
 
 type Column interface {
 	GetInfo() columnInfo
-	GetValue() any
 }
 
 type ColumnSetName interface {
@@ -70,61 +63,50 @@ type TableView struct {
 }
 
 func (q *Col[T]) SetName(name string) {
-	q.Name = name
+	q.C = name
 }
 func (q Col[T]) GetInfo() columnInfo {
 	typ := *new(T)
 	fieldType := reflect.TypeOf(typ).String()
-	col := columnInfo{Name: q.Name, FieldType: fieldType}
+	col := columnInfo{Name: q.C, FieldType: fieldType}
 	return col
-}
-func (q Col[T]) GetValue() any {
-	return any(q.Value)
-}
-func (q ColPoint[T]) GetInfo() columnInfo {
-	typ := *new(T)
-	fieldType := reflect.TypeOf(typ).String()
-	col := columnInfo{Name: q.Name, IsPointer: true, FieldType: fieldType}
-	return col
-}
-func (q ColPoint[T]) GetValue() any {
-	return any(*q.Value)
 }
 
 // Generic
 func (e Col[T]) Equals(v T) ColumnStatement {
-	return ColumnStatement{e.Name, "=", any(v), nil}
+	return ColumnStatement{e.C, "=", any(v), nil}
 }
 func (e Col[T]) In(values_ ...T) ColumnStatement {
 	values := []any{}
 	for _, v := range values_ {
 		values = append(values, any(v))
 	}
-	return ColumnStatement{e.Name, "IN", any(*new(T)), values}
+	return ColumnStatement{e.C, "IN", any(*new(T)), values}
 }
 func (e Col[T]) GreaterThan(v T) ColumnStatement {
-	return ColumnStatement{e.Name, ">", any(v), nil}
+	return ColumnStatement{e.C, ">", any(v), nil}
 }
 func (e Col[T]) GreaterEqual(v T) ColumnStatement {
-	return ColumnStatement{e.Name, ">=", any(v), nil}
+	return ColumnStatement{e.C, ">=", any(v), nil}
 }
 func (e Col[T]) LessThan(v T) ColumnStatement {
-	return ColumnStatement{e.Name, "<", any(v), nil}
+	return ColumnStatement{e.C, "<", any(v), nil}
 }
 func (e Col[T]) LessEqual(v T) ColumnStatement {
-	return ColumnStatement{e.Name, "<=", any(v), nil}
+	return ColumnStatement{e.C, "<=", any(v), nil}
 }
 
 // Generic Array
 type ColSlice[T any] struct {
-	Name   string
-	Values []T
+	Name string
+	// Values []T
 }
 
-func (q ColSlice[T]) GetValue() any {
-	return any(q.Values)
-}
-
+/*
+	func (q ColSlice[T]) GetValue() any {
+		return any(q.Values)
+	}
+*/
 func (q ColSlice[T]) GetInfo() columnInfo {
 	typ := *new(T)
 	return columnInfo{Name: q.Name, FieldType: reflect.TypeOf(typ).String(), IsSlice: true}
@@ -146,20 +128,13 @@ type CsInt = ColSlice[int]
 type CsI32 = ColSlice[int32]
 type CsI16 = ColSlice[int16]
 type CsStr = ColSlice[string]
-type CpInt = ColPoint[int]
-type CpI32 = ColPoint[int32]
-type CpI16 = ColPoint[int16]
-type CpStr = ColPoint[string]
-type CpI64 = ColPoint[int64]
-type CpF32 = ColPoint[float32]
-type CpF64 = ColPoint[float64]
 
 type statementGroup struct {
 	group []ColumnStatement
 }
 
-type TableSchemaInterface[T any] interface {
-	GetSchema() TableSchema[T]
+type TableSchemaInterface interface {
+	GetSchema() TableSchema
 }
 
 type Query[T any] struct {
@@ -233,19 +208,19 @@ type QueryResult[T any] struct {
 	Error   error
 }
 
-func QuerySelect[T TableSchemaInterface[E], E any](handler func(query *Query[E], schemaTable T)) QueryResult[E] {
+func Select[T TableSchemaInterface](handler func(query *Query[T], schemaTable T)) QueryResult[T] {
 
-	query := Query[E]{}
+	query := Query[T]{}
 	scyllaTable := MakeTable[T]()
 	handler(&query, scyllaTable.baseType)
-	records, err := selectExec[E, T](&query)
+	records, err := selectExec[T](&query)
 
-	return QueryResult[E]{records, err}
+	return QueryResult[T]{records, err}
 }
 
-func selectExec[T any, E TableSchemaInterface[T]](query *Query[T]) ([]T, error) {
+func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 
-	scyllaTable := MakeTable[E]()
+	scyllaTable := MakeTable[T]()
 	viewTableName := scyllaTable.name
 
 	if len(scyllaTable.keyspace) == 0 {
@@ -379,12 +354,14 @@ func selectExec[T any, E TableSchemaInterface[T]](query *Query[T]) ([]T, error) 
 			}
 			if mapField, ok := fieldMapping[column.FieldType]; ok {
 				field := ref.Field(column.FieldIdx)
-				val := reflect.ValueOf(value)
-				if val.Kind() == reflect.Ptr {
-					// Dereference the pointer to get the underlying value
-					val = val.Elem()
-				}
-				fmt.Printf("Mapeando valor | F: %v N: %v C: %v | %v\n", field, column.Name, column.FieldType, val)
+				/*
+					val := reflect.ValueOf(value)
+					if val.Kind() == reflect.Ptr {
+						// Dereference the pointer to get the underlying value
+						val = val.Elem()
+					}
+					fmt.Printf("Mapeando valor | F: %v N: %v C: %v | %v\n", field, column.Name, column.FieldType, val)
+				*/
 				mapField(&field, value, column.IsPointer)
 				// Revisa si necesita parsearse un string a un struct como JSON
 			} else if column.IsComplexType {
@@ -419,7 +396,6 @@ func selectExec[T any, E TableSchemaInterface[T]](query *Query[T]) ([]T, error) 
 				fmt.Print("Column is not mapped:: ", column)
 			}
 		}
-		//Print(rec)
 		records = append(records, *rec)
 	}
 
