@@ -1,9 +1,9 @@
 package db
 
 import (
-	"app/core"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 )
 
@@ -46,15 +46,12 @@ var makeStatementWith string = `
 	and dclocal_read_repair_chance = 0
 	and speculative_retry = '99.0PERCENTILE'`
 
-func MakeTable[T TableSchemaInterface[E], E any]() scyllaTable[T] {
+func MakeTable[T TableSchemaInterface]() scyllaTable[T] {
 
-	schemaType := *new(T)
-	schema := schemaType.GetSchema()
-	schemaRefValue := reflect.ValueOf(&schemaType).Elem()
-	schemaRefType := schemaRefValue.Type()
-
-	fmt.Println("schema type!!", reflect.TypeOf(schemaType).Name())
-	fmt.Println("struct type!!", reflect.TypeOf(*new(E)).Name())
+	structType := *new(T)
+	structRefValue := reflect.ValueOf(&structType).Elem()
+	structRefType := structRefValue.Type()
+	schema := structType.GetSchema()
 
 	if schema.PrimaryKey == nil {
 		panic("No se ha especificado una PrimaryKey")
@@ -79,65 +76,67 @@ func MakeTable[T TableSchemaInterface[E], E any]() scyllaTable[T] {
 	}
 
 	fieldNameIdxMap := map[string]fieldIdxType{}
-	refValue := reflect.ValueOf(schema.StructType)
-	refType := refValue.Type()
+	colRegex, _ := regexp.Compile(`^Col\[.*\]$`)
+	colSliceRegex, _ := regexp.Compile(`^ColSlice\[.*\]$`)
 
-	for i := 0; i < refType.NumField(); i++ {
-		fieldNameIdxMap[refType.Field(i).Name] = fieldIdxType{
-			Idx: i, Type: refType.Field(i).Type.Name(),
+	for i := 0; i < structRefType.NumField(); i++ {
+		fieldNameIdxMap[structRefType.Field(i).Name] = fieldIdxType{
+			Idx: i, Type: structRefType.Field(i).Type.Name(),
 		}
 	}
 
-	for i := 0; i < schemaRefType.NumField(); i++ {
-		schemaField := schemaRefType.Field(i)
-		// fieldValue := refValue.Field(i)
-		schemaFieldValue := schemaRefValue.Field(i)
-		fmt.Println("typee::", schemaRefValue.Field(i).Type().Name())
+	for i := 0; i < structRefType.NumMethod(); i++ {
+		method := structRefType.Method(i)
+		if method.Type.NumOut() != 1 {
+			continue
+		}
+		methodOutName := method.Type.Out(0).Name()
+		isCol := colRegex.MatchString(methodOutName)
+		isColSlice := colSliceRegex.MatchString(methodOutName)
 
-		if _, ok := schemaField.Tag.Lookup("db"); ok {
-			tagValues := strings.Split(schemaField.Tag.Get("db"), ",")
-			if col, ok := schemaRefValue.Field(i).Addr().Interface().(ColumnSetName); ok {
-				col.SetName(tagValues[0])
-			}
+		if !isCol && !isColSlice {
+			continue
 		}
 
-		if _, ok := fieldNameIdxMap[schemaField.Name]; !ok {
-			msg := fmt.Sprintf(`No se encontró el field "%v" en el struct "%v" pero sí en el schema "%v"`, schemaField.Name, refType.Name(), schemaRefType.Name())
-			panic(msg)
+		fmt.Printf("Method:: %v | %v \n", method.Name, methodOutName)
+		fieldName := method.Name
+		if fieldName[len(fieldName)-1:] == "_" {
+			fieldName = fieldName[0 : len(fieldName)-1]
 		}
 
-		if col, ok := schemaFieldValue.Interface().(Column); ok {
-			columnInfo := col.GetInfo()
-			if field, ok := fieldNameIdxMap[schemaField.Name]; ok {
-				columnInfo.FieldIdx = field.Idx
-				columnInfo.FieldType = field.Type
-			} else {
-				panic("No se encontró en el struct origen: " + schemaField.Name)
-			}
-
-			fmt.Println("Column Name:", columnInfo.Name, "| Type:", columnInfo.FieldType, "| Is Slice:", columnInfo.IsSlice)
-
-			fieldBaseIdx := fieldNameIdxMap[schemaField.Name].Idx
-
-			columnInfo.getValue = func(s *reflect.Value) any {
-				return s.Field(fieldBaseIdx).Interface()
-			}
-
-			columnInfo.Type = scyllaFieldToColumnTypesMap[columnInfo.FieldType]
-			if columnInfo.Type == "" {
-				columnInfo.IsComplexType = true
-				columnInfo.Type = "blob"
-			} else if columnInfo.IsSlice {
-				columnInfo.Type = fmt.Sprintf("set<%v>", columnInfo.Type)
-			}
-			dbTable.columnsMap[columnInfo.Name] = columnInfo
-			dbTable.columns = append(dbTable.columns, columnInfo)
+		fieldIdxType := fieldNameIdxMap[fieldName]
+		if fieldIdxType.Type == "" {
+			panic(fmt.Sprintf(`No se encontró la columna "%v" en el struct "%v"`, fieldName, structRefType.Name()))
 		}
+
+		mathodValue := structRefValue.Method(i).Call([]reflect.Value{})
+		var column columnInfo
+		if col, ok := mathodValue[0].Interface().(Column); ok {
+			column = col.GetInfo()
+		} else {
+			panic(fmt.Sprintf("La columna %v está mal configurada.", fieldName))
+		}
+
+		column.FieldIdx = fieldIdxType.Idx
+		column.FieldType = fieldIdxType.Type
+
+		fmt.Println("Column Name:", column.Name, "| Type:", column.FieldType, "| Is Slice:", column.IsSlice)
+
+		column.getValue = func(s *reflect.Value) any {
+			return s.Field(column.FieldIdx).Interface()
+		}
+
+		column.Type = scyllaFieldToColumnTypesMap[column.FieldType]
+		if column.Type == "" {
+			column.IsComplexType = true
+			column.Type = "blob"
+		} else if column.IsSlice {
+			column.Type = fmt.Sprintf("set<%v>", column.Type)
+		}
+
+		dbTable.columnsMap[column.Name] = column
+		dbTable.columns = append(dbTable.columns, column)
 	}
-
-	core.Print(schemaType)
-
-	dbTable.baseType = schemaType
 
 	idxCount := int8(1)
 	for _, column := range schema.GlobalIndexes {
