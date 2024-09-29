@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,9 +13,9 @@ import (
 var mu sync.Mutex
 var scyllaSession *gocql.Session
 var isConnectingTime int64 = 0
-var connParams DBConnParams = DBConnParams{}
+var connParams ConnParams = ConnParams{}
 
-type DBConnParams struct {
+type ConnParams struct {
 	Host        string
 	Port        int
 	User        string
@@ -24,7 +25,7 @@ type DBConnParams struct {
 	Keyspace    string
 }
 
-func MakeScyllaConnection(params DBConnParams) *gocql.Session {
+func MakeScyllaConnection(params ConnParams) *gocql.Session {
 	if params.ConnTimeout == 0 {
 		params.ConnTimeout = 10
 	}
@@ -78,4 +79,20 @@ func getScyllaConnection() *gocql.Session {
 
 	scyllaSession = session
 	return scyllaSession
+}
+
+func QueryExec(queryStr string) error {
+	query := getScyllaConnection().Query(queryStr)
+	if err := query.Exec(); err != nil {
+		if strings.Contains(err.Error(), "no hosts available") {
+			fmt.Println(`Error en conexión db: "no hosts available", reconectando...`)
+			getScyllaConnection()
+			fmt.Println(`Ejecutando query luego de reconexión...`)
+			err = query.Exec()
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

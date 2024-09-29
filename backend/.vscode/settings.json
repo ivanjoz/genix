@@ -1,11 +1,11 @@
 {
   "sqltools.connections": [
     {
-      "server": "54.173.200.126",
+      "server": "54.224.185.108",
       "port": 9042,
       "previewLimit": 200,
       "driver": "Scylla",
-      "name": "Genix",
+      "name": "Genixc",
       "group": "genix",
       "username": "cassandra",
       "password": "aet5z7kixhr46y3z",
