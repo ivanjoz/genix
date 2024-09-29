@@ -45,6 +45,16 @@ var scyllaFieldToColumnTypesMap = map[string]string{
 	"float64": "double",
 }
 
+var indexTypes = map[int8]string{
+	1: "GLOBAL INDEX",
+	2: "LOCAL INDEX",
+	3: "HASH INDEX",
+	4: "HASH INDEX w/COLLECTIONS",
+	6: "VIEW",
+	7: "HASH VIEW",
+	8: "RANGE VIEW",
+}
+
 var makeStatementWith string = `	WITH caching = {'keys': 'ALL', 'rows_per_partition': 'ALL'}
 	and compaction = {'class': 'SizeTieredCompactionStrategy'}
 	and compression = {'compression_level': '3', 'sstable_compression': 'org.apache.cassandra.io.compress.ZstdCompressor'}
@@ -239,16 +249,6 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			idx:     idxCount,
 			column:  colInfo,
 			columns: []string{colInfo.Name},
-			getValue: func(s *reflect.Value) any {
-				return colInfo.getValue(s)
-			},
-			getStatement: func(statements ...ColumnStatement) string {
-				if len(statements) != 1 {
-					panic(fmt.Sprintf("Error columna %v: El número de valores debe ser = 1", colInfo.Name))
-				}
-				st := statements[0]
-				return fmt.Sprintf("%v %v %v", colInfo.Name, st.Operator, st.Value)
-			},
 		}
 		index.getCreateScript = func() string {
 			return fmt.Sprintf(`CREATE INDEX %v ON %v (%v)`,
@@ -267,15 +267,6 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			idx:     idxCount,
 			column:  dbTable.columnsMap[column.GetInfo().Name],
 			columns: []string{dbTable.partitionKey.Name, colInfo.Name},
-			getValue: func(s *reflect.Value) any {
-				return colInfo.getValue(s)
-			},
-			getStatement: func(sts ...ColumnStatement) string {
-				if len(sts) != 2 {
-					panic(fmt.Sprintf("Error columna %v: El número de valores debe ser = 2", colInfo.Name))
-				}
-				return fmt.Sprintf("%v = %v AND %v %v %v", dbTable.partitionKey.Name, sts[0].Value, colInfo.Name, sts[1].Operator, sts[1].Value)
-			},
 		}
 		index.getCreateScript = func() string {
 			return fmt.Sprintf(`CREATE INDEX %v ON %v ((%v),%v)`,
@@ -289,51 +280,87 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 	for _, indexColumns := range schema.HashIndexes {
 		columns := []*columnInfo{}
 		names := []string{}
+		columnsNormal := []*columnInfo{}
+		var columnSlice *columnInfo
 
-		for _, col := range indexColumns {
-			name := col.GetInfo().Name
-			names = append(names, name)
-			columns = append(columns, dbTable.columnsMap[name])
+		for _, colInfo := range indexColumns {
+			column := dbTable.columnsMap[colInfo.GetInfo().Name]
+			if column.IsComplexType {
+				panic("No puede ser un struct como columna de una view")
+			}
+			if column.IsSlice {
+				if columnSlice != nil {
+					panic(fmt.Sprintf(`Table "%v". Can't create view with slice columns "%v" and "%v"`, dbTable.name, columnSlice.Name, column.Name))
+				}
+				columnSlice = column
+			} else {
+				columnsNormal = append(columnsNormal, column)
+			}
+			names = append(names, column.Name)
+			columns = append(columns, column)
 		}
 
 		colnames := strings.Join(names, "_")
 		column := columnInfo{
 			Name:      fmt.Sprintf(`zz_%v`, colnames),
-			FieldType: "int32", Type: "int", IsVirtual: true,
-			Idx: dbTable._maxColIdx,
-			getValue: func(s *reflect.Value) any {
-				values := []any{}
-				for _, e := range columns {
-					values = append(values, e.getValue(s))
-				}
-				return HashInt(values...)
-			},
+			FieldType: "int32",
+			Type:      "int",
+			IsVirtual: true,
+			Idx:       dbTable._maxColIdx,
 		}
 
 		dbTable._maxColIdx++
 		dbTable.columnsMap[column.Name] = &column
 
 		index := viewInfo{
-			Type:     3,
-			name:     fmt.Sprintf(`%v__%v_index`, dbTable.name, colnames),
-			idx:      idxCount,
-			columns:  names,
-			column:   &column,
-			getValue: column.getValue,
+			Type:    3,
+			name:    fmt.Sprintf(`%v__%v_index`, dbTable.name, colnames),
+			idx:     idxCount,
+			columns: names,
+			column:  &column,
 		}
 
-		index.getStatement = func(statements ...ColumnStatement) string {
-			if len(statements) < 2 {
-				panic(fmt.Sprintf("Error columna %v: El número de valores debe ser >= 2", index.name))
+		if columnSlice != nil {
+			column.FieldType = "[]int32"
+			column.Type = "set<int>"
+			column.IsSlice = true
+			index.Type = 4
+
+			column.getValue = func(s *reflect.Value) any {
+				values := []any{}
+				for _, col := range columnsNormal {
+					values = append(values, col.getValue(s))
+				}
+				hashValues := []int32{}
+				hashValues = append(hashValues, HashInt(values...))
+
+				reflectSlice := s.Field(columnSlice.FieldIdx)
+				if columnSlice.IsPointer {
+					reflectSlice = reflectSlice.Elem()
+				}
+				for _, vl := range reflectToSlice(&reflectSlice) {
+					hashValues = append(hashValues, HashInt(vl))
+					hashValues = append(hashValues, HashInt(append(values, vl)...))
+				}
+				return "{" + Concatx(",", hashValues) + "}"
 			}
 
-			values := []any{}
-			for _, e := range statements {
-				values = append(values, e.Value)
+			index.getStatement = func(statements ...ColumnStatement) string {
+				values := []any{}
+				for _, st := range statements {
+					values = append(values, st.GetValue())
+				}
+				hashValue := HashInt(values...)
+				return fmt.Sprintf("%v CONTAINS %v", column.Name, hashValue)
 			}
-			hashInt := HashInt(values...)
-			// Revisar casuísica IN
-			return fmt.Sprintf("%v %v %v", index.column.Name, statements[0].Operator, hashInt)
+		} else {
+			column.getValue = func(s *reflect.Value) any {
+				values := []any{}
+				for _, e := range columns {
+					values = append(values, e.getValue(s))
+				}
+				return HashInt(values...)
+			}
 		}
 
 		index.getCreateScript = func() string {
@@ -348,8 +375,8 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 	// VIEWS
 	for _, viewConfig := range schema.Views {
 		columns := []*columnInfo{}
-		columnsNormal := []*columnInfo{}
 		names := []string{}
+		columnsNormal := []*columnInfo{}
 		var columnSlice *columnInfo
 
 		for _, colInfo := range viewConfig.Cols {
@@ -371,7 +398,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 		colnames := strings.Join(names, "_")
 		view := viewInfo{
-			Type:    4,
+			Type:    6,
 			name:    fmt.Sprintf(`%v__%v_view`, dbTable.name, colnames),
 			columns: names,
 		}
@@ -389,10 +416,11 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		// Si sólo es una columna, no es necesario autogenerar
 		if len(columns) == 1 {
 			view.column = columns[0]
-			view.getValue = view.column.getValue
 		} else if len(viewConfig.IntConcatRadix) > 0 {
 			view.column.FieldType = "int64"
 			view.column.Type = "bigint"
+			view.Type = 8
+
 			// Si ha especificado un int64 radix entonces se puede concatener, maximo 2 columnas
 			if len(columns) < 2 {
 				panic(fmt.Sprintf(`La view "%v" de la tabla "%v" posee menos de 2 columnas para usar el IntConcatRadix`, dbTable.name, view.name))
@@ -443,11 +471,12 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				fmt.Printf("Radix Sum Calculado %v | %v | %v\n", sumValue, values, radixesI64)
 				return any(sumValue)
 			}
-			view.getValue = view.column.getValue
-		} else if columnSlice != nil {
+		} else if false /* columnSlice != nil */ {
+			//TODO: REVIEW!!!
 			// Si una de las columnas es un slice puede iterar por el slice para obtener los values y gurdarla en una columa Set<any>
 			view.column.FieldType = "[]int32"
 			view.column.Type = "set<int>"
+			view.column.IsSlice = true
 			// Si hay una columna slice entonces por cada elemento en el slice
 			view.column.getValue = func(s *reflect.Value) any {
 				values := []any{}
@@ -462,11 +491,14 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 					reflectSlice = reflectSlice.Elem()
 				}
 				for _, vl := range reflectToSlice(&reflectSlice) {
+					hashValues = append(hashValues, HashInt(vl))
 					hashValues = append(hashValues, HashInt(append(values, vl)...))
 				}
 				return "{" + Concatx(",", hashValues) + "}"
 			}
+			//
 		} else {
+			view.Type = 7
 			// Sino crea un hash de las columnas
 			view.column.getValue = func(s *reflect.Value) any {
 				values := []any{}
@@ -491,7 +523,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			if col.Type == "text" {
 				whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" > ''")
 			} else if col.IsSlice {
-				whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" IS NOT NULL")
+				// whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" IS NOT NULL")
 			} else {
 				whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" > 0")
 			}

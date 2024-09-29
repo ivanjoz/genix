@@ -107,7 +107,7 @@ func InitTable[T any](mode int8) {
 	for _, e := range dbcolumns {
 		if column, ok := columnNamesMap[e.Name]; ok {
 			if column.Type != e.Type {
-				Logx(5, fmt.Sprintf(`La columna "%v" está definida con type "%v", pero en el Struct está con "%v" equivalente a "%v"`+"\n", e.Name, e.Type, column.FieldType, column.Type))
+				Logx(5, fmt.Sprintf(`La columna "%v" está definida con type "%v", pero en el Struct está con "%v" equivalente a "%v"`, e.Name, e.Type, column.FieldType, column.Type)+"\n")
 			}
 			delete(columnNamesMap, e.Name)
 		} else {
