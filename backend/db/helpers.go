@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
+	"reflect"
 	"strings"
 
 	"github.com/fatih/color"
@@ -117,4 +118,37 @@ func Concatx[T any](sep string, slice1 []T) string {
 		sliceOfStrings = append(sliceOfStrings, fmt.Sprintf("%v", value))
 	}
 	return strings.Join(sliceOfStrings, sep)
+}
+
+func sliceToAny[T any](valuesGeneric *[]T) []any {
+	values := []any{}
+	for _, v := range *valuesGeneric {
+		values = append(values, any(v))
+	}
+	return values
+}
+
+func reflectToSlice(value *reflect.Value) []any {
+	var values []any
+
+	switch sl := value.Interface().(type) {
+	case []int:
+		values = sliceToAny(&sl)
+	case []int8:
+		values = sliceToAny(&sl)
+	case []int16:
+		values = sliceToAny(&sl)
+	case []int32:
+		values = sliceToAny(&sl)
+	case []int64:
+		values = sliceToAny(&sl)
+	case []float32:
+		values = sliceToAny(&sl)
+	case []float64:
+		values = sliceToAny(&sl)
+	default:
+		// The value is not an integer
+		panic("Value was not recognised of a slice.")
+	}
+	return values
 }
