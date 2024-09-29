@@ -175,27 +175,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				if column.IsPointer {
 					field = field.Elem()
 				}
-
-				concatenatedValues := ""
-				switch sl := field.Interface().(type) {
-				case []int:
-					concatenatedValues = Concatx(",", sl)
-				case []int8:
-					concatenatedValues = Concatx(",", sl)
-				case []int16:
-					concatenatedValues = Concatx(",", sl)
-				case []int32:
-					concatenatedValues = Concatx(",", sl)
-				case []int64:
-					concatenatedValues = Concatx(",", sl)
-				case []float32:
-					concatenatedValues = Concatx(",", sl)
-				case []float64:
-					concatenatedValues = Concatx(",", sl)
-				default:
-					// The value is not an integer
-					panic("Value was not recognised of a slice.")
-				}
+				concatenatedValues := Concatx(",", reflectToSlice(&field))
 				return "{" + concatenatedValues + "}"
 			}
 		} else if column.IsPointer {
@@ -368,12 +348,25 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 	// VIEWS
 	for _, viewConfig := range schema.Views {
 		columns := []*columnInfo{}
+		columnsNormal := []*columnInfo{}
 		names := []string{}
+		var columnSlice *columnInfo
 
-		for _, col := range viewConfig.Cols {
-			name := col.GetInfo().Name
-			names = append(names, name)
-			columns = append(columns, dbTable.columnsMap[name])
+		for _, colInfo := range viewConfig.Cols {
+			column := dbTable.columnsMap[colInfo.GetInfo().Name]
+			if column.IsComplexType {
+				panic("No puede ser un struct como columna de una view")
+			}
+			if column.IsSlice {
+				if columnSlice != nil {
+					panic(fmt.Sprintf(`Table "%v". Can't create view with slice columns "%v" and "%v"`, dbTable.name, columnSlice.Name, column.Name))
+				}
+				columnSlice = column
+			} else {
+				columnsNormal = append(columnsNormal, column)
+			}
+			names = append(names, column.Name)
+			columns = append(columns, column)
 		}
 
 		colnames := strings.Join(names, "_")
@@ -451,10 +444,33 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				return any(sumValue)
 			}
 			view.getValue = view.column.getValue
+		} else if columnSlice != nil {
+			// Si una de las columnas es un slice puede iterar por el slice para obtener los values y gurdarla en una columa Set<any>
+			view.column.FieldType = "[]int32"
+			view.column.Type = "set<int>"
+			// Si hay una columna slice entonces por cada elemento en el slice
+			view.column.getValue = func(s *reflect.Value) any {
+				values := []any{}
+				for _, e := range columns {
+					values = append(values, e.getValue(s))
+				}
+				hashValues := []int32{}
+				hashValues = append(hashValues, HashInt(values...))
+
+				reflectSlice := s.Field(columnSlice.FieldIdx)
+				if columnSlice.IsPointer {
+					reflectSlice = reflectSlice.Elem()
+				}
+				for _, vl := range reflectToSlice(&reflectSlice) {
+					hashValues = append(hashValues, HashInt(append(values, vl)...))
+				}
+				return "{" + Concatx(",", hashValues) + "}"
+			}
 		} else {
 			// Sino crea un hash de las columnas
 			view.column.getValue = func(s *reflect.Value) any {
 				values := []any{}
+				// Si una de las columnas es un slice puede iterar por el slice para obtener los values y gurdarla en una columa Set<any>
 				for _, e := range columns {
 					values = append(values, e.getValue(s))
 				}

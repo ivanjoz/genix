@@ -69,6 +69,7 @@ func TestQuery(params ConnParams) {
 	fmt.Println("Query 2")
 	result2 := Select(func(q *Query[Usuario], col Usuario) {
 		q.Exclude(col.Apellido_()).
+			Where(col.RolID_().Equals(1)).
 			Where(col.Accesos_().Contains(4))
 	})
 
