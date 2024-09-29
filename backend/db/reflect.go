@@ -1,11 +1,14 @@
 package db
 
 import (
+	"encoding/hex"
 	"fmt"
 	"reflect"
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/fxamacker/cbor/v2"
 )
 
 type columnInfo struct {
@@ -17,6 +20,7 @@ type columnInfo struct {
 	Type      string
 	// RefType        reflect.Value
 	FieldIdx       int
+	Idx            int16
 	RefType        reflect.Value
 	IsPrimaryKey   int8
 	IsSlice        bool
@@ -63,11 +67,13 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 	}
 
 	dbTable := scyllaTable[any]{
-		keyspace:   schema.Keyspace,
-		name:       schema.Name,
-		columnsMap: map[string]*columnInfo{},
-		indexes:    map[string]viewInfo{},
-		views:      map[string]viewInfo{},
+		keyspace:      schema.Keyspace,
+		name:          schema.Name,
+		columnsMap:    map[string]*columnInfo{},
+		columnsIdxMap: map[int16]*columnInfo{},
+		indexes:       map[string]*viewInfo{},
+		views:         map[string]*viewInfo{},
+		_maxColIdx:    int16(structRefValue.NumField()) + 1,
 	}
 
 	if dbTable.keyspace == "" {
@@ -145,20 +151,89 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 		// fmt.Println("Column Name:", column.Name, "| Type:", column.FieldType, "| Is Slice:", column.IsSlice)
 
-		column.getValue = func(s *reflect.Value) any {
-			field := s.Field(column.FieldIdx)
-			// fmt.Println("Col: ", column.Name, " | Type::", field.Type().String())
-			if column.IsPointer {
+		// Seteando "getValue"
+		if column.IsSlice && column.FieldType == "string" {
+			column.getValue = func(s *reflect.Value) any {
+				field := s.Field(column.FieldIdx)
+				if column.IsPointer {
+					field = field.Elem()
+				}
+
+				if values, ok := field.Interface().([]string); ok {
+					strValues := []string{}
+					for _, v := range values {
+						strValues = append(strValues, `'`+v+`'`)
+					}
+					return "{" + strings.Join(strValues, ",") + "}"
+				} else {
+					panic("It must be string but was not.")
+				}
+			}
+		} else if column.IsSlice {
+			column.getValue = func(s *reflect.Value) any {
+				field := s.Field(column.FieldIdx)
+				if column.IsPointer {
+					field = field.Elem()
+				}
+
+				concatenatedValues := ""
+				switch sl := field.Interface().(type) {
+				case []int:
+					concatenatedValues = Concatx(",", sl)
+				case []int8:
+					concatenatedValues = Concatx(",", sl)
+				case []int16:
+					concatenatedValues = Concatx(",", sl)
+				case []int32:
+					concatenatedValues = Concatx(",", sl)
+				case []int64:
+					concatenatedValues = Concatx(",", sl)
+				case []float32:
+					concatenatedValues = Concatx(",", sl)
+				case []float64:
+					concatenatedValues = Concatx(",", sl)
+				default:
+					// The value is not an integer
+					panic("Value was not recognised of a slice.")
+				}
+				return "{" + concatenatedValues + "}"
+			}
+		} else if column.IsPointer {
+			column.getValue = func(s *reflect.Value) any {
+				field := s.Field(column.FieldIdx)
 				if field.IsNil() {
 					return nil
 				} else {
 					return field.Elem().Interface()
 				}
-			} else {
+			}
+		} else if column.IsComplexType {
+			column.getValue = func(s *reflect.Value) any {
+				field := s.Field(column.FieldIdx)
+				if column.IsPointer {
+					field = field.Elem()
+				}
+				recordBytes, err := cbor.Marshal(field)
+				if err != nil {
+					fmt.Println("Error al encodeding .cbor:: ", column.FieldName, err)
+					return ""
+				}
+				hexString := hex.EncodeToString(recordBytes)
+				return "0x" + hexString
+			}
+		} else if column.FieldType == "string" {
+			column.getValue = func(s *reflect.Value) any {
+				field := s.Field(column.FieldIdx)
+				return any(fmt.Sprintf("'%v'", field))
+			}
+		} else {
+			column.getValue = func(s *reflect.Value) any {
+				field := s.Field(column.FieldIdx)
 				return field.Interface()
 			}
 		}
 
+		// Seteando "setValue"
 		column.Type = scyllaFieldToColumnTypesMap[column.FieldType]
 		if column.Type == "" {
 			column.IsComplexType = true
@@ -170,6 +245,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		if _, ok := dbTable.columnsMap[column.Name]; ok {
 			panic("The following column name is repeated:" + column.Name)
 		} else {
+			column.Idx = int16(column.FieldIdx) + 1
 			dbTable.columnsMap[column.Name] = &column
 		}
 	}
@@ -178,7 +254,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 	for _, column := range schema.GlobalIndexes {
 		colInfo := dbTable.columnsMap[column.GetInfo().Name]
 		index := viewInfo{
-			iType:   1,
+			Type:    1,
 			name:    fmt.Sprintf(`%v__%v_index_0`, dbTable.name, colInfo.Name),
 			idx:     idxCount,
 			column:  colInfo,
@@ -200,15 +276,16 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		}
 
 		idxCount++
-		dbTable.indexes[index.name] = index
+		dbTable.indexes[index.name] = &index
 	}
 
 	for _, column := range schema.LocalIndexes {
 		colInfo := column.GetInfo()
 		index := viewInfo{
-			iType:   2,
+			Type:    2,
 			name:    fmt.Sprintf(`%v__%v_index_1`, dbTable.name, colInfo.Name),
 			idx:     idxCount,
+			column:  dbTable.columnsMap[column.GetInfo().Name],
 			columns: []string{dbTable.partitionKey.Name, colInfo.Name},
 			getValue: func(s *reflect.Value) any {
 				return colInfo.getValue(s)
@@ -226,7 +303,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		}
 
 		idxCount++
-		dbTable.indexes[index.name] = index
+		dbTable.indexes[index.name] = &index
 	}
 
 	for _, indexColumns := range schema.HashIndexes {
@@ -243,6 +320,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		column := columnInfo{
 			Name:      fmt.Sprintf(`zz_%v`, colnames),
 			FieldType: "int32", Type: "int", IsVirtual: true,
+			Idx: dbTable._maxColIdx,
 			getValue: func(s *reflect.Value) any {
 				values := []any{}
 				for _, e := range columns {
@@ -252,10 +330,11 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			},
 		}
 
+		dbTable._maxColIdx++
 		dbTable.columnsMap[column.Name] = &column
 
 		index := viewInfo{
-			iType:    3,
+			Type:     3,
 			name:     fmt.Sprintf(`%v__%v_index`, dbTable.name, colnames),
 			idx:      idxCount,
 			columns:  names,
@@ -283,7 +362,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		}
 
 		idxCount++
-		dbTable.indexes[index.name] = index
+		dbTable.indexes[index.name] = &index
 	}
 
 	// VIEWS
@@ -299,7 +378,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 		colnames := strings.Join(names, "_")
 		view := viewInfo{
-			iType:   4,
+			Type:    4,
 			name:    fmt.Sprintf(`%v__%v_view`, dbTable.name, colnames),
 			columns: names,
 		}
@@ -308,7 +387,9 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			view.column = &columnInfo{
 				Name: fmt.Sprintf(`zz_%v`, colnames), IsVirtual: true,
 				FieldType: "int32", Type: "int",
+				Idx: dbTable._maxColIdx,
 			}
+			dbTable._maxColIdx++
 			dbTable.columnsMap[view.column.Name] = view.column
 		}
 
@@ -418,11 +499,26 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			return query
 		}
 
-		dbTable.views[view.name] = view
+		dbTable.views[view.name] = &view
 	}
 
 	for _, col := range dbTable.columnsMap {
 		dbTable.columns = append(dbTable.columns, col)
+		dbTable.columnsIdxMap[col.Idx] = col
+	}
+
+	for _, e := range dbTable.indexes {
+		dbTable.indexViews = append(dbTable.indexViews, e)
+	}
+	for _, e := range dbTable.views {
+		dbTable.indexViews = append(dbTable.indexViews, e)
+	}
+
+	for _, idxview := range dbTable.indexViews {
+		for _, colname := range idxview.columns {
+			col := dbTable.columnsMap[colname]
+			idxview.columnsIdx = append(idxview.columnsIdx, col.Idx)
+		}
 	}
 
 	return dbTable
