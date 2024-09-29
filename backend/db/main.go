@@ -75,7 +75,7 @@ type ColumnSetName interface {
 type TableView struct {
 	Cols []Column
 	// Para concatenar numeros como = int64(e.AlmacenID)*1e9 + int64(e.Updated)
-	Int64ConcatRadix int8
+	IntConcatRadix []int8
 }
 
 func (q *Col[T]) SetName(name string) {
@@ -497,9 +497,14 @@ func InsertExclude[T TableSchemaInterface](records *[]T, columnsToExclude ...Col
 
 	for _, rec := range *records {
 		refValue := reflect.ValueOf(rec)
+		fmt.Println("Type:", reflect.TypeOf(rec).String())
+
 		recordInsertValues := []string{}
 
 		for _, col := range columns {
+			if col.getValue == nil {
+				panic("is nil column: getValue() = " + col.Name + " | " + col.FieldName)
+			}
 			value := col.getValue(&refValue)
 			recordInsertValues = append(recordInsertValues, parseValueToString(value))
 		}

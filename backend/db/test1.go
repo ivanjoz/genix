@@ -2,6 +2,7 @@ package db
 
 import (
 	"app/core"
+	"fmt"
 )
 
 //Some docs
@@ -13,7 +14,7 @@ type Usuario struct {
 	Nombre    string
 	Apellido  string
 	Direccion string
-	Rol       string
+	RolID     int16
 	Edad      int32
 	Updated   int64
 	GruposIDs []int32
@@ -29,7 +30,7 @@ func (e _u) ID_() CoI32        { return CoI32{"id"} }
 func (e _u) Nombre_() CoStr    { return CoStr{"nombre"} }
 func (e _u) Apellido_() CoStr  { return CoStr{"apellido"} }
 func (e _u) Direccion_() CoStr { return CoStr{"direccion"} }
-func (e _u) Rol_() CoStr       { return CoStr{"rol"} }
+func (e _u) RolID_() CoI16     { return CoI16{"rol_id"} }
 func (e _u) Updated_() CoF64   { return CoF64{"updated"} }
 func (e _u) Accesos_() CsI32   { return CsI32{"accesos"} }
 func (e _u) Edad_() CsI32      { return CsI32{"edad"} }
@@ -44,10 +45,11 @@ func (e Usuario) GetSchema() TableSchema {
 		Keys:          []Column{e.ID_()},
 		GlobalIndexes: []Column{e.Edad_(), e.GruposIDs_()},
 		LocalIndexes:  []Column{e.Nombre_()},
-		HashIndexes:   [][]Column{{e.Rol_(), e.Edad_()}},
+		HashIndexes:   [][]Column{{e.RolID_(), e.Edad_()}},
 		Views: []TableView{
-			{Cols: []Column{e.Rol_(), e.Accesos_()}},
-			{Cols: []Column{e.Edad_(), e.Updated_()}, Int64ConcatRadix: 9},
+			{Cols: []Column{e.RolID_(), e.Accesos_()}},
+			{Cols: []Column{e.RolID_(), e.Updated_()}, IntConcatRadix: []int8{10}},
+			{Cols: []Column{e.RolID_(), e.Edad_(), e.Updated_()}, IntConcatRadix: []int8{4, 11}},
 		},
 	}
 }
@@ -77,5 +79,11 @@ func TestDeploy(params ConnParams) {
 
 	MakeScyllaConnection(params)
 
-	DeployScylla(Usuario{Nombre: "dadasd"})
+	DeployScylla(Usuario{})
+
+	usuarios := getUsuariosData()
+	err := InsertExclude(&usuarios)
+	if err != nil {
+		fmt.Println("Error al insertar::", err)
+	}
 }
