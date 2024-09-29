@@ -73,18 +73,25 @@ func DeployScylla(structTables ...any) {
 		tableColumnsMap[key] = append(tableColumnsMap[key], e)
 	}
 
-	for tableName, columns := range tableColumnsMap {
-		s1 := strings.Split(tableName, "_")
-		if s1[len(s1)-1] == "view" {
-			continue
-		}
-		fmt.Println("✔ Table =", tableName)
-		columnsNames := []string{}
-		for _, c := range columns {
-			columnsNames = append(columnsNames, fmt.Sprintf("%v(%v)", c.Name, c.Type))
-		}
-		fmt.Println("  Columns =", strings.Join(columnsNames, ", "))
+	tablesNames := []string{}
+
+	for tableName /*, columns */ := range tableColumnsMap {
+		tablesNames = append(tablesNames, tableName)
+		/*
+			s1 := strings.Split(tableName, "_")
+			if s1[len(s1)-1] == "view" {
+				continue
+			}
+			fmt.Println("✔ Table =", tableName)
+			columnsNames := []string{}
+			for _, c := range columns {
+				columnsNames = append(columnsNames, fmt.Sprintf("%v(%v)", c.Name, c.Type))
+			}
+			fmt.Println("  Columns =", strings.Join(columnsNames, ", "))
+		*/
 	}
+
+	fmt.Println("Tables::", tablesNames)
 
 	fmt.Println("Obteniendo Indices...")
 	scyllaIndexes := Select(func(q *Query[ScyllaIndexes], col ScyllaIndexes) {
@@ -114,14 +121,13 @@ func DeployScylla(structTables ...any) {
 			panic("El Type no implementa TableSchemaInterface")
 		}
 
-		tableName := table.keyspace + "." + table.name
+		tableName := table.fullName()
 
 		originColumns := tableColumnsMap[tableName]
 
 		// Si no existe la tabla entonces la crea...
 		if len(originColumns) == 0 {
 			Logx(6, "No se encontró la tabla: "+tableName+"\n")
-
 			Logx(2, fmt.Sprintf(`Creando tabla "%v"...`+"\n", tableName))
 
 			columnsTypes := []string{}
@@ -163,6 +169,7 @@ func DeployScylla(structTables ...any) {
 
 		columnsSchemaMap := map[string]*columnInfo{}
 		for name, col := range table.columnsMap {
+			// core.Log("columnas 11:", name, "|", col.FieldName)
 			columnsSchemaMap[name] = col
 		}
 		columnsNoMapeadas := map[string]string{}
@@ -203,7 +210,7 @@ func DeployScylla(structTables ...any) {
 			if slices.Contains(tableIndexes, index.name) {
 				continue
 			}
-			Logx(2, fmt.Sprintf(`No se encontró el índice "%v" en "%v". Creando...`+"\n", index.name, tableName))
+			Logx(5, fmt.Sprintf(`No se encontró el índice "%v" en "%v". Creando...`+"\n", index.name, tableName))
 
 			createScript := index.getCreateScript()
 			fmt.Println(createScript)
@@ -211,6 +218,25 @@ func DeployScylla(structTables ...any) {
 				fmt.Println(err)
 				panic(fmt.Sprintf(`Error creando el índice "%v" en %v`, index.name, tableName))
 			}
+			Logx(2, fmt.Sprintf(`Index created "%v"`+"\n", index.name))
+		}
+
+		//Revisa si posee views, en su defecto las crea
+		for _, view := range table.views {
+			name := table.keyspace + "." + view.name
+			if _, ok := tableColumnsMap[name]; ok {
+				continue
+			}
+			Logx(5, fmt.Sprintf(`No se encontró la view "%v" en la tabla "%v". Preparando creación...`+"\n", view.name, table.name))
+
+			createScript := view.getCreateScript()
+			fmt.Println(createScript)
+			if err := QueryExec(createScript); err != nil {
+				fmt.Println(err)
+				panic(fmt.Sprintf(`Error creando el índice "%v" en %v`, view.name, tableName))
+			}
+
+			Logx(2, fmt.Sprintf(`View created "%v"`+"\n", view.name))
 		}
 	}
 }

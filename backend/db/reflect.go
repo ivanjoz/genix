@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -40,8 +41,7 @@ var scyllaFieldToColumnTypesMap = map[string]string{
 	"float64": "double",
 }
 
-var makeStatementWith string = `
-	WITH caching = {'keys': 'ALL', 'rows_per_partition': 'ALL'}
+var makeStatementWith string = `	WITH caching = {'keys': 'ALL', 'rows_per_partition': 'ALL'}
 	and compaction = {'class': 'SizeTieredCompactionStrategy'}
 	and compression = {'compression_level': '3', 'sstable_compression': 'org.apache.cassandra.io.compress.ZstdCompressor'}
 	and dclocal_read_repair_chance = 0
@@ -146,7 +146,17 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		// fmt.Println("Column Name:", column.Name, "| Type:", column.FieldType, "| Is Slice:", column.IsSlice)
 
 		column.getValue = func(s *reflect.Value) any {
-			return s.Field(column.FieldIdx).Interface()
+			field := s.Field(column.FieldIdx)
+			// fmt.Println("Col: ", column.Name, " | Type::", field.Type().String())
+			if column.IsPointer {
+				if field.IsNil() {
+					return nil
+				} else {
+					return field.Elem().Interface()
+				}
+			} else {
+				return field.Interface()
+			}
 		}
 
 		column.Type = scyllaFieldToColumnTypesMap[column.FieldType]
@@ -228,20 +238,11 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			names = append(names, name)
 			columns = append(columns, dbTable.columnsMap[name])
 		}
+
 		colnames := strings.Join(names, "_")
 		column := columnInfo{
 			Name:      fmt.Sprintf(`zz_%v`, colnames),
 			FieldType: "int32", Type: "int", IsVirtual: true,
-		}
-
-		dbTable.columnsMap[column.Name] = &column
-
-		index := viewInfo{
-			iType:   3,
-			name:    fmt.Sprintf(`%v__%v_index`, dbTable.name, colnames),
-			idx:     idxCount,
-			columns: names,
-			column:  &column,
 			getValue: func(s *reflect.Value) any {
 				values := []any{}
 				for _, e := range columns {
@@ -250,6 +251,18 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				return HashInt(values...)
 			},
 		}
+
+		dbTable.columnsMap[column.Name] = &column
+
+		index := viewInfo{
+			iType:    3,
+			name:     fmt.Sprintf(`%v__%v_index`, dbTable.name, colnames),
+			idx:      idxCount,
+			columns:  names,
+			column:   &column,
+			getValue: column.getValue,
+		}
+
 		index.getStatement = func(statements ...ColumnStatement) string {
 			if len(statements) < 2 {
 				panic(fmt.Sprintf("Error columna %v: El número de valores debe ser >= 2", index.name))
@@ -263,6 +276,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			// Revisar casuísica IN
 			return fmt.Sprintf("%v %v %v", index.column.Name, statements[0].Operator, hashInt)
 		}
+
 		index.getCreateScript = func() string {
 			return fmt.Sprintf(`CREATE INDEX %v ON %v (%v)`,
 				index.name, dbTable.fullName(), index.column.Name)
@@ -272,6 +286,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		dbTable.indexes[index.name] = index
 	}
 
+	// VIEWS
 	for _, viewConfig := range schema.Views {
 		columns := []*columnInfo{}
 		names := []string{}
@@ -300,24 +315,69 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		// Si sólo es una columna, no es necesario autogenerar
 		if len(columns) == 1 {
 			view.column = columns[0]
-			view.getValue = func(s *reflect.Value) any {
-				return view.column.getValue(s)
-			}
-		} else if viewConfig.Int64ConcatRadix > 0 {
+			view.getValue = view.column.getValue
+		} else if len(viewConfig.IntConcatRadix) > 0 {
 			view.column.FieldType = "int64"
 			view.column.Type = "bigint"
 			// Si ha especificado un int64 radix entonces se puede concatener, maximo 2 columnas
-			if len(columns) != 2 {
-				panic(fmt.Sprintf(`La view "%v" de la tabla "%v" posee más de 2 columnas para usar el Int64ConcatRadix`, dbTable.name, view.name))
+			if len(columns) < 2 {
+				panic(fmt.Sprintf(`La view "%v" de la tabla "%v" posee menos de 2 columnas para usar el IntConcatRadix`, dbTable.name, view.name))
 			}
 
-			view.getValue = func(s *reflect.Value) any {
-				return view.column.getValue(s)
+			radixes := append(viewConfig.IntConcatRadix, 0)
+
+			if len(radixes) != len(view.columns) {
+				panic(fmt.Sprintf(`The view "%v" in "%v" need to have %v radix arguments for the %v columns provided`,
+					view.name, dbTable.name, len(view.columns)-1, len(view.columns)))
 			}
+
+			slices.Reverse(radixes)
+			sum := int8(0)
+			for i, v := range radixes {
+				radixes[i] = v + sum
+				sum += v
+			}
+			slices.Reverse(radixes)
+
+			if radixes[0] > 17 {
+				panic(fmt.Sprintf(`For view "%v" in "%v" the max radix must not be greater than 17.`, view.name, dbTable.name))
+			}
+
+			radixesI64 := []int64{}
+			for _, v := range radixes {
+				radixesI64 = append(radixesI64, int64(v))
+			}
+
+			supportedTypes := []string{"int8", "int16", "int32", "int64", "int"}
+
+			for _, col := range columns {
+				if col.IsSlice || !slices.Contains(supportedTypes, col.FieldType) {
+					panic(fmt.Sprintf(`For view "%v" in "%v" need the column %v need to be a int type for the radix value be computed.`,
+						view.name, dbTable.name, col.Name))
+				}
+			}
+
+			view.column.getValue = func(s *reflect.Value) any {
+				sumValue := int64(0)
+				values := []any{}
+				for i, col := range columns {
+					value := col.getValue(s)
+					valueI64 := convertToInt64(value) * Pow10Int64(radixesI64[i])
+					values = append(values, value)
+					sumValue += valueI64
+				}
+				fmt.Printf("Radix Sum Calculado %v | %v | %v\n", sumValue, values, radixesI64)
+				return any(sumValue)
+			}
+			view.getValue = view.column.getValue
 		} else {
 			// Sino crea un hash de las columnas
-			view.getValue = func(s *reflect.Value) any {
-				return view.column.getValue(s)
+			view.column.getValue = func(s *reflect.Value) any {
+				values := []any{}
+				for _, e := range columns {
+					values = append(values, e.getValue(s))
+				}
+				return HashInt(values...)
 			}
 		}
 
@@ -341,13 +401,20 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		}
 
 		view.getCreateScript = func() string {
-			query := fmt.Sprintf(`CREATE MATERIALIZED VIEW %v
-			AS
+			colNames := []string{}
+			for _, col := range dbTable.columns {
+				if !col.IsVirtual || col.Name == view.column.Name {
+					colNames = append(colNames, col.Name)
+				}
+			}
+
+			query := fmt.Sprintf(`CREATE MATERIALIZED VIEW %v.%v AS
 			SELECT %v FROM %v
 			WHERE %v
 			PRIMARY KEY (%v)
 			%v;`,
-				view.name, "*", dbTable.name, strings.Join(whereColumnsNotNull, " AND "), pk, makeStatementWith)
+				dbTable.keyspace, view.name, strings.Join(colNames, ", "), dbTable.fullName(),
+				strings.Join(whereColumnsNotNull, " AND "), pk, makeStatementWith)
 			return query
 		}
 
