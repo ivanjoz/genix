@@ -1,7 +1,6 @@
 package db
 
 import (
-	"app/core"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +10,23 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 )
+
+type scyllaTable[T any] struct {
+	baseType      T
+	name          string
+	keyspace      string
+	keys          []columnInfo
+	partitionKey  columnInfo
+	columns       []*columnInfo
+	columnsMap    map[string]*columnInfo
+	indexes       map[string]viewInfo
+	views         map[string]viewInfo
+	ViewsExcluded []string
+}
+
+func (e scyllaTable[T]) fullName() string {
+	return fmt.Sprintf("%v.%v", e.keyspace, e.name)
+}
 
 type Col[T any] struct {
 	C string
@@ -30,7 +46,7 @@ type TableSchema struct {
 	Keyspace string
 	// StructType    T
 	Name          string
-	PrimaryKey    Column
+	Keys          []Column
 	Partition     Column
 	GlobalIndexes []Column
 	LocalIndexes  []Column
@@ -99,14 +115,8 @@ func (e Col[T]) LessEqual(v T) ColumnStatement {
 // Generic Array
 type ColSlice[T any] struct {
 	Name string
-	// Values []T
 }
 
-/*
-	func (q ColSlice[T]) GetValue() any {
-		return any(q.Values)
-	}
-*/
 func (q ColSlice[T]) GetInfo() columnInfo {
 	typ := *new(T)
 	return columnInfo{Name: q.Name, FieldType: reflect.TypeOf(typ).String(), IsSlice: true}
@@ -140,10 +150,10 @@ type TableSchemaInterface interface {
 type Query[T any] struct {
 	T              T
 	statements     []statementGroup
-	columnsInclude []Column
-	columnsExclude []Column
+	columnsInclude []columnInfo
+	columnsExclude []columnInfo
 	recordsToJoin  []T
-	columnsJoin    []Column
+	columnsJoin    []columnInfo
 }
 
 func (q *Query[T]) init() {
@@ -151,11 +161,15 @@ func (q *Query[T]) init() {
 }
 
 func (q *Query[T]) Columns(columns ...Column) *Query[T] {
-	q.columnsInclude = append(q.columnsInclude, columns...)
+	for _, col := range columns {
+		q.columnsInclude = append(q.columnsInclude, col.GetInfo())
+	}
 	return q
 }
 func (q *Query[T]) Exclude(columns ...Column) *Query[T] {
-	q.columnsExclude = append(q.columnsExclude, columns...)
+	for _, col := range columns {
+		q.columnsExclude = append(q.columnsExclude, col.GetInfo())
+	}
 	return q
 }
 
@@ -180,7 +194,9 @@ type WithJoin[T any] struct {
 
 func (e *WithJoin[T]) Join(columns ...Column) *Query[T] {
 	e.query.recordsToJoin = e.recordsToJoin
-	e.query.columnsJoin = columns
+	for _, col := range columns {
+		e.query.columnsJoin = append(e.query.columnsJoin, col.GetInfo())
+	}
 	return e.query
 }
 
@@ -194,7 +210,7 @@ type viewInfo struct {
 	iType   int8 /* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
 	name    string
 	idx     int8
-	column  columnInfo
+	column  *columnInfo
 	columns []string
 	// Para concatenar numeros como = int64(e.AlmacenID)*1e9 + int64(e.Updated)
 	int64ConcatRadix int8
@@ -211,16 +227,16 @@ type QueryResult[T any] struct {
 func Select[T TableSchemaInterface](handler func(query *Query[T], schemaTable T)) QueryResult[T] {
 
 	query := Query[T]{}
-	scyllaTable := MakeTable[T]()
-	handler(&query, scyllaTable.baseType)
-	records, err := selectExec[T](&query)
+	baseType := *new(T)
+	handler(&query, baseType)
+	records, err := selectExec(&query)
 
 	return QueryResult[T]{records, err}
 }
 
 func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 
-	scyllaTable := MakeTable[T]()
+	scyllaTable := makeTable[T](*new(T))
 	viewTableName := scyllaTable.name
 
 	if len(scyllaTable.keyspace) == 0 {
@@ -230,7 +246,25 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 		return nil, errors.New("no se ha especificado un keyspace")
 	}
 
-	queryStr := "SELECT * FROM %v.%v WHERE %v"
+	columnNames := []string{}
+	if len(query.columnsInclude) > 0 {
+		for _, col := range query.columnsInclude {
+			columnNames = append(columnNames, col.Name)
+		}
+	} else {
+		columnsExclude := []string{}
+		for _, col := range query.columnsExclude {
+			columnsExclude = append(columnsExclude, col.Name)
+		}
+		for _, col := range scyllaTable.columns {
+			if !slices.Contains(columnsExclude, col.Name) {
+				columnNames = append(columnNames, col.Name)
+			}
+		}
+	}
+
+	queryStr := fmt.Sprintf("SELECT %v ", strings.Join(columnNames, ", ")) +
+		"FROM %v.%v WHERE %v"
 	indexOperators := []string{"=", "IN"}
 
 	statements := []ColumnStatement{}
@@ -307,10 +341,11 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 	// fmt.Println("where statements::", whereStatements)
 
 	for _, st := range statementsRemain {
-		fmt.Println("column 1::", st.Column)
-		fmt.Println("column 2::", st.Operator)
-		fmt.Println("column 3::", st.GetValue())
-
+		/*
+			fmt.Println("column 1::", st.Column)
+			fmt.Println("column 2::", st.Operator)
+			fmt.Println("column 3::", st.GetValue())
+		*/
 		where := fmt.Sprintf("%v %v %v", st.Column, st.Operator, st.GetValue())
 		// fmt.Println("where::", where)
 		whereStatements = append(whereStatements, where)
@@ -331,8 +366,7 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 	scanner := iter.Scanner()
 	records := []T{}
 
-	fmt.Println("starting iterator")
-	fmt.Println("columns::", len(scyllaTable.columns))
+	fmt.Println("starting iterator | columns::", len(scyllaTable.columns))
 
 	for scanner.Next() {
 
@@ -347,7 +381,8 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 		rec := new(T)
 		ref := reflect.ValueOf(rec).Elem()
 
-		for idx, column := range scyllaTable.columns {
+		for idx, colname := range columnNames {
+			column := scyllaTable.columnsMap[colname]
 			value := rowValues[idx]
 			if value == nil {
 				continue
@@ -360,7 +395,7 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 						// Dereference the pointer to get the underlying value
 						val = val.Elem()
 					}
-					fmt.Printf("Mapeando valor | F: %v N: %v C: %v | %v\n", field, column.Name, column.FieldType, val)
+					fmt.Printf("Mapeando valor | F: %v N: %v C: %v | %v\n", column.FieldName, column.Name, column.FieldType, val)
 				*/
 				mapField(&field, value, column.IsPointer)
 				// Revisa si necesita parsearse un string a un struct como JSON
@@ -399,20 +434,86 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 		records = append(records, *rec)
 	}
 
-	core.Print(records)
+	// core.Print(records)
 
 	return records, nil
 }
 
-type scyllaTable[T any] struct {
-	baseType      T
-	name          string
-	keyspace      string
-	primaryKey    columnInfo
-	partitionKey  columnInfo
-	columns       []columnInfo
-	columnsMap    map[string]columnInfo
-	indexes       map[string]viewInfo
-	views         map[string]viewInfo
-	ViewsExcluded []string
+func parseValueToString(v any) string {
+	if str, ok := v.(string); ok {
+		return `'` + str + `'`
+	} else {
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func makeQueryStatement(statements []string) string {
+	queryStr := ""
+	if len(statements) == 1 {
+		queryStr = statements[0]
+	} else {
+		statements := strings.Join(statements, "\n")
+		queryStr = fmt.Sprintf("BEGIN BATCH\n%v\nAPPLY BATCH;", statements)
+	}
+	return queryStr
+}
+
+func InsertExclude[T TableSchemaInterface](records *[]T, columnsToExclude ...Column) error {
+
+	scyllaTable := makeTable(*new(T))
+
+	columns := []*columnInfo{}
+	if len(columnsToExclude) > 0 {
+		columsToExcludeNames := []string{}
+		for _, e := range columnsToExclude {
+			columsToExcludeNames = append(columsToExcludeNames, e.GetInfo().Name)
+		}
+		for _, col := range scyllaTable.columns {
+			if !slices.Contains(columsToExcludeNames, col.Name) {
+				columns = append(columns, col)
+			}
+		}
+	} else {
+		columns = scyllaTable.columns
+	}
+
+	columnsNames := []string{}
+	for _, col := range columns {
+		columnsNames = append(columnsNames, col.Name)
+	}
+	/*
+		virtualIndexes := []viewInfo{}
+		for _, index := range scyllaTable.indexes {
+			if index.column.IsVirtual {
+				virtualIndexes = append(virtualIndexes, index)
+			}
+		}
+	*/
+
+	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES `,
+		scyllaTable.fullName(), strings.Join(columnsNames, ", "))
+
+	queryStatements := []string{}
+
+	for _, rec := range *records {
+		refValue := reflect.ValueOf(rec)
+		recordInsertValues := []string{}
+
+		for _, col := range columns {
+			value := col.getValue(&refValue)
+			recordInsertValues = append(recordInsertValues, parseValueToString(value))
+		}
+
+		statement := /*" " +*/ queryStrInsert + "(" + strings.Join(recordInsertValues, ", ") + ")"
+		queryStatements = append(queryStatements, statement)
+	}
+
+	queryInsert := makeQueryStatement(queryStatements)
+	if err := QueryExec(queryInsert); err != nil {
+		fmt.Println(queryInsert)
+		fmt.Println("Error inserting records:", err)
+		return err
+	}
+
+	return nil
 }

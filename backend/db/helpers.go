@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
+
+	"github.com/fatih/color"
 )
 
 func BasicHashInt(s string) int32 {
@@ -19,7 +21,7 @@ func HashInt(values ...any) int32 {
 	for _, anyVal := range values {
 		switch val := anyVal.(type) {
 		case int:
-			binary.Write(buf, binary.LittleEndian, val)
+			binary.Write(buf, binary.LittleEndian, int64(val))
 		case int32:
 			binary.Write(buf, binary.LittleEndian, val)
 		case int64:
@@ -43,4 +45,32 @@ func HashInt(values ...any) int32 {
 	h := fnv.New32a()
 	h.Write(buf.Bytes())
 	return int32(h.Sum32())
+}
+
+func Logx(style int8, messageInColor string, params ...any) {
+	var c *color.Color
+
+	if style == 1 {
+		c = color.New(color.FgCyan, color.Bold)
+	} else if style == 2 {
+		c = color.New(color.FgGreen, color.Bold)
+	} else if style == 3 {
+		c = color.New(color.FgYellow, color.Bold)
+	} else if style == 4 {
+		c = color.New(color.FgBlue, color.Bold)
+	} else if style == 5 {
+		c = color.New(color.FgRed, color.Bold)
+	} else if style == 6 {
+		c = color.New(color.FgMagenta, color.Bold)
+	}
+
+	c.Print(messageInColor)
+	if len(params) > 0 {
+		fmt.Print(" | ")
+		for _, e := range params {
+			fmt.Print(e)
+			fmt.Print(" ")
+		}
+		fmt.Println("")
+	}
 }

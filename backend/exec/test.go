@@ -37,7 +37,7 @@ func (e Usuario) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:          "ztest_usuarios",
 		Partition:     e.CompanyID_(),
-		PrimaryKey:    e.ID_(),
+		Keys:          []db.Column{e.ID_()},
 		GlobalIndexes: []db.Column{e.Edad_()},
 		LocalIndexes:  []db.Column{e.Nombre_()},
 		HashIndexes:   [][]db.Column{{e.Rol_(), e.Edad_()}},
@@ -71,15 +71,13 @@ func TestQuery(args *core.ExecArgs) core.FuncResponse {
 
 func TestDeploy(args *core.ExecArgs) core.FuncResponse {
 
-	db.MakeScyllaConnection(db.DBConnParams{
+	db.TestDeploy(db.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,
 		Password: core.Env.DB_PASSWORD,
 		Keyspace: core.Env.DB_NAME,
 	})
-
-	db.DeployScylla(Usuario{})
 
 	return core.FuncResponse{}
 }
