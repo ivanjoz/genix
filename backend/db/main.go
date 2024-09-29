@@ -54,7 +54,7 @@ type TableSchema struct {
 	GlobalIndexes []Column
 	LocalIndexes  []Column
 	HashIndexes   [][]Column
-	Views         []TableView
+	Views         []View
 }
 
 func (q ColumnStatement) GetValue() any {
@@ -75,10 +75,16 @@ type ColumnSetName interface {
 	SetName(string)
 }
 
-type TableView struct {
+type View struct {
 	Cols []Column
 	// Para concatenar numeros como = int64(e.AlmacenID)*1e9 + int64(e.Updated)
 	IntConcatRadix []int8
+}
+
+type Index struct {
+	Cols []Column
+	// Crea un hash para todas las combinaciones
+	HashAll bool
 }
 
 func (q *Col[T]) SetName(name string) {
@@ -210,13 +216,13 @@ func (q *Query[T]) With(records ...T) *WithJoin[T] {
 }
 
 type viewInfo struct {
-	Type            int8 /* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
-	name            string
-	idx             int8
-	column          *columnInfo
-	columns         []string
-	columnsIdx      []int16
-	getValue        func(s *reflect.Value) any
+	Type       int8 /* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
+	name       string
+	idx        int8
+	column     *columnInfo
+	columns    []string
+	columnsIdx []int16
+	//	getValue        func(s *reflect.Value) any
 	getStatement    func(statements ...ColumnStatement) string
 	getCreateScript func() string
 }
@@ -266,7 +272,7 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 			columnsExclude = append(columnsExclude, col.Name)
 		}
 		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columnsExclude, col.Name) {
+			if !slices.Contains(columnsExclude, col.Name) && !col.IsVirtual {
 				columnNames = append(columnNames, col.Name)
 			}
 		}
@@ -309,29 +315,6 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 				posibleViewsOrIndexes = append(posibleViewsOrIndexes, psb)
 			}
 		}
-		/*
-			// Revisa si puede user un índice compuesto (sólo para operadores IN y =)
-			findComposeIndex := true
-			for _, st := range statements {
-				if !slices.Contains(indexOperators, st.Operator) {
-					findComposeIndex = false
-				}
-			}
-
-			if findComposeIndex {
-				for _, index := range scyllaTable.indexes {
-					isIncluded := true
-					for _, col := range index.columns {
-						if slices.Contains(columnsWhere, col) {
-							isIncluded = false
-						}
-					}
-					if isIncluded {
-						posibleViewsOrIndexes = append(posibleViewsOrIndexes, index)
-					}
-				}
-			}
-		*/
 	}
 
 	var statementsRemain []ColumnStatement
@@ -349,10 +332,8 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 		viewOrIndex := posibleViewsOrIndexes[0].indexView
 		fmt.Println("Posible Index:", viewOrIndex.name)
 
-		if viewOrIndex.Type == 1 || viewOrIndex.Type == 2 {
-			// No es necesario cambiar nada del query
-			statementsRemain = statements
-		} else {
+		if viewOrIndex.getStatement != nil {
+			fmt.Println("Creating statement Index:", viewOrIndex.name)
 			// Revisa qué columnas satisfacen el índice
 			statementsSelected := []ColumnStatement{}
 			for _, st := range statements {
@@ -363,6 +344,9 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 				}
 			}
 			whereStatements = append(whereStatements, viewOrIndex.getStatement(statementsSelected...))
+		} else {
+			// No es necesario cambiar nada del query
+			statementsRemain = statements
 		}
 	} else {
 		statementsRemain = statements
@@ -390,6 +374,15 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 	rd, err := iter.RowData()
 	if err != nil {
 		fmt.Println("Error on RowData::", err)
+		if strings.Contains(err.Error(), "use ALLOW FILTERING") {
+			fmt.Println("Posible Indexes or Views::")
+			for _, e := range posibleViewsOrIndexes {
+				typeName := indexTypes[e.indexView.Type]
+				colnames := strings.Join(e.indexView.columns, ", ")
+				msg := fmt.Sprintf(`%v (%v) %v`+"\n", typeName, e.indexView.column.Type, colnames)
+				fmt.Println(msg)
+			}
+		}
 		return nil, err
 	}
 

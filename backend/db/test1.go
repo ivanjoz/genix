@@ -7,6 +7,7 @@ import (
 
 //Some docs
 //https://medium.engineering/scylladb-implementation-lists-in-mediums-feature-store-part-2-905299c89392
+//https://university.scylladb.com/courses/data-modeling/lessons/materialized-views-secondary-indexes-and-filtering/
 
 type Usuario struct {
 	CompanyID int32
@@ -32,7 +33,7 @@ func (e _u) Apellido_() CoStr  { return CoStr{"apellido"} }
 func (e _u) Direccion_() CoStr { return CoStr{"direccion"} }
 func (e _u) RolID_() CoI16     { return CoI16{"rol_id"} }
 func (e _u) Updated_() CoF64   { return CoF64{"updated"} }
-func (e _u) Accesos_() CsI32   { return CsI32{"accesos"} }
+func (e _u) Accesos_() CsI32   { return CsI32{"accesos_ids"} }
 func (e _u) Edad_() CsI32      { return CsI32{"edad"} }
 func (e _u) Proyectos_() CsStr { return CsStr{"proyectos"} }
 func (e _u) Peso_() CoF32      { return CoF32{"peso"} }
@@ -45,9 +46,9 @@ func (e Usuario) GetSchema() TableSchema {
 		Keys:          []Column{e.ID_()},
 		GlobalIndexes: []Column{e.Edad_(), e.GruposIDs_()},
 		LocalIndexes:  []Column{e.Nombre_()},
-		HashIndexes:   [][]Column{{e.RolID_(), e.Edad_()}},
-		Views: []TableView{
-			{Cols: []Column{e.RolID_(), e.Accesos_()}},
+		HashIndexes:   [][]Column{{e.RolID_(), e.Edad_()}, {e.RolID_(), e.Accesos_()}},
+		Views: []View{
+			//{Cols: []Column{e.RolID_(), e.Accesos_()}},
 			{Cols: []Column{e.RolID_(), e.Updated_()}, IntConcatRadix: []int8{10}},
 			{Cols: []Column{e.RolID_(), e.Edad_(), e.Updated_()}, IntConcatRadix: []int8{4, 11}},
 		},
@@ -69,7 +70,7 @@ func TestQuery(params ConnParams) {
 	fmt.Println("Query 2")
 	result2 := Select(func(q *Query[Usuario], col Usuario) {
 		q.Exclude(col.Apellido_()).
-			Where(col.RolID_().Equals(1)).
+			// Where(col.RolID_().Equals(1)).
 			Where(col.Accesos_().Contains(4))
 	})
 
@@ -79,6 +80,11 @@ func TestQuery(params ConnParams) {
 func TestDeploy(params ConnParams) {
 
 	MakeScyllaConnection(params)
+
+	err1 := QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.ztest_usuarios__rol_id_accesos_view`)
+	if err1 != nil {
+		fmt.Println("error:", err1)
+	}
 
 	DeployScylla(Usuario{})
 
