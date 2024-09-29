@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
+	"strings"
 
 	"github.com/fatih/color"
 )
@@ -108,4 +109,12 @@ func Pow10Int64(m int64) int64 {
 		number *= 10
 	}
 	return number
+}
+
+func Concatx[T any](sep string, slice1 []T) string {
+	sliceOfStrings := []string{}
+	for _, value := range slice1 {
+		sliceOfStrings = append(sliceOfStrings, fmt.Sprintf("%v", value))
+	}
+	return strings.Join(sliceOfStrings, sep)
 }

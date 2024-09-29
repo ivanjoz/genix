@@ -19,9 +19,12 @@ type scyllaTable[T any] struct {
 	partitionKey  columnInfo
 	columns       []*columnInfo
 	columnsMap    map[string]*columnInfo
-	indexes       map[string]viewInfo
-	views         map[string]viewInfo
+	columnsIdxMap map[int16]*columnInfo
+	indexes       map[string]*viewInfo
+	views         map[string]*viewInfo
+	indexViews    []*viewInfo
 	ViewsExcluded []string
+	_maxColIdx    int16
 }
 
 func (e scyllaTable[T]) fullName() string {
@@ -207,16 +210,15 @@ func (q *Query[T]) With(records ...T) *WithJoin[T] {
 }
 
 type viewInfo struct {
-	iType   int8 /* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
-	name    string
-	idx     int8
-	column  *columnInfo
-	columns []string
-	// Para concatenar numeros como = int64(e.AlmacenID)*1e9 + int64(e.Updated)
-	int64ConcatRadix int8
-	getValue         func(s *reflect.Value) any
-	getStatement     func(statements ...ColumnStatement) string
-	getCreateScript  func() string
+	Type            int8 /* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
+	name            string
+	idx             int8
+	column          *columnInfo
+	columns         []string
+	columnsIdx      []int16
+	getValue        func(s *reflect.Value) any
+	getStatement    func(statements ...ColumnStatement) string
+	getCreateScript func() string
 }
 
 type QueryResult[T any] struct {
@@ -232,6 +234,13 @@ func Select[T TableSchemaInterface](handler func(query *Query[T], schemaTable T)
 	records, err := selectExec(&query)
 
 	return QueryResult[T]{records, err}
+}
+
+type posibleIndex struct {
+	indexView    *viewInfo
+	colsIncluded []int16
+	colsMissing  []int16
+	priority     int8
 }
 
 func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
@@ -265,75 +274,96 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 
 	queryStr := fmt.Sprintf("SELECT %v ", strings.Join(columnNames, ", ")) +
 		"FROM %v.%v WHERE %v"
-	indexOperators := []string{"=", "IN"}
+	// indexOperators := []string{"=", "IN"}
 
 	statements := []ColumnStatement{}
 	columnsWhere := []string{}
+	colsWhereIdx := []int16{}
+
 	for _, st := range query.statements {
+		col := scyllaTable.columnsMap[st.group[0].Column]
+		colsWhereIdx = append(colsWhereIdx, col.Idx)
 		statements = append(statements, st.group[0])
 		columnsWhere = append(columnsWhere, st.group[0].Column)
 	}
 
-	posibleViewsOrIndexes := []viewInfo{}
+	posibleViewsOrIndexes := []posibleIndex{}
 
-	if len(statements) > 1 {
+	if len(statements) > 0 {
 		// Revisa si puede usar una vista
-		for _, view := range scyllaTable.views {
-			isIncluded := true
-			for _, col := range view.columns {
-				if slices.Contains(columnsWhere, col) {
-					isIncluded = false
+		for _, indview := range scyllaTable.indexViews {
+			psb := posibleIndex{indexView: indview}
+			for _, idx := range indview.columnsIdx {
+				if slices.Contains(colsWhereIdx, idx) {
+					psb.colsIncluded = append(psb.colsIncluded, idx)
+				} else {
+					psb.colsMissing = append(psb.colsMissing, idx)
 				}
 			}
-			if isIncluded {
-				posibleViewsOrIndexes = append(posibleViewsOrIndexes, view)
+			if len(psb.colsIncluded) > 0 {
+				if len(psb.colsIncluded) == len(colsWhereIdx) {
+					psb.priority = 6 + int8(len(colsWhereIdx))*2
+				}
+				psb.priority -= int8(len(psb.colsMissing)) * 2
+
+				posibleViewsOrIndexes = append(posibleViewsOrIndexes, psb)
 			}
 		}
-
-		// Revisa si puede user un índice compuesto (sólo para operadores IN y =)
-		findComposeIndex := true
-		for _, st := range statements {
-			if !slices.Contains(indexOperators, st.Operator) {
-				findComposeIndex = false
+		/*
+			// Revisa si puede user un índice compuesto (sólo para operadores IN y =)
+			findComposeIndex := true
+			for _, st := range statements {
+				if !slices.Contains(indexOperators, st.Operator) {
+					findComposeIndex = false
+				}
 			}
-		}
 
-		if findComposeIndex {
-			for _, index := range scyllaTable.indexes {
-				isIncluded := true
-				for _, col := range index.columns {
-					if slices.Contains(columnsWhere, col) {
-						isIncluded = false
+			if findComposeIndex {
+				for _, index := range scyllaTable.indexes {
+					isIncluded := true
+					for _, col := range index.columns {
+						if slices.Contains(columnsWhere, col) {
+							isIncluded = false
+						}
+					}
+					if isIncluded {
+						posibleViewsOrIndexes = append(posibleViewsOrIndexes, index)
 					}
 				}
-				if isIncluded {
-					posibleViewsOrIndexes = append(posibleViewsOrIndexes, index)
-				}
 			}
-		}
+		*/
 	}
 
 	var statementsRemain []ColumnStatement
 	whereStatements := []string{}
 
-	fmt.Println("posible index::", len(posibleViewsOrIndexes))
+	fmt.Println("posible indexes::", len(posibleViewsOrIndexes))
 
 	// Revisa si hay un view que satisfaga este request
 	if len(posibleViewsOrIndexes) > 0 {
 		//TODO: aquí debe escoger el mejor índice o view en caso existan 2
-		viewOrIndex := posibleViewsOrIndexes[0]
+		slices.SortFunc(posibleViewsOrIndexes, func(a, b posibleIndex) int {
+			return int(b.priority - a.priority)
+		})
 
-		// Revisa qué columnas satisfacen el índice
-		statementsSelected := []ColumnStatement{}
-		for _, st := range statements {
-			if slices.Contains(viewOrIndex.columns, st.Column) {
-				statementsSelected = append(statementsSelected, st)
-			} else {
-				statementsRemain = append(statementsRemain, st)
+		viewOrIndex := posibleViewsOrIndexes[0].indexView
+		fmt.Println("Posible Index:", viewOrIndex.name)
+
+		if viewOrIndex.Type == 1 || viewOrIndex.Type == 2 {
+			// No es necesario cambiar nada del query
+			statementsRemain = statements
+		} else {
+			// Revisa qué columnas satisfacen el índice
+			statementsSelected := []ColumnStatement{}
+			for _, st := range statements {
+				if slices.Contains(viewOrIndex.columns, st.Column) {
+					statementsSelected = append(statementsSelected, st)
+				} else {
+					statementsRemain = append(statementsRemain, st)
+				}
 			}
+			whereStatements = append(whereStatements, viewOrIndex.getStatement(statementsSelected...))
 		}
-		fmt.Println("hola???")
-		whereStatements = append(whereStatements, viewOrIndex.getStatement(statementsSelected...))
 	} else {
 		statementsRemain = statements
 	}
@@ -452,7 +482,7 @@ func makeQueryStatement(statements []string) string {
 	if len(statements) == 1 {
 		queryStr = statements[0]
 	} else {
-		statements := strings.Join(statements, "\n")
+		statements := strings.Join(statements, ";\n") + ";"
 		queryStr = fmt.Sprintf("BEGIN BATCH\n%v\nAPPLY BATCH;", statements)
 	}
 	return queryStr
@@ -506,7 +536,7 @@ func InsertExclude[T TableSchemaInterface](records *[]T, columnsToExclude ...Col
 				panic("is nil column: getValue() = " + col.Name + " | " + col.FieldName)
 			}
 			value := col.getValue(&refValue)
-			recordInsertValues = append(recordInsertValues, parseValueToString(value))
+			recordInsertValues = append(recordInsertValues, fmt.Sprintf("%v", value))
 		}
 
 		statement := /*" " +*/ queryStrInsert + "(" + strings.Join(recordInsertValues, ", ") + ")"

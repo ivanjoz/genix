@@ -54,25 +54,25 @@ func (e Usuario) GetSchema() TableSchema {
 	}
 }
 
-func TestQuery(args *core.ExecArgs) core.FuncResponse {
+func TestQuery(params ConnParams) {
+	MakeScyllaConnection(params)
 
+	fmt.Println("Query 1")
 	result := Select(func(q *Query[Usuario], col Usuario) {
 		q.Exclude(col.Apellido_()).
-			Where(col.Nombre_().Equals("hola")).
-			Where(col.Updated_().Equals(1)).
-			Where(col.Accesos_().Contains(4))
+			Where(col.CompanyID_().Equals(1)).
+			Where(col.Nombre_().Equals("Carlos"))
 	})
 
 	core.Print(result.Records)
 
+	fmt.Println("Query 2")
 	result2 := Select(func(q *Query[Usuario], col Usuario) {
 		q.Exclude(col.Apellido_()).
-			With([]Usuario{}...).Join(col.Nombre_(), col.Apellido_())
+			Where(col.Accesos_().Contains(4))
 	})
 
 	core.Print(result2.Records)
-
-	return core.FuncResponse{}
 }
 
 func TestDeploy(params ConnParams) {
