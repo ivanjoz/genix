@@ -45,7 +45,7 @@ func (e Usuario) GetSchema() TableSchema {
 		Partition:     e.CompanyID_(),
 		Keys:          []Column{e.ID_()},
 		GlobalIndexes: []Column{e.Edad_(), e.GruposIDs_()},
-		LocalIndexes:  []Column{e.Nombre_()},
+		LocalIndexes:  []Column{e.Nombre_(), e.GruposIDs_()},
 		HashIndexes:   [][]Column{{e.RolID_(), e.Edad_()}, {e.RolID_(), e.Accesos_()}},
 		Views: []View{
 			//{Cols: []Column{e.RolID_(), e.Accesos_()}},
@@ -66,15 +66,16 @@ func TestQuery(params ConnParams) {
 	})
 
 	core.Print(result.Records)
+	/*
+		fmt.Println("Query 2")
+		result2 := Select(func(q *Query[Usuario], col Usuario) {
+			q.Exclude(col.Apellido_()).
+				// Where(col.RolID_().Equals(1)).
+				Where(col.Accesos_().Contains(4))
+		})
 
-	fmt.Println("Query 2")
-	result2 := Select(func(q *Query[Usuario], col Usuario) {
-		q.Exclude(col.Apellido_()).
-			// Where(col.RolID_().Equals(1)).
-			Where(col.Accesos_().Contains(4))
-	})
-
-	core.Print(result2.Records)
+		core.Print(result2.Records)
+	*/
 }
 
 func TestDeploy(params ConnParams) {

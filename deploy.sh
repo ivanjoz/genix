@@ -1,4 +1,6 @@
 #!/bin/bash
+source ~/.bashrc
+
 AWS_PROFILE="ivanjoz"
 AWS_S3="gerp-v2-frontend"
 FUNCTION_NAME="jobfinder6-p-app"
@@ -19,6 +21,11 @@ fi
 
 echo "Usando AWS Profile: $AWS_PROFILE"
 export PATH=$HOME/.nvm/versions/node/v20.16.0/bin:$PATH
+
+GO_PATH="go"
+if [ -x /usr/local/go/bin/go ]; then
+    GO_PATH="/usr/local/go/bin/go"
+fi
 
 #PUBLICAR FRONTEND
 if [[ $ACCIONES == *"1"* ]]; then
@@ -57,7 +64,7 @@ if [[ $ACCIONES == *"2"* ]]; then
     echo "=== PUBLICANDO BACKEND ==="
 
     cd ./cloud
-    go run . accion=1
+    $GO_PATH run . accion=1
 
     echo "El deploy backend-node finalizado!"
 
@@ -82,7 +89,7 @@ if [[ $ACCIONES == *"5"* ]]; then
     echo "=== RECREANDO TABLAS ==="
 
     cd ./backend
-    go run . fn-homologate
+    $GO_PATH run . fn-homologate
 
 fi
 
@@ -91,7 +98,7 @@ if [[ $ACCIONES == *"7"* ]]; then
     echo "=== COMPILANDO BACKEND ==="
 
     cd ./backend
-    go build -v .
+    $GO_PATH build -v .
     gsa app
 
 fi
