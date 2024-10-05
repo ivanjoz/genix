@@ -12,7 +12,6 @@ import (
 )
 
 type scyllaTable[T any] struct {
-	baseType      T
 	name          string
 	keyspace      string
 	keys          []columnInfo
@@ -410,17 +409,9 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 			if value == nil {
 				continue
 			}
-			if mapField, ok := fieldMapping[column.FieldType]; ok {
+			if column.setValue != nil {
 				field := ref.Field(column.FieldIdx)
-				/*
-					val := reflect.ValueOf(value)
-					if val.Kind() == reflect.Ptr {
-						// Dereference the pointer to get the underlying value
-						val = val.Elem()
-					}
-					fmt.Printf("Mapeando valor | F: %v N: %v C: %v | %v\n", column.FieldName, column.Name, column.FieldType, val)
-				*/
-				mapField(&field, value, column.IsPointer)
+				column.setValue(&field, value)
 				// Revisa si necesita parsearse un string a un struct como JSON
 			} else if column.IsComplexType {
 				// Log("complex type::", column.FieldName)

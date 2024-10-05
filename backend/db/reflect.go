@@ -31,6 +31,7 @@ type columnInfo struct {
 	IsComplexType  bool
 	ViewIdx        int8
 	getValue       func(s *reflect.Value) any
+	setValue       func(s *reflect.Value, v any)
 }
 
 var scyllaFieldToColumnTypesMap = map[string]string{
@@ -158,8 +159,11 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		column.FieldName = columnFromField.FieldName
 		column.IsPointer = columnFromField.IsPointer
 		column.IsSlice = columnFromField.IsSlice
+		column.setValue = fieldMapping[makeMappingKey(&column)]
 
-		// fmt.Println("Column Name:", column.Name, "| Type:", column.FieldType, "| Is Slice:", column.IsSlice)
+		if column.setValue == nil {
+			fmt.Println("Unrecognized type for column:", column.FieldName, "|", column.FieldType)
+		}
 
 		// Seteando "getValue"
 		if column.IsSlice && column.FieldType == "string" {
@@ -471,32 +475,33 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				fmt.Printf("Radix Sum Calculado %v | %v | %v\n", sumValue, values, radixesI64)
 				return any(sumValue)
 			}
-		} else if false /* columnSlice != nil */ {
-			//TODO: REVIEW!!!
-			// Si una de las columnas es un slice puede iterar por el slice para obtener los values y gurdarla en una columa Set<any>
-			view.column.FieldType = "[]int32"
-			view.column.Type = "set<int>"
-			view.column.IsSlice = true
-			// Si hay una columna slice entonces por cada elemento en el slice
-			view.column.getValue = func(s *reflect.Value) any {
-				values := []any{}
-				for _, e := range columns {
-					values = append(values, e.getValue(s))
-				}
-				hashValues := []int32{}
-				hashValues = append(hashValues, HashInt(values...))
+			/*
+				} else if columnSlice != nil {
+					//TODO: REVIEW!!!
+					// Si una de las columnas es un slice puede iterar por el slice para obtener los values y gurdarla en una columa Set<any>
+					view.column.FieldType = "[]int32"
+					view.column.Type = "set<int>"
+					view.column.IsSlice = 1
+					// Si hay una columna slice entonces por cada elemento en el slice
+					view.column.getValue = func(s *reflect.Value) any {
+						values := []any{}
+						for _, e := range columns {
+							values = append(values, e.getValue(s))
+						}
+						hashValues := []int32{}
+						hashValues = append(hashValues, HashInt(values...))
 
-				reflectSlice := s.Field(columnSlice.FieldIdx)
-				if columnSlice.IsPointer {
-					reflectSlice = reflectSlice.Elem()
-				}
-				for _, vl := range reflectToSlice(&reflectSlice) {
-					hashValues = append(hashValues, HashInt(vl))
-					hashValues = append(hashValues, HashInt(append(values, vl)...))
-				}
-				return "{" + Concatx(",", hashValues) + "}"
-			}
-			//
+						reflectSlice := s.Field(columnSlice.FieldIdx)
+						if columnSlice.IsPointer {
+							reflectSlice = reflectSlice.Elem()
+						}
+						for _, vl := range reflectToSlice(&reflectSlice) {
+							hashValues = append(hashValues, HashInt(vl))
+							hashValues = append(hashValues, HashInt(append(values, vl)...))
+						}
+						return "{" + Concatx(",", hashValues) + "}"
+					}
+			*/
 		} else {
 			view.Type = 7
 			// Sino crea un hash de las columnas
@@ -570,131 +575,4 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 	}
 
 	return dbTable
-}
-
-type number1 interface {
-	int | int32 | int8 | uint8 | int16 | uint16 | int64
-}
-type numfloat interface {
-	float32 | float64
-}
-
-func setReflectInt[T number1, E number1](e *reflect.Value, vl *E, isPointer bool) {
-	if isPointer && vl != nil {
-		pv := T(*vl)
-		(*e).Set(reflect.ValueOf(&pv))
-	} else if !isPointer {
-		(*e).SetInt(int64(*vl))
-	}
-}
-
-func setReflectIntSlice[T number1, E number1](e *reflect.Value, vl *[]E, isPointer bool) {
-	newSlice := []T{}
-	for _, v := range *vl {
-		newSlice = append(newSlice, T(v))
-	}
-	if isPointer {
-		(*e).Set(reflect.ValueOf(&newSlice))
-	} else {
-		(*e).Set(reflect.ValueOf(newSlice))
-	}
-}
-
-func setReflectFloat[T numfloat](e *reflect.Value, vl *T, isPointer bool) {
-	if isPointer {
-		pv := T(*vl)
-		(*e).Set(reflect.ValueOf(&pv))
-	} else {
-		(*e).SetFloat(float64(*vl))
-	}
-}
-
-var fieldMapping = map[string]func(e *reflect.Value, value any, isPointer bool){
-	"string": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*string); ok {
-			if ip {
-				(*e).Set(reflect.ValueOf(vl))
-			} else {
-				(*e).SetString(*vl)
-			}
-		}
-	},
-	"int32": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*int); ok {
-			setReflectInt[int32](e, vl, ip)
-		}
-	},
-	"int": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*int); ok {
-			setReflectInt[int](e, vl, ip)
-		}
-	},
-	"int16": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*int16); ok {
-			setReflectInt[int](e, vl, ip)
-		} else if vl, ok := v.(*int); ok {
-			setReflectInt[int](e, vl, ip)
-		}
-	},
-	"int8": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*int8); ok {
-			setReflectInt[int](e, vl, ip)
-		} else if vl, ok := v.(*int); ok {
-			setReflectInt[int](e, vl, ip)
-		}
-	},
-	"int64": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*int64); ok {
-			setReflectInt[int](e, vl, ip)
-		}
-	},
-	"[]int32": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*[]int); ok {
-			setReflectIntSlice[int32](e, vl, ip)
-		}
-	},
-	"[]int16": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*[]int16); ok {
-			setReflectIntSlice[int16](e, vl, ip)
-		} else if vl, ok := v.(*[]int8); ok {
-			setReflectIntSlice[int8](e, vl, ip)
-		} else if vl, ok := v.(*[]int); ok {
-			setReflectIntSlice[int](e, vl, ip)
-		}
-	},
-	"[]int8": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*[]int8); ok {
-			setReflectIntSlice[int8](e, vl, ip)
-		} else if vl, ok := v.(*[]int16); ok {
-			setReflectIntSlice[int16](e, vl, ip)
-		} else if vl, ok := v.(*[]int); ok {
-			setReflectIntSlice[int](e, vl, ip)
-		}
-	},
-	"[]int64": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*[]int64); ok {
-			setReflectIntSlice[int64](e, vl, ip)
-		} else if vl, ok := v.(*[]int); ok {
-			setReflectIntSlice[int](e, vl, ip)
-		}
-	},
-	"[]string": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*[]string); ok {
-			if ip {
-				(*e).Set(reflect.ValueOf(vl))
-			} else {
-				(*e).Set(reflect.ValueOf(*vl))
-			}
-		}
-	},
-	"float32": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*float32); ok {
-			setReflectFloat(e, vl, ip)
-		}
-	},
-	"float64": func(e *reflect.Value, v any, ip bool) {
-		if vl, ok := v.(*float64); ok {
-			setReflectFloat(e, vl, ip)
-		}
-	},
 }
