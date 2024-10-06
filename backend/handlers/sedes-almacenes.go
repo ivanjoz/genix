@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"app/core"
+	"app/db"
 	s "app/types"
 	"encoding/json"
 	"fmt"
@@ -149,25 +150,20 @@ func GetPaisCiudades(req *core.HandlerArgs) core.HandlerResponse {
 	paisID := req.GetQueryInt("pais-id")
 	updated := req.GetQueryInt64("upd")
 
-	registros := []s.PaisCiudad{}
+	paisCiudades := db.Select(func(q *db.Query[s.PaisCiudad], col s.PaisCiudad) {
+		q.Where(col.PaisID_().Equals(paisID)).
+			WhereIF(updated > 0, col.Updated_().GreaterEqual(updated))
+	})
 
-	query := core.DBSelect(&registros).
-		Where("pais_id").Equals(paisID)
-
-	if updated > 0 {
-		query = query.Where("updated").GreatEq(updated)
-	}
-
-	err := query.Exec()
-	if err != nil {
-		err = fmt.Errorf("error al obtener los paises - ciudades: %v", err)
+	if paisCiudades.Err != nil {
+		err := fmt.Errorf("error al obtener los paises - ciudades: %v", paisCiudades.Err)
 		core.Print(err)
 		return req.MakeErr(err)
 	}
 
-	core.Log("registros obtenidos:: ", len(registros))
+	core.Log("registros obtenidos:: ", len(paisCiudades.Records))
 
-	return core.MakeResponse(req, &registros)
+	return core.MakeResponse(req, &paisCiudades.Records)
 }
 
 func PostAlmacen(req *core.HandlerArgs) core.HandlerResponse {

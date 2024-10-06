@@ -1,7 +1,6 @@
 package db
 
 import (
-	"app/core"
 	"fmt"
 )
 
@@ -65,7 +64,7 @@ func TestQuery(params ConnParams) {
 			Where(col.Nombre_().Equals("Carlos"))
 	})
 
-	core.Print(result.Records)
+	fmt.Println(result.Records)
 	/*
 		fmt.Println("Query 2")
 		result2 := Select(func(q *Query[Usuario], col Usuario) {
@@ -90,7 +89,7 @@ func TestDeploy(params ConnParams) {
 	DeployScylla(Usuario{})
 
 	usuarios := getUsuariosData()
-	err := InsertExclude(&usuarios)
+	err := Insert(&usuarios)
 	if err != nil {
 		fmt.Println("Error al insertar::", err)
 	}

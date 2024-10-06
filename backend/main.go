@@ -2,6 +2,7 @@ package main
 
 import (
 	"app/core"
+	"app/db"
 	"app/exec"
 	"context"
 	"fmt"
@@ -157,6 +158,15 @@ func main() {
 		funcToInvoke(&args)
 		return
 	}
+
+	// Conexión a la base de datos
+	db.MakeScyllaConnection(db.ConnParams{
+		Host:     core.Env.DB_HOST,
+		Port:     int(core.Env.DB_PORT),
+		User:     core.Env.DB_USER,
+		Password: core.Env.DB_PASSWORD,
+		Keyspace: core.Env.DB_NAME,
+	})
 
 	// Si se está desarrollando en local
 	if core.Env.IS_LOCAL {

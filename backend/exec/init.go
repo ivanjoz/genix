@@ -2,9 +2,12 @@ package exec
 
 import (
 	"app/core"
+	"app/db"
 	"app/handlers"
+	"app/types"
 	s "app/types"
 	"encoding/csv"
+	"fmt"
 	"os"
 
 	"time"
@@ -127,9 +130,22 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 func Homologate(args *core.ExecArgs) core.FuncResponse {
 
-	for _, controller := range MakeScyllaControllers() {
-		controller.InitTable(2)
-	}
+	/*
+		for _, controller := range MakeScyllaControllers() {
+			controller.InitTable(2)
+		}
+	*/
+	// Conexión a la base de datos
+	db.MakeScyllaConnection(db.ConnParams{
+		Host:     core.Env.DB_HOST,
+		Port:     int(core.Env.DB_PORT),
+		User:     core.Env.DB_USER,
+		Password: core.Env.DB_PASSWORD,
+		Keyspace: core.Env.DB_NAME,
+	})
+
+	fmt.Println("----------")
+	db.DeployScylla(types.PaisCiudad{}, types.ListaCompartidaRegistro{})
 
 	return core.FuncResponse{}
 }
