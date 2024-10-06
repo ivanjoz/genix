@@ -1,5 +1,7 @@
 package types
 
+import "app/db"
+
 type PaisCiudad struct {
 	TAGS         `table:"pais_ciudades"`
 	PaisID       int32       `db:"pais_id,pk"`
@@ -10,6 +12,26 @@ type PaisCiudad struct {
 	Updated      int64       `json:"upd" db:"updated,view"`
 	Departamento *PaisCiudad `json:"-"`
 	Provincia    *PaisCiudad `json:"-"`
+}
+
+type _a = PaisCiudad
+
+func (e _a) PaisID_() db.CoI32   { return db.CoI32{"pais_id"} }
+func (e _a) CiudadID_() db.CoStr { return db.CoStr{"ciudad_id"} }
+func (e _a) Nombre_() db.CoStr   { return db.CoStr{"nombre"} }
+func (e _a) PadreID_() db.CoStr  { return db.CoStr{"padre_id"} }
+func (e _a) Jerarquia_() db.CoI8 { return db.CoI8{"jerarquia"} }
+func (e _a) Updated_() db.CoI64  { return db.CoI64{"updated"} }
+
+func (e PaisCiudad) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "pais_ciudades",
+		Partition: e.PaisID_(),
+		Keys:      []db.Column{e.CiudadID_()},
+		Views: []db.View{
+			{Cols: []db.Column{e.Updated_()}},
+		},
+	}
 }
 
 type ListaCompartidaRegistro struct {
@@ -24,6 +46,30 @@ type ListaCompartidaRegistro struct {
 	Status    int8  `json:"ss,omitempty" db:"status,view.1"`
 	Updated   int64 `json:"upd,omitempty" db:"updated,view.2"`
 	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
+}
+
+type _b = ListaCompartidaRegistro
+
+func (e _b) EmpresaID_() db.CoI32   { return db.CoI32{"empresa_id"} }
+func (e _b) ID_() db.CoI32          { return db.CoI32{"id"} }
+func (e _b) ListaID_() db.CoI32     { return db.CoI32{"lista_id"} }
+func (e _b) Nombre_() db.CoStr      { return db.CoStr{"padre_id"} }
+func (e _b) Images_() db.CsStr      { return db.CsStr{"images"} }
+func (e _b) Descripcion_() db.CoStr { return db.CoStr{"descripcion"} }
+func (e _b) Status_() db.CoI8       { return db.CoI8{"status"} }
+func (e _b) Updated_() db.CoI64     { return db.CoI64{"updated"} }
+func (e _b) UpdatedBy_() db.CoI32   { return db.CoI32{"updated_by"} }
+
+func (e ListaCompartidaRegistro) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name: "lista_compartida_registros",
+		Keys: []db.Column{e.EmpresaID_(), e.ID_()},
+		Views: []db.View{
+			{Cols: []db.Column{e.ListaID_()}},
+			{Cols: []db.Column{e.ListaID_(), e.Status_()}, Int32ConcatRadix: []int8{2}},
+			{Cols: []db.Column{e.ListaID_(), e.Updated_()}, IntConcatRadix: []int8{10}},
+		},
+	}
 }
 
 func (e *ListaCompartidaRegistro) GetView(view int8) any {

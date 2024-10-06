@@ -14,8 +14,8 @@ import (
 type scyllaTable[T any] struct {
 	name          string
 	keyspace      string
-	keys          []columnInfo
-	partitionKey  columnInfo
+	keys          []*columnInfo
+	partitionKey  *columnInfo
 	columns       []*columnInfo
 	columnsMap    map[string]*columnInfo
 	columnsIdxMap map[int16]*columnInfo
@@ -68,6 +68,7 @@ func (q ColumnStatement) GetValue() any {
 
 type Column interface {
 	GetInfo() columnInfo
+	GetName() string
 }
 
 type ColumnSetName interface {
@@ -78,6 +79,8 @@ type View struct {
 	Cols []Column
 	// Para concatenar numeros como = int64(e.AlmacenID)*1e9 + int64(e.Updated)
 	IntConcatRadix []int8
+	// Para concatenar numeros como = int32(e.AlmacenID)*1e5 + int64(e.Updated)
+	Int32ConcatRadix []int8
 }
 
 type Index struct {
@@ -94,6 +97,9 @@ func (q Col[T]) GetInfo() columnInfo {
 	fieldType := reflect.TypeOf(typ).String()
 	col := columnInfo{Name: q.C, FieldType: fieldType}
 	return col
+}
+func (q Col[T]) GetName() string {
+	return q.C
 }
 
 // Generic
@@ -130,6 +136,10 @@ func (q ColSlice[T]) GetInfo() columnInfo {
 	return columnInfo{Name: q.Name, FieldType: reflect.TypeOf(typ).String(), IsSlice: true}
 }
 
+func (q ColSlice[T]) GetName() string {
+	return q.Name
+}
+
 func (e ColSlice[T]) Contains(v T) ColumnStatement {
 	return ColumnStatement{e.Name, "CONTAINS", any(v), nil}
 }
@@ -138,6 +148,7 @@ type CoAny = Col[any]
 type CoInt = Col[int]
 type CoI32 = Col[int32]
 type CoI16 = Col[int16]
+type CoI8 = Col[int8]
 type CoStr = Col[string]
 type CoI64 = Col[int64]
 type CoF32 = Col[float32]
@@ -189,6 +200,13 @@ func (q *Query[T]) Where(ce ColumnStatement) *Query[T] {
 	return q
 }
 
+func (q *Query[T]) WhereIF(condition bool, ce ColumnStatement) *Query[T] {
+	if condition {
+		q.Where(ce)
+	}
+	return q
+}
+
 func (q *Query[T]) WhereOr(ce ...ColumnStatement) *Query[T] {
 	q.init()
 	q.statements = append(q.statements, statementGroup{group: ce})
@@ -228,7 +246,7 @@ type viewInfo struct {
 
 type QueryResult[T any] struct {
 	Records []T
-	Error   error
+	Err     error
 }
 
 func Select[T TableSchemaInterface](handler func(query *Query[T], schemaTable T)) QueryResult[T] {
@@ -236,9 +254,17 @@ func Select[T TableSchemaInterface](handler func(query *Query[T], schemaTable T)
 	query := Query[T]{}
 	baseType := *new(T)
 	handler(&query, baseType)
-	records, err := selectExec(&query)
-
+	records := []T{}
+	err := selectExec(&records, &query)
 	return QueryResult[T]{records, err}
+}
+
+func SelectRef[T TableSchemaInterface](recordsGetted *[]T, handler func(query *Query[T], schemaTable T)) error {
+
+	query := Query[T]{}
+	baseType := *new(T)
+	handler(&query, baseType)
+	return selectExec(recordsGetted, &query)
 }
 
 type posibleIndex struct {
@@ -248,7 +274,7 @@ type posibleIndex struct {
 	priority     int8
 }
 
-func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
+func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) error {
 
 	scyllaTable := makeTable[T](*new(T))
 	viewTableName := scyllaTable.name
@@ -257,7 +283,7 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 		scyllaTable.keyspace = connParams.Keyspace
 	}
 	if len(scyllaTable.keyspace) == 0 {
-		return nil, errors.New("no se ha especificado un keyspace")
+		return errors.New("no se ha especificado un keyspace")
 	}
 
 	columnNames := []string{}
@@ -330,6 +356,9 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 
 		viewOrIndex := posibleViewsOrIndexes[0].indexView
 		fmt.Println("Posible Index:", viewOrIndex.name)
+		if viewOrIndex.Type >= 6 {
+			viewTableName = viewOrIndex.name
+		}
 
 		if viewOrIndex.getStatement != nil {
 			fmt.Println("Creating statement Index:", viewOrIndex.name)
@@ -382,12 +411,10 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 				fmt.Println(msg)
 			}
 		}
-		return nil, err
+		return err
 	}
 
 	scanner := iter.Scanner()
-	records := []T{}
-
 	fmt.Println("starting iterator | columns::", len(scyllaTable.columns))
 
 	for scanner.Next() {
@@ -397,7 +424,7 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 		err := scanner.Scan(rowValues...)
 		if err != nil {
 			fmt.Println("Error on scan::", err)
-			return nil, err
+			return err
 		}
 
 		rec := new(T)
@@ -445,12 +472,10 @@ func selectExec[T TableSchemaInterface](query *Query[T]) ([]T, error) {
 				fmt.Print("Column is not mapped:: ", column)
 			}
 		}
-		records = append(records, *rec)
+		(*recordsGetted) = append((*recordsGetted), *rec)
 	}
 
-	// core.Print(records)
-
-	return records, nil
+	return nil
 }
 
 func parseValueToString(v any) string {
@@ -472,7 +497,7 @@ func makeQueryStatement(statements []string) string {
 	return queryStr
 }
 
-func InsertExclude[T TableSchemaInterface](records *[]T, columnsToExclude ...Column) error {
+func Insert[T TableSchemaInterface](records *[]T, columnsToExclude ...Column) error {
 
 	scyllaTable := makeTable(*new(T))
 
@@ -534,5 +559,76 @@ func InsertExclude[T TableSchemaInterface](records *[]T, columnsToExclude ...Col
 		return err
 	}
 
+	return nil
+}
+
+func makeUpdateQuery[T TableSchemaInterface](records *[]T, columnsToInclude []Column, columnsToExclude []Column) []string {
+
+	scyllaTable := makeTable(*new(T))
+
+	columnsToUpdate := []*columnInfo{}
+	if len(columnsToInclude) > 0 {
+		for _, col := range columnsToInclude {
+			columnsToUpdate = append(columnsToUpdate, scyllaTable.columnsMap[col.GetName()])
+		}
+	} else {
+		columnsToExcludeNames := []string{}
+		for _, c := range columnsToExclude {
+			columnsToExcludeNames = append(columnsToExcludeNames, c.GetName())
+		}
+		for _, col := range columnsToUpdate {
+			if !col.IsVirtual && !slices.Contains(columnsToExcludeNames, col.Name) {
+				columnsToUpdate = append(columnsToUpdate, col)
+			}
+		}
+	}
+
+	columnsWhere := scyllaTable.keys
+
+	if scyllaTable.partitionKey != nil {
+		columnsWhere = append([]*columnInfo{scyllaTable.partitionKey}, columnsWhere...)
+	}
+
+	queryStatements := []string{}
+
+	for _, rec := range *records {
+		refValue := reflect.ValueOf(rec)
+
+		setStatements := []string{}
+		for _, col := range columnsToUpdate {
+			v := col.getValue(&refValue)
+			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
+		}
+
+		whereStatements := []string{}
+		for _, col := range columnsWhere {
+			v := col.getValue(&refValue)
+			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
+		}
+
+		queryStatement := fmt.Sprintf(
+			"UPDATE %v SET %v WHERE %v",
+			scyllaTable.fullName(), Concatx(", ", setStatements), Concatx(" and ", whereStatements),
+		)
+
+		queryStatements = append(queryStatements, queryStatement)
+	}
+
+	return queryStatements
+}
+
+func Update[T TableSchemaInterface](records *[]T, columnsToInclude ...Column) error {
+
+	if len(columnsToInclude) == 0 {
+		panic("No se incluyeron columnas a actualizar.")
+	}
+
+	queryStatements := makeUpdateQuery(records, columnsToInclude, nil)
+	queryInsert := makeQueryStatement(queryStatements)
+	if err := QueryExec(queryInsert); err != nil {
+		fmt.Println(queryInsert)
+		fmt.Println("Error inserting records:", err)
+		return err
+	}
 	return nil
 }

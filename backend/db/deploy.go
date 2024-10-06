@@ -62,9 +62,11 @@ func DeployScylla(structTables ...any) {
 		q.Where(col.Keyspace_().Equals(connParams.Keyspace))
 	})
 
-	if scyllaColumns.Error != nil {
-		panic("Error:" + scyllaColumns.Error.Error())
+	if scyllaColumns.Err != nil {
+		panic("Error:" + scyllaColumns.Err.Error())
 	}
+
+	fmt.Println("Scylla columns obtenidas::", len(scyllaColumns.Records))
 
 	tableColumnsMap := map[string][]ScyllaColumns{}
 
@@ -75,20 +77,20 @@ func DeployScylla(structTables ...any) {
 
 	tablesNames := []string{}
 
-	for tableName /*, columns */ := range tableColumnsMap {
+	for tableName, columns := range tableColumnsMap {
 		tablesNames = append(tablesNames, tableName)
-		/*
-			s1 := strings.Split(tableName, "_")
-			if s1[len(s1)-1] == "view" {
-				continue
-			}
-			fmt.Println("✔ Table =", tableName)
-			columnsNames := []string{}
-			for _, c := range columns {
-				columnsNames = append(columnsNames, fmt.Sprintf("%v(%v)", c.Name, c.Type))
-			}
-			fmt.Println("  Columns =", strings.Join(columnsNames, ", "))
-		*/
+
+		s1 := strings.Split(tableName, "_")
+		if s1[len(s1)-1] == "view" {
+			continue
+		}
+		fmt.Println("✔ Table =", tableName)
+		columnsNames := []string{}
+		for _, c := range columns {
+			columnsNames = append(columnsNames, fmt.Sprintf("%v(%v)", c.Name, c.Type))
+		}
+		fmt.Println("  Columns =", strings.Join(columnsNames, ", "))
+
 	}
 
 	fmt.Println("Tables::", tablesNames)
@@ -98,8 +100,8 @@ func DeployScylla(structTables ...any) {
 		q.Where(col.Keyspace_().Equals(connParams.Keyspace))
 	})
 
-	if scyllaIndexes.Error != nil {
-		panic("Error:" + scyllaIndexes.Error.Error())
+	if scyllaIndexes.Err != nil {
+		panic("Error:" + scyllaIndexes.Err.Error())
 	}
 
 	tableIdexesMap := map[string][]string{}

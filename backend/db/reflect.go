@@ -91,14 +91,6 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		dbTable.keyspace = connParams.Keyspace
 	}
 
-	if schema.Partition != nil {
-		dbTable.partitionKey = schema.Partition.GetInfo()
-	}
-
-	for _, key := range schema.Keys {
-		dbTable.keys = append(dbTable.keys, key.GetInfo())
-	}
-
 	fieldNameIdxMap := map[string]columnInfo{}
 	colRegex, _ := regexp.Compile(`^Col\[.*\]$`)
 	colSliceRegex, _ := regexp.Compile(`^ColSlice\[.*\]$`)
@@ -244,6 +236,14 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		}
 	}
 
+	if schema.Partition != nil {
+		dbTable.partitionKey = dbTable.columnsMap[schema.Partition.GetInfo().Name]
+	}
+
+	for _, key := range schema.Keys {
+		dbTable.keys = append(dbTable.keys, dbTable.columnsMap[key.GetInfo().Name])
+	}
+
 	idxCount := int8(1)
 	for _, column := range schema.GlobalIndexes {
 		colInfo := dbTable.columnsMap[column.GetInfo().Name]
@@ -380,8 +380,10 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 	for _, viewConfig := range schema.Views {
 		columns := []*columnInfo{}
 		names := []string{}
-		columnsNormal := []*columnInfo{}
-		var columnSlice *columnInfo
+
+		if dbTable.partitionKey != nil {
+			names = append(names, dbTable.partitionKey.Name)
+		}
 
 		for _, colInfo := range viewConfig.Cols {
 			column := dbTable.columnsMap[colInfo.GetInfo().Name]
@@ -389,12 +391,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				panic("No puede ser un struct como columna de una view")
 			}
 			if column.IsSlice {
-				if columnSlice != nil {
-					panic(fmt.Sprintf(`Table "%v". Can't create view with slice columns "%v" and "%v"`, dbTable.name, columnSlice.Name, column.Name))
-				}
-				columnSlice = column
-			} else {
-				columnsNormal = append(columnsNormal, column)
+				panic("No puede ser un slice como columna de una view")
 			}
 			names = append(names, column.Name)
 			columns = append(columns, column)
@@ -420,9 +417,12 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		// Si sólo es una columna, no es necesario autogenerar
 		if len(columns) == 1 {
 			view.column = columns[0]
-		} else if len(viewConfig.IntConcatRadix) > 0 {
-			view.column.FieldType = "int64"
-			view.column.Type = "bigint"
+		} else if len(viewConfig.IntConcatRadix) > 0 || len(viewConfig.Int32ConcatRadix) > 0 {
+			isInt64 := len(viewConfig.IntConcatRadix) > 0
+			if isInt64 {
+				view.column.FieldType = "int64"
+				view.column.Type = "bigint"
+			}
 			view.Type = 8
 
 			// Si ha especificado un int64 radix entonces se puede concatener, maximo 2 columnas
@@ -430,7 +430,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				panic(fmt.Sprintf(`La view "%v" de la tabla "%v" posee menos de 2 columnas para usar el IntConcatRadix`, dbTable.name, view.name))
 			}
 
-			radixes := append(viewConfig.IntConcatRadix, 0)
+			radixes := append(append(viewConfig.IntConcatRadix, viewConfig.Int32ConcatRadix...), 0)
 
 			if len(radixes) != len(view.columns) {
 				panic(fmt.Sprintf(`The view "%v" in "%v" need to have %v radix arguments for the %v columns provided`,
@@ -473,35 +473,12 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 					sumValue += valueI64
 				}
 				fmt.Printf("Radix Sum Calculado %v | %v | %v\n", sumValue, values, radixesI64)
-				return any(sumValue)
+				if isInt64 {
+					return any(sumValue)
+				} else {
+					return any(int32(sumValue))
+				}
 			}
-			/*
-				} else if columnSlice != nil {
-					//TODO: REVIEW!!!
-					// Si una de las columnas es un slice puede iterar por el slice para obtener los values y gurdarla en una columa Set<any>
-					view.column.FieldType = "[]int32"
-					view.column.Type = "set<int>"
-					view.column.IsSlice = 1
-					// Si hay una columna slice entonces por cada elemento en el slice
-					view.column.getValue = func(s *reflect.Value) any {
-						values := []any{}
-						for _, e := range columns {
-							values = append(values, e.getValue(s))
-						}
-						hashValues := []int32{}
-						hashValues = append(hashValues, HashInt(values...))
-
-						reflectSlice := s.Field(columnSlice.FieldIdx)
-						if columnSlice.IsPointer {
-							reflectSlice = reflectSlice.Elem()
-						}
-						for _, vl := range reflectToSlice(&reflectSlice) {
-							hashValues = append(hashValues, HashInt(vl))
-							hashValues = append(hashValues, HashInt(append(values, vl)...))
-						}
-						return "{" + Concatx(",", hashValues) + "}"
-					}
-			*/
 		} else {
 			view.Type = 7
 			// Sino crea un hash de las columnas
@@ -515,26 +492,26 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			}
 		}
 
-		whereCols := append([]columnInfo{*view.column}, dbTable.keys...)
-		pk := whereCols[0].Name + ", " + whereCols[1].Name
-
-		if len(dbTable.partitionKey.Name) > 0 {
-			whereCols = append([]columnInfo{dbTable.partitionKey}, whereCols...)
-			pk = fmt.Sprintf("(%v), %v", whereCols[0].Name, pk)
-		}
-
-		whereColumnsNotNull := []string{}
-		for _, col := range whereCols {
-			if col.Type == "text" {
-				whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" > ''")
-			} else if col.IsSlice {
-				// whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" IS NOT NULL")
-			} else {
-				whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" > 0")
-			}
-		}
-
 		view.getCreateScript = func() string {
+			whereCols := append([]*columnInfo{view.column}, dbTable.keys...)
+			pk := whereCols[0].Name + ", " + whereCols[1].Name
+
+			if dbTable.partitionKey != nil {
+				whereCols = append([]*columnInfo{dbTable.partitionKey}, whereCols...)
+				pk = fmt.Sprintf("(%v), %v", whereCols[0].Name, pk)
+			}
+
+			whereColumnsNotNull := []string{}
+			for _, col := range whereCols {
+				if col.Type == "text" {
+					whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" > ''")
+				} else if col.IsSlice {
+					// whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" IS NOT NULL")
+				} else {
+					whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" > 0")
+				}
+			}
+
 			colNames := []string{}
 			for _, col := range dbTable.columns {
 				if !col.IsVirtual || col.Name == view.column.Name {
