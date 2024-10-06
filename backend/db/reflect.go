@@ -19,19 +19,18 @@ type columnInfo struct {
 	NameAlias string
 	Type      string
 	// RefType        reflect.Value
-	FieldIdx       int
-	Idx            int16
-	RefType        reflect.Value
-	IsPrimaryKey   int8
-	IsSlice        bool
-	IsPointer      bool
-	IsViewExcluded bool
-	IsVirtual      bool
-	HasView        bool
-	IsComplexType  bool
-	ViewIdx        int8
-	getValue       func(s *reflect.Value) any
-	setValue       func(s *reflect.Value, v any)
+	FieldIdx      int
+	Idx           int16
+	RefType       reflect.Value
+	IsPrimaryKey  int8
+	IsSlice       bool
+	IsPointer     bool
+	IsVirtual     bool
+	HasView       bool
+	IsComplexType bool
+	ViewIdx       int8
+	getValue      func(s *reflect.Value) any
+	setValue      func(s *reflect.Value, v any)
 }
 
 var scyllaFieldToColumnTypesMap = map[string]string{
@@ -71,7 +70,6 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 	structRefValue := reflect.ValueOf(structType)
 	structRefType := structRefValue.Type()
-	// fmt.Println("struct type:", structRefType, "| numfield:", structRefType.NumField())
 
 	if len(schema.Keys) == 0 {
 		panic("No se ha especificado una PrimaryKey")
@@ -238,10 +236,13 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 	if schema.Partition != nil {
 		dbTable.partitionKey = dbTable.columnsMap[schema.Partition.GetInfo().Name]
+		dbTable.keysIdx = append(dbTable.keysIdx, dbTable.partitionKey.Idx)
 	}
 
 	for _, key := range schema.Keys {
-		dbTable.keys = append(dbTable.keys, dbTable.columnsMap[key.GetInfo().Name])
+		col := dbTable.columnsMap[key.GetInfo().Name]
+		dbTable.keys = append(dbTable.keys, col)
+		dbTable.keysIdx = append(dbTable.keysIdx, col.Idx)
 	}
 
 	idxCount := int8(1)
