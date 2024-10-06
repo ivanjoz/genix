@@ -9,7 +9,7 @@
   "dependencies": {
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.14.1",
-    "@solidjs/start": "^1.0.6",
+    "@solidjs/start": "^1.0.8",
     "@tanstack/solid-virtual": "^3.2.0",
     "@tanstack/virtual-core": "^3.2.0",
     "@types/d3": "^7.4.3",

@@ -15,6 +15,7 @@ export interface IMenuRecord {
 export const [innerPageName, setInnerPageName] = createSignal("")
 export const [pageViews, setPageViews] = createSignal([])
 export const [pageView, setPageView] = createSignal(0)
+export const [isRouteChanging, setIsRouteChanging] = createSignal(false)
 
 const uicolors = [
   { id: "light", name: "Claro" },
@@ -321,8 +322,11 @@ const MakeMenuRecord = (props: IMenuElement, opt: IMenuRecord, selected?: boolea
   return <a style={{ "text-decoration": 'none', display: 'contents' }} 
     href={opt.route||"/"}>
     <div class={cN} onClick={ev => {
-
+      const route = opt.route||"/"
+      if(window.location.pathname === route){ return }
       ev.stopPropagation()
+      window.history.pushState(null, opt.name, opt.route||"/")
+      setIsRouteChanging(true)
       props.menuOpen[1] = opt.route
       props.setMenuOpen([...props.menuOpen])
       if(showMenu()){ setShowMenu(false) }
