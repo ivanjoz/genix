@@ -1,5 +1,5 @@
 import { JSX, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import { setInnerPageName, setPageView, setPageViews } from "./menu"
+import { isRouteChanging, setInnerPageName, setIsRouteChanging, setPageView, setPageViews } from "./menu"
 import { fetchPending, setfetchPending } from "~/shared/http"
 import { Params } from "~/shared/security"
 import { useLocation } from "@solidjs/router"
@@ -20,6 +20,7 @@ export const PageContainer = (props: IPageContainer) => {
   const location = useLocation()
   
   onMount(() => {
+    setIsRouteChanging(false)
     setInnerPageName(props.title||"")
     setPageViews(props.views||[])
     const view = Params.getValueInt(`pview-${location.pathname}`)
@@ -33,6 +34,7 @@ export const PageContainer = (props: IPageContainer) => {
   onCleanup(() => { setInnerPageName("") })
   
   const isLoading = createMemo(() => {
+    if(isRouteChanging()){ return true }
     console.log("Loading:: ", fetchPending().size)
     if(!props.fetchLoading) return false
     return fetchPending().size > 0
@@ -58,10 +60,27 @@ export const PageContainer = (props: IPageContainer) => {
   
   return <div class={cN()} style={props.pageStyle}>
     <Show when={!isLoading()}>
-      { props.children }       
+      {props.children}   
     </Show> 
     <Show when={isLoading()}>
-      <h2>Cargando...</h2>    
+      <Spinner1 message="Cargando Módulo..."/>    
     </Show> 
   </div>
+}
+
+export const Spinner1 = (props: { message: string }) => {
+  return <div class="flex ai-center" style={{ padding: "5rem 12rem" }}>
+    <div class="spinner"></div>
+    <h2 class="ml-08">{props.message}</h2>
+  </div>
+} 
+
+export const PageLoadingElement = (
+  <div class="page-container">
+    <Spinner1 message="Cargando Aplicación..."/>   
+  </div>
+)
+
+export const PageLoading = () => {
+  return PageLoadingElement
 }

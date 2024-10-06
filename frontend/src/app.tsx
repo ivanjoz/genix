@@ -10,6 +10,7 @@ import { createIndexDB } from "./shared/main";
 import { Params, loginStatus, setLoginStatus } from "./shared/security";
 import PageBuilder from "./pages/page";
 import CmsWebpage from "./routes/cms/webpage";
+import { PageLoading, PageLoadingElement, Spinner1 } from "./core/page";
 
 let defaultModule = Modules[0]
 const isClient = typeof window !== 'undefined'
@@ -98,14 +99,15 @@ export default function Root() {
     <Router root={props => (
         <MetaProvider>
           <Title>GENIX - MyPes</Title>
-          <Suspense>{props.children}</Suspense>
+          <Suspense fallback={PageLoadingElement}>{props.children}</Suspense>
         </MetaProvider>
       )}>
+      <Route path="/_loading" component={PageLoading} />
       <Route path="/page" component={PageBuilder} />
       <Route path="/page/:name" component={PageBuilder} />
       <Route path="/cms/webpage/:name" component={CmsWebpage} />
       <Show when={isLogin() === 2}>
-        <FileRoutes />
+        <Suspense fallback={PageLoadingElement}>{<FileRoutes />}</Suspense>
       </Show>
     </Router>
     <Show when={isLogin() === 3}>
