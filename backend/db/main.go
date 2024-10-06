@@ -16,6 +16,7 @@ type scyllaTable[T any] struct {
 	keyspace      string
 	keys          []*columnInfo
 	partitionKey  *columnInfo
+	keysIdx       []int16
 	columns       []*columnInfo
 	columnsMap    map[string]*columnInfo
 	columnsIdxMap map[int16]*columnInfo
@@ -276,7 +277,7 @@ type posibleIndex struct {
 
 func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) error {
 
-	scyllaTable := makeTable[T](*new(T))
+	scyllaTable := makeTable(*new(T))
 	viewTableName := scyllaTable.name
 
 	if len(scyllaTable.keyspace) == 0 {
@@ -568,17 +569,55 @@ func makeUpdateQuery[T TableSchemaInterface](records *[]T, columnsToInclude []Co
 
 	columnsToUpdate := []*columnInfo{}
 	if len(columnsToInclude) > 0 {
-		for _, col := range columnsToInclude {
-			columnsToUpdate = append(columnsToUpdate, scyllaTable.columnsMap[col.GetName()])
+		for _, col_ := range columnsToInclude {
+			col := scyllaTable.columnsMap[col_.GetName()]
+			if slices.Contains(scyllaTable.keysIdx, col.Idx) {
+				msg := fmt.Sprintf(`Table "%v": The column "%v" can't be updated because is part of primary key.`, scyllaTable.name, col.Name)
+				panic(msg)
+			}
+			columnsToUpdate = append(columnsToUpdate, col)
 		}
 	} else {
 		columnsToExcludeNames := []string{}
 		for _, c := range columnsToExclude {
 			columnsToExcludeNames = append(columnsToExcludeNames, c.GetName())
 		}
-		for _, col := range columnsToUpdate {
-			if !col.IsVirtual && !slices.Contains(columnsToExcludeNames, col.Name) {
+		for _, col := range scyllaTable.columns {
+			isExcluded := slices.Contains(columnsToExcludeNames, col.Name)
+			if !col.IsVirtual && !isExcluded && !slices.Contains(scyllaTable.keysIdx, col.Idx) {
 				columnsToUpdate = append(columnsToUpdate, col)
+			}
+		}
+	}
+
+	columnsIdx := []int16{}
+	for _, col := range columnsToUpdate {
+		columnsIdx = append(columnsIdx, col.Idx)
+	}
+
+	//Revisa si hay columnas que deben actualizarse juntas para los índices calculados
+	for _, indexViews := range scyllaTable.indexViews {
+		if indexViews.column.IsVirtual {
+			includedCols := []int16{}
+			notIncludedCols := []int16{}
+			for _, colIdx := range indexViews.columnsIdx {
+				if slices.Contains(columnsIdx, colIdx) || slices.Contains(scyllaTable.keysIdx, colIdx) {
+					includedCols = append(includedCols, colIdx)
+				} else {
+					notIncludedCols = append(notIncludedCols, colIdx)
+				}
+			}
+			if len(includedCols) > 0 && len(notIncludedCols) > 0 {
+				colNames := strings.Join(indexViews.columns, `, `)
+				includedColsNames := []string{}
+				for _, idx := range notIncludedCols {
+					includedColsNames = append(includedColsNames, scyllaTable.columnsIdxMap[idx].Name)
+				}
+
+				msg := fmt.Sprintf(`Table "%v": A composit index/view requires the columns %v are updated together. Included: %v`, scyllaTable.name, colNames, strings.Join(includedColsNames, ", "))
+				panic(msg)
+			} else if len(includedCols) > 0 {
+				columnsToUpdate = append(columnsToUpdate, indexViews.column)
 			}
 		}
 	}

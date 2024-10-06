@@ -242,3 +242,34 @@ func DeployScylla(structTables ...any) {
 		}
 	}
 }
+
+func RecalcVirtualColumns[T TableSchemaInterface]() {
+	scyllaTable := makeTable(*new(T))
+
+	columnsToUpdateIdx := []int16{}
+	for _, viewIndex := range scyllaTable.indexViews {
+		if viewIndex.column.IsVirtual {
+			for _, idx := range viewIndex.columnsIdx {
+				if !slices.Contains(columnsToUpdateIdx, idx) {
+					columnsToUpdateIdx = append(columnsToUpdateIdx, idx)
+				}
+			}
+		}
+	}
+
+	if len(columnsToUpdateIdx) == 0 {
+		panic("no hay columnas virtuales a actulizar")
+	}
+
+	// columnsToUpdate := []*columnInfo{}
+
+	query := Query[T]{}
+	records := []T{}
+	err := selectExec(&records, &query)
+
+	if err != nil {
+		fmt.Println("Error al obtener los registros::", err)
+	}
+
+	err = Update(&records)
+}
