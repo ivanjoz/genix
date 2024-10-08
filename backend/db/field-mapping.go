@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"reflect"
 )
 
@@ -58,6 +59,10 @@ func makeMappingKey(col *columnInfo) fieldMap {
 	return fm
 }
 
+func printError(valType string, v any) {
+	fmt.Printf("Error: El valor %v no fue mapeado = %v\n", valType, reflect.Indirect(reflect.ValueOf(v)))
+}
+
 var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 	// NO SLICE
 	{"string", 0, 0}: func(e *reflect.Value, v any) {
@@ -74,21 +79,29 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 	{"int32", 0, 0}: func(e *reflect.Value, v any) {
 		if vl, ok := v.(*int); ok {
 			setReflectInt[int32](e, vl)
+		} else {
+			printError("int32", v)
 		}
 	},
 	{"int32", 1, 0}: func(e *reflect.Value, v any) {
 		if vl, ok := v.(*int); ok {
 			setReflectIntPointer[int32](e, vl)
+		} else {
+			printError("int32", v)
 		}
 	},
 	{"int", 0, 0}: func(e *reflect.Value, v any) {
 		if vl, ok := v.(*int); ok {
 			setReflectInt[int32](e, vl)
+		} else {
+			printError("int", v)
 		}
 	},
 	{"int", 1, 0}: func(e *reflect.Value, v any) {
 		if vl, ok := v.(*int); ok {
 			setReflectIntPointer[int32](e, vl)
+		} else {
+			printError("int", v)
 		}
 	},
 	{"int16", 0, 0}: func(e *reflect.Value, v any) {
@@ -96,6 +109,8 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 			setReflectInt[int16](e, vl)
 		} else if vl, ok := v.(*int); ok {
 			setReflectInt[int](e, vl)
+		} else {
+			printError("int16", v)
 		}
 	},
 	{"int16", 1, 0}: func(e *reflect.Value, v any) {
@@ -103,6 +118,8 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 			setReflectIntPointer[int16](e, vl)
 		} else if vl, ok := v.(*int); ok {
 			setReflectIntPointer[int](e, vl)
+		} else {
+			printError("int16", v)
 		}
 	},
 	{"int8", 0, 0}: func(e *reflect.Value, v any) {
@@ -110,6 +127,8 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 			setReflectInt[int](e, vl)
 		} else if vl, ok := v.(*int); ok {
 			setReflectInt[int](e, vl)
+		} else {
+			printError("int8", v)
 		}
 	},
 	{"int8", 1, 0}: func(e *reflect.Value, v any) {
@@ -117,20 +136,26 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 			setReflectIntPointer[int](e, vl)
 		} else if vl, ok := v.(*int); ok {
 			setReflectIntPointer[int](e, vl)
+		} else {
+			printError("int8", v)
 		}
 	},
 	{"int64", 0, 0}: func(e *reflect.Value, v any) {
-		if vl, ok := v.(*int8); ok {
-			setReflectInt[int](e, vl)
+		if vl, ok := v.(*int64); ok {
+			setReflectInt[int64](e, vl)
 		} else if vl, ok := v.(*int); ok {
-			setReflectInt[int](e, vl)
+			setReflectInt[int64](e, vl)
+		} else {
+			printError("int64", v)
 		}
 	},
 	{"int64", 1, 0}: func(e *reflect.Value, v any) {
-		if vl, ok := v.(*int8); ok {
-			setReflectIntPointer[int](e, vl)
+		if vl, ok := v.(*int64); ok {
+			setReflectIntPointer[int64](e, vl)
 		} else if vl, ok := v.(*int); ok {
-			setReflectIntPointer[int](e, vl)
+			setReflectIntPointer[int64](e, vl)
+		} else {
+			printError("int64", v)
 		}
 	},
 	{"float32", 0, 0}: func(e *reflect.Value, v any) {
@@ -138,6 +163,8 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 			(*e).SetFloat(float64(*vl))
 		} else if vl, ok := v.(*float64); ok {
 			(*e).SetFloat(float64(*vl))
+		} else {
+			printError("float32", v)
 		}
 	},
 	{"float32", 1, 0}: func(e *reflect.Value, v any) {
@@ -145,17 +172,23 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 			(*e).Set(reflect.ValueOf(vl))
 		} else if vl, ok := v.(*float64); ok {
 			(*e).Set(reflect.ValueOf(float32(*vl)))
+		} else {
+			printError("float32", v)
 		}
 	},
 	// SLICE
 	{"int32", 0, 1}: func(e *reflect.Value, v any) {
 		if vl, ok := v.(*[]int); ok {
 			setReflectIntSlice[int32](e, vl)
+		} else {
+			printError("[]int32", v)
 		}
 	},
 	{"int32", 1, 1}: func(e *reflect.Value, v any) { // Pointer
 		if vl, ok := v.(*[]int); ok {
 			setReflectIntSlicePointer[int32](e, vl)
+		} else {
+			printError("[]int32", v)
 		}
 	},
 	{"int16", 0, 1}: func(e *reflect.Value, v any) {
@@ -165,6 +198,8 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 			setReflectIntSlice[int16](e, vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlice[int16](e, vl)
+		} else {
+			printError("[]int16", v)
 		}
 	},
 	{"int16", 1, 1}: func(e *reflect.Value, v any) { // Pointer
@@ -174,6 +209,8 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 			setReflectIntSlicePointer[int16](e, vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlicePointer[int16](e, vl)
+		} else {
+			printError("[]int16", v)
 		}
 	},
 	{"int8", 0, 1}: func(e *reflect.Value, v any) {
@@ -183,6 +220,8 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 			setReflectIntSlice[int8](e, vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlice[int8](e, vl)
+		} else {
+			printError("[]int8", v)
 		}
 	},
 	{"int8", 1, 1}: func(e *reflect.Value, v any) { // Pointer
@@ -192,6 +231,8 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 			setReflectIntSlicePointer[int8](e, vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlicePointer[int8](e, vl)
+		} else {
+			printError("[]int8", v)
 		}
 	},
 	{"int64", 0, 1}: func(e *reflect.Value, v any) {
@@ -199,6 +240,8 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 			setReflectIntSlice[int64](e, vl)
 		} else if vl, ok := v.(*[]int16); ok {
 			setReflectIntSlice[int64](e, vl)
+		} else {
+			printError("[]int16", v)
 		}
 	},
 	{"int64", 1, 1}: func(e *reflect.Value, v any) { // Pointer
@@ -206,6 +249,8 @@ var fieldMapping = map[fieldMap]func(e *reflect.Value, value any){
 			setReflectIntSlicePointer[int64](e, vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlicePointer[int64](e, vl)
+		} else {
+			printError("[]int16", v)
 		}
 	},
 	{"string", 0, 1}: func(e *reflect.Value, v any) {
