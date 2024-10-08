@@ -21,7 +21,7 @@ type columnInfo struct {
 	// RefType        reflect.Value
 	FieldIdx      int
 	Idx           int16
-	RefType       reflect.Value
+	RefType       reflect.Type
 	IsPrimaryKey  int8
 	IsSlice       bool
 	IsPointer     bool
@@ -98,6 +98,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			FieldIdx:  i,
 			FieldType: structRefType.Field(i).Type.String(),
 			FieldName: structRefType.Field(i).Name,
+			RefType:   structRefType.Field(i).Type,
 		}
 		if col.FieldType[0:1] == "*" {
 			col.IsPointer = true
@@ -131,28 +132,34 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			fieldName = fieldName[0 : len(fieldName)-1]
 		}
 
-		columnFromField := fieldNameIdxMap[fieldName]
-		if columnFromField.FieldType == "" {
+		column := fieldNameIdxMap[fieldName]
+		if column.FieldType == "" {
 			panic(fmt.Sprintf(`No se encontró la columna "%v" en el struct "%v"`, fieldName, structRefType.Name()))
 		}
 
 		mathodValue := structRefValue.Method(i).Call([]reflect.Value{})
-		var column columnInfo
 		if col, ok := mathodValue[0].Interface().(Coln); ok {
-			column = col.GetInfo()
+			colInfo := col.GetInfo()
+			//TODO: compara si las columnas posee los tipos adecuados
+			column.Name = colInfo.Name
 		} else {
 			panic(fmt.Sprintf("La columna %v está mal configurada.", fieldName))
 		}
 
-		column.FieldIdx = columnFromField.FieldIdx
-		column.FieldType = columnFromField.FieldType
-		column.FieldName = columnFromField.FieldName
-		column.IsPointer = columnFromField.IsPointer
-		column.IsSlice = columnFromField.IsSlice
 		column.setValue = fieldMapping[makeMappingKey(&column)]
 
 		if column.setValue == nil {
 			fmt.Println("Unrecognized type for column:", column.FieldName, "|", column.FieldType)
+		}
+
+		// Seteando "setValue"
+		column.Type = scyllaFieldToColumnTypesMap[column.FieldType]
+		if column.Type == "" {
+			column.IsComplexType = true
+			column.IsSlice = false
+			column.Type = "blob"
+		} else if column.IsSlice {
+			column.Type = fmt.Sprintf("set<%v>", column.Type)
 		}
 
 		// Seteando "getValue"
@@ -197,7 +204,9 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				if column.IsPointer {
 					field = field.Elem()
 				}
-				recordBytes, err := cbor.Marshal(field)
+				// fmt.Println("field complex::", field)
+				recordBytes, err := cbor.Marshal(field.Interface())
+				// fmt.Println("bytes getted::", len(recordBytes))
 				if err != nil {
 					fmt.Println("Error al encodeding .cbor:: ", column.FieldName, err)
 					return ""
@@ -215,15 +224,6 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				field := s.Field(column.FieldIdx)
 				return field.Interface()
 			}
-		}
-
-		// Seteando "setValue"
-		column.Type = scyllaFieldToColumnTypesMap[column.FieldType]
-		if column.Type == "" {
-			column.IsComplexType = true
-			column.Type = "blob"
-		} else if column.IsSlice {
-			column.Type = fmt.Sprintf("set<%v>", column.Type)
 		}
 
 		if _, ok := dbTable.columnsMap[column.Name]; ok {
@@ -485,12 +485,12 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				values := []any{}
 				for i, col := range columns {
 					value := col.getValue(s)
-					fmt.Println("Value Getted", col.Name, "|", value)
+					// fmt.Println("Value Getted", col.Name, "|", value)
 					valueI64 := convertToInt64(value) * Pow10Int64(radixesI64[i])
 					values = append(values, value)
 					sumValue += valueI64
 				}
-				fmt.Printf("Radix Sum Calculado %v | %v | %v\n", sumValue, values, radixesI64)
+				// fmt.Printf("Radix Sum Calculado %v | %v | %v\n", sumValue, values, radixesI64)
 				if isInt64 {
 					return any(sumValue)
 				} else {

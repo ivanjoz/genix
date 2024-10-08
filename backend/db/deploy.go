@@ -112,7 +112,6 @@ func DeployScylla(structTables ...any) {
 
 	for _, st := range structTables {
 		var table scyllaTable[any]
-		// structRefValue := reflect.TypeOf(st).Name()
 		fmt.Println("Struct Type:", reflect.TypeOf(st).Name())
 
 		if ITableSchema, ok := st.(TableSchemaInterface); ok {

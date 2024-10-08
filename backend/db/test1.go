@@ -1,7 +1,9 @@
 package db
 
 import (
+	"app/cbor"
 	"fmt"
+	"reflect"
 )
 
 //Some docs
@@ -60,10 +62,10 @@ func (e Usuario) GetSchema() TableSchema {
 		Partition:     e.CompanyID_(),
 		Keys:          []Coln{e.ID_()},
 		GlobalIndexes: []Coln{e.Edad_(), e.GruposIDs_()},
-		LocalIndexes:  []Coln{e.Nombre_(), e.GruposIDs_()},
-		HashIndexes:   [][]Coln{{e.RolID_(), e.Edad_()}, {e.RolID_(), e.Accesos_()}},
+		// LocalIndexes:  []Coln{e.Nombre_(), e.GruposIDs_()},
+		HashIndexes: [][]Coln{{e.RolID_(), e.Edad_()}, {e.RolID_(), e.Accesos_()}},
 		Views: []View{
-			//{Cols: []Column{e.RolID_(), e.Accesos_()}},
+			{Cols: []Coln{e.RolID_(), e.Edad_()}, KeepPart: true},
 			{Cols: []Coln{e.RolID_(), e.Updated_()}, ConcatI64: []int8{10}},
 			{Cols: []Coln{e.RolID_(), e.Edad_(), e.Updated_()}, ConcatI64: []int8{4, 11}},
 		},
@@ -76,8 +78,8 @@ func TestQuery(params ConnParams) {
 	fmt.Println("Query 1")
 	result := Select(func(q *Query[Usuario], col Usuario) {
 		q.Exclude(col.Apellido_()).
-			Where(col.CompanyID_().Equals(1)).
-			Where(col.Nombre_().Equals("Carlos"))
+			Where(col.CompanyID_().Equals(1)) /*.
+			Where(col.Nombre_().Equals("Carlos")) */
 	})
 
 	fmt.Println(result.Records)
@@ -94,19 +96,42 @@ func TestQuery(params ConnParams) {
 }
 
 func TestDeploy(params ConnParams) {
+	/*
+		MakeScyllaConnection(params)
 
-	MakeScyllaConnection(params)
+		err1 := QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.lista_compartida_registros__lista_id_view`)
+		if err1 != nil {
+			fmt.Println("error:", err1)
+		}
 
-	err1 := QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.lista_compartida_registros__lista_id_view`)
-	if err1 != nil {
-		fmt.Println("error:", err1)
-	}
-
-	DeployScylla(Usuario{})
-
+		DeployScylla(Usuario{})
+	*/
 	usuarios := getUsuariosData()
 	err := Insert(&usuarios)
 	if err != nil {
 		fmt.Println("Error al insertar::", err)
 	}
+}
+
+func TestCBOR() {
+	usuarios := getUsuariosData()
+	perfil := usuarios[0].Perfil
+	fmt.Println(perfil)
+
+	encodedBytes, err := cbor.Marshal(perfil)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(encodedBytes)
+
+	refType := reflect.TypeOf(perfil)
+	refPerfil := reflect.New(refType).Elem()
+
+	err = cbor.Unmarshal(encodedBytes, refPerfil.Addr().Interface())
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(refPerfil)
 }
