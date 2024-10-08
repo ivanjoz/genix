@@ -6,6 +6,7 @@ import (
 	"app/db"
 	"app/facturacion"
 	"app/types"
+	s "app/types"
 	"bufio"
 	"bytes"
 	"encoding/gob"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	mail "github.com/xhit/go-simple-mail/v2"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
@@ -640,5 +642,59 @@ func Test29(args *core.ExecArgs) core.FuncResponse {
 
 	db.RecalcVirtualColumns[types.ListaCompartidaRegistro]()
 
+	return core.FuncResponse{}
+}
+
+func Test30(args *core.ExecArgs) core.FuncResponse {
+
+	listasIDs := []int32{1, 2}
+	updated := int64(789456123)
+	errGroup := errgroup.Group{}
+
+	listasRegistrosMap := map[int32]*[]s.ListaCompartidaRegistro{}
+	for _, listaID := range listasIDs {
+		listasRegistrosMap[listaID] = &[]s.ListaCompartidaRegistro{}
+	}
+
+	type r = s.ListaCompartidaRegistro
+	errGroup.Go(func() error {
+		result := db.Select(func(q *db.Query[r], col r) {
+			q.Where(col.EmpresaID_().Equals(1))
+			q.Where(col.ListaID_().In(listasIDs...))
+			if updated > 0 {
+				q.Where(col.Updated_().GreaterThan(updated))
+			} else {
+				q.Where(col.Status_().Equals(1))
+			}
+		})
+
+		core.Log("resultado obtenidos::", len(result.Records))
+
+		return result.Err
+	})
+
+	err := errGroup.Wait()
+	if err != nil {
+		panic(err)
+	}
+
+	listasRegistros := []s.ListaCompartidaRegistro{}
+	for _, registros := range listasRegistrosMap {
+		listasRegistros = append(listasRegistros, *registros...)
+	}
+
+	core.Log("nro registros::", len(listasRegistros))
+
+	return core.FuncResponse{}
+}
+
+func Test32(args *core.ExecArgs) core.FuncResponse {
+	/*
+		err1 := db.QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.lista_compartida_registros__lista_id_view`)
+		if err1 != nil {
+			fmt.Println("error:", err1)
+		}
+	*/
+	db.DeployScylla(s.ListaCompartidaRegistro{})
 	return core.FuncResponse{}
 }

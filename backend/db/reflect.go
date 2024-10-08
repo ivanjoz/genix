@@ -138,7 +138,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 		mathodValue := structRefValue.Method(i).Call([]reflect.Value{})
 		var column columnInfo
-		if col, ok := mathodValue[0].Interface().(Column); ok {
+		if col, ok := mathodValue[0].Interface().(Coln); ok {
 			column = col.GetInfo()
 		} else {
 			panic(fmt.Sprintf("La columna %v está mal configurada.", fieldName))
@@ -235,8 +235,8 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 	}
 
 	if schema.Partition != nil {
-		dbTable.partitionKey = dbTable.columnsMap[schema.Partition.GetInfo().Name]
-		dbTable.keysIdx = append(dbTable.keysIdx, dbTable.partitionKey.Idx)
+		dbTable.partKey = dbTable.columnsMap[schema.Partition.GetInfo().Name]
+		dbTable.keysIdx = append(dbTable.keysIdx, dbTable.partKey.Idx)
 	}
 
 	for _, key := range schema.Keys {
@@ -271,7 +271,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			name:    fmt.Sprintf(`%v__%v_index_1`, dbTable.name, colInfo.Name),
 			idx:     idxCount,
 			column:  dbTable.columnsMap[column.GetInfo().Name],
-			columns: []string{dbTable.partitionKey.Name, colInfo.Name},
+			columns: []string{dbTable.partKey.Name, colInfo.Name},
 		}
 		index.getCreateScript = func() string {
 			return fmt.Sprintf(`CREATE INDEX %v ON %v ((%v),%v)`,
@@ -350,13 +350,13 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				return "{" + Concatx(",", hashValues) + "}"
 			}
 
-			index.getStatement = func(statements ...ColumnStatement) string {
+			index.getStatement = func(statements ...ColumnStatement) []string {
 				values := []any{}
 				for _, st := range statements {
 					values = append(values, st.GetValue())
 				}
 				hashValue := HashInt(values...)
-				return fmt.Sprintf("%v CONTAINS %v", column.Name, hashValue)
+				return []string{fmt.Sprintf("%v CONTAINS %v", column.Name, hashValue)}
 			}
 		} else {
 			column.getValue = func(s *reflect.Value) any {
@@ -379,11 +379,11 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 	// VIEWS
 	for _, viewConfig := range schema.Views {
-		columns := []*columnInfo{}
-		names := []string{}
-
-		if dbTable.partitionKey != nil {
-			names = append(names, dbTable.partitionKey.Name)
+		colNames := []string{}
+		columns := []*columnInfo{} // No incluye la particion
+		isRangeView := len(viewConfig.ConcatI64) > 0 || len(viewConfig.ConcatI32) > 0
+		if isRangeView {
+			viewConfig.KeepPart = true
 		}
 
 		for _, colInfo := range viewConfig.Cols {
@@ -394,20 +394,36 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			if column.IsSlice {
 				panic("No puede ser un slice como columna de una view")
 			}
-			names = append(names, column.Name)
+			colNames = append(colNames, column.Name)
 			columns = append(columns, column)
 		}
 
-		colnames := strings.Join(names, "_")
+		colNamesNoPart := colNames
+
+		colNamesJoined := strings.Join(colNames, "_")
+		if dbTable.partKey != nil {
+			colNames = append([]string{dbTable.partKey.Name}, colNames...)
+			if viewConfig.KeepPart {
+				colNamesJoined = "pk_" + colNamesJoined
+			} else {
+				colNamesJoined = dbTable.partKey.Name + "_" + colNamesJoined
+				columns = append([]*columnInfo{dbTable.partKey}, columns...)
+			}
+		}
+		if isRangeView {
+			colNamesJoined = colNamesJoined + "_rng"
+		}
+
 		view := viewInfo{
-			Type:    6,
-			name:    fmt.Sprintf(`%v__%v_view`, dbTable.name, colnames),
-			columns: names,
+			Type:          6,
+			name:          fmt.Sprintf(`%v__%v_view`, dbTable.name, colNamesJoined),
+			columns:       colNames,
+			columnsNoPart: colNamesNoPart,
 		}
 
 		if len(columns) > 1 {
 			view.column = &columnInfo{
-				Name: fmt.Sprintf(`zz_%v`, colnames), IsVirtual: true,
+				Name: fmt.Sprintf(`zz_%v`, colNamesJoined), IsVirtual: true,
 				FieldType: "int32", Type: "int",
 				Idx: dbTable._maxColIdx,
 			}
@@ -418,8 +434,8 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		// Si sólo es una columna, no es necesario autogenerar
 		if len(columns) == 1 {
 			view.column = columns[0]
-		} else if len(viewConfig.IntConcatRadix) > 0 || len(viewConfig.Int32ConcatRadix) > 0 {
-			isInt64 := len(viewConfig.IntConcatRadix) > 0
+		} else if isRangeView {
+			isInt64 := len(viewConfig.ConcatI64) > 0
 			if isInt64 {
 				view.column.FieldType = "int64"
 				view.column.Type = "bigint"
@@ -431,11 +447,11 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				panic(fmt.Sprintf(`La view "%v" de la tabla "%v" posee menos de 2 columnas para usar el IntConcatRadix`, dbTable.name, view.name))
 			}
 
-			radixes := append(append(viewConfig.IntConcatRadix, viewConfig.Int32ConcatRadix...), 0)
+			radixes := append(append(viewConfig.ConcatI64, viewConfig.ConcatI32...), 0)
 
-			if len(radixes) != len(view.columns) {
+			if len(radixes) != len(columns) {
 				panic(fmt.Sprintf(`The view "%v" in "%v" need to have %v radix arguments for the %v columns provided`,
-					view.name, dbTable.name, len(view.columns)-1, len(view.columns)))
+					view.name, dbTable.name, len(columns)-1, len(columns)))
 			}
 
 			slices.Reverse(radixes)
@@ -492,23 +508,91 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				}
 				return HashInt(values...)
 			}
+
+			view.getStatement = func(statements ...ColumnStatement) []string {
+				for i, e := range statements {
+					fmt.Println("Statement ", i, " | ", e)
+				}
+
+				valuesGroups := [][]any{{}}
+				statement := ""
+				// Si una de las columnas es un slice puede iterar por el slice para obtener los values y gurdarla en una columa Set<any>
+				for _, e := range columns {
+					for _, st := range statements {
+						if st.Column == e.Name {
+							if len(st.Values) >= 2 {
+								valuesGroupsCurrent := valuesGroups
+								valuesGroups = [][]any{}
+								for _, vg := range valuesGroupsCurrent {
+									for _, value := range st.Values {
+										valuesGroups = append(valuesGroups, append(vg, value))
+									}
+								}
+							} else {
+								if len(st.Values) == 1 {
+									st.Value = st.Values[0]
+								}
+								for i := range valuesGroups {
+									valuesGroups[i] = append(valuesGroups[i], st.Value)
+								}
+							}
+							break
+						}
+					}
+				}
+
+				hashValues := []string{}
+				for _, values := range valuesGroups {
+					hashValues = append(hashValues, fmt.Sprintf("%v", HashInt(values...)))
+				}
+
+				if len(hashValues) == 1 {
+					statement = fmt.Sprintf("%v = %v", view.column.Name, hashValues[0])
+				} else {
+					values := strings.Join(hashValues, ", ")
+					statement = fmt.Sprintf("%v IN (%v)", view.column.Name, values)
+				}
+
+				if viewConfig.KeepPart {
+					for _, st := range statements {
+						if st.Column == dbTable.partKey.Name {
+							statement = fmt.Sprintf("%v = %v AND ", st.Column, st.Value) + statement
+						}
+					}
+				}
+				return []string{statement}
+			}
 		}
 
 		view.getCreateScript = func() string {
 			whereCols := append([]*columnInfo{view.column}, dbTable.keys...)
-			pk := whereCols[0].Name + ", " + whereCols[1].Name
+			var wherePartCol *columnInfo
 
-			if dbTable.partitionKey != nil {
-				whereCols = append([]*columnInfo{dbTable.partitionKey}, whereCols...)
-				pk = fmt.Sprintf("(%v), %v", whereCols[0].Name, pk)
+			if dbTable.partKey != nil {
+				if viewConfig.KeepPart {
+					wherePartCol = dbTable.partKey
+				} else {
+					whereCols = append([]*columnInfo{view.column, dbTable.partKey}, dbTable.keys...)
+				}
+			}
+
+			keyNames := []string{}
+			for _, col := range whereCols {
+				keyNames = append(keyNames, col.Name)
+			}
+
+			pk := strings.Join(keyNames, ",")
+			if wherePartCol != nil {
+				pk = fmt.Sprintf("(%v), %v", wherePartCol.Name, pk)
 			}
 
 			whereColumnsNotNull := []string{}
 			for _, col := range whereCols {
 				if col.Type == "text" {
 					whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" > ''")
-				} else if col.IsSlice {
-					// whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" IS NOT NULL")
+					/*} else if col.IsSlice {
+					whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" IS NOT NULL")
+					*/
 				} else {
 					whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" > 0")
 				}

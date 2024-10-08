@@ -23,7 +23,7 @@ func (e ScyllaColumns) GetSchema() TableSchema {
 	return TableSchema{
 		Keyspace: "system_schema",
 		Name:     "columns",
-		Keys:     []Column{e.Keyspace_()},
+		Keys:     []Coln{e.Keyspace_()},
 	}
 }
 
@@ -46,7 +46,7 @@ func (e ScyllaIndexes) GetSchema() TableSchema {
 	return TableSchema{
 		Keyspace: "system_schema",
 		Name:     "indexes",
-		Keys:     []Column{e.Keyspace_()},
+		Keys:     []Coln{e.Keyspace_()},
 	}
 }
 
@@ -113,9 +113,7 @@ func DeployScylla(structTables ...any) {
 	for _, st := range structTables {
 		var table scyllaTable[any]
 		// structRefValue := reflect.TypeOf(st).Name()
-		fmt.Println("struct type:", reflect.TypeOf(st).Name())
-		structRefValue := reflect.ValueOf(st)
-		fmt.Println("struct type 1:", structRefValue.Type())
+		fmt.Println("Struct Type:", reflect.TypeOf(st).Name())
 
 		if ITableSchema, ok := st.(TableSchemaInterface); ok {
 			table = MakeTable(ITableSchema.GetSchema(), st)
@@ -126,6 +124,7 @@ func DeployScylla(structTables ...any) {
 		tableName := table.fullName()
 
 		originColumns := tableColumnsMap[tableName]
+		fmt.Println("current columns::", len(originColumns))
 
 		// Si no existe la tabla entonces la crea...
 		if len(originColumns) == 0 {
@@ -143,8 +142,8 @@ func DeployScylla(structTables ...any) {
 			}
 
 			pk := strings.Join(keys, ", ")
-			if len(table.partitionKey.Name) > 0 {
-				pk = fmt.Sprintf("(%v), %v", table.partitionKey.Name, pk)
+			if len(table.partKey.Name) > 0 {
+				pk = fmt.Sprintf("(%v), %v", table.partKey.Name, pk)
 			}
 
 			query := `

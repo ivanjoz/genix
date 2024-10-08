@@ -27,9 +27,9 @@ func (e PaisCiudad) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "pais_ciudades",
 		Partition: e.PaisID_(),
-		Keys:      []db.Column{e.CiudadID_()},
+		Keys:      []db.Coln{e.CiudadID_()},
 		Views: []db.View{
-			{Cols: []db.Column{e.Updated_()}},
+			{Cols: []db.Coln{e.Updated_()}},
 		},
 	}
 }
@@ -53,7 +53,7 @@ type _b = ListaCompartidaRegistro
 func (e _b) EmpresaID_() db.CoI32   { return db.CoI32{"empresa_id"} }
 func (e _b) ID_() db.CoI32          { return db.CoI32{"id"} }
 func (e _b) ListaID_() db.CoI32     { return db.CoI32{"lista_id"} }
-func (e _b) Nombre_() db.CoStr      { return db.CoStr{"padre_id"} }
+func (e _b) Nombre_() db.CoStr      { return db.CoStr{"nombre"} }
 func (e _b) Images_() db.CsStr      { return db.CsStr{"images"} }
 func (e _b) Descripcion_() db.CoStr { return db.CoStr{"descripcion"} }
 func (e _b) Status_() db.CoI8       { return db.CoI8{"status"} }
@@ -62,12 +62,13 @@ func (e _b) UpdatedBy_() db.CoI32   { return db.CoI32{"updated_by"} }
 
 func (e ListaCompartidaRegistro) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name: "lista_compartida_registros",
-		Keys: []db.Column{e.EmpresaID_(), e.ID_()},
+		Name:      "lista_compartida_registro",
+		Partition: e.EmpresaID_(),
+		Keys:      []db.Coln{e.ID_()},
 		Views: []db.View{
-			{Cols: []db.Column{e.ListaID_()}},
-			{Cols: []db.Column{e.ListaID_(), e.Status_()}, Int32ConcatRadix: []int8{2}},
-			{Cols: []db.Column{e.ListaID_(), e.Updated_()}, IntConcatRadix: []int8{10}},
+			{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
+			{Cols: []db.Coln{e.ListaID_(), e.Status_()}, ConcatI32: []int8{2}},
+			{Cols: []db.Coln{e.ListaID_(), e.Updated_()}, ConcatI64: []int8{10}},
 		},
 	}
 }

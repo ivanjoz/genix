@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"app/core"
+	"app/db"
 	s "app/types"
 	"encoding/json"
 	"time"
@@ -23,18 +24,35 @@ func GetListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	errGroup := errgroup.Group{}
 
-	for _, listaID := range listasIDs {
-		query := core.DBSelect(listasRegistrosMap[listaID], "empresa_id").
-			Where("empresa_id").Equals(req.Usuario.EmpresaID)
+	/*
+		for _, listaID := range listasIDs {
+			query := core.DBSelect(listasRegistrosMap[listaID], "empresa_id").
+				Where("empresa_id").Equals(req.Usuario.EmpresaID)
 
-		if updated > 0 {
-			query = query.Where("lista_id", "updated").GreatEq(listaID, updated)
-		} else {
-			query = query.Where("lista_id", "status").Equals(listaID, int8(1))
+			if updated > 0 {
+				query = query.Where("lista_id", "updated").GreatEq(listaID, updated)
+			} else {
+				query = query.Where("lista_id", "status").Equals(listaID, int8(1))
+			}
+
+			errGroup.Go(func() error {
+				return query.Exec()
+			})
 		}
+	*/
 
+	for _, listaID := range listasIDs {
+		type r = s.ListaCompartidaRegistro
 		errGroup.Go(func() error {
-			return query.Exec()
+			return db.SelectRef(listasRegistrosMap[listaID], func(q *db.Query[r], col r) {
+				q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+				q.Where(col.ListaID_().Equals(listaID))
+				if updated > 0 {
+					q.Where(col.Updated_().GreaterThan(updated))
+				} else {
+					q.Where(col.Status_().Equals(1))
+				}
+			})
 		})
 	}
 
