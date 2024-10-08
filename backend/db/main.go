@@ -1,7 +1,6 @@
 package db
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -98,9 +97,12 @@ func (q *Col[T]) SetName(name string) {
 	q.C = name
 }
 func (q Col[T]) GetInfo() columnInfo {
-	typ := *new(T)
-	fieldType := reflect.TypeOf(typ).String()
-	col := columnInfo{Name: q.C, FieldType: fieldType}
+	col := columnInfo{Name: q.C}
+	if reflect.TypeFor[T]().Kind() == reflect.Interface {
+		col.FieldType = "any"
+	} else {
+		col.FieldType = reflect.TypeFor[T]().Name()
+	}
 	return col
 }
 
@@ -145,8 +147,7 @@ type ColSlice[T any] struct {
 }
 
 func (q ColSlice[T]) GetInfo() columnInfo {
-	typ := *new(T)
-	return columnInfo{Name: q.Name, FieldType: reflect.TypeOf(typ).String(), IsSlice: true}
+	return columnInfo{Name: q.Name, FieldType: reflect.TypeFor[T]().String(), IsSlice: true}
 }
 
 func (q ColSlice[T]) GetName() string {
@@ -323,9 +324,14 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 
 	statements := []ColumnStatement{}
 	colsWhereIdx := []int16{}
+	allAreKeys := true
 
 	for _, st := range query.statements {
 		col := scyllaTable.columnsMap[st.group[0].Column]
+		if !slices.Contains(scyllaTable.keysIdx, col.Idx) {
+			allAreKeys = false
+		}
+
 		colsWhereIdx = append(colsWhereIdx, col.Idx)
 		statements = append(statements, st.group[0])
 		if isHash && !slices.Contains(hashOperators, st.group[0].Operator) {
@@ -335,7 +341,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 
 	posibleViewsOrIndexes := []posibleIndex{}
 
-	if len(statements) > 0 {
+	if len(statements) > 0 && !allAreKeys {
 		// Revisa si puede usar una vista
 		for _, indview := range scyllaTable.indexViews {
 			psb := posibleIndex{indexView: indview}
@@ -418,7 +424,12 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 	queryWhereStatements := []string{}
 
 	for _, whereStatement := range whereStatements {
-		whereStatement += whereStatementsRemain
+		if whereStatementsRemain != "" {
+			if whereStatement != "" {
+				whereStatementsRemain = " AND " + whereStatementsRemain
+			}
+			whereStatement += whereStatementsRemain
+		}
 		if whereStatement != "" {
 			whereStatement = " WHERE " + whereStatement
 		}
@@ -430,14 +441,14 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 		recordsMap[i] = &[]T{}
 	}
 
-	errGroup := errgroup.Group{}
+	eg := errgroup.Group{}
 
 	for i, whereStatement := range queryWhereStatements {
 		queryStr = fmt.Sprintf(queryStr, scyllaTable.keyspace, viewTableName, whereStatement)
 		records := recordsMap[i]
 
 		fmt.Println("query string::", queryStr)
-		errGroup.Go(func() error {
+		eg.Go(func() error {
 
 			iter := getScyllaConnection().Query(queryStr).Iter()
 			rd, err := iter.RowData()
@@ -448,7 +459,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 					for _, e := range posibleViewsOrIndexes {
 						typeName := indexTypes[e.indexView.Type]
 						colnames := strings.Join(e.indexView.columns, ", ")
-						msg := fmt.Sprintf(`%v (%v) %v`+"\n", typeName, e.indexView.column.Type, colnames)
+						msg := fmt.Sprintf("%v (%v) %v", typeName, e.indexView.column.Type, colnames)
 						fmt.Println(msg)
 					}
 				}
@@ -483,34 +494,26 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 						// Revisa si necesita parsearse un string a un struct como JSON
 					} else if column.IsComplexType {
 						// Log("complex type::", column.FieldName)
-						if vl, ok := value.(*string); ok {
-							newStruct := column.RefType.Interface()
-							err := json.Unmarshal([]byte(*vl), newStruct)
-							if err != nil {
-								fmt.Println("Error al convertir: ", newStruct, *vl, err.Error())
-							}
-							if column.IsPointer {
-								ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct))
-							} else {
-								ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct).Elem())
-							}
-						} else if vl, ok := value.(*[]uint8); ok {
+						if vl, ok := value.(*[]uint8); ok {
 							if len(*vl) <= 2 {
 								continue
 							}
-							newStruct := column.RefType.Interface()
-							err = cbor.Unmarshal(*vl, &newStruct)
+							newElm := reflect.New(column.RefType).Elem()
+							err = cbor.Unmarshal([]byte(*vl), newElm.Addr().Interface())
 							if err != nil {
-								fmt.Println("Error al convertir: ", newStruct, *vl, err.Error())
+								fmt.Println("Error al convertir: ", newElm, "|", err.Error())
 							}
+							// fmt.Println("col complex:", column.Name, " | ", newElm, " | L:", len(*vl))
 							if column.IsPointer {
-								ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct))
+								ref.Field(column.FieldIdx).Set(reflect.ValueOf(newElm))
 							} else {
-								ref.Field(column.FieldIdx).Set(reflect.ValueOf(newStruct).Elem())
+								ref.Field(column.FieldIdx).Set(newElm)
 							}
+						} else {
+							fmt.Print("Complex Type could not be parsed:", column.Name)
 						}
 					} else {
-						fmt.Print("Column is not mapped:: ", column)
+						fmt.Print("Column is not mapped:: ", column.Name)
 					}
 				}
 
@@ -522,6 +525,10 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 			}
 			return nil
 		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return err
 	}
 
 	if len(queryWhereStatements) > 1 {
@@ -608,8 +615,9 @@ func Insert[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) erro
 	}
 
 	queryInsert := makeQueryStatement(queryStatements)
+	fmt.Println(queryInsert)
+
 	if err := QueryExec(queryInsert); err != nil {
-		fmt.Println(queryInsert)
 		fmt.Println("Error inserting records:", err)
 		return err
 	}

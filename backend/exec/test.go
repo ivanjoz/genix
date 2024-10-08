@@ -30,3 +30,10 @@ func TestQuery(args *core.ExecArgs) core.FuncResponse {
 
 	return core.FuncResponse{}
 }
+
+func TestCBOR(args *core.ExecArgs) core.FuncResponse {
+
+	db.TestCBOR()
+
+	return core.FuncResponse{}
+}

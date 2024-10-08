@@ -29,6 +29,7 @@ var ExecHandlersTesting = ExecRouterType{
 	"fn13":  TestDynamoCounter,
 	"fn15":  TestDeploy,
 	"fn16":  TestQuery,
+	"fn17":  TestCBOR,
 	"fn014": Test14,
 	"fn015": Test15,
 	"fn016": Test16,
