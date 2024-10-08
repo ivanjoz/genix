@@ -58,14 +58,14 @@ func (e Usuario) GetSchema() TableSchema {
 	return TableSchema{
 		Name:          "ztest_usuarios",
 		Partition:     e.CompanyID_(),
-		Keys:          []Column{e.ID_()},
-		GlobalIndexes: []Column{e.Edad_(), e.GruposIDs_()},
-		LocalIndexes:  []Column{e.Nombre_(), e.GruposIDs_()},
-		HashIndexes:   [][]Column{{e.RolID_(), e.Edad_()}, {e.RolID_(), e.Accesos_()}},
+		Keys:          []Coln{e.ID_()},
+		GlobalIndexes: []Coln{e.Edad_(), e.GruposIDs_()},
+		LocalIndexes:  []Coln{e.Nombre_(), e.GruposIDs_()},
+		HashIndexes:   [][]Coln{{e.RolID_(), e.Edad_()}, {e.RolID_(), e.Accesos_()}},
 		Views: []View{
 			//{Cols: []Column{e.RolID_(), e.Accesos_()}},
-			{Cols: []Column{e.RolID_(), e.Updated_()}, IntConcatRadix: []int8{10}},
-			{Cols: []Column{e.RolID_(), e.Edad_(), e.Updated_()}, IntConcatRadix: []int8{4, 11}},
+			{Cols: []Coln{e.RolID_(), e.Updated_()}, ConcatI64: []int8{10}},
+			{Cols: []Coln{e.RolID_(), e.Edad_(), e.Updated_()}, ConcatI64: []int8{4, 11}},
 		},
 	}
 }
@@ -96,12 +96,11 @@ func TestQuery(params ConnParams) {
 func TestDeploy(params ConnParams) {
 
 	MakeScyllaConnection(params)
-	/*
-		err1 := QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.ztest_usuarios__rol_id_accesos_view`)
-		if err1 != nil {
-			fmt.Println("error:", err1)
-		}
-	*/
+
+	err1 := QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.lista_compartida_registros__lista_id_view`)
+	if err1 != nil {
+		fmt.Println("error:", err1)
+	}
 
 	DeployScylla(Usuario{})
 
