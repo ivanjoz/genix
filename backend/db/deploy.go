@@ -261,15 +261,21 @@ func RecalcVirtualColumns[T TableSchemaInterface]() {
 		panic("no hay columnas virtuales a actulizar")
 	}
 
-	// columnsToUpdate := []*columnInfo{}
-
 	query := Query[T]{}
 	records := []T{}
 	err := selectExec(&records, &query)
-
 	if err != nil {
 		fmt.Println("Error al obtener los registros::", err)
 	}
 
-	err = Update(&records)
+	fmt.Println("registros obtenidos::", len(records))
+	fmt.Print(records)
+
+	queryStatements := makeUpdateQuery(&records, nil, nil, true)
+	fmt.Println("actualizando registros::", len(queryStatements))
+	queryInsert := makeQueryStatement(queryStatements)
+	if err := QueryExec(queryInsert); err != nil {
+		fmt.Println(queryInsert)
+		fmt.Println("Error updating records:", err)
+	}
 }

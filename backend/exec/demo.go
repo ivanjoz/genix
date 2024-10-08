@@ -3,6 +3,7 @@ package exec
 import (
 	"app/aws"
 	"app/core"
+	"app/db"
 	"app/facturacion"
 	"app/types"
 	"bufio"
@@ -631,6 +632,13 @@ func Test28(args *core.ExecArgs) core.FuncResponse {
 	fmt.Print("Probando UUID")
 	fmt.Printf("Tunix UUID: %v\n", core.SunixTimeUUIDx3())
 	fmt.Printf("Tunix ID + UUID: %v\n", core.SunixUUIDx3FromID(120))
+
+	return core.FuncResponse{}
+}
+
+func Test29(args *core.ExecArgs) core.FuncResponse {
+
+	db.RecalcVirtualColumns[types.ListaCompartidaRegistro]()
 
 	return core.FuncResponse{}
 }

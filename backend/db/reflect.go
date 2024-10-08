@@ -469,6 +469,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				values := []any{}
 				for i, col := range columns {
 					value := col.getValue(s)
+					fmt.Println("Value Getted", col.Name, "|", value)
 					valueI64 := convertToInt64(value) * Pow10Int64(radixesI64[i])
 					values = append(values, value)
 					sumValue += valueI64

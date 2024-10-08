@@ -25,6 +25,13 @@ type ConnParams struct {
 	Keyspace    string
 }
 
+func SetScyllaConnection(params ConnParams) {
+	if params.ConnTimeout == 0 {
+		params.ConnTimeout = 10
+	}
+	connParams = params
+}
+
 func MakeScyllaConnection(params ConnParams) *gocql.Session {
 	if params.ConnTimeout == 0 {
 		params.ConnTimeout = 10

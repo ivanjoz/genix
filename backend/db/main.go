@@ -95,10 +95,12 @@ func (q *Col[T]) SetName(name string) {
 }
 func (q Col[T]) GetInfo() columnInfo {
 	typ := *new(T)
+	fmt.Println("hola::", q)
 	fieldType := reflect.TypeOf(typ).String()
 	col := columnInfo{Name: q.C, FieldType: fieldType}
 	return col
 }
+
 func (q Col[T]) GetName() string {
 	return q.C
 }
@@ -304,8 +306,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 		}
 	}
 
-	queryStr := fmt.Sprintf("SELECT %v ", strings.Join(columnNames, ", ")) +
-		"FROM %v.%v WHERE %v"
+	queryStr := fmt.Sprintf("SELECT %v ", strings.Join(columnNames, ", ")) + "FROM %v.%v %v"
 	// indexOperators := []string{"=", "IN"}
 
 	statements := []ColumnStatement{}
@@ -395,6 +396,9 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 	}
 
 	whereStatementsConcat := strings.Join(whereStatements, " AND ")
+	if whereStatementsConcat != "" {
+		whereStatementsConcat = " WHERE " + whereStatementsConcat
+	}
 	queryStr = fmt.Sprintf(queryStr, scyllaTable.keyspace, viewTableName, whereStatementsConcat)
 
 	fmt.Println("query string::", queryStr)
@@ -563,11 +567,11 @@ func Insert[T TableSchemaInterface](records *[]T, columnsToExclude ...Column) er
 	return nil
 }
 
-func makeUpdateQuery[T TableSchemaInterface](records *[]T, columnsToInclude []Column, columnsToExclude []Column) []string {
+func makeUpdateQuery[T TableSchemaInterface](records *[]T, columnsToInclude []Column, columnsToExclude []Column, onlyVirtual bool) []string {
 
 	scyllaTable := makeTable(*new(T))
-
 	columnsToUpdate := []*columnInfo{}
+
 	if len(columnsToInclude) > 0 {
 		for _, col_ := range columnsToInclude {
 			col := scyllaTable.columnsMap[col_.GetName()]
@@ -622,6 +626,16 @@ func makeUpdateQuery[T TableSchemaInterface](records *[]T, columnsToInclude []Co
 		}
 	}
 
+	if onlyVirtual {
+		cols := columnsToUpdate
+		columnsToUpdate = nil
+		for _, col := range cols {
+			if col.IsVirtual {
+				columnsToUpdate = append(columnsToUpdate, col)
+			}
+		}
+	}
+
 	columnsWhere := scyllaTable.keys
 
 	if scyllaTable.partitionKey != nil {
@@ -662,7 +676,7 @@ func Update[T TableSchemaInterface](records *[]T, columnsToInclude ...Column) er
 		panic("No se incluyeron columnas a actualizar.")
 	}
 
-	queryStatements := makeUpdateQuery(records, columnsToInclude, nil)
+	queryStatements := makeUpdateQuery(records, columnsToInclude, nil, false)
 	queryInsert := makeQueryStatement(queryStatements)
 	if err := QueryExec(queryInsert); err != nil {
 		fmt.Println(queryInsert)

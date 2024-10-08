@@ -8,6 +8,18 @@ import (
 //https://medium.engineering/scylladb-implementation-lists-in-mediums-feature-store-part-2-905299c89392
 //https://university.scylladb.com/courses/data-modeling/lessons/materialized-views-secondary-indexes-and-filtering/
 
+type Perfil struct {
+	Nombre string  `cbor:"1,keyasint,omitempty"`
+	Param1 int32   `cbor:"2,keyasint,omitempty"`
+	Param2 float32 `cbor:"3,keyasint,omitempty"`
+}
+
+type Permisos struct {
+	Nombre string  `cbor:"1,keyasint,omitempty"`
+	Param1 int32   `cbor:"2,keyasint,omitempty"`
+	Param2 float32 `cbor:"3,keyasint,omitempty"`
+}
+
 type Usuario struct {
 	CompanyID int32
 	ID        int32
@@ -21,6 +33,8 @@ type Usuario struct {
 	Accesos   []int32
 	Proyectos []string
 	Peso      *float32
+	Perfil    Perfil
+	Permisos  []Permisos
 }
 
 type _u = Usuario
@@ -37,6 +51,8 @@ func (e _u) Edad_() CsI32      { return CsI32{"edad"} }
 func (e _u) Proyectos_() CsStr { return CsStr{"proyectos"} }
 func (e _u) Peso_() CoF32      { return CoF32{"peso"} }
 func (e _u) GruposIDs_() CsI32 { return CsI32{"grupos_ids"} }
+func (e _u) Perfil_() CoAny    { return CoAny{"perfil"} }
+func (e _u) Permisos_() CoAny  { return CoAny{"permisos"} }
 
 func (e Usuario) GetSchema() TableSchema {
 	return TableSchema{
@@ -80,11 +96,12 @@ func TestQuery(params ConnParams) {
 func TestDeploy(params ConnParams) {
 
 	MakeScyllaConnection(params)
-
-	err1 := QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.ztest_usuarios__rol_id_accesos_view`)
-	if err1 != nil {
-		fmt.Println("error:", err1)
-	}
+	/*
+		err1 := QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.ztest_usuarios__rol_id_accesos_view`)
+		if err1 != nil {
+			fmt.Println("error:", err1)
+		}
+	*/
 
 	DeployScylla(Usuario{})
 
