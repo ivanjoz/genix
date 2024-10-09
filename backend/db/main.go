@@ -36,10 +36,12 @@ type IColumnStatement interface {
 	GetName() string
 }
 type ColumnStatement struct {
-	Column   string
-	Operator string
-	Value    any
-	Values   []any
+	Col         string
+	Operator    string
+	Value       any
+	Values      []any
+	BetweenFrom []any
+	BetweenTo   []any
 }
 type TableSchema struct {
 	Keyspace string
@@ -112,33 +114,33 @@ func (q Col[T]) GetName() string {
 
 // Generic
 func (e Col[T]) Equals(v T) ColumnStatement {
-	return ColumnStatement{e.C, "=", any(v), nil}
+	return ColumnStatement{Col: e.C, Operator: "=", Value: any(v)}
 }
 func (e Col[T]) In(values_ ...T) ColumnStatement {
 	values := []any{}
 	for _, v := range values_ {
 		values = append(values, any(v))
 	}
-	return ColumnStatement{e.C, "IN", any(*new(T)), values}
+	return ColumnStatement{Col: e.C, Operator: "IN", Values: values}
 }
 func (e Col[T]) ConcurrentIn(values_ ...T) ColumnStatement {
 	values := []any{}
 	for _, v := range values_ {
 		values = append(values, any(v))
 	}
-	return ColumnStatement{e.C, "CI", any(*new(T)), values}
+	return ColumnStatement{Col: e.C, Operator: "CIN", Values: values}
 }
 func (e Col[T]) GreaterThan(v T) ColumnStatement {
-	return ColumnStatement{e.C, ">", any(v), nil}
+	return ColumnStatement{Col: e.C, Operator: ">", Value: any(v)}
 }
 func (e Col[T]) GreaterEqual(v T) ColumnStatement {
-	return ColumnStatement{e.C, ">=", any(v), nil}
+	return ColumnStatement{Col: e.C, Operator: ">=", Value: any(v)}
 }
 func (e Col[T]) LessThan(v T) ColumnStatement {
-	return ColumnStatement{e.C, "<", any(v), nil}
+	return ColumnStatement{Col: e.C, Operator: "<", Value: any(v)}
 }
 func (e Col[T]) LessEqual(v T) ColumnStatement {
-	return ColumnStatement{e.C, "<=", any(v), nil}
+	return ColumnStatement{Col: e.C, Operator: "<=", Value: any(v)}
 }
 
 // Generic Array
@@ -155,7 +157,7 @@ func (q ColSlice[T]) GetName() string {
 }
 
 func (e ColSlice[T]) Contains(v T) ColumnStatement {
-	return ColumnStatement{e.Name, "CONTAINS", any(v), nil}
+	return ColumnStatement{Col: e.Name, Operator: "CONTAINS", Value: any(v)}
 }
 
 type CoAny = Col[any]
@@ -318,7 +320,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 		}
 	}
 
-	queryStr := fmt.Sprintf("SELECT %v ", strings.Join(columnNames, ", ")) + "FROM %v.%v %v"
+	queryTemplate := fmt.Sprintf("SELECT %v ", strings.Join(columnNames, ", ")) + "FROM %v.%v %v"
 	hashOperators := []string{"=", "IN"}
 	isHash := true
 
@@ -327,7 +329,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 	allAreKeys := true
 
 	for _, st := range query.statements {
-		col := scyllaTable.columnsMap[st.group[0].Column]
+		col := scyllaTable.columnsMap[st.group[0].Col]
 		if !slices.Contains(scyllaTable.keysIdx, col.Idx) {
 			allAreKeys = false
 		}
@@ -389,7 +391,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 			// Revisa qué columnas satisfacen el índice
 			statementsSelected := []ColumnStatement{}
 			for _, st := range statements {
-				if slices.Contains(viewOrIndex.columns, st.Column) {
+				if slices.Contains(viewOrIndex.columns, st.Col) {
 					statementsSelected = append(statementsSelected, st)
 				} else {
 					statementsRemain = append(statementsRemain, st)
@@ -415,12 +417,12 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 			fmt.Println("column 2::", st.Operator)
 			fmt.Println("column 3::", st.GetValue())
 		*/
-		where := fmt.Sprintf("%v %v %v", st.Column, st.Operator, st.GetValue())
+		where := fmt.Sprintf("%v %v %v", st.Col, st.Operator, st.GetValue())
 		// fmt.Println("where::", where)
 		whereStatementsRemainSects = append(whereStatementsRemainSects, where)
 	}
 
-	whereStatementsRemain := strings.Join(whereStatementsRemainSects, "AND ")
+	whereStatementsRemain := strings.Join(whereStatementsRemainSects, " AND ")
 	queryWhereStatements := []string{}
 
 	for _, whereStatement := range whereStatements {
@@ -444,10 +446,10 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 	eg := errgroup.Group{}
 
 	for i, whereStatement := range queryWhereStatements {
-		queryStr = fmt.Sprintf(queryStr, scyllaTable.keyspace, viewTableName, whereStatement)
+		queryStr := fmt.Sprintf(queryTemplate, scyllaTable.keyspace, viewTableName, whereStatement)
 		records := recordsMap[i]
 
-		fmt.Println("query string::", queryStr)
+		fmt.Println("Query::", queryStr)
 		eg.Go(func() error {
 
 			iter := getScyllaConnection().Query(queryStr).Iter()
