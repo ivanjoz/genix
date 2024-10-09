@@ -55,6 +55,8 @@ var indexTypes = map[int8]string{
 	8: "RANGE VIEW",
 }
 
+var rangeOperators = []string{">", "<", ">=", "<="}
+
 var makeStatementWith string = `	WITH caching = {'keys': 'ALL', 'rows_per_partition': 'ALL'}
 	and compaction = {'class': 'SizeTieredCompactionStrategy'}
 	and compression = {'compression_level': '3', 'sstable_compression': 'org.apache.cassandra.io.compress.ZstdCompressor'}
@@ -480,22 +482,117 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				}
 			}
 
-			view.column.getValue = func(s *reflect.Value) any {
+			var makeValue = func(values []int64) int64 {
 				sumValue := int64(0)
-				values := []any{}
-				for i, col := range columns {
-					value := col.getValue(s)
-					// fmt.Println("Value Getted", col.Name, "|", value)
-					valueI64 := convertToInt64(value) * Pow10Int64(radixesI64[i])
-					values = append(values, value)
+				for i, value := range values {
+					valueI64 := value * Pow10Int64(radixesI64[i])
 					sumValue += valueI64
 				}
+				return sumValue
+			}
+
+			view.column.getValue = func(s *reflect.Value) any {
+				values := []int64{}
+				for _, col := range columns {
+					values = append(values, convertToInt64(col.getValue(s)))
+				}
+				sumValue := makeValue(values)
 				// fmt.Printf("Radix Sum Calculado %v | %v | %v\n", sumValue, values, radixesI64)
 				if isInt64 {
 					return any(sumValue)
 				} else {
 					return any(int32(sumValue))
 				}
+			}
+
+			view.getStatement = func(statements ...ColumnStatement) []string {
+
+				//Identify is a statement has a partition value
+				statementsMap := map[string]*ColumnStatement{}
+				for i, st := range statements {
+					statementsMap[st.Col] = &statements[i]
+				}
+
+				whereStatements := []string{}
+				var partStatement *ColumnStatement
+
+				if viewConfig.KeepPart {
+					partStatement = statementsMap[dbTable.partKey.Name]
+					if partStatement == nil {
+						panic(fmt.Sprintf(`The partition "%v" for table "%v" wasn't found.`, dbTable.partKey.Name, dbTable.name))
+					}
+				}
+
+				if len(statements[0].BetweenFrom) > 0 {
+
+				} else if slices.Contains(rangeOperators, statements[len(statements)-1].Operator) {
+					valuesGroups := [][]int64{{}}
+					rangeColumns := []*columnInfo{}
+
+					for _, col := range columns {
+						if _, ok := statementsMap[col.Name]; !ok {
+							statementsMap[col.Name] = &ColumnStatement{Value: int64(0)}
+						}
+						st := statementsMap[col.Name]
+						if len(rangeColumns) > 0 || slices.Contains(rangeOperators, st.Operator) {
+							rangeColumns = append(rangeColumns, col)
+							continue
+						}
+
+						if st == nil {
+							for i := range valuesGroups {
+								valuesGroups[i] = append(valuesGroups[i], 0)
+							}
+						} else if len(st.Values) >= 1 {
+							valuesGroupsCurrent := valuesGroups
+							valuesGroups = [][]int64{}
+							for _, value_ := range st.Values {
+								value := convertToInt64(value_)
+								for _, vg := range valuesGroupsCurrent {
+									valuesGroups = append(valuesGroups, append(vg, value))
+								}
+							}
+						} else {
+							if len(st.Values) == 1 {
+								st.Value = st.Values[0]
+							}
+							value := convertToInt64(st.Value)
+							for i := range valuesGroups {
+								valuesGroups[i] = append(valuesGroups[i], value)
+							}
+						}
+					}
+
+					// Create the ranges
+					for _, valuesFrom := range valuesGroups {
+						idxEnd := len(valuesFrom) - 1
+						valuesTo := slices.Clone(valuesFrom)
+						valuesTo[idxEnd]++
+
+						for _, col := range rangeColumns {
+							st := statementsMap[col.Name]
+							valuesFrom = append(valuesFrom, convertToInt64(st.Value))
+							valuesTo = append(valuesTo, 0)
+						}
+
+						whereStatement := fmt.Sprintf("%v >= %v AND %v < %v",
+							view.column.Name, makeValue(valuesFrom),
+							view.column.Name, makeValue(valuesTo),
+						)
+						whereStatements = append(whereStatements, whereStatement)
+					}
+				}
+
+				if partStatement != nil {
+					for i, ws := range whereStatements {
+						whereStatements[i] = fmt.Sprintf("%v = %v AND % v",
+							dbTable.partKey.Name, convertToInt64(partStatement.Value), ws)
+					}
+				}
+
+				fmt.Println("where statements::", whereStatements)
+
+				return whereStatements
 			}
 		} else {
 			view.Type = 7
@@ -519,7 +616,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				// Si una de las columnas es un slice puede iterar por el slice para obtener los values y gurdarla en una columa Set<any>
 				for _, e := range columns {
 					for _, st := range statements {
-						if st.Column == e.Name {
+						if st.Col == e.Name {
 							if len(st.Values) >= 2 {
 								valuesGroupsCurrent := valuesGroups
 								valuesGroups = [][]any{}
@@ -555,8 +652,8 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 				if viewConfig.KeepPart {
 					for _, st := range statements {
-						if st.Column == dbTable.partKey.Name {
-							statement = fmt.Sprintf("%v = %v AND ", st.Column, st.Value) + statement
+						if st.Col == dbTable.partKey.Name {
+							statement = fmt.Sprintf("%v = %v AND ", st.Col, st.Value) + statement
 						}
 					}
 				}

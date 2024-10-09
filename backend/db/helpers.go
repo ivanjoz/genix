@@ -92,6 +92,7 @@ func convertToInt64(val any) int64 {
 		return v
 	default:
 		// The value is not an integer
+		fmt.Println("Error: Value is not an integer:", v)
 		return 0
 	}
 }
