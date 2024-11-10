@@ -1,5 +1,7 @@
 package types
 
+import "app/db"
+
 type Increment struct {
 	TAGS         `table:"sequences"`
 	TableName    string `db:"name,pk"`
@@ -41,6 +43,45 @@ type Producto struct {
 	CreatedBy int32 `json:",omitempty" db:"created_by"`
 }
 
+type _e = Producto
+
+func (e _e) EmpresaID_() db.CoI32     { return db.CoI32{"empresa_id"} }
+func (e _e) ID_() db.CoI32            { return db.CoI32{"id"} }
+func (e _e) TempID_() db.CoI32        { return db.CoI32{"temp_id"} }
+func (e _e) Nombre_() db.CoStr        { return db.CoStr{"nombre"} }
+func (e _e) Descripcion_() db.CoStr   { return db.CoStr{"descripcion"} }
+func (e _e) CategoriasIDs_() db.CsI32 { return db.CsI32{"categorias_ids"} }
+func (e _e) Params_() db.CsI8         { return db.CsI8{"params_ids"} }
+func (e _e) Precio_() db.CoI32        { return db.CoI32{"precio"} }
+func (e _e) Descuento_() db.CoF32     { return db.CoF32{"descuento"} }
+func (e _e) PrecioFinal_() db.CoI32   { return db.CoI32{"precio_final"} }
+func (e _e) Peso_() db.CoF32          { return db.CoF32{"peso"} }
+func (e _e) Volumen_() db.CoF32       { return db.CoF32{"volumen"} }
+func (e _e) SbnCantidad_() db.CoI32   { return db.CoI32{"sbn_cantidad"} }
+func (e _e) SbnUnidad_() db.CoStr     { return db.CoStr{"sbn_unidad"} }
+func (e _e) SbnPrecio_() db.CoI32     { return db.CoI32{"sbn_precio"} }
+func (e _e) SbnDescuento_() db.CoF32  { return db.CoF32{"sbn_decuento"} }
+func (e _e) SbnPreciFinal_() db.CoI32 { return db.CoI32{"sbn_precio_final"} }
+func (e _e) Propiedades_() db.CoAny   { return db.CoAny{"propiedades"} }
+func (e _e) Images_() db.CoAny        { return db.CoAny{"images"} }
+func (e _e) Status_() db.CoI8         { return db.CoI8{"status"} }
+func (e _e) Updated_() db.CoI64       { return db.CoI64{"updated"} }
+func (e _e) UpdatedBy_() db.CoI32     { return db.CoI32{"updated_by"} }
+func (e _e) Created_() db.CoI64       { return db.CoI64{"created"} }
+func (e _e) CreatedBy_() db.CoI32     { return db.CoI32{"created_by"} }
+
+func (e Producto) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "productos",
+		Partition: e.EmpresaID_(),
+		Keys:      []db.Coln{e.ID_()},
+		Views: []db.View{
+			{Cols: []db.Coln{e.Status_()}, KeepPart: true},
+			{Cols: []db.Coln{e.Updated_()}, KeepPart: true},
+		},
+	}
+}
+
 type ProductoPropiedad struct {
 	ID     int16  `json:"id,omitempty" ms:"i"`
 	Nombre string `json:"nm,omitempty" ms:"n"`
@@ -71,6 +112,32 @@ type Almacen struct {
 	CreatedBy int32 `json:",omitempty" db:"created_by"`
 }
 
+type _c = Almacen
+
+func (e _c) EmpresaID_() db.CoI32   { return db.CoI32{"empresa_id"} }
+func (e _c) ID_() db.CoI32          { return db.CoI32{"id"} }
+func (e _c) SedeID_() db.CoI32      { return db.CoI32{"sede_id"} }
+func (e _c) Nombre_() db.CoStr      { return db.CoStr{"nombre"} }
+func (e _c) Descripcion_() db.CoStr { return db.CoStr{"descripcion"} }
+func (e _c) Layout_() db.CoAny      { return db.CoAny{"layout"} }
+func (e _c) Status_() db.CoI8       { return db.CoI8{"status"} }
+func (e _c) Updated_() db.CoI64     { return db.CoI64{"updated"} }
+func (e _c) UpdatedBy_() db.CoI32   { return db.CoI32{"updated_by"} }
+func (e _c) Created_() db.CoI64     { return db.CoI64{"created"} }
+func (e _c) CreatedBy_() db.CoI32   { return db.CoI32{"created_by"} }
+
+func (e Almacen) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "almacenes",
+		Partition: e.EmpresaID_(),
+		Keys:      []db.Coln{e.ID_()},
+		Views: []db.View{
+			{Cols: []db.Coln{e.Status_()}, KeepPart: true},
+			{Cols: []db.Coln{e.Updated_()}, KeepPart: true},
+		},
+	}
+}
+
 type ProductoStock struct {
 	TAGS             `table:"producto_stock"`
 	EmpresaID        int32   `db:"empresa_id,pk"`
@@ -85,17 +152,17 @@ type ProductoStock struct {
 }
 
 type AlmacenLayout struct {
-	ID      int16                 `ms:"i"`
-	Name    string                `ms:"n"`
-	RowCant int8                  `ms:"r"`
-	ColCant int8                  `ms:"c"`
-	Bloques []AlmacenLayoutBloque `ms:"b"`
+	ID      int16                 `ms:"i" cbor:"1,keyasint,omitempty"`
+	Name    string                `ms:"n" cbor:"2,keyasint,omitempty"`
+	RowCant int8                  `ms:"r" cbor:"3,keyasint,omitempty"`
+	ColCant int8                  `ms:"c" cbor:"4,keyasint,omitempty"`
+	Bloques []AlmacenLayoutBloque `ms:"b" cbor:"5,keyasint,omitempty"`
 }
 
 type AlmacenLayoutBloque struct {
-	Row    int8   `json:"rw" ms:"r"`
-	Column int8   `json:"co" ms:"c"`
-	Name   string `json:"nm" ms:"n"`
+	Row    int8   `json:"rw" ms:"r" cbor:"1,keyasint,omitempty"`
+	Column int8   `json:"co" ms:"c" cbor:"2,keyasint,omitempty"`
+	Name   string `json:"nm" ms:"n" cbor:"2,keyasint,omitempty"`
 }
 
 type Sede struct {
@@ -111,7 +178,33 @@ type Sede struct {
 	UpdatedBy   int32  `db:"updated_by"`
 	Created     int64  `db:"created"`
 	CreatedBy   int32  `db:"created_by"`
-	Ciudad      string
+	Ciudad      string `json:"omitempty"`
+}
+
+type _d = Sede
+
+func (e _d) EmpresaID_() db.CoI32   { return db.CoI32{"empresa_id"} }
+func (e _d) ID_() db.CoI32          { return db.CoI32{"id"} }
+func (e _d) Nombre_() db.CoStr      { return db.CoStr{"nombre"} }
+func (e _d) Descripcion_() db.CoStr { return db.CoStr{"descripcion"} }
+func (e _d) Direccion_() db.CoStr   { return db.CoStr{"direccion"} }
+func (e _d) CiudadID_() db.CoStr    { return db.CoStr{"pais_ciudad_id"} }
+func (e _d) Status_() db.CoI8       { return db.CoI8{"status"} }
+func (e _d) Updated_() db.CoI64     { return db.CoI64{"updated"} }
+func (e _d) UpdatedBy_() db.CoI32   { return db.CoI32{"updated_by"} }
+func (e _d) Created_() db.CoI64     { return db.CoI64{"created"} }
+func (e _d) CreatedBy_() db.CoI32   { return db.CoI32{"created_by"} }
+
+func (e Sede) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "sedes",
+		Partition: e.EmpresaID_(),
+		Keys:      []db.Coln{e.ID_()},
+		Views: []db.View{
+			{Cols: []db.Coln{e.Status_()}, KeepPart: true},
+			{Cols: []db.Coln{e.Updated_()}, KeepPart: true},
+		},
+	}
 }
 
 type AlmacenProducto struct {

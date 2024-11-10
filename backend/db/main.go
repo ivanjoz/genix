@@ -56,8 +56,16 @@ type TableSchema struct {
 }
 
 func (q ColumnStatement) GetValue() any {
-	if len(q.Values) > 0 {
-		return ""
+	if len(q.Values) > 0 && q.Operator == "IN" {
+		values := []string{}
+		for _, v := range q.Values {
+			if str, ok := v.(string); ok {
+				values = append(values, `'`+str+`'`)
+			} else {
+				values = append(values, fmt.Sprintf("%v", v))
+			}
+		}
+		return "(" + strings.Join(values, ", ") + ")"
 	} else if str, ok := q.Value.(string); ok {
 		return `'` + str + `'`
 	} else {
@@ -172,6 +180,7 @@ type CoF64 = Col[float64]
 type CsInt = ColSlice[int]
 type CsI32 = ColSlice[int32]
 type CsI16 = ColSlice[int16]
+type CsI8 = ColSlice[int8]
 type CsStr = ColSlice[string]
 
 type statementGroup struct {
@@ -256,6 +265,7 @@ type viewInfo struct {
 	columns       []string
 	columnsNoPart []string
 	columnsIdx    []int16
+	Operators     []string
 	//	getValue        func(s *reflect.Value) any
 	getStatement    func(statements ...ColumnStatement) []string
 	getCreateScript func() string
@@ -355,6 +365,20 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 				}
 			}
 			if len(psb.colsIncluded) > 0 {
+				hasOperators := true
+				if len(indview.Operators) > 0 {
+					for _, st := range statements {
+						if !slices.Contains(indview.Operators, st.Operator) {
+							hasOperators = false
+							break
+						}
+					}
+				}
+
+				if !hasOperators {
+					continue
+				}
+
 				if len(psb.colsIncluded) == len(colsWhereIdx) {
 					psb.priority = 6 + int8(len(colsWhereIdx))*2
 					if isHash && indview.Type == 7 {
@@ -405,6 +429,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 	} else {
 		statementsRemain = statements
 	}
+
 	if len(whereStatements) == 0 {
 		whereStatements = append(whereStatements, "")
 	}
@@ -495,9 +520,9 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 						column.setValue(&field, value)
 						// Revisa si necesita parsearse un string a un struct como JSON
 					} else if column.IsComplexType {
-						// Log("complex type::", column.FieldName)
+						fmt.Println("complex type::", column.FieldName, "|", column.FieldType)
 						if vl, ok := value.(*[]uint8); ok {
-							if len(*vl) <= 2 {
+							if len(*vl) <= 3 {
 								continue
 							}
 							newElm := reflect.New(column.RefType).Elem()
@@ -505,7 +530,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 							if err != nil {
 								fmt.Println("Error al convertir: ", newElm, "|", err.Error())
 							}
-							// fmt.Println("col complex:", column.Name, " | ", newElm, " | L:", len(*vl))
+							fmt.Println("col complex:", column.Name, " | ", newElm, " | L:", len(*vl))
 							if column.IsPointer {
 								ref.Field(column.FieldIdx).Set(reflect.ValueOf(newElm))
 							} else {

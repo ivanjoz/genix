@@ -18,15 +18,14 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		query := core.DBSelect(&almacenes).
-			Where("empresa_id").Equals(req.Usuario.EmpresaID)
-
-		if updated > 0 {
-			query = query.Where("updated").GreatEq(updated)
-		} else {
-			query = query.Where("status").Equals(1)
-		}
-		err := query.Exec()
+		err := db.SelectRef(&almacenes, func(q *db.Query[s.Almacen], col s.Almacen) {
+			q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+			if updated > 0 {
+				q.Where(col.Updated_().GreaterThan(updated))
+			} else {
+				q.Where(col.Status_().Equals(1))
+			}
+		})
 		if err != nil {
 			err = fmt.Errorf("error al obtener los almacenes: %v", err)
 		}
@@ -35,23 +34,21 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 
 	sedes := []s.Sede{}
 	errGroup.Go(func() error {
-		query := core.DBSelect(&sedes).
-			Where("empresa_id").Equals(req.Usuario.EmpresaID)
-
-		if updated > 0 {
-			query = query.Where("updated").GreatEq(updated)
-		} else {
-			query = query.Where("status").Equals(1)
-		}
-		err := query.Exec()
+		err := db.SelectRef(&sedes, func(q *db.Query[s.Sede], col s.Sede) {
+			q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+			if updated > 0 {
+				q.Where(col.Updated_().GreaterThan(updated))
+			} else {
+				q.Where(col.Status_().Equals(1))
+			}
+		})
 		if err != nil {
-			err = fmt.Errorf("error al obtener las sedes: %v", err)
+			err = fmt.Errorf("error al obtener los sedes: %v", err)
 		}
 		return err
 	})
 
-	err := errGroup.Wait()
-	if err != nil {
+	if err := errGroup.Wait(); err != nil {
 		return req.MakeErr(err)
 	}
 
@@ -67,17 +64,16 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	paisCiudades := []s.PaisCiudad{}
-	ubigeosIDs := []any{}
-	for _, e := range ubigeosSlice.Values {
-		ubigeosIDs = append(ubigeosIDs, any(e))
-	}
 
-	if len(ubigeosIDs) > 0 {
-		err := core.DBSelect(&paisCiudades).
-			Where("pais_id").Equals(604).Where("ciudad_id").IN(ubigeosIDs...).Exec()
+	if !ubigeosSlice.IsEmpty() {
+		err := db.SelectRef(&paisCiudades, func(q *db.Query[s.PaisCiudad], col s.PaisCiudad) {
+			q.Where(col.PaisID_().Equals(604))
+			q.Where(col.CiudadID_().In(ubigeosSlice.Values...))
+		})
 		if err != nil {
 			return req.MakeErr("Error al obtener las ciudades:", err)
 		}
+
 		paisCiudadesMap := core.SliceToMapK(paisCiudades,
 			func(e s.PaisCiudad) string { return e.CiudadID })
 
@@ -138,8 +134,7 @@ func PostSedes(req *core.HandlerArgs) core.HandlerResponse {
 	body.Created = time.Now().Unix()
 	body.CreatedBy = req.Usuario.ID
 
-	err = core.DBInsert(&[]s.Sede{body})
-	if err != nil {
+	if err = db.Insert(&[]s.Sede{body}); err != nil {
 		return req.MakeErr("Error al actualizar / insertar la sede: " + err.Error())
 	}
 
@@ -197,8 +192,7 @@ func PostAlmacen(req *core.HandlerArgs) core.HandlerResponse {
 	body.Created = time.Now().Unix()
 	body.CreatedBy = req.Usuario.ID
 
-	err = core.DBInsert(&[]s.Almacen{body})
-	if err != nil {
+	if db.Insert((&[]s.Almacen{body})); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el almacén: " + err.Error())
 	}
 

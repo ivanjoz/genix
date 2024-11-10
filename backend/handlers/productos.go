@@ -53,7 +53,8 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	productosIDsSet := core.SliceSet[int32]{}
 	createCounter := 0
 
-	for _, e := range productos {
+	for i := range productos {
+		e := &productos[i]
 		if e.ID < 1 {
 			createCounter++
 			e.TempID = e.ID
