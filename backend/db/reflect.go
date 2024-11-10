@@ -423,6 +423,10 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			columnsNoPart: colNamesNoPart,
 		}
 
+		for _, e := range columns {
+			fmt.Println("view:", view.name, "| ", e.Name)
+		}
+
 		if len(columns) > 1 {
 			view.column = &columnInfo{
 				Name: fmt.Sprintf(`zz_%v`, colNamesJoined), IsVirtual: true,
@@ -436,6 +440,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		// Si sólo es una columna, no es necesario autogenerar
 		if len(columns) == 1 {
 			view.column = columns[0]
+			fmt.Println("hay 1 columna:", columns[0].Name)
 		} else if isRangeView {
 			isInt64 := len(viewConfig.ConcatI64) > 0
 			if isInt64 {
@@ -595,6 +600,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				return whereStatements
 			}
 		} else {
+			view.Operators = []string{"=", "IN"}
 			view.Type = 7
 			// Sino crea un hash de las columnas
 			view.column.getValue = func(s *reflect.Value) any {

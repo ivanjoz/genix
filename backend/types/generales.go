@@ -19,7 +19,7 @@ type _a = PaisCiudad
 func (e _a) PaisID_() db.CoI32   { return db.CoI32{"pais_id"} }
 func (e _a) CiudadID_() db.CoStr { return db.CoStr{"ciudad_id"} }
 func (e _a) Nombre_() db.CoStr   { return db.CoStr{"nombre"} }
-func (e _a) PadreID_() db.CoStr  { return db.CoStr{"padre_id"} }
+func (e _a) PadreID_() db.CoI32  { return db.CoI32{"padre_id"} }
 func (e _a) Jerarquia_() db.CoI8 { return db.CoI8{"jerarquia"} }
 func (e _a) Updated_() db.CoI64  { return db.CoI64{"updated"} }
 
@@ -29,7 +29,7 @@ func (e PaisCiudad) GetSchema() db.TableSchema {
 		Partition: e.PaisID_(),
 		Keys:      []db.Coln{e.CiudadID_()},
 		Views: []db.View{
-			{Cols: []db.Coln{e.Updated_()}},
+			{Cols: []db.Coln{e.Updated_()}, KeepPart: true},
 		},
 	}
 }

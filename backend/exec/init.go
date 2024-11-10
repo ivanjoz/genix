@@ -145,7 +145,15 @@ func Homologate(args *core.ExecArgs) core.FuncResponse {
 	})
 
 	fmt.Println("----------")
-	db.DeployScylla(types.PaisCiudad{}, types.ListaCompartidaRegistro{})
+	/*
+		err1 := db.QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.almacenes__pk_updated_view`)
+		if err1 != nil {
+			fmt.Println("error:", err1)
+		}
+	*/
+	db.DeployScylla(
+		types.PaisCiudad{}, types.ListaCompartidaRegistro{},
+		types.Sede{}, types.Almacen{})
 
 	return core.FuncResponse{}
 }
