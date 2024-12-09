@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"app/core"
+	"app/db"
 	s "app/types"
 	"encoding/json"
 	"fmt"
@@ -17,15 +18,14 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		query := core.DBSelect(&productos, "temp_id", "empresa_id").
-			Where("empresa_id").Equals(req.Usuario.EmpresaID)
-
-		if updated > 0 {
-			query = query.Where("updated").GreatEq(updated)
-		} else {
-			query = query.Where("status").Equals(1)
-		}
-		err := query.Exec()
+		err := db.SelectRef(&productos, func(q *db.Query[s.Producto], col s.Producto) {
+			q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+			if updated > 0 {
+				q.Where(col.Updated_().GreaterEqual(updated))
+			} else {
+				q.Where(col.Status_().GreaterEqual(1))
+			}
+		})
 		if err != nil {
 			err = fmt.Errorf("error al obtener los productos: %v", err)
 		}
@@ -76,9 +76,9 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	productosCurrent := []s.Producto{}
 	if len(productosIDsSet.Values) > 0 {
-		err = core.DBSelect(&productosCurrent).
-			Where("id").In(core.ToAny(productosIDsSet.Values)).Exec()
-
+		err = db.SelectRef(&productosCurrent, func(q *db.Query[s.Producto], col s.Producto) {
+			q.Where(col.ID_().In(productosIDsSet.Values...))
+		})
 		if err != nil {
 			return req.MakeErr("Error al obtener los productos actuales:", err)
 		}
@@ -169,8 +169,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		e.Propiedades = core.MapToSlice(propiedadesMap)
 	}
 
-	err = core.DBInsert(&productos)
-	if err != nil {
+	if err = db.Insert(&productos); err != nil {
 		return req.MakeErr("Error al actualizar / insertar la sede: " + err.Error())
 	}
 
@@ -200,21 +199,19 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	productos := []s.Producto{}
+	productos := db.Select(func(q *db.Query[s.Producto], col s.Producto) {
+		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+		q.Where(col.ID_().Equals(image.ProductoID))
+	})
 
-	err = core.DBSelect(&productos).
-		Where("empresa_id").Equals(req.Usuario.EmpresaID).
-		Where("id").Equals(image.ProductoID).Exec()
-
-	if err != nil {
-		return req.MakeErr("Error al obtener el producto:", err)
+	if productos.Err != nil {
+		return req.MakeErr("Error al obtener el producto:", productos.Err)
 	}
-
-	if len(productos) == 0 {
+	if len(productos.Records) == 0 {
 		return req.MakeErr("No se encontró el producto con ID:", image.ProductoID)
 	}
 
-	producto := productos[0]
+	producto := productos.Records[0]
 	response := map[string]string{}
 
 	if len(image.ImageToDelete) > 0 {

@@ -1,5 +1,7 @@
 package types
 
+import "app/db"
+
 type Caja struct {
 	TAGS         `table:"cajas"`
 	EmpresaID    int32  `db:"empresa_id,pk"`
@@ -18,6 +20,34 @@ type Caja struct {
 	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
 	Created   int32 `json:",omitempty" db:"created"`
 	CreatedBy int32 `json:",omitempty" db:"created_by"`
+}
+
+func (e Caja) EmpresaID_() db.CoI32    { return db.CoI32{"empresa_id"} }
+func (e Caja) ID_() db.CoI32           { return db.CoI32{"id"} }
+func (e Caja) Tipo_() db.CoI32         { return db.CoI32{"tipo"} }
+func (e Caja) SedeID_() db.CoI32       { return db.CoI32{"sede_id"} }
+func (e Caja) Nombre_() db.CoStr       { return db.CoStr{"nombre"} }
+func (e Caja) Descripcion_() db.CoStr  { return db.CoStr{"descripcion"} }
+func (e Caja) MonedaTipo_() db.CoI8    { return db.CoI8{"moneda"} }
+func (e Caja) CuadreFecha_() db.CoI32  { return db.CoI32{"cuadre_fecha"} }
+func (e Caja) CuadreSaldo_() db.CoI32  { return db.CoI32{"cuadre_saldo"} }
+func (e Caja) SaldoCurrent_() db.CoI32 { return db.CoI32{"saldo_current"} }
+func (e Caja) Status_() db.CoI8        { return db.CoI8{"status"} }
+func (e Caja) Updated_() db.CoI32      { return db.CoI32{"updated"} }
+func (e Caja) UpdatedBy_() db.CoI32    { return db.CoI32{"updated_by"} }
+func (e Caja) Created_() db.CoI32      { return db.CoI32{"created"} }
+func (e Caja) CreatedBy_() db.CoI32    { return db.CoI32{"created_by"} }
+
+func (e Caja) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "cajas",
+		Partition: e.EmpresaID_(),
+		Keys:      []db.Coln{e.ID_()},
+		Views: []db.View{
+			{Cols: []db.Coln{e.Status_()}, KeepPart: true},
+			{Cols: []db.Coln{e.Updated_()}, KeepPart: true},
+		},
+	}
 }
 
 type CajaMovimiento struct {

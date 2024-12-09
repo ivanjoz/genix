@@ -2,6 +2,7 @@ package operaciones
 
 import (
 	"app/core"
+	"app/db"
 	s "app/types"
 	"encoding/json"
 	"slices"
@@ -181,26 +182,19 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	almacenID := req.GetQueryInt("almacen-id")
 	updated := core.UnixToSunix(req.GetQueryInt64("upd"))
 
-	almacenProductos := []s.AlmacenProducto{}
+	almacenProductos := db.Select(func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
+		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+		if updated > 0 {
+			q.Between(col.AlmacenID_().Equals(almacenID), col.Updated_().Equals(updated)).
+				And(col.AlmacenID_().Equals(almacenID+1), col.Updated_().LessEqual(0))
+		} else {
+			q.Where(col.ID_().Between(core.Concat62(almacenID, 0), core.Concat62(almacenID+1, 0)))
+		}
+	})
 
-	query := core.DBSelect(&almacenProductos).
-		Where("empresa_id").Equals(req.Usuario.EmpresaID)
-
-	if updated > 0 {
-		query = query.
-			Where("almacen_id", "updated").GreatEq(almacenID, updated).
-			Where("almacen_id", "updated").LessThan(almacenID+1, 0)
-	} else {
-		query = query.
-			Where("id").GreatThan(core.Concat62(almacenID, 0)).
-			Where("id").LessThan(core.Concat62(almacenID+1, 0))
+	if almacenProductos.Err != nil {
+		return req.MakeErr("Error al obtener los registros del almacén:", almacenProductos.Err)
 	}
 
-	core.Log("ejecutando query: 1")
-	err := query.Exec()
-	if err != nil {
-		return req.MakeErr("Error al obtener los registros del almacén:", err)
-	}
-
-	return req.MakeResponse(almacenProductos)
+	return req.MakeResponse(almacenProductos.Records)
 }

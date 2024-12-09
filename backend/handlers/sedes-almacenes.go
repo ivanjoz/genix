@@ -192,7 +192,7 @@ func PostAlmacen(req *core.HandlerArgs) core.HandlerResponse {
 	body.Created = time.Now().Unix()
 	body.CreatedBy = req.Usuario.ID
 
-	if db.Insert((&[]s.Almacen{body})); err != nil {
+	if err := db.Insert((&[]s.Almacen{body})); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el almacén: " + err.Error())
 	}
 

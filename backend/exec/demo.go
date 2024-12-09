@@ -24,6 +24,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+/*
 func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
 	usuarios := []types.Usuario{}
 	if err := core.DBSelect(&usuarios); err != nil {
@@ -35,6 +36,7 @@ func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
 
 	return core.FuncResponse{}
 }
+*/
 
 func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 	counter, err := core.GetCounter("usuarios_1", 1)
