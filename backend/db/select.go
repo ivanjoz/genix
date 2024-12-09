@@ -143,6 +143,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 	statementsRemain := []ColumnStatement{}
 	statementsLogs_ := []ColumnStatement{}
 	whereStatements := []string{}
+	orderColumn := scyllaTable.keys[0]
 
 	fmt.Println("posible indexes::", len(posibleViewsOrIndexes))
 
@@ -182,6 +183,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 					statementsRemain = append(statementsRemain, st)
 				}
 			}
+			orderColumn = viewOrIndex.column
 			whereStatements = viewOrIndex.getStatement(statementsSelected...)
 		} else {
 			// No es necesario cambiar nada del query
@@ -231,6 +233,9 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 		}
 		if whereStatement != "" {
 			whereStatement = " WHERE " + whereStatement
+		}
+		if len(query.orderBy) > 0 {
+			whereStatement += " " + fmt.Sprintf(query.orderBy, orderColumn.Name)
 		}
 		queryWhereStatements = append(queryWhereStatements, whereStatement)
 	}

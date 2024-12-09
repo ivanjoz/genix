@@ -224,20 +224,20 @@ type AlmacenProducto struct {
 	Status      int8    `json:"ss,omitempty" db:"status"`
 }
 
-type _f = AlmacenProducto
+type alp = AlmacenProducto
 
-func (e _f) EmpresaID_() db.CoI32   { return db.CoI32{"empresa_id"} }
-func (e _f) ID_() db.CoStr          { return db.CoStr{"id"} }
-func (e _f) SKU_() db.CoStr         { return db.CoStr{"sku"} }
-func (e _f) Lote_() db.CoStr        { return db.CoStr{"lote"} }
-func (e _f) AlmacenID_() db.CoI32   { return db.CoI32{"almacen_id"} }
-func (e _f) ProductoID_() db.CoI32  { return db.CoI32{"producto_id"} }
-func (e _f) Cantidad_() db.CoI32    { return db.CoI32{"cantidad"} }
-func (e _f) SubCantidad_() db.CoI32 { return db.CoI32{"sub_cantidad"} }
-func (e _f) CostoUn_() db.CoI32     { return db.CoI32{"costo_un"} }
-func (e _f) Updated_() db.CoI32     { return db.CoI32{"updated"} }
-func (e _f) UpdatedBy_() db.CoI32   { return db.CoI32{"updated_by"} }
-func (e _f) Status_() db.CoI8       { return db.CoI8{"status"} }
+func (e alp) EmpresaID_() db.CoI32   { return db.CoI32{"empresa_id"} }
+func (e alp) ID_() db.CoStr          { return db.CoStr{"id"} }
+func (e alp) SKU_() db.CoStr         { return db.CoStr{"sku"} }
+func (e alp) Lote_() db.CoStr        { return db.CoStr{"lote"} }
+func (e alp) AlmacenID_() db.CoI32   { return db.CoI32{"almacen_id"} }
+func (e alp) ProductoID_() db.CoI32  { return db.CoI32{"producto_id"} }
+func (e alp) Cantidad_() db.CoI32    { return db.CoI32{"cantidad"} }
+func (e alp) SubCantidad_() db.CoI32 { return db.CoI32{"sub_cantidad"} }
+func (e alp) CostoUn_() db.CoI32     { return db.CoI32{"costo_un"} }
+func (e alp) Updated_() db.CoI32     { return db.CoI32{"updated"} }
+func (e alp) UpdatedBy_() db.CoI32   { return db.CoI32{"updated_by"} }
+func (e alp) Status_() db.CoI8       { return db.CoI8{"status"} }
 
 func (e AlmacenProducto) GetSchema() db.TableSchema {
 	return db.TableSchema{
@@ -290,5 +290,37 @@ func (e *AlmacenMovimiento) GetView(view int8) any {
 		return int64(e.AlmacenRefID)*1e9 + int64(e.Created)
 	} else {
 		return 0
+	}
+}
+
+type alm = AlmacenMovimiento
+
+func (e alm) EmpresaID_() db.CoI32       { return db.CoI32{"empresa_id"} }
+func (e alm) ID_() db.CoI64              { return db.CoI64{"id"} }
+func (e alm) SKU_() db.CoStr             { return db.CoStr{"sku"} }
+func (e alm) Lote_() db.CoStr            { return db.CoStr{"lote"} }
+func (e alm) AlmacenID_() db.CoI32       { return db.CoI32{"almacen_id"} }
+func (e alm) AlmacenRefID_() db.CoI32    { return db.CoI32{"almacen_ref_id"} }
+func (e alm) VentaID_() db.CoI32         { return db.CoI32{"venta_id"} }
+func (e alm) ProductoID_() db.CoI32      { return db.CoI32{"producto_id"} }
+func (e alm) Cantidad_() db.CoI32        { return db.CoI32{"cantidad"} }
+func (e alm) AlmacenCantidad_() db.CoI32 { return db.CoI32{"almacen_cantidad"} }
+func (e alm) SubCantidad_() db.CoI32     { return db.CoI32{"sub_cantidad"} }
+func (e alm) Tipo_() db.CoI8             { return db.CoI8{"tipo"} }
+func (e alm) Created_() db.CoI32         { return db.CoI32{"created"} }
+func (e alm) CreatedBy_() db.CoI32       { return db.CoI32{"created_by"} }
+
+func (e alm) AlmacenRefCantidad_() db.CoI32 { return db.CoI32{"almacen_ref_cantidad"} }
+
+func (e alm) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "almacen_movimiento",
+		Partition: e.EmpresaID_(),
+		Keys:      []db.Coln{e.ID_()},
+		Views: []db.View{
+			{Cols: []db.Coln{e.SKU_()}, KeepPart: true},
+			{Cols: []db.Coln{e.Lote_()}, KeepPart: true},
+			{Cols: []db.Coln{e.AlmacenRefID_(), e.Created_()}, ConcatI64: []int8{9}},
+		},
 	}
 }

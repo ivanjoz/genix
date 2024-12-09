@@ -64,15 +64,30 @@ type CajaMovimiento struct {
 	CreatedBy  int32 `json:",omitempty" db:"created_by,view"`
 }
 
-/*
-func (e *CajaMovimiento) MakeID(unixTimeMill int64) int64 {
-	return int64(e.CajaID)*10_000_000_000_000 + unixTimeMill
-}
+type cjm = CajaMovimiento
 
-func (e *CajaMovimiento) SetID(unixTimeMill int64) {
-	e.ID = int64(e.CajaID)*10_000_000_000_000 + unixTimeMill
+func (e cjm) EmpresaID_() db.CoI32  { return db.CoI32{"empresa_id"} }
+func (e cjm) ID_() db.CoI64         { return db.CoI64{"id"} }
+func (e cjm) VentaID_() db.CoI32    { return db.CoI32{"venta_id"} }
+func (e cjm) CajaID_() db.CoI32     { return db.CoI32{"caja_id"} }
+func (e cjm) CajaRefID_() db.CoI32  { return db.CoI32{"caja_ref_id"} }
+func (e cjm) Tipo_() db.CoI32       { return db.CoI32{"tipo"} }
+func (e cjm) SaldoFinal_() db.CoI32 { return db.CoI32{"saldo_final"} }
+func (e cjm) Monto_() db.CoI32      { return db.CoI32{"monto"} }
+func (e cjm) Created_() db.CoI32    { return db.CoI32{"created"} }
+func (e cjm) CreatedBy_() db.CoI32  { return db.CoI32{"created_by"} }
+
+func (e cjm) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "caja_movimientos",
+		Partition: e.EmpresaID_(),
+		Keys:      []db.Coln{e.ID_()},
+		Views: []db.View{
+			{Cols: []db.Coln{e.VentaID_()}, KeepPart: true},
+			{Cols: []db.Coln{e.CreatedBy_()}, KeepPart: true},
+		},
+	}
 }
-*/
 
 type CajaCuadre struct {
 	TAGS            `table:"caja_cuadre"`
@@ -87,12 +102,6 @@ type CajaCuadre struct {
 	Created         int32 `json:",omitempty" db:"created"`
 	CreatedBy       int32 `json:",omitempty" db:"created_by,view"`
 }
-
-/*
-func (e *CajaCuadre) SetID(unixTimeMill int64) {
-	e.ID = int64(e.CajaID)*10_000_000_000_00 + unixTimeMill
-}
-*/
 
 type VentaProducto struct {
 	ProductoID int32 `cbor:"1,keyasint"`

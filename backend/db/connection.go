@@ -88,6 +88,11 @@ func getScyllaConnection() *gocql.Session {
 	return scyllaSession
 }
 
+func QueryExecStatements(queryStatements []string) error {
+	queryToExec := makeQueryStatement(queryStatements)
+	return QueryExec(queryToExec)
+}
+
 func QueryExec(queryStr string) error {
 	query := getScyllaConnection().Query(queryStr)
 	if err := query.Exec(); err != nil {

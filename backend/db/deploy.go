@@ -269,7 +269,7 @@ func RecalcVirtualColumns[T TableSchemaInterface]() {
 	fmt.Println("registros obtenidos::", len(records))
 	fmt.Print(records)
 
-	queryStatements := makeUpdateQuery(&records, nil, nil, true)
+	queryStatements := makeUpdateStatementsBase(&records, nil, nil, true)
 	fmt.Println("actualizando registros::", len(queryStatements))
 	queryInsert := makeQueryStatement(queryStatements)
 	if err := QueryExec(queryInsert); err != nil {
