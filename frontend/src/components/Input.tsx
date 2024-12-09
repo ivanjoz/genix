@@ -87,7 +87,7 @@ export function Input<T>(props: IInput<T>) {
     }
   ))
   
-  let cN = `${s1.input_1} p-rel`
+  let cN = `${s1.input} p-rel`
   if(props.css){ cN += " " + props.css }
   
   const iconValid = () => {
@@ -106,27 +106,29 @@ export function Input<T>(props: IInput<T>) {
   }
 
   return <div class={cN}>
-    { props.label && 
-      <div class="mr-auto label">
-        {props.label} { iconValid() }
-      </div>
+    { props.label && <>
+        <div class={`${s1.input_lab}`}>{props.label}{ iconValid() }</div>
+        <div class={`${s1.input_lab1}`}>{props.label}{ iconValid() }</div>
+      </>
     }
-    <input class={"in-5 " + (props.inputCss||"") } 
-      value={getValue()} 
-      onkeyup={ev => { onKeyUp(ev); isChange++ }}
-      type={props.type || "text"}
-      onBlur={(ev) => {
-        onKeyUp(ev as unknown as any, true)
-        if(props.onChange && isChange){ 
-          props.onChange() 
-          isChange = 0
-        }
-      }}
-      placeholder={props.placeholder||""}
-      disabled={props.disabled}
-    />
-    { !props.label && iconValid() }
-    { props.postValue || null  }
+    <div class={`${s1.input_div} w100`}>
+      <input class={s1.input_inp +" "+ (props.inputCss||"") } 
+        value={getValue()} 
+        onkeyup={ev => { onKeyUp(ev); isChange++ }}
+        type={props.type || "text"}
+        onBlur={(ev) => {
+          onKeyUp(ev as unknown as any, true)
+          if(props.onChange && isChange){ 
+            props.onChange() 
+            isChange = 0
+          }
+        }}
+        placeholder={props.placeholder||""}
+        disabled={props.disabled}
+      />
+      { !props.label && iconValid() }
+      { props.postValue || null  }
+    </div>
   </div>
 }
 

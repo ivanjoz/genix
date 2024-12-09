@@ -204,6 +204,7 @@ type Query[T any] struct {
 	recordsToJoin  []T
 	columnsJoin    []columnInfo
 	between        ColumnStatement
+	orderBy        string
 }
 
 func (q *Query[T]) init() {
@@ -235,6 +236,11 @@ func (q *Query[T]) Where(statements ...ColumnStatement) *Query[T] {
 			group: statements,
 		})
 	}
+	return q
+}
+
+func (q *Query[T]) OrderDescending() *Query[T] {
+	q.orderBy = "ORDER BY %v DESC"
 	return q
 }
 
@@ -329,8 +335,7 @@ func makeQueryStatement(statements []string) string {
 	return queryStr
 }
 
-func Insert[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) error {
-
+func MakeInsertStatement[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) []string {
 	scyllaTable := makeTable(*new(T))
 
 	columns := []*columnInfo{}
@@ -352,14 +357,6 @@ func Insert[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) erro
 	for _, col := range columns {
 		columnsNames = append(columnsNames, col.Name)
 	}
-	/*
-		virtualIndexes := []viewInfo{}
-		for _, index := range scyllaTable.indexes {
-			if index.column.IsVirtual {
-				virtualIndexes = append(virtualIndexes, index)
-			}
-		}
-	*/
 
 	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES `,
 		scyllaTable.fullName(), strings.Join(columnsNames, ", "))
@@ -383,7 +380,12 @@ func Insert[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) erro
 		statement := /*" " +*/ queryStrInsert + "(" + strings.Join(recordInsertValues, ", ") + ")"
 		queryStatements = append(queryStatements, statement)
 	}
+	return queryStatements
+}
 
+func Insert[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) error {
+
+	queryStatements := MakeInsertStatement(records, columnsToExclude...)
 	queryInsert := makeQueryStatement(queryStatements)
 	fmt.Println(queryInsert)
 
@@ -395,7 +397,7 @@ func Insert[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) erro
 	return nil
 }
 
-func makeUpdateQuery[T TableSchemaInterface](records *[]T, columnsToInclude []Coln, columnsToExclude []Coln, onlyVirtual bool) []string {
+func makeUpdateStatementsBase[T TableSchemaInterface](records *[]T, columnsToInclude []Coln, columnsToExclude []Coln, onlyVirtual bool) []string {
 
 	scyllaTable := makeTable(*new(T))
 	columnsToUpdate := []*columnInfo{}
@@ -498,18 +500,72 @@ func makeUpdateQuery[T TableSchemaInterface](records *[]T, columnsToInclude []Co
 	return queryStatements
 }
 
+func MakeUpdateStatements[T TableSchemaInterface](records *[]T, columnsToInclude ...Coln) []string {
+	return makeUpdateStatementsBase(records, columnsToInclude, nil, false)
+}
+
 func Update[T TableSchemaInterface](records *[]T, columnsToInclude ...Coln) error {
 
 	if len(columnsToInclude) == 0 {
 		panic("No se incluyeron columnas a actualizar.")
 	}
 
-	queryStatements := makeUpdateQuery(records, columnsToInclude, nil, false)
+	queryStatements := makeUpdateStatementsBase(records, columnsToInclude, nil, false)
 	queryInsert := makeQueryStatement(queryStatements)
 	if err := QueryExec(queryInsert); err != nil {
 		fmt.Println(queryInsert)
 		fmt.Println("Error inserting records:", err)
 		return err
 	}
+	return nil
+}
+
+func UpdateExclude[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) error {
+
+	queryStatements := makeUpdateStatementsBase(records, nil, columnsToExclude, false)
+	queryInsert := makeQueryStatement(queryStatements)
+	if err := QueryExec(queryInsert); err != nil {
+		fmt.Println(queryInsert)
+		fmt.Println("Error inserting records:", err)
+		return err
+	}
+	return nil
+}
+
+func InsertOrUpdate[T TableSchemaInterface](
+	records *[]T,
+	isRecordForInsert func(e *T) bool,
+	columnsToExcludeUpdate []Coln,
+	columnsToExcludeInsert ...Coln,
+) error {
+
+	recordsToInsert := []T{}
+	recordsToUpdate := []T{}
+
+	for _, e := range *records {
+		if isRecordForInsert(&e) {
+			recordsToInsert = append(recordsToInsert, e)
+		} else {
+			recordsToUpdate = append(recordsToUpdate, e)
+		}
+	}
+
+	if len(recordsToUpdate) > 0 {
+		fmt.Println("Registros a actualizar:", len(recordsToUpdate))
+		err := UpdateExclude(&recordsToUpdate, columnsToExcludeUpdate...)
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(recordsToInsert) > 0 {
+		fmt.Println("Registros a insertar:", len(recordsToInsert))
+
+		err := Insert(&recordsToInsert, columnsToExcludeInsert...)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

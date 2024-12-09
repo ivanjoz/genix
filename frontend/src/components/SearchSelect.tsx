@@ -2,6 +2,7 @@ import { For, Show, createEffect, createSignal, on, onMount } from "solid-js";
 import { Portal } from "solid-js/web";
 import { throttle } from "~/core/main";
 import { deviceType } from "~/app";
+import s1 from "./components.module.css"
 
 interface SearchSelect<T> {
   saveOn?: any
@@ -195,8 +196,10 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
     }
   }
 
-  let cN = "in-5c p-rel flex-column a-start"
+  // let cN = "in-5c p-rel flex-column a-start"
+  let cN = `${s1.input} p-rel`
   if(props.css){ cN += " " + props.css }
+  if(!props.label){ cN += " no-label" }
 
   const iconValid = (): any => {
     if(!isValid()){ return null }
@@ -207,40 +210,43 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
   }
 
   return <div class={cN}>
-    { props.label && 
-      <div class="mr-auto label">
-        {props.label} { !props.disabled && iconValid() }
-      </div>
+    { props.label && <>
+        <div class={`${s1.input_lab}`}>{props.label}{ iconValid() }</div>
+        <div class={`${s1.input_lab1}`}>{props.label}{ iconValid() }</div>
+      </>
     }
-    <input class="in-5 increment" onkeyup={onKeyUp} ref={inputRef}
-      onPaste={onKeyUp as any}
-      onCut={onKeyUp as any}
-      onKeyDown={onKeyDown}
-      placeholder={props.placeholder || ":: seleccione ::"}
-      onkeydown={ev => {
-        ev.stopPropagation()
-        console.log(ev)
-      }}
-      disabled={props.disabled}
-      onFocus={ev=> {
-        ev.stopPropagation()
-        words = []
-        setFilteredOptions(filter(""))
-        setShow(true)
-      }}
-      onBlur={ev => {
-        ev.stopPropagation()
-        // Revisa si la opción seleccionada existe
-        let inputValue = String(inputRef.value||"").toLowerCase()
-        const selected = props.options.find(
-          x => ((x[keyName]||"") as string).toLowerCase() === inputValue
-        )
-        setValueSaveOn(selected,true)
-        setShow(false)
-      }}
-    />
+    <div class={`${s1.input_div} w100`}>
+      <input class={`${s1.input_inp +" "+ (props.inputCss||"")}`} 
+        onkeyup={onKeyUp} ref={inputRef}
+        onPaste={onKeyUp as any}
+        onCut={onKeyUp as any}
+        onKeyDown={onKeyDown}
+        placeholder={props.placeholder || ":: seleccione ::"}
+        onkeydown={ev => {
+          ev.stopPropagation()
+          console.log(ev)
+        }}
+        disabled={props.disabled}
+        onFocus={ev=> {
+          ev.stopPropagation()
+          words = []
+          setFilteredOptions(filter(""))
+          setShow(true)
+        }}
+        onBlur={ev => {
+          ev.stopPropagation()
+          // Revisa si la opción seleccionada existe
+          let inputValue = String(inputRef.value||"").toLowerCase()
+          const selected = props.options.find(
+            x => ((x[keyName]||"") as string).toLowerCase() === inputValue
+          )
+          setValueSaveOn(selected,true)
+          setShow(false)
+        }}
+      />
+    </div>
     <Show when={!props.disabled}>
-      <div class={"_icon" + ((show() && !props.icon) ? " show" : "")}>
+      <div class={`${s1.input_icon1} p-abs ` + ((show() && !props.icon) ? " show" : "")}>
         <i class={props.icon || "icon-down-open-1"}></i>
       </div>
     </Show>

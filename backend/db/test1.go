@@ -95,6 +95,27 @@ func TestQuery(params ConnParams) {
 	*/
 }
 
+func TestQuery2(params ConnParams) {
+	MakeScyllaConnection(params)
+
+	fmt.Println("Query 1")
+	result := Select(func(q *Query[Usuario], col Usuario) {
+		q.Between()
+	})
+
+	fmt.Println(result.Records)
+	/*
+		fmt.Println("Query 2")
+		result2 := Select(func(q *Query[Usuario], col Usuario) {
+			q.Exclude(col.Apellido_()).
+				// Where(col.RolID_().Equals(1)).
+				Where(col.Accesos_().Contains(4))
+		})
+
+		core.Print(result2.Records)
+	*/
+}
+
 func TestDeploy(params ConnParams) {
 	/*
 		MakeScyllaConnection(params)

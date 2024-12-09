@@ -5,7 +5,9 @@
   --primary: #4042a3;
   --secondary: #eeefff;
   --heigth-1: 3rem;
-  font-size: 16px;
+  font-size: calc(9px + 0.215vw  + 0.3vh);
+  --fs1: 16px;
+  --fs2: 15px;
 }
 
 @media screen and (max-width: 600px) {
@@ -23,7 +25,8 @@ body {
   font-family: main;
   overflow-x: hidden;
   height: 100%;
-  color: #282a2e;
+  color: #2c2b2e;
+  font-size: var(--fs1);
   background-color: #e9eef1;
   --light-bg-1: #eff3f6;
   --white-1: #ffffff;
@@ -123,11 +126,12 @@ body.view-min {
 
 *, :after, :before { box-sizing: border-box; }
 button { cursor: pointer; }
+
 input, textarea, select, button, p {
-  font-size: 1rem;
+  font-size: var(--fs1);
   font-family: main;
   box-sizing: border-box;
-  padding: 4px 6px 3px 6px;
+  /* padding: 4px 6px 3px 6px; */
 }
 
 .z5  { z-index: 5; }
@@ -1491,7 +1495,9 @@ body.dark th {
   font-size: 0.95rem;
   flex-shrink: 0;
   padding: 0;
+  cursor: pointer;
 }
+
 
 .bnr1 {
   height: calc(2rem - 4px);

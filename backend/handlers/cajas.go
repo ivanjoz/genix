@@ -68,12 +68,10 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 		body.UpdatedBy = req.Usuario.ID
 	}
 
-	core.Print(body)
-
-	err = core.DBUpdateInsert(
+	err = db.InsertOrUpdate(
 		&[]s.Caja{body},
-		func(e s.Caja) bool { return e.Created == nowTime },
-		[]string{"fecha_cuadre", "monto_cuadre", "monto_current"},
+		func(e *s.Caja) bool { return e.Created == nowTime },
+		[]db.Coln{body.CuadreFecha_(), body.CuadreSaldo_(), body.SaldoCurrent_()},
 	)
 
 	if err != nil {
@@ -94,35 +92,34 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	lastRegistros := req.GetQueryInt("last-registros")
 	lastRegistros = core.If(lastRegistros > 1000, 1000, lastRegistros)
 
-	movimientos := []s.CajaMovimiento{}
-	query := core.DBSelect(&movimientos).
-		Where("empresa_id").Equals(req.Usuario.EmpresaID)
+	movimientos := db.Select(func(q *db.Query[s.CajaMovimiento], col s.CajaMovimiento) {
+		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+		if lastRegistros > 0 {
+			q.Where(col.ID_().Between(
+				core.SunixUUIDx2FromID(cajaID, 0), core.SunixUUIDx2FromID(cajaID+1, 0)))
+		} else {
+			q.Where(col.ID_().Between(
+				core.SunixUUIDx2FromID(cajaID, fechaHInicio),
+				core.SunixUUIDx2FromID(cajaID, fechaHFin+1)))
+		}
+		q.OrderDescending()
+	})
 
-	if lastRegistros > 0 {
-		query = query.Where("id").GreatEq(core.SunixUUIDx2FromID(cajaID, 0)).
-			Where("id").LessEq(core.SunixUUIDx2FromID(cajaID+1, 0))
-		query.Limit(lastRegistros)
-	} else if fechaHInicio > 0 && fechaHFin > 0 {
-		query = query.Where("id").GreatEq(core.SunixUUIDx2FromID(cajaID, fechaHInicio)).
-			Where("id").LessEq(core.SunixUUIDx2FromID(cajaID, fechaHFin+1))
+	if movimientos.Err != nil {
+		return req.MakeErr("Error al obtener los movimientos de las cajas:", movimientos.Err)
 	}
 
-	err := query.OrderDescending().Exec()
-	if err != nil {
-		return req.MakeErr("Error al obtener los movimientos de las cajas:", err)
-	}
-
-	core.Log("Movimientos obtenidos::", len(movimientos))
+	core.Log("Movimientos obtenidos::", len(movimientos.Records))
 
 	usuarios, err := shared.GetUsuarios(req.Usuario.EmpresaID,
-		core.Map(movimientos, func(e s.CajaMovimiento) int32 { return e.CreatedBy }))
+		core.Map(movimientos.Records, func(e s.CajaMovimiento) int32 { return e.CreatedBy }))
 
 	if err != nil {
 		return req.MakeErr("Error al obtener los usuarios.", err)
 	}
 
 	response := map[string]any{
-		"movimientos": movimientos,
+		"movimientos": movimientos.Records,
 		"usuarios":    usuarios,
 	}
 
@@ -273,20 +270,19 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
 	record.CreatedBy = req.Usuario.ID
 	record.ID = core.SunixUUIDx2FromID(record.CajaID)
 
-	statements := core.MakeInsertQuery(&[]s.CajaMovimiento{record})
+	statements := db.MakeInsertStatement(&[]s.CajaMovimiento{record})
 
 	// Statement para actualizar la caja
 	caja.SaldoCurrent = record.SaldoFinal
 	caja.Updated = nowTime
 	caja.UpdatedBy = req.Usuario.ID
-	statements = append(statements, core.MakeUpdateQuery(
-		&[]s.Caja{caja}, "cuadre_fecha", "cuadre_saldo", "saldo_current", "updated",
-		"updated_by")...)
+	statements = append(statements, db.MakeUpdateStatements(
+		&[]s.Caja{caja}, caja.CuadreFecha_(), caja.CuadreSaldo_(), caja.SaldoCurrent_(),
+		caja.Updated_(), caja.UpdatedBy_())...)
 
-	statement := core.MakeQueryStatement(statements)
-	core.Log(statement)
+	core.Log(statements)
 
-	if err := core.DBExec(statement); err != nil {
+	if err := db.QueryExecStatements(statements); err != nil {
 		core.Log("Error ScyllaDB: ", err)
 		return req.MakeErr("Error al registrar el cuadre:", err)
 	}
