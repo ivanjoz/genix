@@ -708,15 +708,16 @@ func EncodeJsonToFileX[T any](respStruct *T, name ...string) string {
 	}
 
 	PrintMemUsage()
-	fi, err := os.Stat(outputPath)
+	// fi, err := os.Stat(outputPath)
 	if err != nil {
 		panic("Error al validar el output.json" + err.Error())
 	}
 	// get the size
-	size := fi.Size()
+	/*
+		size := fi.Size()
 
-	fmt.Println("Respuesta guardada en:: ", outputPath, " | Size (kb): ", float64(size)/1000)
-
+		fmt.Println("Respuesta guardada en:: ", outputPath, " | Size (kb): ", float64(size)/1000)
+	*/
 	return outputPath
 }
 

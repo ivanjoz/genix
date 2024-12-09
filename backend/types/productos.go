@@ -216,12 +216,41 @@ type AlmacenProducto struct {
 	Lote        string  `json:",omitempty" db:"lote,view"`
 	AlmacenID   int32   `json:",omitempty" db:"almacen_id,view.1"`
 	ProductoID  int32   `json:",omitempty" db:"producto_id,view"`
-	UpdatedBy   int32   `json:",omitempty" db:"updated_by"`
 	Cantidad    int32   `json:",omitempty" db:"cantidad"`
 	SubCantidad int32   `json:",omitempty" db:"sub_cantidad"`
 	CostoUn     float32 `json:",omitempty" db:"costo_un"`
 	Updated     int32   `json:"upd,omitempty" db:"updated,view.1"`
+	UpdatedBy   int32   `json:",omitempty" db:"updated_by"`
 	Status      int8    `json:"ss,omitempty" db:"status"`
+}
+
+type _f = AlmacenProducto
+
+func (e _f) EmpresaID_() db.CoI32   { return db.CoI32{"empresa_id"} }
+func (e _f) ID_() db.CoStr          { return db.CoStr{"id"} }
+func (e _f) SKU_() db.CoStr         { return db.CoStr{"sku"} }
+func (e _f) Lote_() db.CoStr        { return db.CoStr{"lote"} }
+func (e _f) AlmacenID_() db.CoI32   { return db.CoI32{"almacen_id"} }
+func (e _f) ProductoID_() db.CoI32  { return db.CoI32{"producto_id"} }
+func (e _f) Cantidad_() db.CoI32    { return db.CoI32{"cantidad"} }
+func (e _f) SubCantidad_() db.CoI32 { return db.CoI32{"sub_cantidad"} }
+func (e _f) CostoUn_() db.CoI32     { return db.CoI32{"costo_un"} }
+func (e _f) Updated_() db.CoI32     { return db.CoI32{"updated"} }
+func (e _f) UpdatedBy_() db.CoI32   { return db.CoI32{"updated_by"} }
+func (e _f) Status_() db.CoI8       { return db.CoI8{"status"} }
+
+func (e AlmacenProducto) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "almacen_producto",
+		Partition: e.EmpresaID_(),
+		Keys:      []db.Coln{e.ID_()},
+		Views: []db.View{
+			{Cols: []db.Coln{e.SKU_()}, KeepPart: true},
+			{Cols: []db.Coln{e.Lote_()}, KeepPart: true},
+			{Cols: []db.Coln{e.ProductoID_()}, KeepPart: true},
+			{Cols: []db.Coln{e.AlmacenID_(), e.Updated_()}, ConcatI64: []int8{9}},
+		},
+	}
 }
 
 func (e *AlmacenProducto) SelfParse() {

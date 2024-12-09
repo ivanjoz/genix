@@ -1,14 +1,10 @@
 package db
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"slices"
 	"strings"
-
-	"github.com/fxamacker/cbor/v2"
-	"golang.org/x/sync/errgroup"
 )
 
 type scyllaTable[T any] struct {
@@ -36,13 +32,14 @@ type IColumnStatement interface {
 	GetName() string
 }
 type ColumnStatement struct {
-	Col         string
-	Operator    string
-	Value       any
-	Values      []any
-	BetweenFrom []any
-	BetweenTo   []any
+	Col      string
+	Operator string
+	Value    any
+	Values   []any
+	From     []ColumnStatement
+	To       []ColumnStatement
 }
+
 type TableSchema struct {
 	Keyspace string
 	// StructType    T
@@ -150,6 +147,14 @@ func (e Col[T]) LessThan(v T) ColumnStatement {
 func (e Col[T]) LessEqual(v T) ColumnStatement {
 	return ColumnStatement{Col: e.C, Operator: "<=", Value: any(v)}
 }
+func (e Col[T]) Between(v1 T, v2 T) ColumnStatement {
+	return ColumnStatement{
+		Col:      e.C,
+		Operator: "BETWEEN",
+		From:     []ColumnStatement{{Col: e.C, Value: v1}},
+		To:       []ColumnStatement{{Col: e.C, Value: v2}},
+	}
+}
 
 // Generic Array
 type ColSlice[T any] struct {
@@ -198,6 +203,7 @@ type Query[T any] struct {
 	columnsExclude []columnInfo
 	recordsToJoin  []T
 	columnsJoin    []columnInfo
+	between        ColumnStatement
 }
 
 func (q *Query[T]) init() {
@@ -217,11 +223,18 @@ func (q *Query[T]) Exclude(columns ...Coln) *Query[T] {
 	return q
 }
 
-func (q *Query[T]) Where(ce ColumnStatement) *Query[T] {
+func (q *Query[T]) Where(statements ...ColumnStatement) *Query[T] {
 	q.init()
-	q.statements = append(q.statements, statementGroup{
-		group: []ColumnStatement{ce},
-	})
+	if statements[0].Operator == "BETWEEN" {
+		st := statements[0]
+		q.between.Operator = "BETWEEN"
+		q.between.From = append(q.between.From, st.From...)
+		q.between.To = append(q.between.To, st.To...)
+	} else {
+		q.statements = append(q.statements, statementGroup{
+			group: statements,
+		})
+	}
 	return q
 }
 
@@ -236,6 +249,35 @@ func (q *Query[T]) WhereOr(ce ...ColumnStatement) *Query[T] {
 	q.init()
 	q.statements = append(q.statements, statementGroup{group: ce})
 	return q
+}
+
+type QueryBetweem[T any] struct {
+	query *Query[T]
+}
+
+func (q QueryBetweem[T]) And(statements ...ColumnStatement) *Query[T] {
+	fromColNames := ""
+	for _, c := range q.query.between.From {
+		fromColNames += (c.Col + "_")
+	}
+	toColNames := ""
+	for _, c := range statements {
+		toColNames += (c.Col + "_")
+	}
+	if fromColNames != toColNames {
+		panic(fmt.Sprintf(`The "From" and "To" statements for the BETWEEN operators must contains the same columns in the same order. Getted "%v" vs "%v"`, fromColNames, toColNames))
+	}
+	q.query.between.To = statements
+	return q.query
+}
+
+func (q *Query[T]) Between(statements ...ColumnStatement) QueryBetweem[T] {
+	q.between.From = statements
+	q.between.Operator = "BETWEEN"
+	if len(statements) == 1 {
+		q.between.Col = statements[0].Col
+	}
+	return QueryBetweem[T]{query: q}
 }
 
 type WithJoin[T any] struct {
@@ -274,305 +316,6 @@ type viewInfo struct {
 type QueryResult[T any] struct {
 	Records []T
 	Err     error
-}
-
-func Select[T TableSchemaInterface](handler func(query *Query[T], schemaTable T)) QueryResult[T] {
-
-	query := Query[T]{}
-	baseType := *new(T)
-	handler(&query, baseType)
-	records := []T{}
-	err := selectExec(&records, &query)
-	return QueryResult[T]{records, err}
-}
-
-func SelectRef[T TableSchemaInterface](recordsGetted *[]T, handler func(query *Query[T], schemaTable T)) error {
-
-	query := Query[T]{}
-	baseType := *new(T)
-	handler(&query, baseType)
-	return selectExec(recordsGetted, &query)
-}
-
-type posibleIndex struct {
-	indexView    *viewInfo
-	colsIncluded []int16
-	colsMissing  []int16
-	priority     int8
-}
-
-func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) error {
-
-	scyllaTable := makeTable(*new(T))
-	viewTableName := scyllaTable.name
-
-	if len(scyllaTable.keyspace) == 0 {
-		scyllaTable.keyspace = connParams.Keyspace
-	}
-	if len(scyllaTable.keyspace) == 0 {
-		return errors.New("no se ha especificado un keyspace")
-	}
-
-	columnNames := []string{}
-	if len(query.columnsInclude) > 0 {
-		for _, col := range query.columnsInclude {
-			columnNames = append(columnNames, col.Name)
-		}
-	} else {
-		columnsExclude := []string{}
-		for _, col := range query.columnsExclude {
-			columnsExclude = append(columnsExclude, col.Name)
-		}
-		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columnsExclude, col.Name) && !col.IsVirtual {
-				columnNames = append(columnNames, col.Name)
-			}
-		}
-	}
-
-	queryTemplate := fmt.Sprintf("SELECT %v ", strings.Join(columnNames, ", ")) + "FROM %v.%v %v"
-	hashOperators := []string{"=", "IN"}
-	isHash := true
-
-	statements := []ColumnStatement{}
-	colsWhereIdx := []int16{}
-	allAreKeys := true
-
-	for _, st := range query.statements {
-		col := scyllaTable.columnsMap[st.group[0].Col]
-		if !slices.Contains(scyllaTable.keysIdx, col.Idx) {
-			allAreKeys = false
-		}
-
-		colsWhereIdx = append(colsWhereIdx, col.Idx)
-		statements = append(statements, st.group[0])
-		if isHash && !slices.Contains(hashOperators, st.group[0].Operator) {
-			isHash = false
-		}
-	}
-
-	posibleViewsOrIndexes := []posibleIndex{}
-
-	if len(statements) > 0 && !allAreKeys {
-		// Revisa si puede usar una vista
-		for _, indview := range scyllaTable.indexViews {
-			psb := posibleIndex{indexView: indview}
-			for _, idx := range indview.columnsIdx {
-				if slices.Contains(colsWhereIdx, idx) {
-					psb.colsIncluded = append(psb.colsIncluded, idx)
-				} else {
-					psb.colsMissing = append(psb.colsMissing, idx)
-				}
-			}
-			if len(psb.colsIncluded) > 0 {
-				hasOperators := true
-				if len(indview.Operators) > 0 {
-					for _, st := range statements {
-						if !slices.Contains(indview.Operators, st.Operator) {
-							hasOperators = false
-							break
-						}
-					}
-				}
-
-				if !hasOperators {
-					continue
-				}
-
-				if len(psb.colsIncluded) == len(colsWhereIdx) {
-					psb.priority = 6 + int8(len(colsWhereIdx))*2
-					if isHash && indview.Type == 7 {
-						psb.priority += 2
-					}
-				}
-				psb.priority -= int8(len(psb.colsMissing)) * 2
-
-				posibleViewsOrIndexes = append(posibleViewsOrIndexes, psb)
-			}
-		}
-	}
-
-	var statementsRemain []ColumnStatement
-	whereStatements := []string{}
-
-	fmt.Println("posible indexes::", len(posibleViewsOrIndexes))
-
-	// Revisa si hay un view que satisfaga este request
-	if len(posibleViewsOrIndexes) > 0 {
-		//TODO: aquí debe escoger el mejor índice o view en caso existan 2
-		slices.SortFunc(posibleViewsOrIndexes, func(a, b posibleIndex) int {
-			return int(b.priority - a.priority)
-		})
-
-		viewOrIndex := posibleViewsOrIndexes[0].indexView
-		fmt.Println("Posible Index:", viewOrIndex.name)
-		if viewOrIndex.Type >= 6 {
-			viewTableName = viewOrIndex.name
-		}
-
-		if viewOrIndex.getStatement != nil {
-			fmt.Println("Creating statement Index:", viewOrIndex.name)
-			// Revisa qué columnas satisfacen el índice
-			statementsSelected := []ColumnStatement{}
-			for _, st := range statements {
-				if slices.Contains(viewOrIndex.columns, st.Col) {
-					statementsSelected = append(statementsSelected, st)
-				} else {
-					statementsRemain = append(statementsRemain, st)
-				}
-			}
-			whereStatements = viewOrIndex.getStatement(statementsSelected...)
-		} else {
-			// No es necesario cambiar nada del query
-			statementsRemain = statements
-		}
-	} else {
-		statementsRemain = statements
-	}
-
-	if len(whereStatements) == 0 {
-		whereStatements = append(whereStatements, "")
-	}
-
-	// fmt.Println("where statements::", whereStatements)
-	whereStatementsRemainSects := []string{}
-	for _, st := range statementsRemain {
-		/*
-			fmt.Println("column 1::", st.Column)
-			fmt.Println("column 2::", st.Operator)
-			fmt.Println("column 3::", st.GetValue())
-		*/
-		where := fmt.Sprintf("%v %v %v", st.Col, st.Operator, st.GetValue())
-		// fmt.Println("where::", where)
-		whereStatementsRemainSects = append(whereStatementsRemainSects, where)
-	}
-
-	whereStatementsRemain := strings.Join(whereStatementsRemainSects, " AND ")
-	queryWhereStatements := []string{}
-
-	for _, whereStatement := range whereStatements {
-		if whereStatementsRemain != "" {
-			if whereStatement != "" {
-				whereStatementsRemain = " AND " + whereStatementsRemain
-			}
-			whereStatement += whereStatementsRemain
-		}
-		if whereStatement != "" {
-			whereStatement = " WHERE " + whereStatement
-		}
-		queryWhereStatements = append(queryWhereStatements, whereStatement)
-	}
-
-	recordsMap := map[int]*[]T{}
-	for i := range queryWhereStatements {
-		recordsMap[i] = &[]T{}
-	}
-
-	eg := errgroup.Group{}
-
-	for i, whereStatement := range queryWhereStatements {
-		queryStr := fmt.Sprintf(queryTemplate, scyllaTable.keyspace, viewTableName, whereStatement)
-		records := recordsMap[i]
-
-		fmt.Println("Query::", queryStr)
-		eg.Go(func() error {
-
-			iter := getScyllaConnection().Query(queryStr).Iter()
-			rd, err := iter.RowData()
-			if err != nil {
-				fmt.Println("Error on RowData::", err)
-				if strings.Contains(err.Error(), "use ALLOW FILTERING") {
-					fmt.Println("Posible Indexes or Views::")
-					for _, e := range posibleViewsOrIndexes {
-						typeName := indexTypes[e.indexView.Type]
-						colnames := strings.Join(e.indexView.columns, ", ")
-						msg := fmt.Sprintf("%v (%v) %v", typeName, e.indexView.column.Type, colnames)
-						fmt.Println(msg)
-					}
-				}
-				return err
-			}
-
-			scanner := iter.Scanner()
-			fmt.Println("starting iterator | columns::", len(scyllaTable.columns))
-
-			for scanner.Next() {
-
-				rowValues := rd.Values
-
-				err := scanner.Scan(rowValues...)
-				if err != nil {
-					fmt.Println("Error on scan::", err)
-					return err
-				}
-
-				rec := new(T)
-				ref := reflect.ValueOf(rec).Elem()
-
-				for idx, colname := range columnNames {
-					column := scyllaTable.columnsMap[colname]
-					value := rowValues[idx]
-					if value == nil {
-						continue
-					}
-					if column.setValue != nil {
-						field := ref.Field(column.FieldIdx)
-						column.setValue(&field, value)
-						// Revisa si necesita parsearse un string a un struct como JSON
-					} else if column.IsComplexType {
-						fmt.Println("complex type::", column.FieldName, "|", column.FieldType)
-						if vl, ok := value.(*[]uint8); ok {
-							if len(*vl) <= 3 {
-								continue
-							}
-							newElm := reflect.New(column.RefType).Elem()
-							err = cbor.Unmarshal([]byte(*vl), newElm.Addr().Interface())
-							if err != nil {
-								fmt.Println("Error al convertir: ", newElm, "|", err.Error())
-							}
-							fmt.Println("col complex:", column.Name, " | ", newElm, " | L:", len(*vl))
-							if column.IsPointer {
-								ref.Field(column.FieldIdx).Set(reflect.ValueOf(newElm))
-							} else {
-								ref.Field(column.FieldIdx).Set(newElm)
-							}
-						} else {
-							fmt.Print("Complex Type could not be parsed:", column.Name)
-						}
-					} else {
-						fmt.Print("Column is not mapped:: ", column.Name)
-					}
-				}
-
-				if len(queryWhereStatements) == 1 {
-					(*recordsGetted) = append((*recordsGetted), *rec)
-				} else {
-					(*records) = append((*records), *rec)
-				}
-			}
-			return nil
-		})
-	}
-
-	if err := eg.Wait(); err != nil {
-		return err
-	}
-
-	if len(queryWhereStatements) > 1 {
-		for _, records := range recordsMap {
-			(*recordsGetted) = append((*recordsGetted), *records...)
-		}
-	}
-
-	return nil
-}
-
-func parseValueToString(v any) string {
-	if str, ok := v.(string); ok {
-		return `'` + str + `'`
-	} else {
-		return fmt.Sprintf("%v", v)
-	}
 }
 
 func makeQueryStatement(statements []string) string {

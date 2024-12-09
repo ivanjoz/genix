@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"app/core"
+	"app/db"
 	"app/shared"
 	s "app/types"
 	"encoding/json"
@@ -10,29 +11,30 @@ import (
 func GetCajas(req *core.HandlerArgs) core.HandlerResponse {
 	updated := core.UnixToSunix(req.GetQueryInt64("upd"))
 
-	cajas := []s.Caja{}
-	query := core.DBSelect(&cajas).
-		Where("empresa_id").Equals(req.Usuario.EmpresaID)
+	cajas := db.Select(func(q *db.Query[s.Caja], col s.Caja) {
+		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+		if updated > 0 {
+			q.Where(col.Updated_().GreaterEqual(updated))
+		} else {
+			q.Where(col.Status_().Equals(1))
+		}
+	})
 
-	if updated > 0 {
-		query = query.Where("updated").GreatEq(updated)
-	} else {
-		query = query.Where("status").Equals(1)
+	if cajas.Err != nil {
+		return req.MakeErr("Error al obtener las cajas:", cajas.Err)
 	}
-	query.Exec()
 
 	//TODO: Eliminar luego
-	for i := range cajas {
-		e := &cajas[i]
+	for i := range cajas.Records {
+		e := &cajas.Records[i]
 		if e.Updated == 0 {
 			e.Updated = 1
 		}
 	}
 
 	response := map[string]any{
-		"Cajas": cajas,
+		"Cajas": cajas.Records,
 	}
-
 	return core.MakeResponse(req, &response)
 }
 

@@ -93,3 +93,279 @@ body:global(.dark) .card_image_1:hover .card_input_layer {
 body:global(.dark) .card_image_1:hover .card_input_layer {
   background-color: #353741;
 }
+
+/* inputs */
+.input {
+  --color1: rgba(109, 92, 150, 0.329);
+  --padding1: 3px;
+  --left: 10px;
+  --margin_bottom: -8px;
+  --bor_rad: 7px;
+  display: flex;
+  flex-direction: column;
+  height: min-content;
+}
+
+body:global(.ff-1) .input {
+  --inp-height: 2.25rem;
+  --inp-pt: 2px;
+}
+body:global(.ff-2) .input {
+  --inp-height: 2.15rem;
+  --inp-pt: 1px;
+}
+
+body:global(.ff-1) .input {
+  --margin_bottom: -10px;
+}
+
+:global(.bg-d) .input  {
+  --padding1: 7px;
+  --margin_bottom: -9px;
+  --bor_rad: 12px;
+}
+body:global(.ff-1) :global(.bg-d) .input  {
+  --margin_bottom: -10px;
+}
+
+.input_inp::placeholder {
+  color: #7d82ad;
+}
+.input_div {
+  display: flex;
+  background-color: white;
+  box-shadow: rgb(74 70 86 / 22%) 0px 1px 3px 0px,
+   rgb(55 52 64 / 14%) 0px 0px 2px 0px;
+  border-radius: 5px;
+  border: 1px solid rgb(188 192 218);
+  border-bottom: 1px solid var(--color1);
+  position: relative;
+  z-index: 2;
+}
+:global(.bg-d) .input_div {
+  border: 1px solid transparent;
+  box-shadow: rgb(73 65 97 / 24%) 0px 1px 3px 0px,
+   rgb(73 65 97 / 18%) 0px 0px 2px 0px;
+}
+.input_div:global(._dsb) > .input_inp {
+  background-color: #f4f4f6;
+}
+
+.input:global(._show) {
+  z-index: 84;
+}
+
+.input:not(:global(.s2)):not(:global(.s3)):not(:global(.s4)):not(:global(.in-8)):not(:global(.no-label)) .input_div {
+  margin-top: -1px;
+  padding-top: 0.3rem;
+}
+
+.input:global(.no-label) .input_div {
+  padding-top: 1px;
+}
+
+.input_lab, .input_lab1 {
+  font-size: var(--fs2);
+  flex-shrink: 0; 
+  width: fit-content;
+  background-color: white;
+  padding: 0 var(--padding1);
+  border: 1px solid transparent;
+  max-width: calc(100% - 15px);
+  pointer-events: none;
+  min-height: 8px;
+}
+
+body:global(.ff-1) .input_lab, body:global(.ff-1) .input_lab1 {
+  padding-top: 1px;
+}
+
+.input_lab {
+  color: #6d5ab7;
+  margin-bottom: var(--margin_bottom);
+  margin-left: var(--left);
+  z-index: 3;
+  line-height: 1.1;
+  border-radius: var(--bor_rad) var(--bor_rad) 0 0;
+  padding-bottom: 1px;
+}
+.input:hover  .input_lab {
+  color:  #423d55;
+}
+
+.input_lab1 {
+  border-radius: var(--bor_rad) var(--bor_rad) 0 0;
+  top: 0;
+  color: transparent;
+  width: fit-content;
+  z-index: 1;
+  position: absolute;
+  left: var(--left);
+  display: none;
+  box-shadow: rgb(73 65 97 / 20%) 0px 0px 3px 0px;
+}
+
+:global(.bg-d) .input_lab1 {
+  display: block;
+}
+
+.input_hrs  {
+  display: flex;
+  align-items: center;
+  width: 80%;
+  margin-right: 1.2rem;
+  margin-bottom: 1px;
+}
+
+.input_hrs > input {
+  border: none;
+  outline: none;
+  background-color: rgb(237, 236, 243);
+  width: 2.4rem;
+  padding: 0;
+  text-align: center;
+  height: 1.8rem;
+  line-height: 1;
+  border-radius: 5px;
+}
+
+.input_lab > * {
+  pointer-events: none;
+  user-select: none;
+}
+.input_line {
+  height: 0.8rem;
+  display: none;
+}
+:global(.bg-d) .input_line {
+  height: 0.6rem;
+}
+
+.input_inp {
+  background-color: transparent;
+  border: none;
+  outline: none;
+  padding-bottom: 0;
+  z-index: 20;
+  position: relative;
+  padding-left: 7px;
+  border-radius: 5px;
+  min-width: 4rem;
+  width: 100%;
+}
+.input_inp:not(textarea) {
+  height: var(--inp-height);
+}
+select.input_inp {
+  padding-left: 4px;
+}
+
+.input_inp:disabled {
+  background-color: #f4f3f6;
+  margin-bottom: 1px;
+  margin-top: -1px;
+  padding-top: calc(var(--inp-pt) + 3px);
+}
+
+.input:hover .input_div {
+  border: 1px solid gray;
+}
+.input:hover:not(:focus-within):not(:global(.s4)) .input_div {
+  border: 1px solid rgb(93, 92, 99);
+}
+:global(.bg-d) .input:hover:not(:focus-within):not(:global(.s4)) .input_div {
+  border: 1px solid rgb(156 142 228);
+}
+
+.input:hover:not(:global(.s2)):not(:global(.s4)):not(:global(.in-8)) .input_lab, 
+.input:not(:global(.s2)):not(:global(.s4)):not(:global(.in-8)):focus-within .input_lab {
+  margin-left: calc(var(--left) + 1px);
+  padding-left: calc(var(--padding1) - 1px);
+  padding-right: calc(var(--padding1) - 1px);
+  max-width: calc(100% - 17px);
+}
+
+.input:hover:not(:global(.s2)):not(:global(.s4)):not(:global(.in-8)) .input_lab1, 
+.input:not(:global(.s2)):not(:global(.s4)):not(:global(.in-8)):focus-within .input_lab1{
+  top: -1px;
+}
+
+.input:hover:not(:global(.s2)):not(:global(.s4)):not(:global(.in-8)) .input_imp, 
+.input:not(:global(.s2)):not(:global(.s4)):not(:global(.in-8)):focus-within .input_imp {
+  padding-top: var(--inp-pt);
+}
+
+.input:hover .input_lab1 {
+  border: 1px solid rgb(156 142 228);
+}
+
+.input:focus-within .input_lab1, 
+.input:focus-within .input_div {
+  border: 1px solid rgb(138, 130, 255);
+  outline: 1px solid rgb(171, 164, 255);
+}
+.input:focus-within .input_div {
+  box-shadow: rgb(74 70 86 / 35%) 0px 1px 4px 0px,
+   rgb(55 52 64 / 25%) 0px 0px 3px 0px;
+}
+.input:focus-within .input_lab1 {
+  box-shadow: rgb(74 70 86 / 33%) 0px 0px 4px 0px;
+}
+.input :global(._search) {
+  position: absolute;
+  bottom: 0.55rem;
+  z-index: 4;
+  right: 4px;
+  color: #666caaad;
+}
+.input :global(.search2) {
+  z-index: 150;
+}
+.input_search_count {
+  right: 6px;
+  bottom: 0.55rem;
+  z-index: 4;
+  color: #5a62b5da;
+}
+
+.input_inp_hidden {
+  height: 4px;
+  width: 4px;
+  position: absolute;
+  right: 0;
+  top: 0;
+  opacity: 0;
+  border: none;
+  outline: none;
+  pointer-events: none;
+}
+
+/* s2 Syle */
+.input:global(.s2){
+  flex-direction: row;
+  align-items: center;
+}
+.input:global(.s2) .input_lab {
+  background: none;
+  padding-bottom: 0.5rem;
+  margin-left: 0;
+}
+.input:global(.s2) .input_inp {
+  height: 2.2rem;
+}
+.input:global(.s2) .input_lab1, .input:global(.s2) .input_line {
+  display: none;
+}
+
+/* s5 Syle */
+.input:global(.s5) .input_inp{
+  height: 2rem;
+  margin-top: -1px;
+}
+.input:global(.s5) .input_inp::placeholder{
+  color: #616fc0;
+}
+.input:global(.s5) .input_div{
+  box-shadow: rgb(74 70 86 / 18%) 0px 0px 2px 0px, rgb(55 52 64 / 10%) 0px 0px 1px 0px;
+  border-bottom-color: transparent;
+}

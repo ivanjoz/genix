@@ -1,5 +1,6 @@
 import { For, JSX, createEffect, createSignal } from "solid-js";
 import { on } from "solid-js";
+import s1 from "./components.module.css"
 
 export interface IInput<T> {
   id?: number
@@ -86,9 +87,9 @@ export function Input<T>(props: IInput<T>) {
     }
   ))
   
-  let cN = "in-5c p-rel flex-column a-start"
+  let cN = `${s1.input_1} p-rel`
   if(props.css){ cN += " " + props.css }
-    
+  
   const iconValid = () => {
     if(!isInputValid()) return null
     else if(isInputValid() === 2){ return <i class="v-icon icon-ok c-green"></i>  }

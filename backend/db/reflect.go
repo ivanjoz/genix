@@ -68,6 +68,11 @@ func makeTable[T TableSchemaInterface](structType T) scyllaTable[any] {
 	return MakeTable(structType.GetSchema(), structType)
 }
 
+type statementRangeGroup struct {
+	from      *ColumnStatement
+	betweenTo *ColumnStatement
+}
+
 func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 	structRefValue := reflect.ValueOf(structType)
@@ -440,7 +445,6 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		// Si sólo es una columna, no es necesario autogenerar
 		if len(columns) == 1 {
 			view.column = columns[0]
-			fmt.Println("hay 1 columna:", columns[0].Name)
 		} else if isRangeView {
 			isInt64 := len(viewConfig.ConcatI64) > 0
 			if isInt64 {
@@ -513,32 +517,77 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			view.getStatement = func(statements ...ColumnStatement) []string {
 
 				//Identify is a statement has a partition value
-				statementsMap := map[string]*ColumnStatement{}
-				for i, st := range statements {
-					statementsMap[st.Col] = &statements[i]
+				statementsMap := map[string]statementRangeGroup{}
+				useBeetween := false
+
+				fmt.Println(statements)
+
+				for i := range statements {
+					st := &statements[i]
+					fmt.Println("statement (2):", st.Col, "|", st.Value, "|", st.Operator)
+
+					if st.Operator == "BETWEEN" {
+						useBeetween = true
+						for i := range st.From {
+							statementsMap[st.From[i].Col] = statementRangeGroup{
+								from:      &st.From[i],
+								betweenTo: &st.To[i],
+							}
+						}
+					} else {
+						statementsMap[st.Col] = statementRangeGroup{from: st}
+					}
 				}
 
 				whereStatements := []string{}
 				var partStatement *ColumnStatement
 
 				if viewConfig.KeepPart {
-					partStatement = statementsMap[dbTable.partKey.Name]
+					partStatement = statementsMap[dbTable.partKey.Name].from
 					if partStatement == nil {
 						panic(fmt.Sprintf(`The partition "%v" for table "%v" wasn't found.`, dbTable.partKey.Name, dbTable.name))
 					}
 				}
 
-				if len(statements[0].BetweenFrom) > 0 {
+				for _, col := range columns {
+					if _, ok := statementsMap[col.Name]; !ok {
+						statementsMap[col.Name] = statementRangeGroup{
+							from: &ColumnStatement{Value: int64(0)},
+						}
+					}
+				}
 
+				if useBeetween {
+					valuesFrom, valuesTo := []int64{}, []int64{}
+
+					for _, col := range columns {
+						srg := statementsMap[col.Name]
+						valuesFrom = append(valuesFrom, convertToInt64(srg.from.Value))
+						if srg.betweenTo != nil {
+							valuesTo = append(valuesTo, convertToInt64(srg.betweenTo.Value))
+						} else {
+							valuesTo = append(valuesTo, convertToInt64(srg.from.Value))
+						}
+					}
+
+					whereSt := fmt.Sprintf("%v >= %v AND %v < %v",
+						view.column.Name, makeValue(valuesFrom),
+						view.column.Name, makeValue(valuesTo),
+					)
+					if partStatement != nil {
+						whereSt = fmt.Sprintf("%v = %v AND % v",
+							dbTable.partKey.Name, convertToInt64(partStatement.Value), whereSt)
+					}
+
+					fmt.Println("Is useBeetween::", whereSt)
+
+					return []string{whereSt}
 				} else if slices.Contains(rangeOperators, statements[len(statements)-1].Operator) {
 					valuesGroups := [][]int64{{}}
 					rangeColumns := []*columnInfo{}
 
 					for _, col := range columns {
-						if _, ok := statementsMap[col.Name]; !ok {
-							statementsMap[col.Name] = &ColumnStatement{Value: int64(0)}
-						}
-						st := statementsMap[col.Name]
+						st := statementsMap[col.Name].from
 						if len(rangeColumns) > 0 || slices.Contains(rangeOperators, st.Operator) {
 							rangeColumns = append(rangeColumns, col)
 							continue
@@ -576,7 +625,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 						for _, col := range rangeColumns {
 							st := statementsMap[col.Name]
-							valuesFrom = append(valuesFrom, convertToInt64(st.Value))
+							valuesFrom = append(valuesFrom, convertToInt64(st.from.Value))
 							valuesTo = append(valuesTo, 0)
 						}
 
@@ -596,7 +645,6 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				}
 
 				fmt.Println("where statements::", whereStatements)
-
 				return whereStatements
 			}
 		} else {
