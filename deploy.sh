@@ -31,31 +31,15 @@ fi
 if [[ $ACCIONES == *"1"* ]]; then
 
     echo "=== PUBLICANDO FRONTEND ==="
-    echo "Enviando archivos a S3: $AWS_S3"
-
-    S3_SYNC="s3 sync ./frontend/.output/public"
-    S3_CP="s3 cp ./frontend/.output/public"
+    echo "Generando frontend a docs para su deploy en .github"
 
     if [[ $ACCIONES != *"x"* ]]; then
        npm run build --prefix ./frontend
     fi
 
-    aws --profile $AWS_PROFILE $S3_SYNC/assets s3://$AWS_S3/assets --size-only --exclude "*" --include "*.js"  --content-type application/javascript --delete
-    aws --profile $AWS_PROFILE $S3_SYNC/assets s3://$AWS_S3/assets --size-only --exclude "*" --include "*.css" --content-type text/css --delete
-    aws --profile $AWS_PROFILE $S3_SYNC/_build s3://$AWS_S3/_build --size-only --exclude "*" --include "*.js"  --content-type application/javascript --delete
-    aws --profile $AWS_PROFILE $S3_SYNC/_build s3://$AWS_S3/_build --size-only --exclude "*" --include "*.css" --content-type text/css --delete
-    aws --profile $AWS_PROFILE $S3_CP/sw.js s3://$AWS_S3/sw.js --content-type application/javascript
-    aws --profile $AWS_PROFILE $S3_CP/manifest.webmanifest s3://$AWS_S3/manifest.webmanifest --content-type application/json
-    aws --profile $AWS_PROFILE $S3_CP/index.html s3://$AWS_S3/index.html --content-type text/html
-
-    if [[ $ACCIONES == *"3"* ]]; then
-       aws --profile $AWS_PROFILE $S3_SYNC/images s3://$AWS_S3/images --size-only
-       # aws --profile $AWS_PROFILE $S3_SYNC/icons s3://$AWS_S3/icons --size-only
-       aws --profile $AWS_PROFILE $S3_SYNC/libs s3://$AWS_S3/libs --size-only
-    fi
+    node build.js
 
     echo "El deploy frontend finalizado!"
-
 fi
 
 #PUBLICAR BACKEND

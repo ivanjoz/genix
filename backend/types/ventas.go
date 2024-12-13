@@ -103,6 +103,27 @@ type CajaCuadre struct {
 	CreatedBy       int32 `json:",omitempty" db:"created_by,view"`
 }
 
+func (e CajaCuadre) EmpresaID_() db.CoI32       { return db.CoI32{"empresa_id"} }
+func (e CajaCuadre) ID_() db.CoI64              { return db.CoI64{"id"} }
+func (e CajaCuadre) CajaID_() db.CoI32          { return db.CoI32{"caja_id"} }
+func (e CajaCuadre) Tipo_() db.CoI8             { return db.CoI8{"tipo"} }
+func (e CajaCuadre) SaldoSistema_() db.CoI32    { return db.CoI32{"saldo_sistema"} }
+func (e CajaCuadre) SaldoReal_() db.CoI32       { return db.CoI32{"saldo_real"} }
+func (e CajaCuadre) SaldoDiferencia_() db.CoI32 { return db.CoI32{"saldo_diferencia"} }
+func (e CajaCuadre) Created_() db.CoI32         { return db.CoI32{"created"} }
+func (e CajaCuadre) CreatedBy_() db.CoI32       { return db.CoI32{"created_by"} }
+
+func (e CajaCuadre) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "caja_cuadre",
+		Partition: e.EmpresaID_(),
+		Keys:      []db.Coln{e.ID_()},
+		Views: []db.View{
+			{Cols: []db.Coln{e.CreatedBy_()}, KeepPart: true},
+		},
+	}
+}
+
 type VentaProducto struct {
 	ProductoID int32 `cbor:"1,keyasint"`
 	Cantidad   int32 `cbor:"2,keyasint"`
