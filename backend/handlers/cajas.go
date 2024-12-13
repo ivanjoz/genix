@@ -135,33 +135,29 @@ func GetCajaCuadres(req *core.HandlerArgs) core.HandlerResponse {
 	lastRegistros := req.GetQueryInt("last-registros")
 	lastRegistros = core.If(lastRegistros > 1000, 1000, lastRegistros)
 
-	cuadres := []s.CajaCuadre{}
-	query := core.DBSelect(&cuadres).
-		Where("empresa_id").Equals(req.Usuario.EmpresaID)
+	cuadres := db.Select(func(q *db.Query[s.CajaCuadre], col s.CajaCuadre) {
+		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+		if lastRegistros > 0 {
+			q.Where(col.ID_().Between(core.SunixUUIDx2FromID(cajaID, 0), core.SunixUUIDx2FromID(cajaID+1, 0)))
+		} else {
+			//TODO: completar?
+		}
+		q.OrderDescending().Limit(lastRegistros)
+	})
 
-	if lastRegistros > 0 {
-		query = query.Where("id").GreatEq(core.SunixUUIDx2FromID(cajaID, 0)).
-			Where("id").LessEq(core.SunixUUIDx2FromID(cajaID+1, 0))
-		query.Limit(lastRegistros)
-	} else {
-
-	}
-
-	err := query.OrderDescending().Exec()
-	if err != nil {
-		return req.MakeErr("Error al obtener los movimientos de las cajas:", err)
+	if cuadres.Err != nil {
+		return req.MakeErr("Error al obtener los movimientos de las cajas:", cuadres.Err)
 	}
 
 	usuarios, err := shared.GetUsuarios(req.Usuario.EmpresaID,
-		core.Map(cuadres, func(e s.CajaCuadre) int32 { return e.CreatedBy }))
+		core.Map(cuadres.Records, func(e s.CajaCuadre) int32 { return e.CreatedBy }))
 
 	if err != nil {
 		return req.MakeErr("Error al obtener los usuarios.", err)
 	}
 
 	response := map[string]any{
-		"usuarios": usuarios,
-		"cuadres":  cuadres,
+		"usuarios": usuarios, "cuadres": cuadres,
 	}
 
 	return core.MakeResponse(req, &response)

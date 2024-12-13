@@ -205,6 +205,7 @@ type Query[T any] struct {
 	columnsJoin    []columnInfo
 	between        ColumnStatement
 	orderBy        string
+	limit          int32
 }
 
 func (q *Query[T]) init() {
@@ -241,6 +242,11 @@ func (q *Query[T]) Where(statements ...ColumnStatement) *Query[T] {
 
 func (q *Query[T]) OrderDescending() *Query[T] {
 	q.orderBy = "ORDER BY %v DESC"
+	return q
+}
+
+func (q *Query[T]) Limit(limit int32) *Query[T] {
+	q.limit = limit
 	return q
 }
 

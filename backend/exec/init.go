@@ -154,7 +154,8 @@ func Homologate(args *core.ExecArgs) core.FuncResponse {
 	db.DeployScylla(
 		types.PaisCiudad{}, types.ListaCompartidaRegistro{},
 		types.Sede{}, types.Almacen{}, types.Producto{}, types.AlmacenProducto{},
-		types.Caja{}, types.CajaMovimiento{},
+		types.Caja{}, types.CajaMovimiento{}, types.AlmacenMovimiento{},
+		types.CajaCuadre{},
 	)
 
 	return core.FuncResponse{}

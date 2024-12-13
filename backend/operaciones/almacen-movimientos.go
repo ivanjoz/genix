@@ -30,7 +30,7 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	keys := []any{}
+	keys := []string{}
 
 	for i := range stock {
 		e := &stock[i]
@@ -44,13 +44,15 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Obtiene el stock actual
-	currentStock := []s.AlmacenProducto{}
-	err = core.DBSelect(&currentStock).Where("id").In(keys).Exec()
-	if err != nil {
+	currentStock := db.Select(func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
+		q.Where(col.ID_().In(keys...))
+	})
+
+	if currentStock.Err != nil {
 		return req.MakeErr("Error al obtener el stock previo:", err)
 	}
 
-	currentStockMap := core.SliceToMapK(currentStock,
+	currentStockMap := core.SliceToMapK(currentStock.Records,
 		func(e s.AlmacenProducto) string { return e.ID })
 
 	//Genera los movimientos correspondientes al stock actual
@@ -111,21 +113,25 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	result := Result{}
 
-	err := core.DBSelect(&result.Movimientos, "id", "empresa_id").
-		Where("empresa_id").Equals(req.Usuario.EmpresaID).
-		Where("id").GreatEq(core.SunixUUIDx3FromID(almacenID, int64(fechaHoraInicio)*1e6)).
-		Where("id").LessEq(core.SunixUUIDx3FromID(almacenID+1, int64(0))).
-		OrderDescending().Limit(1000).Exec()
+	err := db.SelectRef(&result.Movimientos, func(q *db.Query[s.AlmacenMovimiento], col s.AlmacenMovimiento) {
+		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+		q.Where(col.ID_().Between(
+			core.SunixUUIDx3FromID(almacenID, int64(fechaHoraInicio)),
+			core.SunixUUIDx3FromID(almacenID+1, int64(0))))
+		q.OrderDescending().Limit(1000)
+	})
 
 	if err != nil {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)
 	}
 
-	err = core.DBSelect(&result.Movimientos, "id", "empresa_id").
-		Where("empresa_id").Equals(req.Usuario.EmpresaID).
-		Where("almacen_ref_id", "created").GreatEq(almacenID, fechaHoraInicio).
-		Where("almacen_ref_id", "created").LessEq(almacenID, fechaHoraFin).
-		OrderDescending().Limit(1000).Exec()
+	err = db.SelectRef(&result.Movimientos, func(q *db.Query[s.AlmacenMovimiento], col s.AlmacenMovimiento) {
+		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+		//TODO: Revisar si esto funciona
+		q.Where(col.AlmacenRefID_().Equals(almacenID))
+		q.Where(col.CreatedBy_().Between(fechaHoraInicio, fechaHoraFin))
+		q.OrderDescending().Limit(1000)
+	})
 
 	if err != nil {
 		return req.MakeErr("Error al obtener los registros del almacén (2):", err)
@@ -148,11 +154,11 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		err := core.DBSelect(&result.Productos).
-			Columns("id", "nombre", "precio").
-			Where("empresa_id").Equals(req.Usuario.EmpresaID).
-			Where("id").In(core.ToAny(productosSet.Values)).Exec()
-
+		err := db.SelectRef(&result.Productos, func(q *db.Query[s.Producto], col s.Producto) {
+			q.Columns(col.ID_(), col.Nombre_(), col.Precio_())
+			q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+			q.Where(col.ID_().In(productosSet.Values...))
+		})
 		if err != nil {
 			err = core.Err("Error al obtener los productos:", err)
 		}
@@ -160,11 +166,11 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	})
 
 	errGroup.Go(func() error {
-		err := core.DBSelect(&result.Usuarios).
-			Columns("id", "usuario", "nombres", "apellidos").
-			Where("empresa_id").Equals(req.Usuario.EmpresaID).
-			Where("id").In(core.ToAny(usuariosSet.Values)).Exec()
-
+		err := db.SelectRef(&result.Usuarios, func(q *db.Query[s.Usuario], col s.Usuario) {
+			q.Columns(col.ID_(), col.Usuario_(), col.Nombres_(), col.Apellidos_())
+			q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+			q.Where(col.ID_().In(usuariosSet.Values...))
+		})
 		if err != nil {
 			err = core.Err("Error al obtener los usuarios:", err)
 		}
