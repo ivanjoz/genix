@@ -43,7 +43,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 	controllersMap := map[string]ScyllaController{}
 
 	for _, e := range MakeScyllaControllers() {
-		controllersMap[e.ScyllaTable.NameSingle] = e
+		controllersMap[e.TableName] = e
 	}
 
 	reader := tar.NewReader(bytes.NewReader(fileBytes))

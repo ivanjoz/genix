@@ -2,6 +2,23 @@ package types
 
 import "app/db"
 
+type Increment struct {
+	TAGS         `table:"sequences"`
+	TableName    string `db:"name,pk"`
+	CurrentValue int64  `db:"current_value,counter"`
+}
+
+func (e Increment) TableName_() db.CoStr    { return db.CoStr{"name"} }
+func (e Increment) CurrentValue_() db.CoI64 { return db.CoI64{"current_value"} }
+
+func (e Increment) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:           "sequences",
+		Keys:           []db.Coln{e.TableName_()},
+		SequenceColumn: e.CurrentValue_(),
+	}
+}
+
 type PaisCiudad struct {
 	TAGS         `table:"pais_ciudades"`
 	PaisID       int32       `db:"pais_id,pk"`

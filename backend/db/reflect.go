@@ -38,7 +38,6 @@ var scyllaFieldToColumnTypesMap = map[string]string{
 	"int":     "int",
 	"int32":   "int",
 	"int64":   "bigint",
-	"int64.1": "counter",
 	"int16":   "smallint",
 	"int8":    "tinyint",
 	"float32": "float",
@@ -99,6 +98,11 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 	fieldNameIdxMap := map[string]columnInfo{}
 	colRegex, _ := regexp.Compile(`^Col\[.*\]$`)
 	colSliceRegex, _ := regexp.Compile(`^ColSlice\[.*\]$`)
+
+	sequenceColumn := ""
+	if schema.SequenceColumn != nil {
+		sequenceColumn = schema.SequenceColumn.GetName()
+	}
 
 	for i := 0; i < structRefValue.NumField(); i++ {
 		col := columnInfo{
@@ -161,7 +165,9 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 		// Seteando "setValue"
 		column.Type = scyllaFieldToColumnTypesMap[column.FieldType]
-		if column.Type == "" {
+		if sequenceColumn == column.Name {
+			column.Type = "counter"
+		} else if column.Type == "" {
 			column.IsComplexType = true
 			column.IsSlice = false
 			column.Type = "blob"
@@ -264,7 +270,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		}
 		index.getCreateScript = func() string {
 			return fmt.Sprintf(`CREATE INDEX %v ON %v (%v)`,
-				index.name, dbTable.fullName(), column.GetInfo().Name)
+				index.name, dbTable.GetFullName(), column.GetInfo().Name)
 		}
 
 		idxCount++
@@ -282,7 +288,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		}
 		index.getCreateScript = func() string {
 			return fmt.Sprintf(`CREATE INDEX %v ON %v ((%v),%v)`,
-				index.name, dbTable.fullName(), index.columns[0], index.columns[1])
+				index.name, dbTable.GetFullName(), index.columns[0], index.columns[1])
 		}
 
 		idxCount++
@@ -377,7 +383,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 		index.getCreateScript = func() string {
 			return fmt.Sprintf(`CREATE INDEX %v ON %v (%v)`,
-				index.name, dbTable.fullName(), index.column.Name)
+				index.name, dbTable.GetFullName(), index.column.Name)
 		}
 
 		idxCount++
@@ -761,7 +767,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			WHERE %v
 			PRIMARY KEY (%v)
 			%v;`,
-				dbTable.keyspace, view.name, strings.Join(colNames, ", "), dbTable.fullName(),
+				dbTable.keyspace, view.name, strings.Join(colNames, ", "), dbTable.GetFullName(),
 				strings.Join(whereColumnsNotNull, " AND "), pk, makeStatementWith)
 			return query
 		}

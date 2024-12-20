@@ -84,11 +84,10 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	statements := slices.Concat(
-		core.MakeInsertQuery(&movimientos), core.MakeInsertQuery(&stock))
+		db.MakeInsertStatement(&movimientos), db.MakeInsertStatement(&stock))
 	core.Print(statements)
 
-	err = core.ExecuteStatements(statements)
-	if err != nil {
+	if err = db.QueryExecStatements(statements); err != nil {
 		return req.MakeErr("Error al obtener el stock previo:", err)
 	}
 

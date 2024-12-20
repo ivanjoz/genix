@@ -192,7 +192,7 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 	record.Created = nowTime
 	record.CreatedBy = req.Usuario.ID
 	record.SaldoDiferencia = record.SaldoReal - caja.SaldoCurrent
-	statements := core.MakeInsertQuery(&[]s.CajaCuadre{record})
+	statements := db.MakeInsertStatement(&[]s.CajaCuadre{record})
 
 	// Guarda la caja
 	caja.CuadreSaldo = record.SaldoReal
@@ -200,9 +200,10 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 	caja.SaldoCurrent = record.SaldoReal
 	caja.Updated = nowTime
 	caja.UpdatedBy = req.Usuario.ID
-	statements = append(statements, core.MakeUpdateQuery(
-		&[]s.Caja{caja}, "cuadre_fecha", "cuadre_saldo", "saldo_current", "updated",
-		"updated_by")...)
+
+	statements = append(statements, db.MakeUpdateStatements(
+		&[]s.Caja{caja}, caja.CuadreFecha_(), caja.CuadreSaldo_(), caja.SaldoCurrent_(),
+		caja.Updated_(), caja.UpdatedBy_())...)
 
 	// Guarda el movimiento
 	movimiento := s.CajaMovimiento{
@@ -217,12 +218,9 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	statements = append(statements,
-		core.MakeInsertQuery(&[]s.CajaMovimiento{movimiento})...)
+		db.MakeInsertStatement(&[]s.CajaMovimiento{movimiento})...)
 
-	statement := core.MakeQueryStatement(statements)
-	core.Log(statement)
-
-	if err := core.DBExec(statement); err != nil {
+	if err := db.QueryExecStatements(statements); err != nil {
 		core.Log("Error ScyllaDB: ", err)
 		return req.MakeErr("Error al registrar el cuadre:", err)
 	}
