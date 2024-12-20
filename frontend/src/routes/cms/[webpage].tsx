@@ -1,13 +1,14 @@
 import { useLocation } from "@solidjs/router";
-import { For, JSX, createEffect, createMemo, createSignal } from "solid-js";
+import { For, JSX, createEffect, createMemo, createSignal, onMount } from "solid-js";
 import { PageContainer } from "~/core/page";
 import { IPageParams, IPageSection, ISectionParams, PageSectionRenderer, PageSectionsDefs } from "~/pages/page";
 import { pageExample } from "~/pages/page-example";
-import styles from "./webpage.module.css"
+import * as styles from "./webpage.module.css"
 import { Input } from "~/components/Input";
 import { coponentsRenders } from "~/pages/page-components";
-import { pageView } from "~/core/menu";
+import { pageView, setIsRouteChanging } from "~/core/menu";
 import { arrayToMapN } from "~/shared/main";
+import { useParams } from "@solidjs/router";
 
 export const [pageViews, setPageViews] = createSignal({})
 
@@ -27,9 +28,13 @@ export default function CmsWebpage() {
   const [sectionSelected, setSectionSelected] = createSignal<IPageSection>()
   const [sectionParams, setSectionParams] = createSignal([] as ISectionParams[])
   const pageSectionsDefsMap = arrayToMapN(PageSectionsDefs,'id')
+  const params = useParams()
 
   createEffect(() => {
-    console.log(location.pathname)
+    import("./webpage.module.css")
+    setIsRouteChanging(false)
+    console.log("params::", params.webpage)
+    console.log("location:: ",location.pathname)
   })
 
   const addSection = (seccionIdx: number, mode: 1 | 2) => {
@@ -75,7 +80,7 @@ export default function CmsWebpage() {
   }
 
   return <PageContainer title="Webpage" class=""
-    views={[[1,"Editor",],[2,"Secciones"]]}
+    views={[[1,"Constructor",],[2,"Secciones"]]}
     pageStyle={{ display: 'grid', "grid-template-columns": "1.1fr 4fr", 
       padding: '0', "background-color": "white" }}
   >

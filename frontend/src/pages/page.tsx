@@ -27,6 +27,8 @@ export interface IPageSection {
   color3?: string
   marginTop?: string
   marginBottom?: string
+  columnasCant?: number
+  filasCant?: number
 }
 
 /*
@@ -62,7 +64,7 @@ export interface ISectionParams {
 export interface IPageParams {
   type: number, name: string
   params: (number|[number,string])[]
-  render: (e: any) => JSX.Element
+  render: (e: { args: IPageSection }) => JSX.Element
 }
 
 interface IPageSectionRenderer {

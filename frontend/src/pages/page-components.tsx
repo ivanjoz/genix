@@ -2,6 +2,7 @@ import { BasicSection, BigScroll, Demo1, LayerImage21 } from "./components";
 import './components.css';
 import { Header1 } from "./headers";
 import { IPageParams } from "./page";
+import { ProductosCuadrilla } from "./productos";
 
 export const coponentsRenders: IPageParams[] = [
   { type: 1, name: 'Basic Section', 
@@ -14,6 +15,10 @@ export const coponentsRenders: IPageParams[] = [
   },
   { type: 21, name: 'Layer Image 21', 
     render: e => <LayerImage21 args={e.args} />,
+    params: [1,2,3],
+  },
+  { type: 41, name: 'Productos Cuadrilla', 
+    render: e => <ProductosCuadrilla args={e.args} />,
     params: [1,2,3],
   },
   { type: 9998, name: 'Demo 1', render: e => <Demo1 args={e.args} />, 

@@ -9,7 +9,7 @@ import Modules from "./core/modules";
 import { createIndexDB } from "./shared/main";
 import { Params, loginStatus, setLoginStatus } from "./shared/security";
 import PageBuilder from "./pages/page";
-import CmsWebpage from "./routes/cms/webpage";
+import CmsWebpage from "./routes/cms/[webpage]";
 import { PageLoading, PageLoadingElement, Spinner1 } from "./core/page";
 
 let defaultModule = Modules[0]
@@ -36,7 +36,7 @@ if(isClient){
   window._params = { fetchID: 1001, fetchProcesses: new Map() }
   window._pendingRequests = []
   window._counterID = 1
-  window.S3_URL = "https://genix-dev.un.pe/"
+  window.S3_URL = "https://d16qwm950j0pjf.cloudfront.net/"
   window._zoneOffset = (new Date()).getTimezoneOffset() * 60
   createIndexDB(Modules)
 }
@@ -105,7 +105,6 @@ export default function Root() {
       <Route path="/_loading" component={PageLoading} />
       <Route path="/page" component={PageBuilder} />
       <Route path="/page/:name" component={PageBuilder} />
-      <Route path="/cms/webpage/:name" component={CmsWebpage} />
       <Show when={isLogin() === 2}>
         <Suspense fallback={PageLoadingElement}>{<FileRoutes />}</Suspense>
       </Show>

@@ -68,7 +68,7 @@ export function CellEditable<T>(props: ICellEditable<T>) {
           }}
           onBlur={ev => {
             ev.stopPropagation()
-            debugger
+            
             const newValue = extractValue(ev.target.value)
             if(prevValue !== newValue){
               prevValue = newValue

@@ -90,15 +90,15 @@ export const AdminModule: IModule = {
     },
     { name: "CMS", minName: "CMS",  id: 5, icon: "icon-buffer",
       options: [
-        { name: "Inicio", route: "/cms/webpage/1"
+        { name: "Inicio", route: "/cms/page-1"
         },
-        { name: "Nosotros", route: "/cms/webpage/2"
+        { name: "Nosotros", route: "/cms/page-2"
         },
-        { name: "Tienda", route: "/cms/webpage/3"
+        { name: "Tienda", route: "/cms/page-3"
         },
-        { name: "Producto", route: "/cms/webpage/4"
+        { name: "Producto", route: "/cms/page-4"
         },
-        { name: "Carrito Compra", route: "/cms/webpage/5"
+        { name: "Carrito Compra", route: "/cms/page-5"
         }, 
       ]  
     },
