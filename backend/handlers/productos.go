@@ -251,3 +251,58 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	return req.MakeResponse(response)
 }
+
+func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
+	empresaID := req.GetQueryInt("empresa-id")
+	// core.Log("usuario::")
+	// core.Print(req.Usuario)
+	if empresaID == 0 {
+		empresaID = req.Usuario.EmpresaID
+	}
+
+	categoriaID := req.GetQueryInt("categoria-id")
+
+	productos := []s.Producto{}
+	categorias := []s.ListaCompartidaRegistro{}
+	errGroup := errgroup.Group{}
+
+	errGroup.Go(func() error {
+		err := db.SelectRef(&productos, func(q *db.Query[s.Producto], col s.Producto) {
+			q.Columns(col.ID_(), col.Nombre_(), col.Descripcion_(), col.Precio_(), col.Descuento_(), col.PrecioFinal_(), col.Images_())
+			q.Where(col.EmpresaID_().Equals(empresaID))
+			q.Where(col.Status_().Equals(1))
+			if categoriaID > 0 {
+				q.Where(col.CategoriasIDs_().Contains(categoriaID))
+			}
+		})
+		if err != nil {
+			err = fmt.Errorf("error al obtener los productos: %v", err)
+		}
+		return err
+	})
+
+	errGroup.Go(func() error {
+		err := db.SelectRef(&categorias, func(q *db.Query[s.ListaCompartidaRegistro], col s.ListaCompartidaRegistro) {
+			q.Columns(col.ID_(), col.Nombre_(), col.Descripcion_())
+			q.Where(col.EmpresaID_().Equals(empresaID))
+			q.Where(col.ListaID_().Equals(1))
+			q.Where(col.Status_().Equals(1))
+		})
+		if err != nil {
+			err = fmt.Errorf("error al obtener los productos: %v", err)
+		}
+		return err
+	})
+
+	if err := errGroup.Wait(); err != nil {
+		return req.MakeErr(err)
+	}
+	core.Log("productos obtenidos::", len(productos))
+
+	response := map[string]any{
+		"productos":  productos,
+		"categorias": categorias,
+	}
+
+	return core.MakeResponse(req, &response)
+}

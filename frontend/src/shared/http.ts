@@ -304,7 +304,7 @@ const searchOnCache = (props: httpProps) => {
   })
 }
 
-const makeRoute = (route: string, apiName?: string) => {
+export const makeRoute = (route: string, apiName?: string) => {
   const apiUrl = apiName ? window.API_ROUTES[apiName] : window.API_ROUTES.MAIN
   return route.includes('://') ? route : apiUrl + route
 }

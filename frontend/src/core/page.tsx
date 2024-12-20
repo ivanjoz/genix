@@ -20,6 +20,7 @@ export const PageContainer = (props: IPageContainer) => {
   const location = useLocation()
   
   onMount(() => {
+    console.log("setting route is charging::", false)
     setIsRouteChanging(false)
     setInnerPageName(props.title||"")
     setPageViews(props.views||[])
@@ -34,9 +35,11 @@ export const PageContainer = (props: IPageContainer) => {
   onCleanup(() => { setInnerPageName("") })
   
   const isLoading = createMemo(() => {
+    console.log("is rute charging::", isRouteChanging())
     if(isRouteChanging()){ return true }
     console.log("Loading:: ", fetchPending().size)
     if(!props.fetchLoading) return false
+    console.log("setting is loading::",  fetchPending().size > 0)
     return fetchPending().size > 0
   })
 
