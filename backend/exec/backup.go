@@ -94,7 +94,7 @@ func SaveBackup(empresaID int32) error {
 
 	// Scylla Tables - Controllers
 	for _, controller := range MakeScyllaControllers() {
-		name := fmt.Sprintf("%v|%v", controller.ScyllaTable.NameSingle, 1)
+		name := fmt.Sprintf("%v|%v", controller.TableName, 1)
 
 		core.Log("Obteniendo registros de: ", name, "...")
 
@@ -105,7 +105,7 @@ func SaveBackup(empresaID int32) error {
 
 		core.Log("Registros obtenidos: ", len(records))
 		compressed := encoder.EncodeAll(records, make([]byte, 0, len(records)))
-		core.Log("comprimido::", len(compressed), " | ", len(records))
+		core.Log("Comprimido::", len(compressed), " | ", len(records))
 
 		hdr := &tar.Header{
 			Name: name, Mode: 0600, Size: int64(len(compressed)),

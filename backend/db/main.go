@@ -23,8 +23,17 @@ type scyllaTable[T any] struct {
 	_maxColIdx    int16
 }
 
-func (e scyllaTable[T]) fullName() string {
+func (e scyllaTable[T]) GetFullName() string {
 	return fmt.Sprintf("%v.%v", e.keyspace, e.name)
+}
+func (e scyllaTable[T]) GetColumns() map[string]*columnInfo {
+	return e.columnsMap
+}
+func (e scyllaTable[T]) GetKeys() []*columnInfo {
+	return e.keys
+}
+func (e scyllaTable[T]) GetPartKey() *columnInfo {
+	return e.partKey
 }
 
 type IColumnStatement interface {
@@ -43,13 +52,14 @@ type ColumnStatement struct {
 type TableSchema struct {
 	Keyspace string
 	// StructType    T
-	Name          string
-	Keys          []Coln
-	Partition     Coln
-	GlobalIndexes []Coln
-	LocalIndexes  []Coln
-	HashIndexes   [][]Coln
-	Views         []View
+	Name           string
+	Keys           []Coln
+	Partition      Coln
+	GlobalIndexes  []Coln
+	LocalIndexes   []Coln
+	HashIndexes    [][]Coln
+	Views          []View
+	SequenceColumn Coln
 }
 
 func (q ColumnStatement) GetValue() any {
@@ -365,7 +375,7 @@ func MakeInsertStatement[T TableSchemaInterface](records *[]T, columnsToExclude 
 	}
 
 	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES `,
-		scyllaTable.fullName(), strings.Join(columnsNames, ", "))
+		scyllaTable.GetFullName(), strings.Join(columnsNames, ", "))
 
 	queryStatements := []string{}
 
@@ -497,7 +507,7 @@ func makeUpdateStatementsBase[T TableSchemaInterface](records *[]T, columnsToInc
 
 		queryStatement := fmt.Sprintf(
 			"UPDATE %v SET %v WHERE %v",
-			scyllaTable.fullName(), Concatx(", ", setStatements), Concatx(" and ", whereStatements),
+			scyllaTable.GetFullName(), Concatx(", ", setStatements), Concatx(" and ", whereStatements),
 		)
 
 		queryStatements = append(queryStatements, queryStatement)

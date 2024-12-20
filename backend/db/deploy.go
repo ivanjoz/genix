@@ -55,57 +55,75 @@ func (e ScyllaIndexes) Keyspace_() CoStr { return CoStr{"keyspace_name"} }
 func (e ScyllaIndexes) Name_() CoStr     { return CoStr{"index_name"} }
 func (e ScyllaIndexes) Kind_() CoStr     { return CoStr{"kind"} }
 
-func DeployScylla(structTables ...any) {
+var cacheCodePrev int32
+var scyllaColumnsSaved []ScyllaColumns
+var scyllaIndexesSaved []ScyllaIndexes
 
-	fmt.Println("Obteniendo columnas...")
-	scyllaColumns := Select(func(q *Query[ScyllaColumns], col ScyllaColumns) {
-		q.Where(col.Keyspace_().Equals(connParams.Keyspace))
-	})
+func DeployScylla(cacheCode int32, structTables ...any) {
+	var scyllaColumns []ScyllaColumns
+	var scyllaIndexes []ScyllaIndexes
+	isFetched := false
 
-	if scyllaColumns.Err != nil {
-		panic("Error:" + scyllaColumns.Err.Error())
+	if cacheCode > 0 && cacheCode == cacheCodePrev {
+		scyllaColumns = scyllaColumnsSaved
+		scyllaIndexes = scyllaIndexesSaved
+	} else {
+		fmt.Println("Obteniendo columnas...")
+		scyllaColumnsQuery := Select(func(q *Query[ScyllaColumns], col ScyllaColumns) {
+			q.Where(col.Keyspace_().Equals(connParams.Keyspace))
+		})
+
+		if scyllaColumnsQuery.Err != nil {
+			panic("Error al obtener columnas:" + scyllaColumnsQuery.Err.Error())
+		}
+
+		scyllaColumns = scyllaColumnsQuery.Records
+		fmt.Println("Scylla columns obtenidas::", len(scyllaColumns))
+
+		fmt.Println("Obteniendo Indices...")
+		scyllaIndexesQuery := Select(func(q *Query[ScyllaIndexes], col ScyllaIndexes) {
+			q.Where(col.Keyspace_().Equals(connParams.Keyspace))
+		})
+
+		if scyllaIndexesQuery.Err != nil {
+			panic("Error al obtener índices:" + scyllaIndexesQuery.Err.Error())
+		}
+
+		scyllaIndexes = scyllaIndexesQuery.Records
+		fmt.Println("Índices obtenidos:", len(scyllaIndexes))
+		isFetched = true
 	}
-
-	fmt.Println("Scylla columns obtenidas::", len(scyllaColumns.Records))
 
 	tableColumnsMap := map[string][]ScyllaColumns{}
 
-	for _, e := range scyllaColumns.Records {
+	for _, e := range scyllaColumns {
 		key := fmt.Sprintf("%v.%v", e.Keyspace, e.Table)
 		tableColumnsMap[key] = append(tableColumnsMap[key], e)
 	}
 
-	tablesNames := []string{}
+	if isFetched {
+		tablesNames := []string{}
 
-	for tableName, columns := range tableColumnsMap {
-		tablesNames = append(tablesNames, tableName)
+		for tableName, columns := range tableColumnsMap {
+			tablesNames = append(tablesNames, tableName)
 
-		s1 := strings.Split(tableName, "_")
-		if s1[len(s1)-1] == "view" {
-			continue
+			s1 := strings.Split(tableName, "_")
+			if s1[len(s1)-1] == "view" {
+				continue
+			}
+			fmt.Println("✔ Table =", tableName)
+			columnsNames := []string{}
+			for _, c := range columns {
+				columnsNames = append(columnsNames, fmt.Sprintf("%v(%v)", c.Name, c.Type))
+			}
+			fmt.Println("  Columns =", strings.Join(columnsNames, ", "))
 		}
-		fmt.Println("✔ Table =", tableName)
-		columnsNames := []string{}
-		for _, c := range columns {
-			columnsNames = append(columnsNames, fmt.Sprintf("%v(%v)", c.Name, c.Type))
-		}
-		fmt.Println("  Columns =", strings.Join(columnsNames, ", "))
 
-	}
-
-	fmt.Println("Tables::", tablesNames)
-
-	fmt.Println("Obteniendo Indices...")
-	scyllaIndexes := Select(func(q *Query[ScyllaIndexes], col ScyllaIndexes) {
-		q.Where(col.Keyspace_().Equals(connParams.Keyspace))
-	})
-
-	if scyllaIndexes.Err != nil {
-		panic("Error:" + scyllaIndexes.Err.Error())
+		fmt.Println("Tables::", tablesNames)
 	}
 
 	tableIdexesMap := map[string][]string{}
-	for _, e := range scyllaIndexes.Records {
+	for _, e := range scyllaIndexes {
 		key := fmt.Sprintf("%v.%v", e.Keyspace, e.Table)
 		tableIdexesMap[key] = append(tableIdexesMap[key], e.Name)
 	}
@@ -120,7 +138,7 @@ func DeployScylla(structTables ...any) {
 			panic("El Type no implementa TableSchemaInterface")
 		}
 
-		tableName := table.fullName()
+		tableName := table.GetFullName()
 
 		originColumns := tableColumnsMap[tableName]
 		fmt.Println("current columns::", len(originColumns))
@@ -256,7 +274,8 @@ func RecalcVirtualColumns[T TableSchemaInterface]() {
 	}
 
 	if len(columnsToUpdateIdx) == 0 {
-		panic("no hay columnas virtuales a actulizar")
+		fmt.Println("no hay columnas virtuales a actulizar")
+		return
 	}
 
 	query := Query[T]{}

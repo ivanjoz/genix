@@ -54,8 +54,7 @@ func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 			Created:     time.Now().Unix(),
 		},
 	}
-
-	core.DBInsert(&usuarios)
+	core.Log(usuarios)
 
 	return core.FuncResponse{}
 }
@@ -180,7 +179,7 @@ func Test16(args *core.ExecArgs) core.FuncResponse {
 func Test17(args *core.ExecArgs) core.FuncResponse {
 
 	usuarios := []types.Usuario{}
-	core.DBSelect(&usuarios)
+	// core.DBSelect(&usuarios)
 
 	core.Print(usuarios)
 
@@ -234,17 +233,17 @@ type DemoStruct4 struct {
 }
 
 func Test18(args *core.ExecArgs) core.FuncResponse {
+	/*
+		registros := []DemoStruct{}
+		err := core.DBSelect(&registros).
+			Where("company_id").Equals(1).Where("id").GreatThan(2).Exec()
 
-	registros := []DemoStruct{}
-	err := core.DBSelect(&registros).
-		Where("company_id").Equals(1).Where("id").GreatThan(2).Exec()
+		if err != nil {
+			panic(err)
+		}
 
-	if err != nil {
-		panic(err)
-	}
-
-	core.Print(registros)
-
+		core.Print(registros)
+	*/
 	return core.FuncResponse{}
 }
 
@@ -280,10 +279,7 @@ func Test19(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	registros := []DemoStruct{demo}
-	err = core.DBInsert(&registros)
-	if err != nil {
-		panic(err)
-	}
+	core.Log(registros)
 
 	return core.FuncResponse{}
 }
@@ -545,10 +541,6 @@ func Test25(args *core.ExecArgs) core.FuncResponse {
 
 func Test26(args *core.ExecArgs) core.FuncResponse {
 
-	scyllaTable := core.MakeScyllaTable(types.ListaCompartidaRegistro{})
-
-	core.Print(scyllaTable)
-
 	return core.FuncResponse{}
 }
 
@@ -697,6 +689,6 @@ func Test32(args *core.ExecArgs) core.FuncResponse {
 			fmt.Println("error:", err1)
 		}
 	*/
-	db.DeployScylla(s.ListaCompartidaRegistro{})
+	db.DeployScylla(0, s.ListaCompartidaRegistro{})
 	return core.FuncResponse{}
 }

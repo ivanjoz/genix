@@ -4,7 +4,6 @@ import (
 	"app/core"
 	"app/db"
 	"app/handlers"
-	"app/types"
 	s "app/types"
 	"encoding/csv"
 	"fmt"
@@ -119,12 +118,13 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	core.Log("Nº de registros:: ", len(recordsMap))
 	recordsImported := core.MapToSliceT(recordsMap)
-
-	err = core.DBInsert(&recordsImported)
-	if err != nil {
-		panic(err)
-	}
-
+	core.Log(recordsImported)
+	/*
+		err = core.DBInsert(&recordsImported)
+		if err != nil {
+			panic(err)
+		}
+	*/
 	return core.FuncResponse{}
 }
 
@@ -151,12 +151,19 @@ func Homologate(args *core.ExecArgs) core.FuncResponse {
 			fmt.Println("error:", err1)
 		}
 	*/
-	db.DeployScylla(
-		types.PaisCiudad{}, types.ListaCompartidaRegistro{},
-		types.Sede{}, types.Almacen{}, types.Producto{}, types.AlmacenProducto{},
-		types.Caja{}, types.CajaMovimiento{}, types.AlmacenMovimiento{},
-		types.CajaCuadre{},
-	)
+	structTypes := []any{}
+	for _, cn := range MakeScyllaControllers() {
+		structTypes = append(structTypes, cn.StructType)
+	}
 
+	db.DeployScylla(0, structTypes...)
+
+	return core.FuncResponse{}
+}
+
+func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
+	for _, cn := range MakeScyllaControllers() {
+		cn.RecalcVirtualColumns()
+	}
 	return core.FuncResponse{}
 }

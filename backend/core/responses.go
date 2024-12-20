@@ -12,7 +12,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -39,13 +38,14 @@ type HandlerArgs struct {
 }
 
 func PrintMemUsage() {
-	return
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	// memory := m.TotalAlloc / 1024 / 1024
-	// Log("Memory TotalAlloc = %v MiB\n", memory)
-	msg := fmt.Sprintf("nAlloc = %v MiB | TotalAlloc = %v | Sys = %v | NumGC = %v\n", m.Alloc/1024/1024, m.TotalAlloc/1024/1024, m.Sys/1024/1024, m.NumGC)
-	Log(msg)
+	/*
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		// memory := m.TotalAlloc / 1024 / 1024
+		// Log("Memory TotalAlloc = %v MiB\n", memory)
+		msg := fmt.Sprintf("nAlloc = %v MiB | TotalAlloc = %v | Sys = %v | NumGC = %v\n", m.Alloc/1024/1024, m.TotalAlloc/1024/1024, m.Sys/1024/1024, m.NumGC)
+		Log(msg)
+	*/
 }
 
 func CompressBrotliOnFile(filePath string) []byte {
@@ -708,16 +708,6 @@ func EncodeJsonToFileX[T any](respStruct *T, name ...string) string {
 	}
 
 	PrintMemUsage()
-	// fi, err := os.Stat(outputPath)
-	if err != nil {
-		panic("Error al validar el output.json" + err.Error())
-	}
-	// get the size
-	/*
-		size := fi.Size()
-
-		fmt.Println("Respuesta guardada en:: ", outputPath, " | Size (kb): ", float64(size)/1000)
-	*/
 	return outputPath
 }
 

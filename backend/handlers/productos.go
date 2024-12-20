@@ -243,7 +243,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 	producto.Updated = time.Now().Unix()
 	producto.UpdatedBy = req.Usuario.ID
 
-	err = core.DBInsert(&[]s.Producto{producto})
+	err = db.Insert(&[]s.Producto{producto})
 
 	if err != nil {
 		return req.MakeErr("Error al actualizar el producto:", err)

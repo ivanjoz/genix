@@ -17,6 +17,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-importar-ciudades": ImportCiudades,
 	"fn-backup":            DoSaveBackup,
 	"fn-homologate":        Homologate,
+	"fn-recalc":            RecalcVirtualColumnsValues,
 	"compress-image":       CompressImage,
 }
 

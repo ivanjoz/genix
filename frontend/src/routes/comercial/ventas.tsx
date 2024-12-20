@@ -21,10 +21,14 @@ export interface ProductoVenta {
   skus?: IProductoStock[]
 }
 
+export interface SkuCant {
+  sku: string, cant: number
+}
+
 export interface VentaProducto {
   key: string
   productoID: number
-  sku?: string
+  skus?: Map<string,number>
   lote?: string
   cantidad: number
   isSubUnidad?: boolean
@@ -124,7 +128,7 @@ export default function Ventas() {
         if(clone){ newProductos.push(clone) }
       }
     }
-
+    console.log("productos parsed::", newProductos)
     setProdustosParsed(newProductos) 
     setProductosParsedAll(newProductos)        
   })
@@ -161,16 +165,33 @@ export default function Ventas() {
       return
     }
     
+    console.log("producto venta::", e)
+
     const ventaProducto = ventaProductos().find(x => x.key === e.key)
     if(ventaProducto){
       ventaProducto.cantidad += cant
+      if(sku){
+        const skuAdded = ventaProducto.skus.get(sku)
+        if(skuAdded){
+          const stockCant = e.skus.find(x => x.SKU === sku)?.Cantidad || 0
+          if(skuAdded >= stockCant){
+            setVentaErrorMessage(`El SKU ${sku} del producto "${e.producto.Nombre}" sólo posee ${stockCant} unidad(es).`)
+            return
+          }
+          ventaProducto.skus.set(sku, skuAdded +1)
+        } else {
+          ventaProducto.skus.set(sku, 1)
+        }
+      }
     } else {
       ventaProductos().push({ 
         key: e.key, cantidad: cant, productoID: e.producto.ID,
+        skus: new Map(sku ? [[sku,1]] : []),
         isSubUnidad: e.isSubUnidad || false
       })
     }
     const newVentaProductos = [...ventaProductos()]
+    console.log("venta productos::", newVentaProductos)
     setVentaProductos(newVentaProductos)
     const input = ventaProductoInput()
     if(input){ input.value = "" }
@@ -210,6 +231,7 @@ export default function Ventas() {
           label="" keys="ID.Nombre" options={almacenes()?.Almacenes || []}
           placeholder=" ALMACÉN" selected={almacenSelected()}
           onChange={e => {
+            setAlmacenSelected(e?.ID || -1)
             if(e){ getStock(e.ID); return }
           }}
         />
@@ -283,7 +305,9 @@ export default function Ventas() {
             return <ProductoVentaCard idx={i}
               isSelected={isSelected()} ventasProductosMap={ventaProductosMap()}
               productoStock={e}
-              agregarProductoVenta={agregarProductoVenta}
+              agregarProductoVenta={(cant, sku) => {
+                agregarProductoVenta(e, cant, sku)
+              }}
               setProductoSelected={setProductoSelected}
               filterText={filterText()}
               onmouseover={() => {
@@ -341,7 +365,15 @@ export default function Ventas() {
           },
           { header: "SKU",
             render: e => {
-              return e.sku || ""
+              console.log("skuss",e)
+              if(!e.skus){ return "" }
+              return <>
+                { [...e.skus].map(([sku,cant]) => {
+                    return <div>{sku} {cant > 1 ? <span class="ml-04">({cant})</span> : null}</div>
+                  })
+
+                }
+              </>
             }
           },
           { header: "Cantidad",
@@ -375,14 +407,24 @@ export default function Ventas() {
   </PageContainer>
 }
 
-function ProductoCantidad(){
+interface IProductoCantidad {
+  onSelect: (cant: number) => void
+}
+
+function ProductoCantidad(props: IProductoCantidad){
 
   const cantidades = [2,3,4,5,6,8,10,12]
 
   return <div class={["flex p-rel ai-end h100",style.buttons_cantidad].join(" ")}>
     <For each={cantidades}>
       {e => {
-        return <div class={`flex-center ff-bold ${style.button_venta_cantidad}`}>{e}</div>
+        return <div class={`flex-center ff-bold ${style.button_venta_cantidad}`} 
+        onClick={ev => {
+          ev.stopPropagation()
+          props.onSelect(e)
+        }}>
+          {e}
+        </div>
       }} 
     </For>
   </div>
@@ -395,7 +437,7 @@ interface IProductoVentaCard {
   filterText: string
   ventasProductosMap: Map<string,VentaProducto>
   setProductoSelected: (e: number) => void
-  agregarProductoVenta: () => void
+  agregarProductoVenta: (cant: number, sku?: string) => void
   onmouseover: () => void
 }
 
@@ -442,6 +484,15 @@ const ProductoVentaCard = (props: IProductoVentaCard) => {
 
   const firstSkus = createMemo(() => {
     let skus = props.productoStock.skus || []
+    const ventaProducto = props.ventasProductosMap.get(props.productoStock.key)
+    if(ventaProducto?.skus?.size > 0){
+      skus = skus.filter(x => {
+        if(!ventaProducto.skus.has(x.SKU)){
+          return true
+        }
+        return x.Cantidad > ventaProducto.skus.get(x.SKU)
+      })
+    }
     if(skus.length > 4){ skus = skus.slice(0,4) }
     return skus
   })
@@ -475,7 +526,10 @@ const ProductoVentaCard = (props: IProductoVentaCard) => {
             <div class="flex-wrap z20 p-rel" style={{ margin: '0 -3px' }}>
               <For each={firstSkus()}>
               {e => {
-                return <div class={`h5 ${style.producto_sku}`}>
+                return <div class={`h5 ${style.producto_sku}`} onClick={ev =>{
+                  ev.stopPropagation()
+                  props.agregarProductoVenta(1,e.SKU)
+                }}>
                   {e.SKU}
                 </div>
               }}
@@ -483,7 +537,9 @@ const ProductoVentaCard = (props: IProductoVentaCard) => {
             </div>
           </Show>
           <Show when={!isSku()}>
-            <ProductoCantidad/>
+            <ProductoCantidad onSelect={cant => {
+              props.agregarProductoVenta(cant)
+            }}/>
           </Show>           
         </div>
         <div class={joinb("p-rel flex ai-center",style.input_cantidad)}>
