@@ -762,12 +762,22 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 				}
 			}
 
+			// TODO: si se usan los nombres de columnas explícitas entonces se deben recrear las vistas cada vez que se agregue una columna
+			/*
+				query := fmt.Sprintf(`CREATE MATERIALIZED VIEW %v.%v AS
+				SELECT %v FROM %v
+				WHERE %v
+				PRIMARY KEY (%v)
+				%v;`,
+					dbTable.keyspace, view.name, strings.Join(colNames, ", "), dbTable.GetFullName(),
+					strings.Join(whereColumnsNotNull, " AND "), pk, makeStatementWith)
+			*/
 			query := fmt.Sprintf(`CREATE MATERIALIZED VIEW %v.%v AS
-			SELECT %v FROM %v
+			SELECT * FROM %v
 			WHERE %v
 			PRIMARY KEY (%v)
 			%v;`,
-				dbTable.keyspace, view.name, strings.Join(colNames, ", "), dbTable.GetFullName(),
+				dbTable.keyspace, view.name, dbTable.GetFullName(),
 				strings.Join(whereColumnsNotNull, " AND "), pk, makeStatementWith)
 			return query
 		}

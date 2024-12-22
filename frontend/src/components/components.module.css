@@ -98,7 +98,7 @@ body:global(.dark) .card_image_1:hover .card_input_layer {
 .input {
   --color1: rgba(109, 92, 150, 0.329);
   --padding1: 3px;
-  --left: 10px;
+  --left: 8px;
   --margin_bottom: -9px;
   --bor_rad: 7px;
   display: flex;
@@ -116,6 +116,9 @@ body:global(.ff-2) .input {
 }
 body .input:global(.no-label) {
   --inp-height: 2.3rem;
+}
+div:global(.s11) .input {
+  margin-right: -6px;
 }
 
 body:global(.ff-2) .input {

@@ -236,3 +236,40 @@ const resizeImageCanvasWebp = (args: ConvertImageArgs): Promise<string> => {
     console.log('Data-URL::', img.src)
   })
 }
+
+export interface IImageCtn {
+  src?: string
+  types?: string[]
+  size?: 2 | 4 | 6 | 8 | 9
+  class?: string
+  style?: JSX.CSSProperties
+}
+
+export const ImageCtn = (props: IImageCtn) => {
+
+  const makeImageSrc = () => {
+    let src = props.src
+    if(src.substring(0,5) !== "data:"){
+      if(src.substring(0,8) !== "https://" && src.substring(0,7) !== "http://"){
+        src = window.S3_URL + src
+      }
+      if(props.size){ src = `${src}-x${props.size}` }
+    }
+    return src
+  }
+
+
+  return <picture class={"dsp-cont"} style={props.style}>
+    { props.types?.includes("avif") &&
+      <source type="image/avif" srcset={makeImageSrc() + ".avif"} />
+    }
+    { props.types?.includes("webp") &&
+      <source type="image/webp" srcset={makeImageSrc() + ".webp"} />
+    }
+    <img class={`${props.class||""}`}
+      style={props.style}
+      src={makeImageSrc() + (props.types?.length > 0 ? `.${props.types[0]}` : "")}
+    />
+  </picture>
+}
+

@@ -23,6 +23,7 @@ export interface IProducto {
   Precio?: number
   Descuento?: number
   PrecioFinal?: number
+  ContentHTML?: string
   Propiedades?: IProductoPropiedades[]
   Peso?: number
   Volumen?: number

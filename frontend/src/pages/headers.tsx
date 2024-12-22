@@ -52,8 +52,8 @@ export function Header1(props: IHeader1) { // type: 10
   return <>
     <div class="header1-menu1 flex" ref={menuRef1}>
       <div class="flex ai-center jc-between w100">
-        <div>{props.args.title}</div>
-        <div>{props.args.subtitle}</div>
+        <div>{props.args.Title}</div>
+        <div>{props.args.Subtitle}</div>
       </div>
     </div>    
     <div class="header1-menu2 flex w100" ref={menuRef2}>

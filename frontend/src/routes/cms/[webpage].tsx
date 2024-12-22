@@ -1,14 +1,13 @@
-import { useLocation } from "@solidjs/router";
-import { For, JSX, createEffect, createMemo, createSignal, onMount } from "solid-js";
-import { PageContainer } from "~/core/page";
-import { IPageParams, IPageSection, ISectionParams, PageSectionRenderer, PageSectionsDefs } from "~/pages/page";
-import { pageExample } from "~/pages/page-example";
-import * as styles from "./webpage.module.css"
+import { useLocation, useParams } from "@solidjs/router";
+import { For, JSX, createEffect, createMemo, createSignal } from "solid-js";
 import { Input } from "~/components/Input";
-import { coponentsRenders } from "~/pages/page-components";
 import { pageView, setIsRouteChanging } from "~/core/menu";
+import { PageContainer } from "~/core/page";
+import { IPageParams, IPageSection, ISectionParams, PageSectionRenderer } from "~/pages/page";
+import { coponentsRenders, IPageBlock, PageBlocks } from "~/pages/page-components";
+import { pageExample } from "~/pages/page-example";
 import { arrayToMapN } from "~/shared/main";
-import { useParams } from "@solidjs/router";
+import * as styles from "./webpage.module.css";
 
 export const [pageViews, setPageViews] = createSignal({})
 
@@ -26,8 +25,9 @@ export default function CmsWebpage() {
   const location = useLocation()
   const [pageSections, setPageSections] = createSignal(pageExample)
   const [sectionSelected, setSectionSelected] = createSignal<IPageSection>()
-  const [sectionParams, setSectionParams] = createSignal([] as ISectionParams[])
-  const pageSectionsDefsMap = arrayToMapN(PageSectionsDefs,'id')
+  const [sectionParams, setSectionParams] = createSignal([] as IPageBlock[])
+  const pageSectionsDefsMap = arrayToMapN(Object.values(PageBlocks),'id')
+
   const params = useParams()
 
   createEffect(() => {
@@ -97,7 +97,7 @@ export default function CmsWebpage() {
               save="content" saveOn={e} 
               onChange={() => {
                 console.log(e.content)
-                const selected = {...sectionSelected()}
+                const selected = {...sectionSelected()} as any
                 selected[e.key] = e.content as never
                 updateSectionSelected(selected)
               }}
@@ -144,14 +144,16 @@ export default function CmsWebpage() {
             onClick={ev => {
               ev.stopPropagation()
               setSectionSelected(e)
-              const params: ISectionParams[] = []
+              const params: IPageBlock[] = []
               for(const param of (getPageSectionParams(e.type)?.params || [])){
-                const id = typeof param === 'number' ? param : param[0] 
-                const p = {...pageSectionsDefsMap.get(id)}
+                const p = {...pageSectionsDefsMap.get(param.id)}
+                /*
                 const nameCustom = typeof param === 'number' ? "" : param[1]
                 if(nameCustom){ p.name = nameCustom }
-
-                if(e[p.key]){ p.content = e[p.key] }
+                */
+                if(e[p.key as keyof IPageSection]){
+                   p.content = e[p.key as keyof IPageSection] as never
+                }
                 params.push(p)
               }
               console.log("params a renderizar::", params)

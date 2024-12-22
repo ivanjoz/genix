@@ -26,7 +26,7 @@ export function LayerImage21(props: IHeader1) { // type: 21
 export function BasicSection(props: { args: IPageSection }) { // type: 21
 
   return <div class="w100" style={{ "height": "12rem" }}>
-    <div><h1>{props.args.title}</h1></div>
-    <div>{props.args.content}</div>
+    <div><h1>{props.args.Title}</h1></div>
+    <div>{props.args.Content}</div>
   </div>
 }
