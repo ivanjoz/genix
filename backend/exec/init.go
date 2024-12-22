@@ -146,7 +146,8 @@ func Homologate(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("----------")
 	/*
-		err1 := db.QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.almacenes__pk_updated_view`)
+		err1 := db.QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.productos__pk_status_view`)
+		err1 = db.QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.productos__pk_updated_view`)
 		if err1 != nil {
 			fmt.Println("error:", err1)
 		}

@@ -9,32 +9,33 @@ type ProductoImagen struct {
 
 type Producto struct {
 	TAGS          `table:"productos"`
-	EmpresaID     int32   `json:",omitempty" db:"empresa_id,pk"`
-	ID            int32   `db:"id,pk"`
-	TempID        int32   `json:"-" db:"temp_id"`
+	EmpresaID     int32 `json:",omitempty"`
+	ID            int32
+	TempID        int32   `json:"-"`
 	Nombre        string  `db:"nombre"`
-	Descripcion   string  `json:",omitempty" db:"descripcion"`
-	CategoriasIDs []int32 `json:",omitempty" db:"categorias_ids"`
-	Params        []int8  `json:",omitempty" db:"params_ids"`
-	Precio        int32   `json:",omitempty" db:"precio"`
-	Descuento     float32 `json:",omitempty" db:"descuento"`
-	PrecioFinal   int32   `json:",omitempty" db:"precio_final"`
-	Peso          float32 `json:",omitempty" db:"peso"`
-	Volumen       float32 `json:",omitempty" db:"volumen"`
-	SbnCantidad   int32   `json:",omitempty" db:"sbn_cantidad"`
-	SbnUnidad     string  `json:",omitempty" db:"sbn_unidad"`
-	SbnPrecio     int32   `json:",omitempty" db:"sbn_precio"`
-	SbnDescuento  float32 `json:",omitempty" db:"sbn_decuento"`
-	SbnPreciFinal int32   `json:",omitempty" db:"sbn_precio_final"`
+	Descripcion   string  `json:",omitempty"`
+	ContentHTML   string  `json:",omitempty"`
+	CategoriasIDs []int32 `json:",omitempty"`
+	Params        []int8  `json:",omitempty"`
+	Precio        int32   `json:",omitempty"`
+	Descuento     float32 `json:",omitempty"`
+	PrecioFinal   int32   `json:",omitempty"`
+	Peso          float32 `json:",omitempty"`
+	Volumen       float32 `json:",omitempty"`
+	SbnCantidad   int32   `json:",omitempty"`
+	SbnUnidad     string  `json:",omitempty"`
+	SbnPrecio     int32   `json:",omitempty"`
+	SbnDescuento  float32 `json:",omitempty"`
+	SbnPreciFinal int32   `json:",omitempty"`
 
-	Propiedades []ProductoPropiedades `json:",omitempty" db:"propiedades"`
-	Images      []ProductoImagen      `json:",omitempty" db:"images"`
+	Propiedades []ProductoPropiedades `json:",omitempty"`
+	Images      []ProductoImagen      `json:",omitempty"`
 	// Propiedades generales
-	Status    int8  `json:"ss,omitempty" db:"status,view"`
-	Updated   int64 `json:"upd,omitempty" db:"updated,view"`
-	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
-	Created   int64 `json:",omitempty" db:"created"`
-	CreatedBy int32 `json:",omitempty" db:"created_by"`
+	Status    int8  `json:"ss,omitempty"`
+	Updated   int64 `json:"upd,omitempty"`
+	UpdatedBy int32 `json:",omitempty"`
+	Created   int64 `json:",omitempty"`
+	CreatedBy int32 `json:",omitempty"`
 }
 
 type _e = Producto
@@ -44,6 +45,7 @@ func (e _e) ID_() db.CoI32            { return db.CoI32{"id"} }
 func (e _e) TempID_() db.CoI32        { return db.CoI32{"temp_id"} }
 func (e _e) Nombre_() db.CoStr        { return db.CoStr{"nombre"} }
 func (e _e) Descripcion_() db.CoStr   { return db.CoStr{"descripcion"} }
+func (e _e) ContentHTML_() db.CoStr   { return db.CoStr{"content_html"} }
 func (e _e) CategoriasIDs_() db.CsI32 { return db.CsI32{"categorias_ids"} }
 func (e _e) Params_() db.CsI8         { return db.CsI8{"params_ids"} }
 func (e _e) Precio_() db.CoI32        { return db.CoI32{"precio"} }

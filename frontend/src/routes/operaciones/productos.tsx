@@ -6,7 +6,7 @@ import { CellEditable, CellTextOptions } from "~/components/Editables";
 import { CheckBoxContainer, Input, refreshInput } from "~/components/Input";
 import { SideLayer, openLayers, setOpenLayers } from "~/components/Modals";
 import { QTable } from "~/components/QTable";
-import { SearchSelect } from "~/components/SearchSelect";
+import { SearchCard, SearchSelect } from "~/components/SearchSelect";
 import { throttle } from "~/core/main";
 import { pageView } from "~/core/menu";
 import { PageContainer } from "~/core/page";
@@ -17,6 +17,7 @@ import { ImageUploader } from "~/components/Uploaders";
 import { POST } from "~/shared/http";
 import { useListasCompartidasAPI } from "~/services/admin/listas-compartidas";
 import { ListasCompartidasLayer } from "~/routes-components/admin/listas-compartidas";
+import { ProductoFichaEditor } from "~/routes-components/operaciones/productos";
 
 export default function Productos() {
 
@@ -177,34 +178,15 @@ export default function Productos() {
               css="w-24x mb-10" label="Nombre" 
             />
             <div class="flex-wrap ac-baseline w100 p-rel" 
-                style={{ "min-height": 'calc(14vh + 1rem)' }}>
+                style={{ "min-height": 'calc(10rem + 10px' }}>
               <div class="w-05x p-rel">
                 <ImageUploader  cardStyle={{ width: '100%', position: 'absolute', 
-                  top: '0', "z-index": 12 }}
+                  top: '0', "z-index": 12, "max-height": '10rem' }}
                   types={["avif","webp"]}
                   src={productoForm().Image
                     ? `img-productos/${productoForm().Image.n}-x2` : ""}
                 />
               </div>
-              <Input saveOn={productoForm()} save="Peso" css="w-055x mb-10"
-                label="Peso" type="number"
-              />
-              <SearchSelect saveOn={productoForm()} save="PesoT" placeholder=" "
-                label="-" keys="i.v" css="w-04x mb-10"
-                options={[
-                  {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
-                ]}
-              />
-              <Input saveOn={productoForm()} save="Volumen" css="w-055x mb-10"
-                label="Volumen" type="number"
-              />
-              <SearchSelect saveOn={productoForm()} save="VolumenT" placeholder=" "
-                label="-" keys="i.v" css="w-04x mb-10"
-                options={[
-                  {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
-                ]}
-              />
-              <div class="w-05x p-rel"></div>
               <Input saveOn={productoForm()} save="Precio" id={1}
                 css="w-055x mb-10" label="Precio Base" type="number"
                 baseDecimals={2}
@@ -239,16 +221,39 @@ export default function Productos() {
                   {i:1, v:"PEN (S/.)"},{i:2, v:"g"},{i:3, v:"Libras"}
                 ]}
               />
-             
-            </div>
-            <div class="w-24x mb-02 flex jc-end">
-              <CheckBoxContainer options={[ { v: 1, n: 'SKU Individual' } ]} 
-                keys="v.n" saveOn={productoForm()} save="Params" />
+              <div class="w-05x p-rel"></div>
+              <Input saveOn={productoForm()} save="Peso" css="w-055x mb-10"
+                label="Peso" type="number"
+              />
+              <SearchSelect saveOn={productoForm()} save="PesoT" placeholder=" "
+                label="Un" keys="i.v" css="w-04x mb-10"
+                options={[
+                  {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
+                ]}
+              />
+              <Input saveOn={productoForm()} save="Volumen" css="w-055x mb-10"
+                label="Volumen" type="number"
+              />
+              <SearchSelect saveOn={productoForm()} save="VolumenT" placeholder=" "
+                label="Un" keys="i.v" css="w-04x mb-10"
+                options={[
+                  {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
+                ]}
+              />
+              <div class="w-24x mb-04 flex jc-end">
+                <CheckBoxContainer options={[ { v: 1, n: 'SKU Individual' } ]} 
+                  keys="v.n" saveOn={productoForm()} save="Params" />
+              </div>
             </div>
             <div class="w100 mb-10">
-              <CardSelect label="Categorías" options={categorias()} keys="ID.Nombre"
-                css="w-145x" saveOn={productoForm()} save="CategoriasIDs" />
+              <SearchCard placeholder="CATEGORÍAS ::" options={categorias()} keys="ID.Nombre"
+                css="w100 s11" saveOn={productoForm()} save="CategoriasIDs" 
+                inputCss="w-06x"
+              />
             </div>
+            <Input saveOn={productoForm()} save="Descripcion"
+              css="w-24x mb-10" label="Descripción Corta" 
+            />
             <div class="ff-bold h3 mb-06">
               <div class="ml-08">Sub-Unidades</div>
             </div>
@@ -323,6 +328,9 @@ export default function Productos() {
               ]}    
             />
           </div>
+        </Show>
+        <Show when={layerView() === 2}>
+          <ProductoFichaEditor producto={productoForm()} />
         </Show>
         <Show when={layerView() === 3}>
           <div class="w100 px-02 py-08"

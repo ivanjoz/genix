@@ -328,7 +328,7 @@ export function SearchCard<T>(props: SearchSelect<T>) {
       <SearchSelect css={props.inputCss || "w-08x"} label={props.label}
         options={props.options} keys={props.keys} placeholder={props.placeholder}
         avoidIDs={optionsSelected() as number[]}
-        clearOnSelect={true}
+        clearOnSelect={true} icon="icon-search"
         onChange={e => {
           if(!e){ return }
           optionsSelected().push(e[keyId] as (number|string))
@@ -348,8 +348,9 @@ export function SearchCard<T>(props: SearchSelect<T>) {
       <For each={optionsSelected()}>
         {(id) => {
             const opt = optionsMap.get(id)
+            const name = opt ? opt[keyName] : `ITEM-${id}`
             return <div class="card-c12">
-              { opt[keyName] as string }
+              { name as string }
               <button class="bnr1 b-trash" onClick={ev => {
                 ev.stopPropagation()
                 const newSelected = optionsSelected().filter(x => x !== id)

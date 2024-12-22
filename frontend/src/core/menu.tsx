@@ -342,7 +342,7 @@ const MakeMenuRecord = (props: IMenuElement, opt: IMenuRecord, selected?: boolea
         <i class={(opt.icon || "icon-cube") + " h3 mr-01"}></i>
         <span class="mn-1 ff-mono" style={{ "margin-bottom": '-2px' }}>
         { opt.name.split(" ").map(x => {
-            return <span class="mr-05">{x}</span>
+            return <span class="mr-04">{x}</span>
           })
         }
         </span>

@@ -978,7 +978,7 @@ body.dark .search-c4:focus-within {
 }
 .side-layer1 {
   position: fixed;
-  background-color: var(--light-3);
+  background-color: var(--white-3);
   top: 3rem;
   right: 0;
   height: calc(100vh - 3rem);
