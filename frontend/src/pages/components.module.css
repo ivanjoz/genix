@@ -59,3 +59,82 @@
 .product_cart_button:hover  {
   outline: 2px solid rgba(0, 0, 0, 0.6);
 }
+
+/* Floating Cart */
+.floating_cart_ctn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: rgba(50, 50, 93, 0.25) 0px 8px 27px -4px, 
+    rgba(0, 0, 0, 0.3) 0px 6px 16px -8px;
+  cursor: pointer;
+  --size1: 5rem;
+  height: var(--size1);
+  width: var(--size1);
+  transition:  width 0.4s ease, height 0.4s ease;
+  padding: 2px;
+  overflow: hidden;
+}
+.floating_cart_ctn_open {
+  height: 34rem;
+  width: 30rem;
+}
+.floating_cart_content {
+  height: 34rem;
+  width: 30rem;
+  position: absolute;
+  bottom: 0;
+  right: 0;
+}
+.floating_cart_ctn:hover {
+  outline: 1px solid rgb(167, 125, 236);
+}
+.floating_cart_ctn.floating_cart_ctn_open {
+  outline: none
+}
+.floating_cart_ctn:hover .floating_cart_btn {
+  background-color: rgb(246, 242, 255);
+}
+
+.floating_cart_btn {
+  border-radius: 8px;
+  height: var(--size1);
+  width: var(--size1);
+  padding: 14px;
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  background-color: white;
+  z-index: 4;
+}
+.floating_cart_ctn_open .floating_cart_btn {
+  border-radius: 0 0 8px 0;
+  padding: 1.6rem;
+}
+.floating_cart_card {
+  position: absolute;
+  height: var(--size1);
+  bottom: 0;
+  right: 0;
+  width: 100%;
+  background-color: rgb(85, 75, 179);
+  visibility: hidden;
+  border-radius: 0 0 8px 8px;
+  color: white;
+  padding-right: var(--size1);
+  font-size: 1.5rem;
+}
+.floating_cart_ctn.floating_cart_ctn_open .floating_cart_card {
+  visibility: visible;
+}
+.floating_cart_ctn.floating_cart_ctn_open .floating_cart_btn {
+  outline: none;
+}
+.floating_cart_ctn.floating_cart_ctn_open .floating_cart_btn {
+  background-color: rgb(255, 232, 232);
+}
+.floating_cart_card:hover {
+  background-color: rgb(98, 87, 197);
+}
