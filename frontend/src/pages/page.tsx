@@ -3,6 +3,7 @@ import './components.css'
 import { coponentsRenders, IPageBlock } from "./page-components"
 import { pageExample } from "./page-example"
 import styles from './page.module.css'
+import { CartFloating } from "./productos"
 
 export interface IPageSection {
   id?: number
@@ -64,23 +65,26 @@ export const PageSectionRenderer = (e: IPageSectionRenderer) => {
 }
 
 export const PageRenderer = (props: IPageRenderer) => {
-
-  return <For each={props.sections}>
-    {e => {
-      if(props.isEditable){
-        return <div class={`p-rel w100 ${styles.cms_editable_card}`}>
-          <div class={`flex ai-center p-abs ff-bold ${styles.cms_card_button_up}`}>
-            <i class="icon-plus h6"></i>Sección
+  
+  return <>
+    <For each={props.sections}>
+      {e => {
+        if(props.isEditable){
+          return <div class={`p-rel w100 ${styles.cms_editable_card}`}>
+            <div class={`flex ai-center p-abs ff-bold ${styles.cms_card_button_up}`}>
+              <i class="icon-plus h6"></i>Sección
+            </div>
+            <PageSectionRenderer args={e} type={e.type} />
+            <div class={`flex ai-center p-abs ff-bold ${styles.cms_card_button_down}`}>
+              <i class="icon-plus h6"></i>Sección
+            </div>
           </div>
-          <PageSectionRenderer args={e} type={e.type} />
-          <div class={`flex ai-center p-abs ff-bold ${styles.cms_card_button_down}`}>
-            <i class="icon-plus h6"></i>Sección
-          </div>
-        </div>
-      }
-      return <PageSectionRenderer args={e} type={e.type} />
-    }}
-  </For>
+        }
+        return <PageSectionRenderer args={e} type={e.type} />
+      }}
+    </For>
+    <CartFloating />
+  </>
 }
 
 export function PageViewer() {

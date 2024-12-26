@@ -15,6 +15,7 @@ export const useProductosCmsAPI = (categoriasIDs?: number[]) => {
   const [fetchedRecords, setFetchedRecords] = createSignal({
     productos: [] as IProducto[],
     categorias: [] as IListaRegistro[],
+    isFetching: true,
     updated: -1
   })
 
@@ -44,8 +45,10 @@ export const useProductosCmsAPI = (categoriasIDs?: number[]) => {
       .then(results => {
         console.log("productos obtenidos desde servidor:", results)
         results.updated = nowTime
-        localStorage.setItem(key, JSON.stringify(results))
         resolve(results)
+        if(results.productos?.length > 0){
+          localStorage.setItem(key, JSON.stringify(results))
+        }
       })
       .catch(err => {
         reject(err)
