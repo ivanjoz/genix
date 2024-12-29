@@ -82,6 +82,20 @@
 .product_cart_button:hover  {
   outline: 2px solid rgba(0, 0, 0, 0.6);
 }
+.product_cart_bn_cant {
+  font-family: semibold;
+  display: none;
+}
+.product_card:global(.has-products):not(:hover) .product_cart_bn_cant {
+  display: block;
+}
+.product_card:global(.has-products):not(:hover) .product_cart_button > i {
+  display: none;
+}
+.product_card:global(.has-products):not(:hover) .product_cart_button {
+  background-color: rgb(231, 94, 94);
+  color: white;
+}
 
 /* Floating Cart */
 .floating_cart_ctn_ref {
@@ -222,4 +236,43 @@
   color: white;
   z-index: 112;
   pointer-events: none;
+}
+
+/* Carrito Layer */
+.menu_cart_layer {
+  position: absolute;
+  top: 4rem;
+  width: 48rem;
+  max-width: calc(82vw - 24px);
+  height: calc(100vh - 8.2rem);
+  background-color: white;
+  z-index: 120;
+  box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px,
+   rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
+  border-radius: 11px;
+  padding: 8px;
+  outline: 2px solid rgba(0, 0, 0, 0.24);
+}
+.menu_cart_layer_btn_ctn {
+  width: 8rem;
+  cursor: pointer;
+  user-select: none;
+}
+.menu_cart_layer_btn {
+  width: 8rem;
+  height: 2.4rem;
+  border-radius: 7px;
+}
+.menu_cart_layer_btn:hover {
+  outline: 2px solid #4c55d5;
+}
+.menu_cart_layer_btn_selected {
+  position: absolute;
+  top: 0.4rem;
+  background-color: #ecedff;
+  color: #4c55d5;
+}
+.menu_cart_layer_angle{ 
+  height: 20px;
+  top: -20px;
 }

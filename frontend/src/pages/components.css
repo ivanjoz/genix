@@ -15,7 +15,7 @@
 .header1-menu2 {
   height: calc(3.1vw + 3.1vh);
   box-sizing: border-box;
-  padding: 0 20vw 0 16vw;
+  padding: 0 4vw 0 4vw;
   font-size: var(--fs2);
   transition: height .4s;
   z-index: 150;
