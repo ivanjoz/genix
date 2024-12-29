@@ -33,9 +33,17 @@ export const useProductosCmsAPI = (categoriasIDs?: number[]) => {
   }
 
   if(!productosPromiseMap.has(key)){
-    const route = makeRoute("p-productos-cms")
+    let route = makeRoute("p-productos-cms")
     const headers = new Headers()
-    headers.append('Authorization', `Bearer ${getToken()}`)
+    headers.append('Authorization', `Bearer ${getToken(true)}`)
+
+    const location = window.location.pathname.split("/").filter(x => x)
+    if(location[1] && location[1].includes("-")){
+      const empresaID = location[1].split("-")[0]
+      if(!isNaN(empresaID as unknown as number)){ 
+        route += `?empresa-id=${empresaID}`
+      }
+    }
   
     productosPromiseMap.set(key, new Promise((resolve, reject) => {
       fetch(route, { headers })

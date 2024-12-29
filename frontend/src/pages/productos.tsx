@@ -16,7 +16,7 @@ export function ProductosCuadrilla(props: IHeader1) { // type: 10
   const [ productos ] = useProductosCmsAPI()
 
   createEffect(() => {
-    console.log("icon cart svg::", iconCartSvg)
+    // console.log("icon cart svg::", iconCartSvg)
     console.log("productos obtenidos component::", productos())
   })
 
