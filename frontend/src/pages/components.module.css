@@ -247,11 +247,11 @@
   height: calc(100vh - 8.2rem);
   background-color: white;
   z-index: 120;
-  box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px,
-   rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
+  box-shadow: rgb(70 70 96 / 35%) 0 2px 18px -2px,
+   rgb(0 0 0 / 35%) 0px 0 6px 0;
   border-radius: 11px;
   padding: 8px;
-  outline: 2px solid rgba(0, 0, 0, 0.24);
+  /* outline: 2px solid rgba(0, 0, 0, 0.24); */
 }
 .menu_cart_layer_btn_ctn {
   width: 8rem;

@@ -92,6 +92,7 @@ const parseResponseAsStream = async (fetchResponse: Response, props: IHttpStatus
   }
   else if (fetchResponse.status === 401) {
     accessHelper.clearAccesos()
+    console.log("sesión expirada::", fetchResponse)
     throw("La sesión ha expirado, vuelva a iniciar sesión.")
   }
   else if (fetchResponse.status !== 200) {
