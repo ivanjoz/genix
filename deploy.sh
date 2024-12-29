@@ -37,6 +37,7 @@ if [[ $ACCIONES == *"1"* ]]; then
        npm run build --prefix ./frontend
     fi
 
+    cd ./frontend
     node build.js
 
     echo "El deploy frontend finalizado!"
