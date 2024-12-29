@@ -2,7 +2,13 @@
   font-family: 'main'; src: url("/libs/open-sans-regular.woff2") 
 }
 @font-face { 
-  font-family: 'bold'; src: url("/libs/nunito-v12-latin-600.woff") 
+  font-family: 'bold'; src: url("/libs/open-sans-v40-latin-600.woff2") 
+}
+@font-face { 
+  font-family: 'semibold'; src: url("/libs/open-sans-v40-latin-500.woff2") 
+}
+@font-face { 
+  font-family: 'bold-italic'; src: url("/libs/open-sans-v40-latin-600italic.woff2") 
 }
 @font-face { 
   font-family: 'mono'; src: url("/libs/jetbrains-mono-regular.woff2") 

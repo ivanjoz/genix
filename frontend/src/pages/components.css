@@ -36,7 +36,7 @@
   position: fixed;
   top: 0;
   left: 0;
-  height: calc(2.3vw + 2.3vh);
+  height: calc(2vw + 2vh + 2px);
 }
 .layer-im1 {
   min-height: 30vw;
