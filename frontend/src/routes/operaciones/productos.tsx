@@ -183,8 +183,21 @@ export default function Productos() {
                 <ImageUploader  cardStyle={{ width: '100%', position: 'absolute', 
                   top: '0', "z-index": 12, "max-height": '10rem' }}
                   types={["avif","webp"]}
-                  src={productoForm().Image
-                    ? `img-productos/${productoForm().Image.n}-x2` : ""}
+                  src={productoForm().Image ? `img-productos/${productoForm().Image.n}-x2` : ""}
+                  refreshIndexDBCache="productos"
+                  saveAPI={productoForm().ID > 0 ? "producto-image" : ""}
+                  setDataToSend={e => {
+                    e.ProductoID = productoForm().ID || 0
+                  }}
+                  onUploaded={(imagePath, dsc) => {
+                    if(imagePath.includes("/")){ imagePath = imagePath.split("/")[1] }
+                    const pImage = { n: imagePath, d: dsc }
+                    console.log("image name::", pImage)
+                    const form = productoForm()
+                    form.Image = pImage
+                    form.Images = form.Images || []
+                    form.Images.unshift(pImage)
+                  }}
                 />
               </div>
               <Input saveOn={productoForm()} save="Precio" id={1}

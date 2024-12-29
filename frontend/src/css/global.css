@@ -235,6 +235,8 @@ h1, h2, h3, h4, h5, h6 {
 
 p { margin: 0.4rem 0; }
 .ff-bold { font-family: bold; }
+.ff-semibold { font-family: semibold; }
+.ff-bold-italic { font-family: bold-italic; }
 .ff-main { font-family: main; }
 .ff-light { font-family: light; }
 .ff-mono, .ff-mono p { font-family: mono; }

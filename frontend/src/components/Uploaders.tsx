@@ -25,7 +25,7 @@ export interface IImageUploader {
   types?: string[]
   saveAPI?: string
   refreshIndexDBCache?: string
-  onUploaded?: (src: string) => void
+  onUploaded?: (imagePath: string, description?: string) => void
   setDataToSend?: (e: any) => void
   clearOnUpload?: boolean
   description?: string
@@ -79,7 +79,9 @@ export const ImageUploader = (props?: IImageUploader) => {
       setProgress(-1)
       setImageSrc({ src: `${result.imageName}-x2`, types: ["webp","avif"] })
     }
-    if(props.onUploaded){ props.onUploaded(result.imageName) }
+    if(props.onUploaded){ 
+      props.onUploaded(result.imageName, imageSrc().description) 
+    }
   }
 
   const isImageBase64 = () => {
