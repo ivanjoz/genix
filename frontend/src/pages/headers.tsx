@@ -1,5 +1,8 @@
-import { createEffect } from "solid-js"
+import { createEffect, createSignal } from "solid-js"
 import { IPageSection, ISectionParams } from "./page"
+import s1 from './components.module.css'
+import angleSvg from "../assets/angle.svg?raw"
+import { parseSVG } from "~/core/main"
 
 export interface IHeader1 {
   args: IPageSection
@@ -49,6 +52,8 @@ export function Header1(props: IHeader1) { // type: 10
     console.log(props.args)
   })
 
+  const [showCart, setShowCart] = createSignal(null as { right: number, angleRight: number })
+
   return <>
     <div class="header1-menu1 flex" ref={menuRef1}>
       <div class="flex ai-center jc-between w100">
@@ -56,8 +61,41 @@ export function Header1(props: IHeader1) { // type: 10
         <div>{props.args.Subtitle}</div>
       </div>
     </div>    
-    <div class="header1-menu2 flex w100" ref={menuRef2}>
-
+    <div class="header1-menu2 flex ai-center w100" ref={menuRef2}>
+      <div class="ml-auto"></div>
+      <div class={`p-rel h100 flex ai-center jc-center ml-08 mr-08 ${s1.menu_cart_layer_btn_ctn}`}>
+        <div class={`p-rel flex-center w100 h4 mt-04 ${s1.menu_cart_layer_btn}`}
+          classList={{ [s1.menu_cart_layer_btn_selected]: !!showCart() }}        
+          onClick={ev => {
+            ev.stopPropagation()
+            if(showCart()){ 
+              setShowCart(null)
+            } else {
+              const rect = ev.target.parentElement.getBoundingClientRect()
+              const right = document.body.offsetWidth - rect.right
+              const angleRight = Math.floor(right + (rect.width / 2))
+              setShowCart({ right, angleRight })
+            }
+            ev.target
+          }}
+        >
+          <i class="icon-basket"></i>Carrito
+        </div>
+        { showCart() &&
+          <div class={`${s1.menu_cart_layer}`} 
+            style={{ right: `calc(1.4rem - ${showCart().right}px)`  }}> 
+            <img class={`p-abs ${s1.menu_cart_layer_angle}`}
+              style={{ right: `calc(${showCart().angleRight}px - 1.4rem - 16px)`  }}
+              src={parseSVG(angleSvg)}
+            />
+            {/* https://codyhouse.co/demo/breadcrumbs-multi-steps-indicator/index.html#0 */ }
+            <div>{`Carrito > Datos > Pago > Confirmación`}</div>
+          </div>
+        }
+      </div>
+      <div class="p-rel flex h4 ai-center mt-04 ml-08 mr-08">
+        <i class="icon-user"></i>Usuario
+      </div>
     </div>
   </>
 }

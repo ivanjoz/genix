@@ -24,7 +24,13 @@ export function ProductosCuadrilla(props: IHeader1) { // type: 10
     <div class="w100 flex-wrap ai-baseline jc-center">
       { productos().isFetching && <div>Obteniendo productos...</div> }
       { (productos().productos||[]).map(e => {
-          return <div class={`p-rel flex-column ai-center ${s1.product_card}`}>
+          const cartCant = createMemo(() => {
+            return cartProductos().get(e.ID)?.cant || 0
+          })
+
+          return <div class={`p-rel flex-column ai-center ${s1.product_card}`}
+            classList={{ "has-products": cartCant() > 0 }}
+          >
             { e.Images?.length > 0 &&
               <ImageCtn src={"img-productos/"+ e.Images[0]?.n} size={2}
                 class={s1.product_card_image}
@@ -42,10 +48,14 @@ export function ProductosCuadrilla(props: IHeader1) { // type: 10
                   addProducto(e)
                 }}
               >
-                <i class="icon-basket"></i>
-                <div class={s1.product_cart_bn_text}>
-                  Añadir al Carrito
-                </div>
+                <i class="icon-basket _icon"></i>
+                <div class={s1.product_cart_bn_cant}>{cartCant()}</div>
+                { cartCant() > 0
+                  ? <div class={s1.product_cart_bn_text}>
+                      Añadir más <span>({cartCant()})</span>
+                    </div>
+                  : <div class={s1.product_cart_bn_text}>Añadir al Carrito</div>
+                }                
               </div>
             </div>
           </div>
@@ -163,7 +173,11 @@ export const CartFloatingProducto = (props: ICartFloatingProducto) => {
     </div>
     <div class={`p-rel w100 flex-column ml-08 ${s1.producto_card_ctn}`}>
       <div>{props.producto.Nombre}</div>
-      <div class={`p-abs flex-center ${s1.producto_card_btn_del}`}>
+      <div class={`p-abs flex-center ${s1.producto_card_btn_del}`} onClick={ev => {
+        ev.stopPropagation()
+        cartProductos().delete(props.producto.ID)
+        setCartProductos(new Map(cartProductos()))
+      }}>
         <i class="icon-trash"></i>
       </div>
       <div class={`p-abs h3 ff-semibold ${s1.producto_card_price}`}>
