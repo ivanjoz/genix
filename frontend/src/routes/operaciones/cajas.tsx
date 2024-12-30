@@ -1,7 +1,8 @@
 import { Show, createMemo, createSignal } from "solid-js";
 import { deviceType } from "~/app";
-import { BarOptions, LayerLoading } from "~/components/Cards";
+import { BarOptions } from "~/components/Cards";
 import { CheckBox, Input, InputDisabled } from "~/components/Input";
+import { LayerLoading } from "~/components/Layers";
 import { Modal, setOpenModals } from "~/components/Modals";
 import { ITableColumn, QTable } from "~/components/QTable";
 import { SearchSelect } from "~/components/SearchSelect";

@@ -1,8 +1,9 @@
 import { createEffect, createSignal } from "solid-js"
-import { IPageSection, ISectionParams } from "./page"
-import s1 from './components.module.css'
-import angleSvg from "../assets/angle.svg?raw"
 import { parseSVG } from "~/core/main"
+import angleSvg from "../assets/angle.svg?raw"
+import s1 from './components.module.css'
+import { IPageSection } from "./page"
+import { EcommerceCart } from "./cart"
 
 export interface IHeader1 {
   args: IPageSection
@@ -89,7 +90,7 @@ export function Header1(props: IHeader1) { // type: 10
               src={parseSVG(angleSvg)}
             />
             {/* https://codyhouse.co/demo/breadcrumbs-multi-steps-indicator/index.html#0 */ }
-            <div>{`Carrito > Datos > Pago > Confirmación`}</div>
+            <EcommerceCart />
           </div>
         }
       </div>

@@ -1,6 +1,8 @@
 /// <reference types="@solidjs/start/env" />
 
 declare module "*.module.css";
+// declare module "*.svg";
+declare module "*.svg?raw";
 // declare module "*.module.scss";
 
 interface Window {

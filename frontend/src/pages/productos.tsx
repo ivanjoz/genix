@@ -1,15 +1,14 @@
-import { createComputed, createEffect, createMemo, createSignal, For, on } from "solid-js"
-import { IHeader1 } from "./headers"
-import { IPageSection } from "./page"
-import { useProductosCmsAPI } from "./productos-service"
-import { ImageCtn, ImageUploader } from "~/components/Uploaders"
-import s1 from "./components.module.css"
-import { formatN } from "~/shared/main"
+import { createEffect, createMemo, createSignal, For, on } from "solid-js"
 import { Portal } from "solid-js/web"
-import iconCartSvg from "../assets/icon_cart.svg?raw"
-import iconCancelSvg from "../assets/icon_cancel.svg?raw"
+import { ImageCtn } from "~/components/Uploaders"
 import { parseSVG } from "~/core/main"
 import { IProducto } from "~/services/operaciones/productos"
+import { formatN } from "~/shared/main"
+import iconCancelSvg from "../assets/icon_cancel.svg?raw"
+import iconCartSvg from "../assets/icon_cart.svg?raw"
+import s1 from "./components.module.css"
+import { IHeader1 } from "./headers"
+import { useProductosCmsAPI } from "./productos-service"
 
 export function ProductosCuadrilla(props: IHeader1) { // type: 10
 
@@ -70,7 +69,7 @@ export interface ICartProducto {
   cant: number
 }
 
-const [cartProductos, setCartProductos] = createSignal(new Map() as Map<number,ICartProducto>)
+export const [cartProductos, setCartProductos] = createSignal(new Map() as Map<number,ICartProducto>)
 
 export const addProducto = (producto: IProducto) => {
 
@@ -144,9 +143,11 @@ export const CartFloating = (props: ICartFloating) => {
 export interface ICartFloatingProducto{
   producto: IProducto
   cant: number
+  mode?: 1 | 2
 }
 
 export const CartFloatingProducto = (props: ICartFloatingProducto) => {
+
   const precio = createMemo(on(
     () => [ cartProductos() ], 
     () => { return props.cant * props.producto.PrecioFinal }
@@ -164,30 +165,37 @@ export const CartFloatingProducto = (props: ICartFloatingProducto) => {
     setCartProductos(new Map(cartProductos()))
   }
 
-  return <div class={`flex w100 ${s1.floating_producto_card} mb-08 p-rel`}>
+  return <div class={`flex w100 ${s1.floating_producto_card} p-rel`}
+      classList={{ 
+        "s2": props.mode === 2, 
+        "mb-10": (props.mode||1) === 1, 
+        "mb-12": (props.mode||1) === 2 
+      }}
+    >
     <div class={`h100 ${s1.floating_producto_card_img}`}>
       <ImageCtn src={"img-productos/"+ props.producto.Images[0]?.n} size={2}
         class={"h100 w100 object-cover"}
         types={["avif","webp"]}
       />
     </div>
-    <div class={`p-rel w100 flex-column ml-08 ${s1.producto_card_ctn}`}>
+    <div class={`p-rel w100 flex-column ml-06 ${s1.producto_card_ctn}`}>
       <div>{props.producto.Nombre}</div>
       <div class={`p-abs flex-center ${s1.producto_card_btn_del}`} onClick={ev => {
         ev.stopPropagation()
         cartProductos().delete(props.producto.ID)
         setCartProductos(new Map(cartProductos()))
       }}>
-        <i class="icon-trash"></i>
+        <i class="icon-cancel"></i>
       </div>
       <div class={`p-abs h3 ff-semibold ${s1.producto_card_price}`}>
         s./ {formatN(precio()/100, 2)}
       </div>
-      <div class={`p-abs flex ai-center ff-semibold ${s1.producto_card_bnt_cant}`}>
+      <div class={`p-abs flex ai-center ff-semibold ${s1.producto_card_btn_ctn}`}>
         <button onClick={ev => {
           ev.stopPropagation(); add(props.cant - 1)
-        }}>-</button>
+        }} class={`${s1.producto_card_btn_cant}`}>-</button>
         <input type="number" value={cant()} 
+          class={`mr-02 ml-02 ${s1.producto_card_btn_input}`}
           onChange={ev => {
             const newValue = parseInt(ev.target.value||"0")
             if(newValue > 0){
@@ -199,7 +207,7 @@ export const CartFloatingProducto = (props: ICartFloatingProducto) => {
         />
         <button onClick={ev => {
           ev.stopPropagation(); add(props.cant + 1)
-        }}>+</button>
+        }} class={`${s1.producto_card_btn_cant}`}>+</button>
       </div>
     </div>
   </div>

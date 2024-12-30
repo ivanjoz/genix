@@ -1,14 +1,25 @@
 import { createSignal } from "solid-js";
-import { IHeader1 } from "./headers";
-import { IPageSection } from "./page";
-import { makeRoute } from "~/shared/http";
-import { getToken, Params } from "~/shared/security";
-import { IProducto } from "~/services/operaciones/productos";
 import { IListaRegistro } from "~/services/admin/listas-compartidas";
+import { IProducto } from "~/services/operaciones/productos";
+import { makeRoute } from "~/shared/http";
+import { getToken } from "~/shared/security";
 
 const maxCacheTime = 5 * 60 // 5 minutos
 
 const productosPromiseMap: Map<string,Promise<any>> = new Map()
+
+export const getEmpresaID = (): number => {
+  const location = window.location.pathname.split("/").filter(x => x)
+  if(location[1] && location[1].includes("-")){
+    const empresaID = location[1].split("-")[0]
+    if(!isNaN(empresaID as unknown as number)){ 
+      return parseInt(empresaID)
+    }
+  } else if(!isNaN(location[1] as unknown as number)){
+    return parseInt(location[1])
+  }
+  return 0
+}
 
 export const useProductosCmsAPI = (categoriasIDs?: number[]) => {
 
@@ -33,18 +44,10 @@ export const useProductosCmsAPI = (categoriasIDs?: number[]) => {
   }
 
   if(!productosPromiseMap.has(key)){
-    let route = makeRoute("p-productos-cms")
+    const route = makeRoute("p-productos-cms") + `?empresa-id=${getEmpresaID()}`
     const headers = new Headers()
     headers.append('Authorization', `Bearer ${getToken(true)}`)
-
-    const location = window.location.pathname.split("/").filter(x => x)
-    if(location[1] && location[1].includes("-")){
-      const empresaID = location[1].split("-")[0]
-      if(!isNaN(empresaID as unknown as number)){ 
-        route += `?empresa-id=${empresaID}`
-      }
-    }
-  
+    
     productosPromiseMap.set(key, new Promise((resolve, reject) => {
       fetch(route, { headers })
       .then(results => {
