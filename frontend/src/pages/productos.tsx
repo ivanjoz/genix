@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, on } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { ImageCtn } from "~/components/Uploaders"
 import { parseSVG } from "~/core/main"
@@ -7,8 +7,9 @@ import { formatN } from "~/shared/main"
 import iconCancelSvg from "../assets/icon_cancel.svg?raw"
 import iconCartSvg from "../assets/icon_cart.svg?raw"
 import s1 from "./components.module.css"
-import { IHeader1 } from "./headers"
+import { IHeader1, setShowCart, showCart } from "./headers"
 import { useProductosCmsAPI } from "./productos-service"
+import { setCartOption } from "./cart"
 
 export function ProductosCuadrilla(props: IHeader1) { // type: 10
 
@@ -101,42 +102,49 @@ export const CartFloating = (props: ICartFloating) => {
   })
 
   return <Portal mount={document.body}>
-    <div class={`p-rel flex-center ${s1.floating_cart_ctn_ref}`}>
-      <div class={`p-rel h100 w100 ${s1.floating_cart_ctn}`}
-        classList={{ [s1.floating_cart_ctn_open]: isOpen() === 1 }}
-      >
-        <div class={`flex-center p-rel ${s1.floating_cart_btn}`}
-          classList={{ "has-productos": cartProductos().size > 0 }}
-          onClick={ev => {
-            ev.stopPropagation()
-            setIsOpen(isOpen() ? 0 : 1)
-          }}
+    <Show when={!showCart()}>
+      <div class={`p-rel flex-center ${s1.floating_cart_ctn_ref}`}>
+        <div class={`p-rel h100 w100 ${s1.floating_cart_ctn}`}
+          classList={{ [s1.floating_cart_ctn_open]: isOpen() === 1 }}
         >
-          <img class="" 
-            src={parseSVG(isOpen() ? iconCancelSvg : iconCartSvg)}
-          />
-        </div>
-        <div class={`p-rel ${s1.floating_cart_content}`}>
-          <div class="h100 w100">
-            <For each={Array.from(cartProductos().values())}>
-            {e => {
-              console.log("rendering productos::", cartProductos())
-              return <CartFloatingProducto producto={e.producto} cant={e.cant} />
+          <div class={`flex-center p-rel ${s1.floating_cart_btn}`}
+            classList={{ "has-productos": cartProductos().size > 0 }}
+            onClick={ev => {
+              ev.stopPropagation()
+              setIsOpen(isOpen() ? 0 : 1)
             }}
-            </For>
+          >
+            <img class="" 
+              src={parseSVG(isOpen() ? iconCancelSvg : iconCartSvg)}
+            />
           </div>
-          <div class={`flex-center ${s1.floating_cart_card}`}>
-            <div class="ff-bold-italic mr-08">Ir a Pagar -</div>
-            <div class="ff-bold-italic mr-08">S/. {formatN(precio()/100,2)}</div>
+          <div class={`p-rel ${s1.floating_cart_content}`}>
+            <div class="h100 w100">
+              <For each={Array.from(cartProductos().values())}>
+              {e => {
+                console.log("rendering productos::", cartProductos())
+                return <CartFloatingProducto producto={e.producto} cant={e.cant} />
+              }}
+              </For>
+            </div>
+            <div class={`flex-center ${s1.floating_cart_card}`} onClick={ev => {
+              ev.stopPropagation()
+              setShowCart(true)
+              setIsOpen(0)
+              setCartOption(2)
+            }}>
+              <div class="ff-bold-italic mr-08">Ir a Pagar -</div>
+              <div class="ff-bold-italic mr-08">S/. {formatN(precio()/100,2)}</div>
+            </div>
           </div>
         </div>
+        { cartProductos().size > 0 && !isOpen() &&
+          <div class={`p-abs ff-semibold flex-center ${s1.floating_cart_count}`}>
+            {cartProductos().size}
+          </div>
+        }
       </div>
-      { cartProductos().size > 0 && !isOpen() &&
-        <div class={`p-abs ff-semibold flex-center ${s1.floating_cart_count}`}>
-          {cartProductos().size}
-        </div>
-      }
-    </div>
+    </Show>
   </Portal>
 }
 

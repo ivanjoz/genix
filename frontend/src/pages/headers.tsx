@@ -1,4 +1,4 @@
-import { createEffect, createSignal } from "solid-js"
+import { createEffect, createMemo, createSignal, on } from "solid-js"
 import { parseSVG } from "~/core/main"
 import angleSvg from "../assets/angle.svg?raw"
 import s1 from './components.module.css'
@@ -8,6 +8,8 @@ import { EcommerceCart } from "./cart"
 export interface IHeader1 {
   args: IPageSection
 }
+
+export const [showCart, setShowCart] = createSignal(false)
 
 export function Header1(props: IHeader1) { // type: 10
 
@@ -53,8 +55,20 @@ export function Header1(props: IHeader1) { // type: 10
     console.log(props.args)
   })
 
-  const [showCart, setShowCart] = createSignal(null as { right: number, angleRight: number })
+  let divRef: HTMLDivElement
 
+  const divParams = createMemo(on(
+    () => [showCart()],
+    () => {
+      if(!divRef){ return {} }
+      const rect = divRef.parentElement.getBoundingClientRect()
+      const right = document.body.offsetWidth - rect.right
+      const angleRight = Math.floor(right + (rect.width / 2))
+
+      return { right, angleRight }
+    }
+  ))
+  
   return <>
     <div class="header1-menu1 flex" ref={menuRef1}>
       <div class="flex ai-center jc-between w100">
@@ -66,27 +80,24 @@ export function Header1(props: IHeader1) { // type: 10
       <div class="ml-auto"></div>
       <div class={`p-rel h100 flex ai-center jc-center ml-08 mr-08 ${s1.menu_cart_layer_btn_ctn}`}>
         <div class={`p-rel flex-center w100 h4 mt-04 ${s1.menu_cart_layer_btn}`}
-          classList={{ [s1.menu_cart_layer_btn_selected]: !!showCart() }}        
+          classList={{ [s1.menu_cart_layer_btn_selected]: !!showCart() }}
+          ref={divRef}        
           onClick={ev => {
             ev.stopPropagation()
             if(showCart()){ 
-              setShowCart(null)
+              setShowCart(false)
             } else {
-              const rect = ev.target.parentElement.getBoundingClientRect()
-              const right = document.body.offsetWidth - rect.right
-              const angleRight = Math.floor(right + (rect.width / 2))
-              setShowCart({ right, angleRight })
+              setShowCart(true)
             }
-            ev.target
           }}
         >
           <i class="icon-basket"></i>Carrito
         </div>
         { showCart() &&
           <div class={`${s1.menu_cart_layer}`} 
-            style={{ right: `calc(1.4rem - ${showCart().right}px)`  }}> 
+            style={{ right: `calc(1.2rem - ${divParams().right}px)`  }}> 
             <img class={`p-abs ${s1.menu_cart_layer_angle}`}
-              style={{ right: `calc(${showCart().angleRight}px - 1.4rem - 16px)`  }}
+              style={{ right: `calc(${divParams().angleRight}px - 1.2rem - 16px)`  }}
               src={parseSVG(angleSvg)}
             />
             {/* https://codyhouse.co/demo/breadcrumbs-multi-steps-indicator/index.html#0 */ }

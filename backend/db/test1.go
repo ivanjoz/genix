@@ -65,6 +65,9 @@ func (e Usuario) GetSchema() TableSchema {
 		// LocalIndexes:  []Coln{e.Nombre_(), e.GruposIDs_()},
 		HashIndexes: [][]Coln{{e.RolID_(), e.Edad_()}, {e.RolID_(), e.Accesos_()}},
 		Views: []View{
+			{Cols: []Coln{e.RolID_()}, KeepPart: true},
+			// No puede ser un slice como columna de una view
+			// {Cols: []Coln{e.Accesos_()}, KeepPart: true},
 			{Cols: []Coln{e.RolID_(), e.Edad_()}, KeepPart: true},
 			{Cols: []Coln{e.RolID_(), e.Updated_()}, ConcatI64: []int8{10}},
 			{Cols: []Coln{e.RolID_(), e.Edad_(), e.Updated_()}, ConcatI64: []int8{4, 11}},
@@ -75,7 +78,7 @@ func (e Usuario) GetSchema() TableSchema {
 func TestQuery(params ConnParams) {
 	MakeScyllaConnection(params)
 
-	fmt.Println("Query 1")
+	fmt.Println("Query 1...")
 	result := Select(func(q *Query[Usuario], col Usuario) {
 		q.Exclude(col.Apellido_()).
 			Where(col.CompanyID_().Equals(1)) /*.
@@ -83,16 +86,16 @@ func TestQuery(params ConnParams) {
 	})
 
 	fmt.Println(result.Records)
-	/*
-		fmt.Println("Query 2")
-		result2 := Select(func(q *Query[Usuario], col Usuario) {
-			q.Exclude(col.Apellido_()).
-				// Where(col.RolID_().Equals(1)).
-				Where(col.Accesos_().Contains(4))
-		})
 
-		core.Print(result2.Records)
-	*/
+	fmt.Println("Query 2...")
+	result2 := Select(func(q *Query[Usuario], col Usuario) {
+		q.Exclude(col.Apellido_()).
+			Where(col.CompanyID_().Equals(1)).
+			// Where(col.RolID_().Equals(1)).
+			Where(col.Accesos_().Contains(4))
+	})
+
+	fmt.Println(result2.Records)
 }
 
 func TestQuery2(params ConnParams) {
@@ -116,7 +119,7 @@ func TestQuery2(params ConnParams) {
 	*/
 }
 
-func TestDeploy(params ConnParams) {
+func TestInsert(params ConnParams) {
 	/*
 		MakeScyllaConnection(params)
 
@@ -155,4 +158,9 @@ func TestCBOR() {
 	}
 
 	fmt.Println(refPerfil)
+}
+
+func TestDeploy(params ConnParams) {
+	MakeScyllaConnection(params)
+	DeployScylla(0, Usuario{})
 }
