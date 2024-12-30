@@ -2,70 +2,7 @@ import { For, JSX, JSXElement, Show, createEffect, createMemo, createSignal, on 
 import { VList } from "../components/virtua/solid";
 import { arrayToMapN } from "~/shared/main";
 import { SearchSelect } from "./SearchSelect";
-
-interface ILayerAutoHide {
-  children: JSXElement
-  icon: JSXElement
-  buttonClass: string
-  containerClass?: string
-  layerClass?: string
-  layerStyle?: JSX.CSSProperties
-}
-
-export const LayerSelect = (props: ILayerAutoHide) => {
-  const [show, setShow] = createSignal(false)
-  
-  let refInput: HTMLInputElement
-  let refLayer: HTMLDivElement
-  let avoidHideOnBlur = false
-  
-  createEffect(() => {
-    if(show()){
-      refInput?.focus()
-    }
-  },[show()])
-
-  return <div class={"flex-center flex-column" + 
-    (props.containerClass ? " " + props.containerClass : "")}
-  >
-    <button class={props.buttonClass} 
-      onMouseDown={ev => {
-        ev.stopPropagation()
-        avoidHideOnBlur = true
-      }}
-      onClick={ev => {
-        ev.stopPropagation()
-        if(avoidHideOnBlur){ avoidHideOnBlur = false }
-        setShow(!show())
-      }}>
-      {props.icon}
-    </button>
-    <div class="p-rel" style={{ width: '0px', height: '0px' }}>
-      <Show when={show()}>
-        <input ref={refInput} autofocus={true} class="input-hide1"
-          onBlur={ev => {
-            ev.stopPropagation()
-            if(avoidHideOnBlur){
-              avoidHideOnBlur = false; refInput?.focus()
-            } else {
-              setShow(false)
-            }
-          }}
-        />
-        <div class={"p-abs layer-c2 layer-angle1" + (props.layerClass ? " " + props.layerClass : "")}
-          style={props.layerStyle}
-          ref={refLayer}
-          onMouseDown={ev => {
-            ev.stopPropagation()
-            avoidHideOnBlur = true
-          }}
-        >
-          { props.children }
-        </div>
-      </Show>
-    </div>
-  </div>
-}
+import s1 from "./cards.module.css"
 
 interface IBarOptions {
   options: [number,string][]
@@ -175,40 +112,6 @@ export function CardSelect<T,Y>(props: ICardSelect<T,Y>){
   </div>
 }
 
-export interface ILayerLoading<T> {
-  baseObject: T
-  startPromise: (e: T) => Promise<any>
-  lodingElement?: JSX.Element
-  children: JSX.Element | JSX.Element[]
-}
-
-export function LayerLoading<T>(props: ILayerLoading<T>){
-  const [isLoading, setIsLoading] = createSignal(false)
-  
-  createEffect(on(() => [props.baseObject], 
-    () => {
-      setIsLoading(true)
-      props.startPromise(props.baseObject)
-      .then(() => {
-        setIsLoading(false)
-      })
-    }
-  ))
-
-  return <div class={"w100"}>
-    { isLoading() &&
-      <div class="pm-loading mt-12" style={{ padding: '7px' }}>
-        <div class="bg"></div>
-        <span>{"Cargando..."}</span>
-      </div>
-    }
-    { !isLoading() &&
-      props.children
-    }
-  </div>
-}
-
-
 export interface ICardsList<T> {
   data: T[]
   render: (d: T, i: number) => JSX.Element
@@ -254,9 +157,7 @@ export function ButtonList<T>(props: IButtonList<T>){
     }}
     </For>
   </div>
-
 }
-
 
 interface ISpinnerProps {
   mensaje?: string, className?: string
@@ -295,4 +196,52 @@ export const Spinner = (props: ISpinnerProps) => {
       <div></div><div></div></div>
     </div>
   )
+}
+
+import arrow1Svg from "../assets/flecha_inicio.svg?raw"
+import arrow2Svg from "../assets/flecha_fin.svg?raw"
+import { parseSVG } from "~/core/main";
+
+interface IICardArrowStepsOption {
+  id: number, name: string, icon?: string
+}
+
+export interface ICardArrowSteps {
+  options: IICardArrowStepsOption[]
+  onSelect?: (e: IICardArrowStepsOption) => void
+  selected?: number
+  optionRender?: (e: IICardArrowStepsOption) => JSX.Element
+}
+
+export const CardArrowSteps = (props: ICardArrowSteps) => {
+
+  return <div class="grid mr-08"
+    style={{ "grid-template-columns": props.options.map(x => "1fr").join(" ") }}
+  >
+  { props.options.map(e => {
+      return <div class={`flex p-rel ai-center ${s1.card_arrow_ctn}`}
+        classList={{ [s1.card_arrow_ctn_selected]: e.id === props.selected }}
+        onClick={ev => {
+          ev.stopPropagation()
+          if(props.onSelect){ 
+            props.onSelect(e)
+          }
+        }}
+      >
+        <img class={`h100 ${s1.card_arrow_svg}`} 
+          src={parseSVG(arrow1Svg)} alt=""
+        />
+        <div class={`h100 flex-center ${s1.card_arrow_name}`}>
+          { props.optionRender 
+              ? props.optionRender(e) 
+              : <div class="ff-semibold">{e.name}</div>
+          }          
+        </div>
+        <img class={`h100 ${s1.card_arrow_svg}`} src={parseSVG(arrow2Svg)} alt="" 
+        />
+        <div class={s1.card_arrow_line}></div>
+      </div>
+    })
+  }
+  </div>
 }

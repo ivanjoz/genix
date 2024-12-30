@@ -220,6 +220,7 @@ select:disabled {
 .pad-sl6 { padding-left: 6px; margin-left: -6px; }
 .h0 { font-size: 1.8rem; }
 .h1, h1 { font-size: 1.4rem; }
+.fs20 { font-size: 20px; }
 .h2, h2 { font-size: 1.2rem; }
 .h3, h3 { font-size: 1.1rem; }
 .h4, h4 { font-size: 1rem; }

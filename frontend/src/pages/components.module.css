@@ -130,7 +130,7 @@
   position: absolute;
   bottom: 0;
   right: 0;
-  padding: 4px;
+  padding: 6px;
 }
 .floating_cart_content > div:first-of-type {
   overflow: auto;
@@ -196,16 +196,30 @@
 /* Floating cart producto */
 .floating_producto_card {
   height: 5rem;
-  background-color: rgb(244 244 244);
-  
+  box-shadow: rgba(50, 50, 105, 0.15) 0px 2px 5px 0px,
+   rgba(0, 0, 0, 0.05) 0px 1px 2px 0px;
+  border-radius: 8px;
+}
+.floating_producto_card:not(:global(.s2)) {
+  overflow: hidden;
+}
+.floating_producto_card:global(.s2) {
+  height: 6.8rem;
+  box-shadow: rgba(50, 50, 105, 0.15) 0px 2px 5px 0px, 
+    rgba(0, 0, 0, 0.1) 0px 0px 2px 0px;
 }
 .floating_producto_card_img {
   width: 6rem;
   flex-shrink: 0;
+  border-radius: 8px 0 0 8px;
+  overflow: hidden;
 }
 .producto_card_ctn {
   padding: 4px;
   padding-right: 2.6rem;
+}
+.floating_producto_card:global(.s2) .producto_card_ctn {
+  padding-right: 1.4rem;
 }
 .producto_card_btn_del {
   top: 0;
@@ -219,11 +233,19 @@
   color: white;
   background-color: rgb(228, 94, 94);
 }
+.floating_producto_card:global(.s2) .producto_card_btn_del {
+  border-radius: 50%;
+  width: 1.8rem;
+  height: 1.8rem;
+  top: -6px;
+  right: -6px;
+}
+
 .producto_card_price {
   bottom: 4px;
   right: 6px;
 }
-.producto_card_bnt_cant {
+.producto_card_btn_ctn {
   bottom: 2px ;
   left: 0;
 }
@@ -236,6 +258,24 @@
   color: white;
   z-index: 112;
   pointer-events: none;
+}
+.producto_card_btn_cant {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 50%;
+  border: none;
+  background-color: #e5e3f4;
+  font-size: 1.2rem;
+}
+.producto_card_btn_cant:hover {
+  background-color: #5e51c0;
+  color: white;
+}
+.producto_card_btn_input {
+  width: 4rem;
+  text-align: center;
+  border: 1px solid #a8a0c2;
+  height: 1.8rem;
 }
 
 /* Carrito Layer */
@@ -275,4 +315,16 @@
 .menu_cart_layer_angle{ 
   height: 20px;
   top: -20px;
+}
+.cart_button_1 {
+  border-radius: 8px;
+  border: none;
+  padding: 4px 8px 4px 12px;
+  background-color: #ebf3ff;
+  color: #315793;
+  border-bottom: 2px solid #acc4ec;
+}
+.cart_button_1:hover {
+  outline: 2px solid #3a78db;
+  border-bottom-color: #ebf3ff;
 }

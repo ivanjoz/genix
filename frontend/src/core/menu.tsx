@@ -5,7 +5,8 @@ import { appModule, deviceType, setAppModule, setShowMenu, setViewType, showMenu
 import Modules, { IModule } from "./modules"
 import { Params, accessHelper } from "~/shared/security"
 import { fetchOnCourse } from "~/shared/http"
-import { ButtonList, LayerSelect } from "~/components/Cards"
+import { ButtonList } from "~/components/Cards"
+import { LayerSelect } from "~/components/Layers"
 
 export interface IMenuRecord {
   name: string, minName?: string, id?: number, route?: string,

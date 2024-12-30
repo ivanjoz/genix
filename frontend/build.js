@@ -3,18 +3,18 @@ import fs from 'fs'
 const __dirname = new URL('.', import.meta.url).pathname;
 
 const buildFolder = path.join(__dirname,'.output','public')
-const staticFolder = path.join(__dirname,'..','docs')
+const deployFolder = path.join(__dirname,'..','docs')
 
 const buildSubFolder = [
   "", "images", "pdf", "assets", "libs", "_build", path.join("_build","assets")
 ]
 
-console.log("Moviendo al folder:", staticFolder)
+console.log("Moviendo al folder:", deployFolder)
 
 for(const folder of buildSubFolder){
   // console.log("Copiando folder:",folder)
   const buildPath = folder ? path.join(buildFolder,folder) : buildFolder
-  const deployPath = folder ? path.join(staticFolder,folder) : staticFolder
+  const deployPath = folder ? path.join(deployFolder,folder) : deployFolder
 
   if(!fs.existsSync(buildPath)){
     continue
@@ -42,3 +42,5 @@ for(const folder of buildSubFolder){
   }
 }
 
+console.log("Moviendo 404.html...")
+fs.copyFileSync(path.join(buildFolder,"index.html"), path.join(deployFolder,"404.html"))
