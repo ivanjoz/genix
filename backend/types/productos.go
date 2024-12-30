@@ -36,6 +36,11 @@ type Producto struct {
 	UpdatedBy int32 `json:",omitempty"`
 	Created   int64 `json:",omitempty"`
 	CreatedBy int32 `json:",omitempty"`
+	// Categorías (necesarias para indexar)
+	Categoria1 int16 `json:"c1,omitempty"`
+	Categoria2 int16 `json:"c2,omitempty"`
+	Categoria3 int16 `json:"c3,omitempty"`
+	Categoria4 int16 `json:"c4,omitempty"`
 }
 
 type _e = Producto
@@ -65,6 +70,10 @@ func (e _e) Updated_() db.CoI64       { return db.CoI64{"updated"} }
 func (e _e) UpdatedBy_() db.CoI32     { return db.CoI32{"updated_by"} }
 func (e _e) Created_() db.CoI64       { return db.CoI64{"created"} }
 func (e _e) CreatedBy_() db.CoI32     { return db.CoI32{"created_by"} }
+func (e _e) Categoria1_() db.CoI16    { return db.CoI16{"categoria_1"} }
+func (e _e) Categoria2_() db.CoI16    { return db.CoI16{"categoria_2"} }
+func (e _e) Categoria3_() db.CoI16    { return db.CoI16{"categoria_3"} }
+func (e _e) Categoria4_() db.CoI16    { return db.CoI16{"categoria_4"} }
 
 func (e Producto) GetSchema() db.TableSchema {
 	return db.TableSchema{
@@ -75,6 +84,8 @@ func (e Producto) GetSchema() db.TableSchema {
 			{Cols: []db.Coln{e.Status_()}, KeepPart: true},
 			{Cols: []db.Coln{e.Updated_()}, KeepPart: true},
 		},
+		LocalIndexes: []db.Coln{
+			e.Categoria1_(), e.Categoria2_(), e.Categoria3_(), e.Categoria4_()},
 	}
 }
 

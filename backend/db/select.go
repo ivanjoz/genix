@@ -252,8 +252,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 		records := recordsMap[i]
 
 		fmt.Println("Query::", queryStr)
-		eg.Go(func() error {
-
+		doScan := func() error {
 			iter := getScyllaConnection().Query(queryStr).Iter()
 			rd, err := iter.RowData()
 			if err != nil {
@@ -328,6 +327,19 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 				}
 			}
 			return nil
+		}
+
+		eg.Go(func() error {
+			err := doScan()
+			if err != nil {
+				if strings.Contains(err.Error(), "no hosts available") {
+					scyllaSession = nil
+					fmt.Println("Reconectando con ScyllaDB...")
+					getScyllaConnection()
+					err = doScan()
+				}
+			}
+			return err
 		})
 	}
 
