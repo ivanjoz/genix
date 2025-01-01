@@ -3,6 +3,7 @@ package operaciones
 import (
 	"app/core"
 	"app/db"
+	"app/types"
 	s "app/types"
 	"encoding/json"
 	"slices"
@@ -13,8 +14,6 @@ import (
 func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 
 	stock := []s.AlmacenProducto{}
-	nowTime := core.SunixTime()
-
 	err := json.Unmarshal([]byte(*req.Body), &stock)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -30,65 +29,23 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	keys := []string{}
-
-	for i := range stock {
-		e := &stock[i]
-		e.EmpresaID = req.Usuario.EmpresaID
-		e.Updated = nowTime
-		if e.Cantidad > 0 && e.Status == 0 {
-			e.Status = 1
-		}
-		e.SelfParse()
-		keys = append(keys, e.ID)
-	}
-
-	// Obtiene el stock actual
-	currentStock := db.Select(func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
-		q.Where(col.ID_().In(keys...))
-	})
-
-	if currentStock.Err != nil {
-		return req.MakeErr("Error al obtener el stock previo:", err)
-	}
-
-	currentStockMap := core.SliceToMapK(currentStock.Records,
-		func(e s.AlmacenProducto) string { return e.ID })
-
-	//Genera los movimientos correspondientes al stock actual
-	movimientos := []s.AlmacenMovimiento{}
-	uuid := core.SunixTimeUUIDx3()
-
+	// Genera los movimientos internos
+	movimientosInternos := []types.MovimientoInterno{}
 	for _, e := range stock {
-		movimiento := s.AlmacenMovimiento{
-			ID:         core.SunixUUIDx3FromID(e.AlmacenID, uuid),
-			EmpresaID:  req.Usuario.EmpresaID,
-			ProductoID: e.ProductoID,
-			SKU:        e.SKU,
-			Lote:       e.Lote,
-			Created:    core.SunixTime(),
-			CreatedBy:  req.Usuario.ID,
-			AlmacenID:  e.AlmacenID,
-			Tipo:       core.If(e.Cantidad > 0, int8(1), 2),
-		}
-		uuid++
-
-		currentCantidad := int32(0)
-		if current, ok := currentStockMap[e.ID]; ok {
-			currentCantidad = current.Cantidad
-		}
-		movimiento.Cantidad = e.Cantidad - currentCantidad
-		movimiento.AlmacenCantidad = currentCantidad + movimiento.Cantidad
-		core.Print(movimiento)
-		movimientos = append(movimientos, movimiento)
+		movimientosInternos = append(movimientosInternos, types.MovimientoInterno{
+			ReemplazarCantidad: true,
+			ProductoID:         e.ProductoID,
+			SKU:                e.SKU,
+			Lote:               e.Lote,
+			AlmacenID:          e.AlmacenID,
+			Cantidad:           e.Cantidad,
+			SubCantidad:        e.SubCantidad,
+		})
 	}
 
-	statements := slices.Concat(
-		db.MakeInsertStatement(&movimientos), db.MakeInsertStatement(&stock))
-	core.Print(statements)
-
-	if err = db.QueryExecStatements(statements); err != nil {
-		return req.MakeErr("Error al obtener el stock previo:", err)
+	err = ApplyMovimientos(movimientosInternos)
+	if err != nil {
+		return req.MakeErr(err)
 	}
 
 	return req.MakeResponse(stock)
@@ -202,4 +159,111 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	return req.MakeResponse(almacenProductos.Records)
+}
+
+func ApplyMovimientos(movimientos []types.MovimientoInterno) error {
+
+	keys := []string{}
+	productosIDs := core.SliceSet[int32]{}
+
+	for _, mov := range movimientos {
+		keys = append(keys, mov.GetAlmacenProductoID())
+		productosIDs.Add(mov.ProductoID)
+	}
+
+	// Obtiene el stock actual
+	currentStock := db.Select(func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
+		q.Where(col.EmpresaID_().Equals(core.Usuario.EmpresaID))
+		q.Where(col.ID_().In(keys...))
+	})
+
+	if currentStock.Err != nil {
+		return core.Err("Error al obtener el stock previo:", currentStock.Err)
+	}
+
+	currentStockMap := core.SliceToMapK(currentStock.Records,
+		func(e s.AlmacenProducto) string { return e.ID })
+
+	// Obtiene el stock del producto en todos los almacenes
+	productosStock := db.Select(func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
+		q.Columns(col.ProductoID_(), col.AlmacenID_(), col.Cantidad_(), col.SubCantidad_())
+		q.Where(col.EmpresaID_().Equals(core.Usuario.EmpresaID))
+		q.Where(col.Status_().Equals(1))
+		q.Where(col.ProductoID_().In(productosIDs.Values...))
+	})
+
+	core.Log("productos stock::", len(productosStock.Records))
+
+	if productosStock.Err != nil {
+		return core.Err("Error al obtener el stock previo:", currentStock.Err)
+	}
+
+	//Genera los movimientos correspondientes al stock actual
+	almacenMovimientos := []s.AlmacenMovimiento{}
+	almacenProductos := []s.AlmacenProducto{}
+	uuid := core.SunixTimeUUIDx3()
+
+	for _, e := range movimientos {
+		movimiento := s.AlmacenMovimiento{
+			ID:         core.SunixUUIDx3FromID(e.AlmacenID, uuid),
+			EmpresaID:  core.Usuario.EmpresaID,
+			ProductoID: e.ProductoID,
+			SKU:        e.SKU,
+			Lote:       e.Lote,
+			Created:    core.SunixTime(),
+			CreatedBy:  core.Usuario.ID,
+			AlmacenID:  e.AlmacenID,
+			Tipo:       core.If(e.Cantidad > 0, int8(1), 2),
+		}
+		uuid++
+
+		currentCantidad := int32(0)
+		almProdID := e.GetAlmacenProductoID()
+		if current, ok := currentStockMap[almProdID]; ok {
+			currentCantidad = current.Cantidad
+		}
+
+		if e.ReemplazarCantidad {
+			movimiento.Cantidad = e.Cantidad - currentCantidad
+			movimiento.AlmacenCantidad = e.Cantidad
+		} else {
+			movimiento.Cantidad = e.Cantidad
+			movimiento.AlmacenCantidad = currentCantidad + e.Cantidad
+		}
+		core.Print(movimiento)
+		almacenMovimientos = append(almacenMovimientos, movimiento)
+
+		costoUn := float32(0)
+		if cs, ok := currentStockMap[almProdID]; ok {
+			costoUn = cs.CostoUn
+		}
+
+		almacenProductos = append(almacenProductos, s.AlmacenProducto{
+			ID:         almProdID,
+			AlmacenID:  e.AlmacenID,
+			ProductoID: e.ProductoID,
+			EmpresaID:  core.Usuario.EmpresaID,
+			SKU:        e.SKU,
+			Lote:       e.Lote,
+			Cantidad:   movimiento.AlmacenCantidad,
+			// SubCantidad: (???),
+			Updated:   core.SunixTime(),
+			UpdatedBy: core.Usuario.ID,
+			Status:    core.If(movimiento.AlmacenCantidad == 0, int8(0), 1),
+			CostoUn:   costoUn,
+		})
+	}
+
+	core.Print(almacenProductos)
+
+	statements := slices.Concat(
+		db.MakeInsertStatement(&almacenMovimientos),
+		db.MakeInsertStatement(&almacenProductos))
+	core.Print(statements)
+
+	if err := db.QueryExecStatements(statements); err != nil {
+		return core.Err("Error al guardar el stock:", err)
+	}
+
+	return nil
 }

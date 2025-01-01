@@ -216,19 +216,19 @@ func (e Sede) GetSchema() db.TableSchema {
 
 type AlmacenProducto struct {
 	TAGS      `table:"almacen_producto"`
-	EmpresaID int32 `json:",omitempty" db:"empresa_id,pk"`
+	EmpresaID int32 `json:",omitempty"`
 	// [Almacen-ID] [status] [Producto-ID] [SKU] [Lote]
 	ID          string  `db:"id,pk"`
-	SKU         string  `json:",omitempty" db:"sku,view"`
-	Lote        string  `json:",omitempty" db:"lote,view"`
-	AlmacenID   int32   `json:",omitempty" db:"almacen_id,view.1"`
-	ProductoID  int32   `json:",omitempty" db:"producto_id,view"`
-	Cantidad    int32   `json:",omitempty" db:"cantidad"`
-	SubCantidad int32   `json:",omitempty" db:"sub_cantidad"`
-	CostoUn     float32 `json:",omitempty" db:"costo_un"`
-	Updated     int32   `json:"upd,omitempty" db:"updated,view.1"`
-	UpdatedBy   int32   `json:",omitempty" db:"updated_by"`
-	Status      int8    `json:"ss,omitempty" db:"status"`
+	SKU         string  `json:",omitempty"`
+	Lote        string  `json:",omitempty"`
+	AlmacenID   int32   `json:",omitempty"`
+	ProductoID  int32   `json:",omitempty"`
+	Cantidad    int32   `json:",omitempty"`
+	SubCantidad int32   `json:",omitempty"`
+	CostoUn     float32 `json:",omitempty"`
+	Updated     int32   `json:"upd,omitempty"`
+	UpdatedBy   int32   `json:",omitempty"`
+	Status      int8    `json:"ss,omitempty"`
 }
 
 type alp = AlmacenProducto
@@ -254,14 +254,16 @@ func (e AlmacenProducto) GetSchema() db.TableSchema {
 		Views: []db.View{
 			{Cols: []db.Coln{e.SKU_()}, KeepPart: true},
 			{Cols: []db.Coln{e.Lote_()}, KeepPart: true},
-			{Cols: []db.Coln{e.ProductoID_()}, KeepPart: true},
-			{Cols: []db.Coln{e.AlmacenID_(), e.Updated_()}, ConcatI64: []int8{9}},
+			// {Cols: []db.Coln{e.ProductoID_()}, KeepPart: true},
+			{Cols: []db.Coln{e.ProductoID_(), e.Status_()}, KeepPart: true, ConcatI32: []int8{1}},
+			{Cols: []db.Coln{e.AlmacenID_(), e.Updated_()}, KeepPart: true, ConcatI64: []int8{9}},
+			{Cols: []db.Coln{e.AlmacenID_(), e.Status_()}, KeepPart: true, ConcatI32: []int8{1}},
 		},
 	}
 }
 
 func (e *AlmacenProducto) SelfParse() {
-	e.ID = Concat62(e.AlmacenID, e.Status, e.ProductoID, e.SKU, e.Lote)
+	e.ID = Concat62(e.AlmacenID, e.ProductoID, e.SKU, e.Lote)
 }
 
 func (e *AlmacenProducto) GetView(view int8) any {
@@ -330,4 +332,21 @@ func (e alm) GetSchema() db.TableSchema {
 			{Cols: []db.Coln{e.AlmacenRefID_(), e.Created_()}, ConcatI64: []int8{9}},
 		},
 	}
+}
+
+type MovimientoInterno struct {
+	ProductoID           int32
+	SKU                  string
+	Lote                 string
+	AlmacenID            int32
+	AlmacenDestinoID     int32
+	ReemplazarCantidad   bool
+	Cantidad             int32
+	SubCantidad          int32
+	ModificarCantidad    int32
+	ModificarSubCantidad int32
+}
+
+func (e *MovimientoInterno) GetAlmacenProductoID() string {
+	return Concat62(e.AlmacenID, e.ProductoID, e.SKU, e.Lote)
 }
