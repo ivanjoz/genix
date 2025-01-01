@@ -563,6 +563,57 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 					}
 				}
 
+				getValuesGroups := func() (valuesGroups [][]int64, rangeColumns []*columnInfo) {
+					for _, col := range columns {
+						// fmt.Println("iterando columna::", col.Name)
+						st := statementsMap[col.Name].from
+						if len(rangeColumns) > 0 || slices.Contains(rangeOperators, st.Operator) {
+							rangeColumns = append(rangeColumns, col)
+							// fmt.Println("continue here::", col.Name)
+							continue
+						}
+
+						if st == nil {
+							// fmt.Println("iterando columna 1::", col.Name)
+							for i := range valuesGroups {
+								valuesGroups[i] = append(valuesGroups[i], 0)
+							}
+						} else {
+							statementValues := st.Values
+							if len(statementValues) == 0 {
+								statementValues = append(statementValues, st.Value)
+							}
+
+							// fmt.Println("iterando columna 2::", col.Name, statementValues)
+
+							if len(valuesGroups) > 0 {
+								valuesGroupsCurrent := valuesGroups
+								valuesGroups = [][]int64{}
+								for _, value := range statementValues {
+									valueInt64 := convertToInt64(value)
+									for _, vg := range valuesGroupsCurrent {
+										valuesGroups = append(valuesGroups, append(vg, valueInt64))
+									}
+								}
+							} else {
+								for _, v := range statementValues {
+									valuesGroups = append(valuesGroups, []int64{convertToInt64(v)})
+								}
+							}
+						} /* else {
+							fmt.Println("iterando columna 3::", col.Name)
+							if len(st.Values) == 1 {
+								st.Value = st.Values[0]
+							}
+							value := convertToInt64(st.Value)
+							for i := range valuesGroups {
+								valuesGroups[i] = append(valuesGroups[i], value)
+							}
+						} */
+					}
+					return valuesGroups, rangeColumns
+				}
+
 				if useBeetween {
 					valuesFrom, valuesTo := []int64{}, []int64{}
 
@@ -589,39 +640,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 
 					return []string{whereSt}
 				} else if slices.Contains(rangeOperators, statements[len(statements)-1].Operator) {
-					valuesGroups := [][]int64{{}}
-					rangeColumns := []*columnInfo{}
-
-					for _, col := range columns {
-						st := statementsMap[col.Name].from
-						if len(rangeColumns) > 0 || slices.Contains(rangeOperators, st.Operator) {
-							rangeColumns = append(rangeColumns, col)
-							continue
-						}
-
-						if st == nil {
-							for i := range valuesGroups {
-								valuesGroups[i] = append(valuesGroups[i], 0)
-							}
-						} else if len(st.Values) >= 1 {
-							valuesGroupsCurrent := valuesGroups
-							valuesGroups = [][]int64{}
-							for _, value_ := range st.Values {
-								value := convertToInt64(value_)
-								for _, vg := range valuesGroupsCurrent {
-									valuesGroups = append(valuesGroups, append(vg, value))
-								}
-							}
-						} else {
-							if len(st.Values) == 1 {
-								st.Value = st.Values[0]
-							}
-							value := convertToInt64(st.Value)
-							for i := range valuesGroups {
-								valuesGroups[i] = append(valuesGroups[i], value)
-							}
-						}
-					}
+					valuesGroups, rangeColumns := getValuesGroups()
 
 					// Create the ranges
 					for _, valuesFrom := range valuesGroups {
@@ -641,6 +660,17 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 						)
 						whereStatements = append(whereStatements, whereStatement)
 					}
+				} else {
+					valuesGroups, _ := getValuesGroups()
+					fmt.Println("values group::", valuesGroups)
+
+					hashValues := []int64{}
+					for _, values := range valuesGroups {
+						hashValues = append(hashValues, makeValue(values))
+					}
+					whereStatements = append(whereStatements,
+						fmt.Sprintf("%v IN (%v)", view.column.Name, Concatx(", ", hashValues)),
+					)
 				}
 
 				if partStatement != nil {

@@ -128,6 +128,7 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 	return core.FuncResponse{}
 }
 
+// fn-homologate
 func Homologate(args *core.ExecArgs) core.FuncResponse {
 
 	/*
@@ -162,9 +163,27 @@ func Homologate(args *core.ExecArgs) core.FuncResponse {
 	return core.FuncResponse{}
 }
 
+// fn-recalc
 func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
-	for _, cn := range MakeScyllaControllers() {
-		cn.RecalcVirtualColumns()
-	}
+	/*
+		for _, cn := range MakeScyllaControllers() {
+			cn.RecalcVirtualColumns()
+		}
+	*/
+	/*
+		db.RecalcVirtualColumns[types.AlmacenProducto]()
+	*/
+
+	db.MakeScyllaConnection(db.ConnParams{
+		Host:     core.Env.DB_HOST,
+		Port:     int(core.Env.DB_PORT),
+		User:     core.Env.DB_USER,
+		Password: core.Env.DB_PASSWORD,
+		Keyspace: core.Env.DB_NAME,
+	})
+
+	db.QueryExec("DELETE FROM genix.almacen_producto where empresa_id = 1")
+	db.QueryExec("DELETE FROM genix.almacen_movimiento where empresa_id = 1")
+
 	return core.FuncResponse{}
 }
