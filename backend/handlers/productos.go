@@ -19,6 +19,7 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	errGroup.Go(func() error {
 		err := db.SelectRef(&productos, func(q *db.Query[s.Producto], col s.Producto) {
+			q.Exclude(col.Stock_(), col.StockStatus_())
 			q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
 			if updated > 0 {
 				q.Where(col.Updated_().GreaterEqual(updated))
@@ -268,9 +269,9 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 
 	errGroup.Go(func() error {
 		err := db.SelectRef(&productos, func(q *db.Query[s.Producto], col s.Producto) {
-			q.Columns(col.ID_(), col.Nombre_(), col.Descripcion_(), col.Precio_(), col.Descuento_(), col.PrecioFinal_(), col.Images_())
+			q.Columns(col.ID_(), col.Nombre_(), col.Descripcion_(), col.Precio_(), col.Descuento_(), col.PrecioFinal_(), col.Images_(), col.Stock_())
 			q.Where(col.EmpresaID_().Equals(empresaID))
-			q.Where(col.Status_().Equals(1))
+			q.Where(col.StockStatus_().Equals(1))
 			if categoriaID > 0 {
 				q.Where(col.CategoriasIDs_().Contains(categoriaID))
 			}

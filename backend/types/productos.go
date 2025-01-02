@@ -7,6 +7,11 @@ type ProductoImagen struct {
 	Descripcion string `ms:"d" json:"d"`
 }
 
+type AlmacenStockMin struct {
+	AlmacenID int32 `cbor:"1,keyasint" json:"a"`
+	Cantidad  int32 `cbor:"2,keyasint" json:"c"`
+}
+
 type Producto struct {
 	TAGS          `table:"productos"`
 	EmpresaID     int32 `json:",omitempty"`
@@ -28,8 +33,11 @@ type Producto struct {
 	SbnDescuento  float32 `json:",omitempty"`
 	SbnPreciFinal int32   `json:",omitempty"`
 
-	Propiedades []ProductoPropiedades `json:",omitempty"`
-	Images      []ProductoImagen      `json:",omitempty"`
+	Propiedades    []ProductoPropiedades `json:",omitempty"`
+	Images         []ProductoImagen      `json:",omitempty"`
+	Stock          []AlmacenStockMin     `json:",omitempty"`
+	StockReservado []AlmacenStockMin     `json:",omitempty"`
+	StockStatus    int8                  `json:",omitempty"`
 	// Propiedades generales
 	Status    int8  `json:"ss,omitempty"`
 	Updated   int64 `json:"upd,omitempty"`
@@ -45,35 +53,38 @@ type Producto struct {
 
 type _e = Producto
 
-func (e _e) EmpresaID_() db.CoI32     { return db.CoI32{"empresa_id"} }
-func (e _e) ID_() db.CoI32            { return db.CoI32{"id"} }
-func (e _e) TempID_() db.CoI32        { return db.CoI32{"temp_id"} }
-func (e _e) Nombre_() db.CoStr        { return db.CoStr{"nombre"} }
-func (e _e) Descripcion_() db.CoStr   { return db.CoStr{"descripcion"} }
-func (e _e) ContentHTML_() db.CoStr   { return db.CoStr{"content_html"} }
-func (e _e) CategoriasIDs_() db.CsI32 { return db.CsI32{"categorias_ids"} }
-func (e _e) Params_() db.CsI8         { return db.CsI8{"params_ids"} }
-func (e _e) Precio_() db.CoI32        { return db.CoI32{"precio"} }
-func (e _e) Descuento_() db.CoF32     { return db.CoF32{"descuento"} }
-func (e _e) PrecioFinal_() db.CoI32   { return db.CoI32{"precio_final"} }
-func (e _e) Peso_() db.CoF32          { return db.CoF32{"peso"} }
-func (e _e) Volumen_() db.CoF32       { return db.CoF32{"volumen"} }
-func (e _e) SbnCantidad_() db.CoI32   { return db.CoI32{"sbn_cantidad"} }
-func (e _e) SbnUnidad_() db.CoStr     { return db.CoStr{"sbn_unidad"} }
-func (e _e) SbnPrecio_() db.CoI32     { return db.CoI32{"sbn_precio"} }
-func (e _e) SbnDescuento_() db.CoF32  { return db.CoF32{"sbn_decuento"} }
-func (e _e) SbnPreciFinal_() db.CoI32 { return db.CoI32{"sbn_precio_final"} }
-func (e _e) Propiedades_() db.CoAny   { return db.CoAny{"propiedades"} }
-func (e _e) Images_() db.CoAny        { return db.CoAny{"images"} }
-func (e _e) Status_() db.CoI8         { return db.CoI8{"status"} }
-func (e _e) Updated_() db.CoI64       { return db.CoI64{"updated"} }
-func (e _e) UpdatedBy_() db.CoI32     { return db.CoI32{"updated_by"} }
-func (e _e) Created_() db.CoI64       { return db.CoI64{"created"} }
-func (e _e) CreatedBy_() db.CoI32     { return db.CoI32{"created_by"} }
-func (e _e) Categoria1_() db.CoI16    { return db.CoI16{"categoria_1"} }
-func (e _e) Categoria2_() db.CoI16    { return db.CoI16{"categoria_2"} }
-func (e _e) Categoria3_() db.CoI16    { return db.CoI16{"categoria_3"} }
-func (e _e) Categoria4_() db.CoI16    { return db.CoI16{"categoria_4"} }
+func (e _e) EmpresaID_() db.CoI32      { return db.CoI32{"empresa_id"} }
+func (e _e) ID_() db.CoI32             { return db.CoI32{"id"} }
+func (e _e) TempID_() db.CoI32         { return db.CoI32{"temp_id"} }
+func (e _e) Nombre_() db.CoStr         { return db.CoStr{"nombre"} }
+func (e _e) Descripcion_() db.CoStr    { return db.CoStr{"descripcion"} }
+func (e _e) ContentHTML_() db.CoStr    { return db.CoStr{"content_html"} }
+func (e _e) CategoriasIDs_() db.CsI32  { return db.CsI32{"categorias_ids"} }
+func (e _e) Params_() db.CsI8          { return db.CsI8{"params_ids"} }
+func (e _e) Precio_() db.CoI32         { return db.CoI32{"precio"} }
+func (e _e) Descuento_() db.CoF32      { return db.CoF32{"descuento"} }
+func (e _e) PrecioFinal_() db.CoI32    { return db.CoI32{"precio_final"} }
+func (e _e) Peso_() db.CoF32           { return db.CoF32{"peso"} }
+func (e _e) Volumen_() db.CoF32        { return db.CoF32{"volumen"} }
+func (e _e) SbnCantidad_() db.CoI32    { return db.CoI32{"sbn_cantidad"} }
+func (e _e) SbnUnidad_() db.CoStr      { return db.CoStr{"sbn_unidad"} }
+func (e _e) SbnPrecio_() db.CoI32      { return db.CoI32{"sbn_precio"} }
+func (e _e) SbnDescuento_() db.CoF32   { return db.CoF32{"sbn_decuento"} }
+func (e _e) SbnPreciFinal_() db.CoI32  { return db.CoI32{"sbn_precio_final"} }
+func (e _e) Propiedades_() db.CoAny    { return db.CoAny{"propiedades"} }
+func (e _e) Images_() db.CoAny         { return db.CoAny{"images"} }
+func (e _e) Status_() db.CoI8          { return db.CoI8{"status"} }
+func (e _e) Updated_() db.CoI64        { return db.CoI64{"updated"} }
+func (e _e) UpdatedBy_() db.CoI32      { return db.CoI32{"updated_by"} }
+func (e _e) Created_() db.CoI64        { return db.CoI64{"created"} }
+func (e _e) CreatedBy_() db.CoI32      { return db.CoI32{"created_by"} }
+func (e _e) Categoria1_() db.CoI16     { return db.CoI16{"categoria_1"} }
+func (e _e) Categoria2_() db.CoI16     { return db.CoI16{"categoria_2"} }
+func (e _e) Categoria3_() db.CoI16     { return db.CoI16{"categoria_3"} }
+func (e _e) Categoria4_() db.CoI16     { return db.CoI16{"categoria_4"} }
+func (e _e) Stock_() db.CoAny          { return db.CoAny{"stock"} }
+func (e _e) StockReservado_() db.CoAny { return db.CoAny{"stock_reservado"} }
+func (e _e) StockStatus_() db.CoI8     { return db.CoI8{"stock_status"} }
 
 func (e Producto) GetSchema() db.TableSchema {
 	return db.TableSchema{
@@ -82,6 +93,7 @@ func (e Producto) GetSchema() db.TableSchema {
 		Keys:      []db.Coln{e.ID_()},
 		Views: []db.View{
 			{Cols: []db.Coln{e.Status_()}, KeepPart: true},
+			{Cols: []db.Coln{e.StockStatus_()}, KeepPart: true},
 			{Cols: []db.Coln{e.Updated_()}, KeepPart: true},
 		},
 		LocalIndexes: []db.Coln{
@@ -143,19 +155,6 @@ func (e Almacen) GetSchema() db.TableSchema {
 			{Cols: []db.Coln{e.Updated_()}, KeepPart: true},
 		},
 	}
-}
-
-type ProductoStock struct {
-	TAGS             `table:"producto_stock"`
-	EmpresaID        int32   `db:"empresa_id,pk"`
-	ProductoID       int32   `db:"id,pk"`
-	AlmacenID        int32   `db:"almacen_id"`
-	LayoutID         int16   `db:"layout_id"`
-	LayoutPosicionID int16   `db:"layout_posicion_id"`
-	Stock            float32 `db:"stock"`
-	SKU              string  `db:"sku"`
-	Updated          int64   `json:"upd" db:"updated,view"`
-	UpdatedBy        int32   `db:"updated_by"`
 }
 
 type AlmacenLayout struct {

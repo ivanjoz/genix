@@ -161,6 +161,22 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(almacenProductos.Records)
 }
 
+type almacenStockCount struct {
+	cantidad    int32
+	subcantidad int32
+}
+
+type productoStockCounter struct {
+	productoID     int32
+	almacenesStock map[int32]almacenStockCount
+}
+
+func (ps *productoStockCounter) AddCant(almacenID int32, cant int32) {
+	count := ps.almacenesStock[almacenID]
+	count.cantidad += cant
+	ps.almacenesStock[almacenID] = count
+}
+
 func ApplyMovimientos(movimientos []types.MovimientoInterno) error {
 
 	keys := []string{}
@@ -198,6 +214,22 @@ func ApplyMovimientos(movimientos []types.MovimientoInterno) error {
 		return core.Err("Error al obtener el stock previo:", currentStock.Err)
 	}
 
+	productoStock := map[int32]*productoStockCounter{}
+	getProductoStock := func(productoID int32) *productoStockCounter {
+		if _, ok := productoStock[productoID]; !ok {
+			productoStock[productoID] = &productoStockCounter{
+				productoID:     productoID,
+				almacenesStock: map[int32]almacenStockCount{},
+			}
+		}
+		return productoStock[productoID]
+	}
+
+	for _, e := range productosStock.Records {
+		ps := getProductoStock(e.ProductoID)
+		ps.AddCant(e.AlmacenID, e.Cantidad)
+	}
+
 	//Genera los movimientos correspondientes al stock actual
 	almacenMovimientos := []s.AlmacenMovimiento{}
 	almacenProductos := []s.AlmacenProducto{}
@@ -230,8 +262,11 @@ func ApplyMovimientos(movimientos []types.MovimientoInterno) error {
 			movimiento.Cantidad = e.Cantidad
 			movimiento.AlmacenCantidad = currentCantidad + e.Cantidad
 		}
-		core.Print(movimiento)
+
 		almacenMovimientos = append(almacenMovimientos, movimiento)
+
+		ps := getProductoStock(e.ProductoID)
+		ps.AddCant(e.AlmacenID, movimiento.Cantidad)
 
 		costoUn := float32(0)
 		if cs, ok := currentStockMap[almProdID]; ok {
@@ -263,6 +298,37 @@ func ApplyMovimientos(movimientos []types.MovimientoInterno) error {
 
 	if err := db.QueryExecStatements(statements); err != nil {
 		return core.Err("Error al guardar el stock:", err)
+	}
+
+	// Agrega los datos del stock a los productos
+	productosToUpdate := []s.Producto{}
+	for _, e := range productoStock {
+		almacenStock := []s.AlmacenStockMin{}
+		for almacenID, cant := range e.almacenesStock {
+			if cant.cantidad == 0 && cant.subcantidad == 0 {
+				continue
+			}
+			almacenStock = append(almacenStock, s.AlmacenStockMin{
+				AlmacenID: almacenID,
+				Cantidad:  cant.cantidad,
+			})
+		}
+		productosToUpdate = append(productosToUpdate, s.Producto{
+			EmpresaID:   core.Usuario.EmpresaID,
+			ID:          e.productoID,
+			Stock:       almacenStock,
+			StockStatus: core.If(almacenStock == nil, int8(0), 1),
+		})
+	}
+
+	core.Log("productos for update...")
+	core.Print(productosToUpdate)
+
+	pCol := s.Producto{}
+	err := db.Update(&productosToUpdate, pCol.Stock_(), pCol.StockStatus_())
+	if err != nil {
+		// Este error es interno, dado que el stock ya se guardó en la tabla principal de almacén_productos
+		core.Log("Error al actualizar el stock en productos:", err)
 	}
 
 	return nil

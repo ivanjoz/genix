@@ -35,6 +35,7 @@ export interface IProducto {
   Images?: IProductoImage[]
   Image?: IProductoImage
   CategoriasIDs?: number[]
+  Stock?: {a /* almacen */: number, c /* cantidad */: number}[]
   ss: number
   upd: number
   _stock?: number
@@ -54,6 +55,7 @@ export const useProductosAPI = (): GetSignal<IProductoResult> => {
       useIndexDBCache: 'productos',
     },
     (result_) => {
+      console.log("result productos 1:: ", result_)
       const result = result_ as IProductoResult
       for(let e of result.Records){
         e.Propiedades = e.Propiedades || []
