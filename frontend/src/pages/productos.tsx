@@ -42,21 +42,30 @@ export function ProductosCuadrilla(props: IHeader1) { // type: 10
                 <div>{e.Nombre}</div>
                 <div class="ff-bold h3">s/. {formatN(e.PrecioFinal/100,2)}</div>
               </div>
-              <div class={`flex ai-center jc-center ${s1.product_cart_button}`}
-                onClick={ev => {
-                  ev.stopPropagation()
-                  addProducto(e)
-                }}
-              >
-                <i class="icon-basket _icon"></i>
-                <div class={s1.product_cart_bn_cant}>{cartCant()}</div>
-                { cartCant() > 0
-                  ? <div class={s1.product_cart_bn_text}>
-                      Añadir más <span>({cartCant()})</span>
-                    </div>
-                  : <div class={s1.product_cart_bn_text}>Añadir al Carrito</div>
-                }                
-              </div>
+              <Show when={cartCant() < e._stock}>
+                <div class={`flex ai-center jc-center ${s1.product_cart_button}`}
+                  onClick={ev => {
+                    ev.stopPropagation()
+                    addProducto(e)
+                  }}
+                >
+                  <i class="icon-basket _icon"></i>
+                  <div class={s1.product_cart_bn_cant}>{cartCant()}</div>                  
+                    { cartCant() > 0
+                      ? <div class={s1.product_cart_bn_text}>
+                          Añadir más <span>({cartCant()})</span>
+                        </div>
+                      : <div class={s1.product_cart_bn_text}>Añadir al Carrito</div>
+                    }                          
+                </div>
+              </Show>
+              <Show when={cartCant() >= e._stock}>
+                <div class={`flex ai-center jc-center ${s1.product_cart_button}`}>
+                  <i class="icon-attention _icon"></i>
+                  <div class={s1.product_cart_bn_cant}>{cartCant()}</div>
+                  <div class={s1.product_cart_bn_text}>Stock Máximo = <span>{cartCant()}</span></div>     
+                </div>
+              </Show> 
             </div>
           </div>
         })

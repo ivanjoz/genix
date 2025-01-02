@@ -527,10 +527,11 @@ func Update[T TableSchemaInterface](records *[]T, columnsToInclude ...Coln) erro
 	}
 
 	queryStatements := makeUpdateStatementsBase(records, columnsToInclude, nil, false)
-	queryInsert := makeQueryStatement(queryStatements)
-	if err := QueryExec(queryInsert); err != nil {
-		fmt.Println(queryInsert)
-		fmt.Println("Error inserting records:", err)
+	queryUpdate := makeQueryStatement(queryStatements)
+	fmt.Println(queryUpdate)
+
+	if err := QueryExec(queryUpdate); err != nil {
+		fmt.Println("Error updating records:", err)
 		return err
 	}
 	return nil

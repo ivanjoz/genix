@@ -4,7 +4,7 @@ import { IProducto } from "~/services/operaciones/productos";
 import { makeRoute } from "~/shared/http";
 import { getToken } from "~/shared/security";
 
-const maxCacheTime = 5 * 60 // 5 minutos
+const maxCacheTime = 2 // 2 segundos
 
 const productosPromiseMap: Map<string,Promise<any>> = new Map()
 
@@ -19,6 +19,13 @@ export const getEmpresaID = (): number => {
     return parseInt(location[1])
   }
   return 0
+}
+
+const parseProductos = (productos: IProducto[]) => {
+  for(const p of productos){
+    p._stock = 0
+    for(const stock of p.Stock){ p._stock += (stock.c||0) }
+  }
 }
 
 export const useProductosCmsAPI = (categoriasIDs?: number[]) => {
@@ -56,6 +63,7 @@ export const useProductosCmsAPI = (categoriasIDs?: number[]) => {
       .then(results => {
         console.log("productos obtenidos desde servidor:", results)
         results.updated = nowTime
+        parseProductos(results.productos||[])
         resolve(results)
         if(results.productos?.length > 0){
           localStorage.setItem(key, JSON.stringify(results))
