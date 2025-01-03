@@ -163,7 +163,29 @@ export interface ICartFloatingProducto{
   mode?: 1 | 2
 }
 
+const [productWarnMessage, setProductWarnMessage] = createSignal({ id: 0, msg: "" })
+
+const clearProductoWarn = () => {
+  if(productWarnMessage().id > 0){
+    setProductWarnMessage({ id: 0, msg: "" })
+  }
+}
+
+let prevCartSize = 0
+createEffect(() => {
+  if(prevCartSize !== cartProductos().size){
+    prevCartSize = cartProductos().size
+    setProductWarnMessage({ id: 0, msg: "" }) 
+  }
+})
+
 export const CartFloatingProducto = (props: ICartFloatingProducto) => {
+
+  const message = createMemo(() => {
+    if(productWarnMessage().id === props.producto.ID){
+      return productWarnMessage().msg
+    }
+  })
 
   const precio = createMemo(on(
     () => [ cartProductos() ], 
@@ -182,50 +204,67 @@ export const CartFloatingProducto = (props: ICartFloatingProducto) => {
     setCartProductos(new Map(cartProductos()))
   }
 
-  return <div class={`flex w100 ${s1.floating_producto_card} p-rel`}
+  return <div class="p-rel w100"
       classList={{ 
-        "s2": props.mode === 2, 
         "mb-10": (props.mode||1) === 1, 
         "mb-12": (props.mode||1) === 2 
       }}
     >
-    <div class={`h100 ${s1.floating_producto_card_img}`}>
-      <ImageCtn src={"img-productos/"+ props.producto.Images[0]?.n} size={2}
-        class={"h100 w100 object-cover"}
-        types={["avif","webp"]}
-      />
-    </div>
-    <div class={`p-rel w100 flex-column ml-06 ${s1.producto_card_ctn}`}>
-      <div>{props.producto.Nombre}</div>
-      <div class={`p-abs flex-center ${s1.producto_card_btn_del}`} onClick={ev => {
-        ev.stopPropagation()
-        cartProductos().delete(props.producto.ID)
-        setCartProductos(new Map(cartProductos()))
-      }}>
-        <i class="icon-cancel"></i>
-      </div>
-      <div class={`p-abs h3 ff-semibold ${s1.producto_card_price}`}>
-        s./ {formatN(precio()/100, 2)}
-      </div>
-      <div class={`p-abs flex ai-center ff-semibold ${s1.producto_card_btn_ctn}`}>
-        <button onClick={ev => {
-          ev.stopPropagation(); add(props.cant - 1)
-        }} class={`${s1.producto_card_btn_cant}`}>-</button>
-        <input type="number" value={cant()} 
-          class={`mr-02 ml-02 ${s1.producto_card_btn_input}`}
-          onChange={ev => {
-            const newValue = parseInt(ev.target.value||"0")
-            if(newValue > 0){
-              add(newValue)
-            } else {
-              ev.target.value = String(props.cant)
-            }
-          }}
+    <div class={`flex w100 ${s1.floating_producto_card} p-rel`}
+        classList={{ "s2": props.mode === 2 }}
+      >
+      <div class={`h100 ${s1.floating_producto_card_img}`}>
+        <ImageCtn src={"img-productos/"+ props.producto.Images[0]?.n} size={2}
+          class={"h100 w100 object-cover"}
+          types={["avif","webp"]}
         />
-        <button onClick={ev => {
-          ev.stopPropagation(); add(props.cant + 1)
-        }} class={`${s1.producto_card_btn_cant}`}>+</button>
+      </div>
+      <div class={`p-rel w100 flex-column ml-06 ${s1.producto_card_ctn}`}>
+        <div>{props.producto.Nombre}</div>
+        <div class={`p-abs flex-center ${s1.producto_card_btn_del}`} onClick={ev => {
+          ev.stopPropagation()
+          clearProductoWarn()
+          cartProductos().delete(props.producto.ID)
+          setCartProductos(new Map(cartProductos()))
+        }}>
+          <i class="icon-cancel"></i>
+        </div>
+        <div class={`p-abs h3 ff-semibold ${s1.producto_card_price}`}>
+          s./ {formatN(precio()/100, 2)}
+        </div>
+        <div class={`p-abs flex ai-center ff-semibold ${s1.producto_card_btn_ctn}`}>
+          <button onClick={ev => {
+            ev.stopPropagation(); add(props.cant - 1); clearProductoWarn()
+          }} class={`${s1.producto_card_btn_cant}`}>-</button>
+          <input type="number" value={cant()} 
+            class={`mr-02 ml-02 ${s1.producto_card_btn_input}`}
+            onChange={ev => {
+              let newValue = parseInt(ev.target.value||"0")
+              if(newValue > props.producto._stock){
+                newValue = props.producto._stock
+                ev.target.value = newValue as unknown as string
+                setProductWarnMessage({ 
+                  id: props.producto.ID,
+                  msg: `El stock máximo es ${props.producto._stock}`
+                })
+                add(newValue)
+              } else if(newValue > 0){
+                add(newValue); clearProductoWarn()
+              } else {
+                ev.target.value = String(props.cant)
+              }
+            }}
+          />
+          { cant() < props.producto._stock &&
+            <button onClick={ev => {
+              ev.stopPropagation(); add(props.cant + 1); clearProductoWarn()
+            }} class={`${s1.producto_card_btn_cant}`}>+</button>
+          }
+        </div>
       </div>
     </div>
+    <Show when={!!message()}>
+      <div class="c-red h5 mt-02"><i class="icon-attention"></i> {message()}</div>
+    </Show>
   </div>
 }
