@@ -4,6 +4,7 @@ import { CartFloatingProducto, cartProductos } from "./productos"
 import { formatN } from "~/shared/main"
 import s1 from "./components.module.css"
 import { Input } from "~/components/Input"
+import { CiudadSelector } from "~/core/components"
 
 export const [cartOption, setCartOption] = createSignal(1)
 
@@ -18,6 +19,7 @@ export interface ICartForm {
   email: string
   direccion?: string
   referencia?: string
+  ciudadID?: string
 }
 
 export const [cartForm, setCartForm] = createSignal({} as ICartForm)
@@ -103,6 +105,9 @@ export const EcommerceCart = (props: IEcommerceCart) => {
         />
         <Input label="Correo Electrónico" saveOn={cartForm()} save="email"  
           css="w-12x mb-10" required={true}
+        />
+        <CiudadSelector css={["w-12x mb-10","w-12x mb-10","w-12x mb-10"]}
+          saveOn={cartForm()} save="ciudadID" 
         />
         <Input label="Dirección" saveOn={cartForm()} save="direccion"  
           css="w-24x mb-10" required={true}

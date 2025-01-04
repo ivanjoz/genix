@@ -245,3 +245,15 @@ export const CardArrowSteps = (props: ICardArrowSteps) => {
   }
   </div>
 }
+
+
+export interface ISpinner4 {
+  style: JSX.CSSProperties
+}
+
+export const Spinner4 = (props: ISpinner4) => {
+  return <div style={props.style}>
+    <div class="progress1">  
+    </div>
+  </div>
+}

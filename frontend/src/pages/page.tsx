@@ -95,6 +95,7 @@ export function PageViewer() {
 
 export default function PageBuilder() {
 
-  return <PageRenderer isEditable={false} sections={pageExample} />
-
+  return <>
+    <PageRenderer isEditable={false} sections={pageExample} />
+  </>
 }

@@ -236,6 +236,30 @@ export const createIndexDB = (modules: IModule[]): Promise<any> => {
   })
 }
 
+const DEXIE_ECOMMERCE_VERSION = 1
+
+export const makeEcommerceDB = (): Promise<Dexie> => {
+  // IndexedDB Ecommerce
+  let db = window.DexieEcommerceDB as Dexie
+  if(!db){
+    db = window.DexieEcommerceDB = new Dexie("ecommerce")
+    db.version(DEXIE_ECOMMERCE_VERSION).stores({
+      cache: "key"
+    })
+  }
+
+  return new Promise((resolve, reject) => {
+    if (db.isOpen()){ resolve(db) }
+    else {
+      db.open().then(() => {
+        console.log('Base de datos IndexDB inicializada.')
+        resolve(db)
+      })
+      .catch(error => { console.warn(error); reject(error) })
+    }
+  })
+}
+
 export const arrayToMapS = <T>(array: T[], keys?: string | string[]):
   Map<string, T> => {
   const map = new Map()

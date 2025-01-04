@@ -1316,3 +1316,31 @@ body.dark .search-opt {
     opacity: 0;
   }
 }
+
+
+/* Spinner4 */
+.progress1 {
+  width: 96px;
+  height: 17.6px;
+  border-radius: 16px;
+  color: #7c7dc6;
+  border: 1.6px solid;
+  position: relative;
+  z-index: 41;
+}
+
+.progress1::before {
+  content: "";
+  position: absolute;
+  margin: 1.6px;
+  inset: 0 100% 0 0;
+  border-radius: inherit;
+  background: currentColor;
+  animation: progress-pf82op 2s infinite;
+}
+
+@keyframes progress-pf82op {
+  100% {
+     inset: 0;
+  }
+}
