@@ -6,8 +6,10 @@ import (
 	"app/handlers"
 	s "app/types"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"time"
 )
@@ -125,6 +127,40 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 			panic(err)
 		}
 	*/
+	return core.FuncResponse{}
+}
+
+func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
+
+	// ciudades de Peru
+	ciudades := db.Select(func(q *db.Query[s.PaisCiudad], col s.PaisCiudad) {
+		q.Columns(col.Nombre_(), col.CiudadID_(), col.PadreID_())
+		q.Where(col.PaisID_().Equals(604))
+	})
+
+	if ciudades.Err != nil {
+		panic(ciudades.Err)
+	}
+
+	core.Log("ciudades obtenidas::", len(ciudades.Records))
+
+	cwd, _ := os.Getwd()
+	parentDir := filepath.Dir(cwd)
+	filePath := filepath.Join(parentDir, "frontend", "public", "assets", "peru_ciudades.json")
+
+	file, err := os.Create(filePath)
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return core.FuncResponse{}
+	}
+	defer file.Close()
+
+	// Encode the struct as JSON and write it to the file
+	encoder := json.NewEncoder(file)
+	if err := encoder.Encode(ciudades.Records); err != nil {
+		fmt.Println("Error encoding JSON:", err)
+	}
+
 	return core.FuncResponse{}
 }
 

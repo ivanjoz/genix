@@ -21,12 +21,12 @@ func (e Increment) GetSchema() db.TableSchema {
 
 type PaisCiudad struct {
 	TAGS         `table:"pais_ciudades"`
-	PaisID       int32       `db:"pais_id,pk"`
+	PaisID       int32       `json:",omitempty" db:"pais_id,pk"`
 	CiudadID     string      `json:"ID" db:"ciudad_id,pk"`
 	Nombre       string      `db:"nombre"`
 	PadreID      string      `db:"padre_id"`
-	Jerarquia    int8        `db:"jerarquia"`
-	Updated      int64       `json:"upd" db:"updated,view"`
+	Jerarquia    int8        `json:",omitempty" db:"jerarquia"`
+	Updated      int64       `json:"upd,omitempty" db:"updated,view"`
 	Departamento *PaisCiudad `json:"-"`
 	Provincia    *PaisCiudad `json:"-"`
 }

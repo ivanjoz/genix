@@ -118,7 +118,7 @@ export const ComercialModule: IModule = {
   id: 2,
   code: "comercial",
   indexedDBTables: {
-
+    ecommerce_cache: "key"
   },
   menus: [
     { name: "Productos", minName: "PRD",  id: 2, icon: "icon-flow-merge",

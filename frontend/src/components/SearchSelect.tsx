@@ -1,8 +1,9 @@
-import { For, Show, createEffect, createSignal, on, onMount } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, on, onMount } from "solid-js";
 import { Portal } from "solid-js/web";
 import { throttle } from "~/core/main";
 import { deviceType } from "~/app";
 import s1 from "./components.module.css"
+import { Spinner4 } from "./Cards";
 
 interface SearchSelect<T> {
   saveOn?: any
@@ -22,6 +23,7 @@ interface SearchSelect<T> {
   avoidIDs?: number[]
   inputCss?: string
   icon?: string
+  showLoading?: boolean
 }
 
 export function highlString(phrase: string, words: string[]) {
@@ -87,7 +89,7 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
   }
 
   createEffect(on(
-    () => [props.saveOn, props.selected||""], 
+    () => [props.saveOn, props.selected||"", props.options], 
     () => {
       if(!inputRef) return
       const selected = getSelectedFromProps()
@@ -209,6 +211,10 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
     }
   }
 
+  const disabled = createMemo(() => {
+    return props.disabled || props.showLoading
+  })
+
   return <div class={cN}>
     { props.label && <>
         <div class={`${s1.input_lab}`}>{props.label}{ iconValid() }</div>
@@ -221,12 +227,14 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
         onPaste={onKeyUp as any}
         onCut={onKeyUp as any}
         onKeyDown={onKeyDown}
-        placeholder={props.placeholder || ":: seleccione ::"}
+        placeholder={
+          props.showLoading ? "" : props.placeholder || ":: seleccione ::"
+        }
         onkeydown={ev => {
           ev.stopPropagation()
           console.log(ev)
         }}
-        disabled={props.disabled}
+        disabled={disabled()}
         onFocus={ev=> {
           ev.stopPropagation()
           words = []
@@ -245,7 +253,10 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
         }}
       />
     </div>
-    <Show when={!props.disabled}>
+    { props.showLoading &&
+      <Spinner4 style={{ position: 'absolute', left: '0.7rem', bottom: "8px" }}/>
+    }
+    <Show when={!disabled()}>
       <div class={`${s1.input_icon1} p-abs ` + ((show() && !props.icon) ? " show" : "")}>
         <i class={props.icon || "icon-down-open-1"}></i>
       </div>
@@ -488,3 +499,4 @@ export function SearchMobileLayer<T>(props: ISearchMobileLayer<T>) {
     </Portal>
   </Show>
 }
+

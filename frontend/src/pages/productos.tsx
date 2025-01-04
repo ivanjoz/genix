@@ -1,24 +1,20 @@
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { ImageCtn } from "~/components/Uploaders"
-import { parseSVG } from "~/core/main"
+import { parseSVG, throttle } from "~/core/main"
 import { IProducto } from "~/services/operaciones/productos"
-import { formatN } from "~/shared/main"
+import { formatN, makeEcommerceDB } from "~/shared/main"
 import iconCancelSvg from "../assets/icon_cancel.svg?raw"
 import iconCartSvg from "../assets/icon_cart.svg?raw"
 import s1 from "./components.module.css"
 import { IHeader1, setShowCart, showCart } from "./headers"
 import { useProductosCmsAPI } from "./productos-service"
 import { setCartOption } from "./cart"
+import Dexie from "dexie"
 
 export function ProductosCuadrilla(props: IHeader1) { // type: 10
 
   const [ productos ] = useProductosCmsAPI()
-
-  createEffect(() => {
-    // console.log("icon cart svg::", iconCartSvg)
-    console.log("productos obtenidos component::", productos())
-  })
 
   return <div class={"w100 " + s1.product_cuadrilla_ctn}>
     <div class="w100 flex-wrap ai-baseline jc-center">
@@ -179,6 +175,24 @@ createEffect(() => {
   }
 })
 
+export interface ICartProductoCache {
+  id: number, cant: number
+}
+
+createEffect(() => {
+  const productosMap = cartProductos()
+  throttle(async () => {
+    const record = {
+      key: "cart",
+      productos: [...productosMap.values()].map(x => {
+        return { id: x.producto.ID, cant: x.cant }
+      }),
+    }
+    const db = await makeEcommerceDB()
+    db.table("cache").put(record)
+  },500)
+})
+
 export const CartFloatingProducto = (props: ICartFloatingProducto) => {
 
   const message = createMemo(() => {
@@ -192,7 +206,7 @@ export const CartFloatingProducto = (props: ICartFloatingProducto) => {
     () => { return props.cant * props.producto.PrecioFinal }
   ))
 
-  const cant =  createMemo(on(
+  const cant = createMemo(on(
     () => [ cartProductos() ], 
     () => { return props.cant }
   ))

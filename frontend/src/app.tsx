@@ -6,11 +6,10 @@ import { Show, Suspense, createEffect, createSignal } from "solid-js";
 import LoginPage from "./core/login";
 import { MainMenu, MainMenuMobile, MainTopMenu } from "./core/menu";
 import Modules from "./core/modules";
+import { PageLoading, PageLoadingElement } from "./core/page";
+import PageBuilder from "./pages/page";
 import { createIndexDB } from "./shared/main";
 import { Params, loginStatus, setLoginStatus } from "./shared/security";
-import PageBuilder from "./pages/page";
-import CmsWebpage from "./routes/cms/[webpage]";
-import { PageLoading, PageLoadingElement, Spinner1 } from "./core/page";
 
 let defaultModule = Modules[0]
 const isClient = typeof window !== 'undefined'
@@ -103,7 +102,6 @@ export default function Root() {
         </MetaProvider>
       )}>
       <Route path="/_loading" component={PageLoading} />
-      <Route path="/page" component={PageBuilder} />
       <Route path="/page/:name" component={PageBuilder} />
       <Show when={isLogin() === 2}>
         <Suspense fallback={PageLoadingElement}>{<FileRoutes />}</Suspense>

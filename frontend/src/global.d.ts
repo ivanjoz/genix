@@ -9,7 +9,7 @@ interface Window {
   appId: string
   CompressionStream: any
   DexieDB: any,
-  DexieDB2: any,
+  DexieEcommerceDB: any,
   EvaluacionesDB: any,
   _broadcast: BroadcastChannel
   _pendingRequests: any[],
