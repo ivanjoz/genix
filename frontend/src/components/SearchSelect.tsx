@@ -291,16 +291,17 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
  </div>
 }
 
+let cardCounterID = 0
+
 export function SearchCard<T>(props: SearchSelect<T>) {
 
   const [keyId, keyName] = props.keys.split(".") as [keyof T, keyof T]
   const [optionsSelected, setOptionsSelected] = createSignal([] as (number|string)[])
 
-  window._counterID++
-  const id = window._counterID
-
-  let optionsMap: Map<(number|string),T> = new Map()
-
+  cardCounterID++
+  const id = cardCounterID
+  const optionsMap: Map<(number|string),T> = new Map()
+  
   const processOptions = () => {
     for(let e of props.options){
       optionsMap.set(e[keyId] as (number|string),e)

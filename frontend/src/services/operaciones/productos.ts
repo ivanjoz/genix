@@ -2,6 +2,7 @@ import { Notify } from "~/core/main"
 import { GET, GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
 import { arrayToMapN } from "~/shared/main"
 import { IUsuario } from "../admin/empresas"
+import { Env } from "~/shared/security"
 
 export interface IProductoPropiedad {
   id: number, nm: string, ss: number
@@ -160,8 +161,8 @@ export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): P
     throw("No se encontró una fecha de inicio o fin.")
   }
   
-  route += `&fecha-hora-inicio=${args.fechaInicio*24*60*60 + window._zoneOffset}`
-  route += `&fecha-hora-fin=${(args.fechaFin+1)*24*60*60 + window._zoneOffset}`
+  route += `&fecha-hora-inicio=${args.fechaInicio*24*60*60 + Env.zoneOffset}`
+  route += `&fecha-hora-fin=${(args.fechaFin+1)*24*60*60 + Env.zoneOffset}`
 
   let result: IAlmacenMovimientosResult
 

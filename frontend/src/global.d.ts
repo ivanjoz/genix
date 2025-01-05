@@ -30,3 +30,4 @@ interface Window {
   API_ROUTES: { MAIN: string }
   S3_URL: string
 }
+

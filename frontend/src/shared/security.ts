@@ -1,7 +1,8 @@
-import { decrypt, throttle } from "./main"
+import { decrypt } from "./main"
 import { ILoginResult } from "~/services/admin/login"
-import { Loading, Notify } from "~/core/main"
 import { createSignal } from "solid-js"
+import { Env, LocalStorage } from "~/env"
+import { Loading, Notify, throttle } from "~/core/main"
 
 interface UserInfo {
   d: number // userID
@@ -19,33 +20,23 @@ interface UserInfoParsed {
 }
 
 const isClient = typeof window !== 'undefined'
-if(isClient){ window.appId = "genix" }
-const wd = typeof window !== 'undefined' ? window : { appId: "", _zoneOffset: 0 }
-
-export const localStorage = typeof window !== 'undefined' 
-  ? window.localStorage
-  : {
-      getItem: (k: string) => { return "" },
-      setItem: (k: string, v: string) => { return "" },
-      removeItem: (k: string) => { return "" }
-    } as any
 
 const clearAccesos = () => {
   if(typeof window !== 'undefined'){
-    localStorage.removeItem(window.appId+ "Accesos")
-    localStorage.removeItem(window.appId+ "UserInfo")
+    LocalStorage.removeItem(Env.appId+ "Accesos")
+    LocalStorage.removeItem(Env.appId+ "UserInfo")
     setLoginStatus(false)
   }
 }
 
 // Función para obtener el Token
 export const getToken = (noError?: boolean) => {
-  const userToken = localStorage.getItem(window.appId + "UserToken")
-  const expTime = parseInt(localStorage.getItem(window.appId + "TokenExpTime") || '0')
+  const userToken = LocalStorage.getItem(Env.appId + "UserToken")
+  const expTime = parseInt(LocalStorage.getItem(Env.appId + "TokenExpTime") || '0')
   const nowTime = Math.floor(Date.now()/1000)
 
   if (!userToken) {
-    console.error('No se encontró la data del usuario. ¿Está logeado?:',window.appId)
+    console.error('No se encontró la data del usuario. ¿Está logeado?:',Env.appId)
     return
   }
   else if (!expTime || nowTime > expTime) {
@@ -85,7 +76,7 @@ export class AccessHelper {
   #userInfo: UserInfoParsed
   
   #setUserInfo(){
-    const userInfoJson = localStorage?.getItem(wd.appId+ "UserInfo")
+    const userInfoJson = LocalStorage?.getItem(Env.appId+ "UserInfo")
     if(!userInfoJson){ return }
     this.#userInfo = JSON.parse(userInfoJson)
   }
@@ -102,9 +93,9 @@ export class AccessHelper {
       id: userInfo.d, user: userInfo.u, email: login.UserEmail, names: login.UserNames
     }
     
-    localStorage.setItem(wd.appId + "UserInfo", JSON.stringify(userInfoParsed))
-    localStorage.setItem(wd.appId + "UserToken", login.UserToken)
-    localStorage.setItem(wd.appId + "TokenExpTime", String(login.TokenExpTime))
+    LocalStorage.setItem(Env.appId + "UserInfo", JSON.stringify(userInfoParsed))
+    LocalStorage.setItem(Env.appId + "UserToken", login.UserToken)
+    LocalStorage.setItem(Env.appId + "TokenExpTime", String(login.TokenExpTime))
     this.#setUserInfo()
     
     const b32l = this.#b32l
@@ -118,14 +109,14 @@ export class AccessHelper {
     }
     const hash = checksum(parsedAccesos)
     const hashParsed = `${hash.substring(0, 2)}${parsedAccesos}${hash.substring(2, 4)}`
-    localStorage.setItem(wd.appId+ "Accesos", hashParsed)
+    LocalStorage.setItem(Env.appId+ "Accesos", hashParsed)
   }
 
   checkAcceso(accesoID: number, nivel?: number) {
     nivel = nivel || 1
     const b32ls = this.#b32ls
     if(this.#accesos === ""){
-      this.#accesos = localStorage.getItem(wd.appId + "Accesos") || ""
+      this.#accesos = LocalStorage.getItem(Env.appId + "Accesos") || ""
     }
 
     if(!this.#accesos) return false
@@ -208,16 +199,18 @@ export const Params = {
   checkRol: (a: number) => accessHelper.checkRol(a),
   userInfo: () => accessHelper.getUserInfo(),
   setValue(key: string, value: string | number) {
-    localStorage.setItem(key, String(value))
+    LocalStorage.setItem(key, String(value))
   },
   getValue(key: string): string {
-    return localStorage.getItem(key) || ''
+    return LocalStorage.getItem(key) || ''
   },
-  getValueInt(key: string): number {
-    const value: string | number = localStorage.getItem(key) || '0'
+  getValueInt(key: string | number): number {
+    const value: string | number = LocalStorage.getItem(String(key)) || '0'
     return parseInt(value as string)
   },
   getFechaUnix(){
-    return Math.floor(((Date.now()/1000) - wd._zoneOffset) / 86400)
+    return Math.floor(((Date.now()/1000) - Env.zoneOffset) / 86400)
   }
 }
+export { Env }
+

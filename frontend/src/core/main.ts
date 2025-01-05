@@ -1,18 +1,19 @@
 import pkg from "notiflix";
+import { Env } from "~/env";
 export const { Notify, Loading, Confirm } = pkg;
 
 export const fechaUnixToSunix = (fechaUnix: number) => {
   if(!fechaUnix){ return 0 }
-  const fechaHoraUnix = fechaUnix*24*60*60 + (window._zoneOffset||0)
+  const fechaHoraUnix = fechaUnix*24*60*60 + (Env.zoneOffset||0)
   const fechaSunix = Math.floor((fechaHoraUnix - (10**9)) / 2)
   return fechaSunix
 }
 
-export const throttle = (func: () => void, delay: number) => {
-  if(window._throttleTimer){ clearTimeout(window._throttleTimer) }
-  window._throttleTimer = setTimeout(() => {
+export const throttle = (func: (() => void), delay: number) => {
+  if(Env.throttleTimer){ clearTimeout(Env.throttleTimer) }
+  Env.throttleTimer = setTimeout(() => {
     func()
-    delete window._throttleTimer
+    Env.throttleTimer = null
   }, delay)
 }
 

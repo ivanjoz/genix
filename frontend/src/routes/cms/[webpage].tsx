@@ -11,22 +11,13 @@ import * as styles from "./webpage.module.css";
 
 export const [pageViews, setPageViews] = createSignal({})
 
-const sectionsParamsMap: Map<number,IPageParams> = new Map()
-
-const getPageSectionParams = (type: number): IPageParams => {
-  if(sectionsParamsMap.size === 0){
-    for(let e of coponentsRenders){ sectionsParamsMap.set(e.type,e) }
-  }
-  return sectionsParamsMap.get(type)
-}
-
 export default function CmsWebpage() {
 
   const location = useLocation()
   const [pageSections, setPageSections] = createSignal(pageExample)
   const [sectionSelected, setSectionSelected] = createSignal<IPageSection>()
   const [sectionParams, setSectionParams] = createSignal([] as IPageBlock[])
-  const pageSectionsDefsMap = arrayToMapN(Object.values(PageBlocks),'id')
+  const coponentsRendersMap = arrayToMapN(coponentsRenders, 'type')
 
   const params = useParams()
 
@@ -92,14 +83,25 @@ export default function CmsWebpage() {
       }
       <For each={sectionParams()}>
         {e => {
+          console.log("section params::", e)
+          const applyUpdate = () => {
+            const selected = {...sectionSelected()} as any
+            updateSectionSelected(selected)
+          }
+
           if(e.type === 1){
             return <Input css="mb-10"  inputCss="s5" label={e.name} 
-              save="content" saveOn={e} 
+              save={e.key as keyof IPageSection} saveOn={sectionSelected()} 
               onChange={() => {
-                console.log(e.content)
-                const selected = {...sectionSelected()} as any
-                selected[e.key] = e.content as never
-                updateSectionSelected(selected)
+                applyUpdate()
+              }}
+            />
+          } else if(e.type === 2){
+            return <Input css="mb-10"  inputCss="s5" label={e.name} 
+              save={e.key as keyof IPageSection} saveOn={sectionSelected()} 
+              useTextArea={true}
+              onChange={() => {
+                applyUpdate()
               }}
             />
           }
@@ -144,19 +146,7 @@ export default function CmsWebpage() {
             onClick={ev => {
               ev.stopPropagation()
               setSectionSelected(e)
-              const params: IPageBlock[] = []
-              for(const param of (getPageSectionParams(e.type)?.params || [])){
-                const p = {...pageSectionsDefsMap.get(param.id)}
-                /*
-                const nameCustom = typeof param === 'number' ? "" : param[1]
-                if(nameCustom){ p.name = nameCustom }
-                */
-                if(e[p.key as keyof IPageSection]){
-                   p.content = e[p.key as keyof IPageSection] as never
-                }
-                params.push(p)
-              }
-              console.log("params a renderizar::", params)
+              const params = coponentsRendersMap.get(e.type)?.params || []
               setSectionParams(params)
             }}
           >

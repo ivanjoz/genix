@@ -4,7 +4,8 @@ import { Accessor, Setter, createSignal } from "solid-js";
 import { Loading, Notify } from "~/core/main";
 import { UriMerger, getRecordsFromIDB, httpProps, saveRecordsToIndexDB } from './httpHelpers';
 import { formatN } from './main';
-import { accessHelper, getToken } from "./security";
+import { accessHelper, Env, getToken } from "./security";
+import { LocalStorage } from '~/env';
 
 export const defaultCacheExp = 20 * 60
 export const keyID = 'id'
@@ -247,11 +248,11 @@ export const buildHeaders = (props: httpProps, contentType?: string) => {
   const fromHeader = [
     location.pathname,
     (new Date()).getTimezoneOffset(),
-    window?.navigator?.language || "",
-    [`${window.screen.height}x${window.screen.width}`,
-    `ram:${window?.navigator['deviceMemory'] || 0}`,
-    `core:${navigator.hardwareConcurrency || 0}`,
-    window?.navigator['connection']?.effectiveType || "-"
+    Env.language || "",
+    [`${Env.screen.height}x${Env.screen.width}`,
+    `ram:${Env.deviceMemory || 0}`,
+    //`core:${navigator.hardwareConcurrency || 0}`,
+    //window?.navigator['connection']?.effectiveType || "-"
     ].join("_"),
   ].join("|")
 
@@ -306,7 +307,7 @@ const searchOnCache = (props: httpProps) => {
 }
 
 export const makeRoute = (route: string, apiName?: string) => {
-  const apiUrl = apiName ? window.API_ROUTES[apiName] : window.API_ROUTES.MAIN
+  const apiUrl = apiName ? Env.API_ROUTES[apiName] : Env.API_ROUTES.MAIN
   return route.includes('://') ? route : apiUrl + route
 }
 
@@ -345,10 +346,10 @@ const parseResults = (props: httpProps, records: any[]) => {
 
 export function GET(props: httpProps): Promise<any> {
 
-  if(props.mergeRequest && !window._pendingRequests.includes(props)){ 
-    window._pendingRequests.push(props) 
+  if(props.mergeRequest && !Env.pendingRequests.includes(props)){ 
+    Env.pendingRequests.push(props) 
   }
-  console.log('agregando merge:::',[...window._pendingRequests])
+  console.log('agregando merge:::',[...Env.pendingRequests])
 
   return new Promise((resolve, reject) => {
     props.status = { code: 200, message: "" }
@@ -411,8 +412,8 @@ export const makeGETFetchHandler = <T>(
   const props = typeof props_ === 'function' ? props_() : props_
 
   if(!props.id){
-    props.id = window._params.fetchID
-    window._params.fetchID++
+    props.id = Env.params.fetchID
+    Env.params.fetchID++
   }
 
   const [fetchedRecords, setFetchedRecords] = createSignal(props.emptyValue as T)
@@ -462,13 +463,13 @@ export const makeGETFetchHandler = <T>(
 
 // ReadyForFetch: 1 = Consultar al servidor, 2 = Se obtuvo desde IndexedDB, no enviar
 async function fetchPendingRequests() {
-  const pending: httpProps[] = window._pendingRequests
+  const pending: httpProps[] = Env.pendingRequests
   if (pending.length === 0) return
   if (pending.some(x => !x.readyForFetch)) return
-  console.log("requests to fetch:: ",[...window._pendingRequests])
+  console.log("requests to fetch:: ",[...Env.pendingRequests])
 
   const requests = pending.filter(x => x.readyForFetch === 1)
-  window._pendingRequests = []
+  Env.pendingRequests = []
   if (requests.length === 0) {
     // Si no hay ningún request a realizar (porque han sido enviados desde IndexDB probablemente)
     return
@@ -503,7 +504,7 @@ const doFetchPendingRequests = async (requests: httpProps[]) => {
   const routes: string[] = requests.map(x => x.route)
   const mergedUri = UriMerger.mergeRoutesInQuery(routes)
   const status = { code: 200, message: "" }
-  const cache = window._cache
+  const cache = Env.cache
   updateFechOnCourse(requests[0],1)
 
   // Crea la URL y envía el request
@@ -596,7 +597,7 @@ const searchOnIndexDB = async (props: httpProps): Promise<any[]> => {
   const idbTable = props.useIndexDBCache
 
   checkIdbTables(props)
-  const cache = window._cache
+  const cache = Env.cache
 
   // Limpia el flag para user el caché
   if (props.clearCache){ delete cache[idbTable] }
@@ -610,7 +611,7 @@ const searchOnIndexDB = async (props: httpProps): Promise<any[]> => {
   props.localRecordsToDelete = []
   let forceSync = false
   // Revisa si el caché está desactivado por un numero de segundos
-  const forceUntil = parseInt(localStorage.getItem("force_sync_cache_until") || "0")
+  const forceUntil = parseInt(LocalStorage.getItem("force_sync_cache_until") || "0")
   const nowUnixTime = Math.floor((Date.now() / 1000))
 
   if (nowUnixTime < forceUntil) { forceSync = true }
@@ -620,7 +621,7 @@ const searchOnIndexDB = async (props: httpProps): Promise<any[]> => {
     // Revisa si hay que forzar la sincronización de esa tabla
     for (let partValue of partValuesToCheck) {
       const key1 = 'force_sync_cache_' + idbTable + '_' + partValue
-      if (localStorage.getItem(key1)) {
+      if (LocalStorage.getItem(key1)) {
         console.log('Forzando Sincronizacion::', key1, idbTable)
         forceSync = true
         props.localRecordsToDelete.push(key1)
@@ -752,7 +753,7 @@ export const setForceRefresh = (props: IForceRefresh) => {
 
   for (let table of props.refreshIndexDBCache) {
     for (let part of partitions) {
-      localStorage.setItem(`force_sync_cache_` + table + '_' + part, '1')
+      LocalStorage.setItem(`force_sync_cache_` + table + '_' + part, '1')
     }
   }
 }

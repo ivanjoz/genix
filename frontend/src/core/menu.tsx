@@ -1,12 +1,14 @@
-import { For, JSX, Show, createMemo, createSignal } from "solid-js"
-import { A } from "@solidjs/router"
-import { SearchSelect } from "~/components/SearchSelect"
-import { appModule, deviceType, setAppModule, setShowMenu, setViewType, showMenu, viewType } from "~/app"
-import Modules, { IModule } from "./modules"
-import { Params, accessHelper } from "~/shared/security"
-import { fetchOnCourse } from "~/shared/http"
+import { For, Show, Suspense, createMemo, createSignal } from "solid-js"
+import { appModule, deviceType, setShowMenu, showMenu } from "~/app"
 import { ButtonList } from "~/components/Cards"
 import { LayerSelect } from "~/components/Layers"
+import { Env, getWindow, LocalStorage } from "~/env"
+import { fetchOnCourse } from "~/shared/http"
+import { Params, accessHelper, setLoginStatus } from "~/shared/security"
+import { IModule } from "./modules"
+import LoginPage from "./login"
+import { PageLoadingElement } from "./page"
+import { FileRoutes } from "@solidjs/start/router"
 
 export interface IMenuRecord {
   name: string, minName?: string, id?: number, route?: string,
@@ -71,7 +73,7 @@ export function MainTopMenu() {
             }
             return <div class={cN()} onClick={ev => {
               ev.stopPropagation()
-              Params.setValue(`pview-${window.location.pathname}`,e[0])
+              Params.setValue(`pview-${Env.getPathname()}`,e[0])
               setPageView(e[0])
             }}>
               <span>{e[1]}</span>
@@ -116,11 +118,11 @@ export function MainTopMenu() {
           <div class="w100"></div>
           <div>Tema</div>
           <ButtonList options={uicolors}
-            keys="id.name" selected={localStorage.getItem("ui-color") as any}
+            keys="id.name" selected={LocalStorage.getItem("ui-color") as any}
             onClick={e => {
               for(let x of uicolors){ document.body.classList.remove(x.id) }
               document.body.classList.add(e.id)
-              localStorage.setItem("ui-color",e.id)
+              LocalStorage.setItem("ui-color",e.id)
             }}
           />
         </LayerSelect>
@@ -128,7 +130,7 @@ export function MainTopMenu() {
       <button class="bnr-4" onClick={ev => {
           ev.stopPropagation()
           const now5secodsMore = Math.floor((Date.now() / 1000)) + 5
-          localStorage.setItem("force_sync_cache_until", String(now5secodsMore))
+          LocalStorage.setItem("force_sync_cache_until", String(now5secodsMore))
           window.location.reload()
         }}>
         <i class="icon-arrows-cw"></i>
@@ -193,9 +195,9 @@ export function SearchCard(props: ISearchCard) {
 }
 
 export function MainMenu() {
+  const pathname = Env.getPathname()
 
   const getMenuOpenFromRoute = (module: IModule): [number, string] => {
-    const pathname = window.location.pathname
     for(let menu of module.menus){
       for(let opt of menu.options){
         if(opt.route === pathname){ return [menu.id, opt.route] }
@@ -317,6 +319,8 @@ export function MenuElement(props: IMenuElement) {
 }
 
 const MakeMenuRecord = (props: IMenuElement, opt: IMenuRecord, selected?: boolean) => {
+  const pathname = Env.getPathname()
+  const Window = getWindow()
   let cN = `menu-option-c1`
   if(selected) cN += ' selected'
 
@@ -324,9 +328,9 @@ const MakeMenuRecord = (props: IMenuElement, opt: IMenuRecord, selected?: boolea
     href={opt.route||"/"}>
     <div class={cN} onClick={ev => {
       const route = opt.route||"/"
-      if(window.location.pathname === route){ return }
+      if(pathname === route){ return }
       ev.stopPropagation()
-      window.history.pushState(null, opt.name, opt.route||"/")
+      Window.history.pushState(null, opt.name, opt.route||"/")
       setIsRouteChanging(true)
       props.menuOpen[1] = opt.route
       props.setMenuOpen([...props.menuOpen])
@@ -372,7 +376,7 @@ export function MenuSearchTop(props: MenuSearchTop) {
 export function MainMenuMobile() {
 
   const getMenuOpenFromRoute = (module: IModule): [number, string] => {
-    const pathname = window.location.pathname
+    const pathname = Env.getPathname()
     for(let menu of module.menus){
       for(let opt of menu.options){
         if(opt.route === pathname){ return [menu.id, opt.route] }
@@ -411,4 +415,26 @@ export function MainMenuMobile() {
       </For>
     </div>
   </div>
+}
+
+export interface IPageMenu {
+  isLogin: number
+}
+
+export default function PageMenu(props: IPageMenu){
+  console.log("is login::", props.isLogin)
+
+  return <>
+    <Show when={props.isLogin === 2}>
+      <Suspense fallback={PageLoadingElement}>{<FileRoutes />}</Suspense>
+      <Show when={[1].includes(deviceType())}><MainMenu/></Show>
+      <Show when={[2,3].includes(deviceType()) && showMenu()}>
+        <MainMenuMobile/>
+      </Show>
+      <MainTopMenu />
+    </Show>
+    <Show when={props.isLogin === 3}>
+      <LoginPage setLogin={setLoginStatus} />
+    </Show>
+  </>
 }

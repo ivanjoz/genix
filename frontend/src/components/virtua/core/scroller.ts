@@ -1,3 +1,4 @@
+import { getInnerWidth } from "~/env";
 import {
   getCurrentDocument,
   getCurrentWindow,
@@ -393,7 +394,7 @@ export const createWindowScroller = (
         const offsetSum =
           offset +
           (isHorizontal && isRTLDocument()
-            ? window.innerWidth - node[offsetKey] - node.offsetWidth
+            ? getInnerWidth() - node[offsetKey] - node.offsetWidth
             : node[offsetKey]);
 
         const parent = node.offsetParent;

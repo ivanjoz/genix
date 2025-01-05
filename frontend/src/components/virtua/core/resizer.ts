@@ -126,6 +126,7 @@ export const createWindowResizer = (
 
   return {
     _observeRoot(container) {
+      console.log("_observeRoot")
       const window = getCurrentWindow(getCurrentDocument(container));
       const onWindowResize = () => {
         store._update(ACTION_VIEWPORT_RESIZE, window[windowSizeKey]);
