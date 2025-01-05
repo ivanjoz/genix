@@ -6,7 +6,7 @@ const buildFolder = path.join(__dirname,'.output','public')
 const deployFolder = path.join(__dirname,'..','docs')
 
 const buildSubFolder = [
-  "", "images", "pdf", "assets", "libs", "_build", path.join("_build","assets")
+  "", "images", "pdf", "page", "assets", "libs", "_build", path.join("_build","assets")
 ]
 
 console.log("Moviendo al folder:", deployFolder)
