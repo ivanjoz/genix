@@ -1,6 +1,6 @@
 import { POST } from "~/shared/http"
 import { makeRamdomString } from "~/shared/main"
-import { accessHelper, setLoginStatus } from "~/shared/security"
+import { accessHelper, checkIsLogin, Env, setIsLogin_ } from "~/shared/security"
 
 export interface ILogin {
   EmpresaID: number
@@ -36,8 +36,12 @@ export async function sendUserLogin(data: ILogin): Promise<any> {
   let userInfo = ""
   try {
     await accessHelper.parseAccesos(result, data.CipherKey)
-    setLoginStatus(accessHelper.checkAcceso(1))
-
+    if(!accessHelper.checkAcceso(1)){
+      Env.clearAccesos()
+    } else {
+      setIsLogin_(checkIsLogin())
+      Env.navigate("/")
+    }
   } catch (error) {
     console.log("error encriptando::")
     console.log(error)

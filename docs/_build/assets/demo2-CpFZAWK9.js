@@ -1,1 +1,0 @@
-import{c as e,g as t,t as a}from"./web-n9SrCLWm.js";import{P as r}from"./app-CxTCLAtU.js";var o=a("<h1>Demo2");function i(){return e(r,{title:"Cajas",get children(){return t(o)}})}export{i as default};

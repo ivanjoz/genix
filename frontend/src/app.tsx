@@ -1,14 +1,16 @@
 import { Meta, MetaProvider, Title } from "@solidjs/meta";
-import { Route, Router } from "@solidjs/router";
+import { Route, Router, useNavigate } from "@solidjs/router";
 import { clientOnly } from "@solidjs/start";
 import { FileRoutes } from "@solidjs/start/router";
-import { Show, Suspense, createEffect, createSignal, onMount } from "solid-js";
+import { Suspense, createEffect, createSignal, onMount } from "solid-js";
 import Modules from "./core/modules";
 import { PageLoading, PageLoadingElement } from "./core/page";
 import { Env, LocalStorage, getWindow } from "./env";
 import PageBuilder from "./pages/page";
+import LoginPage from "./routes/login";
 import { createIndexDB } from "./shared/main";
-import { Params, loginStatus } from "./shared/security";
+import { checkIsLogin, Params } from "./shared/security";
+
 const PageMenu = clientOnly(() => import("./core/menu"))
 
 let defaultModule = Modules[0]
@@ -41,17 +43,9 @@ export const checkDevice = () => {
 export const [deviceType, setDeviceType] = createSignal(checkDevice())
 export const [viewType, setViewType] = createSignal(Params.getValueInt('viewType')||2)
 
-const checkIsLogin = () => {
-  if(Env.getEmpresaID() > 0){ return 1 }
-  if(!isClient){ return 0 }
-  else if(loginStatus() && isClient){ return 2 }
-  else { return 3 }
-}
-
 export default function Root() {
 
   const IS_LOCAL = isClient && window.location.hostname.includes("localhost")
-  const [isLogin, setIsLogin] = createSignal(checkIsLogin())
 
   if(isClient){
     window.addEventListener('resize', ()=> {
@@ -78,19 +72,19 @@ export default function Root() {
     }
     Params.setValue("viewType", viewType())
   })
-  
-  console.log("estamos aqui::",1)
 
   onMount(() => {
-    setTimeout(() => {
-      console.log("volviendo a setear is login")
-      setIsLogin(checkIsLogin())
-    },20)
+    if(checkIsLogin() === 3){
+      Env.navigate("login")
+      return
+    }
   })
 
   return <>
     <Router root={props => {
         Env.pathname = props.location.pathname
+        const navigate = useNavigate()
+        Env.navigate = navigate
         return <MetaProvider>
           <Title>GENIX - MyPes</Title>
           <Meta name="loc" content={props.location.pathname}/>
@@ -99,10 +93,8 @@ export default function Root() {
       }}>
       <Route path="/_loading" component={PageLoading} />
       <Route path="/page/:name" component={PageBuilder} />
-      <Show when={isLogin() === 2}>
-        <Suspense fallback={PageLoadingElement}>{<FileRoutes />}</Suspense>
-      </Show>
+      <Suspense fallback={PageLoadingElement}>{<FileRoutes />}</Suspense>
     </Router>
-    <PageMenu isLogin={isLogin()}/>
+    <PageMenu/>
   </>
 }

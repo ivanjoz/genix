@@ -1,14 +1,11 @@
-import { For, Show, Suspense, createMemo, createSignal } from "solid-js"
+import { For, Show, createMemo, createSignal } from "solid-js"
 import { appModule, deviceType, setShowMenu, showMenu } from "~/app"
 import { ButtonList } from "~/components/Cards"
 import { LayerSelect } from "~/components/Layers"
-import { Env, getWindow, LocalStorage } from "~/env"
+import { Env, LocalStorage, getWindow } from "~/env"
 import { fetchOnCourse } from "~/shared/http"
-import { Params, accessHelper, setLoginStatus } from "~/shared/security"
+import { Params, isLogin } from "~/shared/security"
 import { IModule } from "./modules"
-import LoginPage from "./login"
-import { PageLoadingElement } from "./page"
-import { FileRoutes } from "@solidjs/start/router"
 
 export interface IMenuRecord {
   name: string, minName?: string, id?: number, route?: string,
@@ -111,7 +108,7 @@ export function MainTopMenu() {
         >
           <button class="bn1" onClick={ev => {
             ev.stopPropagation()
-            accessHelper.clearAccesos()
+            Env.clearAccesos()
           }}>
             <i class="icon-logout-1"></i>Salir
           </button>
@@ -417,24 +414,14 @@ export function MainMenuMobile() {
   </div>
 }
 
-export interface IPageMenu {
-  isLogin: number
-}
-
-export default function PageMenu(props: IPageMenu){
-  console.log("is login::", props.isLogin)
-
+export default function PageMenu(){
   return <>
-    <Show when={props.isLogin === 2}>
-      <Suspense fallback={PageLoadingElement}>{<FileRoutes />}</Suspense>
+    <Show when={isLogin() === 2}>
       <Show when={[1].includes(deviceType())}><MainMenu/></Show>
       <Show when={[2,3].includes(deviceType()) && showMenu()}>
         <MainMenuMobile/>
       </Show>
       <MainTopMenu />
-    </Show>
-    <Show when={props.isLogin === 3}>
-      <LoginPage setLogin={setLoginStatus} />
     </Show>
   </>
 }

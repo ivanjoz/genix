@@ -1,7 +1,7 @@
 import { decrypt } from "./main"
 import { ILoginResult } from "~/services/admin/login"
 import { createSignal } from "solid-js"
-import { Env, LocalStorage } from "~/env"
+import { Env, IsClient, LocalStorage } from "~/env"
 import { Loading, Notify, throttle } from "~/core/main"
 
 interface UserInfo {
@@ -19,16 +19,6 @@ interface UserInfoParsed {
   names: string
 }
 
-const isClient = typeof window !== 'undefined'
-
-const clearAccesos = () => {
-  if(typeof window !== 'undefined'){
-    LocalStorage.removeItem(Env.appId+ "Accesos")
-    LocalStorage.removeItem(Env.appId+ "UserInfo")
-    setLoginStatus(false)
-  }
-}
-
 // Función para obtener el Token
 export const getToken = (noError?: boolean) => {
   const userToken = LocalStorage.getItem(Env.appId + "UserToken")
@@ -42,7 +32,7 @@ export const getToken = (noError?: boolean) => {
   else if (!expTime || nowTime > expTime) {
     if(!noError){
       Notify.failure('La sesión ha expirado, vuelva a iniciar sesión.')
-      clearAccesos()
+      Env.clearAccesos()
     }
     Loading.remove()
     return
@@ -57,7 +47,24 @@ export const getToken = (noError?: boolean) => {
   return userToken
 }
 
-export const [loginStatus, setLoginStatus] = createSignal(isClient && !!getToken(true))
+export const checkIsLogin = () => {
+  if(Env.getEmpresaID() > 0){ return 1 }
+  if(!IsClient()){ return 0 }
+  else if(IsClient() && !!getToken(true)){ return 2 }
+  else { return 3 }
+}
+
+export const [isLogin, setIsLogin_] = createSignal(checkIsLogin())
+
+Env.clearAccesos = () => {
+  if(!IsClient){ return }
+  LocalStorage.removeItem(Env.appId+ "Accesos")
+  LocalStorage.removeItem(Env.appId+ "UserInfo")
+  LocalStorage.removeItem(Env.appId+ "UserToken")
+  LocalStorage.removeItem(Env.appId+ "TokenExpTime")
+  setIsLogin_(checkIsLogin())
+  Env.navigate("login")
+}
 
 export class AccessHelper {
   constructor() {
@@ -80,9 +87,9 @@ export class AccessHelper {
     if(!userInfoJson){ return }
     this.#userInfo = JSON.parse(userInfoJson)
   }
-  clearAccesos = clearAccesos
+  clearAccesos = Env.clearAccesos
   getUserInfo(){ return this.#userInfo }
-
+  
   async parseAccesos(login: ILoginResult, cipherKey?: string) {
     const userInfoStr = await decrypt(login.UserInfo, cipherKey)
     const userInfo: UserInfo = JSON.parse(userInfoStr)
