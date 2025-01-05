@@ -1,7 +1,7 @@
 import { JSX, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { isRouteChanging, setInnerPageName, setIsRouteChanging, setPageView, setPageViews } from "./menu"
-import { fetchPending, setfetchPending } from "~/shared/http"
-import { Params } from "~/shared/security"
+import { fetchPending } from "~/shared/http"
+import { Env, isLogin, Params } from "~/shared/security"
 import { useLocation } from "@solidjs/router"
 import { deviceType } from "~/app"
 
@@ -16,11 +16,13 @@ interface IPageContainer {
 }
 
 export const PageContainer = (props: IPageContainer) => {
-
   const location = useLocation()
   
   onMount(() => {
-    console.log("setting route is charging::", false)
+    if(isLogin() !== 2){
+      Env.navigate("login")
+      return
+    }
     setIsRouteChanging(false)
     setInnerPageName(props.title||"")
     setPageViews(props.views||[])
@@ -50,24 +52,29 @@ export const PageContainer = (props: IPageContainer) => {
     return cN
   }
 
-  if(props.accesos?.length > 0){
-    const isAuth = props.accesos.some(x => Params.checkAcceso(x,1))
-    if(!isAuth){
-      return <div class={cN()}>
-        <div class="box-error-ms">
-          No posee accesos para visualizar este módulo.
-        </div>
-      </div>
+  const hasAccess = createMemo(() => {
+    if(isLogin() !== 2){ 
+      return false
+    } else if(props.accesos?.length > 0){
+      return props.accesos.some(x => Params.checkAcceso(x,1))
     }
-  }
-  
+    return true
+  })
+
+  console.log("has acces::", hasAccess(),"|",isLogin())
+
   return <div class={cN()} style={props.pageStyle}>
-    <Show when={!isLoading()}>
+    <Show when={!isLoading() && hasAccess()}>
       {props.children}   
     </Show> 
-    <Show when={isLoading()}>
+    <Show when={isLoading() && hasAccess()} >
       <Spinner1 message="Cargando Módulo..."/>    
-    </Show> 
+    </Show>
+    <Show when={!hasAccess()}>
+      <div class="box-error-ms">
+        No posee accesos para visualizar este módulo.
+      </div>
+    </Show>
   </div>
 }
 

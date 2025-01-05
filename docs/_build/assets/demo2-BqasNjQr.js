@@ -1,0 +1,1 @@
+import{c as t,g as e,t as r}from"./web-BZ6LonWj.js";import{P as a}from"./app-B5wVexcE.js";import"./Input-Cf7HKpQs.js";var o=r("<h1>Demo2");function p(){return t(a,{title:"Cajas",get children(){return e(o)}})}export{p as default};

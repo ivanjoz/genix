@@ -1,3 +1,5 @@
+import { Navigator } from "@solidjs/router/dist/types.js"
+
 export const IsClient = () => {
   return typeof window !== 'undefined'
 }
@@ -40,6 +42,8 @@ export const Env = {
   hostname: "",
   pathname: "",
   empresaID: 0,
+  clearAccesos: null as (() => void),
+  navigate: null as Navigator, 
   history: {
     pushState: (data: any, unused: string, url?: string | URL | null) => {
       console.log("Es server!!", data, unused, url)
@@ -84,3 +88,6 @@ export const LocalStorage = typeof window !== 'undefined'
       setItem: (k: string, v: string) => { return "" },
       removeItem: (k: string) => { return "" }
     }
+
+
+    

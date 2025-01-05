@@ -5,7 +5,7 @@ import { Loading, Notify } from "~/core/main";
 import { UriMerger, getRecordsFromIDB, httpProps, saveRecordsToIndexDB } from './httpHelpers';
 import { formatN } from './main';
 import { accessHelper, Env, getToken } from "./security";
-import { LocalStorage } from '~/env';
+import { IsClient, LocalStorage } from '~/env';
 
 export const defaultCacheExp = 20 * 60
 export const keyID = 'id'
@@ -345,6 +345,7 @@ const parseResults = (props: httpProps, records: any[]) => {
 }
 
 export function GET(props: httpProps): Promise<any> {
+  if(!IsClient()){ return Promise.resolve([]) }
 
   if(props.mergeRequest && !Env.pendingRequests.includes(props)){ 
     Env.pendingRequests.push(props) 
@@ -379,7 +380,7 @@ export function GET(props: httpProps): Promise<any> {
       awaitDexieOpen()
         .then(() => searchOnIndexDB(props))
         .then(result => {
-          debugger
+          // debugger
           if(props.readyForFetch === 1){ return }
           return result ? resolve(parseResults(props, result)) : makeFetch() 
         })
