@@ -19,6 +19,7 @@ export interface IInput<T> {
   baseDecimals?: number
   content?: (string|JSX.Element)
   transform?: (v: (string|number)) => (string|number)
+  useTextArea?: boolean
 }
 
 const [inputUpdater, setInputUpdater] = createSignal(new Map as Map<number,number>)
@@ -100,8 +101,7 @@ export function Input<T>(props: IInput<T>) {
 
   const getValue = () => {
     const value = inputValue()
-    if(typeof value !== 'number'){ console.log("valor 1:", value) ; return value || "" }
-   console.log("value 2:", value)
+    if(typeof value !== 'number'){ return value || "" }
     return baseDecimals ? (value as number / baseDecimals) : value
   }
 
@@ -112,20 +112,35 @@ export function Input<T>(props: IInput<T>) {
       </>
     }
     <div class={`${s1.input_div} w100`}>
+      {
+      props.useTextArea ?
+      <textarea class={s1.input_inp +" "+ (props.inputCss||"") } 
+        value={getValue()} 
+        onkeyup={ev => { onKeyUp(ev); isChange++ }}
+        placeholder={props.placeholder||""}
+        disabled={props.disabled}
+        onBlur={(ev) => {
+          onKeyUp(ev as unknown as any, true)
+          if(props.onChange && isChange){ 
+            props.onChange(); isChange = 0
+          }
+        }}      
+      />
+      :
       <input class={s1.input_inp +" "+ (props.inputCss||"") } 
         value={getValue()} 
         onkeyup={ev => { onKeyUp(ev); isChange++ }}
         type={props.type || "text"}
+        placeholder={props.placeholder||""}
+        disabled={props.disabled}
         onBlur={(ev) => {
           onKeyUp(ev as unknown as any, true)
           if(props.onChange && isChange){ 
-            props.onChange() 
-            isChange = 0
+            props.onChange(); isChange = 0
           }
         }}
-        placeholder={props.placeholder||""}
-        disabled={props.disabled}
-      />
+      /> 
+      }
       { !props.label && iconValid() }
       { props.postValue || null  }
     </div>

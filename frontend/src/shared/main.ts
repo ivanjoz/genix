@@ -1,5 +1,5 @@
 import Dexie from "dexie";
-import { Params, checksum } from "./security";
+import { Env, Params, checksum } from "./security";
 import { Loading, Notify } from "~/core/main";
 import { IModule } from "~/core/modules";
 
@@ -42,14 +42,6 @@ export const makeRamdomString = (length: number) => {
     str += (Math.random() + 1).toString(36).substring(2)
   }
   return str.substring(0,length)
-}
-
-export const throttle = (func: (() => void), delay: number) => {
-  if(window._throttleTimer){ clearTimeout(window._throttleTimer) }
-  window._throttleTimer = setTimeout(() => {
-    func()
-    window._throttleTimer = null
-  }, delay)
 }
 
 const separators = new Set(["-","_"])
@@ -185,9 +177,9 @@ export const makeB64UrlDecode = (contentString: string): string => {
 }
 
 export const createIndexDB = (modules: IModule[]): Promise<any> => {
-  const dbName = window.appId
-  const dexieVersion = window._dexieVersion
-  const lastDexieVersion = Params.getValueInt('dexieVersion', 1)
+  const dbName = Env.appId
+  const dexieVersion = Env.dexieVersion
+  const lastDexieVersion = Params.getValueInt('dexieVersion')
   const indexedDBTables: {[m: string]: string } = {}
   for(let module of modules){
     for(let key in module.indexedDBTables){
@@ -206,15 +198,15 @@ export const createIndexDB = (modules: IModule[]): Promise<any> => {
     if (dexieVersion !== lastDexieVersion) {
       Loading.standard('Limpiando Datos...')
       db.delete().then(() => {
-        Params.setValue('dexieVersion', dexieVersion, 1)
-        Params.setValue(`dexie_idb_${dexieVersion}`, hash, 1)
+        Params.setValue('dexieVersion', dexieVersion)
+        Params.setValue(`dexie_idb_${dexieVersion}`, hash)
         setTimeout(() => { Loading.remove(); window.location.reload() }, 100)
       })
     }
     else if (prevhash && hash !== prevhash) {
       Notify.warning(`El esquema de la Base de Datos local ha cambiando, re-inicializando...`)
       db.delete().then(() => {
-        Params.setValue(`dexie_idb_${dexieVersion}`, hash, 1)
+        Params.setValue(`dexie_idb_${dexieVersion}`, hash)
         setTimeout(() => { Loading.remove(); window.location.reload() }, 100)
       })
     }
@@ -239,6 +231,7 @@ export const createIndexDB = (modules: IModule[]): Promise<any> => {
 const DEXIE_ECOMMERCE_VERSION = 1
 
 export const makeEcommerceDB = (): Promise<Dexie> => {
+  if(typeof window === 'undefined'){ return null }
   // IndexedDB Ecommerce
   let db = window.DexieEcommerceDB as Dexie
   if(!db){

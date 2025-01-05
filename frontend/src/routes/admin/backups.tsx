@@ -6,6 +6,7 @@ import css from "../../css/layout.module.css"
 import { formatN } from "~/shared/main"
 import { Show, createSignal } from "solid-js"
 import { POST } from "~/shared/http"
+import { Env } from "~/env"
 
 export default function Backups() {
 
@@ -94,7 +95,7 @@ export default function Backups() {
               <button class="bn1 d-purple" onclick={ev =>{
                 ev.stopPropagation()
                 const s3key = ["backups",1, backupSelected().Name].join("/")
-                const url = window.S3_URL + s3key
+                const url = Env.S3_URL + s3key
                 console.log("url to download::", url)
                 downloadFile(url)
               }}>

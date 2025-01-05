@@ -2,6 +2,7 @@ import { JSX, createSignal, onMount } from "solid-js"
 import styles from "./components.module.css"
 import { POST, POST_XMLHR } from "~/shared/http"
 import { Notify } from "~/core/main"
+import { Env } from "~/env"
 
 export interface IImageInput {
   content: string
@@ -92,7 +93,7 @@ export const ImageUploader = (props?: IImageUploader) => {
     let src = imageSrc().src
     if(src.substring(0,5) !== "data:"){
       if(src.substring(0,8) !== "https://" && src.substring(0,7) !== "http://"){
-        src = window.S3_URL + src
+        src = Env.S3_URL + src
       }
     }
     return src
@@ -254,7 +255,7 @@ export const ImageCtn = (props: IImageCtn) => {
     let src = props.src
     if(src.substring(0,5) !== "data:"){
       if(src.substring(0,8) !== "https://" && src.substring(0,7) !== "http://"){
-        src = window.S3_URL + src
+        src = Env.S3_URL + src
       }
       if(props.size){ src = `${src}-x${props.size}` }
     }

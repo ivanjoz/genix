@@ -12,20 +12,42 @@ export interface IPageBlock {
   id: number, name: string, type: number, key?: string, content?: string | string[]
 }
 
-export const PageBlocks: {[e: string]: IPageBlock} = {
-  Title: { id: 1, name: 'Título', type: 1 },
-  Subtitle: { id: 2, name: 'Subtítulo', type: 1 },
-  Content: { id: 3, name: 'Contenido', type: 2 },
-  ContentArray: { id: 4, name: 'Contenidos', type: 3 },
-  BackgroundImage: { id: 5, name: 'Image de Fondo', type: 4 },
-  Content_1: { id: 11, name: 'Contenido 1', type: 2 },
-  Content_2: { id: 12, name: 'Contenido 2', type: 2 },
-  Content_3: { id: 13, name: 'Contenido 3', type: 2 },
-  Images: { id: 14, name: 'Imágenes', type: 5 },
-  ImagesGalery: { id: 14, name: 'Imágenes (Galería)', type: 7 },
-  Categorias: { id: 13, name: 'Productos Categorías', type: 8 },
-  ColumnsCant: { id: 31, name: 'Nº Columnas', type: 2 },
-  RowsCant: { id: 32, name: 'Nº Filas', type: 2 },
+export class PageBlock {
+  constructor(id: number, name: string, type: number, key?: string){
+    this.id = id
+    this.type = type
+    this.name = name
+    this.key = key
+  }
+  id: number
+  type: number
+  name: string
+  key: string
+  content: string
+  as = (name: string): PageBlock => {
+    return new PageBlock(this.id, name, this.type, this.key)
+  }
+}
+
+export const PageBlocks: {[e: string]: PageBlock} = {
+  Title: new PageBlock(1,"Título", 1),
+  Subtitle: new PageBlock(2,"Subtítulo", 1),
+  Content: new PageBlock(3,"Contenido", 2),
+  ContentArray: new PageBlock(4,"Contenidos", 3),
+  BackgroundImage: new PageBlock(5,"Image de Fondo", 5),
+  Content_1: new PageBlock(11,"Contenido 1", 2),
+  Content_2: new PageBlock(12,"Contenido 2", 2),
+  Content_3: new PageBlock(13,"Contenido 3", 2),
+  Images: new PageBlock(15,"Imágenes", 5),
+  ImagesGalery: new PageBlock(16,"Imágenes (Galería)", 7),
+  Categorias: new PageBlock(13,"Productos Categorías", 8),
+  ColumnsCant: new PageBlock(31,"Nº Columnas", 2),
+  RowsCant: new PageBlock(32,"Nº Filas", 2),
+  Check_1: new PageBlock(41,"Check 1", 4),
+  Check_2: new PageBlock(42,"Check 2", 4),
+  Check_3: new PageBlock(43,"Check 3", 4),
+  Check_4: new PageBlock(44,"Check 4", 4),
+  Check_5: new PageBlock(45,"Check 5", 4),
 }
 
 const pb = PageBlocks

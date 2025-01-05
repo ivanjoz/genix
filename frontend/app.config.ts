@@ -1,13 +1,19 @@
 import { defineConfig } from "@solidjs/start/config";
 import type { Options } from "vite-plugin-solid"
 import path from 'path'
+import { prerender } from "process";
 
 const IS_PRD = process.env.npm_lifecycle_event !== 'dev'
 console.log("IS_PROD:", IS_PRD)
 
 export default defineConfig({
-  ssr: false, // IS_PRD,
+  ssr: true,
   server: {
+    prerender: {
+      preset: "cloudflare-pages-static",
+      autoSubfolderIndex: false,
+      routes: ["/","/page/1"]
+    }
   },
   devOverlay: false,
   solid: {

@@ -90,14 +90,8 @@ export const PageRenderer = (props: IPageRenderer) => {
   </>
 }
 
-export function PageViewer() {
-
-  return <PageRenderer sections={pageExample} />
-
-}
-
 export default function PageBuilder() {
-
+  console.log("renderizando page...")
   return <>
     <PageRenderer isEditable={false} sections={pageExample} />
   </>

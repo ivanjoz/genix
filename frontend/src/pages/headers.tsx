@@ -4,6 +4,7 @@ import angleSvg from "../assets/angle.svg?raw"
 import s1 from './components.module.css'
 import { IPageSection } from "./page"
 import { EcommerceCart } from "./cart"
+import { getWindow } from "~/env"
 
 export interface IHeader1 {
   args: IPageSection
@@ -17,8 +18,10 @@ export function Header1(props: IHeader1) { // type: 10
   let menuRef2: HTMLDivElement
   let menuRefHeight = 0
   let eT: number, wH, apear, disapear // Variables
-    
+  const Window = getWindow()
+  
   const updateVariables = () => {
+    if(!menuRef1 || !menuRef2){ return }
     menuRefHeight = menuRef1.getBoundingClientRect().height
     // Distancia del margen superior del elemento hasta el Top
     eT = 0; let offsetParent = menuRef2
@@ -26,7 +29,7 @@ export function Header1(props: IHeader1) { // type: 10
       eT += menuRef2.offsetTop
       offsetParent = offsetParent.offsetParent as HTMLDivElement
     }
-    wH = window.innerHeight // Altura de la pantalla
+    wH = Window.innerHeight // Altura de la pantalla
     // Distancia donde el elemento comienza a aparecer en el viewport
     apear = eT - wH
     // Distancia donde el elemento desaparece del viewport
@@ -34,18 +37,19 @@ export function Header1(props: IHeader1) { // type: 10
   }
 
   const handleScroll = () => {
+    if(!menuRef2){ return }
     if(typeof eT !== 'number' || !menuRefHeight){ updateVariables() }
-    let wy = window.scrollY - 15; // Posición del scroll
-    console.log("haciendo scroll",menuRefHeight,window.scrollY )
-    if(window.scrollY > (menuRefHeight + 8)){
+    let wy = Window.scrollY - 15; // Posición del scroll
+    console.log("haciendo scroll",menuRefHeight,Window.scrollY )
+    if(Window.scrollY > (menuRefHeight + 8)){
       menuRef2.classList.add('menu-on')
     } else if( wy < eT){
       menuRef2.classList.remove('menu-on')
     }
   }
 
-  window.addEventListener("scroll", handleScroll)
-  window.addEventListener("resize", handleScroll)
+  Window.addEventListener("scroll", handleScroll)
+  Window.addEventListener("resize", handleScroll)
 
   createEffect(() => {
     handleScroll()

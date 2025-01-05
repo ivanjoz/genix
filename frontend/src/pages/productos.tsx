@@ -1,3 +1,4 @@
+import { useZoomImageMove } from "@zoom-image/solid"
 import { createEffect, createMemo, createSignal, For, on, onMount, Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { ImageCtn } from "~/components/Uploaders"
@@ -6,12 +7,10 @@ import { IProducto } from "~/services/operaciones/productos"
 import { formatN, makeEcommerceDB } from "~/shared/main"
 import iconCancelSvg from "../assets/icon_cancel.svg?raw"
 import iconCartSvg from "../assets/icon_cart.svg?raw"
+import { setCartOption } from "./cart"
 import s1 from "./components.module.css"
 import { IHeader1, setShowCart, showCart } from "./headers"
 import { useProductosCmsAPI } from "./productos-service"
-import { setCartOption } from "./cart"
-import { createZoomImageWheel } from "@zoom-image/core"
-import { useZoomImageMove } from "@zoom-image/solid"
 
 export function ProductosCuadrilla(props: IHeader1) { // type: 10
 
@@ -201,6 +200,7 @@ createEffect(() => {
       }),
     }
     const db = await makeEcommerceDB()
+    if(!db){ return }
     db.table("cache").put(record)
   },500)
 })

@@ -3,6 +3,7 @@ import Dexie, { Table } from 'dexie';
 import { camelToSnakeCase } from "./main";
 import { Notify, Loading } from "~/core/main";
 import { AxiosProgressEvent } from "axios";
+import { LocalStorage } from "~/env";
 
 export interface IHttpStatus { code: number, message: string }
 
@@ -175,7 +176,7 @@ export const getRecordsFromIDB = (props: httpProps): Promise<any[]> => {
       const elapsed = (Date.now() - (props.startTimeMs || 0))
       console.log(`Registros enviados desde IndexDB [${tables.join(',')}] en ${elapsed}ms`)
       for(let k of (props.localRecordsToDelete || [])){ 
-        localStorage.removeItem(k)
+        LocalStorage.removeItem(k)
       }
       resolve(results)
     })
@@ -183,7 +184,7 @@ export const getRecordsFromIDB = (props: httpProps): Promise<any[]> => {
       console.error('Error al obtener los datos de DexieDB....')
       console.warn(error)
       console.warn("Filtros Utilizados::",filters)
-      const blankResult = tables.length === 1 ? [] : tables.map(_ => []) 
+      const blankResult = tables.length === 1 ? [] : tables.map(() => []) 
       resolve(blankResult)
     })
   })
