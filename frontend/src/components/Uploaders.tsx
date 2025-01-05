@@ -1,4 +1,4 @@
-import { JSX, createSignal } from "solid-js"
+import { JSX, createSignal, onMount } from "solid-js"
 import styles from "./components.module.css"
 import { POST, POST_XMLHR } from "~/shared/http"
 import { Notify } from "~/core/main"
@@ -245,6 +245,7 @@ export interface IImageCtn {
   size?: 2 | 4 | 6 | 8 | 9
   class?: string
   style?: JSX.CSSProperties
+  useZoomOnHover?: boolean
 }
 
 export const ImageCtn = (props: IImageCtn) => {
@@ -259,7 +260,6 @@ export const ImageCtn = (props: IImageCtn) => {
     }
     return src
   }
-
 
   return <picture class={"dsp-cont"} style={props.style}>
     { props.types?.includes("avif") &&

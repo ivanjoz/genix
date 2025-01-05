@@ -13,6 +13,8 @@
     "@tanstack/solid-virtual": "^3.10.9",
     "@tanstack/virtual-core": "^3.10.9",
     "@types/d3": "^7.4.3",
+    "@zoom-image/core": "^0.39.0",
+    "@zoom-image/solid": "^0.2.23",
     "axios": "^1.6.3",
     "billboard.js": "^3.12.2",
     "cbor-web": "^9.0.2",
