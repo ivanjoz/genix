@@ -1,9 +1,9 @@
-import { For, JSX } from "solid-js"
+import { For, JSX, Show } from "solid-js"
 import './components.css'
 import { coponentsRenders, IPageBlock } from "./page-components"
 import { pageExample } from "./page-example"
 import styles from './page.module.css'
-import { CartFloating } from "./productos"
+import { CartFloating, ProductoInfoLayer, productoSelected } from "./productos"
 
 export interface IPageSection {
   id?: number
@@ -84,6 +84,9 @@ export const PageRenderer = (props: IPageRenderer) => {
       }}
     </For>
     <CartFloating />
+    <Show when={!!productoSelected()}>
+      <ProductoInfoLayer />
+    </Show>
   </>
 }
 

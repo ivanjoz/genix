@@ -1,0 +1,1 @@
+import{a as e,c as t,t as a}from"./web-D7Y7EE6c.js";import{P as r}from"./app-DUJ9K0SH.js";var n=a("<h1>Sistema de Gestión de Mypes");function m(){return e({}),t(r,{title:"Index",get children(){return n()}})}export{m as default};

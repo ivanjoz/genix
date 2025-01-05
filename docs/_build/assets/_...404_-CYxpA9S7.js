@@ -1,0 +1,1 @@
+import{c as t,t as e}from"./web-D7Y7EE6c.js";import{P as a}from"./app-DUJ9K0SH.js";var o=e("<div class=h1>No se encontró la página buscada...");function c(){return t(a,{title:"No Encontrado",fetchLoading:!0,get children(){return o()}})}export{c as default};

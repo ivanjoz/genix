@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onMount, Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { ImageCtn } from "~/components/Uploaders"
 import { parseSVG, throttle } from "~/core/main"
@@ -10,7 +10,8 @@ import s1 from "./components.module.css"
 import { IHeader1, setShowCart, showCart } from "./headers"
 import { useProductosCmsAPI } from "./productos-service"
 import { setCartOption } from "./cart"
-import Dexie from "dexie"
+import { createZoomImageWheel } from "@zoom-image/core"
+import { useZoomImageMove } from "@zoom-image/solid"
 
 export function ProductosCuadrilla(props: IHeader1) { // type: 10
 
@@ -26,6 +27,10 @@ export function ProductosCuadrilla(props: IHeader1) { // type: 10
 
           return <div class={`p-rel flex-column ai-center ${s1.product_card}`}
             classList={{ "has-products": cartCant() > 0 }}
+            onClick={ev => {
+              ev.stopPropagation()
+              setProductoSelected(e)
+            }}
           >
             { e.Images?.length > 0 &&
               <ImageCtn src={"img-productos/"+ e.Images[0]?.n} size={2}
@@ -56,7 +61,9 @@ export function ProductosCuadrilla(props: IHeader1) { // type: 10
                 </div>
               </Show>
               <Show when={cartCant() >= e._stock}>
-                <div class={`flex ai-center jc-center ${s1.product_cart_button}`}>
+                <div class={`flex ai-center jc-center ${s1.product_cart_button}`}
+                  onClick={ev => { ev.stopPropagation() }}
+                >
                   <i class="icon-attention _icon"></i>
                   <div class={s1.product_cart_bn_cant}>{cartCant()}</div>
                   <div class={s1.product_cart_bn_text}>Stock Máximo = <span>{cartCant()}</span></div>     
@@ -179,8 +186,13 @@ export interface ICartProductoCache {
   id: number, cant: number
 }
 
+let isEmptyInit = true
+
 createEffect(() => {
   const productosMap = cartProductos()
+  if(isEmptyInit && productosMap.size === 0){ return }
+  isEmptyInit = false
+
   throttle(async () => {
     const record = {
       key: "cart",
@@ -281,4 +293,63 @@ export const CartFloatingProducto = (props: ICartFloatingProducto) => {
       <div class="c-red h5 mt-02"><i class="icon-attention"></i> {message()}</div>
     </Show>
   </div>
+}
+
+export const [productoSelected, setProductoSelected] = createSignal(null as IProducto)
+
+export interface IProductoInfoLayer {
+
+}
+
+export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
+
+  let divRef: HTMLDivElement
+  const { createZoomImage } = useZoomImageMove()
+
+  onMount(() => {
+    console.log("div container::", divRef)
+    createZoomImage(divRef, { zoomFactor: 2 })
+  })
+
+  return <Portal mount={document.body}>
+    <div class={`${s1.producto_layer_bg}`} onClick={ev => {
+      ev.stopPropagation()
+      setProductoSelected(null)
+    }}></div>
+    <div class={`${s1.producto_layer_ctn}`}>
+      <div class="flex h1 ff-semibold mb-08">
+        {productoSelected().Nombre}
+      </div>
+      <div class="flex w100">
+        <div class={`p-rel ${s1.producto_layer_img_ctn}`}>
+        { productoSelected().Images.map(img => {
+            return <div class={`p-rel ${s1.producto_layer_img_min} mb-08`}>
+              <ImageCtn src={"img-productos/"+ img.n} size={2}
+                class={"h100 w100 object-contain"}
+                types={["avif","webp"]}
+              />
+            </div>
+          })
+        }
+        </div>
+        <div class={`${s1.producto_layer_content}`}>
+          <div class={`p-rel w100 ${s1.producto_layer_img1}`} ref={divRef}>
+            <ImageCtn src={"img-productos/"+ productoSelected().Images[0]?.n} size={6}
+              class={"h100 w100 object-contain"}
+              types={["avif","webp"]}
+            />
+          </div>
+          <div class="flex mt-12 ai-center">
+            <div class="mr-06">Precio:</div>
+            <div class="ff-bold h1">s/. {formatN(productoSelected()?.PrecioFinal/100,2)}</div>
+            <div class="ml-auto"></div>
+            <button class={`${s1.producto_cart_btn}`}>
+              <i class="icon-basket"></i>
+              Añadir a Carrito
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Portal>
 }
