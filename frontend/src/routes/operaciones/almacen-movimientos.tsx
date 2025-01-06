@@ -93,7 +93,7 @@ export default function AlmacenMovimientos() {
       </div>
     </div>
     <QTable data={almacenMovimientos()} 
-      css="w100" tableCss="w-page-t w100"
+      css="w100 w-page-t" tableCss="w100"
       maxHeight="calc(100vh - 8rem - 12px)" 
       makeFilter={e => {
         const producto = productosMap.get(e.ProductoID)?.Nombre || ""

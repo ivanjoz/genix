@@ -345,7 +345,7 @@ export default function Ventas() {
           getContent={() => formatMo(form().total)}/>
       </div>
       <QTable data={ventaProductos()} 
-        css="w100 mt-12" tableCss="w-page-t w100"
+        css="w100 mt-12 w-page-t" tableCss="w100"
         maxHeight="calc(100vh - 12rem - 12px)"
         columns={[
           { header: "Nº",

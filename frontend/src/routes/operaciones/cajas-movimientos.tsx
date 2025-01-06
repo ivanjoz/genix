@@ -84,7 +84,7 @@ export default function CajasMovimientos() {
       </div>
     </div>
     <QTable data={cajaMovimientos()} 
-      css="w100" tableCss="w-page-t w100"
+      css="w100 w-page-t" tableCss="w100"
       maxHeight="calc(100vh - 8rem - 12px)" 
       makeFilter={e => {
         const movTipo = cajaMovimientoTiposMap.get(e.Tipo)

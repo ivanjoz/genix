@@ -1,11 +1,15 @@
-import { createSignal } from "solid-js"
-import { PageContainer } from "~/core/page"
+import { onMount } from "solid-js"
+import { Env, isLogin } from "~/shared/security"
 
 export default function Home() {
 
-  const [form, setfForm] = createSignal({})
+  onMount(() => {
+    if(isLogin() !== 2){
+      Env.navigate("login")
+    } else {
+      Env.navigate("home")
+    }
+  })
   
-  return <PageContainer title="Index">
-    <h1>Sistema de Gestión de Mypes</h1>
-  </PageContainer>
+  return <div></div>
 }
