@@ -1,0 +1,1 @@
+import{o as e,g as a,t as o}from"./web-CZ5hrCiI.js";import{i,E as t}from"./main-C-D57zym.js";var n=o("<div>");function s(){return e(()=>{i()!==2?t.navigate("login"):t.navigate("home")}),a(n)}export{s as default};
