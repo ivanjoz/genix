@@ -182,7 +182,7 @@ export default function ProductosStock() {
       </div>
     </div>
     <QTable data={productosStock()} 
-      css="" tableCss="w-page-t" maxHeight="calc(80vh - 13rem)" 
+      css="w-page-t" tableCss="" maxHeight="calc(80vh - 13rem)" 
       filterText={filterText()}
       makeFilter={e => {
         const producto = productos().productosMap.get(e.ProductoID)?.Nombre || ""

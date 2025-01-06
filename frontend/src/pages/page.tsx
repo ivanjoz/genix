@@ -1,7 +1,6 @@
 import { For, JSX, Show } from "solid-js"
 import './components.css'
 import { coponentsRenders, IPageBlock } from "./page-components"
-import { pageExample } from "./page-example"
 import styles from './page.module.css'
 import { CartFloating, ProductoInfoLayer, productoSelected } from "./productos"
 
@@ -64,7 +63,7 @@ export const PageSectionRenderer = (e: IPageSectionRenderer) => {
   return <div></div>
 }
 
-export const PageRenderer = (props: IPageRenderer) => {
+export default function PageRenderer(props: IPageRenderer){
   
   return <>
     <For each={props.sections}>
@@ -87,12 +86,5 @@ export const PageRenderer = (props: IPageRenderer) => {
     <Show when={!!productoSelected()}>
       <ProductoInfoLayer />
     </Show>
-  </>
-}
-
-export default function PageBuilder() {
-  console.log("renderizando page...")
-  return <>
-    <PageRenderer isEditable={false} sections={pageExample} />
   </>
 }

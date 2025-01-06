@@ -13,7 +13,7 @@ export default defineConfig({
       preset: "cloudflare-pages-static",
       autoSubfolderIndex: false,
       routes: ["/","/page/1"]
-    }
+    },
   },
   devOverlay: false,
   solid: {

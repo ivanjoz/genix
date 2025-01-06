@@ -6,10 +6,9 @@ import { Suspense, createEffect, createSignal, onMount } from "solid-js";
 import Modules from "./core/modules";
 import { PageLoading, PageLoadingElement } from "./core/page";
 import { Env, LocalStorage, getWindow } from "./env";
-import PageBuilder from "./pages/page";
-import LoginPage from "./routes/login";
+import PageBuilder from "./pages/main";
 import { createIndexDB } from "./shared/main";
-import { checkIsLogin, Params } from "./shared/security";
+import { Params, checkIsLogin } from "./shared/security";
 
 const PageMenu = clientOnly(() => import("./core/menu"))
 

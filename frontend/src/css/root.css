@@ -73,7 +73,6 @@ p {
   padding-right: 1px;
   padding-left: 1px;
   background-color: var(--white-2);
-  scrollbar-gutter: stable;
 }
 
 .qtable-c.selectable > table > tbody > tr {

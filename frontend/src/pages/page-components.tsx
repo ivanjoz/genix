@@ -2,6 +2,7 @@ import { BasicSection, BigScroll, Demo1, LayerImage21 } from "./components";
 import './components.css';
 import { Header1 } from "./headers";
 import { IPageParams } from "./page";
+import { pageExample } from "./page-example";
 import { ProductosCuadrilla } from "./productos";
 
 /*
