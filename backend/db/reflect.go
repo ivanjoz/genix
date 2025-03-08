@@ -269,8 +269,12 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			columns: []string{colInfo.Name},
 		}
 		index.getCreateScript = func() string {
-			return fmt.Sprintf(`CREATE INDEX %v ON %v (%v)`,
-				index.name, dbTable.GetFullName(), column.GetInfo().Name)
+			colInfo := column.GetInfo()
+			colName := colInfo.Name
+			if colInfo.IsSlice {
+				colName = fmt.Sprintf("VALUES(%v)", colInfo.Name)
+			}
+			return fmt.Sprintf(`CREATE INDEX %v ON %v (%v)`, index.name, dbTable.GetFullName(), colName)
 		}
 
 		idxCount++
@@ -402,10 +406,10 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		for _, colInfo := range viewConfig.Cols {
 			column := dbTable.columnsMap[colInfo.GetInfo().Name]
 			if column.IsComplexType {
-				panic("No puede ser un struct como columna de una view")
+				panic("No puede usar un struct como columna de una view.")
 			}
 			if column.IsSlice {
-				panic("No puede ser un slice como columna de una view")
+				panic("No puede usar un slice como columna de una view. Intente con un índice global.")
 			}
 			colNames = append(colNames, column.Name)
 			columns = append(columns, column)
