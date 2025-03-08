@@ -21,6 +21,14 @@ func Select[T TableSchemaInterface](handler func(query *Query[T], schemaTable T)
 	return QueryResult[T]{records, err}
 }
 
+func SelectT[T TableSchemaInterface](handler func(query *Query[T])) ([]T, error) {
+	query := Query[T]{}
+	handler(&query)
+	records := []T{}
+	err := selectExec(&records, &query)
+	return records, err
+}
+
 func SelectRef[T TableSchemaInterface](recordsGetted *[]T, handler func(query *Query[T], schemaTable T)) error {
 
 	query := Query[T]{}

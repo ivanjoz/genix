@@ -3,7 +3,6 @@ package operaciones
 import (
 	"app/core"
 	"app/db"
-	"app/types"
 	s "app/types"
 	"encoding/json"
 	"slices"
@@ -30,9 +29,9 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Genera los movimientos internos
-	movimientosInternos := []types.MovimientoInterno{}
+	movimientosInternos := []s.MovimientoInterno{}
 	for _, e := range stock {
-		movimientosInternos = append(movimientosInternos, types.MovimientoInterno{
+		movimientosInternos = append(movimientosInternos, s.MovimientoInterno{
 			ReemplazarCantidad: true,
 			ProductoID:         e.ProductoID,
 			SKU:                e.SKU,
@@ -177,7 +176,7 @@ func (ps *productoStockCounter) AddCant(almacenID int32, cant int32) {
 	ps.almacenesStock[almacenID] = count
 }
 
-func ApplyMovimientos(movimientos []types.MovimientoInterno) error {
+func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 
 	keys := []string{}
 	productosIDs := core.SliceSet[int32]{}
@@ -186,6 +185,20 @@ func ApplyMovimientos(movimientos []types.MovimientoInterno) error {
 		keys = append(keys, mov.GetAlmacenProductoID())
 		productosIDs.Add(mov.ProductoID)
 	}
+
+	// Obtiene información de los productos
+	productos, err := db.SelectT(func(q *db.Query[s.Producto]) {
+		col := q.T
+		q.Columns(col.EmpresaID_(), col.ID_(), col.CategoriasIDs_())
+		q.Where(col.EmpresaID_().Equals(core.Usuario.EmpresaID))
+		q.Where(col.ID_().In(productosIDs.Values...))
+	})
+
+	if err != nil {
+		return core.Err("Error al obtener los productos:", err)
+	}
+
+	productosMap := core.SliceToMapE(productos, func(e s.Producto) int32 { return e.ID })
 
 	// Obtiene el stock actual
 	currentStock := db.Select(func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
@@ -313,19 +326,20 @@ func ApplyMovimientos(movimientos []types.MovimientoInterno) error {
 				Cantidad:  cant.cantidad,
 			})
 		}
-		productosToUpdate = append(productosToUpdate, s.Producto{
-			EmpresaID:   core.Usuario.EmpresaID,
-			ID:          e.productoID,
-			Stock:       almacenStock,
-			StockStatus: core.If(almacenStock == nil, int8(0), 1),
-		})
+
+		producto := productosMap[e.productoID]
+		producto.Stock = almacenStock
+		producto.StockStatus = core.If(almacenStock == nil, int8(0), 1)
+		producto.FillCategoriasConStock()
+
+		productosToUpdate = append(productosToUpdate, producto)
 	}
 
 	core.Log("productos for update...")
 	core.Print(productosToUpdate)
 
 	pCol := s.Producto{}
-	err := db.Update(&productosToUpdate, pCol.Stock_(), pCol.StockStatus_())
+	err = db.Update(&productosToUpdate, pCol.Stock_(), pCol.StockStatus_())
 	if err != nil {
 		// Este error es interno, dado que el stock ya se guardó en la tabla principal de almacén_productos
 		core.Log("Error al actualizar el stock en productos:", err)

@@ -61,13 +61,13 @@ func (e Usuario) GetSchema() TableSchema {
 		Name:          "ztest_usuarios",
 		Partition:     e.CompanyID_(),
 		Keys:          []Coln{e.ID_()},
-		GlobalIndexes: []Coln{e.Edad_(), e.GruposIDs_()},
+		GlobalIndexes: []Coln{e.Edad_(), e.GruposIDs_(), e.Accesos_()},
 		// LocalIndexes:  []Coln{e.Nombre_(), e.GruposIDs_()},
 		HashIndexes: [][]Coln{{e.RolID_(), e.Edad_()}, {e.RolID_(), e.Accesos_()}},
 		Views: []View{
 			{Cols: []Coln{e.RolID_()}, KeepPart: true},
 			// No puede ser un slice como columna de una view
-			// {Cols: []Coln{e.Accesos_()}, KeepPart: true},
+			// {Cols: []Coln{e.Accesos_()}, KeepPart: false},
 			{Cols: []Coln{e.RolID_(), e.Edad_()}, KeepPart: true},
 			{Cols: []Coln{e.RolID_(), e.Updated_()}, ConcatI64: []int8{10}},
 			{Cols: []Coln{e.RolID_(), e.Edad_(), e.Updated_()}, ConcatI64: []int8{4, 11}},
