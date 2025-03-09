@@ -250,6 +250,10 @@ export interface IImage {
   useZoomOnHover?: boolean
   imageStyle?: JSX.CSSProperties
   imageClass?: string
+  description?: string
+  showDescriptionAlways?: boolean
+  selectable?: boolean
+  onSelect?: () => void
 }
 
 
@@ -286,11 +290,18 @@ export const ImageCard = (props: IImage) => {
   const makeSrc = () => makeImageSrc(props.src, props.size)
   const [isLoading, setIsLoading] = createSignal(1)
 
-  const css = props.class || styles.image_card_default
+  let css = props.class || styles.image_card_default
+  if(props.selectable){
+    css += " sel"
+  }
 
-  return <div class={`p-rel ${css}`} 
+  return <div class={`p-rel imgc1 ${css}`} 
     style={{...(props.style||{}), 
       "background-color": isLoading() === 1 ? "#34353e" : "" }}
+    onClick={ev => {
+      ev.stopPropagation()
+      if(props.onSelect){ props.onSelect() }
+    }}
   >
     <picture class={"dsp-cont"}
       onError={() => setIsLoading(2) }
@@ -325,6 +336,11 @@ export const ImageCard = (props: IImage) => {
           <div class="spinner-item"></div>
         </div>
         <div style={{ color: 'white' }}>Cargando...</div>
+      </div>
+    }
+    { props.description &&
+      <div class={`p-abs ff-bold flex-center w100 ${styles.image_card_desc}`}>
+        { props.description }
       </div>
     }
   </div>

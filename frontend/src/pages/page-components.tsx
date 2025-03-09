@@ -1,7 +1,7 @@
 import { BasicSection, BigScroll, Demo1, LayerImage21 } from "./components";
 import './components.css';
 import { Header1 } from "./headers";
-import { IPageParams } from "./page";
+import { IPageParams, IPageSection } from "./page";
 import { pageExample } from "./page-example";
 import { ProductosCuadrilla } from "./productos";
 
@@ -10,7 +10,8 @@ import { ProductosCuadrilla } from "./productos";
          6 = color, 7 = array of image with text
 */
 export interface IPageBlock {
-  id: number, name: string, type: number, key?: string, content?: string | string[]
+  id: number, name: string, type: number, 
+  key?: keyof IPageSection, content?: string | string[]
 }
 
 export class PageBlock {

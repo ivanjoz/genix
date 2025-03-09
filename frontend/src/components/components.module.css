@@ -420,8 +420,34 @@ select.input_inp {
   padding: 4px;
   background-color: white;
   box-shadow: rgb(52 52 57 / 30%) 0px 1px 6px 0px;
+  cursor: pointer;
+}
+
+.image_card_default:global(.sel):hover {
+  outline: 2px solid rgb(29, 29, 29);
 }
 
 .image_card_default img {
   border-radius: 6px;
+}
+
+.image_card_desc {
+  height: 4.7rem; 
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 0%,
+   rgba(0,0,0,0.5) 46%, rgba(0,0,0,0.5) 100%);
+  left: 4px;
+  bottom: 4px;
+  border-radius: 8px;
+ /*  backdrop-filter: blur(4px); */
+  color: white;
+  padding: 1.2rem 6px 6px 6px;
+  text-shadow: 1px 2px 4px rgb(0 0 0 / 70%);
+  visibility: hidden;
+  width: calc(100% - 8px);
+  pointer-events: none;
+}
+
+:global(.imgc1):hover .image_card_desc {
+  visibility: visible;
 }

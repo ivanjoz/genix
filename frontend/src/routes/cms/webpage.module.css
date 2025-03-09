@@ -141,10 +141,33 @@
   border-radius: 5px;
   border: 1px solid rgb(188 192 218);
   cursor: pointer;
+  padding: 4px
 }
 
-.image_selector > i {
+.image_selector img {
+  object-fit: contain;
+}
+
+.image_selector_seleccione {
+  top: 0;
+  left: 0;
+  padding-bottom: 1rem;
+}
+.image_selector_seleccione > i {
   font-size: 3rem;
+}
+
+.image_selector_cambiar {
+  opacity: 0;
+}
+.image_selector_cambiar:hover {
+  opacity: 1;
+}
+.image_selector_seleccione.image_selector_cambiar {
+  color: white;
+  background-color: rgba(0, 0, 0, 0.4);
+  z-index: 21;
+  border-radius: 6px;
 }
 
 .image_selector:hover {
