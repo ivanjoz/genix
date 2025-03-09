@@ -1,6 +1,6 @@
 import { For, JSX, Show } from "solid-js"
 import './components.css'
-import { coponentsRenders, IPageBlock } from "./page-components"
+import { componentsRenders, IPageBlock } from "./page-components"
 import styles from './page.module.css'
 import { CartFloating, ProductoInfoLayer, productoSelected } from "./productos"
 
@@ -57,7 +57,7 @@ interface IPageSectionRenderer {
 }
 
 export const PageSectionRenderer = (e: IPageSectionRenderer) => {
-  for(const sec of coponentsRenders){
+  for(const sec of componentsRenders){
     if(e.type === sec.type){ return sec.render(e) }
   }
   return <div></div>

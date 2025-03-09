@@ -52,7 +52,7 @@ body:global(.dark) .card_image_1.card_input:hover {
 }
 
 .card_image_textarea {
-  background-color: #00000017;
+  background-color: #0000005c;
   border: none;
   border-radius: 7px;
   color: white;

@@ -6,7 +6,7 @@ const IS_PRD = process.env.npm_lifecycle_event !== 'dev'
 console.log("IS_PROD:", IS_PRD)
 
 export default defineConfig({
-  ssr: true,
+  ssr: false,
   server: {
     prerender: {
       preset: "cloudflare-pages-static",

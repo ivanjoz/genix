@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"app/aws"
 	"app/core"
 	"app/db"
 	s "app/types"
@@ -224,13 +225,14 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		producto.Images = images
 	} else {
-		imageArgs := ImageArgs{
-			Content: image.Content,
-			Folder:  "img-productos",
-			Name:    fmt.Sprintf("%v", time.Now().UnixMilli()),
+		imageArgs := aws.ImageArgs{
+			Content:     image.Content,
+			Folder:      "img-productos",
+			Name:        fmt.Sprintf("%v", time.Now().UnixMilli()),
+			Resolutions: map[uint16]string{980: "x6", 540: "x4", 340: "x2"},
 		}
 
-		_, err = saveImage(imageArgs)
+		_, err = aws.SaveImage(imageArgs)
 		if err != nil {
 			return req.MakeErr("Error al guardar la imagen: " + err.Error())
 		}

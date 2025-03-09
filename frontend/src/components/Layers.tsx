@@ -42,6 +42,7 @@ export const LayerSelect = (props: ILayerAutoHide) => {
       <Show when={show()}>
         <input ref={refInput} autofocus={true} class="input-hide1"
           onBlur={ev => {
+            return
             ev.stopPropagation()
             if(avoidHideOnBlur){
               avoidHideOnBlur = false; refInput?.focus()
