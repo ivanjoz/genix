@@ -54,7 +54,7 @@ export const PageBlocks: {[e: string]: PageBlock} = {
 const pb = PageBlocks
 for(const key in PageBlocks){ (PageBlocks as any)[key].key = key }
 
-export const coponentsRenders: IPageParams[] = [
+export const componentsRenders: IPageParams[] = [
   { type: 1, name: 'Basic Section', 
     render: e => <BasicSection args={e.args} />,
     params: [pb.Title, pb.Subtitle, pb.Content],

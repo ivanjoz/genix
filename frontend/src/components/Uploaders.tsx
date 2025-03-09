@@ -32,6 +32,7 @@ export interface IImageUploader {
   description?: string
   cardStyle?: JSX.CSSProperties
   onDelete?: (src: string) => void
+  cardCss?: string
 }
 
 export const ImageUploader = (props?: IImageUploader) => {
@@ -99,7 +100,7 @@ export const ImageUploader = (props?: IImageUploader) => {
     return src
   }
   
-  return <div class={`p-rel ${styles.card_image_1} ${imageSrc()?.src ? "" : styles.card_input}`}
+  return <div class={`p-rel ${props.cardCss ? props.cardCss + " " : ""}${styles.card_image_1} ${imageSrc()?.src ? "" : styles.card_input}`}
     style={props.cardStyle}
   >
     { (imageSrc()?.src||"").length === 0 &&

@@ -83,10 +83,6 @@ func (e _e) Updated_() db.CoI64            { return db.CoI64{"updated"} }
 func (e _e) UpdatedBy_() db.CoI32          { return db.CoI32{"updated_by"} }
 func (e _e) Created_() db.CoI64            { return db.CoI64{"created"} }
 func (e _e) CreatedBy_() db.CoI32          { return db.CoI32{"created_by"} }
-func (e _e) Categoria1_() db.CoI16         { return db.CoI16{"categoria_1"} }
-func (e _e) Categoria2_() db.CoI16         { return db.CoI16{"categoria_2"} }
-func (e _e) Categoria3_() db.CoI16         { return db.CoI16{"categoria_3"} }
-func (e _e) Categoria4_() db.CoI16         { return db.CoI16{"categoria_4"} }
 func (e _e) Stock_() db.CoAny              { return db.CoAny{"stock"} }
 func (e _e) StockReservado_() db.CoAny     { return db.CoAny{"stock_reservado"} }
 func (e _e) StockStatus_() db.CoI8         { return db.CoI8{"stock_status"} }
@@ -102,16 +98,14 @@ func (e *Producto) FillCategoriasConStock() {
 
 func (e Producto) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:      "productos",
-		Partition: e.EmpresaID_(),
-		Keys:      []db.Coln{e.ID_()},
+		Name:          "productos",
+		Partition:     e.EmpresaID_(),
+		Keys:          []db.Coln{e.ID_()},
+		GlobalIndexes: []db.Coln{e.CategoriasConStock_()},
 		Views: []db.View{
 			{Cols: []db.Coln{e.Status_()}, KeepPart: true},
 			{Cols: []db.Coln{e.StockStatus_()}, KeepPart: true},
 			{Cols: []db.Coln{e.Updated_()}, KeepPart: true},
-		},
-		LocalIndexes: []db.Coln{
-			e.Categoria1_(), e.Categoria2_(), e.Categoria3_(), e.Categoria4_(),
 		},
 	}
 }
