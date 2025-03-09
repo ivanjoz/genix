@@ -1,16 +1,15 @@
 import { useLocation, useParams } from "@solidjs/router";
-import { For, JSX, createEffect, createMemo, createSignal } from "solid-js";
+import { createEffect, createMemo, createSignal, For, JSX } from "solid-js";
 import { Input } from "~/components/Input";
 import { pageView, setIsRouteChanging } from "~/core/menu";
 import { PageContainer } from "~/core/page";
-import { IPageParams, IPageSection, ISectionParams, PageSectionRenderer } from "~/pages/page";
-import { componentsRenders, IPageBlock, PageBlocks } from "~/pages/page-components";
+import { IPageParams, IPageSection, PageSectionRenderer } from "~/pages/page";
+import { componentsRenders, IPageBlock } from "~/pages/page-components";
 import { pageExample } from "~/pages/page-example";
-import { arrayToMapN } from "~/shared/main";
-import * as styles from "./webpage.module.css";
-import { classList } from "solid-js/web";
-import { ImageGalery, ImageGalerySelector } from "./galeria-imagenes";
 import { useGaleriaImagesAPI } from "~/services/cms/galeria-images";
+import { arrayToMapN } from "~/shared/main";
+import { ImageGalery, ImageGalerySelector } from "./galeria-imagenes";
+import * as styles from "./webpage.module.css";
 
 export const [pageViews, setPageViews] = createSignal({})
 
@@ -123,7 +122,14 @@ export default function CmsWebpage() {
                 }}
               />
             } else if(e.type === 5){
-              return <ImageGalerySelector imagenes={galeriaImagenes()} />
+              return <ImageGalerySelector imagenes={galeriaImagenes()} 
+                imageSelected={sectionSelected()[e.key] as string}
+                onSelect={img => {
+                  sectionSelected()[e.key] = img.Image as never
+                  console.log("section updated::", sectionSelected())
+                  applyUpdate()
+                }}
+              />
             }
             return <div>--</div>
           }}

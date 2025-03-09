@@ -15,6 +15,7 @@ export interface IPageSection {
   content1?: string
   content2?: string
   content3?: string
+  Image?: string
   Title?: string
   Subtitle?: string
   images?: string[]
