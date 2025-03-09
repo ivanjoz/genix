@@ -9,7 +9,8 @@ import { pageExample } from "~/pages/page-example";
 import { arrayToMapN } from "~/shared/main";
 import * as styles from "./webpage.module.css";
 import { classList } from "solid-js/web";
-import { ImageGalery } from "./image-galery";
+import { ImageGalery, ImageGalerySelector } from "./galeria-imagenes";
+import { useGaleriaImagesAPI } from "~/services/cms/galeria-images";
 
 export const [pageViews, setPageViews] = createSignal({})
 
@@ -20,6 +21,7 @@ export default function CmsWebpage() {
   const [sectionSelected, setSectionSelected] = createSignal<IPageSection>()
   const [sectionParams, setSectionParams] = createSignal([] as IPageBlock[])
   const coponentsRendersMap = arrayToMapN(componentsRenders, 'type')
+  const [galeriaImagenes] = useGaleriaImagesAPI()
 
   const params = useParams()
 
@@ -120,6 +122,8 @@ export default function CmsWebpage() {
                   applyUpdate()
                 }}
               />
+            } else if(e.type === 5){
+              return <ImageGalerySelector imagenes={galeriaImagenes()} />
             }
             return <div>--</div>
           }}
@@ -160,7 +164,9 @@ export default function CmsWebpage() {
     }
     { 
     pageView() === 2 &&
-    <ImageGalery />
+    <ImageGalery imagenes={galeriaImagenes()}
+      useUploader={true}
+    />
     }
   </PageContainer>
 }
@@ -227,12 +233,16 @@ const SeccionTypeSelector = (props: ISeccionTypeSelector) => {
 
   let inputRef: HTMLInputElement
   let avoidBlur = false
+  let avoidClickUntil = 0
 
   return <div class="w100 p-rel mb-08">
     <button class={`flex ai-center w100 p-rel h3 ff-bold ${styles.btn_11}`}
       classList={{"open": showLayer() }}
       onClick={ev => {
         ev.stopPropagation()
+        if(avoidClickUntil && avoidClickUntil > Date.now()){
+          return
+        }
         const showState = !showLayer()
         setShowLayer(showState)
         setTimeout(() => {
@@ -245,7 +255,7 @@ const SeccionTypeSelector = (props: ISeccionTypeSelector) => {
     </button>
     { showLayer() &&
       <>
-        <input ref={inputRef} class="p-abs"
+        <input ref={inputRef} class={`p-abs ${styles.input_invisible}`}
           onBlur={ev => {
             ev.stopPropagation()
             if(avoidBlur){
@@ -253,6 +263,7 @@ const SeccionTypeSelector = (props: ISeccionTypeSelector) => {
               ev.target.focus()
             } else {
               setShowLayer(false)
+              avoidClickUntil = Date.now() + 400
             }
           }}
         />

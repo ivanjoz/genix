@@ -30,7 +30,7 @@ export class PageBlock {
   }
 }
 
-export const PageBlocks: {[e: string]: PageBlock} = {
+export const PageBlocks /*: {[e: string]: PageBlock} */ = {
   Title: new PageBlock(1,"Título", 1),
   Subtitle: new PageBlock(2,"Subtítulo", 1),
   Content: new PageBlock(3,"Contenido", 2),
@@ -39,7 +39,7 @@ export const PageBlocks: {[e: string]: PageBlock} = {
   Content_1: new PageBlock(11,"Contenido 1", 2),
   Content_2: new PageBlock(12,"Contenido 2", 2),
   Content_3: new PageBlock(13,"Contenido 3", 2),
-  Images: new PageBlock(15,"Imágenes", 5),
+  Image: new PageBlock(15,"Imágen", 5),
   ImagesGalery: new PageBlock(16,"Imágenes (Galería)", 7),
   Categorias: new PageBlock(13,"Productos Categorías", 8),
   ColumnsCant: new PageBlock(31,"Nº Columnas", 2),
@@ -65,7 +65,7 @@ export const componentsRenders: IPageParams[] = [
   },
   { type: 21, name: 'Layer Image 21', 
     render: e => <LayerImage21 args={e.args} />,
-    params: [pb.Title, pb.Subtitle, pb.Content],
+    params: [pb.Title, pb.Subtitle, pb.Content, pb.Image],
   },
   { type: 41, name: 'Productos Cuadrilla', 
     render: e => <ProductosCuadrilla args={e.args} />,

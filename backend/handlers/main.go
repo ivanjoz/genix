@@ -34,4 +34,5 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.caja-movimiento":     PostMovimientoCaja,
 	"GET.p-demo-serialization": Demo1,
 	"POST.galeria-image":       PostGaleriaImage,
+	"GET.galeria-images":       GetGaleriaImages,
 }

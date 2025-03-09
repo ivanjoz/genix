@@ -1,5 +1,5 @@
 import { Notify, fechaUnixToSunix } from "~/core/main"
-import { GET, GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
+import { GET, GetSignal, POST, makeApiGetHandler } from "~/shared/http"
 import { arrayToMapN } from "~/shared/main"
 import { IUsuario } from "../admin/empresas"
 import { Env } from "~/env"
@@ -24,7 +24,7 @@ export interface ICajaResult {
 }
 
 export const useCajasAPI = (): GetSignal<ICajaResult> => {
-  return  makeGETFetchHandler(
+  return  makeApiGetHandler(
     { route: "cajas", emptyValue: [],
       errorMessage: 'Hubo un error al obtener los productos.',
       cacheSyncTime: 1, mergeRequest: true,

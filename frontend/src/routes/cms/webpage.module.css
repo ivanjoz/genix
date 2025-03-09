@@ -114,10 +114,40 @@
 
 .image_upload_card {
   width: 14rem;
-  height: 14rem;
+  height: 12rem;
   margin: 6px;
 }
 
 .image_upload_card img {
   object-fit: contain;
+}
+
+.input_invisible {
+  opacity: 0;
+  border: none;
+  outline: none;
+  width: 4px;
+  height: 4px;
+  pointer-events: none;
+}
+
+.image_selector {
+  border-radius: 6px;
+  width: 13rem;
+  height: 10rem;
+  background-color: white;
+  box-shadow: rgb(74 70 86 / 22%) 0px 1px 3px 0px, 
+    rgb(55 52 64 / 14%) 0px 0px 2px 0px;
+  border-radius: 5px;
+  border: 1px solid rgb(188 192 218);
+  cursor: pointer;
+}
+
+.image_selector > i {
+  font-size: 3rem;
+}
+
+.image_selector:hover {
+  outline: 1px solid rgb(52, 51, 56);
+  color: rgb(104, 37, 180);
 }

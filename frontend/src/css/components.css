@@ -608,6 +608,11 @@ body.dark .modal-body {
   width: 44rem;
   max-width: 64vw;
 }
+.modal-body.w74-84 {
+  width: 74rem;
+  max-width: 86vw;
+  min-width: 70vw;
+}
 
 .search-c4 {
   display: flex;

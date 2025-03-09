@@ -405,7 +405,7 @@ export function GET(props: httpProps): Promise<any> {
 export type GetSignal<T> = [Accessor<T>, Setter<T>]
 export type IResult = { Records?: any[] } | { [e: string]: any[] }
 
-export const makeGETFetchHandler = <T>(
+export const makeApiGetHandler = <T>(
   props_: httpProps | ((args?: any) => httpProps),
   parseResult?: ((result: IResult, args?: any) => T)
 ): (GetSignal<T>) => {

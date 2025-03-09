@@ -1,4 +1,4 @@
-import { GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
+import { GetSignal, POST, makeApiGetHandler } from "~/shared/http"
 import { arrayToMapN, arrayToMapS } from "~/shared/main"
 
 export interface ISede {
@@ -45,7 +45,7 @@ export interface IAlmacenes {
 }
 
 export const useSedesAlmacenesAPI = (): GetSignal<IAlmacenes> => {
-  return  makeGETFetchHandler(
+  return  makeApiGetHandler(
     { route: "sedes-almacenes", emptyValue: [],
       errorMessage: 'Hubo un error al obtener las sedes / almacenes.',
       cacheSyncTime: 1, mergeRequest: true,
@@ -96,7 +96,7 @@ export interface PaisCiudadResult {
 }
 
 export const usePaisCiudadesAPI = (): GetSignal<PaisCiudadResult> => {
-  return makeGETFetchHandler(
+  return makeApiGetHandler(
     { route: `pais-ciudades?pais-id=604`, emptyValue: [],
       errorMessage: 'Hubo un error al obtener los paises y ciudades',
       cacheSyncTime: 600, mergeRequest: true,

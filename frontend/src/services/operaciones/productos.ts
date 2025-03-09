@@ -1,5 +1,5 @@
 import { Notify } from "~/core/main"
-import { GET, GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
+import { GET, GetSignal, POST, makeApiGetHandler } from "~/shared/http"
 import { arrayToMapN } from "~/shared/main"
 import { IUsuario } from "../admin/empresas"
 import { Env } from "~/shared/security"
@@ -49,7 +49,7 @@ export interface IProductoResult {
 }
 
 export const useProductosAPI = (): GetSignal<IProductoResult> => {
-  return  makeGETFetchHandler(
+  return  makeApiGetHandler(
     { route: "productos", emptyValue: [],
       errorMessage: 'Hubo un error al obtener los productos.',
       cacheSyncTime: 1, mergeRequest: true,

@@ -29,6 +29,7 @@ export const AdminModule: IModule = {
     productos_stock: '[AlmacenID+ID]',
     listas_compartidas: '[pk+ID]',
     pais_ciudades: '[PaisID+ID]', 
+    galeria_images: 'Image'
   },
   menus: [
     { name: "Gestión", minName: "Ges", id: 1, icon: "icon-flow-merge",
