@@ -1,4 +1,4 @@
-import { GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
+import { GetSignal, POST, makeApiGetHandler } from "~/shared/http"
 import { arrayToMapN, arrayToMapS } from "~/shared/main"
 
 export interface IListaRegistro {
@@ -20,7 +20,7 @@ export interface IListas {
 export const useListasCompartidasAPI = (ids: number[]): GetSignal<IListas> => {
   const pk = ids.sort().join(",")
 
-  return  makeGETFetchHandler(
+  return  makeApiGetHandler(
     { route: "listas-compartidas",
       errorMessage: 'Hubo un error al obtener las listas compartidas.',
       cacheSyncTime: 1, mergeRequest: true,

@@ -1,4 +1,4 @@
-import { GetSignal, POST, makeGETFetchHandler } from "~/shared/http"
+import { GetSignal, POST, makeApiGetHandler } from "~/shared/http"
 import { arrayToMapN } from "~/shared/main"
 
 export interface IEmpresa {
@@ -25,7 +25,7 @@ export interface IEmpresaSmtp {
 }
 
 export const useEmpresasAPI = (): GetSignal<IEmpresa[]> => {
-  return  makeGETFetchHandler(
+  return  makeApiGetHandler(
     { route: "empresas", emptyValue: [],
       errorMessage: 'Hubo un error al obtener las empresas.',
       cacheSyncTime: 1, mergeRequest: true,
@@ -40,7 +40,7 @@ export const useEmpresasAPI = (): GetSignal<IEmpresa[]> => {
 }
 
 export const useParametrosEmpresaAPI = (): GetSignal<IEmpresa> => {
-  return  makeGETFetchHandler(
+  return  makeApiGetHandler(
     { route: "empresa-parametros", emptyValue: [],
       errorMessage: 'Hubo un error al obtener las empresa.',
       cacheSyncTime: 1, // mergeRequest: true,
@@ -60,7 +60,7 @@ export interface IBackup {
 }
 
 export const useBackupsAPI = (): GetSignal<IBackup[]> => {
-  return  makeGETFetchHandler(
+  return  makeApiGetHandler(
     { route: "backups", emptyValue: [],
       errorMessage: 'Hubo un error al obtener los backups.',
       cacheSyncTime: 0, mergeRequest: true,
@@ -105,7 +105,7 @@ export interface IUsuarioResult {
 }
 
 export const useUsuariosAPI = (): GetSignal<IUsuarioResult> => {
-  return  makeGETFetchHandler(
+  return  makeApiGetHandler(
     { route: "usuarios", emptyValue: {},
       errorMessage: 'Hubo un error al obtener los usuarios.',
       cacheSyncTime: 1, mergeRequest: true,
@@ -142,7 +142,7 @@ export interface IAcceso {
 }
 
 export const useAccesosAPI = (): GetSignal<IAcceso[]> => {
-  return makeGETFetchHandler(
+  return makeApiGetHandler(
     { route: "seguridad-accesos", emptyValue: [],
       errorMessage: 'Hubo un error al obtener los accesos.',
       cacheSyncTime: 1, mergeRequest: true,
@@ -182,7 +182,7 @@ export interface IPerfiles {
 }
 
 export const usePerfilesAPI = (): GetSignal<IPerfiles> => {
-  return  makeGETFetchHandler(
+  return  makeApiGetHandler(
     { route: "perfiles", emptyValue: [],
       errorMessage: 'Hubo un error al obtener los perfiles.',
       cacheSyncTime: 1, mergeRequest: true, useIndexDBCache: 'perfiles',

@@ -203,7 +203,7 @@ export interface ConvertImageArgs {
 
 const resizeImageCanvasWebp = (args: ConvertImageArgs): Promise<string> => {
   const canvas = document.createElement('canvas')
-  const img = new Image
+  const img = new window.Image
   // const img = document.createElement('img')
 
   return new Promise((resolve,reject) => {   
@@ -241,39 +241,91 @@ const resizeImageCanvasWebp = (args: ConvertImageArgs): Promise<string> => {
   })
 }
 
-export interface IImageCtn {
+export interface IImage {
   src?: string
   types?: string[]
   size?: 2 | 4 | 6 | 8 | 9
   class?: string
   style?: JSX.CSSProperties
   useZoomOnHover?: boolean
+  imageStyle?: JSX.CSSProperties
+  imageClass?: string
 }
 
-export const ImageCtn = (props: IImageCtn) => {
 
-  const makeImageSrc = () => {
-    let src = props.src
-    if(src.substring(0,5) !== "data:"){
-      if(src.substring(0,8) !== "https://" && src.substring(0,7) !== "http://"){
-        src = Env.S3_URL + src
-      }
-      if(props.size){ src = `${src}-x${props.size}` }
+const makeImageSrc = (src: string, size?: number) => {
+  if(src.substring(0,5) !== "data:"){
+    if(src.substring(0,8) !== "https://" && src.substring(0,7) !== "http://"){
+      src = Env.S3_URL + src
     }
-    return src
+    if(size){ src = `${src}-x${size}` }
   }
+  return src
+}
+
+export const Image = (props: IImage) => {
+
+  const makeSrc = () => makeImageSrc(props.src, props.size)
 
   return <picture class={"dsp-cont"} style={props.style}>
     { props.types?.includes("avif") &&
-      <source type="image/avif" srcset={makeImageSrc() + ".avif"} />
+      <source type="image/avif" srcset={makeSrc() + ".avif"} />
     }
     { props.types?.includes("webp") &&
-      <source type="image/webp" srcset={makeImageSrc() + ".webp"} />
+      <source type="image/webp" srcset={makeSrc() + ".webp"} />
     }
     <img class={`${props.class||""}`}
       style={props.style}
-      src={makeImageSrc() + (props.types?.length > 0 ? `.${props.types[0]}` : "")}
+      src={makeSrc() + (props.types?.length > 0 ? `.${props.types[0]}` : "")}
     />
   </picture>
 }
 
+export const ImageCard = (props: IImage) => {
+
+  const makeSrc = () => makeImageSrc(props.src, props.size)
+  const [isLoading, setIsLoading] = createSignal(1)
+
+  const css = props.class || styles.image_card_default
+
+  return <div class={`p-rel ${css}`} 
+    style={{...(props.style||{}), 
+      "background-color": isLoading() === 1 ? "#34353e" : "" }}
+  >
+    <picture class={"dsp-cont"}
+      onError={() => setIsLoading(2) }
+      onLoad={() => {
+        console.log("on load!!")
+        setIsLoading(0)
+      }}
+    >
+      { props.types?.includes("avif") &&
+        <source type="image/avif" srcset={makeSrc() + ".avif"} />
+      }
+      { props.types?.includes("webp") &&
+        <source type="image/webp" srcset={makeSrc() + ".webp"} />
+      }
+      <img class={`${props.imageClass||""} w100 h100`}
+        style={props.imageStyle}
+        src={makeSrc() + (props.types?.length > 0 ? `.${props.types[0]}` : "")}
+        onError={() => setIsLoading(2) }
+        onLoad={() => {
+          console.log("on load!!")
+          setIsLoading(0)
+        }}
+      />
+    </picture>
+    { isLoading() === 1 &&
+      <div class={`${styles.image_loading_layer}`}>
+        <div class="spinner4">
+          <div class="spinner-item"></div>
+          <div class="spinner-item"></div>
+          <div class="spinner-item"></div>
+          <div class="spinner-item"></div>
+          <div class="spinner-item"></div>
+        </div>
+        <div style={{ color: 'white' }}>Cargando...</div>
+      </div>
+    }
+  </div>
+}

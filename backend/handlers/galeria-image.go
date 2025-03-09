@@ -46,6 +46,7 @@ func PostGaleriaImage(req *core.HandlerArgs) core.HandlerResponse {
 		Image:       imageName,
 		Description: image.Description,
 		Status:      1,
+		Updated:     core.SunixTime(),
 	}
 
 	err = db.Insert(&[]s.GaleriaImagen{galeriaImage})
@@ -55,4 +56,26 @@ func PostGaleriaImage(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	return req.MakeResponse(map[string]any{"imageName": imageName})
+}
+
+func GetGaleriaImages(req *core.HandlerArgs) core.HandlerResponse {
+
+	updated := core.UnixToSunix(req.GetQueryInt64("updated"))
+
+	imagenes, err := db.SelectT(func(query *db.Query[s.GaleriaImagen]) {
+		col := query.T
+		query.Exclude(col.EmpresaID_())
+		query.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+		if updated > 0 {
+			query.Where(col.Updated_().GreaterEqual(updated))
+		} else {
+			query.Where(col.Status_().GreaterEqual(1))
+		}
+	})
+
+	if err != nil {
+		return req.MakeErr("Error al obtener las imágenes:", err)
+	}
+
+	return req.MakeResponse(imagenes)
 }

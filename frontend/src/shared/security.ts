@@ -217,6 +217,13 @@ export const Params = {
   },
   getFechaUnix(){
     return Math.floor(((Date.now()/1000) - Env.zoneOffset) / 86400)
+  },
+  toSunix(fechaHoraUnix: number){
+    return Math.floor((fechaHoraUnix - (10**9)) / 2)
+  },
+  sunixTime(){
+    const fechaHora = Math.floor(Date.now()/1000)
+    return Params.toSunix(fechaHora)
   }
 }
 export { Env }

@@ -49,3 +49,43 @@
   justify-content: center;
   align-items: center;
 }
+
+.spinner4 {
+  --animation-duration: 1000ms;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+}
+.spinner4 .spinner-item {
+  width: calc(60px / 12);
+  height: 80%;
+  background: #eeaa88;
+  animation: spinner1 var(--animation-duration) ease-in-out infinite;
+}
+@keyframes spinner1 {
+  50% {
+    transform: scaleY(0.25);
+  }
+}
+.spinner4 .spinner-item:nth-child(1) {
+  background-color: #bbbb88;
+  animation-delay: calc(var(--animation-duration) / 10 * -3);
+}
+.spinner4 .spinner-item:nth-child(2) {
+  background-color: #eeaa88;
+  animation-delay: calc(var(--animation-duration) / 10 * -1);
+}
+.spinner4 .spinner-item:nth-child(3) {
+  background-color: #eedd99;
+  animation-delay: calc(var(--animation-duration) / 10 * -2);
+}
+.spinner4.spinner-item:nth-child(4) {
+  background-color: #eec290;
+  animation-delay: calc(var(--animation-duration) / 10 * -1);
+}
+.spinner4:nth-child(1) .spinner-item:nth-child(5) {
+  background-color: #ccc68d;
+  animation-delay: calc(var(--animation-duration) / 10 * -3);
+}
