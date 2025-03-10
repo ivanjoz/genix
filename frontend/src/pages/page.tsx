@@ -1,61 +1,37 @@
-import { For, JSX, Show } from "solid-js"
-import './components.css'
-import { componentsRenders, IPageBlock } from "./page-components"
-import styles from './page.module.css'
-import { CartFloating, ProductoInfoLayer, productoSelected } from "./productos"
+import { For, Show } from "solid-js";
+import { BasicSection, BigScroll, Demo1, LayerImage21 } from "./components";
+import './components.css';
+import { Header1 } from "./headers";
+import { IPageParams, IPageRenderer, IPageSectionRenderer, PageBlocks } from "./page-components";
+import styles from './page.module.css';
+import { CartFloating, ProductoInfoLayer, ProductosCuadrilla, productoSelected } from "./productos";
 
-export interface IPageSection {
-  id?: number
-  type?: number
-  mode?: number
-  style?: string
-  Content?: string
-  contentArray?: string[]
-  backgroundImage?: string
-  content1?: string
-  content2?: string
-  content3?: string
-  Image?: string
-  Title?: string
-  Subtitle?: string
-  images?: string[]
-  imagesGalery?: string[]
-  image1?: string
-  image2?: string
-  params?: number[]
-  color1?: string
-  color2?: string
-  color3?: string
-  marginTop?: string
-  marginBottom?: string
-  columnasCant?: number
-  filasCant?: number
-}
+const pb = PageBlocks
 
-
-interface IPageRenderer {
-  sections: IPageSection[]
-  isEditable?: boolean
-}
-
-export interface ISectionParams {
-  id: number
-  key: keyof IPageSection
-  name: string
-  type: number
-  content?: string | number | string[] | number[]
-}
-
-export interface IPageParams {
-  type: number, name: string
-  params: IPageBlock[]
-  render: (e: { args: IPageSection }) => JSX.Element
-}
-
-interface IPageSectionRenderer {
-  type: number
-  args: IPageSection
-}
+export const componentsRenders: IPageParams[] = [
+  { type: 1, name: 'Basic Section', 
+    render: e => <BasicSection args={e.args} />,
+    params: [pb.Title, pb.Subtitle, pb.Content],
+  },
+  { type: 10, name: 'Header 1', 
+    render: e => <Header1 args={e.args} />, 
+    params: [pb.Title, pb.Subtitle, pb.Content],
+  },
+  { type: 21, name: 'Layer Image 21', 
+    render: e => <LayerImage21 args={e.args} />,
+    params: [pb.Title, pb.Subtitle, pb.Content, pb.Image],
+  },
+  { type: 41, name: 'Productos Cuadrilla', 
+    render: e => <ProductosCuadrilla args={e.args} />,
+    params: [pb.Content],
+  },
+  { type: 9998, name: 'Demo 1', render: e => <Demo1 args={e.args} />, 
+    params: []
+  },
+  { type: 9999, name: 'Big Scroll', render: e => <BigScroll args={e.args} />, 
+    params: []
+  }
+]
 
 export const PageSectionRenderer = (e: IPageSectionRenderer) => {
   for(const sec of componentsRenders){

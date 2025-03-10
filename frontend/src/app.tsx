@@ -1,14 +1,14 @@
 import { Meta, MetaProvider, Title } from "@solidjs/meta";
-import { Route, Router, useNavigate } from "@solidjs/router";
+import { Route, Router, useNavigate, useLocation } from "@solidjs/router";
 import { clientOnly } from "@solidjs/start";
 import { FileRoutes } from "@solidjs/start/router";
-import { Suspense, createEffect, createSignal, onMount } from "solid-js";
+import { Show, Suspense, createEffect, createSignal, onMount } from "solid-js";
 import Modules from "./core/modules";
 import { PageLoading, PageLoadingElement } from "./core/page";
 import { Env, LocalStorage, getWindow } from "./env";
 import PageBuilder from "./pages/main";
 import { createIndexDB } from "./shared/main";
-import { Params, checkIsLogin } from "./shared/security";
+import { Params, checkIsLogin, getShowStore, setShowStoreEmpresa, showStoreEmpresa } from "./shared/security";
 
 const PageMenu = clientOnly(() => import("./core/menu"))
 
@@ -84,6 +84,11 @@ export default function Root() {
         Env.pathname = props.location.pathname
         const navigate = useNavigate()
         Env.navigate = navigate
+        const location = useLocation()
+        createEffect(() => {
+          setShowStoreEmpresa(getShowStore(location.pathname))
+        })
+
         return <MetaProvider>
           <Title>GENIX - MyPes</Title>
           <Meta name="loc" content={props.location.pathname}/>
@@ -91,9 +96,12 @@ export default function Root() {
         </MetaProvider>
       }}>
       <Route path="/_loading" component={PageLoading} />
+      <Route path="/page" component={PageBuilder} />
       <Route path="/page/:name" component={PageBuilder} />
       <Suspense fallback={PageLoadingElement}>{<FileRoutes />}</Suspense>
     </Router>
-    <PageMenu/>
+    <Show when={showStoreEmpresa() === 0}>
+      <PageMenu/>
+    </Show>
   </>
 }

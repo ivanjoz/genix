@@ -2,7 +2,7 @@ import { Loading } from "~/core/main";
 import { createSignal, onMount } from "solid-js";
 import { Input } from "~/components/Input";
 import { sendUserLogin } from "~/services/admin/login";
-import { Env, isLogin } from "~/shared/security";
+import { Env, isLogin, setShowStoreEmpresa } from "~/shared/security";
 
 const SendLogin = async (form: any) => {
   Loading.standard("Enviando Credenciales...")

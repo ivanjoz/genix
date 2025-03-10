@@ -56,6 +56,19 @@ export const checkIsLogin = () => {
 
 export const [isLogin, setIsLogin_] = createSignal(checkIsLogin())
 
+export const getShowStore = (pathname?: string): number => {
+  pathname = pathname || Env.getPathname()
+  console.log("evaluando pathname::", pathname)
+  if(pathname === "/login"){
+    return -1
+  } else if(pathname === "/" || pathname.substring(0,5) === "/page"){
+    return Env.getEmpresaID() || -1
+  }
+  return 0
+}
+
+export const [showStoreEmpresa, setShowStoreEmpresa] = createSignal(getShowStore())
+
 Env.clearAccesos = () => {
   if(!IsClient){ return }
   LocalStorage.removeItem(Env.appId+ "Accesos")

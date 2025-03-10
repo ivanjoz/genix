@@ -3,13 +3,13 @@ import { createEffect, createMemo, createSignal, For, JSX } from "solid-js";
 import { Input } from "~/components/Input";
 import { pageView, setIsRouteChanging } from "~/core/menu";
 import { PageContainer } from "~/core/page";
-import { IPageParams, IPageSection, PageSectionRenderer } from "~/pages/page";
-import { componentsRenders, IPageBlock } from "~/pages/page-components";
+import { componentsRenders, PageSectionRenderer } from "~/pages/page";
 import { pageExample } from "~/pages/page-example";
 import { useGaleriaImagesAPI } from "~/services/cms/galeria-images";
 import { arrayToMapN } from "~/shared/main";
 import { ImageGalery, ImageGalerySelector } from "./galeria-imagenes";
 import * as styles from "./webpage.module.css";
+import { IPageBlock, IPageParams, IPageSection } from "~/pages/page-components";
 
 export const [pageViews, setPageViews] = createSignal({})
 
