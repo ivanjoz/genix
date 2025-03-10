@@ -4,7 +4,7 @@ import { ButtonList } from "~/components/Cards"
 import { LayerSelect } from "~/components/Layers"
 import { Env, LocalStorage, getWindow } from "~/env"
 import { fetchOnCourse } from "~/shared/http"
-import { Params, isLogin } from "~/shared/security"
+import { Params } from "~/shared/security"
 import { IModule } from "./modules"
 
 export interface IMenuRecord {
@@ -415,13 +415,12 @@ export function MainMenuMobile() {
 }
 
 export default function PageMenu(){
+  
   return <>
-    <Show when={isLogin() === 2}>
-      <Show when={[1].includes(deviceType())}><MainMenu/></Show>
-      <Show when={[2,3].includes(deviceType()) && showMenu()}>
-        <MainMenuMobile/>
-      </Show>
-      <MainTopMenu />
+    <Show when={[1].includes(deviceType())}><MainMenu/></Show>
+    <Show when={[2,3].includes(deviceType()) && showMenu()}>
+      <MainMenuMobile/>
     </Show>
+    <MainTopMenu />
   </>
 }

@@ -1,4 +1,5 @@
 import { onMount } from "solid-js"
+import PageBuilder from "~/pages/main"
 import { Env, isLogin } from "~/shared/security"
 
 export default function Home() {
@@ -7,9 +8,9 @@ export default function Home() {
     if(isLogin() !== 2){
       Env.navigate("login")
     } else {
-      Env.navigate("home")
+      // Env.navigate("admin-home")
     }
   })
   
-  return <div></div>
+  return <PageBuilder />
 }

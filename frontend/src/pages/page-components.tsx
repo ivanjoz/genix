@@ -1,9 +1,16 @@
-import { BasicSection, BigScroll, Demo1, LayerImage21 } from "./components";
+import { JSX } from 'solid-js';
 import './components.css';
-import { Header1 } from "./headers";
-import { IPageParams, IPageSection } from "./page";
-import { pageExample } from "./page-example";
-import { ProductosCuadrilla } from "./productos";
+
+export interface IPageParams {
+  type: number, name: string
+  params: IPageBlock[]
+  render: (e: { args: IPageSection }) => JSX.Element
+}
+
+export interface IPageSectionRenderer {
+  type: number
+  args: IPageSection
+}
 
 /*
   types: 1 = text, 2 = content, 3 = array of string, 4 = image, 5 = array of images
@@ -15,7 +22,7 @@ export interface IPageBlock {
 }
 
 export class PageBlock {
-  constructor(id: number, name: string, type: number, key?: string){
+  constructor(id: number, name: string, type: number, key?: keyof IPageSection){
     this.id = id
     this.type = type
     this.name = name
@@ -24,7 +31,7 @@ export class PageBlock {
   id: number
   type: number
   name: string
-  key: string
+  key: keyof IPageSection
   content: string
   as = (name: string): PageBlock => {
     return new PageBlock(this.id, name, this.type, this.key)
@@ -52,30 +59,45 @@ export const PageBlocks /*: {[e: string]: PageBlock} */ = {
   Check_5: new PageBlock(45,"Check 5", 4),
 }
 
-const pb = PageBlocks
 for(const key in PageBlocks){ (PageBlocks as any)[key].key = key }
 
-export const componentsRenders: IPageParams[] = [
-  { type: 1, name: 'Basic Section', 
-    render: e => <BasicSection args={e.args} />,
-    params: [pb.Title, pb.Subtitle, pb.Content],
-  },
-  { type: 10, name: 'Header 1', 
-    render: e => <Header1 args={e.args} />, 
-    params: [pb.Title, pb.Subtitle, pb.Content],
-  },
-  { type: 21, name: 'Layer Image 21', 
-    render: e => <LayerImage21 args={e.args} />,
-    params: [pb.Title, pb.Subtitle, pb.Content, pb.Image],
-  },
-  { type: 41, name: 'Productos Cuadrilla', 
-    render: e => <ProductosCuadrilla args={e.args} />,
-    params: [pb.Content],
-  },
-  { type: 9998, name: 'Demo 1', render: e => <Demo1 args={e.args} />, 
-    params: []
-  },
-  { type: 9999, name: 'Big Scroll', render: e => <BigScroll args={e.args} />, 
-    params: []
-  }
-]
+export interface IPageSection {
+  id?: number
+  type?: number
+  mode?: number
+  style?: string
+  Content?: string
+  contentArray?: string[]
+  backgroundImage?: string
+  content1?: string
+  content2?: string
+  content3?: string
+  Image?: string
+  Title?: string
+  Subtitle?: string
+  images?: string[]
+  imagesGalery?: string[]
+  image1?: string
+  image2?: string
+  params?: number[]
+  color1?: string
+  color2?: string
+  color3?: string
+  marginTop?: string
+  marginBottom?: string
+  columnasCant?: number
+  filasCant?: number
+}
+
+export interface IPageRenderer {
+  sections: IPageSection[]
+  isEditable?: boolean
+}
+
+export interface ISectionParams {
+  id: number
+  key: keyof IPageSection
+  name: string
+  type: number
+  content?: string | number | string[] | number[]
+}
