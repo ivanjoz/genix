@@ -51,7 +51,7 @@ export const ImageGalery = (props: IImageGalery) => {
     <div class="flex-wrap w100">
       { props.useUploader &&
         <ImageUploader saveAPI="galeria-image"
-          // refreshIndexDBCache="productos"
+          refreshIndexDBCache="galeria_images"
           clearOnUpload={true} cardCss={s1.image_upload_card}
           setDataToSend={e => {
             
