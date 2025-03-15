@@ -3,11 +3,10 @@
 const FILENAME = "start.js"
 const FRONTEND_SCRIPT = "npm start"
 const BACKEND_GO_SCRIPT = "go run -v . dev"
-const BACKEND_NODE_SCRIPT = "npm run start"
 const ENVIROMENT_VARIABLES = ""
-
 //********************************************************* */
-const { spawn, execSync, spawnSync, exec } = require("child_process")
+
+const { spawn, execSync } = require("child_process")
 const { platform } = require("os")
 const path = require("path")
 const isWindows = platform() === "win32"
@@ -43,41 +42,20 @@ if (!fs.existsSync(path.join(frontendPath, "node_modules"))){
   }
 }
 
-const backendNodePath = path.join(__dirname, 'backend')
-if (!fs.existsSync(path.join(backendNodePath, "node_modules"))){ 
-  console.log("No se encontraron los node_modules en el backend. Instalando...")
-  if(isWindows){
-    execSync(`cd ${backendNodePath} & npm install`, { stdio: "inherit", shell: true })
-  } else {
-    execSync('cd frontend && npm install', { encoding: 'utf-8' })
-  }
-}
-
-const backendGoPath = path.join(__dirname, 'backend-golang')
+const backendGoPath = path.join(__dirname, 'backend')
 console.log("Instalando los paquetes de Go (si no lo están)...")
 if(isWindows){
   execSync(`cd ${backendGoPath} & go mod tidy`, { stdio: "inherit", shell: true })
 } else {
-  execSync('cd backend-golang && go mod tidy', { encoding: 'utf-8' })
+  execSync('cd backend && go mod tidy', { encoding: 'utf-8' })
 }
 
-// Define the scripts you want to run
 let frontendScript = `cd ./frontend && ${FRONTEND_SCRIPT}`
 if (isWindows) {
   frontendScript = `cd ${frontendPath} & ${FRONTEND_SCRIPT}`
 }
 
-let backendNodeScript = "cd ./backend && " + BACKEND_NODE_SCRIPT
-if (isWindows) {
-  backendNodeScript = `cd ${backendNodePath} & ${BACKEND_NODE_SCRIPT}`
-}
-
-let prebackend = ""
-if (platform() === "linux") {
-  prebackend = "source ~/.bashrc && source ~/.profile && "
-}
-
-// Elimina las variables de entorno
+// Remove enviroment variables
 const ENV_PATH = path.join(__dirname, '.env')
 if (fs.existsSync(ENV_PATH)) { fs.unlinkSync(ENV_PATH) }
 
@@ -91,12 +69,10 @@ if(ENVIROMENT_VARIABLES){
   }
 }
 
-console.log("Prerequisitos: OK")
-
 const BLUE_BAR = "\x1b[44m \x1b[0m"
 const CYAN_BAR = "\x1b[46m \x1b[0m"
 const YELLOW_BAR = "\x1b[43m \x1b[0m"
-const MAGENTA_BAR = "\x1b[45m \x1b[0m"
+// const MAGENTA_BAR = "\x1b[45m \x1b[0m"
 
 const backendLog = (data) => {
   for(const line of (data||"").split("\n").filter(x => x.trim().length > 0)){
@@ -107,9 +83,9 @@ const backendLog = (data) => {
 const startBackendGo = () => {
   nodemon({
     exec: BACKEND_GO_SCRIPT,  // Runs the Go application
-    watch: ["."],  // Only watches the backend-golang folder
-    ext: "go",                  // Only watches Go files
-    cwd: "backend-golang",       // Sets the working directory to backend-golang
+    watch: ["."],             // Only watches the backend-golang folder
+    ext: "go",                // Only watches Go files
+    cwd: "backend",    // Sets the working directory to backend-golang
     delay: "200ms",
     spawn: true,
     signal: "SIGTERM",
@@ -126,20 +102,20 @@ const startBackendGo = () => {
 }
 
 const runScripts = () => {
-  console.log("Pre-building...");
+  /*
+  console.log("Pre-building...")
   try {
-    const output = execSync('node prebuild.js', { encoding: 'utf-8' }); // Runs script.sh synchronously
-    console.log("Script Output:", output);
+    const output = execSync('node prebuild.js', { encoding: 'utf-8' })
+    console.log("Script Output:", output)
   } catch (error) {
-    console.error("Error executing script:", error);
+    console.error("Error executing script:", error)
   }
-
-  console.log("Ejecutando procesos:")
-  console.log(`${YELLOW_BAR}${YELLOW_BAR} Frontend   ${BLUE_BAR}${BLUE_BAR} Backend (Go)   ${CYAN_BAR}${CYAN_BAR} Backend (Node)`)
+  */
+  console.log("Executing processes...")
+  console.log(`${YELLOW_BAR}${YELLOW_BAR} Frontend   ${BLUE_BAR}${BLUE_BAR} Backend (Go)`)
 
   // Run all scripts in parallel
   runScript(frontendScript, YELLOW_BAR)
-  runScript(backendNodeScript, CYAN_BAR)
   startBackendGo()
 }
 
@@ -148,13 +124,14 @@ const runScript = (script, name) => {
   console.log("Ejecutando script:", script)
 
   const scriptProcess = isWindows ?
-    spawn(script, [], { stdio: ["ignore", "pipe", "pipe"], detached: false, shell: true }) 
+    spawn(script, [], { 
+      stdio: ["ignore", "pipe", "pipe"], detached: false, shell: true }) 
     :
     spawn("bash", ["-c", script], {
       stdio: ["ignore", "pipe", "pipe"], // Capture stdout and stderr
       detached: false, // Ensures process terminates when Node.js exits
     });
-
+  
   const logdata = (prefix, data) => {
     const lines = data.toString().split("\n").filter(x => x)
     for (const line of lines) {
@@ -162,17 +139,9 @@ const runScript = (script, name) => {
     }
   }
 
-  scriptProcess.stdout.on("data", (data) => {
-    logdata(name, data)
-  });
-
-  scriptProcess.stderr.on("data", (data) => {
-    logdata(name, data)
-  });
-
-  scriptProcess.on("exit", (code) => {
-    logdata(name, `Exited with code ${code}`)
-  });
+  scriptProcess.stdout.on("data", (data) => logdata(name, data))
+  scriptProcess.stderr.on("data", (data) => logdata(name, data))
+  scriptProcess.on("exit", (code) => logdata(name, `Exited with code ${code}`))
 }
 
 // Function to check if a port is in use
@@ -234,6 +203,6 @@ const killPortIfInUse = (port) => {
 }
 
 // Kill necessary ports before starting
-[3055, 3056, 3064, 3581].forEach(killPortIfInUse)
+[3588, 3589].forEach(killPortIfInUse)
 // Run scripts
 runScripts()

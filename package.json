@@ -1,0 +1,14 @@
+{
+  "name": "smartberry",
+  "version": "1.0.2",
+  "description": "Sistema de Sanidad, Cartografía y Evaluaciones de HF",
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "blessed-contrib": "^4.11.0",
+    "nodemon": "^3.1.9",
+    "pidusage": "^3.0.2"
+  },
+  "scripts": {
+    "dev": "node start.js "
+  }
+}
