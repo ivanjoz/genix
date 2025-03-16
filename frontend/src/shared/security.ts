@@ -26,8 +26,9 @@ export const getToken = (noError?: boolean) => {
   const nowTime = Math.floor(Date.now()/1000)
 
   if (!userToken) {
+    debugger
     console.error('No se encontró la data del usuario. ¿Está logeado?:',Env.appId)
-    return
+    return ""
   }
   else if (!expTime || nowTime > expTime) {
     if(!noError){
@@ -35,7 +36,7 @@ export const getToken = (noError?: boolean) => {
       Env.clearAccesos()
     }
     Loading.remove()
-    return
+    return ""
   }
   // revisa si la sesión está por expirar
   if ((expTime - nowTime) < (60 * 15)) {
@@ -44,7 +45,7 @@ export const getToken = (noError?: boolean) => {
   else if ((expTime - nowTime) < (60 * 5)) {
     throttle(() => { Notify.warning(`La sesión expirará en 5 minutos`) }, 20)
   }
-  return userToken
+  return userToken || ""
 }
 
 export const checkIsLogin = () => {
@@ -55,6 +56,10 @@ export const checkIsLogin = () => {
 }
 
 export const [isLogin, setIsLogin_] = createSignal(checkIsLogin())
+
+export const isLogged = (): boolean => {
+  return Env.getEmpresaID() > 0 && getToken(true)?.length > 0
+}
 
 export const getShowStore = (pathname?: string): number => {
   pathname = pathname || Env.getPathname()
@@ -116,6 +121,7 @@ export class AccessHelper {
     LocalStorage.setItem(Env.appId + "UserInfo", JSON.stringify(userInfoParsed))
     LocalStorage.setItem(Env.appId + "UserToken", login.UserToken)
     LocalStorage.setItem(Env.appId + "TokenExpTime", String(login.TokenExpTime))
+    LocalStorage.setItem(Env.appId + "EmpresaID", String(login.EmpresaID))
     this.#setUserInfo()
     
     const b32l = this.#b32l

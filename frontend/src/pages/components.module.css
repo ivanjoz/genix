@@ -3,28 +3,60 @@
   background-color: #f4f4fa;
   padding: 1rem 2vw;
 }
-.product_cuadrilla_ctn > div:first-of-type{
+
+.product_cuadrilla_ctn_mobile {
+  padding: 1rem 2vw;
+}
+
+.product_cuadrilla_ctn:not(.product_cuadrilla_ctn_mobile) > div:first-of-type{
   padding-right: 2rem;
 }
-.product_card {
-  margin: 12px 1rem;
+
+.product_cuadrilla_mobile {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-gap: 3vw;
+}
+
+.product_card, .product_card_mobile {
   box-shadow: rgba(44, 44, 48, 0.15) 0px 5px 15px 0px;
   background-color: white;
-  padding-top: 0.5rem;
-  padding-bottom: 0.7rem;
   border-radius: 11px;
-  width: 16rem;
- /* overflow: hidden; */
 }
+
+.product_card {
+  margin: 12px 1rem;
+  width: 16rem;
+  padding: 0.5rem 4px 0.7rem 4px;
+}
+
+.product_card_mobile {
+  width: 100%;
+  overflow: hidden;
+  padding: 0.5rem 4px calc(2rem + 8px) 4px;
+  margin: 0;
+  border-bottom: 2px solid rgb(172 153 226);
+}
+
 .product_card_image {
   height: 12rem;
   object-fit: contain;
 }
+
+.product_card_mobile .product_card_image {
+  height: calc(38vw + 6px);
+}
+
 .product_name_ctn {
   padding: 4px 8px 0 8px;
   background-color: white;
   line-height: 1.2;
 }
+
+.product_cuadrilla_mobile .product_name_ctn {
+  flex-direction: column;
+}
+
 .product_cart_button {
   border-radius: 7px;
   height: 2rem;
@@ -39,13 +71,24 @@
   outline: 2px solid rgba(255, 255, 255);
   user-select: none;
 }
+
+.product_cart_button_mobile {
+  background-color: rgb(228, 221, 248);
+  color: rgb(100, 67, 160);
+  height: calc(2rem + 6px);
+  position: absolute;
+  width: 100%;
+  bottom: -1px;
+  left: 0;
+}
+
 .product_cart_button:hover {
   background-color: rgb(106, 70, 204);
   color: white;
   border-radius: 8px;
 }
+
 .product_card:hover {
-  /* box-shadow: rgba(71, 71, 121, 0.4) 0px 4px 12px 0px; */
   margin-bottom: 0;
   padding-bottom: calc(0.7rem + 26px);
   outline: 2px solid rgb(202, 173, 255);
@@ -64,6 +107,11 @@
   font-family: bold;
   margin-right: 2px;
 }
+
+.product_cart_button_mobile .product_cart_bn_text {
+  display: block;
+}
+
 .product_card:hover .product_cart_button  {
   width: calc(100%);
   outline: none;
@@ -446,14 +494,15 @@
 
 .productos_search_layer {
   border-radius: 16px;
-  background-color: white;
+  background-color: #f4f4f4;
   height: 32rem;
   box-shadow: rgba(14, 30, 37, 0.12) 0px 2px 4px 0px, 
     rgba(14, 30, 37, 0.32) 0px 2px 16px 0px;
+  padding: 12px;
 }
 
 .productos_search_layer:not(.productos_search_layer_mobile) {
-  width: 56rem;
+  width: 64rem;
   max-width: 88vw;
   top: 3rem;
 }
@@ -511,4 +560,95 @@
   border-radius: 16px;
   height: calc(100% - 8px);
   width: 30vw;
+}
+
+/* Producto filter */
+.producto_filter_container {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-gap: 12px;
+  align-items: end;
+}
+
+.producto_filter_container.is_mobile {
+  grid-template-columns: 1fr 1fr;
+  grid-gap: 10px;
+}
+
+.producto_filter_card {
+  width: 100%;
+  padding: 4px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: rgb(0 0 0 / 15%) 0px 2px 4px;
+  line-height: 1.2;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.producto_filter_card:hover {
+  outline: 1px solid rgba(0, 0, 0, 0.363);
+}
+
+.producto_filter_card_image {
+  height: 6rem;
+  width: calc(6rem + 4px);
+  object-fit: contain;
+  margin-right: 4px;
+}
+
+.is_mobile.producto_filter_card {
+  margin-bottom: 0;
+}
+
+.is_mobile .producto_filter_card_image {
+  height: 20vw;
+  width: 20vw;
+}
+
+.producto_filter_button {
+  border-radius: 7px;
+  height: 2rem;
+  width: 2rem;
+  background-color: rgb(228, 221, 248);
+  color: rgb(100, 67, 160);
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  cursor: pointer;
+  outline: 2px solid rgba(255, 255, 255);
+  user-select: none
+}
+
+.is_mobile .producto_filter_button {
+  width: auto;
+  padding: 0 6px;
+  font-size: 14px;
+  right: 2px;
+  bottom: 8px;
+}
+
+.producto_filter_button > div:first-of-type {
+  display: none;
+}
+
+.producto_filter_card:hover .producto_filter_button > div:first-of-type {
+  display: block;
+}
+
+.producto_filter_card:hover .producto_filter_button {
+  width: 8rem;
+  height: calc(2rem + 2px);
+}
+
+.is_mobile .producto_filter_button > div:first-of-type {
+  display: block;
+}
+
+.producto_filter_button:hover {
+  background-color:rgb(126, 90, 192);
+  color: white;
+}
+.producto_filter_mobile_text {
+  padding: 2px 4px;
 }
