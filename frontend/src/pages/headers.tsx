@@ -4,7 +4,7 @@ import angleSvg from "../assets/angle.svg?raw"
 import s1 from './components.module.css'
 import { EcommerceCart } from "./cart"
 import { getWindow } from "~/env"
-import { ProductoSearchLayer } from "./productos"
+import { cartProductos, ProductoSearchLayer } from "./productos"
 import { IPageSection } from "./page-components"
 import { deviceType } from "~/app"
 
@@ -128,9 +128,45 @@ export function Header1(props: IHeader1) { // type: 10
           <i class="icon-menu"></i>
         </div>
         <ProductoSearchLayer />
-        <div class={`ml-auto ${s1.top_bar_mobile_icon}`}>
-          <i class="icon-basket"></i>
-        </div>
+        { !showCart() &&
+          <div class={`ml-auto ${s1.top_bar_mobile_icon}`}
+            onClick={ev => {
+              ev.stopPropagation()
+              setShowCart(true)
+            }}
+          >
+            { cartProductos().size > 0 &&
+              <div class={`p-abs flex-center ${s1.top_bar_mobile_icon_counter}`}>{cartProductos().size}</div>
+            }
+            <i class="icon-basket"
+              style={{ 
+                "margin-bottom": cartProductos().size > 0 ? "-6px" : undefined,
+                "margin-left": cartProductos().size > 0 ? "-4px" : undefined    
+              }}
+            ></i>
+          </div>
+        }
+        { showCart() && 
+          <div class={`ml-auto flex-center ${s1.top_bar_mobile_icon}`}
+            onClick={ev => {
+              ev.stopPropagation()
+              setShowCart(false)
+            }}
+          >
+            <div class={`flex-center ml-04 ${s1.top_bar_cart_icon_cancel}`}>
+              <i class="icon-cancel"></i>
+            </div>
+          </div>
+        }
+        { showCart() &&
+          <div class={`${s1.menu_cart_layer}`} 
+            style={{ right: `calc(1.2rem - ${divParams().right}px)`  }}> 
+            <img class={`p-abs ${s1.menu_cart_layer_angle}`}
+              style={{ right: `1.1rem`  }} src={parseSVG(angleSvg)}
+            />
+            <EcommerceCart />
+          </div>
+        }
       </div>
     }
   </>

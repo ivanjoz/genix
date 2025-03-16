@@ -14,6 +14,7 @@ import { useProductosCmsAPI } from "./productos-service"
 import angleSvg from "../assets/angle.svg?raw"
 import { deviceType, isMobile, isMobOrTablet } from "~/app"
 import { highlString } from "~/components/SearchSelect"
+import { Env } from "~/env"
 
 export function ProductosCuadrilla(props: IHeader1) { // type: 10
 
@@ -350,11 +351,20 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
   </div>
 
   return <Portal mount={document.body}>
-    <div class={`${s1.producto_layer_bg}`} onClick={ev => {
-      ev.stopPropagation()
-      setProductoSelected(null)
-    }}></div>
+    <div class={`${s1.producto_layer_bg}`} 
+      onMouseDown={ev => {
+        ev.stopPropagation()
+        Env.productoSearchRefocusOnBlur = true
+      }}
+      onClick={ev => {
+        ev.stopPropagation()
+        setProductoSelected(null)
+      }}></div>
     <div class={`${s1.producto_layer_ctn}`}
+        onMouseDown={ev => {
+          ev.stopPropagation()
+          Env.productoSearchRefocusOnBlur = true
+        }}
         classList={{ [s1.is_mobile]: isMobOrTablet() }}
       >
       <div class="flex h1 ff-semibold mb-08">
@@ -410,7 +420,10 @@ export const ProductoCard2 = (props: IProductoCard2) => {
   return <div class={`${s1.producto_filter_card} p-rel`}
       classList={{[s1.is_mobile]: isMobile() }}
     >
-    <div class="flex w100 p-rel">
+    <div class="flex w100 p-rel" onClick={ev => {
+      ev.stopPropagation()
+      setProductoSelected(props.producto)
+    }}>
       <Image src={"img-productos/"+ props.producto.Images[0]?.n} size={2}
         class={s1.producto_filter_card_image + " w100"}
         types={["avif","webp"]}
@@ -470,7 +483,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
   const [searchText, setSearchText] = createSignal([])
 
   let inputRef: HTMLInputElement
-  let refocusOnBlur = false
+  Env.productoSearchRefocusOnBlur = false
 
   const filterProductos = (searchPhrase: string) => {
     const words = searchPhrase.split(" ").map(x => x.trim().toLowerCase()).filter(x => x.length > 1)
@@ -513,7 +526,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
   const closeLayer = () => {
     setSearchText([])
     setShowLayer(false)
-    refocusOnBlur = false
+    Env.productoSearchRefocusOnBlur = false
     if(inputRef){ 
       inputRef.value = "" 
       inputRef.blur()
@@ -523,7 +536,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
   return <div class={`p-rel flex jc-center ${s1.productos_search_bar_cnt}`}
       onMouseDown={ev => {
         ev.stopPropagation()
-        refocusOnBlur = true
+        Env.productoSearchRefocusOnBlur = true
       }}
     >
     <div class="p-rel w100">
@@ -542,8 +555,8 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
         }}
         onBlur={ev => {
           ev.stopPropagation()
-          if(refocusOnBlur){
-            refocusOnBlur = false
+          if(Env.productoSearchRefocusOnBlur){
+            Env.productoSearchRefocusOnBlur = false
             ev.target.focus()
           } else {
             closeLayer()

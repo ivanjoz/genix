@@ -1,3 +1,5 @@
+@value mobile_size: 680px;
+
 .card_arrow_ctn {
   height: 2.8rem;
   margin-right: -4px;
@@ -11,6 +13,8 @@
   z-index: 5;
   padding: 0 6px;
   flex-grow: 1;
+  max-width: 100%;
+  overflow: hidden;
 }
 .card_arrow_ctn > img:last-of-type {
   margin-right: -4px;
@@ -47,4 +51,13 @@
 .card_arrow_ctn.card_arrow_ctn_selected .card_arrow_name {
   background-color: #0cad66;
   color: white;
+}
+
+@media only screen and (max-width: mobile_size) {
+  .card_arrow_name {
+    padding: 0;
+    font-size: var(--fs2);
+    word-break: break-all;
+    min-width: unset;
+  }
 }
