@@ -1,3 +1,5 @@
+@value mobile_size: 680px;
+
 .product_cuadrilla_ctn {
   min-height: 10rem;
   background-color: #f4f4fa;
@@ -51,6 +53,12 @@
   padding: 4px 8px 0 8px;
   background-color: white;
   line-height: 1.2;
+}
+
+@media only screen and (max-width: mobile_size) {
+  .product_name_ctn {
+    padding: 2px 4px 0 4px;
+  }
 }
 
 .product_cuadrilla_mobile .product_name_ctn {
@@ -156,11 +164,11 @@
   width: var(--size1);
   z-index: 111;
 }
-.floating_cart_ctn_ref.is_mobile {
-  bottom: calc(1rem - 2px);
-  right: calc(1rem - 2px);
-  --size1: 4.5rem;
-  --content-width: calc(100vw - 2rem + 4px);
+
+.floating_cart_ctn_ref, .floating_cart_ctn_ref * {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; /* Prevents text selection */
+  user-select: none;
 }
 
 .floating_cart_ctn {
@@ -179,16 +187,11 @@
 
 .floating_cart_ctn_open, .floating_cart_content {
   height: 34rem;
-  max-height: 70vh;
   max-width: calc(100vw - 2rem);
-}
-
-.floating_cart_ctn_open {
   width: var(--content-width);
 }
 
 .floating_cart_content {
-  width: var(--content-width);
   position: absolute;
   bottom: 0;
   right: 0;
@@ -281,6 +284,7 @@
 .producto_card_ctn {
   padding: 4px;
   padding-right: 2.6rem;
+  line-height: 1.2;
 }
 .floating_producto_card:global(.s2) .producto_card_ctn {
   padding-right: 1.4rem;
@@ -330,6 +334,7 @@
   border: none;
   background-color: #e5e3f4;
   font-size: 1.2rem;
+  font-family: mono;
 }
 .producto_card_btn_cant:hover {
   background-color: #5e51c0;
@@ -340,6 +345,43 @@
   text-align: center;
   border: 1px solid #a8a0c2;
   height: 1.8rem;
+}
+
+@media only screen and (max-width: mobile_size) {
+  .floating_cart_ctn_ref {
+    bottom: calc(1rem - 2px);
+    right: calc(1rem - 2px);
+    --size1: 4.5rem;
+    --content-width: calc(100vw - 2rem + 4px);
+  }
+  .floating_cart_count {
+    width: 2.1rem;
+    height: 2.1rem;
+    font-size: var(--fs2);
+  }
+  .producto_card_btn_input {
+    width: 3.6rem;
+  }
+  .producto_card_ctn {
+    margin-left: 4px;
+  }
+  .floating_producto_card_img {
+    width: 21vw;
+  }
+  .producto_card_btn_input {
+    border: 1px solid #d1cbe2;
+    border-bottom: 2px solid #d1cbe2;
+  }
+  .producto_card_price > div:first-of-type {
+    font-size: var(--fs3);
+    margin-right: 1px;
+  }
+  .floating_cart_card {
+    font-size: 1.2rem;
+  }
+  .floating_cart_ctn_open, .floating_cart_content {
+    height: 72vh;
+  }
 }
 
 /* Carrito Layer */
@@ -497,21 +539,21 @@
   width: 24rem;
 }
 
-.productos_search_bar_mobile_cont {
-  width: 34vw;
-}
-
-.productos_search_bar_mobile_cont:focus-within {
-  width: calc(100vw - 8rem - 4px);
-}
-
 .productos_search_input:focus-within {
   outline: 2px solid rgb(124, 105, 218);
   background-color: rgb(245, 243, 255);
 }
 
-.productos_search_bar_mobile_cont:focus-within .productos_search_input_mobile {
-  outline: 2px solid rgb(124, 105, 218);
+@media screen {
+  .productos_search_bar_cnt {
+    width: 34vw;
+  }
+  .productos_search_bar_cnt:focus-within {
+    width: calc(100vw - 8rem - 4px);
+  }
+  .productos_search_bar_cnt:focus-within .productos_search_input_mobile {
+    outline: 2px solid rgb(124, 105, 218);
+  }
 }
 
 .productos_search_input, .productos_search_input_mobile {
@@ -550,13 +592,20 @@
 }
 */
 
-.productos_search_layer {
+.productos_search_layer, .productos_search_sin_resultados {
   border-radius: 16px;
   background-color: #f4f4f4;
   height: 32rem;
   box-shadow: rgba(14, 30, 37, 0.12) 0px 2px 4px 0px, 
     rgba(14, 30, 37, 0.32) 0px 2px 16px 0px;
   padding: 12px;
+}
+
+.productos_search_sin_resultados {
+  width: 20rem;
+  max-width: 82vw;
+  height: 5rem;
+  top: calc(2.6rem + 6px);
 }
 
 .productos_search_layer:not(.productos_search_layer_mobile) {
@@ -576,10 +625,20 @@
   padding: 8px;
 }
 
-.productos_search_layer_angle {
+.productos_search_layer_angle, .productos_search_sin_resultados_layer_angle {
   width: 1.9rem;
   top: 1.9rem;
   z-index: 11;
+}
+
+.productos_search_sin_resultados_layer_angle,
+.productos_search_sin_resultados {
+  display: none;
+}
+
+.productos_search_bar_cnt:focus-within .productos_search_sin_resultados_layer_angle,
+.productos_search_bar_cnt:focus-within .productos_search_sin_resultados {
+  display: flex;
 }
 
 .top_bar_mobile {
@@ -734,4 +793,9 @@
   background-color: #d66060;
   color: white;
   top: 2px;
+  display: none;
+}
+
+.productos_search_bar_cnt:focus-within .productos_search_close_button {
+  display: block;
 }
