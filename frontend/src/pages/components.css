@@ -13,10 +13,9 @@
   margin-bottom: calc(3.1vw + 3.1vh);
 }
 .header1-menu2 {
-  height: calc(3.1vw + 3.1vh);
+  height: calc(2.8vw + 2.8vh);
   box-sizing: border-box;
   padding: 0 4vw 0 4vw;
- /* font-size: var(--fs2); */
   transition: height .4s;
   z-index: 150;
   justify-content: space-between;
@@ -25,6 +24,7 @@
   background-color: #fff;
   box-shadow: 0 0 5px rgba(0,0,0,.2);
 }
+
 .cms-1 .header1-menu1 {
   margin-bottom: 0;
 }
@@ -36,7 +36,7 @@
   position: fixed;
   top: 0;
   left: 0;
-  height: calc(2vw + 2vh + 2px);
+  height: 3.4rem;
 }
 .layer-im1 {
   min-height: 30vw;

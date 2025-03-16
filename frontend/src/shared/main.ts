@@ -1,7 +1,7 @@
 import Dexie from "dexie";
-import { Env, Params, checksum } from "./security";
 import { Loading, Notify } from "~/core/main";
 import { IModule } from "~/core/modules";
+import { Env, Params, checksum } from "./security";
 
 export const joinb = (...args: any[]) => {
   return args.filter(x => x).join(" ")
@@ -237,7 +237,7 @@ export const makeEcommerceDB = (): Promise<Dexie> => {
   if(!db){
     db = window.DexieEcommerceDB = new Dexie("ecommerce")
     db.version(DEXIE_ECOMMERCE_VERSION).stores({
-      cache: "key"
+      cache: "key", forms: "[formID+key],formID"
     })
   }
 
@@ -251,6 +251,11 @@ export const makeEcommerceDB = (): Promise<Dexie> => {
       .catch(error => { console.warn(error); reject(error) })
     }
   })
+}
+
+export const getCmsTable = async (name: string): Promise<Dexie.Table> => {
+  const db = await makeEcommerceDB()
+  return await db.table(name)
 }
 
 export const arrayToMapS = <T>(array: T[], keys?: string | string[]):

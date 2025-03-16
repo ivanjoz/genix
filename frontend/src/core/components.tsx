@@ -5,6 +5,7 @@ export interface ICiudadSelector<T> {
   css: string[]
   saveOn?: T
   save?: keyof T
+  onChange?: () => void
 }
 
 let ciudadesPromise: Promise<ICiudadesResult>
@@ -123,6 +124,7 @@ export const CiudadSelector = <T,>(props: ICiudadSelector<T>) => {
     if(!props.saveOn || !props.save){ return }
     const ciudadID = form().distritoID || form().provinciaID || form().departamentoID || ""
     props.saveOn[props.save] = ciudadID as never
+    if(props.onChange){ props.onChange() }
   }
 
   return <>

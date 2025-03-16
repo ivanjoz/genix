@@ -87,7 +87,7 @@ export default function CmsWebpage() {
         style={{ "z-index": 51 }}
       >
         { !sectionSelected() &&
-          <div>Seleccione una sección para editar su contenido.</div>
+          <div>Seleccione una sección para editar su contenido1.</div>
         }
         { sectionSelected() &&
           <SeccionTypeSelector selected={sectionSelected()} 

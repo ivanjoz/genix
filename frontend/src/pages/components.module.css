@@ -213,6 +213,7 @@
   flex-shrink: 0;
   border-radius: 8px 0 0 8px;
   overflow: hidden;
+  padding: 4px;
 }
 .producto_card_ctn {
   padding: 4px;
@@ -387,3 +388,127 @@
   outline: 1px solid black;
 }
 
+/* productos search */
+.productos_search_bar_cnt {
+  width: 24rem;
+}
+
+.productos_search_bar_mobile_cont {
+  width: 34vw;
+}
+
+.productos_search_bar_mobile_cont:focus-within {
+  width: calc(100vw - 8rem - 4px);
+}
+
+.productos_search_input:focus-within {
+  outline: 2px solid rgb(124, 105, 218);
+  background-color: rgb(245, 243, 255);
+}
+
+.productos_search_bar_mobile_cont:focus-within .productos_search_input_mobile {
+  outline: 2px solid rgb(124, 105, 218);
+}
+
+.productos_search_input, .productos_search_input_mobile {
+  height: calc(2.5rem - 2px);
+  outline: none;
+  border: none;
+  background-color: #eae9ef;
+  border-radius: 16px;
+} 
+
+.productos_search_input {
+  box-shadow: #20202329 0px 1px 3px, #20202329 0px 1px 2px;
+  padding-left: 0.8rem;
+}
+
+.productos_search_input_mobile {
+  padding-left: 2rem;
+}
+
+.productos_search_input_mobile::placeholder {
+  color: #736f91;
+}
+
+.productos_search_icon {
+  position: absolute;
+  right: 8px;
+  top: 0.5rem;
+  color: rgb(102, 101, 134);
+  pointer-events: none;
+}
+
+.productos_search_bar_mobile_cont .productos_search_icon {
+  left: 8px;
+  right: none;
+}
+
+.productos_search_layer {
+  border-radius: 16px;
+  background-color: white;
+  height: 32rem;
+  box-shadow: rgba(14, 30, 37, 0.12) 0px 2px 4px 0px, 
+    rgba(14, 30, 37, 0.32) 0px 2px 16px 0px;
+}
+
+.productos_search_layer:not(.productos_search_layer_mobile) {
+  width: 56rem;
+  max-width: 88vw;
+  top: 3rem;
+}
+
+.productos_search_layer_mobile {
+  position: fixed;
+  top: calc(3rem + 6px);
+  width: calc(98vw);
+  left: 2vw;
+  width: 96vw;
+  max-width: unset;
+  max-height: calc(75vh - 4rem);
+}
+
+.productos_search_layer_angle {
+  width: 1.9rem;
+  top: 1.9rem;
+  z-index: 11;
+}
+
+.top_bar_mobile {
+  position: fixed;
+  z-index: 1000;
+  width: 100vw;
+  background-color: white;
+  height: calc(3rem + 2px);
+  top: 0;
+  padding: 0 4px;
+}
+
+.top_bar_mobile_icon {
+  font-size: 1.3rem;
+  width: 3.6rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: calc(100% - 8px);
+  border-radius: 8px;
+  color: #373547;
+}
+
+.top_bar_mobile_icon {
+  font-size: 1.3rem;
+  width: 3.6rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: calc(100% - 8px);
+  border-radius: 8px;
+  color: #373547;
+}
+
+.mobile_product_seach_bar {
+  background-color: #efe9fa;
+  border-radius: 16px;
+  height: calc(100% - 8px);
+  width: 30vw;
+}

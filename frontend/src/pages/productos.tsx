@@ -2,7 +2,7 @@ import { useZoomImageMove } from "@zoom-image/solid"
 import { createEffect, createMemo, createSignal, For, on, onMount, Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { Image } from "~/components/Uploaders"
-import { parseSVG, throttle } from "~/core/main"
+import { include, parseSVG, throttle } from "~/core/main"
 import { IProducto } from "~/services/operaciones/productos"
 import { formatN, makeEcommerceDB } from "~/shared/main"
 import iconCancelSvg from "../assets/icon_cancel.svg?raw"
@@ -11,6 +11,8 @@ import { setCartOption } from "./cart"
 import s1 from "./components.module.css"
 import { IHeader1, setShowCart, showCart } from "./headers"
 import { useProductosCmsAPI } from "./productos-service"
+import angleSvg from "../assets/angle.svg?raw"
+import { deviceType } from "~/app"
 
 export function ProductosCuadrilla(props: IHeader1) { // type: 10
 
@@ -352,4 +354,71 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
       </div>
     </div>
   </Portal>
+}
+
+interface IProductoSearchLayer {
+
+}
+
+export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
+
+  const [ productos ] = useProductosCmsAPI()
+  const [productosFiltered, setProductosFiltered] = createSignal([])
+  const [showLayer, setShowLayer] = createSignal(false)
+
+  const filterProductos = (searchPhrase: string) => {
+    const words = searchPhrase.split(" ").map(x => x.trim()).filter(x => x.length > 1)
+    const filtered = [] as IProducto[]
+
+    const showLayer_ = words.length > 0 
+    if(showLayer() !== showLayer_){ setShowLayer(showLayer_) }
+
+    for(const pr of productos().productos){
+      if(include(pr.Nombre, words)){
+        filtered.push(pr)
+        if(filtered.length >= 24){ return }
+      }
+    }
+  }
+
+  return <div class="p-rel flex jc-center"
+      classList={{ 
+        [s1.productos_search_bar_cnt]: [1].includes(deviceType()),
+        [s1.productos_search_bar_mobile_cont]: [2,3].includes(deviceType()) 
+      }}
+    >
+    <div class="p-rel w100">
+      <input type="text" class="w100"
+        classList={{
+          [s1.productos_search_input]: [1,2].includes(deviceType()),
+          [s1.productos_search_input_mobile]: [3].includes(deviceType())
+        }}
+        onKeyDown={ev => {
+          ev.stopPropagation()
+          filterProductos((ev.target as any).value)
+        }}
+        placeholder={[1,2].includes(deviceType()) ? "Busca productos..." : "Buscar.."}
+        onFocus={ev => {
+          ev.stopPropagation()
+        }}
+        onBlur={ev => {
+          ev.stopPropagation()
+          // setShowLayer(false)
+        }}
+      />
+      <i class={"icon-search " + s1.productos_search_icon}></i>
+    </div>
+    { 
+    showLayer() && <>
+      <img class={`p-abs ${s1.productos_search_layer_angle}`}
+        style={{ }}
+        src={parseSVG(angleSvg)}
+      />
+      <div class={`p-abs ${s1.productos_search_layer}`}
+        classList={{[s1.productos_search_layer_mobile]: [3].includes(deviceType()) }}
+      >
+      </div>
+    </>
+    }
+  </div>
 }

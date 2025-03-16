@@ -1,17 +1,17 @@
-import { createMemo, createSignal, For, JSX, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, JSX, Show } from "solid-js"
 import { CardArrowSteps } from "~/components/Cards"
 import { CartFloatingProducto, cartProductos } from "./productos"
-import { formatN } from "~/shared/main"
+import { formatN, getCmsTable, makeEcommerceDB } from "~/shared/main"
 import s1 from "./components.module.css"
 import { Input } from "~/components/Input"
 import { CiudadSelector } from "~/core/components"
+import { throttle } from "~/core/main"
 
 export const [cartOption, setCartOption] = createSignal(1)
 
 export interface IEcommerceCart {
 
 }
-
 
 export interface ICartForm {
   nombres: string
@@ -24,6 +24,29 @@ export interface ICartForm {
 
 export const [cartForm, setCartForm] = createSignal({} as ICartForm)
 
+const savedForm = {} as ICartForm
+
+export const saveCartForm = () => {
+  throttle(async () => {
+    const form = cartForm()
+    const valuesToSave = []
+  
+    for(const key of Object.keys(form) as (keyof ICartForm)[]){
+      const currentValue = savedForm[key]||""
+      const value = form[key] || ""
+      if(currentValue !== value){
+        savedForm[key] = value
+        valuesToSave.push({ formID: 1, key, value })
+      }
+    }
+  
+    if(valuesToSave.length > 0){
+      const dbTable = await getCmsTable("forms")
+      dbTable.bulkPut(valuesToSave)
+    }
+  },500)
+}
+
 export const EcommerceCart = (props: IEcommerceCart) => {
 
   const precio = createMemo(() => {
@@ -32,6 +55,16 @@ export const EcommerceCart = (props: IEcommerceCart) => {
       precio += (pr.cant * pr.producto.PrecioFinal)
     }
     return precio
+  })
+
+  getCmsTable("forms").then(table => {
+    table.where({ formID: 1 }).toArray().then(formRecords => {
+      const form = {} as ICartForm
+      for(const e of formRecords){
+        form[e.key as keyof ICartForm] = e.value
+      }
+      setCartForm(form)
+    })
   })
 
   return <div class="w100" style={{ padding: '8px' }}>
@@ -99,21 +132,27 @@ export const EcommerceCart = (props: IEcommerceCart) => {
       <div class="flex-wrap w100-10">
         <Input label="Nombres" saveOn={cartForm()} save="nombres"  
           css="w-12x mb-10" required={true}
+          onChange={() => saveCartForm()}
         />
-        <Input label="Apellidos" saveOn={cartForm()} save="nombres"  
+        <Input label="Apellidos" saveOn={cartForm()} save="apellidos"  
           css="w-12x mb-10" required={true}
+          onChange={() => saveCartForm()}
         />
         <Input label="Correo Electrónico" saveOn={cartForm()} save="email"  
           css="w-12x mb-10" required={true}
+          onChange={() => saveCartForm()}
         />
         <CiudadSelector css={["w-12x mb-10","w-12x mb-10","w-12x mb-10"]}
           saveOn={cartForm()} save="ciudadID" 
+          onChange={() => saveCartForm()}
         />
         <Input label="Dirección" saveOn={cartForm()} save="direccion"  
           css="w-24x mb-10" required={true}
+          onChange={() => saveCartForm()}
         />
         <Input label="Referencia" saveOn={cartForm()} save="referencia"  
           css="w-24x mb-10"
+          onChange={() => saveCartForm()}
         />
       </div>
     </Show>
