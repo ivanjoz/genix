@@ -9,6 +9,7 @@
   --fs1: 16px;
   --fs2: 15px;
   --fs3: 14px;
+  --fs-h3: 1.1rem;
 }
 
 @media screen and (max-width: 600px) {
@@ -224,7 +225,7 @@ select:disabled {
 .h1, h1 { font-size: 1.4rem; }
 .fs20 { font-size: 20px; }
 .h2, h2 { font-size: 1.2rem; }
-.h3, h3 { font-size: 1.1rem; }
+.h3, h3 { font-size: var(--fs-h3); }
 .h4, h4 { font-size: 1rem; }
 .h5, h5 { font-size: 0.94rem; }
 .h6, h6 { font-size: 0.88rem; }

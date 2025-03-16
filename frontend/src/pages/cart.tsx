@@ -67,7 +67,7 @@ export const EcommerceCart = (props: IEcommerceCart) => {
     })
   })
 
-  return <div class="w100" style={{ padding: '8px' }}>
+  return <div class={`w100 ${s1.menu_cart_layer_container}`}>
     <CardArrowSteps selected={cartOption()}
       options={[ 
         { id: 1, name: 'Carrito', icon: "icon-basket" }, 
@@ -82,10 +82,9 @@ export const EcommerceCart = (props: IEcommerceCart) => {
         let name = e.name as (string|JSX.Element);
         if(e.id === 2){ name = <span>Datos de <br />Envío</span>  }
         else if(e.id === 4){ name = <span>Confirmación</span>  }
-        return <div class="flex ai-center mt-01 ff-semibold">
+        return <div class={`flex ai-center mt-01 ff-semibold ${s1.menu_cart_layer_header_button}`}>
           <i class={`h3 ${e.icon} mr-02`} style={{ "margin-left": "-6px" }}></i>
-          <div style={{ "line-height": '1.1', "text-align": 'left' }}
-            class="mr-08">{name}</div>
+          <div class={s1.menu_cart_layer_header_button_name}>{name}</div>
         </div>
       }}
     />
@@ -104,9 +103,7 @@ export const EcommerceCart = (props: IEcommerceCart) => {
           Continuar <i class="icon-right"></i>
         </button>
       </div>
-      <div class="h100 w100 grid" 
-        style={{ "grid-template-columns": "1fr 1fr", "column-gap": "12px" }}
-      >
+      <div class={`h100 w100 grid ${s1.menu_cart_layer_products}`}>
         <For each={Array.from(cartProductos().values())}>
         {e => {
           console.log("rendering productos::", cartProductos())

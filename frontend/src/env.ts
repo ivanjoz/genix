@@ -78,7 +78,9 @@ export const Env = {
       }
     }
     return Env.empresaID
-  }
+  },
+  // Extra
+  productoSearchRefocusOnBlur: false
 }
 
 export const getInnerWidth = () => {
