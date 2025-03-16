@@ -499,10 +499,8 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
       />
       <i class={"icon-search " + s1.productos_search_icon}></i>
     </div>
-    { 
-    showLayer() && <>
+    <Show when={showLayer()}>
       <img class={`p-abs ${s1.productos_search_layer_angle}`}
-        style={{ }}
         src={parseSVG(angleSvg)}
       />
       <div class={`p-abs ${s1.productos_search_layer}`}
@@ -512,7 +510,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
           classList={{[s1.is_mobile]: [3].includes(deviceType()) }}
         >
           { categoriaProductos().map(cp => {
-              return <>
+              return <div>
               { cp.productos.map((e,i) => {
                   return <div class="w100">
                     { i === 0 &&
@@ -524,13 +522,12 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
                   </div>
                 })
               }
-              </>
+              </div>
             })
           }
         </div>
       </div>
-    </>
-    }
+    </Show>
   </div>
 }
 
