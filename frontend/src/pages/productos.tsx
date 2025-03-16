@@ -70,13 +70,18 @@ export function ProductosCuadrilla(props: IHeader1) { // type: 10
                   }}
                 >      
                   <div class={s1.product_cart_bn_cant}>{cartCant()}</div>   
-                    { (cartCant() > 0 && [1].includes(deviceType()))
+                    { cartCant() > 0 
                       ? <div class={s1.product_cart_bn_text}>
-                          Agregar más <span>({cartCant()})</span>
+                        { !isMobile() &&
+                          <span>Agregar más <span>({cartCant()})</span></span>
+                        }
                         </div>
                       : <div class={s1.product_cart_bn_text}>Agregar</div>
                     }
-                  <i class="icon-basket _icon mt-02"></i>                        
+                  <i class="icon-basket _icon mt-02"></i>  
+                  { cartCant() > 0 && isMobile() &&
+                    <span class="ml-02 ff-bold">(Hay {cartCant()})</span>
+                  }                      
                 </div>
               </Show>
               <Show when={cartCant() >= e._stock}>
@@ -134,9 +139,7 @@ export const CartFloating = (props: ICartFloating) => {
 
   return <Portal mount={document.body}>
     <Show when={!showCart()}>
-      <div class={`p-rel flex-center ${s1.floating_cart_ctn_ref}`}
-          classList={{ [s1.is_mobile]: isMobOrTablet() }}
-        >
+      <div class={`p-rel flex-center ${s1.floating_cart_ctn_ref}`}>
         <div class={`p-rel h100 w100 ${s1.floating_cart_ctn}`}
           classList={{ [s1.floating_cart_ctn_open]: isOpen() === 1 }}
         >
@@ -277,8 +280,9 @@ export const CartFloatingProducto = (props: ICartFloatingProducto) => {
         }}>
           <i class="icon-cancel"></i>
         </div>
-        <div class={`p-abs h3 ff-semibold ${s1.producto_card_price}`}>
-          s./ {formatN(precio()/100, 2)}
+        <div class={`p-abs h3 ff-semibold flex ai-center ${s1.producto_card_price}`}>
+          <div>{props.producto._moneda}</div>
+          <div>{formatN(precio()/100, 2)}</div>
         </div>
         <div class={`p-abs flex ai-center ff-semibold ${s1.producto_card_btn_ctn}`}>
           <button onClick={ev => {
@@ -399,7 +403,9 @@ interface IProductoCard2 {
 
 export const ProductoCard2 = (props: IProductoCard2) => {
 
-  const isMobile = createMemo(() => [3].includes(deviceType()))
+  const cartCant = createMemo(() => {
+    return cartProductos().get(props.producto.ID)?.cant || 0
+  })
 
   return <div class={`${s1.producto_filter_card} p-rel`}
       classList={{[s1.is_mobile]: isMobile() }}
@@ -423,11 +429,19 @@ export const ProductoCard2 = (props: IProductoCard2) => {
             <div>{formatN(props.producto.PrecioFinal/100,2)}</div>
           </div>
         </div>
-        <div class={`flex ai-center jc-center ${s1.producto_filter_button}`}>
-          <div class="ff-bold" 
-            classList={{"mt-02": !isMobile()}} 
-          >+</div>
+        <div class={`flex ai-center jc-center ${s1.producto_filter_button}`}
+          onClick={ev => {
+            ev.stopPropagation()
+            addProducto(props.producto)
+          }}
+        >
+          { cartCant() === 0 &&
+            <div class="ff-bold" 
+              classList={{"mt-02": !isMobile()}} 
+            >+</div>
+          }
           <i class="icon-basket"></i>
+          { cartCant() > 0 && <div class="h5 ff-bold mb-04">({cartCant()})</div> }
         </div>
       </div>
     </div>
@@ -455,7 +469,6 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
   const [showLayer, setShowLayer] = createSignal(false)
   const [searchText, setSearchText] = createSignal([])
 
-  const isMobile = createMemo(() => [3].includes(deviceType()))
   let inputRef: HTMLInputElement
   let refocusOnBlur = false
 
@@ -498,16 +511,16 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
   }
 
   const closeLayer = () => {
-    setShowLayer(false)
     setSearchText([])
-    if(inputRef){ inputRef.value = "" }
+    setShowLayer(false)
+    refocusOnBlur = false
+    if(inputRef){ 
+      inputRef.value = "" 
+      inputRef.blur()
+    }
   }
 
-  return <div class="p-rel flex jc-center"
-      classList={{ 
-        [s1.productos_search_bar_cnt]: [1].includes(deviceType()),
-        [s1.productos_search_bar_mobile_cont]: [2,3].includes(deviceType()) 
-      }}
+  return <div class={`p-rel flex jc-center ${s1.productos_search_bar_cnt}`}
       onMouseDown={ev => {
         ev.stopPropagation()
         refocusOnBlur = true
@@ -540,18 +553,28 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
       { !showLayer() &&
         <i class={"icon-search " + s1.productos_search_icon}></i> 
       }
-      { showLayer() &&
-        <button class={`p-abs flex-center ${s1.productos_search_close_button}`}
-          onClick={ev => {
-            ev.stopPropagation()
-            closeLayer()
-          }}
-        >
-          <i class="icon-cancel"></i> 
-        </button>
-      }
+      <button class={`p-abs flex-center ${s1.productos_search_close_button}`}
+        style={{ display: showLayer() ? 'block' : undefined  }}
+        onClick={ev => {
+          ev.stopPropagation()
+          closeLayer()
+        }}
+      >
+        <i class="icon-cancel"></i> 
+      </button>
     </div>
-    <Show when={showLayer()}>
+    <Show when={!showLayer() || (showLayer() && categoriaProductos().length === 0)}>
+      <img class={`p-abs ${s1.productos_search_sin_resultados_layer_angle}`}
+        src={parseSVG(angleSvg)}
+      />
+      <div class={`p-abs flex-center ${s1.productos_search_sin_resultados}`}>
+        { searchText().length === 0 
+          ? <div>Escriba un producto para buscarlo...</div>
+          : <div>No se encontraron productos</div>
+        }        
+      </div>
+    </Show>
+    <Show when={showLayer() && categoriaProductos().length > 0}>
       <img class={`p-abs ${s1.productos_search_layer_angle}`}
         src={parseSVG(angleSvg)}
       />

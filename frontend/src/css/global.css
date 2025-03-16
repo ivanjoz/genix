@@ -8,6 +8,7 @@
   font-size: calc(9px + 0.215vw  + 0.3vh);
   --fs1: 16px;
   --fs2: 15px;
+  --fs3: 14px;
 }
 
 @media screen and (max-width: 600px) {

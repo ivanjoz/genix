@@ -1,8 +1,8 @@
 import { Meta, MetaProvider, Title } from "@solidjs/meta";
-import { Route, Router, useNavigate, useLocation } from "@solidjs/router";
+import { Route, Router, useLocation, useNavigate } from "@solidjs/router";
 import { clientOnly } from "@solidjs/start";
 import { FileRoutes } from "@solidjs/start/router";
-import { Show, Suspense, createEffect, createMemo, createSignal, onMount } from "solid-js";
+import { Show, Suspense, createEffect, createSignal, onMount } from "solid-js";
 import Modules from "./core/modules";
 import { PageLoading, PageLoadingElement } from "./core/page";
 import { Env, LocalStorage, getWindow } from "./env";
@@ -42,9 +42,9 @@ export const checkDevice = () => {
 export const [deviceType, setDeviceType] = createSignal(checkDevice())
 export const [viewType, setViewType] = createSignal(Params.getValueInt('viewType')||2)
 
-export const isMobile = createMemo(() => checkDevice() === 3)
-export const isMobOrTablet = createMemo(() => [2,3].includes(checkDevice()))
-export const isDesktop = createMemo(() => checkDevice() === 1)
+export const [isDesktop, setIsDesktop] = createSignal(deviceType() === 1)
+export const [isMobOrTablet, setIsMobOrTablet] = createSignal([2,3].includes(deviceType()))
+export const [isMobile, setIsMobile] = createSignal(deviceType() === 3)
 
 export default function Root() {
 
@@ -54,7 +54,12 @@ export default function Root() {
     window.addEventListener('resize', ()=> {
       const newDeviceType = checkDevice()
       console.log('device type::', newDeviceType)
-      if(newDeviceType !== deviceType()){ setDeviceType(newDeviceType) }
+      if(newDeviceType !== deviceType()){
+        setIsDesktop(newDeviceType === 1)
+        setIsMobOrTablet([2,3].includes(newDeviceType))
+        setIsMobile(newDeviceType === 3)
+        setDeviceType(newDeviceType) 
+      }
     })
   
     if ('serviceWorker' in navigator && !IS_LOCAL) {
