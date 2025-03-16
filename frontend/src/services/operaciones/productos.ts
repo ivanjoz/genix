@@ -40,6 +40,7 @@ export interface IProducto {
   ss: number
   upd: number
   _stock?: number
+  _moneda?: string
 }
 
 export interface IProductoResult {
