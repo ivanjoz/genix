@@ -23,6 +23,7 @@ const parseProductos = (productos: IProductosResult) => {
   productos.productos = productos.productos || []
   for(const p of productos.productos){
     p._stock = 0
+    p._moneda = "s/."
     for(const stock of p.Stock){ p._stock += (stock.c||0) }
   }
 

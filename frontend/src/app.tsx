@@ -2,7 +2,7 @@ import { Meta, MetaProvider, Title } from "@solidjs/meta";
 import { Route, Router, useNavigate, useLocation } from "@solidjs/router";
 import { clientOnly } from "@solidjs/start";
 import { FileRoutes } from "@solidjs/start/router";
-import { Show, Suspense, createEffect, createSignal, onMount } from "solid-js";
+import { Show, Suspense, createEffect, createMemo, createSignal, onMount } from "solid-js";
 import Modules from "./core/modules";
 import { PageLoading, PageLoadingElement } from "./core/page";
 import { Env, LocalStorage, getWindow } from "./env";
@@ -41,6 +41,10 @@ export const checkDevice = () => {
 
 export const [deviceType, setDeviceType] = createSignal(checkDevice())
 export const [viewType, setViewType] = createSignal(Params.getValueInt('viewType')||2)
+
+export const isMobile = createMemo(() => checkDevice() === 3)
+export const isMobOrTablet = createMemo(() => [2,3].includes(checkDevice()))
+export const isDesktop = createMemo(() => checkDevice() === 1)
 
 export default function Root() {
 

@@ -12,7 +12,7 @@ import s1 from "./components.module.css"
 import { IHeader1, setShowCart, showCart } from "./headers"
 import { useProductosCmsAPI } from "./productos-service"
 import angleSvg from "../assets/angle.svg?raw"
-import { deviceType } from "~/app"
+import { deviceType, isMobile, isMobOrTablet } from "~/app"
 import { highlString } from "~/components/SearchSelect"
 
 export function ProductosCuadrilla(props: IHeader1) { // type: 10
@@ -134,7 +134,9 @@ export const CartFloating = (props: ICartFloating) => {
 
   return <Portal mount={document.body}>
     <Show when={!showCart()}>
-      <div class={`p-rel flex-center ${s1.floating_cart_ctn_ref}`}>
+      <div class={`p-rel flex-center ${s1.floating_cart_ctn_ref}`}
+          classList={{ [s1.is_mobile]: isMobOrTablet() }}
+        >
         <div class={`p-rel h100 w100 ${s1.floating_cart_ctn}`}
           classList={{ [s1.floating_cart_ctn_open]: isOpen() === 1 }}
         >
@@ -331,41 +333,56 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
     createZoomImage(divRef, { zoomFactor: 2 })
   })
 
+  const productosGallerySelector = <div class={`p-rel ${s1.producto_layer_img_ctn}`}>
+    { productoSelected().Images.map(img => {
+        return <div class={`p-rel ${s1.producto_layer_img_min} mb-08`}>
+          <Image src={"img-productos/"+ img.n} size={2}
+            class={"h100 w100 object-contain"}
+            types={["avif","webp"]}
+          />
+        </div>
+      })
+    }
+  </div>
+
   return <Portal mount={document.body}>
     <div class={`${s1.producto_layer_bg}`} onClick={ev => {
       ev.stopPropagation()
       setProductoSelected(null)
     }}></div>
-    <div class={`${s1.producto_layer_ctn}`}>
+    <div class={`${s1.producto_layer_ctn}`}
+        classList={{ [s1.is_mobile]: isMobOrTablet() }}
+      >
       <div class="flex h1 ff-semibold mb-08">
         {productoSelected().Nombre}
       </div>
       <div class="flex w100">
-        <div class={`p-rel ${s1.producto_layer_img_ctn}`}>
-        { productoSelected().Images.map(img => {
-            return <div class={`p-rel ${s1.producto_layer_img_min} mb-08`}>
-              <Image src={"img-productos/"+ img.n} size={2}
-                class={"h100 w100 object-contain"}
-                types={["avif","webp"]}
-              />
-            </div>
-          })
+        { !isMobOrTablet() &&
+          productosGallerySelector
         }
-        </div>
-        <div class={`${s1.producto_layer_content}`}>
+        <div class={`${s1.producto_layer_content}`}
+          classList={{ [s1.is_mobile]: isMobOrTablet() }}
+        >
           <div class={`p-rel w100 ${s1.producto_layer_img1}`} ref={divRef}>
             <Image src={"img-productos/"+ productoSelected().Images[0]?.n} size={6}
               class={"h100 w100 object-contain"}
               types={["avif","webp"]}
             />
           </div>
+          { isMobOrTablet() &&
+            productosGallerySelector
+          }
           <div class="flex mt-12 ai-center">
-            <div class="mr-06">Precio:</div>
-            <div class="ff-bold h1">s/. {formatN(productoSelected()?.PrecioFinal/100,2)}</div>
+            <div class="flex ai-center"
+              classList={{ [s1.producto_layer_content_precio_mobile]: isMobOrTablet() }}
+            >
+              <div class="mr-06">Precio:</div>
+              <div class="ff-bold h1">s/. {formatN(productoSelected()?.PrecioFinal/100,2)}</div>
+            </div>
             <div class="ml-auto"></div>
             <button class={`${s1.producto_cart_btn}`}>
+              Agregar
               <i class="icon-basket"></i>
-              Añadir a Carrito
             </button>
           </div>
         </div>
@@ -398,14 +415,18 @@ export const ProductoCard2 = (props: IProductoCard2) => {
             {highlString(props.producto.Nombre, props.searchText||[])}
           </div>
         }
-        <div class="ff-bold h3"
-          classList={{"mt-08": isMobile()}}  
-          >s/. {formatN(props.producto.PrecioFinal/100,2)}
+        <div class={`ff-bold h3 flex ai-center ${s1.producto_filter_price}`}
+          classList={{[s1.is_mobile]: isMobile()}}  
+        >
+          <div class="flex ai-start">
+            <div>{props.producto._moneda}</div>
+            <div>{formatN(props.producto.PrecioFinal/100,2)}</div>
+          </div>
         </div>
         <div class={`flex ai-center jc-center ${s1.producto_filter_button}`}>
           <div class="ff-bold" 
             classList={{"mt-02": !isMobile()}} 
-          >Agregar</div>
+          >+</div>
           <i class="icon-basket"></i>
         </div>
       </div>
@@ -433,6 +454,10 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
   const [categoriaProductos, setCategoriaProductos] = createSignal([] as ICategProductos[])
   const [showLayer, setShowLayer] = createSignal(false)
   const [searchText, setSearchText] = createSignal([])
+
+  const isMobile = createMemo(() => [3].includes(deviceType()))
+  let inputRef: HTMLInputElement
+  let refocusOnBlur = false
 
   const filterProductos = (searchPhrase: string) => {
     const words = searchPhrase.split(" ").map(x => x.trim().toLowerCase()).filter(x => x.length > 1)
@@ -472,14 +497,24 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
     setSearchText(words)
   }
 
+  const closeLayer = () => {
+    setShowLayer(false)
+    setSearchText([])
+    if(inputRef){ inputRef.value = "" }
+  }
+
   return <div class="p-rel flex jc-center"
       classList={{ 
         [s1.productos_search_bar_cnt]: [1].includes(deviceType()),
         [s1.productos_search_bar_mobile_cont]: [2,3].includes(deviceType()) 
       }}
+      onMouseDown={ev => {
+        ev.stopPropagation()
+        refocusOnBlur = true
+      }}
     >
     <div class="p-rel w100">
-      <input type="text" class="w100"
+      <input type="text" class="w100" ref={inputRef}
         classList={{
           [s1.productos_search_input]: [1,2].includes(deviceType()),
           [s1.productos_search_input_mobile]: [3].includes(deviceType())
@@ -494,10 +529,27 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
         }}
         onBlur={ev => {
           ev.stopPropagation()
-          // setShowLayer(false)
+          if(refocusOnBlur){
+            refocusOnBlur = false
+            ev.target.focus()
+          } else {
+            closeLayer()
+          }
         }}
       />
-      <i class={"icon-search " + s1.productos_search_icon}></i>
+      { !showLayer() &&
+        <i class={"icon-search " + s1.productos_search_icon}></i> 
+      }
+      { showLayer() &&
+        <button class={`p-abs flex-center ${s1.productos_search_close_button}`}
+          onClick={ev => {
+            ev.stopPropagation()
+            closeLayer()
+          }}
+        >
+          <i class="icon-cancel"></i> 
+        </button>
+      }
     </div>
     <Show when={showLayer()}>
       <img class={`p-abs ${s1.productos_search_layer_angle}`}
@@ -510,11 +562,11 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
           classList={{[s1.is_mobile]: [3].includes(deviceType()) }}
         >
           { categoriaProductos().map(cp => {
-              return <div>
+              return <>
               { cp.productos.map((e,i) => {
                   return <div class="w100">
                     { i === 0 &&
-                      <div class="ff-bold p-rel h5 w100 mb-02" style={{ overflow: 'hidden' }}>
+                      <div class="ff-bold p-rel h6 w100 mb-02" style={{ overflow: 'hidden' }}>
                         {cp.categoria.toUpperCase()}
                       </div> 
                     }
@@ -522,7 +574,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
                   </div>
                 })
               }
-              </div>
+              </>
             })
           }
         </div>
