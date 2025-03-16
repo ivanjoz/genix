@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 //********************************************************* */
 const FILENAME = "start.js"
-const FRONTEND_SCRIPT = "npm start"
+const FRONTEND_SCRIPT = "npm run dev"
 const BACKEND_GO_SCRIPT = "go run -v . dev"
 const ENVIROMENT_VARIABLES = ""
 //********************************************************* */
