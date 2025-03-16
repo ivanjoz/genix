@@ -112,6 +112,15 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		propiedadesMap := map[int16]*s.ProductoPropiedades{}
 
 		if current != nil {
+			// Estas propiedades no cambian
+			e.Stock = current.Stock
+			e.StockReservado = current.StockReservado
+			e.StockStatus = current.StockStatus
+			e.CategoriasConStock = current.CategoriasConStock
+			e.Created = current.Created
+			e.CreatedBy = current.CreatedBy
+			e.Images = current.Images
+
 			for i := range current.Propiedades {
 				e := &current.Propiedades[i]
 				e.Status = 0
@@ -271,7 +280,7 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 
 	errGroup.Go(func() error {
 		err := db.SelectRef(&productos, func(q *db.Query[s.Producto], col s.Producto) {
-			q.Columns(col.ID_(), col.Nombre_(), col.Descripcion_(), col.Precio_(), col.Descuento_(), col.PrecioFinal_(), col.Images_(), col.Stock_())
+			q.Columns(col.ID_(), col.Nombre_(), col.Descripcion_(), col.Precio_(), col.Descuento_(), col.PrecioFinal_(), col.Images_(), col.Stock_(), col.CategoriasIDs_())
 			q.Where(col.EmpresaID_().Equals(empresaID))
 			q.Where(col.StockStatus_().Equals(1))
 			if categoriaID > 0 {
@@ -292,7 +301,7 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 			q.Where(col.Status_().Equals(1))
 		})
 		if err != nil {
-			err = fmt.Errorf("error al obtener los productos: %v", err)
+			err = fmt.Errorf("error al obtener las categorías: %v", err)
 		}
 		return err
 	})

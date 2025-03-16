@@ -4,7 +4,7 @@ import { Portal } from "solid-js/web"
 import { Image } from "~/components/Uploaders"
 import { include, parseSVG, throttle } from "~/core/main"
 import { IProducto } from "~/services/operaciones/productos"
-import { formatN, makeEcommerceDB } from "~/shared/main"
+import { arrayToMapG, arrayToMapN, formatN, makeEcommerceDB } from "~/shared/main"
 import iconCancelSvg from "../assets/icon_cancel.svg?raw"
 import iconCartSvg from "../assets/icon_cart.svg?raw"
 import { setCartOption } from "./cart"
@@ -13,21 +13,35 @@ import { IHeader1, setShowCart, showCart } from "./headers"
 import { useProductosCmsAPI } from "./productos-service"
 import angleSvg from "../assets/angle.svg?raw"
 import { deviceType } from "~/app"
+import { highlString } from "~/components/SearchSelect"
 
 export function ProductosCuadrilla(props: IHeader1) { // type: 10
 
   const [ productos ] = useProductosCmsAPI()
 
-  return <div class={"w100 " + s1.product_cuadrilla_ctn}>
-    <div class="w100 flex-wrap ai-baseline jc-center">
+  return <div class={"w100 " + s1.product_cuadrilla_ctn}
+      classList={{
+        [s1.product_cuadrilla_ctn_mobile]: deviceType() === 3, 
+      }}
+    >
+    <div class="w100"
+      classList={{
+        [s1.product_cuadrilla_mobile]: [3].includes(deviceType()), 
+        "flex-wrap ai-baseline jc-center": [1,2].includes(deviceType()), 
+      }}
+    >
       { productos().isFetching && <div>Obteniendo productos...</div> }
       { (productos().productos||[]).map(e => {
           const cartCant = createMemo(() => {
             return cartProductos().get(e.ID)?.cant || 0
           })
 
-          return <div class={`p-rel flex-column ai-center ${s1.product_card}`}
-            classList={{ "has-products": cartCant() > 0 }}
+          return <div class={`p-rel flex-column ai-center`}
+            classList={{ 
+              "has-products": cartCant() > 0,
+              [s1.product_card]: deviceType() !== 3, 
+              [s1.product_card_mobile]: deviceType() === 3, 
+            }}
             onClick={ev => {
               ev.stopPropagation()
               setProductoSelected(e)
@@ -35,7 +49,7 @@ export function ProductosCuadrilla(props: IHeader1) { // type: 10
           >
             { e.Images?.length > 0 &&
               <Image src={"img-productos/"+ e.Images[0]?.n} size={2}
-                class={s1.product_card_image}
+                class={s1.product_card_image + " w100"}
                 types={["avif","webp"]}
               />
             }
@@ -45,20 +59,24 @@ export function ProductosCuadrilla(props: IHeader1) { // type: 10
                 <div class="ff-bold h3">s/. {formatN(e.PrecioFinal/100,2)}</div>
               </div>
               <Show when={cartCant() < e._stock}>
-                <div class={`flex ai-center jc-center ${s1.product_cart_button}`}
+                <div class={`flex ai-center jc-center`}
+                  classList={{
+                    [s1.product_cart_button]: [1].includes(deviceType()),
+                    [s1.product_cart_button_mobile]: [2,3].includes(deviceType()),
+                  }}
                   onClick={ev => {
                     ev.stopPropagation()
                     addProducto(e)
                   }}
-                >
-                  <i class="icon-basket _icon"></i>
-                  <div class={s1.product_cart_bn_cant}>{cartCant()}</div>                  
-                    { cartCant() > 0
+                >      
+                  <div class={s1.product_cart_bn_cant}>{cartCant()}</div>   
+                    { (cartCant() > 0 && [1].includes(deviceType()))
                       ? <div class={s1.product_cart_bn_text}>
-                          Añadir más <span>({cartCant()})</span>
+                          Agregar más <span>({cartCant()})</span>
                         </div>
-                      : <div class={s1.product_cart_bn_text}>Añadir al Carrito</div>
-                    }                          
+                      : <div class={s1.product_cart_bn_text}>Agregar</div>
+                    }
+                  <i class="icon-basket _icon mt-02"></i>                        
                 </div>
               </Show>
               <Show when={cartCant() >= e._stock}>
@@ -356,29 +374,102 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
   </Portal>
 }
 
+
+interface IProductoCard2 {
+  producto: IProducto
+  searchText?: string[]
+}
+
+export const ProductoCard2 = (props: IProductoCard2) => {
+
+  const isMobile = createMemo(() => [3].includes(deviceType()))
+
+  return <div class={`${s1.producto_filter_card} p-rel`}
+      classList={{[s1.is_mobile]: isMobile() }}
+    >
+    <div class="flex w100 p-rel">
+      <Image src={"img-productos/"+ props.producto.Images[0]?.n} size={2}
+        class={s1.producto_filter_card_image + " w100"}
+        types={["avif","webp"]}
+      />
+      <div>
+        { !isMobile() &&
+          <div class="_highlight">
+            {highlString(props.producto.Nombre, props.searchText||[])}
+          </div>
+        }
+        <div class="ff-bold h3"
+          classList={{"mt-08": isMobile()}}  
+          >s/. {formatN(props.producto.PrecioFinal/100,2)}
+        </div>
+        <div class={`flex ai-center jc-center ${s1.producto_filter_button}`}>
+          <div class="ff-bold" 
+            classList={{"mt-02": !isMobile()}} 
+          >Agregar</div>
+          <i class="icon-basket"></i>
+        </div>
+      </div>
+    </div>
+    { isMobile() &&
+      <div class={`_highlight ${s1.producto_filter_mobile_text}`}>
+        {highlString(props.producto.Nombre, props.searchText||[])}
+      </div>
+    }
+  </div>
+}
+
 interface IProductoSearchLayer {
 
 }
 
+interface ICategProductos {
+  categoria: string
+  productos: IProducto[]
+}
+
 export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
 
-  const [ productos ] = useProductosCmsAPI()
-  const [productosFiltered, setProductosFiltered] = createSignal([])
+  const [ productosResult ] = useProductosCmsAPI()
+  const [categoriaProductos, setCategoriaProductos] = createSignal([] as ICategProductos[])
   const [showLayer, setShowLayer] = createSignal(false)
+  const [searchText, setSearchText] = createSignal([])
 
   const filterProductos = (searchPhrase: string) => {
-    const words = searchPhrase.split(" ").map(x => x.trim()).filter(x => x.length > 1)
+    const words = searchPhrase.split(" ").map(x => x.trim().toLowerCase()).filter(x => x.length > 1)
     const filtered = [] as IProducto[]
+    const productosResult_ = productosResult()
 
     const showLayer_ = words.length > 0 
     if(showLayer() !== showLayer_){ setShowLayer(showLayer_) }
 
-    for(const pr of productos().productos){
-      if(include(pr.Nombre, words)){
+    for(const pr of productosResult_.productos){
+      if(include(pr.Nombre.toLowerCase(), words)){
         filtered.push(pr)
         if(filtered.length >= 24){ return }
       }
     }
+
+    const categoriaProductosMap: Map<number,IProducto[]> = new Map()
+
+    for(const pr of filtered){
+      const categID = pr.CategoriasIDs?.length > 0 ? pr.CategoriasIDs[0] : -1
+      categoriaProductosMap.has(categID)
+        ? categoriaProductosMap.get(categID).push(pr)
+        : categoriaProductosMap.set(categID,[pr])
+    }
+
+    const categProductos: ICategProductos[] = []
+
+    for(const [categoriaID, productos] of categoriaProductosMap){
+      const categoria = productosResult_.categoriasMap.get(categoriaID)?.Nombre || ""
+      categProductos.push({ categoria, productos })
+    }
+
+    categProductos.sort((a,b) => !a.categoria ? -1 : (a.productos.length > b.productos.length ? -1 : 1 ))
+
+    console.log("categoría productos::", categProductos)
+    setCategoriaProductos(categProductos)
+    setSearchText(words)
   }
 
   return <div class="p-rel flex jc-center"
@@ -395,7 +486,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
         }}
         onKeyDown={ev => {
           ev.stopPropagation()
-          filterProductos((ev.target as any).value)
+          throttle(() => { filterProductos((ev.target as any).value) },250)
         }}
         placeholder={[1,2].includes(deviceType()) ? "Busca productos..." : "Buscar.."}
         onFocus={ev => {
@@ -417,8 +508,29 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
       <div class={`p-abs ${s1.productos_search_layer}`}
         classList={{[s1.productos_search_layer_mobile]: [3].includes(deviceType()) }}
       >
+        <div class={"w100 " + s1.producto_filter_container}
+          classList={{[s1.is_mobile]: [3].includes(deviceType()) }}
+        >
+          { categoriaProductos().map(cp => {
+              return <>
+              { cp.productos.map((e,i) => {
+                  return <div class="w100">
+                    { i === 0 &&
+                      <div class="ff-bold p-rel h5 w100 mb-02" style={{ overflow: 'hidden' }}>
+                        {cp.categoria.toUpperCase()}
+                      </div> 
+                    }
+                    <ProductoCard2 producto={e} searchText={searchText()}/>
+                  </div>
+                })
+              }
+              </>
+            })
+          }
+        </div>
       </div>
     </>
     }
   </div>
 }
+

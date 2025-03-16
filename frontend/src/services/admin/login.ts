@@ -16,6 +16,7 @@ export interface ILoginResult {
   UserToken: string
   UserInfo: string
   TokenExpTime: number
+  EmpresaID: number
 }
 
 export async function sendUserLogin(data: ILogin): Promise<any> {

@@ -1,7 +1,7 @@
 import { JSX, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { isRouteChanging, setInnerPageName, setIsRouteChanging, setPageView, setPageViews } from "./menu"
 import { fetchPending } from "~/shared/http"
-import { Env, isLogin, Params } from "~/shared/security"
+import { Env, isLogged, isLogin, Params } from "~/shared/security"
 import { useLocation } from "@solidjs/router"
 import { deviceType } from "~/app"
 
@@ -19,7 +19,7 @@ export const PageContainer = (props: IPageContainer) => {
   const location = useLocation()
   
   onMount(() => {
-    if(isLogin() !== 2){
+    if(!isLogged()){
       Env.navigate("login")
       return
     }
@@ -53,7 +53,7 @@ export const PageContainer = (props: IPageContainer) => {
   }
 
   const hasAccess = createMemo(() => {
-    if(isLogin() !== 2){ 
+    if(!isLogged()){ 
       return false
     } else if(props.accesos?.length > 0){
       return props.accesos.some(x => Params.checkAcceso(x,1))

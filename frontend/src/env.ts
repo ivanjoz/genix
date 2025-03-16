@@ -55,6 +55,12 @@ export const Env = {
   },
   getEmpresaID: (): number => {
     if(!Env.empresaID){ 
+      const localEmpresaID = localStorage.getItem(Env.appId + "EmpresaID")
+      if(localEmpresaID){
+        Env.empresaID = parseInt(localEmpresaID)
+        return Env.empresaID
+      }
+
       let pathname = ""
       if(isClient){
         pathname = document.head.querySelector(`meta[name="loc"]`)?.getAttribute("content") || ""
@@ -71,7 +77,6 @@ export const Env = {
         return Env.empresaID = parseInt(paths[1])
       }
     }
-    console.log("Empresa ID::", Env.empresaID)
     return Env.empresaID
   }
 }

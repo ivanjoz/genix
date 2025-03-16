@@ -96,6 +96,7 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 		"UserToken":    core.BytesToBase64(usuarioTokenEncrypted, true),
 		"TokenExpTime": time.Now().Unix() + (60 * 60 * 4),
 		"UserInfo":     core.BytesToBase64(usuarioInfoEncrypted),
+		"EmpresaID":    usuario.EmpresaID,
 	}
 
 	return req.MakeResponse(response)
