@@ -1,5 +1,5 @@
 import { useZoomImageMove } from "@zoom-image/solid"
-import { createEffect, createMemo, createSignal, For, on, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { Image } from "~/components/Uploaders"
 import { include, parseSVG, throttle } from "~/core/main"
@@ -477,7 +477,7 @@ interface ICategProductos {
 
 export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
 
-  const [ productosResult ] = useProductosCmsAPI()
+  const [productosResult] = useProductosCmsAPI()
   const [categoriaProductos, setCategoriaProductos] = createSignal([] as ICategProductos[])
   const [showLayer, setShowLayer] = createSignal(false)
   const [searchText, setSearchText] = createSignal([])
@@ -533,6 +533,9 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
     }
   }
 
+  Env.closeProductosSearchLayer = closeLayer
+  onCleanup(() => { Env.closeProductosSearchLayer = null })
+
   return <div class={`p-rel flex jc-center ${s1.productos_search_bar_cnt}`}
       onMouseDown={ev => {
         ev.stopPropagation()
@@ -552,6 +555,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
         placeholder={[1,2].includes(deviceType()) ? "Busca productos..." : "Buscar.."}
         onFocus={ev => {
           ev.stopPropagation()
+          setShowCart(false)
         }}
         onBlur={ev => {
           ev.stopPropagation()

@@ -51,6 +51,8 @@ export default function Root() {
   const IS_LOCAL = isClient && window.location.hostname.includes("localhost")
 
   if(isClient){
+    Env.loadEmpresaConfig()
+
     window.addEventListener('resize', ()=> {
       const newDeviceType = checkDevice()
       console.log('device type::', newDeviceType)

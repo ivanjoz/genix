@@ -9,6 +9,7 @@ interface Window {
   appId: string
   CompressionStream: any
   DexieDB: any,
+  Culqi: any,
   DexieEcommerceDB: any,
   EvaluacionesDB: any,
   _broadcast: BroadcastChannel
@@ -29,5 +30,6 @@ interface Window {
   _route?: string
   API_ROUTES: { MAIN: string }
   S3_URL: string
+  CulqiCheckout: any
 }
 

@@ -1,4 +1,5 @@
 import { defineConfig } from "@solidjs/start/config";
+import tailwindcss from '@tailwindcss/vite'
 import type { Options } from "vite-plugin-solid"
 import path from 'path'
 
@@ -22,7 +23,9 @@ export default defineConfig({
   } as Options,
   vite() {
     return { 
-      plugins: [].filter(x => x),
+      plugins: [
+        tailwindcss()
+      ].filter(x => x),
       resolve: {
         alias: {
           "@styles": path.resolve(process.env.PWD as string,'src/styles'),

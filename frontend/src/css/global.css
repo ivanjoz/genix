@@ -1,3 +1,9 @@
+@import "tailwindcss";
+
+@custom-variant sm (@media (max-width: 680px));
+@custom-variant md (@media (max-width: 940px));
+@custom-variant lg (@media (max-width: 1280px));
+
 :root {
   --width-1: 10px;
   --width-modern: 25px;
@@ -6,21 +12,12 @@
   --secondary: #eeefff;
   --heigth-1: 3rem;
   font-size: calc(9px + 0.215vw  + 0.3vh);
+  --menu-height-mobile: calc(2.8rem + 2px);
   --fs1: 16px;
   --fs2: 15px;
   --fs3: 14px;
   --fs-h3: 1.1rem;
 }
-
-@media screen and (max-width: 600px) {
-  :root {
-    font-size: 16px;
-  }
-  .m-hide {
-    display: none;
-  }
-}
-
 
 body {
   margin: 0;
@@ -157,6 +154,11 @@ textarea:disabled {
 select:disabled {
   -webkit-appearance: none;
   text-indent: 3px;
+}
+
+.ps-form {
+  padding-left: 6px;
+  padding-right: 6px;
 }
 
 .overflow-auto { overflow: auto; }
@@ -357,6 +359,14 @@ body.dark .c-red { color: #ff9494; }
 .c-red2 { color: #a33434; }
 .c-yellow { color: #e5a000; }
 .c-steel { color: #475262; }
+
+.overflow-s4 {
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-right: -4px;
+  padding-right: 4px;
+  width: calc(100% + 4px);
+}
 
 .c-steel1 {
   color: #58577d;
@@ -1662,4 +1672,17 @@ body.dark .b-blue:hover {
 
 .dsp-cont {
   display: contents;
+}
+
+@media screen and (max-width: 600px) {
+  :root {
+    font-size: 16px;
+  }
+  .m-hide {
+    display: none;
+  }
+  .ps-form {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
 }

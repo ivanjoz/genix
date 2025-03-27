@@ -211,12 +211,13 @@ export interface ICardArrowSteps {
   onSelect?: (e: IICardArrowStepsOption) => void
   selected?: number
   optionRender?: (e: IICardArrowStepsOption) => JSX.Element
+  columnsTemplate?: string
 }
 
 export const CardArrowSteps = (props: ICardArrowSteps) => {
 
   return <div class="grid mr-08"
-    style={{ "grid-template-columns": props.options.map(x => "1fr").join(" ") }}
+    style={{ "grid-template-columns": props.columnsTemplate || props.options.map(x => "1fr").join(" ") }}
   >
   { props.options.map(e => {
       return <div class={`flex p-rel ai-center ${s1.card_arrow_ctn}`}
@@ -258,3 +259,8 @@ export const Spinner4 = (props: ISpinner4) => {
   </div>
 }
 
+export const CreditCardForm = (props: ISpinner4) => {
+  return <div>
+    <img class="bg-image-1" src="images/visa_credit_background.webp" alt="" />
+  </div>
+}
