@@ -1,1 +1,0 @@
-import{t}from"./web-B9EQUxsk.js";import{P as o}from"./app-9rYrrEH8.js";import{c as r}from"./solid-DoXAfIeo.js";import"./main-BW8i8U5f.js";import"./main-CbQ9Ia1e.js";import"./http-zIS_ecGQ.js";var e=t("<div class=h1>No se encontró la página buscada...");function s(){return r(o,{title:"No Encontrado",fetchLoading:!0,get children(){return e()}})}export{s as default};
