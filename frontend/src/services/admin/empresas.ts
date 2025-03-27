@@ -3,25 +3,35 @@ import { arrayToMapN } from "~/shared/main"
 
 export interface IEmpresa {
   id: number,
-  email: string
-  nombre: string
-  razonSocial: string
-  ruc: string
-  telefono: string
-  representante: string
-  direccion: string
-  ciudad: string
-  smtp: IEmpresaSmtp
+  Email: string
+  Nombre: string
+  RazonSocial: string
+  RUC: string
+  Telefono: string
+  Representante: string
+  Direccion: string
+  Ciudad: string
+  SmtpConfig: IEmpresaSmtp
+  CulquiConfig: IEmpresaCulqui
   ss: number
   upd: number
 }
 
 export interface IEmpresaSmtp {
-  host: string
-  port: string
-  user: string
-  pwd: string
-  email: string
+  Host: string
+  Port: string
+  User: string
+  Password: string
+  Email: string
+}
+
+export interface IEmpresaCulqui {
+  RsaKey: string
+  RsaKeyID: string
+  LlaveLive: string
+  LlaveDev: string
+  LlavePubLive: string
+  LlavePubDev: string
 }
 
 export const useEmpresasAPI = (): GetSignal<IEmpresa[]> => {
@@ -48,7 +58,11 @@ export const useParametrosEmpresaAPI = (): GetSignal<IEmpresa> => {
     },
     (result) => {
       console.log("resultado obtenido:: ", result.Records)
-      return result.Records[0]|| {}
+      const empresa = (result.Records[0]|| {}) as IEmpresa
+      empresa.SmtpConfig = empresa.SmtpConfig || {} as IEmpresaSmtp
+      empresa.CulquiConfig = empresa.CulquiConfig || {} as IEmpresaCulqui
+
+      return empresa
     }
   )
 }

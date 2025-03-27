@@ -3,7 +3,7 @@ import { parseSVG } from "~/core/main"
 import angleSvg from "../assets/angle.svg?raw"
 import s1 from './components.module.css'
 import { EcommerceCart } from "./cart"
-import { getWindow } from "~/env"
+import { Env, getWindow } from "~/env"
 import { cartProductos, ProductoSearchLayer } from "./productos"
 import { IPageSection } from "./page-components"
 import { deviceType } from "~/app"
@@ -133,6 +133,7 @@ export function Header1(props: IHeader1) { // type: 10
             onClick={ev => {
               ev.stopPropagation()
               setShowCart(true)
+              if(Env.closeProductosSearchLayer){ Env.closeProductosSearchLayer() }
             }}
           >
             { cartProductos().size > 0 &&

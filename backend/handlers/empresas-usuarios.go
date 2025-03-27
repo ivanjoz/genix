@@ -130,6 +130,26 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al guardar el registro de la empresa:", err)
 	}
 
+	// Agrega un archivo publico
+	empresaPublic := s.EmpresaPub{
+		ID:            record.ID,
+		Nombre:        record.Nombre,
+		CulqiLlave:    record.CulquiConfig.LlavePubDev,
+		CulqiRsaKey:   record.CulquiConfig.RsaKey,
+		CulqiRsaKeyID: record.CulquiConfig.RsaKeyID,
+	}
+
+	empresaPublicBytes, _ := json.Marshal(empresaPublic)
+	core.Log("Guardando::", string(empresaPublicBytes))
+
+	aws.SendFileToS3(aws.FileToS3Args{
+		Bucket:      core.Env.S3_BUCKET,
+		Path:        "empresas",
+		FileContent: empresaPublicBytes,
+		Name:        fmt.Sprintf("e-%v.json", req.Usuario.EmpresaID),
+	})
+
+	core.Print(empresaPublic)
 	return core.MakeResponse(req, &record)
 }
 

@@ -6,6 +6,8 @@ import s1 from "./components.module.css"
 import { Input } from "~/components/Input"
 import { CiudadSelector } from "~/core/components"
 import { throttle } from "~/core/main"
+import { isMobile } from "~/app"
+import { Env } from "~/env"
 
 export const [cartOption, setCartOption] = createSignal(1)
 
@@ -67,13 +69,81 @@ export const EcommerceCart = (props: IEcommerceCart) => {
     })
   })
 
-  return <div class={`w100 ${s1.menu_cart_layer_container}`}>
+  const paymentMethods = {
+    tarjeta: true,
+    yape: true,
+    billetera: true,
+    bancaMovil: true,
+  }
+
+  const publicKey = Env.empresa.CulqiLlave || ""
+
+  const config = {
+    publicKey,
+    settings: {
+      title: 'Culqi  store 2',
+      currency: 'PEN',
+      amount: 8000,
+      order: 'ord_live_d1P0Tu1n7Od4nZdp',
+      xculqirsaid: 'Inserta aquí el id de tu llave pública RSA',
+      rsapublickey: 'Inserta aquí tu llave pública RSA',
+    },
+    options: {
+      lang: 'auto',
+      installments: true,
+      modal: false,
+      container: "#culqi-container", // Opcional
+      paymentMethods: paymentMethods,
+      paymentMethodsSort: Object.keys(paymentMethods), // las opciones se ordenan según se configuren en paymentMethods
+    },
+    appearance: {
+      hiddenBanner: true,
+      menuType: isMobile() ? "sliderTop" : "", // "sliderTop",
+      rules: {
+        ".Culqi-Input": { "margin-bottom": "8px" },
+      }
+    },
+    client: {
+      email: 'test2@demo.com',
+    }
+  }
+
+  createEffect(() => {
+    if(cartOption() === 3){
+      setTimeout(() => {
+        const handleCulqiAction = () => {
+          if (Culqi.token) {
+            const token = Culqi.token.id;
+            console.log('Se ha creado un Token: ', token);
+          } else if (Culqi.order) {
+            const order = Culqi.order;
+            console.log('Se ha creado el objeto Order: ', order);
+          } else {
+            console.log('Errorrr : ', Culqi.error);
+          }
+        }
+        
+        const Culqi = new window.CulqiCheckout(publicKey, config)
+        Culqi.culqi = handleCulqiAction
+        Culqi.open()
+      },100)
+    }
+  })
+
+  const ciudadCss = "sm:w-full w-1/2 mb-10 ps-form"
+  //id="culqi-js"
+
+  return <div class={`w100 flex flex-col ac-baseline h100 p-rek ${s1.menu_cart_layer_container}`}>
     <CardArrowSteps selected={cartOption()}
+      columnsTemplate={isMobile() ? "1fr 1fr 1fr 0.7fr" : ""}
       options={[ 
         { id: 1, name: 'Carrito', icon: "icon-basket" }, 
         { id: 2, name: 'Datos de Envío', icon: "icon-doc-inv-alt" }, 
         { id: 3, name: 'Pago', icon: "icon-shield" }, 
-        { id: 4, name: 'Confirmación', icon: "icon-ok" }, 
+        { id: 4, 
+          name: 'Confirmación', 
+          icon: "icon-ok" 
+        },
       ]}
       onSelect={opt => {
         setCartOption(opt.id)
@@ -81,7 +151,12 @@ export const EcommerceCart = (props: IEcommerceCart) => {
       optionRender={e => {
         let name = e.name as (string|JSX.Element);
         if(e.id === 2){ name = <span>Datos de <br />Envío</span>  }
-        else if(e.id === 4){ name = <span>Confirmación</span>  }
+        else if(e.id === 4){
+          if(isMobile()){ name = <i class="icon-ok"></i>  }
+          else {
+            name = <span>Confirmación</span> 
+          } 
+        }
         return <div class={`flex ai-center mt-01 ff-semibold ${s1.menu_cart_layer_header_button}`}>
           <i class={`h3 ${e.icon} mr-02`} style={{ "margin-left": "-6px" }}></i>
           <div class={s1.menu_cart_layer_header_button_name}>{name}</div>
@@ -103,7 +178,7 @@ export const EcommerceCart = (props: IEcommerceCart) => {
           Continuar <i class="icon-right"></i>
         </button>
       </div>
-      <div class={`h100 w100 grid ${s1.menu_cart_layer_products}`}>
+      <div class={`h100 w100 grid ac-baseline ${s1.menu_cart_layer_products}`}>
         <For each={Array.from(cartProductos().values())}>
         {e => {
           console.log("rendering productos::", cartProductos())
@@ -113,44 +188,51 @@ export const EcommerceCart = (props: IEcommerceCart) => {
       </div>
     </Show>
     <Show when={cartOption() === 2}>
-      <div class="w100 flex mb-08">
-        <div class="ff-bold-italic fs20">Total a pagar:</div>
-        <div class="ml-04 ff-bold fs20 c-blue">s/. {formatN(precio()/100,2)}</div>
-        <div class="mr-auto"></div>
-        <button class={`mr-20 ${s1.cart_button_1}`} 
-          onClick={ev => {
-            ev.stopPropagation()
-            setCartOption(3)
-          }}
-        >
-          Relizar Pago <i class="icon-right"></i>
-        </button>
+      <div class="h100 p-rel flex flex-col overflow-s4">
+        <div class="w100 flex mb-08">
+          <div class="ff-bold-italic fs20">Total a pagar:</div>
+          <div class="ml-04 ff-bold fs20 c-blue">s/. {formatN(precio()/100,2)}</div>
+          <div class="mr-auto"></div>
+          <button class={`mr-20 ${s1.cart_button_1}`} 
+            onClick={ev => {
+              ev.stopPropagation()
+              setCartOption(3)
+            }}
+          >
+            Relizar Pago <i class="icon-right"></i>
+          </button>
+        </div>
+        <div class="flex-wrap w100-10">
+          <Input label="Nombres" saveOn={cartForm()} save="nombres"  
+            css="w-1/2 mb-10 ps-form" required={true}
+            onChange={() => saveCartForm()}
+          />
+          <Input label="Apellidos" saveOn={cartForm()} save="apellidos"  
+            css="w-1/2 mb-10 ps-form" required={true}
+            onChange={() => saveCartForm()}
+          />
+          <Input label="Correo Electrónico" saveOn={cartForm()} save="email"  
+            css="sm:w-1/1 w-1/2 mb-10 ps-form" required={true}
+            onChange={() => saveCartForm()}
+          />
+          <CiudadSelector css={[ciudadCss, ciudadCss, ciudadCss]}
+            saveOn={cartForm()} save="ciudadID" 
+            onChange={() => saveCartForm()}
+          />
+          <Input label="Dirección" saveOn={cartForm()} save="direccion"  
+            css="w-full ps-form mb-10" required={true}
+            onChange={() => saveCartForm()}
+          />
+          <Input label="Referencia" saveOn={cartForm()} save="referencia"  
+            css="w-full ps-form mb-10"
+            onChange={() => saveCartForm()}
+          />
+        </div>
       </div>
-      <div class="flex-wrap w100-10">
-        <Input label="Nombres" saveOn={cartForm()} save="nombres"  
-          css="w-12x mb-10" required={true}
-          onChange={() => saveCartForm()}
-        />
-        <Input label="Apellidos" saveOn={cartForm()} save="apellidos"  
-          css="w-12x mb-10" required={true}
-          onChange={() => saveCartForm()}
-        />
-        <Input label="Correo Electrónico" saveOn={cartForm()} save="email"  
-          css="w-12x mb-10" required={true}
-          onChange={() => saveCartForm()}
-        />
-        <CiudadSelector css={["w-12x mb-10","w-12x mb-10","w-12x mb-10"]}
-          saveOn={cartForm()} save="ciudadID" 
-          onChange={() => saveCartForm()}
-        />
-        <Input label="Dirección" saveOn={cartForm()} save="direccion"  
-          css="w-24x mb-10" required={true}
-          onChange={() => saveCartForm()}
-        />
-        <Input label="Referencia" saveOn={cartForm()} save="referencia"  
-          css="w-24x mb-10"
-          onChange={() => saveCartForm()}
-        />
+    </Show>
+    <Show when={cartOption() === 3}>
+      <div class="h100 w100 p-rel" id="culqi-container" style={{ position: 'relative', height: "40rem" }}>
+
       </div>
     </Show>
   </div>

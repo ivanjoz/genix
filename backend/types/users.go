@@ -6,30 +6,48 @@ type TAGS struct{}
 
 type Empresa struct { // DynamoDB
 	TAGS               `table:"empresas"`
-	ID                 int32      `json:"id"`
-	Nombre             string     `json:"nombre"`
-	RazonSocial        string     `json:"razonSocial"`
-	RUC                string     `json:"ruc"`
-	Email              string     `json:"email"`
-	NotificacionEmail  string     `json:"notifEmail"`
-	Telefono           string     `json:"telefono"`
-	Representante      string     `json:"representante"`
-	Direccion          string     `json:"direccion"`
-	Ciudad             string     `json:"ciudad"`
-	FormApiKey         string     `json:"formApiKey"`
-	EmailVerificado    int8       `json:"emailVeridicado,omitempty"`
-	TelefonoVerificado int8       `json:"telefonoVerificado,omitempty"`
-	SmtpConfig         SmtpConfig `json:"smtp"`
-	Updated            int64      `json:"upd"`
-	Status             int8       `json:"ss"`
+	ID                 int32        `json:"id"`
+	Nombre             string       `json:",omitempty"`
+	RazonSocial        string       `json:",omitempty"`
+	RUC                string       `json:",omitempty"`
+	Email              string       `json:",omitempty"`
+	NotificacionEmail  string       `json:",omitempty"`
+	Telefono           string       `json:",omitempty"`
+	Representante      string       `json:",omitempty"`
+	Direccion          string       `json:",omitempty"`
+	Ciudad             string       `json:",omitempty"`
+	FormApiKey         string       `json:",omitempty"`
+	EmailVerificado    int8         `json:",omitempty"`
+	TelefonoVerificado int8         `json:",omitempty"`
+	SmtpConfig         SmtpConfig   `json:",omitempty"`
+	CulquiConfig       CulquiConfig `json:",omitempty"`
+	Updated            int64        `json:"upd"`
+	Status             int8         `json:"ss"`
 }
 
 type SmtpConfig struct {
-	Email    string `json:"email,omitempty"`
-	User     string `json:"user,omitempty"`
-	Password string `json:"pwd,omitempty"`
-	Post     int32  `json:"port,omitempty"`
-	Host     string `json:"host,omitempty"`
+	Email    string `json:",omitempty"`
+	User     string `json:",omitempty"`
+	Password string `json:",omitempty"`
+	Post     int32  `json:",omitempty"`
+	Host     string `json:",omitempty"`
+}
+
+type CulquiConfig struct {
+	RsaKey       string `json:",omitempty"`
+	RsaKeyID     string `json:",omitempty"`
+	LlaveLive    string `json:",omitempty"`
+	LlavePubLive string `json:",omitempty"`
+	LlaveDev     string `json:",omitempty"`
+	LlavePubDev  string `json:",omitempty"`
+}
+
+type EmpresaPub struct {
+	ID            int32  `json:"id"`
+	Nombre        string `json:",omitempty"`
+	CulqiRsaKey   string `json:",omitempty"`
+	CulqiRsaKeyID string `json:",omitempty"`
+	CulqiLlave    string `json:",omitempty"`
 }
 
 type Usuario struct { // DynamoDB + ScyllaDB

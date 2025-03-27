@@ -25,6 +25,12 @@ export const getWindow = () => {
   } as Window
 }
 
+export interface IEmpresaParams {
+  CulqiLlave: string
+  Nombre: string
+  id: number
+}
+
 export const Env = {
   appId: "genix",
   S3_URL: "https://d16qwm950j0pjf.cloudfront.net/",
@@ -42,6 +48,7 @@ export const Env = {
   hostname: "",
   pathname: "",
   empresaID: 0,
+  empresa: {} as IEmpresaParams,
   clearAccesos: null as (() => void),
   navigate: null as Navigator, 
   history: {
@@ -79,8 +86,22 @@ export const Env = {
     }
     return Env.empresaID
   },
+  loadEmpresaConfig: () => {
+    if(Env.empresa.id){ return }
+    const empresaID = Env.getEmpresaID()
+    if(empresaID){
+      fetch(Env.S3_URL +`empresas/e-${empresaID}.json`)
+      .then(res => res.json())
+      .then(res => {
+        Env.empresa = res
+      })
+    } else {
+      console.warn("No se encontró la empresa-id:", empresaID)
+    }
+  },
   // Extra
-  productoSearchRefocusOnBlur: false
+  productoSearchRefocusOnBlur: false,
+  closeProductosSearchLayer: null as () => void
 }
 
 export const getInnerWidth = () => {

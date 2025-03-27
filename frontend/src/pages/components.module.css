@@ -404,14 +404,16 @@
    rgb(0 0 0 / 35%) 0px 0 6px 0;
   border-radius: 11px;
   padding: 8px;
-  /* outline: 2px solid rgba(0, 0, 0, 0.24); */
+  /*
+  overflow-y: auto;
+  overflow-x: hidden;
+  */
 }
 .menu_cart_layer_header_button_name {
   margin-right: 6px;
   line-height: 1.1;
   text-align: left;
 }
-
 .menu_cart_layer_btn_ctn {
   width: 8rem;
   cursor: pointer;
@@ -457,7 +459,7 @@
     width: 100vw;
     max-width: 100vw;
     left: 0px;
-    top: calc(3rem + 6px);
+    top: calc(var(--menu-height-mobile) + 5px);
   }
   .menu_cart_layer_angle {
     height: 16px;
@@ -601,7 +603,7 @@
 }
 
 .productos_search_input, .productos_search_input_mobile {
-  height: calc(2.5rem - 2px);
+  height: calc(var(--menu-height-mobile) - 8px);
   outline: none;
   border: none;
   background-color: #eae9ef;
@@ -649,7 +651,7 @@
   width: 20rem;
   max-width: 82vw;
   height: 5rem;
-  top: calc(2.6rem + 6px);
+  top: calc(var(--menu-height-mobile) + 1px);
 }
 
 .productos_search_layer:not(.productos_search_layer_mobile) {
@@ -660,7 +662,7 @@
 
 .productos_search_layer_mobile {
   position: fixed;
-  top: calc(3rem + 6px);
+  top: calc(var(--menu-height-mobile) + 5px);
   width: calc(98vw);
   left: 0;
   width: 100vw;
@@ -690,7 +692,7 @@
   z-index: 151;
   width: 100vw;
   background-color: white;
-  height: calc(3rem + 2px);
+  height: var(--menu-height-mobile);
   top: 0;
   padding: 0 4px;
   box-shadow: rgba(0, 0, 0, 0.18) 0px 2px 4px;
@@ -848,9 +850,9 @@
 
 .productos_search_close_button {
   border-radius: 50%;
-  width: calc(2.5rem - 2px - 4px);
-  height: calc(2.5rem - 2px - 4px);
-  right: 6px;
+  width: calc(var(--menu-height-mobile) - 8px - 4px);
+  height: calc(var(--menu-height-mobile) - 8px - 4px);
+  right: 4px;
   outline: none;
   border: none;
   background-color: #d66060;

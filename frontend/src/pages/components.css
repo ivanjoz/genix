@@ -89,3 +89,16 @@
   background-color: #ccc68d;
   animation-delay: calc(var(--animation-duration) / 10 * -3);
 }
+
+/* CULQUI */
+#culqi-js {
+  position: relative !important;
+  background-color: transparent !important;
+  pointer-events: none;
+  display: contents !important;
+}
+
+#culqi-js > iframe {
+  pointer-events: all;
+  height: 40rem;
+}
