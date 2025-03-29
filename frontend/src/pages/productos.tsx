@@ -9,7 +9,7 @@ import iconCancelSvg from "../assets/icon_cancel.svg?raw"
 import iconCartSvg from "../assets/icon_cart.svg?raw"
 import { setCartOption } from "./cart"
 import s1 from "./components.module.css"
-import { IHeader1, setShowCart, showCart } from "./headers"
+import { IHeader1, setShowCart, showCart, showMobileSideMenu } from "./headers"
 import { useProductosCmsAPI } from "./productos-service"
 import angleSvg from "../assets/angle.svg?raw"
 import { deviceType, isMobile, isMobOrTablet } from "~/app"
@@ -176,7 +176,9 @@ export const CartFloating = (props: ICartFloating) => {
           </div>
         </div>
         { cartProductos().size > 0 && !isOpen() &&
-          <div class={`p-abs ff-semibold flex-center ${s1.floating_cart_count}`}>
+          <div class={`p-abs ff-semibold flex-center ${s1.floating_cart_count}`}
+            classList={{[s1.disabled]: showMobileSideMenu() > 0 }}
+          >
             {cartProductos().size}
           </div>
         }
