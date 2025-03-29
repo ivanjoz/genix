@@ -1,5 +1,5 @@
 import { Meta, MetaProvider, Title } from "@solidjs/meta";
-import { Route, Router, useLocation, useNavigate } from "@solidjs/router";
+import { Route, Router, useLocation, useNavigate, useParams } from "@solidjs/router";
 import { clientOnly } from "@solidjs/start";
 import { FileRoutes } from "@solidjs/start/router";
 import { Show, Suspense, createEffect, createSignal, onMount } from "solid-js";
@@ -94,10 +94,16 @@ export default function Root() {
     <Router root={props => {
         Env.pathname = props.location.pathname
         const navigate = useNavigate()
+        
         Env.navigate = navigate
         const location = useLocation()
         createEffect(() => {
           setShowStoreEmpresa(getShowStore(location.pathname))
+        })
+
+        createEffect(() => {
+          console.log('URL has changed to:', location.pathname + location.search + location.hash);
+          // You can perform your custom actions here when the URL changes
         })
 
         return <MetaProvider>

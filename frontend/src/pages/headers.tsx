@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, on } from "solid-js"
+import { createEffect, createMemo, createSignal, on, Show } from "solid-js"
 import { parseSVG } from "~/core/main"
 import angleSvg from "../assets/angle.svg?raw"
 import s1 from './components.module.css'
@@ -13,6 +13,12 @@ export interface IHeader1 {
 }
 
 export const [showCart, setShowCart] = createSignal(false)
+
+createEffect(() => {
+  if(showCart() === true){
+    Env.navigate("/?cart=1")
+  }
+})
 
 export function Header1(props: IHeader1) { // type: 10
 
@@ -124,7 +130,16 @@ export function Header1(props: IHeader1) { // type: 10
     }
     { ![1].includes(deviceType()) &&
       <div class={`${s1.top_bar_mobile} flex ai-center mr-08`}>
-        <div class={s1.top_bar_mobile_icon}>
+        <div class={s1.top_bar_mobile_icon} 
+          onMouseDown={ev => {
+            ev.stopPropagation()
+            openMobileSideMenu(true)
+          }}
+          onTouchStart={ev => {
+            ev.stopPropagation()
+            openMobileSideMenu(true)
+          }}
+        >
           <i class="icon-menu"></i>
         </div>
         <ProductoSearchLayer />
@@ -137,7 +152,9 @@ export function Header1(props: IHeader1) { // type: 10
             }}
           >
             { cartProductos().size > 0 &&
-              <div class={`p-abs flex-center ${s1.top_bar_mobile_icon_counter}`}>{cartProductos().size}</div>
+              <div class={`p-abs flex-center ${s1.top_bar_mobile_icon_counter}`}
+                classList={{[s1.disabled]: showMobileSideMenu() > 0}} 
+              >{cartProductos().size}</div>
             }
             <i class="icon-basket"
               style={{ 
@@ -170,5 +187,92 @@ export function Header1(props: IHeader1) { // type: 10
         }
       </div>
     }
+    <MobileSideMenu />
+  </>
+}
+
+export interface IMobileSideMenu {
+
+}
+
+export const [showMobileSideMenu, setShowMobileSideMenu] = createSignal(0)
+
+export const openMobileSideMenu = (open?: boolean) => {
+  if(open && showMobileSideMenu() === 1){
+    setShowMobileSideMenu(2)
+  } else if(open && !showMobileSideMenu()){
+    setShowMobileSideMenu(2)
+  } else if(!open){
+    setShowMobileSideMenu(0)
+  }
+}
+
+const mainMenuOptinos = [
+  { name: "Iniciar Sesión",
+    icon: "icon-user",
+  },
+  { name: "Regístrate",
+    icon: "icon-doc",
+  },
+  { name: "Mis Pedidos",
+    icon: "icon-box",
+  },
+  { name: "Tieda",
+    icon: "icon-home",
+  }
+]
+
+export const MobileSideMenu  = (props: IMobileSideMenu) => {
+
+  createEffect(() => {
+    if(showMobileSideMenu() === 1){
+      setShowMobileSideMenu(2)
+    }
+  })
+
+  return <>
+    <div class={`${s1.mobile_side_menu_ctn}`}
+      classList={{[s1.is_open]: showMobileSideMenu() === 2 }}
+    >
+    <Show when={showMobileSideMenu() === 2}>
+      <button class={`p-abs ${s1.mobile_side_btn_close}`}
+        onClick={ev => {
+          ev.stopPropagation()
+          openMobileSideMenu(false)
+        }}
+      >
+        <i class="h3 icon-cancel"></i>
+      </button>
+      <div class="ff-semibold h2 flex a-center ml-04">
+        <div>Hola!</div>
+      </div>
+      <div class="mb-20"></div>
+      <div class={`grid ${s1.mobile_side_menu_options_ctn}`}>
+      { mainMenuOptinos.map(e => {
+          return <div class={`p-rel items-center flex flex-column ${s1.mobile_side_menu_btn}`}>
+            <div class={`${s1.mobile_side_menu_btn_top}`}>
+              
+            </div>
+            <div class={`${s1.mobile_side_menu_icon_ctn}`}>
+              { e.icon && <i class={"h2 " + e.icon}></i> }
+            </div>
+            <div class={`ff-semibold flex items-center grow ${s1.mobile_side_menu_name}`}>
+              {e.name}
+            </div>
+          </div>
+        })
+      }
+      </div>
+    </Show>
+    </div>
+    <div class={`${s1.mobile_side_menu_background}`}
+      classList={{[s1.is_open]: showMobileSideMenu() === 2 }}
+      onClick={ev => {
+        ev.stopPropagation()
+        openMobileSideMenu(false)
+      }}
+    >
+
+    </div>
   </>
 }
