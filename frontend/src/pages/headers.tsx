@@ -9,6 +9,7 @@ import { IPageSection } from "./page-components"
 import { deviceType } from "~/app"
 import { Portal } from "solid-js/web"
 import { MobileLayerForm, setOpenMobileLayer } from "~/components/Modals"
+import { FlipButton } from "~/components/Cards"
 
 export interface IHeader1 {
   args: IPageSection
@@ -82,7 +83,12 @@ export function Header1(props: IHeader1) { // type: 10
       return { right, angleRight }
     }
   ))
-  
+
+  const [prerenderCart, setPrerenderCart] = createSignal(false)
+  createEffect(() => {
+    if(!showCart()){ setPrerenderCart(false) }
+  })
+
   return <>
     { [1].includes(deviceType()) &&
       <div class="header1-menu1 flex" ref={menuRef1}>
@@ -100,7 +106,7 @@ export function Header1(props: IHeader1) { // type: 10
           <div class={`p-rel h100 flex ai-center jc-center ml-08 mr-08 ${s1.menu_cart_layer_btn_ctn}`}>
             <div class={`p-rel flex-center w100 h4 mt-02 ${s1.menu_cart_layer_btn}`}
               classList={{ [s1.menu_cart_layer_btn_selected]: !!showCart() }}
-              ref={divRef}        
+              ref={divRef}      
               onClick={ev => {
                 ev.stopPropagation()
                 if(showCart()){ 
@@ -133,11 +139,7 @@ export function Header1(props: IHeader1) { // type: 10
     { ![1].includes(deviceType()) &&
       <div class={`${s1.top_bar_mobile} flex ai-center mr-08`}>
         <div class={s1.top_bar_mobile_icon} 
-          onMouseDown={ev => {
-            ev.stopPropagation()
-            openMobileSideMenu(true)
-          }}
-          onTouchStart={ev => {
+          onClick={ev => {
             ev.stopPropagation()
             openMobileSideMenu(true)
           }}
@@ -145,14 +147,9 @@ export function Header1(props: IHeader1) { // type: 10
           <i class="icon-menu"></i>
         </div>
         <ProductoSearchLayer />
-        { !showCart() &&
-          <div class={`ml-auto ${s1.top_bar_mobile_icon}`}
-            onClick={ev => {
-              ev.stopPropagation()
-              setShowCart(true)
-              if(Env.closeProductosSearchLayer){ Env.closeProductosSearchLayer() }
-            }}
-          >
+        <FlipButton class={`ml-auto flex-center ${s1.top_bar_mobile_icon}`}
+          isFliped={showCart()}
+          front={<>
             { cartProductos().size > 0 &&
               <div class={`p-abs flex-center ${s1.top_bar_mobile_icon_counter}`}
                 classList={{[s1.disabled]: showMobileSideMenu() > 0}} 
@@ -164,23 +161,41 @@ export function Header1(props: IHeader1) { // type: 10
                 "margin-left": cartProductos().size > 0 ? "-4px" : undefined    
               }}
             ></i>
-          </div>
-        }
-        { showCart() && 
-          <div class={`ml-auto flex-center ${s1.top_bar_mobile_icon}`}
-            onClick={ev => {
-              ev.stopPropagation()
-              setShowCart(false)
-            }}
-          >
-            <div class={`flex-center ml-04 ${s1.top_bar_cart_icon_cancel}`}>
-              <i class="icon-cancel"></i>
+          </>}
+          back={
+            <div class={`ml-auto flex-center ${s1.top_bar_mobile_icon}`}
+              onClick={ev => {
+                ev.stopPropagation()
+                setShowCart(false)
+              }}
+            >
+              <div class={`flex-center ml-04 ${s1.top_bar_cart_icon_cancel}`}>
+                <i class="icon-cancel"></i>
+              </div>
             </div>
-          </div>
-        }
-        { showCart() &&
-          <div class={`${s1.menu_cart_layer}`} 
-            style={{ right: `calc(1.2rem - ${divParams().right}px)`  }}> 
+          }
+          onMouseDown={() => {
+            if(!showCart()){
+              setPrerenderCart(true)
+              setTimeout(() => { if(!showCart()){ setPrerenderCart(false) } },1500)
+            }
+          }}
+          onClick={() => {
+            if(showCart()){
+              setShowCart(false)
+            } else {
+              setShowCart(true)
+              setPrerenderCart(false)
+              if(Env.closeProductosSearchLayer){ Env.closeProductosSearchLayer() }
+            }
+          }}
+        />
+        { (showCart() || prerenderCart() ) &&
+          <div class={`${s1.menu_cart_layer}`}
+            classList={{[s1.is_hidden]: !showCart() }}
+            style={{ 
+              right: `calc(1.2rem - ${divParams().right}px)`, 
+            }}> 
             <img class={`p-abs ${s1.menu_cart_layer_angle}`}
               style={{ right: `1.1rem`  }} src={parseSVG(angleSvg)}
             />
@@ -292,7 +307,7 @@ export const MobileSideMenu  = (props: IMobileSideMenu) => {
         openMobileSideMenu(false)
       }}
     >
-      
+
     </div>
     <MobileLayerForm id={1} title="Iniciar Sesión">
       <div>hola</div>
