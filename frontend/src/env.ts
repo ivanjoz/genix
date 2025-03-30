@@ -120,7 +120,7 @@ export const Env = {
     }
   },
   // Extra
-  productoSearchRefocusOnBlur: false,
+  productoSearchRefocusOnBlur: 0,
   closeProductosSearchLayer: null as () => void
 }
 
