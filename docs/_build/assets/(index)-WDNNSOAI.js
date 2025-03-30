@@ -1,0 +1,1 @@
+import{t}from"./web-B9EQUxsk.js";import{P as e}from"./app-CK7_gtPn.js";import{c as r}from"./solid-DoXAfIeo.js";import"./main-3KfG555U.js";import"./main-CyvPQj02.js";import"./http-5mnECz6S.js";var m=t("<h1>Sistema de Gestión de Mypes");function d(){return alert("das"),r(e,{title:"Home",get children(){return m()}})}export{d as default};
