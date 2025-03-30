@@ -1,6 +1,8 @@
-import { JSX, JSXElement, Show, createEffect, createSignal } from "solid-js";
+import { JSX, JSXElement, Show, createEffect, createMemo, createSignal } from "solid-js";
 import { Portal } from "solid-js/web";
 import { deviceType } from "~/app";
+import s1 from './components.module.css'
+import { Env } from "~/env";
 
 interface IModal {
   children: JSX.Element
@@ -302,4 +304,65 @@ export const CornerLayer = (props: ISideLayer) => {
       </div>
     </Show>
   </>
+}
+
+export const [openMobileLayer, setOpenMobileLayer] = createSignal(0)
+
+
+createEffect(() => {
+  if(openMobileLayer() > 0){
+    Env.suscribeUrlFlag("l", ()=>{ setOpenMobileLayer(0) })
+  }
+})
+
+export interface IMobileLayerForm {
+  id: number
+  children: JSXElement
+  title: string
+}
+
+export const MobileLayerForm  = (props: IMobileLayerForm) => {
+
+  const [isOpen, setIsOpen] = createSignal(openMobileLayer() === props.id ? 2 : 0)
+  let prevState = 0
+
+  createEffect(() => {
+    if(openMobileLayer() === props.id){
+      setIsOpen(2)
+    } else if(openMobileLayer() === 0 && prevState === props.id){
+      setIsOpen(1)
+      setTimeout(() => { setIsOpen(0) }, 300)
+    } else {
+      setIsOpen(0)
+    }
+    prevState = openMobileLayer()
+  })
+
+  return <Portal mount={document.body}>
+    <div class={`${s1.mobile_layer_form_ctn}`}
+      classList={{
+        [s1.is_open]: isOpen() === 2,
+        [s1.is_closing]: isOpen() === 1,
+      }}
+    >
+      <Show when={isOpen()}>
+        <div class={`flex  ${s1.mobile_layer_form_title_ctn}`}>
+          <div class={`flex-center ${s1.mobile_layer_form_back_btn} ml-02`}
+            onClick={ev => {
+              ev.stopPropagation()
+              setOpenMobileLayer(0)
+            }}
+          >
+            <i class="h2 icon-left-1"></i>
+          </div>
+          <div class={`flex grow ${s1.mobile_layer_form_title}`}>
+            {props.title && <span class="ff-semibold h3">{props.title}</span> }
+          </div>
+        </div>
+      </Show>
+      <div class={`${s1.mobile_layer_form}`}>
+        { isOpen() > 0 && props.children }
+      </div>
+    </div>
+  </Portal>
 }

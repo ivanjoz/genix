@@ -56,6 +56,26 @@ export const Env = {
       console.log("Es server!!", data, unused, url)
     }
   },
+  _navFlags: new Map as Map<string,(() => void)>,
+  suscribeUrlFlag: (flag: string, callbackOnClose: (() => void)) => {
+    const uriParams = window.location.search.substring(1).split("&").filter(x => x)
+    const uriFlag = flag +"=1"
+    if(!uriParams.includes(uriFlag)){
+      uriParams.push(uriFlag)
+      Env.navigate(window.location.pathname +"?"+ uriParams.join("&"))
+    }
+    Env._navFlags.set(flag, callbackOnClose)
+  },
+  onUrlChange: (uriSearch: string) => {
+    const uriParams = new Set(uriSearch.substring(1).split("&").filter(x => x))
+    console.log("uri params::", uriParams)
+    for(const [key,callback] of Env._navFlags){
+      if(!uriParams.has(key+"=1")){
+        callback()
+        Env._navFlags.delete(key)
+      }
+    }
+  },
   getPathname: () => {
     if(isClient){ return window.location.pathname }
     return Env.pathname || ""
