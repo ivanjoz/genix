@@ -334,14 +334,18 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
 
   let divRef: HTMLDivElement
   const { createZoomImage } = useZoomImageMove()
+  const [isClosing, setIsClosing] = createSignal(false)
 
-  onMount(() => {
-    console.log("div container::", divRef)
-    createZoomImage(divRef, { zoomFactor: 2 })
+  createEffect(() => {
+    if(productoSelected()){
+      createZoomImage(divRef, { zoomFactor: 2 })
+    } else {
+      setIsClosing(false)
+    }
   })
 
   const productosGallerySelector = <div class={`p-rel ${s1.producto_layer_img_ctn}`}>
-    { productoSelected().Images.map(img => {
+    { (productoSelected()?.Images||[]).map(img => {
         return <div class={`p-rel ${s1.producto_layer_img_min} mb-08`}>
           <Image src={"img-productos/"+ img.n} size={2}
             class={"h100 w100 object-contain"}
@@ -352,57 +356,83 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
     }
   </div>
 
+  const close = () => {
+    if(isMobile()){
+      setIsClosing(true)
+      setTimeout(() => setProductoSelected(null),360)
+    } else {
+      setProductoSelected(null)
+    }
+  }
+
   return <Portal mount={document.body}>
-    <div class={`${s1.producto_layer_bg}`} 
+    <div class={`${s1.producto_layer_bg}`}
+      classList={{
+        [s1.is_open]: !!productoSelected(),
+        [s1.is_closing]: isClosing()
+      }} 
       onMouseDown={ev => {
         ev.stopPropagation()
-        Env.productoSearchRefocusOnBlur = true
+        Env.productoSearchRefocusOnBlur = 1
       }}
       onClick={ev => {
         ev.stopPropagation()
-        setProductoSelected(null)
+        close()
       }}></div>
     <div class={`${s1.producto_layer_ctn}`}
-        onMouseDown={ev => {
-          ev.stopPropagation()
-          Env.productoSearchRefocusOnBlur = true
-        }}
-        classList={{ [s1.is_mobile]: isMobOrTablet() }}
-      >
-      <div class="flex h1 ff-semibold mb-08">
-        {productoSelected().Nombre}
-      </div>
-      <div class="flex w100">
-        { !isMobOrTablet() &&
-          productosGallerySelector
-        }
-        <div class={`${s1.producto_layer_content}`}
-          classList={{ [s1.is_mobile]: isMobOrTablet() }}
+      classList={{
+        [s1.is_open]: !!productoSelected(),
+        [s1.is_closing]: isClosing() 
+      }} 
+      onMouseDown={ev => {
+        ev.stopPropagation()
+        Env.productoSearchRefocusOnBlur = 2
+      }}
+    >
+      <Show when={!!productoSelected()}>
+        <div class={`flex h1 ff-semibold ${s1.producto_layer_title}`}
+          onClick={ev => {
+            ev.stopPropagation()
+            close()
+          }}
         >
-          <div class={`p-rel w100 ${s1.producto_layer_img1}`} ref={divRef}>
-            <Image src={"img-productos/"+ productoSelected().Images[0]?.n} size={6}
-              class={"h100 w100 object-contain"}
-              types={["avif","webp"]}
-            />
-          </div>
-          { isMobOrTablet() &&
-            productosGallerySelector
-          }
-          <div class="flex mt-12 ai-center">
-            <div class="flex ai-center"
-              classList={{ [s1.producto_layer_content_precio_mobile]: isMobOrTablet() }}
-            >
-              <div class="mr-06">Precio:</div>
-              <div class="ff-bold h1">s/. {formatN(productoSelected()?.PrecioFinal/100,2)}</div>
-            </div>
-            <div class="ml-auto"></div>
-            <button class={`${s1.producto_cart_btn}`}>
-              Agregar
-              <i class="icon-basket"></i>
-            </button>
+          <div class="grow flex-center h100">{productoSelected().Nombre}</div>
+          <div class={`flex-center h100 ${s1.producto_layer_title_btn}`}>
+            <i class={isMobile() ? "icon-left-1" : "icon-cancel"}></i>
           </div>
         </div>
-      </div>
+        <div class={` ${s1.producto_layer_content_ctn}`}>
+          <div class="flex">
+            { !isMobOrTablet() &&
+              productosGallerySelector
+            }
+            <div class={`${s1.producto_layer_content}`}>
+              <div class={`p-rel w100 ${s1.producto_layer_img1}`} ref={divRef}>
+                <Image src={"img-productos/"+ productoSelected().Images[0]?.n} size={6}
+                  class={"h100 w100 object-contain"}
+                  types={["avif","webp"]}
+                />
+              </div>
+              { isMobOrTablet() &&
+                productosGallerySelector
+              }
+              <div class="flex mt-12 ai-center">
+                <div class="flex ai-center"
+                  classList={{ [s1.producto_layer_content_precio_mobile]: isMobOrTablet() }}
+                >
+                  <div class="mr-06">Precio:</div>
+                  <div class="ff-bold h1">s/. {formatN(productoSelected()?.PrecioFinal/100,2)}</div>
+                </div>
+                <div class="ml-auto"></div>
+                <button class={`${s1.producto_cart_btn}`}>
+                  Agregar
+                  <i class="icon-basket"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Show>
     </div>
   </Portal>
 }
@@ -422,10 +452,16 @@ export const ProductoCard2 = (props: IProductoCard2) => {
   return <div class={`${s1.producto_filter_card} p-rel`}
       classList={{[s1.is_mobile]: isMobile() }}
     >
-    <div class="flex w100 p-rel" onClick={ev => {
-      ev.stopPropagation()
-      setProductoSelected(props.producto)
-    }}>
+    <div class="flex w100 p-rel"
+      onMouseDown={ev => {
+        ev.stopPropagation()
+        Env.productoSearchRefocusOnBlur = 2 
+      }}
+      onClick={ev => {
+        ev.stopPropagation()
+        setProductoSelected(props.producto)
+      }}
+    >
       <Image src={"img-productos/"+ props.producto.Images[0]?.n} size={2}
         class={s1.producto_filter_card_image + " w100"}
         types={["avif","webp"]}
@@ -445,6 +481,10 @@ export const ProductoCard2 = (props: IProductoCard2) => {
           </div>
         </div>
         <div class={`flex ai-center jc-center ${s1.producto_filter_button}`}
+          onMouseDown={ev => {
+            ev.stopPropagation()
+            Env.productoSearchRefocusOnBlur = 1
+          }}
           onClick={ev => {
             ev.stopPropagation()
             addProducto(props.producto)
@@ -485,7 +525,8 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
   const [searchText, setSearchText] = createSignal([])
 
   let inputRef: HTMLInputElement
-  Env.productoSearchRefocusOnBlur = false
+  let inputCheckRef: HTMLInputElement
+  Env.productoSearchRefocusOnBlur = 0
 
   const filterProductos = (searchPhrase: string) => {
     const words = searchPhrase.split(" ").map(x => x.trim().toLowerCase()).filter(x => x.length > 1)
@@ -528,23 +569,50 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
   const closeLayer = () => {
     setSearchText([])
     setShowLayer(false)
-    Env.productoSearchRefocusOnBlur = false
+    Env.productoSearchRefocusOnBlur = 0
     if(inputRef){ 
       inputRef.value = "" 
       inputRef.blur()
+      inputCheckRef.blur()
     }
   }
 
   Env.closeProductosSearchLayer = closeLayer
   onCleanup(() => { Env.closeProductosSearchLayer = null })
 
+  createEffect(() => {
+    const ae = document.activeElement
+    if(!productoSelected() && (ae === inputCheckRef || ae === inputRef)){
+      inputRef.focus()
+      Env.productoSearchRefocusOnBlur = 0
+    }
+  })
+
+  const onBlur = (target: HTMLInputElement, id: 1 | 2) => {
+    if(Env.productoSearchRefocusOnBlur > 0){
+      if(Env.productoSearchRefocusOnBlur === id){
+        Env.productoSearchRefocusOnBlur = 0
+        target.focus()
+      } else {
+        const input = Env.productoSearchRefocusOnBlur === 1 ? inputRef : inputCheckRef
+        input.focus()
+      }
+    } else {
+      closeLayer()
+    }
+  }
+
   return <div class={`p-rel flex jc-center ${s1.productos_search_bar_cnt}`}
       onMouseDown={ev => {
         ev.stopPropagation()
-        Env.productoSearchRefocusOnBlur = true
+        if(showLayer()){ 
+          Env.productoSearchRefocusOnBlur = productoSelected() ? 2 :1 
+        }
       }}
     >
-    <div class="p-rel w100">
+    <div class="p-rel w100" onMouseDown={ev => {
+      ev.stopPropagation()
+    }}>
       <input type="text" class="w100" ref={inputRef}
         classList={{
           [s1.productos_search_input]: [1,2].includes(deviceType()),
@@ -560,13 +628,13 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
           setShowCart(false)
         }}
         onBlur={ev => {
-          ev.stopPropagation()
-          if(Env.productoSearchRefocusOnBlur){
-            Env.productoSearchRefocusOnBlur = false
-            ev.target.focus()
-          } else {
-            closeLayer()
-          }
+          ev.stopPropagation(); onBlur(ev.target,1)
+        }}
+      />
+      <input type="checkbox" class={`p-abs ${s1.productos_search_check_hidden}`}
+        ref={inputCheckRef}
+        onBlur={ev => {
+          ev.stopPropagation(); onBlur(ev.target,2)
         }}
       />
       { !showLayer() &&
@@ -574,7 +642,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
       }
       <button class={`p-abs flex-center ${s1.productos_search_close_button}`}
         style={{ display: showLayer() ? 'block' : undefined  }}
-        onClick={ev => {
+        onMouseDown={ev => {
           ev.stopPropagation()
           closeLayer()
         }}
@@ -624,4 +692,3 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
     </Show>
   </div>
 }
-

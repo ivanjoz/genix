@@ -60,8 +60,6 @@ export default function PageRenderer(props: IPageRenderer){
       }}
     </For>
     <CartFloating />
-    <Show when={!!productoSelected()}>
-      <ProductoInfoLayer />
-    </Show>
+    <ProductoInfoLayer />
   </>
 }
