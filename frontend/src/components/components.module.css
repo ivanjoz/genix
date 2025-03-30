@@ -360,6 +360,10 @@ select.input_inp {
   z-index: 13;
 }
 
+div:global(.ps-form) .input_icon1 {
+  right: calc(0.35rem + 6px);
+}
+
 .input_icon1:global(.show) {
   transform: rotateX(180deg);
   bottom: 0.5rem;
@@ -456,7 +460,7 @@ select.input_inp {
 /* MOBILE LAYER FORM */
 .mobile_layer_form_ctn {
   position: fixed;
-  bottom: 0;
+  top: 10px;
   width: 100vw;
   height: calc(100vh - 10px);
   z-index: 165;

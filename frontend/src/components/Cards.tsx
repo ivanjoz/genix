@@ -264,3 +264,29 @@ export const CreditCardForm = (props: ISpinner4) => {
     <img class="bg-image-1" src="images/visa_credit_background.webp" alt="" />
   </div>
 }
+
+interface IFlipButton {
+  class: string
+  front: JSX.Element
+  back: JSX.Element
+  isFliped: boolean
+  onClick?: () => void
+  onMouseDown?: () => void
+}
+
+export const FlipButton = (props: IFlipButton) => {
+  return <div class={`p-rel ${s1.flip_button_ctn} ${props.class}`}
+    classList={{[s1.is_fliped]: props.isFliped}}
+    onClick={ev => {
+      ev.stopPropagation()
+      if(props.onClick){ props.onClick() }
+    }}
+    onMouseDown={ev => {
+      ev.stopPropagation()
+      if(props.onMouseDown){ props.onMouseDown() }
+    }}
+  >
+    <div class={s1.flip_button_front}>{props.front}</div>
+    <div class={s1.flip_button_back}>{props.back}</div>
+  </div>
+}

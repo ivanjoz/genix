@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onMount } from "solid-js";
 import { Portal } from "solid-js/web";
 import { throttle } from "~/core/main";
-import { deviceType } from "~/app";
+import { deviceType, isMobile } from "~/app";
 import s1 from "./components.module.css"
 import { Spinner4 } from "./Cards";
 
@@ -59,6 +59,8 @@ export function makeHighlString(content: string, search: string){
   </span>
 }
 
+let cardCounterID = 1
+
 export function SearchSelect<T>(props: SearchSelect<T>) {
 
   const [show, setShow] = createSignal(false)
@@ -66,10 +68,23 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
   const [arrowSelected, setArrowSelected] = createSignal(-1)
   const [avoidhover, setAvoidhover] = createSignal(false)
   const [isValid, setIsValid] = createSignal(0)
+  const [selectedValue, setSelectedValue] = createSignal("")
 
   const [keyId, keyName] = props.keys.split(".") as [keyof T, keyof T]
+  const searchCardID = cardCounterID
+  cardCounterID++
 
   let inputRef: HTMLInputElement = undefined as unknown as HTMLInputElement
+
+  const useLayerPicker = createMemo(() => isMobile())
+  const changeValue = (value: string) => {
+    if(useLayerPicker()){
+      setSelectedValue(value)
+    } else {
+      if(inputRef){ inputRef.value = value }
+    }
+  }
+
   let words: string[] = []
 
   const getSelectedFromProps = (): T => {
@@ -91,12 +106,11 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
   createEffect(on(
     () => [props.saveOn, props.selected||"", props.options], 
     () => {
-      if(!inputRef) return
       const selected = getSelectedFromProps()
       if(selected){
-        inputRef.value = selected[keyName] as string
+        changeValue(selected[keyName] as string)
       } else {
-        inputRef.value = ""
+        changeValue("")
       }
       if(isRequired()){ setIsValid(selected ? 1 : 2) }
     }
@@ -113,11 +127,11 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
       selected = getSelectedFromProps()
     }
 
-    if(setOnInput && inputRef){
+    if(setOnInput){
       if(selected && !props.clearOnSelect){
-        inputRef.value = selected[keyName] as string
+        changeValue(selected[keyName] as string)
       } else {
-        inputRef.value = ""
+        changeValue("")
       }  
     }
 
@@ -222,36 +236,47 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
       </>
     }
     <div class={`${s1.input_div} w100`}>
-      <input class={`${s1.input_inp +" "+ (props.inputCss||"")}`} 
-        onkeyup={onKeyUp} ref={inputRef}
-        onPaste={onKeyUp as any}
-        onCut={onKeyUp as any}
-        onKeyDown={onKeyDown}
-        placeholder={
-          props.showLoading ? "" : props.placeholder || ":: seleccione ::"
-        }
-        onkeydown={ev => {
-          ev.stopPropagation()
-          console.log(ev)
-        }}
-        disabled={disabled()}
-        onFocus={ev=> {
-          ev.stopPropagation()
-          words = []
-          setFilteredOptions(filter(""))
-          setShow(true)
-        }}
-        onBlur={ev => {
-          ev.stopPropagation()
-          // Revisa si la opción seleccionada existe
-          let inputValue = String(inputRef.value||"").toLowerCase()
-          const selected = props.options.find(
-            x => ((x[keyName]||"") as string).toLowerCase() === inputValue
-          )
-          setValueSaveOn(selected,true)
-          setShow(false)
-        }}
-      />
+      { !useLayerPicker() &&
+        <input class={`${s1.input_inp +" "+ (props.inputCss||"")}`} 
+          onkeyup={onKeyUp} ref={inputRef}
+          onPaste={onKeyUp as any}
+          onCut={onKeyUp as any}
+          onKeyDown={onKeyDown}
+          placeholder={
+            props.showLoading ? "" : props.placeholder || ":: seleccione ::"
+          }
+          onkeydown={ev => {
+            ev.stopPropagation()
+            console.log(ev)
+          }}
+          disabled={disabled() || isMobile()}
+          onFocus={ev=> {
+            ev.stopPropagation()
+            words = []
+            setFilteredOptions(filter(""))
+            setShow(true)
+          }}
+          onBlur={ev => {
+            ev.stopPropagation()
+            // Revisa si la opción seleccionada existe
+            let inputValue = String(inputRef.value||"").toLowerCase()
+            const selected = props.options.find(
+              x => ((x[keyName]||"") as string).toLowerCase() === inputValue
+            )
+            setValueSaveOn(selected, true)
+            setShow(false)
+          }}
+        />
+      }
+      { useLayerPicker() &&
+        <div class={`${s1.input_inp +" "+ (props.inputCss||"")}`} 
+          onClick={ev => {
+            ev.stopPropagation()
+            setOpenSearchLayer(searchCardID)
+          }}>
+          <div class="h100 w100 flex items-center">{ selectedValue() }</div>
+        </div>
+      }
     </div>
     { props.showLoading &&
       <Spinner4 style={{ position: 'absolute', left: '0.7rem', bottom: "8px" }}/>
@@ -261,7 +286,7 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
         <i class={props.icon || "icon-down-open-1"}></i>
       </div>
     </Show>
-    { show() &&
+    { show() && !useLayerPicker() &&
       <div class={"search-ctn z20 w100" + (arrowSelected() >= 0 ? " on-arrow" : "")}
         onMouseMove={avoidhover() ? (ev) => {
           console.log("hover aqui:: ", arrowSelected())
@@ -288,10 +313,15 @@ export function SearchSelect<T>(props: SearchSelect<T>) {
         }
       </div>
     } 
+    { useLayerPicker() && 
+      <SearchMobileLayer id={searchCardID} options={props.options} keys={props.keys}
+        onSelect={e => {
+          setValueSaveOn(e, true)
+        }}
+      />
+    }
  </div>
 }
-
-let cardCounterID = 0
 
 export function SearchCard<T>(props: SearchSelect<T>) {
 
@@ -461,7 +491,8 @@ export function SearchMobileLayer<T>(props: ISearchMobileLayer<T>) {
         <div class="p-rel w100 px-08 mt-06">
           <i class="i-search icon-search p-abs"></i>
           <input class="in-5 s2 increment" onkeyup={onKeyUp} ref={inputRef}
-            style={{ "margin-bottom": '6px' }}
+            placeholder="Seleccione..."
+            style={{ "margin-bottom": '2px' }}
             onBlur={ev => {
               ev.stopPropagation()
               console.log("blur:: mouse status", onMouseStatus)

@@ -93,8 +93,27 @@ body.dark .in-5c > .label, .in-label {
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-gap: 4px 8px;
+  overflow: auto;
+  max-height: 64vh;
+  padding-top: 4px;
+  border-radius: 0 0 24px 24px;
+  padding-bottom: 10px;
 }
 
+.options-c2::-webkit-scrollbar-thumb {
+  background-color: #434875;
+}
+
+.options-c2::-webkit-scrollbar-track {
+  border: none;
+  border-radius: 0;
+}
+
+.options-c2::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background-color: #2d2e30;
+}
 
 .search-ctn {
   background-color: white;
@@ -709,7 +728,7 @@ body.dark .search-c4:focus-within {
   position: fixed;
   top: 0;
   min-height: 10rem;
-  background-color: #00000085;
+  background-color: #0000009a;
   z-index: 221;
   width: 100%;
   backdrop-filter: blur(6px);
@@ -728,10 +747,14 @@ body.dark .search-c4:focus-within {
 }
 .card-c2 {
   color: white;
-  height: 2.4rem;
+  min-height: 2.4rem;
   border-radius: 7px;
+  line-height: 1.1;
+  text-align: center;
+  padding: 2px 4px;
   border: 1px solid #ffffff36;
   outline: 2px solid #00000080;
+  background-color: #00000036;
 }
 
 /* CHECKBOX */
