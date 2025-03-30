@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, on, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, JSXElement, on, Show } from "solid-js"
 import { parseSVG } from "~/core/main"
 import angleSvg from "../assets/angle.svg?raw"
 import s1 from './components.module.css'
@@ -7,6 +7,8 @@ import { Env, getWindow } from "~/env"
 import { cartProductos, ProductoSearchLayer } from "./productos"
 import { IPageSection } from "./page-components"
 import { deviceType } from "~/app"
+import { Portal } from "solid-js/web"
+import { MobileLayerForm, setOpenMobileLayer } from "~/components/Modals"
 
 export interface IHeader1 {
   args: IPageSection
@@ -16,7 +18,7 @@ export const [showCart, setShowCart] = createSignal(false)
 
 createEffect(() => {
   if(showCart() === true){
-    Env.navigate("/?cart=1")
+    Env.suscribeUrlFlag("c", ()=>{ setShowCart(false) })
   }
 })
 
@@ -198,18 +200,24 @@ export interface IMobileSideMenu {
 export const [showMobileSideMenu, setShowMobileSideMenu] = createSignal(0)
 
 export const openMobileSideMenu = (open?: boolean) => {
+  if(open){
+    Env.suscribeUrlFlag("m", () => openMobileSideMenu(false) )
+  }
+
   if(open && showMobileSideMenu() === 1){
     setShowMobileSideMenu(2)
   } else if(open && !showMobileSideMenu()){
     setShowMobileSideMenu(2)
   } else if(!open){
-    setShowMobileSideMenu(0)
+    setShowMobileSideMenu(3)
+    setTimeout(() => { setShowMobileSideMenu(0) },340)
   }
 }
 
 const mainMenuOptinos = [
   { name: "Iniciar Sesión",
     icon: "icon-user",
+    onClick: () => { setOpenMobileLayer(1) }
   },
   { name: "Regístrate",
     icon: "icon-doc",
@@ -217,7 +225,7 @@ const mainMenuOptinos = [
   { name: "Mis Pedidos",
     icon: "icon-box",
   },
-  { name: "Tieda",
+  { name: "Tienda",
     icon: "icon-home",
   }
 ]
@@ -232,9 +240,13 @@ export const MobileSideMenu  = (props: IMobileSideMenu) => {
 
   return <>
     <div class={`${s1.mobile_side_menu_ctn}`}
-      classList={{[s1.is_open]: showMobileSideMenu() === 2 }}
+      classList={{
+        [s1.is_open]: showMobileSideMenu() === 2,
+        [s1.is_closing]: showMobileSideMenu() === 3
+      }}
+
     >
-    <Show when={showMobileSideMenu() === 2}>
+    <Show when={[2,3].includes(showMobileSideMenu())}>
       <button class={`p-abs ${s1.mobile_side_btn_close}`}
         onClick={ev => {
           ev.stopPropagation()
@@ -249,7 +261,12 @@ export const MobileSideMenu  = (props: IMobileSideMenu) => {
       <div class="mb-20"></div>
       <div class={`grid ${s1.mobile_side_menu_options_ctn}`}>
       { mainMenuOptinos.map(e => {
-          return <div class={`p-rel items-center flex flex-column ${s1.mobile_side_menu_btn}`}>
+          return <div class={`p-rel items-center flex flex-column ${s1.mobile_side_menu_btn}`}
+            onClick={ev => {
+              ev.stopPropagation()
+              if(e.onClick){ e.onClick() }
+            }}
+          >
             <div class={`${s1.mobile_side_menu_btn_top}`}>
               
             </div>
@@ -266,13 +283,21 @@ export const MobileSideMenu  = (props: IMobileSideMenu) => {
     </Show>
     </div>
     <div class={`${s1.mobile_side_menu_background}`}
-      classList={{[s1.is_open]: showMobileSideMenu() === 2 }}
+      classList={{
+        [s1.is_open]: showMobileSideMenu() === 2,
+        [s1.is_closing]: showMobileSideMenu() === 3 
+      }}
       onClick={ev => {
         ev.stopPropagation()
         openMobileSideMenu(false)
       }}
     >
-
+      
     </div>
+    <MobileLayerForm id={1} title="Iniciar Sesión">
+      <div>hola</div>
+      <div>dasd</div>
+    </MobileLayerForm>
   </>
 }
+

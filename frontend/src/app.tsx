@@ -102,8 +102,8 @@ export default function Root() {
         })
 
         createEffect(() => {
-          console.log('URL has changed to:', location.pathname + location.search + location.hash);
-          // You can perform your custom actions here when the URL changes
+          console.log('URL has changed:', location.pathname + location.search)
+          Env.onUrlChange(location.search)
         })
 
         return <MetaProvider>

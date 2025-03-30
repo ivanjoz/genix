@@ -451,3 +451,68 @@ select.input_inp {
 :global(.imgc1):hover .image_card_desc {
   visibility: visible;
 }
+
+
+/* MOBILE LAYER FORM */
+.mobile_layer_form_ctn {
+  position: fixed;
+  bottom: 0;
+  width: 100vw;
+  height: calc(100vh - 10px);
+  z-index: 165;
+  background-color: #2c2d31;
+  transform: translateY(56vh);
+  transition: transform 360ms, opacity 320ms ease-in;
+  border-radius: 16px 16px 0 0;
+  overflow: hidden;
+  outline: 4px solid #ffffff69;
+}
+
+.mobile_layer_form_ctn:not(.is_open):not(.is_closing) {
+  visibility: hidden;
+  height: 0px;
+  pointer-events: none;
+}
+
+.mobile_layer_form_ctn.is_open {
+  transform: translateY(0);
+}
+
+.mobile_layer_form_ctn.is_closing {
+  opacity: 0;
+  transform: translateY(56vh);
+}
+
+.mobile_layer_form_ctn:not(.is_open) > * {
+  pointer-events: none;
+}
+
+.mobile_layer_form {
+  height: calc(100vh - 10px - 3rem);
+  width: 100vw;
+  background-color: #f4f4fa;
+  position: absolute;
+  bottom: 0;
+  background-color: #f4f4fa; 
+  border-radius: 16px 16px 0 0;
+  outline: 2px solid #000000c2;
+  padding: 8px;
+}
+
+.mobile_layer_form_title_ctn {
+  height: 3rem;
+  align-items: center;
+  color: white;
+  position: absolute;
+  width: 100vw;
+  top: 0;
+  left: 0;
+}
+.mobile_layer_form_back_btn {
+  width: 15vw;
+}
+.mobile_layer_form_title {
+  text-align: center;
+  justify-content: center;
+  padding-right: 10vw;
+}

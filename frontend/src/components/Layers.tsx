@@ -241,3 +241,4 @@ export const BackgroundParallax = (props: IBackgroundParallax) => {
     { childNodes() }
   </>
 }
+

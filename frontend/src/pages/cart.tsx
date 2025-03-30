@@ -165,43 +165,25 @@ export const EcommerceCart = (props: IEcommerceCart) => {
     />
     <div class="w100 mt-08"></div>
     <Show when={cartOption() === 1}>
-      <div class="w100 flex mb-08">
-        <div class="ff-bold-italic fs20">Total a pagar:</div>
-        <div class="ml-04 ff-bold fs20 c-blue">s/. {formatN(precio()/100,2)}</div>
-        <div class="mr-auto"></div>
-        <button class={`mr-20 ${s1.cart_button_1}`} 
-          onClick={ev => {
-            ev.stopPropagation()
-            setCartOption(2)
+      <div class="h100 p-rel flex flex-col overflow-s4">
+        <CarritoSubtotal precio={precio()} accion="Continuar" 
+          onAccion={() => setCartOption(2) }
+        />
+        <div class={`h100 w100 grid ac-baseline ${s1.menu_cart_layer_products}`}>
+          <For each={Array.from(cartProductos().values())}>
+          {e => {
+            console.log("rendering productos::", cartProductos())
+            return <CartFloatingProducto producto={e.producto} cant={e.cant} mode={2} />
           }}
-        >
-          Continuar <i class="icon-right"></i>
-        </button>
-      </div>
-      <div class={`h100 w100 grid ac-baseline ${s1.menu_cart_layer_products}`}>
-        <For each={Array.from(cartProductos().values())}>
-        {e => {
-          console.log("rendering productos::", cartProductos())
-          return <CartFloatingProducto producto={e.producto} cant={e.cant} mode={2} />
-        }}
-        </For>
+          </For>
+        </div>
       </div>
     </Show>
     <Show when={cartOption() === 2}>
       <div class="h100 p-rel flex flex-col overflow-s4">
-        <div class="w100 flex mb-08">
-          <div class="ff-bold-italic fs20">Total a pagar:</div>
-          <div class="ml-04 ff-bold fs20 c-blue">s/. {formatN(precio()/100,2)}</div>
-          <div class="mr-auto"></div>
-          <button class={`mr-20 ${s1.cart_button_1}`} 
-            onClick={ev => {
-              ev.stopPropagation()
-              setCartOption(3)
-            }}
-          >
-            Relizar Pago <i class="icon-right"></i>
-          </button>
-        </div>
+        <CarritoSubtotal precio={precio()} accion="Pagar" 
+          onAccion={() => setCartOption(3) }
+        />
         <div class="flex-wrap w100-10">
           <Input label="Nombres" saveOn={cartForm()} save="nombres"  
             css="w-1/2 mb-10 ps-form" required={true}
@@ -235,5 +217,34 @@ export const EcommerceCart = (props: IEcommerceCart) => {
 
       </div>
     </Show>
+  </div>
+}
+
+export interface ICarritoSubtotal {
+  precio: number
+  accion: string
+  onAccion: () => void
+}
+
+export const CarritoSubtotal = (props: ICarritoSubtotal) => {
+
+  return <div class="w100 flex mb-08">
+    <div class="mr-auto">
+      <div class={`flex items-center ${s1.cart_total_text}`} >
+        <div class="ff-bold-italic fs20 mr-06">Total a pagar:</div>
+        <div class="ff-bold c-blue mb-04">s/.</div>
+        <div class="ml-04 ff-bold fs20 c-blue"> 
+          {formatN(props.precio/100,2)}
+        </div>
+      </div>
+    </div>
+    <button class={`mr-20 ${s1.cart_button_1}`} 
+      onClick={ev => {
+        ev.stopPropagation()
+        props.onAccion()
+      }}
+    >
+      {props.accion} <i class="icon-right"></i>
+    </button>
   </div>
 }
