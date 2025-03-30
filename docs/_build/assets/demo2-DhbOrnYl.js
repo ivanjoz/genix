@@ -1,1 +1,0 @@
-import{t}from"./web-B9EQUxsk.js";import{P as r}from"./app-CK7_gtPn.js";import{c as e}from"./solid-DoXAfIeo.js";import"./main-3KfG555U.js";import"./main-CyvPQj02.js";import"./http-5mnECz6S.js";var o=t("<h1>Demo2");function l(){return e(r,{title:"Cajas",get children(){return o()}})}export{l as default};
