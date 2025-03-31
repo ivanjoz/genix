@@ -97,9 +97,9 @@ body.dark .in-5c > .label, .in-label {
   max-height: 64vh;
   padding-top: 4px;
   border-radius: 0 0 24px 24px;
-  padding-bottom: 10px;
+  padding-bottom: 8px;
 }
-
+/*
 .options-c2::-webkit-scrollbar-thumb {
   background-color: #434875;
 }
@@ -114,7 +114,7 @@ body.dark .in-5c > .label, .in-label {
   height: 8px;
   background-color: #2d2e30;
 }
-
+*/
 .search-ctn {
   background-color: white;
   padding: 3px 4px 4px 4px; 
@@ -732,13 +732,30 @@ body.dark .search-c4:focus-within {
   z-index: 221;
   width: 100%;
   backdrop-filter: blur(6px);
-  border-radius: 0 0 24px 24px;
+  border-radius: 0 0 20px 20px;
+  border-bottom: 6px solid #00000050;
 }
-.search-background input {
+
+.search-background input, .search-background textarea {
   padding-left: 2.2rem;
   color: white;
   font-size: 1.1rem;
+  margin-bottom: 2px;
+  height: 2.4rem;
+  background-color: #464672d4;
+  border: 1px solid transparent;
+  padding-top: calc(0.5rem + 2px);
+  line-height: 1;
+  appearance: none;
+  outline: none;
+  border-radius: 9px;
 }
+
+.search-background input:focus, .search-background textarea:focus {
+  border: 1px solid rgb(117, 118, 214);
+  outline: 1px solid rgb(150, 152, 255);
+}
+
 .search-background .i-search {
   color: #ffffffd4;
   top: 0.4rem;
@@ -747,7 +764,7 @@ body.dark .search-c4:focus-within {
 }
 .card-c2 {
   color: white;
-  min-height: 2.4rem;
+  min-height: 2.5rem;
   border-radius: 7px;
   line-height: 1.1;
   text-align: center;
@@ -755,6 +772,14 @@ body.dark .search-c4:focus-within {
   border: 1px solid #ffffff36;
   outline: 2px solid #00000080;
   background-color: #00000036;
+}
+
+.search-bg-close-btn {
+  border-radius: 50%;
+  height: 2.4rem;
+  width: 2.4rem;
+  background-color: rgb(224 104 104);
+  color: #ffffff;
 }
 
 /* CHECKBOX */

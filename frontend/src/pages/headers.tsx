@@ -19,7 +19,7 @@ export const [showCart, setShowCart] = createSignal(false)
 
 createEffect(() => {
   if(showCart() === true){
-    Env.suscribeUrlFlag("c", ()=>{ setShowCart(false) })
+    Env.suscribeUrlFlag("mob-pcart", ()=>{ setShowCart(false) })
   }
 })
 
@@ -119,7 +119,7 @@ export function Header1(props: IHeader1) { // type: 10
               <i class="icon-basket"></i>Carrito
             </div>
             { showCart() &&
-              <div class={`${s1.menu_cart_layer}`} 
+              <div id="mob-pcart" class={`${s1.menu_cart_layer}`} 
                 style={{ right: `calc(1.2rem - ${divParams().right}px)`  }}> 
                 <img class={`p-abs ${s1.menu_cart_layer_angle}`}
                   style={{ right: `calc(${divParams().angleRight}px - 1.2rem - 16px)`  }}
@@ -191,7 +191,7 @@ export function Header1(props: IHeader1) { // type: 10
           }}
         />
         { (showCart() || prerenderCart() ) &&
-          <div class={`${s1.menu_cart_layer}`}
+          <div id="mob-pcart" class={`${s1.menu_cart_layer}`}
             classList={{[s1.is_hidden]: !showCart() }}
             style={{ 
               right: `calc(1.2rem - ${divParams().right}px)`, 
@@ -216,7 +216,7 @@ export const [showMobileSideMenu, setShowMobileSideMenu] = createSignal(0)
 
 export const openMobileSideMenu = (open?: boolean) => {
   if(open){
-    Env.suscribeUrlFlag("m", () => openMobileSideMenu(false) )
+    Env.suscribeUrlFlag("mob-menu", () => openMobileSideMenu(false) )
   }
 
   if(open && showMobileSideMenu() === 1){
@@ -259,7 +259,6 @@ export const MobileSideMenu  = (props: IMobileSideMenu) => {
         [s1.is_open]: showMobileSideMenu() === 2,
         [s1.is_closing]: showMobileSideMenu() === 3
       }}
-
     >
     <Show when={[2,3].includes(showMobileSideMenu())}>
       <button class={`p-abs ${s1.mobile_side_btn_close}`}
@@ -274,7 +273,7 @@ export const MobileSideMenu  = (props: IMobileSideMenu) => {
         <div>Hola!</div>
       </div>
       <div class="mb-20"></div>
-      <div class={`grid ${s1.mobile_side_menu_options_ctn}`}>
+      <div id="mob-menu" class={`grid ${s1.mobile_side_menu_options_ctn}`}>
       { mainMenuOptinos.map(e => {
           return <div class={`p-rel items-center flex flex-column ${s1.mobile_side_menu_btn}`}
             onClick={ev => {

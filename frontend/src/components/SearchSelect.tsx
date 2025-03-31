@@ -4,6 +4,7 @@ import { throttle } from "~/core/main";
 import { deviceType, isMobile } from "~/app";
 import s1 from "./components.module.css"
 import { Spinner4 } from "./Cards";
+import { Env } from "~/env";
 
 interface SearchSelect<T> {
   saveOn?: any
@@ -418,6 +419,12 @@ export function SearchCard<T>(props: SearchSelect<T>) {
 
 export const [openSearchLayer, setOpenSearchLayer] = createSignal(0)
 
+createEffect(() => {
+  if(openSearchLayer() > 0){
+    Env.suscribeUrlFlag("mob-search-layer", () => setOpenSearchLayer(0))
+  }
+})
+
 export interface ISearchMobileLayer<T> {
   id: number
   css?: string
@@ -441,7 +448,7 @@ export function SearchMobileLayer<T>(props: ISearchMobileLayer<T>) {
     return openSearchLayer() === props.id 
   }
 
-  let inputRef: HTMLInputElement = undefined as unknown as HTMLInputElement
+  let inputRef: HTMLTextAreaElement = undefined
   let onMouseStatus = 1
 
   const [keyId, keyName] = props.keys.split(".") as [keyof T, keyof T]
@@ -487,22 +494,30 @@ export function SearchMobileLayer<T>(props: ISearchMobileLayer<T>) {
 
   return <Show when={show()}>
     <Portal mount={document.body}>
-      <div class="search-background">
-        <div class="p-rel w100 px-08 mt-06">
-          <i class="i-search icon-search p-abs"></i>
-          <input class="in-5 s2 increment" onkeyup={onKeyUp} ref={inputRef}
-            placeholder="Seleccione..."
-            style={{ "margin-bottom": '2px' }}
-            onBlur={ev => {
-              ev.stopPropagation()
-              console.log("blur:: mouse status", onMouseStatus)
-              if(onMouseStatus === 1){ 
-                onMouseStatus = 0
-              } else {
-                setOpenSearchLayer(0)
-              }
-            }}
-          />
+      <div id="mob-search-layer" class="search-background">
+        <div class="flex items-center">
+          <div class="p-rel grow px-08 mt-06">
+            <i class="i-search icon-search p-abs"></i>
+            <textarea rows={1} class="w100 increment ta-input" onkeyup={onKeyUp} ref={inputRef}
+              placeholder="Seleccione..."
+              style={{ "margin-bottom": '2px' }}
+              onBlur={ev => {
+                ev.stopPropagation()
+                console.log("blur:: mouse status", onMouseStatus)
+                if(onMouseStatus === 1){ 
+                  onMouseStatus = 0
+                } else {
+                  setOpenSearchLayer(0)
+                }
+              }}
+            />
+          </div>
+          <button class="mr-08 search-bg-close-btn" onMouseDown={ev => {
+            ev.stopPropagation()
+            setOpenSearchLayer(0)
+          }}>
+            <i class="icon-cancel"></i>
+          </button>
         </div>
         <div class="w100 px-08 options-c2">
           <For each={filteredOptions()}>
