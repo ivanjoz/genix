@@ -512,11 +512,14 @@ div:global(.ps-form) .input_icon1 {
   top: 0;
   left: 0;
 }
+.mobile_layer_form_title_ctn:hover {
+  color: rgb(255, 185, 185);
+}
 .mobile_layer_form_back_btn {
   width: 15vw;
 }
 .mobile_layer_form_title {
   text-align: center;
   justify-content: center;
-  padding-right: 10vw;
+  padding-left: 10vw;
 }

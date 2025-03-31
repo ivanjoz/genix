@@ -336,14 +336,6 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
   const { createZoomImage } = useZoomImageMove()
   const [isClosing, setIsClosing] = createSignal(false)
 
-  createEffect(() => {
-    if(productoSelected()){
-      createZoomImage(divRef, { zoomFactor: 2 })
-    } else {
-      setIsClosing(false)
-    }
-  })
-
   const productosGallerySelector = <div class={`p-rel ${s1.producto_layer_img_ctn}`}>
     { (productoSelected()?.Images||[]).map(img => {
         return <div class={`p-rel ${s1.producto_layer_img_min} mb-08`}>
@@ -364,6 +356,15 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
       setProductoSelected(null)
     }
   }
+
+  createEffect(() => {
+    if(productoSelected()){
+      createZoomImage(divRef, { zoomFactor: 2 })
+      Env.suscribeUrlFlag("product-layer", () => close())
+    } else {
+      setIsClosing(false)
+    }
+  })
 
   return <Portal mount={document.body}>
     <div class={`${s1.producto_layer_bg}`}
@@ -401,7 +402,7 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
             <i class={isMobile() ? "icon-left-1" : "icon-cancel"}></i>
           </div>
         </div>
-        <div class={` ${s1.producto_layer_content_ctn}`}>
+        <div id="product-layer" class={` ${s1.producto_layer_content_ctn}`}>
           <div class="flex">
             { !isMobOrTablet() &&
               productosGallerySelector
@@ -524,7 +525,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
   const [showLayer, setShowLayer] = createSignal(false)
   const [searchText, setSearchText] = createSignal([])
 
-  let inputRef: HTMLInputElement
+  let inputRef: HTMLTextAreaElement
   let inputCheckRef: HTMLInputElement
   Env.productoSearchRefocusOnBlur = 0
 
@@ -610,13 +611,13 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
         }
       }}
     >
-    <div class="p-rel w100" onMouseDown={ev => {
+    <div class="p-rel flex items-center w100" onMouseDown={ev => {
       ev.stopPropagation()
     }}>
-      <input type="text" class="w100" ref={inputRef}
+      <textarea rows={1} class={`w100 ta-input ${s1.productos_search_input}`} ref={inputRef}
         classList={{
-          [s1.productos_search_input]: [1,2].includes(deviceType()),
-          [s1.productos_search_input_mobile]: [3].includes(deviceType())
+          //[s1.productos_search_input]: [1,2].includes(deviceType()),
+          // [s1.productos_search_input_mobile]: [3].includes(deviceType())
         }}
         onKeyDown={ev => {
           ev.stopPropagation()
@@ -628,7 +629,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
           setShowCart(false)
         }}
         onBlur={ev => {
-          ev.stopPropagation(); onBlur(ev.target,1)
+          ev.stopPropagation(); onBlur(ev.target as unknown as HTMLInputElement,1)
         }}
       />
       <input type="checkbox" class={`p-abs ${s1.productos_search_check_hidden}`}

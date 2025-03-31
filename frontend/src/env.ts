@@ -31,6 +31,13 @@ export interface IEmpresaParams {
   id: number
 }
 
+export interface NavFlag {
+  id: number
+  close: () => void
+  updated: number
+  elementId: string
+}
+
 export const Env = {
   appId: "genix",
   S3_URL: "https://d16qwm950j0pjf.cloudfront.net/",
@@ -56,25 +63,57 @@ export const Env = {
       console.log("Es server!!", data, unused, url)
     }
   },
-  _navFlags: new Map as Map<string,(() => void)>,
-  suscribeUrlFlag: (flag: string, callbackOnClose: (() => void)) => {
-    const uriParams = window.location.search.substring(1).split("&").filter(x => x)
-    const uriFlag = flag +"=1"
-    if(!uriParams.includes(uriFlag)){
-      uriParams.push(uriFlag)
-      Env.navigate(window.location.pathname +"?"+ uriParams.join("&"))
+  _navFlagCounter: 0,
+  _navFlagsIDs: new Map() as Map<string,number>,
+  _navFlags: [] as NavFlag[],
+  _navReturns: 0,
+  urlHistory: new Set() as Set<string>,
+  suscribeUrlFlag: (elementId: string, callbackOnClose: (() => void)) => {
+    if(!Env._navFlagsIDs.has(elementId)){
+      Env._navFlagsIDs.set(elementId, Env._navFlagsIDs.size + 1)
     }
-    Env._navFlags.set(flag, callbackOnClose)
+    const id = Env._navFlagsIDs.get(elementId)
+
+    const isIncluded = Env._navFlags.some(x => x.elementId === elementId)
+    if(isIncluded){
+      Env._navFlags = Env._navFlags.filter(x => x.elementId !== elementId)
+    }
+    Env._navFlags.unshift({
+      id, updated: Date.now(), elementId: elementId, close: callbackOnClose
+    })
+
+    let uriParams = window.location.search.substring(1).split("&").filter(x => x)
+    const nf = (uriParams.find(x => x.substring(0,3) === "nf=")||"").replace("nf=","")
+
+    if(Env._navFlagCounter === 0 && nf){
+      Env._navFlagCounter = nf.split(",").map(x => parseInt(x))[0]
+    }
+
+    if(!isIncluded || Env._navReturns > 0){
+      Env._navFlagCounter++
+      if(Env._navReturns > 0){ Env._navReturns-- }
+      Env.urlHistory.add(window.location.search)
+      uriParams = uriParams.filter(x => x.substring(0,3) !== "nf=")
+      uriParams.push(`nf=${Env._navFlagCounter},${Env._navFlags.map(x => x.id).join(",")}`)
+      Env.navigate(window.location.pathname +"?"+ uriParams.join("&"), 
+        { scroll: false })
+    }
   },
   onUrlChange: (uriSearch: string) => {
-    const uriParams = new Set(uriSearch.substring(1).split("&").filter(x => x))
-    console.log("uri params::", uriParams)
-    for(const [key,callback] of Env._navFlags){
-      if(!uriParams.has(key+"=1")){
-        callback()
-        Env._navFlags.delete(key)
+    // debugger
+    if(!Env.urlHistory.has(uriSearch)){ return }
+    Env.urlHistory.delete(uriSearch)
+    Env._navReturns++
+
+    const clearedIDs: Set<number> = new Set()
+    for(const nf of Env._navFlags){
+      clearedIDs.add(nf.id)
+      if(document.getElementById(nf.elementId)){
+        nf.close()
+        break
       }
     }
+    Env._navFlags = Env._navFlags.filter(x => !clearedIDs.has(x.id))
   },
   getPathname: () => {
     if(isClient){ return window.location.pathname }

@@ -308,10 +308,9 @@ export const CornerLayer = (props: ISideLayer) => {
 
 export const [openMobileLayer, setOpenMobileLayer] = createSignal(0)
 
-
 createEffect(() => {
   if(openMobileLayer() > 0){
-    Env.suscribeUrlFlag("l", ()=>{ setOpenMobileLayer(0) })
+    Env.suscribeUrlFlag("mob-layer-form", ()=>{ setOpenMobileLayer(0) })
   }
 })
 
@@ -346,17 +345,17 @@ export const MobileLayerForm  = (props: IMobileLayerForm) => {
       }}
     >
       <Show when={isOpen()}>
-        <div class={`flex  ${s1.mobile_layer_form_title_ctn}`}>
-          <div class={`flex-center ${s1.mobile_layer_form_back_btn} ml-02`}
-            onClick={ev => {
-              ev.stopPropagation()
-              setOpenMobileLayer(0)
-            }}
-          >
-            <i class="h2 icon-left-1"></i>
-          </div>
+        <div id="mob-layer-form" class={`flex ${s1.mobile_layer_form_title_ctn}`}
+          onClick={ev => {
+            ev.stopPropagation()
+            setOpenMobileLayer(0)
+          }}
+        >
           <div class={`flex grow ${s1.mobile_layer_form_title}`}>
             {props.title && <span class="ff-semibold h3">{props.title}</span> }
+          </div>
+          <div class={`flex-center ${s1.mobile_layer_form_back_btn} ml-02`}>
+            <i class="h2 icon-cancel"></i>
           </div>
         </div>
       </Show>
