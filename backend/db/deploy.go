@@ -159,7 +159,7 @@ func DeployScylla(cacheCode int32, structTables ...any) {
 			}
 
 			pk := strings.Join(keys, ", ")
-			if len(table.partKey.Name) > 0 {
+			if table.partKey != nil && len(table.partKey.Name) > 0 {
 				pk = fmt.Sprintf("(%v), %v", table.partKey.Name, pk)
 			}
 

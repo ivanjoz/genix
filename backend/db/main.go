@@ -381,7 +381,7 @@ func MakeInsertStatement[T TableSchemaInterface](records *[]T, columnsToExclude 
 
 	for _, rec := range *records {
 		refValue := reflect.ValueOf(rec)
-		fmt.Println("Type:", reflect.TypeOf(rec).String())
+		// fmt.Println("Type:", reflect.TypeOf(rec).String())
 
 		recordInsertValues := []string{}
 
@@ -403,7 +403,7 @@ func Insert[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) erro
 
 	queryStatements := MakeInsertStatement(records, columnsToExclude...)
 	queryInsert := makeQueryStatement(queryStatements)
-	fmt.Println(queryInsert)
+	//	fmt.Println(queryInsert)
 
 	if err := QueryExec(queryInsert); err != nil {
 		fmt.Println("Error inserting records:", err)

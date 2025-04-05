@@ -59,8 +59,14 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 			log.Fatalf("Error reading tar file: %s", err)
 		}
 
+		fmt.Printf("Header name: %v", header.Name)
 		nameSlice := strings.Split(header.Name, "|")
 		tableName := nameSlice[0]
+
+		if tableName == "empresa" || tableName == "accesos" || tableName == "perfiles" {
+			fmt.Sprintf(`La tabla "%v" debe guardarse en DynamoDB, no configurado.`, tableName)
+			continue
+		}
 
 		if _, ok := controllersMap[tableName]; !ok {
 			core.Log("No se encontró la tabla:", tableName)
