@@ -77,6 +77,7 @@ func makeController[T db.TableSchemaInterface]() ScyllaController {
 	}
 
 	return ScyllaController{
+		TableName:  tableNameSingle,
 		StructType: newType,
 		GetRecords: func(empresaID, limit int32, lastKey any) ([]any, error) {
 			records, err := queryRecords(empresaID, limit, lastKey)

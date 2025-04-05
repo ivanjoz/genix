@@ -206,7 +206,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 		statementsLogs = append(statementsLogs, fmt.Sprintf("%v %v %v", st.Col, st.Operator, st.Value))
 	}
 
-	fmt.Println("Statements:", strings.Join(statementsLogs, " | "))
+	// fmt.Println("Statements:", strings.Join(statementsLogs, " | "))
 
 	if len(whereStatements) == 0 {
 		whereStatements = append(whereStatements, "")
