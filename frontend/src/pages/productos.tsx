@@ -366,6 +366,12 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
     }
   })
 
+  const cartCant = createMemo(() => {
+    const producto = productoSelected()
+    if(!producto){ return 0 }
+    return cartProductos().get(producto.ID)?.cant || 0
+  })
+
   return <Portal mount={document.body}>
     <div class={`${s1.producto_layer_bg}`}
       classList={{
@@ -425,9 +431,15 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
                   <div class="ff-bold h1">s/. {formatN(productoSelected()?.PrecioFinal/100,2)}</div>
                 </div>
                 <div class="ml-auto"></div>
-                <button class={`${s1.producto_cart_btn}`}>
-                  Agregar
+                <button class={`${s1.producto_cart_btn}`}
+                  onClick={ev => {
+                    ev.stopPropagation()
+                    addProducto(productoSelected())
+                  }}
+                >
+                  { cartCant() ? "" : "Agregar" }
                   <i class="icon-basket"></i>
+                  { cartCant() && <span class="ml-04">(Hay {cartCant()})</span> }
                 </button>
               </div>
             </div>
@@ -614,11 +626,8 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
     <div class="p-rel flex items-center w100" onMouseDown={ev => {
       ev.stopPropagation()
     }}>
-      <textarea rows={1} class={`w100 ta-input ${s1.productos_search_input}`} ref={inputRef}
-        classList={{
-          //[s1.productos_search_input]: [1,2].includes(deviceType()),
-          // [s1.productos_search_input_mobile]: [3].includes(deviceType())
-        }}
+      <textarea rows={1} class={`w100 ta-input ${s1.productos_search_input}`} 
+        ref={inputRef}
         onKeyDown={ev => {
           ev.stopPropagation()
           throttle(() => { filterProductos((ev.target as any).value) },250)
@@ -627,6 +636,9 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
         onFocus={ev => {
           ev.stopPropagation()
           setShowCart(false)
+          setTimeout(() => {
+            inputRef.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          },150)
         }}
         onBlur={ev => {
           ev.stopPropagation(); onBlur(ev.target as unknown as HTMLInputElement,1)
