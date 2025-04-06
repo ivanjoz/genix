@@ -485,7 +485,12 @@ export function SearchMobileLayer<T>(props: ISearchMobileLayer<T>) {
   
   createEffect(() => {
     if(show()){
-      inputRef?.focus()
+      if(inputRef){
+        inputRef.focus()
+        setTimeout(() => {
+          inputRef.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        },150)
+      }
       setWords([])
       setFilteredOptions(filter(""))
       onMouseStatus = 0 
