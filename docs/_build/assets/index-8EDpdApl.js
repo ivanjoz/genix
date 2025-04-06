@@ -1,1 +1,0 @@
-import{o as r,c as t}from"./solid-DoXAfIeo.js";import{P as a}from"./main-B_drbOPO.js";import{E as e,g as o}from"./main-wawJI9OC.js";function p(){return r(()=>{(!e.getEmpresaID()||!o(!0))&&console.log("Empresa ID:",e.getEmpresaID(),"| Token:",o(!0))}),t(a,{})}export{p as default};
