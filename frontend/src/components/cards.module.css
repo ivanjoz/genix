@@ -96,3 +96,28 @@
   transform: rotateY(0deg);
   pointer-events: all;
 }
+
+.bar_card2_opt {
+  padding: 0 6px;
+  margin: 0 4px;
+  min-width: 7rem;
+  font-family: bold;
+  color: #9d9dac;
+  border-bottom: 4px solid rgba(0, 0, 0, 0.1);
+  user-select: none;
+  cursor: pointer;
+}
+.bar_card2_opt:hover {
+  color: #606086;
+  border-bottom: 4px solid #9a9ab8;
+}
+
+.bar_card2_opt.selected{
+  color: #4343ad;
+  border-bottom: 4px solid rgb(117 108 233);
+}
+.bar_card2_line {
+  padding: 0 6px;
+  min-width: 8rem;
+  font-family: bold;
+}

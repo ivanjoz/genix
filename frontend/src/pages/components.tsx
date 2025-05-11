@@ -1,7 +1,7 @@
 import { BackgroundParallax } from "~/components/Layers";
 import { IHeader1 } from "./headers";
 import { IPageSection } from "./page-components";
-import { Image } from "../components/Uploaders"
+import { ImageC } from "../components/Uploaders"
 
 export function BigScroll(props: IHeader1) { // type: 10
 
@@ -23,7 +23,7 @@ export function LayerImage21(props: IHeader1) { // type: 21
   return <div class="layer-im1 w100" style={{ "margin-top": props.args.marginTop }}>
     <BackgroundParallax offsetTop={0} keyUpdated={props.args.Image||"_"}>
       { props.args.Image ?
-        <Image size={8} src={`img-galeria/${props.args.Image}`} class="w100" 
+        <ImageC size={8} src={`img-galeria/${props.args.Image}`} class="w100" 
           style= {{ height: 'auto' }} types={["avif","webp"]}
         />
         : <div class="w100 h100"></div>

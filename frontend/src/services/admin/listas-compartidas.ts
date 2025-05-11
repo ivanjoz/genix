@@ -17,6 +17,11 @@ export interface IListas {
   RecordsMap: Map<number,IListaRegistro>
 }
 
+export const listasCompartidas = [
+  { id: 1, name: "Categoría" },
+  { id: 2, name: "Marca" }
+]
+
 export const useListasCompartidasAPI = (ids: number[]): GetSignal<IListas> => {
   const pk = ids.sort().join(",")
 
@@ -33,6 +38,20 @@ export const useListasCompartidasAPI = (ids: number[]): GetSignal<IListas> => {
       result.RecordsMap = arrayToMapN(result.Records, 'ID')
       // console.log("listas compartidas API::",result)
       result.Records = result.Records.filter(x => x.ss)
+
+      // Custom Convert
+      for(const e of result.Records){
+        if(e.ListaID === 1){ // Productos Categorias
+          const imagesMap = new Map((e.Images||[]).map(x => (
+            [parseInt(x.split("-")[1]),x])))
+          
+          e.Images = []
+          for(const order of [1,2,3]){
+            e.Images.push(imagesMap.get(order)||"")
+          }
+        }
+      }
+
       return result
     }
   )

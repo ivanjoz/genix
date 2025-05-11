@@ -9,7 +9,6 @@ import (
 	"crypto/tls"
 	"encoding/base32"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
 	"errors"
@@ -845,17 +844,162 @@ func Base64MD5Hash(content string, len int32) string {
 	return encoded
 }
 
-func IntToBase64(number int64, maxLen int8) string {
-	byteData := make([]byte, 8)
-	binary.LittleEndian.PutUint64(byteData, uint64(number))
-	base64Str := base64.StdEncoding.EncodeToString(byteData)
-
-	if maxLen > 0 {
-		base64Str = strings.ReplaceAll(base64Str, "=", "")
-		base64Str = strings.ReplaceAll(base64Str, "/", "-")
-		base64Str = base64Str[:(int(maxLen))]
+func StrToInt(srt string) int32 {
+	if srt == "" {
+		return 0
 	}
-	return base64Str
+	va, err := strconv.Atoi(srt)
+	if err != nil {
+		Log("Error en convertir a int: ", srt, " | ", err)
+		return 0
+	}
+	return int32(va)
+}
+
+const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+const base64Base = int64(len(base64Chars))
+
+func IntToBase64(num int64, urlEncode ...bool) string {
+	if num == 0 {
+		return string(base64Chars[0]) // Represent 0 with the first character
+	}
+
+	isNegative := false
+	if num < 0 {
+		isNegative = true
+		num = num * -1
+	}
+
+	n := big.NewInt(num)
+	b := big.NewInt(base64Base)
+	zero := big.NewInt(0)
+	base64String := ""
+
+	for n.Cmp(zero) > 0 {
+		remainder := new(big.Int)
+		n.DivMod(n, b, remainder)
+		base64String = string(base64Chars[remainder.Int64()]) + base64String
+	}
+
+	if len(urlEncode) == 1 && urlEncode[0] {
+		base64String = strings.ReplaceAll(base64String, "/", "-")
+	}
+
+	if isNegative {
+		base64String = "-" + base64String
+	}
+	return base64String
+}
+
+func Base64ToInt(base64Custom string, isUrlEncoded ...bool) int64 {
+	isNegative := false
+
+	if base64Custom[0:1] == "-" {
+		isNegative = true
+		base64Custom = base64Custom[1:]
+	}
+
+	if len(isUrlEncoded) == 1 && isUrlEncoded[0] {
+		base64Custom = strings.ReplaceAll(base64Custom, "-", "/")
+	}
+
+	n := big.NewInt(0)
+	power := big.NewInt(1)
+	b := big.NewInt(base64Base)
+
+	for i := len(base64Custom) - 1; i >= 0; i-- {
+		char := base64Custom[i]
+		index := strings.IndexByte(base64Chars, char)
+		if index == -1 {
+			fmt.Println("invalid character in base64 custom string:", char)
+			return 0
+		}
+		val := big.NewInt(int64(index))
+		term := new(big.Int).Mul(val, power)
+		n.Add(n, term)
+		power.Mul(power, b)
+	}
+
+	if !n.IsInt64() {
+		fmt.Println("decoded value exceeds the range of int64")
+		return 0
+	}
+
+	value := n.Int64()
+	if isNegative {
+		value = value * -1
+	}
+	return value
+}
+
+func IntSliceToString(values []int32) string {
+
+	valmap := map[int][]string{}
+	maxLen := 0
+	minLen := 0
+
+	for _, vInt := range values {
+		vStr := IntToBase64(int64(vInt))
+		slen := len(vStr)
+		valmap[slen] = append(valmap[slen], vStr)
+
+		if minLen == 0 || slen < minLen {
+			minLen = slen
+		}
+		if slen > maxLen {
+			maxLen = slen
+		}
+	}
+
+	b64slice := fmt.Sprintf("%v", minLen)
+
+	for i := minLen; i <= maxLen; i++ {
+		if i > minLen {
+			b64slice += "."
+		}
+		b64slice += strings.Join(valmap[i], "")
+	}
+	return b64slice
+}
+
+func StringToIntSlice(encoded string) (values []int32) {
+	defer func() {
+		if r := recover(); r != nil {
+			Log("Error: No se pudo decodificar:", encoded)
+			values = []int32{}
+		}
+	}()
+
+	if len(encoded) == 0 {
+		return []int32{}
+	}
+
+	minLen := int(StrToInt(encoded[0:1]))
+	encoded = encoded[1:]
+
+	groups := strings.Split(encoded, ".")
+
+	for i, group := range groups {
+		charLen := minLen + i
+
+		for j := 0; j < len(group); j += charLen {
+			end := j + charLen
+			// Asegurarse de no exceder la longitud del grupo
+			if end > len(group) {
+				end = len(group)
+			}
+
+			chars := group[j:end]
+			// Validar que `chars` tenga la longitud esperada
+			if len(chars) != charLen {
+				Log(charLen, len(group), group)
+				Log("Error: No se pudo decodificar al base64 INT a Slice")
+				continue
+			}
+			values = append(values, int32(Base64ToInt(chars)))
+		}
+	}
+	return values
 }
 
 func FnvHashStringBase(input string, isBase64 bool, intSize int, strSize ...int) string {

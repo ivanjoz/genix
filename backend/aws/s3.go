@@ -172,6 +172,7 @@ func S3ListFiles(args FileToS3Args) ([]types.Object, error) {
 }
 
 type ImageArgs struct {
+	Order       int32
 	Content     string /* Base64 webp image */
 	Folder      string
 	Name        string

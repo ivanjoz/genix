@@ -57,7 +57,7 @@ export function Modal(props: IModal) {
                 </button>
               }
               { props.onSave &&
-                <button class="bn1 b-blue mr-08 lh-10" onClick={ev => {
+                <button class="bn1 b-blue2 mr-08 lh-10" onClick={ev => {
                   if(props.onSave){
                     props.onSave()
                     ev.stopPropagation()
@@ -69,7 +69,7 @@ export function Modal(props: IModal) {
                   }
                 </button>
               }
-              <button class="bn1 b-yellow h3 lh-10" onClick={ev => {
+              <button class="bn1 b-yellow2 h3 lh-10" onClick={ev => {
                 ev.stopPropagation()
                 if(props.onClose){ props.onClose() }
                 setOpenModals([])

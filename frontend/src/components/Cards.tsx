@@ -39,6 +39,31 @@ export const BarOptions = (props: IBarOptions) => {
   </div>
 }
 
+export const BarOptions2 = (props: IBarOptions) => {
+
+  return <div class={"bar-1 flex p-rel" + (props.class ? " " + props.class : "")}>
+    <For each={props.options}>
+    {e => {
+      const getClass = () => {
+        let cn = "flex-center h3 " + s1.bar_card2_opt
+        if(props.selectedID === e[0]){ cn += " " + s1.selected }
+        if(props.buttonClass){ cn += " " + props.buttonClass }
+        return cn
+      }
+
+      return <div class={getClass()} 
+        style={props.buttonStyle}
+        onClick={ev =>{
+          ev.stopPropagation()
+          if(props.onSelect){ props.onSelect(e[0]) }
+        }}>
+        {e[1]}
+      </div>
+    }}
+    </For>
+  </div>
+}
+
 interface ICardSelect<T,Y> {
   label: string
   options: T[]

@@ -20,6 +20,7 @@ export interface IInput<T> {
   content?: (string|JSX.Element)
   transform?: (v: (string|number)) => (string|number)
   useTextArea?: boolean
+  rows?: number
 }
 
 const [inputUpdater, setInputUpdater] = createSignal(new Map as Map<number,number>)
@@ -119,6 +120,7 @@ export function Input<T>(props: IInput<T>) {
         onkeyup={ev => { onKeyUp(ev); isChange++ }}
         placeholder={props.placeholder||""}
         disabled={props.disabled}
+        rows={props.rows}
         onBlur={(ev) => {
           onKeyUp(ev as unknown as any, true)
           if(props.onChange && isChange){ 
