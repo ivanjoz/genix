@@ -126,18 +126,18 @@ type ProductoPropiedades struct {
 
 type Almacen struct {
 	TAGS        `table:"almacenes"`
-	EmpresaID   int32           `db:"empresa_id,pk"`
-	ID          int32           `db:"id,pk"`
-	SedeID      int32           `db:"sede_id"`
-	Nombre      string          `db:"nombre"`
-	Descripcion string          `db:"descripcion"`
-	Layout      []AlmacenLayout `db:"layout"`
+	EmpresaID   int32
+	ID          int32
+	SedeID      int32
+	Nombre      string
+	Descripcion string
+	Layout      []AlmacenLayout
 	// Propiedades generales
-	Status    int8  `json:"ss,omitempty" db:"status,view"`
-	Updated   int64 `json:"upd,omitempty" db:"updated,view"`
-	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
-	Created   int64 `json:",omitempty" db:"created"`
-	CreatedBy int32 `json:",omitempty" db:"created_by"`
+	Status    int8  `json:"ss,omitempty"`
+	Updated   int64 `json:"upd,omitempty"`
+	UpdatedBy int32 `json:",omitempty"`
+	Created   int64 `json:",omitempty"`
+	CreatedBy int32 `json:",omitempty"`
 }
 
 type _c = Almacen

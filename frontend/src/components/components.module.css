@@ -39,16 +39,34 @@ body:global(.dark) .card_image_1.card_input:hover {
   background: linear-gradient(0deg, rgba(0,0,0,0.40) 0%, rgba(255,255,255,0) 25%);
 }
 
+.card_image_btn {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+}
+.card_image_btn:hover {
+  outline: 2px solid rgba(0, 0, 0, 0.7) !important;
+}
+
 .card_image_layer_loading {
   top: 0px;
   left: 0px;
   backdrop-filter: blur(4px);
   background-color: rgba(0, 0, 0, 0.34);
 }
+.card_image_upload_text {
+  font-family: 'bold';
+  color: white;
+  text-shadow: 2px 2px 6px #000000;
+  text-align: center;
+  bottom: 3rem;
+  background-color: rgba(0, 0, 0, 0.2);
+  left: 0;
+  line-height: 1.2;
+  padding: 0 8px;
+}
 
 .card_image_layer_botton {
   bottom: 0;
-  padding: 4px;
+  padding: 6px;
 }
 
 .card_image_textarea {
@@ -268,6 +286,9 @@ body:global(.ff-2) .input_lab, body:global(.ff-2) .input_lab1 {
 }
 select.input_inp {
   padding-left: 4px;
+}
+textarea.input_inp {
+  padding-top: 6px;
 }
 
 .input_inp:disabled {

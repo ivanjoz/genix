@@ -1,8 +1,9 @@
-import { JSX, createSignal, onMount } from "solid-js"
-import styles from "./components.module.css"
+import { JSX, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import s1 from "./components.module.css"
 import { POST, POST_XMLHR } from "~/shared/http"
 import { Notify } from "~/core/main"
 import { Env } from "~/env"
+import { image } from "d3"
 
 export interface IImageInput {
   content: string
@@ -33,12 +34,40 @@ export interface IImageUploader {
   cardStyle?: JSX.CSSProperties
   onDelete?: (src: string) => void
   cardCss?: string
+  hideFormUseMessage?: string
+  hideUploadButton?: boolean
+  id?: number
+}
+
+export interface IImageResult {
+  id: number
+  imageName: string
+  description?: string
+}
+
+export const imagesToUpload: Map<number,() => Promise<IImageResult>> = new Map()
+let idCounter = Date.now()
+
+export const uploadCurrentImages = async () => {
+
+  const results = await Promise.all(imagesToUpload.values().map(e => e()))
+  for(const id of imagesToUpload.keys()){
+    imagesToUpload.delete(id)
+  }
+  
+  return results
 }
 
 export const ImageUploader = (props?: IImageUploader) => {
 
   const [imageSrc, setImageSrc] = createSignal(props || { src: "" } as IImageUploader)
   const [progress, setProgress] = createSignal(props.src ? -1 : 0)
+
+  const imageID = createMemo(() => {
+    if(props.id){ return props.id }
+    idCounter++
+    return idCounter
+  })
 
   const onFileChange = async (ev: InputEvent) => {
     const files: FileList = ev.target.files
@@ -51,8 +80,8 @@ export const ImageUploader = (props?: IImageUploader) => {
     setImageSrc({ src: imageB64 })
   }
 
-  const uploadImage = async () => {
-    let result: { imageName: string }
+  const uploadImage = async (): Promise<IImageResult> => {
+    let result = { } as IImageResult
     setProgress(0.001)
     const data = { 
       Content: imageSrc().src, Folder: "img-uploads", 
@@ -72,8 +101,12 @@ export const ImageUploader = (props?: IImageUploader) => {
       })
     } catch (error) {
       Notify.failure("Error guardando la imagen:", error)
-      return
+      return result
     }
+
+    result.id = imageID()
+    result.description = imageSrc().description
+
     if(props.clearOnUpload){
       setImageSrc({ src: "" })
       setProgress(0)
@@ -82,9 +115,16 @@ export const ImageUploader = (props?: IImageUploader) => {
       setImageSrc({ src: `${result.imageName}-x2`, types: ["webp","avif"] })
     }
     if(props.onUploaded){ 
-      props.onUploaded(result.imageName, imageSrc().description) 
+      props.onUploaded(result.imageName, result.description) 
     }
+    return result
   }
+
+  createEffect(() => {
+    imageSrc().src && isImageBase64()
+      ? imagesToUpload.set(imageID(), uploadImage)
+      : imagesToUpload.delete(imageID()) 
+  })
 
   const isImageBase64 = () => {
     return imageSrc().src?.length > 0 && (imageSrc()?.types||[]).length === 0
@@ -99,12 +139,14 @@ export const ImageUploader = (props?: IImageUploader) => {
     }
     return src
   }
-  
-  return <div class={`p-rel ${props.cardCss ? props.cardCss + " " : ""}${styles.card_image_1} ${imageSrc()?.src ? "" : styles.card_input}`}
+
+  onCleanup(() => { imagesToUpload.delete(imageID()) })
+
+  return <div class={`p-rel ${props.cardCss ? props.cardCss + " " : ""}${s1.card_image_1} ${imageSrc()?.src ? "" : s1.card_input}`}
     style={props.cardStyle}
   >
     { (imageSrc()?.src||"").length === 0 &&
-      <div class={`w100 h100 p-rel flex-column ai-center jc-center ${styles.card_input_layer}`}>
+      <div class={`w100 h100 p-rel flex-column ai-center jc-center ${s1.card_input_layer}`}>
         <input onChange={ev => onFileChange(ev)} type="file" 
           accept="image/png, image/jpeg, image/webp" 
         />
@@ -122,15 +164,15 @@ export const ImageUploader = (props?: IImageUploader) => {
         { imageSrc().types?.includes("webp") &&
           <source type="image/webp" srcset={makeImageSrc() + ".webp"} />
         }
-        <img class={`w100 h100 p-abs ${styles.card_image_img1}`}
+        <img class={`w100 h100 p-abs ${s1.card_image_img1}`}
           src={makeImageSrc() + 
             (imageSrc().types?.length > 0 ? `.${imageSrc().types[0]}` : "")}/>
       </picture>
     }
     { progress() == -1 &&
-      <div class={`w100 h100 p-abs ${styles.card_image_layer}${isImageBase64() ? " s1" : ""}`}>
-        { isImageBase64() &&
-          <textarea class={`w100 ${styles.card_image_textarea}`} rows={3}
+      <div class={`w100 h100 p-abs ${s1.card_image_layer}${isImageBase64() ? " s1" : ""}`}>
+        { isImageBase64() && !props.hideFormUseMessage &&
+          <textarea class={`w100 ${s1.card_image_textarea}`} rows={3}
             placeholder="Nombre..."
             onBlur={ev => {
               ev.stopPropagation()
@@ -138,9 +180,14 @@ export const ImageUploader = (props?: IImageUploader) => {
             }}
           />
         }
-        <div class={`w100 p-abs flex-center ${styles.card_image_layer_botton}`}>
-          <button class={`bnr2 b-red mr-04 ${isImageBase64() 
-            ? "" : styles.card_image_layer_bn_close2}`} 
+        { isImageBase64() && props.hideFormUseMessage &&
+          <div class={"p-abs w100 "+s1.card_image_upload_text}>
+            { props.hideFormUseMessage }
+          </div>
+        }
+        <div class={`w100 p-abs flex-center ${s1.card_image_layer_botton}`}>
+          <button class={`bnr4 b-red mr-12 ${isImageBase64() 
+            ? "" : s1.card_image_layer_bn_close2} ${s1.card_image_btn}`} 
             onClick={ev => {
               ev.stopPropagation()
               if(props.onDelete){
@@ -151,8 +198,8 @@ export const ImageUploader = (props?: IImageUploader) => {
             }}>
             <i class="icon-cancel"></i>
           </button>
-          { isImageBase64() &&
-            <button class="bnr2 b-blue" onClick={ev => {
+          { isImageBase64() && !props.hideUploadButton &&
+            <button class={"bnr4 b-blue "+s1.card_image_btn} onClick={ev => {
               ev.stopPropagation()
               uploadImage()
             }}>
@@ -163,7 +210,7 @@ export const ImageUploader = (props?: IImageUploader) => {
       </div>
     }
     { progress() > 0 &&
-      <div class={`w100 h100 p-abs flex-center ${styles.card_image_layer_loading}`}>
+      <div class={`w100 h100 p-abs flex-center ${s1.card_image_layer_loading}`}>
         <div class="c-white h3 ff-bold">Loading...</div>
       </div>
     }
@@ -267,7 +314,7 @@ const makeImageSrc = (src: string, size?: number) => {
   return src
 }
 
-export const Image = (props: IImage) => {
+export const ImageC = (props: IImage) => {
 
   const makeSrc = () => makeImageSrc(props.src, props.size)
 
@@ -290,7 +337,7 @@ export const ImageCard = (props: IImage) => {
   const makeSrc = () => makeImageSrc(props.src, props.size)
   const [isLoading, setIsLoading] = createSignal(1)
 
-  let css = props.class || styles.image_card_default
+  let css = props.class || s1.image_card_default
   if(props.selectable){
     css += " sel"
   }
@@ -327,7 +374,7 @@ export const ImageCard = (props: IImage) => {
       />
     </picture>
     { isLoading() === 1 &&
-      <div class={`${styles.image_loading_layer}`}>
+      <div class={`${s1.image_loading_layer}`}>
         <div class="spinner4">
           <div class="spinner-item"></div>
           <div class="spinner-item"></div>
@@ -339,7 +386,7 @@ export const ImageCard = (props: IImage) => {
       </div>
     }
     { props.description &&
-      <div class={`p-abs ff-bold flex-center w100 ${styles.image_card_desc}`}>
+      <div class={`p-abs ff-bold flex-center w100 ${s1.image_card_desc}`}>
         { props.description }
       </div>
     }

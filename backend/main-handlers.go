@@ -48,7 +48,7 @@ func mainHandler(args core.HandlerArgs) core.MainResponse {
 	core.Env.REQ_ENCODING = req_encoding
 	core.Env.REQ_PARAMS = core.MapGetKeys(args.Headers, "x-api-key", "X-Api-Key")
 	core.Env.REQ_USER_AGENT = core.MapGetKeys(args.Headers, "User-Agent", "user-agent")
-	core.Env.REQ_ID = core.IntToBase64(time.Now().UnixMilli(), 6)
+	core.Env.REQ_ID = core.IntToBase64(time.Now().UnixMilli())
 	args.Usuario = core.CheckUser(&args, 0)
 
 	apiNames := []string{"api", "go1", "go2", "go3", "go4", "go5"}

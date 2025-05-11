@@ -1,33 +1,36 @@
 import { ConfirmWarn, Loading, Notify } from "~/core/main";
 import { max } from "simple-statistics";
 import { Show, createEffect, createMemo, createSignal } from "solid-js";
-import { BarOptions, CardSelect } from "~/components/Cards";
+import { BarOptions, BarOptions2, CardSelect } from "~/components/Cards";
 import { CellEditable, CellTextOptions } from "~/components/Editables";
 import { CheckBoxContainer, Input, refreshInput } from "~/components/Input";
 import { SideLayer, openLayers, setOpenLayers } from "~/components/Modals";
 import { QTable } from "~/components/QTable";
 import { SearchCard, SearchSelect } from "~/components/SearchSelect";
 import { throttle } from "~/core/main";
-import { pageView } from "~/core/menu";
 import { PageContainer } from "~/core/page";
 import { IProducto, IProductoImage, IProductoPropiedad, IProductoPropiedades, postProducto, useProductosAPI } from "~/services/operaciones/productos";
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
-import { formatN } from "~/shared/main";
+import { arrayToMapN, formatN } from "~/shared/main";
 import { ImageUploader } from "~/components/Uploaders";
 import { POST } from "~/shared/http";
 import { useListasCompartidasAPI } from "~/services/admin/listas-compartidas";
 import { ListasCompartidasLayer } from "~/routes-components/admin/listas-compartidas";
 import { ProductoFichaEditor } from "~/routes-components/operaciones/productos";
+import { ProductosParametros } from "./productos-parametros";
 
 export default function Productos() {
 
   const [almacenes] = useSedesAlmacenesAPI()
-  const [listasCompartidas] = useListasCompartidasAPI([1])
+  const [listasCompartidas] = useListasCompartidasAPI([1,2])
   const [productos, setProductos] = useProductosAPI()
+  const [view, setView] = createSignal(1)
 
   const [filterText, setFilterText] = createSignal("")
   const [productoForm, setProductoForm] = createSignal({} as IProducto)
   const [layerView, setLayerView] = createSignal(1)
+
+  const handlerDerivedMap: Map<number,()=>void> = new Map()
   const layerWidth = 0.48
 
   createEffect(() => {
@@ -37,6 +40,8 @@ export default function Productos() {
   const categorias = createMemo(() => {
     return listasCompartidas()?.Records?.filter(x => x.ListaID === 1) || []
   })
+
+  const categoriasMap = createMemo(() =>  arrayToMapN(categorias(),'ID'))
   
   const saveProducto = async (isDelete?: boolean) => {
     const form = productoForm()
@@ -87,11 +92,15 @@ export default function Productos() {
   let counter = -1
   
   return <PageContainer title="Productos"
-    views={[[1,"Productos"],[2,"Parámetros"]]}
   >
-    <Show when={pageView() === 1}>
-      <div class="flex ai-center jc-between mb-06">
-        <div class="search-c4 mr-16 w16rem">
+
+    <div class="flex ai-center jc-between mb-10">
+      <div class="flex a-center mr-auto">
+        <BarOptions2 options={[[1,"Productos"],[2,"Categorías"],[3,"Marcas"]]} 
+          selectedID={view()}
+          onSelect={e => setView(e)}
+        />
+        <div class="search-c4 ml-16 w12rem">
           <div><i class="icon-search"></i></div>
           <input class="w100" autocomplete="off" type="text" onKeyUp={ev => {
             ev.stopPropagation()
@@ -100,16 +109,24 @@ export default function Productos() {
             },150)
           }}/>
         </div>
-        <div class="flex ai-center">
-          <button class="bn1 b-green" onClick={ev => {
-            ev.stopPropagation()
+      </div>
+      <div class="flex ai-center">
+        <button class="bn1 d-green" onClick={ev => {
+          ev.stopPropagation()
+          if(view() === 1){
             setOpenLayers([1])
             setProductoForm({ ss: 1, Propiedades: [] } as IProducto)
-          }}>
-            <i class="icon-plus"></i>
-          </button>
-        </div>
+          } else if(view() === 2){
+            handlerDerivedMap.get(1)?.()
+          } else if(view() === 3){
+            handlerDerivedMap.get(2)?.()
+          }
+        }}>
+          <i class="icon-plus"></i>
+        </button>
       </div>
+    </div>
+    <Show when={view() === 1}>
       <QTable data={productos().productos || []} 
         css="selectable w-page-t" tableCss=""
         isSelected={(e,id) => e.ID === id as number}
@@ -126,6 +143,15 @@ export default function Productos() {
           { header: "Nombre", cardColumn: [3,2], field: "Nombre",
             getValue: e => e.Nombre, cardCss: "h5 c-steel",
           },
+          { header: "Categorías", cardColumn: [3,2],
+            getValue: e => {
+              const nombres: string[] = []
+              for(const id of e.CategoriasIDs){
+                nombres.push(categoriasMap().get(id)?.Nombre || `Categoria-${id}`)
+              }
+              return nombres.join(", ")
+            }
+          },
           { header: "Precio", cardColumn: [3,2], cardCss: "h5 c-steel", css: "t-c",
             getValue: e => e.Precio ? formatN(e.Precio/100,2) : "", 
           },
@@ -140,9 +166,6 @@ export default function Productos() {
               if(!e.SbnUnidad) return ""
               return `${e.SbnCantidad} x ${e.SbnUnidad}`
             }
-          },
-          { header: "Grupos", cardColumn: [3,2],  css: "t-c",
-            getValue: e => ""
           },
         ]}
         onRowCLick={e => {
@@ -385,10 +408,15 @@ export default function Productos() {
         </Show>
       </SideLayer>
     </Show>
-    <Show when={pageView() === 2}>
-      <div class="flex ai-center jc-between mb-06">
-        <ListasCompartidasLayer listaID={1} listas={listasCompartidas()} />
-      </div>
+    <Show when={view() === 2}>
+      <ProductosParametros listas={listasCompartidas()} listaID={1} 
+        handlerDerivedMap={handlerDerivedMap} hideBar={true}
+      />
+    </Show>
+    <Show when={view() === 3}>
+      <ProductosParametros listas={listasCompartidas()} listaID={2} 
+        handlerDerivedMap={handlerDerivedMap} hideBar={true}
+      />
     </Show>
   </PageContainer>
 }

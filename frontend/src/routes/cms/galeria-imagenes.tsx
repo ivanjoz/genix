@@ -1,4 +1,4 @@
-import { Image, ImageCard, ImageUploader } from "~/components/Uploaders"
+import { ImageC, ImageCard, ImageUploader } from "~/components/Uploaders"
 import s1 from "./webpage.module.css";
 import { IGaleriaImagen } from "~/services/cms/galeria-images";
 import { createEffect, createMemo, createSignal, For, JSX } from "solid-js";
@@ -116,7 +116,7 @@ export const ImageGalerySelector = (props: IImageGalerySelector) => {
         }
       </div>
       { props.imageSelected &&
-        <Image src={`img-galeria/${props.imageSelected}`} 
+        <ImageC src={`img-galeria/${props.imageSelected}`} 
           types={["avif","webp"]} size={4}
           class="w100 h100"
         />

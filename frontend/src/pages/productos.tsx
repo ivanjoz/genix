@@ -1,7 +1,7 @@
 import { useZoomImageMove } from "@zoom-image/solid"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
 import { Portal } from "solid-js/web"
-import { Image } from "~/components/Uploaders"
+import { ImageC } from "~/components/Uploaders"
 import { include, parseSVG, throttle } from "~/core/main"
 import { IProducto } from "~/services/operaciones/productos"
 import { arrayToMapG, arrayToMapN, formatN, makeEcommerceDB } from "~/shared/main"
@@ -49,7 +49,7 @@ export function ProductosCuadrilla(props: IHeader1) { // type: 10
             }}
           >
             { e.Images?.length > 0 &&
-              <Image src={"img-productos/"+ e.Images[0]?.n} size={2}
+              <ImageC src={"img-productos/"+ e.Images[0]?.n} size={2}
                 class={s1.product_card_image + " w100"}
                 types={["avif","webp"]}
               />
@@ -268,7 +268,7 @@ export const CartFloatingProducto = (props: ICartFloatingProducto) => {
         classList={{ "s2": props.mode === 2 }}
       >
       <div class={`h100 ${s1.floating_producto_card_img}`}>
-        <Image src={"img-productos/"+ props.producto.Images[0]?.n} size={2}
+        <ImageC src={"img-productos/"+ props.producto.Images[0]?.n} size={2}
           class={"h100 w100 object-cover"}
           types={["avif","webp"]}
         />
@@ -339,7 +339,7 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
   const productosGallerySelector = <div class={`p-rel ${s1.producto_layer_img_ctn}`}>
     { (productoSelected()?.Images||[]).map(img => {
         return <div class={`p-rel ${s1.producto_layer_img_min} mb-08`}>
-          <Image src={"img-productos/"+ img.n} size={2}
+          <ImageC src={"img-productos/"+ img.n} size={2}
             class={"h100 w100 object-contain"}
             types={["avif","webp"]}
           />
@@ -415,7 +415,7 @@ export const ProductoInfoLayer = (props: IProductoInfoLayer) => {
             }
             <div class={`${s1.producto_layer_content}`}>
               <div class={`p-rel w100 ${s1.producto_layer_img1}`} ref={divRef}>
-                <Image src={"img-productos/"+ productoSelected().Images[0]?.n} size={6}
+                <ImageC src={"img-productos/"+ productoSelected().Images[0]?.n} size={6}
                   class={"h100 w100 object-contain"}
                   types={["avif","webp"]}
                 />
@@ -475,7 +475,7 @@ export const ProductoCard2 = (props: IProductoCard2) => {
         setProductoSelected(props.producto)
       }}
     >
-      <Image src={"img-productos/"+ props.producto.Images[0]?.n} size={2}
+      <ImageC src={"img-productos/"+ props.producto.Images[0]?.n} size={2}
         class={s1.producto_filter_card_image + " w100"}
         types={["avif","webp"]}
       />

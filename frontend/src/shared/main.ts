@@ -309,3 +309,14 @@ export const arrayToMapG = <T>(array: T[], keys?: string | string[]):
   }
   return map
 }
+
+export const objectAssign = (receptor: any, giver: any) => {
+  for(const key in giver){
+    receptor[key] = giver[key]
+  }
+  for(const key in receptor){
+    if(!Object.hasOwn(giver,key)){
+      delete receptor[key]
+    }
+  }
+}

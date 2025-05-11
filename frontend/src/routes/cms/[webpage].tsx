@@ -95,6 +95,8 @@ export default function CmsWebpage() {
               const selected = {...sectionSelected()}
               selected.type = pp.type
               updateSectionSelected(selected)
+              const params = coponentsRendersMap.get(pp.type)?.params || []
+              setSectionParams(params)
             }}
           />
         }

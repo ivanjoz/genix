@@ -104,6 +104,8 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 		e.Updated = nowTime
 	}
 
+	core.Print(records)
+
 	if err = db.Insert(&records); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el registro de lista compartida: " + err.Error())
 	}
