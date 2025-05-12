@@ -19,18 +19,19 @@ type columnInfo struct {
 	NameAlias string
 	Type      string
 	// RefType        reflect.Value
-	FieldIdx      int
-	Idx           int16
-	RefType       reflect.Type
-	IsPrimaryKey  int8
-	IsSlice       bool
-	IsPointer     bool
-	IsVirtual     bool
-	HasView       bool
-	IsComplexType bool
-	ViewIdx       int8
-	getValue      func(s *reflect.Value) any
-	setValue      func(s *reflect.Value, v any)
+	FieldIdx          int
+	Idx               int16
+	RefType           reflect.Type
+	IsPrimaryKey      int8
+	IsSlice           bool
+	IsPointer         bool
+	IsVirtual         bool
+	HasView           bool
+	IsComplexType     bool
+	ViewIdx           int8
+	getValue          func(s *reflect.Value) any
+	getStatementValue func(s *reflect.Value) any
+	setValue          func(s *reflect.Value, v any)
 }
 
 var scyllaFieldToColumnTypesMap = map[string]string{
@@ -163,7 +164,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			fmt.Println("Unrecognized type for column:", column.FieldName, "|", column.FieldType)
 		}
 
-		// Seteando "setValue"
+		// Seteando "getStatementValue" (para los batchs)
 		column.Type = scyllaFieldToColumnTypesMap[column.FieldType]
 		if sequenceColumn == column.Name {
 			column.Type = "counter"
@@ -173,6 +174,38 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			column.Type = "blob"
 		} else if column.IsSlice {
 			column.Type = fmt.Sprintf("set<%v>", column.Type)
+		}
+
+		if column.IsPointer {
+			column.getStatementValue = func(s *reflect.Value) any {
+				refValue := s.Field(column.FieldIdx)
+				if refValue.IsNil() {
+					return nil
+				} else {
+					return refValue.Elem().Interface()
+				}
+			}
+		} else if column.IsComplexType {
+			column.getStatementValue = func(s *reflect.Value) any {
+				field := s.Field(column.FieldIdx)
+				if column.IsPointer {
+					field = field.Elem()
+				}
+				recordBytes, err := cbor.Marshal(field.Interface())
+				if err != nil {
+					fmt.Println("Error al encodeding .cbor:: ", column.FieldName, err)
+					return ""
+				}
+				return recordBytes
+			}
+		} else {
+			column.getStatementValue = func(s *reflect.Value) any {
+				refValue := s.Field(column.FieldIdx)
+				if column.IsPointer {
+					refValue = refValue.Elem()
+				}
+				return refValue.Interface()
+			}
 		}
 
 		// Seteando "getValue"

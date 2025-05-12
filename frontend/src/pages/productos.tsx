@@ -539,6 +539,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
 
   let inputRef: HTMLTextAreaElement
   let inputCheckRef: HTMLInputElement
+  let divRef: HTMLDivElement
   Env.productoSearchRefocusOnBlur = 0
 
   const filterProductos = (searchPhrase: string) => {
@@ -616,6 +617,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
   }
 
   return <div class={`p-rel flex jc-center ${s1.productos_search_bar_cnt}`}
+      ref={divRef}
       onMouseDown={ev => {
         ev.stopPropagation()
         if(showLayer()){ 
@@ -637,7 +639,7 @@ export const ProductoSearchLayer = (props: IProductoSearchLayer) => {
           ev.stopPropagation()
           setShowCart(false)
           setTimeout(() => {
-            inputRef.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            divRef.parentElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
           },150)
         }}
         onBlur={ev => {

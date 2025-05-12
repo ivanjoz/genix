@@ -94,7 +94,9 @@ func QueryExecStatements(queryStatements []string) error {
 }
 
 func QueryExec(queryStr string) error {
+
 	query := getScyllaConnection().Query(queryStr)
+
 	if err := query.Exec(); err != nil {
 		if strings.Contains(err.Error(), "no hosts available") {
 			fmt.Println(`Error en conexión db: "no hosts available", reconectando...`)

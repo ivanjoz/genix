@@ -12,7 +12,7 @@ import { PageContainer } from "~/core/page";
 import { IProducto, IProductoImage, IProductoPropiedad, IProductoPropiedades, postProducto, useProductosAPI } from "~/services/operaciones/productos";
 import { useSedesAlmacenesAPI } from "~/services/operaciones/sedes-almacenes";
 import { arrayToMapN, formatN } from "~/shared/main";
-import { ImageUploader } from "~/components/Uploaders";
+import { ImageUploader, uploadCurrentImages } from "~/components/Uploaders";
 import { POST } from "~/shared/http";
 import { useListasCompartidasAPI } from "~/services/admin/listas-compartidas";
 import { ListasCompartidasLayer } from "~/routes-components/admin/listas-compartidas";
@@ -37,11 +37,15 @@ export default function Productos() {
     console.log("listas compartidas::",listasCompartidas())
   })
 
-  const categorias = createMemo(() => {
+  const productoCategorias = createMemo(() => {
     return listasCompartidas()?.Records?.filter(x => x.ListaID === 1) || []
   })
 
-  const categoriasMap = createMemo(() =>  arrayToMapN(categorias(),'ID'))
+  const productoMarcas = createMemo(() => {
+    return listasCompartidas()?.Records?.filter(x => x.ListaID === 2) || []
+  })
+
+  const categoriasMap = createMemo(() =>  arrayToMapN(productoCategorias(),'ID'))
   
   const saveProducto = async (isDelete?: boolean) => {
     const form = productoForm()
@@ -51,6 +55,8 @@ export default function Productos() {
     }
 
     Loading.standard("Creando /Actualizando Producto...")
+    await uploadCurrentImages()
+    
     try {
       var result = await postProducto([form])
     } catch (error) {
@@ -146,7 +152,7 @@ export default function Productos() {
           { header: "Categorías", cardColumn: [3,2],
             getValue: e => {
               const nombres: string[] = []
-              for(const id of e.CategoriasIDs){
+              for(const id of e.CategoriasIDs||[]){
                 nombres.push(categoriasMap().get(id)?.Nombre || `Categoria-${id}`)
               }
               return nombres.join(", ")
@@ -196,123 +202,120 @@ export default function Productos() {
           }}
         />
         <Show when={layerView() === 1}>
-          <div class="flex-wrap w100 mt-12">
+          <div class="grid grid-cols-24 gap-x-10 gap-y-8 mt-8 mb-12">
             <Input saveOn={productoForm()} save="Nombre" required={true}
-              css="w-24x mb-10" label="Nombre" 
+              css="col-span-full" label="Nombre" 
             />
-            <div class="flex-wrap ac-baseline w100 p-rel" 
-                style={{ "min-height": 'calc(10rem + 10px' }}>
-              <div class="w-05x p-rel">
-                <ImageUploader  cardStyle={{ width: '100%', position: 'absolute', 
-                  top: '0', "z-index": 12, "max-height": '10rem' }}
-                  types={["avif","webp"]}
-                  src={productoForm().Image ? `img-productos/${productoForm().Image.n}-x2` : ""}
-                  refreshIndexDBCache="productos"
-                  saveAPI={productoForm().ID > 0 ? "producto-image" : ""}
-                  setDataToSend={e => {
-                    e.ProductoID = productoForm().ID || 0
-                  }}
-                  onUploaded={(imagePath, dsc) => {
-                    if(imagePath.includes("/")){ imagePath = imagePath.split("/")[1] }
-                    const pImage = { n: imagePath, d: dsc }
-                    console.log("image name::", pImage)
-                    const form = productoForm()
-                    form.Image = pImage
-                    form.Images = form.Images || []
-                    form.Images.unshift(pImage)
-                  }}
-                />
-              </div>
-              <Input saveOn={productoForm()} save="Precio" id={1}
-                css="w-055x mb-10" label="Precio Base" type="number"
-                baseDecimals={2}
-                onChange={() => {
-                  const form = productoForm()
-                  form.PrecioFinal = Math.floor(form.Precio * (1-(form.Descuento||0)/100))
-                  refreshInput([3])
+            <div class="col-span-6 row-span-3">
+              <ImageUploader cardStyle={{ "max-height": '11rem', width: "100%" }}
+                types={["avif","webp"]} id={140}
+                src={productoForm().Image ? `img-productos/${productoForm().Image.n}-x2` : ""}
+                refreshIndexDBCache="productos"
+                saveAPI={productoForm().ID > 0 ? "producto-image" : ""}
+                setDataToSend={e => {
+                  e.ProductoID = productoForm().ID || 0
                 }}
-              />
-              <Input saveOn={productoForm()} save="Descuento" 
-                css="w-04x mb-10" label="Desc." type="number"
-                postValue={<div class="p-abs pos-v c-steel1">%</div>}
-                onChange={() => {
+                onUploaded={(imagePath, dsc) => {
+                  if(imagePath.includes("/")){ imagePath = imagePath.split("/")[1] }
+                  const pImage = { n: imagePath, d: dsc }
+                  console.log("image name::", pImage)
                   const form = productoForm()
-                  form.PrecioFinal = Math.floor(form.Precio * (1-(form.Descuento||0)/100))
-                  refreshInput([3])
-                  console.log("form::", form)
+                  form.Image = pImage
+                  form.Images = form.Images || []
+                  form.Images.unshift(pImage)
                 }}
-              />
-              <Input saveOn={productoForm()} save="PrecioFinal" id={3}
-                css="w-055x mb-10" label="Precio Final" type="number"
-                baseDecimals={2}
-                onChange={() => {
-                  const form = productoForm()
-                  form.Precio = Math.floor(form.PrecioFinal / (1-(form.Descuento||0)/100))
-                  refreshInput([1])
-                }}
-              />
-              <SearchSelect saveOn={productoForm()} save="Moneda" placeholder=" "
-                css="w-04x mb-10" 
-                label="Moneda" keys="i.v" options={[
-                  {i:1, v:"PEN (S/.)"},{i:2, v:"g"},{i:3, v:"Libras"}
-                ]}
-              />
-              <div class="w-05x p-rel"></div>
-              <Input saveOn={productoForm()} save="Peso" css="w-055x mb-10"
-                label="Peso" type="number"
-              />
-              <SearchSelect saveOn={productoForm()} save="PesoT" placeholder=" "
-                label="Un" keys="i.v" css="w-04x mb-10"
-                options={[
-                  {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
-                ]}
-              />
-              <Input saveOn={productoForm()} save="Volumen" css="w-055x mb-10"
-                label="Volumen" type="number"
-              />
-              <SearchSelect saveOn={productoForm()} save="VolumenT" placeholder=" "
-                label="Un" keys="i.v" css="w-04x mb-10"
-                options={[
-                  {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
-                ]}
-              />
-              <div class="w-24x mb-04 flex jc-end">
-                <CheckBoxContainer options={[ { v: 1, n: 'SKU Individual' } ]} 
-                  keys="v.n" saveOn={productoForm()} save="Params" />
-              </div>
-            </div>
-            <div class="w100 mb-10">
-              <SearchCard placeholder="CATEGORÍAS ::" options={categorias()} keys="ID.Nombre"
-                css="w100 s11" saveOn={productoForm()} save="CategoriasIDs" 
-                inputCss="w-06x"
               />
             </div>
-            <Input saveOn={productoForm()} save="Descripcion"
-              css="w-24x mb-10" label="Descripción Corta" 
+            <Input saveOn={productoForm()} save="Precio" id={1}
+              css="col-span-5" label="Precio Base" type="number"
+              baseDecimals={2}
+              onChange={() => {
+                const form = productoForm()
+                form.PrecioFinal = Math.floor(form.Precio * (1-(form.Descuento||0)/100))
+                refreshInput([3])
+              }}
             />
-            <div class="ff-bold h3 mb-06">
-              <div class="ml-08">Sub-Unidades</div>
-            </div>
-            <div class="flex w100">
-              <Input saveOn={productoForm()} save="SbnUnidad" 
-                css="w-05x mb-10" label="Nombre"
-              />
-              <Input saveOn={productoForm()} save="SbnPrecio" baseDecimals={2}
-                css="w-055x mb-10" label="Precio Base" type="number"
-              />
-              <Input saveOn={productoForm()} save="SbnDescuento" 
-                postValue={<div class="p-abs pos-v c-steel1">%</div>}
-                css="w-04x mb-10" label="Descuento" type="number"
-              />
-              <Input saveOn={productoForm()} save="SbnPreciFinal" baseDecimals={2}
-                css="w-055x mb-10" label="Precio Final" type="number"
-              />
-              <Input saveOn={productoForm()} save="SbnCantidad" 
-                css="w-04x mb-10" label="Cantidad" type="number"
-              />
+            <Input saveOn={productoForm()} save="Descuento" 
+              css="col-span-4" label="Desc." type="number"
+              postValue={<div class="p-abs pos-v c-steel1">%</div>}
+              onChange={() => {
+                const form = productoForm()
+                form.PrecioFinal = Math.floor(form.Precio * (1-(form.Descuento||0)/100))
+                refreshInput([3])
+                console.log("form::", form)
+              }}
+            />
+            <Input saveOn={productoForm()} save="PrecioFinal" id={3}
+              css="col-span-5" label="Precio Final" type="number"
+              baseDecimals={2}
+              onChange={() => {
+                const form = productoForm()
+                form.Precio = Math.floor(form.PrecioFinal / (1-(form.Descuento||0)/100))
+                refreshInput([1])
+              }}
+            />
+            <SearchSelect saveOn={productoForm()} save="Moneda" placeholder=" "
+              css="col-span-4" 
+              label="Moneda" keys="i.v" options={[
+                {i:1, v:"PEN (S/.)"},{i:2, v:"g"},{i:3, v:"Libras"}
+              ]}
+            />
+            <Input saveOn={productoForm()} save="Peso" css="col-span-5"
+              label="Peso" type="number"
+            />
+            <SearchSelect saveOn={productoForm()} save="PesoT" placeholder=" "
+              label="Un" keys="i.v" css="col-span-4"
+              options={[
+                {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
+              ]}
+            />
+            <Input saveOn={productoForm()} save="Volumen" css="col-span-5"
+              label="Volumen" type="number"
+            />
+            <SearchSelect saveOn={productoForm()} save="VolumenT" placeholder=" "
+              label="Un" keys="i.v" css="col-span-4"
+              options={[
+                {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
+              ]}
+            />
+            <SearchSelect saveOn={productoForm()} save="MarcaID" placeholder=" "
+              css="col-span-9" 
+              label="Marca" keys="ID.Nombre" options={productoMarcas()}
+            />
+            <div class="col-span-9 flex jc-end">
+              <CheckBoxContainer options={[ { v: 1, n: 'SKU Individual' } ]} 
+                keys="v.n" saveOn={productoForm()} save="Params" />
             </div>
           </div>
-          <div class="w100 py-04 px-04">
+          <SearchCard placeholder="CATEGORÍAS ::" options={productoCategorias()} keys="ID.Nombre"
+            css="grid grid-cols-24 s11 mb-10" saveOn={productoForm()} save="CategoriasIDs" 
+            inputCss="col-span-6"
+          /> 
+          <Input saveOn={productoForm()} save="Descripcion"
+            css="w100 mb-10" label="Descripción Corta" 
+          />
+          <div class="ff-bold h3 mb-06 mt-10">
+            <div class="ml-08">Sub-Unidades</div>
+          </div>
+          <div class="grid grid-cols-24 w100 gap-x-10 gap-y-8 mt-8">
+            <Input saveOn={productoForm()} save="SbnUnidad" 
+              css="col-span-5" label="Nombre"
+            />
+            <Input saveOn={productoForm()} save="SbnPrecio" baseDecimals={2}
+              css="col-span-5" label="Precio Base" type="number"
+            />
+            <Input saveOn={productoForm()} save="SbnDescuento" 
+              postValue={<div class="p-abs pos-v c-steel1">%</div>}
+              css="col-span-4" label="Descuento" type="number"
+            />
+            <Input saveOn={productoForm()} save="SbnPreciFinal" baseDecimals={2}
+              css="col-span-5" label="Precio Final" type="number"
+            />
+            <Input saveOn={productoForm()} save="SbnCantidad" 
+              css="col-span-5" label="Cantidad" type="number"
+            />
+          </div>
+          <div class="w100 mt-12">
             <QTable data={(productoForm().Propiedades||[]).filter(x => x.Status)}
               maxHeight="40rem" tableCss="single-color"
               columns={[
