@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+
+	"github.com/gocql/gocql"
 )
 
 type scyllaTable[T any] struct {
@@ -399,13 +401,65 @@ func MakeInsertStatement[T TableSchemaInterface](records *[]T, columnsToExclude 
 	return queryStatements
 }
 
+func MakeInsertBatch[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) *gocql.Batch {
+	scyllaTable := makeTable(*new(T))
+
+	columns := []*columnInfo{}
+	if len(columnsToExclude) > 0 {
+		columsToExcludeNames := []string{}
+		for _, e := range columnsToExclude {
+			columsToExcludeNames = append(columsToExcludeNames, e.GetInfo().Name)
+		}
+		for _, col := range scyllaTable.columns {
+			if !slices.Contains(columsToExcludeNames, col.Name) {
+				columns = append(columns, col)
+			}
+		}
+	} else {
+		columns = scyllaTable.columns
+	}
+
+	columnsNames := []string{}
+	columnPlaceholders := []string{}
+	for _, col := range columns {
+		columnsNames = append(columnsNames, col.Name)
+		columnPlaceholders = append(columnPlaceholders, "?")
+	}
+
+	session := getScyllaConnection()
+	batch := session.NewBatch(gocql.UnloggedBatch)
+
+	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES (%v)`,
+		scyllaTable.GetFullName(), strings.Join(columnsNames, ", "), strings.Join(columnPlaceholders, ", "))
+
+	for _, rec := range *records {
+		refValue := reflect.ValueOf(rec)
+		values := []any{}
+
+		for _, col := range columns {
+			if col.getValue == nil {
+				panic("is nil column: getValue() = " + col.Name + " | " + col.FieldName)
+			}
+			values = append(values, col.getStatementValue(&refValue))
+		}
+
+		fmt.Println("VALUES::")
+		fmt.Println(values)
+		batch.Query(queryStrInsert, values...)
+	}
+	return batch
+}
+
 func Insert[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) error {
 
-	queryStatements := MakeInsertStatement(records, columnsToExclude...)
-	queryInsert := makeQueryStatement(queryStatements)
-	//	fmt.Println(queryInsert)
+	session := getScyllaConnection()
+	fmt.Println("BATCH (1)::")
+	queryBatch := MakeInsertBatch(records, columnsToExclude...)
 
-	if err := QueryExec(queryInsert); err != nil {
+	fmt.Println("BATCH (2)::")
+	fmt.Println(queryBatch.Entries)
+
+	if err := session.ExecuteBatch(queryBatch); err != nil {
 		fmt.Println("Error inserting records:", err)
 		return err
 	}

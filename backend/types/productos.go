@@ -21,6 +21,7 @@ type Producto struct {
 	Descripcion   string  `json:",omitempty"`
 	ContentHTML   string  `json:",omitempty"`
 	CategoriasIDs []int32 `json:",omitempty"`
+	MarcaID       int32   `json:",omitempty"`
 	Params        []int8  `json:",omitempty"`
 	Precio        int32   `json:",omitempty"`
 	Descuento     float32 `json:",omitempty"`
@@ -73,6 +74,7 @@ func (e _e) Peso_() db.CoF32               { return db.CoF32{"peso"} }
 func (e _e) Volumen_() db.CoF32            { return db.CoF32{"volumen"} }
 func (e _e) SbnCantidad_() db.CoI32        { return db.CoI32{"sbn_cantidad"} }
 func (e _e) SbnUnidad_() db.CoStr          { return db.CoStr{"sbn_unidad"} }
+func (e _e) MarcaID_() db.CoI32            { return db.CoI32{"marca_id"} }
 func (e _e) SbnPrecio_() db.CoI32          { return db.CoI32{"sbn_precio"} }
 func (e _e) SbnDescuento_() db.CoF32       { return db.CoF32{"sbn_decuento"} }
 func (e _e) SbnPreciFinal_() db.CoI32      { return db.CoI32{"sbn_precio_final"} }
