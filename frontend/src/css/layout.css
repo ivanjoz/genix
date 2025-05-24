@@ -151,7 +151,7 @@
   margin-right: -1rem;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 680px) {
   .main-menu-c {
     display: none;
   }

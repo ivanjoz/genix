@@ -318,7 +318,7 @@ export default function Ventas() {
         />
       </div>
     </div>
-    <div class="side-layer1 grow-1 px-12 py-08" 
+    <div class="side-layer grow-1 px-12 py-08" 
       style={{ width: `calc(var(--page-width) * ${layerWidth/100})` }}>
       { ventaErrorMessage() &&
         <div class="box-error-ms mb-08">{ventaErrorMessage()}</div>
