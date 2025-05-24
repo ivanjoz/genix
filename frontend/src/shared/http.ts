@@ -437,7 +437,7 @@ export const makeApiGetHandler = <T>(
   // Primer GET donde obtiene desde IndexedDB
   GET(props)
   .then((result: T) => {
-    debugger
+    // debugger
     props.resultCached = result
     if(parseResult){ result = parseResult(result as Exclude<T,unknown>) }
     setFetchedRecords(result as Exclude<T,unknown>)

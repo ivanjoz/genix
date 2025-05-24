@@ -57,13 +57,13 @@ export interface ITableRow<T> {
 
 export function QTable<T>(props: IQTable<T>) {
 
-  let inputRef: HTMLDivElement = undefined as unknown as HTMLDivElement
+  let containerRef: HTMLDivElement = undefined as unknown as HTMLDivElement
 
   const makeCardColumns = (): (ITableColumn<T>[][]) => {
     let cardColumnsFlat: ITableColumn<T>[] = []
-    for(let co of props.columns){
+    for(const co of props.columns){
       if(co.subcols){
-        for(let sc of co.subcols){ cardColumnsFlat.push(sc) }
+        for(const sc of co.subcols){ cardColumnsFlat.push(sc) }
       } else {
         cardColumnsFlat.push(co)
       }
@@ -72,14 +72,14 @@ export function QTable<T>(props: IQTable<T>) {
     cardColumnsFlat.sort((a,b) => a.cardColumn[0] - b.cardColumn[0])
 
     const cardColumnsMap: Map<number,ITableColumn<T>[]> = new Map()
-    for(let e of cardColumnsFlat){
+    for(const e of cardColumnsFlat){
       cardColumnsMap.has(e.cardColumn[0])
         ? cardColumnsMap.get(e.cardColumn[0]).push(e)
         : cardColumnsMap.set(e.cardColumn[0],[e])
     }
 
     const cardColumns: ITableColumn<T>[][] = []
-    for(let columns of cardColumnsMap.values()){
+    for(const columns of cardColumnsMap.values()){
       columns.sort((a,b) => (a.cardColumn[1]||1) - (b.cardColumn[1]||1))
       cardColumns.push(columns)
     }
@@ -90,7 +90,7 @@ export function QTable<T>(props: IQTable<T>) {
   let cardColumns: ITableColumn<T>[][] = makeCardColumns()
 
   const isCardView = () => {
-    console.log("is card view:: ", deviceType(), cardColumns.length)
+    console.log("is card view:: ", deviceType() === 3 && cardColumns.length > 0, deviceType(), cardColumns.length)
     return deviceType() === 3 && cardColumns.length > 0
   }
 
@@ -107,12 +107,13 @@ export function QTable<T>(props: IQTable<T>) {
   const makeVirtualizer = (props: IQTable<T>, length?: number) => {
     return createVirtualizer({
       count: (typeof length === 'number' ? length : props.data.length) || 1,
-      estimateSize: () => 34,
-      getScrollElement: () => { return inputRef },
+      estimateSize: isCardView() ? () => 50 : () => 34,
+      getScrollElement: () => { return containerRef },
     })
   }
 
   let Virtualizer = makeVirtualizer(props)
+
   const [recordRows, setRecordRows] = createSignal(Virtualizer.getVirtualItems())
   const [records, setRecords] = createSignal(props.data)
 
@@ -159,17 +160,18 @@ export function QTable<T>(props: IQTable<T>) {
   
   const tableSize = createMemo(() => {
     const _records = recordRows()
+    console.log("records table::", _records, _records.length)
     if(_records.length === 0){ return 50 }
     return Virtualizer.getTotalSize() - _records[0].size * _records.length
   })
 
   const divClass = () => {
-    if(isCardView()){ return "w100" }
+    if(isCardView()){ return "qtable-cards w100" }
     else { return "qtable-c" + (props.css  ? " " + props.css : "") }
   }
 
   return <div class={divClass()} 
-    ref={inputRef} style={{ 
+    ref={containerRef} style={{ 
       "max-height": props.maxHeight || "calc(100vh - 8rem - 12px)",
       ...(props.style||{}),
       ...(isCardView() ? props.styleMobile || {} : {})
@@ -218,56 +220,70 @@ export function QTable<T>(props: IQTable<T>) {
       </table>
     </Show>
     <Show when={isCardView()}>
-      <For each={recordRows()}>
-        {(row,i) => {
-          const records_ = records()
-          const record = records_[row.index]
-          
-          const isSelected = createMemo(() => {
-            const selected = props.selected && props.isSelected
-              ? props.isSelected(record, props.selected) 
-              : false
-            return selected
-          })
+      <div class="p-rel w100"
+        style={{ height: `${Virtualizer.getTotalSize()}px` }}
+      >
+        <For each={recordRows()}>
+          {(row,i) => {
+            const records_ = records()
+            const record = records_[row.index]
+            
+            const isSelected = createMemo(() => {
+              const selected = props.selected && props.isSelected
+                ? props.isSelected(record, props.selected) 
+                : false
+              return selected
+            })
 
-          if(records_.length === 0 && i() === 0){
-            return <tr>
-              <td colSpan={99}>
-                <div class="empty-message flex ai-center">
-                  No se encontraron registros.
-                </div>
-              </td>
-            </tr>
-          }
+            if(records_.length === 0 && i() === 0){
+              return <tr>
+                <td colSpan={99}>
+                  <div class="empty-message flex ai-center">
+                    No se encontraron registros.
+                  </div>
+                </td>
+              </tr>
+            }
 
-          return <div class={"w100 flex-column card-ct mb-04" 
-              + (isSelected() ? " selected" : "")}
-            onClick={ev => {
-              ev.stopPropagation()
-              if(props.onRowCLick){ props.onRowCLick(record) }
-            }}
-          >
-            <For each={cardColumns}>
-              {cols => {
-                return <div class="flex ai-center jc-between">
-                  { cols.map(col => {
-                      let content: (string|JSX.Element) = ""
-                      if(col.cardRender){ 
-                        content = col.cardRender(record, i(), null) 
-                      } else if(col.render){ 
-                        content = col.render(record, -1, null) 
-                      } else if(col.getValue){ 
-                        content = col.getValue(record, i()) 
-                      }
-                      return <div class={col.cardCss||""}>{content}</div>
-                    })
-                  }
-                </div>
+            return <div class={"w100 flex-column card-ct mb-04" 
+                + (isSelected() ? " selected" : "")}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                // height: `${row.size}px`,
+                transform: `translateY(${row.start}px)`,
               }}
-            </For>
-          </div>
-        }}
-      </For>
+              data-index={row.index}
+              ref={Virtualizer.measureElement}
+              onClick={ev => {
+                ev.stopPropagation()
+                if(props.onRowCLick){ props.onRowCLick(record) }
+              }}
+            >
+              <For each={cardColumns}>
+                {cols => {
+                  return <div class="flex ai-center jc-between">
+                    { cols.map(col => {
+                        let content: (string|JSX.Element) = ""
+                        if(col.cardRender){ 
+                          content = col.cardRender(record, i(), null) 
+                        } else if(col.render){ 
+                          content = col.render(record, -1, null) 
+                        } else if(col.getValue){ 
+                          content = col.getValue(record, i()) 
+                        }
+                        return <div class={col.cardCss||""}>{content}</div>
+                      })
+                    }
+                  </div>
+                }}
+              </For>
+            </div>
+          }}
+        </For>
+      </div>
     </Show>
   </div>
 }

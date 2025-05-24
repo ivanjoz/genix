@@ -1029,7 +1029,7 @@ body.dark .search-c4:focus-within {
 .bn-c1c:hover > .bn-c1 {
   border-bottom: none;
 }
-.side-layer1 {
+.side-layer {
   position: fixed;
   background-color: var(--white-3);
   top: 3rem;
@@ -1038,7 +1038,25 @@ body.dark .search-c4:focus-within {
   z-index: 125;
   box-shadow: rgb(36 36 43 / 24%) -1px 0px 24px -4px;
 }
-body.dark .side-layer1 {
+.layer-w-48l {
+  width: calc(var(--page-width) * (1 - 0.48));
+}
+.side-layer.layer-w-48 {
+  width: calc(var(--page-width) * 0.48);
+}
+
+@media (max-width: 680px) {
+  .side-layer {
+    right: unset;
+    left: 0;
+    width: 100%;
+  }
+  .side-layer.layer-w-48 {
+    width: 100%;
+  }
+}
+
+body.dark .side-layer {
   box-shadow: rgb(0 0 0 / 50%) -1px 0px 15px 0px;
 }
 .corner-layer {

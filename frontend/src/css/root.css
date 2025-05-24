@@ -75,6 +75,12 @@ p {
   background-color: var(--white-2);
 }
 
+.qtable-cards {
+  position: relative;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .qtable-c.selectable > table > tbody > tr {
   cursor: pointer;
 }

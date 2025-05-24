@@ -18,6 +18,7 @@ import { useListasCompartidasAPI } from "~/services/admin/listas-compartidas";
 import { ListasCompartidasLayer } from "~/routes-components/admin/listas-compartidas";
 import { ProductoFichaEditor } from "~/routes-components/operaciones/productos";
 import { ProductosParametros } from "./productos-parametros";
+import { deviceType } from "~/app";
 
 export default function Productos() {
 
@@ -102,10 +103,12 @@ export default function Productos() {
 
     <div class="flex ai-center jc-between mb-10">
       <div class="flex a-center mr-auto">
-        <BarOptions2 options={[[1,"Productos"],[2,"Categorías"],[3,"Marcas"]]} 
-          selectedID={view()}
-          onSelect={e => setView(e)}
-        />
+        { deviceType() < 3 &&
+          <BarOptions2 options={[[1,"Productos"],[2,"Categorías"],[3,"Marcas"]]} 
+            selectedID={view()}
+            onSelect={e => setView(e)}
+          />
+        }
         <div class="search-c4 ml-16 w12rem">
           <div><i class="icon-search"></i></div>
           <input class="w100" autocomplete="off" type="text" onKeyUp={ev => {
@@ -134,22 +137,21 @@ export default function Productos() {
     </div>
     <Show when={view() === 1}>
       <QTable data={productos().productos || []} 
-        css="selectable w-page-t" tableCss=""
+        css={"selectable w-page-t "+(openLayers().length > 0 ? "layer-w-48l" : "") }
+        tableCss=""
         isSelected={(e,id) => e.ID === id as number}
         selected={productoForm().ID}
         filterText={filterText()} filterKeys={["Nombre"]}
-        style={{ width: openLayers().length > 0 
-          ? `calc(var(--page-width) * ${1-layerWidth})` : undefined  
-        }}
+        styleMobile={{ height: "80vh" }}
         maxHeight="calc(80vh - 13rem)" 
         columns={[
           { header: "ID", headerStyle: { width: '3rem' }, css: "t-c c-purple",
             getValue: e => e.ID
           },
-          { header: "Nombre", cardColumn: [3,2], field: "Nombre",
+          { header: "Nombre", cardColumn: [1,1], field: "Nombre",
             getValue: e => e.Nombre, cardCss: "h5 c-steel",
           },
-          { header: "Categorías", cardColumn: [3,2],
+          { header: "Categorías", cardColumn: [1,2],
             getValue: e => {
               const nombres: string[] = []
               for(const id of e.CategoriasIDs||[]){
@@ -158,10 +160,10 @@ export default function Productos() {
               return nombres.join(", ")
             }
           },
-          { header: "Precio", cardColumn: [3,2], cardCss: "h5 c-steel", css: "t-c",
+          { header: "Precio", cardColumn: [2,2], cardCss: "h5 c-steel", css: "t-c",
             getValue: e => e.Precio ? formatN(e.Precio/100,2) : "", 
           },
-          { header: "Descuento", cardColumn: [3,2],  css: "t-c",
+          { header: "Descuento", cardColumn: [2,2],  css: "t-c",
             getValue: e => e.Descuento ? formatN(e.Descuento,1) + "%" : "",
           },
           { header: "Precio Final", cardColumn: [3,2],  css: "t-c",
@@ -184,7 +186,7 @@ export default function Productos() {
           }
         }}
       />
-      <SideLayer id={1} style={{ width: `calc(var(--page-width) * ${layerWidth})` }}
+      <SideLayer id={1} class="layer-w-48"
         title={"Producto " + (productoForm()?.Nombre||"(Nuevo)") }
         onClose={() => {
           setProductoForm({} as IProducto) 
@@ -206,7 +208,7 @@ export default function Productos() {
             <Input saveOn={productoForm()} save="Nombre" required={true}
               css="col-span-full" label="Nombre" 
             />
-            <div class="col-span-6 row-span-3">
+            <div class="col-span-6 sm:col-span-12 row-span-3">
               <ImageUploader cardStyle={{ "max-height": '11rem', width: "100%" }}
                 types={["avif","webp"]} id={140}
                 src={productoForm().Image ? `img-productos/${productoForm().Image.n}-x2` : ""}
@@ -227,7 +229,7 @@ export default function Productos() {
               />
             </div>
             <Input saveOn={productoForm()} save="Precio" id={1}
-              css="col-span-5" label="Precio Base" type="number"
+              css="col-span-5 sm:col-span-12" label="Precio Base" type="number"
               baseDecimals={2}
               onChange={() => {
                 const form = productoForm()
@@ -236,7 +238,7 @@ export default function Productos() {
               }}
             />
             <Input saveOn={productoForm()} save="Descuento" 
-              css="col-span-4" label="Desc." type="number"
+              css="col-span-4 sm:col-span-12" label="Desc." type="number"
               postValue={<div class="p-abs pos-v c-steel1">%</div>}
               onChange={() => {
                 const form = productoForm()
@@ -246,7 +248,7 @@ export default function Productos() {
               }}
             />
             <Input saveOn={productoForm()} save="PrecioFinal" id={3}
-              css="col-span-5" label="Precio Final" type="number"
+              css="col-span-5 sm:col-span-12" label="Precio Final" type="number"
               baseDecimals={2}
               onChange={() => {
                 const form = productoForm()
@@ -255,34 +257,28 @@ export default function Productos() {
               }}
             />
             <SearchSelect saveOn={productoForm()} save="Moneda" placeholder=" "
-              css="col-span-4" 
+              css="col-span-4 sm:col-span-12" 
               label="Moneda" keys="i.v" options={[
                 {i:1, v:"PEN (S/.)"},{i:2, v:"g"},{i:3, v:"Libras"}
               ]}
             />
-            <Input saveOn={productoForm()} save="Peso" css="col-span-5"
+            <Input saveOn={productoForm()} save="Peso" css="col-span-5 sm:col-span-12"
               label="Peso" type="number"
             />
             <SearchSelect saveOn={productoForm()} save="PesoT" placeholder=" "
-              label="Un" keys="i.v" css="col-span-4"
+              label="Un" keys="i.v" css="col-span-4 sm:col-span-12"
               options={[
                 {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
               ]}
             />
-            <Input saveOn={productoForm()} save="Volumen" css="col-span-5"
+            <Input saveOn={productoForm()} save="Volumen" css="col-span-5 sm:col-span-12"
               label="Volumen" type="number"
             />
-            <SearchSelect saveOn={productoForm()} save="VolumenT" placeholder=" "
-              label="Un" keys="i.v" css="col-span-4"
-              options={[
-                {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
-              ]}
-            />
             <SearchSelect saveOn={productoForm()} save="MarcaID" placeholder=" "
-              css="col-span-9" 
+              css="col-span-9 sm:col-span-full" 
               label="Marca" keys="ID.Nombre" options={productoMarcas()}
             />
-            <div class="col-span-9 flex jc-end">
+            <div class="col-span-9 sm:col-span-full flex jc-end">
               <CheckBoxContainer options={[ { v: 1, n: 'SKU Individual' } ]} 
                 keys="v.n" saveOn={productoForm()} save="Params" />
             </div>

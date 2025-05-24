@@ -168,7 +168,7 @@ export const getRecordsFromIDB = (props: httpProps): Promise<any[]> => {
     // Guarda los datos en la IndexDB
     Promise.all(tables.map(table => getTable(table)))
     .then(results => {
-      debugger
+      // debugger
       for(let i=0; i< tables.length; i++){
         results[i] = results[i].filter(x => !x._IS_META)
       }

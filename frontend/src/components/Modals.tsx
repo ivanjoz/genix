@@ -170,7 +170,7 @@ export const SideLayer = (props: ISideLayer) => {
   })
 
   const cN = () => {
-    return "side-layer1" + (props.class ? " " + props.class : "")
+    return "side-layer" + (props.class ? " " + props.class : "")
   }
 
   let layerRef: HTMLDivElement
