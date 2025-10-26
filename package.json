@@ -10,5 +10,9 @@
   },
   "scripts": {
     "dev": "node start.js "
+  },
+  "devDependencies": {
+    "@skeletonlabs/skeleton": "^4.1.4",
+    "@skeletonlabs/skeleton-svelte": "^4.1.4"
   }
 }

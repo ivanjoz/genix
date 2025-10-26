@@ -18,7 +18,7 @@
 	let currentPathname = $state('');
 
 	// Computed - menu is always minimized by default (4.5rem), expands on hover (14rem)
-	let menuWidthClass = $derived(isMenuHover ? 'w-56' : 'w-18');
+	let menuWidthClass = $derived(isMenuHover ? 'w-240' : 'w-68');
 
 	// Functions
 	function getMenuOpenFromRoute(mod: IModule, pathname: string): [number, string] {
@@ -71,7 +71,7 @@
 	aria-label="Main navigation"
 >
 	<!-- Header spacer (3rem height) -->
-	<div class="h-12 border-b border-gray-800/30"></div>
+	<div class="h-48 border-b border-gray-800/30"></div>
 
 	<!-- Menu Items -->
 	<div class="flex-1 transition-all duration-300" style="min-width: {isMenuHover ? '14rem' : '4.5rem'}">
@@ -87,7 +87,7 @@
 				>
 					<!-- Menu Header -->
 					<button
-						class="w-full h-12 px-3 flex items-center justify-between relative
+						class="w-full h-48 px-12 flex items-center justify-between relative
 							text-indigo-300 hover:bg-gray-800/50 transition-colors duration-200
 							border-l-4 border-transparent hover:border-indigo-500
 							{isOpen ? 'bg-gray-800 border-indigo-500' : ''}"
@@ -126,12 +126,12 @@
 							{#each menu.options as option}
 								{@const isActive = option.route === currentPathname}
 								<button
-									class="w-full flex items-center py-2.5 text-sm relative
+									class="w-full flex items-center py-10 text-sm relative
 										hover:bg-indigo-600/20 transition-all duration-150
 										border-l-2 border-transparent
 										{isActive ? 'bg-indigo-600/30 border-indigo-400 text-white' : 'text-gray-300'}"
-									style="padding-left: {isMenuHover ? '1.5rem' : '0'}; padding-right: {isMenuHover
-										? '1.5rem'
+									style="padding-left: {isMenuHover ? '8px' : '0'}; padding-right: {isMenuHover
+										? '8px'
 										: '0'}"
 									onclick={() => navigateTo(option.route || '/', menu.id || 0)}
 								>
@@ -196,10 +196,10 @@
 				text-white shadow-2xl overflow-y-auto animate-slide-in"
 		>
 			<!-- Mobile Header -->
-			<div class="h-12 flex items-center justify-between px-4 border-b border-gray-800/50">
+			<div class="h-48 flex items-center justify-between px-16 border-b border-gray-800/50">
 				<span class="text-lg font-bold tracking-wider text-indigo-400">GENIX</span>
 				<button
-					class="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+					class="p-8 hover:bg-gray-800 rounded-lg transition-colors"
 					onclick={() => (isMobileOpen = false)}
 					aria-label="Close menu"
 				>
@@ -227,7 +227,7 @@
 							style="max-height: {maxHeight}"
 						>
 							<button
-								class="w-full h-12 px-4 flex items-center justify-between
+								class="w-full h-48 px-16 flex items-center justify-between
 									text-indigo-300 hover:bg-gray-800/50 transition-colors
 									border-l-4 border-transparent hover:border-indigo-500 relative
 									{isOpen ? 'bg-gray-800 border-indigo-500' : ''}"
@@ -248,7 +248,7 @@
 									{#each menu.options as option}
 										{@const isActive = option.route === currentPathname}
 										<button
-											class="w-full flex items-center px-6 py-2.5 text-sm relative
+											class="w-full flex items-center px-24 py-10 text-sm relative
 												hover:bg-indigo-600/20 transition-all
 												border-l-2 border-transparent
 												{isActive

@@ -1,10 +1,9 @@
 <script lang="ts" module>
-	type CSSProperties = Record<string, string | number>;
 
 	export interface ICellEditableProps<T> {
 		saveOn: T;
-		save: string;
-		class?: string;
+		save?: string;
+		css?: string;
 		contentClass?: string;
 		inputClass?: string;
 		onChange?: (newValue: string | number) => void;
@@ -19,7 +18,7 @@
 	let {
 		saveOn,
 		save,
-		class: className = '',
+		css,
 		contentClass = '',
 		inputClass = '',
 		onChange,
@@ -86,9 +85,9 @@
 	const renderContent = $derived(render ? render(currentValue, isEditing) : currentValue);
 </script>
 
-<div class={`cell-ed-c flex ai-center p-rel ${className}`}>
-	<div
-		class={`h100 w100 ${contentClass}`}
+<div class="_2">{currentValue}</div>
+<div class="_1 {css}">
+	<div class="{contentClass}"
 		style:visibility={isEditing ? 'hidden' : 'visible'}
 		onclick={handleClick}
 		role="button"
@@ -106,47 +105,55 @@
 		{/if}
 	</div>
 	{#if isEditing}
-		<div class="flex ai-center cell-ed h100 w100">
-			<input
-				bind:this={inputRef}
-				value={currentValue || ''}
-				{type}
-				class={`w100 ${inputClass}`}
-				onkeyup={handleKeyUp}
-				onblur={handleBlur}
-			/>
-		</div>
+		<input bind:this={inputRef} {type}
+			value={currentValue || ''}
+			class={`w100 ${inputClass}`}
+			onkeyup={handleKeyUp}
+			onblur={handleBlur}
+		/>
 	{/if}
 </div>
 
 <style>
-	.cell-ed-c {
-		position: relative;
-		display: flex;
-		align-items: center;
-		width: 100%;
-		height: 100%;
-		padding: 0.5rem 0.75rem;
+	._2 {
+		opacity: 0;
+		pointer-events: none;
 	}
-
-	.cell-ed {
+	._1 {
 		position: absolute;
 		top: 0;
 		left: 0;
-		padding: 0.5rem 0.75rem;
-	}
-
-	.cell-ed input {
-		padding: 0.25rem 0.5rem;
-		border: 1px solid #4042a3;
-		border-radius: 4px;
-		outline: none;
-		font-size: inherit;
-		font-family: inherit;
-	}
-
-	.flex {
 		display: flex;
+		align-items: center;
+		padding: 0 6px;
+		width: 100%;
+		height: 100%;
+		border: 1px solid transparent;
+	}
+	._1 > div:first-of-type {
+		height: 100%;
+		width: 100%;
+		display: flex;
+		align-items: center;
+	}
+	._1 > input:first-of-type {
+		border: none;
+		outline: none;
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 100%;
+		width: 100%;
+		padding-left: 6px;
+	}
+
+	._1:hover {
+		border: 1px solid rgba(0, 0, 0, 0.596);
+	}
+	._1:focus-within {
+    border: 1px solid #dbc1ff;
+    outline: 1px solid #b17bff;
+		background-color: #f9f4ff;
 	}
 
 	.ai-center {
@@ -155,14 +162,6 @@
 
 	.p-rel {
 		position: relative;
-	}
-
-	.h100 {
-		height: 100%;
-	}
-
-	.w100 {
-		width: 100%;
 	}
 
 	.c-red {
