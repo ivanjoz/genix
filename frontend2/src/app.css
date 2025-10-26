@@ -1,0 +1,208 @@
+@import 'tailwindcss';
+@import './lib/fontello-embedded.css';
+
+/* Custom Tailwind Configuration */
+@theme {
+  --breakpoint-2xl: 1539px;
+  --breakpoint-xl: 1379px;
+  --breakpoint-lg: 1139px;
+  --breakpoint-md: 749px;
+}
+
+/* CSS Variables */
+:root {
+	/* Spacing */
+	--header-height: 3rem;
+	--menu-width: 14rem;
+	--menu-w1: 14.5rem;
+	--menu-w1m: 4.5rem;
+
+	/* Colors */
+	--primary: #4042a3;
+	--secondary: #eeefff;
+	--gray1: #2b2b2e;
+
+	/* Font Sizes */
+	--fs1: 16px;
+	--fs2: 15px;
+	--fs3: 14px;
+	--fs-h3: 1.1rem;
+}
+
+/* Base Styles */
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	font-family: 'Inter', system-ui, -apple-system, sans-serif;
+	overflow-x: hidden;
+	height: 100%;
+	color: #2c2b2e;
+	font-size: var(--fs1);
+	background-color: #e9eef1;
+	transition: background-color 0.3s ease;
+}
+
+/* Dark Mode */
+body.dark {
+	color: #f3f2f6;
+	background-color: #27262a;
+}
+
+/* Headings */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	margin: 0;
+	font-weight: 600;
+}
+
+/* Buttons */
+button {
+	cursor: pointer;
+	outline: none;
+}
+
+button:disabled {
+	cursor: not-allowed;
+	opacity: 0.6;
+}
+
+/* Links */
+a {
+	text-decoration: none;
+	color: inherit;
+}
+
+/* Inputs */
+input,
+textarea,
+select {
+	font-family: inherit;
+	font-size: inherit;
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+	background-color: #f8f8f8;
+	color: #484848;
+	opacity: 1;
+}
+
+/* Custom Scrollbar */
+@media only screen and (min-width: 680px) {
+	::-webkit-scrollbar {
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+
+	::-webkit-scrollbar-track {
+		background-color: #e6edf4;
+		border-radius: 4px;
+	}
+
+	::-webkit-scrollbar-thumb {
+		background-color: #b2b6e8;
+		border-radius: 8px;
+		min-height: 2rem;
+		background-image: linear-gradient(
+			45deg,
+			rgba(255, 255, 255, 0.2) 25%,
+			transparent 25%,
+			transparent 50%,
+			rgba(255, 255, 255, 0.2) 50%,
+			rgba(255, 255, 255, 0.2) 75%,
+			transparent 75%,
+			transparent
+		);
+	}
+
+	body.dark ::-webkit-scrollbar {
+		background-color: #8a8cad;
+	}
+
+	body.dark ::-webkit-scrollbar-track {
+		background-color: #121213;
+	}
+}
+
+/* Remove number input arrows */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+input[type='number'] {
+	-moz-appearance: textfield;
+}
+
+/* Utility Classes */
+.text-shadow {
+	text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Animation Utilities */
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes slideInRight {
+	from {
+		transform: translateX(100%);
+	}
+	to {
+		transform: translateX(0);
+	}
+}
+
+@keyframes slideInLeft {
+	from {
+		transform: translateX(-100%);
+	}
+	to {
+		transform: translateX(0);
+	}
+}
+
+.animate-fade-in {
+	animation: fadeIn 0.3s ease-in-out;
+}
+
+.animate-slide-in-right {
+	animation: slideInRight 0.3s ease-out;
+}
+
+.animate-slide-in-left {
+	animation: slideInLeft 0.3s ease-out;
+}
+
+/* Focus Styles */
+*:focus-visible {
+	outline: 2px solid #4042a3;
+	outline-offset: 2px;
+}
+
+/* Selection Styles */
+::selection {
+	background-color: #4042a3;
+	color: white;
+}
+
+/* Print Styles */
+@media print {
+	.no-print {
+		display: none !important;
+	}
+}
