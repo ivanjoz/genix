@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { createVirtualizer } from '$lib/virtualizer/index.svelte';
+	import { createVirtualizer } from '../../../components/VTable/index.svelte';
 	import CellEditable from '../../../components/CellEditable.svelte';
 
 	interface TestRecord {
@@ -159,8 +159,7 @@
 				{@const firstItemStart = virtualItems[0]?.start || 0}
 				{@const isFinal = i === virtualItems.length - 1}
 				{@const remainingSize = totalSize - (virtualItems[0]?.size || 34) * virtualItems.length}
-				<tr
-					class="table-row"
+				<tr	class="table-row"
 					class:tr-even={row.index % 2 === 0}
 					class:tr-odd={row.index % 2 !== 0}
 					style="height: {row.size}px; transform: translateY({firstItemStart}px);"
@@ -297,12 +296,9 @@
 		background-color: #f8f9fa;
 	}
 
-	.table-cell {
-		padding: 0.5rem 0.75rem;
+	.table-row > td {
 		display: table-cell;
-		overflow: hidden;
 		text-overflow: ellipsis;
-		white-space: nowrap;
 		vertical-align: middle;
 	}
 

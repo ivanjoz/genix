@@ -53,12 +53,12 @@
 </script>
 
 <header
-	class="fixed top-0 left-0 right-0 h-12 bg-gradient-to-r from-indigo-600 to-indigo-700 
-		shadow-md z-40 flex items-center px-4"
+	class="fixed top-0 left-0 right-0 h-48 bg-gradient-to-r from-indigo-600 to-indigo-700 
+		shadow-md z-40 flex items-center px-16"
 >
 	<!-- Logo Section (Desktop) -->
-	<div class="hidden md:flex items-center justify-center h-full w-56 mr-3">
-		<div class="h-10 w-10 bg-black/20 rounded-lg flex items-center justify-center">
+	<div class="hidden md:flex items-center justify-center h-full w-56 mr-12">
+		<div class="h-40 w-40 bg-black/20 rounded-lg flex items-center justify-center">
 			<img src="/images/genix_logo4.svg" alt="Genix Logo" class="w-full h-full p-1" />
 		</div>
 	</div>
@@ -66,7 +66,7 @@
 	<!-- Mobile Menu Button -->
 	{#if showMenuButton}
 		<button
-			class="md:hidden p-2 hover:bg-white/10 rounded-lg transition-colors mr-3"
+			class="md:hidden p-8 hover:bg-white/10 rounded-lg transition-colors mr-12"
 			onclick={onMenuToggle}
 			aria-label="Toggle menu"
 		>
@@ -82,12 +82,12 @@
 	</div>
 
 	<!-- Right Actions -->
-	<div class="flex items-center gap-2">
+	<div class="flex items-center gap-8">
 		<!-- Loading Indicator (placeholder for future implementation) -->
 		<!-- 
 		{#if isLoading}
-			<div class="px-3 py-1 bg-black/20 rounded-lg flex items-center gap-2">
-				<div class="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+			<div class="px-12 py-4 bg-black/20 rounded-lg flex items-center gap-8">
+				<div class="w-8 h-8 bg-yellow-400 rounded-full animate-pulse"></div>
 				<span class="text-white text-sm">Cargando...</span>
 			</div>
 		{/if}
@@ -96,7 +96,7 @@
 		<!-- Settings Dropdown -->
 		<div class="relative">
 			<button
-				class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 
+				class="w-40 h-40 rounded-full bg-white/10 hover:bg-white/20 
 					flex items-center justify-center transition-colors shadow-sm"
 				onclick={toggleSettings}
 				aria-label="Settings"
@@ -108,16 +108,16 @@
 			{#if showSettings}
 				<!-- Settings Dropdown Panel -->
 				<div
-					class="absolute right-0 top-12 mt-1 w-48 bg-white dark:bg-gray-800 
+					class="absolute right-0 top-48 mt-4 w-192 bg-white dark:bg-gray-800 
 						rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 
-						py-2 z-50"
+						py-8 z-50"
 				>
 					<!-- Theme Section -->
-					<div class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
-						<p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Tema</p>
-						<div class="flex gap-2">
+					<div class="px-12 py-8 border-b border-gray-200 dark:border-gray-700">
+						<p class="text-xs text-gray-500 dark:text-gray-400 mb-8">Tema</p>
+						<div class="flex gap-8">
 							<button
-								class="flex-1 px-3 py-1.5 rounded-md text-sm transition-colors
+								class="flex-1 px-12 py-6 rounded-md text-sm transition-colors
 									{uiTheme === 'light'
 										? 'bg-indigo-600 text-white'
 										: 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'}"
@@ -126,7 +126,7 @@
 								Claro
 							</button>
 							<button
-								class="flex-1 px-3 py-1.5 rounded-md text-sm transition-colors
+								class="flex-1 px-12 py-6 rounded-md text-sm transition-colors
 									{uiTheme === 'dark'
 										? 'bg-indigo-600 text-white'
 										: 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'}"
@@ -139,8 +139,8 @@
 
 					<!-- Actions -->
 					<button
-						class="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 
-							flex items-center gap-2 text-gray-700 dark:text-gray-200"
+						class="w-full px-12 py-8 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 
+							flex items-center gap-8 text-gray-700 dark:text-gray-200"
 						onclick={handleLogout}
 					>
 						<span>🚪</span>
@@ -152,7 +152,7 @@
 
 		<!-- Reload Button -->
 		<button
-			class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 
+			class="w-40 h-40 rounded-full bg-white/10 hover:bg-white/20 
 				flex items-center justify-center transition-colors shadow-sm
 				{isReloading ? 'animate-spin' : ''}"
 			onclick={handleReload}
