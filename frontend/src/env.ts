@@ -11,7 +11,7 @@ if(isClient){
   if(window.location.host.includes("localhost") && window.location.host !== "localhost:8000"){
     api = "http://localhost:3589/api/"
   }
-}
+} 
 
 export const getWindow = () => {
   if(isClient){ return window }

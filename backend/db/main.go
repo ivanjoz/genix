@@ -440,7 +440,13 @@ func MakeInsertBatch[T TableSchemaInterface](records *[]T, columnsToExclude ...C
 			if col.getValue == nil {
 				panic("is nil column: getValue() = " + col.Name + " | " + col.FieldName)
 			}
-			values = append(values, col.getStatementValue(&refValue))
+			var value any
+			if col.getStatementValue != nil {
+				value = col.getStatementValue(&refValue)
+			} else {
+				value = col.getValue(&refValue)
+			}
+			values = append(values, value)
 		}
 
 		fmt.Println("VALUES::")

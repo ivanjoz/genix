@@ -1,0 +1,14 @@
+{
+    "sqltools.connections": [
+        {
+            "server": "98.159.110.105",
+            "port": 14444,
+            "previewLimit": 50,
+            "driver": "Scylla",
+            "name": "Genix",
+            "database": "genix",
+            "username": "cassandra",
+            "password": "aet5z7kixhr46y3z"
+        }
+    ]
+}

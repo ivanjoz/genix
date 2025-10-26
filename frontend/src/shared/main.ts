@@ -264,14 +264,13 @@ export const arrayToMapS = <T>(array: T[], keys?: string | string[]):
   if (typeof keys === 'string') { for (let e of array) { map.set(e[keys], e) } }
   else if (Array.isArray(keys)) {
     for (let e of array) {
-      const keyGrouped = keys.map(key => (e[key] || "0")).join("_")
+      const keyGrouped = keys.map(key => (e[key as keyof T] || "0")).join("_")
       map.set(keyGrouped, e)
     }
   }
   else { console.warn('No es un array::', array) }
   return map
 }
-
 
 export const arrayToMapN = <T>(array: T[], keys?: string | string[]):
   Map<number, T> => {
