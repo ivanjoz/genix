@@ -25,7 +25,12 @@
 		"vite": "^7.1.7"
 	},
 	"dependencies": {
+		"@skeletonlabs/skeleton": "^4.1.4",
+		"@skeletonlabs/skeleton-common": "^4.1.4",
+		"@skeletonlabs/skeleton-svelte": "^4.1.4",
 		"@tanstack/svelte-virtual": "^3.13.12",
+		"@zag-js/popover": "^1.26.4",
+		"@zag-js/svelte": "^1.26.4",
 		"bits-ui": "^2.14.1",
 		"lucide-svelte": "^0.548.0",
 		"svelte-tiny-virtual-list": "^3.0.1",
