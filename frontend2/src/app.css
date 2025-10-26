@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import './lib/fontello-embedded.css';
+@import './components/popover/popover.css';
 
 /* Custom Tailwind Configuration */
 @theme {
