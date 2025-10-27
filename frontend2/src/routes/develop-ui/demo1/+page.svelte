@@ -1,6 +1,5 @@
 
 <script>
-    import PopoverExample from "../../../components/popover/PopoverExample.svelte";
     import Popover2Example from "../../../components/popover2/Popover2Example.svelte";
 
 </script>
