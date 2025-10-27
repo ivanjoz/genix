@@ -42,6 +42,7 @@
 	// Update position when open changes or elements are ready
 	$effect(() => {
 		if (open && referenceElement && floatingElement) {
+      console.log("referenceElement", referenceElement)
 			updatePosition();
 		}
 	});

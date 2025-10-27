@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { VTable, type ITableColumn } from '../../../components/VTable';
+	import CellSelector from '../../../components/CellSelector.svelte';
+import { VTable, type ITableColumn } from '../../../components/VTable';
 
 	interface TestRecord {
 		id: string;
@@ -56,7 +57,7 @@
 					},
 				},
 				{
-					header: 'Edad',
+					header: 'Selector',
 					getValue: (e) => e.edad,
 					css: 'text-center'
 				}
@@ -135,6 +136,13 @@
 		<span style="background-color: #fef3c7; padding: 0.125rem 0.25rem; border-radius: 3px;">
 			{value}
 		</span>
+
+	{:else if col.header === 'Selector'}
+		<div class="w-full h-full relative" onclick={ev => {
+			ev.stopPropagation()
+		}}>
+			<CellSelector id={record.id}/>
+		</div>
 	
 	<!-- Actions column - real interactive buttons! -->
 	{:else if col.id === 'actions'}
