@@ -100,11 +100,9 @@
 
 {#if open}
 	<Portal>
-		<div
-			bind:this={floatingElement}
-			class={className}
+		<div bind:this={floatingElement}
+			class="{className} ps-{position.placement}"
 			style={computedStyle()}
-			data-placement={position.placement}
 		>
 			{@render children?.()}
 		</div>

@@ -1,11 +1,9 @@
 <script lang="ts">
 	// Props
 	let {
-		onMenuToggle,
 		title = 'Genix',
 		showMenuButton = false
 	}: {
-		onMenuToggle?: () => void;
 		title?: string;
 		showMenuButton?: boolean;
 	} = $props();
@@ -52,9 +50,8 @@
 	});
 </script>
 
-<header
-	class="fixed top-0 left-0 right-0 h-48 bg-gradient-to-r from-indigo-600 to-indigo-700 
-		shadow-md z-40 flex items-center px-16"
+<header	class="_1 fixed top-0 left-0 right-0 bg-gradient-to-r from-indigo-600 to-indigo-700 
+	shadow-md z-40 flex items-center px-16"
 >
 	<!-- Logo Section (Desktop) -->
 	<div class="hidden md:flex items-center justify-center h-full w-56 mr-12">
@@ -65,13 +62,13 @@
 
 	<!-- Mobile Menu Button -->
 	{#if showMenuButton}
-		<button
-			class="md:hidden p-8 hover:bg-white/10 rounded-lg transition-colors mr-12"
-			onclick={onMenuToggle}
+		<label
+			for="mobile-menu-toggle"
+			class="md:hidden p-8 hover:bg-white/10 rounded-lg transition-colors mr-12 cursor-pointer"
 			aria-label="Toggle menu"
 		>
 			<span class="text-white text-2xl">☰</span>
-		</button>
+		</label>
 	{/if}
 
 	<!-- Title -->
@@ -177,6 +174,10 @@
 {/if}
 
 <style>
+	._1 {
+		height: var(--header-height);
+	}
+
 	@keyframes spin {
 		from {
 			transform: rotate(0deg);

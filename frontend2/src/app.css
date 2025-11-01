@@ -1,6 +1,5 @@
 @import 'tailwindcss';
 @import './lib/fontello-embedded.css';
-@import './components/popover/popover.css';
 
 /* Custom Tailwind Configuration */
 @theme {
@@ -45,6 +44,18 @@ body {
 	font-size: var(--fs1);
 	background-color: #e9eef1;
 	transition: background-color 0.3s ease;
+	--page-padding: 10px;
+	--header-height: 46px;
+	--title-bar-height: 40px;
+	--title-bar-lg-height: 42px;
+	--title-bar-xl-height: 44px;
+	--menu-box-height: 46px;
+	--menu-opt-height: 36px;
+	--pad-1: 12px;
+	--pad-2: 14px;
+	--pad-3: 16px;
+	--menu-max-width: 240px;
+	--menu-min-width: 70px;
 }
 
 /* Dark Mode */

@@ -107,7 +107,7 @@
 	{#if isEditing}
 		<input bind:this={inputRef} {type}
 			value={currentValue || ''}
-			class={`w100 ${inputClass}`}
+			class={`w-full ${inputClass}`}
 			onkeyup={handleKeyUp}
 			onblur={handleBlur}
 		/>
@@ -120,15 +120,15 @@
 		pointer-events: none;
 	}
 	._1 {
-		position: absolute;
-		top: 0;
-		left: 0;
-		display: flex;
-		align-items: center;
-		padding: 0 6px;
-		width: 100%;
-		height: 100%;
-		border: 1px solid transparent;
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    width: 100%;
+    height: 100%;
+    border: 1px solid transparent;
 	}
 	._1 > div:first-of-type {
 		height: 100%;
@@ -151,8 +151,8 @@
 		border: 1px solid rgba(0, 0, 0, 0.596);
 	}
 	._1:focus-within {
-    border: 1px solid #dbc1ff;
-    outline: 1px solid #b17bff;
+		box-shadow: inset 0 0 0px 1px #dbc1ff;
+    border-color: #b17bff;
 		background-color: #f9f4ff;
 	}
 

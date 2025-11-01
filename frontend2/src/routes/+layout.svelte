@@ -7,9 +7,6 @@
     import Modules from '../core/modules';
 
 	let { children } = $props();
-
-	// State for mobile menu
-	let isMobileMenuOpen = $state(false);
 	
 	// Main content margin - menu is always 4.5rem (w-18) by default
 	let mainMarginClass = 'ml-18';
@@ -27,12 +24,11 @@
 <!-- Header with mobile menu toggle -->
 <Header
 	showMenuButton={true}
-	onMenuToggle={() => (isMobileMenuOpen = !isMobileMenuOpen)}
 	title="Sistema Genix"
 />
 
 <!-- Side Menu -->
-<SideMenu bind:isMobileOpen={isMobileMenuOpen} />
+<SideMenu />
 
 <!-- Main Content -->
 <main
