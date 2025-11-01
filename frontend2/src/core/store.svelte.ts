@@ -7,4 +7,10 @@ export let Core = $state({
   openSearchLayer: 0 as number,
   deviceType: 1 as number,
   mobileMenuOpen: 0 as number,
+  popoverShowID: 0 as number | string
 })
+
+export const WeakSearchRef: WeakMap<any,{ 
+  idToRecord: Map<string|number, any>
+  valueToRecord: Map<string,any>
+}> = new WeakMap()

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@humanspeak/svelte-virtual-list':
+        specifier: ^0.3.5
+        version: 0.3.5(svelte@5.42.2)
       '@skeletonlabs/skeleton':
         specifier: ^4.1.4
         version: 4.1.4(tailwindcss@4.1.16)
@@ -245,6 +248,11 @@ packages:
 
   '@floating-ui/utils@0.2.10':
     resolution: {integrity: sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==}
+
+  '@humanspeak/svelte-virtual-list@0.3.5':
+    resolution: {integrity: sha512-oAHlTnYmMxu59Vz8zVjmGK/P3RmWBz5qQFGPqVhfxwu+I0BuTjULks6p1L0baTu0zcPuI2GHq/XS4FdT6P95MQ==}
+    peerDependencies:
+      svelte: ^5.0.0
 
   '@internationalized/date@3.10.0':
     resolution: {integrity: sha512-oxDR/NTEJ1k+UFVQElaNIk65E/Z83HK1z1WI3lQyhTtnNg4R5oVXaPzK3jcpKG8UHKDVuDQHzn+wsxSz8RP3aw==}
@@ -1205,6 +1213,11 @@ snapshots:
       '@floating-ui/utils': 0.2.10
 
   '@floating-ui/utils@0.2.10': {}
+
+  '@humanspeak/svelte-virtual-list@0.3.5(svelte@5.42.2)':
+    dependencies:
+      esm-env: 1.2.2
+      svelte: 5.42.2
 
   '@internationalized/date@3.10.0':
     dependencies:

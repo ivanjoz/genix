@@ -309,7 +309,9 @@
 
   .vtable {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    background-color: white;
+    border-spacing: 0;
     background-color: white;
   }
 
@@ -362,7 +364,7 @@
     width: 100%;
     border-bottom: 1px solid #e9ecef;
     transition: background-color 0.15s ease;
-    will-change: transform;
+    /* will-change: transform; */
     cursor: pointer;
   }
 
@@ -388,6 +390,7 @@
     white-space: nowrap;
     vertical-align: middle;
     border-right: 1px solid #f1f3f5;
+    position: relative;
   }
 
   .vtable-cell:last-child {
