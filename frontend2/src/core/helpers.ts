@@ -35,3 +35,7 @@ export const highlString = (phrase: string, words: string[]): { text: string, hi
   }
   return arr.filter(x => x)
 }
+
+export const parseSVG = (svgContent: string)=> {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent)}`
+}

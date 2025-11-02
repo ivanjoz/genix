@@ -1,6 +1,7 @@
 <script lang="ts">
 	import CellSelector from '../../../components/CellSelector.svelte';
-import { VTable, type ITableColumn } from '../../../components/VTable';
+	import { VTable, type ITableColumn } from '../../../components/VTable';
+	import Page from "../../../components/Page.svelte";
 
 	interface TestRecord {
 		id: string;
@@ -172,7 +173,7 @@ import { VTable, type ITableColumn } from '../../../components/VTable';
 	{/if}
 {/snippet}
 
-<div class="page-container" style="padding: 1rem;">
+<Page>
 	<div class="header-section">
 		<h2>VTable Component - Snippet-based cellRenderer Demo</h2>
 		<p class="text-sm text-gray-600 mt-2">
@@ -204,7 +205,7 @@ import { VTable, type ITableColumn } from '../../../components/VTable';
 		overscan={15}
 		cellRenderer={useSnippetRenderer ? cellRendererSnippet : undefined}
 	/>
-</div>
+</Page>
 
 <style>
 	.page-container {

@@ -31,14 +31,4 @@
 <SideMenu />
 
 <!-- Main Content -->
-<main
-	class="pt-12 min-h-screen bg-gray-50 
-		transition-all duration-300
-		{mainMarginClass}
-		md:{mainMarginClass}
-		p-4 md:p-6"
->
-	<div class="max-w-7xl mx-auto">
-		{@render children?.()}
-	</div>
-</main>
+{@render children?.()}

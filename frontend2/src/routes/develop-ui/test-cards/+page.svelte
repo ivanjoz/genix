@@ -1,11 +1,10 @@
 <script lang="ts">
-
+	import Page from "../../../components/Page.svelte";
 </script>
 
-<div>
-	
-
-</div>
+<Page>
+	<div>hola</div>
+</Page>
 
 <style>
 	.page-container {

@@ -2,7 +2,9 @@
 	import { tick } from 'svelte';
 	import Portal from './Portal.svelte';
 	import { calculatePosition, type Placement } from './positioning';
-	
+  import { parseSVG } from '../../core/helpers';
+	import angleSvg from "../../assets/angle.svg?raw"
+
 	interface Props {
 		/** The reference element to position relative to */
 		referenceElement: HTMLElement | null;
@@ -105,6 +107,14 @@
 			style={computedStyle()}
 		>
 			{@render children?.()}
+			<div class={[
+					"absolute overflow-hidden h-18 flex justify-center w-full",
+					position.placement === "bottom" && "top-[-18px]",
+					position.placement === "top" && "bottom-[-18px] rotate-180",
+				]}
+			>
+				<img class={`_5 w-24 h-24 top`} alt="" src={parseSVG(angleSvg)}/>
+			</div>
 		</div>
 	</Portal>
 {/if}
