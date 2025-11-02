@@ -1,6 +1,6 @@
 <script lang="ts" generics="T,E">
-    import { untrack } from "svelte";
-  import { throttle } from "../core/helpers";
+  import { untrack } from "svelte";
+  import { parseSVG, throttle } from "../core/helpers";
   import { Core, WeakSearchRef } from "../core/store.svelte";
   import { Popover2 } from "./popover2";
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list'
@@ -168,7 +168,7 @@
     referenceElement={refElement}
     open={show}
     placement="bottom"
-  >
+  > 
     <div class="h-200 w-400 p-4 _4 overflow-auto">
       <SvelteVirtualList items={optionsFiltered}>
         {#snippet renderItem(item)}
@@ -242,5 +242,8 @@
     background-color: rgb(255, 255, 255);
     border-radius: 7px;
     box-shadow: rgba(0, 0, 0, 0.24) 0px 3px 8px;
+  }
+  ._5 {
+
   }
 </style>

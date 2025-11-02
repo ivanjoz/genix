@@ -61,13 +61,11 @@
 			{@const optionsCount = menu.options?.length || 0}
 			{@const maxHeight = isOpen ? `${optionsCount * 2.8 + 3}rem` : '3rem'}
 
-			<div
-				class="overflow-hidden transition-all duration-400 mb-1"
+			<div class="overflow-hidden transition-all duration-400 mb-1"
 				style="max-height: {maxHeight}"
 			>
 				<!-- Menu Header -->
-				<button
-					class="w-full h-48 px-12 flex items-center justify-between relative
+				<button class="w-full h-48 px-12 flex items-center justify-between relative
 						text-indigo-300 hover:bg-gray-800/50 transition-colors duration-400
 						border-l-4 border-transparent hover:border-indigo-500
 						{isOpen ? 'bg-gray-800 border-indigo-500' : ''}"
@@ -76,11 +74,11 @@
 				>
 					<div class="flex items-center flex-1 min-w-0">
 						<!-- Minimized view - show only minName -->
-						<span class="menu-minimized text-xs font-mono font-semibold ml-1">
-							{menu.minName || menu.name.substring(0, 3).toUpperCase()}
+						<span class="menu-minimized font-mono font-semibold ml-1">
+							{(menu.minName || menu.name.substring(0, 3)).toUpperCase()}
 						</span>
 						<!-- Expanded view - show full name -->
-						<span class="menu-expanded text-sm font-mono font-semibold ml-1 tracking-wider">
+						<span class="menu-expanded font-mono font-semibold ml-1 tracking-wider">
 							{menu.name.toUpperCase()}
 						</span>
 					</div>
@@ -88,7 +86,7 @@
 					<!-- Arrow icon (only visible when expanded) -->
 					{#if menu.options && menu.options.length > 0}
 						<span
-							class="menu-arrow absolute right-3 transition-all duration-300 text-xs"
+							class="menu-arrow absolute right-3 transition-all duration-300"
 							class:rotate-180={isOpen}
 						>
 							<i class="icon-down-open-1"></i>
@@ -101,34 +99,28 @@
 					<div class="transition-all duration-200">
 						{#each menu.options as option}
 							{@const isActive = option.route === currentPathname}
-							<button
-								class="submenu-option w-full flex items-center py-10 text-sm relative
-									hover:bg-indigo-600/20 transition-all duration-150
-									border-l-2 border-transparent
-									{isActive ? 'bg-indigo-600/30 border-indigo-400 text-white' : 'text-gray-300'}"
+							<button class="submenu-option w-full flex items-center py-10 relative
+								hover:bg-indigo-600/20 transition-all duration-150
+								border-l-2 border-transparent
+								{isActive ? 'bg-indigo-600/30 border-indigo-400 text-white' : 'text-gray-300'}"
 								onclick={() => navigateTo(option.route || '/', menu.id || 0)}
 							>
 								<!-- Minimized: show icon only centered -->
-								<div class="option-minimized w-full flex justify-center">
-									{#if option.icon}
-										<i class="{option.icon} text-lg"></i>
-									{:else}
-										<span class="text-xs font-mono">
-											{option.minName || option.name.substring(0, 2)}
-										</span>
-									{/if}
+								<div class="option-minimized w-full flex pl-7">
+									<i class="{option.icon || "icon-box"} mr-2"></i>
+									<div class="font-mono">
+										{option.minName || option.name.substring(0, 2)}
+									</div>
 								</div>
 								
 								<!-- Expanded: show icon and full name -->
-								<div class="option-expanded flex items-center w-full">
-									{#if option.icon}
-										<i class="{option.icon} text-base mr-2"></i>
-									{/if}
-									<span class="font-mono text-xs">
+								<div class="option-expanded flex w-full">
+									<i class="{option.icon || "icon-box"} mr-2"></i>
+									<div class="font-mono">
 										{#each option.name.split(' ') as word}
-											<span class="mr-1">{word}</span>
+											<span class="mr-4">{word}</span>
 										{/each}
-									</span>
+									</div>
 								</div>
 
 								<!-- Active indicator -->
