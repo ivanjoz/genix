@@ -1,3 +1,6 @@
+import pkg from 'notiflix';
+export const { Notify } = pkg;
+
 let throttleTimer: number
 
 export const throttle = (func: (() => void), delay: number) => {

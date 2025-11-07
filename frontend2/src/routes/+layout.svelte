@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
+	import { page } from '$app/stores';
 	import Header from '../components/Header.svelte';
 	import SideMenu from '../components/SideMenu.svelte';
     import { Core } from '../core/store.svelte';
@@ -14,6 +15,9 @@
 	$effect(() => {
 		Core.module = Modules[0]
 	})
+
+	// Check if current route should show Header and SideMenu
+	let showLayout = $derived(!$page.url.pathname.startsWith('/login'));
 </script>
 
 <svelte:head>
@@ -21,14 +25,12 @@
 	<title>Genix - Sistema de Gestión</title>
 </svelte:head>
 
-<!-- Header with mobile menu toggle -->
-<Header
-	showMenuButton={true}
-	title="Sistema Genix"
-/>
-
-<!-- Side Menu -->
-<SideMenu />
+{#if showLayout}
+	<!-- Header with mobile menu toggle -->
+	<Header	showMenuButton={true}	title="Sistema Genix"/>
+	<!-- Side Menu -->
+	<SideMenu />
+{/if}
 
 <!-- Main Content -->
 {@render children?.()}

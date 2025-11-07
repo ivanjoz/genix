@@ -14,3 +14,5 @@ node_modules
 mode_modules/*
 package-lock.json
 frontend/app.config.*
+frontend2/static/sw.js
+frontend2/static/sw.js.map
