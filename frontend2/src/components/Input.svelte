@@ -1,5 +1,5 @@
 <script lang="ts" generics="T">
-  import s1 from "./core.module.css";
+  import s1 from "./components.module.css";
 
   export interface IInput<T> {
     id?: number;

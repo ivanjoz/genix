@@ -72,7 +72,7 @@
 					onclick={() => toggleMenu(menu.id || 0)}
 					aria-expanded={isOpen}
 				>
-					<div class="flex items-center flex-1 min-w-0">
+					<div class="flex items-center flex-1 min-w-0 whitespace-nowrap">
 						<!-- Minimized view - show only minName -->
 						<span class="menu-minimized font-mono font-semibold ml-1">
 							{(menu.minName || menu.name.substring(0, 3)).toUpperCase()}

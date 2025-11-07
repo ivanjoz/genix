@@ -1,6 +1,12 @@
 <script lang="ts">
-  let { children } = $props();
+  import { Env } from "$lib/security";
 
+  let { children, sideLayerSize }: {
+    children: any, sideLayerSize?: number,
+    options?: {id: number, name: string}[]
+  } = $props();
+
+  Env.sideLayerSize = sideLayerSize || 0
 </script>
 
 <div class="_1 p-8">
