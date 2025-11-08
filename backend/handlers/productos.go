@@ -13,7 +13,7 @@ import (
 )
 
 func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetQueryInt64("upd")
+	updated := core.Coalesce(req.GetQueryInt64("upd"), req.GetQueryInt64("updated"))
 
 	productos := []s.Producto{}
 	errGroup := errgroup.Group{}

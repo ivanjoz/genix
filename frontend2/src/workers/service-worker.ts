@@ -11,7 +11,7 @@ export type serviceHttpProps = {
   route: string
   module?: string
   routeParsed?: string
-  headers?: { [e: string]: string }
+  headers?: { [e: string]: string } | Headers
   keyID: string | string[]
   fields?: string[]
   keyFilterIfEmpty?: string
@@ -89,10 +89,9 @@ const parseResponseAsStream = async (
 }
 
 const extractUpdated = (
-  obj: {[k: string]: any[]}, keyForUpdated?:string, useMin?: boolean
+  obj: {[k: string]: any[]}, useMin?: boolean
 ) => {
   const updatedStatus: {[k: string]: number } = {}
-  const upKey = keyForUpdated || "updated"
 
   for(const [key, values] of Object.entries(obj)){
     if(values && !Array.isArray(values)){
@@ -100,10 +99,11 @@ const extractUpdated = (
     }
     let maxOrMin = 0
     for(const v of values||[]){
+      const updated = v.updated || v.upd || 0
       if(useMin){
-        if(maxOrMin === 0 || v[upKey] < maxOrMin){ maxOrMin = v[upKey] }
+        if(maxOrMin === 0 || updated < maxOrMin){ maxOrMin = updated }
       } else {
-        if(v[upKey] > maxOrMin){ maxOrMin = v[upKey] }
+        if(updated > maxOrMin){ maxOrMin = updated }
       }
     }
     updatedStatus[key] = maxOrMin
@@ -163,7 +163,7 @@ const handleFetchResponse = async (
   if(Array.isArray(response)){ response = { _default: response } }
 
   const updatedStatusDelta = extractUpdated(response)
-  const updatedMinDelta = extractUpdated(response,null,true)
+  const updatedMinDelta = extractUpdated(response, true)
 
   let hasChanged = false
   for(const [key, updated] of Object.entries(updatedStatusDelta)){

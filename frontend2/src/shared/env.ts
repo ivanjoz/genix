@@ -34,8 +34,12 @@ export interface IEmpresaParams {
 export const Env = {
   appId: "genix",
   S3_URL: "https://d16qwm950j0pjf.cloudfront.net/",
+  serviceWorker: "/sw.js",
+  apiRoute: "http://localhost:3589/",
+  enviroment: "dev",
   counterID: 1,
   sideLayerSize: 0,
+  fetchID: 1000,
   zoneOffset: (new Date()).getTimezoneOffset() * 60,
   dexieVersion: 1,
   cache: {} as {[e: string]: any},
