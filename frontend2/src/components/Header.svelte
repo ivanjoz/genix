@@ -206,7 +206,7 @@
 		align-items: center;
 		border-radius: 7px;
 	}
-
+	/*
 	.pm-loading > .pm-counter {
 		height: calc(100% - 8px);
 		background-color: black;
@@ -218,7 +218,7 @@
 		position: absolute;
 		left: 4px;
 	}
-
+	*/
 	.pm-loading > .bg {
 		position: absolute;
 		left: -46px;

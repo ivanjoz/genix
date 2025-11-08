@@ -150,10 +150,29 @@ export const getToken = () => {
   return userToken
 }
 
-export const fetchCache = async (argsBase: serviceHttpProps): Promise<FetchCacheResponse> => {
-  argsBase.routeParsed = makeApiRoute(argsBase.route)
-  console.log("fetching cache...", argsBase)
+export const fetchCache = async (args: serviceHttpProps): Promise<FetchCacheResponse> => {
+  args.routeParsed = makeApiRoute(args.route)
+  console.log("fetching cache...", args)
 
-  const response = await sendServiceMessage(3,argsBase)
+  const response = await sendServiceMessage(3,args)
+  
   return response as FetchCacheResponse
+}
+
+export const fetchCacheParsed = async (args: serviceHttpProps): Promise<any> => {
+  const response = await fetchCache(args)
+  let content = response.content
+
+  if (args.cacheMode === 'offline') {
+    if(!content || response.isEmpty){
+      return null
+    }
+  } else if (args.cacheMode === 'updateOnly') {
+    if (response.notUpdated) {
+      return null
+    }
+  }
+
+  if(content?._default){ return content._default }
+  return content
 }

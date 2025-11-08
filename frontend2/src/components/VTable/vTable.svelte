@@ -4,6 +4,7 @@
   import type { ITableColumn, CellRendererSnippet } from "./types";
   import type { VirtualItem } from './index.svelte';
     import CellEditable from '../CellEditable.svelte';
+    import { highlString, include } from '../../core/helpers';
 
   interface VTableProps<T> {
     columns: ITableColumn<T>[];
@@ -18,6 +19,8 @@
     isSelected?: (row: T, selected: T | number) => boolean;
     emptyMessage?: string;
     cellRenderer?: CellRendererSnippet<T>;
+    filterText?: string;
+    getFilterContent?: (row: T) => string;
   }
 
   let {
@@ -33,6 +36,8 @@
     isSelected,
     emptyMessage = 'No se encontraron registros.',
     cellRenderer,
+    filterText,
+    getFilterContent
   }: VTableProps<T> = $props();
 
   // State
@@ -73,6 +78,22 @@
     };
   });
 
+  const filterTextArray = $derived((filterText||"").toLowerCase().split(" ").filter(x => x.length > 1))
+
+  const filteredData = $derived.by(() => {
+    console.log("filterText", filterText)
+
+    if(filterText && getFilterContent){
+      const filtered = data.filter(
+        x => include(getFilterContent(x).toLowerCase(), filterTextArray))
+
+      console.log("data filtrada::", filtered)
+      return filtered
+    } else {
+      return data
+    }
+  })
+
   // Initialize virtualizer
   $effect(() => {
     if (containerRef && !virtualizerStore) {
@@ -81,7 +102,7 @@
         getScrollElement: () => containerRef!,
         estimateSize: () => estimateSize,
         overscan: overscan,
-        getCount: () => data.length
+        getCount: () => filteredData.length
       });
 
       const updateVirtualItems = () => {
@@ -108,13 +129,17 @@
   });
 
   // Watch for data changes
-  let lastDataRef: any = null;
   $effect(() => {
-    const currentData = data;
+    // Track both filteredData and its length to ensure changes are detected
+    const currentData = filteredData;
+    const currentLength = filteredData.length;
     
-    if (lastDataRef !== null && currentData !== lastDataRef && isInitialized && virtualizerStore) {
+    if (isInitialized && virtualizerStore) {
       untrack(() => {
         dataVersion++;
+        
+        // Notify virtualizer of the change
+        virtualizerStore!.refresh();
         
         const items = virtualizerStore!.getVirtualItems();
         const size = virtualizerStore!.getTotalSize();
@@ -123,16 +148,11 @@
         totalSize = size;
       });
     }
-    
-    lastDataRef = currentData;
   });
 
   // Helper to get cell content
   function getCellContent(column: ITableColumn<T>, record: T, index: number): { 
-    content: any; 
-    isHTML: boolean; 
-    useSnippet: boolean;
-    css: string
+    content: any; isHTML: boolean; useSnippet: boolean; css: string
   } {
     let content: any = '';
     let isHTML = false;
@@ -160,9 +180,7 @@
     }
 
     // Check if we should use snippet renderer (takes priority over function renderer)
-    if (cellRenderer) {
-      useSnippet = true;
-    }
+    if (cellRenderer) { useSnippet = true; }
 
     let css = typeof column.cellCss === 'string' 
       ? column.cellCss
@@ -234,7 +252,7 @@
 
     <!-- Virtual Body -->
     <tbody class="vtable-body">
-      {#if data.length === 0}
+      {#if filteredData.length === 0}
         <tr>
           <td colspan={processedColumns.flatColumns.length} class="vtable-empty">
             <div class="vtable-empty-message">
@@ -247,14 +265,16 @@
           {@const firstItemStart = virtualItems[0]?.start || 0}
           {@const isFinal = i === virtualItems.length - 1}
           {@const remainingSize = totalSize - (virtualItems[0]?.size || estimateSize) * virtualItems.length}
-          {@const record = data[row.index]}
-          {@const selected = isRowSelected(record, row.index)}
+          {@const record = filteredData[row.index]}
           
-          <tr class="vtable-row"
+          {#if record}
+            {@const selected = isRowSelected(record, row.index)}
+            
+            <tr class="vtable-row"
             class:vtable-row-even={row.index % 2 === 0}
             class:vtable-row-odd={row.index % 2 !== 0}
             class:vtable-row-selected={selected}
-            style="height: {row.size}px; transform: translateY({firstItemStart}px);"
+            style="transform: translateY({firstItemStart}px);"
             onclick={() => handleRowClick(record, row.index)}
           >
             {#each processedColumns.flatColumns as column}
@@ -276,10 +296,14 @@
                   />
                 {:else if cellData.useSnippet && cellRenderer}
                   {@render cellRenderer(record, column, cellData.content, row.index)}
-                {:else if cellData.isHTML}
-                  {@html cellData.content}
                 {:else}
-                  {cellData.content}
+                  {#if filterText && column.highlight}
+                    {#each highlString(cellData.content, filterTextArray) as part }
+                      <span class:_2={part.highl}>{part.text}</span>
+                    {/each }
+                  {:else}
+                    { cellData.content }
+                  {/if}
                 {/if}
               </td>
             {/each}
@@ -290,6 +314,7 @@
               <td style="border: none;"></td>
             </tr>
           {/if}
+          {/if}
         {/each}
       {/if}
     </tbody>
@@ -297,6 +322,10 @@
 </div>
 
 <style>
+  ._2 {
+    color: red;
+  }
+
   .hsc > div {
     background-color: #e9ecef;
   }
@@ -305,6 +334,7 @@
     border-radius: 8px;
     background-color: white;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 2px;
   }
 
   .vtable {

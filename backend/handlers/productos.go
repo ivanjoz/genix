@@ -23,9 +23,9 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 			q.Exclude(col.Stock_(), col.StockStatus_())
 			q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
 			if updated > 0 {
-				q.Where(col.Updated_().GreaterEqual(updated))
+				q.Where(col.Updated_().GreaterThan(updated))
 			} else {
-				q.Where(col.Status_().GreaterEqual(1))
+				q.Where(col.Status_().GreaterThan(1))
 			}
 		})
 		if err != nil {

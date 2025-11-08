@@ -10,7 +10,7 @@
   Env.sideLayerSize = sideLayerSize || 0
 </script>
 
-<div class="_1 p-8">
+<div class="_1 p-10">
   {#if Core.isLoading === 0}
     {@render children()}
   {/if}
