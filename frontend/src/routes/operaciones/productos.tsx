@@ -258,7 +258,8 @@ export default function Productos() {
             />
             <SearchSelect saveOn={productoForm()} save="Moneda" placeholder=" "
               css="col-span-4 sm:col-span-12" 
-              label="Moneda" keys="i.v" options={[
+              label="Moneda" keys="i.v" 
+              options={[
                 {i:1, v:"PEN (S/.)"},{i:2, v:"g"},{i:3, v:"Libras"}
               ]}
             />

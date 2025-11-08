@@ -1,3 +1,4 @@
+import { Notify } from "../core/helpers"
 import { fetchEvent } from "../core/store.svelte"
 import { Env } from "../shared/env"
 import type { IGetCacheSubObject, serviceHttpProps } from "../workers/service-worker"
@@ -161,6 +162,23 @@ export const fetchCache = async (args: serviceHttpProps): Promise<FetchCacheResp
 
 export const fetchCacheParsed = async (args: serviceHttpProps): Promise<any> => {
   const response = await fetchCache(args)
+  debugger
+
+  if(response.error){
+    let errMessage = response.error
+    if(typeof response.error === 'string'){
+      try {
+        let errorJson = JSON.parse(response.error)
+        errMessage = errorJson.error || JSON.stringify(errorJson)
+      } catch (_) { }
+    } else {
+      errMessage = (response.error as any).error || response.error
+    }
+    console.log("errMessage", errMessage)
+    Notify.failure(errMessage)
+    return null
+  }
+
   let content = response.content
 
   if (args.cacheMode === 'offline') {

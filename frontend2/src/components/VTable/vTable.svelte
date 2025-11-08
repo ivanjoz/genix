@@ -3,8 +3,8 @@
   import { createVirtualizer } from './index.svelte';
   import type { ITableColumn, CellRendererSnippet } from "./types";
   import type { VirtualItem } from './index.svelte';
-    import CellEditable from '../CellEditable.svelte';
-    import { highlString, include } from '../../core/helpers';
+  import CellEditable from '../CellEditable.svelte';
+  import { highlString, include } from '../../core/helpers';
 
   interface VTableProps<T> {
     columns: ITableColumn<T>[];
@@ -91,6 +91,12 @@
       return filtered
     } else {
       return data
+    }
+  })
+
+  $effect(() => {
+    if(selected || !selected){
+      console.log("selected::", selected)
     }
   })
 
@@ -323,7 +329,8 @@
 
 <style>
   ._2 {
-    color: red;
+    color: #da3c3c;
+    text-decoration: underline;
   }
 
   .hsc > div {
@@ -410,8 +417,12 @@
     background-color: #f8f9fa;
   }
 
-  .vtable-row-selected {
-    background-color: #e7f3ff !important;
+  .vtable-row-selected, .vtable-row-selected.vtable-row:hover {
+    background-color: #f6f6ff;
+    outline: 2px solid var(--color-11);
+    border-radius: 5px;
+    position: relative;
+    z-index: 12;
   }
 
   .vtable-row > td {

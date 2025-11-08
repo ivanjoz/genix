@@ -1,10 +1,12 @@
 <script lang="ts">
   import { Env } from "$lib/security";
   import { Core } from "../core/store.svelte";
+  import OptionsStrip from "./micro/OptionsStrip.svelte";
   
-  const { children, css, title, type }: {
+  const { children, css, title, type, options, selected, onSelect }: {
     children: any, css?: string, title?: string, titleCss?: string,
-    options?: {id: number, name: string}[],
+    options?: [number, string][],
+    selected?: number, onSelect?: (e: any) => void,
     type: "side" | "content"
   } = $props();
 
@@ -36,6 +38,12 @@
         </button>
       </div>
     </div>
+    {#if (options||[]).length > 0}
+      <OptionsStrip options={options as [number, string][]} 
+        selected={selected}
+        onSelect={onSelect}
+      />
+    {/if}
     <div>{@render children()}</div>
   </div>
 {/if}

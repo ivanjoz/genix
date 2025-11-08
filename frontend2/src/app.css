@@ -51,6 +51,14 @@ body {
 	--menu-min-width: 70px;
 	--input-height: 44px;
   --input-border-color: #d0d4e7;
+
+	/*colors*/
+	--purple-2: #3b2e9d;
+	--purple-3: #6459a4;
+	--purple-6: #5424bc;
+	--gray-purple-1: #bcb7e7;
+	--gray-purple-2: #c3c5df;
+	--color-11: #9d9ef0;
 }
 
 /* Utility Classes - Margin */

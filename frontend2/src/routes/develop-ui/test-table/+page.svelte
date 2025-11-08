@@ -127,52 +127,6 @@
 	}
 </script>
 
-<!-- Snippet-based cellRenderer - renders actual Svelte components! -->
-{#snippet cellRendererSnippet(record: TestRecord, col: ITableColumn<TestRecord>, value: any )}	
-	<!-- Edad > 50 - red with fire emoji -->
-	{#if col.header === 'Edad' && record.edad > 50}
-		<span style="color: #ef4444; font-weight: 600;">{value} 🔥</span>
-	
-	<!-- Updated apellidos - yellow highlight -->
-	{:else if record._updated && col.header === 'Apellidos'}
-		<span style="background-color: #fef3c7; padding: 0.125rem 0.25rem; border-radius: 3px;">
-			{value}
-		</span>
-
-	{:else if col.header === 'Selector'}
-		<CellSelector id={record.id} options={data} keyField="id" valueField="nombre"
-			saveOn={record} save="selector"
-		/>
-		
-	<!-- Actions column - real interactive buttons! -->
-	{:else if col.id === 'actions'}
-		<div class="action-buttons">
-			<button class="btn-small btn-edit"
-				onclick={(e) => {
-					e.stopPropagation();
-					handleEdit(record);
-				}}
-				title="Edit"
-			>
-				✏️
-			</button>
-			<button class="btn-small btn-delete"
-				onclick={(e) => {
-					e.stopPropagation();
-					handleDelete(record);
-				}}
-				title="Delete"
-			>
-				🗑️
-			</button>
-		</div>
-	
-	<!-- Default - just show content -->
-	{:else}
-		{value}
-	{/if}
-{/snippet}
-
 <Page>
 	<div class="header-section">
 		<h2>VTable Component - Snippet-based cellRenderer Demo</h2>
@@ -203,8 +157,53 @@
 		isSelected={isRowSelected}
 		estimateSize={34}
 		overscan={15}
-		cellRenderer={useSnippetRenderer ? cellRendererSnippet : undefined}
-	/>
+	>
+		<!-- Snippet-based cellRenderer - renders actual Svelte components! -->
+		{#snippet cellRenderer(record: TestRecord, col: ITableColumn<TestRecord>, value: any )}	
+			<!-- Edad > 50 - red with fire emoji -->
+			{#if col.header === 'Edad' && record.edad > 50}
+				<span style="color: #ef4444; font-weight: 600;">{value} 🔥</span>
+			
+			<!-- Updated apellidos - yellow highlight -->
+			{:else if record._updated && col.header === 'Apellidos'}
+				<span style="background-color: #fef3c7; padding: 0.125rem 0.25rem; border-radius: 3px;">
+					{value}
+				</span>
+
+			{:else if col.header === 'Selector'}
+				<CellSelector id={record.id} options={data} keyField="id" valueField="nombre"
+					saveOn={record} save="selector"
+				/>
+				
+			<!-- Actions column - real interactive buttons! -->
+			{:else if col.id === 'actions'}
+				<div class="action-buttons">
+					<button class="btn-small btn-edit"
+						onclick={(e) => {
+							e.stopPropagation();
+							handleEdit(record);
+						}}
+						title="Edit"
+					>
+						✏️
+					</button>
+					<button class="btn-small btn-delete"
+						onclick={(e) => {
+							e.stopPropagation();
+							handleDelete(record);
+						}}
+						title="Delete"
+					>
+						🗑️
+					</button>
+				</div>
+			
+			<!-- Default - just show content -->
+			{:else}
+				{value}
+			{/if}
+		{/snippet}
+	</VTable>
 </Page>
 
 <style>
