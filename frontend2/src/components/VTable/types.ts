@@ -22,6 +22,7 @@ export interface ITableColumn<T> {
   render?: (e: T, idx: number, rerender: (ids?: number[]) => void) => (any)
 	renderHTML?: (e: T, idx: number, rerender: (ids?: number[]) => void) => string
   _colspan?: number
+	highlight?: boolean
 }
 
 /**

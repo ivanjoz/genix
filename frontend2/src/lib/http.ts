@@ -3,7 +3,7 @@ import type { IFetchEvent } from "../core/store.svelte"
 import { formatN } from "../shared/main"
 import type { CacheMode, serviceHttpProps } from "../workers/service-worker"
 import { accessHelper, Env, getToken } from "./security"
-import { fetchCache } from "./sw-cache"
+import { fetchCache, fetchCacheParsed } from "./sw-cache"
 
 export interface httpProps {
   data?: any
@@ -320,12 +320,12 @@ export class GetHandler {
       return
     }
 
-    fetchCache(this.makeProps('offline'))
+    fetchCacheParsed(this.makeProps('offline'))
     .then(cachedResponse => {
       if(cachedResponse){
         this.handler(cachedResponse)
       }
-      return fetchCache(this.makeProps('refresh'))
+      return fetchCacheParsed(this.makeProps('refresh'))
     })
     .then(fetchedResponse => {
       if(fetchedResponse){

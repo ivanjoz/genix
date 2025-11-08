@@ -1,13 +1,13 @@
 import pkg from 'notiflix';
 export const { Notify } = pkg;
 
-let throttleTimer: number
+let throttleTimer: NodeJS.Timeout | null
 
 export const throttle = (func: (() => void), delay: number) => {
   if(throttleTimer){ clearTimeout(throttleTimer) }
   throttleTimer = setTimeout(() => {
     func()
-    throttleTimer = 0
+    throttleTimer = null
   }, delay)
 }
 
@@ -41,4 +41,30 @@ export const highlString = (phrase: string, words: string[]): { text: string, hi
 
 export const parseSVG = (svgContent: string)=> {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent)}`
+}
+
+export function include(e: string, h: string | string[]) {
+  if (h && typeof h === 'string') {
+    h = h.split(' ').filter(x => x.length > 0)
+  }
+
+  if (!h || h === "undefined" || h.length === 0) {
+    return true;
+  } else if (h.length === 1) {
+    return e.includes(h[0])
+  } else if (h.length === 2) {
+    return e.includes(h[0]) && e.includes(h[1])
+  } else if (h.length === 3) {
+    return e.includes(h[0]) && e.includes(h[1]) && e.includes(h[2])
+  } else if (h.length === 4) {
+    return e.includes(h[0]) && e.includes(h[1]) && e.includes(h[2])
+      && e.includes(h[3])
+  } else if (h.length === 5) {
+    return e.includes(h[0]) && e.includes(h[1]) && e.includes(h[2])
+      && e.includes(h[3]) && e.includes(h[4])
+  } else {
+    return e.includes(h[0]) && e.includes(h[1])
+      && e.includes(h[2]) && e.includes(h[3]) && e.includes(h[4])
+      && e.includes(h[5])
+  }
 }

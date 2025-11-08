@@ -9,15 +9,8 @@
   --breakpoint-md: 749px;
 	--spacing: 1px;
 }
-
 /* CSS Variables */
 :root {
-	/* Spacing */
-	--header-height: 3rem;
-	--menu-width: 14rem;
-	--menu-w1: 14.5rem;
-	--menu-w1m: 4.5rem;
-
 	/* Colors */
 	--primary: #4042a3;
 	--secondary: #eeefff;
@@ -27,7 +20,6 @@
 	--fs1: 16px;
 	--fs2: 15px;
 	--fs3: 14px;
-	--fs-h3: 1.1rem;
 }
 
 /* Base Styles */
@@ -45,6 +37,7 @@ body {
 	background-color: #e9eef1;
 	transition: background-color 0.3s ease;
 	--page-padding: 10px;
+	--page-width: calc(100vw - var(--menu-min-width) - 20px);
 	--header-height: 46px;
 	--title-bar-height: 40px;
 	--title-bar-lg-height: 42px;
@@ -374,4 +367,46 @@ input[type='number'] {
   border-color: #b46d2f;
   color: #be682e;
   background: white;
+}
+
+.i-search {
+	background-color: white;
+	height: 34px;
+	display: flex;
+	align-items: center;
+	border-radius: 6px;
+	overflow: overlay;
+	box-shadow: #5a5e6330 0px 1px 8px 0px;
+	border: 1px solid #ffffff30;
+}
+.i-search > input {
+	height: 100%;
+	width: 100%;
+	outline: none;
+	border: none;
+}
+.i-search > div {
+	border-radius: 6px 0 0 6px;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	background-color: var(--white-3);
+	color: #696370;
+	width: 30px;
+	justify-content: center;
+	flex-shrink: 0;
+	font-size: 15px;
+	padding-top: 1px;
+}
+.i-search:focus-within {
+	border-color: #738dff;
+	box-shadow: #5a5e6330 0 1px 6px, #738dff 0 0 1px 1px;
+}
+
+.w-page {
+	overflow: auto;
+}
+
+.w-page > div {
+	min-width: calc(var(--page-width) - 2px);
 }
