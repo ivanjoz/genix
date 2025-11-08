@@ -51,7 +51,6 @@
 	role="navigation"
 	aria-label="Main navigation"
 >
-	<!-- Header spacer (3rem height) -->
 	<div class="h-48 border-b border-gray-800/30 w-full"></div>
 
 	<!-- Menu Items -->

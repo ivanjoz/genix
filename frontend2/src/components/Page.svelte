@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Env } from "$lib/security";
+    import { Core } from "../core/store.svelte";
 
   let { children, sideLayerSize }: {
     children: any, sideLayerSize?: number,
@@ -10,7 +11,12 @@
 </script>
 
 <div class="_1 p-8">
-  {@render children()}
+  {#if Core.isLoading === 0}
+    {@render children()}
+  {/if}
+  {#if Core.isLoading > 0}
+    <div class="p-16"><h2>Cargando...</h2></div>
+  {/if}
 </div>
 
 <style>

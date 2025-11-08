@@ -6,6 +6,8 @@
 	import SideMenu from '../components/SideMenu.svelte';
     import { Core } from '../core/store.svelte';
     import Modules from '../core/modules';
+    import { doInitServiceWorker } from '$lib/sw-cache';
+    import Page from '../components/Page.svelte';
 
 	let { children } = $props();
 	
@@ -14,6 +16,10 @@
 
 	$effect(() => {
 		Core.module = Modules[0]
+
+		doInitServiceWorker().then(() => {
+			Core.isLoading = 0
+		})
 	})
 
 	// Check if current route should show Header and SideMenu
@@ -30,7 +36,14 @@
 	<Header	showMenuButton={true}	title="Sistema Genix"/>
 	<!-- Side Menu -->
 	<SideMenu />
+	{#if Core.isLoading > 0}
+		<Page>
+			<div class="p-12"><h2>Cargando...</h2></div>
+		</Page>
+	{/if}
 {/if}
 
 <!-- Main Content -->
-{@render children?.()}
+{#if Core.isLoading === 0 || !showLayout}
+	{@render children?.()}
+{/if}

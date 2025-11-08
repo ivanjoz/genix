@@ -2,8 +2,10 @@
   import Layer from "../../../components/Layer.svelte";
   import Page from "../../../components/Page.svelte";
   import { Core } from "../../../core/store.svelte";
+    import { ProductosService } from "./productos.svelte";
 
   let searchText = $state("")
+  let productos = new ProductosService()
 
 </script>
 

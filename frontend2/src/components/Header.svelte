@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { fetchOnCourse } from "../core/store.svelte";
+
 	// Props
 	let {
 		title = 'Genix',
@@ -79,16 +81,13 @@
 	</div>
 
 	<!-- Right Actions -->
-	<div class="flex items-center gap-8">
-		<!-- Loading Indicator (placeholder for future implementation) -->
-		<!-- 
-		{#if isLoading}
-			<div class="px-12 py-4 bg-black/20 rounded-lg flex items-center gap-8">
-				<div class="w-8 h-8 bg-yellow-400 rounded-full animate-pulse"></div>
-				<span class="text-white text-sm">Cargando...</span>
+	<div class="flex items-center gap-8 h-full relative">
+		{#if fetchOnCourse.size > 0}
+			<div class="pm-loading mr-06">
+				<div class="bg"></div>
+				<span>{"Cargando..."}</span>
 			</div>
 		{/if}
-		-->
 
 		<!-- Settings Dropdown -->
 		<div class="relative">
@@ -189,5 +188,59 @@
 
 	.animate-spin {
 		animation: spin 1s linear infinite;
+	}
+
+	/* LOADING */
+	.pm-loading {
+		height: calc(100% - 7px);
+		margin-bottom: 1px;
+		width: 10rem;
+		text-align: left;
+		position: relative;
+		line-height: 1;
+		display: flex;
+		z-index: 210;
+		padding: 0.6px 8px 0.6px 1.8rem;
+		color: #ffffff;
+		overflow: hidden;
+		align-items: center;
+		border-radius: 7px;
+	}
+
+	.pm-loading > .pm-counter {
+		height: calc(100% - 8px);
+		background-color: black;
+		color: #fff324;
+		width: 1.4rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		position: absolute;
+		left: 4px;
+	}
+
+	.pm-loading > .bg {
+		position: absolute;
+		left: -46px;
+		right: 0;
+		top: 0;
+		bottom: 0;
+		z-index: -1;
+		background: repeating-linear-gradient(-55deg,#000000 1px,#323538 2px,	#393d42 11px,#292827 12px,#000000 20px);
+		animation-name: MOVE-BG;
+		animation-duration: 0.4s;
+		animation-timing-function: linear;
+		animation-iteration-count: infinite;
+	}
+
+	/* LOADING BAR */
+	@keyframes MOVE-BG {
+		from {
+			transform: translateX(0);
+		}
+
+		to {
+			transform: translateX(46px);
+		}
 	}
 </style>

@@ -1,5 +1,9 @@
 import { Notify } from "../core/helpers"
+import type { IFetchEvent } from "../core/store.svelte"
+import { formatN } from "../shared/main"
+import type { CacheMode, serviceHttpProps } from "../workers/service-worker"
 import { accessHelper, Env, getToken } from "./security"
+import { fetchCache } from "./sw-cache"
 
 export interface httpProps {
   data?: any
@@ -15,14 +19,14 @@ interface IHttpStatus {
   message: string 
 }
 
-export const makeRoute = (route: string, apiName?: string) => {
-  const apiUrl = apiName ? Env.API_ROUTES[apiName] : Env.API_ROUTES.MAIN
+export const makeRoute = (route: string) => {
+  const apiUrl = Env.apiRoute
   return route.includes('://') ? route : apiUrl + route
 }
 
-export const buildHeaders = (props: httpProps, contentType?: string) => {
+export const buildHeaders = (contentType?: string) => {
   const cTs: {[e: string]: string } = { "json": "application/json" }
-
+  /*
   const fromHeader = [
     location.pathname,
     (new Date()).getTimezoneOffset(),
@@ -31,17 +35,13 @@ export const buildHeaders = (props: httpProps, contentType?: string) => {
     `ram:${Env.deviceMemory || 0}`,
     ].join("_"),
   ].join("|")
-
-  if (props.headers) {
-    props.headers['x-api-key'] = fromHeader
-    return props.headers
-  }
-  const headers = new Headers()
+  */
+  const headers = {} as {[k:string]: string}
 
   if (contentType && cTs[contentType]) {
-    headers.append('Content-Type', cTs[contentType])
+    headers['Content-Type'] = cTs[contentType]
   }
-  headers.append('Authorization', `Bearer ${getToken()}`)
+  headers['Authorization'] = `Bearer ${getToken()}`
   // headers.append('x-api-key', fromHeader)
   return headers
 }
@@ -134,7 +134,7 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
 
     fetch(apiRoute, {
       method: method,
-      headers: buildHeaders(props, 'json'),
+      headers: buildHeaders('json'),
       body: JSON.stringify(data)
     })
       .then(res => parsePreResponse(res, status))
@@ -161,13 +161,112 @@ export function PUT(props: httpProps) {
   return POST_PUT(props, 'PUT')
 }
 
+
+let progressLastTime = 0
+let progressTimeStart = 0
+let progressBytes = 0
+let fetchOnCourse = 0
+
+export const setFetchProgress = (bytesLen: number) => {
+  const nowTime = Date.now()
+  if(!progressBytes){ 
+    progressTimeStart = nowTime  
+  }
+
+  progressLastTime = nowTime
+  progressBytes += bytesLen
+
+  let mbps = 0
+  const kb = progressBytes/1000
+  const elapsed = nowTime - progressTimeStart
+
+  if(elapsed > 50){
+    mbps = kb / elapsed
+  }
+  
+  let msg = `Descargando... ${formatN(kb)} kb`
+  if(mbps){
+    if(mbps > 10){ mbps = 10 }
+    msg += ` (${formatN(mbps,2)} MB/s)`
+  }
+
+  const loadingMsgDiv = document.getElementById("NotiflixLoadingMessage")
+  if(loadingMsgDiv){
+    let nextElement = loadingMsgDiv.nextElementSibling
+    if(!nextElement){
+      nextElement = document.createElement("div")
+      nextElement.setAttribute("id","NotifyProgressMessage")
+      loadingMsgDiv.parentNode.insertBefore(nextElement, loadingMsgDiv.nextSibling)
+    }
+    nextElement.innerHTML = msg
+  }
+}
+
+
+// Parsea los headers de la respuesta crear un reader
+const parseResponseAsStream = async (fetchResponse: Response, status: any, props?: httpProps) => {
+
+  const contentType = fetchResponse.headers.get("Content-Type")
+
+  if (fetchResponse.status) {
+    status.code = fetchResponse.status
+    status.message = fetchResponse.statusText
+  }
+
+  if (fetchResponse.status === 200) { 
+    const reader = fetchResponse.body.getReader()
+    const stream = new ReadableStream({
+      start(controller) {
+        fetchOnCourse++
+        return pump()
+        function pump() {
+          return reader.read().then(({ done, value }) => {
+            // When no more data needs to be consumed, close the stream
+            if (done) {
+              controller.close()
+              fetchOnCourse--
+              if(fetchOnCourse <= 0){ progressBytes = 0 }
+              return
+            }
+            // console.log("chunk obtenido:: ", value.length)
+            setFetchProgress(value.length)
+            // Enqueue the next data chunk into our target stream
+            controller.enqueue(value)
+            return pump()
+          })
+        }
+      },
+    })
+    const responseStream = new Response(stream)
+    const responseText = await responseStream.text()
+    if(props){ props.contentLength = responseText.length }
+    return Promise.resolve(JSON.parse(responseText))
+  }
+  else if (fetchResponse.status === 401) {
+    document.dispatchEvent(new Event('userLogout'))
+    console.warn('Error 401, la sesión ha expirado.')
+    Notify.failure('La sesión ha expirado, vuelva a iniciar sesión.')
+    Notify.remove()
+  }
+  else if (fetchResponse.status !== 200) {
+    console.log(fetchResponse)
+    if (!contentType || contentType.indexOf("/json") === -1) {
+      console.log('Parseando como texto')
+      return fetchResponse.text()
+    } else {
+      console.log('parseando como JSON')
+      return fetchResponse.json()
+    }
+  }
+}
+
 export function GET(props: httpProps): Promise<any> {
   const status: IHttpStatus = { code: 200, message: "" }
-  const route = makeRoute(props.route, props.apiName)
+  const route = makeRoute(props.route)
   
   return new Promise((resolve, reject) => {
     console.log("realizando fetch::", props)
-    fetch(route, { headers: buildHeaders(props) })
+    fetch(route, { headers: buildHeaders() })
       .then(res => parsePreResponse(res, status))
       .then(res => {
         return parseResponseBody(res, props, status) ? resolve(res) : reject(res)
@@ -183,16 +282,18 @@ export function GET(props: httpProps): Promise<any> {
 export class GetHandler {
 
   route = ""
+  routeParsed = ""
+  module = "a"
+
   useCache: { min: number, ver: number  } | undefined = undefined
+  headers: { [k: string]: string } | undefined = undefined
 
-  handler(e: any){
-
-  }
+  handler(e: any){}
 
   isTest: boolean = false
   Test(){
     alert(this.route)
-    
+
     setTimeout(() => {
       this.handler({ message: "Message 1" })
       setTimeout(() => {
@@ -201,7 +302,35 @@ export class GetHandler {
     },1000)
   }
 
-  fetch(){
+  makeProps(cacheMode: CacheMode): serviceHttpProps {
+    const props = {
+      routeParsed: makeRoute(this.route),
+      route: this.route,
+      useCache: this.useCache,
+      module: this.module,
+      headers: buildHeaders('json'),
+      cacheMode,
+    } as serviceHttpProps
+    return props
+  }
 
+  fetch(){
+    if(this.route.length === 0){
+      Notify.failure("No se especificó el route en productos.")
+      return
+    }
+
+    fetchCache(this.makeProps('offline'))
+    .then(cachedResponse => {
+      if(cachedResponse){
+        this.handler(cachedResponse)
+      }
+      return fetchCache(this.makeProps('refresh'))
+    })
+    .then(fetchedResponse => {
+      if(fetchedResponse){
+        this.handler(fetchedResponse)
+      }
+    })
   }
 }
