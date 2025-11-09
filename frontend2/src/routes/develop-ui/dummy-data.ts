@@ -1,4 +1,4 @@
-const usersDemo = [
+export const usersDemo = [
   {
     "name": "Adeel Solangi",
     "language": "Sindhi",

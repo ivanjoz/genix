@@ -9,6 +9,28 @@
   --breakpoint-md: 749px;
 	--spacing: 1px;
 }
+
+@font-face { 
+  font-family: 'main'; src: url("/fonts/open-sans-regular.woff2") 
+}
+@font-face { 
+  font-family: 'bold'; src: url("/fonts/open-sans-v40-latin-600.woff2") 
+}
+@font-face { 
+  font-family: 'semibold'; src: url("/fonts/open-sans-v40-latin-500.woff2") 
+}
+@font-face { 
+  font-family: 'mono'; src: url("/fonts/jetbrains-mono-regular.woff2") 
+}
+/*
+@font-face { 
+  font-family: 'bold-italic'; src: url("/fonts/open-sans-v40-latin-600italic.woff2") 
+}
+@font-face { 
+  font-family: 'mono500'; src: url("/fonts/jetbrains-mono-500.woff2") 
+}
+*/
+
 /* CSS Variables */
 :root {
 	/* Colors */
@@ -29,7 +51,7 @@
 
 body {
 	margin: 0;
-	font-family: 'Inter', system-ui, -apple-system, sans-serif;
+	font-family: main, 'Inter', system-ui, -apple-system, sans-serif;
 	overflow-x: hidden;
 	height: 100%;
 	color: #2c2b2e;
@@ -58,6 +80,7 @@ body {
 	--purple-6: #5424bc;
 	--gray-purple-1: #bcb7e7;
 	--gray-purple-2: #c3c5df;
+	--light-blue-1: #edeff6;
 	--color-11: #9d9ef0;
 }
 
@@ -65,6 +88,9 @@ body {
 .mb-12 { margin-bottom: 12px; }
 .mb-08 { margin-bottom: 8px; }
 .mb-16 { margin-bottom: 16px; }
+.fs15 { font-size: 15px; }
+.fs14 { font-size: 14px; }
+.lh-10 { line-height: 1; }
 
 /* Dark Mode */
 body.dark {
@@ -80,8 +106,24 @@ h4,
 h5,
 h6 {
 	margin: 0;
-	font-weight: 600;
+	font-family: bold;
 }
+
+.h3, .h2 {
+	font-family: bold;
+}
+.h3 {
+	font-size: 18px;
+}
+.h2 {
+	font-size: 20px;
+}
+
+.ff-bold { font-family: bold; }
+.ff-semibold { font-family: semibold; }
+.ff-main { font-family: main; }
+.ff-light { font-family: light; }
+.ff-mono, .ff-mono p { font-family: mono; }
 
 /* Buttons */
 button {
@@ -417,4 +459,11 @@ input[type='number'] {
 
 .w-page > div {
 	min-width: calc(var(--page-width) - 2px);
+}
+
+/* botones redondos */
+.bnr-1 {
+	height: 32px;
+	width: 32px;
+	border-radius: 50%;
 }

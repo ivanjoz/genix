@@ -1,9 +1,11 @@
 import { Notify } from "../core/helpers"
-import type { IFetchEvent } from "../core/store.svelte"
+import axios, { type AxiosProgressEvent } from 'axios';
 import { formatN } from "../shared/main"
 import type { CacheMode, serviceHttpProps } from "../workers/service-worker"
 import { accessHelper, Env, getToken } from "./security"
 import { fetchCache, fetchCacheParsed } from "./sw-cache"
+
+export interface IHttpStatus { code: number, message: string }
 
 export interface httpProps {
   data?: any
@@ -12,11 +14,8 @@ export interface httpProps {
   headers?: {[key: string]: string}
   successMessage?: string
   errorMessage?: string
-}
-
-interface IHttpStatus { 
-  code: number
-  message: string 
+  onUploadProgress?: (e: AxiosProgressEvent) => void
+  status?: IHttpStatus
 }
 
 export const makeRoute = (route: string) => {
@@ -161,6 +160,41 @@ export function PUT(props: httpProps) {
   return POST_PUT(props, 'PUT')
 }
 
+// Crea una solicitud HTTP request
+export const POST_XMLHR = (props: httpProps): Promise<any> => {
+  const data = props.data
+  if (typeof data !== 'object') {
+    const err = 'The data provided is not a JSON'
+    console.error(err)
+    return Promise.reject(err)
+  }
+  props.status = { code: 200, message: "" }
+  const apiRoute = makeRoute(props.route)
+
+  return new Promise((resolve, reject) => {
+    axios.post(apiRoute, data, {
+      onUploadProgress: props.onUploadProgress,
+      headers: { 'authorization': `Bearer ${getToken()}` },
+    })
+    .then(result => {
+      const data = result.data
+      if (result.status !== 200) {
+        let message = data.message || data.error || data.errorMessage
+        if (!message) message = String(data)
+        Notify.failure(data)
+        reject(data)
+      } else {
+        resolve(data)
+      }
+    })
+    .catch(error => {
+      if (error.response && error.response.data) error = error.response.data
+      const message = error.message || error.error || error.errorMessage
+      Notify.failure(String(message || error))
+      reject(error)
+    })
+  })
+}
 
 let progressLastTime = 0
 let progressTimeStart = 0
@@ -292,8 +326,6 @@ export class GetHandler {
 
   isTest: boolean = false
   Test(){
-    alert(this.route)
-
     setTimeout(() => {
       this.handler({ message: "Message 1" })
       setTimeout(() => {

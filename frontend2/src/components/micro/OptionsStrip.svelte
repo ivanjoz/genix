@@ -12,7 +12,7 @@
   } = $props()
 
   const getClass = (e: T) => {
-    let cn = "flex items-center _1"
+    let cn = "flex items-center ff-bold _1"
     const id = Array.isArray(e) ? e[0] : (e?.[keyField] || 0)
     if(id === selected){ cn += " _2" }
     if(buttonCss){ cn += " " + buttonCss }

@@ -1,15 +1,15 @@
-<script lang="ts" generics="T">
-  import { derived } from "svelte/store";
-  import s1 from "./components.module.css";
+<script lang="ts" generics="T,E">
   import { highlString, throttle } from "../core/helpers";
   import { Core } from "../core/store.svelte";
+  import s1 from "./components.module.css";
 
-  interface SearchSelectProps<T> {
-    saveOn?: any;
-    save?: string | keyof T;
+  interface SearchSelectProps<T,E> {
+    saveOn?: E;
+    save?: keyof E;
     css?: string;
     options: T[];
-    keys: string;
+    keyId: keyof T;
+    keyName: keyof T;
     label?: string;
     placeholder?: string;
     max?: number;
@@ -19,7 +19,7 @@
     required?: boolean;
     disabled?: boolean;
     clearOnSelect?: boolean;
-    avoidIDs?: number[];
+    avoidIDs?: (number|string)[];
     inputCss?: string;
     icon?: string;
     showLoading?: boolean;
@@ -30,7 +30,6 @@
     save,
     css = "",
     options = [],
-    keys,
     label,
     placeholder,
     max = 100,
@@ -44,7 +43,9 @@
     inputCss = "",
     icon,
     showLoading = false,
-  }: SearchSelectProps<T> = $props();
+    keyId,
+    keyName
+  }: SearchSelectProps<T,E> = $props();
 
   let show = $state(false);
   let filteredOptions = $state<T[]>([...options]);
@@ -52,8 +53,8 @@
   let avoidhover = $state(false);
   let isValid = $state(0);
   let selectedValue = $state("");
+  let avoidBlur = false
 
-  const [keyId, keyName] = keys.split(".") as [keyof T, keyof T];
   // let searchCardID = Math.random();
   let inputRef: HTMLInputElement;
   let words: string[] = [];
@@ -75,7 +76,7 @@
   function getSelectedFromProps(): T | undefined {
     let currValue = selected;
     if (typeof currValue === "undefined" && save && saveOn) {
-      currValue = saveOn[save as keyof T] as number | string;
+      currValue = saveOn[save as keyof E] as number | string;
     }
     let selectedItem: T | undefined;
     if (currValue) {
@@ -119,9 +120,9 @@
         onChange(selectedItem as T);
       }
     } else if (saveOn && save) {
-      const current = (saveOn[save as keyof T] || null) as number;
+      const current = (saveOn[save as keyof E] || null) as number;
       if (current !== newValue) {
-        saveOn[save as keyof T] = newValue;
+        saveOn[save as keyof E] = newValue;
         if (onChange) {
           onChange(selectedItem as T);
         }
@@ -194,9 +195,11 @@
   }
 
   function onOptionClick(opt: T) {
-    if (inputRef) {
-      setValueSaveOn(opt, true);
+    if (inputRef) { 
+      setValueSaveOn(opt, true)
+      inputRef.blur()
     }
+    show = false
   }
 
   let cN = $derived(
@@ -242,17 +245,18 @@
       {label}{@html iconValid() || ""}
     </div>
     <div class={s1.input_lab_cell_right}><div></div></div>
-  {/if}
-  <div class={s1.input_shadow_layer}>
-    <div></div>
-  </div>
-  <div class={`${s1.input_div} flex w-full`}>
-    <div class={s1.input_div_1}>
+    <div class={s1.input_shadow_layer}>
       <div></div>
     </div>
+  {/if}
+  <div class={`${s1.input_div} flex w-full`}>
+    {#if label}
+      <div class={s1.input_div_1}>
+        <div></div>
+      </div>
+    {/if}
     {#if !useLayerPicker}
-      <input
-        class={`w-full ${s1.input_inp} ${inputCss}`}
+      <input class={`w-full ${s1.input_inp} ${inputCss}`}
         bind:this={inputRef}
         onkeyup={onKeyUp}
         onpaste={onKeyUp as any}
@@ -266,12 +270,21 @@
         disabled={isDisabled || isMobile}
         onfocus={(ev) => {
           ev.stopPropagation();
-          words = [];
-          filteredOptions = filter("");
-          show = true;
+          if(!show){
+            words = [];
+            filteredOptions = filter("");
+            show = true;
+          }
         }}
         onblur={(ev) => {
           ev.stopPropagation();
+          console.log("avoidBlur 2", avoidBlur)
+          if(avoidBlur){ 
+            avoidBlur = false
+            inputRef.focus()
+            return 
+          }
+          
           let inputValue = String(inputRef.value || "").toLowerCase();
           const selectedItem = options.find((x) => {
             const itemName = String(x[keyName] || "");
@@ -282,8 +295,7 @@
         }}
       />
     {:else}
-      <div
-        class={`w-full ${s1.input_inp} ${inputCss}`}
+      <div class={`w-full ${s1.input_inp} ${inputCss}`}
         role="button" tabindex="0"
         onkeydown={(ev) => {
           if (ev.key === 'Enter' || ev.key === ' ') {
@@ -313,6 +325,11 @@
   {#if show && !useLayerPicker}
     <div class="p-4 _1 left-0 z-40 w-full{arrowSelected >= 0 ? ' on-arrow' : ''}"
       role="button" tabindex="0"
+      onmousedown={(ev) => {
+        ev.stopPropagation()
+        avoidBlur = true
+        console.log("avoidBlur 1", avoidBlur)
+      }}
       onmousemove={avoidhover
         ? (ev) => {
             console.log("hover aqui:: ", arrowSelected);
@@ -330,7 +347,7 @@
             ? ' _selected'
             : ''}"
           role="button" tabindex="0"
-          onmousedown={(ev) => {
+          onclick={(ev) => {
             ev.stopPropagation();
             onOptionClick(e);
           }}
