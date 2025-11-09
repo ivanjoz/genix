@@ -1,8 +1,7 @@
-import { goto } from '$app/navigation';
 import { Env } from '$lib/security';
+import { SvelteMap } from 'svelte/reactivity';
 import type { IMenuRecord } from '../types/menu';
 import type { IModule } from './modules';
-import { SvelteMap } from 'svelte/reactivity';
 
 export const Core = $state({
   module: { menus: [] as IMenuRecord[] } as IModule,

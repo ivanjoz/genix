@@ -32,6 +32,7 @@ if (!fs.existsSync("node_modules")){
 
 const nodemon = require("nodemon")
 
+// Frontend 1
 const frontendPath = path.join(__dirname, 'frontend')
 if (!fs.existsSync(path.join(frontendPath, "node_modules"))){ 
   console.log("No se encontraron los node_modules en el frontend. Instalando...")
@@ -42,17 +43,26 @@ if (!fs.existsSync(path.join(frontendPath, "node_modules"))){
   }
 }
 
+let frontendScript = `cd ./frontend && ${FRONTEND_SCRIPT}`
+if (isWindows) {
+  frontendScript = `cd ${frontendPath} & ${FRONTEND_SCRIPT}`
+}
+
+// Frontend 2
+const frontendPath2 = path.join(__dirname, 'frontend2')
+
+let frontendScript2 = `cd ./frontend2 && ${FRONTEND_SCRIPT}`
+if (isWindows) {
+  frontendScript2 = `cd ${frontendPath2} & ${FRONTEND_SCRIPT}`
+}
+
+// Backend
 const backendGoPath = path.join(__dirname, 'backend')
 console.log("Instalando los paquetes de Go (si no lo están)...")
 if(isWindows){
   execSync(`cd ${backendGoPath} & go mod tidy`, { stdio: "inherit", shell: true })
 } else {
   execSync('cd backend && go mod tidy', { encoding: 'utf-8' })
-}
-
-let frontendScript = `cd ./frontend && ${FRONTEND_SCRIPT}`
-if (isWindows) {
-  frontendScript = `cd ${frontendPath} & ${FRONTEND_SCRIPT}`
 }
 
 // Remove enviroment variables
@@ -116,6 +126,7 @@ const runScripts = () => {
 
   // Run all scripts in parallel
   runScript(frontendScript, YELLOW_BAR)
+  runScript(frontendScript2, YELLOW_BAR)
   startBackendGo()
 }
 

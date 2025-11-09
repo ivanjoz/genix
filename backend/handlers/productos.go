@@ -25,7 +25,7 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 			if updated > 0 {
 				q.Where(col.Updated_().GreaterThan(updated))
 			} else {
-				q.Where(col.Status_().GreaterThan(1))
+				q.Where(col.Status_().GreaterEqual(1))
 			}
 		})
 		if err != nil {

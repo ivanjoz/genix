@@ -153,6 +153,7 @@ export const getToken = () => {
 
 export const fetchCache = async (args: serviceHttpProps): Promise<FetchCacheResponse> => {
   args.routeParsed = makeApiRoute(args.route)
+  args.__version__ = args.useCache?.ver || 1
   console.log("fetching cache...", args)
 
   const response = await sendServiceMessage(3,args)
@@ -162,7 +163,7 @@ export const fetchCache = async (args: serviceHttpProps): Promise<FetchCacheResp
 
 export const fetchCacheParsed = async (args: serviceHttpProps): Promise<any> => {
   const response = await fetchCache(args)
-  debugger
+  // debugger
 
   if(response.error){
     let errMessage = response.error

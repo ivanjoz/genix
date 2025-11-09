@@ -3,7 +3,7 @@
   import { Core } from "../core/store.svelte";
   import OptionsStrip from "./micro/OptionsStrip.svelte";
   
-  const { children, css, title, type, options, selected, onSelect }: {
+  const { children, css, title, titleCss, type, options, selected, onSelect }: {
     children: any, css?: string, title?: string, titleCss?: string,
     options?: [number, string][],
     selected?: number, onSelect?: (e: any) => void,
@@ -26,7 +26,7 @@
 {#if Core.showSideLayer > 0 && type == 'side'}
   <div class="_1 {css||""}" style="width: {layerWidth};">
     <div class="flex items-center justify-between">
-      <div class="">{title}</div>
+      <div class={titleCss}>{title}</div>
       <div class="items-center">
         <button class="bx-yellow" title="close"
           onclick={ev => {

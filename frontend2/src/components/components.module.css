@@ -33,7 +33,14 @@
   /* span all columns */
   grid-row: 2;
   width: 100%;
-  border-radius: 8px;
+  border-radius: 5px;
+}
+
+.input:global(.no-label) .input_div {
+  height: calc(var(--input-height) - 4px);
+  box-shadow: rgb(74 70 86 / 22%) 0px 1px 3px 0px, rgb(55 52 64 / 14%) 0px 0px 2px 0px;
+  border: 1px solid rgb(193 197 220);
+  border-bottom: 1px solid var(--color1);
 }
 
 .input_div_1 {
@@ -44,13 +51,13 @@
   pointer-events: none;
 }
 
-.input_div_1>div {
+.input_div_1 > div {
   height: var(--input-height);
   width: 100%;
   overflow: hidden;
   border: 1px solid var(--input-border-color);
   margin-top: -10px;
-  border-radius: 8px;
+  border-radius: 5px;
   pointer-events: none;
 }
 
@@ -62,6 +69,11 @@
   outline-color: transparent;
   border: none;
   background-color: transparent;
+}
+
+.input_inp::placeholder {
+  color: #7d82ad;
+  font-size: 14px;
 }
 
 /* First row cells */
@@ -90,7 +102,7 @@
   position: absolute;
   bottom: -24px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 .input_lab_cell_left>div {
@@ -123,11 +135,158 @@
   bottom: 4px;
   width: calc(100% - 8px);
   height: 100%;
-  border-radius: 8px;
+  border-radius: 5px;
   border: 1px solid transparent;
   background: linear-gradient(0deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.2) 100%);
 }
 
 .input:focus-within .input_shadow_layer > div {
   box-shadow: rgb(186 182 255 / 80%) 0px 1px 2px 1px, #585a6630 0 0 2px;;
+}
+
+/* ImageUploader styles */
+.card_image_1 {
+  overflow: hidden;
+  border-radius: 7px;
+  border: 1px solid gray;
+  background-color: white;
+  cursor: pointer;
+}
+
+body:global(.dark) .card_image_1 {
+  background-color: #474a57;
+}
+
+.card_image_1.card_input:hover {
+  border: 1px solid rgb(110, 105, 122);
+  outline: 1px solid rgb(48, 46, 51);
+}
+
+body:global(.dark) .card_image_1.card_input:hover {
+  border-color: white;
+  outline-color: white;
+}
+
+.card_image_img1 {
+  top: 0;
+  left: 0;
+}
+
+.card_image_layer {
+  top: 0;
+  padding: 6px;
+  left: 0;
+}
+
+.card_image_layer:not(:hover) .card_image_layer_bn_close2 {
+  display: none;
+}
+
+.card_image_layer:hover,
+.card_image_layer.s1 {
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.4) 0%, rgba(255, 255, 255, 0) 25%);
+}
+
+.card_image_btn {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.card_image_btn:hover {
+  outline: 2px solid rgba(0, 0, 0, 0.7) !important;
+}
+
+.card_image_layer_loading {
+  top: 0px;
+  left: 0px;
+  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.34);
+}
+
+.card_image_upload_text {
+  font-family: 'bold';
+  color: white;
+  text-shadow: 2px 2px 6px #000000;
+  text-align: center;
+  bottom: 3rem;
+  background-color: rgba(0, 0, 0, 0.2);
+  left: 0;
+  line-height: 1.2;
+  padding: 0 8px;
+}
+
+.card_image_layer_botton {
+  bottom: 0;
+  padding: 6px;
+}
+
+.card_image_textarea {
+  background-color: #0000005c;
+  border: none;
+  border-radius: 7px;
+  color: white;
+  font-family: 'bold';
+  text-shadow: -1px 0 #000000b8, 0 1px #000000b8, 1px 0 #000000b8, 0 -1px #000000b8;
+  line-height: 1.1;
+  overflow: hidden;
+  height: auto;
+  backdrop-filter: blur(4px);
+  outline: none;
+  resize: none;
+  padding: 4px 4px;
+}
+
+.card_image_textarea:focus {
+  outline: 1px solid rgb(93, 62, 133);
+}
+
+.card_image_textarea::placeholder {
+  text-shadow: none;
+  color: white;
+}
+
+.card_image_1 input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 100%;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.card_input_layer {
+  pointer-events: none;
+}
+
+.card_image_1 input {
+  pointer-events: all;
+}
+
+.image_loading_layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.image_card_default {
+  width: 10rem;
+  height: 10rem;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.image_card_desc {
+  bottom: 0;
+  left: 0;
+  padding: 6px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 100%);
+  color: white;
 }

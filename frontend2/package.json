@@ -34,6 +34,7 @@
 		"@tanstack/svelte-virtual": "^3.13.12",
 		"@zag-js/popover": "^1.26.4",
 		"@zag-js/svelte": "^1.26.4",
+		"axios": "^1.13.2",
 		"bits-ui": "^2.14.1",
 		"esbuild": "^0.25.12",
 		"lucide-svelte": "^0.548.0",
