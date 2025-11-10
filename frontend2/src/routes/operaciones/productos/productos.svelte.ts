@@ -1,4 +1,4 @@
-import { GetHandler } from "$lib/http";
+import { GetHandler, POST } from "$lib/http";
 import { browser } from '$app/environment';
 
 export interface IProductoPropiedad {
@@ -18,11 +18,11 @@ export interface IProducto {
   ID: number,
   Nombre: string
   Descripcion: string
-  Precio?: number
-  Descuento?: number
-  PrecioFinal?: number
+  Precio: number
+  Descuento: number
+  PrecioFinal: number
   ContentHTML?: string
-  Propiedades?: IProductoPropiedades[]
+  Propiedades: IProductoPropiedades[]
   Peso?: number
   Volumen?: number
   SbnCantidad?: number
@@ -32,7 +32,7 @@ export interface IProducto {
   SbnPreciFinal?: number
   Images?: IProductoImage[]
   Image?: IProductoImage
-  CategoriasIDs?: number[]
+  CategoriasIDs: number[]
   Stock?: {a /* almacen */: number, c /* cantidad */: number}[]
   ss: number
   upd: number
@@ -68,6 +68,13 @@ export class ProductosService extends GetHandler {
   }
 }
 
+export const postProducto = (data: IProducto[]) => {
+  return POST({
+    data,
+    route: "productos",
+  })
+}
+
 export interface IListaRegistro {
   ID: number
   ListaID: number
@@ -94,15 +101,20 @@ export class ListasCompartidasService extends GetHandler {
 
   Records: IListaRegistro[] = $state([])
   RecordsMap: Map<number,IListaRegistro>= $state(new Map())
+  ListaRecordsMap: Map<number,IListaRegistro[]>= $state(new Map())
+
+  get(id: number){
+    return this.RecordsMap.get(id)
+  }
 
   handler(result: IListaRegistro[]): void {
-    console.log("listas result::", result)
 
     this.RecordsMap = new Map(result.map(x => [x.ID,x]))
     this.Records = result
+    this.ListaRecordsMap = new Map()
 
     for(const e of this.Records){
-      if(e.ListaID === 1){ // Productos Categorias
+      if([1,2].includes(e.ListaID)){ // Productos Categorias
         const imagesMap = new Map((e.Images||[]).map(x => (
           [parseInt(x.split("-")[1]),x])))
         
@@ -111,7 +123,20 @@ export class ListasCompartidasService extends GetHandler {
           e.Images.push(imagesMap.get(order)||"")
         }
       }
+
+      this.ListaRecordsMap.has(e.ListaID)
+        ? this.ListaRecordsMap.get(e.ListaID)?.push(e)
+        : this.ListaRecordsMap.set(e.ListaID, [e])
     }
+  }
+
+  addNew(e: IListaRegistro){
+    const records = this.ListaRecordsMap.get(e.ListaID) || []
+    records.unshift(e)
+    this.ListaRecordsMap.set(e.ListaID, [...records])
+    this.ListaRecordsMap = new Map(this.ListaRecordsMap)
+    this.RecordsMap.set(e.ID, e)
+    this.Records.push(e)
   }
 
   constructor(ids: number[]){

@@ -38,3 +38,20 @@ export const fetchEvent = (fetchID: number, props: IFetchEvent | 0) => {
     fetchOnCourse.set(fetchID, props)
   }
 }
+
+// Global state for managing open modals
+export const openModals = $state<number[]>([]);
+
+// Helper functions to manage modals
+export const openModal = (id: number) => {
+  if (!openModals.includes(id)) { openModals.push(id); }
+}
+
+export const closeModal = (id: number) => {
+  const index = openModals.indexOf(id);
+  if (index > -1) { openModals.splice(index, 1); }
+}
+
+export const closeAllModals = () => {
+  openModals.length = 0;
+}

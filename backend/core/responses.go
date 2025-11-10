@@ -596,10 +596,10 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 	if fmt.Sprintf("%T", *new(T)) == "string" {
 		body := fmt.Sprintf("%v", *respStruct)
 		response.Body = &body
-	} else if structLen < 0 {
+	} else if structLen < 102400 || Env.IS_LOCAL {
 		bodyBytes, err := json.Marshal(respStruct)
 		if err != nil {
-			return req.MakeErr("No se pudo serializar respuesta: " + err.Error())
+			return req.MakeErr("No se pudo serializar respuesta:", err)
 		}
 		body := string(bodyBytes)
 		response.Body = &body
@@ -816,6 +816,7 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 
 	// Si es una respuesta que viene desde disco
 	if len(response.BodyOnDisk) > 0 {
+		Log("Hay body on disk::", response.BodyOnDisk)
 		if strings.Contains(Env.REQ_ENCODING, "br") {
 			bodyBytes = CompressBrotliOnFile(response.BodyOnDisk)
 			respWriter.Header().Set("Content-Encoding", "br")
@@ -841,6 +842,13 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 			Log("Hubo un error al enviar la respuesta::", err)
 		}
 	} else {
+		bodyLen := 240
+		if len(bodyBytes) < bodyLen {
+			bodyLen = len(bodyBytes) - 1
+		}
+		Log("Body:", response.Route)
+		Log(string(bodyBytes[0:bodyLen]))
+
 		respWriter.Write(bodyBytes)
 	}
 }

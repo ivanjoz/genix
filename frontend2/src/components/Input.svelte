@@ -1,5 +1,7 @@
 <script lang="ts" generics="T">
+    import { untrack } from "svelte";
   import s1 from "./components.module.css";
+  import { type Element } from "./micro/Renderer.svelte";
 
   export interface IInput<T> {
     id?: number;
@@ -14,7 +16,7 @@
     placeholder?: string;
     disabled?: boolean;
     onChange?: () => void;
-    postValue?: any;
+    postValue?: string | Element[];
     baseDecimals?: number;
     content?: string | any;
     transform?: (v: string | number) => string | number;
@@ -43,6 +45,7 @@
     rows,
   }: IInput<T> = $props();
 
+  /*
   // Shared reactive state
   let inputUpdater = $state(new Map<number, number>());
 
@@ -54,6 +57,7 @@
     }
     inputUpdater = map;
   }
+  */
 
   const baseDecimalsValue = baseDecimals ? 10 ** baseDecimals : 0;
   let inputValue = $state("" as string | number);
@@ -93,10 +97,13 @@
       value = transform(value);
     }
 
-    if (saveOn && save) {
-      saveOn[save] = value as any;
-      isInputValid = checkIfInputIsValid();
-    }
+    untrack(() => {
+      if (saveOn && save) {
+        saveOn[save] = value as any;
+        isInputValid = checkIfInputIsValid();
+      }
+    })
+
     inputValue = value;
   }
 
@@ -109,6 +116,7 @@
     return null;
   }
 
+  /*
   $effect(() => {
     const updaterVal = id ? inputUpdater.get(id) || 0 : 0;
     updaterVal; // dependency
@@ -116,6 +124,23 @@
     inputValue = typeof v === "number" ? v : (v as string) || "";
     isInputValid = checkIfInputIsValid();
   });
+  */
+
+  let lastSaveOn: T | undefined
+
+  $effect(() => {
+    if(!saveOn || !save){ return }
+    if(lastSaveOn === saveOn){ return }
+    lastSaveOn = saveOn
+
+    if(saveOn[save] !== inputValue){
+      untrack(() => {
+        const v = saveOn[save]
+        inputValue = typeof v === "number" ? v : (v as string) || ""
+        isInputValid = checkIfInputIsValid()
+      })
+    }
+  })
 
   let cN = $derived(`${s1.input} p-rel` + (css ? " " + css : ""));
 </script>
@@ -147,6 +172,7 @@
           isChange++;
         }}
         onblur={(ev) => {
+          console.log("input saveon:",$state.snapshot(saveOn))
           onKeyUp(ev, true);
           if (onChange && isChange) {
             onChange();
@@ -155,8 +181,7 @@
         }}
       ></textarea>
     {:else}
-      <input
-        class={`w-full ${s1.input_inp} ${inputCss || ""}`}
+      <input class={`w-full ${s1.input_inp} ${inputCss || ""}`}
         bind:value={inputValue}
         type={type || "text"}
         placeholder={placeholder || ""}

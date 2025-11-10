@@ -1,6 +1,6 @@
 import pkg from 'notiflix';
 import { Env } from '../shared/env';
-export const { Notify } = pkg;
+export const { Notify, Loading } = pkg;
 
 let throttleTimer: NodeJS.Timeout | null
 

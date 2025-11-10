@@ -401,8 +401,8 @@
     width: 100%;
     border-bottom: 1px solid #e9ecef;
     transition: background-color 0.15s ease;
-    /* will-change: transform; */
     cursor: pointer;
+    height: var(--row-height);
   }
 
   .vtable-row:hover {
