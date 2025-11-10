@@ -11,18 +11,9 @@
     keyId: keyof E;
     keyName: keyof E;
     label?: string;
-    placeholder?: string;
-    max?: number;
-    onChange?: (e: E) => void;
-    selected?: number | string;
-    notEmpty?: boolean;
-    required?: boolean;
-    disabled?: boolean;
-    clearOnSelect?: boolean;
-    avoidIDs?: number[];
-    inputCss?: string;
-    icon?: string;
-    showLoading?: boolean;
+    cardCss?: string
+    inputCss?: string
+    onChange?: (e: (string|number)[]) => void;
   }
 
   const {
@@ -33,17 +24,9 @@
     keyId,
     keyName,
     label,
-    placeholder,
-    max = 100,
     onChange,
-    selected = $bindable(),
-    notEmpty = false,
-    required = false,
-    disabled = false,
-    clearOnSelect = false,
-    inputCss = "",
-    icon,
-    showLoading = false,
+    inputCss,
+    cardCss
   }: SearchSelectProps<T> = $props();
 
   let selectedIDs = $state<(number|string)[]>([])
@@ -67,20 +50,24 @@
     if(options?.length > 0){ buildMap() }
   })
 
-  $effect(() => {
-    selectedIDs
-    untrack(() => {
-      if(saveOn && save){
-        saveOn[save] = selectedIDs as NonNullable<T>[keyof T]
-      }
-    })
-  })
+  const doOnChange = () => {
+    if(saveOn && save){
+      saveOn[save] = selectedIDs as NonNullable<T>[keyof T]
+    }
+    if(onChange){ onChange(selectedIDs) }
+    //console.log("Change selectedIDs:", $state.snapshot(selectedIDs), $state.snapshot(saveOn), saveOn, save)
+  }
+
+  let prevSaveOn: T | undefined
 
   $effect(() => {
-    if(saveOn && save){
+    // console.log("Nuevo SaveOn:", $state.snapshot(saveOn))
+    if(saveOn && save && saveOn !== prevSaveOn){
+      prevSaveOn = saveOn
       buildMap()
       untrack(() => {
-        selectedIDs = saveOn[save] as (number|string)[]
+        // console.log("Asignando SaveOn:", $state.snapshot(saveOn))
+        selectedIDs = saveOn[save] as (number|string)[] || []
       })
     }
   })
@@ -95,16 +82,18 @@
 
 <div class={css}>
   <SearchSelect options={options} keyId={keyId} keyName={keyName} 
-    clearOnSelect={true} avoidIDs={selectedIDs} placeholder={label}
+    clearOnSelect={true} avoidIDs={selectedIDs} placeholder={label} 
+    css={"s1 "+inputCss}
     onChange={e => {
       if(!e){ return }
       const id = e[keyId] as number
       if(!selectedIDs.includes(id)){
-        selectedIDs.push(id)
+        selectedIDs.push(id)        
+        doOnChange()
       }
     }}
   />
-  <div class="p-4 min-h-40 _2 flex flex-wrap">
+  <div class="p-4 min-h-40 _2 flex flex-wrap {cardCss}">
     {#each selectedIDs as id }
       {@const el = getOption(id)}
       <div class="m-2 px-8 min-w-56 h-32 lh-10 flex _3">
@@ -113,6 +102,7 @@
           onclick={ev => {
             ev.stopPropagation()
             selectedIDs = selectedIDs.filter(x => x !== id)
+            doOnChange()
           }}
         >
           <i class="icon-trash"></i>

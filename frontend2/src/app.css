@@ -66,6 +66,7 @@ body {
 	--title-bar-xl-height: 44px;
 	--menu-box-height: 46px;
 	--menu-opt-height: 36px;
+	--row-height: 34px;
 	--pad-1: 12px;
 	--pad-2: 14px;
 	--pad-3: 16px;
@@ -81,6 +82,7 @@ body {
 	--gray-purple-1: #bcb7e7;
 	--gray-purple-2: #c3c5df;
 	--light-blue-1: #edeff6;
+	--input-color-bottom: rgba(109, 92, 150, 0.329);
 	--color-11: #9d9ef0;
 }
 

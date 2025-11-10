@@ -45,15 +45,8 @@ type Producto struct {
 	UpdatedBy int32 `json:",omitempty"`
 	Created   int64 `json:",omitempty"`
 	CreatedBy int32 `json:",omitempty"`
-
-	CategoriasConStock []int32 `json:",omitempty"` /* concatenada con la Empresa-ID para ser indexadas*/
-	// Categorías (necesarias para indexar)
-	/*
-		Categoria1 int16 `json:"c1,omitempty"`
-		Categoria2 int16 `json:"c2,omitempty"`
-		Categoria3 int16 `json:"c3,omitempty"`
-		Categoria4 int16 `json:"c4,omitempty"`
-	*/
+	/* concatenada con la Empresa-ID para ser indexadas*/
+	CategoriasConStock []int32 `json:",omitempty"`
 }
 
 type _e = Producto

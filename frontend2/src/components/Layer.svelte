@@ -3,10 +3,16 @@
   import { Core } from "../core/store.svelte";
   import OptionsStrip from "./micro/OptionsStrip.svelte";
   
-  const { children, css, title, titleCss, type, options, selected, onSelect }: {
+  const { 
+    children, css, title, titleCss, 
+    type, options, selected, onSelect, onSave, onDelete, saveButtonName
+  }: {
     children: any, css?: string, title?: string, titleCss?: string,
     options?: [number, string][],
-    selected?: number, onSelect?: (e: any) => void,
+    selected?: number, onSelect?: (e: any) => (void | undefined),
+    onSave?: () => void
+    onDelete?: () => void
+    saveButtonName?: string
     type: "side" | "content"
   } = $props();
 
@@ -28,6 +34,17 @@
     <div class="flex items-center justify-between">
       <div class={titleCss}>{title}</div>
       <div class="items-center">
+        {#if onDelete}
+          <button class="bx-red mr-8 lh-10" onclick={onDelete} aria-label="Eliminar">
+            <i class="icon-trash"></i>
+          </button>
+        {/if}
+        {#if onSave}
+          <button class="bx-blue mr-8 lh-10" onclick={onSave} aria-label="Guardar">
+            <i class="icon-floppy"></i>
+            <span>{saveButtonName}</span>
+          </button>
+        {/if}
         <button class="bx-yellow" title="close"
           onclick={ev => {
             ev.stopPropagation()
@@ -40,8 +57,8 @@
     </div>
     {#if (options||[]).length > 0}
       <OptionsStrip options={options as [number, string][]} 
-        selected={selected}
-        onSelect={onSelect}
+        selected={selected as number}
+        onSelect={e => { onSelect?.(e) }}
       />
     {/if}
     <div>{@render children()}</div>

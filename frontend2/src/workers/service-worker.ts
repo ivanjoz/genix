@@ -159,7 +159,7 @@ interface ILastSync {
 const handleFetchResponse = async (
   args: serviceHttpProps, lastSync: ILastSync, response: CacheContent, nowTime: number
 ): Promise<any> => {
-  args.keyID = args.keyID || "id"
+
   if(Array.isArray(response)){ response = { _default: response } }
 
   const updatedStatusDelta = extractUpdated(response)
@@ -195,18 +195,24 @@ const handleFetchResponse = async (
     for(const [respKey, newRecords] of Object.entries(response as { [k: string]: any[] })){
       if((newRecords||[]).length === 0){ continue }
 
-      const keyID = args.keysIDs && Object.hasOwn(args.keysIDs,respKey)
+      // El keysIDs puede ser un array de keys
+      const keyOrComposedID = args.keysIDs && Object.hasOwn(args.keysIDs,respKey)
         ? args.keysIDs[respKey]
         : args.keyID || "id"
+
+      const keysIDs: string[] = ["ID","id"]
+      if(typeof keyOrComposedID === 'string' && !keysIDs.includes(keyOrComposedID)){ 
+        keysIDs.unshift(keyOrComposedID) 
+      }
 
       let missingCount = 0
       let missingKeys: Set<string> = new Set()
       // Combina los registros basados en el ID
       // ***
       const makeKeyID = (r: any) => {
-        if(Array.isArray(keyID)){
+        if(Array.isArray(keyOrComposedID)){
           const arr: (string|number)[] = []
-          for(const primaryKey of keyID){
+          for(const primaryKey of keyOrComposedID){
             if(r[primaryKey]){
               arr.push(r[primaryKey])
             } else {
@@ -215,17 +221,16 @@ const handleFetchResponse = async (
               return 0
             }
           }
-          return keyID.map(x => r[x]).join("_")
-        } else if(typeof args.keyID === 'string'){
-          if(r[args.keyID]){
-            return r[args.keyID]
+          return keyOrComposedID.map(x => r[x]).join("_")
+        } else {
+          const id = r[keysIDs[0]] || r[keysIDs[1]] || r[keysIDs[2]]
+          if(id){
+            return id
           } else {
             missingCount++
-            missingKeys.add(args.keyID)
+            missingKeys.add(keysIDs[0])
             return 0
           }
-        } else {
-          console.warn(`Cache Error: En "${args.route}", no se reconoció la key: ${args.keyID}`)
         }
       }
       
@@ -240,6 +245,8 @@ const handleFetchResponse = async (
       for(const e of newRecords){
         recordsMap.set(makeKeyID(e), e)
       }
+
+      console.log("records mapp cache::",prevRecords,newRecords, recordsMap)
 
       if(missingCount > 0){
         console.warn(`Cache Error: En "${args.route}" hay ${missingCount} registros sin las siguientes keys ${[...missingKeys].join(", ")}`)
@@ -343,7 +350,6 @@ const fetchCache = async(args: serviceHttpProps) => {
 
   const fetchTime = Math.floor(Date.now()/1000)
   args.status = { code: 200, message: "" }
-  args.keyID = args.keyID || "id"
 
   try {
 
@@ -557,6 +563,7 @@ HandlersMap.set(22, async (args: { __enviroment__: string })=> {
               // 5. Get Content-Length from the Response headers
               // Fallback to response.headers.get('content-length') for case-insensitivity
               const contentLength = response.headers.get('Content-Length') || response.headers.get('content-length');
+              if(!e.size){ e.size = 0 }
               e.size += parseInt(contentLength || '0', 10)
             } else {
               // Handle case where a request might not have a matching response (unlikely for cache.keys)
