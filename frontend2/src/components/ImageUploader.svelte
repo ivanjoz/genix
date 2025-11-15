@@ -16,6 +16,10 @@ export interface ImageData {
   Description?: string;
 }
 
+export interface ImageSource {
+  src: string, description?: string, types?: string[], name?: string
+}
+
 export interface IImageUploaderProps {
   src?: string;
   types?: string[];
@@ -27,9 +31,11 @@ export interface IImageUploaderProps {
   description?: string;
   cardStyle?: string;
   onDelete?: (src: string) => void;
+  onChange?: (e: ImageSource) => void 
   cardCss?: string;
   hideFormUseMessage?: string;
   hideUploadButton?: boolean;
+  hideForm?: boolean;
   id?: number;
 }
 
@@ -39,13 +45,12 @@ export interface IImageResult {
   description?: string;
 }
 
-interface Props extends IImageUploaderProps {}
-
 let { 
   src = "",
   types = [],
   saveAPI = "images",
   refreshIndexDBCache = "",
+  onChange,
   onUploaded = undefined,
   setDataToSend = undefined,
   clearOnUpload = false,
@@ -54,12 +59,13 @@ let {
   onDelete = undefined,
   cardCss = "",
   hideFormUseMessage = "",
+  hideForm = false,
   hideUploadButton = false,
   id = undefined
-}: Props = $props();
+}: IImageUploaderProps = $props();
 
 // State
-let imageSrc = $state({ src, types, description });
+let imageSrc = $state({ src, types, description } as ImageSource);
 let progress = $state(src ? -1 : 0);
 let imageID = $state(id || Date.now() + Math.random());
 
@@ -98,6 +104,7 @@ const onFileChange = async (ev: Event) => {
     const imageB64 = await fileToImage(imageFile, 1.2);
     progress = -1;
     imageSrc = { src: imageB64, types: [], description: imageSrc.description };
+    onChange?.(imageSrc);
   } catch (error) {
     Notify.failure('Error procesando la imagen: ' + String(error));
     progress = 0;
@@ -197,8 +204,8 @@ export const uploadCurrentImages = async () => {
       {#if imageSrc.types?.includes('webp')}
         <source type="image/webp" srcset={makeImageSrc() + '.webp'} />
       {/if}
-      <img class="w-full h-full p-4 absolute card_image_img1"
-        src={makeImageSrc() + (imageSrc.types?.length > 0 ? `.${imageSrc.types[0]}` : '')}
+      <img class="w-full h-full absolute card_image_img1"
+        src={makeImageSrc() + ((imageSrc.types||[]).length > 0 ? `.${imageSrc?.types?.[0]}` : '')}
         alt="Upload preview"
       />
     </picture>
@@ -206,7 +213,7 @@ export const uploadCurrentImages = async () => {
 
   {#if progress === -1}
     <div class="w-full h-full absolute card_image_layer{isImageBase64() ? ' s1' : ''}">
-      {#if isImageBase64() && !hideFormUseMessage}
+      {#if isImageBase64() && !hideFormUseMessage && !hideForm}
         <textarea
           class="w-full card_image_textarea"
           rows={3}
@@ -214,6 +221,7 @@ export const uploadCurrentImages = async () => {
           onblur={(ev) => {
             ev.stopPropagation();
             imageSrc.description = ev.currentTarget.value || '';
+            onChange?.(imageSrc);
           }}
         ></textarea>
       {/if}
@@ -234,6 +242,7 @@ export const uploadCurrentImages = async () => {
               return;
             }
             imageSrc = { src: '', types: [], description: '' };
+            onChange?.(imageSrc);
             progress = 0;
           }}
         >
@@ -377,13 +386,15 @@ export const uploadCurrentImages = async () => {
     overflow: hidden;
     height: auto;
     backdrop-filter: blur(4px);
-    outline: none;
+    outline-offset: 0;
+    outline: 2px solid #ffffff60;
     resize: none;
     padding: 4px 4px;
   }
 
   .card_image_textarea:focus {
-    outline: 1px solid rgb(93, 62, 133);
+    outline-color:rgb(189, 141, 253);
+    outline-offset: 0;
   }
 
   .card_image_textarea::placeholder {

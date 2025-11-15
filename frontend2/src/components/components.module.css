@@ -235,13 +235,15 @@ body:global(.dark) .card_image_1.card_input:hover {
   overflow: hidden;
   height: auto;
   backdrop-filter: blur(4px);
-  outline: none;
+  outline: 2px solid #ffffffa3;
+  outline-offset: 0;
   resize: none;
   padding: 4px 4px;
 }
 
 .card_image_textarea:focus {
-  outline: 1px solid rgb(93, 62, 133);
+  outline: 1px solid rgb(126, 77, 189);
+  outline-offset: 0;
 }
 
 .card_image_textarea::placeholder {
@@ -294,4 +296,11 @@ body:global(.dark) .card_image_1.card_input:hover {
   padding: 6px;
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 100%);
   color: white;
+}
+
+.input_post_value {
+  position: absolute;
+  right: 7px;
+  bottom: calc(var(--input-height) / 2 - 16px);
+  color: #585799;
 }

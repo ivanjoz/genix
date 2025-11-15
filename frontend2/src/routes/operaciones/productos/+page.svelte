@@ -1,4 +1,5 @@
 <script lang="ts">
+    import CheckboxOptions from "$components/CheckboxOptions.svelte";
     import Input from "$components/Input.svelte";
     import { openModal } from "$core/store.svelte";
     import { Loading, Notify } from "$lib/helpers";
@@ -68,6 +69,9 @@
       return
     }
 
+    console.log("productor a enviar:",$state.snapshot(productoForm))
+    // return
+
     Loading.standard("Guardando producto...")
     try {
       var result = await postProducto([productoForm])
@@ -98,7 +102,7 @@
     <div class="i-search w-200 ml-12">
       <div><i class="icon-search"></i></div>
       <input type="text" onkeyup={ev => {
-        const value = String(ev.target?.value||"")
+        const value = String((ev.target as any).value||"")
         throttle(() => { filterText = value },150)
       }}>
     </div>
@@ -161,22 +165,22 @@
           />
         </div>
         <Input label="Precio Base" saveOn={productoForm} css="col-span-5"
-          save="Precio" type="number"
+          save="Precio" type="number" baseDecimals={2}
         />
         <Input label="Descuento" saveOn={productoForm} css="col-span-5"
-          save="Descuento" postValue="%"
+          save="Descuento" postValue="%" type="number"
         />
         <Input label="Precio Final" saveOn={productoForm} css="col-span-5"
-          save="PrecioFinal"
+          save="PrecioFinal" type="number" baseDecimals={2}
         />
         <SearchSelect label="Moneda" saveOn={productoForm} css="col-span-5"
-          save="_moneda" keyId="i" keyName="v"
+          save="MonedaID" keyId="i" keyName="v"
           options={[
-            {i:1, v:"PEN (S/.)"},{i:2, v:"g"},{i:3, v:"Libras"}
+            {i:1, v:"PEN (S/.)"},{i:2, v:"USD ($)"}
           ]}
         />
         <Input label="Peso" saveOn={productoForm} css="col-span-5"
-          save="Peso"
+          save="Peso" type="number"
         />
         <SearchSelect label="Unidad" saveOn={productoForm} css="col-span-5"
           save="UnidadID" keyId="i" keyName="v"
@@ -185,7 +189,7 @@
           ]}
         />
         <Input label="Volumen" saveOn={productoForm} css="col-span-5"
-          save="Volumen"
+          save="Volumen" type="number"
         />
         <SearchSelect label="Marca" saveOn={productoForm} css="col-span-10 mb-2"
           save="MarcaID" keyId="i" keyName="v"
@@ -194,7 +198,9 @@
           ]}
         />
         <div class="col-span-5">
-          <div class="h-10">_</div>
+          <CheckboxOptions save="Params" saveOn={productoForm} type="multiple"
+            options={[{i:1, v:"SKU Individual"}]} keyId="i" keyName="v"
+          />
         </div>
         <Input saveOn={productoForm} save="Descripcion"
           css="col-span-24 mb-4" label="Descripción Corta" 
@@ -204,23 +210,23 @@
           cardCss="grow" inputCss="w-180" bind:saveOn={productoForm}
           save="CategoriasIDs"
         />
-        <div class="ff-bold h3 col-span-24 mb-4 ml-8">
+        <div class="ff-bold h3 col-span-24 ml-8">
           Sub-Unidades
         </div>
         <Input saveOn={productoForm} save="SbnUnidad" 
-          css="col-span-5" label="Nombre"
+          css="col-span-6" label="Nombre"
         />
         <Input saveOn={productoForm} save="SbnPrecio" baseDecimals={2}
-          css="col-span-5" label="Precio Base" type="number"
+          css="col-span-6" label="Precio Base" type="number"
         />
-        <Input saveOn={productoForm} save="SbnDescuento"
-          css="col-span-4" label="Descuento" type="number"
+        <Input saveOn={productoForm} save="SbnDescuento" postValue="%"
+          css="col-span-6" label="Descuento" type="number"
         />
         <Input saveOn={productoForm} save="SbnPreciFinal" baseDecimals={2}
-          css="col-span-5" label="Precio Final" type="number"
+          css="col-span-6" label="Precio Final" type="number"
         />
         <Input saveOn={productoForm} save="SbnCantidad" 
-          css="col-span-5" label="Cantidad" type="number"
+          css="col-span-6" label="Cantidad" type="number"
         />
       </div>
     {/if}
