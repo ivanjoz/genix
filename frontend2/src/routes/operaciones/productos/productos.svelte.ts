@@ -20,6 +20,7 @@ export interface IProducto {
   Descripcion: string
   Precio: number
   Descuento: number
+  MonedaID: number
   PrecioFinal: number
   ContentHTML?: string
   Propiedades: IProductoPropiedades[]
@@ -33,7 +34,10 @@ export interface IProducto {
   Images?: IProductoImage[]
   Image?: IProductoImage
   CategoriasIDs: number[]
+  MarcaID: number
+  UnidadID: number
   Stock?: {a /* almacen */: number, c /* cantidad */: number}[]
+  Params: number[]
   ss: number
   upd: number
   _stock?: number

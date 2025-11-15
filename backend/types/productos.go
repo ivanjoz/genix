@@ -16,14 +16,16 @@ type Producto struct {
 	TAGS          `table:"productos"`
 	EmpresaID     int32 `json:",omitempty"`
 	ID            int32
-	TempID        int32   `json:"-"`
-	Nombre        string  `db:"nombre"`
+	TempID        int32 `json:"-"`
+	Nombre        string
 	Descripcion   string  `json:",omitempty"`
 	ContentHTML   string  `json:",omitempty"`
 	CategoriasIDs []int32 `json:",omitempty"`
 	MarcaID       int32   `json:",omitempty"`
 	Params        []int8  `json:",omitempty"`
 	Precio        int32   `json:",omitempty"`
+	MonedaID      int16   `json:",omitempty"`
+	UnidadID      int16   `json:",omitempty"`
 	Descuento     float32 `json:",omitempty"`
 	PrecioFinal   int32   `json:",omitempty"`
 	Peso          float32 `json:",omitempty"`
@@ -65,6 +67,8 @@ func (e _e) Descuento_() db.CoF32          { return db.CoF32{"descuento"} }
 func (e _e) PrecioFinal_() db.CoI32        { return db.CoI32{"precio_final"} }
 func (e _e) Peso_() db.CoF32               { return db.CoF32{"peso"} }
 func (e _e) Volumen_() db.CoF32            { return db.CoF32{"volumen"} }
+func (e _e) MonedaID_() db.CoI16           { return db.CoI16{"moneda_id"} }
+func (e _e) UnidadID_() db.CoI16           { return db.CoI16{"unidad_id"} }
 func (e _e) SbnCantidad_() db.CoI32        { return db.CoI32{"sbn_cantidad"} }
 func (e _e) SbnUnidad_() db.CoStr          { return db.CoStr{"sbn_unidad"} }
 func (e _e) MarcaID_() db.CoI32            { return db.CoI32{"marca_id"} }

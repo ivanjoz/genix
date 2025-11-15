@@ -1,8 +1,9 @@
 <script lang="ts">
-    import { derived } from "svelte/store";
-    import type { ListasCompartidasService } from "./productos.svelte";
+    import ImageUploader, { type ImageSource } from "$components/ImageUploader.svelte";
+    import Input from "$components/Input.svelte";
     import Modal from "$components/Modal.svelte";
     import { closeModal, openModal } from "$core/store.svelte";
+    import type { IListaRegistro, ListasCompartidasService } from "./productos.svelte";
 
 
   const { 
@@ -17,6 +18,9 @@
     console.log("listas getted:", $state.snapshot(listas))
     return listas.ListaRecordsMap.get(origin) || []
   })
+
+  let form = $state({} as IListaRegistro)
+  let images = $state([{},{},{}] as ImageSource[])
 
   /*
 
@@ -61,7 +65,27 @@
 
   }}
   >
-  <h1>hola</h1>
+  <div class="grid grid-cols-12 gap-10 p-6">
+    <Input label="Nombre" css="col-span-12"
+      saveOn={form} save="Nombre" required={true}
+    />
+    <Input label="Descripción" css="col-span-12 mb-16"
+      saveOn={form} save="Descripcion"
+    />
+    {#each images as image }
+      <ImageUploader clearOnUpload={true}
+        src={image.name ? `producto-categoria/${image.name}-x2` : ""}
+        cardCss="w-full h-180 p-4 col-span-4"
+        hideUploadButton={true} hideForm={true}
+        onChange={e => {
+          Object.assign(image, e)
+        }}
+        onUploaded={src => {
+          console.log("imagen subida::", src)
+        }}
+      />
+    {/each }
+  </div>
 </Modal>
 
 <style>

@@ -64,6 +64,11 @@
   let isInputValid = $state(checkIfInputIsValid());
   let isChange = 0;
 
+  const makeValue = (value: number) => {
+    if(typeof value !== 'number'){ return value || "" }
+    return baseDecimals ? (value as number / baseDecimals) : value
+  }
+
   function checkIfInputIsValid(): number {
     if (!required || disabled) return 0;
     if (!saveOn || !save) return 1;
@@ -89,7 +94,6 @@
         value = undefined as any;
       } else {
         value = parseFloat(value as string);
-        if (baseDecimalsValue) value = Math.round(value * baseDecimalsValue);
       }
     }
 
@@ -99,7 +103,11 @@
 
     untrack(() => {
       if (saveOn && save) {
-        saveOn[save] = value as any;
+        let valueSaved = value
+        if(baseDecimalsValue && typeof valueSaved === 'number'){
+          valueSaved = Math.round(valueSaved * baseDecimalsValue);
+        }
+        saveOn[save] = valueSaved as NonNullable<T>[keyof T];
         isInputValid = checkIfInputIsValid();
       }
     })
@@ -137,6 +145,9 @@
       untrack(() => {
         const v = saveOn[save]
         inputValue = typeof v === "number" ? v : (v as string) || ""
+        if(baseDecimalsValue && typeof inputValue === 'number'){ 
+          inputValue = inputValue / baseDecimalsValue 
+        }
         isInputValid = checkIfInputIsValid()
       })
     }
@@ -161,16 +172,11 @@
       <div></div>
     </div>
     {#if useTextArea}
-      <textarea
-        class={`w-full ${s1.input_inp} ${inputCss || ""}`}
+      <textarea class={`w-full ${s1.input_inp} ${inputCss || ""}`}
         bind:value={inputValue}
         placeholder={placeholder || ""}
         {disabled}
         {rows}
-        onkeyup={(ev) => {
-          onKeyUp(ev);
-          isChange++;
-        }}
         onblur={(ev) => {
           console.log("input saveon:",$state.snapshot(saveOn))
           onKeyUp(ev, true);
@@ -181,15 +187,11 @@
         }}
       ></textarea>
     {:else}
-      <input class={`w-full ${s1.input_inp} ${inputCss || ""}`}
+      <input class="w-full {s1.input_inp} {inputCss || ""}"
         bind:value={inputValue}
         type={type || "text"}
         placeholder={placeholder || ""}
         {disabled}
-        onkeyup={(ev) => {
-          onKeyUp(ev);
-          isChange++;
-        }}
         onblur={(ev) => {
           onKeyUp(ev, true);
           if (onChange && isChange) {
@@ -204,7 +206,7 @@
       {@html iconValid() || ""}
     {/if}
     {#if postValue}
-      {postValue}
+      <div class="{s1.input_post_value}">{postValue}</div>
     {/if}
   </div>
 </div>
