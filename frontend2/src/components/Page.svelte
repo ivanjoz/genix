@@ -1,13 +1,20 @@
 <script lang="ts">
   import { Env } from "$lib/security";
+    import { onMount } from "svelte";
     import { Core } from "../core/store.svelte";
 
-  let { children, sideLayerSize }: {
-    children: any, sideLayerSize?: number,
+  let { children, sideLayerSize, title, options }: {
+    children: any, sideLayerSize?: number, title: string
     options?: {id: number, name: string}[]
   } = $props();
 
   Env.sideLayerSize = sideLayerSize || 0
+
+  onMount(() => {
+    Core.pageTitle = title || ""
+    Core.pageOptions = options || []
+  })
+
 </script>
 
 <div class="_1 p-10">

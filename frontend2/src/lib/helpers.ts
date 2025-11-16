@@ -1,11 +1,26 @@
 import pkg from 'notiflix';
 import { Env } from '../shared/env';
-export const { Notify, Loading } = pkg;
+export const { Notify, Loading, Confirm } = pkg;
 
 let throttleTimer: NodeJS.Timeout | null
 
 if(typeof window !== 'undefined'){
   Loading.init({ zindex: 400 })
+}
+
+export const ConfirmWarn = (
+  a: string, b: string, c: string, d?: string, e?: () => void, f?: () => void,
+) =>{
+  Confirm.init({
+    fontFamily:'main',
+    messageFontSize:'15px',
+    titleColor:'#db3030',
+    titleFontSize:'18px',
+    messageColor:'#1e1e1e',
+    okButtonColor:'#f8f8f8',
+    okButtonBackground:'#f35c5c',
+  })
+  Confirm.show(a,b,c,d,e,f)
 }
 
 export const throttle = (func: (() => void), delay: number) => {

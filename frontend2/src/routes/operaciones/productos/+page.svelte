@@ -3,7 +3,8 @@
     import Input from "$components/Input.svelte";
     import HTMLEditor from "$components/micro/HTMLEditor.svelte";
     import { openModal } from "$core/store.svelte";
-    import { Loading, Notify } from "$lib/helpers";
+    import { ConfirmWarn, Loading, Notify } from "$lib/helpers";
+    import { POST } from "$lib/http";
     import ImageUploader from "../../../components/ImageUploader.svelte";
     import Layer from "../../../components/Layer.svelte";
     import OptionsStrip from "../../../components/micro/OptionsStrip.svelte";
@@ -96,9 +97,26 @@
     console.log("productor form:", $state.snapshot(productoForm))
   })
 
+  const deleteProductoImage = async (ImageToDelete: string) => {
+    Loading.standard("Eliminando Imagen...")
+    try {
+      await POST({
+        data: { ProductoID: productoForm.ID, ImageToDelete },
+        route: "producto-image",
+        refreshRoutes: ["productos"],
+      }) 
+    } catch (error) {
+      Notify.failure(`Error al eliminar imagen: ${error}`)
+      Loading.remove()
+      return
+    }    
+    Loading.remove()
+    productoForm.Images = (productoForm.Images||[]).filter(e => e.n !== ImageToDelete)
+  }
+
 </script>
 
-<Page sideLayerSize={780}>
+<Page sideLayerSize={780} title="Productos">
   <div class="flex items-center mb-8">
     <OptionsStrip selected={view}
       options={[[1,"Productos"],[2,"Categorías"],[3,"Marcas"]]} 
@@ -166,7 +184,7 @@
         <div class="col-span-9 row-span-4">
           <ImageUploader saveAPI="producto-image"
             clearOnUpload={true} types={["avif","webp"]}
-            src={productoForm.Image ? `img-productos/${productoForm.Image.n}-x2` : ""}
+            folder="img-productos" size={2} src={productoForm.Image?.n}
             cardCss="w-full h-180  p-4"
             setDataToSend={e => {
               e.ProductoID = productoForm.ID
@@ -248,6 +266,38 @@
     {#if layerView === 2}
       <HTMLEditor saveOn={productoForm} save="ContentHTML" 
         css="mt-12"/>
+    {/if}
+    {#if layerView === 4}
+      <div class="grid grid-cols-4 items-start gap-x-10 gap-y-10 mt-16">
+        <ImageUploader saveAPI="producto-image"
+          clearOnUpload={true} types={["avif","webp"]} folder="img-productos"
+          cardCss="w-full h-170 p-4"
+          setDataToSend={e => {
+            e.ProductoID = productoForm.ID
+          }}
+          onUploaded={(imagePath, description) => {
+            if(imagePath.includes("/")){ imagePath = imagePath.split("/")[1] }
+            productoForm.Image = { n: imagePath, d: description } as IProductoImage
+            productoForm.Images = productoForm.Images || []
+            productoForm.Images.unshift(productoForm.Image)
+          }}
+        />
+        {#each (productoForm.Images||[]) as image }
+          <ImageUploader saveAPI="producto-image" size={2}
+            clearOnUpload={true} types={["avif","webp"]} folder="img-productos"
+            cardCss="w-full h-170 p-4" src={image?.n}
+            onDelete={() => {
+              ConfirmWarn("ELIMINAR IMAGEN",
+                `Eliminar la imagen ${image.d ? `"${image.d}"` : "seleccionada"}`,
+                "SI","NO",
+                () => {
+                  deleteProductoImage(image.n)
+                }
+              )
+            }}
+          />
+        {/each}
+      </div>
     {/if}
   </Layer>
   {#if view === 2}

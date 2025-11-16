@@ -11,7 +11,9 @@ export const Core = $state({
   mobileMenuOpen: 0 as number,
   popoverShowID: 0 as number | string,
   showSideLayer: 0 as number,
-  isLoading: 1
+  isLoading: 1,
+  pageTitle: "" as string,
+  pageOptions: [] as {id: number, name: string}[],
 })
 
 export const WeakSearchRef: WeakMap<any,{ 

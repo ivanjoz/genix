@@ -52,7 +52,7 @@ export interface IProductoResult {
 
 export class ProductosService extends GetHandler {
   route = "productos"
-  useCache = { min: 5, ver: 8 }
+  useCache = { min: 5, ver: 9 }
 
   productos: IProducto[] = $state([])
   productosMap: Map<number,IProducto> = $state(new Map())
@@ -80,6 +80,7 @@ export const postProducto = (data: IProducto[]) => {
   return POST({
     data,
     route: "productos",
+    refreshRoutes: ["productos"]
   })
 }
 
