@@ -8,7 +8,6 @@ import 'froala-editor/js/plugins/align.min.js'
 import 'froala-editor/css/plugins/table.min.css'
 import { onMount, onCleanup, on, createEffect } from 'solid-js'
 import s1 from '../operaciones/operaciones.module.css'
-import './froala.css'
 import { IProducto } from '~/services/operaciones/productos'
 
 interface IProductoFichaEditor {

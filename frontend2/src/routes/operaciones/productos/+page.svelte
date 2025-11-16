@@ -1,6 +1,7 @@
 <script lang="ts">
     import CheckboxOptions from "$components/CheckboxOptions.svelte";
     import Input from "$components/Input.svelte";
+    import HTMLEditor from "$components/micro/HTMLEditor.svelte";
     import { openModal } from "$core/store.svelte";
     import { Loading, Notify } from "$lib/helpers";
     import ImageUploader from "../../../components/ImageUploader.svelte";
@@ -243,6 +244,10 @@
           css="col-span-6" label="Cantidad" type="number"
         />
       </div>
+    {/if}
+    {#if layerView === 2}
+      <HTMLEditor saveOn={productoForm} save="ContentHTML" 
+        css="mt-12"/>
     {/if}
   </Layer>
   {#if view === 2}
