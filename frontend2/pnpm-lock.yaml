@@ -38,6 +38,9 @@ importers:
       esbuild:
         specifier: ^0.25.12
         version: 0.25.12
+      froala-editor:
+        specifier: ^4.7.0
+        version: 4.7.0
       lucide-svelte:
         specifier: ^0.548.0
         version: 0.548.0(svelte@5.42.2)
@@ -881,6 +884,9 @@ packages:
   form-data@4.0.4:
     resolution: {integrity: sha512-KrGhL9Q4zjj0kiUt5OO4Mr/A/jlI2jDYs5eHBpYHPcBEVSiipAvn2Ko2HnPe20rmcuuvMHNdZFp+4IlGTMF0Ow==}
     engines: {node: '>= 6'}
+
+  froala-editor@4.7.0:
+    resolution: {integrity: sha512-Q3AK/7kX+AtO5ca/7RYB5lqwcCZ5sq2XkgFceMXdcq48M86wLbi4GZcxeU5LmCpUH93MnJ3DLlis+P341H1L1w==}
 
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
@@ -2103,6 +2109,8 @@ snapshots:
       es-set-tostringtag: 2.1.0
       hasown: 2.0.2
       mime-types: 2.1.35
+
+  froala-editor@4.7.0: {}
 
   fsevents@2.3.3:
     optional: true

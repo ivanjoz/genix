@@ -37,6 +37,7 @@
 		"axios": "^1.13.2",
 		"bits-ui": "^2.14.1",
 		"esbuild": "^0.25.12",
+		"froala-editor": "^4.7.0",
 		"lucide-svelte": "^0.548.0",
 		"mime-types": "^3.0.1",
 		"notiflix": "^3.2.8",
