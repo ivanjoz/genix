@@ -3,7 +3,8 @@ import axios, { type AxiosProgressEvent } from 'axios';
 import { formatN } from "../shared/main"
 import type { CacheMode, serviceHttpProps } from "../workers/service-worker"
 import { accessHelper, Env, getToken } from "./security"
-import { fetchCache, fetchCacheParsed } from "./sw-cache"
+import { fetchCache, fetchCacheParsed, sendServiceMessage } from "./sw-cache"
+import { browser } from "$app/environment";
 
 export interface IHttpStatus { code: number, message: string }
 
@@ -16,6 +17,7 @@ export interface httpProps {
   errorMessage?: string
   onUploadProgress?: (e: AxiosProgressEvent) => void
   status?: IHttpStatus
+  refreshRoutes?: string[]
 }
 
 export const makeRoute = (route: string) => {
@@ -126,7 +128,11 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
   }
   
   const status: IHttpStatus = { code: 200, message: "" }
-  const apiRoute = makeRoute(props.route, props.apiName)
+  const apiRoute = makeRoute(props.route)
+
+  if((props.refreshRoutes||[]).length > 0){
+    sendServiceMessage(24, { routes: props.refreshRoutes })
+  }
 
   return new Promise((resolve, reject) => {
     console.log(`Fetching ${method} : ` + props.route)
@@ -136,19 +142,19 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
       headers: buildHeaders('json'),
       body: JSON.stringify(data)
     })
-      .then(res => parsePreResponse(res, status))
-      .then(res => {
-        parseResponseBody(res, props, status) ? resolve(res) : reject(res)
-      })
-      .catch(error => {
-        console.log('error::', error)
-        if (props.errorMessage) {
-          Notify.failure(props.errorMessage)
-        } else {
-          Notify.failure(String(error))
-        }
-        reject(error)
-      })
+    .then(res => parsePreResponse(res, status))
+    .then(res => {
+      parseResponseBody(res, props, status) ? resolve(res) : reject(res)
+    })
+    .catch(error => {
+      console.log('error::', error)
+      if (props.errorMessage) {
+        Notify.failure(props.errorMessage)
+      } else {
+        Notify.failure(String(error))
+      }
+      reject(error)
+    })
   })
 }
 
@@ -347,6 +353,7 @@ export class GetHandler {
   }
 
   fetch(){
+    if(!browser){ return }
     if(this.route.length === 0){
       Notify.failure("No se especificó el route en productos.")
       return
@@ -355,12 +362,14 @@ export class GetHandler {
     fetchCacheParsed(this.makeProps('offline'))
     .then(cachedResponse => {
       if(cachedResponse){
+        delete cachedResponse.__version__
         this.handler(cachedResponse)
       }
       return fetchCacheParsed(this.makeProps('refresh'))
     })
     .then(fetchedResponse => {
       if(fetchedResponse){
+        delete fetchedResponse.__version__
         this.handler(fetchedResponse)
       }
     })

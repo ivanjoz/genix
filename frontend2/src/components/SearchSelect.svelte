@@ -4,16 +4,16 @@
   import s1 from "./components.module.css";
 
   interface SearchSelectProps<T,E> {
-    saveOn?: E;
-    save?: keyof E;
+    saveOn?: T;
+    save?: keyof T;
     css?: string;
-    options: T[];
-    keyId: keyof T;
-    keyName: keyof T;
+    options: E[];
+    keyId: keyof E;
+    keyName: keyof E;
     label?: string;
     placeholder?: string;
     max?: number;
-    onChange?: (e: T) => void;
+    onChange?: (e: E) => void;
     selected?: number | string;
     notEmpty?: boolean;
     required?: boolean;
@@ -48,7 +48,7 @@
   }: SearchSelectProps<T,E> = $props();
 
   let show = $state(false);
-  let filteredOptions = $state<T[]>([...options]);
+  let filteredOptions = $state<E[]>([...options]);
   let arrowSelected = $state(-1);
   let avoidhover = $state(false);
   let isValid = $state(0);
@@ -73,12 +73,12 @@
     }
   }
 
-  function getSelectedFromProps(): T | undefined {
+  function getSelectedFromProps(): E | undefined {
     let currValue = selected;
     if (typeof currValue === "undefined" && save && saveOn) {
-      currValue = saveOn[save as keyof E] as number | string;
+      currValue = saveOn[save as keyof T] as number | string;
     }
-    let selectedItem: T | undefined;
+    let selectedItem: E | undefined;
     if (currValue) {
       selectedItem = options.find((x) => x[keyId] === currValue);
     }
@@ -91,7 +91,7 @@
 
   let prevSetValueTime = Date.now();
 
-  function setValueSaveOn(selectedItem?: T, setOnInput?: boolean) {
+  function setValueSaveOn(selectedItem?: E, setOnInput?: boolean) {
     const nowTime = Date.now();
     if (nowTime - prevSetValueTime < 80) {
       return;
@@ -117,20 +117,20 @@
 
     if (clearOnSelect) {
       if (onChange) {
-        onChange(selectedItem as T);
+        onChange(selectedItem as E);
       }
     } else if (saveOn && save) {
-      const current = (saveOn[save as keyof E] || null) as number;
+      const current = (saveOn[save as keyof T] || null) as number;
       if (current !== newValue) {
-        saveOn[save as keyof E] = newValue;
+        saveOn[save as keyof T] = newValue as NonNullable<T>[keyof T];
         if (onChange) {
-          onChange(selectedItem as T);
+          onChange(selectedItem as E);
         }
       }
     } else if (typeof selected !== "undefined") {
       if ((selected || null) !== newValue) {
         if (onChange) {
-          onChange(selectedItem as T);
+          onChange(selectedItem as E);
         }
       }
     }
@@ -142,11 +142,11 @@
     }
     const avoidIDSet = new Set(avoidIDs || []);
 
-    const filtered: T[] = [];
+    const filtered: E[] = [];
     for (let op of options) {
       if (
         avoidIDSet.size > 0 &&
-        avoidIDSet.has(op[keyId as keyof T] as number)
+        avoidIDSet.has(op[keyId as keyof E] as number)
       ) {
         continue;
       }
@@ -194,7 +194,7 @@
     }
   }
 
-  function onOptionClick(opt: T) {
+  function onOptionClick(opt: E) {
     if (inputRef) { 
       setValueSaveOn(opt, true)
       inputRef.blur()

@@ -2,6 +2,7 @@ import { Env } from '$lib/security';
 import { SvelteMap } from 'svelte/reactivity';
 import type { IMenuRecord } from '../types/menu';
 import type { IModule } from './modules';
+import type { IImageResult } from '$components/ImageUploader.svelte';
 
 export const Core = $state({
   module: { menus: [] as IMenuRecord[] } as IModule,
@@ -55,3 +56,6 @@ export const closeModal = (id: number) => {
 export const closeAllModals = () => {
   openModals.length = 0;
 }
+
+// Map to store images to upload (global state)
+export const imagesToUpload = new Map<number, () => Promise<IImageResult>>();

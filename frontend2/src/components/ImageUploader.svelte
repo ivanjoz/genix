@@ -1,8 +1,9 @@
 <script lang="ts">
 import { POST_XMLHR } from '$lib/http';
-import { onDestroy } from 'svelte';
+import { onDestroy, untrack } from 'svelte';
 import { Notify, fileToImage } from '$lib/helpers';
 import { Env } from '../shared/env';
+import { imagesToUpload } from '$core/store.svelte';
 
 export interface IImageInput {
   content: string;
@@ -17,7 +18,8 @@ export interface ImageData {
 }
 
 export interface ImageSource {
-  src: string, description?: string, types?: string[], name?: string
+  src: string, base64: string, description?: string, types?: string[], name?: string,
+  _id?: number
 }
 
 export interface IImageUploaderProps {
@@ -37,6 +39,8 @@ export interface IImageUploaderProps {
   hideUploadButton?: boolean;
   hideForm?: boolean;
   id?: number;
+  size?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+  folder?: string
 }
 
 export interface IImageResult {
@@ -61,35 +65,37 @@ let {
   hideFormUseMessage = "",
   hideForm = false,
   hideUploadButton = false,
+  size, folder,
   id = undefined
 }: IImageUploaderProps = $props();
 
 // State
 let imageSrc = $state({ src, types, description } as ImageSource);
 let progress = $state(src ? -1 : 0);
-let imageID = $state(id || Date.now() + Math.random());
+
+Env.imageCounter++
+const imageID = id || Env.imageCounter
 
 // Update imageSrc when props change
 $effect(() => {
-  if (src) {
-    imageSrc = { src, types, description };
-  }
-});
+  src;
+  imageSrc = { src, base64: "", types, description };
+})
 
-// Helper functions
-const isImageBase64 = () => {
-  return imageSrc.src?.length > 0 && (imageSrc.types || []).length === 0;
-};
+const makeImageSrc = (format?: string) => {
+  if(imageSrc.base64){ return imageSrc.base64 }
+  if(!imageSrc.src){ return "" }
 
-const makeImageSrc = () => {
-  let srcUrl = imageSrc.src;
-  if (srcUrl.substring(0, 5) !== "data:") {
-    if (srcUrl.substring(0, 8) !== "https://" && srcUrl.substring(0, 7) !== "http://") {
-      srcUrl = Env.S3_URL + srcUrl;
-    }
+  let srcUrl = imageSrc.src || ""
+  // debugger
+  if (srcUrl.substring(0, 8) !== "https://" && srcUrl.substring(0, 7) !== "http://") {
+    if(folder){ srcUrl = folder +"/"+ srcUrl }
+    if(size){ srcUrl = `${srcUrl}-x${size}` }
+    srcUrl = Env.S3_URL + srcUrl
   }
-  return srcUrl;
-};
+  if(format){ srcUrl = srcUrl +"."+ format }
+  return srcUrl
+}
 
 const onFileChange = async (ev: Event) => {
   const target = ev.target as HTMLInputElement;
@@ -103,7 +109,7 @@ const onFileChange = async (ev: Event) => {
     // Use web worker-based image conversion (1.2 MP resolution, WebP format)
     const imageB64 = await fileToImage(imageFile, 1.2);
     progress = -1;
-    imageSrc = { src: imageB64, types: [], description: imageSrc.description };
+    imageSrc = { src: "", base64: imageB64, types: [], description: imageSrc.description };
     onChange?.(imageSrc);
   } catch (error) {
     Notify.failure('Error procesando la imagen: ' + String(error));
@@ -112,18 +118,20 @@ const onFileChange = async (ev: Event) => {
 };
 
 const uploadImage = async (): Promise<IImageResult> => {
-  let result = {} as IImageResult;
-  progress = 0.001;
+  let result = {} as IImageResult
+  if(!imageSrc.base64){
+    Notify.failure("No hay nada que enviar.")
+    return Promise.resolve(result)
+  }
+
+  progress = 0.001
 
   const data = {
-    Content: imageSrc.src,
-    Folder: 'img-uploads',
+    Content: imageSrc.base64,
     Description: imageSrc.description
   };
 
-  if (setDataToSend) {
-    setDataToSend(data);
-  }
+  if (setDataToSend) { setDataToSend(data); }
 
   try {
     result = await POST_XMLHR({
@@ -145,13 +153,14 @@ const uploadImage = async (): Promise<IImageResult> => {
   result.description = imageSrc.description;
 
   if (clearOnUpload) {
-    imageSrc = { src: '', types: [], description: '' };
-    progress = 0;
+    imageSrc = { src: '', base64: '', types: [], description: '' };
+    // progress = 0;
   } else {
-    progress = -1;
-    imageSrc = { src: `${result.imageName}-x2`, types: ['webp', 'avif'], description: imageSrc.description };
+    // progress = -1;
+    imageSrc = { src: `${result.imageName}-x2`, base64: '', types: ['webp', 'avif'], description: imageSrc.description };
   }
 
+  progress = -1;
   if (onUploaded) {
     onUploaded(result.imageName, result.description);
   }
@@ -159,12 +168,9 @@ const uploadImage = async (): Promise<IImageResult> => {
   return result;
 };
 
-// Map to store images to upload (global state)
-export const imagesToUpload = new Map<number, () => Promise<IImageResult>>();
-
 // Effect to manage imagesToUpload map
 $effect(() => {
-  if (imageSrc.src && isImageBase64()) {
+  if (imageSrc.base64) {
     imagesToUpload.set(imageID as number, uploadImage);
   } else {
     imagesToUpload.delete(imageID as number);
@@ -175,12 +181,6 @@ onDestroy(() => {
   imagesToUpload.delete(imageID as number);
 });
 
-// Export function to upload all current images
-export const uploadCurrentImages = async () => {
-  const results = await Promise.all(Array.from(imagesToUpload.values()).map((fn) => fn()));
-  imagesToUpload.clear();
-  return results;
-};
 </script>
 
 <div class="relative {cardCss} card_image_1 {imageSrc?.src ? '' : 'card_input'}"
@@ -196,28 +196,26 @@ export const uploadCurrentImages = async () => {
     </div>
   {/if}
 
-  {#if imageSrc?.src?.length > 0}
+  {#if (imageSrc.src||imageSrc.base64||"").length > 0}
     <picture class="contents">
       {#if imageSrc.types?.includes('avif')}
-        <source type="image/avif" srcset={makeImageSrc() + '.avif'} />
+        <source type="image/avif" srcset={makeImageSrc("avif")} />
       {/if}
       {#if imageSrc.types?.includes('webp')}
-        <source type="image/webp" srcset={makeImageSrc() + '.webp'} />
+        <source type="image/webp" srcset={makeImageSrc("webp")} />
       {/if}
       <img class="w-full h-full absolute card_image_img1"
-        src={makeImageSrc() + ((imageSrc.types||[]).length > 0 ? `.${imageSrc?.types?.[0]}` : '')}
+        src={makeImageSrc(imageSrc?.types?.[0])}
         alt="Upload preview"
       />
     </picture>
   {/if}
 
   {#if progress === -1}
-    <div class="w-full h-full absolute card_image_layer{isImageBase64() ? ' s1' : ''}">
-      {#if isImageBase64() && !hideFormUseMessage && !hideForm}
-        <textarea
-          class="w-full card_image_textarea"
-          rows={3}
-          placeholder="Nombre..."
+    <div class="w-full h-full absolute card_image_layer{imageSrc.base64 ? ' s1' : ''}">
+      {#if imageSrc.base64 && !hideFormUseMessage && !hideForm}
+        <textarea class="w-full card_image_textarea"
+          rows={3} placeholder="Nombre..."
           onblur={(ev) => {
             ev.stopPropagation();
             imageSrc.description = ev.currentTarget.value || '';
@@ -225,13 +223,13 @@ export const uploadCurrentImages = async () => {
           }}
         ></textarea>
       {/if}
-      {#if isImageBase64() && hideFormUseMessage}
+      {#if imageSrc.base64 && hideFormUseMessage}
         <div class="absolute w-full card_image_upload_text">
           {hideFormUseMessage}
         </div>
       {/if}
       <div class="w-full absolute flex items-center justify-center card_image_layer_botton">
-        <button class="bnr-1 _4 mr-12 {isImageBase64()
+        <button class="bnr-1 _4 mr-12 {imageSrc.base64
             ? ''
             : 'card_image_layer_bn_close2'} card_image_btn"
           aria-label="Eliminar imagen"
@@ -241,14 +239,14 @@ export const uploadCurrentImages = async () => {
               onDelete(src);
               return;
             }
-            imageSrc = { src: '', types: [], description: '' };
+            imageSrc = { src: '', base64: '', types: [], description: '' };
             onChange?.(imageSrc);
             progress = 0;
           }}
         >
           <i class="icon-cancel"></i>
         </button>
-        {#if isImageBase64() && !hideUploadButton}
+        {#if imageSrc.base64 && !hideUploadButton}
           <button class="bnr-1 _5 card_image_btn"
             aria-label="Subir imagen"
             onclick={(ev) => {

@@ -94,7 +94,7 @@
 			position: absolute;
 			top: ${position.top}px;
 			left: ${position.left}px;
-			z-index: 9999;
+			z-index: 210;
 			${customStyle}
 		`.trim();
 	});

@@ -59,6 +59,10 @@ export class ProductosService extends GetHandler {
 
   handler(result: IProducto[]): void {
     console.log("productos result::", result)
+    for(const e of result){
+      e.Image = e.Images?.[0]
+      e.CategoriasIDs = e.CategoriasIDs || []
+    }
 
     this.productos = result
     this.productosMap = new Map(result.map(x => [x.ID, x]))
@@ -101,7 +105,8 @@ export const listasCompartidas = [
 ]
 
 export class ListasCompartidasService extends GetHandler {
-  useCache = { min: 5, ver: 1 }
+  route = "listas-compartidas2"
+  useCache = { min: 5, ver: 6 }
 
   Records: IListaRegistro[] = $state([])
   RecordsMap: Map<number,IListaRegistro>= $state(new Map())
@@ -111,27 +116,36 @@ export class ListasCompartidasService extends GetHandler {
     return this.RecordsMap.get(id)
   }
 
-  handler(result: IListaRegistro[]): void {
+  handler(result: {[k: string]: IListaRegistro[]}): void {
+    console.log("result getted::", result)
 
-    this.RecordsMap = new Map(result.map(x => [x.ID,x]))
-    this.Records = result
+    this.Records = []
     this.ListaRecordsMap = new Map()
 
-    for(const e of this.Records){
-      if([1,2].includes(e.ListaID)){ // Productos Categorias
-        const imagesMap = new Map((e.Images||[]).map(x => (
-          [parseInt(x.split("-")[1]),x])))
-        
-        e.Images = []
-        for(const order of [1,2,3]){
-          e.Images.push(imagesMap.get(order)||"")
-        }
-      }
+    for(const [key, records] of Object.entries(result)){
+      const listaID = parseInt(key.split("_")[1])
+      
+      for(const e of records){
+        if(!e.ss){ continue }
+        this.Records.push(e)
 
-      this.ListaRecordsMap.has(e.ListaID)
-        ? this.ListaRecordsMap.get(e.ListaID)?.push(e)
-        : this.ListaRecordsMap.set(e.ListaID, [e])
+        if([1,2].includes(listaID)){ // Productos Categorias
+          const imagesMap = new Map((e.Images||[]).filter(x => x).map(x => (
+            [parseInt(x.split("-")[1]),x])))
+          
+          e.Images = []
+          for(const order of [1,2,3]){
+            e.Images.push(imagesMap.get(order)||"")
+          }
+        }
+
+        this.ListaRecordsMap.has(e.ListaID)
+          ? this.ListaRecordsMap.get(e.ListaID)?.push(e)
+          : this.ListaRecordsMap.set(e.ListaID, [e])
+      }
     }
+
+    this.RecordsMap = new Map(this.Records.map(x => [x.ID,x]))
   }
 
   addNew(e: IListaRegistro){
@@ -143,12 +157,26 @@ export class ListasCompartidasService extends GetHandler {
     this.Records.push(e)
   }
 
-  constructor(ids: number[]){
+  constructor(ids: number[] = []){
     super()
-    this.route = `listas-compartidas?ids=${ids.join(",")}`
-
-    if (browser) {
+    if(ids.length > 0){
+      this.route = `listas-compartidas2?ids=${ids.join(",")}`
+    }
+    if(ids){
       this.fetch()
     }
   }
+}
+
+export interface INewIDToID {
+  NewID:  number
+	TempID: number
+}
+
+export const postListaRegistros = (data: IListaRegistro[]) => {
+  return POST({
+    data,
+    route: "listas-compartidas",
+    refreshRoutes: ["listas-compartidas2"]
+  })
 }

@@ -15,7 +15,7 @@
     import { Core } from "../../../core/store.svelte";
     import { formatN } from "../../../shared/main";
     import CategoriasMarcas from "./CategoriasMarcas.svelte";
-    import { ListasCompartidasService, postProducto, ProductosService, type IProducto } from "./productos.svelte";
+    import { ListasCompartidasService, postProducto, ProductosService, type IProducto, type IProductoImage } from "./productos.svelte";
 
   let filterText = $state("")
   const productos = new ProductosService()
@@ -24,6 +24,10 @@
   let view = $state(1)
   let layerView = $state(1)
   let productoForm = $state({} as IProducto)
+  // svelte-ignore non_reactive_update
+  let CategoriasLayer: CategoriasMarcas | null = null
+  // svelte-ignore non_reactive_update
+  let MarcasLayer: CategoriasMarcas | null = null
 
   let productoColumns: ITableColumn<IProducto>[] = [
     { header: "ID", css: "c-blue text-center", headerCss: "w-48",
@@ -87,6 +91,10 @@
     Core.showSideLayer = 0
   }
 
+  $effect(() => {
+    console.log("productor form:", $state.snapshot(productoForm))
+  })
+
 </script>
 
 <Page sideLayerSize={780}>
@@ -110,7 +118,9 @@
     <button class="bx-green ml-auto" onclick={ev => {
       ev.stopPropagation()
       if(view === 2){
-        openModal(2)
+        CategoriasLayer?.newRecord()
+      } else if(view === 2) {
+        MarcasLayer?.newRecord()
       } else {
         Core.showSideLayer = 1
       }
@@ -138,9 +148,9 @@
       />
     </Layer>
   {/if}
-  <Layer css="p-12" title={productoForm?.Nombre || ""} type="side"
+  <Layer css="px-14 py-10" title={productoForm?.Nombre || ""} type="side"
     titleCss="h2 mb-6"
-    options={[[1,"Información"],[2,"Ficha"],[3,"Fotos"]]}
+    options={[[1,"Información"],[2,"Ficha"],[3,"Parámetros"],[4,"Fotos"]]}
     selected={layerView}
     onSelect={e => layerView = e[0]}
     onSave={() => {
@@ -154,13 +164,17 @@
         />
         <div class="col-span-9 row-span-4">
           <ImageUploader saveAPI="producto-image"
-            clearOnUpload={true}
+            clearOnUpload={true} types={["avif","webp"]}
+            src={productoForm.Image ? `img-productos/${productoForm.Image.n}-x2` : ""}
             cardCss="w-full h-180  p-4"
             setDataToSend={e => {
               e.ProductoID = productoForm.ID
             }}
-            onUploaded={src => {
-              console.log("imagen subida::", src)
+            onUploaded={(imagePath, description) => {
+              if(imagePath.includes("/")){ imagePath = imagePath.split("/")[1] }
+              productoForm.Image = { n: imagePath, d: description } as IProductoImage
+              productoForm.Images = productoForm.Images || []
+              productoForm.Images.unshift(productoForm.Image)
             }}
           />
         </div>
@@ -232,6 +246,9 @@
     {/if}
   </Layer>
   {#if view === 2}
-    <CategoriasMarcas listas={listas} origin={1}/>
+    <CategoriasMarcas listas={listas} origin={1} bind:this={CategoriasLayer}/>
+  {/if}
+  {#if view === 3}
+    <CategoriasMarcas listas={listas} origin={2} bind:this={MarcasLayer}/>
   {/if}
 </Page>

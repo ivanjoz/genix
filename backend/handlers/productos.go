@@ -246,7 +246,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("Error al guardar la imagen: " + err.Error())
 		}
 
-		response["imageName"] = image.Folder + "/" + imageArgs.Name
+		response["imageName"] = "img-productos/" + imageArgs.Name
 
 		producto.Images = append(producto.Images, s.ProductoImagen{
 			Name: imageArgs.Name, Descripcion: image.Description})
@@ -328,7 +328,7 @@ func PostProductoCategoriaImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	imageName := core.Concat("-", core.ToBase36s(req.Usuario.EmpresaID), image.Order, core.ToBase36(0))
 	image.Name = imageName
-	image.Folder = "producto-categoria"
+	image.Folder = "img-public"
 	image.Resolutions = map[uint16]string{980: "x6", 540: "x4", 340: "x2"}
 
 	if _, err = aws.SaveImage(image); err != nil {

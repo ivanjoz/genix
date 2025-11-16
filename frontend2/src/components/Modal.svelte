@@ -142,7 +142,7 @@ const modalSizesMap = new Map([
     height: 100vh;
     position: fixed;
     background-color: rgba(0, 0, 0, 0.5);
-    z-index: 9999;
+    z-index: 195;
     opacity: 0;
     transition: opacity 0.3s ease;
   }

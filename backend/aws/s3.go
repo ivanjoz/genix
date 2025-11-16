@@ -210,6 +210,8 @@ func SaveImage(args ImageArgs) ([]imageconv.Image, error) {
 	images := []imageconv.Image{}
 
 	saveImage := func(image imageconv.Image) {
+		fmt.Println("args.Folder:", args.Folder)
+
 		args := FileToS3Args{
 			Bucket:      core.Env.S3_BUCKET,
 			Path:        args.Folder,
