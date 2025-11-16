@@ -166,8 +166,7 @@ export function include(e: string, h: string | string[]) {
 }
 
 export const ConfirmWarn = (
-  a: string, b: string, c: string, d?: string,
-  e?: () => void, f?: () => void,
+  a: string, b: string, c: string, d?: string, e?: () => void, f?: () => void,
 ) =>{
   Confirm.init({
     fontFamily:'main',

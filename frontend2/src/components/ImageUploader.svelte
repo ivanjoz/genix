@@ -324,6 +324,7 @@ onDestroy(() => {
   .card_image_img1 {
     top: 0;
     left: 0;
+    object-fit: contain;
   }
 
   .card_image_layer {

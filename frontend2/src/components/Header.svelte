@@ -1,12 +1,10 @@
 <script lang="ts">
-    import { fetchOnCourse } from "../core/store.svelte";
+  import { Core, fetchOnCourse } from "../core/store.svelte";
 
 	// Props
-	let {
-		title = 'Genix',
+	const {
 		showMenuButton = false
 	}: {
-		title?: string;
 		showMenuButton?: boolean;
 	} = $props();
 
@@ -64,8 +62,7 @@
 
 	<!-- Mobile Menu Button -->
 	{#if showMenuButton}
-		<label
-			for="mobile-menu-toggle"
+		<label for="mobile-menu-toggle"
 			class="md:hidden p-8 hover:bg-white/10 rounded-lg transition-colors mr-12 cursor-pointer"
 			aria-label="Toggle menu"
 		>
@@ -75,9 +72,15 @@
 
 	<!-- Title -->
 	<div class="flex-1 flex items-center">
-		<h1 class="text-white text-lg font-semibold tracking-wide">
-			{title}
-		</h1>
+		{#if Core.pageOptions?.length > 0}
+			{#each Core.pageOptions as opt }
+				<div>{opt.name}</div>
+			{/each}
+		{:else}
+			<div class="h1 text-white text-lg font-semibold tracking-wide">
+				{Core.pageTitle}
+			</div>
+		{/if}
 	</div>
 
 	<!-- Right Actions -->

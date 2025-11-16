@@ -46,12 +46,17 @@
 </script>
 
 <!-- Desktop Menu -->
-<div class="desktop-menu fixed left-0 top-0 h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950 
+<div class="d-menu fixed left-0 top-0 h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950 
 		text-white shadow-xl transition-all duration-200 ease-in-out z-50 hidden md:block"
 	role="navigation"
 	aria-label="Main navigation"
 >
-	<div class="h-48 border-b border-gray-800/30 w-full"></div>
+	<div class="flex items-center h-48 border-b border-gray-800/30 w-full">
+		<div class="_1 flex items-center">
+			<img class="w-42 h-42" src="/images/genix_logo4.svg" alt="">
+			<div class="_2 hidden white ff-bold h2 ml-[-3px]">enix</div>
+		</div>
+	</div>
 
 	<!-- Menu Items -->
 	<div class="flex-1 transition-all duration-300 w-full">
@@ -98,14 +103,14 @@
 					<div class="transition-all duration-200">
 						{#each menu.options as option}
 							{@const isActive = option.route === currentPathname}
-							<button class="submenu-option w-full flex items-center py-10 relative
+							<button class="submenu-option w-full flex items-center px-0 py-10 relative
 								hover:bg-indigo-600/20 transition-all duration-150
 								border-l-2 border-transparent
 								{isActive ? 'bg-indigo-600/30 border-indigo-400 text-white' : 'text-gray-300'}"
 								onclick={() => navigateTo(option.route || '/', menu.id || 0)}
 							>
 								<!-- Minimized: show icon only centered -->
-								<div class="option-minimized w-full flex pl-7">
+								<div class="option-minimized flex w-full">
 									<i class="{option.icon || "icon-box"} mr-2"></i>
 									<div class="font-mono">
 										{option.minName || option.name.substring(0, 2)}
@@ -196,8 +201,7 @@
 						<div class="transition-all duration-300">
 							{#each menu.options as option}
 								{@const isActive = option.route === currentPathname}
-								<button
-									class="w-full flex items-center px-24 py-10 text-sm relative
+								<button	class="w-full flex items-center px-24 py-10 text-sm relative
 										hover:bg-indigo-600/20 transition-all
 										border-l-2 border-transparent
 										{isActive
@@ -232,13 +236,23 @@
 </div>
 
 <style>
+	.d-menu:hover {
+
+	}
+	._1 {
+		position: absolute;
+		left: 12px;
+	}
+	.d-menu:hover ._2 {
+		display: block;
+	}
 	/* Desktop Menu - Pure CSS Width Control */
-	.desktop-menu {
+	.d-menu {
 		width: var(--menu-min-width);
 		overflow: hidden;
 	}
 	
-	.desktop-menu:hover {
+	.d-menu:hover {
 		width: var(--menu-max-width);
 		overflow: auto;
 	}
@@ -252,11 +266,11 @@
 		display: none;
 	}
 	
-	.desktop-menu:hover .menu-minimized {
+	.d-menu:hover .menu-minimized {
 		display: none;
 	}
 	
-	.desktop-menu:hover .menu-expanded {
+	.d-menu:hover .menu-expanded {
 		display: block;
 	}
 
@@ -265,7 +279,7 @@
 		opacity: 0;
 	}
 	
-	.desktop-menu:hover .menu-arrow {
+	.d-menu:hover .menu-arrow {
 		opacity: 1;
 	}
 
@@ -277,22 +291,32 @@
 	.option-expanded {
 		display: none;
 	}
+
+	.option-minimized, .option-expanded {
+		position: absolute;
+		left: 6px;
+		align-items: center;
+	}
+
+	.option-minimized > div, .option-expanded > div {
+		margin-bottom: -2px;
+		font-size: 15px;
+	}
 	
-	.desktop-menu:hover .option-minimized {
+	.d-menu:hover .option-minimized {
 		display: none;
 	}
 	
-	.desktop-menu:hover .option-expanded {
+	.d-menu:hover .option-expanded {
 		display: flex;
 	}
 
 	/* Submenu padding adjustment */
 	.submenu-option {
-		padding-left: 0;
-		padding-right: 0;
+		height: 38px;
 	}
 	
-	.desktop-menu:hover .submenu-option {
+	.d-menu:hover .submenu-option {
 		padding-left: 8px;
 		padding-right: 8px;
 	}
