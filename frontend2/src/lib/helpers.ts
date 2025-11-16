@@ -4,6 +4,10 @@ export const { Notify, Loading } = pkg;
 
 let throttleTimer: NodeJS.Timeout | null
 
+if(typeof window !== 'undefined'){
+  Loading.init({ zindex: 400 })
+}
+
 export const throttle = (func: (() => void), delay: number) => {
   if(throttleTimer){ clearTimeout(throttleTimer) }
   throttleTimer = setTimeout(() => {

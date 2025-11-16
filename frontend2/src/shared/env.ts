@@ -55,6 +55,7 @@ export const Env = {
   pathname: "",
   empresaID: 0,
   empresa: {} as IEmpresaParams,
+  imageCounter: 10000,
   clearAccesos: null as (() => void) | null,
   navigate: goto, 
   history: {

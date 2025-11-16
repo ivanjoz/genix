@@ -25,6 +25,7 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.producto-image":           PostProductoImage,
 	"POST.producto-categoria-image": PostProductoCategoriaImage,
 	"GET.listas-compartidas":        GetListasCompartidas,
+	"GET.listas-compartidas2":       GetListasCompartidas2,
 	"POST.listas-compartidas":       PostListasCompartidas,
 	"POST.images":                   PostImage,
 	"GET.cajas":                     GetCajas,

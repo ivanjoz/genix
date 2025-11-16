@@ -29,7 +29,7 @@
 </script>
 
 <!-- Render content normally, then move it to body via the effect above -->
-<div bind:this={contentElement} style="position: absolute; top: 0; left: 0; z-index: 9999;">
+<div bind:this={contentElement} style="position: absolute; top: 0; left: 0; z-index: 300;">
 	{@render children?.()}
 </div>
 

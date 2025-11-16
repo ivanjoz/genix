@@ -5,6 +5,7 @@ import (
 	"app/db"
 	s "app/types"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -56,6 +57,50 @@ func GetListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	*/
 	return core.MakeResponse(req, &listasRegistros)
+}
+
+func GetListasCompartidas2(req *core.HandlerArgs) core.HandlerResponse {
+	listasIDs := req.GetQueryIntSlice("ids")
+
+	if len(listasIDs) == 0 {
+		return req.MakeErr("No se enviaron los ids de las listas a consultar.")
+	}
+
+	listaRegistrosMap := map[int32]*[]s.ListaCompartidaRegistro{}
+	for _, listaID := range listasIDs {
+		listaRegistrosMap[listaID] = &[]s.ListaCompartidaRegistro{}
+	}
+	eg := errgroup.Group{}
+
+	for _, listaID := range listasIDs {
+		type r = s.ListaCompartidaRegistro
+		updated := req.GetQueryInt64(fmt.Sprintf("id_%v", listaID))
+
+		eg.Go(func() error {
+			return db.SelectRef(listaRegistrosMap[listaID], func(q *db.Query[r], col r) {
+				q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+				q.Where(col.ListaID_().Equals(listaID))
+				if updated > 0 {
+					q.Where(col.Updated_().GreaterThan(updated))
+				} else {
+					q.Where(col.Status_().Equals(1))
+				}
+			})
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return req.MakeErr(err)
+	}
+
+	response := map[string]*[]s.ListaCompartidaRegistro{}
+	for id, registros := range listaRegistrosMap {
+		response[fmt.Sprintf("id_%v", id)] = registros
+
+		core.Log("Listas Compartidas Registros::", id, "|", len(*registros))
+	}
+
+	return core.MakeResponse(req, &response)
 }
 
 func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
