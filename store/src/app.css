@@ -1,0 +1,165 @@
+@import "tailwindcss/utilities";
+@source not inline('--tw-backdrop-saturate');
+@source not inline('--tw-gradient-to-position');
+@source not inline('--tw-outline-style');
+
+@theme {
+  --breakpoint-2xl: 1539px;
+  --breakpoint-xl: 1379px;
+  --breakpoint-lg: 1139px;
+  --breakpoint-md: 749px;
+  --spacing: 1px;
+}
+
+@font-face {
+  font-family: "main";
+  src: url("/libs/lato-v24-latin-regular.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face { 
+  font-family: 'bold'; src: url("/libs/lato-v24-latin-700.woff2") 
+}
+@font-face { 
+  font-family: 'semibold'; src: url("/libs/lato-v24-latin-700.woff2") 
+}
+
+body {
+  --input-height: 44px;
+  --input-border-color: #d0d4e7;
+}
+
+body,
+input,
+textarea,
+button {
+  margin: 0;
+  font-family: main, Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  color: rgb(37, 38, 43);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+}
+
+.bn1 {
+  height: 40px;
+  border-radius: 7px;
+  border: none;
+  outline: none;
+  background-color: transparent;
+  cursor: pointer;
+  padding: 2px 4px 0 0;
+}
+
+.bn1:hover {
+  outline: 2px solid #4c55d5;
+  background-color: #f5f6ff;
+}
+
+/* Esto es para que en los media query no se incluya la barra */
+@media (min-width: 740px) {
+  .w100-p12 {
+    width: 100vw;
+    padding-right: 12px;
+  }
+}
+
+.lh-11 {
+  line-height: 1.1;
+}
+
+.ff-bold { font-family: bold; }
+.ff-semibold { font-family: semibold; }
+.ff-bold-italic { font-family: bold-italic; }
+.ff-main { font-family: main; }
+.ff-light { font-family: light; }
+.ff-mono, .ff-mono p { font-family: mono; }
+.ff-mono500, .ff-mono500 p { font-family: mono500; }
+.fs-italic { font-style: italic; }
+.fs14 { font-size: 14px; }
+.fs15 { font-size: 15px; }
+.fs17 { font-size: 17px; }
+.fs18 { font-size: 18px; }
+.fs20 { font-size: 20px; }
+
+.fx-c {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+} 
+
+.body {
+  scroll-behavior: smooth;
+}
+
+#sh-0, #sh-1 {
+  transition: height 0.3s ease;
+}
+#sh-1 {
+  background-color: #ffffff;
+    box-shadow:
+    rgba(0, 0, 0, 0.16) 0px 2px 6px,
+    rgba(0, 0, 0, 0.2) 0px 2px 8px;
+  z-index: 200;
+}
+#sh-0.s1, #sh-0.s1 + #sh-1 {
+  height: 52px;
+}
+#sh-0.s1 + #sh-1 {
+  position: fixed;
+  top: 0;
+}
+@media (max-width: 739px) {
+  #sh-0.s1, #sh-0.s1 + #sh-1 {
+    height: 47px;
+  }
+}
+
+/* View Transitions for Mobile Menu */
+@keyframes slide-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-100%);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* When closing: OLD snapshot slides out to the left */
+::view-transition-old(mobile-side-menu) {
+  animation: slide-out 0.3s ease-in-out forwards;
+  animation-fill-mode: forwards;
+}
+
+/* When opening: NEW snapshot slides in from the left */
+::view-transition-new(mobile-side-menu) {
+  animation: slide-in 0.3s ease-in-out;
+}
+
+/* Prevent the default fade out on OLD snapshot */
+::view-transition-image-pair(mobile-side-menu) {
+  isolation: auto;
+}

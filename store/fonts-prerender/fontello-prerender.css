@@ -1,0 +1,32 @@
+/*
+ * This CSS file contains the Fontello WOFF2 font embedded as a Base64 data URI.
+ * It uses a custom @font-face template and extracted individual icon definitions.
+ */
+
+@font-face {
+font-family: 'fontello1';
+src: url('data:font/woff2;base64,d09GMgABAAAAAAGsAAwAAAAAA5gAAAFeAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHCoGYAAEEQgKASoBNgIkAwQLBAAEIAWDDAcgG+kCAB4FblsDT0/oiiFYqyEcvqQRlGu4l3wJVIVkYSs7dcAeWVZodDWmDtgJoBiXo7ndJC8TL6KeTJPLz/SGhEZJpEwNZD29t9lOA0vojRKMMAkmCYXF0dDDcBdNtFB2gQW1Ux0hyphl/VGBToOi+InJyRyk/RWyIUKEWgHQ5MO41kI6S+847y4+5IInYy0Zv5nd7N7hV4QyJEyrbptv3SAAQAIhatUHAiThGyRQTt1dOvWNa+/LBfDzvBiQVdfs5JLngHYJBHoK5DLh6qgqkcuGuTECCHYdTgmi6cAuuCP005H0OuP5jTeGFgM+vNXQadn3RpdBf20O15tPo1ARFNUWg/Ky8krQ1RtyJmWN7cKELkJELesB1IBkDhthTCZH2o3DcnmKUYRMF74l9k/SWKOctKw+xqa9IMxdj6XAgyKPEBmS+RwW1Nv1OuTyOXTMDUlTEeKqy8hoJsER7gQAAAA=') format('woff2');
+font-weight: normal;
+font-style: normal;
+}
+
+[class^="icon1-"]:before, [class*=" icon1-"]:before {
+font-family: "fontello1";
+font-style: normal;
+font-weight: normal;
+display: inline-block;
+text-decoration: inherit;
+width: 1em;
+margin-right: .2em;
+text-align: center;
+font-variant: normal;
+text-transform: none;
+line-height: 1em;
+margin-left: .2em;
+}
+
+.icon1-cancel:before { content: '\e803'; }
+.icon1-cancel-1:before { content: '\e80a'; }
+.icon1-user:before { content: '\e80f'; }
+.icon1-search:before { content: '\e810'; }
+.icon1-basket:before { content: '\e827'; }

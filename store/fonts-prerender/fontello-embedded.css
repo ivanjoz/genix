@@ -1,0 +1,32 @@
+/*
+ * This CSS file contains the Fontello SVG font embedded as a Base64 data URI.
+ * It uses a custom @font-face template and extracted individual icon definitions.
+ */
+
+@font-face {
+font-family: 'fontello';
+src: url('data:image/svg+xml;charset=utf-8;base64,PD94bWwgdmVy....dmc+Cg==') format('svg');
+font-weight: normal;
+font-style: normal;
+}
+
+[class^="icon-"]:before, [class*=" icon-"]:before {
+font-family: "fontello";
+font-style: normal;
+font-weight: normal;
+display: inline-block;
+text-decoration: inherit;
+width: 1em;
+margin-right: .2em;
+text-align: center;
+font-variant: normal;
+text-transform: none;
+line-height: 1em;
+margin-left: .2em;
+}
+
+.icon-cancel:before { content: '\e803'; }
+.icon-cancel-1:before { content: '\e80a'; }
+.icon-user:before { content: '\e80f'; }
+.icon-search:before { content: '\e810'; }
+.icon-basket:before { content: '\e827'; }
