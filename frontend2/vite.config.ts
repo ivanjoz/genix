@@ -76,7 +76,7 @@ const serviceWorkerPlugin = () => ({
 
 export default defineConfig({
 	server: {
-    port: 3577, // Change this to your desired port
+    port: 3570, // Change this to your desired port
   },
 	plugins: [tailwindcss(), sveltekit(), serviceWorkerPlugin()]
 });

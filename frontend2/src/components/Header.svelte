@@ -62,12 +62,13 @@
 
 	<!-- Mobile Menu Button -->
 	{#if showMenuButton}
-		<label for="mobile-menu-toggle"
+		<button type="button"
 			class="md:hidden p-8 hover:bg-white/10 rounded-lg transition-colors mr-12 cursor-pointer"
 			aria-label="Toggle menu"
+			onclick={() => Core.toggleMobileMenu()}
 		>
 			<span class="text-white text-2xl">☰</span>
-		</label>
+		</button>
 	{/if}
 
 	<!-- Title -->

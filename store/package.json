@@ -4,7 +4,8 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev",
+		"dev": "vite dev --port 3571",
+		"start": "vite dev --port 3571",
 		"build": "vite build && node postbuild",
 		"publish": "vite build && node postbuild --publish",
 		"build:prerender": "svelte-kit build --prerender",

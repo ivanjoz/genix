@@ -37,15 +37,31 @@ const frontendPath = path.join(__dirname, 'frontend')
 if (!fs.existsSync(path.join(frontendPath, "node_modules"))){ 
   console.log("No se encontraron los node_modules en el frontend. Instalando...")
   if(isWindows){
-    execSync(`cd ${frontendPath} & npm install`, { stdio: "inherit", shell: true })
+    execSync(`cd ${frontendPath} & pnpm install`, { stdio: "inherit", shell: true })
   } else {
-    execSync('cd frontend && npm install', { encoding: 'utf-8' })
+    execSync('cd frontend && pnpm install', { encoding: 'utf-8' })
   }
 }
 
 let frontendScript = `cd ./frontend && ${FRONTEND_SCRIPT}`
 if (isWindows) {
   frontendScript = `cd ${frontendPath} & ${FRONTEND_SCRIPT}`
+}
+
+// Store
+const storePath = path.join(__dirname, 'store')
+if (!fs.existsSync(path.join(storePath, "node_modules"))){ 
+  console.log("No se encontraron los node_modules en el frontend. Instalando...")
+  if(isWindows){
+    execSync(`cd ${storePath} & pnpm install`, { stdio: "inherit", shell: true })
+  } else {
+    execSync('cd frontend && pnpm install', { encoding: 'utf-8' })
+  }
+}
+
+let storeScript = `cd ./store && ${FRONTEND_SCRIPT}`
+if (isWindows) {
+  storeScript = `cd ${storePath} & ${FRONTEND_SCRIPT}`
 }
 
 // Frontend 2
@@ -127,6 +143,7 @@ const runScripts = () => {
   // Run all scripts in parallel
   runScript(frontendScript, YELLOW_BAR)
   runScript(frontendScript2, YELLOW_BAR)
+  runScript(storeScript, YELLOW_BAR)
   startBackendGo()
 }
 

@@ -37,7 +37,7 @@ export default {
       precompress: false,
       strict: true,
     }),
-    ssr: false,
+    // ssr: false,
     prerender: {
       handleMissingId: 'ignore',
       handleHttpError: ({ path, referrer, status, message }) => {

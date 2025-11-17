@@ -28,6 +28,9 @@ globalThis._isPrerender = false
 globalThis._fileNameMap = new Map()
 
 export default defineConfig({
+  server: {
+    port: 3571,
+  },
   plugins: [
     {
       name: "plugin-1",
@@ -88,7 +91,6 @@ export default defineConfig({
     tailwindcss(),
     sveltekit(),
   ],
-  // assetsInclude: ["*/blurhash.js"],
   css: {
     modules: {
       generateScopedName: (name, filename_, css) => {
@@ -112,9 +114,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: (id) => {
-          return "my-app";
-        },
+        manualChunks: (id) => { return "app" },
       },
     },
   },

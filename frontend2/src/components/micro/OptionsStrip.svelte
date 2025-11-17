@@ -31,7 +31,7 @@
 
 </script>
 
-<div class="flex items-center">
+<div class="pb-4 md:pb-0 flex items-center shrink-0 max-w-[100%] overflow-x-auto overflow-y-hidden">
   {#each options as opt }
     <button class={getClass(opt)} onclick={ev => {
       ev.stopPropagation()
@@ -55,9 +55,16 @@
     display: flex;
     text-align: center;
     justify-content: center;
+    align-items: end;
   }
   ._2 {
     color: #4343ad;
     border-bottom: 4px solid rgb(117 108 233);
+  }
+
+  @media (max-width: 750px) {
+    ._1 {
+      height: 38px;
+    }
   }
 </style>
