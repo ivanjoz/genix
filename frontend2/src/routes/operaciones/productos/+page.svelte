@@ -117,7 +117,7 @@
 </script>
 
 <Page sideLayerSize={780} title="Productos">
-  <div class="flex items-center mb-8">
+  <div class="flex flex-col md:flex-row items-center mb-8">
     <OptionsStrip selected={view}
       options={[[1,"Productos"],[2,"Categorías"],[3,"Marcas"]]} 
       onSelect={e => {
@@ -167,8 +167,8 @@
       />
     </Layer>
   {/if}
-  <Layer css="px-14 py-10" title={productoForm?.Nombre || ""} type="side"
-    titleCss="h2 mb-6"
+  <Layer css="px-8 py-8 md:px-14 md:py-10" title={productoForm?.Nombre || ""} type="side"
+    titleCss="h2 mb-6" contentCss="px-0 md:px-0"
     options={[[1,"Información"],[2,"Ficha"],[3,"Parámetros"],[4,"Fotos"]]}
     selected={layerView}
     onSelect={e => layerView = e[0]}
@@ -177,11 +177,11 @@
     }}
   >
     {#if layerView === 1}
-      <div class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-16">
+      <div class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-6 md:mt-16">
         <Input label="Nombre" saveOn={productoForm} css="col-span-24"
           required={true} save="Nombre"
         />
-        <div class="col-span-9 row-span-4">
+        <div class="col-span-24 md:col-span-9 md:row-span-4">
           <ImageUploader saveAPI="producto-image"
             clearOnUpload={true} types={["avif","webp"]}
             folder="img-productos" size={2} src={productoForm.Image?.n}
@@ -197,40 +197,44 @@
             }}
           />
         </div>
-        <Input label="Precio Base" saveOn={productoForm} css="col-span-5"
+        <Input label="Precio Base" saveOn={productoForm} 
+          css="col-span-12 md:col-span-5"
           save="Precio" type="number" baseDecimals={2}
         />
-        <Input label="Descuento" saveOn={productoForm} css="col-span-5"
+        <Input label="Descuento" saveOn={productoForm} 
+          css="col-span-12 md:col-span-5"
           save="Descuento" postValue="%" type="number"
         />
-        <Input label="Precio Final" saveOn={productoForm} css="col-span-5"
+        <Input label="Precio Final" saveOn={productoForm} 
+          css="col-span-12 md:col-span-5"
           save="PrecioFinal" type="number" baseDecimals={2}
         />
-        <SearchSelect label="Moneda" saveOn={productoForm} css="col-span-5"
+        <SearchSelect label="Moneda" saveOn={productoForm} 
+          css="col-span-12 md:col-span-5"
           save="MonedaID" keyId="i" keyName="v"
           options={[
             {i:1, v:"PEN (S/.)"},{i:2, v:"USD ($)"}
           ]}
         />
-        <Input label="Peso" saveOn={productoForm} css="col-span-5"
+        <Input label="Peso" saveOn={productoForm} css="col-span-12 md:col-span-5"
           save="Peso" type="number"
         />
-        <SearchSelect label="Unidad" saveOn={productoForm} css="col-span-5"
+        <SearchSelect label="Unidad" saveOn={productoForm} css="col-span-12 md:col-span-5"
           save="UnidadID" keyId="i" keyName="v"
           options={[
             {i:1, v:"Kg"},{i:2, v:"g"},{i:3, v:"Libras"}
           ]}
         />
-        <Input label="Volumen" saveOn={productoForm} css="col-span-5"
+        <Input label="Volumen" saveOn={productoForm} css="col-span-12 md:col-span-5"
           save="Volumen" type="number"
         />
-        <SearchSelect label="Marca" saveOn={productoForm} css="col-span-10 mb-2"
+        <SearchSelect label="Marca" saveOn={productoForm} css="col-span-12 md:col-span-10 mb-2"
           save="MarcaID" keyId="i" keyName="v"
           options={[
             {i:1, v:"PEN (S/.)"},{i:2, v:"g"},{i:3, v:"Libras"}
           ]}
         />
-        <div class="col-span-5">
+        <div class="col-span-24 md:col-span-5">
           <CheckboxOptions save="Params" saveOn={productoForm} type="multiple"
             options={[{i:1, v:"SKU Individual"}]} keyId="i" keyName="v"
           />
@@ -240,26 +244,26 @@
         />
         <SearchCard css="col-span-24 flex items-start" label="CATEGORÍAS ::"
           options={categorias} keyId="ID" keyName="Nombre"
-          cardCss="grow" inputCss="w-180" bind:saveOn={productoForm}
+          cardCss="grow" inputCss="w-[35%] md:w-180" bind:saveOn={productoForm}
           save="CategoriasIDs"
         />
         <div class="ff-bold h3 col-span-24 ml-8">
           Sub-Unidades
         </div>
         <Input saveOn={productoForm} save="SbnUnidad" 
-          css="col-span-6" label="Nombre"
+          css="col-span-12 md:col-span-6" label="Nombre"
         />
         <Input saveOn={productoForm} save="SbnPrecio" baseDecimals={2}
-          css="col-span-6" label="Precio Base" type="number"
+          css="col-span-12 md:col-span-6" label="Precio Base" type="number"
         />
         <Input saveOn={productoForm} save="SbnDescuento" postValue="%"
-          css="col-span-6" label="Descuento" type="number"
+          css="col-span-12 md:col-span-6" label="Descuento" type="number"
         />
         <Input saveOn={productoForm} save="SbnPreciFinal" baseDecimals={2}
-          css="col-span-6" label="Precio Final" type="number"
+          css="col-span-12 md:col-span-6" label="Precio Final" type="number"
         />
         <Input saveOn={productoForm} save="SbnCantidad" 
-          css="col-span-6" label="Cantidad" type="number"
+          css="col-span-12 md:col-span-6" label="Cantidad" type="number"
         />
       </div>
     {/if}
@@ -268,7 +272,7 @@
         css="mt-12"/>
     {/if}
     {#if layerView === 4}
-      <div class="grid grid-cols-4 items-start gap-x-10 gap-y-10 mt-16">
+      <div class="grid grid-cols-2 md:grid-cols-4 items-start gap-x-10 gap-y-10 mt-16">
         <ImageUploader saveAPI="producto-image"
           clearOnUpload={true} types={["avif","webp"]} folder="img-productos"
           cardCss="w-full h-170 p-4"

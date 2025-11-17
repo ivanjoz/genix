@@ -281,7 +281,7 @@ input[type='number'] {
 .c-steel { color: #475262; }
 
 
-/* Nuevos botones 1 */.bx-green
+/* Nuevos botones 1 */
 .bx-blue, .bx-green, .bx-red, .bx-orange, .bx-yellow, .bx-purple, .bnr-graym .bc-blue {
   display: inline-flex;
   align-items: center;
@@ -470,4 +470,8 @@ input[type='number'] {
 	height: 32px;
 	width: 32px;
 	border-radius: 50%;
+}
+
+.fr-selection-handle {
+	position: absolute;
 }

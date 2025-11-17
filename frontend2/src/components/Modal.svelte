@@ -176,7 +176,7 @@ const modalSizesMap = new Map([
 
   /* Mobile responsive */
   @media (max-width: 768px) {
-    :global(._2) {
+    ._2 {
       max-width: 96vw;
       width: 96vw;
       padding-left: 0.4rem;

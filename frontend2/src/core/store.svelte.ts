@@ -14,6 +14,7 @@ export const Core = $state({
   isLoading: 1,
   pageTitle: "" as string,
   pageOptions: [] as {id: number, name: string}[],
+  toggleMobileMenu: (() => {}) as () => void,
 })
 
 export const WeakSearchRef: WeakMap<any,{ 

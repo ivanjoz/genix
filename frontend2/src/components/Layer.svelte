@@ -4,11 +4,11 @@
   import OptionsStrip from "./micro/OptionsStrip.svelte";
   
   const { 
-    children, css, title, titleCss, 
+    children, css, title, titleCss, contentCss,
     type, options, selected, onSelect, onSave, onDelete, saveButtonName
   }: {
     children: any, css?: string, title?: string, titleCss?: string,
-    options?: [number, string][],
+    options?: [number, string][], contentCss?: string
     selected?: number, onSelect?: (e: any) => (void | undefined),
     onSave?: () => void
     onDelete?: () => void
@@ -30,7 +30,7 @@
 </script>
 
 {#if Core.showSideLayer > 0 && type == 'side'}
-  <div class="_1 {css||""}" style="width: {layerWidth};">
+  <div class="_1 flex flex-col {css||""}" style="width: {layerWidth};">
     <div class="flex items-center justify-between">
       <div class={titleCss}>{title}</div>
       <div class="items-center">
@@ -61,7 +61,7 @@
         onSelect={e => { onSelect?.(e) }}
       />
     {/if}
-    <div>{@render children()}</div>
+    <div class="_2 grow-1 {contentCss}">{@render children()}</div>
   </div>
 {/if}
 
@@ -81,5 +81,23 @@
     background-color: rgb(255, 255, 255);
     box-shadow: -3px 1px 5px #0000001a;
     z-index: 101;
+    max-width: 100vw;
+    overflow: hidden;
+  }
+  ._2 {
+    overflow-y: auto;
+    overflow-x: hidden;
+    width: calc(100% + 6px);
+    margin-right: -6px;
+    padding-right: 6px;
+  }
+
+  @media (max-width: 749px) {
+    ._2 {
+      width: calc(100% + 12px);
+      margin-left: -6px;
+      margin-right: -6px;
+      padding: 0 6px;
+    }
   }
 </style>

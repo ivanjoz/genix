@@ -33,4 +33,14 @@
     width: calc(100% - var(--menu-min-width));
     min-height: calc(100vh - var(--header-height) - 4px);
   }
+
+  @media (max-width: 750px) {
+    ._1 {
+      margin-left: 0;
+      width: 100%;
+      max-width: 100vw;
+      overflow-x: hidden;
+    }
+  }
+
 </style>

@@ -8,6 +8,8 @@
 	const module = $derived(Core.module);
 	let menuOpen = $state<[number, string]>([0, '']);
 	let currentPathname = $state('');
+	let mobileMenuPanel: HTMLElement;
+	let mobileMenuBackdrop: HTMLElement;
 
 	// Functions
 	function getMenuOpenFromRoute(mod: IModule, pathname: string): [number, string] {
@@ -32,6 +34,57 @@
 	function navigateTo(route: string, menuId: number) {
 		menuOpen = [menuId, route];
 		goto(route);
+		// Close mobile menu on navigation
+		if (Core.mobileMenuOpen) {
+			closeMobileMenu();
+		}
+	}
+
+	// Animation duration in milliseconds - should match CSS animation duration
+	const ANIMATION_DURATION = 350;
+
+	function openMobileMenu() {
+		if (mobileMenuPanel) {
+			mobileMenuPanel.style.setProperty("view-transition-name", "mobile-side-menu");
+			
+			setTimeout(() => {
+				mobileMenuPanel.style.setProperty("view-transition-name", "");
+			}, ANIMATION_DURATION);
+
+			if (document.startViewTransition) {
+				document.startViewTransition(() => {
+					Core.mobileMenuOpen = 1;
+				});
+			} else {
+				Core.mobileMenuOpen = 1;
+			}
+		}
+	}
+
+	function closeMobileMenu() {
+		if (mobileMenuPanel) {
+			mobileMenuPanel.style.setProperty("view-transition-name", "mobile-side-menu");
+
+			if (document.startViewTransition) {
+				document.startViewTransition(() => {
+					Core.mobileMenuOpen = 0;
+				});
+			} else {
+				Core.mobileMenuOpen = 0;
+			}
+
+			setTimeout(() => {
+				mobileMenuPanel.style.setProperty("view-transition-name", "");
+			}, ANIMATION_DURATION);
+		}
+	}
+
+	function toggleMobileMenu() {
+		if (Core.mobileMenuOpen) {
+			closeMobileMenu();
+		} else {
+			openMobileMenu();
+		}
 	}
 
 	// Lifecycle
@@ -42,6 +95,11 @@
 				menuOpen = getMenuOpenFromRoute(module, currentPathname);
 			}
 		}
+	});
+
+	// Register the toggle function in the Core store
+	$effect(() => {
+		Core.toggleMobileMenu = toggleMobileMenu;
 	});
 </script>
 
@@ -142,23 +200,20 @@
 	</div>
 </div>
 
-<!-- Mobile Menu Toggle (hidden checkbox for CSS-only control) -->
-<input type="checkbox" id="mobile-menu-toggle" class="mobile-menu-checkbox" />
-
 <!-- Mobile Menu -->
-<div class="mobile-menu-wrapper md:hidden" role="dialog" aria-modal="true">
+<div class="mobile-menu-wrapper md:hidden {Core.mobileMenuOpen ? 'is-open' : ''}" role="dialog" aria-modal="true">
 	<!-- Backdrop -->
-	<label for="mobile-menu-toggle" class="mobile-menu-backdrop" aria-label="Close menu"></label>
+	<button type="button" class="mobile-menu-backdrop" aria-label="Close menu" onclick={closeMobileMenu} bind:this={mobileMenuBackdrop}></button>
 
 	<!-- Mobile Menu Panel -->
-	<aside class="mobile-menu-panel">
+	<aside class="mobile-menu-panel" bind:this={mobileMenuPanel}>
 		<!-- Mobile Header -->
 		<div class="h-48 flex items-center justify-between px-16 border-b border-gray-800/50">
 			<span class="text-lg font-bold tracking-wider text-indigo-400">GENIX</span>
-			<label
-				for="mobile-menu-toggle"
+			<button
 				class="p-8 hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
 				aria-label="Close menu"
+				onclick={closeMobileMenu}
 			>
 				<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path
@@ -168,7 +223,7 @@
 						d="M6 18L18 6M6 6l12 12"
 					/>
 				</svg>
-			</label>
+			</button>
 		</div>
 
 		<!-- Mobile Menu Items -->
@@ -236,9 +291,6 @@
 </div>
 
 <style>
-	.d-menu:hover {
-
-	}
 	._1 {
 		position: absolute;
 		left: 12px;
@@ -321,17 +373,12 @@
 		padding-right: 8px;
 	}
 
-	/* Pure CSS Mobile Menu Control */
-	.mobile-menu-checkbox {
-		display: none;
-	}
-
+	/* Mobile Menu Control */
 	.mobile-menu-wrapper {
 		position: fixed;
 		inset: 0;
 		z-index: 50;
 		pointer-events: none;
-		visibility: hidden;
 	}
 
 	.mobile-menu-backdrop {
@@ -340,8 +387,17 @@
 		background-color: rgb(0 0 0 / 0.6);
 		backdrop-filter: blur(4px);
 		opacity: 0;
-		transition: opacity 0.3s ease-out;
 		cursor: pointer;
+		border: none;
+		padding: 0;
+		z-index: 1;
+		pointer-events: none;
+		transition: opacity 0.4s ease-in-out;
+	}
+
+	.mobile-menu-wrapper.is-open .mobile-menu-backdrop {
+		pointer-events: all;
+		opacity: 1;
 	}
 
 	.mobile-menu-panel {
@@ -355,21 +411,55 @@
 		color: white;
 		box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
 		overflow-y: auto;
-		transform: translateX(-100%);
-		transition: transform 0.3s ease-out;
+		/* Don't transform by default - let view transitions handle it */
+		opacity: 0;
+		z-index: 2;
 	}
 
-	/* When checkbox is checked, show the mobile menu */
-	.mobile-menu-checkbox:checked ~ .mobile-menu-wrapper {
+	/* When mobile menu is open */
+	.mobile-menu-wrapper.is-open {
 		pointer-events: auto;
-		visibility: visible;
 	}
 
-	.mobile-menu-checkbox:checked ~ .mobile-menu-wrapper .mobile-menu-backdrop {
+	.mobile-menu-wrapper.is-open .mobile-menu-panel {
 		opacity: 1;
+		z-index: 2;
 	}
 
-	.mobile-menu-checkbox:checked ~ .mobile-menu-wrapper .mobile-menu-panel {
-		transform: translateX(0);
+	/* View Transitions for Mobile Menu */
+	@keyframes slide-out {
+		from {
+			transform: translateX(0);
+			opacity: 1;
+		}
+		to {
+			transform: translateX(-100%);
+			opacity: 1;
+		}
+	}
+
+	@keyframes slide-in {
+		from {
+			transform: translateX(-100%);
+		}
+		to {
+			transform: translateX(0);
+		}
+	}
+
+	/* When closing: OLD snapshot slides out to the left */
+	::view-transition-old(mobile-side-menu) {
+		animation: slide-out 0.35s ease-in-out forwards;
+		animation-fill-mode: forwards;
+	}
+
+	/* When opening: NEW snapshot slides in from the left */
+	::view-transition-new(mobile-side-menu) {
+		animation: slide-in 0.35s ease-in-out;
+	}
+
+	/* Prevent the default fade out on OLD snapshot */
+	::view-transition-image-pair(mobile-side-menu) {
+		isolation: auto;
 	}
 </style>

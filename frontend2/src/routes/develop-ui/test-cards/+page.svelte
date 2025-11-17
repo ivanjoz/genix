@@ -7,7 +7,7 @@
 
 </script>
 
-<Page>
+<Page title="demo">
 	<div>hola</div>
 	<div>{demoService.message}</div>
 	<ImageUploader saveAPI="producto-image"
