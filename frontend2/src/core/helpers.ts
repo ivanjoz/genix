@@ -11,17 +11,21 @@ export const throttle = (func: (() => void), delay: number) => {
   }, delay)
 }
 
-export const highlString = (phrase: string, words: string[]): { text: string, highl?: boolean }[] => {
+export const highlString = (
+  phrase: string, words: string[]
+): { text: string, highl?: boolean, isEnd?: boolean }[] => {
   if(typeof phrase !== 'string'){
     console.error("no es string")
     console.log(phrase)
     return [{ text: "!" }]
   }
-  const arr: { text: string, highl?: boolean }[] = [{ text: phrase }]
-  if (!words || words.length === 0) return arr
+  const arr: { text: string, highl?: boolean, isEnd?: boolean }[] = [{ text: phrase }]
+  if (!words || words.length === 0){ return arr }
+  console.log("words 222:", arr.filter(x => x),"|",phrase,words)
 
   for (let word of words) {
     if (word.length < 2) continue
+    word = word + " "
     for (let i = 0; i < arr.length; i++) {
       const str = arr[i].text
       if (typeof str !== 'string') continue
@@ -30,12 +34,17 @@ export const highlString = (phrase: string, words: string[]): { text: string, hi
         const ini = str.slice(0, idx)
         const middle = str.slice(idx, idx + word.length)
         const fin = str.slice(idx + word.length)
-        arr.splice(i, 1, { text: ini }, { text: middle, highl: true }, { text: fin })
-        if(arr.length > 40){ return arr.filter(x => x) }
+        debugger
+        arr.splice(i, 1, { text: ini }, { text: middle, highl: true, isEnd: true }, { text: fin, isEnd: true })
+        if(arr.length > 40){ 
+          console.log("words 111:", arr.filter(x => x),"|",phrase,words)
+          return arr.filter(x => x) 
+        }
         continue
       }
     }
   }
+  console.log("words 111:", arr.filter(x => x),"|",phrase,words)
   return arr.filter(x => x)
 }
 

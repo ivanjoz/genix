@@ -3,11 +3,29 @@ import { SvelteMap } from 'svelte/reactivity';
 import type { IMenuRecord } from '../types/menu';
 import type { IModule } from './modules';
 import type { IImageResult } from '$components/ImageUploader.svelte';
+import { browser } from '$app/environment';
+
+export const getDeviceType = () => {
+  let view = 1 // Desktop
+  if(!browser){ return view }
+  if (window.innerWidth < 740) {
+    view = 3 /* Mobile */
+  } else if (window.innerWidth < 1140) { view = 2 /* Tablet */ }
+  return view
+}
+
+export interface ITopSearchLayer {
+  options: any[]
+  keyName: string
+  keyID: string | number
+  onSelect: (e: any) => void
+  onRemove?: (e: any) => void
+}
 
 export const Core = $state({
   module: { menus: [] as IMenuRecord[] } as IModule,
   openSearchLayer: 0 as number,
-  deviceType: 1 as number,
+  deviceType: getDeviceType() as number,
   mobileMenuOpen: 0 as number,
   popoverShowID: 0 as number | string,
   showSideLayer: 0 as number,
@@ -15,6 +33,10 @@ export const Core = $state({
   pageTitle: "" as string,
   pageOptions: [] as {id: number, name: string}[],
   toggleMobileMenu: (() => {}) as () => void,
+  setSideLayer: ((layerId: number) => {
+    Core.showSideLayer = layerId;
+  }) as (layerId: number) => void,
+  showMobileSearchLayer: null as ITopSearchLayer | null
 })
 
 export const WeakSearchRef: WeakMap<any,{ 
@@ -62,3 +84,4 @@ export const closeAllModals = () => {
 
 // Map to store images to upload (global state)
 export const imagesToUpload = new Map<number, () => Promise<IImageResult>>();
+

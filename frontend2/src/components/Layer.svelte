@@ -1,19 +1,27 @@
 <script lang="ts">
   import { Env } from "$lib/security";
+  import { tick } from "svelte";
   import { Core } from "../core/store.svelte";
   import OptionsStrip from "./micro/OptionsStrip.svelte";
   
+  // svelte-ignore non_reactive_update
+  let divLayer: HTMLDivElement
+  // Animation duration in milliseconds - should match CSS animation duration
+  const ANIMATION_DURATION = 350;
+
   const { 
-    children, css, title, titleCss, contentCss,
-    type, options, selected, onSelect, onSave, onDelete, saveButtonName
+    children, css, title, titleCss, contentCss, id,
+    type, options, selected, onSelect, onSave, onDelete, onClose, saveButtonName
   }: {
     children: any, css?: string, title?: string, titleCss?: string,
     options?: [number, string][], contentCss?: string
     selected?: number, onSelect?: (e: any) => (void | undefined),
     onSave?: () => void
     onDelete?: () => void
+    onClose?: () => void
     saveButtonName?: string
-    type: "side" | "content"
+    type: "side" | "content",
+    id?: number
   } = $props();
 
   const layerWidth = $derived.by(() => {
@@ -21,19 +29,85 @@
   })
 
   const contentWidth = $derived.by(() => {
-    return Core.showSideLayer > 0 
+    return Core.showSideLayer > 0 && Core.deviceType !== 3
       ? `calc(var(--page-width) - ${layerWidth} - 8px)` 
       : undefined
+  })
+
+  // Helper function to set layer with view transition on mobile
+  const setSideLayerWithTransition = (layerId: number) => {
+    if (Core.deviceType === 3 && document.startViewTransition) {
+      // We need to wait for the next tick to ensure the element is available
+      tick().then(() => {
+        /*
+        const targetDiv = document.querySelector(`[data-layer-id="${layerId}"]`) as HTMLDivElement;
+        const currentDiv = divLayer;
+        */
+        // Set view-transition-name on both current and target elements
+        if (divLayer) {
+          divLayer.style.setProperty("view-transition-name", "mobile-side-layer");
+        }
+        /*
+        if (targetDiv) {
+          targetDiv.style.setProperty("view-transition-name", "mobile-side-layer");
+        }
+        */
+        setTimeout(() => {
+          if (divLayer) {
+            divLayer.style.setProperty("view-transition-name", "");
+          }
+          /*
+          if (targetDiv) {
+            targetDiv.style.setProperty("view-transition-name", "");
+          }
+            */
+        }, ANIMATION_DURATION);
+
+        document.startViewTransition(() => {
+          Core.showSideLayer = layerId;
+        });
+      });
+    } else {
+      Core.showSideLayer = layerId;
+    }
+  }
+
+  // Helper function to close layer with view transition on mobile
+  const closeLayer = () => {
+    setSideLayerWithTransition(0);
+  }
+
+  // Set view-transition-name when layer is shown on mobile
+  $effect(() => {
+    if(type !== 'side' || Core.deviceType !== 3){ return }
+    
+    if (Core.showSideLayer === id && divLayer) {
+      divLayer.style.setProperty("view-transition-name", "mobile-side-layer");
+      
+      setTimeout(() => {
+        if (divLayer) {
+          divLayer.style.setProperty("view-transition-name", "");
+        }
+      }, ANIMATION_DURATION);
+    }
+  })
+
+  // Register the setSideLayer function in the Core store
+  $effect(() => {
+    Core.setSideLayer = setSideLayerWithTransition;
   })
 
   console.log("Env.sideLayerSize",  Env.sideLayerSize)
 </script>
 
-{#if Core.showSideLayer > 0 && type == 'side'}
-  <div class="_1 flex flex-col {css||""}" style="width: {layerWidth};">
+{#if Core.showSideLayer === id && type == 'side'}
+  <div class="_1 flex flex-col {css||""}" bind:this={divLayer}
+    data-layer-id={id}
+    style="width: {layerWidth};"
+  >
     <div class="flex items-center justify-between">
-      <div class={titleCss}>{title}</div>
-      <div class="items-center">
+      <div class="overflow-hidden text-nowrap mr-8 {titleCss}">{title}</div>
+      <div class="shrink-0 flex items-center">
         {#if onDelete}
           <button class="bx-red mr-8 lh-10" onclick={onDelete} aria-label="Eliminar">
             <i class="icon-trash"></i>
@@ -48,7 +122,14 @@
         <button class="bx-yellow" title="close"
           onclick={ev => {
             ev.stopPropagation()
-            Core.showSideLayer = 0
+            closeLayer()
+            if(onClose){
+              if(Core.deviceType === 3){
+                setTimeout(() => { onClose() },300)
+              } else {
+                onClose()
+              }
+            }
           }}
         >
           <i class="icon-cancel"></i>
@@ -100,4 +181,41 @@
       padding: 0 6px;
     }
   }
+
+  /* View Transitions for Mobile Layer */
+	@keyframes slide-out {
+		from {
+			transform: translateX(0);
+			opacity: 1;
+		}
+		to {
+			transform: translateX(100%);
+			opacity: 1;
+		}
+	}
+
+	@keyframes slide-in {
+		from {
+			transform: translateX(100%);
+		}
+		to {
+			transform: translateX(0);
+		}
+	}
+
+	/* When closing: OLD snapshot slides out to the left */
+	::view-transition-old(mobile-side-layer) {
+		animation: slide-out 0.35s ease-in-out forwards;
+		animation-fill-mode: forwards;
+	}
+
+	/* When opening: NEW snapshot slides in from the left */
+	::view-transition-new(mobile-side-layer) {
+		animation: slide-in 0.35s ease-in-out;
+	}
+
+	/* Prevent the default fade out on OLD snapshot */
+	::view-transition-image-pair(mobile-side-layer) {
+		isolation: auto;
+	}
 </style>

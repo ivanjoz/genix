@@ -2,9 +2,10 @@
     import CheckboxOptions from "$components/CheckboxOptions.svelte";
     import Input from "$components/Input.svelte";
     import HTMLEditor from "$components/micro/HTMLEditor.svelte";
-    import { openModal } from "$core/store.svelte";
+    import { openModal, type ITopSearchLayer } from "$core/store.svelte";
     import { ConfirmWarn, Loading, Notify } from "$lib/helpers";
     import { POST } from "$lib/http";
+    import { onMount } from "svelte";
     import ImageUploader from "../../../components/ImageUploader.svelte";
     import Layer from "../../../components/Layer.svelte";
     import OptionsStrip from "../../../components/micro/OptionsStrip.svelte";
@@ -90,7 +91,7 @@
     if(producto){
       Object.assign(producto, productoForm)
     }
-    Core.showSideLayer = 0
+    Core.setSideLayer(0)
   }
 
   $effect(() => {
@@ -117,16 +118,16 @@
 </script>
 
 <Page sideLayerSize={780} title="Productos">
-  <div class="flex flex-col md:flex-row items-center mb-8">
-    <OptionsStrip selected={view}
+  <div class="grid grid-cols-12 md:flex md:flex-row items-center mb-8">
+    <OptionsStrip selected={view} css="col-span-12 mb-6 md:mb-0"
       options={[[1,"Productos"],[2,"Categorías"],[3,"Marcas"]]} 
       onSelect={e => {
-        Core.showSideLayer = 0
+        Core.setSideLayer(0)
         productoForm = { ID: 0 } as IProducto
         view = e[0] as number
       }}
     />
-    <div class="i-search w-200 ml-12">
+    <div class="i-search w-full md:w-200 md:ml-12 col-span-5">
       <div><i class="icon-search"></i></div>
       <input type="text" onkeyup={ev => {
         const value = String((ev.target as any).value||"")
@@ -134,17 +135,17 @@
       }}>
     </div>
 
-    <button class="bx-green ml-auto" onclick={ev => {
+    <button class="bx-green ml-auto col-span-7" onclick={ev => {
       ev.stopPropagation()
       if(view === 2){
         CategoriasLayer?.newRecord()
       } else if(view === 2) {
         MarcasLayer?.newRecord()
       } else {
-        Core.showSideLayer = 1
+        Core.setSideLayer(1)
       }
     }}>
-      <i class="icon-plus"></i>Nuevo
+      <i class="icon-plus"></i><span class="hidden md:block">Nuevo</span>
     </button>
   </div>
 
@@ -162,19 +163,18 @@
           productoForm = {...e}
           productoForm.CategoriasIDs = [...(e.CategoriasIDs||[])]
           productoForm.Propiedades = [...(e.Propiedades||[])]
-          Core.showSideLayer = 1
+          Core.setSideLayer(1)
         }}
       />
     </Layer>
   {/if}
   <Layer css="px-8 py-8 md:px-14 md:py-10" title={productoForm?.Nombre || ""} type="side"
-    titleCss="h2 mb-6" contentCss="px-0 md:px-0"
+    titleCss="h2 mb-6" contentCss="px-0 md:px-0" id={1}
     options={[[1,"Información"],[2,"Ficha"],[3,"Parámetros"],[4,"Fotos"]]}
     selected={layerView}
     onSelect={e => layerView = e[0]}
-    onSave={() => {
-      onSave()
-    }}
+    onClose={() => { productoForm = {} as IProducto }}
+    onSave={() => { onSave() }}
   >
     {#if layerView === 1}
       <div class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-6 md:mt-16">

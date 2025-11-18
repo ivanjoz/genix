@@ -36,35 +36,22 @@
 		goto(route);
 		// Close mobile menu on navigation
 		if (Core.mobileMenuOpen) {
-			closeMobileMenu();
+			toggleMobileMenu(true);
 		}
 	}
 
 	// Animation duration in milliseconds - should match CSS animation duration
 	const ANIMATION_DURATION = 350;
 
-	function openMobileMenu() {
-		if (mobileMenuPanel) {
-			mobileMenuPanel.style.setProperty("view-transition-name", "mobile-side-menu");
-			
-			setTimeout(() => {
-				mobileMenuPanel.style.setProperty("view-transition-name", "");
-			}, ANIMATION_DURATION);
+	const toggleMobileMenu = (close?: boolean) => {
+		if(!mobileMenuPanel){ return }
+		mobileMenuPanel.style.setProperty("view-transition-name", "mobile-side-menu")
 
-			if (document.startViewTransition) {
-				document.startViewTransition(() => {
-					Core.mobileMenuOpen = 1;
-				});
-			} else {
-				Core.mobileMenuOpen = 1;
-			}
-		}
-	}
+		setTimeout(() => {
+			mobileMenuPanel.style.setProperty("view-transition-name", "")
+		}, ANIMATION_DURATION)
 
-	function closeMobileMenu() {
-		if (mobileMenuPanel) {
-			mobileMenuPanel.style.setProperty("view-transition-name", "mobile-side-menu");
-
+		if (Core.mobileMenuOpen || close) {
 			if (document.startViewTransition) {
 				document.startViewTransition(() => {
 					Core.mobileMenuOpen = 0;
@@ -72,18 +59,14 @@
 			} else {
 				Core.mobileMenuOpen = 0;
 			}
-
-			setTimeout(() => {
-				mobileMenuPanel.style.setProperty("view-transition-name", "");
-			}, ANIMATION_DURATION);
-		}
-	}
-
-	function toggleMobileMenu() {
-		if (Core.mobileMenuOpen) {
-			closeMobileMenu();
 		} else {
-			openMobileMenu();
+			if (document.startViewTransition) {
+				document.startViewTransition(() => {
+					Core.mobileMenuOpen = 1;
+				});
+			} else {
+				Core.mobileMenuOpen = 1;
+			}
 		}
 	}
 
@@ -203,7 +186,8 @@
 <!-- Mobile Menu -->
 <div class="mobile-menu-wrapper md:hidden {Core.mobileMenuOpen ? 'is-open' : ''}" role="dialog" aria-modal="true">
 	<!-- Backdrop -->
-	<button type="button" class="mobile-menu-backdrop" aria-label="Close menu" onclick={closeMobileMenu} bind:this={mobileMenuBackdrop}></button>
+	<button type="button" class="mobile-menu-backdrop" aria-label="Close menu" 
+		onclick={() => toggleMobileMenu(true)} bind:this={mobileMenuBackdrop}></button>
 
 	<!-- Mobile Menu Panel -->
 	<aside class="mobile-menu-panel" bind:this={mobileMenuPanel}>
@@ -213,7 +197,7 @@
 			<button
 				class="p-8 hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
 				aria-label="Close menu"
-				onclick={closeMobileMenu}
+				onclick={() => toggleMobileMenu(true)}
 			>
 				<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path

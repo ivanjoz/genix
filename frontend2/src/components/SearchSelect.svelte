@@ -1,4 +1,5 @@
 <script lang="ts" generics="T,E">
+    import { include } from "$lib/helpers";
   import { highlString, throttle } from "../core/helpers";
   import { Core } from "../core/store.svelte";
   import s1 from "./components.module.css";
@@ -91,12 +92,10 @@
 
   let prevSetValueTime = Date.now();
 
-  function setValueSaveOn(selectedItem?: E, setOnInput?: boolean) {
-    const nowTime = Date.now();
-    if (nowTime - prevSetValueTime < 80) {
-      return;
-    }
-    prevSetValueTime = nowTime;
+  const setValueSaveOn = (selectedItem?: E, setOnInput?: boolean) => {
+    const nowTime = Date.now()
+    if (nowTime - prevSetValueTime < 80) { return }
+    prevSetValueTime = nowTime
 
     if (notEmpty && !selectedItem) {
       selectedItem = getSelectedFromProps();
@@ -136,25 +135,24 @@
     }
   }
 
-  function filter(text: string) {
+  const filter = (text: string) => {
     if (!text && (avoidIDs?.length || 0) === 0) {
       return [...options];
     }
-    const avoidIDSet = new Set(avoidIDs || []);
+    const avoidIDSet = new Set(avoidIDs || [])
+    const filtered: E[] = []
+    const searchWords = text.toLowerCase().split(" ").filter(x => x.length > 1)
 
-    const filtered: E[] = [];
-    for (let op of options) {
-      if (
-        avoidIDSet.size > 0 &&
-        avoidIDSet.has(op[keyId as keyof E] as number)
-      ) {
+    for (const opt of options) {
+      if (avoidIDSet.size > 0 && avoidIDSet.has(opt[keyId as keyof E] as number)){
         continue;
       }
-      const name = op[keyName] as string;
-      if (typeof name === "string") {
-        const nameN = name.toLowerCase();
-        if (!text || nameN.includes(text)) {
-          filtered.push(op);
+      if(searchWords.length === 0){
+        filtered.push(opt)
+      } else {
+        const name = opt[keyName] as string
+        if (typeof name === "string") {
+          if(include(name.toLowerCase(), searchWords)){ filtered.push(opt) }
         }
       }
     }
@@ -195,10 +193,8 @@
   }
 
   function onOptionClick(opt: E) {
-    if (inputRef) { 
-      setValueSaveOn(opt, true)
-      inputRef.blur()
-    }
+    setValueSaveOn(opt, true)
+    if (inputRef) { inputRef.blur() }
     show = false
   }
 
@@ -233,8 +229,16 @@
     filteredOptions = filter("");
   });
 
-  function handleOpenMobileLayer() {
-    // openSearchLayer = searchCardID;
+  const handleOpenMobileLayer = () => {
+    Core.showMobileSearchLayer = {
+      options: filteredOptions, 
+      keyName: keyName as string, 
+      keyID: keyId as string,
+      onSelect: (e) => { onOptionClick(e) },
+      onRemove: (e) => {
+
+      }
+    }
   }
 </script>
 
@@ -295,7 +299,7 @@
         }}
       />
     {:else}
-      <div class={`w-full ${s1.input_inp} ${inputCss}`}
+      <div class={`w-full flex items-center ${s1.input_inp} ${inputCss}`}
         role="button" tabindex="0"
         onkeydown={(ev) => {
           if (ev.key === 'Enter' || ev.key === ' ') {
@@ -307,7 +311,13 @@
           handleOpenMobileLayer();
         }}
       >
-        <div class="h100 w100 flex items-center">{selectedValue}</div>
+        <div class="h100 w100 flex items-center">
+          {#if selectedValue}
+            {selectedValue}
+          {:else}
+            <div class="fs15 mt-2 _10">{placeholder||""}</div>
+          {/if}
+        </div>
       </div>
     {/if}
     {#if !label}
@@ -318,7 +328,7 @@
     <div>Cargando...</div>
   {/if}
   {#if !isDisabled}
-    <div class="absolute bottom-8 right-6 {show && !icon ? 'show' : ''}">
+    <div class="absolute bottom-8 right-6 pointer-events-none {show && !icon ? 'show' : ''}">
       <i class={icon || "icon-down-open-1"}></i>
     </div>
   {/if}
@@ -343,6 +353,7 @@
     >
       {#each filteredOptions as e, i}
         {@const name = String(e[keyName])}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div class="flex ai-center _highlight{arrowSelected === i
             ? ' _selected'
             : ''}"
@@ -354,7 +365,7 @@
         >
           <div>
             {#each highlString(name, words) as w}
-              <span class={w.highl ? "_8" : ""}>{w.text}</span>
+              <span class={w.highl ? "_8" : ""} class:mr-4={w.isEnd}>{w.text}</span>
             {/each}
           </div>
         </div>
@@ -402,5 +413,8 @@
   ._8 {
     color: rgb(196, 71, 71);
     text-decoration: underline;
+  }
+  ._10 {
+    color: #6d5dad;
   }
 </style>
