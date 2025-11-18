@@ -34,11 +34,11 @@ if [[ $ACCIONES == *"1"* ]]; then
     echo "Generando frontend a docs para su deploy en .github"
 
     if [[ $ACCIONES != *"x"* ]]; then
-       npm run build --prefix ./frontend
+       npm run publish --prefix ./frontend2
     fi
 
-    cd ./frontend
-    node build.js
+    #cd ./frontend
+    #node build.js
 
     echo "El deploy frontend finalizado!"
 fi
