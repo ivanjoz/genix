@@ -1,20 +1,21 @@
+import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 
 export const IsClient = () => {
-  return typeof window !== 'undefined'
+  return browser
 }
 
-const isClient = IsClient()
 let api = "https://dnh72xkkh3junf57p3vexemlvm0emgys.lambda-url.us-east-1.on.aws/api/"
 
-if(isClient){
-  if(window.location.host.includes("localhost") && window.location.host !== "localhost:8000"){
-    api = "http://localhost:3589/api/"
+if(browser){
+  const host = window.location.host
+  if((host.includes("localhost") || host.includes("127.0.0.1")) && host !== "localhost:8000"){
+    api = "http://localhost:3589/"
   }
 } 
 
 export const getWindow = () => {
-  if(isClient){ return window }
+  if(browser){ return window }
   else return {
     scrollY: 0,
     innerHeight: 800,
@@ -35,7 +36,7 @@ export const Env = {
   appId: "genix",
   S3_URL: "https://d16qwm950j0pjf.cloudfront.net/",
   serviceWorker: "/sw.js",
-  apiRoute: "http://localhost:3589/",
+  apiRoute: api,
   enviroment: "dev",
   counterID: 1,
   sideLayerSize: 0,
@@ -47,9 +48,9 @@ export const Env = {
   params: { fetchID: 1001, fetchProcesses: new Map() },
   pendingRequests: [] as any[],
   API_ROUTES: { MAIN: api } as {[e: string]: string},
-  screen: isClient ? window.screen : { height: -1, width: -1 },
-  language: isClient ? window.navigator?.language || "" : "-",
-  deviceMemory: isClient ? (window.navigator as any)?.deviceMemory || 0 : 0,
+  screen: browser ? window.screen : { height: -1, width: -1 },
+  language: browser ? window.navigator?.language || "" : "-",
+  deviceMemory: browser ? (window.navigator as any)?.deviceMemory || 0 : 0,
   throttleTimer: null as NodeJS.Timeout | null,
   hostname: "",
   pathname: "",
@@ -64,7 +65,7 @@ export const Env = {
     }
   },
   getPathname: () => {
-    if(isClient){ return window.location.pathname }
+    if(browser){ return window.location.pathname }
     return Env.pathname || ""
   },
   getEmpresaID: (): number => {
@@ -76,7 +77,7 @@ export const Env = {
       }
 
       let pathname = ""
-      if(isClient){
+      if(browser){
         pathname = document.head.querySelector(`meta[name="loc"]`)?.getAttribute("content") || ""
       }
       if(!pathname){ pathname = Env.getPathname() }
@@ -109,7 +110,7 @@ export const Env = {
 }
 
 export const getInnerWidth = () => {
-  if(isClient){ return window.innerWidth }
+  if(browser){ return window.innerWidth }
   else { return 1200 }
 }
 

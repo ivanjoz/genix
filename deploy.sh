@@ -51,7 +51,7 @@ if [[ $ACCIONES == *"2"* ]]; then
     cd ./cloud
     $GO_PATH run . accion=1
 
-    echo "El deploy backend-node finalizado!"
+    echo "El deploy backend finalizado!"
 
 fi
 
