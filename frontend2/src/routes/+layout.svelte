@@ -4,12 +4,13 @@
 	import { page } from '$app/state';
 	import Header from '../components/Header.svelte';
 	import SideMenu from '../components/SideMenu.svelte';
-	import { Core } from '../core/store.svelte';
+	import { getDeviceType, Core } from '../core/store.svelte';
 	import Modules from '../core/modules';
 	import { doInitServiceWorker } from '$lib/sw-cache';
 	import Page from '../components/Page.svelte';
   import { Env } from '$lib/security';
-    import { browser } from '$app/environment';
+  import { browser } from '$app/environment';
+    import TopLayerSelector from '$components/micro/TopLayerSelector.svelte';
 
 	let { children } = $props();
 
@@ -31,6 +32,11 @@
 		Core.module = Modules[0]
 		console.log("imageWorker",Env, Env.imageWorker)
 
+		window.addEventListener('resize', () => {
+			const newDeviceType = getDeviceType()
+			if (newDeviceType !== Core.deviceType) { Core.deviceType = newDeviceType }
+		})
+
 		doInitServiceWorker().then(() => {
 			Core.isLoading = 0
 		})
@@ -46,12 +52,13 @@
 </svelte:head>
 
 {#if showLayout}
+	<TopLayerSelector></TopLayerSelector>
 	<!-- Header with mobile menu toggle -->
-	<Header	showMenuButton={true}	title="Sistema Genix"/>
+	<Header	showMenuButton={true}/>
 	<!-- Side Menu -->
 	<SideMenu />
 	{#if Core.isLoading > 0}
-		<Page>
+		<Page title="...">
 			<div class="p-12"><h2>Cargando...</h2></div>
 		</Page>
 	{/if}

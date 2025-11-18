@@ -79,7 +79,6 @@
 
 </script>
 
-
 <div class={css}>
   <SearchSelect options={options} keyId={keyId} keyName={keyName} 
     clearOnSelect={true} avoidIDs={selectedIDs} placeholder={label} 

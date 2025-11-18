@@ -1,14 +1,15 @@
 <script lang="ts" generics="T">
 
   let { 
-    options, selected, keyField, valueField, buttonCss, onSelect
+    options, selected, keyField, valueField, buttonCss, onSelect, css
   }: { 
     options: T[], 
     selected: number,
     keyField?: keyof T,
     valueField?: keyof T,
     buttonCss?: string,
-    onSelect: (e: T) => void
+    onSelect: (e: T) => void,
+    css?: string
   } = $props()
 
   const getClass = (e: T) => {
@@ -31,7 +32,7 @@
 
 </script>
 
-<div class="pb-4 md:pb-0 flex items-center shrink-0 max-w-[100%] overflow-x-auto overflow-y-hidden">
+<div class="pb-4 md:pb-0 flex items-center shrink-0 max-w-[100%] overflow-x-auto overflow-y-hidden {css}">
   {#each options as opt }
     <button class={getClass(opt)} onclick={ev => {
       ev.stopPropagation()
