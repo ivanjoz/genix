@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { formatN, formatTime } from "../functions/helpers";
+  import { formatN } from "$lib/helpers";
   import type { IProducto } from "../services/productos.svelte";
-  import ImageHash from "./imagehash.svelte";
+  import ImageHash from "./Imagehash.svelte";
   import { addProductoCant, ProductsSelectedMap } from "./store.svelte";
   
   const { 

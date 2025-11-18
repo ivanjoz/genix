@@ -9,16 +9,17 @@
   }: IProps = $props();
 
   import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
-  import angleSvg from "../assets/angle.svg?raw";
-  import { parseSVG } from "../functions/helpers";
+  import angleSvg from "$lib/assets/angle.svg?raw";
+  import { parseSVG } from "$lib/helpers";
   import s1 from "./styles.module.css"
-  import ArrowSteps from "../core/ArrowSteps.svelte"
-  import { Ecommerce, Globals } from "../stores/globals.svelte";
-  import Input from "../core/Input.svelte";
+  import ArrowSteps from "./ArrowSteps.svelte"
+  import { Ecommerce } from "../stores/globals.svelte";
+  import Input from "$components/Input.svelte";
   import CiudadesSelector from "./CiudadesSelector.svelte";
   import ProductCardHorizonal from "./ProductCardHorizonal.svelte";
+    import { Core } from "$core/store.svelte";
 
-  let userForm = {}
+  let userForm = {} as any
 
   function toggleCartDiv() {
     layerOpenedState.id = layerOpenedState.id === id ? 0 : id;
@@ -40,7 +41,7 @@
     />
     <div class="_2 absolute p-12 flex flex-col">
       <ArrowSteps selected={Ecommerce.cartOption}
-        columnsTemplate={Globals.deviceType === 3 ? "1fr 1fr 1fr 0.7fr" : ""}
+        columnsTemplate={Core.deviceType === 3 ? "1fr 1fr 1fr 0.7fr" : ""}
         onSelect={e => {
           Ecommerce.cartOption = e.id
         }}

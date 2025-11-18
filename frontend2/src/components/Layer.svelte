@@ -14,7 +14,7 @@
     type, options, selected, onSelect, onSave, onDelete, onClose, saveButtonName
   }: {
     children: any, css?: string, title?: string, titleCss?: string,
-    options?: [number, string][], contentCss?: string
+    options?: [number, string, string[]?][], contentCss?: string
     selected?: number, onSelect?: (e: any) => (void | undefined),
     onSave?: () => void
     onDelete?: () => void
@@ -138,8 +138,8 @@
     </div>
     {#if (options||[]).length > 0}
       <OptionsStrip options={options as [number, string][]} 
-        selected={selected as number}
-        onSelect={e => { onSelect?.(e) }}
+        selected={selected as number} useMobileGrid={true}
+        onSelect={e => { onSelect?.(e) }} css="mt-2"
       />
     {/if}
     <div class="_2 grow-1 {contentCss}">{@render children()}</div>

@@ -1,16 +1,17 @@
 <script lang="ts">
-	import '../app.css';
-	import favicon from '$lib/assets/favicon.svg';
+	import { browser } from '$app/environment';
 	import { page } from '$app/state';
-	import Header from '../components/Header.svelte';
-	import SideMenu from '../components/SideMenu.svelte';
-	import { getDeviceType, Core } from '../core/store.svelte';
-	import Modules from '../core/modules';
+	import TopLayerSelector from '$components/micro/TopLayerSelector.svelte';
+	import favicon from '$lib/assets/favicon.svg';
+	import { checkIsLogin, Env } from '$lib/security';
 	import { doInitServiceWorker } from '$lib/sw-cache';
+	import { onMount } from 'svelte';
+	import '../app.css';
+	import Header from '../components/Header.svelte';
 	import Page from '../components/Page.svelte';
-  import { Env } from '$lib/security';
-  import { browser } from '$app/environment';
-    import TopLayerSelector from '$components/micro/TopLayerSelector.svelte';
+	import SideMenu from '../components/SideMenu.svelte';
+	import Modules from '../core/modules';
+	import { Core, getDeviceType } from '../core/store.svelte';
 
 	let { children } = $props();
 
@@ -25,8 +26,16 @@
 		}
 	}
 	
-	// Main content margin - menu is always 4.5rem (w-18) by default
-	let mainMarginClass = 'ml-18';
+	const redirectsToLogin = $derived.by(() => {
+		if(["/login"].includes(page.url.pathname)){
+			return false
+		}
+		return checkIsLogin() !== 2
+	})
+
+	onMount(() => {
+		if(redirectsToLogin){ Env.navigate("/login") }
+	})
 
 	$effect(() => {
 		Core.module = Modules[0]
@@ -51,7 +60,7 @@
 	<title>Genix - Sistema de Gestión</title>
 </svelte:head>
 
-{#if showLayout}
+{#if showLayout && !redirectsToLogin}
 	<TopLayerSelector></TopLayerSelector>
 	<!-- Header with mobile menu toggle -->
 	<Header	showMenuButton={true}/>
@@ -65,6 +74,6 @@
 {/if}
 
 <!-- Main Content -->
-{#if Core.isLoading === 0 || !showLayout}
+{#if (Core.isLoading === 0 || !showLayout /* ??? */) && !redirectsToLogin}
 	{@render children?.()}
 {/if}

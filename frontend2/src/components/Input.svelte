@@ -60,16 +60,13 @@
   */
 
   const baseDecimalsValue = baseDecimals ? 10 ** baseDecimals : 0;
-  let inputValue = $state("" as string | number);
-  let isInputValid = $state(checkIfInputIsValid());
-  let isChange = 0;
 
   const makeValue = (value: number) => {
     if(typeof value !== 'number'){ return value || "" }
     return baseDecimals ? (value as number / baseDecimals) : value
   }
 
-  function checkIfInputIsValid(): number {
+  const checkIfInputIsValid = (): number => {
     if (!required || disabled) return 0;
     if (!saveOn || !save) return 1;
     const value = saveOn[save] as string | number;
@@ -83,7 +80,11 @@
     return pass ? 2 : 1;
   }
 
-  function onKeyUp(ev: KeyboardEvent | FocusEvent, isBlur?: boolean) {
+  let inputValue = $state("" as string | number);
+  let isInputValid = $state(checkIfInputIsValid());
+  let isChange = 0;
+
+  const onKeyUp = (ev: KeyboardEvent | FocusEvent, isBlur?: boolean) => {
     ev.stopPropagation();
     const target = ev.target as HTMLInputElement | HTMLTextAreaElement;
     let value: string | number = target.value;
@@ -115,7 +116,7 @@
     inputValue = value;
   }
 
-  function iconValid() {
+  const iconValid = () => {
     if (!isInputValid) return null;
     else if (isInputValid === 2)
       return `<i class="v-icon icon-ok c-green"></i>`;
@@ -123,16 +124,6 @@
       return `<i class="v-icon icon-attention c-red"></i>`;
     return null;
   }
-
-  /*
-  $effect(() => {
-    const updaterVal = id ? inputUpdater.get(id) || 0 : 0;
-    updaterVal; // dependency
-    const v = saveOn[save];
-    inputValue = typeof v === "number" ? v : (v as string) || "";
-    isInputValid = checkIfInputIsValid();
-  });
-  */
 
   let lastSaveOn: T | undefined
 
@@ -177,7 +168,8 @@
         placeholder={placeholder || ""}
         {disabled}
         {rows}
-        onblur={(ev) => {
+        onkeyup={ev => { onKeyUp(ev) }}
+        onblur={ev => {
           console.log("input saveon:",$state.snapshot(saveOn))
           onKeyUp(ev, true);
           if (onChange && isChange) {
@@ -192,6 +184,7 @@
         type={type || "text"}
         placeholder={placeholder || ""}
         {disabled}
+        onkeyup={ev => { onKeyUp(ev) }}
         onblur={(ev) => {
           onKeyUp(ev, true);
           if (onChange && isChange) {

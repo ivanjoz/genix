@@ -1,8 +1,9 @@
 <script lang="ts" generics="T">
   import { derived } from "svelte/store";
-  import { highlString, throttle } from "../functions/helpers";
-  import { Core } from "./store.svelte";
-  import s1 from "./core.module.css";
+  import { highlString, throttle } from "$lib/helpers";
+  import s1 from "./components.module.css";
+  import { Core } from "$core/store.svelte";
+  
   interface SearchSelectProps<T> {
     saveOn?: any;
     save?: string | keyof T;

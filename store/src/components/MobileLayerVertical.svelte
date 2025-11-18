@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Core, suscribeUrlFlag } from "./store.svelte";
+  import { Core, suscribeUrlFlag } from "$core/store.svelte.ts";
 
   const { 
-    id = false, title = "" 
+    id = false, title = ""
   } = $props<{ id: number, title: string }>();
   let divContainer: HTMLDivElement
 
@@ -25,9 +25,13 @@
         divContainer.style.setProperty("view-transition-name","")
       },400)
 
-      document.startViewTransition(() => {
+      if (document.startViewTransition) {
+        document.startViewTransition(() => {
+          showInner = show
+        })
+      } else {
         showInner = show
-      })
+      }
     }
   })
 

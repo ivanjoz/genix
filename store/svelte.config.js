@@ -37,6 +37,11 @@ export default {
       precompress: false,
       strict: true,
     }),
+    alias: {
+			$components: './src/components',
+			$core: './src/core',
+			$shared: './src/shared'
+		},
     // ssr: false,
     prerender: {
       handleMissingId: 'ignore',

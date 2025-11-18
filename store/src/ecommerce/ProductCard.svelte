@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { formatN, formatTime } from "../functions/helpers";
+  import { formatN, formatTime } from "$lib/helpers";
   import type { IProducto } from "../services/productos.svelte";
 
   const { 
     producto = null as IProducto, css = ""
   } = $props();
 
-  import ImageHash from "./imagehash.svelte";
+  import ImageHash from "./Imagehash.svelte";
     import { ProductsSelectedMap } from "./store.svelte";
   import s1 from "./styles.module.css";
 

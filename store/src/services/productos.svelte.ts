@@ -1,5 +1,5 @@
 import { Env } from "../env";
-import { arrayToMapN } from "../functions/helpers";
+import { arrayToMapN } from "$lib/helpers";
 
 const maxCacheTime = 60 * 5 // 2 segundos
 const productosPromiseMap: Map<string, Promise<any>> = new Map()

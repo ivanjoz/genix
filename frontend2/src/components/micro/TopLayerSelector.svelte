@@ -41,6 +41,11 @@ $effect(() => {
       }
       searchText = ""
     })
+  } else {
+    if(htmlTextarea){
+      htmlTextarea.blur() 
+      htmlTextarea.value = ""
+    }
   }
 })
 
@@ -81,6 +86,7 @@ $effect(() => {
   </div>
   <div class="_6">
     {#each optionsFiltered as opt }
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div class="_7" onclick={() => {
         Core.showMobileSearchLayer?.onSelect(opt)
         Core.showMobileSearchLayer = null

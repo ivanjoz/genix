@@ -1,10 +1,9 @@
 <script lang="ts">
-  import Header from "../components/headers.svelte";
-  import MainCarrusel from "../components/MainCarrusel.svelte";
-    import ProductCard from "../components/ProductCard.svelte";
-  import ProductCards from "../components/ProductCards.svelte";
-  import type { ICategoriaProducto } from "../components/types";
     import MobileMenu from "../core/MobileMenu.svelte";
+    import MainCarrusel from "../ecommerce/MainCarrusel.svelte";
+    import Header from "../ecommerce/Header.svelte";
+    import ProductCards from "../ecommerce/ProductCards.svelte";
+    import type { ICategoriaProducto } from "../ecommerce/store.svelte";
 
   let categorias: ICategoriaProducto[] = [
     { Name: "Perfumes", Image: "images/categoria_1.webp" },

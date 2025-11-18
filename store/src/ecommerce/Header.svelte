@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import SearchBar from "./search-bar.svelte";
-  import CartMenu from "./cart-menu.svelte";
-  import UsuarioMenu from "./usuario-menu.svelte";
+  import SearchBar from "./SearchBar.svelte";
+  import CartMenu from "./CartMenu.svelte";
+  import UsuarioMenu from "./UsuarioMenu.svelte";
     import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
-    import { Core } from "../core/store.svelte";
+    import { Core } from "$core/store.svelte";
 
   // State for mobile menu
   let mobileMenuOpen = $state(false);

@@ -60,7 +60,7 @@ body {
 	transition: background-color 0.3s ease;
 	--page-padding: 10px;
 	--page-width: calc(100vw - var(--menu-min-width) - 20px);
-	--header-height: 46px;
+	--header-height: 48px;
 	--title-bar-height: 40px;
 	--title-bar-lg-height: 42px;
 	--title-bar-xl-height: 44px;
