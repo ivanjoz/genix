@@ -1,5 +1,3 @@
-import { Env } from "../env"
-
 export interface ICiudad {
   ID: string
   Nombre: string

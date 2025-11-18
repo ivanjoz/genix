@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Env } from "$lib/security";
-    import { onMount } from "svelte";
-    import { Core } from "../core/store.svelte";
+  import { checkIsLogin, Env } from "$lib/security";
+  import { onMount } from "svelte";
+  import { Core } from "../core/store.svelte";
 
   let { children, sideLayerSize, title, options }: {
     children: any, sideLayerSize?: number, title: string
@@ -9,16 +9,23 @@
   } = $props();
 
   Env.sideLayerSize = sideLayerSize || 0
+  const isLogged = $derived(checkIsLogin() === 2)
+  console.log("isLogged 22", isLogged)
 
   onMount(() => {
-    Core.pageTitle = title || ""
-    Core.pageOptions = options || []
+    console.log("isLogged 11", isLogged)
+    if(!isLogged){
+      Env.navigate("/login")
+    } else {
+      Core.pageTitle = title || ""
+      Core.pageOptions = options || []
+    }
   })
 
 </script>
 
 <div class="_1 p-10">
-  {#if Core.isLoading === 0}
+  {#if Core.isLoading === 0 && isLogged}
     {@render children()}
   {/if}
   {#if Core.isLoading > 0}

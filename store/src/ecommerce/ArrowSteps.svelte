@@ -5,9 +5,9 @@
     icon?: string;
   }
 
-  import arrow2Svg from "../assets/flecha_fin.svg?raw";
-  import arrow1Svg from "../assets/flecha_inicio.svg?raw";
-  import { cn, parseSVG } from "../functions/helpers";
+  import arrow2Svg from "$lib/assets/flecha_fin.svg?raw";
+  import arrow1Svg from "$lib/assets/flecha_inicio.svg?raw";
+  import { cn, parseSVG } from "$lib/helpers";
   import { Ecommerce } from "../stores/globals.svelte";
   import s1 from "./styles.module.css";
 

@@ -1,13 +1,38 @@
+import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 
-/**
- * Shared store for SearchSelect components
- * Controls which mobile search layer is currently open
- */
-export let Core = $state({
+export const getDeviceType = () => {
+  let view = 1 // Desktop
+  if(!browser){ return view }
+  if (window.innerWidth < 740) {
+    view = 3 /* Mobile */
+  } else if (window.innerWidth < 1140) { view = 2 /* Tablet */ }
+  return view
+}
+
+export interface ITopSearchLayer {
+  options: any[]
+  keyName: string
+  keyID: string | number
+  onSelect: (e: any) => void
+  onRemove?: (e: any) => void
+}
+
+export const Core = $state({
+  // module: { menus: [] as IMenuRecord[] } as IModule,
   openSearchLayer: 0 as number,
-  deviceType: 1 as number,
+  deviceType: getDeviceType() as number,
   mobileMenuOpen: 0 as number,
+  popoverShowID: 0 as number | string,
+  showSideLayer: 0 as number,
+  isLoading: 1,
+  pageTitle: "" as string,
+  pageOptions: [] as {id: number, name: string}[],
+  toggleMobileMenu: (() => {}) as () => void,
+  setSideLayer: ((layerId: number) => {
+    Core.showSideLayer = layerId;
+  }) as (layerId: number) => void,
+  showMobileSearchLayer: null as ITopSearchLayer | null,
   openLayers: [] as number[]
 })
 

@@ -88,7 +88,7 @@
 
 <!-- Desktop Menu -->
 <div class="d-menu fixed left-0 top-0 h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950 
-		text-white shadow-xl transition-all duration-200 ease-in-out z-50 hidden md:block"
+		text-white shadow-xl transition-all duration-200 ease-in-out z-300 hidden md:block"
 	role="navigation"
 	aria-label="Main navigation"
 >

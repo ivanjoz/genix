@@ -42,7 +42,7 @@ export type CellRendererFn<T> = (
 export type CellRendererSnippet<T> = Snippet<[
   T,                              // record
   ITableColumn<T>,    						// column
-  any                             // defaultContent
+  any,                            // defaultContent
 	number,                         // rowIndex
 ]>;
 

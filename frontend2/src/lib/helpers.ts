@@ -76,6 +76,10 @@ export const parseSVG = (svgContent: string)=> {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent)}`
 }
 
+export const cn = (...classNames: (string|boolean)[]) => {
+  return classNames.filter(x => x).join(" ")
+}
+
 export function include(e: string, h: string | string[]) {
   if (h && typeof h === 'string') {
     h = h.split(' ').filter(x => x.length > 0)
