@@ -71,14 +71,14 @@
     opacity: 0;
     pointer-events: none;
     z-index: -1;
-    transform: translateY(56vh);
+   /* transform: translateY(56vh); */
   }
 
   ._2 {
     opacity: 1;
     pointer-events: auto;
     z-index: 221;
-    transform: translateY(0);
+    /* transform: translateY(0); */
   }
 
   ._3 {
@@ -92,8 +92,8 @@
   /* View Transitions for Mobile Layer Vartical*/
   @keyframes slide-up {
     from {
-      transform: translateY(56vh);
-      opacity: 0;
+      transform: translateY(40vh);
+      opacity: 0.4;
     }
     to {
       transform: translateY(0);
@@ -107,16 +107,16 @@
       opacity: 1;
     }
     to {
-      transform: translateY(56vh);
+      transform: translateY(40vh);
       opacity: 0;
     }
   }
 
   ::view-transition-new(mobile-layer-vertical) {
-    animation: slide-up 360ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+    animation: slide-up 320ms cubic-bezier(.23,.21,.64,.97) forwards;
   }
 
   ::view-transition-old(mobile-layer-vertical) {
-    animation: slide-down 380ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation: slide-down 300ms cubic-bezier(.46,.17,.69,.66) forwards;
   }
 </style>
