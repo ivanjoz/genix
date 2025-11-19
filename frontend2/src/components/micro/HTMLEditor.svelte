@@ -1,5 +1,5 @@
 <script lang="ts" generics="T">
-  import { onMount } from "svelte"
+  import { onMount, tick } from "svelte"
   import { browser } from "$app/environment"
   import {
     ChangeSource,
@@ -77,30 +77,8 @@
   let imageUrl = $state("")
   let tableRows = $state(3)
   let tableCols = $state(3)
-
-  const headingOptions: Array<{ label: string; value: HeadingLevel }> = [
-    { label: "Paragraph", value: 0 },
-    { label: "H1", value: 1 },
-    { label: "H2", value: 2 },
-    { label: "H3", value: 3 },
-    { label: "H4", value: 4 },
-    { label: "H5", value: 5 },
-    { label: "H6", value: 6 }
-  ]
-
-  const fontFamilyOptions = [
-    "Arial",
-    "Helvetica",
-    "Times New Roman",
-    "Courier New",
-    "Verdana",
-    "Georgia",
-    "Palatino",
-    "Garamond",
-    "Comic Sans MS",
-    "Trebuchet MS",
-    "Impact"
-  ]
+  let selectedRows = $state(0)
+  let selectedCols = $state(0)
 
   const getEditorCore = () => {
     const current = editor as (IEditor & { core?: any }) | null
@@ -141,6 +119,9 @@
 
     return domToContentModel(body, context)
   }
+
+  let layerInput: HTMLInputElement
+  let avoidCloseOnBlur = false
 
   const sanitizeHtml = (html: string): string => {
     if (!browser) {
@@ -448,10 +429,32 @@
   }
 
   const handleInsertTable = () => {
-    withEditor(instance => insertTable(instance, tableRows, tableCols))
+    if (selectedRows > 0 && selectedCols > 0) {
+      withEditor(instance => insertTable(instance, selectedRows, selectedCols))
+      showTableDialog = false
+      selectedRows = 0
+      selectedCols = 0
+    }
+  }
+
+  const handleRowSelect = (rows: number) => {
+    selectedRows = rows
+    if (selectedRows > 0 && selectedCols > 0) {
+      handleInsertTable()
+    }
+  }
+
+  const handleColSelect = (cols: number) => {
+    selectedCols = cols
+    if (selectedRows > 0 && selectedCols > 0) {
+      handleInsertTable()
+    }
+  }
+
+  const closeTableDialog = () => {
     showTableDialog = false
-    tableRows = 3
-    tableCols = 3
+    selectedRows = 0
+    selectedCols = 0
   }
 
   const handleInsertImage = () => {
@@ -545,42 +548,24 @@
 
 <div class={`rooster-wrapper ${css ?? ""}`}>
   {#if browser}
-    <div class="rooster-toolbar">
-      <div class="rooster-group">
-        <button
-          type="button"
-          disabled={!editor}
-          aria-label="Undo"
-          onclick={() => {
-            if (editor) {
-              const core = getEditorCore()
-              if (core) {
-                core.api.undo(core)
-                scheduleFormatStateRefresh()
-              }
-            }
-          }}>
-          ↶
-        </button>
-        <button
-          type="button"
-          disabled={!editor}
-          aria-label="Redo"
-          onclick={() => {
-            if (editor) {
-              const core = getEditorCore()
-              if (core) {
-                core.api.redo(core)
-                scheduleFormatStateRefresh()
-              }
-            }
-          }}>
-          ↷
-        </button>
-      </div>
-
-      <div class="rooster-group">
-        <label class="rooster-select">
+    <div 
+      class="rooster-toolbar relative"
+      role="toolbar"
+      aria-label="Editor toolbar"
+      tabindex="-1"
+      onclick={(e) => {
+        // Close table dialog if clicking outside the _10 div
+        if (showTableDialog && !(e.target as HTMLElement).closest('._10')) {
+          // closeTableDialog()
+        }
+      }}
+      onkeydown={(e) => {
+        if (e.key === 'Escape' && showTableDialog) {
+          // closeTableDialog()
+        }
+      }}
+    >
+        <div class="rooster-group">
           <span>Size</span>
           <select
             bind:value={fontSizeSelection}
@@ -591,10 +576,7 @@
               <option value={size}>{size}</option>
             {/each}
           </select>
-        </label>
-      </div>
-
-      <div class="rooster-group">
+        </div>
         <button
           type="button"
           class:active={!!formatState.isBold}
@@ -611,36 +593,24 @@
           onclick={() => withEditor(toggleItalic)}>
           <em>I</em>
         </button>
-        <button
-          type="button"
-          class:active={!!formatState.isUnderline}
-          disabled={!editor}
-          aria-label="Underline"
-          onclick={() => withEditor(toggleUnderline)}>
-          <u>U</u>
+        <button type="button" disabled={!editor}
+          aria-label="Insert table" class:_11={showTableDialog}
+          onclick={() => {
+            showTableDialog = !showTableDialog
+            tick().then(() => layerInput?.focus() )
+          }}>
+          ⊞
         </button>
-        <button
-          type="button"
-          class:active={!!formatState.isStrikeThrough}
-          disabled={!editor}
-          aria-label="Strikethrough"
-          onclick={() => withEditor(toggleStrikethrough)}>
-          <s>S</s>
-        </button>
-      </div>
-
-      <div class="rooster-group">
-        <label class="rooster-color" aria-label="Text color">
-          <span>Text</span>
-          <input
-            type="color"
+        <label class="rooster-group" aria-label="Text color">
+          <span>A</span>
+          <input type="color"
             bind:value={textColorValue}
             disabled={!editor}
             oninput={event =>
               handleTextColorChange((event.currentTarget as HTMLInputElement).value)} />
         </label>
-        <label class="rooster-color" aria-label="Background color">
-          <span>Fill</span>
+        <label class="rooster-group" aria-label="Background color">
+          <span>F</span>
           <input
             type="color"
             bind:value={backgroundColorValue}
@@ -648,9 +618,7 @@
             oninput={event =>
               handleBackgroundColorChange((event.currentTarget as HTMLInputElement).value)} />
         </label>
-      </div>
 
-      <div class="rooster-group">
         <button
           type="button"
           class:active={formatState.textAlign === "left" || !formatState.textAlign}
@@ -675,6 +643,19 @@
           onclick={() => handleAlignment("right")}>
           ➡
         </button>
+        <button type="button"
+          class:active={!!formatState.isUnderline}
+          disabled={!editor}
+          aria-label="Underline"
+          onclick={() => withEditor(toggleUnderline)}>
+          <u>U</u>
+        </button>
+        <button type="button"
+          class:active={!!formatState.isStrikeThrough}
+          disabled={!editor} aria-label="Strikethrough"
+          onclick={() => withEditor(toggleStrikethrough)}>
+          <s>S</s>
+        </button>
         <button
           type="button"
           class:active={formatState.textAlign === "justify"}
@@ -683,9 +664,7 @@
           onclick={() => handleAlignment("justify")}>
           ☰
         </button>
-      </div>
 
-      <div class="rooster-group">
         <button
           type="button"
           class:active={!!formatState.isBullet}
@@ -702,9 +681,7 @@
           onclick={() => withEditor(toggleNumbering)}>
           1.
         </button>
-      </div>
 
-      <div class="rooster-group">
         <button
           type="button"
           disabled={!editor}
@@ -722,18 +699,95 @@
         <button
           type="button"
           disabled={!editor}
-          aria-label="Insert table"
-          onclick={() => showTableDialog = true}>
-          ⊞
-        </button>
-        <button
-          type="button"
-          disabled={!editor}
           aria-label="Clear format"
           onclick={() => withEditor(clearFormat)}>
           Clear
         </button>
-      </div>
+      <button type="button" disabled={!editor}
+        aria-label="Undo"
+        onclick={() => {
+          if (editor) {
+            const core = getEditorCore()
+            if (core) {
+              core.api.undo(core)
+              scheduleFormatStateRefresh()
+            }
+          }
+        }}>
+        ↶
+      </button>
+      <button type="button" disabled={!editor}
+        aria-label="Redo"
+        onclick={() => {
+          if (editor) {
+            const core = getEditorCore()
+            if (core) {
+              core.api.redo(core)
+              scheduleFormatStateRefresh()
+            }
+          }
+        }}>
+        ↷
+      </button>
+
+      {#if showTableDialog}
+        <input type="text opacity-0 absolute z-[-1]" bind:this={layerInput}
+          onblur={(ev => {
+            if(avoidCloseOnBlur){
+              avoidCloseOnBlur = false;
+              (ev.target as HTMLInputElement).focus()
+              return
+            }
+            showTableDialog = false
+          })}
+        >
+        <div class="_10" role="dialog"
+          aria-label="Table size selector"
+          tabindex="-1"
+          onmousedown={() => avoidCloseOnBlur = true}
+          onclick={(e) => e.stopPropagation()}
+          onkeydown={(e) => {
+            if (e.key === 'Escape') {
+              closeTableDialog()
+            }
+          }}
+        >
+          <div class="">
+            <div class="flex items-start flex-col md:flex-row md:items-center table-selector-section">
+              <div class="w-80 table-selector-label">Columnas</div>
+              <div class="flex flex-wrap items-center">
+                {#each Array(12) as _, i} 
+                  {@const num = i + 1}
+                  <button type="button"
+                    class="mr-4 mb-4 table-selector-box"
+                    class:selected={selectedCols >= num}
+                    onclick={() => handleColSelect(num)}
+                    aria-label="Select {num} columns"
+                  >
+                    {num}
+                  </button>
+                {/each}
+              </div>
+            </div>
+            <div class="flex items-start flex-col md:flex-row md:items-center table-selector-section">
+              <div class="w-80 table-selector-label">Filas</div>
+              <div class="flex flex-wrap items-center">
+                {#each Array(12) as _, i}
+                  {@const num = i + 1}
+                  <button type="button"
+                    class="mr-4 mb-4 table-selector-box"
+                    class:selected={selectedRows >= num}
+                    onclick={() => handleRowSelect(num)}
+                    aria-label="Select {num} rows"
+                  >
+                    {num}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
 
       {#if isInTable}
         <div class="rooster-group">
@@ -827,59 +881,6 @@
       </div>
         {/if}
 
-    {#if showTableDialog}
-      <div 
-        class="rooster-dialog-overlay" 
-        role="button"
-        tabindex="0"
-        onclick={() => showTableDialog = false}
-        onkeydown={(e) => {
-          if (e.key === 'Escape' || e.key === 'Enter') {
-            showTableDialog = false
-          }
-        }}>
-        <div 
-          class="rooster-dialog" 
-          role="dialog"
-          tabindex="-1"
-          onclick={(e) => e.stopPropagation()}
-          onkeydown={(e) => {
-            if (e.key === 'Escape') {
-              showTableDialog = false
-            }
-          }}>
-          <h3>Insert Table</h3>
-          <div class="rooster-dialog-input-group">
-            <label>
-              Rows:
-              <input
-                type="number"
-                bind:value={tableRows}
-                min="1"
-                max="20"
-                class="rooster-dialog-input" />
-            </label>
-            <label>
-              Columns:
-              <input
-                type="number"
-                bind:value={tableCols}
-                min="1"
-                max="20"
-                class="rooster-dialog-input" />
-            </label>
-          </div>
-          <div class="rooster-dialog-actions">
-            <button type="button" onclick={handleInsertTable}>
-              Insert
-            </button>
-            <button type="button" onclick={() => { showTableDialog = false; tableRows = 3; tableCols = 3 }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    {/if}
 
     <div class="rooster-editor-container" bind:this={editorContainer} style="position: relative;">
       <div
@@ -908,12 +909,26 @@
   .rooster-toolbar {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
+    gap: 4px;
     align-items: center;
-    padding: 0.5rem;
+    padding: 6px;
     border: 1px solid #e2e8f0;
-    border-radius: 0.75rem;
+    border-radius: 4px;
     background: #f8fafc;
+  }
+
+  .rooster-toolbar > button {
+    width: 40px;
+    height: 36px;
+  }
+
+  .rooster-toolbar > button._11 {
+    margin-bottom: -8px;
+    z-index: 88;
+    border: 2px solid #ab9efc;
+    border-bottom: 0;
+    border-radius: 6px 6px 0 0;
+    background-color: #f4f2ff;
   }
 
   .rooster-group {
@@ -929,7 +944,7 @@
     padding-right: 0;
   }
 
-  .rooster-toolbar button {
+  .rooster-toolbar > button {
     border: 1px solid #cbd5f5;
     background: white;
     border-radius: 0.4rem;
@@ -940,17 +955,17 @@
     transition: border-color 0.2s, color 0.2s, background 0.2s;
   }
 
-  .rooster-toolbar button:hover:not(:disabled) {
+  .rooster-toolbar > button:hover:not(:disabled) {
     border-color: #3b82f6;
     color: #1d4ed8;
   }
 
-  .rooster-toolbar button:disabled {
+  .rooster-toolbar > button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
 
-  .rooster-toolbar button.active {
+  .rooster-toolbar > button.active {
     background: #dbeafe;
     border-color: #3b82f6;
     color: #1d4ed8;
@@ -979,21 +994,15 @@
     cursor: not-allowed;
   }
 
-  .rooster-color {
+  .rooster-group {
     display: flex;
-    flex-direction: column;
     font-size: 0.75rem;
     color: #475569;
-  }
-
-  .rooster-color input[type="color"] {
-    margin-top: 0.2rem;
-    width: 2.5rem;
-    height: 2rem;
     border: 1px solid #cbd5f5;
-    border-radius: 0.4rem;
-    padding: 0.1rem;
     background: white;
+    border-radius: 6px;
+    height: 36px;
+    padding: 0 4px;
   }
 
   .rooster-editor-container {
@@ -1020,7 +1029,7 @@
   }
 
   .rooster-editor :global(p) {
-    margin: 0 0 0.75rem;
+    margin: 0 0 6px;
   }
 
   .rooster-editor :global(div) {
@@ -1034,7 +1043,7 @@
   .rooster-editor :global(table) {
     width: 100%;
     border-collapse: collapse;
-    margin: 0.75rem 0;
+    margin: 6px 0;
     position: relative;
   }
 
@@ -1150,4 +1159,69 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
+
+  ._10 {
+    position: absolute;
+    top: 45px;
+    width: calc(100% - 12px);
+    border: 1px solid #ab9efc;
+    min-height: 60px;
+    background-color: white;
+    border-radius: 8px;
+    z-index: 80;
+    box-shadow: rgba(9, 30, 66, 0.25) 0px 4px 8px -2px, rgba(9, 30, 66, 0.08) 0px 0px 0px 1px;
+    padding: 12px;
+  }
+
+  .table-selector-section {
+    margin-bottom: 16px;
+  }
+
+  .table-selector-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .table-selector-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 8px;
+  }
+
+  .table-selector-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 4px;
+  }
+
+  .table-selector-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    background-color: #e8e5f2;
+    cursor: pointer;
+    font-size: 13px;
+    color: #0f172a;
+    transition: all 0.15s;
+    user-select: none;
+    padding: 0;
+    width: 100%;
+    height: 28px;
+    width: 32px;
+  }
+
+  .table-selector-box:hover:not(.selected) {
+    background-color: #e0e7ff;
+    border-color: #6366f1;
+    color: #4338ca;
+  }
+
+  .table-selector-box.selected {
+    background-color: #6366f1;
+    border-color: #4f46e5;
+    color: white;
+    font-weight: 600;
+  }
+
 </style>
