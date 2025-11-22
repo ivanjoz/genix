@@ -255,18 +255,6 @@ input[type='number'] {
 	animation: slideInLeft 0.3s ease-out;
 }
 
-/* Focus Styles */
-*:focus-visible {
-	outline: 2px solid #4042a3;
-	outline-offset: 2px;
-}
-
-/* Selection Styles */
-::selection {
-	background-color: #4042a3;
-	color: white;
-}
-
 /* Print Styles */
 @media print {
 	.no-print {
