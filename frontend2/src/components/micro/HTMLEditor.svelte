@@ -548,8 +548,7 @@
 
 <div class={`rooster-wrapper ${css ?? ""}`}>
   {#if browser}
-    <div 
-      class="rooster-toolbar relative"
+    <div class="relative rooster-toolbar relative"
       role="toolbar"
       aria-label="Editor toolbar"
       tabindex="-1"
@@ -566,7 +565,6 @@
       }}
     >
         <div class="rooster-group">
-          <span>Size</span>
           <select
             bind:value={fontSizeSelection}
             disabled={!editor}
@@ -601,23 +599,29 @@
           }}>
           ⊞
         </button>
-        <label class="rooster-group" aria-label="Text color">
-          <span>A</span>
-          <input type="color"
+        <button class="rooster-group relative flex items-center justify-center pb-12" aria-label="Text color">
+          <div>A</div>
+          <div class="_12 absolute bottom-2 left-2 w-[calc(100%-4px)] h-12 rounded-[2px]"
+            style="background-color: {textColorValue};"
+          ></div>
+          <input type="color" class="hidden"
             bind:value={textColorValue}
             disabled={!editor}
             oninput={event =>
               handleTextColorChange((event.currentTarget as HTMLInputElement).value)} />
-        </label>
-        <label class="rooster-group" aria-label="Background color">
+        </button>
+        <button class="rooster-group relative flex items-center justify-center pb-12" aria-label="Background color">
           <span>F</span>
+          <div class="_12 absolute bottom-2 left-2 w-[calc(100%-4px)] h-12 rounded-[2px]"
+            style="background-color: {backgroundColorValue};"
+          ></div>
           <input
-            type="color"
+            type="color" class="hidden"
             bind:value={backgroundColorValue}
             disabled={!editor}
             oninput={event =>
               handleBackgroundColorChange((event.currentTarget as HTMLInputElement).value)} />
-        </label>
+        </button>
 
         <button
           type="button"
@@ -732,6 +736,7 @@
 
       {#if showTableDialog}
         <input type="text opacity-0 absolute z-[-1]" bind:this={layerInput}
+          inputmode="none" autocomplete="off"
           onblur={(ev => {
             if(avoidCloseOnBlur){
               avoidCloseOnBlur = false;
@@ -790,50 +795,48 @@
       {/if}
 
       {#if isInTable}
-        <div class="rooster-group">
-          <button
-            type="button"
-            disabled={!editor}
-            aria-label="Add row above"
-            onclick={() => withEditor(instance => editTable(instance, 'insertAbove'))}>
-            ⬆ Row
-          </button>
-          <button
-            type="button"
-            disabled={!editor}
-            aria-label="Add row below"
-            onclick={() => withEditor(instance => editTable(instance, 'insertBelow'))}>
-            ⬇ Row
-          </button>
-          <button
-            type="button"
-            disabled={!editor}
-            aria-label="Add column left"
-            onclick={() => withEditor(instance => editTable(instance, 'insertLeft'))}>
-            ⬅ Col
-          </button>
-          <button
-            type="button"
-            disabled={!editor}
-            aria-label="Add column right"
-            onclick={() => withEditor(instance => editTable(instance, 'insertRight'))}>
-            ➡ Col
-          </button>
-          <button
-            type="button"
-            disabled={!editor}
-            aria-label="Delete row"
-            onclick={() => withEditor(instance => editTable(instance, 'deleteRow'))}>
-            🗑 Row
-          </button>
-          <button
-            type="button"
-            disabled={!editor}
-            aria-label="Delete column"
-            onclick={() => withEditor(instance => editTable(instance, 'deleteColumn'))}>
-            🗑 Col
-          </button>
-        </div>
+        <button
+          type="button"
+          disabled={!editor}
+          aria-label="Add row above"
+          onclick={() => withEditor(instance => editTable(instance, 'insertAbove'))}>
+          ⬆ Row
+        </button>
+        <button
+          type="button"
+          disabled={!editor}
+          aria-label="Add row below"
+          onclick={() => withEditor(instance => editTable(instance, 'insertBelow'))}>
+          ⬇ Row
+        </button>
+        <button
+          type="button"
+          disabled={!editor}
+          aria-label="Add column left"
+          onclick={() => withEditor(instance => editTable(instance, 'insertLeft'))}>
+          ⬅ Col
+        </button>
+        <button
+          type="button"
+          disabled={!editor}
+          aria-label="Add column right"
+          onclick={() => withEditor(instance => editTable(instance, 'insertRight'))}>
+          ➡ Col
+        </button>
+        <button
+          type="button"
+          disabled={!editor}
+          aria-label="Delete row"
+          onclick={() => withEditor(instance => editTable(instance, 'deleteRow'))}>
+          🗑 Row
+        </button>
+        <button
+          type="button"
+          disabled={!editor}
+          aria-label="Delete column"
+          onclick={() => withEditor(instance => editTable(instance, 'deleteColumn'))}>
+          🗑 Col
+        </button>
       {/if}
     </div>
 
@@ -909,7 +912,7 @@
   .rooster-toolbar {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 2px;
     align-items: center;
     padding: 6px;
     border: 1px solid #e2e8f0;
@@ -917,9 +920,9 @@
     background: #f8fafc;
   }
 
-  .rooster-toolbar > button {
-    width: 40px;
-    height: 36px;
+  .rooster-toolbar > button, .rooster-group {
+    width: 42px;
+    height: 38px;
   }
 
   .rooster-toolbar > button._11 {
@@ -947,12 +950,15 @@
   .rooster-toolbar > button {
     border: 1px solid #cbd5f5;
     background: white;
-    border-radius: 0.4rem;
-    padding: 0.35rem 0.65rem;
+    border-radius: 4px;
     font-size: 0.85rem;
     cursor: pointer;
     color: #0f172a;
     transition: border-color 0.2s, color 0.2s, background 0.2s;
+  }
+
+  ._12 {
+    border: 1px solid rgba(0, 0, 0, 0.7);
   }
 
   .rooster-toolbar > button:hover:not(:disabled) {
@@ -1000,9 +1006,7 @@
     color: #475569;
     border: 1px solid #cbd5f5;
     background: white;
-    border-radius: 6px;
-    height: 36px;
-    padding: 0 4px;
+    border-radius: 4px;
   }
 
   .rooster-editor-container {

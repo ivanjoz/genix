@@ -361,7 +361,7 @@
 	.mobile-menu-wrapper {
 		position: fixed;
 		inset: 0;
-		z-index: 50;
+		z-index: 301;
 		pointer-events: none;
 	}
 
@@ -397,7 +397,7 @@
 		overflow-y: auto;
 		/* Don't transform by default - let view transitions handle it */
 		opacity: 0;
-		z-index: 2;
+		z-index: 301c;
 	}
 
 	/* When mobile menu is open */

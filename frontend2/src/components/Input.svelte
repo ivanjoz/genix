@@ -181,7 +181,7 @@
     {:else}
       <input class="w-full {s1.input_inp} {inputCss || ""}"
         bind:value={inputValue}
-        type={type || "text"}
+        type={type || "search"}
         placeholder={placeholder || ""}
         {disabled}
         onkeyup={ev => { onKeyUp(ev) }}
