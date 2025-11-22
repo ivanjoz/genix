@@ -1,6 +1,21 @@
 <script lang="ts" generics="T">
-  import { onMount, tick } from "svelte"
-  import { browser } from "$app/environment"
+  import { browser } from "$app/environment";
+  import { parseSVG } from "$lib/helpers";
+  import {
+    editorBackgroundColors,
+    editorTextColors,
+    editorTextSizes,
+    TextBackgroudColor,
+    TextColorIcon,
+    TextSizeIcon
+  } from "./HTMLEditor"
+  import type {
+    ContentModelDocument,
+    ContentModelFormatState,
+    EditorPlugin,
+    IEditor,
+    PluginEvent
+  } from "roosterjs";
   import {
     ChangeSource,
     clearFormat,
@@ -17,22 +32,15 @@
     setFontSize,
     setHeadingLevel,
     setTextColor,
+    TableEditPlugin,
     toggleBold,
     toggleBullet,
     toggleItalic,
     toggleNumbering,
     toggleStrikethrough,
     toggleUnderline
-  } from "roosterjs"
-  import { TableEditPlugin } from "roosterjs"
-  import type {
-    ContentModelDocument,
-    ContentModelFormatState,
-    EditorPlugin,
-    IEditor,
-    PluginEvent,
-    TableOperation
-  } from "roosterjs"
+  } from "roosterjs";
+  import { onMount } from "svelte";
 
   type HeadingLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6
 
@@ -52,18 +60,8 @@
   let formatState = $state<ContentModelFormatState>({})
   let isInTable = $state(false)
   let fontSizeOptions = $state<string[]>([
-    "8pt",
-    "9pt",
-    "10pt",
-    "11pt",
-    "12pt",
-    "14pt",
-    "16pt",
-    "18pt",
-    "20pt",
-    "24pt",
-    "28pt",
-    "32pt",
+    "8pt", "9pt", "10pt", "11pt", "12pt", "14pt",
+    "16pt", "18pt", "20pt", "24pt", "28pt", "32pt"
   ])
   let fontSizeSelection = $state<string>("16pt")
   let headingSelection = $state<HeadingLevel>(0)
@@ -72,11 +70,14 @@
   let fontFamilySelection = $state<string>("Arial")
   let lastSyncedValue = getInitialValue()
   let pendingFormatFrame: number | null = null
-  let showImageDialog = $state(false)
-  let showTableDialog = $state(false)
-  let imageUrl = $state("")
-  let tableRows = $state(3)
-  let tableCols = $state(3)
+  
+  // Layers state
+  let showTableLayer = $state(false)
+  let showTextColorLayer = $state(false)
+  let showBackgroudColorLayer = $state(false)
+  let showTextSizeLayer = $state(false)
+  
+  // Table state
   let selectedRows = $state(0)
   let selectedCols = $state(0)
 
@@ -86,9 +87,7 @@
   }
 
   const ensureFontSizeOption = (size: string) => {
-    if (!size) {
-      return
-    }
+    if (!size) return
     if (!fontSizeOptions.includes(size)) {
       fontSizeOptions = [...fontSizeOptions, size]
     }
@@ -98,17 +97,13 @@
     html: string,
     core?: ReturnType<typeof getEditorCore>
   ): ContentModelDocument | undefined => {
-    if (!browser) {
-      return undefined
-    }
+    if (!browser) return undefined
 
     const normalized = html?.trim() ? html : "<p></p>"
     const parser = new DOMParser()
     const doc = parser.parseFromString(normalized, "text/html")
     const body = doc.body
-    if (!body) {
-      return undefined
-    }
+    if (!body) return undefined
 
     const context = core
       ? createDomToModelContextWithConfig(
@@ -120,105 +115,62 @@
     return domToContentModel(body, context)
   }
 
-  let layerInput: HTMLInputElement
+  let layerInput = $state<HTMLInputElement>()
   let avoidCloseOnBlur = false
 
   const sanitizeHtml = (html: string): string => {
-    if (!browser) {
-      return html
-    }
-
+    if (!browser) return html
     const parser = new DOMParser()
     const doc = parser.parseFromString(html, "text/html")
     
-    // Remove unwanted styles from divs
-    const divs = doc.querySelectorAll('div')
-    divs.forEach(div => {
-      const htmlDiv = div as HTMLElement
-      htmlDiv.style.removeProperty('margin-top')
-      htmlDiv.style.removeProperty('margin-bottom')
-      htmlDiv.style.removeProperty('font-family')
-      htmlDiv.style.removeProperty('font-size')
-      htmlDiv.style.removeProperty('color')
-    })
+    const removeStyles = (elements: NodeListOf<HTMLElement>, props: string[]) => {
+      elements.forEach(el => props.forEach(p => el.style.removeProperty(p)))
+    }
 
-    // Remove unwanted styles from table cells
-    const cells = doc.querySelectorAll('td, th')
-    cells.forEach(cell => {
-      const htmlCell = cell as HTMLElement
-      htmlCell.style.removeProperty('width')
-      htmlCell.style.removeProperty('height')
-      htmlCell.style.removeProperty('border-width')
-      htmlCell.style.removeProperty('border-style')
-      htmlCell.style.removeProperty('border-color')
-    })
+    removeStyles(doc.querySelectorAll('div'), 
+      ['margin-top', 'margin-bottom', 'font-family', 'font-size', 'color'])
+    
+    removeStyles(doc.querySelectorAll('td, th'),
+      ['width', 'height', 'border-width', 'border-style', 'border-color'])
 
     return doc.body.innerHTML
   }
 
   const applyHtmlToEditor = (html: string) => {
     const core = getEditorCore()
-    if (!core) {
-      return
-    }
+    if (!core) return
 
-    // Sanitize HTML to remove unwanted styles before creating model
     const sanitizedHtml = sanitizeHtml(html)
     const model = createModelFromHtml(sanitizedHtml, core)
-    if (!model) {
-      return
-    }
+    if (!model) return
 
     core.api.setContentModel(core, model, { ignoreSelection: true })
     core.api.triggerEvent(
       core,
-      {
-        eventType: "contentChanged",
-        source: ChangeSource.SetContent
-      },
+      { eventType: "contentChanged", source: ChangeSource.SetContent },
       true
     )
     
-    // Also remove styles from the DOM after applying
     setTimeout(() => {
-      if (editorRoot) {
-        removeUnwantedStyles(editorRoot)
-      }
+      if (editorRoot) removeUnwantedStyles(editorRoot)
     }, 0)
   }
 
   const removeUnwantedStyles = (element: HTMLElement) => {
-    // Remove unwanted styles from divs
-    const divs = element.querySelectorAll('div')
-    divs.forEach(div => {
-      const htmlDiv = div as HTMLElement
-      htmlDiv.style.removeProperty('margin-top')
-      htmlDiv.style.removeProperty('margin-bottom')
-      htmlDiv.style.removeProperty('font-family')
-      htmlDiv.style.removeProperty('font-size')
-      htmlDiv.style.removeProperty('color')
-    })
+    const removeStyles = (elements: NodeListOf<HTMLElement>, props: string[]) => {
+      elements.forEach(el => props.forEach(p => el.style.removeProperty(p)))
+    }
 
-    // Remove unwanted styles from table cells
-    const cells = element.querySelectorAll('td, th')
-    cells.forEach(cell => {
-      const htmlCell = cell as HTMLElement
-      htmlCell.style.removeProperty('width')
-      htmlCell.style.removeProperty('height')
-      htmlCell.style.removeProperty('border-width')
-      htmlCell.style.removeProperty('border-style')
-      htmlCell.style.removeProperty('border-color')
-    })
+    removeStyles(element.querySelectorAll('div'), 
+      ['margin-top', 'margin-bottom', 'font-family', 'font-size', 'color'])
+
+    removeStyles(element.querySelectorAll('td, th'),
+      ['width', 'height', 'border-width', 'border-style', 'border-color'])
   }
 
   const syncEditorHtml = () => {
-    if (!editorRoot) {
-      return
-    }
-
-    // Remove unwanted inline styles before syncing
+    if (!editorRoot) return
     removeUnwantedStyles(editorRoot)
-
     const nextValue = editorRoot.innerHTML
     if (nextValue !== editorValue) {
       editorValue = nextValue
@@ -237,31 +189,21 @@
       return
     }
     
-    // Check if selection is a table selection
     if (selection.type === 'table') {
       isInTable = true
       return
     }
     
-    // Check if range selection is inside a table
     if (selection.type === 'range') {
       const range = selection.range
-      
-      // Check both startContainer and commonAncestorContainer
-      const nodesToCheck: Node[] = [
-        range.startContainer,
-        range.commonAncestorContainer
-      ]
+      const nodesToCheck: Node[] = [range.startContainer, range.commonAncestorContainer]
       
       for (const startNode of nodesToCheck) {
         let node: Node | null = startNode
-        
-        // Walk up the DOM tree to find if we're inside a table
         while (node && node !== editorRoot) {
           if (node.nodeType === Node.ELEMENT_NODE) {
-            const element = node as HTMLElement
-            const tagName = element.tagName?.toUpperCase()
-            if (tagName === 'TABLE' || tagName === 'TD' || tagName === 'TH' || tagName === 'TR' || tagName === 'TBODY' || tagName === 'THEAD' || tagName === 'TFOOT') {
+            const tagName = (node as HTMLElement).tagName?.toUpperCase()
+            if (['TABLE', 'TD', 'TH', 'TR', 'TBODY', 'THEAD', 'TFOOT'].includes(tagName)) {
               isInTable = true
               return
             }
@@ -281,16 +223,13 @@
       return
     }
     formatState = getFormatState(editor) ?? {}
-    const nextFontSize = formatState.fontSize
-    if (nextFontSize) {
-      ensureFontSizeOption(nextFontSize)
-      fontSizeSelection = nextFontSize
+    if (formatState.fontSize) {
+      ensureFontSizeOption(formatState.fontSize)
+      fontSizeSelection = formatState.fontSize
     }
-    const nextHeading = (formatState.headingLevel ?? 0) as HeadingLevel
-    headingSelection = nextHeading
-    const nextFontFamily = formatState.fontName
-    if (nextFontFamily) {
-      fontFamilySelection = nextFontFamily
+    headingSelection = (formatState.headingLevel ?? 0) as HeadingLevel
+    if (formatState.fontName) {
+      fontFamilySelection = formatState.fontName
     }
     checkIfInTable()
   }
@@ -321,7 +260,6 @@
         syncEditorHtml()
         refreshFormatState()
 
-        // Set up MutationObserver to remove unwanted styles as they're added
         if (editorRoot && browser) {
           mutationObserver = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
@@ -330,21 +268,18 @@
                   const element = node as HTMLElement
                   removeUnwantedStyles(element)
                   
-                  // Also check if the node itself is a div or table cell
-                  if (element.tagName === 'DIV' || element.tagName === 'TD' || element.tagName === 'TH') {
-                    if (element.tagName === 'DIV') {
-                      element.style.removeProperty('margin-top')
-                      element.style.removeProperty('margin-bottom')
-                      element.style.removeProperty('font-family')
-                      element.style.removeProperty('font-size')
-                      element.style.removeProperty('color')
-                    } else {
-                      element.style.removeProperty('width')
-                      element.style.removeProperty('height')
-                      element.style.removeProperty('border-width')
-                      element.style.removeProperty('border-style')
-                      element.style.removeProperty('border-color')
-                    }
+                  if (element.tagName === 'DIV') {
+                    element.style.removeProperty('margin-top')
+                    element.style.removeProperty('margin-bottom')
+                    element.style.removeProperty('font-family')
+                    element.style.removeProperty('font-size')
+                    element.style.removeProperty('color')
+                  } else if (element.tagName === 'TD' || element.tagName === 'TH') {
+                    element.style.removeProperty('width')
+                    element.style.removeProperty('height')
+                    element.style.removeProperty('border-width')
+                    element.style.removeProperty('border-style')
+                    element.style.removeProperty('border-color')
                   }
                 }
               })
@@ -372,15 +307,11 @@
       onPluginEvent: (event: PluginEvent) => {
         if (event.eventType === "contentChanged") {
           syncEditorHtml()
-          // Remove unwanted styles after content changes
           if (editorRoot) {
-            setTimeout(() => {
-              removeUnwantedStyles(editorRoot as HTMLElement)
-            }, 0)
+            setTimeout(() => removeUnwantedStyles(editorRoot as HTMLElement), 0)
           }
         }
         if (event.eventType === "contentChanged" || event.eventType === "selectionChanged") {
-          // Immediately check table state on selection changes for better responsiveness
           if (event.eventType === "selectionChanged") {
             checkIfInTable()
           }
@@ -391,17 +322,14 @@
   }
 
   const withEditor = (cb: (instance: IEditor) => void) => {
-    if (!editor) {
-      return
-    }
+    if (!editor) return
     editor.focus()
     cb(editor)
     scheduleFormatStateRefresh()
   }
 
-  const handleHeadingChange = (value: HeadingLevel) => {
-    headingSelection = value
-    withEditor(instance => setHeadingLevel(instance, value))
+  const handleAlignment = (alignment: "left" | "center" | "right" | "justify") => {
+    withEditor(instance => setAlignment(instance, alignment))
   }
 
   const handleFontSizeChange = (size: string) => {
@@ -409,11 +337,40 @@
     withEditor(instance => setFontSize(instance, size))
   }
 
-  const handleFontFamilyChange = (family: string) => {
-    fontFamilySelection = family
-    withEditor(instance => setFontName(instance, family))
+  const handleInsertTable = () => {
+    if (selectedRows > 0 && selectedCols > 0) {
+      withEditor(instance => insertTable(instance, selectedCols, selectedRows))
+      showTableLayer = false
+      selectedRows = 0
+      selectedCols = 0
+    }
   }
 
+  const handleRowSelect = (rows: number) => {
+    selectedRows = rows
+    if (selectedRows > 0 && selectedCols > 0) handleInsertTable()
+  }
+
+  const handleColSelect = (cols: number) => {
+    selectedCols = cols
+    if (selectedRows > 0 && selectedCols > 0) handleInsertTable()
+  }
+
+  const closeTableDialog = () => {
+    showTableLayer = false
+    selectedRows = 0
+    selectedCols = 0
+  }
+
+  const handleInsertHR = () => {
+    if (editor) {
+      const core = getEditorCore()
+      if (core) {
+        core.api.insertNode(core, document.createElement('hr'))
+      }
+    }
+  }
+  
   const handleTextColorChange = (color: string) => {
     textColorValue = color
     withEditor(instance => setTextColor(instance, color))
@@ -424,84 +381,16 @@
     withEditor(instance => setBackgroundColor(instance, color))
   }
 
-  const handleAlignment = (alignment: "left" | "center" | "right" | "justify") => {
-    withEditor(instance => setAlignment(instance, alignment))
-  }
-
-  const handleInsertTable = () => {
-    if (selectedRows > 0 && selectedCols > 0) {
-      withEditor(instance => insertTable(instance, selectedRows, selectedCols))
-      showTableDialog = false
-      selectedRows = 0
-      selectedCols = 0
-    }
-  }
-
-  const handleRowSelect = (rows: number) => {
-    selectedRows = rows
-    if (selectedRows > 0 && selectedCols > 0) {
-      handleInsertTable()
-    }
-  }
-
-  const handleColSelect = (cols: number) => {
-    selectedCols = cols
-    if (selectedRows > 0 && selectedCols > 0) {
-      handleInsertTable()
-    }
-  }
-
-  const closeTableDialog = () => {
-    showTableDialog = false
-    selectedRows = 0
-    selectedCols = 0
-  }
-
-  const handleInsertImage = () => {
-    if (imageUrl.trim() && editor) {
-      const core = getEditorCore()
-      if (core) {
-        const img = document.createElement('img')
-        img.src = imageUrl.trim()
-        img.style.maxWidth = '100%'
-        core.api.insertNode(core, img)
-        showImageDialog = false
-        imageUrl = ""
-      }
-    }
-  }
-
-  const handleInsertHR = () => {
-    if (editor) {
-      const core = getEditorCore()
-      if (core) {
-        const hr = document.createElement('hr')
-        core.api.insertNode(core, hr)
-      }
-    }
-  }
-
   onMount(() => {
-    if (!browser || !editorRoot) {
-      return
-    }
+    if (!browser || !editorRoot) return
 
     const initialModel = createModelFromHtml(editorValue)
     const syncPlugin = createSyncPlugin()
-    // TableEditPlugin enables table resizing, moving, and other table editing features
-    // Features enabled by default: TableResizer, TableMover, TableSelector, CellResizer, etc.
-    // The plugin automatically detects tables and adds resize handles on hover
     const tableEditPlugin = new TableEditPlugin()
     const instance = createEditor(editorRoot, [syncPlugin, tableEditPlugin], initialModel)
     editor = instance
 
-    // Add click listener for immediate table detection
-    const handleClick = () => {
-      // Use setTimeout to ensure selection is updated after click
-      setTimeout(() => {
-        checkIfInTable()
-      }, 0)
-    }
+    const handleClick = () => setTimeout(checkIfInTable, 0)
 
     editorRoot.addEventListener('click', handleClick)
     editorRoot.addEventListener('focus', handleClick)
@@ -513,17 +402,19 @@
       }
       editorRoot?.removeEventListener('click', handleClick)
       editorRoot?.removeEventListener('focus', handleClick)
-      // Plugins are automatically disposed when editor is disposed
       instance.dispose()
       editor = null
     }
   })
 
-  $effect(() => {
-    if (!saveOn || !save) {
-      return
-    }
+  const showLayer = $derived(showTableLayer || showTextColorLayer || showBackgroudColorLayer || showTextSizeLayer)
 
+  $effect(() => {
+    if(showLayer){ layerInput?.focus() }
+  })
+
+  $effect(() => {
+    if (!saveOn || !save) return
     if (editorValue !== lastSyncedValue) {
       lastSyncedValue = editorValue
       saveOn[save] = editorValue as NonNullable<T>[keyof T]
@@ -531,364 +422,226 @@
   })
 
   $effect(() => {
-    if (!browser || !saveOn || !save) {
-      return
-    }
-
+    if (!browser || !saveOn || !save) return
     const incoming = ((saveOn[save] as string) ?? "") || ""
     if (incoming !== editorValue) {
       lastSyncedValue = incoming
       editorValue = incoming
-      if (editor) {
-        applyHtmlToEditor(incoming)
-      }
+      if (editor) applyHtmlToEditor(incoming)
     }
   })
+
+  // Button Configuration
+  const toolbarItems = $derived([
+    { label: 'Bold', icon: '<strong>B</strong>', action: () => withEditor(toggleBold), active: !!formatState.isBold },
+    { label: 'Italic', icon: '<em>I</em>', action: () => withEditor(toggleItalic), active: !!formatState.isItalic },
+    { 
+      label: 'Text Size', 
+      icon: `<img class="h-24 w-24" src="${parseSVG(TextSizeIcon)}" alt="" />`, 
+      action: () => { showTextSizeLayer = !showTextSizeLayer }, 
+      active: showTextSizeLayer,
+      isLayer: true
+    },
+    { 
+      label: 'Insert table', 
+      icon: '⊞', 
+      action: () => { showTableLayer = !showTableLayer }, 
+      active: showTableLayer,
+      isLayer: true
+    },
+    {
+      label: 'Text color',
+      html: `<img class="h-20 w-20 ml-4" src="${parseSVG(TextColorIcon)}" alt="" />
+             <div class="absolute bottom-2 left-2 w-[calc(100%-4px)] h-12 border border-black/70 rounded-[2px]" style="background-color: ${textColorValue};"></div>`,
+      action: () => { showTextColorLayer = !showTextColorLayer },
+      active: showTextColorLayer,
+      isLayer: true,
+      className: 'pb-12'
+    },
+    {
+      label: 'Background color',
+      html: `<img class="h-20 w-20" src="${parseSVG(TextBackgroudColor)}" alt="" />
+             <div class="absolute bottom-2 left-2 w-[calc(100%-4px)] h-12 border border-black/70 rounded-[2px]" style="background-color: ${backgroundColorValue};"></div>`,
+      action: () => { showBackgroudColorLayer = !showBackgroudColorLayer },
+      active: showBackgroudColorLayer,
+      isLayer: true,
+      className: 'pb-12'
+    },
+    { label: 'Align left', icon: '⬅', action: () => handleAlignment("left"), active: formatState.textAlign === "left" || !formatState.textAlign },
+    { label: 'Align center', icon: '⬍', action: () => handleAlignment("center"), active: formatState.textAlign === "center" },
+    { label: 'Align right', icon: '➡', action: () => handleAlignment("right"), active: formatState.textAlign === "right" },
+    { label: 'Underline', icon: '<u>U</u>', action: () => withEditor(toggleUnderline), active: !!formatState.isUnderline },
+    { label: 'Strikethrough', icon: '<s>S</s>', action: () => withEditor(toggleStrikethrough), active: !!formatState.isStrikeThrough },
+    { label: 'Justify', icon: '☰', action: () => handleAlignment("justify"), active: formatState.textAlign === "justify" },
+    { label: 'Bulleted list', icon: '••', action: () => withEditor(toggleBullet), active: !!formatState.isBullet },
+    { label: 'Numbered list', icon: '1.', action: () => withEditor(toggleNumbering), active: !!formatState.isNumbering },
+    { label: 'Insert horizontal rule', icon: '─', action: handleInsertHR },
+    { label: 'Clear format', icon: 'Clear', action: () => withEditor(clearFormat) },
+    { 
+      label: 'Undo', 
+      icon: '↶', 
+      action: () => { if (editor && getEditorCore()) { getEditorCore()?.api.undo(getEditorCore()!); scheduleFormatStateRefresh() } } 
+    },
+    { 
+      label: 'Redo', 
+      icon: '↷', 
+      action: () => { if (editor && getEditorCore()) { getEditorCore()?.api.redo(getEditorCore()!); scheduleFormatStateRefresh() } } 
+    },
+  ])
+
+  const tableButtons = [
+    { label: 'Add row above', icon: '⬆ Row', action: () => withEditor(instance => editTable(instance, 'insertAbove')) },
+    { label: 'Add row below', icon: '⬇ Row', action: () => withEditor(instance => editTable(instance, 'insertBelow')) },
+    { label: 'Add column left', icon: '⬅ Col', action: () => withEditor(instance => editTable(instance, 'insertLeft')) },
+    { label: 'Add column right', icon: '➡ Col', action: () => withEditor(instance => editTable(instance, 'insertRight')) },
+    { label: 'Delete row', icon: '🗑 Row', action: () => withEditor(instance => editTable(instance, 'deleteRow')) },
+    { label: 'Delete column', icon: '🗑 Col', action: () => withEditor(instance => editTable(instance, 'deleteColumn')) },
+  ]
+
+  const buttonCss = "mr-4 mb-4 w-32 h-28 flex items-center justify-center rounded bg-indigo-100/50 cursor-pointer text-[13px] text-slate-900 transition-all hover:not(.selected):bg-indigo-100 hover:not(.selected):border-indigo-500 hover:not(.selected):text-indigo-700"
 </script>
 
-<div class={`rooster-wrapper ${css ?? ""}`}>
+<div class={`flex flex-col ${css ?? ""}`}>
   {#if browser}
-    <div class="relative rooster-toolbar relative"
+    <div class="flex flex-wrap gap-2 items-center p-6 border border-slate-200 rounded-t-[6px] bg-slate-50 relative"
       role="toolbar"
       aria-label="Editor toolbar"
       tabindex="-1"
       onclick={(e) => {
-        // Close table dialog if clicking outside the _10 div
-        if (showTableDialog && !(e.target as HTMLElement).closest('._10')) {
+        if (showTableLayer && !(e.target as HTMLElement).closest('._10')) {
           // closeTableDialog()
         }
       }}
       onkeydown={(e) => {
-        if (e.key === 'Escape' && showTableDialog) {
+        if (e.key === 'Escape' && showTableLayer) {
           // closeTableDialog()
         }
       }}
     >
-        <div class="rooster-group">
-          <select
-            bind:value={fontSizeSelection}
-            disabled={!editor}
-            onchange={event =>
-              handleFontSizeChange((event.currentTarget as HTMLSelectElement).value)}>
-            {#each fontSizeOptions as size}
-              <option value={size}>{size}</option>
-            {/each}
-          </select>
-        </div>
-        <button
-          type="button"
-          class:active={!!formatState.isBold}
-          disabled={!editor}
-          aria-label="Bold"
-          onclick={() => withEditor(toggleBold)}>
-          <strong>B</strong>
-        </button>
-        <button
-          type="button"
-          class:active={!!formatState.isItalic}
-          disabled={!editor}
-          aria-label="Italic"
-          onclick={() => withEditor(toggleItalic)}>
-          <em>I</em>
-        </button>
-        <button type="button" disabled={!editor}
-          aria-label="Insert table" class:_11={showTableDialog}
-          onclick={() => {
-            showTableDialog = !showTableDialog
-            tick().then(() => layerInput?.focus() )
-          }}>
-          ⊞
-        </button>
-        <button class="rooster-group relative flex items-center justify-center pb-12" aria-label="Text color">
-          <div>A</div>
-          <div class="_12 absolute bottom-2 left-2 w-[calc(100%-4px)] h-12 rounded-[2px]"
-            style="background-color: {textColorValue};"
-          ></div>
-          <input type="color" class="hidden"
-            bind:value={textColorValue}
-            disabled={!editor}
-            oninput={event =>
-              handleTextColorChange((event.currentTarget as HTMLInputElement).value)} />
-        </button>
-        <button class="rooster-group relative flex items-center justify-center pb-12" aria-label="Background color">
-          <span>F</span>
-          <div class="_12 absolute bottom-2 left-2 w-[calc(100%-4px)] h-12 rounded-[2px]"
-            style="background-color: {backgroundColorValue};"
-          ></div>
-          <input
-            type="color" class="hidden"
-            bind:value={backgroundColorValue}
-            disabled={!editor}
-            oninput={event =>
-              handleBackgroundColorChange((event.currentTarget as HTMLInputElement).value)} />
-        </button>
-
-        <button
-          type="button"
-          class:active={formatState.textAlign === "left" || !formatState.textAlign}
-          disabled={!editor}
-          aria-label="Align left"
-          onclick={() => handleAlignment("left")}>
-          ⬅
-        </button>
-        <button
-          type="button"
-          class:active={formatState.textAlign === "center"}
-          disabled={!editor}
-          aria-label="Align center"
-          onclick={() => handleAlignment("center")}>
-          ⬍
-        </button>
-        <button
-          type="button"
-          class:active={formatState.textAlign === "right"}
-          disabled={!editor}
-          aria-label="Align right"
-          onclick={() => handleAlignment("right")}>
-          ➡
-        </button>
-        <button type="button"
-          class:active={!!formatState.isUnderline}
-          disabled={!editor}
-          aria-label="Underline"
-          onclick={() => withEditor(toggleUnderline)}>
-          <u>U</u>
-        </button>
-        <button type="button"
-          class:active={!!formatState.isStrikeThrough}
-          disabled={!editor} aria-label="Strikethrough"
-          onclick={() => withEditor(toggleStrikethrough)}>
-          <s>S</s>
-        </button>
-        <button
-          type="button"
-          class:active={formatState.textAlign === "justify"}
-          disabled={!editor}
-          aria-label="Justify"
-          onclick={() => handleAlignment("justify")}>
-          ☰
-        </button>
-
-        <button
-          type="button"
-          class:active={!!formatState.isBullet}
-          disabled={!editor}
-          aria-label="Bulleted list"
-          onclick={() => withEditor(toggleBullet)}>
-          ••
-        </button>
-        <button
-          type="button"
-          class:active={!!formatState.isNumbering}
-          disabled={!editor}
-          aria-label="Numbered list"
-          onclick={() => withEditor(toggleNumbering)}>
-          1.
-        </button>
-
-        <button
-          type="button"
-          disabled={!editor}
-          aria-label="Insert horizontal rule"
-          onclick={handleInsertHR}>
-          ─
-        </button>
-        <button
-          type="button"
-          disabled={!editor}
-          aria-label="Insert image"
-          onclick={() => showImageDialog = true}>
-          🖼
-        </button>
-        <button
-          type="button"
-          disabled={!editor}
-          aria-label="Clear format"
-          onclick={() => withEditor(clearFormat)}>
-          Clear
-        </button>
-      <button type="button" disabled={!editor}
-        aria-label="Undo"
-        onclick={() => {
-          if (editor) {
-            const core = getEditorCore()
-            if (core) {
-              core.api.undo(core)
-              scheduleFormatStateRefresh()
-            }
-          }
-        }}>
-        ↶
-      </button>
-      <button type="button" disabled={!editor}
-        aria-label="Redo"
-        onclick={() => {
-          if (editor) {
-            const core = getEditorCore()
-            if (core) {
-              core.api.redo(core)
-              scheduleFormatStateRefresh()
-            }
-          }
-        }}>
-        ↷
-      </button>
-
-      {#if showTableDialog}
-        <input type="text opacity-0 absolute z-[-1]" bind:this={layerInput}
-          inputmode="none" autocomplete="off"
-          onblur={(ev => {
-            if(avoidCloseOnBlur){
-              avoidCloseOnBlur = false;
-              (ev.target as HTMLInputElement).focus()
-              return
-            }
-            showTableDialog = false
-          })}
+      {#each toolbarItems as item}
+        <button type="button"  disabled={!editor}
+          class:_6={item.isLayer && item.active}
+          class="_4 {item.active ? 'bg-blue-100 border-blue-500 text-blue-700' : ''} {item.className ?? ''}"
+          aria-label={item.label}
+          onclick={item.action}
         >
-        <div class="_10" role="dialog"
-          aria-label="Table size selector"
+          {@html item.html || item.icon}
+        </button>
+      {/each}
+
+      {#if showLayer}
+        <div class="absolute top-[47px] w-[calc(100%-20px)] left-[10px] border border-[#ab9efc] min-h-[60px] bg-white rounded-lg z-50 shadow-lg p-12 _10" 
+          role="dialog"
+          aria-label="Editor popup"
           tabindex="-1"
           onmousedown={() => avoidCloseOnBlur = true}
           onclick={(e) => e.stopPropagation()}
-          onkeydown={(e) => {
-            if (e.key === 'Escape') {
-              closeTableDialog()
-            }
-          }}
+          onkeydown={(e) => { if (e.key === 'Escape') closeTableDialog() }}
         >
-          <div class="">
-            <div class="flex items-start flex-col md:flex-row md:items-center table-selector-section">
-              <div class="w-80 table-selector-label">Columnas</div>
-              <div class="flex flex-wrap items-center">
-                {#each Array(12) as _, i} 
-                  {@const num = i + 1}
-                  <button type="button"
-                    class="mr-4 mb-4 table-selector-box"
-                    class:selected={selectedCols >= num}
-                    onclick={() => handleColSelect(num)}
-                    aria-label="Select {num} columns"
-                  >
-                    {num}
-                  </button>
-                {/each}
+          <input type="text" bind:this={layerInput}
+            inputmode="none" autocomplete="off" 
+            class="opacity-0 h-2 w-1 absolute z-[-1]"
+            onblur={(ev => {
+              // return
+              if(avoidCloseOnBlur){
+                avoidCloseOnBlur = false;
+                (ev.target as HTMLInputElement).focus()
+                return
+              }
+              showTableLayer = false
+              showTextColorLayer = false
+              showBackgroudColorLayer = false
+              showTextSizeLayer = false
+            })}
+          >
+          {#if showTableLayer}
+            <div>
+              <div class="flex items-start flex-col md:flex-row md:items-center">
+                <div class="w-80 text-sm font-semibold text-slate-600 mb-8">Columnas</div>
+                <div class="flex flex-wrap items-center">
+                  {#each Array(12) as _, i} 
+                    {@const num = i + 1}
+                    <button type="button"
+                      class="{buttonCss} {selectedCols >= num ? 'bg-indigo-500 text-white font-semibold' : ''}"
+                      class:selected={selectedCols >= num}
+                      onclick={() => handleColSelect(num)}
+                      aria-label="Select {num} columns"
+                    >
+                      {num}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+              <div class="flex items-start flex-col md:flex-row md:items-center">
+                <div class="w-80 text-sm font-semibold text-slate-600 mb-8">Filas</div>
+                <div class="flex flex-wrap items-center">
+                  {#each Array(12) as _, i}
+                    {@const num = i + 1}
+                    <button type="button"
+                      class="{buttonCss} {selectedRows >= num ? 'bg-indigo-500 text-white font-semibold' : ''}"
+                      class:selected={selectedRows >= num}
+                      onclick={() => handleRowSelect(num)}
+                      aria-label="Select {num} rows"
+                    >
+                      {num}
+                    </button>
+                  {/each}
+                </div>
               </div>
             </div>
-            <div class="flex items-start flex-col md:flex-row md:items-center table-selector-section">
-              <div class="w-80 table-selector-label">Filas</div>
-              <div class="flex flex-wrap items-center">
-                {#each Array(12) as _, i}
-                  {@const num = i + 1}
-                  <button type="button"
-                    class="mr-4 mb-4 table-selector-box"
-                    class:selected={selectedRows >= num}
-                    onclick={() => handleRowSelect(num)}
-                    aria-label="Select {num} rows"
-                  >
-                    {num}
-                  </button>
-                {/each}
-              </div>
+          {/if}
+          {#if showBackgroudColorLayer || showTextColorLayer}
+            {@const colors = showBackgroudColorLayer ? editorBackgroundColors : editorTextColors }
+            <div class="flex flex-wrap w-full">
+              {#each colors as color }
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="h-20 w-32 m-4 border border-black/60 cursor-pointer hover:outline hover:outline-1 hover:outline-black/70" 
+                  style="background-color: {color};"
+                  onclick={() => {
+                    if(showBackgroudColorLayer) handleBackgroundColorChange(color)
+                    else handleTextColorChange(color)
+                  }}
+                ></div>
+              {/each}
             </div>
-          </div>
+          {/if}
+          {#if showTextSizeLayer}
+            <div class="flex flex-wrap w-full gap-8">
+              {#each editorTextSizes as e }
+                <button type="button" 
+                  class="px-12 py-4 hover:bg-slate-100 rounded border border-slate-200"
+                  onclick={() => { 
+                    handleFontSizeChange(`${e.id}px`); showTextSizeLayer = false; 
+                  }}
+                >
+                  {e.name}
+                </button>
+              {/each}
+            </div>
+          {/if}
         </div>
       {/if}
 
       {#if isInTable}
-        <button
-          type="button"
-          disabled={!editor}
-          aria-label="Add row above"
-          onclick={() => withEditor(instance => editTable(instance, 'insertAbove'))}>
-          ⬆ Row
-        </button>
-        <button
-          type="button"
-          disabled={!editor}
-          aria-label="Add row below"
-          onclick={() => withEditor(instance => editTable(instance, 'insertBelow'))}>
-          ⬇ Row
-        </button>
-        <button
-          type="button"
-          disabled={!editor}
-          aria-label="Add column left"
-          onclick={() => withEditor(instance => editTable(instance, 'insertLeft'))}>
-          ⬅ Col
-        </button>
-        <button
-          type="button"
-          disabled={!editor}
-          aria-label="Add column right"
-          onclick={() => withEditor(instance => editTable(instance, 'insertRight'))}>
-          ➡ Col
-        </button>
-        <button
-          type="button"
-          disabled={!editor}
-          aria-label="Delete row"
-          onclick={() => withEditor(instance => editTable(instance, 'deleteRow'))}>
-          🗑 Row
-        </button>
-        <button
-          type="button"
-          disabled={!editor}
-          aria-label="Delete column"
-          onclick={() => withEditor(instance => editTable(instance, 'deleteColumn'))}>
-          🗑 Col
-        </button>
+        {#each tableButtons as item}
+          <button
+            type="button"
+            disabled={!editor}
+            class="_4"
+            aria-label={item.label}
+            onclick={item.action}
+          >
+            {item.icon}
+          </button>
+        {/each}
       {/if}
     </div>
 
-    {#if showImageDialog}
-      <div 
-        class="rooster-dialog-overlay" 
-        role="button"
-        tabindex="0"
-        onclick={() => showImageDialog = false}
-        onkeydown={(e) => {
-          if (e.key === 'Escape' || e.key === 'Enter') {
-            showImageDialog = false
-          }
-        }}>
-        <div 
-          class="rooster-dialog" 
-          role="dialog"
-          tabindex="-1"
-          onclick={(e) => e.stopPropagation()}
-          onkeydown={(e) => {
-            if (e.key === 'Escape') {
-              showImageDialog = false
-            }
-          }}>
-          <h3>Insert Image</h3>
-          <input
-            type="text"
-            bind:value={imageUrl}
-            placeholder="Image URL"
-            class="rooster-dialog-input"
-            onkeydown={(e) => {
-              if (e.key === 'Enter') {
-                handleInsertImage()
-              }
-            }} />
-          <div class="rooster-dialog-actions">
-            <button type="button" onclick={handleInsertImage} disabled={!imageUrl.trim()}>
-              Insert
-            </button>
-            <button type="button" onclick={() => { showImageDialog = false; imageUrl = "" }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-        {/if}
-
-
-    <div class="rooster-editor-container" bind:this={editorContainer} style="position: relative;">
+    <div class="border border-slate-200 rounded-b-[6px] bg-white min-h-[14rem] shadow-inner" bind:this={editorContainer} style="position: relative;">
       <div
         bind:this={editorRoot}
-        class="rooster-editor"
+        class="rooster-editor min-h-[14rem] p-16 text-base leading-relaxed text-slate-900 outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none"
         role="textbox"
         aria-label="Rich text editor"
         aria-multiline="true"
@@ -896,163 +649,63 @@
         data-placeholder="Empieza a escribir contenido enriquecido…"></div>
     </div>
   {:else}
-    <div class="rooster-placeholder">
+    <div class="border-2 border-dashed border-slate-300 rounded-xl p-16 text-center text-slate-600 bg-slate-50">
       El editor de texto enriquecido se cargará cuando estés en el navegador.
     </div>
   {/if}
-  </div>
+</div>
 
 <style>
-  .rooster-wrapper {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .rooster-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2px;
-    align-items: center;
-    padding: 6px;
-    border: 1px solid #e2e8f0;
-    border-radius: 4px;
-    background: #f8fafc;
-  }
-
-  .rooster-toolbar > button, .rooster-group {
+  ._4 {
     width: 42px;
     height: 38px;
-  }
-
-  .rooster-toolbar > button._11 {
-    margin-bottom: -8px;
-    z-index: 88;
-    border: 2px solid #ab9efc;
-    border-bottom: 0;
-    border-radius: 6px 6px 0 0;
-    background-color: #f4f2ff;
-  }
-
-  .rooster-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding-right: 0.5rem;
-    border-right: 1px solid #e2e8f0;
-  }
-
-  .rooster-group:last-child {
-    border-right: none;
-    padding-right: 0;
-  }
-
-  .rooster-toolbar > button {
-    border: 1px solid #cbd5f5;
-    background: white;
+    border: 1px solid #cbd5e1;
+    background-color: white;
     border-radius: 4px;
-    font-size: 0.85rem;
+    font-size: 14px;
     cursor: pointer;
     color: #0f172a;
-    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    transition-property: color, background-color, border-color;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
   }
-
-  ._12 {
-    border: 1px solid rgba(0, 0, 0, 0.7);
-  }
-
-  .rooster-toolbar > button:hover:not(:disabled) {
+  
+  ._4:hover:not(:disabled) {
     border-color: #3b82f6;
     color: #1d4ed8;
   }
-
-  .rooster-toolbar > button:disabled {
+  
+  ._4:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-
-  .rooster-toolbar > button.active {
-    background: #dbeafe;
-    border-color: #3b82f6;
-    color: #1d4ed8;
+  ._6 {
+    margin-bottom: -8px;
+    border: 2px solid #996dff;
+    background-color: #faf9ff;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    z-index: 80;
   }
 
-  .rooster-select {
-    display: flex;
-    flex-direction: column;
-    font-size: 0.75rem;
-    color: #475569;
-  }
-
-  .rooster-select select {
-    margin-top: 0.2rem;
-    border: 1px solid #cbd5f5;
-    border-radius: 0.4rem;
-    padding: 0.25rem 0.5rem;
-    font-size: 0.85rem;
-    background: white;
-    color: #0f172a;
-    min-width: 6rem;
-  }
-
-  .rooster-select select:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .rooster-group {
-    display: flex;
-    font-size: 0.75rem;
-    color: #475569;
-    border: 1px solid #cbd5f5;
-    background: white;
-    border-radius: 4px;
-  }
-
-  .rooster-editor-container {
-    border: 1px solid #e2e8f0;
-    border-radius: 0.75rem;
-    background: white;
-    min-height: 14rem;
-    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
-  }
-
-  .rooster-editor {
-    min-height: 14rem;
-    padding: 1rem;
-    font-size: 1rem;
-    line-height: 1.6;
-    color: #0f172a;
-    outline: none;
-  }
-
-  .rooster-editor:empty:before {
-    content: attr(data-placeholder);
-    color: #94a3b8;
-    pointer-events: none;
-  }
-
-  .rooster-editor :global(p) {
+  /* Global editor styles that are hard to tailwind-ize inside the contenteditable div */
+  div :global(.rooster-editor p) {
     margin: 0 0 6px;
   }
 
-  .rooster-editor :global(div) {
-    margin-top: 0 !important;
-    margin-bottom: 0 !important;
-    font-family: inherit !important;
-    font-size: inherit !important;
-    color: inherit !important;
-  }
-
-  .rooster-editor :global(table) {
+  div :global(.rooster-editor table) {
     width: 100%;
     border-collapse: collapse;
     margin: 6px 0;
     position: relative;
   }
 
-  .rooster-editor :global(table td),
-  .rooster-editor :global(table th) {
+  div :global(.rooster-editor table td),
+  div :global(.rooster-editor table th) {
     border: 1px solid #cbd5f5;
     padding: 0.5rem;
     width: auto !important;
@@ -1064,168 +717,15 @@
     box-sizing: border-box;
   }
 
-  .rooster-editor :global(img) {
+  div :global(.rooster-editor img) {
     max-width: 100%;
     height: auto;
     margin: 0.75rem 0;
   }
 
-  .rooster-editor :global(hr) {
+  div :global(.rooster-editor hr) {
     border: none;
     border-top: 1px solid #cbd5f5;
     margin: 1rem 0;
   }
-
-  .rooster-placeholder {
-    border: 2px dashed #cbd5f5;
-    border-radius: 0.75rem;
-    padding: 1rem;
-    text-align: center;
-    color: #475569;
-    background: #f8fafc;
-  }
-
-  .rooster-dialog-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-  }
-
-  .rooster-dialog {
-    background: white;
-    border-radius: 0.75rem;
-    padding: 1.5rem;
-    min-width: 300px;
-    max-width: 90vw;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  }
-
-  .rooster-dialog h3 {
-    margin: 0 0 1rem 0;
-    font-size: 1.25rem;
-    color: #0f172a;
-  }
-
-  .rooster-dialog-input {
-    width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #cbd5f5;
-    border-radius: 0.4rem;
-    font-size: 0.9rem;
-    margin-bottom: 1rem;
-  }
-
-  .rooster-dialog-input-group {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1rem;
-  }
-
-  .rooster-dialog-input-group label {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    font-size: 0.9rem;
-    color: #475569;
-  }
-
-  .rooster-dialog-actions {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: flex-end;
-  }
-
-  .rooster-dialog-actions button {
-    padding: 0.5rem 1rem;
-    border: 1px solid #cbd5f5;
-    border-radius: 0.4rem;
-    background: white;
-    color: #0f172a;
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: all 0.2s;
-  }
-
-  .rooster-dialog-actions button:hover:not(:disabled) {
-    background: #3b82f6;
-    color: white;
-    border-color: #3b82f6;
-  }
-
-  .rooster-dialog-actions button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  ._10 {
-    position: absolute;
-    top: 45px;
-    width: calc(100% - 12px);
-    border: 1px solid #ab9efc;
-    min-height: 60px;
-    background-color: white;
-    border-radius: 8px;
-    z-index: 80;
-    box-shadow: rgba(9, 30, 66, 0.25) 0px 4px 8px -2px, rgba(9, 30, 66, 0.08) 0px 0px 0px 1px;
-    padding: 12px;
-  }
-
-  .table-selector-section {
-    margin-bottom: 16px;
-  }
-
-  .table-selector-section:last-child {
-    margin-bottom: 0;
-  }
-
-  .table-selector-label {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #475569;
-    margin-bottom: 8px;
-  }
-
-  .table-selector-grid {
-    display: grid;
-    grid-template-columns: repeat(10, 1fr);
-    gap: 4px;
-  }
-
-  .table-selector-box {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-    background-color: #e8e5f2;
-    cursor: pointer;
-    font-size: 13px;
-    color: #0f172a;
-    transition: all 0.15s;
-    user-select: none;
-    padding: 0;
-    width: 100%;
-    height: 28px;
-    width: 32px;
-  }
-
-  .table-selector-box:hover:not(.selected) {
-    background-color: #e0e7ff;
-    border-color: #6366f1;
-    color: #4338ca;
-  }
-
-  .table-selector-box.selected {
-    background-color: #6366f1;
-    border-color: #4f46e5;
-    color: white;
-    font-weight: 600;
-  }
-
 </style>
