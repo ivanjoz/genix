@@ -51,7 +51,7 @@
 </script>
 
 <header	class="_1 fixed top-0 left-0 right-0 bg-gradient-to-r from-indigo-600 to-indigo-700 
-	shadow-md z-40 flex items-center px-16"
+	shadow-md z-150 flex items-center px-16"
 >
 	<!-- Logo Section (Desktop) -->
 	<div class="hidden md:flex items-center justify-center h-full w-56 mr-12">

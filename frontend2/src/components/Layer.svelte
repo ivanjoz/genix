@@ -160,7 +160,7 @@
     height: calc(100vh - var(--header-height));
     right: 0;
     background-color: rgb(255, 255, 255);
-    box-shadow: -3px 1px 5px #0000001a;
+    box-shadow: -7px 0px 15px 8px #00000030, -3px 1px 5px 2px #0000001c;
     z-index: 101;
     max-width: 100vw;
     overflow: hidden;
