@@ -186,7 +186,7 @@
     }
 
     // Check if we should use snippet renderer (takes priority over function renderer)
-    if (cellRenderer) { useSnippet = true; }
+    if (cellRenderer && column.id) { useSnippet = true; }
 
     let css = typeof column.cellCss === 'string' 
       ? column.cellCss
@@ -215,8 +215,7 @@
   }
 </script>
 
-<div
-  bind:this={containerRef}
+<div bind:this={containerRef}
   class="vtable-container {css}"
   style="max-height: {maxHeight}; overflow: auto;"
 >
@@ -310,6 +309,24 @@
                   {:else}
                     { cellData.content }
                   {/if}
+                {/if}
+                {#if column.buttonEditHandler || column.buttonDeleteHandler}
+                  <div class="flex gap-4 items-center justify-center">
+                    {#if column.buttonEditHandler}
+                      <button class="_11 _e" title="edit" onclick={() => {
+                        column.buttonEditHandler?.(record)
+                      }}>
+                        <i class="icon-pencil"></i>
+                      </button>
+                    {/if}
+                    {#if column.buttonDeleteHandler}
+                      <button class="_11 _d" title="delete" onclick={() => {
+                        column.buttonDeleteHandler?.(record)
+                      }}>
+                        <i class="icon-trash"></i>
+                      </button>
+                    {/if}
+                  </div>
                 {/if}
               </td>
             {/each}
@@ -446,5 +463,23 @@
   .vtable-empty-message {
     color: #6c757d;
     font-size: 0.875rem;
+  }
+
+  ._11 {
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    font-size: 15px;
+    color: #5243c2;
+    box-shadow: rgb(67 61 110 / 62%) 0px 1px 2px 0px;
+  }
+  ._11._e {
+    color: #5243c2;
+    background-color: #e7e4ff;
+    box-shadow: rgb(67 61 110 / 62%) 0px 1px 2px 0px;
+  }
+  ._11._e:hover {
+    outline: 1px solid #5243c2;
+    background-color: #f5f4ff;
   }
 </style>

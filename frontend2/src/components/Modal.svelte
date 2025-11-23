@@ -15,6 +15,8 @@ interface Props {
   bodyCss?: string
   headCss?: string
   size: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+  saveIcon?: string
+  saveButtonLabel?: string
 }
 
 let { 
@@ -28,7 +30,9 @@ let {
   onSave, 
   onDelete, 
   onClose,
-  size
+  size,
+  saveIcon,
+  saveButtonLabel
 }: Props = $props();
 
 // Local state for this modal instance
@@ -119,8 +123,8 @@ const modalSizesMap = new Map([
             {/if}
             {#if onSave}
               <button class="bx-blue mr-8 lh-10" onclick={handleSave} aria-label={isEdit ? "Actualizar" : "Guardar"}>
-                <i class="icon-floppy"></i>
-                <span>{isEdit ? "Actualizar" : "Guardar"}</span>
+                <i class={saveIcon || "icon-floppy"}></i>
+                <span>{saveButtonLabel || (isEdit ? "Actualizar" : "Guardar")}</span>
               </button>
             {/if}
             <button class="bx-yellow h3 lh-10" onclick={handleClose} aria-label="Cerrar">
