@@ -24,7 +24,8 @@ export interface ITableColumn<T> {
   _colspan?: number
 	highlight?: boolean
 	/* Buttons */
-	buttonEditHandler?: (e:T, value: string|number) => void
+	buttonEditHandler?: (e:T) => void
+	buttonDeleteHandler?: (e:T) => void
 }
 
 /**

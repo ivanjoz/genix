@@ -22,11 +22,12 @@
     transform?: (v: string | number) => string | number;
     useTextArea?: boolean;
     rows?: number;
+    dependencyValue?: number | string
   }
 
   const {
     id,
-    saveOn,
+    saveOn = $bindable(),
     save,
     label,
     css,
@@ -43,6 +44,7 @@
     transform,
     useTextArea,
     rows,
+    dependencyValue
   }: IInput<T> = $props();
 
   /*
@@ -113,6 +115,7 @@
       }
     })
 
+    if(!isBlur){ isChange = 1 }
     inputValue = value;
   }
 
@@ -127,21 +130,27 @@
 
   let lastSaveOn: T | undefined
 
+  const doSave = () => {
+    untrack(() => {
+      const v = saveOn[save]
+      inputValue = typeof v === "number" ? v : (v as string) || ""
+      if(baseDecimalsValue && typeof inputValue === 'number'){ 
+        inputValue = inputValue / baseDecimalsValue 
+      }
+      isInputValid = checkIfInputIsValid()
+    })
+  }
+
   $effect(() => {
     if(!saveOn || !save){ return }
     if(lastSaveOn === saveOn){ return }
     lastSaveOn = saveOn
 
-    if(saveOn[save] !== inputValue){
-      untrack(() => {
-        const v = saveOn[save]
-        inputValue = typeof v === "number" ? v : (v as string) || ""
-        if(baseDecimalsValue && typeof inputValue === 'number'){ 
-          inputValue = inputValue / baseDecimalsValue 
-        }
-        isInputValid = checkIfInputIsValid()
-      })
-    }
+    if(saveOn[save] !== inputValue){ doSave() }
+  })
+
+  $effect(() => {
+    if(dependencyValue){ doSave() }
   })
 
   let cN = $derived(`${s1.input} p-rel` + (css ? " " + css : ""));

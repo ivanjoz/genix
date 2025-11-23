@@ -16,7 +16,7 @@
 
 <script lang="ts" generics="T">
 	let {
-		saveOn,
+		saveOn = $bindable(),
 		save,
 		css,
 		contentClass = '',

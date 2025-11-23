@@ -190,7 +190,7 @@
           <ImageUploader saveAPI="producto-image"
             clearOnUpload={true} types={["avif","webp"]}
             folder="img-productos" size={2} src={productoForm.Image?.n}
-            cardCss="w-full h-180  p-4"
+            cardCss="w-full h-180 p-4"
             setDataToSend={e => {
               e.ProductoID = productoForm.ID
             }}
@@ -205,6 +205,11 @@
         <Input label="Precio Base" saveOn={productoForm} 
           css="col-span-12 md:col-span-5"
           save="Precio" type="number" baseDecimals={2}
+          dependencyValue={productoForm.Precio}
+          onChange={() => {
+            console.log("productoForm", $state.snapshot(productoForm))
+            productoForm.PrecioFinal = Math.round((productoForm.Precio * (100 - (productoForm.Descuento||0))) / 100)
+          }}
         />
         <Input label="Descuento" saveOn={productoForm} 
           css="col-span-12 md:col-span-5"
@@ -212,7 +217,12 @@
         />
         <Input label="Precio Final" saveOn={productoForm} 
           css="col-span-12 md:col-span-5"
+          dependencyValue={productoForm.PrecioFinal}
           save="PrecioFinal" type="number" baseDecimals={2}
+          onChange={() => {
+            console.log("productoForm", $state.snapshot(productoForm))
+            productoForm.Precio = Math.round((productoForm.PrecioFinal / (100 - (productoForm.Descuento||0))) * 100)
+          }}
         />
         <SearchSelect label="Moneda" saveOn={productoForm} 
           css="col-span-12 md:col-span-5"
@@ -258,8 +268,13 @@
         <Input saveOn={productoForm} save="SbnUnidad" 
           css="col-span-12 md:col-span-6" label="Nombre"
         />
-        <Input saveOn={productoForm} save="SbnPrecio" baseDecimals={2}
+        <Input bind:saveOn={productoForm} save="SbnPrecio" baseDecimals={2}
           css="col-span-12 md:col-span-6" label="Precio Base" type="number"
+          onChange={() => {
+            console.log()
+            productoForm.PrecioFinal = Math.round((productoForm.Precio * (100 - (productoForm.Descuento||0))) / 100)
+            productoForm = {...productoForm}
+          }}
         />
         <Input saveOn={productoForm} save="SbnDescuento" postValue="%"
           css="col-span-12 md:col-span-6" label="Descuento" type="number"
