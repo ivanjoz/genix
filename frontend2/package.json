@@ -35,6 +35,7 @@
 		"mime-types": "^3.0.1",
 		"notiflix": "^3.2.8",
 		"roosterjs": "^9.41.0",
+		"svelte-awesome-color-picker": "^4.1.0",
 		"svelte-lexical": "^0.6.3",
 		"tailwind-merge": "^3.3.1",
 		"tailwind-variants": "^3.1.1"

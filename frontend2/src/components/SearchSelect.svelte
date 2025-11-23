@@ -1,6 +1,6 @@
 <script lang="ts" generics="T,E">
-    import { include } from "$lib/helpers";
-  import { highlString, throttle } from "../core/helpers";
+    import { highlString, include } from "$lib/helpers";
+  import { throttle } from "../core/helpers";
   import { Core } from "../core/store.svelte";
   import s1 from "./components.module.css";
 
@@ -8,6 +8,7 @@
     saveOn?: T;
     save?: keyof T;
     css?: string;
+    optionsCss?: string
     options: E[];
     keyId: keyof E;
     keyName: keyof E;
@@ -45,6 +46,7 @@
     icon,
     showLoading = false,
     keyId,
+    optionsCss,
     keyName
   }: SearchSelectProps<T,E> = $props();
 
@@ -58,7 +60,7 @@
 
   // let searchCardID = Math.random();
   let inputRef: HTMLInputElement;
-  let words: string[] = [];
+  let words = $state<string[]>([]);
 
   const isMobile = $derived(Core.deviceType === 3);
   const useLayerPicker = $derived(isMobile);
@@ -165,7 +167,7 @@
     const text = String(target.value || "").toLowerCase();
 
     throttle(() => {
-      words = String(inputRef.value).split(" ");
+      words = String(inputRef.value).toLowerCase().split(" ");
       filteredOptions = filter(text);
     }, 120);
   }
@@ -333,7 +335,7 @@
     </div>
   {/if}
   {#if show && !useLayerPicker}
-    <div class="p-4 _1 left-0 z-40 w-full{arrowSelected >= 0 ? ' on-arrow' : ''}"
+    <div class="p-4 _1 left-0 z-40 {arrowSelected >= 0 ? ' on-arrow' : ''} {optionsCss || "w-full"}"
       role="button" tabindex="0"
       onmousedown={(ev) => {
         ev.stopPropagation()
@@ -351,8 +353,9 @@
           }
         : undefined}
     >
-      {#each filteredOptions as e, i}
+      {#each filteredOptions as e, i (e[keyId] + words.join(','))}
         {@const name = String(e[keyName])}
+        {@const highlighted = highlString(name, words)}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div class="flex ai-center _highlight{arrowSelected === i
             ? ' _selected'
@@ -364,7 +367,7 @@
           }}
         >
           <div>
-            {#each highlString(name, words) as w}
+            {#each highlighted as w}
               <span class={w.highl ? "_8" : ""} class:mr-4={w.isEnd}>{w.text}</span>
             {/each}
           </div>

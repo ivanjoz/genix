@@ -12,6 +12,7 @@
     keyName: keyof E;
     label?: string;
     cardCss?: string
+    optionsCss?: string
     inputCss?: string
     onChange?: (e: (string|number)[]) => void;
   }
@@ -26,6 +27,7 @@
     label,
     onChange,
     inputCss,
+    optionsCss,
     cardCss
   }: SearchSelectProps<T> = $props();
 
@@ -82,7 +84,7 @@
 <div class={css}>
   <SearchSelect options={options} keyId={keyId} keyName={keyName} 
     clearOnSelect={true} avoidIDs={selectedIDs} placeholder={label} 
-    css={"s1 "+inputCss}
+    css={"s1 "+inputCss} optionsCss={optionsCss}
     onChange={e => {
       if(!e){ return }
       const id = e[keyId] as number

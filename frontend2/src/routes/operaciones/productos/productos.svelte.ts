@@ -9,6 +9,16 @@ export interface IProductoPropiedades {
   ID: number, Nombre: string, Options: IProductoPropiedad[], Status: number
 }
 
+export interface IProductoPresentacion {
+  id: number, 
+  at: number, /* atributo */
+  nm: string, /* nombre */
+  cl: string, /* color */
+  pc: number, /* precio */
+  pd: number, /* precio diferencial */
+  ss: number  /* estado */
+}
+
 export interface IProductoImage {
   n: string /* Nombre del imagen */
   d: string /* descripcion de la imagen */
@@ -24,6 +34,7 @@ export interface IProducto {
   PrecioFinal: number
   ContentHTML?: string
   Propiedades: IProductoPropiedades[]
+  Presentaciones: IProductoPresentacion[]
   Peso?: number
   Volumen?: number
   SbnCantidad?: number
@@ -34,6 +45,7 @@ export interface IProducto {
   Images?: IProductoImage[]
   Image?: IProductoImage
   CategoriasIDs: number[]
+  AtributosIDs?: number[]
   MarcaID: number
   UnidadID: number
   Stock?: {a /* almacen */: number, c /* cantidad */: number}[]
@@ -181,3 +193,11 @@ export const postListaRegistros = (data: IListaRegistro[]) => {
     refreshRoutes: ["listas-compartidas2"]
   })
 }
+
+export const productoAtributos = [
+  { id: 1, name: "Color" },
+  { id: 2, name: "Talla" },
+  { id: 3, name: "Tamaño" },
+  { id: 4, name: "Forma" },
+  { id: 5, name: "Presentación" },
+]

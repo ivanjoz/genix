@@ -15,8 +15,9 @@
     import { throttle } from "../../../core/helpers";
     import { Core } from "../../../core/store.svelte";
     import { formatN } from "../../../shared/main";
+    import Atributos from "./Atributos.svelte";
     import CategoriasMarcas from "./CategoriasMarcas.svelte";
-    import { ListasCompartidasService, postProducto, ProductosService, type IProducto, type IProductoImage } from "./productos.svelte";
+    import { ListasCompartidasService, postProducto, productoAtributos, ProductosService, type IProducto, type IProductoImage } from "./productos.svelte";
 
   let filterText = $state("")
   const productos = new ProductosService()
@@ -249,7 +250,7 @@
         <SearchCard css="col-span-24 flex items-start" label="CATEGORÍAS ::"
           options={categorias} keyId="ID" keyName="Nombre"
           cardCss="grow" inputCss="w-[35%] md:w-180" bind:saveOn={productoForm}
-          save="CategoriasIDs"
+          save="CategoriasIDs" optionsCss="w-280"
         />
         <div class="ff-bold h3 col-span-24 ml-8">
           Sub-Unidades
@@ -274,6 +275,11 @@
     {#if layerView === 2}
       <HTMLEditor saveOn={productoForm} save="ContentHTML" 
         css="mt-12"/>
+    {/if}
+    {#if layerView === 3}
+      <div class="mt-16 w-full">
+        <Atributos bind:producto={productoForm}></Atributos>
+      </div>
     {/if}
     {#if layerView === 4}
       <div class="grid grid-cols-2 md:grid-cols-4 items-start gap-x-10 gap-y-10 mt-16">
