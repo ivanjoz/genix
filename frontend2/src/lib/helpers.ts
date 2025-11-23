@@ -34,6 +34,8 @@ export const throttle = (func: (() => void), delay: number) => {
 export const highlString = (
   phrase: string, words: string[]
 ): { text: string, highl?: boolean, isEnd?: boolean }[] => {
+  // console.log("words 333:",phrase,words)
+
   if(typeof phrase !== 'string'){
     console.error("no es string")
     console.log(phrase)
@@ -41,7 +43,7 @@ export const highlString = (
   }
   const arr: { text: string, highl?: boolean, isEnd?: boolean }[] = [{ text: phrase }]
   if (!words || words.length === 0){ return arr }
-  console.log("words 222:", arr.filter(x => x),"|",phrase,words)
+  // console.log("words 222:", arr.filter(x => x),"|",phrase,words)
 
   for (let word of words) {
     if (word.length < 2) continue
@@ -61,7 +63,7 @@ export const highlString = (
         
         arr.splice(i, 1, ...splited)
         if(arr.length > 40){ 
-          console.log("words 111:", arr.filter(x => x),"|",phrase,words)
+          // console.log("words 111:", arr.filter(x => x),"|",phrase,words)
           return arr.filter(x => x) 
         }
         continue

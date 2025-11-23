@@ -23,6 +23,8 @@ export interface ITableColumn<T> {
 	renderHTML?: (e: T, idx: number, rerender: (ids?: number[]) => void) => string
   _colspan?: number
 	highlight?: boolean
+	/* Buttons */
+	buttonEditHandler?: (e:T, value: string|number) => void
 }
 
 /**

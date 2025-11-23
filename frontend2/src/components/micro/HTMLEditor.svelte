@@ -128,7 +128,7 @@
     }
 
     removeStyles(doc.querySelectorAll('div'), 
-      ['margin-top', 'margin-bottom', 'font-family', 'font-size', 'color'])
+      ['margin-top', 'margin-bottom', 'font-family' /*, 'font-size', 'color' */])
     
     removeStyles(doc.querySelectorAll('td, th'),
       ['width', 'height', 'border-width', 'border-style', 'border-color'])
@@ -272,8 +272,8 @@
                     element.style.removeProperty('margin-top')
                     element.style.removeProperty('margin-bottom')
                     element.style.removeProperty('font-family')
-                    element.style.removeProperty('font-size')
-                    element.style.removeProperty('color')
+                    //element.style.removeProperty('font-size')
+                    //element.style.removeProperty('color')
                   } else if (element.tagName === 'TD' || element.tagName === 'TH') {
                     element.style.removeProperty('width')
                     element.style.removeProperty('height')
