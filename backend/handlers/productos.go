@@ -7,6 +7,7 @@ import (
 	s "app/types"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -108,8 +109,11 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		current := productosCurrentMap[e.ID]
 
 		// Lógica para hacer un merge de las propiedades de los productos
-		optionMaxID := int16(0)
-		propiedadesMap := map[int16]*s.ProductoPropiedades{}
+		// optionMaxID := int16(0)
+		// propiedadesMap := map[int16]*s.ProductoPropiedades{}
+		presentacionesMap := map[int16]s.ProductoPesentacion{}
+		presentacionesNameMap := map[string]s.ProductoPesentacion{}
+		presentacionMaxID := int16(0)
 
 		if current != nil {
 			// Estas propiedades no cambian
@@ -120,64 +124,89 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 			e.Created = current.Created
 			e.CreatedBy = current.CreatedBy
 			e.Images = current.Images
-
-			for i := range current.Propiedades {
-				e := &current.Propiedades[i]
-				e.Status = 0
-				e.OptionsMap = map[string]*s.ProductoPropiedad{}
-				propiedadesMap[e.ID] = e
-				for _, opt := range e.Options {
-					if opt.ID > optionMaxID {
-						optionMaxID = opt.ID
+			/*
+				for i := range current.Propiedades {
+					e := &current.Propiedades[i]
+					e.Status = 0
+					e.OptionsMap = map[string]*s.ProductoPropiedad{}
+					propiedadesMap[e.ID] = e
+					for _, opt := range e.Options {
+						if opt.ID > optionMaxID {
+							optionMaxID = opt.ID
+						}
+						e.OptionsMap[core.NormaliceString(&opt.Nombre)] = &opt
 					}
-					e.OptionsMap[core.NormaliceString(&opt.Nombre)] = &opt
+				}
+			*/
+			for _, e := range current.Presentaciones {
+				presentacionesMap[e.ID] = e
+				presentacionesNameMap[core.Concatn(e.AtributoID, strings.ToLower(e.Name))] = e
+				if e.ID > presentacionMaxID {
+					presentacionMaxID = e.ID
 				}
 			}
 		}
 
-		for _, propiedad := range e.Propiedades {
-			if _, ok := propiedadesMap[propiedad.ID]; !ok {
-				propiedadesMap[propiedad.ID] = &s.ProductoPropiedades{
-					ID:         propiedad.ID,
-					Nombre:     propiedad.Nombre,
-					OptionsMap: map[string]*s.ProductoPropiedad{},
-					Status:     1,
-				}
+		for _, pr := range e.Presentaciones {
+			name := core.Concatn(pr.AtributoID, strings.ToLower(pr.Name))
+			if current, ok := presentacionesNameMap[name]; ok && pr.ID != 0 {
+				pr.ID = current.ID
 			}
-			propiedadCurrent := propiedadesMap[propiedad.ID]
-			propiedadCurrent.Nombre = propiedad.Nombre
-			propiedadCurrent.Status = propiedad.Status
-			nombresUsedSet := core.SliceSet[string]{}
-
-			for i := range propiedad.Options {
-				opt := &propiedad.Options[i]
-				if len(opt.Nombre) == 0 {
-					continue
-				}
-
-				nombre := core.NormaliceString(&opt.Nombre)
-				nombresUsedSet.Add(nombre)
-
-				if optCurrent, ok := propiedadCurrent.OptionsMap[nombre]; ok {
-					optCurrent.Status = opt.Status
-				} else {
-					opt.ID = int16(optionMaxID) + 1
-					optionMaxID++
-					opt.Status = 1
-					propiedadCurrent.OptionsMap[nombre] = opt
-				}
+			if pr.ID <= 0 {
+				presentacionMaxID++
+				pr.ID = presentacionMaxID
 			}
-
-			for nombre, opt := range propiedadCurrent.OptionsMap {
-				if !nombresUsedSet.Include(nombre) {
-					opt.Status = 0
-				}
-			}
-
-			propiedadCurrent.Options = core.MapToSlice(propiedadCurrent.OptionsMap)
+			presentacionesNameMap[name] = pr
+			presentacionesMap[pr.ID] = pr
 		}
 
-		e.Propiedades = core.MapToSlice(propiedadesMap)
+		e.Presentaciones = core.MapToSliceT(presentacionesMap)
+
+		/*
+			for _, propiedad := range e.Propiedades {
+				if _, ok := propiedadesMap[propiedad.ID]; !ok {
+					propiedadesMap[propiedad.ID] = &s.ProductoPropiedades{
+						ID:         propiedad.ID,
+						Nombre:     propiedad.Nombre,
+						OptionsMap: map[string]*s.ProductoPropiedad{},
+						Status:     1,
+					}
+				}
+				propiedadCurrent := propiedadesMap[propiedad.ID]
+				propiedadCurrent.Nombre = propiedad.Nombre
+				propiedadCurrent.Status = propiedad.Status
+				nombresUsedSet := core.SliceSet[string]{}
+
+				for i := range propiedad.Options {
+					opt := &propiedad.Options[i]
+					if len(opt.Nombre) == 0 {
+						continue
+					}
+
+					nombre := core.NormaliceString(&opt.Nombre)
+					nombresUsedSet.Add(nombre)
+
+					if optCurrent, ok := propiedadCurrent.OptionsMap[nombre]; ok {
+						optCurrent.Status = opt.Status
+					} else {
+						opt.ID = int16(optionMaxID) + 1
+						optionMaxID++
+						opt.Status = 1
+						propiedadCurrent.OptionsMap[nombre] = opt
+					}
+				}
+
+				for nombre, opt := range propiedadCurrent.OptionsMap {
+					if !nombresUsedSet.Include(nombre) {
+						opt.Status = 0
+					}
+				}
+
+				propiedadCurrent.Options = core.MapToSlice(propiedadCurrent.OptionsMap)
+			}
+
+			e.Propiedades = core.MapToSlice(propiedadesMap)
+		*/
 	}
 
 	if err = db.Insert(&productos); err != nil {
