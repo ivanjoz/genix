@@ -41,6 +41,8 @@
     }
   ]
 
+  const presentacionesFiltered = $derived(producto.Presentaciones.filter(x => x.ss))
+
 </script>
 
 <div class="flex justify-between mt-4">
@@ -49,7 +51,8 @@
   <button class="bx-green s1" onclick={() => {
     presentacionForm = { 
       at: producto.AtributosIDs?.[0] as number,
-      id: tempCounter
+      id: tempCounter,
+      ss: 1
     } as IProductoPresentacion
     tempCounter--
     console.log("presentacionForm", presentacionForm)
@@ -84,6 +87,16 @@
       Object.assign(current, presentacionForm)
     } else {
       producto.Presentaciones.push(presentacionForm)
+    }
+    producto.Presentaciones = [...producto.Presentaciones]
+    closeAllModals()
+  }}
+  onDelete={() => {
+    const current = producto.Presentaciones.find(x => x.id === presentacionForm.id)
+    if(current && presentacionForm.id > 0){
+      current.ss = 0
+    } else {
+      producto.Presentaciones = producto.Presentaciones.filter(x => x.id !== presentacionForm.id)
     }
     producto.Presentaciones = [...producto.Presentaciones]
     closeAllModals()

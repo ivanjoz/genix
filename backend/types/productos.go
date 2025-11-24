@@ -12,6 +12,15 @@ type AlmacenStockMin struct {
 	Cantidad  int32 `cbor:"2,keyasint" json:"c"`
 }
 
+type ProductoPesentacion struct {
+	ID               int16  `ms:"i" json:"id"`
+	AtributoID       int16  `ms:"a" json:"at"`
+	Name             string `ms:"n" json:"nm"`
+	Color            string `ms:"c" json:"cl"`
+	Precio           int32  `ms:"p" json:"pc"`
+	DiferenciaPrecio int32  `ms:"d" json:"pd"`
+}
+
 type Producto struct {
 	TAGS          `table:"productos"`
 	EmpresaID     int32 `json:",omitempty"`
@@ -37,6 +46,7 @@ type Producto struct {
 	SbnPreciFinal int32   `json:",omitempty"`
 
 	Propiedades    []ProductoPropiedades `json:",omitempty"`
+	Presentaciones []ProductoPesentacion `json:",omitempty"`
 	Images         []ProductoImagen      `json:",omitempty"`
 	Stock          []AlmacenStockMin     `json:",omitempty"`
 	StockReservado []AlmacenStockMin     `json:",omitempty"`
