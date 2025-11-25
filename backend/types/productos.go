@@ -13,12 +13,13 @@ type AlmacenStockMin struct {
 }
 
 type ProductoPesentacion struct {
-	ID               int16  `ms:"i" json:"id"`
-	AtributoID       int16  `ms:"a" json:"at"`
-	Name             string `ms:"n" json:"nm"`
-	Color            string `ms:"c" json:"cl"`
-	Precio           int32  `ms:"p" json:"pc"`
-	DiferenciaPrecio int32  `ms:"d" json:"pd"`
+	ID               int16  `ms:"i" json:"id,omitempty""`
+	AtributoID       int16  `ms:"a" json:"at,omitempty""`
+	Name             string `ms:"n" json:"nm,omitempty""`
+	Color            string `ms:"c" json:"cl,omitempty""`
+	Precio           int32  `ms:"p" json:"pc,omitempty""`
+	DiferenciaPrecio int32  `ms:"d" json:"pd,omitempty""`
+	Status           int8   `ms:"s" json:"ss,omitempty""`
 }
 
 type Producto struct {
@@ -95,6 +96,7 @@ func (e _e) CreatedBy_() db.CoI32          { return db.CoI32{"created_by"} }
 func (e _e) Stock_() db.CoAny              { return db.CoAny{"stock"} }
 func (e _e) StockReservado_() db.CoAny     { return db.CoAny{"stock_reservado"} }
 func (e _e) StockStatus_() db.CoI8         { return db.CoI8{"stock_status"} }
+func (e _e) Presentaciones_() db.CoAny     { return db.CoAny{"presentaciones"} }
 
 func (e *Producto) FillCategoriasConStock() {
 	e.CategoriasConStock = nil
@@ -272,7 +274,10 @@ func (e AlmacenProducto) GetSchema() db.TableSchema {
 			{Cols: []db.Coln{e.SKU_()}, KeepPart: true},
 			{Cols: []db.Coln{e.Lote_()}, KeepPart: true},
 			// {Cols: []db.Coln{e.ProductoID_()}, KeepPart: true},
-			{Cols: []db.Coln{e.ProductoID_(), e.Status_()}, KeepPart: true, ConcatI32: []int8{1}},
+			{
+				Cols:     []db.Coln{e.ProductoID_(), e.Status_()},
+				KeepPart: true, ConcatI32: []int8{1},
+			},
 			{Cols: []db.Coln{e.AlmacenID_(), e.Updated_()}, KeepPart: true, ConcatI64: []int8{9}},
 			{Cols: []db.Coln{e.AlmacenID_(), e.Status_()}, KeepPart: true, ConcatI32: []int8{1}},
 		},
@@ -283,6 +288,7 @@ func (e *AlmacenProducto) SelfParse() {
 	e.ID = Concat62(e.AlmacenID, e.ProductoID, e.SKU, e.Lote)
 }
 
+/*
 func (e *AlmacenProducto) GetView(view int8) any {
 	if view == 1 {
 		return int64(e.AlmacenID)*1e9 + int64(e.Updated)
@@ -290,6 +296,7 @@ func (e *AlmacenProducto) GetView(view int8) any {
 		return 0
 	}
 }
+*/
 
 type AlmacenMovimiento struct {
 	TAGS      `table:"almacen_movimiento"`
@@ -309,8 +316,14 @@ type AlmacenMovimiento struct {
 	Tipo               int8   `json:",omitempty" db:"tipo"`
 	Created            int32  `json:",omitempty" db:"created,view.1"`
 	CreatedBy          int32  `json:",omitempty" db:"created_by"`
+	Table              *TableAlmacenMovimiento
 }
 
+type TableAlmacenMovimiento struct {
+	AlmacenID db.CoI32
+}
+
+/*
 func (e *AlmacenMovimiento) GetView(view int8) any {
 	if view == 1 {
 		return int64(e.AlmacenRefID)*1e9 + int64(e.Created)
@@ -318,6 +331,7 @@ func (e *AlmacenMovimiento) GetView(view int8) any {
 		return 0
 	}
 }
+*/
 
 type alm = AlmacenMovimiento
 

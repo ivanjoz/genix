@@ -15,9 +15,21 @@ export interface httpProps {
   headers?: {[key: string]: string}
   successMessage?: string
   errorMessage?: string
+  module?: string
   onUploadProgress?: (e: AxiosProgressEvent) => void
   status?: IHttpStatus
   refreshRoutes?: string[]
+  keysIDs?: { [e: string]: string | string[] }
+  keyID: string | string[]
+  cacheMode?: CacheMode
+  useCache?: { 
+    min: number, /* minutos del caché */
+    ver: number  /* versión del caché */
+  },
+  useCacheStatic?: { 
+    min: number, /* minutos del caché */
+    ver: number  /* versión del caché */
+  },
 }
 
 export const makeRoute = (route: string) => {
@@ -302,11 +314,29 @@ const parseResponseAsStream = async (fetchResponse: Response, status: any, props
 
 export function GET(props: httpProps): Promise<any> {
   const status: IHttpStatus = { code: 200, message: "" }
-  const route = makeRoute(props.route)
-  
-  return new Promise((resolve, reject) => {
-    console.log("realizando fetch::", props)
-    fetch(route, { headers: buildHeaders() })
+  const routeParsed = makeRoute(props.route)
+
+  if(props.useCache){
+    const args = {
+      routeParsed,
+      route: props.route,
+      useCache: props.useCache,
+      module: props.module,
+      headers: buildHeaders('json'),
+      cacheMode: props.cacheMode,
+    } as serviceHttpProps
+
+    return new Promise((resolve, reject) => {
+      fetchCacheParsed(args)
+      .then(cachedResponse => {
+        resolve(cachedResponse)
+      })
+      .catch(err => { reject(err) })
+    })
+  } else {
+    return new Promise((resolve, reject) => {
+      console.log("realizando fetch::", props)
+      fetch(routeParsed, { headers: buildHeaders() })
       .then(res => parsePreResponse(res, status))
       .then(res => {
         return parseResponseBody(res, props, status) ? resolve(res) : reject(res)
@@ -316,7 +346,8 @@ export function GET(props: httpProps): Promise<any> {
         if (props.errorMessage) { Notify.failure(props.errorMessage) }
         reject(error)
       })
-  })
+    })
+  }
 }
 
 export class GetHandler {

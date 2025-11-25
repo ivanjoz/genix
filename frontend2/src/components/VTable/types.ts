@@ -2,6 +2,7 @@
  * Type definitions for Svelte 5 Virtual Scroller
  */
 
+import type { ElementAST } from '$components/micro/Renderer.svelte';
 import type { Snippet } from 'svelte';
 
 export interface ITableColumn<T> {
@@ -19,7 +20,7 @@ export interface ITableColumn<T> {
 	onEditChange?: (e:T, value: string|number) => void
   cardRender?: (e: T, idx: number, rerender: (ids?: number[]) => void) => (any)
   getValue?: (e: T, idx: number) => (string|number)
-  render?: (e: T, idx: number, rerender: (ids?: number[]) => void) => (any)
+  render?: (e: T, idx: number, rerender: (ids?: number[]) => void) => ElementAST[]
 	renderHTML?: (e: T, idx: number, rerender: (ids?: number[]) => void) => string
   _colspan?: number
 	highlight?: boolean

@@ -58,9 +58,28 @@
 					},
 				},
 				{
-					header: 'Selector',
-					getValue: (e) => e.edad,
-					css: 'text-center'
+					header: 'Edad',
+					getValue: (e) => e.edadChanged || e.edad,
+					render: e => {
+						if(e.edadChanged && e.edadChanged !== e.edad){
+							return [
+								{ css: "flex items-center",
+									children: [
+										{ text: `${e.edad}`	},
+										{	css: "icon-ok",	text: "" },
+										{ text: `${e.edadChanged}` }
+									]
+								}
+							]
+						}
+						return [
+							{ text: `${e.edad} !!` }
+						]
+					},
+					css: 'text-center',
+					onEditChange(e, value) {
+							e.edadChanged = parseInt(value as number)
+					},
 				}
 			]
 		},
@@ -169,11 +188,6 @@
 				<span style="background-color: #fef3c7; padding: 0.125rem 0.25rem; border-radius: 3px;">
 					{value}
 				</span>
-
-			{:else if col.header === 'Selector'}
-				<CellSelector id={record.id} options={data} keyField="id" valueField="nombre"
-					saveOn={record} save="selector"
-				/>
 				
 			<!-- Actions column - real interactive buttons! -->
 			{:else if col.id === 'actions'}

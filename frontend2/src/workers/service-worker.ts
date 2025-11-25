@@ -29,6 +29,10 @@ export type serviceHttpProps = {
     min: number, /* minutos del caché */
     ver: number  /* versión del caché */
   },
+  useCacheStatic?: { 
+    min: number, /* minutos del caché */
+    ver: number  /* versión del caché */
+  },
 }
 
 type CacheContent = { __version__?: number } & { [k: string]: any[] }

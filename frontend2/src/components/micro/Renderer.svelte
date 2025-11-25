@@ -1,12 +1,12 @@
 <script lang="ts" module>
 
-  export interface Element {
-    id: number | string
+  export interface ElementAST {
+    id?: number | string
     css?: string
-    content?: string
-    isButton?: boolean
+    tagName?: "DIV" | "SPAN" | "BUTTON",
+    text?: string
     onClick?: (id: number | string) => void
-    children?: Element[]
+    children?: ElementAST[]
   }
 
 </script>
@@ -15,38 +15,38 @@
 
   const { 
     elements 
-  }: { elements: Element[] } = $props()
+  }: { elements: ElementAST[] } = $props()
 
-  const handleClick = (element: Element) => {
+  const handleClick = (element: ElementAST) => {
     if (element.onClick) {
-      element.onClick(element.id)
+      element.onClick(element.id || 0)
     }
   }
 
 </script>
 
-{#snippet renderElement(element: Element)}
-  {#if element.isButton}
+{#snippet renderElement(element: ElementAST)}
+  {#if element.tagName === 'BUTTON'}
     <button
       class={element.css}
       onclick={() => handleClick(element)}
     >
-      {#if element.content}
-        {element.content}
+      {#if element.text}
+        {element.text}
       {/if}
       {#if element.children}
-        {#each element.children as child (child.id)}
+        {#each element.children as child}
           {@render renderElement(child)}
         {/each}
       {/if}
     </button>
   {:else}
     <div class={element.css}>
-      {#if element.content}
-        {element.content}
+      {#if element.text}
+        {element.text}
       {/if}
       {#if element.children}
-        {#each element.children as child (child.id)}
+        {#each element.children as child}
           {@render renderElement(child)}
         {/each}
       {/if}
@@ -54,7 +54,7 @@
   {/if}
 {/snippet}
 
-{#each elements as element (element.id)}
+{#each elements as element}
   {@render renderElement(element)}
 {/each}
 

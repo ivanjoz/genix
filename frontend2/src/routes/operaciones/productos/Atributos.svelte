@@ -41,7 +41,7 @@
     }
   ]
 
-  const presentacionesFiltered = $derived(producto.Presentaciones.filter(x => x.ss))
+  const presentacionesFiltered = $derived((producto.Presentaciones||[]).filter(x => x.ss))
 
 </script>
 
@@ -63,7 +63,7 @@
 </div>
 
 <VTable columns={columns} css="mt-6"
-  data={producto.Presentaciones||[]}
+  data={presentacionesFiltered}
   onRowClick={e => {
     presentacionForm = {...e}
   }}

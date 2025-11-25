@@ -691,3 +691,13 @@ func Test32(args *core.ExecArgs) core.FuncResponse {
 	db.DeployScylla(0, s.ListaCompartidaRegistro{})
 	return core.FuncResponse{}
 }
+
+type DemoType1[T DemoStruct1] struct {
+	Table DemoStruct1
+	ID    int32
+}
+
+func Test33(args *core.ExecArgs) core.FuncResponse {
+
+	return core.FuncResponse{}
+}

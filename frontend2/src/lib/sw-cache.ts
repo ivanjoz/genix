@@ -163,7 +163,6 @@ export const fetchCache = async (args: serviceHttpProps): Promise<FetchCacheResp
 
 export const fetchCacheParsed = async (args: serviceHttpProps): Promise<any> => {
   const response = await fetchCache(args)
-  // debugger
 
   if(response.error){
     let errMessage = response.error
