@@ -1,4 +1,7 @@
 <script lang="ts" module>
+    import type { ElementAST } from './micro/Renderer.svelte';
+    import Renderer from './micro/Renderer.svelte';
+
 
 	export interface ICellEditableProps<T> {
 		saveOn: T;
@@ -7,7 +10,7 @@
 		contentClass?: string;
 		inputClass?: string;
 		onChange?: (newValue: string | number) => void;
-		render?: (value: number | string, isEditing: boolean) => any;
+		render?: (value: number | string) => ElementAST[];
 		getValue?: (e: T) => number | string;
 		required?: boolean;
 		type?: string;
@@ -60,6 +63,7 @@
 
 	function handleClick(ev: MouseEvent) {
 		ev.stopPropagation();
+		console.log("currentValue", currentValue)
 		prevValue = currentValue;
 		isEditing = true;
 	}
@@ -82,7 +86,6 @@
 		isEditing = false;
 	}
 
-	const renderContent = $derived(render ? render(currentValue, isEditing) : currentValue);
 </script>
 
 <div class="_2">{currentValue}</div>
@@ -98,8 +101,12 @@
 				handleClick(ev as any);
 			}
 		}}
-	>
-		{renderContent}
+	>	
+		{#if render}
+			<Renderer elements={render(currentValue)}/>
+		{:else}
+			{currentValue}
+		{/if}
 		{#if !currentValue && required}
 			<i class="icon-attention c-red"></i>
 		{/if}

@@ -1,5 +1,5 @@
 <script lang="ts" generics="T,E">
-    import { highlString, include } from "$lib/helpers";
+  import { highlString, include } from "$lib/helpers";
   import { throttle } from "../core/helpers";
   import { Core } from "../core/store.svelte";
   import s1 from "./components.module.css";

@@ -160,7 +160,7 @@
     height: calc(100vh - var(--header-height));
     right: 0;
     background-color: rgb(255, 255, 255);
-    box-shadow: -7px 0px 15px 8px #00000030, -3px 1px 5px 2px #0000001c;
+    box-shadow: -7px 0px 15px 0px #00000024, -3px 1px 5px 0px #00000017;
     z-index: 101;
     max-width: 100vw;
     overflow: hidden;
@@ -179,6 +179,9 @@
       margin-left: -6px;
       margin-right: -6px;
       padding: 0 6px;
+    }
+    ._1 {
+      box-shadow: -7px 0px 15px 8px #00000030, -3px 1px 5px 2px #0000001c;
     }
   }
 

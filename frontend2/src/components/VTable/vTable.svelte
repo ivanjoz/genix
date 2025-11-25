@@ -5,6 +5,7 @@
   import type { VirtualItem } from './index.svelte';
   import CellEditable from '../CellEditable.svelte';
   import { highlString, include } from '../../core/helpers';
+  import { type ElementAST } from '$components/micro/Renderer.svelte';
 
   interface VTableProps<T> {
     columns: ITableColumn<T>[];
@@ -170,13 +171,6 @@
         dataVersion++;
       });
       isHTML = true;
-    } else if (column.render) {
-      // Render function - may return HTML or other content
-      content = column.render(record, index, () => {
-        dataVersion++;
-      });
-      // Assume it's HTML if it's a string containing HTML tags
-      isHTML = typeof content === 'string' && /<[^>]+>/.test(content);
     } else if (column.getValue) {
       content = column.getValue(record, index);
       isHTML = false;
@@ -295,6 +289,11 @@
                 {:else if column.onEditChange}
                   <CellEditable saveOn={record} 
                     getValue={() => cellData.content} 
+                    render={
+                      (column.render 
+                      ? () => column.render?.(record, row.index, () => {}) 
+                      : undefined) as (value: number | string) => ElementAST[]
+                    }
                     onChange={v => { 
                       column.onEditChange?.(record,v)
                     }}

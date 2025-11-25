@@ -7,7 +7,7 @@
     import ImageUploader from "../../../components/ImageUploader.svelte";
     import Layer from "../../../components/Layer.svelte";
     import OptionsStrip from "../../../components/micro/OptionsStrip.svelte";
-    import Page from "../../../components/Page.svelte";
+    import Page from "$components/Page.svelte";
     import SearchCard from "../../../components/SearchCard.svelte";
     import SearchSelect from "../../../components/SearchSelect.svelte";
     import type { ITableColumn } from "../../../components/VTable";
@@ -139,7 +139,7 @@
       ev.stopPropagation()
       if(view === 2){
         CategoriasLayer?.newRecord()
-      } else if(view === 2) {
+      } else if(view === 3) {
         MarcasLayer?.newRecord()
       } else {
         Core.setSideLayer(1)
@@ -244,10 +244,8 @@
           save="Volumen" type="number"
         />
         <SearchSelect label="Marca" saveOn={productoForm} css="col-span-12 md:col-span-10 mb-2"
-          save="MarcaID" keyId="i" keyName="v"
-          options={[
-            {i:1, v:"PEN (S/.)"},{i:2, v:"g"},{i:3, v:"Libras"}
-          ]}
+          save="MarcaID" keyId="ID" keyName="Nombre"
+          options={listas.ListaRecordsMap.get(2)||[]}
         />
         <div class="col-span-24 md:col-span-5">
           <CheckboxOptions save="Params" saveOn={productoForm} type="multiple"

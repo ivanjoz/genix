@@ -1,7 +1,7 @@
 <script lang="ts" generics="T">
     import { untrack } from "svelte";
   import s1 from "./components.module.css";
-  import { type Element } from "./micro/Renderer.svelte";
+  import { type ElementAST } from "./micro/Renderer.svelte";
 
   export interface IInput<T> {
     id?: number;
@@ -16,7 +16,7 @@
     placeholder?: string;
     disabled?: boolean;
     onChange?: () => void;
-    postValue?: string | Element[];
+    postValue?: string | ElementAST[];
     baseDecimals?: number;
     content?: string | any;
     transform?: (v: string | number) => string | number;

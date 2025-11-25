@@ -83,13 +83,14 @@ func (e ListaCompartidaRegistro) GetSchema() db.TableSchema {
 		Partition: e.EmpresaID_(),
 		Keys:      []db.Coln{e.ID_()},
 		Views: []db.View{
-			{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
+			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
 			{Cols: []db.Coln{e.ListaID_(), e.Status_()}, ConcatI32: []int8{2}},
 			{Cols: []db.Coln{e.ListaID_(), e.Updated_()}, ConcatI64: []int8{10}},
 		},
 	}
 }
 
+/*
 func (e *ListaCompartidaRegistro) GetView(view int8) any {
 	if view == 1 {
 		return e.ListaID*100 + int32(e.Status)
@@ -99,6 +100,7 @@ func (e *ListaCompartidaRegistro) GetView(view int8) any {
 		return 0
 	}
 }
+*/
 
 type NewIDToID struct {
 	NewID  int32
