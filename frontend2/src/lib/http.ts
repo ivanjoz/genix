@@ -20,7 +20,7 @@ export interface httpProps {
   status?: IHttpStatus
   refreshRoutes?: string[]
   keysIDs?: { [e: string]: string | string[] }
-  keyID: string | string[]
+  keyID?: string | string[]
   cacheMode?: CacheMode
   useCache?: { 
     min: number, /* minutos del caché */

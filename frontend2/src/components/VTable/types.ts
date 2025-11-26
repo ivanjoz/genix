@@ -20,7 +20,7 @@ export interface ITableColumn<T> {
 	onEditChange?: (e:T, value: string|number) => void
   cardRender?: (e: T, idx: number, rerender: (ids?: number[]) => void) => (any)
   getValue?: (e: T, idx: number) => (string|number)
-  render?: (e: T, idx: number, rerender: (ids?: number[]) => void) => ElementAST[]
+  render?: (e: T, idx: number, rerender: (ids?: number[]) => void) => ElementAST | ElementAST[]
 	renderHTML?: (e: T, idx: number, rerender: (ids?: number[]) => void) => string
   _colspan?: number
 	highlight?: boolean
