@@ -4,7 +4,7 @@
     id?: number | string
     css?: string
     tagName?: "DIV" | "SPAN" | "BUTTON",
-    text?: string
+    text?: string | number
     onClick?: (id: number | string) => void
     children?: ElementAST[]
   }
@@ -15,7 +15,7 @@
 
   const { 
     elements 
-  }: { elements: ElementAST[] } = $props()
+  }: { elements: ElementAST | ElementAST[] } = $props()
 
   const handleClick = (element: ElementAST) => {
     if (element.onClick) {
@@ -53,9 +53,13 @@
     </div>
   {/if}
 {/snippet}
+{#if Array.isArray(elements)}
+  {#each elements as element}
+    {@render renderElement(element)}
+  {/each}
+{:else}
+  {@render renderElement(elements)}
+{/if}
 
-{#each elements as element}
-  {@render renderElement(element)}
-{/each}
 
 

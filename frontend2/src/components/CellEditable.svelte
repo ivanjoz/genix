@@ -10,7 +10,7 @@
 		contentClass?: string;
 		inputClass?: string;
 		onChange?: (newValue: string | number) => void;
-		render?: (value: number | string) => ElementAST[];
+		render?: (value: number | string) => ElementAST | ElementAST[];
 		getValue?: (e: T) => number | string;
 		required?: boolean;
 		type?: string;
@@ -39,7 +39,6 @@
 		: ((saveOn || ({} as T))[save as keyof T] as number | string);
 
 	let currentValue = $state(initialValue);
-	let prevValue = $state(initialValue);
 
 	// Focus input when editing starts
 	$effect(() => {
@@ -55,33 +54,18 @@
 		return newValue as string | number;
 	}
 
-	function reSetValue(newValue?: string | number) {
-		const extracted = extractValue(newValue);
-		(saveOn as any)[save as keyof T] = extracted;
-		currentValue = extracted;
-	}
-
 	function handleClick(ev: MouseEvent) {
 		ev.stopPropagation();
-		console.log("currentValue", currentValue)
-		prevValue = currentValue;
 		isEditing = true;
 	}
 
-	function handleKeyUp(ev: KeyboardEvent) {
-		ev.stopPropagation();
-		reSetValue((ev.target as HTMLInputElement).value);
-	}
-
 	function handleBlur(ev: FocusEvent) {
-		ev.stopPropagation();
-
+		ev.stopPropagation()
 		const newValue = extractValue((ev.target as HTMLInputElement).value);
-		if (prevValue !== newValue) {
-			prevValue = newValue;
-			if (onChange) {
-				onChange(newValue);
-			}
+		if (currentValue !== newValue) {
+			console.log("cambiando::")
+			if (onChange) { onChange(newValue);	}
+			currentValue = newValue
 		}
 		isEditing = false;
 	}
@@ -115,7 +99,6 @@
 		<input bind:this={inputRef} {type}
 			value={currentValue || ''}
 			class={`w-full ${inputClass}`}
-			onkeyup={handleKeyUp}
 			onblur={handleBlur}
 		/>
 	{/if}
