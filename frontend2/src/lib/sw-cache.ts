@@ -157,7 +157,8 @@ export const fetchCache = async (args: serviceHttpProps): Promise<FetchCacheResp
   console.log("fetching cache...", args)
 
   const response = await sendServiceMessage(3,args)
-  
+  console.log("cache response::",response)
+
   return response as FetchCacheResponse
 }
 
@@ -180,6 +181,7 @@ export const fetchCacheParsed = async (args: serviceHttpProps): Promise<any> => 
   }
 
   let content = response.content
+  // debugger
 
   if (args.cacheMode === 'offline') {
     if(!content || response.isEmpty){

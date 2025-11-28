@@ -1,7 +1,7 @@
 <script lang="ts">
   import { checkIsLogin, Env } from "$lib/security";
-  import { onMount } from "svelte";
-  import { Core } from "../core/store.svelte";
+  import { onDestroy, onMount } from "svelte";
+  import { closeAllModals, Core, openModal } from "../core/store.svelte";
 
   let { children, sideLayerSize, title, options }: {
     children: any, sideLayerSize?: number, title: string
@@ -20,6 +20,11 @@
       Core.pageTitle = title || ""
       Core.pageOptions = options || []
     }
+  })
+
+  onDestroy(() => {
+    Core.openSideLayer(0)
+    closeAllModals()
   })
 
 </script>

@@ -90,7 +90,7 @@
     if(producto){
       Object.assign(producto, productoForm)
     }
-    Core.setSideLayer(0)
+    Core.openSideLayer(0)
   }
 
   $effect(() => {
@@ -122,7 +122,7 @@
       options={[[1,"Productos"],[2,"Categorías"],[3,"Marcas"]]} 
       useMobileGrid={true}
       onSelect={e => {
-        Core.setSideLayer(0)
+        Core.openSideLayer(0)
         productoForm = { ID: 0 } as IProducto
         view = e[0] as number
       }}
@@ -142,7 +142,7 @@
       } else if(view === 3) {
         MarcasLayer?.newRecord()
       } else {
-        Core.setSideLayer(1)
+        Core.openSideLayer(1)
       }
     }}>
       <i class="icon-plus"></i><span class="hidden md:block">Nuevo</span>
@@ -163,12 +163,13 @@
           productoForm = {...e}
           productoForm.CategoriasIDs = [...(e.CategoriasIDs||[])]
           productoForm.Propiedades = [...(e.Propiedades||[])]
-          Core.setSideLayer(1)
+          Core.openSideLayer(1)
         }}
       />
     </Layer>
   {/if}
-  <Layer css="px-8 py-8 md:px-14 md:py-10" title={productoForm?.Nombre || ""} type="side"
+  <Layer type="side" css="px-8 py-8 md:px-14 md:py-10" 
+    title={productoForm?.Nombre || ""} 
     titleCss="h2 mb-6" contentCss="px-0 md:px-0" id={1}
     options={[
       [1,"Información",["Informa-","ción"]],

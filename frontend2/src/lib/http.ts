@@ -321,7 +321,7 @@ export function GET(props: httpProps): Promise<any> {
       routeParsed,
       route: props.route,
       useCache: props.useCache,
-      module: props.module,
+      module: props.module || "a",
       headers: buildHeaders('json'),
       cacheMode: props.cacheMode,
     } as serviceHttpProps

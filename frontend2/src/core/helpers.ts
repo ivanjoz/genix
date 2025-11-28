@@ -25,7 +25,6 @@ export const highlString = (
 
   for (let word of words) {
     if (word.length < 2) continue
-    word = word + " "
     for (let i = 0; i < arr.length; i++) {
       const str = arr[i].text
       if (typeof str !== 'string') continue
@@ -34,10 +33,10 @@ export const highlString = (
         const ini = str.slice(0, idx)
         const middle = str.slice(idx, idx + word.length)
         const fin = str.slice(idx + word.length)
-        debugger
-        arr.splice(i, 1, { text: ini }, { text: middle, highl: true, isEnd: true }, { text: fin, isEnd: true })
+        const parts = [{ text: ini }, { text: middle, highl: true }, { text: fin }].filter(x => x.text)
+        arr.splice(i, 1, ...parts)
         if(arr.length > 40){ 
-          console.log("words 111:", arr.filter(x => x),"|",phrase,words)
+          console.log("words 333:", arr.filter(x => x),"|",phrase,words)
           return arr.filter(x => x) 
         }
         continue

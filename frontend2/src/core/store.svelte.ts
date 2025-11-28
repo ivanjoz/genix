@@ -33,7 +33,7 @@ export const Core = $state({
   pageTitle: "" as string,
   pageOptions: [] as {id: number, name: string}[],
   toggleMobileMenu: (() => {}) as () => void,
-  setSideLayer: ((layerId: number) => {
+  openSideLayer: ((layerId: number) => {
     Core.showSideLayer = layerId;
   }) as (layerId: number) => void,
   showMobileSearchLayer: null as ITopSearchLayer | null

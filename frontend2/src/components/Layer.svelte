@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Env } from "$lib/security";
-  import { tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import { Core } from "../core/store.svelte";
   import OptionsStrip from "./micro/OptionsStrip.svelte";
   
@@ -35,7 +35,7 @@
   })
 
   // Helper function to set layer with view transition on mobile
-  const setSideLayerWithTransition = (layerId: number) => {
+  const openSideLayerWithTransition = (layerId: number) => {
     if (Core.deviceType === 3 && document.startViewTransition) {
       // We need to wait for the next tick to ensure the element is available
       tick().then(() => {
@@ -74,7 +74,7 @@
 
   // Helper function to close layer with view transition on mobile
   const closeLayer = () => {
-    setSideLayerWithTransition(0);
+    openSideLayerWithTransition(0);
   }
 
   // Set view-transition-name when layer is shown on mobile
@@ -92,9 +92,9 @@
     }
   })
 
-  // Register the setSideLayer function in the Core store
+  // Register the openSideLayer function in the Core store
   $effect(() => {
-    Core.setSideLayer = setSideLayerWithTransition;
+    Core.openSideLayer = openSideLayerWithTransition;
   })
 
   console.log("Env.sideLayerSize",  Env.sideLayerSize)
