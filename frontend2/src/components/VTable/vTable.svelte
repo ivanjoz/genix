@@ -22,6 +22,7 @@
     cellRenderer?: CellRendererSnippet<T>;
     filterText?: string;
     getFilterContent?: (row: T) => string;
+    useFilterCache?: boolean;
   }
 
   let {
@@ -38,7 +39,8 @@
     emptyMessage = 'No se encontraron registros.',
     cellRenderer,
     filterText,
-    getFilterContent
+    getFilterContent,
+    useFilterCache = false
   }: VTableProps<T> = $props();
 
   // State
@@ -48,6 +50,7 @@
   let virtualizerStore: ReturnType<typeof createVirtualizer> | null = null;
   let isInitialized = false;
   let dataVersion = $state(0);
+  const filterCache = new WeakMap<T & object, string>();
 
   // Process columns to calculate colspans and separate header levels
   const processedColumns = $derived.by(() => {
@@ -86,7 +89,21 @@
 
     if(filterText && getFilterContent){
       const filtered = data.filter(
-        x => include(getFilterContent(x).toLowerCase(), filterTextArray))
+        x => {
+          let content = ""
+          if (useFilterCache && typeof x === 'object' && x !== null) {
+            const cached = filterCache.get(x);
+            if (cached) {
+              content = cached;
+            } else {
+              content = getFilterContent(x).toLowerCase();
+              filterCache.set(x, content);
+            }
+          } else {
+            content = getFilterContent(x).toLowerCase();
+          }
+          return include(content, filterTextArray)
+        })
 
       console.log("data filtrada::", filtered)
       return filtered
@@ -276,7 +293,7 @@
             style="transform: translateY({firstItemStart}px);"
             onclick={() => handleRowClick(record, row.index)}
           >
-            {#each processedColumns.flatColumns as column}
+            {#each processedColumns.flatColumns as column, j (`${j}_${filterText||""}`)}
               {@const cellData = getCellContent(column, record, row.index)}
               <td class="{cellData.css}"
                 style={column.cellStyle ? Object.entries(column.cellStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}

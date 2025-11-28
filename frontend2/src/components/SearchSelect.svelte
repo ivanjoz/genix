@@ -138,6 +138,7 @@
   }
 
   const filter = (text: string) => {
+    console.log("options filtered::", label, options)
     if (!text && (avoidIDs?.length || 0) === 0) {
       return [...options];
     }
@@ -158,6 +159,7 @@
         }
       }
     }
+    console.log("options filtered 2::", label, options, filtered)
     return filtered;
   }
 
@@ -242,6 +244,9 @@
       }
     }
   }
+
+  const wordsJoined = $derived(words.join("_"))
+
 </script>
 
 <div class={cN}>
@@ -335,7 +340,7 @@
     </div>
   {/if}
   {#if show && !useLayerPicker}
-    <div class="p-4 _1 left-0 z-40 {arrowSelected >= 0 ? ' on-arrow' : ''} {optionsCss || "w-full"}"
+    <div class="p-4 _1 left-0 z-320 {arrowSelected >= 0 ? ' on-arrow' : ''} {optionsCss || "w-full"}"
       role="button" tabindex="0"
       onmousedown={(ev) => {
         ev.stopPropagation()
@@ -353,7 +358,7 @@
           }
         : undefined}
     >
-      {#each filteredOptions as e, i (e[keyId] + words.join(','))}
+      {#each filteredOptions as e, i (e[keyId] + wordsJoined)}
         {@const name = String(e[keyName])}
         {@const highlighted = highlString(name, words)}
         <!-- svelte-ignore a11y_click_events_have_key_events -->

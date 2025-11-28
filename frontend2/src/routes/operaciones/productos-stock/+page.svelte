@@ -4,25 +4,35 @@
     import type { ITableColumn } from "$components/VTable";
     import VTable from "$components/VTable/vTable.svelte";
     import { throttle } from "$lib/helpers";
+    import { Loading } from "notiflix";
     import { ProductosService } from "../productos/productos.svelte";
     import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte";
-    import type { IProductoStock } from "./productos-stock.svelte";
+    import { getProductosStock, type IProductoStock } from "./productos-stock.svelte";
+    import { Core } from "$core/store.svelte";
+    import Layer from "$components/Layer.svelte";
+    import Input from "$components/Input.svelte";
 
   const almacenes = new AlmacenesService()
   const productos = new ProductosService()
 
   let filters = $state({ almacenID: 0 })
   let filterText = $state("")
+  let almacenStock = $state([] as IProductoStock[])
+  let form = $state({} as IProductoStock)
+
+  $effect(() => {
+    if(!filters.almacenID){ return }
+  })
 
   let columns: ITableColumn<IProductoStock>[] = [
-    { header: "Producto",
+    { header: "Producto", highlight: true,
       getValue: e => {
         const producto = productos.productosMap.get(e.ProductoID)?.Nombre
         return producto || ""
       }
     },
     { header: "Lote",
-      getValue: e => e.Lote || filterText
+      getValue: e => e.Lote || ""
     },
     { header: "SKU",
       getValue: e => e.SKU || ""
@@ -36,6 +46,7 @@
       }
     },
     { header: "Stock",
+      getValue: e => e.Cantidad,
       onEditChange: (e, value) => {
         e._hasUpdated = true
         e._cantidadPrev = e._cantidadPrev || e.Cantidad || -1
@@ -64,6 +75,19 @@
     },
   ]
 
+  const onChangeAlmacen = async () => {
+    if(!filters.almacenID){ return }
+    Loading.standard()
+    try {
+      var result = await getProductosStock(filters.almacenID)
+    } catch (error) {
+      Loading.remove()
+      return
+    }
+    Loading.remove()
+    almacenStock = result
+  }
+
 </script>
 
 <Page sideLayerSize={640} title="productos-stock">
@@ -71,6 +95,9 @@
     <SearchSelect options={almacenes?.Almacenes||[]} keyId="ID" keyName="Nombre" 
       saveOn={filters} save="almacenID" placeholder="ALMACÉN ::"
       css="w-270"
+      onChange={() => {
+        onChangeAlmacen()
+      }}
     />
     {#if !filters.almacenID}
       <div class="ml-12 c-red"><i class="icon-attention"></i>Debe seleccionar un almacén.</div>
@@ -83,8 +110,30 @@
         }}>
       </div>
     {/if}
+    <div class="ml-auto">
+      <button class="bx-green" onclick={() => {
+        Core.openSideLayer(1)
+      }}>
+        <i class="icon-plus"></i>Agregar
+      </button>
+    </div>
   </div>
-  <VTable columns={columns} data={[{}]}>
+  <VTable columns={columns} data={almacenStock}
+    filterText={filterText}
+    useFilterCache={true}
+    getFilterContent={e => {
+      const producto = productos.productosMap.get(e.ProductoID)
+      return [producto?.Nombre, e.SKU, e.Lote].filter(x => x).join(" ").toLowerCase()
+    }}
+  >
 
   </VTable>
+  <Layer id={1} type="side" css="p-16" title="Agregar Stock" titleCss="h2">
+    <div class="grid-cols-24 mt-6">
+      <SearchSelect label="Producto" css="col-span-24"
+        saveOn={form} save="ProductoID" options={productos.productos||[]}
+        keyName="Nombre" keyId="ID"
+      />
+    </div>
+  </Layer>
 </Page>
