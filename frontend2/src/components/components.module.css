@@ -6,6 +6,7 @@
   grid-template-rows: auto auto;
   /* two rows */
   position: relative;
+  align-self: end;
   --shadow-1: rgb(89 89 115 / 15%) 0px 1px 2px 1px;
 }
 
