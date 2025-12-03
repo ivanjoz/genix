@@ -268,6 +268,12 @@ Boolean toggle checkbox.
 | `label` | `string` | No | Checkbox label |
 | `css` | `string` | No | CSS for container |
 
+### Form Layout Rules
+
+- **Grid System:** Always use a 24-column grid (`grid-cols-24`) for form layouts.
+- **Spacing:** Use `gap-10` (which translates to 10px in this project) for spacing between inputs. Do not use individual margins (e.g., `mb-10`) on input components.
+- **Sizing:** Use `col-span-N` classes to define the width of each input relative to the 24-column grid.
+
 **Form Components Example:**
 ```svelte
 <script>
@@ -277,16 +283,16 @@ Boolean toggle checkbox.
   let userForm = $state({ name: "", countryID: 0, active: false, roleIDs: [] })
 </script>
 
-<div class="grid grid-cols-12 md:flex md:flex-row gap-10">
-  <Input label="Name" bind:saveOn={userForm} save="name" css="col-span-12"/>
+<div class="grid grid-cols-24 gap-10">
+  <Input label="Name" bind:saveOn={userForm} save="name" css="col-span-24 md:col-span-12"/>
   <SearchSelect label="Country" bind:saveOn={userForm} save="countryID" 
-    options={countries} keyId="id" keyName="value" css="col-span-12"
+    options={countries} keyId="id" keyName="value" css="col-span-24 md:col-span-12"
   />
   <Checkbox label="Is Admin" bind:saveOn={userForm} save="active" 
-    css="col-span-12" 
+    css="col-span-24" 
   />
   <SearchCard label="Roles" bind:saveOn={userForm} save="roleIDs" 
-    options={roles} keyId="id" keyName="name" css="col-span-12"
+    options={roles} keyId="id" keyName="name" css="col-span-24"
   />
 </div>
 ```
@@ -407,6 +413,8 @@ For more control, VTable accepts a `cellRenderer` Svelte 5 snippet. The snippet 
 ### GetHandler Class
 
 For fetch requests that can use cache—specifically those without dynamic filters that need data ready for the view to display information—use the `GetHandler` class to construct the service controller.
+
+**Location Rule:** Service files must be named with the `.svelte.ts` extension (e.g., `productos.svelte.ts`) and placed in the **same folder** as the `+page.svelte` file that uses them. This ensures proper colocation of logic and view.
 
 **How it works:** The class makes two fetches:
 1. **First fetch (cache):** Always fetches from cache through the Service Worker. If no cache exists, it returns nothing and `handler()` is not called.
