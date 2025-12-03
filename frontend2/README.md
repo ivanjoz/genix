@@ -2,18 +2,27 @@
 
 Frontend using Svelte 5, SvelteKit, and Tailwind CSS.
 
-Tailwind Configuration:
-- Important: The --spacing is set to 1px
+**Tailwind Configuration:** `--spacing` is set to `1px`.
 
-## 🎨 UI Components
+---
 
-### Page and layers
+## UI Components
 
-All non-public pages need to be inside the Page component.
+### Page
 
-If the page is subdivided in sections, you can use the prop "options" and "selected" in the Page component. This options are rendered in the the top main menu so is recomended a maximun of 3 options because they are stacked horizontally.
+Container for authenticated pages. All non-public pages must be wrapped in this component. Redirects to `/login` if not authenticated.
 
-Example:
+If the page is subdivided into sections, use the `options` and `selected` props. These options are rendered in the top main menu, so a maximum of 3 options is recommended because they are stacked horizontally.
+
+**Props:**
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `title` | `string` | Yes | Page title displayed in header |
+| `children` | `Snippet` | Yes | Page content |
+| `options` | `{id: number, name: string}[]` | No | Tab options rendered in header menu (max 3 recommended) |
+| `sideLayerSize` | `number` | No | Width of side layer in pixels |
+
+**Example:**
 ```svelte
 <script>
   let view = $state(1)
@@ -29,9 +38,25 @@ Example:
 </Page>
 ```
 
-The component OptionsStrip can also be used to render options menu to create sections in the page itself or inside layer or small components.
+---
 
-Example:
+### OptionsStrip
+
+Horizontal menu for creating sections. Can be used to render options menu within the page itself, inside a Layer, or in small components.
+
+**Props:**
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `options` | `T[]` | Yes | Array of options. Format: `[id, name]` or `[id, name, [mobileLine1, mobileLine2]]` |
+| `selected` | `number` | Yes | Currently selected option ID |
+| `onSelect` | `(e: T) => void` | Yes | Callback when option is selected |
+| `keyId` | `keyof T` | No | Key for option ID (if not using array format) |
+| `keyName` | `keyof T` | No | Key for option name (if not using array format) |
+| `buttonCss` | `string` | No | CSS classes for buttons |
+| `css` | `string` | No | CSS classes for container |
+| `useMobileGrid` | `boolean` | No | Use grid layout on mobile |
+
+**Example:**
 ```svelte
 <script>
   let view = $state(1)
@@ -47,13 +72,60 @@ Example:
 </Page>
 ```
 
-There are two ways to render overlayed information: Modals and Layers. A Layer is a container element that appear on the side or on the bottom of the escreen.
+---
 
-The Layer and Modal component can be shown buttons like: Save o Delete using the prop handlers. For example using the onSave() handler shows automatically a button. There is also an onDelete() and onClose() handlers. The Layer and Modal always display a close button.
+### Layer and Modal
 
-The Layer can show a horizontal menu bar for conditional rendering using de "options" prop.
+There are two ways to render overlayed information: **Modals** and **Layers**.
 
-Example:
+- A **Layer** is a container element that appears on the side or bottom of the screen.
+- A **Modal** is a centered overlay dialog.
+
+Both components can show action buttons (Save, Delete) using handler props. Providing `onSave` automatically shows a save button; providing `onDelete` shows a delete button. Both always display a close button.
+
+The Layer can show a horizontal menu bar for conditional rendering using the `options` prop.
+
+**Layer Props:**
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `id` | `number` | No | Layer identifier for open/close |
+| `type` | `"side" \| "bottom" \| "content"` | Yes | Layer position type |
+| `children` | `Snippet` | Yes | Layer content |
+| `title` | `string` | No | Layer title |
+| `titleCss` | `string` | No | CSS for title |
+| `css` | `string` | No | CSS for container |
+| `contentCss` | `string` | No | CSS for content area |
+| `options` | `[number, string, string[]?][]` | No | Tab options for internal sections |
+| `selected` | `number` | No | Bindable selected option ID |
+| `onSave` | `() => void` | No | Shows save button, called on click |
+| `onDelete` | `() => void` | No | Shows delete button, called on click |
+| `onClose` | `() => void` | No | Called when layer closes |
+| `saveButtonName` | `string` | No | Custom save button label |
+| `saveButtonIcon` | `string` | No | Custom save button icon class |
+| `contentOverflow` | `boolean` | No | Allow content overflow |
+
+Use `Core.openSideLayer(id)` to open and `Core.hideSideLayer()` to close.
+
+**Modal Props:**
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `id` | `number` | Yes | Modal identifier |
+| `title` | `string \| Snippet` | Yes | Modal title (string or Svelte snippet) |
+| `size` | `1-9` | Yes | Modal width (1=600px to 9=1000px) |
+| `children` | `Snippet` | No | Modal content |
+| `css` | `string` | No | CSS for modal container |
+| `headCss` | `string` | No | CSS for header |
+| `bodyCss` | `string` | No | CSS for body |
+| `isEdit` | `boolean` | No | Changes save button to "Actualizar" |
+| `onSave` | `() => void` | No | Shows save button, called on click |
+| `onDelete` | `() => void` | No | Shows delete button, called on click |
+| `onClose` | `() => void` | No | Called when modal closes |
+| `saveIcon` | `string` | No | Custom save button icon |
+| `saveButtonLabel` | `string` | No | Custom save button label |
+
+Use `Core.openModal(id)` to open and `closeModal(id)` to close.
+
+**Example:**
 ```svelte
 <script>
   import { Core } from "$core/store.svelte"
@@ -86,83 +158,201 @@ Example:
 </Page>
 ```
 
-### Form Components
+---
 
-The base components are in the src/components/ folder.
-The most important components for making forms are: Input.svelte, SearchSelect and SearchCard.svelte. Use SearchSelect instead of select, it provides autocompletion.
+## Form Components
 
-All the form components has this logic. There is a prop called "saveOn" where is reference of the form object is passed a props called "save" thats the name of the field that will be use to save the content of the input or select.
+Located in `src/components/`. The most important components for making forms are: `Input`, `SearchSelect`, `SearchCard`, and `Checkbox`. Use `SearchSelect` instead of native `<select>` as it provides autocompletion.
 
-In components that needs an "options" array. The component render the value of the option based on the "keyName" props, so the value to be rendered is object[keyName]. The component set the ID in the form getted with object[keyId]
+### Universal Props Pattern
 
-The SearchCard component renders an input with a space above or to the side where the selected options are render as cards. The options are saved in the form as an array of ids.
+All form components share this binding pattern:
+- **`saveOn`**: A reference to the form object (bindable). The component reads and writes to this object.
+- **`save`**: The field name (key) in the form object where the value will be stored.
 
-Example:
+### Options Pattern (for SearchSelect, SearchCard)
+
+Components that need an `options` array use these props:
+- **`keyName`**: The key in each option object used to render the display value. The rendered value is `option[keyName]`.
+- **`keyId`**: The key in each option object used to get the ID. When selected, the component saves `option[keyId]` to the form via `saveOn[save] = option[keyId]`.
+
+---
+
+### Input
+
+Text/number input with validation support.
+
+**Props:**
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `saveOn` | `T` | Yes | Form object reference (bindable) |
+| `save` | `keyof T` | Yes | Field name to save value |
+| `label` | `string` | No | Input label |
+| `css` | `string` | No | CSS for container |
+| `inputCss` | `string` | No | CSS for input element |
+| `type` | `string` | No | Input type (default: "search") |
+| `placeholder` | `string` | No | Placeholder text |
+| `required` | `boolean` | No | Shows validation indicator |
+| `disabled` | `boolean` | No | Disables input |
+| `validator` | `(v: string \| number) => boolean` | No | Custom validation function |
+| `onChange` | `() => void` | No | Called on value change (on blur) |
+| `postValue` | `string \| ElementAST[]` | No | Content after input |
+| `baseDecimals` | `number` | No | Decimal precision for storage |
+| `transform` | `(v: string \| number) => string \| number` | No | Transform value on blur |
+| `useTextArea` | `boolean` | No | Render as textarea |
+| `rows` | `number` | No | Textarea rows |
+| `dependencyValue` | `number \| string` | No | Triggers refresh when changed |
+
+---
+
+### SearchSelect
+
+Autocomplete dropdown. Use instead of native `<select>` as it provides autocompletion.
+
+**Props:**
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `saveOn` | `T` | No | Form object reference (bindable) |
+| `save` | `keyof T` | No | Field name to save selected ID |
+| `options` | `E[]` | Yes | Array of option objects |
+| `keyId` | `keyof E` | Yes | Key for option ID (saved to form) |
+| `keyName` | `keyof E` | Yes | Key for option display name (rendered) |
+| `label` | `string` | No | Input label |
+| `css` | `string` | No | CSS for container |
+| `inputCss` | `string` | No | CSS for input |
+| `optionsCss` | `string` | No | CSS for dropdown |
+| `placeholder` | `string` | No | Placeholder text |
+| `selected` | `number \| string` | No | Selected ID (bindable) |
+| `onChange` | `(e: E) => void` | No | Called when selection changes |
+| `required` | `boolean` | No | Shows validation indicator |
+| `disabled` | `boolean` | No | Disables input |
+| `notEmpty` | `boolean` | No | Prevents clearing selection |
+| `clearOnSelect` | `boolean` | No | Clears input after selection |
+| `avoidIDs` | `(number \| string)[]` | No | IDs to exclude from options |
+| `max` | `number` | No | Max options to display (default: 100) |
+| `icon` | `string` | No | Custom dropdown icon class |
+| `showLoading` | `boolean` | No | Shows loading state |
+
+---
+
+### SearchCard
+
+Multi-select input that renders selected options as removable cards. The component displays an input with a space below where selected options appear as cards. The options are saved in the form as an array of IDs.
+
+**Props:**
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `saveOn` | `T` | No | Form object reference (bindable) |
+| `save` | `keyof T` | No | Field name to save array of IDs |
+| `options` | `E[]` | Yes | Array of option objects |
+| `keyId` | `keyof E` | Yes | Key for option ID (saved to array) |
+| `keyName` | `keyof E` | Yes | Key for option display name (rendered in cards) |
+| `label` | `string` | No | Placeholder text |
+| `css` | `string` | No | CSS for container |
+| `inputCss` | `string` | No | CSS for search input |
+| `optionsCss` | `string` | No | CSS for dropdown |
+| `cardCss` | `string` | No | CSS for cards container |
+| `onChange` | `(e: (string \| number)[]) => void` | No | Called when selection changes |
+
+---
+
+### Checkbox
+
+Boolean toggle checkbox.
+
+**Props:**
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `saveOn` | `T` | No | Form object reference (bindable) |
+| `save` | `keyof T` | No | Field name to save boolean |
+| `label` | `string` | No | Checkbox label |
+| `css` | `string` | No | CSS for container |
+
+**Form Components Example:**
 ```svelte
 <script>
-  const countries = [{ id: 1, value: "UK", id: 2, value: "Canada", id: 3: value: "Germany" }], { id: 2, name: "" }
-  const roles = [{ id: 1, name: "Costumer" }, { id: 2, name: "Manager" }, { id: 3, name: "Supervisor" }]
+  const countries = [{ id: 1, value: "UK" }, { id: 2, value: "Canada" }, { id: 3, value: "Germany" }]
+  const roles = [{ id: 1, name: "Customer" }, { id: 2, name: "Manager" }, { id: 3, name: "Supervisor" }]
 
   let userForm = $state({ name: "", countryID: 0, active: false, roleIDs: [] })
 </script>
 
 <div class="grid grid-cols-12 md:flex md:flex-row gap-10">
-  <Input label="Nombre" bind:saveOn={userForm} save="name" css="col-span-12"/>
-  <SearchSelect label="Nombre" bind:saveOn={userForm} save="countryID" 
+  <Input label="Name" bind:saveOn={userForm} save="name" css="col-span-12"/>
+  <SearchSelect label="Country" bind:saveOn={userForm} save="countryID" 
     options={countries} keyId="id" keyName="value" css="col-span-12"
   />
   <Checkbox label="Is Admin" bind:saveOn={userForm} save="active" 
     css="col-span-12" 
   />
-  <SearchCard label="Nombre" bind:saveOn={userForm} save="roleIDs" 
-    options={countries} keyId="id" keyName="name" css="col-span-12"
+  <SearchCard label="Roles" bind:saveOn={userForm} save="roleIDs" 
+    options={roles} keyId="id" keyName="name" css="col-span-12"
   />
 </div>
 ```
 
-### Tables: VTable
+---
 
-The VTable table component is very versatile. It need a column definition, an array of ITableColumn<T> elements. 
+## VTable
 
-The VTable component have the following props:
-- columns: ITableColumn<T>[]
-- data: T[]
-- maxHeight: string
-- css: string. Of the div container
-- tableCss: string. Of the actual <table> element
-- selected: T. The selected element
-- isSelected: (row: T, selected: T | number) => boolean. A function to identify the selected row.
-- cellRenderer: CellRendererSnippet<T>
-- filterText: string
-- getFilterContent: (row: T) => string. It constructs the string to be used to make the comparison with the filterText. For example: {e => e.Name +" "+ e.Email}
+Versatile table component with filtering and custom cell rendering. Requires a column definition array of `ITableColumn<T>` elements.
 
-The props of the ITableColumn object are:
-- header: string. The name to render in the header of the table
-- getValue?: (e: T, idx: number) => string. A callback to get the value to render in the cell.
-- render: (e: T, idx: number) => string | ElementAST | ElementAST[]. A render function that can return a HTML string using the {@html ...} snippet. It also can return a AST of the element to render, for complex renderings.
-- headerCss: string
-- header: string. The th content
-- cellCss: string
-- subcols: ITableColumn<T>[]. It divide the header into sub-headers, and each is a column.
-- onCellEdit?: (e:T, value: string|number) => void. It renders a edit buttom.
-- onCellSelect?: (e:T, value: string|number) => void. It renders a delete buttom.
-- id: string. Necesary is using the cellRenderer snippet.
+**Props:**
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `columns` | `ITableColumn<T>[]` | Yes | Column definitions |
+| `data` | `T[]` | Yes | Data array |
+| `maxHeight` | `string` | No | Max table height |
+| `css` | `string` | No | CSS for container div |
+| `tableCss` | `string` | No | CSS for table element |
+| `selected` | `T` | No | Selected row |
+| `isSelected` | `(row: T, selected: T \| number) => boolean` | No | Function to identify selected row |
+| `cellRenderer` | `CellRendererSnippet<T>` | No | Svelte 5 snippet for custom cell rendering |
+| `filterText` | `string` | No | Text to filter rows |
+| `getFilterContent` | `(row: T) => string` | No | Builds string for filter comparison |
+| `useFilterCache` | `boolean` | No | Cache filter results |
 
-The ElementAST interface:
-  - id?: number | string
-  - css?: string
-  - tagName?: "DIV" | "SPAN" | "BUTTON",
-  - text?: string | number
-  - onClick?: (id: number | string) => void
-  - children?: ElementAST[]
+### ITableColumn Interface
 
-For more control, the VTable can include a cellRenderer Svente 5 snippet. The arguments of the snippet are: 
-  - record: T
-  - col: ITableColumn<T>
-  - cellContent?: string 
-  - index?: number
+| Prop | Type | Description |
+|------|------|-------------|
+| `header` | `string \| (() => string)` | Header text (th content) |
+| `id` | `string \| number` | Column ID (required when using cellRenderer snippet) |
+| `getValue` | `(e: T, idx: number) => string \| number` | Callback to get the value to render in the cell |
+| `render` | `(e: T, idx: number) => string \| ElementAST \| ElementAST[]` | Render function that can return an HTML string (use with `{@html ...}`) or an ElementAST for complex renderings |
+| `headerCss` | `string` | CSS for header cell |
+| `cellCss` | `string` | CSS for body cells |
+| `subcols` | `ITableColumn<T>[]` | Divides the header into sub-headers, each becoming a column |
+| `onCellEdit` | `(e: T, value: string \| number) => void` | Renders an edit button |
+| `onCellSelect` | `(e: T, value: string \| number) => void` | Renders a select button |
+| `buttonEditHandler` | `(e: T) => void` | Edit button handler |
+| `buttonDeleteHandler` | `(e: T) => void` | Delete button handler |
 
-Example:
+### ElementAST Interface
+
+For complex cell rendering without HTML strings:
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `tagName` | `"DIV" \| "SPAN" \| "BUTTON"` | HTML tag |
+| `text` | `string \| number` | Text content |
+| `css` | `string` | CSS classes |
+| `id` | `number \| string` | Element ID |
+| `onClick` | `(id: number \| string) => void` | Click handler |
+| `children` | `ElementAST[]` | Child elements |
+
+### CellRendererSnippet
+
+For more control, VTable accepts a `cellRenderer` Svelte 5 snippet. The snippet arguments are:
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `record` | `T` | Row data |
+| `col` | `ITableColumn<T>` | Column definition |
+| `cellContent` | `any` | Default cell content |
+| `index` | `number` | Row index |
+
+**Example:**
 ```svelte
 <script>
   let users: IUser = $state([{ id: 1, name: "Peter", age: 21 }, { id: 2, name: "Hans", age: 27 }])
@@ -210,21 +400,33 @@ Example:
 </VTable>
 ```
 
-### Services and cache
+---
 
-The fetch requests than can use cache, the ones that don't use dynamic filters and need to be ready for the view to show information, use the GetHandler class to construct the service controller.
+## Services and Cache
 
-The arguments in he constructor() are optional. The way it works it makes two fetches. The first one is always to the cache through the Service Worker. If there is no cache it does not return anything so the handler() function does not execute. The second fetch is done to the server to fetch the updated records. There records are combined with the cache records in the Service Worker and it returns to the handler() function all the records up to date. It can return an array of object or an object where each key is an array. 
+### GetHandler Class
 
-The handler() function is where the raw response is parsed, prepared and setted in the reactive properties of the class declared using the $state() rune. This enables the reactivity on the view.
+For fetch requests that can use cache—specifically those without dynamic filters that need data ready for the view to display information—use the `GetHandler` class to construct the service controller.
 
-The main properties are:
- - route: string. The route of the backend service.
- - useCache: { min: number, ver: number }. The "min" property are the minutes of the caché. If the cache has not expired it will not fetch the server. The "ver" property is the version, if ti changes the cache is invalidated.
+**How it works:** The class makes two fetches:
+1. **First fetch (cache):** Always fetches from cache through the Service Worker. If no cache exists, it returns nothing and `handler()` is not called.
+2. **Second fetch (server):** Fetches updated records from the server. These records are combined with cached records in the Service Worker, and `handler()` receives all up-to-date records.
 
-The constructor needs to execute the this.fetch() function.
+The response can be an array of objects or an object where each key is an array.
 
-Example: productos.svelte.ts
+The `handler()` function is where the raw response is parsed, prepared, and set in the reactive properties of the class declared using the `$state()` rune. This enables reactivity in the view.
+
+**Properties:**
+| Property | Type | Description |
+|----------|------|-------------|
+| `route` | `string` | Backend service route |
+| `useCache` | `{ min: number, ver: number }` | Cache config: `min` = cache duration in minutes, `ver` = version (changing this invalidates the cache) |
+
+**Methods:**
+- `handler(response)`: Override to process the response and set reactive state properties
+- `fetch()`: Executes the fetch. Must be called in the constructor.
+
+**Example:** `productos.svelte.ts`
 ```typescript
 export class ProductosService extends GetHandler {
   route = "productos"
@@ -246,7 +448,7 @@ export class ProductosService extends GetHandler {
 }
 ```
 
-Example: +page.svelte
+**Example:** `+page.svelte`
 ```svelte
 <script>
   const warehouseID = 1
