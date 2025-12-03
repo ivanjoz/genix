@@ -32,11 +32,19 @@ export const Core = $state({
   isLoading: 1,
   pageTitle: "" as string,
   pageOptions: [] as {id: number, name: string}[],
+  showMobileSearchLayer: null as ITopSearchLayer | null,
   toggleMobileMenu: (() => {}) as () => void,
   openSideLayer: ((layerId: number) => {
-    Core.showSideLayer = layerId;
+    Core.showSideLayer = layerId
   }) as (layerId: number) => void,
-  showMobileSearchLayer: null as ITopSearchLayer | null
+  hideSideLayer: (() => { Core.showSideLayer = 0 }) as () => void,
+  openModal: (id: number) => {
+    if (!openModals.includes(id)) { openModals.push(id); }
+  },
+  closeModal: (id: number) => {
+    const index = openModals.indexOf(id);
+    if (index > -1) { openModals.splice(index, 1); }
+  },
 })
 
 export const WeakSearchRef: WeakMap<any,{ 

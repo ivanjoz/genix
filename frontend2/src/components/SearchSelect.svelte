@@ -57,6 +57,7 @@
   let isValid = $state(0);
   let selectedValue = $state("");
   let avoidBlur = false
+  let openUp = $state(false);
 
   // let searchCardID = Math.random();
   let inputRef: HTMLInputElement;
@@ -65,6 +66,14 @@
   const isMobile = $derived(Core.deviceType === 3);
   const useLayerPicker = $derived(isMobile);
   const isDisabled = $derived(disabled || showLoading);
+
+  function checkPosition() {
+    if (inputRef) {
+      const rect = inputRef.getBoundingClientRect();
+      const windowHeight = window.innerHeight;
+      openUp = rect.top > windowHeight / 2;
+    }
+  }
 
   function changeValue(value: string) {
     if (useLayerPicker) {
@@ -282,6 +291,7 @@
         onfocus={(ev) => {
           ev.stopPropagation();
           if(!show){
+            checkPosition();
             words = [];
             filteredOptions = filter("");
             show = true;
@@ -341,6 +351,7 @@
   {/if}
   {#if show && !useLayerPicker}
     <div class="p-4 _1 left-0 z-320 {arrowSelected >= 0 ? ' on-arrow' : ''} {optionsCss || "w-full"}"
+      class:open-up={openUp}
       role="button" tabindex="0"
       onmousedown={(ev) => {
         ev.stopPropagation()
@@ -393,6 +404,12 @@
     overflow-y: auto;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     border-radius: 6px;
+  }
+
+  ._1.open-up {
+    top: auto;
+    bottom: calc(100% - 8px);
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
   }
 
   ._1 > div {

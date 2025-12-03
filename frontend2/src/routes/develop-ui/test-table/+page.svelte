@@ -53,7 +53,7 @@
 				{
 					header: 'Apellidos',
 					getValue: (e) => e.apellidos,
-					onEditChange(e, value) {
+					onCellEdit(e, value) {
 						e.apellidos = value as string
 					},
 				},
@@ -77,7 +77,7 @@
 						]
 					},
 					css: 'text-center',
-					onEditChange(e, value) {
+					onCellEdit(e, value) {
 							e.edadChanged = parseInt(value as number)
 					},
 				}

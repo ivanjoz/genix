@@ -5,7 +5,16 @@
   import type { VirtualItem } from './index.svelte';
   import CellEditable from '../CellEditable.svelte';
   import { highlString, include } from '../../core/helpers';
-  import { type ElementAST } from '$components/micro/Renderer.svelte';
+  import Renderer, { type ElementAST } from '$components/micro/Renderer.svelte';
+    import CellSelector from '$components/CellSelector.svelte';
+
+  interface ICellContent { 
+    content: string; 
+    contentHTML: string; 
+    contentAST: ElementAST | ElementAST[], 
+    useSnippet: boolean; 
+    css: string
+  }
 
   interface VTableProps<T> {
     columns: ITableColumn<T>[];
@@ -175,36 +184,30 @@
   });
 
   // Helper to get cell content
-  function getCellContent(column: ITableColumn<T>, record: T, index: number): { 
-    content: any; isHTML: boolean; useSnippet: boolean; css: string
-  } {
-    let content: any = '';
-    let isHTML = false;
-    let useSnippet = false;
+  function getCellContent(column: ITableColumn<T>, record: T, index: number): ICellContent {
 
-    if (column.renderHTML) {
-      // Explicitly render as HTML
-      content = column.renderHTML(record, index, () => {
-        dataVersion++;
-      });
-      isHTML = true;
+    const rec = { } as ICellContent
+
+    if (column.render) {
+      const renderedContent = column.render(record, index)
+      if(typeof renderedContent === 'string'){
+        rec.contentHTML = renderedContent
+      } else if(renderedContent){
+        rec.contentAST = renderedContent
+      }
     } else if (column.getValue) {
-      content = column.getValue(record, index);
-      isHTML = false;
-    } else if (column.field) {
-      content = (record as any)[column.field];
-      isHTML = false;
+      rec.content = column.getValue(record, index) as string
     }
 
     // Check if we should use snippet renderer (takes priority over function renderer)
-    if (cellRenderer && column.id) { useSnippet = true; }
+    if (cellRenderer && column.id) { rec.useSnippet = true; }
 
-    let css = typeof column.cellCss === 'string' 
+    rec.css = typeof column.cellCss === 'string' 
       ? column.cellCss
-      : (column.onEditChange ? "relative" : "px-8 py-4")
-    if(column.css){ css += " " + column.css }
+      : (column.onCellEdit ? "relative" : "px-8 py-4")
+    if(column.css){ rec.css += " " + column.css }
 
-    return { content, isHTML, useSnippet, css };
+    return rec
   }
 
   // Helper to get header content
@@ -298,21 +301,30 @@
               <td class="{cellData.css}"
                 style={column.cellStyle ? Object.entries(column.cellStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}
                 onclick={ev => {
-                  if(column.onEditChange){ ev.stopPropagation() }
+                  if(column.onCellEdit){ ev.stopPropagation() }
                 }}
               >
-                {#if cellData.isHTML}
-                  {@html cellData.content}
-                {:else if column.onEditChange}
-                  <CellEditable saveOn={record} 
+                {#if cellData.contentAST}
+                  <Renderer elements={cellData.contentAST}/>
+                {:else if cellData.contentHTML}
+                  {@html cellData.contentHTML}
+                {:else if column.onCellEdit}
+                  <CellEditable 
                     getValue={() => cellData.content} 
                     render={
                       (column.render 
-                      ? () => column.render?.(record, row.index, () => {}) 
+                      ? () => column.render?.(record, row.index) 
                       : undefined) as (value: number | string) => ElementAST[]
                     }
                     onChange={v => { 
-                      column.onEditChange?.(record,v)
+                      column.onCellEdit?.(record,v)
+                    }}
+                  />
+                {:else if column.onCellSelect}
+                  <CellSelector options={column.cellOptions as any[]} 
+                    keyId="" keyName=""
+                    onChange={v => { 
+                      column.onCellSelect?.(record,v)
                     }}
                   />
                 {:else if cellData.useSnippet && cellRenderer}

@@ -82,9 +82,7 @@ export class ProductosService extends GetHandler {
 
   constructor(){
     super()
-    if (browser) {
-      this.fetch()
-    }
+    this.fetch()
   }
 }
 

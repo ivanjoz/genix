@@ -120,7 +120,6 @@ export const postProductosStock = (data: IProductoStock[]) => {
   })
 }
 
-
 interface IQueryAlmacenMovimientos {
   almacenID: number
   fechaInicio: number

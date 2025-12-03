@@ -33,17 +33,17 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	for _, e := range stock {
 		movimientosInternos = append(movimientosInternos, s.MovimientoInterno{
 			ReemplazarCantidad: true,
+			AlmacenID:          e.AlmacenID,
 			ProductoID:         e.ProductoID,
+			PresentacionID:     e.PresentacionID,
 			SKU:                e.SKU,
 			Lote:               e.Lote,
-			AlmacenID:          e.AlmacenID,
 			Cantidad:           e.Cantidad,
 			SubCantidad:        e.SubCantidad,
 		})
 	}
 
-	err = ApplyMovimientos(movimientosInternos)
-	if err != nil {
+	if err = ApplyMovimientos(movimientosInternos); err != nil {
 		return req.MakeErr(err)
 	}
 
@@ -71,8 +71,8 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	err := db.SelectRef(&result.Movimientos, func(q *db.Query[s.AlmacenMovimiento], col s.AlmacenMovimiento) {
 		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
 		q.Where(col.ID_().Between(
-			core.SunixUUIDx3FromID(almacenID, int64(fechaHoraInicio)),
-			core.SunixUUIDx3FromID(almacenID+1, int64(0))))
+			core.SUnixTimeUUIDConcatID(almacenID, int64(fechaHoraInicio)),
+			core.SUnixTimeUUIDConcatID(almacenID+1, int64(0))))
 		q.OrderDescending().Limit(1000)
 	})
 
@@ -141,23 +141,50 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	almacenID := req.GetQueryInt("almacen-id")
-	updated := core.UnixToSunix(req.GetQueryInt64("upd"))
+	updated := req.GetQueryInt("updated")
+	core.Log("updated::", updated)
 
-	almacenProductos := db.Select(func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
-		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-		if updated > 0 {
-			q.Between(col.AlmacenID_().Equals(almacenID), col.Updated_().Equals(updated)).
-				And(col.AlmacenID_().Equals(almacenID+1), col.Updated_().LessEqual(0))
-		} else {
-			q.Where(col.ID_().Between(core.Concat62(almacenID, 0), core.Concat62(almacenID+1, 0)))
-		}
-	})
+	almacenProductos1 := []s.AlmacenProducto{}
+	almacenProductos2 := []s.AlmacenProducto{}
 
-	if almacenProductos.Err != nil {
-		return req.MakeErr("Error al obtener los registros del almacén:", almacenProductos.Err)
+	eg := errgroup.Group{}
+
+	// Si se necesita obtener un delta
+	if updated > 0 {
+		eg.Go(func() error {
+			return db.SelectRef(&almacenProductos1, func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
+				q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+				q.Where(col.AlmacenID_().Equals(almacenID))
+				q.Where(col.Status_().Equals(1))
+				q.Between(col.Updated_().Equals(updated)).And(col.Updated_().LessEqual(999999999))
+			})
+		})
+		eg.Go(func() error {
+			return db.SelectRef(&almacenProductos2, func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
+				q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+				q.Where(col.AlmacenID_().Equals(almacenID))
+				q.Where(col.Status_().Equals(0))
+				q.Between(col.Updated_().Equals(updated)).And(col.Updated_().LessEqual(999999999))
+			})
+		})
+	} else {
+		eg.Go(func() error {
+			return db.SelectRef(&almacenProductos2, func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
+				q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
+				q.Where(col.AlmacenID_().Equals(almacenID))
+				q.Where(col.Status_().Equals(1))
+				q.Between(col.Updated_().Equals(0)).And(col.Updated_().LessEqual(999999999))
+			})
+		})
 	}
 
-	return req.MakeResponse(almacenProductos.Records)
+	if err := eg.Wait(); err != nil {
+		return req.MakeErr("Error al obtener los registros del almacén:", err)
+	}
+
+	almacenProductos1 = slices.Concat(almacenProductos1, almacenProductos2)
+
+	return req.MakeResponse(almacenProductos1)
 }
 
 type almacenStockCount struct {
@@ -168,12 +195,6 @@ type almacenStockCount struct {
 type productoStockCounter struct {
 	productoID     int32
 	almacenesStock map[int32]almacenStockCount
-}
-
-func (ps *productoStockCounter) AddCant(almacenID int32, cant int32) {
-	count := ps.almacenesStock[almacenID]
-	count.cantidad += cant
-	ps.almacenesStock[almacenID] = count
 }
 
 func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
@@ -207,7 +228,7 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 	})
 
 	if currentStock.Err != nil {
-		return core.Err("Error al obtener el stock previo:", currentStock.Err)
+		return core.Err("Error al obtener el stock previo (1):", currentStock.Err)
 	}
 
 	currentStockMap := core.SliceToMapK(currentStock.Records,
@@ -224,41 +245,47 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 	core.Log("productos stock::", len(productosStock.Records))
 
 	if productosStock.Err != nil {
-		return core.Err("Error al obtener el stock previo:", currentStock.Err)
+		return core.Err("Error al obtener el stock previo (2):", currentStock.Err)
 	}
 
 	productoStock := map[int32]*productoStockCounter{}
-	getProductoStock := func(productoID int32) *productoStockCounter {
-		if _, ok := productoStock[productoID]; !ok {
-			productoStock[productoID] = &productoStockCounter{
+
+	addProductoStock := func(productoID, almacenID, cantidad int32) {
+		ps := productoStock[productoID]
+		if ps == nil {
+			ps = &productoStockCounter{
 				productoID:     productoID,
 				almacenesStock: map[int32]almacenStockCount{},
 			}
+			productoStock[productoID] = ps
 		}
-		return productoStock[productoID]
+
+		count := ps.almacenesStock[almacenID]
+		count.cantidad += cantidad
+		ps.almacenesStock[almacenID] = count
 	}
 
 	for _, e := range productosStock.Records {
-		ps := getProductoStock(e.ProductoID)
-		ps.AddCant(e.AlmacenID, e.Cantidad)
+		addProductoStock(e.ProductoID, e.AlmacenID, e.Cantidad)
 	}
 
 	//Genera los movimientos correspondientes al stock actual
 	almacenMovimientos := []s.AlmacenMovimiento{}
 	almacenProductos := []s.AlmacenProducto{}
-	uuid := core.SunixTimeUUIDx3()
+	uuid := core.SUnixTimeUUID()
 
 	for _, e := range movimientos {
 		movimiento := s.AlmacenMovimiento{
-			ID:         core.SunixUUIDx3FromID(e.AlmacenID, uuid),
-			EmpresaID:  core.Usuario.EmpresaID,
-			ProductoID: e.ProductoID,
-			SKU:        e.SKU,
-			Lote:       e.Lote,
-			Created:    core.SunixTime(),
-			CreatedBy:  core.Usuario.ID,
-			AlmacenID:  e.AlmacenID,
-			Tipo:       core.If(e.Cantidad > 0, int8(1), 2),
+			ID:             core.SUnixTimeUUIDConcatID(e.AlmacenID, uuid),
+			EmpresaID:      core.Usuario.EmpresaID,
+			AlmacenID:      e.AlmacenID,
+			ProductoID:     e.ProductoID,
+			PresentacionID: e.PresentacionID,
+			SKU:            e.SKU,
+			Lote:           e.Lote,
+			Tipo:           core.If(e.Cantidad > 0, int8(1), 2),
+			Created:        core.SUnixTime(),
+			CreatedBy:      core.Usuario.ID,
 		}
 		uuid++
 
@@ -278,8 +305,7 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 
 		almacenMovimientos = append(almacenMovimientos, movimiento)
 
-		ps := getProductoStock(e.ProductoID)
-		ps.AddCant(e.AlmacenID, movimiento.Cantidad)
+		addProductoStock(e.ProductoID, e.AlmacenID, movimiento.Cantidad)
 
 		costoUn := float32(0)
 		if cs, ok := currentStockMap[almProdID]; ok {
@@ -287,18 +313,19 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 		}
 
 		almacenProductos = append(almacenProductos, s.AlmacenProducto{
-			ID:         almProdID,
-			AlmacenID:  e.AlmacenID,
-			ProductoID: e.ProductoID,
-			EmpresaID:  core.Usuario.EmpresaID,
-			SKU:        e.SKU,
-			Lote:       e.Lote,
-			Cantidad:   movimiento.AlmacenCantidad,
+			ID:             almProdID,
+			AlmacenID:      e.AlmacenID,
+			ProductoID:     e.ProductoID,
+			PresentacionID: e.PresentacionID,
+			EmpresaID:      core.Usuario.EmpresaID,
+			SKU:            e.SKU,
+			Lote:           e.Lote,
+			Cantidad:       movimiento.AlmacenCantidad,
 			// SubCantidad: (???),
-			Updated:   core.SunixTime(),
-			UpdatedBy: core.Usuario.ID,
 			Status:    core.If(movimiento.AlmacenCantidad == 0, int8(0), 1),
 			CostoUn:   costoUn,
+			Updated:   core.SUnixTime(),
+			UpdatedBy: core.Usuario.ID,
 		})
 	}
 

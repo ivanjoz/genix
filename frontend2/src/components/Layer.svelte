@@ -9,18 +9,24 @@
   // Animation duration in milliseconds - should match CSS animation duration
   const ANIMATION_DURATION = 350;
 
-  const { 
+  let { 
     children, css, title, titleCss, contentCss, id,
-    type, options, selected, onSelect, onSave, onDelete, onClose, saveButtonName
+    type, options, 
+    selected = $bindable(), 
+   /* onSelect, */ onSave, onDelete, onClose, 
+    saveButtonName, saveButtonIcon, contentOverflow
   }: {
     children: any, css?: string, title?: string, titleCss?: string,
     options?: [number, string, string[]?][], contentCss?: string
-    selected?: number, onSelect?: (e: any) => (void | undefined),
+    selected?: number, 
+    // onSelect?: (e: any) => (void | undefined),
     onSave?: () => void
     onDelete?: () => void
     onClose?: () => void
     saveButtonName?: string
-    type: "side" | "content",
+    saveButtonIcon?: string
+    contentOverflow?: boolean
+    type: "side" | "bottom" | "content",
     id?: number
   } = $props();
 
@@ -100,9 +106,12 @@
   console.log("Env.sideLayerSize",  Env.sideLayerSize)
 </script>
 
-{#if Core.showSideLayer === id && type == 'side'}
-  <div class="_1 flex flex-col {css||""}" bind:this={divLayer}
+{#if Core.showSideLayer === id && (type === 'side'|| type === 'bottom')}
+  <div class="flex flex-col {css||""}" bind:this={divLayer}
     data-layer-id={id}
+    class:_8={contentOverflow}
+    class:_1={type === 'side'}
+    class:_2={type === 'bottom'}
     style="width: {layerWidth};"
   >
     <div class="flex items-center justify-between">
@@ -115,7 +124,7 @@
         {/if}
         {#if onSave}
           <button class="bx-blue mr-8 lh-10" onclick={onSave} aria-label="Guardar">
-            <i class="icon-floppy"></i>
+            <i class="{saveButtonIcon || 'icon-floppy'}"></i>
             <span>{saveButtonName || "Guardar"}</span>
           </button>
         {/if}
@@ -139,10 +148,11 @@
     {#if (options||[]).length > 0}
       <OptionsStrip options={options as [number, string][]} 
         selected={selected as number} useMobileGrid={true}
-        onSelect={e => { onSelect?.(e) }} css="mt-2"
+        onSelect={e => { selected = e[0] }} 
+        css="mt-2"
       />
     {/if}
-    <div class="_2 grow-1 {contentCss}">{@render children()}</div>
+    <div class="_4 grow-1 {contentCss}">{@render children()}</div>
   </div>
 {/if}
 
@@ -166,15 +176,31 @@
     overflow: hidden;
   }
   ._2 {
+    position: fixed;
+    bottom: 0;
+    height: auto;
+    width: 800px;
+    right: 0;
+    background-color: rgb(255, 255, 255);
+    box-shadow: -7px 0px 15px 0px #00000024, -3px 1px 5px 0px #00000017;
+    z-index: 101;
+    max-width: 100vw;
+    overflow: hidden;
+  }
+  ._4 {
     overflow-y: auto;
     overflow-x: hidden;
     width: calc(100% + 6px);
     margin-right: -6px;
     padding-right: 6px;
   }
+  ._1._8 ._4, ._1._8, ._2._8 ._4, ._2._8 {
+    overflow-y: visible;
+    overflow-x: visible;
+  }
 
   @media (max-width: 749px) {
-    ._2 {
+    ._4 {
       width: calc(100% + 12px);
       margin-left: -6px;
       margin-right: -6px;

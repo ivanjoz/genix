@@ -3,12 +3,12 @@
 
 
   let { 
-    options, selected, keyField, valueField, buttonCss, onSelect, css, useMobileGrid
+    options, selected, keyId, keyName, buttonCss, onSelect, css, useMobileGrid
   }: { 
     options: T[], 
     selected: number,
-    keyField?: keyof T,
-    valueField?: keyof T,
+    keyId?: keyof T,
+    keyName?: keyof T,
     buttonCss?: string,
     onSelect: (e: T) => void,
     useMobileGrid?: boolean
@@ -17,7 +17,7 @@
 
   const getClass = (e: T) => {
     let cn = ""
-    const id = Array.isArray(e) ? e[0] : (keyField ? e?.[keyField] : 0) || 0
+    const id = Array.isArray(e) ? e[0] : (keyId ? e?.[keyId] : 0) || 0
     if(id === selected){ cn += " _3" }
     if(buttonCss){ cn += " " + buttonCss }
     return cn
@@ -29,8 +29,8 @@
         return e[2]
       }
       return [e[1] as string]
-    } else if(valueField){
-      return [e[valueField] as string]
+    } else if(keyName){
+      return [e[keyName] as string]
     } else {
       return [""]
     }

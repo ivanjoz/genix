@@ -46,7 +46,7 @@ func PostGaleriaImage(req *core.HandlerArgs) core.HandlerResponse {
 		Image:       imageName,
 		Description: image.Description,
 		Status:      1,
-		Updated:     core.SunixTime(),
+		Updated:     core.SUnixTime(),
 	}
 
 	err = db.Insert(&[]s.GaleriaImagen{galeriaImage})

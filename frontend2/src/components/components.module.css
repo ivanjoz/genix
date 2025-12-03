@@ -41,6 +41,7 @@
   box-shadow: rgb(74 70 86 / 22%) 0px 1px 3px 0px, rgb(55 52 64 / 14%) 0px 0px 2px 0px;
   border: 1px solid rgb(193 197 220);
   border-bottom: 1px solid var(--input-color-bottom);
+  background: linear-gradient(0deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.2) 100%);
 }
 
 .input_div_1 {
@@ -69,6 +70,11 @@
   outline-color: transparent;
   border: none;
   background-color: transparent;
+}
+
+.input:global(.no-label) .input_inp {
+  height: 100%;
+  margin-top: unset;
 }
 
 .input_inp::placeholder {

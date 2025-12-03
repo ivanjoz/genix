@@ -4,7 +4,7 @@
 
 
 	export interface ICellEditableProps<T> {
-		saveOn: T;
+		saveOn?: T;
 		save?: string;
 		css?: string;
 		contentClass?: string;

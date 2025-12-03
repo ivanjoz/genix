@@ -622,11 +622,11 @@ func Test27(args *core.ExecArgs) core.FuncResponse {
 
 func Test28(args *core.ExecArgs) core.FuncResponse {
 
-	fmt.Printf("Tunix Time: %v\n", core.SunixTime())
-	fmt.Printf("Tunix Time Milli: %v\n", core.SunixTimeMilli())
+	fmt.Printf("Tunix Time: %v\n", core.SUnixTime())
+	fmt.Printf("Tunix Time Milli: %v\n", core.SUnixTimeMilli())
 	fmt.Print("Probando UUID")
-	fmt.Printf("Tunix UUID: %v\n", core.SunixTimeUUIDx3())
-	fmt.Printf("Tunix ID + UUID: %v\n", core.SunixUUIDx3FromID(120))
+	fmt.Printf("Tunix UUID: %v\n", core.SUnixTimeUUID())
+	fmt.Printf("Tunix ID + UUID: %v\n", core.SUnixTimeUUIDConcatID(120))
 
 	return core.FuncResponse{}
 }
@@ -698,6 +698,12 @@ type DemoType1[T DemoStruct1] struct {
 }
 
 func Test33(args *core.ExecArgs) core.FuncResponse {
+
+	id := int32(1)
+
+	uuid := core.SUnixTimeUUIDConcatID(id)
+
+	core.Log(uuid)
 
 	return core.FuncResponse{}
 }

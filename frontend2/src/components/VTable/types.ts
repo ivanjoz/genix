@@ -17,11 +17,13 @@ export interface ITableColumn<T> {
   field?: string
   subcols?: ITableColumn<T>[]
   cardColumn?: [number, (1|2|3)?]
-	onEditChange?: (e:T, value: string|number) => void
-  cardRender?: (e: T, idx: number, rerender: (ids?: number[]) => void) => (any)
+	cellOptions?: any[]
+	onCellEdit?: (e:T, value: string|number) => void
+	onCellSelect?: (e:T, value: string|number) => void
+  cardRender?: (e: T, idx: number) => (any)
   getValue?: (e: T, idx: number) => (string|number)
-  render?: (e: T, idx: number, rerender: (ids?: number[]) => void) => ElementAST | ElementAST[]
-	renderHTML?: (e: T, idx: number, rerender: (ids?: number[]) => void) => string
+	
+  render?: (e: T, idx: number) => string | ElementAST | ElementAST[]
   _colspan?: number
 	highlight?: boolean
 	/* Buttons */

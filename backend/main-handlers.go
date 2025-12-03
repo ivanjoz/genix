@@ -294,6 +294,7 @@ func ExecFuncHandler(lambdaInput string) core.FuncResponse {
 func prepareResponse(args core.HandlerArgs, handlerResponse *core.HandlerResponse) core.MainResponse {
 	response := core.MainResponse{}
 	if core.Env.IS_LOCAL {
+		// core.Print(handlerResponse)
 		core.SendLocalResponse(args, *handlerResponse)
 	} else {
 		if len(handlerResponse.Error) > 0 {

@@ -1,5 +1,5 @@
 import { Notify } from "$lib/helpers"
-import { GET } from "$lib/http"
+import { GET, POST } from "$lib/http"
 
 export interface IProductoStock {
   ID: string
@@ -23,10 +23,18 @@ export const getProductosStock = async (almacenID: number): Promise<IProductoSto
     records = await GET({ 
       route: `productos-stock?almacen-id=${almacenID}`,
       errorMessage: 'Hubo un error al obtener el stock.',
-      useCache: { min: 2, ver: 1 },
+      useCache: { min: 0, ver: 6 },
     })
   } catch (error) {
     Notify.failure(error as string)
   }
   return records
+}
+
+export const postProductosStock = (data: IProductoStock[]) => {
+  return POST({
+    data,
+    route: "productos-stock",
+    refreshRoutes: ["productos-stock"]
+  })
 }

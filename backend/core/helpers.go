@@ -192,10 +192,10 @@ func MakeUniqueInts[T any, N Number1](slice []T, f func(T) N) []N {
 	return list
 }
 
-func SunixTime() int32 {
+func SUnixTime() int32 {
 	return int32((time.Now().Unix() - 1e9) / 2)
 }
-func SunixTimeMilli() int64 {
+func SUnixTimeMilli() int64 {
 	return int64((time.Now().UnixMilli() - 1e12) / 2)
 }
 func UnixToSunix(unixTime int64) int32 {
@@ -205,26 +205,15 @@ func SunixToUnix(sunixTime int32) int32 {
 	return int32((sunixTime + 1e9) * 2)
 }
 
-func SunixTimeUUIDx2() int64 {
-	return SunixTimeMilli()*100 + int64(mrand.Intn(100))
-}
-func SunixUUIDx2FromID(id int32, sunixUUID ...int64) int64 {
-	var uuid int64
-	if len(sunixUUID) == 1 {
-		uuid = sunixUUID[0]
-		for uuid > 0 && uuid < 1e13 {
-			uuid = uuid * 10
-		}
-	} else {
-		uuid = SunixTimeUUIDx2()
-	}
-	return int64(id)*1e14 + uuid
+// Makes an UUID based on SUnixTime in milliseconds and random 3 last digits
+func SUnixTimeUUID() int64 {
+	return SUnixTimeMilli()*1000 + int64(mrand.Intn(1000))
 }
 
-func SunixTimeUUIDx3() int64 {
-	return SunixTimeMilli()*1000 + int64(mrand.Intn(1000))
-}
-func SunixUUIDx3FromID(id int32, sunixUUID ...int64) int64 {
+// Concatenate a value (or "id") to a SUnixTime UUID.
+// It Generates the SUnixTime UUID if not present.
+// The SUnixTime UUID is the last 15 digits of the INT64. The max value of the "id" is 9222
+func SUnixTimeUUIDConcatID(id int32, sunixUUID ...int64) int64 {
 	var uuid int64
 	if len(sunixUUID) == 1 {
 		uuid = sunixUUID[0]
@@ -232,7 +221,7 @@ func SunixUUIDx3FromID(id int32, sunixUUID ...int64) int64 {
 			uuid = uuid * 10
 		}
 	} else {
-		uuid = SunixTimeUUIDx3()
+		uuid = SUnixTimeUUID()
 	}
 	return int64(id)*1e15 + uuid
 }

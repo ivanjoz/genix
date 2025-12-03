@@ -1,392 +1,259 @@
-# Genix Frontend 2 - Svelte 5 Migration
+# Genix Frontend 2
 
-Modern frontend implementation using Svelte 5, SvelteKit, and Tailwind CSS.
+Frontend using Svelte 5, SvelteKit, and Tailwind CSS.
 
-## 🚀 Overview
+Tailwind Configuration:
+- Important: The --spacing is set to 1px
 
-This is a complete migration of the Genix frontend from Solid.js to Svelte 5, featuring:
+## 🎨 UI Components
 
-- **Svelte 5** with modern runes ($state, $derived, $effect)
-- **SvelteKit** for routing and SSR
-- **Tailwind CSS** for styling
-- **TypeScript** for type safety
-- **Responsive design** for mobile, tablet, and desktop
-- **Dark mode** support
-- **Accessibility** features (ARIA labels, keyboard navigation)
+### Page and layers
 
-## 📁 Project Structure
+All non-public pages need to be inside the Page component.
 
-```
-frontend2/
-├── src/
-│   ├── components/
-│   │   ├── SideMenu.svelte      # Main navigation menu
-│   │   └── Header.svelte        # Top header bar
-│   ├── types/
-│   │   └── menu.ts              # Menu types and configuration
-│   ├── routes/
-│   │   ├── +layout.svelte       # Main layout
-│   │   ├── +page.svelte         # Home page
-│   │   └── admin/
-│   │       └── empresas/
-│   │           └── +page.svelte # Example page
-│   ├── lib/
-│   │   └── assets/              # Static assets
-│   └── app.css                  # Global styles
-├── static/                      # Public files
-├── MENU_MIGRATION.md           # Detailed migration guide
-├── COMPONENT_SUMMARY.md        # Component documentation
-├── CSS_CONVERSION_GUIDE.md     # CSS to Tailwind conversion
-└── README.md                   # This file
+If the page is subdivided in sections, you can use the prop "options" and "selected" in the Page component. This options are rendered in the the top main menu so is recomended a maximun of 3 options because they are stacked horizontally.
+
+Example:
+```svelte
+<script>
+  let view = $state(1)
+</script>
+
+<Page title="New Page"
+  options={[[1,"Section 1"],[2,"Section 2"]]}
+  selected={view}
+>
+  {#if view === 1}
+    <div>Content 1</div>
+  {/if}
+</Page>
 ```
 
-## 🛠️ Installation
+The component OptionsStrip can also be used to render options menu to create sections in the page itself or inside layer or small components.
 
-```bash
-# Install dependencies
-npm install
+Example:
+```svelte
+<script>
+  let view = $state(1)
+</script>
 
-# Run development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
+<Page title="New Page">
+  <OptionsStrip selected={view}
+    options={[[1,"Section 1"],[2,"Section 2"]]}
+  />
+  {#if view === 1}
+    <div>Content 1</div>
+  {/if}
+</Page>
 ```
 
-## 📦 Key Dependencies
+There are two ways to render overlayed information: Modals and Layers. A Layer is a container element that appear on the side or on the bottom of the escreen.
 
-```json
-{
-  "svelte": "^5.0.0",
-  "@sveltejs/kit": "^2.0.0",
-  "tailwindcss": "^3.4.0",
-  "typescript": "^5.0.0"
+The Layer and Modal component can be shown buttons like: Save o Delete using the prop handlers. For example using the onSave() handler shows automatically a button. There is also an onDelete() and onClose() handlers. The Layer and Modal always display a close button.
+
+The Layer can show a horizontal menu bar for conditional rendering using de "options" prop.
+
+Example:
+```svelte
+<script>
+  import { Core } from "$core/store.svelte"
+  let view = $state(1)
+  let layerView = $state(1)
+</script>
+
+<Page title="New Page">
+  <button class="bx-green"
+    onclick={() => { Core.openSideLayer(1) }}
+  >
+    <i class="icon-plus"></i>
+  </button>
+  <Layer id={1} bind:selected={layerView} title="I am a layer"
+    options={[[1,"Section 1"],[2,"Section 2"]]} 
+    onSave={() => { Core.hideSideLayer() }}
+  >
+    {#if layerView === 1}
+      <div>Content Section 1</div>
+    {/if}
+  </Layer>
+  <button class="bx-green"
+    onclick={() => { Core.openModal(1) }}
+  >
+    <i class="icon-plus"></i>
+  </button>
+  <Modal title="New Modal" id={1} onSave={() => { doSomething() }}>
+    <div>Content</div>
+  </Modal>
+</Page>
+```
+
+### Form Components
+
+The base components are in the src/components/ folder.
+The most important components for making forms are: Input.svelte, SearchSelect and SearchCard.svelte. Use SearchSelect instead of select, it provides autocompletion.
+
+All the form components has this logic. There is a prop called "saveOn" where is reference of the form object is passed a props called "save" thats the name of the field that will be use to save the content of the input or select.
+
+In components that needs an "options" array. The component render the value of the option based on the "keyName" props, so the value to be rendered is object[keyName]. The component set the ID in the form getted with object[keyId]
+
+The SearchCard component renders an input with a space above or to the side where the selected options are render as cards. The options are saved in the form as an array of ids.
+
+Example:
+```svelte
+<script>
+  const countries = [{ id: 1, value: "UK", id: 2, value: "Canada", id: 3: value: "Germany" }], { id: 2, name: "" }
+  const roles = [{ id: 1, name: "Costumer" }, { id: 2, name: "Manager" }, { id: 3, name: "Supervisor" }]
+
+  let userForm = $state({ name: "", countryID: 0, active: false, roleIDs: [] })
+</script>
+
+<div class="grid grid-cols-12 md:flex md:flex-row gap-10">
+  <Input label="Nombre" bind:saveOn={userForm} save="name" css="col-span-12"/>
+  <SearchSelect label="Nombre" bind:saveOn={userForm} save="countryID" 
+    options={countries} keyId="id" keyName="value" css="col-span-12"
+  />
+  <Checkbox label="Is Admin" bind:saveOn={userForm} save="active" 
+    css="col-span-12" 
+  />
+  <SearchCard label="Nombre" bind:saveOn={userForm} save="roleIDs" 
+    options={countries} keyId="id" keyName="name" css="col-span-12"
+  />
+</div>
+```
+
+### Tables: VTable
+
+The VTable table component is very versatile. It need a column definition, an array of ITableColumn<T> elements. 
+
+The VTable component have the following props:
+- columns: ITableColumn<T>[]
+- data: T[]
+- maxHeight: string
+- css: string. Of the div container
+- tableCss: string. Of the actual <table> element
+- selected: T. The selected element
+- isSelected: (row: T, selected: T | number) => boolean. A function to identify the selected row.
+- cellRenderer: CellRendererSnippet<T>
+- filterText: string
+- getFilterContent: (row: T) => string. It constructs the string to be used to make the comparison with the filterText. For example: {e => e.Name +" "+ e.Email}
+
+The props of the ITableColumn object are:
+- header: string. The name to render in the header of the table
+- getValue?: (e: T, idx: number) => string. A callback to get the value to render in the cell.
+- render: (e: T, idx: number) => string | ElementAST | ElementAST[]. A render function that can return a HTML string using the {@html ...} snippet. It also can return a AST of the element to render, for complex renderings.
+- headerCss: string
+- header: string. The th content
+- cellCss: string
+- subcols: ITableColumn<T>[]. It divide the header into sub-headers, and each is a column.
+- onCellEdit?: (e:T, value: string|number) => void. It renders a edit buttom.
+- onCellSelect?: (e:T, value: string|number) => void. It renders a delete buttom.
+- id: string. Necesary is using the cellRenderer snippet.
+
+The ElementAST interface:
+  - id?: number | string
+  - css?: string
+  - tagName?: "DIV" | "SPAN" | "BUTTON",
+  - text?: string | number
+  - onClick?: (id: number | string) => void
+  - children?: ElementAST[]
+
+For more control, the VTable can include a cellRenderer Svente 5 snippet. The arguments of the snippet are: 
+  - record: T
+  - col: ITableColumn<T>
+  - cellContent?: string 
+  - index?: number
+
+Example:
+```svelte
+<script>
+  let users: IUser = $state([{ id: 1, name: "Peter", age: 21 }, { id: 2, name: "Hans", age: 27 }])
+  let filterText = $state("")
+
+  let columns: ITableColumn<IUser>[] = [
+    { header: "ID", getValue: e => e.ID },
+    { header: "Name", 
+      render: e => {
+        return {
+          css: "flex items-center",
+          children: [
+            { tagName: "i", css: "icon-user" },
+            { text: e.Name }
+          ]
+        }
+      }
+    },
+    { header: "Age", id: "age" }
+  ]
+</script>
+
+<div class="i-search">
+  <div><i class="icon-search"></i></div>
+  <input type="text" onkeyup={ev => {
+    const value = String((ev.target as any).value||"")
+    throttle(() => { filterText = value },150)
+  }}>
+</div>
+<VTable columns={columns} data={almacenStock}
+  filterText={filterText}
+  useFilterCache={true}
+  getFilterContent={e => {
+    const producto = productos.productosMap.get(e.ProductoID)
+    return [producto?.Nombre, e.SKU, e.Lote].filter(x => x).join(" ").toLowerCase()
+  }}
+>
+  {#snippet cellRenderer(record: IUser, col: ITableColumn<IUser>)}
+    {#if col.id === "age"}
+      <div class="flex">
+        <div class="ff-bold">Age:</div><div>{record.age}</div>
+      </div>
+    {/if}
+  {/snippet}
+</VTable>
+```
+
+### Services and cache
+
+The fetch requests than can use cache, the ones that don't use dynamic filters and need to be ready for the view to show information, use the GetHandler class to construct the service controller.
+
+The arguments in he constructor() are optional. The way it works it makes two fetches. The first one is always to the cache through the Service Worker. If there is no cache it does not return anything so the handler() function does not execute. The second fetch is done to the server to fetch the updated records. There records are combined with the cache records in the Service Worker and it returns to the handler() function all the records up to date. It can return an array of object or an object where each key is an array. 
+
+The handler() function is where the raw response is parsed, prepared and setted in the reactive properties of the class declared using the $state() rune. This enables the reactivity on the view.
+
+The main properties are:
+ - route: string. The route of the backend service.
+ - useCache: { min: number, ver: number }. The "min" property are the minutes of the caché. If the cache has not expired it will not fetch the server. The "ver" property is the version, if ti changes the cache is invalidated.
+
+The constructor needs to execute the this.fetch() function.
+
+Example: productos.svelte.ts
+```typescript
+export class ProductosService extends GetHandler {
+  route = "productos"
+  useCache = { min: 5, ver: 9 }
+
+  productos: IProducto[] = $state([])
+  productosMap: Map<number,IProducto> = $state(new Map())
+
+  handler(response: IProducto[]): void {
+    this.productos = response
+    this.productosMap = new Map(response.map(x => [x.ID, x]))
+  }
+
+  constructor(warehouseID: number){
+    super()
+    this.route = `productos?warehouse=${warehouseID}`
+    this.fetch()
+  }
 }
 ```
 
-## 🎨 Components
-
-### SideMenu.svelte
-
-Comprehensive side navigation menu with:
-- Collapsible sections
-- Desktop minimization
-- Mobile slide-in menu
-- Route highlighting
-- Smooth animations
-- Dark mode support
-
-**Usage:**
+Example: +page.svelte
 ```svelte
 <script>
-  import SideMenu from './components/SideMenu.svelte';
-  
-  let isMobileOpen = $state(false);
-  let isMinimized = $state(false);
+  const warehouseID = 1
+  const productos = new ProductosService(warehouseID)
 </script>
 
-<SideMenu bind:isMobileOpen bind:isMinimized />
-```
-
-### Header.svelte
-
-Top navigation bar with:
-- Theme switcher
-- Settings dropdown
-- Mobile menu toggle
-- Reload functionality
-- Logout action
-
-**Usage:**
-```svelte
-<script>
-  import Header from './components/Header.svelte';
-</script>
-
-<Header 
-  showMenuButton={true}
-  onMenuToggle={() => toggleMobileMenu()}
-  title="Mi App"
+<VTable data={productos.productos}
+  ... 
 />
 ```
-
-## 🎯 Features
-
-### Desktop Experience
-- **Fixed sidebar** with hover-to-expand when minimized
-- **Smooth transitions** between states
-- **Keyboard navigation** support
-- **Custom scrollbar** styling
-
-### Mobile Experience
-- **Slide-in menu** from right
-- **Backdrop blur** effect
-- **Touch-optimized** interactions
-- **Bottom-sheet** style on small screens
-
-### Theme Support
-- **Light mode** (default)
-- **Dark mode** toggle in header
-- **Persists** to localStorage
-- **Smooth transitions** between themes
-
-### Accessibility
-- **ARIA labels** on all interactive elements
-- **Keyboard navigation** (Tab, Enter, Escape)
-- **Focus indicators** visible
-- **Screen reader** friendly
-
-## 🔧 Configuration
-
-### Menu Structure
-
-Edit `src/types/menu.ts` to customize the menu:
-
-```typescript
-import type { IModule } from './menu';
-
-export const myMenu: IModule = {
-  id: 1,
-  name: 'Mi Sistema',
-  menus: [
-    {
-      id: 1,
-      name: 'Dashboard',
-      minName: 'DASH',
-      options: [
-        {
-          name: 'Overview',
-          minName: 'OVR',
-          route: '/dashboard',
-          icon: 'chart'
-        }
-      ]
-    }
-  ]
-};
-```
-
-### Styling
-
-Global styles in `src/app.css`:
-
-```css
-:root {
-  --header-height: 3rem;
-  --menu-width: 14rem;
-  --primary: #4042a3;
-}
-```
-
-Component-specific styles use Tailwind utilities:
-
-```svelte
-<div class="bg-blue-600 hover:bg-blue-700 transition-colors">
-  Button
-</div>
-```
-
-## 📱 Responsive Design
-
-Breakpoints:
-- **Mobile**: < 768px (Tailwind `md`)
-- **Tablet**: 768px - 1024px
-- **Desktop**: > 1024px
-
-```svelte
-<!-- Hide on mobile, show on desktop -->
-<div class="hidden md:block">Desktop only</div>
-
-<!-- Show on mobile, hide on desktop -->
-<div class="block md:hidden">Mobile only</div>
-```
-
-## 🎨 Theming
-
-Toggle theme:
-
-```typescript
-// In Header.svelte
-function toggleTheme(theme: 'light' | 'dark') {
-  document.body.classList.remove('light', 'dark');
-  document.body.classList.add(theme);
-  localStorage.setItem('ui-color', theme);
-}
-```
-
-Add theme-specific styles:
-
-```svelte
-<div class="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
-  Content
-</div>
-```
-
-## 🚀 Development
-
-### Adding a New Page
-
-1. Create a new route file:
-```bash
-src/routes/my-page/+page.svelte
-```
-
-2. Add content:
-```svelte
-<script lang="ts">
-  // Your logic
-</script>
-
-<h1>My Page</h1>
-```
-
-3. Add to menu in `src/types/menu.ts`:
-```typescript
-{
-  name: 'My Page',
-  route: '/my-page',
-  icon: 'icon'
-}
-```
-
-### Adding a New Component
-
-1. Create component file:
-```bash
-src/components/MyComponent.svelte
-```
-
-2. Define props:
-```svelte
-<script lang="ts">
-  let { title, data = [] } = $props<{
-    title: string;
-    data?: string[];
-  }>();
-</script>
-```
-
-3. Use component:
-```svelte
-<script>
-  import MyComponent from './components/MyComponent.svelte';
-</script>
-
-<MyComponent title="Hello" data={['a', 'b']} />
-```
-
-## 🧪 Testing
-
-```bash
-# Run tests
-npm test
-
-# Type checking
-npm run check
-
-# Linting
-npm run lint
-
-# Format code
-npm run format
-```
-
-## 📚 Documentation
-
-- **[MENU_MIGRATION.md](./MENU_MIGRATION.md)** - Detailed migration guide
-- **[COMPONENT_SUMMARY.md](./COMPONENT_SUMMARY.md)** - Component documentation
-- **[CSS_CONVERSION_GUIDE.md](./CSS_CONVERSION_GUIDE.md)** - CSS to Tailwind guide
-
-## 🔄 Migration from Solid.js
-
-Key differences:
-
-1. **Reactivity**: Svelte runes instead of signals
-   ```typescript
-   // Solid.js
-   const [value, setValue] = createSignal(0);
-   
-   // Svelte 5
-   let value = $state(0);
-   ```
-
-2. **Computed Values**: $derived instead of createMemo
-   ```typescript
-   // Solid.js
-   const double = createMemo(() => value() * 2);
-   
-   // Svelte 5
-   let double = $derived(value * 2);
-   ```
-
-3. **Effects**: $effect instead of createEffect
-   ```typescript
-   // Solid.js
-   createEffect(() => {
-     console.log(value());
-   });
-   
-   // Svelte 5
-   $effect(() => {
-     console.log(value);
-   });
-   ```
-
-4. **Styling**: Tailwind instead of CSS modules
-   ```svelte
-   <!-- Solid.js -->
-   <div class={styles.container}>Content</div>
-   
-   <!-- Svelte 5 -->
-   <div class="bg-white p-4 rounded-lg">Content</div>
-   ```
-
-## 🐛 Known Issues
-
-None at the moment! 🎉
-
-## 📝 TODO
-
-- [ ] Add icon library (lucide-svelte)
-- [ ] Add menu search functionality
-- [ ] Add user favorites system
-- [ ] Add breadcrumb navigation
-- [ ] Add notification badges
-- [ ] Add keyboard shortcuts
-- [ ] Add loading states
-- [ ] Add error boundaries
-- [ ] Add unit tests
-- [ ] Add E2E tests
-
-## 🤝 Contributing
-
-1. Create a feature branch
-2. Make changes
-3. Run linter and type check
-4. Test on mobile and desktop
-5. Update documentation
-6. Submit pull request
-
-## 📄 License
-
-Same as parent project.
-
-## 🙏 Acknowledgments
-
-- Original Solid.js implementation: `../frontend/src/core/menu.tsx`
-- Svelte team for Svelte 5
-- Tailwind CSS team
-- SvelteKit team
-
-## 📞 Support
-
-For issues or questions, please refer to the project documentation or contact the development team.
-
----
-
-**Version**: 1.0.0  
-**Last Updated**: 2024  
-**Status**: ✅ Ready for use
