@@ -6,7 +6,7 @@
   import { Popover2 } from "./popover2";
 
 	export interface ICellSelector<T,E> {
-    id: number | string;
+    id?: number | string;
 		saveOn?: T;
 		save?: keyof T;
 		css?: string;
@@ -16,14 +16,14 @@
 		render?: (value: E, isEditing: boolean) => any;
 		getValue?: (e: T) => number | string;
     options: E[]
-    keyField: keyof E,
-    valueField: keyof E,
+    keyId: keyof E,
+    keyName: keyof E,
 		required?: boolean;
 		type?: string;
 	}
 
   let {
-		id, options, saveOn, save, keyField, valueField, contentClass, required, render
+		id, options, saveOn, save, keyId, keyName, contentClass, required, render
 	}: ICellSelector<T,E> = $props();
 
   let show = $derived(Core.popoverShowID === id);
@@ -39,8 +39,8 @@
     const valueToRecord: Map<string,E> = new Map()
 
     for(const e of options){
-      idToRecord.set(e[keyField] as (string|number), e)
-      valueToRecord.set((e[valueField] as string).toLowerCase(), e)
+      idToRecord.set(e[keyId] as (string|number), e)
+      valueToRecord.set((e[keyName] as string).toLowerCase(), e)
     }
 
     WeakSearchRef.set(options, { idToRecord, valueToRecord })
@@ -53,7 +53,7 @@
 
     if(!filterValue){ return options }
     else {
-      return options.filter(x => String(x[valueField]||"").toLowerCase().includes(filterValue))
+      return options.filter(x => String(x[keyName]||"").toLowerCase().includes(filterValue))
     }
   })
 
@@ -61,12 +61,12 @@
     const valueToRecord = WeakSearchRef.get(options)?.valueToRecord || new Map()
     selected = valueToRecord.get(String(target.value||"").toLowerCase())
     if(selected){
-      target.value = selected[valueField] as string
+      target.value = selected[keyName] as string
     } else {
       target.value = ""
     }
     if(saveOn && save){
-      if(selected){ saveOn[save] = selected[keyField] as unknown as NonNullable<T>[keyof T] }
+      if(selected){ saveOn[save] = selected[keyId] as unknown as NonNullable<T>[keyof T] }
       else {
         delete saveOn[save]
       }
@@ -76,9 +76,9 @@
   const onSelect = (e: E) => {
     console.log("selected", e)
     selected = e
-    if(inputRef){ inputRef.value = e[valueField] as string }
+    if(inputRef){ inputRef.value = e[keyName] as string }
     if(saveOn && save){
-      saveOn[save] = e[keyField] as unknown as NonNullable<T>[keyof T]
+      saveOn[save] = e[keyId] as unknown as NonNullable<T>[keyof T]
     }
     Core.popoverShowID = 0
   }
@@ -90,7 +90,7 @@
 	})
 
   const renderContent = $derived(
-    render ? render(selected, show) : selected?.[valueField] || "" as string
+    render ? render(selected, show) : selected?.[keyName] || "" as string
   );
 
   const handlwShowClick = () => {
@@ -100,7 +100,7 @@
 
   $effect(() => {
 		if (show && inputRef) {
-      if(selected){ inputRef.value = selected[valueField] as string }
+      if(selected){ inputRef.value = selected[keyName] as string }
 			inputRef.focus();
 		}
 	})
@@ -113,7 +113,7 @@
         selected = saveOn[save] ? idToRecord.get(saveOn[save]) as E : null as E
         console.log("selected 3",selected)
         if (selected) {
-          if(inputRef){ inputRef.value = selected[valueField] as string }
+          if(inputRef){ inputRef.value = selected[keyName] as string }
         } else {
           if(inputRef){ inputRef.value = "" }
         }
@@ -189,7 +189,7 @@
               }
             }}
           >
-            {item[valueField]}
+            {item[keyName]}
           </div>
         {/snippet}
       </SvelteVirtualList>

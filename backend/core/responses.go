@@ -602,6 +602,9 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 			return req.MakeErr("No se pudo serializar respuesta:", err)
 		}
 		body := string(bodyBytes)
+		if body == "null" {
+			body = "[]"
+		}
 		response.Body = &body
 	} else {
 		fileName := fmt.Sprintf("output-%v", req.MergedID)

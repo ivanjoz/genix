@@ -116,7 +116,7 @@
 
 </script>
 
-<Page sideLayerSize={780} title="Productos">
+<Page sideLayerSize={780} title="Productos" >
   <div class="grid grid-cols-12 md:flex md:flex-row items-center mb-8">
     <OptionsStrip selected={view} css="col-span-12 mb-6 md:mb-0"
       options={[[1,"Productos"],[2,"Categorías"],[3,"Marcas"]]} 
@@ -171,16 +171,15 @@
   <Layer type="side" css="px-8 py-8 md:px-14 md:py-10" 
     title={productoForm?.Nombre || ""} 
     titleCss="h2 mb-6" contentCss="px-0 md:px-0" id={1}
+    bind:selected={layerView}
+    onClose={() => { productoForm = {} as IProducto }}
+    onSave={() => { onSave() }}
     options={[
       [1,"Información",["Informa-","ción"]],
       [2,"Ficha"],
       [3,"Presentaciones",["Presenta-","ciones"]],
       [4,"Fotos"]
     ]}
-    selected={layerView}
-    onSelect={e => layerView = e[0]}
-    onClose={() => { productoForm = {} as IProducto }}
-    onSave={() => { onSave() }}
   >
     {#if layerView === 1}
       <div class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-6 md:mt-16">

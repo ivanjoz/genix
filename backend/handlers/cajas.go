@@ -52,7 +52,7 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Faltan parámetros a enviar: (ID, Nombre, Tipo o SedeID)")
 	}
 
-	nowTime := core.SunixTime()
+	nowTime := core.SUnixTime()
 	body.Updated = nowTime
 	body.EmpresaID = req.Usuario.EmpresaID
 
@@ -96,11 +96,11 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
 		if lastRegistros > 0 {
 			q.Where(col.ID_().Between(
-				core.SunixUUIDx2FromID(cajaID, 0), core.SunixUUIDx2FromID(cajaID+1, 0)))
+				core.SUnixTimeUUIDConcatID(cajaID, 0), core.SUnixTimeUUIDConcatID(cajaID+1, 0)))
 		} else {
 			q.Where(col.ID_().Between(
-				core.SunixUUIDx2FromID(cajaID, fechaHInicio),
-				core.SunixUUIDx2FromID(cajaID, fechaHFin+1)))
+				core.SUnixTimeUUIDConcatID(cajaID, fechaHInicio),
+				core.SUnixTimeUUIDConcatID(cajaID, fechaHFin+1)))
 		}
 		q.OrderDescending()
 	})
@@ -138,7 +138,7 @@ func GetCajaCuadres(req *core.HandlerArgs) core.HandlerResponse {
 	cuadres := db.Select(func(q *db.Query[s.CajaCuadre], col s.CajaCuadre) {
 		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
 		if lastRegistros > 0 {
-			q.Where(col.ID_().Between(core.SunixUUIDx2FromID(cajaID, 0), core.SunixUUIDx2FromID(cajaID+1, 0)))
+			q.Where(col.ID_().Between(core.SUnixTimeUUIDConcatID(cajaID, 0), core.SUnixTimeUUIDConcatID(cajaID+1, 0)))
 		} else {
 			//TODO: completar?
 		}
@@ -165,7 +165,7 @@ func GetCajaCuadres(req *core.HandlerArgs) core.HandlerResponse {
 
 func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 
-	nowTime := core.SunixTime()
+	nowTime := core.SUnixTime()
 	record := s.CajaCuadre{}
 	err := json.Unmarshal([]byte(*req.Body), &record)
 	if err != nil {
@@ -188,7 +188,7 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Guarda el cuadre
 	record.EmpresaID = req.Usuario.EmpresaID
-	record.ID = core.SunixUUIDx2FromID(record.CajaID)
+	record.ID = core.SUnixTimeUUIDConcatID(record.CajaID)
 	record.Created = nowTime
 	record.CreatedBy = req.Usuario.ID
 	record.SaldoDiferencia = record.SaldoReal - caja.SaldoCurrent
@@ -207,7 +207,7 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Guarda el movimiento
 	movimiento := s.CajaMovimiento{
-		ID:         core.SunixUUIDx2FromID(record.CajaID),
+		ID:         core.SUnixTimeUUIDConcatID(record.CajaID),
 		EmpresaID:  req.Usuario.EmpresaID,
 		CajaID:     record.CajaID,
 		Tipo:       2, // Cuadre de caja
@@ -230,7 +230,7 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 
 func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
 
-	nowTime := core.SunixTime()
+	nowTime := core.SUnixTime()
 	record := s.CajaMovimiento{}
 	err := json.Unmarshal([]byte(*req.Body), &record)
 	if err != nil {
@@ -262,7 +262,7 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
 	record.EmpresaID = req.Usuario.EmpresaID
 	record.Created = nowTime
 	record.CreatedBy = req.Usuario.ID
-	record.ID = core.SunixUUIDx2FromID(record.CajaID)
+	record.ID = core.SUnixTimeUUIDConcatID(record.CajaID)
 
 	statements := db.MakeInsertStatement(&[]s.CajaMovimiento{record})
 

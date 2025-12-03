@@ -833,7 +833,7 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			/*
 				query := fmt.Sprintf(`CREATE MATERIALIZED VIEW %v.%v AS
 				SELECT %v FROM %v
-				WHERE %v
+				WHERE %vlen(keys)
 				PRIMARY KEY (%v)
 				%v;`,
 					dbTable.keyspace, view.name, strings.Join(colNames, ", "), dbTable.GetFullName(),

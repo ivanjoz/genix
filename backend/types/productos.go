@@ -237,55 +237,58 @@ type AlmacenProducto struct {
 	TAGS      `table:"almacen_producto"`
 	EmpresaID int32 `json:",omitempty"`
 	// [Almacen-ID] [status] [Producto-ID] [SKU] [Lote]
-	ID          string  `db:"id,pk"`
-	SKU         string  `json:",omitempty"`
-	Lote        string  `json:",omitempty"`
-	AlmacenID   int32   `json:",omitempty"`
-	ProductoID  int32   `json:",omitempty"`
-	Cantidad    int32   `json:",omitempty"`
-	SubCantidad int32   `json:",omitempty"`
-	CostoUn     float32 `json:",omitempty"`
-	Updated     int32   `json:"upd,omitempty"`
-	UpdatedBy   int32   `json:",omitempty"`
-	Status      int8    `json:"ss,omitempty"`
+	ID             string  `db:"id,pk"`
+	SKU            string  `json:",omitempty"`
+	Lote           string  `json:",omitempty"`
+	AlmacenID      int32   `json:",omitempty"`
+	ProductoID     int32   `json:",omitempty"`
+	PresentacionID int16   `json:",omitempty"`
+	Cantidad       int32   `json:",omitempty"`
+	SubCantidad    int32   `json:",omitempty"`
+	CostoUn        float32 `json:",omitempty"`
+	Updated        int32   `json:"upd,omitempty"`
+	UpdatedBy      int32   `json:",omitempty"`
+	Status         int8    `json:"ss,omitempty"`
 }
 
 type alp = AlmacenProducto
 
-func (e alp) EmpresaID_() db.CoI32   { return db.CoI32{"empresa_id"} }
-func (e alp) ID_() db.CoStr          { return db.CoStr{"id"} }
-func (e alp) SKU_() db.CoStr         { return db.CoStr{"sku"} }
-func (e alp) Lote_() db.CoStr        { return db.CoStr{"lote"} }
-func (e alp) AlmacenID_() db.CoI32   { return db.CoI32{"almacen_id"} }
-func (e alp) ProductoID_() db.CoI32  { return db.CoI32{"producto_id"} }
-func (e alp) Cantidad_() db.CoI32    { return db.CoI32{"cantidad"} }
-func (e alp) SubCantidad_() db.CoI32 { return db.CoI32{"sub_cantidad"} }
-func (e alp) CostoUn_() db.CoI32     { return db.CoI32{"costo_un"} }
-func (e alp) Updated_() db.CoI32     { return db.CoI32{"updated"} }
-func (e alp) UpdatedBy_() db.CoI32   { return db.CoI32{"updated_by"} }
-func (e alp) Status_() db.CoI8       { return db.CoI8{"status"} }
+func (e alp) EmpresaID_() db.CoI32      { return db.CoI32{"empresa_id"} }
+func (e alp) ID_() db.CoStr             { return db.CoStr{"id"} }
+func (e alp) SKU_() db.CoStr            { return db.CoStr{"sku"} }
+func (e alp) Lote_() db.CoStr           { return db.CoStr{"lote"} }
+func (e alp) AlmacenID_() db.CoI32      { return db.CoI32{"almacen_id"} }
+func (e alp) ProductoID_() db.CoI32     { return db.CoI32{"producto_id"} }
+func (e alp) Cantidad_() db.CoI32       { return db.CoI32{"cantidad"} }
+func (e alp) SubCantidad_() db.CoI32    { return db.CoI32{"sub_cantidad"} }
+func (e alp) CostoUn_() db.CoI32        { return db.CoI32{"costo_un"} }
+func (e alp) Updated_() db.CoI32        { return db.CoI32{"updated"} }
+func (e alp) UpdatedBy_() db.CoI32      { return db.CoI32{"updated_by"} }
+func (e alp) Status_() db.CoI8          { return db.CoI8{"status"} }
+func (e alp) PresentacionID_() db.CoI16 { return db.CoI16{"presentacion_id"} }
 
 func (e AlmacenProducto) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:      "almacen_producto",
-		Partition: e.EmpresaID_(),
-		Keys:      []db.Coln{e.ID_()},
+		Name:         "almacen_producto",
+		Partition:    e.EmpresaID_(),
+		Keys:         []db.Coln{e.ID_()},
+		LocalIndexes: []db.Coln{e.SKU_(), e.Lote_()},
 		Views: []db.View{
-			{Cols: []db.Coln{e.SKU_()}, KeepPart: true},
-			{Cols: []db.Coln{e.Lote_()}, KeepPart: true},
-			// {Cols: []db.Coln{e.ProductoID_()}, KeepPart: true},
 			{
 				Cols:     []db.Coln{e.ProductoID_(), e.Status_()},
 				KeepPart: true, ConcatI32: []int8{1},
 			},
-			{Cols: []db.Coln{e.AlmacenID_(), e.Updated_()}, KeepPart: true, ConcatI64: []int8{9}},
-			{Cols: []db.Coln{e.AlmacenID_(), e.Status_()}, KeepPart: true, ConcatI32: []int8{1}},
+			{
+				Cols:      []db.Coln{e.AlmacenID_(), e.Status_(), e.Updated_()},
+				KeepPart:  true,
+				ConcatI64: []int8{1, 9},
+			},
 		},
 	}
 }
 
 func (e *AlmacenProducto) SelfParse() {
-	e.ID = Concat62(e.AlmacenID, e.ProductoID, e.SKU, e.Lote)
+	e.ID = Concat62(e.AlmacenID, e.ProductoID, e.PresentacionID, e.SKU, e.Lote)
 }
 
 /*
@@ -310,6 +313,7 @@ type AlmacenMovimiento struct {
 	AlmacenRefCantidad int32  `json:",omitempty" db:"almacen_ref_cantidad"`
 	VentaID            int32  `json:",omitempty" db:"venta_id"`
 	ProductoID         int32  `json:",omitempty" db:"producto_id"`
+	PresentacionID     int16  `json:",omitempty" db:"presentacion_id"`
 	Cantidad           int32  `json:",omitempty" db:"cantidad"`
 	AlmacenCantidad    int32  `json:",omitempty" db:"almacen_cantidad"`
 	SubCantidad        int32  `json:",omitempty" db:"sub_cantidad"`
@@ -367,6 +371,7 @@ func (e alm) GetSchema() db.TableSchema {
 
 type MovimientoInterno struct {
 	ProductoID           int32
+	PresentacionID       int16
 	SKU                  string
 	Lote                 string
 	AlmacenID            int32
@@ -379,5 +384,5 @@ type MovimientoInterno struct {
 }
 
 func (e *MovimientoInterno) GetAlmacenProductoID() string {
-	return Concat62(e.AlmacenID, e.ProductoID, e.SKU, e.Lote)
+	return Concat62(e.AlmacenID, e.ProductoID, e.PresentacionID, e.SKU, e.Lote)
 }
