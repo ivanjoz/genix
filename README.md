@@ -14,4 +14,7 @@ Actualmente estamos migrando el frontend de solid.js (/frontend) a svelte.js (/f
 - Compilación en el cliente de componentes UI de Ecommerce
 - Editor WYSIWYG de Ecommerce.
 
+Importante: El frontend en solid.js no usa Tailwind sino clases css similares en global.css, convertirlas a Tailwind al migrar.
+Hay clases que sí están en Solid.js como: ff-bold, ff-mono, ff-semibold, c-red, c-blue y demás colores que comienzan con c*.
+
 La presente documentación está en curso.

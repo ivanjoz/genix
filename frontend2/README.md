@@ -327,7 +327,7 @@ Versatile table component with filtering and custom cell rendering. Requires a c
 | `getValue` | `(e: T, idx: number) => string \| number` | Callback to get the value to render in the cell |
 | `render` | `(e: T, idx: number) => string \| ElementAST \| ElementAST[]` | Render function that can return an HTML string (use with `{@html ...}`) or an ElementAST for complex renderings |
 | `headerCss` | `string` | CSS for header cell |
-| `cellCss` | `string` | CSS for body cells |
+| `cellCss` | `string` | CSS for body cells. Important: If using, the cell drop default styles so it looses padding. Consider add "px-6" |
 | `subcols` | `ITableColumn<T>[]` | Divides the header into sub-headers, each becoming a column |
 | `onCellEdit` | `(e: T, value: string \| number) => void` | Renders an edit button |
 | `onCellSelect` | `(e: T, value: string \| number) => void` | Renders a select button |
