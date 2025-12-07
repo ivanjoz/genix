@@ -95,7 +95,7 @@
 
   const handlwShowClick = () => {
     filterValue = ""
-    Core.popoverShowID = id
+    Core.popoverShowID = id as (number|string)
 	}
 
   $effect(() => {

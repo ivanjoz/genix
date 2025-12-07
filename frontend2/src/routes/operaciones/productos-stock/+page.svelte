@@ -50,7 +50,7 @@
         return pr?.nm || ""
       }
     },
-    { header: "Stock",
+    { header: "Stock", css: "justify-end", inputCss: "text-right pr-6",
       getValue: e => e.Cantidad,
       onCellEdit: (e, value) => {
         agregarStock(e, parseInt(value as string||"0"))
@@ -176,7 +176,7 @@
 <Page sideLayerSize={640} title="productos-stock">
   <div class="flex items-center mb-8">
     <SearchSelect options={almacenes?.Almacenes||[]} keyId="ID" keyName="Nombre" 
-      saveOn={filters} save="almacenID" placeholder="ALMACÉN ::"
+      bind:saveOn={filters} save="almacenID" placeholder="ALMACÉN ::"
       css="w-270"
       onChange={() => {
         onChangeAlmacen()
@@ -192,7 +192,7 @@
           throttle(() => { filterText = value },150)
         }}>
       </div>
-      <Checkbox label="Todos los Productos" saveOn={filters} save="showTodosProductos" 
+      <Checkbox label="Todos los Productos" bind:saveOn={filters} save="showTodosProductos" 
         css="ml-16" />
     {/if}
     <div class="ml-auto">
@@ -234,26 +234,26 @@
   >
     <div class="grid grid-cols-24 gap-10 mt-6 p-4">
       <SearchSelect label="Producto" css="col-span-24" required={true}
-        saveOn={form} save="ProductoID" options={productos.productos||[]}
+        bind:saveOn={form} save="ProductoID" options={productos.productos||[]}
         keyName="Nombre" keyId="ID"
       />
       {#if (formProducto?.Presentaciones?.filter(x => x.ss)||[]).length > 0}
         <SearchSelect label="Presentación" css="col-span-24"
-          saveOn={form} save="PresentacionID" options={formProducto?.Presentaciones||[]}
+          bind:saveOn={form} save="PresentacionID" options={formProducto?.Presentaciones||[]}
           keyName="nm" keyId="id"
         />
       {/if}
       <Input label="SKU" css="col-span-16"
-        saveOn={form} save="SKU"
+        bind:saveOn={form} save="SKU"
       />
       <Input label="Cantidad" required={true} css="col-span-8"
-        saveOn={form} save="Cantidad" type="number"
+        bind:saveOn={form} save="Cantidad" type="number"
       />
       <Input label="Lote" css="col-span-16"
-        saveOn={form} save="Lote"
+        bind:saveOn={form} save="Lote"
       />
       <Input label="Costo x Unidad" css="col-span-8"
-        saveOn={form} save="CostoUn" type="number"
+        bind:saveOn={form} save="CostoUn" type="number"
       />
     </div>
   </Layer>

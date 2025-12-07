@@ -628,6 +628,13 @@ func Test28(args *core.ExecArgs) core.FuncResponse {
 	fmt.Printf("Tunix UUID: %v\n", core.SUnixTimeUUID())
 	fmt.Printf("Tunix ID + UUID: %v\n", core.SUnixTimeUUIDConcatID(120))
 
+	SUnix1 := int32(999999999)
+	SUnix2 := int32(2147483646)
+
+	fmt.Println("-----------------------")
+	fmt.Println(core.UnixTimeToFormat(core.SunixToUnix(SUnix1), "A"))
+	fmt.Println(core.UnixTimeToFormat(core.SunixToUnix(SUnix2), "A"))
+
 	return core.FuncResponse{}
 }
 

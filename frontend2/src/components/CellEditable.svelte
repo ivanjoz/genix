@@ -35,7 +35,7 @@
 	let inputRef = $state<HTMLInputElement>();
 
 	const initialValue = getValue
-		? getValue(saveOn)
+		? getValue(saveOn as T)
 		: ((saveOn || ({} as T))[save as keyof T] as number | string);
 
 	let currentValue = $state(initialValue);

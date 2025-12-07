@@ -2,12 +2,11 @@
   import Input from "$components/Input.svelte"
   import Page from "$components/Page.svelte"
   import { Notify } from "$core/helpers"
+    import { Loading } from "notiflix";
   import { EmpresaParametrosService, postEmpresaParametros } from "./empresas.svelte"
 
   const service = new EmpresaParametrosService()
   
-  let isSaving = $state(false)
-
   async function saveEmpresa() {
     const form = service.empresa
     if((form.RUC||"").length === 0 || (form.Nombre||"").length === 0 || 
@@ -16,14 +15,14 @@
       return
     }
 
-    isSaving = true
+    Loading.standard("Guardando...")
     try {
       await postEmpresaParametros(form)
       Notify.success("Datos guardados correctamente")
     } catch (error) {
       // Error handled by POST
     }
-    isSaving = false
+    Loading.remove()
   }
 </script>
 
@@ -34,9 +33,8 @@
         <button class="bx-blue" onclick={ev => {
           ev.stopPropagation()
           saveEmpresa()
-        }} disabled={isSaving}>
-          <i class="icon-floppy mr-2"></i>
-          {isSaving ? "Guardando..." : "Guardar"}
+        }}>
+          <i class="icon-floppy mr-2"></i>Guardar
         </button>
       </div>
     </div>
