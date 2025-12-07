@@ -195,7 +195,8 @@
       } else if(renderedContent){
         rec.contentAST = renderedContent
       }
-    } else if (column.getValue) {
+    }
+    if (column.getValue) {
       rec.content = column.getValue(record, index) as string
     }
 
@@ -304,12 +305,9 @@
                   if(column.onCellEdit){ ev.stopPropagation() }
                 }}
               >
-                {#if cellData.contentAST}
-                  <Renderer elements={cellData.contentAST}/>
-                {:else if cellData.contentHTML}
-                  {@html cellData.contentHTML}
-                {:else if column.onCellEdit}
-                  <CellEditable 
+                {#if column.onCellEdit}
+                  <CellEditable contentClass={column.css}
+                    inputClass={column.inputCss}
                     getValue={() => cellData.content} 
                     render={
                       (column.render 
@@ -329,6 +327,10 @@
                   />
                 {:else if cellData.useSnippet && cellRenderer}
                   {@render cellRenderer(record, column, cellData.content, row.index)}
+                {:else if cellData.contentAST}
+                  <Renderer elements={cellData.contentAST}/>
+                {:else if cellData.contentHTML}
+                  {@html cellData.contentHTML}
                 {:else}
                   {#if filterText && column.highlight}
                     {#each highlString(cellData.content, filterTextArray) as part }

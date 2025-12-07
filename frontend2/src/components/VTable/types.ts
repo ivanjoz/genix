@@ -12,6 +12,7 @@ export interface ITableColumn<T> {
   headerStyle?: Record<string, string>
   cellStyle?: Record<string, string>
   css?: string
+	inputCss?: string
 	cellCss?: string
   cardCss?: string
   field?: string
