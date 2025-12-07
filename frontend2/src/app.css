@@ -267,10 +267,12 @@ input[type='number'] {
 .c-green { color: rgb(17, 156, 80); }
 .c-yellow { color: #e5a000; }
 .c-steel { color: #475262; }
-
+.c-purple { color: #6840a6; }
+.c-purple4 { color: #6459a4; }
+.c-purple2 { color: #5936c5; }
 
 /* Nuevos botones 1 */
-.bx-blue, .bx-green, .bx-red, .bx-orange, .bx-yellow, .bx-purple, .bnr-graym .bc-blue {
+.bx-blue, .bx-green, .bx-red, .bx-orange, .bx-yellow, .bx-purple, .bnr-graym .bc-blue, .bn-white {
   display: inline-flex;
   align-items: center;
   vertical-align: middle;
@@ -282,6 +284,19 @@ input[type='number'] {
   box-sizing: border-box;
   outline: none;
   flex-shrink: 0;
+}
+
+.bn-white {
+	height: 38px;
+	box-shadow: rgba(0, 0, 0, 0.20) 0px 1px 4px;
+	color: #285bf1;
+	border-radius: 7px;
+  padding: 5px 12px 4px 12px;
+	background-color: white;
+}
+
+.bn-white:hover {
+	outline: 1px solid #686481;
 }
 
 .bx-blue, .bx-green, .bx-red, .bx-orange, .bx-purple, .bx-yellow, .bc-blue {

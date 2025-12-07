@@ -343,14 +343,16 @@
                 {#if column.buttonEditHandler || column.buttonDeleteHandler}
                   <div class="flex gap-4 items-center justify-center">
                     {#if column.buttonEditHandler}
-                      <button class="_11 _e" title="edit" onclick={() => {
+                      <button class="_11 _e" title="edit" onclick={ev => {
+                        ev.stopPropagation()
                         column.buttonEditHandler?.(record)
                       }}>
                         <i class="icon-pencil"></i>
                       </button>
                     {/if}
                     {#if column.buttonDeleteHandler}
-                      <button class="_11 _d" title="delete" onclick={() => {
+                      <button class="_11 _d" title="delete" onclick={ev => {
+                        ev.stopPropagation()
                         column.buttonDeleteHandler?.(record)
                       }}>
                         <i class="icon-trash"></i>
@@ -472,7 +474,7 @@
     z-index: 12;
   }
 
-  .vtable-row > td {
+  .vtable-row > td:not(:last-of-type) {
     display: table-cell;
     text-overflow: ellipsis;
     white-space: nowrap;
