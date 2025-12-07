@@ -157,6 +157,7 @@
       id: "actions",
       buttonEditHandler: (rec) => {
         perfilForm = { ...rec, accesosMap: new Map(rec.accesosMap) }
+        accesoEdit = false
         Core.openModal(2)
       }
     }
@@ -197,6 +198,7 @@
         getFilterContent={e => [e.nombre].filter(x => x).join(" ").toLowerCase()}
         isSelected={(e, id) => e.id === id}
         onRowClick={e => {
+          accesoEdit = false
           if (e.id === perfilForm.id) {
             perfilForm = {} as IPerfil
           } else {
@@ -208,7 +210,7 @@
 
     <!-- Right side: Accesos -->
     <div class="w-full md:w-[66.5%]">
-      <div class="flex justify-between w-full mb-10">
+      <div class="flex justify-between w-full mb-6">
         <div class="ff-bold text-xl">
           <span>Accesos</span>
           {#if accesoEdit}
@@ -239,7 +241,7 @@
             </button>
           {/if}
           {#if !perfilForm.id}
-            <button class="bx-white" onclick={ev => {
+            <button class="bn-white" onclick={ev => {
               ev.stopPropagation()
               accesoEdit = !accesoEdit
             }} aria-label="Editar">
@@ -258,10 +260,10 @@
         </div>
       {/if}
       {#each accesosGrouped as ag}
-        <div class="ff-bold c-purple text-lg mt-16 mb-8">
-          {ag.moduleName.toUpperCase()}{ag.moduleName ? " > " : ""}{ag.groupName.toUpperCase()}
+        <div class="ff-bold h3 mb-6">
+          {ag.moduleName}{ag.moduleName ? " > " : ""}{ag.groupName}
         </div>
-        <div class="flex flex-wrap gap-8">
+        <div class="grid grid-cols-3 gap-x-12 gap-y-8 mb-16">
           {#each ag.accesos as acceso}
             <AccesoCard 
               {acceso} 

@@ -90,7 +90,7 @@
   
   {#if isEdit}
     <div 
-      class="p-abs flex-center i-edit"
+      class="absolute flex items-center justify-center i-edit"
       onclick={ev => {
         ev.stopPropagation()
         onEdit()
@@ -106,7 +106,7 @@
     >
       <i class="icon-pencil"></i>
     </div>
-    <div class="p-abs flex-center a-id c-purple">{acceso.id}</div>
+    <div class="absolute flex items-center justify-center a-id c-purple">{acceso.id}</div>
   {/if}
   
   {#if !isEdit && perfilForm}
@@ -153,16 +153,14 @@
 
 <style>
   .acceso-card {
-    height: 2.3rem;
+    height: 38px;
     position: relative;
-    width: calc((100% / 3) - 16px);
     box-shadow: 0 1px 8px #5a5e6330;
     background-color: white;
     cursor: pointer;
     display: flex;
     padding: 3px 6px 3px 4px;
     align-items: center;
-    margin: 4px 8px;
     line-height: 1.05;
     border-left: 4px solid transparent;
     user-select: none;
