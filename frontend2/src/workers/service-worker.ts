@@ -12,10 +12,10 @@ export type serviceHttpProps = {
   module?: string
   routeParsed?: string
   headers?: { [e: string]: string } | Headers
-  keyID: string | string[]
+  keyID?: string | string[]
+  keysIDs?: { [e: string]: string | string[] }
   fields?: string[]
   keyFilterIfEmpty?: string
-  keysIDs?: { [e: string]: string | string[] }
   keyForUpdated?: string
   cacheMode?: CacheMode
   contentLength?: number
