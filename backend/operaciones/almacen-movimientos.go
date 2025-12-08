@@ -80,18 +80,6 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)
 	}
 
-	err = db.SelectRef(&result.Movimientos, func(q *db.Query[s.AlmacenMovimiento], col s.AlmacenMovimiento) {
-		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-		//TODO: Revisar si esto funciona
-		q.Where(col.AlmacenRefID_().Equals(almacenID))
-		q.Where(col.CreatedBy_().Between(fechaHoraInicio, fechaHoraFin))
-		q.OrderDescending().Limit(1000)
-	})
-
-	if err != nil {
-		return req.MakeErr("Error al obtener los registros del almacén (2):", err)
-	}
-
 	core.Log("movimientos encontrados:", len(result.Movimientos))
 
 	if len(result.Movimientos) == 0 {
