@@ -157,7 +157,7 @@ func GetCajaCuadres(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	response := map[string]any{
-		"usuarios": usuarios, "cuadres": cuadres,
+		"usuarios": usuarios, "cuadres": cuadres.Records,
 	}
 
 	return core.MakeResponse(req, &response)
