@@ -87,8 +87,8 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se envió la Caja-ID")
 	}
 
-	fechaHInicio := req.GetQueryInt64("fecha-hora-inicio")
-	fechaHFin := req.GetQueryInt64("fecha-hora-fin")
+	fechaHoraInicio := core.UnixToSunix(req.GetQueryInt64("fecha-hora-inicio"))
+	fechaHoraFin := core.UnixToSunix(req.GetQueryInt64("fecha-hora-fin"))
 	lastRegistros := req.GetQueryInt("last-registros")
 	lastRegistros = core.If(lastRegistros > 1000, 1000, lastRegistros)
 
@@ -99,8 +99,8 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 				core.SUnixTimeUUIDConcatID(cajaID, 0), core.SUnixTimeUUIDConcatID(cajaID+1, 0)))
 		} else {
 			q.Where(col.ID_().Between(
-				core.SUnixTimeUUIDConcatID(cajaID, fechaHInicio),
-				core.SUnixTimeUUIDConcatID(cajaID, fechaHFin+1)))
+				core.SUnixTimeUUIDConcatID(cajaID, int64(fechaHoraInicio)),
+				core.SUnixTimeUUIDConcatID(cajaID, int64(fechaHoraFin)+1)))
 		}
 		q.OrderDescending()
 	})
