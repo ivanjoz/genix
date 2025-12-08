@@ -104,10 +104,10 @@
 		{#each module.menus as menu}
 			{@const isOpen = menuOpen[0] === menu.id}
 			{@const optionsCount = menu.options?.length || 0}
-			{@const maxHeight = isOpen ? `${optionsCount * 2.8 + 3}rem` : '3rem'}
+			{@const menuHeight = isOpen ? `${optionsCount * 38 + 48}px` : '48px'}
 
 			<div class="overflow-hidden transition-all duration-400 mb-1"
-				style="max-height: {maxHeight}"
+				style="height: {menuHeight}"
 			>
 				<!-- Menu Header -->
 				<button class="w-full h-48 px-12 flex items-center justify-between relative
@@ -215,10 +215,10 @@
 			{#each (module?.menus||[]) as menu}
 				{@const isOpen = menuOpen[0] === menu.id}
 				{@const optionsCount = menu.options?.length || 0}
-				{@const maxHeight = isOpen ? `${optionsCount * 2.8 + 3}rem` : '3rem'}
+				{@const menuHeight = isOpen ? `${optionsCount * 2.8 + 3}rem` : '3rem'}
 
-				<div class="mb-1 overflow-hidden transition-all duration-300"
-					style="max-height: {maxHeight}"
+				<div class="mb-1 overflow-hidden transition-all duration-400"
+					style="height: {menuHeight}"
 				>
 					<button	class="w-full h-48 px-16 flex items-center justify-between
 							text-indigo-300 hover:bg-gray-800/50 transition-colors

@@ -72,7 +72,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
 		q.Where(col.ID_().Between(
 			core.SUnixTimeUUIDConcatID(almacenID, int64(fechaHoraInicio)),
-			core.SUnixTimeUUIDConcatID(almacenID+1, int64(0))))
+			core.SUnixTimeUUIDConcatID(almacenID, int64(fechaHoraFin)+1)))
 		q.OrderDescending().Limit(1000)
 	})
 

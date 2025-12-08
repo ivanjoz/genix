@@ -8,12 +8,10 @@
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte"
   import { ProductosService } from "../productos/productos.svelte"
   import { 
-    queryAlmacenMovimientos, 
-    movimientoTipos,
-    type IAlmacenMovimiento,
-    type IUsuario,
-    type IProducto
+    queryAlmacenMovimientos, movimientoTipos,
+    type IAlmacenMovimiento, type IUsuario, type IProducto
   } from "./almacen-movimientos.svelte"
+    import { untrack } from "svelte";
 
   const almacenes = new AlmacenesService()
   const productos = new ProductosService()
@@ -36,9 +34,11 @@
 
   // Set default almacen when almacenes are loaded
   $effect(() => {
-    const almacenID = (almacenes.Almacenes || [])[0]?.ID
-    if (almacenID && almacenID !== form.almacenID) {
-      form = { ...form, almacenID }
+    if(almacenes?.Almacenes?.length > 0){
+      untrack(() => {
+        const almacenID = (almacenes.Almacenes || [])[0]?.ID
+        form = { ...form, almacenID }
+      })
     }
   })
 
@@ -58,10 +58,10 @@
 
     console.log("registros obtenidos: ", result)
 
-    for (let e of result.Productos) { 
+    for (const e of result.Productos) { 
       productosMap.set(e.ID, e) 
     }
-    for (let e of result.Usuarios) { 
+    for (const e of result.Usuarios) { 
       usuariosMap.set(e.id, e) 
     }
 
