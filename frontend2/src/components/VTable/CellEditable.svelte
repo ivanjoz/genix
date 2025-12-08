@@ -1,6 +1,6 @@
 <script lang="ts" module>
-    import type { ElementAST } from './micro/Renderer.svelte';
-    import Renderer from './micro/Renderer.svelte';
+    import type { ElementAST } from '../micro/Renderer.svelte';
+    import Renderer from '../micro/Renderer.svelte';
 
 
 	export interface ICellEditableProps<T> {

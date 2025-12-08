@@ -3,10 +3,10 @@
   import { createVirtualizer } from './index.svelte';
   import type { ITableColumn, CellRendererSnippet } from "./types";
   import type { VirtualItem } from './index.svelte';
-  import CellEditable from '../CellEditable.svelte';
+  import CellEditable from './CellEditable.svelte';
   import { highlString, include } from '../../core/helpers';
   import Renderer, { type ElementAST } from '$components/micro/Renderer.svelte';
-    import CellSelector from '$components/CellSelector.svelte';
+    import CellSelector from './CellSelector.svelte';
 
   interface ICellContent { 
     content: string; 
