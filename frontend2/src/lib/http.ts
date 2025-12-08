@@ -355,6 +355,8 @@ export class GetHandler {
   route = ""
   routeParsed = ""
   module = "a"
+  keyID: string | string[] = ""
+  keysIDs: { [e: string]: string | string[] } = {}
 
   useCache: { min: number, ver: number  } | undefined = undefined
   headers: { [k: string]: string } | undefined = undefined
@@ -379,6 +381,8 @@ export class GetHandler {
       module: this.module,
       headers: buildHeaders('json'),
       cacheMode,
+      keyID: this.keyID,
+      keysIDs: this.keysIDs,
     } as serviceHttpProps
     return props
   }

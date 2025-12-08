@@ -139,6 +139,7 @@
       });
 
       const updateVirtualItems = () => {
+        if(!virtualizerStore){ return }
         const items = virtualizerStore!.getVirtualItems();
         const size = virtualizerStore!.getTotalSize();
         
