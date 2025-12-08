@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Core, fetchOnCourse } from "../core/store.svelte";
+  import { Core, fetchOnCourse } from "../../core/store.svelte";
+    import ButtonLayer from "../micro/ButtonLayer.svelte";
+    import HeaderConfig from "./HeaderConfig.svelte";
 
 	// Props
 	const {
@@ -33,13 +35,6 @@
 		window.location.reload();
 	}
 
-	function handleLogout() {
-		// Clear session/tokens
-		localStorage.clear();
-		sessionStorage.clear();
-		window.location.href = '/login';
-	}
-
 	// Initialize theme from localStorage
 	$effect(() => {
 		const savedTheme = localStorage.getItem('ui-color') || 'light';
@@ -53,6 +48,7 @@
 <header	class="_1 fixed top-0 left-0 right-0 bg-gradient-to-r from-indigo-600 to-indigo-700 
 	shadow-md z-150 flex items-center px-16"
 >
+
 	<!-- Logo Section (Desktop) -->
 	<div class="hidden md:flex items-center justify-center h-full w-56 mr-12">
 		<div class="h-40 w-40 bg-black/20 rounded-lg flex items-center justify-center">
@@ -95,59 +91,15 @@
 
 		<!-- Settings Dropdown -->
 		<div class="relative">
-			<button
-				class="w-40 h-40 rounded-full bg-white/10 hover:bg-white/20 
+			<ButtonLayer layerClass="w-640 h-460 px-8 py-6"
+				buttonClass="w-40 h-40 rounded-full bg-white/10 hover:bg-white/20 
 					flex items-center justify-center transition-colors shadow-sm"
-				onclick={toggleSettings}
-				aria-label="Settings"
-				aria-expanded={showSettings}
 			>
-				<span class="text-white text-lg">⚙️</span>
-			</button>
-
-			{#if showSettings}
-				<!-- Settings Dropdown Panel -->
-				<div
-					class="absolute right-0 top-48 mt-4 w-192 bg-white dark:bg-gray-800 
-						rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 
-						py-8 z-50"
-				>
-					<!-- Theme Section -->
-					<div class="px-12 py-8 border-b border-gray-200 dark:border-gray-700">
-						<p class="text-xs text-gray-500 dark:text-gray-400 mb-8">Tema</p>
-						<div class="flex gap-8">
-							<button
-								class="flex-1 px-12 py-6 rounded-md text-sm transition-colors
-									{uiTheme === 'light'
-										? 'bg-indigo-600 text-white'
-										: 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'}"
-								onclick={() => toggleTheme('light')}
-							>
-								Claro
-							</button>
-							<button
-								class="flex-1 px-12 py-6 rounded-md text-sm transition-colors
-									{uiTheme === 'dark'
-										? 'bg-indigo-600 text-white'
-										: 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'}"
-								onclick={() => toggleTheme('dark')}
-							>
-								Oscuro
-							</button>
-						</div>
-					</div>
-
-					<!-- Actions -->
-					<button
-						class="w-full px-12 py-8 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 
-							flex items-center gap-8 text-gray-700 dark:text-gray-200"
-						onclick={handleLogout}
-					>
-						<span>🚪</span>
-						<span>Salir</span>
-					</button>
-				</div>
-			{/if}
+				{#snippet button()}
+					<span class="text-white text-lg">⚙️</span>
+				{/snippet}
+				<HeaderConfig />
+			</ButtonLayer>
 		</div>
 
 		<!-- Reload Button -->
@@ -248,3 +200,4 @@
 		}
 	}
 </style>
+

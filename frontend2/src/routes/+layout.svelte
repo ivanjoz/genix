@@ -7,11 +7,11 @@
 	import { doInitServiceWorker } from '$lib/sw-cache';
 	import { onMount } from 'svelte';
 	import '../app.css';
-	import Header from '../components/Header.svelte';
-	import Page from '../components/Page.svelte';
-	import SideMenu from '../components/SideMenu.svelte';
+	import Header from '$components/layout/Header.svelte';
+	import Page from '$components/Page.svelte';
+	import SideMenu from '$components/layout/SideMenu.svelte';
 	import Modules from '../core/modules';
-	import { Core, getDeviceType } from '../core/store.svelte';
+	import { Core, getDeviceType } from '$core/store.svelte';
 
 	let { children } = $props();
 

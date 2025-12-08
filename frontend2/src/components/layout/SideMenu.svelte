@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { Core } from '../core/store.svelte';
-	import type { IMenuRecord, IModule } from '../types/menu';
+	import { Core } from '$core/store.svelte';
+	import type { IMenuRecord, IModule } from '../../types/menu';
 
 	// State
 	const module = $derived(Core.module);

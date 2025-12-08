@@ -1,5 +1,5 @@
 <script lang="ts">
-	import CellSelector from '../../../components/CellSelector.svelte';
+	import CellSelector from '../../../components/VTable/CellSelector.svelte';
 	import { VTable, type ITableColumn } from '../../../components/VTable';
 	import Page from "../../../components/Page.svelte";
 
