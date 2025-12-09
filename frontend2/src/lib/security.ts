@@ -1,7 +1,13 @@
 import { decrypt } from "../shared/main"
-import type { ILoginResult } from "../services/admin/login"
+import { reloadLogin, type ILoginResult } from "../services/admin/login"
 import { Env, IsClient, LocalStorage } from "../shared/env"
 import { Notify, throttle } from "../core/helpers"
+
+// Token refresh constants (all in seconds)
+const TOKEN_REFRESH_THRESHOLD = 40 * 60 // 40 minutes in seconds
+const TOKEN_CHECK_INTERVAL = 4 * 60 // 4 minutes in seconds
+const REFRESH_LOCK_DURATION = 30 // 30 seconds lock duration
+const REFRESH_LOCK_KEY = Env.appId + "TokenRefreshLock"
 
 interface UserInfo {
   d: number // userID
@@ -67,13 +73,108 @@ export const getShowStore = (pathname?: string): number => {
   return 0
 }
 
+// TOKEN REFRESH MANAGEMENT
+const acquireRefreshLock = (): boolean => {
+  if (!IsClient()) return false
+  
+  const lockTime = parseInt(LocalStorage.getItem(REFRESH_LOCK_KEY)||"0")
+  const nowUnix = Math.floor(Date.now() / 1000)
+  // Check if lock has expired
+  if (lockTime && (nowUnix - lockTime < REFRESH_LOCK_DURATION)) {
+    console.log('Token refresh already in progress in another tab')
+    return false
+  }
+  
+  // Acquire lock
+  LocalStorage.setItem(REFRESH_LOCK_KEY, String(nowUnix))
+  return true
+}
+
+// Check if token needs refresh
+const shouldRefreshToken = (): boolean => {  
+  const tokenCreated = parseInt(LocalStorage.getItem(Env.appId + "TokenCreated") || '0')
+  const tokenAge =  Math.floor(Date.now() / 1000) - tokenCreated
+  
+  return tokenCreated > 0 && tokenAge >= TOKEN_REFRESH_THRESHOLD
+}
+
+// Token refresh checker - will be called every 4 minutes
+let tokenRefreshInterval: number | null = null
+
+const checkAndRefreshToken = async () => {
+  if (!IsClient()) return
+  
+  // Check if user is still logged in
+  if (!getToken(true)) {
+    stopTokenRefreshCheck()
+    return
+  }
+  
+  // Check if token needs refresh and Try to acquire lock to prevent parallel execution
+  if (!shouldRefreshToken() || !acquireRefreshLock()) { return }
+  console.log('Token refresh initiated - token is older than 40 minutes')
+  
+  try {
+    await reloadLogin()
+    console.log('Token refreshed successfully')
+  } catch (error) {
+    console.error('Error refreshing token:', error)
+  } finally {
+    LocalStorage.removeItem(REFRESH_LOCK_KEY) // Release the lock
+  }
+}
+
+// Start the token refresh check interval
+export const startTokenRefreshCheck = () => {
+  if (!IsClient()) return
+  
+  // Clear any existing interval
+  if (tokenRefreshInterval !== null) { clearInterval(tokenRefreshInterval) }
+  
+  // Start new interval (convert seconds to milliseconds for setInterval)
+  tokenRefreshInterval = window.setInterval(checkAndRefreshToken, TOKEN_CHECK_INTERVAL * 1000)
+  console.log('Token refresh check started - will check every 4 minutes')
+}
+
+// Stop the token refresh check interval
+export const stopTokenRefreshCheck = () => {
+  if (tokenRefreshInterval !== null) {
+    clearInterval(tokenRefreshInterval)
+    tokenRefreshInterval = null
+    console.log('Token refresh check stopped')
+  }
+}
+
+// Clear accesos and logout
 Env.clearAccesos = () => {
   if(!IsClient){ return }
+  stopTokenRefreshCheck()
   LocalStorage.removeItem(Env.appId+ "Accesos")
   LocalStorage.removeItem(Env.appId+ "UserInfo")
   LocalStorage.removeItem(Env.appId+ "UserToken")
   LocalStorage.removeItem(Env.appId+ "TokenExpTime")
+  LocalStorage.removeItem(Env.appId+ "TokenCreated")
+  LocalStorage.removeItem(REFRESH_LOCK_KEY)
   Env.navigate("/login")
+}
+
+// Initialize token refresh check on page load if user is logged in
+export const initTokenRefreshCheck = () => {
+  if (!IsClient()) return
+  
+  // Check if user is logged in
+  const hasToken = getToken(true)
+  const tokenCreated = LocalStorage.getItem(Env.appId + "TokenCreated")
+  
+  if (hasToken && tokenCreated) {
+    startTokenRefreshCheck()
+  }
+}
+
+// Auto-initialize on client side
+if (IsClient()) {
+  // Wait a bit for the app to initialize (1 second)
+  setTimeout(initTokenRefreshCheck, 1 * 1000)
 }
 
 export class AccessHelper {
@@ -110,8 +211,11 @@ export class AccessHelper {
       id: userInfo.d, user: userInfo.u, email: login.UserEmail, names: login.UserNames
     }
     
+    const UnixTime = Math.floor(Date.now()/1000)
+    LocalStorage.setItem(Env.appId + "TokenCreated", String(UnixTime))
     LocalStorage.setItem(Env.appId + "UserInfo", JSON.stringify(userInfoParsed))
     LocalStorage.setItem(Env.appId + "UserToken", login.UserToken)
+    // unix time un seconds expiration
     LocalStorage.setItem(Env.appId + "TokenExpTime", String(login.TokenExpTime))
     LocalStorage.setItem(Env.appId + "EmpresaID", String(login.EmpresaID))
     this.#setUserInfo()
@@ -128,6 +232,9 @@ export class AccessHelper {
     const hash = checksum(parsedAccesos)
     const hashParsed = `${hash.substring(0, 2)}${parsedAccesos}${hash.substring(2, 4)}`
     LocalStorage.setItem(Env.appId+ "Accesos", hashParsed)
+    
+    // Start token refresh check after successful login
+    startTokenRefreshCheck()
   }
 
   checkAcceso(accesoID: number, nivel?: number) {
