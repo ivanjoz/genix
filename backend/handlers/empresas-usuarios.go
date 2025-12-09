@@ -200,10 +200,17 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	if body.ID != 1 && len(body.PerfilesIDs) == 0 {
+	isUsuarioPropio := req.Route == "/usuario-propio"
+	core.Log("route::", req.Route)
+
+	if isUsuarioPropio {
+		body.ID = req.Usuario.ID
+	}
+
+	if body.ID != 1 && len(body.PerfilesIDs) == 0 && !isUsuarioPropio {
 		return req.MakeErr("El usuario debe tener al menos 1 permiso")
 	}
-	if len(body.Usuario) < 5 || len(body.Nombres) < 5 {
+	if (len(body.Usuario) < 5 && !isUsuarioPropio) || len(body.Nombres) < 5 {
 		return req.MakeErr("El usuario nombre debe tener al menos 5 caracteres")
 	}
 	if body.ID == 0 {
@@ -233,6 +240,11 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.PasswordHash = usuario.PasswordHash
 		body.Created = usuario.Created
 		body.CreatedBy = usuario.CreatedBy
+		if isUsuarioPropio {
+			body.PerfilesIDs = usuario.PerfilesIDs
+			body.RolesIDs = usuario.RolesIDs
+			body.Usuario = usuario.Usuario
+		}
 	}
 
 	if len(body.Password) >= 6 {
@@ -243,6 +255,7 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	body.Password = ""
 	body.Updated = time.Now().Unix()
 	body.UpdatedBy = req.Usuario.ID
+	core.Print(body)
 
 	err = dynamoTable.PutItem(&body, 1)
 	if err != nil {

@@ -2,6 +2,7 @@ import { decrypt } from "../shared/main"
 import { reloadLogin, type ILoginResult } from "../services/admin/login"
 import { Env, IsClient, LocalStorage } from "../shared/env"
 import { Notify, throttle } from "../core/helpers"
+import type { IUsuario } from "../routes/admin/usuarios/usuarios.svelte"
 
 // Token refresh constants (all in seconds)
 const TOKEN_REFRESH_THRESHOLD = 40 * 60 // 40 minutes in seconds
@@ -17,7 +18,7 @@ interface UserInfo {
   a: number[] // accesos ids
 }
 
-interface UserInfoParsed {
+export interface UserInfoParsed {
   id: number
   user: string
   email: string
@@ -177,6 +178,8 @@ if (IsClient()) {
   setTimeout(initTokenRefreshCheck, 1 * 1000)
 }
 
+
+
 export class AccessHelper {
   constructor() {
     const b32l = []
@@ -191,7 +194,7 @@ export class AccessHelper {
   #avoidCheckSum = false
   #accesos = ''
   #cachedResults: Map<string,boolean> = new Map()
-  #userInfo: UserInfoParsed | null = null
+  #userInfo: IUsuario = null as unknown as IUsuario
   
   #setUserInfo(){
     const userInfoJson = LocalStorage?.getItem(Env.appId+ "UserInfo")
@@ -200,20 +203,22 @@ export class AccessHelper {
   }
   clearAccesos = Env.clearAccesos
   getUserInfo(){ return this.#userInfo }
+  setUserInfo(userInfo: IUsuario){ 
+    this.#userInfo = userInfo
+    LocalStorage.setItem(Env.appId + "UserInfo", JSON.stringify(userInfo))
+  }
   
   async parseAccesos(login: ILoginResult, cipherKey?: string) {
+    debugger
     const userInfoStr = await decrypt(login.UserInfo, cipherKey as string)
-    const userInfo: UserInfo = JSON.parse(userInfoStr)
-    let accesosIDs = [...(userInfo.a||[])]
-    accesosIDs = accesosIDs.concat((userInfo.r||[]).map(x => x * 10 + 8))
+    const userInfo = JSON.parse(userInfoStr) as IUsuario
+ 
+    const rolesIDsParsed = (userInfo.rolesIDs||[]).map(x => x * 10 + 8)
+    const accesosIDs = (userInfo.accesosIDs||[]).concat(rolesIDsParsed)
 
-    const userInfoParsed: UserInfoParsed = { 
-      id: userInfo.d, user: userInfo.u, email: login.UserEmail, names: login.UserNames
-    }
-    
     const UnixTime = Math.floor(Date.now()/1000)
     LocalStorage.setItem(Env.appId + "TokenCreated", String(UnixTime))
-    LocalStorage.setItem(Env.appId + "UserInfo", JSON.stringify(userInfoParsed))
+    LocalStorage.setItem(Env.appId + "UserInfo", JSON.stringify(userInfo))
     LocalStorage.setItem(Env.appId + "UserToken", login.UserToken)
     // unix time un seconds expiration
     LocalStorage.setItem(Env.appId + "TokenExpTime", String(login.TokenExpTime))
@@ -232,7 +237,7 @@ export class AccessHelper {
     const hash = checksum(parsedAccesos)
     const hashParsed = `${hash.substring(0, 2)}${parsedAccesos}${hash.substring(2, 4)}`
     LocalStorage.setItem(Env.appId+ "Accesos", hashParsed)
-    
+    debugger
     // Start token refresh check after successful login
     startTokenRefreshCheck()
   }

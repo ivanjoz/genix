@@ -1,6 +1,7 @@
 import { GET, POST } from "../../lib/http"
 import { makeRamdomString } from "../../shared/main"
 import { accessHelper, checkIsLogin, Env } from "../../lib/security"
+import type { IUsuario } from "../../routes/admin/usuarios/usuarios.svelte"
 
 export interface ILogin {
   EmpresaID: number

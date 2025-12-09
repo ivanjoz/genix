@@ -105,30 +105,43 @@ func MakeUsuarioResponse(usuario types.Usuario, cipherKey string) (map[string]an
 		usuarioToken.AccesosIDs = core.MakeUnique(usuarioToken.AccesosIDs)
 	}
 
-	usuarioInfoJsonBytes, _ := json.Marshal(usuarioToken)
-	usuarioInfoString := string(usuarioInfoJsonBytes)
-	core.Log("usuarioInfoString", usuarioInfoString)
+	usuarioTokenJson := core.ToJsonNoErr(usuarioToken)
+	core.Log("usuarioInfoString", usuarioTokenJson)
 
 	// Crea el Token del usuario encriptado
-	usuarioTokenCompressed := core.CompressZstd(&usuarioInfoString)
+	usuarioTokenCompressed := core.CompressZstd(&usuarioTokenJson)
 	usuarioTokenEncrypted, err := core.Encrypt(usuarioTokenCompressed)
 
-	core.Log("Accesos Len:", len(usuarioInfoString), "|", len(usuarioTokenCompressed), "|", len(usuarioTokenEncrypted))
+	core.Log("Accesos Len:", len(usuarioTokenJson), "|", len(usuarioTokenCompressed), "|", len(usuarioTokenEncrypted))
 
 	if err != nil {
 		return nil, core.Err("Error al generar el Token de usuario.", err)
 	}
 
 	// Crea la informacion del usuario encriptada
-	usuarioInfoEncrypted, _ := core.Encrypt([]byte(usuarioInfoString), cipherKey)
+	userInfo := map[string]any{
+		"usuario":      usuario.Usuario,
+		"accesosIDs":   usuarioToken.AccesosIDs,
+		"rolesIDs":     usuarioToken.RolesIDs,
+		"nombres":      usuario.Nombres,
+		"apellidos":    usuario.Apellidos,
+		"email":        usuario.Email,
+		"documentoNro": usuario.DocumentoNro,
+		"cargo":        usuario.Cargo,
+	}
+
+	userInfoJson := core.ToJsonNoErr(userInfo)
+	userInfoJsonEncrypted, err := core.Encrypt([]byte(userInfoJson), cipherKey)
+
+	if err != nil {
+		return nil, core.Err("Error al encriptar la información del usuario.", err)
+	}
 
 	response := map[string]any{
 		"UserID":       usuario.ID,
-		"UserNames":    usuario.Nombres + "|" + usuario.Apellidos,
-		"UserEmail":    usuario.Email,
 		"UserToken":    core.BytesToBase64(usuarioTokenEncrypted, true),
 		"TokenExpTime": usuarioToken.Expired,
-		"UserInfo":     core.BytesToBase64(usuarioInfoEncrypted),
+		"UserInfo":     core.BytesToBase64(userInfoJsonEncrypted),
 		"EmpresaID":    usuario.EmpresaID,
 	}
 
