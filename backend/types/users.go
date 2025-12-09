@@ -60,6 +60,8 @@ type Usuario struct { // DynamoDB + ScyllaDB
 	PerfilesIDs  []int32 `json:"perfilesIDs,omitempty" db:"perfiles_ids"`
 	RolesIDs     []int32 `json:"rolesIDs,omitempty" db:"roles_ids"`
 	Email        string  `json:"email,omitempty" db:"email"`
+	Cargo        string  `json:"cargo,omitempty" db:"cargo"`
+	DocumentoNro string  `json:"documentoNro,omitempty" db:"documento_nro"`
 	PasswordHash string  `json:"passwordHash,omitempty"`
 	Password     string  `json:"password1,omitempty"`
 	Created      int64   `json:"created,omitempty" db:"created"`
@@ -69,19 +71,21 @@ type Usuario struct { // DynamoDB + ScyllaDB
 	Status       int8    `json:"ss,omitempty" db:"status"`
 }
 
-func (e Usuario) ID_() db.CoI32          { return db.CoI32{"id"} }
-func (e Usuario) EmpresaID_() db.CoI32   { return db.CoI32{"empresa_id"} }
-func (e Usuario) Usuario_() db.CoStr     { return db.CoStr{"usuario"} }
-func (e Usuario) Apellidos_() db.CoStr   { return db.CoStr{"apellidos"} }
-func (e Usuario) Nombres_() db.CoStr     { return db.CoStr{"nombres"} }
-func (e Usuario) PerfilesIDs_() db.CsI32 { return db.CsI32{"perfiles_ids"} }
-func (e Usuario) RolesIDs_() db.CsI32    { return db.CsI32{"roles_ids"} }
-func (e Usuario) Email_() db.CoStr       { return db.CoStr{"email"} }
-func (e Usuario) Status_() db.CoI8       { return db.CoI8{"status"} }
-func (e Usuario) Updated_() db.CoI64     { return db.CoI64{"updated"} }
-func (e Usuario) UpdatedBy_() db.CoI32   { return db.CoI32{"updated_by"} }
-func (e Usuario) Created_() db.CoI64     { return db.CoI64{"created"} }
-func (e Usuario) CreatedBy_() db.CoI32   { return db.CoI32{"created_by"} }
+func (e Usuario) ID_() db.CoI32           { return db.CoI32{"id"} }
+func (e Usuario) EmpresaID_() db.CoI32    { return db.CoI32{"empresa_id"} }
+func (e Usuario) Usuario_() db.CoStr      { return db.CoStr{"usuario"} }
+func (e Usuario) Apellidos_() db.CoStr    { return db.CoStr{"apellidos"} }
+func (e Usuario) DocumentoNro_() db.CoStr { return db.CoStr{"documento_nro"} }
+func (e Usuario) Cargo_() db.CoStr        { return db.CoStr{"cargo"} }
+func (e Usuario) Nombres_() db.CoStr      { return db.CoStr{"nombres"} }
+func (e Usuario) PerfilesIDs_() db.CsI32  { return db.CsI32{"perfiles_ids"} }
+func (e Usuario) RolesIDs_() db.CsI32     { return db.CsI32{"roles_ids"} }
+func (e Usuario) Email_() db.CoStr        { return db.CoStr{"email"} }
+func (e Usuario) Status_() db.CoI8        { return db.CoI8{"status"} }
+func (e Usuario) Updated_() db.CoI64      { return db.CoI64{"updated"} }
+func (e Usuario) UpdatedBy_() db.CoI32    { return db.CoI32{"updated_by"} }
+func (e Usuario) Created_() db.CoI64      { return db.CoI64{"created"} }
+func (e Usuario) CreatedBy_() db.CoI32    { return db.CoI32{"created_by"} }
 
 func (e Usuario) GetSchema() db.TableSchema {
 	return db.TableSchema{

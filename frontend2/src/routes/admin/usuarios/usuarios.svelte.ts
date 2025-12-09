@@ -16,6 +16,8 @@ export interface IUsuario {
   created: number
   password1: string
   password2: string
+  //Extra
+  accesosIDs: number[]
 }
 
 export interface IPerfil {
@@ -98,4 +100,14 @@ export const postUsuario = (data: IUsuario) => {
     refreshRoutes: ["usuarios"]
   })
 }
+
+export const postUsuarioPropio = (data: IUsuario) => {
+  return POST({
+    data,
+    route: "usuario-propio",
+    refreshRoutes: ["usuarios"]
+  })
+}
+
+
 

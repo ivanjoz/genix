@@ -12,6 +12,7 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.empresa":                  PostEmpresa,
 	"GET.usuarios":                  GetUsuarios,
 	"POST.usuarios":                 PostUsuarios,
+	"POST.usuario-propio":           PostUsuarios,
 	"POST.seguridad-accesos":        PostAcceso,
 	"GET.seguridad-accesos":         GetAccesos,
 	"POST.perfiles":                 PostPerfiles,
