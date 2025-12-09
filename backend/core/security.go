@@ -154,14 +154,14 @@ type IUsuario struct {
 	ModulesIDs   []int32 `json:"m"`
 	BaseModuleID int32   `json:"b"`
 	RolesIDs     []int32 `json:"r"`
-	Device       string  `json:"v"`
-	IP           string  `json:"i"`
-	Usuario      string  `json:"u"`
+	Device       string  `json:"v,omitempty"`
+	IP           string  `json:"i,omitempty"`
+	Usuario      string  `json:"u,omitempty"`
 	AccesosIDs   []int32 `json:"a"`
-	Created      int64   `json:"e"`
+	Expired      int64   `json:"e"`
 	ZonaHoraria  int16   `json:"h,omitempty"`
 	DeviceID     int     `json:"q,omitempty"`
-	Error        string
+	Error        string  `json:"-"`
 }
 
 var Usuario IUsuario

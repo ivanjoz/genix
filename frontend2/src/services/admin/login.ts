@@ -1,4 +1,4 @@
-import { POST } from "../../lib/http"
+import { GET, POST } from "../../lib/http"
 import { makeRamdomString } from "../../shared/main"
 import { accessHelper, checkIsLogin, Env } from "../../lib/security"
 
@@ -19,12 +19,12 @@ export interface ILoginResult {
   EmpresaID: number
 }
 
-export async function sendUserLogin(data: ILogin): Promise<any> {
-  let result: ILoginResult
+export const sendUserLogin = async (data: ILogin): Promise<any> => {
+  let loginInfo: ILoginResult
   data.CipherKey = makeRamdomString(32)
 
   try {
-    result = await POST({
+    loginInfo = await POST({
       data, 
       route: `p-user-login`, 
       apiName: 'MAIN',
@@ -37,7 +37,7 @@ export async function sendUserLogin(data: ILogin): Promise<any> {
 
   let userInfo = ""
   try {
-    await accessHelper.parseAccesos(result, data.CipherKey)
+    await accessHelper.parseAccesos(loginInfo, data.CipherKey)
     if(!accessHelper.checkAcceso(1)){
       Env.clearAccesos?.()
     } else {
@@ -50,7 +50,36 @@ export async function sendUserLogin(data: ILogin): Promise<any> {
   
   console.log(userInfo)
 
-  return { result }
+  return { result: loginInfo }
+}
+
+export const reloadLogin = async (): Promise<any> => {
+  let loginInfo: ILoginResult
+  const CipherKey = makeRamdomString(32)
+
+  try {
+    loginInfo = await GET({
+      route: `reload-login?cipher-key=${CipherKey}`, 
+      headers: { "Content-Type": "application/json" }
+    })
+  } catch (error) {
+    console.log(error)
+    return { error }
+  }
+
+  let userInfo = ""
+  try {
+    await accessHelper.parseAccesos(loginInfo, CipherKey)
+    if(!accessHelper.checkAcceso(1)){
+      Env.clearAccesos?.()
+    }
+  } catch (error) {
+    console.log("error encriptando::")
+    console.log(error)
+  }
+  
+  console.log(userInfo)
+  return { result: loginInfo }
 }
 
 export const handleLogin = (login: ILoginResult) => {

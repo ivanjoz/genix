@@ -5,6 +5,7 @@ import "app/core"
 var ModuleHandlers = core.AppRouterType{
 	"GET.p-hello":                   HelloWorld,
 	"POST.p-user-login":             PostLogin,
+	"GET.reload-login":              ReloadLogin,
 	"GET.empresas":                  GetEmpresas,
 	"GET.empresa-parametros":        GetEmpresaParametros,
 	"POST.empresa-parametros":       PostEmpresaParametros,
