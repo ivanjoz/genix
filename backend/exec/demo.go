@@ -714,3 +714,106 @@ func Test33(args *core.ExecArgs) core.FuncResponse {
 
 	return core.FuncResponse{}
 }
+
+type DemoTable4[T any] struct {
+	Table  T
+	Nombre db.Col[string]
+	Hola1  int
+}
+
+func (e DemoTable4[T]) Hello() {
+
+}
+
+type HelloInterface interface {
+	Hello()
+}
+
+func Demo1(e HelloInterface) {
+	core.Log(e)
+}
+
+type DemoTable5 struct {
+	DemoTable4[DemoStruct]
+	Nombre     db.Colx[DemoTable5, string]
+	Edad       db.Colx[DemoTable5, int32]
+	Cualquiera db.Colx[DemoTable5, int32]
+}
+
+func (e DemoTable5) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "caja_movimientos",
+		Partition: e.Nombre,
+		/*
+			Keys:      []db.Coln{e.ID_()},
+			Views: []db.View{
+				{Cols: []db.Coln{e.VentaID_()}, KeepPart: true},
+				{Cols: []db.Coln{e.CreatedBy_()}, KeepPart: true},
+			},
+		*/
+	}
+}
+
+func (e DemoTable5) MakeTable() *DemoTable5 {
+	return &DemoTable5{}
+}
+
+func (e *DemoTable4[T]) Query(statements ...db.ColumnStatement) []T {
+
+	return []T{}
+}
+
+var Table11 = DemoTable4[int32]{}
+
+type TableHelper[T any] struct {
+	Table T
+	Hola  db.CoI16
+	Hola1 int
+}
+
+func (e TableHelper[T]) Query2() []int32 {
+
+	records := DemoTable5{}.MakeTable().
+		Nombre.Equals("").
+		Edad.Equals(1).Query()
+
+	core.Log(records)
+
+	db.RecalcVirtualColumns[s.ListaCompartidaRegistro]()
+
+	return []int32{}
+}
+
+type Hello1[T any] interface {
+	Query() []T
+}
+
+type Hello2[T any] interface {
+	Query2() []T
+}
+
+var Table1 = TableHelper[DemoStruct1]{}
+
+func Query[T any](e Hello1[T]) []T {
+	Table1.Hola.Equals(1)
+	Demo1(DemoTable5{})
+	return []T{}
+}
+
+var DemoTableHelper = TableHelper[DemoStruct1]{}
+
+func Test34(args *core.ExecArgs) core.FuncResponse {
+
+	id := int32(1)
+
+	uuid := core.SUnixTimeUUIDConcatID(id)
+
+	core.Log(uuid)
+
+	return core.FuncResponse{}
+}
+
+func Test35(args *core.ExecArgs) core.FuncResponse {
+
+	return core.FuncResponse{}
+}
