@@ -64,6 +64,16 @@ type CajaMovimiento struct {
 	CreatedBy  int32 `json:",omitempty" db:"created_by,view"`
 }
 
+type CajaMovimientoTable struct {
+	db.GetSchemaTest1[CajaMovimiento]
+	EmpresaID db.Col[int32]
+	CajaID    db.Colx[CajaMovimientoTable, int32]
+}
+
+func (e CajaMovimientoTable) MakeTable() *CajaMovimientoTable {
+	return &CajaMovimientoTable{}
+}
+
 type cjm = CajaMovimiento
 
 func (e cjm) EmpresaID_() db.CoI32  { return db.CoI32{"empresa_id"} }

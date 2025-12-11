@@ -112,6 +112,32 @@ type Col[T any] struct {
 	C string
 }
 
+type Table1[T any] interface {
+	MakeTable() *T
+	GetSchema() TableSchema
+}
+
+type Colx[T Table1[T], E any] struct {
+	Table *T
+	C     string
+}
+
+func (e *Colx[T, E]) Equals(v E) *T {
+	return e.Table
+}
+
+func (q *Colx[T, E]) SetName(name string) {
+	q.C = name
+}
+
+func (q Colx[T, E]) GetInfo() columnInfo {
+	return columnInfo{}
+}
+
+func (q Colx[T, E]) GetName() string {
+	return ""
+}
+
 func (q *Col[T]) SetName(name string) {
 	q.C = name
 }
@@ -206,6 +232,14 @@ type statementGroup struct {
 
 type TableSchemaInterface interface {
 	GetSchema() TableSchema
+}
+
+type GetSchemaTest1[T TableSchemaInterface] struct {
+}
+
+func (e GetSchemaTest1[T]) GetSchema() TableSchema {
+	h := any(new(T)).(TableSchemaInterface)
+	return h.GetSchema()
 }
 
 type Query[T any] struct {
