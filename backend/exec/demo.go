@@ -5,6 +5,7 @@ import (
 	"app/core"
 	"app/db"
 	"app/facturacion"
+	"app/types"
 	s "app/types"
 	"bufio"
 	"bytes"
@@ -735,9 +736,11 @@ func Demo1(e HelloInterface) {
 
 type DemoTable5 struct {
 	DemoTable4[DemoStruct]
-	Nombre     db.Colx[DemoTable5, string]
-	Edad       db.Colx[DemoTable5, int32]
-	Cualquiera db.Colx[DemoTable5, int32]
+	/*
+		Nombre     db.Colx[DemoTable5, string]
+		Edad       db.Colx[DemoTable5, int32]
+		Cualquiera db.Colx[DemoTable5, int32]
+	*/
 }
 
 func (e DemoTable5) GetSchema() db.TableSchema {
@@ -772,13 +775,13 @@ type TableHelper[T any] struct {
 }
 
 func (e TableHelper[T]) Query2() []int32 {
+	/*
+		records := DemoTable5{}.MakeTable().
+			Nombre.Equals("").
+			Edad.Equals(1).Query()
 
-	records := DemoTable5{}.MakeTable().
-		Nombre.Equals("").
-		Edad.Equals(1).Query()
-
-	core.Log(records)
-
+		core.Log(records)
+	*/
 	db.RecalcVirtualColumns[s.ListaCompartidaRegistro]()
 
 	return []int32{}
@@ -814,6 +817,15 @@ func Test34(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test35(args *core.ExecArgs) core.FuncResponse {
+
+	return core.FuncResponse{}
+}
+
+func Test36(args *core.ExecArgs) core.FuncResponse {
+	q1 := types.AlmacenTable{}.Init()
+	q1.Query(q1.Nombre, q1.EmpresaID, q1.SedeID).
+		EmpresaID.Equals(1).
+		Nombre.Equals("Hola").Exec()
 
 	return core.FuncResponse{}
 }
