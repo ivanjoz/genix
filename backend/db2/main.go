@@ -1,12 +1,14 @@
-package db
+package db2
 
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/gocql/gocql"
+	"github.com/kr/pretty"
 )
 
 type scyllaTable[T any] struct {
@@ -87,8 +89,10 @@ type Coln interface {
 	GetName() string
 }
 
-type ColumnSetName interface {
+type ColumnSetInfo interface {
 	SetName(string)
+	SetTableInfo(*TableInfo)
+	SetSchemaStruct(any)
 }
 
 type View struct {
@@ -108,15 +112,158 @@ type Index struct {
 	HashAll bool
 }
 
-type Col[T any] struct {
-	C string
+type TableInfo struct {
+	statements       []ColumnStatement
+	allowFilter      bool
+	columnsToInclude []string
+	isExcluding      bool
+	columnsToExclude []string
 }
 
-func (q *Col[T]) SetName(name string) {
-	q.C = name
+type TableStructInterface[T any] interface {
+	//Query(columns ...Coln) *T
+	// AddStatement(statement ColumnStatement)
+	Init() *T
+	// GetRefSchema() T
+	//GetTable() *TableInfo
+	//	Exclude() *T
 }
-func (q Col[T]) GetInfo() columnInfo {
-	col := columnInfo{Name: q.C}
+
+type TableStruct[T TableStructInterface[T], E any] struct {
+	Ref          *TableStruct[T, E]
+	schemaStruct *T
+	tableInfo    *TableInfo
+}
+
+func (e *TableStruct[T, E]) SetName(t string) {}
+func (e *TableStruct[T, E]) SetTableInfo(t *TableInfo) {
+	e.tableInfo = t
+}
+func (e *TableStruct[T, E]) GetTableInfo() *TableInfo {
+	return e.tableInfo
+}
+func (e *TableStruct[T, E]) SetSchemaStruct(schemaStruct any) {
+	if schema, ok := schemaStruct.(*T); ok {
+		e.schemaStruct = schema
+	}
+}
+
+var (
+	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
+)
+
+func toSnakeCase(str string) string {
+	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+	return strings.ToLower(snake)
+}
+
+func InitTable[T any](schemaStruct *T) *T {
+
+	structValue := reflect.ValueOf(schemaStruct).Elem()
+	structType := structValue.Type()
+	refTableInfo := &TableInfo{}
+
+	for i := 0; i < structValue.NumField(); i++ {
+		field := structValue.Field(i)
+		fieldType := structType.Field(i)
+
+		// Check if field can be addressed and if it implements ColumnSetName interface
+		if !field.CanAddr() || !field.Addr().CanInterface() {
+			continue
+		}
+
+		fieldAddr := field.Addr()
+		// Try to get the interface and check if it implements ColumnSetName
+		colSetter, ok := fieldAddr.Interface().(ColumnSetInfo)
+		if !ok {
+			fmt.Println("El field", fieldType.Name, "no implementa ColumnSetInfo")
+			continue
+		} else {
+			fmt.Println("Field seteado!", fieldType.Name, "|", fieldType.Type)
+		}
+
+		// Extract column name from db tag or convert field name to snake_case
+		columnName := toSnakeCase(fieldType.Name)
+		if tag := fieldType.Tag.Get("db"); tag != "" {
+			columnName = tag
+		}
+
+		// Set the column name using the interface method
+		colSetter.SetName(columnName)
+		colSetter.SetTableInfo(refTableInfo)
+		colSetter.SetSchemaStruct(schemaStruct)
+	}
+	fmt.Println("schemaStruct (1)", schemaStruct)
+	return schemaStruct
+}
+
+func (e *TableStruct[T, E]) Query(columns ...Coln) *T {
+	for _, col := range columns {
+		e.tableInfo.columnsToInclude = append(e.tableInfo.columnsToInclude, col.GetName())
+	}
+	fmt.Println("Table info in query::", e.tableInfo)
+
+	return e.schemaStruct
+}
+
+func (e *TableStruct[T, E]) GetRefSchema() *T {
+	return e.schemaStruct
+}
+
+func (e *TableStruct[T, E]) QueryExclude(columns ...Coln) *T {
+	e.Ref = &TableStruct[T, E]{}
+	e.schemaStruct = new(T)
+	// prepareTable(e.schemaStruct)
+	// e.columnsToExclude = append(e.columnsToExclude, columns...)
+	return e.schemaStruct
+}
+
+func Print(Struct any) {
+	pretty.Println(Struct)
+}
+
+func (e *TableStruct[T, E]) Exec() {
+	fmt.Println("Exec!!")
+	fmt.Println(e.schemaStruct)
+	for _, statement := range e.tableInfo.statements {
+		fmt.Println("Statement:", statement)
+	}
+	Print(e.tableInfo)
+}
+
+func (e *TableStruct[T, E]) AllowFilter() *T {
+	e.tableInfo.allowFilter = true
+	return e.schemaStruct
+}
+
+func (e *TableStruct[T, E]) Exclude() *T {
+	e.tableInfo.isExcluding = true
+	return e.schemaStruct
+}
+
+func (e *TableStruct[T, E]) AddStatement(statement ColumnStatement) {
+	e.tableInfo.statements = append(e.tableInfo.statements, statement)
+}
+
+type TableInterface[T any] interface {
+	//Query(columns ...Coln) *T
+	// AddStatement(statement ColumnStatement)
+	GetSchema() TableSchema
+	// GetRefSchema() T
+	//GetTable() *TableInfo
+	//	Exclude() *T
+}
+
+type Col[T TableInterface[T], E any] struct {
+	Name         string
+	schemaStruct *T
+	tableInfo    *TableInfo
+}
+
+func (q Col[T, E]) GetInfo() columnInfo {
+	col := columnInfo{Name: q.Name}
 	if reflect.TypeFor[T]().Kind() == reflect.Interface {
 		col.FieldType = "any"
 	} else {
@@ -125,46 +272,70 @@ func (q Col[T]) GetInfo() columnInfo {
 	return col
 }
 
-func (q Col[T]) GetName() string {
-	return q.C
+func (q Col[T, E]) GetName() string {
+	return q.Name
 }
 
-// Generic
-func (e Col[T]) Equals(v T) ColumnStatement {
-	return ColumnStatement{Col: e.C, Operator: "=", Value: any(v)}
+func (c *Col[T, E]) SetName(name string) {
+	c.Name = name
 }
-func (e Col[T]) In(values_ ...T) ColumnStatement {
+
+func (c *Col[T, E]) SetTableInfo(tableInfo *TableInfo) {
+	c.tableInfo = tableInfo
+}
+
+func (c *Col[T, E]) SetSchemaStruct(schemaStruct any) {
+	if schema, ok := schemaStruct.(*T); ok {
+		c.schemaStruct = schema
+	}
+}
+
+func (e *Col[T, E]) Exclude(v E) *T {
+	return e.schemaStruct
+}
+
+func (e *Col[T, E]) Equals(v E) *T {
+	fmt.Println("Equals", e)
+	fmt.Println("schemaStruct", e.schemaStruct)
+	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.Name, Operator: "=", Value: any(v)})
+	// (*e.schemaStruct).AddStatement(ColumnStatement{Col: e.Name, Operator: "=", Value: any(v)})
+	return e.schemaStruct
+}
+
+func (e Col[T, E]) In(values_ ...E) *T {
 	values := []any{}
 	for _, v := range values_ {
 		values = append(values, any(v))
 	}
-	return ColumnStatement{Col: e.C, Operator: "IN", Values: values}
+	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.Name, Operator: "IN", Values: values})
+	// (*e.schemaStruct).AddStatement(ColumnStatement{Col: e.Name, Operator: "IN", Values: values})
+	return e.schemaStruct
 }
-func (e Col[T]) ConcurrentIn(values_ ...T) ColumnStatement {
+func (e Col[T, E]) ConcurrentIn(values_ ...E) ColumnStatement {
 	values := []any{}
 	for _, v := range values_ {
 		values = append(values, any(v))
 	}
-	return ColumnStatement{Col: e.C, Operator: "CIN", Values: values}
+	return ColumnStatement{Col: e.Name, Operator: "CIN", Values: values}
 }
-func (e Col[T]) GreaterThan(v T) ColumnStatement {
-	return ColumnStatement{Col: e.C, Operator: ">", Value: any(v)}
+func (e Col[T, E]) GreaterThan(v E) ColumnStatement {
+	return ColumnStatement{Col: e.Name, Operator: ">", Value: any(v)}
 }
-func (e Col[T]) GreaterEqual(v T) ColumnStatement {
-	return ColumnStatement{Col: e.C, Operator: ">=", Value: any(v)}
+func (e Col[T, E]) GreaterEqual(v E) ColumnStatement {
+	return ColumnStatement{Col: e.Name, Operator: ">=", Value: any(v)}
 }
-func (e Col[T]) LessThan(v T) ColumnStatement {
-	return ColumnStatement{Col: e.C, Operator: "<", Value: any(v)}
+func (e Col[T, E]) LessThan(v E) ColumnStatement {
+	return ColumnStatement{Col: e.Name, Operator: "<", Value: any(v)}
 }
-func (e Col[T]) LessEqual(v T) ColumnStatement {
-	return ColumnStatement{Col: e.C, Operator: "<=", Value: any(v)}
+func (e Col[T, E]) LessEqual(v E) ColumnStatement {
+	return ColumnStatement{Col: e.Name, Operator: "<=", Value: any(v)}
 }
-func (e Col[T]) Between(v1 T, v2 T) ColumnStatement {
+func (e Col[T, E]) Between(v1 E, v2 E) ColumnStatement {
 	return ColumnStatement{
-		Col:      e.C,
+		Col:      e.Name,
 		Operator: "BETWEEN",
-		From:     []ColumnStatement{{Col: e.C, Value: v1}},
-		To:       []ColumnStatement{{Col: e.C, Value: v2}},
+		From:     []ColumnStatement{{Col: e.Name, Value: v1}},
+		To:       []ColumnStatement{{Col: e.Name, Value: v2}},
 	}
 }
 
@@ -181,24 +352,13 @@ func (q ColSlice[T]) GetName() string {
 	return q.Name
 }
 
+func (c *ColSlice[T]) SetName(name string) {
+	c.Name = name
+}
+
 func (e ColSlice[T]) Contains(v T) ColumnStatement {
 	return ColumnStatement{Col: e.Name, Operator: "CONTAINS", Value: any(v)}
 }
-
-type CoAny = Col[any]
-type CoInt = Col[int]
-type CoI32 = Col[int32]
-type CoI16 = Col[int16]
-type CoI8 = Col[int8]
-type CoStr = Col[string]
-type CoI64 = Col[int64]
-type CoF32 = Col[float32]
-type CoF64 = Col[float64]
-type CsInt = ColSlice[int]
-type CsI32 = ColSlice[int32]
-type CsI16 = ColSlice[int16]
-type CsI8 = ColSlice[int8]
-type CsStr = ColSlice[string]
 
 type statementGroup struct {
 	group []ColumnStatement

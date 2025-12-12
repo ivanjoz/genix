@@ -1,6 +1,9 @@
 package types
 
-import "app/db"
+import (
+	"app/db"
+	"app/db2"
+)
 
 type ProductoImagen struct {
 	Name        string `ms:"n" json:"n"`
@@ -136,7 +139,6 @@ type ProductoPropiedades struct {
 }
 
 type Almacen struct {
-	TAGS        `table:"almacenes"`
 	EmpresaID   int32
 	ID          int32
 	SedeID      int32
@@ -149,6 +151,45 @@ type Almacen struct {
 	UpdatedBy int32 `json:",omitempty"`
 	Created   int64 `json:",omitempty"`
 	CreatedBy int32 `json:",omitempty"`
+}
+
+type AlmacenTable struct {
+	db2.TableStruct[AlmacenTable, Almacen]
+	EmpresaID   db2.Col[AlmacenTable, int32]
+	ID          db2.Col[AlmacenTable, int32]
+	SedeID      db2.Col[AlmacenTable, int32]
+	Nombre      db2.Col[AlmacenTable, string]
+	Descripcion db2.Col[AlmacenTable, string]
+	Layout      db2.Col[AlmacenTable, []AlmacenLayout]
+	Status      db2.Col[AlmacenTable, int8]
+	Updated     db2.Col[AlmacenTable, int64]
+	UpdatedBy   db2.Col[AlmacenTable, int32]
+	Created     db2.Col[AlmacenTable, int64]
+	CreatedBy   db2.Col[AlmacenTable, int32]
+}
+
+func (e AlmacenTable) Init() *AlmacenTable {
+	return db2.InitTable(&AlmacenTable{})
+}
+
+func (e AlmacenTable) GetSchema() db2.TableSchema {
+	return db2.TableSchema{
+		Name:      "almacenes",
+		Partition: e.EmpresaID,
+		Keys:      []db2.Coln{e.ID},
+		Views: []db2.View{
+			{Cols: []db2.Coln{e.Status}, KeepPart: true},
+			{Cols: []db2.Coln{e.Updated}, KeepPart: true},
+		},
+	}
+}
+
+func QueryDemo() {
+	/*
+		query := (&AlmacenTable{}).Query()
+		query.EmpresaID.Equals(1).
+			Nombre.Equals("Hola").Nombre.Equals("")
+	*/
 }
 
 type _c = Almacen

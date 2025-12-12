@@ -67,7 +67,7 @@ type CajaMovimiento struct {
 type CajaMovimientoTable struct {
 	db.GetSchemaTest1[CajaMovimiento]
 	EmpresaID db.Col[int32]
-	CajaID    db.Colx[CajaMovimientoTable, int32]
+	/*	CajaID    db.Colx[CajaMovimientoTable, int32] */
 }
 
 func (e CajaMovimientoTable) MakeTable() *CajaMovimientoTable {
