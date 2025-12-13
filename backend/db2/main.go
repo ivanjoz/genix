@@ -116,15 +116,15 @@ type TableInfo struct {
 	orderBy        string
 	limit          int32
 	allowFilter    bool
+	refSlice       any /* referencia al slice de resultados */
 }
 
 type TableStructInterface[T any] interface {
-	Query() *T
+	// Query() *T
 	GetSchema() TableSchema
 }
 
 type TableStruct[T TableStructInterface[T], E any] struct {
-	Ref          *TableStruct[T, E]
 	schemaStruct *T
 	tableInfo    *TableInfo
 }
@@ -132,6 +132,9 @@ type TableStruct[T TableStructInterface[T], E any] struct {
 func (e *TableStruct[T, E]) SetName(t string) {}
 func (e *TableStruct[T, E]) SetTableInfo(t *TableInfo) {
 	e.tableInfo = t
+}
+func (e *TableStruct[T, E]) SetRefSlice(refSlice *[]E) {
+	e.tableInfo.refSlice = refSlice
 }
 func (e *TableStruct[T, E]) GetTableInfo() *TableInfo {
 	return e.tableInfo
@@ -146,14 +149,24 @@ func (e *TableStruct[T, E]) SetSchemaStruct(schemaStruct any) {
 }
 
 type TableBaseInterface[T any, E any] interface {
-	GetTable() E
-	GetBaseStruct() T
+	GetBaseStruct() E
+	GetTableStruct() T
 }
 
-func (e TableStruct[T, E]) GetTable() E {
+type TableStructInterfaceQuery[T any, E any] interface {
+	SetRefSlice(*[]E)
+}
+
+func Query[T TableBaseInterface[E, T], E any](refSlice *[]T) *E {
+	refTable := MakeTable2[E, T](new(E))
+	any(refTable).(TableStructInterfaceQuery[E, T]).SetRefSlice(refSlice)
+	return refTable
+}
+
+func (e TableStruct[T, E]) GetBaseStruct() E {
 	return *new(E)
 }
-func (e TableStruct[T, E]) GetBaseStruct() T {
+func (e TableStruct[T, E]) GetTableStruct() T {
 	return *new(T)
 }
 
@@ -169,6 +182,87 @@ func toSnakeCase(str string) string {
 }
 
 func MakeTable[T TableBaseInterface[T, E], E any](schemaStruct *T) *T {
+	fmt.Println("making table...")
+	structRefValue := reflect.ValueOf(*new(E))
+	structRefType := structRefValue.Type()
+
+	fieldNameIdxMap := map[string]*columnInfo{}
+	refTableInfo := &TableInfo{}
+
+	for i := 0; i < structRefValue.NumField(); i++ {
+		col := columnInfo{
+			FieldIdx:  i,
+			FieldType: structRefType.Field(i).Type.String(),
+			FieldName: structRefType.Field(i).Name,
+			RefType:   structRefType.Field(i).Type,
+		}
+
+		if col.FieldType[0:1] == "*" {
+			col.IsPointer = true
+			col.FieldType = col.FieldType[1:]
+		}
+		if col.FieldType[0:2] == "[]" {
+			col.IsSlice = true
+			col.FieldType = col.FieldType[2:]
+		}
+
+		fmt.Println("fieldtype obtenido::", col.FieldName, col.FieldType)
+		// fmt.Println("Fieldname::", col.FieldName, "| Type:", col.FieldType)
+		fieldNameIdxMap[col.FieldName] = &col
+	}
+
+	structValue := reflect.ValueOf(schemaStruct).Elem()
+	structType := structValue.Type()
+
+	fmt.Println("fieldNameIdxMap...", len(fieldNameIdxMap), "| nf:", structValue.NumField())
+
+	for i := 0; i < structValue.NumField(); i++ {
+		field := structValue.Field(i)
+		fieldType := structType.Field(i)
+
+		// Check if field can be addressed and if it implements ColumnSetName interface
+		if !field.CanAddr() || !field.Addr().CanInterface() {
+			fmt.Println("no es::", fieldType.Name)
+			continue
+		}
+
+		fieldAddr := field.Addr()
+		// Try to get the interface and check if it implements ColumnSetName
+		column, ok := fieldAddr.Interface().(ColGetInfoPointer)
+		if !ok {
+			fmt.Println("El field", fieldType.Name, "no implementa ColumnSetInfo")
+			continue
+		} else {
+			fmt.Println("Field seteado!", fieldType.Name, "|", fieldType.Type)
+		}
+
+		// Extract column name from db tag or convert field name to snake_case
+		columnName := toSnakeCase(fieldType.Name)
+		if tag := fieldType.Tag.Get("db"); tag != "" {
+			columnName = tag
+		}
+
+		if colBase, ok := fieldNameIdxMap[fieldType.Name]; ok {
+			colInfo := column.GetInfoPointer()
+			colInfo.Name = columnName
+			colInfo.FieldIdx = colBase.FieldIdx
+			colInfo.FieldType = colBase.FieldType
+			colInfo.FieldName = colBase.FieldName
+			colInfo.RefType = colBase.RefType
+		} else if fieldType.Name != "TableStruct" {
+			err := fmt.Sprintf(`No se encontró el field "%v" en el struct "%v"`, fieldType.Name, structRefType.Name())
+			panic(err)
+		}
+
+		// Set the column name using the interface method
+		column.SetSchemaStruct(schemaStruct)
+		column.SetTableInfo(refTableInfo)
+	}
+	fmt.Println("schemaStruct (1)", schemaStruct)
+	return schemaStruct
+}
+
+func MakeTable2[T any, E any](schemaStruct *T) *T {
 	fmt.Println("making table...")
 	structRefValue := reflect.ValueOf(*new(E))
 	structRefType := structRefValue.Type()
@@ -309,6 +403,7 @@ func (e *TableStruct[T, E]) AddStatement(statement ColumnStatement) {
 
 type TableInterface[T any] interface {
 	GetSchema() TableSchema
+	GetTableStruct() T
 }
 
 type Col[T TableInterface[T], E any] struct {

@@ -831,9 +831,11 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 		Password: core.Env.DB_PASSWORD,
 		Keyspace: core.Env.DB_NAME,
 	})
+	almacenes2 := []types.Almacen{}
+
 	// Example 1: Simple query with chaining
-	query := types.AlmacenTable{}.Query()
-	query.EmpresaID.Equals(1).Status.Equals(1)
+	query := db2.Query(&almacenes2)
+	query.Select(query.Layout).EmpresaID.Equals(1).Status.Equals(1)
 
 	// Execute and get all results
 	almacenes, err := query.All()
@@ -841,6 +843,6 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 		panic(err)
 	}
 	fmt.Println("Found almacenes:", len(almacenes))
-
+	core.Print(almacenes)
 	return core.FuncResponse{}
 }
