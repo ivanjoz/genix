@@ -154,7 +154,7 @@ type ColumnSetInfo interface {
 }
 
 // TableStruct
-type TableStruct[T TableSchemaInterface[T], E any] struct {
+type TableStruct[T TableSchemaInterface[T], E TableBaseInterface[T, E]] struct {
 	schemaStruct *T
 	tableInfo    *TableInfo
 }
@@ -219,17 +219,24 @@ func (e *TableStruct[T, E]) OrderDesc() *T {
 	return e.schemaStruct
 }
 
-func (e *TableStruct[T, E]) Between(statements ...ColumnStatement) *T {
-	e.tableInfo.between.From = statements
-	e.tableInfo.between.Operator = "BETWEEN"
-	if len(statements) == 1 {
-		e.tableInfo.between.Col = statements[0].Col
-	}
-	return e.schemaStruct
+func (e *TableStruct[T, E]) Update(records *[]E, columnsToInclude ...Coln) error {
+	return Update(records, columnsToInclude...)
 }
 
-func (e *TableStruct[T, E]) AddStatement(statement ColumnStatement) {
-	e.tableInfo.statements = append(e.tableInfo.statements, statement)
+func (e *TableStruct[T, E]) UpdateOne(record E, columnsToInclude ...Coln) error {
+	return UpdateOne(record, columnsToInclude...)
+}
+
+func (e *TableStruct[T, E]) UpdateExclude(records *[]E, columnsToExclude ...Coln) error {
+	return UpdateExclude(records, columnsToExclude...)
+}
+
+func (e *TableStruct[T, E]) Insert(records *[]E, columnsToExclude ...Coln) error {
+	return Insert(records, columnsToExclude...)
+}
+
+func (e *TableStruct[T, E]) InsertOne(record E, columnsToExclude ...Coln) error {
+	return InsertOne(record, columnsToExclude...)
 }
 
 // Col and ColSlice
@@ -249,10 +256,6 @@ func (q *Col[T, E]) GetInfoPointer() *columnInfo {
 
 func (q Col[T, E]) GetName() string {
 	return q.info.Name
-}
-
-func (c *Col[T, E]) SetName(name string) {
-	c.info.Name = name
 }
 
 func (c *Col[T, E]) SetTableInfo(tableInfo *TableInfo) {
@@ -317,44 +320,48 @@ func (e *Col[T, E]) Between(v1 E, v2 E) *T {
 	return e.schemaStruct
 }
 
-type ColSlice[T any] struct {
+type ColSlice[T TableInterface[T], E any] struct {
 	info         columnInfo
-	schemaStruct any
+	schemaStruct *T
 	tableInfo    *TableInfo
 }
 
-func (q ColSlice[T]) GetInfo() columnInfo {
-	return columnInfo{Name: q.info.Name, FieldType: reflect.TypeFor[T]().String(), IsSlice: true}
+func (q ColSlice[T, E]) GetInfo() columnInfo {
+	q.info.IsSlice = true
+	return q.info
 }
 
-func (q ColSlice[T]) GetName() string {
+func (q *ColSlice[T, E]) GetInfoPointer() *columnInfo {
+	q.info.IsSlice = true
+	return &q.info
+}
+
+func (q ColSlice[T, E]) GetName() string {
 	return q.info.Name
 }
 
-func (c *ColSlice[T]) SetName(name string) {
-	c.info.Name = name
-}
-
-func (c *ColSlice[T]) SetTableInfo(tableInfo *TableInfo) {
+func (c *ColSlice[T, E]) SetTableInfo(tableInfo *TableInfo) {
 	c.tableInfo = tableInfo
 }
 
-func (c *ColSlice[T]) SetSchemaStruct(schemaStruct any) {
-	c.schemaStruct = schemaStruct
+func (c *ColSlice[T, E]) SetSchemaStruct(schemaStruct any) {
+	if schema, ok := schemaStruct.(*T); ok {
+		c.schemaStruct = schema
+	}
 }
 
-func (e *ColSlice[T]) Contains(v T) any {
+func (e *ColSlice[T, E]) Contains(v E) *T {
 	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: "CONTAINS", Value: any(v)})
 	return e.schemaStruct
 }
 
 func Query[T TableBaseInterface[E, T], E any](refSlice *[]T) *E {
-	refTable := MakeTable[E, T](new(E))
+	refTable := initStructTable[E, T](new(E))
 	any(refTable).(TableStructInterfaceQuery[E, T]).SetRefSlice(refSlice)
 	return refTable
 }
 
-func MakeTable[T any, E any](schemaStruct *T) *T {
+func initStructTable[T any, E any](schemaStruct *T) *T {
 	fmt.Println("making table...")
 	structRefValue := reflect.ValueOf(*new(E))
 	structRefType := structRefValue.Type()
@@ -393,14 +400,14 @@ func MakeTable[T any, E any](schemaStruct *T) *T {
 		field := structValue.Field(i)
 		fieldType := structType.Field(i)
 
-		// Check if field can be addressed and if it implements ColumnSetName interface
+		// Check if field can be addressed and if it implements ColGetInfoPointer interface
 		if !field.CanAddr() || !field.Addr().CanInterface() {
 			fmt.Println("no es::", fieldType.Name)
 			continue
 		}
 
 		fieldAddr := field.Addr()
-		// Try to get the interface and check if it implements ColumnSetName
+		// Try to get the interface and check if it implements ColGetInfoPointer
 		column, ok := fieldAddr.Interface().(ColGetInfoPointer)
 		if !ok {
 			fmt.Println("El field", fieldType.Name, "no implementa ColumnSetInfo")
@@ -449,6 +456,6 @@ func makeQueryStatement(statements []string) string {
 // execQuery executes a query based on TableInfo and returns records
 func execQuery[T TableSchemaInterface[T], E any](schemaStruct *T, tableInfo *TableInfo) error {
 	records := (tableInfo.refSlice).(*[]E)
-	scyllaTable := MakeTableSchema(schemaStruct)
+	scyllaTable := makeTable(schemaStruct)
 	return selectExec(records, tableInfo, scyllaTable)
 }
