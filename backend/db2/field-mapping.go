@@ -9,12 +9,6 @@ type number1 interface {
 	int | int32 | int8 | uint8 | int16 | uint16 | int64
 }
 
-/*
-type numfloat interface {
-	float32 | float64
-}
-*/
-
 func setReflectInt[T number1, E number1](e *reflect.Value, vl *E) {
 	(*e).SetInt(int64(*vl))
 }

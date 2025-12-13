@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"reflect"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -65,7 +64,7 @@ var makeStatementWith string = `	WITH caching = {'keys': 'ALL', 'rows_per_partit
 
 // https://forum.scylladb.com/t/what-is-the-difference-between-clustering-primary-partition-and-composite-or-compound-keys-in-scylladb/41
 func makeTable[T TableSchemaInterface](structType T) scyllaTable[any] {
-	return MakeTable(structType.GetSchema(), structType)
+	return MakeTableSchema(structType.GetSchema(), &structType)
 }
 
 type statementRangeGroup struct {
@@ -73,10 +72,9 @@ type statementRangeGroup struct {
 	betweenTo *ColumnStatement
 }
 
-func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
+func MakeTableSchema[T any](schema TableSchema, structType *T) scyllaTable[any] {
 
-	structRefValue := reflect.ValueOf(structType)
-	structRefType := structRefValue.Type()
+	structRefValue := reflect.ValueOf(structType).Elem()
 
 	if len(schema.Keys) == 0 {
 		panic("No se ha especificado una PrimaryKey")
@@ -96,68 +94,31 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 		dbTable.keyspace = connParams.Keyspace
 	}
 
-	fieldNameIdxMap := map[string]columnInfo{}
-	colRegex, _ := regexp.Compile(`^Col\[.*\]$`)
-	colSliceRegex, _ := regexp.Compile(`^ColSlice\[.*\]$`)
-
 	sequenceColumn := ""
 	if schema.SequenceColumn != nil {
 		sequenceColumn = schema.SequenceColumn.GetName()
 	}
 
+	// New implementation: iterate over struct fields and process Col[T,E] fields
 	for i := 0; i < structRefValue.NumField(); i++ {
-		col := columnInfo{
-			FieldIdx:  i,
-			FieldType: structRefType.Field(i).Type.String(),
-			FieldName: structRefType.Field(i).Name,
-			RefType:   structRefType.Field(i).Type,
-		}
-		if col.FieldType[0:1] == "*" {
-			col.IsPointer = true
-			col.FieldType = col.FieldType[1:]
-		}
-		if col.FieldType[0:2] == "[]" {
-			col.IsSlice = true
-			col.FieldType = col.FieldType[2:]
-		}
+		field := structRefValue.Field(i)
 
-		// fmt.Println("Fieldname::", col.FieldName, "| Type:", col.FieldType)
-		fieldNameIdxMap[col.FieldName] = col
-	}
-
-	for i := 0; i < structRefType.NumMethod(); i++ {
-		method := structRefType.Method(i)
-		if method.Type.NumOut() != 1 {
-			continue
-		}
-		methodOutName := method.Type.Out(0).Name()
-		isCol := colRegex.MatchString(methodOutName)
-		isColSlice := colSliceRegex.MatchString(methodOutName)
-
-		if !isCol && !isColSlice {
+		// Skip if field cannot be addressed or interfaced
+		if !field.CanAddr() || !field.Addr().CanInterface() {
+			panic("saltando aqui!")
 			continue
 		}
 
-		// fmt.Printf("Method:: %v | %v \n", method.Name, methodOutName)
-		fieldName := method.Name
-		if fieldName[len(fieldName)-1:] == "_" {
-			fieldName = fieldName[0 : len(fieldName)-1]
+		// Check if field implements Coln interface
+		fieldAddr := field.Addr()
+		colInterface, ok := fieldAddr.Interface().(Coln)
+		if !ok {
+			fmt.Println("saltando aqui 2!", field.Type().Name())
+			continue
 		}
 
-		column := fieldNameIdxMap[fieldName]
-		if column.FieldType == "" {
-			panic(fmt.Sprintf(`No se encontró la columna "%v" en el struct "%v"`, fieldName, structRefType.Name()))
-		}
-
-		mathodValue := structRefValue.Method(i).Call([]reflect.Value{})
-		if col, ok := mathodValue[0].Interface().(Coln); ok {
-			colInfo := col.GetInfo()
-			//TODO: compara si las columnas posee los tipos adecuados
-			column.Name = colInfo.Name
-		} else {
-			panic(fmt.Sprintf("La columna %v está mal configurada.", fieldName))
-		}
-
+		// Get column info from the field
+		column := colInterface.GetInfo()
 		column.setValue = fieldMapping[makeMappingKey(&column)]
 
 		if column.setValue == nil {
@@ -279,9 +240,13 @@ func MakeTable[T any](schema TableSchema, structType T) scyllaTable[any] {
 			dbTable.columnsMap[column.Name] = &column
 		}
 	}
-
 	if schema.Partition != nil {
+		fmt.Println("hola 1")
+		fmt.Println(dbTable.columnsMap)
+		fmt.Println(schema.Partition)
+		fmt.Println("hola 2")
 		dbTable.partKey = dbTable.columnsMap[schema.Partition.GetInfo().Name]
+		fmt.Println("hola 3")
 		dbTable.keysIdx = append(dbTable.keysIdx, dbTable.partKey.Idx)
 	}
 
