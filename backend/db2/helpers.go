@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"hash/fnv"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/kr/pretty"
 )
 
 func BasicHashInt(s string) int32 {
@@ -152,4 +154,19 @@ func reflectToSlice(value *reflect.Value) []any {
 		panic("Value was not recognised of a slice.")
 	}
 	return values
+}
+
+var (
+	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
+)
+
+func toSnakeCase(str string) string {
+	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+	return strings.ToLower(snake)
+}
+
+func Print(Struct any) {
+	pretty.Println(Struct)
 }
