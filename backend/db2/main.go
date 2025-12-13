@@ -3,12 +3,7 @@ package db2
 import (
 	"fmt"
 	"reflect"
-	"regexp"
-	"slices"
 	"strings"
-
-	"github.com/gocql/gocql"
-	"github.com/kr/pretty"
 )
 
 type scyllaTable[T any] struct {
@@ -38,6 +33,20 @@ func (e scyllaTable[T]) GetKeys() []*columnInfo {
 }
 func (e scyllaTable[T]) GetPartKey() *columnInfo {
 	return e.partKey
+}
+
+type viewInfo struct {
+	/* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
+	Type            int8
+	name            string
+	idx             int8
+	column          *columnInfo
+	columns         []string
+	columnsNoPart   []string
+	columnsIdx      []int16
+	Operators       []string
+	getStatement    func(statements ...ColumnStatement) []string
+	getCreateScript func() string
 }
 
 type ColumnStatement struct {
@@ -80,17 +89,6 @@ func (q ColumnStatement) GetValue() any {
 	}
 }
 
-type Coln interface {
-	GetInfo() columnInfo
-	GetName() string
-}
-
-type ColumnSetInfo interface {
-	SetName(string)
-	SetTableInfo(*TableInfo)
-	SetSchemaStruct(any)
-}
-
 type View struct {
 	Cols []Coln
 	// Para concatenar numeros como = int64(e.AlmacenID)*1e9 + int64(e.Updated)
@@ -119,17 +117,48 @@ type TableInfo struct {
 	refSlice       any /* referencia al slice de resultados */
 }
 
-type TableStructInterface[T any] interface {
-	// Query() *T
+// Interfaces
+type TableSchemaInterface[T any] interface {
 	GetSchema() TableSchema
 }
 
-type TableStruct[T TableStructInterface[T], E any] struct {
+type TableBaseInterface[T any, E any] interface {
+	GetBaseStruct() E
+	GetTableStruct() T
+}
+
+type TableStructInterfaceQuery[T any, E any] interface {
+	SetRefSlice(*[]E)
+}
+
+type TableInterface[T any] interface {
+	GetSchema() TableSchema
+	GetTableStruct() T
+}
+
+type ColGetInfoPointer interface {
+	GetInfoPointer() *columnInfo
+	SetSchemaStruct(any)
+	SetTableInfo(*TableInfo)
+}
+
+type Coln interface {
+	GetInfo() columnInfo
+	GetName() string
+}
+
+type ColumnSetInfo interface {
+	SetName(string)
+	SetTableInfo(*TableInfo)
+	SetSchemaStruct(any)
+}
+
+// TableStruct
+type TableStruct[T TableSchemaInterface[T], E any] struct {
 	schemaStruct *T
 	tableInfo    *TableInfo
 }
 
-func (e *TableStruct[T, E]) SetName(t string) {}
 func (e *TableStruct[T, E]) SetTableInfo(t *TableInfo) {
 	e.tableInfo = t
 }
@@ -147,202 +176,12 @@ func (e *TableStruct[T, E]) SetSchemaStruct(schemaStruct any) {
 		e.schemaStruct = schema
 	}
 }
-
-type TableBaseInterface[T any, E any] interface {
-	GetBaseStruct() E
-	GetTableStruct() T
-}
-
-type TableStructInterfaceQuery[T any, E any] interface {
-	SetRefSlice(*[]E)
-}
-
-func Query[T TableBaseInterface[E, T], E any](refSlice *[]T) *E {
-	refTable := MakeTable2[E, T](new(E))
-	any(refTable).(TableStructInterfaceQuery[E, T]).SetRefSlice(refSlice)
-	return refTable
-}
-
 func (e TableStruct[T, E]) GetBaseStruct() E {
 	return *new(E)
 }
 func (e TableStruct[T, E]) GetTableStruct() T {
 	return *new(T)
 }
-
-var (
-	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
-)
-
-func toSnakeCase(str string) string {
-	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
-	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
-	return strings.ToLower(snake)
-}
-
-func MakeTable[T TableBaseInterface[T, E], E any](schemaStruct *T) *T {
-	fmt.Println("making table...")
-	structRefValue := reflect.ValueOf(*new(E))
-	structRefType := structRefValue.Type()
-
-	fieldNameIdxMap := map[string]*columnInfo{}
-	refTableInfo := &TableInfo{}
-
-	for i := 0; i < structRefValue.NumField(); i++ {
-		col := columnInfo{
-			FieldIdx:  i,
-			FieldType: structRefType.Field(i).Type.String(),
-			FieldName: structRefType.Field(i).Name,
-			RefType:   structRefType.Field(i).Type,
-		}
-
-		if col.FieldType[0:1] == "*" {
-			col.IsPointer = true
-			col.FieldType = col.FieldType[1:]
-		}
-		if col.FieldType[0:2] == "[]" {
-			col.IsSlice = true
-			col.FieldType = col.FieldType[2:]
-		}
-
-		fmt.Println("fieldtype obtenido::", col.FieldName, col.FieldType)
-		// fmt.Println("Fieldname::", col.FieldName, "| Type:", col.FieldType)
-		fieldNameIdxMap[col.FieldName] = &col
-	}
-
-	structValue := reflect.ValueOf(schemaStruct).Elem()
-	structType := structValue.Type()
-
-	fmt.Println("fieldNameIdxMap...", len(fieldNameIdxMap), "| nf:", structValue.NumField())
-
-	for i := 0; i < structValue.NumField(); i++ {
-		field := structValue.Field(i)
-		fieldType := structType.Field(i)
-
-		// Check if field can be addressed and if it implements ColumnSetName interface
-		if !field.CanAddr() || !field.Addr().CanInterface() {
-			fmt.Println("no es::", fieldType.Name)
-			continue
-		}
-
-		fieldAddr := field.Addr()
-		// Try to get the interface and check if it implements ColumnSetName
-		column, ok := fieldAddr.Interface().(ColGetInfoPointer)
-		if !ok {
-			fmt.Println("El field", fieldType.Name, "no implementa ColumnSetInfo")
-			continue
-		} else {
-			fmt.Println("Field seteado!", fieldType.Name, "|", fieldType.Type)
-		}
-
-		// Extract column name from db tag or convert field name to snake_case
-		columnName := toSnakeCase(fieldType.Name)
-		if tag := fieldType.Tag.Get("db"); tag != "" {
-			columnName = tag
-		}
-
-		if colBase, ok := fieldNameIdxMap[fieldType.Name]; ok {
-			colInfo := column.GetInfoPointer()
-			colInfo.Name = columnName
-			colInfo.FieldIdx = colBase.FieldIdx
-			colInfo.FieldType = colBase.FieldType
-			colInfo.FieldName = colBase.FieldName
-			colInfo.RefType = colBase.RefType
-		} else if fieldType.Name != "TableStruct" {
-			err := fmt.Sprintf(`No se encontró el field "%v" en el struct "%v"`, fieldType.Name, structRefType.Name())
-			panic(err)
-		}
-
-		// Set the column name using the interface method
-		column.SetSchemaStruct(schemaStruct)
-		column.SetTableInfo(refTableInfo)
-	}
-	fmt.Println("schemaStruct (1)", schemaStruct)
-	return schemaStruct
-}
-
-func MakeTable2[T any, E any](schemaStruct *T) *T {
-	fmt.Println("making table...")
-	structRefValue := reflect.ValueOf(*new(E))
-	structRefType := structRefValue.Type()
-
-	fieldNameIdxMap := map[string]*columnInfo{}
-	refTableInfo := &TableInfo{}
-
-	for i := 0; i < structRefValue.NumField(); i++ {
-		col := columnInfo{
-			FieldIdx:  i,
-			FieldType: structRefType.Field(i).Type.String(),
-			FieldName: structRefType.Field(i).Name,
-			RefType:   structRefType.Field(i).Type,
-		}
-
-		if col.FieldType[0:1] == "*" {
-			col.IsPointer = true
-			col.FieldType = col.FieldType[1:]
-		}
-		if col.FieldType[0:2] == "[]" {
-			col.IsSlice = true
-			col.FieldType = col.FieldType[2:]
-		}
-
-		fmt.Println("fieldtype obtenido::", col.FieldName, col.FieldType)
-		// fmt.Println("Fieldname::", col.FieldName, "| Type:", col.FieldType)
-		fieldNameIdxMap[col.FieldName] = &col
-	}
-
-	structValue := reflect.ValueOf(schemaStruct).Elem()
-	structType := structValue.Type()
-
-	fmt.Println("fieldNameIdxMap...", len(fieldNameIdxMap), "| nf:", structValue.NumField())
-
-	for i := 0; i < structValue.NumField(); i++ {
-		field := structValue.Field(i)
-		fieldType := structType.Field(i)
-
-		// Check if field can be addressed and if it implements ColumnSetName interface
-		if !field.CanAddr() || !field.Addr().CanInterface() {
-			fmt.Println("no es::", fieldType.Name)
-			continue
-		}
-
-		fieldAddr := field.Addr()
-		// Try to get the interface and check if it implements ColumnSetName
-		column, ok := fieldAddr.Interface().(ColGetInfoPointer)
-		if !ok {
-			fmt.Println("El field", fieldType.Name, "no implementa ColumnSetInfo")
-			continue
-		} else {
-			fmt.Println("Field seteado!", fieldType.Name, "|", fieldType.Type)
-		}
-
-		// Extract column name from db tag or convert field name to snake_case
-		columnName := toSnakeCase(fieldType.Name)
-		if tag := fieldType.Tag.Get("db"); tag != "" {
-			columnName = tag
-		}
-
-		if colBase, ok := fieldNameIdxMap[fieldType.Name]; ok {
-			colInfo := column.GetInfoPointer()
-			colInfo.Name = columnName
-			colInfo.FieldIdx = colBase.FieldIdx
-			colInfo.FieldType = colBase.FieldType
-			colInfo.FieldName = colBase.FieldName
-			colInfo.RefType = colBase.RefType
-		} else if fieldType.Name != "TableStruct" {
-			err := fmt.Sprintf(`No se encontró el field "%v" en el struct "%v"`, fieldType.Name, structRefType.Name())
-			panic(err)
-		}
-
-		// Set the column name using the interface method
-		column.SetSchemaStruct(schemaStruct)
-		column.SetTableInfo(refTableInfo)
-	}
-	fmt.Println("schemaStruct (1)", schemaStruct)
-	return schemaStruct
-}
-
 func (e *TableStruct[T, E]) Select(columns ...Coln) *T {
 	for _, col := range columns {
 		e.tableInfo.columnsInclude = append(e.tableInfo.columnsInclude, col.GetInfo())
@@ -361,16 +200,8 @@ func (e *TableStruct[T, E]) GetRefSchema() *T {
 	return e.schemaStruct
 }
 
-func Print(Struct any) {
-	pretty.Println(Struct)
-}
-
-func (e *TableStruct[T, E]) Exec() ([]E, error) {
+func (e *TableStruct[T, E]) Exec() error {
 	return execQuery[T, E](e.schemaStruct, e.tableInfo)
-}
-
-func (e *TableStruct[T, E]) All() ([]E, error) {
-	return e.Exec()
 }
 
 func (e *TableStruct[T, E]) AllowFilter() *T {
@@ -401,11 +232,7 @@ func (e *TableStruct[T, E]) AddStatement(statement ColumnStatement) {
 	e.tableInfo.statements = append(e.tableInfo.statements, statement)
 }
 
-type TableInterface[T any] interface {
-	GetSchema() TableSchema
-	GetTableStruct() T
-}
-
+// Col and ColSlice
 type Col[T TableInterface[T], E any] struct {
 	info         columnInfo
 	schemaStruct *T
@@ -414,12 +241,6 @@ type Col[T TableInterface[T], E any] struct {
 
 func (q Col[T, E]) GetInfo() columnInfo {
 	return q.info
-}
-
-type ColGetInfoPointer interface {
-	GetInfoPointer() *columnInfo
-	SetSchemaStruct(any)
-	SetTableInfo(*TableInfo)
 }
 
 func (q *Col[T, E]) GetInfoPointer() *columnInfo {
@@ -496,7 +317,6 @@ func (e *Col[T, E]) Between(v1 E, v2 E) *T {
 	return e.schemaStruct
 }
 
-// Generic Array
 type ColSlice[T any] struct {
 	info         columnInfo
 	schemaStruct any
@@ -528,30 +348,91 @@ func (e *ColSlice[T]) Contains(v T) any {
 	return e.schemaStruct
 }
 
-type TableSchemaInterface interface {
-	GetSchema() TableSchema
+func Query[T TableBaseInterface[E, T], E any](refSlice *[]T) *E {
+	refTable := MakeTable[E, T](new(E))
+	any(refTable).(TableStructInterfaceQuery[E, T]).SetRefSlice(refSlice)
+	return refTable
 }
 
-type GetSchemaTest1[T TableSchemaInterface] struct {
-}
+func MakeTable[T any, E any](schemaStruct *T) *T {
+	fmt.Println("making table...")
+	structRefValue := reflect.ValueOf(*new(E))
+	structRefType := structRefValue.Type()
 
-func (e GetSchemaTest1[T]) GetSchema() TableSchema {
-	h := any(new(T)).(TableSchemaInterface)
-	return h.GetSchema()
-}
+	fieldNameIdxMap := map[string]*columnInfo{}
+	refTableInfo := &TableInfo{}
 
-type viewInfo struct {
-	/* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
-	Type            int8
-	name            string
-	idx             int8
-	column          *columnInfo
-	columns         []string
-	columnsNoPart   []string
-	columnsIdx      []int16
-	Operators       []string
-	getStatement    func(statements ...ColumnStatement) []string
-	getCreateScript func() string
+	for i := 0; i < structRefValue.NumField(); i++ {
+		col := columnInfo{
+			FieldIdx:  i,
+			FieldType: structRefType.Field(i).Type.String(),
+			FieldName: structRefType.Field(i).Name,
+			RefType:   structRefType.Field(i).Type,
+		}
+
+		if col.FieldType[0:1] == "*" {
+			col.IsPointer = true
+			col.FieldType = col.FieldType[1:]
+		}
+		if col.FieldType[0:2] == "[]" {
+			col.IsSlice = true
+			col.FieldType = col.FieldType[2:]
+		}
+
+		fmt.Println("fieldtype obtenido::", col.FieldName, col.FieldType)
+		// fmt.Println("Fieldname::", col.FieldName, "| Type:", col.FieldType)
+		fieldNameIdxMap[col.FieldName] = &col
+	}
+
+	structValue := reflect.ValueOf(schemaStruct).Elem()
+	structType := structValue.Type()
+
+	fmt.Println("fieldNameIdxMap...", len(fieldNameIdxMap), "| nf:", structValue.NumField())
+
+	for i := 0; i < structValue.NumField(); i++ {
+		field := structValue.Field(i)
+		fieldType := structType.Field(i)
+
+		// Check if field can be addressed and if it implements ColumnSetName interface
+		if !field.CanAddr() || !field.Addr().CanInterface() {
+			fmt.Println("no es::", fieldType.Name)
+			continue
+		}
+
+		fieldAddr := field.Addr()
+		// Try to get the interface and check if it implements ColumnSetName
+		column, ok := fieldAddr.Interface().(ColGetInfoPointer)
+		if !ok {
+			fmt.Println("El field", fieldType.Name, "no implementa ColumnSetInfo")
+			continue
+		} else {
+			fmt.Println("Field seteado!", fieldType.Name, "|", fieldType.Type)
+		}
+
+		// Extract column name from db tag or convert field name to snake_case
+		columnName := toSnakeCase(fieldType.Name)
+		if tag := fieldType.Tag.Get("db"); tag != "" {
+			columnName = tag
+		}
+
+		if colBase, ok := fieldNameIdxMap[fieldType.Name]; ok {
+			colInfo := column.GetInfoPointer()
+			colInfo.Name = columnName
+			colInfo.FieldIdx = colBase.FieldIdx
+			colInfo.FieldType = colBase.FieldType
+			colInfo.FieldName = colBase.FieldName
+			colInfo.RefType = colBase.RefType
+		} else if fieldType.Name != "TableStruct" {
+			err := fmt.Sprintf(`No se encontró el field "%v" en el struct "%v"`, fieldType.Name, structRefType.Name())
+			panic(err)
+		}
+
+		// Set the column name using the interface method
+		column.SetSchemaStruct(schemaStruct)
+		column.SetTableInfo(refTableInfo)
+	}
+	fmt.Println("schemaStruct (1)", schemaStruct)
+	return schemaStruct
 }
 
 func makeQueryStatement(statements []string) string {
@@ -565,307 +446,9 @@ func makeQueryStatement(statements []string) string {
 	return queryStr
 }
 
-func MakeInsertStatement[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) []string {
-	scyllaTable := makeTable(*new(T))
-
-	columns := []*columnInfo{}
-	if len(columnsToExclude) > 0 {
-		columsToExcludeNames := []string{}
-		for _, e := range columnsToExclude {
-			columsToExcludeNames = append(columsToExcludeNames, e.GetInfo().Name)
-		}
-		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columsToExcludeNames, col.Name) {
-				columns = append(columns, col)
-			}
-		}
-	} else {
-		columns = scyllaTable.columns
-	}
-
-	columnsNames := []string{}
-	for _, col := range columns {
-		columnsNames = append(columnsNames, col.Name)
-	}
-
-	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES `,
-		scyllaTable.GetFullName(), strings.Join(columnsNames, ", "))
-
-	queryStatements := []string{}
-
-	for _, rec := range *records {
-		refValue := reflect.ValueOf(rec)
-		// fmt.Println("Type:", reflect.TypeOf(rec).String())
-
-		recordInsertValues := []string{}
-
-		for _, col := range columns {
-			if col.getValue == nil {
-				panic("is nil column: getValue() = " + col.Name + " | " + col.FieldName)
-			}
-			value := col.getValue(&refValue)
-			recordInsertValues = append(recordInsertValues, fmt.Sprintf("%v", value))
-		}
-
-		statement := /*" " +*/ queryStrInsert + "(" + strings.Join(recordInsertValues, ", ") + ")"
-		queryStatements = append(queryStatements, statement)
-	}
-	return queryStatements
-}
-
-func MakeInsertBatch[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) *gocql.Batch {
-	scyllaTable := makeTable(*new(T))
-
-	columns := []*columnInfo{}
-	if len(columnsToExclude) > 0 {
-		columsToExcludeNames := []string{}
-		for _, e := range columnsToExclude {
-			columsToExcludeNames = append(columsToExcludeNames, e.GetInfo().Name)
-		}
-		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columsToExcludeNames, col.Name) {
-				columns = append(columns, col)
-			}
-		}
-	} else {
-		columns = scyllaTable.columns
-	}
-
-	columnsNames := []string{}
-	columnPlaceholders := []string{}
-	for _, col := range columns {
-		columnsNames = append(columnsNames, col.Name)
-		columnPlaceholders = append(columnPlaceholders, "?")
-	}
-
-	session := getScyllaConnection()
-	batch := session.NewBatch(gocql.UnloggedBatch)
-
-	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES (%v)`,
-		scyllaTable.GetFullName(), strings.Join(columnsNames, ", "), strings.Join(columnPlaceholders, ", "))
-
-	for _, rec := range *records {
-		refValue := reflect.ValueOf(rec)
-		values := []any{}
-
-		for _, col := range columns {
-			if col.getValue == nil {
-				panic("is nil column: getValue() = " + col.Name + " | " + col.FieldName)
-			}
-			var value any
-			if col.getStatementValue != nil {
-				value = col.getStatementValue(&refValue)
-			} else {
-				value = col.getValue(&refValue)
-			}
-			values = append(values, value)
-		}
-
-		fmt.Println("VALUES::")
-		fmt.Println(values)
-		batch.Query(queryStrInsert, values...)
-	}
-	return batch
-}
-
-func Insert[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) error {
-
-	session := getScyllaConnection()
-	fmt.Println("BATCH (1)::")
-	queryBatch := MakeInsertBatch(records, columnsToExclude...)
-
-	fmt.Println("BATCH (2)::")
-	fmt.Println(queryBatch.Entries)
-
-	if err := session.ExecuteBatch(queryBatch); err != nil {
-		fmt.Println("Error inserting records:", err)
-		return err
-	}
-
-	return nil
-}
-
-func makeUpdateStatementsBase[T TableSchemaInterface](records *[]T, columnsToInclude []Coln, columnsToExclude []Coln, onlyVirtual bool) []string {
-
-	scyllaTable := makeTable(*new(T))
-	columnsToUpdate := []*columnInfo{}
-
-	if len(columnsToInclude) > 0 {
-		for _, col_ := range columnsToInclude {
-			col := scyllaTable.columnsMap[col_.GetName()]
-			if slices.Contains(scyllaTable.keysIdx, col.Idx) {
-				msg := fmt.Sprintf(`Table "%v": The column "%v" can't be updated because is part of primary key.`, scyllaTable.name, col.Name)
-				panic(msg)
-			}
-			columnsToUpdate = append(columnsToUpdate, col)
-		}
-	} else {
-		columnsToExcludeNames := []string{}
-		for _, c := range columnsToExclude {
-			columnsToExcludeNames = append(columnsToExcludeNames, c.GetName())
-		}
-		for _, col := range scyllaTable.columns {
-			isExcluded := slices.Contains(columnsToExcludeNames, col.Name)
-			if !col.IsVirtual && !isExcluded && !slices.Contains(scyllaTable.keysIdx, col.Idx) {
-				columnsToUpdate = append(columnsToUpdate, col)
-			}
-		}
-	}
-
-	columnsIdx := []int16{}
-	for _, col := range columnsToUpdate {
-		columnsIdx = append(columnsIdx, col.Idx)
-	}
-
-	//Revisa si hay columnas que deben actualizarse juntas para los índices calculados
-	for _, indexViews := range scyllaTable.indexViews {
-		if indexViews.column.IsVirtual {
-			includedCols := []int16{}
-			notIncludedCols := []int16{}
-			for _, colIdx := range indexViews.columnsIdx {
-				if slices.Contains(columnsIdx, colIdx) || slices.Contains(scyllaTable.keysIdx, colIdx) {
-					includedCols = append(includedCols, colIdx)
-				} else {
-					notIncludedCols = append(notIncludedCols, colIdx)
-				}
-			}
-			if len(includedCols) > 0 && len(notIncludedCols) > 0 {
-				colNames := strings.Join(indexViews.columns, `, `)
-				includedColsNames := []string{}
-				for _, idx := range notIncludedCols {
-					includedColsNames = append(includedColsNames, scyllaTable.columnsIdxMap[idx].Name)
-				}
-
-				msg := fmt.Sprintf(`Table "%v": A composit index/view requires the columns %v are updated together. Included: %v`, scyllaTable.name, colNames, strings.Join(includedColsNames, ", "))
-				panic(msg)
-			} else if len(includedCols) > 0 {
-				columnsToUpdate = append(columnsToUpdate, indexViews.column)
-			}
-		}
-	}
-
-	if onlyVirtual {
-		cols := columnsToUpdate
-		columnsToUpdate = nil
-		for _, col := range cols {
-			if col.IsVirtual {
-				columnsToUpdate = append(columnsToUpdate, col)
-			}
-		}
-	}
-
-	columnsWhere := scyllaTable.keys
-
-	if scyllaTable.partKey != nil {
-		columnsWhere = append([]*columnInfo{scyllaTable.partKey}, columnsWhere...)
-	}
-
-	queryStatements := []string{}
-
-	for _, rec := range *records {
-		refValue := reflect.ValueOf(rec)
-
-		setStatements := []string{}
-		for _, col := range columnsToUpdate {
-			v := col.getValue(&refValue)
-			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
-		}
-
-		whereStatements := []string{}
-		for _, col := range columnsWhere {
-			v := col.getValue(&refValue)
-			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
-		}
-
-		queryStatement := fmt.Sprintf(
-			"UPDATE %v SET %v WHERE %v",
-			scyllaTable.GetFullName(), Concatx(", ", setStatements), Concatx(" and ", whereStatements),
-		)
-
-		queryStatements = append(queryStatements, queryStatement)
-	}
-
-	return queryStatements
-}
-
-func MakeUpdateStatements[T TableSchemaInterface](records *[]T, columnsToInclude ...Coln) []string {
-	return makeUpdateStatementsBase(records, columnsToInclude, nil, false)
-}
-
-func Update[T TableSchemaInterface](records *[]T, columnsToInclude ...Coln) error {
-
-	if len(columnsToInclude) == 0 {
-		panic("No se incluyeron columnas a actualizar.")
-	}
-
-	queryStatements := makeUpdateStatementsBase(records, columnsToInclude, nil, false)
-	queryUpdate := makeQueryStatement(queryStatements)
-	fmt.Println(queryUpdate)
-
-	if err := QueryExec(queryUpdate); err != nil {
-		fmt.Println("Error updating records:", err)
-		return err
-	}
-	return nil
-}
-
-func UpdateExclude[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) error {
-
-	queryStatements := makeUpdateStatementsBase(records, nil, columnsToExclude, false)
-	queryInsert := makeQueryStatement(queryStatements)
-	if err := QueryExec(queryInsert); err != nil {
-		fmt.Println(queryInsert)
-		fmt.Println("Error inserting records:", err)
-		return err
-	}
-	return nil
-}
-
-func InsertOrUpdate[T TableSchemaInterface](
-	records *[]T,
-	isRecordForInsert func(e *T) bool,
-	columnsToExcludeUpdate []Coln,
-	columnsToExcludeInsert ...Coln,
-) error {
-
-	recordsToInsert := []T{}
-	recordsToUpdate := []T{}
-
-	for _, e := range *records {
-		if isRecordForInsert(&e) {
-			recordsToInsert = append(recordsToInsert, e)
-		} else {
-			recordsToUpdate = append(recordsToUpdate, e)
-		}
-	}
-
-	if len(recordsToUpdate) > 0 {
-		fmt.Println("Registros a actualizar:", len(recordsToUpdate))
-		err := UpdateExclude(&recordsToUpdate, columnsToExcludeUpdate...)
-		if err != nil {
-			return err
-		}
-	}
-
-	if len(recordsToInsert) > 0 {
-		fmt.Println("Registros a insertar:", len(recordsToInsert))
-
-		err := Insert(&recordsToInsert, columnsToExcludeInsert...)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // execQuery executes a query based on TableInfo and returns records
-func execQuery[T TableStructInterface[T], E any](schemaStruct *T, tableInfo *TableInfo) ([]E, error) {
-	// Get the schema from the struct
-	schema := (*schemaStruct).GetSchema()
-	scyllaTable := MakeTableSchema(schema, schemaStruct)
-	// Use the existing selectExec logic but adapted for our new structure
-	records := []E{}
-	err := selectExecNew(&records, tableInfo, scyllaTable)
-	return records, err
+func execQuery[T TableSchemaInterface[T], E any](schemaStruct *T, tableInfo *TableInfo) error {
+	records := (tableInfo.refSlice).(*[]E)
+	scyllaTable := MakeTableSchema(schemaStruct)
+	return selectExec(records, tableInfo, scyllaTable)
 }

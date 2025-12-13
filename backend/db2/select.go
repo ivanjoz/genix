@@ -18,8 +18,8 @@ type posibleIndex struct {
 	priority     int8
 }
 
-// selectExecNew executes a query using TableSchema and TableInfo
-func selectExecNew[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable scyllaTable[any]) error {
+// selectExec executes a query using TableSchema and TableInfo
+func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable scyllaTable[any]) error {
 	viewTableName := scyllaTable.name
 
 	if len(scyllaTable.keyspace) == 0 {

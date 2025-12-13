@@ -63,8 +63,8 @@ var makeStatementWith string = `	WITH caching = {'keys': 'ALL', 'rows_per_partit
 	and speculative_retry = '99.0PERCENTILE'`
 
 // https://forum.scylladb.com/t/what-is-the-difference-between-clustering-primary-partition-and-composite-or-compound-keys-in-scylladb/41
-func makeTable[T TableSchemaInterface](structType T) scyllaTable[any] {
-	return MakeTableSchema(structType.GetSchema(), &structType)
+func makeTable[T TableSchemaInterface[T]](structType T) scyllaTable[any] {
+	return MakeTableSchema(&structType)
 }
 
 type statementRangeGroup struct {
@@ -72,8 +72,9 @@ type statementRangeGroup struct {
 	betweenTo *ColumnStatement
 }
 
-func MakeTableSchema[T any](schema TableSchema, structType *T) scyllaTable[any] {
+func MakeTableSchema[T TableSchemaInterface[T]](structType *T) scyllaTable[any] {
 
+	schema := (*structType).GetSchema()
 	structRefValue := reflect.ValueOf(structType).Elem()
 
 	if len(schema.Keys) == 0 {
