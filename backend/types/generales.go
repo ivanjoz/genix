@@ -1,6 +1,9 @@
 package types
 
-import "app/db"
+import (
+	"app/db"
+	"app/db2"
+)
 
 type Increment struct {
 	TAGS         `table:"sequences"`
@@ -52,7 +55,7 @@ func (e PaisCiudad) GetSchema() db.TableSchema {
 }
 
 type ListaCompartidaRegistro struct {
-	TAGS        `table:"lista_compartida_registros"`
+	db2.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
 	EmpresaID   int32    `db:"empresa_id,pk"`
 	ID          int32    `db:"id,pk"`
 	ListaID     int32    `db:"lista_id,view,view.1,view.2"`
@@ -86,6 +89,32 @@ func (e ListaCompartidaRegistro) GetSchema() db.TableSchema {
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
 			{Cols: []db.Coln{e.ListaID_(), e.Status_()}, ConcatI32: []int8{2}},
 			{Cols: []db.Coln{e.ListaID_(), e.Updated_()}, ConcatI64: []int8{10}},
+		},
+	}
+}
+
+type ListaCompartidaRegistroTable struct {
+	db2.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
+	EmpresaID   db2.Col[ListaCompartidaRegistroTable, int32]
+	ID          db2.Col[ListaCompartidaRegistroTable, int32]
+	ListaID     db2.Col[ListaCompartidaRegistroTable, int32]
+	Nombre      db2.Col[ListaCompartidaRegistroTable, string]
+	Images      db2.ColSlice[ListaCompartidaRegistroTable, string]
+	Descripcion db2.Col[ListaCompartidaRegistroTable, string]
+	Status      db2.Col[ListaCompartidaRegistroTable, int8]
+	Updated     db2.Col[ListaCompartidaRegistroTable, int64]
+	UpdatedBy   db2.Col[ListaCompartidaRegistroTable, int32]
+}
+
+func (e ListaCompartidaRegistroTable) GetSchema() db2.TableSchema {
+	return db2.TableSchema{
+		Name:      "lista_compartida_registro",
+		Partition: e.EmpresaID,
+		Keys:      []db2.Coln{e.ID},
+		Views: []db2.View{
+			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
+			{Cols: []db2.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
+			{Cols: []db2.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
 		},
 	}
 }

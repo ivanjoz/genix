@@ -122,7 +122,7 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable scy
 
 	statementsSelected := []ColumnStatement{}
 	statementsRemain := []ColumnStatement{}
-	statementsLogs_ := []ColumnStatement{}
+	// statementsLogs_ := []ColumnStatement{}
 	whereStatements := []string{}
 	orderColumn := scyllaTable.keys[0]
 
@@ -152,14 +152,14 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable scy
 							isIncluded = false
 							break
 						}
-						statementsLogs_ = append(statementsLogs_, e)
+						// statementsLogs_ = append(statementsLogs_, e)
 					}
 					if isIncluded {
 						statementsSelected = append(statementsSelected, st)
 					}
 				} else if slices.Contains(viewOrIndex.columns, st.Col) {
 					statementsSelected = append(statementsSelected, st)
-					statementsLogs_ = append(statementsLogs_, st)
+					// statementsLogs_ = append(statementsLogs_, st)
 				} else {
 					statementsRemain = append(statementsRemain, st)
 				}
@@ -174,12 +174,14 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable scy
 		statementsRemain = statements
 	}
 
-	statementsLogs := []string{}
-	for _, st := range append(statementsLogs_, statementsRemain...) {
-		statementsLogs = append(statementsLogs, fmt.Sprintf("%v %v %v", st.Col, st.Operator, st.Value))
-	}
+	/*
+		statementsLogs := []string{}
+		for _, st := range append(statementsLogs_, statementsRemain...) {
+			statementsLogs = append(statementsLogs, fmt.Sprintf("%v %v %v", st.Col, st.Operator, st.Value))
+		}
 
-	// fmt.Println("Statements:", strings.Join(statementsLogs, " | "))
+		fmt.Println("Statements:", strings.Join(statementsLogs, " | "))
+	*/
 
 	if len(whereStatements) == 0 {
 		whereStatements = append(whereStatements, "")

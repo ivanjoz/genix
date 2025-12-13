@@ -831,21 +831,68 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 		Password: core.Env.DB_PASSWORD,
 		Keyspace: core.Env.DB_NAME,
 	})
-	almacenes := []types.Almacen{}
+	registros := []types.ListaCompartidaRegistro{}
+
+	recordToInsert := types.ListaCompartidaRegistro{
+		ID:          2,
+		EmpresaID:   1,
+		ListaID:     3,
+		Nombre:      "Demo 1",
+		Images:      []string{"value 1", "value2"},
+		Descripcion: "Descripcion 1",
+		Status:      1,
+		Updated:     1111,
+		UpdatedBy:   2222,
+	}
+
+	fmt.Println("Insertando registro...")
+
+	err := db2.Insert(&[]types.ListaCompartidaRegistro{recordToInsert})
+	if err != nil {
+		fmt.Println("Error al insertar::", err)
+		panic(err)
+	}
+
+	fmt.Println("Registros insertado!")
+
+	recordToUpdate := types.ListaCompartidaRegistro{
+		ID:          1,
+		EmpresaID:   1,
+		ListaID:     3,
+		Nombre:      "Demo Update 1",
+		Images:      []string{"Updated xx", "Updated yyy"},
+		Descripcion: "Descripcion Updated 1",
+		Status:      1,
+		Updated:     9999,
+		UpdatedBy:   8888,
+	}
+
+	fmt.Println("Actualizando registros....")
+
+	q1 := db2.Table[types.ListaCompartidaRegistro]()
+	err = q1.Update(&[]types.ListaCompartidaRegistro{recordToUpdate},
+		q1.Status, q1.ListaID, q1.Nombre, q1.Images, q1.Descripcion, q1.Updated)
+	if err != nil {
+		fmt.Println("Error al actualizar::", err)
+		panic(err)
+	}
+
+	fmt.Println("registro actualizado!")
 
 	// Example 1: Simple query with chaining
-	query := db2.Query(&almacenes)
-	query.Select().EmpresaID.Equals(1).Status.Equals(1)
+	query := db2.Query(&registros)
+	query.Select().
+		EmpresaID.Equals(1).ListaID.Equals(2).Status.Equals(1).
+		AllowFilter()
 
 	// Execute and get all results
-
 	if err := query.Exec(); err != nil {
 		panic(err)
 	}
-	core.Print(almacenes)
-	fmt.Println("Found almacenes:", len(almacenes), "|", len(almacenes))
-	for _, e := range almacenes {
-		fmt.Println("Almacén:", e.Nombre, "|", e.ID)
+
+	fmt.Println("Found records:", len(registros), "|", len(registros))
+	for _, e := range registros {
+		fmt.Println("Records:", e.Nombre, "|", e.ID)
 	}
 	return core.FuncResponse{}
 }

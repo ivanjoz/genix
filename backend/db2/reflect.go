@@ -63,16 +63,12 @@ var makeStatementWith string = `	WITH caching = {'keys': 'ALL', 'rows_per_partit
 	and speculative_retry = '99.0PERCENTILE'`
 
 // https://forum.scylladb.com/t/what-is-the-difference-between-clustering-primary-partition-and-composite-or-compound-keys-in-scylladb/41
-func makeTable[T TableSchemaInterface[T]](structType T) scyllaTable[any] {
-	return MakeTableSchema(&structType)
-}
-
 type statementRangeGroup struct {
 	from      *ColumnStatement
 	betweenTo *ColumnStatement
 }
 
-func MakeTableSchema[T TableSchemaInterface[T]](structType *T) scyllaTable[any] {
+func makeTable[T TableSchemaInterface[T]](structType *T) scyllaTable[any] {
 
 	schema := (*structType).GetSchema()
 	structRefValue := reflect.ValueOf(structType).Elem()
@@ -106,15 +102,14 @@ func MakeTableSchema[T TableSchemaInterface[T]](structType *T) scyllaTable[any] 
 
 		// Skip if field cannot be addressed or interfaced
 		if !field.CanAddr() || !field.Addr().CanInterface() {
-			panic("saltando aqui!")
-			continue
+			panic("No es un interface!: " + field.Type().Name())
 		}
 
 		// Check if field implements Coln interface
 		fieldAddr := field.Addr()
 		colInterface, ok := fieldAddr.Interface().(Coln)
 		if !ok {
-			fmt.Println("saltando aqui 2!", field.Type().Name())
+			fmt.Println("No es una columna:", field.Type().Name())
 			continue
 		}
 
