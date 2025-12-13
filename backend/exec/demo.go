@@ -4,6 +4,7 @@ import (
 	"app/aws"
 	"app/core"
 	"app/db"
+	"app/db2"
 	"app/facturacion"
 	"app/types"
 	s "app/types"
@@ -822,10 +823,24 @@ func Test35(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test36(args *core.ExecArgs) core.FuncResponse {
-	q1 := types.AlmacenTable{}.Init()
-	q1.Query(q1.Nombre, q1.EmpresaID, q1.SedeID).
-		EmpresaID.Equals(1).
-		Nombre.Equals("Hola").Exec()
+
+	db2.MakeScyllaConnection(db2.ConnParams{
+		Host:     core.Env.DB_HOST,
+		Port:     int(core.Env.DB_PORT),
+		User:     core.Env.DB_USER,
+		Password: core.Env.DB_PASSWORD,
+		Keyspace: core.Env.DB_NAME,
+	})
+	// Example 1: Simple query with chaining
+	query := types.AlmacenTable{}.Query()
+	query.EmpresaID.Equals(1).Status.Equals(1)
+
+	// Execute and get all results
+	almacenes, err := query.All()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Found almacenes:", len(almacenes))
 
 	return core.FuncResponse{}
 }

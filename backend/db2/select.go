@@ -11,32 +11,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func Select[T TableSchemaInterface](handler func(query *Query[T], schemaTable T)) QueryResult[T] {
-
-	query := Query[T]{}
-	baseType := *new(T)
-	handler(&query, baseType)
-	records := []T{}
-	err := selectExec(&records, &query)
-	return QueryResult[T]{records, err}
-}
-
-func SelectT[T TableSchemaInterface](handler func(query *Query[T])) ([]T, error) {
-	query := Query[T]{}
-	handler(&query)
-	records := []T{}
-	err := selectExec(&records, &query)
-	return records, err
-}
-
-func SelectRef[T TableSchemaInterface](recordsGetted *[]T, handler func(query *Query[T], schemaTable T)) error {
-
-	query := Query[T]{}
-	baseType := *new(T)
-	handler(&query, baseType)
-	return selectExec(recordsGetted, &query)
-}
-
 type posibleIndex struct {
 	indexView    *viewInfo
 	colsIncluded []int16
@@ -44,9 +18,8 @@ type posibleIndex struct {
 	priority     int8
 }
 
-func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) error {
-
-	scyllaTable := makeTable(*new(T))
+// selectExecNew executes a query using TableSchema and TableInfo
+func selectExecNew[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable scyllaTable[any]) error {
 	viewTableName := scyllaTable.name
 
 	if len(scyllaTable.keyspace) == 0 {
@@ -57,13 +30,13 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 	}
 
 	columnNames := []string{}
-	if len(query.columnsInclude) > 0 {
-		for _, col := range query.columnsInclude {
+	if len(tableInfo.columnsInclude) > 0 {
+		for _, col := range tableInfo.columnsInclude {
 			columnNames = append(columnNames, col.Name)
 		}
 	} else {
 		columnsExclude := []string{}
-		for _, col := range query.columnsExclude {
+		for _, col := range tableInfo.columnsExclude {
 			columnsExclude = append(columnsExclude, col.Name)
 		}
 		for _, col := range scyllaTable.columns {
@@ -81,23 +54,23 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 	colsWhereIdx := []int16{}
 	allAreKeys := true
 
-	for _, st := range query.statements {
-		col := scyllaTable.columnsMap[st.group[0].Col]
+	for _, st := range tableInfo.statements {
+		col := scyllaTable.columnsMap[st.Col]
 		if !slices.Contains(scyllaTable.keysIdx, col.Idx) {
 			allAreKeys = false
 		}
 
 		colsWhereIdx = append(colsWhereIdx, col.Idx)
-		statements = append(statements, st.group[0])
-		if isHash && !slices.Contains(hashOperators, st.group[0].Operator) {
+		statements = append(statements, st)
+		if isHash && !slices.Contains(hashOperators, st.Operator) {
 			isHash = false
 		}
 	}
 
 	// Between Statement
-	if len(query.between.From) > 0 {
-		statements = append(statements, query.between)
-		for _, st := range query.between.From {
+	if len(tableInfo.between.From) > 0 {
+		statements = append(statements, tableInfo.between)
+		for _, st := range tableInfo.between.From {
 			col := scyllaTable.columnsMap[st.Col]
 			colsWhereIdx = append(colsWhereIdx, col.Idx)
 			if !slices.Contains(scyllaTable.keysIdx, col.Idx) {
@@ -242,15 +215,18 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 		if whereStatement != "" {
 			whereStatement = " WHERE " + whereStatement
 		}
-		if len(query.orderBy) > 0 {
-			whereStatement += " " + fmt.Sprintf(query.orderBy, orderColumn.Name)
+		if len(tableInfo.orderBy) > 0 {
+			whereStatement += " " + fmt.Sprintf(tableInfo.orderBy, orderColumn.Name)
+		}
+		if tableInfo.limit > 0 {
+			whereStatement += fmt.Sprintf(" LIMIT %v", tableInfo.limit)
 		}
 		queryWhereStatements = append(queryWhereStatements, whereStatement)
 	}
 
-	recordsMap := map[int]*[]T{}
+	recordsMap := map[int]*[]E{}
 	for i := range queryWhereStatements {
-		recordsMap[i] = &[]T{}
+		recordsMap[i] = &[]E{}
 	}
 
 	eg := errgroup.Group{}
@@ -290,7 +266,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 					return err
 				}
 
-				rec := new(T)
+				rec := new(E)
 				ref := reflect.ValueOf(rec).Elem()
 
 				for idx, colname := range columnNames {

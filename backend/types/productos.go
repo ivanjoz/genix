@@ -3,6 +3,7 @@ package types
 import (
 	"app/db"
 	"app/db2"
+	"fmt"
 )
 
 type ProductoImagen struct {
@@ -168,11 +169,15 @@ type AlmacenTable struct {
 	CreatedBy   db2.Col[AlmacenTable, int32]
 }
 
-func (e AlmacenTable) Init() *AlmacenTable {
-	return db2.InitTable(&AlmacenTable{})
+func (e AlmacenTable) Query() *AlmacenTable {
+	return db2.MakeTable(&AlmacenTable{})
 }
 
 func (e AlmacenTable) GetSchema() db2.TableSchema {
+	fmt.Print("Obteniendo schema...")
+	fmt.Println(e.EmpresaID.GetInfo())
+	fmt.Println(e.EmpresaID)
+
 	return db2.TableSchema{
 		Name:      "almacenes",
 		Partition: e.EmpresaID,
@@ -185,11 +190,49 @@ func (e AlmacenTable) GetSchema() db2.TableSchema {
 }
 
 func QueryDemo() {
-	/*
-		query := (&AlmacenTable{}).Query()
-		query.EmpresaID.Equals(1).
-			Nombre.Equals("Hola").Nombre.Equals("")
-	*/
+	// Example 1: Simple query with chaining
+	query := AlmacenTable{}.Query()
+	query.EmpresaID.Equals(1).Status.Equals(1)
+
+	// Execute and get all results
+	almacenes, err := query.All()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Found almacenes:", len(almacenes))
+
+	// Example 2: Query with First()
+	query2 := AlmacenTable{}.Query()
+	almacen, err := query2.EmpresaID.Equals(1).
+		Status.Equals(1).
+		First()
+	if err != nil {
+		panic(err)
+	}
+	if almacen != nil {
+		fmt.Println("Found almacen:", almacen.Nombre)
+	}
+
+	// Example 3: Query with IN operator
+	query3 := AlmacenTable{}.Query()
+	almacenes3, err := query3.EmpresaID.Equals(1).
+		SedeID.In(1, 2, 3).
+		Limit(10).
+		All()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Found almacenes with IN:", len(almacenes3))
+
+	// Example 4: Query with Select (specific columns)
+	query4 := AlmacenTable{}.Query()
+	almacenes4, err := query4.Select(query4.EmpresaID, query4.ID, query4.Nombre).
+		EmpresaID.Equals(1).
+		All()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Found almacenes with Select:", len(almacenes4))
 }
 
 type _c = Almacen
