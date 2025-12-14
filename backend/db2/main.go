@@ -172,6 +172,18 @@ type TableStruct[T TableSchemaInterface[T], E TableBaseInterface[T, E]] struct {
 	tableInfo    *TableInfo
 }
 
+// GobEncode implements gob.GobEncoder interface
+// TableStruct is only used for queries and doesn't need to be encoded
+func (e TableStruct[T, E]) GobEncode() ([]byte, error) {
+	return []byte{}, nil
+}
+
+// GobDecode implements gob.GobDecoder interface
+// TableStruct is only used for queries and doesn't need to be decoded
+func (e *TableStruct[T, E]) GobDecode(data []byte) error {
+	return nil
+}
+
 func (e *TableStruct[T, E]) MakeTableSchema() TableSchema {
 	return MakeSchema[E]()
 }
@@ -288,7 +300,7 @@ func (c *Col[T, E]) SetTableInfo(tableInfo *TableInfo) {
 }
 
 func (c *Col[T, E]) SetSchemaStruct(schemaStruct any) {
-	fmt.Println("seteando schemaStruct", c.info.Name)
+	// fmt.Println("seteando schemaStruct", c.info.Name)
 	if schema, ok := schemaStruct.(*T); ok {
 		c.schemaStruct = schema
 	} else {
@@ -301,7 +313,7 @@ func (e *Col[T, E]) Exclude(v E) *T {
 }
 
 func (e *Col[T, E]) Equals(v E) *T {
-	fmt.Println("e.schemaStruct", e.schemaStruct)
+	// fmt.Println("e.schemaStruct", e.schemaStruct)
 	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: "=", Value: any(v)})
 	return e.schemaStruct
 }
@@ -448,7 +460,7 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 			fmt.Println("El field", fieldType.Name, "no implementa ColumnSetInfo")
 			continue
 		} else {
-			fmt.Println("Field seteado!", fieldType.Name, "|", fieldType.Type)
+			// fmt.Println("Field seteado!", fieldType.Name, "|", fieldType.Type)
 		}
 
 		// Extract column name from db tag or convert field name to snake_case

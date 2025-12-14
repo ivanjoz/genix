@@ -237,12 +237,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		}
 	}
 	if schema.Partition != nil {
-		fmt.Println("hola 1")
-		fmt.Println(dbTable.columnsMap)
-		fmt.Println(schema.Partition)
-		fmt.Println("hola 2")
 		dbTable.partKey = dbTable.columnsMap[schema.Partition.GetInfo().Name]
-		fmt.Println("hola 3")
 		dbTable.keysIdx = append(dbTable.keysIdx, dbTable.partKey.Idx)
 	}
 

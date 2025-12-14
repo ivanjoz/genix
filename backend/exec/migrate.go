@@ -77,10 +77,11 @@ func makeControllerDB2[T db2.TableBaseInterface[E, T], E db2.TableSchemaInterfac
 		}
 
 		// Execute the query
+		fmt.Println("Obteniendo registros de::", tableName)
 		if err := query.Exec(); err != nil {
 			return nil, core.Err("Error al consultar", tableName, ":", err)
 		}
-
+		fmt.Println("reqgistros obtenidos (1)::", len(records))
 		return records, nil
 	}
 
@@ -106,6 +107,7 @@ func makeControllerDB2[T db2.TableBaseInterface[E, T], E db2.TableSchemaInterfac
 			if err != nil {
 				return []byte{}, err
 			}
+			fmt.Println("registros obtenidos (2)::", len(records))
 
 			var buffer bytes.Buffer
 			encoder := gob.NewEncoder(&buffer)
