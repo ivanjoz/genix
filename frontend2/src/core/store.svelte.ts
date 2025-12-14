@@ -35,9 +35,9 @@ export const Core = $state({
   pageOptionSelected: 1,
   showMobileSearchLayer: null as ITopSearchLayer | null,
   toggleMobileMenu: (() => {}) as () => void,
-  openSideLayer: ((layerId: number) => {
+  openSideLayer: (layerId: number) => {
     Core.showSideLayer = layerId
-  }) as (layerId: number) => void,
+  },
   hideSideLayer: (() => { Core.showSideLayer = 0 }) as () => void,
   openModal: (id: number) => {
     if (!openModals.includes(id)) { openModals.push(id); }

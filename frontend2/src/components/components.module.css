@@ -311,3 +311,13 @@ body:global(.dark) .card_image_1.card_input:hover {
   bottom: calc(var(--input-height) / 2 - 16px);
   color: #585799;
 }
+
+.input:global(.bg-solid) .input_div {
+  background: white;
+}
+.input:global(.shadow-small) .input_div {
+  box-shadow: rgb(74 70 86 / 10%) 0px 1px 3px 0px;
+}
+.input:global(.no-border) .input_div {
+  border: none;
+}

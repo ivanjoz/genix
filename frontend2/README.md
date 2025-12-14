@@ -331,8 +331,8 @@ Versatile table component with filtering and custom cell rendering. Requires a c
 | `subcols` | `ITableColumn<T>[]` | Divides the header into sub-headers, each becoming a column |
 | `onCellEdit` | `(e: T, value: string \| number) => void` | Renders an edit button |
 | `onCellSelect` | `(e: T, value: string \| number) => void` | Renders a select button |
-| `buttonEditHandler` | `(e: T) => void` | Edit button handler |
-| `buttonDeleteHandler` | `(e: T) => void` | Delete button handler |
+| `buttonEditHandler` | `(e: T) => void` | Renders an edit button in the cell |
+| `buttonDeleteHandler` | `(e: T) => void` | Renders a delete button in the cell |
 
 ### ElementAST Interface
 
@@ -357,6 +357,8 @@ For more control, VTable accepts a `cellRenderer` Svelte 5 snippet. The snippet 
 | `col` | `ITableColumn<T>` | Column definition |
 | `cellContent` | `any` | Default cell content |
 | `index` | `number` | Row index |
+
+Important: Use it instead or large HTML strings.
 
 **Example:**
 ```svelte
