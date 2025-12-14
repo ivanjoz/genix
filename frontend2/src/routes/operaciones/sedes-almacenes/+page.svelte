@@ -9,6 +9,7 @@
   import { Loading, Notify, formatTime } from "$lib/helpers"
   import { throttle } from "$lib/helpers"
   import { Core } from "$core/store.svelte"
+  import AlmacenLayoutEditor from "./AlmacenLayoutEditor.svelte"
   import { 
     AlmacenesService, 
     PaisCiudadesService, 
@@ -27,7 +28,6 @@
   let filterText = $state("")
   let sedeForm = $state({} as ISede)
   let almacenForm = $state({} as IAlmacen)
-  let layerView = $state(1)
 
   const saveSede = async (isDelete?: boolean) => {
     const form = sedeForm
@@ -151,10 +151,9 @@
       header: "...",
       headerCss: "w-32",
       cellCss: "text-center px-6",
-      render: (e) => {
-        return `<button class="bnr2 b-blue b-card-1 edit-btn" data-id="${e.ID}">
-          <i class="icon-pencil"></i>
-        </button>`
+      buttonEditHandler: (e) => {
+        sedeForm = {...e}
+        Core.openModal(1)
       }
     }
   ]
@@ -181,37 +180,9 @@
     },
     {
       header: "Layout",
+      id: "layout",
       cellCss: "px-6",
-      render: (e) => {
-        if(!e.Layout || e.Layout.length === 0) {
-          return `<div class="w-full flex items-center justify-between">
-            <div></div>
-            <button class="bnr2 b-blue b-card-1 layout-btn" data-id="${e.ID}">
-              <i class="icon-pencil"></i>
-            </button>
-          </div>`
-        }
-        
-        // Calculate averages
-        const avgCols = e.Layout.reduce((sum, x) => sum + (x.ColCant || 0), 0) / e.Layout.length
-        const avgRows = e.Layout.reduce((sum, x) => sum + (x.RowCant || 0), 0) / e.Layout.length
-        
-        return `<div class="w-full flex items-center justify-between">
-          <div class="flex items-center">
-            <div class="ff-bold h3">${e.Layout.length}</div>
-            <i class="icon-folder-empty"></i>
-            <div class="mr-4 ml-4 h6 text-slate-500">X</div>
-            <div class="ff-bold h3">${avgCols.toFixed(0)}</div>
-            <i class="icon-buffer"></i>
-            <div class="mr-4 ml-4 h6 text-slate-500">X</div>
-            <div class="ff-bold h3">${avgRows.toFixed(0)}</div>
-            <i class="icon-cube"></i>
-          </div>
-          <button class="bnr2 b-blue b-card-1 layout-btn" data-id="${e.ID}">
-            <i class="icon-pencil"></i>
-          </button>
-        </div>`
-      }
+      getValue: e => ""
     },
     {
       header: "Estado",
@@ -227,10 +198,9 @@
       header: "...",
       headerCss: "w-32",
       cellCss: "text-center px-6",
-      render: (e) => {
-        return `<button class="bnr2 b-blue b-card-1 edit-btn" data-id="${e.ID}">
-          <i class="icon-pencil"></i>
-        </button>`
+      buttonEditHandler: (e) => {
+        almacenForm = JSON.parse(JSON.stringify(e))
+        Core.openModal(2)
       }
     }
   ]
@@ -255,60 +225,17 @@
     })
   })
 
-  const handleSedeEdit = (id: number) => {
-    const sede = almacenesService.Sedes.find(x => x.ID === id)
-    if(sede){
-      sedeForm = {...sede}
-      Core.openModal(1)
-    }
-  }
-
-  const handleAlmacenEdit = (id: number) => {
-    const almacen = almacenesService.Almacenes.find(x => x.ID === id)
-    if(almacen){
-      almacenForm = JSON.parse(JSON.stringify(almacen))
-      Core.openModal(2)
-    }
-  }
-
-  const handleLayoutEdit = (id: number) => {
-    const almacen = almacenesService.Almacenes.find(x => x.ID === id)
-    if(almacen){
-      almacenForm = JSON.parse(JSON.stringify(almacen))
-      // Process layout to convert Bloques to xy_ properties
-      for(let layout of almacenForm.Layout||[]){
-        for(let e of layout.Bloques||[]){
-          layout[`xy_${e.rw}_${e.co}`] = e.nm
-        }
-      }
-      Core.openSideLayer(1)
-    }
-  }
-
-  // Event delegation for button clicks
-  $effect(() => {
-    const handleClick = (e: Event) => {
-      const target = e.target as HTMLElement
-      const button = target.closest('button')
-      if(!button) return
-
-      const id = parseInt(button.getAttribute('data-id') || '0')
-      if(!id) return
-
-      if(button.classList.contains('edit-btn')){
-        if(Core.pageOptionSelected === 1){
-          handleSedeEdit(id)
-        } else {
-          handleAlmacenEdit(id)
-        }
-      } else if(button.classList.contains('layout-btn')){
-        handleLayoutEdit(id)
+  const handleLayoutEdit = (almacen: IAlmacen) => {
+    almacenForm = JSON.parse(JSON.stringify(almacen))
+    // Process layout to convert Bloques to xy_ properties
+    for(let layout of almacenForm.Layout||[]){
+      for(let e of layout.Bloques||[]){
+        layout[`xy_${e.rw}_${e.co}`] = e.nm
       }
     }
-
-    document.addEventListener('click', handleClick)
-    return () => document.removeEventListener('click', handleClick)
-  })
+    console.log("ejecutando open side")
+    Core.openSideLayer(1)
+  }
 </script>
 
 <Page title="Sedes & Almacenes" options={pageOptions}>
@@ -367,7 +294,36 @@
         maxHeight="calc(80vh - 13rem)"
         columns={almacenesColumns}
         data={filteredAlmacenes}
-      />
+      >
+        {#snippet cellRenderer(record: IAlmacen, col: ITableColumn<IAlmacen>)}
+          {#if col.id === "layout"}
+            <div class="w-full flex items-center justify-between">
+              {#if record.Layout && record.Layout.length > 0}
+                {@const avgCols = record.Layout.reduce((sum, x) => sum + (x.ColCant || 0), 0) / record.Layout.length}
+                {@const avgRows = record.Layout.reduce((sum, x) => sum + (x.RowCant || 0), 0) / record.Layout.length}
+                <div class="flex items-center">
+                  <div class="ff-bold h3">{record.Layout.length}</div>
+                  <i class="icon-folder-empty"></i>
+                  <div class="mr-4 ml-4 h6 text-slate-500">X</div>
+                  <div class="ff-bold h3">{avgCols.toFixed(0)}</div>
+                  <i class="icon-buffer"></i>
+                  <div class="mr-4 ml-4 h6 text-slate-500">X</div>
+                  <div class="ff-bold h3">{avgRows.toFixed(0)}</div>
+                  <i class="icon-cube"></i>
+                </div>
+              {:else}
+                <div></div>
+              {/if}
+              <button class="bnr2 b-blue b-card-1" 
+                aria-label="Editar Layout"
+                onclick={() => handleLayoutEdit(record)}
+              >
+                <i class="icon-pencil"></i>
+              </button>
+            </div>
+          {/if}
+        {/snippet}
+      </VTable>
     </div>
   {/if}
 
@@ -423,100 +379,11 @@
 
   <!-- Layout Side Layer -->
   <Layer id={1} type="side" title={"Layout " + (almacenForm?.Nombre || "-")}
-    contentCss="p-0"
+    contentCss="p-0" css="px-8 py-8 md:px-14 md:py-10" 
+    titleCss="h2 ff-bold"
     onClose={() => {}}
     onSave={() => { saveAlmacen() }}
   >
-    {@const layouts = almacenForm.Layout || []}
-    
-    <div class="w-full h-full relative">
-      <div class="flex justify-between w-full mb-8 px-12 pt-12">
-        <div></div>
-        <div class="flex items-center">
-          <button class="bx-green" aria-label="Agregar Layout" onclick={ev => {
-            ev.stopPropagation()
-            const maxID = layouts.length > 0 
-              ? Math.max(...layouts.map(x => x.ID || 0)) 
-              : 0
-            layouts.push({ RowCant: 2, ColCant: 3, Name: "", ID: maxID + 1, Bloques: [] })
-            almacenForm.Layout = [...layouts]
-          }}>
-            <i class="icon-plus"></i>
-          </button>
-        </div>
-      </div>
-      
-      <div class="overflow-auto px-12" style="max-height: calc(100% - 6.4rem)">
-        {#if layouts.length === 0}
-          <div class="bg-red-100 text-red-700 p-8 rounded">
-            No hay espacios en al almacén. Agregue uno pulsando en (+)
-          </div>
-        {/if}
-        
-        {#each layouts as _, idx (layouts[idx].ID)}
-          {@const layout = layouts[idx]}
-          {@const heads = Array.from({ length: layout.ColCant || 1 }, (_, i) => String(i + 1))}
-          {@const rows = Array.from({ length: layout.RowCant || 1 }, (_, i) => String(i + 1))}
-          
-          <div class="bg-white rounded-lg shadow-sm p-8 mb-12">
-            <div class="w-full flex items-center justify-between px-8 py-8">
-              <div class="flex items-center">
-                <Input label="" bind:saveOn={layouts[idx]} save="Name" 
-                  css="w-144 mr-12" inputCss="text-sm" required={true}
-                />
-                <span class="ff-bold text-slate-600">Filas</span>
-                <Input label="" bind:saveOn={layouts[idx]} save="RowCant" 
-                  css="w-60 mx-4" inputCss="text-sm" type="number"
-                  onChange={() => { 
-                    almacenForm.Layout = [...layouts]
-                  }}
-                />
-                <span class="ff-bold text-slate-600">Niveles</span>
-                <Input label="" bind:saveOn={layouts[idx]} save="ColCant" 
-                  css="w-60 mx-4" inputCss="text-sm" type="number"
-                  onChange={() => { 
-                    almacenForm.Layout = [...layouts]
-                  }}
-                />
-              </div>
-              <button class="bnr4 b-red" aria-label="Eliminar Layout"
-                style="margin-top: -12px; margin-right: -4px"
-                onclick={ev => {
-                  ev.stopPropagation()
-                  almacenForm.Layout = layouts.filter((_, i) => i !== idx)
-                }}
-              >
-                <i class="icon-trash"></i>
-              </button>
-            </div>
-            
-            <table class="w-full">
-              <thead>
-                <tr>
-                  <th style="width: 3rem">-</th>
-                  {#each heads as head}
-                    <th style="width: calc(92% / {heads.length})">{head}</th>
-                  {/each}
-                </tr>
-              </thead>
-              <tbody>
-                {#each rows as row}
-                  <tr>
-                    <td class="text-center">{row}</td>
-                    {#each heads as col}
-                      <td class="relative py-2 px-2" style="height: 2.6rem">
-                        <Input label="" bind:saveOn={layouts[idx]} save={`xy_${row}_${col}`}
-                          css="w-full" inputCss="text-sm text-center"
-                        />
-                      </td>
-                    {/each}
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        {/each}
-      </div>
-    </div>
+    <AlmacenLayoutEditor bind:almacen={almacenForm} />
   </Layer>
 </Page>

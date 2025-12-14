@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Env } from "$lib/security";
-  import { onDestroy, tick } from "svelte";
+  import { tick } from "svelte";
   import { Core } from "../core/store.svelte";
   import OptionsStrip from "./micro/OptionsStrip.svelte";
   
@@ -8,6 +8,8 @@
   let divLayer: HTMLDivElement
   // Animation duration in milliseconds - should match CSS animation duration
   const ANIMATION_DURATION = 350;
+  // Track previous showSideLayer value to detect changes
+  let previousShowSideLayer = $state(Core.showSideLayer);
 
   let { 
     children, css, title, titleCss, contentCss, id,
@@ -31,88 +33,69 @@
   } = $props();
 
   const layerWidth = $derived.by(() => {
-    return Env.sideLayerSize + "px"
+    return Env.sideLayerSize ? Env.sideLayerSize + "px" : ""
   })
 
   const contentWidth = $derived.by(() => {
     return Core.showSideLayer > 0 && Core.deviceType !== 3
-      ? `calc(var(--page-width) - ${layerWidth} - 8px)` 
+      ? `calc(var(--page-width) - ${layerWidth||"0"} - 8px)` 
       : undefined
   })
 
-  // Helper function to set layer with view transition on mobile
-  const openSideLayerWithTransition = (layerId: number) => {
-    if (Core.deviceType === 3 && document.startViewTransition) {
-      // We need to wait for the next tick to ensure the element is available
-      tick().then(() => {
-        /*
-        const targetDiv = document.querySelector(`[data-layer-id="${layerId}"]`) as HTMLDivElement;
-        const currentDiv = divLayer;
-        */
-        // Set view-transition-name on both current and target elements
-        if (divLayer) {
-          divLayer.style.setProperty("view-transition-name", "mobile-side-layer");
-        }
-        /*
-        if (targetDiv) {
-          targetDiv.style.setProperty("view-transition-name", "mobile-side-layer");
-        }
-        */
+  // Helper function to close layer with view transition on mobile
+  const closeLayer = () => {
+    Core.openSideLayer(0);
+  }
+
+  // React to showSideLayer changes and handle transitions on mobile
+  $effect(() => {
+    if (type !== 'side' || Core.deviceType !== 3) {
+      previousShowSideLayer = Core.showSideLayer;
+      return;
+    }
+    
+    // Detect if showSideLayer changed
+    if (previousShowSideLayer !== Core.showSideLayer) {
+      const isOpening = Core.showSideLayer === id;
+      const isClosing = previousShowSideLayer === id && Core.showSideLayer !== id;
+      
+      if ((isOpening || isClosing) && document.startViewTransition && divLayer) {
+        // Set view-transition-name for the animation
+        divLayer.style.setProperty("view-transition-name", "mobile-side-layer");
+        
+        // Start the view transition
+        document.startViewTransition(() => {
+          // The actual DOM update happens here
+          tick();
+        });
+        
+        // Clean up view-transition-name after animation completes
         setTimeout(() => {
           if (divLayer) {
             divLayer.style.setProperty("view-transition-name", "");
           }
-          /*
-          if (targetDiv) {
-            targetDiv.style.setProperty("view-transition-name", "");
-          }
-            */
         }, ANIMATION_DURATION);
-
-        document.startViewTransition(() => {
-          Core.showSideLayer = layerId;
-        });
-      });
-    } else {
-      Core.showSideLayer = layerId;
-    }
-  }
-
-  // Helper function to close layer with view transition on mobile
-  const closeLayer = () => {
-    openSideLayerWithTransition(0);
-  }
-
-  // Set view-transition-name when layer is shown on mobile
-  $effect(() => {
-    if(type !== 'side' || Core.deviceType !== 3){ return }
-    
-    if (Core.showSideLayer === id && divLayer) {
-      divLayer.style.setProperty("view-transition-name", "mobile-side-layer");
+      }
       
-      setTimeout(() => {
-        if (divLayer) {
-          divLayer.style.setProperty("view-transition-name", "");
-        }
-      }, ANIMATION_DURATION);
+      previousShowSideLayer = Core.showSideLayer;
     }
   })
 
-  // Register the openSideLayer function in the Core store
   $effect(() => {
-    Core.openSideLayer = openSideLayerWithTransition;
+    if(Core.showSideLayer || type){
+      console.log("updated 122:", Core.showSideLayer, type,"| open:", Core.showSideLayer === id)
+    }
   })
 
-  console.log("Env.sideLayerSize",  Env.sideLayerSize)
 </script>
 
 {#if Core.showSideLayer === id && (type === 'side'|| type === 'bottom')}
-  <div class="flex flex-col {css||""}" bind:this={divLayer}
+  <div class="flex flex-col w-800 {css||""}" bind:this={divLayer}
     data-layer-id={id}
     class:_8={contentOverflow}
     class:_1={type === 'side'}
     class:_2={type === 'bottom'}
-    style="width: {layerWidth};"
+    style={layerWidth ? `width: ${layerWidth};` : ""}
   >
     <div class="flex items-center justify-between">
       <div class="overflow-hidden text-nowrap mr-8 {titleCss}">{title}</div>

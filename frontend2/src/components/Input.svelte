@@ -153,7 +153,9 @@
     if(dependencyValue){ doSave() }
   })
 
-  let cN = $derived(`${s1.input} p-rel` + (css ? " " + css : ""));
+  let cN = $derived(
+    `${s1.input} p-rel${css ? ` ${css}` : ""}${!label ? " no-label" : ""}`,
+  )
 </script>
 
 <div class={cN}>
@@ -163,14 +165,12 @@
       {label}{@html iconValid() || ""}
     </div>
     <div class={s1.input_lab_cell_right}><div></div></div>
+    <div class={s1.input_shadow_layer}><div></div></div>
   {/if}
-  <div class={s1.input_shadow_layer}>
-    <div></div>
-  </div>
   <div class={`${s1.input_div} flex w-full`}>
-    <div class={s1.input_div_1}>
-      <div></div>
-    </div>
+    {#if label}
+      <div class={s1.input_div_1}><div></div></div>
+    {/if}
     {#if useTextArea}
       <textarea class={`w-full ${s1.input_inp} ${inputCss || ""}`}
         bind:value={inputValue}

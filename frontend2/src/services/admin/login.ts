@@ -27,7 +27,7 @@ export const sendUserLogin = async (data: ILogin): Promise<any> => {
   try {
     loginInfo = await POST({
       data, 
-      route: `p-user-login`, 
+      route: `ef`, 
       apiName: 'MAIN',
       headers: { "Content-Type": "application/json" }
     })
