@@ -109,17 +109,17 @@ export class AccessHelper {
   getUserInfo(){ return this.#userInfo }
   
   async parseAccesos(login: ILoginResult, cipherKey?: string) {
-    const userInfoStr = await decrypt(login.UserInfo, cipherKey)
-    const userInfo: UserInfo = JSON.parse(userInfoStr)
-    let accesosIDs = [...(userInfo.a||[])]
-    accesosIDs = accesosIDs.concat((userInfo.r||[]).map(x => x * 10 + 8))
+    const userInfoStr = await decrypt(login.UserInfo, cipherKey as string)
+    const userInfo = JSON.parse(userInfoStr)
+ 
+    const rolesIDsParsed = (userInfo.rolesIDs||[]).map(x => x * 10 + 8)
+    const accesosIDs = (userInfo.accesosIDs||[]).concat(rolesIDsParsed)
 
-    const userInfoParsed: UserInfoParsed = { 
-      id: userInfo.d, user: userInfo.u, email: login.UserEmail, names: login.UserNames
-    }
-    
-    LocalStorage.setItem(Env.appId + "UserInfo", JSON.stringify(userInfoParsed))
+    const UnixTime = Math.floor(Date.now()/1000)
+    LocalStorage.setItem(Env.appId + "TokenCreated", String(UnixTime))
+    LocalStorage.setItem(Env.appId + "UserInfo", JSON.stringify(userInfo))
     LocalStorage.setItem(Env.appId + "UserToken", login.UserToken)
+    // unix time un seconds expiration
     LocalStorage.setItem(Env.appId + "TokenExpTime", String(login.TokenExpTime))
     LocalStorage.setItem(Env.appId + "EmpresaID", String(login.EmpresaID))
     this.#setUserInfo()

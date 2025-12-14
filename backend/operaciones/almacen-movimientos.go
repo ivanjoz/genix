@@ -2,7 +2,7 @@ package operaciones
 
 import (
 	"app/core"
-	"app/db"
+	"app/db2"
 	s "app/types"
 	"encoding/json"
 	"slices"
@@ -68,13 +68,14 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	result := Result{}
 
-	err := db.SelectRef(&result.Movimientos, func(q *db.Query[s.AlmacenMovimiento], col s.AlmacenMovimiento) {
-		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-		q.Where(col.ID_().Between(
-			core.SUnixTimeUUIDConcatID(almacenID, int64(fechaHoraInicio)),
-			core.SUnixTimeUUIDConcatID(almacenID, int64(fechaHoraFin)+1)))
-		q.OrderDescending().Limit(1000)
-	})
+	query := db2.Query(&result.Movimientos)
+	query.Select().
+		EmpresaID.Equals(req.Usuario.EmpresaID).
+		ID.Between(
+		core.SUnixTimeUUIDConcatID(almacenID, int64(fechaHoraInicio)),
+		core.SUnixTimeUUIDConcatID(almacenID, int64(fechaHoraFin)+1))
+	query.OrderDesc().Limit(1000)
+	err := query.Exec()
 
 	if err != nil {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)
@@ -97,11 +98,12 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		err := db.SelectRef(&result.Productos, func(q *db.Query[s.Producto], col s.Producto) {
-			q.Columns(col.ID_(), col.Nombre_(), col.Precio_())
-			q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-			q.Where(col.ID_().In(productosSet.Values...))
-		})
+		query := db2.Query(&result.Productos)
+		q1 := db2.Table[s.Producto]()
+		query.Select(q1.ID, q1.Nombre, q1.Precio).
+			EmpresaID.Equals(req.Usuario.EmpresaID).
+			ID.In(productosSet.Values...)
+		err := query.Exec()
 		if err != nil {
 			err = core.Err("Error al obtener los productos:", err)
 		}
@@ -109,11 +111,12 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	})
 
 	errGroup.Go(func() error {
-		err := db.SelectRef(&result.Usuarios, func(q *db.Query[s.Usuario], col s.Usuario) {
-			q.Columns(col.ID_(), col.Usuario_(), col.Nombres_(), col.Apellidos_())
-			q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-			q.Where(col.ID_().In(usuariosSet.Values...))
-		})
+		query := db2.Query(&result.Usuarios)
+		q1 := db2.Table[s.Usuario]()
+		query.Select(q1.ID, q1.Usuario, q1.Nombres, q1.Apellidos).
+			EmpresaID.Equals(req.Usuario.EmpresaID).
+			ID.In(usuariosSet.Values...)
+		err := query.Exec()
 		if err != nil {
 			err = core.Err("Error al obtener los usuarios:", err)
 		}
@@ -140,29 +143,32 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	// Si se necesita obtener un delta
 	if updated > 0 {
 		eg.Go(func() error {
-			return db.SelectRef(&almacenProductos1, func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
-				q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-				q.Where(col.AlmacenID_().Equals(almacenID))
-				q.Where(col.Status_().Equals(1))
-				q.Between(col.Updated_().Equals(updated)).And(col.Updated_().LessEqual(999999999))
-			})
+			query := db2.Query(&almacenProductos1)
+			query.Select().
+				EmpresaID.Equals(req.Usuario.EmpresaID).
+				AlmacenID.Equals(int32(almacenID)).
+				Status.Equals(1).
+				Updated.Between(int32(updated), int32(999999999))
+			return query.Exec()
 		})
 		eg.Go(func() error {
-			return db.SelectRef(&almacenProductos2, func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
-				q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-				q.Where(col.AlmacenID_().Equals(almacenID))
-				q.Where(col.Status_().Equals(0))
-				q.Between(col.Updated_().Equals(updated)).And(col.Updated_().LessEqual(999999999))
-			})
+			query := db2.Query(&almacenProductos2)
+			query.Select().
+				EmpresaID.Equals(req.Usuario.EmpresaID).
+				AlmacenID.Equals(int32(almacenID)).
+				Status.Equals(0).
+				Updated.Between(int32(updated), int32(999999999))
+			return query.Exec()
 		})
 	} else {
 		eg.Go(func() error {
-			return db.SelectRef(&almacenProductos2, func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
-				q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-				q.Where(col.AlmacenID_().Equals(almacenID))
-				q.Where(col.Status_().Equals(1))
-				q.Between(col.Updated_().Equals(0)).And(col.Updated_().LessEqual(999999999))
-			})
+			query := db2.Query(&almacenProductos2)
+			query.Select().
+				EmpresaID.Equals(req.Usuario.EmpresaID).
+				AlmacenID.Equals(int32(almacenID)).
+				Status.Equals(1).
+				Updated.Between(int32(0), int32(999999999))
+			return query.Exec()
 		})
 	}
 
@@ -196,44 +202,46 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 	}
 
 	// Obtiene información de los productos
-	productos, err := db.SelectT(func(q *db.Query[s.Producto]) {
-		col := q.T
-		q.Columns(col.EmpresaID_(), col.ID_(), col.CategoriasIDs_())
-		q.Where(col.EmpresaID_().Equals(core.Usuario.EmpresaID))
-		q.Where(col.ID_().In(productosIDs.Values...))
-	})
+	productos := []s.Producto{}
+	query := db2.Query(&productos)
+	q1 := db2.Table[s.Producto]()
+	query.Select(q1.EmpresaID, q1.ID, q1.CategoriasIDs).
+		EmpresaID.Equals(core.Usuario.EmpresaID).
+		ID.In(productosIDs.Values...)
 
-	if err != nil {
+	if err := query.Exec(); err != nil {
 		return core.Err("Error al obtener los productos:", err)
 	}
 
 	productosMap := core.SliceToMapE(productos, func(e s.Producto) int32 { return e.ID })
 
 	// Obtiene el stock actual
-	currentStock := db.Select(func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
-		q.Where(col.EmpresaID_().Equals(core.Usuario.EmpresaID))
-		q.Where(col.ID_().In(keys...))
-	})
+	currentStock := []s.AlmacenProducto{}
+	currentStockQuery := db2.Query(&currentStock)
+	currentStockQuery.Select().
+		EmpresaID.Equals(core.Usuario.EmpresaID).
+		ID.In(keys...)
 
-	if currentStock.Err != nil {
-		return core.Err("Error al obtener el stock previo (1):", currentStock.Err)
+	if err := currentStockQuery.Exec(); err != nil {
+		return core.Err("Error al obtener el stock previo (1):", err)
 	}
 
-	currentStockMap := core.SliceToMapK(currentStock.Records,
+	currentStockMap := core.SliceToMapK(currentStock,
 		func(e s.AlmacenProducto) string { return e.ID })
 
 	// Obtiene el stock del producto en todos los almacenes
-	productosStock := db.Select(func(q *db.Query[s.AlmacenProducto], col s.AlmacenProducto) {
-		q.Columns(col.ProductoID_(), col.AlmacenID_(), col.Cantidad_(), col.SubCantidad_())
-		q.Where(col.EmpresaID_().Equals(core.Usuario.EmpresaID))
-		q.Where(col.Status_().Equals(1))
-		q.Where(col.ProductoID_().In(productosIDs.Values...))
-	})
+	productosStock := []s.AlmacenProducto{}
+	productosStockQuery := db2.Query(&productosStock)
+	qAlm := db2.Table[s.AlmacenProducto]()
+	productosStockQuery.Select(qAlm.ProductoID, qAlm.AlmacenID, qAlm.Cantidad, qAlm.SubCantidad).
+		EmpresaID.Equals(core.Usuario.EmpresaID).
+		Status.Equals(1).
+		ProductoID.In(productosIDs.Values...)
 
-	core.Log("productos stock::", len(productosStock.Records))
+	core.Log("productos stock::", len(productosStock))
 
-	if productosStock.Err != nil {
-		return core.Err("Error al obtener el stock previo (2):", currentStock.Err)
+	if err := productosStockQuery.Exec(); err != nil {
+		return core.Err("Error al obtener el stock previo (2):", err)
 	}
 
 	productoStock := map[int32]*productoStockCounter{}
@@ -253,7 +261,7 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 		ps.almacenesStock[almacenID] = count
 	}
 
-	for _, e := range productosStock.Records {
+	for _, e := range productosStock {
 		addProductoStock(e.ProductoID, e.AlmacenID, e.Cantidad)
 	}
 
@@ -319,13 +327,14 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 
 	core.Print(almacenProductos)
 
-	statements := slices.Concat(
-		db.MakeInsertStatement(&almacenMovimientos),
-		db.MakeInsertStatement(&almacenProductos))
-	core.Print(statements)
+	// Insert AlmacenProducto using db2
+	if err := db2.Insert(&almacenProductos); err != nil {
+		return core.Err("Error al guardar el stock de productos:", err)
+	}
 
-	if err := db.QueryExecStatements(statements); err != nil {
-		return core.Err("Error al guardar el stock:", err)
+	// Insert AlmacenMovimiento using db2
+	if err := db2.Insert(&almacenMovimientos); err != nil {
+		return core.Err("Error al guardar los movimientos:", err)
 	}
 
 	// Agrega los datos del stock a los productos
@@ -353,9 +362,8 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 	core.Log("productos for update...")
 	core.Print(productosToUpdate)
 
-	pCol := s.Producto{}
-	err = db.Update(&productosToUpdate, pCol.Stock_(), pCol.StockStatus_())
-	if err != nil {
+	q2 := db2.Table[s.Producto]()
+	if err := db2.Update(&productosToUpdate, q2.Stock, q2.StockStatus); err != nil {
 		// Este error es interno, dado que el stock ya se guardó en la tabla principal de almacén_productos
 		core.Log("Error al actualizar el stock en productos:", err)
 	}

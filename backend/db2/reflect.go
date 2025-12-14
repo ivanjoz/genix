@@ -68,7 +68,7 @@ type statementRangeGroup struct {
 	betweenTo *ColumnStatement
 }
 
-func makeTable[T TableSchemaInterface[T]](structType *T) scyllaTable[any] {
+func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 	schema := (*structType).GetSchema()
 	structRefValue := reflect.ValueOf(structType).Elem()
@@ -77,7 +77,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) scyllaTable[any] {
 		panic("No se ha especificado una PrimaryKey")
 	}
 
-	dbTable := scyllaTable[any]{
+	dbTable := ScyllaTable[any]{
 		keyspace:      schema.Keyspace,
 		name:          schema.Name,
 		columnsMap:    map[string]*columnInfo{},

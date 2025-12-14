@@ -2,86 +2,94 @@ package exec
 
 import (
 	"app/core"
-	"app/db"
+	"app/db2"
 	s "app/types"
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"strings"
 )
 
-func MakeScyllaControllers() []ScyllaController {
-	return []ScyllaController{
-		makeController[s.Almacen](),
-		makeController[s.Sede](),
-		makeController[s.Producto](),
-		makeController[s.GaleriaImagen](),
-		// makeController[s.ProductoStock](),
-		makeController[s.ListaCompartidaRegistro](),
-		makeController[s.PaisCiudad](),
-		makeController[s.AlmacenProducto](),
-		makeController[s.AlmacenMovimiento](),
-		makeController[s.Increment](),
-		makeController[s.Usuario](),
-		makeController[s.Caja](),
-		makeController[s.CajaMovimiento](),
-		makeController[s.CajaCuadre](),
+func MakeScyllaControllers2() []db2.ScyllaController2 {
+	return []db2.ScyllaController2{
+		//v2 controllers
+		makeControllerDB2[s.Almacen](),
+		makeControllerDB2[s.Sede](),
+		makeControllerDB2[s.AlmacenProducto](),
+		makeControllerDB2[s.PaisCiudad](),
+		makeControllerDB2[s.GaleriaImagen](),
+		makeControllerDB2[s.ListaCompartidaRegistro](),
+		makeControllerDB2[s.AlmacenMovimiento](),
+		makeControllerDB2[s.Usuario](),
+		makeControllerDB2[s.Caja](),
+		makeControllerDB2[s.CajaMovimiento](),
+		makeControllerDB2[s.CajaCuadre](),
+		makeControllerDB2[s.Producto](),
+		makeControllerDB2[s.Increment](),
+		makeControllerDB2[DemoStruct](),
 	}
 }
 
-type ScyllaController struct {
-	TableName            string
-	StructType           db.TableSchemaInterface
-	GetRecords           func(empresaID, limit int32, lastKey any) ([]any, error)
-	GetRecordsGob        func(empresaID, limit int32, lastKey any) ([]byte, error)
-	RestoreGobRecords    func(empresaID int32, content []byte) error
-	InitTable            func(mode int8)
-	RecalcVirtualColumns func()
-}
+// makeControllerDB2 creates a ScyllaController for db2 package types using generics.
+// This function automatically handles queries for any db2 table type using the
+// TableQueryInterface for clean, simple query building.
+func makeControllerDB2[T db2.TableBaseInterface[E, T], E db2.TableSchemaInterface[E]]() db2.ScyllaController2 {
+	// Get the table struct instance
+	schema := db2.MakeSchema[T]()
+	scyllaTable := db2.MakeScyllaTable[T]()
 
-func makeController[T db.TableSchemaInterface]() ScyllaController {
-	newType := *new(T)
-	scyllaTable := db.MakeTable(newType.GetSchema(), newType)
-	columnsMap := scyllaTable.GetColumns()
-	tableName := scyllaTable.GetFullName()
-	tableNameSingle := strings.Split(tableName, ".")[1]
-	partKey := scyllaTable.GetPartKey()
+	// Get table name and keyspace
+	tableName := schema.Name
+	keyspace := schema.Keyspace
+	if keyspace == "" {
+		keyspace = core.Env.DB_NAME
+	}
+	fullTableName := fmt.Sprintf("%s.%s", keyspace, tableName)
+
+	// Get partition key name
+	partKeyName := ""
+	if schema.Partition != nil {
+		partKeyName = schema.Partition.GetName()
+	}
+
+	// Get clustering key info
+	firstKeyName := ""
+	if len(schema.Keys) > 0 {
+		firstKeyName = schema.Keys[0].GetName()
+	}
 
 	queryRecords := func(empresaID, limit int32, lastKey any) ([]T, error) {
+		records := []T{}
+		query := any(db2.Query(&records)).(db2.TableQueryInterface[E])
 
-		query := db.Select(func(q *db.Query[T], col T) {
-			if _, ok := columnsMap["empresa_id"]; ok {
-				q.Where(db.ColumnStatement{
-					Col: "empresa_id", Operator: "=", Value: empresaID,
-				})
-			} else {
-				core.Log("No hay columna de particionado (empresa_id): ", tableName)
-			}
-
-			if lastKey != nil {
-				q.Where(db.ColumnStatement{
-					Col: scyllaTable.GetKeys()[0].Name, Operator: ">=", Value: lastKey,
-				})
-			}
-
-			if limit > 0 {
-				q.Limit(limit)
-			}
-		})
-
-		if query.Err != nil {
-			return query.Records, core.Err("Error al consultar", tableName, ":", query.Err)
+		// Add empresa_id filter if partition key is empresa_id
+		if partKeyName == "empresa_id" {
+			query.SetWhere("empresa_id", "=", empresaID)
 		}
 
-		return query.Records, nil
+		// Add lastKey filter if provided (for pagination)
+		if lastKey != nil && firstKeyName != "" {
+			query.SetWhere(firstKeyName, ">=", lastKey)
+		}
+
+		// Add limit if provided
+		if limit > 0 {
+			query.Limit(limit)
+		}
+
+		// Execute the query
+		if err := query.Exec(); err != nil {
+			return nil, core.Err("Error al consultar", tableName, ":", err)
+		}
+
+		return records, nil
 	}
 
-	return ScyllaController{
-		TableName:  tableNameSingle,
-		StructType: newType,
+	return db2.ScyllaController2{
+		TableName: tableName,
+		Schema:    schema,
+		Table:     scyllaTable,
 		GetRecords: func(empresaID, limit int32, lastKey any) ([]any, error) {
 			records, err := queryRecords(empresaID, limit, lastKey)
-
 			if err != nil {
 				return []any{}, err
 			}
@@ -95,14 +103,12 @@ func makeController[T db.TableSchemaInterface]() ScyllaController {
 		},
 		GetRecordsGob: func(empresaID, limit int32, lastKey any) ([]byte, error) {
 			records, err := queryRecords(empresaID, limit, lastKey)
-
 			if err != nil {
 				return []byte{}, err
 			}
 
 			var buffer bytes.Buffer
 			encoder := gob.NewEncoder(&buffer)
-
 			err = encoder.Encode(records)
 			if err != nil {
 				return []byte{}, err
@@ -117,86 +123,34 @@ func makeController[T db.TableSchemaInterface]() ScyllaController {
 			records := []T{}
 			err := dec.Decode(&records)
 			if err != nil {
-				return core.Err("Error al decodificar registros de:", tableNameSingle, ".", err)
+				return core.Err("Error al decodificar registros de:", tableName, ".", err)
 			}
 
-			// Las secuencias no se insertan sino se actualizan
-			core.Log("Tabla:", tableNameSingle, "| Guardando", len(records), "registros...")
+			core.Log("Tabla:", tableName, "| Guardando", len(records), "registros...")
 
-			// Lógica específica para secuencias
-			if tableNameSingle == "sequences" {
-				keys := []string{}
-				updateStatements := []string{}
-				recordsParsed := []s.Increment{}
-
-				for _, e := range records {
-					rec := any(e).(s.Increment)
-					recordsParsed = append(recordsParsed, rec)
-					keys = append(keys, rec.TableName)
-				}
-
-				query := db.Select(func(q *db.Query[s.Increment], col s.Increment) {
-					q.Where(col.TableName_().In(keys...))
-				})
-
-				if query.Err != nil {
-					return core.Err("Error al seleccionar registros:", err)
-				}
-
-				core.Log("Registros obtenidos:", len(query.Records))
-				currentRecordsMap := core.SliceToMapK(query.Records,
-					func(e s.Increment) string { return e.TableName })
-
-				for _, e := range recordsParsed {
-					currentValue := int64(0)
-					if current, ok := currentRecordsMap[e.TableName]; ok {
-						currentValue = current.CurrentValue
-					}
-					core.Log("Current Value:", currentValue)
-					if e.CurrentValue == currentValue {
-						continue
-					}
-					increment := ""
-					if e.CurrentValue > currentValue {
-						increment = fmt.Sprintf("+ %v", e.CurrentValue-currentValue)
-					} else {
-						increment = fmt.Sprintf("- %v", currentValue-e.CurrentValue)
-					}
-
-					statement := fmt.Sprintf(
-						"UPDATE %v.sequences SET current_value = current_value %v WHERE name = '%v'",
-						core.Env.DB_NAME, increment, e.TableName)
-					updateStatements = append(updateStatements, statement)
-				}
-
-				core.Log("Registros a actualizar:", len(updateStatements))
-
-				for _, statement := range updateStatements {
-					core.Log("Enviando Statement:", statement)
-					if err := db.QueryExec(statement); err != nil {
-						core.Log("Error en statement: ", statement)
-						return core.Err("Error al actualizar registros:", err)
-					}
-				}
-			} else {
-				if partKey != nil && partKey.Name == "empresa_id" {
-					statement := fmt.Sprintf(`DELETE FROM %v WHERE empresa_id = %v`, tableName, empresaID)
-					if err := db.QueryExec(statement); err != nil {
-						core.Log("Error en statement: ", statement)
-						return core.Err("Error al eliminar registros:", err)
-					}
-				}
-				if err = db.Insert(&records); err != nil {
-					return core.Err("Error al insertar registros:", err)
+			// Delete existing records for this empresa_id if partition key is empresa_id
+			if partKeyName == "empresa_id" {
+				statement := fmt.Sprintf(`DELETE FROM %v WHERE empresa_id = %v`, fullTableName, empresaID)
+				if err := db2.QueryExec(statement); err != nil {
+					core.Log("Error en statement: ", statement)
+					return core.Err("Error al eliminar registros:", err)
 				}
 			}
+
+			// Insert new records
+			if err = db2.Insert(&records); err != nil {
+				return core.Err("Error al insertar registros:", err)
+			}
+
 			return nil
 		},
 		InitTable: func(mode int8) {
-			db.DeployScylla(1, *new(T))
+			// TODO: Implement table initialization for db2
+			core.Log("InitTable not yet implemented for db2:", tableName)
 		},
 		RecalcVirtualColumns: func() {
-			db.RecalcVirtualColumns[T]()
+			// TODO: Implement virtual column recalculation for db2
+			core.Log("RecalcVirtualColumns not yet implemented for db2:", tableName)
 		},
 	}
 }

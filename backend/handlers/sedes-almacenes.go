@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"app/core"
-	"app/db"
+	"app/db2"
 	s "app/types"
 	"encoding/json"
 	"fmt"
@@ -18,34 +18,36 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		err := db.SelectRef(&almacenes, func(q *db.Query[s.Almacen], col s.Almacen) {
-			q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-			if updated > 0 {
-				q.Where(col.Updated_().GreaterThan(updated))
-			} else {
-				q.Where(col.Status_().Equals(1))
-			}
-		})
-		if err != nil {
-			err = fmt.Errorf("error al obtener los almacenes: %v", err)
+		query := db2.Query(&almacenes)
+		query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
+
+		if updated > 0 {
+			query.Updated.GreaterThan(updated)
+		} else {
+			query.Status.Equals(1)
 		}
-		return err
+
+		if err := query.Exec(); err != nil {
+			return fmt.Errorf("error al obtener los almacenes: %v", err)
+		}
+		return nil
 	})
 
 	sedes := []s.Sede{}
 	errGroup.Go(func() error {
-		err := db.SelectRef(&sedes, func(q *db.Query[s.Sede], col s.Sede) {
-			q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-			if updated > 0 {
-				q.Where(col.Updated_().GreaterThan(updated))
-			} else {
-				q.Where(col.Status_().Equals(1))
-			}
-		})
-		if err != nil {
-			err = fmt.Errorf("error al obtener los sedes: %v", err)
+		query := db2.Query(&sedes)
+		query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
+
+		if updated > 0 {
+			query.Updated.GreaterThan(updated)
+		} else {
+			query.Status.Equals(1)
 		}
-		return err
+
+		if err := query.Exec(); err != nil {
+			return fmt.Errorf("error al obtener los sedes: %v", err)
+		}
+		return nil
 	})
 
 	if err := errGroup.Wait(); err != nil {
@@ -66,10 +68,13 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 	paisCiudades := []s.PaisCiudad{}
 
 	if !ubigeosSlice.IsEmpty() {
-		err := db.SelectRef(&paisCiudades, func(q *db.Query[s.PaisCiudad], col s.PaisCiudad) {
-			q.Where(col.PaisID_().Equals(604))
-			q.Where(col.CiudadID_().In(ubigeosSlice.Values...))
-		})
+		// Note: PaisCiudad still uses old db ORM - this will need to be migrated separately
+		query := db2.Query(&paisCiudades)
+		query.Select().
+			PaisID.Equals(604).
+			CiudadID.In(ubigeosSlice.Values...)
+
+		err := query.Exec()
 		if err != nil {
 			return req.MakeErr("Error al obtener las ciudades:", err)
 		}
@@ -134,7 +139,7 @@ func PostSedes(req *core.HandlerArgs) core.HandlerResponse {
 	body.Created = time.Now().Unix()
 	body.CreatedBy = req.Usuario.ID
 
-	if err = db.Insert(&[]s.Sede{body}); err != nil {
+	if err = db2.Insert(&[]s.Sede{body}); err != nil {
 		return req.MakeErr("Error al actualizar / insertar la sede: " + err.Error())
 	}
 
@@ -145,20 +150,27 @@ func GetPaisCiudades(req *core.HandlerArgs) core.HandlerResponse {
 	paisID := req.GetQueryInt("pais-id")
 	updated := req.GetQueryInt64("upd")
 
-	paisCiudades := db.Select(func(q *db.Query[s.PaisCiudad], col s.PaisCiudad) {
-		q.Where(col.PaisID_().Equals(paisID)).
-			WhereIF(updated > 0, col.Updated_().GreaterEqual(updated))
-	})
+	paisCiudades := []s.PaisCiudad{}
+	query := db2.Query(&paisCiudades)
+	query.Select().
+		PaisID.Equals(int32(paisID))
 
-	if paisCiudades.Err != nil {
-		err := fmt.Errorf("error al obtener los paises - ciudades: %v", paisCiudades.Err)
+	if updated > 0 {
+		query.Updated.GreaterEqual(updated)
+	}
+
+	query.AllowFilter()
+	err := query.Exec()
+
+	if err != nil {
+		err := fmt.Errorf("error al obtener los paises - ciudades: %v", err)
 		core.Print(err)
 		return req.MakeErr(err)
 	}
 
-	core.Log("registros obtenidos:: ", len(paisCiudades.Records))
+	core.Log("registros obtenidos:: ", len(paisCiudades))
 
-	return core.MakeResponse(req, &paisCiudades.Records)
+	return core.MakeResponse(req, &paisCiudades)
 }
 
 func PostAlmacen(req *core.HandlerArgs) core.HandlerResponse {
@@ -192,7 +204,7 @@ func PostAlmacen(req *core.HandlerArgs) core.HandlerResponse {
 	body.Created = time.Now().Unix()
 	body.CreatedBy = req.Usuario.ID
 
-	if err := db.Insert((&[]s.Almacen{body})); err != nil {
+	if err := db2.Insert(&[]s.Almacen{body}); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el almacén: " + err.Error())
 	}
 
