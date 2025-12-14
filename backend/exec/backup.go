@@ -93,7 +93,7 @@ func SaveBackup(empresaID int32) error {
 	}
 
 	// Scylla Tables - Controllers
-	for _, controller := range MakeScyllaControllers() {
+	for _, controller := range MakeScyllaControllers2() {
 		name := fmt.Sprintf("%v|%v", controller.TableName, 1)
 
 		core.Log("Obteniendo registros de: ", name, "...")

@@ -26,13 +26,15 @@ var ExecHandlersCron = ExecRouterType{}
 
 var ExecHandlersTesting = ExecRouterType{
 	// "fn10":  TestScyllaDBConnection,
-	"fn11":  TestScyllaDBInsert,
-	"fn12":  TestZstdCompression,
-	"fn13":  TestDynamoCounter,
-	"fn15":  TestInsert,
-	"fn16":  TestQuery,
-	"fn17":  TestCBOR,
-	"fn18":  TestDeploy,
+	"fn11": TestScyllaDBInsert,
+	"fn12": TestZstdCompression,
+	"fn13": TestDynamoCounter,
+	/*
+		"fn15":  TestInsert,
+		"fn16":  TestQuery,
+		"fn17":  TestCBOR,
+		"fn18":  TestDeploy,
+	*/
 	"fn014": Test14,
 	"fn015": Test15,
 	"fn016": Test16,

@@ -3,7 +3,7 @@ package handlers
 import (
 	"app/aws"
 	"app/core"
-	"app/db"
+	"app/db2"
 	s "app/types"
 	"encoding/json"
 	"time"
@@ -49,7 +49,7 @@ func PostGaleriaImage(req *core.HandlerArgs) core.HandlerResponse {
 		Updated:     core.SUnixTime(),
 	}
 
-	err = db.Insert(&[]s.GaleriaImagen{galeriaImage})
+	err = db2.Insert(&[]s.GaleriaImagen{galeriaImage})
 	if err != nil {
 		core.Log("Error al guardar la imagen.")
 		return req.MakeErr("Error al guardar la imagen en BD.", err)
@@ -62,18 +62,20 @@ func GetGaleriaImages(req *core.HandlerArgs) core.HandlerResponse {
 
 	updated := core.UnixToSunix(req.GetQueryInt64("updated"))
 
-	imagenes, err := db.SelectT(func(query *db.Query[s.GaleriaImagen]) {
-		col := query.T
-		query.Exclude(col.EmpresaID_())
-		query.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-		if updated > 0 {
-			query.Where(col.Updated_().GreaterEqual(updated))
-		} else {
-			query.Where(col.Status_().GreaterEqual(1))
-		}
-	})
+	imagenes := []s.GaleriaImagen{}
+	query := db2.Query(&imagenes)
+	q1 := db2.Table[s.GaleriaImagen]()
 
-	if err != nil {
+	query.Exclude(q1.EmpresaID).
+		EmpresaID.Equals(req.Usuario.EmpresaID)
+
+	if updated > 0 {
+		query.Updated.GreaterEqual(updated)
+	} else {
+		query.Status.GreaterEqual(1)
+	}
+
+	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener las imágenes:", err)
 	}
 

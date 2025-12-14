@@ -3,7 +3,6 @@ package exec
 import (
 	"app/aws"
 	"app/core"
-	"app/db"
 	"app/db2"
 	"app/facturacion"
 	"app/types"
@@ -204,7 +203,7 @@ type DemoStruct3 struct {
 	Demo   int32  `json:"demo" msgpack:"2,omitempty"`
 }
 
-type DemoStruct struct {
+type DemoStruct5 struct {
 	s.TAGS    `table:"demo_structs"`
 	CompanyID int32         `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
 	ID        int32         `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
@@ -264,7 +263,7 @@ func Test19(args *core.ExecArgs) core.FuncResponse {
 		panic(err)
 	}
 
-	demo := DemoStruct{
+	demo := DemoStruct5{
 		CompanyID: 1,
 		ID:        int32(id),
 		Edad:      43,
@@ -279,7 +278,7 @@ func Test19(args *core.ExecArgs) core.FuncResponse {
 		Struct3:   st3,
 	}
 
-	registros := []DemoStruct{demo}
+	registros := []DemoStruct5{demo}
 	core.Log(registros)
 
 	return core.FuncResponse{}
@@ -348,7 +347,7 @@ func Test20(args *core.ExecArgs) core.FuncResponse {
 
 func Test21(args *core.ExecArgs) core.FuncResponse {
 
-	demo := DemoStruct{
+	demo := DemoStruct5{
 		CompanyID: 1,
 		ID:        int32(1),
 		Edad:      43,
@@ -642,7 +641,8 @@ func Test28(args *core.ExecArgs) core.FuncResponse {
 
 func Test29(args *core.ExecArgs) core.FuncResponse {
 
-	db.RecalcVirtualColumns[s.ListaCompartidaRegistro]()
+	// Migrated to db2 - db.RecalcVirtualColumns not needed anymore
+	// db.RecalcVirtualColumns[s.ListaCompartidaRegistro]()
 
 	return core.FuncResponse{}
 }
@@ -658,21 +658,26 @@ func Test30(args *core.ExecArgs) core.FuncResponse {
 		listasRegistrosMap[listaID] = &[]s.ListaCompartidaRegistro{}
 	}
 
-	type r = s.ListaCompartidaRegistro
+	// Migrated to db2
 	errGroup.Go(func() error {
-		result := db.Select(func(q *db.Query[r], col r) {
-			q.Where(col.EmpresaID_().Equals(1))
-			q.Where(col.ListaID_().In(listasIDs...))
-			if updated > 0 {
-				q.Where(col.Updated_().GreaterThan(updated))
-			} else {
-				q.Where(col.Status_().Equals(1))
-			}
-		})
+		registros := []s.ListaCompartidaRegistro{}
+		query := db2.Query(&registros)
+		query.Select().
+			EmpresaID.Equals(1).
+			ListaID.In(listasIDs...)
+		if updated > 0 {
+			query.Updated.GreaterThan(updated)
+		} else {
+			query.Status.Equals(1)
+		}
 
-		core.Log("resultado obtenidos::", len(result.Records))
+		if err := query.Exec(); err != nil {
+			return err
+		}
 
-		return result.Err
+		core.Log("resultado obtenidos::", len(registros))
+
+		return nil
 	})
 
 	err := errGroup.Wait()
@@ -697,7 +702,10 @@ func Test32(args *core.ExecArgs) core.FuncResponse {
 			fmt.Println("error:", err1)
 		}
 	*/
-	db.DeployScylla(0, s.ListaCompartidaRegistro{})
+	// Migrated to db2 - use makeControllerDB2 and db2.DeployScylla
+	// db.DeployScylla(0, s.ListaCompartidaRegistro{})
+	controller := makeControllerDB2[s.ListaCompartidaRegistro]()
+	db2.DeployScylla(0, controller)
 	return core.FuncResponse{}
 }
 
@@ -719,7 +727,7 @@ func Test33(args *core.ExecArgs) core.FuncResponse {
 
 type DemoTable4[T any] struct {
 	Table  T
-	Nombre db.Col[string]
+	Nombre string
 	Hola1  int
 }
 
@@ -736,7 +744,7 @@ func Demo1(e HelloInterface) {
 }
 
 type DemoTable5 struct {
-	DemoTable4[DemoStruct]
+	DemoTable4[DemoStruct5]
 	/*
 		Nombre     db.Colx[DemoTable5, string]
 		Edad       db.Colx[DemoTable5, int32]
@@ -744,25 +752,7 @@ type DemoTable5 struct {
 	*/
 }
 
-func (e DemoTable5) GetSchema() db.TableSchema {
-	return db.TableSchema{
-		Name:      "caja_movimientos",
-		Partition: e.Nombre,
-		/*
-			Keys:      []db.Coln{e.ID_()},
-			Views: []db.View{
-				{Cols: []db.Coln{e.VentaID_()}, KeepPart: true},
-				{Cols: []db.Coln{e.CreatedBy_()}, KeepPart: true},
-			},
-		*/
-	}
-}
-
-func (e DemoTable5) MakeTable() *DemoTable5 {
-	return &DemoTable5{}
-}
-
-func (e *DemoTable4[T]) Query(statements ...db.ColumnStatement) []T {
+func (e *DemoTable4[T]) Query(statements ...db2.ColumnStatement) []T {
 
 	return []T{}
 }
@@ -771,7 +761,7 @@ var Table11 = DemoTable4[int32]{}
 
 type TableHelper[T any] struct {
 	Table T
-	Hola  db.CoI16
+	Hola  int32
 	Hola1 int
 }
 
@@ -783,7 +773,8 @@ func (e TableHelper[T]) Query2() []int32 {
 
 		core.Log(records)
 	*/
-	db.RecalcVirtualColumns[s.ListaCompartidaRegistro]()
+	// Migrated to db2 - db.RecalcVirtualColumns not needed anymore
+	// db.RecalcVirtualColumns[s.ListaCompartidaRegistro]()
 
 	return []int32{}
 }
@@ -795,16 +786,6 @@ type Hello1[T any] interface {
 type Hello2[T any] interface {
 	Query2() []T
 }
-
-var Table1 = TableHelper[DemoStruct1]{}
-
-func Query[T any](e Hello1[T]) []T {
-	Table1.Hola.Equals(1)
-	Demo1(DemoTable5{})
-	return []T{}
-}
-
-var DemoTableHelper = TableHelper[DemoStruct1]{}
 
 func Test34(args *core.ExecArgs) core.FuncResponse {
 
@@ -820,6 +801,48 @@ func Test34(args *core.ExecArgs) core.FuncResponse {
 func Test35(args *core.ExecArgs) core.FuncResponse {
 
 	return core.FuncResponse{}
+}
+
+type DemoStruct struct {
+	db2.TableStruct[DemoStructTable, DemoStruct]
+	EmpresaID   int32    `db:"empresa_id,pk"`
+	ID          int32    `db:"id,pk"`
+	ListaID     int32    `db:"lista_id,view,view.1,view.2"`
+	Nombre      string   `json:",omitempty" db:"nombre"`
+	Images      []string `json:",omitempty" db:"images"`
+	Descripcion string   `json:",omitempty" db:"descripcion"`
+	DemoColumn  DemoStruct1
+	// Propiedades generales
+	Status    int8  `json:"ss,omitempty" db:"status,view.1"`
+	Updated   int64 `json:"upd,omitempty" db:"updated,view.2"`
+	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
+}
+
+type DemoStructTable struct {
+	db2.TableStruct[DemoStructTable, DemoStruct]
+	EmpresaID   db2.Col[DemoStructTable, int32]
+	ID          db2.Col[DemoStructTable, int32]
+	ListaID     db2.Col[DemoStructTable, int32]
+	Nombre      db2.Col[DemoStructTable, string]
+	Images      db2.ColSlice[DemoStructTable, string]
+	Descripcion db2.Col[DemoStructTable, string]
+	Status      db2.Col[DemoStructTable, int8]
+	Updated     db2.Col[DemoStructTable, int64]
+	UpdatedBy   db2.Col[DemoStructTable, int32]
+	DemoColumn  db2.Col[DemoStructTable, DemoStruct1]
+}
+
+func (e DemoStructTable) GetSchema() db2.TableSchema {
+	return db2.TableSchema{
+		Name:      "zz_demo_struct",
+		Partition: e.EmpresaID,
+		Keys:      []db2.Coln{e.ID},
+		Views: []db2.View{
+			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
+			{Cols: []db2.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
+			{Cols: []db2.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
+		},
+	}
 }
 
 func Test36(args *core.ExecArgs) core.FuncResponse {
@@ -870,7 +893,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 	fmt.Println("Actualizando registros....")
 
 	q1 := db2.Table[types.ListaCompartidaRegistro]()
-	err = q1.Update(&[]types.ListaCompartidaRegistro{recordToUpdate},
+	err = db2.Update(&[]types.ListaCompartidaRegistro{recordToUpdate},
 		q1.Status, q1.ListaID, q1.Nombre, q1.Images, q1.Descripcion, q1.Updated)
 	if err != nil {
 		fmt.Println("Error al actualizar::", err)

@@ -19,7 +19,7 @@ type posibleIndex struct {
 }
 
 // selectExec executes a query using TableSchema and TableInfo
-func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable scyllaTable[any]) error {
+func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable ScyllaTable[any]) error {
 	viewTableName := scyllaTable.name
 
 	if len(scyllaTable.keyspace) == 0 {

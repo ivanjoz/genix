@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-type scyllaTable[T any] struct {
+type ScyllaTable[T any] struct {
 	name          string
 	keyspace      string
 	keys          []*columnInfo
@@ -22,16 +22,16 @@ type scyllaTable[T any] struct {
 	_maxColIdx    int16
 }
 
-func (e scyllaTable[T]) GetFullName() string {
+func (e ScyllaTable[T]) GetFullName() string {
 	return fmt.Sprintf("%v.%v", e.keyspace, e.name)
 }
-func (e scyllaTable[T]) GetColumns() map[string]*columnInfo {
+func (e ScyllaTable[T]) GetColumns() map[string]*columnInfo {
 	return e.columnsMap
 }
-func (e scyllaTable[T]) GetKeys() []*columnInfo {
+func (e ScyllaTable[T]) GetKeys() []*columnInfo {
 	return e.keys
 }
-func (e scyllaTable[T]) GetPartKey() *columnInfo {
+func (e ScyllaTable[T]) GetPartKey() *columnInfo {
 	return e.partKey
 }
 
@@ -153,10 +153,35 @@ type ColumnSetInfo interface {
 	SetSchemaStruct(any)
 }
 
+type TableQueryInterface[T any] interface {
+	GetSchema() TableSchema
+	SetWhere(string, string, any)
+	Limit(int32) *T
+	AllowFilter() *T
+	Exec() error
+}
+
+type TableDeployInterface interface {
+	MakeTableSchema() TableSchema
+	MakeScyllaTable() ScyllaTable[any]
+}
+
 // TableStruct
 type TableStruct[T TableSchemaInterface[T], E TableBaseInterface[T, E]] struct {
 	schemaStruct *T
 	tableInfo    *TableInfo
+}
+
+func (e *TableStruct[T, E]) MakeTableSchema() TableSchema {
+	return MakeSchema[E]()
+}
+func (e *TableStruct[T, E]) MakeScyllaTable() ScyllaTable[any] {
+	return makeTable(new(T))
+}
+
+func (e *TableStruct[T, E]) SetWhere(colname string, operator string, value any) {
+	cs := ColumnStatement{Col: colname, Operator: operator, Value: value}
+	e.tableInfo.statements = append(e.tableInfo.statements, cs)
 }
 
 func (e *TableStruct[T, E]) SetTableInfo(t *TableInfo) {
@@ -355,10 +380,20 @@ func (e *ColSlice[T, E]) Contains(v E) *T {
 	return e.schemaStruct
 }
 
-func Query[T TableBaseInterface[E, T], E any](refSlice *[]T) *E {
+func Query[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSlice *[]T) *E {
 	refTable := initStructTable[E, T](new(E))
 	any(refTable).(TableStructInterfaceQuery[E, T]).SetRefSlice(refSlice)
 	return refTable
+}
+
+func MakeScyllaTable[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() ScyllaTable[any] {
+	refTable := initStructTable[E, T](new(E))
+	return makeTable(refTable)
+}
+
+func MakeSchema[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() TableSchema {
+	refTable := initStructTable[E, T](new(E))
+	return (*refTable).GetSchema()
 }
 
 func initStructTable[T any, E any](schemaStruct *T) *T {

@@ -2,7 +2,7 @@ package main
 
 import (
 	"app/core"
-	"app/db"
+	"app/db2"
 	"app/exec"
 	"context"
 	"fmt"
@@ -131,8 +131,7 @@ func main() {
 		}()
 	}
 
-	// Conexión a la base de datos
-	db.SetScyllaConnection(db.ConnParams{
+	db2.SetScyllaConnection(db2.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,

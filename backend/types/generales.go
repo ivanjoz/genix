@@ -1,29 +1,29 @@
 package types
 
-import (
-	"app/db"
-	"app/db2"
-)
+import "app/db2"
 
 type Increment struct {
-	TAGS         `table:"sequences"`
-	TableName    string `db:"name,pk"`
-	CurrentValue int64  `db:"current_value,counter"`
+	db2.TableStruct[IncrementTable, Increment]
+	Name         string
+	CurrentValue int64
 }
 
-func (e Increment) TableName_() db.CoStr    { return db.CoStr{"name"} }
-func (e Increment) CurrentValue_() db.CoI64 { return db.CoI64{"current_value"} }
+type IncrementTable struct {
+	db2.TableStruct[IncrementTable, Increment]
+	Name         db2.Col[IncrementTable, string] // `db:"name,pk"`
+	CurrentValue db2.Col[IncrementTable, int64]  // `db:"current_value,counter"`
+}
 
-func (e Increment) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e IncrementTable) GetSchema() db2.TableSchema {
+	return db2.TableSchema{
 		Name:           "sequences",
-		Keys:           []db.Coln{e.TableName_()},
-		SequenceColumn: e.CurrentValue_(),
+		Keys:           []db2.Coln{e.Name},
+		SequenceColumn: &e.CurrentValue,
 	}
 }
 
 type PaisCiudad struct {
-	TAGS         `table:"pais_ciudades"`
+	db2.TableStruct[PaisCiudadTable, PaisCiudad]
 	PaisID       int32       `json:",omitempty" db:"pais_id,pk"`
 	CiudadID     string      `json:"ID" db:"ciudad_id,pk"`
 	Nombre       string      `db:"nombre"`
@@ -34,22 +34,23 @@ type PaisCiudad struct {
 	Provincia    *PaisCiudad `json:"-"`
 }
 
-type _a = PaisCiudad
+type PaisCiudadTable struct {
+	db2.TableStruct[PaisCiudadTable, PaisCiudad]
+	PaisID    db2.Col[PaisCiudadTable, int32]
+	CiudadID  db2.Col[PaisCiudadTable, string]
+	Nombre    db2.Col[PaisCiudadTable, string]
+	PadreID   db2.Col[PaisCiudadTable, string]
+	Jerarquia db2.Col[PaisCiudadTable, int8]
+	Updated   db2.Col[PaisCiudadTable, int64]
+}
 
-func (e _a) PaisID_() db.CoI32   { return db.CoI32{"pais_id"} }
-func (e _a) CiudadID_() db.CoStr { return db.CoStr{"ciudad_id"} }
-func (e _a) Nombre_() db.CoStr   { return db.CoStr{"nombre"} }
-func (e _a) PadreID_() db.CoI32  { return db.CoI32{"padre_id"} }
-func (e _a) Jerarquia_() db.CoI8 { return db.CoI8{"jerarquia"} }
-func (e _a) Updated_() db.CoI64  { return db.CoI64{"updated"} }
-
-func (e PaisCiudad) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e PaisCiudadTable) GetSchema() db2.TableSchema {
+	return db2.TableSchema{
 		Name:      "pais_ciudades",
-		Partition: e.PaisID_(),
-		Keys:      []db.Coln{e.CiudadID_()},
-		Views: []db.View{
-			{Cols: []db.Coln{e.Updated_()}, KeepPart: true},
+		Partition: e.PaisID,
+		Keys:      []db2.Coln{e.CiudadID},
+		Views: []db2.View{
+			{Cols: []db2.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
@@ -66,31 +67,6 @@ type ListaCompartidaRegistro struct {
 	Status    int8  `json:"ss,omitempty" db:"status,view.1"`
 	Updated   int64 `json:"upd,omitempty" db:"updated,view.2"`
 	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
-}
-
-type _b = ListaCompartidaRegistro
-
-func (e _b) EmpresaID_() db.CoI32   { return db.CoI32{"empresa_id"} }
-func (e _b) ID_() db.CoI32          { return db.CoI32{"id"} }
-func (e _b) ListaID_() db.CoI32     { return db.CoI32{"lista_id"} }
-func (e _b) Nombre_() db.CoStr      { return db.CoStr{"nombre"} }
-func (e _b) Images_() db.CsStr      { return db.CsStr{"images"} }
-func (e _b) Descripcion_() db.CoStr { return db.CoStr{"descripcion"} }
-func (e _b) Status_() db.CoI8       { return db.CoI8{"status"} }
-func (e _b) Updated_() db.CoI64     { return db.CoI64{"updated"} }
-func (e _b) UpdatedBy_() db.CoI32   { return db.CoI32{"updated_by"} }
-
-func (e ListaCompartidaRegistro) GetSchema() db.TableSchema {
-	return db.TableSchema{
-		Name:      "lista_compartida_registro",
-		Partition: e.EmpresaID_(),
-		Keys:      []db.Coln{e.ID_()},
-		Views: []db.View{
-			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
-			{Cols: []db.Coln{e.ListaID_(), e.Status_()}, ConcatI32: []int8{2}},
-			{Cols: []db.Coln{e.ListaID_(), e.Updated_()}, ConcatI64: []int8{10}},
-		},
-	}
 }
 
 type ListaCompartidaRegistroTable struct {

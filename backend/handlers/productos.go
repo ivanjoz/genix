@@ -3,7 +3,7 @@ package handlers
 import (
 	"app/aws"
 	"app/core"
-	"app/db"
+	"app/db2"
 	s "app/types"
 	"encoding/json"
 	"fmt"
@@ -20,15 +20,16 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		err := db.SelectRef(&productos, func(q *db.Query[s.Producto], col s.Producto) {
-			q.Exclude(col.Stock_(), col.StockStatus_())
-			q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-			if updated > 0 {
-				q.Where(col.Updated_().GreaterThan(updated))
-			} else {
-				q.Where(col.Status_().GreaterEqual(1))
-			}
-		})
+		query := db2.Query(&productos)
+		q1 := db2.Table[s.Producto]()
+		query.Exclude(q1.Stock, q1.StockStatus).
+			EmpresaID.Equals(req.Usuario.EmpresaID)
+		if updated > 0 {
+			query.Updated.GreaterThan(updated)
+		} else {
+			query.Status.GreaterEqual(1)
+		}
+		err := query.Exec()
 		if err != nil {
 			err = fmt.Errorf("error al obtener los productos: %v", err)
 		}
@@ -79,9 +80,9 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	productosCurrent := []s.Producto{}
 	if len(productosIDsSet.Values) > 0 {
-		err = db.SelectRef(&productosCurrent, func(q *db.Query[s.Producto], col s.Producto) {
-			q.Where(col.ID_().In(productosIDsSet.Values...))
-		})
+		query := db2.Query(&productosCurrent)
+		query.Select().ID.In(productosIDsSet.Values...)
+		err = query.Exec()
 		if err != nil {
 			return req.MakeErr("Error al obtener los productos actuales:", err)
 		}
@@ -209,7 +210,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		*/
 	}
 
-	if err = db.Insert(&productos); err != nil {
+	if err = db2.Insert(&productos); err != nil {
 		return req.MakeErr("Error al actualizar / insertar la sede: " + err.Error())
 	}
 
@@ -239,19 +240,20 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	productos := db.Select(func(q *db.Query[s.Producto], col s.Producto) {
-		q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-		q.Where(col.ID_().Equals(image.ProductoID))
-	})
+	productos := []s.Producto{}
+	query := db2.Query(&productos)
+	query.Select().
+		EmpresaID.Equals(req.Usuario.EmpresaID).
+		ID.Equals(image.ProductoID)
 
-	if productos.Err != nil {
-		return req.MakeErr("Error al obtener el producto:", productos.Err)
+	if err := query.Exec(); err != nil {
+		return req.MakeErr("Error al obtener el producto:", err)
 	}
-	if len(productos.Records) == 0 {
+	if len(productos) == 0 {
 		return req.MakeErr("No se encontró el producto con ID:", image.ProductoID)
 	}
 
-	producto := productos.Records[0]
+	producto := productos[0]
 	response := map[string]string{}
 
 	if len(image.ImageToDelete) > 0 {
@@ -284,7 +286,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 	producto.Updated = time.Now().Unix()
 	producto.UpdatedBy = req.Usuario.ID
 
-	err = db.Insert(&[]s.Producto{producto})
+	err = db2.Insert(&[]s.Producto{producto})
 
 	if err != nil {
 		return req.MakeErr("Error al actualizar el producto:", err)
@@ -308,14 +310,15 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		err := db.SelectRef(&productos, func(q *db.Query[s.Producto], col s.Producto) {
-			q.Columns(col.ID_(), col.Nombre_(), col.Descripcion_(), col.Precio_(), col.Descuento_(), col.PrecioFinal_(), col.Images_(), col.Stock_(), col.CategoriasIDs_())
-			q.Where(col.EmpresaID_().Equals(empresaID))
-			q.Where(col.StockStatus_().Equals(1))
-			if categoriaID > 0 {
-				q.Where(col.CategoriasIDs_().Contains(categoriaID))
-			}
-		})
+		query := db2.Query(&productos)
+		q1 := db2.Table[s.Producto]()
+		query.Select(q1.ID, q1.Nombre, q1.Descripcion, q1.Precio, q1.Descuento, q1.PrecioFinal, q1.Images, q1.Stock, q1.CategoriasIDs).
+			EmpresaID.Equals(empresaID).
+			StockStatus.Equals(1)
+		if categoriaID > 0 {
+			query.CategoriasIDs.Contains(categoriaID)
+		}
+		err := query.Exec()
 		if err != nil {
 			err = fmt.Errorf("error al obtener los productos: %v", err)
 		}
@@ -323,12 +326,13 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 	})
 
 	errGroup.Go(func() error {
-		err := db.SelectRef(&categorias, func(q *db.Query[s.ListaCompartidaRegistro], col s.ListaCompartidaRegistro) {
-			q.Columns(col.ID_(), col.Nombre_(), col.Descripcion_())
-			q.Where(col.EmpresaID_().Equals(empresaID))
-			q.Where(col.ListaID_().Equals(1))
-			q.Where(col.Status_().Equals(1))
-		})
+		query := db2.Query(&categorias)
+		q1 := db2.Table[s.ListaCompartidaRegistro]()
+		query.Select(q1.ID, q1.Nombre, q1.Descripcion).
+			EmpresaID.Equals(empresaID).
+			ListaID.Equals(1).
+			Status.Equals(1)
+		err := query.Exec()
 		if err != nil {
 			err = fmt.Errorf("error al obtener las categorías: %v", err)
 		}

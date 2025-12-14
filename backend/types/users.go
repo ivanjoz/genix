@@ -1,6 +1,6 @@
 package types
 
-import "app/db"
+import "app/db2"
 
 type TAGS struct{}
 
@@ -51,7 +51,7 @@ type EmpresaPub struct {
 }
 
 type Usuario struct { // DynamoDB + ScyllaDB
-	TAGS         `table:"usuarios"`
+	db2.TableStruct[UsuarioTable, Usuario]
 	ID           int32   `json:"id" db:"id,pk"`
 	EmpresaID    int32   `json:"empresaID,omitempty" db:"empresa_id,pk"`
 	Usuario      string  `json:"usuario" db:"usuario"`
@@ -71,27 +71,30 @@ type Usuario struct { // DynamoDB + ScyllaDB
 	Status       int8    `json:"ss,omitempty" db:"status"`
 }
 
-func (e Usuario) ID_() db.CoI32           { return db.CoI32{"id"} }
-func (e Usuario) EmpresaID_() db.CoI32    { return db.CoI32{"empresa_id"} }
-func (e Usuario) Usuario_() db.CoStr      { return db.CoStr{"usuario"} }
-func (e Usuario) Apellidos_() db.CoStr    { return db.CoStr{"apellidos"} }
-func (e Usuario) DocumentoNro_() db.CoStr { return db.CoStr{"documento_nro"} }
-func (e Usuario) Cargo_() db.CoStr        { return db.CoStr{"cargo"} }
-func (e Usuario) Nombres_() db.CoStr      { return db.CoStr{"nombres"} }
-func (e Usuario) PerfilesIDs_() db.CsI32  { return db.CsI32{"perfiles_ids"} }
-func (e Usuario) RolesIDs_() db.CsI32     { return db.CsI32{"roles_ids"} }
-func (e Usuario) Email_() db.CoStr        { return db.CoStr{"email"} }
-func (e Usuario) Status_() db.CoI8        { return db.CoI8{"status"} }
-func (e Usuario) Updated_() db.CoI64      { return db.CoI64{"updated"} }
-func (e Usuario) UpdatedBy_() db.CoI32    { return db.CoI32{"updated_by"} }
-func (e Usuario) Created_() db.CoI64      { return db.CoI64{"created"} }
-func (e Usuario) CreatedBy_() db.CoI32    { return db.CoI32{"created_by"} }
+type UsuarioTable struct {
+	db2.TableStruct[UsuarioTable, Usuario]
+	ID           db2.Col[UsuarioTable, int32]
+	EmpresaID    db2.Col[UsuarioTable, int32]
+	Usuario      db2.Col[UsuarioTable, string]
+	Apellidos    db2.Col[UsuarioTable, string]
+	Nombres      db2.Col[UsuarioTable, string]
+	PerfilesIDs  db2.ColSlice[UsuarioTable, int32] `db:"perfiles_ids"`
+	RolesIDs     db2.ColSlice[UsuarioTable, int32] `db:"roles_ids"`
+	Email        db2.Col[UsuarioTable, string]
+	Cargo        db2.Col[UsuarioTable, string]
+	DocumentoNro db2.Col[UsuarioTable, string]
+	Created      db2.Col[UsuarioTable, int64]
+	CreatedBy    db2.Col[UsuarioTable, int32]
+	Updated      db2.Col[UsuarioTable, int64]
+	UpdatedBy    db2.Col[UsuarioTable, int32]
+	Status       db2.Col[UsuarioTable, int8]
+}
 
-func (e Usuario) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e UsuarioTable) GetSchema() db2.TableSchema {
+	return db2.TableSchema{
 		Name:      "usuarios",
-		Partition: e.EmpresaID_(),
-		Keys:      []db.Coln{e.ID_()},
+		Partition: e.EmpresaID,
+		Keys:      []db2.Coln{e.ID},
 	}
 }
 

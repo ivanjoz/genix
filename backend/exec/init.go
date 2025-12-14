@@ -2,7 +2,7 @@ package exec
 
 import (
 	"app/core"
-	"app/db"
+	"app/db2"
 	"app/handlers"
 	s "app/types"
 	"encoding/csv"
@@ -133,16 +133,16 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	// ciudades de Peru
-	ciudades := db.Select(func(q *db.Query[s.PaisCiudad], col s.PaisCiudad) {
-		q.Columns(col.Nombre_(), col.CiudadID_(), col.PadreID_())
-		q.Where(col.PaisID_().Equals(604))
-	})
+	ciudades := []s.PaisCiudad{}
+	q1 := db2.Query(&ciudades)
+	err := q1.Select(q1.Nombre, q1.CiudadID, q1.PadreID).
+		PaisID.Equals(604).Exec()
 
-	if ciudades.Err != nil {
-		panic(ciudades.Err)
+	if err != nil {
+		panic(err)
 	}
 
-	core.Log("ciudades obtenidas::", len(ciudades.Records))
+	core.Log("ciudades obtenidas::", len(ciudades))
 
 	cwd, _ := os.Getwd()
 	parentDir := filepath.Dir(cwd)
@@ -157,7 +157,7 @@ func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	// Encode the struct as JSON and write it to the file
 	encoder := json.NewEncoder(file)
-	if err := encoder.Encode(ciudades.Records); err != nil {
+	if err := encoder.Encode(ciudades); err != nil {
 		fmt.Println("Error encoding JSON:", err)
 	}
 
@@ -166,14 +166,27 @@ func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 // fn-homologate
 func Homologate(args *core.ExecArgs) core.FuncResponse {
-
 	/*
-		for _, controller := range MakeScyllaControllers() {
-			controller.InitTable(2)
+		// Conexión a la base de datos
+		db.MakeScyllaConnection(db.ConnParams{
+			Host:     core.Env.DB_HOST,
+			Port:     int(core.Env.DB_PORT),
+			User:     core.Env.DB_USER,
+			Password: core.Env.DB_PASSWORD,
+			Keyspace: core.Env.DB_NAME,
+		})
+
+		fmt.Println("----------")
+
+		structTypes := []any{}
+		for _, cn := range MakeScyllaControllers() {
+			structTypes = append(structTypes, cn.StructType)
 		}
+
+		db.DeployScylla(0, structTypes...)
 	*/
-	// Conexión a la base de datos
-	db.MakeScyllaConnection(db.ConnParams{
+
+	db2.MakeScyllaConnection(db2.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,
@@ -181,20 +194,7 @@ func Homologate(args *core.ExecArgs) core.FuncResponse {
 		Keyspace: core.Env.DB_NAME,
 	})
 
-	fmt.Println("----------")
-	/*
-		err1 := db.QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.productos__pk_status_view`)
-		err1 = db.QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.productos__pk_updated_view`)
-		if err1 != nil {
-			fmt.Println("error:", err1)
-		}
-	*/
-	structTypes := []any{}
-	for _, cn := range MakeScyllaControllers() {
-		structTypes = append(structTypes, cn.StructType)
-	}
-
-	db.DeployScylla(0, structTypes...)
+	db2.DeployScylla(0, MakeScyllaControllers2()...)
 
 	return core.FuncResponse{}
 }
@@ -210,7 +210,7 @@ func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
 		db.RecalcVirtualColumns[types.AlmacenProducto]()
 	*/
 
-	db.MakeScyllaConnection(db.ConnParams{
+	db2.MakeScyllaConnection(db2.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,
@@ -218,8 +218,8 @@ func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
 		Keyspace: core.Env.DB_NAME,
 	})
 
-	db.QueryExec("DELETE FROM genix.almacen_producto where empresa_id = 1")
-	db.QueryExec("DELETE FROM genix.almacen_movimiento where empresa_id = 1")
+	db2.QueryExec("DELETE FROM genix.almacen_producto where empresa_id = 1")
+	db2.QueryExec("DELETE FROM genix.almacen_movimiento where empresa_id = 1")
 
 	return core.FuncResponse{}
 }

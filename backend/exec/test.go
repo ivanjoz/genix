@@ -2,11 +2,11 @@ package exec
 
 import (
 	"app/core"
-	"app/db"
+	"app/db2"
 )
 
-func makeConnParams() db.ConnParams {
-	return db.ConnParams{
+func makeConnParams() db2.ConnParams {
+	return db2.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,
@@ -15,30 +15,32 @@ func makeConnParams() db.ConnParams {
 	}
 }
 
+/*
 func TestInsert(args *core.ExecArgs) core.FuncResponse {
 
-	db.TestInsert(makeConnParams())
+	db2.TestInsert(makeConnParams())
 
 	return core.FuncResponse{}
 }
 
 func TestQuery(args *core.ExecArgs) core.FuncResponse {
 
-	db.TestQuery(makeConnParams())
+	db2.TestQuery(makeConnParams())
 
 	return core.FuncResponse{}
 }
 
 func TestCBOR(args *core.ExecArgs) core.FuncResponse {
 
-	db.TestCBOR()
+	db2.TestCBOR()
 
 	return core.FuncResponse{}
 }
 
 func TestDeploy(args *core.ExecArgs) core.FuncResponse {
 
-	db.TestDeploy(makeConnParams())
+	db2.TestDeploy(makeConnParams())
 
 	return core.FuncResponse{}
 }
+*/

@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"app/core"
-	"app/db"
+	"app/db2"
 	s "app/types"
 	"encoding/json"
 	"fmt"
@@ -26,17 +26,17 @@ func GetListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	for _, listaID := range listasIDs {
-		type r = s.ListaCompartidaRegistro
 		errGroup.Go(func() error {
-			return db.SelectRef(listasRegistrosMap[listaID], func(q *db.Query[r], col r) {
-				q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-				q.Where(col.ListaID_().Equals(listaID))
-				if updated > 0 {
-					q.Where(col.Updated_().GreaterThan(updated))
-				} else {
-					q.Where(col.Status_().Equals(1))
-				}
-			})
+			query := db2.Query(listasRegistrosMap[listaID])
+			query.Select().
+				EmpresaID.Equals(req.Usuario.EmpresaID).
+				ListaID.Equals(listaID)
+			if updated > 0 {
+				query.Updated.GreaterThan(updated)
+			} else {
+				query.Status.Equals(1)
+			}
+			return query.Exec()
 		})
 	}
 
@@ -73,19 +73,19 @@ func GetListasCompartidas2(req *core.HandlerArgs) core.HandlerResponse {
 	eg := errgroup.Group{}
 
 	for _, listaID := range listasIDs {
-		type r = s.ListaCompartidaRegistro
 		updated := req.GetQueryInt64(fmt.Sprintf("id_%v", listaID))
 
 		eg.Go(func() error {
-			return db.SelectRef(listaRegistrosMap[listaID], func(q *db.Query[r], col r) {
-				q.Where(col.EmpresaID_().Equals(req.Usuario.EmpresaID))
-				q.Where(col.ListaID_().Equals(listaID))
-				if updated > 0 {
-					q.Where(col.Updated_().GreaterThan(updated))
-				} else {
-					q.Where(col.Status_().Equals(1))
-				}
-			})
+			query := db2.Query(listaRegistrosMap[listaID])
+			query.Select().
+				EmpresaID.Equals(req.Usuario.EmpresaID).
+				ListaID.Equals(listaID)
+			if updated > 0 {
+				query.Updated.GreaterThan(updated)
+			} else {
+				query.Status.Equals(1)
+			}
+			return query.Exec()
 		})
 	}
 
@@ -151,7 +151,7 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Print(records)
 
-	if err = db.Insert(&records); err != nil {
+	if err = db2.Insert(&records); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el registro de lista compartida: " + err.Error())
 	}
 
