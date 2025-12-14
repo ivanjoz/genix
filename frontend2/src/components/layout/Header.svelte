@@ -71,7 +71,12 @@
 	<div class="flex-1 flex items-center">
 		{#if Core.pageOptions?.length > 0}
 			{#each Core.pageOptions as opt }
-				<div>{opt.name}</div>
+			{@const selected = Core.pageOptionSelected == opt.id}
+				<button class="_2" class:_3={selected} aria-label={opt.name}
+					onclick={() => {
+						Core.pageOptionSelected = opt.id
+					}}>{opt.name}
+				</button>
 			{/each}
 		{:else}
 			<div class="h1 text-white text-lg font-semibold tracking-wide">
@@ -187,6 +192,26 @@
 		animation-duration: 0.4s;
 		animation-timing-function: linear;
 		animation-iteration-count: infinite;
+	}
+
+	._2 {
+		color: white;
+		min-width: 150px;
+		background-color: rgba(0, 0, 0, 0.123);
+		height: calc(var(--header-height) - 8px);
+		margin-top: 8px;
+		margin-right: 8px;
+		border-radius: 8px 8px 0 0;
+		border-bottom: 5px solid transparent;
+		padding-top: 4px;
+		opacity: 0.7;
+	}
+	._2._3 {
+		background-color: rgba(0, 0, 0, 0.2);
+		border-bottom: 2px solid white;
+		border-bottom: 5px solid #2b2b4c;
+		font-family: semibold;
+		opacity: 1;
 	}
 
 	/* LOADING BAR */

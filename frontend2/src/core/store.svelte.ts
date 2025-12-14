@@ -32,6 +32,7 @@ export const Core = $state({
   isLoading: 1,
   pageTitle: "" as string,
   pageOptions: [] as {id: number, name: string}[],
+  pageOptionSelected: 1,
   showMobileSearchLayer: null as ITopSearchLayer | null,
   toggleMobileMenu: (() => {}) as () => void,
   openSideLayer: ((layerId: number) => {
