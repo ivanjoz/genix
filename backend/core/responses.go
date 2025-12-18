@@ -820,27 +820,6 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 
 	var bodyBytes []byte
 
-	if response.Body == nil {
-		Log("El body es nil!")
-	} else if strings.Contains(args.Encoding, "zstd") {
-		encoder, _ := zstd.NewWriter(nil)
-		bb := []byte(*response.Body)
-		bodyBytes = encoder.EncodeAll(bb, make([]byte, 0, len(bb)))
-		respWriter.Header().Set("Content-Encoding", "zstd")
-	} else {
-		var bodyCompressed bytes.Buffer
-		gz := gzip.NewWriter(&bodyCompressed)
-		if _, err := gz.Write([]byte(*response.Body)); err != nil {
-			log.Fatal(err)
-		}
-		if err := gz.Close(); err != nil {
-			log.Fatal(err)
-		}
-
-		bodyBytes = bodyCompressed.Bytes()
-		respWriter.Header().Set("Content-Encoding", "gzip")
-	}
-
 	// Revisa si hay que enviar error
 	if len(response.Error) > 0 {
 		respWriter.WriteHeader(http.StatusBadRequest)
@@ -854,16 +833,42 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 		if err != nil {
 			Log("Hubo un error al enviar la respuesta::", err)
 		}
+		return
+	}
+
+	// Envía respuesta ok
+	if response.Body == nil {
+		Log("El body es nil!")
+	} else if strings.Contains(args.Encoding, "zstd") {
+		Log("Comprimiendo body con: zstd")
+		encoder, _ := zstd.NewWriter(nil)
+		bb := []byte(*response.Body)
+		bodyBytes = encoder.EncodeAll(bb, make([]byte, 0, len(bb)))
+		respWriter.Header().Set("Content-Encoding", "zstd")
 	} else {
+		Log("Comprimiendo body con: gzip")
+		var bodyCompressed bytes.Buffer
+		gz := gzip.NewWriter(&bodyCompressed)
+		if _, err := gz.Write([]byte(*response.Body)); err != nil {
+			log.Fatal(err)
+		}
+		if err := gz.Close(); err != nil {
+			log.Fatal(err)
+		}
+
+		bodyBytes = bodyCompressed.Bytes()
+		respWriter.Header().Set("Content-Encoding", "gzip")
+	}
+
+	/*
 		bodyLen := 240
 		if len(bodyBytes) < bodyLen {
 			bodyLen = len(bodyBytes) - 1
 		}
 		Log("Body:", response.Route)
 		Log(string(bodyBytes[0:bodyLen]))
-
-		respWriter.Write(bodyBytes)
-	}
+	*/
+	respWriter.Write(bodyBytes)
 }
 
 // TODO: deprecar después

@@ -18,3 +18,5 @@ frontend2/static/sw.js
 frontend2/static/sw.js.map
 store/docs/*
 frontend2/docs/*
+backend/app.tar.zst
+backend/app
