@@ -43,7 +43,7 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 		})
 	}
 
-	if err = ApplyMovimientos(movimientosInternos); err != nil {
+	if err = ApplyMovimientos(req, movimientosInternos); err != nil {
 		return req.MakeErr(err)
 	}
 
@@ -191,7 +191,7 @@ type productoStockCounter struct {
 	almacenesStock map[int32]almacenStockCount
 }
 
-func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
+func ApplyMovimientos(req *core.HandlerArgs, movimientos []s.MovimientoInterno) error {
 
 	keys := []string{}
 	productosIDs := core.SliceSet[int32]{}
@@ -206,7 +206,7 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 	query := db2.Query(&productos)
 	q1 := db2.Table[s.Producto]()
 	query.Select(q1.EmpresaID, q1.ID, q1.CategoriasIDs).
-		EmpresaID.Equals(core.Usuario.EmpresaID).
+		EmpresaID.Equals(req.Usuario.EmpresaID).
 		ID.In(productosIDs.Values...)
 
 	if err := query.Exec(); err != nil {
@@ -219,7 +219,7 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 	currentStock := []s.AlmacenProducto{}
 	currentStockQuery := db2.Query(&currentStock)
 	currentStockQuery.Select().
-		EmpresaID.Equals(core.Usuario.EmpresaID).
+		EmpresaID.Equals(req.Usuario.EmpresaID).
 		ID.In(keys...)
 
 	if err := currentStockQuery.Exec(); err != nil {
@@ -234,7 +234,7 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 	productosStockQuery := db2.Query(&productosStock)
 	qAlm := db2.Table[s.AlmacenProducto]()
 	productosStockQuery.Select(qAlm.ProductoID, qAlm.AlmacenID, qAlm.Cantidad, qAlm.SubCantidad).
-		EmpresaID.Equals(core.Usuario.EmpresaID).
+		EmpresaID.Equals(req.Usuario.EmpresaID).
 		Status.Equals(1).
 		ProductoID.In(productosIDs.Values...)
 
@@ -273,7 +273,7 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 	for _, e := range movimientos {
 		movimiento := s.AlmacenMovimiento{
 			ID:             core.SUnixTimeUUIDConcatID(e.AlmacenID, uuid),
-			EmpresaID:      core.Usuario.EmpresaID,
+			EmpresaID:      req.Usuario.EmpresaID,
 			AlmacenID:      e.AlmacenID,
 			ProductoID:     e.ProductoID,
 			PresentacionID: e.PresentacionID,
@@ -281,7 +281,7 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 			Lote:           e.Lote,
 			Tipo:           core.If(e.Cantidad > 0, int8(1), 2),
 			Created:        core.SUnixTime(),
-			CreatedBy:      core.Usuario.ID,
+			CreatedBy:      req.Usuario.ID,
 		}
 		uuid++
 
@@ -313,7 +313,7 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 			AlmacenID:      e.AlmacenID,
 			ProductoID:     e.ProductoID,
 			PresentacionID: e.PresentacionID,
-			EmpresaID:      core.Usuario.EmpresaID,
+			EmpresaID:      req.Usuario.EmpresaID,
 			SKU:            e.SKU,
 			Lote:           e.Lote,
 			Cantidad:       movimiento.AlmacenCantidad,
@@ -321,7 +321,7 @@ func ApplyMovimientos(movimientos []s.MovimientoInterno) error {
 			Status:    core.If(movimiento.AlmacenCantidad == 0, int8(0), 1),
 			CostoUn:   costoUn,
 			Updated:   core.SUnixTime(),
-			UpdatedBy: core.Usuario.ID,
+			UpdatedBy: req.Usuario.ID,
 		})
 	}
 

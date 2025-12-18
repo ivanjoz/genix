@@ -12,6 +12,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -56,11 +57,14 @@ func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (
 }
 
 func LocalHandler(w http.ResponseWriter, request *http.Request) {
-	core.Log("hola aquí!!")
-	clearEnvVariables()
-	core.Env.REQ_IP = request.RemoteAddr
 
-	bodyBytes, _ := io.ReadAll(request.Body)
+	const maxBodyBytes = int64(10 << 20) // 10 MiB
+	bodyReader := http.MaxBytesReader(w, request.Body, maxBodyBytes)
+	bodyBytes, err := io.ReadAll(bodyReader)
+	if err != nil {
+		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
 	body := string(bodyBytes)
 
 	args := core.HandlerArgs{
@@ -68,6 +72,7 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 		Method:         strings.ToUpper(request.Method),
 		Route:          request.URL.Path,
 		ResponseWriter: &w,
+		ReqContext:     request,
 	}
 
 	blen := core.If(len(body) > 500, 500, len(body))
@@ -122,6 +127,7 @@ func OnPanic(panicMessage interface{}) {
 func main() {
 	serverPort := ":3589"
 	core.PopulateVariables()
+	makeAppHandlers()
 
 	if !core.Env.IS_LOCAL { // Controla los panic error
 		defer func() {
@@ -141,7 +147,7 @@ func main() {
 
 	invokeFun := ""
 	for _, value := range os.Args {
-		if value[0:2] == "fn" {
+		if len(value) >= 2 && value[0:2] == "fn" {
 			core.Env.LOGS_FULL = true
 			core.Env.APP_CODE = "smbr-qas"
 			invokeFun = value
@@ -171,14 +177,26 @@ func main() {
 	if core.Env.IS_LOCAL {
 		core.Log("Ejecutando en local. http://localhost" + serverPort)
 
-		cors := cors.New(cors.Options{
+		corsMiddleware := cors.New(cors.Options{
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{http.MethodPost, http.MethodPut, http.MethodGet},
 			AllowedHeaders:   []string{"*"},
 			AllowCredentials: false,
 		})
-		// Inicia el servidor con la configuración CORS
-		http.ListenAndServe(serverPort, cors.Handler(http.HandlerFunc(LocalHandler)))
+		// Inicia el servidor con timeouts (previene slowloris y mejora resiliencia).
+		srv := &http.Server{
+			Addr:              serverPort,
+			Handler:           corsMiddleware.Handler(http.HandlerFunc(LocalHandler)),
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      60 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			MaxHeaderBytes:    1 << 20, // 1 MiB
+		}
+
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			core.Log("HTTP server error:", err)
+		}
 
 	} else {
 		// Si se está en Lamnda

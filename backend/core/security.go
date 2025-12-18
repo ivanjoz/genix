@@ -25,10 +25,9 @@ type EnvStruct struct {
 	TMP_DIR        string
 	REQ_IP         string
 	REQ_ID         string
-	REQ_ENCODING   string
 	REQ_PARAMS     string
 	REQ_USER_AGENT string
-	HANDLER_PARH   string
+	// HANDLER_PARH   string
 	REQ_PATH       string
 	AWS_PROFILE    string
 	AWS_REGION     string
@@ -166,7 +165,7 @@ type IUsuario struct {
 
 var Usuario IUsuario
 
-func CheckUser(req *HandlerArgs, access int) IUsuario {
+func CheckUser(req *HandlerArgs, access int) *IUsuario {
 	userToken := req.Headers["authorization"]
 	if len(userToken) < 8 {
 		userToken = req.Headers["Authorization"]
@@ -176,26 +175,26 @@ func CheckUser(req *HandlerArgs, access int) IUsuario {
 
 	if len(userToken) < 8 || !strings.Contains(userToken, "Bearer ") {
 		usuario.Error = "No se suministró un Token de usuario"
-		return usuario
+		return &usuario
 	}
 
 	encryptedInfo := strings.Split(userToken, " ")[1]
 	if len(encryptedInfo) < 8 {
 		usuario.Error = "No se encontró la informaación encriptada del usuario"
-		return usuario
+		return &usuario
 	}
 
 	encryptedInfoBytes := Base64ToBytes(MakeB64UrlDecode(encryptedInfo))
 	if len(encryptedInfoBytes) < 16 {
 		usuario.Error = "El tocken de inicio de sesión es inválido"
-		return usuario
+		return &usuario
 	}
 	decriptedBytes, err := Decrypt(encryptedInfoBytes)
 
 	if err != nil {
 		Log("Error desencriptar:", err)
 		usuario.Error = "Hubo un error al desencriptar el Token."
-		return usuario
+		return &usuario
 	}
 
 	decriptedBytesJson := DecompressZstd(&decriptedBytes)
@@ -205,8 +204,11 @@ func CheckUser(req *HandlerArgs, access int) IUsuario {
 		usuario.Error = "Error al recuperar la información del usuario."
 	}
 
-	Usuario = usuario
-	Env.USUARIO_ID = usuario.ID
+	// NOTE: In local/VPS HTTP mode requests are concurrent; avoid mutating global user state.
+	if !Env.IS_LOCAL {
+		Usuario = usuario
+		Env.USUARIO_ID = usuario.ID
+	}
 
-	return usuario
+	return &usuario
 }
