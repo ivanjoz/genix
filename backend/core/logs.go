@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 var LogsSaved = []string{}
 var LogCounter = new(int32)
+var logsMu sync.Mutex
 
 func LogDebug(args ...any) {
 	if Env.LOGS_DEBUG {
@@ -37,8 +39,12 @@ func Log(args ...any) {
 		}
 	}
 
-	if Env.LOGS_ONLY_SAVE || doLog {
+	// LogsSaved is primarily used for Lambda request log persistence.
+	// Protect the slice for cases where handlers run goroutines (errgroup).
+	if Env.LOGS_ONLY_SAVE || (!Env.IS_LOCAL && doLog) {
+		logsMu.Lock()
 		LogsSaved = append(LogsSaved, logMsg)
+		logsMu.Unlock()
 	}
 	if !doLog {
 		return

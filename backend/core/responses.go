@@ -18,6 +18,7 @@ import (
 	"github.com/DmitriyVTitov/size"
 	"github.com/andybalholm/brotli"
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/klauspost/compress/zstd"
 )
 
 type HandlerArgs struct {
@@ -34,7 +35,8 @@ type HandlerArgs struct {
 	ResponseBody   *string
 	ResponseError  string
 	ReqParams      string
-	Usuario        IUsuario
+	Encoding       string
+	Usuario        *IUsuario
 }
 
 func PrintMemUsage() {
@@ -211,7 +213,7 @@ func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTT
 	PrintMemUsage()
 	// Si es una respuesta que viene desde disco
 	if len(handlerResponse.BodyOnDisk) > 0 {
-		if strings.Contains(Env.REQ_ENCODING, "br") {
+		if strings.Contains(handlerResponse.Encoding, "br") {
 			bodyBytes := CompressBrotliOnFile(handlerResponse.BodyOnDisk)
 			response.Body = base64.StdEncoding.EncodeToString(bodyBytes)
 			response.Headers["Content-Encoding"] = "br"
@@ -231,7 +233,7 @@ func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTT
 	Log("Len del body:: ", len(body))
 
 	// revisa si la respuesta puede ser comprimida con brotli
-	if strings.Contains(Env.REQ_ENCODING, "br") {
+	if strings.Contains(handlerResponse.Encoding, "br") {
 		Log("Enviando respuesta comprimida con brotli")
 		// Log(body)
 		bodyBytes := []byte(body)
@@ -252,7 +254,7 @@ func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTT
 		// Log(response.Body)
 		response.Headers["Content-Encoding"] = "br"
 		response.IsBase64Encoded = true
-	} else if isMaxLen || strings.Contains(Env.REQ_ENCODING, "gzip") {
+	} else if isMaxLen || strings.Contains(handlerResponse.Encoding, "gzip") {
 		Log("Enviando respuesta comprimida con gzip")
 
 		var bodyCompressed bytes.Buffer
@@ -526,6 +528,7 @@ type HandlerResponse struct {
 	BodyOnDisk string
 	StatusCode int
 	Error      string
+	Encoding   string
 	Headers    map[string]string
 	Route      string
 	MergeID    int32
@@ -815,20 +818,27 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 		respWriter.Header().Set("Content-Type", "application/json; charset=utf-8")
 	}
 
-	bodyBytes := []byte{}
+	var bodyBytes []byte
 
-	// Si es una respuesta que viene desde disco
-	if len(response.BodyOnDisk) > 0 {
-		Log("Hay body on disk::", response.BodyOnDisk)
-		if strings.Contains(Env.REQ_ENCODING, "br") {
-			bodyBytes = CompressBrotliOnFile(response.BodyOnDisk)
-			respWriter.Header().Set("Content-Encoding", "br")
-		} else {
-			bodyBytes = CompressGzipOnFile(response.BodyOnDisk)
-			respWriter.Header().Set("Content-Encoding", "gzip")
+	if response.Body == nil {
+		Log("El body es nil!")
+	} else if strings.Contains(args.Encoding, "zstd") {
+		encoder, _ := zstd.NewWriter(nil)
+		bb := []byte(*response.Body)
+		bodyBytes = encoder.EncodeAll(bb, make([]byte, 0, len(bb)))
+		respWriter.Header().Set("Content-Encoding", "zstd")
+	} else {
+		var bodyCompressed bytes.Buffer
+		gz := gzip.NewWriter(&bodyCompressed)
+		if _, err := gz.Write([]byte(*response.Body)); err != nil {
+			log.Fatal(err)
 		}
-	} else if response.Body != nil {
-		bodyBytes = []byte(*response.Body)
+		if err := gz.Close(); err != nil {
+			log.Fatal(err)
+		}
+
+		bodyBytes = bodyCompressed.Bytes()
+		respWriter.Header().Set("Content-Encoding", "gzip")
 	}
 
 	// Revisa si hay que enviar error
@@ -856,6 +866,7 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 	}
 }
 
+// TODO: deprecar después
 type MergedRoute struct {
 	Id       int32             `json:"id"`
 	FuncPath string            `json:"funcPath"`

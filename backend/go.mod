@@ -1,6 +1,8 @@
 module app
 
-go 1.22.0
+go 1.23
+
+toolchain go1.24.6
 
 require (
 	github.com/andybalholm/brotli v1.1.0
@@ -15,7 +17,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.51.1
 	github.com/fatih/color v1.15.0
 	github.com/gocql/gocql v1.6.0
-	github.com/klauspost/compress v1.17.2
+	github.com/klauspost/compress v1.18.2
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/mashingan/smapping v0.1.19
 	github.com/mileusna/useragent v1.3.3
