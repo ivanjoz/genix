@@ -54,12 +54,15 @@ func mainHandler(args core.HandlerArgs) core.MainResponse {
 		core.Env.REQ_ID = core.IntToBase64(time.Now().UnixMilli())
 	}
 
+	core.Log(args.Route)
+
+	if args.Route[0] == '/' {
+		args.Route = args.Route[1:]
+	}
+
 	pathSegments := strings.Split(args.Route, "/")
 	if slices.Contains(apiNames, pathSegments[0]) {
 		args.Route = strings.Join(pathSegments[1:], "/")
-	}
-	if args.Route[0] == '/' {
-		args.Route = args.Route[1:]
 	}
 
 	core.Log("Route:", args.Route)

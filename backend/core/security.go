@@ -64,22 +64,28 @@ func PopulateVariables() {
 	var variablesBytes []byte
 
 	if IS_LOCAL {
-		APP_CODE = "gerp_x"
+		APP_CODE = "genix"
 		dirname := strings.Split(wd, "/")
-		dirname[len(dirname)-1] = "credentials.json"
-		credentialsJson := strings.Join(dirname, "/")
-		file, err := os.Open(credentialsJson)
-		if err != nil {
-			fmt.Println("Error opening file:", err)
-			return
-		}
-		defer file.Close()
+		parentPath := strings.Join(dirname[0:len(dirname)-1], "/")
 
-		// Read the content of the file
-		variablesBytes, err = io.ReadAll(file)
-		if err != nil {
-			fmt.Println("Error reading credentials.json:", err)
-			return
+		for _, filePath := range []string{parentPath, wd} {
+			file, err := os.Open(filePath + "/credentials.json")
+			if err != nil {
+				fmt.Println("Error opening file:", err)
+				continue
+			}
+			defer file.Close()
+
+			// Read the content of the file
+			variablesBytes, err = io.ReadAll(file)
+			if err != nil {
+				fmt.Println("Error reading credentials.json:", err)
+				continue
+			}
+		}
+
+		if len(variablesBytes) == 0 {
+			panic("Archivo credentials.json no encontrado.")
 		}
 	} else {
 		configJsonBase64 := os.Getenv("CONFIG")

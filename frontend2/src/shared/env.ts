@@ -5,7 +5,7 @@ export const IsClient = () => {
   return browser
 }
 
-let api = "https://dnh72xkkh3junf57p3vexemlvm0emgys.lambda-url.us-east-1.on.aws/api/"
+let api = "https://genix-dev-api-1.un.pe/"
 
 if(browser){
   const host = window.location.host
