@@ -12,7 +12,7 @@
 	import SideMenu from '$components/layout/SideMenu.svelte';
 	import Modules from '../core/modules';
 	import { Core, getDeviceType } from '$core/store.svelte';
-	import ImageWorker from '../workers/image-worker?worker&inline';
+	import ImageWorker from '../workers/image-worker?worker';
 
 	let { children } = $props();
 
