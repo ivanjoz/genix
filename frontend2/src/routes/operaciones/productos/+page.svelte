@@ -199,7 +199,7 @@
           required={true} save="Nombre"
         />
         <div class="col-span-24 md:col-span-9 md:row-span-4">
-          <ImageUploader saveAPI="producto-image"
+          <ImageUploader saveAPI="producto-image" useConvertAvif={true}
             clearOnUpload={true} types={["avif","webp"]}
             folder="img-productos" size={2} src={productoForm.Image?.n}
             cardCss="w-full h-180 p-4"
@@ -309,7 +309,7 @@
     {/if}
     {#if layerView === 4}
       <div class="grid grid-cols-2 md:grid-cols-4 items-start gap-x-10 gap-y-10 mt-16">
-        <ImageUploader saveAPI="producto-image"
+        <ImageUploader saveAPI="producto-image" useConvertAvif={true}
           clearOnUpload={true} types={["avif","webp"]} folder="img-productos"
           cardCss="w-full h-170 p-4"
           setDataToSend={e => {
@@ -325,7 +325,7 @@
         {#each (productoForm.Images||[]) as image }
           <ImageUploader saveAPI="producto-image" size={2}
             clearOnUpload={true} types={["avif","webp"]} folder="img-productos"
-            cardCss="w-full h-170 p-4" src={image?.n}
+            cardCss="w-full h-170 p-4" src={image?.n} useConvertAvif={true}
             onDelete={() => {
               ConfirmWarn("ELIMINAR IMAGEN",
                 `Eliminar la imagen ${image.d ? `"${image.d}"` : "seleccionada"}`,

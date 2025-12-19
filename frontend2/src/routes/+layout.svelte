@@ -12,15 +12,16 @@
 	import SideMenu from '$components/layout/SideMenu.svelte';
 	import Modules from '../core/modules';
 	import { Core, getDeviceType } from '$core/store.svelte';
+	import ImageWorker from '../workers/image-worker?worker&inline';
 
 	let { children } = $props();
 
 	if(browser){
 		console.log('🔧 Initializing image worker...')
 		try {
-			Env.imageWorker = new Worker(
-				new URL('../workers/image-worker.ts', import.meta.url), { type: 'module' })
-			console.log('✅ Image worker initialized successfully:', Env.imageWorker)
+			Env.ImageWorkerClass = ImageWorker
+			Env.imageWorker = new ImageWorker()
+			console.log('✅ Image worker initialized successfully')
 		} catch (error) {
 			console.error('❌ Failed to initialize image worker:', error)
 		}

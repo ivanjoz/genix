@@ -41,6 +41,7 @@ export interface IImageUploaderProps {
   id?: number;
   size?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
   folder?: string
+  useConvertAvif?: boolean
 }
 
 export interface IImageResult {
@@ -53,7 +54,6 @@ let {
   src = "",
   types = [],
   saveAPI = "images",
-  refreshIndexDBCache = "",
   onChange,
   onUploaded = undefined,
   setDataToSend = undefined,
@@ -65,7 +65,7 @@ let {
   hideFormUseMessage = "",
   hideForm = false,
   hideUploadButton = false,
-  size, folder,
+  size, folder, useConvertAvif,
   id = undefined
 }: IImageUploaderProps = $props();
 
@@ -97,25 +97,32 @@ const makeImageSrc = (format?: string) => {
   return srcUrl
 }
 
-const onFileChange = async (ev: Event) => {
-  const target = ev.target as HTMLInputElement;
-  const files: FileList | null = target.files;
-  if (!files || files.length === 0) return;
+let imageFile: Blob
 
-  const imageFile = files[0] as Blob;
-  console.log('imagefile::', imageFile);
+const onFileChange = async (ev: Event) => {
+  const target = ev.target as HTMLInputElement
+  const files: FileList | null = target.files
+  if (!files || files.length === 0){ return }
+
+  imageFile = files[0] as Blob
+  console.log('imagefile::', imageFile)
 
   try {
     // Use web worker-based image conversion (1.2 MP resolution, WebP format)
-    const imageB64 = await fileToImage(imageFile, 1.2);
-    progress = -1;
-    imageSrc = { src: "", base64: imageB64, types: [], description: imageSrc.description };
-    onChange?.(imageSrc);
+    const imageB64 = await fileToImage(imageFile, 1200, 'avif')
+    console.log("imageB64", imageB64)
+    progress = -1
+    imageSrc = { src: "", base64: imageB64, types: [], description: imageSrc.description }
+    onChange?.(imageSrc)
   } catch (error) {
-    Notify.failure('Error procesando la imagen: ' + String(error));
-    progress = 0;
+    Notify.failure('Error procesando la imagen: ' + String(error))
+    progress = 0
   }
-};
+}
+
+type IResulution = {
+  i: number, r: number, fn: (c: string) => {}, promise?: Promise<any>
+}
 
 const uploadImage = async (): Promise<IImageResult> => {
   let result = {} as IImageResult
@@ -127,11 +134,40 @@ const uploadImage = async (): Promise<IImageResult> => {
   progress = 0.001
 
   const data = {
-    Content: imageSrc.base64,
+    Content: "", Content_x6: "",  Content_x4: "",  Content_x2: "",
     Description: imageSrc.description
-  };
+  }
+
+  if(useConvertAvif){
+    const resolutions = [
+      { i: 6, r: 980, fn: e => data.Content_x6 = e },
+      { i: 4, r: 670, fn: e => data.Content_x4 = e },
+      { i: 2, r: 360, fn: e => data.Content_x2 = e }
+    ] as IResulution[]
+
+    for(const rs of resolutions){
+      rs.promise = new Promise(resolve => { 
+        fileToImage(imageFile, rs.r, "avif").then(d => { 
+          // console.log("image b64",d)
+          rs.fn(d), resolve(0) 
+        })
+      })
+    }
+
+    try {
+      await Promise.all(resolutions.map(x => x.promise)) 
+    } catch (error) {
+      Notify.failure(`Error al convertir imagen: ${error}`)
+      return Promise.resolve(result)
+    }
+
+  } else {
+    data.Content = imageSrc.base64
+  }
 
   if (setDataToSend) { setDataToSend(data); }
+
+  console.log("data a enviar::", data)
 
   try {
     result = await POST_XMLHR({

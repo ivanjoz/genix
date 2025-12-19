@@ -108,97 +108,157 @@ export function include(e: string, h: string | string[]) {
   }
 }
 
-// Resolución en Mpx (máximo 2)
-export const fileToImage = (blob: Blob | File, resolution: number, useJpeg?: boolean): Promise<string> => {
+const pendingWorkerRequests = new Map<number, { 
+  resolve: (value: string) => void, 
+  reject: (reason?: any) => void,
+  timeout: NodeJS.Timeout
+}>();
 
-  if(resolution > 2){
+interface WorkerInstance { worker: Worker; tasks: number; }
+
+const workerPool = new Map<number|string, WorkerInstance>();
+const MAX_WORKERS = 4;
+
+const setWorkerCommunication = (wi: WorkerInstance) => {
+  wi.worker.onmessage = ({ data }) => {
+    wi.tasks = Math.max(0, wi.tasks - 1);
+    const { id, dataUrl, error } = data;
+    const request = pendingWorkerRequests.get(id);
+    
+    if (request) {
+      clearTimeout(request.timeout);
+      pendingWorkerRequests.delete(id);
+      
+      if (error) {
+        console.error(`❌ Worker error for request ${id}:`, error);
+        request.reject(error);
+      } else {
+        console.log(`📨 Received message from worker for request ${id} | len: ${dataUrl.length}`);
+        request.resolve(dataUrl || "");
+      }
+    }
+  };
+
+  wi.worker.onerror = (error) => {
+    wi.tasks = Math.max(0, wi.tasks - 1);
+    console.error('❌ Worker error:', error);
+  };
+};
+
+const getBestWorker = (): Worker => {
+  if (Env.imageWorker && !workerPool.has('preloaded')) {
+    const wi = { worker: Env.imageWorker, tasks: 0 }
+    setWorkerCommunication(wi);
+    workerPool.set('preloaded', wi);
+  }
+
+  let best: WorkerInstance | null = null;
+  
+  for (const wi of workerPool.values()) {
+    if (wi.tasks === 0) { best = wi; break }
+    if (!best || wi.tasks < best.tasks) { best = wi }
+  }
+
+  if ((!best || best.tasks > 0) && workerPool.size < MAX_WORKERS && Env.ImageWorkerClass) {
+    console.log(`🚀 Spawning new worker (Pool size: ${workerPool.size + 1})`);
+    const wi = { worker: new Env.ImageWorkerClass(), tasks: 0 };
+    setWorkerCommunication(wi);
+    const id = Math.random();
+    workerPool.set(id, wi);
+    best = wi;
+  }
+
+  if (best) {
+    best.tasks++;
+    return best.worker;
+  }
+  
+  return Env.imageWorker;
+};
+
+// Resolución en Mpx (máximo 2)
+export const fileToImage = (
+  blob: Blob | File, resolution: number, fileType?: "webp" | "avif" | "jpg",
+): Promise<string> => {
+
+  if(resolution > 2000){
     Notify.failure("2mpx is max resolution for image conversion.")
     return Promise.resolve("")
   }
+
+  const useJpeg = fileType === "jpg"
+  const useAvif = fileType === "avif"
+
+  const worker = getBestWorker();
 
   console.log('📸 fileToImage called with:', { 
     blobType: blob.type, 
     blobSize: blob.size, 
-    resolution, 
-    useJpeg,
-    workerExists: !!Env.imageWorker 
+    resolution, useJpeg, useAvif,
+    poolSize: workerPool.size,
+    workerExists: !!worker
   })
 
-  if(!Env.imageWorker){
-    console.error('❌ Image worker is not initialized!')
-    return Promise.reject("Image worker is not initialized")
+  if(!worker){
+    console.error('❌ No image worker available!')
+    return Promise.reject("Image worker not available")
   }
 
   return new Promise((resolve, reject) => {
-    let isResolved = false
-    Env.imageWorker.onmessage = ({ data }) => {
-      console.log('📨 Received message from worker:', data)
-      isResolved = true
-      resolve(data.dataUrl||"")
-    }
+    const id = Math.floor(Math.random() * 1000000);
+    const timeout = setTimeout(() => {
+      console.error(`⏱️ Worker timeout - no response after 8 seconds (id=${id}, r=${resolution})`)
+      pendingWorkerRequests.delete(id);
+      reject("Error al procesar la imagen. (superó los 8 segundos.)")
+    }, 8000)
 
-    Env.imageWorker.onerror = (error) => {
-      console.error('❌ Worker error:', error)
-      isResolved = true
-      reject("Worker error: " + error.message)
-    }
+    pendingWorkerRequests.set(id, { resolve, reject, timeout });
 
-    setTimeout(() => {
-      if(!isResolved){
-        console.error('⏱️ Worker timeout - no response after 8 seconds')
-        reject("Error al procesar la imagen. (superó los 8 segundos.)")
-      }
-    },8000)
-
-    console.log('📤 Posting message to worker...')
-    Env.imageWorker.postMessage({ blob, resolution, useJpeg })
+    console.log(`📤 Posting message to worker (id=${id})...`)
+    worker.postMessage({ id, blob, resolution, useJpeg, useAvif })
   })
 }
 
 // Resolución en Mpx (máximo 2)
-export const bitmapToImage = (bitmap: ImageBitmap, resolution: number, useJpeg?: boolean): Promise<string> => {
+export const bitmapToImage = (
+  bitmap: ImageBitmap, resolution: number, fileType?: "webp" | "avif" | "jpg",
+): Promise<string> => {
 
-  if(resolution > 2){
+  if(resolution > 2000){
     Notify.failure("2mpx is max resolution for image conversion.")
     return Promise.resolve("")
   }
 
+  const useJpeg = fileType === "jpg"
+  const useAvif = fileType === "avif"
+
+  const worker = getBestWorker();
+
   console.log('📸 bitmapToImage called with:', { 
     bitmapWidth: bitmap.width,
     bitmapHeight: bitmap.height,
-    resolution, 
-    useJpeg,
-    workerExists: !!Env.imageWorker 
+    resolution, useJpeg, useAvif,
+    poolSize: workerPool.size,
+    workerExists: !!worker
   })
 
-  if(!Env.imageWorker){
-    console.error('❌ Image worker is not initialized!')
-    return Promise.reject("Image worker is not initialized")
+  if(!worker){
+    console.error('❌ No image worker available!')
+    return Promise.reject("Image worker not available")
   }
 
   return new Promise((resolve, reject) => {
-    let isResolved = false
-    Env.imageWorker.onmessage = ({ data }) => {
-      console.log('📨 Received message from worker:', data)
-      isResolved = true
-      resolve(data.dataUrl||"")
-    }
+    const id = Math.floor(Math.random() * 1000000);
+    const timeout = setTimeout(() => {
+      console.error(`⏱️ Worker timeout - no response after 8 seconds (id=${id})`)
+      pendingWorkerRequests.delete(id);
+      reject("Error al procesar la imagen. (superó los 8 segundos.)")
+    }, 8000)
 
-    Env.imageWorker.onerror = (error) => {
-      console.error('❌ Worker error:', error)
-      isResolved = true
-      reject("Worker error: " + error.message)
-    }
+    pendingWorkerRequests.set(id, { resolve, reject, timeout });
 
-    setTimeout(() => {
-      if(!isResolved){
-        console.error('⏱️ Worker timeout - no response after 8 seconds')
-        reject("Error al procesar la imagen. (superó los 8 segundos.)")
-      }
-    },8000)
-
-    console.log('📤 Posting message to worker with bitmap transfer...')
-    Env.imageWorker.postMessage({ bitmap, resolution, useJpeg }, [bitmap])
+    console.log(`📤 Posting message to worker with bitmap transfer (id=${id})...`)
+    worker.postMessage({ id, bitmap, resolution, useJpeg, useAvif }, [bitmap])
   })
 }
 

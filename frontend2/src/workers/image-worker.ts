@@ -1,64 +1,90 @@
+import { encode } from '@jsquash/avif';
+
 console.log('🔧 Image worker loaded and ready')
 
+let nativeAvifSupport: boolean | null = null;
+
+const checkNativeAvifSupport = async () => {
+  if (nativeAvifSupport !== null) return nativeAvifSupport;
+  try {
+    const canvas = new OffscreenCanvas(1, 1);
+    const blob = await canvas.convertToBlob({ type: 'image/avif' });
+    nativeAvifSupport = blob.type === 'image/avif';
+  } catch (e) {
+    nativeAvifSupport = false;
+  }
+  return nativeAvifSupport;
+}
+
 self.onmessage = async (event) => {
+  const { id, bitmap: inputBitmap, blob: inputBlob, resolution, useJpeg, useAvif } = event.data;
+  
   console.log('📨 Worker received message:', { 
-    hasBitmap: !!event.data.bitmap, 
-    hasBlob: !!event.data.blob,
-    resolution: event.data.resolution,
-    useJpeg: event.data.useJpeg
+    id,
+    hasBitmap: !!inputBitmap, 
+    hasBlob: !!inputBlob,
+    resolution,
+    useJpeg,
+    useAvif
   })
 
   try {
-    if (event.data.bitmap) {
+    let bitmap: ImageBitmap;
+    if (inputBitmap) {
       console.log('🖼️ Processing bitmap...')
-      const bitmap: ImageBitmap = event.data.bitmap;
-      const resolutionMP = event.data.resolution || 1; // Default 1MP (1,000,000 pixels)
-
-      const { width, height } = calculateDimensions(bitmap.width, bitmap.height, resolutionMP);
-      console.log('📏 Calculated dimensions:', { width, height })
-      
-      const canvas = new OffscreenCanvas(width, height);
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(bitmap, 0, 0, width, height);
-
-      const fileType = event.data.useJpeg ? "image/jpeg" : "image/webp"
-      const blob = await canvas.convertToBlob({ type: fileType, quality: 0.8 });
-      console.log('🎨 Blob created:', blob.size, 'bytes')
-      const dataUrl = await blobToBase64_(blob);
-      console.log('✅ Data URL created, length:', dataUrl.length)
-
-      self.postMessage({ dataUrl });
-      console.log('📤 Response sent to main thread')
-    } else if (event.data.blob) {
+      bitmap = inputBitmap;
+    } else if (inputBlob) {
       console.log('🖼️ Processing blob...')
-      // fallback path if OffscreenCanvas is not supported
-      const blob: Blob = event.data.blob;
-      const resolutionMP = event.data.resolution || 1; // Default 1MP (1,000,000 pixels)
+      const blob: Blob = inputBlob;
       console.log('🔄 Creating ImageBitmap from blob...')
-      const bitmap = await createImageBitmap(blob);
+      bitmap = await createImageBitmap(blob);
       console.log('✅ ImageBitmap created:', bitmap.width, 'x', bitmap.height)
-
-      const { width, height } = calculateDimensions(bitmap.width, bitmap.height, resolutionMP);
-      console.log('📏 Calculated dimensions:', { width, height })
-      
-      const canvas = new OffscreenCanvas(width, height);
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(bitmap, 0, 0, width, height);
-
-      const fileType = event.data.useJpeg ? "image/jpeg" : "image/webp"
-      const resizedBlob = await canvas.convertToBlob({ type: fileType, quality: 0.8 });
-      console.log('🎨 Resized blob created:', resizedBlob.size, 'bytes')
-      const dataUrl = await blobToBase64_(resizedBlob);
-      console.log('✅ Data URL created, length:', dataUrl.length)
-
-      self.postMessage({ dataUrl });
-      console.log('📤 Response sent to main thread')
     } else {
       console.error('❌ No bitmap or blob provided in message')
+      self.postMessage({ id, error: 'No bitmap or blob provided' });
+      return;
     }
+
+    let targetResolution = resolution || 1000
+    if(targetResolution > 2500){ targetResolution = 2500 }
+    
+    const { width, height } = calculateDimensions(bitmap.width, bitmap.height, targetResolution);
+    console.log('📏 Calculated dimensions:', { width, height })
+
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(bitmap, 0, 0, width, height);
+
+    let blob: Blob;
+    if (useAvif) {
+      console.log('🥑 Attempting AVIF conversion...')
+      if (await checkNativeAvifSupport()) {
+        console.log('🚀 Using native AVIF support')
+        blob = await canvas.convertToBlob({ type: 'image/avif', quality: 0.8 });
+      } else {
+        console.log('📦 Using @jsquash/avif fallback')
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const avifBuffer = await encode(imageData);
+        blob = new Blob([avifBuffer], { type: 'image/avif' });
+      }
+    } else {
+      const fileType = useJpeg ? "image/jpeg" : "image/webp"
+      console.log(`🎨 Converting to ${fileType}...`)
+      blob = await canvas.convertToBlob({ type: fileType, quality: 0.8 });
+    }
+
+    console.log('🎨 Blob created:', blob.size, 'bytes', blob.type)
+    const dataUrl = await blobToBase64_(blob);
+    console.log('✅ Data URL created, length:', dataUrl.length)
+
+    self.postMessage({ id, dataUrl });
+    console.log('📤 Response sent to main thread')
+    
+    // Close bitmap to free memory
+    bitmap.close();
   } catch (error) {
     console.error('❌ Error in worker:', error)
-    self.postMessage({ error: String(error) })
+    self.postMessage({ id, error: String(error) })
   }
 };
 
@@ -68,8 +94,8 @@ const calculateDimensions = (
   const aspectRatio = originalWidth / originalHeight;
   const originalPixels = originalWidth * originalHeight
   
-  // Convert megapixels to total pixels
-  const targetPixels = targetMP * 1000000; // 1MP = 1,000,000 pixels
+  // Convert 1D pixel to 2D pixels
+  const targetPixels = targetMP * targetMP
   
   if(targetPixels > originalPixels){
     return { width: originalWidth, height: originalHeight }

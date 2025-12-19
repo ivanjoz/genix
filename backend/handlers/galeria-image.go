@@ -34,7 +34,7 @@ func PostGaleriaImage(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	core.Env.IS_LOCAL = false
-	_, err = aws.SaveImage(imageArgs)
+	_, err = aws.SaveConvertImage(imageArgs)
 	if err != nil {
 		return req.MakeErr("Error al guardar la imagen: " + err.Error())
 	}
