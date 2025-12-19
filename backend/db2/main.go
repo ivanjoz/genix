@@ -433,7 +433,7 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 			col.FieldType = col.FieldType[2:]
 		}
 
-		fmt.Println("fieldtype obtenido::", col.FieldName, col.FieldType)
+		// fmt.Println("fieldtype obtenido::", col.FieldName, col.FieldType)
 		// fmt.Println("Fieldname::", col.FieldName, "| Type:", col.FieldType)
 		fieldNameIdxMap[col.FieldName] = &col
 	}
@@ -441,7 +441,7 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 	structValue := reflect.ValueOf(schemaStruct).Elem()
 	structType := structValue.Type()
 
-	fmt.Println("fieldNameIdxMap...", len(fieldNameIdxMap), "| nf:", structValue.NumField())
+	// fmt.Println("fieldNameIdxMap...", len(fieldNameIdxMap), "| nf:", structValue.NumField())
 
 	for i := 0; i < structValue.NumField(); i++ {
 		field := structValue.Field(i)
@@ -485,7 +485,7 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 		column.SetSchemaStruct(schemaStruct)
 		column.SetTableInfo(refTableInfo)
 	}
-	fmt.Println("schemaStruct (1)", schemaStruct)
+	// fmt.Println("schemaStruct (1)", schemaStruct)
 	return schemaStruct
 }
 

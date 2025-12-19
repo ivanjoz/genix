@@ -120,13 +120,13 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	core.Log("Nº de registros:: ", len(recordsMap))
 	recordsImported := core.MapToSliceT(recordsMap)
-	core.Log(recordsImported)
-	/*
-		err = core.DBInsert(&recordsImported)
-		if err != nil {
-			panic(err)
-		}
-	*/
+	// core.Log(recordsImported)
+
+	err = db2.Insert(&recordsImported)
+	if err != nil {
+		panic(err)
+	}
+
 	return core.FuncResponse{}
 }
 

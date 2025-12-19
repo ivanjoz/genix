@@ -79,12 +79,13 @@
     } else {
       if (value || value === 0) pass = true;
     }
-    return pass ? 2 : 1;
+    return pass ? 2 : 1
   }
 
-  let inputValue = $state("" as string | number);
-  let isInputValid = $state(checkIfInputIsValid());
-  let isChange = 0;
+  let inputValue = $state("" as string | number)
+  let isInputValid = $state(checkIfInputIsValid())
+  let isChange = 0
+  let focusValue = null as string | number | null
 
   const onKeyUp = (ev: KeyboardEvent | FocusEvent, isBlur?: boolean) => {
     ev.stopPropagation();
@@ -98,6 +99,17 @@
       } else {
         value = parseFloat(value as string);
       }
+    }
+
+    if(isBlur && validator && !validator(value)){
+      inputValue = focusValue as string | number
+      if (saveOn && save) {
+        if(baseDecimalsValue && typeof inputValue === 'number'){
+          inputValue = Math.round(inputValue * baseDecimalsValue);
+        }
+        saveOn[save] = inputValue as NonNullable<T>[keyof T];
+      }
+      return
     }
 
     if (transform && isBlur) {
@@ -194,12 +206,17 @@
         placeholder={placeholder || ""}
         {disabled}
         onkeyup={ev => { onKeyUp(ev) }}
+        onfocus={ev => {
+          const target = ev.target as HTMLInputElement | HTMLTextAreaElement;
+          focusValue = target.value
+        }}
         onblur={(ev) => {
           onKeyUp(ev, true);
           if (onChange && isChange) {
             onChange();
             isChange = 0;
           }
+          focusValue = null
         }}
       />
     {/if}

@@ -128,6 +128,8 @@ func makeControllerDB2[T db2.TableBaseInterface[E, T], E db2.TableSchemaInterfac
 				return core.Err("Error al decodificar registros de:", tableName, ".", err)
 			}
 
+			core.Log(core.ToJsonNoErr(records))
+
 			core.Log("Tabla:", tableName, "| Guardando", len(records), "registros...")
 
 			// Delete existing records for this empresa_id if partition key is empresa_id

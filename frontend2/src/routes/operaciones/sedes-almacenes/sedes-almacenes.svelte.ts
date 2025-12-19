@@ -109,8 +109,8 @@ export class PaisCiudadesService extends GetHandler {
   distritos: IPaisCiudad[] = $state([])
   ciudadesMap: Map<string,IPaisCiudad> = $state(new Map())
 
-  handler(result: { Records: IPaisCiudad[] }): void {
-    const ciudades = result.Records?.filter(x => !(x as any)._IS_META) || []
+  handler(result: IPaisCiudad[]): void {
+    const ciudades = result?.filter(x => !(x as any)._IS_META) || []
     const distritos: IPaisCiudad[] = []
     const ciudadesMap = new Map(ciudades.map(e => [e.ID, e]))
 
@@ -132,6 +132,8 @@ export class PaisCiudadesService extends GetHandler {
     for(let e of distritos){
       e._nombre = `${e.Departamento?.Nombre||"-"} ► ${e.Provincia?.Nombre||""} ► ${e.Nombre}`
     }
+
+    console.log("distritos:", distritos)
 
     this.ciudades = ciudades
     this.distritos = distritos

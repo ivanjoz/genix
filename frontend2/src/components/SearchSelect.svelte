@@ -3,6 +3,7 @@
   import { throttle } from "../core/helpers";
   import { Core } from "../core/store.svelte";
   import s1 from "./components.module.css";
+  import SvelteVirtualList from "@humanspeak/svelte-virtual-list";
 
   interface SearchSelectProps<T,E> {
     saveOn?: T;
@@ -61,6 +62,7 @@
 
   // let searchCardID = Math.random();
   let inputRef: HTMLInputElement;
+  let vlRef: any;
   let words = $state<string[]>([]);
 
   const isMobile = $derived(Core.deviceType === 3);
@@ -180,6 +182,7 @@
     throttle(() => {
       words = String(inputRef.value).toLowerCase().split(" ");
       filteredOptions = filter(text);
+      arrowSelected = -1;
     }, 120);
   }
 
@@ -187,21 +190,21 @@
     console.log("avoid hover:: ", avoidhover);
     ev.stopPropagation();
 
-    let nroR = filteredOptions.length;
-    if (nroR > max) nroR = max;
-
     if (!show || filteredOptions.length === 0) return;
 
     if (ev.key === "ArrowUp") {
-      let arrow = (arrowSelected || 0) - 1;
-      if (arrow < 0) arrow = nroR;
-      arrowSelected = arrow;
-      if (!avoidhover) avoidhover = true;
+      ev.preventDefault();
+      arrowSelected = arrowSelected <= 0 ? filteredOptions.length - 1 : arrowSelected - 1;
+      avoidhover = true;
+      vlRef?.scrollToIndex(arrowSelected, { align: 'auto' });
     } else if (ev.key === "ArrowDown") {
-      let arrow = (arrowSelected || 0) + 1;
-      if (arrow > nroR) arrow = 1;
-      arrowSelected = arrow;
-      if (!avoidhover) avoidhover = true;
+      ev.preventDefault();
+      arrowSelected = arrowSelected >= filteredOptions.length - 1 ? 0 : arrowSelected + 1;
+      avoidhover = true;
+      vlRef?.scrollToIndex(arrowSelected, { align: 'auto' });
+    } else if (ev.key === "Enter" && arrowSelected >= 0) {
+      ev.preventDefault();
+      onOptionClick(filteredOptions[arrowSelected]);
     }
   }
 
@@ -240,6 +243,7 @@
 
   $effect(() => {
     filteredOptions = filter("");
+    arrowSelected = -1;
   });
 
   const handleOpenMobileLayer = () => {
@@ -253,8 +257,6 @@
       }
     }
   }
-
-  const wordsJoined = $derived(words.join("_"))
 
 </script>
 
@@ -346,7 +348,8 @@
     </div>
   {/if}
   {#if show && !useLayerPicker}
-    <div class="p-4 _1 left-0 z-320 {arrowSelected >= 0 ? ' on-arrow' : ''} {optionsCss || "w-full"}"
+    <div class="_1 p-4 left-0 z-320 {arrowSelected >= 0 ? ' on-arrow' : ''} {optionsCss || "w-full"}"
+      style:height={Math.min(filteredOptions.length * 36 + 10, 300) + 'px'}
       class:open-up={openUp}
       role="button" tabindex="0"
       onmousedown={(ev) => {
@@ -365,26 +368,28 @@
           }
         : undefined}
     >
-      {#each filteredOptions as e, i (e[keyId] + wordsJoined)}
-        {@const name = String(e[keyName])}
-        {@const highlighted = highlString(name, words)}
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <div class="flex ai-center _highlight{arrowSelected === i
-            ? ' _selected'
-            : ''}"
-          role="button" tabindex="0"
-          onclick={(ev) => {
-            ev.stopPropagation();
-            onOptionClick(e);
-          }}
-        >
-          <div>
-            {#each highlighted as w}
-              <span class={w.highl ? "_8" : ""} class:mr-4={w.isEnd}>{w.text}</span>
-            {/each}
+      <SvelteVirtualList bind:this={vlRef} items={filteredOptions}>
+        {#snippet renderItem(e, i)}
+          {@const name = String(e[keyName])}
+          {@const highlighted = highlString(name, words)}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <div
+            class="flex ai-center _highlight{arrowSelected === i ? ' _selected' : ''}"
+            role="button"
+            tabindex="0"
+            onclick={(ev) => {
+              ev.stopPropagation();
+              onOptionClick(e);
+            }}
+          >
+            <div>
+              {#each highlighted as w}
+                <span class={w.highl ? "_8" : ""} class:mr-4={w.isEnd}>{w.text}</span>
+              {/each}
+            </div>
           </div>
-        </div>
-      {/each}
+        {/snippet}
+      </SvelteVirtualList>
     </div>
   {/if}
 </div>
@@ -396,10 +401,9 @@
     background: white;
     border: 1px solid #ccc;
     border-radius: 4px;
-    max-height: 300px;
-    overflow-y: auto;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     border-radius: 6px;
+    overflow: hidden;
   }
 
   ._1.open-up {
@@ -408,7 +412,7 @@
     box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
   }
 
-  ._1 > div {
+  ._highlight {
     display: flex;
     align-items: center;
     height: 36px;
@@ -417,7 +421,7 @@
     border-radius: 4px;
   }
 
-  ._1 > div:hover {
+  ._highlight:hover {
     background-color: #f0f0f0;
   }
 
