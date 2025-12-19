@@ -75,13 +75,6 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 		ReqContext:     request,
 	}
 
-	blen := core.If(len(body) > 500, 500, len(body))
-	if blen > 0 {
-		core.Log("*body enviado (LOCAL): ", body[0:(blen-1)])
-	} else {
-		core.Log("no se encontró body")
-	}
-
 	// Revisa si lo que se está pidiendo es ejecutar una funcion
 	if len(body) > 11 && body[0:11] == `{"fn_exec":` {
 		core.Log("Ejecutando funcion...")

@@ -21,8 +21,8 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	errGroup.Go(func() error {
 		query := db2.Query(&productos)
-		q1 := db2.Table[s.Producto]()
-		query.Exclude(q1.Stock, q1.StockStatus).
+
+		query.Exclude(query.Stock, query.StockStatus).
 			EmpresaID.Equals(req.Usuario.EmpresaID)
 		if updated > 0 {
 			query.Updated.GreaterThan(updated)

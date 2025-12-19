@@ -160,6 +160,33 @@ interface ILastSync {
   __version__: number
 }
 
+const getRecordKeys = (args: serviceHttpProps, field: string): string |string[] => {
+  const keyIDs = args.keysIDs && Object.hasOwn(args.keysIDs, field)
+    ? args.keysIDs[field]
+    : args.keyID || "id"
+  return keyIDs
+}
+
+const getKeyValue = (record: any, keyIDs: string |string[]): (string|number) => {
+  if(typeof keyIDs === 'string'){
+    return record[keyIDs] || record.ID || 0
+  } else if(Array.isArray(keyIDs)){
+    const arr: (string|number)[] = []
+    for(const key of keyIDs){
+      if(record[key]){
+        arr.push(record[key])
+      } else {
+        return 0
+      }
+    }
+    return arr.join("_")
+  } else {
+    return 0
+  }
+}
+
+export interface IResponse { [k: string]: any[] }
+
 const handleFetchResponse = async (
   args: serviceHttpProps, lastSync: ILastSync, response: CacheContent, nowTime: number
 ): Promise<any> => {
@@ -189,53 +216,29 @@ const handleFetchResponse = async (
   if(!hasChanged && args.cacheMode !== 'updateOnly'){
     response = (await getCacheRecord(key, cacheName)) as { [k: string]: any[] }
   } else if(hasChanged){
-    const prevResponse = (await getCacheRecord(key, cacheName)) as { [k: string]: any[] }
+    const prevResponse = (await getCacheRecord(key, cacheName)) as IResponse
     console.log("cache obtenido:",key,cacheName, args)
 
     if(self._isLocal){
       console.log("prevResponse (old)", args.route, args.cacheMode, {...prevResponse})
     }
 
-    for(const [respKey, newRecords] of Object.entries(response as { [k: string]: any[] })){
+    const usedKeysCount: {[k: string]: number } = {}
+
+    for(const [respKey, newRecords] of Object.entries(response as IResponse)){
       if((newRecords||[]).length === 0){ continue }
 
-      // El keysIDs puede ser un array de keys
-      const keyOrComposedID = args.keysIDs && Object.hasOwn(args.keysIDs,respKey)
-        ? args.keysIDs[respKey]
-        : args.keyID || "id"
-
-      const keysIDs: string[] = ["ID","id"]
-      if(typeof keyOrComposedID === 'string' && !keysIDs.includes(keyOrComposedID)){ 
-        keysIDs.unshift(keyOrComposedID) 
-      }
+      const keyIDs = getRecordKeys(args,respKey)
 
       let missingCount = 0
-      let missingKeys: Set<string> = new Set()
+
+      usedKeysCount[String(keyIDs)] = (usedKeysCount[String(keyIDs)]||0) + newRecords.length
       // Combina los registros basados en el ID
       // ***
       const makeKeyID = (r: any) => {
-        if(Array.isArray(keyOrComposedID)){
-          const arr: (string|number)[] = []
-          for(const primaryKey of keyOrComposedID){
-            if(r[primaryKey]){
-              arr.push(r[primaryKey])
-            } else {
-              missingCount++
-              missingKeys.add(primaryKey)
-              return 0
-            }
-          }
-          return keyOrComposedID.map(x => r[x]).join("_")
-        } else {
-          const id = r[keysIDs[0]] || r[keysIDs[1]] || r[keysIDs[2]]
-          if(id){
-            return id
-          } else {
-            missingCount++
-            missingKeys.add(keysIDs[0])
-            return 0
-          }
-        }
+        const value = getKeyValue(r, keyIDs)
+        if(!value){ missingCount++ }
+        return value
       }
       
       const prevRecords = prevResponse[respKey] || []
@@ -243,18 +246,13 @@ const handleFetchResponse = async (
 
       const recordsMap: Map<number|string,any> = new Map()
 
-      for(const e of prevRecords){
-        recordsMap.set(makeKeyID(e), e)
-      }
-      for(const e of newRecords){
-        recordsMap.set(makeKeyID(e), e)
-      }
-
-      console.log("records mapp cache::",prevRecords,newRecords, recordsMap)
+      for(const e of prevRecords){ recordsMap.set(makeKeyID(e), e) }
+      for(const e of newRecords){ recordsMap.set(makeKeyID(e), e) }
 
       if(missingCount > 0){
-        console.warn(`Cache Error: En "${args.route}" hay ${missingCount} registros sin las siguientes keys ${[...missingKeys].join(", ")}`)
+        console.warn(`Cache Error: En "${args.route}" (${respKey}) hay ${missingCount} registros sin la key: ${keyIDs}`)
       }
+      console.log("Cache usedKeysCount", usedKeysCount)
 
       const mergedRecords: any[] = []
       for(const e of recordsMap.values()){
@@ -264,6 +262,7 @@ const handleFetchResponse = async (
 
       prevResponse[respKey] = mergedRecords
     }
+
     if(self._isLocal){
       console.log("prevResponse (new)", args.route, args.cacheMode, {...prevResponse})
     }
@@ -376,11 +375,13 @@ const fetchCache = async(args: serviceHttpProps) => {
       if(lastSync.updatedStatus._default){
         route = addToRoute(route, "updated", lastSync.updatedStatus._default as number)
       } else {
-        route = addToRoute(route, "updated", lastSync.fetchTime as number)
+        let minUpdated = 0
         for(const [key, updated] of Object.entries(lastSync.updatedStatus)){
+          if(minUpdated === 0 || updated < minUpdated){ minUpdated = updated }
           if(fields.length > 0 && !fields.includes(key)){ continue }
           route = addToRoute(route, key, updated as number)
         }
+        route = addToRoute(route, "updated", minUpdated)
       }
 
       // Revisa si es necesario realizar una nuevo fetch

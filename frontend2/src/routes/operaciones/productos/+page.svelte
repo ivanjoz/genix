@@ -69,7 +69,7 @@
     return listas.ListaRecordsMap.get(1) || []
   })
 
-  const onSave = async () => {
+  const onSave = async (isDelete?: boolean) => {
     if((productoForm.Nombre?.length||0) < 4){
       Notify.failure("El nombre debe tener al menos 4 caracteres.")
       return
@@ -80,15 +80,21 @@
 
     Loading.standard("Guardando producto...")
     try {
-      var result = await postProducto([productoForm])
+      var productosUpdated = await postProducto([productoForm])
     } catch (error) {
       Notify.failure(error as string); Loading.remove(); return
     }
     Loading.remove()
 
     const producto = productos.productos.find(x => x.ID === productoForm.ID)
-    if(producto){
+    if(producto && isDelete){
+      productos.productos = productos.productos.filter(x => x.ID !== productoForm.ID)
+    } else if(producto) {
       Object.assign(producto, productoForm)
+    } else {
+      productoForm.ID = productosUpdated[0].ID
+      productos.productos.unshift(productoForm)
+      productos.productos = [...productos.productos]
     }
     Core.openSideLayer(0)
   }
@@ -174,6 +180,12 @@
     bind:selected={layerView}
     onClose={() => { productoForm = {} as IProducto }}
     onSave={() => { onSave() }}
+    onDelete={() => { 
+      ConfirmWarn("Eliminar Producto",
+        `¿Está seguro que desea eliminar "${productoForm.Nombre}"?`,
+        "SI", "NO", () => { onSave(true) }
+      )
+    }}
     options={[
       [1,"Información",["Informa-","ción"]],
       [2,"Ficha"],
@@ -214,6 +226,7 @@
         <Input label="Descuento" saveOn={productoForm} 
           css="col-span-12 md:col-span-5"
           save="Descuento" postValue="%" type="number"
+          validator={v => { return !v || v as number < 100 }}
         />
         <Input label="Precio Final" saveOn={productoForm} 
           css="col-span-12 md:col-span-5"
@@ -247,7 +260,7 @@
           save="MarcaID" keyId="ID" keyName="Nombre"
           options={listas.ListaRecordsMap.get(2)||[]}
         />
-        <div class="col-span-24 md:col-span-5">
+        <div class="col-span-24 md:col-span-14">
           <CheckboxOptions save="Params" saveOn={productoForm} type="multiple"
             options={[{i:1, v:"SKU Individual"}]} keyId="i" keyName="v"
           />
