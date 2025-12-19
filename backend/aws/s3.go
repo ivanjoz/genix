@@ -178,11 +178,13 @@ type ImageArgs struct {
 	Name        string
 	Description string
 	Resolutions map[uint16]string
+	Type        string
+	Resolution  int8
 }
 
 const USE_MULTILAMBDA = true
 
-func SaveImage(args ImageArgs) ([]imageconv.Image, error) {
+func SaveConvertImage(args ImageArgs) ([]imageconv.Image, error) {
 	fmt.Println("API de conversión de imágenes. Usando Multilambda:", USE_MULTILAMBDA)
 
 	/*
@@ -303,4 +305,25 @@ func SaveImage(args ImageArgs) ([]imageconv.Image, error) {
 		}
 	}
 	return images, nil
+}
+
+func SaveImage(image ImageArgs) (string, error) {
+
+	fmt.Println("args.Folder:", image.Folder)
+
+	if strings.Contains(image.Content[0:40], "base64,") {
+		image.Content = strings.Split(image.Content, "base64,")[1]
+	}
+
+	bytes := core.Base64ToBytes(image.Content)
+
+	args := FileToS3Args{
+		Bucket:      core.Env.S3_BUCKET,
+		Path:        image.Folder,
+		FileContent: bytes,
+		ContentType: fmt.Sprintf("image/%v", image.Type),
+		Name:        fmt.Sprintf("%v-x%v.%v", image.Name, image.Resolution, image.Type),
+	}
+	err := SendFileToS3(args)
+	return args.Name, err
 }

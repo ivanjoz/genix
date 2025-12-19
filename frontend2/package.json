@@ -30,6 +30,7 @@
 	},
 	"dependencies": {
 		"@humanspeak/svelte-virtual-list": "^0.3.5",
+		"@jsquash/avif": "^2.1.1",
 		"axios": "^1.13.2",
 		"esbuild": "^0.25.12",
 		"mime-types": "^3.0.1",

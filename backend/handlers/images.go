@@ -19,7 +19,7 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 	image.Folder = "img-productos"
 	image.Resolutions = map[uint16]string{980: "x6", 540: "x4", 340: "x2"}
 
-	_, err = aws.SaveImage(image)
+	_, err = aws.SaveConvertImage(image)
 	if err != nil {
 		return req.MakeErr("Error al guardar la imagen: " + err.Error())
 	}

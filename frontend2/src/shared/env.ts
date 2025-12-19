@@ -42,6 +42,7 @@ export const Env = {
   sideLayerSize: 0,
   fetchID: 1000,
   imageWorker: null as unknown as Worker,
+  ImageWorkerClass: null as any,
   zoneOffset: (new Date()).getTimezoneOffset() * 60,
   dexieVersion: 1,
   cache: {} as {[e: string]: any},

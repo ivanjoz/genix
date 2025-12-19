@@ -219,6 +219,9 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 type productoImage struct {
 	Content       string
+	Content_x6    string
+	Content_x4    string
+	Content_x2    string
 	Folder        string
 	Description   string
 	ProductoID    int32
@@ -235,7 +238,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 	core.Log("Image to delete 1:", image.ImageToDelete)
 
 	if len(image.ImageToDelete) == 0 {
-		if image.ProductoID == 0 || len(image.Content) == 0 {
+		if image.ProductoID == 0 || (len(image.Content) == 0 && len(image.Content_x6) == 0) {
 			return req.MakeErr("NO se encontraron los parámetros: [ProductoID] [Content]")
 		}
 	}
@@ -256,6 +259,20 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 	producto := productos[0]
 	response := map[string]string{}
 
+	name := core.ToBase36(time.Now().UnixMilli())
+
+	imageArgs := aws.ImageArgs{
+		Content: image.Content, Folder: "img-productos", Name: name, Type: "avif",
+		Resolutions: map[uint16]string{980: "x6", 570: "x4", 360: "x2"},
+	}
+
+	addImage := func() {
+		response["imageName"] = "img-productos/" + name
+
+		pi := s.ProductoImagen{Name: name, Descripcion: image.Description}
+		producto.Images = append([]s.ProductoImagen{pi}, producto.Images...)
+	}
+
 	if len(image.ImageToDelete) > 0 {
 		images := []s.ProductoImagen{}
 		for _, e := range producto.Images {
@@ -264,23 +281,33 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 			}
 		}
 		producto.Images = images
+	} else if len(image.Content_x6) > 0 {
+
+		resolutionMap := map[int8]*string{
+			6: &image.Content_x6, 4: &image.Content_x4, 2: &image.Content_x2,
+		}
+
+		for resolution, content := range resolutionMap {
+			if len(*content) < 50 {
+				continue
+			}
+			cloned := imageArgs
+			cloned.Resolution = resolution
+			cloned.Content = *content
+			_, err = aws.SaveImage(cloned)
+			if err != nil {
+				return req.MakeErr("Error al guardar la imagen:", err)
+			}
+		}
+
+		addImage()
 	} else {
-		imageArgs := aws.ImageArgs{
-			Content:     image.Content,
-			Folder:      "img-productos",
-			Name:        fmt.Sprintf("%v", time.Now().UnixMilli()),
-			Resolutions: map[uint16]string{980: "x6", 540: "x4", 340: "x2"},
-		}
-
-		_, err = aws.SaveImage(imageArgs)
+		_, err = aws.SaveConvertImage(imageArgs)
 		if err != nil {
-			return req.MakeErr("Error al guardar la imagen: " + err.Error())
+			return req.MakeErr("Error al guardar la imagen:", err)
 		}
 
-		response["imageName"] = "img-productos/" + imageArgs.Name
-
-		producto.Images = append(producto.Images, s.ProductoImagen{
-			Name: imageArgs.Name, Descripcion: image.Description})
+		addImage()
 	}
 
 	producto.Updated = time.Now().Unix()
@@ -364,7 +391,7 @@ func PostProductoCategoriaImage(req *core.HandlerArgs) core.HandlerResponse {
 	image.Folder = "img-public"
 	image.Resolutions = map[uint16]string{980: "x6", 540: "x4", 340: "x2"}
 
-	if _, err = aws.SaveImage(image); err != nil {
+	if _, err = aws.SaveConvertImage(image); err != nil {
 		return req.MakeErr("Error al guardar la imagen: " + err.Error())
 	}
 

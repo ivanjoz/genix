@@ -58,6 +58,13 @@ const serviceWorkerPlugin = () => ({
 
     // Custom middleware to serve files from the public directory directly
     server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
+      // Serve WASM files with correct MIME type
+      if (req.url && req.url.endsWith('.wasm')) {
+        res.setHeader('Content-Type', 'application/wasm');
+        res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+        res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+      }
+      
       // This helps prevent intercepting routes that should be handled by the SPA
       if(req.url && req.url.startsWith('/sw.js')){
         const filePath = path.join(publicDir, req.url);
@@ -77,6 +84,18 @@ const serviceWorkerPlugin = () => ({
 export default defineConfig({
 	server: {
     port: 3570, // Change this to your desired port
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+    }
   },
+  optimizeDeps: {
+    exclude: ['@jsquash/avif'],
+  },
+  worker: {
+    format: 'es',
+    plugins: () => [tailwindcss()],
+  },
+  assetsInclude: ['**/*.wasm'],
 	plugins: [tailwindcss(), sveltekit(), serviceWorkerPlugin()]
 });
