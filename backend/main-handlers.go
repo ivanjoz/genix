@@ -250,27 +250,28 @@ func prepareResponse(args core.HandlerArgs, handlerResponse *core.HandlerRespons
 	}
 
 	// Revisa si es necesario guardar el Log
-	logRecord := core.MakeReqLog()
-	apisToAvoid := []string{"logs-"}
+	/*
+		logRecord := core.MakeReqLog()
+		apisToAvoid := []string{"logs-"}
 
-	saveLogs := true
-	if strings.Contains(logRecord.IP, "::1") || strings.Contains(logRecord.IP, "127.0.0.1") {
-		saveLogs = false
-	}
-	if len(logRecord.PathName) < 4 || strings.Contains(logRecord.PathName, ".p-") {
-		saveLogs = false
-	}
-
-	for _, e := range apisToAvoid {
-		if strings.Contains(logRecord.ApiUrl, e) {
+		saveLogs := true
+		if strings.Contains(logRecord.IP, "::1") || strings.Contains(logRecord.IP, "127.0.0.1") {
 			saveLogs = false
-			break
 		}
-	}
-	if saveLogs {
-		// core.Print(logRecord)
-		aws.MakeTableLogs2().PutItem(&logRecord, 1)
-	}
+		if len(logRecord.PathName) < 4 || strings.Contains(logRecord.PathName, ".p-") {
+			saveLogs = false
+		}
+
+		for _, e := range apisToAvoid {
+			if strings.Contains(logRecord.ApiUrl, e) {
+				saveLogs = false
+				break
+			}
+		}
+		if saveLogs {
+			aws.MakeTableLogs2().PutItem(&logRecord, 1)
+		}
+	*/
 	return response
 }
 

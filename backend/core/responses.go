@@ -14,6 +14,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DmitriyVTitov/size"
 	"github.com/andybalholm/brotli"
@@ -37,6 +38,7 @@ type HandlerArgs struct {
 	ReqParams      string
 	Encoding       string
 	Usuario        *IUsuario
+	StartTime      int64
 }
 
 func PrintMemUsage() {
@@ -859,6 +861,10 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 		bodyBytes = bodyCompressed.Bytes()
 		respWriter.Header().Set("Content-Encoding", "gzip")
 	}
+
+	elapsed := time.Now().UnixMilli() - args.StartTime
+	serverInfo := fmt.Sprintf("Genix-v1.0:%v", elapsed)
+	respWriter.Header().Set("Server", serverInfo)
 
 	/*
 		bodyLen := 240
