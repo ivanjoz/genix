@@ -86,6 +86,8 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeResponse(result)
 	}
 
+	core.Print(result.Movimientos[0])
+
 	usuariosSet := core.SliceSet[int32]{}
 	productosSet := core.SliceSet[int32]{}
 
@@ -356,8 +358,8 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []s.MovimientoInterno) 
 		productosToUpdate = append(productosToUpdate, producto)
 	}
 
-	core.Log("productos for update...")
-	core.Print(productosToUpdate)
+	//core.Log("productos for update...")
+	// core.Print(productosToUpdate)
 
 	q2 := db2.Table[s.Producto]()
 	if err := db2.Update(&productosToUpdate, q2.Stock, q2.StockStatus); err != nil {

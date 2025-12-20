@@ -1,10 +1,10 @@
 package serialize
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 
+	"github.com/bytedance/sonic"
 	"github.com/viant/xunsafe"
 )
 
@@ -24,7 +24,7 @@ func NewDecoder() *Decoder {
 // Expects format: [keys, content] where keys is the type definitions and content is the data
 func Unmarshal(data []byte, v any) error {
 	var arr []any
-	if err := json.Unmarshal(data, &arr); err != nil {
+	if err := sonic.Unmarshal(data, &arr); err != nil {
 		return err
 	}
 
