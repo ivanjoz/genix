@@ -1,7 +1,9 @@
 package serialize
 
 import (
+	"fmt"
 	"reflect"
+	"sort"
 
 	"github.com/bytedance/sonic"
 	"github.com/viant/xunsafe"
@@ -66,10 +68,18 @@ func (e *Encoder) GetKeysListAll() [][]any {
 	return e.registry.GetKeysListAll()
 }
 
-func (e *Encoder) marshalContent(v any) ([]any, error) {
+func (e *Encoder) marshalContent(v any) (any, error) {
+	if v == nil {
+		return nil, nil
+	}
+
 	val := reflect.ValueOf(v)
-	if val.Kind() == reflect.Ptr {
+	for (val.Kind() == reflect.Ptr || val.Kind() == reflect.Interface) && !val.IsNil() {
 		val = val.Elem()
+	}
+
+	if (val.Kind() == reflect.Ptr || val.Kind() == reflect.Interface) && val.IsNil() {
+		return nil, nil
 	}
 
 	switch val.Kind() {
@@ -77,10 +87,47 @@ func (e *Encoder) marshalContent(v any) ([]any, error) {
 		return e.marshalStruct(val)
 	case reflect.Slice, reflect.Array:
 		return e.marshalSlice(val)
+	case reflect.Map:
+		return e.marshalMap(val)
 	default:
 		// Fallback for other types
-		return []any{val.Interface()}, nil
+		if !val.IsValid() {
+			return nil, nil
+		}
+		return val.Interface(), nil
 	}
+}
+
+func (e *Encoder) marshalMap(val reflect.Value) ([]any, error) {
+	result := []any{3}
+
+	// Get all keys and sort them for consistent two-pass ordering
+	mapKeys := val.MapKeys()
+	keysWithStr := make([]struct {
+		val reflect.Value
+		str string
+	}, len(mapKeys))
+
+	for i, k := range mapKeys {
+		keysWithStr[i] = struct {
+			val reflect.Value
+			str string
+		}{k, fmt.Sprintf("%v", k.Interface())}
+	}
+
+	sort.Slice(keysWithStr, func(i, j int) bool {
+		return keysWithStr[i].str < keysWithStr[j].str
+	})
+
+	for _, ks := range keysWithStr {
+		v := val.MapIndex(ks.val)
+		marshaledVal, err := e.marshalValue(v.Interface())
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, ks.str, marshaledVal)
+	}
+	return result, nil
 }
 
 func (e *Encoder) marshalStruct(val reflect.Value) ([]any, error) {
@@ -190,9 +237,17 @@ func (e *Encoder) marshalSlice(val reflect.Value) ([]any, error) {
 }
 
 func (e *Encoder) marshalValue(v any) (any, error) {
+	if v == nil {
+		return nil, nil
+	}
+
 	val := reflect.ValueOf(v)
-	if val.Kind() == reflect.Ptr && !val.IsNil() {
+	for (val.Kind() == reflect.Ptr || val.Kind() == reflect.Interface) && !val.IsNil() {
 		val = val.Elem()
+	}
+
+	if (val.Kind() == reflect.Ptr || val.Kind() == reflect.Interface) && val.IsNil() {
+		return nil, nil
 	}
 
 	if val.Kind() == reflect.Struct {
@@ -201,5 +256,12 @@ func (e *Encoder) marshalValue(v any) (any, error) {
 	if val.Kind() == reflect.Slice || val.Kind() == reflect.Array {
 		return e.marshalSlice(val)
 	}
-	return v, nil
+	if val.Kind() == reflect.Map {
+		return e.marshalMap(val)
+	}
+
+	if !val.IsValid() {
+		return nil, nil
+	}
+	return val.Interface(), nil
 }

@@ -1,3 +1,4 @@
+import { unmarshall } from "$lib/unmarshall"
 import { CACHE_APP, getCacheRecord, HandlersMap, hasCacheKey, parseObject, sendClientMessage, setCacheRecord } from "./service-worker-cache"
 
 export type CacheMode = 'offline' | 'updateOnly' | 'refresh' | 'fetchOnly'
@@ -425,7 +426,7 @@ const fetchCache = async(args: serviceHttpProps) => {
     }
 
     console.log(`Realizando fetch (${route})...`)
-    const preResponse = await self.fetch(route, { headers:  args.headers }) 
+    const preResponse = await self.fetch(route, { headers: args.headers }) 
 
     if(preResponse.status && preResponse.status !== 200){
       const responseText = await preResponse.text()
@@ -433,6 +434,9 @@ const fetchCache = async(args: serviceHttpProps) => {
     }
 
     let response = ((await parseResponseAsStream(preResponse, args))||{}) as CacheContent
+    console.log("response pre-unmarshall", response)
+    response = unmarshall(response)
+    console.log("response post-unmarshall", response)
 
     if(Array.isArray(response.response) && typeof response.message === 'string'){
       response = response.response as any

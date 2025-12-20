@@ -17,7 +17,8 @@ Traditional JSON serialization repeats field names for every object:
 This library eliminates field name repetition by:
 1. Storing field definitions once in a **keys list**
 2. Serializing objects as **value arrays** with positional mapping
-3. Skipping zero/empty values to further reduce size
+3. Serializing maps as key-value sequences to support dynamic structures
+4. Skipping zero/empty values to further reduce size
 
 Result:
 
@@ -31,6 +32,9 @@ Result:
 ## Output Format
 
 The `Marshal` function produces a single array with two elements: `[keys, content]`
+
+- **keys**: An array of type definitions. Always returns an empty array `[]` instead of `null` if no structs are registered.
+- **content**: The actual data.
 
 ### Keys Array
 
@@ -64,7 +68,22 @@ Each array starts with a header value:
 | `1` | New object type (includes type ID in reference block) |
 | `0` | Same type as previous object |
 | `2` | Array/Slice of values |
+| `3` | Map of key-value pairs |
 | Other | Plain array values |
+
+### Map Serialization
+
+Maps are serialized as a flat sequence of keys and values:
+`[3, key1, val1, key2, val2, ...]`
+
+- **Header 3**: Identifies the structure as a Map.
+- **Pairs**: Alternating sequence of keys and their corresponding values.
+- **Recursion**: Values within the map are recursively marshaled using the same rules.
+
+Example:
+```json
+[3, "Status", "OK", "Count", 42]
+```
 
 ### Object Reference Block
 
@@ -160,9 +179,16 @@ var result []MyStruct
 err := serialize.Unmarshal(output, &result)
 ```
 
+## Maps and Dynamic Data
+
+Unlike structs, maps do not have a fixed schema. Therefore:
+- They are not registered in the `keys` metadata list.
+- They are self-describing, sending both keys and values in the content array.
+- They are ideal for top-level response wrappers or dynamic dictionaries.
+
 ## Nested Structures
 
-Nested structs and arrays are fully supported:
+Nested structs, arrays, and maps are fully supported:
 
 ```go
 type Parent struct {
