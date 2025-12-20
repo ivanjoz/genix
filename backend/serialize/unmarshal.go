@@ -164,6 +164,13 @@ func (d *Decoder) unmarshalStruct(arr []any, val reflect.Value) error {
 			val.Set(newVal)
 			return nil
 		}
+		if val.Kind() == reflect.Ptr {
+			// Handle pointer types
+			if val.IsNil() {
+				val.Set(reflect.New(d.lastType))
+			}
+			return d.populateStruct(xStruct, typeID, arr[valueStartIdx:], skipIndices, val.Elem())
+		}
 		return fmt.Errorf("cannot unmarshal struct into %v", val.Type())
 	}
 

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +18,7 @@ import (
 	"github.com/DmitriyVTitov/size"
 	"github.com/andybalholm/brotli"
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/bytedance/sonic"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -33,7 +33,7 @@ type HandlerArgs struct {
 	Route          string
 	Authorization  string
 	MergedID       int32
-	ResponseBody   *string
+	ResponseBody   *[]byte
 	ResponseError  string
 	ReqParams      string
 	Encoding       string
@@ -164,7 +164,7 @@ func DecompressBase64Gzip[T any](base64String *string, output *T) error {
 	defer file.Close()
 
 	// Decode the JSON into the struct
-	decoder := json.NewDecoder(file)
+	decoder := sonic.ConfigDefault.NewDecoder(file)
 	err = decoder.Decode(&output)
 	if err != nil {
 		return errors.New("Error deserializar JSON: " + err.Error())
@@ -238,7 +238,7 @@ func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTT
 	if strings.Contains(handlerResponse.Encoding, "br") {
 		Log("Enviando respuesta comprimida con brotli")
 		// Log(body)
-		bodyBytes := []byte(body)
+		bodyBytes := body
 		bodyCompressed := bytes.Buffer{}
 		writer := brotli.NewWriterV2(&bodyCompressed, 4)
 		in := bytes.NewReader(bodyBytes)
@@ -261,7 +261,7 @@ func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTT
 
 		var bodyCompressed bytes.Buffer
 		gz := gzip.NewWriter(&bodyCompressed)
-		if _, err := gz.Write([]byte(body)); err != nil {
+		if _, err := gz.Write(body); err != nil {
 			log.Fatal(err)
 		}
 		if err := gz.Close(); err != nil {
@@ -274,7 +274,7 @@ func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTT
 		response.Headers["Content-Encoding"] = "gzip"
 		response.IsBase64Encoded = true
 	} else {
-		response.Body = body
+		response.Body = string(body)
 	}
 	return response
 }
@@ -295,7 +295,7 @@ func MakeErrRespFinal(statusCode int32, body string) *events.APIGatewayV2HTTPRes
 	// responseErr.Headers["Content-Type"] = "plain/text"
 	response.Headers["Content-Type"] = "application/json; charset=utf-8"
 	errorMsg := ErrorMsg{Error: body}
-	responseJSON, _ := json.Marshal(errorMsg)
+	responseJSON, _ := sonic.Marshal(errorMsg)
 	response.Body = string(responseJSON)
 	// Log("Error a enviar::", body)
 	return response
@@ -526,7 +526,7 @@ func (e HandlerArgs) GetQuerySlice(key string) []string {
 }
 
 type HandlerResponse struct {
-	Body       *string
+	Body       *[]byte
 	BodyOnDisk string
 	StatusCode int
 	Error      string
@@ -599,18 +599,24 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 	structLen := size.Of(*respStruct)
 	// Si es menor a 100kb entonces lo serializa aquí
 	if fmt.Sprintf("%T", *new(T)) == "string" {
-		body := fmt.Sprintf("%v", *respStruct)
+		body := []byte(fmt.Sprintf("%v", *respStruct))
 		response.Body = &body
 	} else if structLen < 102400 || Env.IS_LOCAL {
-		bodyBytes, err := json.Marshal(respStruct)
+		/*
+			marshall1, _ := serialize.Marshal(respStruct)
+			fmt.Println(string(marshall1))
+		*/
+		bodyBytes, err := sonic.Marshal(respStruct)
+
+		// fmt.Println("Json Size:", len(bodyBytes), "| vs:", len(marshall1))
+
 		if err != nil {
 			return req.MakeErr("No se pudo serializar respuesta:", err)
 		}
-		body := string(bodyBytes)
-		if body == "null" {
-			body = "[]"
+		if bytes.Equal(bodyBytes, []byte("null")) {
+			bodyBytes = []byte("[]")
 		}
-		response.Body = &body
+		response.Body = &bodyBytes
 	} else {
 		fileName := fmt.Sprintf("output-%v", req.MergedID)
 		response.BodyOnDisk = EncodeJsonToFileX(respStruct, fileName)
@@ -666,8 +672,9 @@ func CombineResponses(responses []*HandlerResponse) HandlerResponse {
 			Log("Agregando a Body:: ", fileName, " | Lines:", linesCount, " | Size:", size)
 			outputJson.WriteString("}\n")
 		} else if res.Body != nil {
-			header += (*res.Body + "}\n")
 			outputJson.WriteString(header)
+			outputJson.Write(*res.Body)
+			outputJson.WriteString("}\n")
 		} else if len(res.Error) > 0 {
 			header += "null }\n"
 			outputJson.WriteString(header)
@@ -706,7 +713,7 @@ func EncodeJsonToFileX[T any](respStruct *T, name ...string) string {
 	}
 	defer file.Close()
 
-	encoder := json.NewEncoder(file)
+	encoder := sonic.ConfigDefault.NewEncoder(file)
 	encoder.SetEscapeHTML(false)
 	PrintMemUsage()
 
@@ -732,7 +739,7 @@ func (req *HandlerArgs) MakeResponseDisk(respStruct any) HandlerResponse {
 	}
 	defer file.Close()
 	// TODO: aqui hay un salto de memoria, revisar
-	encoder := json.NewEncoder(file)
+	encoder := sonic.ConfigDefault.NewEncoder(file)
 	encoder.SetEscapeHTML(false)
 	PrintMemUsage()
 
@@ -789,7 +796,7 @@ func (req *HandlerArgs) MakeResponseDiskT(outputPath string) HandlerResponse {
 	return response
 }
 
-func (req *HandlerArgs) MakeResponsePlain(body *string) HandlerResponse {
+func (req *HandlerArgs) MakeResponsePlain(body *[]byte) HandlerResponse {
 	response := HandlerResponse{
 		Body:       body,
 		StatusCode: http.StatusOK,
@@ -828,7 +835,7 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 		errorMap := map[string]string{
 			"error": response.Error,
 		}
-		errorJson, _ := json.Marshal(errorMap)
+		errorJson, _ := sonic.Marshal(errorMap)
 
 		Log("enviando error:: ", response.Error)
 		_, err := respWriter.Write(errorJson)
@@ -844,14 +851,14 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 	} else if strings.Contains(args.Encoding, "zstd") {
 		Log("Comprimiendo body con: zstd")
 		encoder, _ := zstd.NewWriter(nil)
-		bb := []byte(*response.Body)
+		bb := *response.Body
 		bodyBytes = encoder.EncodeAll(bb, make([]byte, 0, len(bb)))
 		respWriter.Header().Set("Content-Encoding", "zstd")
 	} else {
 		Log("Comprimiendo body con: gzip")
 		var bodyCompressed bytes.Buffer
 		gz := gzip.NewWriter(&bodyCompressed)
-		if _, err := gz.Write([]byte(*response.Body)); err != nil {
+		if _, err := gz.Write(*response.Body); err != nil {
 			log.Fatal(err)
 		}
 		if err := gz.Close(); err != nil {

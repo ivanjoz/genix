@@ -23,7 +23,7 @@ Result:
 
 ```json
 [
-  [[1,1,"name",2,"age",3,"country"]],
+  [[1,0,"name",1,"age",2,"country"]],
   [2,[1,[1],"John",27,"USA"],[0,"Jane",25,"UK"],[0,"Bob",30,"USA"]]
 ]
 ```
@@ -41,12 +41,12 @@ Contains type definitions with field mappings:
 ```
 
 - **typeID**: Unique identifier for the struct type
-- **fieldIndex**: 1-based position of the field in the optimized order
+- **fieldIndex**: 0-based position of the field in the optimized order
 - **fieldName**: JSON tag name (or Go field name if no tag)
 
 Example:
 ```json
-[[1,1,"name",2,"age",3,"anArray",4,"demo",5,"decimal"]]
+[[1,0,"name",1,"age",2,"anArray",3,"demo",4,"decimal"]]
 ```
 
 ### Content Array
