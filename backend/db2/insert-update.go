@@ -2,11 +2,11 @@ package db2
 
 import (
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
 
 	"github.com/gocql/gocql"
+	"github.com/viant/xunsafe"
 )
 
 func MakeInsertStatement[T TableSchemaInterface[T]](records *[]T, columnsToExclude ...Coln) []string {
@@ -37,8 +37,9 @@ func MakeInsertStatement[T TableSchemaInterface[T]](records *[]T, columnsToExclu
 
 	queryStatements := []string{}
 
-	for _, rec := range *records {
-		refValue := reflect.ValueOf(rec)
+	for i := range *records {
+		rec := &(*records)[i]
+		ptr := xunsafe.AsPointer(rec)
 		// fmt.Println("Type:", reflect.TypeOf(rec).String())
 
 		recordInsertValues := []string{}
@@ -47,7 +48,7 @@ func MakeInsertStatement[T TableSchemaInterface[T]](records *[]T, columnsToExclu
 			if col.getValue == nil {
 				panic("is nil column: getValue() = " + col.Name + " | " + col.FieldName)
 			}
-			value := col.getValue(&refValue)
+			value := col.getValue(ptr)
 			recordInsertValues = append(recordInsertValues, fmt.Sprintf("%v", value))
 		}
 
@@ -96,8 +97,9 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES (%v)`,
 		scyllaTable.GetFullName(), strings.Join(columnsNames, ", "), strings.Join(columnPlaceholders, ", "))
 
-	for _, rec := range *records {
-		refValue := reflect.ValueOf(rec)
+	for i := range *records {
+		rec := &(*records)[i]
+		ptr := xunsafe.AsPointer(rec)
 		values := []any{}
 
 		for _, col := range columns {
@@ -106,9 +108,9 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 			}
 			var value any
 			if col.getStatementValue != nil {
-				value = col.getStatementValue(&refValue)
+				value = col.getStatementValue(ptr)
 			} else {
-				value = col.getValue(&refValue)
+				value = col.getValue(ptr)
 			}
 			values = append(values, value)
 		}
@@ -242,18 +244,19 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 
 	queryStatements := []string{}
 
-	for _, rec := range *records {
-		refValue := reflect.ValueOf(rec)
+	for i := range *records {
+		rec := &(*records)[i]
+		ptr := xunsafe.AsPointer(rec)
 
 		setStatements := []string{}
 		for _, col := range columnsToUpdate {
-			v := col.getValue(&refValue)
+			v := col.getValue(ptr)
 			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
 		}
 
 		whereStatements := []string{}
 		for _, col := range columnsWhere {
-			v := col.getValue(&refValue)
+			v := col.getValue(ptr)
 			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
 		}
 

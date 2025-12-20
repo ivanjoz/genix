@@ -1,9 +1,9 @@
 package serialize
 
 import (
-	"encoding/json"
 	"reflect"
 
+	"github.com/bytedance/sonic"
 	"github.com/viant/xunsafe"
 )
 
@@ -53,7 +53,7 @@ func Marshal(v any) ([]byte, error) {
 	keys := e.registry.GetKeysList()
 	result := []any{keys, content}
 
-	return json.Marshal(result)
+	return sonic.Marshal(result)
 }
 
 // GetKeysList returns the list of keys for all registered types (only used fields)

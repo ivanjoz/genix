@@ -5,13 +5,38 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/fatih/color"
 	"github.com/kr/pretty"
+	"github.com/viant/xunsafe"
 )
+
+var (
+	DebugFull          bool
+	logVariableCheched bool
+	LogCount           uint32
+)
+
+func ShouldLog() bool {
+	if !logVariableCheched {
+		DebugFull = os.Getenv("LOGS_FULL") != ""
+		logVariableCheched = true
+	}
+	if !DebugFull {
+		return false
+	}
+	return atomic.LoadUint32(&LogCount) < 5
+}
+
+func IncrementLogCount() {
+	atomic.AddUint32(&LogCount, 1)
+}
 
 func BasicHashInt(s string) int32 {
 	h := fnv.New32a()
@@ -131,10 +156,14 @@ func sliceToAny[T any](valuesGeneric *[]T) []any {
 	return values
 }
 
-func reflectToSlice(value *reflect.Value) []any {
+func reflectToSlicePtr(field *xunsafe.Field, ptr unsafe.Pointer) []any {
+	return reflectToSliceValue(field.Interface(ptr))
+}
+
+func reflectToSliceValue(value any) []any {
 	var values []any
 
-	switch sl := value.Interface().(type) {
+	switch sl := value.(type) {
 	case []int:
 		values = sliceToAny(&sl)
 	case []int8:
@@ -149,11 +178,17 @@ func reflectToSlice(value *reflect.Value) []any {
 		values = sliceToAny(&sl)
 	case []float64:
 		values = sliceToAny(&sl)
+	case []string:
+		values = sliceToAny(&sl)
 	default:
 		// The value is not an integer
-		panic("Value was not recognised of a slice.")
+		panic("Value was not recognised of a slice: " + reflect.TypeOf(value).String())
 	}
 	return values
+}
+
+func reflectToSlice(value *reflect.Value) []any {
+	return reflectToSliceValue(value.Interface())
 }
 
 var (

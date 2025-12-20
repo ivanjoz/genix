@@ -1,13 +1,16 @@
 package db2
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"github.com/fxamacker/cbor/v2"
+	"github.com/viant/xunsafe"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -258,7 +261,9 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 			scanner := iter.Scanner()
 			fmt.Println("starting iterator | columns::", len(scyllaTable.columns))
 
+			rowCount := 0
 			for scanner.Next() {
+				rowCount++
 
 				rowValues := rd.Values
 
@@ -269,17 +274,34 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 				}
 
 				rec := new(E)
-				ref := reflect.ValueOf(rec).Elem()
+				ptr := xunsafe.AsPointer(rec)
+				shouldLog := ShouldLog()
+
+				if shouldLog {
+					fmt.Printf("\n--- Scanning record %d ---\n", atomic.LoadUint32(&LogCount)+1)
+				}
 
 				for idx, colname := range columnNames {
 					column := scyllaTable.columnsMap[colname]
 					value := rowValues[idx]
+
+					if shouldLog {
+						valStr := "nil"
+						if value != nil {
+							valStr = fmt.Sprintf("%v", reflect.Indirect(reflect.ValueOf(value)).Interface())
+						}
+						offset := uintptr(0)
+						if column.Field != nil {
+							offset = column.Field.Offset
+						}
+						fmt.Printf("Col: %-20s (Field: %-20s) | Offset: %-4d | DB Value: %s\n", colname, column.FieldName, offset, valStr)
+					}
+
 					if value == nil {
 						continue
 					}
 					if column.setValue != nil {
-						field := ref.Field(column.FieldIdx)
-						column.setValue(&field, value)
+						column.setValue(ptr, value)
 						// Revisa si necesita parsearse un string a un struct como JSON
 					} else if column.IsComplexType {
 						// fmt.Println("complex type::", column.FieldName, "|", column.FieldType)
@@ -293,17 +315,19 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 								fmt.Println("Error al convertir: ", newElm, "|", err.Error())
 							}
 							// fmt.Println("col complex:", column.Name, " | ", newElm, " | L:", len(*vl))
-							if column.IsPointer {
-								ref.Field(column.FieldIdx).Set(reflect.ValueOf(newElm))
-							} else {
-								ref.Field(column.FieldIdx).Set(newElm)
-							}
+							column.Field.Set(ptr, newElm.Interface())
 						} else {
 							fmt.Print("Complex Type could not be parsed:", column.Name)
 						}
 					} else {
 						fmt.Print("Column is not mapped:: ", column.Name)
 					}
+				}
+
+				if shouldLog {
+					recJSON, _ := json.MarshalIndent(rec, "", "  ")
+					fmt.Printf("Resulting Struct: %s\n", string(recJSON))
+					IncrementLogCount()
 				}
 
 				if len(queryWhereStatements) == 1 {

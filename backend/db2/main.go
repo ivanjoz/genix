@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/viant/xunsafe"
 )
 
 type ScyllaTable[T any] struct {
@@ -416,12 +418,22 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 	fieldNameIdxMap := map[string]*columnInfo{}
 	refTableInfo := &TableInfo{}
 
-	for i := 0; i < structRefValue.NumField(); i++ {
-		col := columnInfo{
+	for i := 0; i < structRefType.NumField(); i++ {
+		field := structRefType.Field(i)
+		xfield := xunsafe.FieldByName(structRefType, field.Name)
+		col := &columnInfo{
 			FieldIdx:  i,
-			FieldType: structRefType.Field(i).Type.String(),
-			FieldName: structRefType.Field(i).Name,
-			RefType:   structRefType.Field(i).Type,
+			FieldType: field.Type.String(),
+			FieldName: field.Name,
+			RefType:   field.Type,
+			Field:     xfield,
+		}
+		if DebugFull {
+			offset := uintptr(0)
+			if xfield != nil {
+				offset = xfield.Offset
+			}
+			fmt.Printf("Base Struct Field: %-20s | Type: %-15s | Offset: %d\n", field.Name, field.Type.String(), offset)
 		}
 
 		if col.FieldType[0:1] == "*" {
@@ -435,7 +447,7 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 
 		// fmt.Println("fieldtype obtenido::", col.FieldName, col.FieldType)
 		// fmt.Println("Fieldname::", col.FieldName, "| Type:", col.FieldType)
-		fieldNameIdxMap[col.FieldName] = &col
+		fieldNameIdxMap[col.FieldName] = col
 	}
 
 	structValue := reflect.ValueOf(schemaStruct).Elem()
@@ -476,6 +488,10 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 			colInfo.FieldType = colBase.FieldType
 			colInfo.FieldName = colBase.FieldName
 			colInfo.RefType = colBase.RefType
+			colInfo.Field = colBase.Field
+			if DebugFull {
+				fmt.Printf("Init Col: %s, Field: %s, Offset: %d\n", colInfo.Name, colInfo.FieldName, colInfo.Field.Offset)
+			}
 		} else if fieldType.Name != "TableStruct" {
 			err := fmt.Sprintf(`No se encontró el field "%v" en el struct "%v"`, fieldType.Name, structRefType.Name())
 			panic(err)
