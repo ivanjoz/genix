@@ -608,7 +608,6 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 			fmt.Println(string(marshall1))
 		*/
 		bodyBytes, err := serialize.Marshal(respStruct)
-		fmt.Println(string(bodyBytes))
 		// fmt.Println("Json Size:", len(bodyBytes), "| vs:", len(marshall1))
 
 		if err != nil {
