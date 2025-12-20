@@ -54,7 +54,12 @@ func getFieldName(field reflect.StructField) string {
 	}
 	// Handle "name,omitempty" format
 	if idx := strings.Index(jsonTag, ","); idx != -1 {
-		return jsonTag[:idx]
+		name := jsonTag[:idx]
+		// If name is empty (e.g., ",omitempty"), use the struct field name
+		if name == "" {
+			return field.Name
+		}
+		return name
 	}
 	return jsonTag
 }
@@ -189,14 +194,14 @@ func (r *FieldRegistry) GetKeysList() [][]any {
 			// Use optimized order (most used fields first)
 			for orderIdx, fieldIdx := range info.OptimizedOrder {
 				if info.UsedMask[fieldIdx] {
-					keyEntry = append(keyEntry, orderIdx+1, info.Fields[fieldIdx].Name) // 1-based optimized index
+					keyEntry = append(keyEntry, orderIdx, info.Fields[fieldIdx].Name) // 0-based optimized index
 				}
 			}
 		} else {
 			// Use original order
 			for i, field := range info.Fields {
 				if info.UsedMask[i] {
-					keyEntry = append(keyEntry, i+1, field.Name) // 1-based index
+					keyEntry = append(keyEntry, i, field.Name) // 0-based index
 				}
 			}
 		}
@@ -218,7 +223,7 @@ func (r *FieldRegistry) GetKeysListAll() [][]any {
 	for id, info := range r.idToInfo {
 		keyEntry := []any{id}
 		for i, field := range info.Fields {
-			keyEntry = append(keyEntry, i+1, field.Name) // 1-based index as per README
+			keyEntry = append(keyEntry, i, field.Name) // 0-based index
 		}
 		result = append(result, keyEntry)
 	}

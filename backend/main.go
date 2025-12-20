@@ -30,9 +30,9 @@ func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (
 	// Revisa si lo que se está pidiendo es ejecutar una funcion
 	if len(request.Body) > 11 && request.Body[0:11] == `{"fn_exec":` {
 		funcResponse := ExecFuncHandler(request.Body)
-		body := core.ToJsonNoErr(funcResponse)
-		core.Log("*Body response::" + core.StrCut(body, 400))
-		response := core.HandlerResponse{Body: &body, Headers: map[string]string{}}
+		bodyBytes := []byte(core.ToJsonNoErr(funcResponse))
+		core.Log("*Body response::" + core.StrCut(string(bodyBytes), 400))
+		response := core.HandlerResponse{Body: &bodyBytes, Headers: map[string]string{}}
 		return core.MakeResponseFinal(&response), nil
 	}
 
@@ -88,7 +88,8 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 			},
 		}
 		body := core.ToJsonNoErr(lambdaResponse)
-		response := core.HandlerResponse{Body: &body}
+		bodyBytes := []byte(body)
+		response := core.HandlerResponse{Body: &bodyBytes}
 		core.SendLocalResponse(args, response)
 		return
 	}

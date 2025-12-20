@@ -23,7 +23,8 @@ func HelloWorld(req *core.HandlerArgs) core.HandlerResponse {
 	body1 = strings.Replace(body1, "$4", os.Getenv("APP_CODE"), -1)
 	body1 = strings.Replace(body1, "$5", strings.Join(os.Args, " | "), -1)
 
-	return req.MakeResponsePlain(&body1)
+	bodyBytes := []byte(body1)
+	return req.MakeResponsePlain(&bodyBytes)
 }
 
 type DemoStruct4 struct {

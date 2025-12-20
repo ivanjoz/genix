@@ -99,9 +99,6 @@ func (e *Encoder) marshalStruct(val reflect.Value) ([]any, error) {
 		result = append(result, 0)
 	}
 
-	var skipIndices []int
-	var values []any
-
 	// Ensure we have an addressable value
 	if !val.CanAddr() {
 		newVal := reflect.New(t).Elem()
@@ -122,27 +119,47 @@ func (e *Encoder) marshalStruct(val reflect.Value) ([]any, error) {
 		}
 	}
 
+	// First pass: collect field values and track which are zero
+	type fieldData struct {
+		orderIdx int
+		isZero   bool
+		value    any
+	}
+	fieldDataList := make([]fieldData, len(fieldOrder))
+	lastNonZeroIdx := -1
+
 	for orderIdx, fieldIdx := range fieldOrder {
 		field := &xStruct.Fields[fieldIdx]
 		fVal := field.Interface(ptr)
 
-		// Check if it's zero value to skip it
 		if isZero(fVal) {
-			skipIndices = append(skipIndices, orderIdx) // Use order index, not field index
-			continue
-		}
+			fieldDataList[orderIdx] = fieldData{orderIdx: orderIdx, isZero: true}
+		} else {
+			// Mark this field as used in the registry (during first pass)
+			if e.isAnalyzing {
+				e.registry.MarkFieldUsed(id, fieldIdx)
+			}
 
-		// Mark this field as used in the registry (during first pass)
-		if e.isAnalyzing {
-			e.registry.MarkFieldUsed(id, fieldIdx)
+			// Recursively marshal if it's a struct or slice
+			marshaledVal, err := e.marshalValue(fVal)
+			if err != nil {
+				return nil, err
+			}
+			fieldDataList[orderIdx] = fieldData{orderIdx: orderIdx, isZero: false, value: marshaledVal}
+			lastNonZeroIdx = orderIdx
 		}
+	}
 
-		// Recursively marshal if it's a struct or slice
-		marshaledVal, err := e.marshalValue(fVal)
-		if err != nil {
-			return nil, err
+	// Build skip indices and values - only include skip indices before the last non-zero value
+	var skipIndices []int
+	var values []any
+	for orderIdx := 0; orderIdx <= lastNonZeroIdx; orderIdx++ {
+		fd := fieldDataList[orderIdx]
+		if fd.isZero {
+			skipIndices = append(skipIndices, orderIdx)
+		} else {
+			values = append(values, fd.value)
 		}
-		values = append(values, marshaledVal)
 	}
 
 	// Reference block

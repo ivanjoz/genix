@@ -12,10 +12,11 @@ type DemoStruct2 struct {
 
 type DemoStruct struct {
 	Name    string      `json:"name"`
-	Age     int32       `json:"age"`
+	Age     int32       `json:",omitempty"`
 	Decimal float64     `json:"decimal"`
 	AnArray []int32     `json:"anArray"`
 	Demo    DemoStruct2 `json:"demo"`
+	Demo2   *DemoStruct2
 }
 
 func Test() {
@@ -32,7 +33,9 @@ func Test() {
 		{Name: "Jane", Age: 25, AnArray: []int32{4, 5}},
 		{Name: "Bob", Age: 30, Demo: DemoStruct2{Property1: "X", Count: 1}},
 		{Name: "Alice", Age: 28, AnArray: []int32{6}, Demo: DemoStruct2{Property1: "Y", Count: 2}},
-		{Name: "Charlie", Age: 35, Decimal: 3.14}, // Only record with Decimal
+		{Name: "Charlie", Age: 35, Decimal: 3.14, Demo2: &DemoStruct2{
+			Property1: "N", Count: 99,
+		}}, // Only record with Decimal
 	}
 
 	fmt.Println("=== Two-Pass Optimization ===")

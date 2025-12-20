@@ -73,11 +73,10 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		EmpresaID.Equals(req.Usuario.EmpresaID).
 		ID.Between(
 		core.SUnixTimeUUIDConcatID(almacenID, int64(fechaHoraInicio)),
-		core.SUnixTimeUUIDConcatID(almacenID, int64(fechaHoraFin)+1))
-	query.OrderDesc().Limit(1000)
-	err := query.Exec()
+		core.SUnixTimeUUIDConcatID(almacenID, int64(fechaHoraFin)+1),
+	).OrderDesc().Limit(1000)
 
-	if err != nil {
+	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)
 	}
 
@@ -99,8 +98,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	errGroup.Go(func() error {
 		query := db2.Query(&result.Productos)
-		q1 := db2.Table[s.Producto]()
-		query.Select(q1.ID, q1.Nombre, q1.Precio).
+		query.Select(query.ID, query.Nombre, query.Precio).
 			EmpresaID.Equals(req.Usuario.EmpresaID).
 			ID.In(productosSet.Values...)
 		err := query.Exec()
@@ -112,8 +110,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	errGroup.Go(func() error {
 		query := db2.Query(&result.Usuarios)
-		q1 := db2.Table[s.Usuario]()
-		query.Select(q1.ID, q1.Usuario, q1.Nombres, q1.Apellidos).
+		query.Select(query.ID, query.Usuario, query.Nombres, query.Apellidos).
 			EmpresaID.Equals(req.Usuario.EmpresaID).
 			ID.In(usuariosSet.Values...)
 		err := query.Exec()
