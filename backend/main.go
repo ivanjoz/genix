@@ -73,6 +73,7 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 		Route:          request.URL.Path,
 		ResponseWriter: &w,
 		ReqContext:     request,
+		StartTime:      time.Now().UnixMilli(),
 	}
 
 	// Revisa si lo que se está pidiendo es ejecutar una funcion

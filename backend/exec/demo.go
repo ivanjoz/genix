@@ -5,6 +5,7 @@ import (
 	"app/core"
 	"app/db2"
 	"app/facturacion"
+	"app/serialize"
 	"app/types"
 	s "app/types"
 	"bufio"
@@ -917,5 +918,12 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 	for _, e := range registros {
 		fmt.Println("Records:", e.Nombre, "|", e.ID)
 	}
+	return core.FuncResponse{}
+}
+
+func Test37(args *core.ExecArgs) core.FuncResponse {
+
+	serialize.Test()
+
 	return core.FuncResponse{}
 }
