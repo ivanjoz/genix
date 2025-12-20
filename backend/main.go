@@ -52,7 +52,7 @@ func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (
 		Route:   route,
 		Method:  request.RequestContext.HTTP.Method,
 	}
-	response := mainHandler(args)
+	response := mainHandler(&args)
 	return response.LambdaResponse, nil
 }
 
@@ -111,7 +111,7 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 		args.Headers[key] = value
 	}
 
-	mainHandler(args)
+	mainHandler(&args)
 }
 
 func OnPanic(panicMessage interface{}) {

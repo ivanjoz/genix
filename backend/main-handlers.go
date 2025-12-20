@@ -40,7 +40,7 @@ func makeAppHandlers() *core.AppRouterType {
 // Handler principal (para lambda y para local)
 var apiNames = []string{"api", "go1", "go2", "go3", "go4", "go5"}
 
-func mainHandler(args core.HandlerArgs) core.MainResponse {
+func mainHandler(args *core.HandlerArgs) core.MainResponse {
 	// coloca algunas variables de entorno que pueden ser utilizadas por otros handlers
 	args.Authorization = core.MapGetKeys(args.Headers, "Authorization", "authorization")
 	args.Encoding = core.MapGetKeys(args.Headers, "Accept-Encoding", "accept-encoding")
@@ -70,7 +70,7 @@ func mainHandler(args core.HandlerArgs) core.MainResponse {
 	// Los es públicos comienzan con "p-" y no necesitan validacion del user Tocken
 	isPublicPath := len(args.Route) > 2 && args.Route[0:2] == "p-"
 	if !isPublicPath {
-		args.Usuario = core.CheckUser(&args, 0)
+		args.Usuario = core.CheckUser(args, 0)
 	}
 
 	funcPath := args.Method + "." + args.Route
@@ -103,7 +103,7 @@ func mainHandler(args core.HandlerArgs) core.MainResponse {
 		handlerResponse.Error = "no hay una lambda para el path solicitado: " + funcPath
 	} else {
 		core.Log("Ejecutando Handler::", funcPath)
-		handlerResponse = handlerFunc(&args)
+		handlerResponse = handlerFunc(args)
 		respLen := 0
 		if handlerResponse.Body != nil {
 			respLen = len(*handlerResponse.Body)
@@ -232,11 +232,11 @@ func ExecFuncHandler(lambdaInput string) core.FuncResponse {
 	return core.FuncResponse{}
 }
 
-func prepareResponse(args core.HandlerArgs, handlerResponse *core.HandlerResponse) core.MainResponse {
+func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerResponse) core.MainResponse {
 	response := core.MainResponse{}
 	if core.Env.IS_LOCAL {
 		// core.Print(handlerResponse)
-		core.SendLocalResponse(args, *handlerResponse)
+		core.SendLocalResponse(*args, *handlerResponse)
 		// In local/VPS HTTP mode we skip request-log persistence to avoid global
 		// per-request state and Dynamo I/O on the hot path.
 		return response
