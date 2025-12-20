@@ -5,6 +5,7 @@ import type { CacheMode, serviceHttpProps } from "../workers/service-worker"
 import { accessHelper, Env, getToken } from "./security"
 import { fetchCache, fetchCacheParsed, sendServiceMessage } from "./sw-cache"
 import { browser } from "$app/environment";
+import { unmarshall } from "./unmarshall";
 
 export interface IHttpStatus { code: number, message: string }
 
@@ -124,6 +125,7 @@ function parseResponseBody(res: any, props: httpProps, status: IHttpStatus) {
   if (!res) { res = "Hubo un error desconocido en el servidor" }
   // Revisa si es un objeto
   else if (typeof res === 'string') { try { res = JSON.parse(res) } catch { } }
+
   // Revisa el Status Code
   if (!checkErrorResponse(res, status)) return false
 
@@ -156,6 +158,7 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
     })
     .then(res => parsePreResponse(res, status))
     .then(res => {
+      res = unmarshall(res)
       parseResponseBody(res, props, status) ? resolve(res) : reject(res)
     })
     .catch(error => {
@@ -339,6 +342,7 @@ export function GET(props: httpProps): Promise<any> {
       fetch(routeParsed, { headers: buildHeaders() })
       .then(res => parsePreResponse(res, status))
       .then(res => {
+        res = unmarshall(res)
         return parseResponseBody(res, props, status) ? resolve(res) : reject(res)
       })
       .catch(error => {

@@ -68,6 +68,8 @@ export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): P
     Notify.failure(error as string)
     throw error
   }
+
+  console.log("almacén movimientos:", result)
   
   result.Usuarios = result.Usuarios || []
   result.Productos = result.Productos || []
@@ -76,10 +78,3 @@ export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): P
 
   return result
 }
-
-const arrayToMapN = <T extends { [key: string]: any }>(
-  arr: T[], key: string
-): Map<number, T> => {
-  return new Map(arr.map(x => [x[key] as number, x]))
-}
-

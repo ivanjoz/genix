@@ -1,6 +1,7 @@
 package core
 
 import (
+	"app/serialize"
 	"bufio"
 	"bytes"
 	"compress/gzip"
@@ -606,8 +607,8 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 			marshall1, _ := serialize.Marshal(respStruct)
 			fmt.Println(string(marshall1))
 		*/
-		bodyBytes, err := sonic.Marshal(respStruct)
-
+		bodyBytes, err := serialize.Marshal(respStruct)
+		fmt.Println(string(bodyBytes))
 		// fmt.Println("Json Size:", len(bodyBytes), "| vs:", len(marshall1))
 
 		if err != nil {

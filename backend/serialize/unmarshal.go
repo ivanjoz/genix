@@ -34,16 +34,13 @@ func Unmarshal(data []byte, v any) error {
 
 	// arr[0] contains the keys (type definitions) - can be used for self-describing data
 	// arr[1] contains the actual content
-	content, ok := arr[1].([]any)
-	if !ok {
-		return fmt.Errorf("invalid content format: expected array")
-	}
+	content := arr[1]
 
 	d := NewDecoder()
 	return d.Unmarshal(content, v)
 }
 
-func (d *Decoder) Unmarshal(data []any, v any) error {
+func (d *Decoder) Unmarshal(data any, v any) error {
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Ptr {
 		return fmt.Errorf("v must be a pointer")
@@ -77,9 +74,47 @@ func (d *Decoder) unmarshalValue(data any, val reflect.Value) error {
 		return d.unmarshalStruct(arr, val)
 	case 2:
 		return d.unmarshalSlice(arr, val)
+	case 3:
+		return d.unmarshalMap(arr, val)
 	default:
 		return setPrimitive(val, data)
 	}
+}
+
+func (d *Decoder) unmarshalMap(arr []any, val reflect.Value) error {
+	mapType := val.Type()
+	if val.Kind() == reflect.Interface {
+		mapType = reflect.TypeOf(map[string]any{})
+	} else if val.Kind() != reflect.Map {
+		return fmt.Errorf("cannot unmarshal map into %v", val.Type())
+	}
+
+	m := reflect.MakeMap(mapType)
+
+	keyType := mapType.Key()
+	elemType := mapType.Elem()
+
+	for i := 1; i < len(arr); i += 2 {
+		if i+1 >= len(arr) {
+			break
+		}
+		key := reflect.New(keyType).Elem()
+		err := d.unmarshalValue(arr[i], key)
+		if err != nil {
+			return err
+		}
+
+		elem := reflect.New(elemType).Elem()
+		err = d.unmarshalValue(arr[i+1], elem)
+		if err != nil {
+			return err
+		}
+
+		m.SetMapIndex(key, elem)
+	}
+
+	val.Set(m)
+	return nil
 }
 
 func (d *Decoder) unmarshalStruct(arr []any, val reflect.Value) error {
@@ -220,12 +255,16 @@ func (d *Decoder) populateStruct(xStruct *xunsafe.Struct, typeID int, values []a
 }
 
 func (d *Decoder) unmarshalSlice(arr []any, val reflect.Value) error {
-	if val.Kind() != reflect.Slice && val.Kind() != reflect.Array {
+	sliceType := val.Type()
+	if val.Kind() == reflect.Interface {
+		// Default to []any for interface{}
+		sliceType = reflect.TypeOf([]any{})
+	} else if val.Kind() != reflect.Slice && val.Kind() != reflect.Array {
 		return fmt.Errorf("cannot unmarshal slice into %v", val.Type())
 	}
 
-	elemType := val.Type().Elem()
-	slice := reflect.MakeSlice(val.Type(), 0, len(arr)-1)
+	elemType := sliceType.Elem()
+	slice := reflect.MakeSlice(sliceType, 0, len(arr)-1)
 
 	for i := 1; i < len(arr); i++ {
 		elem := reflect.New(elemType).Elem()

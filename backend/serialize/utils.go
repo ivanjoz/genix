@@ -186,7 +186,7 @@ func (r *FieldRegistry) GetKeysList() [][]any {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var result [][]any
+	result := [][]any{}
 	for id, info := range r.idToInfo {
 		keyEntry := []any{id}
 
@@ -219,7 +219,7 @@ func (r *FieldRegistry) GetKeysListAll() [][]any {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var result [][]any
+	result := [][]any{}
 	for id, info := range r.idToInfo {
 		keyEntry := []any{id}
 		for i, field := range info.Fields {
