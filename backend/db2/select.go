@@ -301,23 +301,33 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 						continue
 					}
 					if column.setValue != nil {
+						if shouldLog {
+							fmt.Printf("Calling setValue for Col: %s\n", colname)
+						}
 						column.setValue(ptr, value)
 						// Revisa si necesita parsearse un string a un struct como JSON
 					} else if column.IsComplexType {
+						if shouldLog {
+							fmt.Printf("Handling ComplexType for Col: %s\n", colname)
+						}
 						// fmt.Println("complex type::", column.FieldName, "|", column.FieldType)
-						if vl, ok := value.(*[]uint8); ok {
-							if len(*vl) <= 3 {
-								continue
-							}
+						var vl []uint8
+						if b, ok := value.(*[]uint8); ok {
+							vl = *b
+						} else if b, ok := value.([]uint8); ok {
+							vl = b
+						}
+
+						if len(vl) > 3 {
 							newElm := reflect.New(column.RefType).Elem()
-							err = cbor.Unmarshal([]byte(*vl), newElm.Addr().Interface())
+							err = cbor.Unmarshal(vl, newElm.Addr().Interface())
 							if err != nil {
 								fmt.Println("Error al convertir: ", newElm, "|", err.Error())
 							}
 							// fmt.Println("col complex:", column.Name, " | ", newElm, " | L:", len(*vl))
-							column.Field.Set(ptr, newElm.Interface())
-						} else {
-							fmt.Print("Complex Type could not be parsed:", column.Name)
+							reflect.NewAt(column.RefType, column.Field.Pointer(ptr)).Elem().Set(newElm)
+						} else if !shouldLog {
+							fmt.Printf("Complex Type could not be parsed or empty: %s (Type: %T)\n", column.Name, value)
 						}
 					} else {
 						fmt.Print("Column is not mapped:: ", column.Name)

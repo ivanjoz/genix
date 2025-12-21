@@ -79,17 +79,18 @@ func HashInt(values ...any) int32 {
 func Logx(style int8, messageInColor string, params ...any) {
 	var c *color.Color
 
-	if style == 1 {
+	switch style {
+	case 1:
 		c = color.New(color.FgCyan, color.Bold)
-	} else if style == 2 {
+	case 2:
 		c = color.New(color.FgGreen, color.Bold)
-	} else if style == 3 {
+	case 3:
 		c = color.New(color.FgYellow, color.Bold)
-	} else if style == 4 {
+	case 4:
 		c = color.New(color.FgBlue, color.Bold)
-	} else if style == 5 {
+	case 5:
 		c = color.New(color.FgRed, color.Bold)
-	} else if style == 6 {
+	case 6:
 		c = color.New(color.FgMagenta, color.Bold)
 	}
 
@@ -187,19 +188,22 @@ func reflectToSliceValue(value any) []any {
 	return values
 }
 
-func reflectToSlice(value *reflect.Value) []any {
-	return reflectToSliceValue(value.Interface())
-}
-
 var (
-	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
+	matchFirstCap  = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap    = regexp.MustCompile("([a-z0-9])([A-Z])")
+	matchUnderline = regexp.MustCompile("_([a-z0-9])_")
 )
 
 func toSnakeCase(str string) string {
 	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
 	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
-	return strings.ToLower(snake)
+	res := strings.ToLower(snake)
+
+	for matchUnderline.MatchString(res) {
+		res = matchUnderline.ReplaceAllString(res, "_$1")
+	}
+
+	return res
 }
 
 func Print(Struct any) {

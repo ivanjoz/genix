@@ -198,7 +198,7 @@ export const POST_XMLHR = (props: httpProps): Promise<any> => {
       headers: { 'authorization': `Bearer ${getToken()}` },
     })
     .then(result => {
-      const data = result.data
+      const data = unmarshall(result.data)
       if (result.status !== 200) {
         let message = data.message || data.error || data.errorMessage
         if (!message) message = String(data)
