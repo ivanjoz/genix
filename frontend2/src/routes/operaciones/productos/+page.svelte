@@ -76,7 +76,8 @@
     }
 
     console.log("productor a enviar:",$state.snapshot(productoForm))
-    // return
+    
+    if(isDelete){ productoForm.ss = 0 }
 
     Loading.standard("Guardando producto...")
     try {

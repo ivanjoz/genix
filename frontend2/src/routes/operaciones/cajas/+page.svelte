@@ -87,17 +87,23 @@
     }
     Loading.standard("Guardando caja...")
     try {
-      await postCaja(caja)
+      var result = await postCaja(caja)
     } catch (error) {
       console.warn(error)
       return
     }
     Loading.remove()
-    const existingCaja = cajas.CajasMap.get(caja.ID)
-    if (existingCaja) {
-      Object.assign(existingCaja, caja)
-      cajas.Cajas = [...cajas.Cajas]
+
+    caja.SaldoCurrent = caja.SaldoCurrent || 0
+
+    const selected = cajas.CajasMap.get(caja.ID)
+    if (selected) {
+      Object.assign(selected, caja)
+    } else {
+      caja.ID = result.ID
+      cajas.Cajas.push(caja)
     }
+    cajas.Cajas = [...cajas.Cajas]
     Core.closeModal(1)
   }
 
@@ -106,9 +112,9 @@
     form.SaldoSistema = cajaForm.SaldoCurrent
 
     Loading.standard("Guardando caja...")
-    let result: any
+    let recordSaved: ICajaCuadre & { NeedUpdateSaldo: number }
     try {
-      result = await postCajaCuadre(form)
+      recordSaved = await postCajaCuadre(form)
     } catch (error) {
       console.warn(error)
       return
@@ -117,8 +123,8 @@
     const caja = cajas.CajasMap.get(form.CajaID)
     if (!caja) return
     
-    if (typeof result?.NeedUpdateSaldo === 'number') {
-      caja.SaldoCurrent = result.NeedUpdateSaldo
+    if (typeof recordSaved?.NeedUpdateSaldo === 'number') {
+      caja.SaldoCurrent = recordSaved.NeedUpdateSaldo
       cajaForm = { ...caja }
       const newForm = { ...cajaCuadreForm }
       newForm._error = `Hubo una actualización en el saldo de la caja. El saldo actual es "${formatN(caja.SaldoCurrent / 100, 2)}". Intente nuevamente con el cálculo actualizado.`
@@ -129,6 +135,7 @@
       cajas.Cajas = [...cajas.Cajas]
       Object.assign(cajaForm, caja)
       Core.closeModal(2)
+      cajaCuadres.unshift(recordSaved)
     }
   }
 
@@ -139,9 +146,9 @@
       return
     }
     Loading.standard("Guardando Movimiento...")
-    let result: any
+    let movimientoSaved: ICajaMovimiento
     try {
-      result = await postCajaMovimiento(form)
+      movimientoSaved = await postCajaMovimiento(form)
     } catch (error) {
       console.warn(error)
       return
@@ -154,6 +161,8 @@
     caja.SaldoCurrent = form.SaldoFinal
     cajas.Cajas = [...cajas.Cajas]
     Object.assign(cajaForm, caja)
+
+    cajaMovimientos.unshift(movimientoSaved)
     Core.closeModal(3)
   }
 
