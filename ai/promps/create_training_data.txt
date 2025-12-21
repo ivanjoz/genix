@@ -1,0 +1,29 @@
+lee genix/ai/FUNCTION_GEMMA.md
+
+necesito que crees data de prueba para las siguientes funciones.
+Usa variaciones imperativas, en forma de pregunta, formas en las que una persona podría preguntar.
+
+Contexto: Esto se implementará en un sistema ERP para pequeñas empresas en español, en Perú. Este ERP tiene las funciones básicas de gestión de productos, almacenes, stock, compras, ventas, gastos, caja, pagos, cuentas por cobrar y por pagar, entre otras.
+
+Funciones:
+
+get_producto_stock. El único imput es el nombre del producto y lo que va devolver es la cantidad de producto en cada uno de los almacenes donde está. Ejemplo: ¿Cuál es el stock del producto x?
+
+get_producto_movimientos. El único imput es el nombre del producto y lo que va devolver son los ultimos movimientos del producto en todos los almacenes. Ejemplo: ¿Cuáles son los movimientos de inventario del producto x?
+
+do_agregar_producto. El único input opcional es el nombre del producto. La función va a redirigir a un formulario para agregar el producto. el modelo solo tiene que reconocer la intención. Ejemplo: "Agrega el producto x"
+
+get_caja_saldo. Obtiene el saldo de la caja. El input es el nombre de la caja. Ejemplo: "¿Cuanto dinero hay en la Caha Principal?"
+
+get_caja_movimientos. Obtiene los ultimos movimientos de la caja. El input es el nombre de la caja. Ejemplo "¿Cuáles fueron los movimiento de la Caja Principal?"
+
+get_ventas_del_dia. Obtiene un resumen de las ventas de hoy. Ejemplo: "Cuáles fueron las ventas del dia de hoy?"
+
+get_ventas_ultimos_dias. Obtiene un resumen de las ventas de los ultimos días. El parámetro opcional es el número de días. Ejemplo: "¿Cuales fueron las ventas de los últimos 8 dias?"
+
+do_agregar_movimiento_caja. Abre un fomulario para agregar un movimiento de caja. Los parámetros opcionales son el nombre de la caja y el monto. Ejemplo: "Agrega un pago de 150 soles a la Caja mostrador" o "Agrega un cobro de 180 soles a la Caja principal", "Recibi 100 soles, agregalo a la Caja principal"
+
+do_agregar_gasto: Abre un formulario para agregar un gasto. El parámetro obligatorio es la descripción del gasto y el opcional es el monto del gasto. Ejemplo: "Agrega un gasto por Cena de navidad de 400 soles"
+
+Crea la data de prueba en gemma_traning_data.py usando la estructura propuesta para el gemma_generator.py
+

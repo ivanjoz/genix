@@ -1,0 +1,24 @@
+genix/ai/FUNCTION_GEMMA.md
+
+Necesito un generador de data de entrenamiento, el input que voy a tener es el siguiente en pseudocodigo
+
+var get_almacen_stock = {
+    developer: "You are a model that can do function calling with the following functions<start_function_declaration>declaration:get_almacen_stock{description:<escape>Obtener el stock de un producto en todos los almacenes<escape>,parameters:{properties:{producto:{type:<escape>STRING<escape>}},required:[<escape>producto<escape>]}}<end_function_declaration>",
+    assistant: "<start_function_call>call:get_almacen_stock{{producto:<escape>[VARIABLE_1]<escape>}}<end_function_call>",
+    queries: [
+        {
+            user: "¿Cual es el stock del producto casaca de cuero Tommy?",
+            variables: ["casaca de cuero Tommy"]
+        },
+        {
+            user: "Dame el stock del producto Ayudin de 500 ml",
+            variables: ["Ayudin de 500 ml"]
+        },
+        {
+            user: "¿Cuánto producto hay de Helado Donofrio?",
+            variables: ["Helado Donofrio"]
+        }
+    ]
+}
+
+y que esto lo convierta en data de entrenamiento para functionGemma
