@@ -76,7 +76,7 @@ export class ProductosService extends GetHandler {
       e.CategoriasIDs = e.CategoriasIDs || []
     }
 
-    this.productos = result
+    this.productos = result.filter(x => x.ss)
     this.productosMap = new Map(result.map(x => [x.ID, x]))
   }
 
