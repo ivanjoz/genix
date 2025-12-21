@@ -2,6 +2,7 @@ package db2
 
 import (
 	"fmt"
+	"slices"
 	"unsafe"
 
 	"github.com/viant/xunsafe"
@@ -11,23 +12,8 @@ type number1 interface {
 	int | int32 | int8 | uint8 | int16 | uint16 | int64
 }
 
-func setReflectInt[T number1, E number1](f *xunsafe.Field, ptr unsafe.Pointer, vl *E) {
-	val := T(*vl)
-	if ShouldLog() {
-		fmt.Printf("Mapping field %s: setting value %v at offset %d\n", f.Name, val, f.Offset)
-	}
-	f.Set(ptr, val)
-}
-
-func setReflectIntPointer[T number1, E number1](f *xunsafe.Field, ptr unsafe.Pointer, vl *E) {
-	if vl != nil {
-		pv := new(T)
-		*pv = T(*vl)
-		if ShouldLog() {
-			fmt.Printf("Mapping field %s: setting pointer value %v at offset %d\n", f.Name, *pv, f.Offset)
-		}
-		f.Set(ptr, pv)
-	}
+func setField[T any](f *xunsafe.Field, ptr unsafe.Pointer, val T) {
+	*(*T)(f.Pointer(ptr)) = val
 }
 
 func setReflectIntSlice[T number1, E number1](f *xunsafe.Field, ptr unsafe.Pointer, vl *[]E) {
@@ -35,7 +21,7 @@ func setReflectIntSlice[T number1, E number1](f *xunsafe.Field, ptr unsafe.Point
 	for i, v := range *vl {
 		newSlice[i] = T(v)
 	}
-	f.Set(ptr, newSlice)
+	setField(f, ptr, newSlice)
 }
 
 func setReflectIntSlicePointer[T number1, E number1](f *xunsafe.Field, ptr unsafe.Pointer, vl *[]E) {
@@ -43,7 +29,7 @@ func setReflectIntSlicePointer[T number1, E number1](f *xunsafe.Field, ptr unsaf
 	for i, v := range *vl {
 		newSlice[i] = T(v)
 	}
-	f.Set(ptr, &newSlice)
+	setField(f, ptr, &newSlice)
 }
 
 type fieldMap struct {
@@ -229,103 +215,191 @@ var fieldMapping = map[fieldMap]func(f *xunsafe.Field, ptr unsafe.Pointer, value
 			printError("float32", v)
 		}
 	},
+	{"int", 0, 1}: func(f *xunsafe.Field, ptr unsafe.Pointer, v any) {
+		if vl, ok := v.(*[]int); ok {
+			setReflectIntSlice[int](f, ptr, vl)
+		} else if vl, ok := v.([]int); ok {
+			setReflectIntSlice[int](f, ptr, &vl)
+		} else if vl, ok := v.(*[]int32); ok {
+			setReflectIntSlice[int](f, ptr, vl)
+		} else if vl, ok := v.([]int32); ok {
+			setReflectIntSlice[int](f, ptr, &vl)
+		} else if vl, ok := v.(*[]int64); ok {
+			setReflectIntSlice[int](f, ptr, vl)
+		} else if vl, ok := v.([]int64); ok {
+			setReflectIntSlice[int](f, ptr, &vl)
+		} else {
+			printError("[]int", v)
+		}
+	},
+	{"int", 1, 1}: func(f *xunsafe.Field, ptr unsafe.Pointer, v any) { // Pointer
+		if vl, ok := v.(*[]int); ok {
+			setReflectIntSlicePointer[int](f, ptr, vl)
+		} else if vl, ok := v.([]int); ok {
+			setReflectIntSlicePointer[int](f, ptr, &vl)
+		} else if vl, ok := v.(*[]int32); ok {
+			setReflectIntSlicePointer[int](f, ptr, vl)
+		} else if vl, ok := v.([]int32); ok {
+			setReflectIntSlicePointer[int](f, ptr, &vl)
+		} else if vl, ok := v.(*[]int64); ok {
+			setReflectIntSlicePointer[int](f, ptr, vl)
+		} else if vl, ok := v.([]int64); ok {
+			setReflectIntSlicePointer[int](f, ptr, &vl)
+		} else {
+			printError("[]int", v)
+		}
+	},
 	// SLICE
 	{"int32", 0, 1}: func(f *xunsafe.Field, ptr unsafe.Pointer, v any) {
 		if vl, ok := v.(*[]int32); ok {
-			f.Set(ptr, *vl)
+			setReflectIntSlice[int32](f, ptr, vl)
+		} else if vl, ok := v.([]int32); ok {
+			setReflectIntSlice[int32](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlice[int32](f, ptr, vl)
+		} else if vl, ok := v.([]int); ok {
+			setReflectIntSlice[int32](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int64); ok {
 			setReflectIntSlice[int32](f, ptr, vl)
+		} else if vl, ok := v.([]int64); ok {
+			setReflectIntSlice[int32](f, ptr, &vl)
 		} else {
 			printError("[]int32", v)
 		}
 	},
 	{"int32", 1, 1}: func(f *xunsafe.Field, ptr unsafe.Pointer, v any) { // Pointer
 		if vl, ok := v.(*[]int32); ok {
-			f.Set(ptr, vl)
+			setReflectIntSlicePointer[int32](f, ptr, vl)
+		} else if vl, ok := v.([]int32); ok {
+			setReflectIntSlicePointer[int32](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlicePointer[int32](f, ptr, vl)
+		} else if vl, ok := v.([]int); ok {
+			setReflectIntSlicePointer[int32](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int64); ok {
 			setReflectIntSlicePointer[int32](f, ptr, vl)
+		} else if vl, ok := v.([]int64); ok {
+			setReflectIntSlicePointer[int32](f, ptr, &vl)
 		} else {
 			printError("[]int32", v)
 		}
 	},
 	{"int16", 0, 1}: func(f *xunsafe.Field, ptr unsafe.Pointer, v any) {
 		if vl, ok := v.(*[]int16); ok {
-			f.Set(ptr, *vl)
+			setReflectIntSlice[int16](f, ptr, vl)
+		} else if vl, ok := v.([]int16); ok {
+			setReflectIntSlice[int16](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlice[int16](f, ptr, vl)
+		} else if vl, ok := v.([]int); ok {
+			setReflectIntSlice[int16](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int32); ok {
 			setReflectIntSlice[int16](f, ptr, vl)
+		} else if vl, ok := v.([]int32); ok {
+			setReflectIntSlice[int16](f, ptr, &vl)
 		} else {
 			printError("[]int16", v)
 		}
 	},
 	{"int16", 1, 1}: func(f *xunsafe.Field, ptr unsafe.Pointer, v any) { // Pointer
 		if vl, ok := v.(*[]int16); ok {
-			f.Set(ptr, vl)
+			setReflectIntSlicePointer[int16](f, ptr, vl)
+		} else if vl, ok := v.([]int16); ok {
+			setReflectIntSlicePointer[int16](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlicePointer[int16](f, ptr, vl)
+		} else if vl, ok := v.([]int); ok {
+			setReflectIntSlicePointer[int16](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int32); ok {
 			setReflectIntSlicePointer[int16](f, ptr, vl)
+		} else if vl, ok := v.([]int32); ok {
+			setReflectIntSlicePointer[int16](f, ptr, &vl)
 		} else {
 			printError("[]int16", v)
 		}
 	},
 	{"int8", 0, 1}: func(f *xunsafe.Field, ptr unsafe.Pointer, v any) {
 		if vl, ok := v.(*[]int8); ok {
-			f.Set(ptr, *vl)
+			setReflectIntSlice[int8](f, ptr, vl)
+		} else if vl, ok := v.([]int8); ok {
+			setReflectIntSlice[int8](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlice[int8](f, ptr, vl)
+		} else if vl, ok := v.([]int); ok {
+			setReflectIntSlice[int8](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int32); ok {
 			setReflectIntSlice[int8](f, ptr, vl)
+		} else if vl, ok := v.([]int32); ok {
+			setReflectIntSlice[int8](f, ptr, &vl)
 		} else {
 			printError("[]int8", v)
 		}
 	},
 	{"int8", 1, 1}: func(f *xunsafe.Field, ptr unsafe.Pointer, v any) { // Pointer
 		if vl, ok := v.(*[]int8); ok {
-			f.Set(ptr, vl)
+			setReflectIntSlicePointer[int8](f, ptr, vl)
+		} else if vl, ok := v.([]int8); ok {
+			setReflectIntSlicePointer[int8](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlicePointer[int8](f, ptr, vl)
+		} else if vl, ok := v.([]int); ok {
+			setReflectIntSlicePointer[int8](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int32); ok {
 			setReflectIntSlicePointer[int8](f, ptr, vl)
+		} else if vl, ok := v.([]int32); ok {
+			setReflectIntSlicePointer[int8](f, ptr, &vl)
 		} else {
 			printError("[]int8", v)
 		}
 	},
 	{"int64", 0, 1}: func(f *xunsafe.Field, ptr unsafe.Pointer, v any) {
 		if vl, ok := v.(*[]int64); ok {
-			f.Set(ptr, *vl)
+			setReflectIntSlice[int64](f, ptr, vl)
+		} else if vl, ok := v.([]int64); ok {
+			setReflectIntSlice[int64](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlice[int64](f, ptr, vl)
+		} else if vl, ok := v.([]int); ok {
+			setReflectIntSlice[int64](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int32); ok {
 			setReflectIntSlice[int64](f, ptr, vl)
+		} else if vl, ok := v.([]int32); ok {
+			setReflectIntSlice[int64](f, ptr, &vl)
 		} else {
 			printError("[]int64", v)
 		}
 	},
 	{"int64", 1, 1}: func(f *xunsafe.Field, ptr unsafe.Pointer, v any) { // Pointer
 		if vl, ok := v.(*[]int64); ok {
-			f.Set(ptr, vl)
+			setReflectIntSlicePointer[int64](f, ptr, vl)
+		} else if vl, ok := v.([]int64); ok {
+			setReflectIntSlicePointer[int64](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int); ok {
 			setReflectIntSlicePointer[int64](f, ptr, vl)
+		} else if vl, ok := v.([]int); ok {
+			setReflectIntSlicePointer[int64](f, ptr, &vl)
 		} else if vl, ok := v.(*[]int32); ok {
 			setReflectIntSlicePointer[int64](f, ptr, vl)
+		} else if vl, ok := v.([]int32); ok {
+			setReflectIntSlicePointer[int64](f, ptr, &vl)
 		} else {
 			printError("[]int64", v)
 		}
 	},
 	{"string", 0, 1}: func(f *xunsafe.Field, ptr unsafe.Pointer, v any) {
 		if vl, ok := v.(*[]string); ok {
-			f.Set(ptr, *vl)
+			setField(f, ptr, slices.Clone(*vl))
+		} else if vl, ok := v.([]string); ok {
+			setField(f, ptr, slices.Clone(vl))
 		}
 	},
 	{"string", 1, 1}: func(f *xunsafe.Field, ptr unsafe.Pointer, v any) { // Pointer
 		if vl, ok := v.(*[]string); ok {
-			f.Set(ptr, vl)
+			val := slices.Clone(*vl)
+			setField(f, ptr, &val)
+		} else if vl, ok := v.([]string); ok {
+			val := slices.Clone(vl)
+			setField(f, ptr, &val)
 		}
 	},
 }

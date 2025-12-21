@@ -124,7 +124,7 @@ func main() {
 	core.PopulateVariables()
 	makeAppHandlers()
 	fmt.Println("Setting full logs...")
-	// os.Setenv("LOGS_FULL", "1")
+	os.Setenv("LOGS_FULL", "1")
 
 	if !core.Env.IS_LOCAL { // Controla los panic error
 		defer func() {

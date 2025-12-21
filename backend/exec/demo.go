@@ -804,48 +804,6 @@ func Test35(args *core.ExecArgs) core.FuncResponse {
 	return core.FuncResponse{}
 }
 
-type DemoStruct struct {
-	db2.TableStruct[DemoStructTable, DemoStruct]
-	EmpresaID   int32    `db:"empresa_id,pk"`
-	ID          int32    `db:"id,pk"`
-	ListaID     int32    `db:"lista_id,view,view.1,view.2"`
-	Nombre      string   `json:",omitempty" db:"nombre"`
-	Images      []string `json:",omitempty" db:"images"`
-	Descripcion string   `json:",omitempty" db:"descripcion"`
-	DemoColumn  DemoStruct1
-	// Propiedades generales
-	Status    int8  `json:"ss,omitempty" db:"status,view.1"`
-	Updated   int64 `json:"upd,omitempty" db:"updated,view.2"`
-	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
-}
-
-type DemoStructTable struct {
-	db2.TableStruct[DemoStructTable, DemoStruct]
-	EmpresaID   db2.Col[DemoStructTable, int32]
-	ID          db2.Col[DemoStructTable, int32]
-	ListaID     db2.Col[DemoStructTable, int32]
-	Nombre      db2.Col[DemoStructTable, string]
-	Images      db2.ColSlice[DemoStructTable, string]
-	Descripcion db2.Col[DemoStructTable, string]
-	Status      db2.Col[DemoStructTable, int8]
-	Updated     db2.Col[DemoStructTable, int64]
-	UpdatedBy   db2.Col[DemoStructTable, int32]
-	DemoColumn  db2.Col[DemoStructTable, DemoStruct1]
-}
-
-func (e DemoStructTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
-		Name:      "zz_demo_struct",
-		Partition: e.EmpresaID,
-		Keys:      []db2.Coln{e.ID},
-		Views: []db2.View{
-			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
-			{Cols: []db2.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
-			{Cols: []db2.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
-		},
-	}
-}
-
 func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	db2.MakeScyllaConnection(db2.ConnParams{

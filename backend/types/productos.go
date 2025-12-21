@@ -3,23 +3,23 @@ package types
 import "app/db2"
 
 type ProductoImagen struct {
-	Name        string `ms:"n" json:"n"`
-	Descripcion string `ms:"d" json:"d"`
+	Name        string `ms:"n" json:"n" cbor:"n"`
+	Descripcion string `ms:"d" json:"d" cbor:"d"`
 }
 
 type AlmacenStockMin struct {
-	AlmacenID int32 `cbor:"1,keyasint" json:"a"`
-	Cantidad  int32 `cbor:"2,keyasint" json:"c"`
+	AlmacenID int32 `cbor:"a" json:"a"`
+	Cantidad  int32 `cbor:"c" json:"c"`
 }
 
 type ProductoPesentacion struct {
-	ID               int16  `ms:"i" json:"id,omitempty"`
-	AtributoID       int16  `ms:"a" json:"at,omitempty"`
-	Name             string `ms:"n" json:"nm,omitempty"`
-	Color            string `ms:"c" json:"cl,omitempty"`
-	Precio           int32  `ms:"p" json:"pc,omitempty"`
-	DiferenciaPrecio int32  `ms:"d" json:"pd,omitempty"`
-	Status           int8   `ms:"s" json:"ss,omitempty"`
+	ID               int16  `ms:"i" json:"id,omitempty" cbor:"i"`
+	AtributoID       int16  `ms:"a" json:"at,omitempty" cbor:"a"`
+	Name             string `ms:"n" json:"nm,omitempty" cbor:"n"`
+	Color            string `ms:"c" json:"cl,omitempty" cbor:"c"`
+	Precio           int32  `ms:"p" json:"pc,omitempty" cbor:"p"`
+	DiferenciaPrecio int32  `ms:"d" json:"pd,omitempty" cbor:"d"`
+	Status           int8   `ms:"s" json:"ss,omitempty" cbor:"s"`
 }
 
 type Producto struct {
@@ -122,16 +122,16 @@ func (e ProductoTable) GetSchema() db2.TableSchema {
 }
 
 type ProductoPropiedad struct {
-	ID     int16  `json:"id,omitempty" ms:"i"`
-	Nombre string `json:"nm,omitempty" ms:"n"`
-	Status int8   `json:"ss,omitempty" ms:"s"`
+	ID     int16  `json:"id,omitempty" ms:"i" cbor:"i"`
+	Nombre string `json:"nm,omitempty" ms:"n" cbor:"n"`
+	Status int8   `json:"ss,omitempty" ms:"s" cbor:"s"`
 }
 
 type ProductoPropiedades struct {
-	ID         int16                         `ms:"i"`
-	Nombre     string                        `ms:"n"`
-	Options    []ProductoPropiedad           `ms:"o"`
-	Status     int8                          `ms:"s"`
+	ID         int16                         `ms:"i" cbor:"i"`
+	Nombre     string                        `ms:"n" cbor:"n"`
+	Options    []ProductoPropiedad           `ms:"o" cbor:"o"`
+	Status     int8                          `ms:"s" cbor:"s"`
 	OptionsMap map[string]*ProductoPropiedad `json:"-" ms:"-"`
 }
 
@@ -179,17 +179,17 @@ func (e AlmacenTable) GetSchema() db2.TableSchema {
 }
 
 type AlmacenLayout struct {
-	ID      int16                 `ms:"i" cbor:"1,keyasint,omitempty"`
-	Name    string                `ms:"n" cbor:"2,keyasint,omitempty"`
-	RowCant int8                  `ms:"r" cbor:"3,keyasint,omitempty"`
-	ColCant int8                  `ms:"c" cbor:"4,keyasint,omitempty"`
-	Bloques []AlmacenLayoutBloque `ms:"b" cbor:"5,keyasint,omitempty"`
+	ID      int16                 `ms:"i" cbor:"i" json:"id,omitempty"`
+	Name    string                `ms:"n" cbor:"n" json:"nm,omitempty"`
+	RowCant int8                  `ms:"r" cbor:"r" json:"rc,omitempty"`
+	ColCant int8                  `ms:"c" cbor:"c" json:"cc,omitempty"`
+	Bloques []AlmacenLayoutBloque `ms:"b" cbor:"b" json:"bl,omitempty"`
 }
 
 type AlmacenLayoutBloque struct {
-	Row    int8   `json:"rw" ms:"r" cbor:"1,keyasint,omitempty"`
-	Column int8   `json:"co" ms:"c" cbor:"2,keyasint,omitempty"`
-	Name   string `json:"nm" ms:"n" cbor:"2,keyasint,omitempty"`
+	Row    int8   `json:"rw" ms:"r" cbor:"r"`
+	Column int8   `json:"co" ms:"c" cbor:"c"`
+	Name   string `json:"nm" ms:"n" cbor:"n"`
 }
 
 type Sede struct {

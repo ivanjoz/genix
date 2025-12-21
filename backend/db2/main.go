@@ -428,6 +428,11 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 			RefType:   field.Type,
 			Field:     xfield,
 		}
+
+		if tag := field.Tag.Get("db"); tag != "" {
+			col.Name = strings.Split(tag, ",")[0]
+		}
+
 		if DebugFull {
 			offset := uintptr(0)
 			if xfield != nil {
@@ -476,12 +481,20 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 		}
 
 		// Extract column name from db tag or convert field name to snake_case
-		columnName := toSnakeCase(fieldType.Name)
+		columnName := ""
 		if tag := fieldType.Tag.Get("db"); tag != "" {
-			columnName = tag
+			columnName = strings.Split(tag, ",")[0]
 		}
 
 		if colBase, ok := fieldNameIdxMap[fieldType.Name]; ok {
+			if columnName == "" {
+				columnName = colBase.Name
+			}
+
+			if columnName == "" {
+				columnName = toSnakeCase(fieldType.Name)
+			}
+
 			colInfo := column.GetInfoPointer()
 			colInfo.Name = columnName
 			colInfo.FieldIdx = colBase.FieldIdx
@@ -489,6 +502,8 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 			colInfo.FieldName = colBase.FieldName
 			colInfo.RefType = colBase.RefType
 			colInfo.Field = colBase.Field
+			colInfo.IsSlice = colBase.IsSlice
+			colInfo.IsPointer = colBase.IsPointer
 			if DebugFull {
 				fmt.Printf("Init Col: %s, Field: %s, Offset: %d\n", colInfo.Name, colInfo.FieldName, colInfo.Field.Offset)
 			}

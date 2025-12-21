@@ -36,12 +36,14 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 		return err
 	})
 
-	err := errGroup.Wait()
-	if err != nil {
+	if err := errGroup.Wait(); err != nil {
 		return req.MakeErr(err)
 	}
 
 	core.Log("productos obtenidos::", len(productos))
+	if len(productos) > 0 {
+		core.Print(productos[0])
+	}
 
 	return core.MakeResponse(req, &productos)
 }
@@ -312,6 +314,8 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	producto.Updated = time.Now().Unix()
 	producto.UpdatedBy = req.Usuario.ID
+
+	core.Print(producto)
 
 	err = db2.Insert(&[]s.Producto{producto})
 
