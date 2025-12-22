@@ -1,8 +1,9 @@
-transformers<=4.46.3
-peft<=0.13.2
-trl<=0.12.1
-bitsandbytes<=0.44.1
-accelerate<=1.1.1
-datasets<=3.1.0
+transformers>=4.53.0
+peft>=0.14.0
+trl>=0.13.0
+bitsandbytes>=0.45.0
+accelerate>=1.2.0
+datasets>=3.1.0
 tensorboard
+boto3
 

@@ -5,7 +5,13 @@
 ### 1. Configure Credentials
 Ensure `../credentials.json` has your `AWS_PROFILE`, `AWS_REGION`, `SAGEMAKER_ROLE`, and optionally `SAGEMAKER_S3_OUTPUT`.
 
-### 2. Run Script
+### 2. Install Dependencies
+```bash
+chmod +x install_launcher.sh && ./install_launcher.sh
+source venv/bin/activate
+```
+
+### 3. Run Script
 ```bash
 # 1. Set your Hugging Face token
 export HF_TOKEN=your_huggingface_token
