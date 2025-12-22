@@ -47,20 +47,50 @@ def train(args):
         bnb_4bit_use_double_quant=True,
     )
 
+    # Obtener el token de HuggingFace del entorno (pasado desde SageMaker)
+    hf_token = os.environ.get("HUGGING_FACE_HUB_TOKEN", None)
+    if hf_token:
+        print("✓ HuggingFace token loaded from environment")
+    else:
+        print("⚠️  No HuggingFace token found in environment")
+    
     # Cargar modelo y processor (CRÍTICO: usar AutoProcessor, no AutoTokenizer)
     # El AutoProcessor de FunctionGemma maneja los control tokens especiales
-    print(f"Loading model: {args.model_id}")
+    model_path = args.model_dir if args.model_dir and os.path.exists(args.model_dir) else args.model_id
+    print(f"Loading model from: {model_path}")
+    
     model = AutoModelForCausalLM.from_pretrained(
-        args.model_id,
+        model_path,
         quantization_config=bnb_config,
         device_map="auto",
         trust_remote_code=True,
         torch_dtype=torch.bfloat16,
+        token=hf_token,
     )
     
     # Usar AutoProcessor en lugar de AutoTokenizer para FunctionGemma
-    print(f"Loading processor: {args.model_id}")
-    processor = AutoProcessor.from_pretrained(args.model_id, trust_remote_code=True)
+    print(f"Loading processor from: {model_path}")
+    processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True, token=hf_token)
+    
+    # --- LÓGICA DE CACHE EN S3 ---
+    # Si descargamos de HF y tenemos una ruta de cache en S3, guardamos una copia
+    if model_path == args.model_id and args.s3_model_cache:
+        try:
+            from huggingface_hub import snapshot_download
+            print(f"📦 Caching model to S3 for future jobs: {args.s3_model_cache}")
+            temp_cache_dir = "/tmp/model_cache"
+            # Descargar la versión original (sin cuantizar) para el cache
+            snapshot_download(
+                repo_id=args.model_id, 
+                local_dir=temp_cache_dir, 
+                token=hf_token
+            )
+            # Subir a S3 usando el CLI de AWS (ya configurado con el rol de SageMaker)
+            os.system(f"aws s3 sync {temp_cache_dir} {args.s3_model_cache}")
+            print("✅ Model cached successfully in S3")
+        except Exception as e:
+            print(f"⚠️ Failed to cache model to S3: {e}")
+    # -----------------------------
     tokenizer = processor.tokenizer  # Extraer el tokenizer del processor
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
@@ -116,7 +146,7 @@ def train(args):
         save_total_limit=3,  # Mantener solo los 3 últimos checkpoints (ahorra espacio)
         
         # Optimizador y scheduler
-        evaluation_strategy="no",
+        eval_strategy="no",
         optim="paged_adamw_32bit",  # Optimizado para QLoRA
         lr_scheduler_type="cosine",  # Mejor convergencia
         warmup_ratio=0.03,  # Warmup del 3%
@@ -203,6 +233,18 @@ if __name__ == "__main__":
         type=str, 
         default=os.environ.get("SM_CHANNEL_TRAIN", "./"),
         help="Directory containing training data (gemma_training_data.jsonl)"
+    )
+    parser.add_argument(
+        "--model_dir", 
+        type=str, 
+        default=os.environ.get("SM_CHANNEL_MODEL", None),
+        help="Directory containing the base model (if cached in S3)"
+    )
+    parser.add_argument(
+        "--s3_model_cache", 
+        type=str, 
+        default=os.environ.get("S3_MODEL_CACHE", None),
+        help="S3 URI to cache the model if downloaded from HF"
     )
     parser.add_argument(
         "--output_dir", 

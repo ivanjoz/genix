@@ -17,7 +17,19 @@ Ensure your `credentials.json` includes:
 *Note: If `SAGEMAKER_S3_OUTPUT` is not provided, it will use the SageMaker default session bucket.*
 *Note: If `SAGEMAKER_ROLE` is not present, it will fallback to `LAMBDA_IAM_ROLE` if available.*
 
-### 2. Launch Training
+### 2. Install Dependencies
+You can install the necessary local dependencies (SageMaker SDK and Boto3) using the provided script:
+
+```bash
+# Make the script executable and run it
+chmod +x install_launcher.sh
+./install_launcher.sh
+
+# Activate the virtual environment
+source venv/bin/activate
+```
+
+### 3. Launch Training
 ```bash
 # 1. Set your Hugging Face token
 export HF_TOKEN=your_huggingface_token
