@@ -21,3 +21,10 @@ frontend2/docs/*
 backend/app.tar.zst
 backend/app
 backend/app
+ai/cache/*
+ai/venv/*
+ai/venv2/*
+ai/models/*
+ai/__pycache__/*
+ai/gemma_training_data.jsonl
+ai/training/__pycache__/*

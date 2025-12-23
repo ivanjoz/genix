@@ -30,6 +30,7 @@
   let CategoriasLayer: CategoriasMarcas | null = null
   // svelte-ignore non_reactive_update
   let MarcasLayer: CategoriasMarcas | null = null
+  let imageUploaderHandler: (() => void) | undefined
 
   let productoColumns: ITableColumn<IProducto>[] = [
     { header: "ID", css: "c-blue text-center", headerCss: "w-48",
@@ -41,7 +42,7 @@
     { header: "Categorías", highlight: true,
       getValue: e => {
         const nombres = []
-        for(const id of e.CategoriasIDs){
+        for(const id of (e.CategoriasIDs||[])){
           const nombre = listas.get(id)?.Nombre || `Categoría-${id}`
           nombres.push(nombre)
         }
@@ -204,8 +205,13 @@
             clearOnUpload={true} types={["avif","webp"]}
             folder="img-productos" size={2} src={productoForm.Image?.n}
             cardCss="w-full h-180 p-4"
+            imageSource={productoForm._imageSource}
             setDataToSend={e => {
               e.ProductoID = productoForm.ID
+            }}
+            onChange={(e, uploadHandler) => {
+              imageUploaderHandler = uploadHandler
+              productoForm._imageSource = e
             }}
             onUploaded={(imagePath, description) => {
               if(imagePath.includes("/")){ imagePath = imagePath.split("/")[1] }

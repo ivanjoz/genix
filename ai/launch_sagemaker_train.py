@@ -10,8 +10,14 @@ from huggingface_hub import snapshot_download
 # 0. Analizar argumentos de línea de comandos
 parser = argparse.ArgumentParser()
 parser.add_argument("--local", action="store_true", help="Ejecutar localmente usando Docker")
-parser.add_argument("--cache_model", action="store_true", help="Descargar y cachear el modelo en S3")
+parser.add_argument("--cache_model", action="store_true", default=True, help="Descargar y cachear el modelo en S3 (habilitado por defecto)")
+parser.add_argument("--no-cache", action="store_true", help="Descargar el modelo directamente desde HuggingFace sin cachear en S3")
+parser.add_argument("--full", action="store_true", help="Realizar Full Fine-Tuning en lugar de LoRA")
 args, _ = parser.parse_known_args()
+
+# Si se especifica --no-cache, desactivar el cache
+if args.no_cache:
+    args.cache_model = False
 
 # 0.1 Cargar configuración desde credentials.json (en la carpeta padre)
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,6 +44,7 @@ else:
     boto_sess = boto3.Session(profile_name=aws_profile, region_name=region)
     sess = sagemaker.Session(boto_session=boto_sess)
     instance_type = 'ml.g4dn.xlarge'
+    print(f"🚀 Ejecutando en SageMaker ({instance_type})")
 
 # Configuración de S3 (usar SAGEMAKER_S3_OUTPUT si existe, si no usar bucket default)
 s3_output_base = config.get("SAGEMAKER_S3_OUTPUT")
@@ -56,12 +63,14 @@ print("FunctionGemma Training - AWS SageMaker with Spot Instances")
 print(f"AWS Profile: {aws_profile}")
 print(f"Region:      {region}")
 print(f"Role ARN:    {role}")
-print(f"S3 Path:     {s3_output_base or f's3://{bucket}/{prefix}'}")
+print(f"S3 Path:     {s3_output_base or (f's3://{bucket}/{prefix}' if prefix else f's3://{bucket}')}")
 print("=" * 70)
 
 # 1. Gestionar Cache del Modelo en S3
 model_id = "google/functiongemma-270m-it"
-s3_model_uri = f"s3://{bucket}/{prefix}/model_cache/{model_id.split('/')[-1]}"
+# Construir la URI evitando doble slash cuando prefix está vacío
+prefix_path = f"{prefix}/" if prefix else ""
+s3_model_uri = f"s3://{bucket}/{prefix_path}model_cache/{model_id.split('/')[-1]}"
 
 # Verificar si el modelo ya está en S3 para evitar descargas/subidas innecesarias
 s3_exists = False
@@ -69,7 +78,8 @@ if not args.local:
     try:
         s3_client = boto_sess.client('s3')
         # Verificar un archivo clave para confirmar que el modelo está completo
-        s3_client.head_object(Bucket=bucket, Key=f"{prefix}/model_cache/{model_id.split('/')[-1]}/config.json")
+        s3_key = f"{prefix_path}model_cache/{model_id.split('/')[-1]}/config.json"
+        s3_client.head_object(Bucket=bucket, Key=s3_key)
         s3_exists = True
         print(f"✅ Modelo encontrado en S3 cache: {s3_model_uri}")
     except:
@@ -125,31 +135,36 @@ print(f"✓ Data location: {s3_data_uri}")
 if args.local:
     checkpoint_s3_uri = f"file://{os.path.abspath('./checkpoints')}"
 else:
-    checkpoint_s3_uri = f"s3://{bucket}/{prefix}/checkpoints"
+    checkpoint_s3_uri = f"s3://{bucket}/{prefix_path}checkpoints"
 print(f"✓ Checkpoints will be saved to: {checkpoint_s3_uri}")
 
 # 3. Hiperparámetros del modelo (actualizados para FunctionGemma)
 hyperparameters = {
     "model_id": "google/functiongemma-270m-it",  # Modelo correcto para function calling
-    "epochs": 3,
-    "batch_size": 4,
+    "epochs": 10,
+    "batch_size": 2,
     "gradient_accumulation_steps": 4,  # Batch efectivo = 4 * 4 = 16
-    "lr": 2e-4,
+    "lr": 2e-5 if args.full else 2e-4, # LR más bajo para full finetuning
     "max_seq_length": 2048,  # FunctionGemma soporta hasta 32K
-    "lora_r": 16,
-    "lora_alpha": 32,
     "logging_steps": 10,
     "save_steps": 50,  # Guardar checkpoint cada 50 steps (importante para spot)
 }
 
+if not args.full:
+    hyperparameters.update({
+        "lora_r": 16,
+        "lora_alpha": 32,
+    })
+
 print("\nTraining Configuration:")
 for key, value in hyperparameters.items():
     print(f"  {key}: {value}")
+print(f"  Full Finetuning: {args.full}")
 print()
 
 # 4. Configurar el estimador de HuggingFace
 huggingface_estimator = HuggingFace(
-    entry_point='train.py',
+    entry_point='train_full.py' if args.full else 'train.py',
     source_dir='./training',
     instance_type=instance_type,
     instance_count=1,

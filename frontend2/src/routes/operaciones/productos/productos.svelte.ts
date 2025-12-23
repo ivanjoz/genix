@@ -1,5 +1,6 @@
 import { GetHandler, POST } from "$lib/http";
 import { browser } from '$app/environment';
+import type { ImageSource } from "$components/ImageUploader.svelte";
 
 export interface IProductoPropiedad {
   id: number, nm: string, ss: number
@@ -54,6 +55,7 @@ export interface IProducto {
   upd: number
   _stock?: number
   _moneda?: string
+  _imageSource?: ImageSource
 }
 
 export interface IProductoResult {
