@@ -31,6 +31,7 @@ Unlike standard models that use Markdown code blocks, FunctionGemma uses these s
 * `<start_function_call>` / `<end_function_call>`: Wraps the model's output.
 * `<escape>`: Wraps every single **string value** inside the JSON to protect special characters.
 * `call:`: A prefix that must appear immediately after the start call token.
+* `declaration:`: A prefix that must appear immediately after the start function declaration token.
 
 ## 4. Training Data Structure (JSONL)
 To train the model, we use a JSONL format where each object is a `messages` array. **Note the specific string required in the developer role to "activate" the model.**

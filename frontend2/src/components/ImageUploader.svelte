@@ -33,7 +33,7 @@ export interface IImageUploaderProps {
   description?: string;
   cardStyle?: string;
   onDelete?: (src: string) => void;
-  onChange?: (e: ImageSource) => void 
+  onChange?: (e: ImageSource, uploadImage?: () => void) => void 
   cardCss?: string;
   hideFormUseMessage?: string;
   hideUploadButton?: boolean;
@@ -42,6 +42,7 @@ export interface IImageUploaderProps {
   size?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
   folder?: string
   useConvertAvif?: boolean
+  imageSource?: ImageSource
 }
 
 export interface IImageResult {
@@ -66,20 +67,21 @@ let {
   hideForm = false,
   hideUploadButton = false,
   size, folder, useConvertAvif,
-  id = undefined
+  id = undefined,
+  imageSource
 }: IImageUploaderProps = $props();
 
 // State
-let imageSrc = $state({ src, types, description } as ImageSource);
-let progress = $state(src ? -1 : 0);
+let imageSrc = $state(imageSource || { src, types, description } as ImageSource);
+let progress = $derived((src||imageSrc?.base64) ? -1 : 0);
 
 Env.imageCounter++
 const imageID = id || Env.imageCounter
 
 // Update imageSrc when props change
 $effect(() => {
-  src;
-  imageSrc = { src, base64: "", types, description };
+  src; imageSource;
+  imageSrc = imageSource || { src, base64: "", types, description };
 })
 
 const makeImageSrc = (format?: string) => {
@@ -98,27 +100,6 @@ const makeImageSrc = (format?: string) => {
 }
 
 let imageFile: Blob
-
-const onFileChange = async (ev: Event) => {
-  const target = ev.target as HTMLInputElement
-  const files: FileList | null = target.files
-  if (!files || files.length === 0){ return }
-
-  imageFile = files[0] as Blob
-  console.log('imagefile::', imageFile)
-
-  try {
-    // Use web worker-based image conversion (1.2 MP resolution, WebP format)
-    const imageB64 = await fileToImage(imageFile, 1200, 'avif')
-    console.log("imageB64", imageB64)
-    progress = -1
-    imageSrc = { src: "", base64: imageB64, types: [], description: imageSrc.description }
-    onChange?.(imageSrc)
-  } catch (error) {
-    Notify.failure('Error procesando la imagen: ' + String(error))
-    progress = 0
-  }
-}
 
 type IResulution = {
   i: number, r: number, fn: (c: string) => {}, promise?: Promise<any>
@@ -204,6 +185,27 @@ const uploadImage = async (): Promise<IImageResult> => {
   return result;
 };
 
+const onFileChange = async (ev: Event) => {
+  const target = ev.target as HTMLInputElement
+  const files: FileList | null = target.files
+  if (!files || files.length === 0){ return }
+
+  imageFile = files[0] as Blob
+  console.log('imagefile::', imageFile)
+
+  try {
+    // Use web worker-based image conversion (1.2 MP resolution, WebP format)
+    const imageB64 = await fileToImage(imageFile, 1200, 'avif')
+    console.log("imageB64", imageB64)
+    progress = -1
+    imageSrc = { src: "", base64: imageB64, types: [], description: imageSrc.description }
+    onChange?.(imageSrc, uploadImage)
+  } catch (error) {
+    Notify.failure('Error procesando la imagen: ' + String(error))
+    progress = 0
+  }
+}
+
 // Effect to manage imagesToUpload map
 $effect(() => {
   if (imageSrc.base64) {
@@ -255,7 +257,7 @@ onDestroy(() => {
           onblur={(ev) => {
             ev.stopPropagation();
             imageSrc.description = ev.currentTarget.value || '';
-            onChange?.(imageSrc);
+            onChange?.(imageSrc, uploadImage);
           }}
         ></textarea>
       {/if}

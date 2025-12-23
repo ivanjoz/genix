@@ -1,18 +1,20 @@
 import json
+import os
+from transformers import AutoTokenizer
+from training.tools_config import SYSTEM_INSTRUCTION
 
 def generate_training_data(data_configs):
     """
-    Generates training data for functionGemma from a list of configurations.
-    
-    Each config should have:
-    - developer: The system instruction with function declaration.
-    - assistant: A template for the assistant response with [VARIABLE_N] placeholders.
-    - queries: A list of dicts with 'user' (query) and 'variables' (list of values).
+    Prepares the training data in a structured message format.
+    The actual formatting with tools will be handled during training
+    to ensure consistency with inference.
     """
-    training_data = []
+    processed_data = []
     
+    # Base system instruction from shared config
+    system_instruction = SYSTEM_INSTRUCTION
+
     for config in data_configs:
-        developer_content = config.get("developer")
         assistant_template = config.get("assistant")
         queries = config.get("queries", [])
         
@@ -21,25 +23,24 @@ def generate_training_data(data_configs):
             variables = query_info.get("variables", [])
             
             # Replace [VARIABLE_N] placeholders in assistant template
-            # [VARIABLE_1] -> variables[0], [VARIABLE_2] -> variables[1], etc.
             assistant_content = assistant_template
             for i, var_value in enumerate(variables):
                 placeholder = f"[VARIABLE_{i+1}]"
-                assistant_content = assistant_content.replace(placeholder, str(var_value))
+                # Handle null/empty variables
+                val = str(var_value) if var_value is not None else "null"
+                assistant_content = assistant_content.replace(placeholder, val)
             
-            # Ensure double braces in template (if any) are reduced to single braces
-            # if the user provided something like {{producto: ... }}
-            # but wait, the user's prompt has {{ which might be literal or for formatting.
-            # In the prompt: assistant: "<start_function_call>call:get_almacen_stock{{producto:<escape>[VARIABLE_1]<escape>}}<end_function_call>"
-            # If we want the output to be: <start_function_call>call:get_almacen_stock{producto:<escape>value<escape>}<end_function_call>
-            # we should replace {{ with { and }} with }.
+            # Reduce double braces to single braces for the final call
             assistant_content = assistant_content.replace("{{", "{").replace("}}", "}")
 
+            # Create message structure
+            # Note: We keep the content "clean" (no manual tags) 
+            # because the trainer will apply the tools during training.
             example = {
                 "messages": [
                     {
                         "role": "developer",
-                        "content": developer_content
+                        "content": system_instruction
                     },
                     {
                         "role": "user",
@@ -51,9 +52,9 @@ def generate_training_data(data_configs):
                     }
                 ]
             }
-            training_data.append(example)
+            processed_data.append(example)
             
-    return training_data
+    return processed_data
 
 def save_jsonl(data, filename):
     with open(filename, 'w', encoding='utf-8') as f:
@@ -63,7 +64,7 @@ def save_jsonl(data, filename):
 if __name__ == "__main__":
     from gemma_training_data import training_data
     
-    training_data = generate_training_data(training_data)
-    save_jsonl(training_data, "gemma_training_data.jsonl")
-    print(f"Generated {len(training_data)} examples in gemma_training_data.jsonl")
-
+    print("Generating training examples...")
+    processed_examples = generate_training_data(training_data)
+    save_jsonl(processed_examples, "gemma_training_data.jsonl")
+    print(f"Generated {len(processed_examples)} examples in gemma_training_data.jsonl")
