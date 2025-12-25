@@ -28,3 +28,9 @@ ai/models/*
 ai/__pycache__/*
 ai/gemma_training_data.jsonl
 ai/training/__pycache__/*
+ai/venv_312/*
+ai/venv*
+frontend2/static/models_local/*
+frontend2/static/models/*
+ai/onnx-inference.js
+ai/wasm/*
