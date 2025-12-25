@@ -29,12 +29,17 @@
 		"vite": "^7.1.7"
 	},
 	"dependencies": {
+		"@huggingface/transformers": "^3.8.1",
 		"@humanspeak/svelte-virtual-list": "^0.3.5",
 		"@jsquash/avif": "^2.1.1",
+		"@mediapipe/tasks-genai": "^0.10.25",
+		"@mlc-ai/web-llm": "^0.2.80",
+		"@xenova/transformers": "^2.17.2",
 		"axios": "^1.13.2",
 		"esbuild": "^0.25.12",
 		"mime-types": "^3.0.1",
 		"notiflix": "^3.2.8",
+		"onnxruntime-web": "^1.23.2",
 		"roosterjs": "^9.41.0",
 		"svelte-awesome-color-picker": "^4.1.0",
 		"svelte-lexical": "^0.6.3",
