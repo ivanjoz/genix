@@ -172,8 +172,11 @@ type TableDeployInterface interface {
 type TableStruct[T TableSchemaInterface[T], E TableBaseInterface[T, E]] struct {
 	schemaStruct *T
 	tableInfo    *TableInfo
+	// field just for encoding purposes
+	I__ bool `gob:"-" json:"-"`
 }
 
+/*
 // GobEncode implements gob.GobEncoder interface
 // TableStruct is only used for queries and doesn't need to be encoded
 func (e TableStruct[T, E]) GobEncode() ([]byte, error) {
@@ -185,6 +188,7 @@ func (e TableStruct[T, E]) GobEncode() ([]byte, error) {
 func (e *TableStruct[T, E]) GobDecode(data []byte) error {
 	return nil
 }
+*/
 
 func (e *TableStruct[T, E]) MakeTableSchema() TableSchema {
 	return MakeSchema[E]()
@@ -411,7 +415,7 @@ func MakeSchema[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() TableSc
 }
 
 func initStructTable[T any, E any](schemaStruct *T) *T {
-	fmt.Println("making table...")
+	// fmt.Println("making table...")
 	structRefValue := reflect.ValueOf(*new(E))
 	structRefType := structRefValue.Type()
 

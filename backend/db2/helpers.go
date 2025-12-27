@@ -3,6 +3,7 @@ package db2
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"os"
@@ -147,6 +148,11 @@ func Concatx[T any](sep string, slice1 []T) string {
 		sliceOfStrings = append(sliceOfStrings, fmt.Sprintf("%v", value))
 	}
 	return strings.Join(sliceOfStrings, sep)
+}
+
+func Err(content ...any) error {
+	errMessage := Concatx(" ", content)
+	return errors.New(errMessage)
 }
 
 func sliceToAny[T any](valuesGeneric *[]T) []any {
