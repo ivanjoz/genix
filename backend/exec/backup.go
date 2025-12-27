@@ -3,7 +3,6 @@ package exec
 import (
 	"app/aws"
 	"app/core"
-	"app/handlers"
 	"archive/tar"
 	"bytes"
 	"fmt"
@@ -18,83 +17,87 @@ func SaveBackup(empresaID int32) error {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	encoder, _ := zstd.NewWriter(nil)
+	var err error
 
-	addTarRecord := func(name string, records any) error {
-		core.Log("Agrigando registro desde DynamoDB:", name)
-		content, _ := core.GobEncode(records)
-		compressed := encoder.EncodeAll(content, make([]byte, 0, len(content)))
+	/*
 
-		hdr := &tar.Header{
-			Name: name, Mode: 0600, Size: int64(len(compressed)),
-		}
-		if err := tw.WriteHeader(hdr); err != nil {
-			return core.Err("Error al escribir TAR header:", name, "|", err)
-		}
-		if _, err := tw.Write(compressed); err != nil {
-			return core.Err("Error al escribir TAR body:", name, "|", err)
-		}
-		return nil
-	}
+		addTarRecord := func(name string, records any) error {
+			core.Log("Agrigando registro desde DynamoDB:", name)
+			content, _ := core.GobEncode(records)
+			compressed := encoder.EncodeAll(content, make([]byte, 0, len(content)))
 
-	// Empresa
-	empresasTable := handlers.MakeEmpresaTable()
-	empresa, err := empresasTable.GetItem(fmt.Sprintf("%v", empresaID))
-
-	if err != nil {
-		return core.Err("Error al obtener la empresa:", err)
-	}
-
-	if err := addTarRecord("empresa|1", *empresa); err != nil {
-		return core.Err(err)
-	}
-
-	// Accesos
-	if empresaID == 1 {
-		accesosTable := handlers.MakeAccesoTable()
-		accesos, err := accesosTable.QueryBatch([]aws.DynamoQueryParam{
-			{Index: "sk", GreaterThan: "0"},
-		})
-
-		if err != nil {
-			return core.Err("Error al obtener los accesos:", err)
+			hdr := &tar.Header{
+				Name: name, Mode: 0600, Size: int64(len(compressed)),
+			}
+			if err := tw.WriteHeader(hdr); err != nil {
+				return core.Err("Error al escribir TAR header:", name, "|", err)
+			}
+			if _, err := tw.Write(compressed); err != nil {
+				return core.Err("Error al escribir TAR body:", name, "|", err)
+			}
+			return nil
 		}
 
-		if err := addTarRecord("accesos|1", accesos); err != nil {
-			return core.Err(err)
-		}
-	}
+		// Empresa
+			empresasTable := handlers.MakeEmpresaTable()
+			empresa, err := empresasTable.GetItem(fmt.Sprintf("%v", empresaID))
 
-	// Usuarios
-	usuariosTable := handlers.MakeUsuarioTable(empresaID)
-	usuarios, err := usuariosTable.QueryBatch([]aws.DynamoQueryParam{
-		{Index: "sk", GreaterThan: "0"},
-	})
+			if err != nil {
+				return core.Err("Error al obtener la empresa:", err)
+			}
 
-	if err != nil {
-		return core.Err("Error al obtener los usuarios:", err)
-	}
+			if err := addTarRecord("empresa|1", *empresa); err != nil {
+				return core.Err(err)
+			}
 
-	if err := addTarRecord("usuarios|1", usuarios); err != nil {
-		return core.Err(err)
-	}
+			// Accesos
+			if empresaID == 1 {
+				accesosTable := handlers.MakeAccesoTable()
+				accesos, err := accesosTable.QueryBatch([]aws.DynamoQueryParam{
+					{Index: "sk", GreaterThan: "0"},
+				})
 
-	// Perfiles
-	perfilesTable := handlers.MakePerfilTable(empresaID)
-	perfiles, err := perfilesTable.QueryBatch([]aws.DynamoQueryParam{
-		{Index: "sk", GreaterThan: "0"},
-	})
+				if err != nil {
+					return core.Err("Error al obtener los accesos:", err)
+				}
 
-	if err != nil {
-		return core.Err("Error al obtener los perfiles:", err)
-	}
+				if err := addTarRecord("accesos|1", accesos); err != nil {
+					return core.Err(err)
+				}
+			}
 
-	if err := addTarRecord("perfiles|1", perfiles); err != nil {
-		return core.Err(err)
-	}
+			// Usuarios
+			usuariosTable := handlers.MakeUsuarioTable(empresaID)
+			usuarios, err := usuariosTable.QueryBatch([]aws.DynamoQueryParam{
+				{Index: "sk", GreaterThan: "0"},
+			})
+
+			if err != nil {
+				return core.Err("Error al obtener los usuarios:", err)
+			}
+
+			if err := addTarRecord("usuarios|1", usuarios); err != nil {
+				return core.Err(err)
+			}
+
+			// Perfiles
+			perfilesTable := handlers.MakePerfilTable(empresaID)
+			perfiles, err := perfilesTable.QueryBatch([]aws.DynamoQueryParam{
+				{Index: "sk", GreaterThan: "0"},
+			})
+
+			if err != nil {
+				return core.Err("Error al obtener los perfiles:", err)
+			}
+
+			if err := addTarRecord("perfiles|1", perfiles); err != nil {
+				return core.Err(err)
+			}
+	*/
 
 	// Scylla Tables - Controllers
-	for _, controller := range MakeScyllaControllers2() {
-		name := fmt.Sprintf("%v|%v", controller.TableName, 1)
+	for _, controller := range MakeScyllaControllers() {
+		name := fmt.Sprintf("%v|%v", controller.GetTable().GetFullName(), 1)
 
 		core.Log("Obteniendo registros de: ", name, "...")
 
@@ -104,6 +107,8 @@ func SaveBackup(empresaID int32) error {
 		}
 
 		core.Log("Registros obtenidos: ", len(records))
+		fmt.Println(string(records))
+
 		compressed := encoder.EncodeAll(records, make([]byte, 0, len(records)))
 		core.Log("Comprimido::", len(compressed), " | ", len(records))
 

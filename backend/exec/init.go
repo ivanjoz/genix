@@ -194,7 +194,7 @@ func Homologate(args *core.ExecArgs) core.FuncResponse {
 		Keyspace: core.Env.DB_NAME,
 	})
 
-	db2.DeployScylla(0, MakeScyllaControllers2()...)
+	db2.DeployScylla(0, MakeScyllaControllers()...)
 
 	return core.FuncResponse{}
 }

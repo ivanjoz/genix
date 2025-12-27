@@ -703,9 +703,9 @@ func Test32(args *core.ExecArgs) core.FuncResponse {
 			fmt.Println("error:", err1)
 		}
 	*/
-	// Migrated to db2 - use makeControllerDB2 and db2.DeployScylla
+	// Migrated to db2 - use makeDBController and db2.DeployScylla
 	// db.DeployScylla(0, s.ListaCompartidaRegistro{})
-	controller := makeControllerDB2[s.ListaCompartidaRegistro]()
+	controller := makeDBController[s.ListaCompartidaRegistro]()
 	db2.DeployScylla(0, controller)
 	return core.FuncResponse{}
 }

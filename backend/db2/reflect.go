@@ -112,7 +112,10 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		fieldAddr := field.Addr()
 		colInterface, ok := fieldAddr.Interface().(Coln)
 		if !ok {
-			fmt.Println("No es una columna:", field.Type().Name())
+			fieldName := field.Type().Name()
+			if !(len(fieldName) > 12 && fieldName[0:12] == "TableStruct[") {
+				fmt.Println("No es una columna:", field.Type().Name())
+			}
 			continue
 		}
 

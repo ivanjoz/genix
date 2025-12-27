@@ -1,6 +1,8 @@
 package db2
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"slices"
 	"strings"
@@ -15,6 +17,111 @@ type ScyllaController2 struct {
 	RestoreGobRecords    func(empresaID int32, content []byte) error
 	InitTable            func(mode int8)
 	RecalcVirtualColumns func()
+}
+
+type ScyllaController[T TableBaseInterface[E, T], E TableSchemaInterface[E]] struct {
+	TableName string
+	Table     ScyllaTable[T]
+	Schema    TableSchema
+}
+
+type ScyllaControllerInterface interface {
+	GetTable() ScyllaTable[any]
+	GetTableName() string
+	GetRecords(partValue, limit int32, lastKey any) []any
+	GetRecordsGob(partValue, limit int32, lastKey any) ([]byte, error)
+	RestoreGobRecords(partValue int32, content []byte) error
+}
+
+func (e *ScyllaController[T, E]) GetTable() ScyllaTable[any] {
+	return ScyllaTable[any](e.Table)
+}
+
+func (e *ScyllaController[T, E]) GetTableName() string {
+	return e.Table.name
+}
+
+func (e *ScyllaController[T, E]) GetRecords(partValue, limit int32, lastKey any) []any {
+
+	records := []T{}
+	query := any(Query(&records)).(TableQueryInterface[E])
+
+	if partValue > 0 {
+		query.SetWhere(e.Table.partKey.Name, "=", partValue)
+	}
+
+	// Add lastKey filter if provided (for pagination)
+	if lastKey != nil && len(e.Table.keys) > 0 {
+		query.SetWhere(e.Table.keys[0].Name, ">=", lastKey)
+	}
+
+	// Execute the query
+	fmt.Println("Obteniendo registros de::", e.Table.name)
+	if err := query.Exec(); err != nil {
+		fmt.Println("Error al consultar", e.Table.name, ":", err)
+		return nil
+	}
+	fmt.Println("reqgistros obtenidos (1)::", len(records))
+
+	recordsAny := []any{}
+	for _, e := range records {
+		recordsAny = append(recordsAny, any(e))
+	}
+
+	return recordsAny
+}
+
+func (e *ScyllaController[T, E]) GetRecordsGob(partValue, limit int32, lastKey any) ([]byte, error) {
+
+	gob.Register(*new(T))
+	records := e.GetRecords(partValue, limit, lastKey)
+	if len(records) == 0 {
+		return nil, nil
+	}
+
+	var buffer bytes.Buffer
+	encoder := gob.NewEncoder(&buffer)
+	err := encoder.Encode(records)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func (e *ScyllaController[T, E]) RestoreGobRecords(partValue int32, content []byte) error {
+
+	gob.Register(*new(T))
+	reader := bytes.NewReader(content)
+	dec := gob.NewDecoder(reader)
+	records := []T{}
+	err := dec.Decode(&records)
+
+	fmt.Println("Content Len:", len(content), "registros:", len(records))
+
+	if err != nil {
+		return Err("Error al decodificar registros de: ", e.Table.name, err)
+	}
+
+	if len(records) > 0 {
+		Print(records[0])
+	}
+
+	/*
+		if partValue > 0 {
+			statement := fmt.Sprintf(`DELETE FROM %v WHERE %v = %v`, e.Table.GetFullName(), e.Table.GetPartKey().Name, partValue)
+			if err := QueryExec(statement); err != nil {
+				fmt.Println("Error en statement: ", statement)
+				return Err("Error al eliminar registros:", err)
+			}
+		}
+
+		// Insert new records
+		if err := Insert(&records); err != nil {
+			return Err("Error al insertar registros:", err)
+		}
+	*/
+	return nil
 }
 
 type ScyllaColumns struct {
@@ -35,7 +142,7 @@ var cacheCodePrev int32
 var scyllaColumnsSaved []ScyllaColumns
 var scyllaIndexesSaved []ScyllaIndexes
 
-func DeployScylla(cacheCode int32, controllers ...ScyllaController2) {
+func DeployScylla(cacheCode int32, controllers ...ScyllaControllerInterface) {
 	var scyllaColumns []ScyllaColumns
 	var scyllaIndexes []ScyllaIndexes
 	isFetched := false
@@ -110,10 +217,10 @@ func DeployScylla(cacheCode int32, controllers ...ScyllaController2) {
 	}
 
 	for _, controller := range controllers {
-		table := controller.Table
+		table := controller.GetTable()
 		tableName := table.GetFullName()
 
-		fmt.Println("Struct Type:", controller.TableName)
+		fmt.Println("Struct Type:", controller.GetTableName())
 
 		originColumns := tableColumnsMap[tableName]
 		fmt.Println("current columns::", len(originColumns))
