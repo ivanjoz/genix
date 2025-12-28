@@ -11,12 +11,12 @@ import (
 type ScyllaTable[T any] struct {
 	name          string
 	keyspace      string
-	keys          []*columnInfo
-	partKey       *columnInfo
+	keys          []IColInfo
+	partKey       IColInfo
 	keysIdx       []int16
-	columns       []*columnInfo
-	columnsMap    map[string]*columnInfo
-	columnsIdxMap map[int16]*columnInfo
+	columns       []IColInfo
+	columnsMap    map[string]IColInfo
+	columnsIdxMap map[int16]IColInfo
 	indexes       map[string]*viewInfo
 	views         map[string]*viewInfo
 	indexViews    []*viewInfo
@@ -27,13 +27,16 @@ type ScyllaTable[T any] struct {
 func (e ScyllaTable[T]) GetFullName() string {
 	return fmt.Sprintf("%v.%v", e.keyspace, e.name)
 }
-func (e ScyllaTable[T]) GetColumns() map[string]*columnInfo {
+func (e ScyllaTable[T]) GetName() string {
+	return e.name
+}
+func (e ScyllaTable[T]) GetColumns() map[string]IColInfo {
 	return e.columnsMap
 }
-func (e ScyllaTable[T]) GetKeys() []*columnInfo {
+func (e ScyllaTable[T]) GetKeys() []IColInfo {
 	return e.keys
 }
-func (e ScyllaTable[T]) GetPartKey() *columnInfo {
+func (e ScyllaTable[T]) GetPartKey() IColInfo {
 	return e.partKey
 }
 
@@ -42,7 +45,7 @@ type viewInfo struct {
 	Type            int8
 	name            string
 	idx             int8
-	column          *columnInfo
+	column          IColInfo
 	columns         []string
 	columnsNoPart   []string
 	columnsIdx      []int16
@@ -426,11 +429,15 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 		field := structRefType.Field(i)
 		xfield := xunsafe.FieldByName(structRefType, field.Name)
 		col := &columnInfo{
-			FieldIdx:  i,
-			FieldType: field.Type.String(),
-			FieldName: field.Name,
-			RefType:   field.Type,
-			Field:     xfield,
+			colInfo: colInfo{
+				FieldIdx:  i,
+				FieldName: field.Name,
+				RefType:   field.Type,
+				Field:     xfield,
+			},
+			colType: colType{
+				FieldType: field.Type.String(),
+			},
 		}
 
 		if tag := field.Tag.Get("db"); tag != "" {
@@ -446,11 +453,11 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 		}
 
 		if col.FieldType[0:1] == "*" {
-			col.IsPointer = true
+			col.GetType().IsPointer = true
 			col.FieldType = col.FieldType[1:]
 		}
 		if col.FieldType[0:2] == "[]" {
-			col.IsSlice = true
+			col.GetType().IsSlice = true
 			col.FieldType = col.FieldType[2:]
 		}
 
@@ -501,13 +508,13 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 
 			colInfo := column.GetInfoPointer()
 			colInfo.Name = columnName
-			colInfo.FieldIdx = colBase.FieldIdx
+			colInfo.FieldIdx = colBase.GetInfo().FieldIdx
 			colInfo.FieldType = colBase.FieldType
-			colInfo.FieldName = colBase.FieldName
-			colInfo.RefType = colBase.RefType
-			colInfo.Field = colBase.Field
-			colInfo.IsSlice = colBase.IsSlice
-			colInfo.IsPointer = colBase.IsPointer
+			colInfo.FieldName = colBase.GetInfo().FieldName
+			colInfo.RefType = colBase.GetInfo().RefType
+			colInfo.Field = colBase.GetInfo().Field
+			colInfo.IsSlice = colBase.GetType().IsSlice
+			colInfo.IsPointer = colBase.GetType().IsPointer
 			if DebugFull {
 				fmt.Printf("Init Col: %s, Field: %s, Offset: %d\n", colInfo.Name, colInfo.FieldName, colInfo.Field.Offset)
 			}

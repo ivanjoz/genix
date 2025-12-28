@@ -61,7 +61,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		fmt.Printf("Header name: %v", header.Name)
-		nameSlice := strings.Split(header.Name, "|")
+		nameSlice := strings.Split(header.Name, ".")
 		tableName := nameSlice[0]
 
 		if tableName == "empresa" || tableName == "accesos" || tableName == "perfiles" {
@@ -94,7 +94,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		fmt.Printf("Restaurando registros: %v\n", header.Name)
-		err = controller.RestoreGobRecords(req.Usuario.EmpresaID, content)
+		err = controller.RestoreCSVRecords(req.Usuario.EmpresaID, &content)
 		if err != nil {
 			core.Log(err)
 		}

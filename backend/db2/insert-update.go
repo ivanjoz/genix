@@ -12,14 +12,14 @@ import (
 func MakeInsertStatement[T TableSchemaInterface[T]](records *[]T, columnsToExclude ...Coln) []string {
 	scyllaTable := makeTable(new(T))
 
-	columns := []*columnInfo{}
+	columns := []IColInfo{}
 	if len(columnsToExclude) > 0 {
 		columsToExcludeNames := []string{}
 		for _, e := range columnsToExclude {
 			columsToExcludeNames = append(columsToExcludeNames, e.GetInfo().Name)
 		}
 		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columsToExcludeNames, col.Name) {
+			if !slices.Contains(columsToExcludeNames, col.GetName()) {
 				columns = append(columns, col)
 			}
 		}
@@ -29,7 +29,7 @@ func MakeInsertStatement[T TableSchemaInterface[T]](records *[]T, columnsToExclu
 
 	columnsNames := []string{}
 	for _, col := range columns {
-		columnsNames = append(columnsNames, col.Name)
+		columnsNames = append(columnsNames, col.GetName())
 	}
 
 	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES `,
@@ -45,10 +45,7 @@ func MakeInsertStatement[T TableSchemaInterface[T]](records *[]T, columnsToExclu
 		recordInsertValues := []string{}
 
 		for _, col := range columns {
-			if col.getValue == nil {
-				panic("is nil column: getValue() = " + col.Name + " | " + col.FieldName)
-			}
-			value := col.getValue(ptr)
+			value := col.GetValue(ptr)
 			recordInsertValues = append(recordInsertValues, fmt.Sprintf("%v", value))
 		}
 
@@ -69,14 +66,14 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	refTable := initStructTable[E, T](new(E))
 	scyllaTable := makeTable(refTable)
 
-	columns := []*columnInfo{}
+	columns := []IColInfo{}
 	if len(columnsToExclude) > 0 {
 		columsToExcludeNames := []string{}
 		for _, e := range columnsToExclude {
 			columsToExcludeNames = append(columsToExcludeNames, e.GetInfo().Name)
 		}
 		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columsToExcludeNames, col.Name) {
+			if !slices.Contains(columsToExcludeNames, col.GetName()) {
 				columns = append(columns, col)
 			}
 		}
@@ -87,7 +84,7 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	columnsNames := []string{}
 	columnPlaceholders := []string{}
 	for _, col := range columns {
-		columnsNames = append(columnsNames, col.Name)
+		columnsNames = append(columnsNames, col.GetName())
 		columnPlaceholders = append(columnPlaceholders, "?")
 	}
 
@@ -103,14 +100,10 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		values := []any{}
 
 		for _, col := range columns {
-			if col.getValue == nil {
-				panic("is nil column: getValue() = " + col.Name + " | " + col.FieldName)
-			}
 			var value any
-			if col.getStatementValue != nil {
-				value = col.getStatementValue(ptr)
-			} else {
-				value = col.getValue(ptr)
+			value = col.GetStatementValue(ptr)
+			if value == nil {
+				value = col.GetValue(ptr)
 			}
 			values = append(values, value)
 		}
@@ -153,7 +146,7 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 
 	refTable := initStructTable[E, T](new(E))
 	scyllaTable := makeTable(refTable)
-	columnsToUpdate := []*columnInfo{}
+	columnsToUpdate := []IColInfo{}
 
 	if len(columnsToInclude) > 0 {
 		for _, col_ := range columnsToInclude {
@@ -162,8 +155,8 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 				Print(col)
 				panic("No se encontró la columna (update):" + col_.GetName())
 			}
-			if slices.Contains(scyllaTable.keysIdx, col.Idx) {
-				msg := fmt.Sprintf(`Table "%v": The column "%v" can't be updated because is part of primary key.`, scyllaTable.name, col.Name)
+			if slices.Contains(scyllaTable.keysIdx, col.GetInfo().Idx) {
+				msg := fmt.Sprintf(`Table "%v": The column "%v" can't be updated because is part of primary key.`, scyllaTable.name, col.GetName())
 				panic(msg)
 			}
 			columnsToUpdate = append(columnsToUpdate, col)
@@ -174,8 +167,8 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 			columnsToExcludeNames = append(columnsToExcludeNames, c.GetName())
 		}
 		for _, col := range scyllaTable.columns {
-			isExcluded := slices.Contains(columnsToExcludeNames, col.Name)
-			if !col.IsVirtual && !isExcluded && !slices.Contains(scyllaTable.keysIdx, col.Idx) {
+			isExcluded := slices.Contains(columnsToExcludeNames, col.GetName())
+			if !col.GetInfo().IsVirtual && !isExcluded && !slices.Contains(scyllaTable.keysIdx, col.GetInfo().Idx) {
 				columnsToUpdate = append(columnsToUpdate, col)
 			}
 		}
@@ -183,16 +176,17 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 
 	columnsIdx := []int16{}
 	for _, col := range columnsToUpdate {
-		columnsIdx = append(columnsIdx, col.Idx)
+		columnsIdx = append(columnsIdx, col.GetInfo().Idx)
 	}
 	columnsIncluded := slices.Concat(scyllaTable.keysIdx, columnsIdx)
-	if scyllaTable.partKey != nil {
-		columnsIncluded = append(columnsIncluded, scyllaTable.partKey.Idx)
+	pk := scyllaTable.GetPartKey()
+	if pk != nil && !pk.IsNil() {
+		columnsIncluded = append(columnsIncluded, pk.GetInfo().Idx)
 	}
 
 	//Revisa si hay columnas que deben actualizarse juntas para los índices calculados
 	for _, indexViews := range scyllaTable.indexViews {
-		if indexViews.column.IsVirtual {
+		if indexViews.column.GetInfo().IsVirtual {
 			includedCols := []int16{}
 			notIncludedCols := []int16{}
 
@@ -207,7 +201,7 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 			if len(includedCols) > 0 && len(notIncludedCols) > 0 {
 				colnames := []string{}
 				for _, colname := range indexViews.columns {
-					if scyllaTable.partKey != nil && scyllaTable.partKey.Name == colname {
+					if pk != nil && !pk.IsNil() && pk.GetName() == colname {
 						continue
 					}
 					colnames = append(colnames, fmt.Sprintf(`"%v"`, colname))
@@ -215,7 +209,7 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 
 				includedColsNames := []string{}
 				for _, idx := range notIncludedCols {
-					includedColsNames = append(includedColsNames, scyllaTable.columnsIdxMap[idx].Name)
+					includedColsNames = append(includedColsNames, scyllaTable.columnsIdxMap[idx].GetName())
 				}
 
 				msg := fmt.Sprintf(`Table "%v": A composit index/view requires the columns %v be updated together. Not Included: %v`, scyllaTable.name, strings.Join(colnames, ", "), strings.Join(includedColsNames, ", "))
@@ -230,7 +224,7 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 		cols := columnsToUpdate
 		columnsToUpdate = nil
 		for _, col := range cols {
-			if col.IsVirtual {
+			if col.GetInfo().IsVirtual {
 				columnsToUpdate = append(columnsToUpdate, col)
 			}
 		}
@@ -238,8 +232,9 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 
 	columnsWhere := scyllaTable.keys
 
-	if scyllaTable.partKey != nil {
-		columnsWhere = append([]*columnInfo{scyllaTable.partKey}, columnsWhere...)
+	pk = scyllaTable.GetPartKey()
+	if pk != nil && !pk.IsNil() {
+		columnsWhere = append([]IColInfo{pk}, columnsWhere...)
 	}
 
 	queryStatements := []string{}
@@ -250,14 +245,14 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 
 		setStatements := []string{}
 		for _, col := range columnsToUpdate {
-			v := col.getValue(ptr)
-			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
+			v := col.GetValue(ptr)
+			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, col.GetName(), v))
 		}
 
 		whereStatements := []string{}
 		for _, col := range columnsWhere {
-			v := col.getValue(ptr)
-			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
+			v := col.GetValue(ptr)
+			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, col.GetName(), v))
 		}
 
 		queryStatement := fmt.Sprintf(

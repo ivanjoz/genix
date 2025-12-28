@@ -17,103 +17,29 @@ func SaveBackup(empresaID int32) error {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	encoder, _ := zstd.NewWriter(nil)
+	defer encoder.Close()
 	var err error
-
-	/*
-
-		addTarRecord := func(name string, records any) error {
-			core.Log("Agrigando registro desde DynamoDB:", name)
-			content, _ := core.GobEncode(records)
-			compressed := encoder.EncodeAll(content, make([]byte, 0, len(content)))
-
-			hdr := &tar.Header{
-				Name: name, Mode: 0600, Size: int64(len(compressed)),
-			}
-			if err := tw.WriteHeader(hdr); err != nil {
-				return core.Err("Error al escribir TAR header:", name, "|", err)
-			}
-			if _, err := tw.Write(compressed); err != nil {
-				return core.Err("Error al escribir TAR body:", name, "|", err)
-			}
-			return nil
-		}
-
-		// Empresa
-			empresasTable := handlers.MakeEmpresaTable()
-			empresa, err := empresasTable.GetItem(fmt.Sprintf("%v", empresaID))
-
-			if err != nil {
-				return core.Err("Error al obtener la empresa:", err)
-			}
-
-			if err := addTarRecord("empresa|1", *empresa); err != nil {
-				return core.Err(err)
-			}
-
-			// Accesos
-			if empresaID == 1 {
-				accesosTable := handlers.MakeAccesoTable()
-				accesos, err := accesosTable.QueryBatch([]aws.DynamoQueryParam{
-					{Index: "sk", GreaterThan: "0"},
-				})
-
-				if err != nil {
-					return core.Err("Error al obtener los accesos:", err)
-				}
-
-				if err := addTarRecord("accesos|1", accesos); err != nil {
-					return core.Err(err)
-				}
-			}
-
-			// Usuarios
-			usuariosTable := handlers.MakeUsuarioTable(empresaID)
-			usuarios, err := usuariosTable.QueryBatch([]aws.DynamoQueryParam{
-				{Index: "sk", GreaterThan: "0"},
-			})
-
-			if err != nil {
-				return core.Err("Error al obtener los usuarios:", err)
-			}
-
-			if err := addTarRecord("usuarios|1", usuarios); err != nil {
-				return core.Err(err)
-			}
-
-			// Perfiles
-			perfilesTable := handlers.MakePerfilTable(empresaID)
-			perfiles, err := perfilesTable.QueryBatch([]aws.DynamoQueryParam{
-				{Index: "sk", GreaterThan: "0"},
-			})
-
-			if err != nil {
-				return core.Err("Error al obtener los perfiles:", err)
-			}
-
-			if err := addTarRecord("perfiles|1", perfiles); err != nil {
-				return core.Err(err)
-			}
-	*/
 
 	// Scylla Tables - Controllers
 	for _, controller := range MakeScyllaControllers() {
-		name := fmt.Sprintf("%v|%v", controller.GetTable().GetFullName(), 1)
+		scyllaTable := controller.GetTable()
+		name := fmt.Sprintf("%v.%v.csv.zstd", scyllaTable.GetName(), empresaID)
 
 		core.Log("Obteniendo registros de: ", name, "...")
 
-		records, err := controller.GetRecordsGob(1, 100000, nil)
+		csv, err := controller.GetRecordsCSV(empresaID)
 		if err != nil {
 			return core.Err(err)
 		}
 
-		core.Log("Registros obtenidos: ", len(records))
-		fmt.Println(string(records))
+		core.Log("Registros obtenidos: ", csv.RowsCount)
 
-		compressed := encoder.EncodeAll(records, make([]byte, 0, len(records)))
-		core.Log("Comprimido::", len(compressed), " | ", len(records))
+		compressed := encoder.EncodeAll(csv.Content, make([]byte, 0, len(csv.Content)))
+		core.Log(fmt.Sprintf("%v registros comprimidos: %.3f kb", csv.RowsCount, float64(len(compressed))/1000))
 
 		hdr := &tar.Header{
 			Name: name, Mode: 0600, Size: int64(len(compressed)),
+			ModTime: time.Now(),
 		}
 		if err := tw.WriteHeader(hdr); err != nil {
 			return core.Err("Error al escribir TAR header:", name, "|", err)
@@ -121,6 +47,10 @@ func SaveBackup(empresaID int32) error {
 		if _, err := tw.Write(compressed); err != nil {
 			return core.Err("Error al escribir TAR body:", name, "|", err)
 		}
+	}
+
+	if err := tw.Close(); err != nil {
+		return core.Err("Error al cerrar el TAR writer:", err)
 	}
 
 	hash := core.MakeRandomBase36String(12)

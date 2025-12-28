@@ -8,21 +8,15 @@ import (
 	"strings"
 )
 
-type ScyllaController2 struct {
-	TableName            string
-	Table                ScyllaTable[any]
-	Schema               TableSchema
-	GetRecords           func(empresaID, limit int32, lastKey any) ([]any, error)
-	GetRecordsGob        func(empresaID, limit int32, lastKey any) ([]byte, error)
-	RestoreGobRecords    func(empresaID int32, content []byte) error
-	InitTable            func(mode int8)
-	RecalcVirtualColumns func()
-}
-
 type ScyllaController[T TableBaseInterface[E, T], E TableSchemaInterface[E]] struct {
 	TableName string
 	Table     ScyllaTable[T]
 	Schema    TableSchema
+}
+
+type CSVResult struct {
+	Content   []byte
+	RowsCount int32
 }
 
 type ScyllaControllerInterface interface {
@@ -30,7 +24,8 @@ type ScyllaControllerInterface interface {
 	GetTableName() string
 	GetRecords(partValue, limit int32, lastKey any) []any
 	GetRecordsGob(partValue, limit int32, lastKey any) ([]byte, error)
-	RestoreGobRecords(partValue int32, content []byte) error
+	RestoreCSVRecords(partValue int32, content *[]byte) error
+	GetRecordsCSV(partValue int32) (CSVResult, error)
 }
 
 func (e *ScyllaController[T, E]) GetTable() ScyllaTable[any] {
@@ -46,13 +41,14 @@ func (e *ScyllaController[T, E]) GetRecords(partValue, limit int32, lastKey any)
 	records := []T{}
 	query := any(Query(&records)).(TableQueryInterface[E])
 
-	if partValue > 0 {
-		query.SetWhere(e.Table.partKey.Name, "=", partValue)
+	pk := e.Table.GetPartKey()
+	if partValue > 0 && pk != nil && !pk.IsNil() {
+		query.SetWhere(pk.GetName(), "=", partValue)
 	}
 
 	// Add lastKey filter if provided (for pagination)
 	if lastKey != nil && len(e.Table.keys) > 0 {
-		query.SetWhere(e.Table.keys[0].Name, ">=", lastKey)
+		query.SetWhere(e.Table.keys[0].GetName(), ">=", lastKey)
 	}
 
 	// Execute the query
@@ -69,6 +65,11 @@ func (e *ScyllaController[T, E]) GetRecords(partValue, limit int32, lastKey any)
 	}
 
 	return recordsAny
+}
+
+func (e *ScyllaController[T, E]) GetRecordsCSV(partValue int32) (CSVResult, error) {
+	scyllaTable := &e.Table
+	return exportToCSV(scyllaTable, partValue)
 }
 
 func (e *ScyllaController[T, E]) GetRecordsGob(partValue, limit int32, lastKey any) ([]byte, error) {
@@ -89,34 +90,31 @@ func (e *ScyllaController[T, E]) GetRecordsGob(partValue, limit int32, lastKey a
 	return buffer.Bytes(), nil
 }
 
-func (e *ScyllaController[T, E]) RestoreGobRecords(partValue int32, content []byte) error {
-
-	gob.Register(*new(T))
-	reader := bytes.NewReader(content)
-	dec := gob.NewDecoder(reader)
-	records := []T{}
-	err := dec.Decode(&records)
-
-	fmt.Println("Content Len:", len(content), "registros:", len(records))
+func (e *ScyllaController[T, E]) RestoreCSVRecords(partValue int32, content *[]byte) error {
+	scyllaTable := &e.Table
+	records, err := CsvToRecords(scyllaTable, content)
 
 	if err != nil {
-		return Err("Error al decodificar registros de: ", e.Table.name, err)
+		return err
 	}
+
+	pk := e.Table.GetPartKey()
+	if partValue > 0 && pk != nil && !pk.IsNil() {
+		statement := fmt.Sprintf(`DELETE FROM %v WHERE %v = %v`, e.Table.GetFullName(), pk.GetName(), partValue)
+		if err := QueryExec(statement); err != nil {
+			fmt.Println("Error en statement: ", statement)
+			return Err("Error al eliminar registros:", err)
+		}
+	}
+
+	// Insert new records
+	fmt.Println("Registros a insertar:", len(records))
 
 	if len(records) > 0 {
 		Print(records[0])
 	}
 
 	/*
-		if partValue > 0 {
-			statement := fmt.Sprintf(`DELETE FROM %v WHERE %v = %v`, e.Table.GetFullName(), e.Table.GetPartKey().Name, partValue)
-			if err := QueryExec(statement); err != nil {
-				fmt.Println("Error en statement: ", statement)
-				return Err("Error al eliminar registros:", err)
-			}
-		}
-
-		// Insert new records
 		if err := Insert(&records); err != nil {
 			return Err("Error al insertar registros:", err)
 		}
@@ -232,17 +230,18 @@ func DeployScylla(cacheCode int32, controllers ...ScyllaControllerInterface) {
 
 			columnsTypes := []string{}
 			for _, e := range table.columns {
-				columnsTypes = append(columnsTypes, e.Name+" "+e.Type)
+				columnsTypes = append(columnsTypes, e.GetName()+" "+e.GetType().ColType)
 			}
 
 			keys := []string{}
 			for _, key := range table.keys {
-				keys = append(keys, key.Name)
+				keys = append(keys, key.GetName())
 			}
 
 			pk := strings.Join(keys, ", ")
-			if table.partKey != nil && len(table.partKey.Name) > 0 {
-				pk = fmt.Sprintf("(%v), %v", table.partKey.Name, pk)
+			partKey := table.GetPartKey()
+			if partKey != nil && !partKey.IsNil() && len(partKey.GetName()) > 0 {
+				pk = fmt.Sprintf("(%v), %v", partKey.GetName(), pk)
 			}
 
 			query := `
@@ -267,7 +266,7 @@ func DeployScylla(cacheCode int32, controllers ...ScyllaControllerInterface) {
 			Logx(2, fmt.Sprintf(`Tabla creada: "%v"`+"\n", tableName))
 		}
 
-		columnsSchemaMap := map[string]*columnInfo{}
+		columnsSchemaMap := map[string]IColInfo{}
 		for name, col := range table.columnsMap {
 			columnsSchemaMap[name] = col
 		}
@@ -275,8 +274,8 @@ func DeployScylla(cacheCode int32, controllers ...ScyllaControllerInterface) {
 
 		for _, originColumn := range originColumns {
 			if column, ok := columnsSchemaMap[originColumn.Name]; ok {
-				if column.Type != originColumn.Type {
-					Logx(5, fmt.Sprintf(`La columna "%v" está definida con type "%v", pero en el Struct está con "%v" equivalente a "%v"`+"\n", originColumn.Name, originColumn.Type, column.FieldType, column.Type))
+				if column.GetType().ColType != originColumn.Type {
+					Logx(5, fmt.Sprintf(`La columna "%v" está definida con type "%v", pero en el Struct está con "%v" equivalente a "%v"`+"\n", originColumn.Name, originColumn.Type, column.GetType().FieldType, column.GetType().ColType))
 				}
 				delete(columnsSchemaMap, originColumn.Name)
 			} else {
@@ -291,14 +290,14 @@ func DeployScylla(cacheCode int32, controllers ...ScyllaControllerInterface) {
 			}
 			// Revisa las columnas que deben crearse en BD
 			for _, column := range columnsSchemaMap {
-				Logx(5, fmt.Sprintf(`La columna "%v" con struct type "%v" no existe en la BD de origen.`+"\n", column.Name, column.FieldType))
-				query := fmt.Sprintf(`ALTER TABLE %v ADD %v %v`, tableName, column.Name, column.Type)
+				Logx(5, fmt.Sprintf(`La columna "%v" con struct type "%v" no existe en la BD de origen.`+"\n", column.GetName(), column.GetType().FieldType))
+				query := fmt.Sprintf(`ALTER TABLE %v ADD %v %v`, tableName, column.GetName(), column.GetType().ColType)
 				fmt.Printf(`Ejecutando agregar columna "%v"...`+"\n", query)
 
 				if err := QueryExec(query); err != nil {
-					panic(fmt.Sprintf(`Error agregando columna "%v" | %v`, column.Name, err))
+					panic(fmt.Sprintf(`Error agregando columna "%v" | %v`, column.GetName(), err))
 				}
-				Logx(2, fmt.Sprintf(`Columna Agregada: "%v"`+"\n", column.Name))
+				Logx(2, fmt.Sprintf(`Columna Agregada: "%v"`+"\n", column.GetName()))
 			}
 		}
 
