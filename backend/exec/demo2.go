@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"app/aws"
 	"app/core"
 	"app/db2"
+	"app/handlers"
 	"fmt"
 )
 
@@ -92,6 +94,34 @@ func Test38(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	core.Print(recordsGetted[0])
+
+	return core.FuncResponse{}
+}
+
+func Test39(args *core.ExecArgs) core.FuncResponse {
+
+	value := int64(65)
+
+	fmt.Println(string(core.Int64ToBase64Bytes(value)))
+
+	return core.FuncResponse{}
+}
+
+func Test40(args *core.ExecArgs) core.FuncResponse {
+
+	query := aws.DynamoQueryParam{Index: "ix3", GreaterThan: "0"}
+	query.GreaterThan = fmt.Sprintf("1_%v", 0)
+
+	dynamoTable := handlers.MakeUsuarioTable(1)
+	records, err := dynamoTable.QueryBatch([]aws.DynamoQueryParam{query})
+
+	if err != nil {
+		panic(err)
+	}
+
+	if err = db2.Insert(&records); err != nil {
+		panic(err.Error())
+	}
 
 	return core.FuncResponse{}
 }

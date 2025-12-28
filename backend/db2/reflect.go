@@ -1,7 +1,6 @@
 package db2
 
 import (
-	"encoding/hex"
 	"fmt"
 	"reflect"
 	"slices"
@@ -12,39 +11,87 @@ import (
 	"github.com/viant/xunsafe"
 )
 
-type columnInfo struct {
-	Name      string
-	FieldType string
-	FieldName string
-	//FieldName      string
-	NameAlias string
-	Type      string
-	// RefType        reflect.Value
-	FieldIdx          int
-	Idx               int16
-	RefType           reflect.Type
-	IsPrimaryKey      int8
-	IsSlice           bool
-	IsPointer         bool
-	IsVirtual         bool
-	HasView           bool
-	IsComplexType     bool
-	ViewIdx           int8
-	Field             *xunsafe.Field
-	getValue          func(ptr unsafe.Pointer) any
-	getStatementValue func(ptr unsafe.Pointer) any
-	setValue          func(ptr unsafe.Pointer, v any)
+type colInfo struct {
+	Name         string
+	FieldName    string
+	NameAlias    string
+	IsPrimaryKey int8
+	FieldIdx     int
+	IsVirtual    bool
+	HasView      bool
+	ViewIdx      int8
+	Idx          int16
+	RefType      reflect.Type
+	Field        *xunsafe.Field
 }
 
-var scyllaFieldToColumnTypesMap = map[string]string{
-	"string":  "text",
-	"int":     "int",
-	"int32":   "int",
-	"int64":   "bigint",
-	"int16":   "smallint",
-	"int8":    "tinyint",
-	"float32": "float",
-	"float64": "double",
+type columnInfo struct {
+	colInfo
+	colType
+	getValue func(ptr unsafe.Pointer) any
+}
+
+func (c *columnInfo) GetValue(ptr unsafe.Pointer) any {
+	if c.getValue != nil {
+		return c.getValue(ptr)
+	}
+	return makeScyllaValue(c.Field, ptr, c.Type)
+}
+
+func (c *columnInfo) GetStatementValue(ptr unsafe.Pointer) any {
+	if c.getValue != nil {
+		return c.getValue(ptr)
+	}
+	if c.Field == nil {
+		return nil
+	}
+	if c.IsPointer {
+		if c.Field.IsNil(ptr) {
+			return nil
+		}
+		return c.Field.Interface(ptr)
+	}
+	if c.IsComplexType {
+		fieldValue := c.Field.Interface(ptr)
+		recordBytes, err := cbor.Marshal(fieldValue)
+		if err != nil {
+			fmt.Println("Error al encodeding .cbor:: ", c.FieldName, err)
+			return ""
+		}
+		return recordBytes
+	}
+	return c.Field.Interface(ptr)
+}
+
+func (c *columnInfo) SetValue(ptr unsafe.Pointer, v any) any {
+	assingValue(c.Field, ptr, c.Type, v)
+	return nil
+}
+
+func (c *columnInfo) GetType() *colType {
+	return &c.colType
+}
+
+func (c *columnInfo) GetName() string {
+	return c.Name
+}
+
+func (c *columnInfo) GetInfo() *colInfo {
+	return &c.colInfo
+}
+
+func (c *columnInfo) IsNil() bool {
+	return c == nil
+}
+
+type IColInfo interface {
+	GetValue(ptr unsafe.Pointer) any
+	GetStatementValue(ptr unsafe.Pointer) any
+	SetValue(ptr unsafe.Pointer, v any) any
+	GetType() *colType
+	GetName() string
+	GetInfo() *colInfo
+	IsNil() bool
 }
 
 var indexTypes = map[int8]string{
@@ -83,8 +130,8 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	dbTable := ScyllaTable[any]{
 		keyspace:      schema.Keyspace,
 		name:          schema.Name,
-		columnsMap:    map[string]*columnInfo{},
-		columnsIdxMap: map[int16]*columnInfo{},
+		columnsMap:    map[string]IColInfo{},
+		columnsIdxMap: map[int16]IColInfo{},
 		indexes:       map[string]*viewInfo{},
 		views:         map[string]*viewInfo{},
 		_maxColIdx:    int16(structRefValue.NumField()) + 1,
@@ -123,140 +170,51 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		column := new(columnInfo)
 		*column = colInterface.GetInfo()
 
-		fieldMappingFunc := fieldMapping[makeMappingKey(column)]
-		if fieldMappingFunc != nil {
-			f := column.Field
-			column.setValue = func(ptr unsafe.Pointer, v any) {
-				fieldMappingFunc(f, ptr, v)
-			}
-		}
-
-		if column.setValue == nil {
-			fmt.Println("Unrecognized type for column:", column.FieldName, "|", column.FieldType)
-		}
-
 		if DebugFull {
 			offset := uintptr(0)
-			if column.Field != nil {
-				offset = column.Field.Offset
+			if column.GetInfo().Field != nil {
+				offset = column.GetInfo().Field.Offset
 			}
-			fmt.Printf("Mapped Table Column: %-20s | Field: %-20s | Type: %-10s | Offset: %d\n", column.Name, column.FieldName, column.FieldType, offset)
+			fmt.Printf("Mapped Table Column: %-20s | Field: %-20s | Type: %-10s | Offset: %d\n", column.GetName(), column.GetInfo().FieldName, column.FieldType, offset)
 		}
 
 		// Seteando "getStatementValue" (para los batchs)
-		column.Type = scyllaFieldToColumnTypesMap[column.FieldType]
-		if sequenceColumn == column.Name {
-			column.Type = "counter"
-		} else if column.Type == "" {
-			column.IsComplexType = true
-			column.IsSlice = false
-			column.Type = "blob"
-		} else if column.IsSlice {
-			column.Type = fmt.Sprintf("set<%v>", column.Type)
+		colType := GetColTypeByName(column.FieldType, "")
+		column.ColType = colType.ColType
+		column.Type = colType.Type
+
+		if sequenceColumn == column.GetName() {
+			column.ColType = "counter"
+		} else if column.ColType == "" {
+			column.GetType().IsComplexType = true
+			column.Type = 9
+			column.GetType().IsSlice = false
+			column.ColType = "blob"
+		} else if column.GetType().IsSlice && column.ColType[0:3] != "set" {
+			column.ColType = fmt.Sprintf("set<%v>", column.ColType)
 		}
 
-		if column.IsPointer {
-			f := column.Field
-			column.getStatementValue = func(ptr unsafe.Pointer) any {
-				if f.Addr(ptr) == nil || f.IsNil(ptr) {
-					return nil
-				}
-				return f.Interface(ptr)
-			}
-		} else if column.IsComplexType {
-			f := column.Field
-			fName := column.FieldName
-			column.getStatementValue = func(ptr unsafe.Pointer) any {
-				fieldValue := f.Interface(ptr)
-				recordBytes, err := cbor.Marshal(fieldValue)
-				if err != nil {
-					fmt.Println("Error al encodeding .cbor:: ", fName, err)
-					return ""
-				}
-				return recordBytes
-			}
+		if _, ok := dbTable.columnsMap[column.GetName()]; ok {
+			panic("The following column name is repeated:" + column.GetName())
 		} else {
-			f := column.Field
-			column.getStatementValue = func(ptr unsafe.Pointer) any {
-				return f.Interface(ptr)
-			}
-		}
-
-		// Seteando "getValue"
-		if column.IsSlice && column.FieldType == "string" {
-			f := column.Field
-			column.getValue = func(ptr unsafe.Pointer) any {
-				fieldValue := f.Interface(ptr)
-				if values, ok := fieldValue.([]string); ok {
-					strValues := []string{}
-					for _, v := range values {
-						strValues = append(strValues, `'`+v+`'`)
-					}
-					return "{" + strings.Join(strValues, ",") + "}"
-				} else {
-					panic("It must be string but was not.")
-				}
-			}
-		} else if column.IsSlice {
-			f := column.Field
-			column.getValue = func(ptr unsafe.Pointer) any {
-				// reflectToSlice needs to be updated or replaced
-				concatenatedValues := Concatx(",", reflectToSlicePtr(f, ptr))
-				return "{" + concatenatedValues + "}"
-			}
-		} else if column.IsPointer {
-			f := column.Field
-			column.getValue = func(ptr unsafe.Pointer) any {
-				if f.IsNil(ptr) {
-					return nil
-				}
-				return f.Interface(ptr)
-			}
-		} else if column.IsComplexType {
-			f := column.Field
-			fName := column.FieldName
-			column.getValue = func(ptr unsafe.Pointer) any {
-				fieldValue := f.Interface(ptr)
-				recordBytes, err := cbor.Marshal(fieldValue)
-				if err != nil {
-					fmt.Println("Error al encodeding .cbor:: ", fName, err)
-					return ""
-				}
-				hexString := hex.EncodeToString(recordBytes)
-				return "0x" + hexString
-			}
-		} else if column.FieldType == "string" {
-			f := column.Field
-			column.getValue = func(ptr unsafe.Pointer) any {
-				fieldValue := f.Interface(ptr)
-				return any(fmt.Sprintf("'%v'", fieldValue))
-			}
-		} else {
-			f := column.Field
-			column.getValue = func(ptr unsafe.Pointer) any {
-				return f.Interface(ptr)
-			}
-		}
-
-		if _, ok := dbTable.columnsMap[column.Name]; ok {
-			panic("The following column name is repeated:" + column.Name)
-		} else {
-			column.Idx = int16(column.FieldIdx) + 1
-			dbTable.columnsMap[column.Name] = column
+			column.GetInfo().Idx = int16(column.GetInfo().FieldIdx) + 1
+			dbTable.columnsMap[column.GetName()] = column
 			if DebugFull {
-				fmt.Printf("Mapped Col: %s, Field: %s, Offset: %d\n", column.Name, column.FieldName, column.Field.Offset)
+				fmt.Printf("Mapped Col: %s, Field: %s, Offset: %d\n", column.GetName(), column.GetInfo().FieldName, column.GetInfo().Field.Offset)
 			}
 		}
 	}
 	if schema.Partition != nil {
 		dbTable.partKey = dbTable.columnsMap[schema.Partition.GetInfo().Name]
-		dbTable.keysIdx = append(dbTable.keysIdx, dbTable.partKey.Idx)
+		if dbTable.partKey != nil && !dbTable.partKey.IsNil() {
+			dbTable.keysIdx = append(dbTable.keysIdx, dbTable.partKey.GetInfo().Idx)
+		}
 	}
 
 	for _, key := range schema.Keys {
 		col := dbTable.columnsMap[key.GetInfo().Name]
 		dbTable.keys = append(dbTable.keys, col)
-		dbTable.keysIdx = append(dbTable.keysIdx, col.Idx)
+		dbTable.keysIdx = append(dbTable.keysIdx, col.GetInfo().Idx)
 	}
 
 	idxCount := int8(1)
@@ -264,10 +222,10 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		colInfo := dbTable.columnsMap[column.GetInfo().Name]
 		index := &viewInfo{
 			Type:    1,
-			name:    fmt.Sprintf(`%v__%v_index_0`, dbTable.name, colInfo.Name),
+			name:    fmt.Sprintf(`%v__%v_index_0`, dbTable.name, colInfo.GetName()),
 			idx:     idxCount,
 			column:  colInfo,
-			columns: []string{colInfo.Name},
+			columns: []string{colInfo.GetName()},
 		}
 		c := column
 		index.getCreateScript = func() string {
@@ -287,10 +245,10 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		colInfo := column.GetInfo()
 		index := &viewInfo{
 			Type:    2,
-			name:    fmt.Sprintf(`%v__%v_index_1`, dbTable.name, colInfo.Name),
+			name:    fmt.Sprintf(`%v__%v_index_1`, dbTable.name, colInfo.GetName()),
 			idx:     idxCount,
-			column:  dbTable.columnsMap[colInfo.Name],
-			columns: []string{dbTable.partKey.Name, colInfo.Name},
+			column:  dbTable.columnsMap[colInfo.GetName()],
+			columns: []string{dbTable.GetPartKey().GetName(), colInfo.GetName()},
 		}
 		index.getCreateScript = func() string {
 			return fmt.Sprintf(`CREATE INDEX %v ON %v ((%v),%v)`,
@@ -302,39 +260,44 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	}
 
 	for _, indexColumns := range schema.HashIndexes {
-		columns := []*columnInfo{}
+		columns := []IColInfo{}
 		names := []string{}
-		columnsNormal := []*columnInfo{}
-		var columnSlice *columnInfo
+		columnsNormal := []IColInfo{}
+		var columnSlice IColInfo
 
 		for _, colInfo := range indexColumns {
 			column := dbTable.columnsMap[colInfo.GetInfo().Name]
-			if column.IsComplexType {
+			if column.GetType().IsComplexType {
 				panic("No puede ser un struct como columna de una view")
 			}
-			if column.IsSlice {
+			if column.GetType().IsSlice {
 				if columnSlice != nil {
-					panic(fmt.Sprintf(`Table "%v". Can't create view with slice columns "%v" and "%v"`, dbTable.name, columnSlice.Name, column.Name))
+					panic(fmt.Sprintf(`Table "%v". Can't create view with slice columns "%v" and "%v"`, dbTable.name, columnSlice.GetName(), column.GetName()))
 				}
 				columnSlice = column
 			} else {
 				columnsNormal = append(columnsNormal, column)
 			}
-			names = append(names, column.Name)
+			names = append(names, column.GetName())
 			columns = append(columns, column)
 		}
 
 		colnames := strings.Join(names, "_")
 		column := &columnInfo{
-			Name:      fmt.Sprintf(`zz_%v`, colnames),
-			FieldType: "int32",
-			Type:      "int",
-			IsVirtual: true,
-			Idx:       dbTable._maxColIdx,
+			colInfo: colInfo{
+				IsVirtual: true,
+				Idx:       dbTable._maxColIdx,
+			},
+			colType: colType{
+				FieldType: "int32",
+				ColType:   "int",
+			},
 		}
 
+		column.GetInfo().Name = fmt.Sprintf(`zz_%v`, colnames)
+
 		dbTable._maxColIdx++
-		dbTable.columnsMap[column.Name] = column
+		dbTable.columnsMap[column.GetName()] = column
 
 		index := &viewInfo{
 			Type:    3,
@@ -345,9 +308,9 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		}
 
 		if columnSlice != nil {
-			column.FieldType = "[]int32"
-			column.Type = "set<int>"
-			column.IsSlice = true
+			column.GetType().FieldType = "[]int32"
+			column.GetType().ColType = "set<int>"
+			column.GetType().IsSlice = true
 			index.Type = 4
 
 			colNormal := columnsNormal
@@ -355,15 +318,16 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			column.getValue = func(ptr unsafe.Pointer) any {
 				values := []any{}
 				for _, col := range colNormal {
-					values = append(values, col.getValue(ptr))
+					values = append(values, col.GetValue(ptr))
 				}
 				hashValues := []int32{}
 				hashValues = append(hashValues, HashInt(values...))
 
-				if colSlice.IsPointer && colSlice.Field.IsNil(ptr) {
+				colSliceInfo := colSlice.GetInfo()
+				if column.GetType().IsPointer && colSliceInfo.Field.IsNil(ptr) {
 					// Skip if nil pointer
 				} else {
-					fieldValue := colSlice.Field.Interface(ptr)
+					fieldValue := colSliceInfo.Field.Interface(ptr)
 					for _, vl := range reflectToSliceValue(fieldValue) {
 						hashValues = append(hashValues, HashInt(vl))
 						hashValues = append(hashValues, HashInt(append(values, vl)...))
@@ -372,7 +336,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				return "{" + Concatx(",", hashValues) + "}"
 			}
 
-			colName := column.Name
+			colName := column.GetName()
 			index.getStatement = func(statements ...ColumnStatement) []string {
 				values := []any{}
 				for _, st := range statements {
@@ -386,7 +350,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			column.getValue = func(ptr unsafe.Pointer) any {
 				values := []any{}
 				for _, e := range cols {
-					values = append(values, e.getValue(ptr))
+					values = append(values, e.GetValue(ptr))
 				}
 				return HashInt(values...)
 			}
@@ -394,7 +358,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 		index.getCreateScript = func() string {
 			return fmt.Sprintf(`CREATE INDEX %v ON %v (%v)`,
-				index.name, dbTable.GetFullName(), index.column.Name)
+				index.name, dbTable.GetFullName(), index.column.GetName())
 		}
 
 		idxCount++
@@ -405,7 +369,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	for _, viewConfig := range schema.Views {
 		viewCfg := viewConfig
 		colNames := []string{}
-		columns := []*columnInfo{} // No incluye la particion
+		columns := []IColInfo{} // No incluye la particion
 		isRangeView := len(viewCfg.ConcatI64) > 0 || len(viewCfg.ConcatI32) > 0
 		if isRangeView {
 			viewCfg.KeepPart = true
@@ -413,26 +377,27 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 		for _, colInfo := range viewCfg.Cols {
 			column := dbTable.columnsMap[colInfo.GetInfo().Name]
-			if column.IsComplexType {
+			if column.GetType().IsComplexType {
 				panic("No puede usar un struct como columna de una view.")
 			}
-			if column.IsSlice {
+			if column.GetType().IsSlice {
 				panic("No puede usar un slice como columna de una view. Intente con un índice global.")
 			}
-			colNames = append(colNames, column.Name)
+			colNames = append(colNames, column.GetName())
 			columns = append(columns, column)
 		}
 
 		colNamesNoPart := colNames
 
 		colNamesJoined := strings.Join(colNames, "_")
-		if dbTable.partKey != nil {
-			colNames = append([]string{dbTable.partKey.Name}, colNames...)
+		pk := dbTable.GetPartKey()
+		if pk != nil && !pk.IsNil() {
+			colNames = append([]string{pk.GetName()}, colNames...)
 			if viewCfg.KeepPart {
 				colNamesJoined = "pk_" + colNamesJoined
 			} else {
-				colNamesJoined = dbTable.partKey.Name + "_" + colNamesJoined
-				columns = append([]*columnInfo{dbTable.partKey}, columns...)
+				colNamesJoined = pk.GetName() + "_" + colNamesJoined
+				columns = append([]IColInfo{pk}, columns...)
 			}
 		}
 		if isRangeView {
@@ -447,17 +412,22 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		}
 
 		for _, e := range columns {
-			fmt.Println("view:", view.name, "| ", e.Name)
+			fmt.Println("view:", view.name, "| ", e.GetName())
 		}
 
 		if len(columns) > 1 {
 			view.column = &columnInfo{
-				Name: fmt.Sprintf(`zz_%v`, colNamesJoined), IsVirtual: true,
-				FieldType: "int32", Type: "int",
-				Idx: dbTable._maxColIdx,
+				colInfo: colInfo{
+					IsVirtual: true,
+					Idx:       dbTable._maxColIdx,
+				},
+				colType: colType{
+					FieldType: "int32", ColType: "int",
+				},
 			}
+			view.column.GetInfo().Name = fmt.Sprintf(`zz_%v`, colNamesJoined)
 			dbTable._maxColIdx++
-			dbTable.columnsMap[view.column.Name] = view.column
+			dbTable.columnsMap[view.column.GetName()] = view.column
 		}
 
 		// Si sólo es una columna, no es necesario autogenerar
@@ -466,8 +436,8 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		} else if isRangeView {
 			isInt64 := len(viewCfg.ConcatI64) > 0
 			if isInt64 {
-				view.column.FieldType = "int64"
-				view.column.Type = "bigint"
+				view.column.GetType().FieldType = "int64"
+				view.column.GetType().ColType = "bigint"
 			}
 			view.Type = 8
 
@@ -503,9 +473,9 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			supportedTypes := []string{"int8", "int16", "int32", "int64", "int"}
 
 			for _, col := range columns {
-				if col.IsSlice || !slices.Contains(supportedTypes, col.FieldType) {
+				if col.GetType().IsSlice || !slices.Contains(supportedTypes, col.GetType().FieldType) {
 					panic(fmt.Sprintf(`For view "%v" in "%v" need the column %v need to be a int type for the radix value be computed.`,
-						view.name, dbTable.name, col.Name))
+						view.name, dbTable.name, col.GetName()))
 				}
 			}
 
@@ -520,10 +490,10 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 			viewCols := columns
 			isI64 := isInt64
-			view.column.getValue = func(ptr unsafe.Pointer) any {
+			view.column.(*columnInfo).getValue = func(ptr unsafe.Pointer) any {
 				values := []int64{}
 				for _, col := range viewCols {
-					values = append(values, convertToInt64(col.getValue(ptr)))
+					values = append(values, convertToInt64(col.GetValue(ptr)))
 				}
 				sumValue := makeValue(values)
 				// fmt.Printf("Radix Sum Calculado %v | %v | %v\n", sumValue, values, radixesI64)
@@ -565,32 +535,36 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				var partStatement *ColumnStatement
 
 				if viewCfgPtr.KeepPart {
-					partStatement = statementsMap[dbTable.partKey.Name].from
+					pk := dbTable.GetPartKey()
+					if pk == nil || pk.IsNil() {
+						panic(fmt.Sprintf(`The partition for table "%v" wasn't found.`, dbTable.name))
+					}
+					partStatement = statementsMap[pk.GetName()].from
 					if partStatement == nil {
-						panic(fmt.Sprintf(`The partition "%v" for table "%v" wasn't found.`, dbTable.partKey.Name, dbTable.name))
+						panic(fmt.Sprintf(`The partition "%v" for table "%v" wasn't found.`, pk.GetName(), dbTable.name))
 					}
 				}
 
 				for _, col := range viewCols {
-					if _, ok := statementsMap[col.Name]; !ok {
-						statementsMap[col.Name] = statementRangeGroup{
+					if _, ok := statementsMap[col.GetName()]; !ok {
+						statementsMap[col.GetName()] = statementRangeGroup{
 							from: &ColumnStatement{Value: int64(0)},
 						}
 					}
 				}
 
-				getValuesGroups := func() (valuesGroups [][]int64, rangeColumns []*columnInfo) {
+				getValuesGroups := func() (valuesGroups [][]int64, rangeColumns []IColInfo) {
 					for _, col := range viewCols {
-						// fmt.Println("iterando columna::", col.Name)
-						st := statementsMap[col.Name].from
+						// fmt.Println("iterando columna::", col.GetName())
+						st := statementsMap[col.GetName()].from
 						if len(rangeColumns) > 0 || slices.Contains(rangeOperators, st.Operator) {
 							rangeColumns = append(rangeColumns, col)
-							// fmt.Println("continue here::", col.Name)
+							// fmt.Println("continue here::", col.GetName())
 							continue
 						}
 
 						if st == nil {
-							// fmt.Println("iterando columna 1::", col.Name)
+							// fmt.Println("iterando columna 1::", col.GetName())
 							for i := range valuesGroups {
 								valuesGroups[i] = append(valuesGroups[i], 0)
 							}
@@ -600,7 +574,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 								statementValues = append(statementValues, st.Value)
 							}
 
-							// fmt.Println("iterando columna 2::", col.Name, statementValues)
+							// fmt.Println("iterando columna 2::", col.GetName(), statementValues)
 
 							if len(valuesGroups) > 0 {
 								valuesGroupsCurrent := valuesGroups
@@ -625,7 +599,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 					valuesFrom, valuesTo := []int64{}, []int64{}
 
 					for _, col := range viewCols {
-						srg := statementsMap[col.Name]
+						srg := statementsMap[col.GetName()]
 						valuesFrom = append(valuesFrom, convertToInt64(srg.from.Value))
 						if srg.betweenTo != nil {
 							valuesTo = append(valuesTo, convertToInt64(srg.betweenTo.Value))
@@ -635,12 +609,15 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 					}
 
 					whereSt := fmt.Sprintf("%v >= %v AND %v < %v",
-						viewPtr.column.Name, makeValue(valuesFrom),
-						viewPtr.column.Name, makeValue(valuesTo),
+						viewPtr.column.GetName(), makeValue(valuesFrom),
+						viewPtr.column.GetName(), makeValue(valuesTo),
 					)
 					if partStatement != nil {
-						whereSt = fmt.Sprintf("%v = %v AND % v",
-							dbTable.partKey.Name, convertToInt64(partStatement.Value), whereSt)
+						pk := dbTable.GetPartKey()
+						if pk != nil && !pk.IsNil() {
+							whereSt = fmt.Sprintf("%v = %v AND %v",
+								pk.GetName(), convertToInt64(partStatement.Value), whereSt)
+						}
 					}
 
 					fmt.Println("Is useBeetween::", whereSt)
@@ -656,14 +633,14 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 						valuesTo[idxEnd]++
 
 						for _, col := range rangeColumns {
-							st := statementsMap[col.Name]
+							st := statementsMap[col.GetName()]
 							valuesFrom = append(valuesFrom, convertToInt64(st.from.Value))
 							valuesTo = append(valuesTo, 0)
 						}
 
 						whereStatement := fmt.Sprintf("%v >= %v AND %v < %v",
-							viewPtr.column.Name, makeValue(valuesFrom),
-							viewPtr.column.Name, makeValue(valuesTo),
+							viewPtr.column.GetName(), makeValue(valuesFrom),
+							viewPtr.column.GetName(), makeValue(valuesTo),
 						)
 						whereStatements = append(whereStatements, whereStatement)
 					}
@@ -676,14 +653,17 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 						hashValues = append(hashValues, makeValue(values))
 					}
 					whereStatements = append(whereStatements,
-						fmt.Sprintf("%v IN (%v)", viewPtr.column.Name, Concatx(", ", hashValues)),
+						fmt.Sprintf("%v IN (%v)", viewPtr.column.GetName(), Concatx(", ", hashValues)),
 					)
 				}
 
 				if partStatement != nil {
-					for i, ws := range whereStatements {
-						whereStatements[i] = fmt.Sprintf("%v = %v AND % v",
-							dbTable.partKey.Name, convertToInt64(partStatement.Value), ws)
+					pk := dbTable.GetPartKey()
+					if pk != nil && !pk.IsNil() {
+						for i, ws := range whereStatements {
+							whereStatements[i] = fmt.Sprintf("%v = %v AND %v",
+								pk.GetName(), convertToInt64(partStatement.Value), ws)
+						}
 					}
 				}
 
@@ -697,11 +677,11 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			view.Operators = []string{"=", "IN"}
 			view.Type = 7
 			// Sino crea un hash de las columnas
-			view.column.getValue = func(ptr unsafe.Pointer) any {
+			view.column.(*columnInfo).getValue = func(ptr unsafe.Pointer) any {
 				values := []any{}
 				// Si una de las columnas es un slice puede iterar por el slice para obtener los values y gurdarla en una columa Set<any>
 				for _, e := range viewCols {
-					values = append(values, e.getValue(ptr))
+					values = append(values, e.GetValue(ptr))
 				}
 				return HashInt(values...)
 			}
@@ -716,7 +696,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				// Si una de las columnas es un slice puede iterar por el slice para obtener los values y gurdarla en una columa Set<any>
 				for _, e := range viewCols {
 					for _, st := range statements {
-						if st.Col == e.Name {
+						if st.Col == e.GetName() {
 							if len(st.Values) >= 2 {
 								valuesGroupsCurrent := valuesGroups
 								valuesGroups = [][]any{}
@@ -744,16 +724,19 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				}
 
 				if len(hashValues) == 1 {
-					statement = fmt.Sprintf("%v = %v", viewPtr.column.Name, hashValues[0])
+					statement = fmt.Sprintf("%v = %v", viewPtr.column.GetName(), hashValues[0])
 				} else {
 					values := strings.Join(hashValues, ", ")
-					statement = fmt.Sprintf("%v IN (%v)", viewPtr.column.Name, values)
+					statement = fmt.Sprintf("%v IN (%v)", viewPtr.column.GetName(), values)
 				}
 
 				if viewCfgPtr.KeepPart {
-					for _, st := range statements {
-						if st.Col == dbTable.partKey.Name {
-							statement = fmt.Sprintf("%v = %v AND ", st.Col, st.Value) + statement
+					pk := dbTable.GetPartKey()
+					if pk != nil && !pk.IsNil() {
+						for _, st := range statements {
+							if st.Col == pk.GetName() {
+								statement = fmt.Sprintf("%v = %v AND ", st.Col, st.Value) + statement
+							}
 						}
 					}
 				}
@@ -763,43 +746,44 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 		viewPtr := view
 		view.getCreateScript = func() string {
-			whereCols := append([]*columnInfo{viewPtr.column}, dbTable.keys...)
-			var wherePartCol *columnInfo
+			whereCols := append([]IColInfo{viewPtr.column}, dbTable.keys...)
+			var wherePartCol IColInfo
 
-			if dbTable.partKey != nil {
+			pk_ := dbTable.GetPartKey()
+			if pk_ != nil && !pk_.IsNil() {
 				if viewCfg.KeepPart {
-					wherePartCol = dbTable.partKey
+					wherePartCol = pk_
 				} else {
-					whereCols = append([]*columnInfo{viewPtr.column, dbTable.partKey}, dbTable.keys...)
+					whereCols = append([]IColInfo{viewPtr.column, pk_}, dbTable.keys...)
 				}
 			}
 
 			keyNames := []string{}
 			for _, col := range whereCols {
-				keyNames = append(keyNames, col.Name)
+				keyNames = append(keyNames, col.GetName())
 			}
 
 			pk := strings.Join(keyNames, ",")
 			if wherePartCol != nil {
-				pk = fmt.Sprintf("(%v), %v", wherePartCol.Name, pk)
+				pk = fmt.Sprintf("(%v), %v", wherePartCol.GetName(), pk)
 			}
 
 			whereColumnsNotNull := []string{}
 			for _, col := range whereCols {
-				if col.Type == "text" {
-					whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" > ''")
+				if col.GetType().ColType == "text" {
+					whereColumnsNotNull = append(whereColumnsNotNull, col.GetName()+" > ''")
 					/*} else if col.IsSlice {
 					whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" IS NOT NULL")
 					*/
 				} else {
-					whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" > 0")
+					whereColumnsNotNull = append(whereColumnsNotNull, col.GetName()+" > 0")
 				}
 			}
 
 			colNames := []string{}
 			for _, col := range dbTable.columns {
-				if !col.IsVirtual || col.Name == viewPtr.column.Name {
-					colNames = append(colNames, col.Name)
+				if !col.GetInfo().IsVirtual || col.GetName() == viewPtr.column.GetName() {
+					colNames = append(colNames, col.GetName())
 				}
 			}
 
@@ -818,7 +802,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 	for _, col := range dbTable.columnsMap {
 		dbTable.columns = append(dbTable.columns, col)
-		dbTable.columnsIdxMap[col.Idx] = col
+		dbTable.columnsIdxMap[col.GetInfo().Idx] = col
 	}
 
 	for _, e := range dbTable.indexes {
@@ -831,7 +815,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	for _, idxview := range dbTable.indexViews {
 		for _, colname := range idxview.columns {
 			col := dbTable.columnsMap[colname]
-			idxview.columnsIdx = append(idxview.columnsIdx, col.Idx)
+			idxview.columnsIdx = append(idxview.columnsIdx, col.GetInfo().Idx)
 		}
 	}
 

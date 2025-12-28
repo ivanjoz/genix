@@ -880,6 +880,30 @@ func IntToBase64(num int64, urlEncode ...bool) string {
 	return base64String
 }
 
+func Int64ToBase64Bytes(n int64) []byte {
+	// Handle 0 specifically
+	if n == 0 {
+		return []byte{base64Chars[0]}
+	}
+
+	// Max length of an int64 in base64 is 11 characters
+	var buf [11]byte
+	i := 11
+
+	// Work backwards from the end of the buffer
+	for n > 0 {
+		i--
+		buf[i] = base64Chars[n%64]
+		n /= 64
+	}
+
+	// Return only the occupied part of the buffer
+	// We create a copy to avoid the buffer escaping to heap if needed
+	result := make([]byte, 11-i)
+	copy(result, buf[i:])
+	return result
+}
+
 func Base64ToInt(base64Custom string, isUrlEncoded ...bool) int64 {
 	isNegative := false
 

@@ -35,16 +35,16 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 	columnNames := []string{}
 	if len(tableInfo.columnsInclude) > 0 {
 		for _, col := range tableInfo.columnsInclude {
-			columnNames = append(columnNames, col.Name)
+			columnNames = append(columnNames, col.GetName())
 		}
 	} else {
 		columnsExclude := []string{}
 		for _, col := range tableInfo.columnsExclude {
-			columnsExclude = append(columnsExclude, col.Name)
+			columnsExclude = append(columnsExclude, col.GetName())
 		}
 		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columnsExclude, col.Name) && !col.IsVirtual {
-				columnNames = append(columnNames, col.Name)
+			if !slices.Contains(columnsExclude, col.GetName()) && !col.GetInfo().IsVirtual {
+				columnNames = append(columnNames, col.GetName())
 			}
 		}
 	}
@@ -59,11 +59,11 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 
 	for _, st := range tableInfo.statements {
 		col := scyllaTable.columnsMap[st.Col]
-		if !slices.Contains(scyllaTable.keysIdx, col.Idx) {
+		if !slices.Contains(scyllaTable.keysIdx, col.GetInfo().Idx) {
 			allAreKeys = false
 		}
 
-		colsWhereIdx = append(colsWhereIdx, col.Idx)
+		colsWhereIdx = append(colsWhereIdx, col.GetInfo().Idx)
 		statements = append(statements, st)
 		if isHash && !slices.Contains(hashOperators, st.Operator) {
 			isHash = false
@@ -75,8 +75,8 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 		statements = append(statements, tableInfo.between)
 		for _, st := range tableInfo.between.From {
 			col := scyllaTable.columnsMap[st.Col]
-			colsWhereIdx = append(colsWhereIdx, col.Idx)
-			if !slices.Contains(scyllaTable.keysIdx, col.Idx) {
+			colsWhereIdx = append(colsWhereIdx, col.GetInfo().Idx)
+			if !slices.Contains(scyllaTable.keysIdx, col.GetInfo().Idx) {
 				allAreKeys = false
 			}
 		}
@@ -221,7 +221,7 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 			whereStatement = " WHERE " + whereStatement
 		}
 		if len(tableInfo.orderBy) > 0 {
-			whereStatement += " " + fmt.Sprintf(tableInfo.orderBy, orderColumn.Name)
+			whereStatement += " " + fmt.Sprintf(tableInfo.orderBy, orderColumn.GetName())
 		}
 		if tableInfo.limit > 0 {
 			whereStatement += fmt.Sprintf(" LIMIT %v", tableInfo.limit)
@@ -251,7 +251,7 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 					for _, e := range posibleViewsOrIndexes {
 						typeName := indexTypes[e.indexView.Type]
 						colnames := strings.Join(e.indexView.columns, ", ")
-						msg := fmt.Sprintf("%v (%v) %v", typeName, e.indexView.column.Type, colnames)
+						msg := fmt.Sprintf("%v (%v) %v", typeName, e.indexView.column.GetType().ColType, colnames)
 						fmt.Println(msg)
 					}
 				}
@@ -267,8 +267,7 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 
 				rowValues := rd.Values
 
-				err := scanner.Scan(rowValues...)
-				if err != nil {
+				if err := scanner.Scan(rowValues...); err != nil {
 					fmt.Println("Error on scan::", err)
 					return err
 				}
@@ -291,22 +290,22 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 							valStr = fmt.Sprintf("%v", reflect.Indirect(reflect.ValueOf(value)).Interface())
 						}
 						offset := uintptr(0)
-						if column.Field != nil {
-							offset = column.Field.Offset
+						if column.GetInfo().Field != nil {
+							offset = column.GetInfo().Field.Offset
 						}
-						fmt.Printf("Col: %-20s (Field: %-20s) | Offset: %-4d | DB Value: %s\n", colname, column.FieldName, offset, valStr)
+						fmt.Printf("Col: %-20s (Field: %-20s) | Offset: %-4d | DB Value: %s\n", colname, column.GetInfo().FieldName, offset, valStr)
 					}
 
 					if value == nil {
 						continue
 					}
-					if column.setValue != nil {
-						if shouldLog {
-							fmt.Printf("Calling setValue for Col: %s\n", colname)
-						}
-						column.setValue(ptr, value)
-						// Revisa si necesita parsearse un string a un struct como JSON
-					} else if column.IsComplexType {
+					if shouldLog {
+						fmt.Printf("Calling SetValue for Col: %s\n", colname)
+					}
+					column.SetValue(ptr, value)
+
+					// Revisa si necesita parsearse un string a un struct como JSON
+					if column.GetType().IsComplexType {
 						if shouldLog {
 							fmt.Printf("Handling ComplexType for Col: %s\n", colname)
 						}
@@ -319,18 +318,16 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 						}
 
 						if len(vl) > 3 {
-							newElm := reflect.New(column.RefType).Elem()
+							newElm := reflect.New(column.GetInfo().RefType).Elem()
 							err = cbor.Unmarshal(vl, newElm.Addr().Interface())
 							if err != nil {
 								fmt.Println("Error al convertir: ", newElm, "|", err.Error())
 							}
 							// fmt.Println("col complex:", column.Name, " | ", newElm, " | L:", len(*vl))
-							reflect.NewAt(column.RefType, column.Field.Pointer(ptr)).Elem().Set(newElm)
+							reflect.NewAt(column.GetInfo().RefType, column.GetInfo().Field.Pointer(ptr)).Elem().Set(newElm)
 						} else if !shouldLog {
-							fmt.Printf("Complex Type could not be parsed or empty: %s (Type: %T)\n", column.Name, value)
+							fmt.Printf("Complex Type could not be parsed or empty: %s (Type: %T)\n", column.GetName(), value)
 						}
-					} else {
-						fmt.Print("Column is not mapped:: ", column.Name)
 					}
 				}
 
