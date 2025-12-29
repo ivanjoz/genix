@@ -1,6 +1,6 @@
 package types
 
-import "app/db2"
+import "app/db"
 
 type ProductoImagen struct {
 	Name        string `ms:"n" json:"n" cbor:"n"`
@@ -23,7 +23,7 @@ type ProductoPesentacion struct {
 }
 
 type Producto struct {
-	db2.TableStruct[ProductoTable, Producto]
+	db.TableStruct[ProductoTable, Producto]
 	EmpresaID      int32   `json:",omitempty" db:"empresa_id,pk"`
 	ID             int32   `db:"id,pk"`
 	TempID         int32   `json:"-" db:"-"`
@@ -63,39 +63,39 @@ type Producto struct {
 }
 
 type ProductoTable struct {
-	db2.TableStruct[ProductoTable, Producto]
-	EmpresaID          db2.Col[ProductoTable, int32]
-	ID                 db2.Col[ProductoTable, int32]
-	Nombre             db2.Col[ProductoTable, string]
-	Descripcion        db2.Col[ProductoTable, string]
-	ContentHTML        db2.Col[ProductoTable, string]
-	CategoriasIDs      db2.ColSlice[ProductoTable, int32] `db:"categorias_ids"`
-	MarcaID            db2.Col[ProductoTable, int32]
-	Params             db2.ColSlice[ProductoTable, int8] `db:"params_ids"`
-	Precio             db2.Col[ProductoTable, int32]
-	MonedaID           db2.Col[ProductoTable, int16]
-	UnidadID           db2.Col[ProductoTable, int16]
-	Descuento          db2.Col[ProductoTable, float32]
-	PrecioFinal        db2.Col[ProductoTable, int32]
-	Peso               db2.Col[ProductoTable, float32]
-	Volumen            db2.Col[ProductoTable, float32]
-	SbnCantidad        db2.Col[ProductoTable, int32]
-	SbnUnidad          db2.Col[ProductoTable, string]
-	SbnPrecio          db2.Col[ProductoTable, int32]
-	SbnDescuento       db2.Col[ProductoTable, float32]
-	SbnPrecioFinal     db2.Col[ProductoTable, int32]
-	Propiedades        db2.Col[ProductoTable, []ProductoPropiedades]
-	Presentaciones     db2.Col[ProductoTable, []ProductoPesentacion]
-	Images             db2.Col[ProductoTable, []ProductoImagen]
-	Stock              db2.Col[ProductoTable, []AlmacenStockMin]
-	StockReservado     db2.Col[ProductoTable, []AlmacenStockMin]
-	StockStatus        db2.Col[ProductoTable, int8]
-	Status             db2.Col[ProductoTable, int8]
-	Updated            db2.Col[ProductoTable, int64]
-	UpdatedBy          db2.Col[ProductoTable, int32]
-	Created            db2.Col[ProductoTable, int64]
-	CreatedBy          db2.Col[ProductoTable, int32]
-	CategoriasConStock db2.ColSlice[ProductoTable, int32]
+	db.TableStruct[ProductoTable, Producto]
+	EmpresaID          db.Col[ProductoTable, int32]
+	ID                 db.Col[ProductoTable, int32]
+	Nombre             db.Col[ProductoTable, string]
+	Descripcion        db.Col[ProductoTable, string]
+	ContentHTML        db.Col[ProductoTable, string]
+	CategoriasIDs      db.ColSlice[ProductoTable, int32] `db:"categorias_ids"`
+	MarcaID            db.Col[ProductoTable, int32]
+	Params             db.ColSlice[ProductoTable, int8] `db:"params_ids"`
+	Precio             db.Col[ProductoTable, int32]
+	MonedaID           db.Col[ProductoTable, int16]
+	UnidadID           db.Col[ProductoTable, int16]
+	Descuento          db.Col[ProductoTable, float32]
+	PrecioFinal        db.Col[ProductoTable, int32]
+	Peso               db.Col[ProductoTable, float32]
+	Volumen            db.Col[ProductoTable, float32]
+	SbnCantidad        db.Col[ProductoTable, int32]
+	SbnUnidad          db.Col[ProductoTable, string]
+	SbnPrecio          db.Col[ProductoTable, int32]
+	SbnDescuento       db.Col[ProductoTable, float32]
+	SbnPrecioFinal     db.Col[ProductoTable, int32]
+	Propiedades        db.Col[ProductoTable, []ProductoPropiedades]
+	Presentaciones     db.Col[ProductoTable, []ProductoPesentacion]
+	Images             db.Col[ProductoTable, []ProductoImagen]
+	Stock              db.Col[ProductoTable, []AlmacenStockMin]
+	StockReservado     db.Col[ProductoTable, []AlmacenStockMin]
+	StockStatus        db.Col[ProductoTable, int8]
+	Status             db.Col[ProductoTable, int8]
+	Updated            db.Col[ProductoTable, int64]
+	UpdatedBy          db.Col[ProductoTable, int32]
+	Created            db.Col[ProductoTable, int64]
+	CreatedBy          db.Col[ProductoTable, int32]
+	CategoriasConStock db.ColSlice[ProductoTable, int32]
 }
 
 func (e *Producto) FillCategoriasConStock() {
@@ -107,16 +107,16 @@ func (e *Producto) FillCategoriasConStock() {
 	}
 }
 
-func (e ProductoTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e ProductoTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:          "productos",
 		Partition:     e.EmpresaID,
-		Keys:          []db2.Coln{e.ID},
-		GlobalIndexes: []db2.Coln{e.CategoriasConStock},
-		Views: []db2.View{
-			{Cols: []db2.Coln{e.Status}, KeepPart: true},
-			{Cols: []db2.Coln{e.StockStatus}, KeepPart: true},
-			{Cols: []db2.Coln{e.Updated}, KeepPart: true},
+		Keys:          []db.Coln{e.ID},
+		GlobalIndexes: []db.Coln{e.CategoriasConStock},
+		Views: []db.View{
+			{Cols: []db.Coln{e.Status}, KeepPart: true},
+			{Cols: []db.Coln{e.StockStatus}, KeepPart: true},
+			{Cols: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
@@ -136,7 +136,7 @@ type ProductoPropiedades struct {
 }
 
 type Almacen struct {
-	db2.TableStruct[AlmacenTable, Almacen]
+	db.TableStruct[AlmacenTable, Almacen]
 	EmpresaID   int32           `db:"empresa_id,pk"`
 	ID          int32           `db:"id,pk"`
 	SedeID      int32           `db:"sede_id"`
@@ -152,29 +152,29 @@ type Almacen struct {
 }
 
 type AlmacenTable struct {
-	db2.TableStruct[AlmacenTable, Almacen]
-	EmpresaID   db2.Col[AlmacenTable, int32]
-	ID          db2.Col[AlmacenTable, int32]
-	SedeID      db2.Col[AlmacenTable, int32]
-	Nombre      db2.Col[AlmacenTable, string]
-	Descripcion db2.Col[AlmacenTable, string]
-	Layout      db2.Col[AlmacenTable, []AlmacenLayout]
-	Status      db2.Col[AlmacenTable, int8]
-	Updated     db2.Col[AlmacenTable, int64]
-	UpdatedBy   db2.Col[AlmacenTable, int32]
-	Created     db2.Col[AlmacenTable, int64]
-	CreatedBy   db2.Col[AlmacenTable, int32]
+	db.TableStruct[AlmacenTable, Almacen]
+	EmpresaID   db.Col[AlmacenTable, int32]
+	ID          db.Col[AlmacenTable, int32]
+	SedeID      db.Col[AlmacenTable, int32]
+	Nombre      db.Col[AlmacenTable, string]
+	Descripcion db.Col[AlmacenTable, string]
+	Layout      db.Col[AlmacenTable, []AlmacenLayout]
+	Status      db.Col[AlmacenTable, int8]
+	Updated     db.Col[AlmacenTable, int64]
+	UpdatedBy   db.Col[AlmacenTable, int32]
+	Created     db.Col[AlmacenTable, int64]
+	CreatedBy   db.Col[AlmacenTable, int32]
 }
 
-func (e AlmacenTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e AlmacenTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:         "almacenes",
 		Partition:    e.EmpresaID,
 		UseSequences: true,
-		Keys:         []db2.Coln{e.ID},
-		Views: []db2.View{
-			{Cols: []db2.Coln{e.Status}, KeepPart: true},
-			{Cols: []db2.Coln{e.Updated}, KeepPart: true},
+		Keys:         []db.Coln{e.ID},
+		Views: []db.View{
+			{Cols: []db.Coln{e.Status}, KeepPart: true},
+			{Cols: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
@@ -194,7 +194,7 @@ type AlmacenLayoutBloque struct {
 }
 
 type Sede struct {
-	db2.TableStruct[SedeTable, Sede]
+	db.TableStruct[SedeTable, Sede]
 	EmpresaID   int32  `db:"empresa_id,pk"`
 	ID          int32  `db:"id,pk"`
 	Nombre      string `db:"nombre"`
@@ -210,34 +210,34 @@ type Sede struct {
 }
 
 type SedeTable struct {
-	db2.TableStruct[SedeTable, Sede]
-	EmpresaID   db2.Col[SedeTable, int32]
-	ID          db2.Col[SedeTable, int32]
-	Nombre      db2.Col[SedeTable, string]
-	Descripcion db2.Col[SedeTable, string]
-	Direccion   db2.Col[SedeTable, string]
-	CiudadID    db2.Col[SedeTable, string] `db:"pais_ciudad_id"`
-	Status      db2.Col[SedeTable, int8]
-	Updated     db2.Col[SedeTable, int64]
-	UpdatedBy   db2.Col[SedeTable, int32]
-	Created     db2.Col[SedeTable, int64]
-	CreatedBy   db2.Col[SedeTable, int32]
+	db.TableStruct[SedeTable, Sede]
+	EmpresaID   db.Col[SedeTable, int32]
+	ID          db.Col[SedeTable, int32]
+	Nombre      db.Col[SedeTable, string]
+	Descripcion db.Col[SedeTable, string]
+	Direccion   db.Col[SedeTable, string]
+	CiudadID    db.Col[SedeTable, string] `db:"pais_ciudad_id"`
+	Status      db.Col[SedeTable, int8]
+	Updated     db.Col[SedeTable, int64]
+	UpdatedBy   db.Col[SedeTable, int32]
+	Created     db.Col[SedeTable, int64]
+	CreatedBy   db.Col[SedeTable, int32]
 }
 
-func (e SedeTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e SedeTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "sedes",
 		Partition: e.EmpresaID,
-		Keys:      []db2.Coln{e.ID},
-		Views: []db2.View{
-			{Cols: []db2.Coln{e.Status}, KeepPart: true},
-			{Cols: []db2.Coln{e.Updated}, KeepPart: true},
+		Keys:      []db.Coln{e.ID},
+		Views: []db.View{
+			{Cols: []db.Coln{e.Status}, KeepPart: true},
+			{Cols: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
 
 type AlmacenProducto struct {
-	db2.TableStruct[AlmacenProductoTable, AlmacenProducto]
+	db.TableStruct[AlmacenProductoTable, AlmacenProducto]
 	EmpresaID int32 `json:",omitempty" db:"empresa_id,pk"`
 	// [Almacen-ID] [status] [Producto-ID] [SKU] [Lote]
 	ID             string  `db:"id,pk"`
@@ -255,36 +255,36 @@ type AlmacenProducto struct {
 }
 
 type AlmacenProductoTable struct {
-	db2.TableStruct[AlmacenProductoTable, AlmacenProducto]
-	EmpresaID      db2.Col[AlmacenProductoTable, int32]
-	ID             db2.Col[AlmacenProductoTable, string]
-	SKU            db2.Col[AlmacenProductoTable, string]
-	Lote           db2.Col[AlmacenProductoTable, string]
-	AlmacenID      db2.Col[AlmacenProductoTable, int32]
-	ProductoID     db2.Col[AlmacenProductoTable, int32]
-	PresentacionID db2.Col[AlmacenProductoTable, int16]
-	Cantidad       db2.Col[AlmacenProductoTable, int32]
-	SubCantidad    db2.Col[AlmacenProductoTable, int32]
-	CostoUn        db2.Col[AlmacenProductoTable, float32]
-	Updated        db2.Col[AlmacenProductoTable, int32]
-	UpdatedBy      db2.Col[AlmacenProductoTable, int32]
-	Status         db2.Col[AlmacenProductoTable, int8]
+	db.TableStruct[AlmacenProductoTable, AlmacenProducto]
+	EmpresaID      db.Col[AlmacenProductoTable, int32]
+	ID             db.Col[AlmacenProductoTable, string]
+	SKU            db.Col[AlmacenProductoTable, string]
+	Lote           db.Col[AlmacenProductoTable, string]
+	AlmacenID      db.Col[AlmacenProductoTable, int32]
+	ProductoID     db.Col[AlmacenProductoTable, int32]
+	PresentacionID db.Col[AlmacenProductoTable, int16]
+	Cantidad       db.Col[AlmacenProductoTable, int32]
+	SubCantidad    db.Col[AlmacenProductoTable, int32]
+	CostoUn        db.Col[AlmacenProductoTable, float32]
+	Updated        db.Col[AlmacenProductoTable, int32]
+	UpdatedBy      db.Col[AlmacenProductoTable, int32]
+	Status         db.Col[AlmacenProductoTable, int8]
 }
 
-func (e AlmacenProductoTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e AlmacenProductoTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:         "almacen_producto",
 		Partition:    e.EmpresaID,
-		Keys:         []db2.Coln{e.ID},
-		LocalIndexes: []db2.Coln{e.SKU, e.Lote},
-		Views: []db2.View{
+		Keys:         []db.Coln{e.ID},
+		LocalIndexes: []db.Coln{e.SKU, e.Lote},
+		Views: []db.View{
 			{
-				Cols:      []db2.Coln{e.ProductoID, e.Status},
+				Cols:      []db.Coln{e.ProductoID, e.Status},
 				KeepPart:  true,
 				ConcatI32: []int8{1},
 			},
 			{
-				Cols:      []db2.Coln{e.AlmacenID, e.Status, e.Updated},
+				Cols:      []db.Coln{e.AlmacenID, e.Status, e.Updated},
 				KeepPart:  true,
 				ConcatI64: []int8{1, 9},
 			},
@@ -307,7 +307,7 @@ func (e *AlmacenProducto) GetView(view int8) any {
 */
 
 type AlmacenMovimiento struct {
-	db2.TableStruct[AlmacenMovimientoTable, AlmacenMovimiento]
+	db.TableStruct[AlmacenMovimientoTable, AlmacenMovimiento]
 	EmpresaID int32 `json:",omitempty" db:"empresa_id,pk"`
 	// [Almacen-ID] + [Created] + [Ramdom Number]
 	ID                 int64  `db:"id,pk"`
@@ -328,34 +328,34 @@ type AlmacenMovimiento struct {
 }
 
 type AlmacenMovimientoTable struct {
-	db2.TableStruct[AlmacenMovimientoTable, AlmacenMovimiento]
-	EmpresaID          db2.Col[AlmacenMovimientoTable, int32]
-	ID                 db2.Col[AlmacenMovimientoTable, int64]
-	SKU                db2.Col[AlmacenMovimientoTable, string]
-	Lote               db2.Col[AlmacenMovimientoTable, string]
-	AlmacenID          db2.Col[AlmacenMovimientoTable, int32]
-	AlmacenRefID       db2.Col[AlmacenMovimientoTable, int32]
-	AlmacenRefCantidad db2.Col[AlmacenMovimientoTable, int32]
-	VentaID            db2.Col[AlmacenMovimientoTable, int32]
-	ProductoID         db2.Col[AlmacenMovimientoTable, int32]
-	PresentacionID     db2.Col[AlmacenMovimientoTable, int16]
-	Cantidad           db2.Col[AlmacenMovimientoTable, int32]
-	AlmacenCantidad    db2.Col[AlmacenMovimientoTable, int32]
-	SubCantidad        db2.Col[AlmacenMovimientoTable, int32]
-	Tipo               db2.Col[AlmacenMovimientoTable, int8]
-	Created            db2.Col[AlmacenMovimientoTable, int32]
-	CreatedBy          db2.Col[AlmacenMovimientoTable, int32]
+	db.TableStruct[AlmacenMovimientoTable, AlmacenMovimiento]
+	EmpresaID          db.Col[AlmacenMovimientoTable, int32]
+	ID                 db.Col[AlmacenMovimientoTable, int64]
+	SKU                db.Col[AlmacenMovimientoTable, string]
+	Lote               db.Col[AlmacenMovimientoTable, string]
+	AlmacenID          db.Col[AlmacenMovimientoTable, int32]
+	AlmacenRefID       db.Col[AlmacenMovimientoTable, int32]
+	AlmacenRefCantidad db.Col[AlmacenMovimientoTable, int32]
+	VentaID            db.Col[AlmacenMovimientoTable, int32]
+	ProductoID         db.Col[AlmacenMovimientoTable, int32]
+	PresentacionID     db.Col[AlmacenMovimientoTable, int16]
+	Cantidad           db.Col[AlmacenMovimientoTable, int32]
+	AlmacenCantidad    db.Col[AlmacenMovimientoTable, int32]
+	SubCantidad        db.Col[AlmacenMovimientoTable, int32]
+	Tipo               db.Col[AlmacenMovimientoTable, int8]
+	Created            db.Col[AlmacenMovimientoTable, int32]
+	CreatedBy          db.Col[AlmacenMovimientoTable, int32]
 }
 
-func (e AlmacenMovimientoTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e AlmacenMovimientoTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "almacen_movimiento",
 		Partition: e.EmpresaID,
-		Keys:      []db2.Coln{e.ID},
-		Views: []db2.View{
-			{Cols: []db2.Coln{e.SKU}, KeepPart: true},
-			{Cols: []db2.Coln{e.Lote}, KeepPart: true},
-			{Cols: []db2.Coln{e.AlmacenRefID, e.Created}, ConcatI64: []int8{9}},
+		Keys:      []db.Coln{e.ID},
+		Views: []db.View{
+			{Cols: []db.Coln{e.SKU}, KeepPart: true},
+			{Cols: []db.Coln{e.Lote}, KeepPart: true},
+			{Cols: []db.Coln{e.AlmacenRefID, e.Created}, ConcatI64: []int8{9}},
 		},
 	}
 }

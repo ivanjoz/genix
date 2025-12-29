@@ -1,41 +1,17 @@
 package db
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/viant/xunsafe"
 	"golang.org/x/sync/errgroup"
 )
-
-func Select[T TableSchemaInterface](handler func(query *Query[T], schemaTable T)) QueryResult[T] {
-
-	query := Query[T]{}
-	baseType := *new(T)
-	handler(&query, baseType)
-	records := []T{}
-	err := selectExec(&records, &query)
-	return QueryResult[T]{records, err}
-}
-
-func SelectT[T TableSchemaInterface](handler func(query *Query[T])) ([]T, error) {
-	query := Query[T]{}
-	handler(&query)
-	records := []T{}
-	err := selectExec(&records, &query)
-	return records, err
-}
-
-func SelectRef[T TableSchemaInterface](recordsGetted *[]T, handler func(query *Query[T], schemaTable T)) error {
-
-	query := Query[T]{}
-	baseType := *new(T)
-	handler(&query, baseType)
-	return selectExec(recordsGetted, &query)
-}
 
 type posibleIndex struct {
 	indexView    *viewInfo
@@ -44,9 +20,8 @@ type posibleIndex struct {
 	priority     int8
 }
 
-func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) error {
-
-	scyllaTable := makeTable(*new(T))
+// selectExec executes a query using TableSchema and TableInfo
+func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable ScyllaTable[any]) error {
 	viewTableName := scyllaTable.name
 
 	if len(scyllaTable.keyspace) == 0 {
@@ -57,18 +32,18 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 	}
 
 	columnNames := []string{}
-	if len(query.columnsInclude) > 0 {
-		for _, col := range query.columnsInclude {
-			columnNames = append(columnNames, col.Name)
+	if len(tableInfo.columnsInclude) > 0 {
+		for _, col := range tableInfo.columnsInclude {
+			columnNames = append(columnNames, col.GetName())
 		}
 	} else {
 		columnsExclude := []string{}
-		for _, col := range query.columnsExclude {
-			columnsExclude = append(columnsExclude, col.Name)
+		for _, col := range tableInfo.columnsExclude {
+			columnsExclude = append(columnsExclude, col.GetName())
 		}
 		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columnsExclude, col.Name) && !col.IsVirtual {
-				columnNames = append(columnNames, col.Name)
+			if !slices.Contains(columnsExclude, col.GetName()) && !col.GetInfo().IsVirtual {
+				columnNames = append(columnNames, col.GetName())
 			}
 		}
 	}
@@ -81,26 +56,26 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 	colsWhereIdx := []int16{}
 	allAreKeys := true
 
-	for _, st := range query.statements {
-		col := scyllaTable.columnsMap[st.group[0].Col]
-		if !slices.Contains(scyllaTable.keysIdx, col.Idx) {
+	for _, st := range tableInfo.statements {
+		col := scyllaTable.columnsMap[st.Col]
+		if !slices.Contains(scyllaTable.keysIdx, col.GetInfo().Idx) {
 			allAreKeys = false
 		}
 
-		colsWhereIdx = append(colsWhereIdx, col.Idx)
-		statements = append(statements, st.group[0])
-		if isHash && !slices.Contains(hashOperators, st.group[0].Operator) {
+		colsWhereIdx = append(colsWhereIdx, col.GetInfo().Idx)
+		statements = append(statements, st)
+		if isHash && !slices.Contains(hashOperators, st.Operator) {
 			isHash = false
 		}
 	}
 
 	// Between Statement
-	if len(query.between.From) > 0 {
-		statements = append(statements, query.between)
-		for _, st := range query.between.From {
+	if len(tableInfo.between.From) > 0 {
+		statements = append(statements, tableInfo.between)
+		for _, st := range tableInfo.between.From {
 			col := scyllaTable.columnsMap[st.Col]
-			colsWhereIdx = append(colsWhereIdx, col.Idx)
-			if !slices.Contains(scyllaTable.keysIdx, col.Idx) {
+			colsWhereIdx = append(colsWhereIdx, col.GetInfo().Idx)
+			if !slices.Contains(scyllaTable.keysIdx, col.GetInfo().Idx) {
 				allAreKeys = false
 			}
 		}
@@ -149,7 +124,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 
 	statementsSelected := []ColumnStatement{}
 	statementsRemain := []ColumnStatement{}
-	statementsLogs_ := []ColumnStatement{}
+	// statementsLogs_ := []ColumnStatement{}
 	whereStatements := []string{}
 	orderColumn := scyllaTable.keys[0]
 
@@ -179,14 +154,14 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 							isIncluded = false
 							break
 						}
-						statementsLogs_ = append(statementsLogs_, e)
+						// statementsLogs_ = append(statementsLogs_, e)
 					}
 					if isIncluded {
 						statementsSelected = append(statementsSelected, st)
 					}
 				} else if slices.Contains(viewOrIndex.columns, st.Col) {
 					statementsSelected = append(statementsSelected, st)
-					statementsLogs_ = append(statementsLogs_, st)
+					// statementsLogs_ = append(statementsLogs_, st)
 				} else {
 					statementsRemain = append(statementsRemain, st)
 				}
@@ -201,12 +176,14 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 		statementsRemain = statements
 	}
 
-	statementsLogs := []string{}
-	for _, st := range append(statementsLogs_, statementsRemain...) {
-		statementsLogs = append(statementsLogs, fmt.Sprintf("%v %v %v", st.Col, st.Operator, st.Value))
-	}
+	/*
+		statementsLogs := []string{}
+		for _, st := range append(statementsLogs_, statementsRemain...) {
+			statementsLogs = append(statementsLogs, fmt.Sprintf("%v %v %v", st.Col, st.Operator, st.Value))
+		}
 
-	// fmt.Println("Statements:", strings.Join(statementsLogs, " | "))
+		fmt.Println("Statements:", strings.Join(statementsLogs, " | "))
+	*/
 
 	if len(whereStatements) == 0 {
 		whereStatements = append(whereStatements, "")
@@ -242,15 +219,18 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 		if whereStatement != "" {
 			whereStatement = " WHERE " + whereStatement
 		}
-		if len(query.orderBy) > 0 {
-			whereStatement += " " + fmt.Sprintf(query.orderBy, orderColumn.Name)
+		if len(tableInfo.orderBy) > 0 {
+			whereStatement += " " + fmt.Sprintf(tableInfo.orderBy, orderColumn.GetName())
+		}
+		if tableInfo.limit > 0 {
+			whereStatement += fmt.Sprintf(" LIMIT %v", tableInfo.limit)
 		}
 		queryWhereStatements = append(queryWhereStatements, whereStatement)
 	}
 
-	recordsMap := map[int]*[]T{}
+	recordsMap := map[int]*[]E{}
 	for i := range queryWhereStatements {
-		recordsMap[i] = &[]T{}
+		recordsMap[i] = &[]E{}
 	}
 
 	eg := errgroup.Group{}
@@ -270,7 +250,7 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 					for _, e := range posibleViewsOrIndexes {
 						typeName := indexTypes[e.indexView.Type]
 						colnames := strings.Join(e.indexView.columns, ", ")
-						msg := fmt.Sprintf("%v (%v) %v", typeName, e.indexView.column.Type, colnames)
+						msg := fmt.Sprintf("%v (%v) %v", typeName, e.indexView.column.GetType().ColType, colnames)
 						fmt.Println(msg)
 					}
 				}
@@ -280,52 +260,54 @@ func selectExec[T TableSchemaInterface](recordsGetted *[]T, query *Query[T]) err
 			scanner := iter.Scanner()
 			fmt.Println("starting iterator | columns::", len(scyllaTable.columns))
 
+			rowCount := 0
 			for scanner.Next() {
+				rowCount++
 
 				rowValues := rd.Values
 
-				err := scanner.Scan(rowValues...)
-				if err != nil {
+				if err := scanner.Scan(rowValues...); err != nil {
 					fmt.Println("Error on scan::", err)
 					return err
 				}
 
-				rec := new(T)
-				ref := reflect.ValueOf(rec).Elem()
+				rec := new(E)
+				ptr := xunsafe.AsPointer(rec)
+				shouldLog := ShouldLog()
+
+				if shouldLog {
+					fmt.Printf("\n--- Scanning record %d ---\n", atomic.LoadUint32(&LogCount)+1)
+				}
 
 				for idx, colname := range columnNames {
 					column := scyllaTable.columnsMap[colname]
 					value := rowValues[idx]
+
+					if shouldLog {
+						valStr := "nil"
+						if value != nil {
+							valStr = fmt.Sprintf("%v", reflect.Indirect(reflect.ValueOf(value)).Interface())
+						}
+						offset := uintptr(0)
+						if column.GetInfo().Field != nil {
+							offset = column.GetInfo().Field.Offset
+						}
+						fmt.Printf("Col: %-20s (Field: %-20s) | Offset: %-4d | DB Value: %s\n", colname, column.GetInfo().FieldName, offset, valStr)
+					}
+
 					if value == nil {
 						continue
 					}
-					if column.setValue != nil {
-						field := ref.Field(column.FieldIdx)
-						column.setValue(&field, value)
-						// Revisa si necesita parsearse un string a un struct como JSON
-					} else if column.IsComplexType {
-						// fmt.Println("complex type::", column.FieldName, "|", column.FieldType)
-						if vl, ok := value.(*[]uint8); ok {
-							if len(*vl) <= 3 {
-								continue
-							}
-							newElm := reflect.New(column.RefType).Elem()
-							err = cbor.Unmarshal([]byte(*vl), newElm.Addr().Interface())
-							if err != nil {
-								fmt.Println("Error al convertir: ", newElm, "|", err.Error())
-							}
-							// fmt.Println("col complex:", column.Name, " | ", newElm, " | L:", len(*vl))
-							if column.IsPointer {
-								ref.Field(column.FieldIdx).Set(reflect.ValueOf(newElm))
-							} else {
-								ref.Field(column.FieldIdx).Set(newElm)
-							}
-						} else {
-							fmt.Print("Complex Type could not be parsed:", column.Name)
-						}
-					} else {
-						fmt.Print("Column is not mapped:: ", column.Name)
+					if shouldLog {
+						fmt.Printf("Calling SetValue for Col: %s\n", colname)
 					}
+					column.SetValue(ptr, value)
+				}
+
+				if shouldLog {
+					recJSON, _ := json.MarshalIndent(rec, "", "  ")
+					fmt.Printf("Resulting Struct: %s\n", string(recJSON))
+					IncrementLogCount()
 				}
 
 				if len(queryWhereStatements) == 1 {

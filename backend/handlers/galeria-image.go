@@ -3,7 +3,7 @@ package handlers
 import (
 	"app/aws"
 	"app/core"
-	"app/db2"
+	"app/db"
 	s "app/types"
 	"encoding/json"
 	"time"
@@ -49,7 +49,7 @@ func PostGaleriaImage(req *core.HandlerArgs) core.HandlerResponse {
 		Updated:     core.SUnixTime(),
 	}
 
-	err = db2.Insert(&[]s.GaleriaImagen{galeriaImage})
+	err = db.Insert(&[]s.GaleriaImagen{galeriaImage})
 	if err != nil {
 		core.Log("Error al guardar la imagen.")
 		return req.MakeErr("Error al guardar la imagen en BD.", err)
@@ -63,8 +63,8 @@ func GetGaleriaImages(req *core.HandlerArgs) core.HandlerResponse {
 	updated := core.UnixToSunix(req.GetQueryInt64("updated"))
 
 	imagenes := []s.GaleriaImagen{}
-	query := db2.Query(&imagenes)
-	q1 := db2.Table[s.GaleriaImagen]()
+	query := db.Query(&imagenes)
+	q1 := db.Table[s.GaleriaImagen]()
 
 	query.Exclude(q1.EmpresaID).
 		EmpresaID.Equals(req.Usuario.EmpresaID)

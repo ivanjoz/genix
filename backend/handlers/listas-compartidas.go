@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"app/core"
-	"app/db2"
+	"app/db"
 	s "app/types"
 	"encoding/json"
 	"fmt"
@@ -27,7 +27,7 @@ func GetListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 
 	for _, listaID := range listasIDs {
 		errGroup.Go(func() error {
-			query := db2.Query(listasRegistrosMap[listaID])
+			query := db.Query(listasRegistrosMap[listaID])
 			query.Select().
 				EmpresaID.Equals(req.Usuario.EmpresaID).
 				ListaID.Equals(listaID)
@@ -76,7 +76,7 @@ func GetListasCompartidas2(req *core.HandlerArgs) core.HandlerResponse {
 		updated := req.GetQueryInt64(fmt.Sprintf("id_%v", listaID))
 
 		eg.Go(func() error {
-			query := db2.Query(listaRegistrosMap[listaID])
+			query := db.Query(listaRegistrosMap[listaID])
 			query.Select().
 				EmpresaID.Equals(req.Usuario.EmpresaID).
 				ListaID.Equals(listaID)
@@ -151,7 +151,7 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Print(records)
 
-	if err = db2.Insert(&records); err != nil {
+	if err = db.Insert(&records); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el registro de lista compartida: " + err.Error())
 	}
 

@@ -3,7 +3,7 @@ package handlers
 import (
 	"app/aws"
 	"app/core"
-	"app/db2"
+	"app/db"
 	s "app/types"
 	"encoding/json"
 	"fmt"
@@ -20,7 +20,7 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		query := db2.Query(&productos)
+		query := db.Query(&productos)
 
 		query.Exclude(query.Stock, query.StockStatus).
 			EmpresaID.Equals(req.Usuario.EmpresaID)
@@ -82,7 +82,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	productosCurrent := []s.Producto{}
 	if len(productosIDsSet.Values) > 0 {
-		query := db2.Query(&productosCurrent)
+		query := db.Query(&productosCurrent)
 		query.Select().ID.In(productosIDsSet.Values...)
 		err = query.Exec()
 		if err != nil {
@@ -212,7 +212,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		*/
 	}
 
-	if err = db2.Insert(&productos); err != nil {
+	if err = db.Insert(&productos); err != nil {
 		return req.MakeErr("Error al actualizar / insertar la sede: " + err.Error())
 	}
 
@@ -246,7 +246,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	productos := []s.Producto{}
-	query := db2.Query(&productos)
+	query := db.Query(&productos)
 	query.Select().
 		EmpresaID.Equals(req.Usuario.EmpresaID).
 		ID.Equals(image.ProductoID)
@@ -317,7 +317,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Print(producto)
 
-	err = db2.Insert(&[]s.Producto{producto})
+	err = db.Insert(&[]s.Producto{producto})
 
 	if err != nil {
 		return req.MakeErr("Error al actualizar el producto:", err)
@@ -341,8 +341,8 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		query := db2.Query(&productos)
-		q1 := db2.Table[s.Producto]()
+		query := db.Query(&productos)
+		q1 := db.Table[s.Producto]()
 		query.Select(q1.ID, q1.Nombre, q1.Descripcion, q1.Precio, q1.Descuento, q1.PrecioFinal, q1.Images, q1.Stock, q1.CategoriasIDs).
 			EmpresaID.Equals(empresaID).
 			StockStatus.Equals(1)
@@ -357,8 +357,8 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 	})
 
 	errGroup.Go(func() error {
-		query := db2.Query(&categorias)
-		q1 := db2.Table[s.ListaCompartidaRegistro]()
+		query := db.Query(&categorias)
+		q1 := db.Table[s.ListaCompartidaRegistro]()
 		query.Select(q1.ID, q1.Nombre, q1.Descripcion).
 			EmpresaID.Equals(empresaID).
 			ListaID.Equals(1).

@@ -2,7 +2,7 @@ package exec
 
 import (
 	"app/core"
-	"app/db2"
+	"app/db"
 	"app/handlers"
 	s "app/types"
 	"encoding/csv"
@@ -122,7 +122,7 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 	recordsImported := core.MapToSliceT(recordsMap)
 	// core.Log(recordsImported)
 
-	err = db2.Insert(&recordsImported)
+	err = db.Insert(&recordsImported)
 	if err != nil {
 		panic(err)
 	}
@@ -134,7 +134,7 @@ func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	// ciudades de Peru
 	ciudades := []s.PaisCiudad{}
-	q1 := db2.Query(&ciudades)
+	q1 := db.Query(&ciudades)
 	err := q1.Select(q1.Nombre, q1.CiudadID, q1.PadreID).
 		PaisID.Equals(604).Exec()
 
@@ -186,7 +186,7 @@ func Homologate(args *core.ExecArgs) core.FuncResponse {
 		db.DeployScylla(0, structTypes...)
 	*/
 
-	db2.MakeScyllaConnection(db2.ConnParams{
+	db.MakeScyllaConnection(db.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,
@@ -194,7 +194,7 @@ func Homologate(args *core.ExecArgs) core.FuncResponse {
 		Keyspace: core.Env.DB_NAME,
 	})
 
-	db2.DeployScylla(0, MakeScyllaControllers()...)
+	db.DeployScylla(0, MakeScyllaControllers()...)
 
 	return core.FuncResponse{}
 }
@@ -210,7 +210,7 @@ func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
 		db.RecalcVirtualColumns[types.AlmacenProducto]()
 	*/
 
-	db2.MakeScyllaConnection(db2.ConnParams{
+	db.MakeScyllaConnection(db.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,
@@ -218,15 +218,15 @@ func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
 		Keyspace: core.Env.DB_NAME,
 	})
 
-	db2.QueryExec("DELETE FROM genix.almacen_producto where empresa_id = 1")
-	db2.QueryExec("DELETE FROM genix.almacen_movimiento where empresa_id = 1")
+	db.QueryExec("DELETE FROM genix.almacen_producto where empresa_id = 1")
+	db.QueryExec("DELETE FROM genix.almacen_movimiento where empresa_id = 1")
 
 	return core.FuncResponse{}
 }
 
 func RecalcSequences(partValue any) {
 
-	db2.MakeScyllaConnection(db2.ConnParams{
+	db.MakeScyllaConnection(db.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,

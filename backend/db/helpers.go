@@ -3,13 +3,41 @@ package db
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/fnv"
+	"os"
 	"reflect"
+	"regexp"
 	"strings"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/fatih/color"
+	"github.com/kr/pretty"
+	"github.com/viant/xunsafe"
 )
+
+var (
+	DebugFull          bool
+	logVariableCheched bool
+	LogCount           uint32
+)
+
+func ShouldLog() bool {
+	if !logVariableCheched {
+		DebugFull = os.Getenv("LOGS_FULL") != ""
+		logVariableCheched = true
+	}
+	if !DebugFull {
+		return false
+	}
+	return atomic.LoadUint32(&LogCount) < 5
+}
+
+func IncrementLogCount() {
+	atomic.AddUint32(&LogCount, 1)
+}
 
 func BasicHashInt(s string) int32 {
 	h := fnv.New32a()
@@ -52,17 +80,18 @@ func HashInt(values ...any) int32 {
 func Logx(style int8, messageInColor string, params ...any) {
 	var c *color.Color
 
-	if style == 1 {
+	switch style {
+	case 1:
 		c = color.New(color.FgCyan, color.Bold)
-	} else if style == 2 {
+	case 2:
 		c = color.New(color.FgGreen, color.Bold)
-	} else if style == 3 {
+	case 3:
 		c = color.New(color.FgYellow, color.Bold)
-	} else if style == 4 {
+	case 4:
 		c = color.New(color.FgBlue, color.Bold)
-	} else if style == 5 {
+	case 5:
 		c = color.New(color.FgRed, color.Bold)
-	} else if style == 6 {
+	case 6:
 		c = color.New(color.FgMagenta, color.Bold)
 	}
 
@@ -121,6 +150,11 @@ func Concatx[T any](sep string, slice1 []T) string {
 	return strings.Join(sliceOfStrings, sep)
 }
 
+func Err(content ...any) error {
+	errMessage := Concatx(" ", content)
+	return errors.New(errMessage)
+}
+
 func sliceToAny[T any](valuesGeneric *[]T) []any {
 	values := []any{}
 	for _, v := range *valuesGeneric {
@@ -129,10 +163,14 @@ func sliceToAny[T any](valuesGeneric *[]T) []any {
 	return values
 }
 
-func reflectToSlice(value *reflect.Value) []any {
+func reflectToSlicePtr(field *xunsafe.Field, ptr unsafe.Pointer) []any {
+	return reflectToSliceValue(field.Interface(ptr))
+}
+
+func reflectToSliceValue(value any) []any {
 	var values []any
 
-	switch sl := value.Interface().(type) {
+	switch sl := value.(type) {
 	case []int:
 		values = sliceToAny(&sl)
 	case []int8:
@@ -147,9 +185,33 @@ func reflectToSlice(value *reflect.Value) []any {
 		values = sliceToAny(&sl)
 	case []float64:
 		values = sliceToAny(&sl)
+	case []string:
+		values = sliceToAny(&sl)
 	default:
 		// The value is not an integer
-		panic("Value was not recognised of a slice.")
+		panic("Value was not recognised of a slice: " + reflect.TypeOf(value).String())
 	}
 	return values
+}
+
+var (
+	matchFirstCap  = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap    = regexp.MustCompile("([a-z0-9])([A-Z])")
+	matchUnderline = regexp.MustCompile("_([a-z0-9])_")
+)
+
+func toSnakeCase(str string) string {
+	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+	res := strings.ToLower(snake)
+
+	for matchUnderline.MatchString(res) {
+		res = matchUnderline.ReplaceAllString(res, "_$1")
+	}
+
+	return res
+}
+
+func Print(Struct any) {
+	pretty.Println(Struct)
 }

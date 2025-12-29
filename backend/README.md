@@ -20,13 +20,13 @@ A type-safe, reflection-based ORM for ScyllaDB/Cassandra with fluent query build
 
 Every model requires two structs:
 
-1. **Base Struct**: Embeds `db2.TableStruct` and contains your data fields
-2. **Table Struct**: Defines columns as `db2.Col` or `db2.ColSlice` for query building
+1. **Base Struct**: Embeds `db.TableStruct` and contains your data fields
+2. **Table Struct**: Defines columns as `db.Col` or `db.ColSlice` for query building
 
 ```go
 // Base struct - holds the actual data
 type ListaCompartidaRegistro struct {
-    db2.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
+    db.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
     EmpresaID   int32    `db:"empresa_id,pk"`
     ID          int32    `db:"id,pk"`
     ListaID     int32    `db:"lista_id,view.1,view.2"`
@@ -40,27 +40,27 @@ type ListaCompartidaRegistro struct {
 
 // Table struct - for type-safe queries
 type ListaCompartidaRegistroTable struct {
-    db2.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
-    EmpresaID   db2.Col[ListaCompartidaRegistroTable, int32]
-    ID          db2.Col[ListaCompartidaRegistroTable, int32]
-    ListaID     db2.Col[ListaCompartidaRegistroTable, int32]
-    Nombre      db2.Col[ListaCompartidaRegistroTable, string]
-    Images      db2.ColSlice[ListaCompartidaRegistroTable, string]  // For slices
-    Descripcion db2.Col[ListaCompartidaRegistroTable, string]
-    Status      db2.Col[ListaCompartidaRegistroTable, int8]
-    Updated     db2.Col[ListaCompartidaRegistroTable, int64]
-    UpdatedBy   db2.Col[ListaCompartidaRegistroTable, int32]
+    db.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
+    EmpresaID   db.Col[ListaCompartidaRegistroTable, int32]
+    ID          db.Col[ListaCompartidaRegistroTable, int32]
+    ListaID     db.Col[ListaCompartidaRegistroTable, int32]
+    Nombre      db.Col[ListaCompartidaRegistroTable, string]
+    Images      db.ColSlice[ListaCompartidaRegistroTable, string]  // For slices
+    Descripcion db.Col[ListaCompartidaRegistroTable, string]
+    Status      db.Col[ListaCompartidaRegistroTable, int8]
+    Updated     db.Col[ListaCompartidaRegistroTable, int64]
+    UpdatedBy   db.Col[ListaCompartidaRegistroTable, int32]
 }
 
 // GetSchema defines the table structure and keys
-func (e ListaCompartidaRegistroTable) GetSchema() db2.TableSchema {
-    return db2.TableSchema{
+func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
+    return db.TableSchema{
         Name:      "lista_compartida_registro",
         Partition: e.EmpresaID,              // Partition key
-        Keys:      []db2.Coln{e.ID},         // Clustering key(s)
-        Views: []db2.View{
-            {Cols: []db2.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
-            {Cols: []db2.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
+        Keys:      []db.Coln{e.ID},         // Clustering key(s)
+        Views: []db.View{
+            {Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
+            {Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
         },
     }
 }
@@ -71,14 +71,14 @@ func (e ListaCompartidaRegistroTable) GetSchema() db2.TableSchema {
 1. **Field Names**: Column names are inferred from field names converted to snake_case, or explicitly set with the `db` tag
 2. **Primary Keys**: Use `db:"column_name,pk"` to mark partition/clustering keys
 3. **Column Types**:
-   - Use `db2.Col[TableStruct, Type]` for single values
-   - Use `db2.ColSlice[TableStruct, Type]` for slices (stored as sets)
+   - Use `db.Col[TableStruct, Type]` for single values
+   - Use `db.ColSlice[TableStruct, Type]` for slices (stored as sets)
 4. **Both structs must have matching field names** to map columns correctly
 
 ## Connection Setup
 
 ```go
-db2.MakeScyllaConnection(db2.ConnParams{
+db.MakeScyllaConnection(db.ConnParams{
     Host:     "localhost",
     Port:     9042,
     User:     "cassandra",
@@ -107,13 +107,13 @@ records := []types.ListaCompartidaRegistro{
 }
 
 // Insert all fields
-err := db2.Insert(&records)
+err := db.Insert(&records)
 
 // Insert excluding specific columns
-err := db2.Insert(&records, q1.UpdatedBy)
+err := db.Insert(&records, q1.UpdatedBy)
 
 // Insert single record
-err := db2.InsertOne(records[0])
+err := db.InsertOne(records[0])
 ```
 
 ### Update
@@ -130,17 +130,17 @@ recordToUpdate := types.ListaCompartidaRegistro{
 }
 
 // Get table reference for column selection
-q1 := db2.Table[types.ListaCompartidaRegistro]()
+q1 := db.Table[types.ListaCompartidaRegistro]()
 
 // Update specific columns only
-err := db2.Update(&[]types.ListaCompartidaRegistro{recordToUpdate},
+err := db.Update(&[]types.ListaCompartidaRegistro{recordToUpdate},
     q1.Status, q1.ListaID, q1.Nombre, q1.Images, q1.Updated)
 
 // Update single record
-err := db2.UpdateOne(recordToUpdate, q1.Nombre, q1.Status)
+err := db.UpdateOne(recordToUpdate, q1.Nombre, q1.Status)
 
 // Update all fields except specified
-err := db2.UpdateExclude(&records, q1.UpdatedBy, q1.Created)
+err := db.UpdateExclude(&records, q1.UpdatedBy, q1.Created)
 ```
 
 ### Select/Query
@@ -149,7 +149,7 @@ err := db2.UpdateExclude(&records, q1.UpdatedBy, q1.Created)
 registros := []types.ListaCompartidaRegistro{}
 
 // Build and execute query
-query := db2.Query(&registros)
+query := db.Query(&registros)
 query.Select().
     EmpresaID.Equals(1).
     ListaID.Equals(2).
@@ -193,10 +193,10 @@ query.Images.Contains("image.jpg")
 ### Partition and Clustering Keys
 
 ```go
-db2.TableSchema{
+db.TableSchema{
     Name:      "table_name",
     Partition: e.CompanyID,           // Partition key
-    Keys:      []db2.Coln{e.ID},      // Clustering keys
+    Keys:      []db.Coln{e.ID},      // Clustering keys
 }
 ```
 
@@ -205,13 +205,13 @@ db2.TableSchema{
 Create materialized views for alternative query patterns:
 
 ```go
-Views: []db2.View{
+Views: []db.View{
     // Simple view with partition key
-    {Cols: []db2.Coln{e.ListaID, e.Status}, KeepPart: true},
+    {Cols: []db.Coln{e.ListaID, e.Status}, KeepPart: true},
     
     // Concatenated integer view (for range queries)
-    {Cols: []db2.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
-    {Cols: []db2.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
+    {Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
+    {Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
 }
 ```
 
@@ -226,5 +226,5 @@ Views: []db2.View{
 ## Type Support
 
 - **Primitives**: `int8`, `int16`, `int32`, `int64`, `int`, `float32`, `float64`, `string`, `bool`
-- **Slices**: Stored as ScyllaDB sets (use `db2.ColSlice`)
+- **Slices**: Stored as ScyllaDB sets (use `db.ColSlice`)
 - **Complex types**: Structs automatically serialized to CBOR and stored as blobs

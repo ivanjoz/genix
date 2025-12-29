@@ -2,13 +2,13 @@ package exec
 
 import (
 	"app/core"
-	"app/db2"
+	"app/db"
 	s "app/types"
 	"fmt"
 )
 
-func MakeScyllaControllers() []db2.ScyllaControllerInterface {
-	return []db2.ScyllaControllerInterface{
+func MakeScyllaControllers() []db.ScyllaControllerInterface {
+	return []db.ScyllaControllerInterface{
 
 		makeDBController[s.Producto](),
 		/*
@@ -32,10 +32,10 @@ func MakeScyllaControllers() []db2.ScyllaControllerInterface {
 // makeDBController creates a ScyllaController for db2 package types using generics.
 // This function automatically handles queries for any db2 table type using the
 // TableQueryInterface for clean, simple query building.
-func makeDBController[T db2.TableBaseInterface[E, T], E db2.TableSchemaInterface[E]]() db2.ScyllaControllerInterface {
+func makeDBController[T db.TableBaseInterface[E, T], E db.TableSchemaInterface[E]]() db.ScyllaControllerInterface {
 	// Get the table struct instance
-	schema := db2.MakeSchema[T]()
-	scyllaTable := db2.MakeScyllaTable[T]()
+	schema := db.MakeSchema[T]()
+	scyllaTable := db.MakeScyllaTable[T]()
 
 	// Get table name and keyspace
 	tableName := schema.Name
@@ -45,9 +45,9 @@ func makeDBController[T db2.TableBaseInterface[E, T], E db2.TableSchemaInterface
 	}
 	fullTableName := fmt.Sprintf("%s.%s", keyspace, tableName)
 
-	contoller := db2.ScyllaController[T, E]{
+	contoller := db.ScyllaController[T, E]{
 		TableName: fullTableName,
-		Table:     db2.ScyllaTable[T](scyllaTable),
+		Table:     db.ScyllaTable[T](scyllaTable),
 		Schema:    schema,
 	}
 	return &contoller
