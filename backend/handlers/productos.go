@@ -74,7 +74,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	var counter int64
 	if createCounter > 0 {
-		counter, err = core.GetCounter("productos", createCounter, req.Usuario.EmpresaID)
+		counter, err = productos[0].GetCounter(createCounter, req.Usuario.EmpresaID)
 		if err != nil {
 			return req.MakeErr("Error al obtener el counter.", counter)
 		}

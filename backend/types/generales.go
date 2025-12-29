@@ -84,9 +84,10 @@ type ListaCompartidaRegistroTable struct {
 
 func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:      "lista_compartida_registro",
-		Partition: e.EmpresaID,
-		Keys:      []db.Coln{e.ID},
+		Name:         "lista_compartida_registro",
+		Partition:    e.EmpresaID,
+		UseSequences: true,
+		Keys:         []db.Coln{e.ID},
 		Views: []db.View{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
 			{Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
@@ -94,18 +95,6 @@ func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
 		},
 	}
 }
-
-/*
-func (e *ListaCompartidaRegistro) GetView(view int8) any {
-	if view == 1 {
-		return e.ListaID*100 + int32(e.Status)
-	} else if view == 2 {
-		return int64(e.ListaID)*10_000_000_000 + e.Updated
-	} else {
-		return 0
-	}
-}
-*/
 
 type NewIDToID struct {
 	NewID  int32

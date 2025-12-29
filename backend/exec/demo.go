@@ -40,7 +40,8 @@ func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
 */
 
 func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
-	counter, err := core.GetCounter("usuarios_1", 1)
+	usuario := s.Usuario{}
+	counter, err := usuario.GetCounter(1, 1)
 	if err != nil {
 		panic(err)
 	}
@@ -259,14 +260,9 @@ func Test19(args *core.ExecArgs) core.FuncResponse {
 		{Hola: "dada", Value: 222.1423},
 		{Hola: "demo", Value: 123.123}}
 
-	id, err := core.GetCounter("demo_structs_1", 1)
-	if err != nil {
-		panic(err)
-	}
-
 	demo := DemoStruct5{
 		CompanyID: 1,
-		ID:        int32(id),
+		ID:        2,
 		Edad:      43,
 		Nombre:    "11prueba",
 		Palabras:  []string{"hola", "mundo", "lala"},
