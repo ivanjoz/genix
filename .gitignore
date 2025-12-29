@@ -35,5 +35,6 @@ frontend2/static/models/*
 ai/onnx-inference.js
 ai/wasm/*
 ai/transformers.js
+ai/functiongemma-270m-it-ONNX-GQA/
 
 ai/models/*
