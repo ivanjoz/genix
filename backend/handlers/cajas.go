@@ -57,7 +57,7 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 	body.EmpresaID = req.Usuario.EmpresaID
 
 	if body.ID < 0 {
-		counter, err := core.GetCounter("cajas", 1, req.Usuario.EmpresaID)
+		counter, err := body.GetCounter(1, req.Usuario.EmpresaID)
 		if err != nil {
 			return req.MakeErr("Error al obtener el counter.", counter)
 		}

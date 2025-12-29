@@ -92,9 +92,10 @@ type UsuarioTable struct {
 
 func (e UsuarioTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:      "usuarios",
-		Partition: e.EmpresaID,
-		Keys:      []db.Coln{e.ID},
+		Name:         "usuarios",
+		Partition:    e.EmpresaID,
+		UseSequences: true,
+		Keys:         []db.Coln{e.ID},
 	}
 }
 

@@ -127,7 +127,7 @@ func PostSedes(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if body.ID < 1 {
-		counter, err := core.GetCounter("sedes", 1, req.Usuario.EmpresaID)
+		counter, err := body.GetCounter(1, req.Usuario.EmpresaID)
 		if err != nil {
 			return req.MakeErr("Error al obtener el counter.", counter)
 		}
@@ -186,7 +186,7 @@ func PostAlmacen(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if body.ID < 1 {
-		counter, err := core.GetCounter("almacenes", 1, req.Usuario.EmpresaID)
+		counter, err := body.GetCounter(1, req.Usuario.EmpresaID)
 		if err != nil {
 			return req.MakeErr("Error al obtener el counter.", counter)
 		}

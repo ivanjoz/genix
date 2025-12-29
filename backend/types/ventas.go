@@ -43,9 +43,10 @@ type CajaTable struct {
 
 func (e CajaTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:      "cajas",
-		Partition: e.EmpresaID,
-		Keys:      []db.Coln{e.ID},
+		Name:         "cajas",
+		Partition:    e.EmpresaID,
+		UseSequences: true,
+		Keys:         []db.Coln{e.ID},
 		Views: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.Updated}, KeepPart: true},

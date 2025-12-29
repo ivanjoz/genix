@@ -226,9 +226,10 @@ type SedeTable struct {
 
 func (e SedeTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:      "sedes",
-		Partition: e.EmpresaID,
-		Keys:      []db.Coln{e.ID},
+		Name:         "sedes",
+		Partition:    e.EmpresaID,
+		UseSequences: true,
+		Keys:         []db.Coln{e.ID},
 		Views: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.Updated}, KeepPart: true},
