@@ -1,9 +1,9 @@
 package types
 
-import "app/db2"
+import "app/db"
 
 type GaleriaImagen struct {
-	db2.TableStruct[GaleriaImagenTable, GaleriaImagen]
+	db.TableStruct[GaleriaImagenTable, GaleriaImagen]
 	EmpresaID   int32  `db:"empresa_id,pk"`
 	Image       string `db:"image,pk"`
 	Description string `db:"description"`
@@ -12,22 +12,22 @@ type GaleriaImagen struct {
 }
 
 type GaleriaImagenTable struct {
-	db2.TableStruct[GaleriaImagenTable, GaleriaImagen]
-	EmpresaID   db2.Col[GaleriaImagenTable, int32]
-	Image       db2.Col[GaleriaImagenTable, string]
-	Description db2.Col[GaleriaImagenTable, string]
-	Status      db2.Col[GaleriaImagenTable, int8]
-	Updated     db2.Col[GaleriaImagenTable, int32]
+	db.TableStruct[GaleriaImagenTable, GaleriaImagen]
+	EmpresaID   db.Col[GaleriaImagenTable, int32]
+	Image       db.Col[GaleriaImagenTable, string]
+	Description db.Col[GaleriaImagenTable, string]
+	Status      db.Col[GaleriaImagenTable, int8]
+	Updated     db.Col[GaleriaImagenTable, int32]
 }
 
-func (e GaleriaImagenTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e GaleriaImagenTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "galeria_imagenes",
 		Partition: e.EmpresaID,
-		Keys:      []db2.Coln{e.Image},
-		Views: []db2.View{
-			{Cols: []db2.Coln{e.Status}, KeepPart: true},
-			{Cols: []db2.Coln{e.Updated}, KeepPart: true},
+		Keys:      []db.Coln{e.Image},
+		Views: []db.View{
+			{Cols: []db.Coln{e.Status}, KeepPart: true},
+			{Cols: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }

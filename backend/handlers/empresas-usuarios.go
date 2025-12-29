@@ -3,7 +3,7 @@ package handlers
 import (
 	"app/aws"
 	"app/core"
-	"app/db2"
+	"app/db"
 	s "app/types"
 	"encoding/json"
 	"fmt"
@@ -262,7 +262,7 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al actualizar el usuario (DynamoDB): " + err.Error())
 	}
 
-	if err = db2.Insert(&[]s.Usuario{body}); err != nil {
+	if err = db.Insert(&[]s.Usuario{body}); err != nil {
 		return req.MakeErr("Error al actualizar el usuario (SQL): " + err.Error())
 	}
 

@@ -1,6 +1,6 @@
 package types
 
-import "app/db2"
+import "app/db"
 
 type TAGS struct{}
 
@@ -51,7 +51,7 @@ type EmpresaPub struct {
 }
 
 type Usuario struct { // DynamoDB + ScyllaDB
-	db2.TableStruct[UsuarioTable, Usuario]
+	db.TableStruct[UsuarioTable, Usuario]
 	ID           int32   `json:"id" db:"id,pk"`
 	EmpresaID    int32   `json:"empresaID,omitempty" db:"empresa_id,pk"`
 	Usuario      string  `json:"usuario" db:"usuario"`
@@ -72,29 +72,29 @@ type Usuario struct { // DynamoDB + ScyllaDB
 }
 
 type UsuarioTable struct {
-	db2.TableStruct[UsuarioTable, Usuario]
-	ID           db2.Col[UsuarioTable, int32]
-	EmpresaID    db2.Col[UsuarioTable, int32]
-	Usuario      db2.Col[UsuarioTable, string]
-	Apellidos    db2.Col[UsuarioTable, string]
-	Nombres      db2.Col[UsuarioTable, string]
-	PerfilesIDs  db2.ColSlice[UsuarioTable, int32] `db:"perfiles_ids"`
-	RolesIDs     db2.ColSlice[UsuarioTable, int32] `db:"roles_ids"`
-	Email        db2.Col[UsuarioTable, string]
-	Cargo        db2.Col[UsuarioTable, string]
-	DocumentoNro db2.Col[UsuarioTable, string]
-	Created      db2.Col[UsuarioTable, int64]
-	CreatedBy    db2.Col[UsuarioTable, int32]
-	Updated      db2.Col[UsuarioTable, int64]
-	UpdatedBy    db2.Col[UsuarioTable, int32]
-	Status       db2.Col[UsuarioTable, int8]
+	db.TableStruct[UsuarioTable, Usuario]
+	ID           db.Col[UsuarioTable, int32]
+	EmpresaID    db.Col[UsuarioTable, int32]
+	Usuario      db.Col[UsuarioTable, string]
+	Apellidos    db.Col[UsuarioTable, string]
+	Nombres      db.Col[UsuarioTable, string]
+	PerfilesIDs  db.ColSlice[UsuarioTable, int32] `db:"perfiles_ids"`
+	RolesIDs     db.ColSlice[UsuarioTable, int32] `db:"roles_ids"`
+	Email        db.Col[UsuarioTable, string]
+	Cargo        db.Col[UsuarioTable, string]
+	DocumentoNro db.Col[UsuarioTable, string]
+	Created      db.Col[UsuarioTable, int64]
+	CreatedBy    db.Col[UsuarioTable, int32]
+	Updated      db.Col[UsuarioTable, int64]
+	UpdatedBy    db.Col[UsuarioTable, int32]
+	Status       db.Col[UsuarioTable, int8]
 }
 
-func (e UsuarioTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e UsuarioTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "usuarios",
 		Partition: e.EmpresaID,
-		Keys:      []db2.Coln{e.ID},
+		Keys:      []db.Coln{e.ID},
 	}
 }
 

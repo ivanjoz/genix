@@ -1,7 +1,7 @@
 package core
 
 import (
-	"app/db2"
+	"app/db"
 	"app/types"
 	"fmt"
 )
@@ -12,7 +12,7 @@ func GetCounter(name string, incrementCount int, empresaID ...int32) (int64, err
 	}
 
 	result := []types.Increment{}
-	query := db2.Query(&result)
+	query := db.Query(&result)
 	query.Select().Name.Equals(name)
 
 	if err := query.Exec(); err != nil {
@@ -29,7 +29,7 @@ func GetCounter(name string, incrementCount int, empresaID ...int32) (int64, err
 		Env.DB_NAME, incrementCount, name,
 	)
 
-	if err := db2.QueryExec(queryUpdateStr); err != nil {
+	if err := db.QueryExec(queryUpdateStr); err != nil {
 		Log(queryUpdateStr)
 		panic(err)
 	}

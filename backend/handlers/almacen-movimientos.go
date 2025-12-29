@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"app/core"
-	"app/db2"
+	"app/db"
 	s "app/types"
 )
 
@@ -11,7 +11,7 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt("upd")
 
 	almacenProductos := []s.AlmacenProducto{}
-	query := db2.Query(&almacenProductos)
+	query := db.Query(&almacenProductos)
 	query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
 
 	if updated > 0 {

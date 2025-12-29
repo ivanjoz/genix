@@ -3,7 +3,7 @@ package exec
 import (
 	"app/aws"
 	"app/core"
-	"app/db2"
+	"app/db"
 	"app/facturacion"
 	"app/serialize"
 	"app/types"
@@ -662,7 +662,7 @@ func Test30(args *core.ExecArgs) core.FuncResponse {
 	// Migrated to db2
 	errGroup.Go(func() error {
 		registros := []s.ListaCompartidaRegistro{}
-		query := db2.Query(&registros)
+		query := db.Query(&registros)
 		query.Select().
 			EmpresaID.Equals(1).
 			ListaID.In(listasIDs...)
@@ -703,10 +703,10 @@ func Test32(args *core.ExecArgs) core.FuncResponse {
 			fmt.Println("error:", err1)
 		}
 	*/
-	// Migrated to db2 - use makeDBController and db2.DeployScylla
+	// Migrated to db2 - use makeDBController and db.DeployScylla
 	// db.DeployScylla(0, s.ListaCompartidaRegistro{})
 	controller := makeDBController[s.ListaCompartidaRegistro]()
-	db2.DeployScylla(0, controller)
+	db.DeployScylla(0, controller)
 	return core.FuncResponse{}
 }
 
@@ -753,7 +753,7 @@ type DemoTable5 struct {
 	*/
 }
 
-func (e *DemoTable4[T]) Query(statements ...db2.ColumnStatement) []T {
+func (e *DemoTable4[T]) Query(statements ...db.ColumnStatement) []T {
 
 	return []T{}
 }
@@ -806,7 +806,7 @@ func Test35(args *core.ExecArgs) core.FuncResponse {
 
 func Test36(args *core.ExecArgs) core.FuncResponse {
 
-	db2.MakeScyllaConnection(db2.ConnParams{
+	db.MakeScyllaConnection(db.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,
@@ -829,7 +829,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Insertando registro...")
 
-	err := db2.Insert(&[]types.ListaCompartidaRegistro{recordToInsert})
+	err := db.Insert(&[]types.ListaCompartidaRegistro{recordToInsert})
 	if err != nil {
 		fmt.Println("Error al insertar::", err)
 		panic(err)
@@ -851,8 +851,8 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Actualizando registros....")
 
-	q1 := db2.Table[types.ListaCompartidaRegistro]()
-	err = db2.Update(&[]types.ListaCompartidaRegistro{recordToUpdate},
+	q1 := db.Table[types.ListaCompartidaRegistro]()
+	err = db.Update(&[]types.ListaCompartidaRegistro{recordToUpdate},
 		q1.Status, q1.ListaID, q1.Nombre, q1.Images, q1.Descripcion, q1.Updated)
 	if err != nil {
 		fmt.Println("Error al actualizar::", err)
@@ -862,7 +862,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 	fmt.Println("registro actualizado!")
 
 	// Example 1: Simple query with chaining
-	query := db2.Query(&registros)
+	query := db.Query(&registros)
 	query.Select().
 		EmpresaID.Equals(1).ListaID.Equals(2).Status.Equals(1).
 		AllowFilter()

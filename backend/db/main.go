@@ -3,45 +3,59 @@ package db
 import (
 	"fmt"
 	"reflect"
-	"slices"
 	"strings"
 
-	"github.com/gocql/gocql"
+	"github.com/viant/xunsafe"
 )
 
-type scyllaTable[T any] struct {
-	name          string
-	keyspace      string
-	keys          []*columnInfo
-	partKey       *columnInfo
-	keysIdx       []int16
-	columns       []*columnInfo
-	columnsMap    map[string]*columnInfo
-	columnsIdxMap map[int16]*columnInfo
-	indexes       map[string]*viewInfo
-	views         map[string]*viewInfo
-	indexViews    []*viewInfo
-	ViewsExcluded []string
-	_maxColIdx    int16
+type ScyllaTable[T any] struct {
+	name            string
+	keyspace        string
+	keys            []IColInfo
+	partKey         IColInfo
+	keysIdx         []int16
+	columns         []IColInfo
+	columnsMap      map[string]IColInfo
+	columnsIdxMap   map[int16]IColInfo
+	indexes         map[string]*viewInfo
+	views           map[string]*viewInfo
+	indexViews      []*viewInfo
+	ViewsExcluded   []string
+	useSequences    bool
+	sequencePartCol IColInfo
+	_maxColIdx      int16
 }
 
-func (e scyllaTable[T]) GetFullName() string {
+func (e ScyllaTable[T]) GetFullName() string {
 	return fmt.Sprintf("%v.%v", e.keyspace, e.name)
 }
-func (e scyllaTable[T]) GetColumns() map[string]*columnInfo {
+func (e ScyllaTable[T]) GetName() string {
+	return e.name
+}
+func (e ScyllaTable[T]) GetColumns() map[string]IColInfo {
 	return e.columnsMap
 }
-func (e scyllaTable[T]) GetKeys() []*columnInfo {
+func (e ScyllaTable[T]) GetKeys() []IColInfo {
 	return e.keys
 }
-func (e scyllaTable[T]) GetPartKey() *columnInfo {
+func (e ScyllaTable[T]) GetPartKey() IColInfo {
 	return e.partKey
 }
 
-type IColumnStatement interface {
-	GetValue() any
-	GetName() string
+type viewInfo struct {
+	/* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
+	Type            int8
+	name            string
+	idx             int8
+	column          IColInfo
+	columns         []string
+	columnsNoPart   []string
+	columnsIdx      []int16
+	Operators       []string
+	getStatement    func(statements ...ColumnStatement) []string
+	getCreateScript func() string
 }
+
 type ColumnStatement struct {
 	Col      string
 	Operator string
@@ -54,14 +68,17 @@ type ColumnStatement struct {
 type TableSchema struct {
 	Keyspace string
 	// StructType    T
-	Name           string
-	Keys           []Coln
-	Partition      Coln
-	GlobalIndexes  []Coln
-	LocalIndexes   []Coln
-	HashIndexes    [][]Coln
-	Views          []View
-	SequenceColumn Coln
+	Name            string
+	Keys            []Coln
+	Partition       Coln
+	GlobalIndexes   []Coln
+	LocalIndexes    []Coln
+	HashIndexes     [][]Coln
+	Views           []View
+	SequenceColumn  Coln
+	CounterColumn   Coln
+	UseSequences    bool
+	SequencePartCol Coln
 }
 
 func (q ColumnStatement) GetValue() any {
@@ -82,15 +99,6 @@ func (q ColumnStatement) GetValue() any {
 	}
 }
 
-type Coln interface {
-	GetInfo() columnInfo
-	GetName() string
-}
-
-type ColumnSetName interface {
-	SetName(string)
-}
-
 type View struct {
 	Cols []Coln
 	// Para concatenar numeros como = int64(e.AlmacenID)*1e9 + int64(e.Updated)
@@ -108,246 +116,437 @@ type Index struct {
 	HashAll bool
 }
 
-type Col[T any] struct {
-	C string
-}
-
-func (q *Col[T]) SetName(name string) {
-	q.C = name
-}
-func (q Col[T]) GetInfo() columnInfo {
-	col := columnInfo{Name: q.C}
-	if reflect.TypeFor[T]().Kind() == reflect.Interface {
-		col.FieldType = "any"
-	} else {
-		col.FieldType = reflect.TypeFor[T]().Name()
-	}
-	return col
-}
-
-func (q Col[T]) GetName() string {
-	return q.C
-}
-
-// Generic
-func (e Col[T]) Equals(v T) ColumnStatement {
-	return ColumnStatement{Col: e.C, Operator: "=", Value: any(v)}
-}
-func (e Col[T]) In(values_ ...T) ColumnStatement {
-	values := []any{}
-	for _, v := range values_ {
-		values = append(values, any(v))
-	}
-	return ColumnStatement{Col: e.C, Operator: "IN", Values: values}
-}
-func (e Col[T]) ConcurrentIn(values_ ...T) ColumnStatement {
-	values := []any{}
-	for _, v := range values_ {
-		values = append(values, any(v))
-	}
-	return ColumnStatement{Col: e.C, Operator: "CIN", Values: values}
-}
-func (e Col[T]) GreaterThan(v T) ColumnStatement {
-	return ColumnStatement{Col: e.C, Operator: ">", Value: any(v)}
-}
-func (e Col[T]) GreaterEqual(v T) ColumnStatement {
-	return ColumnStatement{Col: e.C, Operator: ">=", Value: any(v)}
-}
-func (e Col[T]) LessThan(v T) ColumnStatement {
-	return ColumnStatement{Col: e.C, Operator: "<", Value: any(v)}
-}
-func (e Col[T]) LessEqual(v T) ColumnStatement {
-	return ColumnStatement{Col: e.C, Operator: "<=", Value: any(v)}
-}
-func (e Col[T]) Between(v1 T, v2 T) ColumnStatement {
-	return ColumnStatement{
-		Col:      e.C,
-		Operator: "BETWEEN",
-		From:     []ColumnStatement{{Col: e.C, Value: v1}},
-		To:       []ColumnStatement{{Col: e.C, Value: v2}},
-	}
-}
-
-// Generic Array
-type ColSlice[T any] struct {
-	Name string
-}
-
-func (q ColSlice[T]) GetInfo() columnInfo {
-	return columnInfo{Name: q.Name, FieldType: reflect.TypeFor[T]().String(), IsSlice: true}
-}
-
-func (q ColSlice[T]) GetName() string {
-	return q.Name
-}
-
-func (e ColSlice[T]) Contains(v T) ColumnStatement {
-	return ColumnStatement{Col: e.Name, Operator: "CONTAINS", Value: any(v)}
-}
-
-type CoAny = Col[any]
-type CoInt = Col[int]
-type CoI32 = Col[int32]
-type CoI16 = Col[int16]
-type CoI8 = Col[int8]
-type CoStr = Col[string]
-type CoI64 = Col[int64]
-type CoF32 = Col[float32]
-type CoF64 = Col[float64]
-type CsInt = ColSlice[int]
-type CsI32 = ColSlice[int32]
-type CsI16 = ColSlice[int16]
-type CsI8 = ColSlice[int8]
-type CsStr = ColSlice[string]
-
-type statementGroup struct {
-	group []ColumnStatement
-}
-
-type TableSchemaInterface interface {
-	GetSchema() TableSchema
-}
-
-type GetSchemaTest1[T TableSchemaInterface] struct {
-}
-
-func (e GetSchemaTest1[T]) GetSchema() TableSchema {
-	h := any(new(T)).(TableSchemaInterface)
-	return h.GetSchema()
-}
-
-type Query[T any] struct {
-	T              T
-	statements     []statementGroup
+type TableInfo struct {
+	statements     []ColumnStatement
 	columnsInclude []columnInfo
 	columnsExclude []columnInfo
-	recordsToJoin  []T
-	columnsJoin    []columnInfo
 	between        ColumnStatement
 	orderBy        string
 	limit          int32
+	allowFilter    bool
+	refSlice       any /* referencia al slice de resultados */
 }
 
-func (q *Query[T]) init() {
-	q.T = *new(T)
+// Interfaces
+type TableSchemaInterface[T any] interface {
+	GetSchema() TableSchema
 }
 
-func (q *Query[T]) Columns(columns ...Coln) *Query[T] {
-	for _, col := range columns {
-		q.columnsInclude = append(q.columnsInclude, col.GetInfo())
+type TableBaseInterface[T any, E any] interface {
+	GetBaseStruct() E
+	GetTableStruct() T
+}
+
+type TableStructInterfaceQuery[T any, E any] interface {
+	SetRefSlice(*[]E)
+}
+
+type TableInterface[T any] interface {
+	GetSchema() TableSchema
+	GetTableStruct() T
+}
+
+type ColGetInfoPointer interface {
+	GetInfoPointer() *columnInfo
+	SetSchemaStruct(any)
+	SetTableInfo(*TableInfo)
+}
+
+type Coln interface {
+	GetInfo() columnInfo
+	GetName() string
+}
+
+type ColumnSetInfo interface {
+	SetName(string)
+	SetTableInfo(*TableInfo)
+	SetSchemaStruct(any)
+}
+
+type TableQueryInterface[T any] interface {
+	GetSchema() TableSchema
+	SetWhere(string, string, any)
+	Limit(int32) *T
+	AllowFilter() *T
+	Exec() error
+}
+
+type TableDeployInterface interface {
+	MakeTableSchema() TableSchema
+	MakeScyllaTable() ScyllaTable[any]
+}
+
+// TableStruct
+type TableStruct[T TableSchemaInterface[T], E TableBaseInterface[T, E]] struct {
+	schemaStruct *T
+	tableInfo    *TableInfo
+	// field just for encoding purposes
+	I__ bool `gob:"-" json:"-"`
+}
+
+/*
+// GobEncode implements gob.GobEncoder interface
+// TableStruct is only used for queries and doesn't need to be encoded
+func (e TableStruct[T, E]) GobEncode() ([]byte, error) {
+	return []byte{}, nil
+}
+
+// GobDecode implements gob.GobDecoder interface
+// TableStruct is only used for queries and doesn't need to be decoded
+func (e *TableStruct[T, E]) GobDecode(data []byte) error {
+	return nil
+}
+*/
+
+func (e *TableStruct[T, E]) MakeTableSchema() TableSchema {
+	return MakeSchema[E]()
+}
+func (e *TableStruct[T, E]) MakeScyllaTable() ScyllaTable[any] {
+	return makeTable(new(T))
+}
+
+func (e *TableStruct[T, E]) SetWhere(colname string, operator string, value any) {
+	cs := ColumnStatement{Col: colname, Operator: operator, Value: value}
+	e.tableInfo.statements = append(e.tableInfo.statements, cs)
+}
+
+func (e *TableStruct[T, E]) SetTableInfo(t *TableInfo) {
+	e.tableInfo = t
+}
+func (e *TableStruct[T, E]) SetRefSlice(refSlice *[]E) {
+	e.tableInfo.refSlice = refSlice
+}
+func (e *TableStruct[T, E]) GetTableInfo() *TableInfo {
+	return e.tableInfo
+}
+func (e *TableStruct[T, E]) GetInfoPointer() *columnInfo { // Para compatibilidad
+	return &columnInfo{}
+}
+func (e *TableStruct[T, E]) SetSchemaStruct(schemaStruct any) {
+	if schema, ok := schemaStruct.(*T); ok {
+		e.schemaStruct = schema
 	}
-	return q
 }
-func (q *Query[T]) Exclude(columns ...Coln) *Query[T] {
+func (e TableStruct[T, E]) GetBaseStruct() E {
+	return *new(E)
+}
+func (e TableStruct[T, E]) GetTableStruct() T {
+	return *new(T)
+}
+func (e *TableStruct[T, E]) Select(columns ...Coln) *T {
 	for _, col := range columns {
-		q.columnsExclude = append(q.columnsExclude, col.GetInfo())
+		e.tableInfo.columnsInclude = append(e.tableInfo.columnsInclude, col.GetInfo())
 	}
-	return q
+	return e.schemaStruct
 }
 
-func (q *Query[T]) Where(statements ...ColumnStatement) *Query[T] {
-	q.init()
-	if statements[0].Operator == "BETWEEN" {
-		st := statements[0]
-		q.between.Operator = "BETWEEN"
-		q.between.From = append(q.between.From, st.From...)
-		q.between.To = append(q.between.To, st.To...)
+func (e *TableStruct[T, E]) Exclude(columns ...Coln) *T {
+	for _, col := range columns {
+		e.tableInfo.columnsExclude = append(e.tableInfo.columnsExclude, col.GetInfo())
+	}
+	return e.schemaStruct
+}
+
+func (e *TableStruct[T, E]) GetRefSchema() *T {
+	return e.schemaStruct
+}
+
+func (e *TableStruct[T, E]) Exec() error {
+	return execQuery[T, E](e.schemaStruct, e.tableInfo)
+}
+
+func (e *TableStruct[T, E]) AllowFilter() *T {
+	e.tableInfo.allowFilter = true
+	return e.schemaStruct
+}
+
+func (e *TableStruct[T, E]) Limit(limit int32) *T {
+	e.tableInfo.limit = limit
+	return e.schemaStruct
+}
+
+func (e *TableStruct[T, E]) OrderDesc() *T {
+	e.tableInfo.orderBy = "ORDER BY %v DESC"
+	return e.schemaStruct
+}
+
+func (e *TableStruct[T, E]) Update(records *[]E, columnsToInclude ...Coln) error {
+	return Update(records, columnsToInclude...)
+}
+
+func (e *TableStruct[T, E]) UpdateOne(record E, columnsToInclude ...Coln) error {
+	return UpdateOne(record, columnsToInclude...)
+}
+
+func (e *TableStruct[T, E]) UpdateExclude(records *[]E, columnsToExclude ...Coln) error {
+	return UpdateExclude(records, columnsToExclude...)
+}
+
+func (e *TableStruct[T, E]) Insert(records *[]E, columnsToExclude ...Coln) error {
+	return Insert(records, columnsToExclude...)
+}
+
+func (e *TableStruct[T, E]) InsertOne(record E, columnsToExclude ...Coln) error {
+	return InsertOne(record, columnsToExclude...)
+}
+
+// Col and ColSlice
+type Col[T TableInterface[T], E any] struct {
+	info         columnInfo
+	schemaStruct *T
+	tableInfo    *TableInfo
+}
+
+func (q Col[T, E]) GetInfo() columnInfo {
+	if q.info.Type == 0 {
+		typeOf := reflect.TypeOf((*E)(nil)).Elem().String()
+		q.info.colType = GetColTypeByName(typeOf, "")
+		if q.info.Type == 0 {
+			q.info.colType = GetColTypeByID(9)
+		}
+		// fmt.Println("typeOf", q.info.Name, "|", typeOf, "|", q.info.Type, "|", q.info.IsSlice)
+	}
+	return q.info
+}
+
+func (q *Col[T, E]) GetInfoPointer() *columnInfo {
+	if q.info.Type == 0 {
+		q.info = q.GetInfo()
+	}
+	return &q.info
+}
+
+func (q Col[T, E]) GetName() string {
+	return q.info.Name
+}
+
+func (c *Col[T, E]) SetTableInfo(tableInfo *TableInfo) {
+	c.tableInfo = tableInfo
+}
+
+func (c *Col[T, E]) SetSchemaStruct(schemaStruct any) {
+	// fmt.Println("seteando schemaStruct", c.info.Name)
+	if schema, ok := schemaStruct.(*T); ok {
+		c.schemaStruct = schema
 	} else {
-		q.statements = append(q.statements, statementGroup{
-			group: statements,
-		})
+		fmt.Println("no seteado!!")
 	}
-	return q
 }
 
-func (q *Query[T]) OrderDescending() *Query[T] {
-	q.orderBy = "ORDER BY %v DESC"
-	return q
+func (e *Col[T, E]) Exclude(v E) *T {
+	return e.schemaStruct
 }
 
-func (q *Query[T]) Limit(limit int32) *Query[T] {
-	q.limit = limit
-	return q
+func (e *Col[T, E]) Equals(v E) *T {
+	// fmt.Println("e.schemaStruct", e.schemaStruct)
+	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: "=", Value: any(v)})
+	return e.schemaStruct
 }
 
-func (q *Query[T]) WhereIF(condition bool, ce ColumnStatement) *Query[T] {
-	if condition {
-		q.Where(ce)
+func (e *Col[T, E]) In(values_ ...E) *T {
+	values := []any{}
+	for _, v := range values_ {
+		values = append(values, any(v))
 	}
-	return q
+	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: "IN", Values: values})
+	return e.schemaStruct
 }
 
-func (q *Query[T]) WhereOr(ce ...ColumnStatement) *Query[T] {
-	q.init()
-	q.statements = append(q.statements, statementGroup{group: ce})
-	return q
+func (e *Col[T, E]) GreaterThan(v E) *T {
+	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: ">", Value: any(v)})
+	return e.schemaStruct
 }
 
-type QueryBetweem[T any] struct {
-	query *Query[T]
+func (e *Col[T, E]) GreaterEqual(v E) *T {
+	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: ">=", Value: any(v)})
+	return e.schemaStruct
 }
 
-func (q QueryBetweem[T]) And(statements ...ColumnStatement) *Query[T] {
-	fromColNames := ""
-	for _, c := range q.query.between.From {
-		fromColNames += (c.Col + "_")
+func (e *Col[T, E]) LessThan(v E) *T {
+	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: "<", Value: any(v)})
+	return e.schemaStruct
+}
+
+func (e *Col[T, E]) LessEqual(v E) *T {
+	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: "<=", Value: any(v)})
+	return e.schemaStruct
+}
+
+func (e *Col[T, E]) Between(v1 E, v2 E) *T {
+	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{
+		Col:      e.info.Name,
+		Operator: "BETWEEN",
+		From:     []ColumnStatement{{Col: e.info.Name, Value: v1}},
+		To:       []ColumnStatement{{Col: e.info.Name, Value: v2}},
+	})
+	return e.schemaStruct
+}
+
+type ColSlice[T TableInterface[T], E any] struct {
+	info         columnInfo
+	schemaStruct *T
+	tableInfo    *TableInfo
+}
+
+func (q ColSlice[T, E]) GetInfo() columnInfo {
+	if q.info.Type == 0 {
+		typeOf := reflect.TypeOf((*E)(nil)).Elem().String()
+		if typeOf[0] == '*' {
+			typeOf = "*[]" + typeOf[1:]
+		} else {
+			typeOf = "[]" + typeOf
+		}
+		q.info.colType = GetColTypeByName(typeOf, "")
+		if q.info.colType.Type == 0 {
+			panic("No se reconoió el slice type:" + typeOf)
+		}
 	}
-	toColNames := ""
-	for _, c := range statements {
-		toColNames += (c.Col + "_")
+	return q.info
+}
+
+func (q *ColSlice[T, E]) GetInfoPointer() *columnInfo {
+	if q.info.Type == 0 {
+		q.info = q.GetInfo()
 	}
-	if fromColNames != toColNames {
-		panic(fmt.Sprintf(`The "From" and "To" statements for the BETWEEN operators must contains the same columns in the same order. Getted "%v" vs "%v"`, fromColNames, toColNames))
+	return &q.info
+}
+
+func (q ColSlice[T, E]) GetName() string {
+	return q.info.Name
+}
+
+func (c *ColSlice[T, E]) SetTableInfo(tableInfo *TableInfo) {
+	c.tableInfo = tableInfo
+}
+
+func (c *ColSlice[T, E]) SetSchemaStruct(schemaStruct any) {
+	if schema, ok := schemaStruct.(*T); ok {
+		c.schemaStruct = schema
 	}
-	q.query.between.To = statements
-	return q.query
 }
 
-func (q *Query[T]) Between(statements ...ColumnStatement) QueryBetweem[T] {
-	q.between.From = statements
-	q.between.Operator = "BETWEEN"
-	if len(statements) == 1 {
-		q.between.Col = statements[0].Col
+func (e *ColSlice[T, E]) Contains(v E) *T {
+	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: "CONTAINS", Value: any(v)})
+	return e.schemaStruct
+}
+
+func Query[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSlice *[]T) *E {
+	refTable := initStructTable[E, T](new(E))
+	any(refTable).(TableStructInterfaceQuery[E, T]).SetRefSlice(refSlice)
+	return refTable
+}
+
+func MakeScyllaTable[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() ScyllaTable[any] {
+	refTable := initStructTable[E, T](new(E))
+	return makeTable(refTable)
+}
+
+func MakeSchema[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() TableSchema {
+	refTable := initStructTable[E, T](new(E))
+	return (*refTable).GetSchema()
+}
+
+func initStructTable[T any, E any](schemaStruct *T) *T {
+	// fmt.Println("making table...")
+	structRefValue := reflect.ValueOf(*new(E))
+	structRefType := structRefValue.Type()
+
+	fieldNameIdxMap := map[string]*columnInfo{}
+	refTableInfo := &TableInfo{}
+
+	for i := 0; i < structRefType.NumField(); i++ {
+		field := structRefType.Field(i)
+		xfield := xunsafe.FieldByName(structRefType, field.Name)
+		col := &columnInfo{
+			colInfo: colInfo{
+				FieldIdx:  i,
+				FieldName: field.Name,
+				RefType:   field.Type,
+				Field:     xfield,
+			},
+			colType: GetColTypeByName(field.Type.String(), ""),
+		}
+
+		if col.colType.Type == 0 {
+			col.colType = GetColTypeByID(9)
+		}
+
+		if tag := field.Tag.Get("db"); tag != "" {
+			col.Name = strings.Split(tag, ",")[0]
+		}
+
+		if DebugFull {
+			offset := uintptr(0)
+			if xfield != nil {
+				offset = xfield.Offset
+			}
+			fmt.Printf("Base Struct Field: %-20s | Type: %-15s | Offset: %d\n", field.Name, field.Type.String(), offset)
+		}
+
+		fieldNameIdxMap[col.FieldName] = col
 	}
-	return QueryBetweem[T]{query: q}
-}
 
-type WithJoin[T any] struct {
-	query         *Query[T]
-	recordsToJoin []T
-}
+	structValue := reflect.ValueOf(schemaStruct).Elem()
+	structType := structValue.Type()
 
-func (e *WithJoin[T]) Join(columns ...Coln) *Query[T] {
-	e.query.recordsToJoin = e.recordsToJoin
-	for _, col := range columns {
-		e.query.columnsJoin = append(e.query.columnsJoin, col.GetInfo())
+	// fmt.Println("fieldNameIdxMap...", len(fieldNameIdxMap), "| nf:", structValue.NumField())
+
+	for i := 0; i < structValue.NumField(); i++ {
+		field := structValue.Field(i)
+		fieldType := structType.Field(i)
+
+		// Check if field can be addressed and if it implements ColGetInfoPointer interface
+		if !field.CanAddr() || !field.Addr().CanInterface() {
+			fmt.Println("no es::", fieldType.Name)
+			continue
+		}
+
+		fieldAddr := field.Addr()
+		// Try to get the interface and check if it implements ColGetInfoPointer
+		column, ok := fieldAddr.Interface().(ColGetInfoPointer)
+		if !ok {
+			fmt.Println("El field", fieldType.Name, "no implementa ColumnSetInfo")
+			continue
+		} else {
+			// fmt.Println("Field seteado!", fieldType.Name, "|", fieldType.Type)
+		}
+
+		// Extract column name from db tag or convert field name to snake_case
+		columnName := ""
+		if tag := fieldType.Tag.Get("db"); tag != "" {
+			columnName = strings.Split(tag, ",")[0]
+		}
+
+		if colBase, ok := fieldNameIdxMap[fieldType.Name]; ok {
+			if columnName == "" {
+				columnName = colBase.Name
+			}
+
+			if columnName == "" {
+				columnName = toSnakeCase(fieldType.Name)
+			}
+
+			colInfo := column.GetInfoPointer()
+			colInfo.colInfo = *colBase.GetInfo()
+			colInfo.Name = columnName
+			colInfo.FieldIdx = colBase.GetInfo().FieldIdx
+			colInfo.FieldName = colBase.GetInfo().FieldName
+			colInfo.RefType = colBase.GetInfo().RefType
+			colInfo.Field = colBase.GetInfo().Field
+			if DebugFull {
+				fmt.Printf("Init Col: %s, Field: %s, Offset: %d\n", colInfo.Name, colInfo.FieldName, colInfo.Field.Offset)
+			}
+		} else if fieldType.Name != "TableStruct" {
+			err := fmt.Sprintf(`No se encontró el field "%v" en el struct "%v"`, fieldType.Name, structRefType.Name())
+			panic(err)
+		}
+
+		// Set the column name using the interface method
+		column.SetSchemaStruct(schemaStruct)
+		column.SetTableInfo(refTableInfo)
 	}
-	return e.query
-}
-
-func (q *Query[T]) With(records ...T) *WithJoin[T] {
-	q.init()
-	wj := WithJoin[T]{query: q, recordsToJoin: records}
-	return &wj
-}
-
-type viewInfo struct {
-	Type          int8 /* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
-	name          string
-	idx           int8
-	column        *columnInfo
-	columns       []string
-	columnsNoPart []string
-	columnsIdx    []int16
-	Operators     []string
-	//	getValue        func(s *reflect.Value) any
-	getStatement    func(statements ...ColumnStatement) []string
-	getCreateScript func() string
-}
-
-type QueryResult[T any] struct {
-	Records []T
-	Err     error
+	// fmt.Println("schemaStruct (1)", schemaStruct)
+	return schemaStruct
 }
 
 func makeQueryStatement(statements []string) string {
@@ -361,294 +560,139 @@ func makeQueryStatement(statements []string) string {
 	return queryStr
 }
 
-func MakeInsertStatement[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) []string {
-	scyllaTable := makeTable(*new(T))
-
-	columns := []*columnInfo{}
-	if len(columnsToExclude) > 0 {
-		columsToExcludeNames := []string{}
-		for _, e := range columnsToExclude {
-			columsToExcludeNames = append(columsToExcludeNames, e.GetInfo().Name)
-		}
-		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columsToExcludeNames, col.Name) {
-				columns = append(columns, col)
-			}
-		}
-	} else {
-		columns = scyllaTable.columns
-	}
-
-	columnsNames := []string{}
-	for _, col := range columns {
-		columnsNames = append(columnsNames, col.Name)
-	}
-
-	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES `,
-		scyllaTable.GetFullName(), strings.Join(columnsNames, ", "))
-
-	queryStatements := []string{}
-
-	for _, rec := range *records {
-		refValue := reflect.ValueOf(rec)
-		// fmt.Println("Type:", reflect.TypeOf(rec).String())
-
-		recordInsertValues := []string{}
-
-		for _, col := range columns {
-			if col.getValue == nil {
-				panic("is nil column: getValue() = " + col.Name + " | " + col.FieldName)
-			}
-			value := col.getValue(&refValue)
-			recordInsertValues = append(recordInsertValues, fmt.Sprintf("%v", value))
-		}
-
-		statement := /*" " +*/ queryStrInsert + "(" + strings.Join(recordInsertValues, ", ") + ")"
-		queryStatements = append(queryStatements, statement)
-	}
-	return queryStatements
+// execQuery executes a query based on TableInfo and returns records
+func execQuery[T TableSchemaInterface[T], E any](schemaStruct *T, tableInfo *TableInfo) error {
+	records := (tableInfo.refSlice).(*[]E)
+	scyllaTable := makeTable(schemaStruct)
+	return selectExec(records, tableInfo, scyllaTable)
 }
 
-func MakeInsertBatch[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) *gocql.Batch {
-	scyllaTable := makeTable(*new(T))
-
-	columns := []*columnInfo{}
-	if len(columnsToExclude) > 0 {
-		columsToExcludeNames := []string{}
-		for _, e := range columnsToExclude {
-			columsToExcludeNames = append(columsToExcludeNames, e.GetInfo().Name)
-		}
-		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columsToExcludeNames, col.Name) {
-				columns = append(columns, col)
-			}
-		}
-	} else {
-		columns = scyllaTable.columns
-	}
-
-	columnsNames := []string{}
-	columnPlaceholders := []string{}
-	for _, col := range columns {
-		columnsNames = append(columnsNames, col.Name)
-		columnPlaceholders = append(columnPlaceholders, "?")
-	}
-
-	session := getScyllaConnection()
-	batch := session.NewBatch(gocql.UnloggedBatch)
-
-	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES (%v)`,
-		scyllaTable.GetFullName(), strings.Join(columnsNames, ", "), strings.Join(columnPlaceholders, ", "))
-
-	for _, rec := range *records {
-		refValue := reflect.ValueOf(rec)
-		values := []any{}
-
-		for _, col := range columns {
-			if col.getValue == nil {
-				panic("is nil column: getValue() = " + col.Name + " | " + col.FieldName)
-			}
-			var value any
-			if col.getStatementValue != nil {
-				value = col.getStatementValue(&refValue)
-			} else {
-				value = col.getValue(&refValue)
-			}
-			values = append(values, value)
-		}
-
-		fmt.Println("VALUES::")
-		fmt.Println(values)
-		batch.Query(queryStrInsert, values...)
-	}
-	return batch
+/* Increment Table */
+type Increment struct {
+	TableStruct[IncrementTable, Increment]
+	Name         string
+	CurrentValue int64
 }
 
-func Insert[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) error {
-
-	session := getScyllaConnection()
-	fmt.Println("BATCH (1)::")
-	queryBatch := MakeInsertBatch(records, columnsToExclude...)
-
-	fmt.Println("BATCH (2)::")
-	fmt.Println(queryBatch.Entries)
-
-	if err := session.ExecuteBatch(queryBatch); err != nil {
-		fmt.Println("Error inserting records:", err)
-		return err
-	}
-
-	return nil
+type IncrementTable struct {
+	TableStruct[IncrementTable, Increment]
+	Name         Col[IncrementTable, string] // `db:"name,pk"`
+	CurrentValue Col[IncrementTable, int64]  // `db:"current_value,counter"`
 }
 
-func makeUpdateStatementsBase[T TableSchemaInterface](records *[]T, columnsToInclude []Coln, columnsToExclude []Coln, onlyVirtual bool) []string {
+func (e IncrementTable) GetSchema() TableSchema {
+	return TableSchema{
+		Name:           "sequences",
+		Keys:           []Coln{e.Name},
+		SequenceColumn: &e.CurrentValue,
+	}
+}
 
-	scyllaTable := makeTable(*new(T))
-	columnsToUpdate := []*columnInfo{}
+func (e *TableStruct[T, E]) GetCounter(
+	increment int, partValue any, secondPartValue ...any,
+) (int64, error) {
 
-	if len(columnsToInclude) > 0 {
-		for _, col_ := range columnsToInclude {
-			col := scyllaTable.columnsMap[col_.GetName()]
-			if slices.Contains(scyllaTable.keysIdx, col.Idx) {
-				msg := fmt.Sprintf(`Table "%v": The column "%v" can't be updated because is part of primary key.`, scyllaTable.name, col.Name)
-				panic(msg)
-			}
-			columnsToUpdate = append(columnsToUpdate, col)
+	result := []Increment{}
+	query := Query(&result)
+	secondPartValue_ := any(0)
+	if len(secondPartValue) > 0 {
+		secondPartValue_ = secondPartValue[0]
+	}
+
+	scyllaTable := e.MakeScyllaTable()
+
+	name := fmt.Sprintf("%v_%v_%v", scyllaTable.name, partValue, secondPartValue_)
+	query.Select().Name.Equals(name)
+
+	if err := query.Exec(); err != nil {
+		return 0, Err("Error al obtener el counter: ", err)
+	}
+
+	currentValue := int64(1)
+	if len(result) > 0 {
+		currentValue = result[0].CurrentValue
+	}
+
+	queryUpdateStr := fmt.Sprintf(
+		"UPDATE %v.sequences SET current_value = current_value + %v WHERE name = '%v'",
+		strings.Split(scyllaTable.GetFullName(), ".")[0], increment, name,
+	)
+
+	if err := QueryExec(queryUpdateStr); err != nil {
+		fmt.Println(queryUpdateStr)
+		panic(err)
+	}
+
+	return currentValue, nil
+}
+
+type SeqValue struct {
+	ID      int64 `db:"id"`
+	SeqPart int64 `db:"seq_part"`
+}
+
+func (e ScyllaController[T, E]) ResetCounter(partValue any) error {
+
+	scyllaTable := e.GetTable()
+	if !scyllaTable.useSequences {
+		return nil
+	}
+
+	seqValues := []SeqValue{}
+
+	if scyllaTable.sequencePartCol == nil {
+
+		maxValue := int64(0)
+
+		queryMax := fmt.Sprintf(
+			`SELECT max(%v) as id FROM %v WHERE %v = %v`,
+			scyllaTable.keys[0].GetName(),
+			scyllaTable.GetFullName(),
+			scyllaTable.partKey.GetName(),
+			partValue)
+
+		if err := getScyllaConnection().Query(queryMax).Scan(&maxValue); err != nil {
+			fmt.Println("Error al obtener el valor máximo (posiblemente tabla vacía): ", err)
 		}
+
+		seqValues = append(seqValues, SeqValue{ID: maxValue})
+
 	} else {
-		columnsToExcludeNames := []string{}
-		for _, c := range columnsToExclude {
-			columnsToExcludeNames = append(columnsToExcludeNames, c.GetName())
+
+		queryMax := fmt.Sprintf(
+			`SELECT max(%v) as id, %v as seq_part FROM %v WHERE %v = %v GROUP BY %v ALLOW FILTERING`,
+			scyllaTable.keys[0].GetName(),
+			scyllaTable.sequencePartCol.GetName(),
+			scyllaTable.GetFullName(),
+			scyllaTable.partKey.GetName(),
+			partValue,
+			scyllaTable.sequencePartCol.GetName())
+
+		iter := getScyllaConnection().Query(queryMax).Iter()
+		var id int64
+		var seqPart int64
+		for iter.Scan(&id, &seqPart) {
+			seqValues = append(seqValues, SeqValue{ID: id, SeqPart: seqPart})
 		}
-		for _, col := range scyllaTable.columns {
-			isExcluded := slices.Contains(columnsToExcludeNames, col.Name)
-			if !col.IsVirtual && !isExcluded && !slices.Contains(scyllaTable.keysIdx, col.Idx) {
-				columnsToUpdate = append(columnsToUpdate, col)
-			}
-		}
-	}
-
-	columnsIdx := []int16{}
-	for _, col := range columnsToUpdate {
-		columnsIdx = append(columnsIdx, col.Idx)
-	}
-
-	//Revisa si hay columnas que deben actualizarse juntas para los índices calculados
-	for _, indexViews := range scyllaTable.indexViews {
-		if indexViews.column.IsVirtual {
-			includedCols := []int16{}
-			notIncludedCols := []int16{}
-			for _, colIdx := range indexViews.columnsIdx {
-				if slices.Contains(columnsIdx, colIdx) || slices.Contains(scyllaTable.keysIdx, colIdx) {
-					includedCols = append(includedCols, colIdx)
-				} else {
-					notIncludedCols = append(notIncludedCols, colIdx)
-				}
-			}
-			if len(includedCols) > 0 && len(notIncludedCols) > 0 {
-				colNames := strings.Join(indexViews.columns, `, `)
-				includedColsNames := []string{}
-				for _, idx := range notIncludedCols {
-					includedColsNames = append(includedColsNames, scyllaTable.columnsIdxMap[idx].Name)
-				}
-
-				msg := fmt.Sprintf(`Table "%v": A composit index/view requires the columns %v are updated together. Included: %v`, scyllaTable.name, colNames, strings.Join(includedColsNames, ", "))
-				panic(msg)
-			} else if len(includedCols) > 0 {
-				columnsToUpdate = append(columnsToUpdate, indexViews.column)
-			}
+		if err := iter.Close(); err != nil {
+			fmt.Println("Error al obtener los valores máximos agrupados: ", err)
 		}
 	}
 
-	if onlyVirtual {
-		cols := columnsToUpdate
-		columnsToUpdate = nil
-		for _, col := range cols {
-			if col.IsVirtual {
-				columnsToUpdate = append(columnsToUpdate, col)
-			}
-		}
-	}
+	for _, seqValue := range seqValues {
+		name := fmt.Sprintf("x%v_%v_%v", partValue, scyllaTable.name, seqValue.SeqPart)
+		keyspace := strings.Split(scyllaTable.GetFullName(), ".")[0]
 
-	columnsWhere := scyllaTable.keys
-
-	if scyllaTable.partKey != nil {
-		columnsWhere = append([]*columnInfo{scyllaTable.partKey}, columnsWhere...)
-	}
-
-	queryStatements := []string{}
-
-	for _, rec := range *records {
-		refValue := reflect.ValueOf(rec)
-
-		setStatements := []string{}
-		for _, col := range columnsToUpdate {
-			v := col.getValue(&refValue)
-			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
-		}
-
-		whereStatements := []string{}
-		for _, col := range columnsWhere {
-			v := col.getValue(&refValue)
-			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, col.Name, v))
-		}
-
-		queryStatement := fmt.Sprintf(
-			"UPDATE %v SET %v WHERE %v",
-			scyllaTable.GetFullName(), Concatx(", ", setStatements), Concatx(" and ", whereStatements),
+		queryUpdateStr := fmt.Sprintf(
+			"UPDATE %v.sequences SET current_value = current_value + %v WHERE name = '%v'",
+			keyspace, seqValue.ID, name,
 		)
 
-		queryStatements = append(queryStatements, queryStatement)
-	}
+		fmt.Println(queryUpdateStr)
 
-	return queryStatements
-}
-
-func MakeUpdateStatements[T TableSchemaInterface](records *[]T, columnsToInclude ...Coln) []string {
-	return makeUpdateStatementsBase(records, columnsToInclude, nil, false)
-}
-
-func Update[T TableSchemaInterface](records *[]T, columnsToInclude ...Coln) error {
-
-	if len(columnsToInclude) == 0 {
-		panic("No se incluyeron columnas a actualizar.")
-	}
-
-	queryStatements := makeUpdateStatementsBase(records, columnsToInclude, nil, false)
-	queryUpdate := makeQueryStatement(queryStatements)
-	fmt.Println(queryUpdate)
-
-	if err := QueryExec(queryUpdate); err != nil {
-		fmt.Println("Error updating records:", err)
-		return err
-	}
-	return nil
-}
-
-func UpdateExclude[T TableSchemaInterface](records *[]T, columnsToExclude ...Coln) error {
-
-	queryStatements := makeUpdateStatementsBase(records, nil, columnsToExclude, false)
-	queryInsert := makeQueryStatement(queryStatements)
-	if err := QueryExec(queryInsert); err != nil {
-		fmt.Println(queryInsert)
-		fmt.Println("Error inserting records:", err)
-		return err
-	}
-	return nil
-}
-
-func InsertOrUpdate[T TableSchemaInterface](
-	records *[]T,
-	isRecordForInsert func(e *T) bool,
-	columnsToExcludeUpdate []Coln,
-	columnsToExcludeInsert ...Coln,
-) error {
-
-	recordsToInsert := []T{}
-	recordsToUpdate := []T{}
-
-	for _, e := range *records {
-		if isRecordForInsert(&e) {
-			recordsToInsert = append(recordsToInsert, e)
-		} else {
-			recordsToUpdate = append(recordsToUpdate, e)
-		}
-	}
-
-	if len(recordsToUpdate) > 0 {
-		fmt.Println("Registros a actualizar:", len(recordsToUpdate))
-		err := UpdateExclude(&recordsToUpdate, columnsToExcludeUpdate...)
-		if err != nil {
-			return err
-		}
-	}
-
-	if len(recordsToInsert) > 0 {
-		fmt.Println("Registros a insertar:", len(recordsToInsert))
-
-		err := Insert(&recordsToInsert, columnsToExcludeInsert...)
-		if err != nil {
-			return err
+		if err := QueryExec(queryUpdateStr); err != nil {
+			fmt.Println(queryUpdateStr)
+			panic(err)
 		}
 	}
 

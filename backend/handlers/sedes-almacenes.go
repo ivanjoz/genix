@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"app/core"
-	"app/db2"
+	"app/db"
 	s "app/types"
 	"encoding/json"
 	"fmt"
@@ -18,7 +18,7 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		query := db2.Query(&almacenes)
+		query := db.Query(&almacenes)
 		query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
 
 		if updated > 0 {
@@ -35,7 +35,7 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 
 	sedes := []s.Sede{}
 	errGroup.Go(func() error {
-		query := db2.Query(&sedes)
+		query := db.Query(&sedes)
 		query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
 
 		if updated > 0 {
@@ -69,7 +69,7 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 
 	if !ubigeosSlice.IsEmpty() {
 		// Note: PaisCiudad still uses old db ORM - this will need to be migrated separately
-		query := db2.Query(&paisCiudades)
+		query := db.Query(&paisCiudades)
 		query.Select().
 			PaisID.Equals(604).
 			CiudadID.In(ubigeosSlice.Values...)
@@ -139,7 +139,7 @@ func PostSedes(req *core.HandlerArgs) core.HandlerResponse {
 	body.Created = time.Now().Unix()
 	body.CreatedBy = req.Usuario.ID
 
-	if err = db2.Insert(&[]s.Sede{body}); err != nil {
+	if err = db.Insert(&[]s.Sede{body}); err != nil {
 		return req.MakeErr("Error al actualizar / insertar la sede: " + err.Error())
 	}
 
@@ -151,7 +151,7 @@ func GetPaisCiudades(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt64("upd")
 
 	paisCiudades := []s.PaisCiudad{}
-	query := db2.Query(&paisCiudades)
+	query := db.Query(&paisCiudades)
 	query.Select().
 		PaisID.Equals(int32(paisID))
 
@@ -204,7 +204,7 @@ func PostAlmacen(req *core.HandlerArgs) core.HandlerResponse {
 	body.Created = time.Now().Unix()
 	body.CreatedBy = req.Usuario.ID
 
-	if err := db2.Insert(&[]s.Almacen{body}); err != nil {
+	if err := db.Insert(&[]s.Almacen{body}); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el almacén: " + err.Error())
 	}
 

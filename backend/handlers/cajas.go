@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"app/core"
-	"app/db2"
+	"app/db"
 	"app/shared"
 	s "app/types"
 	"encoding/json"
@@ -12,7 +12,7 @@ func GetCajas(req *core.HandlerArgs) core.HandlerResponse {
 	updated := core.UnixToSunix(req.GetQueryInt64("upd"))
 
 	cajas := []s.Caja{}
-	query := db2.Query(&cajas)
+	query := db.Query(&cajas)
 	query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
 	if updated > 0 {
 		query.Updated.GreaterEqual(updated)
@@ -71,11 +71,11 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 	// Insert or Update using db2
 	if body.Created == nowTime {
 		// New record - insert
-		err = db2.Insert(&[]s.Caja{body})
+		err = db.Insert(&[]s.Caja{body})
 	} else {
 		// Existing record - update excluding specific fields
-		q1 := db2.Table[s.Caja]()
-		err = db2.UpdateExclude(&[]s.Caja{body}, q1.CuadreFecha, q1.CuadreSaldo, q1.SaldoCurrent)
+		q1 := db.Table[s.Caja]()
+		err = db.UpdateExclude(&[]s.Caja{body}, q1.CuadreFecha, q1.CuadreSaldo, q1.SaldoCurrent)
 	}
 
 	if err != nil {
@@ -97,7 +97,7 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	lastRegistros = core.If(lastRegistros > 1000, 1000, lastRegistros)
 
 	movimientos := []s.CajaMovimiento{}
-	query := db2.Query(&movimientos)
+	query := db.Query(&movimientos)
 	query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
 	if lastRegistros > 0 {
 		query.ID.Between(
@@ -140,7 +140,7 @@ func GetCajaCuadres(req *core.HandlerArgs) core.HandlerResponse {
 	lastRegistros = core.If(lastRegistros > 1000, 1000, lastRegistros)
 
 	cuadres := []s.CajaCuadre{}
-	query := db2.Query(&cuadres)
+	query := db.Query(&cuadres)
 	query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
 	if lastRegistros > 0 {
 		query.ID.Between(core.SUnixTimeUUIDConcatID(cajaID, 0), core.SUnixTimeUUIDConcatID(cajaID+1, 0))
@@ -217,18 +217,18 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Insert records using db2
-	if err := db2.Insert(&[]s.CajaCuadre{record}); err != nil {
+	if err := db.Insert(&[]s.CajaCuadre{record}); err != nil {
 		core.Log("Error ScyllaDB inserting cuadre: ", err)
 		return req.MakeErr("Error al registrar el cuadre:", err)
 	}
 
-	q1 := db2.Table[s.Caja]()
-	if err := db2.Update(&[]s.Caja{caja}, q1.CuadreFecha, q1.CuadreSaldo, q1.SaldoCurrent, q1.Updated, q1.UpdatedBy); err != nil {
+	q1 := db.Table[s.Caja]()
+	if err := db.Update(&[]s.Caja{caja}, q1.CuadreFecha, q1.CuadreSaldo, q1.SaldoCurrent, q1.Updated, q1.UpdatedBy); err != nil {
 		core.Log("Error ScyllaDB updating caja: ", err)
 		return req.MakeErr("Error al actualizar la caja:", err)
 	}
 
-	if err := db2.Insert(&[]s.CajaMovimiento{movimiento}); err != nil {
+	if err := db.Insert(&[]s.CajaMovimiento{movimiento}); err != nil {
 		core.Log("Error ScyllaDB inserting movimiento: ", err)
 		return req.MakeErr("Error al registrar el movimiento:", err)
 	}
@@ -278,14 +278,14 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
 	caja.UpdatedBy = req.Usuario.ID
 
 	// Insert movimiento using db2
-	if err := db2.Insert(&[]s.CajaMovimiento{record}); err != nil {
+	if err := db.Insert(&[]s.CajaMovimiento{record}); err != nil {
 		core.Log("Error ScyllaDB inserting movimiento: ", err)
 		return req.MakeErr("Error al registrar el movimiento:", err)
 	}
 
 	// Update caja using db2
-	q1 := db2.Table[s.Caja]()
-	if err := db2.Update(&[]s.Caja{caja}, q1.CuadreFecha, q1.CuadreSaldo, q1.SaldoCurrent, q1.Updated, q1.UpdatedBy); err != nil {
+	q1 := db.Table[s.Caja]()
+	if err := db.Update(&[]s.Caja{caja}, q1.CuadreFecha, q1.CuadreSaldo, q1.SaldoCurrent, q1.Updated, q1.UpdatedBy); err != nil {
 		core.Log("Error ScyllaDB updating caja: ", err)
 		return req.MakeErr("Error al actualizar la caja:", err)
 	}

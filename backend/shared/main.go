@@ -2,7 +2,7 @@ package shared
 
 import (
 	"app/core"
-	"app/db2"
+	"app/db"
 	"app/types"
 	s "app/types"
 )
@@ -15,7 +15,7 @@ func GetUsuarios(empresaID int32, usuariosIDs []int32) ([]types.Usuario, error) 
 	}
 
 	usuarios := []s.Usuario{}
-	query := db2.Query(&usuarios)
+	query := db.Query(&usuarios)
 	query.Select().
 		EmpresaID.Equals(empresaID).
 		ID.In(ids.Values...)
@@ -29,7 +29,7 @@ func GetUsuarios(empresaID int32, usuariosIDs []int32) ([]types.Usuario, error) 
 func GetCaja(empresaID, cajaID int32) (s.Caja, error) {
 
 	cajas := []s.Caja{}
-	query := db2.Query(&cajas)
+	query := db.Query(&cajas)
 	query.Select().
 		EmpresaID.Equals(empresaID).
 		ID.Equals(cajaID)

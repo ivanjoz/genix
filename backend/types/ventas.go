@@ -1,9 +1,9 @@
 package types
 
-import "app/db2"
+import "app/db"
 
 type Caja struct {
-	db2.TableStruct[CajaTable, Caja]
+	db.TableStruct[CajaTable, Caja]
 	EmpresaID    int32  `db:"empresa_id,pk"`
 	ID           int32  `db:"id,pk"`
 	Tipo         int32  `db:"tipo"`
@@ -23,38 +23,38 @@ type Caja struct {
 }
 
 type CajaTable struct {
-	db2.TableStruct[CajaTable, Caja]
-	EmpresaID    db2.Col[CajaTable, int32]
-	ID           db2.Col[CajaTable, int32]
-	Tipo         db2.Col[CajaTable, int32]
-	SedeID       db2.Col[CajaTable, int32]
-	Nombre       db2.Col[CajaTable, string]
-	Descripcion  db2.Col[CajaTable, string]
-	MonedaTipo   db2.Col[CajaTable, int8]
-	CuadreFecha  db2.Col[CajaTable, int32]
-	CuadreSaldo  db2.Col[CajaTable, int32]
-	SaldoCurrent db2.Col[CajaTable, int32]
-	Status       db2.Col[CajaTable, int8]
-	Updated      db2.Col[CajaTable, int32]
-	UpdatedBy    db2.Col[CajaTable, int32]
-	Created      db2.Col[CajaTable, int32]
-	CreatedBy    db2.Col[CajaTable, int32]
+	db.TableStruct[CajaTable, Caja]
+	EmpresaID    db.Col[CajaTable, int32]
+	ID           db.Col[CajaTable, int32]
+	Tipo         db.Col[CajaTable, int32]
+	SedeID       db.Col[CajaTable, int32]
+	Nombre       db.Col[CajaTable, string]
+	Descripcion  db.Col[CajaTable, string]
+	MonedaTipo   db.Col[CajaTable, int8]
+	CuadreFecha  db.Col[CajaTable, int32]
+	CuadreSaldo  db.Col[CajaTable, int32]
+	SaldoCurrent db.Col[CajaTable, int32]
+	Status       db.Col[CajaTable, int8]
+	Updated      db.Col[CajaTable, int32]
+	UpdatedBy    db.Col[CajaTable, int32]
+	Created      db.Col[CajaTable, int32]
+	CreatedBy    db.Col[CajaTable, int32]
 }
 
-func (e CajaTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e CajaTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "cajas",
 		Partition: e.EmpresaID,
-		Keys:      []db2.Coln{e.ID},
-		Views: []db2.View{
-			{Cols: []db2.Coln{e.Status}, KeepPart: true},
-			{Cols: []db2.Coln{e.Updated}, KeepPart: true},
+		Keys:      []db.Coln{e.ID},
+		Views: []db.View{
+			{Cols: []db.Coln{e.Status}, KeepPart: true},
+			{Cols: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
 
 type CajaMovimiento struct {
-	db2.TableStruct[CajaMovimientoTable, CajaMovimiento]
+	db.TableStruct[CajaMovimientoTable, CajaMovimiento]
 	EmpresaID  int32 `json:",omitempty" db:"empresa_id,pk"`
 	ID         int64 `db:"id,pk"`
 	CajaID     int32 `db:"caja_id"`
@@ -68,33 +68,33 @@ type CajaMovimiento struct {
 }
 
 type CajaMovimientoTable struct {
-	db2.TableStruct[CajaMovimientoTable, CajaMovimiento]
-	EmpresaID  db2.Col[CajaMovimientoTable, int32]
-	ID         db2.Col[CajaMovimientoTable, int64]
-	CajaID     db2.Col[CajaMovimientoTable, int32]
-	CajaRefID  db2.Col[CajaMovimientoTable, int32]
-	VentaID    db2.Col[CajaMovimientoTable, int32]
-	Tipo       db2.Col[CajaMovimientoTable, int8]
-	SaldoFinal db2.Col[CajaMovimientoTable, int32]
-	Monto      db2.Col[CajaMovimientoTable, int32]
-	Created    db2.Col[CajaMovimientoTable, int32]
-	CreatedBy  db2.Col[CajaMovimientoTable, int32]
+	db.TableStruct[CajaMovimientoTable, CajaMovimiento]
+	EmpresaID  db.Col[CajaMovimientoTable, int32]
+	ID         db.Col[CajaMovimientoTable, int64]
+	CajaID     db.Col[CajaMovimientoTable, int32]
+	CajaRefID  db.Col[CajaMovimientoTable, int32]
+	VentaID    db.Col[CajaMovimientoTable, int32]
+	Tipo       db.Col[CajaMovimientoTable, int8]
+	SaldoFinal db.Col[CajaMovimientoTable, int32]
+	Monto      db.Col[CajaMovimientoTable, int32]
+	Created    db.Col[CajaMovimientoTable, int32]
+	CreatedBy  db.Col[CajaMovimientoTable, int32]
 }
 
-func (e CajaMovimientoTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e CajaMovimientoTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "caja_movimientos",
 		Partition: e.EmpresaID,
-		Keys:      []db2.Coln{e.ID},
-		Views: []db2.View{
-			{Cols: []db2.Coln{e.VentaID}, KeepPart: true},
-			{Cols: []db2.Coln{e.CreatedBy}, KeepPart: true},
+		Keys:      []db.Coln{e.ID},
+		Views: []db.View{
+			{Cols: []db.Coln{e.VentaID}, KeepPart: true},
+			{Cols: []db.Coln{e.CreatedBy}, KeepPart: true},
 		},
 	}
 }
 
 type CajaCuadre struct {
-	db2.TableStruct[CajaCuadreTable, CajaCuadre]
+	db.TableStruct[CajaCuadreTable, CajaCuadre]
 	EmpresaID       int32 `json:",omitempty" db:"empresa_id,pk"`
 	ID              int64 `json:",omitempty" db:"id,pk"`
 	CajaID          int32 `json:",omitempty" db:"caja_id"`
@@ -108,26 +108,26 @@ type CajaCuadre struct {
 }
 
 type CajaCuadreTable struct {
-	db2.TableStruct[CajaCuadreTable, CajaCuadre]
-	EmpresaID       db2.Col[CajaCuadreTable, int32]
-	ID              db2.Col[CajaCuadreTable, int64]
-	CajaID          db2.Col[CajaCuadreTable, int32]
-	Tipo            db2.Col[CajaCuadreTable, int8]
-	MovimientoID    db2.Col[CajaCuadreTable, int64]
-	SaldoSistema    db2.Col[CajaCuadreTable, int32]
-	SaldoReal       db2.Col[CajaCuadreTable, int32]
-	SaldoDiferencia db2.Col[CajaCuadreTable, int32]
-	Created         db2.Col[CajaCuadreTable, int32]
-	CreatedBy       db2.Col[CajaCuadreTable, int32]
+	db.TableStruct[CajaCuadreTable, CajaCuadre]
+	EmpresaID       db.Col[CajaCuadreTable, int32]
+	ID              db.Col[CajaCuadreTable, int64]
+	CajaID          db.Col[CajaCuadreTable, int32]
+	Tipo            db.Col[CajaCuadreTable, int8]
+	MovimientoID    db.Col[CajaCuadreTable, int64]
+	SaldoSistema    db.Col[CajaCuadreTable, int32]
+	SaldoReal       db.Col[CajaCuadreTable, int32]
+	SaldoDiferencia db.Col[CajaCuadreTable, int32]
+	Created         db.Col[CajaCuadreTable, int32]
+	CreatedBy       db.Col[CajaCuadreTable, int32]
 }
 
-func (e CajaCuadreTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e CajaCuadreTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "caja_cuadre",
 		Partition: e.EmpresaID,
-		Keys:      []db2.Coln{e.ID},
-		Views: []db2.View{
-			{Cols: []db2.Coln{e.CreatedBy}, KeepPart: true},
+		Keys:      []db.Coln{e.ID},
+		Views: []db.View{
+			{Cols: []db.Coln{e.CreatedBy}, KeepPart: true},
 		},
 	}
 }

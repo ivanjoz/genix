@@ -1,29 +1,29 @@
 package types
 
-import "app/db2"
+import "app/db"
 
 type Increment struct {
-	db2.TableStruct[IncrementTable, Increment]
+	db.TableStruct[IncrementTable, Increment]
 	Name         string
 	CurrentValue int64
 }
 
 type IncrementTable struct {
-	db2.TableStruct[IncrementTable, Increment]
-	Name         db2.Col[IncrementTable, string] // `db:"name,pk"`
-	CurrentValue db2.Col[IncrementTable, int64]  // `db:"current_value,counter"`
+	db.TableStruct[IncrementTable, Increment]
+	Name         db.Col[IncrementTable, string] // `db:"name,pk"`
+	CurrentValue db.Col[IncrementTable, int64]  // `db:"current_value,counter"`
 }
 
-func (e IncrementTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e IncrementTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:           "sequences",
-		Keys:           []db2.Coln{e.Name},
+		Keys:           []db.Coln{e.Name},
 		SequenceColumn: &e.CurrentValue,
 	}
 }
 
 type PaisCiudad struct {
-	db2.TableStruct[PaisCiudadTable, PaisCiudad]
+	db.TableStruct[PaisCiudadTable, PaisCiudad]
 	PaisID       int32       `json:",omitempty" db:"pais_id,pk"`
 	CiudadID     string      `json:"ID" db:"ciudad_id,pk"`
 	Nombre       string      `db:"nombre"`
@@ -35,28 +35,28 @@ type PaisCiudad struct {
 }
 
 type PaisCiudadTable struct {
-	db2.TableStruct[PaisCiudadTable, PaisCiudad]
-	PaisID    db2.Col[PaisCiudadTable, int32]
-	CiudadID  db2.Col[PaisCiudadTable, string]
-	Nombre    db2.Col[PaisCiudadTable, string]
-	PadreID   db2.Col[PaisCiudadTable, string]
-	Jerarquia db2.Col[PaisCiudadTable, int8]
-	Updated   db2.Col[PaisCiudadTable, int64]
+	db.TableStruct[PaisCiudadTable, PaisCiudad]
+	PaisID    db.Col[PaisCiudadTable, int32]
+	CiudadID  db.Col[PaisCiudadTable, string]
+	Nombre    db.Col[PaisCiudadTable, string]
+	PadreID   db.Col[PaisCiudadTable, string]
+	Jerarquia db.Col[PaisCiudadTable, int8]
+	Updated   db.Col[PaisCiudadTable, int64]
 }
 
-func (e PaisCiudadTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e PaisCiudadTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "pais_ciudades",
 		Partition: e.PaisID,
-		Keys:      []db2.Coln{e.CiudadID},
-		Views: []db2.View{
-			{Cols: []db2.Coln{e.Updated}, KeepPart: true},
+		Keys:      []db.Coln{e.CiudadID},
+		Views: []db.View{
+			{Cols: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
 
 type ListaCompartidaRegistro struct {
-	db2.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
+	db.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
 	EmpresaID   int32    `db:"empresa_id,pk"`
 	ID          int32    `db:"id,pk"`
 	ListaID     int32    `db:"lista_id,view,view.1,view.2"`
@@ -70,27 +70,27 @@ type ListaCompartidaRegistro struct {
 }
 
 type ListaCompartidaRegistroTable struct {
-	db2.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
-	EmpresaID   db2.Col[ListaCompartidaRegistroTable, int32]
-	ID          db2.Col[ListaCompartidaRegistroTable, int32]
-	ListaID     db2.Col[ListaCompartidaRegistroTable, int32]
-	Nombre      db2.Col[ListaCompartidaRegistroTable, string]
-	Images      db2.ColSlice[ListaCompartidaRegistroTable, string]
-	Descripcion db2.Col[ListaCompartidaRegistroTable, string]
-	Status      db2.Col[ListaCompartidaRegistroTable, int8]
-	Updated     db2.Col[ListaCompartidaRegistroTable, int64]
-	UpdatedBy   db2.Col[ListaCompartidaRegistroTable, int32]
+	db.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
+	EmpresaID   db.Col[ListaCompartidaRegistroTable, int32]
+	ID          db.Col[ListaCompartidaRegistroTable, int32]
+	ListaID     db.Col[ListaCompartidaRegistroTable, int32]
+	Nombre      db.Col[ListaCompartidaRegistroTable, string]
+	Images      db.ColSlice[ListaCompartidaRegistroTable, string]
+	Descripcion db.Col[ListaCompartidaRegistroTable, string]
+	Status      db.Col[ListaCompartidaRegistroTable, int8]
+	Updated     db.Col[ListaCompartidaRegistroTable, int64]
+	UpdatedBy   db.Col[ListaCompartidaRegistroTable, int32]
 }
 
-func (e ListaCompartidaRegistroTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "lista_compartida_registro",
 		Partition: e.EmpresaID,
-		Keys:      []db2.Coln{e.ID},
-		Views: []db2.View{
+		Keys:      []db.Coln{e.ID},
+		Views: []db.View{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
-			{Cols: []db2.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
-			{Cols: []db2.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
+			{Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
+			{Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
 		},
 	}
 }

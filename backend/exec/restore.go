@@ -3,7 +3,7 @@ package exec
 import (
 	"app/aws"
 	"app/core"
-	"app/db2"
+	"app/db"
 	"archive/tar"
 	"bytes"
 	"encoding/json"
@@ -41,7 +41,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener el backup desde el S3", err)
 	}
 
-	controllersMap := map[string]db2.ScyllaControllerInterface{}
+	controllersMap := map[string]db.ScyllaControllerInterface{}
 
 	for _, e := range MakeScyllaControllers() {
 		controllersMap[e.GetTableName()] = e

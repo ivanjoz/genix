@@ -3,7 +3,7 @@ package exec
 import (
 	"app/aws"
 	"app/core"
-	"app/db2"
+	"app/db"
 	"app/handlers"
 	"fmt"
 )
@@ -15,7 +15,7 @@ type InnerStruct struct {
 }
 
 type DemoStruct struct {
-	db2.TableStruct[DemoStructTable, DemoStruct]
+	db.TableStruct[DemoStructTable, DemoStruct]
 	EmpresaID   int32    `db:"empresa_id,pk"`
 	ID          int32    `db:"id,pk"`
 	ListaID     int32    `db:"lista_id,view,view.1,view.2"`
@@ -31,29 +31,29 @@ type DemoStruct struct {
 }
 
 type DemoStructTable struct {
-	db2.TableStruct[DemoStructTable, DemoStruct]
-	EmpresaID   db2.Col[DemoStructTable, int32]
-	ID          db2.Col[DemoStructTable, int32]
-	ListaID     db2.Col[DemoStructTable, int32]
-	Nombre      db2.Col[DemoStructTable, string]
-	Images      db2.ColSlice[DemoStructTable, string]
-	RolesIDs    db2.ColSlice[DemoStructTable, int32]
-	Descripcion db2.Col[DemoStructTable, string]
-	Status      db2.Col[DemoStructTable, int8]
-	Updated     db2.Col[DemoStructTable, int64]
-	UpdatedBy   db2.Col[DemoStructTable, int32]
-	DemoColumn  db2.Col[DemoStructTable, InnerStruct]
+	db.TableStruct[DemoStructTable, DemoStruct]
+	EmpresaID   db.Col[DemoStructTable, int32]
+	ID          db.Col[DemoStructTable, int32]
+	ListaID     db.Col[DemoStructTable, int32]
+	Nombre      db.Col[DemoStructTable, string]
+	Images      db.ColSlice[DemoStructTable, string]
+	RolesIDs    db.ColSlice[DemoStructTable, int32]
+	Descripcion db.Col[DemoStructTable, string]
+	Status      db.Col[DemoStructTable, int8]
+	Updated     db.Col[DemoStructTable, int64]
+	UpdatedBy   db.Col[DemoStructTable, int32]
+	DemoColumn  db.Col[DemoStructTable, InnerStruct]
 }
 
-func (e DemoStructTable) GetSchema() db2.TableSchema {
-	return db2.TableSchema{
+func (e DemoStructTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "zz_demo_struct",
 		Partition: e.EmpresaID,
-		Keys:      []db2.Coln{e.ID},
-		Views: []db2.View{
+		Keys:      []db.Coln{e.ID},
+		Views: []db.View{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
-			{Cols: []db2.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
-			{Cols: []db2.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
+			{Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
+			{Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
 		},
 	}
 }
@@ -78,7 +78,7 @@ func Test38(args *core.ExecArgs) core.FuncResponse {
 
 		// Insertarndo registros
 		fmt.Println("Insertando Registros...")
-		err := db2.Insert(&[]DemoStruct{record})
+		err := db.Insert(&[]DemoStruct{record})
 		if err != nil {
 			panic(err)
 		}
@@ -87,7 +87,7 @@ func Test38(args *core.ExecArgs) core.FuncResponse {
 	// Obteniendo registros
 	fmt.Println("Obteniendo Registros...")
 	recordsGetted := []DemoStruct{}
-	query := db2.Query(&recordsGetted)
+	query := db.Query(&recordsGetted)
 	err = query.Exclude(query.ListaID).ID.Equals(1).Exec()
 	if err != nil {
 		panic(err)
@@ -119,7 +119,7 @@ func Test40(args *core.ExecArgs) core.FuncResponse {
 		panic(err)
 	}
 
-	if err = db2.Insert(&records); err != nil {
+	if err = db.Insert(&records); err != nil {
 		panic(err.Error())
 	}
 
