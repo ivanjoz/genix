@@ -14,6 +14,7 @@ export class BackupsService extends GetHandler {
   backups: IBackup[] = $state([])
 
   handler(records: IBackup[]) {
+    records.sort((a,b) => a.Name > b.Name ? 1 : -1)
     this.backups = records || []
   }
 

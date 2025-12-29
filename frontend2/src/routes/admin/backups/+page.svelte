@@ -1,13 +1,13 @@
 <script lang="ts">
-  import Page from "$components/Page.svelte"
-  import VTable from "$components/VTable/vTable.svelte"
-  import type { ITableColumn } from "$components/VTable/types"
-  import { Notify, ConfirmWarn } from "$lib/helpers"
-  import { formatTime } from "$lib/helpers"
-  import { formatN } from "$shared/main"
-  import { Loading } from "notiflix"
-  import { BackupsService, createBackup, restoreBackup, type IBackup } from "./backups.svelte"
-  import { Env } from "$lib/security"
+  import Page from "$components/Page.svelte";
+  import type { ITableColumn } from "$components/VTable/types";
+  import VTable from "$components/VTable/vTable.svelte";
+  import { ConfirmWarn, formatTime } from "$lib/helpers";
+  import { Env } from "$lib/security";
+  import { formatN } from "$shared/main";
+  import { Loading } from "notiflix";
+  import { BackupsService, createBackup, restoreBackup, type IBackup } from "./backups.svelte";
+    import { sendServiceMessage } from "$lib/sw-cache";
 
   const backupsService = new BackupsService()
 
@@ -29,6 +29,7 @@
     Loading.standard("Restaurando Backup...")
     try {
       await restoreBackup(name)
+      await sendServiceMessage(26, {})
     } catch (error) {
       // Error already handled by POST function
     }

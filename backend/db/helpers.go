@@ -45,6 +45,69 @@ func BasicHashInt(s string) int32 {
 	return int32(h.Sum32())
 }
 
+const base64Chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/"
+
+func Int64ToBase64Bytes(n int64) []byte {
+	if n == 0 {
+		return []byte{base64Chars[0]}
+	}
+
+	// 1. Determine if negative and use absolute value
+	isNegative := false
+	un := uint64(n)
+	if n < 0 {
+		isNegative = true
+		// Handle math.MinInt64 edge case by converting to uint64 first
+		un = uint64(-n)
+	}
+
+	// 2. Max length: 11 chars for magnitude + 1 for sign = 12
+	var buf [12]byte
+	i := 12
+
+	// 3. Mathematical Base64 conversion
+	for un > 0 {
+		i--
+		buf[i] = base64Chars[un%64]
+		un /= 64
+	}
+
+	// 4. Add the minus sign if necessary
+	if isNegative {
+		i--
+		buf[i] = '-'
+	}
+
+	// Return only the occupied part of the buffer
+	// We create a copy to avoid the buffer escaping to heap if needed
+	result := make([]byte, 12-i)
+	copy(result, buf[i:])
+	return result
+}
+
+func Base64BytesToInt64(b []byte) int64 {
+	if len(b) == 0 {
+		return 0
+	}
+	isNegative := false
+	if b[0] == '-' {
+		isNegative = true
+		b = b[1:]
+	}
+	var res uint64
+	for _, char := range b {
+		idx := strings.IndexByte(base64Chars, char)
+		if idx == -1 {
+			continue
+		}
+		res = res*64 + uint64(idx)
+	}
+	if isNegative {
+		return -int64(res)
+	}
+	return int64(res)
+}
+
 func HashInt(values ...any) int32 {
 	buf := new(bytes.Buffer)
 

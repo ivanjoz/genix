@@ -598,7 +598,7 @@ HandlersMap.set(22, async (args: { __enviroment__: string })=> {
   return { cacheStats }
 })
 
-//Función para eliminar caché
+//Función para eliminar caché en base a un cacheName
 HandlersMap.set(23, async (args: { __enviroment__: string, cacheName: string })=> {
 
   console.log(`Eliminando caché "${args.cacheName}" (Enviroment ${args.__enviroment__})...`)
@@ -607,6 +607,23 @@ HandlersMap.set(23, async (args: { __enviroment__: string, cacheName: string })=
 
   console.log(`Caché "${args.cacheName}" eliminado! (Enviroment ${args.__enviroment__})...`)
   
+  return { ok: 1 }
+})
+
+
+//Función para eliminar todo el cache
+HandlersMap.set(26, async (args: { __enviroment__: string })=> {
+  console.log("Eliminando caché...")
+
+  const cacheNames = await caches.keys();
+  for (const name of cacheNames) {
+    if (name.startsWith(args.__enviroment__)) {
+      console.log(`Eliminando caché por ambiente "${args.__enviroment__}": ${name}`);
+      await caches.delete(name);
+    }
+  }
+  
+  console.log("Caché eliminado.")
   return { ok: 1 }
 })
 
