@@ -63,9 +63,28 @@ func (c *columnInfo) GetStatementValue(ptr unsafe.Pointer) any {
 	return c.Field.Interface(ptr)
 }
 
-func (c *columnInfo) SetValue(ptr unsafe.Pointer, v any) any {
-	assingValue(c.Field, ptr, c.Type, v)
-	return nil
+func (c *columnInfo) SetValue(ptr unsafe.Pointer, v any) {
+	if c.Type == 9 {
+		var vl []byte
+		if b, ok := v.(*[]byte); ok {
+			vl = *b
+		} else if b, ok := v.([]byte); ok {
+			vl = b
+		}
+
+		if len(vl) > 3 && c.Field != nil {
+			// Direct unmarshal into the field memory using xunsafe pointer
+			dest := reflect.NewAt(c.RefType, c.Field.Pointer(ptr)).Interface()
+			err := cbor.Unmarshal(vl, dest)
+			if err != nil {
+				fmt.Printf("Error al convertir ComplexType for Col %s: %v\n", c.Name, err)
+			}
+		} else if ShouldLog() {
+			fmt.Printf("Complex Type could not be parsed or empty: %s (Type: %T)\n", c.Name, v)
+		}
+	} else {
+		assingValue(c.Field, ptr, c.Type, v)
+	}
 }
 
 func (c *columnInfo) GetType() *colType {
@@ -87,7 +106,7 @@ func (c *columnInfo) IsNil() bool {
 type IColInfo interface {
 	GetValue(ptr unsafe.Pointer) any
 	GetStatementValue(ptr unsafe.Pointer) any
-	SetValue(ptr unsafe.Pointer, v any) any
+	SetValue(ptr unsafe.Pointer, v any)
 	GetType() *colType
 	GetName() string
 	GetInfo() *colInfo
@@ -134,6 +153,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		columnsIdxMap: map[int16]IColInfo{},
 		indexes:       map[string]*viewInfo{},
 		views:         map[string]*viewInfo{},
+		useSequences:  schema.UseSequences,
 		_maxColIdx:    int16(structRefValue.NumField()) + 1,
 	}
 
@@ -158,17 +178,17 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		// Check if field implements Coln interface
 		fieldAddr := field.Addr()
 		colInterface, ok := fieldAddr.Interface().(Coln)
+		fieldName := field.Type().Name()
+
 		if !ok {
-			fieldName := field.Type().Name()
 			if !(len(fieldName) > 12 && fieldName[0:12] == "TableStruct[") {
-				fmt.Println("No es una columna:", field.Type().Name())
+				fmt.Println("No es una columna:", fieldName)
 			}
 			continue
 		}
 
 		// Get column info from the field
-		column := new(columnInfo)
-		*column = colInterface.GetInfo()
+		column := colInterface.GetInfo()
 
 		if DebugFull {
 			offset := uintptr(0)
@@ -178,32 +198,28 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			fmt.Printf("Mapped Table Column: %-20s | Field: %-20s | Type: %-10s | Offset: %d\n", column.GetName(), column.GetInfo().FieldName, column.FieldType, offset)
 		}
 
-		// Seteando "getStatementValue" (para los batchs)
-		colType := GetColTypeByName(column.FieldType, "")
-		column.ColType = colType.ColType
-		column.Type = colType.Type
-
 		if sequenceColumn == column.GetName() {
 			column.ColType = "counter"
-		} else if column.ColType == "" {
+		} /* else if column.ColType == "" {
 			column.GetType().IsComplexType = true
 			column.Type = 9
 			column.GetType().IsSlice = false
 			column.ColType = "blob"
 		} else if column.GetType().IsSlice && column.ColType[0:3] != "set" {
 			column.ColType = fmt.Sprintf("set<%v>", column.ColType)
-		}
+		} */
 
 		if _, ok := dbTable.columnsMap[column.GetName()]; ok {
 			panic("The following column name is repeated:" + column.GetName())
 		} else {
 			column.GetInfo().Idx = int16(column.GetInfo().FieldIdx) + 1
-			dbTable.columnsMap[column.GetName()] = column
+			dbTable.columnsMap[column.GetName()] = &column
 			if DebugFull {
 				fmt.Printf("Mapped Col: %s, Field: %s, Offset: %d\n", column.GetName(), column.GetInfo().FieldName, column.GetInfo().Field.Offset)
 			}
 		}
 	}
+
 	if schema.Partition != nil {
 		dbTable.partKey = dbTable.columnsMap[schema.Partition.GetInfo().Name]
 		if dbTable.partKey != nil && !dbTable.partKey.IsNil() {
@@ -239,6 +255,11 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 		idxCount++
 		dbTable.indexes[index.name] = index
+	}
+
+	if schema.SequencePartCol != nil {
+		gi := schema.SequencePartCol.GetInfo()
+		dbTable.sequencePartCol = &gi
 	}
 
 	for _, column := range schema.LocalIndexes {

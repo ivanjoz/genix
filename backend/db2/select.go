@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/fxamacker/cbor/v2"
 	"github.com/viant/xunsafe"
 	"golang.org/x/sync/errgroup"
 )
@@ -303,32 +302,6 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 						fmt.Printf("Calling SetValue for Col: %s\n", colname)
 					}
 					column.SetValue(ptr, value)
-
-					// Revisa si necesita parsearse un string a un struct como JSON
-					if column.GetType().IsComplexType {
-						if shouldLog {
-							fmt.Printf("Handling ComplexType for Col: %s\n", colname)
-						}
-						// fmt.Println("complex type::", column.FieldName, "|", column.FieldType)
-						var vl []uint8
-						if b, ok := value.(*[]uint8); ok {
-							vl = *b
-						} else if b, ok := value.([]uint8); ok {
-							vl = b
-						}
-
-						if len(vl) > 3 {
-							newElm := reflect.New(column.GetInfo().RefType).Elem()
-							err = cbor.Unmarshal(vl, newElm.Addr().Interface())
-							if err != nil {
-								fmt.Println("Error al convertir: ", newElm, "|", err.Error())
-							}
-							// fmt.Println("col complex:", column.Name, " | ", newElm, " | L:", len(*vl))
-							reflect.NewAt(column.GetInfo().RefType, column.GetInfo().Field.Pointer(ptr)).Elem().Set(newElm)
-						} else if !shouldLog {
-							fmt.Printf("Complex Type could not be parsed or empty: %s (Type: %T)\n", column.GetName(), value)
-						}
-					}
 				}
 
 				if shouldLog {

@@ -99,7 +99,9 @@ func isPointer(v any) bool {
 	return reflect.ValueOf(v).Kind() == reflect.Ptr
 }
 
-func CsvToRecords[T any](scyllaTable *ScyllaTable[T], content *[]byte) ([]T, error) {
+func CsvToRecords[T any](
+	scyllaTable *ScyllaTable[T], content *[]byte, partValue any,
+) ([]T, error) {
 
 	if content == nil {
 		return nil, nil
@@ -148,6 +150,9 @@ func CsvToRecords[T any](scyllaTable *ScyllaTable[T], content *[]byte) ([]T, err
 				colInfo := columns[colIdx]
 				if colInfo != nil {
 					value := base64CSVStringToValue(string(currentValue), colInfo.GetType().Type)
+					if colInfo.GetType().Type == 9 {
+						fmt.Println("Blob:", colInfo.GetName(), "|", value, "|", string(currentValue), "|", colInfo.GetType().Type)
+					}
 					colInfo.SetValue(unsafe.Pointer(&currentRecord), value)
 				}
 			}
@@ -156,6 +161,9 @@ func CsvToRecords[T any](scyllaTable *ScyllaTable[T], content *[]byte) ([]T, err
 			colIdx++
 
 			if b == '\n' {
+				if scyllaTable.partKey != nil {
+					scyllaTable.partKey.SetValue(unsafe.Pointer(&currentRecord), partValue)
+				}
 				parsedRecords = append(parsedRecords, currentRecord)
 				currentRecord = *new(T)
 				colIdx = 0

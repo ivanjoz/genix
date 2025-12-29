@@ -26,6 +26,7 @@ type ScyllaControllerInterface interface {
 	GetRecordsGob(partValue, limit int32, lastKey any) ([]byte, error)
 	RestoreCSVRecords(partValue int32, content *[]byte) error
 	GetRecordsCSV(partValue int32) (CSVResult, error)
+	ResetCounter(partValue any) error
 }
 
 func (e *ScyllaController[T, E]) GetTable() ScyllaTable[any] {
@@ -92,7 +93,7 @@ func (e *ScyllaController[T, E]) GetRecordsGob(partValue, limit int32, lastKey a
 
 func (e *ScyllaController[T, E]) RestoreCSVRecords(partValue int32, content *[]byte) error {
 	scyllaTable := &e.Table
-	records, err := CsvToRecords(scyllaTable, content)
+	records, err := CsvToRecords(scyllaTable, content, partValue)
 
 	if err != nil {
 		return err
@@ -114,11 +115,9 @@ func (e *ScyllaController[T, E]) RestoreCSVRecords(partValue int32, content *[]b
 		Print(records[0])
 	}
 
-	/*
-		if err := Insert(&records); err != nil {
-			return Err("Error al insertar registros:", err)
-		}
-	*/
+	if err := Insert(&records); err != nil {
+		return Err("Error al insertar registros:", err)
+	}
 	return nil
 }
 

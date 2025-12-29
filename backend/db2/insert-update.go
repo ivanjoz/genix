@@ -108,8 +108,8 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 			values = append(values, value)
 		}
 
-		fmt.Println("VALUES::")
-		fmt.Println(values)
+		// fmt.Println("VALUES::")
+		// fmt.Println(values)
 		batch.Query(queryStrInsert, values...)
 	}
 	return batch
@@ -120,11 +120,11 @@ func Insert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 ) error {
 
 	session := getScyllaConnection()
-	fmt.Println("BATCH (1)::")
+	//fmt.Println("BATCH (1)::")
 	queryBatch := makeInsertBatch(records, columnsToExclude...)
 
-	fmt.Println("BATCH (2)::")
-	fmt.Println(queryBatch.Entries)
+	//fmt.Println("BATCH (2)::")
+	//fmt.Println(queryBatch.Entries)
 
 	if err := session.ExecuteBatch(queryBatch); err != nil {
 		fmt.Println("Error inserting records:", err)
