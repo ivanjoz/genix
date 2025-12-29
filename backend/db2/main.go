@@ -9,19 +9,21 @@ import (
 )
 
 type ScyllaTable[T any] struct {
-	name          string
-	keyspace      string
-	keys          []IColInfo
-	partKey       IColInfo
-	keysIdx       []int16
-	columns       []IColInfo
-	columnsMap    map[string]IColInfo
-	columnsIdxMap map[int16]IColInfo
-	indexes       map[string]*viewInfo
-	views         map[string]*viewInfo
-	indexViews    []*viewInfo
-	ViewsExcluded []string
-	_maxColIdx    int16
+	name            string
+	keyspace        string
+	keys            []IColInfo
+	partKey         IColInfo
+	keysIdx         []int16
+	columns         []IColInfo
+	columnsMap      map[string]IColInfo
+	columnsIdxMap   map[int16]IColInfo
+	indexes         map[string]*viewInfo
+	views           map[string]*viewInfo
+	indexViews      []*viewInfo
+	ViewsExcluded   []string
+	useSequences    bool
+	sequencePartCol IColInfo
+	_maxColIdx      int16
 }
 
 func (e ScyllaTable[T]) GetFullName() string {
@@ -66,14 +68,17 @@ type ColumnStatement struct {
 type TableSchema struct {
 	Keyspace string
 	// StructType    T
-	Name           string
-	Keys           []Coln
-	Partition      Coln
-	GlobalIndexes  []Coln
-	LocalIndexes   []Coln
-	HashIndexes    [][]Coln
-	Views          []View
-	SequenceColumn Coln
+	Name            string
+	Keys            []Coln
+	Partition       Coln
+	GlobalIndexes   []Coln
+	LocalIndexes    []Coln
+	HashIndexes     [][]Coln
+	Views           []View
+	SequenceColumn  Coln
+	CounterColumn   Coln
+	UseSequences    bool
+	SequencePartCol Coln
 }
 
 func (q ColumnStatement) GetValue() any {
@@ -293,10 +298,21 @@ type Col[T TableInterface[T], E any] struct {
 }
 
 func (q Col[T, E]) GetInfo() columnInfo {
+	if q.info.Type == 0 {
+		typeOf := reflect.TypeOf((*E)(nil)).Elem().String()
+		q.info.colType = GetColTypeByName(typeOf, "")
+		if q.info.Type == 0 {
+			q.info.colType = GetColTypeByID(9)
+		}
+		// fmt.Println("typeOf", q.info.Name, "|", typeOf, "|", q.info.Type, "|", q.info.IsSlice)
+	}
 	return q.info
 }
 
 func (q *Col[T, E]) GetInfoPointer() *columnInfo {
+	if q.info.Type == 0 {
+		q.info = q.GetInfo()
+	}
 	return &q.info
 }
 
@@ -373,12 +389,25 @@ type ColSlice[T TableInterface[T], E any] struct {
 }
 
 func (q ColSlice[T, E]) GetInfo() columnInfo {
-	q.info.IsSlice = true
+	if q.info.Type == 0 {
+		typeOf := reflect.TypeOf((*E)(nil)).Elem().String()
+		if typeOf[0] == '*' {
+			typeOf = "*[]" + typeOf[1:]
+		} else {
+			typeOf = "[]" + typeOf
+		}
+		q.info.colType = GetColTypeByName(typeOf, "")
+		if q.info.colType.Type == 0 {
+			panic("No se reconoió el slice type:" + typeOf)
+		}
+	}
 	return q.info
 }
 
 func (q *ColSlice[T, E]) GetInfoPointer() *columnInfo {
-	q.info.IsSlice = true
+	if q.info.Type == 0 {
+		q.info = q.GetInfo()
+	}
 	return &q.info
 }
 
@@ -435,9 +464,11 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 				RefType:   field.Type,
 				Field:     xfield,
 			},
-			colType: colType{
-				FieldType: field.Type.String(),
-			},
+			colType: GetColTypeByName(field.Type.String(), ""),
+		}
+
+		if col.colType.Type == 0 {
+			col.colType = GetColTypeByID(9)
 		}
 
 		if tag := field.Tag.Get("db"); tag != "" {
@@ -452,17 +483,6 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 			fmt.Printf("Base Struct Field: %-20s | Type: %-15s | Offset: %d\n", field.Name, field.Type.String(), offset)
 		}
 
-		if col.FieldType[0:1] == "*" {
-			col.GetType().IsPointer = true
-			col.FieldType = col.FieldType[1:]
-		}
-		if col.FieldType[0:2] == "[]" {
-			col.GetType().IsSlice = true
-			col.FieldType = col.FieldType[2:]
-		}
-
-		// fmt.Println("fieldtype obtenido::", col.FieldName, col.FieldType)
-		// fmt.Println("Fieldname::", col.FieldName, "| Type:", col.FieldType)
 		fieldNameIdxMap[col.FieldName] = col
 	}
 
@@ -507,14 +527,12 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 			}
 
 			colInfo := column.GetInfoPointer()
+			colInfo.colInfo = *colBase.GetInfo()
 			colInfo.Name = columnName
 			colInfo.FieldIdx = colBase.GetInfo().FieldIdx
-			colInfo.FieldType = colBase.FieldType
 			colInfo.FieldName = colBase.GetInfo().FieldName
 			colInfo.RefType = colBase.GetInfo().RefType
 			colInfo.Field = colBase.GetInfo().Field
-			colInfo.IsSlice = colBase.GetType().IsSlice
-			colInfo.IsPointer = colBase.GetType().IsPointer
 			if DebugFull {
 				fmt.Printf("Init Col: %s, Field: %s, Offset: %d\n", colInfo.Name, colInfo.FieldName, colInfo.Field.Offset)
 			}
@@ -547,4 +565,136 @@ func execQuery[T TableSchemaInterface[T], E any](schemaStruct *T, tableInfo *Tab
 	records := (tableInfo.refSlice).(*[]E)
 	scyllaTable := makeTable(schemaStruct)
 	return selectExec(records, tableInfo, scyllaTable)
+}
+
+/* Increment Table */
+type Increment struct {
+	TableStruct[IncrementTable, Increment]
+	Name         string
+	CurrentValue int64
+}
+
+type IncrementTable struct {
+	TableStruct[IncrementTable, Increment]
+	Name         Col[IncrementTable, string] // `db:"name,pk"`
+	CurrentValue Col[IncrementTable, int64]  // `db:"current_value,counter"`
+}
+
+func (e IncrementTable) GetSchema() TableSchema {
+	return TableSchema{
+		Name:           "sequences",
+		Keys:           []Coln{e.Name},
+		SequenceColumn: &e.CurrentValue,
+	}
+}
+
+func (e *TableStruct[T, E]) GetCounter(
+	increment int, partValue any, secondPartValue ...any,
+) (int64, error) {
+
+	result := []Increment{}
+	query := Query(&result)
+	secondPartValue_ := any(0)
+	if len(secondPartValue) > 0 {
+		secondPartValue_ = secondPartValue[0]
+	}
+
+	scyllaTable := e.MakeScyllaTable()
+
+	name := fmt.Sprintf("%v_%v_%v", scyllaTable.name, partValue, secondPartValue_)
+	query.Select().Name.Equals(name)
+
+	if err := query.Exec(); err != nil {
+		return 0, Err("Error al obtener el counter: ", err)
+	}
+
+	currentValue := int64(1)
+	if len(result) > 0 {
+		currentValue = result[0].CurrentValue
+	}
+
+	queryUpdateStr := fmt.Sprintf(
+		"UPDATE %v.sequences SET current_value = current_value + %v WHERE name = '%v'",
+		strings.Split(scyllaTable.GetFullName(), ".")[0], increment, name,
+	)
+
+	if err := QueryExec(queryUpdateStr); err != nil {
+		fmt.Println(queryUpdateStr)
+		panic(err)
+	}
+
+	return currentValue, nil
+}
+
+type SeqValue struct {
+	ID      int64 `db:"id"`
+	SeqPart int64 `db:"seq_part"`
+}
+
+func (e ScyllaController[T, E]) ResetCounter(partValue any) error {
+
+	scyllaTable := e.GetTable()
+	if !scyllaTable.useSequences {
+		return nil
+	}
+
+	seqValues := []SeqValue{}
+
+	if scyllaTable.sequencePartCol == nil {
+
+		maxValue := int64(0)
+
+		queryMax := fmt.Sprintf(
+			`SELECT max(%v) as id FROM %v WHERE %v = %v`,
+			scyllaTable.keys[0].GetName(),
+			scyllaTable.GetFullName(),
+			scyllaTable.partKey.GetName(),
+			partValue)
+
+		if err := getScyllaConnection().Query(queryMax).Scan(&maxValue); err != nil {
+			fmt.Println("Error al obtener el valor máximo (posiblemente tabla vacía): ", err)
+		}
+
+		seqValues = append(seqValues, SeqValue{ID: maxValue})
+
+	} else {
+
+		queryMax := fmt.Sprintf(
+			`SELECT max(%v) as id, %v as seq_part FROM %v WHERE %v = %v GROUP BY %v ALLOW FILTERING`,
+			scyllaTable.keys[0].GetName(),
+			scyllaTable.sequencePartCol.GetName(),
+			scyllaTable.GetFullName(),
+			scyllaTable.partKey.GetName(),
+			partValue,
+			scyllaTable.sequencePartCol.GetName())
+
+		iter := getScyllaConnection().Query(queryMax).Iter()
+		var id int64
+		var seqPart int64
+		for iter.Scan(&id, &seqPart) {
+			seqValues = append(seqValues, SeqValue{ID: id, SeqPart: seqPart})
+		}
+		if err := iter.Close(); err != nil {
+			fmt.Println("Error al obtener los valores máximos agrupados: ", err)
+		}
+	}
+
+	for _, seqValue := range seqValues {
+		name := fmt.Sprintf("x%v_%v_%v", partValue, scyllaTable.name, seqValue.SeqPart)
+		keyspace := strings.Split(scyllaTable.GetFullName(), ".")[0]
+
+		queryUpdateStr := fmt.Sprintf(
+			"UPDATE %v.sequences SET current_value = current_value + %v WHERE name = '%v'",
+			keyspace, seqValue.ID, name,
+		)
+
+		fmt.Println(queryUpdateStr)
+
+		if err := QueryExec(queryUpdateStr); err != nil {
+			fmt.Println(queryUpdateStr)
+			panic(err)
+		}
+	}
+
+	return nil
 }

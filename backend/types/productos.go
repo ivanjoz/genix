@@ -168,9 +168,10 @@ type AlmacenTable struct {
 
 func (e AlmacenTable) GetSchema() db2.TableSchema {
 	return db2.TableSchema{
-		Name:      "almacenes",
-		Partition: e.EmpresaID,
-		Keys:      []db2.Coln{e.ID},
+		Name:         "almacenes",
+		Partition:    e.EmpresaID,
+		UseSequences: true,
+		Keys:         []db2.Coln{e.ID},
 		Views: []db2.View{
 			{Cols: []db2.Coln{e.Status}, KeepPart: true},
 			{Cols: []db2.Coln{e.Updated}, KeepPart: true},

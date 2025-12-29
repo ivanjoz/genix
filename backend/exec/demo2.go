@@ -125,3 +125,10 @@ func Test40(args *core.ExecArgs) core.FuncResponse {
 
 	return core.FuncResponse{}
 }
+
+func Test41(args *core.ExecArgs) core.FuncResponse {
+
+	RecalcSequences(1)
+
+	return core.FuncResponse{}
+}

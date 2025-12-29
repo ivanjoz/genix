@@ -433,8 +433,8 @@ func base64CSVStringToValue(val string, valType int8) any {
 	case 8: // bool
 		return val == "1"
 	case 9: // []byte
-		b, _ := base64.StdEncoding.DecodeString(val)
-		return b
+		recordBytes, _ := base64.StdEncoding.DecodeString(val)
+		return recordBytes
 	case 11: // []string
 		parts := strings.Split(val, "``")
 		res := make([]string, len(parts))
@@ -443,6 +443,7 @@ func base64CSVStringToValue(val string, valType int8) any {
 		}
 		return res
 	case 12, 13, 14, 15: // []int64, []int32, []int16, []int8
+		fmt.Println("slice value:", val)
 		parts := strings.Split(val, ",")
 		switch valType {
 		case 12:
@@ -596,7 +597,7 @@ func assingValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, value any) 
 		} else {
 			printError(GetColTypeByID(colType).FieldType, value)
 		}
-	case 9: // []byte
+	case 9: // IsComplexType = true | []byte as cbor
 		if vl, ok := value.([]byte); ok {
 			f.Set(ptr, vl)
 		} else if vl, ok := value.(*[]byte); ok {

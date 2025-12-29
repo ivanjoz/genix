@@ -223,3 +223,19 @@ func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
 
 	return core.FuncResponse{}
 }
+
+func RecalcSequences(partValue any) {
+
+	db2.MakeScyllaConnection(db2.ConnParams{
+		Host:     core.Env.DB_HOST,
+		Port:     int(core.Env.DB_PORT),
+		User:     core.Env.DB_USER,
+		Password: core.Env.DB_PASSWORD,
+		Keyspace: core.Env.DB_NAME,
+	})
+
+	fmt.Println("Recalculando Counter de Tablas...")
+	for _, sc := range MakeScyllaControllers() {
+		sc.ResetCounter(partValue)
+	}
+}
