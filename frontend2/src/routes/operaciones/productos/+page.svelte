@@ -176,7 +176,7 @@
       />
     </Layer>
   {/if}
-  <Layer type="side" css="px-8 py-8 md:px-14 md:py-10" 
+  <Layer type="side" css="px-8 py-8 md:px-16 md:py-10" 
     title={productoForm?.Nombre || ""} 
     titleCss="h2 mb-6" contentCss="px-0 md:px-0" id={1}
     bind:selected={layerView}

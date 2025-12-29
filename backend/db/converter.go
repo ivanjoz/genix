@@ -246,69 +246,6 @@ func unSanitizeString(value string) string {
 	return string(dst)
 }
 
-const base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/"
-
-func Int64ToBase64Bytes(n int64) []byte {
-	if n == 0 {
-		return []byte{base64Chars[0]}
-	}
-
-	// 1. Determine if negative and use absolute value
-	isNegative := false
-	un := uint64(n)
-	if n < 0 {
-		isNegative = true
-		// Handle math.MinInt64 edge case by converting to uint64 first
-		un = uint64(-n)
-	}
-
-	// 2. Max length: 11 chars for magnitude + 1 for sign = 12
-	var buf [12]byte
-	i := 12
-
-	// 3. Mathematical Base64 conversion
-	for un > 0 {
-		i--
-		buf[i] = base64Chars[un%64]
-		un /= 64
-	}
-
-	// 4. Add the minus sign if necessary
-	if isNegative {
-		i--
-		buf[i] = '-'
-	}
-
-	// Return only the occupied part of the buffer
-	// We create a copy to avoid the buffer escaping to heap if needed
-	result := make([]byte, 12-i)
-	copy(result, buf[i:])
-	return result
-}
-
-func Base64BytesToInt64(b []byte) int64 {
-	if len(b) == 0 {
-		return 0
-	}
-	isNegative := false
-	if b[0] == '-' {
-		isNegative = true
-		b = b[1:]
-	}
-	var res uint64
-	for _, char := range b {
-		idx := strings.IndexByte(base64Chars, char)
-		if idx == -1 {
-			continue
-		}
-		res = res*64 + uint64(idx)
-	}
-	if isNegative {
-		return -int64(res)
-	}
-	return int64(res)
-}
-
 func valueToCSVBase64(val any) []byte {
 
 	if val == nil {
@@ -394,10 +331,16 @@ func valueToCSVBase64(val any) []byte {
 	case []byte:
 		dst := make([]byte, base64.StdEncoding.EncodedLen(len(v)))
 		base64.StdEncoding.Encode(dst, v)
+		for len(dst) > 0 && dst[len(dst)-1] == '=' {
+			dst = dst[:len(dst)-1]
+		}
 		return dst
 	case *[]byte:
 		dst := make([]byte, base64.StdEncoding.EncodedLen(len(*v)))
 		base64.StdEncoding.Encode(dst, *v)
+		for len(dst) > 0 && dst[len(dst)-1] == '=' {
+			dst = dst[:len(dst)-1]
+		}
 		return dst
 	case bool:
 		if v {
@@ -433,6 +376,9 @@ func base64CSVStringToValue(val string, valType int8) any {
 	case 8: // bool
 		return val == "1"
 	case 9: // []byte
+		for len(val)%4 != 0 {
+			val += "="
+		}
 		recordBytes, _ := base64.StdEncoding.DecodeString(val)
 		return recordBytes
 	case 11: // []string

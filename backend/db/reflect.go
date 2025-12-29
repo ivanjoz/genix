@@ -518,11 +518,11 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				statementsMap := map[string]statementRangeGroup{}
 				useBeetween := false
 
-				fmt.Println(statements)
+				// fmt.Println(statements)
 
 				for i := range statements {
 					st := &statements[i]
-					fmt.Println("statement (2):", st.Col, "|", st.Value, "|", st.Operator)
+					// fmt.Println("statement (2):", st.Col, "|", st.Value, "|", st.Operator)
 
 					if st.Operator == "BETWEEN" {
 						useBeetween = true

@@ -173,9 +173,11 @@
   ._4 {
     overflow-y: auto;
     overflow-x: hidden;
-    width: calc(100% + 6px);
+    width: calc(100% + 10px);
     margin-right: -6px;
     padding-right: 6px;
+    margin-left: -4px;
+    padding-left: 4px;
   }
   ._1._8 ._4, ._1._8, ._2._8 ._4, ._2._8 {
     overflow-y: visible;

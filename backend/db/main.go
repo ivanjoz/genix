@@ -548,7 +548,7 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 				columnName = toSnakeCase(fieldType.Name)
 			}
 
-			fmt.Println("seteando nombre:", columnName)
+			// fmt.Println("seteando nombre:", columnName)
 
 			colInfo := column.GetInfoPointer()
 			*colInfo = *colBase
