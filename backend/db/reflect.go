@@ -103,26 +103,6 @@ func (c *columnInfo) IsNil() bool {
 	return c == nil
 }
 
-type IColInfo interface {
-	GetValue(ptr unsafe.Pointer) any
-	GetStatementValue(ptr unsafe.Pointer) any
-	SetValue(ptr unsafe.Pointer, v any)
-	GetType() *colType
-	GetName() string
-	GetInfo() *colInfo
-	IsNil() bool
-}
-
-var indexTypes = map[int8]string{
-	1: "GLOBAL INDEX",
-	2: "LOCAL INDEX",
-	3: "HASH INDEX",
-	4: "HASH INDEX w/COLLECTIONS",
-	6: "VIEW",
-	7: "HASH VIEW",
-	8: "RANGE VIEW",
-}
-
 var rangeOperators = []string{">", "<", ">=", "<="}
 
 var makeStatementWith string = `	WITH caching = {'keys': 'ALL', 'rows_per_partition': 'ALL'}
@@ -189,6 +169,11 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 		// Get column info from the field
 		column := colInterface.GetInfo()
+		// fmt.Printf("DEBUG: makeTable field=%s, GetInfo().Name=%s, Type=%T\n", fieldName, column.Name, colInterface)
+		if column.Name == "" {
+			fmt.Printf("DEBUG: makeTable EMPTY NAME for field=%s! columnInfo=%+v\n", fieldName, column)
+			panic("El nombre de la columna no está seteada.")
+		}
 
 		if DebugFull {
 			offset := uintptr(0)

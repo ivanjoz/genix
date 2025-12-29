@@ -9,8 +9,9 @@ import (
 	"github.com/viant/xunsafe"
 )
 
-func MakeInsertStatement[T TableSchemaInterface[T]](records *[]T, columnsToExclude ...Coln) []string {
-	scyllaTable := makeTable(new(T))
+func MakeInsertStatement[T TableBaseInterface[E, T], E TableSchemaInterface[E]](records *[]T, columnsToExclude ...Coln) []string {
+	refTable := initStructTable[E, T](new(E))
+	scyllaTable := makeTable(refTable)
 
 	columns := []IColInfo{}
 	if len(columnsToExclude) > 0 {
