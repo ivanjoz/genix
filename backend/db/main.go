@@ -4,9 +4,27 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"unsafe"
 
 	"github.com/viant/xunsafe"
 )
+
+var indexTypes = map[int8]string{
+	1: "Global Index",
+	2: "Local Index",
+	3: "Hash Index",
+	4: "View",
+}
+
+type IColInfo interface {
+	GetName() string
+	GetValue(ptr unsafe.Pointer) any
+	GetStatementValue(ptr unsafe.Pointer) any
+	SetValue(ptr unsafe.Pointer, v any)
+	GetInfo() *colInfo
+	GetType() *colType
+	IsNil() bool
+}
 
 type ScyllaTable[T any] struct {
 	name            string
@@ -202,7 +220,7 @@ func (e *TableStruct[T, E]) MakeTableSchema() TableSchema {
 	return MakeSchema[E]()
 }
 func (e *TableStruct[T, E]) MakeScyllaTable() ScyllaTable[any] {
-	return makeTable(new(T))
+	return makeTable(initStructTable[T, E](new(T)))
 }
 
 func (e *TableStruct[T, E]) SetWhere(colname string, operator string, value any) {
@@ -298,6 +316,7 @@ type Col[T TableInterface[T], E any] struct {
 }
 
 func (q Col[T, E]) GetInfo() columnInfo {
+	// fmt.Printf("DEBUG: Col.GetInfo called for field=%s, Name=%s\n", q.info.FieldName, q.info.Name)
 	if q.info.Type == 0 {
 		typeOf := reflect.TypeOf((*E)(nil)).Elem().String()
 		q.info.colType = GetColTypeByName(typeOf, "")
@@ -456,6 +475,9 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 
 	for i := 0; i < structRefType.NumField(); i++ {
 		field := structRefType.Field(i)
+		if field.Name == "TableStruct" {
+			continue
+		}
 		xfield := xunsafe.FieldByName(structRefType, field.Name)
 		col := &columnInfo{
 			colInfo: colInfo{
@@ -526,16 +548,29 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 				columnName = toSnakeCase(fieldType.Name)
 			}
 
+			fmt.Println("seteando nombre:", columnName)
+
 			colInfo := column.GetInfoPointer()
-			colInfo.colInfo = *colBase.GetInfo()
+			*colInfo = *colBase
 			colInfo.Name = columnName
-			colInfo.FieldIdx = colBase.GetInfo().FieldIdx
-			colInfo.FieldName = colBase.GetInfo().FieldName
-			colInfo.RefType = colBase.GetInfo().RefType
-			colInfo.Field = colBase.GetInfo().Field
+			// fmt.Printf("DEBUG: initStructTable: field=%s, colName=%s, colInfo.Name=%s, ptr=%p\n", fieldType.Name, columnName, colInfo.Name, colInfo)
 			if DebugFull {
 				fmt.Printf("Init Col: %s, Field: %s, Offset: %d\n", colInfo.Name, colInfo.FieldName, colInfo.Field.Offset)
 			}
+
+			// Revisando si se seteo el nombre
+			column1, ok := column.(Coln)
+			if !ok {
+				fmt.Printf("Error: Field %s (%s) is in base struct but does not implement Coln interface. Ensure it is a valid column type.\n", fieldType.Name, fieldType.Type.String())
+				panic("no cumple la interfaz")
+			}
+
+			infoCheck := column1.GetInfo()
+			// fmt.Printf("DEBUG: check after set: field=%s, GetInfo().Name=%s, column1Type=%T\n", fieldType.Name, infoCheck.Name, column1)
+			if infoCheck.Name == "" {
+				panic("No se seteo el nombre: " + columnName)
+			}
+
 		} else if fieldType.Name != "TableStruct" {
 			err := fmt.Sprintf(`No se encontró el field "%v" en el struct "%v"`, fieldType.Name, structRefType.Name())
 			panic(err)
@@ -593,24 +628,22 @@ func (e *TableStruct[T, E]) GetCounter(
 ) (int64, error) {
 
 	result := []Increment{}
-	query := Query(&result)
+
 	secondPartValue_ := any(0)
 	if len(secondPartValue) > 0 {
 		secondPartValue_ = secondPartValue[0]
 	}
 
 	scyllaTable := e.MakeScyllaTable()
+	name := fmt.Sprintf("x%v_%v_%v", partValue, scyllaTable.name, secondPartValue_)
 
-	name := fmt.Sprintf("%v_%v_%v", scyllaTable.name, partValue, secondPartValue_)
-	query.Select().Name.Equals(name)
-
-	if err := query.Exec(); err != nil {
+	if err := Query(&result).Name.Equals(name).Exec(); err != nil {
 		return 0, Err("Error al obtener el counter: ", err)
 	}
 
 	currentValue := int64(1)
 	if len(result) > 0 {
-		currentValue = result[0].CurrentValue
+		currentValue = result[0].CurrentValue + 1
 	}
 
 	queryUpdateStr := fmt.Sprintf(

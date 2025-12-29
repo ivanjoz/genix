@@ -11,20 +11,18 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 	return []db.ScyllaControllerInterface{
 
 		makeDBController[s.Producto](),
-		/*
-			makeDBController[s.Almacen](),
-			makeDBController[s.Sede](),
-			makeDBController[s.AlmacenProducto](),
-			makeDBController[s.PaisCiudad](),
-			makeDBController[s.GaleriaImagen](),
-			makeDBController[s.ListaCompartidaRegistro](),
-			makeDBController[s.AlmacenMovimiento](),
-			makeDBController[s.Usuario](),
-			makeDBController[s.Caja](),
-			makeDBController[s.CajaMovimiento](),
-			makeDBController[s.CajaCuadre](),
-			makeDBController[DemoStruct](),
-		*/
+		makeDBController[s.Almacen](),
+		makeDBController[s.Sede](),
+		makeDBController[s.AlmacenProducto](),
+		makeDBController[s.PaisCiudad](),
+		makeDBController[s.GaleriaImagen](),
+		makeDBController[s.ListaCompartidaRegistro](),
+		makeDBController[s.AlmacenMovimiento](),
+		makeDBController[s.Usuario](),
+		makeDBController[s.Caja](),
+		makeDBController[s.CajaMovimiento](),
+		makeDBController[s.CajaCuadre](),
+		makeDBController[DemoStruct](),
 		//	makeDBController[s.Increment](),
 	}
 }

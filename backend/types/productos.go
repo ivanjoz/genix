@@ -111,6 +111,7 @@ func (e ProductoTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:          "productos",
 		Partition:     e.EmpresaID,
+		UseSequences:  true,
 		Keys:          []db.Coln{e.ID},
 		GlobalIndexes: []db.Coln{e.CategoriasConStock},
 		Views: []db.View{
