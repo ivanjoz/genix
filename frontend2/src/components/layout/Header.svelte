@@ -96,9 +96,10 @@
 
 		<!-- Settings Dropdown -->
 		<div class="relative">
-			<ButtonLayer layerClass="w-640 h-460 px-8 py-6"
+			<ButtonLayer layerClass="md:w-640 md:h-460 px-8 py-6"
 				buttonClass="w-40 h-40 rounded-full bg-white/10 hover:bg-white/20 
 					flex items-center justify-center transition-colors shadow-sm"
+				contentCss="px-4 pb-8 md:px-8 md:py-8"
 			>
 				{#snippet button()}
 					<span class="text-white text-lg">⚙️</span>
