@@ -7,7 +7,7 @@
 
 
   const options = [
-    { id: 1, name: "Usuario" }, { id: 2, name: "Configuración" }
+    { id: 1, name: "Usuario" }, { id: 2, name: "Config." }
   ]
   let selected = $state(1)
 

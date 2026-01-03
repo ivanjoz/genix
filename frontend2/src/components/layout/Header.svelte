@@ -46,7 +46,7 @@
 </script>
 
 <header	class="_1 fixed top-0 left-0 right-0 bg-gradient-to-r from-indigo-600 to-indigo-700 
-	shadow-md z-150 flex items-center px-16"
+	shadow-md z-150 flex items-center px-6 md:px-16"
 >
 
 	<!-- Logo Section (Desktop) -->
@@ -102,7 +102,7 @@
 				contentCss="px-4 pb-8 md:px-8 md:py-8"
 			>
 				{#snippet button()}
-					<span class="text-white text-lg">⚙️</span>
+					<span class="text-white text-lg icon-cog"></span>
 				{/snippet}
 				<HeaderConfig />
 			</ButtonLayer>
@@ -110,14 +110,14 @@
 
 		<!-- Reload Button -->
 		<button
-			class="w-40 h-40 rounded-full bg-white/10 hover:bg-white/20 
-				flex items-center justify-center transition-colors shadow-sm
+			class="hidden md:flex w-40 h-40 rounded-full bg-white/10 hover:bg-white/20 
+				items-center justify-center transition-colors shadow-sm
 				{isReloading ? 'animate-spin' : ''}"
 			onclick={handleReload}
 			aria-label="Reload"
 			disabled={isReloading}
 		>
-			<span class="text-white text-lg">🔄</span>
+			<span class="text-white text-lg icon-cw"></span>
 		</button>
 	</div>
 </header>
