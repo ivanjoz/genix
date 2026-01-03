@@ -99,14 +99,14 @@
   >
     <div class="flex items-center justify-between">
       <div class="overflow-hidden text-nowrap mr-8 {titleCss}">{title}</div>
-      <div class="shrink-0 flex items-center">
+      <div class="shrink-0 flex items-center mb-2">
         {#if onDelete}
-          <button class="bx-red mr-8 lh-10" onclick={onDelete} aria-label="Eliminar">
+          <button class="bx-red mr-10 lh-10" onclick={onDelete} aria-label="Eliminar">
             <i class="icon-trash"></i>
           </button>
         {/if}
         {#if onSave}
-          <button class="bx-blue mr-8 lh-10" onclick={onSave} aria-label="Guardar">
+          <button class="bx-blue mr-10 lh-10" onclick={onSave} aria-label="Guardar">
             <i class="{saveButtonIcon || 'icon-floppy'}"></i>
             <span class="_11">{saveButtonName || "Guardar"}</span>
           </button>
@@ -154,7 +154,7 @@
     right: 0;
     background-color: rgb(255, 255, 255);
     box-shadow: -7px 0px 15px 0px #00000024, -3px 1px 5px 0px #00000017;
-    z-index: 101;
+    z-index: var(--layer-zindex);
     max-width: 100vw;
     overflow: hidden;
   }
@@ -166,7 +166,7 @@
     right: 0;
     background-color: rgb(255, 255, 255);
     box-shadow: -7px 0px 15px 0px #00000024, -3px 1px 5px 0px #00000017;
-    z-index: 101;
+    z-index: var(--layer-zindex);
     max-width: 100vw;
     overflow: hidden;
   }

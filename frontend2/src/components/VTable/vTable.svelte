@@ -66,7 +66,6 @@
 
   // Mobile view state
   let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1024);
-  const isMobileView = $derived(windowWidth < 580);
 
   // Handle window resize
   $effect(() => {
@@ -113,6 +112,9 @@
       .filter(col => col.mobile)
       .sort((a, b) => (a.mobile?.order || 0) - (b.mobile?.order || 0));
   });
+
+  // Mobile view - only enable if columns have mobile config and screen is small
+  const isMobileView = $derived(windowWidth < 580 && mobileColumns.length > 0);
 
   const filterTextArray = $derived((filterText||"").toLowerCase().split(" ").filter(x => x.length > 1))
 
@@ -281,45 +283,104 @@
               <div class="mobile-card-grid">
                 {#each mobileColumns as column}
                   {@const mobile = column.mobile}
-                  {@const cellData = getCellContent(column, record, index)}
-                  <div class="mobile-card-item {mobile?.css || 'col-span-full'}">
-                    {#if mobile?.leftElement}
-                      <div class="mobile-card-left">
-                        {#if typeof mobile.leftElement === 'string'}
-                          {@html mobile.leftElement}
-                        {:else}
-                          <Renderer elements={mobile.leftElement}/>
+                  {@const shouldRender = !mobile?.if || mobile.if(record, index)}
+                  {#if shouldRender}
+                    {@const cellData = getCellContent(column, record, index)}
+                    {#if mobile?.labelTop}
+                    <div class="mobile-card-item mobile-card-item-vertical {mobile?.css || 'col-span-full'}">
+                      <div class="mobile-card-label-top">{mobile.labelTop}</div>
+                      <div class="mobile-card-content-wrapper">
+                        {#if mobile?.icon}
+                          <i class="icon-{mobile.icon} {mobile?.iconCss || ''}"></i>
+                        {/if}
+                        {#if mobile?.labelLeft}
+                          <span class="mobile-card-label-left">{mobile.labelLeft}</span>
+                        {/if}
+                        {#if mobile?.elementLeft}
+                          <div class="mobile-card-left">
+                            {#if typeof mobile.elementLeft === 'string'}
+                              {@html mobile.elementLeft}
+                            {:else}
+                              <Renderer elements={mobile.elementLeft}/>
+                            {/if}
+                          </div>
+                        {/if}
+                        <div class="mobile-card-content">
+                          {#if mobile?.render}
+                            {@const renderedContent = mobile.render(record, index)}
+                            {#if typeof renderedContent === 'string'}
+                              {@html renderedContent}
+                            {:else}
+                              <Renderer elements={renderedContent}/>
+                            {/if}
+                          {:else if cellData.useSnippet && cellRenderer}
+                            {@render cellRenderer(record, column, cellData.content, index)}
+                          {:else if cellData.contentAST}
+                            <Renderer elements={cellData.contentAST}/>
+                          {:else if cellData.contentHTML}
+                            {@html cellData.contentHTML}
+                          {:else}
+                            {cellData.content}
+                          {/if}
+                        </div>
+                        {#if mobile?.elementRight}
+                          <div class="mobile-card-right">
+                            {#if typeof mobile.elementRight === 'string'}
+                              {@html mobile.elementRight}
+                            {:else}
+                              <Renderer elements={mobile.elementRight}/>
+                            {/if}
+                          </div>
                         {/if}
                       </div>
-                    {/if}
-                    <div class="mobile-card-content">
-                      {#if mobile?.render}
-                        {@const renderedContent = mobile.render(record, index)}
-                        {#if typeof renderedContent === 'string'}
-                          {@html renderedContent}
+                    </div>
+                  {:else}
+                    <div class="mobile-card-item {mobile?.css || 'col-span-full'}">
+                      {#if mobile?.icon}
+                        <i class="icon-{mobile.icon} {mobile?.iconCss || ''}"></i>
+                      {/if}
+                      {#if mobile?.labelLeft}
+                        <span class="mobile-card-label-left">{mobile.labelLeft}</span>
+                      {/if}
+                      {#if mobile?.elementLeft}
+                        <div class="mobile-card-left">
+                          {#if typeof mobile.elementLeft === 'string'}
+                            {@html mobile.elementLeft}
+                          {:else}
+                            <Renderer elements={mobile.elementLeft}/>
+                          {/if}
+                        </div>
+                      {/if}
+                      <div class="mobile-card-content">
+                        {#if mobile?.render}
+                          {@const renderedContent = mobile.render(record, index)}
+                          {#if typeof renderedContent === 'string'}
+                            {@html renderedContent}
+                          {:else}
+                            <Renderer elements={renderedContent}/>
+                          {/if}
+                        {:else if cellData.useSnippet && cellRenderer}
+                          {@render cellRenderer(record, column, cellData.content, index)}
+                        {:else if cellData.contentAST}
+                          <Renderer elements={cellData.contentAST}/>
+                        {:else if cellData.contentHTML}
+                          {@html cellData.contentHTML}
                         {:else}
-                          <Renderer elements={renderedContent}/>
+                          {cellData.content}
                         {/if}
-                      {:else if cellData.useSnippet && cellRenderer}
-                        {@render cellRenderer(record, column, cellData.content, index)}
-                      {:else if cellData.contentAST}
-                        <Renderer elements={cellData.contentAST}/>
-                      {:else if cellData.contentHTML}
-                        {@html cellData.contentHTML}
-                      {:else}
-                        {cellData.content}
+                      </div>
+                      {#if mobile?.elementRight}
+                        <div class="mobile-card-right">
+                          {#if typeof mobile.elementRight === 'string'}
+                            {@html mobile.elementRight}
+                          {:else}
+                            <Renderer elements={mobile.elementRight}/>
+                          {/if}
+                        </div>
                       {/if}
                     </div>
-                    {#if mobile?.rightElement}
-                      <div class="mobile-card-right">
-                        {#if typeof mobile.rightElement === 'string'}
-                          {@html mobile.rightElement}
-                        {:else}
-                          <Renderer elements={mobile.rightElement}/>
-                        {/if}
-                      </div>
-                    {/if}
-                  </div>
+                  {/if}
+                  {/if}
                 {/each}
               </div>
             </div>
@@ -661,6 +722,31 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .mobile-card-item-vertical {
+    flex-direction: column;
+    align-items: flex-start;
+    row-gap: 0;
+  }
+
+  .mobile-card-label-top {
+    font-size: 14px;
+    color: #666;
+    line-height: 1;
+  }
+
+  .mobile-card-content-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .mobile-card-label-left {
+    font-size: 14px;
+    color: #666;
+    flex-shrink: 0;
   }
 
   .mobile-card-left,
