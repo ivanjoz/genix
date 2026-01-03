@@ -4,7 +4,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev",
+		"dev": "vite dev --force",
 		"preview": "vite preview --port 3000",
 		"prepare": "svelte-kit sync || echo ''",
 		"build": "vite build && node postbuild",

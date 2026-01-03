@@ -6,7 +6,8 @@
   import CellEditable from './CellEditable.svelte';
   import { highlString, include } from '../../core/helpers';
   import Renderer, { type ElementAST } from '$components/micro/Renderer.svelte';
-    import CellSelector from './CellSelector.svelte';
+  import CellSelector from './CellSelector.svelte';
+  import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 
   interface ICellContent { 
     content: string; 
@@ -32,6 +33,7 @@
     filterText?: string;
     getFilterContent?: (row: T) => string;
     useFilterCache?: boolean;
+    mobileCardCss?: string
   }
 
   let {
@@ -49,7 +51,8 @@
     cellRenderer,
     filterText,
     getFilterContent,
-    useFilterCache = false
+    useFilterCache = false,
+    mobileCardCss = ''
   }: VTableProps<T> = $props();
 
   // State
@@ -60,6 +63,19 @@
   let isInitialized = false;
   let dataVersion = $state(0);
   const filterCache = new WeakMap<T & object, string>();
+
+  // Mobile view state
+  let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const isMobileView = $derived(windowWidth < 580);
+
+  // Handle window resize
+  $effect(() => {
+    const handleResize = () => {
+      windowWidth = window.innerWidth;
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  });
 
   // Process columns to calculate colspans and separate header levels
   const processedColumns = $derived.by(() => {
@@ -89,6 +105,13 @@
       flatColumns,
       hasSubcols: level2.length > 0
     };
+  });
+
+  // Mobile columns sorted by order
+  const mobileColumns = $derived.by(() => {
+    return processedColumns.flatColumns
+      .filter(col => col.mobile)
+      .sort((a, b) => (a.mobile?.order || 0) - (b.mobile?.order || 0));
   });
 
   const filterTextArray = $derived((filterText||"").toLowerCase().split(" ").filter(x => x.length > 1))
@@ -129,6 +152,7 @@
 
   // Initialize virtualizer
   $effect(() => {
+    if (isMobileView) return;
     if (containerRef && !virtualizerStore) {
       virtualizerStore = createVirtualizer({
         count: 0,
@@ -233,9 +257,79 @@
 
 <div bind:this={containerRef}
   class="vtable-container {css}"
-  style="max-height: {maxHeight}; overflow: auto;"
+  style="max-height: {maxHeight}; overflow: {isMobileView ? 'hidden' : 'auto'};"
 >
-  <table class="vtable {tableCss}">
+  {#if isMobileView}
+    <!-- Mobile Card View -->
+    <div class="mobile-card-container" style="height: {maxHeight};">
+      {#if filteredData.length === 0}
+        <div class="mobile-empty-message">
+          {emptyMessage}
+        </div>
+      {:else}
+        <SvelteVirtualList items={filteredData}>
+          {#snippet renderItem(record, index)}
+            <div class="mobile-card mb-6 {mobileCardCss || ''}" 
+              role="button" 
+              tabindex="0"
+              onclick={() => handleRowClick(record, index)}
+              onkeydown={(ev) => {
+                if (ev.key === 'Enter' || ev.key === ' ') {
+                  handleRowClick(record, index);
+                }
+              }}>
+              <div class="mobile-card-grid">
+                {#each mobileColumns as column}
+                  {@const mobile = column.mobile}
+                  {@const cellData = getCellContent(column, record, index)}
+                  <div class="mobile-card-item {mobile?.css || 'col-span-full'}">
+                    {#if mobile?.leftElement}
+                      <div class="mobile-card-left">
+                        {#if typeof mobile.leftElement === 'string'}
+                          {@html mobile.leftElement}
+                        {:else}
+                          <Renderer elements={mobile.leftElement}/>
+                        {/if}
+                      </div>
+                    {/if}
+                    <div class="mobile-card-content">
+                      {#if mobile?.render}
+                        {@const renderedContent = mobile.render(record, index)}
+                        {#if typeof renderedContent === 'string'}
+                          {@html renderedContent}
+                        {:else}
+                          <Renderer elements={renderedContent}/>
+                        {/if}
+                      {:else if cellData.useSnippet && cellRenderer}
+                        {@render cellRenderer(record, column, cellData.content, index)}
+                      {:else if cellData.contentAST}
+                        <Renderer elements={cellData.contentAST}/>
+                      {:else if cellData.contentHTML}
+                        {@html cellData.contentHTML}
+                      {:else}
+                        {cellData.content}
+                      {/if}
+                    </div>
+                    {#if mobile?.rightElement}
+                      <div class="mobile-card-right">
+                        {#if typeof mobile.rightElement === 'string'}
+                          {@html mobile.rightElement}
+                        {:else}
+                          <Renderer elements={mobile.rightElement}/>
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/snippet}
+        </SvelteVirtualList>
+      {/if}
+    </div>
+  {:else}
+    <!-- Desktop Table View -->
+    <table class="vtable {tableCss}">
     <!-- Header -->
     <thead class="vtable-header">
       <!-- First level headers -->
@@ -375,6 +469,7 @@
       {/if}
     </tbody>
   </table>
+  {/if}
 </div>
 
 <style>
@@ -392,6 +487,21 @@
     background-color: white;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     padding: 2px;
+  }
+
+  @media (max-width: 579px) {
+    .vtable-container {
+      background-color: transparent;
+      border: none;
+      box-shadow: none;
+      width: calc(100% + 8px);
+      margin-left: -4px;
+      margin-right: -4px;
+      padding: 0;
+    }
+    .vtable-container :global(.virtual-list-items) {
+      padding: 4px;
+    }
   }
 
   .vtable {
@@ -514,5 +624,53 @@
   ._11._e:hover {
     outline: 1px solid #5243c2;
     background-color: #f5f4ff;
+  }
+
+  /* Mobile Card Styles */
+  .mobile-card-container {
+    width: 100%;
+  }
+
+  .mobile-empty-message {
+    text-align: center;
+    padding: 2rem;
+    color: #6c757d;
+    font-size: 0.875rem;
+  }
+
+  .mobile-card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 12px;
+    cursor: pointer;
+    transition: box-shadow 0.2s ease;
+  }
+
+  .mobile-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  .mobile-card-grid {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    gap: 4px;
+  }
+
+  .mobile-card-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mobile-card-left,
+  .mobile-card-right {
+    flex-shrink: 0;
+  }
+
+  .mobile-card-content {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
   }
 </style>

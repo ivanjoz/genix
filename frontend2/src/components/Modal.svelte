@@ -101,6 +101,11 @@ const modalSizesMap = new Map([
   [9, "w-1000 max-w-[88vw]"],
 ])
 
+const saveLabel = $derived.by(() => {
+  if(saveButtonLabel){ return  saveButtonLabel }
+  return isEdit ? "Actualizar" : "Guardar"
+})
+
 </script>
 
 {#if isOpen}
@@ -122,9 +127,9 @@ const modalSizesMap = new Map([
               </button>
             {/if}
             {#if onSave}
-              <button class="bx-blue mr-8 lh-10" onclick={handleSave} aria-label={isEdit ? "Actualizar" : "Guardar"}>
+              <button class="bx-blue mr-8 lh-10" onclick={handleSave} aria-label={saveLabel}>
                 <i class={saveIcon || "icon-floppy"}></i>
-                <span>{saveButtonLabel || (isEdit ? "Actualizar" : "Guardar")}</span>
+                <span>{saveLabel}</span>
               </button>
             {/if}
             <button class="bx-yellow h3 lh-10" onclick={handleClose} aria-label="Cerrar">
@@ -186,7 +191,7 @@ const modalSizesMap = new Map([
       padding-left: 0.4rem;
       padding-right: 0.4rem;
     }
-
+    
     :global(.modal-title .name) {
       padding-left: 0;
       padding-top: 2px;

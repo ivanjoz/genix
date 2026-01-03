@@ -34,10 +34,20 @@
 
   let productoColumns: ITableColumn<IProducto>[] = [
     { header: "ID", css: "c-blue text-center", headerCss: "w-48",
-      getValue: e => e.ID
+      getValue: e => e.ID,
+      mobile: {
+        order: 1,
+        css: "col-span-6",
+        render: (e) => `<strong>${e.ID}</strong>`
+      }
     },
     { header: "Producto", highlight: true,
-      getValue: e => e.Nombre
+      getValue: e => e.Nombre,
+      mobile: {
+        order: 2,
+        css: "col-span-18",
+        render: (e) => `<strong>${e.Nombre}</strong>`
+      }
     },
     { header: "Categorías", highlight: true,
       getValue: e => {
@@ -47,21 +57,59 @@
           nombres.push(nombre)
         }
         return nombres.join(", ")
+      },
+      mobile: {
+        order: 3,
+        css: "col-span-24",
+        render: (e) => {
+          const nombres = []
+          for(const id of (e.CategoriasIDs||[])){
+            const nombre = listas.get(id)?.Nombre || `Categoría-${id}`
+            nombres.push(nombre)
+          }
+          return `<div style="font-size: 0.85rem; color: #666;">${nombres.join(", ") || "Sin categorías"}</div>`
+        }
       }
     },
     { header: "Precio", css: "text-right",
-      getValue: e => formatN(e.Precio / 100,2)
+      getValue: e => formatN(e.Precio / 100,2),
+      mobile: {
+        order: 4,
+        css: "col-span-8",
+        leftElement: "<span style='font-size: 0.8rem; color: #999;'>Precio:</span>",
+        render: (e) => formatN(e.Precio / 100,2)
+      }
     },
     { header: "Descuento", css: "text-right",
-      getValue: e => e.Descuento ? String(e.Descuento) + "%" : ""
+      getValue: e => e.Descuento ? String(e.Descuento) + "%" : "",
+      mobile: {
+        order: 5,
+        css: "col-span-8",
+        leftElement: "<span style='font-size: 0.8rem; color: #999;'>Desc:</span>",
+        render: (e) => e.Descuento ? `${e.Descuento}%` : "-"
+      }
     },
     { header: "Precio Final", css: "text-right",
-      getValue: e => formatN(e.PrecioFinal / 100,2)
+      getValue: e => formatN(e.PrecioFinal / 100,2),
+      mobile: {
+        order: 6,
+        css: "col-span-8",
+        leftElement: "<span style='font-size: 0.8rem; color: #999;'>Final:</span>",
+        render: (e) => `<strong>${formatN(e.PrecioFinal / 100,2)}</strong>`
+      }
     },
     { header: "Sub Unidades", css: "text-right",
       getValue: e => {
         if(!e.SbnUnidad) return ""
         return `${e.SbnCantidad} x ${e.SbnUnidad}`
+      },
+      mobile: {
+        order: 7,
+        css: "col-span-24",
+        render: (e) => {
+          if(!e.SbnUnidad) return "<span style='color: #999;'>-</span>"
+          return `<div style="font-size: 0.85rem; color: #666;">Sub-unidad: ${e.SbnCantidad} x ${e.SbnUnidad}</div>`
+        }
       }
     },
   ]
@@ -173,6 +221,7 @@
           productoForm.Propiedades = [...(e.Propiedades||[])]
           Core.openSideLayer(1)
         }}
+        mobileCardCss="mb-2"
       />
     </Layer>
   {/if}
