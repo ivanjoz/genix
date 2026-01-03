@@ -108,7 +108,7 @@
         {#if onSave}
           <button class="bx-blue mr-8 lh-10" onclick={onSave} aria-label="Guardar">
             <i class="{saveButtonIcon || 'icon-floppy'}"></i>
-            <span>{saveButtonName || "Guardar"}</span>
+            <span class="_11">{saveButtonName || "Guardar"}</span>
           </button>
         {/if}
         <button class="bx-yellow" title="close"
@@ -193,6 +193,9 @@
     }
     ._1 {
       box-shadow: -7px 0px 15px 8px #00000030, -3px 1px 5px 2px #0000001c;
+    }
+    ._11 {
+      display: none;
     }
   }
 

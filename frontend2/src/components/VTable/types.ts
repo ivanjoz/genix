@@ -5,6 +5,14 @@
 import type { ElementAST } from '$components/micro/Renderer.svelte';
 import type { Snippet } from 'svelte';
 
+export interface ITableMobileCard<T> {
+	order: number,
+	leftElement?: string | ElementAST | ElementAST[] 
+	rightElement?: string | ElementAST | ElementAST[]
+	css?: string
+	render?: (e: T, idx: number) => string | ElementAST | ElementAST[]
+}
+
 export interface ITableColumn<T> {
   id?: number | string
   header: string | (() => string)
@@ -30,6 +38,7 @@ export interface ITableColumn<T> {
 	/* Buttons */
 	buttonEditHandler?: (e:T) => void
 	buttonDeleteHandler?: (e:T) => void
+	mobile?: ITableMobileCard<T>
 }
 
 /**

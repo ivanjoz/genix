@@ -82,7 +82,7 @@ const serviceWorkerPlugin = () => ({
 });
 
 export default defineConfig({
-	server: {
+  server: {
     port: 3570, // Change this to your desired port
     headers: {
       'Cross-Origin-Embedder-Policy': 'require-corp',
@@ -97,5 +97,5 @@ export default defineConfig({
     plugins: () => [tailwindcss()],
   },
   assetsInclude: ['**/*.wasm'],
-	plugins: [tailwindcss(), sveltekit(), serviceWorkerPlugin()]
+  plugins: [sveltekit(), tailwindcss(), serviceWorkerPlugin()]
 });

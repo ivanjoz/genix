@@ -461,10 +461,6 @@ input[type='number'] {
 	box-shadow: #5a5e6330 0 1px 6px, #738dff 0 0 1px 1px;
 }
 
-.w-page {
-	overflow: auto;
-}
-
 .w-page > div {
 	min-width: calc(var(--page-width) - 2px);
 }
@@ -478,4 +474,10 @@ input[type='number'] {
 
 .fr-selection-handle {
 	position: absolute;
+}
+
+@media only screen and (min-width: 680px)  {
+	.w-page {
+		overflow: auto;
+	}	
 }
