@@ -11,10 +11,21 @@ const config = {
 	compilerOptions: {
 		hmr: false,
 		cssHash: ({ hash, css, name, filename }) => {
+			if (!filename) {
+				return `svelte-${hash(css).substring(0, 8)}`;
+			}
+			// Extract component name and sanitize it
 			const componentName = filename
-				? filename.split(/[\\/]/).pop().split('.')[0]
-				: 'comp';
-			return `${componentName}_${hash(css).substring(0,4)}`;
+				.split(/[\\/]/)
+				.pop()
+				.split('.')[0]
+				.replace(/^\+/, '') // Remove leading + from route files
+				.replace(/[^a-zA-Z0-9_-]/g, '_') // Replace invalid chars with underscore
+				.replace(/^[0-9]/, '_$&'); // Ensure it doesn't start with a number
+			
+			// Fallback if name is empty after sanitization
+			const safeName = componentName || 'comp';
+			return `${safeName}_${hash(css).substring(0, 8)}`;
 		}
 	},
 	kit: {

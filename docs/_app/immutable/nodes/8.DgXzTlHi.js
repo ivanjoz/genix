@@ -1,1 +1,0 @@
-import"../chunks/DsnmJJEf.js";import"../chunks/BmzFTYzn.js";import{f as a,b as e}from"../chunks/Bf0lWsRu.js";import{P as m}from"../chunks/CA3qa6R_.js";var p=a("<h2>hola mundo</h2>");function h(o){m(o,{title:"Page Editor",children:(t,i)=>{var r=p();e(t,r)},$$slots:{default:!0}})}export{h as component};
