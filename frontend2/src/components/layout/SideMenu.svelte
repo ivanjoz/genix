@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { tick } from 'svelte';
 	import { Core } from '$core/store.svelte';
 	import type { IMenuRecord, IModule } from '../../types/menu';
 
@@ -31,13 +32,31 @@
 		}
 	}
 
-	function navigateTo(route: string, menuId: number) {
-		menuOpen = [menuId, route];
+	function applyActiveStylesInstant(button: HTMLElement) {
+		// Find and remove active state from the currently active button (only one can be active)
+		const activeButton = mobileMenuPanel?.querySelector('.mobile-menu-option.is-active');
+		if (activeButton) {
+			activeButton.classList.remove('is-active');
+		}
+		
+		// Apply active state to clicked button
+		button.classList.add('is-active');
+	}
+
+	async function navigateTo(route: string, menuId: number, buttonElement?: HTMLElement) {
+		
+		// On mobile: Apply styles instantly to clicked button before view transition
+		if (Core.mobileMenuOpen && buttonElement) {
+			applyActiveStylesInstant(buttonElement);
+		}
+		
 		goto(route);
-		// Close mobile menu on navigation
+
 		if (Core.mobileMenuOpen) {
 			toggleMobileMenu(true);
 		}
+
+		menuOpen = [menuId, route];
 	}
 
 	// Animation duration in milliseconds - should match CSS animation duration
@@ -192,78 +211,55 @@
 	<!-- Mobile Menu Panel -->
 	<aside class="mobile-menu-panel" bind:this={mobileMenuPanel}>
 		<!-- Mobile Header -->
-		<div class="h-48 flex items-center justify-between px-16 border-b border-gray-800/50">
-			<span class="text-lg font-bold tracking-wider text-indigo-400">GENIX</span>
+		<div class="mobile-header h-48 flex items-center px-6 justify-between">
+			<div class="mobile-header-logo">
+				<img src="/images/genix_logo3.svg" alt="Genix" class="size-36" />
+				<span class="logo-text">GENIX</span>
+			</div>
 			<button
-				class="p-8 hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+				class="close-button size-32"
 				aria-label="Close menu"
 				onclick={() => toggleMobileMenu(true)}
 			>
-				<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M6 18L18 6M6 6l12 12"
-					/>
-				</svg>
+				<i class="icon-cancel"></i>
 			</button>
 		</div>
 
 		<!-- Mobile Menu Items -->
-		<div class="py-4">
+		<div class="mobile-menu-content">
 			{#each (module?.menus||[]) as menu}
 				{@const isOpen = menuOpen[0] === menu.id}
-				{@const optionsCount = menu.options?.length || 0}
-				{@const menuHeight = isOpen ? `${optionsCount * 2.8 + 3}rem` : '3rem'}
-
-				<div class="mb-1 overflow-hidden transition-all duration-400"
-					style="height: {menuHeight}"
-				>
-					<button	class="w-full h-48 px-16 flex items-center justify-between
-							text-indigo-300 hover:bg-gray-800/50 transition-colors
-							border-l-4 border-transparent hover:border-indigo-500 relative
-							{isOpen ? 'bg-gray-800 border-indigo-500' : ''}"
+				
+				<div class="mobile-menu-group">
+					<button	
+						class="mobile-menu-group-button {isOpen ? 'is-open' : ''}"
 						onclick={() => toggleMenu(menu.id || 0)}
 					>
-						<span class="text-sm font-mono font-semibold tracking-wider">
-							{menu.name.toUpperCase()}
-						</span>
+						<span class="menu-group-title">{menu.name.toUpperCase()}</span>
 						{#if menu.options && menu.options.length > 0}
-							<span class="transition-transform duration-300 text-xs" class:rotate-180={isOpen}>
+							<span class="menu-group-chevron" class:rotated={isOpen}>
 								<i class="icon-down-open-1"></i>
 							</span>
 						{/if}
 					</button>
 
 					{#if menu.options && isOpen}
-						<div class="transition-all duration-300">
+						<div class="mobile-menu-options-grid">
 							{#each menu.options as option}
 								{@const isActive = option.route === currentPathname}
-								<button	class="w-full flex items-center px-24 py-10 text-sm relative
-										hover:bg-indigo-600/20 transition-all
-										border-l-2 border-transparent
-										{isActive
-											? 'bg-indigo-600/30 border-indigo-400 text-white font-medium'
-											: 'text-gray-300'}"
-									onclick={() => navigateTo(option.route || '/', menu.id || 0)}
+								<button	
+									class="mobile-menu-option {isActive ? 'is-active' : ''}"
+									onclick={(e) => navigateTo(option.route || '/', menu.id || 0, e.currentTarget)}
+									onmousedown={(e) => e.currentTarget.classList.add('is-pressed')}
+									onmouseup={(e) => e.currentTarget.classList.remove('is-pressed')}
+									onmouseleave={(e) => e.currentTarget.classList.remove('is-pressed')}
+									ontouchstart={(e) => e.currentTarget.classList.add('is-pressed')}
+									ontouchend={(e) => e.currentTarget.classList.remove('is-pressed')}
 								>
-									<div class="flex items-center w-full">
-										{#if option.icon}
-											<i class="{option.icon} text-base mr-2"></i>
-										{/if}
-										<span class="font-mono text-xs">
-											{#each option.name.split(' ') as word}
-												<span class="mr-1">{word}</span>
-											{/each}
-										</span>
-									</div>
-
-									{#if isActive}
-										<div
-											class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-3/4 bg-indigo-400 rounded-r"
-										></div>
+									{#if option.icon}
+										<i class="{option.icon} option-icon"></i>
 									{/if}
+									<span class="option-text">{option.name}</span>
 								</button>
 							{/each}
 						</div>
@@ -368,15 +364,15 @@
 	.mobile-menu-backdrop {
 		position: absolute;
 		inset: 0;
-		background-color: rgb(0 0 0 / 0.6);
-		backdrop-filter: blur(4px);
+		background-color: rgb(0 0 0 / 0.5);
+		backdrop-filter: blur(2px);
 		opacity: 0;
 		cursor: pointer;
 		border: none;
 		padding: 0;
 		z-index: 1;
 		pointer-events: none;
-		transition: opacity 0.4s ease-in-out;
+		transition: opacity 0.35s ease-in-out;
 	}
 
 	.mobile-menu-wrapper.is-open .mobile-menu-backdrop {
@@ -389,15 +385,16 @@
 		left: 0;
 		top: 0;
 		height: 100%;
-		width: 14rem;
-		max-width: 75vw;
-		background: linear-gradient(to bottom, rgb(17 24 39), rgb(17 24 39), rgb(3 7 18));
-		color: white;
-		box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+		width: 78vw;
+		background: white;
+		color: #2c2b2e;
+		box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
 		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
 		/* Don't transform by default - let view transitions handle it */
 		opacity: 0;
-		z-index: 301c;
+		z-index: 301;
 	}
 
 	/* When mobile menu is open */
@@ -408,6 +405,192 @@
 	.mobile-menu-wrapper.is-open .mobile-menu-panel {
 		opacity: 1;
 		z-index: 2;
+	}
+
+	/* Mobile Header */
+	.mobile-header {
+		border-bottom: 1px solid #e5e7eb;
+		background: white;
+	}
+
+	.mobile-header-logo {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.logo-text {
+		font-size: 18px;
+		font-weight: 700;
+		font-family: bold;
+		color: #1f2937;
+		letter-spacing: 0.5px;
+	}
+
+	.close-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 50%;
+		background: #f3f4f6;
+		color: #374151;
+		border: none;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.close-button:hover {
+		background: #e5e7eb;
+	}
+
+	.close-button svg {
+		width: 16px;
+		height: 16px;
+	}
+
+	/* Mobile Menu Content */
+	.mobile-menu-content {
+		flex: 1;
+		padding: 4px 0;
+		overflow-y: auto;
+	}
+
+	.mobile-menu-group {
+		margin-bottom: 2px;
+	}
+
+	.mobile-menu-group-button {
+		width: 100%;
+		padding: 10px 12px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		background: white;
+		border: none;
+		border-left: 4px solid transparent;
+		cursor: pointer;
+		transition: all 0.2s;
+		text-align: left;
+	}
+
+	.mobile-menu-group-button:hover {
+		background: #f9fafb;
+	}
+
+	.mobile-menu-group-button.is-open {
+		background: #f3f4f7;
+		border-left-color: #8b5cf6;
+	}
+
+	.menu-group-title {
+		font-size: 15px;
+		font-weight: 600;
+		font-family: semibold;
+		color: #1f2937;
+		letter-spacing: 0.3px;
+		text-transform: uppercase;
+	}
+
+	.menu-group-chevron {
+		color: #4b5563;
+		font-size: 14px;
+		transition: transform 0.3s ease;
+		display: flex;
+		align-items: center;
+	}
+
+	.menu-group-chevron.rotated {
+		transform: rotate(180deg);
+	}
+
+	/* Options Grid */
+	.mobile-menu-options-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 6px;
+		padding: 6px 10px 12px 10px;
+		background: white;
+		animation: fadeIn 0.25s ease-out;
+	}
+
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+			transform: translateY(-4px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	.mobile-menu-option {
+    padding: 4px 8px 6px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    cursor: pointer;
+    min-height: 70px;
+    justify-content: center;
+	}
+
+	.mobile-menu-option:hover:not(.is-active) {
+		background: #f9fafb;
+		border-color: #9ca3af;
+		transform: translateY(-1px);
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+		transition: transform 0.2s, box-shadow 0.2s, background 0.2s, border-color 0.2s;
+	}
+
+	.mobile-menu-option.is-pressed:not(.is-active) {
+		background: #e5e7eb;
+		border-color: #9ca3af;
+		transform: translateY(0);
+		box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+		transition: transform 0.2s, box-shadow 0.2s, background 0.2s, border-color 0.2s;
+	}
+
+	.mobile-menu-option.is-active {
+		background: #ede9fe !important;
+		border-color: #8b5cf6 !important;
+		box-shadow: 0 2px 6px rgba(139, 92, 246, 0.25) !important;
+		transition: none !important;
+	}
+
+	.mobile-menu-option.is-active.is-pressed {
+		background: #ddd6fe !important;
+		border-color: #7c3aed !important;
+		box-shadow: inset 0 2px 4px rgba(124, 58, 237, 0.2) !important;
+		transition: none !important;
+	}
+
+	.option-icon {
+		font-size: 20px;
+		color: #4b5563;
+	 /*	margin-bottom: 2px; */
+	}
+
+	.mobile-menu-option.is-active .option-icon {
+		color: #7c3aed !important;
+		transition: none !important;
+	}
+
+	.option-text {
+		font-size: 15px;
+		font-family: main;
+		color: #1f2937;
+		text-align: center;
+		line-height: 1.1;
+		word-break: break-word;
+	}
+
+	.mobile-menu-option.is-active .option-text {
+		color: #5b21b6 !important;
+		transition: none !important;
 	}
 
 	/* View Transitions for Mobile Menu */

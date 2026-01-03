@@ -38,3 +38,6 @@ ai/transformers.js
 ai/functiongemma-270m-it-ONNX-GQA/
 
 ai/models/*
+docs/models/*
+docs/models_local/*
+docs/_app/immutable/assets/ort-*
