@@ -20,6 +20,8 @@
     onOpen?: () => void;
     /** Callback when layer closes */
     onClose?: () => void;
+    /** css of the content */
+    contentCss?: string;
   }
 
   let {
@@ -27,6 +29,7 @@
     buttonClass = '',
     layerClass = '',
     defaultOpen = false,
+    contentCss = '',
     children,
     button,
     onOpen,
@@ -65,19 +68,23 @@
     
     const buttonRect = buttonElement.getBoundingClientRect();
     const layerRect = layerElement.getBoundingClientRect();
+    const isMobile = window.innerWidth <= 748;
     
     const offset = 8; // Distance from button
     let top = buttonRect.bottom + offset;
-    let left = buttonRect.left;
+    let left = isMobile ? 6 : buttonRect.left;
     
-    // Check if layer would go off right edge of viewport
-    if (left + layerRect.width > window.innerWidth) {
-      left = window.innerWidth - layerRect.width - 10;
-    }
-    
-    // Check if layer would go off left edge of viewport
-    if (left < 10) {
-      left = 10;
+    // Desktop: position relative to button
+    if (!isMobile) {
+      // Check if layer would go off right edge of viewport
+      if (left + layerRect.width > window.innerWidth) {
+        left = window.innerWidth - layerRect.width - 10;
+      }
+      
+      // Check if layer would go off left edge of viewport
+      if (left < 10) {
+        left = 10;
+      }
     }
     
     // Check if layer would go off bottom of viewport
@@ -89,7 +96,26 @@
     
     // Calculate angle position to be centered below the button
     const buttonCenter = buttonRect.left + (buttonRect.width / 2);
-    angleLeft = buttonCenter - left - 12; // 12 is half the angle width (24px / 2)
+    
+    if (isMobile) {
+      // On mobile, center the angle relative to the button within the layer
+      // Layer is at left = 6px, so calculate relative to that
+      angleLeft = buttonCenter - left - 12; // 12 is half the angle width (24px / 2)
+      // Ensure angle stays within layer bounds (layer width is calc(100vw - 12px))
+      const layerWidth = window.innerWidth - 12;
+      const minAngleLeft = 10;
+      const maxAngleLeft = layerWidth - 24;
+      if (angleLeft < minAngleLeft) angleLeft = minAngleLeft;
+      if (angleLeft > maxAngleLeft) angleLeft = maxAngleLeft;
+    } else {
+      // Desktop: position relative to layer
+      angleLeft = buttonCenter - left - 12;
+      // Ensure angle stays within layer bounds
+      const minAngleLeft = 10;
+      const maxAngleLeft = layerRect.width - 24;
+      if (angleLeft < minAngleLeft) angleLeft = minAngleLeft;
+      if (angleLeft > maxAngleLeft) angleLeft = maxAngleLeft;
+    }
   }
 
   // Update position when layer opens
@@ -166,7 +192,7 @@
 
   {#if isOpen}
     <div bind:this={layerElement}
-      class="button-layer min-w-200 {layerClass}"
+      class="button-layer min-w-200 w-[calc(100vw-12px)] {layerClass}"
       style="top: {position.top}px; left: {position.left}px;"
     >
       <!-- Angle pointer -->
@@ -175,7 +201,7 @@
       </div>
       
       <!-- Layer content -->
-      <div class="button-layer-content">
+      <div class="button-layer-content-wrapper {contentCss}">
         {@render children?.()}
       </div>
     </div>
@@ -213,6 +239,22 @@
       0 2px 4px -1px rgba(0, 0, 0, 0.06),
       0 0 0 1px rgba(0, 0, 0, 0.05);
     animation: slideDown 0.2s ease-out;
+    overflow: visible;
+  }
+
+  /* Mobile: fixed width and max-height */
+  @media (max-width: 748px) {
+    .button-layer {
+      max-width: calc(100vw - 12px);
+      max-height: calc(100vh - 100px);
+      overflow: visible;
+    }
+    
+    /* Make content scrollable while keeping angle visible */
+    .button-layer-content-wrapper {
+      overflow-y: auto;
+      max-height: calc(100vh - 100px);
+    }
   }
 
   .button-layer-angle {
@@ -223,16 +265,13 @@
     width: 24px;
     display: flex;
     justify-content: center;
+    z-index: 211;
   }
 
   .button-layer-angle-img {
     width: 24px;
     height: 24px;
     filter: drop-shadow(0 -1px 1px rgba(0, 0, 0, 0.05));
-  }
-
-  .button-layer-content {
-    padding: 8px;
   }
 
   @keyframes slideDown {
