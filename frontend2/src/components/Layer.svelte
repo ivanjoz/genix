@@ -10,6 +10,10 @@
   const ANIMATION_DURATION = 350;
   // Track previous showSideLayer value to detect changes
   let previousShowSideLayer = $state(Core.showSideLayer);
+  // Track if we're in an opening transition
+  let isInTransition = $state(false);
+  // Track visibility to prevent flash before transition starts
+  let isVisible = $state(false);
 
   let { 
     children, css, title, titleCss, contentCss, id,
@@ -48,6 +52,7 @@
   }
 
   // React to showSideLayer changes and handle transitions on mobile
+  // ONLY handle opening transitions - closing is instant
   $effect(() => {
     if (type !== 'side' || Core.deviceType !== 3) {
       previousShowSideLayer = Core.showSideLayer;
@@ -57,24 +62,36 @@
     // Detect if showSideLayer changed
     if (previousShowSideLayer !== Core.showSideLayer) {
       const isOpening = Core.showSideLayer === id;
-      const isClosing = previousShowSideLayer === id && Core.showSideLayer !== id;
       
-      if ((isOpening || isClosing) && document.startViewTransition && divLayer) {
-        // Set view-transition-name for the animation
-        divLayer.style.setProperty("view-transition-name", "mobile-side-layer");
+      // Only handle opening transitions
+      if (isOpening && typeof document.startViewTransition === 'function') {
+        // Clear any previous layer's transition name to prevent conflicts
+        if (previousShowSideLayer !== 0) {
+          const oldLayer = document.querySelector(`[data-layer-id="${previousShowSideLayer}"]`);
+          if (oldLayer) {
+            (oldLayer as HTMLElement).style.setProperty('view-transition-name', '');
+          }
+        }
         
-        // Start the view transition
-        document.startViewTransition(() => {
-          // The actual DOM update happens here
-          tick();
+        // Start the view transition for opening
+        const transition = document.startViewTransition(async () => {
+          // Mark that we're in transition and make it visible ONLY now
+          isInTransition = true;
+          isVisible = true;
+          // Wait for Svelte to update the DOM
+          await tick();
         });
         
-        // Clean up view-transition-name after animation completes
-        setTimeout(() => {
-          if (divLayer) {
-            divLayer.style.setProperty("view-transition-name", "");
-          }
-        }, ANIMATION_DURATION);
+        // Clean up after animation completes
+        transition.finished.finally(() => {
+          isInTransition = false;
+        });
+      } else if (isOpening) {
+        // Fallback or non-mobile: just show it
+        isVisible = true;
+      } else if (previousShowSideLayer === id) {
+        // Closing: hide it
+        isVisible = false;
       }
       
       previousShowSideLayer = Core.showSideLayer;
@@ -95,6 +112,8 @@
     class:_8={contentOverflow}
     class:_1={type === 'side'}
     class:_2={type === 'bottom'}
+    class:in-transition={isInTransition}
+    class:visible={isVisible}
     style={layerWidth ? `width: ${layerWidth};` : ""}
   >
     <div class="flex items-center justify-between">
@@ -157,6 +176,9 @@
     z-index: var(--layer-zindex);
     max-width: 100vw;
     overflow: hidden;
+    /* Prevent flash: hidden by default until transition starts or visible class applied */
+    opacity: 0;
+    visibility: hidden;
   }
   ._2 {
     position: fixed;
@@ -169,6 +191,17 @@
     z-index: var(--layer-zindex);
     max-width: 100vw;
     overflow: hidden;
+    /* Prevent flash */
+    opacity: 0;
+    visibility: hidden;
+  }
+  ._1.visible, ._2.visible {
+    opacity: 1;
+    visibility: visible;
+  }
+  ._1.in-transition, ._2.in-transition {
+    opacity: 1;
+    visibility: visible;
   }
   ._4 {
     overflow-y: auto;
@@ -194,23 +227,16 @@
     ._1 {
       box-shadow: -7px 0px 15px 8px #00000030, -3px 1px 5px 2px #0000001c;
     }
+    /* Set view-transition-name only when in transition */
+    ._1.in-transition {
+      view-transition-name: mobile-side-layer;
+    }
     ._11 {
       display: none;
     }
   }
 
-  /* View Transitions for Mobile Layer */
-	@keyframes slide-out {
-		from {
-			transform: translateX(0);
-			opacity: 1;
-		}
-		to {
-			transform: translateX(100%);
-			opacity: 1;
-		}
-	}
-
+  /* View Transitions for Mobile Layer - Opening Only */
 	@keyframes slide-in {
 		from {
 			transform: translateX(100%);
@@ -220,19 +246,29 @@
 		}
 	}
 
-	/* When closing: OLD snapshot slides out to the left */
-	::view-transition-old(mobile-side-layer) {
-		animation: slide-out 0.35s ease-in-out forwards;
-		animation-fill-mode: forwards;
-	}
-
-	/* When opening: NEW snapshot slides in from the left */
-	::view-transition-new(mobile-side-layer) {
-		animation: slide-in 0.35s ease-in-out;
-	}
-
-	/* Prevent the default fade out on OLD snapshot */
+	/* Prevent default cross-fade */
 	::view-transition-image-pair(mobile-side-layer) {
-		isolation: auto;
+		isolation: isolate;
 	}
+
+	/* Override default group animation */
+	::view-transition-group(mobile-side-layer) {
+		animation-duration: 0.35s;
+		animation-timing-function: ease-in-out;
+	}
+
+	/* When opening: NEW snapshot slides in from the right (off-screen) */
+	::view-transition-new(mobile-side-layer) {
+		animation: slide-in 0.35s ease-in-out forwards;
+		z-index: 2;
+		opacity: 1;
+	}
+
+	/* Hide old snapshot completely when opening (no fade effect) */
+	::view-transition-old(mobile-side-layer) {
+		opacity: 0 !important;
+		animation: none !important;
+		display: none !important;
+	}
+
 </style>

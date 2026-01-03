@@ -258,7 +258,7 @@
 </script>
 
 <div bind:this={containerRef}
-  class="vtable-container {css}"
+  class="vtable-container {css}" class:_14={isMobileView}
   style="max-height: {maxHeight}; overflow: {isMobileView ? 'hidden' : 'auto'};"
 >
   {#if isMobileView}
@@ -542,24 +542,22 @@
   .hsc > div {
     background-color: #e9ecef;
   }
-  .vtable-container {
+
+  .vtable-container:not(._14) {
+    background-color: white;
     border: 1px solid #dee2e6;
     border-radius: 8px;
-    background-color: white;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     padding: 2px;
   }
 
+  .vtable-container._14 {
+    width: calc(100% + 8px);
+    margin-left: -4px;
+    margin-right: -4px;
+  }
+
   @media (max-width: 579px) {
-    .vtable-container {
-      background-color: transparent;
-      border: none;
-      box-shadow: none;
-      width: calc(100% + 8px);
-      margin-left: -4px;
-      margin-right: -4px;
-      padding: 0;
-    }
     .vtable-container :global(.virtual-list-items) {
       padding: 4px;
     }
