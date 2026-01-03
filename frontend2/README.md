@@ -317,6 +317,7 @@ Versatile table component with filtering and custom cell rendering. Requires a c
 | `filterText` | `string` | No | Text to filter rows |
 | `getFilterContent` | `(row: T) => string` | No | Builds string for filter comparison |
 | `useFilterCache` | `boolean` | No | Cache filter results |
+| `mobileCardCss` | `string` | No | CSS classes for mobile cards |
 
 ### ITableColumn Interface
 
@@ -333,6 +334,22 @@ Versatile table component with filtering and custom cell rendering. Requires a c
 | `onCellSelect` | `(e: T, value: string \| number) => void` | Renders a select button |
 | `buttonEditHandler` | `(e: T) => void` | Renders an edit button in the cell |
 | `buttonDeleteHandler` | `(e: T) => void` | Renders a delete button in the cell |
+| `mobile` | `ITableMobileCard<T>` | Mobile card configuration (renders below 580px) |
+
+### ITableMobileCard Interface
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `order` | `number` | Display order (required) |
+| `css` | `string` | Tailwind classes (use `col-span-N` for 24-col grid) |
+| `render` | `(e: T, idx: number) => string \| ElementAST \| ElementAST[]` | Custom render (priority over column render) |
+| `labelLeft` | `string` | 14px label to the left |
+| `labelTop` | `string` | Label above (creates vertical layout) |
+| `icon` | `string` | Icon class name (renders as `icon-{icon}`) |
+| `iconCss` | `string` | Icon CSS classes |
+| `elementLeft` | `string \| ElementAST \| ElementAST[]` | Custom left element |
+| `elementRight` | `string \| ElementAST \| ElementAST[]` | Custom right element |
+| `if` | `(e: T, idx: number) => boolean` | Conditional render |
 
 ### ElementAST Interface
 
@@ -360,26 +377,34 @@ For more control, VTable accepts a `cellRenderer` Svelte 5 snippet. The snippet 
 
 Important: Use it instead or large HTML strings.
 
+**Mobile Cards:** VTable automatically switches to card layout when screen width is below 580px **only if at least one column has a `mobile` property**. If no columns have mobile configuration, the table view is always used regardless of screen size. On mobile, the table renders as vertical cards using a 24-column grid. Add `mobile` property to columns with `order`, `css` (use `col-span-N` for grid layout), `labelLeft`, `labelTop`, `icon`, `if`, etc. Note: Avoid using the `render` property in mobile config; prefer `labelLeft`, `labelTop`, `icon`, and column `getValue`/`render` instead.
+
 **Example:**
 ```svelte
 <script>
-  let users: IUser = $state([{ id: 1, name: "Peter", age: 21 }, { id: 2, name: "Hans", age: 27 }])
   let filterText = $state("")
-
-  let columns: ITableColumn<IUser>[] = [
-    { header: "ID", getValue: e => e.ID },
-    { header: "Name", 
-      render: e => {
-        return {
-          css: "flex items-center",
-          children: [
-            { tagName: "i", css: "icon-user" },
-            { text: e.Name }
-          ]
-        }
-      }
+  let columns: ITableColumn<IProducto>[] = [
+    { 
+      header: "ID", 
+      getValue: e => e.ID,
+      mobile: { order: 1, css: "col-span-6", icon: "tag" }
     },
-    { header: "Age", id: "age" }
+    { 
+      header: "Producto", 
+      getValue: e => e.Nombre,
+      mobile: { order: 2, css: "col-span-18" }
+    },
+    { 
+      header: "Precio", 
+      getValue: e => formatN(e.Precio / 100, 2),
+      mobile: { order: 4, css: "col-span-8", labelLeft: "Precio:" }
+    },
+    { 
+      header: "Age", 
+      id: "age",
+      getValue: e => e.age,
+      mobile: { order: 5, css: "col-span-24", labelTop: "Age", if: (e) => e.age > 0 }
+    }
   ]
 </script>
 
@@ -390,19 +415,14 @@ Important: Use it instead or large HTML strings.
     throttle(() => { filterText = value },150)
   }}>
 </div>
-<VTable columns={columns} data={almacenStock}
+<VTable columns={columns} data={productos}
   filterText={filterText}
-  useFilterCache={true}
-  getFilterContent={e => {
-    const producto = productos.productosMap.get(e.ProductoID)
-    return [producto?.Nombre, e.SKU, e.Lote].filter(x => x).join(" ").toLowerCase()
-  }}
+  getFilterContent={e => e.Nombre}
+  mobileCardCss="mb-2"
 >
-  {#snippet cellRenderer(record: IUser, col: ITableColumn<IUser>)}
+  {#snippet cellRenderer(record, col)}
     {#if col.id === "age"}
-      <div class="flex">
-        <div class="ff-bold">Age:</div><div>{record.age}</div>
-      </div>
+      <div class="flex"><div class="ff-bold">Age:</div><div>{record.age}</div></div>
     {/if}
   {/snippet}
 </VTable>

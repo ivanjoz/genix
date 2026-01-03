@@ -112,8 +112,8 @@ const saveLabel = $derived.by(() => {
   <Portal>
     <div class="_1 fixed top-0 left-0 flex items-center justify-center" bind:this={modalDiv}>
       <div class="_2 pt-50 min-h-460 flex flex-col relative {css} {modalSizesMap.get(size)}">
-        <div class="_3 h-50 py-0 px-12 flex absolute w-full top-0 left-0 items-center justify-between mb-auto {headCss}">
-          <div class="flex items-center ff-bold h2">
+        <div class="_3 h-50 py-0 px-8 md:px-12 flex absolute w-full top-0 left-0 items-center justify-between mb-auto {headCss}">
+          <div class="flex items-center ff-bold leading-[1.1] text-lg md:text-xl">
             {#if isSnippet(title)}
               {@render title()}
             {:else}
@@ -122,22 +122,22 @@ const saveLabel = $derived.by(() => {
           </div>
           <div class="flex items-center">
             {#if onDelete}
-              <button class="bx-red mr-8 lh-10" onclick={handleDelete} aria-label="Eliminar">
+              <button class="bx-red mr-10 lh-10" onclick={handleDelete} aria-label="Eliminar">
                 <i class="icon-trash"></i>
               </button>
             {/if}
             {#if onSave}
-              <button class="bx-blue mr-8 lh-10" onclick={handleSave} aria-label={saveLabel}>
+              <button class="bx-blue mr-10 lh-10" onclick={handleSave} aria-label={saveLabel}>
                 <i class={saveIcon || "icon-floppy"}></i>
-                <span>{saveLabel}</span>
+                <span class="_5">{saveLabel}</span>
               </button>
             {/if}
-            <button class="bx-yellow h3 lh-10" onclick={handleClose} aria-label="Cerrar">
+            <button class="bx-yellow h3 lh-10 mr-[-2px]" onclick={handleClose} aria-label="Cerrar">
               <i class="icon-cancel"></i>
             </button>
           </div>
         </div>
-        <div class="w-full grow py-6 px-10 {bodyCss}">
+        <div class="w-full grow py-6 px-2 md:px-10 {bodyCss}">
           {@render children?.()}
         </div>
       </div>
@@ -151,7 +151,7 @@ const saveLabel = $derived.by(() => {
     height: 100vh;
     position: fixed;
     background-color: rgba(0, 0, 0, 0.5);
-    z-index: 195;
+    z-index: var(--modal-zindex);
     opacity: 0;
     transition: opacity 0.3s ease;
   }
@@ -184,19 +184,32 @@ const saveLabel = $derived.by(() => {
   }
 
   /* Mobile responsive */
-  @media (max-width: 768px) {
+  @media (max-width: 640px) {
     ._2 {
-      max-width: 96vw;
-      width: 96vw;
-      padding-left: 0.4rem;
-      padding-right: 0.4rem;
+      max-width: calc(100vw - 16px);
+      width: calc(100vw - 16px);
+      padding-left: 8px;
+      padding-right: 8px;
     }
-    
+
+    ._5 {
+      display: none;
+    }
+
     :global(.modal-title .name) {
       padding-left: 0;
       padding-top: 2px;
       font-size: 1.1rem;
       overflow: hidden;
+    }
+  }
+
+  @media (max-width: 420px) {
+    ._2 {
+      max-width: calc(100vw - 8px);
+      width: calc(100vw - 8px);
+      padding-left: 4px;
+      padding-right: 4px;
     }
   }
 </style>

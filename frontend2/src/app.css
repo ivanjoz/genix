@@ -8,6 +8,14 @@
   --breakpoint-lg: 1139px;
   --breakpoint-md: 749px;
 	--spacing: 1px;
+	
+	/* Font Sizes - minimum 14px, then 15px, 16px, 18px, 20px, 22px */
+	--font-size-xs: 14px;
+	--font-size-sm: 15px;
+	--font-size-base: 16px;
+	--font-size-lg: 18px;
+	--font-size-xl: 20px;
+	--font-size-2xl: 22px;
 }
 
 @font-face { 
@@ -87,6 +95,11 @@ body {
 	--input-color-bottom: rgba(109, 92, 150, 0.329);
 	--color-11: #9d9ef0;
 	--font-mono: mono;
+
+	/* z-indexes */
+	--modal-zindex: 175;
+	--layer-zindex: 101;
+	--portal-zindex: 201;
 }
 
 /* Utility Classes - Margin */

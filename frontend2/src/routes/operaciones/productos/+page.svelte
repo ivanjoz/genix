@@ -38,6 +38,7 @@
       mobile: {
         order: 1,
         css: "col-span-6",
+        icon: "tag",
         render: (e) => `<strong>${e.ID}</strong>`
       }
     },
@@ -76,7 +77,7 @@
       mobile: {
         order: 4,
         css: "col-span-8",
-        leftElement: "<span style='font-size: 0.8rem; color: #999;'>Precio:</span>",
+        labelLeft: "Precio:",
         render: (e) => formatN(e.Precio / 100,2)
       }
     },
@@ -85,7 +86,7 @@
       mobile: {
         order: 5,
         css: "col-span-8",
-        leftElement: "<span style='font-size: 0.8rem; color: #999;'>Desc:</span>",
+        labelLeft: "Desc:",
         render: (e) => e.Descuento ? `${e.Descuento}%` : "-"
       }
     },
@@ -94,7 +95,8 @@
       mobile: {
         order: 6,
         css: "col-span-8",
-        leftElement: "<span style='font-size: 0.8rem; color: #999;'>Final:</span>",
+        labelLeft: "Final:",
+        icon: "ok",
         render: (e) => `<strong>${formatN(e.PrecioFinal / 100,2)}</strong>`
       }
     },
@@ -106,9 +108,10 @@
       mobile: {
         order: 7,
         css: "col-span-24",
+        labelTop: "Sub-unidades",
         render: (e) => {
           if(!e.SbnUnidad) return "<span style='color: #999;'>-</span>"
-          return `<div style="font-size: 0.85rem; color: #666;">Sub-unidad: ${e.SbnCantidad} x ${e.SbnUnidad}</div>`
+          return `<div style="font-size: 0.9rem;">${e.SbnCantidad} x ${e.SbnUnidad}</div>`
         }
       }
     },

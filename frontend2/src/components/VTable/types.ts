@@ -7,10 +7,15 @@ import type { Snippet } from 'svelte';
 
 export interface ITableMobileCard<T> {
 	order: number,
-	leftElement?: string | ElementAST | ElementAST[] 
-	rightElement?: string | ElementAST | ElementAST[]
+	elementLeft?: string | ElementAST | ElementAST[] 
+	elementRight?: string | ElementAST | ElementAST[]
 	css?: string
+	icon?: string
+	iconCss?: string
 	render?: (e: T, idx: number) => string | ElementAST | ElementAST[]
+	labelLeft?: string
+	labelTop?: string
+	if?: (e: T, idx: number) => boolean
 }
 
 export interface ITableColumn<T> {

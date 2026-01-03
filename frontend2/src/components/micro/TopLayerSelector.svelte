@@ -115,12 +115,11 @@ $effect(() => {
     border-radius: 0 0 16px 16px;
     border-bottom: 6px solid rgba(0, 0, 0, .25);
     opacity: 0;
-    z-index: -1;
     pointer-events: none;
   }
   ._1._2 {
     opacity: 1;
-    z-index: 180;
+    z-index: 299;
     pointer-events: all;
   }
   ._3 {

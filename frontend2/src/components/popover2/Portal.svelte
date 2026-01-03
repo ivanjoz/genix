@@ -2,9 +2,10 @@
 	interface Props {
 		children?: import('svelte').Snippet;
 		target?: HTMLElement;
+		zIndex?: number
 	}
 	
-	let { children, target = undefined }: Props = $props();
+	let { children, target = undefined, zIndex }: Props = $props();
 	
 	let contentElement: HTMLDivElement | null = $state(null);
 	let portalTarget: HTMLElement | null = $state(null);
@@ -29,7 +30,14 @@
 </script>
 
 <!-- Render content normally, then move it to body via the effect above -->
-<div bind:this={contentElement} style="position: absolute; top: 0; left: 0; z-index: 300;">
+<div bind:this={contentElement} class="_1 absolute top-0"
+	style:z-index={zIndex ? zIndex : undefined}
+>
 	{@render children?.()}
 </div>
 
+<style>
+	._1 { 
+		z-index: var(--portal-zindex);
+	}
+</style>
