@@ -7,6 +7,8 @@ import fs from 'fs'
 import mime from 'mime-types'
 import path from 'path'
 import type { IncomingMessage, ServerResponse } from 'http'
+import { type RolldownOptions } from 'rolldown'
+import { svelteClassHasher } from './plugins.js';
 
 // Custom plugin to build the service worker
 const __dirname = process.cwd()
@@ -64,9 +66,9 @@ const serviceWorkerPlugin = () => ({
         res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
         res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
       }
-      
+
       // This helps prevent intercepting routes that should be handled by the SPA
-      if(req.url && req.url.startsWith('/sw.js')){
+      if (req.url && req.url.startsWith('/sw.js')) {
         const filePath = path.join(publicDir, req.url);
         // Check if the file exists in the public directory
         if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
@@ -89,6 +91,20 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
     }
   },
+  cacheDir: 'node_modules/.vite',
+  build: {
+    // This disables minification for the entire build
+    minify: false,
+    // You can also disable CSS minification specifically if needed
+    cssMinify: false,
+    rollupOptions: {
+      cache: true,
+      output: {
+        // This tries to keep the IDs based on content rather than index
+        hashCharacters: 'base64',
+      }
+    } as RolldownOptions
+  },
   optimizeDeps: {
     exclude: ['@jsquash/avif'],
   },
@@ -96,6 +112,6 @@ export default defineConfig({
     format: 'es',
     plugins: () => [tailwindcss()],
   },
-  assetsInclude: ['**/*.wasm'],
-  plugins: [sveltekit(), tailwindcss(), serviceWorkerPlugin()]
+  plugins: [svelteClassHasher(), sveltekit(), tailwindcss(), serviceWorkerPlugin()]
 });
+

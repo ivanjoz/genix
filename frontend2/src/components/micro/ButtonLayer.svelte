@@ -285,7 +285,7 @@
     }
   }
 
-  body:global(.dark) .button-layer {
+  :global(.dark) .button-layer {
     background-color: #2d2d3a;
     box-shadow: 
       0 4px 6px -1px rgba(0, 0, 0, 0.3),

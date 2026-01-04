@@ -61,8 +61,8 @@
   let openUp = $state(false);
 
   // let searchCardID = Math.random();
-  let inputRef: HTMLInputElement;
-  let vlRef: any;
+  let inputRef = $state<HTMLInputElement>();
+  let vlRef = $state<any>();
   let words = $state<string[]>([]);
 
   const isMobile = $derived(Core.deviceType === 3);
@@ -375,7 +375,8 @@
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div
             class="flex ai-center _highlight{arrowSelected === i ? ' _selected' : ''}"
-            role="button"
+            role="option"
+            aria-selected={arrowSelected === i}
             tabindex="0"
             onclick={(ev) => {
               ev.stopPropagation();
