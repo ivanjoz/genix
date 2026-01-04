@@ -10,7 +10,9 @@
 
   Env.sideLayerSize = sideLayerSize || 0
   const isLogged = $derived(checkIsLogin() === 2)
-  console.log("isLogged 22", isLogged)
+  $effect(() => {
+    console.log("isLogged 22", isLogged)
+  })
 
   onMount(() => {
     console.log("isLogged 11", isLogged)

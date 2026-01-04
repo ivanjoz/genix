@@ -82,7 +82,7 @@
   let showCalendar = $state(false)
   let inputValue = $state("")
   let avoidCloseOnBlur = false
-  let inputElement: HTMLInputElement
+  let inputElement = $state<HTMLInputElement>()
 
   const parseMonth = (yearMonth: number) => {
     const yearMonthString = String(yearMonth)
@@ -332,7 +332,7 @@
     </div>
 
     {#if showCalendar}
-      <div class="date-picker-c" onmouseleave={(ev) => {
+      <div class="date-picker-c" role="presentation" onmouseleave={(ev) => {
         ev.stopPropagation()
         if (inputElement !== document.activeElement) {
           avoidCloseOnBlur = false
@@ -341,7 +341,8 @@
         }
       }}>
         <div class="flex justify-between items-center mb-[2px]">
-          <div class="h2 bn-d1 flex items-center justify-center"
+          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
+            type="button"
             onmousedown={(ev) => {
               ev.stopPropagation()
               avoidCloseOnBlur = true
@@ -349,8 +350,9 @@
             onclick={(ev) => {
               ev.stopPropagation()
               changeMonth(-12)
-            }}>«</div>
-          <div class="h2 bn-d1 flex items-center justify-center"
+            }}>«</button>
+          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
+            type="button"
             onmousedown={(ev) => {
               ev.stopPropagation()
               avoidCloseOnBlur = true
@@ -358,12 +360,13 @@
             onclick={(ev) => {
               ev.stopPropagation()
               changeMonth(-1)
-            }}>‹</div>
+            }}>‹</button>
           <div class="bn-d2 flex items-center justify-center">
             <div class="mr-[4px]">{monthName.name}</div>
             <div>{monthName.year}</div>
           </div>
-          <div class="h2 bn-d1 flex items-center justify-center"
+          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
+            type="button"
             onmousedown={(ev) => {
               ev.stopPropagation()
               avoidCloseOnBlur = true
@@ -371,8 +374,9 @@
             onclick={(ev) => {
               ev.stopPropagation()
               changeMonth(1)
-            }}>›</div>
-          <div class="h2 bn-d1 flex items-center justify-center"
+            }}>›</button>
+          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
+            type="button"
             onmousedown={(ev) => {
               ev.stopPropagation()
               avoidCloseOnBlur = true
@@ -380,7 +384,7 @@
             onclick={(ev) => {
               ev.stopPropagation()
               changeMonth(12)
-            }}>»</div>
+            }}>»</button>
         </div>
         <div class="flex">
           <div class="dp-week base text-[13px] ff-bold c-purple"></div>
@@ -396,8 +400,9 @@
               {@const isSelected = day.fechaUnix === fechaSelected}
               {@const isFocused = day.fechaUnix === fechaFocus}
               {@const isToday = fechaTodayUnix === day.fechaUnix}
-              <div
-                class="relative dp-day text-center flex items-center justify-center {isOutMonth ? 'is-out' : ''} {isSelected ? 'selected' : ''} {isFocused ? 'focused' : ''}"
+              <button
+                class="relative dp-day text-center flex items-center justify-center p-0 bg-transparent border-0 {isOutMonth ? 'is-out' : ''} {isSelected ? 'selected' : ''} {isFocused ? 'focused' : ''}"
+                type="button"
                 onclick={(ev) => {
                   ev.stopPropagation()
                   changeFechaSelected(day.fechaUnix)
@@ -415,7 +420,7 @@
                 {#if isToday}
                   <div class="ln-today"></div>
                 {/if}
-              </div>
+              </button>
             {/each}
           </div>
         {/each}
@@ -446,7 +451,7 @@
     </div>
 
     {#if showCalendar}
-      <div class="date-picker-c" onmouseleave={(ev) => {
+      <div class="date-picker-c" role="presentation" onmouseleave={(ev) => {
         ev.stopPropagation()
         if (inputElement !== document.activeElement) {
           avoidCloseOnBlur = false
@@ -455,7 +460,8 @@
         }
       }}>
         <div class="flex justify-between items-center mb-[2px]">
-          <div class="h2 bn-d1 flex items-center justify-center"
+          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
+            type="button"
             onmousedown={(ev) => {
               ev.stopPropagation()
               avoidCloseOnBlur = true
@@ -463,8 +469,9 @@
             onclick={(ev) => {
               ev.stopPropagation()
               changeMonth(-12)
-            }}>«</div>
-          <div class="h2 bn-d1 flex items-center justify-center"
+            }}>«</button>
+          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
+            type="button"
             onmousedown={(ev) => {
               ev.stopPropagation()
               avoidCloseOnBlur = true
@@ -472,12 +479,13 @@
             onclick={(ev) => {
               ev.stopPropagation()
               changeMonth(-1)
-            }}>‹</div>
+            }}>‹</button>
           <div class="bn-d2 flex items-center justify-center">
             <div class="mr-[4px]">{monthName.name}</div>
             <div>{monthName.year}</div>
           </div>
-          <div class="h2 bn-d1 flex items-center justify-center"
+          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
+            type="button"
             onmousedown={(ev) => {
               ev.stopPropagation()
               avoidCloseOnBlur = true
@@ -485,8 +493,9 @@
             onclick={(ev) => {
               ev.stopPropagation()
               changeMonth(1)
-            }}>›</div>
-          <div class="h2 bn-d1 flex items-center justify-center"
+            }}>›</button>
+          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
+            type="button"
             onmousedown={(ev) => {
               ev.stopPropagation()
               avoidCloseOnBlur = true
@@ -494,7 +503,7 @@
             onclick={(ev) => {
               ev.stopPropagation()
               changeMonth(12)
-            }}>»</div>
+            }}>»</button>
         </div>
         <div class="flex">
           <div class="dp-week base text-[13px] ff-bold c-purple"></div>
@@ -510,8 +519,9 @@
               {@const isSelected = day.fechaUnix === fechaSelected}
               {@const isFocused = day.fechaUnix === fechaFocus}
               {@const isToday = fechaTodayUnix === day.fechaUnix}
-              <div
-                class="relative dp-day text-center flex items-center justify-center {isOutMonth ? 'is-out' : ''} {isSelected ? 'selected' : ''} {isFocused ? 'focused' : ''}"
+              <button
+                class="relative dp-day text-center flex items-center justify-center p-0 bg-transparent border-0 {isOutMonth ? 'is-out' : ''} {isSelected ? 'selected' : ''} {isFocused ? 'focused' : ''}"
+                type="button"
                 onclick={(ev) => {
                   ev.stopPropagation()
                   changeFechaSelected(day.fechaUnix)
@@ -529,7 +539,7 @@
                 {#if isToday}
                   <div class="ln-today"></div>
                 {/if}
-              </div>
+              </button>
             {/each}
           </div>
         {/each}
