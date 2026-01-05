@@ -1,0 +1,35 @@
+
+  ._2.aMl {
+    background-color: var(--light-blue-1);
+    border-radius: 5px;
+    box-shadow: #5f7187a8 0 1px 3px -1px;
+  }
+  ._3.aMl {
+    background-color: #fff;
+    justify-content: center;
+    border-radius: 4px;
+    border: 1px solid #dfe1ea;
+    color: #3d497a;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+  }
+  ._3.aMl:hover {
+    border-color: rgb(236, 125, 125);
+    color: rgb(209, 66, 66);
+  }
+  ._3.aMl:hover ._4:where(.aMl) {
+    opacity: 1;
+    background-color: rgb(255, 221, 221);
+    color: rgb(224, 61, 61);
+  }
+  ._3.aMl ._4:where(.aMl) {
+    font-size: 14px;
+    border-radius: 50%;
+    opacity: 0;
+  }
+  ._3.aMl ._4:where(.aMl):hover {
+    background-color: rgb(240, 102, 102);
+    color: white;
+  }

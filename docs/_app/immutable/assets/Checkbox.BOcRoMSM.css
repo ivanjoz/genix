@@ -1,0 +1,17 @@
+
+  ._1.aMs {
+    background-color: var(--white);
+    border: 1px solid rgb(143, 143, 143);
+    color: white;
+  }
+  ._1._2.aMs {
+    background-color: #09cb70;
+    border-color: #19965b;
+  }
+  ._1.aMs:hover {
+    border: 2px solid #0987eb;
+  }
+  ._1._2.aMs:hover {
+    border: 2px solid #61778b;
+    background-color: #98aec5;
+  }
