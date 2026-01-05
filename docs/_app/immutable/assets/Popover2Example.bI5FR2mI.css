@@ -1,0 +1,20 @@
+
+	.aL4.aMm > :where(.aMm) + :where(.aMm) {
+		margin-top: 2rem;
+	}
+	
+	.aL5.aMm > :where(.aMm) + :where(.aMm) {
+		margin-top: 1rem;
+	}
+	
+	.aL6.aMm {
+		display: flex;
+	}
+	
+	.aL7.aMm {
+		flex-wrap: wrap;
+	}
+	
+	.aL8.aMm {
+		gap: 1rem;
+	}

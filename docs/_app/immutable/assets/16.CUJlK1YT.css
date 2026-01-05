@@ -1,0 +1,144 @@
+
+  /* (unused) .aLK {
+    min-height: 100vh;
+    background-color: #f8f9fa;
+  }*/
+
+  .aLL.aMi {
+    margin-bottom: 1.5rem;
+  }
+
+  h2.aMi {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0;
+    color: #1a202c;
+  }
+
+  .aLM.aMi {
+    font-size: 0.875rem;
+  }
+
+  .aLN.aMi {
+    color: #6c757d;
+  }
+
+  .aLO.aMi {
+    color: #2563eb;
+  }
+
+  .aLP.aMi {
+    color: #6c757d;
+  }
+
+  .aLQ.aMi {
+    margin-top: 0.25rem;
+  }
+
+  .aLR.aMi {
+    margin-top: 0.5rem;
+  }
+
+  .aLS.aMi {
+    padding: 0.75rem 1rem;
+    background-color: #e7f3ff;
+    border-left: 4px solid #3b82f6;
+    border-radius: 4px;
+    color: #1e40af;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .aLT.aMi {
+    padding: 0.25rem 0.5rem;
+    background-color: #22c55e;
+    color: white;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  /* Custom styling for VTable columns */
+  .updated-indicator {
+    color: #dc3545;
+    font-size: 1rem;
+    margin-right: 0.25rem;
+  }
+
+  .id-column {
+    font-weight: 600;
+    color: #4042a3;
+  }
+
+  .nombre-column {
+    font-weight: 500;
+  }
+
+  .action-column {
+    width: 100px;
+  }
+
+  .header-group {
+    background-color: #e9ecef !important;
+    font-weight: 700;
+  }
+
+  .text-center {
+    text-align: center;
+  }
+
+  .aM0 {
+    padding: 0.25rem 0.5rem;
+    background-color: #4042a3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-size: 0.875rem;
+  }
+
+  .aM0:hover {
+    background-color: #2f3280;
+  }
+
+  /* New snippet-based action buttons */
+  .aM1 {
+    display: flex;
+    gap: 0.25rem;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .aM2 {
+    padding: 0.25rem 0.5rem;
+    border: none;
+    background: #f3f4f6;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .aM2:hover {
+    background: #e5e7eb;
+    transform: scale(1.05);
+  }
+
+  .aM2:active {
+    transform: scale(0.95);
+  }
+
+  .aM3:hover {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+
+  .aM4:hover {
+    background: #fee2e2;
+    color: #dc2626;
+  }

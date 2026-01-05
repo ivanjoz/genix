@@ -1,0 +1,323 @@
+.aMG {
+  height: auto;
+  display: grid;
+  grid-template-columns: 12px auto 1fr;
+  /* first row: 12px | content | remaining space */
+  grid-template-rows: auto auto;
+  /* two rows */
+  position: relative;
+  align-self: end;
+  --shadow-1: rgb(89 89 115 / 15%) 0px 1px 2px 1px;
+}
+
+.aMG:focus-within {
+  --input-border-color: #9794d6;
+  --shadow-1: rgb(171 171 255 / 80%) 0px 1px 2px 1px;
+}
+
+.aMH {
+  font-size: 15px;
+  color: #6d5dad;
+ /*  margin-bottom: 1px; */
+  z-index: 10;
+  grid-column: 2;
+  grid-row: 1;
+  padding-left: 2px;
+  padding-right: 2px;
+  line-height: 16px;
+}
+
+.aMI {
+  height: calc(var(--input-height) - 10px);
+  position: relative;
+  grid-column: 1 / -1;
+  /* span all columns */
+  grid-row: 2;
+  width: 100%;
+  border-radius: 5px;
+}
+
+.aMG.no-label .aMI {
+  height: calc(var(--input-height) - 4px);
+  box-shadow: rgb(74 70 86 / 22%) 0px 1px 3px 0px, rgb(55 52 64 / 14%) 0px 0px 2px 0px;
+  border: 1px solid rgb(193 197 220);
+  border-bottom: 1px solid var(--input-color-bottom);
+  background: linear-gradient(0deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.2) 100%);
+}
+
+.aMJ {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  position: absolute;
+  pointer-events: none;
+}
+
+.aMJ > div {
+  height: var(--input-height);
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--input-border-color);
+  margin-top: -10px;
+  border-radius: 5px;
+  pointer-events: none;
+}
+
+.aMK {
+  padding-left: 7px;
+  height: calc(100% + 3px);
+  margin-top: -3px;
+  outline: none !important;
+  outline-color: transparent;
+  border: none;
+  background-color: transparent;
+}
+
+.aMG.no-label .aMK {
+  height: 100%;
+  margin-top: unset;
+}
+
+.aMK::placeholder {
+  color: #7d82ad;
+  font-size: 14px;
+}
+
+.aMG.s1 .aMK::placeholder  {
+  color: #6d5dad;
+  font-size: 15px;
+}
+
+/* First row cells */
+.aML,
+.aMM {
+  grid-row: 1;
+  overflow: hidden;
+  position: relative;
+  pointer-events: none;
+}
+
+.aML {
+  grid-column: 1;
+  margin-left: -4px;
+}
+
+.aMM {
+  grid-column: 3;
+  min-width: 12px;
+  margin-right: -4px;
+}
+
+.aML>div,
+.aMM>div {
+  border-top: 1px solid var(--input-border-color);
+  position: absolute;
+  bottom: -24px;
+  height: 32px;
+  border-radius: 5px;
+}
+
+.aML>div {
+  border-left: 1px solid var(--input-border-color);
+  left: 4px;
+  width: 32px;
+  box-shadow: var(--shadow-1);
+}
+
+.aMM>div {
+  border-right: 1px solid var(--input-border-color);
+  right: 4px;
+  width: calc(100% + 12px);
+  box-shadow: var(--shadow-1);
+}
+
+.aMN {
+  position: absolute;
+  overflow: hidden;
+  bottom: -4px;
+  left: -4px;
+  width: calc(100% + 8px);
+  height: calc(var(--input-height) - 6px);
+}
+
+.aMN > div {
+  box-shadow: #6e789030 0 1px 2px 1px, #585a6630 0 0 2px;
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  width: calc(100% - 8px);
+  height: 100%;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: linear-gradient(0deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.2) 100%);
+}
+
+.aMG:focus-within .aMN > div {
+  box-shadow: rgb(186 182 255 / 80%) 0px 1px 2px 1px, #585a6630 0 0 2px;;
+}
+
+/* ImageUploader styles */
+.aMO {
+  overflow: hidden;
+  border-radius: 7px;
+  border: 1px solid gray;
+  background-color: white;
+  cursor: pointer;
+}
+
+body.dark .aMO {
+  background-color: #474a57;
+}
+
+.aMO.aMP:hover {
+  border: 1px solid rgb(110, 105, 122);
+  outline: 1px solid rgb(48, 46, 51);
+}
+
+body.dark .aMO.aMP:hover {
+  border-color: white;
+  outline-color: white;
+}
+
+.aMQ {
+  top: 0;
+  left: 0;
+}
+
+.aMR {
+  top: 0;
+  padding: 6px;
+  left: 0;
+}
+
+.aMR:not(:hover) .aMS {
+  display: none;
+}
+
+.aMR:hover,
+.aMR.aMT {
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.4) 0%, rgba(255, 255, 255, 0) 25%);
+}
+
+.aMU {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.aMU:hover {
+  outline: 2px solid rgba(0, 0, 0, 0.7) !important;
+}
+
+.aMV {
+  top: 0px;
+  left: 0px;
+  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.34);
+}
+
+.aMW {
+  font-family: 'bold';
+  color: white;
+  text-shadow: 2px 2px 6px #000000;
+  text-align: center;
+  bottom: 3rem;
+  background-color: rgba(0, 0, 0, 0.2);
+  left: 0;
+  line-height: 1.2;
+  padding: 0 8px;
+}
+
+.aMX {
+  bottom: 0;
+  padding: 6px;
+}
+
+.aMY {
+  background-color: #0000005c;
+  border: none;
+  border-radius: 7px;
+  color: white;
+  font-family: 'bold';
+  text-shadow: -1px 0 #000000b8, 0 1px #000000b8, 1px 0 #000000b8, 0 -1px #000000b8;
+  line-height: 1.1;
+  overflow: hidden;
+  height: auto;
+  backdrop-filter: blur(4px);
+  outline: 2px solid #ffffffa3;
+  outline-offset: 0;
+  resize: none;
+  padding: 4px 4px;
+}
+
+.aMY:focus {
+  outline: 1px solid rgb(126, 77, 189);
+  outline-offset: 0;
+}
+
+.aMY::placeholder {
+  text-shadow: none;
+  color: white;
+}
+
+.aMO input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 100%;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.aMZ {
+  pointer-events: none;
+}
+
+.aMO input {
+  pointer-events: all;
+}
+
+.aN0 {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.aN1 {
+  width: 10rem;
+  height: 10rem;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.aN2 {
+  bottom: 0;
+  left: 0;
+  padding: 6px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 100%);
+  color: white;
+}
+
+.aN3 {
+  position: absolute;
+  right: 7px;
+  bottom: calc(var(--input-height) / 2 - 16px);
+  color: #585799;
+}
+
+.aMG.bg-solid .aMI {
+  background: white;
+}
+.aMG.shadow-small .aMI {
+  box-shadow: rgb(74 70 86 / 10%) 0px 1px 3px 0px;
+}
+.aMG.no-border .aMI {
+  border: none;
+}

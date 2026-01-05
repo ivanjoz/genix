@@ -1,0 +1,90 @@
+
+  .date-input-container.aMy {
+    position: relative;
+  }
+
+  .aJp.aMy {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background: white;
+    border: 1px solid #c1c5dc;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    min-width: 280px;
+  }
+
+  .aJq.aMy {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+  }
+
+  .aJr.aMy {
+    width: 32px;
+    height: 28px;
+    flex-shrink: 0;
+  }
+
+  .aJs.aMy {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    font-size: 14px;
+  }
+
+  .aJs.aMy:hover {
+    background-color: #f0f0f5;
+  }
+
+  .aJs.aJt.aMy {
+    color: #b0b0c0;
+  }
+
+  .aJs.aJu.aMy {
+    background-color: #6d5dad;
+    color: white;
+    font-weight: 600;
+  }
+
+  .aJs.aJv.aMy {
+    background-color: #e8e7f5;
+    outline: 2px solid #9794d6;
+  }
+
+  .aJw.aMy {
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    height: 4px;
+    background-color: #6d5dad;
+    border-radius: 50%;
+  }
+
+  .aJs.aJu.aMy .aJw:where(.aMy) {
+    background-color: white;
+  }
+
+  .aJx.aMy, .aJy.aMy {
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    user-select: none;
+  }
+
+  .aJx.aMy:hover, .aJy.aMy:hover {
+    background-color: #f0f0f5;
+  }
+
+  .aJy.aMy {
+    font-weight: 600;
+    color: #6d5dad;
+  }
