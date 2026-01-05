@@ -2,6 +2,9 @@ import fs from 'fs';
 import path from 'path';
 
 const nameMapping = new Map();
+const tmpDir = path.resolve(process.cwd(), 'tmp');
+const counterFilePath = path.join(tmpDir, 'counter.txt');
+const lockDir = path.join(tmpDir, 'counter.lock');
 
 /**
  * replaceClassName - Converts a class name to a minified counter-based identifier.
@@ -16,11 +19,6 @@ export function replaceClassName(name) {
     nameMapping.set(name, counter);
     return counter;
 }
-
-let currentCounter = 55;
-let lockedBy = 0;
-const tmpDir = path.resolve(process.cwd(), 'tmp');
-const counterFilePath = path.join(tmpDir, 'counter.txt');
 
 /**
  * counterMinify - Converts a number to a short, CSS-safe string identifier.
@@ -56,51 +54,110 @@ export function counterMinify(n) {
     return res;
 }
 
+function acquireLock() {
+    const maxRetries = 100;
+    const retryDelay = 20; // ms
+    let retries = 0;
+
+    while (retries < maxRetries) {
+        try {
+            fs.mkdirSync(lockDir);
+            return; // Lock acquired
+        } catch (e) {
+            if (e.code === 'EEXIST') {
+                // Check if lock is stale (older than 5 seconds)
+                try {
+                    const stats = fs.statSync(lockDir);
+                    if (Date.now() - stats.mtimeMs > 5000) {
+                        try {
+                            fs.rmdirSync(lockDir);
+                            continue; // Retry immediately
+                        } catch (rmErr) {
+                            // Ignore removal error, someone else might have removed it
+                        }
+                    }
+                } catch (statErr) {
+                    // Lock might have been removed in the meantime
+                }
+
+                // Wait and retry
+                const end = Date.now() + retryDelay;
+                while (Date.now() < end) { }
+                retries++;
+            } else {
+                throw e;
+            }
+        }
+    }
+    throw new Error(`Failed to acquire lock on ${lockDir} after ${maxRetries} retries.`);
+}
+
+function releaseLock() {
+    try {
+        fs.rmdirSync(lockDir);
+    } catch (e) {
+        // Ignore if already removed, but log warnings for other errors
+        if (e.code !== 'ENOENT') {
+            console.warn(`[counter] Warning: Failed to release lock: ${e.message}`);
+        }
+    }
+}
+
 /**
- * getCounter - Increments the current counter and returns its minified string representation.
- * Accessible by any user.
+ * getCounter - Atomically increments the counter and returns its minified string representation.
+ * Uses file locking to ensure process safety.
  * 
  * @returns {string} The minified counter string.
  */
 export function getCounter() {
-    currentCounter++;
-    return counterMinify(currentCounter);
-}
-
-/**
- * saveCounter - Saves the current counter and lock state to a file in the /tmp folder.
- * Format: lockedBy:counter
- * 
- * @param {number} userID - The ID of the user attempting to save. Use 0 to unlock.
- */
-export function saveCounter(userID) {
-    if (lockedBy !== 0 && userID !== 0 && lockedBy !== userID) {
-        throw new Error(`Lock Error: Counter is locked by user ${lockedBy}. User ${userID} is not allowed to save.`);
-    }
-
     if (!fs.existsSync(tmpDir)) {
         fs.mkdirSync(tmpDir, { recursive: true });
     }
 
-    lockedBy = userID;
-    fs.writeFileSync(counterFilePath, `${lockedBy}:${currentCounter}`, 'utf8');
+    let count = 0;
+
+    try {
+        acquireLock();
+
+        // Read current
+        if (fs.existsSync(counterFilePath)) {
+            const content = fs.readFileSync(counterFilePath, 'utf8').trim();
+            // Format is "lockedBy:count", splits to ['lockedBy', 'count']
+            const parts = content.split(':');
+            count = parseInt(parts.length > 1 ? parts[1] : parts[0], 10) || 0;
+        } else {
+            // Default starting value if file doesn't exist
+            count = 55;
+        }
+
+        // Increment
+        count++;
+
+        // Save (preserving the '0' for lockedBy for compatibility/simplicity, 
+        // essentially "0:count" means not logically locked by old mechanism)
+        fs.writeFileSync(counterFilePath, `0:${count}`, 'utf8');
+
+    } finally {
+        releaseLock();
+    }
+
+    return counterMinify(count);
 }
 
 /**
- * getCounterFomFile - Loads the counter and lock state from the file into memory.
+ * Deprecated: Kept for compatibility but effectively no-op or simple wrapper.
+ * The new getCounter handles persistence automatically.
+ */
+export function saveCounter(userID) {
+    // No-op in new atomic design, or could force a save if really needed, 
+    // but getCounter handles state.
+}
+
+/**
+ * Deprecated: Kept for compatibility.
  */
 export function getCounterFomFile() {
-    if (fs.existsSync(counterFilePath)) {
-        try {
-            const content = fs.readFileSync(counterFilePath, 'utf8').trim();
-            const [lb, count] = content.split(':');
-            lockedBy = parseInt(lb, 10) || 0;
-            currentCounter = parseInt(count, 10) || 0;
-            console.log(`[counter] Loaded: counter=${currentCounter}, lockedBy=${lockedBy}`);
-        } catch (e) {
-            console.warn(`[counter] Warning: Failed to load counter from ${counterFilePath}:`, e.message);
-        }
-    }
+    // No-op, getCounter reads from file every time.
 }
 
 
@@ -136,7 +193,7 @@ export const svelteClassHasher = () => {
          * found in Svelte style blocks. This ensures hash consistency across files.
          */
         async buildStart() {
-            saveCounter(1);
+            // No initialization needed for counter, it relies on file.
 
             const scanDir = (dir) => {
                 if (!fs.existsSync(dir)) return;
@@ -163,6 +220,7 @@ export const svelteClassHasher = () => {
                 }
             };
 
+            nameMapping.clear();
             classMap.clear();
             scanDir(srcDir);
             console.log(`[class-hasher] Global map ready: ${classMap.size} classes protected.`);
@@ -170,12 +228,9 @@ export const svelteClassHasher = () => {
 
         /*
          * buildEnd hook:
-         * Saves the final counter state and unlocks it.
          */
         async buildEnd() {
-            saveCounter(1); // Persist final count
-            saveCounter(0); // Unlock
-            console.log(`[class-hasher] Counter saved (${currentCounter}) and unlocked.`);
+            // No cleanup needed
         },
 
         /**

@@ -22,7 +22,7 @@ const config = {
 			if (isBuild) {
 				const key = filename || hash(css);
 				if (!componentMap.has(key)) {
-					componentMap.set(key, "_" + getCounter());
+					componentMap.set(key, getCounter());
 				}
 				return componentMap.get(key);
 			}
