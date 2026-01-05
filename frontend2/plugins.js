@@ -1,20 +1,108 @@
 import fs from 'fs';
 import path from 'path';
-import { createHash } from 'node:crypto';
+
+const nameMapping = new Map();
 
 /**
- * replaceClassName - Generates a 6-character, CSS-safe identifier based on the input name.
- * Format: _ (underscore) + first 5 characters of the MD5 hash.
+ * replaceClassName - Converts a class name to a minified counter-based identifier.
  * 
  * @param {string} name - The original CSS class name.
- * @returns {string} The hashed identifier (or original name if < 4 characters).
+ * @returns {string} The minified identifier (or original name if < 4 characters).
  */
 export function replaceClassName(name) {
-    if (name.length >= 4) {
-        return '_' + createHash('md5').update(name).digest('hex').slice(0, 5);
-    }
-    return name;
+    if (name.length < 4) return name;
+    if (nameMapping.has(name)) return nameMapping.get(name);
+    const counter = getCounter()
+    nameMapping.set(name, counter);
+    return counter;
 }
+
+let currentCounter = 55;
+let lockedBy = 0;
+const tmpDir = path.resolve(process.cwd(), 'tmp');
+const counterFilePath = path.join(tmpDir, 'counter.txt');
+
+/**
+ * counterMinify - Converts a number to a short, CSS-safe string identifier.
+ * Logic: a, b... Z, a0, a1... aZ, b0...
+ * Always starts with a letter, contains letters and numbers.
+ * 
+ * @param {number} n - The counter value.
+ * @returns {string} The minified string.
+ */
+export function counterMinify(n) {
+    const chars0 = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const charsN = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+    if (n < 52) return chars0[n];
+
+    let tempN = n - 52;
+    let length = 2;
+    let combinations = 52 * 62;
+
+    while (tempN >= combinations) {
+        tempN -= combinations;
+        length++;
+        combinations *= 62;
+    }
+
+    let res = '';
+    for (let i = 0; i < length - 1; i++) {
+        res = charsN[tempN % 62] + res;
+        tempN = Math.floor(tempN / 62);
+    }
+    res = chars0[tempN] + res;
+
+    return res;
+}
+
+/**
+ * getCounter - Increments the current counter and returns its minified string representation.
+ * Accessible by any user.
+ * 
+ * @returns {string} The minified counter string.
+ */
+export function getCounter() {
+    currentCounter++;
+    return counterMinify(currentCounter);
+}
+
+/**
+ * saveCounter - Saves the current counter and lock state to a file in the /tmp folder.
+ * Format: lockedBy:counter
+ * 
+ * @param {number} userID - The ID of the user attempting to save. Use 0 to unlock.
+ */
+export function saveCounter(userID) {
+    if (lockedBy !== 0 && userID !== 0 && lockedBy !== userID) {
+        throw new Error(`Lock Error: Counter is locked by user ${lockedBy}. User ${userID} is not allowed to save.`);
+    }
+
+    if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+    }
+
+    lockedBy = userID;
+    fs.writeFileSync(counterFilePath, `${lockedBy}:${currentCounter}`, 'utf8');
+}
+
+/**
+ * getCounterFomFile - Loads the counter and lock state from the file into memory.
+ */
+export function getCounterFomFile() {
+    if (fs.existsSync(counterFilePath)) {
+        try {
+            const content = fs.readFileSync(counterFilePath, 'utf8').trim();
+            const [lb, count] = content.split(':');
+            lockedBy = parseInt(lb, 10) || 0;
+            currentCounter = parseInt(count, 10) || 0;
+            console.log(`[counter] Loaded: counter=${currentCounter}, lockedBy=${lockedBy}`);
+        } catch (e) {
+            console.warn(`[counter] Warning: Failed to load counter from ${counterFilePath}:`, e.message);
+        }
+    }
+}
+
 
 /**
  * svelteClassHasher - A Vite plugin designed for Svelte 5 to automatically hash local CSS classes.
@@ -48,6 +136,8 @@ export const svelteClassHasher = () => {
          * found in Svelte style blocks. This ensures hash consistency across files.
          */
         async buildStart() {
+            saveCounter(1);
+
             const scanDir = (dir) => {
                 if (!fs.existsSync(dir)) return;
                 const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -78,6 +168,16 @@ export const svelteClassHasher = () => {
             console.log(`[class-hasher] Global map ready: ${classMap.size} classes protected.`);
         },
 
+        /*
+         * buildEnd hook:
+         * Saves the final counter state and unlocks it.
+         */
+        async buildEnd() {
+            saveCounter(1); // Persist final count
+            saveCounter(0); // Unlock
+            console.log(`[class-hasher] Counter saved (${currentCounter}) and unlocked.`);
+        },
+
         /**
          * transform hook:
          * Parses each .svelte file to identify local classes and their safe usages.
@@ -98,6 +198,23 @@ export const svelteClassHasher = () => {
                 let sm;
                 while ((sm = classSelectorRegex.exec(content)) !== null) {
                     if (sm[1].length >= 4) localClasses.add(sm[1]);
+                }
+            }
+
+            if (localClasses.size === 0) return null;
+
+            // STEP 1.5: Exclude classes found in script blocks to prevent breaking JS logic.
+            // If a class name appears in the script tag, we assume it's used programmatically
+            // and skip hashing it to be safe.
+            const scriptCheckRegex = /<script[^>]*>([\s\S]*?)<\/script>/g;
+            let scrMatch;
+            while ((scrMatch = scriptCheckRegex.exec(code)) !== null) {
+                const scriptContent = scrMatch[1];
+                for (const cls of Array.from(localClasses)) {
+                    const pattern = new RegExp(`(?<![a-zA-Z0-9_-])${cls.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-zA-Z0-9_-])`);
+                    if (pattern.test(scriptContent)) {
+                        localClasses.delete(cls);
+                    }
                 }
             }
 

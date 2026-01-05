@@ -1,5 +1,13 @@
 import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { getCounter, getCounterFomFile } from './plugins.js';
+
+const isBuild = process.argv.includes('build');
+const componentMap = new Map();
+
+if (isBuild) {
+	getCounterFomFile();
+}
 
 console.log('--- SVELTE CONFIG LOADED ---');
 
@@ -11,6 +19,14 @@ const config = {
 	compilerOptions: {
 		hmr: false,
 		cssHash: ({ hash, css, name, filename }) => {
+			if (isBuild) {
+				const key = filename || hash(css);
+				if (!componentMap.has(key)) {
+					componentMap.set(key, "_" + getCounter());
+				}
+				return componentMap.get(key);
+			}
+
 			if (!filename) {
 				return `svelte-${hash(css).substring(0, 8)}`;
 			}
@@ -22,7 +38,7 @@ const config = {
 				.replace(/^\+/, '') // Remove leading + from route files
 				.replace(/[^a-zA-Z0-9_-]/g, '_') // Replace invalid chars with underscore
 				.replace(/^[0-9]/, '_$&'); // Ensure it doesn't start with a number
-			
+
 			// Fallback if name is empty after sanitization
 			const safeName = componentName || 'comp';
 			return `${safeName}_${hash(css).substring(0, 8)}`;
