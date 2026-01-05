@@ -8,7 +8,14 @@ import mime from 'mime-types'
 import path from 'path'
 import type { IncomingMessage, ServerResponse } from 'http'
 import { type RolldownOptions } from 'rolldown'
-import { svelteClassHasher } from './plugins.js';
+import { svelteClassHasher, getCounter, getCounterFomFile } from './plugins.js';
+
+const isBuild = process.argv.includes('build');
+const cssModuleMap = new Map<string, string>();
+
+if (isBuild) {
+  getCounterFomFile();
+}
 
 // Custom plugin to build the service worker
 const __dirname = process.cwd()
@@ -92,6 +99,20 @@ export default defineConfig({
     }
   },
   cacheDir: 'node_modules/.vite',
+  css: {
+    modules: {
+      generateScopedName: (name, filename, _css) => {
+        if (isBuild) {
+          const key = `${filename}:${name}`;
+          if (!cssModuleMap.has(key)) {
+            cssModuleMap.set(key, getCounter());
+          }
+          return cssModuleMap.get(key)!;
+        }
+        return `m-${name}_${Math.random().toString(36).substring(2, 6)}`;
+      }
+    }
+  },
   build: {
     // This disables minification for the entire build
     minify: false,
@@ -112,6 +133,8 @@ export default defineConfig({
     format: 'es',
     plugins: () => [tailwindcss()],
   },
-  plugins: [svelteClassHasher(), sveltekit(), tailwindcss(), serviceWorkerPlugin()]
+  plugins: [
+    isBuild && svelteClassHasher(), sveltekit(), tailwindcss(), serviceWorkerPlugin()
+  ].filter(x => x)
 });
 
