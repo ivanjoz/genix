@@ -1,0 +1,10 @@
+# Antigravity Behavior Rules
+
+1. **File Operations**:
+   - ALWAYS use `view_file` to read files. NEVER use `run_command` with `cat`, `less`, `head`, or `tail`.
+   - ALWAYS use `list_dir` to explore directories. NEVER use `ls` or `dir` via `run_command`.
+   - ALWAYS use `grep_search` or `find_by_name` for searching. NEVER use `grep` or `find` via terminal.
+
+2. **System Stability**:
+   - Only use `run_command` for actual execution tasks (e.g., `npm run build`, `npm run dev`, script execution).
+   - If a binary fails to execute, consider checking SELinux permissions or file contexts.
