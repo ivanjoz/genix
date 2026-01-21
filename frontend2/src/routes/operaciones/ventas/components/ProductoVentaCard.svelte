@@ -77,7 +77,7 @@
   const cantidades = [2,3,4,5,6,8,10,12]
 
     const css = $derived.by(() => {
-    let cn = "px-16 py-12 transition-all duration-200 border border-transparent rounded-lg "
+    let cn = "px-10 py-8 transition-all duration-200 border border-transparent rounded-lg "
     if(isSelected){
       cn += "bg-blue-50/50 border-blue-200 shadow-sm"
     } else {
@@ -104,13 +104,11 @@
     onmouseover()
   }}
 >
-  <div 
-    class="flex flex-col gap-4 cursor-pointer group"
+  <div class="flex relative flex-col gap-4 cursor-pointer group"
     onclick={() => onselect(idx)}
   >
     <!-- Header: Name + Line -->
     <div class="flex items-center gap-8 mb-4">
-       <div class="h-[1px] bg-gray-200 grow group-hover:bg-gray-300 transition-colors"></div>
        <div class="text-sm font-medium text-gray-700 flex items-center gap-8">
           {@html highlightText(productoStock.producto.Nombre, filterText)}
           {#if productoStock.isSubUnidad}
@@ -121,12 +119,13 @@
              <span class="text-xs font-bold text-purple-600 bg-purple-50 px-4 py-1 rounded">(SKU)</span>
           {/if}
        </div>
+       <div class="h-[1px] bg-gray-200 grow group-hover:bg-gray-300 transition-colors"></div>
     </div>
 
     <!-- Body: Grid -->
     <div class="grid grid-cols-[1fr_auto_auto_auto] gap-16 items-center">
         <!-- Col 1: Quick Actions / SKUs -->
-        <div class="min-h-[36px] flex items-center">
+        <div class="absolute bottom-[-2px] left-[-2px] flex items-center">
             {#if isSku}
                <div class="flex flex-wrap gap-4">
                   {#each firstSkus as sku}

@@ -33,6 +33,14 @@
   let productosParsed = $state([] as ProductoVenta[]);
   let productosParsedAll = $state([] as ProductoVenta[]); // cache for filtering
 
+  const chunkedProductos = $derived.by(() => {
+    const result = [];
+    for (let i = 0; i < productosParsed.length; i += 2) {
+      result.push(productosParsed.slice(i, i + 2));
+    }
+    return result;
+  });
+
   // Effects
   $effect(() => {
     // Auto-select first almacen
@@ -196,18 +204,27 @@
       </div>
 
       <!-- Grid/List -->
-      <div class="flex-1 overflow-y-auto pr-8">
-        {#each productosParsed as item, idx (item.key)}
-          <ProductoVentaCard
-            {idx}
-            productoStock={item}
-            isSelected={idx === productoSelected}
-            ventaProducto={ventasState.ventaProductosMap.get(item.key)}
-            filterText={ventasState.filterText}
-            onselect={(i) => (productoSelected = i)}
-            onmouseover={() => (productoSelected = -1)}
-            onadd={(n, sku) => ventasState.addProducto(item, n, sku)}
-          />
+      <div class="flex-1 overflow-y-auto">
+        {#each chunkedProductos as group, groupIdx (group[0].key)}
+          <div class="flex gap-6 mb-6">
+            {#each group as item, itemIdx (item.key)}
+              <div class="flex-1 min-w-0">
+                <ProductoVentaCard
+                  idx={groupIdx * 2 + itemIdx}
+                  productoStock={item}
+                  isSelected={(groupIdx * 2 + itemIdx) === productoSelected}
+                  ventaProducto={ventasState.ventaProductosMap.get(item.key)}
+                  filterText={ventasState.filterText}
+                  onselect={(i) => (productoSelected = i)}
+                  onmouseover={() => (productoSelected = -1)}
+                  onadd={(n, sku) => ventasState.addProducto(item, n, sku)}
+                />
+              </div>
+            {/each}
+            {#if group.length === 1}
+              <div class="flex-1 min-w-0"></div> 
+            {/if}
+          </div>
         {/each}
 
         {#if productosParsed.length === 0}
