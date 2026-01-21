@@ -123,9 +123,15 @@ export function formatN(
 
 export const decrypt = async (encryptedString: string, key: string) => {
   key = key.substring(0,32)
+  let encryptedData: Uint8Array<ArrayBuffer>
   // Decode the base64 string
-  const encryptedData = Uint8Array.from(atob(encryptedString), c => c.charCodeAt(0))
-  console.log("encrypted len::", encryptedData.length)
+  try {
+    encryptedData = Uint8Array.from(atob(encryptedString), c => c.charCodeAt(0))
+    console.log("encrypted len::", encryptedData.length)   
+  } catch (error) {
+    console.log(error)
+    return ""
+  }
 
   // Convert the key to Uint8Array
   const keyBuffer = await crypto.subtle.importKey(

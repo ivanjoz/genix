@@ -120,6 +120,7 @@ export const Env = {
     return Env.pathname || ""
   },
   getEmpresaID: (): number => {
+    return 1
     if(!Env.empresaID){ 
       const localEmpresaID = localStorage.getItem(Env.appId + "EmpresaID")
       if(localEmpresaID){

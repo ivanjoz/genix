@@ -71,7 +71,7 @@ export const AdminModule: IModule = {
     },
     { name: "Comercial", minName: "Com",  id: 3, icon: "icon-tasks",
       options: [
-        { name: "Ventas", route: "/comercial/ventas",
+        { name: "Ventas", route: "/operaciones/ventas",
           icon: "icon-flash"
         },
       ]  

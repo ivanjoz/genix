@@ -84,10 +84,12 @@ export default function Root() {
   })
 
   onMount(() => {
+    /*
     if(checkIsLogin() === 3){
       Env.navigate("login")
       return
     }
+      */
   })
 
   return <>

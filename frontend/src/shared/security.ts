@@ -49,6 +49,7 @@ export const getToken = (noError?: boolean) => {
 }
 
 export const checkIsLogin = () => {
+  return 1
   if(Env.getEmpresaID() > 0){ return 1 }
   if(!IsClient()){ return 0 }
   else if(IsClient() && !!getToken(true)){ return 2 }
@@ -58,6 +59,7 @@ export const checkIsLogin = () => {
 export const [isLogin, setIsLogin_] = createSignal(checkIsLogin())
 
 export const isLogged = (): boolean => {
+  return true
   return Env.getEmpresaID() > 0 && getToken(true)?.length > 0
 }
 

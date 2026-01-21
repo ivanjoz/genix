@@ -42,3 +42,4 @@ docs/models/*
 docs/models_local/*
 docs/_app/immutable/assets/ort-*
 frontend2/tmp/*
+ai/.venv/*
