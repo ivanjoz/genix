@@ -1,6 +1,6 @@
 <script lang="ts">
   import { formatN } from "$shared/main";
-  import { type ProductoVenta, type VentaProducto } from "../ventas.svelte";
+  import { type ProductoVenta, type VentaProducto } from "./ventas.svelte";
 
   interface Props {
     idx: number
@@ -58,11 +58,13 @@
   // SKU Logic filtering
   const firstSkus = $derived.by(() => {
     let skus = productoStock.skus || []
-    if (ventaProducto?.skus && ventaProducto.skus.size > 0) {
-        // Simple filter: show SKUs not fully added?
-        // Legacy: if SKU in cart < SKU stock
-        // For visual simplicity, showing all available SKUs is good.
-    }
+    
+    // Filter out SKUs that are fully in cart (no stock left)
+    skus = skus.filter(s => {
+        const inCart = ventaProducto?.skus?.get(s.SKU as string) || 0
+        return (s.Cantidad - inCart) > 0
+    })
+
     return skus.slice(0, 5) 
   })
 
@@ -77,7 +79,7 @@
   const cantidades = [2,3,4,5,6,8,10,12]
 
     const css = $derived.by(() => {
-    let cn = "px-10 py-8 transition-all duration-200 border border-transparent rounded-lg "
+    let cn = "px-10 py-6 transition-all duration-200 border border-transparent rounded-lg "
     if(isSelected){
       cn += "bg-blue-50/50 border-blue-200 shadow-sm"
     } else {
@@ -108,8 +110,8 @@
     onclick={() => onselect(idx)}
   >
     <!-- Header: Name + Line -->
-    <div class="flex items-center gap-8 mb-4">
-       <div class="text-sm font-medium text-gray-700 flex items-center gap-8">
+    <div class="flex items-center gap-8">
+       <div class="font-medium text-gray-700 flex items-center gap-8">
           {@html highlightText(productoStock.producto.Nombre, filterText)}
           {#if productoStock.isSubUnidad}
              <span class="text-gray-300">|</span>
@@ -123,14 +125,13 @@
     </div>
 
     <!-- Body: Grid -->
-    <div class="grid grid-cols-[1fr_auto_auto_auto] gap-16 items-center">
+    <div class="flex items-center">
         <!-- Col 1: Quick Actions / SKUs -->
-        <div class="absolute bottom-[-2px] left-[-2px] flex items-center">
+        <div class="flex items-center">
             {#if isSku}
                <div class="flex flex-wrap gap-4">
                   {#each firstSkus as sku}
-                      <button 
-                        class="bn-white h-32 px-8 py-2 text-xs font-mono font-medium hover:bg-gray-50 transition-colors"
+                      <button class="sku-button transition-colors"
                         onclick={(e) => {
                             e.stopPropagation()
                             onadd(1, sku.SKU)
@@ -141,8 +142,9 @@
                   {/each}
                </div>
             {:else}
-              <div class="flex gap-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div class="flex gap-4 z-10 m-[-2px] opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   {#each cantidades as n}
+                     {#if n <= getCant}
                      <button 
                        class="w-32 h-32 flex items-center justify-center text-xs font-bold text-gray-500 bg-gray-100 hover:bg-blue-100 hover:text-blue-600 rounded cursor-pointer transition-colors"
                        onclick={(e) => {
@@ -152,6 +154,7 @@
                      >
                         {n}
                      </button>
+                     {/if}
                   {/each}
               </div>
             {/if}
@@ -161,17 +164,37 @@
         <!-- In this design, we keep it simple. -->
         
         <!-- Col 3: Stock -->
-        <div class="font-mono text-sm text-gray-500 text-right w-64">
-            <span class={getCant === 0 ? "text-red-500 font-bold" : ""}>
-                 {getCant}
-            </span>
-            <span class="text-gray-300 text-xs ml-4">stk</span>
-        </div>
-
+        {#if !isSku}
+          <div class="font-mono absolute bottom-0 left-0 text-sm text-gray-500 text-right w-64">
+              <span class={getCant === 0 ? "text-red-500 font-bold" : ""}>
+                  {getCant}
+              </span>
+              <span class="text-gray-300 text-xs ml-4">stk</span>
+          </div>
+        {/if}
         <!-- Col 4: Price -->
-        <div class="font-mono text-sm font-medium text-gray-700 text-right w-80">
+        <div class="font-mono ml-auto text-sm font-medium text-gray-700 text-right w-80">
             {formatN(price/100, 2)}
         </div>
     </div>
   </div>
 </div>
+
+
+<style>
+  .sku-button {
+    color: #285bf1;
+    border-radius: 7px;
+    padding: 5px 8px 4px 8px;
+    background-color: #f6f6f6;
+    border-bottom: 1px solid #b7b9d3;
+    line-height: 1;
+    font-size: 14px;
+    font-family: mono;
+  }
+  .sku-button:hover {
+    background-color: #5e84f7;
+    border-bottom: 1px solid #5e84f7;
+    color: white;
+  }
+</style>

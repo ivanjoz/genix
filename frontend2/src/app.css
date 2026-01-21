@@ -10,8 +10,8 @@
 	--spacing: 1px;
 	
 	/* Font Sizes - minimum 14px, then 15px, 16px, 18px, 20px, 22px */
-	--font-size-xs: 14px;
-	--font-size-sm: 15px;
+	--font-size-xs: var(--text-xs);
+	--font-size-sm: var(--text-sm);
 	--font-size-base: 16px;
 	--font-size-lg: 18px;
 	--font-size-xl: 20px;
@@ -47,6 +47,8 @@
 	--gray1: #2b2b2e;
 
 	/* Font Sizes */
+	--text-sm: 15px;
+	--text-xs: 14px;
 	--fs1: 16px;
 	--fs2: 15px;
 	--fs3: 14px;

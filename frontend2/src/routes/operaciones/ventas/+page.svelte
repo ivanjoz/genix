@@ -10,7 +10,8 @@
   import { ProductosService } from "../productos/productos.svelte";
   import type { IAlmacen } from "../sedes-almacenes/sedes-almacenes.svelte";
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte";
-  import ProductoVentaCard from "./components/ProductoVentaCard.svelte";
+  import { ListasCompartidasService } from "../productos/productos.svelte"; 
+  import ProductoVentaCard from "./ProductoVentaCard.svelte";
   import type { ProductoVenta } from "./ventas.svelte";
   import { VentasState } from "./ventas.svelte";
 
@@ -20,6 +21,7 @@
   // Services
   const almacenesService = new AlmacenesService();
   const productosService = new ProductosService();
+  const listasService = new ListasCompartidasService([2]); // 2: Marcas
 
   // State
   const ventasState = new VentasState();
@@ -73,11 +75,13 @@
       const stocks = productoToStockMap.get(producto.ID) || [];
       if (stocks.length === 0) continue;
 
+      const brandName = listasService.RecordsMap.get(producto.MarcaID)?.Nombre || "";
+      
       const base: ProductoVenta = {
         producto: producto,
         cant: 0,
         key: `P${producto.ID}`,
-        searchText: producto.Nombre.toLowerCase(),
+        searchText: (producto.Nombre + " " + brandName).toLowerCase(),
       };
 
       const skusStock: IProductoStock[] = [];
@@ -121,19 +125,45 @@
   }
 
   let filterTimeout: any;
-  function filterProductos(text: string) {
-    ventasState.filterText = text;
-    // Debounce logic if needed, or simple filter
-    if (!text) {
+  function applyFilters() {
+    const text = ventasState.filterText.toLowerCase();
+    const skuText = ventasState.filterSku.toLowerCase();
+
+    if (!text && !skuText) {
       productosParsed = productosParsedAll;
       return;
     }
 
-    const terms = text.toLowerCase().split(" ");
-    productosParsed = productosParsedAll.filter((e) =>
-      include(e.searchText, terms),
-    );
+    const terms = text ? text.split(" ") : [];
+    
+    productosParsed = productosParsedAll.filter((e) => {
+        // Filter by Name
+        const matchName = terms.length === 0 || include(e.searchText, terms);
+        
+        // Filter by SKU
+        let matchSku = true;
+        if(skuText) {
+            matchSku = false;
+            if(e.skus && e.skus.length > 0) {
+                // Check if any stock SKU matches
+                matchSku = e.skus.some(s => s.SKU && s.SKU.toLowerCase().includes(skuText));
+            }
+        }
+
+        return matchName && matchSku;
+    });
+    
     productoSelected = -1;
+  }
+
+  function filterProductos(text: string) {
+    ventasState.filterText = text;
+    applyFilters();
+  }
+
+  function filterSkus(text: string) {
+    ventasState.filterSku = text;
+    applyFilters();
   }
 
   function handleKeydown(ev: KeyboardEvent) {
@@ -165,7 +195,9 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<Page title="Ventas" sideLayerSize={400}>
+<Page title="Ventas" sideLayerSize={400}
+  options={[{ id: 1, name: "Ventas" }, { id: 2, name: "Configuración" }]}
+>
   <div class="flex h-full gap-16">
     <!-- Main Content -->
     <div class="flex-1 flex flex-col min-w-0">
@@ -188,18 +220,32 @@
           />
         </div>
 
-        <div class="flex-1 relative">
-          <i
-            class="icon-search absolute left-12 top-1/2 -translate-y-1/2 text-gray-400"
-          ></i>
-          <input
-            bind:this={searchInput}
-            type="text"
-            class="w-full pl-36 pr-16 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-            placeholder="Buscar producto..."
-            value={ventasState.filterText}
-            oninput={(e) => filterProductos(e.currentTarget.value)}
-          />
+        <div class="flex-1 relative flex gap-4">
+          <div class="relative flex-1">
+             <i
+               class="icon-search absolute left-12 top-1/2 -translate-y-1/2 text-gray-400"
+             ></i>
+             <input
+               bind:this={searchInput}
+               type="text"
+               class="w-full pl-36 pr-16 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+               placeholder="Producto..."
+               value={ventasState.filterText}
+               oninput={(e) => filterProductos(e.currentTarget.value)}
+             />
+          </div>
+          <div class="relative w-200">
+             <i
+               class="icon-barcode absolute left-12 top-1/2 -translate-y-1/2 text-gray-400"
+             ></i>
+             <input
+               type="text"
+               class="w-full pl-36 pr-16 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+               placeholder="SKU..."
+               value={ventasState.filterSku}
+               oninput={(e) => filterSkus(e.currentTarget.value)}
+             />
+          </div>
         </div>
       </div>
 
@@ -249,8 +295,7 @@
       <div class="px-16 py-12 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
       >
         <h3 class="font-bold text-gray-800">DETALLE DE VENTA</h3>
-        <button
-          class="bg-blue-600 hover:bg-blue-700 text-white px-16 py-6 rounded-lg text-sm font-medium transition-colors flex items-center gap-8 shadow-sm"
+        <button class="bx-blue"
           title="Guardar venta"
         >
           Guardar

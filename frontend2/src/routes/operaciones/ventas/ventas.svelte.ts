@@ -38,6 +38,7 @@ export class VentasState {
   form = $state({ total: 0, subtotal: 0, igv: 0 } as IVenta)
   filterText = $state("")
   ventaErrorMessage = $state("")
+  filterSku = $state("")
   
   // Cart
   ventaProductos = $state([] as VentaProducto[])
@@ -63,17 +64,23 @@ export class VentasState {
     if(ventaProducto){
       ventaProducto.cantidad += cant
       if(sku){
-        ventaProducto.skus = ventaProducto.skus || new Map()
-        const skuAdded = ventaProducto.skus.get(sku)
+        const currentSkus = ventaProducto.skus || new Map<string, number>()
+        const skuAdded = currentSkus.get(sku)
+        
         if(skuAdded){
           const stockCant = e.skus?.find(x => x.SKU === sku)?.Cantidad || 0
           if((skuAdded + 1) > stockCant){
             this.ventaErrorMessage = `El SKU ${sku} del producto "${e.producto?.Nombre}" sólo posee ${stockCant} unidad(es).`
             return
           }
-          ventaProducto.skus.set(sku, skuAdded + 1)
+          // Perform immutable update on Map to trigger reactivity
+          const newSkus = new Map(currentSkus)
+          newSkus.set(sku, skuAdded + 1)
+          ventaProducto.skus = newSkus
         } else {
-          ventaProducto.skus.set(sku, 1)
+          const newSkus = new Map(currentSkus)
+          newSkus.set(sku, 1)
+          ventaProducto.skus = newSkus
         }
       }
       this.ventaProductos = [...this.ventaProductos] // trigger update if deep mutation not caught (arrays)
