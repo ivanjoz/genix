@@ -1,6 +1,6 @@
 <script lang="ts">
   import Input from "$components/Input.svelte";
-    import LayerStatic from "$components/micro/LayerStatic.svelte";
+  import LayerStatic from "$components/micro/LayerStatic.svelte";
   import Page from "$components/Page.svelte";
   import SearchSelect from "$components/SearchSelect.svelte";
   import { Loading, include } from "$lib/helpers";
@@ -14,6 +14,7 @@
   import ProductoVentaCard from "./ProductoVentaCard.svelte";
   import type { ProductoVenta } from "./ventas.svelte";
   import { VentasState } from "./ventas.svelte";
+  import { ParametrosService } from "../../../services/parametros.svelte";
 
   // Helpers
   const formatMo = (n: number) => formatN(n, 2);
@@ -22,6 +23,7 @@
   const almacenesService = new AlmacenesService();
   const productosService = new ProductosService();
   const listasService = new ListasCompartidasService([2]); // 2: Marcas
+  const parametrosService = new ParametrosService(2);
 
   // State
   const ventasState = new VentasState();
@@ -50,6 +52,10 @@
       almacenSelected = almacenesService.Almacenes[0].ID;
       loadStock(almacenSelected);
     }
+  });
+
+  $effect(() => {
+    console.log("parametrosService", parametrosService)
   });
 
   async function loadStock(almacenID: number) {

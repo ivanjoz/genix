@@ -100,3 +100,40 @@ type NewIDToID struct {
 	NewID  int32
 	TempID int32
 }
+
+type Parametros struct {
+	db.TableStruct[ParametrosTable, Parametros]
+	EmpresaID int32
+	Grupo     int32
+	Key       string
+	Valor     string
+	ValorInt  int32
+	Valores   []int32
+	// Propiedades generales
+	Status    int8
+	Updated   int64
+	UpdatedBy int32
+}
+
+type ParametrosTable struct {
+	db.TableStruct[ParametrosTable, Parametros]
+	EmpresaID db.Col[ParametrosTable, int32]
+	Grupo     db.Col[ParametrosTable, int32]
+	Key       db.Col[ParametrosTable, string]
+	Valor     db.ColSlice[ParametrosTable, string]
+	ValorInt  db.Col[ParametrosTable, int32]
+	Valores   db.ColSlice[ParametrosTable, int32]
+	Status    db.Col[ParametrosTable, int8]
+	Updated   db.Col[ParametrosTable, int64]
+	UpdatedBy db.Col[ParametrosTable, int32]
+}
+
+func (e ParametrosTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:         "parametros",
+		Partition:    e.EmpresaID,
+		UseSequences: true,
+		Keys:         []db.Coln{e.Grupo, e.Key},
+		Views:        []db.View{},
+	}
+}

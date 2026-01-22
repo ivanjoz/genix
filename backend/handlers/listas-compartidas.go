@@ -12,54 +12,6 @@ import (
 )
 
 func GetListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetQueryInt64("upd")
-	listasIDs := req.GetQueryIntSlice("ids")
-
-	if len(listasIDs) == 0 {
-		return req.MakeErr("No se enviaron los ids de las listas a consultar.")
-	}
-
-	listasRegistrosMap := map[int32]*[]s.ListaCompartidaRegistro{}
-	for _, listaID := range listasIDs {
-		listasRegistrosMap[listaID] = &[]s.ListaCompartidaRegistro{}
-	}
-	errGroup := errgroup.Group{}
-
-	for _, listaID := range listasIDs {
-		errGroup.Go(func() error {
-			query := db.Query(listasRegistrosMap[listaID])
-			query.Select().
-				EmpresaID.Equals(req.Usuario.EmpresaID).
-				ListaID.Equals(listaID)
-			if updated > 0 {
-				query.Updated.GreaterThan(updated)
-			} else {
-				query.Status.Equals(1)
-			}
-			return query.Exec()
-		})
-	}
-
-	err := errGroup.Wait()
-	if err != nil {
-		return req.MakeErr(err)
-	}
-
-	listasRegistros := []s.ListaCompartidaRegistro{}
-	for _, registros := range listasRegistrosMap {
-		listasRegistros = append(listasRegistros, *registros...)
-	}
-
-	core.Log("Listas compartidas registros obtenidos::", len(listasRegistros))
-	/*
-		type Result struct {
-			Registros []s.ListaCompartidaRegistro `json:"registros"`
-		}
-	*/
-	return core.MakeResponse(req, &listasRegistros)
-}
-
-func GetListasCompartidas2(req *core.HandlerArgs) core.HandlerResponse {
 	listasIDs := req.GetQueryIntSlice("ids")
 
 	if len(listasIDs) == 0 {

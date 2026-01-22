@@ -118,7 +118,7 @@ export const listasCompartidas = [
 ]
 
 export class ListasCompartidasService extends GetHandler {
-  route = "listas-compartidas2"
+  route = "listas-compartidas"
   useCache = { min: 5, ver: 6 }
 
   Records: IListaRegistro[] = $state([])
@@ -173,7 +173,7 @@ export class ListasCompartidasService extends GetHandler {
   constructor(ids: number[] = []){
     super()
     if(ids.length > 0){
-      this.route = `listas-compartidas2?ids=${ids.join(",")}`
+      this.route = `listas-compartidas?ids=${ids.join(",")}`
     }
     if(ids){
       this.fetch()
@@ -190,7 +190,7 @@ export const postListaRegistros = (data: IListaRegistro[]) => {
   return POST({
     data,
     route: "listas-compartidas",
-    refreshRoutes: ["listas-compartidas2"]
+    refreshRoutes: ["listas-compartidas"]
   })
 }
 
