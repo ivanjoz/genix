@@ -3,12 +3,12 @@
   import type { ITableColumn } from "$components/VTable/types";
   import VTable from "$components/VTable/vTable.svelte";
   import { ConfirmWarn, formatTime } from "$lib/helpers";
-  import { Env } from "$lib/security";
   import { formatN } from "$shared/main";
   import pkg from 'notiflix'
 const { Loading } = pkg;
   import { BackupsService, createBackup, restoreBackup, type IBackup } from "./backups.svelte";
     import { sendServiceMessage } from "$lib/sw-cache";
+    import { Env } from "../../../env";
 
   const backupsService = new BackupsService()
 
@@ -41,7 +41,7 @@ const { Loading } = pkg;
     const s3key = ["backups", 1, backup.Name].join("/")
     const url = Env.S3_URL + s3key
     console.log("url to download::", url)
-    
+
     const aElement = document.createElement("a")
     aElement.setAttribute("download", backup.Name)
     aElement.href = url
@@ -95,7 +95,7 @@ const { Loading } = pkg;
           </button>
         </div>
       </div>
-      <VTable 
+      <VTable
         data={backupsService.backups}
         columns={columns}
         css="selectable w-full"

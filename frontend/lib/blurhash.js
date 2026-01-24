@@ -281,7 +281,8 @@
     "1": "d16qwm950j0pjf.cloudfront.net/img-productos"
   }
 
-  const onload = () => {
+	const onload = () => {
+
     for(const img of Array.from(document.getElementsByTagName("img"))){
       const role = img.getAttribute("role")
       if(role && role[1] === "/"){
@@ -290,7 +291,8 @@
           img.src = thumbHashToDataURL(image)
         } else if(origin === "1"){
           const imageFull = image + (size ? `-x${size}.avif` : "")
-          img.src = "https://" + origins[origin] +"/"+ imageFull
+					img.src = "https://" + origins[origin] + "/" + imageFull
+					console.log("image source::", img.src )
         }
       }
     }

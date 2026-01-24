@@ -1,10 +1,10 @@
-import { Env } from '$lib/security';
 import { SvelteMap } from 'svelte/reactivity';
 import type { IMenuRecord } from '../types/menu';
 import type { IModule } from './modules';
 import type { IImageResult } from '$components/ImageUploader.svelte';
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
+import { Env } from '../env';
 
 export const getDeviceType = () => {
   let view = 1 // Desktop
@@ -50,14 +50,14 @@ export const Core = $state({
   },
 })
 
-export const WeakSearchRef: WeakMap<any,{ 
+export const WeakSearchRef: WeakMap<any,{
   idToRecord: Map<string|number, any>
   valueToRecord: Map<string,any>
 }> = new WeakMap()
 
 
 export interface IFetchEvent {
-  url: string 
+  url: string
 }
 
 export const fetchOnCourse = $state<Map<number,IFetchEvent>>(new SvelteMap())
@@ -100,7 +100,7 @@ export const imagesToUpload = new Map<number, () => Promise<IImageResult>>();
 export const mainMenuOptions = [
   { name: "Iniciar Sesión",
     icon: "icon-user",
-    onClick: () => { 
+    onClick: () => {
       if(!Core.openLayers.includes(1)){
         Core.openLayers.push(1)
       }
@@ -135,8 +135,8 @@ export const suscribeUrlFlag = (elementId: string, callbackOnClose: (() => void)
   const isIncluded = !!flag
 
   if(!flag){
-    flag = { 
-      id: navFlags.length + 1, 
+    flag = {
+      id: navFlags.length + 1,
       close: callbackOnClose,
       elementId
     }
@@ -144,7 +144,7 @@ export const suscribeUrlFlag = (elementId: string, callbackOnClose: (() => void)
   }
 
   flag.updated = Date.now()
-  
+
   let uriParams = window.location.search.substring(1).split("&").filter(x => x)
   const nf = (uriParams.find(x => x.substring(0,3) === "nf=")||"").replace("nf=","")
 
@@ -155,10 +155,10 @@ export const suscribeUrlFlag = (elementId: string, callbackOnClose: (() => void)
   if(!isIncluded || navReturns > 0){
     navFlagCounter++
     if(navReturns > 0){ navReturns-- }
-    
+
     uriParams = uriParams.filter(x => x.substring(0,3) !== "nf=")
     uriParams.push(`nf=${navFlagCounter},${navFlags.map(x => x.id).join(",")}`)
-    
+
     goto(window.location.pathname +"?"+ uriParams.join("&"), { noScroll: true, replaceState: false })
   }
 }
@@ -179,4 +179,3 @@ if(typeof window !== 'undefined'){
     }
   })
 }
-

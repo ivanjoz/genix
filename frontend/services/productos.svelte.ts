@@ -1,5 +1,6 @@
 import { Env } from "../env";
 import { arrayToMapN } from "$lib/helpers";
+import { GET } from "$lib/http";
 
 const maxCacheTime = 60 * 5 // 2 segundos
 const productosPromiseMap: Map<string, Promise<any>> = new Map()
@@ -73,30 +74,26 @@ export const getProductos = async (categoriasIDs?: number[]): Promise<IProductos
   if(!productosPromiseMap.has(apiRoute)) {
     const headers = new Headers()
     headers.append('Authorization', `Bearer 1`)
-    const fullRoute = Env.makeRoute(apiRoute)
-    console.log("Consultando Productos | API:", fullRoute)
+    console.log("Consultando Productos | API:", apiRoute)
 
-    productosPromiseMap.set(apiRoute, new Promise((resolve, reject) => {
-      fetch(fullRoute, { headers })
-        .then(res => {
-          return res.json()
-        })
-				.then(res => {
-					console.log("Productos response:", Object.keys(res))
-					console.log(res)
+		productosPromiseMap.set(apiRoute, new Promise((resolve, reject) => {
+			GET({ route: apiRoute })
+			.then(res => {
+				console.log("Productos response:", Object.keys(res))
+				console.log(res)
 
-          for(const e of (res.productos||[]) as IProducto[]){
-            e.Image = (e.Images||[])[0] || { n: "" } as IProductoImage
-          }
+        for(const e of (res.productos||[]) as IProducto[]){
+          e.Image = (e.Images||[])[0] || { n: "" } as IProductoImage
+        }
 
-          res.productosMap = arrayToMapN(res.productos || [], 'ID')
-          res.categoriasMap = arrayToMapN(res.categorias || [], 'ID')
-          res.updated = Math.floor(Date.now() / 1000)
-          resolve(res)
-        })
-        .catch(err => {
-          reject(err)
-        })
+        res.productosMap = arrayToMapN(res.productos || [], 'ID')
+        res.categoriasMap = arrayToMapN(res.categorias || [], 'ID')
+        res.updated = Math.floor(Date.now() / 1000)
+        resolve(res)
+      })
+      .catch(err => {
+        reject(err)
+      })
     }))
   }
 

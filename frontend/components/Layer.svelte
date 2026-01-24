@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Env } from '$lib/security'
   import { tick } from 'svelte'
   import { Core } from "$core/store.svelte"
   import OptionsStrip from './micro/OptionsStrip.svelte'
+    import { Env } from '../env';
 
   // svelte-ignore non_reactive_update
   let divLayer: HTMLDivElement

@@ -3,7 +3,8 @@
   import Input from "../../components/Input.svelte";
   import { Notify } from "$core/helpers";
   import { sendUserLogin, type ILogin } from "../../services/admin/login";
-  import { checkIsLogin, Env } from "../../lib/security";
+  import { checkIsLogin } from "../../lib/security";
+    import { Env } from "../../env";
 
   let form = $state({ Usuario: "", Password: "", EmpresaID: 1, CipherKey: "" } as ILogin)
   let isLoading = $state(false)
@@ -13,19 +14,19 @@
       Notify.failure('Debe proporcionar un usuario y una contraseña válidos');
       return
     }
-    
+
     isLoading = true
     Notify.info('Enviando Credenciales...')
-    
+
     const result = await sendUserLogin(form)
     console.log(result)
-    
+
     isLoading = false
-    
+
     if(result.error){
       Notify.failure('Error al iniciar sesión')
     }
-  } 
+  }
 
   onMount(() => {
     if(checkIsLogin() === 2){
@@ -47,25 +48,25 @@
       <div class="flex justify-center items-center text-xl font-semibold text-[#686caa] mb-4">
         Gestor Empresarial en la Nube para MyPes
       </div>
-      <Input 
-        required={true} 
-        css="mb-12 w-full text-lg" 
-        label="Usuario" 
-        saveOn={form} 
-        save="Usuario" 
+      <Input
+        required={true}
+        css="mb-12 w-full text-lg"
+        label="Usuario"
+        saveOn={form}
+        save="Usuario"
         type="text"
       />
-      <Input 
-        required={true} 
-        css="mb-12 w-full text-lg" 
-        label="Contraseña" 
-        saveOn={form} 
-        save="Password" 
+      <Input
+        required={true}
+        css="mb-12 w-full text-lg"
+        label="Contraseña"
+        saveOn={form}
+        save="Password"
         type="password"
       />
       <div class="flex w-full justify-center items-center mt-[1.4rem]">
-        <button 
-          class="bn1 big d-blue" 
+        <button
+          class="bn1 big d-blue"
           disabled={isLoading}
           onclick={ev => {
             ev.stopPropagation()
@@ -99,7 +100,7 @@
   .login-logo-c {
     height: 8rem;
   }
-  
+
   .login-logo-c > img {
     object-fit: contain;
   }
@@ -173,7 +174,7 @@
       display: flex;
       justify-content: center;
     }
-    
+
     .login-bg-1 {
       width: 90vw;
       padding: 1rem 1.2rem 1.4rem 1.2rem;

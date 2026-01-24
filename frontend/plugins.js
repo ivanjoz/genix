@@ -181,7 +181,7 @@ export function getCounterFomFile() {
  */
 export const svelteClassHasher = () => {
     const classMap = new Map();
-    const srcDir = path.resolve(process.cwd(), 'src');
+    const srcDir = process.cwd();
 
     return {
         name: 'svelte-class-hasher',
@@ -189,7 +189,7 @@ export const svelteClassHasher = () => {
 
         /**
          * buildStart hook:
-         * Recursively scans the /src directory to build a map of every hashable class 
+         * Recursively scans the project directory to build a map of every hashable class 
          * found in Svelte style blocks. This ensures hash consistency across files.
          */
         async buildStart() {
@@ -201,6 +201,7 @@ export const svelteClassHasher = () => {
                 for (const entry of entries) {
                     const fullPath = path.join(dir, entry.name);
                     if (entry.isDirectory()) {
+                        if (entry.name === 'node_modules' || entry.name === '.svelte-kit' || entry.name === 'tmp' || entry.name === 'static' || entry.name === 'build' || entry.name === '.git') continue;
                         scanDir(fullPath);
                     } else if (entry.isFile() && entry.name.endsWith('.svelte')) {
                         const content = fs.readFileSync(fullPath, 'utf8');

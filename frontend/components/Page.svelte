@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { checkIsLogin, Env } from "$lib/security";
+  import { checkIsLogin } from "$lib/security";
   import { onDestroy, onMount } from "svelte";
   import { closeAllModals, Core, openModal } from "$core/store.svelte";
+    import { Env } from "../env";
 
   let { children, sideLayerSize, title, options }: {
     children: any, sideLayerSize?: number, title: string

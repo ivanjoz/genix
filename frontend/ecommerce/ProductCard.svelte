@@ -2,7 +2,7 @@
   import { formatN, formatTime } from "$lib/helpers";
   import type { IProducto } from "$services/productos.svelte";
 
-  const { 
+  const {
     producto = null as IProducto, css = ""
   } = $props();
 
@@ -17,7 +17,7 @@
 
 <div class="relative _8">
   <div class={["_1", css].join(" ")}>
-    <ImageHash css="w-full h-[36vw] md:h-200" src={producto.Image?.n} />
+    <ImageHash css="w-full h-[36vw] md:h-200" src={producto.Image?.n} folder="img-productos"/>
     <div class="_3 pb-2">
       <div class="_5 mt-6 mb-4 min-h-26 md:min-h-32 fx-c">
         {producto.Nombre}

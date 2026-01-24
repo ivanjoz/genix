@@ -1,7 +1,6 @@
-import { decrypt } from "../shared/main"
 import { reloadLogin, type ILoginResult } from "../services/admin/login"
 import { Env, IsClient, LocalStorage } from "../env"
-import { Notify, throttle } from "$lib/helpers"
+import { decrypt, Notify, throttle } from "$lib/helpers"
 import type { IUsuario } from "../routes/admin/usuarios/usuarios.svelte"
 
 // Token refresh constants (all in seconds)
@@ -77,7 +76,7 @@ export const getShowStore = (pathname?: string): number => {
 // TOKEN REFRESH MANAGEMENT
 const acquireRefreshLock = (): boolean => {
   if (!IsClient()) return false
-  
+
   const lockTime = parseInt(LocalStorage.getItem(REFRESH_LOCK_KEY)||"0")
   const nowUnix = Math.floor(Date.now() / 1000)
   // Check if lock has expired
@@ -85,17 +84,17 @@ const acquireRefreshLock = (): boolean => {
     console.log('Token refresh already in progress in another tab')
     return false
   }
-  
+
   // Acquire lock
   LocalStorage.setItem(REFRESH_LOCK_KEY, String(nowUnix))
   return true
 }
 
 // Check if token needs refresh
-const shouldRefreshToken = (): boolean => {  
+const shouldRefreshToken = (): boolean => {
   const tokenCreated = parseInt(LocalStorage.getItem(Env.appId + "TokenCreated") || '0')
   const tokenAge =  Math.floor(Date.now() / 1000) - tokenCreated
-  
+
   return tokenCreated > 0 && tokenAge >= TOKEN_REFRESH_THRESHOLD
 }
 
@@ -104,17 +103,17 @@ let tokenRefreshInterval: number | null = null
 
 const checkAndRefreshToken = async () => {
   if (!IsClient()) return
-  
+
   // Check if user is still logged in
   if (!getToken(true)) {
     stopTokenRefreshCheck()
     return
   }
-  
+
   // Check if token needs refresh and Try to acquire lock to prevent parallel execution
   if (!shouldRefreshToken() || !acquireRefreshLock()) { return }
   console.log('Token refresh initiated - token is older than 40 minutes')
-  
+
   try {
     await reloadLogin()
     console.log('Token refreshed successfully')
@@ -128,10 +127,10 @@ const checkAndRefreshToken = async () => {
 // Start the token refresh check interval
 export const startTokenRefreshCheck = () => {
   if (!IsClient()) return
-  
+
   // Clear any existing interval
   if (tokenRefreshInterval !== null) { clearInterval(tokenRefreshInterval) }
-  
+
   // Start new interval (convert seconds to milliseconds for setInterval)
   tokenRefreshInterval = window.setInterval(checkAndRefreshToken, TOKEN_CHECK_INTERVAL * 1000)
   console.log('Token refresh check started - will check every 4 minutes')
@@ -162,11 +161,11 @@ Env.clearAccesos = () => {
 // Initialize token refresh check on page load if user is logged in
 export const initTokenRefreshCheck = () => {
   if (!IsClient()) return
-  
+
   // Check if user is logged in
   const hasToken = getToken(true)
   const tokenCreated = LocalStorage.getItem(Env.appId + "TokenCreated")
-  
+
   if (hasToken && tokenCreated) {
     startTokenRefreshCheck()
   }
@@ -195,7 +194,7 @@ export class AccessHelper {
   #accesos = ''
   #cachedResults: Map<string,boolean> = new Map()
   #userInfo: IUsuario = null as unknown as IUsuario
-  
+
   #setUserInfo(){
     const userInfoJson = LocalStorage?.getItem(Env.appId+ "UserInfo")
     if(!userInfoJson){ return }
@@ -203,16 +202,16 @@ export class AccessHelper {
   }
   clearAccesos = Env.clearAccesos
   getUserInfo(){ return this.#userInfo }
-  setUserInfo(userInfo: IUsuario){ 
+  setUserInfo(userInfo: IUsuario){
     this.#userInfo = userInfo
     LocalStorage.setItem(Env.appId + "UserInfo", JSON.stringify(userInfo))
   }
-  
+
   async parseAccesos(login: ILoginResult, cipherKey?: string) {
     debugger
     const userInfoStr = await decrypt(login.UserInfo, cipherKey as string)
     const userInfo = JSON.parse(userInfoStr) as IUsuario
- 
+
     const rolesIDsParsed = (userInfo.rolesIDs||[]).map(x => x * 10 + 8)
     const accesosIDs = (userInfo.accesosIDs||[]).concat(rolesIDsParsed)
 
@@ -224,7 +223,7 @@ export class AccessHelper {
     LocalStorage.setItem(Env.appId + "TokenExpTime", String(login.TokenExpTime))
     LocalStorage.setItem(Env.appId + "EmpresaID", String(login.EmpresaID))
     this.#setUserInfo()
-    
+
     const b32l = this.#b32l
     let parsedAccesos = b32l[b32l.length - 1]
     let i = 0
@@ -349,4 +348,3 @@ export const Params = {
     return Params.toSunix(fechaHora)
   }
 }
-export { Env }

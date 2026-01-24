@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import TopLayerSelector from '$components/micro/TopLayerSelector.svelte';
 	import favicon from '$lib/assets/favicon.svg';
-	import { checkIsLogin, Env } from '$lib/security';
+	import { checkIsLogin } from '$lib/security';
 	import { doInitServiceWorker } from '$lib/sw-cache';
 	import { onMount } from 'svelte';
 	import '../app.css';
@@ -13,6 +13,7 @@
 	import Modules from "$core/modules";
 	import { Core, getDeviceType } from '$core/store.svelte';
 	import ImageWorker from '../workers/image-worker?worker';
+    import { Env } from '../env';
 
 	let { children } = $props();
 

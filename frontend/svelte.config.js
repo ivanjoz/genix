@@ -1,6 +1,7 @@
 import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { getCounter, getCounterFomFile } from './plugins.js';
+import path from 'path';
 
 const isBuild = process.argv.includes('build');
 const componentMap = new Map();
@@ -58,16 +59,14 @@ const config = {
 			assets: 'static',
 			lib: 'lib',
 			routes: 'routes',
-			serviceWorker: 'workers/service-worker',
 			appTemplate: 'app.html'
 		},
 		alias: {
-			$lib: './lib',
-			$components: './components',
-			$core: './core',
-			$shared: './shared',
-			$ecommerce: './ecommerce',
-			$services: './services'
+			$components: path.resolve('./components'),
+			$core: path.resolve('./core'),
+			$shared: path.resolve('./shared'),
+			$ecommerce: path.resolve('./ecommerce'),
+			$services: path.resolve('./services')
 		},
 		prerender: {
 			handleHttpError: 'warn'

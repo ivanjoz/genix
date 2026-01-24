@@ -31,6 +31,37 @@ const serviceWorkerConfig: BuildOptions = {
   platform: 'browser',
   packages: 'bundle' as const,
   target: 'esnext',
+  plugins: [
+    {
+      name: 'alias',
+      setup(build) {
+        build.onResolve({ filter: /^\$/ }, args => {
+          const parts = args.path.split('/');
+          const alias = parts[0];
+          const rest = parts.slice(1).join('/');
+          const baseDir = {
+            '$lib': 'lib',
+            '$core': 'core',
+            '$components': 'components',
+            '$shared': 'shared',
+            '$ecommerce': 'ecommerce',
+            '$services': 'services'
+          }[alias];
+          
+          if (!baseDir) return null;
+          
+          let fullPath = path.resolve(__dirname, baseDir, rest);
+          if (!fs.existsSync(fullPath)) {
+            if (fs.existsSync(fullPath + '.ts')) fullPath += '.ts';
+            else if (fs.existsSync(fullPath + '.js')) fullPath += '.js';
+            else if (fs.existsSync(path.join(fullPath, 'index.ts'))) fullPath = path.join(fullPath, 'index.ts');
+            else if (fs.existsSync(path.join(fullPath, 'index.js'))) fullPath = path.join(fullPath, 'index.js');
+          }
+          return { path: fullPath };
+        });
+      },
+    },
+  ],
 }
 
 const serviceWorkerPlugin = () => ({
@@ -91,8 +122,17 @@ const serviceWorkerPlugin = () => ({
 });
 
 export default defineConfig({
+  root: path.resolve(__dirname),
+  publicDir: 'static',
   server: {
     port: 3570, // Change this to your desired port
+    fs: {
+      strict: false,
+      allow: [
+        path.resolve(__dirname),
+        path.resolve(__dirname, '..'),
+      ],
+    },
     headers: {
       'Cross-Origin-Embedder-Policy': 'require-corp',
       'Cross-Origin-Opener-Policy': 'same-origin',
@@ -149,7 +189,10 @@ export default defineConfig({
     plugins: () => [tailwindcss()],
   },
   plugins: [
-    isBuild && svelteClassHasher(), sveltekit(), tailwindcss(), serviceWorkerPlugin()
+    sveltekit(),
+    isBuild && svelteClassHasher(),
+    tailwindcss(),
+    serviceWorkerPlugin()
   ].filter(x => x)
 });
 

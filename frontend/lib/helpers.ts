@@ -60,11 +60,11 @@ export const highlString = (
         const splited = [
           { text: ini }, { text: middle, highl: true }, { text: fin }
         ].filter(x => x.text);
-        
+
         arr.splice(i, 1, ...splited)
-        if(arr.length > 40){ 
+        if(arr.length > 40){
           // console.log("words 111:", arr.filter(x => x),"|",phrase,words)
-          return arr.filter(x => x) 
+          return arr.filter(x => x)
         }
         continue
       }
@@ -108,8 +108,8 @@ export function include(e: string, h: string | string[]) {
   }
 }
 
-const pendingWorkerRequests = new Map<number, { 
-  resolve: (value: string) => void, 
+const pendingWorkerRequests = new Map<number, {
+  resolve: (value: string) => void,
   reject: (reason?: any) => void,
   timeout: NodeJS.Timeout
 }>();
@@ -124,11 +124,11 @@ const setWorkerCommunication = (wi: WorkerInstance) => {
     wi.tasks = Math.max(0, wi.tasks - 1);
     const { id, dataUrl, error } = data;
     const request = pendingWorkerRequests.get(id);
-    
+
     if (request) {
       clearTimeout(request.timeout);
       pendingWorkerRequests.delete(id);
-      
+
       if (error) {
         console.error(`❌ Worker error for request ${id}:`, error);
         request.reject(error);
@@ -153,7 +153,7 @@ const getBestWorker = (): Worker => {
   }
 
   let best: WorkerInstance | null = null;
-  
+
   for (const wi of workerPool.values()) {
     if (wi.tasks === 0) { best = wi; break }
     if (!best || wi.tasks < best.tasks) { best = wi }
@@ -172,7 +172,7 @@ const getBestWorker = (): Worker => {
     best.tasks++;
     return best.worker;
   }
-  
+
   return Env.imageWorker;
 };
 
@@ -191,9 +191,9 @@ export const fileToImage = (
 
   const worker = getBestWorker();
 
-  console.log('📸 fileToImage called with:', { 
-    blobType: blob.type, 
-    blobSize: blob.size, 
+  console.log('📸 fileToImage called with:', {
+    blobType: blob.type,
+    blobSize: blob.size,
     resolution, useJpeg, useAvif,
     poolSize: workerPool.size,
     workerExists: !!worker
@@ -234,7 +234,7 @@ export const bitmapToImage = (
 
   const worker = getBestWorker();
 
-  console.log('📸 bitmapToImage called with:', { 
+  console.log('📸 bitmapToImage called with:', {
     bitmapWidth: bitmap.width,
     bitmapHeight: bitmap.height,
     resolution, useJpeg, useAvif,
@@ -280,8 +280,8 @@ const mesesMap = new Map([
 export const formatTime = (date: Date | number | string, layout?: string): (Date | string | null) => {
   let d: Date | undefined
 
-  if (!date) { 
-    d = new Date() 
+  if (!date) {
+    d = new Date()
   }
   else if (typeof date === "number") {
     // Valida las fechas por dia, segundo o ms
@@ -327,21 +327,21 @@ export const formatTime = (date: Date | number | string, layout?: string): (Date
           if (!d.getTime) return null
         }
       }
-    } else { 
-      return null 
+    } else {
+      return null
     }
   }
 
   // Revisa si es una fecha válida
   if (!d || !(d instanceof Date) || !d.getTime) return layout ? "" : null
-  
+
   const _dia = d.getDate()
   if (isNaN(_dia)) return !layout ? null : ""
   const dia = _dia < 10 ? "0" + _dia : String(_dia)
-  
+
   const _mes = d.getMonth() + 1
   const mes = _mes < 10 ? "0" + _mes : String(_mes)
-  
+
   const year = String(d.getFullYear())
 
   if (!layout) { return d }
@@ -387,8 +387,8 @@ export const formatTime = (date: Date | number | string, layout?: string): (Date
 export const arrayToMapN = <T>(array: T[], keys?: keyof T | (keyof T)[]):
   Map<number, T> => {
   const map = new Map()
-  if (typeof keys === 'string') { 
-    for (const e of array) { map.set(e[keys  as keyof T], e) } 
+  if (typeof keys === 'string') {
+    for (const e of array) { map.set(e[keys  as keyof T], e) }
   } else if (Array.isArray(keys)) {
     for (const e of array) {
       const keyGrouped = keys.map(key => (e[key as keyof T] || "")).join("_")
@@ -406,13 +406,13 @@ export function formatN(
 ){
   decimal = decimal || 0
   if (typeof x !== 'number') return x ? '-' : ''
-  
+
   if(decimal === -1){
-    if(x < 1) x = Math.round(x*10000)/10000  
+    if(x < 1) x = Math.round(x*10000)/10000
     else if(x < 10) x = Math.round(x*1000)/1000
     else if(x >= 10) x = Math.round(x*100)/ 100
   }
-  
+
   let xString
   if(typeof decimal === 'number' && decimal >= 0){
     if(decimal === 0){
@@ -429,4 +429,45 @@ export function formatN(
     while (xString.length < fixedLen) { xString = charF + xString }
   }
   return xString
+}
+
+export const decrypt = async (encryptedString: string, key: string) => {
+  key = key.substring(0,32)
+  // Decode the base64 string
+  const encryptedData = Uint8Array.from(atob(encryptedString), c => c.charCodeAt(0))
+  console.log("encrypted len::", encryptedData.length)
+
+  // Convert the key to Uint8Array
+  const keyBuffer = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(key), { name: "AES-GCM" }, false, ["decrypt"]
+  )
+
+  // Ensure the encrypted data is not too short
+  if (encryptedData.length < 12) {
+    throw new Error("Invalid encrypted data");
+  }
+
+  // Extract the nonce from the first 12 bytes
+  const nonce = encryptedData.slice(0, 12)
+  console.log("nonce:: " ,new TextDecoder().decode(nonce))
+
+  const ciphertext = encryptedData.slice(12)
+
+  console.log("desencriptando:: ", nonce.length, key.length, ciphertext.length)
+
+  // Decrypt the data
+  let decryptedData: ArrayBuffer
+  try {
+    decryptedData = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: nonce }, keyBuffer, ciphertext
+    )
+  } catch (error) {
+    console.log("Error desencriptando:: ", error)
+    return ""
+  }
+
+  console.log("decripted data:: ", decryptedData)
+  // Convert the decrypted data to a string
+  const decryptedString = new TextDecoder().decode(decryptedData)
+  return decryptedString
 }

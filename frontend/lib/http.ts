@@ -2,10 +2,11 @@ import { Notify } from "$core/helpers"
 import axios, { type AxiosProgressEvent } from 'axios';
 import { formatN } from "../shared/main"
 import type { CacheMode, serviceHttpProps } from "../workers/service-worker"
-import { accessHelper, Env, getToken } from "./security"
+import { accessHelper, getToken } from "./security"
 import { fetchCache, fetchCacheParsed, sendServiceMessage } from "./sw-cache"
 import { browser } from "$app/environment";
 import { unmarshall } from "./unmarshall";
+import { Env } from '../env'
 
 export interface IHttpStatus { code: number, message: string }
 
@@ -23,17 +24,15 @@ export interface httpProps {
   keysIDs?: { [e: string]: string | string[] }
   keyID?: string | string[]
   cacheMode?: CacheMode
-  useCache?: { 
+  useCache?: {
     min: number, /* minutos del caché */
     ver: number  /* versión del caché */
   },
-  useCacheStatic?: { 
+  useCacheStatic?: {
     min: number, /* minutos del caché */
     ver: number  /* versión del caché */
   },
 }
-
-
 
 export const buildHeaders = (contentType?: string) => {
   const cTs: {[e: string]: string } = { "json": "application/json" }
@@ -78,8 +77,8 @@ const extractError = (result: any): string => {
     if(errorJson.message || errorJson.error || errorJson.errorMessage){
       errorJson = errorJson.message || errorJson.error || errorJson.errorMessage
     }
-    errorString = typeof errorJson === 'string' 
-      ?  errorJson 
+    errorString = typeof errorJson === 'string'
+      ?  errorJson
       : JSON.stringify(errorJson)
   }
   return errorString
@@ -137,8 +136,8 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
     console.error(err)
     return Promise.reject(err)
   }
-  
-const apiRoute = Env.makeRoute(props.route)
+
+  const apiRoute = Env.makeRoute(props.route)
 
   if((props.refreshRoutes||[]).length > 0){
     sendServiceMessage(24, { routes: props.refreshRoutes })
@@ -220,8 +219,8 @@ let fetchOnCourse = 0
 
 export const setFetchProgress = (bytesLen: number) => {
   const nowTime = Date.now()
-  if(!progressBytes){ 
-    progressTimeStart = nowTime  
+  if(!progressBytes){
+    progressTimeStart = nowTime
   }
 
   progressLastTime = nowTime
@@ -234,7 +233,7 @@ export const setFetchProgress = (bytesLen: number) => {
   if(elapsed > 50){
     mbps = kb / elapsed
   }
-  
+
   let msg = `Descargando... ${formatN(kb)} kb`
   if(mbps){
     if(mbps > 10){ mbps = 10 }
@@ -264,7 +263,7 @@ const parseResponseAsStream = async (fetchResponse: Response, status: any, props
     status.message = fetchResponse.statusText
   }
 
-  if (fetchResponse.status === 200) { 
+  if (fetchResponse.status === 200) {
     const reader = fetchResponse.body.getReader()
     const stream = new ReadableStream({
       start(controller) {

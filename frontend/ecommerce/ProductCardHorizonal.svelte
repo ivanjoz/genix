@@ -3,8 +3,8 @@
   import type { IProducto } from "$services/productos.svelte";
   import ImageHash from "./Imagehash.svelte";
   import { addProductoCant, ProductsSelectedMap } from "./store.svelte";
-  
-  const { 
+
+  const {
     producto = null as IProducto, css = ""
   } = $props();
 
@@ -15,7 +15,7 @@
 
 <div class="flex relative _1 h-88 md:h-110 rounded-[7px]">
   <div class="p-8">
-    <ImageHash css="w-88 md:w-100 h-[100%]" src={producto.Image?.n} />
+    <ImageHash css="w-88 md:w-100 h-[100%]" src={producto.Image?.n} folder="img-productos" />
   </div>
   <div class="flex flex-col h-full relative pt-6 pb-4 w-full">
     <div>{producto.Nombre}</div>
