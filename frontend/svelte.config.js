@@ -61,6 +61,9 @@ const config = {
 			$shared: './src/shared',
 			$ecommerce: './src/ecommerce',
 			$services: './src/services'
+		},
+		prerender: {
+			handleHttpError: 'warn'
 		}
 	}
 };

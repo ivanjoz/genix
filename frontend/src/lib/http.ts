@@ -33,10 +33,7 @@ export interface httpProps {
   },
 }
 
-export const makeRoute = (route: string) => {
-  const apiUrl = Env.apiRoute
-  return route.includes('://') ? route : apiUrl + route
-}
+
 
 export const buildHeaders = (contentType?: string) => {
   const cTs: {[e: string]: string } = { "json": "application/json" }
@@ -141,8 +138,7 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
     return Promise.reject(err)
   }
   
-  const status: IHttpStatus = { code: 200, message: "" }
-  const apiRoute = makeRoute(props.route)
+const apiRoute = Env.makeRoute(props.route)
 
   if((props.refreshRoutes||[]).length > 0){
     sendServiceMessage(24, { routes: props.refreshRoutes })
@@ -190,7 +186,7 @@ export const POST_XMLHR = (props: httpProps): Promise<any> => {
     return Promise.reject(err)
   }
   props.status = { code: 200, message: "" }
-  const apiRoute = makeRoute(props.route)
+const apiRoute = Env.makeRoute(props.route)
 
   return new Promise((resolve, reject) => {
     axios.post(apiRoute, data, {
@@ -317,7 +313,7 @@ const parseResponseAsStream = async (fetchResponse: Response, status: any, props
 
 export function GET(props: httpProps): Promise<any> {
   const status: IHttpStatus = { code: 200, message: "" }
-  const routeParsed = makeRoute(props.route)
+  const routeParsed = Env.makeRoute(props.route)
 
   if(props.useCache){
     const args = {
@@ -379,7 +375,7 @@ export class GetHandler {
 
   makeProps(cacheMode: CacheMode): serviceHttpProps {
     const props = {
-      routeParsed: makeRoute(this.route),
+      routeParsed: Env.makeRoute(this.route),
       route: this.route,
       useCache: this.useCache,
       module: this.module,

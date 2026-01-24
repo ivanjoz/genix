@@ -26,7 +26,7 @@
 			console.error('❌ Failed to initialize image worker:', error)
 		}
 	}
-	
+
 	const redirectsToLogin = $derived.by(() => {
 		// Skip auth check for store routes (public-facing)
 		if(page.url.pathname.startsWith('/store')){
@@ -56,8 +56,11 @@
 		})
 	})
 
+	const routesWithoutLayout: string[] = ["login","store"]
 	// Check if current route should show Header and SideMenu
-	let showLayout = $derived(!page.url.pathname.startsWith('/login'));
+	let showLayout = $derived(
+		!routesWithoutLayout.some(x => !page.url.pathname.startsWith(x))
+	);
 </script>
 
 <svelte:head>

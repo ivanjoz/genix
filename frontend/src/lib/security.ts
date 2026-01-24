@@ -1,6 +1,6 @@
 import { decrypt } from "../shared/main"
 import { reloadLogin, type ILoginResult } from "../services/admin/login"
-import { Env, IsClient, LocalStorage } from "../shared/env"
+import { Env, IsClient, LocalStorage } from "../env"
 import { Notify, throttle } from "$lib/helpers"
 import type { IUsuario } from "../routes/admin/usuarios/usuarios.svelte"
 

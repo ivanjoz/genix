@@ -9,7 +9,7 @@ export interface ILogin {
   Password: string
   CipherKey: string
 }
-  
+
 export interface ILoginResult {
   UserID: number
   UserNames: string
@@ -26,7 +26,7 @@ export const sendUserLogin = async (data: ILogin): Promise<any> => {
 
   try {
     loginInfo = await POST({
-      data, 
+      data,
       route: `p-user-login`,
       apiName: 'MAIN',
       headers: { "Content-Type": "application/json" }
@@ -48,7 +48,7 @@ export const sendUserLogin = async (data: ILogin): Promise<any> => {
     console.log("error encriptando::")
     console.log(error)
   }
-  
+
   console.log(userInfo)
 
   return { result: loginInfo }
@@ -60,7 +60,7 @@ export const reloadLogin = async (): Promise<any> => {
 
   try {
     loginInfo = await GET({
-      route: `reload-login?cipher-key=${CipherKey}`, 
+      route: `reload-login?cipher-key=${CipherKey}`,
       headers: { "Content-Type": "application/json" }
     })
   } catch (error) {
@@ -78,7 +78,7 @@ export const reloadLogin = async (): Promise<any> => {
     console.log("error encriptando::")
     console.log(error)
   }
-  
+
   console.log(userInfo)
   return { result: loginInfo }
 }
@@ -86,4 +86,3 @@ export const reloadLogin = async (): Promise<any> => {
 export const handleLogin = (login: ILoginResult) => {
   // Additional login handling if needed
 }
-

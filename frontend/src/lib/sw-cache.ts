@@ -1,6 +1,6 @@
 import { Notify } from "$core/helpers"
 import { fetchEvent } from "$core/store.svelte"
-import { Env } from "../shared/env"
+import { Env } from '../env';
 import type { IGetCacheSubObject, serviceHttpProps } from "../workers/service-worker"
 import { setFetchProgress } from "./http"
 
@@ -130,29 +130,8 @@ export const getCacheSubObject = async (args: IGetCacheSubObject): Promise<any[]
   return await sendServiceMessage(15, args)
 }
 
-const makeApiRoute = (route: string) => {
-  const apiUrl = Env.apiRoute
-  return route.includes('://') ? route : apiUrl + route
-}
-
-export interface FetchCacheResponse {
-  cacheFetched: number
-  notUpdated: boolean
-  lastFetched: number
-  lastUpdated: {[k: string]: number }
-  isEmpty: boolean
-  content: any
-  error: string
-}
-
-// Función para obtener el Token
-export const getToken = () => {
-  const userToken = localStorage.getItem(Env.appId + "UserToken")
-  return userToken
-}
-
 export const fetchCache = async (args: serviceHttpProps): Promise<FetchCacheResponse> => {
-  args.routeParsed = makeApiRoute(args.route)
+  args.routeParsed = Env.makeRoute(args.route)
   args.__version__ = args.useCache?.ver || 1
   console.log("fetching cache...", args)
 

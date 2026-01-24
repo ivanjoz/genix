@@ -1,4 +1,4 @@
-import { getWindow } from "$shared/env"
+import { getWindow } from "../env"
 
 export const checkDevice = () => {
   const Window = getWindow()
@@ -7,10 +7,10 @@ export const checkDevice = () => {
   else { return 1 }
 }
 
-export let Globals = $state({ 
+export let Globals = $state({
   deviceType: checkDevice()
 });
 
-export let Ecommerce = $state({ 
+export let Ecommerce = $state({
   cartOption: 1
 });

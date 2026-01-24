@@ -2,7 +2,7 @@
 import { POST_XMLHR } from '$lib/http';
 import { onDestroy, untrack } from 'svelte';
 import { Notify, fileToImage } from '$lib/helpers';
-import { Env } from '../shared/env';
+import { Env } from '../env';
 import { imagesToUpload } from '$core/store.svelte';
 
 export interface IImageInput {

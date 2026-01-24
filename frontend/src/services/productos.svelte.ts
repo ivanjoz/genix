@@ -1,4 +1,4 @@
-import { Env } from "$lib/security";
+import { Env } from "../env";
 import { arrayToMapN } from "$lib/helpers";
 
 const maxCacheTime = 60 * 5 // 2 segundos
@@ -73,7 +73,7 @@ export const getProductos = async (categoriasIDs?: number[]): Promise<IProductos
   if(!productosPromiseMap.has(apiRoute)) {
     const headers = new Headers()
     headers.append('Authorization', `Bearer 1`)
-    const fullRoute = Env.apiRoute + apiRoute
+    const fullRoute = Env.makeRoute(apiRoute)
     console.log("Consultando Productos | API:", fullRoute)
 
     productosPromiseMap.set(apiRoute, new Promise((resolve, reject) => {

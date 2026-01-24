@@ -9,14 +9,8 @@
     TextColorIcon,
     TextSizeIcon
   } from "./HTMLEditor"
-  import type {
-    ContentModelDocument,
-    ContentModelFormatState,
-    EditorPlugin,
-    IEditor,
-    PluginEvent
-  } from "roosterjs";
-  import {
+  import pkg from "roosterjs";
+  const {
     ChangeSource,
     clearFormat,
     createDomToModelContext,
@@ -39,7 +33,13 @@
     toggleNumbering,
     toggleStrikethrough,
     toggleUnderline
-  } from "roosterjs";
+  } = pkg;
+
+  type ContentModelDocument = pkg.ContentModelDocument;
+  type ContentModelFormatState = pkg.ContentModelFormatState;
+  type EditorPlugin = pkg.EditorPlugin;
+  type IEditor = pkg.IEditor;
+  type PluginEvent = pkg.PluginEvent;
   import { onMount } from "svelte";
 
   type HeadingLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6
