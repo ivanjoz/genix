@@ -2,7 +2,8 @@
   import Input from "$components/Input.svelte"
   import Page from "$components/Page.svelte"
   import { Notify } from "$core/helpers"
-    import { Loading } from "notiflix";
+    import pkg from 'notiflix'
+const { Loading } = pkg;
   import { EmpresaParametrosService, postEmpresaParametros } from "./empresas.svelte"
 
   const service = new EmpresaParametrosService()

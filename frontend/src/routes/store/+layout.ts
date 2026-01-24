@@ -13,7 +13,7 @@ export async function load({ url }) {
 
   console.log("Env is local? = ", (globalThis as any)._isLocal,"|", url.host)
 
-  console.log("obteniendo productos...");
+  console.log("obteniendo productos 1...");
   const productos = await getProductos(undefined)
   console.log("productos obtenidos:", productos.productos?.length)
 

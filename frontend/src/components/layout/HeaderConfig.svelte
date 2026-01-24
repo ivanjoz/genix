@@ -2,7 +2,8 @@
     import Input from "$components/Input.svelte";
     import OptionsStrip from "$components/micro/OptionsStrip.svelte";
     import { accessHelper, type UserInfoParsed } from "$lib/security";
-    import { Loading, Notify } from "notiflix";
+    import pkg from 'notiflix'
+const { Loading, Notify } = pkg;
     import { postUsuario, postUsuarioPropio, type IUsuario } from "../../routes/admin/usuarios/usuarios.svelte";
 
 

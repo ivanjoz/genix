@@ -271,8 +271,10 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 	empresaID := req.GetQueryInt("empresa-id")
 	// core.Log("usuario::")
 	// core.Print(req.Usuario)
-	if empresaID == 0 {
+	if empresaID == 0 && req.Usuario != nil {
 		empresaID = req.Usuario.EmpresaID
+	} else if empresaID == 0 {
+		empresaID = 1
 	}
 
 	categoriaID := req.GetQueryInt("categoria-id")

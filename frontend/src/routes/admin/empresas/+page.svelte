@@ -7,7 +7,8 @@
   import { Notify, throttle } from "$core/helpers"
   import { Core, closeModal } from "$core/store.svelte"
   import { formatTime } from "$lib/helpers"
-  import { Loading } from "notiflix"
+  import pkg from 'notiflix'
+const { Loading } = pkg
   import { EmpresasService, postEmpresa, type IEmpresa } from "./empresas.svelte"
 
   const empresasService = new EmpresasService()

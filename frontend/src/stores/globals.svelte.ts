@@ -1,4 +1,4 @@
-import { getWindow } from "$lib/security"
+import { getWindow } from "$shared/env"
 
 export const checkDevice = () => {
   const Window = getWindow()

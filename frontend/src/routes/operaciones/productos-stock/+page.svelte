@@ -4,7 +4,8 @@
     import type { ITableColumn } from "$components/VTable";
     import VTable from "$components/VTable/vTable.svelte";
     import { Notify, throttle } from "$lib/helpers";
-    import { Loading } from "notiflix";
+    import pkg from 'notiflix'
+const { Loading } = pkg;
     import { ProductosService } from "../productos/productos.svelte";
     import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte";
     import { getProductosStock, postProductosStock, type IProductoStock } from "./productos-stock.svelte";

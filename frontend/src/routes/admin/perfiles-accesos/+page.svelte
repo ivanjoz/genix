@@ -11,7 +11,8 @@
   import { Notify, throttle } from "$core/helpers"
   import { Core, closeModal } from "$core/store.svelte"
   import Modules from "$core/modules"
-  import { Loading } from "notiflix"
+  import pkg from 'notiflix'
+const { Loading } = pkg
   import { 
     AccesosService, 
     PerfilesService, 

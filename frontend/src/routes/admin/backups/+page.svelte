@@ -5,7 +5,8 @@
   import { ConfirmWarn, formatTime } from "$lib/helpers";
   import { Env } from "$lib/security";
   import { formatN } from "$shared/main";
-  import { Loading } from "notiflix";
+  import pkg from 'notiflix'
+const { Loading } = pkg;
   import { BackupsService, createBackup, restoreBackup, type IBackup } from "./backups.svelte";
     import { sendServiceMessage } from "$lib/sw-cache";
 

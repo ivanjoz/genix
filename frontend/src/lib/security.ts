@@ -1,7 +1,7 @@
 import { decrypt } from "../shared/main"
 import { reloadLogin, type ILoginResult } from "../services/admin/login"
 import { Env, IsClient, LocalStorage } from "../shared/env"
-import { Notify, throttle } from "$core/helpers"
+import { Notify, throttle } from "$lib/helpers"
 import type { IUsuario } from "../routes/admin/usuarios/usuarios.svelte"
 
 // Token refresh constants (all in seconds)

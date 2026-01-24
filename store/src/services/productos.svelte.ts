@@ -58,7 +58,7 @@ export const productosServiceState = $state({
 
 export type IFetch = (
   input: string | URL | Request, init?: RequestInit
-) => Promise<Response> 
+) => Promise<Response>
 
 export interface IProductosResult {
   productos: IProducto[]
@@ -81,8 +81,11 @@ export const getProductos = async (categoriasIDs?: number[]): Promise<IProductos
         .then(res => {
           return res.json()
         })
-        .then(res => {
-          for(const e of res.productos as IProducto[]){
+				.then(res => {
+					console.log("Productos response:", Object.keys(res))
+					console.log(res)
+
+          for(const e of (res.productos||[]) as IProducto[]){
             e.Image = (e.Images||[])[0] || { n: "" } as IProductoImage
           }
 
