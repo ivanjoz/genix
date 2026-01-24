@@ -54,13 +54,20 @@ const config = {
 			precompress: false,
 			strict: true
 		}),
+		files: {
+			assets: 'static',
+			lib: 'lib',
+			routes: 'routes',
+			serviceWorker: 'workers/service-worker',
+			appTemplate: 'app.html'
+		},
 		alias: {
-			$lib: './src/lib',
-			$components: './src/components',
-			$core: './src/core',
-			$shared: './src/shared',
-			$ecommerce: './src/ecommerce',
-			$services: './src/services'
+			$lib: './lib',
+			$components: './components',
+			$core: './core',
+			$shared: './shared',
+			$ecommerce: './ecommerce',
+			$services: './services'
 		},
 		prerender: {
 			handleHttpError: 'warn'

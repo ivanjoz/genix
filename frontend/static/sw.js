@@ -1,4 +1,4 @@
-// src/lib/unmarshall.ts
+// lib/unmarshall.ts
 var unmarshall = (encoded) => {
   if (!Array.isArray(encoded) || encoded.length !== 2) {
     return encoded;
@@ -106,7 +106,7 @@ var unmarshall = (encoded) => {
   return decode(content);
 };
 
-// src/core/sharedHelpers.ts
+// core/sharedHelpers.ts
 var recreateObject = (obj, keysMap) => {
   if (Array.isArray(obj)) {
     return obj.map((x) => recreateObject(x, keysMap));
@@ -132,7 +132,7 @@ var recreateObject = (obj, keysMap) => {
   return obj;
 };
 
-// src/workers/service-worker-cache.ts
+// workers/service-worker-cache.ts
 var PRECACHE = "precache-v2";
 var CACHE_ASSETS = "assets-v2";
 var CACHE_STATIC = "static-v2";
@@ -520,7 +520,7 @@ var parseObject = (rec) => {
   return newObject;
 };
 
-// src/workers/service-worker.ts
+// workers/service-worker.ts
 var parseResponseAsStream = async (fetchResponse, props) => {
   const contentType = fetchResponse.headers.get("Content-Type");
   if (fetchResponse.status && props.status) {
