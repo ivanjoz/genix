@@ -10,7 +10,7 @@
 	import Header from '$components/layout/Header.svelte';
 	import Page from '$components/Page.svelte';
 	import SideMenu from '$components/layout/SideMenu.svelte';
-	import Modules from '../core/modules';
+	import Modules from "$core/modules";
 	import { Core, getDeviceType } from '$core/store.svelte';
 	import ImageWorker from '../workers/image-worker?worker';
 
@@ -28,6 +28,10 @@
 	}
 	
 	const redirectsToLogin = $derived.by(() => {
+		// Skip auth check for store routes (public-facing)
+		if(page.url.pathname.startsWith('/store')){
+			return false
+		}
 		if(["/login"].includes(page.url.pathname)){
 			return false
 		}

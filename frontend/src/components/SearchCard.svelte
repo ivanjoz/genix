@@ -1,7 +1,7 @@
 <script lang="ts" generics="T,E">
     import { untrack } from "svelte";
   import SearchSelect from "./SearchSelect.svelte";
-    import { WeakSearchRef } from "../core/store.svelte";
+    import { WeakSearchRef } from "$core/store.svelte";
 
   interface SearchSelectProps<T> {
     saveOn?: T;

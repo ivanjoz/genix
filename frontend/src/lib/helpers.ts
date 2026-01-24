@@ -384,3 +384,18 @@ export const formatTime = (date: Date | number | string, layout?: string): (Date
   return fechaStr
 }
 
+export const arrayToMapN = <T>(array: T[], keys?: keyof T | (keyof T)[]):
+  Map<number, T> => {
+  const map = new Map()
+  if (typeof keys === 'string') { 
+    for (const e of array) { map.set(e[keys  as keyof T], e) } 
+  } else if (Array.isArray(keys)) {
+    for (const e of array) {
+      const keyGrouped = keys.map(key => (e[key as keyof T] || "")).join("_")
+      map.set(keyGrouped, e)
+    }
+  }
+  else { console.warn('No es un array::', array) }
+  return map
+}
+

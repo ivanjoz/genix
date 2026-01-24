@@ -55,9 +55,12 @@ const config = {
 			strict: true
 		}),
 		alias: {
+			$lib: './src/lib',
 			$components: './src/components',
 			$core: './src/core',
-			$shared: './src/shared'
+			$shared: './src/shared',
+			$ecommerce: './src/ecommerce',
+			$services: './src/services'
 		}
 	}
 };

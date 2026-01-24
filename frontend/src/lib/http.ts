@@ -1,4 +1,4 @@
-import { Notify } from "../core/helpers"
+import { Notify } from "$core/helpers"
 import axios, { type AxiosProgressEvent } from 'axios';
 import { formatN } from "../shared/main"
 import type { CacheMode, serviceHttpProps } from "../workers/service-worker"

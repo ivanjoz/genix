@@ -10,7 +10,8 @@
 		"build": "vite build && node postbuild",
 		"publish": "vite build && node postbuild --publish",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"prebuild:store": "node scripts/thumbhash-prebuild.js"
 	},
 	"overrides": {
 		"rolldown": "^1.0.0-beta.58"
@@ -30,6 +31,7 @@
 		"@tailwindcss/vite": "^4.1.13",
 		"@types/mime-types": "^3.0.1",
 		"@types/node": "^24.10.0",
+		"sharp": "^0.34.3",
 		"svelte": "^5.39.5",
 		"svelte-check": "^4.3.2",
 		"svelte-infinitable": "^0.0.14",
@@ -46,6 +48,7 @@
 		"@mlc-ai/web-llm": "^0.2.80",
 		"@xenova/transformers": "^2.17.2",
 		"axios": "^1.13.2",
+		"embla-carousel-svelte": "^8.6.0",
 		"esbuild": "^0.25.12",
 		"mime-types": "^3.0.1",
 		"notiflix": "^3.2.8",
@@ -55,6 +58,7 @@
 		"svelte-awesome-color-picker": "^4.1.0",
 		"svelte-lexical": "^0.6.3",
 		"tailwind-merge": "^3.3.1",
-		"tailwind-variants": "^3.1.1"
+		"tailwind-variants": "^3.1.1",
+		"thumbhash": "^0.1.1"
 	}
 }

@@ -100,7 +100,7 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 			sede := &sedes[i]
 			if pc, ok := paisCiudadesMap[sede.CiudadID]; ok {
 				if pc.Departamento != nil {
-					sede.Ciudad = core.Concat("|", pc.Nombre, pc.Provincia.Nombre, pc.Departamento.Nombre)
+					sede.CiudadID = core.Concat("|", pc.Nombre, pc.Provincia.Nombre, pc.Departamento.Nombre)
 				}
 			}
 		}

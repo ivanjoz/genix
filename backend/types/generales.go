@@ -120,7 +120,7 @@ type ParametrosTable struct {
 	EmpresaID db.Col[ParametrosTable, int32]
 	Grupo     db.Col[ParametrosTable, int32]
 	Key       db.Col[ParametrosTable, string]
-	Valor     db.ColSlice[ParametrosTable, string]
+	Valor     db.Col[ParametrosTable, string]
 	ValorInt  db.Col[ParametrosTable, int32]
 	Valores   db.ColSlice[ParametrosTable, int32]
 	Status    db.Col[ParametrosTable, int8]

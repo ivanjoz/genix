@@ -12,8 +12,8 @@
   import SearchSelect from "../../../components/SearchSelect.svelte";
   import type { ITableColumn } from "../../../components/VTable";
   import VTable from "../../../components/VTable/vTable.svelte";
-  import { throttle } from "../../../core/helpers";
-  import { Core } from "../../../core/store.svelte";
+  import { throttle } from "$core/helpers";
+  import { Core } from "$core/store.svelte";
   import { formatN } from "../../../shared/main";
   import Atributos from "./Atributos.svelte";
   import CategoriasMarcas from "./CategoriasMarcas.svelte";

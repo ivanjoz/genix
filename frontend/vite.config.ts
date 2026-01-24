@@ -123,6 +123,21 @@ export default defineConfig({
       output: {
         // This tries to keep the IDs based on content rather than index
         hashCharacters: 'base64',
+        manualChunks: (id) => {
+          // Separate admin and store chunks to prevent loading admin code on store routes
+          if (id.includes('/admin/') || id.includes('/cms/') || id.includes('/operaciones/')) {
+            return 'admin';
+          }
+          if (id.includes('/ecommerce/') || id.includes('/store/')) {
+            return 'store';
+          }
+          // Shared code goes to common chunk
+          if (id.includes('/components/') || id.includes('/lib/') || id.includes('/core/')) {
+            return 'shared';
+          }
+          // Everything else goes to vendor
+          return 'vendor';
+        },
       }
     } as RolldownOptions
   },
