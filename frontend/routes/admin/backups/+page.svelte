@@ -119,7 +119,7 @@ const { Loading } = pkg;
       <div class="mb-6 h2 ff-bold">Restore</div>
       <div class="_1 w-full rounded-[8px] min-h-160 py-12 px-16">
         {#if !backupSelected}
-          <div class="w-full c-red ff-bold flex-wrap box-error-ms mt-16">
+          <div class="w-full text-red-500 ff-bold flex-wrap box-error-ms mt-16">
             Seleccione un Backup
           </div>
         {:else}

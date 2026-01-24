@@ -42,7 +42,7 @@ const { Loading } = pkg;
     },
     { header: "SKU",
       getValue: e => e.SKU || ""
-    },    
+    },
     { header: "Presentación",
       getValue: e => {
         if(!e.PresentacionID){ return "" }
@@ -63,9 +63,9 @@ const { Loading } = pkg;
             children: [
               { text: String(e._cantidadPrev > 0 ?  e._cantidadPrev : 0) },
               { text: "→", css: "ml-2 mr-2"  },
-              { text: e.Cantidad, css: "c-red"  }
+              { text: e.Cantidad, css: "text-red-500"  }
             ]
-          }          
+          }
         } else {
           return { text: e.Cantidad || ""  }
         }
@@ -123,10 +123,10 @@ const { Loading } = pkg;
       const presentacionesIDs = pr.Presentaciones?.length > 0 ? pr.Presentaciones.map(x => x.id) : [0]
       for(const presentacionID of presentacionesIDs){
         const stockID = [filters.almacenID, pr.ID, presentacionID || "", "", ""].join("_")
-        if(productosStockMap.has(stockID)){ 
+        if(productosStockMap.has(stockID)){
           const e = productosStockMap.get(stockID) as IProductoStock
           e.PresentacionID = presentacionID
-          continue 
+          continue
         }
 
         const stock = {
@@ -176,7 +176,7 @@ const { Loading } = pkg;
 
 <Page sideLayerSize={640} title="productos-stock">
   <div class="flex items-center mb-8">
-    <SearchSelect options={almacenes?.Almacenes||[]} keyId="ID" keyName="Nombre" 
+    <SearchSelect options={almacenes?.Almacenes||[]} keyId="ID" keyName="Nombre"
       bind:saveOn={filters} save="almacenID" placeholder="ALMACÉN ::"
       css="w-270"
       onChange={() => {
@@ -184,7 +184,7 @@ const { Loading } = pkg;
       }}
     />
     {#if !filters.almacenID}
-      <div class="ml-12 c-red"><i class="icon-attention"></i>Debe seleccionar un almacén.</div>
+      <div class="ml-12 text-red-500"><i class="icon-attention"></i>Debe seleccionar un almacén.</div>
     {:else}
       <div class="i-search w-full md:w-200 md:ml-12 col-span-5">
         <div><i class="icon-search"></i></div>
@@ -193,7 +193,7 @@ const { Loading } = pkg;
           throttle(() => { filterText = value },150)
         }}>
       </div>
-      <Checkbox label="Todos los Productos" bind:saveOn={filters} save="showTodosProductos" 
+      <Checkbox label="Todos los Productos" bind:saveOn={filters} save="showTodosProductos"
         css="ml-16" />
     {/if}
     <div class="ml-auto">

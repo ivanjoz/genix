@@ -1,22 +1,22 @@
 <script lang="ts">
   import SearchSelect from "$components/SearchSelect.svelte";
   import { useCiudadesAPI, type ICiudad } from "../services/ciudades.svelte";
-  
+
   export interface ICiudades {
     css: string
     saveOn: any
     save: string
     onChange?: () => void
   }
-  
+
   const {
     css, saveOn, save, onChange
   }: ICiudades = $props();
 
-  let form = $state({ 
-    departamentoID: saveOn.departamentoID || "", 
-    provinciaID: saveOn.provinciaID || "", 
-    distritoID: saveOn.distritoID || "" 
+  let form = $state({
+    departamentoID: saveOn.departamentoID || "",
+    provinciaID: saveOn.provinciaID || "",
+    distritoID: saveOn.distritoID || ""
   })
 
   const ciudades = useCiudadesAPI()
@@ -56,7 +56,7 @@
       form.provinciaID = ""
       form.distritoID = ""
       form.provinciaID = ""
-    } 
+    }
   })
 
   const doSave = () => {
@@ -69,7 +69,7 @@
 </script>
 
 <SearchSelect saveOn={form} save="departamentoID" css={css}
-  label={"Departamento "+ciudades.departamentos.length} keys="ID.Nombre" required={true}
+  label={"Departamento"} keyId="ID" keyName="Nombre" required={true}
   options={ciudades.departamentos}
   onChange={e => {
     console.log("departamento::", e)
@@ -81,7 +81,7 @@
   }}
 />
 <SearchSelect saveOn={form} save="provinciaID" css={css}
-  label="Provincia" keys="ID.Nombre" required={true}
+  label="Provincia" keyId="ID" keyName="Nombre" required={true}
   options={provincias}
   onChange={e => {
     form.distritoID = null
@@ -90,7 +90,7 @@
   }}
 />
 <SearchSelect saveOn={form} save="distritoID" css={css}
-  label="Distrito" keys="ID.Nombre" required={true}
+  label="Distrito" keyId="ID" keyName="Nombre" required={true}
   options={distritos}
   onChange={() => { doSave() }}
 />

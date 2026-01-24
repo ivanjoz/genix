@@ -140,7 +140,7 @@
         else if (isInputValid === 2)
             return `<i class="v-icon icon-ok c-green"></i>`;
         else if (isInputValid === 1)
-            return `<i class="v-icon icon-attention c-red"></i>`;
+            return `<i class="v-icon icon-attention text-red-500"></i>`;
         return null;
     };
 

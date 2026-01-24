@@ -221,9 +221,9 @@
   function iconValid() {
     if (!isValid) return null;
     if (isValid === 2) {
-      return `<i class="v-icon icon-ok c-green"></i>`;
+      return `<i class="v-icon icon-ok text-green-600"></i>`;
     } else if (isValid === 1) {
-      return `<i class="v-icon icon-attention c-red"></i>`;
+      return `<i class="v-icon icon-attention text-red-600"></i>`;
     }
     return null;
   }
@@ -248,8 +248,8 @@
 
   const handleOpenMobileLayer = () => {
     Core.showMobileSearchLayer = {
-      options: filteredOptions, 
-      keyName: keyName as string, 
+      options: filteredOptions,
+      keyName: keyName as string,
       keyID: keyId as string,
       onSelect: (e) => { onOptionClick(e) },
       onRemove: (e) => {
@@ -298,12 +298,12 @@
         onblur={(ev) => {
           ev.stopPropagation();
           console.log("avoidBlur 2", avoidBlur)
-          if(avoidBlur){ 
+          if(avoidBlur){
             avoidBlur = false
             inputRef.focus()
-            return 
+            return
           }
-          
+
           let inputValue = String(inputRef.value || "").toLowerCase();
           const selectedItem = options.find((x) => {
             const itemName = String(x[keyName] || "");

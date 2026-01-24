@@ -85,14 +85,14 @@
 				handleClick(ev as any);
 			}
 		}}
-	>	
+	>
 		{#if render}
 			<Renderer elements={render(currentValue)}/>
 		{:else}
 			{currentValue}
 		{/if}
 		{#if !currentValue && required}
-			<i class="icon-attention c-red"></i>
+			<i class="icon-attention text-red-500"></i>
 		{/if}
 	</div>
 	{#if isEditing}
@@ -154,8 +154,7 @@
 		position: relative;
 	}
 
-	.c-red {
+	.text-red-500 {
 		color: #dc3545;
 	}
 </style>
-

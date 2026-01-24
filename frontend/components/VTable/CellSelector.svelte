@@ -84,7 +84,7 @@
   }
 
   $effect(() => {
-    if(selected || !selected){ 
+    if(selected || !selected){
       console.log("selected 2",selected)
     }
 	})
@@ -104,7 +104,7 @@
 			inputRef.focus();
 		}
 	})
-  
+
   $effect(() => {
     if(saveOn && save){
       buildMap()
@@ -124,7 +124,7 @@
 </script>
 
 <div class="_2">{renderContent}</div>
-<div class="_1" bind:this={refElement} 
+<div class="_1" bind:this={refElement}
   role="button"
   tabindex="0"
   onkeydown={(ev) => {
@@ -142,7 +142,7 @@
   >
     { renderContent }
     {#if !selected && required}
-      <i class="icon-attention c-red"></i>
+      <i class="icon-attention text-red-500"></i>
     {/if}
   </div>
   {#if show}
@@ -168,18 +168,18 @@
     referenceElement={refElement}
     open={show}
     placement="bottom"
-  > 
+  >
     <div class="h-200 w-400 p-4 _4 overflow-auto">
       <SvelteVirtualList items={optionsFiltered}>
         {#snippet renderItem(item)}
           <div class="_3 min-h-28 px-8 py-4 flex items-center"
             role="button"
             tabindex="0"
-            onclick={ev => { 
+            onclick={ev => {
               ev.stopPropagation()
-              onSelect(item) 
+              onSelect(item)
             }}
-            onmousedown={() => { 
+            onmousedown={() => {
               avoidBlur = true
             }}
             onkeydown={(ev) => {

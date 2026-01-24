@@ -13,16 +13,16 @@
   import Modules from "$core/modules"
   import pkg from 'notiflix'
 const { Loading } = pkg
-  import { 
-    AccesosService, 
-    PerfilesService, 
-    postSeguridadAccesos, 
+  import {
+    AccesosService,
+    PerfilesService,
+    postSeguridadAccesos,
     postPerfil,
     accesosGrupos,
     accesoAcciones,
     arrayToMapN,
-    type IAcceso, 
-    type IPerfil 
+    type IAcceso,
+    type IPerfil
   } from "./perfiles-accesos.svelte"
   import AccesoCard from "./AccesoCard.svelte"
 
@@ -63,8 +63,8 @@ const { Loading } = pkg
     for (let [key, accesosGroup] of gruposMap) {
       const [moduleID, group] = key.split("_").map(x => parseInt(x))
       accesosGrouped_.push({
-        moduleID, 
-        group, 
+        moduleID,
+        group,
         accesos: accesosGroup,
         groupName: accesosGruposMap.get(group)?.name || "",
         moduleName: moduleSelectedID ? "" : modulesMap.get(moduleID)?.name || ""
@@ -76,7 +76,7 @@ const { Loading } = pkg
 
   async function saveAcceso() {
     const form = accesoForm
-    if (!form.nombre || !form.orden || (form.acciones?.length || 0) == 0 
+    if (!form.nombre || !form.orden || (form.acciones?.length || 0) == 0
       || !form.grupo || (form.modulosIDs?.length || 0) === 0) {
       Notify.failure("Faltan propiedades para agregar el acceso.")
       return
@@ -86,10 +86,10 @@ const { Loading } = pkg
 
     try {
       const result = await postSeguridadAccesos(form)
-      
+
       if ((form.id || 0) <= 0) form.id = result.id
       accesosService.updateAcceso(form)
-      
+
       accesoForm = {} as IAcceso
       closeModal(1)
       Notify.success("Acceso guardado correctamente")
@@ -110,7 +110,7 @@ const { Loading } = pkg
       form.accesos = []
       for (let [accesoID, niveles] of form.accesosMap) {
         if (niveles.length === 0) { form.accesosMap.delete(accesoID) }
-        for (let n of niveles) { 
+        for (let n of niveles) {
           form.accesos.push(accesoID * 10 + n)
         }
       }
@@ -126,11 +126,11 @@ const { Loading } = pkg
 
     try {
       const result = await postPerfil(form)
-      
+
       if ((form.id || 0) <= 0) form.id = result.id
       form._open = false
       perfilesService.updatePerfil(form)
-      
+
       perfilForm = {} as IPerfil
       closeModal(2)
       Notify.success("Perfil guardado correctamente")
@@ -141,18 +141,18 @@ const { Loading } = pkg
   }
 
   const columns: ITableColumn<IPerfil>[] = [
-    { 
-      header: "ID", 
-      headerCss: "w-54", 
+    {
+      header: "ID",
+      headerCss: "w-54",
       cellCss: "text-center c-purple",
       getValue: e => e.id
     },
-    { 
+    {
       header: "Perfil", highlight: true,
       getValue: e => e.nombre
     },
-    { 
-      header: "...", 
+    {
+      header: "...",
       headerCss: "w-42",
       cellCss: "text-center",
       id: "actions",
@@ -189,8 +189,8 @@ const { Loading } = pkg
           </button>
         </div>
       </div>
-      <VTable 
-        css="w-full selectable" 
+      <VTable
+        css="w-full selectable"
         columns={columns}
         maxHeight="calc(100vh - 8rem - 16px)"
         data={perfilesService.perfiles}
@@ -215,7 +215,7 @@ const { Loading } = pkg
         <div class="ff-bold text-xl">
           <span>Accesos</span>
           {#if accesoEdit}
-            <span class="c-red">(Modo Edición)</span>
+            <span class="text-red-500">(Modo Edición)</span>
           {/if}
           {#if perfilForm.id > 0}
             <span class="mr-4">:</span>
@@ -247,7 +247,7 @@ const { Loading } = pkg
               accesoEdit = !accesoEdit
             }} aria-label="Editar">
               {#if accesoEdit}
-                <i class="c-red icon-cancel"></i>
+                <i class="text-red-500 icon-cancel"></i>
               {:else}
                 <i class="icon-pencil"></i>
               {/if}
@@ -266,8 +266,8 @@ const { Loading } = pkg
         </div>
         <div class="grid grid-cols-3 gap-x-12 gap-y-8 mb-16">
           {#each ag.accesos as acceso}
-            <AccesoCard 
-              {acceso} 
+            <AccesoCard
+              {acceso}
               isEdit={accesoEdit}
               bind:perfilForm
               onEdit={() => {
@@ -282,7 +282,7 @@ const { Loading } = pkg
   </div>
 
   <!-- Modal for Acceso -->
-  <Modal 
+  <Modal
     id={1}
     size={6}
     title={(accesoForm?.id > 0 ? "Editando" : "Creando") + " Acceso"}
@@ -290,41 +290,41 @@ const { Loading } = pkg
     onSave={() => saveAcceso()}
   >
     <div class="grid grid-cols-24 gap-10 p-6">
-      <Input 
-        bind:saveOn={accesoForm} 
+      <Input
+        bind:saveOn={accesoForm}
         save="nombre"
-        css="col-span-14" 
-        label="Nombre" 
+        css="col-span-14"
+        label="Nombre"
         required={true}
       />
-      <SearchSelect 
-        bind:saveOn={accesoForm} 
+      <SearchSelect
+        bind:saveOn={accesoForm}
         save="grupo"
-        css="col-span-10" 
-        label="Grupo" 
+        css="col-span-10"
+        label="Grupo"
         required={true}
         options={accesosGrupos}
         keyId="id"
         keyName="name"
       />
-      <Input 
-        bind:saveOn={accesoForm} 
+      <Input
+        bind:saveOn={accesoForm}
         save="descripcion"
-        css="col-span-16" 
+        css="col-span-16"
         label="Descripción"
       />
-      <Input 
-        bind:saveOn={accesoForm} 
+      <Input
+        bind:saveOn={accesoForm}
         save="orden"
-        css="col-span-8" 
-        label="Orden" 
+        css="col-span-8"
+        label="Orden"
         type="number"
       />
-      <SearchCard 
-        bind:saveOn={accesoForm} 
+      <SearchCard
+        bind:saveOn={accesoForm}
         save="modulosIDs"
-        css="col-span-24" 
-        label="Módulos" 
+        css="col-span-24"
+        label="Módulos"
         options={Modules}
         keyId="id"
         keyName="name"
@@ -334,10 +334,10 @@ const { Loading } = pkg
         <div class="ff-bold text-lg">Acciones</div>
         <div class="h-[1px] grow bg-gray-300"></div>
       </div>
-      <CheckboxOptions 
-        bind:saveOn={accesoForm} 
+      <CheckboxOptions
+        bind:saveOn={accesoForm}
         save="acciones"
-        css="col-span-24 flex-wrap gap-y-8" 
+        css="col-span-24 flex-wrap gap-y-8"
         options={accesoAcciones}
         keyId="id"
         keyName="name"
@@ -347,7 +347,7 @@ const { Loading } = pkg
   </Modal>
 
   <!-- Modal for Perfil -->
-  <Modal 
+  <Modal
     id={2}
     size={5}
     title={(perfilForm?.id > 0 ? "Editando" : "Creando") + " Perfil"}
@@ -356,17 +356,17 @@ const { Loading } = pkg
     onClose={() => { perfilForm = {} as IPerfil }}
   >
     <div class="grid grid-cols-24 gap-10 p-6">
-      <Input 
-        bind:saveOn={perfilForm} 
+      <Input
+        bind:saveOn={perfilForm}
         save="nombre"
-        css="col-span-24" 
-        label="Nombre" 
+        css="col-span-24"
+        label="Nombre"
         required={true}
       />
-      <Input 
-        bind:saveOn={perfilForm} 
+      <Input
+        bind:saveOn={perfilForm}
         save="descripcion"
-        css="col-span-24" 
+        css="col-span-24"
         label="Descripción"
       />
     </div>
