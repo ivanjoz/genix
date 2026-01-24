@@ -10,5 +10,6 @@
      "**/ai/**",
      "**/.vscode/**",
      "**/docs/**",
+     "**/store_deprecated/**",
 	]
 }

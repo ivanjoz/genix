@@ -296,15 +296,14 @@
     }
 
     const subheader0 = document.getElementById("sh-0")
-    const subheader1 = document.getElementById("sh-1")
 
     const handleScroll = () => {
       // console.log("comparison:", window.scrollY, subheaderElement.offsetTop);
 
-      if (window.scrollY > subheader0.offsetTop) {
-        subheader0.classList.add("s1")
+      if (window.scrollY > (subheader0?.offsetTop || 0)) {
+        subheader0?.classList.add("s1")
       } else {
-        subheader0.classList.remove("s1")
+        subheader0?.classList.remove("s1")
       }
     };
 
@@ -313,27 +312,6 @@
     return () => {
       window.removeEventListener("scroll", handleScroll);
     };
-
-    // Your DOM manipulation code here
-    // This runs as soon as HTML is parsed, before images/stylesheets finish loading
-    /*
-    console.log("DOM ready, elements...");
-    console.log(
-      "images::",
-      Array.from(document.getElementsByClassName("_bhi_")),
-    );
-    // Example: Find and modify elements
-    for (const el of Array.from(document.getElementsByClassName("_bhi_"))) {
-      const imageHash = (el.getAttribute("src")||"").replace("/?","");
-      if (!imageHash) {
-        console.log("Missin image src:", el);
-        continue;
-      }
-      const imageSrc = thumbHashToDataURL(imageHash);
-      console.log("generando src::", imageSrc, "|", imageHash);
-      el.setAttribute("src", imageSrc);
-    }
-    */
   }
 
   if (typeof window != "undefined") {
