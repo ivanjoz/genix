@@ -57,10 +57,10 @@
 		})
 	})
 
-	const routesWithoutLayout: string[] = ["login","store"]
+	const routesWithoutLayout: string[] = ["/login","/store"]
 	// Check if current route should show Header and SideMenu
 	let showLayout = $derived(
-		!routesWithoutLayout.some(x => !page.url.pathname.startsWith(x))
+		!routesWithoutLayout.some(x => page.url.pathname.startsWith(x))
 	);
 </script>
 

@@ -1,7 +1,4 @@
-@import "tailwindcss/utilities";
-@source not inline('--tw-backdrop-saturate');
-@source not inline('--tw-gradient-to-position');
-@source not inline('--tw-outline-style');
+@import "tailwindcss";
 
 @theme {
   --breakpoint-2xl: 1539px;
