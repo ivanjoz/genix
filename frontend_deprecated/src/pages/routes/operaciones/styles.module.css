@@ -1,0 +1,24 @@
+.categoria_card {
+  background-color: rgb(255, 255, 255);
+  width: 18rem;
+  min-height: 8rem;
+  border-radius: 8px;
+  box-shadow: rgba(0, 0, 0, 0.1) 0px 4px 6px -1px, rgba(0, 0, 0, 0.06) 0px 2px 4px -1px;
+}
+.categoria_card:hover {
+  outline: 2px solid rgba(0, 0, 0, 0.5);
+}
+.categoria_card_image {
+  background-color: rgb(235, 233, 245);
+  min-height: 4rem;
+}
+.categoria_card_image_upload {
+  width: 15rem;
+  height: 13rem;
+}
+.categoria_card_image img {
+  max-height: 7rem;
+  object-fit: cover;
+  object-position: center;
+  width: 100%;
+}

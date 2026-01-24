@@ -1,0 +1,109 @@
+.card_venta {
+  background-color: var(--white-4);
+  height: 2.6rem;
+  padding: 0 7px;
+  box-shadow: #5a5e6330 0px 1px 8px 0px;
+  user-select: none;
+  outline: 1px solid transparent;
+  cursor: pointer;
+}
+:global(.sku) > .card_venta {
+  height: 3.6rem;
+}
+.card_venta:hover, :global(.sld) > .card_venta {
+  outline-color: var(--black-1);
+}
+.card_venta_nombre {
+  background-color: var(--white-4);
+  position: absolute;
+  top: -10px;
+  left: -1px;
+  height: 1.6rem;
+  z-index: 5;
+  padding: 0 1rem 0 7px;
+  border: 1px solid var(--black-1);
+  border-bottom: none;
+  border-right: none;
+  display: none;
+}
+.card_venta_nombre_line {
+  position: absolute;
+  right: 0px;
+  height: 9px;
+  top: 0px;
+  border-left: 1px solid var(--black-1);
+}
+.card_venta:hover .card_venta_nombre,
+:global(.sld) .card_venta .card_venta_nombre {
+  display: flex;
+}
+.card_venta:hover .card_venta_producto,
+:global(.sld) .card_venta .card_venta_producto {
+  display: none;
+}
+.card_venta:hover .card_venta_producto_ctn,
+:global(.sld) .card_venta .card_venta_producto_ctn {
+  padding-top: 0.7rem;
+}
+.buttons_cantidad {
+  display: none;
+  padding-bottom: 2px;
+  z-index: 11;
+}
+.card_venta:hover .buttons_cantidad,
+:global(.sld) .buttons_cantidad {
+  display: flex;
+}
+.button_venta_cantidad {
+  border-radius: 7px;
+  margin: 0 2px;
+  height: 1.6rem;
+  width: 2rem;
+  background-color: rgb(226, 230, 240);
+}
+body:global(.dark) .button_venta_cantidad {
+  background-color: rgb(50, 65, 102);
+}
+.button_venta_cantidad:hover {
+  color: white;
+  background-color: rgb(56, 99, 209);
+}
+body:global(.dark) .button_venta_cantidad:hover {
+  color: rgb(58, 55, 255);
+  background-color: rgb(255, 255, 255);
+}
+.input_cantidad > * {
+  display: none;
+}
+.card_venta:hover .input_cantidad > *,
+:global(.sld) .input_cantidad > * {
+  display: block;
+}
+
+.input_cantidad > input {
+  padding: 0 2px;
+  height: 2rem;
+  text-align: center;
+  border: 1px solid rgb(173, 172, 189);
+}
+.input_cantidad > input:focus {
+  border: 1px solid rgb(162, 160, 196);
+  outline: 1px solid rgb(114, 111, 168);
+}
+.input_cantidad > input:focus {
+  border: 1px solid rgb(162, 160, 196);
+  outline: 1px solid rgb(114, 111, 168);
+}
+.producto_sku {
+  margin: 2px 3px;
+  background-color: rgb(253, 230, 253);
+  color: rgb(83, 67, 83);
+  padding: 3px 6px 2px 6px;
+  border-radius: 7px;
+  line-height: 1;
+}
+.producto_sku:hover {
+  outline: 1px solid rgb(144, 72, 144);
+  background-color: rgb(144, 72, 144);
+  color: rgb(255, 235, 255);
+}
