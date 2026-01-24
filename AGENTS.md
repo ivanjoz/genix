@@ -1,3 +1,22 @@
+# AGENT OPERATIONAL PROTOCOL (V2)
+
+## 1. INTELLIGENT RESEARCH
+- **Identify Unknowns:** If a library, API, or error is not in your training data, use the `@search` tool immediately. Do not guess.
+- **One-Shot Research:** Gather enough info in one search to form a hypothesis. Avoid "research loops" where you search for the same thing multiple times without writing code.
+
+## 2. LOOP DETECTION & PREVENTION
+- **The "Two-Strike" Rule:** If a tool call (shell command or file edit) returns the same error twice, or if the code state doesn't change after an application, you are STUCK.
+- **STALL PROTOCOL:** Upon detecting a loop, you MUST stop all autonomous actions and present the following to the user:
+    1. **Summary:** What was attempted and why it failed.
+    2. **Hypothesis:** Your best guess on the root cause.
+    3. **Assumption:** A specific assumption you are making to move forward.
+    4. **The Ask:** "I'm stuck. Should I try [Proposed Fix] based on my assumption, or do you have a different direction?"
+
+## 3. ITERATION STYLE
+- **Bias toward Action:** For known territory (Go, React, PostgreSQL), apply the fix immediately.
+- **Verify & Share:** After a fix, run the relevant test or build command. If it passes, show the result. If it fails, trigger the "Stall Protocol" immediately rather than trying a "blind" second fix.
+- **Keep in Loop:** Every tool execution should be preceded by a 1-sentence "Intent" (e.g., "Updating the ScyllaDB connection string to test the timeout hypothesis").
+
 # Genix Project Structure for AI Agents
 
 This document provides guidance for AI agents to navigate the Genix project codebase and find relevant documentation.
@@ -11,33 +30,3 @@ For a general overview of the project, technology stack, and migration status, p
 ## Backend
 
 The backend is written in Go and uses ScyllaDB/Cassandra as its database. The backend code is located in the `backend/` directory.
-
-For detailed documentation on the backend, including the custom ORM for ScyllaDB/Cassandra, please refer to [backend/README.md](backend/README.md).
-
-## Frontend
-
-The project has two frontend directories:
-- `frontend/`: The legacy frontend built with Solid.js.
-- `frontend2/`: The new and current frontend built with Svelte.js and SvelteKit.
-
-**All new frontend development should be done in `frontend2/`.**
-
-The primary documentation for the frontend, including UI components, form handling, and data fetching, is in [frontend2/README.md](frontend2/README.md). This is the most important document for understanding the frontend architecture and conventions.
-
-For historical context on the old Solid.js frontend, you can refer to [frontend/README.md](frontend/README.md).
-
-## AI and Machine Learning
-
-The `ai/` directory contains scripts and resources related to AI and machine learning models, including training and inference.
-
-- For a quick start on using the AI functionalities, refer to [ai/QUICK_START.md](ai/QUICK_START.md).
-- For details on the Gemma model function calling, see [ai/FUNCTION_GEMMA.md](ai/FUNCTION_GEMMA.md).
-- For information on training the models, see [ai/README_TRAINING.md](ai/README_TRAINING.md).
-
-## E-commerce Store
-
-The `store/` directory contains the SvelteKit project for the e-commerce storefront. For basic information about this Svelte project, see [store/README.md](store/README.md).
-
-## Deployment
-
-Deployment instructions and scripts can be found in `DEPLOYMENT.md`, `deploy.sh`, and `backend/deploy.sh`.

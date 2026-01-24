@@ -39,10 +39,10 @@ type DemoStructTable struct {
 	Images      db.ColSlice[DemoStructTable, string]
 	RolesIDs    db.ColSlice[DemoStructTable, int32]
 	Descripcion db.Col[DemoStructTable, string]
+	DemoColumn  db.Col[DemoStructTable, InnerStruct]
 	Status      db.Col[DemoStructTable, int8]
 	Updated     db.Col[DemoStructTable, int64]
 	UpdatedBy   db.Col[DemoStructTable, int32]
-	DemoColumn  db.Col[DemoStructTable, InnerStruct]
 }
 
 func (e DemoStructTable) GetSchema() db.TableSchema {

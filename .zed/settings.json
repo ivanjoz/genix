@@ -1,0 +1,13 @@
+{
+  "project_name": "genix",
+ 	"file_scan_exclusions": [
+		"**/frontend_deprecated/**",
+		"**/node_modules/**",
+		"**/dist/**",
+     "**/build/**",
+     "**/target/**",
+     "**/.git/**",
+     "**/ai/**",
+     "**/.vscode/**",
+	]
+}

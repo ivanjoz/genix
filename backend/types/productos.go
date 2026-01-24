@@ -147,10 +147,11 @@ type Almacen struct {
 	// Propiedades generales
 	Status    int8  `json:"ss,omitempty" db:"status,view"`
 	Updated   int64 `json:"upd,omitempty" db:"updated,view"`
-	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
-	Created   int64 `json:",omitempty" db:"created"`
-	CreatedBy int32 `json:",omitempty" db:"created_by"`
-}
+		UpdatedBy   int32  `json:",omitempty" db:"updated_by"`
+		Created     int64  `json:",omitempty" db:"created"`
+		CreatedBy   int32  `json:",omitempty" db:"created_by"`
+		Ciudad      string `json:",omitempty"`
+	}
 
 type AlmacenTable struct {
 	db.TableStruct[AlmacenTable, Almacen]
@@ -207,7 +208,6 @@ type Sede struct {
 	UpdatedBy   int32  `json:",omitempty" db:"updated_by"`
 	Created     int64  `json:",omitempty" db:"created"`
 	CreatedBy   int32  `json:",omitempty" db:"created_by"`
-	Ciudad      string `json:",omitempty"`
 }
 
 type SedeTable struct {
