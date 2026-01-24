@@ -1,4 +1,4 @@
-import { IMenuRecord } from "./menu";
+import type { IMenuRecord } from "./menu.ts"
 
 export interface IModule {
   name: string
@@ -71,7 +71,7 @@ export const AdminModule: IModule = {
     },
     { name: "Comercial", minName: "Com",  id: 3, icon: "icon-tasks",
       options: [
-        { name: "Ventas", route: "/comercial/ventas",
+        { name: "Ventas", route: "/operaciones/ventas",
           icon: "icon-flash"
         },
       ]  
@@ -91,7 +91,7 @@ export const AdminModule: IModule = {
     },
     { name: "CMS", minName: "CMS",  id: 5, icon: "icon-buffer",
       options: [
-        { name: "Inicio", route: "/cms/page-1"
+        { name: "Inicio", route: "/cms/inicio"
         },
         { name: "Nosotros", route: "/cms/page-2"
         },
