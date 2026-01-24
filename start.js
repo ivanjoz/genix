@@ -25,7 +25,7 @@ if(!isConsole){
 }
 
 // Revisa si todo está instalado
-if (!fs.existsSync("node_modules")){ 
+if (!fs.existsSync("node_modules")){
   console.log("Instalando dependiencias de Node.js...")
   execSync('npm install', { encoding: 'utf-8' })
 }
@@ -34,42 +34,19 @@ const nodemon = require("nodemon")
 
 // Frontend 1
 const frontendPath = path.join(__dirname, 'frontend')
-if (!fs.existsSync(path.join(frontendPath, "node_modules"))){ 
-  console.log("No se encontraron los node_modules en el frontend. Instalando...")
+const frontendNodeModules = path.join(frontendPath, "node_modules")
+if (!fs.existsSync(frontendNodeModules) || !fs.existsSync(path.join(frontendNodeModules, "rolldown-vite"))){
+  console.log("No se encontraron los node_modules o faltan dependencias en el frontend. Instalando...")
   if(isWindows){
-    execSync(`cd ${frontendPath} & pnpm install`, { stdio: "inherit", shell: true })
+    execSync(`cd ${frontendPath} & bun install`, { stdio: "inherit", shell: true })
   } else {
-    execSync('cd frontend && pnpm install', { encoding: 'utf-8' })
+    execSync('cd frontend && bun install', { encoding: 'utf-8' })
   }
 }
 
 let frontendScript = `cd ./frontend && ${FRONTEND_SCRIPT}`
 if (isWindows) {
   frontendScript = `cd ${frontendPath} & ${FRONTEND_SCRIPT}`
-}
-
-// Store
-const storePath = path.join(__dirname, 'store')
-if (!fs.existsSync(path.join(storePath, "node_modules"))){ 
-  console.log("No se encontraron los node_modules en el frontend. Instalando...")
-  if(isWindows){
-    execSync(`cd ${storePath} & pnpm install`, { stdio: "inherit", shell: true })
-  } else {
-    execSync('cd frontend && pnpm install', { encoding: 'utf-8' })
-  }
-}
-
-let storeScript = `cd ./store && ${FRONTEND_SCRIPT}`
-if (isWindows) {
-  storeScript = `cd ${storePath} & ${FRONTEND_SCRIPT}`
-}
-
-// Frontend 2
-const frontendPath2 = path.join(__dirname, 'frontend2')
-
-let frontendScript2 = `cd ./frontend2 && ${FRONTEND_SCRIPT}`
-if (isWindows) {
-  frontendScript2 = `cd ${frontendPath2} & ${FRONTEND_SCRIPT}`
 }
 
 // Backend
@@ -142,8 +119,6 @@ const runScripts = () => {
 
   // Run all scripts in parallel
   runScript(frontendScript, YELLOW_BAR)
-  runScript(frontendScript2, YELLOW_BAR)
-  runScript(storeScript, YELLOW_BAR)
   startBackendGo()
 }
 
@@ -152,14 +127,14 @@ const runScript = (script, name) => {
   console.log("Ejecutando script:", script)
 
   const scriptProcess = isWindows ?
-    spawn(script, [], { 
-      stdio: ["ignore", "pipe", "pipe"], detached: false, shell: true }) 
+    spawn(script, [], {
+      stdio: ["ignore", "pipe", "pipe"], detached: false, shell: true })
     :
     spawn("bash", ["-c", script], {
       stdio: ["ignore", "pipe", "pipe"], // Capture stdout and stderr
       detached: false, // Ensures process terminates when Node.js exits
     });
-  
+
   const logdata = (prefix, data) => {
     const lines = data.toString().split("\n").filter(x => x)
     for (const line of lines) {
@@ -178,12 +153,12 @@ const killPortIfInUse = (port) => {
     try {
       const command = `netstat -ano | findstr :${port}`;
       const responseRaw = execSync(command, { encoding: "utf-8" });
-  
+
       if (!responseRaw) return;
-  
+
       const lines = responseRaw.trim().split("\n");
       const pids = new Set(); // Using a Set to avoid duplicates
-  
+
       lines.forEach((line) => {
         const parts = line.trim().split(/\s+/);
         const pid = parts[parts.length - 1]; // The PID is the last column
@@ -191,11 +166,11 @@ const killPortIfInUse = (port) => {
           pids.add(pid);
         }
       });
-  
+
       if (pids.size === 0) return;
-  
+
       console.log(`Port ${port} is being used by PIDs: ${[...pids].join(", ")}`);
-  
+
       pids.forEach((pid) => {
         try {
           execSync(`taskkill /PID ${pid} /F`);

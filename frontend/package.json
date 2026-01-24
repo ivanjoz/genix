@@ -16,12 +16,6 @@
 	"overrides": {
 		"rolldown": "^1.0.0-beta.58"
 	},
-	"pnpm": {
-		"overrides": {
-			"vite": "npm:rolldown-vite@latest",
-			"rolldown": "^1.0.0-beta.58"
-		}
-	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^6.1.0",
 		"@sveltejs/adapter-static": "^3.0.10",
