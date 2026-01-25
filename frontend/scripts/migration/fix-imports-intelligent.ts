@@ -64,18 +64,18 @@ const PACKAGES = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components', 'pkg-s
 const PACKAGE_TO_ALIAS: Record<string, string> = {
   'pkg-core': '$core',
   'pkg-services': '$services',
-  'pkg-ui': '$components',
-  'pkg-components': '$ecommerce',
-  'pkg-store': '$lib',
-  'pkg-app': '$lib',
+  'pkg-ui': '$ui',
+  'pkg-components': '$components',
+  'pkg-store': '$store',
+  'pkg-app': '$app',
 };
 
 // Known subdirectory mappings for cleaner imports
 const SUBDIR_MAPPINGS: Record<string, Record<string, string>> = {
   'pkg-core': {
-    'core': '',
-    'types': 'core',
     'lib': '',
+    'core': '',
+    'assets': '',
   },
   'pkg-services': {
     'services': '',
@@ -93,6 +93,10 @@ const SUBDIR_MAPPINGS: Record<string, Record<string, string>> = {
   },
   'pkg-store': {
     'stores': '',
+  },
+  'pkg-app': {
+    'routes': '',
+    'lib': '',
   },
 };
 
@@ -486,8 +490,45 @@ function constructImportPath(targetPackage: string, targetFile: string, sourceFi
   const alias = PACKAGE_TO_ALIAS[targetPackage];
   if (!alias) return null;
 
-  // Check if there's a subdirectory mapping
+  // Get the relative path from the package root
   const relativeFile = relative(join(FRONTEND_DIR, targetPackage), targetFile);
+  
+  // Special handling for $ui - it should point to pkg-ui/components
+  if (alias === '$ui' && relativeFile.startsWith('components/')) {
+    const remaining = relativeFile.replace(/^components\//, '');
+    return remaining ? `$ui/${remaining}` : '$ui';
+  }
+  
+  // Special handling for $components - it should point to pkg-ui/components
+  // but also check pkg-components/ecommerce as a fallback
+  if (alias === '$components') {
+    // If the file is in pkg-ui/components, use $components directly
+    if (targetFile.includes('/pkg-ui/components/')) {
+      const remaining = relativeFile.replace(/^components\//, '');
+      return remaining ? `$components/${remaining}` : '$components';
+    }
+    // If the file is in pkg-components/ecommerce, use $components
+    if (targetFile.includes('/pkg-components/ecommerce/')) {
+      const remaining = relativeFile.replace(/^ecommerce\//, '');
+      return remaining ? `$components/${remaining}` : '$components';
+    }
+  }
+  
+  // Special handling for $store - it should point to pkg-store
+  // but files might be in pkg-store/stores
+  if (alias === '$store' && relativeFile.startsWith('stores/')) {
+    const remaining = relativeFile.replace(/^stores\//, '');
+    return remaining ? `$store/${remaining}` : '$store';
+  }
+  
+  // Special handling for $services - it should point to pkg-services
+  // but files might be in pkg-services/services
+  if (alias === '$services' && relativeFile.startsWith('services/')) {
+    const remaining = relativeFile.replace(/^services\//, '');
+    return remaining ? `$services/${remaining}` : '$services';
+  }
+  
+  // Check if there's a subdirectory mapping
   const subdirMappings = SUBDIR_MAPPINGS[targetPackage] || {};
 
   for (const [subdir, targetSubdir] of Object.entries(subdirMappings)) {

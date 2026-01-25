@@ -1,14 +1,14 @@
 <script lang="ts">
-  import Input from "$components/Input.svelte"
-  import Modal from "$components/Modal.svelte"
-  import Layer from "$components/Layer.svelte"
-  import Page from "$components/Page.svelte"
-  import SearchSelect from "$components/SearchSelect.svelte"
-import VTable from '$components/VTable/index';
-  import type { ITableColumn } from "$components/VTable"
+import Input from '$ui/components/Input';
+import Modal from '$ui/components/Modal';
+import Layer from '$ui/components/Layer';
+import Page from '$ui/components/Page';
+import SearchSelect from '$ui/components/SearchSelect';
+import VTable from '$ui/components/VTable/index';
+  import type { ITableColumn } from "$ui/VTable/types.ts"
 import { Loading, Notify, formatTime } from '$core/lib/helpers';
 import { throttle } from '$core/lib/helpers';
-  import { Core } from '$core/core/store.svelte'
+import { Core } from '$core/core/store.svelte';
   import AlmacenLayoutEditor from "./AlmacenLayoutEditor.svelte"
   import { 
     AlmacenesService, 

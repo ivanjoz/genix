@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Core } from '$core/core/store.svelte';
+import { Core } from '$core/core/store.svelte';
 import { highlString, include, throttle } from '$core/lib/helpers';
     import { untrack } from 'svelte';
 

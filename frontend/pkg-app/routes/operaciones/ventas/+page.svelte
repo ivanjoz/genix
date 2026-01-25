@@ -1,8 +1,8 @@
 <script lang="ts">
-  import Input from "$components/Input.svelte";
-  import LayerStatic from "$components/micro/LayerStatic.svelte";
-  import Page from "$components/Page.svelte";
-  import SearchSelect from "$components/SearchSelect.svelte";
+import Input from '$ui/components/Input';
+import LayerStatic from '$ui/components/micro/LayerStatic';
+import Page from '$ui/components/Page';
+import SearchSelect from '$ui/components/SearchSelect';
 import { Loading, include } from '$core/lib/helpers';
 import { formatN } from '$core/lib/helpers';
   import type { IProductoStock } from "../productos-stock/productos-stock.svelte";
@@ -14,7 +14,7 @@ import { formatN } from '$core/lib/helpers';
   import ProductoVentaCard from "./ProductoVentaCard.svelte";
   import type { ProductoVenta } from "./ventas.svelte";
   import { VentasState } from "./ventas.svelte";
-  import { ParametrosService } from "$services/parametros.svelte.ts";
+import parametros from '$shared/services/parametros.svelte';
 
   // Helpers
   const formatMo = (n: number) => formatN(n, 2);

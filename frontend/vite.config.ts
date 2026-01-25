@@ -40,27 +40,33 @@ const serviceWorkerConfig: BuildOptions = {
           const alias = parts[0];
           const rest = parts.slice(1).join('/');
           const baseDir = {
-            '$lib': 'pkg-app/lib',
-            '$core': 'pkg-core',
-            '$store': 'pkg-store/stores',
-            '$routes': 'pkg-app/routes',
-            '$components': 'pkg-ui/components',
-            '$shared': 'pkg-services/shared',
-            '$ecommerce': 'pkg-components/ecommerce',
-            '$services': 'pkg-services/services'
-          }[alias];
-          
+    '$core': 'pkg-core',
+    '$store': 'pkg-store',
+    '$app': 'pkg-app',
+    '$routes': 'pkg-app/routes',
+    '$ui': 'pkg-ui',
+    '$components': 'pkg-components',
+    '$shared': 'pkg-services',
+    '$services': 'pkg-services'
+  }[alias];
+
           if (!baseDir) return null;
-          
-          // For $core, try lib/ first, then core/
+
+          // For $core and $components, try multiple subdirectories
           let possiblePaths: string[] = [];
           if (alias === '$core') {
             possiblePaths.push(path.join(baseDir, 'lib', rest));
             possiblePaths.push(path.join(baseDir, 'core', rest));
+            possiblePaths.push(path.join(baseDir, 'assets', rest));
+            possiblePaths.push(path.join(baseDir, rest));
+          } else if (alias === '$components') {
+            possiblePaths.push(path.join(baseDir, rest));
+            possiblePaths.push(path.join('pkg-ui/components', rest));
+            possiblePaths.push(path.join('pkg-components/ecommerce', rest));
           } else {
             possiblePaths.push(path.join(baseDir, rest));
           }
-          
+
           // Try each possible path until we find one that exists
           for (const possiblePath of possiblePaths) {
             let fullPath = path.resolve(__dirname, possiblePath);
@@ -83,7 +89,7 @@ const serviceWorkerConfig: BuildOptions = {
               return { path: path.join(fullPath, 'index.js') };
             }
           }
-          
+
           return null;
         });
       },
@@ -222,4 +228,3 @@ export default defineConfig({
     serviceWorkerPlugin()
   ].filter(x => x)
 });
-

@@ -1,10 +1,10 @@
 <script lang="ts">
-    import Input from "$components/Input.svelte";
-    import ColorPicker from "$components/micro/ColorPicker.svelte";
-    import Modal from "$components/Modal.svelte";
-    import SearchSelect from "$components/SearchSelect.svelte";
-    import { VTable, type ITableColumn } from "$components/VTable";
-    import { closeAllModals, openModal } from '$core/core/store.svelte';
+import Input from '$ui/components/Input';
+import ColorPicker from '$ui/components/micro/ColorPicker';
+import Modal from '$ui/components/Modal';
+import SearchSelect from '$ui/components/SearchSelect';
+import { VTable, ITableColumn } from '$ui/components/VTable';
+import { closeAllModals, openModal } from '$core/core/store.svelte';
 import { formatN } from '$core/lib/helpers';
     import { productoAtributos, type IProducto, type IProductoPresentacion } from "./productos.svelte";
 

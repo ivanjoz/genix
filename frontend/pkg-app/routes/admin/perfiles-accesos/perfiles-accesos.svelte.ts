@@ -1,5 +1,5 @@
 import { GetHandler, POST } from '$core/lib/http';
-import Modules from "$core/core/modules"
+import Modules from '$core/core/modules';
 
 export interface IAcceso {
   id: number

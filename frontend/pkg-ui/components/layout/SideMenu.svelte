@@ -2,7 +2,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { tick } from 'svelte';
-	import { Core } from '$core/core/store.svelte';
+import { Core } from '$core/core/store.svelte';
 	import type { IMenuRecord, IModule } from '$core/menu';
 
 	// State

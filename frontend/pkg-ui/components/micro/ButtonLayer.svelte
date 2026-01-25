@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { parseSVG } from "$core/lib/helpers";
+import { parseSVG } from '$core/lib/helpers';
 import angleSvg from '$core/lib/assets/angle.svg?raw';
 
   interface Props {

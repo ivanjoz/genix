@@ -3,7 +3,7 @@
   import "../../app.css";
   import "$lib/fontello-prerender.css";
 import blurhashScript from '$core/lib/blurhash?raw';
-  import { productosServiceState } from "$services/productos.svelte";
+import { productosServiceState } from '$shared/services/productos.svelte';
   let { children, data } = $props();
 
   productosServiceState.categorias = data.productos.categorias

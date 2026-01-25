@@ -8,7 +8,7 @@
 import arrow2Svg from '$core/lib/assets/flecha_fin.svg?raw';
 import arrow1Svg from '$core/lib/assets/flecha_inicio.svg?raw';
 import { cn, parseSVG } from '$core/lib/helpers';
-  import { Ecommerce } from '$store/globals.svelte.ts';
+import globals from '$store/stores/globals.svelte';
   import s1 from "./styles.module.css";
 
   let {

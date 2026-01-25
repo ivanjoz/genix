@@ -1,17 +1,17 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
-	import TopLayerSelector from '$components/micro/TopLayerSelector.svelte';
+import TopLayerSelector from '$ui/components/micro/TopLayerSelector';
 import favicon from '$core/lib/assets/favicon.svg';
 import { checkIsLogin } from '$core/lib/security';
 import { doInitServiceWorker } from '$core/lib/sw-cache';
 	import { onMount } from 'svelte';
-	import '../static/app.css';
-	import Header from '$components/layout/Header.svelte';
-	import Page from '$components/Page.svelte';
-	import SideMenu from '$components/layout/SideMenu.svelte';
-	import Modules from "$core/core/modules";
-	import { Core, getDeviceType } from '$core/core/store.svelte';
+	import '../app.css';
+import Header from '$ui/components/layout/Header';
+import Page from '$ui/components/Page';
+import SideMenu from '$ui/components/layout/SideMenu';
+import Modules from '$core/core/modules';
+import { Core, getDeviceType } from '$core/core/store.svelte';
 	import ImageWorker from '../workers/image-worker?worker';
 import { Env } from '$core/lib/env';
 

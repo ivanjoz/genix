@@ -1,4 +1,4 @@
-import { getProductos } from "$services/productos.svelte.ts";
+import productos from '$app/routes/operaciones/productos/productos.svelte';
 
 export const csr = true;
 export const ssr = true;

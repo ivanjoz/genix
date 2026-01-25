@@ -1,15 +1,15 @@
 <script lang="ts">
-  import Input from "$components/Input.svelte"
-  import Modal from "$components/Modal.svelte"
-  import OptionsStrip from "$components/micro/OptionsStrip.svelte"
-  import Page from "$components/Page.svelte"
-  import SearchSelect from "$components/SearchSelect.svelte"
-  import Checkbox from "$components/Checkbox.svelte"
-import VTable from '$components/VTable/index';
-  import type { ITableColumn } from "$components/VTable"
+import Input from '$ui/components/Input';
+import Modal from '$ui/components/Modal';
+import OptionsStrip from '$ui/components/micro/OptionsStrip';
+import Page from '$ui/components/Page';
+import SearchSelect from '$ui/components/SearchSelect';
+import Checkbox from '$ui/components/Checkbox';
+import VTable from '$ui/components/VTable/index';
+  import type { ITableColumn } from "$ui/VTable/types.ts"
 import { Loading, Notify, formatTime } from '$core/lib/helpers';
 import { throttle } from '$core/lib/helpers';
-  import { Core } from '$core/core/store.svelte'
+import { Core } from '$core/core/store.svelte';
 import { formatN } from '$core/lib/helpers';
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte"
   import {

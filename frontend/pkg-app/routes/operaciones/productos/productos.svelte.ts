@@ -1,6 +1,6 @@
 import { GetHandler, POST } from '$core/lib/http';
 import { browser } from '$app/environment';
-import type { ImageSource } from "$components/ImageUploader.svelte";
+import type { ImageSource } from "$ui/ImageUploader.svelte";
 
 export interface IProductoPropiedad {
   id: number, nm: string, ss: number

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import { Core } from '$core/core/store.svelte'
+import { Core } from '$core/core/store.svelte';
   import OptionsStrip from './micro/OptionsStrip.svelte'
 import { Env } from '$core/lib/env';
 

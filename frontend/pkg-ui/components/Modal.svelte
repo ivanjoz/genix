@@ -1,7 +1,7 @@
 <script lang="ts">
     import { untrack } from "svelte";
     import Portal from "./popover2/Portal.svelte";
-    import { closeModal, openModals } from '$core/core/store.svelte';
+import { closeModal, openModals } from '$core/core/store.svelte';
 
     interface Props {
         children?: import("svelte").Snippet;

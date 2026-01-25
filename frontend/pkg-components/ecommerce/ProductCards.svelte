@@ -1,5 +1,5 @@
 <script>
-  import { productosServiceState } from "$services/productos.svelte";
+import { productosServiceState } from '$shared/services/productos.svelte';
   import ProductCard from "./ProductCard.svelte";
   import s1 from "./styles.module.css";
 

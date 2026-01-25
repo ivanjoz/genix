@@ -4,8 +4,8 @@
   import type { ITableColumn, CellRendererSnippet } from "./types";
   import type { VirtualItem } from './index.svelte';
   import CellEditable from './CellEditable.svelte';
-  import { highlString, include } from "$core/lib/helpers";
-  import Renderer, { type ElementAST } from '$components/micro/Renderer.svelte';
+import { highlString, include } from '$core/lib/helpers';
+  import Renderer, { type ElementAST } from '../micro/Renderer.svelte';
   import CellSelector from './CellSelector.svelte';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 

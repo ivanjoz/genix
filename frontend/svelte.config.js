@@ -62,6 +62,7 @@ const config = {
 			appTemplate: 'app.html'
 		},
 		alias: {
+			$ui: path.resolve('./pkg-ui'),
 			$store: path.resolve('./pkg-store/stores'),
 			$routes: path.resolve('./pkg-app/routes'),
 			$components: path.resolve('./pkg-ui/components'),

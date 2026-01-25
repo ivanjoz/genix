@@ -87,6 +87,8 @@ interface ImportIssue {
   foundIn?: ExportedSymbol[];
   suggestedPath?: string;
   actualFileLocation?: string;
+  importStatement: ImportStatement;
+  fixAsDefaultImport?: boolean; // Flag for Svelte components that should be default imports
 }
 
 interface FixReport {
@@ -150,6 +152,20 @@ function pathExists(basePath: string): string | null {
     return cleanPath;
   }
   
+  // Check for Svelte files first if the path looks like a component import
+  // (e.g., $ui/components/Input, $ui/Page, etc.)
+  const looksLikeSvelteComponent = cleanPath.includes('/components/') || 
+                                   cleanPath.includes('/micro/') ||
+                                   cleanPath.includes('/layout/') ||
+                                   cleanPath.match(/\/[A-Z][a-zA-Z]+$/); // Ends with capital letter (PascalCase)
+  
+  if (looksLikeSvelteComponent) {
+    const sveltePath = cleanPath + '.svelte';
+    if (fs.existsSync(sveltePath) && fs.statSync(sveltePath).isFile()) {
+      return sveltePath;
+    }
+  }
+  
   // Check for TypeScript/JavaScript/Svelte files
   const codeExtensions = ['.ts', '.js', '.svelte'];
   for (const ext of codeExtensions) {
@@ -185,14 +201,14 @@ function resolveAliasPath(aliasPath: string): string | null {
   const rest = parts.slice(1).join('/');
   
   const aliasMap: Record<string, string> = {
-    '$lib': 'pkg-app/lib',
     '$core': 'pkg-core',
-    '$store': 'pkg-store/stores',
+    '$store': 'pkg-store',
+    '$app': 'pkg-app',
     '$routes': 'pkg-app/routes',
-    '$components': 'pkg-ui/components',
-    '$shared': 'pkg-services/shared',
-    '$ecommerce': 'pkg-components/ecommerce',
-    '$services': 'pkg-services/services'
+    '$ui': 'pkg-ui',
+    '$components': 'pkg-components',
+    '$shared': 'pkg-services',
+    '$services': 'pkg-services'
   };
   
   const baseDir = aliasMap[alias];
@@ -207,6 +223,35 @@ function resolveAliasPath(aliasPath: string): string | null {
       path.join(basePath, 'core', rest),
       path.join(basePath, 'assets', rest),
       path.join(basePath, rest)
+    ];
+    
+    for (const possiblePath of possiblePaths) {
+      const resolved = pathExists(possiblePath);
+      if (resolved) return resolved;
+    }
+    return null;
+  }
+  
+  // For $ui, try pkg-ui/components first, then pkg-ui
+  if (alias === '$ui') {
+    const possiblePaths = [
+      path.join(basePath, 'components', rest),
+      path.join(basePath, rest)
+    ];
+    
+    for (const possiblePath of possiblePaths) {
+      const resolved = pathExists(possiblePath);
+      if (resolved) return resolved;
+    }
+    return null;
+  }
+  
+  // For $components, try pkg-components, pkg-ui/components, and pkg-components/ecommerce
+  if (alias === '$components') {
+    const possiblePaths = [
+      path.join(basePath, rest),
+      path.join(PROJECT_ROOT, 'pkg-ui/components', rest),
+      path.join(PROJECT_ROOT, 'pkg-components/ecommerce', rest)
     ];
     
     for (const possiblePath of possiblePaths) {
@@ -233,18 +278,17 @@ function searchForFile(fileName: string, extensions: string[] = []): string | nu
   // If already has an extension, use only that
   if (path.extname(cleanFileName)) {
     const pathsToSearch = [
-      'pkg-app/lib',
+      'pkg-app',
       'pkg-app/routes',
       'pkg-app/static',
-      'pkg-core/lib',
-      'pkg-core/core',
-      'pkg-core/assets',
+      'pkg-core',
       'pkg-ui/assets',
+      'pkg-ui',
       'pkg-ui/components',
-      'pkg-services/shared',
-      'pkg-services/services',
+      'pkg-services',
+      'pkg-components',
       'pkg-components/ecommerce',
-      'pkg-store/stores'
+      'pkg-store'
     ];
     
     for (const searchDir of pathsToSearch) {
@@ -263,18 +307,17 @@ function searchForFile(fileName: string, extensions: string[] = []): string | nu
     for (const ext of exts) {
       const fullFileName = cleanFileName + ext;
       const pathsToSearch = [
-        'pkg-app/lib',
+        'pkg-app',
         'pkg-app/routes',
         'pkg-app/static',
-        'pkg-core/lib',
-        'pkg-core/core',
-        'pkg-core/assets',
+        'pkg-core',
         'pkg-ui/assets',
+        'pkg-ui',
         'pkg-ui/components',
-        'pkg-services/shared',
-        'pkg-services/services',
+        'pkg-services',
+        'pkg-components',
         'pkg-components/ecommerce',
-        'pkg-store/stores'
+        'pkg-store'
       ];
       
       for (const searchDir of pathsToSearch) {
@@ -316,6 +359,27 @@ function isAssetImport(importPath: string): boolean {
 function isCssImport(importPath: string): boolean {
   const cleanPath = importPath.split('?')[0];
   return cleanPath.endsWith('.css') || cleanPath.endsWith('.module.css');
+}
+
+/**
+ * Check if an import is for a Svelte component
+ */
+function isSvelteComponentImport(importPath: string): boolean {
+  const cleanPath = importPath.split('?')[0];
+  return cleanPath.endsWith('.svelte');
+}
+
+/**
+ * Get the component name from a .svelte file path
+ */
+function getComponentNameFromPath(importPath: string): string | null {
+  const cleanPath = importPath.split('?')[0];
+  if (!cleanPath.endsWith('.svelte')) return null;
+  
+  // Extract the filename without path and extension
+  const fileName = cleanPath.split('/').pop() || '';
+  const componentName = fileName.replace(/\.svelte$/, '');
+  return componentName || null;
 }
 
 /**
@@ -721,19 +785,30 @@ function checkImports(filePath: string): ImportIssue[] {
     let importPathNeedsFix = false;
     if (!missingFile && imp.importPath.startsWith('$')) {
       const alias = imp.importPath.split('/')[0];
-      if (alias === '$core') {
-        // For $core imports, check if resolved path includes 'lib' subdirectory
-        // but the import path doesn't
-        const resolvedRelative = path.relative(PROJECT_ROOT, resolvedFile!);
-        const resolvedParts = resolvedRelative.split(path.sep);
-        // If resolved path is in pkg-core/lib/ but import is $core/* (not $core/lib/*)
-        if (resolvedParts.includes('pkg-core') && resolvedParts.includes('lib')) {
-          const importPathParts = imp.importPath.split('/');
-          if (importPathParts.length >= 2 && importPathParts[1] !== 'lib') {
-            // Import is like $core/http but resolves to pkg-core/lib/http.ts
-            importPathNeedsFix = true;
-            actualFileLocation = resolvedRelative;
-          }
+      const resolvedRelative = path.relative(PROJECT_ROOT, resolvedFile!);
+      const resolvedParts = resolvedRelative.split(path.sep);
+      const importPathParts = imp.importPath.split('/');
+      
+      // Find the package directory in the resolved path (e.g., pkg-core, pkg-ui)
+      const packageDirIndex = resolvedParts.findIndex(part => part.startsWith('pkg-'));
+      if (packageDirIndex !== -1 && packageDirIndex + 1 < resolvedParts.length) {
+        // Check if there's a subdirectory in the resolved path that's not in the import path
+        // For example: pkg-core/lib/http.ts vs import $core/http
+        // Or: pkg-ui/components/Page.svelte vs import $ui/Page.svelte
+        
+        // Count path segments after package directory
+        const resolvedSegmentsAfterPackage = resolvedParts.slice(packageDirIndex + 1);
+        const importSegmentsAfterAlias = importPathParts.slice(1);
+        
+        // If resolved has more segments than import, we need to add them to the import path
+        // But exclude the filename (last segment) from comparison
+        const resolvedSubdirs = resolvedSegmentsAfterPackage.slice(0, -1);
+        const importSubdirs = importSegmentsAfterAlias.slice(0, -1);
+        
+        // If the subdirectories don't match, we need to fix the import path
+        if (JSON.stringify(resolvedSubdirs) !== JSON.stringify(importSubdirs)) {
+          importPathNeedsFix = true;
+          actualFileLocation = resolvedRelative;
         }
       }
     }
@@ -771,7 +846,35 @@ function checkImports(filePath: string): ImportIssue[] {
         }
       }
       
+      // Check if the resolved file is a Svelte component
+      const isSvelteFile = resolvedFile!.endsWith('.svelte') || relativePath.endsWith('.svelte');
+      
       const exportedNames = new Set(fileExps.map(e => e.name));
+      
+      // SPECIAL CASE: Svelte components imported as named imports
+      // Svelte components should be default imports, not named imports
+      if ((isSvelteComponentImport(imp.importPath) || isSvelteFile) && imp.isNamed && !imp.isDefault) {
+        const componentName = getComponentNameFromPath(imp.importPath) || path.basename(relativePath, '.svelte');
+        if (componentName && imp.imports.length === 1 && imp.imports[0] === componentName) {
+          // This is a Svelte component imported as a named import with the component name
+          // It should be a default import instead
+          console.log(`  🔍 Detected Svelte component as named import: ${componentName} from ${imp.importPath}`);
+          console.log(`     - Should be: import ${componentName} from '${imp.importPath}';`);
+          
+          // Mark as an issue that needs fixing
+          issues.push({
+            filePath: path.relative(PROJECT_ROOT, filePath),
+            lineNumber: imp.lineNumber,
+            importStatement: imp,
+            missingFile: false,
+            missingSymbols: [], // No missing symbols, just wrong import style
+            foundIn: [],
+            actualFileLocation: undefined,
+            fixAsDefaultImport: true // Flag to indicate this should be converted to default import
+          });
+          continue; // Skip the normal checks
+        }
+      }
       
       for (const importName of imp.imports) {
         // Skip TypeScript keywords
@@ -955,8 +1058,8 @@ function fixImportIssue(issue: ImportIssue, dryRun: boolean = false): boolean {
   const lineIndex = issue.lineNumber - 1;
   const originalLine = lines[lineIndex];
   
-  // Only skip if we have no symbol locations AND no actual file location
-  if ((!issue.foundIn || issue.foundIn.length === 0) && !issue.actualFileLocation) {
+  // Only skip if we have no symbol locations AND no actual file location AND not a Svelte component fix
+  if ((!issue.foundIn || issue.foundIn.length === 0) && !issue.actualFileLocation && !issue.fixAsDefaultImport) {
     console.log(`⚠️  Cannot fix ${issue.filePath}:${issue.lineNumber} - symbol locations not found`);
     return false;
   }
@@ -987,160 +1090,71 @@ function fixImportIssue(issue: ImportIssue, dryRun: boolean = false): boolean {
  * Determine the best fix for an import issue
  */
 function determineBestFix(issue: ImportIssue): { newImport: string } | null {
-  const { importStatement, foundIn, actualFileLocation } = issue;
+  const { importStatement, foundIn, actualFileLocation, fixAsDefaultImport } = issue;
   
   console.log(`\n  🔧 determineBestFix called for: ${issue.filePath}:${issue.lineNumber}`);
   console.log(`     - Missing file: ${issue.missingFile}`);
   console.log(`     - Missing symbols: [${issue.missingSymbols.join(', ')}]`);
   console.log(`     - Found in count: ${foundIn?.length || 0}`);
   console.log(`     - Actual file location: ${actualFileLocation || 'none'}`);
+  console.log(`     - Fix as default import: ${fixAsDefaultImport || false}`);
   
-  // If we found actual file location for assets, fix it
-  if (actualFileLocation && importStatement.importPath.match(/\.(svg|js|css)(\?raw|\?worker)?$/)) {
-    const newAliasPath = convertToAliasPath(actualFileLocation, path.dirname(issue.filePath));
-    if (!newAliasPath) return null;
-    
-    // Preserve query parameters
-    const queryParams = importStatement.importPath.split('?')[1] || '';
-    const finalPath = queryParams ? `${newAliasPath}?${queryParams}` : newAliasPath;
-    
-    let newImport = '';
-    if (importStatement.isSideEffect) {
-      newImport = `import '${finalPath}';`;
-    } else if (importStatement.isDefault) {
-      newImport = `import ${importStatement.imports[0]} from '${finalPath}';`;
-    } else if (importStatement.isNamed) {
-      newImport = `import { ${importStatement.imports.join(', ')} } from '${finalPath}';`;
-    }
-    
-    return { newImport };
+  // Determine the actual file location
+  let targetFile: string | null = null;
+  
+  if (actualFileLocation) {
+    // We already know where the file is
+    targetFile = actualFileLocation;
+  } else if (foundIn && foundIn.length > 0) {
+    // Find the symbol in other files
+    targetFile = foundIn[0].file;
   }
   
-    // Fix import paths that need correction (e.g., $core/http → $core/lib/http)
-    if (actualFileLocation && importStatement.importPath.startsWith('$') && !importStatement.importPath.match(/\.(ts|js|svg|svelte|png|jpg|jpeg|gif|webp|ico|css|json)(\?.*)?$/)) {
-      console.log(`  🔧 determineBestFix: Path correction detected`);
-      console.log(`     - Original import path: ${importStatement.importPath}`);
-      console.log(`     - Actual file location: ${actualFileLocation}`);
-    
-      const newAliasPath = convertToAliasPath(actualFileLocation, path.dirname(issue.filePath));
-      console.log(`     - Converted to alias path: ${newAliasPath}`);
-    
-      if (!newAliasPath) {
-        console.log(`     - ❌ convertToAliasPath returned null`);
-        return null;
-      }
-
-      let newImport = '';
-      const queryParams = importStatement.importPath.split('?')[1] || '';
-      const finalPath = queryParams ? `${newAliasPath}?${queryParams}` : newAliasPath;
-    
-      console.log(`     - Is default: ${importStatement.isDefault}, Is named: ${importStatement.isNamed}, Is side effect: ${importStatement.isSideEffect}`);
-      console.log(`     - Importing symbols: [${importStatement.imports.join(', ')}]`);
-
-      if (importStatement.isSideEffect) {
-        newImport = `import '${finalPath}';`;
-      } else if (importStatement.isDefault && !importStatement.isNamed) {
-        newImport = `import ${importStatement.imports[0]} from '${finalPath}';`;
-      } else if (importStatement.isNamed && !importStatement.isDefault) {
-        newImport = `import { ${importStatement.imports.join(', ')} } from '${finalPath}';`;
-      } else if (importStatement.isDefault && importStatement.isNamed) {
-        const defaultImport = importStatement.imports[0];
-        const namedImports = importStatement.imports.slice(1);
-        newImport = `import ${defaultImport}, { ${namedImports} } from '${finalPath}';`;
-      }
-
-      console.log(`     - Generated new import: ${newImport}`);
-      return { newImport };
-    }
-  
-  if (!foundIn || foundIn.length === 0) return null;
-  
-  // Group found symbols by location
-  const byLocation = new Map<string, Set<string>>();
-  for (const found of foundIn) {
-    const relPath = path.relative(PROJECT_ROOT, found.filePath);
-    if (!byLocation.has(relPath)) {
-      byLocation.set(relPath, new Set());
-    }
-    byLocation.get(relPath)!.add(found.name);
+  if (!targetFile) {
+    console.log(`  ⚠️  No file location found`);
+    return null;
   }
   
-  // Find location that has all missing symbols
-  for (const [locPath, symbols] of byLocation) {
-    const hasAll = issue.missingSymbols.every(sym => symbols.has(sym));
-    
-    if (hasAll) {
-      // Calculate the alias path from the file path
-      const newAliasPath = convertToAliasPath(locPath, path.dirname(issue.filePath));
-      if (!newAliasPath) continue;
-      
-      // Build new import statement
-      let newImport = '';
-      
-      if (importStatement.isSideEffect) {
-        newImport = `import '${newAliasPath}';`;
-      } else if (importStatement.isDefault && importStatement.isNamed) {
-        // Mixed import
-        const defaultImport = importStatement.imports[0];
-        const namedImports = importStatement.imports.slice(1);
-        newImport = `import ${defaultImport}, { ${namedImports.join(', ')} } from '${newAliasPath}';`;
-      } else if (importStatement.isDefault) {
-        newImport = `import ${importStatement.imports[0]} from '${newAliasPath}';`;
-      } else if (importStatement.isNamed) {
-        newImport = `import { ${importStatement.imports.join(', ')} } from '${newAliasPath}';`;
-      }
-      
-      return { newImport };
-    }
+  console.log(`  🔧 Target file: ${targetFile}`);
+  
+  // Convert file location to alias path
+  const newAliasPath = convertToAliasPath(targetFile, path.dirname(issue.filePath));
+  if (!newAliasPath) {
+    console.log(`  ❌ convertToAliasPath returned null`);
+    return null;
   }
   
-  if (!foundIn || foundIn.length === 0) return null;
+  console.log(`  ✅ Converted to alias path: ${newAliasPath}`);
   
-  // Special handling for $core imports - need to add subdirectory
-  if (importStatement.importPath.startsWith('$core/') && !importStatement.importPath.startsWith('$core/lib/') && !importStatement.importPath.startsWith('$core/core/')) {
-    // Determine which subdirectory symbols are in
-    const subdirs = new Map<string, Set<string>>();
-    for (const found of foundIn) {
-      const relPath = path.relative(PROJECT_ROOT, found.filePath);
-      let subdir = 'lib';
-      if (relPath.startsWith('pkg-core/core/')) {
-        subdir = 'core';
-      } else if (relPath.startsWith('pkg-core/lib/')) {
-        subdir = 'lib';
-      }
-      
-      if (!subdirs.has(subdir)) {
-        subdirs.set(subdir, new Set());
-      }
-      subdirs.get(subdir)!.add(found.name);
-    }
-    
-    // Check if we can satisfy all imports from one subdirectory
-    for (const [subdir, symbols] of subdirs) {
-      const hasAll = issue.missingSymbols.every(sym => symbols.has(sym));
-      if (hasAll) {
-        const rest = importStatement.importPath.substring(6); // Remove "$core/"
-        const newAliasPath = `$core/${subdir}/${rest}`;
-        
-        let newImport = '';
-        if (importStatement.isSideEffect) {
-          newImport = `import '${newAliasPath}';`;
-        } else if (importStatement.isDefault && importStatement.isNamed) {
-          const defaultImport = importStatement.imports[0];
-          const namedImports = importStatement.imports.slice(1);
-          newImport = `import ${defaultImport}, { ${namedImports.join(', ')} } from '${newAliasPath}';`;
-        } else if (importStatement.isDefault) {
-          newImport = `import ${importStatement.imports[0]} from '${newAliasPath}';`;
-        } else if (importStatement.isNamed) {
-          newImport = `import { ${importStatement.imports.join(', ')} } from '${newAliasPath}';`;
-        }
-        
-        return { newImport };
-      }
-    }
+  // Check if it's a Svelte component
+  const isSvelteComponent = targetFile.endsWith('.svelte');
+  const componentName = isSvelteComponent ? path.basename(targetFile, '.svelte') : null;
+  
+  // Preserve query parameters
+  const queryParams = importStatement.importPath.split('?')[1] || '';
+  const finalPath = queryParams ? `${newAliasPath}?${queryParams}` : newAliasPath;
+  
+  // Build the new import statement
+  let newImport = '';
+  
+  if (importStatement.isSideEffect) {
+    newImport = `import '${finalPath}';`;
+  } else if (isSvelteComponent && componentName) {
+    // Svelte components should be default imports
+    newImport = `import ${componentName} from '${finalPath}';`;
+  } else if (importStatement.isDefault && !importStatement.isNamed) {
+    newImport = `import ${importStatement.imports[0]} from '${finalPath}';`;
+  } else if (importStatement.isNamed && !importStatement.isDefault) {
+    newImport = `import { ${importStatement.imports.join(', ')} } from '${finalPath}';`;
+  } else if (importStatement.isDefault && importStatement.isNamed) {
+    // Mixed import: import Component, { helper } from '...'
+    const defaultImport = importStatement.imports[0];
+    const namedImports = importStatement.imports.slice(1).join(', ');
+    newImport = `import ${defaultImport}, { ${namedImports} } from '${finalPath}';`;
   }
   
-  return null;
+  console.log(`  ✅ New import: ${newImport}`);
+  return { newImport };
 }
 
 /**
@@ -1152,14 +1166,14 @@ function convertToAliasPath(filePath: string, sourceDir: string): string | null 
   
   // Try to find if the file is under one of the alias directories
   const aliasMap: Record<string, string> = {
-    '$lib': 'pkg-app/lib',
     '$core': 'pkg-core',
-    '$store': 'pkg-store/stores',
+    '$store': 'pkg-store',
+    '$app': 'pkg-app',
     '$routes': 'pkg-app/routes',
-    '$components': 'pkg-ui/components',
-    '$shared': 'pkg-services/shared',
-    '$ecommerce': 'pkg-components/ecommerce',
-    '$services': 'pkg-services/services'
+    '$ui': 'pkg-ui',
+    '$components': 'pkg-components',
+    '$shared': 'pkg-services',
+    '$services': 'pkg-services'
   };
   
   for (const [alias, baseDir] of Object.entries(aliasMap)) {
@@ -1168,6 +1182,12 @@ function convertToAliasPath(filePath: string, sourceDir: string): string | null 
     if (absPath.startsWith(absBaseDir + path.sep)) {
       const relativePath = path.relative(absBaseDir, absPath);
       const withoutExt = relativePath.replace(/\.(ts|js|svelte)$/, '');
+      
+      // Special handling for $ui - if file is in pkg-ui/components, include components/ in path
+      if (alias === '$ui' && relativePath.startsWith('components/')) {
+        return `${alias}/${withoutExt}`;
+      }
+      
       return `${alias}/${withoutExt}`;
     }
   }

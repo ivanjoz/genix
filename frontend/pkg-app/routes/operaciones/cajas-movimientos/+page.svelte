@@ -1,9 +1,9 @@
 <script lang="ts">
-  import Page from "$components/Page.svelte"
-  import SearchSelect from "$components/SearchSelect.svelte"
-  import DateInput from "$components/DateInput.svelte"
-import VTable from '$components/VTable/index';
-  import type { ITableColumn } from "$components/VTable"
+import Page from '$ui/components/Page';
+import SearchSelect from '$ui/components/SearchSelect';
+import DateInput from '$ui/components/DateInput';
+import VTable from '$ui/components/VTable/index';
+  import type { ITableColumn } from "$ui/VTable/types.ts"
 import { Loading, formatTime, throttle, Notify } from '$core/lib/helpers';
 import { formatN } from '$core/lib/helpers';
   import { untrack } from "svelte"

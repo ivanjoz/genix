@@ -1,5 +1,5 @@
 <script lang="ts">
-    import Input from "$components/Input.svelte";
+import Input from '$ui/components/Input';
 
 
   let { 

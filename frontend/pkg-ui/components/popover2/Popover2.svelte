@@ -2,7 +2,7 @@
 	import { tick } from 'svelte';
 	import Portal from './Portal.svelte';
 	import { calculatePosition, type Placement } from './positioning';
-  import { parseSVG } from "$core/lib/helpers";
+import { parseSVG } from '$core/lib/helpers';
 import angleSvg from '$core/lib/assets/angle.svg?raw';
 
 	interface Props {

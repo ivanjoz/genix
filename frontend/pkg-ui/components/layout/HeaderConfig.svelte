@@ -1,10 +1,10 @@
 <script lang="ts">
-    import Input from "$components/Input.svelte";
-    import OptionsStrip from "$components/micro/OptionsStrip.svelte";
+    import Input from "../Input.svelte";
+    import OptionsStrip from "../micro/OptionsStrip.svelte";
 import { accessHelper } from '$core/lib/security';
     import pkg from 'notiflix'
 const { Loading, Notify } = pkg;
-    import { postUsuario, postUsuarioPropio, type IUsuario } from '$routes/admin/usuarios/usuarios.svelte';
+import { postUsuario, postUsuarioPropio, IUsuario } from '$app/routes/admin/usuarios/usuarios.svelte';
 
 
   const options = [

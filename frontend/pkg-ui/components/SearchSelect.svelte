@@ -1,7 +1,7 @@
 <script lang="ts" generics="T,E">
 import { highlString, include } from '$core/lib/helpers';
-  import { throttle } from "$core/lib/helpers";
-  import { Core } from '$core/core/store.svelte';
+import { throttle } from '$core/lib/helpers';
+import { Core } from '$core/core/store.svelte';
   import s1 from "./components.module.css";
   import SvelteVirtualList from "@humanspeak/svelte-virtual-list";
 

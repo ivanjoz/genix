@@ -1,7 +1,7 @@
 import { Notify } from "$core/lib/helpers"
 import axios, { type AxiosProgressEvent } from 'axios';
 import { formatN } from "./helpers.ts"
-import type { CacheMode, serviceHttpProps } from "$lib/workers/service-worker"
+import type { CacheMode, serviceHttpProps } from "$app/workers/service-worker"
 import { accessHelper, getToken } from "./security"
 import { fetchCache, fetchCacheParsed, sendServiceMessage } from "./sw-cache"
 import { browser } from "$app/environment";

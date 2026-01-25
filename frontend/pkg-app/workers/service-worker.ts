@@ -1,4 +1,4 @@
-import { unmarshall } from '$core/lib/unmarshall'
+import { unmarshall } from '$core/lib/unmarshall';
 import { CACHE_APP, getCacheRecord, HandlersMap, hasCacheKey, parseObject, sendClientMessage, setCacheRecord } from "./service-worker-cache"
 
 export type CacheMode = 'offline' | 'updateOnly' | 'refresh' | 'fetchOnly'

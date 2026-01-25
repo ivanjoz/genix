@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Core, fetchOnCourse } from '$core/core/store.svelte';
+import { Core, fetchOnCourse } from '$core/core/store.svelte';
     import ButtonLayer from "../micro/ButtonLayer.svelte";
     import HeaderConfig from "./HeaderConfig.svelte";
 

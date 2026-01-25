@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Core, suscribeUrlFlag } from '$core/core/store.svelte';
+import { Core, suscribeUrlFlag } from '$core/core/store.svelte';
 
   const { 
     id = false, title = ""

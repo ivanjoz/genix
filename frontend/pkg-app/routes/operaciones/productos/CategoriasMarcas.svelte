@@ -1,8 +1,8 @@
 <script lang="ts">
-    import ImageUploader, { type ImageSource } from "$components/ImageUploader.svelte";
-    import Input from "$components/Input.svelte";
-    import Modal from "$components/Modal.svelte";
-    import { closeAllModals, closeModal, imagesToUpload, openModal } from '$core/core/store.svelte';
+import ImageUploader from '$ui/components/ImageUploader';
+import Input from '$ui/components/Input';
+import Modal from '$ui/components/Modal';
+import { closeAllModals, closeModal, imagesToUpload, openModal } from '$core/core/store.svelte';
 import { Loading, Notify } from '$core/lib/helpers';
     import { postListaRegistros, type IListaRegistro, type INewIDToID, type ListasCompartidasService } from "./productos.svelte";
 

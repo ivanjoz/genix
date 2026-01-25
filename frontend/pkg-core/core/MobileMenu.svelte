@@ -1,6 +1,6 @@
 <script lang="ts">
   import LoginForm from "$ecommerce/forms/LoginForm.svelte";
-  import MobileLayerVertical from "$components/MobileLayerVertical.svelte";
+  import MobileLayerVertical from "$ui/MobileLayerVertical.svelte";
   import { Core, mainMenuOptions, suscribeUrlFlag } from "./store.svelte";
 
   let divContainer: HTMLDivElement

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import Input from "$components/Input.svelte"
-  import Modal from "$components/Modal.svelte"
-  import Page from "$components/Page.svelte"
-import VTable from '$components/VTable/index';
-  import type { ITableColumn } from "$components/VTable/types"
-  import { Notify, throttle } from "$core/lib/helpers"
-  import { Core, closeModal } from '$core/core/store.svelte'
+import Input from '$ui/components/Input';
+import Modal from '$ui/components/Modal';
+import Page from '$ui/components/Page';
+import VTable from '$ui/components/VTable/index';
+  import type { ITableColumn } from "$ui/VTable/types.ts"
+import { Notify, throttle } from '$core/lib/helpers';
+import { Core, closeModal } from '$core/core/store.svelte';
 import { formatTime } from '$core/lib/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg
@@ -117,7 +117,7 @@ const { Loading } = pkg
       <div class="flex items-center">
         <button class="bx-green" onclick={ev => {
           ev.stopPropagation()
-          empresaForm = { 
+          empresaForm = {
             ss: 1,
             SmtpConfig: {},
             CulquiConfig: {}
@@ -129,8 +129,8 @@ const { Loading } = pkg
       </div>
     </div>
 
-    <VTable 
-      columns={columns} 
+    <VTable
+      columns={columns}
       data={empresasService.empresas}
       css="w-full"
       maxHeight="calc(80vh - 13rem)"
@@ -140,7 +140,7 @@ const { Loading } = pkg
     </VTable>
   </div>
 
-  <Modal 
+  <Modal
     id={1}
     size={6}
     title={(empresaForm?.id > 0 ? "Actualizar" : "Guardar") + " Empresa"}
@@ -149,55 +149,55 @@ const { Loading } = pkg
     onDelete={empresaForm?.id > 0 ? () => saveEmpresa(true) : undefined}
   >
     <div class="grid grid-cols-24 gap-10 p-6">
-      <Input 
-        bind:saveOn={empresaForm} 
+      <Input
+        bind:saveOn={empresaForm}
         save="Nombre"
-        css="col-span-24 md:col-span-12" 
-        label="Nombre" 
+        css="col-span-24 md:col-span-12"
+        label="Nombre"
         required={true}
       />
-      <Input 
-        bind:saveOn={empresaForm} 
+      <Input
+        bind:saveOn={empresaForm}
         save="RazonSocial"
-        css="col-span-24 md:col-span-12" 
+        css="col-span-24 md:col-span-12"
         label="Razón Social"
       />
-      <Input 
-        bind:saveOn={empresaForm} 
+      <Input
+        bind:saveOn={empresaForm}
         save="RUC"
-        css="col-span-24 md:col-span-8" 
-        label="RUC" 
+        css="col-span-24 md:col-span-8"
+        label="RUC"
         required={true}
       />
-      <Input 
-        bind:saveOn={empresaForm} 
+      <Input
+        bind:saveOn={empresaForm}
         save="Email"
-        css="col-span-24 md:col-span-8" 
+        css="col-span-24 md:col-span-8"
         label="Email"
         type="email"
       />
-      <Input 
-        bind:saveOn={empresaForm} 
+      <Input
+        bind:saveOn={empresaForm}
         save="Telefono"
-        css="col-span-24 md:col-span-8" 
+        css="col-span-24 md:col-span-8"
         label="Teléfono"
       />
-      <Input 
-        bind:saveOn={empresaForm} 
+      <Input
+        bind:saveOn={empresaForm}
         save="Representante"
-        css="col-span-24 md:col-span-12" 
+        css="col-span-24 md:col-span-12"
         label="Representante"
       />
-      <Input 
-        bind:saveOn={empresaForm} 
+      <Input
+        bind:saveOn={empresaForm}
         save="Ciudad"
-        css="col-span-24 md:col-span-12" 
+        css="col-span-24 md:col-span-12"
         label="Ciudad"
       />
-      <Input 
-        bind:saveOn={empresaForm} 
+      <Input
+        bind:saveOn={empresaForm}
         save="Direccion"
-        css="col-span-24" 
+        css="col-span-24"
         label="Dirección"
         useTextArea={true}
         rows={2}

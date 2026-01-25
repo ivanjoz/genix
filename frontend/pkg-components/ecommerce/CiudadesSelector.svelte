@@ -1,6 +1,6 @@
 <script lang="ts">
-  import SearchSelect from "$components/SearchSelect.svelte";
-  import { useCiudadesAPI, type ICiudad } from "$services/ciudades.svelte.ts";
+import SearchSelect from '$ui/components/SearchSelect';
+import ciudades from '$shared/services/ciudades.svelte';
 
   export interface ICiudades {
     css: string

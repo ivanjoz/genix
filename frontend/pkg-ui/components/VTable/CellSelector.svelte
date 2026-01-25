@@ -1,9 +1,9 @@
 <script lang="ts" generics="T,E">
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import { untrack } from "svelte";
-  import { throttle } from "$core/lib/helpers";
-  import { Core, WeakSearchRef } from '$core/core/store.svelte';
-import { Popover2 } from '$components/popover2/Popover2';
+import { throttle } from '$core/lib/helpers';
+import { Core, WeakSearchRef } from '$core/core/store.svelte';
+import Popover2 from '../popover2/Popover2.svelte';
 
 	export interface ICellSelector<T,E> {
     id?: number | string;

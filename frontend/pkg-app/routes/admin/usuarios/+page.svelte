@@ -1,12 +1,12 @@
 <script lang="ts">
-  import Input from "$components/Input.svelte"
-  import Modal from "$components/Modal.svelte"
-  import Page from "$components/Page.svelte"
-  import SearchCard from "$components/SearchCard.svelte"
-import VTable from '$components/VTable/index';
-  import type { ITableColumn } from "$components/VTable/types"
-  import { Notify, throttle } from "$core/lib/helpers"
-  import { Core, closeModal } from '$core/core/store.svelte'
+import Input from '$ui/components/Input';
+import Modal from '$ui/components/Modal';
+import Page from '$ui/components/Page';
+import SearchCard from '$ui/components/SearchCard';
+import VTable from '$ui/components/VTable/index';
+  import type { ITableColumn } from "$ui/VTable/types.ts"
+import { Notify, throttle } from '$core/lib/helpers';
+import { Core, closeModal } from '$core/core/store.svelte';
 import { formatTime } from '$core/lib/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg
