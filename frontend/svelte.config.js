@@ -67,7 +67,8 @@ const config = {
 			$routes: path.resolve('./routes'),
 			$components: path.resolve('./pkg-components'),
 			$core: path.resolve('./pkg-core'),
-			$services: path.resolve('./pkg-services')
+			$services: path.resolve('./pkg-services'),
+			$lib: path.resolve('./pkg-core/lib')
 		},
 		prerender: {
 			handleHttpError: 'warn'

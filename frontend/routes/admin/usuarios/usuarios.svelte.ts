@@ -1,35 +1,7 @@
 import { GetHandler, POST } from '$core/http';
+import type { IUsuario, IPerfil } from '$core/types/common';
 
-export interface IUsuario {
-  id: number
-  companyID: number
-  nombres: string
-  apellidos: string
-  email: string
-  usuario: string
-  documentoNro: string
-  cargo: string
-  perfilesIDs: number[]
-  rolesIDs: number[]
-  ss: number
-  upd: number
-  created: number
-  password1: string
-  password2: string
-  //Extra
-  accesosIDs: number[]
-}
-
-export interface IPerfil {
-  id: number
-  nombre: string
-  descripcion?: string
-  accesos: number[]
-  modulosIDs: number[]
-  accesosMap: Map<number, number[]>
-  ss: number
-  upd: number
-}
+export type { IUsuario, IPerfil };
 
 export class UsuariosService extends GetHandler {
   route = "usuarios"

@@ -1,6 +1,6 @@
 import { GET, POST } from '$core/http';
-import { accessHelper, checkIsLogin } from '$core/lib/security';
-import type { IUsuario } from '$routes/admin/usuarios/usuarios.svelte';
+import { accessHelper, checkIsLogin, registerReloadLogin } from '$core/lib/security';
+import type { IUsuario, ILoginResult } from '$core/types/common';
 import { Env } from '$core/env';
 
 export interface ILogin {
@@ -10,18 +10,8 @@ export interface ILogin {
   CipherKey: string
 }
 
-export interface ILoginResult {
-  UserID: number
-  UserNames: string
-  UserEmail: string
-  UserToken: string
-  UserInfo: string
-  TokenExpTime: number
-  EmpresaID: number
-}
-
-const makeRamdomString = () => {
-	return "123412341234123412341234123412341234"
+const makeRamdomString = (len?: number) => {
+	return "123412341234123412341234123412341234".substring(0, len || 32)
 }
 
 export const sendUserLogin = async (data: ILogin): Promise<any> => {
@@ -42,7 +32,6 @@ export const sendUserLogin = async (data: ILogin): Promise<any> => {
 
 	console.log("loginInfo", loginInfo)
 
-  let userInfo = ""
   try {
     await accessHelper.parseAccesos(loginInfo, data.CipherKey)
     if(!accessHelper.checkAcceso(1)){
@@ -54,8 +43,6 @@ export const sendUserLogin = async (data: ILogin): Promise<any> => {
     console.log("error encriptando::")
     console.log(error)
   }
-
-  console.log(userInfo)
 
   return { result: loginInfo }
 }
@@ -74,7 +61,6 @@ export const reloadLogin = async (): Promise<any> => {
     return { error }
   }
 
-  let userInfo = ""
   try {
     await accessHelper.parseAccesos(loginInfo, CipherKey)
     if(!accessHelper.checkAcceso(1)){
@@ -85,9 +71,11 @@ export const reloadLogin = async (): Promise<any> => {
     console.log(error)
   }
 
-  console.log(userInfo)
   return { result: loginInfo }
 }
+
+// Register the reload function with core to avoid circular dependency
+registerReloadLogin(reloadLogin);
 
 export const handleLogin = (login: ILoginResult) => {
   // Additional login handling if needed

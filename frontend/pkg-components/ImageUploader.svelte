@@ -4,6 +4,7 @@ import { onDestroy, untrack } from 'svelte';
 import { Notify, fileToImage } from '$core/helpers';
 import { Env } from '$core/env';
 import { imagesToUpload } from '$core/store.svelte';
+import type { IImageResult } from '$core/types/common';
 
 export interface IImageInput {
   content: string;
@@ -43,12 +44,6 @@ export interface IImageUploaderProps {
   folder?: string
   useConvertAvif?: boolean
   imageSource?: ImageSource
-}
-
-export interface IImageResult {
-  id: number;
-  imageName: string;
-  description?: string;
 }
 
 let {

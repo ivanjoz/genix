@@ -20,6 +20,7 @@
 
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { resolve, relative, dirname, join } from 'path';
+import svelteConfig from '../svelte.config.js';
 
 // ============================================
 // Types
@@ -30,6 +31,7 @@ interface PackageDependency {
   toPackage: string;
   files: Set<string>;
   symbols: string[];
+  importDetails: ImportInfo[];
 }
 
 interface ImportInfo {
@@ -37,6 +39,9 @@ interface ImportInfo {
   importPath: string;
   symbol: string;
   packageName: string;
+  lineNumber: number;
+  fullImport: string;
+  isTypeOnly: boolean;
 }
 
 interface Node {
@@ -54,27 +59,29 @@ interface Node {
 const FRONTEND_DIR = resolve(process.cwd());
 const PACKAGES_DIR = FRONTEND_DIR;
 
-const PACKAGES = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components', 'pkg-store', 'pkg-main'];
-
 // Expected hierarchy levels (lower = more base)
 const PACKAGE_LEVELS: Record<string, number> = {
-	'pkg-core': 0,
-  'pkg-components': 1,
-  'pkg-services': 2,
+  'pkg-core': 0,
+  'pkg-services': 1,
+  'pkg-components': 2,
   'pkg-ui': 3,
   'pkg-store': 4,
   'routes': 5
 };
 
-// Allowed dependencies: package -> [allowed dependencies]
-const ALLOWED_DEPENDENCIES: Record<string, string[]> = {
-  'pkg-core': [], // No dependencies allowed
-  'pkg-services': ['pkg-core'],
-  'pkg-ui': ['pkg-core', 'pkg-services'],
-  'pkg-components': ['pkg-core', 'pkg-services', 'pkg-ui'],
-  'pkg-store': ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components'],
-  'routes': ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components']
-};
+// Generate PACKAGES array from PACKAGE_LEVELS, sorted by level
+const PACKAGES = Object.entries(PACKAGE_LEVELS)
+  .sort(([, a], [, b]) => a - b)
+  .map(([name]) => name);
+
+// Generate ALLOWED_DEPENDENCIES dynamically from PACKAGE_LEVELS
+// A package can only depend on packages with a lower level
+const ALLOWED_DEPENDENCIES: Record<string, string[]> = {};
+for (const [pkg, level] of Object.entries(PACKAGE_LEVELS)) {
+  ALLOWED_DEPENDENCIES[pkg] = PACKAGES.filter(
+    p => PACKAGE_LEVELS[p] < level
+  );
+}
 
 // ============================================
 // Global State
@@ -99,24 +106,32 @@ function getPackageName(filePath: string): string | null {
 }
 
 function determineTargetPackage(importPath: string, sourcePackage: string): string | null {
-  // Handle alias imports
-  const aliasMap: Record<string, string> = {
-    '$core': 'pkg-core',
-    '$services': 'pkg-services',
-    '$shared': 'pkg-services', // shared is in pkg-services
-    '$components': 'pkg-ui',
-    '$ecommerce': 'pkg-components',
-    '$ecommerceComponents': 'pkg-ui',
-    '$lib': sourcePackage, // $lib points to current package's lib
-    '$http': 'pkg-core',
-    '$app': null, // SvelteKit built-in, not a package
-  };
-
-  // Extract alias from path
+  // Handle alias imports from Svelte config
   const aliasMatch = importPath.match(/^\$(\w+)/);
   if (aliasMatch) {
-    const alias = aliasMatch[1];
-    return aliasMap[`$${alias}`] || null;
+    const alias = `$${aliasMatch[1]}`;
+
+    // Handle special SvelteKit aliases
+    if (alias === '$app') {
+      return null; // SvelteKit built-in, not a package
+    }
+    if (alias === '$lib') {
+      return 'pkg-core'; // $lib points to pkg-core/lib
+    }
+
+    // Look up alias in config
+    const aliasPath = svelteConfig.kit?.alias?.[alias as keyof typeof svelteConfig.kit.alias];
+    if (aliasPath) {
+      // Extract package name from the resolved path
+      const resolvedPath = String(aliasPath);
+      for (const pkg of PACKAGES) {
+        if (resolvedPath.includes(pkg)) {
+          return pkg;
+        }
+      }
+    }
+
+    return null;
   }
 
   // Handle relative imports
@@ -192,16 +207,31 @@ function parseImports(content: string, filePath: string): ImportInfo[] {
 
     if (match) {
       const importPath = match[1];
+      const lineNumber = i + 1;
+      const isTypeOnly = trimmed.startsWith('import type');
 
-      // Extract symbol name for named imports
-      const symbolMatch = trimmed.match(/import\s+(?:type\s+)?\{?\s*([^},]+)/);
-      const symbol = symbolMatch ? symbolMatch[1].trim() : 'default';
+      // Extract symbol name from various import patterns
+      let symbol: string;
+
+      // Default import: import VTable from '...'
+      const defaultMatch = trimmed.match(/import\s+([A-Za-z_][\w]*)\s+from/);
+      if (defaultMatch && !trimmed.includes('{')) {
+        symbol = defaultMatch[1];
+      }
+      // Named import: import { VTable, ITable } from '...' or import type { VTable } from '...'
+      else {
+        const namedMatch = trimmed.match(/import\s+(?:type\s+)?\{?\s*([A-Za-z_][\w]*)/);
+        symbol = namedMatch ? namedMatch[1] : 'default';
+      }
 
       imports.push({
         file: filePath,
         importPath,
         symbol,
-        packageName
+        packageName,
+        lineNumber,
+        fullImport: line.trim(),
+        isTypeOnly
       });
     }
   }
@@ -240,8 +270,13 @@ function analyzeDependencies() {
 
   console.log(`   Parsed ${allImports.length} imports\n`);
 
-  // Build dependency map
+  // Build dependency map (skip type-only imports as they don't create runtime dependencies)
   for (const imp of allImports) {
+    // Skip type-only imports - they don't create runtime dependencies
+    if (imp.isTypeOnly) {
+      continue;
+    }
+
     const targetPackage = determineTargetPackage(imp.importPath, imp.packageName);
 
     if (targetPackage && targetPackage !== imp.packageName) {
@@ -252,12 +287,14 @@ function analyzeDependencies() {
       if (existingDep) {
         existingDep.files.add(imp.file);
         existingDep.symbols.push(imp.symbol);
+        existingDep.importDetails.push(imp);
       } else {
         dependencies.push({
           fromPackage: imp.packageName,
           toPackage: targetPackage,
           files: new Set([imp.file]),
-          symbols: [imp.symbol]
+          symbols: [imp.symbol],
+          importDetails: [imp]
         });
       }
     }
@@ -415,6 +452,16 @@ function printDetailedDependencies() {
       console.log(`   Suggested action: Move code or refactor to avoid this dependency`);
     }
 
+    console.log(`\n   Import Details:`);
+    console.log('   ' + '─'.repeat(76));
+
+    for (const importDetail of dep.importDetails) {
+      const relativePath = relative(FRONTEND_DIR, importDetail.file);
+      console.log(`   📄 ${relativePath}:${importDetail.lineNumber} (${importDetail.symbol})`);
+      console.log(`      ${importDetail.fullImport}`);
+      console.log();
+    }
+
     console.log();
   }
 
@@ -439,6 +486,22 @@ function printViolationsSummary(violations: string[]) {
     console.log(`\nHierarchy Violations (${hierarchyViolations.length}):`);
     for (const v of hierarchyViolations) {
       console.log(`  ${v}`);
+      
+      // Extract package names from violation message
+      const match = v.match(/HIERARCHY:\s*([\w-]+)\s*→\s*([\w-]+)/);
+      if (match) {
+        const [, fromPkg, toPkg] = match;
+        const dep = dependencies.find(d => d.fromPackage === fromPkg && d.toPackage === toPkg);
+        if (dep && dep.importDetails.length > 0) {
+          console.log('\n  Import Details:');
+          for (const imp of dep.importDetails) {
+            const relativePath = relative(FRONTEND_DIR, imp.file);
+            console.log(`    📄 ${relativePath}:${imp.lineNumber} (${imp.symbol})`);
+            console.log(`       ${imp.fullImport}`);
+          }
+          console.log();
+        }
+      }
     }
   }
 
@@ -505,7 +568,6 @@ function main() {
   console.log('═'.repeat(80));
 
   visualizeGraph();
-  printDetailedDependencies();
   printViolationsSummary(violations);
   printRecommendations();
 

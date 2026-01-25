@@ -1,7 +1,10 @@
 import { SvelteMap } from 'svelte/reactivity';
 import type { IMenuRecord } from '$core/types/modules';
 import type { IModule } from './modules';
-import type { IImageResult } from '$components/ImageUploader.svelte';
+import { LocalStorage, Env } from './env';
+import type { IImageResult } from './types/common';
+
+export const imagesToUpload = new Map<number, () => Promise<IImageResult>>();
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 import { Env } from '$core/env';

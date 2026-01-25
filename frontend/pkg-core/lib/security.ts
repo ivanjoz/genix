@@ -1,13 +1,21 @@
-import { reloadLogin, type ILoginResult } from '$services/login';
 import { Env, IsClient, LocalStorage } from '$core/env';
 import { decrypt, Notify, throttle } from '$core/helpers';
-import type { IUsuario } from '$routes/admin/usuarios/usuarios.svelte';
+import type { IUsuario, ILoginResult } from '$core/types/common';
 
 // Token refresh constants (all in seconds)
 const TOKEN_REFRESH_THRESHOLD = 40 * 60 // 40 minutes in seconds
 const TOKEN_CHECK_INTERVAL = 4 * 60 // 4 minutes in seconds
 const REFRESH_LOCK_DURATION = 30 // 30 seconds lock duration
 const REFRESH_LOCK_KEY = Env.appId + "TokenRefreshLock"
+
+// Global registry for reloadLogin function to avoid circular dependencies
+let reloadLoginFn: () => Promise<any> = async () => {
+  console.warn('reloadLogin function not registered');
+};
+
+export const registerReloadLogin = (fn: () => Promise<any>) => {
+  reloadLoginFn = fn;
+};
 
 interface UserInfo {
   d: number // userID
@@ -115,7 +123,7 @@ const checkAndRefreshToken = async () => {
   console.log('Token refresh initiated - token is older than 40 minutes')
 
   try {
-    await reloadLogin()
+    await reloadLoginFn()
     console.log('Token refreshed successfully')
   } catch (error) {
     console.error('Error refreshing token:', error)
