@@ -998,29 +998,79 @@ function checkImports(filePath: string): ImportIssue[] {
 
 
 
-            if (!symbolFound && (isSvelteFile || isSvelteComponentImport(imp.importPath))) {
+                        if (!symbolFound && (isSvelteFile || isSvelteComponentImport(imp.importPath))) {
 
-              // Try case-insensitive match for Svelte components
 
-              for (const [exportedName, exp] of symbolMap.entries()) {
 
-                if (exportedName.toLowerCase() === importName.toLowerCase()) {
+                          // Try case-insensitive match for Svelte components
 
-                  symbolFound = true;
 
-                  isType = exp.type === 'type';
 
-                  break;
+                          for (const [exportedName, exp] of symbolMap.entries()) {
 
-                }
 
-              }
 
-            } else if (symbolFound) {
+                            if (exportedName.toLowerCase() === importName.toLowerCase()) {
 
-              isType = symbolMap.get(importName)!.type === 'type';
 
-            }
+
+                              symbolFound = true;
+
+
+
+                              isType = exp.type === 'type';
+
+
+
+                              if (exp.type === 'default' && imp.isNamed && !imp.isDefault && imp.imports.length === 1) {
+
+
+
+                                fixAsDefaultImport = true;
+
+
+
+                              }
+
+
+
+                              break;
+
+
+
+                            }
+
+
+
+                          }
+
+
+
+                        } else if (symbolFound) {
+
+
+
+                          const exp = symbolMap.get(importName)!;
+
+
+
+                          isType = exp.type === 'type';
+
+
+
+                          if (exp.type === 'default' && imp.isNamed && !imp.isDefault && imp.imports.length === 1) {
+
+
+
+                            fixAsDefaultImport = true;
+
+
+
+                          }
+
+
+
+                        }
 
 
 
@@ -1437,47 +1487,63 @@ function determineBestFix(issue: ImportIssue, sourceFile: string): string | null
       return null;
     }
 
-        const isGlobalType = issue.shouldAddTypeKeyword || imp.isTypeOnly;
+                const isGlobalType = issue.shouldAddTypeKeyword || imp.isTypeOnly;
 
-        const typeKeyword = isGlobalType ? 'type ' : '';
+                const typeKeyword = isGlobalType ? 'type ' : '';
 
-        const symbolsToUse = (newSymbols || imp.imports).map(name => {
+                const symbolsToUse = (newSymbols || imp.imports).map(name => {
 
-          const isInlineType = issue.missingTypeSymbols?.includes(name) ||
+                  const isInlineType = issue.missingTypeSymbols?.includes(name) ||
 
-                               imp.symbolsMetadata.find(m => m.name === name)?.isType;
+                                       imp.symbolsMetadata.find(m => m.name === name)?.isType;
 
-          return (isInlineType && !isGlobalType) ? `type ${name}` : name;
+                  return (isInlineType && !isGlobalType) ? `type ${name}` : name;
 
-        });
+                });
 
+        
 
+                if (issue.fixAsDefaultImport) {
 
-        if (imp.isDefault && !imp.isNamed) {
+                  if (symbolsToUse.length === 1) {
 
-          // If it was default, but we found a named export match
+                    return `import ${typeKeyword}${symbolsToUse[0]} from '${newPath}';`;
 
-          if (newSymbols && newSymbols.length === 1) {
+                  } else {
 
-            return `import ${typeKeyword}{ ${symbolsToUse[0]} } from '${newPath}';`;
+                    return `import ${typeKeyword}${symbolsToUse[0]}, { ${symbolsToUse.slice(1).join(', ')} } from '${newPath}';`;
 
-          }
+                  }
 
-          return `import ${typeKeyword}${symbolsToUse[0]} from '${newPath}';`;
+                }
 
-        } else if (imp.isNamed && !imp.isDefault) {
+        
 
-          return `import ${typeKeyword}{ ${symbolsToUse.join(', ')} } from '${newPath}';`;
+                if (imp.isDefault && !imp.isNamed) {
 
-        } else if (imp.isDefault && imp.isNamed) {
+                  // If it was default, but we found a named export match
 
-          const defaultImport = symbolsToUse[0];
+                  if (newSymbols && newSymbols.length === 1) {
 
-          const namedImports = symbolsToUse.slice(1).join(', ');
+                    return `import ${typeKeyword}{ ${symbolsToUse[0]} } from '${newPath}';`;
 
-          return `import ${typeKeyword}${defaultImport}, { ${namedImports} } from '${newPath}';`;
+                  }
 
-        }
+                  return `import ${typeKeyword}${symbolsToUse[0]} from '${newPath}';`;
+
+                } else if (imp.isNamed && !imp.isDefault) {
+
+                  return `import ${typeKeyword}{ ${symbolsToUse.join(', ')} } from '${newPath}';`;
+
+                } else if (imp.isDefault && imp.isNamed) {
+
+                  const defaultImport = symbolsToUse[0];
+
+                  const namedImports = symbolsToUse.slice(1).join(', ');
+
+                  return `import ${typeKeyword}${defaultImport}, { ${namedImports} } from '${newPath}';`;
+
+                }
 
      else if (imp.isSideEffect) {
       return `import '${newPath}';`;

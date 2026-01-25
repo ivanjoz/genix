@@ -23,7 +23,7 @@ const { Loading } = pkg
     type IAcceso,
     type IPerfil
   } from "./perfiles-accesos.svelte"
-import { AccesoCard } from '$routes/admin/perfiles-accesos/AccesoCard.svelte';
+import AccesoCard from '$routes/admin/perfiles-accesos/AccesoCard.svelte';
 
   const accesosService = new AccesosService()
   const perfilesService = new PerfilesService()

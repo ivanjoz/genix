@@ -1,5 +1,5 @@
 <script lang="ts">
-import { ONNXInference } from '$routes/develop-ui/model-test/ONNXInference.svelte';
+import ONNXInference from '$routes/develop-ui/model-test/ONNXInference.svelte';
 </script>
 
 <svelte:head>
