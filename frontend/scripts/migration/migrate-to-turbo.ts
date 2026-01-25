@@ -10,7 +10,7 @@
  *     ↓
  *   pkg-ui, pkg-components
  *     ↓
- *   pkg-store, pkg-app (leaf nodes)
+ *   pkg-store, pkg-main (leaf nodes)
  *
  * USAGE:
  *   bun scripts/migration/migrate-to-turbo.ts [--dry-run] [--verbose]
@@ -118,7 +118,7 @@ const MIGRATION_RULES: MigrationRule[] = [
   // Application routes and logic
   {
     sourceDir: 'routes',
-    targetPackage: 'pkg-app',
+    targetPackage: 'pkg-main',
     targetDir: 'routes',
     description: 'SvelteKit application routes'
   },
@@ -132,25 +132,25 @@ const MIGRATION_RULES: MigrationRule[] = [
   // Infrastructure
   {
     sourceDir: 'workers',
-    targetPackage: 'pkg-app',
+    targetPackage: 'pkg-main',
     targetDir: 'workers',
     description: 'Web workers'
   },
   {
     sourceDir: 'functions',
-    targetPackage: 'pkg-app',
+    targetPackage: 'pkg-main',
     targetDir: 'functions',
     description: 'Utility functions'
   },
   {
     sourceDir: 'static',
-    targetPackage: 'pkg-app',
+    targetPackage: 'pkg-main',
     targetDir: 'static',
     description: 'Static files'
   },
   {
     sourceDir: 'genix',
-    targetPackage: 'pkg-app',
+    targetPackage: 'pkg-main',
     targetDir: 'genix',
     description: 'Genix-specific code'
   },
@@ -169,7 +169,7 @@ const SKIP_FOLDERS = [
   'pkg-ui',
   'pkg-components',
   'pkg-store',
-  'pkg-app',
+  'pkg-main',
   'scripts',
   'tmp'
 ];
@@ -356,7 +356,7 @@ function createPackageStructure() {
   log('\n🏗️  Creating package structure...', 'info');
   
   // Create all package directories
-  const packages = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components', 'pkg-store', 'pkg-app'];
+  const packages = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components', 'pkg-store', 'pkg-main'];
   
   for (const pkg of packages) {
     const pkgPath = resolve(FRONTEND_DIR, pkg);

@@ -19,7 +19,7 @@ import { resolve, relative, dirname, join } from 'path';
 const FRONTEND_DIR = resolve(process.cwd());
 const PACKAGES_DIR = FRONTEND_DIR;
 
-const PACKAGES = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-ecommerce', 'pkg-store', 'pkg-app'];
+const PACKAGES = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-ecommerce', 'pkg-store', 'pkg-main'];
 
 // Symbol relocations: when a file moved, update all imports
 // Format: oldPath -> newPath
@@ -36,7 +36,7 @@ const PACKAGE_TO_ALIAS: Record<string, string> = {
   'pkg-ui': '$components',
   'pkg-ecommerce': '$ecommerce',
   'pkg-store': '$lib', // pkg-store uses $lib for its own lib
-  'pkg-app': '$lib',
+  'pkg-main': '$lib',
 };
 
 // Subdirectory mappings within packages

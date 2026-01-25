@@ -58,7 +58,7 @@ function findFilesWithCoreImports(): FileFix[] {
   
   // Search in all package directories
   const searchDirs = [
-    'pkg-app',
+    'pkg-main',
     'pkg-components',
     'pkg-store',
     'pkg-ui',
@@ -162,7 +162,7 @@ function main() {
   
   // Also fix the app.css import in +layout.svelte
   console.log('\n🔧 Checking app.css import...');
-  const layoutPath = path.join(PROJECT_ROOT, 'pkg-app/routes/+layout.svelte');
+  const layoutPath = path.join(PROJECT_ROOT, 'pkg-main/routes/+layout.svelte');
   if (fs.existsSync(layoutPath)) {
     let content = fs.readFileSync(layoutPath, 'utf-8');
     if (content.includes("import '../app.css';")) {

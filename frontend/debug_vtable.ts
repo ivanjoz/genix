@@ -49,7 +49,7 @@ function extractExports(filePath: string) {
 }
 
 const symbolIndex = new Map();
-const searchDirs = ['pkg-core', 'pkg-ui', 'pkg-app', 'pkg-services', 'pkg-components', 'pkg-store'];
+const searchDirs = ['pkg-core', 'pkg-ui', 'pkg-main', 'pkg-services', 'pkg-components', 'pkg-store'];
 
 for (const dir of searchDirs) {
   const dirPath = path.join(PROJECT_ROOT, dir);

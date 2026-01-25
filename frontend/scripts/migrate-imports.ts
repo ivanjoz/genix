@@ -19,7 +19,7 @@ import { resolve, relative, dirname, join, isAbsolute } from 'path';
 const FRONTEND_DIR = resolve(process.cwd());
 const PACKAGES_DIR = FRONTEND_DIR;
 
-const PACKAGES = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-ecommerce', 'pkg-store', 'pkg-app'];
+const PACKAGES = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-ecommerce', 'pkg-store', 'pkg-main'];
 
 // Symbol to new location mapping
 // Format: { symbol: { package: 'pkg-name', path: 'path/to/file' } }

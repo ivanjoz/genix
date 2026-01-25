@@ -56,18 +56,18 @@ const config = {
 			strict: true
 		}),
 		files: {
-			assets: 'pkg-app/static',
-			lib: 'pkg-app/lib',
-			routes: 'pkg-app/routes',
+			assets: 'pkg-main/static',
+			lib: 'pkg-main/lib',
+			routes: 'pkg-main/routes',
 			appTemplate: 'app.html'
 		},
 		alias: {
 			$ui: path.resolve('./pkg-ui'),
 			$store: path.resolve('./pkg-store'),
-			$routes: path.resolve('./pkg-app/routes'),
+			$routes: path.resolve('./pkg-main/routes'),
 			$components: path.resolve('./pkg-components'),
 			$core: path.resolve('./pkg-core'),
-			$app: path.resolve('./pkg-app'),
+			$main: path.resolve('./pkg-main'),
 			$services: path.resolve('./pkg-services')
 		},
 		prerender: {

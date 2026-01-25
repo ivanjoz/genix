@@ -129,8 +129,8 @@ function updateViteConfig(): boolean {
   const newAliasConfig = `const baseDir = {
     '$core': 'pkg-core',
     '$store': 'pkg-store',
-    '$app': 'pkg-app',
-    '$routes': 'pkg-app/routes',
+    '$app': 'pkg-main',
+    '$routes': 'pkg-main/routes',
     '$ui': 'pkg-ui',
     '$components': 'pkg-ui/components',
     '$shared': 'pkg-services',
@@ -285,7 +285,7 @@ function main() {
   console.log('─'.repeat(80));
   
   console.log('📂 Collecting files...');
-  const packageDirs = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components', 'pkg-store', 'pkg-app'];
+  const packageDirs = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components', 'pkg-store', 'pkg-main'];
   const allFiles: string[] = [];
   for (const pkg of packageDirs) {
     const packagePath = join(FRONTEND_DIR, pkg);
@@ -356,8 +356,8 @@ function main() {
   console.log('New alias structure:');
   console.log('  $core → pkg-core');
   console.log('  $store → pkg-store');
-  console.log('  $app → pkg-app');
-  console.log('  $routes → pkg-app/routes');
+  console.log('  $app → pkg-main');
+  console.log('  $routes → pkg-main/routes');
   console.log('  $ui → pkg-ui');
   console.log('  $components → pkg-ui/components');
   console.log('  $shared → pkg-services');

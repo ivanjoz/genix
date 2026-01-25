@@ -26,19 +26,19 @@ const MANUAL_FIXES = [
     note: "Renamed to match actual function name"
   },
   {
-    file: 'pkg-app/routes/develop-ui/test-table/+page.svelte',
+    file: 'pkg-main/routes/develop-ui/test-table/+page.svelte',
     search: "from '../../../components/VTable'",
     replace: "from '$components/VTable'",
     note: "Fixed relative import to alias"
   },
   {
-    file: 'pkg-app/routes/operaciones/productos/+page.svelte',
+    file: 'pkg-main/routes/operaciones/productos/+page.svelte',
     search: "from '../../../components/VTable/vTable.svelte'",
     replace: "from '$components/VTable/vTable.svelte'",
     note: "Fixed relative import to alias"
   },
   {
-    file: 'pkg-app/routes/+layout.svelte',
+    file: 'pkg-main/routes/+layout.svelte',
     search: "from '../workers/image-worker?worker'",
     replace: "from '$lib/workers/image-worker?worker'",
     note: "Fixed relative import to alias"

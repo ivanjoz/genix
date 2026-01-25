@@ -1,7 +1,7 @@
 import { Notify } from "./helpers"
 import { fetchEvent } from "../core/store.svelte"
 import { Env } from './env';
-import type { IGetCacheSubObject, serviceHttpProps } from "$app/workers/service-worker"
+import type { IGetCacheSubObject, serviceHttpProps } from '../../pkg-main/workers/service-worker.ts';
 import { setFetchProgress } from "./http"
 
 let tempID = parseInt(String(Math.floor(Date.now()/1000)).substring(4))

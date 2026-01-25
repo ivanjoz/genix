@@ -63,7 +63,7 @@ const DRY_RUN = process.argv.includes('--dry-run');
 
 const FRONTEND_DIR = resolve(process.cwd());
 const PACKAGES_DIR = FRONTEND_DIR;
-const PACKAGES = ['pkg-app', 'pkg-store', 'pkg-ui', 'pkg-core', 'pkg-ecommerce', 'pkg-services'];
+const PACKAGES = ['pkg-main', 'pkg-store', 'pkg-ui', 'pkg-core', 'pkg-ecommerce', 'pkg-services'];
 
 // Maps for tracking all exports
 const exportsByFile = new Map<string, ExportInfo[]>();

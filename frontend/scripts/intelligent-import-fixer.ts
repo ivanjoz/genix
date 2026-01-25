@@ -603,7 +603,7 @@ function buildSymbolIndex() {
   const searchDirs = [
     'pkg-core',
     'pkg-ui',
-    'pkg-app',
+    'pkg-main',
     'pkg-services',
     'pkg-components',
     'pkg-store'
@@ -1275,7 +1275,7 @@ function checkImports(filePath: string): ImportIssue[] {
  */
 function analyzeImports(): FixReport {
   const searchDirs = [
-    'pkg-app',
+    'pkg-main',
     'pkg-core',
     'pkg-ui',
     'pkg-services',

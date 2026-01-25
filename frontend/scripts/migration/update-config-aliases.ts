@@ -34,7 +34,7 @@ const ALIAS_MAPPINGS = {
 // New paths for aliases
 const ALIAS_PATHS = {
   '$core': './pkg-core',
-  '$lib': './pkg-app/lib',
+  '$lib': './pkg-main/lib',
   '$components': './pkg-ui/components',
   '$services': './pkg-services/services',
   '$shared': './pkg-services/shared',

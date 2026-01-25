@@ -132,7 +132,7 @@ var recreateObject = (obj, keysMap) => {
   return obj;
 };
 
-// pkg-app/workers/service-worker-cache.ts
+// pkg-main/workers/service-worker-cache.ts
 var PRECACHE = "precache-v2";
 var CACHE_ASSETS = "assets-v2";
 var CACHE_STATIC = "static-v2";
@@ -520,7 +520,7 @@ var parseObject = (rec) => {
   return newObject;
 };
 
-// pkg-app/workers/service-worker.ts
+// pkg-main/workers/service-worker.ts
 var parseResponseAsStream = async (fetchResponse, props) => {
   const contentType = fetchResponse.headers.get("Content-Type");
   if (fetchResponse.status && props.status) {

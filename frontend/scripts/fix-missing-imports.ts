@@ -83,7 +83,7 @@ function collectFixes(): FileFix[] {
   
   // Search in all package directories
   const searchDirs = [
-    'pkg-app',
+    'pkg-main',
     'pkg-components',
     'pkg-store',
     'pkg-ui',
@@ -207,7 +207,7 @@ function updateSvelteConfig(): boolean {
   if (match) {
     const newAlias = `alias: {
 			$store: path.resolve('./pkg-store/stores'),
-			$routes: path.resolve('./pkg-app/routes'),${match[1].replace('alias:', '').trim()}`;
+			$routes: path.resolve('./pkg-main/routes'),${match[1].replace('alias:', '').trim()}`;
     content = content.replace(aliasPattern, newAlias);
     fs.writeFileSync(configPath, content, 'utf-8');
     console.log('✅ Added $store and $routes aliases to svelte.config.js');
