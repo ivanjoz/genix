@@ -1,6 +1,6 @@
 <script>
 import { productosServiceState } from '$services/services/productos.svelte';
-  import ProductCard from "./ProductCard.svelte";
+import ProductCard from '$components/ecommerce/ProductCard.svelte';
   import s1 from "./styles.module.css";
 
   const productos = productosServiceState

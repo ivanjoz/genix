@@ -6,9 +6,9 @@ import { closeAllModals, closeModal, imagesToUpload, openModal } from '$core/cor
 import { Loading, Notify } from '$core/lib/helpers';
     import { postListaRegistros, type IListaRegistro, type INewIDToID, type ListasCompartidasService } from "./productos.svelte";
 
-  const { 
+  const {
     listas, origin
-  }: { 
+  }: {
     listas: ListasCompartidasService,
     origin: 1 /* Categorías */ | 2 /* Marcas */,
   } = $props()
@@ -55,7 +55,7 @@ import { Loading, Notify } from '$core/lib/helpers';
 
     let result: INewIDToID[]
     try {
-      result = await postListaRegistros([form]) 
+      result = await postListaRegistros([form])
     } catch (error) {
       Notify.failure(error as string)
       // Loading.remove()
@@ -65,7 +65,7 @@ import { Loading, Notify } from '$core/lib/helpers';
     const selected = categorias.find(x => x.ID === form.ID)
     let newCategorias = [...categorias]
 
-    if(selected && isDelete){ 
+    if(selected && isDelete){
       newCategorias = newCategorias.filter(x => x.ID !== form.ID)
     } else if(selected) {
       Object.assign(selected, form)

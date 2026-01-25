@@ -5,17 +5,17 @@ import Layer from '$ui/components/Layer.svelte';
 import Page from '$ui/components/Page.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
 import VTable from '$ui/components/vTable/vTable.svelte';
-import { ITableColumn } from '$ui/components/vTable/types';
+import type { ITableColumn } from '$ui/components/vTable/types';
 import { Loading, Notify, formatTime } from '$core/lib/helpers';
 import { throttle } from '$core/lib/helpers';
 import { Core } from '$core/core/store.svelte';
-  import AlmacenLayoutEditor from "./AlmacenLayoutEditor.svelte"
-  import { 
-    AlmacenesService, 
-    PaisCiudadesService, 
-    postSede, 
+import AlmacenLayoutEditor from '$routes/operaciones/sedes-almacenes/AlmacenLayoutEditor.svelte';
+  import {
+    AlmacenesService,
+    PaisCiudadesService,
+    postSede,
     postAlmacen,
-    type ISede, 
+    type ISede,
     type IAlmacen,
     type IAlmacenLayout
   } from "./sedes-almacenes.svelte"
@@ -260,7 +260,7 @@ import { Core } from '$core/core/store.svelte';
         </button>
       </div>
     </div>
-    <VTable css="w-full" 
+    <VTable css="w-full"
       maxHeight="calc(80vh - 13rem)"
       columns={sedesColumns}
       data={filteredSedes}
@@ -289,7 +289,7 @@ import { Core } from '$core/core/store.svelte';
           </button>
         </div>
       </div>
-      <VTable 
+      <VTable
         css="w-full"
         maxHeight="calc(80vh - 13rem)"
         columns={almacenesColumns}
@@ -314,7 +314,7 @@ import { Core } from '$core/core/store.svelte';
               {:else}
                 <div></div>
               {/if}
-              <button class="bnr2 b-blue b-card-1" 
+              <button class="bnr2 b-blue b-card-1"
                 aria-label="Editar Layout"
                 onclick={() => handleLayoutEdit(record)}
               >
@@ -328,7 +328,7 @@ import { Core } from '$core/core/store.svelte';
   {/if}
 
   <!-- Sede Modal -->
-  <Modal id={1} title={(sedeForm?.ID > 0 ? "Actualizar" : "Crear") + " Sede"} 
+  <Modal id={1} title={(sedeForm?.ID > 0 ? "Actualizar" : "Crear") + " Sede"}
     size={7} bodyCss="px-16 py-14"
     onSave={() => { saveSede() }}
     onDelete={sedeForm?.ID > 0 ? () => { saveSede(true) } : undefined}
@@ -379,7 +379,7 @@ import { Core } from '$core/core/store.svelte';
 
   <!-- Layout Side Layer -->
   <Layer id={1} type="side" title={"Layout " + (almacenForm?.Nombre || "-")}
-    contentCss="p-0" css="px-8 py-8 md:px-14 md:py-10" 
+    contentCss="p-0" css="px-8 py-8 md:px-14 md:py-10"
     titleCss="h2 ff-bold"
     onClose={() => {}}
     onSave={() => { saveAlmacen() }}

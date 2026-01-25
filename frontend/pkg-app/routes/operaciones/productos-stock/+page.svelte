@@ -1,7 +1,7 @@
 <script lang="ts">
 import Page from '$ui/components/Page.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
-import { ITableColumn } from '$ui/components/vTable/types';
+import type { ITableColumn } from '$ui/components/vTable/types';
 import VTable from '$ui/components/vTable/vTable.svelte';
 import { Notify, throttle } from '$core/lib/helpers';
     import pkg from 'notiflix'

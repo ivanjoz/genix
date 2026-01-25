@@ -25,4 +25,3 @@ import Page from '$ui/components/Page.svelte';
 <style>
 
 </style>
-

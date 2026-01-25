@@ -3,7 +3,7 @@ import Input from '$ui/components/Input.svelte';
 import Modal from '$ui/components/Modal.svelte';
 import Page from '$ui/components/Page.svelte';
 import VTable from '$ui/components/vTable/vTable.svelte';
-import { ITableColumn } from '$ui/components/vTable/types';
+import type { ITableColumn } from '$ui/components/vTable/types';
 import { Notify, throttle } from '$core/lib/helpers';
 import { Core, closeModal } from '$core/core/store.svelte';
 import { formatTime } from '$core/lib/helpers';

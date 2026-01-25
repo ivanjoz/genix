@@ -10,8 +10,8 @@ import { formatN } from '$core/lib/helpers';
   import { ProductosService } from "../productos/productos.svelte";
   import type { IAlmacen } from "../sedes-almacenes/sedes-almacenes.svelte";
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte";
-  import { ListasCompartidasService } from "../productos/productos.svelte"; 
-  import ProductoVentaCard from "./ProductoVentaCard.svelte";
+  import { ListasCompartidasService } from "../productos/productos.svelte";
+import ProductoVentaCard from '$routes/operaciones/ventas/ProductoVentaCard.svelte';
   import type { ProductoVenta } from "./ventas.svelte";
   import { VentasState } from "./ventas.svelte";
 import parametros from '$shared/services/parametros.svelte';
@@ -82,7 +82,7 @@ import parametros from '$shared/services/parametros.svelte';
       if (stocks.length === 0) continue;
 
       const brandName = listasService.RecordsMap.get(producto.MarcaID)?.Nombre || "";
-      
+
       const base: ProductoVenta = {
         producto: producto,
         cant: 0,
@@ -141,11 +141,11 @@ import parametros from '$shared/services/parametros.svelte';
     }
 
     const terms = text ? text.split(" ") : [];
-    
+
     productosParsed = productosParsedAll.filter((e) => {
         // Filter by Name
         const matchName = terms.length === 0 || include(e.searchText, terms);
-        
+
         // Filter by SKU
         let matchSku = true;
         if(skuText) {
@@ -158,7 +158,7 @@ import parametros from '$shared/services/parametros.svelte';
 
         return matchName && matchSku;
     });
-    
+
     productoSelected = -1;
   }
 
@@ -274,7 +274,7 @@ import parametros from '$shared/services/parametros.svelte';
               </div>
             {/each}
             {#if group.length === 1}
-              <div class="flex-1 min-w-0"></div> 
+              <div class="flex-1 min-w-0"></div>
             {/if}
           </div>
         {/each}

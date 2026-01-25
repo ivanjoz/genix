@@ -7,7 +7,7 @@ import SearchCard from '$ui/components/SearchCard.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
 import CheckboxOptions from '$ui/components/CheckboxOptions.svelte';
 import VTable from '$ui/components/vTable/vTable.svelte';
-import { ITableColumn } from '$ui/components/vTable/types';
+import type { ITableColumn } from '$ui/components/vTable/types';
 import { Notify, throttle } from '$core/lib/helpers';
 import { Core, closeModal } from '$core/core/store.svelte';
 import Modules from '$core/core/modules';
@@ -24,7 +24,7 @@ const { Loading } = pkg
     type IAcceso,
     type IPerfil
   } from "./perfiles-accesos.svelte"
-  import AccesoCard from "./AccesoCard.svelte"
+import AccesoCard from '$routes/admin/perfiles-accesos/AccesoCard.svelte';
 
   const accesosService = new AccesosService()
   const perfilesService = new PerfilesService()

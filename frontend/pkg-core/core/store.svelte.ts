@@ -1,10 +1,10 @@
 import { SvelteMap } from 'svelte/reactivity';
 import type { IMenuRecord } from '../types/menu';
 import type { IModule } from './modules';
-import { IImageResult } from '$ui/components/ImageUploader.svelte';
+import type { IImageResult } from '$ui/components/ImageUploader.svelte';
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
-import { Env } from '../lib/env.ts';
+import { Env } from '../lib/env';
 
 export const getDeviceType = () => {
   let view = 1 // Desktop

@@ -1,7 +1,7 @@
-import { reloadLogin, type ILoginResult } from '$services/services/admin/login';
-import { Env, IsClient, LocalStorage } from "./env.ts"
-import { decrypt, Notify, throttle } from "./helpers.ts"
-import type { IUsuario } from "$app/routes/admin/usuarios/usuarios.svelte"
+import { reloadLogin, ILoginResult } from '$services/services/admin/login';
+import { Env, IsClient, LocalStorage } from "./env"
+import { decrypt, Notify, throttle } from "./helpers"
+import type { IUsuario } from '$routes/admin/usuarios/usuarios.svelte';
 
 // Token refresh constants (all in seconds)
 const TOKEN_REFRESH_THRESHOLD = 40 * 60 // 40 minutes in seconds

@@ -3,8 +3,8 @@
   export interface IProps {
     id: number, isMobile?: boolean, css?: string
   }
-  
-  const { 
+
+  const {
     id = 0, isMobile = false, css = ""
   }: IProps = $props();
 
@@ -12,11 +12,11 @@
 import angleSvg from '$core/lib/assets/angle.svg?raw';
 import { parseSVG } from '$core/lib/helpers';
   import s1 from "./styles.module.css"
-  import ArrowSteps from "./ArrowSteps.svelte"
-import globals from '$store/stores/globals.svelte';
+import ArrowSteps from '$components/ecommerce/ArrowSteps.svelte';
+import globals from '$store/globals.svelte';
 import Input from '$ui/components/Input.svelte';
-  import CiudadesSelector from "./CiudadesSelector.svelte";
-  import ProductCardHorizonal from "./ProductCardHorizonal.svelte";
+import CiudadesSelector from '$components/ecommerce/CiudadesSelector.svelte';
+import ProductCardHorizonal from '$components/ecommerce/ProductCardHorizonal.svelte';
 import { Core } from '$core/core/store.svelte';
 
   let userForm = {} as any
@@ -28,7 +28,7 @@ import { Core } from '$core/core/store.svelte';
 
 <div class={css}>
   {#if !isMobile}
-    <button class={["bn1 w-full",layerOpenedState.id === id ? s1.button_menu_top : ""].join(" ")} 
+    <button class={["bn1 w-full",layerOpenedState.id === id ? s1.button_menu_top : ""].join(" ")}
       onclick={toggleCartDiv}>
       <i class="icon1-basket"></i>
       <span>Carrito</span>
@@ -36,8 +36,8 @@ import { Core } from '$core/core/store.svelte';
   {/if}
 
   {#if layerOpenedState.id === id}
-    <img class={"absolute h-20 _1 "+(isMobile ? "right-17" : "right-[40%]")} alt="" 
-      src={parseSVG(angleSvg)} 
+    <img class={"absolute h-20 _1 "+(isMobile ? "right-17" : "right-[40%]")} alt=""
+      src={parseSVG(angleSvg)}
     />
     <div class="_2 absolute p-12 flex flex-col">
       <ArrowSteps selected={Ecommerce.cartOption}
@@ -45,13 +45,13 @@ import { Core } from '$core/core/store.svelte';
         onSelect={e => {
           Ecommerce.cartOption = e.id
         }}
-        options={[ 
-          { id: 1, name: 'Carrito', icon: "icon-basket" }, 
-          { id: 2, name: 'Datos de Envío', icon: "icon-doc-inv-alt" }, 
-          { id: 3, name: 'Pago', icon: "icon-shield" }, 
-          { id: 4, 
-            name: 'Confirmación', 
-            icon: "icon-ok" 
+        options={[
+          { id: 1, name: 'Carrito', icon: "icon-basket" },
+          { id: 2, name: 'Datos de Envío', icon: "icon-doc-inv-alt" },
+          { id: 3, name: 'Pago', icon: "icon-shield" },
+          { id: 4,
+            name: 'Confirmación',
+            icon: "icon-ok"
           },
         ]}
       >

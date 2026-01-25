@@ -3,14 +3,14 @@ import Input from '$ui/components/Input.svelte';
 import ColorPicker from '$ui/components/micro/ColorPicker.svelte';
 import Modal from '$ui/components/Modal.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
-import { VTable, ITableColumn } from '$ui/components/vTable/types';
+import { VTable, ITableColumn } from '$ui/components/vTable/vTable.svelte';
 import { closeAllModals, openModal } from '$core/core/store.svelte';
 import { formatN } from '$core/lib/helpers';
     import { productoAtributos, type IProducto, type IProductoPresentacion } from "./productos.svelte";
 
   const produtcoAtributosMap = new Map(productoAtributos.map(e => [e.id, e]))
 
-  let { 
+  let {
     producto = $bindable()
   }: { producto: IProducto } = $props()
 
@@ -49,7 +49,7 @@ import { formatN } from '$core/lib/helpers';
   <div></div>
   <!-- svelte-ignore a11y_consider_explicit_label -->
   <button class="bx-green s1" onclick={() => {
-    presentacionForm = { 
+    presentacionForm = {
       at: producto.AtributosIDs?.[0] as number,
       id: tempCounter,
       ss: 1
@@ -72,7 +72,7 @@ import { formatN } from '$core/lib/helpers';
     {#if col.id === "color" && record.cl}
       <div class="flex justify-center w-full">
         <div class="_1 h-24 w-36" style="background-color:{record.cl}">
-        </div>  
+        </div>
       </div>
     {/if}
   {/snippet}

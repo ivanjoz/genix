@@ -3,7 +3,7 @@
 
   import emblaCarouselSvelte from "embla-carousel-svelte";
   import s1 from "./styles.module.css";
-  import type { ICategoriaProducto } from "./store.svelte.ts";
+  import type { ICategoriaProducto } from "./store.svelte";
 
   let emblaApi;
   let options = { loop: false };

@@ -4,7 +4,7 @@ import Modal from '$ui/components/Modal.svelte';
 import Page from '$ui/components/Page.svelte';
 import SearchCard from '$ui/components/SearchCard.svelte';
 import VTable from '$ui/components/vTable/vTable.svelte';
-import { ITableColumn } from '$ui/components/vTable/types';
+import type { ITableColumn } from '$ui/components/vTable/types';
 import { Notify, throttle } from '$core/lib/helpers';
 import { Core, closeModal } from '$core/core/store.svelte';
 import { formatTime } from '$core/lib/helpers';
@@ -131,8 +131,8 @@ const { Loading } = pkg
       </div>
     </div>
 
-    <VTable 
-      columns={columns} 
+    <VTable
+      columns={columns}
       data={usuariosService.usuarios}
       css="w-full"
       maxHeight="calc(80vh - 13rem)"
@@ -142,7 +142,7 @@ const { Loading } = pkg
     </VTable>
   </div>
 
-  <Modal 
+  <Modal
     id={1}
     size={5}
     title={(usuarioForm?.id > 0 ? "Actualizar" : "Guardar") + " Usuario"}
@@ -151,47 +151,47 @@ const { Loading } = pkg
     onDelete={usuarioForm?.id > 0 ? () => saveUsuario(true) : undefined}
   >
     <div class="grid grid-cols-24 gap-10 p-6">
-      <Input 
-        bind:saveOn={usuarioForm} 
+      <Input
+        bind:saveOn={usuarioForm}
         save="usuario"
-        css="col-span-12" 
-        label="Usuario" 
+        css="col-span-12"
+        label="Usuario"
         required={true}
         disabled={usuarioForm?.id > 0}
       />
-      <Input 
-        bind:saveOn={usuarioForm} 
+      <Input
+        bind:saveOn={usuarioForm}
         save="nombres"
-        css="col-span-12" 
-        label="Nombres" 
+        css="col-span-12"
+        label="Nombres"
         required={true}
       />
-      <Input 
-        bind:saveOn={usuarioForm} 
+      <Input
+        bind:saveOn={usuarioForm}
         save="apellidos"
-        css="col-span-12" 
+        css="col-span-12"
         label="Apellidos"
       />
-      <Input 
-        bind:saveOn={usuarioForm} 
+      <Input
+        bind:saveOn={usuarioForm}
         save="documentoNro"
-        css="col-span-12" 
+        css="col-span-12"
         label="Nº Documento"
       />
-      <Input 
-        bind:saveOn={usuarioForm} 
+      <Input
+        bind:saveOn={usuarioForm}
         save="cargo"
-        css="col-span-12" 
+        css="col-span-12"
         label="Cargo"
       />
-      <Input 
-        bind:saveOn={usuarioForm} 
+      <Input
+        bind:saveOn={usuarioForm}
         save="email"
-        css="col-span-12" 
+        css="col-span-12"
         label="Email"
       />
-      <SearchCard 
-        bind:saveOn={usuarioForm} 
+      <SearchCard
+        bind:saveOn={usuarioForm}
         save="perfilesIDs"
         css="col-span-24"
         options={perfilesService.perfiles}
@@ -199,24 +199,23 @@ const { Loading } = pkg
         keyName="nombre"
         label="PERFILES ::"
       />
-      <Input 
-        bind:saveOn={usuarioForm} 
+      <Input
+        bind:saveOn={usuarioForm}
         save="password1"
-        css="col-span-12" 
-        label="Password" 
+        css="col-span-12"
+        label="Password"
         type="password"
         required={!usuarioForm.id}
         placeholder={usuarioForm.id > 0 ? "SIN CAMBIAR" : ""}
       />
-      <Input 
-        bind:saveOn={usuarioForm} 
+      <Input
+        bind:saveOn={usuarioForm}
         save="password2"
-        css="col-span-12" 
-        label="Password (Repetir)" 
+        css="col-span-12"
+        label="Password (Repetir)"
         type="password"
         required={!usuarioForm.id}
       />
     </div>
   </Modal>
 </Page>
-

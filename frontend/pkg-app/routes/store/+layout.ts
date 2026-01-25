@@ -1,4 +1,4 @@
-import productos from '$app/routes/operaciones/productos/productos.svelte';
+import productos from '../operaciones/productos/productos.svelte';
 
 export const csr = true;
 export const ssr = true;

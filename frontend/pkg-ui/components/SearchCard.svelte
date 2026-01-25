@@ -1,6 +1,6 @@
 <script lang="ts" generics="T,E">
     import { untrack } from "svelte";
-  import SearchSelect from "./SearchSelect.svelte";
+import SearchSelect from '$ui/components/SearchSelect.svelte';
 import { WeakSearchRef } from '$core/core/store.svelte';
 
   interface SearchSelectProps<T> {
@@ -82,14 +82,14 @@ import { WeakSearchRef } from '$core/core/store.svelte';
 </script>
 
 <div class={css}>
-  <SearchSelect options={options} keyId={keyId} keyName={keyName} 
-    clearOnSelect={true} avoidIDs={selectedIDs} placeholder={label} 
+  <SearchSelect options={options} keyId={keyId} keyName={keyName}
+    clearOnSelect={true} avoidIDs={selectedIDs} placeholder={label}
     css={"s1 "+inputCss} optionsCss={optionsCss}
     onChange={e => {
       if(!e){ return }
       const id = e[keyId] as number
       if(!selectedIDs.includes(id)){
-        selectedIDs.push(id)        
+        selectedIDs.push(id)
         doOnChange()
       }
     }}

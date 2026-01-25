@@ -39,10 +39,10 @@ export class VentasState {
   filterText = $state("")
   ventaErrorMessage = $state("")
   filterSku = $state("")
-  
+
   // Cart
   ventaProductos = $state([] as VentaProducto[])
-  
+
   // Computed
   ventaProductosMap = $derived.by(() => { // Using $derived.by for complex logic if needed, but Map construction is simple
     return new Map(this.ventaProductos.map(x => [x.key, x]))
@@ -54,8 +54,8 @@ export class VentasState {
   addProducto(e: ProductoVenta, cant: number, sku?: string) {
     const ventaCant = this.ventaProductosMap.get(e.key)?.cantidad || 0
     const stock = e.cant - ventaCant
-    
-    if(stock < cant){ 
+
+    if(stock < cant){
       this.ventaErrorMessage = `No hay suficiente stock de "${e.producto?.Nombre}" para agregar ${cant} unidades.`
       return
     }
@@ -66,7 +66,7 @@ export class VentasState {
       if(sku){
         const currentSkus = ventaProducto.skus || new Map<string, number>()
         const skuAdded = currentSkus.get(sku)
-        
+
         if(skuAdded){
           const stockCant = e.skus?.find(x => x.SKU === sku)?.Cantidad || 0
           if((skuAdded + 1) > stockCant){
@@ -85,9 +85,9 @@ export class VentasState {
       }
       this.ventaProductos = [...this.ventaProductos] // trigger update if deep mutation not caught (arrays)
     } else {
-      this.ventaProductos.push({ 
-        key: e.key, 
-        cantidad: cant, 
+      this.ventaProductos.push({
+        key: e.key,
+        cantidad: cant,
         productoID: e.producto.ID,
         skus: new Map(sku ? [[sku,1]] : []),
         isSubUnidad: e.isSubUnidad || false,
@@ -115,20 +115,20 @@ export class VentasState {
         // Legacy: const monto = producto.PrecioFinal * vp.cantidad
         // If subunit, usually price is different, but legacy code uses product.PrecioFinal directly.
         // Assuming ProductoVentaCard logic handles specific subunit price if separate product wasn't created.
-        // In legacy: `if(e.isSubUnidad) { ... }` 
-        // Wait, in legacy, `productosParsed` creates entries. 
-        // If it is subunit, it has `isSubUnidad: true`. 
+        // In legacy: `if(e.isSubUnidad) { ... }`
+        // Wait, in legacy, `productosParsed` creates entries.
+        // If it is subunit, it has `isSubUnidad: true`.
         // But the `producto` object attached is the SAME parent product.
         // Legacy `recalcVentaTotales`: `const monto = producto.PrecioFinal * vp.cantidad`
         // Wait, if it's a subunit, shouldn't it use `SbnPreciFinal`?
         // Checking legacy `ventas.tsx` line 210: `const monto = producto.PrecioFinal * vp.cantidad`
         // It seems simpler in legacy? Or maybe `ProductoVenta` created `key` S+ID but linked same product.
-        // Let's look at legacy lines 120-124: 
+        // Let's look at legacy lines 120-124:
         // `clone.cant = producto.SbnCantidad` ... `clone.isSubUnidad = true`
         // But `recalcVentaTotales` (line 204) uses `producto.PrecioFinal`.
-        // This might be a BUG in legacy or I am misreading. 
+        // This might be a BUG in legacy or I am misreading.
         // Ah, `SbnPreciFinal` exists in `IProducto` interface in `productos.svelte.ts`.
-        
+
         if (vp.isSubUnidad && producto.SbnPreciFinal) {
            precio = producto.SbnPreciFinal
         }
@@ -136,7 +136,7 @@ export class VentasState {
         total += precio * vp.cantidad
       }
     }
-    
+
     this.form.total = total
     this.form.subtotal = Math.floor(total / 1.18)
     this.form.igv = total - this.form.subtotal

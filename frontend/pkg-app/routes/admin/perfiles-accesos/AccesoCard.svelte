@@ -17,7 +17,7 @@ import { Core } from '$core/core/store.svelte';
   } = $props()
 
   const acciones = $derived(perfilForm?.accesosMap?.get(acceso.id) || [])
-  
+
   const accionColor = $derived.by(() => {
     if (acciones.length === 0 || isEdit) return undefined
     const acciones_ = [...acciones].sort().reverse()
@@ -43,7 +43,7 @@ import { Core } from '$core/core/store.svelte';
   function handleAccionClick(ev: MouseEvent, id: number) {
     ev.stopPropagation()
     if (!perfilForm) return
-    
+
     let newAcciones = [...(perfilForm.accesosMap.get(acceso.id) || [])]
     if (newAcciones.includes(id)) {
       newAcciones = newAcciones.filter(x => x !== id)
@@ -51,7 +51,7 @@ import { Core } from '$core/core/store.svelte';
       newAcciones.push(id)
     }
     newAcciones.sort((a, b) => b - a)
-    
+
     if (newAcciones.length === 0) {
       perfilForm.accesosMap.delete(acceso.id)
     } else {
@@ -69,7 +69,7 @@ import { Core } from '$core/core/store.svelte';
   })
 </script>
 
-<div 
+<div
   class={cN}
   style:border-left-color={accionColor}
   onclick={handleCardClick}
@@ -83,13 +83,13 @@ import { Core } from '$core/core/store.svelte';
   }}
 >
   <div class="mr-4">{acceso.nombre}</div>
-  
+
   {#if Core.deviceType > 1}
     <div class="line-1 p-abs" style:background-color={accionColor}></div>
   {/if}
-  
+
   {#if isEdit}
-    <div 
+    <div
       class="absolute flex items-center justify-center i-edit"
       onclick={ev => {
         ev.stopPropagation()
@@ -108,13 +108,13 @@ import { Core } from '$core/core/store.svelte';
     </div>
     <div class="absolute flex items-center justify-center a-id c-purple">{acceso.id}</div>
   {/if}
-  
+
   {#if !isEdit && perfilForm}
     <div class="acciones-ac1">
       {#each acciones as id}
         {@const accion = accesoAccionesMap.get(id)}
         {#if accion}
-          <div 
+          <div
             class="bnc1"
             style:background-color={accion.color}
           >

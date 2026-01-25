@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Popover2 } from './index';
+import { Popover2 } from '$ui/components/popover2/Popover2.svelte';
 	import './popover2.css';
 	
 	let topButton: HTMLElement | null = $state(null);

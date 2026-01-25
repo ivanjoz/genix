@@ -1,7 +1,7 @@
 <script lang="ts" generics="T">
     import { untrack } from "svelte";
     import s1 from "./components.module.css";
-    import { type ElementAST } from "./micro/Renderer.svelte";
+import { ElementAST } from '$ui/components/micro/Renderer.svelte';
 
     export interface IInput<T> {
         id?: number;

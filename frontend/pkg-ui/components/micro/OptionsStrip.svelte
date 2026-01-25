@@ -2,10 +2,10 @@
 import { Core } from '$core/core/store.svelte';
 
 
-  let { 
+  let {
     options, selected, keyId, keyName, buttonCss, onSelect, css, useMobileGrid
-  }: { 
-    options: T[], 
+  }: {
+    options: T[],
     selected: number,
     keyId?: keyof T,
     keyName?: keyof T,

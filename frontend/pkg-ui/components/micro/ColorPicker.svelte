@@ -1,7 +1,7 @@
 <script lang="ts" generics="T">
 import { Core } from '$core/core/store.svelte';
-  import ColorPicker from 'svelte-awesome-color-picker';
-  import s1 from "$components/components.module.css";
+import ColorPicker from '$ui/components/micro/ColorPicker.svelte';
+  import s1 from "../components.module.css";
     import { untrack } from 'svelte';
 
 	let {

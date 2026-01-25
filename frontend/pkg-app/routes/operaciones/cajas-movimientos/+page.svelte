@@ -3,7 +3,7 @@ import Page from '$ui/components/Page.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
 import DateInput from '$ui/components/DateInput.svelte';
 import VTable from '$ui/components/vTable/vTable.svelte';
-import { ITableColumn } from '$ui/components/vTable/types';
+import type { ITableColumn } from '$ui/components/vTable/types';
 import { Loading, formatTime, throttle, Notify } from '$core/lib/helpers';
 import { formatN } from '$core/lib/helpers';
   import { untrack } from "svelte"

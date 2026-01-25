@@ -13,42 +13,42 @@ import { formatN } from '$core/lib/helpers';
     onmouseover: () => void
   }
 
-  let { 
-    idx, 
-    productoStock, 
-    isSelected, 
+  let {
+    idx,
+    productoStock,
+    isSelected,
     ventaProducto,
-    filterText, 
-    onadd, 
+    filterText,
+    onadd,
     onselect,
     onmouseover
   }: Props = $props();
 
   let inputRef: HTMLInputElement | undefined = $state();
-  
+
   // Highlight logic for search
   const highlightText = (text: string, highlight: string) => {
     if (!highlight) return text;
     const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
-    return parts.map((part, i) => 
-      part.toLowerCase() === highlight.toLowerCase() 
+    return parts.map((part, i) =>
+      part.toLowerCase() === highlight.toLowerCase()
         ? `<span class="bg-yellow-200 text-black font-bold">${part}</span>`
         : part
     ).join('');
   };
 
   const isSku = $derived((productoStock.skus?.length || 0) > 0);
-  
+
   const getCant = $derived.by(() => {
      let ventaCant = ventaProducto?.cantidad || 0
-     
-     // Legacy logic for sub-units counting against parent stock 
+
+     // Legacy logic for sub-units counting against parent stock
      // If this is a parent (P..), check if S.. exists
      // This logic was in legacy `ProductoVentaCard`.
      // We might need access to the whole map or pass down the related subunit quanity?
      // For now, simpler approach: pass accurate `ventaProducto` or handle in parent?
      // In legacy it received `ventasProductosMap`.
-     
+
      // Let's assume passed `ventaProducto` corresponds to THIS card's key.
      // But strictly speaking, stock is shared if it's the main unit.
      // Let's implement basic stock substraction first.
@@ -58,14 +58,14 @@ import { formatN } from '$core/lib/helpers';
   // SKU Logic filtering
   const firstSkus = $derived.by(() => {
     let skus = productoStock.skus || []
-    
+
     // Filter out SKUs that are fully in cart (no stock left)
     skus = skus.filter(s => {
         const inCart = ventaProducto?.skus?.get(s.SKU as string) || 0
         return (s.Cantidad - inCart) > 0
     })
 
-    return skus.slice(0, 5) 
+    return skus.slice(0, 5)
   })
 
   const price = $derived.by(() => {
@@ -74,7 +74,7 @@ import { formatN } from '$core/lib/helpers';
       }
       return productoStock.producto.PrecioFinal
   })
-  
+
   // Helper for quantities
   const cantidades = [2,3,4,5,6,8,10,12]
 
@@ -90,7 +90,7 @@ import { formatN } from '$core/lib/helpers';
 
   $effect(() => {
     if(isSelected && inputRef){
-        // Focus or prepare input? 
+        // Focus or prepare input?
         // Parent controls the global input mostly, but we might want visual focus
     }
   })
@@ -145,7 +145,7 @@ import { formatN } from '$core/lib/helpers';
               <div class="flex gap-4 z-10 m-[-2px] opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   {#each cantidades as n}
                      {#if n <= getCant}
-                     <button 
+                     <button
                        class="w-32 h-32 flex items-center justify-center text-xs font-bold text-gray-500 bg-gray-100 hover:bg-blue-100 hover:text-blue-600 rounded cursor-pointer transition-colors"
                        onclick={(e) => {
                            e.stopPropagation()
@@ -162,7 +162,7 @@ import { formatN } from '$core/lib/helpers';
 
         <!-- Col 2: Input Placeholder (Visual only, actual input is often global or hidden/bound) -->
         <!-- In this design, we keep it simple. -->
-        
+
         <!-- Col 3: Stock -->
         {#if !isSku}
           <div class="font-mono absolute bottom-0 left-0 text-sm text-gray-500 text-right w-64">

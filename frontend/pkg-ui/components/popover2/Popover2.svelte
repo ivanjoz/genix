@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import Portal from './Portal.svelte';
+import Portal from '$ui/components/popover2/Portal.svelte';
 	import { calculatePosition, type Placement } from './positioning';
 import { parseSVG } from '$core/lib/helpers';
 import angleSvg from '$core/lib/assets/angle.svg?raw';

@@ -33,7 +33,7 @@ export interface IImageUploaderProps {
   description?: string;
   cardStyle?: string;
   onDelete?: (src: string) => void;
-  onChange?: (e: ImageSource, uploadImage?: () => void) => void 
+  onChange?: (e: ImageSource, uploadImage?: () => void) => void
   cardCss?: string;
   hideFormUseMessage?: string;
   hideUploadButton?: boolean;
@@ -51,7 +51,7 @@ export interface IImageResult {
   description?: string;
 }
 
-let { 
+let {
   src = "",
   types = [],
   saveAPI = "images",
@@ -127,16 +127,16 @@ const uploadImage = async (): Promise<IImageResult> => {
     ] as IResulution[]
 
     for(const rs of resolutions){
-      rs.promise = new Promise(resolve => { 
-        fileToImage(imageFile, rs.r, "avif").then(d => { 
+      rs.promise = new Promise(resolve => {
+        fileToImage(imageFile, rs.r, "avif").then(d => {
           // console.log("image b64",d)
-          rs.fn(d), resolve(0) 
+          rs.fn(d), resolve(0)
         })
       })
     }
 
     try {
-      await Promise.all(resolutions.map(x => x.promise)) 
+      await Promise.all(resolutions.map(x => x.promise))
     } catch (error) {
       Notify.failure(`Error al convertir imagen: ${error}`)
       return Promise.resolve(result)
@@ -486,4 +486,3 @@ onDestroy(() => {
     color: white;
   }
 </style>
-

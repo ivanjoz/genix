@@ -3,11 +3,11 @@ import Page from '$ui/components/Page.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
 import DateInput from '$ui/components/DateInput.svelte';
 import VTable from '$ui/components/vTable/vTable.svelte';
-import { ITableColumn } from '$ui/components/vTable/types';
+import type { ITableColumn } from '$ui/components/vTable/types';
 import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte"
   import { ProductosService } from "../productos/productos.svelte"
-  import { 
+  import {
     queryAlmacenMovimientos, movimientoTipos,
     type IAlmacenMovimiento, type IUsuario, type IProducto
   } from "./almacen-movimientos.svelte"
@@ -58,11 +58,11 @@ import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
 
     console.log("registros obtenidos: ", result)
 
-    for (const e of result.Productos) { 
-      productosMap.set(e.ID, e) 
+    for (const e of result.Productos) {
+      productosMap.set(e.ID, e)
     }
-    for (const e of result.Usuarios) { 
-      usuariosMap.set(e.id, e) 
+    for (const e of result.Usuarios) {
+      usuariosMap.set(e.id, e)
     }
 
     almacenMovimientos = result.Movimientos
@@ -81,19 +81,19 @@ import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
   }
 
   const columns: ITableColumn<IAlmacenMovimiento>[] = [
-    { 
-      header: "Fecha Hora", 
+    {
+      header: "Fecha Hora",
       headerCss: "w-120",
       cellCss: "ff-mono px-6",
       getValue: e => formatTime(e.Created, "d-M h:n") as string
     },
-    { 
+    {
       header: "Producto",
       render: e => {
         const nombre = productosMap.get(e.ProductoID)?.Nombre || `Producto-${e.ProductoID}`
         const words = filterText.toLowerCase().trim().split(" ").filter(x => x)
         const segments = highlString(nombre, words)
-        
+
         let html = ""
         for (const seg of segments) {
           if (seg.highl) {
@@ -105,20 +105,20 @@ import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
         return html
       }
     },
-    { 
-      header: "Lote", 
+    {
+      header: "Lote",
       headerCss: "w-100",
       cellCss: "text-purple-600 text-center px-6",
       getValue: e => e.Lote || "-"
     },
-    { 
-      header: "SKU", 
+    {
+      header: "SKU",
       headerCss: "w-100",
       cellCss: "text-purple-600 text-center px-6",
       getValue: e => e.SKU || "-"
     },
-    { 
-      header: "Movimiento", 
+    {
+      header: "Movimiento",
       headerCss: "w-120",
       cellCss: "text-center px-6",
       render: e => {
@@ -126,8 +126,8 @@ import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
         return mov?.name || "-"
       }
     },
-    { 
-      header: "Cantidad", 
+    {
+      header: "Cantidad",
       headerCss: "w-100",
       cellCss: "text-right ff-mono px-6",
       render: e => {
@@ -136,23 +136,23 @@ import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
         </div>`
       }
     },
-    { 
+    {
       header: "Almacén Origen",
       render: e => almacenRender(e.AlmacenOrigenID, e.AlmacenOrigenCantidad)
     },
-    { 
+    {
       header: "Almacén Destino",
       render: e => almacenRender(e.AlmacenID, e.AlmacenCantidad)
     },
-    { 
-      header: "Usuario", 
+    {
+      header: "Usuario",
       headerCss: "w-120",
       cellCss: "text-center px-6",
       render: e => {
         const usuario = usuariosMap.get(e.CreatedBy || 1)?.usuario || `Usuario-${e.CreatedBy}`
         const words = filterText.toLowerCase().trim().split(" ").filter(x => x)
         const segments = highlString(usuario, words)
-        
+
         let html = ""
         for (const seg of segments) {
           if (seg.highl) {
@@ -170,27 +170,27 @@ import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
 <Page title="Almacén Movimientos">
   <div class="flex items-center justify-between mb-12">
     <div class="flex items-center w-full" style="max-width: 64rem;">
-      <SearchSelect 
-        bind:saveOn={form} 
-        save="almacenID" 
+      <SearchSelect
+        bind:saveOn={form}
+        save="almacenID"
         css="w-240 mr-12"
-        label="Almacén" 
-        keyId="ID" 
-        keyName="Nombre" 
+        label="Almacén"
+        keyId="ID"
+        keyName="Nombre"
         options={almacenes?.Almacenes || []}
-        placeholder="" 
+        placeholder=""
         required={true}
       />
-      <DateInput 
-        label="Fecha Inicio" 
-        css="w-140 mr-12" 
-        save="fechaInicio" 
-        bind:saveOn={form} 
+      <DateInput
+        label="Fecha Inicio"
+        css="w-140 mr-12"
+        save="fechaInicio"
+        bind:saveOn={form}
       />
-      <DateInput 
-        label="Fecha Fin" 
-        css="w-140 mr-12" 
-        save="fechaFin" 
+      <DateInput
+        label="Fecha Fin"
+        css="w-140 mr-12"
+        save="fechaFin"
         bind:saveOn={form}
       />
       <button class="px-16 py-8 bx-purple mt-8 h-44"
@@ -207,10 +207,10 @@ import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
       <div class="absolute left-12 text-gray-400">
         <i class="icon-search"></i>
       </div>
-      <input 
-        class="w-full pl-36 pr-12 py-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" 
-        autocomplete="off" 
-        type="text" 
+      <input
+        class="w-full pl-36 pr-12 py-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        autocomplete="off"
+        type="text"
         placeholder="Buscar..."
         onkeyup={ev => {
           ev.stopPropagation()
@@ -221,12 +221,12 @@ import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
       />
     </div>
   </div>
-  <VTable 
-    data={almacenMovimientos} 
+  <VTable
+    data={almacenMovimientos}
     columns={columns}
     css="w-full"
     tableCss="w-full"
-    maxHeight="calc(100vh - 8rem - 12px)" 
+    maxHeight="calc(100vh - 8rem - 12px)"
     filterText={filterText}
     getFilterContent={e => {
       const producto = productosMap.get(e.ProductoID)?.Nombre || ""
@@ -236,4 +236,3 @@ import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
     useFilterCache={true}
   />
 </Page>
-

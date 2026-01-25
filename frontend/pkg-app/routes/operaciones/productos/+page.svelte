@@ -10,13 +10,13 @@ import OptionsStrip from '$ui/components/micro/OptionsStrip.svelte';
 import Page from '$ui/components/Page.svelte';
 import SearchCard from '$ui/components/SearchCard.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
-import { ITableColumn } from '$ui/components/vTable/types';
+import type { ITableColumn } from '$ui/components/vTable/types';
 import VTable from '$ui/components/vTable/vTable.svelte';
 import { throttle } from '$core/lib/helpers';
 import { Core } from '$core/core/store.svelte';
 import { formatN } from '$core/lib/helpers';
-  import Atributos from "./Atributos.svelte";
-  import CategoriasMarcas from "./CategoriasMarcas.svelte";
+import Atributos from '$routes/operaciones/productos/Atributos.svelte';
+import CategoriasMarcas from '$routes/operaciones/productos/CategoriasMarcas.svelte';
   import {
     ListasCompartidasService,
     postProducto,

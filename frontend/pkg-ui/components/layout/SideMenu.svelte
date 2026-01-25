@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { tick } from 'svelte';
 import { Core } from '$core/core/store.svelte';
-import { IMenuRecord, IModule } from '$core/types/menu';
+import type { IMenuRecord, IModule } from '$core/types/menu';
 
 	// State
 	const module = $derived(Core.module);
@@ -38,18 +38,18 @@ import { IMenuRecord, IModule } from '$core/types/menu';
 		if (activeButton) {
 			activeButton.classList.remove('is-active');
 		}
-		
+
 		// Apply active state to clicked button
 		button.classList.add('is-active');
 	}
 
 	async function navigateTo(route: string, menuId: number, buttonElement?: HTMLElement) {
-		
+
 		// On mobile: Apply styles instantly to clicked button before view transition
 		if (Core.mobileMenuOpen && buttonElement) {
 			applyActiveStylesInstant(buttonElement);
 		}
-		
+
 		goto(route);
 
 		if (Core.mobileMenuOpen) {
@@ -106,7 +106,7 @@ import { IMenuRecord, IModule } from '$core/types/menu';
 </script>
 
 <!-- Desktop Menu -->
-<div class="d-menu fixed left-0 top-0 h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950 
+<div class="d-menu fixed left-0 top-0 h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950
 		text-white shadow-xl transition-all duration-200 ease-in-out z-300 hidden md:block"
 	role="navigation"
 	aria-label="Main navigation"
@@ -176,7 +176,7 @@ import { IMenuRecord, IModule } from '$core/types/menu';
 										{option.minName || option.name.substring(0, 2)}
 									</div>
 								</div>
-								
+
 								<!-- Expanded: show icon and full name -->
 								<div class="option-expanded flex w-full">
 									<i class="{option.icon || "icon-box"} mr-2"></i>
@@ -205,7 +205,7 @@ import { IMenuRecord, IModule } from '$core/types/menu';
 <!-- Mobile Menu -->
 <div class="mobile-menu-wrapper md:hidden {Core.mobileMenuOpen ? 'is-open' : ''}" role="dialog" aria-modal="true">
 	<!-- Backdrop -->
-	<button type="button" class="mobile-menu-backdrop" aria-label="Close menu" 
+	<button type="button" class="mobile-menu-backdrop" aria-label="Close menu"
 		onclick={() => toggleMobileMenu(true)} bind:this={mobileMenuBackdrop}></button>
 
 	<!-- Mobile Menu Panel -->
@@ -229,9 +229,9 @@ import { IMenuRecord, IModule } from '$core/types/menu';
 		<div class="mobile-menu-content">
 			{#each (module?.menus||[]) as menu}
 				{@const isOpen = menuOpen[0] === menu.id}
-				
+
 				<div class="mobile-menu-group">
-					<button	
+					<button
 						class="mobile-menu-group-button {isOpen ? 'is-open' : ''}"
 						onclick={() => toggleMenu(menu.id || 0)}
 					>
@@ -247,7 +247,7 @@ import { IMenuRecord, IModule } from '$core/types/menu';
 						<div class="mobile-menu-options-grid">
 							{#each menu.options as option}
 								{@const isActive = option.route === currentPathname}
-								<button	
+								<button
 									class="mobile-menu-option {isActive ? 'is-active' : ''}"
 									onclick={(e) => navigateTo(option.route || '/', menu.id || 0, e.currentTarget)}
 									onmousedown={(e) => e.currentTarget.classList.add('is-pressed')}
@@ -283,7 +283,7 @@ import { IMenuRecord, IModule } from '$core/types/menu';
 		width: var(--menu-min-width);
 		overflow: hidden;
 	}
-	
+
 	.d-menu:hover {
 		width: var(--menu-max-width);
 		overflow: auto;
@@ -293,15 +293,15 @@ import { IMenuRecord, IModule } from '$core/types/menu';
 	.menu-minimized {
 		display: block;
 	}
-	
+
 	.menu-expanded {
 		display: none;
 	}
-	
+
 	.d-menu:hover .menu-minimized {
 		display: none;
 	}
-	
+
 	.d-menu:hover .menu-expanded {
 		display: block;
 	}
@@ -310,7 +310,7 @@ import { IMenuRecord, IModule } from '$core/types/menu';
 	.menu-arrow {
 		opacity: 0;
 	}
-	
+
 	.d-menu:hover .menu-arrow {
 		opacity: 1;
 	}
@@ -319,7 +319,7 @@ import { IMenuRecord, IModule } from '$core/types/menu';
 	.option-minimized {
 		display: flex;
 	}
-	
+
 	.option-expanded {
 		display: none;
 	}
@@ -334,11 +334,11 @@ import { IMenuRecord, IModule } from '$core/types/menu';
 		margin-bottom: -2px;
 		font-size: 15px;
 	}
-	
+
 	.d-menu:hover .option-minimized {
 		display: none;
 	}
-	
+
 	.d-menu:hover .option-expanded {
 		display: flex;
 	}
@@ -347,7 +347,7 @@ import { IMenuRecord, IModule } from '$core/types/menu';
 	.submenu-option {
 		height: 38px;
 	}
-	
+
 	.d-menu:hover .submenu-option {
 		padding-left: 8px;
 		padding-right: 8px;

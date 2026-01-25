@@ -1,7 +1,7 @@
 <script lang="ts">
 import { Core, fetchOnCourse } from '$core/core/store.svelte';
-    import ButtonLayer from "../micro/ButtonLayer.svelte";
-    import HeaderConfig from "./HeaderConfig.svelte";
+import ButtonLayer from '$ui/components/micro/ButtonLayer.svelte';
+import HeaderConfig from '$ui/components/layout/HeaderConfig.svelte';
 
 	// Props
 	const {
@@ -45,7 +45,7 @@ import { Core, fetchOnCourse } from '$core/core/store.svelte';
 	});
 </script>
 
-<header	class="_1 fixed top-0 left-0 right-0 bg-gradient-to-r from-indigo-600 to-indigo-700 
+<header	class="_1 fixed top-0 left-0 right-0 bg-gradient-to-r from-indigo-600 to-indigo-700
 	shadow-md z-150 flex items-center px-6 md:px-16"
 >
 
@@ -97,7 +97,7 @@ import { Core, fetchOnCourse } from '$core/core/store.svelte';
 		<!-- Settings Dropdown -->
 		<div class="relative">
 			<ButtonLayer layerClass="md:w-640 md:h-460 px-8 py-6"
-				buttonClass="w-40 h-40 rounded-full bg-white/10 hover:bg-white/20 
+				buttonClass="w-40 h-40 rounded-full bg-white/10 hover:bg-white/20
 					flex items-center justify-center transition-colors shadow-sm"
 				contentCss="px-4 pb-8 md:px-8 md:py-8"
 			>
@@ -110,7 +110,7 @@ import { Core, fetchOnCourse } from '$core/core/store.svelte';
 
 		<!-- Reload Button -->
 		<button
-			class="hidden md:flex w-40 h-40 rounded-full bg-white/10 hover:bg-white/20 
+			class="hidden md:flex w-40 h-40 rounded-full bg-white/10 hover:bg-white/20
 				items-center justify-center transition-colors shadow-sm
 				{isReloading ? 'animate-spin' : ''}"
 			onclick={handleReload}
@@ -226,4 +226,3 @@ import { Core, fetchOnCourse } from '$core/core/store.svelte';
 		}
 	}
 </style>
-

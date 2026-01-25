@@ -3,17 +3,17 @@
   import { createVirtualizer } from './index.svelte';
   import type { ITableColumn, CellRendererSnippet } from "./types";
   import type { VirtualItem } from './index.svelte';
-  import CellEditable from './CellEditable.svelte';
+import CellEditable from '$ui/components/vTable/CellEditable.svelte';
 import { highlString, include } from '$core/lib/helpers';
-  import Renderer, { type ElementAST } from '../micro/Renderer.svelte';
-  import CellSelector from './CellSelector.svelte';
+import Renderer, { ElementAST } from '$ui/components/micro/Renderer.svelte';
+import CellSelector from '$ui/components/vTable/CellSelector.svelte';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 
-  interface ICellContent { 
-    content: string; 
-    contentHTML: string; 
-    contentAST: ElementAST | ElementAST[], 
-    useSnippet: boolean; 
+  interface ICellContent {
+    content: string;
+    contentHTML: string;
+    contentAST: ElementAST | ElementAST[],
+    useSnippet: boolean;
     css: string
   }
 
@@ -85,9 +85,9 @@ import { highlString, include } from '$core/lib/helpers';
     for (const col of columns) {
       const colWithSpan = { ...col };
       colWithSpan._colspan = col.subcols?.length || 0;
-      
+
       level1.push(colWithSpan);
-      
+
       if (col.subcols && col.subcols.length > 0) {
         for (const subcol of col.subcols) {
           level2.push(subcol);
@@ -168,7 +168,7 @@ import { highlString, include } from '$core/lib/helpers';
         if(!virtualizerStore){ return }
         const items = virtualizerStore!.getVirtualItems();
         const size = virtualizerStore!.getTotalSize();
-        
+
         virtualItems = [...items];
         totalSize = size;
       };
@@ -193,17 +193,17 @@ import { highlString, include } from '$core/lib/helpers';
     // Track both filteredData and its length to ensure changes are detected
     const currentData = filteredData;
     const currentLength = filteredData.length;
-    
+
     if (isInitialized && virtualizerStore) {
       untrack(() => {
         dataVersion++;
-        
+
         // Notify virtualizer of the change
         virtualizerStore!.refresh();
-        
+
         const items = virtualizerStore!.getVirtualItems();
         const size = virtualizerStore!.getTotalSize();
-        
+
         virtualItems = [...items];
         totalSize = size;
       });
@@ -230,7 +230,7 @@ import { highlString, include } from '$core/lib/helpers';
     // Check if we should use snippet renderer (takes priority over function renderer)
     if (cellRenderer && column.id) { rec.useSnippet = true; }
 
-    rec.css = typeof column.cellCss === 'string' 
+    rec.css = typeof column.cellCss === 'string'
       ? column.cellCss
       : (column.onCellEdit ? "relative" : "px-8 py-4")
     if(column.css){ rec.css += " " + column.css }
@@ -271,8 +271,8 @@ import { highlString, include } from '$core/lib/helpers';
       {:else}
         <SvelteVirtualList items={filteredData}>
           {#snippet renderItem(record, index)}
-            <div class="mobile-card mb-6 {mobileCardCss || ''}" 
-              role="button" 
+            <div class="mobile-card mb-6 {mobileCardCss || ''}"
+              role="button"
               tabindex="0"
               onclick={() => handleRowClick(record, index)}
               onkeydown={(ev) => {
@@ -408,7 +408,7 @@ import { highlString, include } from '$core/lib/helpers';
           </th>
         {/each}
       </tr>
-      
+
       <!-- Second level headers (if subcolumns exist) -->
       {#if processedColumns.hasSubcols}
         <tr class="vtable-header-row vtable-header-row-sub">
@@ -442,10 +442,10 @@ import { highlString, include } from '$core/lib/helpers';
           {@const isFinal = i === virtualItems.length - 1}
           {@const remainingSize = totalSize - (virtualItems[0]?.size || estimateSize) * virtualItems.length}
           {@const record = filteredData[row.index]}
-          
+
           {#if record}
             {@const selected = isRowSelected(record, row.index)}
-            
+
             <tr class="vtable-row"
             class:vtable-row-even={row.index % 2 === 0}
             class:vtable-row-odd={row.index % 2 !== 0}
@@ -464,20 +464,20 @@ import { highlString, include } from '$core/lib/helpers';
                 {#if column.onCellEdit}
                   <CellEditable contentClass={column.css}
                     inputClass={column.inputCss}
-                    getValue={() => cellData.content} 
+                    getValue={() => cellData.content}
                     render={
-                      (column.render 
-                      ? () => column.render?.(record, row.index) 
+                      (column.render
+                      ? () => column.render?.(record, row.index)
                       : undefined) as (value: number | string) => ElementAST[]
                     }
-                    onChange={v => { 
+                    onChange={v => {
                       column.onCellEdit?.(record,v)
                     }}
                   />
                 {:else if column.onCellSelect}
-                  <CellSelector options={column.cellOptions as any[]} 
+                  <CellSelector options={column.cellOptions as any[]}
                     keyId="" keyName=""
-                    onChange={v => { 
+                    onChange={v => {
                       column.onCellSelect?.(record,v)
                     }}
                   />
@@ -519,7 +519,7 @@ import { highlString, include } from '$core/lib/helpers';
               </td>
             {/each}
           </tr>
-          
+
           {#if isFinal}
             <tr style="height: {remainingSize}px; visibility: hidden;">
               <td style="border: none;"></td>

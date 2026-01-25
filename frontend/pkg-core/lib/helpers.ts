@@ -1,5 +1,5 @@
 import pkg from 'notiflix';
-import { Env } from './env.ts';
+import { Env } from './env';
 export const { Notify, Loading, Confirm } = pkg;
 
 let throttleTimer: NodeJS.Timeout | null

@@ -1,6 +1,6 @@
-import { Notify } from "$core/lib/helpers"
-import { fetchEvent } from "$core/core/store.svelte"
-import { Env } from './env.ts';
+import { Notify } from "./helpers"
+import { fetchEvent } from "../core/store.svelte"
+import { Env } from './env';
 import type { IGetCacheSubObject, serviceHttpProps } from "$app/workers/service-worker"
 import { setFetchProgress } from "./http"
 
@@ -56,7 +56,7 @@ export const registerServiceHandler = async (id: number, handler: (e: any) => vo
 }
 
 export const sendServiceMessage = async (accion: number, content: any): Promise<any> => {
-  
+
   const reqID = tempID
   let info = ""
   if(accion === 3){

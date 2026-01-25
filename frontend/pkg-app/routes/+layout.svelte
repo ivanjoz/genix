@@ -2,12 +2,12 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
 import TopLayerSelector from '$ui/components/micro/TopLayerSelector.svelte';
-import favicon from '$core/lib/assets/favicon.svg';
+import favicon from '$core/assets/favicon.svg';
 import { checkIsLogin } from '$core/lib/security';
 import { doInitServiceWorker } from '$core/lib/sw-cache';
 	import { onMount } from 'svelte';
 	import '../app.css';
-import Header from '$ui/components/layout/Header.svelte';
+import Header from '$components/ecommerce/Header.svelte';
 import Page from '$ui/components/Page.svelte';
 import SideMenu from '$ui/components/layout/SideMenu.svelte';
 import Modules from '$core/core/modules';

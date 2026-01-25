@@ -1,12 +1,12 @@
 <script lang="ts">
 import { formatN, formatTime } from '$core/lib/helpers';
-import { IProducto } from '$routes/operaciones/almacen-movimientos/almacen-movimientos.svelte';
+import type { IProducto } from '$routes/operaciones/almacen-movimientos/almacen-movimientos.svelte';
 
   const {
     producto = null as IProducto, css = ""
   } = $props();
 
-  import ImageHash from "./Imagehash.svelte";
+import ImageHash from '$components/ecommerce/Imagehash.svelte';
     import { ProductsSelectedMap } from "./store.svelte";
   import s1 from "./styles.module.css";
 

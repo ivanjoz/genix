@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import SearchBar from "./SearchBar.svelte";
-  import CartMenu from "./CartMenu.svelte";
-  import UsuarioMenu from "./UsuarioMenu.svelte";
+import SearchBar from '$components/ecommerce/SearchBar.svelte';
+import CartMenu from '$components/ecommerce/CartMenu.svelte';
+import UsuarioMenu from '$components/ecommerce/UsuarioMenu.svelte';
     import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
 import { Core } from '$core/core/store.svelte';
 
@@ -44,7 +44,7 @@ import { Core } from '$core/core/store.svelte';
   function closeMobileMenu() {
     mobileMenuOpen = false;
   }
-  
+
 </script>
 
 <div class="_2 flex justify-between text-white h-48"></div>

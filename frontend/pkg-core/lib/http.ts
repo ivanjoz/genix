@@ -1,12 +1,12 @@
-import { Notify } from "$core/lib/helpers"
+import { Notify } from "./helpers"
 import axios, { type AxiosProgressEvent } from 'axios';
-import { formatN } from "./helpers.ts"
+import { formatN } from "./helpers"
 import type { CacheMode, serviceHttpProps } from "$app/workers/service-worker"
 import { accessHelper, getToken } from "./security"
 import { fetchCache, fetchCacheParsed, sendServiceMessage } from "./sw-cache"
 import { browser } from "$app/environment";
 import { unmarshall } from "./unmarshall";
-import { Env } from './env.ts'
+import { Env } from './env'
 
 export interface IHttpStatus { code: number, message: string }
 

@@ -6,7 +6,7 @@ import Page from '$ui/components/Page.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
 import Checkbox from '$ui/components/Checkbox.svelte';
 import VTable from '$ui/components/vTable/vTable.svelte';
-import { ITableColumn } from '$ui/components/vTable/types';
+import type { ITableColumn } from '$ui/components/vTable/types';
 import { Loading, Notify, formatTime } from '$core/lib/helpers';
 import { throttle } from '$core/lib/helpers';
 import { Core } from '$core/core/store.svelte';
@@ -122,7 +122,7 @@ import { formatN } from '$core/lib/helpers';
     Loading.remove()
     const caja = cajas.CajasMap.get(form.CajaID)
     if (!caja) return
-    
+
     if (typeof recordSaved?.NeedUpdateSaldo === 'number') {
       caja.SaldoCurrent = recordSaved.NeedUpdateSaldo
       cajaForm = { ...caja }
@@ -157,7 +157,7 @@ import { formatN } from '$core/lib/helpers';
 
     const caja = cajas.CajasMap.get(form.CajaID)
     if (!caja) return
-    
+
     caja.SaldoCurrent = form.SaldoFinal
     cajas.Cajas = [...cajas.Cajas]
     Object.assign(cajaForm, caja)
@@ -445,7 +445,7 @@ import { formatN } from '$core/lib/helpers';
           </div>
         </div>
       </div>
-      
+
       <div class="flex items-end">
         <button class="bx-purple w-full mt-24">
           <i class="text-[0.875rem] icon-arrows-cw"></i>
@@ -517,4 +517,3 @@ import { formatN } from '$core/lib/helpers';
     </div>
   </Modal>
 </Page>
-

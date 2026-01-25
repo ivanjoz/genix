@@ -1,17 +1,17 @@
 <script lang="ts">
 import { Core, suscribeUrlFlag } from '$core/core/store.svelte';
 
-  const { 
+  const {
     id = false, title = ""
   } = $props<{ id: number, title: string }>();
   let divContainer: HTMLDivElement
 
   const show = $derived(Core.openLayers.includes(id))
-  
+
   $effect(() => {
     if(show){
-      suscribeUrlFlag("mob-layer", () => { 
-        Core.openLayers = Core.openLayers.filter(x => x !== id) 
+      suscribeUrlFlag("mob-layer", () => {
+        Core.openLayers = Core.openLayers.filter(x => x !== id)
       })
     }
   })

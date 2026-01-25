@@ -1,4 +1,4 @@
-import { IProducto } from '$routes/operaciones/almacen-movimientos/almacen-movimientos.svelte';
+import type { IProducto } from '$routes/operaciones/almacen-movimientos/almacen-movimientos.svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
 export interface ICategoriaProducto {

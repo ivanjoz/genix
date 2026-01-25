@@ -1,4 +1,4 @@
-import type { IMenuRecord } from "./menu.ts"
+import type { IMenuRecord } from "./menu"
 
 export interface IModule {
   name: string

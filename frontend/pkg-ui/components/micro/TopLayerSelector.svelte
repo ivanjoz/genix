@@ -36,14 +36,14 @@ $effect(() => {
   if(isOpen){
     untrack(() => {
       if(htmlTextarea){
-        htmlTextarea.focus() 
+        htmlTextarea.focus()
         htmlTextarea.value = ""
       }
       searchText = ""
     })
   } else {
     if(htmlTextarea){
-      htmlTextarea.blur() 
+      htmlTextarea.blur()
       htmlTextarea.value = ""
     }
   }
@@ -187,4 +187,3 @@ $effect(() => {
     text-decoration: underline;
   }
 </style>
-

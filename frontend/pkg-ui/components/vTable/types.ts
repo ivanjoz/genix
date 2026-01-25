@@ -2,7 +2,7 @@
  * Type definitions for Svelte 5 Virtual Scroller
  */
 
-import type { ElementAST } from '../micro/Renderer.svelte';
+import type { ElementAST } from '$ui/components/micro/Renderer.svelte';
 import type { Snippet } from 'svelte';
 
 export interface ITableMobileCard<T> {

@@ -11,8 +11,8 @@ import Input from '$ui/components/Input.svelte';
   const layouts = $derived(almacen.Layout || [])
 
   const addLayout = () => {
-    const maxID = layouts.length > 0 
-      ? Math.max(...layouts.map(x => x.ID || 0)) 
+    const maxID = layouts.length > 0
+      ? Math.max(...layouts.map(x => x.ID || 0))
       : 0
     layouts.push({ RowCant: 2, ColCant: 3, Name: "", ID: maxID + 1, Bloques: [] })
     almacen.Layout = [...layouts]
@@ -36,32 +36,32 @@ import Input from '$ui/components/Input.svelte';
       </button>
     </div>
   </div>
-  
+
   <div class="overflow-auto px-4" style="max-height: calc(100% - 60px)">
     {#if layouts.length === 0}
       <div class="bg-red-100 text-red-700 p-8 rounded">
         No hay espacios en al almacén. Agregue uno pulsando en (+)
       </div>
     {/if}
-    
+
     {#each layouts as _, idx (layouts[idx].ID)}
       {@const layout = layouts[idx]}
       {@const heads = Array.from({ length: layout.ColCant || 1 }, (_, i) => String(i + 1))}
       {@const rows = Array.from({ length: layout.RowCant || 1 }, (_, i) => String(i + 1))}
-      
+
       <div class="_1 bg-white rounded-lg shadow-sm p-8 mb-12">
         <div class="w-full flex items-center justify-between px-8 py-8">
           <div class="flex items-center">
-            <Input bind:saveOn={layouts[idx]} save="Name" 
+            <Input bind:saveOn={layouts[idx]} save="Name"
               css="shadow-small bg-solid no-border w-220 mr-12" inputCss="text-sm" required={true}
             />
             <span class="ff-bold text-slate-600">Filas</span>
-            <Input bind:saveOn={layouts[idx]} save="RowCant" 
+            <Input bind:saveOn={layouts[idx]} save="RowCant"
               css="shadow-small bg-solid no-border w-60 mx-4" inputCss="text-sm" type="number"
               onChange={updateLayout}
             />
             <span class="ff-bold text-slate-600">Niveles</span>
-            <Input bind:saveOn={layouts[idx]} save="ColCant" 
+            <Input bind:saveOn={layouts[idx]} save="ColCant"
               css="shadow-small bg-solid no-border w-60 mx-4" inputCss="text-sm" type="number"
               onChange={updateLayout}
             />
@@ -73,7 +73,7 @@ import Input from '$ui/components/Input.svelte';
             <i class="icon-trash"></i>
           </button>
         </div>
-        
+
         <table class="w-full">
           <thead>
             <tr>

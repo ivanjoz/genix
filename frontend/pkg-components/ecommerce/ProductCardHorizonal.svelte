@@ -1,7 +1,7 @@
 <script lang="ts">
 import { formatN } from '$core/lib/helpers';
-import { IProducto } from '$routes/operaciones/almacen-movimientos/almacen-movimientos.svelte';
-  import ImageHash from "./Imagehash.svelte";
+import type { IProducto } from '$routes/operaciones/almacen-movimientos/almacen-movimientos.svelte';
+import ImageHash from '$components/ecommerce/Imagehash.svelte';
   import { addProductoCant, ProductsSelectedMap } from "./store.svelte";
 
   const {
