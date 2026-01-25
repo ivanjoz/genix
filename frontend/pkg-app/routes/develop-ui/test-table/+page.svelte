@@ -1,6 +1,6 @@
 <script lang="ts">
-import CellSelector from '$ui/components/VTable/CellSelector.svelte';
-import { VTable, ITableColumn } from '$ui/components/VTable/types';
+import CellSelector from '$ui/components/vTable/CellSelector.svelte';
+import { VTable, ITableColumn } from '$ui/components/vTable/types';
 import Page from '$ui/components/Page.svelte';
 
   interface TestRecord {

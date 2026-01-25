@@ -1,7 +1,7 @@
 <script lang="ts">
 import Page from '$ui/components/Page.svelte';
-import { ITableColumn } from '$ui/components/VTable/types';
-import VTable from '$ui/components/VTable/index';
+import { ITableColumn } from '$ui/components/vTable/types';
+import VTable from '$ui/components/vTable/vTable.svelte';
 import { ConfirmWarn, formatTime } from '$core/lib/helpers';
 import { formatN } from '$core/lib/helpers';
   import pkg from 'notiflix'

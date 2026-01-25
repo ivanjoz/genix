@@ -422,6 +422,23 @@ function extractExports(filePath: string): ExportedSymbol[] {
       }
       continue;
     }
+
+    // Destructured const export: export const { A, B } = ...
+    const destructuredConstMatch = trimmed.match(/^export\s+const\s+\{\s*([^}]+)\s*\}\s*=/);
+    if (destructuredConstMatch) {
+      const names = destructuredConstMatch[1].split(',').map(n => n.trim());
+      for (const name of names) {
+        if (name) {
+          exports.push({
+            name,
+            type: 'named',
+            filePath,
+            lineNumber
+          });
+        }
+      }
+      continue;
+    }
     
     // Export from: export * from '...' or export { name } from '...'
     const exportFromMatch = trimmed.match(/^export\s+(?:\*|\{([^}]+)\})\s+from\s+['"]([^'"]+)['"]/);
@@ -463,28 +480,16 @@ function extractExports(filePath: string): ExportedSymbol[] {
       filePath,
       lineNumber: 0
     });
-  }
-  
-  // For index files, add all exports from the directory
-  const ext = path.extname(filePath);
-  const fileName = path.basename(filePath);
-  if (fileName === `index${ext}`) {
-    const dirPath = path.dirname(filePath);
-    const dirFiles = fs.readdirSync(dirPath);
     
-    for (const dirFile of dirFiles) {
-      if (dirFile.startsWith('.') || dirFile === fileName) continue;
-      
-      const dirFilePath = path.join(dirPath, dirFile);
-      if (fs.statSync(dirFilePath).isFile()) {
-        const baseName = path.basename(dirFile, path.extname(dirFile));
-        exports.push({
-          name: baseName,
-          type: 'named',
-          filePath: dirFilePath,
-          lineNumber: 0
-        });
-      }
+    // Also add capitalized version for components (standard Svelte convention)
+    const capitalizedName = componentName.charAt(0).toUpperCase() + componentName.slice(1);
+    if (capitalizedName !== componentName) {
+      exports.push({
+        name: capitalizedName,
+        type: 'default',
+        filePath,
+        lineNumber: 0
+      });
     }
   }
   
@@ -979,9 +984,21 @@ function determineBestFix(issue: ImportIssue): string | null {
   
   // Fix missing symbols by suggesting correct import path
   if (issue.missingSymbols.length > 0 && issue.foundIn.length > 0) {
+    // Group foundIn by file to avoid multiple suggestions for same file
+    const uniqueFiles = new Map();
+    for (const loc of issue.foundIn) {
+      if (!uniqueFiles.has(loc.filePath)) {
+        uniqueFiles.set(loc.filePath, loc);
+      }
+    }
+    
+    const locations = Array.from(uniqueFiles.values());
+    console.log(`  [DEBUG] Symbol '${issue.missingSymbols[0]}' found in: ${locations.map(l => l.filePath).join(', ')}`);
+    
     // Use the first found location
-    const foundFile = issue.foundIn[0].filePath;
+    const foundFile = locations[0].filePath;
     const aliasPath = convertToAliasPath(foundFile);
+    console.log(`  [DEBUG] Selected alias path: ${aliasPath} from file: ${foundFile}`);
     
     if (aliasPath && aliasPath !== imp.importPath) {
       // Reconstruct import with new path
@@ -1012,10 +1029,16 @@ function convertToAliasPath(filePath: string): string | null {
   const absSourceDir = PROJECT_ROOT;
   // Use alias mappings from svelte.config.js
   
+  // Sort aliases by length (descending) to match longest/most specific first
+  const sortedAliases = Object.entries(aliasMap).sort((a, b) => b[1].length - a[1].length);
+
   // Find which package directory the file is in
-  for (const [alias, pkgDir] of Object.entries(aliasMap)) {
-    const absBaseDir = path.join(absSourceDir, pkgDir);
-    if (absPath.startsWith(absBaseDir)) {
+  for (const [alias, pkgDir] of sortedAliases) {
+    const absBaseDir = path.resolve(absSourceDir, pkgDir);
+    // Use a trailing separator to ensure we match a full directory name
+    const baseDirWithSep = absBaseDir.endsWith(path.sep) ? absBaseDir : absBaseDir + path.sep;
+    
+    if (absPath.startsWith(baseDirWithSep) || absPath === absBaseDir) {
       let relativePath = path.relative(absBaseDir, absPath);
       const isSvelte = relativePath.endsWith('.svelte');
       
@@ -1031,7 +1054,8 @@ function convertToAliasPath(filePath: string): string | null {
         if (processedPath === '.') processedPath = '';
       }
       
-      return processedPath ? `${alias}/${processedPath}` : alias;
+      const result = processedPath ? `${alias}/${processedPath}` : alias;
+      return result;
     }
   }
   
