@@ -1,5 +1,5 @@
-import { GET } from '$core/lib/http';
-import { Notify } from '$core/lib/helpers';
+import { GET } from '$core/http';
+import { Notify } from '$core/helpers';
 
 export interface IUsuario {
   id: number

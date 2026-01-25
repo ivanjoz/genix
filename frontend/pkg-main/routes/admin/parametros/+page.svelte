@@ -1,7 +1,7 @@
 <script lang="ts">
-import Input from '$ui/components/Input.svelte';
-import Page from '$ui/components/Page.svelte';
-import { Notify } from '$core/lib/helpers';
+import Input from '$components/Input.svelte';
+import Page from '$ui/Page.svelte';
+import { Notify } from '$core/helpers';
     import pkg from 'notiflix'
 const { Loading } = pkg;
   import { EmpresaParametrosService, postEmpresaParametros } from "./empresas.svelte"

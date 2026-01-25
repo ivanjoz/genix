@@ -1,16 +1,16 @@
 <script lang="ts">
-import Input from '$ui/components/Input.svelte';
-import Modal from '$ui/components/Modal.svelte';
-import OptionsStrip from '$ui/components/micro/OptionsStrip.svelte';
-import Page from '$ui/components/Page.svelte';
-import SearchSelect from '$ui/components/SearchSelect.svelte';
-import Checkbox from '$ui/components/Checkbox.svelte';
-import VTable from '$ui/components/vTable/VTable.svelte';
-import type { ITableColumn } from '$ui/components/vTable/types';
-import { Loading, Notify, formatTime } from '$core/lib/helpers';
-import { throttle } from '$core/lib/helpers';
-import { Core } from '$core/core/store.svelte';
-import { formatN } from '$core/lib/helpers';
+import Input from '$components/Input.svelte';
+import Modal from '$components/Modal.svelte';
+import OptionsStrip from '$components/OptionsStrip.svelte';
+import Page from '$ui/Page.svelte';
+import SearchSelect from '$components/SearchSelect.svelte';
+import Checkbox from '$components/Checkbox.svelte';
+import VTable from '$components/vTable/VTable.svelte';
+import type { ITableColumn } from '$components/vTable/types';
+import { Loading, Notify, formatTime } from '$core/helpers';
+import { throttle } from '$core/helpers';
+import { Core } from '$core/store.svelte';
+import { formatN } from '$core/helpers';
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte"
   import {
     CajasService,

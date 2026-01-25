@@ -1,9 +1,9 @@
 <script lang="ts">
-import ImageUploader from '$ui/components/ImageUploader.svelte';
-import Input from '$ui/components/Input.svelte';
-import Modal from '$ui/components/Modal.svelte';
-import { closeAllModals, closeModal, imagesToUpload, openModal } from '$core/core/store.svelte';
-import { Loading, Notify } from '$core/lib/helpers';
+import ImageUploader from '$components/ImageUploader.svelte';
+import Input from '$components/Input.svelte';
+import Modal from '$components/Modal.svelte';
+import { closeAllModals, closeModal, imagesToUpload, openModal } from '$core/store.svelte';
+import { Loading, Notify } from '$core/helpers';
     import { postListaRegistros, type IListaRegistro, type INewIDToID, type ListasCompartidasService } from "./productos.svelte";
 
   const {

@@ -2,7 +2,7 @@
   // @render 'svelte';
   import "../../app.css";
   import "$lib/fontello-prerender.css";
-import blurhashScript from '$core/lib/blurhash?raw';
+import blurhashScript from '$ui/libs/blurhash';
 import { productosServiceState } from '$services/services/productos.svelte';
   let { children, data } = $props();
 

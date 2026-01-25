@@ -1,6 +1,6 @@
 <script>
-import Input from '$ui/components/Input.svelte';
-import SearchSelect from '$ui/components/SearchSelect.svelte';
+import Input from '$components/Input.svelte';
+import SearchSelect from '$components/SearchSelect.svelte';
    
   let options = [
     { id: 1, nombre: "Ivan Joseph Angulo" },

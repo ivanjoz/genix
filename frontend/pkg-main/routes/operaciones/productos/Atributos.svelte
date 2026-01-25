@@ -1,12 +1,13 @@
 <script lang="ts">
-import Input from '$ui/components/Input.svelte';
-import ColorPicker from '$ui/components/micro/ColorPicker.svelte';
-import Modal from '$ui/components/Modal.svelte';
-import SearchSelect from '$ui/components/SearchSelect.svelte';
-import { VTable, ITableColumn } from '$ui/components/vTable/types';
-import { closeAllModals, openModal } from '$core/core/store.svelte';
-import { formatN } from '$core/lib/helpers';
+import Input from '$components/Input.svelte';
+import ColorPicker from '$components/ColorPicker.svelte';
+import Modal from '$components/Modal.svelte';
+import SearchSelect from '$components/SearchSelect.svelte';
+import VTable from '$components/vTable/VTable.svelte';
+import { closeAllModals, openModal } from '$core/store.svelte';
+import { formatN } from '$core/helpers';
 import { productoAtributos, type IProducto, type IProductoPresentacion } from "./productos.svelte";
+    import type { ITableColumn } from '$components/vTable/types';
 
   const produtcoAtributosMap = new Map(productoAtributos.map(e => [e.id, e]))
 

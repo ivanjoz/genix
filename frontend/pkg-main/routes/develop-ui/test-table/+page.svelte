@@ -1,8 +1,8 @@
 <script lang="ts">
-import CellSelector from '$ui/components/vTable/CellSelector.svelte';
-import VTable from '$ui/components/vTable/VTable.svelte';
-import Page from '$ui/components/Page.svelte';
-import { type ITableColumn } from '$ui/components/vTable/types';
+import CellSelector from '$components/vTable/CellSelector.svelte';
+import VTable from '$components/vTable/VTable.svelte';
+import Page from '$ui/Page.svelte';
+import { type ITableColumn } from '$components/vTable/types';
 
   interface TestRecord {
     id: string

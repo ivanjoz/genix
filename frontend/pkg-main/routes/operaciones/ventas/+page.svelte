@@ -1,10 +1,10 @@
 <script lang="ts">
-import Input from '$ui/components/Input.svelte';
-import LayerStatic from '$ui/components/micro/LayerStatic.svelte';
-import Page from '$ui/components/Page.svelte';
-import SearchSelect from '$ui/components/SearchSelect.svelte';
-import { Loading, include } from '$core/lib/helpers';
-import { formatN } from '$core/lib/helpers';
+import Input from '$components/Input.svelte';
+import LayerStatic from '$components/LayerStatic.svelte';
+import Page from '$ui/Page.svelte';
+import SearchSelect from '$components/SearchSelect.svelte';
+import { Loading, include } from '$core/helpers';
+import { formatN } from '$core/helpers';
   import type { IProductoStock } from "../productos-stock/productos-stock.svelte";
   import { getProductosStock } from "../productos-stock/productos-stock.svelte";
   import { ProductosService } from "../productos/productos.svelte";

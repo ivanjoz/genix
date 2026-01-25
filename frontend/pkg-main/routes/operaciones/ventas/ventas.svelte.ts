@@ -1,4 +1,4 @@
-import { GetHandler } from '$core/lib/http';
+import { GetHandler } from '$core/http';
 import { type IProducto } from "../productos/productos.svelte"
 import { type IProductoStock } from "../productos-stock/productos-stock.svelte"
 

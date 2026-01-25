@@ -1,11 +1,11 @@
 <script lang="ts">
-import Page from '$ui/components/Page.svelte';
-import SearchSelect from '$ui/components/SearchSelect.svelte';
-import DateInput from '$ui/components/DateInput.svelte';
-import VTable from '$ui/components/vTable/VTable.svelte';
-import type { ITableColumn } from '$ui/components/vTable/types';
-import { Loading, formatTime, throttle, Notify } from '$core/lib/helpers';
-import { formatN } from '$core/lib/helpers';
+import Page from '$ui/Page.svelte';
+import SearchSelect from '$components/SearchSelect.svelte';
+import DateInput from '$components/DateInput.svelte';
+import VTable from '$components/vTable/VTable.svelte';
+import type { ITableColumn } from '$components/vTable/types';
+import { Loading, formatTime, throttle, Notify } from '$core/helpers';
+import { formatN } from '$core/helpers';
   import { untrack } from "svelte"
   import {
     CajasService,

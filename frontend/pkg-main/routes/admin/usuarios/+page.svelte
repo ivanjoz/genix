@@ -1,13 +1,13 @@
 <script lang="ts">
-import Input from '$ui/components/Input.svelte';
-import Modal from '$ui/components/Modal.svelte';
-import Page from '$ui/components/Page.svelte';
-import SearchCard from '$ui/components/SearchCard.svelte';
-import VTable from '$ui/components/vTable/VTable.svelte';
-import type { ITableColumn } from '$ui/components/vTable/types';
-import { Notify, throttle } from '$core/lib/helpers';
-import { Core, closeModal } from '$core/core/store.svelte';
-import { formatTime } from '$core/lib/helpers';
+import Input from '$components/Input.svelte';
+import Modal from '$components/Modal.svelte';
+import Page from '$ui/Page.svelte';
+import SearchCard from '$components/SearchCard.svelte';
+import VTable from '$components/vTable/VTable.svelte';
+import type { ITableColumn } from '$components/vTable/types';
+import { Notify, throttle } from '$core/helpers';
+import { Core, closeModal } from '$core/store.svelte';
+import { formatTime } from '$core/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg
   import { UsuariosService, PerfilesService, postUsuario, type IUsuario } from "./usuarios.svelte"

@@ -1,18 +1,18 @@
 <script lang="ts">
-import Page from '$ui/components/Page.svelte';
-import SearchSelect from '$ui/components/SearchSelect.svelte';
-import type { ITableColumn } from '$ui/components/vTable/types';
-import VTable from '$ui/components/vTable/VTable.svelte';
-import { Notify, throttle } from '$core/lib/helpers';
+import Page from '$ui/Page.svelte';
+import SearchSelect from '$components/SearchSelect.svelte';
+import type { ITableColumn } from '$components/vTable/types';
+import VTable from '$components/vTable/VTable.svelte';
+import { Notify, throttle } from '$core/helpers';
     import pkg from 'notiflix'
 const { Loading } = pkg;
     import { ProductosService } from "../productos/productos.svelte";
     import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte";
     import { getProductosStock, postProductosStock, type IProductoStock } from "./productos-stock.svelte";
-import { Core } from '$core/core/store.svelte';
-import Layer from '$ui/components/Layer.svelte';
-import Input from '$ui/components/Input.svelte';
-import Checkbox from '$ui/components/Checkbox.svelte';
+import { Core } from '$core/store.svelte';
+import Layer from '$components/Layer.svelte';
+import Input from '$components/Input.svelte';
+import Checkbox from '$components/Checkbox.svelte';
     import { untrack } from "svelte";
 
   const almacenes = new AlmacenesService()

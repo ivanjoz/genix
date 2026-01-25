@@ -22,7 +22,7 @@ const __dirname = process.cwd()
 const publicDir = path.resolve(__dirname, 'static');
 
 const serviceWorkerConfig: BuildOptions = {
-  entryPoints: [path.resolve(__dirname, 'pkg-main/workers/service-worker.ts')],
+  entryPoints: [path.resolve(__dirname, 'pkg-core/workers/service-worker.ts')],
   format: 'esm', // Service workers typically use ES modules
   outfile: path.resolve(publicDir, 'sw.js'),
   bundle: true,

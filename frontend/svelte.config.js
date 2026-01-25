@@ -56,7 +56,7 @@ const config = {
 			strict: true
 		}),
 		files: {
-			assets: 'pkg-main/static',
+			assets: 'static',
 			lib: 'pkg-main/lib',
 			routes: 'pkg-main/routes',
 			appTemplate: 'app.html'

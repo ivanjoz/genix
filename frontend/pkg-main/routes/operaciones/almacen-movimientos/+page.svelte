@@ -1,10 +1,10 @@
 <script lang="ts">
-import Page from '$ui/components/Page.svelte';
-import SearchSelect from '$ui/components/SearchSelect.svelte';
-import DateInput from '$ui/components/DateInput.svelte';
-import VTable from '$ui/components/vTable/VTable.svelte';
-import type { ITableColumn } from '$ui/components/vTable/types';
-import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
+import Page from '$ui/Page.svelte';
+import SearchSelect from '$components/SearchSelect.svelte';
+import DateInput from '$components/DateInput.svelte';
+import VTable from '$components/vTable/VTable.svelte';
+import type { ITableColumn } from '$components/vTable/types';
+import { Loading, formatTime, throttle, highlString } from '$core/helpers';
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte"
   import { ProductosService } from "../productos/productos.svelte"
   import {

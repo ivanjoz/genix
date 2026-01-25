@@ -1,20 +1,20 @@
 <script lang="ts">
-import CheckboxOptions from '$ui/components/CheckboxOptions.svelte';
-import Input from '$ui/components/Input.svelte';
-import HTMLEditor from '$ui/components/micro/HTMLEditor.svelte';
-import { ConfirmWarn, Loading, Notify } from '$core/lib/helpers';
-import { POST } from '$core/lib/http';
-import ImageUploader from '$ui/components/ImageUploader.svelte';
-import Layer from '$ui/components/Layer.svelte';
-import OptionsStrip from '$ui/components/micro/OptionsStrip.svelte';
-import Page from '$ui/components/Page.svelte';
-import SearchCard from '$ui/components/SearchCard.svelte';
-import SearchSelect from '$ui/components/SearchSelect.svelte';
-import type { ITableColumn } from '$ui/components/vTable/types';
-import VTable from '$ui/components/vTable/VTable.svelte';
-import { throttle } from '$core/lib/helpers';
-import { Core } from '$core/core/store.svelte';
-import { formatN } from '$core/lib/helpers';
+import CheckboxOptions from '$components/CheckboxOptions.svelte';
+import Input from '$components/Input.svelte';
+import HTMLEditor from '$ui/HTMLEditor/HTMLEditor.svelte';
+import { ConfirmWarn, Loading, Notify } from '$core/helpers';
+import { POST } from '$core/http';
+import ImageUploader from '$components/ImageUploader.svelte';
+import Layer from '$components/Layer.svelte';
+import OptionsStrip from '$components/OptionsStrip.svelte';
+import Page from '$ui/Page.svelte';
+import SearchCard from '$components/SearchCard.svelte';
+import SearchSelect from '$components/SearchSelect.svelte';
+import type { ITableColumn } from '$components/vTable/types';
+import VTable from '$components/vTable/VTable.svelte';
+import { throttle } from '$core/helpers';
+import { Core } from '$core/store.svelte';
+import { formatN } from '$core/helpers';
 import Atributos from '$routes/operaciones/productos/Atributos.svelte';
 import CategoriasMarcas from '$routes/operaciones/productos/CategoriasMarcas.svelte';
   import {

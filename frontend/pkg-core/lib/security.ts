@@ -1,6 +1,6 @@
-import { reloadLogin, type ILoginResult } from '$services/services/admin/login';
-import { Env, IsClient, LocalStorage } from "./env"
-import { decrypt, Notify, throttle } from "./helpers"
+import { reloadLogin, type ILoginResult } from '$services/login';
+import { Env, IsClient, LocalStorage } from '$core/env';
+import { decrypt, Notify, throttle } from '$core/helpers';
 import type { IUsuario } from '$routes/admin/usuarios/usuarios.svelte';
 
 // Token refresh constants (all in seconds)

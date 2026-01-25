@@ -1,16 +1,16 @@
 <script lang="ts">
-import Input from '$ui/components/Input.svelte';
-import Modal from '$ui/components/Modal.svelte';
-import Page from '$ui/components/Page.svelte';
-import Layer from '$ui/components/Layer.svelte';
-import SearchCard from '$ui/components/SearchCard.svelte';
-import SearchSelect from '$ui/components/SearchSelect.svelte';
-import CheckboxOptions from '$ui/components/CheckboxOptions.svelte';
-import VTable from '$ui/components/vTable/VTable.svelte';
-import type { ITableColumn } from '$ui/components/vTable/types';
-import { Notify, throttle } from '$core/lib/helpers';
-import { Core, closeModal } from '$core/core/store.svelte';
-import Modules from '$core/core/modules';
+import Input from '$components/Input.svelte';
+import Modal from '$components/Modal.svelte';
+import Page from '$ui/Page.svelte';
+import Layer from '$components/Layer.svelte';
+import SearchCard from '$components/SearchCard.svelte';
+import SearchSelect from '$components/SearchSelect.svelte';
+import CheckboxOptions from '$components/CheckboxOptions.svelte';
+import VTable from '$components/vTable/VTable.svelte';
+import type { ITableColumn } from '$components/vTable/types';
+import { Notify, throttle } from '$core/helpers';
+import { Core, closeModal } from '$core/store.svelte';
+import Modules from '$core/modules';
   import pkg from 'notiflix'
 const { Loading } = pkg
   import {

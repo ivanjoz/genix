@@ -1,6 +1,6 @@
-import { Env } from '$core/lib/env';
-import { arrayToMapN } from '$core/lib/helpers';
-import { GET } from '$core/lib/http';
+import { Env } from '$core/env';
+import { arrayToMapN } from '$core/helpers';
+import { GET } from '$core/http';
 
 const maxCacheTime = 60 * 5 // 2 segundos
 const productosPromiseMap: Map<string, Promise<any>> = new Map()

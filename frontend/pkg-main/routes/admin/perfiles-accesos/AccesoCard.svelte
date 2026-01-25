@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Core } from '$core/core/store.svelte';
+import { Core } from '$core/store.svelte';
   import { accesoAcciones, arrayToMapN, type IAcceso, type IPerfil } from "./perfiles-accesos.svelte"
 
   const accesoAccionesMap = arrayToMapN(accesoAcciones, 'id')
