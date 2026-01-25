@@ -50,3 +50,5 @@ frontend/pkg-store/.svelte-kit/generated/server/internal.js
 frontend/pkg-store/build/*
 frontend/pkg-store/.svelte-kit/*
 frontend/pkg-store/.svelte-kit/*
+frontend/pkg-store/.svelte-kit/generated/client/nodes/1.js
+frontend/pkg-store/.svelte-kit/generated/server/internal.js
