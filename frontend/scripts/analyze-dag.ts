@@ -1,19 +1,19 @@
 #!/usr/bin/env bun
 /**
  * DAG Dependency Analysis Script
- * 
+ *
  * Analyzes the dependency graph between packages and identifies:
  * 1. Circular dependencies
  * 2. Hierarchy violations (wrong direction of imports)
  * 3. Missing dependencies in the expected structure
  * 4. Visualization of the actual dependency graph
- * 
+ *
  * Expected hierarchy:
  *   pkg-core (base)
  *     ↓
  *   pkg-services
  *     ↓
- *   pkg-ui, pkg-ecommerce
+ *   pkg-ui, pkg-components
  *     ↓
  *   pkg-store, pkg-app (leaf nodes)
  */
@@ -54,16 +54,16 @@ interface Node {
 const FRONTEND_DIR = resolve(process.cwd());
 const PACKAGES_DIR = FRONTEND_DIR;
 
-const PACKAGES = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-ecommerce', 'pkg-store', 'pkg-app'];
+const PACKAGES = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components', 'pkg-store', 'pkg-app'];
 
 // Expected hierarchy levels (lower = more base)
 const PACKAGE_LEVELS: Record<string, number> = {
-  'pkg-core': 0,
-  'pkg-services': 1,
-  'pkg-ui': 2,
-  'pkg-ecommerce': 2,
-  'pkg-store': 3,
-  'pkg-app': 3
+	'pkg-core': 0,
+  'pkg-components': 1,
+  'pkg-services': 2,
+  'pkg-ui': 3,
+  'pkg-store': 4,
+  'pkg-app': 5
 };
 
 // Allowed dependencies: package -> [allowed dependencies]
@@ -71,9 +71,9 @@ const ALLOWED_DEPENDENCIES: Record<string, string[]> = {
   'pkg-core': [], // No dependencies allowed
   'pkg-services': ['pkg-core'],
   'pkg-ui': ['pkg-core', 'pkg-services'],
-  'pkg-ecommerce': ['pkg-core', 'pkg-services', 'pkg-ui'],
-  'pkg-store': ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-ecommerce'],
-  'pkg-app': ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-ecommerce']
+  'pkg-components': ['pkg-core', 'pkg-services', 'pkg-ui'],
+  'pkg-store': ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components'],
+  'pkg-app': ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components']
 };
 
 // ============================================
@@ -105,7 +105,7 @@ function determineTargetPackage(importPath: string, sourcePackage: string): stri
     '$services': 'pkg-services',
     '$shared': 'pkg-services', // shared is in pkg-services
     '$components': 'pkg-ui',
-    '$ecommerce': 'pkg-ecommerce',
+    '$ecommerce': 'pkg-components',
     '$ecommerceComponents': 'pkg-ui',
     '$lib': sourcePackage, // $lib points to current package's lib
     '$http': 'pkg-core',
@@ -468,9 +468,9 @@ function printRecommendations() {
   console.log('  pkg-core (Level 0) - Base utilities, no dependencies');
   console.log('  pkg-services (Level 1) - Can depend on pkg-core');
   console.log('  pkg-ui (Level 2) - Can depend on pkg-core, pkg-services');
-  console.log('  pkg-ecommerce (Level 2) - Can depend on pkg-core, pkg-services');
-  console.log('  pkg-store (Level 3) - Can depend on pkg-core, pkg-services, pkg-ui, pkg-ecommerce');
-  console.log('  pkg-app (Level 3) - Can depend on pkg-core, pkg-services, pkg-ui, pkg-ecommerce');
+  console.log('  pkg-components (Level 2) - Can depend on pkg-core, pkg-services');
+  console.log('  pkg-store (Level 3) - Can depend on pkg-core, pkg-services, pkg-ui, pkg-components');
+  console.log('  pkg-app (Level 3) - Can depend on pkg-core, pkg-services, pkg-ui, pkg-components');
   console.log();
 
   const hasViolations = Array.from(packageNodes.values()).some(n => n.violations.length > 0);
