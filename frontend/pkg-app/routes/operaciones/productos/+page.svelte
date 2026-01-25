@@ -11,7 +11,7 @@ import Page from '$ui/components/Page.svelte';
 import SearchCard from '$ui/components/SearchCard.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
 import type { ITableColumn } from '$ui/components/vTable/types';
-import VTable from '$ui/components/vTable/vTable.svelte';
+import VTable from '$ui/components/vTable/VTable.svelte';
 import { throttle } from '$core/lib/helpers';
 import { Core } from '$core/core/store.svelte';
 import { formatN } from '$core/lib/helpers';

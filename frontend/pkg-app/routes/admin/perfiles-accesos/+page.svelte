@@ -6,7 +6,7 @@ import Layer from '$ui/components/Layer.svelte';
 import SearchCard from '$ui/components/SearchCard.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
 import CheckboxOptions from '$ui/components/CheckboxOptions.svelte';
-import VTable from '$ui/components/vTable/vTable.svelte';
+import VTable from '$ui/components/vTable/VTable.svelte';
 import type { ITableColumn } from '$ui/components/vTable/types';
 import { Notify, throttle } from '$core/lib/helpers';
 import { Core, closeModal } from '$core/core/store.svelte';

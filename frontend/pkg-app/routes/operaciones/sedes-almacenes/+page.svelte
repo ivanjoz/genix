@@ -4,7 +4,7 @@ import Modal from '$ui/components/Modal.svelte';
 import Layer from '$ui/components/Layer.svelte';
 import Page from '$ui/components/Page.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
-import VTable from '$ui/components/vTable/vTable.svelte';
+import VTable from '$ui/components/vTable/VTable.svelte';
 import type { ITableColumn } from '$ui/components/vTable/types';
 import { Loading, Notify, formatTime } from '$core/lib/helpers';
 import { throttle } from '$core/lib/helpers';

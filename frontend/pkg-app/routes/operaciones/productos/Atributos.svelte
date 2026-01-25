@@ -3,9 +3,10 @@ import Input from '$ui/components/Input.svelte';
 import ColorPicker from '$ui/components/micro/ColorPicker.svelte';
 import Modal from '$ui/components/Modal.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
-import { VTable, ITableColumn } from '$ui/components/vTable/vTable.svelte';
+import VTable from '$ui/components/vTable/VTable.svelte';
 import { closeAllModals, openModal } from '$core/core/store.svelte';
 import { formatN } from '$core/lib/helpers';
+import { type ITableColumn } from '$ui/components/vTable/types';
     import { productoAtributos, type IProducto, type IProductoPresentacion } from "./productos.svelte";
 
   const produtcoAtributosMap = new Map(productoAtributos.map(e => [e.id, e]))

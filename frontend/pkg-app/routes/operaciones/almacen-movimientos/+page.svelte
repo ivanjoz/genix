@@ -2,7 +2,7 @@
 import Page from '$ui/components/Page.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
 import DateInput from '$ui/components/DateInput.svelte';
-import VTable from '$ui/components/vTable/vTable.svelte';
+import VTable from '$ui/components/vTable/VTable.svelte';
 import type { ITableColumn } from '$ui/components/vTable/types';
 import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte"

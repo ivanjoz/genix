@@ -5,7 +5,7 @@
   import type { VirtualItem } from './index.svelte';
 import CellEditable from '$ui/components/vTable/CellEditable.svelte';
 import { highlString, include } from '$core/lib/helpers';
-import Renderer, { ElementAST } from '$ui/components/micro/Renderer.svelte';
+import Renderer, { type ElementAST } from '$ui/components/micro/Renderer.svelte';
 import CellSelector from '$ui/components/vTable/CellSelector.svelte';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 

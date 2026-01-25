@@ -2,13 +2,13 @@
 import Page from '$ui/components/Page.svelte';
 import SearchSelect from '$ui/components/SearchSelect.svelte';
 import DateInput from '$ui/components/DateInput.svelte';
-import VTable from '$ui/components/vTable/vTable.svelte';
+import VTable from '$ui/components/vTable/VTable.svelte';
 import type { ITableColumn } from '$ui/components/vTable/types';
 import { Loading, formatTime, throttle, Notify } from '$core/lib/helpers';
 import { formatN } from '$core/lib/helpers';
   import { untrack } from "svelte"
-  import { 
-    CajasService, 
+  import {
+    CajasService,
     getCajaMovimientos,
     cajaMovimientoTipos,
     type ICajaMovimiento,
@@ -53,7 +53,7 @@ import { formatN } from '$core/lib/helpers';
       const zoneOffset = -18000
       const fechaHoraInicio = form.fechaInicio * 24 * 60 * 60 + zoneOffset
       const fechaHoraFin = (form.fechaFin + 1) * 24 * 60 * 60 + zoneOffset
-      
+
       result = await getCajaMovimientos({
         CajaID: form.CajaID,
         fechaInicio: fechaHoraInicio,
@@ -70,20 +70,20 @@ import { formatN } from '$core/lib/helpers';
   }
 
   const columns: ITableColumn<ICajaMovimiento>[] = [
-    { 
-      header: "Fecha Hora", 
+    {
+      header: "Fecha Hora",
       headerCss: "w-140",
       cellCss: "ff-mono px-6",
       getValue: e => formatTime(e.Created, "d-M h:n") as string
     },
-    { 
+    {
       header: "Tipo Mov.",
       headerCss: "w-160",
       cellCss: "px-6",
       getValue: e => cajaMovimientoTiposMap.get(e.Tipo)?.name || ""
     },
-    { 
-      header: "Monto", 
+    {
+      header: "Monto",
       headerCss: "w-120",
       cellCss: "ff-mono text-right px-6",
       render: e => {
@@ -91,20 +91,20 @@ import { formatN } from '$core/lib/helpers';
         return `<span class="${cssClass}">${formatN(e.Monto / 100, 2)}</span>`
       }
     },
-    { 
-      header: "Saldo Final", 
+    {
+      header: "Saldo Final",
       headerCss: "w-120",
       cellCss: "ff-mono text-right px-6",
       getValue: e => formatN(e.SaldoFinal / 100, 2) as string
     },
-    { 
+    {
       header: "Nº Documento",
       headerCss: "w-140",
       cellCss: "text-center px-6",
       getValue: e => ""
     },
-    { 
-      header: "Usuario", 
+    {
+      header: "Usuario",
       headerCss: "w-120",
       cellCss: "text-center px-6",
       getValue: e => e.Usuario?.usuario || ""
@@ -115,27 +115,27 @@ import { formatN } from '$core/lib/helpers';
 <Page title="Cajas Movimientos">
   <div class="flex items-center justify-between mb-12">
     <div class="flex items-center w-full" style="max-width: 64rem;">
-      <SearchSelect 
-        bind:saveOn={form} 
-        save="CajaID" 
+      <SearchSelect
+        bind:saveOn={form}
+        save="CajaID"
         css="w-240 mr-12"
-        label="Cajas & Bancos" 
-        keyId="ID" 
-        keyName="Nombre" 
+        label="Cajas & Bancos"
+        keyId="ID"
+        keyName="Nombre"
         options={cajas?.Cajas || []}
-        placeholder="" 
+        placeholder=""
         required={true}
       />
-      <DateInput 
-        label="Fecha Inicio" 
-        css="w-140 mr-12" 
-        save="fechaInicio" 
-        bind:saveOn={form} 
+      <DateInput
+        label="Fecha Inicio"
+        css="w-140 mr-12"
+        save="fechaInicio"
+        bind:saveOn={form}
       />
-      <DateInput 
-        label="Fecha Fin" 
-        css="w-140 mr-12" 
-        save="fechaFin" 
+      <DateInput
+        label="Fecha Fin"
+        css="w-140 mr-12"
+        save="fechaFin"
         bind:saveOn={form}
       />
       <button class="px-16 py-8 bx-blue mt-8 h-44"
@@ -152,10 +152,10 @@ import { formatN } from '$core/lib/helpers';
       <div class="absolute left-12 text-gray-400">
         <i class="icon-search"></i>
       </div>
-      <input 
-        class="w-full pl-36 pr-12 py-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" 
-        autocomplete="off" 
-        type="text" 
+      <input
+        class="w-full pl-36 pr-12 py-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        autocomplete="off"
+        type="text"
         placeholder="Buscar..."
         onkeyup={ev => {
           ev.stopPropagation()
@@ -166,12 +166,12 @@ import { formatN } from '$core/lib/helpers';
       />
     </div>
   </div>
-  <VTable 
-    data={cajaMovimientos} 
+  <VTable
+    data={cajaMovimientos}
     columns={columns}
     css="w-full"
     tableCss="w-full"
-    maxHeight="calc(100vh - 8rem - 12px)" 
+    maxHeight="calc(100vh - 8rem - 12px)"
     filterText={filterText}
     getFilterContent={e => {
       const movTipo = cajaMovimientoTiposMap.get(e.Tipo)?.name || ""

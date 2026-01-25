@@ -13,11 +13,12 @@ import angleSvg from '$core/lib/assets/angle.svg?raw';
 import { parseSVG } from '$core/lib/helpers';
   import s1 from "./styles.module.css"
 import ArrowSteps from '$components/ecommerce/ArrowSteps.svelte';
-import globals from '$store/globals.svelte';
+import { Globals } from '$store/stores/globals.svelte';
 import Input from '$ui/components/Input.svelte';
 import CiudadesSelector from '$components/ecommerce/CiudadesSelector.svelte';
 import ProductCardHorizonal from '$components/ecommerce/ProductCardHorizonal.svelte';
 import { Core } from '$core/core/store.svelte';
+import { Ecommerce } from '$store/stores/globals.svelte'
 
   let userForm = {} as any
 

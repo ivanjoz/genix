@@ -14,7 +14,7 @@ import { formatN } from '$core/lib/helpers';
 import ProductoVentaCard from '$routes/operaciones/ventas/ProductoVentaCard.svelte';
   import type { ProductoVenta } from "./ventas.svelte";
   import { VentasState } from "./ventas.svelte";
-import parametros from '$shared/services/parametros.svelte';
+    import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svelte';
 
   // Helpers
   const formatMo = (n: number) => formatN(n, 2);
@@ -23,7 +23,7 @@ import parametros from '$shared/services/parametros.svelte';
   const almacenesService = new AlmacenesService();
   const productosService = new ProductosService();
   const listasService = new ListasCompartidasService([2]); // 2: Marcas
-  const parametrosService = new ParametrosService(2);
+  const parametrosService = new EmpresaParametrosService();
 
   // State
   const ventasState = new VentasState();

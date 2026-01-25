@@ -1,4 +1,4 @@
-import { reloadLogin, ILoginResult } from '$services/services/admin/login';
+import { reloadLogin, type ILoginResult } from '$services/services/admin/login';
 import { Env, IsClient, LocalStorage } from "./env"
 import { decrypt, Notify, throttle } from "./helpers"
 import type { IUsuario } from '$routes/admin/usuarios/usuarios.svelte';
