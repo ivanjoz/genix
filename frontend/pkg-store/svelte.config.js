@@ -50,7 +50,7 @@ const config = {
 			strict: true
 		}),
 		paths: {
-			base: '/store'
+			base: isBuild ? '/store' : ''
 		},
 		files: {
 			assets: 'static',

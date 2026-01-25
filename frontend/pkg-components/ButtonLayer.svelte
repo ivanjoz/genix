@@ -22,6 +22,7 @@ import angleSvg from '$core/assets/angle.svg?raw';
     onClose?: () => void;
     /** css of the content */
     contentCss?: string;
+    useBig?: boolean;
   }
 
   let {
@@ -33,7 +34,8 @@ import angleSvg from '$core/assets/angle.svg?raw';
     children,
     button,
     onOpen,
-    onClose
+    onClose,
+    useBig
   }: Props = $props();
 
   // svelte-ignore state_referenced_locally
@@ -193,8 +195,9 @@ import angleSvg from '$core/assets/angle.svg?raw';
 
   {#if isOpen}
     <div bind:this={layerElement}
-      class="button-layer min-w-200 w-[calc(100vw-12px)] {layerClass}"
+      class="button-layer min-w-200 {layerClass||'w-[calc(100vw-12px)]'}"
       style="top: {position.top}px; left: {position.left}px;"
+      class:use-big={useBig}
     >
       <!-- Angle pointer -->
       <div class="button-layer-angle" style="left: {angleLeft}px;">
@@ -243,6 +246,10 @@ import angleSvg from '$core/assets/angle.svg?raw';
     overflow: visible;
   }
 
+  .button-layer.use-big {
+    box-shadow: #46466059 0 2px 18px -2px, #00000059 0 0 6px;
+  }
+
   /* Mobile: fixed width and max-height */
   @media (max-width: 748px) {
     .button-layer {
@@ -273,6 +280,16 @@ import angleSvg from '$core/assets/angle.svg?raw';
     width: 24px;
     height: 24px;
     filter: drop-shadow(0 -1px 1px rgba(0, 0, 0, 0.05));
+  }
+
+  .button-layer-angle-img.use-big {
+    width: 28px;
+    height: 28px;
+  }
+
+  .button-layer-angle.use-big {
+	  height: 22px;
+	  width: 28px;
   }
 
   @keyframes slideDown {

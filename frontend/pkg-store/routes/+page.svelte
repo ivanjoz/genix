@@ -6,11 +6,11 @@ import ProductCards from '$store/components/ProductCards.svelte';
 import type { ICategoriaProducto } from '$store/components/store.svelte';
 
   let categorias: ICategoriaProducto[] = [
-    { Name: "Perfumes", Image: "images/categoria_1.webp" },
-    { Name: "Casacas", Image: "images/casaca_icon_sm3.webp" },
-    { Name: "Zapatos", Image: "images/categoria_1.webp" },
-    { Name: "Relojes", Image: "images/categoria_1.webp" },
-    { Name: "Decoración", Image: "images/categoria_1.webp" },
+    { Name: "Perfumes", Image: "images/categoria_11.webp" },
+    { Name: "Casacas", Image: "images/uwgGHwD2aYl3.webp" },
+    { Name: "Zapatos", Image: "images/MqcNHwj3iKeK.webp" },
+    { Name: "Relojes", Image: "images/7ogGDobEysil.webp" },
+    { Name: "Decoración", Image: "images/lHSFC4IPj2mN.webp" },
   ];
 </script>
 

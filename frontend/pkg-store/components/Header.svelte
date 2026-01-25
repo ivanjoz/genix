@@ -5,6 +5,7 @@ import CartMenu from '$store/components/CartMenu.svelte';
 import UsuarioMenu from '$store/components/UsuarioMenu.svelte';
     import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
 import { Core } from '$core/store.svelte';
+import ButtonLayer from '$components/ButtonLayer.svelte';
 
   // State for mobile menu
   let mobileMenuOpen = $state(false);
@@ -66,6 +67,9 @@ import { Core } from '$core/store.svelte';
   </button>
   <SearchBar />
   <div class="flex items-center h-42 ml-auto md:ml-0">
+  	<ButtonLayer buttonText="hola" layerClass="w-500" useBig>
+ 			<div class="h-400">this is a test</div>
+   	</ButtonLayer>
     <CartMenu css="mr-8 hidden md:block relative w-120 h-full" id={1}/>
     <UsuarioMenu />
     <div class={"relative w-[15vw] fx-c flex md:hidden! "+(layerOpenedState.id === 2 ? "s1" : "")}>
