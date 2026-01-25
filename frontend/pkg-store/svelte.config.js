@@ -28,9 +28,11 @@ const config = {
 			if (!filename) {
 				return `svelte-${hash(css).substring(0, 8)}`;
 			}
-			const componentName = filename
-				.split(/[\\/]/)
-				.pop()
+			const fileNamePart = filename.split(/[\\/]/).pop();
+			if (!fileNamePart) {
+				return `svelte-${hash(css).substring(0, 8)}`;
+			}
+			const componentName = fileNamePart
 				.split('.')[0]
 				.replace(/^\+/, '')
 				.replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -58,9 +60,10 @@ const config = {
 		},
 		alias: {
 			$ui: '../pkg-ui',
-			$store: './stores',
+			$store: './',
+			$stores: './stores',
 			$routes: './routes',
-			$components: './components',
+			$components: '../pkg-components',
 			$core: '../pkg-core',
 			$services: '../pkg-services',
 			$lib: './lib'

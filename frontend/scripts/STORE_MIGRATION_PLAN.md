@@ -226,11 +226,12 @@ pkg-store/routes/
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "vite dev --force --port 3571",
-    "build": "vite build",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
-  },
+  	"scripts": {
+  		"dev": "vite dev --force --port 3571",
+  		"build": "vite build",
+  		"check": "svelte-check --tsconfig ./tsconfig.json",
+  		"preview": "vite preview"
+  	},
   "dependencies": {
     "svelte": "^5.39.5",
     "@sveltejs/kit": "^2.43.2"
@@ -273,9 +274,11 @@ export default {
       if (!filename) {
         return `svelte-${hash(css).substring(0, 8)}`;
       }
-      const componentName = filename
-        .split(/[\\/]/)
-        .pop()
+      const fileNamePart = filename.split(/[\\/]/).pop();
+      if (!fileNamePart) {
+        return `svelte-${hash(css).substring(0, 8)}`;
+      }
+      const componentName = fileNamePart
         .split('.')[0]
         .replace(/^\+/, '')
         .replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -296,18 +299,22 @@ export default {
       base: '/store'
     },
     files: {
-      assets: './static',
-      lib: './lib',
+      assets: 'static',
+      lib: 'lib',
       routes: 'routes',
       appTemplate: 'app.html'
     },
     alias: {
       '$ui': '../pkg-ui',
-      '$store': './stores',
+      '$store': './',
       '$routes': './routes',
       '$components': '../pkg-components',
       '$core': '../pkg-core',
-      '$services': '../pkg-services'
+      '$services': '../pkg-services',
+      '$lib': './lib'
+    },
+    prerender: {
+      handleHttpError: 'warn'
     }
   }
 };

@@ -1,14 +1,21 @@
 {
-	"name": "frontend2",
+	"name": "genix-frontend",
 	"private": true,
-	"version": "0.0.1",
+	"version": "2.0.0",
 	"type": "module",
+	"workspaces": [
+		"./pkg-store"
+	],
 	"scripts": {
-		"dev": "vite dev --force",
+		"dev": "node scripts/dev-all.js",
+		"dev:main": "vite dev --force --port 3570",
+		"dev:store": "cd pkg-store && bun run dev",
 		"serve": "vite build && vite preview --port 3000",
 		"prepare": "svelte-kit sync || echo ''",
-		"build": "vite build && node postbuild",
-		"publish": "vite build && node postbuild --publish",
+		"build": "node scripts/build-all.js",
+		"build:main": "vite build",
+		"build:store": "cd pkg-store && bun run build",
+		"publish": "npm run build && node postbuild --publish",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"prebuild:store": "node scripts/thumbhash-prebuild.js"
@@ -25,14 +32,15 @@
 		"@tailwindcss/vite": "^4.1.13",
 		"@types/mime-types": "^3.0.1",
 		"@types/node": "^24.10.0",
+		"http-proxy-middleware": "^3.0.5",
+		"rolldown": "^1.0.0-beta.58",
 		"sharp": "^0.34.3",
 		"svelte": "^5.39.5",
 		"svelte-check": "^4.3.2",
 		"svelte-infinitable": "^0.0.14",
 		"tailwindcss": "^4.1.13",
 		"typescript": "^5.9.2",
-		"vite": "npm:rolldown-vite@latest",
-		"rolldown": "^1.0.0-beta.58"
+		"vite": "npm:rolldown-vite@latest"
 	},
 	"dependencies": {
 		"@huggingface/transformers": "^3.8.1",

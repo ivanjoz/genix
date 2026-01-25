@@ -64,11 +64,11 @@ const config = {
 		alias: {
 			$ui: path.resolve('./pkg-ui'),
 			$store: path.resolve('./pkg-store'),
+			$stores: path.resolve('./pkg-store/stores'),
 			$routes: path.resolve('./routes'),
 			$components: path.resolve('./pkg-components'),
 			$core: path.resolve('./pkg-core'),
-			$services: path.resolve('./pkg-services'),
-			$lib: path.resolve('./pkg-core/lib')
+			$services: path.resolve('./pkg-services')
 		},
 		prerender: {
 			handleHttpError: 'warn'

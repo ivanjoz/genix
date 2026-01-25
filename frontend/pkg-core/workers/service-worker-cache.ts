@@ -156,6 +156,11 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
   //console.log("url recibida:",url, url.pathname)
 
+  // Skip /store routes (handled by store app service worker)
+  if (url.pathname.startsWith('/store/')) {
+    return;
+  }
+
   if (url.pathname === "/_sw_") {
     event.respondWith((async () => {
       // 3. Parse incoming data (from URL params or request body)

@@ -5,6 +5,8 @@ declare global {
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 
+export { browser };
+
 export const IsClient = () => {
   return browser
 }
