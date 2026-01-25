@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatN } from "$shared/main";
+import { formatN } from '$core/lib/helpers';
   import { type ProductoVenta, type VentaProducto } from "./ventas.svelte";
 
   interface Props {

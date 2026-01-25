@@ -4,7 +4,7 @@
   import Layer from "$components/Layer.svelte"
   import Page from "$components/Page.svelte"
   import SearchSelect from "$components/SearchSelect.svelte"
-  import VTable from "$components/VTable/vTable.svelte"
+import VTable from '$components/VTable/index';
   import type { ITableColumn } from "$components/VTable"
   import { Loading, Notify, formatTime } from '$core/helpers'
   import { throttle } from '$core/helpers'

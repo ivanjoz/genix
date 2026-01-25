@@ -11,7 +11,7 @@
   import SearchCard from "$components/SearchCard.svelte";
   import SearchSelect from "$components/SearchSelect.svelte";
   import type { ITableColumn } from "$components/VTable/types.ts";
-  import VTable from "$components/VTable/vTable.svelte";
+import VTable from '$components/VTable/index';
   import { throttle } from "$core/helpers";
   import { Core } from '$core/core/store.svelte';
   import { formatN } from '$core/helpers';

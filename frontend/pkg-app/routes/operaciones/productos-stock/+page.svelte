@@ -2,7 +2,7 @@
     import Page from "$components/Page.svelte";
     import SearchSelect from "$components/SearchSelect.svelte";
     import type { ITableColumn } from "$components/VTable";
-    import VTable from "$components/VTable/vTable.svelte";
+import VTable from '$components/VTable/index';
     import { Notify, throttle } from '$core/helpers';
     import pkg from 'notiflix'
 const { Loading } = pkg;

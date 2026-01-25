@@ -1,6 +1,6 @@
 /**
  * Virtualizer library exports
- * 
+ *
  * This module provides a custom virtual scrolling implementation
  * inspired by TanStack Virtual, adapted for Svelte 5.
  */

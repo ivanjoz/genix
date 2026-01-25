@@ -1,9 +1,9 @@
 <script lang="ts">
   import Page from "$components/Page.svelte";
   import type { ITableColumn } from "$components/VTable/types";
-  import VTable from "$components/VTable/vTable.svelte";
+import VTable from '$components/VTable/index';
   import { ConfirmWarn, formatTime } from '$core/helpers';
-  import { formatN } from "$shared/main";
+import { formatN } from '$core/lib/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg;
   import { BackupsService, createBackup, restoreBackup, type IBackup } from "./backups.svelte";

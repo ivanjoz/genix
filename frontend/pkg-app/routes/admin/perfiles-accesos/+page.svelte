@@ -6,7 +6,7 @@
   import SearchCard from "$components/SearchCard.svelte"
   import SearchSelect from "$components/SearchSelect.svelte"
   import CheckboxOptions from "$components/CheckboxOptions.svelte"
-  import VTable from "$components/VTable/vTable.svelte"
+import VTable from '$components/VTable/index';
   import type { ITableColumn } from "$components/VTable/types"
   import { Notify, throttle } from "$core/helpers"
   import { Core, closeModal } from '$core/core/store.svelte'

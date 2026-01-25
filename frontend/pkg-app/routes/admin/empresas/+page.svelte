@@ -2,7 +2,7 @@
   import Input from "$components/Input.svelte"
   import Modal from "$components/Modal.svelte"
   import Page from "$components/Page.svelte"
-  import VTable from "$components/VTable/vTable.svelte"
+import VTable from '$components/VTable/index';
   import type { ITableColumn } from "$components/VTable/types"
   import { Notify, throttle } from "$core/helpers"
   import { Core, closeModal } from '$core/core/store.svelte'

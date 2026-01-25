@@ -4,7 +4,7 @@
   import Page from "$components/Page.svelte";
   import SearchSelect from "$components/SearchSelect.svelte";
   import { Loading, include } from '$core/helpers';
-  import { formatN } from "$shared/main";
+import { formatN } from '$core/lib/helpers';
   import type { IProductoStock } from "../productos-stock/productos-stock.svelte";
   import { getProductosStock } from "../productos-stock/productos-stock.svelte";
   import { ProductosService } from "../productos/productos.svelte";

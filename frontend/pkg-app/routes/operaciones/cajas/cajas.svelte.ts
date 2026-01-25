@@ -1,6 +1,6 @@
 import { GetHandler, POST, GET } from '$core/http'
 import { formatTime } from '$core/helpers'
-import { Notify } from "$lib/helpers"
+import { Notify } from '$core/lib/helpers';
 
 export interface ICaja {
   ID: number

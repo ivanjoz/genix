@@ -5,7 +5,7 @@
     import SearchSelect from "$components/SearchSelect.svelte";
     import { VTable, type ITableColumn } from "$components/VTable";
     import { closeAllModals, openModal } from '$core/core/store.svelte';
-    import { formatN } from "$shared/main";
+import { formatN } from '$core/lib/helpers';
     import { productoAtributos, type IProducto, type IProductoPresentacion } from "./productos.svelte";
 
   const produtcoAtributosMap = new Map(productoAtributos.map(e => [e.id, e]))

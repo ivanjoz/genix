@@ -2,10 +2,10 @@
   import Page from "$components/Page.svelte"
   import SearchSelect from "$components/SearchSelect.svelte"
   import DateInput from "$components/DateInput.svelte"
-  import VTable from "$components/VTable/vTable.svelte"
+import VTable from '$components/VTable/index';
   import type { ITableColumn } from "$components/VTable"
   import { Loading, formatTime, throttle, Notify } from '$core/helpers'
-  import { formatN } from "$shared/main"
+import { formatN } from '$core/lib/helpers';
   import { untrack } from "svelte"
   import { 
     CajasService, 
