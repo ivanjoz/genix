@@ -1,4 +1,4 @@
-import { GET } from "$core/http.ts"
+import { GET } from '$core/http'
 import { Notify } from "$lib/helpers"
 
 export interface IUsuario {

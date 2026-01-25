@@ -2,7 +2,7 @@
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import { untrack } from "svelte";
   import { throttle } from "$core/helpers";
-  import { Core, WeakSearchRef } from "$core/store.svelte";
+  import { Core, WeakSearchRef } from '$core/core/store.svelte';
   import { Popover2 } from "$components/popover2";
 
 	export interface ICellSelector<T,E> {

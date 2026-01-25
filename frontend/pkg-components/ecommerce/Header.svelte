@@ -4,7 +4,7 @@
   import CartMenu from "./CartMenu.svelte";
   import UsuarioMenu from "./UsuarioMenu.svelte";
     import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
-    import { Core } from "$core/store.svelte";
+    import { Core } from '$core/core/store.svelte';
 
   // State for mobile menu
   let mobileMenuOpen = $state(false);

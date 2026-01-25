@@ -2,7 +2,7 @@
     import ImageUploader, { type ImageSource } from "$components/ImageUploader.svelte";
     import Input from "$components/Input.svelte";
     import Modal from "$components/Modal.svelte";
-    import { closeAllModals, closeModal, imagesToUpload, openModal } from "$core/store.svelte";
+    import { closeAllModals, closeModal, imagesToUpload, openModal } from '$core/core/store.svelte';
     import { Loading, Notify } from "$lib/helpers";
     import { postListaRegistros, type IListaRegistro, type INewIDToID, type ListasCompartidasService } from "./productos.svelte";
 

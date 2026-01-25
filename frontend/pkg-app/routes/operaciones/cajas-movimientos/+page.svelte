@@ -4,7 +4,7 @@
   import DateInput from "$components/DateInput.svelte"
   import VTable from "$components/VTable/vTable.svelte"
   import type { ITableColumn } from "$components/VTable"
-  import { Loading, formatTime, throttle, Notify } from "$core/helpers.ts"
+  import { Loading, formatTime, throttle, Notify } from '$core/helpers'
   import { formatN } from "$shared/main"
   import { untrack } from "svelte"
   import { 

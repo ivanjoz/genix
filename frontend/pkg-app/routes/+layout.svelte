@@ -3,17 +3,17 @@
 	import { page } from '$app/state';
 	import TopLayerSelector from '$components/micro/TopLayerSelector.svelte';
 	import favicon from '$lib/assets/favicon.svg';
-	import { checkIsLogin } from '$core/security.ts';
-	import { doInitServiceWorker } from '$core/sw-cache.ts';
+	import { checkIsLogin } from '$core/security';
+	import { doInitServiceWorker } from '$core/sw-cache';
 	import { onMount } from 'svelte';
-	import '../app.css';
+	import '$lib/app.css';
 	import Header from '$components/layout/Header.svelte';
 	import Page from '$components/Page.svelte';
 	import SideMenu from '$components/layout/SideMenu.svelte';
 	import Modules from "$core/modules";
-	import { Core, getDeviceType } from '$core/store.svelte';
+	import { Core, getDeviceType } from '$core/core/store.svelte';
 	import ImageWorker from '$lib/workers/image-worker?worker';
-    import { Env } from '$core/env.ts';
+    import { Env } from '$core/env';
 
 	let { children } = $props();
 

@@ -1,4 +1,4 @@
-import { GetHandler } from "$core/http.ts"
+import { GetHandler } from '$core/http'
 
 export interface IParametro {
 

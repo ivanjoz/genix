@@ -5,8 +5,8 @@
   import VTable from "$components/VTable/vTable.svelte"
   import type { ITableColumn } from "$components/VTable/types"
   import { Notify, throttle } from "$core/helpers"
-  import { Core, closeModal } from "$core/store.svelte"
-  import { formatTime } from "$core/helpers.ts"
+  import { Core, closeModal } from '$core/core/store.svelte'
+  import { formatTime } from '$core/helpers'
   import pkg from 'notiflix'
 const { Loading } = pkg
   import { EmpresasService, postEmpresa, type IEmpresa } from "./empresas.svelte"

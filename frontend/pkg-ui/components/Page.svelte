@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { checkIsLogin } from "$core/security.ts";
+  import { checkIsLogin } from '$core/security';
   import { onDestroy, onMount } from "svelte";
-  import { closeAllModals, Core, openModal } from "$core/store.svelte";
-    import { Env } from "$core/env.ts";
+  import { closeAllModals, Core, openModal } from '$core/core/store.svelte';
+    import { Env } from '$core/env';
 
   let { children, sideLayerSize, title, options }: {
     children: any, sideLayerSize?: number, title: string

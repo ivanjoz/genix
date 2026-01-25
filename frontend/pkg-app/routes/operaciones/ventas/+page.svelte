@@ -3,7 +3,7 @@
   import LayerStatic from "$components/micro/LayerStatic.svelte";
   import Page from "$components/Page.svelte";
   import SearchSelect from "$components/SearchSelect.svelte";
-  import { Loading, include } from "$core/helpers.ts";
+  import { Loading, include } from '$core/helpers';
   import { formatN } from "$shared/main";
   import type { IProductoStock } from "../productos-stock/productos-stock.svelte";
   import { getProductosStock } from "../productos-stock/productos-stock.svelte";

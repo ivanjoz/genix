@@ -2,8 +2,8 @@
   import CheckboxOptions from "$components/CheckboxOptions.svelte";
   import Input from "$components/Input.svelte";
   import HTMLEditor from "$components/micro/HTMLEditor.svelte";
-  import { ConfirmWarn, Loading, Notify } from "$core/helpers.ts";
-  import { POST } from "$core/http.ts";
+  import { ConfirmWarn, Loading, Notify } from '$core/helpers';
+  import { POST } from '$core/http';
   import ImageUploader from "$components/ImageUploader.svelte";
   import Layer from "$components/Layer.svelte";
   import OptionsStrip from "$components/micro/OptionsStrip.svelte";
@@ -13,8 +13,8 @@
   import type { ITableColumn } from "$components/VTable/types.ts";
   import VTable from "$components/VTable/vTable.svelte";
   import { throttle } from "$core/helpers";
-  import { Core } from "$core/store.svelte";
-  import { formatN } from "$core/helpers.ts";
+  import { Core } from '$core/core/store.svelte';
+  import { formatN } from '$core/helpers';
   import Atributos from "./Atributos.svelte";
   import CategoriasMarcas from "./CategoriasMarcas.svelte";
   import {

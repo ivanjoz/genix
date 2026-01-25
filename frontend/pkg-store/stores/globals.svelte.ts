@@ -1,4 +1,4 @@
-import { getWindow } from "$core/env.ts"
+import { getWindow } from '$core/env'
 
 export const checkDevice = () => {
   const Window = getWindow()

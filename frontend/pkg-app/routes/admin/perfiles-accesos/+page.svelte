@@ -9,7 +9,7 @@
   import VTable from "$components/VTable/vTable.svelte"
   import type { ITableColumn } from "$components/VTable/types"
   import { Notify, throttle } from "$core/helpers"
-  import { Core, closeModal } from "$core/store.svelte"
+  import { Core, closeModal } from '$core/core/store.svelte'
   import Modules from "$core/modules"
   import pkg from 'notiflix'
 const { Loading } = pkg

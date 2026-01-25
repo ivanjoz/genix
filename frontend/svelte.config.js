@@ -56,12 +56,14 @@ const config = {
 			strict: true
 		}),
 		files: {
-			assets: 'static',
-			lib: 'lib',
-			routes: 'routes',
+			assets: 'pkg-app/static',
+			lib: 'pkg-app/lib',
+			routes: 'pkg-app/routes',
 			appTemplate: 'app.html'
 		},
 		alias: {
+			$store: path.resolve('./pkg-store/stores'),
+			$routes: path.resolve('./pkg-app/routes'),
 			$components: path.resolve('./pkg-ui/components'),
 			$core: path.resolve('./pkg-core'),
 			$shared: path.resolve('./pkg-services/shared'),

@@ -1,5 +1,5 @@
 <script lang="ts" generics="T">
-    import { Core } from '$core/store.svelte';
+    import { Core } from '$core/core/store.svelte';
 
 
   let { 

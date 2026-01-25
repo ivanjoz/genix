@@ -1,9 +1,9 @@
 <script lang="ts">
-import { POST_XMLHR } from '$core/http.ts';
+import { POST_XMLHR } from '$core/http';
 import { onDestroy, untrack } from 'svelte';
-import { Notify, fileToImage } from '$core/helpers.ts';
-import { Env } from '$core/env.ts';
-import { imagesToUpload } from '$core/store.svelte';
+import { Notify, fileToImage } from '$core/helpers';
+import { Env } from '$core/env';
+import { imagesToUpload } from '$core/core/store.svelte';
 
 export interface IImageInput {
   content: string;

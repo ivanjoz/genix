@@ -1,8 +1,8 @@
-import { GET, POST } from "$core/http.ts"
+import { GET, POST } from '$core/http'
 import { generateRandomString } from "$core/helpers"
-import { accessHelper, checkIsLogin } from "$core/security.ts"
-import type { IUsuario } from "$lib/routes/admin/usuarios/usuarios.svelte"
-import { Env } from "$core/env.ts"
+import { accessHelper, checkIsLogin } from '$core/security'
+import type { IUsuario } from '$routes/admin/usuarios/usuarios.svelte'
+import { Env } from '$core/env'
 
 export interface ILogin {
   EmpresaID: number

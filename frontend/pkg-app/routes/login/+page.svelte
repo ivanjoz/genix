@@ -3,8 +3,8 @@
   import Input from "$components/Input.svelte";
   import { Notify } from "$core/helpers";
   import { sendUserLogin, type ILogin } from "$services/admin/login.ts";
-  import { checkIsLogin } from "$core/security.ts";
-    import { Env } from "$core/env.ts";
+  import { checkIsLogin } from '$core/security';
+    import { Env } from '$core/env';
 
   let form = $state({ Usuario: "", Password: "", EmpresaID: 1, CipherKey: "" } as ILogin)
   let isLoading = $state(false)

@@ -10,14 +10,14 @@
 
   import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
   import angleSvg from "$lib/assets/angle.svg?raw";
-  import { parseSVG } from "$core/helpers.ts";
+  import { parseSVG } from '$core/helpers';
   import s1 from "./styles.module.css"
   import ArrowSteps from "./ArrowSteps.svelte"
-  import { Ecommerce } from "$lib/globals.svelte.ts";
+  import { Ecommerce } from '$store/globals.svelte.ts';
   import Input from "$components/Input.svelte";
   import CiudadesSelector from "./CiudadesSelector.svelte";
   import ProductCardHorizonal from "./ProductCardHorizonal.svelte";
-    import { Core } from "$core/store.svelte";
+    import { Core } from '$core/core/store.svelte';
 
   let userForm = {} as any
 

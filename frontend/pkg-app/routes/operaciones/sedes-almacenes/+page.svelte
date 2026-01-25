@@ -6,9 +6,9 @@
   import SearchSelect from "$components/SearchSelect.svelte"
   import VTable from "$components/VTable/vTable.svelte"
   import type { ITableColumn } from "$components/VTable"
-  import { Loading, Notify, formatTime } from "$core/helpers.ts"
-  import { throttle } from "$core/helpers.ts"
-  import { Core } from "$core/store.svelte"
+  import { Loading, Notify, formatTime } from '$core/helpers'
+  import { throttle } from '$core/helpers'
+  import { Core } from '$core/core/store.svelte'
   import AlmacenLayoutEditor from "./AlmacenLayoutEditor.svelte"
   import { 
     AlmacenesService, 

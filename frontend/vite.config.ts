@@ -42,6 +42,8 @@ const serviceWorkerConfig: BuildOptions = {
           const baseDir = {
             '$lib': 'pkg-app/lib',
             '$core': 'pkg-core',
+            '$store': 'pkg-store/stores',
+            '$routes': 'pkg-app/routes',
             '$components': 'pkg-ui/components',
             '$shared': 'pkg-services/shared',
             '$ecommerce': 'pkg-components/ecommerce',
@@ -50,14 +52,39 @@ const serviceWorkerConfig: BuildOptions = {
           
           if (!baseDir) return null;
           
-          let fullPath = path.resolve(__dirname, baseDir, rest);
-          if (!fs.existsSync(fullPath)) {
-            if (fs.existsSync(fullPath + '.ts')) fullPath += '.ts';
-            else if (fs.existsSync(fullPath + '.js')) fullPath += '.js';
-            else if (fs.existsSync(path.join(fullPath, 'index.ts'))) fullPath = path.join(fullPath, 'index.ts');
-            else if (fs.existsSync(path.join(fullPath, 'index.js'))) fullPath = path.join(fullPath, 'index.js');
+          // For $core, try lib/ first, then core/
+          let possiblePaths: string[] = [];
+          if (alias === '$core') {
+            possiblePaths.push(path.join(baseDir, 'lib', rest));
+            possiblePaths.push(path.join(baseDir, 'core', rest));
+          } else {
+            possiblePaths.push(path.join(baseDir, rest));
           }
-          return { path: fullPath };
+          
+          // Try each possible path until we find one that exists
+          for (const possiblePath of possiblePaths) {
+            let fullPath = path.resolve(__dirname, possiblePath);
+            if (fs.existsSync(fullPath)) {
+              return { path: fullPath };
+            }
+            if (fs.existsSync(fullPath + '.ts')) {
+              return { path: fullPath + '.ts' };
+            }
+            if (fs.existsSync(fullPath + '.js')) {
+              return { path: fullPath + '.js' };
+            }
+            if (fs.existsSync(fullPath + '.svelte')) {
+              return { path: fullPath + '.svelte' };
+            }
+            if (fs.existsSync(path.join(fullPath, 'index.ts'))) {
+              return { path: path.join(fullPath, 'index.ts') };
+            }
+            if (fs.existsSync(path.join(fullPath, 'index.js'))) {
+              return { path: path.join(fullPath, 'index.js') };
+            }
+          }
+          
+          return null;
         });
       },
     },

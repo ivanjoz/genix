@@ -1,5 +1,5 @@
 <script lang="ts">
-    import MobileMenu from "$core/MobileMenu.svelte";
+    import MobileMenu from '$core/core/MobileMenu.svelte';
     import MainCarrusel from "$ecommerce/MainCarrusel.svelte";
     import Header from "$ecommerce/Header.svelte";
     import ProductCards from "$ecommerce/ProductCards.svelte";

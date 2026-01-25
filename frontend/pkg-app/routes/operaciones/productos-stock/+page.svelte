@@ -3,13 +3,13 @@
     import SearchSelect from "$components/SearchSelect.svelte";
     import type { ITableColumn } from "$components/VTable";
     import VTable from "$components/VTable/vTable.svelte";
-    import { Notify, throttle } from "$core/helpers.ts";
+    import { Notify, throttle } from '$core/helpers';
     import pkg from 'notiflix'
 const { Loading } = pkg;
     import { ProductosService } from "../productos/productos.svelte";
     import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte";
     import { getProductosStock, postProductosStock, type IProductoStock } from "./productos-stock.svelte";
-    import { Core } from "$core/store.svelte";
+    import { Core } from '$core/core/store.svelte';
     import Layer from "$components/Layer.svelte";
     import Input from "$components/Input.svelte";
     import Checkbox from "$components/Checkbox.svelte";

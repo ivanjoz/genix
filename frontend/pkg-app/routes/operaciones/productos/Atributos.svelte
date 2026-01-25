@@ -4,7 +4,7 @@
     import Modal from "$components/Modal.svelte";
     import SearchSelect from "$components/SearchSelect.svelte";
     import { VTable, type ITableColumn } from "$components/VTable";
-    import { closeAllModals, openModal } from "$core/store.svelte";
+    import { closeAllModals, openModal } from '$core/core/store.svelte';
     import { formatN } from "$shared/main";
     import { productoAtributos, type IProducto, type IProductoPresentacion } from "./productos.svelte";
 

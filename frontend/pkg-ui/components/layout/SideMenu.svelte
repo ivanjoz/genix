@@ -2,8 +2,8 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { tick } from 'svelte';
-	import { Core } from '$core/store.svelte';
-	import type { IMenuRecord, IModule } from '$core/menu.ts';
+	import { Core } from '$core/core/store.svelte';
+	import type { IMenuRecord, IModule } from '$core/menu';
 
 	// State
 	const module = $derived(Core.module);
