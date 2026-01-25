@@ -5,6 +5,7 @@
 // 3. See STORE.md for more implementation details
 
 import fs from "fs";
+import { console } from "inspector";
 import path from "path";
 import sharp from "sharp";
 import { rgbaToThumbHash, thumbHashToDataURL } from "thumbhash";
@@ -171,8 +172,8 @@ function verifyThumbhash(base64Hash) {
   try {
     const buffer = Buffer.from(base64Hash, "base64");
     const dataURL = thumbHashToDataURL(buffer);
-    console.log("Generando preview de:", base64Hash);
-    console.log(dataURL);
+    // console.log("Generando preview de:", base64Hash);
+    // console.log(dataURL);
     return dataURL !== null;
   } catch (error) {
     return false;
@@ -180,6 +181,6 @@ function verifyThumbhash(base64Hash) {
 }
 
 // Run the script
-processImages().catch(console.error);
+// processImages().catch(console.error);
 
 export { processImages, generateThumbhash, getFilenameSuffix };

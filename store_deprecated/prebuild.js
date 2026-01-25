@@ -165,8 +165,8 @@ function verifyThumbhash(base64Hash) {
   try {
     const buffer = Buffer.from(base64Hash, "base64");
     const dataURL = thumbHashToDataURL(buffer);
-    console.log("Generando preview de:", base64Hash);
-    console.log(dataURL);
+    // console.log("Generando preview de:", base64Hash);
+    // console.log(dataURL);
     return dataURL !== null;
   } catch (error) {
     return false;
