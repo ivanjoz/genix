@@ -248,7 +248,13 @@ var sendClientMessage = (clientID, content) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(event.request.url);
+  if (self._isLocal) {
+    return;
+  }
   if (url.pathname.startsWith("/store/")) {
+    return;
+  }
+  if (request.headers.get("X-App-Scope") === "store") {
     return;
   }
   if (url.pathname === "/_sw_") {
@@ -359,9 +365,6 @@ self.addEventListener("fetch", (event) => {
         throw error;
       }
     })());
-  }
-  if (self._isLocal) {
-    return;
   }
   const contentType = request.headers.get("Content-Type");
   console.log("event URL:: ", request.url, "|", contentType);

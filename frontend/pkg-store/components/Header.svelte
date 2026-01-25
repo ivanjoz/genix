@@ -55,7 +55,7 @@ import ButtonLayer from '$components/ButtonLayer.svelte';
 <div id="sh-1" class="_1 h-58 w-full md:h-68 top-48 absolute flex items-center md:justify-between w-full left-0 px-4 md:px-80"
 >
   <div class="hidden md:block"></div>
-  <button class="_6 fx-c w-[14vw] md:hidden!" onclick={ev => {
+  <button aria-label="page-menu" class="_6 fx-c w-[14vw] md:hidden!" onclick={ev => {
     ev.stopPropagation()
     if (document.startViewTransition) {
       document.startViewTransition(() => {
@@ -67,9 +67,6 @@ import ButtonLayer from '$components/ButtonLayer.svelte';
   </button>
   <SearchBar />
   <div class="flex items-center h-42 ml-auto md:ml-0">
-  	<ButtonLayer buttonText="hola" layerClass="w-500" useBig>
- 			<div class="h-400">this is a test</div>
-   	</ButtonLayer>
     <CartMenu css="mr-8 hidden md:block relative w-120 h-full" id={1}/>
     <UsuarioMenu />
     <div class={"relative w-[15vw] fx-c flex md:hidden! "+(layerOpenedState.id === 2 ? "s1" : "")}>
@@ -82,7 +79,7 @@ import ButtonLayer from '$components/ButtonLayer.svelte';
           <div class="_4 fs14 fx-c w-22 h-22 mb-14 ml-26 absolute rounded-[50%]">{cartCant}</div>
         {/if}
       </button>
-      <button class="_5 absolute fx-c w-40 h-40 rounded-[50%]" onclick={ev => {
+      <button aria-label="close_layer" class="_5 absolute fx-c w-40 h-40 rounded-[50%]" onclick={ev => {
         ev.stopPropagation()
         layerOpenedState.id = layerOpenedState.id ? 0 : 2
       }}>

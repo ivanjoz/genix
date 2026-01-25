@@ -154,10 +154,22 @@ export const sendClientMessage = (clientID: number, content: any) => {
 self.addEventListener('fetch', (event) => {
   const request = event.request
   const url = new URL(event.request.url)
+
+  // In development mode, let the server handle all requests without service worker interference
+  // This prevents reload loops when using the proxy server setup
+  if (self._isLocal) {
+    return
+  }
+
   //console.log("url recibida:",url, url.pathname)
 
   // Skip /store routes (handled by store app service worker)
   if (url.pathname.startsWith('/store/')) {
+    return;
+  }
+
+  // Skip requests with X-App-Scope: store header (proxied store requests)
+  if (request.headers.get('X-App-Scope') === 'store') {
     return;
   }
 
@@ -309,9 +321,7 @@ self.addEventListener('fetch', (event) => {
     })())
   }
 
-  if (self._isLocal) {
-    return
-  }
+
   const contentType = request.headers.get('Content-Type');
 
   console.log("event URL:: ", request.url, "|", contentType)

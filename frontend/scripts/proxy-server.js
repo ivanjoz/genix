@@ -1,50 +1,109 @@
-// scripts/proxy-server.js
 import http from 'http';
-import { createProxyMiddleware } from 'http-proxy-middleware';
+import httpProxy from 'http-proxy';
 
 const MAIN_PORT = 3570;
 const STORE_PORT = 3571;
-const PROXY_PORT = 3570; // Use same port as before
+const PROXY_PORT = 3572;
 
-// Create proxy middleware for store
-const storeProxy = createProxyMiddleware({
-  target: `http://localhost:${STORE_PORT}`,
-  changeOrigin: true,
-  pathRewrite: {
-    '^/store': '' // Remove /store prefix when proxying to store app
-  },
-  ws: true // Enable WebSocket proxying
-});
-
-// Create proxy middleware for main
-const mainProxy = createProxyMiddleware({
+// Create proxy instances for each target
+const mainProxy = httpProxy.createProxyServer({
   target: `http://localhost:${MAIN_PORT}`,
-  changeOrigin: true,
-  ws: true
+  ws: true,
+  changeOrigin: true
 });
 
-// Create main server
+const storeProxy = httpProxy.createProxyServer({
+  target: `http://localhost:${STORE_PORT}`,
+  ws: true,
+  changeOrigin: true
+});
+
+// Handle proxy errors
+mainProxy.on('error', (err, req, res) => {
+  console.error('[Proxy Error] Main:', err.message);
+  if (!res.headersSent) {
+    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.end('Proxy error: ' + err.message);
+  }
+});
+
+storeProxy.on('error', (err, req, res) => {
+  console.error('[Proxy Error] Store:', err.message);
+  if (!res.headersSent) {
+    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.end('Proxy error: ' + err.message);
+  }
+});
+
+// Log proxy requests
+mainProxy.on('proxyReq', (proxyReq, req, res) => {
+  console.log(`[Proxy] Main: ${req.method} ${req.url}`);
+});
+
+storeProxy.on('proxyReq', (proxyReq, req, res) => {
+  console.log(`[Proxy] Store: ${req.method} ${req.url}`);
+});
+
+// Log WebSocket upgrades
+mainProxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
+  console.log(`[WS] Main: ${req.url}`);
+});
+
+storeProxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
+  console.log(`[WS] Store: ${req.url}`);
+});
+
+// Handle proxy errors on WebSocket connections
+mainProxy.on('proxyErrorWs', (err, req, socket) => {
+  console.error('[WS Error] Main:', err.message);
+  socket.end();
+});
+
+storeProxy.on('proxyErrorWs', (err, req, socket) => {
+  console.error('[WS Error] Store:', err.message);
+  socket.end();
+});
+
+// Create main HTTP server
 const server = http.createServer((req, res) => {
-  console.log(`${req.method} ${req.url} → ${req.url.startsWith('/store') ? 'store' : 'main'}`);
+  const isStore = req.url.startsWith('/store');
   
-  if (req.url.startsWith('/store')) {
-    storeProxy(req, res);
+  if (isStore) {
+    // Remove /store prefix before proxying to store app
+    const originalUrl = req.url;
+    req.url = req.url.replace(/^\/store/, '');
+    console.log(`[HTTP] ${originalUrl} → Store (${req.url})`);
+    storeProxy.web(req, res);
   } else {
-    mainProxy(req, res);
+    console.log(`[HTTP] ${req.url} → Main`);
+    mainProxy.web(req, res);
   }
 });
 
-// Handle WebSocket upgrades
+// Handle WebSocket upgrade requests
 server.on('upgrade', (req, socket, head) => {
-  if (req.url.startsWith('/store')) {
-    storeProxy.upgrade(req, socket, head);
+  const isStore = req.url.startsWith('/store');
+  
+  if (isStore) {
+    // Remove /store prefix before proxying WebSocket connection
+    const originalUrl = req.url;
+    req.url = req.url.replace(/^\/store/, '');
+    console.log(`[WS Upgrade] ${originalUrl} → Store (${req.url})`);
+    storeProxy.ws(req, socket, head);
   } else {
-    mainProxy.upgrade(req, socket, head);
+    console.log(`[WS Upgrade] ${req.url} → Main`);
+    mainProxy.ws(req, socket, head);
   }
 });
 
-server.listen(3572, () => { // Use 3572 for proxy to avoid conflict during dev
-  console.log(`🚀 Development proxy server running on http://localhost:3572`);
-  console.log(`📋 Main (Admin): http://localhost:3572`);
-  console.log(`🛒 Store: http://localhost:3572/store`);
+// Start the proxy server
+server.listen(PROXY_PORT, () => {
+  console.log('╔════════════════════════════════════════════════════════════╗');
+  console.log('║           🚀 Development Proxy Server Running               ║');
+  console.log('╚════════════════════════════════════════════════════════════╝');
+  console.log(`\n  📦 Main (Admin):    http://localhost:${PROXY_PORT}/`);
+  console.log(`  🛒 Store:          http://localhost:${PROXY_PORT}/store`);
+  console.log(`\n  🔧 Main Target:    http://localhost:${MAIN_PORT}`);
+  console.log(`  🔧 Store Target:   http://localhost:${STORE_PORT}`);
+  console.log('\n  Proxying HTTP requests and WebSocket connections...\n');
 });

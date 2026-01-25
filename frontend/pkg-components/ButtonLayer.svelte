@@ -6,16 +6,20 @@ import angleSvg from '$core/assets/angle.svg?raw';
   interface Props {
     /** Button text or content */
     buttonText?: string;
-    /** Custom class for the button */
-    buttonClass?: string;
-    /** Custom class for the layer */
-    layerClass?: string;
+    /** Custom class for the outer wrapper */
+    wrapperClass?: string;
+    /** Horizontal offset added to the calculated left position */
+    horizontalOffset?: number;
+    /** Minimum margin from the screen edges */
+    edgeMargin?: number;
+    /** Whether the layer is open */
+    isOpen?: boolean;
     /** Whether the layer is open by default */
     defaultOpen?: boolean;
     /** Children content to render in the layer */
     children?: import('svelte').Snippet;
     /** Optional custom button snippet */
-    button?: import('svelte').Snippet;
+    button?: import('svelte').Snippet<[boolean]>;
     /** Callback when layer opens */
     onOpen?: () => void;
     /** Callback when layer closes */
@@ -27,8 +31,12 @@ import angleSvg from '$core/assets/angle.svg?raw';
 
   let {
     buttonText = 'Open',
+    wrapperClass = '',
     buttonClass = '',
     layerClass = '',
+    horizontalOffset = 0,
+    edgeMargin = 10,
+    isOpen = $bindable(false),
     defaultOpen = false,
     contentCss = '',
     children,
@@ -39,8 +47,8 @@ import angleSvg from '$core/assets/angle.svg?raw';
   }: Props = $props();
 
   // svelte-ignore state_referenced_locally
-  let isOpen = $state(defaultOpen);
-  let buttonElement: HTMLButtonElement | null = $state(null);
+  if (defaultOpen) isOpen = true;
+  let buttonElement: HTMLElement | null = $state(null);
   let layerElement: HTMLElement | null = $state(null);
   let position = $state({ top: 0, left: 0 });
   let angleLeft = $state(20); // Position of the angle from the left of the layer
@@ -75,18 +83,18 @@ import angleSvg from '$core/assets/angle.svg?raw';
 
     const offset = 8; // Distance from button
     let top = buttonRect.bottom + offset;
-    let left = isMobile ? 6 : buttonRect.left;
+    let left = isMobile ? 6 : buttonRect.left + horizontalOffset;
 
     // Desktop: position relative to button
     if (!isMobile) {
       // Check if layer would go off right edge of viewport
       if (left + layerRect.width > window.innerWidth) {
-        left = window.innerWidth - layerRect.width - 10;
+        left = window.innerWidth - layerRect.width - edgeMargin;
       }
 
       // Check if layer would go off left edge of viewport
-      if (left < 10) {
-        left = 10;
+      if (left < edgeMargin) {
+        left = edgeMargin;
       }
     }
 
@@ -172,16 +180,18 @@ import angleSvg from '$core/assets/angle.svg?raw';
   });
 </script>
 
-<div class="button-layer-wrapper">
+<div class="button-layer-wrapper {wrapperClass}">
   {#if button}
-    <button
+    <div
       bind:this={buttonElement}
       onclick={toggleLayer}
-      class="{buttonClass}"
-      type="button"
+      class="button-layer-trigger-wrapper {buttonClass}"
+      role="button"
+      tabindex="0"
+      onkeydown={(e) => e.key === 'Enter' && toggleLayer()}
     >
-      {@render button()}
-    </button>
+      {@render button(isOpen)}
+    </div>
   {:else}
     <button
       bind:this={buttonElement}
