@@ -2,9 +2,10 @@
 import Input from '$components/Input.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
 import { accessHelper } from '$core/lib/security';
-    import pkg from 'notiflix'
+import pkg from 'notiflix'
 const { Loading, Notify } = pkg;
-import { postUsuario, postUsuarioPropio, type IUsuario } from '$routes/admin/usuarios/usuarios.svelte';
+import { postUsuarioPropio } from '$services/services/usuarios.svelte';
+import type { IUsuario } from '$core/types/common';
 
 
   const options = [

@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 import Portal from '$components/popover2/Portal.svelte';
-	import { calculatePosition, type Placement } from './positioning';
 import { parseSVG } from '$core/helpers';
-import angleSvg from '$ui/assets/angle.svg?raw';
-import './popover2.css';
+import angleSvg from '$core/assets/angle.svg?raw';
+import { calculatePosition, type Position } from './positioning';
 
 	interface Props {
 		/** The reference element to position relative to */

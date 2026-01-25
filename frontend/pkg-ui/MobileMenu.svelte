@@ -1,5 +1,5 @@
 <script lang="ts">
-import LoginForm from '$store/components/forms/LoginForm.svelte';
+import LoginForm from '$components/LoginForm.svelte';
 import MobileLayerVertical from '$components/MobileLayerVertical.svelte';
 import { Core, mainMenuOptions, suscribeUrlFlag } from '$core/store.svelte';
 

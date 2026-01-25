@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
 import { parseSVG } from '$core/helpers';
-import angleSvg from '$ui/assets/angle.svg?raw';
+import angleSvg from '$core/assets/angle.svg?raw';
 
   interface Props {
     /** Button text or content */

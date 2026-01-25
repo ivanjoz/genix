@@ -1,13 +1,8 @@
 import { SvelteMap } from 'svelte/reactivity';
-import type { IMenuRecord } from '$core/types/modules';
-import type { IModule } from './modules';
-import { LocalStorage, Env } from './env';
+import type { IMenuRecord, IModule } from '$core/types/modules';
+import { LocalStorage, Env, browser } from './env';
 import type { IImageResult } from './types/common';
-
-export const imagesToUpload = new Map<number, () => Promise<IImageResult>>();
-import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
-import { Env } from '$core/env';
 
 export const getDeviceType = () => {
   let view = 1 // Desktop
@@ -51,6 +46,10 @@ export const Core = $state({
     const index = openModals.indexOf(id);
     if (index > -1) { openModals.splice(index, 1); }
   },
+  // Ecommerce state moved from pkg-store
+  ecommerce: {
+    cartOption: 1
+  }
 })
 
 export const WeakSearchRef: WeakMap<any,{

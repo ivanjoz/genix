@@ -5,10 +5,10 @@
     icon?: string;
   }
 
-import arrow2Svg from '$ui/assets/flecha_fin.svg?raw';
-import arrow1Svg from '$ui/assets/flecha_inicio.svg?raw';
+import arrow2Svg from '$core/assets/flecha_fin.svg?raw';
+import arrow1Svg from '$core/assets/flecha_inicio.svg?raw';
 import { cn, parseSVG } from '$core/helpers';
-import { Ecommerce } from '$store/stores/globals.svelte'
+import { Core } from '$core/store.svelte'
 import s1 from './styles.module.css';
 
   let {
@@ -30,7 +30,7 @@ import s1 from './styles.module.css';
   }
 
   $effect(() => {
-    console.log("Ecommerce changed::", Ecommerce.cartOption, "|", selected);
+    console.log("Ecommerce changed::", Core.ecommerce.cartOption, "|", selected);
   });
 
   // Use a derived state or a getter for reactive values
