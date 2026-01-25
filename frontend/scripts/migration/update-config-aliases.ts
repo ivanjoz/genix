@@ -236,6 +236,11 @@ function updateTSConfig() {
   log('\n📝 Updating tsconfig.json...', 'info');
 
   let content = readFileSync(configPath, 'utf-8');
+  
+  // Strip comments (tsconfig often has // comments)
+  content = content.replace(/\/\/.*$/gm, '');
+  content = content.replace(/\/\*[\s\S]*?\*\//g, '');
+  
   const json = JSON.parse(content);
 
   // Ensure paths section exists

@@ -22,7 +22,7 @@ const __dirname = process.cwd()
 const publicDir = path.resolve(__dirname, 'static');
 
 const serviceWorkerConfig: BuildOptions = {
-  entryPoints: [path.resolve(__dirname, 'workers/service-worker.ts')],
+  entryPoints: [path.resolve(__dirname, 'pkg-app/workers/service-worker.ts')],
   format: 'esm', // Service workers typically use ES modules
   outfile: path.resolve(publicDir, 'sw.js'),
   bundle: true,
@@ -40,12 +40,12 @@ const serviceWorkerConfig: BuildOptions = {
           const alias = parts[0];
           const rest = parts.slice(1).join('/');
           const baseDir = {
-            '$lib': 'lib',
-            '$core': 'core',
-            '$components': 'components',
-            '$shared': 'shared',
-            '$ecommerce': 'ecommerce',
-            '$services': 'services'
+            '$lib': 'pkg-app/lib',
+            '$core': 'pkg-core',
+            '$components': 'pkg-ui/components',
+            '$shared': 'pkg-services/shared',
+            '$ecommerce': 'pkg-components/ecommerce',
+            '$services': 'pkg-services/services'
           }[alias];
           
           if (!baseDir) return null;
@@ -88,9 +88,9 @@ const serviceWorkerPlugin = () => ({
     buildSw();
 
     // Watch for changes in the service worker source file
-    server.watcher.add(path.resolve(__dirname, 'workers/service-worker.ts'));
+    server.watcher.add(path.resolve(__dirname, 'pkg-app/workers/service-worker.ts'));
     server.watcher.on('change', async (filePath: string) => {
-      if (filePath === path.resolve(__dirname, 'workers/service-worker.ts')) {
+      if (filePath === path.resolve(__dirname, 'pkg-app/workers/service-worker.ts')) {
         await buildSw();
         // server.hot.send({ type: 'full-reload' });
       }
