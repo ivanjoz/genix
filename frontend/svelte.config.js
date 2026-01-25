@@ -63,13 +63,12 @@ const config = {
 		},
 		alias: {
 			$ui: path.resolve('./pkg-ui'),
-			$store: path.resolve('./pkg-store/stores'),
+			$store: path.resolve('./pkg-store'),
 			$routes: path.resolve('./pkg-app/routes'),
-			$components: path.resolve('./pkg-ui/components'),
+			$components: path.resolve('./pkg-components'),
 			$core: path.resolve('./pkg-core'),
-			$shared: path.resolve('./pkg-services/shared'),
-			$ecommerce: path.resolve('./pkg-components/ecommerce'),
-			$services: path.resolve('./pkg-services/services')
+			$app: path.resolve('./pkg-app'),
+			$services: path.resolve('./pkg-services')
 		},
 		prerender: {
 			handleHttpError: 'warn'

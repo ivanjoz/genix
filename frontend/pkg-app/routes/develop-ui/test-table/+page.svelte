@@ -1,6 +1,6 @@
 <script lang="ts">
 import CellSelector from '$ui/components/VTable/CellSelector';
-import { VTable, ITableColumn } from '$ui/components/VTable';
+import { VTable, ITableColumn } from '$ui/components/VTable/index';
 import Page from '$ui/components/Page';
 
   interface TestRecord {

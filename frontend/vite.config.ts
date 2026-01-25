@@ -46,7 +46,6 @@ const serviceWorkerConfig: BuildOptions = {
     '$routes': 'pkg-app/routes',
     '$ui': 'pkg-ui',
     '$components': 'pkg-components',
-    '$shared': 'pkg-services',
     '$services': 'pkg-services'
   }[alias];
 
