@@ -15,8 +15,8 @@ import VTable from '$components/vTable/VTable.svelte';
 import { throttle } from '$core/helpers';
 import { Core } from '$core/store.svelte';
 import { formatN } from '$core/helpers';
-import Atributos from '$main/operaciones/productos/Atributos.svelte';
-import CategoriasMarcas from '$main/operaciones/productos/CategoriasMarcas.svelte';
+import Atributos from '$routes/operaciones/productos/Atributos.svelte';
+import CategoriasMarcas from '$routes/operaciones/productos/CategoriasMarcas.svelte';
   import {
     ListasCompartidasService,
     postProducto,

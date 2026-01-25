@@ -1,6 +1,6 @@
 <script lang="ts">
 import { formatN, formatTime } from '$core/helpers';
-import type { IProducto } from '$main/operaciones/almacen-movimientos/almacen-movimientos.svelte';
+import type { IProducto } from '$services/services/productos.svelte';
 
   const {
     producto = null as IProducto, css = ""

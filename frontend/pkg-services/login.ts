@@ -1,6 +1,6 @@
 import { GET, POST } from '$core/http';
 import { accessHelper, checkIsLogin } from '$core/lib/security';
-import type { IUsuario } from '$main/admin/usuarios/usuarios.svelte';
+import type { IUsuario } from '$routes/admin/usuarios/usuarios.svelte';
 import { Env } from '$core/env';
 
 export interface ILogin {

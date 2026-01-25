@@ -9,8 +9,9 @@ import type { ITableColumn } from '$components/vTable/types';
 import { Loading, Notify, formatTime } from '$core/helpers';
 import { throttle } from '$core/helpers';
 import { Core } from '$core/store.svelte';
-import AlmacenLayoutEditor from '$main/operaciones/sedes-almacenes/AlmacenLayoutEditor.svelte';
-  import {
+import { AlmacenLayoutEditor } from '$routes/operaciones/sedes-almacenes/AlmacenLayoutEditor.svelte';
+
+import {
     AlmacenesService,
     PaisCiudadesService,
     postSede,
