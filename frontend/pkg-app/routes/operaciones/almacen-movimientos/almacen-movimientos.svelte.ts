@@ -1,4 +1,4 @@
-import { GET } from '$core/http'
+import { GET } from '$core/lib/http';
 import { Notify } from '$core/lib/helpers';
 
 export interface IUsuario {

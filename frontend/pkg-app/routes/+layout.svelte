@@ -2,16 +2,16 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
 	import TopLayerSelector from '$components/micro/TopLayerSelector.svelte';
-	import favicon from '$core/assets/favicon.svg';
+import favicon from '$core/lib/assets/favicon.svg';
 import { checkIsLogin } from '$core/lib/security';
 import { doInitServiceWorker } from '$core/lib/sw-cache';
 	import { onMount } from 'svelte';
-	import '../app.css';
+	import '../static/app.css';
 	import Header from '$components/layout/Header.svelte';
 	import Page from '$components/Page.svelte';
 	import SideMenu from '$components/layout/SideMenu.svelte';
 	import Modules from "$core/modules";
-	import { Core, getDeviceType } from '$core/store.svelte';
+	import { Core, getDeviceType } from '$core/core/store.svelte';
 	import ImageWorker from '../workers/image-worker?worker';
 import { Env } from '$core/lib/env';
 

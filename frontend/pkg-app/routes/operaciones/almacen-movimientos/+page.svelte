@@ -4,7 +4,7 @@
   import DateInput from "$components/DateInput.svelte"
 import VTable from '$components/VTable/index';
   import type { ITableColumn } from "$components/VTable"
-  import { Loading, formatTime, throttle, highlString } from '$core/helpers'
+import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte"
   import { ProductosService } from "../productos/productos.svelte"
   import { 

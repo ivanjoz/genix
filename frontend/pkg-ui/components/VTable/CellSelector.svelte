@@ -1,7 +1,7 @@
 <script lang="ts" generics="T,E">
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import { untrack } from "svelte";
-  import { throttle } from "$core/helpers";
+  import { throttle } from "$core/lib/helpers";
   import { Core, WeakSearchRef } from '$core/core/store.svelte';
 import { Popover2 } from '$components/popover2/Popover2';
 

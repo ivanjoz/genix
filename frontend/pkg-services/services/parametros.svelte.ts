@@ -1,4 +1,4 @@
-import { GetHandler } from '$core/http'
+import { GetHandler } from '$core/lib/http';
 
 export interface IParametro {
 

@@ -2,13 +2,13 @@
   import Page from "$components/Page.svelte";
   import type { ITableColumn } from "$components/VTable/types";
 import VTable from '$components/VTable/index';
-  import { ConfirmWarn, formatTime } from '$core/helpers';
+import { ConfirmWarn, formatTime } from '$core/lib/helpers';
 import { formatN } from '$core/lib/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg;
   import { BackupsService, createBackup, restoreBackup, type IBackup } from "./backups.svelte";
-    import { sendServiceMessage } from '$core/sw-cache';
-    import { Env } from '$core/env';
+import { sendServiceMessage } from '$core/lib/sw-cache';
+import { Env } from '$core/lib/env';
 
   const backupsService = new BackupsService()
 

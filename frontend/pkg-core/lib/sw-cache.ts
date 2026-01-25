@@ -1,5 +1,5 @@
-import { Notify } from "$core/helpers"
-import { fetchEvent } from "$core/store.svelte"
+import { Notify } from "$core/lib/helpers"
+import { fetchEvent } from "$core/core/store.svelte"
 import { Env } from './env.ts';
 import type { IGetCacheSubObject, serviceHttpProps } from "$lib/workers/service-worker"
 import { setFetchProgress } from "./http"

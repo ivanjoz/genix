@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
   import s1 from "./styles.module.css";
-    import { Env } from '$core/env';
+import { Env } from '$core/lib/env';
 
 	export interface IImageHash {
 			src: string, css: string, hash: string, alt: string, size: number, folder?: string

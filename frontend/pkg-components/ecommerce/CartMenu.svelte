@@ -9,8 +9,8 @@
   }: IProps = $props();
 
   import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
-  import angleSvg from "$lib/assets/angle.svg?raw";
-  import { parseSVG } from '$core/helpers';
+import angleSvg from '$core/lib/assets/angle.svg?raw';
+import { parseSVG } from '$core/lib/helpers';
   import s1 from "./styles.module.css"
   import ArrowSteps from "./ArrowSteps.svelte"
   import { Ecommerce } from '$store/globals.svelte.ts';

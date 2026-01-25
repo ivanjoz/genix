@@ -1,4 +1,4 @@
-import { GetHandler, POST } from '$core/http'
+import { GetHandler, POST } from '$core/lib/http';
 import Modules from "$core/modules"
 
 export interface IAcceso {

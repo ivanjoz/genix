@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatN, formatTime } from '$core/helpers';
+import { formatN, formatTime } from '$core/lib/helpers';
   import type { IProducto } from "$services/productos.svelte";
 
   const {

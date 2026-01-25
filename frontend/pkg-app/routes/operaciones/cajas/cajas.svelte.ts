@@ -1,5 +1,5 @@
-import { GetHandler, POST, GET } from '$core/http'
-import { formatTime } from '$core/helpers'
+import { GetHandler, POST, GET } from '$core/lib/http';
+import { formatTime } from '$core/lib/helpers';
 import { Notify } from '$core/lib/helpers';
 
 export interface ICaja {

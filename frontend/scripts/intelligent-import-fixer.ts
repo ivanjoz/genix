@@ -132,13 +132,35 @@ function findFilesRecursively(dir: string, extensions: string[]): string[] {
  * Check if a path exists (with or without extensions)
  */
 function pathExists(basePath: string): string | null {
-  const extensions = ['', '.ts', '.js', '.svelte'];
+  // Remove query parameters if present (e.g., ?raw, ?worker)
+  const cleanPath = basePath.split('?')[0];
   
-  for (const ext of extensions) {
-    const fullPath = basePath + ext;
-    if (fs.existsSync(fullPath)) {
+  // First, check if path itself is a file (handles paths with extensions already)
+  if (fs.existsSync(cleanPath) && fs.statSync(cleanPath).isFile()) {
+    return cleanPath;
+  }
+  
+  // Check for TypeScript/JavaScript/Svelte files
+  const codeExtensions = ['.ts', '.js', '.svelte'];
+  for (const ext of codeExtensions) {
+    const fullPath = cleanPath + ext;
+    if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
       return fullPath;
     }
+  }
+  
+  // Check for common asset files
+  const assetExtensions = ['.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.css', '.json'];
+  for (const ext of assetExtensions) {
+    const fullPath = cleanPath + ext;
+    if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+      return fullPath;
+    }
+  }
+  
+  // Check if it's a directory (for directory imports)
+  if (fs.existsSync(cleanPath) && fs.statSync(cleanPath).isDirectory()) {
+    return cleanPath;
   }
   
   return null;
@@ -331,8 +353,25 @@ function extractExports(filePath: string): ExportedSymbol[] {
       continue;
     }
   
-    // Named exports with braces: export { something }
-    const exportFromMatch = trimmed.match(/^export\s+{\s*([^}]+)\s*}(?:\s+from\s+['"]([^'"]+)['"])?/);
+    // Type exports with braces: export type { something } from '...' (must come before generic export { })
+    const exportTypeFromMatch = trimmed.match(/^export\s+type\s+\{\s*([^}]+)\s*\}(?:\s+from\s+['"]([^'"]+)['"])?/);
+    if (exportTypeFromMatch) {
+      const names = exportTypeFromMatch[1].split(',').map(n => n.trim().replace(/^.*\s+as\s+/, ''));
+      for (const name of names) {
+        if (name) {
+          exports.push({
+            name,
+            type: 'named',
+            filePath,
+            lineNumber
+          });
+        }
+      }
+      continue;
+    }
+
+    // Named exports with braces: export { something } (must NOT match export type { })
+    const exportFromMatch = trimmed.match(/^export\s+(?!type\s+\{)\{\s*([^}]+)\s*\}(?:\s+from\s+['"]([^'"]+)['"])?/);
     if (exportFromMatch) {
       const names = exportFromMatch[1].split(',').map(n => n.trim().replace(/^.*\s+as\s+/, ''));
       for (const name of names) {
@@ -585,12 +624,13 @@ function checkImports(filePath: string): ImportIssue[] {
       if (pathExists(resolvedPath)) continue;
     }
     
-    // Skip asset imports with query params that resolve to actual files
-    if (imp.importPath.match(/\.(svg|js|css|ts)(\?raw|\?worker)?$/)) {
-      const cleanPath = imp.importPath.split('?')[0];
-      const fileName = cleanPath.split('/').pop() || '';
-      if (fileName && searchForFile(fileName)) {
-        continue;
+    // Check for asset imports that might need fixing (but don't skip them)
+    if (imp.importPath.match(/\.(svg|png|jpg|jpeg|gif|webp|ico|css|json)(\?.*)?$/)) {
+      // For asset files without extensions or with query params, check if they exist
+      if (!imp.importPath.match(/\.(svg|png|jpg|jpeg|gif|webp|ico|css|json)$/)) {
+        // Has query params but extension is at the end - continue checking
+      } else {
+        // Asset file with extension - continue to check if it needs path correction
       }
     }
     
@@ -602,12 +642,38 @@ function checkImports(filePath: string): ImportIssue[] {
     const foundIn: ExportedSymbol[] = [];
     let actualFileLocation: string | undefined;
     
+    // Check if import path needs correction (e.g., $core/http → $core/lib/http)
+    let importPathNeedsFix = false;
+    if (!missingFile && imp.importPath.startsWith('$')) {
+      const alias = imp.importPath.split('/')[0];
+      if (alias === '$core') {
+        // For $core imports, check if resolved path includes 'lib' subdirectory
+        // but the import path doesn't
+        const resolvedRelative = path.relative(PROJECT_ROOT, resolvedFile!);
+        const resolvedParts = resolvedRelative.split(path.sep);
+        // Debug: log what we're checking
+        console.log(`  🔍 Checking path fix for: ${imp.importPath}`);
+        console.log(`     - Resolved to: ${resolvedRelative}`);
+        console.log(`     - Resolved parts: [${resolvedParts.join(', ')}]`);
+        // If resolved path is in pkg-core/lib/ but import is $core/* (not $core/lib/*)
+        if (resolvedParts.includes('pkg-core') && resolvedParts.includes('lib')) {
+          const importPathParts = imp.importPath.split('/');
+          console.log(`     - Import path parts: [${importPathParts.join(', ')}]`);
+          if (importPathParts.length >= 2 && importPathParts[1] !== 'lib') {
+            // Import is like $core/http but resolves to pkg-core/lib/http.ts
+            console.log(`     - ✅ Needs fix: ${imp.importPath} → $core/lib/${importPathParts.slice(1).join('/')}`);
+            importPathNeedsFix = true;
+            actualFileLocation = resolvedRelative;
+          }
+        }
+      }
+    }
+    
     // If file is missing but it's an asset file, try to find it
-    if (missingFile && (imp.importPath.includes('.svg') || imp.importPath.includes('.js') || imp.importPath.includes('.css') || imp.importPath.includes('.ts'))) {
-      // Strip query parameters for searching
+    if (missingFile) {
       const cleanImportPath = imp.importPath.split('?')[0];
       const fileName = cleanImportPath.split('/').pop() || '';
-      if (fileName) {
+      if (fileName && (imp.importPath.includes('.') || imp.importPath.match(/\?raw|\?worker/))) {
         const foundFile = searchForFile(fileName);
         if (foundFile) {
           actualFileLocation = path.relative(PROJECT_ROOT, foundFile);
@@ -665,15 +731,16 @@ function checkImports(filePath: string): ImportIssue[] {
       }
     }
     
-    if (missingFile || missingSymbols.length > 0) {
+    if (missingFile || missingSymbols.length > 0 || importPathNeedsFix) {
       issues.push({
         filePath: path.relative(PROJECT_ROOT, filePath),
         lineNumber: imp.lineNumber,
         importStatement: imp,
         missingFile,
         missingSymbols,
-        foundIn: foundIn.length > 0 ? foundIn : undefined,
-        actualFileLocation
+        foundIn,
+        actualFileLocation,
+        importStatement: imp
       });
     }
   }
@@ -810,7 +877,8 @@ function fixImportIssue(issue: ImportIssue, dryRun: boolean = false): boolean {
   const lineIndex = issue.lineNumber - 1;
   const originalLine = lines[lineIndex];
   
-  if (!issue.foundIn || issue.foundIn.length === 0) {
+  // Only skip if we have no symbol locations AND no actual file location
+  if ((!issue.foundIn || issue.foundIn.length === 0) && !issue.actualFileLocation) {
     console.log(`⚠️  Cannot fix ${issue.filePath}:${issue.lineNumber} - symbol locations not found`);
     return false;
   }
@@ -843,6 +911,12 @@ function fixImportIssue(issue: ImportIssue, dryRun: boolean = false): boolean {
 function determineBestFix(issue: ImportIssue): { newImport: string } | null {
   const { importStatement, foundIn, actualFileLocation } = issue;
   
+  console.log(`\n  🔧 determineBestFix called for: ${issue.filePath}:${issue.lineNumber}`);
+  console.log(`     - Missing file: ${issue.missingFile}`);
+  console.log(`     - Missing symbols: [${issue.missingSymbols.join(', ')}]`);
+  console.log(`     - Found in count: ${foundIn?.length || 0}`);
+  console.log(`     - Actual file location: ${actualFileLocation || 'none'}`);
+  
   // If we found actual file location for assets, fix it
   if (actualFileLocation && importStatement.importPath.match(/\.(svg|js|css)(\?raw|\?worker)?$/)) {
     const newAliasPath = convertToAliasPath(actualFileLocation, path.dirname(issue.filePath));
@@ -863,6 +937,43 @@ function determineBestFix(issue: ImportIssue): { newImport: string } | null {
     
     return { newImport };
   }
+  
+    // Fix import paths that need correction (e.g., $core/http → $core/lib/http)
+    if (actualFileLocation && importStatement.importPath.startsWith('$') && !importStatement.importPath.match(/\.(ts|js|svg|svelte|png|jpg|jpeg|gif|webp|ico|css|json)(\?.*)?$/)) {
+      console.log(`  🔧 determineBestFix: Path correction detected`);
+      console.log(`     - Original import path: ${importStatement.importPath}`);
+      console.log(`     - Actual file location: ${actualFileLocation}`);
+    
+      const newAliasPath = convertToAliasPath(actualFileLocation, path.dirname(issue.filePath));
+      console.log(`     - Converted to alias path: ${newAliasPath}`);
+    
+      if (!newAliasPath) {
+        console.log(`     - ❌ convertToAliasPath returned null`);
+        return null;
+      }
+
+      let newImport = '';
+      const queryParams = importStatement.importPath.split('?')[1] || '';
+      const finalPath = queryParams ? `${newAliasPath}?${queryParams}` : newAliasPath;
+    
+      console.log(`     - Is default: ${importStatement.isDefault}, Is named: ${importStatement.isNamed}, Is side effect: ${importStatement.isSideEffect}`);
+      console.log(`     - Importing symbols: [${importStatement.imports.join(', ')}]`);
+
+      if (importStatement.isSideEffect) {
+        newImport = `import '${finalPath}';`;
+      } else if (importStatement.isDefault && !importStatement.isNamed) {
+        newImport = `import ${importStatement.imports[0]} from '${finalPath}';`;
+      } else if (importStatement.isNamed && !importStatement.isDefault) {
+        newImport = `import { ${importStatement.imports.join(', ')} } from '${finalPath}';`;
+      } else if (importStatement.isDefault && importStatement.isNamed) {
+        const defaultImport = importStatement.imports[0];
+        const namedImports = importStatement.imports.slice(1);
+        newImport = `import ${defaultImport}, { ${namedImports} } from '${finalPath}';`;
+      }
+
+      console.log(`     - Generated new import: ${newImport}`);
+      return { newImport };
+    }
   
   if (!foundIn || foundIn.length === 0) return null;
   

@@ -2,7 +2,7 @@
   import { tick } from 'svelte'
   import { Core } from '$core/core/store.svelte'
   import OptionsStrip from './micro/OptionsStrip.svelte'
-    import { Env } from '$core/env';
+import { Env } from '$core/lib/env';
 
   // svelte-ignore non_reactive_update
   let divLayer: HTMLDivElement

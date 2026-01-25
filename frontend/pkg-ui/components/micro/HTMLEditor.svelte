@@ -1,6 +1,6 @@
 <script lang="ts" generics="T">
   import { browser } from "$app/environment";
-  import { parseSVG } from '$core/helpers';
+import { parseSVG } from '$core/lib/helpers';
   import {
     editorBackgroundColors,
     editorTextColors,

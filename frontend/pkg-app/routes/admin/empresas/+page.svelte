@@ -4,9 +4,9 @@
   import Page from "$components/Page.svelte"
 import VTable from '$components/VTable/index';
   import type { ITableColumn } from "$components/VTable/types"
-  import { Notify, throttle } from "$core/helpers"
+  import { Notify, throttle } from "$core/lib/helpers"
   import { Core, closeModal } from '$core/core/store.svelte'
-  import { formatTime } from '$core/helpers'
+import { formatTime } from '$core/lib/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg
   import { EmpresasService, postEmpresa, type IEmpresa } from "./empresas.svelte"

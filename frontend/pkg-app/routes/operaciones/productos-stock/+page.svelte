@@ -3,7 +3,7 @@
     import SearchSelect from "$components/SearchSelect.svelte";
     import type { ITableColumn } from "$components/VTable";
 import VTable from '$components/VTable/index';
-    import { Notify, throttle } from '$core/helpers';
+import { Notify, throttle } from '$core/lib/helpers';
     import pkg from 'notiflix'
 const { Loading } = pkg;
     import { ProductosService } from "../productos/productos.svelte";

@@ -1,5 +1,5 @@
 import { Notify } from '$core/lib/helpers';
-import { GET, POST } from '$core/http'
+import { GET, POST } from '$core/lib/http';
 
 export interface IProductoStock {
   ID: string

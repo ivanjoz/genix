@@ -1,8 +1,7 @@
-import { GET, POST } from '$core/http'
-import { generateRandomString } from "$core/helpers"
-import { accessHelper, checkIsLogin } from '$core/security'
+import { GET, POST } from '$core/lib/http';
+import { accessHelper, checkIsLogin } from '$core/lib/security';
 import type { IUsuario } from '$routes/admin/usuarios/usuarios.svelte'
-import { Env } from '$core/env'
+import { Env } from '$core/lib/env';
 
 export interface ILogin {
   EmpresaID: number
@@ -19,6 +18,10 @@ export interface ILoginResult {
   UserInfo: string
   TokenExpTime: number
   EmpresaID: number
+}
+
+const makeRamdomString = () => {
+	return "1234123412341234123412341234"
 }
 
 export const sendUserLogin = async (data: ILogin): Promise<any> => {

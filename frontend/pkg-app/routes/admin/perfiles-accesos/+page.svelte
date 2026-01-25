@@ -8,7 +8,7 @@
   import CheckboxOptions from "$components/CheckboxOptions.svelte"
 import VTable from '$components/VTable/index';
   import type { ITableColumn } from "$components/VTable/types"
-  import { Notify, throttle } from "$core/helpers"
+  import { Notify, throttle } from "$core/lib/helpers"
   import { Core, closeModal } from '$core/core/store.svelte'
   import Modules from "$core/modules"
   import pkg from 'notiflix'
