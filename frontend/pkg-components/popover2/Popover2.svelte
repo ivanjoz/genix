@@ -39,6 +39,7 @@ import { calculatePosition, type Position } from './positioning';
 	}: Props = $props();
 
 	let floatingElement: HTMLElement | null = $state(null);
+	// svelte-ignore state_referenced_locally
 	let position = $state({ top: 0, left: 0, placement: placement as Placement });
 
 	// Update position when open changes or elements are ready

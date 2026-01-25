@@ -443,11 +443,6 @@ import type { IMenuRecord, IModule } from '$core/types/modules';
 		background: #e5e7eb;
 	}
 
-	.close-button svg {
-		width: 16px;
-		height: 16px;
-	}
-
 	/* Mobile Menu Content */
 	.mobile-menu-content {
 		flex: 1;

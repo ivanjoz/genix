@@ -47,6 +47,7 @@ import { Env } from '$core/env';
   } = $props()
 
   // Track visibility to prevent flash before transition starts
+  // svelte-ignore state_referenced_locally
   let isVisible = $state(Core.deviceType !== 3 || type !== 'side')
 
   const layerWidth = $derived.by(() => {

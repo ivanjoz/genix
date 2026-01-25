@@ -52,6 +52,7 @@ import { Core } from '$core/store.svelte';
   }: SearchSelectProps<T,E> = $props();
 
   let show = $state(false);
+  // svelte-ignore state_referenced_locally
   let filteredOptions = $state<E[]>([...options]);
   let arrowSelected = $state(-1);
   let avoidhover = $state(false);

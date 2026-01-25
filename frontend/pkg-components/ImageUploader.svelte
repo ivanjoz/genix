@@ -67,10 +67,12 @@ let {
 }: IImageUploaderProps = $props();
 
 // State
+// svelte-ignore state_referenced_locally
 let imageSrc = $state(imageSource || { src, types, description } as ImageSource);
 let progress = $derived((src||imageSrc?.base64) ? -1 : 0);
 
 Env.imageCounter++
+// svelte-ignore state_referenced_locally
 const imageID = id || Env.imageCounter
 
 // Update imageSrc when props change

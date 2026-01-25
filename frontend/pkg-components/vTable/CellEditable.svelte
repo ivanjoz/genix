@@ -34,6 +34,7 @@ import Renderer from '$components/Renderer.svelte';
 	let isEditing = $state(false);
 	let inputRef = $state<HTMLInputElement>();
 
+	// svelte-ignore state_referenced_locally
 	const initialValue = getValue
 		? getValue(saveOn as T)
 		: ((saveOn || ({} as T))[save as keyof T] as number | string);

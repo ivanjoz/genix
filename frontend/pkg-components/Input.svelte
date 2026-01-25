@@ -61,7 +61,7 @@ import type { ElementAST } from '$components/Renderer.svelte';
   }
   */
 
-    const baseDecimalsValue = baseDecimals ? 10 ** baseDecimals : 0;
+    const baseDecimalsValue = $derived(baseDecimals ? 10 ** baseDecimals : 0);
 
     const makeValue = (value: number) => {
         if (typeof value !== "number") {

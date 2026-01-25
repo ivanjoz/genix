@@ -238,11 +238,6 @@ import { type ITableColumn } from '$components/vTable/types';
 </Page>
 
 <style>
-  .page-container {
-    min-height: 100vh;
-    background-color: #f8f9fa;
-  }
-
   .header-section {
     margin-bottom: 1.5rem;
   }

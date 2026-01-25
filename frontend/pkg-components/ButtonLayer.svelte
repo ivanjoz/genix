@@ -36,6 +36,7 @@ import angleSvg from '$core/assets/angle.svg?raw';
     onClose
   }: Props = $props();
 
+  // svelte-ignore state_referenced_locally
   let isOpen = $state(defaultOpen);
   let buttonElement: HTMLButtonElement | null = $state(null);
   let layerElement: HTMLElement | null = $state(null);

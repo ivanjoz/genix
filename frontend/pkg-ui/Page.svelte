@@ -9,7 +9,9 @@ import { Env } from '$core/env';
     options?: {id: number, name: string}[]
   } = $props();
 
-  Env.sideLayerSize = sideLayerSize || 0
+  $effect(() => {
+    Env.sideLayerSize = sideLayerSize || 0
+  })
   const isLogged = $derived(checkIsLogin() === 2)
   $effect(() => {
     console.log("isLogged 22", isLogged)
