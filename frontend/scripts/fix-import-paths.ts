@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Import Path Fixer Script
- * 
+ *
  * Updates all import paths to point to correct locations after refactoring
  * Handles:
  * 1. Symbol relocations (e.g., ImageUploader moved from $components to $core)
@@ -36,7 +36,6 @@ const PACKAGE_TO_ALIAS: Record<string, string> = {
   'pkg-ui': '$components',
   'pkg-ecommerce': '$ecommerce',
   'pkg-store': '$lib', // pkg-store uses $lib for its own lib
-  'pkg-main': '$lib',
 };
 
 // Subdirectory mappings within packages
@@ -94,7 +93,7 @@ function resolveRelativePath(importPath: string, sourceFile: string): string {
 
   const resolvedPath = resolve(dirname(sourceFile), importPath);
   const resolvedRelative = relative(FRONTEND_DIR, resolvedPath);
-  
+
   return resolvedRelative;
 }
 
@@ -200,7 +199,7 @@ function fixImportsInFile(filePath: string): number {
     if (match) {
       const importPath = match[1];
       let newImportPath: string | null = importPath;
-      
+
       // Priority 1: Check for relocations
       if (IMPORT_RELOCATIONS[importPath]) {
         newImportPath = IMPORT_RELOCATIONS[importPath];
@@ -209,7 +208,7 @@ function fixImportsInFile(filePath: string): number {
       else if (importPath.startsWith('.')) {
         const resolvedPath = resolveRelativePath(importPath, filePath);
         const aliasPath = convertRelativeToAlias(resolvedPath, packageName!);
-        
+
         if (aliasPath !== null) {
           newImportPath = aliasPath;
         } else if (resolvedPath.startsWith(packageName!)) {
@@ -224,11 +223,11 @@ function fixImportsInFile(filePath: string): number {
         const importStart = line.indexOf(importPath);
         const beforeImport = line.substring(0, importStart);
         const afterImport = line.substring(importStart + importPath.length);
-        
+
         line = `${beforeImport}${newImportPath}${afterImport}`;
         modified = true;
         updatesMade++;
-        
+
         changes.push({
           file: filePath,
           line: i + 1,
@@ -256,7 +255,7 @@ function fixImportsInFile(filePath: string): number {
 
 function main() {
   console.log('🔧 Starting Import Path Fixer...\n');
-  
+
   console.log('This script will:');
   console.log('  1. Update imports for relocated files (e.g., ImageUploader)');
   console.log('  2. Convert relative inter-package imports to aliases');
@@ -300,12 +299,12 @@ function main() {
   if (changes.length > 0) {
     console.log('Changes made:');
     console.log('─'.repeat(80));
-    
+
     // Group by type of change
     const relocations = changes.filter(c => c.oldImport in IMPORT_RELOCATIONS);
     const conversions = changes.filter(c => c.oldImport.startsWith('.') && !(c.oldImport in IMPORT_RELOCATIONS));
     const otherChanges = changes.filter(c => !(c.oldImport in IMPORT_RELOCATIONS) && !c.oldImport.startsWith('.'));
-    
+
     if (relocations.length > 0) {
       console.log(`\n📦 File Relocations (${relocations.length}):`);
       for (const change of relocations.slice(0, 10)) {
@@ -317,7 +316,7 @@ function main() {
         console.log(`  ... and ${relocations.length - 10} more`);
       }
     }
-    
+
     if (conversions.length > 0) {
       console.log(`\n🔀 Relative → Alias (${conversions.length}):`);
       for (const change of conversions.slice(0, 10)) {
@@ -329,7 +328,7 @@ function main() {
         console.log(`  ... and ${conversions.length - 10} more`);
       }
     }
-    
+
     if (otherChanges.length > 0) {
       console.log(`\n🔧 Other Changes (${otherChanges.length}):`);
       for (const change of otherChanges.slice(0, 5)) {
@@ -341,7 +340,7 @@ function main() {
         console.log(`  ... and ${otherChanges.length - 5} more`);
       }
     }
-    
+
     console.log('\n' + '─'.repeat(80));
   }
 
@@ -352,7 +351,7 @@ function main() {
   console.log('  3. Run: bun scripts/check-imports.ts');
   console.log('  4. Test the applications');
   console.log('═'.repeat(80));
-  
+
   process.exit(importsUpdated > 0 ? 0 : 1);
 }
 

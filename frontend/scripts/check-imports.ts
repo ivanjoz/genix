@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Import Path Validator and Fixer
- * 
+ *
  * This script validates import paths across all packages and can automatically fix them.
  * Usage:
  *   bun run scripts/check-imports.ts              # Check imports
@@ -63,7 +63,7 @@ const DRY_RUN = process.argv.includes('--dry-run');
 
 const FRONTEND_DIR = resolve(process.cwd());
 const PACKAGES_DIR = FRONTEND_DIR;
-const PACKAGES = ['pkg-main', 'pkg-store', 'pkg-ui', 'pkg-core', 'pkg-ecommerce', 'pkg-services'];
+const PACKAGES = ['routes', 'pkg-store', 'pkg-ui', 'pkg-core', 'pkg-ecommerce', 'pkg-services'];
 
 // Maps for tracking all exports
 const exportsByFile = new Map<string, ExportInfo[]>();
@@ -86,7 +86,7 @@ let unfixableImports = 0;
 
 function loadSvelteConfig(packagePath: string): Config {
   const configPath = join(packagePath, 'svelte.config.js');
-  
+
   if (!existsSync(configPath)) {
     return { aliases: {} };
   }
@@ -94,19 +94,19 @@ function loadSvelteConfig(packagePath: string): Config {
   try {
     const content = readFileSync(configPath, 'utf-8');
     const aliases: Record<string, string> = {};
-    
+
     // Extract alias configuration using regex
     const aliasMatch = content.match(/alias\s*:\s*\{([^}]+)\}/s);
     if (aliasMatch) {
       const aliasBlock = aliasMatch[1];
       const aliasRegex = /['"]?(\$\w+)['"]?\s*:\s*path\.resolve\(['"]([^'"]+)['"]\)/g;
       let match;
-      
+
       while ((match = aliasRegex.exec(aliasBlock)) !== null) {
         aliases[match[1]] = match[2];
       }
     }
-    
+
     return { aliases };
   } catch (error) {
     console.warn(`Warning: Failed to parse svelte.config.js for ${packagePath}`);
@@ -118,7 +118,7 @@ function loadConfigForPackage(packageName: string): Config {
   if (configMap.has(packageName)) {
     return configMap.get(packageName)!;
   }
-  
+
   const packagePath = join(PACKAGES_DIR, packageName);
   const config = loadSvelteConfig(packagePath);
   configMap.set(packageName, config);
@@ -139,7 +139,7 @@ function getAllFiles(dir: string, baseDir: string = dir): string[] {
 
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
-    
+
     // Skip node_modules, .git, hidden files, build outputs
     if (['node_modules', '.git', '.svelte-kit', 'build', 'dist', '.turbo'].includes(entry.name)) {
       continue;
@@ -236,7 +236,7 @@ function parseImports(content: string, filePath: string): ImportInfo[] {
             // Handle 'type a' or 'a as b' patterns
             const parts = symbol.split(/\s+/);
             let cleanSymbol = parts[0];
-            
+
             if (parts[0] === 'type') {
               cleanSymbol = parts[1];
             }
@@ -424,12 +424,12 @@ function resolveImportPath(importPath: string, sourceFile: string, packageName: 
   // Handle alias imports ($components, $core, etc.)
   if (importPath.startsWith('$')) {
     const aliasName = Object.keys(config.aliases).find(alias => importPath.startsWith(alias));
-    
+
     if (aliasName) {
       const aliasPath = config.aliases[aliasName];
       const relativePath = importPath.slice(aliasName.length);
       const resolvedPath = join(packageDir, aliasPath, relativePath);
-      
+
       if (existsSync(resolvedPath)) {
         return {
           valid: true,
@@ -455,13 +455,13 @@ function resolveImportPath(importPath: string, sourceFile: string, packageName: 
           resolvedFile: resolvedPath + '.js'
         };
       }
-      
+
       return {
         valid: false,
         message: `Alias path does not exist: ${resolvedPath}`
       };
     }
-    
+
     return {
       valid: false,
       message: `Unknown alias: ${importPath}`
@@ -471,7 +471,7 @@ function resolveImportPath(importPath: string, sourceFile: string, packageName: 
   // Handle relative imports (./, ../)
   if (importPath.startsWith('.')) {
     const resolvedPath = resolve(sourceDir, importPath);
-    
+
     if (existsSync(resolvedPath)) {
       return {
         valid: true,
@@ -497,7 +497,7 @@ function resolveImportPath(importPath: string, sourceFile: string, packageName: 
         resolvedFile: resolvedPath + '.js'
       };
     }
-    
+
     return {
       valid: false,
       message: `Relative path does not exist: ${resolvedPath}`
@@ -523,7 +523,7 @@ function findSymbol(symbol: string, resolvedPath: string, importType: string): b
       const exports = exportsByFile.get(indexPath) || [];
       return exports.some(e => e.symbol === symbol);
     }
-    
+
     // Check all files in the directory
     const allExports: ExportInfo[] = [];
     for (const [file, fileExports] of exportsByFile) {
@@ -537,12 +537,12 @@ function findSymbol(symbol: string, resolvedPath: string, importType: string): b
   // If it's a file, check its exports
   if (existsSync(resolvedPath)) {
     const exports = exportsByFile.get(resolvedPath) || [];
-    
+
     // For default imports, check if the file has a default export or is a Svelte component
     if (importType === 'default') {
       return exports.some(e => e.type === 'default') || resolvedPath.endsWith('.svelte');
     }
-    
+
     // For named imports, check if the symbol is exported
     return exports.some(e => e.symbol === symbol);
   }
@@ -552,24 +552,24 @@ function findSymbol(symbol: string, resolvedPath: string, importType: string): b
 
 function searchForSymbol(symbol: string, packageName: string): string[] {
   const suggestions: string[] = [];
-  
+
   for (const [file, exports] of exportsByFile) {
     const matchingExport = exports.find(e => e.symbol === symbol);
     if (matchingExport) {
       // Convert absolute path to relative from package root
       const packagePath = join(PACKAGES_DIR, packageName);
       let relativePath = relative(packagePath, file);
-      
+
       // Remove extension for cleaner paths
       if (relativePath.endsWith('.ts') || relativePath.endsWith('.js') || relativePath.endsWith('.svelte')) {
         relativePath = relativePath.slice(0, -3);
       }
-      
+
       suggestions.push(`$/${relativePath}`);
       suggestions.push(relativePath);
     }
   }
-  
+
   return suggestions;
 }
 
@@ -579,11 +579,11 @@ function searchForSymbol(symbol: string, packageName: string): string[] {
 
 function validateImport(importInfo: ImportInfo): ResolutionResult {
   const { fromPath, file, symbol, type, isSvelteComponent } = importInfo;
-  
+
   // Determine which package this file belongs to
   const relativeFile = relative(FRONTEND_DIR, file);
   const packageName = PACKAGES.find(pkg => relativeFile.startsWith(pkg));
-  
+
   if (!packageName) {
     return {
       valid: true,
@@ -593,13 +593,13 @@ function validateImport(importInfo: ImportInfo): ResolutionResult {
 
   // Resolve the import path
   const resolution = resolveImportPath(fromPath, file, packageName);
-  
+
   if (!resolution.valid) {
     return resolution;
   }
 
   // Skip symbol validation for SvelteKit built-ins and external dependencies
-  if (resolution.message === 'SvelteKit built-in - not validated' || 
+  if (resolution.message === 'SvelteKit built-in - not validated' ||
       resolution.message === 'External dependency - not validated') {
     return { valid: true };
   }
@@ -615,7 +615,7 @@ function validateImport(importInfo: ImportInfo): ResolutionResult {
   // For other imports, validate the symbol
   if (resolution.resolvedFile) {
     const symbolExists = findSymbol(symbol, resolution.resolvedFile, type);
-    
+
     if (!symbolExists) {
       // Search for alternative locations
       const suggestions = searchForSymbol(symbol, packageName);
@@ -632,7 +632,7 @@ function validateImport(importInfo: ImportInfo): ResolutionResult {
 
 function fixImport(importInfo: ImportInfo, resolution: ResolutionResult): boolean {
   const { file, line, fromPath, symbol, suggestions, fullLine } = importInfo;
-  
+
   if (!suggestions || suggestions.length === 0) {
     return false;
   }
@@ -707,17 +707,17 @@ function main() {
     try {
       const content = readFileSync(file, 'utf-8');
       const exports = parseExports(content, file);
-      
+
       if (exports.length > 0) {
         exportsByFile.set(file, exports);
-        
+
         // Also index by directory
         const dir = dirname(file);
         if (!exportsByDirectory.has(dir)) {
           exportsByDirectory.set(dir, []);
         }
         exportsByDirectory.get(dir)!.push(...exports);
-        
+
         // Index by symbol
         for (const exp of exports) {
           if (!symbolToExports.has(exp.symbol)) {
@@ -730,7 +730,7 @@ function main() {
       console.warn(`   Warning: Could not parse exports from ${file}`);
     }
   }
-  
+
   const totalExports = Array.from(exportsByFile.values()).reduce((sum, exps) => sum + exps.length, 0);
   console.log(`   Parsed ${totalExports} exports from ${exportsByFile.size} files\n`);
 
@@ -741,7 +741,7 @@ function main() {
     try {
       const content = readFileSync(file, 'utf-8');
       const imports = parseImports(content, file);
-      
+
       if (imports.length > 0) {
         allImports.push(...imports);
         totalImports += imports.length;
@@ -758,19 +758,19 @@ function main() {
 
   for (const importInfo of allImports) {
     const resolution = validateImport(importInfo);
-    
+
     if (!resolution.valid) {
       invalidImports++;
       invalidImportInfos.push({ importInfo, resolution });
 
       const { file, line, symbol, fromPath } = importInfo;
       const relativeFile = relative(FRONTEND_DIR, file);
-      
+
       console.log(`❌ Invalid import in ${relativeFile}:${line}`);
       console.log(`   Symbol: ${symbol}`);
       console.log(`   From: ${fromPath}`);
       console.log(`   Reason: ${resolution.message}`);
-      
+
       if (resolution.suggestions && resolution.suggestions.length > 0) {
         console.log(`   Suggestions: ${resolution.suggestions.join(', ')}`);
       }
@@ -781,7 +781,7 @@ function main() {
   // Step 5: Fix imports if in fix mode
   if (FIX_MODE && invalidImportInfos.length > 0) {
     console.log('🔧 Fixing imports...\n');
-    
+
     for (const { importInfo, resolution } of invalidImportInfos) {
       if (resolution.suggestions && resolution.suggestions.length > 0) {
         const success = fixImport(importInfo, resolution);
@@ -798,7 +798,7 @@ function main() {
         unfixableImports++;
       }
     }
-    
+
     console.log();
   }
 

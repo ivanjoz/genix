@@ -34,7 +34,7 @@ const ALIAS_MAPPINGS = {
 // New paths for aliases
 const ALIAS_PATHS = {
   '$core': './pkg-core',
-  '$lib': './pkg-main/lib',
+  '$routes': './routes',
   '$components': './pkg-ui/components',
   '$services': './pkg-services/services',
   '$shared': './pkg-services/shared',
@@ -82,7 +82,7 @@ function log(message: string, level: 'info' | 'success' | 'warning' | 'error' = 
 
 function updateSvelteConfig() {
   const configPath = resolve(FRONTEND_DIR, 'svelte.config.js');
-  
+
   if (!require('fs').existsSync(configPath)) {
     log('⚠️  svelte.config.js not found', 'warning');
     return;
@@ -91,10 +91,10 @@ function updateSvelteConfig() {
   log('\n📝 Updating svelte.config.js...', 'info');
 
   let content = readFileSync(configPath, 'utf-8');
-  
+
   // Find the alias section
   const aliasMatch = content.match(/alias:\s*\{([^}]+)\}/);
-  
+
   if (!aliasMatch) {
     log('   No alias section found in svelte.config.js', 'warning');
     return;
@@ -107,13 +107,13 @@ function updateSvelteConfig() {
   for (const [alias, newPath] of Object.entries(ALIAS_PATHS)) {
     const oldPathRegex = new RegExp(`'\\${alias}'\\s*:\\s*path\\.resolve\\([^)]+\\)`, 'g');
     const matches = aliasSection.match(oldPathRegex);
-    
+
     if (matches) {
       for (const match of matches) {
         const oldPathMatch = match.match(/path\.resolve\('([^']+)'\)/);
         if (oldPathMatch) {
           const oldPath = oldPathMatch[1];
-          
+
           if (oldPath !== newPath) {
             updates.push({
               file: 'svelte.config.js',
@@ -133,7 +133,7 @@ function updateSvelteConfig() {
 
   if (newAliasSection !== aliasSection) {
     content = content.replace(aliasSection, newAliasSection);
-    
+
     if (!DRY_RUN) {
       writeFileSync(configPath, content, 'utf-8');
       log('   ✅ Updated svelte.config.js', 'success');
@@ -151,7 +151,7 @@ function updateSvelteConfig() {
 
 function updateViteConfig() {
   const configPath = resolve(FRONTEND_DIR, 'vite.config.ts');
-  
+
   if (!require('fs').existsSync(configPath)) {
     log('⚠️  vite.config.ts not found', 'warning');
     return;
@@ -160,10 +160,10 @@ function updateViteConfig() {
   log('\n📝 Updating vite.config.ts...', 'info');
 
   let content = readFileSync(configPath, 'utf-8');
-  
+
   // Find alias definitions in resolve.alias block
   const aliasBlockMatch = content.match(/alias:\s*\{([^}]+)\}/s);
-  
+
   if (!aliasBlockMatch) {
     log('   No alias section found in vite.config.ts', 'warning');
     return;
@@ -182,13 +182,13 @@ function updateViteConfig() {
 
     for (const pattern of patterns) {
       const matches = aliasBlock.match(pattern);
-      
+
       if (matches) {
         for (const match of matches) {
           const pathMatch = match.match(/:\s*['"]([^'"]+)['"]/);
           if (pathMatch) {
             const oldPath = pathMatch[1];
-            
+
             if (oldPath !== newPath) {
               updates.push({
                 file: 'vite.config.ts',
@@ -209,7 +209,7 @@ function updateViteConfig() {
 
   if (newAliasBlock !== aliasBlock) {
     content = content.replace(aliasBlock, newAliasBlock);
-    
+
     if (!DRY_RUN) {
       writeFileSync(configPath, content, 'utf-8');
       log('   ✅ Updated vite.config.ts', 'success');
@@ -227,7 +227,7 @@ function updateViteConfig() {
 
 function updateTSConfig() {
   const configPath = resolve(FRONTEND_DIR, 'tsconfig.json');
-  
+
   if (!require('fs').existsSync(configPath)) {
     log('⚠️  tsconfig.json not found', 'warning');
     return;
@@ -236,11 +236,11 @@ function updateTSConfig() {
   log('\n📝 Updating tsconfig.json...', 'info');
 
   let content = readFileSync(configPath, 'utf-8');
-  
+
   // Strip comments (tsconfig often has // comments)
   content = content.replace(/\/\/.*$/gm, '');
   content = content.replace(/\/\*[\s\S]*?\*\//g, '');
-  
+
   const json = JSON.parse(content);
 
   // Ensure paths section exists
@@ -257,10 +257,10 @@ function updateTSConfig() {
   for (const [alias, newPath] of Object.entries(ALIAS_PATHS)) {
     const aliasPattern = alias + '/*';
     const pathPattern = newPath + '/*';
-    
+
     if (json.compilerOptions.paths[aliasPattern]) {
       const oldPath = json.compilerOptions.paths[aliasPattern][0];
-      
+
       if (oldPath !== pathPattern) {
         updates.push({
           file: 'tsconfig.json',
@@ -269,7 +269,7 @@ function updateTSConfig() {
           oldPath,
           newPath: pathPattern
         });
-        
+
         json.compilerOptions.paths[aliasPattern] = [pathPattern];
         hasChanges = true;
       }
@@ -278,7 +278,7 @@ function updateTSConfig() {
 
   if (hasChanges) {
     const newContent = JSON.stringify(json, null, 2);
-    
+
     if (!DRY_RUN) {
       writeFileSync(configPath, newContent, 'utf-8');
       log('   ✅ Updated tsconfig.json', 'success');
@@ -317,31 +317,31 @@ function main() {
   console.log('SUMMARY');
   console.log('='.repeat(80));
   console.log();
-  
+
   log(`Total updates: ${updates.length}`, updates.length > 0 ? 'success' : 'info');
   console.log();
 
   if (updates.length > 0) {
     console.log('Updates:');
     console.log('─'.repeat(80));
-    
+
     for (const update of updates) {
       console.log(`\n📄 ${update.file}`);
       console.log(`  ${update.oldAlias}: ${update.oldPath}`);
       console.log(`  → ${update.newAlias}: ${update.newPath}`);
     }
-    
+
     console.log('\n' + '─'.repeat(80));
   }
 
   console.log('\n📋 NEW ALIAS MAPPINGS');
   console.log('─'.repeat(80));
   console.log();
-  
+
   for (const [alias, path] of Object.entries(ALIAS_PATHS)) {
     console.log(`  ${alias} → ${path}`);
   }
-  
+
   console.log('\n' + '─'.repeat(80));
   console.log();
 
@@ -358,7 +358,7 @@ function main() {
     console.log('  1. Review the changes above');
     console.log('  2. Run again without --dry-run to apply');
   }
-  
+
   console.log('\n' + '='.repeat(80));
 }
 

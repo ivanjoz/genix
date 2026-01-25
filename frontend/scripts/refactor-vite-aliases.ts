@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 /**
  * Vite Alias Refactor Script
- * 
+ *
  * Refactors Vite config aliases to a simpler, more intuitive format and updates all imports accordingly.
- * 
+ *
  * Changes:
  * - Simplifies aliases to point directly to package roots
  * - Consolidates duplicate aliases ($shared and $services both point to pkg-services)
@@ -118,19 +118,18 @@ function updateViteConfig(): boolean {
   }
 
   console.log('📝 Updating vite.config.ts...\n');
-  
+
   let content = readFileSync(VITE_CONFIG_PATH, 'utf-8');
   const originalContent = content;
 
   // Update the alias map in the esbuild plugin
   // Find the alias configuration object and replace it
   const aliasRegex = /const baseDir = \{[\s\S]*?\}\[alias\];/;
-  
+
   const newAliasConfig = `const baseDir = {
     '$core': 'pkg-core',
     '$store': 'pkg-store',
-    '$app': 'pkg-main',
-    '$routes': 'pkg-main/routes',
+    '$routes': 'routes',
     '$ui': 'pkg-ui',
     '$components': 'pkg-ui/components',
     '$shared': 'pkg-services',
@@ -215,11 +214,11 @@ function updateImportPaths(filePath: string): number {
         const importStart = line.indexOf(importPath);
         const beforeImport = line.substring(0, importStart);
         const afterImport = line.substring(importStart + importPath.length);
-        
+
         line = `${beforeImport}${newImportPath}${afterImport}`;
         modified = true;
         updatesMade++;
-        
+
         changes.push({
           file: filePath,
           line: i + 1,
@@ -247,7 +246,7 @@ function updateImportPaths(filePath: string): number {
 
 function runIntelligentImportFixer(): void {
   console.log('🔧 Running intelligent-import-fixer.ts to fix remaining issues...\n');
-  
+
   try {
     const { spawnSync } = require('child_process');
     const result = spawnSync('bun', ['scripts/intelligent-import-fixer.ts'], {
@@ -283,9 +282,9 @@ function main() {
   // Step 2: Update all import paths
   console.log('\nStep 2/3: Update import paths in codebase');
   console.log('─'.repeat(80));
-  
+
   console.log('📂 Collecting files...');
-  const packageDirs = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components', 'pkg-store', 'pkg-main'];
+  const packageDirs = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components', 'pkg-store', 'routes'];
   const allFiles: string[] = [];
   for (const pkg of packageDirs) {
     const packagePath = join(FRONTEND_DIR, pkg);
@@ -327,7 +326,7 @@ function main() {
   if (changes.length > 0) {
     console.log('Sample changes:');
     console.log('─'.repeat(80));
-    
+
     // Group by transformation type
     const byTransformation: Record<string, typeof changes> = {};
     for (const change of changes) {
@@ -348,7 +347,7 @@ function main() {
         console.log(`  ... and ${changesList.length - 3} more`);
       }
     }
-    
+
     console.log('\n' + '─'.repeat(80));
   }
 
@@ -356,8 +355,7 @@ function main() {
   console.log('New alias structure:');
   console.log('  $core → pkg-core');
   console.log('  $store → pkg-store');
-  console.log('  $app → pkg-main');
-  console.log('  $routes → pkg-main/routes');
+  console.log('  $routes → routes');
   console.log('  $ui → pkg-ui');
   console.log('  $components → pkg-ui/components');
   console.log('  $shared → pkg-services');
@@ -368,7 +366,7 @@ function main() {
   console.log('  2. Test the dev server: bun run dev');
   console.log('  3. If issues remain, run: bun scripts/intelligent-import-fixer.ts');
   console.log();
-  
+
   process.exit(0);
 }
 

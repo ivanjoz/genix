@@ -202,8 +202,7 @@ function resolveAliasPath(aliasPath: string): string | null {
   const aliasMap: Record<string, string> = {
     '$core': 'pkg-core',
     '$store': 'pkg-store',
-    '$app': 'pkg-main',
-    '$routes': 'pkg-main/routes',
+    '$routes': 'routes',
     '$ui': 'pkg-ui',
     '$components': 'pkg-components',
     '$shared': 'pkg-services',
@@ -243,9 +242,7 @@ function searchForFile(fileName: string, extensions: string[] = []): string | nu
   // If already has an extension, use only that
   if (path.extname(cleanFileName)) {
     const pathsToSearch = [
-      'pkg-main',
-      'pkg-main/routes',
-      'pkg-main/static',
+      'routes',
       'pkg-core',
       'pkg-ui/assets',
       'pkg-ui',
@@ -272,9 +269,7 @@ function searchForFile(fileName: string, extensions: string[] = []): string | nu
     for (const ext of exts) {
       const fullFileName = cleanFileName + ext;
       const pathsToSearch = [
-        'pkg-main',
-        'pkg-main/routes',
-        'pkg-main/static',
+        'routes',
         'pkg-core',
         'pkg-ui/assets',
         'pkg-ui',
@@ -505,7 +500,7 @@ function buildSymbolIndex(): void {
   console.log('🔍 Building symbol index...\n');
 
   const searchDirs = [
-    'pkg-main',
+    'routes',
     'pkg-components',
     'pkg-store',
     'pkg-ui',
@@ -907,7 +902,7 @@ function analyzeImports(): FixReport {
   console.log('🔍 Analyzing imports...\n');
 
   const searchDirs = [
-    'pkg-main',
+    'routes',
     'pkg-components',
     'pkg-store',
     'pkg-ui',
@@ -1139,21 +1134,20 @@ function convertToAliasPath(filePath: string, sourceDir: string): string | null 
   const aliasMap: Record<string, string> = {
     '$core': 'pkg-core',
     '$store': 'pkg-store',
-    '$app': 'pkg-main',
-    '$routes': 'pkg-main/routes',
+    '$routes': 'routes',
     '$ui': 'pkg-ui',
     '$components': 'pkg-components',
     '$shared': 'pkg-services',
     '$services': 'pkg-services'
   };
-  
+
   for (const [alias, baseDir] of Object.entries(aliasMap)) {
     const absBaseDir = path.join(PROJECT_ROOT, baseDir);
-    
+
     if (absPath.startsWith(absBaseDir + path.sep)) {
       const relativePath = path.relative(absBaseDir, absPath);
       const withoutExt = relativePath.replace(/\.(ts|js|svelte)$/, '');
-      
+
       return `${alias}/${withoutExt}`;
     }
   }

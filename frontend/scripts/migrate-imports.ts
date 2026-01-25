@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Import Migration Script
- * 
+ *
  * Automatically fixes all DAG violations by:
  * 1. Moving shared types/components to appropriate packages
  * 2. Updating all import paths to use correct aliases
@@ -19,14 +19,14 @@ import { resolve, relative, dirname, join, isAbsolute } from 'path';
 const FRONTEND_DIR = resolve(process.cwd());
 const PACKAGES_DIR = FRONTEND_DIR;
 
-const PACKAGES = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-ecommerce', 'pkg-store', 'pkg-main'];
+const PACKAGES = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-ecommerce', 'pkg-store', 'routes'];
 
 // Symbol to new location mapping
 // Format: { symbol: { package: 'pkg-name', path: 'path/to/file' } }
 const SYMBOL_MIGRATIONS: Record<string, { package: string; path: string }> = {
   // Types that need to be in pkg-core
   'IImageResult': { package: 'pkg-core', path: 'core/types.ts' },
-  
+
   // UI components that pkg-ecommerce uses - these should be passed as props, not imported
   // We'll move them to pkg-core to allow pkg-ecommerce to import them
   'Input': { package: 'pkg-ui', path: 'components/Input.svelte' },
@@ -40,7 +40,7 @@ const IMPORT_REPLACEMENTS: Record<string, string> = {
   // Instead, components should be passed as props or use a different pattern
   '$components/Input.svelte': '$components/Input.svelte', // Keep for now, will warn
   '$components/SearchSelect.svelte': '$components/SearchSelect.svelte', // Keep for now, will warn
-  
+
   // Ensure all $core imports use proper paths
   '../pkg-core/core': '$core',
   '../../pkg-core/core': '$core',
@@ -105,21 +105,21 @@ function shouldUseAlias(importPath: string, sourceFile: string, sourcePackage: s
   // Determine target package
   const sourcePkg = getPackageName(sourceFile) || sourcePackage;
   const isRelative = importPath.startsWith('.');
-  
+
   if (isRelative) {
     // Calculate what package this relative import points to
     const resolvedPath = resolve(dirname(sourceFile), importPath);
     const targetPackage = getPackageName(resolvedPath);
-    
+
     // If different package, use alias
     if (targetPackage && targetPackage !== sourcePkg) {
       return true;
     }
-    
+
     // Same package, keep relative
     return false;
   }
-  
+
   // Already an alias or external, keep as is
   return false;
 }
@@ -128,18 +128,18 @@ function convertToAlias(importPath: string, sourceFile: string): string {
   if (!importPath.startsWith('.')) {
     return importPath;
   }
-  
+
   const resolvedPath = resolve(dirname(sourceFile), importPath);
   const sourcePackage = getPackageName(sourceFile);
   const targetPackage = getPackageName(resolvedPath);
-  
+
   if (!targetPackage || targetPackage === sourcePackage) {
     return importPath;
   }
-  
+
   // Convert relative path to alias
   const relativePath = relative(FRONTEND_DIR, resolvedPath);
-  
+
   // Find which alias this maps to
   const aliasMap: Record<string, string> = {
     'pkg-core/components': '$core',
@@ -151,19 +151,19 @@ function convertToAlias(importPath: string, sourceFile: string): string {
     'pkg-ecommerce/ecommerce': '$ecommerce',
     'pkg-ecommerce/stores': '$ecommerce/stores',
   };
-  
+
   for (const [pathPrefix, alias] of Object.entries(aliasMap)) {
     if (relativePath.startsWith(pathPrefix)) {
       const subPath = relativePath.slice(pathPrefix.length);
       return `${alias}${subPath}`;
     }
   }
-  
+
   // Try to map to package directory
   for (const pkg of PACKAGES) {
     if (relativePath.startsWith(pkg + '/')) {
       const subPath = relativePath.slice(pkg.length + 1);
-      
+
       // Check if it's in a known subdirectory
       const pkgAliases: Record<string, string> = {
         'pkg-core': '$core',
@@ -171,13 +171,13 @@ function convertToAlias(importPath: string, sourceFile: string): string {
         'pkg-ui': '$components',
         'pkg-ecommerce': '$ecommerce',
       };
-      
+
       if (pkgAliases[pkg]) {
         return `${pkgAliases[pkg]}/${subPath}`;
       }
     }
   }
-  
+
   return importPath;
 }
 
@@ -248,20 +248,20 @@ function fixImportsInFile(filePath: string): number {
 
     if (match) {
       const importPath = match[1];
-      
+
       // Check if this import should be converted to an alias
       if (shouldUseAlias(importPath, filePath, packageName!)) {
         const newImportPath = convertToAlias(importPath, filePath);
-        
+
         if (newImportPath !== importPath) {
           // Extract the import statement part (before from)
           const beforeFrom = line.substring(0, line.indexOf(importPath));
           const afterFrom = line.substring(line.indexOf(importPath) + importPath.length);
-          
+
           line = `${beforeFrom}${newImportPath}${afterFrom}`;
           modified = true;
           replacementsMade++;
-          
+
           replacements.push({
             file: filePath,
             line: i + 1,
@@ -306,20 +306,20 @@ function moveFile(from: string, to: string, reason: string): boolean {
   try {
     // Read the file
     const content = readFileSync(sourcePath, 'utf-8');
-    
+
     // Write to destination
     writeFileSync(destPath, content, 'utf-8');
-    
+
     console.log(`   ✓ Moved: ${from} → ${to}`);
     console.log(`     Reason: ${reason}`);
-    
+
     moves.push({ from, to, reason });
     filesMoved++;
-    
+
     // Delete source (optional - comment out if you want to keep originals)
     // Commented out for safety - can be enabled after verification
     // rmSync(sourcePath);
-    
+
     return true;
   } catch (error) {
     console.error(`   ✗ Failed to move ${from}:`, error);
@@ -333,7 +333,7 @@ function moveFiles(): void {
   for (const move of FILES_TO_MOVE) {
     moveFile(move.from, move.to, move.reason);
   }
-  
+
   console.log(`   Moved ${filesMoved} file(s)\n`);
 }
 
@@ -389,7 +389,7 @@ function main() {
   if (replacements.length > 0) {
     console.log('Import replacements made:');
     console.log('─'.repeat(80));
-    
+
     // Group by package
     const byPackage = new Map<string, ImportReplacement[]>();
     for (const rep of replacements) {
@@ -398,7 +398,7 @@ function main() {
       }
       byPackage.get(rep.packageName)!.push(rep);
     }
-    
+
     for (const [pkg, reps] of byPackage) {
       console.log(`\n${pkg}:`);
       for (const rep of reps.slice(0, 10)) { // Show first 10 per package
@@ -410,7 +410,7 @@ function main() {
         console.log(`  ... and ${reps.length - 10} more`);
       }
     }
-    
+
     console.log('\n' + '─'.repeat(80));
   }
 

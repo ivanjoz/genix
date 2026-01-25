@@ -603,7 +603,7 @@ function buildSymbolIndex() {
   const searchDirs = [
     'pkg-core',
     'pkg-ui',
-    'pkg-main',
+    'routes',
     'pkg-services',
     'pkg-components',
     'pkg-store'
@@ -834,7 +834,7 @@ function checkImports(filePath: string): ImportIssue[] {
 
         let shouldAddTypeKeyword = false;
 
-        
+
 
         if (missingFile || missingExtension) {
 
@@ -850,7 +850,7 @@ function checkImports(filePath: string): ImportIssue[] {
 
             const baseName = path.basename(fileName, path.extname(fileName));
 
-            
+
 
             // Search for the file across all packages
 
@@ -870,7 +870,7 @@ function checkImports(filePath: string): ImportIssue[] {
 
           }
 
-          
+
 
           // Also search for symbols
 
@@ -878,11 +878,11 @@ function checkImports(filePath: string): ImportIssue[] {
 
             if (GENERIC_NAMES.has(importName)) continue;
 
-            
+
 
             missingSymbols.push(importName);
 
-            
+
 
             // SEARCH OPTION 1: Local search in the broken file's path (if we can guess it)
 
@@ -894,7 +894,7 @@ function checkImports(filePath: string): ImportIssue[] {
 
               for (const exp of fileExps) {
 
-                if (exp.name.toLowerCase() === importName.toLowerCase() || 
+                if (exp.name.toLowerCase() === importName.toLowerCase() ||
 
                     exp.name.startsWith('use') && exp.name.toLowerCase().includes(importName.toLowerCase())) {
 
@@ -906,7 +906,7 @@ function checkImports(filePath: string): ImportIssue[] {
 
             }
 
-    
+
 
             // SEARCH OPTION 2: Search for symbol in other files (global)
 
@@ -928,7 +928,7 @@ function checkImports(filePath: string): ImportIssue[] {
 
           let fileExps = fileExports.get(relativePath) || [];
 
-          
+
 
           // Check for index files if directory
 
@@ -954,7 +954,7 @@ function checkImports(filePath: string): ImportIssue[] {
 
           }
 
-          
+
 
           const isSvelteFile = resolvedFile!.endsWith('.svelte') || relativePath.endsWith('.svelte');
 
@@ -964,7 +964,7 @@ function checkImports(filePath: string): ImportIssue[] {
 
           const importedSymbolsSet = new Set(imp.imports);
 
-          
+
 
           // Check for Svelte component imported as named import
 
@@ -980,7 +980,7 @@ function checkImports(filePath: string): ImportIssue[] {
 
           }
 
-          
+
 
           // Check if all imported symbols exist and if they are types
 
@@ -990,13 +990,13 @@ function checkImports(filePath: string): ImportIssue[] {
 
             if (GENERIC_NAMES.has(importName)) continue;
 
-            
+
 
             let symbolFound = exportedNames.has(importName);
 
             let isType = false;
 
-            
+
 
             if (!symbolFound && (isSvelteFile || isSvelteComponentImport(imp.importPath))) {
 
@@ -1022,7 +1022,7 @@ function checkImports(filePath: string): ImportIssue[] {
 
             }
 
-            
+
 
             if (!symbolFound) {
 
@@ -1030,13 +1030,13 @@ function checkImports(filePath: string): ImportIssue[] {
 
               allImportedAreTypes = false;
 
-              
+
 
               // SEARCH SAME FILE for alternatives
 
               for (const exp of fileExps) {
 
-                if (exp.name.toLowerCase() === importName.toLowerCase() || 
+                if (exp.name.toLowerCase() === importName.toLowerCase() ||
 
                     exp.name.startsWith('use') && exp.name.toLowerCase().includes(importName.toLowerCase())) {
 
@@ -1046,7 +1046,7 @@ function checkImports(filePath: string): ImportIssue[] {
 
               }
 
-    
+
 
               // Search for symbol in other files
 
@@ -1082,191 +1082,191 @@ function checkImports(filePath: string): ImportIssue[] {
 
           }
 
-    
+
 
                 // Check if we should add the 'type' keyword
 
-    
+
 
                 if (!imp.isTypeOnly && allImportedAreTypes && imp.imports.length > 0) {
 
-    
+
 
                   // Only suggest adding global 'type' if NO symbols have an inline 'type' keyword
 
-    
+
 
                   const alreadyHasInlineType = imp.symbolsMetadata.some(s => s.isType);
 
-    
+
 
                   if (!alreadyHasInlineType) {
 
-    
+
 
                     shouldAddTypeKeyword = true;
 
-    
+
 
                   }
 
-    
+
 
                 }
 
-    
+
 
               }
 
-    
 
-              
 
-    
+
+
+
 
               // Record issue if any problems found
 
-    
+
 
               if (missingFile || missingExtension || missingSymbols.length > 0 || missingTypeSymbols.length > 0 || fixAsDefaultImport || shouldAddTypeKeyword) {
 
-    
+
 
                 // Final check: does determineBestFix actually produce a DIFFERENT line?
 
-    
+
 
                 const proposedFix = determineBestFix({
 
-    
+
 
                   filePath: path.relative(PROJECT_ROOT, filePath),
 
-    
+
 
                   lineNumber: imp.lineNumber,
 
-    
+
 
                   importStatement: imp,
 
-    
+
 
                   missingFile,
 
-    
+
 
                   missingExtension,
 
-    
+
 
                   missingSymbols,
 
-    
+
 
                   missingTypeSymbols,
 
-    
+
 
                   foundIn,
 
-    
+
 
                   actualFileLocation,
 
-    
+
 
                   fixAsDefaultImport,
 
-    
+
 
                   shouldAddTypeKeyword
 
-    
+
 
                 }, path.relative(PROJECT_ROOT, filePath));
 
-    
 
-          
 
-    
+
+
+
 
                 if (proposedFix && proposedFix.trim() !== imp.raw.trim()) {
 
-    
+
 
                   issues.push({
 
-    
+
 
                     filePath: path.relative(PROJECT_ROOT, filePath),
 
-    
+
 
                     lineNumber: imp.lineNumber,
 
-    
+
 
                     importStatement: imp,
 
-    
+
 
                     missingFile,
 
-    
+
 
                     missingExtension,
 
-    
+
 
                     missingSymbols,
 
-    
+
 
                     missingTypeSymbols,
 
-    
+
 
                     foundIn,
 
-    
+
 
                     actualFileLocation,
 
-    
+
 
                     fixAsDefaultImport,
 
-    
+
 
                     shouldAddTypeKeyword
 
-    
+
 
                   });
 
-    
+
 
                 }
 
-    
+
 
               }
 
-    
+
 
             }
 
-    
 
-            
 
-    
+
+
+
 
             return issues;
 
-    
+
 
           }
 
@@ -1275,7 +1275,7 @@ function checkImports(filePath: string): ImportIssue[] {
  */
 function analyzeImports(): FixReport {
   const searchDirs = [
-    'pkg-main',
+    'routes',
     'pkg-core',
     'pkg-ui',
     'pkg-services',
@@ -1443,7 +1443,7 @@ function determineBestFix(issue: ImportIssue, sourceFile: string): string | null
 
         const symbolsToUse = (newSymbols || imp.imports).map(name => {
 
-          const isInlineType = issue.missingTypeSymbols?.includes(name) || 
+          const isInlineType = issue.missingTypeSymbols?.includes(name) ||
 
                                imp.symbolsMetadata.find(m => m.name === name)?.isType;
 
@@ -1451,7 +1451,7 @@ function determineBestFix(issue: ImportIssue, sourceFile: string): string | null
 
         });
 
-    
+
 
         if (imp.isDefault && !imp.isNamed) {
 

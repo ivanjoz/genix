@@ -1,7 +1,7 @@
 #!/usr/bin/env -S bun
 /**
  * Fix Core Imports Script
- * 
+ *
  * This script removes .ts extensions from $core imports across the codebase.
  * The Vite alias resolver needs imports without extensions to properly resolve
  * to pkg-core/lib/ or pkg-core/core/ subdirectories.
@@ -24,14 +24,14 @@ interface FileFix {
  */
 function findFilesRecursively(dir: string, extensions: string[]): string[] {
   const files: string[] = [];
-  
+
   function walk(currentDir: string) {
     const items = fs.readdirSync(currentDir);
-    
+
     for (const item of items) {
       const fullPath = path.join(currentDir, item);
       const stat = fs.statSync(fullPath);
-      
+
       if (stat.isDirectory()) {
         // Skip node_modules and build directories
         if (item !== 'node_modules' && item !== '.svelte-kit' && item !== 'build') {
@@ -45,7 +45,7 @@ function findFilesRecursively(dir: string, extensions: string[]): string[] {
       }
     }
   }
-  
+
   walk(dir);
   return files;
 }
@@ -55,26 +55,26 @@ function findFilesRecursively(dir: string, extensions: string[]): string[] {
  */
 function findFilesWithCoreImports(): FileFix[] {
   const files: FileFix[] = [];
-  
+
   // Search in all package directories
   const searchDirs = [
-    'pkg-main',
+    'routes',
     'pkg-components',
     'pkg-store',
     'pkg-ui',
     'pkg-services'
   ];
-  
+
   for (const dir of searchDirs) {
     const dirPath = path.join(PROJECT_ROOT, dir);
     if (!fs.existsSync(dirPath)) continue;
-    
+
     const matchedFiles = findFilesRecursively(dirPath, ['.ts', '.svelte']);
-    
+
     for (const filePath of matchedFiles) {
       const content = fs.readFileSync(filePath, 'utf-8');
       const matches = [...content.matchAll(CORE_IMPORT_PATTERN)];
-      
+
       if (matches.length > 0) {
         const imports = matches.map(m => m[1]);
         files.push({
@@ -85,7 +85,7 @@ function findFilesWithCoreImports(): FileFix[] {
       }
     }
   }
-  
+
   return files;
 }
 
@@ -96,7 +96,7 @@ function fixImportsInFile(filePath: string, fixes: { original: string, fixed: st
   const fullPath = path.join(PROJECT_ROOT, filePath);
   let content = fs.readFileSync(fullPath, 'utf-8');
   let modified = false;
-  
+
   for (const { original, fixed } of fixes) {
     const pattern = new RegExp(`from\\s+['"]${original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`, 'g');
     if (pattern.test(content)) {
@@ -104,11 +104,11 @@ function fixImportsInFile(filePath: string, fixes: { original: string, fixed: st
       modified = true;
     }
   }
-  
+
   if (modified) {
     fs.writeFileSync(fullPath, content, 'utf-8');
   }
-  
+
   return modified;
 }
 
@@ -117,16 +117,16 @@ function fixImportsInFile(filePath: string, fixes: { original: string, fixed: st
  */
 function main() {
   console.log('🔍 Searching for $core imports with .ts extensions...\n');
-  
+
   const filesWithIssues = findFilesWithCoreImports();
-  
+
   if (filesWithIssues.length === 0) {
     console.log('✅ No $core imports with .ts extensions found!');
     return;
   }
-  
+
   console.log(`Found ${filesWithIssues.length} file(s) with issues:\n`);
-  
+
   // Display findings
   for (const file of filesWithIssues) {
     console.log(`📄 ${file.filePath}`);
@@ -135,34 +135,34 @@ function main() {
     }
     console.log('');
   }
-  
+
   // Ask for confirmation
   console.log('📊 Summary:');
   console.log(`   Total files to fix: ${filesWithIssues.length}`);
   console.log(`   Total imports to fix: ${filesWithIssues.reduce((acc, f) => acc + f.imports.length, 0)}`);
-  
+
   console.log('\n🔧 Proceeding with fixes...\n');
-  
+
   // Apply fixes
   let fixedFiles = 0;
   let fixedImports = 0;
-  
+
   for (const file of filesWithIssues) {
     const fixes = file.imports.map(imp => ({ original: imp, fixed: imp.replace(/\.ts$/, '') }));
     const modified = fixImportsInFile(file.filePath, fixes);
-    
+
     if (modified) {
       fixedFiles++;
       fixedImports += fixes.length;
       console.log(`✅ Fixed: ${file.filePath}`);
     }
   }
-  
+
   console.log(`\n✨ Completed! Fixed ${fixedImports} imports in ${fixedFiles} file(s).`);
-  
+
   // Also fix the app.css import in +layout.svelte
   console.log('\n🔧 Checking app.css import...');
-  const layoutPath = path.join(PROJECT_ROOT, 'pkg-main/routes/+layout.svelte');
+  const layoutPath = path.join(PROJECT_ROOT, 'routes/routes/+layout.svelte');
   if (fs.existsSync(layoutPath)) {
     let content = fs.readFileSync(layoutPath, 'utf-8');
     if (content.includes("import '../app.css';")) {

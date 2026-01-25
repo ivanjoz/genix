@@ -72,7 +72,7 @@ const MIGRATION_RULES: MigrationRule[] = [
     targetDir: 'lib',
     description: 'Core library utilities (helpers, http, security, etc.)'
   },
-  
+
   // Services layer
   {
     sourceDir: 'services',
@@ -86,7 +86,7 @@ const MIGRATION_RULES: MigrationRule[] = [
     targetDir: 'shared',
     description: 'Shared utilities'
   },
-  
+
   // UI components
   {
     sourceDir: 'components',
@@ -100,7 +100,7 @@ const MIGRATION_RULES: MigrationRule[] = [
     targetDir: 'assets',
     description: 'Shared assets (SVGs, icons)'
   },
-  
+
   // Domain-specific components
   {
     sourceDir: 'ecommerce',
@@ -114,7 +114,7 @@ const MIGRATION_RULES: MigrationRule[] = [
     targetDir: 'ecommerce-components',
     description: 'Additional ecommerce components'
   },
-  
+
   // Application routes and logic
   {
     sourceDir: 'routes',
@@ -128,7 +128,7 @@ const MIGRATION_RULES: MigrationRule[] = [
     targetDir: 'stores',
     description: 'Svelte stores'
   },
-  
+
   // Infrastructure
   {
     sourceDir: 'workers',
@@ -169,7 +169,7 @@ const SKIP_FOLDERS = [
   'pkg-ui',
   'pkg-components',
   'pkg-store',
-  'pkg-main',
+  'routes',
   'scripts',
   'tmp'
 ];
@@ -273,7 +273,7 @@ function migrateFile(sourcePath: string, targetPath: string): boolean {
     if (!DRY_RUN) {
       // Ensure target directory exists
       ensureDirectoryExists(dirname(targetPath));
-      
+
       // Move the file
       renameSync(sourcePath, targetPath);
     }
@@ -313,7 +313,7 @@ function migrateDirectory(sourceDir: string, targetDir: string): boolean {
 
 function executeMigrationRule(rule: MigrationRule) {
   const sourcePath = resolve(FRONTEND_DIR, rule.sourceDir);
-  
+
   if (!existsSync(sourcePath)) {
     log(`⚠️  Source directory does not exist: ${rule.sourceDir}`, 'warning');
     stats.skipped++;
@@ -321,24 +321,24 @@ function executeMigrationRule(rule: MigrationRule) {
   }
 
   const targetPath = resolve(FRONTEND_DIR, rule.targetPackage, rule.targetDir);
-  
+
   log(`\n🔄 ${rule.description}`, 'info');
   log(`   ${rule.sourceDir} → ${rule.targetPackage}/${rule.targetDir}`, 'info');
 
   // Try to move the entire directory first
   const moved = migrateDirectory(sourcePath, targetPath);
-  
+
   if (!moved) {
     // If moving directory failed, try file-by-file
     log(`   Moving file-by-file...`, 'warning');
     const files = getAllFiles(sourcePath);
-    
+
     for (const file of files) {
       const relativePath = relative(sourcePath, file);
       const targetFilePath = join(targetPath, relativePath);
       migrateFile(file, targetFilePath);
     }
-    
+
     // Remove empty source directory
     if (!DRY_RUN && existsSync(sourcePath)) {
       try {
@@ -354,17 +354,17 @@ function executeMigrationRule(rule: MigrationRule) {
 
 function createPackageStructure() {
   log('\n🏗️  Creating package structure...', 'info');
-  
+
   // Create all package directories
-  const packages = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components', 'pkg-store', 'pkg-main'];
-  
+  const packages = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components', 'pkg-store', 'routes'];
+
   for (const pkg of packages) {
     const pkgPath = resolve(FRONTEND_DIR, pkg);
     ensureDirectoryExists(pkgPath);
-    
+
     // Create lib directory for each package
     ensureDirectoryExists(join(pkgPath, 'lib'));
-    
+
     if (VERBOSE) {
       log(`  ✓ Created ${pkg}/`, 'success');
     }
@@ -376,22 +376,22 @@ function printSummary() {
   console.log('MIGRATION SUMMARY');
   console.log('='.repeat(80));
   console.log();
-  
+
   log(`Mode: ${DRY_RUN ? 'DRY RUN (no changes made)' : 'LIVE (files moved)'}`, 'info');
   console.log();
-  
+
   log(`Directories moved: ${stats.totalDirectories}`, 'success');
   log(`Files moved: ${stats.totalFiles}`, 'success');
   log(`Skipped: ${stats.skipped}`, 'warning');
   log(`Errors: ${stats.errors.length}`, stats.errors.length > 0 ? 'error' : 'success');
-  
+
   if (stats.errors.length > 0) {
     console.log('\nErrors:');
     for (const error of stats.errors) {
       log(`  ❌ ${error}`, 'error');
     }
   }
-  
+
   if (stats.movedDirs.length > 0 && VERBOSE) {
     console.log('\nMoved directories:');
     for (const move of stats.movedDirs) {
@@ -400,7 +400,7 @@ function printSummary() {
       log(`  ${from} → ${to}`, 'info');
     }
   }
-  
+
   if (stats.movedFiles.length > 0 && VERBOSE) {
     console.log('\nMoved files (showing first 20):');
     for (const move of stats.movedFiles.slice(0, 20)) {
@@ -412,7 +412,7 @@ function printSummary() {
       log(`  ... and ${stats.movedFiles.length - 20} more files`, 'info');
     }
   }
-  
+
   console.log('\n' + '='.repeat(80));
   console.log();
 }
@@ -443,26 +443,26 @@ function main() {
   log(`Dry run: ${DRY_RUN}`, DRY_RUN ? 'warning' : 'info');
   log(`Verbose: ${VERBOSE}`, 'info');
   console.log();
-  
+
   if (DRY_RUN) {
     log('⚠️  DRY RUN MODE - No files will be moved', 'warning');
     console.log();
   }
-  
+
   // Create package structure
   createPackageStructure();
-  
+
   // Execute migration rules
   for (const rule of MIGRATION_RULES) {
     executeMigrationRule(rule);
   }
-  
+
   // Print summary
   printSummary();
-  
+
   // Print next steps
   printNextSteps();
-  
+
   // Exit with appropriate code
   process.exit(stats.errors.length > 0 ? 1 : 0);
 }

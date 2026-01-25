@@ -63,7 +63,7 @@ const PACKAGE_LEVELS: Record<string, number> = {
   'pkg-services': 2,
   'pkg-ui': 3,
   'pkg-store': 4,
-  'pkg-main': 5
+  'routes': 5
 };
 
 // Allowed dependencies: package -> [allowed dependencies]
@@ -73,7 +73,7 @@ const ALLOWED_DEPENDENCIES: Record<string, string[]> = {
   'pkg-ui': ['pkg-core', 'pkg-services'],
   'pkg-components': ['pkg-core', 'pkg-services', 'pkg-ui'],
   'pkg-store': ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components'],
-  'pkg-main': ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components']
+  'routes': ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-components']
 };
 
 // ============================================
@@ -469,8 +469,8 @@ function printRecommendations() {
   console.log('  pkg-services (Level 1) - Can depend on pkg-core');
   console.log('  pkg-ui (Level 2) - Can depend on pkg-core, pkg-services');
   console.log('  pkg-components (Level 2) - Can depend on pkg-core, pkg-services');
-  console.log('  pkg-store (Level 3) - Can depend on pkg-core, pkg-services, pkg-ui, pkg-components');
-  console.log('  pkg-main (Level 3) - Can depend on pkg-core, pkg-services, pkg-ui, pkg-components');
+  console.log('  pkg-store (Level 4) - Can depend on pkg-core, pkg-services, pkg-ui, pkg-components');
+  console.log('  routes (Level 5) - Can depend on pkg-core, pkg-services, pkg-ui, pkg-components');
   console.log();
 
   const hasViolations = Array.from(packageNodes.values()).some(n => n.violations.length > 0);
