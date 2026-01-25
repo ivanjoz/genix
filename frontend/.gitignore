@@ -8,6 +8,10 @@ node_modules
 /.svelte-kit
 /build
 
+# Package specific build directories
+pkg-store/.svelte-kit
+pkg-store/build
+
 # OS
 .DS_Store
 Thumbs.db
