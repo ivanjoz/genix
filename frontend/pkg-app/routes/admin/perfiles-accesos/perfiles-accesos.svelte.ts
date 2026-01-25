@@ -1,5 +1,5 @@
 import { GetHandler, POST } from '$core/lib/http';
-import Modules from "$core/modules"
+import Modules from "$core/core/modules"
 
 export interface IAcceso {
   id: number
@@ -34,13 +34,13 @@ export const accesosGrupos = [
 ]
 
 export const accesoAcciones = [
-  { id: 1, name: "Visualizar", short: "VER", 
+  { id: 1, name: "Visualizar", short: "VER",
     icon: "icon-eye", color: "#00c07d", color2: "#49c99c" },
-  { id: 2, name: "Editar", short: "EDITAR", 
+  { id: 2, name: "Editar", short: "EDITAR",
     icon: "icon-pencil", color: "#0080f9" },
-  { id: 3, name: "Eliminar", short: "ELIMINAR", 
+  { id: 3, name: "Eliminar", short: "ELIMINAR",
     icon: "icon-trash", color: "#0080f9" },
-  { id: 7, name: "Todo", short: "EDITAR", 
+  { id: 7, name: "Todo", short: "EDITAR",
     icon: "icon-shield", color: "#af12eb", color2: "#d35eff" },
 ]
 
@@ -136,11 +136,10 @@ export const postPerfil = (data: IPerfil) => {
   const dataToSend = { ...data }
   delete (dataToSend as any).accesosMap
   delete (dataToSend as any)._open
-  
+
   return POST({
     data: dataToSend,
     route: "perfiles",
     refreshRoutes: ["perfiles"]
   })
 }
-

@@ -10,7 +10,7 @@ import { doInitServiceWorker } from '$core/lib/sw-cache';
 	import Header from '$components/layout/Header.svelte';
 	import Page from '$components/Page.svelte';
 	import SideMenu from '$components/layout/SideMenu.svelte';
-	import Modules from "$core/modules";
+	import Modules from "$core/core/modules";
 	import { Core, getDeviceType } from '$core/core/store.svelte';
 	import ImageWorker from '../workers/image-worker?worker';
 import { Env } from '$core/lib/env';

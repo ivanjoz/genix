@@ -1,7 +1,7 @@
 <script lang="ts">
     import Input from "$components/Input.svelte";
     import OptionsStrip from "$components/micro/OptionsStrip.svelte";
-import { accessHelper, UserInfoParsed } from '$core/lib/security';
+import { accessHelper } from '$core/lib/security';
     import pkg from 'notiflix'
 const { Loading, Notify } = pkg;
     import { postUsuario, postUsuarioPropio, type IUsuario } from '$routes/admin/usuarios/usuarios.svelte';
@@ -18,7 +18,7 @@ const { Loading, Notify } = pkg;
 		sessionStorage.clear();
 		window.location.href = '/login';
 	}
-  
+
   let userInfo = $state(accessHelper.getUserInfo())
   $effect(() => {
     if(selected === 1){ userInfo = userInfo = accessHelper.getUserInfo()}
@@ -45,7 +45,7 @@ const { Loading, Notify } = pkg;
 </script>
 
 <div class="flex items-center">
-  <OptionsStrip options={options} keyId="id" keyName="name" 
+  <OptionsStrip options={options} keyId="id" keyName="name"
     selected={selected} onSelect={e => selected = e.id}
   />
 </div>
@@ -65,31 +65,29 @@ const { Loading, Notify } = pkg;
     </button>
   </div>
   <div class="grid grid-cols-24 w-full gap-10">
-    <Input label="Nombres" css="col-span-12" 
+    <Input label="Nombres" css="col-span-12"
       saveOn={userInfo} save="nombres"
     />
-    <Input label="Apellidos" css="col-span-12" 
+    <Input label="Apellidos" css="col-span-12"
       saveOn={userInfo} save="apellidos"
     />
-    <Input label="Email" css="col-span-12" 
+    <Input label="Email" css="col-span-12"
       saveOn={userInfo} save="email"
     />
-    <Input label="Cargo" css="col-span-12" 
+    <Input label="Cargo" css="col-span-12"
       saveOn={userInfo} save="cargo"
     />
-    <Input label="Nº Documento" css="col-span-12" 
+    <Input label="Nº Documento" css="col-span-12"
       saveOn={userInfo} save="documentoNro"
     />
     <div class="col-span-24">
       <div class="ff-bold mb-[-4px] mt-2">Cambiar Password</div>
     </div>
-    <Input label="Password" css="col-span-12" 
+    <Input label="Password" css="col-span-12"
       saveOn={userInfo} save="password1" type="password"
     />
-    <Input label="Repetir Password" css="col-span-12" 
+    <Input label="Repetir Password" css="col-span-12"
       saveOn={userInfo} save="password2" type="password"
     />
   </div>
 {/if}
-
-
