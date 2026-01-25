@@ -1,4 +1,4 @@
-import productos from '../operaciones/productos/productos.svelte';
+import { getProductos } from '$services/services/productos.svelte';
 
 export const csr = true;
 export const ssr = true;

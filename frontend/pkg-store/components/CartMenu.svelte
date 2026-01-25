@@ -9,7 +9,7 @@
   }: IProps = $props();
 
   import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
-import angleSvg from '$ui/assets/angle.svg';
+import angleSvg from '$ui/assets/angle.svg?raw';
 import { parseSVG } from '$core/helpers';
   import s1 from "./styles.module.css"
 import ArrowSteps from '$components/ArrowSteps.svelte';

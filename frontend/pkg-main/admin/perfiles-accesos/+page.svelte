@@ -8,7 +8,7 @@ import SearchSelect from '$components/SearchSelect.svelte';
 import CheckboxOptions from '$components/CheckboxOptions.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { Notify, throttle } from '$core/helpers';
+import { arrayToMapN, Notify, throttle } from '$core/helpers';
 import { Core, closeModal } from '$core/store.svelte';
 import Modules from '$core/modules';
   import pkg from 'notiflix'
@@ -20,11 +20,10 @@ const { Loading } = pkg
     postPerfil,
     accesosGrupos,
     accesoAcciones,
-    arrayToMapN,
     type IAcceso,
     type IPerfil
   } from "./perfiles-accesos.svelte"
-import AccesoCard from '$routes/admin/perfiles-accesos/AccesoCard.svelte';
+import AccesoCard from '$main/admin/perfiles-accesos/AccesoCard.svelte';
 
   const accesosService = new AccesosService()
   const perfilesService = new PerfilesService()

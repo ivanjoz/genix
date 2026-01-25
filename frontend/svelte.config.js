@@ -57,8 +57,8 @@ const config = {
 		}),
 		files: {
 			assets: 'static',
-			lib: 'pkg-main/lib',
-			routes: 'pkg-main/routes',
+			lib: 'pkg-core/lib',
+			routes: 'pkg-main',
 			appTemplate: 'app.html'
 		},
 		alias: {

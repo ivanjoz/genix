@@ -3,7 +3,8 @@
 import Portal from '$components/popover2/Portal.svelte';
 	import { calculatePosition, type Placement } from './positioning';
 import { parseSVG } from '$core/helpers';
-import angleSvg from '$ui/assets/angle.svg';
+import angleSvg from '$ui/assets/angle.svg?raw';
+import './popover2.css';
 
 	interface Props {
 		/** The reference element to position relative to */
@@ -25,7 +26,7 @@ import angleSvg from '$ui/assets/angle.svg';
 		/** Callback when position is calculated */
 		onPositionUpdate?: (position: { top: number; left: number; placement: Placement }) => void;
 	}
-	
+
 	let {
 		referenceElement,
 		open = false,
@@ -37,10 +38,10 @@ import angleSvg from '$ui/assets/angle.svg';
 		children,
 		onPositionUpdate
 	}: Props = $props();
-	
+
 	let floatingElement: HTMLElement | null = $state(null);
 	let position = $state({ top: 0, left: 0, placement: placement as Placement });
-	
+
 	// Update position when open changes or elements are ready
 	$effect(() => {
 		if (open && referenceElement && floatingElement) {
@@ -48,48 +49,48 @@ import angleSvg from '$ui/assets/angle.svg';
 			updatePosition();
 		}
 	});
-	
+
 	// Recalculate position on scroll and resize using $effect
 	$effect(() => {
 		if (!open) return;
-		
+
 		const handleUpdate = () => {
 			if (open && referenceElement && floatingElement) {
 				updatePosition();
 			}
 		};
-		
+
 		window.addEventListener('scroll', handleUpdate, true);
 		window.addEventListener('resize', handleUpdate);
-		
+
 		return () => {
 			window.removeEventListener('scroll', handleUpdate, true);
 			window.removeEventListener('resize', handleUpdate);
 		};
 	});
-	
+
 	async function updatePosition() {
 		if (!referenceElement || !floatingElement) return;
-		
+
 		// Wait for next tick to ensure element is rendered
 		await tick();
-		
+
 		const result = calculatePosition(referenceElement, floatingElement, {
 			offset,
 			preferredPlacement: placement,
 			fitViewport,
 		});
-		
+
 		position = result;
-		
+
 		if (onPositionUpdate) {
 			onPositionUpdate(result);
 		}
 	}
-	
+
 	const computedStyle = $derived(() => {
 		if (!open) return 'display: none;';
-		
+
 		return `
 			position: absolute;
 			top: ${position.top}px;
@@ -118,4 +119,3 @@ import angleSvg from '$ui/assets/angle.svg';
 		</div>
 	</Portal>
 {/if}
-

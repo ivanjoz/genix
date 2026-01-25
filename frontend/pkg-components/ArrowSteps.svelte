@@ -5,11 +5,11 @@
     icon?: string;
   }
 
-import arrow2Svg from '$ui/assets/flecha_fin.svg';
-import arrow1Svg from '$ui/assets/flecha_inicio.svg';
+import arrow2Svg from '$ui/assets/flecha_fin.svg?raw';
+import arrow1Svg from '$ui/assets/flecha_inicio.svg?raw';
 import { cn, parseSVG } from '$core/helpers';
 import { Ecommerce } from '$store/stores/globals.svelte'
-import s1 from './components.module.css';
+import s1 from './styles.module.css';
 
   let {
     options,

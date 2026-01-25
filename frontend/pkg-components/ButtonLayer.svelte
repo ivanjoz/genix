@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
 import { parseSVG } from '$core/helpers';
-import angleSvg from '$ui/assets/angle.svg';
+import angleSvg from '$ui/assets/angle.svg?raw';
 
   interface Props {
     /** Button text or content */
@@ -63,40 +63,40 @@ import angleSvg from '$ui/assets/angle.svg';
   // Calculate position of the layer below the button
   async function updatePosition() {
     if (!buttonElement || !layerElement) return;
-    
+
     await tick();
-    
+
     const buttonRect = buttonElement.getBoundingClientRect();
     const layerRect = layerElement.getBoundingClientRect();
     const isMobile = window.innerWidth <= 748;
-    
+
     const offset = 8; // Distance from button
     let top = buttonRect.bottom + offset;
     let left = isMobile ? 6 : buttonRect.left;
-    
+
     // Desktop: position relative to button
     if (!isMobile) {
       // Check if layer would go off right edge of viewport
       if (left + layerRect.width > window.innerWidth) {
         left = window.innerWidth - layerRect.width - 10;
       }
-      
+
       // Check if layer would go off left edge of viewport
       if (left < 10) {
         left = 10;
       }
     }
-    
+
     // Check if layer would go off bottom of viewport
     if (top + layerRect.height > window.innerHeight) {
       top = buttonRect.top - layerRect.height - offset;
     }
-    
+
     position = { top, left };
-    
+
     // Calculate angle position to be centered below the button
     const buttonCenter = buttonRect.left + (buttonRect.width / 2);
-    
+
     if (isMobile) {
       // On mobile, center the angle relative to the button within the layer
       // Layer is at left = 6px, so calculate relative to that
@@ -131,7 +131,7 @@ import angleSvg from '$ui/assets/angle.svg';
 
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
-      
+
       // Check if click is outside both button and layer
       if (
         buttonElement && !buttonElement.contains(target) &&
@@ -199,7 +199,7 @@ import angleSvg from '$ui/assets/angle.svg';
       <div class="button-layer-angle" style="left: {angleLeft}px;">
         <img class="button-layer-angle-img" alt="" src={parseSVG(angleSvg)}/>
       </div>
-      
+
       <!-- Layer content -->
       <div class="button-layer-content-wrapper {contentCss}">
         {@render children?.()}
@@ -234,7 +234,7 @@ import angleSvg from '$ui/assets/angle.svg';
     z-index: 210;
     background-color: white;
     border-radius: 8px;
-    box-shadow: 
+    box-shadow:
       0 4px 6px -1px rgba(0, 0, 0, 0.1),
       0 2px 4px -1px rgba(0, 0, 0, 0.06),
       0 0 0 1px rgba(0, 0, 0, 0.05);
@@ -249,7 +249,7 @@ import angleSvg from '$ui/assets/angle.svg';
       max-height: calc(100vh - 100px);
       overflow: visible;
     }
-    
+
     /* Make content scrollable while keeping angle visible */
     .button-layer-content-wrapper {
       overflow-y: auto;
@@ -287,7 +287,7 @@ import angleSvg from '$ui/assets/angle.svg';
 
   :global(.dark) .button-layer {
     background-color: #2d2d3a;
-    box-shadow: 
+    box-shadow:
       0 4px 6px -1px rgba(0, 0, 0, 0.3),
       0 2px 4px -1px rgba(0, 0, 0, 0.2),
       0 0 0 1px rgba(255, 255, 255, 0.1);

@@ -1,7 +1,6 @@
 <script lang="ts">
-import Popover2 from '$components/popover2/Popover2.svelte';
-	import '../../../components/popover2/popover2.css';
-	
+	import Popover2 from '$components/popover2/Popover2.svelte';
+
 	let button1: HTMLElement | null = $state(null);
 	let button2: HTMLElement | null = $state(null);
 	let show1 = $state(false);
@@ -23,7 +22,7 @@ import Popover2 from '$components/popover2/Popover2.svelte';
 		<p class="text-sm text-gray-600 mb-4">
 			The popover should still appear correctly and NOT be clipped by this container.
 		</p>
-		
+
 		<button
 			bind:this={button1}
 			onclick={() => show1 = !show1}
@@ -59,7 +58,7 @@ import Popover2 from '$components/popover2/Popover2.svelte';
 		<h3 class="text-lg font-semibold mb-2 text-purple-600">
 			❌ Nested Container (also overflow: hidden)
 		</h3>
-		
+
 		<div class="border-2 border-orange-500 p-4 mt-2" style="overflow: hidden; height: 150px;">
 			<h4 class="text-md font-semibold mb-2 text-orange-600">
 				❌ Double nested with overflow: hidden
@@ -67,7 +66,7 @@ import Popover2 from '$components/popover2/Popover2.svelte';
 			<p class="text-sm text-gray-600 mb-4">
 				Even with multiple nested overflow:hidden containers, the popover works!
 			</p>
-			
+
 			<button
 				bind:this={button2}
 				onclick={() => show2 = !show2}
@@ -131,4 +130,3 @@ import Popover2 from '$components/popover2/Popover2.svelte';
 		font-family: monospace;
 	}
 </style>
-

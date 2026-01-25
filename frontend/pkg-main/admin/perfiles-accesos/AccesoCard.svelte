@@ -1,6 +1,7 @@
 <script lang="ts">
+    import { arrayToMapN } from '$core/helpers';
 import { Core } from '$core/store.svelte';
-  import { accesoAcciones, arrayToMapN, type IAcceso, type IPerfil } from "./perfiles-accesos.svelte"
+  import { accesoAcciones, type IAcceso, type IPerfil } from "./perfiles-accesos.svelte"
 
   const accesoAccionesMap = arrayToMapN(accesoAcciones, 'id')
 

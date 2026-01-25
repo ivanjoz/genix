@@ -1,19 +1,19 @@
 <script lang="ts">
-import { Popover2 } from '$components/popover2/Popover2.svelte';
+import Popover2 from '$components/popover2/Popover2.svelte';
 	import './popover2.css';
-	
+
 	let topButton: HTMLElement | null = $state(null);
 	let bottomButton: HTMLElement | null = $state(null);
 	let leftButton: HTMLElement | null = $state(null);
 	let rightButton: HTMLElement | null = $state(null);
 	let autoButton: HTMLElement | null = $state(null);
-	
+
 	let showTop = $state(false);
 	let showBottom = $state(false);
 	let showLeft = $state(false);
 	let showRight = $state(false);
 	let showAuto = $state(false);
-	
+
 	let currentPlacement = $state<string>('bottom');
 </script>
 
@@ -28,7 +28,7 @@ import { Popover2 } from '$components/popover2/Popover2.svelte';
 	<!-- Fixed Placement Examples -->
 	<div class="space-y-4">
 		<h3 class="text-xl font-semibold">Fixed Placement (will flip if no space)</h3>
-		
+
 		<div class="flex flex-wrap gap-4">
 			<!-- Top Placement -->
 			<div>
@@ -126,7 +126,7 @@ import { Popover2 } from '$components/popover2/Popover2.svelte';
 		<p class="text-sm text-gray-600 dark:text-gray-400">
 			Current placement: <strong>{currentPlacement}</strong>
 		</p>
-		
+
 		<div>
 			<button
 				bind:this={autoButton}
@@ -181,21 +181,20 @@ import { Popover2 } from '$components/popover2/Popover2.svelte';
 	.space-y-8 > * + * {
 		margin-top: 2rem;
 	}
-	
+
 	.space-y-4 > * + * {
 		margin-top: 1rem;
 	}
-	
+
 	.flex {
 		display: flex;
 	}
-	
+
 	.flex-wrap {
 		flex-wrap: wrap;
 	}
-	
+
 	.gap-4 {
 		gap: 1rem;
 	}
 </style>
-

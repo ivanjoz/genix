@@ -2,11 +2,11 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
 import TopLayerSelector from '$components/TopLayerSelector.svelte';
-import favicon from '$ui/assets/favicon.svg';
+import favicon from '$ui/assets/favicon.svg?raw';
 import { checkIsLogin } from '$core/lib/security';
 import { doInitServiceWorker } from '$core/lib/sw-cache';
 	import { onMount } from 'svelte';
-	import '../app.css';
+	import './app.css';
 import AppHeader from '$ui/AppHeader.svelte';
 import Page from '$ui/Page.svelte';
 import SideMenu from '$ui/SideMenu.svelte';

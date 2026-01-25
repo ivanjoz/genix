@@ -11,10 +11,10 @@ import { formatN } from '$core/helpers';
   import type { IAlmacen } from "../sedes-almacenes/sedes-almacenes.svelte";
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte";
   import { ListasCompartidasService } from "../productos/productos.svelte";
-import ProductoVentaCard from '$routes/operaciones/ventas/ProductoVentaCard.svelte';
+import ProductoVentaCard from '$main/operaciones/ventas/ProductoVentaCard.svelte';
   import type { ProductoVenta } from "./ventas.svelte";
   import { VentasState } from "./ventas.svelte";
-    import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svelte';
+import { EmpresaParametrosService } from '$main/admin/parametros/empresas.svelte';
 
   // Helpers
   const formatMo = (n: number) => formatN(n, 2);

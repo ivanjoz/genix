@@ -65,7 +65,7 @@ The remaining 10 issues fell into three categories:
 
 1. **Asset Default Imports (6 issues)**:
    ```typescript
-   import favicon from '$core/lib/assets/favicon.svg';
+   import favicon from '$core/lib/assets/favicon.svg?raw';
    import blurhashScript from '$core/lib/blurhash?raw';
    import arrow2Svg from '$core/lib/assets/flecha_fin.svg?raw';
    ```
