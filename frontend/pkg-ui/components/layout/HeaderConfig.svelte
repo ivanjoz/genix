@@ -4,7 +4,7 @@ import OptionsStrip from '$ui/components/micro/OptionsStrip.svelte';
 import { accessHelper } from '$core/lib/security';
     import pkg from 'notiflix'
 const { Loading, Notify } = pkg;
-import { postUsuario, postUsuarioPropio, IUsuario } from '$routes/admin/usuarios/usuarios.svelte';
+import { postUsuario, postUsuarioPropio, type IUsuario } from '$routes/admin/usuarios/usuarios.svelte';
 
 
   const options = [

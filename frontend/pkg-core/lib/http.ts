@@ -141,7 +141,8 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
 
   if((props.refreshRoutes||[]).length > 0){
     sendServiceMessage(24, { routes: props.refreshRoutes })
-  }
+	}
+	const status: IHttpStatus = { code: 200, message: "" }
 
   return new Promise((resolve, reject) => {
     console.log(`Fetching ${method} : ` + props.route)

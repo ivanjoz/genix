@@ -21,7 +21,7 @@ export interface ILoginResult {
 }
 
 const makeRamdomString = () => {
-	return "1234123412341234123412341234"
+	return "123412341234123412341234123412341234"
 }
 
 export const sendUserLogin = async (data: ILogin): Promise<any> => {
@@ -38,7 +38,9 @@ export const sendUserLogin = async (data: ILogin): Promise<any> => {
   } catch (error) {
     console.log(error)
     return { error }
-  }
+	}
+
+	console.log("loginInfo", loginInfo)
 
   let userInfo = ""
   try {

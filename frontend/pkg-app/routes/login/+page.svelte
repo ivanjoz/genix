@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
 import Input from '$ui/components/Input.svelte';
 import { Notify } from '$core/lib/helpers';
-import { sendUserLogin, ILogin } from '$services/services/admin/login';
+import { sendUserLogin, type ILogin } from '$services/services/admin/login';
 import { checkIsLogin } from '$core/lib/security';
 import { Env } from '$core/lib/env';
 
