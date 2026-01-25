@@ -1,9 +1,9 @@
 <script lang="ts">
-import Input from '$ui/components/Input';
-import Modal from '$ui/components/Modal';
-import Page from '$ui/components/Page';
+import Input from '$ui/components/Input.svelte';
+import Modal from '$ui/components/Modal.svelte';
+import Page from '$ui/components/Page.svelte';
 import VTable from '$ui/components/VTable/index';
-  import type { ITableColumn } from "$ui/VTable/types.ts"
+import { ITableColumn } from '$ui/components/VTable/types';
 import { Notify, throttle } from '$core/lib/helpers';
 import { Core, closeModal } from '$core/core/store.svelte';
 import { formatTime } from '$core/lib/helpers';

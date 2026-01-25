@@ -1,6 +1,6 @@
 <script lang="ts">
-import ImageUploader from '$ui/components/ImageUploader';
-import Page from '$ui/components/Page';
+import ImageUploader from '$ui/components/ImageUploader.svelte';
+import Page from '$ui/components/Page.svelte';
     import { DemoService } from "./demo-service.svelte";
 
 	let demoService = new DemoService()

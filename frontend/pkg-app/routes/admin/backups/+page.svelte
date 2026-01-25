@@ -1,6 +1,6 @@
 <script lang="ts">
-import Page from '$ui/components/Page';
-  import type { ITableColumn } from "$ui/VTable/types.ts";
+import Page from '$ui/components/Page.svelte';
+import { ITableColumn } from '$ui/components/VTable/types';
 import VTable from '$ui/components/VTable/index';
 import { ConfirmWarn, formatTime } from '$core/lib/helpers';
 import { formatN } from '$core/lib/helpers';

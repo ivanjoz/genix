@@ -14,7 +14,7 @@ import { parseSVG } from '$core/lib/helpers';
   import s1 from "./styles.module.css"
   import ArrowSteps from "./ArrowSteps.svelte"
 import globals from '$store/stores/globals.svelte';
-import Input from '$ui/components/Input';
+import Input from '$ui/components/Input.svelte';
   import CiudadesSelector from "./CiudadesSelector.svelte";
   import ProductCardHorizonal from "./ProductCardHorizonal.svelte";
 import { Core } from '$core/core/store.svelte';

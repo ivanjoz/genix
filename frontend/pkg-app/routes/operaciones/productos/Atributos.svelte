@@ -1,9 +1,9 @@
 <script lang="ts">
-import Input from '$ui/components/Input';
-import ColorPicker from '$ui/components/micro/ColorPicker';
-import Modal from '$ui/components/Modal';
-import SearchSelect from '$ui/components/SearchSelect';
-import { VTable, ITableColumn } from '$ui/components/VTable/index';
+import Input from '$ui/components/Input.svelte';
+import ColorPicker from '$ui/components/micro/ColorPicker.svelte';
+import Modal from '$ui/components/Modal.svelte';
+import SearchSelect from '$ui/components/SearchSelect.svelte';
+import { VTable, ITableColumn } from '$ui/components/VTable/types';
 import { closeAllModals, openModal } from '$core/core/store.svelte';
 import { formatN } from '$core/lib/helpers';
     import { productoAtributos, type IProducto, type IProductoPresentacion } from "./productos.svelte";

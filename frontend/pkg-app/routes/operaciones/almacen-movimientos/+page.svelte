@@ -1,9 +1,9 @@
 <script lang="ts">
-import Page from '$ui/components/Page';
-import SearchSelect from '$ui/components/SearchSelect';
-import DateInput from '$ui/components/DateInput';
+import Page from '$ui/components/Page.svelte';
+import SearchSelect from '$ui/components/SearchSelect.svelte';
+import DateInput from '$ui/components/DateInput.svelte';
 import VTable from '$ui/components/VTable/index';
-  import type { ITableColumn } from "$ui/VTable/types.ts"
+import { ITableColumn } from '$ui/components/VTable/types';
 import { Loading, formatTime, throttle, highlString } from '$core/lib/helpers';
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte"
   import { ProductosService } from "../productos/productos.svelte"

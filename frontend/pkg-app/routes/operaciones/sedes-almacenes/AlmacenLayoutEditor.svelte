@@ -1,5 +1,5 @@
 <script lang="ts">
-import Input from '$ui/components/Input';
+import Input from '$ui/components/Input.svelte';
   import type { IAlmacen, IAlmacenLayout } from "./sedes-almacenes.svelte"
 
   interface Props {

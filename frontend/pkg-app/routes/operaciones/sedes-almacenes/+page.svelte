@@ -1,11 +1,11 @@
 <script lang="ts">
-import Input from '$ui/components/Input';
-import Modal from '$ui/components/Modal';
-import Layer from '$ui/components/Layer';
-import Page from '$ui/components/Page';
-import SearchSelect from '$ui/components/SearchSelect';
+import Input from '$ui/components/Input.svelte';
+import Modal from '$ui/components/Modal.svelte';
+import Layer from '$ui/components/Layer.svelte';
+import Page from '$ui/components/Page.svelte';
+import SearchSelect from '$ui/components/SearchSelect.svelte';
 import VTable from '$ui/components/VTable/index';
-  import type { ITableColumn } from "$ui/VTable/types.ts"
+import { ITableColumn } from '$ui/components/VTable/types';
 import { Loading, Notify, formatTime } from '$core/lib/helpers';
 import { throttle } from '$core/lib/helpers';
 import { Core } from '$core/core/store.svelte';

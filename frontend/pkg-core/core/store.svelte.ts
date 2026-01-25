@@ -1,7 +1,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 import type { IMenuRecord } from '../types/menu';
 import type { IModule } from './modules';
-import type { IImageResult } from '$ui/ImageUploader.svelte';
+import { IImageResult } from '$ui/components/ImageUploader.svelte';
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 import { Env } from '../lib/env.ts';

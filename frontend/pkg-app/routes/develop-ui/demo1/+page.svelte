@@ -1,6 +1,6 @@
 
 <script>
-import Popover2Example from '$ui/components/popover2/Popover2Example';
+import Popover2Example from '$ui/components/popover2/Popover2Example.svelte';
 
 </script>
 

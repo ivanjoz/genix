@@ -1,9 +1,9 @@
 <script lang="ts">
-import MobileMenu from '$core/core/MobileMenu';
-import MainCarrusel from '$components/ecommerce/MainCarrusel';
-import Header from '$components/ecommerce/Header';
-import ProductCards from '$components/ecommerce/ProductCards';
-    import type { ICategoriaProducto } from "$ecommerce/store.svelte.ts";
+import MobileMenu from '$core/core/MobileMenu.svelte';
+import MainCarrusel from '$components/ecommerce/MainCarrusel.svelte';
+import Header from '$components/ecommerce/Header.svelte';
+import ProductCards from '$components/ecommerce/ProductCards.svelte';
+import { ICategoriaProducto } from '$components/ecommerce/store.svelte';
 
   let categorias: ICategoriaProducto[] = [
     { Name: "Perfumes", Image: "images/categoria_1.webp" },

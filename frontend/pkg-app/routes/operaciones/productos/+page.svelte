@@ -1,16 +1,16 @@
 <script lang="ts">
-import CheckboxOptions from '$ui/components/CheckboxOptions';
-import Input from '$ui/components/Input';
-import HTMLEditor from '$ui/components/micro/HTMLEditor';
+import CheckboxOptions from '$ui/components/CheckboxOptions.svelte';
+import Input from '$ui/components/Input.svelte';
+import HTMLEditor from '$ui/components/micro/HTMLEditor.svelte';
 import { ConfirmWarn, Loading, Notify } from '$core/lib/helpers';
 import { POST } from '$core/lib/http';
-import ImageUploader from '$ui/components/ImageUploader';
-import Layer from '$ui/components/Layer';
-import OptionsStrip from '$ui/components/micro/OptionsStrip';
-import Page from '$ui/components/Page';
-import SearchCard from '$ui/components/SearchCard';
-import SearchSelect from '$ui/components/SearchSelect';
-  import type { ITableColumn } from "$ui/VTable/types.ts";
+import ImageUploader from '$ui/components/ImageUploader.svelte';
+import Layer from '$ui/components/Layer.svelte';
+import OptionsStrip from '$ui/components/micro/OptionsStrip.svelte';
+import Page from '$ui/components/Page.svelte';
+import SearchCard from '$ui/components/SearchCard.svelte';
+import SearchSelect from '$ui/components/SearchSelect.svelte';
+import { ITableColumn } from '$ui/components/VTable/types';
 import VTable from '$ui/components/VTable/index';
 import { throttle } from '$core/lib/helpers';
 import { Core } from '$core/core/store.svelte';

@@ -1,8 +1,8 @@
 <script lang="ts">
-import Input from '$ui/components/Input';
-import LayerStatic from '$ui/components/micro/LayerStatic';
-import Page from '$ui/components/Page';
-import SearchSelect from '$ui/components/SearchSelect';
+import Input from '$ui/components/Input.svelte';
+import LayerStatic from '$ui/components/micro/LayerStatic.svelte';
+import Page from '$ui/components/Page.svelte';
+import SearchSelect from '$ui/components/SearchSelect.svelte';
 import { Loading, include } from '$core/lib/helpers';
 import { formatN } from '$core/lib/helpers';
   import type { IProductoStock } from "../productos-stock/productos-stock.svelte";

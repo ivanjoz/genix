@@ -51,6 +51,7 @@ interface ImportIssue {
   lineNumber: number;
   importStatement: ImportStatement;
   missingFile: boolean;
+  missingExtension?: boolean;
   missingSymbols: string[];
   foundIn: ExportedSymbol[];
   actualFileLocation?: string;
@@ -61,6 +62,7 @@ interface FixReport {
   totalIssues: number;
   issuesByType: {
     missingFile: number;
+    missingExtension: number;
     missingSymbols: number;
   };
   issues: ImportIssue[];
@@ -99,7 +101,7 @@ function readAliasMappingsFromConfig(): void {
   try {
     const configContent = fs.readFileSync(configPath, 'utf-8');
     
-    // Extract the alias object using regex
+    // Extract the alias object using regex - handle both path.resolve() and plain strings
     const aliasMatch = configContent.match(/alias:\s*\{([^}]+)\}/s);
     if (!aliasMatch) {
       console.log('⚠️  Could not find alias mappings in svelte.config.js, using defaults');
@@ -107,13 +109,19 @@ function readAliasMappingsFromConfig(): void {
     }
     
     const aliasContent = aliasMatch[1];
-    const aliasRegex = /(\$\w+):\s*path\.resolve\(['"]([^'"]+)['"]\)/g;
+    // Match patterns like: $core: path.resolve('./pkg-core') or $core: './pkg-core'
+    const aliasRegex = /(\$\w+):\s*(?:path\.resolve\(['"]([^'"]+)['"]\)|['"]([^'"]+)['"])/g;
     let match;
     
     while ((match = aliasRegex.exec(aliasContent)) !== null) {
       const alias = match[1];
-      const resolvedPath = match[2];
-      aliasMap[alias] = resolvedPath;
+      const resolvedPath = match[2] || match[3]; // match[2] for path.resolve, match[3] for plain string
+      
+      // Normalize the path - remove leading ./ or ./
+      const normalizedPath = resolvedPath.replace(/^\.\//, '').replace(/^\.$/, '');
+      
+      aliasMap[alias] = normalizedPath;
+      console.log(`  ${alias} -> ${normalizedPath}`);
     }
     
     console.log(`✅ Loaded ${Object.keys(aliasMap).length} alias mappings from svelte.config.js`);
@@ -185,23 +193,30 @@ function pathExists(basePath: string): string | null {
  * Resolve an alias path to an actual file path
  */
 function resolveAliasPath(aliasPath: string): string | null {
-  const parts = aliasPath.split('/');
+  // Remove query parameters if present
+  const cleanPath = aliasPath.split('?')[0];
+  const parts = cleanPath.split('/');
   const alias = parts[0];
   const rest = parts.slice(1).join('/');
   
   // Use alias mappings from svelte.config.js
-  
   const baseDir = aliasMap[alias];
-  if (!baseDir) return null;
+  if (!baseDir) {
+    console.log(`  ⚠️  Unknown alias: ${alias}`);
+    return null;
+  }
   
+  // Build the full path from project root + alias base + relative path
   const fullPath = path.join(PROJECT_ROOT, baseDir, rest);
   const resolved = pathExists(fullPath);
   
   if (resolved) {
+    console.log(`  ✓️  Resolved ${aliasPath} -> ${resolved}`);
     return resolved;
   }
   
   // Path doesn't exist - return null to indicate missing file
+  console.log(`  ❌ Path not found: ${fullPath}`);
   return null;
 }
 
@@ -655,24 +670,39 @@ function checkImports(filePath: string): ImportIssue[] {
     const resolvedFile = resolveAliasPath(imp.importPath);
     const missingFile = resolvedFile === null;
     
+    // Check for missing extension (e.g. $ui/components/Input instead of Input.svelte)
+    let missingExtension = false;
+    if (resolvedFile && resolvedFile.endsWith('.svelte')) {
+      const cleanImportPath = imp.importPath.split('?')[0];
+      if (!cleanImportPath.endsWith('.svelte')) {
+        missingExtension = true;
+        console.log(`  ⚠️  Missing .svelte extension: ${imp.importPath}`);
+      }
+    }
+
     const missingSymbols: string[] = [];
     const foundIn: ExportedSymbol[] = [];
     let actualFileLocation: string | undefined;
     let fixAsDefaultImport = false;
     
-    if (missingFile) {
-      // File doesn't exist - try to find it
-      console.log(`  ❌ File not found: ${imp.importPath}`);
-      
-      // Extract filename from import path
-      const cleanImportPath = imp.importPath.split('?')[0];
-      const fileName = path.basename(cleanImportPath);
-      const baseName = path.basename(fileName, path.extname(fileName));
-      
-      // Search for the file across all packages
-      const foundFile = searchForFile(baseName);
-      if (foundFile) {
-        actualFileLocation = path.relative(PROJECT_ROOT, foundFile);
+    if (missingFile || missingExtension) {
+      if (missingFile) {
+        // File doesn't exist - try to find it
+        console.log(`  ❌ File not found: ${imp.importPath}`);
+        
+        // Extract filename from import path
+        const cleanImportPath = imp.importPath.split('?')[0];
+        const fileName = path.basename(cleanImportPath);
+        const baseName = path.basename(fileName, path.extname(fileName));
+        
+        // Search for the file across all packages
+        const foundFile = searchForFile(baseName);
+        if (foundFile) {
+          actualFileLocation = path.relative(PROJECT_ROOT, foundFile);
+        }
+      } else if (missingExtension) {
+        // File found but extension missing in import
+        actualFileLocation = path.relative(PROJECT_ROOT, resolvedFile!);
       }
       
       // Also search for symbols
@@ -719,7 +749,22 @@ function checkImports(filePath: string): ImportIssue[] {
       for (const importName of imp.imports) {
         if (GENERIC_NAMES.has(importName)) continue;
         
-        if (!exportedNames.has(importName)) {
+        // For Svelte components, do case-insensitive matching since component names
+        // can differ in case from their filename (e.g., VTable vs vTable.svelte)
+        let symbolFound = exportedNames.has(importName);
+        
+        if (!symbolFound && (isSvelteFile || isSvelteComponentImport(imp.importPath))) {
+          // Try case-insensitive match for Svelte components
+          for (const exportedName of exportedNames) {
+            if (exportedName.toLowerCase() === importName.toLowerCase()) {
+              symbolFound = true;
+              console.log(`  ✓️  Svelte component '${importName}' matches exported '${exportedName}' (case-insensitive)`);
+              break;
+            }
+          }
+        }
+        
+        if (!symbolFound) {
           missingSymbols.push(importName);
           
           // Search for symbol in other files
@@ -738,12 +783,13 @@ function checkImports(filePath: string): ImportIssue[] {
     }
     
     // Record issue if any problems found
-    if (missingFile || missingSymbols.length > 0 || fixAsDefaultImport) {
+    if (missingFile || missingExtension || missingSymbols.length > 0 || fixAsDefaultImport) {
       issues.push({
         filePath: path.relative(PROJECT_ROOT, filePath),
         lineNumber: imp.lineNumber,
         importStatement: imp,
         missingFile,
+        missingExtension,
         missingSymbols,
         foundIn,
         actualFileLocation,
@@ -779,6 +825,9 @@ function analyzeImports(): FixReport {
     const files = findFilesRecursively(dirPath, ['.ts', '.js', '.svelte']);
     
     for (const file of files) {
+      const relativePath = path.relative(PROJECT_ROOT, file);
+      console.log(`  Analyzing: ${relativePath}`);
+      
       const imports = parseImports(file);
       const issues = checkImports(file);
       
@@ -792,6 +841,7 @@ function analyzeImports(): FixReport {
     totalIssues: allIssues.length,
     issuesByType: {
       missingFile: allIssues.filter(i => i.missingFile).length,
+      missingExtension: allIssues.filter(i => i.missingExtension).length,
       missingSymbols: allIssues.filter(i => i.missingSymbols.length > 0).length
     },
     issues: allIssues
@@ -809,6 +859,7 @@ function displayReport(report: FixReport) {
   console.log('='.repeat(80));
   console.log(`Total issues found: ${report.totalIssues}`);
   console.log(`  - Missing files: ${report.issuesByType.missingFile}`);
+  console.log(`  - Missing extensions: ${report.issuesByType.missingExtension}`);
   console.log(`  - Missing symbols: ${report.issuesByType.missingSymbols}`);
   console.log('='.repeat(80));
   
@@ -837,6 +888,8 @@ function displayReport(report: FixReport) {
       
       if (issue.missingFile) {
         console.log(`  ❌ File not found: ${issue.importStatement.importPath}`);
+      } else if (issue.missingExtension) {
+        console.log(`  ⚠️  Missing extension in: ${issue.importStatement.importPath}`);
       }
       
       if (issue.missingSymbols.length > 0) {
@@ -895,10 +948,33 @@ function fixImportIssue(filePath: string, issue: ImportIssue): boolean {
 function determineBestFix(issue: ImportIssue): string | null {
   const imp = issue.importStatement;
   
-  // Fix Svelte component import style
+  // Fix missing extension or missing file by suggesting correct path
+  if ((issue.missingExtension || issue.missingFile) && issue.actualFileLocation) {
+    const aliasPath = convertToAliasPath(issue.actualFileLocation);
+    if (aliasPath) {
+      if (imp.isDefault && !imp.isNamed) {
+        return `import ${imp.imports[0]} from '${aliasPath}';`;
+      } else if (imp.isNamed && !imp.isDefault) {
+        return `import { ${imp.imports.join(', ')} } from '${aliasPath}';`;
+      } else if (imp.isDefault && imp.isNamed) {
+        const defaultImport = imp.imports[0];
+        const namedImports = imp.imports.slice(1).join(', ');
+        return `import ${defaultImport}, { ${namedImports} } from '${aliasPath}';`;
+      } else if (imp.isSideEffect) {
+        return `import '${aliasPath}';`;
+      }
+    }
+  }
+
+  // Fix Svelte component import style (named to default)
   if (issue.fixAsDefaultImport) {
     const componentName = getComponentNameFromPath(imp.importPath) || imp.imports[0];
-    return `import ${componentName} from '${imp.importPath}';`;
+    // Ensure we keep extension if it was there or if it should be there
+    let targetPath = imp.importPath;
+    if (issue.actualFileLocation) {
+      targetPath = convertToAliasPath(issue.actualFileLocation) || targetPath;
+    }
+    return `import ${componentName} from '${targetPath}';`;
   }
   
   // Fix missing symbols by suggesting correct import path
@@ -909,22 +985,6 @@ function determineBestFix(issue: ImportIssue): string | null {
     
     if (aliasPath && aliasPath !== imp.importPath) {
       // Reconstruct import with new path
-      if (imp.isDefault && !imp.isNamed) {
-        return `import ${imp.imports[0]} from '${aliasPath}';`;
-      } else if (imp.isNamed && !imp.isDefault) {
-        return `import { ${imp.imports.join(', ')} } from '${aliasPath}';`;
-      } else if (imp.isDefault && imp.isNamed) {
-        const defaultImport = imp.imports[0];
-        const namedImports = imp.imports.slice(1).join(', ');
-        return `import ${defaultImport}, { ${namedImports} } from '${aliasPath}';`;
-      }
-    }
-  }
-  
-  // Fix missing file by suggesting correct path
-  if (issue.missingFile && issue.actualFileLocation) {
-    const aliasPath = convertToAliasPath(issue.actualFileLocation);
-    if (aliasPath) {
       if (imp.isDefault && !imp.isNamed) {
         return `import ${imp.imports[0]} from '${aliasPath}';`;
       } else if (imp.isNamed && !imp.isDefault) {
@@ -957,18 +1017,21 @@ function convertToAliasPath(filePath: string): string | null {
     const absBaseDir = path.join(absSourceDir, pkgDir);
     if (absPath.startsWith(absBaseDir)) {
       let relativePath = path.relative(absBaseDir, absPath);
-      // Remove extension
-      const withoutExt = relativePath.replace(/\.(ts|js|svelte|css)$/, '');
+      const isSvelte = relativePath.endsWith('.svelte');
       
-      // Special handling for index files
-      if (path.basename(withoutExt) === 'index') {
-        relativePath = path.dirname(withoutExt);
-        if (relativePath === '.') relativePath = '';
-      } else {
-        relativePath = withoutExt;
+      // Remove extension for non-svelte files
+      let processedPath = relativePath;
+      if (!isSvelte) {
+        processedPath = relativePath.replace(/\.(ts|js|css)$/, '');
       }
       
-      return relativePath ? `${alias}/${relativePath}` : alias;
+      // Special handling for index files
+      if (path.basename(processedPath, isSvelte ? '.svelte' : undefined) === 'index') {
+        processedPath = path.dirname(processedPath);
+        if (processedPath === '.') processedPath = '';
+      }
+      
+      return processedPath ? `${alias}/${processedPath}` : alias;
     }
   }
   

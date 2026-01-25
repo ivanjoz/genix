@@ -1,4 +1,4 @@
-import type { IProducto } from "$services/productos.svelte";
+import { IProducto } from '$routes/operaciones/almacen-movimientos/almacen-movimientos.svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
 export interface ICategoriaProducto {

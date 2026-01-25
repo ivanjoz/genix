@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { tick } from 'svelte';
 import { Core } from '$core/core/store.svelte';
-	import type { IMenuRecord, IModule } from '$core/menu';
+import { IMenuRecord, IModule } from '$core/types/menu';
 
 	// State
 	const module = $derived(Core.module);

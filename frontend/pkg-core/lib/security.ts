@@ -1,4 +1,4 @@
-import { reloadLogin, type ILoginResult } from "$services/admin/login.ts"
+import { reloadLogin, type ILoginResult } from '$services/services/admin/login';
 import { Env, IsClient, LocalStorage } from "./env.ts"
 import { decrypt, Notify, throttle } from "./helpers.ts"
 import type { IUsuario } from "$app/routes/admin/usuarios/usuarios.svelte"

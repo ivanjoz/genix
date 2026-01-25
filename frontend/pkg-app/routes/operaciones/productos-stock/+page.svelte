@@ -1,7 +1,7 @@
 <script lang="ts">
-import Page from '$ui/components/Page';
-import SearchSelect from '$ui/components/SearchSelect';
-    import type { ITableColumn } from "$ui/VTable/types.ts";
+import Page from '$ui/components/Page.svelte';
+import SearchSelect from '$ui/components/SearchSelect.svelte';
+import { ITableColumn } from '$ui/components/VTable/types';
 import VTable from '$ui/components/VTable/index';
 import { Notify, throttle } from '$core/lib/helpers';
     import pkg from 'notiflix'
@@ -10,9 +10,9 @@ const { Loading } = pkg;
     import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte";
     import { getProductosStock, postProductosStock, type IProductoStock } from "./productos-stock.svelte";
 import { Core } from '$core/core/store.svelte';
-import Layer from '$ui/components/Layer';
-import Input from '$ui/components/Input';
-import Checkbox from '$ui/components/Checkbox';
+import Layer from '$ui/components/Layer.svelte';
+import Input from '$ui/components/Input.svelte';
+import Checkbox from '$ui/components/Checkbox.svelte';
     import { untrack } from "svelte";
 
   const almacenes = new AlmacenesService()

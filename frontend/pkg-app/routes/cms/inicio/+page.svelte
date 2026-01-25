@@ -1,5 +1,5 @@
 <script>
-import Page from '$ui/components/Page';
+import Page from '$ui/components/Page.svelte';
 
 
 
