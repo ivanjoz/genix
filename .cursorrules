@@ -1,0 +1,22 @@
+# Genix Cursor Rules
+
+## Communication and Workflow
+1. **User-in-the-loop**: Always explain your rationale and key findings before proceeding with any significant changes.
+2. **Clarification First**: If an instruction is unclear or ambiguous, STOP and ask the user for clarification before taking action.
+3. **Validation before Documentation**: Do not create or update documentation until the fix or implementation has been validated and confirmed by the user.
+4. **Planning for Complex Tasks**: For complex tasks, always create a detailed plan in a `.md` file within a `tmp/` folder in the project root. The user must review and approve this plan before implementation begins.
+
+## Documentation Standards
+1. **Agent-Optimized**: Documentation must be concise, explain the rationale, and be optimized for AI agents rather than humans.
+2. **No Visuals**: Avoid charts, graphs, or complex diagrams.
+3. **Technical Focus**: Prioritize clear technical descriptions that agents can easily parse and act upon.
+
+## Tooling and Efficiency
+1. **Python for Automation**: Prefer using on-the-fly Python scripts (via `run_shell_command`) to perform bulk edits across multiple files with similar patterns or to generate custom summaries of complex code structures.
+
+## Debugging and Troubleshooting
+1. **Extensive Logging**: Always implement and use debug logs extensively to diagnose errors and trace execution flow.
+2. **Environment Limitations**: Acknowledge that you cannot access certain environments (e.g., the browser). In such cases, rely on the human-in-the-loop to provide log results and error details from those environments.
+
+## File Operations and Safety
+1. **No Git Checkout for Restore**: NEVER use `git checkout` to restore a file. If you need to revert changes or preserve a state, create a manual backup of the file (e.g., `filename.ext.backup`) so it can be restored later without affecting the git index or other tracked changes.

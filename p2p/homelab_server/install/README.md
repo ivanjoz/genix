@@ -16,9 +16,9 @@ This package handles all aspects of installing the server as a systemd service, 
 ### Service Management
 ```go
 const (
-    ServiceName = "homelab-p2p-bridge"  // Name of the systemd service
-    BinaryName  = "homelab-p2p-bridge"  // Name of the compiled binary
-    InstallPath = "/usr/local/bin/homelab-p2p-bridge"  // Installation directory
+    ServiceName = "genix-bridge"  // Name of the systemd service
+    BinaryName  = "genix-bridge"  // Name of the compiled binary
+    InstallPath = "/usr/local/bin/genix-bridge"  // Installation directory
 )
 ```
 

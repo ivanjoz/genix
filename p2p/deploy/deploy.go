@@ -37,7 +37,7 @@ func NewDeployStack(scope constructs.Construct, id string, props *DeployStackPro
 		Handler: jsii.String("bootstrap"),
 		Code:     awslambda.Code_FromAsset(jsii.String(lambdaSourcePath), &awss3assets.AssetOptions{}),
 		Environment: &map[string]*string{
-			"LAPTOP_ID": jsii.String("init"),
+			"LAPTOP_ID": jsii.String(""),
 		},
 	})
 

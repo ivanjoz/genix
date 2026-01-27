@@ -17,7 +17,7 @@ func main() {
     
     fmt.Println("Raw Configuration:")
     fmt.Printf("  APP_NAME:              %s\n", cfg.AppName)
-    fmt.Printf("  WEBSOCKET_URL:         %s\n", cfg.WebSocketURL)
+    fmt.Printf("  SIGNALING_ENDPOINT:    %s\n", cfg.SignalingEndpoint)
     fmt.Printf("  LAMBDA_FUNCTION_NAME: %s\n", cfg.LambdaFunctionNameActual)
     fmt.Printf("  AWS_PROFILE:           %s\n", cfg.AWSProfile)
     fmt.Printf("  AWS_REGION:            %s\n", cfg.AWSRegion)
@@ -38,10 +38,10 @@ func main() {
         fmt.Printf("✅ APP_NAME: %s\n", cfg.AppName)
     }
     
-    if cfg.WebSocketURL == "" {
-        fmt.Println("⚠️  WEBSOCKET_URL not set (needed for home lab server)")
+    if cfg.SignalingEndpoint == "" {
+        fmt.Println("⚠️  SIGNALING_ENDPOINT not set (needed for home lab server)")
     } else {
-        fmt.Printf("✅ WEBSOCKET_URL: %s\n", cfg.WebSocketURL)
+        fmt.Printf("✅ SIGNALING_ENDPOINT: %s\n", cfg.SignalingEndpoint)
     }
     
     if cfg.GetLambdaFunctionName() == "" {

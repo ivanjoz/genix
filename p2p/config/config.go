@@ -15,7 +15,7 @@ type Config struct {
 	AppName          string `json:"APP_NAME,omitempty"`
 	SignalingAppName string `json:"SIGNALING_APP_NAME,omitempty"`
 	StackName        string `json:"SIGNALING_STACK_NAME,omitempty"`
-	WebSocketURL     string `json:"WEBSOCKET_URL,omitempty"`
+	SignalingEndpoint     string `json:"SIGNALING_ENDPOINT,omitempty"`
 	LambdaFunctionName string `json:"-"` // Not in JSON, derived from app_name
 	LambdaFunctionNameActual string `json:"LAMBDA_FUNCTION_NAME,omitempty"` // Actual Lambda function name from CDK output
 	AWSRegion        string `json:"AWS_REGION,omitempty"`
@@ -144,9 +144,9 @@ func Load() (*Config, error) {
 		cfg.AWSAccount = val
 	}
 
-	// Try to get WEBSOCKET_URL from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"WEBSOCKET_URL", "websocket_url", "ws_url"}); found {
-		cfg.WebSocketURL = val
+	// Try to get SIGNALING_ENDPOINT from multiple possible key names
+	if val, found := getValueFromRaw(raw, []string{"SIGNALING_ENDPOINT", "signaling_endpoint", "websocket_url", "WEBSOCKET_URL", "ws_url"}); found {
+		cfg.SignalingEndpoint = val
 	}
 
 	// Try to get LAMBDA_FUNCTION_NAME from multiple possible key names
@@ -170,7 +170,7 @@ func Load() (*Config, error) {
 //   AWS_PROFILE -> aws_profile
 //   AWS_REGION -> aws_region
 //   AWS_ACCOUNT -> aws_account
-//   WEBSOCKET_URL -> websocket_url
+//   SIGNALING_ENDPOINT -> signaling_endpoint
 //   LAMBDA_FUNCTION_NAME -> lambda_function_name
 func LoadWithEnv() (*Config, error) {
 	cfg, err := Load()
@@ -188,8 +188,8 @@ func LoadWithEnv() (*Config, error) {
 	if awsAccount := os.Getenv("AWS_ACCOUNT"); awsAccount != "" {
 		cfg.AWSAccount = strings.TrimSpace(awsAccount)
 	}
-	if wsURL := os.Getenv("WEBSOCKET_URL"); wsURL != "" {
-		cfg.WebSocketURL = strings.TrimSpace(wsURL)
+	if signalingEndpoint := os.Getenv("SIGNALING_ENDPOINT"); signalingEndpoint != "" {
+		cfg.SignalingEndpoint = strings.TrimSpace(signalingEndpoint)
 	}
 	if lambdaName := os.Getenv("LAMBDA_FUNCTION_NAME"); lambdaName != "" {
 		cfg.LambdaFunctionNameActual = strings.TrimSpace(lambdaName)

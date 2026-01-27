@@ -14,6 +14,7 @@ import Modules from '$core/modules';
 import { Core, getDeviceType } from '$core/store.svelte';
 import ImageWorker from '$core/workers/image-worker?worker';
 import { Env } from '$core/env';
+import { initWebRTC, webRTCManager } from '$core/lib/webrtc/manager';
 
 	let { children } = $props();
 
@@ -25,6 +26,14 @@ import { Env } from '$core/env';
 			console.log('✅ Image worker initialized successfully')
 		} catch (error) {
 			console.error('❌ Failed to initialize image worker:', error)
+		}
+
+		console.log('🔧 Initializing WebRTC P2P bridge...')
+		try {
+			initWebRTC(Env.SIGNALING_ENDPOINT)
+			console.log('✅ WebRTC bridge initialization started')
+		} catch (error) {
+			console.error('❌ Failed to initialize WebRTC bridge:', error)
 		}
 	}
 
@@ -55,6 +64,19 @@ import { Env } from '$core/env';
 		doInitServiceWorker().then(() => {
 			Core.isLoading = 0
 		})
+
+		// Subscribe to WebRTC state changes for logging
+		if (browser) {
+			webRTCManager.subscribe(() => {
+				const status = webRTCManager.getConnectionStatus()
+				console.log('📡 WebRTC Status:', status)
+				
+				// Update Core state for UI access
+				Core.webRTCConnected = status.connected
+				Core.webRTCConnecting = status.connecting
+				Core.webRTCError = status.error
+			})
+		}
 	})
 
 	const routesWithoutLayout: string[] = ["/login","/store"]

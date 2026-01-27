@@ -22,4 +22,7 @@ interface Window {
   QAS_HOSTS: strings[]
   
 }
+
+// Build-time constants injected via Vite
+declare const __SIGNALING_ENDPOINT__: string;
 declare const appId: string;

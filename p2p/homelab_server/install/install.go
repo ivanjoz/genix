@@ -11,9 +11,9 @@ import (
 
 const (
 	// ServiceName is the name of the systemd service
-	ServiceName = "homelab-p2p-bridge"
+	ServiceName = "genix-bridge"
 	// BinaryName is the name of the compiled binary
-	BinaryName = "homelab-p2p-bridge"
+	BinaryName = "genix-bridge"
 	// InstallPath is where the binary will be installed
 	InstallPath = "/usr/local/bin/" + BinaryName
 )
@@ -27,7 +27,7 @@ type InstallOptions struct {
 
 // RunInstall performs the complete installation of the server as a systemd service
 func RunInstall() error {
-	log.Println("Starting installation of homelab-p2p-bridge...")
+	log.Println("Starting installation of genix-bridge...")
 
 	// Check if running as root (needed for installing to /usr/local/bin and creating systemd service)
 	if os.Geteuid() != 0 {

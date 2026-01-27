@@ -44,6 +44,7 @@ export const Env = {
   S3_URL: "https://d16qwm950j0pjf.cloudfront.net/",
   serviceWorker: "/sw.js",
   enviroment: "dev",
+  SIGNALING_ENDPOINT: (typeof globalThis !== 'undefined' && '__SIGNALING_ENDPOINT__' in globalThis ? (globalThis as any).__SIGNALING_ENDPOINT__ : "") as string,
   counterID: 1,
   sideLayerSize: 0,
   fetchID: 1000,

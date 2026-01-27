@@ -6,9 +6,32 @@ import type { BuildOptions } from 'esbuild'
 import fs from 'fs'
 import mime from 'mime-types'
 import path from 'path'
+import { fileURLToPath } from 'url';
 import type { IncomingMessage, ServerResponse } from 'http'
 import { type RolldownOptions } from 'rolldown'
 import { svelteClassHasher, getCounter, getCounterFomFile } from './plugins.js';
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Get project directory
+const projectDir = process.cwd()
+
+// Read credentials.json to get SIGNALING_ENDPOINT
+let signalingEndpoint = '';
+try {
+  const credentialsPath = path.resolve(projectDir, '../credentials.json');
+  if (fs.existsSync(credentialsPath)) {
+    const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf-8'));
+    signalingEndpoint = credentials.SIGNALING_ENPOINT || '';
+    console.log('✅ SIGNALING_ENDPOINT loaded from credentials.json:', signalingEndpoint);
+  } else {
+    console.warn('⚠️  credentials.json not found at:', credentialsPath);
+  }
+} catch (error) {
+  console.error('❌ Error reading credentials.json:', error);
+}
 
 const isBuild = process.argv.includes('build');
 const cssModuleMap = new Map<string, string>();
@@ -18,11 +41,10 @@ if (isBuild) {
 }
 
 // Custom plugin to build the service worker
-const __dirname = process.cwd()
-const publicDir = path.resolve(__dirname, 'static');
+const publicDir = path.resolve(projectDir, 'static');
 
 const serviceWorkerConfig: BuildOptions = {
-  entryPoints: [path.resolve(__dirname, 'pkg-core/workers/service-worker.ts')],
+  entryPoints: [path.resolve(projectDir, 'pkg-core/workers/service-worker.ts')],
   format: 'esm', // Service workers typically use ES modules
   outfile: path.resolve(publicDir, 'sw.js'),
   bundle: true,
@@ -119,9 +141,9 @@ const serviceWorkerPlugin = () => ({
     buildSw();
 
     // Watch for changes in the service worker source file
-    server.watcher.add(path.resolve(__dirname, 'pkg-core/workers/service-worker.ts'));
+    server.watcher.add(path.resolve(projectDir, 'pkg-core/workers/service-worker.ts'));
     server.watcher.on('change', async (filePath: string) => {
-      if (filePath === path.resolve(__dirname, 'pkg-core/workers/service-worker.ts')) {
+      if (filePath === path.resolve(projectDir, 'pkg-core/workers/service-worker.ts')) {
         await buildSw();
         // server.hot.send({ type: 'full-reload' });
       }
@@ -155,6 +177,10 @@ const serviceWorkerPlugin = () => ({
 export default defineConfig({
   root: path.resolve(__dirname),
   publicDir: 'static',
+  define: {
+    '__SIGNALING_ENDPOINT__': JSON.stringify(signalingEndpoint),
+    'global': 'globalThis'
+  },
   server: {
     port: 3570, // Change this to your desired port
     fs: {

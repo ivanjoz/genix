@@ -55,14 +55,14 @@ func main() {
     }
 
     fmt.Println("=== Configuration Loaded ===")
-    fmt.Printf("WebSocket URL:        %s\n", cfg.WebSocketURL)
+    fmt.Printf("Signaling Endpoint:   %s\n", cfg.SignalingEndpoint)
     fmt.Printf("Lambda Function Name: %s\n", cfg.GetLambdaFunctionName())
     fmt.Printf("AWS Profile:          %s\n", cfg.AWSProfile)
     fmt.Printf("AWS Region:           %s\n", cfg.AWSRegion)
     fmt.Println()
 
-    if cfg.WebSocketURL == "" {
-        fmt.Println("⚠️  WARNING: WEBSOCKET_URL is not set in credentials.json")
+    if cfg.SignalingEndpoint == "" {
+        fmt.Println("⚠️  WARNING: SIGNALING_ENDPOINT is not set in credentials.json")
         fmt.Println("   Please add it after deploying: wss://xxx.execute-api.region.amazonaws.com/prod")
         os.Exit(0)
     }
@@ -92,12 +92,12 @@ echo "✅ Configuration Test Passed!"
 echo "========================================="
 echo ""
 
-# Check if WEBSOCKET_URL is set
-if ! grep -q "WEBSOCKET_URL" ../credentials.json 2>/dev/null; then
-    echo "⚠️  WEBSOCKET_URL not found in credentials.json"
+# Check if SIGNALING_ENDPOINT is set
+if ! grep -q "SIGNALING_ENDPOINT" ../credentials.json 2>/dev/null; then
+    echo "⚠️  SIGNALING_ENDPOINT not found in credentials.json"
     echo ""
     echo "Please add it after running ./deploy.sh:"
-    echo '  "WEBSOCKET_URL": "wss://your-api-id.execute-api.region.amazonaws.com/prod",'
+    echo '  "SIGNALING_ENDPOINT": "wss://your-api-id.execute-api.region.amazonaws.com/prod",'
     echo ""
     echo "Skipping server test..."
     exit 0
@@ -174,5 +174,5 @@ echo ""
 echo "🚀 You can now run:"
 echo "   go run homelab_server/main.go"
 echo ""
-echo "💡 Make sure your WebSocket URL is correct in credentials.json"
-echo "   The server will connect to: $(grep -o '"WEBSOCKET_URL"[^,}]*' ../credentials.json | head -1 || echo 'Not set')"
+echo "💡 Make sure your Signaling Endpoint is correct in credentials.json"
+echo "   The server will connect to: $(grep -o '"SIGNALING_ENDPOINT"[^,}]*' ../credentials.json | head -1 || echo 'Not set')"

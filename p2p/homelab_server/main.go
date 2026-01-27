@@ -49,10 +49,10 @@ func main() {
 
 	// Normal operation
 	cfg := config.GetDefaultConfig()
-	wsURL := cfg.WebSocketURL
+	wsURL := cfg.SignalingEndpoint
 
 	if wsURL == "" {
-		log.Fatal("WEBSOCKET_URL is required in credentials.json")
+		log.Fatal("SIGNALING_ENDPOINT is required in credentials.json")
 	}
 
 	interrupt := make(chan os.Signal, 1)
@@ -64,6 +64,17 @@ func main() {
 		log.Fatal("dial:", err)
 	}
 	defer c.Close()
+
+	// Request identity from Lambda
+	identifyMsg := sigmsg.Msg{
+		Action: "sendSignal",
+		To:     "me",
+		Data:   "identify",
+	}
+	identifyPayload, _ := json.Marshal(identifyMsg)
+	if err := c.WriteMessage(websocket.TextMessage, identifyPayload); err != nil {
+		log.Printf("Failed to send identify message: %v", err)
+	}
 
 	done := make(chan struct{})
 

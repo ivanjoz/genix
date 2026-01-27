@@ -1,6 +1,7 @@
-<script>
+<script lang="ts">
 import Input from '$components/Input.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
+import WebRTCPanel from './WebRTCPanel.svelte';
    
   let options = [
     { id: 1, nombre: "Ivan Joseph Angulo" },
@@ -26,11 +27,18 @@ import SearchSelect from '$components/SearchSelect.svelte';
     />
 
     <button
-      onclick={() => {
-        console.log(form);
-      }}>Enviar</button
-    >
-  </div>
+        onclick={() => {
+          console.log(form);
+        }}>Enviar</button
+      >
+    </div>
+  
+    <div class="mt-12">
+      <div class="h-40">
+        <div class="text-[24px]">WebRTC Test Panel</div>
+      </div>
+      <WebRTCPanel />
+    </div>
   <div class="_1 p-16">
     <div class="h-40">
       <div class="text-[24px]">Componentes</div>
