@@ -15,7 +15,9 @@ type Config struct {
 	AppName          string `json:"APP_NAME,omitempty"`
 	SignalingAppName string `json:"SIGNALING_APP_NAME,omitempty"`
 	StackName        string `json:"SIGNALING_STACK_NAME,omitempty"`
+	WebSocketURL     string `json:"WEBSOCKET_URL,omitempty"`
 	LambdaFunctionName string `json:"-"` // Not in JSON, derived from app_name
+	LambdaFunctionNameActual string `json:"LAMBDA_FUNCTION_NAME,omitempty"` // Actual Lambda function name from CDK output
 	AWSRegion        string `json:"AWS_REGION,omitempty"`
 	AWSAccount       string `json:"AWS_ACCOUNT,omitempty"`
 }
@@ -41,6 +43,10 @@ func (c *Config) GetStackName() string {
 
 // GetLambdaFunctionName returns the lambda function name (app_name + "-signaling")
 func (c *Config) GetLambdaFunctionName() string {
+	// If actual Lambda function name is set in config, use it
+	if c.LambdaFunctionNameActual != "" {
+		return c.LambdaFunctionNameActual
+	}
 	return c.AppName + "-signaling"
 }
 
@@ -138,6 +144,16 @@ func Load() (*Config, error) {
 		cfg.AWSAccount = val
 	}
 
+	// Try to get WEBSOCKET_URL from multiple possible key names
+	if val, found := getValueFromRaw(raw, []string{"WEBSOCKET_URL", "websocket_url", "ws_url"}); found {
+		cfg.WebSocketURL = val
+	}
+
+	// Try to get LAMBDA_FUNCTION_NAME from multiple possible key names
+	if val, found := getValueFromRaw(raw, []string{"LAMBDA_FUNCTION_NAME", "lambda_function_name", "lambda_name"}); found {
+		cfg.LambdaFunctionNameActual = val
+	}
+
 	// Validate required fields
 	if cfg.AppName == "" {
 		return nil, fmt.Errorf("APP_NAME is required in credentials.json")
@@ -154,6 +170,8 @@ func Load() (*Config, error) {
 //   AWS_PROFILE -> aws_profile
 //   AWS_REGION -> aws_region
 //   AWS_ACCOUNT -> aws_account
+//   WEBSOCKET_URL -> websocket_url
+//   LAMBDA_FUNCTION_NAME -> lambda_function_name
 func LoadWithEnv() (*Config, error) {
 	cfg, err := Load()
 	if err != nil {
@@ -169,6 +187,12 @@ func LoadWithEnv() (*Config, error) {
 	}
 	if awsAccount := os.Getenv("AWS_ACCOUNT"); awsAccount != "" {
 		cfg.AWSAccount = strings.TrimSpace(awsAccount)
+	}
+	if wsURL := os.Getenv("WEBSOCKET_URL"); wsURL != "" {
+		cfg.WebSocketURL = strings.TrimSpace(wsURL)
+	}
+	if lambdaName := os.Getenv("LAMBDA_FUNCTION_NAME"); lambdaName != "" {
+		cfg.LambdaFunctionNameActual = strings.TrimSpace(lambdaName)
 	}
 
 	return cfg, nil

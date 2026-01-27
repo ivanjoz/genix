@@ -50,6 +50,7 @@ import angleSvg from '$core/assets/angle.svg?raw';
 
   // svelte-ignore state_referenced_locally
   if (defaultOpen) isOpen = true;
+  let wrapperElement: HTMLElement | null = $state(null);
   let buttonElement: HTMLElement | null = $state(null);
   let layerElement: HTMLElement | null = $state(null);
   let position = $state({ top: 0, left: 0 });
@@ -75,12 +76,15 @@ import angleSvg from '$core/assets/angle.svg?raw';
 
   // Calculate position of the layer below the button
   async function updatePosition() {
-    if (!buttonElement || !layerElement) return;
-
     await tick();
+	  if(!buttonElement || !layerElement){
+	  	// console.log("No hay buttonElement o layerElement:",buttonElement, layerElement)
+	   	return
+	  }
 
     const buttonRect = buttonElement.getBoundingClientRect();
     const layerRect = layerElement.getBoundingClientRect();
+
     const isMobile = window.innerWidth <= 748;
 
     const offset = 8; // Distance from button

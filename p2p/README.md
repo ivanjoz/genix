@@ -9,13 +9,13 @@ This project implements a serverless signaling bridge for WebRTC connections bet
 - `signal/`: Shared Go types for signaling messages.
 - `config/`: Configuration package for reading credentials.json.
 - `deploy/`: AWS CDK project for infrastructure deployment.
+- `homelab_server/install/`: Systemd service installation package.
 
 ## Prerequisites
 
 - **Go 1.21+**
 - **Node.js & npm**
 - **AWS CLI** configured with appropriate permissions.
-
 
 ## Configuration
 
@@ -27,9 +27,12 @@ All configuration is centralized in `credentials.json` in the project root. Crea
   "app_name": "p2p-bridge",
   "signaling_app_name": "",
   "stack_name": "",
+  "websocket_url": "",
+  "lambda_function_name": "",
   "aws_region": "us-east-1",
   "aws_account": ""
 }
+```
 ```
 
 **Configuration Fields:**
@@ -37,15 +40,19 @@ All configuration is centralized in `credentials.json` in the project root. Crea
 - `app_name`: **Required.** Base application name used to generate other names.
 - `signaling_app_name`: **Optional.** Specific name for the signaling app. If empty, defaults to `app_name + "-signaling"`.
 - `signaling_stack_name`: **Optional.** CDK stack name for CloudFormation. If empty, defaults to `app_name + "-signaling"`.
+- `websocket_url`: **Optional.** WebSocket API URL for home lab server (e.g., `wss://xxx.execute-api.region.amazonaws.com/prod`). Set after deployment.
+- `lambda_function_name`: **Optional.** Actual Lambda function name from CDK output. Defaults to `app_name + "-signaling"` if not set.
 - `aws_region`: AWS region (leave empty to use default from AWS profile).
 - `aws_account`: AWS account ID (leave empty to use default from AWS profile). Not required if `aws_profile` is set.
 
 **Derived Values:**
-- `lambda_function_name`: Automatically set to `app_name + "-signaling"`
+- `lambda_function_name`: Set from `lambda_function_name` in config, or defaults to `app_name + "-signaling"`
 
 **Environment Variable Overrides:**
 You can override configuration values using environment variables:
 - `AWS_PROFILE` → overrides `aws_profile`
+- `WEBSOCKET_URL` → overrides `websocket_url`
+- `LAMBDA_FUNCTION_NAME` → overrides `lambda_function_name`
 - `AWS_REGION` → overrides `aws_region`
 - `AWS_ACCOUNT` → overrides `aws_account`
 
@@ -78,8 +85,14 @@ If you prefer to run steps manually:
    npx cdk deploy
    ```
 
-**Note the Outputs:**
-- `WebSocketConnectURL`: The `wss://...` URL for the client and server to connect.
+3. **Note the Outputs:**
+   - `WebSocketConnectURL`: The `wss://...` URL for the client and server to connect.
+   - Copy the WebSocket URL and Lambda function name to your `credentials.json`:
+     ```bash
+     # Example values from CDK output:
+     "websocket_url": "wss://waogll39kd.execute-api.us-east-1.amazonaws.com/prod",
+     "lambda_function_name": "genix-signaling-genixsignaling744441AF-MmLGyR5UQrPq"
+     ```
 
 ## 💻 Step 2: Run the Home Lab Server
 
@@ -89,28 +102,85 @@ The Home Lab server needs to connect to the WebSocket and have permission to upd
 
 1. Navigate to the project root directory (where `credentials.json` is located).
 
-2. Set the WebSocket URL environment variable (from your CDK output):
-   ```bash
-   export WS_URL="wss://your-api-id.execute-api.region.amazonaws.com/prod"
+2. The home lab server now automatically reads configuration from `credentials.json`. Make sure it includes:
+   ```json
+   "websocket_url": "wss://your-api-id.execute-api.region.amazonaws.com/prod",
+   "lambda_function_name": "genix-signaling-genixsignaling744441AF-MmLGyR5UQrPq"
    ```
 
-   **Note:** The lambda function name and AWS profile are now automatically read from `credentials.json`.
+   **Note:** After running `cdk deploy`, copy these values from the CDK output and add them to your `credentials.json`.
 
 3. Run the server:
    ```bash
    go run homelab_server/main.go
    ```
 
+### Option A: Run Manually
+
 The server will:
+- Load configuration from `credentials.json` (WebSocket URL, Lambda name, AWS profile)
 - Connect to the WebSocket.
 - Receive its `connectionID`.
-- Update the Lambda's `LAPTOP_ID` environment variable.
+- Update the Lambda's `LAPTOP_ID` environment variable using the configured Lambda function name.
 - Wait for incoming WebRTC "offer" signals.
+
+### Option B: Install as a Systemd Service
+
+For production use, you can install the server as a systemd service that runs automatically on boot:
+
+```bash
+cd homelab_server
+sudo go run main.go --install
+```
+
+The `--install` command will:
+- Build and compile the server binary
+- Install the binary to `/usr/local/bin/homelab-p2p-bridge`
+- Create a systemd service file at `/etc/systemd/system/homelab-p2p-bridge.service`
+- Enable and start the service
+
+**Service Features:**
+- Automatically start on system boot
+- Restart automatically if it crashes (5 second delay)
+- Log all output to systemd journal
+- Keep the computer connected to the AWS Lambda WebSocket
+
+**Manage the Service:**
+
+```bash
+# Check service status
+sudo systemctl status homelab-p2p-bridge
+
+# View logs
+sudo journalctl -u homelab-p2p-bridge -f
+
+# Stop the service
+sudo systemctl stop homelab-p2p-bridge
+
+# Restart the service
+sudo systemctl restart homelab-p2p-bridge
+```
+
+**Uninstall the Service:**
+
+To remove the service and binary:
+```bash
+cd homelab_server
+sudo go run main.go --uninstall
+```
+
+The `--uninstall` command will:
+- Stop the service if running
+- Disable the service
+- Remove the systemd service file
+- Reload systemd daemon
+- Remove the installed binary
+- Clean up systemd state
 
 ## 🌐 Step 3: Frontend Connection
 
 Your frontend (browser) should:
-1. Connect to the same `WS_URL`.
+1. Connect to the same WebSocket URL (from `credentials.json` or environment variable).
 2. Send an "offer" signal to the `laptop` target:
    ```json
    {
@@ -121,3 +191,74 @@ Your frontend (browser) should:
    ```
 3. The Lambda will forward this to the current `LAPTOP_ID`.
 4. The Home Lab server will respond with an "answer" via the Lambda back to the browser.
+
+## 🔧 Troubleshooting
+
+**Server fails to start:**
+- Check that `credentials.json` exists in the parent directory
+- Verify `WEBSOCKET_URL` is set correctly
+- Ensure AWS profile has permissions to update Lambda environment variables
+- Check systemd logs: `sudo journalctl -u homelab-p2p-bridge -n 50`
+
+**Service not connecting to WebSocket:**
+- Verify WebSocket URL is correct and accessible
+- Check AWS Lambda function exists and is deployed
+- Verify IAM permissions for the AWS profile
+
+**Permission denied when installing:**
+- The `--install` command must be run with `sudo` privileges
+- Ensure you have write access to `/usr/local/bin` and `/etc/systemd/system/`
+
+**Build fails:**
+- Ensure Go 1.21+ is installed
+- Check that `go.mod` exists in the project root
+- Run `go mod tidy` if dependencies are out of sync
+
+## 📝 Testing
+
+Run the test script to verify configuration and server setup:
+
+```bash
+./test-server.sh
+```
+
+This script will:
+- Verify Go installation
+- Check `credentials.json` exists
+- Validate configuration loading
+- Test server compilation
+- Verify install/uninstall flags
+
+## 🚀 Development Workflow
+
+**When modifying Lambda code:**
+```bash
+# Edit code
+vim signaling_lambda/main.go
+# Build and deploy
+./deploy.sh
+```
+
+**When modifying server code:**
+```bash
+# Edit code
+vim homelab_server/main.go
+# Test (no deployment needed)
+./test-server.sh
+# Run
+go run homelab_server/main.go
+```
+
+**When modifying infrastructure:**
+```bash
+# Edit code
+vim deploy/deploy.go
+# Deploy (Lambda rebuild not needed)
+cd deploy && npx cdk deploy
+```
+
+## 📚 Additional Documentation
+
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Detailed deployment guide
+- [IMPLEMENTATION.md](./IMPLEMENTATION.md) - Implementation details and architecture
+- [homelab_server/install/README.md](./homelab_server/install/README.md) - Systemd service installation documentation

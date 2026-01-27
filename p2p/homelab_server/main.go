@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"flag"
 	"log"
 	"net/url"
 	"os"
@@ -11,22 +11,48 @@ import (
 	"syscall"
 
 	awssdkconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v3"
 	"p2p_bridge/config"
-	"p2p_bridge/signal"
+	"p2p_bridge/homelab_server/install"
+	sigmsg "p2p_bridge/signal"
+)
+
+var (
+	installFlag   = flag.Bool("install", false, "Install the server as a systemd service and start it")
+	uninstallFlag = flag.Bool("uninstall", false, "Uninstall the systemd service and remove the binary")
 )
 
 func main() {
+	flag.Parse()
+
+	// Handle install command
+	if *installFlag {
+		if err := install.RunInstall(); err != nil {
+			log.Fatalf("Installation failed: %v", err)
+		}
+		log.Println("Installation completed successfully!")
+		log.Printf("Service status can be checked with: systemctl status %s", install.ServiceName)
+		return
+	}
+
+	// Handle uninstall command
+	if *uninstallFlag {
+		if err := install.RunUninstall(); err != nil {
+			log.Fatalf("Uninstallation failed: %v", err)
+		}
+		log.Println("Uninstallation completed successfully!")
+		return
+	}
+
+	// Normal operation
 	cfg := config.GetDefaultConfig()
-	wsURL := ""
-	lambdaName := cfg.GetLambdaFunctionName()
+	wsURL := cfg.WebSocketURL
 
 	if wsURL == "" {
-		log.Fatal("WS_URL environment variable is still required")
+		log.Fatal("WEBSOCKET_URL is required in credentials.json")
 	}
 
 	interrupt := make(chan os.Signal, 1)
@@ -49,8 +75,8 @@ func main() {
 				log.Println("read:", err)
 				return
 			}
-			
-			var msg signal.Msg
+
+			var msg sigmsg.Msg
 			json.Unmarshal(message, &msg)
 
 			switch msg.Action {
@@ -77,34 +103,41 @@ func main() {
 
 func updateLambdaConfig(cfg *config.Config, connectionID string) {
 	ctx := context.TODO()
-	awsCfg, _ := awssdkconfig.LoadDefaultConfig(ctx, func(o *awssdkconfig.LoadOptions) {
-		if cfg.AWSRegion != "" {
-			o.Region = cfg.AWSRegion
-		}
-		if cfg.AWSProfile != "" {
-			o.SharedConfigProfile = cfg.AWSProfile
-		}
+	awsCfg, err := awssdkconfig.LoadDefaultConfig(ctx)
+	if err != nil {
+		log.Printf("Failed to load AWS config: %v", err)
+		return
+	}
+
+	svc := lambda.NewFromConfig(awsCfg)
+
+	lambdaName := cfg.GetLambdaFunctionName()
+	res, err := svc.GetFunctionConfiguration(ctx, &lambda.GetFunctionConfigurationInput{
+		FunctionName: &lambdaName,
 	})
- 	svc := lambda.NewFromConfig(awsCfg)
- 	
- 	lambdaName := cfg.GetLambdaFunctionName()
- 	res, _ := svc.GetFunctionConfiguration(ctx, &lambda.GetFunctionConfigurationInput{
+	if err != nil {
+		log.Printf("Failed to get Lambda config: %v", err)
+		return
+	}
+
+	variables := res.Environment.Variables
+	variables["LAPTOP_ID"] = connectionID
+
+	_, err = svc.UpdateFunctionConfiguration(ctx, &lambda.UpdateFunctionConfigurationInput{
 		FunctionName: &lambdaName,
- 	})
- 
- 	variables := res.Environment.Variables
- 	variables["LAPTOP_ID"] = connectionID
- 
- 	svc.UpdateFunctionConfiguration(ctx, &lambda.UpdateFunctionConfigurationInput{
-		FunctionName: &lambdaName,
- 		Environment: &lambdaTypes.Environment{
- 			Variables: variables,
- 		},
- 	})
- 	log.Printf("Lambda updated with LAPTOP_ID: %s", connectionID)
+		Environment: &lambdaTypes.Environment{
+			Variables: variables,
+		},
+	})
+	if err != nil {
+		log.Printf("Failed to update Lambda config: %v", err)
+		return
+	}
+
+	log.Printf("Lambda updated with LAPTOP_ID: %s", connectionID)
 }
 
-func handleOffer(c *websocket.Conn, msg signal.Msg) {
+func handleOffer(c *websocket.Conn, msg sigmsg.Msg) {
 	pc, _ := webrtc.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}},
 	})
@@ -122,12 +155,12 @@ func handleOffer(c *websocket.Conn, msg signal.Msg) {
 
 	pc.SetRemoteDescription(offer)
 	answer, _ := pc.CreateAnswer(nil)
-	
+
 	gatherComplete := webrtc.GatheringCompletePromise(pc)
 	pc.SetLocalDescription(answer)
 	<-gatherComplete
 
-	resp := signal.Msg{
+	resp := sigmsg.Msg{
 		Action: "sendSignal",
 		To:     msg.From,
 		Data:   *pc.LocalDescription(),
