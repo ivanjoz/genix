@@ -19,4 +19,4 @@
 2. **Environment Limitations**: Acknowledge that you cannot access certain environments (e.g., the browser). In such cases, rely on the human-in-the-loop to provide log results and error details from those environments.
 
 ## File Operations and Safety
-1. **No Git Checkout for Restore**: NEVER use `git checkout` to restore a file. If you need to revert changes or preserve a state, create a manual backup of the file (e.g., `filename.ext.backup`) so it can be restored later without affecting the git index or other tracked changes.
+1. **No Git Checkout for Restore**: NEVER use `git checkout` to restore a file. If you need to revert changes or preserve a state, create a manual backup of the file (e.g., `filename.ext.backup`).

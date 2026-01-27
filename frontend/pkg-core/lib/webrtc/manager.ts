@@ -180,7 +180,7 @@ class WebRTCManager {
 			this.state.connecting = false;
 			this.notifyListeners();
 
-			if (!this.state.connected) {
+			if (!this.state.connected && !this.state.error) {
 				this.scheduleReconnect();
 			}
 		});

@@ -217,13 +217,13 @@ func handler(ctx context.Context, event events.APIGatewayWebsocketProxyRequest) 
 				}
 
 				logDebug("===== sendSignal Route Failed (Target Unavailable) =====")
-				return events.APIGatewayProxyResponse{StatusCode: 404}, fmt.Errorf("target connection not found")
+				return events.APIGatewayProxyResponse{StatusCode: 200}, nil
 			}
 
 			logError("Failed to post signal to target", err)
 			logDebug(fmt.Sprintf("PostToConnection result: %+v", result))
 			logDebug("===== sendSignal Route Failed (Unexpected Error) =====")
-			return events.APIGatewayProxyResponse{StatusCode: 500}, fmt.Errorf("failed to send signal: %w", err)
+			return events.APIGatewayProxyResponse{StatusCode: 200}, nil
 		}
 
 		logInfo("Signal sent successfully")

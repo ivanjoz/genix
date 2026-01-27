@@ -178,12 +178,19 @@ export class WSSWebRTC {
       // Check for error messages from the signaling server
       if (message.error === 'backend_unreachable') {
         console.warn('[WSSWebRTC] Backend unreachable:', message.message);
+
+        // Mark as manual close to prevent internal reconnection attempts
+        this.isManualClose = true;
+
+        // Emit error FIRST so listeners (like WebRTCManager) can set their error state
+        // before the 'close' event (triggered by destroy()) is handled.
+        this.emit('error', new Error(message.message || 'The target is not currently connected'));
+
         // Cleanup peer connection since target is not available
         if (this.peer) {
           this.peer.destroy();
           this.peer = null;
         }
-        this.emit('error', new Error(message.message || 'The target is not currently connected'));
         return;
       }
 
@@ -209,7 +216,7 @@ export class WSSWebRTC {
 
     // If connection closes immediately without opening (first attempt), backend is likely unavailable
     // Lambda returns HTTP 503 when homelab_server is not connected
-    if (this.reconnectAttempts === 0) {
+    if (!this.isManualClose && this.reconnectAttempts === 0) {
       console.error('[WSSWebRTC] Connection failed on first attempt - backend likely unavailable');
       this.isManualClose = true;
       this.emit('error', new Error('The target (homelab_server) is not currently connected. Please start the homelab_server to establish a WebRTC connection.'));

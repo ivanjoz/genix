@@ -258,6 +258,28 @@ cd deploy && npx cdk deploy
 - [homelab_server/install/README.md](./homelab_server/install/README.md) - Systemd service installation documentation
 - [TROUBLESHOOTING/connection-issues.md](./TROUBLESHOOTING/connection-issues.md) - Comprehensive connection issues troubleshooting guide
 
+## 💡 Common Issues & Fixes
+
+### WebSocket "Internal server error" (Messages not reaching Lambda)
+
+If the WebSocket connection established successfully (`$connect` works) but subsequent messages fail with a generic `{"message": "Internal server error"}`, it's likely a permission or routing issue at the API Gateway level.
+
+**Cause:**
+- The Lambda function lacks permission to be invoked by API Gateway for routes other than `$connect`.
+- The `$request.body.action` route selection expression might not match any route, and there is no `$default` route.
+
+**Solution:**
+1. **CDK Update (Recommended):** The deployment script has been updated to explicitly grant `lambda:InvokeFunction` for all routes and to include a `$default` route. Re-deploying with `cdk deploy` will apply these fixes.
+2. **Manual Fix (Immediate):** Grant permission to API Gateway to invoke the Lambda for all routes:
+   ```bash
+   aws lambda add-permission \
+     --function-name <your-lambda-function-name> \
+     --statement-id "AllowAllRoutes" \
+     --action "lambda:InvokeFunction" \
+     --principal "apigateway.amazonaws.com" \
+     --source-arn "arn:aws:execute-api:<region>:<account-id>:<api-id>/*"
+   ```
+
 ## 🆘 Connection Issues
 
 If you're experiencing connection problems such as:

@@ -55,6 +55,9 @@ func NewDeployStack(scope constructs.Construct, id string, props *DeployStackPro
 	webSocketApi.AddRoute(jsii.String("$disconnect"), &awscdkapigatewayv2alpha.WebSocketRouteOptions{
 		Integration: integration,
 	})
+	webSocketApi.AddRoute(jsii.String("$default"), &awscdkapigatewayv2alpha.WebSocketRouteOptions{
+		Integration: integration,
+	})
 	webSocketApi.AddRoute(jsii.String("sendSignal"), &awscdkapigatewayv2alpha.WebSocketRouteOptions{
 		Integration: integration,
 	})
@@ -63,6 +66,21 @@ func NewDeployStack(scope constructs.Construct, id string, props *DeployStackPro
 		WebSocketApi: webSocketApi,
 		StageName:    jsii.String("prod"),
 		AutoDeploy:   jsii.Bool(true),
+	})
+
+	// Enable logging for the stage
+	cfnStage := stage.Node().DefaultChild().(awscdkapigatewayv2alpha.CfnStage)
+	cfnStage.SetDefaultRouteSettings(&awscdkapigatewayv2alpha.CfnStage_RouteSettingsProperty{
+		DataTraceEnabled:       jsii.Bool(true),
+		DetailedMetricsEnabled: jsii.Bool(true),
+		LoggingLevel:           jsii.String("INFO"),
+	})
+
+	// Explicitly grant API Gateway permission to invoke the Lambda for all routes
+	signalingLambda.AddPermission(jsii.String("AllowApiGatewayInvoke"), &awslambda.Permission{
+		Principal: awsiam.NewServicePrincipal(jsii.String("apigateway.amazonaws.com"), nil),
+		Action:    jsii.String("lambda:InvokeFunction"),
+		SourceArn: jsii.String(fmt.Sprintf("arn:aws:execute-api:%s:%s:%s/*", *stack.Region(), *stack.Account(), *webSocketApi.ApiId())),
 	})
 
 	// Permissions for Lambda to post messages back to connections
