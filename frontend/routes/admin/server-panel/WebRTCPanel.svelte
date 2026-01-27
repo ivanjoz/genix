@@ -42,19 +42,41 @@
 	// Handle incoming messages
 	function handleIncomingMessage(message: any) {
 		const now = new Date();
-		
-		// Calculate ping latency
-		if (message.type === 'pong' && message.originalTimestamp) {
-			stats.pingLatency = now.getTime() - message.originalTimestamp;
+		let latency: number | null = null;
+
+		// Try to extract latency from message
+		if (message && typeof message === 'object') {
+			if (message.type === 'pong' && message.originalTimestamp) {
+				latency = now.getTime() - message.originalTimestamp;
+				stats.pingLatency = latency;
+			} else if (message.timestamp) {
+				latency = now.getTime() - message.timestamp;
+			}
 		}
+
+		// Handle "Echo: " prefix for text messages
+		if (typeof message === 'string' && message.startsWith('Echo: ')) {
+			try {
+				const jsonStr = message.substring(6);
+				const echoed = JSON.parse(jsonStr);
+				if (echoed.timestamp) {
+					latency = now.getTime() - echoed.timestamp;
+				}
+			} catch (e) {
+				// Not JSON or no timestamp
+			}
+		}
+
+		const msgType = typeof message === 'string' ? 'text' : (message?.type || 'unknown');
 
 		messages = [
 			{
 				id: messages.length + 1,
 				direction: 'received',
-				type: message.type || 'unknown',
+				type: msgType,
 				content: message,
-				timestamp: now
+				timestamp: now,
+				latency
 			},
 			...messages
 		].slice(0, 100); // Keep last 100 messages
@@ -64,17 +86,19 @@
 
 	// Send a test message
 	function sendTestMessage(type: string = testMessageType, content?: any) {
-		if (!webRTC.isConnected) {
+		if (!Core.webRTCConnected) {
 			console.warn('WebRTC not connected');
 			return;
 		}
 
 		const now = new Date();
-		const message = content || {
-			type,
+		const message = {
 			timestamp: now.getTime(),
-			message: customMessage || `Test ${type} message`,
-			testId: Math.random().toString(36).substr(2, 9)
+			...(content || {
+				type,
+				message: customMessage || `Test ${type} message`,
+				testId: Math.random().toString(36).substr(2, 9)
+			})
 		};
 
 		// Add to sent messages
@@ -84,7 +108,8 @@
 				direction: 'sent',
 				type,
 				content: message,
-				timestamp: now
+				timestamp: now,
+				latency: null
 			},
 			...messages
 		].slice(0, 100);
@@ -111,7 +136,7 @@
 	// Toggle auto-send
 	function toggleAutoSend() {
 		autoSendEnabled = !autoSendEnabled;
-		
+
 		if (autoSendEnabled) {
 			sendInterval = setInterval(() => {
 				sendTestMessage('auto_ping');
@@ -155,14 +180,14 @@
 
 	// Derived values
 	const statusColor = $derived.by(() => {
-		if (webRTC.isConnected) return 'text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400';
-		if (webRTC.isConnecting) return 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-400';
+		if (Core.webRTCConnected) return 'text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400';
+		if (Core.webRTCConnecting) return 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-400';
 		return 'text-red-600 bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400';
 	});
 
 	const connectionStatus = $derived.by(() => {
-		if (webRTC.isConnected) return 'Connected';
-		if (webRTC.isConnecting) return 'Connecting...';
+		if (Core.webRTCConnected) return 'Connected';
+		if (Core.webRTCConnecting) return 'Connecting...';
 		return 'Disconnected';
 	});
 
@@ -178,10 +203,10 @@
 				Test and debug P2P connection to home lab server
 			</p>
 		</div>
-		
+
 		<!-- Status Badge -->
 		<div class="flex items-center gap-2 px-4 py-2 rounded-lg border {statusColor}">
-			<div class="w-3 h-3 rounded-full {webRTC.isConnected ? 'bg-green-500' : webRTC.isConnecting ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'}"></div>
+			<div class="w-3 h-3 rounded-full {Core.webRTCConnected ? 'bg-green-500' : Core.webRTCConnecting ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'}"></div>
 			<span class="font-semibold">{connectionStatus}</span>
 		</div>
 	</div>
@@ -191,14 +216,14 @@
 		<div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
 			<h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3">Connection Actions</h3>
 			<div class="flex flex-wrap gap-2">
-				{#if !webRTC.isConnected && !webRTC.isConnecting}
+				{#if !Core.webRTCConnected && !Core.webRTCConnecting}
 					<button
 						onclick={reconnect}
 						class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
 					>
 						Connect
 					</button>
-				{:else if webRTC.isConnected}
+				{:else if Core.webRTCConnected}
 					<button
 						onclick={disconnect}
 						class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
@@ -206,14 +231,14 @@
 						Disconnect
 					</button>
 				{/if}
-				
+
 				<button
 					onclick={() => showAdvanced = !showAdvanced}
 					class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
 				>
 					{showAdvanced ? 'Hide' : 'Show'} Advanced
 				</button>
-				
+
 				<button
 					onclick={() => showMessages = !showMessages}
 					class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
@@ -242,11 +267,11 @@
 						</div>
 					</div>
 				{/if}
-				{#if bridgeInfo.reconnectAttempts > 0}
+				{#if Core.webRTCReconnectAttempts > 0}
 					<div>
 						<div class="text-gray-600 dark:text-gray-400">Reconnect Attempts</div>
 						<div class="font-mono font-semibold text-gray-900 dark:text-gray-100">
-							{bridgeInfo.reconnectAttempts}/5
+							{Core.webRTCReconnectAttempts}/5
 						</div>
 					</div>
 				{/if}
@@ -255,44 +280,44 @@
 	</div>
 
 	<!-- Send Message Controls -->
-	{#if webRTC.isConnected}
+	{#if Core.webRTCConnected}
 		<div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
 			<h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3">Send Test Messages</h3>
-			
+
 			<!-- Quick Actions -->
 			<div class="flex flex-wrap gap-2 mb-4">
 				<button
 					onclick={() => sendTestMessage('ping')}
 					class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
-					disabled={!webRTC.isConnected}
+					disabled={!Core.webRTCConnected}
 				>
 					Send Ping
 				</button>
-				
+
 				<button
 					onclick={() => sendTestMessage('hello', { type: 'hello', message: 'Hello from Genix!' })}
 					class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
-					disabled={!webRTC.isConnected}
+					disabled={!Core.webRTCConnected}
 				>
 					Send Hello
 				</button>
-				
+
 				<button
 					onclick={() => sendTestMessage('data_request', { type: 'data_request', resource: 'test' })}
 					class="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
-					disabled={!webRTC.isConnected}
+					disabled={!Core.webRTCConnected}
 				>
 					Request Data
 				</button>
-				
+
 				<button
 					onclick={() => toggleAutoSend()}
 					class="px-4 py-2 {autoSendEnabled ? 'bg-orange-500 hover:bg-orange-600' : 'bg-gray-500 hover:bg-gray-600'} text-white rounded-lg transition-colors"
-					disabled={!webRTC.isConnected}
+					disabled={!Core.webRTCConnected}
 				>
 					{autoSendEnabled ? 'Stop' : 'Start'} Auto Ping
 				</button>
-				
+
 				<button
 					onclick={clearMessages}
 					class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
@@ -313,15 +338,15 @@
 					<option value="custom">Custom</option>
 					<option value="json">JSON</option>
 				</select>
-				
+
 				<input
 					type="text"
 					bind:value={customMessage}
 					placeholder="Enter custom message or JSON"
 					class="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100"
-					disabled={!webRTC.isConnected}
+					disabled={!Core.webRTCConnected}
 				/>
-				
+
 				<button
 					onclick={() => {
 						if (testMessageType === 'json') {
@@ -331,7 +356,7 @@
 						}
 					}}
 					class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
-					disabled={!webRTC.isConnected}
+					disabled={!Core.webRTCConnected}
 				>
 					Send
 				</button>
@@ -343,7 +368,7 @@
 	{#if showAdvanced}
 		<div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
 			<h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3">Advanced Information</h3>
-			
+
 			<div class="space-y-3">
 				{#if webRTC.bridge}
 					<div>
@@ -361,7 +386,7 @@
 						</div>
 					</div>
 				{/if}
-				
+
 				{#if Core.webRTCError}
 					<div>
 						<div class="text-sm text-red-600 dark:text-red-400 mb-1">Last Error</div>
@@ -398,12 +423,12 @@
 					No messages yet. Send a test message to get started!
 				</div>
 			{:else}
-				<div class="space-y-2 max-h-96 overflow-y-auto">
+				<div class="space-y-2 max-h-450 overflow-y-auto">
 					{#each messages as msg}
-						<div class="flex gap-3 p-3 rounded-lg {msg.direction === 'sent' 
-							? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500' 
+						<div class="flex gap-3 p-3 rounded-lg {msg.direction === 'sent'
+							? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500'
 							: 'bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500'}">
-							<div class="flex-shrink-0">
+							<div class="flex-shrink">
 								<span class="text-2xl {msg.direction === 'sent' ? 'text-blue-500' : 'text-green-500'}">
 									{msg.direction === 'sent' ? '📤' : '📥'}
 								</span>
@@ -416,13 +441,18 @@
 									<span class="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
 										{msg.type}
 									</span>
+									{#if typeof msg.latency === 'number'}
+										<span class="text-xs font-mono font-semibold {msg.latency < 100 ? 'text-green-600' : 'text-yellow-600'}">
+											{msg.latency}ms
+										</span>
+									{/if}
 									<span class="text-xs text-gray-500 dark:text-gray-400 ml-auto">
 										{msg.timestamp.toLocaleTimeString()}
 									</span>
 								</div>
 								<div class="font-mono text-xs text-gray-800 dark:text-gray-200 break-all">
-									<pre class="whitespace-pre-wrap">{typeof msg.content === 'string' 
-										? msg.content 
+									<pre class="whitespace-pre-wrap">{typeof msg.content === 'string'
+										? msg.content
 										: JSON.stringify(msg.content, null, 2)}</pre>
 								</div>
 							</div>

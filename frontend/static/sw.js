@@ -248,9 +248,6 @@ var sendClientMessage = (clientID, content) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(event.request.url);
-  if (self._isLocal) {
-    return;
-  }
   if (url.pathname.startsWith("/store/")) {
     return;
   }
@@ -311,6 +308,9 @@ self.addEventListener("fetch", (event) => {
         headers: { "Content-Type": "application/json" }
       });
     })());
+    return;
+  }
+  if (self._isLocal) {
     return;
   } else if (url.searchParams.has("__cache__")) {
     const cacheParam = url.searchParams.get("__cache__") || "";

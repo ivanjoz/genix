@@ -34,10 +34,21 @@ func logTrace(message string) {
 	fmt.Printf("[TRACE] %s\n", message)
 }
 
+// CleanAndTruncate removes line breaks and caps the string at 200 characters.
+func CleanAndTruncate(input string) string {
+	replacer := strings.NewReplacer("\n", " ", "\r", "")
+	text := replacer.Replace(input)
+	runes := []rune(text)
+	if len(runes) > 200 {
+		return string(runes[:200]) + "..."
+	}
+	return text
+}
+
 func handler(ctx context.Context, event events.APIGatewayWebsocketProxyRequest) (events.APIGatewayProxyResponse, error) {
 	// Log entire event structure for debugging
 	eventJSON, _ := json.MarshalIndent(event, "", "  ")
-	logTrace(fmt.Sprintf("Full Event:\n%s", string(eventJSON)))
+	logTrace(fmt.Sprintf("Full Event Size:\n%v", CleanAndTruncate(string(eventJSON))))
 
 	connectionID := event.RequestContext.ConnectionID
 	routeKey := event.RequestContext.RouteKey
@@ -143,6 +154,27 @@ func handler(ctx context.Context, event events.APIGatewayWebsocketProxyRequest) 
 
 		// Set the sender
 		msg.From = connectionID
+
+		// Normalize Data and Signal fields
+		if msg.Data == nil && msg.Signal != nil {
+			msg.Data = msg.Signal
+		} else if msg.Signal == nil && msg.Data != nil {
+			msg.Signal = msg.Data
+		}
+
+		// Promote action if it's sendSignal and we have a signal type (WebRTC offer/answer/candidate)
+		if msg.Action == "sendSignal" && msg.Data != nil {
+			if dataMap, ok := msg.Data.(map[string]interface{}); ok {
+				if signalType, ok := dataMap["type"].(string); ok {
+					logInfo(fmt.Sprintf("Promoting action from 'sendSignal' to '%s'", signalType))
+					msg.Action = signalType
+				} else if _, ok := dataMap["candidate"]; ok {
+					logInfo("Promoting action from 'sendSignal' to 'candidate'")
+					msg.Action = "candidate"
+				}
+			}
+		}
+
 		logDebug(fmt.Sprintf("Message parsed - Action: %s", msg.Action))
 		logDebug(fmt.Sprintf("Message parsed - From: %s", msg.From))
 		logDebug(fmt.Sprintf("Message parsed - To: %s", msg.To))

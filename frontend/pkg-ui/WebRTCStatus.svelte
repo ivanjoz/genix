@@ -36,8 +36,8 @@
 
 	// Derived status
 	const status = $derived.by(() => {
-		if (webRTC.isConnected) return 'connected';
-		if (webRTC.isConnecting) return 'connecting';
+		if (Core.webRTCConnected) return 'connected';
+		if (Core.webRTCConnecting) return 'connecting';
 		return 'disconnected';
 	});
 
@@ -73,7 +73,7 @@
 
 	// Handle reconnect click
 	function handleReconnect() {
-		if (!webRTC.isConnected && !webRTC.isConnecting) {
+		if (!Core.webRTCConnected && !Core.webRTCConnecting) {
 			webRTC.reconnect();
 		}
 	}
@@ -153,16 +153,16 @@
 							{statusConfig.text}
 						</span>
 					</div>
-					
-					{#if webRTCManager.stateValue.reconnectAttempts > 0}
+
+					{#if Core.webRTCReconnectAttempts > 0}
 						<div class="flex justify-between">
 							<span class="text-gray-600 dark:text-gray-400">Reconnect attempts:</span>
 							<span class="font-medium text-gray-900 dark:text-gray-100">
-								{webRTCManager.stateValue.reconnectAttempts}/5
+								{Core.webRTCReconnectAttempts}/5
 							</span>
 						</div>
 					{/if}
-					
+
 					{#if Core.webRTCError}
 						<div class="flex flex-col gap-1">
 							<span class="text-gray-600 dark:text-gray-400">Error:</span>

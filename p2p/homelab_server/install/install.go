@@ -2,11 +2,15 @@
 package install
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -25,11 +29,45 @@ type InstallOptions struct {
 	WorkingDirectory string
 }
 
-// RunInstall performs the complete installation of the server as a systemd service
-func RunInstall() error {
-	log.Println("Starting installation of genix-bridge...")
+// calculateHash computes the SHA256 hash of a file
+func calculateHash(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
 
-	// Check if running as root (needed for installing to /usr/local/bin and creating systemd service)
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// getServiceHash extracts the hash from the systemd service file
+func getServiceHash() (string, error) {
+	servicePath := "/etc/systemd/system/" + ServiceName + ".service"
+	content, err := os.ReadFile(servicePath)
+	if err != nil {
+		return "", err
+	}
+
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "# Hash: ") {
+			return strings.TrimPrefix(line, "# Hash: "), nil
+		}
+	}
+
+	return "", nil
+}
+
+// RunInstall performs the complete installation or update of the server
+func RunInstall() error {
+	log.Println("Starting installation/update of genix-bridge...")
+
+	// Check if running as root
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("installation must be run with sudo privileges")
 	}
@@ -50,22 +88,59 @@ func RunInstall() error {
 		return fmt.Errorf("failed to build binary: %w", err)
 	}
 
-	// Step 2: Install the binary
-	log.Println("Step 2: Installing binary to", InstallPath)
+	// Step 2: Calculate hash of the new binary
+	newBinaryPath := filepath.Join(wd, BinaryName)
+	newHash, err := calculateHash(newBinaryPath)
+	if err != nil {
+		return fmt.Errorf("failed to calculate hash: %w", err)
+	}
+	log.Printf("Step 2: New binary hash: %s", newHash)
+
+	// Step 3: Check if already installed
+	servicePath := "/etc/systemd/system/" + ServiceName + ".service"
+	_, serviceErr := os.Stat(servicePath)
+	_, binaryErr := os.Stat(InstallPath)
+
+	isInstalled := serviceErr == nil && binaryErr == nil
+
+	if isInstalled {
+		log.Println("Step 3: Service is already installed. Checking for updates...")
+		currentHash, _ := getServiceHash()
+		log.Printf("Current installed hash: %s", currentHash)
+
+		if newHash == currentHash {
+			log.Println("Binary hash is identical. No update needed.")
+			return nil
+		}
+
+		log.Println("Binary hash is different. Updating...")
+	} else {
+		log.Println("Step 3: Service not installed. Performing fresh installation...")
+	}
+
+	// Step 4: Install the binary
+	log.Println("Step 4: Installing binary to", InstallPath)
 	if err := installBinary(); err != nil {
 		return fmt.Errorf("failed to install binary: %w", err)
 	}
 
-	// Step 3: Create systemd service
-	log.Println("Step 3: Creating systemd service...")
-	if err := createSystemdService(opts); err != nil {
+	// Step 5: Create/Update systemd service with hash
+	log.Println("Step 5: Configuring systemd service...")
+	if err := createSystemdService(opts, newHash); err != nil {
 		return fmt.Errorf("failed to create systemd service: %w", err)
 	}
 
-	// Step 4: Enable and start the service
-	log.Println("Step 4: Enabling and starting the service...")
-	if err := enableAndStartService(); err != nil {
-		return fmt.Errorf("failed to start service: %w", err)
+	// Step 6: Reload and Restart (or Enable and Start)
+	if isInstalled {
+		log.Println("Step 6: Reloading and restarting the service...")
+		if err := reloadAndRestartService(); err != nil {
+			return fmt.Errorf("failed to restart service: %w", err)
+		}
+	} else {
+		log.Println("Step 6: Enabling and starting the service...")
+		if err := enableAndStartService(); err != nil {
+			return fmt.Errorf("failed to start service: %w", err)
+		}
 	}
 
 	return nil
@@ -180,28 +255,36 @@ func installBinary() error {
 		return fmt.Errorf("failed to set executable permissions: %w", err)
 	}
 
+	// Restore SELinux context (common on Fedora/RHEL)
+	log.Println("Restoring SELinux context for", InstallPath)
+	if err := runCommand("restorecon", "-v", InstallPath); err != nil {
+		log.Printf("Warning: failed to restore SELinux context: %v", err)
+	}
+
 	log.Printf("Binary installed successfully to %s", InstallPath)
 	return nil
 }
 
 // createSystemdService creates the systemd service file
-func createSystemdService(opts InstallOptions) error {
+func createSystemdService(opts InstallOptions, hash string) error {
 	servicePath := "/etc/systemd/system/" + ServiceName + ".service"
 
-	// Check if service already exists
-	if _, err := os.Stat(servicePath); err == nil {
-		log.Printf("Service file already exists at %s", servicePath)
-		return nil
+	// Determine the user to run the service as
+	runAsUser := os.Getenv("SUDO_USER")
+	if runAsUser == "" {
+		runAsUser = "root"
 	}
+	log.Printf("Configuring service to run as user: %s", runAsUser)
 
 	// Create systemd service file content
-	serviceContent := fmt.Sprintf(`[Unit]
+	serviceContent := fmt.Sprintf(`# Hash: %s
+[Unit]
 Description=Home Lab P2P Bridge Server
 After=network.target
 
 [Service]
 Type=simple
-User=root
+User=%s
 WorkingDirectory=%s
 ExecStart=%s
 Restart=always
@@ -211,7 +294,7 @@ StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-`, opts.WorkingDirectory, InstallPath)
+`, hash, runAsUser, opts.WorkingDirectory, InstallPath)
 
 	// Write service file
 	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
@@ -237,6 +320,29 @@ func enableAndStartService() error {
 	// Start the service
 	if err := runCommand("systemctl", "start", ServiceName); err != nil {
 		return fmt.Errorf("failed to start service: %w", err)
+	}
+
+	// Wait a moment and check service status
+	if err := runCommand("sleep", "2"); err != nil {
+		return fmt.Errorf("sleep command failed: %w", err)
+	}
+
+	log.Println("\nService status:")
+	runCommand("systemctl", "status", ServiceName)
+
+	return nil
+}
+
+// reloadAndRestartService reloads the daemon and restarts the service
+func reloadAndRestartService() error {
+	// Reload systemd daemon
+	if err := runCommand("systemctl", "daemon-reload"); err != nil {
+		return fmt.Errorf("failed to reload systemd daemon: %w", err)
+	}
+
+	// Restart the service
+	if err := runCommand("systemctl", "restart", ServiceName); err != nil {
+		return fmt.Errorf("failed to restart service: %w", err)
 	}
 
 	// Wait a moment and check service status

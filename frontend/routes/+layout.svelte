@@ -74,6 +74,7 @@ import { initWebRTC, webRTCManager } from '$core/lib/webrtc/manager';
 				// Update Core state for UI access
 				Core.webRTCConnected = status.connected
 				Core.webRTCConnecting = status.connecting
+				Core.webRTCReconnectAttempts = status.reconnectAttempts
 				Core.webRTCError = status.error
 			})
 		}

@@ -155,96 +155,187 @@ self.addEventListener('fetch', (event) => {
   const request = event.request
   const url = new URL(event.request.url)
 
-  // In development mode, let the server handle all requests without service worker interference
-  // This prevents reload loops when using the proxy server setup
-  if (self._isLocal) {
-    return
-  }
+    //console.log("url recibida:",url, url.pathname)
 
-  //console.log("url recibida:",url, url.pathname)
+  
 
-  // Skip /store routes (handled by store app service worker)
-  if (url.pathname.startsWith('/store/')) {
-    return;
-  }
+    // Skip /store routes (handled by store app service worker)
 
-  // Skip requests with X-App-Scope: store header (proxied store requests)
-  if (request.headers.get('X-App-Scope') === 'store') {
-    return;
-  }
+    if (url.pathname.startsWith('/store/')) {
 
-  if (url.pathname === "/_sw_") {
-    event.respondWith((async () => {
-      // 3. Parse incoming data (from URL params or request body)
-      const accion = parseInt(url.searchParams.get('accion') || "0")
-      const reqID = parseInt(url.searchParams.get('req') || "0")
-      const enviroment = url.searchParams.get('env') || "main"
+      return;
 
-      if (!clientIDsMap.has(event.clientId)) {
-        clientIDsMap.set(event.clientId, clientIDsMap.size + 1)
-      }
-      const clientID = clientIDsMap.get(event.clientId) || 0
+    }
 
-      const clientReqID = reqID * 1000 + clientID
-      const usedReqTime = usedRequestIDs.get(clientReqID) || 0
-      if (usedReqTime && (Date.now() - usedReqTime) < 1000) {
-        const haceMs = Date.now() - usedReqTime
-        console.log("El id ", reqID, " está duplicado. | Client:", event.clientId, "| Hace:", haceMs, "ms")
-        return new Response(JSON.stringify({ "Error": "ReqID Duplicado." }), {
-          headers: { 'Content-Type': 'application/json' }
+  
+
+    // Skip requests with X-App-Scope: store header (proxied store requests)
+
+    if (request.headers.get('X-App-Scope') === 'store') {
+
+      return;
+
+    }
+
+  
+
+    if (url.pathname === "/_sw_") {
+
+      event.respondWith((async () => {
+
+        // 3. Parse incoming data (from URL params or request body)
+
+        const accion = parseInt(url.searchParams.get('accion') || "0")
+
+        const reqID = parseInt(url.searchParams.get('req') || "0")
+
+        const enviroment = url.searchParams.get('env') || "main"
+
+  
+
+        if (!clientIDsMap.has(event.clientId)) {
+
+          clientIDsMap.set(event.clientId, clientIDsMap.size + 1)
+
+        }
+
+        const clientID = clientIDsMap.get(event.clientId) || 0
+
+  
+
+        const clientReqID = reqID * 1000 + clientID
+
+        const usedReqTime = usedRequestIDs.get(clientReqID) || 0
+
+        if (usedReqTime && (Date.now() - usedReqTime) < 1000) {
+
+          const haceMs = Date.now() - usedReqTime
+
+          console.log("El id ", reqID, " está duplicado. | Client:", event.clientId, "| Hace:", haceMs, "ms")
+
+          return new Response(JSON.stringify({ "Error": "ReqID Duplicado." }), {
+
+            headers: { 'Content-Type': 'application/json' }
+
+          })
+
+        }
+
+        usedRequestIDs.set(reqID, Date.now())
+
+  
+
+  
+
+        const client = await self.clients.get(event.clientId)
+
+        if (!client) {
+
+          console.warn(`No se encontró el client con ID ${event.clientId}`)
+
+          const msg = { error: `No se encontró el client con ID ${event.clientId}` }
+
+          return new Response(JSON.stringify(msg), {
+
+            headers: { 'Content-Type': 'application/json' }
+
+          })
+
+        }
+
+  
+
+        sendHandlers.set(clientID, (content: any) => {
+
+          client.postMessage(content)
+
         })
-      }
-      usedRequestIDs.set(reqID, Date.now())
 
+  
 
-      const client = await self.clients.get(event.clientId)
-      if (!client) {
-        console.warn(`No se encontró el client con ID ${event.clientId}`)
-        const msg = { error: `No se encontró el client con ID ${event.clientId}` }
-        return new Response(JSON.stringify(msg), {
+        const handler = HandlersMap.get(accion)
+
+        if (!handler) {
+
+          console.warn(`No se encontró el handler para la acción ${accion}`)
+
+          const msg = { error: `No se encontró el handler para la acción ${accion}` }
+
+          return new Response(JSON.stringify(msg), {
+
+            headers: { 'Content-Type': 'application/json' }
+
+          })
+
+        }
+
+  
+
+        // You MUST clone the request if you intend to read its body
+
+        // AND then potentially pass the original request on to fetch() later.
+
+        // Reading the body consumes the stream.
+
+        const requestClone = event.request.clone()
+
+        const content = await requestClone.json()
+
+  
+
+        content.__enviroment__ = enviroment
+
+        content.__client__ = clientID
+
+  
+
+        const response = await handler(content)
+
+        const message = { ...response, __response__: accion, __req__: reqID }
+
+        let info = ""
+
+        if (accion === 3) {
+
+          info = [content.route, content.cacheMode, reqID].join(" | ")
+
+        }
+
+        // console.log("Respuesta a enviar:", info, response)
+
+        client.postMessage(message)
+
+  
+
+        // 5. Respond to the fetch request
+
+        console.log(`Respondiendo Fetch (${info}):`, (parseObject(message)))
+
+        return new Response(JSON.stringify({ "ok": 1 }), {
+
           headers: { 'Content-Type': 'application/json' }
-        })
-      }
 
-      sendHandlers.set(clientID, (content: any) => {
-        client.postMessage(content)
-      })
+        });
 
-      const handler = HandlersMap.get(accion)
-      if (!handler) {
-        console.warn(`No se encontró el handler para la acción ${accion}`)
-        const msg = { error: `No se encontró el handler para la acción ${accion}` }
-        return new Response(JSON.stringify(msg), {
-          headers: { 'Content-Type': 'application/json' }
-        })
-      }
+      })())
 
-      // You MUST clone the request if you intend to read its body
-      // AND then potentially pass the original request on to fetch() later.
-      // Reading the body consumes the stream.
-      const requestClone = event.request.clone()
-      const content = await requestClone.json()
+      return
 
-      content.__enviroment__ = enviroment
-      content.__client__ = clientID
+    }
 
-      const response = await handler(content)
-      const message = { ...response, __response__: accion, __req__: reqID }
-      let info = ""
-      if (accion === 3) {
-        info = [content.route, content.cacheMode, reqID].join(" | ")
-      }
-      // console.log("Respuesta a enviar:", info, response)
-      client.postMessage(message)
+  
 
-      // 5. Respond to the fetch request
-      console.log(`Respondiendo Fetch (${info}):`, (parseObject(message)))
-      return new Response(JSON.stringify({ "ok": 1 }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-    })())
-    return
-  } else if (url.searchParams.has("__cache__")) {
+    // In development mode, let the server handle all requests without service worker interference
+
+    // This prevents reload loops when using the proxy server setup
+
+    if (self._isLocal) {
+
+      return
+
+    }
+
+   else if (url.searchParams.has("__cache__")) {
     const cacheParam = url.searchParams.get('__cache__') || "";
     const [cacheTimeMinutes_, cacheVersion_, enviroment] = cacheParam.split('.')
     const cacheTimeMinutes = parseInt(cacheTimeMinutes_)

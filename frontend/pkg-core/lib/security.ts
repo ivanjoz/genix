@@ -39,7 +39,7 @@ export const getToken = (noError?: boolean) => {
   const nowTime = Math.floor(Date.now()/1000)
 
   if (!userToken) {
-    console.error('No se encontró la data del usuario. ¿Está logeado?:',Env.appId)
+    if(!noError){ console.error('No se encontró la data del usuario. ¿Está logeado?:', Env.appId) }
     return ""
   }
   else if (!expTime || nowTime > expTime) {

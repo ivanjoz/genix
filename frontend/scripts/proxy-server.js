@@ -67,6 +67,7 @@ storeProxy.on('proxyErrorWs', (err, req, socket) => {
 // Create main HTTP server
 const server = http.createServer((req, res) => {
   const isStore = req.url.startsWith('/store');
+  const isServiceWorkerComm = req.url.startsWith('/_sw_');
   
   if (isStore) {
     // Remove /store prefix before proxying to store app
@@ -74,6 +75,11 @@ const server = http.createServer((req, res) => {
     req.url = req.url.replace(/^\/store/, '');
     console.log(`[HTTP] ${originalUrl} → Store (${req.url})`);
     storeProxy.web(req, res);
+  } else if (isServiceWorkerComm) {
+    // Handle Service Worker communication requests locally to avoid 404s in Main
+    console.log(`[HTTP] ${req.url} → Handled by Proxy (SW communication)`);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: 1 }));
   } else {
     console.log(`[HTTP] ${req.url} → Main`);
     mainProxy.web(req, res);

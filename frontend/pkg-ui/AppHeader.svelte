@@ -2,7 +2,7 @@
 import { Core, fetchOnCourse } from '$core/store.svelte';
 import ButtonLayer from '$components/ButtonLayer.svelte';
 import HeaderConfig from '$ui/HeaderConfig.svelte';
-import WebRTCStatus from '$components/WebRTCStatus.svelte';
+import WebRTCStatus from '$ui/WebRTCStatus.svelte';
 
 	// Props
 	const {

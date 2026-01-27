@@ -106,7 +106,7 @@ func PopulateVariables() {
 	fmt.Println("Credenciales .json Parseadas:: ")
 
 	if len(Env.DYNAMO_TABLE) == 0 {
-		Env.DYNAMO_TABLE = Env.STACK_NAME + "-db"
+		Env.DYNAMO_TABLE = Env.STACK_NAME + "_db"
 	}
 	if len(Env.API_ROUTE) == 0 {
 		Env.API_ROUTE = "http://localhost:3589"

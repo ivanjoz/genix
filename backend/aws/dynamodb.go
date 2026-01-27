@@ -351,6 +351,7 @@ func (e DynamoTableRecords[T]) QueryBatch(querys []DynamoQueryParam) ([]T, error
 
 			output, err := client.Query(context.TODO(), &queryInput)
 			if err != nil {
+				core.Print(queryInput)
 				core.Log("Error al ejecutar la DynamoDB")
 				panic(err)
 			}

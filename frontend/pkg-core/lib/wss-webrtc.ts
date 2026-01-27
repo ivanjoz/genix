@@ -9,6 +9,25 @@ export interface SignalData {
   sdpMid?: string;
 }
 
+/**
+ * Standard application message structure for P2P communication
+ */
+export interface AppMessage {
+  accion: string;
+  id: string | number;
+  body?: any;
+}
+
+/**
+ * Standard application response structure
+ */
+export interface AppResponse {
+  accion: string;
+  id: string | number;
+  body?: any;
+  error?: string;
+}
+
 export interface PeerInstance {
   connected: boolean;
   send(data: any): void;
@@ -68,6 +87,7 @@ export class WSSWebRTC {
   private peer: PeerInstance | null = null;
   private config: Required<WSSWebRTCConfig>;
   private eventListeners: Partial<BridgeEvents> = {};
+  private pendingRequests: Map<string | number, { resolve: (val: any) => void, reject: (err: Error) => void, timeout: any }> = new Map();
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
   private reconnectDelay: number = 3000;
@@ -98,6 +118,30 @@ export class WSSWebRTC {
    */
   off<K extends keyof BridgeEvents>(event: K): void {
     delete this.eventListeners[event];
+  }
+
+  /**
+   * Send a structured request and wait for a response
+   */
+  async request<T = any>(accion: string, body: any = {}, id?: string | number): Promise<T> {
+    if (!this.peer?.connected) {
+      throw new Error('P2P connection not established');
+    }
+
+    const requestId = id || Math.random().toString(36).substring(2, 11);
+    const message: AppMessage = { accion, id: requestId, body };
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        if (this.pendingRequests.has(requestId)) {
+          this.pendingRequests.delete(requestId);
+          reject(new Error(`Request timeout: ${accion}`));
+        }
+      }, 10000); // 10 second timeout for app requests
+
+      this.pendingRequests.set(requestId, { resolve, reject, timeout });
+      this.send(JSON.stringify(message));
+    });
   }
 
   /**
@@ -186,17 +230,17 @@ export class WSSWebRTC {
         // before the 'close' event (triggered by destroy()) is handled.
         this.emit('error', new Error(message.message || 'The target is not currently connected'));
 
-        // Cleanup peer connection since target is not available
-        if (this.peer) {
-          this.peer.destroy();
-          this.peer = null;
-        }
+        this.cleanup();
         return;
       }
 
-      if (message.signal) {
+      const signal = message.signal || message.data;
+      if (signal && (signal.type || signal.candidate)) {
         console.log('[WSSWebRTC] Received signal from signaling server');
-        this.handleSignal(message.signal);
+        this.handleSignal(signal);
+      } else if (message.action === 'connected' || message.action === 'ping') {
+        // Ignore internal signaling messages
+        console.log('[WSSWebRTC] Received control message:', message.action);
       } else {
         console.warn('[WSSWebRTC] Unknown message format:', message);
       }
@@ -284,7 +328,8 @@ export class WSSWebRTC {
     const message = {
       action: 'sendSignal',
       to: this.config.targetId,
-      signal: data
+      signal: data,
+      data: data // Include both for backward/forward compatibility
     };
 
     if (this.ws?.readyState === WebSocket.OPEN) {
@@ -303,7 +348,7 @@ export class WSSWebRTC {
       return;
     }
 
-    console.log('[WSSWebRTC] Applying signal to peer:', signal.type);
+    console.log('[WSSWebRTC] Applying signal to peer:', signal.type || 'candidate');
     this.peer.signal(signal);
   }
 
@@ -338,13 +383,46 @@ export class WSSWebRTC {
    */
   private handlePeerData(data: unknown): void {
     console.log('[WSSWebRTC] Received data:', data);
-    this.emit('data', data);
+
+    let decodedData = data;
+    if (data && typeof data === 'object') {
+      const d = data as any;
+      if (d.type === 'Buffer' && Array.isArray(d.data)) {
+        decodedData = new TextDecoder().decode(Uint8Array.from(d.data));
+      }
+    }
+
+    // Try to parse as AppResponse
+    if (typeof decodedData === 'string' || decodedData instanceof Uint8Array) {
+      try {
+        const text = typeof decodedData === 'string' ? decodedData : new TextDecoder().decode(decodedData);
+        const parsed = JSON.parse(text) as AppResponse;
+
+        if (parsed.id && this.pendingRequests.has(parsed.id)) {
+          const { resolve, reject, timeout } = this.pendingRequests.get(parsed.id)!;
+          clearTimeout(timeout);
+          this.pendingRequests.delete(parsed.id);
+
+          if (parsed.error) {
+            reject(new Error(parsed.error));
+          } else {
+            resolve(parsed.body);
+          }
+          return; // Handled as a request/response
+        }
+      } catch (e) {
+        // Not a JSON message or not an AppResponse, continue to emit 'data'
+      }
+    }
+
+    this.emit('data', decodedData);
   }
 
   /**
    * Cleanup resources
    */
   private cleanup(): void {
+    this.isManualClose = true; // Prevent handleWsClose from emitting redundant errors
     if (this.peer) {
       this.peer.destroy();
       this.peer = null;

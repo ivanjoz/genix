@@ -206,7 +206,30 @@ class WebRTCManager {
 	 */
 	private handleIncomingData(data: unknown): void {
 		try {
-			const message = typeof data === 'string' ? JSON.parse(data) : data;
+			let message: any = data;
+			
+			// Handle Buffer/Uint8Array data
+			if (data && typeof data === 'object') {
+				const d = data as any;
+				// SimplePeer Buffer polyfill often serializes to {type: 'Buffer', data: [...]}
+				if (d.type === 'Buffer' && Array.isArray(d.data)) {
+					message = new TextDecoder().decode(Uint8Array.from(d.data));
+				} else if (data instanceof Uint8Array) {
+					message = new TextDecoder().decode(data);
+				} else if (data instanceof ArrayBuffer) {
+					message = new TextDecoder().decode(new Uint8Array(data));
+				}
+			}
+
+			// Try to parse as JSON if it's a string
+			if (typeof message === 'string') {
+				try {
+					message = JSON.parse(message);
+				} catch (e) {
+					// Keep as string if not valid JSON
+				}
+			}
+
 			console.log('[WebRTCManager] 📥 Received message:', message);
 
 			// Emit to message listeners

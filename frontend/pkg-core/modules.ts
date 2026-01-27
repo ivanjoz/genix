@@ -25,10 +25,10 @@ export const AdminModule: IModule = {
     cajas: "ID",
     // Scylla
     productos: "ID",
-    sedes_almacenes: '[_pk+ID]',  
+    sedes_almacenes: '[_pk+ID]',
     productos_stock: '[AlmacenID+ID]',
     listas_compartidas: '[pk+ID]',
-    pais_ciudades: '[PaisID+ID]', 
+    pais_ciudades: '[PaisID+ID]',
     galeria_images: 'Image'
   },
   menus: [
@@ -39,10 +39,12 @@ export const AdminModule: IModule = {
         { name: "Parámetros", route: "/admin/parametros", icon: "icon-cog",
         },
         { name: "Usuarios", route: "/admin/usuarios", icon: "icon-adult",
-        },
+				},
         { name: "Perfiles & Accesos", route: "/admin/perfiles-accesos",
           icon: "icon-shield",
-        },
+				},
+				{ name: "Server Panel", route: "/admin/server-panel", icon: "icon-shield" }
+				,
         { name: "Backups", route: "/admin/backups", icon: "icon-database"
         },
       ]
@@ -67,14 +69,14 @@ export const AdminModule: IModule = {
         { name: "Cajas Movimientos", route: "/operaciones/cajas-movimientos",
           icon: "icon-exchange"
         },
-      ]  
+      ]
     },
     { name: "Comercial", minName: "Com",  id: 3, icon: "icon-tasks",
       options: [
         { name: "Ventas", route: "/operaciones/ventas",
           icon: "icon-flash"
         },
-      ]  
+      ]
     },
     { name: "UI Components", minName: "UIC",  id: 4, icon: "icon-buffer",
       options: [
@@ -100,8 +102,8 @@ export const AdminModule: IModule = {
         { name: "Producto", route: "/cms/page-4"
         },
         { name: "Carrito Compra", route: "/cms/page-5"
-        }, 
-      ]  
+        },
+      ]
     },
     { name: "Reportes", minName: "Rep",  id: 6, icon: "icon-tasks",
       options: [
@@ -130,7 +132,7 @@ export const ComercialModule: IModule = {
         },
         { name: "Almacenes",
         },
-      ]  
+      ]
     },
     { name: "Página Web", minName: "PGW",  id: 3, icon: "icon-buffer",
       options: [
@@ -143,8 +145,8 @@ export const ComercialModule: IModule = {
         { name: "Producto", route: "/cms/webpage/4"
         },
         { name: "Carrito Compra", route: "/cms/webpage/5"
-        }, 
-      ]  
+        },
+      ]
     },
   ]
 }
