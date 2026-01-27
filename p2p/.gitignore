@@ -1,0 +1,43 @@
+# Credentials and configuration
+credentials.json
+
+# Lambda bootstrap binary
+signaling_lambda/bootstrap
+
+# Build outputs
+bin/
+build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# CDK outputs
+cdk.out/
+.cdk.staging/
+.cdk.cache/
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test coverage
+*.coverprofile
+coverage.html
+
+# Environment files
+.env
+.env.local

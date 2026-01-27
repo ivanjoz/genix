@@ -6,6 +6,9 @@ import angleSvg from '$core/assets/angle.svg?raw';
   interface Props {
     /** Button text or content */
     buttonText?: string;
+    useBig?: boolean;
+    buttonClass?: string;
+    layerClass?: string;
     /** Custom class for the outer wrapper */
     wrapperClass?: string;
     /** Horizontal offset added to the calculated left position */
@@ -26,7 +29,6 @@ import angleSvg from '$core/assets/angle.svg?raw';
     onClose?: () => void;
     /** css of the content */
     contentCss?: string;
-    useBig?: boolean;
   }
 
   let {

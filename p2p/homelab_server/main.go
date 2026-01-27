@@ -10,20 +10,23 @@ import (
 	"os/signal"
 	"syscall"
 
+	awssdkconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v3"
+	"p2p_bridge/config"
 	"p2p_bridge/signal"
 )
 
 func main() {
-	wsURL := os.Getenv("WS_URL")
-	lambdaName := os.Getenv("LAMBDA_NAME")
+	cfg := config.GetDefaultConfig()
+	wsURL := ""
+	lambdaName := cfg.GetLambdaFunctionName()
 
-	if wsURL == "" || lambdaName == "" {
-		log.Fatal("WS_URL and LAMBDA_NAME environment variables are required")
+	if wsURL == "" {
+		log.Fatal("WS_URL environment variable is still required")
 	}
 
 	interrupt := make(chan os.Signal, 1)
@@ -54,7 +57,7 @@ func main() {
 			case "connected":
 				connID := msg.Data.(string)
 				log.Printf("Connected! ID: %s", connID)
-				updateLambdaConfig(lambdaName, connID)
+				updateLambdaConfig(cfg, connID)
 			case "offer":
 				handleOffer(c, msg)
 			}
@@ -72,25 +75,33 @@ func main() {
 	}
 }
 
-func updateLambdaConfig(functionName, connectionID string) {
+func updateLambdaConfig(cfg *config.Config, connectionID string) {
 	ctx := context.TODO()
-	cfg, _ := config.LoadDefaultConfig(ctx)
-	svc := lambda.NewFromConfig(cfg)
-	
-	res, _ := svc.GetFunctionConfiguration(ctx, &lambda.GetFunctionConfigurationInput{
-		FunctionName: &functionName,
+	awsCfg, _ := awssdkconfig.LoadDefaultConfig(ctx, func(o *awssdkconfig.LoadOptions) {
+		if cfg.AWSRegion != "" {
+			o.Region = cfg.AWSRegion
+		}
+		if cfg.AWSProfile != "" {
+			o.SharedConfigProfile = cfg.AWSProfile
+		}
 	})
-
-	variables := res.Environment.Variables
-	variables["LAPTOP_ID"] = connectionID
-
-	svc.UpdateFunctionConfiguration(ctx, &lambda.UpdateFunctionConfigurationInput{
-		FunctionName: &functionName,
-		Environment: &lambdaTypes.Environment{
-			Variables: variables,
-		},
-	})
-	log.Printf("Lambda updated with LAPTOP_ID: %s", connectionID)
+ 	svc := lambda.NewFromConfig(awsCfg)
+ 	
+ 	lambdaName := cfg.GetLambdaFunctionName()
+ 	res, _ := svc.GetFunctionConfiguration(ctx, &lambda.GetFunctionConfigurationInput{
+		FunctionName: &lambdaName,
+ 	})
+ 
+ 	variables := res.Environment.Variables
+ 	variables["LAPTOP_ID"] = connectionID
+ 
+ 	svc.UpdateFunctionConfiguration(ctx, &lambda.UpdateFunctionConfigurationInput{
+		FunctionName: &lambdaName,
+ 		Environment: &lambdaTypes.Environment{
+ 			Variables: variables,
+ 		},
+ 	})
+ 	log.Printf("Lambda updated with LAPTOP_ID: %s", connectionID)
 }
 
 func handleOffer(c *websocket.Conn, msg signal.Msg) {

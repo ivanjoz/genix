@@ -21,9 +21,80 @@ import { Core } from '$core/store.svelte';
 import { Ecommerce } from '$store/stores/globals.svelte'
 
 import ButtonLayer from '$components/ButtonLayer.svelte';
+import { Env } from '$core/env';
 
   let userForm = {} as any
   let isOpen = $state(false);
+
+  const total = $derived(
+    Array.from(ProductsSelectedMap.values()).reduce((acc, curr) => {
+      const price = curr.producto.PrecioFinal || curr.producto.Precio || 0;
+      return acc + (price * curr.cant);
+    }, 0)
+  );
+
+  async function loadCulqi() {
+    if ((window as any).CulqiCheckout) return (window as any).CulqiCheckout;
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://js.culqi.com/checkout-js';
+      script.async = true;
+      script.onload = () => {
+        resolve((window as any).CulqiCheckout);
+      };
+      document.body.appendChild(script);
+    });
+  }
+
+  async function pagarConCulqi() {
+    const CulqiCheckout = await loadCulqi();
+
+    const settings = {
+      title: Env.empresa.Nombre || 'Genix Store',
+      currency: 'PEN',
+      amount: Math.round(total * 100),
+    };
+
+    const client = {
+      email: userForm.email || '',
+    };
+
+    const options = {
+      lang: 'auto',
+      modal: true,
+      paymentMethods: {
+        tarjeta: true,
+        yape: true,
+        billetera: true,
+        bancaMovil: true,
+        agente: true,
+        cuotealo: true,
+      }
+    };
+
+    const config = { settings, client, options };
+    const publicKey = Env.empresa.CulqiLlave || 'pk_test_...';
+
+    const Culqi = new (CulqiCheckout as any)(publicKey, config);
+
+    (window as any).culqi = () => {
+      if (Culqi.token) {
+        console.log('Token created:', Culqi.token.id);
+        // Here you would send the token to your server
+        Culqi.close();
+        Ecommerce.cartOption = 4;
+      } else if (Culqi.order) {
+        console.log('Order created:', Culqi.order);
+        Culqi.close();
+        Ecommerce.cartOption = 4;
+      } else {
+        console.error('Error:', Culqi.error);
+        alert("Error en el pago: " + (Culqi.error?.user_message || "Desconocido"));
+      }
+    };
+
+    Culqi.open();
+  }
 
   function toggleCartDiv() {
     layerOpenedState.id = layerOpenedState.id === id ? 0 : id;
@@ -31,6 +102,9 @@ import ButtonLayer from '$components/ButtonLayer.svelte';
 
   $effect(() => {
     isOpen = layerOpenedState.id === id;
+    if (isOpen) {
+      Env.loadEmpresaConfig();
+    }
   });
 
   $effect(() => {
@@ -88,6 +162,39 @@ import ButtonLayer from '$components/ButtonLayer.svelte';
           <Input label="Referencia" css="col-span-6" saveOn={userForm} save="referencia" />
         </div>
       {/if}
+      {#if Ecommerce.cartOption === 3}
+        <div class="mt-8">
+          <div class="fs18 ff-bold mb-4">Total a pagar: S/ {total.toFixed(2)}</div>
+          <button
+            class="bg-blue-600 text-white px-6 py-3 rounded-lg w-full ff-bold hover:bg-blue-700 transition-all cursor-pointer shadow-md active:scale-[0.98]"
+            onclick={pagarConCulqi}
+          >
+            Pagar con Culqi
+          </button>
+          <div class="mt-4 text-center text-gray-500 text-sm">
+            Pago seguro procesado por Culqi
+          </div>
+        </div>
+      {/if}
+      {#if Ecommerce.cartOption === 4}
+        <div class="mt-12 text-center">
+          <i class="icon-ok text-green-500 text-[64px] mb-4"></i>
+          <div class="fs24 ff-bold mb-2">¡Gracias por tu compra!</div>
+          <p class="text-gray-600 mb-8">
+            Tu pedido ha sido procesado exitosamente. Recibirás un correo de confirmación a la brevedad.
+          </p>
+          <button
+            class="bg-gray-800 text-white px-8 py-3 rounded-lg ff-bold hover:bg-black transition-all cursor-pointer"
+            onclick={() => {
+              ProductsSelectedMap.clear();
+              Ecommerce.cartOption = 1;
+              layerOpenedState.id = 0;
+            }}
+          >
+            Volver a la tienda
+          </button>
+        </div>
+      {/if}
     </div>
   </div>
 {/snippet}
@@ -98,7 +205,7 @@ import ButtonLayer from '$components/ButtonLayer.svelte';
       wrapperClass="w-full h-full"
       buttonClass="w-full h-full"
       horizontalOffset={-200}
-      edgeMargin={40}
+      edgeMargin={32}
       layerClass="w-768! max-w-[82vw]! rounded-[11px]!" useBig>
       {#snippet button(open)}
         <button class={["bn1 w-full", open ? s1.button_menu_top : ""].join(" ")}>

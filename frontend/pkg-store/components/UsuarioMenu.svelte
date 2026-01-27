@@ -24,10 +24,11 @@
   });
 </script>
 
-<div class="hidden md:block w-120">
+<div class="hidden md:block w-120 relative h-full">
   <ButtonLayer bind:isOpen={isOpen}
     wrapperClass="w-full h-full"
     buttonClass="w-full h-full"
+    edgeMargin={32}
     useBig layerClass="w-300!">
     {#snippet button(open)}
       <button class={["bn1 w-full", open ? s1.button_menu_top : ""].join(" ")}>

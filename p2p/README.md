@@ -7,6 +7,7 @@ This project implements a serverless signaling bridge for WebRTC connections bet
 - `signaling_lambda/`: Go source for the AWS Lambda function.
 - `homelab_server/`: Go source for the local server that establishes the P2P link.
 - `signal/`: Shared Go types for signaling messages.
+- `config/`: Configuration package for reading credentials.json.
 - `deploy/`: AWS CDK project for infrastructure deployment.
 
 ## Prerequisites
@@ -14,43 +15,86 @@ This project implements a serverless signaling bridge for WebRTC connections bet
 - **Go 1.21+**
 - **Node.js & npm**
 - **AWS CLI** configured with appropriate permissions.
-- **Docker** (required by CDK for building the Go Lambda in a Linux environment).
+
+
+## Configuration
+
+All configuration is centralized in `credentials.json` in the project root. Create this file with your settings:
+
+```json
+{
+  "aws_profile": "default",
+  "app_name": "p2p-bridge",
+  "signaling_app_name": "",
+  "stack_name": "",
+  "aws_region": "us-east-1",
+  "aws_account": ""
+}
+```
+
+**Configuration Fields:**
+- `aws_profile`: AWS profile name (as configured in ~/.aws/credentials). Case-insensitive. If not set, uses default AWS profile.
+- `app_name`: **Required.** Base application name used to generate other names.
+- `signaling_app_name`: **Optional.** Specific name for the signaling app. If empty, defaults to `app_name + "-signaling"`.
+- `signaling_stack_name`: **Optional.** CDK stack name for CloudFormation. If empty, defaults to `app_name + "-signaling"`.
+- `aws_region`: AWS region (leave empty to use default from AWS profile).
+- `aws_account`: AWS account ID (leave empty to use default from AWS profile). Not required if `aws_profile` is set.
+
+**Derived Values:**
+- `lambda_function_name`: Automatically set to `app_name + "-signaling"`
+
+**Environment Variable Overrides:**
+You can override configuration values using environment variables:
+- `AWS_PROFILE` → overrides `aws_profile`
+- `AWS_REGION` → overrides `aws_region`
+- `AWS_ACCOUNT` → overrides `aws_account`
 
 ## 🪜 Step 1: Deploy the Infrastructure
 
-1. Navigate to the deployment directory:
+**Quick Deployment:**
+
+Use the convenience script that builds the Lambda and deploys in one command:
+
+```bash
+./deploy.sh
+```
+
+This script automatically:
+1. Builds the Lambda binary for Linux (`./build-lambda.sh`)
+2. Deploys to AWS using CDK (`cdk deploy`)
+
+**Manual Deployment:**
+
+If you prefer to run steps manually:
+
+1. Build the Lambda binary:
+   ```bash
+   ./build-lambda.sh
+   ```
+
+2. Deploy to AWS:
    ```bash
    cd deploy
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Deploy to AWS:
-   ```bash
    npx cdk deploy
    ```
 
-4. **Note the Outputs:**
-   - `WebSocketConnectURL`: The `wss://...` URL for the client and server to connect.
-   - `SignalingStack.SignalingRelay...`: The name of the Lambda function (needed for the server to update environment variables).
+**Note the Outputs:**
+- `WebSocketConnectURL`: The `wss://...` URL for the client and server to connect.
 
 ## 💻 Step 2: Run the Home Lab Server
 
+**Important:** Whenever you modify `signaling_lambda/main.go`, you must rebuild the binary before deploying. The `./deploy.sh` script handles this automatically.
+
 The Home Lab server needs to connect to the WebSocket and have permission to update the Lambda's environment variables.
 
-1. Navigate back to the root directory:
-   ```bash
-   cd ..
-   ```
+1. Navigate to the project root directory (where `credentials.json` is located).
 
-2. Set the environment variables (replace with your CDK outputs):
+2. Set the WebSocket URL environment variable (from your CDK output):
    ```bash
    export WS_URL="wss://your-api-id.execute-api.region.amazonaws.com/prod"
-   export LAMBDA_NAME="SignalingStack-SignalingRelayXXXXX"
    ```
+
+   **Note:** The lambda function name and AWS profile are now automatically read from `credentials.json`.
 
 3. Run the server:
    ```bash
