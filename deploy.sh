@@ -51,13 +51,13 @@ fi
 
 # SERVE LOCAL BUILD
 if [[ $ACCIONES == *"8"* ]]; then
-    echo "=== SIRVIENDO FRONTEND LOCAL (docs/) ==="
-    if [ ! -d "./docs" ]; then
-        echo "❌ La carpeta 'docs' no existe. Ejecute el paso [1] primero."
+    echo "=== SIRVIENDO FRONTEND LOCAL (frontend/build/) ==="
+    if [ ! -d "./frontend/build" ]; then
+        echo "❌ La carpeta './frontend/build' no existe. Ejecute el paso [1] primero."
     else
         echo "Iniciando servidor local en http://localhost:3000..."
-        # Usamos bun x para ejecutar serve (configurado via docs/serve.json para multi-SPA)
-        bun x serve ./docs -l 3000
+        # Usamos bun x para ejecutar serve (configurado via frontend/build/serve.json para multi-SPA)
+        bun x serve ./frontend/build -l 3000
     fi
 fi
 

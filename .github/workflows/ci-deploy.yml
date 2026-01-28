@@ -30,11 +30,12 @@ jobs:
       - name: Prepare deployment folder
         run: |
           mkdir public_folder
-          # Unzip the bundled assets (JS/CSS/Compiled HTML)
-          unzip docs/frontend.zip -d public_folder
-          # Copy the static assets from the repo (they were excluded from the zip)
-          cp -r frontend/static/* public_folder/
-          # Ensure .nojekyll exists to prevent GitHub Pages from ignoring folders starting with underscore (like _app)
+          # Unzip the bundled assets
+          unzip -o docs/frontend.zip -d public_folder
+          # Copy all static assets including the CNAME
+          # We use dot to include hidden files and avoid folder nesting issues
+          cp -r frontend/static/. public_folder/
+          # Ensure .nojekyll exists
           touch public_folder/.nojekyll
           
       - name: Debug Deployment Folder
