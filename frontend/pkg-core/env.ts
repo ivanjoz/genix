@@ -11,7 +11,7 @@ export const IsClient = () => {
   return browser
 }
 
-const apiPrd = "https://dnh72xkkh3junf57p3vexemlvm0emgys.lambda-url.us-east-1.on.aws/api/"
+const apiPrd = "https://cutougpoy6vugs7uh2jg3uqeha0ypizc.lambda-url.us-east-1.on.aws/api/"
 const apiLocal = "http://localhost:3589/api/"
 
 if(browser){
