@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - 'docs/frontend.zip'
+      - 'frontend/static/**'
+      - '.github/workflows/ci-deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -34,6 +36,9 @@ jobs:
           cp -r frontend/static/* public_folder/
           # Ensure .nojekyll exists to prevent GitHub Pages from ignoring folders starting with underscore (like _app)
           touch public_folder/.nojekyll
+          
+      - name: Debug Deployment Folder
+        run: ls -R public_folder
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
