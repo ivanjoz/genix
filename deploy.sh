@@ -38,14 +38,15 @@ fi
 # PUBLICAR FRONTEND
 if [[ $ACCIONES == *"1"* ]]; then
     echo "=== PUBLICANDO FRONTEND ==="
-    echo "Generando frontend (Main + Store) en carpeta 'docs' para GitHub Pages..."
+    echo "Generando bundle comprimido (frontend.zip) en carpeta 'docs'..."
     
     cd ./frontend
-    # Usamos publish que ya integra build-all.js (Main + Store) y postbuild.js (copy to docs)
+    # Usamos publish que ya integra build-all.js (Main + Store) y postbuild.js (zip only bundled)
     bun run publish
     cd ..
     
-    echo "✅ El deploy frontend finalizado en ./docs!"
+    echo "✅ El bundle frontend.zip ha sido generado en ./docs!"
+    echo "💡 Recuerde hacer git add docs/frontend.zip y push para activar el deploy."
 fi
 
 # SERVE LOCAL BUILD

@@ -1,126 +1,80 @@
-// post-build.js
-// This script runs after the SvelteKit build to inline CSS into the final HTML files.
+// postbuild.js
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
-// --- CONFIGURATION ---
-// The directory where SvelteKit outputs the final static site.
-// This is typically 'build' for adapter-static.
 const BUILD_DIR = 'build';
-// ---------------------
+const STATIC_DIR = 'static';
+const DOCS_DIR = path.join('..', 'docs');
 
 /**
- * Recursively copies a directory from source to destination.
- * @param {string} src - The source directory path.
- * @param {string} dest - The destination directory path.
+ * Zips only the bundled assets from the build folder, excluding static assets
+ * that are already tracked in the repository.
  */
-const copyDirectory = (src, dest) => {
-  fs.mkdirSync(dest, { recursive: true });
-  const entries = fs.readdirSync(src, { withFileTypes: true });
-
-  for (const entry of entries) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-
-    if (entry.isDirectory()) {
-      copyDirectory(srcPath, destPath);
-    } else {
-      fs.copyFileSync(srcPath, destPath);
-    }
-  }
-}
-
-/**
- * Publishes the build folder to the docs folder for GitHub Pages.
- */
-const publishToDocs = () => {
-  console.log('--- Starting publish to docs folder ---');
+const zipBundledAssets = () => {
+  console.log('--- Starting zip of bundled assets ---');
   
-  const DOCS_DIR = path.join('..', 'docs');
+  const ZIP_FILE_NAME = 'frontend.zip';
+  const ZIP_PATH = path.join(DOCS_DIR, ZIP_FILE_NAME);
   
   try {
-    // Check if build directory exists
-    try {
-      fs.accessSync(BUILD_DIR);
-    } catch {
+    if (!fs.existsSync(BUILD_DIR)) {
       console.error(`❌ Build directory '${BUILD_DIR}' not found. Please build the project first.`);
       return;
     }
 
-    // Remove only directories from docs folder
-    try {
-      if (fs.existsSync(DOCS_DIR)) {
-        const entries = fs.readdirSync(DOCS_DIR, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isDirectory()) {
-            const dirPath = path.join(DOCS_DIR, entry.name);
-            fs.rmSync(dirPath, { recursive: true, force: true });
-            console.log(`🗑️  Removed directory '${entry.name}' from '${DOCS_DIR}'`);
-          }
-        }
-      } else {
-        // Create docs directory if it doesn't exist
-        fs.mkdirSync(DOCS_DIR, { recursive: true });
-        console.log(`📁 Created '${DOCS_DIR}' directory`);
-      }
-    } catch (error) {
-      console.error(`❌ Error cleaning docs directory:`, error);
+    if (!fs.existsSync(DOCS_DIR)) {
+      fs.mkdirSync(DOCS_DIR, { recursive: true });
     }
 
-    // Copy build folder to docs folder
-    copyDirectory(BUILD_DIR, DOCS_DIR);
-    console.log(`✅ Copied contents from '${BUILD_DIR}' to '${DOCS_DIR}'`);
-
-    // Copy index.html as 404.html for GitHub Pages SPA routing
-    const indexPath = path.join(DOCS_DIR, 'index.html');
-    const notFoundPath = path.join(DOCS_DIR, '404.html');
-    
-    try {
-      if (fs.existsSync(indexPath)) {
-        fs.copyFileSync(indexPath, notFoundPath);
-        console.log(`✅ Created 404.html from index.html`);
-      }
-    } catch (error) {
-      console.error(`❌ Error creating 404.html:`, error);
-    }
-
-    // Create store/404.html as well
-    const storeIndexPath = path.join(DOCS_DIR, 'store', 'index.html');
-    const storeNotFoundPath = path.join(DOCS_DIR, 'store', '404.html');
-    try {
-      if (fs.existsSync(storeIndexPath)) {
-        fs.copyFileSync(storeIndexPath, storeNotFoundPath);
-        console.log(`✅ Created store/404.html from store/index.html`);
-      }
-    } catch (error) {
-      console.log(`ℹ️ No store index.html found at ${storeIndexPath}`);
-    }
-
-    // Create serve.json for local 'serve' command to handle multi-SPA
-    const serveJsonPath = path.join(DOCS_DIR, 'serve.json');
+    // Create serve.json inside build folder for local 'serve' command and SPA routing
     const serveConfig = {
       cleanUrls: true,
       rewrites: [
+        { source: "/store", destination: "/store/index.html" },
         { source: "/store/**", destination: "/store/index.html" },
         { source: "**", destination: "/index.html" }
       ]
     };
-    try {
-      fs.writeFileSync(serveJsonPath, JSON.stringify(serveConfig, null, 2));
-      console.log(`✅ Created serve.json for multi-SPA routing`);
-    } catch (error) {
-      console.error(`❌ Error creating serve.json:`, error);
-    }
+    fs.writeFileSync(path.join(BUILD_DIR, 'serve.json'), JSON.stringify(serveConfig, null, 2));
+    console.log(`✅ Created serve.json inside build folder`);
 
-    console.log('--- Publish to docs folder completed ---');
+    // Get list of items in static folder to exclude them from zip
+    // because they are already in the repo
+    const staticItems = fs.readdirSync(STATIC_DIR);
+    
+    // We want to exclude these items when zipping the build folder
+    // Note: build/ folder contains everything from static/ plus bundled assets
+    const excludeArgs = staticItems.map(item => {
+      // If it's a directory, we need to exclude its contents too
+      if (fs.statSync(path.join(STATIC_DIR, item)).isDirectory()) {
+        return `-x "${item}/*"`;
+      }
+      return `-x "${item}"`;
+    }).join(' ');
+
+    console.log(`📦 Zipping bundled assets to '${ZIP_PATH}'...`);
+    
+    // Remove old zip if exists
+    if (fs.existsSync(ZIP_PATH)) {
+      fs.unlinkSync(ZIP_PATH);
+    }
+    
+    // Use system zip command
+    // We cd into BUILD_DIR so the zip contains paths relative to it
+    const command = `cd ${BUILD_DIR} && zip -r9 "../${ZIP_PATH}" . ${excludeArgs}`;
+    console.log(`Executing: ${command}`);
+    
+    execSync(command, { stdio: 'inherit' });
+    console.log(`✅ Created '${ZIP_PATH}'`);
+
+    console.log('--- Zip process completed ---');
   } catch (error) {
-    console.error('❌ An error occurred during publishing:', error);
+    console.error('❌ An error occurred during zipping:', error);
   }
 }
 
-// Check if 'publish' parameter is passed
 const args = process.argv.slice(2);
-console.log("args....", args)
 if (args.includes('--publish')) {
-  publishToDocs();
+  zipBundledAssets();
 }

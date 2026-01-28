@@ -1,0 +1,48 @@
+name: Deploy Frontend to GitHub Pages
+on:
+  push:
+    paths:
+      - 'docs/frontend.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps:deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Checkout LFS objects
+        run: git lfs pull
+
+      - name: Prepare deployment folder
+        run: |
+          mkdir public_folder
+          # Unzip the bundled assets (JS/CSS/Compiled HTML)
+          unzip docs/frontend.zip -d public_folder
+          # Copy the static assets from the repo (they were excluded from the zip)
+          cp -r frontend/static/* public_folder/
+          # Ensure .nojekyll exists to prevent GitHub Pages from ignoring folders starting with underscore (like _app)
+          touch public_folder/.nojekyll
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './public_folder'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

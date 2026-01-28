@@ -6,6 +6,7 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<script>
 			window._IS_STORE_APP = true;
+			console.log('[Store App] Path:', window.location.pathname, 'Search:', window.location.search);
 			// GitHub Pages SPA routing hack: restore path from 'p' parameter
 			(function() {
 				var l = window.location;
@@ -15,11 +16,13 @@
 						var a = v.split('=');
 						q[a[0]] = a.slice(1).join('=').replace(/~and~/g, '&');
 					});
+					console.log('[Store App] Parsed query:', q);
 					if (q.p !== undefined) {
-						window.history.replaceState(null, null,
-							l.pathname.slice(0, -1) + (q.p || '') +
-							(l.hash || '')
-						);
+						var basePath = l.pathname;
+						if (basePath.endsWith('/')) basePath = basePath.slice(0, -1);
+						var targetPath = basePath + (q.p || '') + (l.hash || '');
+						console.log('[Store App] Restoring path to:', targetPath);
+						window.history.replaceState(null, null, targetPath);
 					}
 				}
 			})();
