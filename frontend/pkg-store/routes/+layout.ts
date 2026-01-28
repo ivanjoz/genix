@@ -1,8 +1,8 @@
 import { getProductos } from '$services/services/productos.svelte';
 
 export const csr = true;
-export const ssr = true;
-export const prerender = true;
+export const ssr = false;
+export const prerender = false;
 // This prevents automatic data serialization
 export const trailingSlash = 'ignore';
 

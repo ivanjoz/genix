@@ -18,7 +18,7 @@
   env.allowLocalModels = true;
   env.allowRemoteModels = false;
   env.localModelPath = '/models/';
-  
+
   // Configure backends safely
   if (env.backends && env.backends.onnx && env.backends.onnx.wasm) {
     (env.backends.onnx.wasm as any).wasmPaths = '/models/';
@@ -29,7 +29,7 @@
   // State
   let textInput = 'Hola, cómo estás?';
   let modelPath = 'model_q4.onnx'; // Default to q4 to save RAM
-  let tokenizerName = 'onnx-community/functiongemma-270m-it'; 
+  let tokenizerName = 'onnx-community/functiongemma-270m-it';
   let isLoading = false;
   let statusMessage = '';
   let statusType: 'info' | 'success' | 'error' = 'info';
@@ -40,7 +40,7 @@
   let forceWASM = false; // Option to bypass WebGPU even if supported
   let backendMessage = '';
   let useSimpleGeneration = false; // Toggle for minimal generation params
-  
+
   let tokenizer: PreTrainedTokenizer | null = null;
   let model: PreTrainedModel | null = null;
 
@@ -58,7 +58,7 @@
         console.warn('WebGPU check failed:', e);
       }
     }
-    
+
     backendMessage = '⚠️ WebGPU not available. Using WASM (CPU) backend.';
   }
 
@@ -68,9 +68,9 @@
       isLoading = true;
       statusMessage = `Loading tokenizer: ${tokenizerName}...`;
       statusType = 'info';
-      
+
       const nameToLoad = String(tokenizerName || 'onnx-community/functiongemma-270m-it');
-      
+
       console.log('--- Initialization ---');
       console.log('Tokenizer/Model:', nameToLoad);
       console.log('Model File:', modelPath);
@@ -94,32 +94,32 @@
         env.allowRemoteModels = false;
         console.log('✅ Tokenizer loaded from remote fallback');
       }
-      
+
       // 2. Load Model using standard v3 structure
       statusMessage = `Loading model: ${modelPath}...`;
-      
+
       const device = (useWebGPU && !forceWASM) ? 'webgpu' : 'wasm';
       console.log('Using device:', device);
 
       // Since we moved files to static/models/onnx-community/functiongemma-270m-it/onnx/
       // the standard from_pretrained will now find them correctly.
       model = await AutoModelForCausalLM.from_pretrained(nameToLoad, {
-        model_file: modelPath, 
+        model_file: modelPath,
         device: device,
         local_files_only: true,
         // v3 specific performance/memory options
         dtype: modelPath.includes('fp16') ? 'fp16' : (modelPath.includes('q4') ? 'q4' : 'fp32'),
       } as any);
-      
+
       console.log('✅ Model loaded successfully');
       statusMessage = '✅ Model and tokenizer ready!';
       statusType = 'success';
-      
+
     } catch (error: any) {
       console.error('Initialization error details:', error);
-      
+
       let errorMessage = error instanceof Error ? error.message : String(error);
-      
+
       if (errorMessage.includes('Aborted') || errorMessage.includes('memory')) {
         errorMessage = 'RuntimeError: Out-of-Memory (OOM) or WASM limit reached.\n\n';
         errorMessage += 'Solutions:\n';
@@ -128,7 +128,7 @@
       } else if (errorMessage.includes('failed to fetch') || errorMessage.includes('404')) {
         errorMessage = `File not found. Check if /static/models_local/${modelPath} and /static/models/${tokenizerName}/config.json exist.`;
       }
-      
+
       statusMessage = `❌ Error: ${errorMessage}`;
       statusType = 'error';
     } finally {
@@ -143,26 +143,26 @@
       statusType = 'error';
       return;
     }
-    
+
     if (!tokenizer || !model) {
       statusMessage = '⚠️ Model not loaded. Initializing...';
       statusType = 'info';
       await initialize();
       if (!model) return;
     }
-    
+
     try {
       isLoading = true;
       results = null;
       generatedText = '';
-      
+
       // 1. Prepare formatted prompt for Gemma
       let formattedPrompt = textInput;
       if (!textInput.includes('<start_of_turn>')) {
         // Simple user/model format (no system role - not supported)
         formattedPrompt = `<start_of_turn>user\n${textInput}<end_of_turn>\n<start_of_turn>model\n`;
       }
-      
+
       console.log('Formatted prompt:', formattedPrompt);
 
       // 2. Tokenize
@@ -170,19 +170,19 @@
       if (!tokenizer) throw new Error('Tokenizer not initialized');
       const encoded = await tokenizer(formattedPrompt);
       console.log('Tokenized input:', encoded);
-      
+
       const input_ids = encoded.input_ids || encoded;
       if (!input_ids) throw new Error('Failed to extract input_ids from tokenizer output');
 
       // 3. Run inference
       statusMessage = 'Generating response...';
       const startTime = performance.now();
-      
+
       if (!model) throw new Error('Model not initialized');
       if (typeof (model as any).generate !== 'function') {
         throw new Error('Model loaded but generate() method is missing.');
       }
-      
+
       const generationInputs: any = { input_ids };
       if (encoded.attention_mask) {
         generationInputs.attention_mask = encoded.attention_mask;
@@ -190,9 +190,9 @@
 
       // Debug: Log input length
       console.log('Input token count:', input_ids.dims?.[1] || input_ids.data?.length || 0);
-      
+
       // Choose generation strategy
-      const genParams = useSimpleGeneration 
+      const genParams = useSimpleGeneration
         ? {
             max_new_tokens: 10240,
             // Minimal params - let model use defaults
@@ -205,35 +205,35 @@
             top_p: 0.95,
             repetition_penalty: 1.1,
           };
-      
+
       console.log('Generation params:', genParams);
       const outputTokens = await (model as any).generate(generationInputs, genParams);
-      
+
       const endTime = performance.now();
       inferenceTime = endTime - startTime;
-      
+
       // Debug: Log output token info
       const outputTokenData = outputTokens[0];
       const inputLength = input_ids.dims?.[1] || input_ids.data?.length || 0;
-      const outputLength = outputTokenData.data?.length || outputTokenData.size || 
+      const outputLength = outputTokenData.data?.length || outputTokenData.size ||
                           (Array.isArray(outputTokenData) ? outputTokenData.length : 0);
       console.log('Input length:', inputLength);
       console.log('Output tokens shape:', outputTokenData.dims || 'unknown');
       console.log('Output tokens total length:', outputLength);
       console.log('New tokens generated:', outputLength - inputLength);
-      
-      // 4. Decode the full output 
+
+      // 4. Decode the full output
       if (!tokenizer) throw new Error('Tokenizer not initialized');
-      
+
       // First decode everything with special tokens
-      const decodedFull = await tokenizer.decode(outputTokens[0], { 
-        skip_special_tokens: false 
+      const decodedFull = await tokenizer.decode(outputTokens[0], {
+        skip_special_tokens: false
       });
-      
+
       console.log('=== Full decoded output ===');
       console.log(decodedFull);
       console.log('=== End full output ===');
-      
+
       // Also decode with special tokens skipped
       const decodedClean = await tokenizer.decode(outputTokens[0], {
         skip_special_tokens: true
@@ -241,10 +241,10 @@
       console.log('=== Decoded (skip special tokens) ===');
       console.log(decodedClean);
       console.log('=== End cleaned output ===');
-      
+
       // 5. Extract just the model's response
       // Try multiple strategies to extract the response
-      
+
       // Strategy 1: Find text after the last <start_of_turn>model
       let strategy1 = '';
       const modelMarker = '<start_of_turn>model';
@@ -257,7 +257,7 @@
           strategy1 = strategy1.substring(0, endIdx);
         }
         strategy1 = strategy1.trim();
-        
+
         // Remove leading "model" word if present (sometimes appears after the tag)
         if (strategy1.toLowerCase().startsWith('model')) {
           strategy1 = strategy1.substring(5).trim();
@@ -270,7 +270,7 @@
           }
         }
       }
-      
+
       // Strategy 2: Use the skip_special_tokens version and remove prompt
       let strategy2 = decodedClean;
       const promptIndex = strategy2.indexOf(textInput);
@@ -281,18 +281,18 @@
       if (strategy2.toLowerCase().startsWith('model')) {
         strategy2 = strategy2.substring(5).trim();
       }
-      
+
       console.log('Strategy 1 (parse markers):', strategy1);
       console.log('Strategy 2 (skip special):', strategy2);
-      
+
       // Use the longer, non-empty result
       generatedText = (strategy1.length > strategy2.length ? strategy1 : strategy2) || strategy1 || strategy2 || 'No output generated';
-      
+
       console.log('=== FINAL Generated Text ===');
       console.log(generatedText);
       console.log('=== Length:', generatedText.length, '===');
 
-      results = null; 
+      results = null;
       statusMessage = `✅ Generation completed in ${inferenceTime.toFixed(2)}ms`;
       statusType = 'success';
     } catch (error) {
@@ -321,7 +321,7 @@ You are a model that can do function calling with the following functions<start_
 
   onMount(() => {
     checkBackendSupport();
-    
+
     // Configure environment on mount
     env.allowLocalModels = true;
     env.allowRemoteModels = false;
@@ -337,13 +337,13 @@ You are a model that can do function calling with the following functions<start_
 <div class="container">
   <h1>🚀 ONNX Model Inference</h1>
   <p class="subtitle">Test your ONNX model with WebGPU or WASM backend using @huggingface/transformers</p>
-  
+
   {#if backendMessage}
     <div class="backend-info" class:webgpu={useWebGPU}>
       {backendMessage}
     </div>
   {/if}
-  
+
   <div class="config-grid">
     <div class="input-group">
       <label for="modelPath">Model Version:</label>
@@ -358,8 +358,8 @@ You are a model that can do function calling with the following functions<start_
 
     <div class="input-group">
       <label for="tokenizerName">Tokenizer Name/Path:</label>
-      <input 
-        id="tokenizerName" 
+      <input
+        id="tokenizerName"
         type="text"
         bind:value={tokenizerName}
         placeholder="e.g., gemma-tokenizer"
@@ -369,10 +369,10 @@ You are a model that can do function calling with the following functions<start_
 
   <div class="input-group">
     <label for="textInput">Input Text:</label>
-    <textarea 
-      id="textInput" 
+    <textarea
+      id="textInput"
       bind:value={textInput}
-      rows="3" 
+      rows="3"
       placeholder="Enter text for inference..."
     ></textarea>
   </div>
@@ -387,10 +387,10 @@ You are a model that can do function calling with the following functions<start_
       Use simple generation (minimal parameters)
     </label>
   </div>
-  
+
   <div class="button-group">
-    <button 
-      class="run-btn" 
+    <button
+      class="run-btn"
       on:click={runInference}
       disabled={isLoading}
     >
@@ -408,7 +408,7 @@ You are a model that can do function calling with the following functions<start_
       Clear Results
     </button>
   </div>
-  
+
   {#if statusMessage}
     <div class="status {statusType}">
       {statusMessage}
@@ -424,16 +424,16 @@ You are a model that can do function calling with the following functions<start_
       </small>
     </div>
   {/if}
-  
+
   {#if results}
     <div class="results">
       <h3>Results:</h3>
-      
+
       <div class="result-item">
         <div class="result-label">⏱️ Inference Time:</div>
         <div class="result-value">{inferenceTime.toFixed(2)} ms</div>
       </div>
-      
+
       {#each Object.entries(results) as [name, tensor]}
         <div class="result-item">
           <div class="result-label">📊 {name}:</div>
@@ -459,19 +459,19 @@ You are a model that can do function calling with the following functions<start_
     padding: 40px;
     margin: 40px auto;
   }
-  
+
   h1 {
     color: #333;
     margin-bottom: 10px;
     font-size: 28px;
   }
-  
+
   .subtitle {
     color: #666;
     margin-bottom: 30px;
     font-size: 14px;
   }
-  
+
   .backend-info {
     background: #fff3cd;
     border: 1px solid #ffc107;
@@ -481,13 +481,13 @@ You are a model that can do function calling with the following functions<start_
     font-size: 13px;
     color: #856404;
   }
-  
+
   .backend-info.webgpu {
     background: #d4edda;
     border-color: #28a745;
     color: #155724;
   }
-  
+
   .warning-box {
     background: #fff3cd;
     border: 1px solid #ffc107;
@@ -498,7 +498,7 @@ You are a model that can do function calling with the following functions<start_
     color: #856404;
     line-height: 1.5;
   }
-  
+
   .config-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -544,7 +544,7 @@ You are a model that can do function calling with the following functions<start_
   .input-group {
     margin-bottom: 20px;
   }
-  
+
   .config-group {
     margin-bottom: 20px;
     padding: 10px;
@@ -564,14 +564,14 @@ You are a model that can do function calling with the following functions<start_
   .checkbox-container input {
     cursor: pointer;
   }
-  
+
   label {
     display: block;
     margin-bottom: 8px;
     color: #555;
     font-weight: 500;
   }
-  
+
   textarea {
     width: 100%;
     padding: 12px;
@@ -582,18 +582,18 @@ You are a model that can do function calling with the following functions<start_
     resize: vertical;
     transition: border-color 0.3s;
   }
-  
+
   textarea:focus {
     outline: none;
     border-color: #667eea;
   }
-  
+
   .button-group {
     display: flex;
     gap: 10px;
     margin-bottom: 20px;
   }
-  
+
   button {
     flex: 1;
     padding: 14px;
@@ -604,27 +604,27 @@ You are a model that can do function calling with the following functions<start_
     cursor: pointer;
     transition: all 0.3s;
   }
-  
+
   .run-btn {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
   }
-  
+
   .run-btn:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
   }
-  
+
   .run-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
-  
+
   .clear-btn {
     background: #f5f5f5;
     color: #666;
   }
-  
+
   .clear-btn:hover {
     background: #e0e0e0;
   }
@@ -638,26 +638,26 @@ You are a model that can do function calling with the following functions<start_
   .template-btn:hover {
     background: #bbdefb;
   }
-  
+
   .status {
     padding: 12px;
     border-radius: 8px;
     margin-bottom: 20px;
     font-size: 14px;
   }
-  
+
   .status.info {
     background: #e3f2fd;
     color: #1976d2;
     border-left: 4px solid #1976d2;
   }
-  
+
   .status.success {
     background: #e8f5e9;
     color: #388e3c;
     border-left: 4px solid #388e3c;
   }
-  
+
   .status.error {
     background: #ffebee;
     color: #c62828;
@@ -687,19 +687,19 @@ You are a model that can do function calling with the following functions<start_
     color: #333;
     border-left: 4px solid #9c27b0;
   }
-  
+
   .results {
     background: #f8f9fa;
     border-radius: 8px;
     padding: 20px;
   }
-  
+
   .results h3 {
     color: #333;
     margin-bottom: 15px;
     font-size: 18px;
   }
-  
+
   .result-item {
     background: white;
     padding: 15px;
@@ -707,20 +707,20 @@ You are a model that can do function calling with the following functions<start_
     margin-bottom: 10px;
     border-left: 3px solid #667eea;
   }
-  
+
   .result-label {
     font-weight: 600;
     color: #555;
     margin-bottom: 5px;
   }
-  
+
   .result-value {
     color: #333;
     font-family: 'Courier New', monospace;
     font-size: 13px;
     word-break: break-all;
   }
-  
+
   .loader {
     display: inline-block;
     width: 16px;
@@ -731,7 +731,7 @@ You are a model that can do function calling with the following functions<start_
     animation: spin 1s ease-in-out infinite;
     margin-right: 8px;
   }
-  
+
   @keyframes spin {
     to { transform: rotate(360deg); }
   }

@@ -76,10 +76,40 @@ const publishToDocs = () => {
     const notFoundPath = path.join(DOCS_DIR, '404.html');
     
     try {
-      fs.copyFileSync(indexPath, notFoundPath);
-      console.log(`✅ Created 404.html from index.html`);
+      if (fs.existsSync(indexPath)) {
+        fs.copyFileSync(indexPath, notFoundPath);
+        console.log(`✅ Created 404.html from index.html`);
+      }
     } catch (error) {
       console.error(`❌ Error creating 404.html:`, error);
+    }
+
+    // Create store/404.html as well
+    const storeIndexPath = path.join(DOCS_DIR, 'store', 'index.html');
+    const storeNotFoundPath = path.join(DOCS_DIR, 'store', '404.html');
+    try {
+      if (fs.existsSync(storeIndexPath)) {
+        fs.copyFileSync(storeIndexPath, storeNotFoundPath);
+        console.log(`✅ Created store/404.html from store/index.html`);
+      }
+    } catch (error) {
+      console.log(`ℹ️ No store index.html found at ${storeIndexPath}`);
+    }
+
+    // Create serve.json for local 'serve' command to handle multi-SPA
+    const serveJsonPath = path.join(DOCS_DIR, 'serve.json');
+    const serveConfig = {
+      cleanUrls: true,
+      rewrites: [
+        { source: "/store/**", destination: "/store/index.html" },
+        { source: "**", destination: "/index.html" }
+      ]
+    };
+    try {
+      fs.writeFileSync(serveJsonPath, JSON.stringify(serveConfig, null, 2));
+      console.log(`✅ Created serve.json for multi-SPA routing`);
+    } catch (error) {
+      console.error(`❌ Error creating serve.json:`, error);
     }
 
     console.log('--- Publish to docs folder completed ---');

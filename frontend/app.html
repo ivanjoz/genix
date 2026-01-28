@@ -5,7 +5,21 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		%sveltekit.head%
 		<script>
-			window.global = window
+			window.global = window;
+			// GitHub Pages SPA routing hack for /store sub-app
+			(function() {
+				var path = window.location.pathname;
+				if (path.startsWith('/store') && !window._IS_STORE_APP) {
+					// Check if it's a file request (has a dot in the last segment)
+					var lastSegment = path.split('/').pop();
+					if (lastSegment.includes('.')) return;
+
+					// Redirect to store index with the path as a parameter
+					var repoName = ''; // Since it's a custom domain, repoName is empty
+					var storePath = path.substring(6); // Remove '/store'
+					window.location.replace('/store/?p=' + encodeURIComponent(storePath) + window.location.search + window.location.hash);
+				}
+			})();
 		</script>
 		<script src="/libs/simplepeer.min.js"></script>
 	</head>

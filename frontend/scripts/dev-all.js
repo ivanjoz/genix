@@ -36,7 +36,7 @@ const main = async () => {
 
   // Start proxy server
   console.log('🔗 Starting proxy server...');
-  const proxy = spawn('node', ['scripts/proxy-server.js'], {
+  const proxy = spawn('bun', ['scripts/proxy-server.js'], {
     cwd: process.cwd(),
     stdio: 'inherit',
     shell: true

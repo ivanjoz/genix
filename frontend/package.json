@@ -7,18 +7,19 @@
 		"./pkg-store"
 	],
 	"scripts": {
-		"dev": "node scripts/dev-all.js",
+		"dev": "bun scripts/dev-all.js",
 		"dev:main": "vite dev --force --port 3570",
 		"dev:store": "cd pkg-store && bun run dev",
-		"serve": "vite build && vite preview --port 3000",
+		"serve": "bun run serve:docs",
+		"serve:docs": "bun x serve ../docs -l 3000",
 		"prepare": "svelte-kit sync || echo ''",
-		"build": "node scripts/build-all.js",
+		"build": "bun scripts/build-all.js",
 		"build:main": "vite build",
 		"build:store": "cd pkg-store && bun run build",
-		"publish": "npm run build && node postbuild --publish",
+		"publish": "bun run build && bun postbuild.js --publish",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"prebuild:store": "node scripts/thumbhash-prebuild.js"
+		"prebuild:store": "bun scripts/thumbhash-prebuild.js"
 	},
 	"overrides": {
 		"rolldown": "^1.0.0-beta.58"

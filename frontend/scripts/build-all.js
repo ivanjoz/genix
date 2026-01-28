@@ -7,18 +7,16 @@ const BUILD_DIR = 'build';
 
 console.log('🚀 Starting build process...');
 
-// Clean previous builds
-if (fs.existsSync(BUILD_DIR)) {
-  fs.rmSync(BUILD_DIR, { recursive: true });
-}
-fs.mkdirSync(BUILD_DIR, { recursive: true });
-
-// Build main app
+// 1. Build main app (this creates the 'build' directory via SvelteKit adapter-static)
 console.log('📦 Building main app...');
 execSync('bun run build:main', { stdio: 'inherit' });
 
-// Copy main build
-console.log('📋 Copying main build...');
+// 2. Build store app
+console.log('📦 Building store app...');
+execSync('bun run build:store', { stdio: 'inherit' });
+
+// 3. Copy store build to /store/ subdirectory in the main build
+console.log('📋 Copying store build into main build...');
 const copyDirectory = (src, dest) => {
   if (!fs.existsSync(src)) {
     console.warn(`⚠️  Source directory ${src} does not exist`);
@@ -40,17 +38,8 @@ const copyDirectory = (src, dest) => {
   }
 };
 
-// SvelteKit builds to .svelte-kit/output/client and .svelte-kit/output/server
-// When using adapter-static, it also outputs to the configured 'pages' directory (usually 'build')
-copyDirectory('build', BUILD_DIR);
-
-// Build store app
-console.log('📦 Building store app...');
-execSync('bun run build:store', { stdio: 'inherit' });
-
-// Copy store build to /store/ subdirectory
-console.log('📋 Copying store build...');
 copyDirectory('pkg-store/build', path.join(BUILD_DIR, 'store'));
+
 
 // Create 404.html for SPA routing
 console.log('📋 Creating 404.html...');
