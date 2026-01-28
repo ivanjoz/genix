@@ -79,8 +79,9 @@ class WebRTCManager {
 			return;
 		}
 
-		const wsUrl = signalingEndpoint || Env.SIGNALING_ENDPOINT;
-		
+		// const wsUrl = signalingEndpoint || Env.SIGNALING_ENDPOINT;
+		const wsUrl = "wss://waogll39kd.execute-api.us-east-1.amazonaws.com/prod"
+
 		if (!wsUrl) {
 			console.warn('[WebRTCManager] No signaling endpoint configured, WebRTC disabled');
 			this.state.error = 'No signaling endpoint configured';
@@ -207,7 +208,7 @@ class WebRTCManager {
 	private handleIncomingData(data: unknown): void {
 		try {
 			let message: any = data;
-			
+
 			// Handle Buffer/Uint8Array data
 			if (data && typeof data === 'object') {
 				const d = data as any;
@@ -394,7 +395,7 @@ export function useWebRTC() {
 		isConnected: webRTCManager.isConnected,
 		isConnecting: webRTCManager.isConnecting,
 		send: (data: any) => webRTCManager.send(data),
-		onMessage: (type: string, callback: (data: any) => void) => 
+		onMessage: (type: string, callback: (data: any) => void) =>
 			webRTCManager.onMessage(type, callback),
 		subscribe: (callback: () => void) => webRTCManager.subscribe(callback),
 		reconnect: () => webRTCManager.reconnect(),

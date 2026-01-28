@@ -71,6 +71,8 @@ func mainHandler(args *core.HandlerArgs) core.MainResponse {
 	isPublicPath := len(args.Route) > 2 && args.Route[0:2] == "p-"
 	if !isPublicPath {
 		args.Usuario = core.CheckUser(args, 0)
+	} else {
+		args.Usuario = &core.IUsuario{}
 	}
 
 	funcPath := args.Method + "." + args.Route
