@@ -186,12 +186,27 @@ class AppSyncConnection {
     }
 
     const amzDate = new Date().toISOString().replace(/[:\-]|\.\d{3}/g, '');
-    const signal = {
+    
+    let sessionToken = '';
+    try {
+      const parsedData = JSON.parse(data);
+      if (parsedData.sessionToken) {
+        sessionToken = parsedData.sessionToken;
+        delete parsedData.sessionToken; // Remove from nested data if preferred, or keep it.
+        data = JSON.stringify(parsedData);
+      }
+    } catch (e) {}
+
+    const signal: any = {
       from: this.clientId,
       to: this.config.targetId,
       action: action,
       data: data
     };
+    
+    if (sessionToken) {
+      signal.sessionToken = sessionToken;
+    }
 
     try {
       const response = await fetch(publishUrl, {
@@ -222,7 +237,8 @@ class AppSyncConnection {
         __response__: 40,
         signal: {
           action: signal.action,
-          data: signal.data
+          data: signal.data,
+          sessionToken: signal.sessionToken
         }
       });
     }

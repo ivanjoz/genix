@@ -665,12 +665,25 @@ var AppSyncConnection = class {
       publishUrl = publishUrl.replace(/\/$/, "") + "/event";
     }
     const amzDate = (/* @__PURE__ */ new Date()).toISOString().replace(/[:\-]|\.\d{3}/g, "");
+    let sessionToken = "";
+    try {
+      const parsedData = JSON.parse(data);
+      if (parsedData.sessionToken) {
+        sessionToken = parsedData.sessionToken;
+        delete parsedData.sessionToken;
+        data = JSON.stringify(parsedData);
+      }
+    } catch (e) {
+    }
     const signal = {
       from: this.clientId,
       to: this.config.targetId,
       action,
       data
     };
+    if (sessionToken) {
+      signal.sessionToken = sessionToken;
+    }
     try {
       const response = await fetch(publishUrl, {
         method: "POST",
@@ -698,7 +711,8 @@ var AppSyncConnection = class {
         __response__: 40,
         signal: {
           action: signal.action,
-          data: signal.data
+          data: signal.data,
+          sessionToken: signal.sessionToken
         }
       });
     }

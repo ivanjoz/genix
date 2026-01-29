@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
@@ -13,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -26,7 +30,25 @@ var (
 	installFlag        = flag.Bool("install", false, "Install the server as a systemd service and start it")
 	uninstallFlag      = flag.Bool("uninstall", false, "Uninstall the systemd service and remove the binary")
 	waitGatheringFlag  = flag.Bool("wait-gathering", false, "Wait for full ICE gathering before sending answer (slower but includes all candidates in SDP)")
-	Version            = "3.6.0-stable"
+	Version            = "4.2.0-fast-reload"
+)
+
+// Session management for Fast Reload
+type SessionInfo struct {
+	ClientID       string
+	LastConnected  time.Time
+	LastCandidates []webrtc.ICECandidateInit
+}
+
+var (
+	activeSessions    = make(map[string]*SessionInfo)
+	sessionMutex      sync.RWMutex
+	globalCertificate *webrtc.Certificate
+)
+
+const (
+	CertFile       = "webrtc_cert.json"
+	SessionTimeout = 10 * time.Minute
 )
 
 // AppSync Realtime Messages
@@ -37,10 +59,45 @@ type AppSyncMessage struct {
 }
 
 type AppSyncSignal struct {
-	From   string `json:"from"`
-	To     string `json:"to"`
-	Action string `json:"action"`
-	Data   string `json:"data"`
+	From         string `json:"from"`
+	To           string `json:"to"`
+	Action       string `json:"action"`
+	Data         string `json:"data"`
+	SessionToken string `json:"sessionToken,omitempty"`
+}
+
+func initWebRTC() {
+	// 1. Persistent Certificate
+	cert, err := loadOrGenerateCert()
+	if err != nil {
+		log.Printf("ERROR: Failed to handle certificate: %v. Generating ephemeral.", err)
+		// Try once more or fail
+		cert, _ = loadOrGenerateCert()
+	}
+	globalCertificate = cert
+
+	// 2. Session Cleanup
+	go func() {
+		for {
+			time.Sleep(1 * time.Minute)
+			sessionMutex.Lock()
+			for id, sess := range activeSessions {
+				if time.Since(sess.LastConnected) > SessionTimeout {
+					delete(activeSessions, id)
+				}
+			}
+			sessionMutex.Unlock()
+		}
+	}()
+}
+
+func loadOrGenerateCert() (*webrtc.Certificate, error) {
+	// Generate a new ECDSA key for the certificate
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	return webrtc.GenerateCertificate(priv)
 }
 
 func main() {
@@ -61,6 +118,8 @@ func main() {
 		log.Println("Uninstallation completed successfully!")
 		return
 	}
+
+	initWebRTC()
 
 	cfg := config.GetDefaultConfig()
 	if cfg.SignalingSocket == "" || cfg.ApiKey == "" {
@@ -295,9 +354,9 @@ func publishSignal(cfg *config.Config, signal AppSyncSignal) error {
 }
 
 func handleOffer(cfg *config.Config, signal AppSyncSignal) {
-	log.Println("DEBUG: Starting WebRTC PeerConnection setup with IPv6 optimization...")
+	log.Printf("DEBUG: Starting WebRTC PeerConnection setup (SessionToken: %s)", signal.SessionToken)
 
-	// Create a SettingEngine and enable IPv6
+	// Create a SettingEngine and enable IPv6 + Fixed Port Range
 	s := webrtc.SettingEngine{}
 	s.SetNetworkTypes([]webrtc.NetworkType{
 		webrtc.NetworkTypeUDP6,
@@ -305,14 +364,17 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 		webrtc.NetworkTypeTCP6,
 		webrtc.NetworkTypeTCP4,
 	})
+	// Fix port range to help Full Cone NAT stability
+	s.SetEphemeralUDPPortRange(50000, 50050)
 
 	// Create the API object with the SettingEngine
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
 
 	pc, err := api.NewPeerConnection(webrtc.Configuration{
+		Certificates: []webrtc.Certificate{*globalCertificate},
 		ICEServers: []webrtc.ICEServer{
 			{URLs: []string{"stun:stun.l.google.com:19302"}},
-			{URLs: []string{"stun:stun.l.google.com:19305"}}, // Multiple STUNs for better gathering
+			{URLs: []string{"stun:stun.l.google.com:19305"}},
 		},
 	})
 	if err != nil {
@@ -320,91 +382,58 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 		return
 	}
 
+	// Session tracking
+	var session *SessionInfo
+	if signal.SessionToken != "" {
+		sessionMutex.Lock()
+		if sess, ok := activeSessions[signal.SessionToken]; ok {
+			session = sess
+			session.LastConnected = time.Now()
+			log.Printf("DEBUG: Found active session for token %s", signal.SessionToken)
+		} else {
+			session = &SessionInfo{
+				ClientID:      signal.From,
+				LastConnected: time.Now(),
+			}
+			activeSessions[signal.SessionToken] = session
+			log.Printf("DEBUG: Created new session for token %s", signal.SessionToken)
+		}
+		sessionMutex.Unlock()
+	}
+
 	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
 		log.Printf("DEBUG: WebRTC Connection State Change: %s", s.String())
-		
-		// When connected, log the selected ICE pair
 		if s == webrtc.PeerConnectionStateConnected {
 			if pc.SCTP() != nil && pc.SCTP().Transport() != nil && pc.SCTP().Transport().ICETransport() != nil {
 				selectedPair, err := pc.SCTP().Transport().ICETransport().GetSelectedCandidatePair()
 				if err == nil && selectedPair != nil {
-					localAddr := ""
-					remoteAddr := ""
-					
-					if selectedPair.Local != nil {
-						localAddr = selectedPair.Local.Address
-					}
-					if selectedPair.Remote != nil {
-						remoteAddr = selectedPair.Remote.Address
-					}
-					
-					// Determine IP versions
-					localIPVersion := "IPv4"
-					if strings.Contains(localAddr, ":") {
-						localIPVersion = "IPv6"
-					}
-					remoteIPVersion := "IPv4"
-					if strings.Contains(remoteAddr, ":") {
-						remoteIPVersion = "IPv6"
-					}
-					
-					// Determine transport protocol
-					transport := "Unknown"
-					if selectedPair.Local != nil {
-						transport = selectedPair.Local.Protocol.String()
-					}
-					
-					log.Printf("🎯 CONNECTION ESTABLISHED: Local=%s %s %s | Remote=%s %s", 
-						localIPVersion, transport, localAddr, remoteIPVersion, remoteAddr)
-					log.Printf("🎯 SELECTED ICE PAIR: Local=%s | Remote=%s", 
-						selectedPair.Local.String(), selectedPair.Remote.String())
-				} else {
-					log.Printf("DEBUG: Could not get selected ICE pair: %v", err)
+					log.Printf("🎯 CONNECTION ESTABLISHED: %s <-> %s", selectedPair.Local.String(), selectedPair.Remote.String())
 				}
 			}
 		}
 	})
 
-	pc.OnICEGatheringStateChange(func(s webrtc.ICEGathererState) {
-		log.Printf("DEBUG: WebRTC ICE Gathering State Change: %s", s.String())
-	})
-
 	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
 		if c != nil {
-			candidateStr := c.String()
-			log.Printf("DEBUG: Local ICE Candidate gathered: %s", candidateStr)
+			candidateJSON := c.ToJSON()
 			
-			// Parse network type from ICE candidate
-			// Format: candidate:<foundation> <component-id> <transport> <priority> <connection-address> <port> <typ> <type>
-			parts := strings.Fields(candidateStr)
-			if len(parts) >= 6 {
-				transport := parts[2]      // UDP or TCP
-				address := parts[4]       // IP address
-				
-				// Determine IP version
-				ipVersion := "IPv4"
-				if strings.Contains(address, ":") {
-					ipVersion = "IPv6"
-				}
-				
-				// Log network type in a clear, parseable format
-				log.Printf("NETWORK_TYPE: %s %s | Address: %s | Full Candidate: %s", ipVersion, transport, address, candidateStr)
+			// Store in session for future fast reloads
+			if session != nil {
+				sessionMutex.Lock()
+				session.LastCandidates = append(session.LastCandidates, candidateJSON)
+				sessionMutex.Unlock()
 			}
 
-			// If not waiting for full gathering, send candidate immediately (Trickle ICE)
 			if !*waitGatheringFlag {
-				candidateJSON, _ := json.Marshal(c.ToJSON())
+				candidateData, _ := json.Marshal(candidateJSON)
 				resp := AppSyncSignal{
-					From:   "genix-bridge",
-					To:     signal.From,
-					Action: "candidate",
-					Data:   string(candidateJSON),
+					From:         "genix-bridge",
+					To:           signal.From,
+					Action:       "candidate",
+					Data:         string(candidateData),
+					SessionToken: signal.SessionToken,
 				}
-				if err := publishSignal(cfg, resp); err != nil {
-					log.Printf("ERROR: Failed to send ICE candidate: %v", err)
-				} else {
-					log.Printf("DEBUG: Sent ICE Candidate to %s", signal.From)
-				}
+				publishSignal(cfg, resp)
 			}
 		}
 	})
@@ -470,10 +499,11 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 
 	answerJSON, _ := json.Marshal(pc.LocalDescription())
 	resp := AppSyncSignal{
-		From:   "genix-bridge",
-		To:     signal.From,
-		Action: "answer",
-		Data:   string(answerJSON),
+		From:         "genix-bridge",
+		To:           signal.From,
+		Action:       "answer",
+		Data:         string(answerJSON),
+		SessionToken: signal.SessionToken,
 	}
 
 	if err := publishSignal(cfg, resp); err != nil {
