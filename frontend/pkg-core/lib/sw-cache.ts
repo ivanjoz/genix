@@ -11,6 +11,13 @@ const successfulResponses: Set<number> = new Set()
 
 const nowTime = Date.now()
 
+export interface FetchCacheResponse {
+  content?: any
+  error?: string | object
+  isEmpty?: boolean
+  notUpdated?: boolean
+}
+
 export const doInitServiceWorker = (): Promise<number> => {
   if(typeof navigator.serviceWorker === 'undefined'){
     console.log("serviceWorker es undefined")
@@ -31,6 +38,14 @@ export const doInitServiceWorker = (): Promise<number> => {
 
         if(data.__response__ === 5){
           setFetchProgress(data.bytes)
+        } else if (data.__response__ === 40){
+          // Handle incoming WebRTC signals (asynchronous push from service worker)
+          const handler = serviceWorkerHandlerMap.get(40)
+          if(handler){
+            handler(data)
+          } else {
+            console.log("No handler registered for action 40 (WebRTC signal)")
+          }
         } else if (data.__response__ > 0 && data.__req__ > 0) {
           if(data.__response__ === 3){
             fetchEvent(data.__req__, 0)
@@ -155,7 +170,7 @@ export const fetchCacheParsed = async (args: serviceHttpProps): Promise<any> => 
       errMessage = (response.error as any).error || response.error
     }
     console.log("errMessage", errMessage)
-    Notify.failure(errMessage)
+    Notify.failure(String(errMessage))
     return null
   }
 

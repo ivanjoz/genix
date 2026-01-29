@@ -1,5 +1,6 @@
 import { unmarshall } from '$core/lib/unmarshall';
 import { CACHE_APP, getCacheRecord, HandlersMap, hasCacheKey, parseObject, sendClientMessage, setCacheRecord } from "./service-worker-cache"
+import { connectAppSync, sendSignalToAppSync, disconnectAppSync, type AppSyncWebRTCConfig } from "./service-worker-webrtc"
 
 export type CacheMode = 'offline' | 'updateOnly' | 'refresh' | 'fetchOnly'
 
@@ -137,6 +138,19 @@ HandlersMap.set(11, async ()=> {
 
 HandlersMap.set(3, async (args: serviceHttpProps) => {
   return await fetchCache(args)
+})
+
+// WebRTC Handlers
+HandlersMap.set(30, async (args: AppSyncWebRTCConfig) => {
+  return await connectAppSync(args)
+})
+
+HandlersMap.set(31, async (args: { __client__: number; action: string; data: string }) => {
+  return await sendSignalToAppSync(args)
+})
+
+HandlersMap.set(32, async (args: { __client__: number }) => {
+  return await disconnectAppSync(args)
 })
 
 const makeKey = (args: serviceHttpProps): [string, string] => {

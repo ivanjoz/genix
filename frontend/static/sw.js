@@ -526,6 +526,286 @@ var parseObject = (rec) => {
   return newObject;
 };
 
+// pkg-core/workers/service-worker-webrtc.ts
+var connectionsByTarget = /* @__PURE__ */ new Map();
+var clientTargetMap = /* @__PURE__ */ new Map();
+var connectionConfigs = /* @__PURE__ */ new Map();
+var AppSyncConnection = class {
+  ws = null;
+  config;
+  clientId;
+  clientIDs = /* @__PURE__ */ new Set();
+  subscribed = false;
+  connectPromise = null;
+  constructor(config) {
+    this.config = {
+      wsUrl: config.wsUrl,
+      apiKey: config.apiKey,
+      targetId: config.targetId,
+      stunServers: config.stunServers || [
+        "stun:stun.l.google.com:19302",
+        "stun:global.stun.twilio.com:3478"
+      ],
+      trickle: config.trickle ?? false,
+      timeout: config.timeout ?? 3e4,
+      __client__: config.__client__
+    };
+    this.clientId = "client-" + Math.random().toString(36).substring(2, 11);
+    this.clientIDs.add(config.__client__);
+  }
+  addClient(clientID) {
+    this.clientIDs.add(clientID);
+  }
+  removeClient(clientID) {
+    this.clientIDs.delete(clientID);
+  }
+  hasClients() {
+    return this.clientIDs.size > 0;
+  }
+  async connect() {
+    if (this.isConnected()) {
+      return { clientId: this.clientId, connected: true };
+    }
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
+    this.connectPromise = new Promise((resolve, reject) => {
+      try {
+        this.startAppSyncSubscription(resolve, reject);
+      } catch (err) {
+        this.connectPromise = null;
+        reject(err);
+      }
+    });
+    return this.connectPromise;
+  }
+  startAppSyncSubscription(resolve, reject) {
+    const url = new URL(this.config.wsUrl.replace("wss://", "https://"));
+    const host = url.host;
+    let rtUrl = host.replace("appsync-api", "appsync-realtime-api");
+    rtUrl = `wss://${rtUrl}/event/realtime`;
+    const amzDate = (/* @__PURE__ */ new Date()).toISOString().replace(/[:\-]|\.\d{3}/g, "");
+    const header = {
+      host,
+      "x-amz-date": amzDate,
+      "x-api-key": this.config.apiKey
+    };
+    const headerB64Sub = btoa(JSON.stringify(header));
+    console.log("[AppSync] Connecting to", rtUrl);
+    this.ws = new WebSocket(rtUrl, ["aws-appsync-event-ws", `header-${headerB64Sub}`]);
+    const timeout = setTimeout(() => {
+      if (this.ws?.readyState !== WebSocket.OPEN) {
+        this.ws?.close();
+        this.connectPromise = null;
+        reject(new Error("Connection timeout"));
+      }
+    }, this.config.timeout);
+    this.ws.onopen = () => {
+      this.ws?.send(JSON.stringify({ type: "connection_init" }));
+    };
+    this.ws.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === "connection_ack") {
+        clearTimeout(timeout);
+        this.subscribe();
+        resolve({ clientId: this.clientId, connected: true });
+      } else if (msg.type === "event" || msg.type === "data") {
+        let events = [];
+        if (msg.type === "data" && msg.event) {
+          events = [msg.event];
+        } else if (msg.payload && msg.payload.events) {
+          events = msg.payload.events;
+        }
+        for (const event of events) {
+          let signal = event;
+          if (typeof event === "string") {
+            try {
+              signal = JSON.parse(event);
+            } catch (e) {
+            }
+          }
+          if (signal && signal.to === this.clientId) {
+            this.handleIncomingSignal(signal);
+          }
+        }
+      }
+    };
+    this.ws.onerror = (err) => {
+      clearTimeout(timeout);
+      this.connectPromise = null;
+      this.sendErrorToClient(new Error("WebSocket Error"));
+      reject(err);
+    };
+    this.ws.onclose = () => {
+      this.connectPromise = null;
+      this.sendCloseToClient();
+    };
+  }
+  subscribe() {
+    if (this.subscribed) return;
+    const url = new URL(this.config.wsUrl.replace("wss://", "https://"));
+    const amzDate = (/* @__PURE__ */ new Date()).toISOString().replace(/[:\-]|\.\d{3}/g, "");
+    const header = {
+      host: url.host,
+      "x-amz-date": amzDate,
+      "x-api-key": this.config.apiKey
+    };
+    const subMsg = {
+      id: "sub-" + Math.random().toString(36).substring(2, 11),
+      type: "subscribe",
+      channel: `/genix-bridge/${this.clientId}`,
+      authorization: header
+    };
+    this.ws?.send(JSON.stringify(subMsg));
+    this.subscribed = true;
+  }
+  async sendSignal(action, data) {
+    let publishUrl = this.config.wsUrl.replace("wss://", "https://");
+    if (!publishUrl.endsWith("/event")) {
+      publishUrl = publishUrl.replace(/\/$/, "") + "/event";
+    }
+    const amzDate = (/* @__PURE__ */ new Date()).toISOString().replace(/[:\-]|\.\d{3}/g, "");
+    const signal = {
+      from: this.clientId,
+      to: this.config.targetId,
+      action,
+      data
+    };
+    try {
+      const response = await fetch(publishUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": this.config.apiKey,
+          "x-amz-date": amzDate
+        },
+        body: JSON.stringify({
+          channel: `genix-bridge/server`,
+          events: [JSON.stringify(signal)]
+        })
+      });
+      if (!response.ok) {
+        throw new Error(`Publish failed: ${response.status}`);
+      }
+    } catch (err) {
+      this.sendErrorToClient(err instanceof Error ? err : new Error("Signal send failed"));
+      throw err;
+    }
+  }
+  handleIncomingSignal(signal) {
+    for (const clientID of this.clientIDs) {
+      sendClientMessage(clientID, {
+        __response__: 40,
+        signal: {
+          action: signal.action,
+          data: signal.data
+        }
+      });
+    }
+  }
+  sendErrorToClient(err) {
+    for (const clientID of this.clientIDs) {
+      sendClientMessage(clientID, {
+        __response__: 30,
+        error: err.message
+      });
+    }
+  }
+  sendCloseToClient() {
+    for (const clientID of this.clientIDs) {
+      sendClientMessage(clientID, {
+        __response__: 30,
+        closed: true
+      });
+    }
+  }
+  disconnect() {
+    this.ws?.close();
+  }
+  isConnected() {
+    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+  }
+  getClientId() {
+    return this.clientId;
+  }
+  getTargetId() {
+    return this.config.targetId;
+  }
+};
+var connectAppSync = async (config) => {
+  const targetId = config.targetId;
+  const clientID = config.__client__;
+  const requiredConfig = {
+    wsUrl: config.wsUrl,
+    apiKey: config.apiKey,
+    targetId,
+    stunServers: config.stunServers || ["stun:stun.l.google.com:19302", "stun:global.stun.twilio.com:3478"],
+    trickle: config.trickle ?? false,
+    timeout: config.timeout ?? 3e4,
+    __client__: clientID
+  };
+  connectionConfigs.set(clientID, requiredConfig);
+  clientTargetMap.set(clientID, targetId);
+  let connection = connectionsByTarget.get(targetId);
+  if (connection && connection.isConnected()) {
+    console.log("[AppSync] Reusing connection for target:", targetId);
+    connection.addClient(clientID);
+    return { clientId: connection.getClientId(), connected: true };
+  }
+  if (connection) {
+    console.log("[AppSync] Connection exists but not connected, reconnecting...");
+    connection.disconnect();
+  }
+  connection = new AppSyncConnection(requiredConfig);
+  connectionsByTarget.set(targetId, connection);
+  return await connection.connect();
+};
+var sendSignalToAppSync = async (args) => {
+  const targetId = clientTargetMap.get(args.__client__);
+  if (!targetId) {
+    throw new Error("No target associated with this client. Call connect first.");
+  }
+  let connection = connectionsByTarget.get(targetId);
+  if (!connection || !connection.isConnected()) {
+    const config = connectionConfigs.get(args.__client__);
+    if (!config) throw new Error("No connection config found");
+    connection = new AppSyncConnection(config);
+    connectionsByTarget.set(targetId, connection);
+    await connection.connect();
+  }
+  try {
+    await connection.sendSignal(args.action, args.data);
+  } catch (err) {
+    const config = connectionConfigs.get(args.__client__);
+    if (config) {
+      connection.disconnect();
+      connection = new AppSyncConnection(config);
+      connectionsByTarget.set(targetId, connection);
+      await connection.connect();
+      await connection.sendSignal(args.action, args.data);
+    } else {
+      throw err;
+    }
+  }
+  return { success: true };
+};
+var disconnectAppSync = async (args) => {
+  const targetId = clientTargetMap.get(args.__client__);
+  if (targetId) {
+    const connection = connectionsByTarget.get(targetId);
+    if (connection) {
+      connection.removeClient(args.__client__);
+      if (!connection.hasClients()) {
+        connection.disconnect();
+        connectionsByTarget.delete(targetId);
+      }
+    }
+    clientTargetMap.delete(args.__client__);
+  }
+  connectionConfigs.delete(args.__client__);
+  return { success: true };
+};
+
 // pkg-core/workers/service-worker.ts
 var parseResponseAsStream = async (fetchResponse, props) => {
   const contentType = fetchResponse.headers.get("Content-Type");
@@ -612,6 +892,15 @@ HandlersMap.set(11, async () => {
 });
 HandlersMap.set(3, async (args) => {
   return await fetchCache(args);
+});
+HandlersMap.set(30, async (args) => {
+  return await connectAppSync(args);
+});
+HandlersMap.set(31, async (args) => {
+  return await sendSignalToAppSync(args);
+});
+HandlersMap.set(32, async (args) => {
+  return await disconnectAppSync(args);
 });
 var makeKey = (args) => {
   const key = [args.route, args.partition?.value || "0"].join("_");

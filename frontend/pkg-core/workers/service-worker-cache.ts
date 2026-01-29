@@ -307,11 +307,23 @@ self.addEventListener('fetch', (event) => {
 
   
 
-        // 5. Respond to the fetch request
+                        // 5. Respond to the fetch request
 
-        console.log(`Respondiendo Fetch (${info}):`, (parseObject(message)))
+  
 
-        return new Response(JSON.stringify({ "ok": 1 }), {
+                        console.log(`Respondiendo Fetch (${info}):`, (parseObject(message)))
+
+  
+
+                        return new Response(JSON.stringify({ "ok": 1 }), {
+
+  
+
+                
+
+  
+
+        
 
           headers: { 'Content-Type': 'application/json' }
 

@@ -1,3 +1,7 @@
+import { sendServiceMessage, registerServiceHandler } from '$core/lib/sw-cache';
+
+const DEBUG_PREFIX = '[WSSWebRTC Client]';
+
 export interface SignalData {
   type?: 'offer' | 'answer' | 'candidate' | 'pranswer' | 'rollback';
   sdp?: string;
@@ -24,11 +28,12 @@ export type BridgeEvents = {
 };
 
 export class WSSWebRTC {
-  private ws: WebSocket | null = null;
   private peer: any = null; // SimplePeer instance
   private config: Required<WSSWebRTCConfig>;
   private eventListeners: Partial<BridgeEvents> = {};
-  private clientId: string;
+  private clientId: string | null = null;
+  private connected: boolean = false;
+  private signalHandlerId: number = 0;
 
   constructor(config: WSSWebRTCConfig) {
     this.config = {
@@ -42,7 +47,8 @@ export class WSSWebRTC {
       trickle: config.trickle ?? false,
       timeout: config.timeout ?? 30000
     };
-    this.clientId = 'client-' + Math.random().toString(36).substring(2, 11);
+this.clientId = 'client-' + Math.random().toString(36).substring(2, 11);
+this.registerSignalHandler();
   }
 
   on<K extends keyof BridgeEvents>(event: K, callback: BridgeEvents[K]): void {
@@ -57,137 +63,53 @@ export class WSSWebRTC {
     }
   }
 
-  connect(): void {
-    this.startAppSyncSubscription();
-  }
+  async connect(): Promise<void> {
+    console.log(`${DEBUG_PREFIX} Connecting to AppSync...`);
 
-  private startAppSyncSubscription(): void {
-    const url = new URL(this.config.wsUrl.replace('wss://', 'https://'));
-    const host = url.host;
-    
-    // Use the official realtime domain for events
-    // Example: d6lzr5appndydd5x35xlrz52te.appsync-api.us-east-1.amazonaws.com
-    // Becomes: d6lzr5appndydd5x35xlrz52te.appsync-realtime-api.us-east-1.amazonaws.com
-    let rtUrl = host.replace('appsync-api', 'appsync-realtime-api');
-    rtUrl = `wss://${rtUrl}/event/realtime`;
+    try {
+      const response = await sendServiceMessage(30, {
+        wsUrl: this.config.wsUrl,
+        apiKey: this.config.apiKey,
+        targetId: this.config.targetId,
+        stunServers: this.config.stunServers,
+        trickle: this.config.trickle,
+        timeout: this.config.timeout
+      });
 
-    const amzDate = new Date().toISOString().replace(/[:\-]|\.\d{3}/g, '');
-    
-    // Headers must be sorted alphabetically for consistent base64 encoding
-    const header = {
-      host: host,
-      'x-amz-date': amzDate,
-      'x-api-key': this.config.apiKey
-    };
-    
-    const headerStr = JSON.stringify(header);
-    // Use standard btoa and then apply base64url replacements if needed, 
-    // but the example shows a standard base64 string in the protocol
-    const headerB64Sub = btoa(headerStr);
-
-    console.log('[WSSWebRTC] Connecting to:', rtUrl);
-
-    // Use AppSync Events subprotocols. No query params needed per working example.
-    this.ws = new WebSocket(rtUrl, ['aws-appsync-event-ws', `header-${headerB64Sub}`]);
-
-    this.ws.onopen = () => {
-      console.log('[WSSWebRTC] AppSync Events Connected');
-      this.ws?.send(JSON.stringify({ type: 'connection_init' }));
-    };
-
-    this.ws.onmessage = (evt) => {
-      const msg = JSON.parse(evt.data);
-      if (msg.type === 'connection_ack') {
-        this.subscribe();
-        this.startWebRTC();
-      } else if (msg.type === 'event' || msg.type === 'data') {
-        let events: any[] = [];
-        if (msg.type === 'data' && msg.event) {
-          events = [msg.event];
-        } else if (msg.payload && msg.payload.events) {
-          events = msg.payload.events;
-        }
-
-        for (const event of events) {
-          let signal = event;
-          if (typeof event === 'string') {
-            try {
-              signal = JSON.parse(event);
-            } catch (e) {}
-          }
-          if (signal && signal.to === this.clientId) {
-            this.handleIncomingSignal(signal);
-          }
-        }
+      if (response.error) {
+        throw new Error(response.error);
       }
-    };
 
-    this.ws.onerror = (err) => {
-      console.error('[WSSWebRTC] AppSync WebSocket Error:', err);
-      this.emit('error', new Error('AppSync WebSocket Error'));
-    };
-    
-    this.ws.onclose = () => {
-      console.log('[WSSWebRTC] AppSync WebSocket Closed');
-      this.emit('close');
-    };
+      this.clientId = response.clientId;
+      this.connected = true;
+      console.log(`${DEBUG_PREFIX} Connected with clientId: ${this.clientId}`);
+
+      this.startWebRTC();
+    } catch (err) {
+      console.error(`${DEBUG_PREFIX} Connection failed:`, err);
+      this.emit('error', err instanceof Error ? err : new Error('Connection failed'));
+    }
   }
 
-  private subscribe(): void {
-    const url = new URL(this.config.wsUrl.replace('wss://', 'https://'));
-    const amzDate = new Date().toISOString().replace(/[:\-]|\.\d{3}/g, '');
-    
-    const header = {
-      host: url.host,
-      'x-amz-date': amzDate,
-      'x-api-key': this.config.apiKey
-    };
-
-    const subMsg = {
-      id: 'sub-' + Math.random().toString(36).substring(2, 11),
-      type: 'subscribe',
-      channel: `/genix-bridge/${this.clientId}`,
-      authorization: header
-    };
-
-    this.ws?.send(JSON.stringify(subMsg));
+  private registerSignalHandler(): void {
+    registerServiceHandler(40, (data: any) => {
+      if (!this.connected && this.clientId) {
+        this.connected = true;
+      }
+      this.handleIncomingSignal(data.signal);
+    });
   }
 
   private async sendSignal(action: string, data: string): Promise<void> {
-    let publishUrl = this.config.wsUrl.replace('wss://', 'https://');
-    if (!publishUrl.endsWith('/event')) {
-      publishUrl = publishUrl.replace(/\/$/, '') + '/event';
-    }
-
-    const amzDate = new Date().toISOString().replace(/[:\-]|\.\d{3}/g, '');
-    const signal = {
-      from: this.clientId,
-      to: this.config.targetId,
-      action: action,
-      data: data
-    };
-
     try {
-      const response = await fetch(publishUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.config.apiKey,
-          'x-amz-date': amzDate
-        },
-        body: JSON.stringify({
-          channel: `genix-bridge/server`,
-          events: [JSON.stringify(signal)]
-        })
+      await sendServiceMessage(31, {
+        action: action,
+        data: data
       });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Publish failed: ${response.status} ${errText}`);
-      }
     } catch (err) {
-      console.error('[WSSWebRTC] Failed to send signal:', err);
+      console.error(`${DEBUG_PREFIX} Failed to send signal:`, err);
       this.emit('error', err instanceof Error ? err : new Error('Signal send failed'));
+      throw err;
     }
   }
 
@@ -209,59 +131,63 @@ export class WSSWebRTC {
     });
 
     this.peer.on('signal', (data: any) => {
-      if (data.candidate) {
-        console.log('[WSSWebRTC] Local ICE Candidate gathered:', data.candidate.candidate);
-        if (data.candidate.candidate.includes(':') && !data.candidate.candidate.includes('.')) {
-          console.log('[WSSWebRTC] IPv6 Candidate detected');
-        }
-      } else {
-        console.log('[WSSWebRTC] Local Signal:', data.type);
-      }
       this.sendSignal(data.type || 'candidate', JSON.stringify(data));
     });
 
     this.peer.on('connect', () => {
-      console.log('[WSSWebRTC] P2P Connected');
+      console.log(`${DEBUG_PREFIX} P2P Connected!`);
       this.emit('connect');
     });
 
-    this.peer.on('data', (data: any) => this.emit('data', data));
-    this.peer.on('error', (err: any) => this.emit('error', err));
-    this.peer.on('close', () => this.emit('close'));
+    this.peer.on('data', (data: any) => {
+      this.emit('data', data);
+    });
+
+    this.peer.on('error', (err: any) => {
+      console.error(`${DEBUG_PREFIX} WebRTC Error:`, err);
+      this.emit('error', err);
+    });
+
+    this.peer.on('close', () => {
+      console.log(`${DEBUG_PREFIX} WebRTC Connection closed`);
+      this.emit('close');
+    });
   }
 
   private handleIncomingSignal(signal: any): void {
     try {
       const data = JSON.parse(signal.data);
-      console.log('[WSSWebRTC] Incoming Signal:', { action: signal.action, data });
-      
+
       if (signal.action === 'candidate') {
-        // SimplePeer expects candidates to be wrapped in a 'candidate' property
-        // We also sanitize the data to remove nulls that can break the RTCIceCandidate constructor
         const candidateInit: any = {
           candidate: data.candidate,
           sdpMid: data.sdpMid,
           sdpMLineIndex: data.sdpMLineIndex
         };
-        
-        console.log('[WSSWebRTC] Applying remote ICE candidate');
         this.peer.signal({ candidate: candidateInit });
       } else {
-        console.log('[WSSWebRTC] Applying remote SDP:', signal.action);
         this.peer.signal(data);
       }
     } catch (e) {
-      console.error('[WSSWebRTC] Error handling incoming signal:', e);
+      console.error(`${DEBUG_PREFIX} Error handling incoming signal:`, e);
     }
   }
 
   private emit<K extends keyof BridgeEvents>(event: K, ...args: Parameters<BridgeEvents[K]>): void {
     const listener = this.eventListeners[event];
-    if (listener) (listener as any)(...args);
+    if (listener) {
+      (listener as any)(...args);
+    }
   }
 
-  disconnect(): void {
-    this.ws?.close();
+  async disconnect(): Promise<void> {
+    try {
+      await sendServiceMessage(32, {});
+    } catch (err) {
+      console.error(`${DEBUG_PREFIX} Disconnect failed:`, err);
+    }
+
     this.peer?.destroy();
+    this.connected = false;
   }
 }
