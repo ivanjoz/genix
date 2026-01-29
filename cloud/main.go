@@ -8,16 +8,16 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type DeployParams struct {
-	AWS_PROFILE       string
-	AWS_REGION        string
-	STACK_NAME        string
+	APP_NAME          string `json:"APP_NAME"`
+	AWS_PROFILE       string `json:"AWS_PROFILE"`
+	AWS_REGION        string `json:"AWS_REGION"`
+	STACK_NAME        string `json:"STACK_NAME"`
 	DEPLOYMENT_BUCKET string
 	FRONTEND_BUCKET   string
 	LAMBDA_IAM_ROLE   string
@@ -63,6 +63,11 @@ func main() {
 
 	if err != nil {
 		panic("Error parsing credentials.json:" + err.Error())
+	}
+
+	if w1 == "cdk" {
+		StartCDK(params)
+		return
 	}
 
 	missingParams := []string{params.STACK_NAME, params.DEPLOYMENT_BUCKET,
@@ -221,86 +226,22 @@ func UpdateEnviromentVariables(params DeployParams, lambdaNro uint8) {
 
 // Despliega la infraestructura
 func DeployIfraestructure(params DeployParams) {
-	baseWD := GetBaseWD()
-	awsConfig, _ := MakeAwsConfig(params.AWS_PROFILE, params.AWS_REGION)
-	client := cloudformation.NewFromConfig(awsConfig)
-
-	stackEventsLogger := StackEventsLogger{
-		Client:    client,
-		StackName: params.STACK_NAME,
-	}
-
-	describeStacksInput := cloudformation.DescribeStacksInput{
-		StackName: &params.STACK_NAME,
-	}
-
-	stackDescript, err := client.DescribeStacks(context.TODO(), &describeStacksInput)
-	if stackDescript != nil {
-		fmt.Println(len(stackDescript.Stacks))
-	}
-
-	stackStatus := 1
-
-	if err != nil {
-		if strings.Contains(err.Error(), "does not exist") {
-			fmt.Println(err)
-			stackStatus = 0
-		} else {
-			panic(err)
-		}
-	}
-
-	cloudTemplateBytes, err := ReadFile(baseWD + "/cloud/cloudformation.yml")
-	if err != nil {
-		panic("No se encontró el template de CloudFormation (cloudformation.yml)." + err.Error())
-	}
-
-	cloudTemplate := string(cloudTemplateBytes)
-
-	variables := map[string]string{
-		"$FRONTEND_BUCKET":   params.FRONTEND_BUCKET,
-		"$DEPLOYMENT_BUCKET": params.DEPLOYMENT_BUCKET,
-		"$DYNAMODB_TABLE":    params.STACK_NAME + "-db",
-		"$LAMBDA_NAME":       params.STACK_NAME + "-backend",
-		"$LAMBDA_IAM_ROLE":   params.LAMBDA_IAM_ROLE,
-		"$S3_COMPILED_PATH":  s3CompiledPath,
-	}
-
-	for key, value := range variables {
-		cloudTemplate = strings.ReplaceAll(cloudTemplate, key, value)
-	}
-
 	CompileBackendToS3(params, true)
 
-	if stackStatus == 0 {
+	fmt.Println("Desplegando infraestructura con CDK...")
 
-		createStackInput := cloudformation.CreateStackInput{
-			StackName:    &params.STACK_NAME,
-			OnFailure:    "DELETE",
-			TemplateBody: &cloudTemplate,
-		}
+	// Ejecuta CDK deploy
+	// Usamos cdk.json para definir el comando --app
+	command := fmt.Sprintf("npx --yes aws-cdk@latest deploy %v-stack --require-approval never --profile %v", params.STACK_NAME, params.AWS_PROFILE)
 
-		stackResult, err := client.CreateStack(context.TODO(), &createStackInput)
-		if err != nil {
-			panic(err)
-		}
+	fmt.Println("Comando:: ", command)
+	cmd := exec.Command("bash", "-c", command)
+	cmd.Dir = GetBaseWD() + "/cloud/"
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
-		Print(stackResult.StackId)
-		stackEventsLogger.GetCurrentEventsAll()
-
-	} else {
-		fmt.Println("Stack Status:: ", stackDescript.Stacks[0].StackStatus)
-
-		updateStackInput := cloudformation.UpdateStackInput{
-			StackName:    &params.STACK_NAME,
-			TemplateBody: &cloudTemplate,
-		}
-
-		_, err := client.UpdateStack(context.TODO(), &updateStackInput)
-		if err != nil {
-			panic(err)
-		}
-
-		stackEventsLogger.GetCurrentEventsAll()
+	err := cmd.Run()
+	if err != nil {
+		panic("Error al ejecutar CDK deploy: " + err.Error())
 	}
 }

@@ -27,7 +27,7 @@ import { WSSWebRTC, createWSSWebRTC } from '$lib/pkg-core/lib/wss-webrtc';
 // Method 1: Using the class directly
 const bridge = new WSSWebRTC({
   wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-  targetId: 'laptop'
+  targetId: 'genix-bridge'
 });
 
 bridge.on('connect', () => {
@@ -44,7 +44,7 @@ bridge.connect();
 // Method 2: Using the async factory function
 const bridge = await createWSSWebRTC({
   wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-  targetId: 'laptop'
+  targetId: 'genix-bridge'
 });
 // Connection is now established and ready to use
 ```
@@ -56,7 +56,7 @@ interface WSSWebRTCConfig {
   // WebSocket URL for signaling server (required)
   wsUrl: string;
   
-  // Target ID to connect to, e.g., "laptop" (required)
+  // Target ID to connect to, e.g., "genix-bridge" (required)
   targetId: string;
   
   // STUN servers for NAT traversal (optional)
@@ -75,7 +75,7 @@ interface WSSWebRTCConfig {
 ```typescript
 {
   wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-  targetId: 'laptop',
+  targetId: 'genix-bridge',
   stunServers: [
     'stun:stun.l.google.com:19302',
     'stun:global.stun.twilio.com:3478'
@@ -150,7 +150,7 @@ async function createWSSWebRTC(config: WSSWebRTCConfig): Promise<WSSWebRTC>
 ```typescript
 const bridge = await createWSSWebRTC({
   wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-  targetId: 'laptop',
+  targetId: 'genix-bridge',
   timeout: 30000
 });
 // Connection is ready
@@ -191,7 +191,7 @@ The bridge emits the following events:
 ```typescript
 const bridge = new WSSWebRTC({
   wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-  targetId: 'laptop'
+  targetId: 'genix-bridge'
 });
 
 // WebSocket events
@@ -225,7 +225,7 @@ bridge.connect();
 ```typescript
 const bridge = new WSSWebRTC({
   wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-  targetId: 'laptop'
+  targetId: 'genix-bridge'
 });
 
 const pendingRequests = new Map();
@@ -342,7 +342,7 @@ bridge.on('error', (err) => {
 ```typescript
 const bridge = await createWSSWebRTC({
   wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-  targetId: 'laptop',
+  targetId: 'genix-bridge',
   timeout: 30000
 }).catch(err => {
   console.error('Connection timeout:', err);
@@ -358,7 +358,7 @@ The bridge communicates with the signaling server using a JSON-based protocol:
 ```json
 {
   "action": "sendSignal",
-  "to": "laptop",
+  "to": "genix-bridge",
   "signal": {
     "type": "offer",
     "sdp": "..."

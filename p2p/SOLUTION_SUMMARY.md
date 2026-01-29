@@ -10,7 +10,7 @@ When the frontend client attempts to establish a WebRTC connection with the home
 ## Root Cause
 
 1. Frontend sends WebRTC offer signal with target `"laptop"`
-2. Lambda resolves `"laptop"` to `LAPTOP_ID` environment variable
+2. Lambda resolves `"genix-bridge"` to `LAPTOP_ID` environment variable
 3. If homelab_server isn't connected, `LAPTOP_ID` is empty or connection doesn't exist
 4. Lambda verifies LAPTOP_ID connection is alive by sending a ping
 5. If LAPTOP_ID is stale (connection doesn't exist), Lambda detects `GoneException`

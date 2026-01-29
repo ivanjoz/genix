@@ -8,12 +8,9 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
-	"github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/klauspost/compress/zstd"
 	"github.com/kr/pretty"
@@ -48,69 +45,6 @@ func ReadFile(filePath string) ([]byte, error) {
 	}
 
 	return fileBytes, nil
-}
-
-type StackEventsLogger struct {
-	Client    *cloudformation.Client
-	StackName string
-	LogsMap   map[string]types.StackEvent
-	UnixTime  int64
-	Start     bool
-}
-
-func (e *StackEventsLogger) GetCurrentEvents() {
-
-	if e.LogsMap == nil {
-		e.LogsMap = map[string]types.StackEvent{}
-		if e.UnixTime == 0 {
-			e.UnixTime = time.Now().Unix() - 5
-		}
-	}
-
-	input := cloudformation.DescribeStackEventsInput{
-		StackName: &e.StackName,
-	}
-	result, err := e.Client.DescribeStackEvents(context.TODO(), &input)
-
-	if err != nil {
-		fmt.Println("Error al obtener los eventos del Stack: ", e.StackName)
-		fmt.Println(err)
-		return
-	}
-
-	for _, se := range result.StackEvents {
-		if se.Timestamp.Unix() < e.UnixTime {
-			continue
-		}
-		if _, ok := e.LogsMap[*se.EventId]; ok {
-			continue
-		}
-		e.LogsMap[*se.EventId] = se
-
-		resourceId := ""
-		if se.LogicalResourceId != nil {
-			resourceId = *se.LogicalResourceId
-		}
-		statusReason := ""
-		if se.ResourceStatusReason != nil {
-			statusReason = *se.ResourceStatusReason
-		}
-
-		fmt.Println(*se.Timestamp, se.ResourceStatus, resourceId, statusReason)
-	}
-}
-
-func (e *StackEventsLogger) GetCurrentEventsAll() {
-	e.Start = true
-	for {
-		if !e.Start {
-			break
-		}
-
-		fmt.Println("Consultando Eventos...")
-		e.GetCurrentEvents()
-		time.Sleep(2 * time.Second)
-	}
 }
 
 func Print(Struct any) {

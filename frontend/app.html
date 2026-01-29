@@ -5,6 +5,12 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		%sveltekit.head%
 		<script>
+			window._env = {
+				SIGNALING_ENDPOINT: "%PUBLIC_SIGNALING_ENDPOINT%",
+				SIGNALING_API_KEY: "%PUBLIC_SIGNALING_API_KEY%"
+			};
+			//ENVIROMENT_VARIABLES
+
 			window.global = window;
 			console.log('[Main App] Path:', window.location.pathname, 'Search:', window.location.search, '_IS_STORE_APP:', !!window._IS_STORE_APP);
 			// GitHub Pages SPA routing hack for /store sub-app

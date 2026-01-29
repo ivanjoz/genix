@@ -279,7 +279,7 @@ try {
 ```json
 {
   "action": "sendSignal",
-  "to": "laptop",
+  "to": "genix-bridge",
   "signal": {
     "type": "offer",
     "sdp": "v=0\r\no=- 123456789..."

@@ -1,10 +1,10 @@
 Your frontend (browser) should:
 1. Connect to the same WebSocket URL (from `credentials.json` or environment variable).
-2. Send an "offer" signal to the `laptop` target:
+2. Send an "offer" signal to the `genix-bridge` target:
    ```json
    {
      "action": "sendSignal",
-     "to": "laptop",
+     "to": "genix-bridge",
      "data": { "type": "offer", "sdp": "..." }
    }
    ```

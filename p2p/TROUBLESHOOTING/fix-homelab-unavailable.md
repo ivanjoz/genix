@@ -7,7 +7,7 @@ When the homelab_server is not running or not connected to the signaling Lambda,
 ## Root Cause
 
 1. Frontend sends WebRTC offer signal with target `"laptop"`
-2. Lambda resolves `"laptop"` to `LAPTOP_ID` environment variable
+2. Lambda resolves `"genix-bridge"` to `LAPTOP_ID` environment variable
 3. If homelab_server isn't connected, `LAPTOP_ID` is empty or connection doesn't exist
 4. Lambda's `PostToConnection` call fails with `GoneException`
 5. Lambda catches error and returns generic 500 "Internal server error"

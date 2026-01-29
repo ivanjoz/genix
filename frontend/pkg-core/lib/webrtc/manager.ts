@@ -79,19 +79,20 @@ class WebRTCManager {
 			return;
 		}
 
-		// const wsUrl = signalingEndpoint || Env.SIGNALING_ENDPOINT;
-		const wsUrl = "wss://waogll39kd.execute-api.us-east-1.amazonaws.com/prod"
+		const wsUrl = signalingEndpoint || Env.SIGNALING_ENDPOINT;
+		const apiKey = Env.API_KEY;
 
-		if (!wsUrl) {
-			console.warn('[WebRTCManager] No signaling endpoint configured, WebRTC disabled');
-			this.state.error = 'No signaling endpoint configured';
+		if (!wsUrl || !apiKey) {
+			console.warn('[WebRTCManager] Missing signaling endpoint or API key, WebRTC disabled');
+			this.state.error = 'Missing configuration';
 			this.notifyListeners();
 			return;
 		}
 
 		this.config = {
 			wsUrl,
-			targetId: 'laptop',
+			apiKey,
+			targetId: 'genix-bridge',
 			stunServers: [
 				'stun:stun.l.google.com:19302',
 				'stun:global.stun.twilio.com:3478'

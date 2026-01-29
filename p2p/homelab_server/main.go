@@ -16,15 +16,16 @@ import (
 	"syscall"
 	"time"
 
+	"p2p_bridge/config"
+
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v3"
-	"p2p_bridge/config"
 )
 
 var (
 	installFlag   = flag.Bool("install", false, "Install the server as a systemd service and start it")
 	uninstallFlag = flag.Bool("uninstall", false, "Uninstall the systemd service and remove the binary")
-	Version       = "3.0.0-appsync"
+	Version       = "3.6.0-stable"
 )
 
 // AppSync Realtime Messages
@@ -61,50 +62,93 @@ func main() {
 	}
 
 	cfg := config.GetDefaultConfig()
-	if cfg.SignalingEndpoint == "" || cfg.ApiKey == "" {
-		log.Fatal("ERROR: SIGNALING_ENDPOINT and API_KEY are required in credentials.json")
+	if cfg.SignalingSocket == "" || cfg.ApiKey == "" {
+		log.Fatal("ERROR: SIGNALING_SOCKET and API_KEY are required in credentials.json")
 	}
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
-	// Build Realtime WebSocket URL
-	// https://xxx.appsync-api.region.amazonaws.com/graphql -> wss://xxx.appsync-realtime-api.region.amazonaws.com/graphql
-	rtURL := strings.Replace(cfg.SignalingEndpoint, "https://", "wss://", 1)
-	rtURL = strings.Replace(rtURL, "appsync-api", "appsync-realtime-api", 1)
+		// 1. Build the correct WebSocket URL
 
-	parsedURL, _ := url.Parse(cfg.SignalingEndpoint)
-	host := parsedURL.Host
+		// Verified working path for AppSync Events: /event/realtime
 
-	header := map[string]string{
-		"host":     host,
-		"x-api-key": cfg.ApiKey,
+		rtURL := cfg.SignalingSocket
+
+		rtURL = strings.TrimSuffix(rtURL, "/")
+
+		if !strings.HasSuffix(rtURL, "/event/realtime") {
+
+			if strings.HasSuffix(rtURL, "/event") {
+
+				rtURL += "/realtime"
+
+			} else {
+
+				rtURL += "/event/realtime"
+
+			}
+
+		}
+
+
+
+	// 2. Prepare Authorization Header
+	parsedAPIURL, _ := url.Parse(cfg.SignalingEndpoint)
+	apiHost := parsedAPIURL.Host
+	amzDate := time.Now().UTC().Format("20060102T150405Z")
+
+	authHeader := map[string]string{
+		"host":       apiHost,
+		"x-api-key":  cfg.ApiKey,
+		"x-amz-date": amzDate,
 	}
-	headerBytes, _ := json.Marshal(header)
-	headerB64 := base64.StdEncoding.EncodeToString(headerBytes)
+	headerBytes, _ := json.Marshal(authHeader)
+	
+	// Base64URL (Raw/No padding) for the subprotocol
+	headerB64Sub := base64.RawURLEncoding.EncodeToString(headerBytes)
+	// Standard Base64 for the query parameter
+	headerB64Query := base64.StdEncoding.EncodeToString(headerBytes)
 
-	finalURL := fmt.Sprintf("%s?header=%s&payload=e30=", rtURL, headerB64)
+	// 3. Connect using verified subprotocols
+	dialer := websocket.Dialer{
+		Subprotocols: []string{"aws-appsync-event-ws", "header-" + headerB64Sub},
+	}
 
-	log.Printf("DEBUG: Connecting to AppSync Realtime at %s...", rtURL)
-	c, _, err := websocket.DefaultDialer.Dial(finalURL, http.Header{"Sec-WebSocket-Protocol": []string{"graphql-ws"}})
+	finalURL := fmt.Sprintf("%s?header=%s&payload=e30=", rtURL, headerB64Query)
+
+	log.Println("Version 4.1.0-flat-subscribe-structure")
+	log.Printf("DEBUG: Connecting to AppSync Events at %s...", rtURL)
+	c, resp, err := dialer.Dial(finalURL, nil)
 	if err != nil {
+		if resp != nil {
+			log.Printf("ERROR: Handshake failed (Status %d)", resp.StatusCode)
+			body, _ := io.ReadAll(resp.Body)
+			log.Printf("ERROR: Response Body: %s", string(body))
+		}
 		log.Fatalf("ERROR: Dial failed: %v", err)
 	}
 	defer c.Close()
 
-	// 1. Connection Init
-	initMsg, _ := json.Marshal(AppSyncMessage{Type: "connection_init"})
-	c.WriteMessage(websocket.TextMessage, initMsg)
+	log.Printf("DEBUG: WebSocket established. Protocol: %s", resp.Header.Get("Sec-WebSocket-Protocol"))
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+
+		// A. Connection Initialization
+		initMsg, _ := json.Marshal(AppSyncMessage{Type: "connection_init"})
+		c.WriteMessage(websocket.TextMessage, initMsg)
+		log.Println("DEBUG: Sent connection_init")
+
 		for {
-			_, message, err := c.ReadMessage()
+			messageType, message, err := c.ReadMessage()
 			if err != nil {
-				log.Println("DEBUG: WebSocket read error:", err)
+				log.Printf("DEBUG: WebSocket read error: %v (Type: %d)", err, messageType)
 				return
 			}
+
+			log.Printf("DEBUG: Received: %s", string(message))
 
 			var msg AppSyncMessage
 			if err := json.Unmarshal(message, &msg); err != nil {
@@ -114,48 +158,47 @@ func main() {
 			switch msg.Type {
 			case "connection_ack":
 				log.Println("DEBUG: AppSync Connection Acknowledged")
-				// 2. Subscribe to signals
-				subID := "sub-1"
-				subPayload := map[string]interface{}{
-					"data": "subscription onSignal($to: String!) { onSignal(to: $to) { from to action data } }",
-					"variables": map[string]string{
-						"to": "laptop",
-					},
-				}
-				// AppSync sub requires 'data' (query) and 'extensions' (auth)
-				startMsg, _ := json.Marshal(map[string]interface{}{
-					"type": "start",
-					"id":   subID,
-					"payload": map[string]interface{}{
-						"data": subPayload["data"],
-						"variables": subPayload["variables"],
-						"extensions": map[string]interface{}{
-							"authorization": header,
-						},
-					},
+				
+				// B. Subscribe to channel (Flattened structure as per working example)
+				subID := fmt.Sprintf("sub-%d", time.Now().Unix())
+				subMsg, _ := json.Marshal(map[string]interface{}{
+					"id":            subID,
+					"type":          "subscribe",
+					"channel":       "genix-bridge/server",
+					"authorization": authHeader,
 				})
-				c.WriteMessage(websocket.TextMessage, startMsg)
-				log.Println("DEBUG: Subscription request sent for 'laptop'")
+				c.WriteMessage(websocket.TextMessage, subMsg)
+				log.Printf("DEBUG: Sent subscribe for 'genix-bridge/server' (ID: %s)", subID)
 
-			case "data":
-				// Handle signal
-				payload := msg.Payload.(map[string]interface{})
-				data := payload["data"].(map[string]interface{})
-				onSignal := data["onSignal"].(map[string]interface{})
+			case "subscribe_success":
+				log.Printf("DEBUG: Subscribed successfully (ID: %s)", msg.ID)
 
-				signal := AppSyncSignal{
-					From:   onSignal["from"].(string),
-					To:     onSignal["to"].(string),
-					Action: onSignal["action"].(string),
-					Data:   onSignal["data"].(string),
-				}
+			case "event":
+				// Handle signal from AppSync Events
+				payload, ok := msg.Payload.(map[string]interface{})
+				if !ok { continue }
 
-				if signal.Action == "offer" {
-					log.Printf("DEBUG: Received WebRTC offer from %s", signal.From)
-					handleOffer(cfg, signal)
+				events, ok := payload["events"].([]interface{})
+				if !ok { continue }
+
+				for _, event := range events {
+					var signal AppSyncSignal
+					eventBytes, _ := json.Marshal(event)
+					// If event is a string, unmarshal from it
+					var eventStr string
+					if err := json.Unmarshal(eventBytes, &eventStr); err == nil {
+						json.Unmarshal([]byte(eventStr), &signal)
+					} else {
+						json.Unmarshal(eventBytes, &signal)
+					}
+
+					if signal.Action == "offer" {
+						log.Printf("DEBUG: Received WebRTC offer from %s", signal.From)
+						handleOffer(cfg, signal)
+					}
 				}
 			case "ka":
-				// Keep alive, ignore
+				// Keep alive
 			case "error":
 				log.Printf("ERROR: AppSync Error: %v", msg.Payload)
 			}
@@ -174,26 +217,19 @@ func main() {
 	}
 }
 
-func sendMutation(cfg *config.Config, signal AppSyncSignal) error {
-	query := `mutation sendSignal($from: String!, $to: String!, $action: String!, $data: String!) {
-		sendSignal(from: $from, to: $to, action: $action, data: $data) {
-			from to action data
-		}
-	}`
-
-	variables := map[string]string{
-		"from":   signal.From,
-		"to":     signal.To,
-		"action": signal.Action,
-		"data":   signal.Data,
+func publishSignal(cfg *config.Config, signal AppSyncSignal) error {
+	// Use SignalingEndpoint directly for REST publishing
+	publishURL := cfg.SignalingEndpoint
+	if !strings.Contains(publishURL, "/event") {
+		publishURL = strings.TrimSuffix(publishURL, "/") + "/event"
 	}
 
 	reqBody, _ := json.Marshal(map[string]interface{}{
-		"query":     query,
-		"variables": variables,
+		"channel": "/genix-bridge/" + signal.To,
+		"events":  []interface{}{signal},
 	})
 
-	req, _ := http.NewRequest("POST", cfg.SignalingEndpoint, bytes.NewBuffer(reqBody))
+	req, _ := http.NewRequest("POST", publishURL, bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", cfg.ApiKey)
 
@@ -206,7 +242,7 @@ func sendMutation(cfg *config.Config, signal AppSyncSignal) error {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("mutation failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("publish failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	return nil
@@ -294,14 +330,14 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 
 	answerJSON, _ := json.Marshal(pc.LocalDescription())
 	resp := AppSyncSignal{
-		From:   "laptop",
+		From:   "genix-bridge",
 		To:     signal.From,
 		Action: "answer",
 		Data:   string(answerJSON),
 	}
 
-	if err := sendMutation(cfg, resp); err != nil {
-		log.Printf("ERROR: Failed to send answer mutation: %v", err)
+	if err := publishSignal(cfg, resp); err != nil {
+		log.Printf("ERROR: Failed to send answer signal: %v", err)
 	} else {
 		log.Printf("DEBUG: Successfully sent WebRTC answer to %s", signal.From)
 	}

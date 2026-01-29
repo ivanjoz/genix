@@ -11,8 +11,8 @@ export async function basicExample() {
     // e.g., 'wss://xxx.execute-api.us-east-1.amazonaws.com/prod'
     wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
     
-    // Target ID to connect to (usually "laptop" as defined in DEPLOYMENT.md)
-    targetId: 'laptop',
+    // Target ID to connect to (usually "genix-bridge" as defined in DEPLOYMENT.md)
+    targetId: 'genix-bridge',
     
     // Optional: Custom STUN servers for better NAT traversal
     stunServers: [
@@ -95,7 +95,7 @@ export async function basicExample() {
 export async function factoryExample() {
   const config: WSSWebRTCConfig = {
     wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-    targetId: 'laptop',
+    targetId: 'genix-bridge',
     timeout: 30000
   };
 
@@ -139,7 +139,7 @@ export function createWSSWebRTCHook() {
   
   const config: WSSWebRTCConfig = {
     wsUrl: process.env.WS_URL || 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-    targetId: 'laptop'
+    targetId: 'genix-bridge'
   };
 
   const bridge = new WSSWebRTC(config);
@@ -192,7 +192,7 @@ export function createWSSWebRTCHook() {
 export async function robustExample() {
   const config: WSSWebRTCConfig = {
     wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-    targetId: 'laptop',
+    targetId: 'genix-bridge',
     timeout: 30000
   };
 
@@ -255,7 +255,7 @@ export async function robustExample() {
 export async function requestResponseExample() {
   const config: WSSWebRTCConfig = {
     wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-    targetId: 'laptop'
+    targetId: 'genix-bridge'
   };
 
   const bridge = new WSSWebRTC(config);
@@ -334,7 +334,7 @@ export async function requestResponseExample() {
 export async function streamingExample() {
   const config: WSSWebRTCConfig = {
     wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-    targetId: 'laptop'
+    targetId: 'genix-bridge'
   };
 
   const bridge = new WSSWebRTC(config);
@@ -504,7 +504,7 @@ export class AppStateBridge {
 export function appStateExample() {
   const config: WSSWebRTCConfig = {
     wsUrl: 'wss://your-api-id.execute-api.region.amazonaws.com/prod',
-    targetId: 'laptop'
+    targetId: 'genix-bridge'
   };
 
   const appBridge = new AppStateBridge(config);

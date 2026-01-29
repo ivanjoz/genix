@@ -21,45 +21,37 @@ func NewDeployStack(scope constructs.Construct, id string, props *DeployStackPro
 	}
 	stack := awscdk.NewStack(scope, &id, &sprops)
 
-	// AppSync GraphQL API for signaling
-	api := awsappsync.NewGraphqlApi(stack, jsii.String("SignalingApi"), &awsappsync.GraphqlApiProps{
-		Name: jsii.String(cfg.GetStackName() + "-api"),
-		Definition: awsappsync.Definition_FromSchema(awsappsync.SchemaFile_FromAsset(jsii.String("schema.graphql"))),
-		AuthorizationConfig: &awsappsync.AuthorizationConfig{
-			DefaultAuthorization: &awsappsync.AuthorizationMode{
-				AuthorizationType: awsappsync.AuthorizationType_API_KEY,
+	// AppSync Events API for signaling
+	api := awsappsync.NewEventApi(stack, jsii.String("SignalingEventApi"), &awsappsync.EventApiProps{
+		ApiName: jsii.String(cfg.GetStackName() + "-events-api"),
+		AuthorizationConfig: &awsappsync.EventApiAuthConfig{
+			AuthProviders: &[]*awsappsync.AppSyncAuthProvider{
+				&awsappsync.AppSyncAuthProvider{
+					AuthorizationType: awsappsync.AppSyncAuthorizationType_API_KEY,
+				},
+			},
+			ConnectionAuthModeTypes: &[]awsappsync.AppSyncAuthorizationType{
+				awsappsync.AppSyncAuthorizationType_API_KEY,
+			},
+			DefaultPublishAuthModeTypes: &[]awsappsync.AppSyncAuthorizationType{
+				awsappsync.AppSyncAuthorizationType_API_KEY,
+			},
+			DefaultSubscribeAuthModeTypes: &[]awsappsync.AppSyncAuthorizationType{
+				awsappsync.AppSyncAuthorizationType_API_KEY,
 			},
 		},
 	})
 
-	// Local Data Source (None) for pub/sub signaling
-	dataSource := api.AddNoneDataSource(jsii.String("NoneDataSource"), &awsappsync.DataSourceOptions{
-		Name: jsii.String("NoneDataSource"),
-	})
-
-	// Mutation resolver for sendSignal
-	dataSource.CreateResolver(jsii.String("SendSignalResolver"), &awsappsync.BaseResolverProps{
-		TypeName: jsii.String("Mutation"),
-		FieldName: jsii.String("sendSignal"),
-		RequestMappingTemplate: awsappsync.MappingTemplate_FromString(jsii.String(`{
-			"version": "2018-05-29",
-			"payload": {
-				"from": "$context.arguments.from",
-				"to": "$context.arguments.to",
-				"action": "$context.arguments.action",
-				"data": "$context.arguments.data"
-			}
-		}`)),
-		ResponseMappingTemplate: awsappsync.MappingTemplate_FromString(jsii.String(`$util.toJson($context.result)`)),
-	})
+	// Add channel namespace for P2P signaling
+	api.AddChannelNamespace(jsii.String("genix-bridge"), nil)
 
 	// Outputs
-	awscdk.NewCfnOutput(stack, jsii.String("GraphQLUrl"), &awscdk.CfnOutputProps{
-		Value: api.GraphqlUrl(),
+	awscdk.NewCfnOutput(stack, jsii.String("WebSocketUrl"), &awscdk.CfnOutputProps{
+		Value: jsii.String("wss://" + *api.RealtimeDns()),
 	})
 
 	awscdk.NewCfnOutput(stack, jsii.String("ApiKey"), &awscdk.CfnOutputProps{
-		Value: api.ApiKey(),
+		Value: (*api.ApiKeys())["Default"].AttrApiKey(),
 	})
 
 	return stack
@@ -96,6 +88,12 @@ func env(cfg *config.Config) *awscdk.Environment {
 	if region == "" {
 		region = os.Getenv("CDK_DEFAULT_REGION")
 	}
+
+	// If account or region is not specified, return nil to let CDK auto-discover
+	if account == "" || region == "" {
+		return nil
+	}
+
 	return &awscdk.Environment{
 		Account: jsii.String(account),
 		Region:  jsii.String(region),

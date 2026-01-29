@@ -15,8 +15,9 @@ type Config struct {
 	AppName          string `json:"APP_NAME,omitempty"`
 	SignalingAppName string `json:"SIGNALING_APP_NAME,omitempty"`
 	StackName        string `json:"SIGNALING_STACK_NAME,omitempty"`
-	SignalingEndpoint     string `json:"SIGNALING_ENDPOINT,omitempty"`
-	ApiKey           string `json:"API_KEY,omitempty"`
+	SignalingEndpoint string `json:"SIGNALING_ENDPOINT,omitempty"`
+	SignalingSocket     string `json:"SIGNALING_SOCKET,omitempty"`
+	ApiKey           string `json:"SIGNALING_API_KEY,omitempty"`
 	LambdaFunctionName string `json:"-"` // Not in JSON, derived from app_name
 	LambdaFunctionNameActual string `json:"LAMBDA_FUNCTION_NAME,omitempty"` // Actual Lambda function name from CDK output
 	AWSRegion        string `json:"AWS_REGION,omitempty"`
@@ -130,8 +131,9 @@ func Load() (*Config, error) {
 		cfg.SignalingAppName = val
 	}
 
-	// Try to get SIGNALING_STACK_NAME from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"SIGNALING_STACK_NAME", "stack_name"}); found {
+	// Try to get SIGNALING_STACK_NAME from credentials.json
+	// Do NOT use the generic STACK_NAME field (that's for the backend stack)
+	if val, found := getValueFromRaw(raw, []string{"SIGNALING_STACK_NAME"}); found {
 		cfg.StackName = val
 	}
 
@@ -150,8 +152,13 @@ func Load() (*Config, error) {
 		cfg.SignalingEndpoint = val
 	}
 
+	// Try to get SIGNALING_SOCKET from multiple possible key names
+	if val, found := getValueFromRaw(raw, []string{"SIGNALING_SOCKET", "signaling_socket"}); found {
+		cfg.SignalingSocket = val
+	}
+
 	// Try to get API_KEY from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"API_KEY", "api_key"}); found {
+	if val, found := getValueFromRaw(raw, []string{"SIGNALING_API_KEY", "api_key"}); found {
 		cfg.ApiKey = val
 	}
 
@@ -196,6 +203,9 @@ func LoadWithEnv() (*Config, error) {
 	}
 	if signalingEndpoint := os.Getenv("SIGNALING_ENDPOINT"); signalingEndpoint != "" {
 		cfg.SignalingEndpoint = strings.TrimSpace(signalingEndpoint)
+	}
+	if signalingSocket := os.Getenv("SIGNALING_SOCKET"); signalingSocket != "" {
+		cfg.SignalingSocket = strings.TrimSpace(signalingSocket)
 	}
 	if apiKey := os.Getenv("API_KEY"); apiKey != "" {
 		cfg.ApiKey = strings.TrimSpace(apiKey)

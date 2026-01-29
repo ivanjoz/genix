@@ -54,7 +54,7 @@ export class WSSWebRTC {
   }
 
   private startAppSyncSubscription(): void {
-    const url = new URL(this.config.wsUrl);
+    const url = new URL(this.config.wsUrl.replace('wss://', 'https://'));
     const host = url.host;
     const rtUrl = this.config.wsUrl
       .replace('https://', 'wss://')
@@ -81,7 +81,7 @@ export class WSSWebRTC {
         this.startWebRTC();
       } else if (msg.type === 'data') {
         const signal = msg.payload.data.onSignal;
-        if (signal.to === this.clientId) {
+        if (signal && signal.to === this.clientId) {
           this.handleIncomingSignal(signal);
         }
       }
@@ -92,7 +92,7 @@ export class WSSWebRTC {
 
   private subscribe(): void {
     const header = {
-      host: new URL(this.config.wsUrl).host,
+      host: new URL(this.config.wsUrl.replace('wss://', 'https://')).host,
       'x-api-key': this.config.apiKey
     };
     const query = `subscription onSignal($to: String!) { onSignal(to: $to) { from to action data } }`;
@@ -102,8 +102,10 @@ export class WSSWebRTC {
       id: 'sub-client',
       type: 'start',
       payload: {
-        data: query,
-        variables: variables,
+        data: JSON.stringify({
+          query,
+          variables
+        }),
         extensions: {
           authorization: header
         }
