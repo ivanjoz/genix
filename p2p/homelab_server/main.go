@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
@@ -20,7 +19,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v3"
 	"p2p_bridge/config"
-	"p2p_bridge/homelab_server/install"
 )
 
 var (
@@ -47,7 +45,7 @@ func main() {
 	flag.Parse()
 
 	if *installFlag {
-		if err := install.RunInstall(); err != nil {
+		if err := RunInstall(); err != nil {
 			log.Fatalf("Installation failed: %v", err)
 		}
 		log.Println("Installation completed successfully!")
@@ -55,7 +53,7 @@ func main() {
 	}
 
 	if *uninstallFlag {
-		if err := install.RunUninstall(); err != nil {
+		if err := RunUninstall(); err != nil {
 			log.Fatalf("Uninstallation failed: %v", err)
 		}
 		log.Println("Uninstallation completed successfully!")
@@ -124,9 +122,6 @@ func main() {
 						"to": "laptop",
 					},
 				}
-				authPayload := map[string]interface{}{
-					"data": string(headerBytes),
-				}
 				// AppSync sub requires 'data' (query) and 'extensions' (auth)
 				startMsg, _ := json.Marshal(map[string]interface{}{
 					"type": "start",
@@ -147,14 +142,14 @@ func main() {
 				payload := msg.Payload.(map[string]interface{})
 				data := payload["data"].(map[string]interface{})
 				onSignal := data["onSignal"].(map[string]interface{})
-				
+
 				signal := AppSyncSignal{
 					From:   onSignal["from"].(string),
 					To:     onSignal["to"].(string),
 					Action: onSignal["action"].(string),
 					Data:   onSignal["data"].(string),
 				}
-				
+
 				if signal.Action == "offer" {
 					log.Printf("DEBUG: Received WebRTC offer from %s", signal.From)
 					handleOffer(cfg, signal)
@@ -185,7 +180,7 @@ func sendMutation(cfg *config.Config, signal AppSyncSignal) error {
 			from to action data
 		}
 	}`
-	
+
 	variables := map[string]string{
 		"from":   signal.From,
 		"to":     signal.To,
@@ -218,8 +213,25 @@ func sendMutation(cfg *config.Config, signal AppSyncSignal) error {
 }
 
 func handleOffer(cfg *config.Config, signal AppSyncSignal) {
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}},
+	log.Println("DEBUG: Starting WebRTC PeerConnection setup with IPv6 optimization...")
+
+	// Create a SettingEngine and enable IPv6
+	s := webrtc.SettingEngine{}
+	s.SetNetworkTypes([]webrtc.NetworkType{
+		webrtc.NetworkTypeUDP6,
+		webrtc.NetworkTypeUDP4,
+		webrtc.NetworkTypeTCP6,
+		webrtc.NetworkTypeTCP4,
+	})
+
+	// Create the API object with the SettingEngine
+	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
+
+	pc, err := api.NewPeerConnection(webrtc.Configuration{
+		ICEServers: []webrtc.ICEServer{
+			{URLs: []string{"stun:stun.l.google.com:19302"}},
+			{URLs: []string{"stun:stun.l.google.com:19305"}}, // Multiple STUNs for better gathering
+		},
 	})
 	if err != nil {
 		log.Printf("ERROR: Failed to create PeerConnection: %v", err)
@@ -230,10 +242,28 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 		log.Printf("DEBUG: WebRTC Connection State Change: %s", s.String())
 	})
 
+	pc.OnICEGatheringStateChange(func(s webrtc.ICEGathererState) {
+		log.Printf("DEBUG: WebRTC ICE Gathering State Change: %s", s.String())
+	})
+
+	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
+		if c != nil {
+			candidateStr := c.String()
+			log.Printf("DEBUG: Local ICE Candidate gathered: %s", candidateStr)
+			if strings.Contains(candidateStr, ":") && !strings.Contains(candidateStr, ".") {
+				log.Printf("DEBUG: Found IPv6 Candidate")
+			}
+		}
+	})
+
 	pc.OnDataChannel(func(d *webrtc.DataChannel) {
+		log.Printf("DEBUG: New DataChannel opened: %s", d.Label())
+		d.OnOpen(func() {
+			log.Printf("DEBUG: DataChannel '%s' is now OPEN", d.Label())
+		})
 		d.OnMessage(func(msg webrtc.DataChannelMessage) {
 			log.Printf("DEBUG: Received DataChannel message: %s", string(msg.Data))
-			// Business logic here (same as before)
+			// Business logic here
 		})
 	})
 
@@ -261,7 +291,7 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 	}
 
 	<-gatherComplete
-	
+
 	answerJSON, _ := json.Marshal(pc.LocalDescription())
 	resp := AppSyncSignal{
 		From:   "laptop",

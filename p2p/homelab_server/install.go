@@ -1,5 +1,5 @@
 // Package install provides systemd service installation and management for the homelab server.
-package install
+package main
 
 import (
 	"crypto/sha256"

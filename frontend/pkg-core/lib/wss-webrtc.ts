@@ -142,11 +142,22 @@ export class WSSWebRTC {
     this.peer = new SimplePeer({
       initiator: true,
       trickle: this.config.trickle,
-      config: { iceServers: this.config.stunServers.map(urls => ({ urls })) }
+      config: { 
+        iceServers: this.config.stunServers.map(urls => ({ urls })),
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require'
+      }
     });
 
     this.peer.on('signal', (data: any) => {
-      console.log('[WSSWebRTC] Local Signal:', data.type || 'candidate');
+      if (data.candidate) {
+        console.log('[WSSWebRTC] Local ICE Candidate gathered:', data.candidate.candidate);
+        if (data.candidate.candidate.includes(':') && !data.candidate.candidate.includes('.')) {
+          console.log('[WSSWebRTC] IPv6 Candidate detected');
+        }
+      } else {
+        console.log('[WSSWebRTC] Local Signal:', data.type);
+      }
       this.sendSignal(data.type || 'candidate', JSON.stringify(data));
     });
 
