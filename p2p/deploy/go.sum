@@ -2,10 +2,6 @@ github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1
 github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/aws/aws-cdk-go/awscdk/v2 v2.114.1 h1:Xp8yuu2vRvW1kUnCEEnycgV7U/bAVAepNvIwXrP5niI=
 github.com/aws/aws-cdk-go/awscdk/v2 v2.114.1/go.mod h1:vPNcOhh47T85J52L+xUUZ91IBRvf5dFpe4s4cyiTn1E=
-github.com/aws/aws-cdk-go/awscdkapigatewayv2alpha/v2 v2.114.1-alpha.0 h1:eJotKvhokOB3EG4PE0F/AD1k5sMc9ovZVvVXOWKL2Rs=
-github.com/aws/aws-cdk-go/awscdkapigatewayv2alpha/v2 v2.114.1-alpha.0/go.mod h1:Tws/cFSjJh8MkJlLjpdh2AxrClXZC93BFZj12qG4cgc=
-github.com/aws/aws-cdk-go/awscdkapigatewayv2integrationsalpha/v2 v2.114.1-alpha.0 h1:8yf+fpqt/vkfFC5JtuYkU0Md6+0sM2D0o4vIKVDRaxw=
-github.com/aws/aws-cdk-go/awscdkapigatewayv2integrationsalpha/v2 v2.114.1-alpha.0/go.mod h1:lt+b1NhUPW6RU1qoNoH5eLIALaHPtDnFztdLrLI2aes=
 github.com/aws/aws-lambda-go v1.52.0 h1:5NfiRaVl9FafUIt2Ld/Bv22kT371mfAI+l1Hd+tV7ZE=
 github.com/aws/aws-lambda-go v1.52.0/go.mod h1:dpMpZgvWx5vuQJfBt0zqBha60q7Dd7RfgJv23DymV8A=
 github.com/aws/aws-sdk-go-v2 v1.41.1 h1:ABlyEARCDLN034NhxlRUSZr4l71mh+T5KAeGh6cerhU=

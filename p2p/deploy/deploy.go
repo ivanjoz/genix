@@ -1,16 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
-	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
-	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
-	"github.com/aws/aws-cdk-go/awscdk/v2/awss3assets"
-	"github.com/aws/aws-cdk-go/awscdkapigatewayv2alpha/v2"
-	"github.com/aws/aws-cdk-go/awscdkapigatewayv2integrationsalpha/v2"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsappsync"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 	"p2p_bridge/config"
@@ -27,76 +21,45 @@ func NewDeployStack(scope constructs.Construct, id string, props *DeployStackPro
 	}
 	stack := awscdk.NewStack(scope, &id, &sprops)
 
-	// Lambda for signaling
-	currDir, _ := os.Getwd()
-	// Since we are in 'deploy' directory, signaling_lambda is one level up
-	lambdaSourcePath := filepath.Join(currDir, "..", "signaling_lambda")
-
-	signalingLambda := awslambda.NewFunction(stack, jsii.String(cfg.GetLambdaFunctionName()), &awslambda.FunctionProps{
-		Runtime: awslambda.Runtime_PROVIDED_AL2023(),
-		Handler: jsii.String("bootstrap"),
-		Code:     awslambda.Code_FromAsset(jsii.String(lambdaSourcePath), &awss3assets.AssetOptions{}),
-		Environment: &map[string]*string{
-			"LAPTOP_ID": jsii.String(""),
+	// AppSync GraphQL API for signaling
+	api := awsappsync.NewGraphqlApi(stack, jsii.String("SignalingApi"), &awsappsync.GraphqlApiProps{
+		Name: jsii.String(cfg.GetStackName() + "-api"),
+		Definition: awsappsync.Definition_FromSchema(awsappsync.SchemaFile_FromAsset(jsii.String("schema.graphql"))),
+		AuthorizationConfig: &awsappsync.AuthorizationConfig{
+			DefaultAuthorization: &awsappsync.AuthorizationMode{
+				AuthorizationType: awsappsync.AuthorizationType_API_KEY,
+			},
 		},
 	})
 
-	// WebSocket API
-	webSocketApi := awscdkapigatewayv2alpha.NewWebSocketApi(stack, jsii.String("SignalingApi"), &awscdkapigatewayv2alpha.WebSocketApiProps{
-		RouteSelectionExpression: jsii.String("$request.body.action"),
+	// Local Data Source (None) for pub/sub signaling
+	dataSource := api.AddNoneDataSource(jsii.String("NoneDataSource"), &awsappsync.DataSourceOptions{
+		Name: jsii.String("NoneDataSource"),
 	})
 
-	integration := awscdkapigatewayv2integrationsalpha.NewWebSocketLambdaIntegration(jsii.String("SignalingIntegration"), signalingLambda)
-
-	// Add routes
-	webSocketApi.AddRoute(jsii.String("$connect"), &awscdkapigatewayv2alpha.WebSocketRouteOptions{
-		Integration: integration,
-	})
-	webSocketApi.AddRoute(jsii.String("$disconnect"), &awscdkapigatewayv2alpha.WebSocketRouteOptions{
-		Integration: integration,
-	})
-	webSocketApi.AddRoute(jsii.String("$default"), &awscdkapigatewayv2alpha.WebSocketRouteOptions{
-		Integration: integration,
-	})
-	webSocketApi.AddRoute(jsii.String("sendSignal"), &awscdkapigatewayv2alpha.WebSocketRouteOptions{
-		Integration: integration,
-	})
-
-	stage := awscdkapigatewayv2alpha.NewWebSocketStage(stack, jsii.String("ProdStage"), &awscdkapigatewayv2alpha.WebSocketStageProps{
-		WebSocketApi: webSocketApi,
-		StageName:    jsii.String("prod"),
-		AutoDeploy:   jsii.Bool(true),
+	// Mutation resolver for sendSignal
+	dataSource.CreateResolver(jsii.String("SendSignalResolver"), &awsappsync.BaseResolverProps{
+		TypeName: jsii.String("Mutation"),
+		FieldName: jsii.String("sendSignal"),
+		RequestMappingTemplate: awsappsync.MappingTemplate_FromString(jsii.String(`{
+			"version": "2018-05-29",
+			"payload": {
+				"from": "$context.arguments.from",
+				"to": "$context.arguments.to",
+				"action": "$context.arguments.action",
+				"data": "$context.arguments.data"
+			}
+		}`)),
+		ResponseMappingTemplate: awsappsync.MappingTemplate_FromString(jsii.String(`$util.toJson($context.result)`)),
 	})
 
-	// Enable logging for the stage
-	cfnStage := stage.Node().DefaultChild().(awscdkapigatewayv2alpha.CfnStage)
-	cfnStage.SetDefaultRouteSettings(&awscdkapigatewayv2alpha.CfnStage_RouteSettingsProperty{
-		DataTraceEnabled:       jsii.Bool(true),
-		DetailedMetricsEnabled: jsii.Bool(true),
-		LoggingLevel:           jsii.String("INFO"),
+	// Outputs
+	awscdk.NewCfnOutput(stack, jsii.String("GraphQLUrl"), &awscdk.CfnOutputProps{
+		Value: api.GraphqlUrl(),
 	})
 
-	// Explicitly grant API Gateway permission to invoke the Lambda for all routes
-	signalingLambda.AddPermission(jsii.String("AllowApiGatewayInvoke"), &awslambda.Permission{
-		Principal: awsiam.NewServicePrincipal(jsii.String("apigateway.amazonaws.com"), nil),
-		Action:    jsii.String("lambda:InvokeFunction"),
-		SourceArn: jsii.String(fmt.Sprintf("arn:aws:execute-api:%s:%s:%s/*", *stack.Region(), *stack.Account(), *webSocketApi.ApiId())),
-	})
-
-	// Permissions for Lambda to post messages back to connections
-	resourceArn := stack.FormatArn(&awscdk.ArnComponents{
-		Service:      jsii.String("execute-api"),
-		Resource:     webSocketApi.ApiId(),
-		ResourceName: jsii.String(fmt.Sprintf("%s/POST/@connections/*", *stage.StageName())),
-	})
-
-	signalingLambda.AddToRolePolicy(awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
-		Actions:   jsii.Strings("execute-api:ManageConnections"),
-		Resources: jsii.Strings(*resourceArn),
-	}))
-
-	awscdk.NewCfnOutput(stack, jsii.String("WebSocketConnectURL"), &awscdk.CfnOutputProps{
-		Value: jsii.String(*webSocketApi.ApiEndpoint() + "/" + *stage.StageName()),
+	awscdk.NewCfnOutput(stack, jsii.String("ApiKey"), &awscdk.CfnOutputProps{
+		Value: api.ApiKey(),
 	})
 
 	return stack

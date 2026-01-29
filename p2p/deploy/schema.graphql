@@ -1,0 +1,25 @@
+type Signal {
+  from: String!
+  to: String!
+  action: String!
+  data: String!
+}
+
+type Query {
+  getSignal(id: ID!): Signal
+}
+
+type Mutation {
+  sendSignal(from: String!, to: String!, action: String!, data: String!): Signal
+}
+
+type Subscription {
+  onSignal(to: String!): Signal
+    @aws_subscribe(mutations: ["sendSignal"])
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}

@@ -16,6 +16,7 @@ type Config struct {
 	SignalingAppName string `json:"SIGNALING_APP_NAME,omitempty"`
 	StackName        string `json:"SIGNALING_STACK_NAME,omitempty"`
 	SignalingEndpoint     string `json:"SIGNALING_ENDPOINT,omitempty"`
+	ApiKey           string `json:"API_KEY,omitempty"`
 	LambdaFunctionName string `json:"-"` // Not in JSON, derived from app_name
 	LambdaFunctionNameActual string `json:"LAMBDA_FUNCTION_NAME,omitempty"` // Actual Lambda function name from CDK output
 	AWSRegion        string `json:"AWS_REGION,omitempty"`
@@ -145,8 +146,13 @@ func Load() (*Config, error) {
 	}
 
 	// Try to get SIGNALING_ENDPOINT from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"SIGNALING_ENDPOINT", "signaling_endpoint", "websocket_url", "WEBSOCKET_URL", "ws_url"}); found {
+	if val, found := getValueFromRaw(raw, []string{"SIGNALING_ENDPOINT", "signaling_endpoint"}); found {
 		cfg.SignalingEndpoint = val
+	}
+
+	// Try to get API_KEY from multiple possible key names
+	if val, found := getValueFromRaw(raw, []string{"API_KEY", "api_key"}); found {
+		cfg.ApiKey = val
 	}
 
 	// Try to get LAMBDA_FUNCTION_NAME from multiple possible key names
@@ -190,6 +196,9 @@ func LoadWithEnv() (*Config, error) {
 	}
 	if signalingEndpoint := os.Getenv("SIGNALING_ENDPOINT"); signalingEndpoint != "" {
 		cfg.SignalingEndpoint = strings.TrimSpace(signalingEndpoint)
+	}
+	if apiKey := os.Getenv("API_KEY"); apiKey != "" {
+		cfg.ApiKey = strings.TrimSpace(apiKey)
 	}
 	if lambdaName := os.Getenv("LAMBDA_FUNCTION_NAME"); lambdaName != "" {
 		cfg.LambdaFunctionNameActual = strings.TrimSpace(lambdaName)

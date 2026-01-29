@@ -1,10 +1,9 @@
-# P2P Bridge: Signaling Lambda & Home Lab Server
+# P2P Bridge: AppSync Signaling & Home Lab Server
 
-This project implements a serverless signaling bridge for WebRTC connections between a browser and a local environment (Home Lab).
+This project implements a serverless signaling bridge for WebRTC connections between a browser and a local environment (Home Lab) using AWS AppSync.
 
 ## Project Structure
 
-- `signaling_lambda/`: Go source for the AWS Lambda function.
 - `homelab_server/`: Go source for the local server that establishes the P2P link.
 - `signal/`: Shared Go types for signaling messages.
 - `config/`: Configuration package for reading credentials.json.
@@ -28,95 +27,41 @@ All configuration is centralized in `credentials.json` in the project root. Crea
   "signaling_app_name": "",
   "stack_name": "",
   "signaling_endpoint": "",
-  "lambda_function_name": "",
+  "api_key": "",
   "aws_region": "us-east-1",
   "aws_account": ""
 }
 ```
 
 **Configuration Fields:**
-- `aws_profile`: AWS profile name (as configured in ~/.aws/credentials). Case-insensitive. If not set, uses default AWS profile.
-- `app_name`: **Required.** Base application name used to generate other names.
-- `signaling_app_name`: **Optional.** Specific name for the signaling app. If empty, defaults to `app_name + "-signaling"`.
-- `signaling_stack_name`: **Optional.** CDK stack name for CloudFormation. If empty, defaults to `app_name + "-signaling"`.
-- `signaling_endpoint`: **Optional.** Signaling endpoint URL for home lab server (e.g., `wss://xxx.execute-api.region.amazonaws.com/prod`). Set after deployment.
-- `lambda_function_name`: **Optional.** Actual Lambda function name from CDK output. Defaults to `app_name + "-signaling"` if not set.
-- `aws_region`: AWS region (leave empty to use default from AWS profile).
-- `aws_account`: AWS account ID (leave empty to use default from AWS profile). Not required if `aws_profile` is set.
-
-**Derived Values:**
-- `lambda_function_name`: Set from `lambda_function_name` in config, or defaults to `app_name + "-signaling"`
-
-**Environment Variable Overrides:**
-You can override configuration values using environment variables:
-- `AWS_PROFILE` → overrides `aws_profile`
-- `SIGNALING_ENDPOINT` → overrides `signaling_endpoint`
-- `LAMBDA_FUNCTION_NAME` → overrides `lambda_function_name`
-- `AWS_REGION` → overrides `aws_region`
-- `AWS_ACCOUNT` → overrides `aws_account`
+- `aws_profile`: AWS profile name.
+- `app_name`: **Required.** Base application name.
+- `signaling_endpoint`: **Optional.** AppSync GraphQL URL. Set after deployment.
+- `api_key`: **Optional.** AppSync API Key. Set after deployment.
+- `aws_region`: AWS region.
+- `aws_account`: AWS account ID.
 
 ## 🪜 Step 1: Deploy the Infrastructure
 
 **Quick Deployment:**
 
-Use the convenience script that builds the Lambda and deploys in one command:
-
 ```bash
 ./deploy.sh
 ```
 
-This script automatically:
-1. Builds the Lambda binary for Linux (`./build-lambda.sh`)
-2. Deploys infrastructure to AWS using CDK (`cdk deploy`)
+This script deploys infrastructure to AWS using CDK.
 
-**For Lambda code updates only:**
-
-```bash
-./build-lambda.sh
-go run update-lambda.go --wait
-```
-
-**Manual Deployment:**
-
-If you prefer to run steps manually:
-
-1. Build the Lambda binary:
-   ```bash
-   ./build-lambda.sh
-   ```
-
-2. Deploy to AWS:
-   ```bash
-   cd deploy
-   npx cdk deploy
-   ```
-
-3. **Note the Outputs:**
-   - `WebSocketConnectURL`: The `wss://...` URL for the client and server to connect.
-   - Copy the WebSocket URL and Lambda function name to your `credentials.json`:
-     ```bash
-     # Example values from CDK output:
-     "signaling_endpoint": "wss://waogll39kd.execute-api.us-east-1.amazonaws.com/prod",
-     "lambda_function_name": "genix-signaling-genixsignaling744441AF-MmLGyR5UQrPq"
-     ```
+**Note the Outputs:**
+- `GraphQLUrl`: The AppSync endpoint.
+- `ApiKey`: The API key for authentication.
+- Copy these to your `credentials.json`.
 
 ## 💻 Step 2: Run the Home Lab Server
 
-**Important:** Whenever you modify `signaling_lambda/main.go`, you must rebuild the binary before deploying. The `./deploy.sh` script handles this automatically.
+The Home Lab server connects to AppSync and listens for incoming WebRTC signals.
 
-The Home Lab server needs to connect to the WebSocket and have permission to update the Lambda's environment variables.
-
-1. Navigate to the project root directory (where `credentials.json` is located).
-
-2. The home lab server now automatically reads configuration from `credentials.json`. Make sure it includes:
-   ```json
-   "signaling_endpoint": "wss://your-api-id.execute-api.region.amazonaws.com/prod",
-   "lambda_function_name": "genix-signaling-genixsignaling744441AF-MmLGyR5UQrPq"
-   ```
-
-   **Note:** After running `cdk deploy`, copy these values from the CDK output and add them to your `credentials.json`.
-
-3. Run the server:
+1. Navigate to the project root directory.
+2. Run the server:
    ```bash
    go run homelab_server/main.go
    ```

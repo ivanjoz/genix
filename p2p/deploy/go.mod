@@ -6,8 +6,6 @@ replace p2p_bridge => ../
 
 require (
 	github.com/aws/aws-cdk-go/awscdk/v2 v2.114.1
-	github.com/aws/aws-cdk-go/awscdkapigatewayv2alpha/v2 v2.114.1-alpha.0
-	github.com/aws/aws-cdk-go/awscdkapigatewayv2integrationsalpha/v2 v2.114.1-alpha.0
 	github.com/aws/aws-lambda-go v1.52.0
 	github.com/aws/aws-sdk-go-v2 v1.41.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.7
