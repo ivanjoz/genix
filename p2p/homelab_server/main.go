@@ -23,9 +23,10 @@ import (
 )
 
 var (
-	installFlag   = flag.Bool("install", false, "Install the server as a systemd service and start it")
-	uninstallFlag = flag.Bool("uninstall", false, "Uninstall the systemd service and remove the binary")
-	Version       = "3.6.0-stable"
+	installFlag        = flag.Bool("install", false, "Install the server as a systemd service and start it")
+	uninstallFlag      = flag.Bool("uninstall", false, "Uninstall the systemd service and remove the binary")
+	waitGatheringFlag  = flag.Bool("wait-gathering", false, "Wait for full ICE gathering before sending answer (slower but includes all candidates in SDP)")
+	Version            = "3.6.0-stable"
 )
 
 // AppSync Realtime Messages
@@ -173,24 +174,64 @@ func main() {
 			case "subscribe_success":
 				log.Printf("DEBUG: Subscribed successfully (ID: %s)", msg.ID)
 
-			case "event":
+			case "event", "data":
 				// Handle signal from AppSync Events
-				payload, ok := msg.Payload.(map[string]interface{})
-				if !ok { continue }
-
-				events, ok := payload["events"].([]interface{})
-				if !ok { continue }
+				// The log shows: {"type":"data","event":"..."} or {"type":"event","payload":{"events":[...]}}
+				
+				var events []interface{}
+				
+				if msg.Type == "data" {
+					// Handle the format: {"type":"data", "event":"..."}
+					rawData, ok := msg.Payload.(map[string]interface{})
+					if !ok {
+						// In case msg.Payload is nil but event is at top level
+						// AppSyncMessage might need to be more flexible or we unmarshal again
+						var raw map[string]interface{}
+						json.Unmarshal(message, &raw)
+						if ev, ok := raw["event"]; ok {
+							events = append(events, ev)
+						}
+					} else if ev, ok := rawData["event"]; ok {
+						events = append(events, ev)
+					} else {
+						// Try unmarshaling the whole message again to find "event"
+						var raw map[string]interface{}
+						json.Unmarshal(message, &raw)
+						if ev, ok := raw["event"]; ok {
+							events = append(events, ev)
+						}
+					}
+				} else {
+					// Handle the format: {"type":"event","payload":{"events":[...]}}
+					payload, ok := msg.Payload.(map[string]interface{})
+					if ok {
+						if evs, ok := payload["events"].([]interface{}); ok {
+							events = evs
+						}
+					}
+				}
 
 				for _, event := range events {
+					log.Printf("DEBUG: Processing event: %v", event)
 					var signal AppSyncSignal
 					eventBytes, _ := json.Marshal(event)
 					// If event is a string, unmarshal from it
 					var eventStr string
 					if err := json.Unmarshal(eventBytes, &eventStr); err == nil {
-						json.Unmarshal([]byte(eventStr), &signal)
+						log.Printf("DEBUG: Unmarshaling signal from string: %s", eventStr)
+						if err := json.Unmarshal([]byte(eventStr), &signal); err != nil {
+							log.Printf("ERROR: Failed to unmarshal signal from string: %v", err)
+							continue
+						}
 					} else {
-						json.Unmarshal(eventBytes, &signal)
+						log.Printf("DEBUG: Unmarshaling signal from object")
+						if err := json.Unmarshal(eventBytes, &signal); err != nil {
+							log.Printf("ERROR: Failed to unmarshal signal from object: %v", err)
+							continue
+						}
 					}
+
+					log.Printf("DEBUG: Extracted Signal: From=%s, To=%s, Action=%s", signal.From, signal.To, signal.Action)
 
 					if signal.Action == "offer" {
 						log.Printf("DEBUG: Received WebRTC offer from %s", signal.From)
@@ -224,10 +265,14 @@ func publishSignal(cfg *config.Config, signal AppSyncSignal) error {
 		publishURL = strings.TrimSuffix(publishURL, "/") + "/event"
 	}
 
+	eventData, _ := json.Marshal(signal)
 	reqBody, _ := json.Marshal(map[string]interface{}{
 		"channel": "/genix-bridge/" + signal.To,
-		"events":  []interface{}{signal},
+		"events":  []interface{}{string(eventData)},
 	})
+
+	log.Printf("DEBUG: Publishing to channel '%s' at URL %s", "/genix-bridge/"+signal.To, publishURL)
+	log.Printf("DEBUG: Publish payload: %s", string(reqBody))
 
 	req, _ := http.NewRequest("POST", publishURL, bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -245,6 +290,7 @@ func publishSignal(cfg *config.Config, signal AppSyncSignal) error {
 		return fmt.Errorf("publish failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	log.Println("DEBUG: Signal published successfully")
 	return nil
 }
 
@@ -276,6 +322,47 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 
 	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
 		log.Printf("DEBUG: WebRTC Connection State Change: %s", s.String())
+		
+		// When connected, log the selected ICE pair
+		if s == webrtc.PeerConnectionStateConnected {
+			if pc.SCTP() != nil && pc.SCTP().Transport() != nil && pc.SCTP().Transport().ICETransport() != nil {
+				selectedPair, err := pc.SCTP().Transport().ICETransport().GetSelectedCandidatePair()
+				if err == nil && selectedPair != nil {
+					localAddr := ""
+					remoteAddr := ""
+					
+					if selectedPair.Local != nil {
+						localAddr = selectedPair.Local.Address
+					}
+					if selectedPair.Remote != nil {
+						remoteAddr = selectedPair.Remote.Address
+					}
+					
+					// Determine IP versions
+					localIPVersion := "IPv4"
+					if strings.Contains(localAddr, ":") {
+						localIPVersion = "IPv6"
+					}
+					remoteIPVersion := "IPv4"
+					if strings.Contains(remoteAddr, ":") {
+						remoteIPVersion = "IPv6"
+					}
+					
+					// Determine transport protocol
+					transport := "Unknown"
+					if selectedPair.Local != nil {
+						transport = selectedPair.Local.Protocol.String()
+					}
+					
+					log.Printf("🎯 CONNECTION ESTABLISHED: Local=%s %s %s | Remote=%s %s", 
+						localIPVersion, transport, localAddr, remoteIPVersion, remoteAddr)
+					log.Printf("🎯 SELECTED ICE PAIR: Local=%s | Remote=%s", 
+						selectedPair.Local.String(), selectedPair.Remote.String())
+				} else {
+					log.Printf("DEBUG: Could not get selected ICE pair: %v", err)
+				}
+			}
+		}
 	})
 
 	pc.OnICEGatheringStateChange(func(s webrtc.ICEGathererState) {
@@ -286,8 +373,38 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 		if c != nil {
 			candidateStr := c.String()
 			log.Printf("DEBUG: Local ICE Candidate gathered: %s", candidateStr)
-			if strings.Contains(candidateStr, ":") && !strings.Contains(candidateStr, ".") {
-				log.Printf("DEBUG: Found IPv6 Candidate")
+			
+			// Parse network type from ICE candidate
+			// Format: candidate:<foundation> <component-id> <transport> <priority> <connection-address> <port> <typ> <type>
+			parts := strings.Fields(candidateStr)
+			if len(parts) >= 6 {
+				transport := parts[2]      // UDP or TCP
+				address := parts[4]       // IP address
+				
+				// Determine IP version
+				ipVersion := "IPv4"
+				if strings.Contains(address, ":") {
+					ipVersion = "IPv6"
+				}
+				
+				// Log network type in a clear, parseable format
+				log.Printf("NETWORK_TYPE: %s %s | Address: %s | Full Candidate: %s", ipVersion, transport, address, candidateStr)
+			}
+
+			// If not waiting for full gathering, send candidate immediately (Trickle ICE)
+			if !*waitGatheringFlag {
+				candidateJSON, _ := json.Marshal(c.ToJSON())
+				resp := AppSyncSignal{
+					From:   "genix-bridge",
+					To:     signal.From,
+					Action: "candidate",
+					Data:   string(candidateJSON),
+				}
+				if err := publishSignal(cfg, resp); err != nil {
+					log.Printf("ERROR: Failed to send ICE candidate: %v", err)
+				} else {
+					log.Printf("DEBUG: Sent ICE Candidate to %s", signal.From)
+				}
 			}
 		}
 	})
@@ -296,10 +413,26 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 		log.Printf("DEBUG: New DataChannel opened: %s", d.Label())
 		d.OnOpen(func() {
 			log.Printf("DEBUG: DataChannel '%s' is now OPEN", d.Label())
+			// Optional: Send a greeting when the channel opens
+			d.SendText(fmt.Sprintf("Hello from Homelab Server! (Version %s)", Version))
 		})
 		d.OnMessage(func(msg webrtc.DataChannelMessage) {
-			log.Printf("DEBUG: Received DataChannel message: %s", string(msg.Data))
-			// Business logic here
+			content := string(msg.Data)
+			log.Printf("DEBUG: Received DataChannel message: %s", content)
+
+			// Echo back or respond to specific messages
+			response := map[string]interface{}{
+				"type":      "response",
+				"echo":      content,
+				"timestamp": time.Now().UnixMilli(),
+				"server":    "homelab",
+			}
+			respBytes, _ := json.Marshal(response)
+			if err := d.Send(respBytes); err != nil {
+				log.Printf("ERROR: Failed to send response to DataChannel: %v", err)
+			} else {
+				log.Printf("DEBUG: Sent response back to client")
+			}
 		})
 	})
 
@@ -320,13 +453,20 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 		return
 	}
 
-	gatherComplete := webrtc.GatheringCompletePromise(pc)
+	var gatherComplete <-chan struct{}
+	if *waitGatheringFlag {
+		gatherComplete = webrtc.GatheringCompletePromise(pc)
+	}
+
 	if err := pc.SetLocalDescription(answer); err != nil {
 		log.Printf("ERROR: Failed to set local description: %v", err)
 		return
 	}
 
-	<-gatherComplete
+	if *waitGatheringFlag {
+		log.Println("DEBUG: Waiting for full ICE gathering...")
+		<-gatherComplete
+	}
 
 	answerJSON, _ := json.Marshal(pc.LocalDescription())
 	resp := AppSyncSignal{
@@ -339,6 +479,6 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 	if err := publishSignal(cfg, resp); err != nil {
 		log.Printf("ERROR: Failed to send answer signal: %v", err)
 	} else {
-		log.Printf("DEBUG: Successfully sent WebRTC answer to %s", signal.From)
+		log.Printf("DEBUG: Successfully sent WebRTC answer (WaitGathering=%v) to %s", *waitGatheringFlag, signal.From)
 	}
 }

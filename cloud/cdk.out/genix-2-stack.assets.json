@@ -1,0 +1,21 @@
+{
+  "version": "48.0.0",
+  "files": {
+    "8236283acda604b19c261e3a41a05d218ad7ad8d47b8c87496e4bcdceee637c0": {
+      "displayName": "genix-2-stack Template",
+      "source": {
+        "path": "genix-2-stack.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "current_account-us-east-1-cf0852eb": {
+          "bucketName": "cdk-hnb659fds-assets-${AWS::AccountId}-us-east-1",
+          "objectKey": "8236283acda604b19c261e3a41a05d218ad7ad8d47b8c87496e4bcdceee637c0.json",
+          "region": "us-east-1",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/cdk-hnb659fds-file-publishing-role-${AWS::AccountId}-us-east-1"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}

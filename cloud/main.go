@@ -36,13 +36,31 @@ func GetBaseWD() string {
 func main() {
 	w1 := ""
 
+	// First check for standalone valid arguments
+	validArgs := map[string]bool{
+		"cdk": true,
+		"1":   true,
+		"2":   true,
+		"3":   true,
+	}
 	for _, arg := range os.Args {
-		if len(arg) > 7 && arg[:7] == "accion=" {
-			w1 = strings.Split(arg, "=")[1]
+		if validArgs[arg] {
+			w1 = arg
 			break
 		}
 	}
 
+	// If no standalone argument found, check for accion= prefix
+	if len(w1) == 0 {
+		for _, arg := range os.Args {
+			if len(arg) > 7 && arg[:7] == "accion=" {
+				w1 = strings.Split(arg, "=")[1]
+				break
+			}
+		}
+	}
+
+	// If still no valid argument found, prompt for interactive input
 	if len(w1) == 0 {
 		fmt.Println("Selecciona acción: [1] Publicar Código [2] Actualizar Variables [3] Deplegar Infraestructura")
 

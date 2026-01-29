@@ -1,0 +1,673 @@
+{
+ "Resources": {
+  "FrontendBucketEFE2E19C": {
+   "Type": "AWS::S3::Bucket",
+   "Properties": {
+    "BucketName": "",
+    "CorsConfiguration": {
+     "CorsRules": [
+      {
+       "AllowedHeaders": [
+        "*"
+       ],
+       "AllowedMethods": [
+        "GET",
+        "PUT",
+        "POST",
+        "DELETE",
+        "HEAD"
+       ],
+       "AllowedOrigins": [
+        "*"
+       ],
+       "MaxAge": 3000
+      }
+     ]
+    }
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/FrontendBucket/Resource"
+   }
+  },
+  "FrontendBucketPolicy1DFF75D9": {
+   "Type": "AWS::S3::BucketPolicy",
+   "Properties": {
+    "Bucket": {
+     "Ref": "FrontendBucketEFE2E19C"
+    },
+    "PolicyDocument": {
+     "Statement": [
+      {
+       "Action": [
+        "s3:GetObject*",
+        "s3:GetBucket*",
+        "s3:List*"
+       ],
+       "Effect": "Allow",
+       "Principal": {
+        "CanonicalUser": {
+         "Fn::GetAtt": [
+          "OAIE1EFC67F",
+          "S3CanonicalUserId"
+         ]
+        }
+       },
+       "Resource": [
+        {
+         "Fn::GetAtt": [
+          "FrontendBucketEFE2E19C",
+          "Arn"
+         ]
+        },
+        {
+         "Fn::Join": [
+          "",
+          [
+           {
+            "Fn::GetAtt": [
+             "FrontendBucketEFE2E19C",
+             "Arn"
+            ]
+           },
+           "/*"
+          ]
+         ]
+        }
+       ]
+      },
+      {
+       "Action": "s3:GetObject",
+       "Effect": "Allow",
+       "Principal": {
+        "CanonicalUser": {
+         "Fn::GetAtt": [
+          "OAIE1EFC67F",
+          "S3CanonicalUserId"
+         ]
+        }
+       },
+       "Resource": {
+        "Fn::Join": [
+         "",
+         [
+          {
+           "Fn::GetAtt": [
+            "FrontendBucketEFE2E19C",
+            "Arn"
+           ]
+          },
+          "/*"
+         ]
+        ]
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/FrontendBucket/Policy/Resource"
+   }
+  },
+  "OAIE1EFC67F": {
+   "Type": "AWS::CloudFront::CloudFrontOriginAccessIdentity",
+   "Properties": {
+    "CloudFrontOriginAccessIdentityConfig": {
+     "Comment": "Genix Identity"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/OAI/Resource"
+   }
+  },
+  "CloudfrontFrontendA1B4DC03": {
+   "Type": "AWS::CloudFront::Distribution",
+   "Properties": {
+    "DistributionConfig": {
+     "CacheBehaviors": [
+      {
+       "AllowedMethods": [
+        "GET",
+        "HEAD"
+       ],
+       "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+       "Compress": false,
+       "PathPattern": "*.html",
+       "TargetOriginId": "genix2stackCloudfrontFrontendOrigin10553A620",
+       "ViewerProtocolPolicy": "redirect-to-https"
+      },
+      {
+       "AllowedMethods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+       ],
+       "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+       "Compress": false,
+       "PathPattern": "*.webmanifest",
+       "TargetOriginId": "genix2stackCloudfrontFrontendOrigin10553A620",
+       "ViewerProtocolPolicy": "https-only"
+      },
+      {
+       "AllowedMethods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+       ],
+       "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+       "Compress": false,
+       "PathPattern": "sw.js",
+       "TargetOriginId": "genix2stackCloudfrontFrontendOrigin10553A620",
+       "ViewerProtocolPolicy": "https-only"
+      },
+      {
+       "AllowedMethods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+       ],
+       "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+       "Compress": false,
+       "PathPattern": "registerSW.js",
+       "TargetOriginId": "genix2stackCloudfrontFrontendOrigin10553A620",
+       "ViewerProtocolPolicy": "https-only"
+      }
+     ],
+     "Comment": "Frontend Genix",
+     "CustomErrorResponses": [
+      {
+       "ErrorCachingMinTTL": 10,
+       "ErrorCode": 403,
+       "ResponseCode": 200,
+       "ResponsePagePath": "/index.html"
+      },
+      {
+       "ErrorCachingMinTTL": 10,
+       "ErrorCode": 404,
+       "ResponseCode": 200,
+       "ResponsePagePath": "/index.html"
+      }
+     ],
+     "DefaultCacheBehavior": {
+      "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+      "Compress": true,
+      "TargetOriginId": "genix2stackCloudfrontFrontendOrigin10553A620",
+      "ViewerProtocolPolicy": "redirect-to-https"
+     },
+     "DefaultRootObject": "index.html",
+     "Enabled": true,
+     "HttpVersion": "http2and3",
+     "IPV6Enabled": true,
+     "Origins": [
+      {
+       "DomainName": {
+        "Fn::GetAtt": [
+         "FrontendBucketEFE2E19C",
+         "RegionalDomainName"
+        ]
+       },
+       "Id": "genix2stackCloudfrontFrontendOrigin10553A620",
+       "S3OriginConfig": {
+        "OriginAccessIdentity": {
+         "Fn::Join": [
+          "",
+          [
+           "origin-access-identity/cloudfront/",
+           {
+            "Ref": "OAIE1EFC67F"
+           }
+          ]
+         ]
+        }
+       }
+      }
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/CloudfrontFrontend/Resource"
+   }
+  },
+  "LambdaGO79EDB5AF": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "main-serverless-deploys",
+     "S3Key": "gerp-artifacts/lambda-compiled.zip"
+    },
+    "Environment": {
+     "Variables": {
+      "APP_CODE": "gerp-prd"
+     }
+    },
+    "FunctionName": "genix-2-backend",
+    "Handler": "index.handler",
+    "MemorySize": 192,
+    "Role": "arn:aws:iam::569069031635:role/serverlessCloud",
+    "Runtime": "provided.al2",
+    "Timeout": 300
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/LambdaGO/Resource"
+   }
+  },
+  "LambdaGOFunctionUrlE15EE033": {
+   "Type": "AWS::Lambda::Url",
+   "Properties": {
+    "AuthType": "NONE",
+    "Cors": {
+     "AllowHeaders": [
+      "*"
+     ],
+     "AllowMethods": [
+      "GET",
+      "POST",
+      "HEAD",
+      "PUT"
+     ],
+     "AllowOrigins": [
+      "*"
+     ]
+    },
+    "TargetFunctionArn": {
+     "Fn::GetAtt": [
+      "LambdaGO79EDB5AF",
+      "Arn"
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/LambdaGO/FunctionUrl/Resource"
+   }
+  },
+  "LambdaGOinvokefunctionurl54B9ED0F": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunctionUrl",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "LambdaGO79EDB5AF",
+      "Arn"
+     ]
+    },
+    "FunctionUrlAuthType": "NONE",
+    "Principal": "*"
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/LambdaGO/invoke-function-url"
+   }
+  },
+  "LambdaGOinvokefunctionF38AAC73": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "LambdaGO79EDB5AF",
+      "Arn"
+     ]
+    },
+    "InvokedViaFunctionUrl": true,
+    "Principal": "*"
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/LambdaGO/invoke-function"
+   }
+  },
+  "LambdaGOLogGroup89A64633": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/genix-2-backend",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/LambdaGOLogGroup/Resource"
+   }
+  },
+  "EventBridgeRule15224D08": {
+   "Type": "AWS::Events::Rule",
+   "Properties": {
+    "Description": "SmartBerry GO | Cron Job Event 10 min",
+    "Name": "genix-2-backend_cron_lambda_every_10_min_go",
+    "ScheduleExpression": "cron(*/10 * * * ? *)",
+    "State": "ENABLED",
+    "Targets": [
+     {
+      "Arn": {
+       "Fn::GetAtt": [
+        "LambdaGO79EDB5AF",
+        "Arn"
+       ]
+      },
+      "Id": "Target0",
+      "Input": "{\"body\":\"exec:cron\"}"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/EventBridgeRule/Resource"
+   }
+  },
+  "EventBridgeRuleAllowEventRulegenix2stackLambdaGOC5C44B6DFEC29968": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "LambdaGO79EDB5AF",
+      "Arn"
+     ]
+    },
+    "Principal": "events.amazonaws.com",
+    "SourceArn": {
+     "Fn::GetAtt": [
+      "EventBridgeRule15224D08",
+      "Arn"
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/EventBridgeRule/AllowEventRulegenix2stackLambdaGOC5C44B6D"
+   }
+  },
+  "MainTable74195DAB": {
+   "Type": "AWS::DynamoDB::Table",
+   "Properties": {
+    "AttributeDefinitions": [
+     {
+      "AttributeName": "pk",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "sk",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "ix1",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "ix2",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "ix3",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "ix4",
+      "AttributeType": "S"
+     },
+     {
+      "AttributeName": "in5",
+      "AttributeType": "N"
+     }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "GlobalSecondaryIndexes": [
+     {
+      "IndexName": "ix1",
+      "KeySchema": [
+       {
+        "AttributeName": "pk",
+        "KeyType": "HASH"
+       },
+       {
+        "AttributeName": "ix1",
+        "KeyType": "RANGE"
+       }
+      ],
+      "Projection": {
+       "ProjectionType": "ALL"
+      }
+     },
+     {
+      "IndexName": "ix2",
+      "KeySchema": [
+       {
+        "AttributeName": "pk",
+        "KeyType": "HASH"
+       },
+       {
+        "AttributeName": "ix2",
+        "KeyType": "RANGE"
+       }
+      ],
+      "Projection": {
+       "ProjectionType": "ALL"
+      }
+     },
+     {
+      "IndexName": "ix3",
+      "KeySchema": [
+       {
+        "AttributeName": "pk",
+        "KeyType": "HASH"
+       },
+       {
+        "AttributeName": "ix3",
+        "KeyType": "RANGE"
+       }
+      ],
+      "Projection": {
+       "ProjectionType": "ALL"
+      }
+     },
+     {
+      "IndexName": "ix4",
+      "KeySchema": [
+       {
+        "AttributeName": "pk",
+        "KeyType": "HASH"
+       },
+       {
+        "AttributeName": "ix4",
+        "KeyType": "RANGE"
+       }
+      ],
+      "Projection": {
+       "ProjectionType": "ALL"
+      }
+     },
+     {
+      "IndexName": "in5",
+      "KeySchema": [
+       {
+        "AttributeName": "pk",
+        "KeyType": "HASH"
+       },
+       {
+        "AttributeName": "in5",
+        "KeyType": "RANGE"
+       }
+      ],
+      "Projection": {
+       "ProjectionType": "ALL"
+      }
+     }
+    ],
+    "KeySchema": [
+     {
+      "AttributeName": "pk",
+      "KeyType": "HASH"
+     },
+     {
+      "AttributeName": "sk",
+      "KeyType": "RANGE"
+     }
+    ],
+    "TableName": "genix-2-db",
+    "TimeToLiveSpecification": {
+     "AttributeName": "ttl",
+     "Enabled": true
+    }
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/MainTable/Resource"
+   }
+  },
+  "LambdaGOn2C13E05AF": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Architectures": [
+     "arm64"
+    ],
+    "Code": {
+     "S3Bucket": "main-serverless-deploys",
+     "S3Key": "gerp-artifacts/lambda-compiled.zip"
+    },
+    "Environment": {
+     "Variables": {
+      "APP_CODE": "gerp-prd"
+     }
+    },
+    "FunctionName": "genix-2-backend_2",
+    "Handler": "index.handler",
+    "MemorySize": 2048,
+    "Role": "arn:aws:iam::569069031635:role/serverlessCloud",
+    "Runtime": "provided.al2",
+    "Timeout": 300
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/LambdaGOn2/Resource"
+   }
+  },
+  "LambdaGOn2FunctionUrlB7DBE9A5": {
+   "Type": "AWS::Lambda::Url",
+   "Properties": {
+    "AuthType": "NONE",
+    "Cors": {
+     "AllowHeaders": [
+      "*"
+     ],
+     "AllowMethods": [
+      "GET",
+      "POST",
+      "HEAD",
+      "PUT"
+     ],
+     "AllowOrigins": [
+      "*"
+     ]
+    },
+    "TargetFunctionArn": {
+     "Fn::GetAtt": [
+      "LambdaGOn2C13E05AF",
+      "Arn"
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/LambdaGOn2/FunctionUrl/Resource"
+   }
+  },
+  "LambdaGOn2invokefunctionurlF0090489": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunctionUrl",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "LambdaGOn2C13E05AF",
+      "Arn"
+     ]
+    },
+    "FunctionUrlAuthType": "NONE",
+    "Principal": "*"
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/LambdaGOn2/invoke-function-url"
+   }
+  },
+  "LambdaGOn2invokefunction50854867": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "LambdaGOn2C13E05AF",
+      "Arn"
+     ]
+    },
+    "InvokedViaFunctionUrl": true,
+    "Principal": "*"
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/LambdaGOn2/invoke-function"
+   }
+  },
+  "LambdaGOn2LogGroup3EB0B2A4": {
+   "Type": "AWS::Logs::LogGroup",
+   "Properties": {
+    "LogGroupName": "/aws/lambda/genix-2-backend_2",
+    "RetentionInDays": 30
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/LambdaGOn2LogGroup/Resource"
+   }
+  },
+  "CDKMetadata": {
+   "Type": "AWS::CDK::Metadata",
+   "Properties": {
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/22LXU/DIBSGf8vu6Zl2bvduZsbEZEvVa0OBNcdSWDjgXAj/3VBa9cKr9+t5a6hXG7hZ8AtVQvaVxhbii+eiZ/xC75FWELdB9Mqz3clMrsjRahTX33rKJWw5qcSEtkGenDUe4sFhh+ZeCEX0JJXx6MfzLjP7zPxLPCB5h23waE3G/+bENB9aySHugxEz8eNn8+Z07ic5KjcgUbnbjiA+2+7R2XDO6+wTU5/KeILYBK3ykjUxeTV8sLKF+MrbMowmJdYossGJsTsEfw4+sc7eQr2G9VKjCV9LPsjN3eKDECsXjMdBQVP0G75fqVSIAQAA"
+   },
+   "Metadata": {
+    "aws:cdk:path": "genix-2-stack/CDKMetadata/Default"
+   }
+  }
+ },
+ "Outputs": {
+  "WebsiteURL": {
+   "Value": {
+    "Fn::GetAtt": [
+     "FrontendBucketEFE2E19C",
+     "WebsiteURL"
+    ]
+   }
+  }
+ },
+ "Parameters": {
+  "BootstrapVersion": {
+   "Type": "AWS::SSM::Parameter::Value<String>",
+   "Default": "/cdk-bootstrap/hnb659fds/version",
+   "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]"
+  }
+ },
+ "Rules": {
+  "CheckBootstrapVersion": {
+   "Assertions": [
+    {
+     "Assert": {
+      "Fn::Not": [
+       {
+        "Fn::Contains": [
+         [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+         ],
+         {
+          "Ref": "BootstrapVersion"
+         }
+        ]
+       }
+      ]
+     },
+     "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+    }
+   ]
+  }
+ }
+}

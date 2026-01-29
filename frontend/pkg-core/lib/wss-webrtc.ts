@@ -7,7 +7,7 @@ export interface SignalData {
 }
 
 export interface WSSWebRTCConfig {
-  wsUrl: string; // AppSync GraphQL URL
+  wsUrl: string; // AppSync Events Endpoint (e.g., https://.../event)
   apiKey: string;
   targetId: string;
   stunServers?: string[];
@@ -49,6 +49,14 @@ export class WSSWebRTC {
     this.eventListeners[event] = callback;
   }
 
+  send(data: any): void {
+    if (this.peer && this.peer.connected) {
+      this.peer.send(data);
+    } else {
+      console.warn('[WSSWebRTC] Cannot send data: Peer not connected');
+    }
+  }
+
   connect(): void {
     this.startAppSyncSubscription();
   }
@@ -56,21 +64,34 @@ export class WSSWebRTC {
   private startAppSyncSubscription(): void {
     const url = new URL(this.config.wsUrl.replace('wss://', 'https://'));
     const host = url.host;
-    const rtUrl = this.config.wsUrl
-      .replace('https://', 'wss://')
-      .replace('appsync-api', 'appsync-realtime-api');
+    
+    // Use the official realtime domain for events
+    // Example: d6lzr5appndydd5x35xlrz52te.appsync-api.us-east-1.amazonaws.com
+    // Becomes: d6lzr5appndydd5x35xlrz52te.appsync-realtime-api.us-east-1.amazonaws.com
+    let rtUrl = host.replace('appsync-api', 'appsync-realtime-api');
+    rtUrl = `wss://${rtUrl}/event/realtime`;
 
+    const amzDate = new Date().toISOString().replace(/[:\-]|\.\d{3}/g, '');
+    
+    // Headers must be sorted alphabetically for consistent base64 encoding
     const header = {
       host: host,
+      'x-amz-date': amzDate,
       'x-api-key': this.config.apiKey
     };
-    const headerB64 = btoa(JSON.stringify(header));
-    const finalUrl = `${rtUrl}?header=${headerB64}&payload=e30=`;
+    
+    const headerStr = JSON.stringify(header);
+    // Use standard btoa and then apply base64url replacements if needed, 
+    // but the example shows a standard base64 string in the protocol
+    const headerB64Sub = btoa(headerStr);
 
-    this.ws = new WebSocket(finalUrl, 'graphql-ws');
+    console.log('[WSSWebRTC] Connecting to:', rtUrl);
+
+    // Use AppSync Events subprotocols. No query params needed per working example.
+    this.ws = new WebSocket(rtUrl, ['aws-appsync-event-ws', `header-${headerB64Sub}`]);
 
     this.ws.onopen = () => {
-      console.log('[WSSWebRTC] AppSync Connected');
+      console.log('[WSSWebRTC] AppSync Events Connected');
       this.ws?.send(JSON.stringify({ type: 'connection_init' }));
     };
 
@@ -79,59 +100,95 @@ export class WSSWebRTC {
       if (msg.type === 'connection_ack') {
         this.subscribe();
         this.startWebRTC();
-      } else if (msg.type === 'data') {
-        const signal = msg.payload.data.onSignal;
-        if (signal && signal.to === this.clientId) {
-          this.handleIncomingSignal(signal);
+      } else if (msg.type === 'event' || msg.type === 'data') {
+        let events: any[] = [];
+        if (msg.type === 'data' && msg.event) {
+          events = [msg.event];
+        } else if (msg.payload && msg.payload.events) {
+          events = msg.payload.events;
+        }
+
+        for (const event of events) {
+          let signal = event;
+          if (typeof event === 'string') {
+            try {
+              signal = JSON.parse(event);
+            } catch (e) {}
+          }
+          if (signal && signal.to === this.clientId) {
+            this.handleIncomingSignal(signal);
+          }
         }
       }
     };
 
-    this.ws.onerror = (err) => this.emit('error', new Error('AppSync WebSocket Error'));
+    this.ws.onerror = (err) => {
+      console.error('[WSSWebRTC] AppSync WebSocket Error:', err);
+      this.emit('error', new Error('AppSync WebSocket Error'));
+    };
+    
+    this.ws.onclose = () => {
+      console.log('[WSSWebRTC] AppSync WebSocket Closed');
+      this.emit('close');
+    };
   }
 
   private subscribe(): void {
+    const url = new URL(this.config.wsUrl.replace('wss://', 'https://'));
+    const amzDate = new Date().toISOString().replace(/[:\-]|\.\d{3}/g, '');
+    
     const header = {
-      host: new URL(this.config.wsUrl.replace('wss://', 'https://')).host,
+      host: url.host,
+      'x-amz-date': amzDate,
       'x-api-key': this.config.apiKey
     };
-    const query = `subscription onSignal($to: String!) { onSignal(to: $to) { from to action data } }`;
-    const variables = { to: this.clientId };
 
-    this.ws?.send(JSON.stringify({
-      id: 'sub-client',
-      type: 'start',
-      payload: {
-        data: JSON.stringify({
-          query,
-          variables
-        }),
-        extensions: {
-          authorization: header
-        }
-      }
-    }));
+    const subMsg = {
+      id: 'sub-' + Math.random().toString(36).substring(2, 11),
+      type: 'subscribe',
+      channel: `/genix-bridge/${this.clientId}`,
+      authorization: header
+    };
+
+    this.ws?.send(JSON.stringify(subMsg));
   }
 
   private async sendSignal(action: string, data: string): Promise<void> {
-    const query = `mutation sendSignal($from: String!, $to: String!, $action: String!, $data: String!) {
-      sendSignal(from: $from, to: $to, action: $action, data: $data) { from to action data }
-    }`;
-    const variables = {
+    let publishUrl = this.config.wsUrl.replace('wss://', 'https://');
+    if (!publishUrl.endsWith('/event')) {
+      publishUrl = publishUrl.replace(/\/$/, '') + '/event';
+    }
+
+    const amzDate = new Date().toISOString().replace(/[:\-]|\.\d{3}/g, '');
+    const signal = {
       from: this.clientId,
       to: this.config.targetId,
       action: action,
       data: data
     };
 
-    await fetch(this.config.wsUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.config.apiKey
-      },
-      body: JSON.stringify({ query, variables })
-    });
+    try {
+      const response = await fetch(publishUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.config.apiKey,
+          'x-amz-date': amzDate
+        },
+        body: JSON.stringify({
+          channel: `genix-bridge/server`,
+          events: [JSON.stringify(signal)]
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Publish failed: ${response.status} ${errText}`);
+      }
+    } catch (err) {
+      console.error('[WSSWebRTC] Failed to send signal:', err);
+      this.emit('error', err instanceof Error ? err : new Error('Signal send failed'));
+    }
   }
 
   private startWebRTC(): void {
@@ -174,8 +231,28 @@ export class WSSWebRTC {
   }
 
   private handleIncomingSignal(signal: any): void {
-    const data = JSON.parse(signal.data);
-    this.peer.signal(data);
+    try {
+      const data = JSON.parse(signal.data);
+      console.log('[WSSWebRTC] Incoming Signal:', { action: signal.action, data });
+      
+      if (signal.action === 'candidate') {
+        // SimplePeer expects candidates to be wrapped in a 'candidate' property
+        // We also sanitize the data to remove nulls that can break the RTCIceCandidate constructor
+        const candidateInit: any = {
+          candidate: data.candidate,
+          sdpMid: data.sdpMid,
+          sdpMLineIndex: data.sdpMLineIndex
+        };
+        
+        console.log('[WSSWebRTC] Applying remote ICE candidate');
+        this.peer.signal({ candidate: candidateInit });
+      } else {
+        console.log('[WSSWebRTC] Applying remote SDP:', signal.action);
+        this.peer.signal(data);
+      }
+    } catch (e) {
+      console.error('[WSSWebRTC] Error handling incoming signal:', e);
+    }
   }
 
   private emit<K extends keyof BridgeEvents>(event: K, ...args: Parameters<BridgeEvents[K]>): void {

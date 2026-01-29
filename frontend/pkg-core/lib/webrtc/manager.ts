@@ -80,7 +80,7 @@ class WebRTCManager {
 		}
 
 		const wsUrl = signalingEndpoint || Env.SIGNALING_ENDPOINT;
-		const apiKey = Env.API_KEY;
+		const apiKey = Env.SIGNALING_API_KEY;
 
 		if (!wsUrl || !apiKey) {
 			console.warn('[WebRTCManager] Missing signaling endpoint or API key, WebRTC disabled');
