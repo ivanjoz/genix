@@ -11,7 +11,7 @@ export const IsClient = () => {
   return browser
 }
 
-const apiPrd = "https://cutougpoy6vugs7uh2jg3uqeha0ypizc.lambda-url.us-east-1.on.aws/api/"
+const apiPrd = ((globalThis as any).LAMBDA_API || "") + "api"
 const apiLocal = "http://localhost:3589/api/"
 
 if(browser){
@@ -44,8 +44,8 @@ export const Env = {
   S3_URL: "https://d16qwm950j0pjf.cloudfront.net/",
   serviceWorker: "/sw.js",
   enviroment: "dev",
-	SIGNALING_ENDPOINT: (self as any).__SIGNALING_ENDPOINT__ || "",
-  SIGNALING_API_KEY: (self as any).__SIGNALING_API_KEY__ || "",
+	SIGNALING_ENDPOINT: (globalThis as any).__SIGNALING_ENDPOINT__ || "",
+  SIGNALING_API_KEY: (globalThis as any).__SIGNALING_API_KEY__ || "",
   counterID: 1,
   sideLayerSize: 0,
   fetchID: 1000,
@@ -79,7 +79,7 @@ export const Env = {
   },
   getEmpresaID: (): number => {
     if(!Env.empresaID){
-      const localEmpresaID = localStorage.getItem(Env.appId + "EmpresaID")
+      const localEmpresaID = browser ? localStorage.getItem(Env.appId + "EmpresaID") : null
       if(localEmpresaID){
         Env.empresaID = parseInt(localEmpresaID)
         return Env.empresaID

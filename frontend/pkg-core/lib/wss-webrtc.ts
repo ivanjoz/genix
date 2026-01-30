@@ -2,6 +2,11 @@ import { sendServiceMessage, registerServiceHandler } from '$core/lib/sw-cache';
 
 const DEBUG_PREFIX = '[WSSWebRTC Client]';
 
+const getTS = () => {
+  const d = new Date();
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}.${d.getMilliseconds().toString().padStart(3, '0')}`;
+};
+
 export interface SignalData {
   type?: 'offer' | 'answer' | 'candidate' | 'pranswer' | 'rollback';
   sdp?: string;
@@ -106,7 +111,7 @@ this.registerSignalHandler();
   }
 
   async connect(): Promise<void> {
-    console.log(`${DEBUG_PREFIX} Connecting to AppSync...`);
+    console.log(`[${getTS()}] ${DEBUG_PREFIX} Connecting to AppSync...`);
 
     try {
       const response = await sendServiceMessage(30, {
@@ -124,11 +129,11 @@ this.registerSignalHandler();
 
       this.clientId = response.clientId;
       this.connected = true;
-      console.log(`${DEBUG_PREFIX} Connected with clientId: ${this.clientId}`);
+      console.log(`[${getTS()}] ${DEBUG_PREFIX} Connected with clientId: ${this.clientId}`);
 
       const cache = ConnectionCache.load();
       if (cache) {
-        console.log(`${DEBUG_PREFIX} Attempting FAST RELOAD with token: ${cache.sessionToken}`);
+        console.log(`[${getTS()}] ${DEBUG_PREFIX} Attempting FAST RELOAD with token: ${cache.sessionToken}`);
         this.connectionMode = 'fast';
         this.sessionToken = cache.sessionToken;
         this.startWebRTC(cache.candidates);
@@ -136,7 +141,7 @@ this.registerSignalHandler();
         // Fallback timer: 2 seconds to connect or we switch to normal
         this.fallbackTimeout = setTimeout(() => {
           if (!this.peer?.connected) {
-            console.warn(`${DEBUG_PREFIX} Fast Reload timed out, falling back to normal connection`);
+            console.warn(`[${getTS()}] ${DEBUG_PREFIX} Fast Reload timed out, falling back to normal connection`);
             this.switchToNormalMode();
           }
         }, 2500);
@@ -207,7 +212,7 @@ this.registerSignalHandler();
 
     // Aggressive candidate injection for Fast Reload
     if (preInjectCandidates.length > 0) {
-      console.log(`${DEBUG_PREFIX} Pre-injecting ${preInjectCandidates.length} cached candidates`);
+      console.log(`[${getTS()}] ${DEBUG_PREFIX} Pre-injecting ${preInjectCandidates.length} cached candidates`);
       // Sort candidates: IPv6 first
       const sorted = [...preInjectCandidates].sort((a, b) => {
         const aIsV6 = a.candidate?.includes(':') ? 1 : 0;
@@ -225,12 +230,13 @@ this.registerSignalHandler();
     }
 
     this.peer.on('signal', (data: any) => {
+      if (this.peer?.connected) return; // Stop signaling once connected
       this.sendSignal(data.type || 'candidate', JSON.stringify(data));
     });
 
     this.peer.on('connect', () => {
       if (this.fallbackTimeout) clearTimeout(this.fallbackTimeout);
-      console.log(`${DEBUG_PREFIX} P2P Connected (${this.connectionMode} mode)!`);
+      console.log(`[${getTS()}] ${DEBUG_PREFIX} P2P Connected (${this.connectionMode} mode)!`);
       this.emit('connect');
 
       // Save success to cache
@@ -242,9 +248,15 @@ this.registerSignalHandler();
     });
 
     this.peer.on('error', (err: any) => {
-      console.error(`${DEBUG_PREFIX} WebRTC Error:`, err);
+      // If we are already connected, ignore errors from late/redundant signals
+      if (this.peer?.connected) {
+        console.warn(`[${getTS()}] ${DEBUG_PREFIX} WebRTC non-critical error (already connected):`, err.message);
+        return;
+      }
+
+      console.error(`[${getTS()}] ${DEBUG_PREFIX} WebRTC Error:`, err);
       if (this.connectionMode === 'fast') {
-        console.warn(`${DEBUG_PREFIX} Fast mode error, falling back...`);
+        console.warn(`[${getTS()}] ${DEBUG_PREFIX} Fast mode error, falling back...`);
         this.switchToNormalMode();
       } else {
         this.emit('error', err);
@@ -277,47 +289,63 @@ this.registerSignalHandler();
     }
   }
 
-  private extractCandidatesFromSDP(sdp: string): RTCIceCandidateInit[] {
-    const candidates: RTCIceCandidateInit[] = [];
-    const lines = sdp.split('\n');
-
-    for (const line of lines) {
-      if (line.startsWith('a=candidate:')) {
-        candidates.push({
-          candidate: line.substring(2).trim(),
-          sdpMid: '0',
-          sdpMLineIndex: 0
-        });
+    private extractCandidatesFromSDP(sdp: string): RTCIceCandidateInit[] {
+      const candidates: RTCIceCandidateInit[] = [];
+      const seen = new Set<string>();
+      const lines = sdp.split('\n');
+      
+      for (const line of lines) {
+        if (line.startsWith('a=candidate:')) {
+          const candidate = line.substring(2).trim();
+          // Simple de-duplication
+          if (seen.has(candidate)) continue;
+          seen.add(candidate);
+  
+          candidates.push({
+            candidate,
+            sdpMid: '0',
+            sdpMLineIndex: 0
+          });
+        }
       }
+      // Limit to top 12 candidates to avoid bloat
+      return candidates.slice(0, 12);
     }
-    return candidates;
-  }
-
-  private handleIncomingSignal(signal: any): void {
-    try {
-      const data = JSON.parse(signal.data);
-
-      // Update session token if server sends a new one
-      if (signal.sessionToken) {
-        this.sessionToken = signal.sessionToken;
+      private handleIncomingSignal(signal: any): void {
+        if (!this.peer || this.peer.destroyed) return;
+    
+        try {
+          // Ignore ALL signals if we are already connected to avoid "Called in wrong state" errors
+          if (this.peer.connected) {
+            console.log(`[${getTS()}] ${DEBUG_PREFIX} Ignored late ${signal.action} signal (already connected)`);
+            return;
+          }
+    
+          const data = JSON.parse(signal.data);
+          
+          // Update session token if server sends a new one
+          if (signal.sessionToken) {
+            this.sessionToken = signal.sessionToken;
+          }
+    
+          if (signal.action === 'candidate') {
+            const candidateInit: any = {
+              candidate: data.candidate,
+              sdpMid: data.sdpMid,
+              sdpMLineIndex: data.sdpMLineIndex
+            };
+            this.peer.signal({ candidate: candidateInit });
+          } else {
+            // Only signal if not connected
+            this.peer.signal(data);
+          }
+        } catch (e) {
+          if (!this.peer.destroyed) {
+            console.error(`[${getTS()}] ${DEBUG_PREFIX} Error handling incoming signal:`, e);
+          }
+        }
       }
-
-      if (signal.action === 'candidate') {
-        const candidateInit: any = {
-          candidate: data.candidate,
-          sdpMid: data.sdpMid,
-          sdpMLineIndex: data.sdpMLineIndex
-        };
-        this.peer.signal({ candidate: candidateInit });
-      } else {
-        this.peer.signal(data);
-      }
-    } catch (e) {
-      console.error(`${DEBUG_PREFIX} Error handling incoming signal:`, e);
-    }
-  }
-
-  private emit<K extends keyof BridgeEvents>(event: K, ...args: Parameters<BridgeEvents[K]>): void {
+      private emit<K extends keyof BridgeEvents>(event: K, ...args: Parameters<BridgeEvents[K]>): void {
     const listener = this.eventListeners[event];
     if (listener) {
       (listener as any)(...args);

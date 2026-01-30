@@ -27,11 +27,12 @@ try {
     const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf-8'));
     signalingEndpoint = credentials.SIGNALING_ENDPOINT || '';
     signalingApiKey = credentials.SIGNALING_API_KEY || credentials.API_KEY || '';
-    
+
     // Inject into process.env so SvelteKit's $env module can pick them up
     process.env.PUBLIC_SIGNALING_ENDPOINT = signalingEndpoint;
-    process.env.PUBLIC_SIGNALING_API_KEY = signalingApiKey;
-    
+		process.env.PUBLIC_SIGNALING_API_KEY = signalingApiKey;
+    process.env.LAMBDA_URL = credentials.LAMBDA_URL;
+
     console.log('✅ Signaling variables loaded from credentials.json and injected into process.env');
   } else {
     console.warn('⚠️  credentials.json not found at:', credentialsPath);
@@ -186,7 +187,10 @@ export default defineConfig({
   publicDir: 'static',
   define: {
     '__SIGNALING_ENDPOINT__': JSON.stringify(signalingEndpoint),
-    '__SIGNALING_API_KEY__': JSON.stringify(signalingApiKey),
+		'__SIGNALING_API_KEY__': JSON.stringify(signalingApiKey),
+		'env': JSON.stringify({
+			LAMBDA_URL: process.env.LAMBDA_URL,
+    }),
     'global': 'globalThis'
   },
   server: {

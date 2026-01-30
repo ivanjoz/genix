@@ -9,6 +9,11 @@ const serviceWorkerResolverMap: Map<number,((value: any) => void)> = new Map()
 const serviceWorkerHandlerMap: Map<number,((value: any) => void)> = new Map()
 const successfulResponses: Set<number> = new Set()
 
+const getTS = () => {
+  const d = new Date();
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}.${d.getMilliseconds().toString().padStart(3, '0')}`;
+};
+
 const nowTime = Date.now()
 
 export interface FetchCacheResponse {
@@ -18,52 +23,57 @@ export interface FetchCacheResponse {
   notUpdated?: boolean
 }
 
+let swReadyPromise: Promise<void> | null = null;
+let swIsInitialized = false;
+
 export const doInitServiceWorker = (): Promise<number> => {
   if(typeof navigator.serviceWorker === 'undefined'){
     console.log("serviceWorker es undefined")
     return Promise.resolve(0)
   }
 
-  return new Promise((resolve) => {
+  if (swReadyPromise) return Promise.resolve(1);
+
+  // 1. Register listener IMMEDIATELY to avoid missing early messages
+  navigator.serviceWorker.addEventListener('message', ({ data }) => {
+    console.log(`[${getTS()}] [SW-Cache] Message from Service Worker:`, data);
+
+    if(data.__response__ === 5){
+      setFetchProgress(data.bytes)
+    } else if (data.__response__ === 40){
+      // Handle incoming WebRTC signals
+      const handler = serviceWorkerHandlerMap.get(40)
+      if(handler){
+        handler(data)
+      } else {
+        console.log("No handler registered for action 40 (WebRTC signal)")
+      }
+    } else if (data.__response__ > 0 && data.__req__ > 0) {
+      if(data.__response__ === 3){
+        fetchEvent(data.__req__, 0)
+      }
+      successfulResponses.add(data.__req__)
+      if(serviceWorkerResolverMap.get(data.__req__)){
+        serviceWorkerResolverMap.get(data.__req__)?.(data)
+        serviceWorkerResolverMap.delete(data.__req__)
+      }
+    }
+  });
+
+  swReadyPromise = new Promise((resolve) => {
     navigator.serviceWorker.register(
       Env.serviceWorker, { scope: '/', type: 'module' }
     ).then(() => {
-      console.log("Service Worker registrado!")
+      console.log(`[${getTS()}] [SW-Cache] Service Worker registered!`);
       return navigator.serviceWorker.ready
     }).then(() => {
-      console.log("Service Worker iniciado en: ",Date.now() - nowTime,"ms")
-      // Listen for messages from the service worker
-      navigator.serviceWorker.addEventListener('message', ({ data }) => {
-        console.log("Mensaje del service worker::", data)
-
-        if(data.__response__ === 5){
-          setFetchProgress(data.bytes)
-        } else if (data.__response__ === 40){
-          // Handle incoming WebRTC signals (asynchronous push from service worker)
-          const handler = serviceWorkerHandlerMap.get(40)
-          if(handler){
-            handler(data)
-          } else {
-            console.log("No handler registered for action 40 (WebRTC signal)")
-          }
-        } else if (data.__response__ > 0 && data.__req__ > 0) {
-          if(data.__response__ === 3){
-            fetchEvent(data.__req__, 0)
-          }
-          successfulResponses.add(data.__req__)
-          if(serviceWorkerResolverMap.get(data.__req__)){
-            serviceWorkerResolverMap.get(data.__req__)?.(data)
-            serviceWorkerResolverMap.delete(data.__req__)
-          } else {
-            console.log("No se envió el request ID!")
-          }
-        } else {
-          console.log("Mensaje del service worker no reconocido:", data)
-        }
-      })
-      resolve(1)
+      console.log(`[${getTS()}] [SW-Cache] Service Worker ready (Iniciado en: ${Date.now() - nowTime}ms)`);
+      swIsInitialized = true;
+      resolve();
     })
   })
+
+  return swReadyPromise.then(() => 1);
 }
 
 export const registerServiceHandler = async (id: number, handler: (e: any) => void) => {
@@ -71,6 +81,10 @@ export const registerServiceHandler = async (id: number, handler: (e: any) => vo
 }
 
 export const sendServiceMessage = async (accion: number, content: any): Promise<any> => {
+  // Ensure SW is initialized before sending
+  if (!swIsInitialized) {
+    await doInitServiceWorker();
+  }
 
   const reqID = tempID
   let info = ""
@@ -89,10 +103,12 @@ export const sendServiceMessage = async (accion: number, content: any): Promise<
 
     const doFetch = () => {
       status.id = 0
-      status.updated = 0
+      status.updated = Date.now() // Initialize with now to prevent immediate retry
 
       if(status.tryCount > 0){
-        console.log(`Intentando fech por ${status.tryCount}º vez...`)
+        console.log(`[${getTS()}] [SW-Cache] Retrying fetch (Action: ${accion}, Attempt: ${status.tryCount})`);
+      } else {
+        console.log(`[${getTS()}] [SW-Cache] First fetch attempt (Action: ${accion})`);
       }
 
       let route = `${window.location.origin}/_sw_?accion=${accion}&req=${reqID}&env=${Env.enviroment}`
@@ -110,12 +126,12 @@ export const sendServiceMessage = async (accion: number, content: any): Promise<
       })
       .then(res => res.json())
       .then(res => {
-        console.log(`respuesta del service worker (${info}):`, res)
+        console.log(`[${getTS()}] [SW-Cache] Fetch response received (Action: ${accion}):`, res);
         status.id = 2
         status.updated = Date.now()
       })
       .catch(err => {
-        console.log(`Error en la respuesta, intentando (${info}):`, err)
+        console.log(`[${getTS()}] [SW-Cache] Fetch error (Action: ${accion}):`, err);
         status.id = 3
         status.updated = Date.now()
       })

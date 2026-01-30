@@ -389,7 +389,8 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 		if sess, ok := activeSessions[signal.SessionToken]; ok {
 			session = sess
 			session.LastConnected = time.Now()
-			log.Printf("DEBUG: Found active session for token %s", signal.SessionToken)
+			session.LastCandidates = nil // Reset list for the new connection attempt
+			log.Printf("DEBUG: Found active session for token %s (Resetting candidates)", signal.SessionToken)
 		} else {
 			session = &SessionInfo{
 				ClientID:      signal.From,
@@ -425,6 +426,12 @@ func handleOffer(cfg *config.Config, signal AppSyncSignal) {
 			}
 
 			if !*waitGatheringFlag {
+				// Optimization: If already connected, don't waste signaling bandwidth.
+				// We still stored it in the session above for the NEXT reload.
+				if pc.ConnectionState() == webrtc.PeerConnectionStateConnected {
+					return
+				}
+
 				candidateData, _ := json.Marshal(candidateJSON)
 				resp := AppSyncSignal{
 					From:         "genix-bridge",
