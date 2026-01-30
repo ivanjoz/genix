@@ -11,8 +11,10 @@ export const IsClient = () => {
   return browser
 }
 
-const apiPrd = ((globalThis as any).LAMBDA_API || "") + "api"
+const apiPrd = ((globalThis as any).env?.LAMBDA_URL || "") + "api/"
 const apiLocal = "http://localhost:3589/api/"
+
+debugger
 
 if(browser){
   const host = window.location.host
