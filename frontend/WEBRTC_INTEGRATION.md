@@ -76,12 +76,12 @@ webRTC.onMessage('data', (data) => console.log(data));
 **File**: `vite.config.ts`
 
 - Reads `SIGNALING_ENPOINT` from `../credentials.json` during build
-- Injects as `__SIGNALING_ENDPOINT__` constant via Vite's `define` option
+- Injects as `PUBLIC_SIGNALING_ENDPOINT` environment variable via SvelteKit's `$env/static/public`
 - Available at build time, not runtime (security best practice)
 
 **Configuration Flow**:
 ```
-credentials.json → Vite Build → __SIGNALING_ENDPOINT__ constant
+credentials.json → .env → SvelteKit Env → PUBLIC_SIGNALING_ENDPOINT
 ```
 
 ### 4. Environment Configuration

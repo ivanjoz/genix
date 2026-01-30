@@ -7,6 +7,28 @@ const BUILD_DIR = 'build';
 
 console.log('🚀 Starting build process...');
 
+// 0. Extract credentials and create .env files
+console.log('📝 Generating .env files from credentials.json...');
+try {
+  const credentialsPath = path.resolve('..', 'credentials.json');
+  if (fs.existsSync(credentialsPath)) {
+    const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf-8'));
+    const envContent = [
+      `PUBLIC_LAMBDA_URL=${credentials.LAMBDA_URL || ''}`,
+      `PUBLIC_SIGNALING_ENDPOINT=${credentials.SIGNALING_ENDPOINT || ''}`,
+      `PUBLIC_SIGNALING_API_KEY=${credentials.SIGNALING_API_KEY || ''}`
+    ].join('\n') + '\n';
+
+    fs.writeFileSync('.env', envContent);
+    fs.writeFileSync(path.join('pkg-store', '.env'), envContent);
+    console.log('✅ .env files created successfully');
+  } else {
+    console.warn('⚠️  credentials.json not found, skipping .env generation');
+  }
+} catch (error) {
+  console.error('❌ Error generating .env files:', error);
+}
+
 // 1. Build main app (this creates the 'build' directory via SvelteKit adapter-static)
 console.log('📦 Building main app...');
 execSync('bun run build:main', { stdio: 'inherit' });

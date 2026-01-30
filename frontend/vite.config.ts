@@ -18,29 +18,6 @@ const __dirname = path.dirname(__filename);
 // Get project directory
 const projectDir = process.cwd()
 
-// Read credentials.json to get signaling variables
-let signalingEndpoint = '';
-let signalingApiKey = '';
-try {
-  const credentialsPath = path.resolve(projectDir, '../credentials.json');
-  if (fs.existsSync(credentialsPath)) {
-    const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf-8'));
-    signalingEndpoint = credentials.SIGNALING_ENDPOINT || '';
-    signalingApiKey = credentials.SIGNALING_API_KEY || credentials.API_KEY || '';
-
-    // Inject into process.env so SvelteKit's $env module can pick them up
-    process.env.PUBLIC_SIGNALING_ENDPOINT = signalingEndpoint;
-		process.env.PUBLIC_SIGNALING_API_KEY = signalingApiKey;
-    process.env.LAMBDA_URL = credentials.LAMBDA_URL;
-
-    console.log('✅ Signaling variables loaded from credentials.json and injected into process.env');
-  } else {
-    console.warn('⚠️  credentials.json not found at:', credentialsPath);
-  }
-} catch (error) {
-  console.error('❌ Error reading credentials.json:', error);
-}
-
 const isBuild = process.argv.includes('build');
 const cssModuleMap = new Map<string, string>();
 
@@ -186,11 +163,6 @@ export default defineConfig({
   root: path.resolve(__dirname),
   publicDir: 'static',
   define: {
-    '__SIGNALING_ENDPOINT__': JSON.stringify(signalingEndpoint),
-		'__SIGNALING_API_KEY__': JSON.stringify(signalingApiKey),
-		'env': JSON.stringify({
-			LAMBDA_URL: process.env.LAMBDA_URL,
-    }),
     'global': 'globalThis'
   },
   server: {

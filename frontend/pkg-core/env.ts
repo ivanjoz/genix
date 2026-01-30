@@ -4,6 +4,7 @@ declare global {
 
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
+import { PUBLIC_LAMBDA_URL, PUBLIC_SIGNALING_ENDPOINT, PUBLIC_SIGNALING_API_KEY } from '$env/static/public';
 
 export { browser };
 
@@ -11,10 +12,8 @@ export const IsClient = () => {
   return browser
 }
 
-const apiPrd = ((globalThis as any).env?.LAMBDA_URL || "") + "api/"
+const apiPrd = (PUBLIC_LAMBDA_URL || "") + "api/"
 const apiLocal = "http://localhost:3589/api/"
-
-debugger
 
 if(browser){
   const host = window.location.host
@@ -46,8 +45,8 @@ export const Env = {
   S3_URL: "https://d16qwm950j0pjf.cloudfront.net/",
   serviceWorker: "/sw.js",
   enviroment: "dev",
-	SIGNALING_ENDPOINT: (globalThis as any).__SIGNALING_ENDPOINT__ || "",
-  SIGNALING_API_KEY: (globalThis as any).__SIGNALING_API_KEY__ || "",
+	SIGNALING_ENDPOINT: PUBLIC_SIGNALING_ENDPOINT || "",
+  SIGNALING_API_KEY: PUBLIC_SIGNALING_API_KEY || "",
   counterID: 1,
   sideLayerSize: 0,
   fetchID: 1000,

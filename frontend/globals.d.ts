@@ -27,6 +27,8 @@ interface Window {
 }
 
 // Build-time constants injected via Vite
-declare const __SIGNALING_ENDPOINT__: string;
-declare const __SIGNALING_API_KEY__: string;
+declare module '$ui/libs/blurhash?raw' {
+	const content: string;
+	export default content;
+}
 declare const appId: string;
