@@ -91,7 +91,7 @@ export const AdminModule: IModule = {
       ]
 
     },
-    { name: "CMS", minName: "CMS",  id: 5, icon: "icon-buffer",
+    { name: "Tienda", minName: "TIE",  id: 5, icon: "icon-buffer",
       options: [
         { name: "Inicio", route: "/cms/inicio"
         },

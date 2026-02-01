@@ -139,10 +139,6 @@ interface ComponentVariable {
     // === Validation ===
     min?: number;             // Minimum value (for numeric types)
     max?: number;             // Maximum value (for numeric types)
-    step?: number;            // Step increment for sliders
-    options?: string[];       // Predefined options (renders as dropdown)
-    required?: boolean;       // Whether value is required
-    pattern?: string;         // Regex validation pattern
     
     // === UI Hints ===
     label?: string;           // Human-readable label for editor

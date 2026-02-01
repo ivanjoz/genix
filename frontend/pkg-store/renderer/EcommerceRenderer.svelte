@@ -1,80 +1,96 @@
 <script lang="ts" module>
-  import type { IProducto } from '$services/services/productos.svelte';
-
-  export interface ComponentVariable {
-  	key: string, // Example: "__v1__"
-   	defaultValue: string, // Example: 80
-   	type: string, // Example: "w"
-    units?: ("px"|"pc"|"rem")[] // Example: "pc". "px" is default
-  }
-  
-  export interface ITextLine {
-  	text: string, css: string
-  }
-  
-	export interface ComponentAST {
-    id?: number | string
-    css?: string // tailwind css rules
-    description?: string
-    tagName?: string // Or the tag of the component
-    onClick?: (id: number | string) => void
-    children?: ComponentAST[]
-    text?: string
-    textLines?: ITextLine[]
-    backgroudImage?: string
-    variables: ComponentVariable[]
-    // Ecommerce Properties
-    productosIDs?: number[]
-    productos?: IProducto[] // Obtiene según los productos IDs
-    categoriaID?: number
-    marcaID?: number
-  }
-
+  export * from './renderer-types';
 </script>
 
 <script lang="ts">
+  import type { ComponentAST, ColorPalette } from './renderer-types';
+  import { resolveTokens, generatePaletteStyles } from './token-resolver';
   import ProductCard from '$store/components/ProductCard.svelte';
   import ProductCardHorizonal from '$store/components/ProductCardHorizonal.svelte';
 
+  interface Props {
+    elements: ComponentAST | ComponentAST[];
+    values?: Record<string, string>;
+    palette?: ColorPalette;
+    isRoot?: boolean;
+  }
+
   const {
-    elements
-  }: { elements: ComponentAST | ComponentAST[] } = $props()
+    elements,
+    values = {},
+    palette,
+    isRoot = true
+  }: Props = $props();
 
   const handleClick = (element: ComponentAST) => {
     if (element.onClick) {
-      element.onClick(element.id || 0)
+      element.onClick(element.id || 0);
     }
+  };
+
+  function getResolvedCss(element: ComponentAST) {
+    return resolveTokens(element.css, element.variables, values, palette);
   }
 
+  function getResolvedLineCss(css: string, variables: any[]) {
+     return resolveTokens(css, variables, values, palette);
+  }
+
+  const paletteStyles = $derived(isRoot ? generatePaletteStyles(palette) : '');
 </script>
 
-{#snippet renderElement(element: ComponentAST)}
-  {#if element.tagName === 'ProductCard'}
-	  {#each element.productos as producto}
-			<ProductCard productoID={producto.ID} css={element.css}/>
-	  {/each}
-	{:else if element.tagName === 'ProductCardHorizonal'}
-	  {#each element.productos as producto}
-			<ProductCardHorizonal producto={producto} css={element.css}/>
-	  {/each}
+{#snippet renderElement(element: ComponentAST, depth: number)}
+  {#if !element}
+    <!-- Skip null elements -->
+  {:else if element.tagName === 'ProductCard'}
+    {#if element.productos}
+      {#each element.productos as producto}
+        <ProductCard productoID={producto.ID} css={getResolvedCss(element)}/>
+      {/each}
+    {/if}
+  {:else if element.tagName === 'ProductCardHorizonal'}
+    {#if element.productos}
+      {#each element.productos as producto}
+        <ProductCardHorizonal producto={producto} css={getResolvedCss(element)}/>
+      {/each}
+    {/if}
   {:else}
-    <div class={element.css}>
+    {@const Tag = element.semanticTag || (element.tagName as any) || 'div'}
+    <Tag 
+      class={getResolvedCss(element)} 
+      style={`${element.style || ''} ${depth === 0 ? paletteStyles : ''}`}
+      onclick={() => handleClick(element)}
+      {...element.attributes}
+      aria-label={element.aria?.label}
+      role={element.aria?.role}
+      aria-hidden={element.aria?.hidden}
+    >
       {#if element.text}
         {element.text}
       {/if}
-      {#if element.children}
-        {#each element.children as child}
-          {@render renderElement(child)}
+
+      {#if element.textLines}
+        {#each element.textLines as line}
+          {@const LineTag = line.tag || 'span'}
+          <LineTag class={getResolvedLineCss(line.css, element.variables || [])}>
+            {line.text}
+          </LineTag>
         {/each}
       {/if}
-    </div>
+
+      {#if element.children}
+        {#each element.children as child}
+          {@render renderElement(child, depth + 1)}
+        {/each}
+      {/if}
+    </Tag>
   {/if}
 {/snippet}
 
 {#if Array.isArray(elements)}
   {#each elements as element}
-    {@render renderElement(element)}
+    {@render renderElement(element, 0)}
   {/each}
 {:else}
-  {@render renderElement(elements)}
+  {@render renderElement(elements, 0)}
 {/if}
