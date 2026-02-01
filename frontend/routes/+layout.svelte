@@ -6,7 +6,9 @@ import favicon from '$ui/assets/favicon.svg?raw';
 import { checkIsLogin } from '$core/lib/security';
 import { doInitServiceWorker } from '$core/lib/sw-cache';
 	import { onMount } from 'svelte';
-	import './app.css';
+		import './app.css';
+	import './tailwind.css';
+	import '../pkg-ui/libs/fontello-embedded.css'
 import AppHeader from '$ui/AppHeader.svelte';
 import Page from '$ui/Page.svelte';
 import SideMenu from '$ui/SideMenu.svelte';

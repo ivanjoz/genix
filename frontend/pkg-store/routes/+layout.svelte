@@ -1,6 +1,7 @@
 <script lang="ts">
   // @render 'svelte';
   import "./store.css";
+  import "./tailwind.css";
   import "$ui/libs/fontello-prerender.css";
 import { productosServiceState } from '$services/services/productos.svelte';
   let { children, data } = $props();
