@@ -2,6 +2,7 @@
     import EcommerceBuilder from './EcommerceBuilder.svelte';
     import { storeExample } from './store-example';
     import type { ColorPalette, ComponentAST } from '../../pkg-store/renderer/renderer-types';
+    import "$ui/libs/fontello-prerender.css";
     import Header from '$store/components/Header.svelte';
     import Page from '$ui/Page.svelte';
 

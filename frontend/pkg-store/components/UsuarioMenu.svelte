@@ -118,7 +118,7 @@
       edgeMargin={32}
       useBig layerClass="w-700 max-w-[90vw] rounded-[11px]">
       {#snippet button(open)}
-        <button class={["bn1 w-full", open ? s1.button_menu_top : ""].join(" ")}>
+        <button class={[s1.bn1, "w-full", open ? s1.button_menu_top : ""].join(" ")}>
           <i class="icon1-user"></i>
           <span>Mi Usuario</span>
         </button>

@@ -61,6 +61,7 @@ body {
 	--input-height: 44px;
 	--input-border-color: #d0d4e7;
 	--light-blue-1: #edeff5;
+	--store-editor-collapsed-width: 280px;
 
 	/*colors*/
 	--white: #ffffff;

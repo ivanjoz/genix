@@ -1,16 +1,24 @@
 <script lang="ts">
 import { formatN } from '$core/helpers';
-import type { IProducto } from '$services/services/productos.svelte';
+import { getProductoByID, type IProducto } from '$services/services/productos.svelte';
 import ImageHash from '$components/Imagehash.svelte';
   import { addProductoCant, ProductsSelectedMap } from "./store.svelte";
 
   export interface IProductCard {
-		producto: IProducto, css?: string, productoID?: number
+		css?: string, productoID: number
 	}
 
-   const {
-     producto, css = "", productoID
-   }: IProductCard = $props();
+  const {
+    css = "", productoID
+  }: IProductCard = $props();
+
+  let producto: IProducto = $state({} as IProducto)
+  
+  $effect(() => {
+  	getProductoByID(productoID).then(p => { 
+   		if(p){ producto = p	}
+   	})
+  })
 
   const prodCant = $derived.by(() => {
     return ProductsSelectedMap.get(producto.ID)?.cant || 0

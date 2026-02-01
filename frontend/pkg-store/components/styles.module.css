@@ -38,6 +38,21 @@
   padding-bottom: 4px;
 }
 
+.bn1 {
+  height: 40px;
+  border-radius: 7px;
+  border: none;
+  outline: none;
+  background-color: transparent;
+  cursor: pointer;
+  padding: 2px 4px 0 0;
+}
+
+.bn1:hover {
+  outline: 2px solid #4c55d5;
+  background-color: #f5f6ff;
+}
+
 /* MAIN CARRUSEL */
 .main_carrusel_ctn {
   background-color: gray;

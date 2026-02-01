@@ -40,7 +40,7 @@ import { Env } from '$core/env';
 
 </script>
 
-<div class="_1 p-10 {containerCss}" class:useTopMinimalMenu={Core.useTopMinimalMenu}
+<div id="page-container" class="_1 p-10 {containerCss}" class:useTopMinimalMenu={Core.useTopMinimalMenu}
 	class:fixed-full-height={fixedFullHeight}
 >
   {#if Core.isLoading === 0 && isLogged}

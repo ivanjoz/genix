@@ -20,11 +20,13 @@ import { getProductoByID, type IProducto } from '$services/services/productos.sv
   let producto: IProducto = $state({} as IProducto)
   
   $effect(() => {
+  	console.log("obteniendo producto con ID::", productoID)
+  
   	getProductoByID(productoID).then(p => { 
+   		console.log("producto obtenido::", p)
    		if(p){ producto = p	}
-   	})
+   	})	
   })
-
 </script>
 
 <div class="relative _8">

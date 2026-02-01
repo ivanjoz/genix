@@ -51,7 +51,7 @@
   {:else if element.tagName === 'ProductCardHorizonal'}
     {#if element.productos}
       {#each element.productos as producto}
-        <ProductCardHorizonal producto={producto} css={getResolvedCss(element)}/>
+        <ProductCardHorizonal productoID={producto.ID} css={getResolvedCss(element)}/>
       {/each}
     {/if}
   {:else}

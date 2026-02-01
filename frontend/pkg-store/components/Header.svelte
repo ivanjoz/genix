@@ -1,39 +1,41 @@
 <script lang="ts">
+  import { browser } from "$app/environment";
+  import { Core } from '$core/store.svelte';
+  import CartMenu from '$store/components/CartMenu.svelte';
+  import SearchBar from '$store/components/SearchBar.svelte';
+  import UsuarioMenu from '$store/components/UsuarioMenu.svelte';
   import { onMount } from "svelte";
-import SearchBar from '$store/components/SearchBar.svelte';
-import CartMenu from '$store/components/CartMenu.svelte';
-import UsuarioMenu from '$store/components/UsuarioMenu.svelte';
-    import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
-import { Core } from '$core/store.svelte';
-import ButtonLayer from '$components/ButtonLayer.svelte';
+  import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
 
   // State for mobile menu
   let mobileMenuOpen = $state(false);
-  let isScrolled = $state(false);
-  let isSubheaderFixed = $state(false);
-  let subheaderElement: HTMLElement;
 
   const cartCant = $derived(ProductsSelectedMap.size)
 
   // Handle scroll effect
   onMount(() => {
-    /*
-    const handleScroll = () => {
-      // console.log("comparison:", window.scrollY, subheaderElement.offsetTop);
 
-      if (window.scrollY > subheaderElement.offsetTop) {
-        isSubheaderFixed = true;
-      } else {
-        isSubheaderFixed = false;
-      }
-    };
+  	if(browser){
+			const subheader0 = document.getElementById("sh-0")
+			const container = subheader0?.offsetParent
 
-    window.addEventListener("scroll", handleScroll);
-
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-    };
-    */
+			if(container){
+			  const handleScroll = () => {
+						console.log("handleScroll", container.scrollTo, subheader0?.offsetParent)
+			    if (container.scrollTop > 48) {
+			      subheader0?.classList.add("s2")
+			    } else {
+			      subheader0?.classList.remove("s2")
+			    }
+			  };
+			
+			  container.addEventListener("scroll", handleScroll);
+			
+			  return () => {
+			    container.removeEventListener("scroll", handleScroll);
+			  };	
+			}
+   	}
   });
 
   // Toggle mobile menu
@@ -142,12 +144,19 @@ import ButtonLayer from '$components/ButtonLayer.svelte';
       rgba(0, 0, 0, 0.2) 0px 2px 8px;
     z-index: 200;
   }
-  .header-0:global(.s1), .header-0:global(.s1) + .header-1 {
+  .header-0:global(.s1), .header-0:global(.s1) + .header-1,
+  .header-0:global(.s2), .header-0:global(.s2) + .header-1 {
     height: 52px;
   }
   .header-0:global(.s1) + .header-1 {
     position: fixed;
     top: 0;
+  }
+  .header-0:global(.s2) + .header-1 {
+    position: fixed;
+    top: var(--header-height);
+    width: calc(100% - var(--store-editor-collapsed-width) - 12px);
+    
   }
   @media (max-width: 739px) {
    .header-0:global(.s1), .header-0:global(.s1) + .header-1 {

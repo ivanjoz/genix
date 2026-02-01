@@ -90,7 +90,7 @@
 				<div class="mt-8 mb-8 fs18 ff-bold">Total a pagar:</div>
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-12 pb-6">
 					{#each ProductsSelectedMap.values() as cartProducto}
-						<ProductCardHorizonal producto={cartProducto.producto} />
+						<ProductCardHorizonal productoID={cartProducto.producto.ID} />
 					{/each}
 				</div>
 			{/if}
@@ -194,7 +194,7 @@
 		>
 			{#snippet button(open)}
 				<button
-					class={["bn1 w-full", open ? s1.button_menu_top : ""].join(" ")}
+					class={[s1.bn1, "w-full", open ? s1.button_menu_top : ""].join(" ")}
 				>
 					<i class="icon1-basket"></i>
 					<span>Carrito</span>

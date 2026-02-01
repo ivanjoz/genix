@@ -231,15 +231,15 @@
   {#if !element}
     <!-- Skip null elements -->
   {:else if element.tagName === 'ProductCard'}
-    {#if element.productos}
-      {#each element.productos as producto}
-        <ProductCard productoID={producto.ID} css={getResolvedCss(element)}/>
+    {#if element.productosIDs||[]}
+      {#each element.productosIDs as productoID}
+        <ProductCard productoID={productoID} css={getResolvedCss(element)}/>
       {/each}
     {/if}
   {:else if element.tagName === 'ProductCardHorizonal'}
-    {#if element.productos}
-      {#each element.productos as producto}
-        <ProductCardHorizonal producto={producto} css={getResolvedCss(element)}/>
+    {#if element.productosIDs}
+      {#each element.productosIDs as productoID}
+        <ProductCardHorizonal productoID={productoID} css={getResolvedCss(element)}/>
       {/each}
     {/if}
   {:else}

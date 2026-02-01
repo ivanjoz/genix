@@ -87,7 +87,7 @@
     border-left: 1px solid #1e293b;
     z-index: 205;
     overflow: hidden;
-    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: width 0.24s cubic-bezier(0.4, 0, 0.2, 1);
     color: #e2e8f0;
   }
 
