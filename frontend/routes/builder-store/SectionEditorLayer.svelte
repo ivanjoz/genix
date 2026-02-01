@@ -11,6 +11,7 @@
     section: SelectedSection | null;
     palette?: ColorPalette;
     onFieldUpdate: (field: EditableField, newValue: string) => void;
+    onTemplateSelect: (template: SectionTemplate) => void;
     onClose: () => void;
   }
 
@@ -19,6 +20,7 @@
     section,
     palette,
     onFieldUpdate,
+    onTemplateSelect,
     onClose
   }: Props = $props();
 
@@ -32,8 +34,7 @@
   ];
 
   function handleTemplateSelect(template: SectionTemplate) {
-    console.log('Selected template:', template);
-    // Logic to add template to builder would go here
+    onTemplateSelect(template);
   }
 </script>
 

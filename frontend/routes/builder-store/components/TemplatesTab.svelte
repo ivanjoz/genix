@@ -21,6 +21,20 @@
       return matchesSearch && matchesCategory;
     });
   });
+  function handleDragStart(e: DragEvent, template: SectionTemplate) {
+    if (!e.dataTransfer) return;
+    e.dataTransfer.setData('application/x-genix-template', JSON.stringify(template));
+    e.dataTransfer.effectAllowed = 'copy';
+    
+    // Optional: set a drag image or just let the browser handle it
+    const target = e.target as HTMLElement;
+    target.style.opacity = '0.5';
+  }
+
+  function handleDragEnd(e: DragEvent) {
+    const target = e.target as HTMLElement;
+    target.style.opacity = '1';
+  }
 </script>
 
 <div class="templates-tab">
@@ -47,7 +61,13 @@
 
   <div class="templates-grid">
     {#each filteredTemplates() as template}
-      <button class="template-card" onclick={() => onSelect(template)}>
+      <button 
+        class="template-card" 
+        onclick={() => onSelect(template)}
+        draggable="true"
+        ondragstart={(e) => handleDragStart(e, template)}
+        ondragend={handleDragEnd}
+      >
         <div class="template-icon">🧩</div>
         <div class="template-info">
           <div class="template-name">{template.name}</div>

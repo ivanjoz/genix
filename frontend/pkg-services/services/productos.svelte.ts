@@ -109,8 +109,31 @@ export const getProductos = async (categoriasIDs?: number[]): Promise<IProductos
 
 let loadingPromise: Promise<IProductosResult> | null = null;
 
-// Revisa si se ha usado el getProductos para obtener los producto, sino lo usa y deja una promesa para que si otra instancia usa getProductoByID, espere la primera, luego obtiene el producto basado en el ID.
 export const getProductoByID = async (id: number): Promise<IProducto | undefined> => {
+	// 1. Si ya lo tenemos en el mapa, lo retornamos inmediatamente
+	const p = productosServiceState.productosMap.get(id);
+	if (p) return p;
+
+	// 2. Si no hay productos cargados todavía, iniciamos o esperamos la carga inicial
+	if (productosServiceState.productos.length === 0) {
+		if (!loadingPromise) {
+			loadingPromise = getProductos();
+		}
+
+		try {
+			await loadingPromise;
+		} catch (err) {
+			console.error("Error cargando productos para getProductoByID:", err);
+			return undefined;
+		}
+	}
+
+	// 3. Después de cargar (o si ya había productos pero no el que buscamos), 
+	// buscamos en el mapa actualizado. Si no está aquí, es que no existe.
+	return productosServiceState.productosMap.get(id);
+}
+
+export const getProductsByCategoryID = async (id: number): Promise<IProducto | undefined> => {
 	// 1. Si ya lo tenemos en el mapa, lo retornamos inmediatamente
 	const p = productosServiceState.productosMap.get(id);
 	if (p) return p;

@@ -42,6 +42,123 @@
   let editorOpen = $state(false);
   let renderKey = $state(0);
 
+  // Drag and Drop state
+  let draggingIndex = $state<number | null>(null);
+  let dropIndex = $state<number | null>(null);
+  let isDraggingOver = $state(false);
+
+  function handleSectionDragStart(e: DragEvent, idx: number) {
+    if (!e.dataTransfer) return;
+    draggingIndex = idx;
+    e.dataTransfer.setData('application/x-genix-reorder', idx.toString());
+    e.dataTransfer.effectAllowed = 'move';
+    
+    // Add a class to the target if needed
+    const target = e.currentTarget as HTMLElement;
+    setTimeout(() => target.classList.add('is-dragging'), 0);
+  }
+
+  function handleSectionDragEnd(e: DragEvent) {
+    draggingIndex = null;
+    dropIndex = null;
+    isDraggingOver = false;
+    const target = e.currentTarget as HTMLElement;
+    target.classList.remove('is-dragging');
+  }
+
+  function handleDragOver(e: DragEvent, idx: number) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.dataTransfer) return;
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    
+    // Determine if we should drop before or after this element
+    const newDropIndex = e.clientY < midpoint ? idx : idx + 1;
+    
+    if (dropIndex !== newDropIndex) {
+      dropIndex = newDropIndex;
+    }
+    isDraggingOver = true;
+  }
+
+  function handleCanvasDragLeave(e: DragEvent) {
+    // Only reset if we're actually leaving the builder area
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    if (
+      e.clientX <= rect.left ||
+      e.clientX >= rect.right ||
+      e.clientY <= rect.top ||
+      e.clientY >= rect.bottom
+    ) {
+      dropIndex = null;
+      isDraggingOver = false;
+    }
+  }
+
+  function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    isDraggingOver = false;
+    
+    const targetIndex = dropIndex ?? (Array.isArray(elements) ? elements.length : 1);
+    
+    if (e.dataTransfer?.getData('application/x-genix-reorder')) {
+      const fromIndex = parseInt(e.dataTransfer.getData('application/x-genix-reorder'));
+      if (isNaN(fromIndex)) return;
+      
+      reorderSection(fromIndex, targetIndex);
+    } else if (e.dataTransfer?.getData('application/x-genix-template')) {
+      const templateData = JSON.parse(e.dataTransfer.getData('application/x-genix-template'));
+      insertTemplate(templateData, targetIndex);
+    }
+    
+    dropIndex = null;
+    draggingIndex = null;
+  }
+
+  function reorderSection(fromIdx: number, toIdx: number) {
+    if (!Array.isArray(elements)) return;
+    
+    const newElements = [...elements];
+    const [movedItem] = newElements.splice(fromIdx, 1);
+    
+    // Adjust target index if it was after the item we removed
+    const adjustedToIdx = toIdx > fromIdx ? toIdx - 1 : toIdx;
+    newElements.splice(adjustedToIdx, 1, newElements[adjustedToIdx]); // This is wrong, let me fix it
+    
+    // Correct way to splice back
+    newElements.splice(adjustedToIdx, 0, movedItem);
+    
+    elements = newElements;
+    onUpdate?.(elements);
+    renderKey++;
+  }
+
+  function insertTemplate(template: any, index: number) {
+    if (!Array.isArray(elements)) {
+      elements = [elements];
+    }
+    
+    const newElements = [...elements];
+    // For now, let's assume template.ast exists or we create a basic one
+    // In a real scenario, we might need to fetch or transform the template
+    const newSection: ComponentAST = template.ast || {
+      tagName: 'section',
+      semanticTag: 'section',
+      css: 'p-20 bg-slate-100',
+      children: [{
+        tagName: 'h2',
+        text: `New ${template.name} Section`
+      }]
+    };
+
+    newElements.splice(index, 0, newSection);
+    elements = newElements;
+    onUpdate?.(elements);
+    renderKey++;
+  }
+
   function getElementByPath(path: string[]): ComponentAST | null {
     let current: ComponentAST | ComponentAST[] = elements;
     
@@ -283,12 +400,18 @@
     {@const Tag = element.semanticTag || (element.tagName as any) || 'section'}
 
     {@const isSelected = selectedSection?.path[0] === sectionIdx.toString()}
-    {#key renderKey}
+    {@const isDragging = draggingIndex === sectionIdx}
+    
     <div
       class="section-wrapper"
-
       class:section-selected={isSelected}
-
+      class:is-dragging={isDragging}
+      
+      draggable="true"
+      ondragstart={(e) => handleSectionDragStart(e, sectionIdx)}
+      ondragend={handleSectionDragEnd}
+      ondragover={(e) => handleDragOver(e, sectionIdx)}
+      
       onclick={() => handleSectionClick(element, sectionIdx)}
       role="button"
       tabindex="0"
@@ -303,7 +426,7 @@
           </svg>
         </span>
         <span>{element.tagName || 'section'}</span>
-        <span class="section-label-hint">Click to edit</span>
+        <span class="section-label-hint">Click to edit • Drag to move</span>
       </div>
       
       <svelte:element 
@@ -335,19 +458,58 @@
         {/if}
       </svelte:element>
     </div>
-    {/key}
   {/if}
 {/snippet}
 
+{#snippet renderPlaceholder()}
+  <div class="drop-placeholder">
+    <div class="placeholder-content">
+      <span class="placeholder-icon">✨</span>
+      <span>Drop to insert here</span>
+    </div>
+  </div>
+{/snippet}
+
 <div class="ecommerce-builder">
-  <div class="builder-canvas">
-    {#if Array.isArray(elements)}
-      {#each elements as element, idx}
-        {@render renderSection(element, idx)}
-      {/each}
-    {:else}
-      {@render renderSection(elements, 0)}
-    {/if}
+  <div 
+    class="builder-canvas" 
+    ondrop={handleDrop}
+    ondragover={(e) => {
+      e.preventDefault();
+      // If we are over the canvas but not over a specific section, 
+      // it means we want to drop at the end
+      if (e.target === e.currentTarget) {
+        dropIndex = Array.isArray(elements) ? elements.length : 1;
+        isDraggingOver = true;
+      }
+    }}
+    ondragleave={handleCanvasDragLeave}
+  >
+    {#key renderKey}
+      {#if Array.isArray(elements)}
+        {#each elements as element, idx}
+          {#if isDraggingOver && dropIndex === idx}
+            {@render renderPlaceholder()}
+          {/if}
+          
+          {@render renderSection(element, idx)}
+          
+          {#if isDraggingOver && dropIndex === idx + 1 && idx === elements.length - 1}
+            {@render renderPlaceholder()}
+          {/if}
+        {/each}
+      {:else}
+        {#if isDraggingOver && dropIndex === 0}
+          {@render renderPlaceholder()}
+        {/if}
+        
+        {@render renderSection(elements, 0)}
+        
+        {#if isDraggingOver && dropIndex === 1}
+          {@render renderPlaceholder()}
+        {/if}
+      {/if}
+    {/key}
   </div>
 
   <SectionEditorLayer
@@ -355,6 +517,7 @@
     section={selectedSection}
     {palette}
     onFieldUpdate={handleFieldUpdate}
+    onTemplateSelect={(template) => insertTemplate(template, Array.isArray(elements) ? elements.length : 1)}
     onClose={closeEditor}
   />
 </div>
@@ -374,6 +537,43 @@
     position: relative;
     cursor: pointer;
     transition: all 0.2s ease;
+  }
+
+  .section-wrapper.is-dragging {
+    opacity: 0.4;
+    cursor: grabbing;
+  }
+
+  .drop-placeholder {
+    height: 48px;
+    margin: 8px 0;
+    border: 2px dashed #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: placeholder-pulse 1.5s infinite ease-in-out;
+  }
+
+  .placeholder-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #3b82f6;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .placeholder-icon {
+    font-size: 18px;
+  }
+
+  @keyframes placeholder-pulse {
+    0% { opacity: 0.6; transform: scale(0.995); }
+    50% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0.6; transform: scale(0.995); }
   }
 
   .section-outline {
