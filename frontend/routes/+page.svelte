@@ -7,7 +7,7 @@
     <!-- Logo -->
     <div class="mb-8">
       <div
-        class="w-24 h-24 mx-auto bg-gradient-to-br from-indigo-600 to-indigo-800
+        class="w-24 h-24 mx-auto bg-linear-to-br from-indigo-600 to-indigo-800
 				rounded-2xl flex items-center justify-center shadow-xl"
       >
         <span class="text-5xl">🏢</span>

@@ -26,6 +26,7 @@ export const Core = $state({
   openSearchLayer: 0 as number,
   deviceType: getDeviceType() as number,
   mobileMenuOpen: 0 as number,
+  useTopMinimalMenu: false as boolean,
   popoverShowID: 0 as number | string,
   showSideLayer: 0 as number,
   isLoading: 1,

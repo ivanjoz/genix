@@ -49,10 +49,10 @@ import ButtonLayer from '$components/ButtonLayer.svelte';
 </script>
 
 <div class="_2 flex justify-between text-white h-48"></div>
-<div id="sh-0" class="flex justify-between w-full h-68">
+<div id="sh-0" class="header-0 flex justify-between w-full h-68">
   header
 </div>
-<div id="sh-1" class="_1 h-58 w-full md:h-68 top-48 absolute flex items-center md:justify-between w-full left-0 px-4 md:px-80"
+<div id="sh-1" class="header-1 _1 h-58 md:h-68 top-48 absolute flex items-center md:justify-between w-full left-0 px-4 md:px-80"
 >
   <div class="hidden md:block"></div>
   <button aria-label="page-menu" class="_6 fx-c w-[14vw] md:hidden!" onclick={ev => {
@@ -130,5 +130,28 @@ import ButtonLayer from '$components/ButtonLayer.svelte';
     outline: none;
     border: none;
     background-color: transparent;
+  }
+  
+  .header-0, .header-1 {
+    transition: height 0.3s ease;
+  }
+  .header-1 {
+    background-color: #ffffff;
+      box-shadow:
+      rgba(0, 0, 0, 0.16) 0px 2px 6px,
+      rgba(0, 0, 0, 0.2) 0px 2px 8px;
+    z-index: 200;
+  }
+  .header-0:global(.s1), .header-0:global(.s1) + .header-1 {
+    height: 52px;
+  }
+  .header-0:global(.s1) + .header-1 {
+    position: fixed;
+    top: 0;
+  }
+  @media (max-width: 739px) {
+   .header-0:global(.s1), .header-0:global(.s1) + .header-1 {
+      height: 47px;
+    }
   }
 </style>

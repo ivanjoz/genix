@@ -56,7 +56,8 @@
     {/if}
   {:else}
     {@const Tag = element.semanticTag || (element.tagName as any) || 'div'}
-    <Tag 
+    <svelte:element 
+      this={Tag}
       class={getResolvedCss(element)} 
       style={`${element.style || ''} ${depth === 0 ? paletteStyles : ''}`}
       onclick={() => handleClick(element)}
@@ -72,9 +73,9 @@
       {#if element.textLines}
         {#each element.textLines as line}
           {@const LineTag = line.tag || 'span'}
-          <LineTag class={getResolvedLineCss(line.css, element.variables || [])}>
+          <svelte:element this={LineTag} class={getResolvedLineCss(line.css, element.variables || [])}>
             {line.text}
-          </LineTag>
+          </svelte:element>
         {/each}
       {/if}
 
@@ -83,7 +84,7 @@
           {@render renderElement(child, depth + 1)}
         {/each}
       {/if}
-    </Tag>
+    </svelte:element>
   {/if}
 {/snippet}
 

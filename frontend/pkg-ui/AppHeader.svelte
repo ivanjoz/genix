@@ -48,14 +48,17 @@ import WebRTCStatus from '$ui/WebRTCStatus.svelte';
 
 <header	class="_1 fixed top-0 left-0 right-0 bg-gradient-to-r from-indigo-600 to-indigo-700
 	shadow-md z-150 flex items-center px-6 md:px-16"
+	class:useTopMinimalMenu={Core.useTopMinimalMenu}
 >
 
 	<!-- Logo Section (Desktop) -->
-	<div class="hidden md:flex items-center justify-center h-full w-56 mr-12">
-		<div class="h-40 w-40 bg-black/20 rounded-lg flex items-center justify-center">
-			<img src="/images/genix_logo4.svg" alt="Genix Logo" class="w-full h-full p-1" />
+	{#if !Core.useTopMinimalMenu}
+		<div class="hidden md:flex items-center justify-center h-full w-56 mr-12">
+			<div class="h-40 w-40 bg-black/20 rounded-lg flex items-center justify-center">
+				<img src="/images/genix_logo4.svg" alt="Genix Logo" class="w-full h-full p-1" />
+			</div>
 		</div>
-	</div>
+	{/if}
 
 	<!-- Mobile Menu Button -->
 	{#if showMenuButton}
@@ -143,6 +146,12 @@ import WebRTCStatus from '$ui/WebRTCStatus.svelte';
 <style>
 	._1 {
 		height: var(--header-height);
+	}
+
+	@media (min-width: 751px) {
+		._1.useTopMinimalMenu {
+			margin-left: var(--menu-max-width);
+		}
 	}
 
 	@keyframes spin {

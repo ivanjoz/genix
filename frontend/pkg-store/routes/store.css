@@ -91,29 +91,6 @@ html {
   scroll-behavior: smooth;
 }
 
-#sh-0, #sh-1 {
-  transition: height 0.3s ease;
-}
-#sh-1 {
-  background-color: #ffffff;
-    box-shadow:
-    rgba(0, 0, 0, 0.16) 0px 2px 6px,
-    rgba(0, 0, 0, 0.2) 0px 2px 8px;
-  z-index: 200;
-}
-#sh-0.s1, #sh-0.s1 + #sh-1 {
-  height: 52px;
-}
-#sh-0.s1 + #sh-1 {
-  position: fixed;
-  top: 0;
-}
-@media (max-width: 739px) {
-  #sh-0.s1, #sh-0.s1 + #sh-1 {
-    height: 47px;
-  }
-}
-
 /* View Transitions for Mobile Menu */
 @keyframes slide-out {
   from {

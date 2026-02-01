@@ -93,15 +93,15 @@ export const AdminModule: IModule = {
     },
     { name: "Tienda", minName: "TIE",  id: 5, icon: "icon-buffer",
       options: [
-        { name: "Inicio", route: "/cms/inicio"
+        { name: "Inicio", route: "/builder-store"
         },
-        { name: "Nosotros", route: "/cms/page-2"
+        { name: "Nosotros", route: "/store-builder/page-2"
         },
-        { name: "Tienda", route: "/cms/page-3"
+        { name: "Tienda", route: "/store-builder/page-3"
         },
-        { name: "Producto", route: "/cms/page-4"
+        { name: "Producto", route: "/store-builder/page-4"
         },
-        { name: "Carrito Compra", route: "/cms/page-5"
+        { name: "Carrito Compra", route: "/store-builder/page-5"
         },
       ]
     },

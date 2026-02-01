@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { tick } from 'svelte';
-import { Core } from '$core/store.svelte';
-import type { IMenuRecord, IModule } from '$core/types/modules';
+	import { Core } from '$core/store.svelte';
+	import type { IMenuRecord, IModule } from '$core/types/modules';
 
 	// State
 	const module = $derived(Core.module);
@@ -106,15 +105,20 @@ import type { IMenuRecord, IModule } from '$core/types/modules';
 </script>
 
 <!-- Desktop Menu -->
-<div class="d-menu fixed left-0 top-0 h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950
+<div class="d-menu fixed left-0 top-0 bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950
 		text-white shadow-xl transition-all duration-200 ease-in-out z-300 hidden md:block"
+	class:h-screen={!Core.useTopMinimalMenu}
+	class:useTopMinimalMenu={Core.useTopMinimalMenu}
 	role="navigation"
 	aria-label="Main navigation"
 >
-	<div class="flex items-center h-48 border-b border-gray-800/30 w-full">
+	<div class="flex items-center h-48 border-b border-gray-800/30 w-full overflow-hidden">
 		<div class="_1 flex items-center">
-			<img class="w-42 h-42" src="/images/genix_logo4.svg" alt="">
-			<div class="_2 hidden white ff-bold h2 ml-[-3px]">enix</div>
+			<img class="w-42 h-42 flex-shrink-0" src="/images/genix_logo4.svg" alt="">
+			<div class="_2 white ff-bold h2 ml-[-3px] whitespace-nowrap">enix</div>
+			{#if Core.useTopMinimalMenu}
+				<i class="icon-down-open-1 ml-4 text-gray-400 text-xs hover-indicator flex-shrink-0"></i>
+			{/if}
 		</div>
 	</div>
 
@@ -272,11 +276,22 @@ import type { IMenuRecord, IModule } from '$core/types/modules';
 
 <style>
 	._1 {
-		position: absolute;
-		left: 12px;
+		display: flex;
+		align-items: center;
+		padding-left: 12px;
 	}
-	.d-menu:hover ._2 {
+	._2 {
+		display: none;
+	}
+	.d-menu:hover ._2, .d-menu.useTopMinimalMenu ._2 {
 		display: block;
+	}
+	.hover-indicator {
+		transition: transform 0.3s;
+		opacity: 0.8;
+	}
+	.d-menu:hover .hover-indicator {
+		transform: rotate(180deg);
 	}
 	/* Desktop Menu - Pure CSS Width Control */
 	.d-menu {
@@ -287,6 +302,16 @@ import type { IMenuRecord, IModule } from '$core/types/modules';
 	.d-menu:hover {
 		width: var(--menu-max-width);
 		overflow: auto;
+	}
+
+	.d-menu.useTopMinimalMenu {
+		width: var(--menu-max-width);
+		height: var(--header-height);
+		overflow: hidden;
+	}
+
+	.d-menu.useTopMinimalMenu:hover {
+		height: 100vh;
 	}
 
 	/* Menu Text - Show minimized by default, expanded on hover */

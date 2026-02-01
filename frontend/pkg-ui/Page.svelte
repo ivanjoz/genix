@@ -4,13 +4,19 @@ import { checkIsLogin } from '$core/lib/security';
 import { closeAllModals, Core, openModal } from '$core/store.svelte';
 import { Env } from '$core/env';
 
-  let { children, sideLayerSize, title, options }: {
-    children: any, sideLayerSize?: number, title: string
+  let { children, sideLayerSize, title, options, containerCss, useTopMinimalMenu }: {
+    children: any, 
+    sideLayerSize?: number, 
+    title: string, 
+    containerCss?: string,
+    useTopMinimalMenu?: boolean,
     options?: {id: number, name: string}[]
   } = $props();
 
   $effect(() => {
     Env.sideLayerSize = sideLayerSize || 0
+    Env.useTopMinimalMenu = useTopMinimalMenu || false
+    Core.useTopMinimalMenu = useTopMinimalMenu || false
   })
   const isLogged = $derived(checkIsLogin() === 2)
   $effect(() => {
@@ -18,7 +24,6 @@ import { Env } from '$core/env';
   })
 
   onMount(() => {
-    console.log("isLogged 11", isLogged)
     if(!isLogged){
       Env.navigate("/login")
     } else {
@@ -34,7 +39,7 @@ import { Env } from '$core/env';
 
 </script>
 
-<div class="_1 p-10">
+<div class="_1 p-10 {containerCss}" class:useTopMinimalMenu={Core.useTopMinimalMenu}>
   {#if Core.isLoading === 0 && isLogged}
     {@render children()}
   {/if}
@@ -49,6 +54,12 @@ import { Env } from '$core/env';
     margin-left: var(--menu-min-width);
     width: calc(100% - var(--menu-min-width));
     min-height: calc(100vh - var(--header-height) - 4px);
+    position: relative;
+  }
+
+  ._1.useTopMinimalMenu {
+    margin-left: 0;
+    width: 100%;
   }
 
   @media (max-width: 750px) {
