@@ -2,119 +2,856 @@
 
 This system enables the creation, management, and rendering of dynamic and highly customizable User Interface (UI) sections for building ecommerce stores. The goal is to provide a component library that users can select, configure, and save to generate their own store.
 
-## System Architecture
+---
+
+## Table of Contents
+
+1. [System Architecture](#1-system-architecture)
+2. [Core Interfaces](#2-core-interfaces)
+3. [Parameterization and Variables](#3-parameterization-and-variables)
+4. [Global Colors and Theming](#4-global-colors-and-theming)
+5. [Responsive Design Strategy](#5-responsive-design-strategy)
+6. [Specialized Components](#6-specialized-components)
+7. [Content Editing: ITextLine](#7-content-editing-itextline)
+8. [Component Library](#8-component-library)
+9. [Accessibility (A11Y)](#9-accessibility-a11y)
+10. [SEO Considerations](#10-seo-considerations)
+11. [Implementation Phases](#11-implementation-phases)
+12. [Critical Considerations](#12-critical-considerations)
+13. [Alternative Strategies](#13-alternative-strategies)
+14. [Open Questions](#14-open-questions)
+
+---
+
+## 1. System Architecture
 
 The system is divided into three main layers:
 
-1.  **Definition (ComponentAST):** A data structure that describes the content, behavior, and styling of a section.
-2.  **Rendering (EcommerceRenderer.svelte):** The engine responsible for interpreting the `ComponentAST` and converting it into DOM elements or Svelte components.
-3.  **Component Library:** A collection of `.ts` files that serve as base templates (Blueprints) for the sections.
+1. **Definition (ComponentAST):** A data structure that describes the content, behavior, and styling of a section.
+2. **Rendering (EcommerceRenderer.svelte):** The engine responsible for interpreting the `ComponentAST` and converting it into DOM elements or Svelte components.
+3. **Component Library:** A collection of `.ts` files that serve as base templates (Blueprints) for the sections.
 
----
+### Architecture Diagram
 
-## 1. Data Structure (ComponentAST)
-
-Each section is defined using the `ComponentAST` interface. This structure is recursive, allowing for complex compositions.
-
-### Main Properties:
-- `id`: Unique identifier for the instance.
-- `tagName`: Defines the HTML element (div, section, button) or the name of a custom component (e.g., `ProductCard`).
-- `css`: Tailwind CSS classes that define the style. Can contain variables and color tokens.
-- `description`: Meta-description of the layout (e.g., "Hero banner with image on the left and CTA on the right"). Used to generate previews in the library.
-- `text` / `textLines`: Simple or structured text content (via lines with independent styles).
-- `variables`: A list of `ComponentVariable` objects for CSS class parameterization.
-- `children`: An array of `ComponentAST` for nesting.
-
----
-
-## 2. Parameterization and Variables
-
-To make a section "editable," we use the `ComponentVariable` object.
-
-### ComponentVariable
-```typescript
-interface ComponentVariable {
-    key: string;          // Token to replace, e.g.: "__v1__"
-    defaultValue: string; // Initial value
-    type: string;         // Tailwind prefix, e.g.: "w", "h", "bg", "text"
-    units?: string[];     // Allowed units (px, rem, %, etc.)
-}
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        User Interface                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │ Section      │  │ Variable     │  │ Preview              │  │
+│  │ Picker       │  │ Editor       │  │ Panel                │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     ComponentAST (JSON)                         │
+│  - Structure, styles, variables, product IDs                    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   EcommerceRenderer.svelte                      │
+│  ┌─────────────────────┐  ┌─────────────────────────────────┐  │
+│  │ Token Resolver      │  │ Component Factory               │  │
+│  │ (variables, colors) │  │ (HTML or Specialized)           │  │
+│  └─────────────────────┘  └─────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Rendered DOM                               │
+│  HTML elements + Specialized Svelte Components                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**Resolution Mechanism:**
-The `EcommerceRenderer` processes the `css` field by replacing variable keys with their current values.
-*Example:* If `css` is `w-[__v1__] h-10` and `__v1__` is `500px`, the result will be `w-[500px] h-10`.
-
 ---
 
-## 3. Global Colors and Theming
+## 2. Core Interfaces
 
-The system supports a global color palette of 10 colors defined by the user (from darkest to lightest).
+### ComponentAST (Complete Definition)
 
-- **Tokens:** Used via the format `__COLOR:1__` through `__COLOR:10__`.
-- **Processing:** Before rendering, a Regex process searches for these tokens in style properties and replaces them with the hexadecimal values or CSS variables of the active palette.
+```typescript
+interface ComponentAST {
+    // === Identity ===
+    id?: string;                          // Unique identifier for the instance
+    tagName: string;                      // HTML element or custom component name
+    
+    // === Styling ===
+    css?: string;                         // Tailwind CSS classes (supports variables and color tokens)
+    style?: string;                       // Inline styles (use sparingly)
+    
+    // === Content ===
+    text?: string;                        // Simple text content
+    textLines?: ITextLine[];              // Structured text with independent styles
+    
+    // === Structure ===
+    children?: ComponentAST[];            // Nested components
+    slot?: string;                        // Named slot for composition
+    
+    // === Customization ===
+    variables?: ComponentVariable[];      // Editable parameters
+    description?: string;                 // Meta-description for library previews
+    
+    // === HTML Attributes ===
+    attributes?: Record<string, string>;  // href, src, alt, target, etc.
+    
+    // === Data for Specialized Components ===
+    productosIDs?: number[];              // Specific product IDs to display
+    categoriaID?: number;                 // Category ID for filtering
+    marcaID?: number;                     // Brand ID for filtering
+    
+    // === Accessibility ===
+    aria?: AriaAttributes;                // ARIA properties
+    semanticTag?: SemanticTag;            // Semantic HTML hint
+    
+    // === SEO ===
+    seo?: SectionSEO;                     // SEO metadata
+}
 
----
+type SemanticTag = 'header' | 'main' | 'footer' | 'nav' | 'article' | 'aside' | 'section';
+```
 
-## 4. Specialized Components (E-commerce Ready)
-
-If the `tagName` matches a registered component, the renderer delegates the logic to that component instead of using a standard HTML element.
-
-| TagName | Description | Required Data |
-| :--- | :--- | :--- |
-| `ProductCard` | Standard product card. | `productos` or `productosIDs` |
-| `ProductCardHorizontal` | Horizontal version of the card. | `productos` or `productosIDs` |
-| `ProductGrid` | Automatic product grid. | `categoriaID` or `marcaID` |
-
----
-
-## 5. Content Editing: ITextLine[]
-
-For components requiring mixed typography (e.g., a Hero with a bold title and a thin subtitle), `ITextLine` is used.
+### ITextLine
 
 ```typescript
 interface ITextLine {
     text: string;
-    css: string; // Specific styles for this line
+    css: string;                          // Specific styles for this line
+    tag?: 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
 }
 ```
 
-**Line Editor:**
-A form component should be implemented to allow the user to:
-1. Add or remove text blocks.
-2. Edit the content of each block.
-3. Configure basic styles (size, color, alignment) that will be translated into Tailwind classes.
+---
+
+## 3. Parameterization and Variables
+
+To make a section "editable," we use the `ComponentVariable` object.
+
+### ComponentVariable
+
+```typescript
+interface ComponentVariable {
+    key: string;              // Token to replace, e.g.: "__v1__"
+    defaultValue: string;     // Initial value
+    type: string;             // Tailwind prefix, e.g.: "w", "h", "bg", "text", "p", "m", "gap"
+    units?: string[];         // Allowed units (px, rem, %, vw, vh, etc.)
+    
+    // === Validation ===
+    min?: number;             // Minimum value (for numeric types)
+    max?: number;             // Maximum value (for numeric types)
+    step?: number;            // Step increment for sliders
+    options?: string[];       // Predefined options (renders as dropdown)
+    required?: boolean;       // Whether value is required
+    pattern?: string;         // Regex validation pattern
+    
+    // === UI Hints ===
+    label?: string;           // Human-readable label for editor
+    group?: string;           // Group related variables in editor UI
+    description?: string;     // Help text for the editor
+}
+```
+
+### Resolution Mechanism
+
+The `EcommerceRenderer` processes the `css` field by replacing variable keys with their current values.
+
+**Example:**
+- Input: `css: "w-[__v1__] h-[__v2__] p-[__v3__]"`
+- Variables: `__v1__ = 500px`, `__v2__ = 300px`, `__v3__ = 20px`
+- Output: `w-[500px] h-[300px] p-[20px]`
+
+### Variable Types Reference
+
+| Type | Description | Example Values |
+|:-----|:------------|:---------------|
+| `w` | Width | `100px`, `50%`, `full`, `screen` |
+| `h` | Height | `200px`, `auto`, `screen` |
+| `p` | Padding | `4`, `20px`, `2rem` |
+| `m` | Margin | `4`, `auto`, `-20px` |
+| `gap` | Gap | `4`, `16px` |
+| `bg` | Background color | `red-500`, `[#ff0000]` |
+| `text` | Text color/size | `white`, `xl`, `2xl` |
+| `rounded` | Border radius | `lg`, `full`, `[20px]` |
+| `shadow` | Box shadow | `md`, `lg`, `2xl` |
 
 ---
 
-## 6. Component Library
+## 4. Global Colors and Theming
+
+The system supports a global color palette of 10 colors defined by the user (from darkest to lightest).
+
+### Color Tokens
+
+- **Format:** `__COLOR:1__` through `__COLOR:10__`
+- **Convention:**
+  - `__COLOR:1__` - `__COLOR:3__`: Dark shades (backgrounds, footers)
+  - `__COLOR:4__` - `__COLOR:6__`: Mid tones (accents, borders)
+  - `__COLOR:7__` - `__COLOR:10__`: Light shades (backgrounds, text on dark)
+
+### Color Palette Interface
+
+```typescript
+interface ColorPalette {
+    id: string;
+    name: string;
+    colors: [string, string, string, string, string, string, string, string, string, string];
+    // Index 0 = __COLOR:1__, Index 9 = __COLOR:10__
+}
+
+// Example palette
+const defaultPalette: ColorPalette = {
+    id: 'default',
+    name: 'Ocean Blue',
+    colors: [
+        '#0f172a', // 1 - Darkest
+        '#1e293b', // 2
+        '#334155', // 3
+        '#475569', // 4
+        '#64748b', // 5
+        '#94a3b8', // 6
+        '#cbd5e1', // 7
+        '#e2e8f0', // 8
+        '#f1f5f9', // 9
+        '#f8fafc', // 10 - Lightest
+    ]
+};
+```
+
+### Processing
+
+Before rendering, a Regex process searches for these tokens in style properties and replaces them with CSS variables:
+
+```typescript
+function resolveColorTokens(css: string, palette: ColorPalette): string {
+    return css.replace(/__COLOR:(\d+)__/g, (_, index) => {
+        return palette.colors[parseInt(index) - 1] || '#000000';
+    });
+}
+```
+
+---
+
+## 5. Responsive Design Strategy
+
+Responsive design is handled entirely through **Tailwind's built-in responsive prefixes**. No additional abstraction is needed.
+
+### Tailwind Breakpoints
+
+| Prefix | Min Width | Usage |
+|:-------|:----------|:------|
+| `sm:` | 640px | Small tablets |
+| `md:` | 768px | Tablets |
+| `lg:` | 1024px | Laptops |
+| `xl:` | 1280px | Desktops |
+| `2xl:` | 1536px | Large screens |
+
+### Usage in ComponentAST
+
+Simply include responsive prefixes in the `css` field:
+
+```typescript
+{
+    tagName: 'div',
+    css: 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 md:p-8 lg:p-12'
+}
+
+// Text that changes size
+{
+    tagName: 'h1',
+    text: 'Welcome',
+    css: 'text-2xl md:text-4xl lg:text-6xl font-bold'
+}
+
+// Layout that switches from column to row
+{
+    tagName: 'div',
+    css: 'flex flex-col md:flex-row gap-4 md:gap-8'
+}
+```
+
+### Mobile-First Approach
+
+Always design mobile-first, then add larger breakpoints:
+
+```typescript
+// ✅ Good: Mobile-first
+css: 'p-4 md:p-8 lg:p-16'
+
+// ❌ Avoid: Desktop-first (harder to maintain)
+css: 'p-16 md:p-8 sm:p-4'
+```
+
+---
+
+## 6. Specialized Components (E-commerce Ready)
+
+If the `tagName` matches a registered component, the renderer delegates the logic to that component instead of using a standard HTML element.
+
+### Component Registry
+
+These are pre-built Svelte components that handle their own internal logic (buttons, modals, add-to-cart, etc.). The `ComponentAST` only needs to provide the data IDs.
+
+| TagName | Description | Data Props |
+|:--------|:------------|:-----------|
+| `ProductCard` | Product card with image, price, and add-to-cart button | `productosIDs` |
+| `ProductCardHorizontal` | Horizontal product card with description | `productosIDs` |
+| `ProductGrid` | Grid of products with optional pagination | `productosIDs`, `categoriaID`, or `marcaID` |
+| `ProductCarousel` | Horizontal scrolling product slider | `productosIDs` |
+| `CategoryCard` | Category card with image and product count | `categoriaID` |
+| `CategoryGrid` | Grid of category cards | `categoriasIDs` |
+| `SearchBar` | Product search with autocomplete | - |
+| `CartWidget` | Mini cart icon with count and dropdown | - |
+| `CartPage` | Full cart page with items list | - |
+| `Breadcrumb` | Navigation breadcrumb | - |
+
+### How Specialized Components Work
+
+Specialized components are self-contained. They:
+- Fetch their own data internally using the provided IDs
+- Handle all user interactions (add to cart, quantity changes, etc.)
+- Manage their own modals and popups
+- Apply their own internal styling (can be customized via `css` prop)
+
+```typescript
+// Usage in ComponentAST - just provide the IDs
+{
+    tagName: 'ProductGrid',
+    css: 'my-8',                    // Additional wrapper styles
+    productosIDs: [101, 102, 103, 104, 105, 106]
+}
+
+// Or filter by category
+{
+    tagName: 'ProductGrid',
+    categoriaID: 5                  // Shows all products from category 5
+}
+```
+
+---
+
+## 7. Content Editing: ITextLine
+
+For components requiring mixed typography (e.g., a Hero with a bold title and a thin subtitle), `ITextLine` is used.
+
+### ITextLine Interface
+
+```typescript
+interface ITextLine {
+    text: string;
+    css: string;                    // Tailwind classes for this line
+    tag?: TextTag;                  // HTML tag to use
+}
+
+type TextTag = 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'strong' | 'em';
+```
+
+> **Note**: For links within text content, use a separate `<a>` element as a child instead of `textLines`.
+
+### Example Usage
+
+```typescript
+{
+    tagName: 'div',
+    css: 'text-center space-y-4',
+    textLines: [
+        { text: 'Summer Sale', tag: 'span', css: 'text-sm uppercase tracking-widest text-[__COLOR:5__]' },
+        { text: 'Up to 50% Off', tag: 'h1', css: 'text-5xl font-bold text-[__COLOR:1__]' },
+        { text: 'Limited time offer on selected items', tag: 'p', css: 'text-lg text-[__COLOR:4__]' }
+    ]
+}
+```
+
+### Line Editor Requirements
+
+The editor component should allow users to:
+1. Add, remove, and reorder text blocks
+2. Edit the content of each block
+3. Select the HTML tag (h1-h6, p, span)
+4. Configure styles via UI controls:
+   - Font size (text-sm, text-base, text-lg, text-xl, etc.)
+   - Font weight (font-normal, font-medium, font-bold)
+   - Color (from palette or custom)
+   - Alignment (text-left, text-center, text-right)
+   - Spacing (tracking, leading)
+
+---
+
+## 8. Component Library
 
 Each section template must reside in an independent `.ts` file within the library folder.
 
-### Definition Example (`hero-section.ts`):
+### Section Template Structure
+
 ```typescript
-export const HeroSection: ComponentAST = {
-    tagName: 'section',
-    description: 'Hero section with solid background, centered text, and buy button.',
-    css: 'bg-[__COLOR:2__] p-20 text-center',
-    variables: [
-        { key: '__v1__', type: 'p', defaultValue: '20' }
-    ],
-    children: [
-        { tagName: 'h1', text: 'Welcome to our store', css: 'text-4xl font-bold' },
-        { tagName: 'ProductCard', css: 'mt-10', productosIDs: [1, 2, 3] }
+interface SectionTemplate {
+    // === Metadata ===
+    id: string;                       // Unique template ID
+    name: string;                     // Display name
+    category: SectionCategory;        // For organization
+    description: string;              // For library preview
+    thumbnail?: string;               // Preview image URL
+    
+    // === Template ===
+    ast: ComponentAST;                // The actual component tree
+    
+    // === Variants ===
+    presets?: SectionPreset[];        // Predefined variable combinations
+}
+
+type SectionCategory = 
+    | 'hero'
+    | 'products'
+    | 'categories'
+    | 'testimonials'
+    | 'features'
+    | 'cta'
+    | 'footer'
+    | 'header'
+    | 'gallery'
+    | 'text';
+
+interface SectionPreset {
+    id: string;
+    name: string;                     // e.g., "Dark Mode", "Minimal", "Bold"
+    variables: Record<string, string>;
+}
+```
+
+### Example Template (`hero-centered.ts`)
+
+```typescript
+import type { SectionTemplate } from './types';
+
+export const HeroCentered: SectionTemplate = {
+    id: 'hero-centered-v1',
+    name: 'Hero - Centered Text',
+    category: 'hero',
+    description: 'Full-width hero section with centered text and CTA button.',
+    
+    ast: {
+        tagName: 'section',
+        css: 'bg-[__COLOR:2__] py-[__v1__] px-4',
+        variables: [
+            { key: '__v1__', type: 'py', defaultValue: '80px', label: 'Vertical Padding', min: 40, max: 200 }
+        ],
+        children: [
+            {
+                tagName: 'div',
+                css: 'max-w-4xl mx-auto text-center',
+                textLines: [
+                    { text: 'Welcome to Our Store', tag: 'h1', css: 'text-5xl font-bold text-[__COLOR:10__] mb-4' },
+                    { text: 'Discover amazing products at great prices', tag: 'p', css: 'text-xl text-[__COLOR:7__] mb-8' }
+                ],
+                children: [
+                    {
+                        tagName: 'a',
+                        text: 'Shop Now',
+                        css: 'inline-block bg-[__COLOR:6__] text-[__COLOR:1__] px-8 py-3 rounded-lg font-semibold hover:bg-[__COLOR:7__] transition-colors',
+                        attributes: { href: '/productos' }
+                    }
+                ]
+            }
+        ]
+    },
+    
+    presets: [
+        {
+            id: 'minimal',
+            name: 'Minimal',
+            variables: { '__v1__': '60px' }
+        },
+        {
+            id: 'bold',
+            name: 'Bold & Spacious',
+            variables: { '__v1__': '120px' }
+        }
     ]
 };
 ```
 
 ### Library Registration
-The `libraryAddSectionComponent(e: ComponentAST)` function is used to register these templates, making them available in the user's selection panel.
+
+```typescript
+import { HeroCentered } from './templates/hero-centered';
+import { ProductGridFeatured } from './templates/product-grid-featured';
+
+// Register all templates
+const sectionLibrary: SectionTemplate[] = [
+    HeroCentered,
+    ProductGridFeatured,
+    // ... more templates
+];
+
+export function getSectionsByCategory(category: SectionCategory): SectionTemplate[] {
+    return sectionLibrary.filter(s => s.category === category);
+}
+
+export function getSectionById(id: string): SectionTemplate | undefined {
+    return sectionLibrary.find(s => s.id === id);
+}
+```
 
 ---
 
-## Proposed Improvements and Roadmap
+## 9. Accessibility (A11Y)
 
-1.  **Snapshot Generation:** Use the `description` property along with a headless rendering engine to generate automatic thumbnails for each section.
-2.  **Style Presets:** Allow the same section (`ComponentAST`) to have multiple "skins" or predefined variable presets.
-3.  **Animations:** Integrate an `animation` property in `ComponentAST` to handle smooth transitions using libraries like `framer-motion` or `svelte-transitions`.
-4.  **Drag & Drop:** Implement the ability to reorder sections within the `EcommerceRenderer` via a visual interface.
+### AriaAttributes Interface
+
+```typescript
+interface AriaAttributes {
+    label?: string;           // aria-label
+    labelledBy?: string;      // aria-labelledby (ID reference)
+    describedBy?: string;     // aria-describedby (ID reference)
+    role?: AriaRole;
+    hidden?: boolean;         // aria-hidden
+    live?: 'polite' | 'assertive' | 'off';
+    expanded?: boolean;       // For toggleable elements
+    controls?: string;        // ID of controlled element
+}
+
+type AriaRole = 
+    | 'button' | 'link' | 'navigation' | 'main' | 'banner'
+    | 'contentinfo' | 'complementary' | 'region' | 'list'
+    | 'listitem' | 'img' | 'dialog' | 'alert';
+```
+
+### Accessibility Guidelines
+
+1. **Semantic HTML**: Use appropriate `semanticTag` values
+2. **Heading Hierarchy**: Ensure proper H1 → H6 order
+3. **Alt Text**: All images must have `attributes.alt`
+4. **Focus Management**: Interactive elements must be keyboard accessible
+5. **Color Contrast**: Ensure sufficient contrast between color tokens
+6. **Screen Reader**: Use `aria` properties for non-obvious interactions
+
+### Example with Accessibility
+
+```typescript
+{
+    tagName: 'section',
+    semanticTag: 'section',
+    aria: { label: 'Featured Products', role: 'region' },
+    css: 'py-16',
+    children: [
+        {
+            tagName: 'h2',
+            text: 'Featured Products',
+            css: 'text-3xl font-bold mb-8'
+        },
+        {
+            tagName: 'ProductGrid',
+            aria: { role: 'list' },
+            productosIDs: [1, 2, 3, 4]
+        }
+    ]
+}
+```
+
+---
+
+## 10. SEO Considerations
+
+### SectionSEO Interface
+
+```typescript
+interface SectionSEO {
+    headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;  // Ensure proper hierarchy
+    structuredData?: StructuredDataType;
+    priority?: number;                       // For internal importance ranking
+    indexable?: boolean;                     // Should content be indexed
+}
+
+type StructuredDataType = 
+    | 'Product'
+    | 'ProductList'
+    | 'BreadcrumbList'
+    | 'Organization'
+    | 'FAQPage'
+    | 'Review';
+```
+
+### SEO Best Practices
+
+1. **Single H1**: Only one H1 per page (usually in hero)
+2. **Structured Data**: Add JSON-LD for product sections
+3. **Image Optimization**: Use WebP, lazy loading, proper dimensions
+4. **Core Web Vitals**: Minimize layout shift, optimize LCP
+
+### Structured Data Generation
+
+```typescript
+function generateProductListSchema(products: Product[]): object {
+    return {
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        itemListElement: products.map((p, i) => ({
+            '@type': 'ListItem',
+            position: i + 1,
+            item: {
+                '@type': 'Product',
+                name: p.name,
+                image: p.image,
+                offers: {
+                    '@type': 'Offer',
+                    price: p.price,
+                    priceCurrency: 'PEN'
+                }
+            }
+        }))
+    };
+}
+```
+
+---
+
+## 11. Implementation Phases
+
+### Phase 1: Core Foundation (Week 1-2)
+- [ ] Define complete TypeScript interfaces in `types.ts`
+- [ ] Implement `EcommerceRenderer.svelte` with recursive rendering
+- [ ] Create token replacement engine (variables + colors)
+- [ ] Implement CSS variable system for theming
+- [ ] Basic error handling and validation
+
+### Phase 2: Specialized Components (Week 2-3)
+- [ ] Create `ProductCard.svelte` with add-to-cart functionality
+- [ ] Create `ProductGrid.svelte` with layout options
+- [ ] Create `CategoryCard.svelte` and `CategoryGrid.svelte`
+- [ ] Create `CartWidget.svelte` and `SearchBar.svelte`
+- [ ] Create 5-10 starter section templates
+
+### Phase 3: Editor System (Week 3-4)
+- [ ] Build variable editor UI (sliders, inputs, dropdowns)
+- [ ] Implement `ITextLine` editor with WYSIWYG controls
+- [ ] Create color palette picker component
+- [ ] Add live preview system
+- [ ] Implement section reordering (drag-and-drop)
+
+### Phase 4: Persistence & State (Week 4-5)
+- [ ] Define JSON serialization format
+- [ ] Implement save/load functionality
+- [ ] Create undo/redo system
+- [ ] Add section versioning and migration
+- [ ] Implement template duplication
+
+### Phase 5: Polish & Optimization (Week 5-6)
+- [ ] Add responsive preview modes (mobile/tablet/desktop)
+- [ ] Generate thumbnails for library
+- [ ] Implement lazy loading for sections
+- [ ] Add animation support
+- [ ] Performance optimization and testing
+
+---
+
+## 12. Critical Considerations
+
+### Performance
+
+1. **Memoization**: Cache rendered sections that haven't changed
+2. **Virtualization**: For pages with many sections, render only visible ones
+3. **Lazy Loading**: Load below-fold sections on scroll
+4. **Image Optimization**: Use srcset, lazy loading, WebP format
+5. **Bundle Size**: Code-split specialized components
+
+```typescript
+// Example: Lazy component loading
+const componentMap = {
+    ProductCard: () => import('./components/ProductCard.svelte'),
+    ProductGrid: () => import('./components/ProductGrid.svelte'),
+};
+```
+
+### Security
+
+1. **Input Sanitization**: Never trust user-provided CSS/HTML
+2. **Whitelist Classes**: Only allow known Tailwind classes
+3. **No `{@html}`**: Avoid raw HTML rendering without sanitization
+4. **URL Validation**: Validate all URLs in `href` attributes
+
+```typescript
+const ALLOWED_CSS_PATTERNS = [
+    /^(w|h|p|m|gap|text|bg|border|rounded|shadow|flex|grid)-/,
+    /^(hover|focus|active|md|lg|xl):/,
+];
+
+function sanitizeCss(css: string): string {
+    return css.split(' ')
+        .filter(cls => ALLOWED_CSS_PATTERNS.some(p => p.test(cls)))
+        .join(' ');
+}
+```
+
+### Migration & Versioning
+
+1. **Schema Version**: Include version in saved data
+2. **Migration Functions**: Create upgraders for each version change
+3. **Backward Compatibility**: Keep deprecated fields for grace period
+
+```typescript
+interface SavedSection {
+    schemaVersion: number;
+    ast: ComponentAST;
+    metadata: {
+        createdAt: string;
+        updatedAt: string;
+    };
+}
+
+const migrations: Record<number, (data: any) => any> = {
+    1: (data) => ({ ...data, schemaVersion: 2, ast: migrateV1toV2(data.ast) }),
+    2: (data) => ({ ...data, schemaVersion: 3, ast: migrateV2toV3(data.ast) }),
+};
+```
+
+### Testing Strategy
+
+1. **Unit Tests**: Test token resolution, validation, sanitization
+2. **Component Tests**: Test each specialized component in isolation
+3. **Snapshot Tests**: Capture rendered output for regression detection
+4. **E2E Tests**: Test full save → render → edit cycle
+5. **Visual Regression**: Compare screenshots across changes
+
+---
+
+## 13. Alternative Strategies
+
+### Strategy A: Slot-Based Composition
+
+Instead of pure AST, use predefined slots:
+
+```typescript
+interface SlotBasedTemplate {
+    id: string;
+    layout: string;  // CSS grid template
+    slots: {
+        [name: string]: {
+            accepts: string[];
+            maxItems?: number;
+            required?: boolean;
+        };
+    };
+}
+
+// Example
+const heroTemplate: SlotBasedTemplate = {
+    id: 'hero-split',
+    layout: 'grid md:grid-cols-2 gap-8',
+    slots: {
+        media: { accepts: ['Image', 'Video'], maxItems: 1, required: true },
+        content: { accepts: ['TextBlock', 'Button'], maxItems: 5 },
+    }
+};
+```
+
+**Pros**: More intuitive drag-drop, clearer constraints, less error-prone  
+**Cons**: Less flexible, more templates needed
+
+### Strategy B: Design Tokens System
+
+Replace inline variables with semantic tokens:
+
+```typescript
+const designTokens = {
+    spacing: {
+        'section-y': 'py-16 md:py-24',
+        'content-gap': 'gap-8',
+    },
+    typography: {
+        'heading-hero': 'text-4xl md:text-6xl font-bold',
+        'body-large': 'text-lg leading-relaxed',
+    }
+};
+
+// Usage
+{
+    css: '$spacing.section-y $typography.heading-hero'
+}
+```
+
+**Pros**: More semantic, easier global updates, better theming  
+**Cons**: Less granular control, steeper learning curve
+
+### Strategy C: Visual Builder First
+
+Build visual editor before AST system:
+
+1. Users drag pre-built blocks
+2. Configure via visual controls only
+3. System generates AST internally
+4. Advanced users can edit AST directly
+
+**Pros**: Better UX for non-technical users  
+**Cons**: More initial development, harder to debug
+
+---
+
+## 14. Open Questions
+
+These decisions should be made before implementation:
+
+1. **State Management**: Svelte stores vs context vs props drilling?
+2. **Persistence**: Local storage vs backend API vs both?
+3. **Versioning**: How to handle template updates for existing stores?
+4. **Multi-language**: Support for i18n in text content?
+5. **Animations**: CSS-only vs Svelte transitions?
+6. **Mobile Editor**: Will users edit on mobile devices?
+7. **Preview**: Separate preview mode or inline editing?
+8. **Export**: Can users export their store as static HTML?
+
+---
+
+## Appendix: Example Complete Section
+
+```typescript
+const featuredProductsSection: ComponentAST = {
+    id: 'section-featured-products',
+    tagName: 'section',
+    semanticTag: 'section',
+    css: 'bg-[__COLOR:9__] py-[__v1__] px-4',
+    aria: { label: 'Featured Products' },
+    seo: { headingLevel: 2, structuredData: 'ProductList' },
+    
+    variables: [
+        { 
+            key: '__v1__', 
+            type: 'py', 
+            defaultValue: '64px',
+            label: 'Section Padding',
+            min: 32,
+            max: 128,
+            step: 8
+        }
+    ],
+    
+    children: [
+        {
+            tagName: 'div',
+            css: 'max-w-7xl mx-auto',
+            children: [
+                {
+                    tagName: 'h2',
+                    text: 'Featured Products',
+                    css: 'text-3xl font-bold text-[__COLOR:1__] text-center mb-12'
+                },
+                {
+                    tagName: 'ProductGrid',
+                    css: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6',
+                    productosIDs: [101, 102, 103, 104, 105, 106, 107, 108]
+                },
+                {
+                    tagName: 'div',
+                    css: 'text-center mt-12',
+                    children: [
+                        {
+                            tagName: 'a',
+                            text: 'View All Products →',
+                            css: 'inline-block text-[__COLOR:3__] font-medium hover:text-[__COLOR:2__] transition-colors',
+                            attributes: { href: '/productos' }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+};
+```
