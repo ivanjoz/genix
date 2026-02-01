@@ -64,10 +64,8 @@ import angleSvg from '$core/assets/angle.svg?raw';
     let parent = element.parentElement;
     while (parent) {
       const { overflow, overflowY } = window.getComputedStyle(parent);
-      if (
-        (parent.scrollHeight > parent.clientHeight) &&
-        (overflow.includes('auto') || overflow.includes('scroll') || overflowY.includes('auto') || overflowY.includes('scroll'))
-      ) {
+      const isScrollable = overflow.includes('auto') || overflow.includes('scroll') || overflowY.includes('auto') || overflowY.includes('scroll');
+      if (isScrollable && parent.scrollHeight > parent.clientHeight) {
         return parent;
       }
       parent = parent.parentElement;
@@ -111,11 +109,12 @@ import angleSvg from '$core/assets/angle.svg?raw';
     const isMobile = window.innerWidth <= 748;
     const offset = 8; // Distance from button
 
-    // Determine vertical placement
+    // Determine vertical placement: prefer bottom if it fits, else use side with more space
     const spaceBelow = parentRect.bottom - buttonRect.bottom;
     const spaceAbove = buttonRect.top - parentRect.top;
+    const requiredHeight = layerRect.height + offset;
 
-    if (spaceBelow < layerRect.height + offset && spaceAbove > spaceBelow) {
+    if (spaceBelow < requiredHeight && spaceAbove > spaceBelow) {
       placement = 'top';
     } else {
       placement = 'bottom';
@@ -130,7 +129,7 @@ import angleSvg from '$core/assets/angle.svg?raw';
     // Desktop: position relative to button
     if (!isMobile) {
       // Check if layer would go off right edge of parent/viewport
-      if (left + layerRect.width > parentRect.right) {
+      if (left + layerRect.width > parentRect.right - edgeMargin) {
         left = parentRect.right - layerRect.width - edgeMargin;
       }
 
@@ -249,8 +248,8 @@ import angleSvg from '$core/assets/angle.svg?raw';
       class:placement-bottom={placement === 'bottom'}
     >
       <!-- Angle pointer -->
-      <div class="button-layer-angle" style="left: {angleLeft}px;">
-        <img class="button-layer-angle-img" alt="" src={parseSVG(angleSvg)}/>
+      <div class="button-layer-angle" style="left: {angleLeft}px;" class:use-big={useBig}>
+        <img class="button-layer-angle-img" alt="" src={parseSVG(angleSvg)} class:use-big={useBig}/>
       </div>
 
       <!-- Layer content -->
@@ -335,20 +334,21 @@ import angleSvg from '$core/assets/angle.svg?raw';
     transform: rotate(180deg);
   }
 
+  .button-layer-angle.use-big {
+    top: -22px;
+	  height: 22px;
+	  width: 28px;
+  }
+
+  .button-layer.placement-top .button-layer-angle.use-big {
+    top: auto;
+    bottom: -22px;
+  }
+
   .button-layer-angle-img {
     width: 24px;
     height: 24px;
     filter: drop-shadow(0 -1px 1px rgba(0, 0, 0, 0.05));
-  }
-
-  .button-layer-angle-img.use-big {
-    width: 28px;
-    height: 28px;
-  }
-
-  .button-layer-angle.use-big {
-	  height: 22px;
-	  width: 28px;
   }
 
   @keyframes slideDown {
