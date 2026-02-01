@@ -69,7 +69,6 @@ export interface ComponentAST {
     onClick?: (id: number | string) => void;
     attributes?: Record<string, string>;
     productosIDs?: number[];
-    productos?: IProducto[];
     categoriaID?: number;
     marcaID?: number;
     aria?: AriaAttributes;

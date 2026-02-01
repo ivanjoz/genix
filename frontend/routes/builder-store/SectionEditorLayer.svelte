@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { ColorPalette, SectionTemplate } from '../../pkg-store/renderer/renderer-types';
   import type { EditableField, SelectedSection } from './EcommerceBuilder.svelte';
-  import OptionsStrip from '../../pkg-components/OptionsStrip.svelte';
   import EditorTab from './components/EditorTab.svelte';
   import TemplatesTab from './components/TemplatesTab.svelte';
   import AIChatTab from './components/AIChatTab.svelte';
@@ -39,41 +38,41 @@
 </script>
 
 <div class="editor-layer">
-  <div class="editor-header-nav">
-    <OptionsStrip
-      options={tabs}
-      selected={activeTabId}
-      keyId="id"
-      keyName="name"
-      onSelect={(tab) => activeTabId = tab.id}
-      containerCss="tab-nav"
-      itemCss="tab-item"
-      activeClass="tab-active"
-    />
-  </div>
-
-  <div class="editor-content">
-    {#if activeTabId === 'editor'}
-      {#if section}
-        <EditorTab {section} {onFieldUpdate} />
-      {:else}
-        <div class="empty-state centered">
-          <span class="empty-icon">👆</span>
-          <p>Click on a section to edit</p>
-          <p class="empty-hint">Hover over sections to see their boundaries</p>
-        </div>
-      {/if}
-    {:else}
-      <div class="tab-body">
-        {#if activeTabId === 'templates'}
-          <TemplatesTab onSelect={handleTemplateSelect} />
-        {:else if activeTabId === 'chat'}
-          <AIChatTab />
-        {:else if activeTabId === 'config'}
-          <ConfigTab {palette} />
-        {/if}
+  <div class="layer-inner">
+    <div class="layer-header">
+      <div class="tab-nav">
+        {#each tabs as tab}
+          <button 
+            class="tab-btn" 
+            class:active={activeTabId === tab.id} 
+            onclick={() => activeTabId = tab.id}
+            title={tab.name}
+          >
+            <span class="tab-icon">{tab.icon}</span>
+            <span class="tab-name">{tab.name}</span>
+          </button>
+        {/each}
       </div>
-    {/if}
+    </div>
+
+    <div class="layer-content">
+      {#if activeTabId === 'editor'}
+        {#if section}
+          <EditorTab {section} {onFieldUpdate} />
+        {:else}
+          <div class="empty-state">
+            <span class="empty-icon">👆</span>
+            <p>Select a section to edit</p>
+          </div>
+        {/if}
+      {:else if activeTabId === 'templates'}
+        <TemplatesTab onSelect={handleTemplateSelect} />
+      {:else if activeTabId === 'chat'}
+        <AIChatTab />
+      {:else if activeTabId === 'config'}
+        <ConfigTab {palette} />
+      {/if}
+    </div>
   </div>
 </div>
 
@@ -82,89 +81,101 @@
     position: fixed;
     top: var(--header-height);
     right: 0;
-    width: 260px;
+    width: 280px;
     height: calc(100vh - var(--header-height));
     background: #0f172a;
     border-left: 1px solid #1e293b;
-    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 205;
-    display: flex;
-    flex-direction: column;
-    color: #e2e8f0;
     overflow: hidden;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color: #e2e8f0;
   }
 
   .editor-layer:hover {
-    width: 420px;
-    box-shadow: -10px 0 20px -4px rgb(0 0 0 / 42%);
+    width: 400px;
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
   }
 
-  .editor-header-nav {
+  /* Fixed width container to prevent internal resizing/squishing */
+  .layer-inner {
+    width: 400px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  .layer-header {
     background: #1e293b;
     border-bottom: 1px solid #334155;
-    padding: 0 10px;
     flex-shrink: 0;
+    padding-top: 8px;
   }
 
-  :global(.tab-nav) {
-    border: none !important;
+  .tab-nav {
+    display: flex;
+    padding: 0 12px 12px;
+    gap: 6px;
+  }
+
+  .tab-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     gap: 4px;
-    padding: 8px 0 !important;
+    padding: 10px 4px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.2s;
   }
 
-  :global(.tab-item) {
-    min-width: 80px !important;
-    height: 36px !important;
-    border-radius: 6px !important;
-    border: none !important;
-    font-size: 13px !important;
-    color: #94a3b8 !important;
-    background: transparent !important;
-    transition: all 0.2s ease !important;
-    padding: 0 12px !important;
-    align-items: center !important;
+  .tab-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #f1f5f9;
   }
 
-  :global(.tab-item:hover) {
-    background: rgba(255, 255, 255, 0.05) !important;
-    color: #f1f5f9 !important;
+  .tab-btn.active {
+    background: #334155;
+    color: #3b82f6;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
-  :global(.tab-active) {
-    background: #3b82f6 !important;
-    color: white !important;
-    font-weight: 600 !important;
+  .tab-icon {
+    font-size: 20px;
   }
 
-  .editor-content {
+  .tab-name {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .layer-content {
     flex: 1;
     overflow-y: auto;
-    padding: 20px;
-    min-width: 420px;
-  }
-
-  .tab-body {
-    height: 100%;
+    padding: 24px;
   }
 
   .empty-state {
-    text-align: center;
-    padding: 40px 20px;
-    color: #64748b;
-  }
-
-  .empty-state.centered {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     height: 100%;
+    color: #64748b;
+    text-align: center;
   }
 
   .empty-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-    display: block;
+    font-size: 40px;
+    margin-bottom: 12px;
   }
 
   .empty-state p {
@@ -172,27 +183,15 @@
     font-size: 14px;
   }
 
-  .empty-hint {
-    color: #475569;
-    font-size: 12px !important;
-    margin-top: 8px !important;
+  /* Custom Scrollbar */
+  .layer-content::-webkit-scrollbar {
+    width: 6px;
   }
-
-  /* Scrollbar styling */
-  .editor-content::-webkit-scrollbar {
-    width: 8px;
+  .layer-content::-webkit-scrollbar-track {
+    background: transparent;
   }
-
-  .editor-content::-webkit-scrollbar-track {
-    background: #1e293b;
-  }
-
-  .editor-content::-webkit-scrollbar-thumb {
-    background: #475569;
-    border-radius: 4px;
-  }
-
-  .editor-content::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
+  .layer-content::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 3px;
   }
 </style>

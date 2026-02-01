@@ -48,23 +48,17 @@ export const storeExample: ComponentAST[] = [
 				children: [
 					{
 						tagName: 'ProductCard',
-						productos: [
-							{ ID: 1, Nombre: 'Classic T-Shirt', Precio: 25.00, Imagen: 'https://via.placeholder.com/300' } as any
-						],
+						productosIDs: [1],
 						css: 'border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow'
 					},
 					{
 						tagName: 'ProductCard',
-						productos: [
-							{ ID: 2, Nombre: 'Denim Jacket', Precio: 85.00, Imagen: 'https://via.placeholder.com/300' } as any
-						],
+						productosIDs: [4],
 						css: 'border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow'
 					},
 					{
 						tagName: 'ProductCard',
-						productos: [
-							{ ID: 3, Nombre: 'Leather Boots', Precio: 120.00, Imagen: 'https://via.placeholder.com/300' } as any
-						],
+						productosIDs: [5],
 						css: 'border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow'
 					}
 				]
