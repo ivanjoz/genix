@@ -1,19 +1,120 @@
-El objeto es poder generar secciones de UI reutilizables y editables que el usuario pueda seleccionar y guardar para que pueda crear su propio ecommerce.
+# Reusable Ecommerce Section System
 
-Esta biblioteca de secciones permitirán al usuario tener plantillas de secciones prediseñadas.
+This system enables the creation, management, and rendering of dynamic and highly customizable User Interface (UI) sections for building ecommerce stores. The goal is to provide a component library that users can select, configure, and save to generate their own store.
 
-Las secciones de UI reutilizables serán del tipo ComponentAST y se renderizará mediante frontend/pkg-store/renderer/EcommerceRenderer.svelte.
+## System Architecture
 
-Cada sección podrá tener variables del tipo ComponentASTVariable, que son valores dinámicos que se evaluarán y se generarán las clases de tailwind correspondientes.
+The system is divided into three main layers:
 
-Los tipos de variables son en sí los prefijos de tailwind como: w, h, p, mb, mt, etc.
+1.  **Definition (ComponentAST):** A data structure that describes the content, behavior, and styling of a section.
+2.  **Rendering (EcommerceRenderer.svelte):** The engine responsible for interpreting the `ComponentAST` and converting it into DOM elements or Svelte components.
+3.  **Component Library:** A collection of `.ts` files that serve as base templates (Blueprints) for the sections.
 
-Cada componente debe estar en un archivo .ts con una pequeña descripción de cómo se ve. Por ejemplo: Sección con fondo color solido, texto lateral derecho, imagen lateral izquierda, botón de "buscar productos". Esa descripción servirá para luego crear un una imagen representativa del layout del componente para una mejor visualización en la biblioteca de componentes.
+---
 
-El componente frontend/pkg-store/renderer/EcommerceRenderer.svelte tomará la lista de secciones y las renderizará y creará una página ecommerce.
+## 1. Data Structure (ComponentAST)
 
-También existirán componentes personalizados como ProductCard o ProductCardHorizonal que podrán ser utilizados mediante el tagName, si el tagName en vez de ser un DIV o BUTTON o un componente HTML, es un componente personalizado, entonces renderiza ese componente.
+Each section is defined using the `ComponentAST` interface. This structure is recursive, allowing for complex compositions.
 
-funcionalidad de componentes con ITextLine[]. Las lineas de texto permiten al usuario darle un estilo distinto a cada linea. Se necesitará un componente que tome esos valores ITextLine[] y los convierta en un formulario editable, donde el usuario puede agregar más bloques de texto y editar el estilo de cada bloque de texto, algo básico como tamaño, color de texto, alineación.
+### Main Properties:
+- `id`: Unique identifier for the instance.
+- `tagName`: Defines the HTML element (div, section, button) or the name of a custom component (e.g., `ProductCard`).
+- `css`: Tailwind CSS classes that define the style. Can contain variables and color tokens.
+- `description`: Meta-description of the layout (e.g., "Hero banner with image on the left and CTA on the right"). Used to generate previews in the library.
+- `text` / `textLines`: Simple or structured text content (via lines with independent styles).
+- `variables`: A list of `ComponentVariable` objects for CSS class parameterization.
+- `children`: An array of `ComponentAST` for nesting.
 
-Los componentes también pueden usar colores globales. Los colores globales son una paleta de colores de 10 colores desde el más oscuro hasta el más claro. Las variables para usar estos colores globales son __COLOR:1__ y serán reemplazas madiante un regex. Se asume que los 10 colores ya están pre seteados por el usuario.
+---
+
+## 2. Parameterization and Variables
+
+To make a section "editable," we use the `ComponentVariable` object.
+
+### ComponentVariable
+```typescript
+interface ComponentVariable {
+    key: string;          // Token to replace, e.g.: "__v1__"
+    defaultValue: string; // Initial value
+    type: string;         // Tailwind prefix, e.g.: "w", "h", "bg", "text"
+    units?: string[];     // Allowed units (px, rem, %, etc.)
+}
+```
+
+**Resolution Mechanism:**
+The `EcommerceRenderer` processes the `css` field by replacing variable keys with their current values.
+*Example:* If `css` is `w-[__v1__] h-10` and `__v1__` is `500px`, the result will be `w-[500px] h-10`.
+
+---
+
+## 3. Global Colors and Theming
+
+The system supports a global color palette of 10 colors defined by the user (from darkest to lightest).
+
+- **Tokens:** Used via the format `__COLOR:1__` through `__COLOR:10__`.
+- **Processing:** Before rendering, a Regex process searches for these tokens in style properties and replaces them with the hexadecimal values or CSS variables of the active palette.
+
+---
+
+## 4. Specialized Components (E-commerce Ready)
+
+If the `tagName` matches a registered component, the renderer delegates the logic to that component instead of using a standard HTML element.
+
+| TagName | Description | Required Data |
+| :--- | :--- | :--- |
+| `ProductCard` | Standard product card. | `productos` or `productosIDs` |
+| `ProductCardHorizontal` | Horizontal version of the card. | `productos` or `productosIDs` |
+| `ProductGrid` | Automatic product grid. | `categoriaID` or `marcaID` |
+
+---
+
+## 5. Content Editing: ITextLine[]
+
+For components requiring mixed typography (e.g., a Hero with a bold title and a thin subtitle), `ITextLine` is used.
+
+```typescript
+interface ITextLine {
+    text: string;
+    css: string; // Specific styles for this line
+}
+```
+
+**Line Editor:**
+A form component should be implemented to allow the user to:
+1. Add or remove text blocks.
+2. Edit the content of each block.
+3. Configure basic styles (size, color, alignment) that will be translated into Tailwind classes.
+
+---
+
+## 6. Component Library
+
+Each section template must reside in an independent `.ts` file within the library folder.
+
+### Definition Example (`hero-section.ts`):
+```typescript
+export const HeroSection: ComponentAST = {
+    tagName: 'section',
+    description: 'Hero section with solid background, centered text, and buy button.',
+    css: 'bg-[__COLOR:2__] p-20 text-center',
+    variables: [
+        { key: '__v1__', type: 'p', defaultValue: '20' }
+    ],
+    children: [
+        { tagName: 'h1', text: 'Welcome to our store', css: 'text-4xl font-bold' },
+        { tagName: 'ProductCard', css: 'mt-10', productosIDs: [1, 2, 3] }
+    ]
+};
+```
+
+### Library Registration
+The `libraryAddSectionComponent(e: ComponentAST)` function is used to register these templates, making them available in the user's selection panel.
+
+---
+
+## Proposed Improvements and Roadmap
+
+1.  **Snapshot Generation:** Use the `description` property along with a headless rendering engine to generate automatic thumbnails for each section.
+2.  **Style Presets:** Allow the same section (`ComponentAST`) to have multiple "skins" or predefined variable presets.
+3.  **Animations:** Integrate an `animation` property in `ComponentAST` to handle smooth transitions using libraries like `framer-motion` or `svelte-transitions`.
+4.  **Drag & Drop:** Implement the ability to reorder sections within the `EcommerceRenderer` via a visual interface.
