@@ -88,9 +88,7 @@ const makeImageSrc = (format?: string) => {
   let srcUrl = imageSrc.src || ""
   // debugger
   if (srcUrl.substring(0, 8) !== "https://" && srcUrl.substring(0, 7) !== "http://") {
-    if(folder){ srcUrl = folder +"/"+ srcUrl }
-    if(size){ srcUrl = `${srcUrl}-x${size}` }
-    srcUrl = Env.S3_URL + srcUrl
+    srcUrl = Env.makeCDNRoute(folder as string, size ? `${srcUrl}-x${size}` :  srcUrl)
   }
   if(format){ srcUrl = srcUrl +"."+ format }
   return srcUrl

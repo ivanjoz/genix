@@ -82,3 +82,31 @@ export interface ColorPalette {
     name: string;
     colors: [string, string, string, string, string, string, string, string, string, string];
 }
+
+export type SectionCategory = 
+    | 'hero'
+    | 'products'
+    | 'categories'
+    | 'testimonials'
+    | 'features'
+    | 'cta'
+    | 'footer'
+    | 'header'
+    | 'gallery'
+    | 'text';
+
+export interface SectionPreset {
+    id: string;
+    name: string;
+    variables: Record<string, string>;
+}
+
+export interface SectionTemplate {
+    id: string;
+    name: string;
+    category: SectionCategory;
+    description: string;
+    thumbnail?: string;
+    ast: ComponentAST;
+    presets?: SectionPreset[];
+}

@@ -1,4 +1,4 @@
-import type { SectionTemplate } from '../renderer/renderer-types';
+import type { SectionTemplate } from '../../renderer/renderer-types';
 
 export const HeroCentered: SectionTemplate = {
     id: 'hero-centered-v1',

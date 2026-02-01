@@ -1,4 +1,4 @@
-import type { SectionTemplate } from '../renderer/renderer-types';
+import type { SectionTemplate } from '../../renderer/renderer-types';
 
 export const HeroSplit: SectionTemplate = {
     id: 'hero-split-v1',

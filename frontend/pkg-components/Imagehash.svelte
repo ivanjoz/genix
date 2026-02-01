@@ -21,19 +21,18 @@ import { Env } from '$core/env';
 
   onMount(() => {
     if (hash?.length > 0) {
-      imageSrc =
-        Env.S3_URL +
-        (folder ? (folder + "/") : "images/") +
-        hash.substring(0, 12).replaceAll(".", "/").replaceAll("-", "=") +
-        ".webp";
+    	let imageName = hash.substring(0, 12).replaceAll(".", "/").replaceAll("-", "=") +
+     ".webp"
+     	
+      imageSrc = Env.makeCDNRoute("images", imageName)
     } else if (src) {
       const sl = src.split(".")
       const ext = sl[sl.length - 1]
-      imageSrc = folder ? (folder + "/" + src) : src
+      let imageName = src
       if(sl.length < 2 || !["jpeg","jpg","webp","avif","png"].includes(ext)){
-        imageSrc += `-x${size}.avif`
+        imageName += `-x${size}.avif`
       }
-      imageSrc = Env.S3_URL + imageSrc
+      imageSrc = Env.makeCDNRoute(folder as string, imageName)
     }
     console.log("image source::", imageSrc,"| folder", folder,"| src",src)
 	})

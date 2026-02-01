@@ -1,4 +1,4 @@
-import type { SectionTemplate } from '../renderer/renderer-types';
+import type { SectionTemplate } from '../../renderer/renderer-types';
 
 export const CTASimple: SectionTemplate = {
     id: 'cta-simple-v1',

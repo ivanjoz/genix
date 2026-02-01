@@ -1,4 +1,4 @@
-import type { SectionTemplate } from '../renderer/renderer-types';
+import type { SectionTemplate } from '../../renderer/renderer-types';
 
 export const NewsletterSection: SectionTemplate = {
     id: 'newsletter-v1',

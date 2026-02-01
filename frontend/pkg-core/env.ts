@@ -4,7 +4,7 @@ declare global {
 
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
-import { PUBLIC_LAMBDA_URL, PUBLIC_SIGNALING_ENDPOINT, PUBLIC_SIGNALING_API_KEY } from '$env/static/public';
+import { PUBLIC_LAMBDA_URL, PUBLIC_SIGNALING_ENDPOINT, PUBLIC_SIGNALING_API_KEY, PUBLIC_FRONTEND_CDN } from '$env/static/public';
 
 export { browser };
 
@@ -42,7 +42,8 @@ export interface IEmpresaParams {
 
 export const Env = {
   appId: "genix",
-  S3_URL: "https://d16qwm950j0pjf.cloudfront.net/",
+	S3_URL: "https://d16qwm950j0pjf.cloudfront.net/",
+  CDN_URL: PUBLIC_FRONTEND_CDN,
   serviceWorker: "/sw.js",
   enviroment: "dev",
 	SIGNALING_ENDPOINT: PUBLIC_SIGNALING_ENDPOINT || "",
@@ -123,18 +124,26 @@ export const Env = {
     if(route[0] === "/"){ route = route.substring(1) }
     const sep = route.includes("?") ? "&" : "?"
     return api + route + sep + `empresa-id=${Env.empresaID}`
+	},
+	makeCDNRoute: (...segments: string[]) => {
+		return makeRoute(Env.CDN_URL, ...segments)
   },
-  makeImageRoute: (route: string) => {
-    if(route.substring(0,6) !== "http//" && route.substring(0,7) !== "https//"){
-      route = Env.S3_URL + "img-productos/" + route
-    }
-    return route
-	}
 }
 
 export const getInnerWidth = () => {
   if(browser){ return window.innerWidth }
   else { return 1200 }
+}
+
+export const makeRoute = (domain: string, ...segments: string[]) => {
+	let prefix = "https"
+	if (domain.includes("://")) {
+		prefix = domain.split("://")[0]
+		domain = domain.split("://")[1]
+	}
+	let route = [domain, ...segments]
+		.filter(x => x).join("/").replaceAll(`//`, "/")
+	return prefix +"://"+ route
 }
 
 export const LocalStorage = typeof window !== 'undefined'

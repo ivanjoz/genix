@@ -3,22 +3,34 @@ import { Core } from '$core/store.svelte';
 
 
   let {
-    options, selected, keyId, keyName, buttonCss, onSelect, css, useMobileGrid
+    options, selected, keyId, keyName, buttonCss, onSelect, css, useMobileGrid,
+    activeClass = "_3",
+    inactiveClass = "",
+    itemCss = "_2",
+    containerCss = "_1"
   }: {
     options: T[],
-    selected: number,
+    selected: any,
     keyId?: keyof T,
     keyName?: keyof T,
     buttonCss?: string,
     onSelect: (e: T) => void,
-    useMobileGrid?: boolean
-    css?: string
+    useMobileGrid?: boolean,
+    css?: string,
+    activeClass?: string,
+    inactiveClass?: string,
+    itemCss?: string,
+    containerCss?: string
   } = $props()
 
   const getClass = (e: T) => {
-    let cn = ""
-    const id = Array.isArray(e) ? e[0] : (keyId ? e?.[keyId] : 0) || 0
-    if(id === selected){ cn += " _3" }
+    let cn = itemCss
+    const id = Array.isArray(e) ? e[0] : (keyId ? e?.[keyId] : e)
+    if(id === selected){ 
+      cn += " " + activeClass 
+    } else {
+      cn += " " + inactiveClass
+    }
     if(buttonCss){ cn += " " + buttonCss }
     return cn
   }
@@ -38,7 +50,7 @@ import { Core } from '$core/store.svelte';
 
 </script>
 
-<div class="_1 pb-4 md:pb-0 flex items-center shrink-0 max-w-[100%] overflow-x-auto overflow-y-hidden {css}"
+<div class="{containerCss} pb-4 md:pb-0 flex items-center shrink-0 max-w-[100%] overflow-x-auto overflow-y-hidden {css}"
   class:_5={useMobileGrid}
   class:grid-cols-2={useMobileGrid && options.length === 2}
   class:grid-cols-3={useMobileGrid && options.length === 3}
@@ -51,6 +63,9 @@ import { Core } from '$core/store.svelte';
       ev.stopPropagation()
       onSelect(opt)
     }}>
+      {#if opt && typeof opt === 'object' && 'icon' in opt}
+        <span class="mr-2">{opt.icon}</span>
+      {/if}
       {#if words.length === 1}
         <span>{words[0]}</span>
       {:else}

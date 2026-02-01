@@ -1,6 +1,7 @@
 // scripts/dev-all.js
 import { spawn } from 'child_process';
 import path from 'path';
+import { setupEnv } from './setup-env.js';
 
 const startApp = (app, command, cwd) => {
   return new Promise((resolve, reject) => {
@@ -19,6 +20,9 @@ const startApp = (app, command, cwd) => {
 
 const main = async () => {
   console.log('🚀 Starting development environment...');
+
+  // Setup environment variables
+  setupEnv();
 
   // Start main app (without store routes)
   console.log('📋 Starting main app...');
