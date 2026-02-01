@@ -21,10 +21,10 @@
 }
 
 @font-face {
-  font-family: 'bold'; src: url("/libs/lato-v24-latin-700.woff2")
+  font-family: 'bold'; src: url("/libs/lato-v24-latin-700.woff2");
 }
 @font-face {
-  font-family: 'semibold'; src: url("/libs/lato-v24-latin-700.woff2")
+  font-family: 'semibold'; src: url("/libs/lato-v24-latin-700.woff2");
 }
 
 body {
