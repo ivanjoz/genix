@@ -4,12 +4,13 @@ import { checkIsLogin } from '$core/lib/security';
 import { closeAllModals, Core, openModal } from '$core/store.svelte';
 import { Env } from '$core/env';
 
-  let { children, sideLayerSize, title, options, containerCss, useTopMinimalMenu }: {
+  let { children, sideLayerSize, title, options, containerCss, useTopMinimalMenu, fixedFullHeight }: {
     children: any, 
     sideLayerSize?: number, 
     title: string, 
     containerCss?: string,
     useTopMinimalMenu?: boolean,
+    fixedFullHeight?: boolean
     options?: {id: number, name: string}[]
   } = $props();
 
@@ -39,7 +40,9 @@ import { Env } from '$core/env';
 
 </script>
 
-<div class="_1 p-10 {containerCss}" class:useTopMinimalMenu={Core.useTopMinimalMenu}>
+<div class="_1 p-10 {containerCss}" class:useTopMinimalMenu={Core.useTopMinimalMenu}
+	class:fixed-full-height={fixedFullHeight}
+>
   {#if Core.isLoading === 0 && isLogged}
     {@render children()}
   {/if}
@@ -60,6 +63,11 @@ import { Env } from '$core/env';
   ._1.useTopMinimalMenu {
     margin-left: 0;
     width: 100%;
+  }
+  
+  .fixed-full-height {
+	 	height: calc(100vh - var(--header-height));
+	  overflow: auto;
   }
 
   @media (max-width: 750px) {

@@ -47,7 +47,7 @@ import WebRTCStatus from '$ui/WebRTCStatus.svelte';
 </script>
 
 <header	class="_1 fixed top-0 left-0 right-0 bg-gradient-to-r from-indigo-600 to-indigo-700
-	shadow-md z-150 flex items-center px-6 md:px-16"
+	shadow-md z-250 flex items-center px-6 md:px-16"
 	class:useTopMinimalMenu={Core.useTopMinimalMenu}
 >
 

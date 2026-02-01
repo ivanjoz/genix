@@ -113,17 +113,12 @@
   });
 </script>
 
-<div class="editor-layer" class:open>
+<div class="editor-layer">
   <div class="editor-header">
     <div class="editor-title">
       <span class="editor-icon">🎨</span>
       <span>Section Editor</span>
     </div>
-    <button class="close-btn" onclick={onClose} aria-label="Close editor">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M18 6L6 18M6 6l12 12"/>
-      </svg>
-    </button>
   </div>
 
   {#if section}
@@ -358,24 +353,24 @@
 
 <style>
   .editor-layer {
-    position: fixed;
-    top: 0;
+  	position: fixed;
+    top: var(--header-height);
     right: 0;
-    width: 400px;
-    height: 100vh;
+    width: 260px;
+    height: calc(100vh - var(--header-height));
     background: #0f172a;
     border-left: 1px solid #1e293b;
-    transform: translateX(100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1000;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 205;
     display: flex;
     flex-direction: column;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
     color: #e2e8f0;
+    overflow: hidden;
   }
 
-  .editor-layer.open {
-    transform: translateX(0);
+  .editor-layer:hover {
+    width: 420px;
+    box-shadow: -10px 0 20px -4px rgb(0 0 0 / 42%);
   }
 
   .editor-header {
@@ -385,6 +380,7 @@
     padding: 16px 20px;
     background: #1e293b;
     border-bottom: 1px solid #334155;
+    flex-shrink: 0;
   }
 
   .editor-title {
@@ -394,35 +390,18 @@
     font-size: 16px;
     font-weight: 600;
     color: #f1f5f9;
+    white-space: nowrap;
   }
 
   .editor-icon {
     font-size: 20px;
   }
 
-  .close-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border: none;
-    background: transparent;
-    color: #94a3b8;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .close-btn:hover {
-    background: #334155;
-    color: #f1f5f9;
-  }
-
   .editor-content {
     flex: 1;
     overflow-y: auto;
     padding: 20px;
+    min-width: 420px; /* Keep content width stable to prevent flickering */
   }
 
   .section-info {

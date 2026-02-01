@@ -38,7 +38,6 @@
     onUpdate
   }: Props = $props();
 
-  let hoveredSectionIdx = $state<number | null>(null);
   let selectedSection = $state<SelectedSection | null>(null);
   let editorOpen = $state(false);
   let renderKey = $state(0);
@@ -282,20 +281,20 @@
     <!-- Skip null elements -->
   {:else}
     {@const Tag = element.semanticTag || (element.tagName as any) || 'section'}
-    {@const isHovered = hoveredSectionIdx === sectionIdx}
+
     {@const isSelected = selectedSection?.path[0] === sectionIdx.toString()}
     {#key renderKey}
     <div
       class="section-wrapper"
-      class:section-hovered={isHovered}
+
       class:section-selected={isSelected}
-      onmouseenter={() => hoveredSectionIdx = sectionIdx}
-      onmouseleave={() => hoveredSectionIdx = null}
+
       onclick={() => handleSectionClick(element, sectionIdx)}
       role="button"
       tabindex="0"
       onkeydown={(e) => e.key === 'Enter' && handleSectionClick(element, sectionIdx)}
     >
+      <div class="section-outline"></div>
       <div class="section-label">
         <span class="section-label-icon">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -341,7 +340,7 @@
 {/snippet}
 
 <div class="ecommerce-builder">
-  <div class="builder-canvas" class:editor-open={editorOpen}>
+  <div class="builder-canvas">
     {#if Array.isArray(elements)}
       {#each elements as element, idx}
         {@render renderSection(element, idx)}
@@ -369,11 +368,6 @@
 
   .builder-canvas {
     flex: 1;
-    transition: margin-right 0.3s ease;
-  }
-
-  .builder-canvas.editor-open {
-    margin-right: 400px;
   }
 
   .section-wrapper {
@@ -382,15 +376,26 @@
     transition: all 0.2s ease;
   }
 
-  .section-wrapper.section-hovered {
-    outline: 2px dashed #3b82f6;
-    outline-offset: 4px;
+  .section-outline {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px dashed #3b82f6;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 9999;
   }
 
-  .section-wrapper.section-selected {
-    outline: 3px solid #2563eb;
-    outline-offset: 4px;
-    box-shadow: 0 0 0 8px rgba(37, 99, 235, 0.1);
+  .section-wrapper:hover .section-outline {
+    opacity: 1;
+    box-shadow: inset 0 0 0 6px rgb(37 99 235 / 29%);
+  }
+
+  .section-wrapper.section-selected .section-outline {
+    border: 2px solid #2563eb;
   }
 
   .section-label {
@@ -432,7 +437,7 @@
     margin-left: 4px;
   }
 
-  .section-wrapper.section-hovered .section-label,
+  .section-wrapper:hover .section-label,
   .section-wrapper.section-selected .section-label {
     opacity: 1;
     transform: translateY(0);

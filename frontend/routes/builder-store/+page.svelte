@@ -30,7 +30,7 @@
     }
 </script>
 
-<Page title="Builder" containerCss="p-0!" useTopMinimalMenu>
+<Page title="Builder" containerCss="p-0! w-[calc(100%-260px)]!" useTopMinimalMenu fixedFullHeight>
     <Header />
     <EcommerceBuilder 
         bind:elements 

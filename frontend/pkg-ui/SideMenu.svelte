@@ -105,19 +105,22 @@
 </script>
 
 <!-- Desktop Menu -->
-<div class="d-menu fixed left-0 top-0 bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950
-		text-white shadow-xl transition-all duration-200 ease-in-out z-300 hidden md:block"
+<div class="d-menu fixed left-0 top-0 bg-linear-to-b from-gray-900 via-gray-900 to-gray-950
+		text-white shadow-xl z-300 hidden md:block"
 	class:h-screen={!Core.useTopMinimalMenu}
 	class:useTopMinimalMenu={Core.useTopMinimalMenu}
+	class:transition-all={!Core.useTopMinimalMenu}
+	class:ease-in-out={!Core.useTopMinimalMenu}
+	class:duration-200={!Core.useTopMinimalMenu}
 	role="navigation"
 	aria-label="Main navigation"
 >
 	<div class="flex items-center h-48 border-b border-gray-800/30 w-full overflow-hidden">
 		<div class="_1 flex items-center">
-			<img class="w-42 h-42 flex-shrink-0" src="/images/genix_logo4.svg" alt="">
-			<div class="_2 white ff-bold h2 ml-[-3px] whitespace-nowrap">enix</div>
+			<img class="w-42 h-42 shrink-0" src="/images/genix_logo4.svg" alt="">
+			<div class="_2 white ff-bold h2 -m-3 whitespace-nowrap">enix</div>
 			{#if Core.useTopMinimalMenu}
-				<i class="icon-down-open-1 ml-4 text-gray-400 text-xs hover-indicator flex-shrink-0"></i>
+				<i class="icon-down-open-1 ml-4 text-gray-400 text-xs hover-indicator shrink-0"></i>
 			{/if}
 		</div>
 	</div>
