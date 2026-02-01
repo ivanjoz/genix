@@ -3,7 +3,7 @@
   export interface ElementAST {
     id?: number | string
     css?: string
-    tagName?: "DIV" | "SPAN" | "BUTTON",
+    tagName?: string
     text?: string | number
     onClick?: (id: number | string) => void
     children?: ElementAST[]
@@ -13,8 +13,8 @@
 
 <script lang="ts">
 
-  const { 
-    elements 
+  const {
+    elements
   }: { elements: ElementAST | ElementAST[] } = $props()
 
   const handleClick = (element: ElementAST) => {
@@ -60,6 +60,3 @@
 {:else}
   {@render renderElement(elements)}
 {/if}
-
-
-

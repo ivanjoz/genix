@@ -4,9 +4,13 @@ import type { IProducto } from '$services/services/productos.svelte';
 import ImageHash from '$components/Imagehash.svelte';
   import { addProductoCant, ProductsSelectedMap } from "./store.svelte";
 
-  const {
-    producto = null as IProducto, css = ""
-  } = $props();
+  export interface IProductCard {
+		producto: IProducto, css?: string, productoID?: number
+	}
+
+   const {
+     producto, css = "", productoID
+   }: IProductCard = $props();
 
   const prodCant = $derived.by(() => {
     return ProductsSelectedMap.get(producto.ID)?.cant || 0

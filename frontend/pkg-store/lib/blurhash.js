@@ -281,16 +281,19 @@
     "1": "d16qwm950j0pjf.cloudfront.net/img-productos"
   }
 
+	alert("hola 1")
+	console.log("estamos aqui blur hash::")
+  
 	const onload = () => {
-
+    console.log("ejecutando onload blurhash")
     for(const img of Array.from(document.getElementsByTagName("img"))){
       const role = img.getAttribute("role")
-      if(role && role[1] === "/"){
+      if(role && role.includes("/")){
         const [origin, size, image] = role.split("/")
         if(origin === "0"){
           img.src = thumbHashToDataURL(image)
         } else if(origin === "1"){
-          const imageFull = image + (size ? `-x${size}.avif` : "")
+          const imageFull = image + (size ? "-x" + size + ".avif" : "")
 					img.src = "https://" + origins[origin] + "/" + imageFull
 					console.log("image source::", img.src )
         }
@@ -300,8 +303,7 @@
     const subheader0 = document.getElementById("sh-0")
 
     const handleScroll = () => {
-      // console.log("comparison:", window.scrollY, subheaderElement.offsetTop);
-
+      alert("hola 2")
       if (window.scrollY > (subheader0?.offsetTop || 0)) {
         subheader0?.classList.add("s1")
       } else {
@@ -317,8 +319,10 @@
   }
 
   if (typeof window != "undefined") {
-    document.addEventListener("DOMContentLoaded", onload);
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", onload);
+    } else {
+      onload();
+    }
   }
-
-  globalThis._makeThumbHashToDataURL = (hash) => thumbHashToDataURL(hash);
 })();

@@ -26,7 +26,7 @@ import { Env } from '$core/env';
         (folder ? (folder + "/") : "images/") +
         hash.substring(0, 12).replaceAll(".", "/").replaceAll("-", "=") +
         ".webp";
-    } else {
+    } else if (src) {
       const sl = src.split(".")
       const ext = sl[sl.length - 1]
       imageSrc = folder ? (folder + "/" + src) : src

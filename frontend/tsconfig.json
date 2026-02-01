@@ -9,8 +9,34 @@
 		"skipLibCheck": true,
 		"sourceMap": true,
 		"strict": true,
-		"moduleResolution": "bundler"
-	}
+		"moduleResolution": "bundler",
+		"paths": {
+			"$ui": ["./pkg-ui"],
+			"$ui/*": ["./pkg-ui/*"],
+			"$store": ["./pkg-store"],
+			"$store/*": ["./pkg-store/*"],
+			"$stores": ["./pkg-store/stores"],
+			"$stores/*": ["./pkg-store/stores/*"],
+			"$routes": ["./routes"],
+			"$routes/*": ["./routes/*"],
+			"$components": ["./pkg-components"],
+			"$components/*": ["./pkg-components/*"],
+			"$core": ["./pkg-core"],
+			"$core/*": ["./pkg-core/*"],
+			"$services": ["./pkg-services"],
+			"$services/*": ["./pkg-services/*"]
+		}
+	},
+	"include": [
+		".svelte-kit/ambient.d.ts",
+		".svelte-kit/non-ambient.d.ts",
+		".svelte-kit/types/**/$types.d.ts",
+		"routes/**/*",
+		"pkg-components/**/*",
+		"pkg-core/**/*",
+		"pkg-services/**/*",
+		"pkg-ui/**/*"
+	]
 	// Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
 	// except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
 	//

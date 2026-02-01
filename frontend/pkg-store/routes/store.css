@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+@source "../../pkg-components/**/*.svelte";
+@source "../../pkg-ui/**/*.svelte";
+@source "../**/*.svelte";
+
 @theme {
   --breakpoint-2xl: 1539px;
   --breakpoint-xl: 1379px;

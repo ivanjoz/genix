@@ -24,7 +24,7 @@ import ProductCard from '$store/components/ProductCard.svelte';
       s1.product_cards_ctn}
   >
     {#each productos.productos as producto}
-      <ProductCard css="w-full md:w-240" {producto} />
+      <ProductCard css="w-full md:w-240" productoID={producto.ID} />
     {/each}
   </div>
 </div>

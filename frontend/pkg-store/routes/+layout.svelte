@@ -2,7 +2,6 @@
   // @render 'svelte';
   import "./store.css";
   import "$ui/libs/fontello-prerender.css";
-import blurhashScript from '$ui/libs/blurhash?raw';
 import { productosServiceState } from '$services/services/productos.svelte';
   let { children, data } = $props();
 
@@ -11,8 +10,7 @@ import { productosServiceState } from '$services/services/productos.svelte';
 </script>
 
 <svelte:head>
-	{@html '<script>' + blurhashScript + '</script>'}
-  {@html `<link rel="stylesheet" href="libs/fontello-embedded.css">`}
+  <link rel="stylesheet" href="libs/fontello-embedded.css">
 </svelte:head>
 
 {@render children()}

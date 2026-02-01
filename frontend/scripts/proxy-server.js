@@ -70,10 +70,7 @@ const server = http.createServer((req, res) => {
   const isServiceWorkerComm = req.url.startsWith('/_sw_');
   
   if (isStore) {
-    // Remove /store prefix before proxying to store app
-    const originalUrl = req.url;
-    req.url = req.url.replace(/^\/store/, '');
-    console.log(`[HTTP] ${originalUrl} → Store (${req.url})`);
+    console.log(`[HTTP] ${req.url} → Store`);
     storeProxy.web(req, res);
   } else if (isServiceWorkerComm) {
     // Handle Service Worker communication requests locally to avoid 404s in Main
@@ -91,10 +88,7 @@ server.on('upgrade', (req, socket, head) => {
   const isStore = req.url.startsWith('/store');
   
   if (isStore) {
-    // Remove /store prefix before proxying WebSocket connection
-    const originalUrl = req.url;
-    req.url = req.url.replace(/^\/store/, '');
-    console.log(`[WS Upgrade] ${originalUrl} → Store (${req.url})`);
+    console.log(`[WS Upgrade] ${req.url} → Store`);
     storeProxy.ws(req, socket, head);
   } else {
     console.log(`[WS Upgrade] ${req.url} → Main`);
