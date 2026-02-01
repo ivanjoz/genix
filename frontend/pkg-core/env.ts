@@ -123,7 +123,7 @@ export const Env = {
     const api = globalThis._isLocal ? apiLocal : apiPrd
     if(route[0] === "/"){ route = route.substring(1) }
     const sep = route.includes("?") ? "&" : "?"
-    return api + route + sep + `empresa-id=${Env.empresaID}`
+    return api + route + sep + `empresa-id=${Env.getEmpresaID()}`
 	},
 	makeCDNRoute: (...segments: string[]) => {
 		return makeRoute(Env.CDN_URL, ...segments)

@@ -21,7 +21,6 @@
 
 			if(container){
 			  const handleScroll = () => {
-						console.log("handleScroll", container.scrollTo, subheader0?.offsetParent)
 			    if (container.scrollTop > 48) {
 			      subheader0?.classList.add("s2")
 			    } else {

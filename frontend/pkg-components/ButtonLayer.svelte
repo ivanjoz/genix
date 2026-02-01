@@ -54,7 +54,27 @@ import angleSvg from '$core/assets/angle.svg?raw';
   let buttonElement: HTMLElement | null = $state(null);
   let layerElement: HTMLElement | null = $state(null);
   let position = $state({ top: 0, left: 0 });
+  let placement = $state<'top' | 'bottom'>('bottom');
   let angleLeft = $state(20); // Position of the angle from the left of the layer
+
+  // Find the nearest scrollable parent
+  function getScrollParent(element: HTMLElement | null): HTMLElement {
+    if (!element) return document.documentElement;
+
+    let parent = element.parentElement;
+    while (parent) {
+      const { overflow, overflowY } = window.getComputedStyle(parent);
+      if (
+        (parent.scrollHeight > parent.clientHeight) &&
+        (overflow.includes('auto') || overflow.includes('scroll') || overflowY.includes('auto') || overflowY.includes('scroll'))
+      ) {
+        return parent;
+      }
+      parent = parent.parentElement;
+    }
+
+    return document.documentElement;
+  }
 
   // Toggle the layer open/closed
   function toggleLayer() {
@@ -74,44 +94,55 @@ import angleSvg from '$core/assets/angle.svg?raw';
     }
   }
 
-  // Calculate position of the layer below the button
+  // Calculate position of the layer below or above the button
   async function updatePosition() {
     await tick();
-	  if(!buttonElement || !layerElement){
-	  	// console.log("No hay buttonElement o layerElement:",buttonElement, layerElement)
-	   	return
-	  }
+    if (!buttonElement || !layerElement) {
+      return;
+    }
 
     const buttonRect = buttonElement.getBoundingClientRect();
     const layerRect = layerElement.getBoundingClientRect();
+    const scrollParent = getScrollParent(buttonElement);
+    const parentRect = scrollParent === document.documentElement
+      ? { top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth, width: window.innerWidth, height: window.innerHeight }
+      : scrollParent.getBoundingClientRect();
 
     const isMobile = window.innerWidth <= 748;
-
     const offset = 8; // Distance from button
-    let top = buttonRect.bottom + offset;
+
+    // Determine vertical placement
+    const spaceBelow = parentRect.bottom - buttonRect.bottom;
+    const spaceAbove = buttonRect.top - parentRect.top;
+
+    if (spaceBelow < layerRect.height + offset && spaceAbove > spaceBelow) {
+      placement = 'top';
+    } else {
+      placement = 'bottom';
+    }
+
+    let top = placement === 'bottom'
+      ? buttonRect.bottom + offset
+      : buttonRect.top - layerRect.height - offset;
+
     let left = isMobile ? 6 : buttonRect.left + horizontalOffset;
 
     // Desktop: position relative to button
     if (!isMobile) {
-      // Check if layer would go off right edge of viewport
-      if (left + layerRect.width > window.innerWidth) {
-        left = window.innerWidth - layerRect.width - edgeMargin;
+      // Check if layer would go off right edge of parent/viewport
+      if (left + layerRect.width > parentRect.right) {
+        left = parentRect.right - layerRect.width - edgeMargin;
       }
 
-      // Check if layer would go off left edge of viewport
-      if (left < edgeMargin) {
-        left = edgeMargin;
+      // Check if layer would go off left edge of parent/viewport
+      if (left < parentRect.left + edgeMargin) {
+        left = parentRect.left + edgeMargin;
       }
-    }
-
-    // Check if layer would go off bottom of viewport
-    if (top + layerRect.height > window.innerHeight) {
-      top = buttonRect.top - layerRect.height - offset;
     }
 
     position = { top, left };
 
-    // Calculate angle position to be centered below the button
+    // Calculate angle position to be centered below/above the button
     const buttonCenter = buttonRect.left + (buttonRect.width / 2);
 
     if (isMobile) {
@@ -214,6 +245,8 @@ import angleSvg from '$core/assets/angle.svg?raw';
       class="button-layer min-w-200 {layerClass||'w-[calc(100vw-12px)]'}"
       style="top: {position.top}px; left: {position.left}px;"
       class:use-big={useBig}
+      class:placement-top={placement === 'top'}
+      class:placement-bottom={placement === 'bottom'}
     >
       <!-- Angle pointer -->
       <div class="button-layer-angle" style="left: {angleLeft}px;">
@@ -262,6 +295,10 @@ import angleSvg from '$core/assets/angle.svg?raw';
     overflow: visible;
   }
 
+  .button-layer.placement-top {
+    animation: slideUp 0.2s ease-out;
+  }
+
   .button-layer.use-big {
     box-shadow: #46466059 0 2px 18px -2px, #00000059 0 0 6px;
   }
@@ -292,6 +329,12 @@ import angleSvg from '$core/assets/angle.svg?raw';
     z-index: 211;
   }
 
+  .button-layer.placement-top .button-layer-angle {
+    top: auto;
+    bottom: -18px;
+    transform: rotate(180deg);
+  }
+
   .button-layer-angle-img {
     width: 24px;
     height: 24px;
@@ -312,6 +355,17 @@ import angleSvg from '$core/assets/angle.svg?raw';
     from {
       opacity: 0;
       transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
     }
     to {
       opacity: 1;
