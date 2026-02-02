@@ -60,7 +60,7 @@
       {/each}
     {/if}
   {:else if child.tagName === 'ProductsByCategory'}
-  	<ProductsByCategory categoryID={child.categoriaID as number} limit={child.limit}
+  	<ProductsByCategory categoryID={(child.categoriasIDs||[])[0]} limit={child.limit}
    		css={getResolvedCss(child)}
     />
   {:else}

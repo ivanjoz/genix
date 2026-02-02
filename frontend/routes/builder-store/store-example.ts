@@ -72,7 +72,7 @@ export const storeExample: ComponentAST[] = [
 			{
 				tagName: 'ProductsByCategory',
 				limit: 4,
-				categoriaID: 13,
+				categoriasIDs: [13],
 				text: 'This are our amazing categories'
 			},
 		]

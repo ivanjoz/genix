@@ -63,12 +63,13 @@ export interface IGalleryImagen {
 export interface ComponentProps {
 	title?: string
  	productosIDs?: number[];
-	categoriaID?: number;
-	marcaID?: number; /* product brand */
+	categoriasIDs?: number[];
+	marcasIDs?: number[];
 	secondaryImagen?: string
 	iconImagen?: string
 	gallery?: IGalleryImagen[]
 	limit?: number, /* limit of elements to show (example: products) */
+	elementsCss?: { [selector: string]: string }
 }
 
 export interface ComponentAST extends ComponentProps {
