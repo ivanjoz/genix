@@ -25,7 +25,7 @@
 	});
 
 	$effect(() => {
-		console.log("productoFetched", productoFetched)
+		// console.log("productoFetched", productoFetched)
 		if (producto && !productoFetched.Nombre) {
 			productoFetched = producto;
 		}
@@ -33,10 +33,10 @@
 
 	$effect(() => {
 		if (productoID && !productoFetched.Nombre) {
-			console.log("obteniendo producto con ID::", productoID);
+			// console.log("obteniendo producto con ID::", productoID);
 
 			getProductoByID(productoID).then((p) => {
-				console.log("producto obtenido::", p);
+				// console.log("producto obtenido::", p);
 				if (p) {
 					productoFetched = p;
 				}

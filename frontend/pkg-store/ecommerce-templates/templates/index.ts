@@ -8,6 +8,8 @@ import { NewsletterSection } from './newsletter';
 import { TestimonialsSection } from './testimonials';
 import { FeaturesSection } from './features';
 import { FooterBasic } from './footer-basic';
+import { CategoryInfoDescription } from '../product-categories/category-info-description';
+import { CategoryWithProducts } from '../product-categories/category-with-products';
 
 export const sectionTemplates = [
     HeroCentered,
@@ -19,7 +21,9 @@ export const sectionTemplates = [
     NewsletterSection,
     TestimonialsSection,
     FeaturesSection,
-    FooterBasic
+    FooterBasic,
+    CategoryInfoDescription,
+    CategoryWithProducts
 ];
 
 export {
@@ -32,5 +36,7 @@ export {
     NewsletterSection,
     TestimonialsSection,
     FeaturesSection,
-    FooterBasic
+    FooterBasic,
+    CategoryInfoDescription,
+    CategoryWithProducts
 };

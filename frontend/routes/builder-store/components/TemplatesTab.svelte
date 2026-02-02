@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { sectionTemplates } from '../../../pkg-store/ecommerce-sections/templates/index';
+  import { sectionTemplates } from '../../../pkg-store/ecommerce-templates/templates/index';
   import type { SectionTemplate } from '../../../pkg-store/renderer/renderer-types';
 
   interface Props {

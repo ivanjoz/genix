@@ -172,3 +172,27 @@ export const getProductsByCategoryID = async (id: number): Promise<IProducto[]> 
 	// buscamos en el mapa actualizado. Si no está aquí, es que no existe.
 	return productosServiceState.productosByCategoryMap.get(id) || [];
 }
+
+export const getCategoryByID = async (id: number): Promise<IProductoCategoria | undefined> => {
+	// 1. Si ya lo tenemos en el mapa, lo retornamos inmediatamente
+	const category = productosServiceState.categoriasMap.get(id);
+	if (category) return category;
+
+	// 2. Si no hay categorías cargadas todavía, iniciamos o esperamos la carga inicial
+	if (productosServiceState.categorias.length === 0) {
+		if (!loadingPromise) {
+			loadingPromise = getProductos();
+		}
+
+		try {
+			await loadingPromise;
+		} catch (err) {
+			console.error("Error cargando productos para getCategoryByID:", err);
+			return undefined;
+		}
+	}
+
+	// 3. Después de cargar (o si ya había categorías pero no la que buscamos), 
+	// buscamos en el mapa actualizado. Si no está aquí, es que no existe.
+	return productosServiceState.categoriasMap.get(id);
+}

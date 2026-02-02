@@ -1,6 +1,8 @@
 import type { ComponentAST } from '../../pkg-store/renderer/renderer-types';
-import { FooterBasic } from '$store/ecommerce-sections/templates/footer-basic'
-import { CategoryGridSection } from '$store/ecommerce-sections/templates/category-grid'
+import { FooterBasic } from '$store/ecommerce-templates/templates/footer-basic'
+import { CategoryGridSection } from '$store/ecommerce-templates/templates/category-grid'
+import { CategoryInfoDescription } from '$store/ecommerce-templates/product-categories/category-info-description'
+import { CategoryWithProducts } from '$store/ecommerce-templates/product-categories/category-with-products'
 
 export const storeExample: ComponentAST[] = [
 	{
@@ -70,13 +72,24 @@ export const storeExample: ComponentAST[] = [
 		css: 'bg-primary-500 py-20 px-4 text-center',
 		children: [
 			{
+				tagName: 'h2',
+				text: 'This are our amazing categories',
+				css: 'text-3xl font-bold mb-8'
+			},
+			{
+				tagName: 'CategoryDescription',
+				css: 'text-lg mb-8',
+				categoriasIDs: [13]
+			},
+			{
 				tagName: 'ProductsByCategory',
 				limit: 4,
-				categoriasIDs: [13],
-				text: 'This are our amazing categories'
-			},
+				categoriasIDs: [13]
+			}
 		]
 	},
+	CategoryInfoDescription.ast,
+	CategoryWithProducts.ast,
 	CategoryGridSection.ast,
-	FooterBasic.ast,
+	FooterBasic.ast
 ];

@@ -4,6 +4,7 @@
   import ProductCard from '$store/components/ProductCard.svelte';
   import ProductsByCategory from '$store/ecommerce-components/ProductsByCategory.svelte';
   import ProductCardHorizonal from '$store/components/ProductCardHorizonal.svelte';
+  import CategoryDescription from '$store/ecommerce-components/ecommerce-attributes/CategoryDescription.svelte';
 
   interface Props {
     element: ComponentAST;
@@ -63,6 +64,11 @@
   	<ProductsByCategory categoryID={(child.categoriasIDs||[])[0]} limit={child.limit}
    		css={getResolvedCss(child)}
     />
+  {:else if child.tagName === 'CategoryDescription'}
+  	<CategoryDescription 
+  		categoriasIDs={child.categoriasIDs}
+  		css={getResolvedCss(child)}
+  	/>
   {:else}
     {@const Tag = child.semanticTag || (child.tagName as any) || 'div'}
     <svelte:element 
