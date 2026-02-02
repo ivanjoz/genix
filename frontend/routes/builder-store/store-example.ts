@@ -6,7 +6,7 @@ export const storeExample: ComponentAST[] = [
 	{
 		tagName: 'section',
 		semanticTag: 'section',
-		css: 'bg-primary-500 text-white py-20 px-4 text-center',
+		css: 'bg-primary-500 py-20 px-4 text-center',
 		children: [
 			{
 				tagName: 'h1',
@@ -63,6 +63,18 @@ export const storeExample: ComponentAST[] = [
 					}
 				]
 			}
+		]
+	},
+	{
+		tagName: 'section',
+		css: 'bg-primary-500 py-20 px-4 text-center',
+		children: [
+			{
+				tagName: 'ProductsByCategory',
+				limit: 4,
+				categoriaID: 13,
+				text: 'This are our amazing categories'
+			},
 		]
 	},
 	CategoryGridSection.ast,

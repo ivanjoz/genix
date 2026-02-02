@@ -68,12 +68,37 @@ The system is divided into three main layers:
 
 ## 2. Core Interfaces
 
-### ComponentAST (Complete Definition)
+### ComponentProps (E-commerce Properties)
+
+This interface contains the non-generic properties used by e-commerce components (logic-enabled components). These properties are inherited by all ComponentAST nodes.
 
 ```typescript
-interface ComponentAST {
+interface IGalleryImagen {
+    image: string;
+    title: string;
+    description: string;
+}
+
+export interface ComponentProps {
+    title: string;                        // Component title or heading text
+    productosIDs?: number[];              // Specific product IDs to display
+    categoriaID?: number;                 // Category ID for filtering products
+    marcaID?: number;                     // Brand ID for filtering products
+    secondaryImagen?: string;             // Secondary image URL (banners, backgrounds)
+    iconImagen: string;                   // Icon image URL for decorative elements
+    gallery?: IGalleryImagen[];           // Array of gallery images with metadata
+    limit?: number;                       // Limit of elements to show (e.g., products in grid)
+}
+```
+
+### ComponentAST (Complete Definition)
+
+`ComponentAST` extends `ComponentProps`, inheriting all e-commerce properties while providing structure for declarative components.
+
+```typescript
+interface ComponentAST extends ComponentProps {
     // === Identity ===
-    id?: string;                          // Unique identifier for the instance
+    id?: string | number;                 // Unique identifier for the instance
     tagName: string;                      // HTML element or custom component name
     
     // === Styling ===
@@ -83,6 +108,7 @@ interface ComponentAST {
     // === Content ===
     text?: string;                        // Simple text content
     textLines?: ITextLine[];              // Structured text with independent styles
+    backgroudImage?: string;              // Background image URL (note: preserved for compatibility)
     
     // === Structure ===
     children?: ComponentAST[];            // Nested components
@@ -95,10 +121,8 @@ interface ComponentAST {
     // === HTML Attributes ===
     attributes?: Record<string, string>;  // href, src, alt, target, etc.
     
-    // === Data for Specialized Components ===
-    productosIDs?: number[];              // Specific product IDs to display
-    categoriaID?: number;                 // Category ID for filtering
-    marcaID?: number;                     // Brand ID for filtering
+    // === Interactivity ===
+    onClick?: (id: number | string) => void; // Click handler function
     
     // === Accessibility ===
     aria?: AriaAttributes;                // ARIA properties
@@ -108,7 +132,7 @@ interface ComponentAST {
     seo?: SectionSEO;                     // SEO metadata
 }
 
-type SemanticTag = 'header' | 'main' | 'footer' | 'nav' | 'article' | 'aside' | 'section';
+type SemanticTag = 'header' | 'main' | 'footer' | 'nav' | 'article' | 'aside' | 'section' | 'div' | 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'a' | 'button' | 'img';
 ```
 
 ### ITextLine
@@ -285,41 +309,60 @@ If the `tagName` matches a registered component, the renderer delegates the logi
 
 ### Component Registry
 
-These are pre-built Svelte components that handle their own internal logic (buttons, modals, add-to-cart, etc.). The `ComponentAST` only needs to provide the data IDs.
+These are pre-built Svelte components that handle their own internal logic (buttons, modals, add-to-cart, etc.). The `ComponentAST` only needs to provide the data properties inherited from `ComponentProps`.
 
 | TagName | Description | Data Props |
 |:--------|:------------|:-----------|
 | `ProductCard` | Product card with image, price, and add-to-cart button | `productosIDs` |
 | `ProductCardHorizontal` | Horizontal product card with description | `productosIDs` |
-| `ProductGrid` | Grid of products with optional pagination | `productosIDs`, `categoriaID`, or `marcaID` |
-| `ProductCarousel` | Horizontal scrolling product slider | `productosIDs` |
-| `CategoryCard` | Category card with image and product count | `categoriaID` |
-| `CategoryGrid` | Grid of category cards | `categoriasIDs` |
+| `ProductGrid` | Grid of products with optional pagination | `productosIDs`, `categoriaID`, `marcaID`, `limit` |
+| `ProductCarousel` | Horizontal scrolling product slider | `productosIDs`, `limit` |
+| `CategoryCard` | Category card with image and product count | `categoriaID`, `title` |
+| `CategoryGrid` | Grid of category cards | `categoriaID`, `title` |
 | `SearchBar` | Product search with autocomplete | - |
 | `CartWidget` | Mini cart icon with count and dropdown | - |
 | `CartPage` | Full cart page with items list | - |
 | `Breadcrumb` | Navigation breadcrumb | - |
+| `Gallery` | Image gallery with lightbox | `gallery`, `title`, `iconImagen` |
+| `Banner` | Promotional banner with image | `title`, `secondaryImagen`, `iconImagen` |
 
 ### How Specialized Components Work
 
 Specialized components are self-contained. They:
-- Fetch their own data internally using the provided IDs
+- Fetch their own data internally using the provided properties from `ComponentProps`
 - Handle all user interactions (add to cart, quantity changes, etc.)
 - Manage their own modals and popups
 - Apply their own internal styling (can be customized via `css` prop)
 
 ```typescript
-// Usage in ComponentAST - just provide the IDs
+// Usage in ComponentAST - provide properties from ComponentProps
 {
     tagName: 'ProductGrid',
+    title: 'Featured Products',     // Section heading
     css: 'my-8',                    // Additional wrapper styles
-    productosIDs: [101, 102, 103, 104, 105, 106]
+    productosIDs: [101, 102, 103, 104, 105, 106],
+    limit: 8                        // Limit to 8 products
 }
 
-// Or filter by category
+// Or filter by category with custom title
 {
     tagName: 'ProductGrid',
-    categoriaID: 5                  // Shows all products from category 5
+    title: 'Summer Collection',     // Custom section title
+    categoriaID: 5,                 // Shows all products from category 5
+    limit: 12,                      // Show up to 12 products
+    iconImagen: '/icons/sun.svg'    // Optional icon for decoration
+}
+
+// Gallery component with images
+{
+    tagName: 'Gallery',
+    title: 'Product Showcase',
+    gallery: [
+        { image: '/img1.jpg', title: 'View 1', description: 'Front view' },
+        { image: '/img2.jpg', title: 'View 2', description: 'Side view' },
+        { image: '/img3.jpg', title: 'View 3', description: 'Detail view' }
+    ],
+    iconImagen: '/icons/camera.svg'
 }
 ```
 
@@ -825,14 +868,11 @@ const featuredProductsSection: ComponentAST = {
             css: 'max-w-7xl mx-auto',
             children: [
                 {
-                    tagName: 'h2',
-                    text: 'Featured Products',
-                    css: 'text-3xl font-bold text-[__COLOR:1__] text-center mb-12'
-                },
-                {
                     tagName: 'ProductGrid',
+                    title: 'Featured Products',  // Using title from ComponentProps
                     css: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6',
-                    productosIDs: [101, 102, 103, 104, 105, 106, 107, 108]
+                    productosIDs: [101, 102, 103, 104, 105, 106, 107, 108],
+                    limit: 8                      // Limit displayed products
                 },
                 {
                     tagName: 'div',
@@ -845,6 +885,39 @@ const featuredProductsSection: ComponentAST = {
                             attributes: { href: '/productos' }
                         }
                     ]
+                }
+            ]
+        }
+    ]
+};
+
+// Example with Gallery component
+const productGallerySection: ComponentAST = {
+    id: 'section-product-gallery',
+    tagName: 'section',
+    title: 'Product Gallery',  // Section title
+    css: 'py-16 px-4 bg-white',
+    
+    children: [
+        {
+            tagName: 'Gallery',
+            title: 'Product Views',
+            iconImagen: '/icons/gallery.svg',
+            gallery: [
+                { 
+                    image: '/products/1/front.jpg', 
+                    title: 'Front View', 
+                    description: 'Product from the front' 
+                },
+                { 
+                    image: '/products/1/side.jpg', 
+                    title: 'Side View', 
+                    description: 'Product from the side' 
+                },
+                { 
+                    image: '/products/1/detail.jpg', 
+                    title: 'Detail View', 
+                    description: 'Close-up detail' 
                 }
             ]
         }

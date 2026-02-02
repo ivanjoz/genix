@@ -55,6 +55,7 @@ export const productosServiceState = $state({
   productosMap: new Map(),
   categorias: [],
   categoriasMap: new Map(),
+  productosByCategoryMap: new Map(),
 } as IProductosResult)
 
 export type IFetch = (
@@ -66,6 +67,7 @@ export interface IProductosResult {
   productosMap: Map<number, IProducto>
   categorias: IProductoCategoria[]
   categoriasMap: Map<number, IProductoCategoria>
+  productosByCategoryMap: Map<number, IProducto[]>
 }
 
 export const getProductos = async (categoriasIDs?: number[]): Promise<IProductosResult> => {
@@ -95,6 +97,20 @@ export const getProductos = async (categoriasIDs?: number[]): Promise<IProductos
         productosServiceState.productosMap = res.productosMap
         productosServiceState.categorias = res.categorias
         productosServiceState.categoriasMap = res.categoriasMap
+
+        // Construir el mapa de productos por categoría
+        const productosByCategoryMap = new Map<number, IProducto[]>()
+        for (const producto of res.productos || []) {
+          if (producto.CategoriasIDs) {
+            for (const categoriaId of producto.CategoriasIDs) {
+              if (!productosByCategoryMap.has(categoriaId)) {
+                productosByCategoryMap.set(categoriaId, [])
+              }
+              productosByCategoryMap.get(categoriaId)!.push(producto)
+            }
+          }
+        }
+        productosServiceState.productosByCategoryMap = productosByCategoryMap
 
         resolve(res)
       })
@@ -133,10 +149,10 @@ export const getProductoByID = async (id: number): Promise<IProducto | undefined
 	return productosServiceState.productosMap.get(id);
 }
 
-export const getProductsByCategoryID = async (id: number): Promise<IProducto | undefined> => {
+export const getProductsByCategoryID = async (id: number): Promise<IProducto[]> => {
 	// 1. Si ya lo tenemos en el mapa, lo retornamos inmediatamente
-	const p = productosServiceState.productosMap.get(id);
-	if (p) return p;
+	const products = productosServiceState.productosByCategoryMap.get(id);
+	if (products) return products;
 
 	// 2. Si no hay productos cargados todavía, iniciamos o esperamos la carga inicial
 	if (productosServiceState.productos.length === 0) {
@@ -147,12 +163,12 @@ export const getProductsByCategoryID = async (id: number): Promise<IProducto | u
 		try {
 			await loadingPromise;
 		} catch (err) {
-			console.error("Error cargando productos para getProductoByID:", err);
-			return undefined;
+			console.error("Error cargando productos para getProductsByCategoryID:", err);
+			return [];
 		}
 	}
 
 	// 3. Después de cargar (o si ya había productos pero no el que buscamos), 
 	// buscamos en el mapa actualizado. Si no está aquí, es que no existe.
-	return productosServiceState.productosMap.get(id);
+	return productosServiceState.productosByCategoryMap.get(id) || [];
 }

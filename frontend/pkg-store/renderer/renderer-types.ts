@@ -54,7 +54,24 @@ export interface SectionSEO {
     indexable?: boolean;
 }
 
-export interface ComponentAST {
+export interface IGalleryImagen {
+	image: string
+	title: string
+	description: string
+}
+
+export interface ComponentProps {
+	title?: string
+ 	productosIDs?: number[];
+	categoriaID?: number;
+	marcaID?: number; /* product brand */
+	secondaryImagen?: string
+	iconImagen?: string
+	gallery?: IGalleryImagen[]
+	limit?: number, /* limit of elements to show (example: products) */
+}
+
+export interface ComponentAST extends ComponentProps {
     id?: string | number;
     tagName: string;
     css?: string;
@@ -68,12 +85,10 @@ export interface ComponentAST {
     description?: string;
     onClick?: (id: number | string) => void;
     attributes?: Record<string, string>;
-    productosIDs?: number[];
-    categoriaID?: number;
     marcaID?: number;
     aria?: AriaAttributes;
     semanticTag?: SemanticTag;
-    seo?: SectionSEO;
+    seo?: SectionSEO;    
 }
 
 export interface ColorPalette {

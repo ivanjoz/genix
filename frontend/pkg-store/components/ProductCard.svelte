@@ -1,47 +1,63 @@
 <script lang="ts">
-import { formatN, formatTime } from '$core/helpers';
-import { getProductoByID, type IProducto } from '$services/services/productos.svelte';
+	import { formatN } from "$core/helpers";
+	import {
+		getProductoByID,
+		type IProducto,
+	} from "$services/services/productos.svelte";
 
 	export interface IProductCard {
-		css?: string, productoID: number
+		css?: string;
+		productoID?: number;
+		producto?: IProducto;
 	}
 
-  const {
-    css = "", productoID
-  }: IProductCard = $props();
+	const { css = "", productoID, producto }: IProductCard = $props();
 
-  import ImageHash from '$components/Imagehash.svelte';
-  import { ProductsSelectedMap } from "./store.svelte";
+	import ImageHash from "$components/Imagehash.svelte";
+	import { ProductsSelectedMap } from "./store.svelte";
 
-  const prodCant = $derived.by(() => {
-    return ProductsSelectedMap.get(producto.ID)?.cant || 0
-  })
-  
-  let producto: IProducto = $state({} as IProducto)
-  
-  $effect(() => {
-  	console.log("obteniendo producto con ID::", productoID)
-  
-  	getProductoByID(productoID).then(p => { 
-   		console.log("producto obtenido::", p)
-   		if(p){ producto = p	}
-   	})	
-  })
+	let productoFetched: IProducto = $state(
+		producto || ({ ID: productoID || 0 } as IProducto),
+	);
+
+	const prodCant = $derived.by(() => {
+		return ProductsSelectedMap.get(productoFetched?.ID)?.cant || 0;
+	});
+
+	$effect(() => {
+		console.log("productoFetched", productoFetched)
+		if (producto && !productoFetched.Nombre) {
+			productoFetched = producto;
+		}
+	});
+
+	$effect(() => {
+		if (productoID && !productoFetched.Nombre) {
+			console.log("obteniendo producto con ID::", productoID);
+
+			getProductoByID(productoID).then((p) => {
+				console.log("producto obtenido::", p);
+				if (p) {
+					productoFetched = p;
+				}
+			});
+		}
+	});
 </script>
 
 <div class="relative _8">
 	<div class={["_1", css].join(" ")}>
 		<ImageHash
 			css="w-full h-[36vw] md:h-200"
-			src={producto.Image?.n}
+			src={productoFetched.Image?.n}
 			folder="img-productos"
 		/>
 		<div class="_3 pb-2">
 			<div class="_5 mt-6 mb-4 min-h-26 md:min-h-32 fx-c">
-				{producto.Nombre}
+				{productoFetched.Nombre || "???"}
 			</div>
 			<div class="px-4 ff-bold fs17">
-				s/. {formatN(producto.PrecioFinal / 100, 2)}
+				s/. {formatN(productoFetched.PrecioFinal / 100, 2)}
 			</div>
 			<div class="_6 fx-c h-30 w-32">
 				<i class="icon1-basket"></i>
@@ -52,7 +68,10 @@ import { getProductoByID, type IProducto } from '$services/services/productos.sv
 			onclick={(ev) => {
 				ev.stopPropagation();
 				console.log("hola");
-				ProductsSelectedMap.set(productoID, { cant: prodCant + 1, producto });
+				ProductsSelectedMap.set(productoFetched.ID, {
+					cant: prodCant + 1,
+					producto,
+				});
 				console.log("ProductsSelectedMap", ProductsSelectedMap);
 			}}
 		>
