@@ -115,8 +115,15 @@
 	role="navigation"
 	aria-label="Main navigation"
 >
-	<div class="flex items-center h-48 border-b border-gray-800/30 w-full overflow-hidden">
-		<div class="_1 flex items-center">
+	<div class="flex items-center h-48 border-b border-gray-800/30 w-full overflow-hidden"
+		class:minimal-menu={Core.useTopMinimalMenu}
+	>
+		{#if Core.useTopMinimalMenu}
+			<div class="menu-header-backgroud absolute top-0 z-0 w-full h-48 p-6">
+				<div class="w-full h-full rounded-[8px]"></div>
+			</div>
+		{/if}
+		<div class="_1 flex items-center z-10">
 			<img class="w-42 h-42 shrink-0" src="/images/genix_logo4.svg" alt="">
 			<div class="_2 white ff-bold h2 -m-3 whitespace-nowrap">enix</div>
 			{#if Core.useTopMinimalMenu}
@@ -614,6 +621,18 @@
 	.mobile-menu-option.is-active .option-text {
 		color: #5b21b6 !important;
 		transition: none !important;
+	}
+	
+	.minimal-menu {
+		background-color: #4f39f6;
+	}
+	
+	.d-menu:not(:hover) .menu-header-backgroud > div {
+  	background-color: #0000001f;
+	}
+	
+	.d-menu:hover .menu-header-backgroud {
+  	background-color: #0000001f;
 	}
 
 	/* View Transitions for Mobile Menu */
