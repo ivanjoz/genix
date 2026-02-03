@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { sectionTemplates } from '../../../pkg-store/ecommerce-templates/templates/index';
-  import type { SectionTemplate } from '../../../pkg-store/renderer/renderer-types';
+  import { SectionList } from '../../../pkg-store/sections/registry';
 
   interface Props {
-    onSelect: (template: SectionTemplate) => void;
+    onSelect: (template: { id: string }) => void;
   }
 
   let { onSelect }: Props = $props();
@@ -11,22 +10,21 @@
   let searchQuery = $state('');
   let selectedCategory = $state('all');
 
-  const categories = ['all', ...new Set(sectionTemplates.map(t => t.category))];
+  const categories = ['all', ...new Set(SectionList.map(t => t.category))];
 
   const filteredTemplates = $derived(() => {
-    return sectionTemplates.filter(t => {
-      const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                           t.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    return SectionList.filter(t => {
+      const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = selectedCategory === 'all' || t.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
   });
-  function handleDragStart(e: DragEvent, template: SectionTemplate) {
+
+  function handleDragStart(e: DragEvent, template: any) {
     if (!e.dataTransfer) return;
     e.dataTransfer.setData('application/x-genix-template', JSON.stringify(template));
     e.dataTransfer.effectAllowed = 'copy';
     
-    // Optional: set a drag image or just let the browser handle it
     const target = e.target as HTMLElement;
     target.style.opacity = '0.5';
   }
@@ -71,7 +69,6 @@
         <div class="template-icon">🧩</div>
         <div class="template-info">
           <div class="template-name">{template.name}</div>
-          <div class="template-desc">{template.description}</div>
           <div class="template-tag">{template.category}</div>
         </div>
       </button>
@@ -166,13 +163,6 @@
     font-weight: 600;
     color: #f1f5f9;
     margin-bottom: 2px;
-  }
-
-  .template-desc {
-    font-size: 11px;
-    color: #64748b;
-    margin-bottom: 6px;
-    line-height: 1.4;
   }
 
   .template-tag {

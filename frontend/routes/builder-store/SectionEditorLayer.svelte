@@ -1,26 +1,18 @@
 <script lang="ts">
-  import type { ColorPalette, SectionTemplate } from '../../pkg-store/renderer/renderer-types';
-  import type { EditableField, SelectedSection } from './EcommerceBuilder.svelte';
+  import type { ColorPalette } from '../../pkg-store/renderer/renderer-types';
+  import { editorStore } from '../../pkg-store/stores/editor.svelte';
   import EditorTab from './components/EditorTab.svelte';
   import TemplatesTab from './components/TemplatesTab.svelte';
   import AIChatTab from './components/AIChatTab.svelte';
   import ConfigTab from './components/ConfigTab.svelte';
 
   interface Props {
-    open: boolean;
-    section: SelectedSection | null;
     palette?: ColorPalette;
-    onFieldUpdate: (field: EditableField, newValue: string) => void;
-    onTemplateSelect: (template: SectionTemplate) => void;
     onClose: () => void;
   }
 
   let {
-    open = $bindable(),
-    section,
     palette,
-    onFieldUpdate,
-    onTemplateSelect,
     onClose
   }: Props = $props();
 
@@ -33,12 +25,20 @@
     { id: 'config', name: 'Config', icon: '⚙️' }
   ];
 
-  function handleTemplateSelect(template: SectionTemplate) {
-    onTemplateSelect(template);
+  // Auto-switch to editor tab when a section is selected
+  $effect(() => {
+    if (editorStore.selectedId) {
+      activeTabId = 'editor';
+    }
+  });
+
+  function handleClose() {
+    editorStore.select(null);
+    onClose();
   }
 </script>
 
-<div class="editor-layer">
+<div class="editor-layer" class:open={editorStore.selectedId !== null}>
   <div class="layer-inner">
     <div class="layer-header">
       <div class="tab-nav">
@@ -54,12 +54,18 @@
           </button>
         {/each}
       </div>
+      
+      {#if editorStore.selectedId}
+        <button class="close-btn" onclick={handleClose} title="Close Editor">
+          ✕
+        </button>
+      {/if}
     </div>
 
     <div class="layer-content">
       {#if activeTabId === 'editor'}
-        {#if section}
-          <EditorTab {section} {onFieldUpdate} />
+        {#if editorStore.selectedSection && editorStore.activeSchema}
+          <EditorTab />
         {:else}
           <div class="empty-state">
             <span class="empty-icon">👆</span>
@@ -67,7 +73,7 @@
           </div>
         {/if}
       {:else if activeTabId === 'templates'}
-        <TemplatesTab onSelect={handleTemplateSelect} />
+        <TemplatesTab onSelect={(template) => editorStore.addSection(template.id)} />
       {:else if activeTabId === 'chat'}
         <AIChatTab />
       {:else if activeTabId === 'config'}
@@ -92,12 +98,11 @@
     color: #e2e8f0;
   }
 
-  .editor-layer:hover {
+  .editor-layer:hover, .editor-layer.open {
     width: 400px;
     box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
   }
 
-  /* Fixed width container to prevent internal resizing/squishing */
   .layer-inner {
     width: 400px;
     height: 100%;
@@ -113,12 +118,15 @@
     border-bottom: 1px solid #334155;
     flex-shrink: 0;
     padding-top: 8px;
+    display: flex;
+    align-items: center;
   }
 
   .tab-nav {
     display: flex;
     padding: 0 12px 12px;
     gap: 6px;
+    flex: 1;
   }
 
   .tab-btn {
@@ -158,6 +166,20 @@
     letter-spacing: 0.8px;
   }
 
+  .close-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 8px 16px;
+    align-self: flex-start;
+  }
+
+  .close-btn:hover {
+    color: white;
+  }
+
   .layer-content {
     flex: 1;
     overflow-y: auto;
@@ -179,12 +201,6 @@
     margin-bottom: 12px;
   }
 
-  .empty-state p {
-    margin: 0;
-    font-size: 14px;
-  }
-
-  /* Custom Scrollbar */
   .layer-content::-webkit-scrollbar {
     width: 6px;
   }

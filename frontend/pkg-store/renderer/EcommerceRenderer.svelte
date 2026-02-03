@@ -1,97 +1,42 @@
 <script lang="ts" module>
-  export * from './renderer-types';
+  export * from './section-types';
 </script>
 
 <script lang="ts">
-  import type { ComponentAST, ColorPalette } from './renderer-types';
-  import { resolveTokens, generatePaletteStyles } from './token-resolver';
-  import ProductCard from '$store/components/ProductCard.svelte';
-  import ProductCardHorizonal from '$store/components/ProductCardHorizonal.svelte';
+  import type { SectionData } from './section-types';
+  import { SectionRegistry } from '../sections/registry';
+  import { generatePaletteStyles } from './token-resolver';
+  import type { ColorPalette } from './renderer-types';
 
   interface Props {
-    elements: ComponentAST | ComponentAST[];
-    values?: Record<string, string>;
+    elements: SectionData[];
     palette?: ColorPalette;
     isRoot?: boolean;
   }
 
   const {
-    elements,
-    values = {},
+    elements = [],
     palette,
     isRoot = true
   }: Props = $props();
 
-  const handleClick = (element: ComponentAST) => {
-    if (element.onClick) {
-      element.onClick(element.id || 0);
-    }
-  };
-
-  function getResolvedCss(element: ComponentAST) {
-    return resolveTokens(element.css, element.variables, values, palette);
-  }
-
-  function getResolvedLineCss(css: string, variables: any[]) {
-     return resolveTokens(css, variables, values, palette);
-  }
-
   const paletteStyles = $derived(isRoot ? generatePaletteStyles(palette) : '');
 </script>
 
-{#snippet renderElement(element: ComponentAST, depth: number)}
-  {#if !element}
-    <!-- Skip null elements -->
-  {:else if element.tagName === 'ProductCard'}
-    {#if element.productos}
-      {#each element.productos as producto}
-        <ProductCard productoID={producto.ID} css={getResolvedCss(element)}/>
-      {/each}
+<div class="ecommerce-render" style={paletteStyles}>
+  {#each elements as element (element.id)}
+    {@const Config = SectionRegistry[element.type]}
+    {#if Config}
+      <Config.component 
+        content={element.content} 
+        css={element.css} 
+        {...element.attributes} 
+      />
+    {:else}
+      <div class="bg-red-50 p-4 border border-red-200 text-red-600 my-4 mx-auto max-w-4xl rounded">
+        <strong>Error:</strong> Unknown section type "<code>{element.type}</code>". 
+        Check if the component exists in <code>pkg-store/sections/templates/</code> and the registry is updated.
+      </div>
     {/if}
-  {:else if element.tagName === 'ProductCardHorizonal'}
-    {#if element.productos}
-      {#each element.productos as producto}
-        <ProductCardHorizonal productoID={producto.ID} css={getResolvedCss(element)}/>
-      {/each}
-    {/if}
-  {:else}
-    {@const Tag = element.semanticTag || (element.tagName as any) || 'div'}
-    <svelte:element 
-      this={Tag}
-      class={getResolvedCss(element)} 
-      style={`${element.style || ''} ${depth === 0 ? paletteStyles : ''}`}
-      onclick={() => handleClick(element)}
-      {...element.attributes}
-      aria-label={element.aria?.label}
-      role={element.aria?.role}
-      aria-hidden={element.aria?.hidden}
-    >
-      {#if element.text}
-        {element.text}
-      {/if}
-
-      {#if element.textLines}
-        {#each element.textLines as line}
-          {@const LineTag = line.tag || 'span'}
-          <svelte:element this={LineTag} class={getResolvedLineCss(line.css, element.variables || [])}>
-            {line.text}
-          </svelte:element>
-        {/each}
-      {/if}
-
-      {#if element.children}
-        {#each element.children as child}
-          {@render renderElement(child, depth + 1)}
-        {/each}
-      {/if}
-    </svelte:element>
-  {/if}
-{/snippet}
-
-{#if Array.isArray(elements)}
-  {#each elements as element}
-    {@render renderElement(element, 0)}
   {/each}
-{:else}
-  {@render renderElement(elements, 0)}
-{/if}
+</div>
