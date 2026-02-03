@@ -25,15 +25,15 @@ The following fields are automatically added to every generated base struct, as 
 
 ## Usage
 
-Run the script from the project root directory using `go run`:
+Run the script from the project root directory using the `app.sh` wrapper:
 
 ```bash
-go run scripts/new_table_script.go <output_path> <table_name> [field:type:key]...
+./app.sh new_table <output_path> <table_name> [field:type:key]...
 ```
 
 ### Arguments
 
--   `<output_path>`: The relative path and filename for the output Go file (e.g., `backend/types/my_new_table.go`).
+-   `<output_path>`: The relative path and filename for the output Go file. Note that `app.sh` runs from the `scripts/` directory, so you should use paths relative to it (e.g., `../backend/types/my_new_table.go`).
 -   `<table_name>`: The name of the table in snake_case (e.g., `my_new_table`).
 -   `[field:type:key]...`: A space-separated list of fields to add to the table.
 
@@ -48,5 +48,5 @@ Each field is defined as a colon-separated string: `fieldName:type[:key]`
 ### Example
 
 ```bash
-go run scripts/new_table_script.go backend/types/customer_profile.go customer_profile first_name:string last_name:string age:int32 'tags:[]string' customer_number:int64:key
+./app.sh new_table ../backend/types/customer_profile.go customer_profile first_name:string last_name:string age:int32 'tags:[]string' demo_number:int64:key
 ```

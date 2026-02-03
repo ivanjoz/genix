@@ -1,4 +1,4 @@
-import { SectionRegistry } from '../sections/registry'; // Note: This will be generated in Step 3/4
+import { SectionRegistry } from '../templates/registry'; // Note: This will be generated in Step 3/4
 import type { SectionData, SectionSchema } from '../renderer/section-types';
 
 class EditorStore {
@@ -46,11 +46,31 @@ class EditorStore {
     const schema = SectionRegistry?.[type]?.schema;
     if (!schema) return;
 
+    // Generate dummy content based on schema
+    const dummyContent: any = {};
+    if (schema.content) {
+      schema.content.forEach(key => {
+        if (key === 'title') dummyContent[key] = 'Example Title';
+        else if (key === 'subTitle') dummyContent[key] = 'Example Subtitle';
+        else if (key === 'description') dummyContent[key] = 'This is a description for your new section. You can edit this text in the editor tab.';
+        else if (key === 'primaryActionLabel') dummyContent[key] = 'Get Started';
+        else if (key === 'primaryActionHref') dummyContent[key] = '#';
+        else if (key === 'textLeft' || key === 'textCenter' || key === 'textRight') dummyContent[key] = 'Sample text for ' + key;
+        else if (key === 'image' || key === 'bgImage') dummyContent[key] = 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=2070&auto=format&fit=crop';
+        else if (key === 'textLines') dummyContent[key] = [
+          { text: 'Feature One: High performance and reliability', css: '' },
+          { text: 'Feature Two: User-friendly interface and experience', css: '' },
+          { text: 'Feature Three: 24/7 dedicated support team', css: '' }
+        ];
+        else if (key === 'productosIDs') dummyContent[key] = [1, 2, 3, 4];
+      });
+    }
+
     const newSection: SectionData = {
       id: crypto.randomUUID(),
       type: type,
       category: schema.category,
-      content: {},
+      content: dummyContent,
       css: {}
     };
 

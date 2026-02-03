@@ -36,11 +36,16 @@ func NewTable(args []string) {
 	tableNameSnake := args[1]
 	tableNameCamel := toCamelCase(tableNameSnake)
 
+	backendDir := "backend"
+	if _, err := os.Stat(backendDir); os.IsNotExist(err) {
+		backendDir = "../backend"
+	}
+
 	// Check if the type is already declared
-	if isTypeDeclared("../backend", tableNameCamel) {
+	if isTypeDeclared(backendDir, tableNameCamel) {
 		log.Fatalf("Error: Type %s is already declared in the backend.", tableNameCamel)
 	}
-	if isTypeDeclared("../backend", tableNameCamel+"Table") {
+	if isTypeDeclared(backendDir, tableNameCamel+"Table") {
 		log.Fatalf("Error: Type %s is already declared in the backend.", tableNameCamel+"Table")
 	}
 

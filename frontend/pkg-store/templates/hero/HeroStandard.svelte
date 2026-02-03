@@ -29,17 +29,9 @@
   }
 
   let { content, css }: Props = $props();
-
-  // Default classes if not provided
-  const containerClass = $derived(css.container || 'relative py-24 px-6 overflow-hidden bg-slate-900 text-white min-h-[60vh] flex items-center');
-  const contentBoxClass = $derived(css.contentBox || 'relative z-10 max-w-4xl mx-auto w-full');
-  const titleClass = $derived(css.title || 'text-5xl md:text-7xl font-black mb-6 leading-tight');
-  const subTitleClass = $derived(css.subTitle || 'text-xl md:text-2xl font-medium mb-4 text-blue-400 uppercase tracking-wider');
-  const descClass = $derived(css.description || 'text-lg md:text-xl text-slate-300 mb-8 max-w-2xl');
-  const buttonClass = $derived(css.button || 'inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105');
 </script>
 
-<section class={containerClass}>
+<section class="relative py-24 px-6 overflow-hidden bg-slate-900 text-white min-h-[60vh] flex items-center {css.container || ''}">
   {#if content.bgImage}
     <div class="absolute inset-0 z-0">
       <img 
@@ -51,17 +43,17 @@
     </div>
   {/if}
 
-  <div class={contentBoxClass}>
+  <div class="relative z-10 max-w-4xl mx-auto w-full {css.contentBox || ''}">
     {#if content.subTitle}
-      <p class={subTitleClass}>{content.subTitle}</p>
+      <p class="text-xl md:text-2xl font-medium mb-4 text-blue-400 uppercase tracking-wider {css.subTitle || ''}">{content.subTitle}</p>
     {/if}
     
     {#if content.title}
-      <h1 class={titleClass}>{content.title}</h1>
+      <h1 class="text-5xl md:text-7xl font-black mb-6 leading-tight {css.title || ''}">{content.title}</h1>
     {/if}
 
     {#if content.description}
-      <p class={descClass}>{content.description}</p>
+      <p class="text-lg md:text-xl text-slate-300 mb-8 max-w-2xl {css.description || ''}">{content.description}</p>
     {/if}
 
     <!-- Example of supporting specific text placements -->
@@ -81,7 +73,7 @@
 
     {#if content.primaryActionLabel}
       <div class="mt-4">
-        <a href={content.primaryActionHref || '#'} class={buttonClass}>
+        <a href={content.primaryActionHref || '#'} class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 {css.button || ''}">
           {content.primaryActionLabel}
         </a>
       </div>

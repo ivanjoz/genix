@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SectionList } from '../../../pkg-store/sections/registry';
+  import { SectionList } from '../../../pkg-store/templates/registry';
 
   interface Props {
     onSelect: (template: { id: string }) => void;

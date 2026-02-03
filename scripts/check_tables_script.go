@@ -13,9 +13,14 @@ import (
 func CheckTables() {
 	fmt.Println("Checking tables...")
 
+	backendDir := "backend"
+	if _, err := os.Stat(backendDir); os.IsNotExist(err) {
+		backendDir = "../backend"
+	}
+
 	cfg := &packages.Config{
 		Mode:  packages.LoadSyntax | packages.LoadTypes,
-		Dir:   "../backend",
+		Dir:   backendDir,
 		Tests: false,
 	}
 

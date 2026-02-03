@@ -9,7 +9,7 @@
      "**/.git/**",
      "**/ai/**",
      "**/.vscode/**",
-     "**/docs/**",
+     "./docs/**",
      "**/store_deprecated/**",
 	]
 }

@@ -5,18 +5,32 @@
   import SectionEditorLayer from './SectionEditorLayer.svelte';
   import BuilderSectionRender from './BuilderSectionRender.svelte';
 
+  import type { SectionData } from '../../pkg-store/renderer/section-types';
+
   interface Props {
+    elements?: SectionData[];
+    values?: Record<string, string>;
     palette?: ColorPalette;
-    onUpdate?: (sections: any[]) => void;
+    onUpdate?: (sections: SectionData[]) => void;
   }
 
   let {
+    elements = [],
+    values = {},
     palette,
     onUpdate
   }: Props = $props();
 
+  // Initialize editorStore with elements if provided
+  $effect(() => {
+    if (elements.length > 0 && editorStore.sections.length === 0) {
+      editorStore.sections = [...elements];
+    }
+  });
+
   let isDraggingOver = $state(false);
   let dropIndex = $state<number | null>(null);
+  let dragCounter = 0;
 
   function handleSectionDragStart(e: DragEvent, idx: number) {
     if (!e.dataTransfer) return;
@@ -41,6 +55,7 @@
   function handleDrop(e: DragEvent) {
     e.preventDefault();
     isDraggingOver = false;
+    dragCounter = 0;
     
     const targetIndex = dropIndex ?? editorStore.sections.length;
     
@@ -73,15 +88,37 @@
 <div class="ecommerce-builder">
   <div 
     class="builder-canvas" 
+    class:is-dragging-over={isDraggingOver}
     ondrop={handleDrop}
+    ondragenter={(e) => {
+      e.preventDefault();
+      dragCounter++;
+      isDraggingOver = true;
+    }}
     ondragover={(e) => {
       e.preventDefault();
+      isDraggingOver = true;
       if (e.target === e.currentTarget) {
-        dropIndex = editorStore.sections.length;
-        isDraggingOver = true;
+        const sections = e.currentTarget.querySelectorAll('.section-wrapper');
+        if (sections.length > 0) {
+          const lastSection = sections[sections.length - 1];
+          const rect = lastSection.getBoundingClientRect();
+          if (e.clientY > rect.bottom) {
+            dropIndex = editorStore.sections.length;
+          }
+        } else {
+          dropIndex = 0;
+        }
       }
     }}
-    ondragleave={() => { isDraggingOver = false; dropIndex = null; }}
+    ondragleave={(e) => {
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        isDraggingOver = false; 
+        dropIndex = null;
+      }
+    }}
   >
     {#each editorStore.sections as section, idx (section.id)}
       {#if isDraggingOver && dropIndex === idx}
@@ -93,7 +130,11 @@
         index={idx}
         {paletteStyles}
         onDragStart={handleSectionDragStart}
-        onDragEnd={() => {}}
+        onDragEnd={() => {
+          isDraggingOver = false;
+          dropIndex = null;
+          dragCounter = 0;
+        }}
         onDragOver={handleDragOver}
       />
       
@@ -131,6 +172,10 @@
     padding-bottom: 200px;
   }
 
+  .builder-canvas.is-dragging-over :global(.section-content) {
+    pointer-events: none;
+  }
+
   .empty-canvas {
     height: 60vh;
     display: flex;
@@ -162,6 +207,7 @@
     align-items: center;
     justify-content: center;
     animation: placeholder-pulse 1.5s infinite ease-in-out;
+    pointer-events: none;
   }
 
   .placeholder-content {

@@ -1,12 +1,13 @@
 <script lang="ts">
     import EcommerceBuilder from './EcommerceBuilder.svelte';
     import { storeExample } from './store-example';
-    import type { ColorPalette, ComponentAST } from '../../pkg-store/renderer/renderer-types';
+    import type { ColorPalette } from '../../pkg-store/renderer/renderer-types';
+    import type { SectionData } from '../../pkg-store/renderer/section-types';
     import "$ui/libs/fontello-prerender.css";
     import Header from '$store/components/Header.svelte';
     import Page from '$ui/Page.svelte';
 
-    let elements = $state<ComponentAST[]>(storeExample);
+    let elements = $state<SectionData[]>(storeExample);
     let values = $state<Record<string, string>>({});
 
     const defaultPalette: ColorPalette = {
@@ -26,7 +27,7 @@
         ]
     };
 
-    function handleUpdate(updated: ComponentAST | ComponentAST[]) {
+    function handleUpdate(updated: SectionData[]) {
         console.log('Store updated:', updated);
     }
 </script>

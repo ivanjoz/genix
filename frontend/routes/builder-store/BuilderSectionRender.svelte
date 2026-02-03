@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { SectionData } from '../../pkg-store/renderer/section-types';
-  import { SectionRegistry } from '../../pkg-store/sections/registry';
+  import { SectionRegistry } from '../../pkg-store/templates/registry';
   import { editorStore } from '../../pkg-store/stores/editor.svelte';
 
   interface Props {
@@ -87,7 +87,7 @@
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.2s ease;
-    z-index: 9999;
+    z-index: 51;
   }
 
   .section-wrapper:hover .section-outline {
