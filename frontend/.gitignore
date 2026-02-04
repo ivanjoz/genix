@@ -25,3 +25,8 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Store images: only keep .avif and .md
+static/store-images/*
+!static/store-images/*.avif
+!static/store-images/*.md

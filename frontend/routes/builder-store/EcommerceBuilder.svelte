@@ -87,9 +87,7 @@
 
 <svelte:head>
   {#if liveCSS.css}
-    <style id="live-tailwind-jit">
-      {liveCSS.css}
-    </style>
+    {@html `<style id="live-tailwind-jit">${liveCSS.css}</style>`}
   {/if}
 </svelte:head>
 

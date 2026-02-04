@@ -6,6 +6,7 @@
 	"file_scan_exclusions": [
 	  "**/node_modules",
 		"**/build",
-		"**/static",
+		"**/static/*.js",
+		"**/static/*.svg",
 	],
 }
