@@ -2,6 +2,7 @@
   import type { ColorPalette } from '../../pkg-store/renderer/renderer-types';
   import { generatePaletteStyles } from '../../pkg-store/renderer/token-resolver';
   import { editorStore } from '../../pkg-store/stores/editor.svelte';
+  import { liveCSS } from '../../pkg-store/stores/live-css.svelte';
   import SectionEditorLayer from './SectionEditorLayer.svelte';
   import BuilderSectionRender from './BuilderSectionRender.svelte';
 
@@ -26,6 +27,14 @@
     if (elements.length > 0 && editorStore.sections.length === 0) {
       editorStore.sections = [...elements];
     }
+  });
+
+  // Live Tailwind compilation
+  $effect(() => {
+    // Track changes to any CSS property in any section
+    // We stringify the CSS objects to ensure the effect re-runs on any deep change
+    const cssData = JSON.stringify(editorStore.sections.map(s => s.css));
+    liveCSS.update();
   });
 
   let isDraggingOver = $state(false);
@@ -75,6 +84,14 @@
 
   const paletteStyles = $derived(generatePaletteStyles(palette));
 </script>
+
+<svelte:head>
+  {#if liveCSS.css}
+    <style id="live-tailwind-jit">
+      {liveCSS.css}
+    </style>
+  {/if}
+</svelte:head>
 
 {#snippet renderPlaceholder()}
   <div class="drop-placeholder">

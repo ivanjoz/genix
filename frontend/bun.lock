@@ -42,7 +42,6 @@
         "svelte": "^5.39.5",
         "svelte-check": "^4.3.2",
         "svelte-infinitable": "^0.0.14",
-        "tailwindcss": "^4.1.13",
         "typescript": "^5.9.2",
         "vite": "npm:rolldown-vite@latest",
       },

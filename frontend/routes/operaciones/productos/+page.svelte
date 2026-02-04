@@ -143,6 +143,12 @@ import CategoriasMarcas from '$routes/operaciones/productos/CategoriasMarcas.sve
       Notify.failure("El nombre debe tener al menos 4 caracteres.");
       return;
     }
+    if(imageUploaderHandler){
+      Loading.standard("Guardando imagen...");
+    	await imageUploaderHandler()
+     	productoForm._imageSource = undefined
+      Loading.change("Guardando producto...")
+    }
 
     console.log("productor a enviar:", $state.snapshot(productoForm));
 
@@ -327,6 +333,7 @@ import CategoriasMarcas from '$routes/operaciones/productos/CategoriasMarcas.sve
             onChange={(e, uploadHandler) => {
               imageUploaderHandler = uploadHandler;
               productoForm._imageSource = e;
+              productoForm.Image = undefined
             }}
             onUploaded={(imagePath, description) => {
               if (imagePath.includes("/")) {

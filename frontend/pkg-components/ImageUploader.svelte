@@ -5,6 +5,7 @@ import { Notify, fileToImage } from '$core/helpers';
 import { Env } from '$core/env';
 import { imagesToUpload } from '$core/store.svelte';
 import type { IImageResult } from '$core/types/common';
+    import Page from '$routes/operaciones/ventas/+page.svelte';
 
 export interface IImageInput {
   content: string;
@@ -34,7 +35,7 @@ export interface IImageUploaderProps {
   description?: string;
   cardStyle?: string;
   onDelete?: (src: string) => void;
-  onChange?: (e: ImageSource, uploadImage?: () => void) => void
+  onChange?: (e: ImageSource, uploadImage?: () => Promise<IImageResult>) => void
   cardCss?: string;
   hideFormUseMessage?: string;
   hideUploadButton?: boolean;
@@ -78,7 +79,11 @@ const imageID = id || Env.imageCounter
 // Update imageSrc when props change
 $effect(() => {
   src; imageSource;
-  imageSrc = imageSource || { src, base64: "", types, description };
+  untrack(() => {
+  	imageSrc = imageSource || { src, base64: "", types, description }
+   	progress = (src || imageSource?.base64) ? -1 : 0
+	  console.log("progress (1)::", $state.snapshot(progress),"|",$state.snapshot(src),"|",$state.snapshot(imageSource))
+  })
 })
 
 const makeImageSrc = (format?: string) => {
@@ -166,17 +171,17 @@ const uploadImage = async (): Promise<IImageResult> => {
 
   if (clearOnUpload) {
     imageSrc = { src: '', base64: '', types: [], description: '' };
-    // progress = 0;
   } else {
-    // progress = -1;
     imageSrc = { src: `${result.imageName}-x2`, base64: '', types: ['webp', 'avif'], description: imageSrc.description };
   }
 
-  progress = -1;
+  console.log("image src 1::",$state.snapshot(progress), $state.snapshot(imageSrc),"clearOnUpload",clearOnUpload)
   if (onUploaded) {
     onUploaded(result.imageName, result.description);
   }
 
+  progress = -1
+  console.log("image src 2::",$state.snapshot(progress), $state.snapshot(imageSrc),"clearOnUpload",clearOnUpload)
   return result;
 };
 
@@ -213,6 +218,11 @@ $effect(() => {
 onDestroy(() => {
   imagesToUpload.delete(imageID as number);
 });
+
+$effect(() => {
+  console.log("progress (2)::", $state.snapshot(progress))
+})
+
 
 </script>
 

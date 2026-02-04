@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/types"
 	"log"
+	"os"
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
