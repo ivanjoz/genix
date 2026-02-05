@@ -389,8 +389,19 @@ export function initWebRTC(signalingEndpoint?: string): void {
 	webRTCManager.initialize(signalingEndpoint);
 }
 
+const USE_WEBRTC = false
+
 // Convenience functions to use in components
 export function useWebRTC() {
+	if (!USE_WEBRTC) {
+		return {
+			subscribe: (callback: () => void) => {},
+			reconnect: () => {},
+			disconnect: () => { },
+			getConnectionStatus: () => {} 
+		}	
+	}
+	
 	return {
 		state: webRTCManager.stateValue,
 		isConnected: webRTCManager.isConnected,

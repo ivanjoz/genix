@@ -30,3 +30,25 @@ For a general overview of the project, technology stack, and migration status, p
 ## Backend
 
 The backend is written in Go and uses ScyllaDB/Cassandra as its database. The backend code is located in the `backend/` directory.
+
+## Key Documentation Files
+
+### Project Overview
+- **README.md** - General project overview: ERP+Ecommerce for small businesses
+
+### Deployment
+- **DEPLOYMENT.md** - Deployment options including AWS Lambda + ScyllaDB on VPS/EC2, self-host deployment with systemd
+
+### Backend Documentation
+- **backend/README.md** - Brief overview of the Go backend for Genix
+- **backend/docs/ORM_DATABASE_QUERY.md** - Comprehensive ScyllaDB ORM documentation covering model definitions, CRUD operations, query building
+
+### Frontend Documentation
+- **frontend/FRONTEND.md** - Monorepo architecture with independent store app, directory structure, package system, development workflow
+- **frontend/UI_COMPONENTS.md** - UI component library documentation: Page, OptionsStrip, Layer/Modal components, form components, VTable, services
+- **frontend/STORE.md** - Store integration notes: thumbhash implementation, store routes, CSS hashing
+
+### Scripts
+- **scripts/NEW_TABLE_SCRIPT.md** - Generates boilerplate code for new database tables following ORM conventions. Use always.
+- **scripts/CHECK_TABLES_SCRIPT.md** - Validates data model conventions for the custom ORM
+- **scripts/SCRIPTS.md** - Central dispatcher and wrapper script management for project utilities

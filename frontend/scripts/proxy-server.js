@@ -66,7 +66,7 @@ storeProxy.on('proxyErrorWs', (err, req, socket) => {
 
 // Create main HTTP server
 const server = http.createServer((req, res) => {
-  const isStore = req.url.startsWith('/store');
+  const isStore = req.url === '/store' || req.url.startsWith('/store/');
   const isServiceWorkerComm = req.url.startsWith('/_sw_');
   
   if (isStore) {
@@ -85,7 +85,7 @@ const server = http.createServer((req, res) => {
 
 // Handle WebSocket upgrade requests
 server.on('upgrade', (req, socket, head) => {
-  const isStore = req.url.startsWith('/store');
+  const isStore = req.url === '/store' || req.url.startsWith('/store/');
   
   if (isStore) {
     console.log(`[WS Upgrade] ${req.url} → Store`);

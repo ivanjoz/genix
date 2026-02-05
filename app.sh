@@ -14,10 +14,15 @@ case "$1" in
     echo "Executing new_table script..."
     (cd scripts && go run . new_table "${@:2}")
     ;;
+  "new_table_column")
+    # For "new_table_column", execute the Go script and pass along all following arguments.
+    echo "Executing new_table_column script..."
+    (cd scripts && go run . new_table_column "${@:2}")
+    ;;
   *)
     # If the command is not recognized, show an error and usage instructions.
     echo "Unknown command: $1"
-    echo "Usage: $0 {check_tables|new_table}"
+    echo "Usage: $0 {check_tables|new_table|new_table_column}"
     exit 1
     ;;
 esac
