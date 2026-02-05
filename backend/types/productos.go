@@ -254,7 +254,7 @@ type AlmacenProducto struct {
 	Updated        int32   `json:"upd,omitempty" db:"updated,view.1"`
 	UpdatedBy      int32   `json:",omitempty" db:"updated_by"`
 	Status         int8    `json:"ss,omitempty" db:"status,view,view.1"`
-}
+}	
 
 type AlmacenProductoTable struct {
 	db.TableStruct[AlmacenProductoTable, AlmacenProducto]
@@ -275,10 +275,11 @@ type AlmacenProductoTable struct {
 
 func (e AlmacenProductoTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:         "almacen_producto",
-		Partition:    e.EmpresaID,
-		Keys:         []db.Coln{e.ID},
-		LocalIndexes: []db.Coln{e.SKU, e.Lote},
+		Name:            "almacen_producto",
+		Partition:       e.EmpresaID,
+		Keys:            []db.Coln{e.ID},
+		KeyConcatenated: []db.Coln{e.AlmacenID, e.ProductoID, e.PresentacionID, e.SKU, e.Lote},
+		LocalIndexes:    []db.Coln{e.SKU, e.Lote},
 		Views: []db.View{
 			{
 				Cols:      []db.Coln{e.ProductoID, e.Status},
@@ -294,19 +295,6 @@ func (e AlmacenProductoTable) GetSchema() db.TableSchema {
 	}
 }
 
-func (e *AlmacenProducto) SelfParse() {
-	e.ID = Concat62(e.AlmacenID, e.ProductoID, e.PresentacionID, e.SKU, e.Lote)
-}
-
-/*
-func (e *AlmacenProducto) GetView(view int8) any {
-	if view == 1 {
-		return int64(e.AlmacenID)*1e9 + int64(e.Updated)
-	} else {
-		return 0
-	}
-}
-*/
 
 type AlmacenMovimiento struct {
 	db.TableStruct[AlmacenMovimientoTable, AlmacenMovimiento]

@@ -13,6 +13,30 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type smartRangeDef struct {
+	from func(v, min, max string) string
+	to   func(v, min, max string) string
+}
+
+var smartRangeMap = map[string]smartRangeDef{
+	">=": {
+		from: func(v, min, max string) string { return v },
+		to:   func(v, min, max string) string { return max },
+	},
+	">": {
+		from: func(v, min, max string) string { return v + "\uffff" },
+		to:   func(v, min, max string) string { return max },
+	},
+	"<=": {
+		from: func(v, min, max string) string { return min },
+		to:   func(v, min, max string) string { return v + "\uffff" },
+	},
+	"<": {
+		from: func(v, min, max string) string { return min },
+		to:   func(v, min, max string) string { return v },
+	},
+}
+
 type posibleIndex struct {
 	indexView    *viewInfo
 	colsIncluded []int16
@@ -22,6 +46,7 @@ type posibleIndex struct {
 
 // selectExec executes a query using TableSchema and TableInfo
 func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable ScyllaTable[any]) error {
+
 	viewTableName := scyllaTable.name
 
 	if len(scyllaTable.keyspace) == 0 {
@@ -54,13 +79,9 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 
 	statements := []ColumnStatement{}
 	colsWhereIdx := []int16{}
-	allAreKeys := true
 
 	for _, st := range tableInfo.statements {
 		col := scyllaTable.columnsMap[st.Col]
-		if !slices.Contains(scyllaTable.keysIdx, col.GetInfo().Idx) {
-			allAreKeys = false
-		}
 
 		colsWhereIdx = append(colsWhereIdx, col.GetInfo().Idx)
 		statements = append(statements, st)
@@ -72,118 +93,164 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 	// Between Statement
 	if len(tableInfo.between.From) > 0 {
 		statements = append(statements, tableInfo.between)
-		for _, st := range tableInfo.between.From {
-			col := scyllaTable.columnsMap[st.Col]
-			colsWhereIdx = append(colsWhereIdx, col.GetInfo().Idx)
-			if !slices.Contains(scyllaTable.keysIdx, col.GetInfo().Idx) {
-				allAreKeys = false
-			}
-		}
 	}
 
-	posibleViewsOrIndexes := []posibleIndex{}
-
-	if len(statements) > 0 && !allAreKeys {
-		// Revisa si puede usar una vista
-		for _, indview := range scyllaTable.indexViews {
-			psb := posibleIndex{indexView: indview}
-			for _, idx := range indview.columnsIdx {
-				if slices.Contains(colsWhereIdx, idx) {
-					psb.colsIncluded = append(psb.colsIncluded, idx)
-				} else {
-					psb.colsMissing = append(psb.colsMissing, idx)
-				}
-			}
-			if len(psb.colsIncluded) > 0 {
-				hasOperators := true
-				if len(indview.Operators) > 0 {
-					for _, st := range statements {
-						if !slices.Contains(indview.Operators, st.Operator) {
-							hasOperators = false
-							break
-						}
-					}
-				}
-
-				if !hasOperators {
-					continue
-				}
-
-				if len(psb.colsIncluded) == len(colsWhereIdx) {
-					psb.priority = 6 + int8(len(colsWhereIdx))*2
-					if isHash && indview.Type == 7 {
-						psb.priority += 2
-					}
-				}
-				psb.priority -= int8(len(psb.colsMissing)) * 2
-
-				posibleViewsOrIndexes = append(posibleViewsOrIndexes, psb)
-			}
-		}
-	}
+	bestCap := MatchQueryCapability(statements, scyllaTable.capabilities)
 
 	statementsSelected := []ColumnStatement{}
 	statementsRemain := []ColumnStatement{}
-	// statementsLogs_ := []ColumnStatement{}
 	whereStatements := []string{}
 	orderColumn := scyllaTable.keys[0]
 
-	fmt.Println("posible indexes::", len(posibleViewsOrIndexes))
-
-	// Revisa si hay un view que satisfaga este request
-	if len(posibleViewsOrIndexes) > 0 {
-		//TODO: aquí debe escoger el mejor índice o view en caso existan 2
-		slices.SortFunc(posibleViewsOrIndexes, func(a, b posibleIndex) int {
-			return int(b.priority - a.priority)
-		})
-
-		viewOrIndex := posibleViewsOrIndexes[0].indexView
-		fmt.Println("Posible Index:", viewOrIndex.name)
-		if viewOrIndex.Type >= 6 {
-			viewTableName = viewOrIndex.name
+	if bestCap != nil {
+		fmt.Println("Best Match Signature:", bestCap.Signature)
+		
+		handledCols := make(map[string]bool)
+		parts := strings.Split(bestCap.Signature, "|")
+		for i := 0; i < len(parts); i += 2 {
+			handledCols[parts[i]] = true
 		}
 
-		if viewOrIndex.getStatement != nil {
-			fmt.Println("Creating statement Index:", viewOrIndex.name)
-			// Revisa qué columnas satisfacen el índice
-			for _, st := range statements {
-				if len(st.From) > 0 {
-					isIncluded := true
-					for _, e := range st.From {
-						if !slices.Contains(viewOrIndex.columns, e.Col) {
-							isIncluded = false
-							break
-						}
-						// statementsLogs_ = append(statementsLogs_, e)
-					}
-					if isIncluded {
+		if bestCap.Source != nil {
+			viewOrIndex := bestCap.Source
+			fmt.Println("Selected Index/View:", viewOrIndex.name)
+			if viewOrIndex.Type >= 6 {
+				viewTableName = viewOrIndex.name
+			}
+
+			if viewOrIndex.getStatement != nil {
+				// Identify which statements match the view columns
+				for _, st := range statements {
+					if slices.Contains(viewOrIndex.columns, st.Col) {
 						statementsSelected = append(statementsSelected, st)
+					} else if len(st.From) > 0 { // BETWEEN
+						isIncluded := true
+						for _, e := range st.From {
+							if !slices.Contains(viewOrIndex.columns, e.Col) {
+								isIncluded = false
+								break
+							}
+						}
+						if isIncluded {
+							statementsSelected = append(statementsSelected, st)
+						} else {
+							statementsRemain = append(statementsRemain, st)
+						}
+					} else {
+						statementsRemain = append(statementsRemain, st)
 					}
-				} else if slices.Contains(viewOrIndex.columns, st.Col) {
-					statementsSelected = append(statementsSelected, st)
-					// statementsLogs_ = append(statementsLogs_, st)
-				} else {
-					statementsRemain = append(statementsRemain, st)
+				}
+				orderColumn = viewOrIndex.column
+				whereStatements = viewOrIndex.getStatement(statementsSelected...)
+			} else {
+				// Direct index usage, no special statement generator
+				statementsRemain = statements
+			}
+		} else if bestCap.IsKey {
+			// Key or KeyConcatenated logic
+			keyCol := scyllaTable.keys[0]
+			hasKeyColQuery := false
+			for _, st := range statements {
+				if st.Col == keyCol.GetName() {
+					hasKeyColQuery = true
+					break
 				}
 			}
-			orderColumn = viewOrIndex.column
-			whereStatements = viewOrIndex.getStatement(statementsSelected...)
-		} else {
-			// No es necesario cambiar nada del query
-			statementsRemain = statements
+
+			if !hasKeyColQuery && len(scyllaTable.keyConcatenated) > 0 {
+				// Apply KeyConcatenated smart logic
+				prefixValues := []any{}
+				var rangeSt *ColumnStatement
+				handledInKeyConcat := make(map[string]bool)
+
+				for _, concatCol := range scyllaTable.keyConcatenated {
+					found := false
+					for _, st := range statements {
+						if st.Col == concatCol.GetName() {
+							if st.Operator == "=" {
+								prefixValues = append(prefixValues, st.Value)
+								handledInKeyConcat[st.Col] = true
+								found = true
+								break
+							} else if slices.Contains(rangeOperators, st.Operator) || st.Operator == "BETWEEN" {
+								rangeSt = &st
+								handledInKeyConcat[st.Col] = true
+								found = true
+								break
+							}
+						}
+					}
+					if !found || rangeSt != nil {
+						break
+					}
+				}
+
+				if len(prefixValues) > 0 || rangeSt != nil {
+					prefixStr := ""
+					if len(prefixValues) > 0 {
+						prefixStr = Concat62(prefixValues...)
+					}
+
+					var newSt ColumnStatement
+					if rangeSt == nil {
+						val := prefixStr
+						if len(prefixValues) == len(scyllaTable.keyConcatenated) {
+							newSt = ColumnStatement{Col: keyCol.GetName(), Operator: "=", Value: val}
+						} else {
+							newSt = ColumnStatement{
+								Col:      keyCol.GetName(),
+								Operator: "BETWEEN",
+								From:     []ColumnStatement{{Col: keyCol.GetName(), Value: val + "_"}},
+								To:       []ColumnStatement{{Col: keyCol.GetName(), Value: val + "_\uffff"}},
+							}
+						}
+					} else {
+						if rangeSt.Operator == "BETWEEN" {
+							valFrom := Concat62(append(prefixValues, rangeSt.From[0].Value)...)
+							valTo := Concat62(append(prefixValues, rangeSt.To[0].Value)...)
+							newSt = ColumnStatement{
+								Col:      keyCol.GetName(),
+								Operator: "BETWEEN",
+								From:     []ColumnStatement{{Col: keyCol.GetName(), Value: valFrom}},
+								To:       []ColumnStatement{{Col: keyCol.GetName(), Value: valTo + "\uffff"}},
+							}
+						} else if trans, ok := smartRangeMap[rangeSt.Operator]; ok {
+							valWithRange := Concat62(append(prefixValues, rangeSt.Value)...)
+							prefixMin, prefixMax := "", "\uffff"
+							if prefixStr != "" {
+								prefixMin = prefixStr + "_"
+								prefixMax = prefixStr + "_\uffff"
+							}
+							fromVal := trans.from(valWithRange, prefixMin, prefixMax)
+							toVal := trans.to(valWithRange, prefixMin, prefixMax)
+							newSt = ColumnStatement{Col: keyCol.GetName(), Operator: "BETWEEN"}
+							if fromVal != "" {
+								newSt.From = append(newSt.From, ColumnStatement{Col: keyCol.GetName(), Operator: ">=", Value: fromVal})
+							}
+							if toVal != "" {
+								newSt.To = append(newSt.To, ColumnStatement{Col: keyCol.GetName(), Operator: "<", Value: toVal})
+							}
+						}
+					}
+					
+					// Add the new PK statement and skip handled concatenated columns
+					statementsRemain = append(statementsRemain, newSt)
+					for _, st := range statements {
+						if !handledInKeyConcat[st.Col] {
+							statementsRemain = append(statementsRemain, st)
+						}
+					}
+				} else {
+					statementsRemain = statements
+				}
+			} else {
+				statementsRemain = statements
+			}
 		}
 	} else {
+		// No match found, fallback to default behavior (all remain)
 		statementsRemain = statements
 	}
-
-	/*
-		statementsLogs := []string{}
-		for _, st := range append(statementsLogs_, statementsRemain...) {
-			statementsLogs = append(statementsLogs, fmt.Sprintf("%v %v %v", st.Col, st.Operator, st.Value))
-		}
-
-		fmt.Println("Statements:", strings.Join(statementsLogs, " | "))
-	*/
 
 	if len(whereStatements) == 0 {
 		whereStatements = append(whereStatements, "")
@@ -247,11 +314,8 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 				fmt.Println("Error on RowData::", err)
 				if strings.Contains(err.Error(), "use ALLOW FILTERING") {
 					fmt.Println("Posible Indexes or Views::")
-					for _, e := range posibleViewsOrIndexes {
-						typeName := indexTypes[e.indexView.Type]
-						colnames := strings.Join(e.indexView.columns, ", ")
-						msg := fmt.Sprintf("%v (%v) %v", typeName, e.indexView.column.GetType().ColType, colnames)
-						fmt.Println(msg)
+					for _, e := range scyllaTable.capabilities {
+						fmt.Println(e.Signature)
 					}
 				}
 				return err

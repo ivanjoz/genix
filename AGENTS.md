@@ -49,6 +49,6 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 - **frontend/STORE.md** - Store integration notes: thumbhash implementation, store routes, CSS hashing
 
 ### Scripts
-- **scripts/NEW_TABLE_SCRIPT.md** - Generates boilerplate code for new database tables following ORM conventions. Use always.
+- **scripts/CREATE_EDIT_TABLE.md** - Creates new database table structures and adds columns to existing tables. Use always.
 - **scripts/CHECK_TABLES_SCRIPT.md** - Validates data model conventions for the custom ORM
 - **scripts/SCRIPTS.md** - Central dispatcher and wrapper script management for project utilities

@@ -17,7 +17,7 @@ import ProductoVentaCard from '$routes/operaciones/ventas/ProductoVentaCard.svel
 import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svelte';
 
   // Helpers
-  const formatMo = (n: number) => formatN(n, 2);
+  const formatMo = (n: number) => formatN(n / 100, 2);
 
   // Services
   const almacenesService = new AlmacenesService();
@@ -192,6 +192,7 @@ import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svel
         return;
       }
       ventasState.addProducto(prod, 1);
+      filterProductos("");
     } else if (ev.key === "Escape") {
       productoSelected = -1;
       searchInput?.focus();
@@ -258,7 +259,7 @@ import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svel
       <!-- Grid/List -->
       <div class="flex-1 overflow-y-auto">
         {#each chunkedProductos as group, groupIdx (group[0].key)}
-          <div class="flex gap-6 mb-6">
+          <div class="flex gap-4 mb-4">
             {#each group as item, itemIdx (item.key)}
               <div class="flex-1 min-w-0">
                 <ProductoVentaCard
@@ -269,7 +270,10 @@ import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svel
                   filterText={ventasState.filterText}
                   onselect={(i) => (productoSelected = i)}
                   onmouseover={() => (productoSelected = -1)}
-                  onadd={(n, sku) => ventasState.addProducto(item, n, sku)}
+                  onadd={(n, sku) => {
+                    ventasState.addProducto(item, n, sku);
+                    filterProductos("");
+                  }}
                 />
               </div>
             {/each}
@@ -338,25 +342,23 @@ import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svel
       </div>
 
       <!-- List -->
-      <div class="flex-1 overflow-y-auto p-8 space-y-8">
+      <div class="flex-1 overflow-y-auto p-4 space-y-4">
         {#each ventasState.ventaProductos as item (item.key)}
           <div
-            class="flex items-start gap-8 p-8 rounded-lg bg-gray-50 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 transition-all group"
+            class="flex items-center gap-8 py-4 px-8 rounded-lg bg-gray-50 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 transition-all group"
           >
-            <div class="text-xs font-bold text-gray-400 pt-4 w-16">
-              {ventasState.ventaProductos.indexOf(item) + 1}
-            </div>
             <div class="flex-1 min-w-0">
               <div class="text-sm font-medium text-gray-800 truncate">
+                <span class="text-blue-600 font-bold mr-4">{item.cantidad} X</span>
                 {item.producto?.Nombre}
                 {#if item.isSubUnidad}
-                  <span class="text-purple-600 text-xs ml-4"
+                  <span class="text-purple-600 text-[10px] ml-4 font-normal"
                     >({item.producto?.SbnUnidad})</span
                   >
                 {/if}
               </div>
               {#if item.skus && item.skus.size > 0}
-                <div class="flex flex-wrap gap-4 mt-4">
+                <div class="flex flex-wrap gap-4 mt-2">
                   {#each item.skus.entries() as [sku, qty]}
                     <span
                       class="text-[10px] bg-white border border-gray-200 px-6 rounded text-gray-600"
@@ -368,9 +370,9 @@ import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svel
               {/if}
             </div>
 
-            <div class="text-right">
+            <div class="flex items-center gap-8">
               <div class="font-mono text-sm font-bold text-gray-700">
-                {item.cantidad}
+                {formatMo((item.isSubUnidad && item.producto?.SbnPreciFinal ? item.producto.SbnPreciFinal : (item.producto?.PrecioFinal || 0)) * item.cantidad)}
               </div>
               <button
                 class="text-red-400 hover:text-red-600 p-4 opacity-0 group-hover:opacity-100 transition-opacity"

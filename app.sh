@@ -9,20 +9,20 @@ case "$1" in
     echo "Executing check_tables script..."
     (cd scripts && go run . check_tables)
     ;;
-  "new_table")
-    # For "new_table", execute the Go script and pass along all following arguments.
-    echo "Executing new_table script..."
-    (cd scripts && go run . new_table "${@:2}")
+  "create")
+    # For "create", create a new database table structure.
+    echo "Executing create command..."
+    (cd scripts && go run table/create_edit_table.go create "${@:2}")
     ;;
-  "new_table_column")
-    # For "new_table_column", execute the Go script and pass along all following arguments.
-    echo "Executing new_table_column script..."
-    (cd scripts && go run . new_table_column "${@:2}")
+  "edit")
+    # For "edit", add a new column to an existing table.
+    echo "Executing edit command..."
+    (cd scripts && go run table/create_edit_table.go edit "${@:2}")
     ;;
   *)
     # If the command is not recognized, show an error and usage instructions.
     echo "Unknown command: $1"
-    echo "Usage: $0 {check_tables|new_table|new_table_column}"
+    echo "Usage: $0 {check_tables|create|edit}"
     exit 1
     ;;
 esac

@@ -12,14 +12,12 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 
 	almacenProductos := []s.AlmacenProducto{}
 	query := db.Query(&almacenProductos)
-	query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
+	query.Select().EmpresaID.Equals(req.Usuario.EmpresaID).AlmacenID.Equals(almacenID)
 
 	if updated > 0 {
-		query.AlmacenID.Equals(int32(almacenID)).
-			Updated.Between(int32(updated), int32(0))
+		query.Updated.GreaterThan(updated)
 	} else {
-		query.ID.Between(
-			core.Concat62(almacenID, 0), core.Concat62(almacenID+1, 0))
+		query.Status.Equals(0)
 	}
 
 	if err := query.Exec(); err != nil {

@@ -28,7 +28,8 @@ type colInfo struct {
 type columnInfo struct {
 	colInfo
 	colType
-	getValue func(ptr unsafe.Pointer) any
+	getValue    func(ptr unsafe.Pointer) any
+	getRawValue func(ptr unsafe.Pointer) any
 }
 
 func (c *columnInfo) GetValue(ptr unsafe.Pointer) any {
@@ -38,7 +39,25 @@ func (c *columnInfo) GetValue(ptr unsafe.Pointer) any {
 	return makeScyllaValue(c.Field, ptr, c.Type)
 }
 
+func (c *columnInfo) GetRawValue(ptr unsafe.Pointer) any {
+	if c.getRawValue != nil {
+		return c.getRawValue(ptr)
+	}
+	if c.Field == nil {
+		return nil
+	}
+	if c.IsPointer {
+		if c.Field.IsNil(ptr) {
+			return nil
+		}
+	}
+	return c.Field.Interface(ptr)
+}
+
 func (c *columnInfo) GetStatementValue(ptr unsafe.Pointer) any {
+	if c.getRawValue != nil {
+		return c.getRawValue(ptr)
+	}
 	if c.getValue != nil {
 		return c.getValue(ptr)
 	}
@@ -216,6 +235,35 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		col := dbTable.columnsMap[key.GetInfo().Name]
 		dbTable.keys = append(dbTable.keys, col)
 		dbTable.keysIdx = append(dbTable.keysIdx, col.GetInfo().Idx)
+	}
+
+	if len(schema.KeyConcatenated) > 0 {
+		if len(dbTable.keys) != 1 {
+			panic(fmt.Sprintf(`Table "%v": KeyConcatenated requires exactly one column in Keys. Found: %v`, dbTable.name, len(dbTable.keys)))
+		}
+		keyCol := dbTable.keys[0].(*columnInfo)
+		if keyCol.Type != 1 { // 1 = string
+			panic(fmt.Sprintf(`Table "%v": KeyConcatenated requires the key column to be a string. Found: %v`, dbTable.name, keyCol.FieldType))
+		}
+
+		concatCols := []IColInfo{}
+		for _, col := range schema.KeyConcatenated {
+			concatCol := dbTable.columnsMap[col.GetName()]
+			concatCols = append(concatCols, concatCol)
+			dbTable.keyConcatenated = append(dbTable.keyConcatenated, concatCol)
+		}
+
+		keyCol.getRawValue = func(ptr unsafe.Pointer) any {
+			values := []any{}
+			for _, col := range concatCols {
+				values = append(values, col.GetRawValue(ptr))
+			}
+			return Concat62(values...)
+		}
+
+		keyCol.getValue = func(ptr unsafe.Pointer) any {
+			return "'" + keyCol.getRawValue(ptr).(string) + "'"
+		}
 	}
 
 	idxCount := int8(1)
@@ -824,6 +872,8 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			idxview.columnsIdx = append(idxview.columnsIdx, col.GetInfo().Idx)
 		}
 	}
+
+	dbTable.capabilities = dbTable.ComputeCapabilities()
 
 	return dbTable
 }

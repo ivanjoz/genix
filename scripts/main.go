@@ -16,10 +16,7 @@ func main() {
 	switch script {
 	case "check_tables":
 		CheckTables()
-	case "new_table":
-		NewTable(os.Args[2:])
-	case "new_table_column":
-		NewTableColumn(os.Args[2:])
+
 	default:
 		fmt.Printf("Unknown script: %s\n", script)
 		os.Exit(1)

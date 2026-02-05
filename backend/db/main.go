@@ -19,6 +19,7 @@ var indexTypes = map[int8]string{
 type IColInfo interface {
 	GetName() string
 	GetValue(ptr unsafe.Pointer) any
+	GetRawValue(ptr unsafe.Pointer) any
 	GetStatementValue(ptr unsafe.Pointer) any
 	SetValue(ptr unsafe.Pointer, v any)
 	GetInfo() *colInfo
@@ -41,6 +42,8 @@ type ScyllaTable[T any] struct {
 	ViewsExcluded   []string
 	useSequences    bool
 	sequencePartCol IColInfo
+	keyConcatenated []IColInfo
+	capabilities    []QueryCapability
 	_maxColIdx      int16
 }
 
@@ -97,6 +100,7 @@ type TableSchema struct {
 	CounterColumn   Coln
 	UseSequences    bool
 	SequencePartCol Coln
+	KeyConcatenated []Coln
 }
 
 func (q ColumnStatement) GetValue() any {
@@ -126,12 +130,6 @@ type View struct {
 	// Keep the original table partition in the created view.
 	// Example: key = (part_col) new_col, pk_col
 	KeepPart bool
-}
-
-type Index struct {
-	Cols []Coln
-	// Crea un hash para todas las combinaciones
-	HashAll bool
 }
 
 type TableInfo struct {

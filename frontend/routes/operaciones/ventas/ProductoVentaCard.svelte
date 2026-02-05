@@ -79,9 +79,9 @@ import { formatN } from '$core/helpers';
   const cantidades = [2,3,4,5,6,8,10,12]
 
     const css = $derived.by(() => {
-    let cn = "px-10 py-6 transition-all duration-200 border border-transparent rounded-lg "
+    let cn = "px-8 py-3 transition-all duration-200 border border-transparent rounded-lg "
     if(isSelected){
-      cn += "bg-blue-50/50 border-blue-200 shadow-sm"
+      cn += "bg-white ring-2 ring-blue-500 ring-inset shadow-[inset_0_0_12px_rgba(59,130,246,0.1)]"
     } else {
       cn += "bg-white hover:border-gray-200 hover:shadow-sm"
     }
@@ -112,7 +112,7 @@ import { formatN } from '$core/helpers';
     <!-- Header: Name + Line -->
     <div class="flex items-center gap-8">
        <div class="font-medium text-gray-700 flex items-center gap-8">
-          {@html highlightText(productoStock.producto.Nombre, filterText)}
+          <span>{@html highlightText(productoStock.producto.Nombre, filterText)}</span>
           {#if productoStock.isSubUnidad}
              <span class="text-gray-300">|</span>
              <span class="text-purple-600 font-bold text-xs">{productoStock.producto.SbnUnidad}</span>
