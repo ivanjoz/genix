@@ -5,9 +5,9 @@ import Page from '$domain/Page.svelte';
 import SearchCard from '$components/SearchCard.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { Notify, throttle } from '$libs/helpers/helpers';
+import { Notify, throttle } from '$libs/helpers';
 import { Core, closeModal } from '$core/store.svelte';
-import { formatTime } from '$libs/helpers/helpers';
+import { formatTime } from '$libs/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg
   import { UsuariosService, PerfilesService, postUsuario, type IUsuario } from "./usuarios.svelte"

@@ -8,7 +8,7 @@ import SearchSelect from '$components/SearchSelect.svelte';
 import CheckboxOptions from '$components/CheckboxOptions.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { arrayToMapN, Notify, throttle } from '$libs/helpers/helpers';
+import { arrayToMapN, Notify, throttle } from '$libs/helpers';
 import { Core, closeModal } from '$core/store.svelte';
 import Modules from '$core/modules';
   import pkg from 'notiflix'

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
 import Input from '$components/Input.svelte';
-import { Notify } from '$libs/helpers/helpers';
+import { Notify } from '$libs/helpers';
 import { sendUserLogin, type ILogin } from '$services/login';
 import { checkIsLogin } from '$core/security';
 import { Env } from '$core/env';

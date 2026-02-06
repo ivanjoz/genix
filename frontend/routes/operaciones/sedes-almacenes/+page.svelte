@@ -6,8 +6,8 @@ import Page from '$domain/Page.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { Loading, Notify, formatTime } from '$libs/helpers/helpers';
-import { throttle } from '$libs/helpers/helpers';
+import { Loading, Notify, formatTime } from '$libs/helpers';
+import { throttle } from '$libs/helpers';
 import { Core } from '$core/store.svelte';
 import AlmacenLayoutEditor from '$routes/operaciones/sedes-almacenes/AlmacenLayoutEditor.svelte';
 

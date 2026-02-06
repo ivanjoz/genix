@@ -7,10 +7,10 @@ import SearchSelect from '$components/SearchSelect.svelte';
 import Checkbox from '$components/Checkbox.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { Loading, Notify, formatTime } from '$libs/helpers/helpers';
-import { throttle } from '$libs/helpers/helpers';
+import { Loading, Notify, formatTime } from '$libs/helpers';
+import { throttle } from '$libs/helpers';
 import { Core } from '$core/store.svelte';
-import { formatN } from '$libs/helpers/helpers';
+import { formatN } from '$libs/helpers';
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte"
   import {
     CajasService,

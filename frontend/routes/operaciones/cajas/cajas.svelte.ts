@@ -1,6 +1,6 @@
-import { GetHandler, POST, GET } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
-import { formatTime } from '$libs/helpers/helpers';
-import { Notify } from '$libs/helpers/helpers';
+import { GetHandler, POST, GET } from '$libs/http.svelte';
+import { formatTime } from '$libs/helpers';
+import { Notify } from '$libs/helpers';
 
 export interface ICaja {
   ID: number

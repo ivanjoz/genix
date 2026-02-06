@@ -1,5 +1,5 @@
 <script lang="ts">
-import { formatN } from '$libs/helpers/helpers';
+import { formatN } from '$libs/helpers';
 	import {
 		getProductoByID,
 		type IProducto,

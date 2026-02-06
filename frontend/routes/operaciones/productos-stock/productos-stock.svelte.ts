@@ -1,5 +1,5 @@
-import { Notify } from '$libs/helpers/helpers';
-import { GET, POST } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
+import { Notify } from '$libs/helpers';
+import { GET, POST } from '$libs/http.svelte';
 
 export interface IProductoStock {
   ID: string

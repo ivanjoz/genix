@@ -46,7 +46,7 @@ export default defineConfig({
       output: {
         hashCharacters: 'base64',
         manualChunks: (id) => {
-          if (id.includes('/components/') || id.includes('/lib/') || id.includes('/core/')) {
+          if (id.includes('/ui-components/') || id.includes('/domain-components/') || id.includes('/core/') || id.includes('/libs/') || id.includes('/services/')) {
             return 'shared';
           }
           return 'vendor';

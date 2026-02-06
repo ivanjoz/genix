@@ -1,11 +1,11 @@
 <script lang="ts">
-import { POST_XMLHR } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
+import { POST_XMLHR } from '$libs/http.svelte';
 import { onDestroy, untrack } from 'svelte';
-import { Notify, fileToImage } from '$libs/helpers/helpers';
+import { Notify, fileToImage } from '$libs/helpers';
 import { Env } from '$core/env';
 import { imagesToUpload } from '$core/store.svelte';
 import type { IImageResult } from '$core/types/common';
-import { Page } from '$domain/Page.svelte';
+import Page from '$domain/Page.svelte';
 
 export interface IImageInput {
   content: string;

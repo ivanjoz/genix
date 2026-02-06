@@ -4,7 +4,7 @@ declare global {
 
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
-import { PUBLIC_LAMBDA_URL, PUBLIC_SIGNALING_ENDPOINT, PUBLIC_SIGNALING_API_KEY, PUBLIC_FRONTEND_CDN } from '$ecommerce/node_modules/@sveltejs/kit/src/runtime/env/dynamic/public';
+import { PUBLIC_LAMBDA_URL, PUBLIC_SIGNALING_ENDPOINT, PUBLIC_SIGNALING_API_KEY, PUBLIC_FRONTEND_CDN } from '$env/static/public';
 
 export { browser };
 

@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Core } from '$core/store.svelte';
-import { highlString, include, throttle } from '$libs/helpers/helpers';
+import { highlString, include, throttle } from '$libs/helpers';
     import { untrack } from 'svelte';
 
 // Local state for this modal instance

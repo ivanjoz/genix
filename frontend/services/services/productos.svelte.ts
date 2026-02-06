@@ -1,6 +1,6 @@
 import { Env } from '$core/env';
-import { arrayToMapN } from '$libs/helpers/helpers';
-import { GET } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
+import { arrayToMapN } from '$libs/helpers';
+import { GET } from '$libs/http.svelte';
 
 const maxCacheTime = 60 * 5 // 2 segundos
 const productosPromiseMap: Map<string, Promise<any>> = new Map()

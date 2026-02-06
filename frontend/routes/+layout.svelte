@@ -14,7 +14,7 @@ import Page from '$domain/Page.svelte';
 import SideMenu from '$domain/SideMenu.svelte';
 import Modules from '$core/modules';
 import { Core, getDeviceType } from '$core/store.svelte';
-import ImageWorker from '$libs/workers/image-worker';
+import ImageWorker from '$libs/workers/image-worker?worker';
 import { Env } from '$core/env';
 import { initWebRTC, webRTCManager } from '$libs/webrtc/manager';
 

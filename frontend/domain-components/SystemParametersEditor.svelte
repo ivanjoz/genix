@@ -2,7 +2,7 @@
 import { systemParameters } from '$services/system-paremeters';
 import { SystemParametersService, saveSystemParameters, type ISystemParameter } from '$services/services/system-parameters.svelte';
 
-import { Loading } from '$libs/helpers/helpers';
+import { Loading } from '$libs/helpers';
     import SearchCard from '$components/SearchCard.svelte';
     import Checkbox from '$components/Checkbox.svelte';
     import { untrack } from 'svelte';

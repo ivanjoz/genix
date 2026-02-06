@@ -2,8 +2,8 @@
 import CheckboxOptions from '$components/CheckboxOptions.svelte';
 import Input from '$components/Input.svelte';
 import HTMLEditor from '$domain/HTMLEditor/HTMLEditor.svelte';
-import { ConfirmWarn, Loading, Notify } from '$libs/helpers/helpers';
-import { POST } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
+import { ConfirmWarn, Loading, Notify } from '$libs/helpers';
+import { POST } from '$libs/http.svelte';
 import ImageUploader from '$components/ImageUploader.svelte';
 import Layer from '$components/Layer.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
@@ -12,9 +12,9 @@ import SearchCard from '$components/SearchCard.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import VTable from '$components/vTable/VTable.svelte';
-import { throttle } from '$libs/helpers/helpers';
+import { throttle } from '$libs/helpers';
 import { Core } from '$core/store.svelte';
-import { formatN } from '$libs/helpers/helpers';
+import { formatN } from '$libs/helpers';
 import Atributos from '$routes/operaciones/productos/Atributos.svelte';
 import CategoriasMarcas from '$routes/operaciones/productos/CategoriasMarcas.svelte';
   import {

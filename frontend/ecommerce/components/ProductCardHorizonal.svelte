@@ -1,5 +1,5 @@
 <script lang="ts">
-import { formatN } from '$libs/helpers/helpers';
+import { formatN } from '$libs/helpers';
 import { getProductoByID, type IProducto } from '$services/services/productos.svelte';
 import ImageHash from '$components/Imagehash.svelte';
   import { addProductoCant, ProductsSelectedMap } from "./store.svelte";

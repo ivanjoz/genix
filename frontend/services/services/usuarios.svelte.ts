@@ -1,4 +1,4 @@
-import { POST } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
+import { POST } from '$libs/http.svelte';
 import type { IUsuario } from '$core/types/common';
 
 export const postUsuario = (data: IUsuario) => {

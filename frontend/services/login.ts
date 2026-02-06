@@ -1,4 +1,4 @@
-import { GET, POST } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
+import { GET, POST } from '$libs/http.svelte';
 import { accessHelper, checkIsLogin, registerReloadLogin } from '$core/security';
 import type { IUsuario, ILoginResult } from '$core/types/common';
 import { Env } from '$core/env';

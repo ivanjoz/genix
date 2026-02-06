@@ -2,8 +2,8 @@
 import Page from '$domain/Page.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import VTable from '$components/vTable/VTable.svelte';
-import { ConfirmWarn, formatTime } from '$libs/helpers/helpers';
-import { formatN } from '$libs/helpers/helpers';
+import { ConfirmWarn, formatTime } from '$libs/helpers';
+import { formatN } from '$libs/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg;
   import { BackupsService, createBackup, restoreBackup, type IBackup } from "./backups.svelte";

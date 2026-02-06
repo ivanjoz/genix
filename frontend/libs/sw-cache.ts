@@ -1,8 +1,8 @@
-import { Notify } from '$libs/helpers/helpers';
+import { Notify } from '$libs/helpers';
 import { fetchEvent } from '$core/store.svelte';
 import { Env } from '$core/env';
 import type { IGetCacheSubObject, serviceHttpProps } from '$libs/workers/service-worker';
-import { setFetchProgress } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
+import { setFetchProgress } from '$libs/http.svelte';
 
 let tempID = parseInt(String(Math.floor(Date.now()/1000)).substring(4))
 const serviceWorkerResolverMap: Map<number,((value: any) => void)> = new Map()

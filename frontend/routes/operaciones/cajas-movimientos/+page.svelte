@@ -4,8 +4,8 @@ import SearchSelect from '$components/SearchSelect.svelte';
 import DateInput from '$components/DateInput.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { Loading, formatTime, throttle, Notify } from '$libs/helpers/helpers';
-import { formatN } from '$libs/helpers/helpers';
+import { Loading, formatTime, throttle, Notify } from '$libs/helpers';
+import { formatN } from '$libs/helpers';
   import { untrack } from "svelte"
   import {
     CajasService,

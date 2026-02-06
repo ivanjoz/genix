@@ -9,7 +9,7 @@
 
 	import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
 	import angleSvg from "$domain/assets/angle.svg?raw";
-import { parseSVG } from '$libs/helpers/helpers';
+import { parseSVG } from '$libs/helpers';
 	import s1 from "./styles.module.css";
 	import ArrowSteps from "$components/ArrowSteps.svelte";
 	import { Globals } from "$ecommerce/stores/globals.svelte";

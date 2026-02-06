@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const PROJECT_ROOT = '/home/ivanjoz/projects/genix/frontend';
+const PROJECT_ROOT = process.cwd();
 const SHOULD_FIX = process.argv.includes('--fix');
 const DRY_RUN = process.argv.includes('--dry-run');
 

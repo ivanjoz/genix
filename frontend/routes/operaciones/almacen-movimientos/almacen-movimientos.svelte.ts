@@ -1,5 +1,5 @@
-import { GET } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
-import { Notify } from '$libs/helpers/helpers';
+import { GET } from '$libs/http.svelte';
+import { Notify } from '$libs/helpers';
 
 export interface IUsuario {
   id: number
