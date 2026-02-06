@@ -59,6 +59,7 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 
 ### Frontend Rules
 - Use untrack inside $effect to avoid render loop
+- GetHandler fetched records need fields: "upd" (Updated) and "ID" (unique id) for delta cache. Or use GetHandler.keyID or .KeysIDs for setting another field.
 
 ### Backend Rules
 - NEVER trust the client. ALWAYS validate the required field and consistency of the data, and return a descriptive error if any validation fails.

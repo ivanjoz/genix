@@ -1,7 +1,7 @@
 import { GetHandler, POST } from '$core/http.svelte';
 
 export interface ISystemParameter {
-	ParameterID: number;
+	ID: number;
 	ValueText: string;
 	ValueInts: number[];
 	Value: number;
@@ -28,9 +28,10 @@ export class SystemParametersService extends GetHandler {
 		this.records = result;
 		const newMap = new Map();
 		for (const rec of result) {
-			newMap.set(rec.ParameterID, rec);
+			newMap.set(rec.ID, rec);
 		}
 		this.recordsMap = newMap;
+		console.log("result getted:", result)
 	}
 
 	constructor() {

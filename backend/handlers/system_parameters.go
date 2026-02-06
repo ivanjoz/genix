@@ -44,7 +44,7 @@ func PostSystemParameters(req *core.HandlerArgs) core.HandlerResponse {
 	now := time.Now().Unix()
 	for i := range records {
 		e := &records[i]
-		if e.ParameterID == 0 {
+		if e.ID == 0 {
 			return req.MakeErr("No se envió el parámetro ID.")
 		}
 		e.EmpresaID = empresaID

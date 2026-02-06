@@ -24,7 +24,7 @@
 					newForm[config.id] = { ...record };
 				} else if (!newForm[config.id]) {
 					newForm[config.id] = {
-						ParameterID: config.id,
+						ID: config.id,
 						ValueText: "",
 						ValueInts: [],
 						Value: 0,
