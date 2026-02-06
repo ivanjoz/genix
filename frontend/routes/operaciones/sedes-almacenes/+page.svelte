@@ -2,12 +2,12 @@
 import Input from '$components/Input.svelte';
 import Modal from '$components/Modal.svelte';
 import Layer from '$components/Layer.svelte';
-import Page from '$ui/Page.svelte';
+import Page from '$domain/Page.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { Loading, Notify, formatTime } from '$core/helpers';
-import { throttle } from '$core/helpers';
+import { Loading, Notify, formatTime } from '$libs/helpers/helpers';
+import { throttle } from '$libs/helpers/helpers';
 import { Core } from '$core/store.svelte';
 import AlmacenLayoutEditor from '$routes/operaciones/sedes-almacenes/AlmacenLayoutEditor.svelte';
 

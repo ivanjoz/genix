@@ -33,7 +33,7 @@ const main = async () => {
 
   // Start store app
   console.log('🛒 Starting store app...');
-  const storeApp = await startApp('store', 'dev', 'pkg-store');
+  const storeApp = await startApp('store', 'dev', 'ecommerce');
 
   // Wait a bit
   await new Promise(resolve => setTimeout(resolve, 2000));

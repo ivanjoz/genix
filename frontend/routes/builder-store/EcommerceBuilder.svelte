@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { ColorPalette } from '../../pkg-store/renderer/renderer-types';
-  import { generatePaletteStyles } from '../../pkg-store/renderer/token-resolver';
-  import { editorStore } from '../../pkg-store/stores/editor.svelte';
-  import { liveCSS } from '../../pkg-store/stores/live-css.svelte';
+import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
+import { generatePaletteStyles } from '$ecommerce/renderer/token-resolver';
+import { editorStore } from '$stores/editor.svelte';
+import { liveCSS } from '$stores/live-css.svelte';
   import SectionEditorLayer from './SectionEditorLayer.svelte';
   import BuilderSectionRender from './BuilderSectionRender.svelte';
 
-  import type { SectionData } from '../../pkg-store/renderer/section-types';
+import type { SectionData } from '$ecommerce/renderer/section-types';
 
   interface Props {
     elements?: SectionData[];

@@ -11,5 +11,6 @@
      "**/.vscode/**",
      "./docs/**",
      "**/store_deprecated/**",
+     "**/.svelte-kit/**",
 	],
 }

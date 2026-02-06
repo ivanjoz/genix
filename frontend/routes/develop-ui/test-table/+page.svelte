@@ -1,7 +1,7 @@
 <script lang="ts">
 import CellSelector from '$components/vTable/CellSelector.svelte';
 import VTable from '$components/vTable/VTable.svelte';
-import Page from '$ui/Page.svelte';
+import Page from '$domain/Page.svelte';
 import { type ITableColumn } from '$components/vTable/types';
 
   interface TestRecord {

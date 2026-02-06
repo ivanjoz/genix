@@ -5,7 +5,7 @@
  * This script fixes remaining broken import paths after the migration:
  * 1. $core/store.svelte → $core/core/store.svelte
  * 2. $core/MobileMenu.svelte → $core/core/MobileMenu.svelte
- * 3. $lib/globals.svelte.ts → $store/globals.svelte.ts (needs $store alias)
+ * 3. $lib/globals.svelte.ts → $ecommerce/globals.svelte.ts (needs $store alias)
  * 4. $lib/routes/* → correct paths
  */
 
@@ -119,13 +119,13 @@ function collectFixes(): FileFix[] {
         });
       }
 
-      // Pattern 3: $lib/globals.svelte.ts → $store/globals.svelte.ts
+      // Pattern 3: $lib/globals.svelte.ts → $ecommerce/globals.svelte.ts
       const libGlobalsMatch = content.match(/from\s+['"](\$lib\/globals\.svelte\.ts)['"]/);
       if (libGlobalsMatch) {
         fixes.push({
           filePath: path.relative(PROJECT_ROOT, filePath),
           originalImport: libGlobalsMatch[1],
-          fixedImport: '$store/globals.svelte.ts'
+          fixedImport: '$ecommerce/globals.svelte.ts'
         });
       }
 
@@ -139,13 +139,13 @@ function collectFixes(): FileFix[] {
         });
       }
 
-      // Pattern 5: $lib/globals.svelte (without .ts) → $store/globals.svelte.ts
+      // Pattern 5: $lib/globals.svelte (without .ts) → $ecommerce/globals.svelte.ts
       const libGlobalsNoExtMatch = content.match(/from\s+['"](\$lib\/globals\.svelte)['"]/);
       if (libGlobalsNoExtMatch) {
         fixes.push({
           filePath: path.relative(PROJECT_ROOT, filePath),
           originalImport: libGlobalsNoExtMatch[1],
-          fixedImport: '$store/globals.svelte'
+          fixedImport: '$ecommerce/globals.svelte'
         });
       }
     }

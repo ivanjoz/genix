@@ -29,7 +29,7 @@ if (isBuild) {
 const publicDir = path.resolve(projectDir, 'static');
 
 const serviceWorkerConfig: BuildOptions = {
-  entryPoints: [path.resolve(projectDir, 'pkg-core/workers/service-worker.ts')],
+  entryPoints: [path.resolve(projectDir, 'libs/workers/service-worker.ts')],
   format: 'esm', // Service workers typically use ES modules
   outfile: path.resolve(publicDir, 'sw.js'),
   bundle: true,
@@ -47,12 +47,13 @@ const serviceWorkerConfig: BuildOptions = {
           const alias = parts[0];
           const rest = parts.slice(1).join('/');
           const baseDir = {
-    '$core': 'pkg-core',
-    '$store': 'pkg-store',
+    '$core': 'core',
+    '$ecommerce': 'ecommerce',
     '$routes': 'routes',
-    '$ui': 'pkg-ui',
-    '$components': 'pkg-components',
-    '$services': 'pkg-services'
+    '$domain': 'domain-components',
+    '$components': 'ui-components',
+    '$services': 'services',
+    '$libs': 'libs'
   }[alias];
 
           if (!baseDir) return null;
@@ -66,8 +67,9 @@ const serviceWorkerConfig: BuildOptions = {
             possiblePaths.push(path.join(baseDir, rest));
           } else if (alias === '$components') {
             possiblePaths.push(path.join(baseDir, rest));
-            possiblePaths.push(path.join('pkg-ui/components', rest));
-            possiblePaths.push(path.join('pkg-components/ecommerce', rest));
+            // pkg-components/ecommerce was likely merged into ui-components or moved to ecommerce
+            // For now, check both possible locations if they still exist
+            possiblePaths.push(path.join('ecommerce', 'components', rest));
           } else {
             possiblePaths.push(path.join(baseDir, rest));
           }

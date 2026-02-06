@@ -4,18 +4,18 @@
 	"version": "2.0.0",
 	"type": "module",
 	"workspaces": [
-		"./pkg-store"
+		"./ecommerce"
 	],
 	"scripts": {
 		"dev": "bun scripts/dev-all.js",
 		"dev:main": "vite dev --force --port 3570",
-		"dev:store": "cd pkg-store && bun run dev",
+		"dev:store": "cd ecommerce && bun run dev",
 		"serve": "bun run serve:build",
 		"serve:build": "bun x serve ./build -l 3000",
 		"prepare": "svelte-kit sync || echo ''",
 		"build": "bun scripts/build-all.js",
 		"build:main": "vite build",
-		"build:store": "cd pkg-store && bun run build",
+		"build:store": "cd ecommerce && bun run build",
 		"publish": "bun run build && bun postbuild.js --publish",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",

@@ -1,4 +1,4 @@
-import { GetHandler } from '$core/http.svelte';
+import { GetHandler } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
 import { type IProducto } from "../productos/productos.svelte"
 import { type IProductoStock } from "../productos-stock/productos-stock.svelte"
 

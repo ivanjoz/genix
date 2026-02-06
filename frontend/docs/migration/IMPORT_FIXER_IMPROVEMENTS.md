@@ -51,7 +51,7 @@ After moving files to the new Turborepo package structure (`pkg-core`, `pkg-serv
 
 **Remaining 10 issues:**
 - Asset default imports (5): `blurhashScript`, `favicon`, `arrow2Svg`, `arrow1Svg`, `angleSvg`
-- Missing exports (2): `Ecommerce` from `$store/globals.svelte.ts`, `ITableColumn` from VTable
+- Missing exports (2): `Ecommerce` from `$ecommerce/globals.svelte.ts`, `ITableColumn` from VTable
 - Missing files (2): `image-worker?worker`, CSS class `s1` from `components.module.css`
 - Missing exports (1): `ITableColumn` type
 

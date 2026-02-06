@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { arrayToMapN } from '$core/helpers';
+import { arrayToMapN } from '$libs/helpers/helpers';
 import { Core } from '$core/store.svelte';
   import { accesoAcciones, type IAcceso, type IPerfil } from "./perfiles-accesos.svelte"
 

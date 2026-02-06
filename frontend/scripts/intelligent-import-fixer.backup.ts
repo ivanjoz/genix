@@ -152,7 +152,7 @@ function pathExists(basePath: string): string | null {
   }
 
   // Check for Svelte files first if the path looks like a component import
-  // (e.g., $ui/components/Input, $ui/Page, etc.)
+  // (e.g., $domain/components/Input, $domain/Page, etc.)
   const looksLikeSvelteComponent = cleanPath.includes('/components/') ||
                                    cleanPath.includes('/micro/') ||
                                    cleanPath.includes('/layout/') ||

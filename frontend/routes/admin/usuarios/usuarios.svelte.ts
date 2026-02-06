@@ -1,4 +1,4 @@
-import { GetHandler } from '$core/http.svelte';
+import { GetHandler } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
 import type { IUsuario, IPerfil } from '$core/types/common';
 export { postUsuario, postUsuarioPropio } from '$services/services/usuarios.svelte';
 

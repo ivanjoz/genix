@@ -1,0 +1,1 @@
+export const env={"PUBLIC_LAMBDA_URL":"https://nctduhfsuy2uq5ziomgtpiabjq0ukddl.lambda-url.us-east-1.on.aws/","PUBLIC_SIGNALING_ENDPOINT":"https://2v7tfrfxenfpvgf356vcuw3iie.appsync-api.us-east-1.amazonaws.com","PUBLIC_SIGNALING_API_KEY":"da2-czyagszanfbptkl57l3t45xmo4"}

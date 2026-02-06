@@ -2,21 +2,21 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
 import TopLayerSelector from '$components/TopLayerSelector.svelte';
-import favicon from '$ui/assets/favicon.svg?raw';
-import { checkIsLogin } from '$core/lib/security';
-import { doInitServiceWorker } from '$core/lib/sw-cache';
+import favicon from '$domain/assets/favicon.svg?raw';
+import { checkIsLogin } from '$core/security';
+import { doInitServiceWorker } from '$libs/sw-cache';
 	import { onMount } from 'svelte';
 		import './app.css';
 	import './tailwind.css';
-	import '../pkg-ui/libs/fontello-embedded.css'
-import AppHeader from '$ui/AppHeader.svelte';
-import Page from '$ui/Page.svelte';
-import SideMenu from '$ui/SideMenu.svelte';
+	import '$domain/libs/fontello-embedded.css'
+import AppHeader from '$domain/AppHeader.svelte';
+import Page from '$domain/Page.svelte';
+import SideMenu from '$domain/SideMenu.svelte';
 import Modules from '$core/modules';
 import { Core, getDeviceType } from '$core/store.svelte';
-import ImageWorker from '$core/workers/image-worker?worker';
+import ImageWorker from '$libs/workers/image-worker';
 import { Env } from '$core/env';
-import { initWebRTC, webRTCManager } from '$core/lib/webrtc/manager';
+import { initWebRTC, webRTCManager } from '$libs/webrtc/manager';
 
 	let { children } = $props();
 

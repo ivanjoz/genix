@@ -42,7 +42,7 @@ const copyDirectory = (src, dest) => {
   }
 };
 
-copyDirectory('pkg-store/build', path.join(BUILD_DIR, 'store'));
+copyDirectory('ecommerce/build', path.join(BUILD_DIR, 'store'));
 
 
 // Create 404.html for SPA routing

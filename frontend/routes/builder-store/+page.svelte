@@ -1,11 +1,11 @@
 <script lang="ts">
     import EcommerceBuilder from './EcommerceBuilder.svelte';
     import { storeExample } from './store-example';
-    import type { ColorPalette } from '../../pkg-store/renderer/renderer-types';
-    import type { SectionData } from '../../pkg-store/renderer/section-types';
-    import "$ui/libs/fontello-prerender.css";
-    import Header from '$store/components/Header.svelte';
-    import Page from '$ui/Page.svelte';
+import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
+import type { SectionData } from '$ecommerce/renderer/section-types';
+    import "$domain/libs/fontello-prerender.css";
+    import Header from '$ecommerce/components/Header.svelte';
+    import Page from '$domain/Page.svelte';
 
     let elements = $state<SectionData[]>(storeExample);
     let values = $state<Record<string, string>>({});

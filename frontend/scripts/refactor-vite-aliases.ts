@@ -31,8 +31,8 @@ const IMPORT_TRANSFORMATIONS: Array<{
   // Remove unnecessary subdirectory paths
   {
     pattern: /\$store\/stores\//g,
-    replacement: '$store/',
-    description: '$store/stores/* → $store/*'
+    replacement: '$ecommerce/',
+    description: '$ecommerce/stores/* → $ecommerce/*'
   },
   {
     pattern: /\$services\/services\//g,

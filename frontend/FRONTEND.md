@@ -331,7 +331,7 @@ alias: {
 import { httpGet } from '$core/http.svelte';
 
 // Import from UI components
-import { Page } from '$ui/Page.svelte';
+import { Page } from '$domain/Page.svelte';
 
 // Import from shared components
 import { Input, SearchSelect } from '$components';

@@ -1,14 +1,14 @@
 <script lang="ts">
 import Input from '$components/Input.svelte';
 import Modal from '$components/Modal.svelte';
-import Page from '$ui/Page.svelte';
+import Page from '$domain/Page.svelte';
 import Layer from '$components/Layer.svelte';
 import SearchCard from '$components/SearchCard.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
 import CheckboxOptions from '$components/CheckboxOptions.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { arrayToMapN, Notify, throttle } from '$core/helpers';
+import { arrayToMapN, Notify, throttle } from '$libs/helpers/helpers';
 import { Core, closeModal } from '$core/store.svelte';
 import Modules from '$core/modules';
   import pkg from 'notiflix'

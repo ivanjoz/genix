@@ -1,12 +1,12 @@
 <script lang="ts">
 import Input from '$components/Input.svelte';
 import Modal from '$components/Modal.svelte';
-import Page from '$ui/Page.svelte';
+import Page from '$domain/Page.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { Notify, throttle } from '$core/helpers';
+import { Notify, throttle } from '$libs/helpers/helpers';
 import { Core, closeModal } from '$core/store.svelte';
-import { formatTime } from '$core/helpers';
+import { formatTime } from '$libs/helpers/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg
   import { EmpresasService, postEmpresa, type IEmpresa } from "./empresas.svelte"

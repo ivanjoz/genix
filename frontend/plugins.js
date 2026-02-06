@@ -201,7 +201,7 @@ export const svelteClassHasher = () => {
                 for (const entry of entries) {
                     const fullPath = path.join(dir, entry.name);
                     if (entry.isDirectory()) {
-                        if (entry.name === 'node_modules' || entry.name === '.svelte-kit' || entry.name === 'tmp' || entry.name === 'static' || entry.name === 'build' || entry.name === '.git') continue;
+                        if (['node_modules', '.svelte-kit', 'tmp', 'static', 'build', '.git', 'ecommerce/build'].includes(entry.name)) continue;
                         scanDir(fullPath);
                     } else if (entry.isFile() && entry.name.endsWith('.svelte')) {
                         const content = fs.readFileSync(fullPath, 'utf8');

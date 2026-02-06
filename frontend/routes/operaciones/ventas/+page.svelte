@@ -1,10 +1,10 @@
 <script lang="ts">
 import Input from '$components/Input.svelte';
 import LayerStatic from '$components/LayerStatic.svelte';
-import Page from '$ui/Page.svelte';
+import Page from '$domain/Page.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
-import { Loading, include } from '$core/helpers';
-import { formatN } from '$core/helpers';
+import { Loading, include } from '$libs/helpers/helpers';
+import { formatN } from '$libs/helpers/helpers';
   import type { IProductoStock } from "../productos-stock/productos-stock.svelte";
   import { getProductosStock } from "../productos-stock/productos-stock.svelte";
   import { ProductosService } from "../productos/productos.svelte";
@@ -17,7 +17,7 @@ import { VentasState } from "./ventas.svelte";
 import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svelte';
     import { Env } from '$core/env';
     import { Core } from '$core/store.svelte';
-    import SystemParametersEditor from '$ui/SystemParametersEditor.svelte';
+    import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
 
   // Helpers
   const formatMo = (n: number) => formatN(n / 100, 2);

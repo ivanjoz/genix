@@ -559,8 +559,8 @@ Check and update `pkg-store/routes/+layout.svelte`:
 ```svelte
 <script>
   import "./store.css";
-  import "$ui/libs/fontello-prerender.css";
-  import blurhashScript from '$ui/libs/blurhash?raw';
+  import "$domain/libs/fontello-prerender.css";
+  import blurhashScript from '$domain/libs/blurhash?raw';
   import { productosServiceState } from '$services/services/productos.svelte';
   
   let { children, data } = $props();

@@ -1,4 +1,4 @@
-import type { SectionData } from '../../pkg-store/renderer/section-types';
+import type { SectionData } from '$ecommerce/renderer/section-types';
 
 export const storeExample: SectionData[] = [
   {

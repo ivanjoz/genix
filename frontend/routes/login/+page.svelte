@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
 import Input from '$components/Input.svelte';
-import { Notify } from '$core/helpers';
+import { Notify } from '$libs/helpers/helpers';
 import { sendUserLogin, type ILogin } from '$services/login';
-import { checkIsLogin } from '$core/lib/security';
+import { checkIsLogin } from '$core/security';
 import { Env } from '$core/env';
 
   let form = $state({ Usuario: "", Password: "", EmpresaID: 1, CipherKey: "" } as ILogin)

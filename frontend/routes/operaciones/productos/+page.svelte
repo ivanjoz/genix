@@ -1,20 +1,20 @@
 <script lang="ts">
 import CheckboxOptions from '$components/CheckboxOptions.svelte';
 import Input from '$components/Input.svelte';
-import HTMLEditor from '$ui/HTMLEditor/HTMLEditor.svelte';
-import { ConfirmWarn, Loading, Notify } from '$core/helpers';
-import { POST } from '$core/http.svelte';
+import HTMLEditor from '$domain/HTMLEditor/HTMLEditor.svelte';
+import { ConfirmWarn, Loading, Notify } from '$libs/helpers/helpers';
+import { POST } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
 import ImageUploader from '$components/ImageUploader.svelte';
 import Layer from '$components/Layer.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
-import Page from '$ui/Page.svelte';
+import Page from '$domain/Page.svelte';
 import SearchCard from '$components/SearchCard.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import VTable from '$components/vTable/VTable.svelte';
-import { throttle } from '$core/helpers';
+import { throttle } from '$libs/helpers/helpers';
 import { Core } from '$core/store.svelte';
-import { formatN } from '$core/helpers';
+import { formatN } from '$libs/helpers/helpers';
 import Atributos from '$routes/operaciones/productos/Atributos.svelte';
 import CategoriasMarcas from '$routes/operaciones/productos/CategoriasMarcas.svelte';
   import {

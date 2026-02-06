@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ColorPalette } from '../../../pkg-store/renderer/renderer-types';
+import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 
   interface Props {
     palette?: ColorPalette;

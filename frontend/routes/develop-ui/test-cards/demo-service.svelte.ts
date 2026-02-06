@@ -1,4 +1,4 @@
-import { GetHandler } from '$core/http.svelte';
+import { GetHandler } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
 
 export class DemoService extends GetHandler {
 

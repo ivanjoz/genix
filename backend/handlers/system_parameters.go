@@ -20,10 +20,11 @@ func GetSystemParameters(req *core.HandlerArgs) core.HandlerResponse {
 		q.Updated.GreaterThan(updated)
 	}
 
-	err := q.Exec()
-	if err != nil {
+	if 	err := q.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los parámetros del sistema.", err)
 	}
+	
+	core.Print(records)
 
 	return core.MakeResponse(req, &records)
 }

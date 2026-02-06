@@ -2,7 +2,7 @@
 import Input from '$components/Input.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
 import WebRTCPanel from './WebRTCPanel.svelte';
-import Page from '$ui/Page.svelte';
+import Page from '$domain/Page.svelte';
     import { Core } from '$core/store.svelte';
 
   let options = [

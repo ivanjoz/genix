@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { editorStore } from '../../../pkg-store/stores/editor.svelte';
-  import type { StandardContent } from '../../../pkg-store/renderer/section-types';
+import { editorStore } from '$stores/editor.svelte';
+import type { StandardContent } from '$ecommerce/renderer/section-types';
 
   const section = $derived(editorStore.selectedSection);
   const schema = $derived(editorStore.activeSchema);

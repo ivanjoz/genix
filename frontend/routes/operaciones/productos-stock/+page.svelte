@@ -1,9 +1,9 @@
 <script lang="ts">
-import Page from '$ui/Page.svelte';
+import Page from '$domain/Page.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import VTable from '$components/vTable/VTable.svelte';
-import { Notify, throttle } from '$core/helpers';
+import { Notify, throttle } from '$libs/helpers/helpers';
     import pkg from 'notiflix'
 const { Loading } = pkg;
     import { ProductosService } from "../productos/productos.svelte";

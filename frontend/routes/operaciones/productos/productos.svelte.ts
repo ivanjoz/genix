@@ -1,4 +1,4 @@
-import { GetHandler, POST } from '$core/http.svelte';
+import { GetHandler, POST } from '$ecommerce/node_modules/@sveltejs/kit/src/utils/http';
 import { browser } from '$app/environment';
 import type { ImageSource } from '$components/ImageUploader.svelte';
 

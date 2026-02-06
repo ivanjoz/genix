@@ -25,6 +25,8 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+.svelte-kit/*
+.svelte-kit/
 
 # Store images: only keep .avif and .md
 static/store-images/*

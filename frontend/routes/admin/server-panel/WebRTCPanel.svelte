@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import { webRTCManager, useWebRTC } from '$core/lib/webrtc/manager';
+import { webRTCManager, useWebRTC } from '$libs/webrtc/manager';
 	import { Core } from '$core/store.svelte';
 
 	const webRTC = useWebRTC();

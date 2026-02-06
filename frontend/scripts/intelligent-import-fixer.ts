@@ -267,6 +267,9 @@ function convertToAliasPath(filePath: string): string | null {
     absPath = path.resolve(PROJECT_ROOT, filePath);
   }
 
+  // DEBUG
+  // console.log(`  [convertToAliasPath] absPath: ${absPath}`);
+
   const sortedAliases = Object.entries(aliasMap).sort((a, b) => b[1].length - a[1].length);
 
   for (const [alias, pkgDir] of sortedAliases) {
@@ -275,6 +278,7 @@ function convertToAliasPath(filePath: string): string | null {
 
     if (absPath.startsWith(baseDirWithSep) || absPath === absBaseDir) {
       let relativePath = path.relative(absBaseDir, absPath);
+      // console.log(`  [convertToAliasPath] Matched alias ${alias} for ${relativePath}`);
 
       const svelte5Exts = ['.svelte.ts', '.svelte.js'];
       let isSvelte5 = false;
@@ -323,9 +327,10 @@ function searchForFile(fileName: string, extensions: string[] = []): string | nu
   // Automatically discover all package directories (pkg-*)
   const pathsToSearch: string[] = [];
   const items = fs.readdirSync(PROJECT_ROOT);
+  const targetDirs = new Set(['core', 'domain-components', 'services', 'ui-components', 'ecommerce', 'libs', 'routes']);
   for (const item of items) {
     const itemPath = path.join(PROJECT_ROOT, item);
-    if (fs.statSync(itemPath).isDirectory() && item.startsWith('pkg-')) {
+    if (fs.statSync(itemPath).isDirectory() && (item.startsWith('pkg-') || targetDirs.has(item))) {
       pathsToSearch.push(item);
       // Also add common subdirectories
       const subItems = fs.readdirSync(itemPath);
@@ -344,7 +349,8 @@ function searchForFile(fileName: string, extensions: string[] = []): string | nu
       const dirPath = path.join(PROJECT_ROOT, searchDir);
       if (!fs.existsSync(dirPath)) continue;
 
-      const files = findFilesRecursively(dirPath, [path.extname(cleanFileName)]);
+      const allFiles = findFilesRecursively(dirPath, [path.extname(cleanFileName)]);
+      const files = allFiles.filter(f => !f.includes('node_modules') && !f.includes('.svelte-kit'));
       for (const file of files) {
         if (path.basename(file) === cleanFileName) {
           return file;
@@ -359,9 +365,9 @@ function searchForFile(fileName: string, extensions: string[] = []): string | nu
         const dirPath = path.join(PROJECT_ROOT, searchDir);
         if (!fs.existsSync(dirPath)) continue;
 
-        const files = findFilesRecursively(dirPath, [ext]);
-        for (const file of files) {
-          if (path.basename(file) === fullFileName) {
+              const allFiles = findFilesRecursively(dirPath, [ext]);
+              const files = allFiles.filter(f => !f.includes('node_modules') && !f.includes('.svelte-kit'));
+              for (const file of files) {          if (path.basename(file) === fullFileName) {
             return file;
           }
         }
@@ -601,12 +607,13 @@ function extractExports(filePath: string): ExportedSymbol[] {
  */
 function buildSymbolIndex() {
   const searchDirs = [
-    'pkg-core',
-    'pkg-ui',
+    'core',
+    'domain-components',
     'routes',
-    'pkg-services',
-    'pkg-components',
-    'pkg-store'
+    'services',
+    'ui-components',
+    'ecommerce',
+    'libs'
   ];
 
   let totalFiles = 0;
@@ -616,10 +623,13 @@ function buildSymbolIndex() {
     const dirPath = path.join(PROJECT_ROOT, dir);
     if (!fs.existsSync(dirPath)) continue;
 
-    const files = findFilesRecursively(dirPath, ['.ts', '.js', '.svelte', '.css']);
+    const allFiles = findFilesRecursively(dirPath, ['.ts', '.js', '.svelte', '.css']);
+    // Filter out any files that might have slipped through from node_modules or .svelte-kit
+    const files = allFiles.filter(f => !f.includes('node_modules') && !f.includes('.svelte-kit'));
 
     for (const file of files) {
       const relativePath = path.relative(PROJECT_ROOT, file);
+      // if (relativePath.includes('node_modules')) console.log(`  [buildSymbolIndex] WARNING: Indexing file in node_modules: ${relativePath}`);
       const exports = extractExports(file);
 
       fileExports.set(relativePath, exports);
@@ -804,7 +814,7 @@ function checkImports(filePath: string): ImportIssue[] {
     }
     const missingFile = resolvedFile === null;
 
-    // Check for missing extension (e.g. $ui/components/Input instead of Input.svelte)
+    // Check for missing extension (e.g. $domain/components/Input instead of Input.svelte)
     let missingExtension = false;
     if (resolvedFile) {
       const isSvelteRelated = resolvedFile.endsWith('.svelte') ||
@@ -1326,11 +1336,12 @@ function checkImports(filePath: string): ImportIssue[] {
 function analyzeImports(): FixReport {
   const searchDirs = [
     'routes',
-    'pkg-core',
-    'pkg-ui',
-    'pkg-services',
-    'pkg-components',
-    'pkg-store'
+    'core',
+    'domain-components',
+    'services',
+    'ui-components',
+    'ecommerce',
+    'libs'
   ];
 
   let totalFiles = 0;
@@ -1341,7 +1352,9 @@ function analyzeImports(): FixReport {
     const dirPath = path.join(PROJECT_ROOT, dir);
     if (!fs.existsSync(dirPath)) continue;
 
-    const files = findFilesRecursively(dirPath, ['.ts', '.js', '.svelte']);
+    const allFiles = findFilesRecursively(dirPath, ['.ts', '.js', '.svelte']);
+    // Filter out any files that might have slipped through from node_modules or .svelte-kit
+    const files = allFiles.filter(f => !f.includes('node_modules') && !f.includes('.svelte-kit'));
 
     for (const file of files) {
       const relativePath = path.relative(PROJECT_ROOT, file);
@@ -1471,8 +1484,11 @@ function fixImportIssue(filePath: string, issue: ImportIssue): boolean {
 function determineBestFix(issue: ImportIssue, sourceFile: string): string | null {
   const imp = issue.importStatement;
 
+  // console.log(`  [determineBestFix] sourceFile: ${sourceFile}, importPath: ${imp.importPath}`);
+
   // Helper to format the final import line with correct type keyword
   const formatFix = (newPath: string, newSymbols?: string[]) => {
+    // console.log(`  [formatFix] newPath: ${newPath}, newSymbols: ${newSymbols?.join(',') || 'none'}`);
     // Safety lock: check if the newPath actually resolves from the sourceFile's package
     let resolves = false;
     if (newPath.startsWith('$')) {
@@ -1484,6 +1500,7 @@ function determineBestFix(issue: ImportIssue, sourceFile: string): string | null
     }
 
     if (!resolves) {
+      // console.log(`  [formatFix] FAILED: ${newPath} does not resolve`);
       return null;
     }
 
@@ -1553,11 +1570,13 @@ function determineBestFix(issue: ImportIssue, sourceFile: string): string | null
 
   // 1. If only type keyword is missing (global or inline)
   if ((issue.shouldAddTypeKeyword || (issue.missingTypeSymbols && issue.missingTypeSymbols.length > 0)) && !issue.missingFile && !issue.missingExtension && !issue.fixAsDefaultImport) {
+    // console.log(`  [determineBestFix] Branch 1: Only type keyword missing`);
     return formatFix(imp.importPath);
   }
 
   // 2. Fix missing extension or missing file by suggesting correct path
   if ((issue.missingExtension || issue.missingFile) && issue.actualFileLocation) {
+    // console.log(`  [determineBestFix] Branch 2: Missing extension or file. actualFileLocation: ${issue.actualFileLocation}`);
     const aliasPath = convertToAliasPath(issue.actualFileLocation);
     if (aliasPath) {
       return formatFix(aliasPath);
@@ -1566,6 +1585,7 @@ function determineBestFix(issue: ImportIssue, sourceFile: string): string | null
 
   // 3. Fix Svelte component import style (named to default)
   if (issue.fixAsDefaultImport) {
+    // console.log(`  [determineBestFix] Branch 3: Fix as default import`);
     const componentName = getComponentNameFromPath(imp.importPath) || imp.imports[0];
     let targetPath = imp.importPath;
     if (issue.actualFileLocation) {
@@ -1576,6 +1596,7 @@ function determineBestFix(issue: ImportIssue, sourceFile: string): string | null
 
   // 4. Fix missing symbols by suggesting correct import path or symbol name
   if (issue.missingSymbols.length > 0 && issue.foundIn.length > 0) {
+    // console.log(`  [determineBestFix] Branch 4: Fix missing symbols. foundIn: ${issue.foundIn.length} locations`);
     const missingSymbol = issue.missingSymbols[0];
     const uniqueFiles = new Map();
     for (const loc of issue.foundIn) {
@@ -1606,9 +1627,11 @@ function determineBestFix(issue: ImportIssue, sourceFile: string): string | null
     }
 
     const foundFile = locations[0].filePath;
+    // console.log(`  [determineBestFix] Choosing location 0: ${foundFile} for symbol ${missingSymbol}`);
     const aliasPath = convertToAliasPath(foundFile);
 
     if (aliasPath) {
+      // console.log(`  [determineBestFix] Generated aliasPath: ${aliasPath}`);
       const newSymbols = imp.imports.map(s => s === missingSymbol ? locations[0].name : s);
       return formatFix(aliasPath, newSymbols);
     }
