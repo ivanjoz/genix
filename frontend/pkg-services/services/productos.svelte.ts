@@ -1,6 +1,6 @@
 import { Env } from '$core/env';
 import { arrayToMapN } from '$core/helpers';
-import { GET } from '$core/http';
+import { GET } from '$core/http.svelte';
 
 const maxCacheTime = 60 * 5 // 2 segundos
 const productosPromiseMap: Map<string, Promise<any>> = new Map()

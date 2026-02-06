@@ -113,7 +113,8 @@ const parsePreResponse = (res: any, status: IHttpStatus): Promise<any> => {
     } else {
       return res.json()
     }
-  }
+	}
+	return Promise.resolve()
 }
 
 // Parsea el body de la respuesta
@@ -361,7 +362,8 @@ export class GetHandler {
   useCache: { min: number, ver: number  } | undefined = undefined
   headers: { [k: string]: string } | undefined = undefined
 
-  handler(e: any){}
+	handler(e: any) { }
+  isReady = $state(0)
 
   isTest: boolean = false
   Test(){
@@ -399,13 +401,15 @@ export class GetHandler {
       if(cachedResponse){
         delete cachedResponse.__version__
         this.handler(cachedResponse)
-      }
+			}
+      this.isReady++
       return fetchCacheParsed(this.makeProps('refresh'))
     })
     .then(fetchedResponse => {
       if(fetchedResponse){
         delete fetchedResponse.__version__
-        this.handler(fetchedResponse)
+				this.handler(fetchedResponse)
+        this.isReady++
       }
     })
   }

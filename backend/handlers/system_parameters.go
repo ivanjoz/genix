@@ -36,12 +36,20 @@ func PostSystemParameters(req *core.HandlerArgs) core.HandlerResponse {
 	if err != nil {
 		return req.MakeErr("Error al deserializar el body: " + err.Error())
 	}
+	
+	if len(records) == 0 {
+		return req.MakeErr("No se enviaron registros a guardar.")
+	}
 
 	now := time.Now().Unix()
 	for i := range records {
-		records[i].EmpresaID = empresaID
-		records[i].Updated = now
-		records[i].UpdatedBy = req.Usuario.ID
+		e := &records[i]
+		if e.ParameterID == 0 {
+			return req.MakeErr("No se envió el parámetro ID.")
+		}
+		e.EmpresaID = empresaID
+		e.Updated = now
+		e.UpdatedBy = req.Usuario.ID
 	}
 
 	if err = db.Insert(&records); err != nil {

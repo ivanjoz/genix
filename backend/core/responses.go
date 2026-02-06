@@ -831,7 +831,11 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 
 	// Revisa si hay que enviar error
 	if len(response.Error) > 0 {
-		respWriter.WriteHeader(http.StatusBadRequest)
+		statusCode := http.StatusBadRequest
+		if response.StatusCode != 0 {
+			statusCode = response.StatusCode
+		}
+		respWriter.WriteHeader(statusCode)
 		errorMap := map[string]string{
 			"error": response.Error,
 		}

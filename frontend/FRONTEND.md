@@ -328,7 +328,7 @@ alias: {
 **Usage Examples**:
 ```typescript
 // Import from core
-import { httpGet } from '$core/http';
+import { httpGet } from '$core/http.svelte';
 
 // Import from UI components
 import { Page } from '$ui/Page.svelte';

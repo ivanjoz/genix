@@ -11,5 +11,8 @@
      "**/.vscode/**",
      "./docs/**",
      "**/store_deprecated/**",
-	]
+	],
+	"agent": {
+		r
+  }
 }

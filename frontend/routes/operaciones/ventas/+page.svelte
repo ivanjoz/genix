@@ -10,11 +10,14 @@ import { formatN } from '$core/helpers';
   import { ProductosService } from "../productos/productos.svelte";
   import type { IAlmacen } from "../sedes-almacenes/sedes-almacenes.svelte";
   import { AlmacenesService } from "../sedes-almacenes/sedes-almacenes.svelte";
-  import { ListasCompartidasService } from "../productos/productos.svelte";
+import { ListasCompartidasService } from "../productos/productos.svelte";
 import ProductoVentaCard from '$routes/operaciones/ventas/ProductoVentaCard.svelte';
-  import type { ProductoVenta } from "./ventas.svelte";
-  import { VentasState } from "./ventas.svelte";
+import type { ProductoVenta } from "./ventas.svelte";
+import { VentasState } from "./ventas.svelte";
 import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svelte';
+    import { Env } from '$core/env';
+    import { Core } from '$core/store.svelte';
+    import SystemParametersEditor from '$ui/SystemParametersEditor.svelte';
 
   // Helpers
   const formatMo = (n: number) => formatN(n / 100, 2);
@@ -205,195 +208,201 @@ import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svel
 <Page title="Ventas" sideLayerSize={400}
   options={[{ id: 1, name: "Ventas" }, { id: 2, name: "Configuración" }]}
 >
-  <div class="flex h-full gap-16">
-    <!-- Main Content -->
-    <div class="flex-1 flex flex-col min-w-0">
-      <!-- Toolbar -->
-      <div class="flex mb-12">
-        <div class="w-250 mr-12">
-          <SearchSelect
-            label=""
-            keyId="ID"
-            keyName="Nombre"
-            options={almacenesService.Almacenes}
-            placeholder="ALMACÉN"
-            selected={almacenSelected}
-            onChange={(e: IAlmacen) => {
-              if (e) {
-                almacenSelected = e.ID;
-                loadStock(e.ID);
-              }
-            }}
-          />
-        </div>
-
-        <div class="flex-1 relative flex gap-4">
-          <div class="relative flex-1">
-             <i
-               class="icon-search absolute left-12 top-1/2 -translate-y-1/2 text-gray-400"
-             ></i>
-             <input
-               bind:this={searchInput}
-               type="text"
-               class="w-full pl-36 pr-16 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-               placeholder="Producto..."
-               value={ventasState.filterText}
-               oninput={(e) => filterProductos(e.currentTarget.value)}
-             />
+  {#if Core.pageOptionSelected === 1}
+    <div class="flex h-full gap-16">
+      <!-- Main Content -->
+      <div class="flex-1 flex flex-col min-w-0">
+        <!-- Toolbar -->
+        <div class="flex mb-12">
+          <div class="w-250 mr-12">
+            <SearchSelect
+              label=""
+              keyId="ID"
+              keyName="Nombre"
+              options={almacenesService.Almacenes}
+              placeholder="ALMACÉN"
+              selected={almacenSelected}
+              onChange={(e: IAlmacen) => {
+                if (e) {
+                  almacenSelected = e.ID;
+                  loadStock(e.ID);
+                }
+              }}
+            />
           </div>
-          <div class="relative w-200">
-             <i
-               class="icon-barcode absolute left-12 top-1/2 -translate-y-1/2 text-gray-400"
-             ></i>
-             <input
-               type="text"
-               class="w-full pl-36 pr-16 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-               placeholder="SKU..."
-               value={ventasState.filterSku}
-               oninput={(e) => filterSkus(e.currentTarget.value)}
-             />
-          </div>
-        </div>
-      </div>
 
-      <!-- Grid/List -->
-      <div class="flex-1 overflow-y-auto">
-        {#each chunkedProductos as group, groupIdx (group[0].key)}
-          <div class="flex gap-4 mb-4">
-            {#each group as item, itemIdx (item.key)}
-              <div class="flex-1 min-w-0">
-                <ProductoVentaCard
-                  idx={groupIdx * 2 + itemIdx}
-                  productoStock={item}
-                  isSelected={(groupIdx * 2 + itemIdx) === productoSelected}
-                  ventaProducto={ventasState.ventaProductosMap.get(item.key)}
-                  filterText={ventasState.filterText}
-                  onselect={(i) => (productoSelected = i)}
-                  onmouseover={() => (productoSelected = -1)}
-                  onadd={(n, sku) => {
-                    ventasState.addProducto(item, n, sku);
-                    filterProductos("");
-                  }}
-                />
-              </div>
-            {/each}
-            {#if group.length === 1}
-              <div class="flex-1 min-w-0"></div>
-            {/if}
-          </div>
-        {/each}
-
-        {#if productosParsed.length === 0}
-          <div class="text-center py-48 text-gray-400">
-            No se encontraron productos
-          </div>
-        {/if}
-      </div>
-    </div>
-
-    <!-- Side Cart -->
-    <div class="w-[38%] min-w-350 ml-24"></div>
-    <LayerStatic css="w-[38%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-60px)] shadow-lg">
-      <!-- Error Message -->
-      {#if ventasState.ventaErrorMessage}
-        <div class="bg-red-50 m-8 text-red-600 p-12 text-sm font-medium border-b border-red-100 animate-in slide-in-from-top-2"
-        >
-          {ventasState.ventaErrorMessage}
-        </div>
-      {/if}
-      <!-- Header -->
-      <div class="px-16 py-12 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
-      >
-        <h3 class="font-bold text-gray-800">DETALLE DE VENTA</h3>
-        <button class="bx-blue"
-          title="Guardar venta"
-        >
-          Guardar
-          <i class="icon-floppy"></i>
-        </button>
-      </div>
-
-      <!-- Summary -->
-      <div
-        class="p-16 grid grid-cols-2 gap-16 border-b border-gray-100 bg-white"
-      >
-        <div class="col-span-2">
-          <Input
-            label="Cliente"
-            css="w-full"
-            saveOn={ventasState.form}
-            save="clienteID"
-          />
-        </div>
-
-        <div class="bg-gray-50 p-8 rounded border border-gray-100">
-          <div class="text-xs text-gray-500 mb-4">Sub Total</div>
-          <div class="font-mono text-gray-800 font-medium">
-            {formatMo(ventasState.form.subtotal)}
+          <div class="flex-1 relative flex gap-4">
+            <div class="relative flex-1">
+               <i
+                 class="icon-search absolute left-12 top-1/2 -translate-y-1/2 text-gray-400"
+               ></i>
+               <input
+                 bind:this={searchInput}
+                 type="text"
+                 class="w-full pl-36 pr-16 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                 placeholder="Producto..."
+                 value={ventasState.filterText}
+                 oninput={(e) => filterProductos(e.currentTarget.value)}
+               />
+            </div>
+            <div class="relative w-200">
+               <i
+                 class="icon-barcode absolute left-12 top-1/2 -translate-y-1/2 text-gray-400"
+               ></i>
+               <input
+                 type="text"
+                 class="w-full pl-36 pr-16 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                 placeholder="SKU..."
+                 value={ventasState.filterSku}
+                 oninput={(e) => filterSkus(e.currentTarget.value)}
+               />
+            </div>
           </div>
         </div>
 
-        <div class="bg-blue-50 p-8 rounded border border-blue-100">
-          <div class="text-xs text-blue-600 mb-4 font-bold">Total</div>
-          <div class="font-mono text-blue-700 font-bold text-lg">
-            {formatMo(ventasState.form.total)}
-          </div>
-        </div>
-      </div>
-
-      <!-- List -->
-      <div class="flex-1 overflow-y-auto p-4 space-y-4">
-        {#each ventasState.ventaProductos as item (item.key)}
-          <div
-            class="flex items-center gap-8 py-4 px-8 rounded-lg bg-gray-50 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 transition-all group"
-          >
-            <div class="flex-1 min-w-0">
-              <div class="text-sm font-medium text-gray-800 truncate">
-                <span class="text-blue-600 font-bold mr-4">{item.cantidad} X</span>
-                {item.producto?.Nombre}
-                {#if item.isSubUnidad}
-                  <span class="text-purple-600 text-[10px] ml-4 font-normal"
-                    >({item.producto?.SbnUnidad})</span
-                  >
-                {/if}
-              </div>
-              {#if item.skus && item.skus.size > 0}
-                <div class="flex flex-wrap gap-4 mt-2">
-                  {#each item.skus.entries() as [sku, qty]}
-                    <span
-                      class="text-[10px] bg-white border border-gray-200 px-6 rounded text-gray-600"
-                    >
-                      {sku} <span class="font-bold text-gray-800">x{qty}</span>
-                    </span>
-                  {/each}
+        <!-- Grid/List -->
+        <div class="flex-1 overflow-y-auto">
+          {#each chunkedProductos as group, groupIdx (group[0].key)}
+            <div class="flex gap-4 mb-4">
+              {#each group as item, itemIdx (item.key)}
+                <div class="flex-1 min-w-0">
+                  <ProductoVentaCard
+                    idx={groupIdx * 2 + itemIdx}
+                    productoStock={item}
+                    isSelected={(groupIdx * 2 + itemIdx) === productoSelected}
+                    ventaProducto={ventasState.ventaProductosMap.get(item.key)}
+                    filterText={ventasState.filterText}
+                    onselect={(i) => (productoSelected = i)}
+                    onmouseover={() => (productoSelected = -1)}
+                    onadd={(n, sku) => {
+                      ventasState.addProducto(item, n, sku);
+                      filterProductos("");
+                    }}
+                  />
                 </div>
+              {/each}
+              {#if group.length === 1}
+                <div class="flex-1 min-w-0"></div>
               {/if}
             </div>
+          {/each}
 
-            <div class="flex items-center gap-8">
-              <div class="font-mono text-sm font-bold text-gray-700">
-                {formatMo((item.isSubUnidad && item.producto?.SbnPreciFinal ? item.producto.SbnPreciFinal : (item.producto?.PrecioFinal || 0)) * item.cantidad)}
-              </div>
-              <button
-                class="text-red-400 hover:text-red-600 p-4 opacity-0 group-hover:opacity-100 transition-opacity"
-                onclick={() => ventasState.removeProducto(item.key)}
-                title="Eliminar"
-              >
-                <i class="icon-trash"></i>
-              </button>
+          {#if productosParsed.length === 0}
+            <div class="text-center py-48 text-gray-400">
+              No se encontraron productos
             </div>
-          </div>
-        {/each}
+          {/if}
+        </div>
+      </div>
 
-        {#if ventasState.ventaProductos.length === 0}
-          <div
-            class="flex flex-col items-center justify-center h-192 text-gray-300 gap-8"
+      <!-- Side Cart -->
+      <div class="w-[38%] min-w-350 ml-24"></div>
+      <LayerStatic css="w-[38%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-60px)] shadow-lg">
+        <!-- Error Message -->
+        {#if ventasState.ventaErrorMessage}
+          <div class="bg-red-50 m-8 text-red-600 p-12 text-sm font-medium border-b border-red-100 animate-in slide-in-from-top-2"
           >
-            <i class="icon-cart text-4xl"></i>
-            <span class="text-sm">Carrito vacío</span>
+            {ventasState.ventaErrorMessage}
           </div>
         {/if}
-      </div>
-    </LayerStatic>
-  </div>
+        <!-- Header -->
+        <div class="px-16 py-12 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
+        >
+          <h3 class="font-bold text-gray-800">DETALLE DE VENTA</h3>
+          <button class="bx-blue"
+            title="Guardar venta"
+          >
+            Guardar
+            <i class="icon-floppy"></i>
+          </button>
+        </div>
+
+        <!-- Summary -->
+        <div
+          class="p-16 grid grid-cols-2 gap-16 border-b border-gray-100 bg-white"
+        >
+          <div class="col-span-2">
+            <Input
+              label="Cliente"
+              css="w-full"
+              saveOn={ventasState.form}
+              save="clienteID"
+            />
+          </div>
+
+          <div class="bg-gray-50 p-8 rounded border border-gray-100">
+            <div class="text-xs text-gray-500 mb-4">Sub Total</div>
+            <div class="font-mono text-gray-800 font-medium">
+              {formatMo(ventasState.form.subtotal)}
+            </div>
+          </div>
+
+          <div class="bg-blue-50 p-8 rounded border border-blue-100">
+            <div class="text-xs text-blue-600 mb-4 font-bold">Total</div>
+            <div class="font-mono text-blue-700 font-bold text-lg">
+              {formatMo(ventasState.form.total)}
+            </div>
+          </div>
+        </div>
+
+        <!-- List -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-4">
+          {#each ventasState.ventaProductos as item (item.key)}
+            <div
+              class="flex items-center gap-8 py-4 px-8 rounded-lg bg-gray-50 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 transition-all group"
+            >
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-gray-800 truncate">
+                  <span class="text-blue-600 font-bold mr-4">{item.cantidad} X</span>
+                  {item.producto?.Nombre}
+                  {#if item.isSubUnidad}
+                    <span class="text-purple-600 text-[10px] ml-4 font-normal"
+                      >({item.producto?.SbnUnidad})</span
+                  >
+                  {/if}
+                </div>
+                {#if item.skus && item.skus.size > 0}
+                  <div class="flex flex-wrap gap-4 mt-2">
+                    {#each item.skus.entries() as [sku, qty]}
+                      <span
+                        class="text-[10px] bg-white border border-gray-200 px-6 rounded text-gray-600"
+                      >
+                        {sku} <span class="font-bold text-gray-800">x{qty}</span>
+                      </span>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+
+              <div class="flex items-center gap-8">
+                <div class="font-mono text-sm font-bold text-gray-700">
+                  {formatMo((item.isSubUnidad && item.producto?.SbnPreciFinal ? item.producto.SbnPreciFinal : (item.producto?.PrecioFinal || 0)) * item.cantidad)}
+                </div>
+                <button
+                  class="text-red-400 hover:text-red-600 p-4 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onclick={() => ventasState.removeProducto(item.key)}
+                  title="Eliminar"
+                >
+                  <i class="icon-trash"></i>
+                </button>
+              </div>
+            </div>
+          {/each}
+
+          {#if ventasState.ventaProductos.length === 0}
+            <div
+              class="flex flex-col items-center justify-center h-192 text-gray-300 gap-8"
+            >
+              <i class="icon-cart text-4xl"></i>
+              <span class="text-sm">Carrito vacío</span>
+            </div>
+          {/if}
+        </div>
+      </LayerStatic>
+    </div>
+  {:else if Core.pageOptionSelected === 2}
+    <div class="flex justify-center py-24">
+      <SystemParametersEditor />
+    </div>
+  {/if}
 </Page>

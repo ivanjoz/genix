@@ -12,6 +12,7 @@ import (
 
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -40,7 +41,21 @@ func makeAppHandlers() *core.AppRouterType {
 // Handler principal (para lambda y para local)
 var apiNames = []string{"api", "go1", "go2", "go3", "go4", "go5"}
 
-func mainHandler(args *core.HandlerArgs) core.MainResponse {
+func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
+	defer func() {
+		if r := recover(); r != nil {
+			errStr := fmt.Sprintf("Internal Server Error (Panic): %v", r)
+			core.Logx(5, errStr)
+			core.Log(string(debug.Stack()))
+
+			handlerResponse := core.HandlerResponse{
+				Error:      errStr,
+				StatusCode: 500,
+			}
+			response = prepareResponse(args, &handlerResponse)
+		}
+	}()
+
 	// coloca algunas variables de entorno que pueden ser utilizadas por otros handlers
 	args.Authorization = core.MapGetKeys(args.Headers, "Authorization", "authorization")
 	args.Encoding = core.MapGetKeys(args.Headers, "Accept-Encoding", "accept-encoding")
@@ -133,7 +148,15 @@ type ExecLambdaInput struct {
 	ExecArgs core.ExecArgs `json:"fn_exec"`
 }
 
-func ExecFuncHandler(lambdaInput string) core.FuncResponse {
+func ExecFuncHandler(lambdaInput string) (response core.FuncResponse) {
+	defer func() {
+		if r := recover(); r != nil {
+			errStr := fmt.Sprintf("Internal Server Error (Panic in ExecFuncHandler): %v", r)
+			core.Logx(5, errStr)
+			core.Log(string(debug.Stack()))
+			response = core.FuncResponse{Error: errStr}
+		}
+	}()
 	core.Env.LOGS_ONLY_SAVE = true
 
 	input := ExecLambdaInput{}
@@ -245,7 +268,11 @@ func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerRespon
 	} else {
 		if len(handlerResponse.Error) > 0 {
 			error := handlerResponse.Error
-			response.LambdaResponse = core.MakeErrRespFinal(400, error)
+			statusCode := int32(400)
+			if handlerResponse.StatusCode != 0 {
+				statusCode = int32(handlerResponse.StatusCode)
+			}
+			response.LambdaResponse = core.MakeErrRespFinal(statusCode, error)
 		} else {
 			response.LambdaResponse = core.MakeResponseFinal(handlerResponse)
 		}

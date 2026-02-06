@@ -1,4 +1,4 @@
-import { GetHandler, POST } from '$core/http';
+import { GetHandler, POST } from '$core/http.svelte';
 
 export interface ISede {
   ID: number,

@@ -2,12 +2,13 @@
     import { untrack } from 'svelte';
 
   const {
-		 saveOn = $bindable(), save, css, label
+		 saveOn = $bindable(), save, css, label, useNumber
 	}: {
     saveOn?: T
 		save?: keyof T
     css?: string
     label?: string
+    useNumber?: boolean /* save 0 | 1 instead of true | false */
   } = $props();
 
   let isSelected = $state(false)
@@ -15,7 +16,11 @@
   const onSelect = () => {
     isSelected = !isSelected
     if(saveOn && save){
-      saveOn[save] = isSelected as NonNullable<T>[keyof T]
+    	if(useNumber){
+        saveOn[save] = (isSelected ? 1 : 0) as NonNullable<T>[keyof T]
+     	} else {
+        saveOn[save] = isSelected as NonNullable<T>[keyof T]
+      }
     }
   }
 

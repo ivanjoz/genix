@@ -12,7 +12,9 @@ Frontend using Svelte 5, SvelteKit, and Tailwind CSS.
 
 Container for authenticated pages. All non-public pages must be wrapped in this component. Redirects to `/login` if not authenticated.
 
-If the page is subdivided into sections, use the `options` and `selected` props. These options are rendered in the top main menu, so a maximum of 3 options is recommended because they are stacked horizontally.
+If the page is subdivided into sections, use the `options` prop. These options are rendered in the top main menu, so a maximum of 3 options is recommended because they are stacked horizontally.
+
+The `Page` component automatically manages the selection state in the global `Core.pageOptionSelected` reactive property (from `$core/store.svelte`). Use this property in your page logic to conditionally render sections.
 
 **Props:**
 | Prop | Type | Required | Description |
@@ -25,15 +27,16 @@ If the page is subdivided into sections, use the `options` and `selected` props.
 **Example:**
 ```svelte
 <script>
-  let view = $state(1)
+  import { Core } from '$core/store.svelte'
 </script>
 
 <Page title="New Page"
-  options={[[1,"Section 1"],[2,"Section 2"]]}
-  selected={view}
+  options={[{id: 1, name: "Section 1"}, {id: 2, name: "Section 2"}]}
 >
-  {#if view === 1}
+  {#if Core.pageOptionSelected === 1}
     <div>Content 1</div>
+  {:else if Core.pageOptionSelected === 2}
+    <div>Content 2</div>
   {/if}
 </Page>
 ```

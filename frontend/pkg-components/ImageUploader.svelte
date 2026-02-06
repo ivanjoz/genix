@@ -1,5 +1,5 @@
 <script lang="ts">
-import { POST_XMLHR } from '$core/http';
+import { POST_XMLHR } from '$core/http.svelte';
 import { onDestroy, untrack } from 'svelte';
 import { Notify, fileToImage } from '$core/helpers';
 import { Env } from '$core/env';

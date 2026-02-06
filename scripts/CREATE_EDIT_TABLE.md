@@ -164,6 +164,15 @@ Both commands use the same field format: `fieldName:type[:key]`
 
 Both commands use `go/format` to ensure generated or modified code follows Go formatting standards.
 
+### JSON Tagging Conventions
+
+The script automatically applies the following JSON tagging rules to all generated fields:
+- **Default**: `json:",omitempty"` (no explicit field names).
+- **Special Case: Updated**: `json:"upd,omitempty"`
+- **Special Case: Status**: `json:"ss,omitempty"`
+
+This ensures consistency across the API and reduces payload size for critical synchronization fields.
+
 ### Field Order
 
 - **For new tables**: Fields are generated in the order specified by the user, after the mandatory system fields.

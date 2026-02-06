@@ -7,7 +7,7 @@ In this project, **Services** act as the glue between the Svelte frontend and th
 ### Service vs. Connector
 While they are technically "connectors," the project convention is to name them `*Service` (e.g., `ProductosService`, `CajasService`). They are typically co-located with their respective routes or placed in `pkg-services/` if shared across multiple modules.
 
-### HTTP Utilities (`$core/http`)
+### HTTP Utilities (`$core/http.svelte`)
 - **`GetHandler`**: A base class for services that need automated caching and synchronization (Delta Cache). Best for master data.
 - **`GET`**: A functional wrapper for fetching data. It can be used for one-off requests or reports. If `useCache` is provided, it will utilize the Service Worker cache.
 - **`POST`**: Used for creating or updating records. It includes a `refreshRoutes` feature to invalidate caches.
@@ -22,7 +22,7 @@ Cached services are used for "Master Data" (Productos, Sedes, Almacenes) that ch
 These services extend `GetHandler` and implement the `handler` method.
 
 ```typescript
-import { GetHandler } from '$core/http';
+import { GetHandler } from '$core/http.svelte';
 
 export class MyService extends GetHandler {
   route = "my-entity"
@@ -65,7 +65,7 @@ Report services are used for complex queries, historical data (e.g., sales repor
 Used for data that must always be fresh or uses dynamic filters.
 
 ```typescript
-import { GET } from '$core/http';
+import { GET } from '$core/http.svelte';
 
 export const getMyReport = async (filters: LogFilters): Promise<ILog[]> => {
   let route = `my-report?start=${filters.start}&end=${filters.end}`
@@ -84,7 +84,7 @@ export const getMyReport = async (filters: LogFilters): Promise<ILog[]> => {
 Useful for data that doesn't need a full class/state management but benefits from caching.
 
 ```typescript
-import { GET } from '$core/http';
+import { GET } from '$core/http.svelte';
 
 export const getStaticConfig = () => {
   return GET({ 
@@ -101,7 +101,7 @@ export const getStaticConfig = () => {
 When updating data, it is critical to keep the cached services in sync.
 
 ```typescript
-import { POST } from '$core/http';
+import { POST } from '$core/http.svelte';
 
 export const saveEntity = (data: IEntity) => {
   return POST({

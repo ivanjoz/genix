@@ -1,4 +1,4 @@
-import { GetHandler } from '$core/http';
+import { GetHandler } from '$core/http.svelte';
 import type { IUsuario, IPerfil } from '$core/types/common';
 export { postUsuario, postUsuarioPropio } from '$services/services/usuarios.svelte';
 

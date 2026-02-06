@@ -1,4 +1,4 @@
-import { POST } from '$core/http';
+import { POST } from '$core/http.svelte';
 import type { IUsuario } from '$core/types/common';
 
 export const postUsuario = (data: IUsuario) => {

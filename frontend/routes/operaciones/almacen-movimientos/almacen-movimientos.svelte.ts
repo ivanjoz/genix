@@ -1,4 +1,4 @@
-import { GET } from '$core/http';
+import { GET } from '$core/http.svelte';
 import { Notify } from '$core/helpers';
 
 export interface IUsuario {

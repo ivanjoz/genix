@@ -19,7 +19,16 @@ import (
 	"github.com/rs/cors"
 )
 
-func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (*events.APIGatewayV2HTTPResponse, error) {
+func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (resp *events.APIGatewayV2HTTPResponse, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			errStr := fmt.Sprintf("Internal Server Error (Panic in LambdaHandler): %v", r)
+			core.Logx(5, errStr)
+			core.Log(string(debug.Stack()))
+			resp = core.MakeErrRespFinal(500, errStr)
+			err = nil // return nil error to Lambda runtime so it sends our response
+		}
+	}()
 	clearEnvVariables()
 
 	core.Env.REQ_IP = request.RequestContext.HTTP.SourceIP
@@ -57,6 +66,21 @@ func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (
 }
 
 func LocalHandler(w http.ResponseWriter, request *http.Request) {
+	defer func() {
+		if r := recover(); r != nil {
+			errStr := fmt.Sprintf("Internal Server Error (Panic in LocalHandler): %v", r)
+			core.Logx(5, errStr)
+			core.Log(string(debug.Stack()))
+
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusInternalServerError)
+			errorMap := map[string]string{
+				"error": errStr,
+			}
+			errorJson := core.ToJsonNoErr(errorMap)
+			w.Write([]byte(errorJson))
+		}
+	}()
 
 	const maxBodyBytes = int64(10 << 20) // 10 MiB
 	bodyReader := http.MaxBytesReader(w, request.Body, maxBodyBytes)

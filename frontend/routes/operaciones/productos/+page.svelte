@@ -3,7 +3,7 @@ import CheckboxOptions from '$components/CheckboxOptions.svelte';
 import Input from '$components/Input.svelte';
 import HTMLEditor from '$ui/HTMLEditor/HTMLEditor.svelte';
 import { ConfirmWarn, Loading, Notify } from '$core/helpers';
-import { POST } from '$core/http';
+import { POST } from '$core/http.svelte';
 import ImageUploader from '$components/ImageUploader.svelte';
 import Layer from '$components/Layer.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';

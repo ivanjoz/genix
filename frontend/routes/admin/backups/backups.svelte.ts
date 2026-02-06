@@ -1,4 +1,4 @@
-import { GetHandler, POST } from '$core/http';
+import { GetHandler, POST } from '$core/http.svelte';
 
 export interface IBackup {
   Name: string
@@ -45,4 +45,3 @@ export const restoreBackup = (name: string) => {
     errorMessage: "Error al restaurar el backup"
   })
 }
-

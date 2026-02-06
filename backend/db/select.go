@@ -383,8 +383,14 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 			return nil
 		}
 
-		eg.Go(func() error {
-			err := doScan()
+		eg.Go(func() (err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("Panic in select goroutine: %v", r)
+				}
+			}()
+
+			err = doScan()
 			if err != nil {
 				if strings.Contains(err.Error(), "no hosts available") {
 					scyllaSession = nil

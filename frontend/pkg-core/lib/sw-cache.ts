@@ -2,7 +2,7 @@ import { Notify } from '$core/helpers';
 import { fetchEvent } from '$core/store.svelte';
 import { Env } from '$core/env';
 import type { IGetCacheSubObject, serviceHttpProps } from '$core/workers/service-worker';
-import { setFetchProgress } from '$core/http';
+import { setFetchProgress } from '$core/http.svelte';
 
 let tempID = parseInt(String(Math.floor(Date.now()/1000)).substring(4))
 const serviceWorkerResolverMap: Map<number,((value: any) => void)> = new Map()

@@ -741,7 +741,7 @@ function checkImports(filePath: string): ImportIssue[] {
     const foundIn: ExportedSymbol[] = [];
     let actualFileLocation: string | undefined;
 
-    // Check if import path needs correction (e.g., $core/http → $core/lib/http)
+    // Check if import path needs correction (e.g., $core/http.svelte → $core/lib/http)
     let importPathNeedsFix = false;
     if (!missingFile && imp.importPath.startsWith('$')) {
       const alias = imp.importPath.split('/')[0];

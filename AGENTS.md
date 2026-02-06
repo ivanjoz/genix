@@ -16,16 +16,17 @@
 - **Bias toward Action:** For known territory (Go, React, PostgreSQL), apply the fix immediately.
 - **Verify & Share:** After a fix, run the relevant test or build command. If it passes, show the result. If it fails, trigger the "Stall Protocol" immediately rather than trying a "blind" second fix.
 - **Keep in Loop:** Every tool execution should be preceded by a 1-sentence "Intent" (e.g., "Updating the ScyllaDB connection string to test the timeout hypothesis").
+- **Extensive Logging**: Always implement and use debug logs extensively to diagnose errors and trace execution flow.
 
-# Genix Project Structure for AI Agents
-
-This document provides guidance for AI agents to navigate the Genix project codebase and find relevant documentation.
+## 4. RULES
+- Search for the correct .md documentation before proceed
+- If some points in the task are unclear, stop and ask for clarification
+- ALWAYS add concise comments in the code to explain the rationale and the goal, especially when code contains business logic.
+- ALWAYS use expresive names for varibles and functions. DONT USE generic names.
 
 ## Project Overview
 
 The Genix project is an ERP and E-commerce platform for small businesses. It consists of a Go backend and a Svelte.js frontend. The project is currently migrating its frontend from Solid.js to Svelte.js.
-
-For a general overview of the project, technology stack, and migration status, please refer to the main [README.md](README.md).
 
 ## Backend
 
@@ -49,9 +50,15 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 - **frontend/FRONTEND.md** - Monorepo architecture with independent store app, directory structure, package system, development workflow
 - **frontend/UI_COMPONENTS.md** - UI component library documentation: Page, OptionsStrip, Layer/Modal components, form components, VTable, services
 - **frontend/STORE.md** - Store integration notes: thumbhash implementation, store routes, CSS hashing
-- **frontend/docs/SERVICES_GUIDE.md** - Guide for frontend services (connectors), explaining Cached Services (Delta Cache) vs. Report Services.
+- **frontend/docs/SERVICES_GUIDE.md** - Guide for creating frontend services (connectors), explaining Cached Services (Delta Cache) vs. Report Services. ALWAYS read before creating one.
 
 ### Scripts
 - **scripts/CREATE_EDIT_TABLE.md** - Creates new database table structures and adds columns to existing tables. USE ALWAYS.
 - **scripts/CHECK_TABLES_SCRIPT.md** - Validates data model conventions for the custom ORM
 - **scripts/SCRIPTS.md** - Central dispatcher and wrapper script management for project utilities
+
+### Frontend Rules
+- Use untrack inside $effect to avoid render loop
+
+### Backend Rules
+- NEVER trust the client. ALWAYS validate the required field and consistency of the data, and return a descriptive error if any validation fails.

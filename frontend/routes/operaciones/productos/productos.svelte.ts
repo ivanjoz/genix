@@ -1,4 +1,4 @@
-import { GetHandler, POST } from '$core/http';
+import { GetHandler, POST } from '$core/http.svelte';
 import { browser } from '$app/environment';
 import type { ImageSource } from '$components/ImageUploader.svelte';
 

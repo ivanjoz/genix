@@ -416,18 +416,26 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 ## 12. Serialization: JSON vs CBOR Tags
 
 Structs in `app/types` must be tagged for both formats to ensure consistency.
-- **JSON**: Used for REST/Web. Standard camelCase.
+
+### JSON Tagging Rules
+- **NEVER** use explicit field names in JSON tags (e.g., `json:"nombre,omitempty"` is forbidden).
+- **ALWAYS** use `json:",omitempty"` as the default for all fields.
+- **EXCEPTIONS**:
+    - `Updated` MUST use `json:"upd,omitempty"`.
+    - `Status` MUST use `json:"ss,omitempty"`.
+
+### CBOR Tagging Rules
 - **CBOR**: Used for high-performance internal and mobile traffic. Use integer keys.
+- Integer keys in CBOR are significantly more efficient than string keys.
 
 ```go
 type Entity struct {
-    ID     int32  `json:"id,omitempty" cbor:"1,keyasint,omitempty"`
-    Nombre string `json:"nombre,omitempty" cbor:"2,keyasint,omitempty"`
+    ID     int32  `json:",omitempty" cbor:"1,keyasint,omitempty"`
+    Nombre string `json:",omitempty" cbor:"2,keyasint,omitempty"`
     Status int8   `json:"ss,omitempty" cbor:"3,keyasint,omitempty"`
+    Updated int64 `json:"upd,omitempty" cbor:"4,keyasint,omitempty"`
 }
 ```
-
-**Note**: Integer keys in CBOR are significantly more efficient than string keys.
 
 ---
 

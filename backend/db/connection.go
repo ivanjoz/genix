@@ -80,7 +80,7 @@ func getScyllaConnection() *gocql.Session {
 	session, err := cluster.CreateSession() //  gocqlx.WrapSession(cluster.CreateSession())
 	if err != nil {
 		log.Println(err)
-		return nil
+		panic(fmt.Sprintf("gocql: unable to create session: %v", err))
 	}
 	fmt.Println("Base de datos ScyllaDB Conectada!!")
 

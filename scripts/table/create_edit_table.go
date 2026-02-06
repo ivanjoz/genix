@@ -178,7 +178,7 @@ func buildFieldString(name, typeName string, isKey, isSlice bool, sliceEType str
 		dbTag = fmt.Sprintf(`db:"%s,pk"`, snakeName)
 	}
 
-	jsonTag := fmt.Sprintf(`json:"%s,omitempty"`, snakeName)
+	jsonTag := `json:",omitempty"`
 	if name == "Updated" {
 		jsonTag = `json:"upd,omitempty"`
 	} else if name == "Status" {
@@ -337,7 +337,7 @@ func findTableFile(dir, tableName string) (string, error) {
 func buildBaseFieldAST(field Field) *ast.Field {
 	snakeName := toSnakeCase(field.Name)
 
-	jsonTag := fmt.Sprintf(`json:"%s,omitempty"`, snakeName)
+	jsonTag := `json:",omitempty"`
 	dbTag := fmt.Sprintf(`db:"%s"`, snakeName)
 	if field.IsKey {
 		dbTag = fmt.Sprintf(`db:"%s,pk"`, snakeName)
@@ -470,8 +470,13 @@ func toSnakeCase(str string) string {
 }
 
 func toCamelCase(str string) string {
-	var link = regexp.MustCompile("(^[A-Za-z])|_([A-Za-z])")
-	return link.ReplaceAllStringFunc(str, func(s string) string {
-		return strings.ToUpper(strings.Replace(s, "_", "", -1))
-	})
+	parts := strings.Split(str, "_")
+	for i, part := range parts {
+		if strings.ToLower(part) == "id" {
+			parts[i] = "ID"
+		} else if len(part) > 0 {
+			parts[i] = strings.ToUpper(part[:1]) + part[1:]
+		}
+	}
+	return strings.Join(parts, "")
 }

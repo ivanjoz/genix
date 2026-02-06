@@ -110,7 +110,9 @@ this.registerSignalHandler();
     }
   }
 
-  async connect(): Promise<void> {
+	async connect(): Promise<void> {
+		console.log("Experimental WebRTC server disabled.")
+		return
     console.log(`[${getTS()}] ${DEBUG_PREFIX} Connecting to AppSync...`);
 
     try {

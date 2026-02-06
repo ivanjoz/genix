@@ -29,7 +29,7 @@ import { initWebRTC, webRTCManager } from '$core/lib/webrtc/manager';
 		} catch (error) {
 			console.error('❌ Failed to initialize image worker:', error)
 		}
-
+		/* 
 		console.log('🔧 Initializing WebRTC P2P bridge...')
 		try {
 			initWebRTC(Env.SIGNALING_ENDPOINT)
@@ -37,6 +37,7 @@ import { initWebRTC, webRTCManager } from '$core/lib/webrtc/manager';
 		} catch (error) {
 			console.error('❌ Failed to initialize WebRTC bridge:', error)
 		}
+		*/
 	}
 
 	const redirectsToLogin = $derived.by(() => {

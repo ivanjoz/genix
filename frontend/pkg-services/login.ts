@@ -1,4 +1,4 @@
-import { GET, POST } from '$core/http';
+import { GET, POST } from '$core/http.svelte';
 import { accessHelper, checkIsLogin, registerReloadLogin } from '$core/lib/security';
 import type { IUsuario, ILoginResult } from '$core/types/common';
 import { Env } from '$core/env';

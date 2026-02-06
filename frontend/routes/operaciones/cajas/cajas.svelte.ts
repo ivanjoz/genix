@@ -1,4 +1,4 @@
-import { GetHandler, POST, GET } from '$core/http';
+import { GetHandler, POST, GET } from '$core/http.svelte';
 import { formatTime } from '$core/helpers';
 import { Notify } from '$core/helpers';
 
@@ -203,4 +203,3 @@ export const cajaMovimientoTipos = [
   { id: 6, name: "Pago", group: 2, isNegative: true },
   { id: 7, name: "Cobro", group: 2 }
 ]
-

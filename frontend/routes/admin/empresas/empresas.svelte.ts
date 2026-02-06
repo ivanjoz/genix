@@ -1,4 +1,4 @@
-import { GetHandler, POST } from '$core/http';
+import { GetHandler, POST } from '$core/http.svelte';
 
 export interface IEmpresaSmtp {
   Host: string
@@ -81,4 +81,3 @@ export const postEmpresa = (data: IEmpresa) => {
     refreshRoutes: ["empresas"]
   })
 }
-
