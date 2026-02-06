@@ -41,14 +41,17 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 
 ### Backend Documentation
 - **backend/README.md** - Brief overview of the Go backend for Genix
+- **backend/db/ORM_INTERNALS.md** - Deep dive into ORM internals: memory model, reflection engine, and query optimization
+- **backend/docs/CREATE_API_HANDLERS.md** - API handler development guide, MUST read before creating APIs. Key concepts: "updated" parameter for delta responses, query examples, conventions.
 - **backend/docs/ORM_DATABASE_QUERY.md** - Comprehensive ScyllaDB ORM documentation covering model definitions, CRUD operations, query building
 
 ### Frontend Documentation
 - **frontend/FRONTEND.md** - Monorepo architecture with independent store app, directory structure, package system, development workflow
 - **frontend/UI_COMPONENTS.md** - UI component library documentation: Page, OptionsStrip, Layer/Modal components, form components, VTable, services
 - **frontend/STORE.md** - Store integration notes: thumbhash implementation, store routes, CSS hashing
+- **frontend/docs/SERVICES_GUIDE.md** - Guide for frontend services (connectors), explaining Cached Services (Delta Cache) vs. Report Services.
 
 ### Scripts
-- **scripts/CREATE_EDIT_TABLE.md** - Creates new database table structures and adds columns to existing tables. Use always.
+- **scripts/CREATE_EDIT_TABLE.md** - Creates new database table structures and adds columns to existing tables. USE ALWAYS.
 - **scripts/CHECK_TABLES_SCRIPT.md** - Validates data model conventions for the custom ORM
 - **scripts/SCRIPTS.md** - Central dispatcher and wrapper script management for project utilities

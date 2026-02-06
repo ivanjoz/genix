@@ -105,7 +105,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 			ID.In(productosSet.Values...)
 		err := query.Exec()
 		if err != nil {
-			err = core.Err("Error al obtener los productos:", err)
+			err = core.Err("Error al obtener los movimientos de almacnén:", err)
 		}
 		return err
 	})
@@ -209,7 +209,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []s.MovimientoInterno) 
 		ID.In(productosIDs.Values...)
 
 	if err := query.Exec(); err != nil {
-		return core.Err("Error al obtener los productos:", err)
+		return core.Err("Error al obtener los productos (en almacén movimientos):", err)
 	}
 
 	productosMap := core.SliceToMapE(productos, func(e s.Producto) int32 { return e.ID })

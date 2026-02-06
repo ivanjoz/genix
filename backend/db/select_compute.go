@@ -117,16 +117,34 @@ func (dbTable *ScyllaTable[T]) ComputeCapabilities() []QueryCapability {
 				Priority:  30 + len(view.columns)*2,
 			})
 		} else if view.Type == 6 { // Simple View
-			cols := []string{}
-			for _, col := range view.columns {
-				cols = append(cols, col+"|=")
+			currentSig := ""
+			for i, col := range view.columns {
+				if i > 0 {
+					currentSig += "|"
+				}
+				currentSig += col + "|="
+
+				priority := 10
+				if i > 0 {
+					priority = 25 + (i-1)*2
+				}
+
+				// Prefix equality
+				caps = append(caps, QueryCapability{
+					Signature: currentSig,
+					Source:    view,
+					Priority:  priority,
+				})
+
+				// Range on clustering keys (everything after partition key)
+				if i > 0 {
+					caps = append(caps, QueryCapability{
+						Signature: currentSig[:len(currentSig)-1] + "~",
+						Source:    view,
+						Priority:  priority - 5,
+					})
+				}
 			}
-			sigBase = strings.Join(cols, "|")
-			caps = append(caps, QueryCapability{
-				Signature: sigBase,
-				Source:    view,
-				Priority:  25 + len(view.columns)*2,
-			})
 		} else if view.Type == 8 { // Range/Radix
 			// Radix views always have equality on prefix, range on last.
 			// They also usually keep part.

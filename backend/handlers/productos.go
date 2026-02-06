@@ -294,7 +294,7 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		err := query.Exec()
 		if err != nil {
-			err = fmt.Errorf("error al obtener los productos: %v", err)
+			err = fmt.Errorf("error al obtener los productos (store): %v", err)
 		}
 		return err
 	})

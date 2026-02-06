@@ -40,4 +40,6 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.galeria-images":            GetGaleriaImages,
 	"POST.parametros":               PostParametros,
 	"GET.parametros":                GetParametros,
+	"GET.system-parameters":         GetSystemParameters,
+	"POST.system-parameters":        PostSystemParameters,
 }

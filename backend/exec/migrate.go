@@ -23,6 +23,7 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[s.CajaMovimiento](),
 		makeDBController[s.CajaCuadre](),
 		makeDBController[s.Parametros](),
+		makeDBController[s.SystemParameters](),
 		makeDBController[DemoStruct](),
 		//	makeDBController[s.Increment](),
 	}
