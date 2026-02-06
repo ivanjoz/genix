@@ -54,3 +54,4 @@ frontend/pkg-store/.svelte-kit/generated/client/nodes/1.js
 frontend/pkg-store/.svelte-kit/generated/server/internal.js
 frontend/static/sw.js
 frontend/static/sw.js.map
+frontend/ecommerce/build/*
