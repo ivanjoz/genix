@@ -12,8 +12,8 @@ import { ProductosService } from '$routes/negocio/productos/productos.svelte';
   import { AlmacenesService } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte";
 import { ListasCompartidasService } from "../../negocio/productos/productos.svelte";
 import ProductoVentaCard from './ProductoVentaCard.svelte';
-import type { ProductoVenta } from "./saleOrder.svelte";
-import { SaleOrderState } from "./saleOrder.svelte";
+import type { ProductoVenta } from "./sale_order.svelte";
+import { SaleOrderState } from "./sale_order.svelte";
 import { EmpresaParametrosService } from '../../configuracion/parametros/empresas.svelte';
     import { Env } from '$core/env';
     import { Core } from '$core/store.svelte';
@@ -60,6 +60,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
     // Auto-select first almacen
     if (almacenSelected === -1 && almacenesService.Almacenes.length > 0) {
       almacenSelected = almacenesService.Almacenes[0].ID;
+      ventasState.form.AlmacenID = almacenSelected;
       loadStock(almacenSelected);
     }
   });
@@ -232,6 +233,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
               onChange={(e: IAlmacen) => {
                 if (e) {
                   almacenSelected = e.ID;
+                  ventasState.form.AlmacenID = e.ID;
                   loadStock(e.ID);
                 }
               }}
@@ -316,24 +318,27 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
         <div class="px-16 py-12 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
         >
        	<div class="grow mr-16">
-          <div class="font-bold text-gray-800 mb-4">DETALLE DE VENTA</div>
-          <div class="grid grid-cols-2 gap-12">
+          <div class="font-bold text-gray-800 mb-4 flex items-center justify-between">
+            <span>DETALLE DE VENTA</span>
+          </div>
+          <div class="grid grid-cols-3 gap-12">
             <div class="bg-gray-50 p-12 rounded-xl border border-gray-100 shadow-sm">
                 <div class="text-[10px] text-gray-500 mb-4 uppercase font-bold tracking-wider">Sub Total</div>
                 <div class="font-mono text-gray-800 text-xl">
-                    {formatMo(ventasState.form.subtotal)}
+                    {formatMo(ventasState.form.TotalAmount - ventasState.form.TaxAmount)}
                 </div>
             </div>
 
             <div class="bg-blue-50 p-12 rounded-xl border border-blue-100 shadow-sm">
                 <div class="text-[10px] text-blue-600 mb-4 uppercase font-bold tracking-wider">Total</div>
                 <div class="font-mono text-blue-700 font-bold text-xl">
-                    {formatMo(ventasState.form.total)}
+                    {formatMo(ventasState.form.TotalAmount)}
                 </div>
             </div>
           </div>
         </div>
           <button class="bx-blue"
+            onclick={() => ventasState.postSaleOrder()}
             title="Guardar venta"
           >
           	Generar
@@ -343,7 +348,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
         <div class="w-full px-12 py-6">
         	<CheckboxOptions type="multiple"
        			options={[ { id: 2, name: "Pagado" }, { id: 3, name: "Recibido" } ]}
-         		keyId="id" keyName="name" save="procesado"
+         		keyId="id" keyName="name" save="ProcessesIncluded_"
          		saveOn={ventasState.form}
          	/>
         </div>

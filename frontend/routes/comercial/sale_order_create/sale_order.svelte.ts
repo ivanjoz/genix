@@ -1,6 +1,7 @@
-import { GetHandler } from '$libs/http.svelte';
+import { POST } from '$libs/http.svelte';
 import { type IProducto } from '$routes/negocio/productos/productos.svelte';
 import { type IProductoStock } from '$routes/logistica/productos-stock/productos-stock.svelte';
+import { Loading, Notify } from '$libs/helpers';
 
 export interface ProductoVenta {
   key: string
@@ -25,24 +26,34 @@ export interface VentaProducto {
   producto?: IProducto // Helper reference
 }
 
-export interface IVenta {
-  clienteID: number
-  subtotal: number
-  igv: number
-  total: number
+export interface ISaleOrder {
+  ID: number
+  EmpresaID: number
+  AlmacenID: number
+  CajaID_: number
+  TotalAmount: number
+  TaxAmount: number
+  DebtAmount: number
+  ProcessesIncluded_: number[]
+  DetailProductsIDs: number[]
+  DetailPrices: number[]
+  DetailQuantities: number[]
+  
+  // UI Helpers (not sent or ignored by backend if not in struct)
   montoRecibido: number
-  montoPagado: number
-	montoVuelto: number
-  procesado: number[]
+  montoVuelto: number
 }
 
 export class SaleOrderState {
   // State
   productosStock = $state([] as IProductoStock[])
-	form = $state({
-		total: 0, subtotal: 0, igv: 0, montoRecibido: 0, montoPagado: 0, montoVuelto: 0,
-		procesado: [2,3] as number[]
-	} as IVenta)
+  form = $state({
+    ID: 0, EmpresaID: 0, AlmacenID: 0, CajaID_: 1, // Default CajaID_ to 1 for now or handle in UI
+    TotalAmount: 0, TaxAmount: 0, DebtAmount: 0,
+    ProcessesIncluded_: [2, 3],
+    DetailProductsIDs: [], DetailPrices: [], DetailQuantities: [],
+    montoRecibido: 0, montoVuelto: 0
+  } as ISaleOrder)
   filterText = $state("")
   ventaErrorMessage = $state("")
   filterSku = $state("")
@@ -51,7 +62,7 @@ export class SaleOrderState {
   ventaProductos = $state([] as VentaProducto[])
 
   // Computed
-  ventaProductosMap = $derived.by(() => { // Using $derived.by for complex logic if needed, but Map construction is simple
+  ventaProductosMap = $derived.by(() => {
     return new Map(this.ventaProductos.map(x => [x.key, x]))
   })
 
@@ -80,7 +91,6 @@ export class SaleOrderState {
             this.ventaErrorMessage = `El SKU ${sku} del producto "${e.producto?.Nombre}" sólo posee ${stockCant} unidad(es).`
             return
           }
-          // Perform immutable update on Map to trigger reactivity
           const newSkus = new Map(currentSkus)
           newSkus.set(sku, skuAdded + 1)
           ventaProducto.skus = newSkus
@@ -90,7 +100,7 @@ export class SaleOrderState {
           ventaProducto.skus = newSkus
         }
       }
-      this.ventaProductos = [...this.ventaProductos] // trigger update if deep mutation not caught (arrays)
+      this.ventaProductos = [...this.ventaProductos]
     } else {
       this.ventaProductos.push({
         key: e.key,
@@ -127,14 +137,64 @@ export class SaleOrderState {
       }
     }
 
-    this.form.total = total
-    this.form.subtotal = Math.floor(total / 1.18)
-    this.form.igv = total - this.form.subtotal
-    this.form.montoPagado = total
+    this.form.TotalAmount = total
+    const subtotal = Math.floor(total / 1.18)
+    this.form.TaxAmount = total - subtotal
+    this.form.DebtAmount = 0 // Assuming fully paid for now, adjust if UI allows debt
     this.recalcVuelto()
   }
 
   recalcVuelto() {
-    this.form.montoVuelto = this.form.montoRecibido - this.form.montoPagado
+    this.form.montoVuelto = (this.form.montoRecibido || 0) - this.form.TotalAmount
+  }
+
+  async postSaleOrder() {
+    if (this.ventaProductos.length === 0) {
+      Notify.failure("El carrito está vacío.")
+      return
+    }
+
+    if (this.form.AlmacenID === 0) {	
+      Notify.failure("Seleccione un almacén.")
+      return
+    }
+
+    Loading.standard("Procesando venta...")
+
+    // Prepare detail slices
+    this.form.DetailProductsIDs = []
+    this.form.DetailPrices = []
+    this.form.DetailQuantities = []
+
+    for (const vp of this.ventaProductos) {
+      this.form.DetailProductsIDs.push(vp.productoID)
+      this.form.DetailQuantities.push(vp.cantidad)
+      
+      let precio = vp.producto?.PrecioFinal || 0
+      if (vp.isSubUnidad && vp.producto?.SbnPreciFinal) {
+        precio = vp.producto.SbnPreciFinal
+      }
+      this.form.DetailPrices.push(precio)
+    }
+
+    try {
+      const res = await POST({
+        route: "sale_order",
+        data: this.form,
+        successMessage: "Venta registrada con éxito"
+      })
+
+      if (res) {
+        // Reset state
+        this.ventaProductos = []
+        this.recalcTotales()
+        this.form.montoRecibido = 0
+        this.form.montoVuelto = 0
+      }
+    } catch (error) {
+      console.error("Error posting sale order:", error)
+    } finally {
+      Loading.remove()
+    }
   }
 }

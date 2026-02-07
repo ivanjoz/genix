@@ -14,6 +14,7 @@ type SaleOrder struct {
 	DetailProductsIDs []int32 `json:",omitempty"`
 	DetailPrices []int32 `json:",omitempty"`
 	DetailQuantities []int32 `json:",omitempty"`
+	DetailProductSKUs []string `json:",omitempty"`
 	
 	TotalAmount int32 `json:",omitempty"`
 	TaxAmount int32 `json:",omitempty"`
@@ -32,11 +33,23 @@ type SaleOrder struct {
 
 type SaleOrderTable struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
-	EmpresaID          db.Col[SaleOrderTable, int32]
-	ID                 db.Col[SaleOrderTable, int64]
-		Fecha  db.Col[SaleOrderTable, int16]
-				AlmacenID  db.Col[SaleOrderTable, int32]
-								Updated  db.Col[SaleOrderTable, int32]
+	EmpresaID         db.Col[SaleOrderTable, int32]
+	ID                db.Col[SaleOrderTable, int64]
+	Fecha             db.Col[SaleOrderTable, int16]
+	AlmacenID         db.Col[SaleOrderTable, int32]
+	DetailProductsIDs db.Col[SaleOrderTable, []int32]
+	DetailPrices      db.Col[SaleOrderTable, []int32]
+	DetailQuantities  db.Col[SaleOrderTable, []int32]
+	TotalAmount       db.Col[SaleOrderTable, int32]
+	TaxAmount         db.Col[SaleOrderTable, int32]
+	DebtAmount        db.Col[SaleOrderTable, int32]
+	DeliveryStatus    db.Col[SaleOrderTable, int8]
+	CajaID_           db.Col[SaleOrderTable, int32]
+	ProcessesIncluded_ db.Col[SaleOrderTable, []int8]
+	Created           db.Col[SaleOrderTable, int32]
+	Updated           db.Col[SaleOrderTable, int32]
+	UpdatedBy         db.Col[SaleOrderTable, int32]
+	Status            db.Col[SaleOrderTable, int8]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {

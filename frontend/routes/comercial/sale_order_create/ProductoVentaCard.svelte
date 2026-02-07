@@ -1,6 +1,6 @@
 <script lang="ts">
 import { formatN } from '$libs/helpers';
-  import { type ProductoVenta, type VentaProducto } from "./ventas.svelte";
+  import { type ProductoVenta, type VentaProducto } from "./saleOrder.svelte";
 
   interface Props {
     idx: number

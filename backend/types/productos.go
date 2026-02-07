@@ -297,23 +297,23 @@ func (e AlmacenProductoTable) GetSchema() db.TableSchema {
 
 type AlmacenMovimiento struct {
 	db.TableStruct[AlmacenMovimientoTable, AlmacenMovimiento]
-	EmpresaID int32 `json:",omitempty" db:"empresa_id,pk"`
+	EmpresaID int32 `json:",omitempty"`
 	// [Almacen-ID] + [Created] + [Ramdom Number]
-	ID                 int64  `db:"id,pk"`
-	SKU                string `json:",omitempty" db:"sku,view"`
-	Lote               string `json:",omitempty" db:"lote,view.1"`
-	AlmacenID          int32  `json:",omitempty" db:"almacen_id"`
-	AlmacenRefID       int32  `json:",omitempty" db:"almacen_ref_id,view.2"`
-	AlmacenRefCantidad int32  `json:",omitempty" db:"almacen_ref_cantidad"`
-	VentaID            int32  `json:",omitempty" db:"venta_id"`
-	ProductoID         int32  `json:",omitempty" db:"producto_id"`
-	PresentacionID     int16  `json:",omitempty" db:"presentacion_id"`
-	Cantidad           int32  `json:",omitempty" db:"cantidad"`
-	AlmacenCantidad    int32  `json:",omitempty" db:"almacen_cantidad"`
-	SubCantidad        int32  `json:",omitempty" db:"sub_cantidad"`
-	Tipo               int8   `json:",omitempty" db:"tipo"`
-	Created            int32  `json:",omitempty" db:"created,view.2"`
-	CreatedBy          int32  `json:",omitempty" db:"created_by"`
+	ID                 int64 
+	SKU                string `json:",omitempty"`
+	Lote               string `json:",omitempty"`
+	AlmacenID          int32  `json:",omitempty"`
+	AlmacenRefID       int32  `json:",omitempty"`
+	AlmacenRefCantidad int32  `json:",omitempty"`
+	DocumentID            int64  `json:",omitempty"`
+	ProductoID         int32  `json:",omitempty"`
+	PresentacionID     int16  `json:",omitempty"`
+	Cantidad           int32  `json:",omitempty"`
+	AlmacenCantidad    int32  `json:",omitempty"`
+	SubCantidad        int32  `json:",omitempty"`
+	Tipo               int8   `json:",omitempty"`
+	Created            int32  `json:",omitempty"`
+	CreatedBy          int32  `json:",omitempty"`
 }
 
 type AlmacenMovimientoTable struct {
@@ -325,7 +325,7 @@ type AlmacenMovimientoTable struct {
 	AlmacenID          db.Col[AlmacenMovimientoTable, int32]
 	AlmacenRefID       db.Col[AlmacenMovimientoTable, int32]
 	AlmacenRefCantidad db.Col[AlmacenMovimientoTable, int32]
-	VentaID            db.Col[AlmacenMovimientoTable, int32]
+	DocumentID         db.Col[AlmacenMovimientoTable, int64]
 	ProductoID         db.Col[AlmacenMovimientoTable, int32]
 	PresentacionID     db.Col[AlmacenMovimientoTable, int16]
 	Cantidad           db.Col[AlmacenMovimientoTable, int32]
@@ -352,15 +352,17 @@ func (e AlmacenMovimientoTable) GetSchema() db.TableSchema {
 type MovimientoInterno struct {
 	ProductoID           int32
 	PresentacionID       int16
+		ReemplazarCantidad   bool
+		Tipo int8
 	SKU                  string
 	Lote                 string
 	AlmacenID            int32
 	AlmacenDestinoID     int32
-	ReemplazarCantidad   bool
 	Cantidad             int32
 	SubCantidad          int32
 	ModificarCantidad    int32
 	ModificarSubCantidad int32
+	DocumentID 					 int64
 }
 
 func (e *MovimientoInterno) GetAlmacenProductoID() string {

@@ -139,6 +139,10 @@ type View struct {
 	// Keep the original table partition in the created view.
 	// Example: key = (part_col) new_col, pk_col
 	KeepPart bool
+	// Create a hash for use with IN operators
+	UseHash bool
+	// Columns to project, all by default
+	Project []Coln
 }
 
 type TableInfo struct {

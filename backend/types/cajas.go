@@ -142,7 +142,7 @@ func (e CajaCuadreTable) GetSchema() db.TableSchema {
 type CajaMovimientoInterno struct {
 	CajaID     int32
 	CajaRefID  int32
-	VentaID    int64
+		DocumentID    int64
 	Tipo       int8
 	Monto      int32
 	SaldoFinal int32 // Opcional, si es 0 se calculará

@@ -61,7 +61,7 @@ func ApplyCajaMovimientos(req *core.HandlerArgs, movimientos []s.CajaMovimientoI
 			EmpresaID:  req.Usuario.EmpresaID,
 			CajaID:     m.CajaID,
 			CajaRefID:  m.CajaRefID,
-			VentaID:    m.VentaID,
+			VentaID:    m.DocumentID,
 			Fecha:      fechaUnix,
 			Tipo:       m.Tipo,
 			Monto:      m.Monto,

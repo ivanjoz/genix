@@ -79,7 +79,7 @@ export const AdminModule: IModule = {
     },
     { name: "Comercial", minName: "Com",  id: 3, icon: "icon-tasks",
       options: [
-        { name: "Punto de Venta", route: "/comercial/point_of_sale",
+        { name: "Punto de Venta", route: "/comercial/sale_order_create",
           icon: "icon-flash"
 				},
 				{ name: "Gestión Ventas", route: "/comercial/gestion-ventas",

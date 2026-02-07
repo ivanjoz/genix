@@ -41,7 +41,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		if montoPago != 0 {
 			movimiento := s.CajaMovimientoInterno{
 				CajaID:  sale.CajaID_,
-				VentaID: sale.ID,
+				DocumentID: sale.ID,
 				Tipo:    8, // Cobro (Venta)
 				Monto:   montoPago,
 			}
@@ -76,6 +76,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			movimientosInternos = append(movimientosInternos, s.MovimientoInterno{
 				AlmacenID:  sale.AlmacenID,
 				ProductoID: productoID,
+				DocumentID: sale.ID,
+				Tipo:    8, // Entrega a cliente final (Venta)
 				Cantidad:   -cantidad, // Salida de almacén
 			})
 		}

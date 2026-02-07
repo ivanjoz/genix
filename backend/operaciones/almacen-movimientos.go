@@ -272,16 +272,18 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []s.MovimientoInterno) 
 	for _, e := range movimientos {
 		movimiento := s.AlmacenMovimiento{
 			ID:             core.SUnixTimeUUIDConcatID(e.AlmacenID, uuid),
+			DocumentID: e.DocumentID,
 			EmpresaID:      req.Usuario.EmpresaID,
 			AlmacenID:      e.AlmacenID,
 			ProductoID:     e.ProductoID,
 			PresentacionID: e.PresentacionID,
 			SKU:            e.SKU,
 			Lote:           e.Lote,
-			Tipo:           core.If(e.Cantidad > 0, int8(1), 2),
+			Tipo:           core.Coalesce(e.Tipo, core.If(e.Cantidad > 0, int8(1), 2)),
 			Created:        core.SUnixTime(),
 			CreatedBy:      req.Usuario.ID,
-		}
+		}		
+		
 		uuid++
 
 		currentCantidad := int32(0)
