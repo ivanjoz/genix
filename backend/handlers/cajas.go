@@ -88,25 +88,29 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 
 func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	cajaID := req.GetQueryInt("caja-id")
+
 	if cajaID == 0 {
 		return req.MakeErr("No se envió la Caja-ID")
 	}
 
-	fechaHoraInicio := core.UnixToSunix(req.GetQueryInt64("fecha-hora-inicio"))
-	fechaHoraFin := core.UnixToSunix(req.GetQueryInt64("fecha-hora-fin"))
-	lastRegistros := req.GetQueryInt("last-registros")
-	lastRegistros = core.If(lastRegistros > 1000, 1000, lastRegistros)
+	lastRegistrosLimit := req.GetQueryInt("last-registros")
 
 	movimientos := []s.CajaMovimiento{}
 	query := db.Query(&movimientos)
-	query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
-	if lastRegistros > 0 {
-		query.ID.Between(
-			core.SUnixTimeUUIDConcatID(cajaID, 0), core.SUnixTimeUUIDConcatID(cajaID+1, 0))
+	query.Select().EmpresaID.Equals(req.Usuario.EmpresaID).CajaID.Equals(cajaID)	
+
+	// KeyIntPacking: CajaID (5) + Fecha (5) + Autoincrement (9)
+	// Base formula: CajaID * 10^14 + Fecha * 10^9 + Autoincrement
+	if lastRegistrosLimit > 0 {
+		query.Limit(lastRegistrosLimit)
 	} else {
-		query.ID.Between(
-			core.SUnixTimeUUIDConcatID(cajaID, int64(fechaHoraInicio)),
-			core.SUnixTimeUUIDConcatID(cajaID, int64(fechaHoraFin)+1))
+		fechaInicio := req.GetQueryInt16("fecha-inicio")
+		fechaFin := req.GetQueryInt16("fecha-fin")
+		if fechaInicio == 0 || fechaFin == 0 {
+			return req.MakeErr("Debe enviar una fecha de inicio y fin.")
+		}
+		
+		query.Fecha.Between(fechaInicio, fechaFin)	
 	}
 	query.OrderDesc()
 

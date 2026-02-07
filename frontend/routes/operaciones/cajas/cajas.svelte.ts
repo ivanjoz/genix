@@ -107,8 +107,8 @@ export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICa
   }
 
   if (args.fechaInicio && args.fechaFin) {
-    route += `&fecha-hora-inicio=${args.fechaInicio}`
-    route += `&fecha-hora-fin=${args.fechaFin + 1}`
+    route += `&fecha-inicio=${args.fechaInicio}`
+    route += `&fecha-fin=${args.fechaFin}`
   }
   if (args.lastRegistros) {
     route += `&last-registros=${args.lastRegistros}`

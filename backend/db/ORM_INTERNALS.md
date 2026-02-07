@@ -88,24 +88,39 @@ This solves the problem of range-querying multiple numeric columns simultaneousl
 
 ---
 
-## 5. Smart Primary Keys (KeyConcatenated)
+## 5. Smart Primary Keys (KeyConcatenated & KeyIntPacking)
 
-For tables where the primary key is a composite string, the ORM provides "Smart Key" logic.
+For tables where the primary key is a composite value, the ORM provides "Smart Key" logic to flatten multiple fields into a single column.
 
-### 5.1 Base62 Encoding and Concatenation
+### 5.1 KeyConcatenated (Base62)
 Fields are concatenated using a `_` separator. Integers are converted to **Base62** (`0-9a-zA-Z`) to ensure the key is compact and URL-safe.
 - `Concat62(100, "abc")` -> `"1C_abc"`
 
-### 5.2 Prefix Range Transformation
-If a query matches a prefix of the concatenated key:
-- **User Query**: `AlmacenID.Equals(123)`
-- **ORM Action**: Detects `AlmacenID` is the first part of the `KeyConcatenated` list.
-- **Transformation**: Generates a `BETWEEN` query on the `id` column:
-  `WHERE id >= '1z_' AND id < '1z_￿'` (using `\uffff` as the high-boundary character).
+### 5.2 KeyIntPacking (Mathematical Concatenation)
+This mechanism packs multiple numeric fields into a single `int64` (bigint). It allocates slots within a 19-digit space (the limit of a signed 64-bit integer).
+- **Width Control**: Each component's width is defined by `DecimalSize(n)`.
+- **Calculation**: `Sum(Value[i] * 10^RemainingDigits)`.
+- **Placeholder Support**: Allows using an `Autoincrement` value as one of the packing components.
 
 ---
 
-## 6. Write Operations and Consistency
+## 6. Automated Autoincrement and Sequences
+
+The ORM automates the retrieval of unique IDs from a central `sequences` counter table before execution.
+
+### 6.1 Partitioned Counters
+By defining `AutoincrementPart`, the ORM uses a specific column's value to partition the counter.
+- **Counter Key**: `table_name + "_" + partition_value`.
+- **Efficiency**: The ORM groups records by partition and performs a single `GetCounter(N)` call for all records in the batch.
+
+### 6.2 Concurrent Collision Avoidance
+The `Autoincrement(randSize)` method can append a random numeric suffix to the retrieved counter value.
+- **Formula**: `CounterValue * 10^randSize + Random(10^randSize)`.
+- This ensures that even if two processes retrieve the same counter value (e.g., during manual resets or extreme concurrency), the final IDs remain unique.
+
+---
+
+## 7. Write Operations and Consistency
 
 ### 6.1 Batching Strategy
 The `Insert` function (`insert-update.go`) uses `gocql.UnloggedBatch`.
@@ -153,4 +168,6 @@ For queries that result in multiple `WHERE` statements (e.g., an `IN` operator o
 2. **Signature Matching**: $O(N)$ source selection where $N$ is the number of indices.
 3. **Radix Range Clustering**: Allowing range queries on multi-column views.
 4. **Base62 Key Compression**: Reducing the size of string-based primary keys.
-5. **CBOR Serialization**: Faster and more compact than JSON for complex data.
+5. **KeyIntPacking**: Mathematical concatenation of primary key components into single `int64`.
+6. **Automated Partitioned Counters**: Zero-effort unique ID generation with collision avoidance.
+7. **CBOR Serialization**: Faster and more compact than JSON for complex data.

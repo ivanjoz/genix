@@ -49,16 +49,7 @@ import { formatN } from '$libs/helpers';
     Loading.standard("Consultando registros...")
     let result: ICajaMovimiento[]
     try {
-      // Zone offset for Peru: -5 hours = -18000 seconds
-      const zoneOffset = -18000
-      const fechaHoraInicio = form.fechaInicio * 24 * 60 * 60 + zoneOffset
-      const fechaHoraFin = (form.fechaFin + 1) * 24 * 60 * 60 + zoneOffset
-
-      result = await getCajaMovimientos({
-        CajaID: form.CajaID,
-        fechaInicio: fechaHoraInicio,
-        fechaFin: fechaHoraFin
-      })
+      result = await getCajaMovimientos(form)
     } catch (error) {
       Loading.remove()
       return

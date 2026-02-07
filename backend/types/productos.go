@@ -240,21 +240,20 @@ func (e SedeTable) GetSchema() db.TableSchema {
 
 type AlmacenProducto struct {
 	db.TableStruct[AlmacenProductoTable, AlmacenProducto]
-	EmpresaID int32 `json:",omitempty" db:"empresa_id,pk"`
-	// [Almacen-ID] [status] [Producto-ID] [SKU] [Lote]
-	ID             string  `db:"id,pk"`
-	SKU            string  `json:",omitempty" db:"sku,index"`
-	Lote           string  `json:",omitempty" db:"lote,index"`
-	AlmacenID      int32   `json:",omitempty" db:"almacen_id,view.1"`
-	ProductoID     int32   `json:",omitempty" db:"producto_id,view"`
-	PresentacionID int16   `json:",omitempty" db:"presentacion_id"`
-	Cantidad       int32   `json:",omitempty" db:"cantidad"`
-	SubCantidad    int32   `json:",omitempty" db:"sub_cantidad"`
-	CostoUn        float32 `json:",omitempty" db:"costo_un"`
-	Updated        int32   `json:"upd,omitempty" db:"updated,view.1"`
-	UpdatedBy      int32   `json:",omitempty" db:"updated_by"`
-	Status         int8    `json:"ss,omitempty" db:"status,view,view.1"`
-}	
+	EmpresaID int32 `json:",omitempty"`
+	ID             string
+	SKU            string  `json:",omitempty"`
+	Lote           string  `json:",omitempty"`
+	AlmacenID      int32   `json:",omitempty"`
+	ProductoID     int32   `json:",omitempty"`
+	PresentacionID int16   `json:",omitempty"`
+	Cantidad       int32   `json:",omitempty"`
+	SubCantidad    int32   `json:",omitempty"`
+	CostoUn        float32 `json:",omitempty"`
+	Updated        int32   `json:"upd,omitempty"`
+	UpdatedBy      int32   `json:",omitempty"`
+	Status         int8    `json:"ss,omitempty"`
+}
 
 type AlmacenProductoTable struct {
 	db.TableStruct[AlmacenProductoTable, AlmacenProducto]

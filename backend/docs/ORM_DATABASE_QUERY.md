@@ -50,15 +50,19 @@ type ListaCompartidaRegistroTable struct {
 }
 
 // GetSchema defines the table structure and keys
-func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
+func (e CajaMovimientoTable) GetSchema() db.TableSchema {
     return db.TableSchema{
-        Name:      "lista_compartida_registro",
-        Partition: e.EmpresaID,              // Partition key
-        Keys:      []db.Coln{e.ID},         // Clustering key(s)
-        Views: []db.View{
-            {Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
-            {Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
+        Name:      "caja_movimientos",
+        Partition: e.EmpresaID,
+        Keys:      []db.Coln{e.ID},
+        // Pack multiple values into a single int64 ID
+        KeyIntPacking: []db.Coln{
+            e.CajaID.DecimalSize(5), 
+            e.Fecha.DecimalSize(5), 
+            e.Autoincrement(3), // Automated counter with 3 random digits
         },
+        // Partition the autoincrement sequence by Fecha
+        AutoincrementPart: e.Fecha,
     }
 }
 ```
@@ -67,10 +71,9 @@ func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
 
 1. **Field Names**: Column names are inferred from field names converted to snake_case, or explicitly set with the `db` tag
 2. **Primary Keys**: Use `db:"column_name,pk"` to mark partition/clustering keys
-3. **Column Types**:
-   - Use `db.Col[TableStruct, Type]` for single values
-   - Use `db.ColSlice[TableStruct, Type]` for slices (stored as sets)
-4. **Both structs must have matching field names** to map columns correctly
+3. **DecimalSize**: Used for `KeyIntPacking` to define the digit width of a component.
+4. **Autoincrement**: Marks a column (or a packing slot) to be automatically filled by the ORM's sequence manager.
+5. **Both structs must have matching field names** to map columns correctly
 
 ## Connection Setup
 

@@ -67,7 +67,6 @@ func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 					suffix := GetRandomInt64(colInfo.autoincrementRandSize)
 					currentAutoVal = currentAutoVal*Pow10Int64(int64(colInfo.autoincrementRandSize)) + suffix
 				}
-				fmt.Printf("DEBUG: Autoincrement Generated: %v (Col: %s, RandSize: %d)\n", currentAutoVal, colInfo.Name, colInfo.autoincrementRandSize)
 
 				// If not packing, set directly
 				if len(scyllaTable.keyIntPacking) == 0 {
@@ -78,7 +77,6 @@ func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 			if len(scyllaTable.keyIntPacking) > 0 {
 				var packedValue int64
 				remainingDigits := int64(19)
-				fmt.Printf("DEBUG: Packing Key for Table %s (19-digit space):\n", scyllaTable.name)
 				for i, col := range scyllaTable.keyIntPacking {
 					if col == nil {
 						continue
@@ -96,8 +94,7 @@ func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 					if i == len(scyllaTable.keyIntPacking)-1 && decSize == 0 {
 						decSize = remainingDigits
 					}
-					
-					oldPacked := packedValue
+
 					remainingDigits -= decSize
 					if remainingDigits < 0 {
 						remainingDigits = 0
@@ -105,11 +102,8 @@ func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 
 					shift := Pow10Int64(remainingDigits)
 					packedValue += val * shift
-					fmt.Printf("  Step %d: Col=%s, Val=%v, Width=%d, Exponent=%d, Result=%v (Prev=%v)\n", 
-						i, colPackingInfo.Name, val, decSize, remainingDigits, packedValue, oldPacked)
 				}
 				// Set into the only key
-				fmt.Printf("DEBUG: Final Packed ID: %v\n", packedValue)
 				scyllaTable.keys[0].SetValue(ptr, packedValue)
 			}
 		}

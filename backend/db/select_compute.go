@@ -174,7 +174,39 @@ func (dbTable *ScyllaTable[T]) ComputeCapabilities() []QueryCapability {
 		}
 	}
 
-	// 4. KeyConcatenated
+	// 4. KeyIntPacking
+	if len(dbTable.keyIntPacking) > 0 {
+		pk := dbTable.partKey
+		if pk != nil && !pk.IsNil() {
+			pkName := pk.GetName()
+			currentSig := fmt.Sprintf("%v|=", pkName)
+
+			for i, col := range dbTable.keyIntPacking {
+				colName := col.GetName()
+				if colName == "autoincrement_placeholder" {
+					continue
+				}
+
+				// Equality
+				caps = append(caps, QueryCapability{
+					Signature: currentSig + fmt.Sprintf("|%v|=", colName),
+					Priority:  40 + i*2,
+					IsKey:     true,
+				})
+
+				// Range
+				caps = append(caps, QueryCapability{
+					Signature: currentSig + fmt.Sprintf("|%v|~", colName),
+					Priority:  35 + i*2,
+					IsKey:     true,
+				})
+
+				currentSig += fmt.Sprintf("|%v|=", colName)
+			}
+		}
+	}
+
+	// 5. KeyConcatenated
 	if len(dbTable.keyConcatenated) > 0 {
 		pk := dbTable.partKey
 		if pk != nil && !pk.IsNil() {

@@ -243,6 +243,107 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 				} else {
 					statementsRemain = statements
 				}
+			} else if !hasKeyColQuery && len(scyllaTable.keyIntPacking) > 0 {
+				// Apply KeyIntPacking smart logic
+				prefixValues := []any{}
+				var rangeSt *ColumnStatement
+				handledInKeyPack := make(map[string]bool)
+
+				for _, packedCol := range scyllaTable.keyIntPacking {
+					colName := packedCol.GetName()
+					if colName == "autoincrement_placeholder" {
+						break
+					}
+					found := false
+					for _, st := range statements {
+						if st.Col == colName {
+							if st.Operator == "=" {
+								prefixValues = append(prefixValues, st.Value)
+								handledInKeyPack[st.Col] = true
+								found = true
+								break
+							} else if slices.Contains(rangeOperators, st.Operator) || st.Operator == "BETWEEN" {
+								rangeSt = &st
+								handledInKeyPack[st.Col] = true
+								found = true
+								break
+							}
+						}
+					}
+					if !found || rangeSt != nil {
+						break
+					}
+				}
+
+				if len(prefixValues) > 0 || rangeSt != nil {
+					// Calculation formula: packedValue = (packedValue * 10^col.decimalSize) + val
+					// We need to calculate the value and the remaining shift to place it in the correct slot
+					
+					makePacked := func(vals []any, rSt *ColumnStatement) (fromVal int64, toVal int64, isEquality bool) {
+						remainingDigits := int64(19)
+						var currentPacked int64
+						
+						// Process equality prefix
+						for i, col := range scyllaTable.keyIntPacking {
+							colInfo := col.(*columnInfo)
+							decSize := int64(colInfo.decimalSize)
+							if i == len(scyllaTable.keyIntPacking)-1 && decSize == 0 {
+								decSize = remainingDigits
+							}
+							remainingDigits -= decSize
+							
+							if i < len(vals) {
+								val := convertToInt64(vals[i])
+								currentPacked += val * Pow10Int64(remainingDigits)
+							} else if rSt != nil && col.GetName() == rSt.Col {
+								// Handle range on current column
+								if rSt.Operator == "BETWEEN" {
+									fromVal = currentPacked + convertToInt64(rSt.From[0].Value)*Pow10Int64(remainingDigits)
+									toVal = currentPacked + convertToInt64(rSt.To[0].Value)*Pow10Int64(remainingDigits)
+								} else {
+									// Handle other range operators if needed, or fallback to simple prefix range
+									val := convertToInt64(rSt.Value)
+									fromVal = currentPacked + val*Pow10Int64(remainingDigits)
+									// For range operators like >, < we might need more complex logic, 
+									// but for now let's focus on the common prefix range case.
+									toVal = fromVal + Pow10Int64(remainingDigits)
+								}
+								return fromVal, toVal, false
+							} else {
+								// End of provided values
+								fromVal = currentPacked
+								toVal = currentPacked + Pow10Int64(remainingDigits+decSize)
+								isEquality = (i == len(scyllaTable.keyIntPacking))
+								return fromVal, toVal, isEquality
+							}
+						}
+						return currentPacked, currentPacked, true
+					}
+
+					from, to, isEq := makePacked(prefixValues, rangeSt)
+					
+					var newSt ColumnStatement
+					if isEq {
+						newSt = ColumnStatement{Col: keyCol.GetName(), Operator: "=", Value: from}
+					} else {
+						newSt = ColumnStatement{
+							Col:      keyCol.GetName(),
+							Operator: "BETWEEN",
+							From:     []ColumnStatement{{Col: keyCol.GetName(), Value: from}},
+							To:       []ColumnStatement{{Col: keyCol.GetName(), Value: to}},
+						}
+					}
+					
+					// Add the new PK statement and skip handled packed columns
+					statementsRemain = append(statementsRemain, newSt)
+					for _, st := range statements {
+						if !handledInKeyPack[st.Col] {
+							statementsRemain = append(statementsRemain, st)
+						}
+					}
+				} else {
+					statementsRemain = statements
+				}
 			} else {
 				statementsRemain = statements
 			}
