@@ -27,6 +27,9 @@ export interface IMenuRecord {
 	route?: string;
 	options?: IMenuRecord[];
 	icon?: string;
+	onlySaaS?: boolean
+	descripcion?: string
+	pageTabs?: string[]
 }
 
 export interface IModule {

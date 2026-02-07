@@ -57,26 +57,16 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	productosIDsSet := core.SliceSet[int32]{}
-	createCounter := 0
 
 	for i := range productos {
 		e := &productos[i]
 		if e.ID < 1 {
-			createCounter++
 			e.TempID = e.ID
 		} else {
 			productosIDsSet.Add(e.ID)
 		}
 		if len(e.Nombre) < 4 {
 			return req.MakeErr("Faltan propiedades de en el producto.")
-		}
-	}
-
-	var counter int64
-	if createCounter > 0 {
-		counter, err = productos[0].GetCounter(createCounter, req.Usuario.EmpresaID)
-		if err != nil {
-			return req.MakeErr("Error al obtener el counter.", counter)
 		}
 	}
 
@@ -98,11 +88,10 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	for i := range productos {
 		e := &productos[i]
 		if e.ID < 1 {
-			e.ID = int32(counter)
+			// Autoincrement is handled automatically by the ORM via handlePreInsert
 			e.Created = nowTime
 			e.CreatedBy = req.Usuario.ID
 			e.Status = 1
-			counter++
 		} else {
 			e.UpdatedBy = req.Usuario.ID
 		}

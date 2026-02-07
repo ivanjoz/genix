@@ -46,7 +46,7 @@ func (e CajaTable) GetSchema() db.TableSchema {
 		Name:         "cajas",
 		Partition:    e.EmpresaID,
 		UseSequences: true,
-		Keys:         []db.Coln{e.ID},
+		Keys:         []db.Coln{e.ID.Autoincrement(0)},
 		Views: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.Updated}, KeepPart: true},
@@ -60,7 +60,7 @@ type CajaMovimiento struct {
 	ID         int64 
 	CajaID     int32 
 	CajaRefID  int32 
-	VentaID    int32 `json:",omitempty"`
+	VentaID    int64 `json:",omitempty"`
 	Fecha int16
 	Tipo       int8  `json:",omitempty"`
 	SaldoFinal int32 
@@ -75,7 +75,7 @@ type CajaMovimientoTable struct {
 	ID         db.Col[CajaMovimientoTable, int64]
 	CajaID     db.Col[CajaMovimientoTable, int32]
 	CajaRefID  db.Col[CajaMovimientoTable, int32]
-	VentaID    db.Col[CajaMovimientoTable, int32]	
+	VentaID    db.Col[CajaMovimientoTable, int64]	
 	Fecha  db.Col[CajaMovimientoTable, int16]
 	Tipo       db.Col[CajaMovimientoTable, int8]
 	SaldoFinal db.Col[CajaMovimientoTable, int32]
@@ -137,6 +137,15 @@ func (e CajaCuadreTable) GetSchema() db.TableSchema {
 			{Cols: []db.Coln{e.CreatedBy}, KeepPart: true},
 		},
 	}
+}
+
+type CajaMovimientoInterno struct {
+	CajaID     int32
+	CajaRefID  int32
+	VentaID    int64
+	Tipo       int8
+	Monto      int32
+	SaldoFinal int32 // Opcional, si es 0 se calculará
 }
 
 type VentaProducto struct {

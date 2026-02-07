@@ -126,14 +126,7 @@ func PostSedes(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Faltan propiedades de la sede")
 	}
 
-	if body.ID < 1 {
-		counter, err := body.GetCounter(1, req.Usuario.EmpresaID)
-		if err != nil {
-			return req.MakeErr("Error al obtener el counter.", counter)
-		}
-		body.ID = int32(counter)
-	}
-
+	// Autoincrement is handled automatically by the ORM via handlePreInsert
 	body.EmpresaID = req.Usuario.EmpresaID
 	body.Updated = time.Now().Unix()
 	body.Created = time.Now().Unix()
@@ -185,13 +178,7 @@ func PostAlmacen(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Faltan propiedades del almacén")
 	}
 
-	if body.ID < 1 {
-		counter, err := body.GetCounter(1, req.Usuario.EmpresaID)
-		if err != nil {
-			return req.MakeErr("Error al obtener el counter.", counter)
-		}
-		body.ID = int32(counter)
-	}
+	// Autoincrement is handled automatically by the ORM via handlePreInsert
 
 	for _, e := range body.Layout {
 		if e.ID == 0 || len(e.Name) == 0 {

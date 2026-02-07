@@ -127,6 +127,14 @@ func (c *columnInfo) IsNil() bool {
 	return c == nil
 }
 
+func (c *columnInfo) SetAutoincrementRandSize(size int8) {
+	c.autoincrementRandSize = size
+}
+
+func (c *columnInfo) SetDecimalSize(size int8) {
+	c.decimalSize = size
+}
+
 var rangeOperators = []string{">", "<", ">=", "<="}
 
 var makeStatementWith string = `	WITH caching = {'keys': 'ALL', 'rows_per_partition': 'ALL'}
@@ -240,16 +248,34 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		col := dbTable.columnsMap[key.GetInfo().Name]
 		dbTable.keys = append(dbTable.keys, col)
 		dbTable.keysIdx = append(dbTable.keysIdx, col.GetInfo().Idx)
+		
+		// Transfer autoincrementRandSize from Key to the actual column in columnsMap
+		// This enables autoincrement functionality when a Key is marked with .Autoincrement()
+		// Valid values: -1 (no random suffix) or >0 (with random suffix)
+		// Default value 0 means .Autoincrement() was never called
+		keyInfo := key.GetInfo()
+		if keyInfo.autoincrementRandSize != 0 {
+			col.SetAutoincrementRandSize(keyInfo.autoincrementRandSize)
+			
+			// Set autoincrementCol if not already set
+			if dbTable.autoincrementCol == nil {
+				dbTable.autoincrementCol = col
+			} else if dbTable.autoincrementCol != col {
+				panic(fmt.Sprintf(`Table "%v": Multiple autoincrement columns are not supported. Found autoincrement on both "%v" and "%v"`, 
+					dbTable.name, dbTable.autoincrementCol.GetName(), col.GetName()))
+			}
+		}
 	}
 
 	if schema.AutoincrementPart != nil {
 		dbTable.autoincrementPart = dbTable.columnsMap[schema.AutoincrementPart.GetInfo().Name]
 	}
 
-	// Identify autoincrement column and KeyIntPacking
+	// Identify autoincrement column from direct column definitions (backward compatibility)
+	// Only set if not already set during Keys processing
 	for _, col := range dbTable.columnsMap {
 		if c, ok := col.(*columnInfo); ok {
-			if c.autoincrementRandSize >= 0 {
+			if c.autoincrementRandSize >= 0 && dbTable.autoincrementCol == nil {
 				dbTable.autoincrementCol = col
 			}
 		}
@@ -259,6 +285,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		if len(dbTable.keys) != 1 {
 			panic(fmt.Sprintf(`Table "%v": KeyIntPacking requires exactly one column in Keys. Found: %v`, dbTable.name, len(dbTable.keys)))
 		}
+		
 		keyCol := dbTable.keys[0].(*columnInfo)
 		if keyCol.Type != 2 { // 2 = int64
 			panic(fmt.Sprintf(`Table "%v": KeyIntPacking requires the key column to be an int64. Found: %v`, dbTable.name, keyCol.FieldType))
@@ -287,7 +314,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				// If it's a real column, ensure decimalSize is transferred if set in KeyIntPacking
 				info := col.GetInfo()
 				if info.decimalSize > 0 {
-					packedCol.(*columnInfo).decimalSize = info.decimalSize
+					packedCol.SetDecimalSize(info.decimalSize)
 				}
 			}
 			dbTable.keyIntPacking = append(dbTable.keyIntPacking, packedCol)

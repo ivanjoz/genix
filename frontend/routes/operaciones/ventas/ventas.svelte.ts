@@ -30,12 +30,19 @@ export interface IVenta {
   subtotal: number
   igv: number
   total: number
+  montoRecibido: number
+  montoPagado: number
+	montoVuelto: number
+  procesado: number[]
 }
 
 export class VentasState {
   // State
   productosStock = $state([] as IProductoStock[])
-  form = $state({ total: 0, subtotal: 0, igv: 0 } as IVenta)
+	form = $state({
+		total: 0, subtotal: 0, igv: 0, montoRecibido: 0, montoPagado: 0, montoVuelto: 0,
+		procesado: [2,3] as number[]
+	} as IVenta)
   filterText = $state("")
   ventaErrorMessage = $state("")
   filterSku = $state("")
@@ -111,23 +118,6 @@ export class VentasState {
       const producto = vp.producto
       if(producto){
         let precio = producto.PrecioFinal
-        // Adjust price for subunits if needed, based on legacy logic it seems price is total?
-        // Legacy: const monto = producto.PrecioFinal * vp.cantidad
-        // If subunit, usually price is different, but legacy code uses product.PrecioFinal directly.
-        // Assuming ProductoVentaCard logic handles specific subunit price if separate product wasn't created.
-        // In legacy: `if(e.isSubUnidad) { ... }`
-        // Wait, in legacy, `productosParsed` creates entries.
-        // If it is subunit, it has `isSubUnidad: true`.
-        // But the `producto` object attached is the SAME parent product.
-        // Legacy `recalcVentaTotales`: `const monto = producto.PrecioFinal * vp.cantidad`
-        // Wait, if it's a subunit, shouldn't it use `SbnPreciFinal`?
-        // Checking legacy `ventas.tsx` line 210: `const monto = producto.PrecioFinal * vp.cantidad`
-        // It seems simpler in legacy? Or maybe `ProductoVenta` created `key` S+ID but linked same product.
-        // Let's look at legacy lines 120-124:
-        // `clone.cant = producto.SbnCantidad` ... `clone.isSubUnidad = true`
-        // But `recalcVentaTotales` (line 204) uses `producto.PrecioFinal`.
-        // This might be a BUG in legacy or I am misreading.
-        // Ah, `SbnPreciFinal` exists in `IProducto` interface in `productos.svelte.ts`.
 
         if (vp.isSubUnidad && producto.SbnPreciFinal) {
            precio = producto.SbnPreciFinal
@@ -140,5 +130,11 @@ export class VentasState {
     this.form.total = total
     this.form.subtotal = Math.floor(total / 1.18)
     this.form.igv = total - this.form.subtotal
+    this.form.montoPagado = total
+    this.recalcVuelto()
+  }
+
+  recalcVuelto() {
+    this.form.montoVuelto = this.form.montoRecibido - this.form.montoPagado
   }
 }

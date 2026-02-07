@@ -95,7 +95,7 @@ func (e UsuarioTable) GetSchema() db.TableSchema {
 		Name:         "usuarios",
 		Partition:    e.EmpresaID,
 		UseSequences: true,
-		Keys:         []db.Coln{e.ID},
+		Keys:         []db.Coln{e.ID.Autoincrement(0)},
 	}
 }
 

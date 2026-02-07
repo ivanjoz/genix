@@ -16,49 +16,77 @@ func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		return nil
 	}
 
-	// Group records by AutoincrementPart
+	partitionColumn := scyllaTable.GetPartKey()	
+	// Group records by composite key: partition value + autoincrementPart value
 	groups := map[string][]*T{}
-	if scyllaTable.autoincrementPart != nil {
-		for i := range *records {
-			rec := &(*records)[i]
-			ptr := xunsafe.AsPointer(rec)
-			partVal := scyllaTable.autoincrementPart.GetRawValue(ptr)
-			key := fmt.Sprintf("%v", partVal)
-			groups[key] = append(groups[key], rec)
+	
+	for i := range *records {
+		rec := &(*records)[i]
+		ptr := xunsafe.AsPointer(rec)
+		
+		// Get partition key value
+		partitionValue := int32(0)
+		if partitionColumn != nil {
+			partitionValue = int32(convertToInt64(partitionColumn.GetRawValue(ptr)))
 		}
-	} else {
-		group := []*T{}
-		for i := range *records {
-			group = append(group, &(*records)[i])
+		
+		// Get autoincrement part value (0 if not defined)
+		autoPartVal := int64(0)
+		if scyllaTable.autoincrementPart != nil {
+			autoPartVal = convertToInt64(scyllaTable.autoincrementPart.GetRawValue(ptr))
 		}
-		groups["default"] = group
+		
+		// Group key is concatenation of partition value + autoincrementPart value
+		key := fmt.Sprintf("%d|%v", partitionValue, autoPartVal)
+		groups[key] = append(groups[key], rec)
 	}
 
 	for partKey, group := range groups {
+		partValues := strings.Split(partKey, "|")
+		
+		// Filter to only include records that need autoincrement (ID == 0)
+		recordsNeedingAutoincrement := []*T{}
+		recordNeedsAutoincrement := map[*T]bool{}
+		
+		for _, rec := range group {
+			ptr := xunsafe.AsPointer(rec)
+			// Check if the primary key has a value of 0
+			var keyVal int64 = 0
+			if len(scyllaTable.keys) > 0 {
+				rawKeyVal := scyllaTable.keys[0].GetRawValue(ptr)
+				keyVal = convertToInt64(rawKeyVal)
+			}
+			
+			// Only apply autoincrement if key is exactly 0
+			if keyVal <= 0 {
+				recordsNeedingAutoincrement = append(recordsNeedingAutoincrement, rec)
+				recordNeedsAutoincrement[rec] = true
+			}
+		}
+		
 		var counterVal int64
 		var err error
-		if scyllaTable.autoincrementCol != nil {
+		
+		if scyllaTable.autoincrementCol != nil && len(recordsNeedingAutoincrement) > 0 {
 			// Determine counter name
-			counterName := scyllaTable.name
-			if scyllaTable.autoincrementPart != nil {
-				counterName = scyllaTable.name + "_" + partKey
-			}
+			counterName := fmt.Sprintf("x%v_%v_%v", partValues[0], scyllaTable.name, partValues[1])
 
-			// Get range of IDs
+			// Get range of IDs - only for records that need autoincrement
 			keyspace := strings.Split(scyllaTable.GetFullName(), ".")[0]
-			counterVal, err = GetCounter(keyspace, counterName, len(group))
+			counterVal, err = GetCounter(keyspace, counterName, len(recordsNeedingAutoincrement))
 			if err != nil {
 				return err
 			}
 			// GetCounter returns the value after increment, so we need the first value of the range
-			counterVal = counterVal - int64(len(group)) + 1
+			counterVal = counterVal - int64(len(recordsNeedingAutoincrement)) + 1
 		}
 
 		for _, rec := range group {
 			ptr := xunsafe.AsPointer(rec)
 			var currentAutoVal int64
 
-			if scyllaTable.autoincrementCol != nil {
+			// Only apply autoincrement if schema has Autoincrement defined AND record ID is 0
+			if scyllaTable.autoincrementCol != nil && recordNeedsAutoincrement[rec] {
 				currentAutoVal = counterVal
 				counterVal++
 

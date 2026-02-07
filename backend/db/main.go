@@ -25,6 +25,10 @@ type IColInfo interface {
 	GetInfo() *colInfo
 	GetType() *colType
 	IsNil() bool
+	// SetAutoincrementRandSize sets the random suffix size for autoincrement columns
+	SetAutoincrementRandSize(size int8)
+	// SetDecimalSize sets the decimal size for KeyIntPacking columns
+	SetDecimalSize(size int8)
 }
 
 type ScyllaTable[T any] struct {
@@ -284,7 +288,7 @@ func (e *TableStruct[T, E]) Autoincrement(randDecimalSize int8) Col[T, E] {
 	if randDecimalSize > 8 {
 		panic("randDecimalSize TOO BIG.")
 	}
-	return Col[T, E]{autoincrementRandSize: randDecimalSize, info: columnInfo{autoincrementRandSize: randDecimalSize}}
+	return Col[T, E]{info: columnInfo{autoincrementRandSize: randDecimalSize}}
 }
 
 func (e *TableStruct[T, E]) Limit(limit int32) *T {
@@ -322,9 +326,6 @@ type Col[T TableInterface[T], E any] struct {
 	info         columnInfo
 	schemaStruct *T
 	tableInfo    *TableInfo
-	decimalSize 	int8
-	// autoincrementRandSize = -1 means no randon number at the end
-	autoincrementRandSize int8
 }
 
 func (q Col[T, E]) GetInfo() columnInfo {
@@ -351,8 +352,19 @@ func (q Col[T, E]) DecimalSize(size int8) Col[T, E] {
 	if size > 15 {
 		panic("Decimal size TOO BIG in:" + q.GetName())
 	}
-	q.decimalSize = size
 	q.info.decimalSize = size
+	return q
+}
+
+func (q Col[T, E]) Autoincrement(randSufixSize int8) Col[T, E] {
+	if randSufixSize > 15 {
+		panic("Rand sufix size TOO BIG in:" + q.GetName())
+	}
+	
+	if randSufixSize == 0 {
+		randSufixSize = -1
+	}	
+	q.info.autoincrementRandSize = randSufixSize
 	return q
 }
 
@@ -577,8 +589,8 @@ func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 			if ok1 {
 				// Transfer properties from Col if they were set
 				if c, ok := any(column1).(*Col[T, E]); ok {
-					colInfo.decimalSize = c.decimalSize
-					colInfo.autoincrementRandSize = c.autoincrementRandSize
+					colInfo.decimalSize = c.info.decimalSize
+					colInfo.autoincrementRandSize = c.info.autoincrementRandSize
 				}
 
 				infoCheck := column1.GetInfo()

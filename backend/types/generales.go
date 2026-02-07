@@ -87,7 +87,7 @@ func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
 		Name:         "lista_compartida_registro",
 		Partition:    e.EmpresaID,
 		UseSequences: true,
-		Keys:         []db.Coln{e.ID},
+		Keys:         []db.Coln{e.ID.Autoincrement(0)},
 		Views: []db.View{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
 			{Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},

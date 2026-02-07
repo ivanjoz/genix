@@ -40,15 +40,11 @@ func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
 */
 
 func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
-	usuario := s.Usuario{}
-	counter, err := usuario.GetCounter(1, 1)
-	if err != nil {
-		panic(err)
-	}
-
+	// Autoincrement is handled automatically by the ORM via handlePreInsert
 	usuarios := []s.Usuario{
 		{
-			ID:          int32(counter),
+			ID:          0, // Set to 0 to trigger autoincrement
+			EmpresaID:   1,
 			Nombres:     "Hola 2",
 			Apellidos:   "Mundo 2",
 			PerfilesIDs: []int32{2, 3, 4},
@@ -56,7 +52,13 @@ func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 			Created:     time.Now().Unix(),
 		},
 	}
-	core.Log(usuarios)
+	
+	if err := db.Insert(&usuarios); err != nil {
+		core.Log("Error inserting usuario:", err)
+		panic(err)
+	}
+	
+	core.Log("Usuario insertado con ID:", usuarios[0].ID)
 
 	return core.FuncResponse{}
 }

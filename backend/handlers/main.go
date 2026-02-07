@@ -1,6 +1,9 @@
 package handlers
 
-import "app/core"
+import (
+	"app/comercial"
+	"app/core"
+)
 
 var ModuleHandlers = core.AppRouterType{
 	"GET.p-hello":                   HelloWorld,
@@ -35,6 +38,7 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.caja-cuadres":              GetCajaCuadres,
 	"POST.caja-cuadre":              PostCajaCuadre,
 	"POST.caja-movimiento":          PostMovimientoCaja,
+	"POST.comercial-sales":          comercial.PostSales,
 	"GET.p-demo-serialization":      Demo1,
 	"POST.galeria-image":            PostGaleriaImage,
 	"GET.galeria-images":            GetGaleriaImages,

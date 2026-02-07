@@ -18,6 +18,8 @@ import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svel
     import { Env } from '$core/env';
     import { Core } from '$core/store.svelte';
     import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
+    import { SystemParametersService } from '$services/services/system-parameters.svelte';
+    import CheckboxOptions from '$components/CheckboxOptions.svelte';
 
   // Helpers
   const formatMo = (n: number) => formatN(n / 100, 2);
@@ -27,6 +29,7 @@ import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svel
   const productosService = new ProductosService();
   const listasService = new ListasCompartidasService([2]); // 2: Marcas
   const parametrosService = new EmpresaParametrosService();
+  const systemParamsService = new SystemParametersService();
 
   // State
   const ventasState = new VentasState();
@@ -34,6 +37,10 @@ import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svel
   let almacenSelected = $state(-1);
   let productoSelected = $state(-1);
   let searchInput: HTMLInputElement;
+
+  // Computed
+  const separarProcesoVenta = $derived(systemParamsService.recordsMap.get(1)?.ValueInts || []);
+  const isSeparadoProceso = $derived(separarProcesoVenta.includes(2));
 
   // Data
   let productosStock = $state([] as IProductoStock[]);
@@ -308,43 +315,38 @@ import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svel
         <!-- Header -->
         <div class="px-16 py-12 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
         >
-          <h3 class="font-bold text-gray-800">DETALLE DE VENTA</h3>
+       	<div class="grow mr-16">
+          <div class="font-bold text-gray-800 mb-4">DETALLE DE VENTA</div>
+          <div class="grid grid-cols-2 gap-12">
+            <div class="bg-gray-50 p-12 rounded-xl border border-gray-100 shadow-sm">
+                <div class="text-[10px] text-gray-500 mb-4 uppercase font-bold tracking-wider">Sub Total</div>
+                <div class="font-mono text-gray-800 text-xl">
+                    {formatMo(ventasState.form.subtotal)}
+                </div>
+            </div>
+
+            <div class="bg-blue-50 p-12 rounded-xl border border-blue-100 shadow-sm">
+                <div class="text-[10px] text-blue-600 mb-4 uppercase font-bold tracking-wider">Total</div>
+                <div class="font-mono text-blue-700 font-bold text-xl">
+                    {formatMo(ventasState.form.total)}
+                </div>
+            </div>
+          </div>
+        </div>
           <button class="bx-blue"
             title="Guardar venta"
           >
-            Guardar
+          	Generar
             <i class="icon-floppy"></i>
           </button>
         </div>
-
-        <!-- Summary -->
-        <div
-          class="p-16 grid grid-cols-2 gap-16 border-b border-gray-100 bg-white"
-        >
-          <div class="col-span-2">
-            <Input
-              label="Cliente"
-              css="w-full"
-              saveOn={ventasState.form}
-              save="clienteID"
-            />
-          </div>
-
-          <div class="bg-gray-50 p-8 rounded border border-gray-100">
-            <div class="text-xs text-gray-500 mb-4">Sub Total</div>
-            <div class="font-mono text-gray-800 font-medium">
-              {formatMo(ventasState.form.subtotal)}
-            </div>
-          </div>
-
-          <div class="bg-blue-50 p-8 rounded border border-blue-100">
-            <div class="text-xs text-blue-600 mb-4 font-bold">Total</div>
-            <div class="font-mono text-blue-700 font-bold text-lg">
-              {formatMo(ventasState.form.total)}
-            </div>
-          </div>
+        <div class="w-full px-12 py-6">
+        	<CheckboxOptions type="multiple"
+       			options={[ { id: 2, name: "Pagado" }, { id: 3, name: "Recibido" } ]}
+         		keyId="id" keyName="name" save="procesado"
+         		saveOn={ventasState.form}
+         	/>
         </div>
-
         <!-- List -->
         <div class="flex-1 overflow-y-auto px-8 py-4 space-y-4">
           {#each ventasState.ventaProductos as item (item.key)}

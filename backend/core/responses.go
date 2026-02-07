@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -607,7 +608,15 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 			marshall1, _ := serialize.Marshal(respStruct)
 			fmt.Println(string(marshall1))
 		*/
-		bodyBytes, err := serialize.Marshal(respStruct)
+		var bodyBytes []byte
+		var err error
+		
+		if Env.IS_LOCAL {
+			bodyBytes, err = json.Marshal(respStruct)	
+		} else {
+			bodyBytes, err = serialize.Marshal(respStruct)	
+		}
+		
 		// fmt.Println("Json Size:", len(bodyBytes), "| vs:", len(marshall1))
 
 		if err != nil {

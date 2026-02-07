@@ -3,10 +3,10 @@ package handlers
 import (
 	"app/core"
 	"app/db"
+	"app/operaciones"
 	"app/shared"
 	s "app/types"
 	"encoding/json"
-	"time"
 )
 
 func GetCajas(req *core.HandlerArgs) core.HandlerResponse {
@@ -57,33 +57,27 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 	body.Updated = nowTime
 	body.EmpresaID = req.Usuario.EmpresaID
 
-	if body.ID < 0 {
-		counter, err := body.GetCounter(1, req.Usuario.EmpresaID)
-		if err != nil {
-			return req.MakeErr("Error al obtener el counter.", counter)
-		}
-		body.ID = int32(counter)
-		body.CreatedBy = req.Usuario.ID
-		body.Created = nowTime
-	} else {
-		body.UpdatedBy = req.Usuario.ID
-	}
-
+	// Autoincrement is handled automatically by the ORM via handlePreInsert
+	body.CreatedBy = req.Usuario.ID
+	body.Created = nowTime
+	body.UpdatedBy = req.Usuario.ID
+	cajas := &[]s.Caja{body}
+	
 	// Insert or Update using db2
 	if body.Created == nowTime {
 		// New record - insert
-		err = db.Insert(&[]s.Caja{body})
+		err = db.Insert(cajas)
 	} else {
 		// Existing record - update excluding specific fields
 		q1 := db.Table[s.Caja]()
-		err = db.UpdateExclude(&[]s.Caja{body}, q1.CuadreFecha, q1.CuadreSaldo, q1.SaldoCurrent)
+		err = db.UpdateExclude(cajas, q1.CuadreFecha, q1.CuadreSaldo, q1.SaldoCurrent)
 	}
 
 	if err != nil {
 		return req.MakeErr("Error al insertar/actualizar registros:", err)
 	}
 
-	return req.MakeResponse(body)
+	return req.MakeResponse((*cajas)[0])
 }
 
 func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
@@ -243,7 +237,6 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 
 func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
 
-	nowTime := core.SUnixTime()
 	record := s.CajaMovimiento{}
 	err := json.Unmarshal([]byte(*req.Body), &record)
 	if err != nil {
@@ -271,29 +264,16 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeResponse(&re)
 	}
 
-	// Guardar el movimiento
-	record.EmpresaID = req.Usuario.EmpresaID
-	record.Created = nowTime
-	record.Fecha = core.TimeToFechaUnix(time.Now())
-	record.CreatedBy = req.Usuario.ID
-	// record.ID = core.SUnixTimeUUIDConcatID(record.CajaID)
-
-	// Actualizar la caja
-	caja.SaldoCurrent = record.SaldoFinal
-	caja.Updated = nowTime
-	caja.UpdatedBy = req.Usuario.ID
-
-	// Insert movimiento using db2
-	if err := db.Insert(&[]s.CajaMovimiento{record}); err != nil {
-		core.Log("Error ScyllaDB inserting movimiento: ", err)
-		return req.MakeErr("Error al registrar el movimiento:", err)
+	movimientoInterno := s.CajaMovimientoInterno{
+		CajaID:     record.CajaID,
+		CajaRefID:  record.CajaRefID,
+		Tipo:       record.Tipo,
+		Monto:      record.Monto,
+		SaldoFinal: record.SaldoFinal,
 	}
 
-	// Update caja using db2
-	q1 := db.Table[s.Caja]()
-	if err := db.Update(&[]s.Caja{caja}, q1.CuadreFecha, q1.CuadreSaldo, q1.SaldoCurrent, q1.Updated, q1.UpdatedBy); err != nil {
-		core.Log("Error ScyllaDB updating caja: ", err)
-		return req.MakeErr("Error al actualizar la caja:", err)
+	if err := operaciones.ApplyCajaMovimientos(req, []s.CajaMovimientoInterno{movimientoInterno}); err != nil {
+		return req.MakeErr(err)
 	}
 
 	return req.MakeResponse(&record)

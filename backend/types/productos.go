@@ -112,7 +112,7 @@ func (e ProductoTable) GetSchema() db.TableSchema {
 		Name:          "productos",
 		Partition:     e.EmpresaID,
 		UseSequences:  true,
-		Keys:          []db.Coln{e.ID},
+		Keys:          []db.Coln{e.ID.Autoincrement(0)},
 		GlobalIndexes: []db.Coln{e.CategoriasConStock},
 		Views: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
@@ -173,7 +173,7 @@ func (e AlmacenTable) GetSchema() db.TableSchema {
 		Name:         "almacenes",
 		Partition:    e.EmpresaID,
 		UseSequences: true,
-		Keys:         []db.Coln{e.ID},
+		Keys:         []db.Coln{e.ID.Autoincrement(0)},
 		Views: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.Updated}, KeepPart: true},
@@ -230,7 +230,7 @@ func (e SedeTable) GetSchema() db.TableSchema {
 		Name:         "sedes",
 		Partition:    e.EmpresaID,
 		UseSequences: true,
-		Keys:         []db.Coln{e.ID},
+		Keys:         []db.Coln{e.ID.Autoincrement(0)},
 		Views: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.Updated}, KeepPart: true},
