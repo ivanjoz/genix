@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
+	"math/rand/v2"
 	"os"
 	"reflect"
 	"regexp"
@@ -356,4 +357,12 @@ func decodeFromBase62(token string) uint64 {
 	}
 
 	return number
+}
+
+func GetRandomInt64(digits int8) int64 {
+	if digits <= 0 {
+		return 0
+	}
+	max := Pow10Int64(int64(digits))
+	return rand.Int64N(max)
 }

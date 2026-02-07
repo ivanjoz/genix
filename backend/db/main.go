@@ -43,6 +43,9 @@ type ScyllaTable[T any] struct {
 	useSequences    bool
 	sequencePartCol IColInfo
 	keyConcatenated []IColInfo
+	keyIntPacking   []IColInfo
+	autoincrementPart IColInfo
+	autoincrementCol  IColInfo
 	capabilities    []QueryCapability
 	_maxColIdx      int16
 }
@@ -101,7 +104,8 @@ type TableSchema struct {
 	UseSequences    bool
 	SequencePartCol Coln
 	KeyConcatenated []Coln
-	KeyIntPacking []Coln
+	KeyIntPacking   []Coln
+	AutoincrementPart Coln
 }
 
 func (q ColumnStatement) GetValue() any {
@@ -155,6 +159,11 @@ type TableBaseInterface[T any, E any] interface {
 	GetTableStruct() T
 }
 
+type TableBaseInterfaceWithCounter[T any, E any] interface {
+	TableBaseInterface[T, E]
+	GetCounter(increment int, partValue any, secondPartValue ...any) (int64, error)
+}
+
 type TableStructInterfaceQuery[T any, E any] interface {
 	SetRefSlice(*[]E)
 }
@@ -200,6 +209,10 @@ type TableStruct[T TableSchemaInterface[T], E TableBaseInterface[T, E]] struct {
 	tableInfo    *TableInfo
 	// field just for encoding purposes
 	I__ bool `gob:"-" json:"-"`
+}
+
+func (e TableStruct[T, E]) GetSchema() TableSchema {
+	return TableSchema{}
 }
 
 
@@ -271,7 +284,7 @@ func (e *TableStruct[T, E]) Autoincrement(randDecimalSize int8) Col[T, E] {
 	if randDecimalSize > 8 {
 		panic("randDecimalSize TOO BIG.")
 	}
-	return Col[T, E]{}
+	return Col[T, E]{autoincrementRandSize: randDecimalSize, info: columnInfo{autoincrementRandSize: randDecimalSize}}
 }
 
 func (e *TableStruct[T, E]) Limit(limit int32) *T {
@@ -335,10 +348,11 @@ func (q *Col[T, E]) GetInfoPointer() *columnInfo {
 }
 
 func (q Col[T, E]) DecimalSize(size int8) Col[T, E] {
-	if size > 10 {
+	if size > 15 {
 		panic("Decimal size TOO BIG in:" + q.GetName())
 	}
 	q.decimalSize = size
+	q.info.decimalSize = size
 	return q
 }
 
@@ -472,7 +486,7 @@ func MakeSchema[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() TableSc
 	return (*refTable).GetSchema()
 }
 
-func initStructTable[T any, E any](schemaStruct *T) *T {
+func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 	// fmt.Println("making table...")
 	structRefValue := reflect.ValueOf(*new(E))
 	structRefType := structRefValue.Type()
@@ -534,10 +548,8 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 		// Try to get the interface and check if it implements ColGetInfoPointer
 		column, ok := fieldAddr.Interface().(ColGetInfoPointer)
 		if !ok {
-			fmt.Println("El field", fieldType.Name, "no implementa ColumnSetInfo")
+			fmt.Println("El field", fieldType.Name, "no implementa ColGetInfoPointer")
 			continue
-		} else {
-			// fmt.Println("Field seteado!", fieldType.Name, "|", fieldType.Type)
 		}
 
 		// Extract column name from db tag or convert field name to snake_case
@@ -560,24 +572,25 @@ func initStructTable[T any, E any](schemaStruct *T) *T {
 			colInfo := column.GetInfoPointer()
 			*colInfo = *colBase
 			colInfo.Name = columnName
+
+			column1, ok1 := fieldAddr.Interface().(Coln)
+			if ok1 {
+				// Transfer properties from Col if they were set
+				if c, ok := any(column1).(*Col[T, E]); ok {
+					colInfo.decimalSize = c.decimalSize
+					colInfo.autoincrementRandSize = c.autoincrementRandSize
+				}
+
+				infoCheck := column1.GetInfo()
+				if infoCheck.Name == "" {
+					panic("No se seteo el nombre: " + columnName)
+				}
+			}
+
 			// fmt.Printf("DEBUG: initStructTable: field=%s, colName=%s, colInfo.Name=%s, ptr=%p\n", fieldType.Name, columnName, colInfo.Name, colInfo)
 			if DebugFull {
 				fmt.Printf("Init Col: %s, Field: %s, Offset: %d\n", colInfo.Name, colInfo.FieldName, colInfo.Field.Offset)
 			}
-
-			// Revisando si se seteo el nombre
-			column1, ok := column.(Coln)
-			if !ok {
-				fmt.Printf("Error: Field %s (%s) is in base struct but does not implement Coln interface. Ensure it is a valid column type.\n", fieldType.Name, fieldType.Type.String())
-				panic("no cumple la interfaz")
-			}
-
-			infoCheck := column1.GetInfo()
-			// fmt.Printf("DEBUG: check after set: field=%s, GetInfo().Name=%s, column1Type=%T\n", fieldType.Name, infoCheck.Name, column1)
-			if infoCheck.Name == "" {
-				panic("No se seteo el nombre: " + columnName)
-			}
-
 		} else if fieldType.Name != "TableStruct" {
 			err := fmt.Sprintf(`No se encontró el field "%v" en el struct "%v"`, fieldType.Name, structRefType.Name())
 			panic(err)
@@ -630,11 +643,10 @@ func (e IncrementTable) GetSchema() TableSchema {
 	}
 }
 
+// Deprecated: use GetCounter standalone function
 func (e *TableStruct[T, E]) GetCounter(
 	increment int, partValue any, secondPartValue ...any,
 ) (int64, error) {
-
-	result := []Increment{}
 
 	secondPartValue_ := any(0)
 	if len(secondPartValue) > 0 {
@@ -643,6 +655,12 @@ func (e *TableStruct[T, E]) GetCounter(
 
 	scyllaTable := e.MakeScyllaTable()
 	name := fmt.Sprintf("x%v_%v_%v", partValue, scyllaTable.name, secondPartValue_)
+
+	return GetCounter(strings.Split(scyllaTable.GetFullName(), ".")[0], name, increment)
+}
+
+func GetCounter(keyspace string, name string, increment int) (int64, error) {
+	result := []Increment{}
 
 	if err := Query(&result).Name.Equals(name).Exec(); err != nil {
 		return 0, Err("Error al obtener el counter: ", err)
@@ -655,7 +673,7 @@ func (e *TableStruct[T, E]) GetCounter(
 
 	queryUpdateStr := fmt.Sprintf(
 		"UPDATE %v.sequences SET current_value = current_value + %v WHERE name = '%v'",
-		strings.Split(scyllaTable.GetFullName(), ".")[0], increment, name,
+		keyspace, increment, name,
 	)
 
 	if err := QueryExec(queryUpdateStr); err != nil {

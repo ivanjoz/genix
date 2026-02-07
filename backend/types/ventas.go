@@ -92,6 +92,7 @@ func (e CajaMovimientoTable) GetSchema() db.TableSchema {
 		KeyIntPacking: []db.Coln{
 			e.CajaID.DecimalSize(5), e.Fecha.DecimalSize(5), e.Autoincrement(3),
 		},
+		AutoincrementPart: e.Fecha,
 		Views: []db.View{
 			{Cols: []db.Coln{e.VentaID}, KeepPart: true},
 			{Cols: []db.Coln{e.CreatedBy}, KeepPart: true},

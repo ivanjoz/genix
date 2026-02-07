@@ -9,6 +9,115 @@ import (
 	"github.com/viant/xunsafe"
 )
 
+func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	records *[]T, scyllaTable ScyllaTable[any],
+) error {
+	if scyllaTable.autoincrementCol == nil && len(scyllaTable.keyIntPacking) == 0 {
+		return nil
+	}
+
+	// Group records by AutoincrementPart
+	groups := map[string][]*T{}
+	if scyllaTable.autoincrementPart != nil {
+		for i := range *records {
+			rec := &(*records)[i]
+			ptr := xunsafe.AsPointer(rec)
+			partVal := scyllaTable.autoincrementPart.GetRawValue(ptr)
+			key := fmt.Sprintf("%v", partVal)
+			groups[key] = append(groups[key], rec)
+		}
+	} else {
+		group := []*T{}
+		for i := range *records {
+			group = append(group, &(*records)[i])
+		}
+		groups["default"] = group
+	}
+
+	for partKey, group := range groups {
+		var counterVal int64
+		var err error
+		if scyllaTable.autoincrementCol != nil {
+			// Determine counter name
+			counterName := scyllaTable.name
+			if scyllaTable.autoincrementPart != nil {
+				counterName = scyllaTable.name + "_" + partKey
+			}
+
+			// Get range of IDs
+			keyspace := strings.Split(scyllaTable.GetFullName(), ".")[0]
+			counterVal, err = GetCounter(keyspace, counterName, len(group))
+			if err != nil {
+				return err
+			}
+			// GetCounter returns the value after increment, so we need the first value of the range
+			counterVal = counterVal - int64(len(group)) + 1
+		}
+
+		for _, rec := range group {
+			ptr := xunsafe.AsPointer(rec)
+			var currentAutoVal int64
+
+			if scyllaTable.autoincrementCol != nil {
+				currentAutoVal = counterVal
+				counterVal++
+
+				colInfo := scyllaTable.autoincrementCol.(*columnInfo)
+				if colInfo.autoincrementRandSize > 0 {
+					suffix := GetRandomInt64(colInfo.autoincrementRandSize)
+					currentAutoVal = currentAutoVal*Pow10Int64(int64(colInfo.autoincrementRandSize)) + suffix
+				}
+				fmt.Printf("DEBUG: Autoincrement Generated: %v (Col: %s, RandSize: %d)\n", currentAutoVal, colInfo.Name, colInfo.autoincrementRandSize)
+
+				// If not packing, set directly
+				if len(scyllaTable.keyIntPacking) == 0 {
+					scyllaTable.autoincrementCol.SetValue(ptr, currentAutoVal)
+				}
+			}
+
+			if len(scyllaTable.keyIntPacking) > 0 {
+				var packedValue int64
+				remainingDigits := int64(19)
+				fmt.Printf("DEBUG: Packing Key for Table %s (19-digit space):\n", scyllaTable.name)
+				for i, col := range scyllaTable.keyIntPacking {
+					if col == nil {
+						continue
+					}
+					var val int64
+					if col == scyllaTable.autoincrementCol {
+						val = currentAutoVal
+					} else {
+						val = convertToInt64(col.GetRawValue(ptr))
+					}
+
+					colPackingInfo := col.(*columnInfo)
+					decSize := int64(colPackingInfo.decimalSize)
+					// If it's the last one and size is 0, it takes all remaining space
+					if i == len(scyllaTable.keyIntPacking)-1 && decSize == 0 {
+						decSize = remainingDigits
+					}
+					
+					oldPacked := packedValue
+					remainingDigits -= decSize
+					if remainingDigits < 0 {
+						remainingDigits = 0
+					}
+
+					shift := Pow10Int64(remainingDigits)
+					packedValue += val * shift
+					fmt.Printf("  Step %d: Col=%s, Val=%v, Width=%d, Exponent=%d, Result=%v (Prev=%v)\n", 
+						i, colPackingInfo.Name, val, decSize, remainingDigits, packedValue, oldPacked)
+				}
+				// Set into the only key
+				fmt.Printf("DEBUG: Final Packed ID: %v\n", packedValue)
+				scyllaTable.keys[0].SetValue(ptr, packedValue)
+			}
+		}
+	}
+
+	return nil
+}
+
 func MakeInsertStatement[T TableBaseInterface[E, T], E TableSchemaInterface[E]](records *[]T, columnsToExclude ...Coln) []string {
 	refTable := initStructTable[E, T](new(E))
 	scyllaTable := makeTable(refTable)
@@ -61,11 +170,8 @@ func Table[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() *E {
 }
 
 func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
-	records *[]T, columnsToExclude ...Coln,
+	records *[]T, scyllaTable ScyllaTable[any], columnsToExclude ...Coln,
 ) *gocql.Batch {
-
-	refTable := initStructTable[E, T](new(E))
-	scyllaTable := makeTable(refTable)
 
 	columns := []IColInfo{}
 	if len(columnsToExclude) > 0 {
@@ -119,10 +225,16 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 func Insert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T, columnsToExclude ...Coln,
 ) error {
+	refTable := initStructTable[E, T](new(E))
+	scyllaTable := makeTable(refTable)
+
+	if err := handlePreInsert(records, scyllaTable); err != nil {
+		return err
+	}
 
 	session := getScyllaConnection()
 	//fmt.Println("BATCH (1)::")
-	queryBatch := makeInsertBatch(records, columnsToExclude...)
+	queryBatch := makeInsertBatch(records, scyllaTable, columnsToExclude...)
 
 	//fmt.Println("BATCH (2)::")
 	//fmt.Println(queryBatch.Entries)

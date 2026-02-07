@@ -6,6 +6,7 @@ import (
 	"app/shared"
 	s "app/types"
 	"encoding/json"
+	"time"
 )
 
 func GetCajas(req *core.HandlerArgs) core.HandlerResponse {
@@ -269,8 +270,9 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
 	// Guardar el movimiento
 	record.EmpresaID = req.Usuario.EmpresaID
 	record.Created = nowTime
+	record.Fecha = core.TimeToFechaUnix(time.Now())
 	record.CreatedBy = req.Usuario.ID
-	record.ID = core.SUnixTimeUUIDConcatID(record.CajaID)
+	// record.ID = core.SUnixTimeUUIDConcatID(record.CajaID)
 
 	// Actualizar la caja
 	caja.SaldoCurrent = record.SaldoFinal

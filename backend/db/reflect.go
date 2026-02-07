@@ -28,8 +28,10 @@ type colInfo struct {
 type columnInfo struct {
 	colInfo
 	colType
-	getValue    func(ptr unsafe.Pointer) any
-	getRawValue func(ptr unsafe.Pointer) any
+	getValue              func(ptr unsafe.Pointer) any
+	getRawValue           func(ptr unsafe.Pointer) any
+	decimalSize           int8
+	autoincrementRandSize int8
 }
 
 func (c *columnInfo) GetValue(ptr unsafe.Pointer) any {
@@ -83,6 +85,9 @@ func (c *columnInfo) GetStatementValue(ptr unsafe.Pointer) any {
 }
 
 func (c *columnInfo) SetValue(ptr unsafe.Pointer, v any) {
+	if c.Field == nil {
+		return
+	}
 	if c.Type == 9 {
 		var vl []byte
 		if b, ok := v.(*[]byte); ok {
@@ -235,6 +240,58 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		col := dbTable.columnsMap[key.GetInfo().Name]
 		dbTable.keys = append(dbTable.keys, col)
 		dbTable.keysIdx = append(dbTable.keysIdx, col.GetInfo().Idx)
+	}
+
+	if schema.AutoincrementPart != nil {
+		dbTable.autoincrementPart = dbTable.columnsMap[schema.AutoincrementPart.GetInfo().Name]
+	}
+
+	// Identify autoincrement column and KeyIntPacking
+	for _, col := range dbTable.columnsMap {
+		if c, ok := col.(*columnInfo); ok {
+			if c.autoincrementRandSize >= 0 {
+				dbTable.autoincrementCol = col
+			}
+		}
+	}
+
+	if len(schema.KeyIntPacking) > 0 {
+		if len(dbTable.keys) != 1 {
+			panic(fmt.Sprintf(`Table "%v": KeyIntPacking requires exactly one column in Keys. Found: %v`, dbTable.name, len(dbTable.keys)))
+		}
+		keyCol := dbTable.keys[0].(*columnInfo)
+		if keyCol.Type != 2 { // 2 = int64
+			panic(fmt.Sprintf(`Table "%v": KeyIntPacking requires the key column to be an int64. Found: %v`, dbTable.name, keyCol.FieldType))
+		}
+
+		for _, col := range schema.KeyIntPacking {
+			packedCol := dbTable.columnsMap[col.GetName()]
+			if packedCol == nil {
+				info := col.GetInfo()
+				if info.autoincrementRandSize >= 0 {
+					// It's an autoincrement placeholder
+					placeholder := &columnInfo{
+						colInfo: colInfo{
+							Name:      "autoincrement_placeholder",
+							IsVirtual: true,
+						},
+						autoincrementRandSize: info.autoincrementRandSize,
+						decimalSize:           info.decimalSize,
+					}
+					packedCol = placeholder
+					dbTable.autoincrementCol = placeholder
+				} else {
+					panic(fmt.Sprintf(`Table "%v": Column "%v" in KeyIntPacking not found`, dbTable.name, col.GetName()))
+				}
+			} else {
+				// If it's a real column, ensure decimalSize is transferred if set in KeyIntPacking
+				info := col.GetInfo()
+				if info.decimalSize > 0 {
+					packedCol.(*columnInfo).decimalSize = info.decimalSize
+				}
+			}
+			dbTable.keyIntPacking = append(dbTable.keyIntPacking, packedCol)
+		}
 	}
 
 	if len(schema.KeyConcatenated) > 0 {
