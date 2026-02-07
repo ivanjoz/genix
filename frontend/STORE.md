@@ -82,7 +82,7 @@ When ready to implement thumbhash:
 
 ### Store Routes
 - Store is accessible at `/store/*`
-- Admin routes are at `/admin/*`
+- Admin routes are grouped by module (e.g., `/configuracion/*`, `/negocio/*`, `/comercial/*`)
 - Store routes use SSR for better SEO
 - Admin routes use SPA mode
 

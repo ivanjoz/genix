@@ -35,56 +35,67 @@ export const AdminModule: IModule = {
     { name: "CONFIGURACIÓN", minName: "CON", id: 1, icon: "icon-flow-merge",
       options: [
 				{
-					name: "Mi Empresa", route: "/admin/empresas", icon: "icon-black-tie",
-					
+					name: "Mi Empresa", route: "/configuracion/parametros", icon: "icon-cog",
+					descripcion: "Edita los datos de tu empresa, pasarela de pago, envío de correos."
         },
-        { name: "Parámetros", route: "/admin/parametros", icon: "icon-cog",
-        },
-        { name: "Usuarios", route: "/admin/usuarios", icon: "icon-adult",
+				{
+					name: "Usuarios", route: "/configuracion/usuarios", icon: "icon-adult",
+					descripcion: "Gestiona usuario y asígnales perfiles."
 				},
-        { name: "Perfiles & Accesos", route: "/admin/perfiles-accesos",
+				{
+					name: "Perfiles & Accesos", route: "/configuracion/perfiles-accesos",
+					descripcion: "Crea perfiles y asígnales accesos.",
           icon: "icon-shield",
 				},
 				{
-					name: "Server Panel", route: "/admin/server-panel", icon: "icon-shield",
+					name: "Backups", route: "/configuracion/backups", icon: "icon-database",
+					descripcion: "Descarga y genera respaldos de tu información.",
+				},
+				{
+					name: "Empresas", route: "/configuracion/empresas", icon: "icon-shield",
 					onlySaaS: true,
 				},
-        { name: "Backups", route: "/admin/backups", icon: "icon-database"
-        },
+				{
+					name: "Server Panel", route: "/configuracion/server-panel", icon: "icon-shield",
+					onlySaaS: true,
+				},
       ]
     },
     { name: "NEGOCIO", minName: "NEG",  id: 2, icon: "icon-cube",
       options: [
-        { name: "Sedes & Almacenes", route: "/operaciones/sedes-almacenes",
-          icon: "icon-home-1"
+        { name: "Sedes & Almacenes", route: "/negocio/sedes-almacenes",
+					icon: "icon-home-1",
+					descripcion: "Crea sedes y almacenes. Crea los layouts de tus almacenes."
         },
-        { name: "Productos", route: "/operaciones/productos",
+				{
+					name: "Productos", route: "/negocio/productos",
+					descripcion: "Crea productos y agrúpalos por categoría y marca. Edita precios, unidades y presentaciones de tus productos.",
           icon: "icon-cube"
 				},
-				{ name: "Clientes & Proveedores", route: "/operaciones/clientes-proveedores",
+				{ name: "Clientes & Proveedores", route: "/negocio/clientes-proveedores",
           icon: "icon-cube"
         },
       ]
     },
     { name: "Comercial", minName: "Com",  id: 3, icon: "icon-tasks",
       options: [
-        { name: "Punto de Venta", route: "/operaciones/ventas",
+        { name: "Punto de Venta", route: "/comercial/point_of_sale",
           icon: "icon-flash"
 				},
-				{ name: "Gestión Ventas", route: "/operaciones/gestion-ventas",
+				{ name: "Gestión Ventas", route: "/comercial/gestion-ventas",
           icon: "icon-flash"
 				},
-				{ name: "Costos de Envio", route: "/operaciones/shipping-costs",
+				{ name: "Costos de Envio", route: "/comercial/shipping-costs",
           icon: "icon-flash"
         },
       ]
 		},
 		{ name: "Logística", minName: "LOG",  id: 4, icon: "icon-tasks",
       options: [
-	      { name: "Gestión de Stock", route: "/operaciones/productos-stock",
+	      { name: "Gestión de Stock", route: "/logistica/productos-stock",
 	        icon: "icon-chart-bar"
 	      },
-	      { name: "Rep. Movimientos", route: "/operaciones/almacen-movimientos",
+	      { name: "Rep. Movimientos", route: "/logistica/almacen-movimientos",
 	        icon: "icon-truck"
 				},
 		    { name: "Órdenes Compra", route: "/logistica/ordenes-de-compra",
@@ -94,26 +105,26 @@ export const AdminModule: IModule = {
     },
 		{ name: "Finanzas", minName: "FIN",  id: 5, icon: "icon-tasks",
       options: [
-	      { name: "Cajas & Bancos", route: "/operaciones/cajas",
+	      { name: "Cajas & Bancos", route: "/finanzas/cajas",
 	        icon: "icon-suitcase"
 	      },
-	      { name: "Cajas Movimientos", route: "/operaciones/cajas-movimientos",
+	      { name: "Cajas Movimientos", route: "/finanzas/cajas-movimientos",
 	        icon: "icon-exchange"
 				},
-		    { name: "Gastos", route: "/operaciones/gastos",
+		    { name: "Gastos", route: "/finanzas/gastos",
 		      icon: "icon-exchange"
 				},
-		    { name: "Gestión de Cuentas", route: "/operaciones/gestion-cuentas",
+		    { name: "Gestión de Cuentas", route: "/finanzas/gestion-cuentas",
 		      icon: "icon-exchange"
 		    },
-		    { name: "Flujo de Caja", route: "/operaciones/flujo-de-caja",
+		    { name: "Flujo de Caja", route: "/finanzas/flujo-de-caja",
 		      icon: "icon-exchange"
 				},
       ]
     },
     { name: "TIENDA", minName: "TIE",  id: 7, icon: "icon-buffer",
       options: [
-        { name: "Inicio", route: "/builder-store"
+        { name: "Inicio", route: "/tienda/builder-store"
         },
         { name: "Nosotros", route: "/store-builder/page-2"
         },

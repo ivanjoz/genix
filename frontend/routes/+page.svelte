@@ -71,7 +71,7 @@
     <!-- Quick Links -->
     <div class="flex flex-wrap justify-center gap-4">
       <a
-        href="/admin/empresas"
+        href="/configuracion/empresas"
         class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700
 				text-white font-semibold rounded-lg shadow-md transition-colors"
       >
@@ -80,7 +80,7 @@
       </a>
 
       <a
-        href="/operaciones/productos"
+        href="/negocio/productos"
         class="inline-flex items-center px-6 py-3 bg-white dark:bg-gray-800
 				hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-white
 				font-semibold rounded-lg shadow-md border border-gray-200 dark:border-gray-700

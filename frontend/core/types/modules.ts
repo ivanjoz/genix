@@ -45,48 +45,42 @@ export const defaultModule: IModule = {
 	menus: [
 		{
 			id: 1,
-			name: 'Administración',
-			minName: 'ADM',
+			name: 'Configuración',
+			minName: 'CON',
 			icon: 'icon-cog',
 			options: [
 				{
 					name: 'Empresas',
 					minName: 'EMP',
-					route: '/admin/empresas',
+					route: '/configuracion/empresas',
 					icon: 'icon-building'
 				},
 				{
 					name: 'Usuarios',
 					minName: 'USR',
-					route: '/admin/usuarios',
+					route: '/configuracion/usuarios',
 					icon: 'icon-users'
 				},
-				{ name: 'Sedes', minName: 'SED', route: '/admin/sedes', icon: 'icon-location' }
+				{ name: 'Sedes', minName: 'SED', route: '/negocio/sedes-almacenes', icon: 'icon-location' }
 			]
 		},
 		{
 			id: 2,
-			name: 'Operaciones',
-			minName: 'OPE',
+			name: 'Negocio',
+			minName: 'NEG',
 			icon: 'icon-box',
 			options: [
 				{
 					name: 'Productos',
 					minName: 'PRO',
-					route: '/operaciones/productos',
+					route: '/negocio/productos',
 					icon: 'icon-cube'
 				},
 				{
 					name: 'Almacenes',
 					minName: 'ALM',
-					route: '/operaciones/almacenes',
+					route: '/negocio/sedes-almacenes',
 					icon: 'icon-archive'
-				},
-				{
-					name: 'Movimientos',
-					minName: 'MOV',
-					route: '/operaciones/movimientos',
-					icon: 'icon-docs'
 				}
 			]
 		},
@@ -105,13 +99,13 @@ export const defaultModule: IModule = {
 				{
 					name: 'Clientes',
 					minName: 'CLI',
-					route: '/comercial/clientes',
+					route: '/negocio/clientes-proveedores',
 					icon: 'icon-user'
 				},
 				{
 					name: 'Reportes',
 					minName: 'REP',
-					route: '/comercial/reportes',
+					route: '/comercial/gestion-ventas',
 					icon: 'icon-chart-bar'
 				}
 			]

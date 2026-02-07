@@ -208,10 +208,10 @@ export default defineConfig({
         hashCharacters: 'base64',
                   manualChunks: (id) => {
                   // Separate admin and store chunks to prevent loading admin code on store routes
-                  if (id.includes('/admin/') || id.includes('/cms/') || id.includes('/operaciones/')) {
+                  if (id.includes('/configuracion/') || id.includes('/negocio/') || id.includes('/comercial/') || id.includes('/logistica/') || id.includes('/finanzas/') || id.includes('/contabilidad/') || id.includes('/cms/')) {
                     return 'admin';
                   }
-                  if (id.includes('/ecommerce/') || id.includes('/store/')) {
+                  if (id.includes('/ecommerce/') || id.includes('/store/') || id.includes('/tienda/')) {
                     return 'store';
                   }
                   // Shared code goes to common chunk
