@@ -346,7 +346,7 @@ import { EmpresaParametrosService } from '$routes/admin/parametros/empresas.svel
         </div>
 
         <!-- List -->
-        <div class="flex-1 overflow-y-auto p-4 space-y-4">
+        <div class="flex-1 overflow-y-auto px-8 py-4 space-y-4">
           {#each ventasState.ventaProductos as item (item.key)}
             <div
               class="flex items-center gap-8 py-4 px-8 rounded-lg bg-gray-50 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 transition-all group"

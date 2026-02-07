@@ -56,16 +56,17 @@ func (e CajaTable) GetSchema() db.TableSchema {
 
 type CajaMovimiento struct {
 	db.TableStruct[CajaMovimientoTable, CajaMovimiento]
-	EmpresaID  int32 `json:",omitempty" db:"empresa_id,pk"`
-	ID         int64 `db:"id,pk"`
-	CajaID     int32 `db:"caja_id"`
-	CajaRefID  int32 `db:"caja_ref_id"`
-	VentaID    int32 `json:",omitempty" db:"venta_id,view"`
-	Tipo       int8  `json:",omitempty" db:"tipo"`
-	SaldoFinal int32 `db:"saldo_final"`
-	Monto      int32 `db:"monto"`
-	Created    int32 `json:",omitempty" db:"created"`
-	CreatedBy  int32 `json:",omitempty" db:"created_by,view.1"`
+	EmpresaID  int32 `json:",omitempty"`
+	ID         int64 
+	CajaID     int32 
+	CajaRefID  int32 
+	VentaID    int32 `json:",omitempty"`
+	Fecha int16
+	Tipo       int8  `json:",omitempty"`
+	SaldoFinal int32 
+	Monto      int32 
+	Created    int32 `json:",omitempty"`
+	CreatedBy  int32 `json:",omitempty"`
 }
 
 type CajaMovimientoTable struct {
@@ -74,7 +75,8 @@ type CajaMovimientoTable struct {
 	ID         db.Col[CajaMovimientoTable, int64]
 	CajaID     db.Col[CajaMovimientoTable, int32]
 	CajaRefID  db.Col[CajaMovimientoTable, int32]
-	VentaID    db.Col[CajaMovimientoTable, int32]
+	VentaID    db.Col[CajaMovimientoTable, int32]	
+	Fecha  db.Col[CajaMovimientoTable, int16]
 	Tipo       db.Col[CajaMovimientoTable, int8]
 	SaldoFinal db.Col[CajaMovimientoTable, int32]
 	Monto      db.Col[CajaMovimientoTable, int32]
@@ -87,6 +89,9 @@ func (e CajaMovimientoTable) GetSchema() db.TableSchema {
 		Name:      "caja_movimientos",
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.ID},
+		KeyIntPacking: []db.Coln{
+			e.CajaID.DecimalSize(5), e.Fecha.DecimalSize(5), e.Autoincrement(3),
+		},
 		Views: []db.View{
 			{Cols: []db.Coln{e.VentaID}, KeepPart: true},
 			{Cols: []db.Coln{e.CreatedBy}, KeepPart: true},

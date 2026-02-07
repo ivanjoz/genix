@@ -101,6 +101,7 @@ type TableSchema struct {
 	UseSequences    bool
 	SequencePartCol Coln
 	KeyConcatenated []Coln
+	KeyIntPacking []Coln
 }
 
 func (q ColumnStatement) GetValue() any {
@@ -146,6 +147,7 @@ type TableInfo struct {
 // Interfaces
 type TableSchemaInterface[T any] interface {
 	GetSchema() TableSchema
+	GetTableStruct() T
 }
 
 type TableBaseInterface[T any, E any] interface {
@@ -200,23 +202,11 @@ type TableStruct[T TableSchemaInterface[T], E TableBaseInterface[T, E]] struct {
 	I__ bool `gob:"-" json:"-"`
 }
 
-/*
-// GobEncode implements gob.GobEncoder interface
-// TableStruct is only used for queries and doesn't need to be encoded
-func (e TableStruct[T, E]) GobEncode() ([]byte, error) {
-	return []byte{}, nil
-}
-
-// GobDecode implements gob.GobDecoder interface
-// TableStruct is only used for queries and doesn't need to be decoded
-func (e *TableStruct[T, E]) GobDecode(data []byte) error {
-	return nil
-}
-*/
 
 func (e *TableStruct[T, E]) MakeTableSchema() TableSchema {
 	return MakeSchema[E]()
 }
+
 func (e *TableStruct[T, E]) MakeScyllaTable() ScyllaTable[any] {
 	return makeTable(initStructTable[T, E](new(T)))
 }
@@ -276,6 +266,14 @@ func (e *TableStruct[T, E]) AllowFilter() *T {
 	return e.schemaStruct
 }
 
+// The randDecimalSize is a random value appended to the autoincrement to avoid take the same value in high concurrent scenarios. If = 3, means ID = 100 now is 100567
+func (e *TableStruct[T, E]) Autoincrement(randDecimalSize int8) Col[T, E] {
+	if randDecimalSize > 8 {
+		panic("randDecimalSize TOO BIG.")
+	}
+	return Col[T, E]{}
+}
+
 func (e *TableStruct[T, E]) Limit(limit int32) *T {
 	e.tableInfo.limit = limit
 	return e.schemaStruct
@@ -311,6 +309,9 @@ type Col[T TableInterface[T], E any] struct {
 	info         columnInfo
 	schemaStruct *T
 	tableInfo    *TableInfo
+	decimalSize 	int8
+	// autoincrementRandSize = -1 means no randon number at the end
+	autoincrementRandSize int8
 }
 
 func (q Col[T, E]) GetInfo() columnInfo {
@@ -331,6 +332,14 @@ func (q *Col[T, E]) GetInfoPointer() *columnInfo {
 		q.info = q.GetInfo()
 	}
 	return &q.info
+}
+
+func (q Col[T, E]) DecimalSize(size int8) Col[T, E] {
+	if size > 10 {
+		panic("Decimal size TOO BIG in:" + q.GetName())
+	}
+	q.decimalSize = size
+	return q
 }
 
 func (q Col[T, E]) GetName() string {

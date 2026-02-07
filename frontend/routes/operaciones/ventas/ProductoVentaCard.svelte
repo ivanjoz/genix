@@ -78,8 +78,8 @@ import { formatN } from '$libs/helpers';
   // Helper for quantities
   const cantidades = [2,3,4,5,6,8,10,12]
 
-    const css = $derived.by(() => {
-    let cn = "px-8 py-3 transition-all duration-200 border border-transparent rounded-lg "
+  const css = $derived.by(() => {
+    let cn = "px-8 py-4 border border-transparent rounded-lg "
     if(isSelected){
       cn += "bg-white ring-2 ring-blue-500 ring-inset shadow-[inset_0_0_12px_rgba(59,130,246,0.1)]"
     } else {
@@ -111,7 +111,7 @@ import { formatN } from '$libs/helpers';
   >
     <!-- Header: Name + Line -->
     <div class="flex items-center gap-8">
-       <div class="font-medium text-gray-700 flex items-center gap-8">
+       <div class="leading-tight text-gray-700 flex items-center gap-8">
           <span>{@html highlightText(productoStock.producto.Nombre, filterText)}</span>
           {#if productoStock.isSubUnidad}
              <span class="text-gray-300">|</span>
@@ -142,11 +142,11 @@ import { formatN } from '$libs/helpers';
                   {/each}
                </div>
             {:else}
-              <div class="flex gap-4 z-10 m-[-2px] opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div class="flex gap-4 z-10 opacity-0 group-hover:opacity-100 duration-200">
                   {#each cantidades as n}
                      {#if n <= getCant}
                      <button
-                       class="w-32 h-32 flex items-center justify-center text-xs font-bold text-gray-500 bg-gray-100 hover:bg-blue-100 hover:text-blue-600 rounded cursor-pointer transition-colors"
+                       class="w-32 h-30 flex items-center justify-center text-xs font-bold text-gray-500 bg-gray-100 hover:bg-blue-100 hover:text-blue-600 rounded cursor-pointer transition-colors"
                        onclick={(e) => {
                            e.stopPropagation()
                            onadd(n)
