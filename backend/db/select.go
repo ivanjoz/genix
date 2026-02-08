@@ -299,7 +299,7 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 								// Handle range on current column
 								if rSt.Operator == "BETWEEN" {
 									fromVal = currentPacked + convertToInt64(rSt.From[0].Value)*Pow10Int64(remainingDigits)
-									toVal = currentPacked + convertToInt64(rSt.To[0].Value)*Pow10Int64(remainingDigits)
+									toVal = currentPacked + (convertToInt64(rSt.To[0].Value)+1)*Pow10Int64(remainingDigits)
 								} else {
 									// Handle other range operators if needed, or fallback to simple prefix range
 									val := convertToInt64(rSt.Value)

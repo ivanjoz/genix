@@ -5,10 +5,12 @@ import (
 	"app/core"
 	"app/db"
 	"app/operaciones"
-	"encoding/json"
 	s "app/types"
+	"encoding/json"
 	"slices"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
@@ -25,11 +27,19 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	sale.Updated = nowTime
 	sale.UpdatedBy = req.Usuario.ID
 	sale.Status = 1
+	sales := []types.SaleOrder{sale}
 
 	// Insertar el registro de venta para obtener el ID (autoincrement)
-	if err := db.Insert(&[]types.SaleOrder{sale}); err != nil {
+	if err := db.Insert(&sales); err != nil {
 		return req.MakeErr("Error al registrar la venta:", err)
 	}
+	
+	sale.ID = sales[0].ID
+	if sale.ID == 0 {
+		return req.MakeErr("Error al obtener el ID de la venta.")
+	}
+	
+	eg := errgroup.Group{}
 
 	// 2 = Pago (Registro en Caja)
 	if slices.Contains(sale.ProcessesIncluded_, 2) {
@@ -45,6 +55,14 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				Tipo:    8, // Cobro (Venta)
 				Monto:   montoPago,
 			}
+			
+			eg.Go(func() error {
+				if err := operaciones.ApplyCajaMovimientos(req, []s.CajaMovimientoInterno{movimiento}); err != nil {
+					core.Log("Error al aplicar movimiento de caja:", err)
+					return core.Err("Error al registrar el movimiento de caja:", err)
+				}
+				return nil
+			})
 
 			if err := operaciones.ApplyCajaMovimientos(req, []s.CajaMovimientoInterno{movimiento}); err != nil {
 				core.Log("Error al aplicar movimiento de caja:", err)
@@ -63,6 +81,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("No hay productos en el detalle para procesar la entrega.")
 		}
 
+		core.Log("Incluyendo movimientos internos...", len(sale.DetailProductsIDs))
+		
 		movimientosInternos := []s.MovimientoInterno{}
 		for i, productoID := range sale.DetailProductsIDs {
 			if i >= len(sale.DetailQuantities) {
@@ -81,13 +101,22 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				Cantidad:   -cantidad, // Salida de almacén
 			})
 		}
+		
+		core.Print(movimientosInternos)
 
 		if len(movimientosInternos) > 0 {
-			if err := operaciones.ApplyMovimientos(req, movimientosInternos); err != nil {
-				core.Log("Error al aplicar movimientos de almacén:", err)
-				return req.MakeErr("Error al procesar la salida de almacén: " + err.Error())
-			}
+			eg.Go(func() error {
+				if err := operaciones.ApplyMovimientos(req, movimientosInternos); err != nil {
+					core.Log("Error al aplicar movimientos de almacén:", err)
+					return core.Err("Error al procesar la salida de almacén:",err)
+				}
+				return nil
+			})
 		}
+	}
+	
+	if err := eg.Wait(); err != nil {
+		return req.MakeErr(err)
 	}
 
 	return req.MakeResponse(sale)

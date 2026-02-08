@@ -305,6 +305,7 @@ type AlmacenMovimiento struct {
 	AlmacenID          int32  `json:",omitempty"`
 	AlmacenRefID       int32  `json:",omitempty"`
 	AlmacenRefCantidad int32  `json:",omitempty"`
+	Fecha          int16  `json:",omitempty"`
 	DocumentID            int64  `json:",omitempty"`
 	ProductoID         int32  `json:",omitempty"`
 	PresentacionID     int16  `json:",omitempty"`
@@ -334,6 +335,7 @@ type AlmacenMovimientoTable struct {
 	Tipo               db.Col[AlmacenMovimientoTable, int8]
 	Created            db.Col[AlmacenMovimientoTable, int32]
 	CreatedBy          db.Col[AlmacenMovimientoTable, int32]
+	Fecha              db.Col[AlmacenMovimientoTable, int16]
 }
 
 func (e AlmacenMovimientoTable) GetSchema() db.TableSchema {
@@ -341,6 +343,10 @@ func (e AlmacenMovimientoTable) GetSchema() db.TableSchema {
 		Name:      "almacen_movimiento",
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.ID},
+		KeyIntPacking: []db.Coln{
+			e.AlmacenID.DecimalSize(5), e.Fecha.DecimalSize(5), e.Autoincrement(3),
+		},
+		AutoincrementPart: e.Fecha,
 		Views: []db.View{
 			{Cols: []db.Coln{e.SKU}, KeepPart: true},
 			{Cols: []db.Coln{e.Lote}, KeepPart: true},

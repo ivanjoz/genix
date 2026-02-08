@@ -748,7 +748,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 					whereSt := fmt.Sprintf("%v >= %v AND %v < %v",
 						viewPtr.column.GetName(), makeValue(valuesFrom),
-						viewPtr.column.GetName(), makeValue(valuesTo),
+						viewPtr.column.GetName(), makeValue(valuesTo)+1,
 					)
 					if partStatement != nil {
 						pk := dbTable.GetPartKey()

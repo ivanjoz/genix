@@ -38,6 +38,7 @@ export interface ISaleOrder {
   DetailProductsIDs: number[]
   DetailPrices: number[]
   DetailQuantities: number[]
+  DetailProductSkus: string[]
   
   // UI Helpers (not sent or ignored by backend if not in struct)
   montoRecibido: number
@@ -52,6 +53,7 @@ export class SaleOrderState {
     TotalAmount: 0, TaxAmount: 0, DebtAmount: 0,
     ProcessesIncluded_: [2, 3],
     DetailProductsIDs: [], DetailPrices: [], DetailQuantities: [],
+    DetailProductSkus: [],
     montoRecibido: 0, montoVuelto: 0
   } as ISaleOrder)
   filterText = $state("")
@@ -165,16 +167,35 @@ export class SaleOrderState {
     this.form.DetailProductsIDs = []
     this.form.DetailPrices = []
     this.form.DetailQuantities = []
+    this.form.DetailProductSkus = []
 
+    // Flatten cart into order details, splitting by SKU for inventory tracking
     for (const vp of this.ventaProductos) {
-      this.form.DetailProductsIDs.push(vp.productoID)
-      this.form.DetailQuantities.push(vp.cantidad)
-      
       let precio = vp.producto?.PrecioFinal || 0
       if (vp.isSubUnidad && vp.producto?.SbnPreciFinal) {
         precio = vp.producto.SbnPreciFinal
       }
-      this.form.DetailPrices.push(precio)
+
+      let totalSkuQty = 0
+      if (vp.skus && vp.skus.size > 0) {
+        // Create a separate line for each SKU group to allow precise stock deduction
+        for (const [sku, qty] of vp.skus.entries()) {
+          this.form.DetailProductsIDs.push(vp.productoID)
+          this.form.DetailPrices.push(precio)
+          this.form.DetailQuantities.push(qty)
+          this.form.DetailProductSkus.push(sku)
+          totalSkuQty += qty
+        }
+      }
+
+      // Add a generic line for any quantity without a specific SKU
+      const remainingQty = vp.cantidad - totalSkuQty
+      if (remainingQty > 0) {
+        this.form.DetailProductsIDs.push(vp.productoID)
+        this.form.DetailPrices.push(precio)
+        this.form.DetailQuantities.push(remainingQty)
+        this.form.DetailProductSkus.push("")
+      }
     }
 
     try {

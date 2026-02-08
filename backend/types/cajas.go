@@ -60,7 +60,7 @@ type CajaMovimiento struct {
 	ID         int64 
 	CajaID     int32 
 	CajaRefID  int32 
-	VentaID    int64 `json:",omitempty"`
+	DocumentoID    int64 `json:",omitempty"`
 	Fecha int16
 	Tipo       int8  `json:",omitempty"`
 	SaldoFinal int32 
@@ -75,7 +75,7 @@ type CajaMovimientoTable struct {
 	ID         db.Col[CajaMovimientoTable, int64]
 	CajaID     db.Col[CajaMovimientoTable, int32]
 	CajaRefID  db.Col[CajaMovimientoTable, int32]
-	VentaID    db.Col[CajaMovimientoTable, int64]	
+	DocumentoID    db.Col[CajaMovimientoTable, int64]	
 	Fecha  db.Col[CajaMovimientoTable, int16]
 	Tipo       db.Col[CajaMovimientoTable, int8]
 	SaldoFinal db.Col[CajaMovimientoTable, int32]
@@ -93,10 +93,7 @@ func (e CajaMovimientoTable) GetSchema() db.TableSchema {
 			e.CajaID.DecimalSize(5), e.Fecha.DecimalSize(5), e.Autoincrement(3),
 		},
 		AutoincrementPart: e.Fecha,
-		Views: []db.View{
-			{Cols: []db.Coln{e.VentaID}, KeepPart: true},
-			{Cols: []db.Coln{e.CreatedBy}, KeepPart: true},
-		},
+		LocalIndexes: []db.Coln{ e.DocumentoID, e.CreatedBy },
 	}
 }
 

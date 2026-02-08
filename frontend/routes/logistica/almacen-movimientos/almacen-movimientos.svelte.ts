@@ -51,12 +51,8 @@ export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): P
   if (!args.fechaInicio || !args.fechaFin) {
     throw "No se encontró una fecha de inicio o fin."
   }
-  
-  // Zone offset for Peru: -5 hours = -18000 seconds
-  const zoneOffset = -18000
-  route += `&fecha-hora-inicio=${args.fechaInicio * 24 * 60 * 60 + zoneOffset}`
-  route += `&fecha-hora-fin=${(args.fechaFin + 1) * 24 * 60 * 60 + zoneOffset}`
 
+  route += `&fecha-inicio=${args.fechaInicio}&fecha-fin=${args.fechaFin}`
   let result: IAlmacenMovimientosResult
 
   try {

@@ -74,7 +74,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	movimientos := []types.CajaMovimiento{}
 	q4 := db.Query(&movimientos)
 	err = q4.EmpresaID.Equals(1).
-		VentaID.Equals(12345). // This uses a view defined in CajaMovimientoTable
+		DocumentoID.Equals(12345). // This uses a view defined in CajaMovimientoTable
 		Exec()
 
 	if err != nil {

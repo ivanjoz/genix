@@ -6,6 +6,7 @@ import (
 	s "app/types"
 	"encoding/json"
 	"slices"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -53,10 +54,10 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	almacenID := req.GetQueryInt("almacen-id")
-	fechaHoraInicio := core.UnixToSunix(req.GetQueryInt64("fecha-hora-inicio"))
-	fechaHoraFin := core.UnixToSunix(req.GetQueryInt64("fecha-hora-fin"))
+	fechaInicio := req.GetQueryInt16("fecha-inicio")
+	fechaFin := req.GetQueryInt16("fecha-fin")
 
-	if almacenID == 0 || fechaHoraInicio == 0 || fechaHoraFin == 0 {
+	if almacenID == 0 || fechaInicio == 0 || fechaFin == 0 {
 		return req.MakeErr("Faltan parámetros.")
 	}
 
@@ -69,12 +70,10 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	result := Result{}
 
 	query := db.Query(&result.Movimientos)
-	query.Select().
-		EmpresaID.Equals(req.Usuario.EmpresaID).
-		ID.Between(
-		core.SUnixTimeUUIDConcatID(almacenID, int64(fechaHoraInicio)),
-		core.SUnixTimeUUIDConcatID(almacenID, int64(fechaHoraFin)+1),
-	).OrderDesc().Limit(1000)
+	
+	query.EmpresaID.Equals(req.Usuario.EmpresaID).
+		AlmacenID.Equals(almacenID).
+		Fecha.Between(fechaInicio, fechaFin).OrderDesc().Limit(1000)
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)
@@ -267,12 +266,9 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []s.MovimientoInterno) 
 	//Genera los movimientos correspondientes al stock actual
 	almacenMovimientos := []s.AlmacenMovimiento{}
 	almacenProductos := []s.AlmacenProducto{}
-	uuid := core.SUnixTimeUUID()
-
 	for _, e := range movimientos {
 		movimiento := s.AlmacenMovimiento{
-			ID:             core.SUnixTimeUUIDConcatID(e.AlmacenID, uuid),
-			DocumentID: e.DocumentID,
+			DocumentID: 		e.DocumentID,
 			EmpresaID:      req.Usuario.EmpresaID,
 			AlmacenID:      e.AlmacenID,
 			ProductoID:     e.ProductoID,
@@ -280,11 +276,10 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []s.MovimientoInterno) 
 			SKU:            e.SKU,
 			Lote:           e.Lote,
 			Tipo:           core.Coalesce(e.Tipo, core.If(e.Cantidad > 0, int8(1), 2)),
+			Fecha: 					core.TimeToFechaUnix(time.Now()),
 			Created:        core.SUnixTime(),
 			CreatedBy:      req.Usuario.ID,
-		}		
-		
-		uuid++
+		}
 
 		currentCantidad := int32(0)
 		almProdID := e.GetAlmacenProductoID()
