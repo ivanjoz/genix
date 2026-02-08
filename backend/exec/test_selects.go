@@ -4,6 +4,7 @@ import (
 	"app/core"
 	"app/db"
 	"app/types"
+	comercial "app/comercial/types"
 	"fmt"
 )
 
@@ -85,8 +86,8 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// 5. Test with range query (Between)
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
-	registrosRange := []types.ListaCompartidaRegistro{}
-	q5 := db.Query(&registrosRange)
+	recordRegistrosListas := []types.ListaCompartidaRegistro{}
+	q5 := db.Query(&recordRegistrosListas)
 	err = q5.EmpresaID.Equals(1).
 		ListaID.Equals(1).
 		Updated.Between(1000000000, 2000000000).
@@ -95,8 +96,24 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	if err != nil {
 		fmt.Println("Error in Test 5:", err)
 	} else {
-		fmt.Printf("Found %d records in range\n", len(registrosRange))
+		fmt.Printf("Found %d records in range\n", len(recordRegistrosListas))
 	}
+	
+	// 6. Test bucket query CONTAINS + "RANGE" with hash index
+	fmt.Println("\n--- Test 5: Range Query (Between) ---")
+	recordSalesOrders := []comercial.SaleOrder{}
+	q6 := db.Query(&recordSalesOrders)
+	err = q6.EmpresaID.Equals(1).
+		DetailProductsIDs.Contains(1).
+		Week.Between(2548, 2614).
+		Exec()
+
+	if err != nil {
+		fmt.Println("Error in Test 5:", err)
+	} else {
+		fmt.Printf("Found %d records in range\n", len(recordRegistrosListas))
+	}
+
 
 	return core.FuncResponse{}
 }

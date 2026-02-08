@@ -404,6 +404,13 @@ func (e *Col[T, E]) Equals(v E) *T {
 	return e.schemaStruct
 }
 
+
+func (e *Col[T, E]) Contains(v int64) *T {
+	// fmt.Println("e.schemaStruct", e.schemaStruct)
+	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: "CONTAINS", Value: any(v)})
+	return e.schemaStruct
+}
+
 func (e *Col[T, E]) In(values_ ...E) *T {
 	values := []any{}
 	for _, v := range values_ {
