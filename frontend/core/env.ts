@@ -12,6 +12,8 @@ export const IsClient = () => {
   return browser
 }
 
+const version = 1.11
+console.log(version)
 const apiPrd = (PUBLIC_LAMBDA_URL || "") + "api/"
 const apiLocal = "http://localhost:3589/api/"
 
