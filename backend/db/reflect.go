@@ -32,6 +32,7 @@ type columnInfo struct {
 	getRawValue           func(ptr unsafe.Pointer) any
 	decimalSize           int8
 	autoincrementRandSize int8
+	compositeBucketing []int8
 }
 
 func (c *columnInfo) GetValue(ptr unsafe.Pointer) any {
@@ -398,109 +399,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	}
 
 	for _, indexColumns := range schema.HashIndexes {
-		columns := []IColInfo{}
-		names := []string{}
-		columnsNormal := []IColInfo{}
-		var columnSlice IColInfo
-
-		for _, colInfo := range indexColumns {
-			column := dbTable.columnsMap[colInfo.GetInfo().Name]
-			if column.GetType().IsComplexType {
-				panic("No puede ser un struct como columna de una view")
-			}
-			if column.GetType().IsSlice {
-				if columnSlice != nil {
-					panic(fmt.Sprintf(`Table "%v". Can't create view with slice columns "%v" and "%v"`, dbTable.name, columnSlice.GetName(), column.GetName()))
-				}
-				columnSlice = column
-			} else {
-				columnsNormal = append(columnsNormal, column)
-			}
-			names = append(names, column.GetName())
-			columns = append(columns, column)
-		}
-
-		colnames := strings.Join(names, "_")
-		column := &columnInfo{
-			colInfo: colInfo{
-				IsVirtual: true,
-				Idx:       dbTable._maxColIdx,
-			},
-			colType: colType{
-				FieldType: "int32",
-				ColType:   "int",
-			},
-		}
-
-		column.GetInfo().Name = fmt.Sprintf(`zz_%v`, colnames)
-
-		dbTable._maxColIdx++
-		dbTable.columnsMap[column.GetName()] = column
-
-		index := &viewInfo{
-			Type:    3,
-			name:    fmt.Sprintf(`%v__%v_index`, dbTable.name, colnames),
-			idx:     idxCount,
-			columns: names,
-			column:  column,
-		}
-
-		if columnSlice != nil {
-			column.GetType().FieldType = "[]int32"
-			column.GetType().ColType = "set<int>"
-			column.GetType().IsSlice = true
-			index.Type = 4
-
-			colNormal := columnsNormal
-			colSlice := columnSlice
-			column.getValue = func(ptr unsafe.Pointer) any {
-				values := []any{}
-				for _, col := range colNormal {
-					values = append(values, col.GetValue(ptr))
-				}
-				hashValues := []int32{}
-				hashValues = append(hashValues, HashInt(values...))
-
-				colSliceInfo := colSlice.GetInfo()
-				if column.GetType().IsPointer && colSliceInfo.Field.IsNil(ptr) {
-					// Skip if nil pointer
-				} else {
-					fieldValue := colSliceInfo.Field.Interface(ptr)
-					for _, vl := range reflectToSliceValue(fieldValue) {
-						hashValues = append(hashValues, HashInt(vl))
-						hashValues = append(hashValues, HashInt(append(values, vl)...))
-					}
-				}
-				return "{" + Concatx(",", hashValues) + "}"
-			}
-
-			colName := column.GetName()
-			index.getStatement = func(statements ...ColumnStatement) []string {
-				values := []any{}
-				for _, st := range statements {
-					values = append(values, st.GetValue())
-				}
-				hashValue := HashInt(values...)
-				return []string{fmt.Sprintf("%v CONTAINS %v", colName, hashValue)}
-			}
-		} else {
-			cols := columns
-			column.getValue = func(ptr unsafe.Pointer) any {
-				values := []any{}
-				for _, e := range cols {
-					values = append(values, e.GetValue(ptr))
-				}
-				return HashInt(values...)
-			}
-		}
-
-		index.getCreateScript = func() string {
-			return fmt.Sprintf(`CREATE INDEX %v ON %v (%v)`,
-				index.name, dbTable.GetFullName(), index.column.GetName())
-		}
-
-		idxCount++
-		dbTable.indexes[index.name] = index
+		fmt.Println(indexColumns)
 	}
 
 	// VIEWS

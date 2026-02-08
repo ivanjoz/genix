@@ -360,6 +360,11 @@ func (q Col[T, E]) DecimalSize(size int8) Col[T, E] {
 	return q
 }
 
+func (q Col[T, E]) CompositeBucketing(buketsSize ...int8) Col[T, E] {
+	q.info.compositeBucketing = buketsSize
+	return q
+}
+
 func (q Col[T, E]) Autoincrement(randSufixSize int8) Col[T, E] {
 	if randSufixSize > 15 {
 		panic("Rand sufix size TOO BIG in:" + q.GetName())
