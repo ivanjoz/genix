@@ -72,10 +72,11 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	productosCurrent := []s.Producto{}
 	if len(productosIDsSet.Values) > 0 {
-		query := db.Query(&productosCurrent)
-		query.Select().ID.In(productosIDsSet.Values...)
-		err = query.Exec()
-		if err != nil {
+		query := db.Query(&productosCurrent).
+			EmpresaID.Equals(req.Usuario.EmpresaID).
+			ID.In(productosIDsSet.Values...)		
+		
+		if err = query.Exec(); err != nil {
 			return req.MakeErr("Error al obtener los productos actuales:", err)
 		}
 	}
@@ -101,8 +102,6 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		current := productosCurrentMap[e.ID]
 
 		// Lógica para hacer un merge de las propiedades de los productos
-		// optionMaxID := int16(0)
-		// propiedadesMap := map[int16]*s.ProductoPropiedades{}
 		presentacionesMap := map[int16]s.ProductoPesentacion{}
 		presentacionesNameMap := map[string]s.ProductoPesentacion{}
 		presentacionMaxID := int16(0)
@@ -118,7 +117,6 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 			e.Images = current.Images
 
 			for _, e := range current.Presentaciones {
-				presentacionesMap[e.ID] = e
 				presentacionesNameMap[core.Concatn(e.AtributoID, strings.ToLower(e.Name))] = e
 				if e.ID > presentacionMaxID {
 					presentacionMaxID = e.ID
@@ -135,8 +133,15 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 				presentacionMaxID++
 				pr.ID = presentacionMaxID
 			}
-			presentacionesNameMap[name] = pr
 			presentacionesMap[pr.ID] = pr
+		}
+		
+		// Add the removed presentaciones with status = 0
+		for _, pr := range presentacionesNameMap {
+			if _ , ok := presentacionesMap[pr.ID]; !ok {
+				pr.Status = 0
+				presentacionesMap[pr.ID] = pr
+			}
 		}
 
 		e.Presentaciones = core.MapToSliceT(presentacionesMap)

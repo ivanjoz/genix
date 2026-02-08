@@ -389,6 +389,24 @@ export class GetHandler {
     return props
   }
 
+	fetchOnline() {
+  	if(!browser){ return }
+    if(this.route.length === 0){
+      Notify.failure("No se especificó el route en productos.")
+      return
+		}
+    
+  	fetchCacheParsed(this.makeProps('refresh'))
+    .then(cachedResponse => {
+      if(cachedResponse){
+        delete cachedResponse.__version__
+        this.handler(cachedResponse)
+      }
+      this.isReady++
+      return fetchCacheParsed(this.makeProps())
+    })
+	}
+  
   fetch(){
     if(!browser){ return }
     if(this.route.length === 0){

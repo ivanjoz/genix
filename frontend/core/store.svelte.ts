@@ -88,6 +88,7 @@ export const openModals = $state<number[]>([]);
 
 // Helper functions to manage modals
 export const openModal = (id: number) => {
+	console.log("abriendo modal::",id, $state.snapshot(openModals))
   if (!openModals.includes(id)) { openModals.push(id); }
 }
 

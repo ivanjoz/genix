@@ -91,6 +91,7 @@ import { Loading, formatTime, throttle, highlString } from '$libs/helpers';
       header: "Producto",
       render: e => {
         const nombre = productosMap.get(e.ProductoID)?.Nombre || `Producto-${e.ProductoID}`
+        
         const words = filterText.toLowerCase().trim().split(" ").filter(x => x)
         const segments = highlString(nombre, words)
 

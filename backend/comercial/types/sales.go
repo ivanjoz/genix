@@ -2,7 +2,6 @@ package types
 
 import "app/db"
 
-
 type SaleOrder struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
 	EmpresaID int32 `json:",omitempty"`
@@ -28,6 +27,7 @@ type SaleOrder struct {
 	Created        int32   `json:",omitempty"`
 	Updated        int32   `json:"upd,omitempty"`
 	UpdatedBy      int32   `json:",omitempty"`
+	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
 	Status         int8    `json:"ss,omitempty"`
 }
 
@@ -58,6 +58,7 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		Partition:       e.EmpresaID,
 		Keys:            []db.Coln{e.ID.Autoincrement(3)},
 		AutoincrementPart: e.Fecha,
+		LocalIndexes: []db.Coln{ e.Updated },
 		Views: []db.View{
 			{ Cols: []db.Coln{ e.Fecha, e.Updated }, KeepPart: true },
 		},

@@ -393,6 +393,10 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 		if tableInfo.limit > 0 {
 			whereStatement += fmt.Sprintf(" LIMIT %v", tableInfo.limit)
 		}
+		// Explicitly opt into filtered queries when the handler requested it.
+		if tableInfo.allowFilter {
+			whereStatement += " ALLOW FILTERING"
+		}
 		queryWhereStatements = append(queryWhereStatements, whereStatement)
 	}
 

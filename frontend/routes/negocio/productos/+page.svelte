@@ -151,7 +151,7 @@ import CategoriasMarcas from './CategoriasMarcas.svelte';
     }
 
     console.log("productor a enviar:", $state.snapshot(productoForm));
-
+    
     if (isDelete) {
       productoForm.ss = 0;
     }

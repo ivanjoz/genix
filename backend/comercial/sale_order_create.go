@@ -20,6 +20,17 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	if err != nil {
 		return req.MakeErr("Error al deserializar el body: " + err.Error())
 	}
+	
+	if len(sale.DetailProductsIDs) != len(sale.DetailPrices) || 
+		len(sale.DetailProductsIDs) != len(sale.DetailQuantities) {
+			return req.MakeErr("El registro posee propiedades incorrectas.")
+	}
+	
+	for _, value := range slices.Concat(sale.DetailProductsIDs,sale.DetailQuantities,sale.DetailPrices) {
+		if value == 0 {
+				return req.MakeErr("Hay un valor incorrecto.")
+		}
+	}
 
 	sale.EmpresaID = req.Usuario.EmpresaID
 	sale.Fecha = core.TimeToFechaUnix(time.Now())
@@ -43,6 +54,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 2 = Pago (Registro en Caja)
 	if slices.Contains(sale.ProcessesIncluded_, 2) {
+		sale.Status += 1
 		if sale.CajaID_ == 0 {
 			return req.MakeErr("Se requiere CajaID_ para procesar el pago.")
 		}
@@ -73,6 +85,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 3 = Entrega (Movimiento de Almacén)
 	if slices.Contains(sale.ProcessesIncluded_, 3) {
+		sale.Status += 2
 		if sale.AlmacenID == 0 {
 			return req.MakeErr("Se requiere AlmacenID para procesar la entrega.")
 		}

@@ -34,7 +34,7 @@ import Checkbox from '$components/Checkbox.svelte';
     { header: "Producto", highlight: true,
       getValue: e => {
         const producto = productos.productosMap.get(e.ProductoID)?.Nombre
-        return producto || ""
+        return producto || `Producto-${e.ProductoID}`
       }
     },
     { header: "Lote",
@@ -48,7 +48,7 @@ import Checkbox from '$components/Checkbox.svelte';
         if(!e.PresentacionID){ return "" }
         const producto = productos.productosMap.get(e.ProductoID)
         const pr = producto?.Presentaciones?.find(x => x.id === e.PresentacionID)
-        return pr?.nm || ""
+        return pr?.nm || `Tipo-${e.PresentacionID}`
       }
     },
     { header: "Stock", css: "justify-end", inputCss: "text-right pr-6",
