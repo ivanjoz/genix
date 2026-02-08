@@ -145,6 +145,10 @@ import { Loading, formatTime, throttle, highlString } from '$libs/helpers';
       render: e => almacenRender(e.AlmacenID, e.AlmacenCantidad)
     },
     {
+      header: "Documento",
+      render: e => String(e.DocumentID || "")
+    },
+    {
       header: "Usuario",
       headerCss: "w-120",
       cellCss: "text-center px-6",

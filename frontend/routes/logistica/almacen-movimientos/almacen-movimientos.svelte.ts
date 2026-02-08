@@ -18,7 +18,7 @@ export interface IAlmacenMovimiento {
   Lote: string
   AlmacenID: number
   AlmacenOrigenID: number
-  VentaID: number
+  DocumentID: number
   ProductoID: number
   Cantidad: number
   AlmacenCantidad: number

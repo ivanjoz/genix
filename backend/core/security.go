@@ -52,6 +52,7 @@ type EnvStruct struct {
 }
 
 var Env *EnvStruct
+var BuildDate string
 
 func PopulateVariables() {
 	fmt.Println("Populando Variables:: ")

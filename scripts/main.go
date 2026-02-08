@@ -17,6 +17,9 @@ func main() {
 	case "check_tables":
 		CheckTables()
 
+	case "deploy_vps":
+		DeployVPS()
+
 	default:
 		fmt.Printf("Unknown script: %s\n", script)
 		os.Exit(1)

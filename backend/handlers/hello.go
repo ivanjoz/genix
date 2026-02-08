@@ -13,11 +13,13 @@ func HelloWorld(req *core.HandlerArgs) core.HandlerResponse {
 
 	body1 := `
 		Todo está funcionando bien!
+		BUILD_DATE = $1
 		ENVIROMENT = $2
 		DB_HOST = $3
 		APP_CODE = $4
 		EXEC_ARGS = $5
 	`
+	body1 = strings.Replace(body1, "$1", core.BuildDate, -1)
 	body1 = strings.Replace(body1, "$2", core.Env.ENVIROMENT, -1)
 	body1 = strings.Replace(body1, "$3", core.Env.DB_HOST, -1)
 	body1 = strings.Replace(body1, "$4", os.Getenv("APP_CODE"), -1)

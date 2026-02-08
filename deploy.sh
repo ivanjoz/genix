@@ -13,6 +13,7 @@ echo "Seleccione acciones a realizar (ej: '123'):"
 echo "Publicar Código ----------------"
 echo "[1] Frontend (Main + Store -> docs/)"
 echo "[2] Backend (AWS Cloud)"
+echo "[3] Backend (VPS)"
 echo "[4] Backup Lib (S3 Binary)"
 echo "Ejecutar Proceso ---------------"
 echo "[5] Recrear Tablas (Backend)"
@@ -70,6 +71,15 @@ if [[ $ACCIONES == *"2"* ]]; then
     echo "✅ El deploy backend finalizado!"
 fi
 
+# PUBLICAR BACKEND (VPS)
+if [[ $ACCIONES == *"3"* ]]; then
+    echo "=== PUBLICANDO BACKEND (VPS) ==="
+    cd ./scripts
+    $GO_PATH run . deploy_vps
+    cd ..
+    echo "✅ El deploy VPS finalizado!"
+fi
+
 # PUBLICAR DB BACKUP BINARY
 if [[ $ACCIONES == *"4"* ]]; then
     echo "=== PUBLICANDO DB-BACKUP ==="
@@ -99,4 +109,3 @@ fi
 
 echo "Finalizado!. Presione cualquier tecla para salir"
 read -n 1
-
