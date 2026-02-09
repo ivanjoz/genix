@@ -113,7 +113,7 @@ func (e ProductoTable) GetSchema() db.TableSchema {
 		Partition:     e.EmpresaID,
 		UseSequences:  true,
 		Keys:          []db.Coln{e.ID.Autoincrement(0)},
-		GlobalIndexesDeprecated: []db.Coln{e.CategoriasConStock},
+		GlobalIndexes: [][]db.Coln{{ e.CategoriasConStock }},
 		ViewsDeprecated: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.StockStatus}, KeepPart: true},

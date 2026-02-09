@@ -200,6 +200,67 @@ db.TableSchema{
 }
 ```
 
+### Packed Indexes (Local) - `Indexes`
+Use `Indexes` when you need fast queries that include the partition key plus a composite predicate like:
+- `Status IN (...)` + `Updated BETWEEN/GT`
+
+Definition example:
+
+```go
+db.TableSchema{
+    Name:      "sale_order",
+    Partition: e.EmpresaID,
+    Keys:      []db.Coln{e.ID},
+    // Local packed index: creates a stored virtual packed column and a local index:
+    // CREATE INDEX ... ON sale_order ((empresa_id), zz_ixp_status_updated)
+    Indexes: [][]db.Coln{
+        {e.Status.Int32(), e.Updated.DecimalSize(8)},
+    },
+}
+```
+
+Rules:
+- First column MUST NOT set `DecimalSize()` (its width is implicit).
+- All remaining columns MUST set `DecimalSize()`.
+- Packed components must be non-negative integers.
+- `.Int32()` means the packed column is stored as CQL `int` (computed as int64 first, trimmed to 9 digits, then cast).
+- Truncation (via `DecimalSize`) can overfetch; the ORM will post-filter results to guarantee correctness.
+
+### Global Indexes - `GlobalIndexes`
+Use `GlobalIndexes` for:
+1. Simple global secondary indexes (single column).
+2. Packed composite global indexes (2+ columns) for equality-oriented lookups.
+
+Single-column example:
+
+```go
+db.TableSchema{
+    Name:      "users",
+    Partition: e.EmpresaID,
+    Keys:      []db.Coln{e.ID},
+    GlobalIndexes: [][]db.Coln{
+        {e.Email}, // CREATE INDEX users__email_index_0 ON users (email)
+    },
+}
+```
+
+Packed composite example:
+
+```go
+db.TableSchema{
+    Name:      "sale_order",
+    Partition: e.EmpresaID,
+    Keys:      []db.Coln{e.ID},
+    GlobalIndexes: [][]db.Coln{
+        {e.Status.Int32(), e.Updated.DecimalSize(8)}, // CREATE INDEX ... ON sale_order (zz_gixp_status_updated)
+    },
+}
+```
+
+Important:
+- Scylla global secondary indexes are not reliable for general range scans.
+- The ORM intentionally does not route range queries (`BETWEEN`, `>`, `<`) through packed global indexes to avoid `ALLOW FILTERING` surprises.
+
 ### Views
 
 Create materialized views for alternative query patterns:

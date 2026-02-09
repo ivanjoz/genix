@@ -38,6 +38,28 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	sale.Updated = nowTime
 	sale.UpdatedBy = req.Usuario.ID
 	sale.Status = 1
+	
+	// 2 = Pago (Registro en Caja)
+	if slices.Contains(sale.ProcessesIncluded_, 2) {
+		sale.Status += 1
+		if sale.CajaID_ == 0 {
+			return req.MakeErr("Se requiere CajaID_ para procesar el pago.")
+		}		
+	}
+	
+	// 3 = Entrega (Movimiento de Almacén)
+	if slices.Contains(sale.ProcessesIncluded_, 3) {
+		sale.Status += 2
+		if sale.AlmacenID == 0 {
+			return req.MakeErr("Se requiere AlmacenID para procesar la entrega.")
+		}
+
+		if len(sale.DetailProductsIDs) == 0 {
+			return req.MakeErr("No hay productos en el detalle para procesar la entrega.")
+		}
+	}
+	
+	
 	sales := []types.SaleOrder{sale}
 
 	// Insertar el registro de venta para obtener el ID (autoincrement)
@@ -54,10 +76,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 2 = Pago (Registro en Caja)
 	if slices.Contains(sale.ProcessesIncluded_, 2) {
-		sale.Status += 1
-		if sale.CajaID_ == 0 {
-			return req.MakeErr("Se requiere CajaID_ para procesar el pago.")
-		}
 
 		montoPago := sale.TotalAmount - sale.DebtAmount
 		if montoPago != 0 {
@@ -85,15 +103,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 3 = Entrega (Movimiento de Almacén)
 	if slices.Contains(sale.ProcessesIncluded_, 3) {
-		sale.Status += 2
-		if sale.AlmacenID == 0 {
-			return req.MakeErr("Se requiere AlmacenID para procesar la entrega.")
-		}
-
-		if len(sale.DetailProductsIDs) == 0 {
-			return req.MakeErr("No hay productos en el detalle para procesar la entrega.")
-		}
-
 		core.Log("Incluyendo movimientos internos...", len(sale.DetailProductsIDs))
 
 		movimientosInternos := []s.MovimientoInterno{}

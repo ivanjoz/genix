@@ -60,7 +60,12 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		HashIndexes: [][]db.Coln{
 			{e.DetailProductsIDs, e.Fecha.CompositeBucketing(2,6,12,20)},
 		},
+		/* 
 		Indexes: [][]db.Coln{
+			{e.Status.Int32(), e.Updated.DecimalSize(8)},
+		},
+		*/
+		GlobalIndexes: [][]db.Coln{
 			{e.Status.Int32(), e.Updated.DecimalSize(8)},
 		},
 		ViewsDeprecated: []db.View{

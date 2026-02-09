@@ -16,8 +16,6 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 	
 	for _, status := range orderStatus {
 		query := db.Query(&sales)
-		
-		// Enforce multi-tenancy
 		query.EmpresaID.Equals(req.Usuario.EmpresaID).Status.Equals(int8(status))
 		
 		if updated > 0 {

@@ -184,11 +184,15 @@ func (dbTable *ScyllaTable[T]) ComputeCapabilities() []QueryCapability {
 					Source:    source,
 					Priority:  priorityBase + len(packedIndex.sourceColumnNames)*2,
 				})
-				caps = append(caps, QueryCapability{
-					Signature: signaturePrefix + colName + "|~",
-					Source:    source,
-					Priority:  priorityBase - 2 + len(packedIndex.sourceColumnNames)*2,
-				})
+				// Global secondary indexes are not reliable for range scans; Scylla can demand ALLOW FILTERING.
+				// We only advertise "~" for local packed indexes (partition-scoped index table supports range on packed col).
+				if isLocal {
+					caps = append(caps, QueryCapability{
+						Signature: signaturePrefix + colName + "|~",
+						Source:    source,
+						Priority:  priorityBase - 2 + len(packedIndex.sourceColumnNames)*2,
+					})
+				}
 			}
 		}
 	}

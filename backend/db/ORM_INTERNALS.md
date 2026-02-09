@@ -86,6 +86,37 @@ This solves the problem of range-querying multiple numeric columns simultaneousl
     - `Combined = (AlmacenID * 10,000,000,000) + Updated`.
 - **Range Logic**: A range query on `Updated` becomes a range query on the combined column while keeping the `AlmacenID` prefix constant.
 
+### 4.3 Packed Indexes (Local vs Global)
+Packed indexes are a numeric "digit packing" strategy that creates a stored virtual integer column (computed on write) and indexes it.
+
+They are declared via `TableSchema`:
+- `Indexes: [][]db.Coln` creates a **local** secondary index on `((partition), packed_col)`.
+- `GlobalIndexes: [][]db.Coln` creates:
+  - simple **global** indexes for single-column entries, and
+  - **packed global** indexes for composite entries (2+ columns).
+
+#### 4.3.1 Packing Rules
+Given source columns `[c1, c2, ..., cn]`:
+- `c1` (first) MUST NOT set `DecimalSize()`; its digit width is derived from remaining budget.
+- `c2..cn` MUST set `DecimalSize(n)`; these define fixed digit widths.
+- All components must be non-negative; negative values are programmer errors and trigger a panic.
+- Truncation rule: if a value has more digits than its slot, the ORM drops least-significant digits (right-trim) to fit.
+
+`.Int32()` is a schema hint meaning "store the packed column as `int32`":
+- The packed value is computed as `int64` first.
+- The final stored value is trimmed to 9 digits and then cast to `int32`.
+- This can overfetch on reads, so the query engine applies a post-filter to guarantee exact semantics.
+
+#### 4.3.2 Query Routing and Safety
+Packed **local** indexes are intended for the pattern:
+- partition equality + prefix equality/IN + range on the last column
+
+Packed **global** indexes are intended for:
+- equality lookups (and small fan-out with `IN` on the first column)
+
+Important: global secondary indexes are not reliable for general range scans in ScyllaDB.
+To avoid accidental `ALLOW FILTERING` behavior, the ORM does not advertise range (`~`) capabilities for packed global indexes.
+
 ---
 
 ## 5. Smart Primary Keys (KeyConcatenated & KeyIntPacking)
@@ -171,3 +202,4 @@ For queries that result in multiple `WHERE` statements (e.g., an `IN` operator o
 5. **KeyIntPacking**: Mathematical concatenation of primary key components into single `int64`.
 6. **Automated Partitioned Counters**: Zero-effort unique ID generation with collision avoidance.
 7. **CBOR Serialization**: Faster and more compact than JSON for complex data.
+8. **Packed Indexes (Local/Global)**: Digit-packing strategy for composite predicates via secondary indexes, with post-filtering when truncation is used.

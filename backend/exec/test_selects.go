@@ -16,7 +16,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	recordSalesOrders2 := []comercial.SaleOrder{}
 	q7 := db.Query(&recordSalesOrders2)
 	err = q7.EmpresaID.Equals(1).
-		Status.Equals(1).AllowFilter().
+		Status.Equals(1).
 		Updated.Between(385298000, 385299000).
 		Exec()
 

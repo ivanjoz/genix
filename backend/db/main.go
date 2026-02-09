@@ -114,22 +114,21 @@ type ColumnStatement struct {
 type TableSchema struct {
 	Keyspace string
 	// StructType    T
-	Name                    string
-	Keys                    []Coln
-	Partition               Coln
-	GlobalIndexesDeprecated []Coln
-	LocalIndexes            []Coln
-	HashIndexes             [][]Coln
-	Indexes                 [][]Coln //  new column
-	GlobalIndexes           [][]Coln //  new column
-	ViewsDeprecated         []View
-	SequenceColumn          Coln
-	CounterColumn           Coln
-	UseSequences            bool
-	SequencePartCol         Coln
-	KeyConcatenated         []Coln
-	KeyIntPacking           []Coln
-	AutoincrementPart       Coln
+	Name              string
+	Keys              []Coln
+	Partition         Coln
+	LocalIndexes      []Coln
+	HashIndexes       [][]Coln
+	Indexes           [][]Coln //  new column
+	GlobalIndexes     [][]Coln //  new column
+	ViewsDeprecated   []View
+	SequenceColumn    Coln
+	CounterColumn     Coln
+	UseSequences      bool
+	SequencePartCol   Coln
+	KeyConcatenated   []Coln
+	KeyIntPacking     []Coln
+	AutoincrementPart Coln
 }
 
 func (q ColumnStatement) GetValue() any {
