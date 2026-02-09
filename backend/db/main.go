@@ -32,26 +32,39 @@ type IColInfo interface {
 }
 
 type ScyllaTable[T any] struct {
-	name            string
-	keyspace        string
-	keys            []IColInfo
-	partKey         IColInfo
-	keysIdx         []int16
-	columns         []IColInfo
-	columnsMap      map[string]IColInfo
-	columnsIdxMap   map[int16]IColInfo
-	indexes         map[string]*viewInfo
-	views           map[string]*viewInfo
-	indexViews      []*viewInfo
-	ViewsExcluded   []string
-	useSequences    bool
-	sequencePartCol IColInfo
-	keyConcatenated []IColInfo
-	keyIntPacking   []IColInfo
+	name              string
+	keyspace          string
+	keys              []IColInfo
+	partKey           IColInfo
+	keysIdx           []int16
+	columns           []IColInfo
+	columnsMap        map[string]IColInfo
+	columnsIdxMap     map[int16]IColInfo
+	indexes           map[string]*viewInfo
+	views             map[string]*viewInfo
+	indexViews        []*viewInfo
+	ViewsExcluded     []string
+	useSequences      bool
+	sequencePartCol   IColInfo
+	keyConcatenated   []IColInfo
+	keyIntPacking     []IColInfo
 	autoincrementPart IColInfo
 	autoincrementCol  IColInfo
-	capabilities    []QueryCapability
-	_maxColIdx      int16
+	capabilities      []QueryCapability
+	// Composite bucket metadata is used to materialize virtual hash sets and plan range+contains reads.
+	compositeBucketIndexes []compositeBucketIndex
+	_maxColIdx             int16
+}
+
+// compositeBucketIndex stores the source columns and generated virtual bucket columns for one HashIndexes entry.
+type compositeBucketIndex struct {
+	name          string
+	sourceColumns []IColInfo
+	bucketColumn  IColInfo
+	// bucketIsWeek keeps schema-level week semantics for custom week-code arithmetic in bucketing and range planning.
+	bucketIsWeek         bool
+	bucketSizes          []int8
+	virtualColumnsBySize map[int8]IColInfo
 }
 
 func (e ScyllaTable[T]) GetFullName() string {
@@ -96,19 +109,19 @@ type ColumnStatement struct {
 type TableSchema struct {
 	Keyspace string
 	// StructType    T
-	Name            string
-	Keys            []Coln
-	Partition       Coln
-	GlobalIndexes   []Coln
-	LocalIndexes    []Coln
-	HashIndexes     [][]Coln
-	Views           []View
-	SequenceColumn  Coln
-	CounterColumn   Coln
-	UseSequences    bool
-	SequencePartCol Coln
-	KeyConcatenated []Coln
-	KeyIntPacking   []Coln
+	Name              string
+	Keys              []Coln
+	Partition         Coln
+	GlobalIndexes     []Coln
+	LocalIndexes      []Coln
+	HashIndexes       [][]Coln
+	Views             []View
+	SequenceColumn    Coln
+	CounterColumn     Coln
+	UseSequences      bool
+	SequencePartCol   Coln
+	KeyConcatenated   []Coln
+	KeyIntPacking     []Coln
 	AutoincrementPart Coln
 }
 
@@ -222,7 +235,6 @@ type TableStruct[T TableSchemaInterface[T], E TableBaseInterface[T, E]] struct {
 func (e TableStruct[T, E]) GetSchema() TableSchema {
 	return TableSchema{}
 }
-
 
 func (e *TableStruct[T, E]) MakeTableSchema() TableSchema {
 	return MakeSchema[E]()
@@ -365,14 +377,19 @@ func (q Col[T, E]) CompositeBucketing(buketsSize ...int8) Col[T, E] {
 	return q
 }
 
+func (q Col[T, E]) IsWeek() Col[T, E] {
+	q.info.isWeek = true
+	return q
+}
+
 func (q Col[T, E]) Autoincrement(randSufixSize int8) Col[T, E] {
 	if randSufixSize > 15 {
 		panic("Rand sufix size TOO BIG in:" + q.GetName())
 	}
-	
+
 	if randSufixSize == 0 {
 		randSufixSize = -1
-	}	
+	}
 	q.info.autoincrementRandSize = randSufixSize
 	return q
 }
@@ -403,7 +420,6 @@ func (e *Col[T, E]) Equals(v E) *T {
 	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: "=", Value: any(v)})
 	return e.schemaStruct
 }
-
 
 func (e *Col[T, E]) Contains(v int64) *T {
 	// fmt.Println("e.schemaStruct", e.schemaStruct)

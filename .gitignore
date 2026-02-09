@@ -58,3 +58,5 @@ frontend/static/sw.js.map
 frontend/ecommerce/build/*
 scripts/scripts_bin
 backend/.gocache/*
+.gocache/*
+scripts/__pycache__/*

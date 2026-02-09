@@ -32,7 +32,8 @@ type columnInfo struct {
 	getRawValue           func(ptr unsafe.Pointer) any
 	decimalSize           int8
 	autoincrementRandSize int8
-	compositeBucketing []int8
+	compositeBucketing    []int8
+	isWeek                bool
 }
 
 func (c *columnInfo) GetValue(ptr unsafe.Pointer) any {
@@ -150,6 +151,111 @@ type statementRangeGroup struct {
 	betweenTo *ColumnStatement
 }
 
+func normalizeCompositeBucketSizes(rawSizes []int8) []int8 {
+	// Normalize and validate bucket sizes once so read/write logic can rely on deterministic order.
+	bucketSizeSeen := map[int8]bool{}
+	bucketSizes := make([]int8, 0, len(rawSizes))
+	for _, bucketSize := range rawSizes {
+		if bucketSize <= 0 {
+			panic(fmt.Sprintf("CompositeBucketing requires bucket sizes > 0. Got: %v", bucketSize))
+		}
+		if bucketSizeSeen[bucketSize] {
+			continue
+		}
+		bucketSizeSeen[bucketSize] = true
+		bucketSizes = append(bucketSizes, bucketSize)
+	}
+	if len(bucketSizes) == 0 {
+		panic("CompositeBucketing requires at least one bucket size.")
+	}
+	slices.Sort(bucketSizes)
+	return bucketSizes
+}
+
+func isCompositeNumericFieldType(fieldType string) bool {
+	// Composite bucket hashing currently supports integer scalars/slices only, matching query planner assumptions.
+	switch fieldType {
+	case "int", "int8", "int16", "int32", "int64", "[]int", "[]int8", "[]int16", "[]int32", "[]int64":
+		return true
+	}
+	return false
+}
+
+func flattenCompositeInt64Values(rawValue any) []int64 {
+	// Treat scalar values as a single-item list so composite hashing works for both scalar and slice numeric columns.
+	if rawValue == nil {
+		return nil
+	}
+
+	rv := reflect.ValueOf(rawValue)
+	for rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
+	}
+
+	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
+		return []int64{convertToInt64(rv.Interface())}
+	}
+
+	values := make([]int64, 0, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		values = append(values, convertToInt64(rv.Index(i).Interface()))
+	}
+	return values
+}
+
+func getCompositeBucketValues(rawValue any, bucketSize int8, isWeek bool) []int64 {
+	// Composite buckets index bucket IDs (week/size), not raw week values.
+	flatValues := flattenCompositeInt64Values(rawValue)
+	bucketValues := make([]int64, 0, len(flatValues))
+	for _, value := range flatValues {
+		bucketValues = append(bucketValues, makeCompositeBucketID(value, bucketSize, isWeek))
+	}
+	return bucketValues
+}
+
+func computeCompositeHashSet(ptr unsafe.Pointer, sourceColumns []IColInfo, bucketColumn IColInfo, bucketSize int8, bucketIsWeek bool) []int32 {
+	// Build the cartesian product across up to 3 numeric source columns, then hash each tuple for set<int> indexing.
+	combinations := [][]int64{{}}
+
+	for _, sourceColumn := range sourceColumns {
+		var columnValues []int64
+		if sourceColumn.GetName() == bucketColumn.GetName() {
+			columnValues = getCompositeBucketValues(sourceColumn.GetRawValue(ptr), bucketSize, bucketIsWeek)
+		} else {
+			columnValues = flattenCompositeInt64Values(sourceColumn.GetRawValue(ptr))
+		}
+
+		if len(columnValues) == 0 {
+			return []int32{}
+		}
+
+		nextCombinations := make([][]int64, 0, len(combinations)*len(columnValues))
+		for _, combination := range combinations {
+			for _, columnValue := range columnValues {
+				combinationExpanded := append(append([]int64{}, combination...), columnValue)
+				nextCombinations = append(nextCombinations, combinationExpanded)
+			}
+		}
+		combinations = nextCombinations
+	}
+
+	uniqueHashes := map[int32]struct{}{}
+	// Deduplicate hashes per record to keep generated set values compact and stable.
+	for _, combination := range combinations {
+		uniqueHashes[HashInt64(combination...)] = struct{}{}
+	}
+
+	hashValues := make([]int32, 0, len(uniqueHashes))
+	for hashValue := range uniqueHashes {
+		hashValues = append(hashValues, hashValue)
+	}
+	slices.Sort(hashValues)
+	return hashValues
+}
+
 func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 	schema := (*structType).GetSchema()
@@ -249,7 +355,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		col := dbTable.columnsMap[key.GetInfo().Name]
 		dbTable.keys = append(dbTable.keys, col)
 		dbTable.keysIdx = append(dbTable.keysIdx, col.GetInfo().Idx)
-		
+
 		// Transfer autoincrementRandSize from Key to the actual column in columnsMap
 		// This enables autoincrement functionality when a Key is marked with .Autoincrement()
 		// Valid values: -1 (no random suffix) or >0 (with random suffix)
@@ -257,12 +363,12 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		keyInfo := key.GetInfo()
 		if keyInfo.autoincrementRandSize != 0 {
 			col.SetAutoincrementRandSize(keyInfo.autoincrementRandSize)
-			
+
 			// Set autoincrementCol if not already set
 			if dbTable.autoincrementCol == nil {
 				dbTable.autoincrementCol = col
 			} else if dbTable.autoincrementCol != col {
-				panic(fmt.Sprintf(`Table "%v": Multiple autoincrement columns are not supported. Found autoincrement on both "%v" and "%v"`, 
+				panic(fmt.Sprintf(`Table "%v": Multiple autoincrement columns are not supported. Found autoincrement on both "%v" and "%v"`,
 					dbTable.name, dbTable.autoincrementCol.GetName(), col.GetName()))
 			}
 		}
@@ -276,7 +382,12 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	// Only set if not already set during Keys processing
 	for _, col := range dbTable.columnsMap {
 		if c, ok := col.(*columnInfo); ok {
-			if c.autoincrementRandSize >= 0 && dbTable.autoincrementCol == nil {
+			// Important: default is 0 (meaning "not autoincrement"). Valid autoincrement values are:
+			// -1  : autoincrement with no random suffix (Col.Autoincrement(0) normalizes to -1)
+			// > 0 : autoincrement with random suffix of that size
+			// The previous condition `>= 0` incorrectly treated the default 0 as autoincrement and
+			// caused tables without Autoincrement() to still query `sequences` on insert.
+			if c.autoincrementRandSize != 0 && dbTable.autoincrementCol == nil {
 				dbTable.autoincrementCol = col
 			}
 		}
@@ -286,7 +397,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		if len(dbTable.keys) != 1 {
 			panic(fmt.Sprintf(`Table "%v": KeyIntPacking requires exactly one column in Keys. Found: %v`, dbTable.name, len(dbTable.keys)))
 		}
-		
+
 		keyCol := dbTable.keys[0].(*columnInfo)
 		if keyCol.Type != 2 { // 2 = int64
 			panic(fmt.Sprintf(`Table "%v": KeyIntPacking requires the key column to be an int64. Found: %v`, dbTable.name, keyCol.FieldType))
@@ -399,7 +510,108 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	}
 
 	for _, indexColumns := range schema.HashIndexes {
-		fmt.Println(indexColumns)
+		// HashIndexes for this strategy supports 2-3 source columns and exactly one CompositeBucketing numeric column.
+		if len(indexColumns) < 2 || len(indexColumns) > 3 {
+			panic(fmt.Sprintf(`Table "%v": HashIndexes entries must have 2 to 3 columns. Found: %v`, dbTable.name, len(indexColumns)))
+		}
+
+		sourceColumns := make([]IColInfo, 0, len(indexColumns))
+		var bucketColumn IColInfo
+		bucketIsWeek := false
+		var bucketSizes []int8
+		sourceColumnNames := make([]string, 0, len(indexColumns))
+
+		for _, indexColumn := range indexColumns {
+			indexColumnInfo := indexColumn.GetInfo()
+			column := dbTable.columnsMap[indexColumnInfo.Name]
+			if column == nil {
+				panic(fmt.Sprintf(`Table "%v": HashIndexes column "%v" was not found`, dbTable.name, indexColumnInfo.Name))
+			}
+			if !isCompositeNumericFieldType(column.GetType().FieldType) {
+				panic(fmt.Sprintf(`Table "%v": HashIndexes column "%v" must be integer scalar/slice. Found: %v`, dbTable.name, column.GetName(), column.GetType().FieldType))
+			}
+			sourceColumns = append(sourceColumns, column)
+			sourceColumnNames = append(sourceColumnNames, column.GetName())
+
+			bucketDefs := indexColumnInfo.compositeBucketing
+			// Exactly one source column defines bucket sizes; all others are hashed as-is.
+			if len(bucketDefs) > 0 {
+				if bucketColumn != nil {
+					panic(fmt.Sprintf(`Table "%v": HashIndexes supports exactly one CompositeBucketing column per index`, dbTable.name))
+				}
+				if column.GetType().IsSlice {
+					panic(fmt.Sprintf(`Table "%v": CompositeBucketing column "%v" must be numeric (not a slice)`, dbTable.name, column.GetName()))
+				}
+				bucketColumn = column
+				bucketIsWeek = indexColumnInfo.isWeek
+				bucketSizes = normalizeCompositeBucketSizes(bucketDefs)
+			}
+		}
+
+		if bucketColumn == nil {
+			panic(fmt.Sprintf(`Table "%v": HashIndexes requires one column marked with CompositeBucketing`, dbTable.name))
+		}
+
+		compositeIndex := compositeBucketIndex{
+			name:                 strings.Join(sourceColumnNames, "_"),
+			sourceColumns:        sourceColumns,
+			bucketColumn:         bucketColumn,
+			bucketIsWeek:         bucketIsWeek,
+			bucketSizes:          bucketSizes,
+			virtualColumnsBySize: map[int8]IColInfo{},
+		}
+
+		for _, bucketSize := range bucketSizes {
+			// One virtual set<int> column per bucket size allows independent global index lookups.
+			virtualColName := fmt.Sprintf("zz_hb_%s_b%d", strings.Join(sourceColumnNames, "_"), bucketSize)
+			if _, exists := dbTable.columnsMap[virtualColName]; exists {
+				panic(fmt.Sprintf(`Table "%v": generated virtual composite bucket column already exists: %v`, dbTable.name, virtualColName))
+			}
+
+			bucketSizeLocal := bucketSize
+			sourceColumnsLocal := sourceColumns
+			bucketColumnLocal := bucketColumn
+
+			virtualColumn := &columnInfo{
+				colInfo: colInfo{
+					Name:      virtualColName,
+					FieldName: virtualColName,
+					IsVirtual: true,
+					Idx:       dbTable._maxColIdx,
+				},
+				colType: GetColTypeByName("[]int32", ""),
+			}
+
+			bucketIsWeekLocal := compositeIndex.bucketIsWeek
+			virtualColumn.getRawValue = func(ptr unsafe.Pointer) any {
+				// Materialize bucketed hashes on demand so insert/update always persists index-consistent values.
+				hashValues := computeCompositeHashSet(ptr, sourceColumnsLocal, bucketColumnLocal, bucketSizeLocal, bucketIsWeekLocal)
+				return hashValues
+			}
+			virtualColumn.getValue = virtualColumn.getRawValue
+
+			dbTable._maxColIdx++
+			dbTable.columnsMap[virtualColumn.GetName()] = virtualColumn
+			compositeIndex.virtualColumnsBySize[bucketSize] = virtualColumn
+
+			index := &viewInfo{
+				Type:    1,
+				name:    fmt.Sprintf(`%v__%v_index_0`, dbTable.name, virtualColumn.GetName()),
+				idx:     idxCount,
+				column:  virtualColumn,
+				columns: []string{virtualColumn.GetName()},
+			}
+			index.getCreateScript = func() string {
+				// Scylla requires VALUES(set_col) for indexing set membership queries.
+				return fmt.Sprintf(`CREATE INDEX %v ON %v (VALUES(%v))`, index.name, dbTable.GetFullName(), virtualColumn.GetName())
+			}
+
+			idxCount++
+			dbTable.indexes[index.name] = index
+		}
+
+		dbTable.compositeBucketIndexes = append(dbTable.compositeBucketIndexes, compositeIndex)
+		fmt.Printf("CompositeBucketing index registered: table=%s index=%s bucketSizes=%v\n", dbTable.name, compositeIndex.name, compositeIndex.bucketSizes)
 	}
 
 	// VIEWS

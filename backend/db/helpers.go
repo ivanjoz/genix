@@ -142,6 +142,66 @@ func HashInt(values ...any) int32 {
 	return int32(h.Sum32())
 }
 
+func HashInt64(values ...int64) int32 {
+	// Use typed int64 arguments in composite planners and delegate the final hashing to HashInt for consistency.
+	switch len(values) {
+	case 0:
+		return HashInt()
+	case 1:
+		return HashInt(values[0])
+	case 2:
+		return HashInt(values[0], values[1])
+	case 3:
+		return HashInt(values[0], values[1], values[2])
+	}
+
+	// Fallback for future extensions beyond 3 values while keeping one hashing implementation.
+	hashValues := make([]any, len(values))
+	for i, value := range values {
+		hashValues[i] = value
+	}
+	return HashInt(hashValues...)
+}
+
+func weekCodeToOrdinal(weekCode int64) (int64, bool) {
+	// Convert YYWW codes (e.g. 2553, 2601) into a contiguous ordinal timeline for arithmetic/bucketing.
+	year := weekCode / 100
+	week := weekCode % 100
+	if week < 1 || week > 53 {
+		return 0, false
+	}
+	return year*53 + (week - 1), true
+}
+
+func normalizeCompositeRange(from, to int64, isWeek bool) (int64, int64) {
+	// Range planning needs contiguous numbers; week-coded values use ordinal conversion.
+	if isWeek {
+		fromOrdinal, fromOk := weekCodeToOrdinal(from)
+		toOrdinal, toOk := weekCodeToOrdinal(to)
+		if fromOk && toOk {
+			if toOrdinal < fromOrdinal {
+				return toOrdinal, fromOrdinal
+			}
+			return fromOrdinal, toOrdinal
+		}
+	}
+	if to < from {
+		return to, from
+	}
+	return from, to
+}
+
+func makeCompositeBucketID(value int64, bucketSize int8, isWeek bool) int64 {
+	// Bucket IDs are computed on a contiguous domain so week boundaries across years remain adjacent.
+	basisValue := value
+	if isWeek {
+		if ordinal, ok := weekCodeToOrdinal(value); ok {
+			basisValue = ordinal
+		}
+	}
+	return basisValue / int64(bucketSize)
+}
+
 func Logx(style int8, messageInColor string, params ...any) {
 	var c *color.Color
 

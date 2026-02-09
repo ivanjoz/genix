@@ -20,6 +20,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
     import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
     import { SystemParametersService } from '$services/services/system-parameters.svelte';
     import CheckboxOptions from '$components/CheckboxOptions.svelte';
+    import { CajasService, type ICaja } from '$routes/finanzas/cajas/cajas.svelte';
 
   // Helpers
   const formatMo = (n: number) => formatN(n / 100, 2);
@@ -30,6 +31,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
   const listasService = new ListasCompartidasService([2]); // 2: Marcas
   const parametrosService = new EmpresaParametrosService();
   const systemParamsService = new SystemParametersService();
+  const cajas = new CajasService()
 
   // State
   const ventasState = new SaleOrderState();
@@ -62,6 +64,10 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
       almacenSelected = almacenesService.Almacenes[0].ID;
       ventasState.form.AlmacenID = almacenSelected;
       loadStock(almacenSelected);
+    }
+    
+    if(cajas.isReady && cajas.Cajas.length > 0){
+    	ventasState.form.CajaID_ = cajas.Cajas[0].ID
     }
   });
 
@@ -345,7 +351,14 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
             <i class="icon-floppy"></i>
           </button>
         </div>
-        <div class="w-full px-12 py-6">
+        <div class="flex w-full px-12 py-6">
+	        <SearchSelect css="mr-16"
+	          label="" save="CajaID_"
+	          keyId="ID"
+	          keyName="Nombre" saveOn={ventasState.form}
+	          options={cajas?.Cajas||[]}
+	          placeholder="CAJA"
+	        />
         	<CheckboxOptions type="multiple"
        			options={[ { id: 2, name: "Pagado" }, { id: 3, name: "Recibido" } ]}
          		keyId="id" keyName="name" save="ProcessesIncluded_"

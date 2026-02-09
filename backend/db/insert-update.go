@@ -16,26 +16,26 @@ func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		return nil
 	}
 
-	partitionColumn := scyllaTable.GetPartKey()	
+	partitionColumn := scyllaTable.GetPartKey()
 	// Group records by composite key: partition value + autoincrementPart value
 	groups := map[string][]*T{}
-	
+
 	for i := range *records {
 		rec := &(*records)[i]
 		ptr := xunsafe.AsPointer(rec)
-		
+
 		// Get partition key value
 		partitionValue := int32(0)
 		if partitionColumn != nil {
 			partitionValue = int32(convertToInt64(partitionColumn.GetRawValue(ptr)))
 		}
-		
+
 		// Get autoincrement part value (0 if not defined)
 		autoPartVal := int64(0)
 		if scyllaTable.autoincrementPart != nil {
 			autoPartVal = convertToInt64(scyllaTable.autoincrementPart.GetRawValue(ptr))
 		}
-		
+
 		// Group key is concatenation of partition value + autoincrementPart value
 		key := fmt.Sprintf("%d|%v", partitionValue, autoPartVal)
 		groups[key] = append(groups[key], rec)
@@ -43,11 +43,11 @@ func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 
 	for partKey, group := range groups {
 		partValues := strings.Split(partKey, "|")
-		
+
 		// Filter to only include records that need autoincrement (ID == 0)
 		recordsNeedingAutoincrement := []*T{}
 		recordNeedsAutoincrement := map[*T]bool{}
-		
+
 		for _, rec := range group {
 			ptr := xunsafe.AsPointer(rec)
 			// Check if the primary key has a value of 0
@@ -56,17 +56,17 @@ func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 				rawKeyVal := scyllaTable.keys[0].GetRawValue(ptr)
 				keyVal = convertToInt64(rawKeyVal)
 			}
-			
+
 			// Only apply autoincrement if key is exactly 0
 			if keyVal <= 0 {
 				recordsNeedingAutoincrement = append(recordsNeedingAutoincrement, rec)
 				recordNeedsAutoincrement[rec] = true
 			}
 		}
-		
+
 		var counterVal int64
 		var err error
-		
+
 		if scyllaTable.autoincrementCol != nil && len(recordsNeedingAutoincrement) > 0 {
 			// Determine counter name
 			counterName := fmt.Sprintf("x%v_%v_%v", partValues[0], scyllaTable.name, partValues[1])
@@ -351,6 +351,45 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 				panic(msg)
 			} else if len(includedCols) > 0 {
 				columnsToUpdate = append(columnsToUpdate, indexViews.column)
+			}
+		}
+	}
+
+	columnsToUpdateByName := map[string]IColInfo{}
+	// Track already-selected columns to avoid duplicate SET clauses when adding virtual bucket columns.
+	for _, col := range columnsToUpdate {
+		columnsToUpdateByName[col.GetName()] = col
+	}
+
+	for _, compositeBucketIndex := range scyllaTable.compositeBucketIndexes {
+		// Composite bucket hashes become inconsistent if only part of the source tuple is updated.
+		includedCols := []string{}
+		notIncludedCols := []string{}
+
+		for _, sourceColumn := range compositeBucketIndex.sourceColumns {
+			if slices.Contains(columnsIncluded, sourceColumn.GetInfo().Idx) {
+				includedCols = append(includedCols, sourceColumn.GetName())
+			} else {
+				notIncludedCols = append(notIncludedCols, sourceColumn.GetName())
+			}
+		}
+
+		if len(includedCols) > 0 && len(notIncludedCols) > 0 {
+			panic(fmt.Sprintf(`Table "%v": CompositeBucketing index "%v" requires updating all source columns together. Included: %v | Missing: %v`,
+				scyllaTable.name,
+				compositeBucketIndex.name,
+				strings.Join(includedCols, ", "),
+				strings.Join(notIncludedCols, ", "),
+			))
+		}
+
+		if len(includedCols) > 0 {
+			// Recompute all generated bucket columns whenever any source tuple is updated.
+			for _, virtualColumn := range compositeBucketIndex.virtualColumnsBySize {
+				if _, exists := columnsToUpdateByName[virtualColumn.GetName()]; !exists {
+					columnsToUpdate = append(columnsToUpdate, virtualColumn)
+					columnsToUpdateByName[virtualColumn.GetName()] = virtualColumn
+				}
 			}
 		}
 	}
