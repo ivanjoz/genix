@@ -8,6 +8,9 @@ type packedIndexInfo struct {
 	indexName         string
 	packedColumnName  string
 	sourceColumnNames []string
+	// partitionColumnName is non-empty when the packed index is local (partition + packed).
+	// Empty means "global index on packed column only".
+	partitionColumnName string
 	// slotDigitsPerColumn aligns with sourceColumnNames (same length).
 	slotDigitsPerColumn []int64
 	// totalDigits is 9 for int32 packed and 19 for int64 packed.

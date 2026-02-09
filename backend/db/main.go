@@ -48,7 +48,7 @@ type ScyllaTable[T any] struct {
 	sequencePartCol IColInfo
 	keyConcatenated []IColInfo
 	keyIntPacking   []IColInfo
-	// packedIndexes stores metadata for TableSchema.Indexes (packed local indexes).
+	// packedIndexes stores metadata for packed indexes declared in schema (local and global).
 	packedIndexes     []*packedIndexInfo
 	autoincrementPart IColInfo
 	autoincrementCol  IColInfo
@@ -114,21 +114,22 @@ type ColumnStatement struct {
 type TableSchema struct {
 	Keyspace string
 	// StructType    T
-	Name              string
-	Keys              []Coln
-	Partition         Coln
-	GlobalIndexes     []Coln
-	LocalIndexes      []Coln
-	HashIndexes       [][]Coln
-	Indexes           [][]Coln //  new column
-	ViewsDeprecated   []View
-	SequenceColumn    Coln
-	CounterColumn     Coln
-	UseSequences      bool
-	SequencePartCol   Coln
-	KeyConcatenated   []Coln
-	KeyIntPacking     []Coln
-	AutoincrementPart Coln
+	Name                    string
+	Keys                    []Coln
+	Partition               Coln
+	GlobalIndexesDeprecated []Coln
+	LocalIndexes            []Coln
+	HashIndexes             [][]Coln
+	Indexes                 [][]Coln //  new column
+	GlobalIndexes           [][]Coln //  new column
+	ViewsDeprecated         []View
+	SequenceColumn          Coln
+	CounterColumn           Coln
+	UseSequences            bool
+	SequencePartCol         Coln
+	KeyConcatenated         []Coln
+	KeyIntPacking           []Coln
+	AutoincrementPart       Coln
 }
 
 func (q ColumnStatement) GetValue() any {

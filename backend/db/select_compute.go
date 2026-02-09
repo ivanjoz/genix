@@ -118,43 +118,77 @@ func (dbTable *ScyllaTable[T]) ComputeCapabilities() []QueryCapability {
 		}
 	}
 
-	// 2.5 Packed Local Indexes (TableSchema.Indexes)
-	// These are backed by a local index on ((partition), packed_column) but must match on source predicates.
+	// 2.5 Packed Indexes (local and global)
+	// These are backed by:
+	// - local:  CREATE INDEX ... ON table ((partition), packed_column)
+	// - global: CREATE INDEX ... ON table (packed_column)
+	// but capabilities must match on the source predicates (status/updated/etc).
 	if len(dbTable.packedIndexes) > 0 {
-		pk := dbTable.partKey
-		if pk != nil && !pk.IsNil() {
-			pkName := pk.GetName()
+		for _, packedIndex := range dbTable.packedIndexes {
+			if len(packedIndex.sourceColumnNames) == 0 {
+				continue
+			}
 
-			for _, packedIndex := range dbTable.packedIndexes {
-				if len(packedIndex.sourceColumnNames) < 2 {
+			source := dbTable.indexes[packedIndex.indexName]
+			if source == nil {
+				continue
+			}
+
+			signatureParts := []string{}
+			isLocal := packedIndex.partitionColumnName != ""
+			if isLocal {
+				signatureParts = append(signatureParts, packedIndex.partitionColumnName, "=")
+			}
+
+			// Single-column packed index: match equality/range directly on that source column (plus pk if local).
+			if len(packedIndex.sourceColumnNames) == 1 {
+				colName := packedIndex.sourceColumnNames[0]
+				sigPrefix := strings.Join(signatureParts, "|")
+				if sigPrefix != "" {
+					sigPrefix += "|"
+				}
+				caps = append(caps, QueryCapability{
+					Signature: sigPrefix + fmt.Sprintf("%v|=", colName),
+					Source:    source,
+					Priority:  14,
+				})
+				caps = append(caps, QueryCapability{
+					Signature: sigPrefix + fmt.Sprintf("%v|~", colName),
+					Source:    source,
+					Priority:  13,
+				})
+				continue
+			}
+
+			// Composite: equality on all prefix columns + (range/equality) on last column.
+			// Note: IN is normalized to "=" in capabilityOpForStatement, so it matches these signatures.
+			for i, colName := range packedIndex.sourceColumnNames {
+				if i < len(packedIndex.sourceColumnNames)-1 {
+					signatureParts = append(signatureParts, colName, "=")
 					continue
 				}
 
-				// Signature: pk equality + equality on all prefix source columns + (range/equality) on last source column.
-				// Note: IN is treated as "=" in capabilityOpForStatement, so it matches this signature too.
-				signatureParts := []string{pkName, "="}
-				for i, colName := range packedIndex.sourceColumnNames {
-					if i < len(packedIndex.sourceColumnNames)-1 {
-						signatureParts = append(signatureParts, colName, "=")
-					} else {
-						// Last supports both range and equality.
-						signaturePrefix := strings.Join(signatureParts, "|")
-						if signaturePrefix != "" {
-							signaturePrefix += "|"
-						}
-
-						caps = append(caps, QueryCapability{
-							Signature: signaturePrefix + colName + "|=",
-							Source:    dbTable.indexes[packedIndex.indexName],
-							Priority:  26 + len(packedIndex.sourceColumnNames)*2,
-						})
-						caps = append(caps, QueryCapability{
-							Signature: signaturePrefix + colName + "|~",
-							Source:    dbTable.indexes[packedIndex.indexName],
-							Priority:  24 + len(packedIndex.sourceColumnNames)*2,
-						})
-					}
+				signaturePrefix := strings.Join(signatureParts, "|")
+				if signaturePrefix != "" {
+					signaturePrefix += "|"
 				}
+
+				priorityBase := 20
+				if isLocal {
+					// Local packed indexes are typically more selective when partition is provided.
+					priorityBase = 26
+				}
+
+				caps = append(caps, QueryCapability{
+					Signature: signaturePrefix + colName + "|=",
+					Source:    source,
+					Priority:  priorityBase + len(packedIndex.sourceColumnNames)*2,
+				})
+				caps = append(caps, QueryCapability{
+					Signature: signaturePrefix + colName + "|~",
+					Source:    source,
+					Priority:  priorityBase - 2 + len(packedIndex.sourceColumnNames)*2,
+				})
 			}
 		}
 	}

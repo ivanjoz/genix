@@ -474,7 +474,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	}
 
 	idxCount := int8(1)
-	for _, column := range schema.GlobalIndexes {
+	for _, column := range schema.GlobalIndexesDeprecated {
 		colInfo := dbTable.columnsMap[column.GetInfo().Name]
 		index := &viewInfo{
 			Type:    1,
@@ -868,12 +868,292 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			indexName:           packedIndex.name,
 			packedColumnName:    virtualPackedColName,
 			sourceColumnNames:   slices.Clone(sourceColumnNames),
+			partitionColumnName: partitionColumn.GetName(),
 			slotDigitsPerColumn: slices.Clone(slotDigitsPerColumn),
 			totalDigits:         totalDigits,
 			isInt32Packed:       isInt32Packed,
 		})
 
 		fmt.Printf("Packed Index registered: table=%s index=%s packedCol=%s isInt32=%v slotDigits=%v\n",
+			dbTable.name, packedIndex.name, virtualPackedColName, isInt32Packed, slotDigitsPerColumn)
+	}
+
+	for _, indexColumns := range schema.GlobalIndexes {
+		// TableSchema.GlobalIndexes: build global secondary indexes.
+		// - If entry has 1 column: create a simple global index on that column.
+		// - If entry has 2+ columns: create a packed virtual column and a global index on it.
+		if len(indexColumns) == 0 {
+			panic(fmt.Sprintf(`Table "%v": GlobalIndexes entry must not be empty`, dbTable.name))
+		}
+
+		// Simple global index on a single column (including slice => VALUES(col)).
+		if len(indexColumns) == 1 {
+			colCfg := indexColumns[0]
+			colInfo := colCfg.GetInfo()
+			column := dbTable.columnsMap[colInfo.Name]
+			if column == nil {
+				panic(fmt.Sprintf(`Table "%v": GlobalIndexes column "%v" was not found`, dbTable.name, colInfo.Name))
+			}
+
+			indexName := fmt.Sprintf(`%v__%v_index_0`, dbTable.name, column.GetName())
+			if _, exists := dbTable.indexes[indexName]; exists {
+				// Avoid duplicate index definitions when migrating from GlobalIndexesDeprecated.
+				continue
+			}
+
+			index := &viewInfo{
+				Type:    1,
+				name:    indexName,
+				idx:     idxCount,
+				column:  column,
+				columns: []string{column.GetName()},
+			}
+			index.getCreateScript = func() string {
+				colName := column.GetName()
+				if column.GetType().IsSlice {
+					colName = fmt.Sprintf("VALUES(%v)", colName)
+				}
+				return fmt.Sprintf(`CREATE INDEX %v ON %v (%v)`, indexName, dbTable.GetFullName(), colName)
+			}
+
+			idxCount++
+			dbTable.indexes[index.name] = index
+			continue
+		}
+
+		// Packed global index for 2+ integer components.
+		sourceColumns := make([]IColInfo, 0, len(indexColumns))
+		sourceColumnNames := make([]string, 0, len(indexColumns))
+		slotDigitsPerColumn := make([]int64, 0, len(indexColumns))
+
+		isInt32Packed := false
+		totalDigits := int64(19)
+
+		for columnIndex, indexColumnConfig := range indexColumns {
+			configInfo := indexColumnConfig.GetInfo()
+			column := dbTable.columnsMap[configInfo.Name]
+			if column == nil {
+				panic(fmt.Sprintf(`Table "%v": GlobalIndexes column "%v" was not found`, dbTable.name, configInfo.Name))
+			}
+
+			if column.GetType().IsComplexType || column.GetType().IsSlice || !isSupportedPackedIndexNumericFieldType(column.GetType().FieldType) {
+				panic(fmt.Sprintf(`Table "%v": GlobalIndexes packed column "%v" must be a scalar integer. Found: %v`, dbTable.name, column.GetName(), column.GetType().FieldType))
+			}
+
+			if configInfo.useInt32Packing {
+				isInt32Packed = true
+				totalDigits = 9
+			}
+
+			// Packed global index uses the same explicit DecimalSize rules as local packing:
+			// - First component MUST NOT set DecimalSize() (its width is implied by the remaining digit budget).
+			// - All remaining components MUST set DecimalSize().
+			if columnIndex == 0 && configInfo.decimalSize > 0 {
+				panic(fmt.Sprintf(`Table "%v": GlobalIndexes first column "%v" must not set DecimalSize()`, dbTable.name, configInfo.Name))
+			}
+			if columnIndex > 0 && configInfo.decimalSize <= 0 {
+				panic(fmt.Sprintf(`Table "%v": GlobalIndexes requires DecimalSize() for column "%v" (all columns after the first must set DecimalSize)`, dbTable.name, configInfo.Name))
+			}
+
+			sourceColumns = append(sourceColumns, column)
+			sourceColumnNames = append(sourceColumnNames, column.GetName())
+			slotDigitsPerColumn = append(slotDigitsPerColumn, int64(configInfo.decimalSize)) // first column may be 0 for now
+		}
+
+		sumTrailingDigits := int64(0)
+		for i := 1; i < len(slotDigitsPerColumn); i++ {
+			sumTrailingDigits += slotDigitsPerColumn[i]
+		}
+
+		if isInt32Packed {
+			if sumTrailingDigits > 8 {
+				panic(fmt.Sprintf(`Table "%v": int32 packed GlobalIndexes requires sum(DecimalSize(columns[1:])) <= 8. Got: %v`, dbTable.name, sumTrailingDigits))
+			}
+		} else {
+			if sumTrailingDigits > 18 {
+				panic(fmt.Sprintf(`Table "%v": int64 packed GlobalIndexes requires sum(DecimalSize(columns[1:])) <= 18. Got: %v`, dbTable.name, sumTrailingDigits))
+			}
+		}
+
+		firstSlotDigits := totalDigits - sumTrailingDigits
+		if firstSlotDigits <= 0 {
+			panic(fmt.Sprintf(`Table "%v": GlobalIndexes invalid digit budget: totalDigits=%v sumTrailingDigits=%v`, dbTable.name, totalDigits, sumTrailingDigits))
+		}
+		slotDigitsPerColumn[0] = firstSlotDigits
+
+		virtualPackedColName := fmt.Sprintf("zz_gixp_%s", strings.Join(sourceColumnNames, "_"))
+		if _, exists := dbTable.columnsMap[virtualPackedColName]; exists {
+			panic(fmt.Sprintf(`Table "%v": generated packed global index column already exists: %v`, dbTable.name, virtualPackedColName))
+		}
+
+		packedColumnTypeName := "int64"
+		if isInt32Packed {
+			packedColumnTypeName = "int32"
+		}
+
+		sourceColumnsLocal := slices.Clone(sourceColumns)
+		slotDigitsLocal := slices.Clone(slotDigitsPerColumn)
+		isInt32PackedLocal := isInt32Packed
+
+		virtualPackedColumn := &columnInfo{
+			colInfo: colInfo{
+				Name:      virtualPackedColName,
+				FieldName: virtualPackedColName,
+				IsVirtual: true,
+				Idx:       dbTable._maxColIdx,
+			},
+			colType: GetColTypeByName(packedColumnTypeName, ""),
+		}
+		virtualPackedColumn.getRawValue = func(ptr unsafe.Pointer) any {
+			componentValues := make([]int64, 0, len(sourceColumnsLocal))
+			for _, sourceColumn := range sourceColumnsLocal {
+				valueI64 := convertToInt64(sourceColumn.GetRawValue(ptr))
+				if valueI64 < 0 {
+					panic(fmt.Sprintf(`Table "%v": packed GlobalIndexes column "%v" produced negative value %d`, dbTable.name, sourceColumn.GetName(), valueI64))
+				}
+				componentValues = append(componentValues, valueI64)
+			}
+
+			packed := computePackedInt64ValueNonNegative(componentValues, slotDigitsLocal)
+			if !isInt32PackedLocal {
+				return any(packed)
+			}
+
+			// Keep stored packed int within int32 constraints by trimming on the right side.
+			// Reads must post-filter for exact semantics because trimming can overfetch.
+			packedTrimmed := trimRightToDigitsNonNegative(packed, 9)
+			return any(int32(packedTrimmed))
+		}
+		virtualPackedColumn.getValue = virtualPackedColumn.getRawValue
+
+		dbTable._maxColIdx++
+		dbTable.columnsMap[virtualPackedColumn.GetName()] = virtualPackedColumn
+
+		indexName := fmt.Sprintf(`%v__%v_index_0`, dbTable.name, virtualPackedColName)
+		if _, exists := dbTable.indexes[indexName]; exists {
+			panic(fmt.Sprintf(`Table "%v": packed GlobalIndexes index name already exists: %v`, dbTable.name, indexName))
+		}
+
+		packedIndex := &viewInfo{
+			Type:               1,
+			name:               indexName,
+			idx:                idxCount,
+			column:             virtualPackedColumn,
+			columns:            slices.Clone(sourceColumnNames),
+			RequiresPostFilter: true,
+		}
+		packedIndex.getCreateScript = func() string {
+			return fmt.Sprintf(`CREATE INDEX %v ON %v (%v)`, indexName, dbTable.GetFullName(), virtualPackedColName)
+		}
+
+		packedColumnNameLocal := virtualPackedColName
+		lastSourceColNameLocal := sourceColumnNames[len(sourceColumnNames)-1]
+
+		packedIndex.getStatement = func(statements ...ColumnStatement) []string {
+			statementByColumn := map[string]ColumnStatement{}
+			for _, st := range statements {
+				statementByColumn[st.Col] = st
+			}
+
+			// Expand prefix value groups.
+			// Requirement: IN must work on the first column (Status IN (...)).
+			// We support IN on any prefix column via cartesian expansion for correctness (can increase fan-out).
+			prefixValueGroups := [][]int64{{}}
+			for i := 0; i < len(sourceColumnNames)-1; i++ {
+				colName := sourceColumnNames[i]
+				st, ok := statementByColumn[colName]
+				if !ok {
+					return nil
+				}
+
+				values := []int64{}
+				switch st.Operator {
+				case "=":
+					values = append(values, convertToInt64(st.Value))
+				case "IN":
+					for _, v := range st.Values {
+						values = append(values, convertToInt64(v))
+					}
+				default:
+					return nil
+				}
+
+				nextGroups := [][]int64{}
+				for _, group := range prefixValueGroups {
+					for _, v := range values {
+						nextGroup := append(slices.Clone(group), v)
+						nextGroups = append(nextGroups, nextGroup)
+					}
+				}
+				prefixValueGroups = nextGroups
+			}
+
+			lastStatement, ok := statementByColumn[lastSourceColNameLocal]
+			if !ok {
+				return nil
+			}
+
+			finalizePackedForStorageType := func(packed int64) int64 {
+				if !isInt32PackedLocal {
+					return packed
+				}
+				return trimRightToDigitsNonNegative(packed, 9)
+			}
+
+			emitRangeClause := func(prefixValues []int64, operator string, boundValue int64) string {
+				componentValues := append(slices.Clone(prefixValues), boundValue)
+				packed := finalizePackedForStorageType(computePackedInt64ValueNonNegative(componentValues, slotDigitsLocal))
+
+				// Avoid underfetch due to truncation on strict bounds.
+				switch operator {
+				case ">":
+					operator = ">="
+				case "<":
+					operator = "<="
+				}
+				return fmt.Sprintf("%v %v %v", packedColumnNameLocal, operator, packed)
+			}
+
+			whereStatements := []string{}
+			for _, prefixValues := range prefixValueGroups {
+				switch lastStatement.Operator {
+				case "=":
+					componentValues := append(slices.Clone(prefixValues), convertToInt64(lastStatement.Value))
+					packed := finalizePackedForStorageType(computePackedInt64ValueNonNegative(componentValues, slotDigitsLocal))
+					whereStatements = append(whereStatements, fmt.Sprintf("%v = %v", packedColumnNameLocal, packed))
+				case "BETWEEN":
+					if len(lastStatement.From) == 0 || len(lastStatement.To) == 0 {
+						return nil
+					}
+					fromValue := convertToInt64(lastStatement.From[0].Value)
+					toValue := convertToInt64(lastStatement.To[0].Value)
+					fromClause := emitRangeClause(prefixValues, ">=", fromValue)
+					toClause := emitRangeClause(prefixValues, "<=", toValue)
+					whereStatements = append(whereStatements, fromClause+" AND "+toClause)
+				case ">", ">=", "<", "<=":
+					whereStatements = append(whereStatements, emitRangeClause(prefixValues, lastStatement.Operator, convertToInt64(lastStatement.Value)))
+				default:
+					return nil
+				}
+			}
+
+			return whereStatements
+		}
+
+		idxCount++
+		dbTable.indexes[packedIndex.name] = packedIndex
+
+		dbTable.packedIndexes = append(dbTable.packedIndexes, &packedIndexInfo{
+			indexName:           packedIndex.name,
+			packedColumnName:    virtualPackedColName,
+			sourceColumnNames:   slices.Clone(sourceColumnNames),
+			partitionColumnName: "",
+			slotDigitsPerColumn: slices.Clone(slotDigitsPerColumn),
+			totalDigits:         totalDigits,
+			isInt32Packed:       isInt32Packed,
+		})
+
+		fmt.Printf("Packed Global Index registered: table=%s index=%s packedCol=%s isInt32=%v slotDigits=%v\n",
 			dbTable.name, packedIndex.name, virtualPackedColName, isInt32Packed, slotDigitsPerColumn)
 	}
 
