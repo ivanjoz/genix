@@ -59,9 +59,11 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		LocalIndexes: []db.Coln{e.Updated},
 		HashIndexes: [][]db.Coln{
 			{e.DetailProductsIDs, e.Fecha.CompositeBucketing(2,6,12,20)},
-			// {e.DetailProductsIDs, e.Week.IsWeek().CompositeBucketing(1,4,6)},
 		},
-		Views: []db.View{
+		Indexes: [][]db.Coln{
+			{e.Status.Int32(), e.Updated.DecimalSize(8)},
+		},
+		ViewsDeprecated: []db.View{
 			{Cols: []db.Coln{e.Fecha, e.Updated}, KeepPart: true},
 		},
 	}

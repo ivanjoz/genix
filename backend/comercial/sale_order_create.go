@@ -34,8 +34,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	sale.EmpresaID = req.Usuario.EmpresaID
 	sale.Fecha = core.TimeToFechaUnix(time.Now())
-	// Keep week code aligned with the date so composite packed indexes remain queryable by week ranges.
-	sale.Week = core.MakeSemanaFromFechaUnix(sale.Fecha, false).Code
 	sale.Created = nowTime
 	sale.Updated = nowTime
 	sale.UpdatedBy = req.Usuario.ID

@@ -118,6 +118,47 @@ func (dbTable *ScyllaTable[T]) ComputeCapabilities() []QueryCapability {
 		}
 	}
 
+	// 2.5 Packed Local Indexes (TableSchema.Indexes)
+	// These are backed by a local index on ((partition), packed_column) but must match on source predicates.
+	if len(dbTable.packedIndexes) > 0 {
+		pk := dbTable.partKey
+		if pk != nil && !pk.IsNil() {
+			pkName := pk.GetName()
+
+			for _, packedIndex := range dbTable.packedIndexes {
+				if len(packedIndex.sourceColumnNames) < 2 {
+					continue
+				}
+
+				// Signature: pk equality + equality on all prefix source columns + (range/equality) on last source column.
+				// Note: IN is treated as "=" in capabilityOpForStatement, so it matches this signature too.
+				signatureParts := []string{pkName, "="}
+				for i, colName := range packedIndex.sourceColumnNames {
+					if i < len(packedIndex.sourceColumnNames)-1 {
+						signatureParts = append(signatureParts, colName, "=")
+					} else {
+						// Last supports both range and equality.
+						signaturePrefix := strings.Join(signatureParts, "|")
+						if signaturePrefix != "" {
+							signaturePrefix += "|"
+						}
+
+						caps = append(caps, QueryCapability{
+							Signature: signaturePrefix + colName + "|=",
+							Source:    dbTable.indexes[packedIndex.indexName],
+							Priority:  26 + len(packedIndex.sourceColumnNames)*2,
+						})
+						caps = append(caps, QueryCapability{
+							Signature: signaturePrefix + colName + "|~",
+							Source:    dbTable.indexes[packedIndex.indexName],
+							Priority:  24 + len(packedIndex.sourceColumnNames)*2,
+						})
+					}
+				}
+			}
+		}
+	}
+
 	// 3. Views
 	for _, view := range dbTable.indexViews {
 		if view.Type < 6 {

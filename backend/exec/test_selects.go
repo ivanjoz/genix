@@ -10,13 +10,31 @@ import (
 
 // TestSelects demonstrates complex select queries including the new KeyConcatenated smart logic.
 func TestSelects(args *core.ExecArgs) core.FuncResponse {
+	var err error
+
+	fmt.Println("\n--- Test 7: Range query in int packet column local index ---")
+	recordSalesOrders2 := []comercial.SaleOrder{}
+	q7 := db.Query(&recordSalesOrders2)
+	err = q7.EmpresaID.Equals(1).
+		Status.Equals(1).AllowFilter().
+		Updated.Between(385298000, 385299000).
+		Exec()
+
+	if err != nil {
+		fmt.Println("Error in Test 6:", err)
+	} else {
+		fmt.Printf("Found %d records in range\n", len(recordSalesOrders2))
+	}
+	
+	return  core.FuncResponse{}
+	
 	// 6. Test bucket query CONTAINS + "RANGE" with hash index
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
 	recordSalesOrders := []comercial.SaleOrder{}
 	q6 := db.Query(&recordSalesOrders)
-	err := q6.EmpresaID.Equals(1).
+	err = q6.EmpresaID.Equals(1).
 		DetailProductsIDs.Contains(1).
-		Fecha.Between(20469, 20497).
+		Fecha.Between(20475, 20495).
 		Exec()
 
 	if err != nil {

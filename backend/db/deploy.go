@@ -26,6 +26,7 @@ type ScyllaControllerInterface interface {
 	GetRecordsGob(partValue, limit int32, lastKey any) ([]byte, error)
 	RestoreCSVRecords(partValue int32, content *[]byte) error
 	GetRecordsCSV(partValue int32) (CSVResult, error)
+	ReloadRecords(partValue int32) error
 	ResetCounter(partValue any) error
 }
 
@@ -71,6 +72,29 @@ func (e *ScyllaController[T, E]) GetRecords(partValue, limit int32, lastKey any)
 func (e *ScyllaController[T, E]) GetRecordsCSV(partValue int32) (CSVResult, error) {
 	scyllaTable := &e.Table
 	return exportToCSV(scyllaTable, partValue)
+}
+
+func (e *ScyllaController[T, E]) ReloadRecords(partValue int32) error {
+	records := []T{}
+	query := any(Query(&records)).(TableQueryInterface[E])
+
+	pk := e.Table.GetPartKey()
+	if partValue > 0 && pk != nil && !pk.IsNil() {
+		query.SetWhere(pk.GetName(), "=", partValue)
+	}
+
+	if err := query.Exec(); err != nil {
+		fmt.Println("Error al consultar", e.Table.name, ":", err)
+		return err
+	}
+
+	if len(records) > 0 {
+		if err := Insert(&records); err != nil {
+			return Err("Error al re-insertar registros:", err)
+		}
+	}
+
+	return nil
 }
 
 func (e *ScyllaController[T, E]) GetRecordsGob(partValue, limit int32, lastKey any) ([]byte, error) {

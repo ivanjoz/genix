@@ -47,7 +47,7 @@ func (e CajaTable) GetSchema() db.TableSchema {
 		Partition:    e.EmpresaID,
 		UseSequences: true,
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
-		Views: []db.View{
+		ViewsDeprecated: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.Updated}, KeepPart: true},
 		},
@@ -130,7 +130,7 @@ func (e CajaCuadreTable) GetSchema() db.TableSchema {
 		Name:      "caja_cuadre",
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.ID},
-		Views: []db.View{
+		ViewsDeprecated: []db.View{
 			{Cols: []db.Coln{e.CreatedBy}, KeepPart: true},
 		},
 	}

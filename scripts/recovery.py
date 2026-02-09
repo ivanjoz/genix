@@ -6,7 +6,7 @@ from cassandra.auth import PlainTextAuthProvider
 # CONFIGURACIÓN
 # ==========================================
 KEYSPACE = "genix"
-TABLES = ["caja_movimientos", "almacen_movimiento"] # Puedes agregar todas las que quieras
+TABLES = ["cajas"] # Puedes agregar todas las que quieras
 DATA_DIR = "/var/lib/scylla/data"
 # ==========================================
 

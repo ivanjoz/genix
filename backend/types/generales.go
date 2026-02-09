@@ -49,7 +49,7 @@ func (e PaisCiudadTable) GetSchema() db.TableSchema {
 		Name:      "pais_ciudades",
 		Partition: e.PaisID,
 		Keys:      []db.Coln{e.CiudadID},
-		Views: []db.View{
+		ViewsDeprecated: []db.View{
 			{Cols: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
@@ -88,7 +88,7 @@ func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
 		Partition:    e.EmpresaID,
 		UseSequences: true,
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
-		Views: []db.View{
+		ViewsDeprecated: []db.View{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
 			{Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
 			{Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
@@ -134,6 +134,6 @@ func (e ParametrosTable) GetSchema() db.TableSchema {
 		Partition:    e.EmpresaID,
 		UseSequences: true,
 		Keys:         []db.Coln{e.Grupo, e.Key},
-		Views:        []db.View{},
+		ViewsDeprecated:        []db.View{},
 	}
 }

@@ -2,6 +2,7 @@ package exec
 
 import (
 	"app/aws"
+	comercial "app/comercial/types"
 	"app/core"
 	"app/db"
 	"app/handlers"
@@ -50,7 +51,7 @@ func (e DemoStructTable) GetSchema() db.TableSchema {
 		Name:      "zz_demo_struct",
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.ID},
-		Views: []db.View{
+		ViewsDeprecated: []db.View{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
 			{Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
 			{Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
@@ -128,7 +129,8 @@ func Test40(args *core.ExecArgs) core.FuncResponse {
 
 func Test41(args *core.ExecArgs) core.FuncResponse {
 
-	RecalcSequences(1)
-
+	controller := makeDBController[comercial.SaleOrder]()
+	controller.ReloadRecords(1)
+	
 	return core.FuncResponse{}
 }

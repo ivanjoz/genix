@@ -120,7 +120,12 @@ func planCompositeBuckets(from, to int64, bucketSizes []int8) []compositeBucketS
 		overfetch int64
 	}
 
-	maxOverfetch := int64(2)
+	maxOverfetch := int64(0)
+	for _, size := range bucketSizes {
+		maxOverfetch += int64(size)
+	}
+
+	maxOverfetch = maxOverfetch / int64(len(bucketSizes))
 	minCoverage := from - maxOverfetch
 	maxCoverage := to + maxOverfetch
 
@@ -219,7 +224,7 @@ func planCompositeBuckets(from, to int64, bucketSizes []int8) []compositeBucketS
 	return plan.selections
 }
 
-func makeCompositeBucketRecordKey(ptr unsafe.Pointer, scyllaTable ScyllaTable[any]) string {
+func makePrimaryKeyRecordKey(ptr unsafe.Pointer, scyllaTable ScyllaTable[any]) string {
 	// Dedupe key always includes partition key plus clustering keys to preserve table key semantics.
 	parts := []string{}
 	partKey := scyllaTable.GetPartKey()
@@ -232,8 +237,8 @@ func makeCompositeBucketRecordKey(ptr unsafe.Pointer, scyllaTable ScyllaTable[an
 	return strings.Join(parts, "|")
 }
 
-func matchesCompositeFilter(ptr unsafe.Pointer, statements []ColumnStatement, scyllaTable ScyllaTable[any]) bool {
-	// Final in-memory filtering guarantees exact semantics after bucket overfetch and hash collisions.
+func recordMatchesPostFilter(ptr unsafe.Pointer, statements []ColumnStatement, scyllaTable ScyllaTable[any]) bool {
+	// Final in-memory filtering guarantees exact semantics after overfetch (e.g. packed indexes with DecimalSize truncation).
 	for _, statement := range statements {
 		column := scyllaTable.columnsMap[statement.Col]
 		if column == nil {
@@ -244,6 +249,22 @@ func matchesCompositeFilter(ptr unsafe.Pointer, statements []ColumnStatement, sc
 		switch statement.Operator {
 		case "=":
 			if convertToInt64(rawValue) != convertToInt64(statement.Value) {
+				return false
+			}
+		case ">":
+			if convertToInt64(rawValue) <= convertToInt64(statement.Value) {
+				return false
+			}
+		case ">=":
+			if convertToInt64(rawValue) < convertToInt64(statement.Value) {
+				return false
+			}
+		case "<":
+			if convertToInt64(rawValue) >= convertToInt64(statement.Value) {
+				return false
+			}
+		case "<=":
+			if convertToInt64(rawValue) > convertToInt64(statement.Value) {
 				return false
 			}
 		case "IN":
@@ -476,12 +497,14 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 	whereStatements := []string{}
 	orderColumn := scyllaTable.keys[0]
 	postFilterStatements := []ColumnStatement{}
-	useCompositePlan := false
+	usePostFilter := false
+	shouldDeduplicateFanoutResults := false
 
 	compositePlan := tryBuildCompositeBucketPlan(statements, scyllaTable)
 	if compositePlan != nil {
 		// Composite plan handles the hash+bucket part; remaining statements are applied as normal SQL predicates.
-		useCompositePlan = true
+		usePostFilter = true
+		shouldDeduplicateFanoutResults = true
 		whereStatements = compositePlan.whereStatements
 		postFilterStatements = compositePlan.filterStatements
 		for _, statement := range statements {
@@ -532,6 +555,13 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 					}
 					orderColumn = viewOrIndex.column
 					whereStatements = viewOrIndex.getStatement(statementsSelected...)
+
+					if viewOrIndex.RequiresPostFilter {
+						// Packed indexes with DecimalSize truncation can overfetch; enforce exact semantics in memory.
+						usePostFilter = true
+						shouldDeduplicateFanoutResults = true
+						postFilterStatements = slices.Clone(statementsSelected)
+					}
 				} else {
 					// Direct index usage, no special statement generator
 					statementsRemain = statements
@@ -871,8 +901,8 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 					IncrementLogCount()
 				}
 
-				if useCompositePlan {
-					if !matchesCompositeFilter(xunsafe.AsPointer(rec), postFilterStatements, scyllaTable) {
+				if usePostFilter {
+					if !recordMatchesPostFilter(xunsafe.AsPointer(rec), postFilterStatements, scyllaTable) {
 						continue
 					}
 				}
@@ -911,13 +941,13 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 	}
 
 	if len(queryWhereStatements) > 1 {
-		if useCompositePlan {
+		if shouldDeduplicateFanoutResults {
 			// Deduplicate fan-out results by partition+primary-key tuple before returning.
 			recordsUniqueMap := map[string]E{}
 			for _, records := range recordsMap {
 				for _, rec := range *records {
 					recPtr := xunsafe.AsPointer(&rec)
-					recordKey := makeCompositeBucketRecordKey(recPtr, scyllaTable)
+					recordKey := makePrimaryKeyRecordKey(recPtr, scyllaTable)
 					recordsUniqueMap[recordKey] = rec
 				}
 			}

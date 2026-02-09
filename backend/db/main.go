@@ -32,22 +32,24 @@ type IColInfo interface {
 }
 
 type ScyllaTable[T any] struct {
-	name              string
-	keyspace          string
-	keys              []IColInfo
-	partKey           IColInfo
-	keysIdx           []int16
-	columns           []IColInfo
-	columnsMap        map[string]IColInfo
-	columnsIdxMap     map[int16]IColInfo
-	indexes           map[string]*viewInfo
-	views             map[string]*viewInfo
-	indexViews        []*viewInfo
-	ViewsExcluded     []string
-	useSequences      bool
-	sequencePartCol   IColInfo
-	keyConcatenated   []IColInfo
-	keyIntPacking     []IColInfo
+	name            string
+	keyspace        string
+	keys            []IColInfo
+	partKey         IColInfo
+	keysIdx         []int16
+	columns         []IColInfo
+	columnsMap      map[string]IColInfo
+	columnsIdxMap   map[int16]IColInfo
+	indexes         map[string]*viewInfo
+	views           map[string]*viewInfo
+	indexViews      []*viewInfo
+	ViewsExcluded   []string
+	useSequences    bool
+	sequencePartCol IColInfo
+	keyConcatenated []IColInfo
+	keyIntPacking   []IColInfo
+	// packedIndexes stores metadata for TableSchema.Indexes (packed local indexes).
+	packedIndexes     []*packedIndexInfo
 	autoincrementPart IColInfo
 	autoincrementCol  IColInfo
 	capabilities      []QueryCapability
@@ -85,16 +87,19 @@ func (e ScyllaTable[T]) GetPartKey() IColInfo {
 
 type viewInfo struct {
 	/* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
-	Type            int8
-	name            string
-	idx             int8
-	column          IColInfo
-	columns         []string
-	columnsNoPart   []string
-	columnsIdx      []int16
-	Operators       []string
-	getStatement    func(statements ...ColumnStatement) []string
-	getCreateScript func() string
+	Type          int8
+	name          string
+	idx           int8
+	column        IColInfo
+	columns       []string
+	columnsNoPart []string
+	columnsIdx    []int16
+	Operators     []string
+	// RequiresPostFilter indicates the index/view can overfetch and should be exact-filtered in memory.
+	// This is required for packed indexes when DecimalSize() truncation is applied.
+	RequiresPostFilter bool
+	getStatement       func(statements ...ColumnStatement) []string
+	getCreateScript    func() string
 }
 
 type ColumnStatement struct {
@@ -115,7 +120,8 @@ type TableSchema struct {
 	GlobalIndexes     []Coln
 	LocalIndexes      []Coln
 	HashIndexes       [][]Coln
-	Views             []View
+	Indexes           [][]Coln //  new column
+	ViewsDeprecated   []View
 	SequenceColumn    Coln
 	CounterColumn     Coln
 	UseSequences      bool
@@ -372,6 +378,11 @@ func (q Col[T, E]) DecimalSize(size int8) Col[T, E] {
 	return q
 }
 
+func (q Col[T, E]) Int32() Col[T, E] {
+	q.info.useInt32Packing = true
+	return q
+}
+
 func (q Col[T, E]) CompositeBucketing(buketsSize ...int8) Col[T, E] {
 	q.info.compositeBucketing = buketsSize
 	return q
@@ -623,6 +634,7 @@ func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 				if c, ok := any(column1).(*Col[T, E]); ok {
 					colInfo.decimalSize = c.info.decimalSize
 					colInfo.autoincrementRandSize = c.info.autoincrementRandSize
+					colInfo.useInt32Packing = c.info.useInt32Packing
 				}
 
 				infoCheck := column1.GetInfo()
