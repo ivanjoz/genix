@@ -1,6 +1,9 @@
 package types
 
-import "app/db"
+import (
+	"app/core"
+	"app/db"
+)
 
 type SaleOrder struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
@@ -30,6 +33,42 @@ type SaleOrder struct {
 	// If contains 2 = the payment is done
 	// If contains 3 = the delivery of the product is done
 	ProcessesIncluded_ []int8 `json:",omitempty"`
+	// This fields are used for fast filtering the last pending orders
+	OrdenPendingPaymentUpdated int32 `json:",omitempty"`
+	OrdenPendingDeliveryUpdated int32 `json:",omitempty"`
+	OrdenPendingFinishedUpdated int32 `json:",omitempty"`
+}
+
+func (e *SaleOrder) AddState(orderState int8) error {
+	updated := core.SUnixTime()
+	if orderState == 2 {
+		if e.Status == 1 || e.Status == 3 {
+			e.Status += 1
+		} else {
+			core.Log("Error: No se puede agregar el estado Pagado a ",e.Status)
+			return core.Err("Error: No se puede agregar el estado Pagado a ",e.Status)
+		}
+	} else if orderState == 3 {
+		if e.Status == 1 || e.Status == 2 {
+			e.Status += 2
+		} else {
+			core.Log("Error: No se puede agregar el estado Entregado a ",e.Status)
+			return core.Err("Error: No se puede agregar el estado Entregado a ",e.Status)
+		}
+	}
+	
+	if e.OrdenPendingPaymentUpdated > 0 && e.OrdenPendingPaymentUpdated != updated {
+		e.OrdenPendingPaymentUpdated = updated
+	}
+
+	if e.OrdenPendingDeliveryUpdated > 0 && e.OrdenPendingDeliveryUpdated != updated {
+		e.OrdenPendingDeliveryUpdated = updated
+	}
+	
+	if e.OrdenPendingFinishedUpdated > 0 && e.OrdenPendingFinishedUpdated != updated {
+		e.OrdenPendingFinishedUpdated = updated
+	}
+	return nil
 }
 
 type SaleOrderTable struct {

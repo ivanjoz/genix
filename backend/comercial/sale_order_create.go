@@ -37,19 +37,21 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	sale.Created = nowTime
 	sale.Updated = nowTime
 	sale.UpdatedBy = req.Usuario.ID
-	sale.Status = 1
+	sale.AddState(1)
 	
 	// 2 = Pago (Registro en Caja)
 	if slices.Contains(sale.ProcessesIncluded_, 2) {
-		sale.Status += 1
+		sale.AddState(2)
 		if sale.CajaID_ == 0 {
 			return req.MakeErr("Se requiere CajaID_ para procesar el pago.")
 		}		
+	} else {
+		sale.OrdenPendingPaymentUpdated = sale.Updated 
 	}
 	
 	// 3 = Entrega (Movimiento de Almacén)
 	if slices.Contains(sale.ProcessesIncluded_, 3) {
-		sale.Status += 2
+		sale.AddState(3)
 		if sale.AlmacenID == 0 {
 			return req.MakeErr("Se requiere AlmacenID para procesar la entrega.")
 		}
@@ -57,8 +59,13 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		if len(sale.DetailProductsIDs) == 0 {
 			return req.MakeErr("No hay productos en el detalle para procesar la entrega.")
 		}
+	}	else {
+		sale.OrdenPendingDeliveryUpdated = sale.Updated 
 	}
 	
+	if sale.Status != 4 {
+		sale.OrdenPendingFinishedUpdated = sale.Updated 
+	}
 	
 	sales := []types.SaleOrder{sale}
 
