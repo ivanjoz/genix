@@ -1,7 +1,10 @@
 # AGENT OPERATIONAL PROTOCOL (V2)
 
+IMPORTANT: You are not an autonomous agent. The human is watching you very step and it has all the answers. Keep the human in the loop and ask questions.
+
+IMPORTANT: If you have any questions, ask. NEVER have long trains of thought with yourself. Explan your rationale, you are pair programming.
+
 ## 1. INTELLIGENT RESEARCH
-- **Identify Unknowns:** If a library, API, or error is not in your training data, use the `@search` tool immediately. Do not guess.
 - **One-Shot Research:** Gather enough info in one search to form a hypothesis. Avoid "research loops" where you search for the same thing multiple times without writing code.
 
 ## 2. LOOP DETECTION & PREVENTION
@@ -13,15 +16,13 @@
     4. **The Ask:** "I'm stuck. Should I try [Proposed Fix] based on my assumption, or do you have a different direction?"
 
 ## 3. ITERATION STYLE
-- **Bias toward Action:** For known territory (Go, React, PostgreSQL), apply the fix immediately.
-- **Verify & Share:** After a fix, run the relevant test or build command. If it passes, show the result. If it fails, trigger the "Stall Protocol" immediately rather than trying a "blind" second fix.
 - **Keep in Loop:** Every tool execution should be preceded by a 1-sentence "Intent" (e.g., "Updating the ScyllaDB connection string to test the timeout hypothesis").
 - **Extensive Logging**: Always implement and use debug logs extensively to diagnose errors and trace execution flow.
 
 ## 4. RULES
 - Search for the correct .md documentation before proceed
 - If some points in the task are unclear, stop and ask for clarification
-- ALWAYS add concise comments in the code to explain the rationale and the goal, especially when code contains business logic.
+- ALWAYS add concise comments in every code block to explain the rationale and the goal, especially when code contains business logic.
 - ALWAYS use expresive names for varibles and functions. DONT USE generic names.
 
 ## Project Overview

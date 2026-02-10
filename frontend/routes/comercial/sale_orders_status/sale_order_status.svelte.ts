@@ -28,25 +28,30 @@ export interface ISaleOrder {
     TopPaidProducts?: ISaleOrderTopProduct[];
 }
 
-// Derived states for the requested categories
-// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
+// UI groups map 1:1 to backend query params:
+// - `pending-status=2` => pending payment
+// - `pending-status=3` => pending delivery
+// - `order-status=4`   => completed
 export const SaleOrderGroup = {
-	FINALIZADO: 4, // Pagado + Entregado (Status 4)
-	PENDIENTE_DE_PAGO: 7, // Pendiente de Pago: Generado (1) or Entregado (3)
-	PENDIENTE_DE_ENTREGA: 8, // Pendiente de Entrega: Generado (1) or Pagado (2)
+	PENDIENTE_DE_PAGO: 2,
+	PENDIENTE_DE_ENTREGA: 3,
+	FINALIZADO: 4,
 }
-
-export const SaleOrderGroupMap = new Map([[4,[4]],[7,[1,3]],[8,[1,2]]])
 
 export class SaleOrdersService extends GetHandler {
     route = "sale_orders"
-    useCache = { min: 0.1, ver: 1 }
+    // Route now depends on group; bump version to avoid mixing old cached queries.
+    useCache = { min: 0.1, ver: 2 }
 
     records: ISaleOrder[] = $state([])
 
-    handler(result: ISaleOrder[]): void {
-        const data = Array.isArray(result) ? result : [result];
-		this.records = data.map((saleOrder) => {
+	handler(result: ISaleOrder[]): void {
+		console.log("getted result::", [...result])	
+		
+		const data = Array.isArray(result) ? result : [result];
+		// Never show deleted/canceled records in the UI; cache merge still works via IDs.
+		const activeOrders = data.filter((saleOrder) => (saleOrder?.ss || 0) > 0);
+		this.records = activeOrders.map((saleOrder) => {
 			const topPaidProducts = this.getTopPaidProductsByAmount(saleOrder);
 			return {
 				...saleOrder,
@@ -99,14 +104,17 @@ export class SaleOrdersService extends GetHandler {
 
 	constructor(group: number) {
 		super()
-		
-		const status = SaleOrderGroupMap.get(group) || []
-		if (status.length === 0) {
+
+		// Keep cache keys separated by group by embedding query params in `route`.
+		if (group === SaleOrderGroup.FINALIZADO) {
+			this.route += `?order-status=${SaleOrderGroup.FINALIZADO}`
+		} else if (group === SaleOrderGroup.PENDIENTE_DE_PAGO || group === SaleOrderGroup.PENDIENTE_DE_ENTREGA) {
+			this.route += `?pending-status=${group}`
+		} else {
 			Notify.failure("El grupo seleccionado es incorrecto")
 			return
 		}
 
-		this.route += `?ss=${status.join(",")}`
-		console.log("Servicio Instanciado:", this.route)
+		console.log("[SaleOrdersService] Instanciado:", this.route)
   }
 }

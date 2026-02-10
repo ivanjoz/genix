@@ -594,6 +594,50 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	}
 
 	for _, indexColumns := range schema.Indexes {
+		// TableSchema.Indexes: build local secondary indexes.
+		// - If entry has 1 column: create a simple local index on that column (replacement for deprecated LocalIndexes).
+		// - If entry has 2+ columns: create a packed virtual column and a local index on it.
+		if len(indexColumns) == 0 {
+			panic(fmt.Sprintf(`Table "%v": Indexes entry must not be empty`, dbTable.name))
+		}
+
+		// Simple local index on a single column (including slice => VALUES(col)).
+		if len(indexColumns) == 1 {
+			colCfg := indexColumns[0]
+			colInfo := colCfg.GetInfo()
+			column := dbTable.columnsMap[colInfo.Name]
+			if column == nil {
+				panic(fmt.Sprintf(`Table "%v": Indexes column "%v" was not found`, dbTable.name, colInfo.Name))
+			}
+
+			indexName := fmt.Sprintf(`%v__%v_index_1`, dbTable.name, column.GetName())
+			if _, exists := dbTable.indexes[indexName]; exists {
+				// Avoid duplicate index definitions if the same column is listed multiple times.
+				continue
+			}
+
+			index := &viewInfo{
+				Type:    2,
+				name:    indexName,
+				idx:     idxCount,
+				column:  column,
+				columns: []string{dbTable.GetPartKey().GetName(), column.GetName()},
+			}
+			index.getCreateScript = func() string {
+				colName := column.GetName()
+				if column.GetType().IsSlice {
+					colName = fmt.Sprintf("VALUES(%v)", colName)
+				}
+				// Local index: partition + column
+				return fmt.Sprintf(`CREATE INDEX %v ON %v ((%v),%v)`,
+					indexName, dbTable.GetFullName(), dbTable.GetPartKey().GetName(), colName)
+			}
+
+			idxCount++
+			dbTable.indexes[index.name] = index
+			continue
+		}
+
 		registerPackedIndex(&dbTable, &idxCount, indexColumns, packedIndexBuildConfig{
 			scope:               packedIndexScopeLocal,
 			schemaFieldName:     "Indexes",
