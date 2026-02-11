@@ -1,30 +1,27 @@
 <script lang="ts">
 import CheckboxOptions from '$components/CheckboxOptions.svelte';
-import Input from '$components/Input.svelte';
-import HTMLEditor from '$domain/HTMLEditor/HTMLEditor.svelte';
-import { ConfirmWarn, Loading, Notify } from '$libs/helpers';
-import { POST } from '$libs/http.svelte';
 import ImageUploader from '$components/ImageUploader.svelte';
+import Input from '$components/Input.svelte';
 import Layer from '$components/Layer.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
-import Page from '$domain/Page.svelte';
 import SearchCard from '$components/SearchCard.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import VTable from '$components/vTable/VTable.svelte';
-import { throttle } from '$libs/helpers';
 import { Core } from '$core/store.svelte';
-import { formatN } from '$libs/helpers';
+import HTMLEditor from '$domain/HTMLEditor/HTMLEditor.svelte';
+import Page from '$domain/Page.svelte';
+import { ConfirmWarn, formatN, Loading, Notify, throttle } from '$libs/helpers';
+import { POST } from '$libs/http.svelte';
 import Atributos from './Atributos.svelte';
 import CategoriasMarcas from './CategoriasMarcas.svelte';
-  import {
+import {
     ListasCompartidasService,
     postProducto,
-    productoAtributos,
     ProductosService,
     type IProducto,
-    type IProductoImage,
-  } from "./productos.svelte";
+    type IProductoImage
+} from "./productos.svelte";
 
   let filterText = $state("");
   const productos = new ProductosService();
