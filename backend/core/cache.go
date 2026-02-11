@@ -9,17 +9,17 @@ import (
 
 func ExtractCacheVersionValues(req *HandlerArgs) []db.IDCacheVersion {
 	idsStr := req.GetQuery("ids")
-	cidsStr := req.GetQuery("cids")
-	ccvStr := req.GetQuery("ccv")
+	cachedIDsStr := req.GetQuery("cids")
+	cacheVersionsFromIDsStr := req.GetQuery("ccv")
 
 	ids := parseConcatenatedInts(idsStr)
-	cachedIDs := parseConcatenatedInts(cidsStr)
-	cacheVersionsFromIDs := parseConcatenatedInts(ccvStr)
+	cachedIDs := parseConcatenatedInts(cachedIDsStr)
+	cacheVersionsFromIDs := parseConcatenatedInts(cacheVersionsFromIDsStr)
 
 	records := []db.IDCacheVersion{}
 
 	for _, id := range ids {
-		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: 0})
+		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: 0, PartitionID: req.Usuario.EmpresaID})
 	}
 
 	for i, id := range cachedIDs {
@@ -27,7 +27,7 @@ func ExtractCacheVersionValues(req *HandlerArgs) []db.IDCacheVersion {
 		if i < len(cacheVersionsFromIDs) {
 			version = uint8(cacheVersionsFromIDs[i])
 		}
-		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: version})
+		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: version, PartitionID: req.Usuario.EmpresaID})
 	}
 
 	Log("records extracted:", len(records))

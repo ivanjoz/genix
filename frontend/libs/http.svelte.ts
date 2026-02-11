@@ -315,7 +315,7 @@ const parseResponseAsStream = async (fetchResponse: Response, status: any, props
   }
 }
 
-export function GET(props: httpProps): Promise<any> {
+export const GET = (props: httpProps): Promise<any> => {
   const status: IHttpStatus = { code: 200, message: "" }
   const routeParsed = Env.makeRoute(props.route)
 

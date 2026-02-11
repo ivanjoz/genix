@@ -48,6 +48,22 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &productos)
 }
 
+func GetProductosByIDs(req *core.HandlerArgs) core.HandlerResponse {
+  cachedIDs := core.ExtractCacheVersionValues(req)
+	
+  if len(cachedIDs) == 0 {
+  	return req.MakeErr("No se enviaron ids a buscar.")
+  }  
+  
+  productos := []s.Producto{}
+  err := db.QueryCachedIDs(&productos, cachedIDs)
+  if err != nil {
+    return req.MakeErr("Error al obtener los productos.", err)
+  }
+  
+	return core.MakeResponse(req, &productos)
+}
+
 func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	productos := []s.Producto{}

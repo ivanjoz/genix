@@ -3,7 +3,6 @@ package db
 import (
 	"errors"
 	"fmt"
-	"math"
 	"reflect"
 	"sort"
 	"strings"
@@ -124,14 +123,6 @@ func nextCacheVersion(currentVersion uint8) uint8 {
 	return currentVersion + 1
 }
 
-func normalizePartitionID(rawPartitionID int64, tableName string) int32 {
-	// cache_version uses int32 partition IDs; source int64 partitions are normalized here.
-	if rawPartitionID > math.MaxInt32 || rawPartitionID < math.MinInt32 {
-		panic(fmt.Sprintf(`Table "%v": partition value %v overflows int32 for cache_version.`, tableName, rawPartitionID))
-	}
-	return int32(rawPartitionID)
-}
-
 func makeCacheVersionPackedID(partitionID int32, tableID int32) int64 {
 	// Lossless packing: high 32 bits = partition, low 32 bits = table hash ID.
 	return (int64(uint32(partitionID)) << 32) | int64(uint32(tableID))
@@ -216,7 +207,7 @@ func assignCacheVersionsToRecords[T any](
 		recordPtr := reflect.ValueOf(record)
 		rawRecordPtr := xunsafe.AsPointer(record)
 
-		partitionID := normalizePartitionID(convertToInt64(scyllaTable.cacheVersionPartitionCol.GetRawValue(rawRecordPtr)), scyllaTable.name)
+		partitionID := convertToInt32(scyllaTable.cacheVersionPartitionCol.GetRawValue(rawRecordPtr))
 		recordID := convertToInt64(scyllaTable.cacheVersionKeyCol.GetRawValue(rawRecordPtr))
 		cacheGroupID := uint8(recordID)
 		packedID := makeCacheVersionPackedID(partitionID, tableID)
@@ -246,7 +237,7 @@ func updateCacheVersionsAfterWrite[T any](records *[]T, scyllaTable ScyllaTable[
 		record := &(*records)[i]
 		rawRecordPtr := xunsafe.AsPointer(record)
 
-		partitionID := normalizePartitionID(convertToInt64(scyllaTable.cacheVersionPartitionCol.GetRawValue(rawRecordPtr)), scyllaTable.name)
+		partitionID := convertToInt32(scyllaTable.cacheVersionPartitionCol.GetRawValue(rawRecordPtr))
 		recordID := convertToInt64(scyllaTable.cacheVersionKeyCol.GetRawValue(rawRecordPtr))
 		cacheGroupID := uint8(recordID)
 		packedID := makeCacheVersionPackedID(partitionID, tableID)
@@ -292,7 +283,7 @@ func assignCacheVersionsAfterSelect[T any](records *[]T, scyllaTable ScyllaTable
 	for i := range *records {
 		record := &(*records)[i]
 		rawRecordPtr := xunsafe.AsPointer(record)
-		partitionID := normalizePartitionID(convertToInt64(scyllaTable.cacheVersionPartitionCol.GetRawValue(rawRecordPtr)), scyllaTable.name)
+		partitionID := convertToInt32(scyllaTable.cacheVersionPartitionCol.GetRawValue(rawRecordPtr))
 		packedID := makeCacheVersionPackedID(partitionID, tableID)
 
 		if _, exists := cacheVersionByPackedID[packedID]; exists {
@@ -339,5 +330,150 @@ func ensureCacheVersionColumnsForSelect(columnNames []string, scyllaTable Scylla
 /* Selecting The Version */
 type IDCacheVersion struct {
 	ID           int64
+	PartitionID  int32
 	CacheVersion uint8
+}
+
+// Only return records whose server cache version differs from the client-provided version.
+func QueryCachedIDs[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSlice *[]T, cachedIDs []IDCacheVersion) error {
+	if len(cachedIDs) == 0 {
+		fmt.Println("QueryCachedIDs: empty request, nothing to process")
+		return nil
+	}
+
+	scyllaTable := MakeScyllaTable[T, E]()
+	if !shouldUseCacheVersionFeature(scyllaTable) {
+		return fmt.Errorf(`Table "%v": QueryCachedIDs requires SaveCacheVersion enabled`, scyllaTable.name)
+	}
+
+	if len(scyllaTable.keyspace) == 0 {
+		scyllaTable.keyspace = connParams.Keyspace
+	}
+	if len(scyllaTable.keyspace) == 0 {
+		return errors.New("QueryCachedIDs: no keyspace configured")
+	}
+
+	partitionColumn := scyllaTable.cacheVersionPartitionCol
+	if partitionColumn == nil || partitionColumn.IsNil() {
+		return fmt.Errorf(`Table "%v": QueryCachedIDs cache-version partition metadata missing`, scyllaTable.name)
+	}
+	keyColumn := scyllaTable.cacheVersionKeyCol
+	if keyColumn == nil || keyColumn.IsNil() {
+		return fmt.Errorf(`Table "%v": QueryCachedIDs cache-version key metadata missing`, scyllaTable.name)
+	}
+
+	// Keep client versions by partition+id so equal IDs in different partitions are isolated.
+	clientVersionByPartitionAndID := map[int32]map[int64]uint8{}
+	uniqueIDsByPartition := map[int32]map[int64]struct{}{}
+	incomingIDsByPartition := map[int32][]int64{}
+
+	for _, cachedID := range cachedIDs {
+		partitionID := convertToInt32(cachedID.PartitionID)
+		if _, exists := uniqueIDsByPartition[partitionID]; !exists {
+			uniqueIDsByPartition[partitionID] = map[int64]struct{}{}
+			clientVersionByPartitionAndID[partitionID] = map[int64]uint8{}
+		}
+		uniqueIDsByPartition[partitionID][cachedID.ID] = struct{}{}
+		clientVersionByPartitionAndID[partitionID][cachedID.ID] = cachedID.CacheVersion
+		incomingIDsByPartition[partitionID] = append(incomingIDsByPartition[partitionID], cachedID.ID)
+	}
+	fmt.Println("QueryCachedIDs: incoming IDs by partition:", incomingIDsByPartition)
+
+	if len(uniqueIDsByPartition) == 0 {
+		fmt.Println("QueryCachedIDs: no unique IDs after normalization")
+		return nil
+	}
+
+	columnNames := make([]string, 0, len(scyllaTable.columns))
+	for _, column := range scyllaTable.columns {
+		if column.GetInfo().IsVirtual {
+			continue
+		}
+		columnNames = append(columnNames, column.GetName())
+	}
+	columnNames = ensureCacheVersionColumnsForSelect(columnNames, scyllaTable)
+
+	recordsToFetchByPartition := map[int32]map[int64]struct{}{}
+	fullyCachedIDsByPartition := map[int32][]int64{}
+	cacheVersionByPackedID := map[int64]map[uint8]uint8{}
+
+	// Phase 1: compare client versions against cache_version table, without touching the main table.
+	tableID := BasicHashInt(scyllaTable.name)
+	for partitionID, idsSet := range uniqueIDsByPartition {
+		packedID := makeCacheVersionPackedID(partitionID, tableID)
+		cacheVersionByGroup, err := getCacheVersionsByPackedID(scyllaTable.keyspace, packedID)
+		if err != nil {
+			return err
+		}
+		cacheVersionByPackedID[packedID] = cacheVersionByGroup
+
+		for recordID := range idsSet {
+			groupID := uint8(recordID)
+			serverVersion := uint8(1)
+			if currentVersion, exists := cacheVersionByGroup[groupID]; exists {
+				serverVersion = currentVersion
+			}
+			clientVersion := clientVersionByPartitionAndID[partitionID][recordID]
+			if clientVersion == serverVersion {
+				fullyCachedIDsByPartition[partitionID] = append(fullyCachedIDsByPartition[partitionID], recordID)
+				continue
+			}
+			if _, exists := recordsToFetchByPartition[partitionID]; !exists {
+				recordsToFetchByPartition[partitionID] = map[int64]struct{}{}
+			}
+			recordsToFetchByPartition[partitionID][recordID] = struct{}{}
+		}
+	}
+
+	idsSelectedFromTableByPartition := map[int32][]int64{}
+	for partitionID, recordIDSet := range recordsToFetchByPartition {
+		for recordID := range recordIDSet {
+			idsSelectedFromTableByPartition[partitionID] = append(idsSelectedFromTableByPartition[partitionID], recordID)
+		}
+	}
+	fmt.Println("QueryCachedIDs: fully cached IDs by partition:", fullyCachedIDsByPartition)
+	fmt.Println("QueryCachedIDs: IDs selected from table by partition:", idsSelectedFromTableByPartition)
+
+	if len(recordsToFetchByPartition) == 0 {
+		fmt.Println("QueryCachedIDs: all IDs resolved from cache_version, skipping table select")
+		return nil
+	}
+
+	fetchedRecords := []T{}
+
+	// Phase 2: fetch only records that actually mismatched (or all if feature disabled).
+	for partitionID, recordIDSet := range recordsToFetchByPartition {
+		if len(recordIDSet) == 0 {
+			continue
+		}
+
+		queryValues := make([]any, 0, len(recordIDSet)+1)
+		valuePlaceholders := make([]string, 0, len(recordIDSet))
+		queryValues = append(queryValues, partitionID)
+		for recordID := range recordIDSet {
+			queryValues = append(queryValues, recordID)
+			valuePlaceholders = append(valuePlaceholders, "?")
+		}
+
+		// Query each partition independently to preserve partition semantics and avoid cross-partition ambiguity.
+		queryString := fmt.Sprintf(
+			"SELECT %v FROM %v.%v WHERE %v = ? AND %v IN (%v)",
+			strings.Join(columnNames, ", "),
+			scyllaTable.keyspace,
+			scyllaTable.name,
+			partitionColumn.GetName(),
+			keyColumn.GetName(),
+			strings.Join(valuePlaceholders, ", "),
+		)
+
+		if err := scanSelectQueryRows(queryString, queryValues, columnNames, scyllaTable, &fetchedRecords, nil); err != nil {
+			return err
+		}
+	}
+
+	// Reuse already-loaded cache_version state to set ccv on fetched rows.
+	assignCacheVersionsToRecords(&fetchedRecords, scyllaTable, cacheVersionByPackedID)
+
+	*refSlice = append(*refSlice, fetchedRecords...)
+	return nil
 }

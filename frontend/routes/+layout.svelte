@@ -17,6 +17,7 @@ import { Core, getDeviceType } from '$core/store.svelte';
 import ImageWorker from '$libs/workers/image-worker?worker';
 import { Env } from '$core/env';
 import { initWebRTC, webRTCManager } from '$libs/webrtc/manager';
+import { testRecordsByIDs } from "../demo/records-by-id.svelte"
 
 	let { children } = $props();
 
@@ -53,6 +54,8 @@ import { initWebRTC, webRTCManager } from '$libs/webrtc/manager';
 
 	onMount(() => {
 		if(redirectsToLogin){ Env.navigate("/login") }
+		
+		testRecordsByIDs()
 	})
 
 	$effect(() => {

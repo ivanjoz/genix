@@ -306,6 +306,102 @@ func recordMatchesPostFilter(ptr unsafe.Pointer, statements []ColumnStatement, s
 	return true
 }
 
+func scanSelectQueryRows[E any](
+	queryStr string,
+	queryValues []any,
+	columnNames []string,
+	scyllaTable ScyllaTable[any],
+	refRecords *[]E,
+	postFilterStatements []ColumnStatement,
+) error {
+	usePostFilter := len(postFilterStatements) > 0
+
+	doScan := func() error {
+		iter := getScyllaConnection().Query(queryStr, queryValues...).Iter()
+		rd, err := iter.RowData()
+		if err != nil {
+			fmt.Println("Error on RowData::", err)
+			if strings.Contains(err.Error(), "use ALLOW FILTERING") {
+				fmt.Println("Posible Indexes or Views::")
+				for _, capability := range scyllaTable.capabilities {
+					fmt.Println(capability.Signature)
+				}
+			}
+			return err
+		}
+
+		scanner := iter.Scanner()
+		fmt.Println("starting iterator | columns::", len(scyllaTable.columns))
+
+		for scanner.Next() {
+			rowValues := rd.Values
+			if err := scanner.Scan(rowValues...); err != nil {
+				fmt.Println("Error on scan::", err)
+				return err
+			}
+
+			record := new(E)
+			recordPtr := xunsafe.AsPointer(record)
+			shouldLog := ShouldLog()
+
+			if shouldLog {
+				fmt.Printf("\n--- Scanning record %d ---\n", atomic.LoadUint32(&LogCount)+1)
+			}
+
+			// Map each scanned DB column into the destination struct using precomputed column metadata.
+			for columnIndex, columnName := range columnNames {
+				column := scyllaTable.columnsMap[columnName]
+				value := rowValues[columnIndex]
+
+				if shouldLog {
+					valueText := "nil"
+					if value != nil {
+						valueText = fmt.Sprintf("%v", reflect.Indirect(reflect.ValueOf(value)).Interface())
+					}
+					offset := uintptr(0)
+					if column.GetInfo().Field != nil {
+						offset = column.GetInfo().Field.Offset
+					}
+					fmt.Printf("Col: %-20s (Field: %-20s) | Offset: %-4d | DB Value: %s\n", columnName, column.GetInfo().FieldName, offset, valueText)
+				}
+
+				if value == nil {
+					continue
+				}
+				if shouldLog {
+					fmt.Printf("Calling SetValue for Col: %s\n", columnName)
+				}
+				column.SetValue(recordPtr, value)
+			}
+
+			if shouldLog {
+				recordJSON, _ := json.MarshalIndent(record, "", "  ")
+				fmt.Printf("Resulting Struct: %s\n", string(recordJSON))
+				IncrementLogCount()
+			}
+
+			// Post-filter keeps exact semantics when indexed query planning intentionally overfetches.
+			if usePostFilter && !recordMatchesPostFilter(xunsafe.AsPointer(record), postFilterStatements, scyllaTable) {
+				continue
+			}
+
+			*refRecords = append(*refRecords, *record)
+		}
+
+		return nil
+	}
+
+	err := doScan()
+	if err != nil && strings.Contains(err.Error(), "no hosts available") {
+		scyllaSession = nil
+		fmt.Println("Reconectando con ScyllaDB...")
+		getScyllaConnection()
+		err = doScan()
+	}
+
+	return err
+}
+
 func tryBuildCompositeBucketPlan(statements []ColumnStatement, scyllaTable ScyllaTable[any]) *compositeBucketQueryPlan {
 	// Build a specialized plan for HashIndexes+CompositeBucketing before generic capability matching.
 	partitionColumn := scyllaTable.GetPartKey()
@@ -834,88 +930,16 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 	for i, whereStatement := range queryWhereStatements {
 		queryStr := fmt.Sprintf(queryTemplate, scyllaTable.keyspace, viewTableName, whereStatement)
 		records := recordsMap[i]
+		recordsTarget := records
+		if len(queryWhereStatements) == 1 {
+			recordsTarget = recordsGetted
+		}
 
 		fmt.Println("Query::", queryStr)
-		doScan := func() error {
-			iter := getScyllaConnection().Query(queryStr).Iter()
-			rd, err := iter.RowData()
-			if err != nil {
-				fmt.Println("Error on RowData::", err)
-				if strings.Contains(err.Error(), "use ALLOW FILTERING") {
-					fmt.Println("Posible Indexes or Views::")
-					for _, e := range scyllaTable.capabilities {
-						fmt.Println(e.Signature)
-					}
-				}
-				return err
-			}
-
-			scanner := iter.Scanner()
-			fmt.Println("starting iterator | columns::", len(scyllaTable.columns))
-
-			rowCount := 0
-			for scanner.Next() {
-				rowCount++
-
-				rowValues := rd.Values
-
-				if err := scanner.Scan(rowValues...); err != nil {
-					fmt.Println("Error on scan::", err)
-					return err
-				}
-
-				rec := new(E)
-				ptr := xunsafe.AsPointer(rec)
-				shouldLog := ShouldLog()
-
-				if shouldLog {
-					fmt.Printf("\n--- Scanning record %d ---\n", atomic.LoadUint32(&LogCount)+1)
-				}
-
-				for idx, colname := range columnNames {
-					column := scyllaTable.columnsMap[colname]
-					value := rowValues[idx]
-
-					if shouldLog {
-						valStr := "nil"
-						if value != nil {
-							valStr = fmt.Sprintf("%v", reflect.Indirect(reflect.ValueOf(value)).Interface())
-						}
-						offset := uintptr(0)
-						if column.GetInfo().Field != nil {
-							offset = column.GetInfo().Field.Offset
-						}
-						fmt.Printf("Col: %-20s (Field: %-20s) | Offset: %-4d | DB Value: %s\n", colname, column.GetInfo().FieldName, offset, valStr)
-					}
-
-					if value == nil {
-						continue
-					}
-					if shouldLog {
-						fmt.Printf("Calling SetValue for Col: %s\n", colname)
-					}
-					column.SetValue(ptr, value)
-				}
-
-				if shouldLog {
-					recJSON, _ := json.MarshalIndent(rec, "", "  ")
-					fmt.Printf("Resulting Struct: %s\n", string(recJSON))
-					IncrementLogCount()
-				}
-
-				if usePostFilter {
-					if !recordMatchesPostFilter(xunsafe.AsPointer(rec), postFilterStatements, scyllaTable) {
-						continue
-					}
-				}
-
-				if len(queryWhereStatements) == 1 {
-					(*recordsGetted) = append((*recordsGetted), *rec)
-				} else {
-					(*records) = append((*records), *rec)
-				}
-			}
-			return nil
+		queryValues := []any{}
+		queryPostFilterStatements := []ColumnStatement{}
+		if usePostFilter {
+			queryPostFilterStatements = postFilterStatements
 		}
 
 		eg.Go(func() (err error) {
@@ -925,15 +949,7 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 				}
 			}()
 
-			err = doScan()
-			if err != nil {
-				if strings.Contains(err.Error(), "no hosts available") {
-					scyllaSession = nil
-					fmt.Println("Reconectando con ScyllaDB...")
-					getScyllaConnection()
-					err = doScan()
-				}
-			}
+			err = scanSelectQueryRows(queryStr, queryValues, columnNames, scyllaTable, recordsTarget, queryPostFilterStatements)
 			return err
 		})
 	}

@@ -251,6 +251,26 @@ func convertToInt64(val any) int64 {
 	}
 }
 
+func convertToInt32(val any) int32 {
+	// Use a type assertion to check if it's an int or other integer types
+	switch v := val.(type) {
+	case int:
+		return int32(v)
+	case int8:
+		return int32(v)
+	case int16:
+		return int32(v)
+	case int32:
+		return v
+	case int64:
+		return int32(v)
+	default:
+		// The value is not an integer
+		fmt.Println("Error: Value is not an integer:", v)
+		return 0
+	}
+}
+
 func Pow10Int64(m int64) int64 {
 	if m == 0 {
 		return 1

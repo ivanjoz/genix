@@ -1,3 +1,5 @@
+import { GET } from './http.svelte'
+
 /**
  * Goal:
  * Resolve records by IDs using a 3-layer strategy:
@@ -7,7 +9,7 @@
 import { concatenateInts } from "./funcs/parsers"
 import { readRecordsFromIDBByIDs, upsertRecordsIntoIDB } from "./cache-by-ids.idb"
 
-const CACHE_TIME = 60
+const CACHE_TIME = 5
 
 export interface IMinimalRecord {
 	ID: number /* ID f the record */ 
@@ -21,17 +23,37 @@ const tableIDRecordCache: Map<string,Map<number,IMinimalRecord>> = new Map()
 const LOG_PREFIX = "[cache-by-ids]"
 
 export type CacheByIDsFetchFromServer = <T extends IMinimalRecord>(
-	tableName: string,
+	apiRoute: string,
 	uriParams: string,
 ) => Promise<T[]>
 
 // Configure this from your app when the backend endpoint is ready.
 let fetchFromServer: CacheByIDsFetchFromServer = async <T extends IMinimalRecord>(
-	tableName: string,
+	apiRoute: string,
 	uriParams: string,
 ): Promise<T[]> => {
-	console.debug(`${LOG_PREFIX} No fetcher configured. Skipping server fetch.`, { tableName, uriParams })
-	return []
+	try {
+		// `apiRoute` is treated as the backend route (example: `productos-ids`).
+		const responsePayload = await GET({ route: `${apiRoute}?${uriParams}` })
+
+		// Support both raw array responses and wrapped `{ records: [...] }` payloads.
+		if (Array.isArray(responsePayload)) return responsePayload as T[]
+		if (Array.isArray(responsePayload?.records)) return responsePayload.records as T[]
+
+		console.warn(`${LOG_PREFIX} Unexpected server response shape. Returning empty list.`, {
+			apiRoute,
+			uriParams,
+			responsePayload,
+		})
+		return []
+	} catch (serverFetchError) {
+		console.warn(`${LOG_PREFIX} Failed to fetch records from server. Returning empty list.`, {
+			apiRoute,
+			uriParams,
+			serverFetchError,
+		})
+		return []
+	}
 }
 
 export const configureCacheByIDs = (fetcher: CacheByIDsFetchFromServer) => {
@@ -40,11 +62,11 @@ export const configureCacheByIDs = (fetcher: CacheByIDsFetchFromServer) => {
 
 const nowSeconds = () => Math.floor(Date.now() / 1000)
 
-const getOrCreateTableCache = (tableName: string): Map<number, IMinimalRecord> => {
-	const existingTableCache = tableIDRecordCache.get(tableName)
+const getOrCreateTableCache = (apiRoute: string): Map<number, IMinimalRecord> => {
+	const existingTableCache = tableIDRecordCache.get(apiRoute)
 	if (existingTableCache) return existingTableCache
 	const createdTableCache = new Map<number, IMinimalRecord>()
-	tableIDRecordCache.set(tableName, createdTableCache)
+	tableIDRecordCache.set(apiRoute, createdTableCache)
 	return createdTableCache
 }
 
@@ -64,18 +86,18 @@ const summarizeIDs = (ids: number[]) => {
 	return `${ids.slice(0, 10).join(",")} ... (+${ids.length - 10})`
 }
 
-export const getRecordsByIDs = async <T extends IMinimalRecord>(tableName: string, ids: number[]): Promise<T[]> => {
+export const getRecordsByIDs = async <T extends IMinimalRecord>(apiRoute: string, ids: number[]): Promise<T[]> => {
 	// Normalize early to avoid duplicated work and to keep deterministic order.
 	const normalizedSortedIDs = normalizeIDs(ids)
 	const currentTimeSeconds = nowSeconds()
 
 	console.debug(`${LOG_PREFIX} getRecordsByIDs start.`, {
-		tableName,
+		apiRoute,
 		idsCount: normalizedSortedIDs.length,
 		ids: summarizeIDs(normalizedSortedIDs),
 	})
 
-	const tableCache = getOrCreateTableCache(tableName)
+	const tableCache = getOrCreateTableCache(apiRoute)
 
 	// Classify each requested ID into:
 	// - missing cache (needs IDB lookup),
@@ -112,12 +134,12 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(tableName: strin
 	// Resolve all memory misses from persistent cache in one batch read.
 	if (idsMissingFromMemoryCache.length > 0) {
 		console.debug(`${LOG_PREFIX} Reading from IndexedDB.`, {
-			tableName,
+			apiRoute,
 			idsCount: idsMissingFromMemoryCache.length,
 			ids: summarizeIDs(idsMissingFromMemoryCache),
 		})
 
-		const idbRecordsByID = await readRecordsFromIDBByIDs<T>(tableName, idsMissingFromMemoryCache)
+		const idbRecordsByID = await readRecordsFromIDBByIDs<T>(apiRoute, idsMissingFromMemoryCache)
 
 		for (const id of idsMissingFromMemoryCache) {
 			const idbRecord = idbRecordsByID.get(id)
@@ -164,7 +186,7 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(tableName: strin
 		(recordsWitoutCache.length > 0 || staleCachedRecordsCount > 0) && uriParams.length > 0
 
 	console.debug(`${LOG_PREFIX} Cache partitioned.`, {
-		tableName,
+		apiRoute,
 		recordsWitoutCacheCount: recordsWitoutCache.length,
 		recordsCachedCount: recordsCachedIDs.length,
 		staleCachedRecordsCount,
@@ -174,10 +196,10 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(tableName: strin
 	let updatedOrNewRecordsFromServer: T[] = []
 	if (shouldFetchFromServer) {
 		try {
-			console.log(`${LOG_PREFIX} Fetching from server.`, { tableName, uriParams })
-			updatedOrNewRecordsFromServer = await fetchFromServer<T>(tableName, uriParams)
+			console.log(`${LOG_PREFIX} Fetching from server.`, { apiRoute, uriParams })
+			updatedOrNewRecordsFromServer = await fetchFromServer<T>(apiRoute, uriParams)
 			console.log(`${LOG_PREFIX} Server response received.`, {
-				tableName,
+				apiRoute,
 				recordsCount: updatedOrNewRecordsFromServer.length,
 			})
 		} catch (error) {
@@ -204,7 +226,7 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(tableName: strin
 		}
 
 		// Persist merged changes so next page load can hit IDB before network.
-		await upsertRecordsIntoIDB<T>(tableName, updatedOrNewRecordsFromServer)
+		await upsertRecordsIntoIDB<T>(apiRoute, updatedOrNewRecordsFromServer)
 	}
 
 	// Final read is stable by requested ID order; tombstones remain hidden.
@@ -217,7 +239,7 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(tableName: strin
 	}
 
 	console.debug(`${LOG_PREFIX} getRecordsByIDs done.`, {
-		tableName,
+		apiRoute,
 		requestedCount: normalizedSortedIDs.length,
 		returnedCount: resolvedRecords.length,
 	})
@@ -246,10 +268,10 @@ const flushBufferedRequests = async () => {
 	}
 
 	// Snapshot and clear current buffer so new calls can start a fresh window.
-	const idsByTableToFetch: Array<{ tableName: string; ids: number[] }> = []
-	for (const [tableName, idsSet] of recordIDsBufferByTable) {
+	const idsByTableToFetch: Array<{ apiRoute: string; ids: number[] }> = []
+	for (const [apiRoute, idsSet] of recordIDsBufferByTable) {
 		if (idsSet.size === 0) continue
-		idsByTableToFetch.push({ tableName, ids: Array.from(idsSet) })
+		idsByTableToFetch.push({ apiRoute, ids: Array.from(idsSet) })
 		idsSet.clear()
 	}
 
@@ -260,14 +282,14 @@ const flushBufferedRequests = async () => {
 		tablesCount: idsByTableToFetch.length,
 	})
 
-	for (const { tableName, ids } of idsByTableToFetch) {
+	for (const { apiRoute, ids } of idsByTableToFetch) {
 		try {
 			// One batched call per table, then fan out by ID.
-			const records = await getRecordsByIDs<any>(tableName, ids)
+			const records = await getRecordsByIDs<any>(apiRoute, ids)
 			const recordsByID = new Map<number, any>(records.map((record) => [record.ID, record]))
 
 			for (const id of ids) {
-				const key = `${tableName}:${id}`
+				const key = `${apiRoute}:${id}`
 				const pending = bufferedResolversByTableAndID.get(key)
 				if (!pending) continue
 				bufferedResolversByTableAndID.delete(key)
@@ -275,9 +297,9 @@ const flushBufferedRequests = async () => {
 				pending.resolve(recordsByID.get(id) || null)
 			}
 		} catch (error) {
-			console.warn(`${LOG_PREFIX} Buffered fetch failed. Rejecting pending promises.`, { tableName }, error)
+			console.warn(`${LOG_PREFIX} Buffered fetch failed. Rejecting pending promises.`, { apiRoute }, error)
 			for (const id of ids) {
-				const key = `${tableName}:${id}`
+				const key = `${apiRoute}:${id}`
 				const pending = bufferedResolversByTableAndID.get(key)
 				if (!pending) continue
 				bufferedResolversByTableAndID.delete(key)
@@ -289,22 +311,22 @@ const flushBufferedRequests = async () => {
 }
 
 export const getRecordByID = async <T extends IMinimalRecord>(
-	tableName: string,
+	apiRoute: string,
 	id: number,
 ): Promise<T | null> => {
 	const numericID = Number(id)
 	if (!Number.isFinite(numericID) || numericID <= 0) return null
 
-	const promiseKey = `${tableName}:${numericID}`
+	const promiseKey = `${apiRoute}:${numericID}`
 	const existingPromise = bufferedPromiseByTableAndID.get(promiseKey)
 	if (existingPromise) return existingPromise as Promise<T | null>
 
 	if (!bufferStarTime) bufferStarTime = Date.now()
 
-	let idsBuffer = recordIDsBufferByTable.get(tableName)
+	let idsBuffer = recordIDsBufferByTable.get(apiRoute)
 	if (!idsBuffer) {
 		idsBuffer = new Set()
-		recordIDsBufferByTable.set(tableName, idsBuffer)
+		recordIDsBufferByTable.set(apiRoute, idsBuffer)
 	}
 	idsBuffer.add(numericID)
 
