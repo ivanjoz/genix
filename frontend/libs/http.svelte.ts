@@ -7,6 +7,9 @@ import { fetchCache, fetchCacheParsed, sendServiceMessage } from '$libs/sw-cache
 import { browser } from "$app/environment";
 import { unmarshall } from '$libs/funcs/unmarshall';
 import { Env } from '$core/env';
+import {  ConcatenateIntsTest } from "./funcs/parsers"
+
+ConcatenateIntsTest()
 
 export interface IHttpStatus { code: number, message: string }
 

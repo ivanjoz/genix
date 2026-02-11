@@ -266,6 +266,11 @@ func Insert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		return err
 	}
 
+	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
+		fmt.Println("Error updating cache versions after insert:", err)
+		return err
+	}
+
 	return nil
 }
 
@@ -462,6 +467,13 @@ func Update[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		fmt.Println("Error updating records:", err)
 		return err
 	}
+
+	refTable := initStructTable[E, T](new(E))
+	scyllaTable := makeTable(refTable)
+	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
+		fmt.Println("Error updating cache versions after update:", err)
+		return err
+	}
 	return nil
 }
 
@@ -481,6 +493,13 @@ func UpdateExclude[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	if err := QueryExec(queryInsert); err != nil {
 		fmt.Println(queryInsert)
 		fmt.Println("Error inserting records:", err)
+		return err
+	}
+
+	refTable := initStructTable[E, T](new(E))
+	scyllaTable := makeTable(refTable)
+	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
+		fmt.Println("Error updating cache versions after update-exclude:", err)
 		return err
 	}
 	return nil

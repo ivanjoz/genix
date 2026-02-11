@@ -26,6 +26,7 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[s.Parametros](),
 		makeDBController[s.SystemParameters](),
 		makeDBController[comercial.SaleOrder](),
+		makeDBController[db.CacheVersion](),
 		makeDBController[DemoStruct](),
 		//	makeDBController[s.Increment](),
 	}

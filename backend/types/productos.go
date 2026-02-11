@@ -60,6 +60,7 @@ type Producto struct {
 	CreatedBy int32 `json:",omitempty" db:"created_by"`
 	/* concatenada con la Empresa-ID para ser indexadas*/
 	CategoriasConStock []int32 `json:",omitempty" db:"categorias_con_stock,gindex"`
+	CacheVersion uint8 `json:"ccv,omitempty"`
 }
 
 type ProductoTable struct {
@@ -112,6 +113,7 @@ func (e ProductoTable) GetSchema() db.TableSchema {
 		Name:          "productos",
 		Partition:     e.EmpresaID,
 		UseSequences:  true,
+		SaveCacheVersion: true,
 		Keys:          []db.Coln{e.ID.Autoincrement(0)},
 		GlobalIndexes: [][]db.Coln{{ e.CategoriasConStock }},
 		ViewsDeprecated: []db.View{

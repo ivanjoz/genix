@@ -204,6 +204,9 @@ func UnixToSunix(unixTime int64) int32 {
 func SunixToUnix(sunixTime int32) int64 {
 	return (int64(sunixTime) + 1e9) * 2
 }
+func SUnix5Min() int32 {
+	return int32((time.Now().Unix() - 1e9) / (60*5))
+}
 
 // Makes an UUID based on SUnixTime in milliseconds and random 3 last digits
 func SUnixTimeUUID() int64 {

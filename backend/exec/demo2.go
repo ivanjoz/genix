@@ -2,7 +2,7 @@ package exec
 
 import (
 	"app/aws"
-	comercial "app/comercial/types"
+	// comercial "app/comercial/types"
 	"app/core"
 	"app/db"
 	"app/handlers"
@@ -128,9 +128,12 @@ func Test40(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test41(args *core.ExecArgs) core.FuncResponse {
-
+	/* 
 	controller := makeDBController[comercial.SaleOrder]()
 	controller.ReloadRecords(1)
+	*/
+	
+	core.Log(core.SUnix5Min())
 	
 	return core.FuncResponse{}
 }

@@ -32,22 +32,24 @@ type IColInfo interface {
 }
 
 type ScyllaTable[T any] struct {
-	name            string
-	keyspace        string
-	keys            []IColInfo
-	partKey         IColInfo
-	keysIdx         []int16
-	columns         []IColInfo
-	columnsMap      map[string]IColInfo
-	columnsIdxMap   map[int16]IColInfo
-	indexes         map[string]*viewInfo
-	views           map[string]*viewInfo
-	indexViews      []*viewInfo
-	ViewsExcluded   []string
-	useSequences    bool
-	sequencePartCol IColInfo
-	keyConcatenated []IColInfo
-	keyIntPacking   []IColInfo
+	name     string
+	keyspace string
+	keys     []IColInfo
+	partKey  IColInfo
+	// saveCacheVersion enables cache-version hooks on insert/update/select for this table.
+	saveCacheVersion bool
+	keysIdx          []int16
+	columns          []IColInfo
+	columnsMap       map[string]IColInfo
+	columnsIdxMap    map[int16]IColInfo
+	indexes          map[string]*viewInfo
+	views            map[string]*viewInfo
+	indexViews       []*viewInfo
+	ViewsExcluded    []string
+	useSequences     bool
+	sequencePartCol  IColInfo
+	keyConcatenated  []IColInfo
+	keyIntPacking    []IColInfo
 	// packedIndexes stores metadata for packed indexes declared in schema (local and global).
 	packedIndexes     []*packedIndexInfo
 	autoincrementPart IColInfo
@@ -129,6 +131,7 @@ type TableSchema struct {
 	KeyConcatenated   []Coln
 	KeyIntPacking     []Coln
 	AutoincrementPart Coln
+	SaveCacheVersion  bool
 }
 
 func (q ColumnStatement) GetValue() any {
@@ -699,22 +702,6 @@ func (e IncrementTable) GetSchema() TableSchema {
 	}
 }
 
-// Deprecated: use GetCounter standalone function
-func (e *TableStruct[T, E]) GetCounter(
-	increment int, partValue any, secondPartValue ...any,
-) (int64, error) {
-
-	secondPartValue_ := any(0)
-	if len(secondPartValue) > 0 {
-		secondPartValue_ = secondPartValue[0]
-	}
-
-	scyllaTable := e.MakeScyllaTable()
-	name := fmt.Sprintf("x%v_%v_%v", partValue, scyllaTable.name, secondPartValue_)
-
-	return GetCounter(strings.Split(scyllaTable.GetFullName(), ".")[0], name, increment)
-}
-
 func GetCounter(keyspace string, name string, increment int) (int64, error) {
 	result := []Increment{}
 
@@ -745,70 +732,25 @@ type SeqValue struct {
 	SeqPart int64 `db:"seq_part"`
 }
 
-func (e ScyllaController[T, E]) ResetCounter(partValue any) error {
+/* CacheVersion Table */
+type CacheVersion struct {
+	TableStruct[CacheVersionTable, CacheVersion]
+	Partition    int32
+	TableID      int32
+	CachedValues []byte
+}
 
-	scyllaTable := e.GetTable()
-	if !scyllaTable.useSequences {
-		return nil
+type CacheVersionTable struct {
+	TableStruct[CacheVersionTable, CacheVersion]
+	Partition    Col[CacheVersionTable, int32]
+	TableID      Col[CacheVersionTable, int32]
+	CachedValues Col[CacheVersionTable, []byte]
+}
+
+func (e CacheVersionTable) GetSchema() TableSchema {
+	return TableSchema{
+		Name:      "cache_version",
+		Partition: e.Partition,
+		Keys:      []Coln{e.TableID},
 	}
-
-	seqValues := []SeqValue{}
-
-	if scyllaTable.sequencePartCol == nil {
-
-		maxValue := int64(0)
-
-		queryMax := fmt.Sprintf(
-			`SELECT max(%v) as id FROM %v WHERE %v = %v`,
-			scyllaTable.keys[0].GetName(),
-			scyllaTable.GetFullName(),
-			scyllaTable.partKey.GetName(),
-			partValue)
-
-		if err := getScyllaConnection().Query(queryMax).Scan(&maxValue); err != nil {
-			fmt.Println("Error al obtener el valor máximo (posiblemente tabla vacía): ", err)
-		}
-
-		seqValues = append(seqValues, SeqValue{ID: maxValue})
-
-	} else {
-
-		queryMax := fmt.Sprintf(
-			`SELECT max(%v) as id, %v as seq_part FROM %v WHERE %v = %v GROUP BY %v ALLOW FILTERING`,
-			scyllaTable.keys[0].GetName(),
-			scyllaTable.sequencePartCol.GetName(),
-			scyllaTable.GetFullName(),
-			scyllaTable.partKey.GetName(),
-			partValue,
-			scyllaTable.sequencePartCol.GetName())
-
-		iter := getScyllaConnection().Query(queryMax).Iter()
-		var id int64
-		var seqPart int64
-		for iter.Scan(&id, &seqPart) {
-			seqValues = append(seqValues, SeqValue{ID: id, SeqPart: seqPart})
-		}
-		if err := iter.Close(); err != nil {
-			fmt.Println("Error al obtener los valores máximos agrupados: ", err)
-		}
-	}
-
-	for _, seqValue := range seqValues {
-		name := fmt.Sprintf("x%v_%v_%v", partValue, scyllaTable.name, seqValue.SeqPart)
-		keyspace := strings.Split(scyllaTable.GetFullName(), ".")[0]
-
-		queryUpdateStr := fmt.Sprintf(
-			"UPDATE %v.sequences SET current_value = current_value + %v WHERE name = '%v'",
-			keyspace, seqValue.ID, name,
-		)
-
-		fmt.Println(queryUpdateStr)
-
-		if err := QueryExec(queryUpdateStr); err != nil {
-			fmt.Println(queryUpdateStr)
-			panic(err)
-		}
-	}
-
-	return nil
 }

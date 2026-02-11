@@ -267,14 +267,15 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	}
 
 	dbTable := ScyllaTable[any]{
-		keyspace:      schema.Keyspace,
-		name:          schema.Name,
-		columnsMap:    map[string]IColInfo{},
-		columnsIdxMap: map[int16]IColInfo{},
-		indexes:       map[string]*viewInfo{},
-		views:         map[string]*viewInfo{},
-		useSequences:  schema.UseSequences,
-		_maxColIdx:    int16(structRefValue.NumField()) + 1,
+		keyspace:         schema.Keyspace,
+		name:             schema.Name,
+		saveCacheVersion: schema.SaveCacheVersion,
+		columnsMap:       map[string]IColInfo{},
+		columnsIdxMap:    map[int16]IColInfo{},
+		indexes:          map[string]*viewInfo{},
+		views:            map[string]*viewInfo{},
+		useSequences:     schema.UseSequences,
+		_maxColIdx:       int16(structRefValue.NumField()) + 1,
 	}
 
 	if dbTable.keyspace == "" {

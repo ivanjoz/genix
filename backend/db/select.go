@@ -453,6 +453,11 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 		return errors.New("no se ha especificado un keyspace")
 	}
 
+	if shouldUseCacheVersionFeature(scyllaTable) {
+		// Validate once at query start so misconfigured models fail fast even before scanning rows.
+		_ = validateCacheVersionFeature(reflect.TypeOf(*new(E)), scyllaTable)
+	}
+
 	columnNames := []string{}
 	if len(tableInfo.columnsInclude) > 0 {
 		for _, col := range tableInfo.columnsInclude {
@@ -469,6 +474,7 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 			}
 		}
 	}
+	columnNames = ensureCacheVersionColumnsForSelect(columnNames, scyllaTable)
 
 	queryTemplate := fmt.Sprintf("SELECT %v ", strings.Join(columnNames, ", ")) + "FROM %v.%v %v"
 	hashOperators := []string{"=", "IN"}
@@ -959,6 +965,10 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 				(*recordsGetted) = append((*recordsGetted), *records...)
 			}
 		}
+	}
+
+	if err := assignCacheVersionsAfterSelect(recordsGetted, scyllaTable); err != nil {
+		return err
 	}
 
 	return nil

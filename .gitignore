@@ -60,3 +60,4 @@ scripts/scripts_bin
 backend/.gocache/*
 .gocache/*
 scripts/__pycache__/*
+frontend/.bun-install/install/*
