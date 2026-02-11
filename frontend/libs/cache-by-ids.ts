@@ -2,7 +2,7 @@
  * Goal:
  * Resolve records by IDs using a 3-layer strategy:
  * 1) in-memory map, 2) IndexedDB persistent cache, 3) server delta sync.
- * It sends `ids`, `cached`, and `upg` so backend returns only new/changed records.
+ * It sends `ids`, `cached`, and `ccv` so backend returns only new/changed records.
  */
 import { concatenateInts } from "./funcs/parsers"
 import { readRecordsFromIDBByIDs, upsertRecordsIntoIDB } from "./cache-by-ids.idb"
@@ -11,7 +11,7 @@ const CACHE_TIME = 60
 
 export interface IMinimalRecord {
 	ID: number /* ID f the record */ 
-	upg: number /* group updated ID. a number from 0 to 255 */
+	ccv: number /* cache version a number from 0 to 255 */
 	ss: number /* status: 1 active, 0 deleted */
 	_fch: number /* fetched: when the record was last fetched (in seconds) */
 }
@@ -79,7 +79,7 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(tableName: strin
 
 	// Classify each requested ID into:
 	// - missing cache (needs IDB lookup),
-	// - cached entries (send ID + upg for server-side delta validation),
+	// - cached entries (send ID + ccv for server-side delta validation),
 	// - stale cache count (forces revalidation call).
 	const idsMissingFromMemoryCache: number[] = []
 	const recordsWitoutCache: number[] = []
@@ -87,7 +87,7 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(tableName: strin
 	const recordsCachedUpdatedGroupsIDs: number[] = []
 
 	// Count cached records that exceeded CACHE_TIME.
-	// These records may still be unchanged (same upg), but we must revalidate with backend.
+	// These records may still be unchanged (same ccv), but we must revalidate with backend.
 	let staleCachedRecordsCount = 0
 
 	for (const id of normalizedSortedIDs) {
@@ -101,7 +101,7 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(tableName: strin
 		if (cachedRecord.ss === 0) continue
 
 		recordsCachedIDs.push(id)
-		recordsCachedUpdatedGroupsIDs.push(cachedRecord.upg || 0)
+		recordsCachedUpdatedGroupsIDs.push(cachedRecord.ccv || 0)
 
 		const recordFetchAgeSeconds = currentTimeSeconds - (cachedRecord._fch || 0)
 		if (recordFetchAgeSeconds > CACHE_TIME) {
@@ -133,7 +133,7 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(tableName: strin
 			if (idbRecord.ss === 0) continue
 
 			recordsCachedIDs.push(id)
-			recordsCachedUpdatedGroupsIDs.push(idbRecord.upg || 0)
+			recordsCachedUpdatedGroupsIDs.push(idbRecord.ccv || 0)
 
 			const recordFetchAgeSeconds = currentTimeSeconds - (idbRecord._fch || 0)
 			if (recordFetchAgeSeconds > CACHE_TIME) {
@@ -145,14 +145,14 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(tableName: strin
 	// Build delta-validation payload:
 	// - `ids`: records with no local cache.
 	// - `cached`: records that exist locally and can be checked by backend.
-	// - `upg`: local update-group values aligned by position with `cached`.
+	// - `ccv`: local update-group values aligned by position with `cached`.
 	const uriParams = [
 		recordsWitoutCache.length > 0 && `ids=${concatenateInts(recordsWitoutCache)}`,
-		recordsCachedIDs.length > 0 && `cached=${concatenateInts(recordsCachedIDs)}`,
-		recordsCachedUpdatedGroupsIDs.length > 0 && `upg=${concatenateInts(recordsCachedUpdatedGroupsIDs)}`,
+		recordsCachedIDs.length > 0 && `cids=${concatenateInts(recordsCachedIDs)}`,
+		recordsCachedUpdatedGroupsIDs.length > 0 && `ccv=${concatenateInts(recordsCachedUpdatedGroupsIDs)}`,
 	]
-		.filter(Boolean)
-		.join("&")
+	.filter(Boolean)
+	.join("&")
 
 	// Why not only `uriParams.length > 0`?
 	// Because `cached` can be non-empty even when data is still fresh. In that case, network
@@ -197,7 +197,7 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(tableName: strin
 			record._fch = currentTimeSeconds
 
 			// Ensure required fields exist to keep cache invariant.
-			if (typeof record.upg !== "number") record.upg = 0
+			if (typeof record.ccv !== "number") record.ccv = 0
 			if (typeof record.ss !== "number") record.ss = 1
 
 			tableCache.set(record.ID, record)

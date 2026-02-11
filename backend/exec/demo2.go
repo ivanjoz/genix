@@ -137,3 +137,10 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 	
 	return core.FuncResponse{}
 }
+
+func Test43(args *core.ExecArgs) core.FuncResponse {
+
+	db.InitCacheVersionTable()
+	
+	return core.FuncResponse{}
+}

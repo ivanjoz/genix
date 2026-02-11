@@ -38,18 +38,22 @@ type ScyllaTable[T any] struct {
 	partKey  IColInfo
 	// saveCacheVersion enables cache-version hooks on insert/update/select for this table.
 	saveCacheVersion bool
-	keysIdx          []int16
-	columns          []IColInfo
-	columnsMap       map[string]IColInfo
-	columnsIdxMap    map[int16]IColInfo
-	indexes          map[string]*viewInfo
-	views            map[string]*viewInfo
-	indexViews       []*viewInfo
-	ViewsExcluded    []string
-	useSequences     bool
-	sequencePartCol  IColInfo
-	keyConcatenated  []IColInfo
-	keyIntPacking    []IColInfo
+	// cache-version metadata is precomputed during table creation.
+	cacheVersionFieldIndex   []int
+	cacheVersionPartitionCol IColInfo
+	cacheVersionKeyCol       IColInfo
+	keysIdx                  []int16
+	columns                  []IColInfo
+	columnsMap               map[string]IColInfo
+	columnsIdxMap            map[int16]IColInfo
+	indexes                  map[string]*viewInfo
+	views                    map[string]*viewInfo
+	indexViews               []*viewInfo
+	ViewsExcluded            []string
+	useSequences             bool
+	sequencePartCol          IColInfo
+	keyConcatenated          []IColInfo
+	keyIntPacking            []IColInfo
 	// packedIndexes stores metadata for packed indexes declared in schema (local and global).
 	packedIndexes     []*packedIndexInfo
 	autoincrementPart IColInfo
@@ -235,10 +239,28 @@ type TableDeployInterface interface {
 
 // TableStruct
 type TableStruct[T TableSchemaInterface[T], E TableBaseInterface[T, E]] struct {
-	schemaStruct *T
-	tableInfo    *TableInfo
+	schemaStruct           *T
+	tableInfo              *TableInfo
+	baseStructType         reflect.Type
+	cacheVersionFieldIndex []int
 	// field just for encoding purposes
 	I__ bool `gob:"-" json:"-"`
+}
+
+func (e *TableStruct[T, E]) setBaseStructType(baseType reflect.Type) {
+	e.baseStructType = baseType
+}
+
+func (e *TableStruct[T, E]) getBaseStructType() reflect.Type {
+	return e.baseStructType
+}
+
+func (e *TableStruct[T, E]) setCacheVersionFieldIndex(fieldIndex []int) {
+	e.cacheVersionFieldIndex = fieldIndex
+}
+
+func (e *TableStruct[T, E]) getCacheVersionFieldIndex() []int {
+	return e.cacheVersionFieldIndex
 }
 
 func (e TableStruct[T, E]) GetSchema() TableSchema {
@@ -544,6 +566,11 @@ func MakeSchema[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() TableSc
 	return (*refTable).GetSchema()
 }
 
+type tableStructCacheMetaSetter interface {
+	setBaseStructType(reflect.Type)
+	setCacheVersionFieldIndex([]int)
+}
+
 func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 	// fmt.Println("making table...")
 	structRefValue := reflect.ValueOf(*new(E))
@@ -659,6 +686,11 @@ func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 		column.SetSchemaStruct(schemaStruct)
 		column.SetTableInfo(refTableInfo)
 	}
+
+	if tableStructMeta, ok := any(schemaStruct).(tableStructCacheMetaSetter); ok {
+		tableStructMeta.setBaseStructType(structRefType)
+		tableStructMeta.setCacheVersionFieldIndex(findCacheVersionFieldIndexInRecordType(structRefType))
+	}
 	// fmt.Println("schemaStruct (1)", schemaStruct)
 	return schemaStruct
 }
@@ -735,22 +767,19 @@ type SeqValue struct {
 /* CacheVersion Table */
 type CacheVersion struct {
 	TableStruct[CacheVersionTable, CacheVersion]
-	Partition    int32
-	TableID      int32
+	PackedID     int64
 	CachedValues []byte
 }
 
 type CacheVersionTable struct {
 	TableStruct[CacheVersionTable, CacheVersion]
-	Partition    Col[CacheVersionTable, int32]
-	TableID      Col[CacheVersionTable, int32]
+	PackedID     Col[CacheVersionTable, int64]
 	CachedValues Col[CacheVersionTable, []byte]
 }
 
 func (e CacheVersionTable) GetSchema() TableSchema {
 	return TableSchema{
-		Name:      "cache_version",
-		Partition: e.Partition,
-		Keys:      []Coln{e.TableID},
+		Name: "cache_version",
+		Keys: []Coln{e.PackedID},
 	}
 }

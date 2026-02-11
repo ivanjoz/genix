@@ -235,7 +235,9 @@ func RecalcSequences(partValue any) {
 	})
 
 	fmt.Println("Recalculando Counter de Tablas...")
+	/* 
 	for _, sc := range MakeScyllaControllers() {
 		sc.ResetCounter(partValue)
 	}
+	*/
 }

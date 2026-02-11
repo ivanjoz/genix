@@ -56,15 +56,8 @@ When `SaveCacheVersion` is enabled:
 4. Encoded byte layout is `[group, version, group, version, ...]`.
 5. Serialization order is stable (sorted by group ID) to avoid non-deterministic byte output.
 
-## Open Questions
-1. `table_id` hashing:
-Should `table_id` hash use only `table_name` (current implementation) or `keyspace.table_name`?
-
-2. Update coverage:
-Should `InsertOrUpdate` increment cache versions once per successful operation branch (current behavior, inherited from `Insert` and `UpdateExclude`)?
-
-3. Select with explicit field projection:
-Current implementation auto-includes partition and key fields internally to compute `ccv`. Is this acceptable for your API semantics?
-
-4. Legacy existing `cache_version` table schema:
-If your DB already has `partition int` (`int32`) instead of `bigint` (`int64`), do you want a migration step now or keep backward compatibility logic in code?
+## Decisions Confirmed
+1. `table_id` hashing uses `BasicHashInt(table_name)`.
+2. `ccv` is assigned from persisted group version and only changes when the group version is incremented on writes.
+3. `cache_version.partition` is `int32`; source `int64` partition values are normalized to `int32`.
+4. No migration script is required at this stage.

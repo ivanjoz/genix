@@ -27,7 +27,7 @@ type ScyllaControllerInterface interface {
 	RestoreCSVRecords(partValue int32, content *[]byte) error
 	GetRecordsCSV(partValue int32) (CSVResult, error)
 	ReloadRecords(partValue int32) error
-	ResetCounter(partValue any) error
+ //	ResetCounter(partValue any) error
 }
 
 func (e *ScyllaController[T, E]) GetTable() ScyllaTable[any] {

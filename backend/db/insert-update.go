@@ -266,6 +266,7 @@ func Insert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		return err
 	}
 
+	// Cache-version is updated only after a successful write to keep counters consistent with persisted rows.
 	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
 		fmt.Println("Error updating cache versions after insert:", err)
 		return err
@@ -470,6 +471,7 @@ func Update[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 
 	refTable := initStructTable[E, T](new(E))
 	scyllaTable := makeTable(refTable)
+	// Version groups are incremented after update commit using the same record IDs as the update payload.
 	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
 		fmt.Println("Error updating cache versions after update:", err)
 		return err
@@ -498,6 +500,7 @@ func UpdateExclude[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 
 	refTable := initStructTable[E, T](new(E))
 	scyllaTable := makeTable(refTable)
+	// UpdateExclude still mutates records, so it participates in the same cache-version increment flow.
 	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
 		fmt.Println("Error updating cache versions after update-exclude:", err)
 		return err

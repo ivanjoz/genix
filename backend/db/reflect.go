@@ -1156,5 +1156,8 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 	dbTable.capabilities = dbTable.ComputeCapabilities()
 
+	// Initializes and validates cache-version metadata once per table build, not per query/write call.
+	configureCacheVersionFields(structType, &dbTable)
+
 	return dbTable
 }
