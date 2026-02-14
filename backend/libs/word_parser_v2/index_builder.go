@@ -12,14 +12,25 @@ import (
 
 const (
 	binaryIndexMagicV3        = "WPV3IDX1"
-	binaryIndexVersion        = uint8(1)
+	binaryIndexVersion        = uint8(2)
 	headerFlagDictionaryDelta = uint8(1 << 0)
-	headerSizeV3              = 29
+	headerFlagShapeDeltaC0    = uint8(1 << 1)
+	headerFlagShapeDeltaC1    = uint8(1 << 2)
+	// Header layout V2 keeps compact shape counters in uint8 and stores overflow in uint16.
+	headerSizeV3 = 33
 )
 
 const (
 	shapeClassTwoBit  = uint8(0)
 	shapeClassFourBit = uint8(1)
+	shapeCountU8Limit = 255
+)
+
+const (
+	shapeDeltaDecoratorRaw          = uint8(0)
+	shapeDeltaDecoratorSmallMut2Bit = uint8(1)
+	shapeDeltaDecoratorPrefixAppend = uint8(2)
+	shapeDeltaDecoratorTrimAppend   = uint8(3)
 )
 
 // EncodedNameRecord stores one normalized product name as shape + syllable IDs.
@@ -145,6 +156,7 @@ func BuildNamesBinaryIndexFromFile(
 	}
 	logDictionaryUsageCoverageStats(generatedDictionary, encodedRecords)
 	logShapeDiversityStats(encodedRecords)
+	logShapeCoverageStats(encodedRecords, shapeCountU8Limit)
 
 	binaryOutput, buildPayloadError := buildBinaryIndexPayload(normalizedDictionarySlots, encodedRecords)
 	if buildPayloadError != nil {
@@ -387,17 +399,28 @@ func buildBinaryIndexPayload(dictionarySlots []string, encodedRecords []EncodedN
 	if splitError != nil {
 		return nil, splitError
 	}
-	if len(class0Buckets)+len(class1Buckets) > 255 {
-		return nil, fmt.Errorf("shape count exceeds uint8 limit class0=%d class1=%d", len(class0Buckets), len(class1Buckets))
+	class0CompactCount, class0OverflowCount, class0CountError := splitShapeCountCompactAndOverflow(len(class0Buckets))
+	if class0CountError != nil {
+		return nil, class0CountError
+	}
+	class1CompactCount, class1OverflowCount, class1CountError := splitShapeCountCompactAndOverflow(len(class1Buckets))
+	if class1CountError != nil {
+		return nil, class1CountError
 	}
 
-	class0ShapeTable, class0ShapeTableError := buildShapeTableSection(class0Buckets, shapeClassTwoBit)
+	class0ShapeTable, class0UseDelta, class0ShapeTableError := buildShapeTableSection(class0Buckets, shapeClassTwoBit)
 	if class0ShapeTableError != nil {
 		return nil, class0ShapeTableError
 	}
-	class1ShapeTable, class1ShapeTableError := buildShapeTableSection(class1Buckets, shapeClassFourBit)
+	class1ShapeTable, class1UseDelta, class1ShapeTableError := buildShapeTableSection(class1Buckets, shapeClassFourBit)
 	if class1ShapeTableError != nil {
 		return nil, class1ShapeTableError
+	}
+	if class0UseDelta {
+		headerFlags |= headerFlagShapeDeltaC0
+	}
+	if class1UseDelta {
+		headerFlags |= headerFlagShapeDeltaC1
 	}
 	class0UsageSection := buildShapeUsageSection(class0Buckets)
 	class1UsageSection := buildShapeUsageSection(class1Buckets)
@@ -413,8 +436,16 @@ func buildBinaryIndexPayload(dictionarySlots []string, encodedRecords []EncodedN
 	binaryPayload = append(binaryPayload, recordCountBuffer[:]...)
 
 	binaryPayload = append(binaryPayload, uint8(len(compactedDictionaryTokens)))
-	binaryPayload = append(binaryPayload, uint8(len(class0Buckets)))
-	binaryPayload = append(binaryPayload, uint8(len(class1Buckets)))
+	binaryPayload = append(binaryPayload, class0CompactCount)
+	binaryPayload = append(binaryPayload, class1CompactCount)
+
+	var class0OverflowBuffer [2]byte
+	binary.LittleEndian.PutUint16(class0OverflowBuffer[:], class0OverflowCount)
+	binaryPayload = append(binaryPayload, class0OverflowBuffer[:]...)
+
+	var class1OverflowBuffer [2]byte
+	binary.LittleEndian.PutUint16(class1OverflowBuffer[:], class1OverflowCount)
+	binaryPayload = append(binaryPayload, class1OverflowBuffer[:]...)
 
 	var dictionarySectionSizeBuffer [4]byte
 	binary.LittleEndian.PutUint32(dictionarySectionSizeBuffer[:], uint32(len(dictionarySection)))
@@ -436,7 +467,7 @@ func buildBinaryIndexPayload(dictionarySlots []string, encodedRecords []EncodedN
 	binaryPayload = append(binaryPayload, contentSection...)
 
 	log.Printf(
-		"word_parser_v2: v3_index header_size=%d index_size=%d content_size=%d header_flags=%d dictionary_count=%d dictionary_bytes=%d shape_class0=%d shape_class1=%d",
+		"word_parser_v2: v3_index header_size=%d index_size=%d content_size=%d header_flags=%d dictionary_count=%d dictionary_bytes=%d shape_class0=%d shape_class1=%d shape_class0_overflow=%d shape_class1_overflow=%d shape_table_mode_c0=%t shape_table_mode_c1=%t",
 		headerSizeV3,
 		len(binaryPayload),
 		len(contentSection),
@@ -445,6 +476,10 @@ func buildBinaryIndexPayload(dictionarySlots []string, encodedRecords []EncodedN
 		len(dictionarySection),
 		len(class0Buckets),
 		len(class1Buckets),
+		class0OverflowCount,
+		class1OverflowCount,
+		class0UseDelta,
+		class1UseDelta,
 	)
 
 	return binaryPayload, nil
@@ -588,9 +623,15 @@ func sortedBucketsFromMap(bucketMap map[string]*shapeBucket) []shapeBucket {
 		keys = append(keys, shapeKey)
 	}
 	sort.Slice(keys, func(leftIndex, rightIndex int) bool {
-		leftWordSizes := bucketMap[keys[leftIndex]].WordSizes
-		rightWordSizes := bucketMap[keys[rightIndex]].WordSizes
-		return compareWordSizeSlices(leftWordSizes, rightWordSizes) < 0
+		leftBucket := bucketMap[keys[leftIndex]]
+		rightBucket := bucketMap[keys[rightIndex]]
+		leftFrequency := len(leftBucket.RecordContents)
+		rightFrequency := len(rightBucket.RecordContents)
+		if leftFrequency != rightFrequency {
+			// Prioritize highest-frequency shapes so compact slots cover more records.
+			return leftFrequency > rightFrequency
+		}
+		return compareWordSizeSlices(leftBucket.WordSizes, rightBucket.WordSizes) < 0
 	})
 
 	buckets := make([]shapeBucket, 0, len(keys))
@@ -601,7 +642,22 @@ func sortedBucketsFromMap(bucketMap map[string]*shapeBucket) []shapeBucket {
 	return buckets
 }
 
-func buildShapeTableSection(buckets []shapeBucket, shapeClass uint8) ([]uint8, error) {
+func buildShapeTableSection(buckets []shapeBucket, shapeClass uint8) ([]uint8, bool, error) {
+	rawSection, rawBuildError := buildRawShapeTableSection(buckets, shapeClass)
+	if rawBuildError != nil {
+		return nil, false, rawBuildError
+	}
+	deltaSection, deltaBuildError := buildDeltaShapeTableSection(buckets, shapeClass)
+	if deltaBuildError != nil {
+		return nil, false, deltaBuildError
+	}
+	if len(deltaSection) < len(rawSection) {
+		return deltaSection, true, nil
+	}
+	return rawSection, false, nil
+}
+
+func buildRawShapeTableSection(buckets []shapeBucket, shapeClass uint8) ([]uint8, error) {
 	section := make([]uint8, 0, len(buckets)*6)
 	for shapeIndex, bucket := range buckets {
 		packedWordSizes, packError := packShapeWordSizes(bucket.WordSizes, shapeClass)
@@ -613,6 +669,177 @@ func buildShapeTableSection(buckets []shapeBucket, shapeClass uint8) ([]uint8, e
 		section = append(section, packedWordSizes...)
 	}
 	return section, nil
+}
+
+func buildDeltaShapeTableSection(buckets []shapeBucket, shapeClass uint8) ([]uint8, error) {
+	section := make([]uint8, 0, len(buckets)*6)
+	var previousWordSizes []uint8
+	for shapeIndex, bucket := range buckets {
+		bestEncodedRow, encodeError := encodeDeltaShapeRow(previousWordSizes, bucket.WordSizes, shapeClass)
+		if encodeError != nil {
+			return nil, fmt.Errorf("encode delta shape row shape_index=%d: %w", shapeIndex, encodeError)
+		}
+		section = append(section, bestEncodedRow...)
+		previousWordSizes = bucket.WordSizes
+	}
+	return section, nil
+}
+
+func encodeDeltaShapeRow(previousWordSizes []uint8, currentWordSizes []uint8, shapeClass uint8) ([]uint8, error) {
+	rawRow, rawError := encodeRawShapeRow(currentWordSizes, shapeClass)
+	if rawError != nil {
+		return nil, rawError
+	}
+	bestRow := rawRow
+
+	smallMutationRow, smallMutationSupported, smallMutationError := encodeSmallMutationShapeRow(previousWordSizes, currentWordSizes)
+	if smallMutationError != nil {
+		return nil, smallMutationError
+	}
+	if smallMutationSupported && len(smallMutationRow) < len(bestRow) {
+		bestRow = smallMutationRow
+	}
+
+	prefixAppendRow, prefixAppendSupported, prefixAppendError := encodePrefixAppendShapeRow(previousWordSizes, currentWordSizes, shapeClass)
+	if prefixAppendError != nil {
+		return nil, prefixAppendError
+	}
+	if prefixAppendSupported && len(prefixAppendRow) < len(bestRow) {
+		bestRow = prefixAppendRow
+	}
+
+	trimAppendRow, trimAppendSupported, trimAppendError := encodeTrimAppendShapeRow(previousWordSizes, currentWordSizes, shapeClass)
+	if trimAppendError != nil {
+		return nil, trimAppendError
+	}
+	if trimAppendSupported && len(trimAppendRow) < len(bestRow) {
+		bestRow = trimAppendRow
+	}
+
+	return bestRow, nil
+}
+
+func encodeRawShapeRow(wordSizes []uint8, shapeClass uint8) ([]uint8, error) {
+	packedWordSizes, packError := packShapeWordSizes(wordSizes, shapeClass)
+	if packError != nil {
+		return nil, packError
+	}
+	encodedRow := make([]uint8, 0, 1+2+len(packedWordSizes))
+	encodedRow = append(encodedRow, shapeDeltaDecoratorRaw)
+	encodedRow = appendUvarint(encodedRow, uint64(len(wordSizes)))
+	encodedRow = appendUvarint(encodedRow, uint64(len(packedWordSizes)))
+	encodedRow = append(encodedRow, packedWordSizes...)
+	return encodedRow, nil
+}
+
+func encodeSmallMutationShapeRow(previousWordSizes []uint8, currentWordSizes []uint8) ([]uint8, bool, error) {
+	if len(previousWordSizes) == 0 || len(previousWordSizes) != len(currentWordSizes) {
+		return nil, false, nil
+	}
+
+	mutationOps := make([]uint8, len(currentWordSizes))
+	for wordIndex := range currentWordSizes {
+		deltaValue := int(currentWordSizes[wordIndex]) - int(previousWordSizes[wordIndex])
+		switch deltaValue {
+		case -1:
+			mutationOps[wordIndex] = 0
+		case 0:
+			mutationOps[wordIndex] = 1
+		case 1:
+			mutationOps[wordIndex] = 2
+		case 2:
+			mutationOps[wordIndex] = 3
+		default:
+			return nil, false, nil
+		}
+	}
+
+	mutationBytes := packTwoBitValues(mutationOps)
+	encodedRow := make([]uint8, 0, 1+1+len(mutationBytes))
+	encodedRow = append(encodedRow, shapeDeltaDecoratorSmallMut2Bit)
+	encodedRow = appendUvarint(encodedRow, uint64(len(mutationBytes)))
+	encodedRow = append(encodedRow, mutationBytes...)
+	return encodedRow, true, nil
+}
+
+func encodePrefixAppendShapeRow(previousWordSizes []uint8, currentWordSizes []uint8, shapeClass uint8) ([]uint8, bool, error) {
+	if len(previousWordSizes) == 0 {
+		return nil, false, nil
+	}
+	if len(currentWordSizes) <= len(previousWordSizes) {
+		return nil, false, nil
+	}
+	sharedPrefixLength := sharedPrefixLengthWordSizes(previousWordSizes, currentWordSizes)
+	if sharedPrefixLength != len(previousWordSizes) {
+		return nil, false, nil
+	}
+
+	appendWordSizes := currentWordSizes[len(previousWordSizes):]
+	packedAppendWordSizes, packError := packShapeWordSizes(appendWordSizes, shapeClass)
+	if packError != nil {
+		return nil, false, packError
+	}
+
+	encodedRow := make([]uint8, 0, 1+2+len(packedAppendWordSizes))
+	encodedRow = append(encodedRow, shapeDeltaDecoratorPrefixAppend)
+	encodedRow = appendUvarint(encodedRow, uint64(len(appendWordSizes)))
+	encodedRow = appendUvarint(encodedRow, uint64(len(packedAppendWordSizes)))
+	encodedRow = append(encodedRow, packedAppendWordSizes...)
+	return encodedRow, true, nil
+}
+
+func encodeTrimAppendShapeRow(previousWordSizes []uint8, currentWordSizes []uint8, shapeClass uint8) ([]uint8, bool, error) {
+	if len(previousWordSizes) == 0 {
+		return nil, false, nil
+	}
+
+	sharedPrefixLength := sharedPrefixLengthWordSizes(previousWordSizes, currentWordSizes)
+	trimCount := len(previousWordSizes) - sharedPrefixLength
+	if trimCount <= 0 {
+		return nil, false, nil
+	}
+
+	appendWordSizes := currentWordSizes[sharedPrefixLength:]
+	if len(appendWordSizes) == 0 {
+		return nil, false, nil
+	}
+	packedAppendWordSizes, packError := packShapeWordSizes(appendWordSizes, shapeClass)
+	if packError != nil {
+		return nil, false, packError
+	}
+
+	encodedRow := make([]uint8, 0, 1+3+len(packedAppendWordSizes))
+	encodedRow = append(encodedRow, shapeDeltaDecoratorTrimAppend)
+	encodedRow = appendUvarint(encodedRow, uint64(trimCount))
+	encodedRow = appendUvarint(encodedRow, uint64(len(appendWordSizes)))
+	encodedRow = appendUvarint(encodedRow, uint64(len(packedAppendWordSizes)))
+	encodedRow = append(encodedRow, packedAppendWordSizes...)
+	return encodedRow, true, nil
+}
+
+func packTwoBitValues(values []uint8) []uint8 {
+	packedValues := make([]uint8, 0, (len(values)+3)/4)
+	for valueIndex := 0; valueIndex < len(values); valueIndex += 4 {
+		firstValue := uint8(0)
+		secondValue := uint8(0)
+		thirdValue := uint8(0)
+		fourthValue := uint8(0)
+		if valueIndex < len(values) {
+			firstValue = values[valueIndex] & 0x03
+		}
+		if valueIndex+1 < len(values) {
+			secondValue = values[valueIndex+1] & 0x03
+		}
+		if valueIndex+2 < len(values) {
+			thirdValue = values[valueIndex+2] & 0x03
+		}
+		if valueIndex+3 < len(values) {
+			fourthValue = values[valueIndex+3] & 0x03
+		}
+		packedByte := (firstValue << 6) | (secondValue << 4) | (thirdValue << 2) | fourthValue
+		packedValues = append(packedValues, packedByte)
+	}
+	return packedValues
 }
 
 func buildShapeUsageSection(buckets []shapeBucket) []uint8 {
@@ -744,10 +971,39 @@ func sharedPrefixLengthBytes(left []byte, right []byte) int {
 	return maximumPrefix
 }
 
+func sharedPrefixLengthWordSizes(left []uint8, right []uint8) int {
+	maximumPrefix := len(left)
+	if len(right) < maximumPrefix {
+		maximumPrefix = len(right)
+	}
+	for index := 0; index < maximumPrefix; index++ {
+		if left[index] != right[index] {
+			return index
+		}
+	}
+	return maximumPrefix
+}
+
 func appendUvarint(target []uint8, value uint64) []uint8 {
 	var buffer [binary.MaxVarintLen64]byte
 	writtenBytes := binary.PutUvarint(buffer[:], value)
 	return append(target, buffer[:writtenBytes]...)
+}
+
+func splitShapeCountCompactAndOverflow(shapeCount int) (uint8, uint16, error) {
+	if shapeCount < 0 {
+		return 0, 0, fmt.Errorf("shape count cannot be negative count=%d", shapeCount)
+	}
+
+	compactCount := shapeCount
+	if compactCount > shapeCountU8Limit {
+		compactCount = shapeCountU8Limit
+	}
+	overflowCount := shapeCount - compactCount
+	if overflowCount > int(^uint16(0)) {
+		return 0, 0, fmt.Errorf("shape count overflow exceeds uint16 capacity count=%d", shapeCount)
+	}
+	return uint8(compactCount), uint16(overflowCount), nil
 }
 
 func logSyllableSummaryLine(label string, syllables []string) {
@@ -1047,4 +1303,79 @@ func logShapeDiversityStats(encodedRecords []EncodedNameRecord) {
 		)
 	}
 	log.Printf("word_parser_v2: shape_top20=%s", strings.Join(previewRows, " | "))
+}
+
+func logShapeCoverageStats(encodedRecords []EncodedNameRecord, compactShapeLimit int) {
+	if len(encodedRecords) == 0 {
+		return
+	}
+	if compactShapeLimit <= 0 {
+		return
+	}
+
+	// Aggregate frequency by exact shape to rank the most common patterns.
+	type shapeCounter struct {
+		Class uint8
+		Shape []uint8
+		Count int
+	}
+	shapeCountersByKey := make(map[string]*shapeCounter, len(encodedRecords))
+	for _, encodedRecord := range encodedRecords {
+		shapeClass, classifyError := classifyShapeWordSizes(encodedRecord.WordSizes)
+		if classifyError != nil {
+			continue
+		}
+		shapeKey := fmt.Sprintf("%d:%v", shapeClass, encodedRecord.WordSizes)
+		shapeCounterRow, exists := shapeCountersByKey[shapeKey]
+		if !exists {
+			shapeCounterRow = &shapeCounter{
+				Class: shapeClass,
+				Shape: append([]uint8(nil), encodedRecord.WordSizes...),
+			}
+			shapeCountersByKey[shapeKey] = shapeCounterRow
+		}
+		shapeCounterRow.Count++
+	}
+
+	sortedShapeCounters := make([]shapeCounter, 0, len(shapeCountersByKey))
+	for _, shapeCounterRow := range shapeCountersByKey {
+		sortedShapeCounters = append(sortedShapeCounters, *shapeCounterRow)
+	}
+	sort.Slice(sortedShapeCounters, func(leftIndex, rightIndex int) bool {
+		leftShapeCounter := sortedShapeCounters[leftIndex]
+		rightShapeCounter := sortedShapeCounters[rightIndex]
+		if leftShapeCounter.Count != rightShapeCounter.Count {
+			return leftShapeCounter.Count > rightShapeCounter.Count
+		}
+		if leftShapeCounter.Class != rightShapeCounter.Class {
+			return leftShapeCounter.Class < rightShapeCounter.Class
+		}
+		return compareWordSizeSlices(leftShapeCounter.Shape, rightShapeCounter.Shape) < 0
+	})
+
+	if compactShapeLimit > len(sortedShapeCounters) {
+		compactShapeLimit = len(sortedShapeCounters)
+	}
+
+	recordsInTopCompactShapes := 0
+	for shapeIndex := 0; shapeIndex < compactShapeLimit; shapeIndex++ {
+		recordsInTopCompactShapes += sortedShapeCounters[shapeIndex].Count
+	}
+
+	recordsEscapingCompactShapes := len(encodedRecords) - recordsInTopCompactShapes
+	nonCommonShapesCount := len(sortedShapeCounters) - compactShapeLimit
+
+	coveragePercent := 0.0
+	if len(encodedRecords) > 0 {
+		coveragePercent = 100.0 * float64(recordsInTopCompactShapes) / float64(len(encodedRecords))
+	}
+	log.Printf(
+		"word_parser_v2: shape_coverage_top%d records_in_compact=%d records_escaping_compact=%d non_common_shapes=%d total_shapes=%d coverage_pct=%.2f",
+		compactShapeLimit,
+		recordsInTopCompactShapes,
+		recordsEscapingCompactShapes,
+		nonCommonShapesCount,
+		len(sortedShapeCounters),
+		coveragePercent,
+	)
 }

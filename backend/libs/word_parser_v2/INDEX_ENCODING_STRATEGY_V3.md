@@ -5,7 +5,7 @@ Reduce index size and improve compression ratio by removing per-record separator
 
 ## Confirmed Decisions
 1. Record reorder is acceptable.
-2. `shape_id` is logical `u8`.
+2. `shape_id` is logical table position (not per-record field).
 3. No word has more than 16 syllables.
 
 ## Core Idea
@@ -47,26 +47,31 @@ Wire format magic: `WPV3IDX1`.
 6. Class-1 shape usage section
 7. Content section
 
-### 1) Header (Fixed 29 bytes)
+### 1) Header (Fixed 33 bytes)
 | Offset | Size | Field | Type | Notes |
 |---|---:|---|---|---|
 | 0 | 8 | magic | bytes[8] | ASCII `WPV3IDX1` |
-| 8 | 1 | version | u8 | `1` |
+| 8 | 1 | version | u8 | `2` |
 | 9 | 1 | header_flags | u8 | bit0: dictionary_delta_mode (`1` enabled) |
 | 10 | 4 | record_count | u32 | total encoded records |
 | 14 | 1 | dictionary_count | u8 | dictionary token count (`1..255`) |
-| 15 | 1 | shape_count_class0 | u8 | class-0 shape count |
-| 16 | 1 | shape_count_class1 | u8 | class-1 shape count |
-| 17 | 4 | dictionary_bytes | u32 | byte size of dictionary section |
-| 21 | 4 | shape_table_class0_bytes | u32 | byte size of class-0 shape table |
-| 25 | 4 | shape_table_class1_bytes | u32 | byte size of class-1 shape table |
+| 15 | 1 | shape_count_class0_compact | u8 | first `min(count,255)` class-0 shapes |
+| 16 | 1 | shape_count_class1_compact | u8 | first `min(count,255)` class-1 shapes |
+| 17 | 2 | shape_count_class0_overflow | u16 | `max(0, count-255)` class-0 shapes |
+| 19 | 2 | shape_count_class1_overflow | u16 | `max(0, count-255)` class-1 shapes |
+| 21 | 4 | dictionary_bytes | u32 | byte size of dictionary section |
+| 25 | 4 | shape_table_class0_bytes | u32 | byte size of class-0 shape table |
+| 29 | 4 | shape_table_class1_bytes | u32 | byte size of class-1 shape table |
 
 Notes:
+- Effective counts are:
+  - `shape_count_class0 = shape_count_class0_compact + shape_count_class0_overflow`
+  - `shape_count_class1 = shape_count_class1_compact + shape_count_class1_overflow`
 - `shape_usage` section sizes are implicit from parsing exactly `shape_count_classN` `varuint`s.
 - `content_bytes` is implicit from file length.
 
 Constraints:
-- `shape_count_class0 + shape_count_class1 <= 255` (logical `shape_id` capacity).
+- `shape_count_class0_overflow` and `shape_count_class1_overflow` must fit in `u16`.
 
 ### 2) Dictionary Section (Variable)
 Dictionary section has two modes selected by `header_flags.bit0`.
@@ -157,18 +162,73 @@ Given a shape:
 ## Deterministic Build Rules
 1. Encode records and compute shapes.
 2. Classify each shape into class-0 or class-1.
-3. Sort unique shapes lexicographically inside each class.
+3. Sort unique shapes by frequency desc, tie-break lexicographically inside each class.
 4. If `dictionary_delta_mode=1`, sort dictionary lexicographically and remap content IDs to sorted slot IDs.
 5. Sort records by `(class, shape_id_local)`.
 6. Keep stable input order within each final shape run.
 7. Emit sections exactly in file-layout order.
+
+## Delta-Optimized Shape Ordering Strategy
+Goal: keep the same logical format, but reorder shapes to maximize delta compression in shape metadata.
+
+### Why
+- Per-record `shape_id` is not stored, so ordering is free to optimize.
+- If adjacent shapes are similar, shape metadata can be delta-encoded more efficiently.
+
+### Build Pipeline
+1. Compute all record shapes first.
+2. Build the unique shape dictionary with frequencies.
+3. Compute an "intelligent order" for shapes that minimizes local delta cost.
+4. Reorder records by that shape order.
+5. Write shape metadata and usage in that same order.
+6. Write grouped content runs in that same order.
+
+### Delta-Friendly Shape Encoding (Implemented)
+Inside each class shape table, each row starts with a decorator `u8`:
+1. `0` = `raw`: full shape row (`word_count`, `packed_len`, `packed_word_sizes`)
+2. `1` = `small_mut_2bit`: same-length mutation from previous shape using 2-bit ops per position
+   - op codes map to deltas: `0 -> -1`, `1 -> 0`, `2 -> +1`, `3 -> +2`
+3. `2` = `prefix_append`: current shape = previous shape + appended tail
+4. `3` = `trim_append`: current shape = previous shape with tail trimmed, then appended tail
+
+The writer evaluates row candidates and picks the shortest encoding per row.
+Then it compares full `raw_shape_table_bytes` vs `decorator_delta_shape_table_bytes` and keeps the smaller one.
+
+Header flags:
+- `bit1`: class-0 shape table encoded with decorator delta rows
+- `bit2`: class-1 shape table encoded with decorator delta rows
+
+This is the vector equivalent of scalar sorted-ID deltas:
+- absolute IDs: `[3,5,7,9]`
+- delta IDs: `[3,+2,+2,+2]`
+
+For shapes:
+- absolute: `[2,1,3]`, `[2,1,4]`, `[2,2]`
+- delta form: raw first, then shared-prefix + suffix for each next one.
+
+### Ordering Heuristic
+Global optimum is expensive; use deterministic approximation:
+1. Start from lexicographic order (stable baseline).
+2. Apply frequency-aware local swaps / nearest-neighbor improvement.
+3. Tie-break by lexicographic order to keep deterministic builds.
+
+### Coverage Metrics to Track
+- `shape_coverage_top255.records_in_compact`
+- `shape_coverage_top255.records_escaping_compact`
+- `shape_coverage_top255.non_common_shapes`
+- `shape_coverage_top255.coverage_pct`
+
+These metrics quantify how much of the corpus is represented by the top 255 most common shapes.
+
+### Current Corpus Observation
+On the current 10k product corpus and `atomic_first` setup, the writer selected raw shape tables (`bit1=0`, `bit2=0`) because decorator delta rows were not smaller than raw packed rows.
 
 ## Decoder Validation Checklist
 Reject file if any check fails:
 1. Header magic/version mismatch.
 2. Section byte lengths exceed file bounds.
 3. `dictionary_count == 0` or `dictionary_count > 255`.
-4. `shape_count_class0 + shape_count_class1 > 255`.
+4. Overflow counters or reconstructed shape counts are invalid.
 5. Invalid dictionary delta reconstruction (`prefix_len` overflow, invalid token length, invalid UTF-8 bytes).
 6. Any decoded class-0 word size outside `1..4`.
 7. Any decoded class-1 word size outside `1..16`.

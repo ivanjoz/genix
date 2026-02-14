@@ -1,0 +1,41 @@
+2026/02/14 01:22:25 word_parser_v2: loaded product names file=libs/word_parser_v2/productos.txt count=10000
+2026/02/14 01:22:25 word_parser_v2: fixed syllable generation completed populated_slots=32 max_slots=120 reserved_aliases=36
+2026/02/14 01:22:25 word_parser_v2: effective_fixed_filter original=32 effective=9 dropped=23
+2026/02/14 01:22:25 word_parser_v2: frequent syllable generation completed products=10000 fixed_slots=9 frequent_slots=191 total=200
+2026/02/14 01:22:25 word_parser_v2: Fixed syllables (9): 1, 2, 3, 4, 5, 6, 7, 8, 9
+2026/02/14 01:22:25 word_parser_v2: Computed syllables (191): as, te, es, la, do, en, ra, da, or, al, ad, co, ca, os, el, ta, to, an, ma, er, no, ri, on, sa, na, ro, lo, ar, id, ol, qu, ic, ti, ud, ac, vi, he, pi, za, in, il, le, un, de, ni, di, va, ec, ve, ur, pa, ne, ja, se, bi, li, re, it, us, mi, ci, mo, ba, et, uc, bo, cu, og, az, am, be, so, ña, me, ce, ag, av, go, at, ge, is, ox, ga, iv, añ, si, su, ul, iz, pe, vo, fe, ho, po, ab, tu, ib, pu, ño, od, ha, ig, fi, oj, om, hu, um, jo, ed, zo, ez, ot, du, ru, gu, fu, hi, aj, ej, oc, zu, im, ex, nu, oz, lu, fa, ah, ev, ap, eñ, af, ub, gi, ut, ir, ka, ji, bu, ya, oh, ip, je, if, ov, ze, em, ey, ix, eg, ay, op, eb, uñ, ax, xi, ef, ik, of, mu, ki, yo, aq, fo, iq, ob, ke, ju, uv, we, ñe, ko, oy, ye, ak, up, eq, ok, ñi, ñu, iñ, ek, ep, wi, ug, yu, uj, xo, wa, ew, ku
+2026/02/14 01:22:26 word_parser_v2: syllable_length_usage usage_1=0 usage_2=82759 usage_3=0 distinct_used_1=0 distinct_used_2=191 distinct_used_3=0
+2026/02/14 01:22:26 word_parser_v2: computed_usage_stats total_usages=82759 total_encoded_usages=82759 computed_syllables=191 used_computed_syllables=191 avg_per_computed=433.29 avg_per_used_computed=433.29
+2026/02/14 01:22:26 word_parser_v2: computed_usage_coverage top_percent=20 syllables=39 usages=52051 coverage_of_computed_pct=62.89 coverage_of_total_pct=62.89
+2026/02/14 01:22:26 word_parser_v2: computed_usage_coverage top_percent=40 syllables=77 usages=70998 coverage_of_computed_pct=85.79 coverage_of_total_pct=85.79
+2026/02/14 01:22:26 word_parser_v2: computed_usage_coverage top_percent=60 syllables=115 usages=78652 coverage_of_computed_pct=95.04 coverage_of_total_pct=95.04
+2026/02/14 01:22:26 word_parser_v2: computed_usage_coverage top_percent=80 syllables=153 usages=81883 coverage_of_computed_pct=98.94 coverage_of_total_pct=98.94
+2026/02/14 01:22:26 word_parser_v2: computed_usage_coverage top_percent=100 syllables=191 usages=82759 coverage_of_computed_pct=100.00 coverage_of_total_pct=100.00
+2026/02/14 01:22:26 word_parser_v2: computed_usage_top20=as:2676, te:2598, es:2568, la:2519, do:2081, en:1720, ra:1709, da:1691, or:1687, al:1684, ad:1678, co:1518, ca:1502, os:1460, el:1457, ta:1422, to:1379, an:1179, ma:1179, er:1177
+2026/02/14 01:22:26 word_parser_v2: shape_diversity total_records=9970 unique_shapes=2264 class0_records=9543 class0_unique=2000 class1_records=427 class1_unique=264
+2026/02/14 01:22:26 word_parser_v2: shape_top20=class=0 shape=[2 2] count=171 | class=0 shape=[2] count=155 | class=0 shape=[2 1] count=149 | class=0 shape=[1 2] count=126 | class=0 shape=[1 1 1] count=117 | class=0 shape=[1 1] count=114 | class=0 shape=[2 2 1] count=113 | class=0 shape=[2 1 1] count=110 | class=0 shape=[1 2 1] count=108 | class=0 shape=[1] count=101 | class=0 shape=[1 2 2] count=101 | class=0 shape=[2 1 2] count=101 | class=0 shape=[1 3] count=90 | class=0 shape=[3 2] count=86 | class=0 shape=[2 2 1 1] count=83 | class=0 shape=[2 3] count=82 | class=0 shape=[1 1 2] count=77 | class=0 shape=[2 2 2] count=76 | class=0 shape=[3 1] count=75 | class=0 shape=[1 2 3] count=71
+2026/02/14 01:22:26 word_parser_v2: shape_coverage_top255 records_in_compact=6401 records_escaping_compact=3569 non_common_shapes=2009 total_shapes=2264 coverage_pct=64.20
+2026/02/14 01:22:26 word_parser_v2: v3_index header_size=33 index_size=94783 content_size=82759 header_flags=0 dictionary_count=200 dictionary_bytes=600 shape_class0=2000 shape_class1=264 shape_class0_overflow=1745 shape_class1_overflow=9 shape_table_mode_c0=false shape_table_mode_c1=false
+2026/02/14 01:22:26 word_parser_v2: stats fixed_syllables=9 extracted_syllables_total=138419 extracted_syllables_unique=1786 input_kb=482.87 output_kb=92.56
+2026/02/14 01:22:26 word_parser_v2: wrote productos.idx input=10000 cleaned=10000 dictionary_slots=200 records=9970 bytes=94783
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=1 value=car count=1521
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=2 value=ref count=1345
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=3 value=our count=1259
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=4 value=sin count=908
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=5 value=pac count=745
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=6 value=hac count=664
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=7 value=bot count=564
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=8 value=cho count=528
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=9 value=del count=510
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=10 value=des count=489
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=11 value=cre count=445
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=12 value=ion count=431
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=13 value=ten count=428
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=14 value=cha count=419
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=15 value=tin count=407
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=16 value=cer count=402
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=17 value=bla count=393
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=18 value=eit count=385
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=19 value=ver count=381
+2026/02/14 01:22:26 word_parser_v2: unknown_syllable rank=20 value=glu count=380
+2026/02/14 01:22:26 word_parser_v2: build completed output=libs/word_parser_v2/productos.idx
