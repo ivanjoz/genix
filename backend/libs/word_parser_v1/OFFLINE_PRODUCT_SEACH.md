@@ -15,11 +15,14 @@ Este documento se enfoca en la estructura del archivo y el flujo de implementaci
 2. Diccionario de fonemas: maximo 250 entradas utiles.
 3. Codigos reservados:
 - `0x00`: separador de fin de registro.
-- `0xF4` (244): marcador `NEXT_IS_NUMBER`.
 4. Codigos de fonema validos: `0x01..0xFA` (ajustable segun tabla final).
 5. Conversion lossy:
 - `uint16`: `normalizedProductID = originalID % 65536`
 - `uint8`: `normalizedValue = originalValue % 256`
+6. Manejo de numeros:
+- Los ceros `0` se eliminan de la frase original.
+- Los digitos `1-9` tienen sus propios IDs de silaba.
+- Se permiten maximo 2 digitos continuos (ej. `750` -> `75`).
 
 ## Estructura de un registro
 Cada producto se guarda como un registro totalmente variable (sin padding):
@@ -67,11 +70,10 @@ Despues de `WordSepMask` se almacena contenido variable:
   - si `phoneme_count_mode=0`, cada palabra ocupa 2 bits (valor real `1..4`)
   - si `phoneme_count_mode=1`, cada palabra ocupa 4 bits (valor real `1..16`)
   - el stream de conteos define la segmentacion de palabras
-  - el conteo incluye todos los bytes de la palabra en `PhonemeStream`, incluyendo `0xF4` y el byte de numero cuando haya numero embebido
+  - el conteo incluye todos los bytes de la palabra en `PhonemeStream` (fonemas + digitos)
 - `PhonemeStream`:
-  - secuencia lineal de fonemas uint8
-  - incluye `0xF4` antes de cada numero normalizado
-  - ejemplo para `750ml`: `[0xF4, 0xEE]` si `750 % 256 = 238 (0xEE)`
+  - secuencia lineal de fonemas uint8 (letras o numeros)
+  - ejemplo para `750ml` (sin ceros -> `75ml`): `[ID_7, ID_5, ID_ml]`
 - `0x00` final: fin de registro
 
 Nota: mantener `0x00` como separador exige que ningun codigo valido de fonema sea `0x00`.
@@ -80,12 +82,14 @@ Nota: mantener `0x00` como separador exige que ningun codigo valido de fonema se
 1. Normalizar texto:
 - minusculas
 - quitar tildes/diacriticos
+- eliminar todos los ceros `0`
 - colapsar espacios
 2. Tokenizar por espacios y separadores comunes.
 3. Para cada token:
-- si es numerico (o contiene unidad numerica), extraer numero base y serializar con `0xF4 + normalizedNumber`
-- si es texto, convertir a secuencia de fonemas del diccionario
-  - si hay numero dentro de una palabra (ej. `100ml`), se mantiene una sola palabra logica y su conteo incluye `0xF4`, `normalizedNumber` y los fonemas restantes de la palabra
+- Procesar contenido mezclado (letras y numeros):
+  - Letras: convertir a secuencia de fonemas del diccionario (silabas).
+  - Numeros: convertir a secuencia de IDs de digitos (1-9).
+  - Regla de truncamiento numerico: si hay una secuencia de numeros, tomar maximo los primeros 2 digitos (ej. `123` -> `12`).
 4. Truncar tokens extremos para respetar limites de mascara por palabra.
 
 ## Diccionario de fonemas (250 entradas)
@@ -101,19 +105,19 @@ Reglas:
 - codigos estables entre builds (no renumerar sin cambio de version)
 - reservar bloques:
   - `0x00` separador
-  - `0xF4` numero
+  - `0x01..0x09` digitos (segun definicion en silabas.go)
   - `0xFB..0xFF` control/futuro
 
 ## Pipeline de indexacion
 1. Cargar productos (ID, marca, categorias, nombre, atributos buscables).
-2. Normalizar y tokenizar texto fuente por producto.
-3. Mapear a fonemas + secuencias numericas.
+2. Normalizar y tokenizar texto fuente por producto (eliminando ceros).
+3. Mapear a fonemas + IDs numericos.
 4. Construir registro variable: header + `WordSepMask` + `PhonemeStream`.
 5. Escribir registro secuencial en `products_search.idx`.
 6. Opcional: generar offset table (`product_offsets.idx`) para acceso directo por posicion.
 
 ## Pipeline de busqueda offline
-1. Normalizar query de entrada igual que en indexacion.
+1. Normalizar query de entrada igual que en indexacion (sin ceros).
 2. Convertir query a stream de fonemas/numeros.
 3. Escanear registros:
 - filtrar primero por categoria/marca desde header
@@ -121,7 +125,6 @@ Reglas:
 4. Rankear resultados:
 - coincidencia completa de tokens
 - bonus por prefijo
-- bonus por match de numero exacto normalizado
 
 ## Separacion de palabras por mask (tu ejemplo)
 Si la mask representa conteos `[2,4,2,3]`, entonces los rangos en `PhonemeStream` son:
@@ -133,9 +136,10 @@ Si la mask representa conteos `[2,4,2,3]`, entonces los rangos en `PhonemeStream
 Nota: el modelo correcto es por longitudes acumuladas (sin solapar).
 
 Ejemplo de numero embebido:
-- token: `100ml`
-- stream posible: `[0xF4, 0x64, 0x62]` (`100 % 256 = 0x64`, `0x62` = fonema `ml`)
-- conteo de esa palabra en mask: `3`
+- token original: `100ml`
+- token procesado: `1ml` (ceros eliminados)
+- stream posible: `[ID_1, ID_ml]`
+- conteo de esa palabra en mask: `2`
 
 ## Pseudocodigo Go (encoder)
 ```go
@@ -146,19 +150,19 @@ func EncodeProductSearchRecord(p ProductIndexInput, phonemeDictionary PhonemeDic
     normalizedBrandID := uint8(p.BrandID % 256)
 
     // 2) Tokenizacion y conversion a fonemas/numero con reglas uniformes.
-    tokens := TokenizeAndNormalizeSpanish(p.SearchText)
-    phonemeWords, encodedNumbers, err := EncodeTokens(tokens, phonemeDictionary)
+    // TokenizeAndNormalizeSpanish debe eliminar '0's.
+    tokens := TokenizeAndNormalizeSpanish(p.SearchText) 
+    phonemeWords, err := EncodeTokens(tokens, phonemeDictionary)
     if err != nil {
         return nil, err
     }
 
     // 3) Seleccion de modo de mascara segun max fonemas por palabra.
-    maxPhonemesInWord := MaxPhonemesPerWord(phonemeWords, encodedNumbers)
+    maxPhonemesInWord := MaxPhonemesPerWord(phonemeWords)
     usesFourBitWordCounts := maxPhonemesInWord > 4
 
     // 4) Construccion de cabecera variable sin bytes de relleno.
-    // BuildWordLengthCounts incluye bytes numericos (0xF4 + valor normalizado) dentro de la palabra donde aparecen.
-    wordLengthCounts := BuildWordLengthCounts(phonemeWords, encodedNumbers)
+    wordLengthCounts := BuildWordLengthCounts(phonemeWords)
     packedWordMask, err := PackWordLengthCounts(wordLengthCounts, usesFourBitWordCounts)
     if err != nil {
         return nil, err
@@ -176,8 +180,8 @@ func EncodeProductSearchRecord(p ProductIndexInput, phonemeDictionary PhonemeDic
     header = append(header, NormalizeCategoryIDsLossy(p.CategoryIDs)...)
     header = append(header, packedWordMask...)
 
-    // 5) Stream final de fonemas y numeros.
-    phonemeStream := FlattenEncodedTokens(phonemeWords, encodedNumbers)
+    // 5) Stream final de fonemas.
+    phonemeStream := FlattenEncodedTokens(phonemeWords)
 
     // 6) Registro final: header variable + stream + separador final.
     out := append(header, phonemeStream...)
@@ -218,16 +222,16 @@ Producto:
 - Categorias: `[3, 9]`
 - Texto: `Vino de 750ml`
 
-Posible stream:
-- `vino` -> `[0x21, 0x34]`
+Posible stream (ceros eliminados -> `vino de 75ml`):
+- `vino` -> `[0x21, 0x34]` (ejemplos IDs)
 - `de` -> `[0x18]`
-- `750` -> `[0xF4, 0xEE]`
+- `75` -> `[ID_7, ID_5]` (IDs especificos de numeros)
 - `ml` -> `[0x62]`
 
 Resultado conceptual:
 
 ```text
-[Flags][ProductID][Brand][Cat1][Cat2][Mask][0x21 0x34 0x18 0xF4 0xEE 0x62][0x00]
+[Flags][ProductID][Brand][Cat1][Cat2][Mask][0x21 0x34 0x18 ID_7 ID_5 0x62][0x00]
 ```
 
 ## Validaciones obligatorias
