@@ -76,23 +76,36 @@ func BuildNamesBinaryIndexFromFile(
 	if fixedGenerationError != nil {
 		return fixedGenerationError
 	}
-	if validateError := validateAndLogFixedSyllables(fixedSlots); validateError != nil {
+	extractedFrequencyBySyllable := extractSyllableFrequency(cleanedProductNames)
+	effectiveFixedSlots, effectiveReservedSyllables, effectiveAliasToSlot, droppedFixedSlots := buildEffectiveFixedSet(
+		fixedSlots,
+		reservedSyllables,
+		fixedAliasToSlot,
+		extractedFrequencyBySyllable,
+	)
+	log.Printf(
+		"word_parser_v2: effective_fixed_filter original=%d effective=%d dropped=%d",
+		len(fixedSlots),
+		len(effectiveFixedSlots),
+		droppedFixedSlots,
+	)
+	if validateError := validateAndLogFixedSyllables(effectiveFixedSlots); validateError != nil {
 		return validateError
 	}
-	generatedDictionary, frequentGenerationError := GenerateFrequentSyllableSlotsWithReserved(cleanedProductNames, fixedSlots, reservedSyllables, frequentConfig)
+	generatedDictionary, frequentGenerationError := GenerateFrequentSyllableSlotsWithReserved(cleanedProductNames, effectiveFixedSlots, effectiveReservedSyllables, frequentConfig)
 	if frequentGenerationError != nil {
 		return frequentGenerationError
 	}
 	if len(generatedDictionary.CombinedSlots) > 255 {
 		return fmt.Errorf("combined dictionary too large for uint8 ids: %d", len(generatedDictionary.CombinedSlots))
 	}
-	logSyllableSummaryLine("Fixed syllables", fixedSlots)
+	logSyllableSummaryLine("Fixed syllables", effectiveFixedSlots)
 	logSyllableSummaryLine("Computed syllables", generatedDictionary.FrequentSlots)
 	totalExtractedSyllables, uniqueExtractedSyllables := extractSyllableStats(cleanedProductNames)
 
 	// This map is the encoding source of truth before dictionary compaction/remapping.
 	syllableToID := make(map[string]uint8, len(generatedDictionary.CombinedSlots)*2)
-	for alias, slotID := range fixedAliasToSlot {
+	for alias, slotID := range effectiveAliasToSlot {
 		if slotID == 0 || slotID > 255 {
 			continue
 		}
@@ -147,7 +160,7 @@ func BuildNamesBinaryIndexFromFile(
 
 	log.Printf(
 		"word_parser_v2: stats fixed_syllables=%d extracted_syllables_total=%d extracted_syllables_unique=%d input_kb=%.2f output_kb=%.2f",
-		len(fixedSlots),
+		len(effectiveFixedSlots),
 		totalExtractedSyllables,
 		uniqueExtractedSyllables,
 		float64(inputFileInfo.Size())/1024.0,
@@ -228,6 +241,88 @@ func extractSyllableStats(cleanedProductNames []string) (int, int) {
 		}
 	}
 	return totalExtracted, len(uniqueExtractedSet)
+}
+
+func extractSyllableFrequency(cleanedProductNames []string) map[string]int {
+	frequencyBySyllable := make(map[string]int, 1024)
+	for _, cleanedProductName := range cleanedProductNames {
+		for _, wordToken := range strings.Fields(cleanedProductName) {
+			for _, extractedSyllable := range splitWordIntoSyllables(wordToken) {
+				if extractedSyllable == "" {
+					continue
+				}
+				frequencyBySyllable[extractedSyllable]++
+			}
+		}
+	}
+	return frequencyBySyllable
+}
+
+func buildEffectiveFixedSet(
+	originalFixedSlots []string,
+	originalReservedSyllables []string,
+	originalAliasToSlot map[string]uint16,
+	extractedFrequencyBySyllable map[string]int,
+) ([]string, []string, map[string]uint16, int) {
+	keptFixedSlots := make([]string, 0, len(originalFixedSlots))
+	oldSlotToNewSlot := make(map[uint16]uint16, len(originalFixedSlots))
+	for slotIndex, fixedSyllable := range originalFixedSlots {
+		normalizedSyllable := normalizeToken(fixedSyllable)
+		if normalizedSyllable == "" {
+			continue
+		}
+		shouldKeep := extractedFrequencyBySyllable[normalizedSyllable] > 0 || isNumericToken(normalizedSyllable)
+		if !shouldKeep {
+			continue
+		}
+		keptFixedSlots = append(keptFixedSlots, normalizedSyllable)
+		oldSlotToNewSlot[uint16(slotIndex+1)] = uint16(len(keptFixedSlots))
+	}
+
+	keptAliasToSlot := make(map[string]uint16, len(originalAliasToSlot))
+	for alias, oldSlotID := range originalAliasToSlot {
+		newSlotID, exists := oldSlotToNewSlot[oldSlotID]
+		if !exists {
+			continue
+		}
+		normalizedAlias := normalizeToken(alias)
+		if normalizedAlias == "" {
+			continue
+		}
+		keptAliasToSlot[normalizedAlias] = newSlotID
+	}
+
+	keptReservedSet := make(map[string]struct{}, len(keptAliasToSlot))
+	for _, reservedSyllable := range originalReservedSyllables {
+		normalizedReserved := normalizeToken(reservedSyllable)
+		if normalizedReserved == "" {
+			continue
+		}
+		if _, exists := keptAliasToSlot[normalizedReserved]; !exists {
+			continue
+		}
+		keptReservedSet[normalizedReserved] = struct{}{}
+	}
+	keptReservedSyllables := make([]string, 0, len(keptReservedSet))
+	for reservedSyllable := range keptReservedSet {
+		keptReservedSyllables = append(keptReservedSyllables, reservedSyllable)
+	}
+	sort.Strings(keptReservedSyllables)
+
+	droppedFixedSlots := len(originalFixedSlots) - len(keptFixedSlots)
+	return keptFixedSlots, keptReservedSyllables, keptAliasToSlot, droppedFixedSlots
+}
+
+func isNumericToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	for _, currentRune := range token {
+		if currentRune < '0' || currentRune > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func validateAndLogFixedSyllables(fixedSlots []string) error {

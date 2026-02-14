@@ -38,6 +38,7 @@ type FixedSyllableGeneratorConfig struct {
 type FrequentSyllableGeneratorConfig struct {
 	TopFrequentCount int
 	TotalSlots       int
+	Strategy         string
 }
 
 // GeneratedDictionary contains both the fixed and text-derived sections.
@@ -114,6 +115,7 @@ func DefaultFixedSyllableGeneratorConfig() FixedSyllableGeneratorConfig {
 			210: {"m", "ml"},
 			211: {"k", "kg", "kgs"},
 			212: {"ud", "un", "uns"},
+			/* 
 			200: {"se", "ce", "xe"},
 			201: {"si", "ci", "xi"},
 			202: {"so", "xo"},
@@ -122,15 +124,17 @@ func DefaultFixedSyllableGeneratorConfig() FixedSyllableGeneratorConfig {
 			220: {"ca", "ka", "qa"},
 			221: {"co", "ko", "qo"},
 			222: {"cu", "ku"},
-			
+			*/
 		},
 		Vowels:                   []string{"a", "e", "i", "o", "u"},
 		Consonants:               []string{"b", "c", "d", "f", "g", "h", "j", "k", "l", "m", "n", "ñ", "p", "q", "r", "s", "t", "v"},
 		ConnectorTokens:          []string{"de", "la", "con", "para", "en"},
 		VowelCombinationPatterns: [][]string{
+			/* 
 			{"b*", "v*"}, 
 			{"q*", "qu*"},
 			{"r*", "rr*"},
+			*/
 		 //	{"k-"}, {"d*"}, {"f*"}, {"g*", "gu*"}, {"h*"},
 				//	{"j*"}, {"l*"}, {"m*"}, {"n*"}, {"ñ-"}, {"p*"},
 				//	{"q*", "qu*"}, {"ch*"}, {"ll*"}, {"-l"}, {"-n"}, {"r*", "rr*"},
@@ -352,6 +356,50 @@ func GenerateFrequentSyllableSlotsWithReserved(
 	}
 
 	sortedFrequencies := sortSyllableFrequencies(frequencyBySyllable)
+
+	if config.Strategy == "frequency" {
+		// No re-sort needed, sortSyllableFrequencies uses count desc.
+	} else if config.Strategy == "atomic_digraph" {
+		// Re-sort to prioritize atomic coverage (length <= 2) and structural digraphs (ch, ll, etc.)
+		sort.SliceStable(sortedFrequencies, func(i, j int) bool {
+			sylI := sortedFrequencies[i].Syllable
+			sylJ := sortedFrequencies[j].Syllable
+			lenI := len([]rune(sylI))
+			lenJ := len([]rune(sylJ))
+
+			isShortI := lenI <= 2
+			isShortJ := lenJ <= 2
+
+			// Prioritize 3-letter structural digraphs common in Spanish
+			isDigraphI := strings.HasPrefix(sylI, "ch") || strings.HasPrefix(sylI, "ll") ||
+				strings.HasPrefix(sylI, "rr") || strings.HasPrefix(sylI, "gu") || strings.HasPrefix(sylI, "qu")
+			isDigraphJ := strings.HasPrefix(sylJ, "ch") || strings.HasPrefix(sylJ, "ll") ||
+				strings.HasPrefix(sylJ, "rr") || strings.HasPrefix(sylJ, "gu") || strings.HasPrefix(sylJ, "qu")
+
+			priorityI := isShortI || (lenI == 3 && isDigraphI)
+			priorityJ := isShortJ || (lenJ == 3 && isDigraphJ)
+
+			if priorityI != priorityJ {
+				return priorityI
+			}
+			return false
+		})
+	} else {
+		// Default: "atomic_first"
+		// Prioritize atomic coverage (length <= 2) over pure frequency.
+		// This proved superior to "atomic_digraph" (2263 vs 2345 shapes).
+		sort.SliceStable(sortedFrequencies, func(i, j int) bool {
+			lenI := len([]rune(sortedFrequencies[i].Syllable))
+			lenJ := len([]rune(sortedFrequencies[j].Syllable))
+			isShortI := lenI <= 2
+			isShortJ := lenJ <= 2
+			if isShortI != isShortJ {
+				return isShortI
+			}
+			return false
+		})
+	}
+
 	prioritizedFrequent := make([]SyllableFrequency, 0, config.TopFrequentCount)
 	for _, current := range sortedFrequencies {
 		if len(prioritizedFrequent) >= config.TopFrequentCount {
@@ -633,8 +681,8 @@ func collectSyllableCandidatesAt(normalizedWord string, index int) []string {
 	candidates := make([]string, 0, 4)
 
 	// Keep the required 4-letter exception.
-	if strings.HasPrefix(remaining, "sion") {
-		candidates = append(candidates, "sion")
+	if strings.HasPrefix(remaining, "cion") {
+		candidates = append(candidates, "cion")
 	}
 	if len(remaining) >= 3 {
 		candidate := remaining[:3]
