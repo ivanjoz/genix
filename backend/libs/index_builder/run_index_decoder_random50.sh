@@ -6,7 +6,10 @@ BACKEND_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 cd "${BACKEND_DIR}"
 
+INPUT_PATH="${1:-libs/index_builder/productos.idx}"
+
 GOCACHE="${GOCACHE:-/tmp/go-build}" \
-  go run ./cmd/word_parser_v2_decode_idx \
-  -input libs/word_parser_v2/productos.idx \
+  go run ./cmd/index_builder_decode_idx \
+  -input "${INPUT_PATH}" \
   -sample 50
+
