@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -15,6 +16,8 @@ const (
 	DefaultDictionarySlots = 244
 	// DefaultTopFrequentCount limits how many high-frequency syllables are prioritized first.
 	DefaultTopFrequentCount = 200
+	// CoverageGreedyCandidatePool limits the candidate set size used by the coverage-aware selector.
+	CoverageGreedyCandidatePool = 400
 )
 
 // SyllableFrequency stores one syllable and how many times it appeared in product text.
@@ -39,6 +42,13 @@ type FrequentSyllableGeneratorConfig struct {
 	TopFrequentCount int
 	TotalSlots       int
 	Strategy         string
+}
+
+var forceTwoLetterSyllableSplit bool
+
+// SetForceTwoLetterSyllableSplit toggles splitter candidate extraction to 2-letter only.
+func SetForceTwoLetterSyllableSplit(enabled bool) {
+	forceTwoLetterSyllableSplit = enabled
 }
 
 // GeneratedDictionary contains both the fixed and text-derived sections.
@@ -102,42 +112,52 @@ func LoadProductNamesFromFile(productNamesFilePath string) ([]string, error) {
 func DefaultFixedSyllableGeneratorConfig() FixedSyllableGeneratorConfig {
 	return FixedSyllableGeneratorConfig{
 		PreassignedSlots: map[uint16][]string{
-			1: {"1"},
-			2: {"2"},
-			3: {"3", "y"},
-			4: {"4", "-"},
-			5: {"5"},
-			6: {"6", "z"},
-			7: {"7", "x"},
-			8: {"8", "w"},
-			9: {"9"},
-			209: {"g", "gr", "grs"},
-			210: {"m", "ml"},
-			211: {"k", "kg", "kgs"},
-			212: {"ud", "un", "uns"},
+			1:   {"1"},
+			2:   {"2"},
+			3:   {"3", "y"},
+			4:   {"4", "-"},
+			5:   {"5"},
+			6:   {"6", "z"},
+			7:   {"7", "x"},
+			8:   {"8", "w"},
+			9:   {"9"},
+			10: {"g", "gr", "grs"},
+			11: {"ml","mm", "mg", "mgs", "m3","m2"},
+			12: {"k", "kg", "kgs","kilos","kilo","kilogramos"},
+			13: {"ud", "un", "uns","unidad","unidades"},
+			14: {"c", "cm", "cm2", "cm3", "cl"},
+			15: {"l", "lt", "lts","litro","litos"},
+			16: {"r", "rr"},
+			17: {"q", "qu"},
+			18: {"p", "pack","paq","paquete"},
 			/* 
-			200: {"se", "ce", "xe"},
-			201: {"si", "ci", "xi"},
-			202: {"so", "xo"},
-			203: {"sa", "xa"},
-			205: {"su", "xu"},
-			220: {"ca", "ka", "qa"},
-			221: {"co", "ko", "qo"},
-			222: {"cu", "ku"},
+			19: {"se", "ce", "xe"},
+			20: {"si", "ci", "xi"},
+			21: {"so", "xo"},
+			22: {"sa", "xa"},
+			23: {"su", "xu"},
+			24: {"ca", "ka", "qa"},
+			25: {"co", "ko", "qo"},
+			26: {"cu", "ku"},
+			27: {"va", "ba"},
+			28: {"ve", "be"},
+			29: {"vi", "bi"},
+			30: {"vo", "bo"},
+			31: {"vu", "bu"},
 			*/
 		},
 		Vowels:                   []string{"a", "e", "i", "o", "u"},
 		Consonants:               []string{"b", "c", "d", "f", "g", "h", "j", "k", "l", "m", "n", "ñ", "p", "q", "r", "s", "t", "v"},
 		ConnectorTokens:          []string{"de", "la", "con", "para", "en"},
 		VowelCombinationPatterns: [][]string{
-			/* 
-			{"b*", "v*"}, 
-			{"q*", "qu*"},
-			{"r*", "rr*"},
+			/*
+				{"b*", "v*"},
+				{"q*", "qu*"},
+				{"r*", "rr*"},
 			*/
-		 //	{"k-"}, {"d*"}, {"f*"}, {"g*", "gu*"}, {"h*"},
-				//	{"j*"}, {"l*"}, {"m*"}, {"n*"}, {"ñ-"}, {"p*"},
-				//	{"q*", "qu*"}, {"ch*"}, {"ll*"}, {"-l"}, {"-n"}, {"r*", "rr*"},
+			//	{"k-"}, {"d*"}, {"f*"}, {"g*", "gu*"}, {"h*"},
+			//	{"j*"}, {"l*"}, {"m*"}, {"n*"}, {"ñ-"}, {"p*"},
+			//	{"q*", "qu*"}, {"ch*"}, {"ll*"}, {"-l"}, {"-n"}, {"r*", "rr*"},
 
 		},
 		EnableTwoSyllableCombinations: false,
@@ -165,8 +185,16 @@ func GenerateFixedSyllableSlotsDetailed(config FixedSyllableGeneratorConfig) ([]
 		return nil, nil, nil, fmt.Errorf("max slots must be > 0")
 	}
 
-	orderedFixedSlots := make([]string, config.MaxSlots)
-	usedSyllablesByAlias := make(map[string]struct{}, config.MaxSlots*2)
+	highestPreassignedSlot := config.MaxSlots
+	for preassignedSlotID := range config.PreassignedSlots {
+		if int(preassignedSlotID) > highestPreassignedSlot {
+			highestPreassignedSlot = int(preassignedSlotID)
+		}
+	}
+	// Keep all preassigned slots addressable even if fixed max is lower.
+	internalFixedCapacity := highestPreassignedSlot
+	orderedFixedSlots := make([]string, internalFixedCapacity)
+	usedSyllablesByAlias := make(map[string]struct{}, internalFixedCapacity*2)
 
 	registerAlias := func(token string) (string, bool) {
 		normalizedToken := normalizeToken(token)
@@ -181,7 +209,7 @@ func GenerateFixedSyllableSlotsDetailed(config FixedSyllableGeneratorConfig) ([]
 	}
 
 	setSlotByIndex := func(slotIndex int, aliases []string) {
-		if slotIndex < 0 || slotIndex >= config.MaxSlots {
+		if slotIndex < 0 || slotIndex >= len(orderedFixedSlots) {
 			return
 		}
 		if orderedFixedSlots[slotIndex] != "" {
@@ -207,7 +235,7 @@ func GenerateFixedSyllableSlotsDetailed(config FixedSyllableGeneratorConfig) ([]
 		if normalizedCandidate == "" || !inserted {
 			return false
 		}
-		for slotIndex := 0; slotIndex < config.MaxSlots; slotIndex++ {
+		for slotIndex := 0; slotIndex < len(orderedFixedSlots); slotIndex++ {
 			if orderedFixedSlots[slotIndex] != "" {
 				continue
 			}
@@ -357,7 +385,7 @@ func GenerateFrequentSyllableSlotsWithReserved(
 
 	sortedFrequencies := sortSyllableFrequencies(frequencyBySyllable)
 
-	if config.Strategy == "frequency" {
+	if config.Strategy == "frequency" || config.Strategy == "ratio_80_20" || config.Strategy == "coverage_greedy" {
 		// No re-sort needed, sortSyllableFrequencies uses count desc.
 	} else if config.Strategy == "atomic_digraph" {
 		// Re-sort to prioritize atomic coverage (length <= 2) and structural digraphs (ch, ll, etc.)
@@ -424,8 +452,66 @@ func GenerateFrequentSyllableSlotsWithReserved(
 		usedSyllables[syllable] = struct{}{}
 	}
 
-	for _, prioritized := range prioritizedFrequent {
-		appendFrequentIfAvailable(prioritized.Syllable)
+	if config.Strategy == "coverage_greedy" {
+		coverageCandidates := make([]SyllableWordMapEntry, 0, CoverageGreedyCandidatePool)
+		for _, current := range sortedFrequencies {
+			if len(coverageCandidates) >= CoverageGreedyCandidatePool {
+				break
+			}
+			if _, isFixed := usedSyllables[current.Syllable]; isFixed {
+				continue
+			}
+			syllableLength := len([]rune(current.Syllable))
+			if syllableLength < 2 || syllableLength > 3 {
+				continue
+			}
+			coverageCandidates = append(coverageCandidates, SyllableWordMapEntry{
+				Syllable: current.Syllable,
+				Length:   syllableLength,
+				Count:    current.Count,
+			})
+		}
+		coverageSelection := BuildCoverageGreedyTopNSyllables(productNames, fixedSlots, coverageCandidates, availableFrequentSlots)
+		for _, selectedSyllable := range coverageSelection {
+			appendFrequentIfAvailable(selectedSyllable)
+		}
+	} else if config.Strategy == "ratio_80_20" {
+		targetTwoLetterCount := int(math.Round(0.8 * float64(availableFrequentSlots)))
+		targetThreeLetterCount := availableFrequentSlots - targetTwoLetterCount
+		addedTwoLetterCount := 0
+		addedThreeLetterCount := 0
+
+		for _, current := range prioritizedFrequent {
+			syllableLength := len([]rune(current.Syllable))
+			if syllableLength == 2 && addedTwoLetterCount < targetTwoLetterCount {
+				beforeCount := len(frequentSlots)
+				appendFrequentIfAvailable(current.Syllable)
+				if len(frequentSlots) > beforeCount {
+					addedTwoLetterCount++
+				}
+			}
+			if len(frequentSlots) >= availableFrequentSlots {
+				break
+			}
+		}
+
+		for _, current := range prioritizedFrequent {
+			syllableLength := len([]rune(current.Syllable))
+			if syllableLength == 3 && addedThreeLetterCount < targetThreeLetterCount {
+				beforeCount := len(frequentSlots)
+				appendFrequentIfAvailable(current.Syllable)
+				if len(frequentSlots) > beforeCount {
+					addedThreeLetterCount++
+				}
+			}
+			if len(frequentSlots) >= availableFrequentSlots {
+				break
+			}
+		}
+	} else {
+		for _, prioritized := range prioritizedFrequent {
+			appendFrequentIfAvailable(prioritized.Syllable)
+		}
 	}
 	for _, current := range sortedFrequencies {
 		appendFrequentIfAvailable(current.Syllable)
@@ -550,25 +636,26 @@ func normalizeText(text string) string {
 
 	for _, currentRune := range strings.ToLower(text) {
 		switch currentRune {
-		case 'á':
+		case 'á', 'à', 'â', 'ä', 'ã', 'å', 'ª':
 			currentRune = 'a'
-		case 'é':
+		case 'é', 'è', 'ê', 'ë':
 			currentRune = 'e'
-		case 'í':
+		case 'í', 'ì', 'î', 'ï':
 			currentRune = 'i'
-		case 'ó':
+		case 'ó', 'ò', 'ô', 'ö', 'õ', 'º':
 			currentRune = 'o'
 		case 'ú', 'ü':
 			currentRune = 'u'
+		case 'ñ':
+			currentRune = 'n'
 		}
 
-		if unicode.IsLetter(currentRune) || unicode.IsDigit(currentRune) || unicode.IsSpace(currentRune) {
+		// Keep only normalized ASCII letters, digits 0-9, and spaces.
+		if (currentRune >= 'a' && currentRune <= 'z') || (currentRune >= '0' && currentRune <= '9') || unicode.IsSpace(currentRune) {
 			normalizedBuilder.WriteRune(currentRune)
 			continue
 		}
-
-		// Any non-word separator becomes space to keep token boundaries explicit.
-		normalizedBuilder.WriteRune(' ')
+		// Drop unsupported punctuation/symbols inline instead of inserting separators.
 	}
 
 	return strings.Join(strings.Fields(normalizedBuilder.String()), " ")
@@ -645,7 +732,7 @@ func splitWordIntoSyllables(word string) []string {
 		}
 		bestStates[index] = skipCandidate
 
-		for _, candidateSyllable := range collectSyllableCandidatesAt(normalizedWord, index) {
+		for _, candidateSyllable := range collectSyllableCandidatesAt(normalizedWord, index, forceTwoLetterSyllableSplit) {
 			nextIndex := index + len(candidateSyllable)
 			followingState := bestStates[nextIndex]
 			candidateState := splitState{
@@ -670,24 +757,41 @@ func splitWordIntoSyllables(word string) []string {
 		}
 		if currentState.syllable != "" {
 			extracted = append(extracted, currentState.syllable)
+		} else if currentState.nextIndex == index+1 {
+			skippedSingleChar := normalizedWord[index : index+1]
+			// Global rule: zero is never emitted as a syllable token.
+			if skippedSingleChar == "0" {
+				index = currentState.nextIndex
+				continue
+			}
+			// Preserve skipped single letters except trailing plural-like "s" in long words.
+			omitTrailingPluralS := wordLength > 5 && index == wordLength-1 && skippedSingleChar == "s"
+			if !omitTrailingPluralS {
+				extracted = append(extracted, skippedSingleChar)
+			}
 		}
 		index = currentState.nextIndex
 	}
 	return extracted
 }
 
-func collectSyllableCandidatesAt(normalizedWord string, index int) []string {
+func collectSyllableCandidatesAt(normalizedWord string, index int, twoLetterOnly bool) []string {
 	remaining := normalizedWord[index:]
-	candidates := make([]string, 0, 4)
+	candidates := make([]string, 0, 5)
 
-	// Keep the required 4-letter exception.
-	if strings.HasPrefix(remaining, "cion") {
-		candidates = append(candidates, "cion")
-	}
-	if len(remaining) >= 3 {
-		candidate := remaining[:3]
-		if matchesSyllablePattern(candidate) {
-			candidates = append(candidates, candidate)
+	if !twoLetterOnly {
+		// Keep required 4-letter exceptions used by the existing dictionary tests.
+		if strings.HasPrefix(remaining, "cion") {
+			candidates = append(candidates, "cion")
+		}
+		if strings.HasPrefix(remaining, "sion") {
+			candidates = append(candidates, "sion")
+		}
+		if len(remaining) >= 3 {
+			candidate := remaining[:3]
+			if matchesSyllablePattern(candidate) {
+				candidates = append(candidates, candidate)
+			}
 		}
 	}
 	if len(remaining) >= 2 {

@@ -12,7 +12,7 @@ GOCACHE="${GOCACHE:-/tmp/go-build}" \
   go run ./cmd/word_parser_v2_build_idx \
   -input libs/word_parser_v2/productos.txt \
   -output libs/word_parser_v2/productos.idx \
-  -slots 200 \
+  -slots 255 \
   -top 200 \
-  -fixed-slots 120 \
-  -strategy atomic_first
+  -fixed-slots 60 \
+  -strategy frequency

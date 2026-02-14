@@ -6,8 +6,11 @@ import (
 	"log"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -16,6 +19,9 @@ const (
 	headerFlagDictionaryDelta = uint8(1 << 0)
 	headerFlagShapeDeltaC0    = uint8(1 << 1)
 	headerFlagShapeDeltaC1    = uint8(1 << 2)
+	headerFlagShapeInlineC0   = uint8(1 << 3)
+	headerFlagShapeInlineC1   = uint8(1 << 4)
+	headerFlagShapeCompactV2  = uint8(1 << 5)
 	// Header layout V2 keeps compact shape counters in uint8 and stores overflow in uint16.
 	headerSizeV3 = 33
 )
@@ -31,6 +37,7 @@ const (
 	shapeDeltaDecoratorSmallMut2Bit = uint8(1)
 	shapeDeltaDecoratorPrefixAppend = uint8(2)
 	shapeDeltaDecoratorTrimAppend   = uint8(3)
+	compactNumericTokenPrefix       = "n0"
 )
 
 // EncodedNameRecord stores one normalized product name as shape + syllable IDs.
@@ -48,6 +55,27 @@ type shapeBucket struct {
 type dictionaryTokenEntry struct {
 	Token string
 	ID    uint8
+}
+
+type shapeDeltaStreamStats struct {
+	NormalDeltaByteCount  int
+	EscapedDeltaByteCount int
+	EscapedDeltaCount     int
+	FirstShapeValueByteCount int
+	TotalDeltaStreamBytes int
+}
+
+type sortedRecordByShapeValue struct {
+	ShapeValue     uint32
+	WordSizes      []uint8
+	EncodedContent []uint8
+}
+
+type topWordFamilyCandidate struct {
+	FamilyKey      string
+	CanonicalWord  string
+	AliasWords     []string
+	TotalFrequency int
 }
 
 // BuildNamesBinaryIndexFromFile reads product names, normalizes/removes connectors, encodes, and writes productos.idx.
@@ -72,16 +100,37 @@ func BuildNamesBinaryIndexFromFile(
 
 	connectorSet := buildConnectorSet(fixedConfig.ConnectorTokens)
 	cleanedProductNames := make([]string, 0, len(productNames))
+	totalConnectorTokensRemoved := 0
+	totalRecordsTruncatedToEightWords := 0
+	totalWordsTruncated := 0
 	for _, rawProductName := range productNames {
 		normalizedTokens := normalizeAndFilterTokens(rawProductName, connectorSet)
+		rawTokenCount := len(strings.Fields(normalizeText(rawProductName)))
+		if rawTokenCount > len(normalizedTokens) {
+			totalConnectorTokensRemoved += rawTokenCount - len(normalizedTokens)
+		}
 		if len(normalizedTokens) == 0 {
 			continue
+		}
+		// Test strategy: cap each phrase to 8 words to enforce compact shapes.
+		if len(normalizedTokens) > 8 {
+			totalRecordsTruncatedToEightWords++
+			totalWordsTruncated += len(normalizedTokens) - 8
+			normalizedTokens = normalizedTokens[:8]
 		}
 		cleanedProductNames = append(cleanedProductNames, strings.Join(normalizedTokens, " "))
 	}
 	if len(cleanedProductNames) == 0 {
 		return fmt.Errorf("all product names were empty after normalization and connector filtering")
 	}
+	remainingConnectorTokensAfterFilter := countConnectorTokensInNames(cleanedProductNames, connectorSet)
+	log.Printf(
+		"word_parser_v2: connector_and_word_cap_stats connectors_removed=%d remaining_connectors_after_filter=%d truncated_records_to_8_words=%d truncated_words_total=%d",
+		totalConnectorTokensRemoved,
+		remainingConnectorTokensAfterFilter,
+		totalRecordsTruncatedToEightWords,
+		totalWordsTruncated,
+	)
 
 	fixedSlots, reservedSyllables, fixedAliasToSlot, fixedGenerationError := GenerateFixedSyllableSlotsDetailed(fixedConfig)
 	if fixedGenerationError != nil {
@@ -135,6 +184,14 @@ func BuildNamesBinaryIndexFromFile(
 			syllableToID[normalizedSyllable] = syllableID
 		}
 	}
+	if len(normalizedDictionarySlots) > 0 {
+		// Numeric compaction tokens are aliases that always resolve inside current dictionary bounds.
+		maxDictionarySlotID := uint8(len(normalizedDictionarySlots))
+		for compactBucket := 1; compactBucket <= 244; compactBucket++ {
+			remappedDictionarySlot := uint8(((compactBucket - 1) % int(maxDictionarySlotID)) + 1)
+			syllableToID[buildCompactNumericToken(uint8(compactBucket))] = remappedDictionarySlot
+		}
+	}
 
 	encodedRecords := make([]EncodedNameRecord, 0, len(cleanedProductNames))
 	unknownSyllableCounts := make(map[string]int)
@@ -154,6 +211,22 @@ func BuildNamesBinaryIndexFromFile(
 	if len(encodedRecords) == 0 {
 		return fmt.Errorf("no records with encodable syllables after normalization")
 	}
+
+	optimizedDictionarySlots, optimizationStats := applyTopWordFamilySlotExpansion(
+		cleanedProductNames,
+		normalizedDictionarySlots,
+		syllableToID,
+	)
+	normalizedDictionarySlots = optimizedDictionarySlots
+	log.Printf(
+		"word_parser_v2: top_word_family_fill scanned_families=%d selected_families=%d added_canonical_words=%d added_alias_mappings=%d dictionary_slots_after=%d",
+		optimizationStats.ScannedFamilyCount,
+		optimizationStats.SelectedFamilyCount,
+		optimizationStats.AddedCanonicalWordCount,
+		optimizationStats.AddedAliasMappingCount,
+		len(normalizedDictionarySlots),
+	)
+
 	logDictionaryUsageCoverageStats(generatedDictionary, encodedRecords)
 	logShapeDiversityStats(encodedRecords)
 	logShapeCoverageStats(encodedRecords, shapeCountU8Limit)
@@ -187,7 +260,167 @@ func BuildNamesBinaryIndexFromFile(
 		len(binaryOutput),
 	)
 	logTopUnknownSyllables(unknownSyllableCounts, 20)
+	if len(unknownSyllableCounts) > 0 {
+		return fmt.Errorf("unknown syllables remain after single-letter fallback unique=%d", len(unknownSyllableCounts))
+	}
 	return nil
+}
+
+type topWordFamilyFillStats struct {
+	ScannedFamilyCount       int
+	SelectedFamilyCount      int
+	AddedCanonicalWordCount  int
+	AddedAliasMappingCount   int
+}
+
+func applyTopWordFamilySlotExpansion(
+	cleanedProductNames []string,
+	inputDictionarySlots []string,
+	syllableToID map[string]uint8,
+) ([]string, topWordFamilyFillStats) {
+	const (
+		targetDictionarySlots      = 254
+		topWordFamilyCandidatesCap = 80
+	)
+	fillStats := topWordFamilyFillStats{}
+	if len(inputDictionarySlots) >= targetDictionarySlots {
+		return inputDictionarySlots, fillStats
+	}
+
+	// Build normalized word frequencies from cleaned corpus.
+	wordFrequencyByToken := make(map[string]int, 2048)
+	for _, cleanedProductName := range cleanedProductNames {
+		for _, wordToken := range strings.Fields(cleanedProductName) {
+			normalizedWordToken := normalizeToken(wordToken)
+			if normalizedWordToken == "" {
+				continue
+			}
+			if !isAlphabeticToken(normalizedWordToken) || utf8.RuneCountInString(normalizedWordToken) < 3 {
+				continue
+			}
+			wordFrequencyByToken[normalizedWordToken]++
+		}
+	}
+	if len(wordFrequencyByToken) == 0 {
+		return inputDictionarySlots, fillStats
+	}
+
+	// Group families with singular/plural normalization by suffix `s`/`es`.
+	type familyAccumulator struct {
+		TotalFrequency int
+		WordFrequency  map[string]int
+	}
+	familyByKey := make(map[string]*familyAccumulator, len(wordFrequencyByToken))
+	for currentWord, currentCount := range wordFrequencyByToken {
+		familyKey := resolveWordFamilyKey(currentWord, wordFrequencyByToken)
+		familyEntry := familyByKey[familyKey]
+		if familyEntry == nil {
+			familyEntry = &familyAccumulator{WordFrequency: make(map[string]int, 4)}
+			familyByKey[familyKey] = familyEntry
+		}
+		familyEntry.TotalFrequency += currentCount
+		familyEntry.WordFrequency[currentWord] += currentCount
+	}
+
+	familyCandidates := make([]topWordFamilyCandidate, 0, len(familyByKey))
+	for familyKey, familyEntry := range familyByKey {
+		canonicalWord := ""
+		canonicalFrequency := -1
+		aliasWords := make([]string, 0, len(familyEntry.WordFrequency))
+		for aliasWord, aliasFrequency := range familyEntry.WordFrequency {
+			aliasWords = append(aliasWords, aliasWord)
+			if aliasFrequency > canonicalFrequency {
+				canonicalWord = aliasWord
+				canonicalFrequency = aliasFrequency
+				continue
+			}
+			if aliasFrequency == canonicalFrequency {
+				if utf8.RuneCountInString(aliasWord) < utf8.RuneCountInString(canonicalWord) {
+					canonicalWord = aliasWord
+				} else if utf8.RuneCountInString(aliasWord) == utf8.RuneCountInString(canonicalWord) && aliasWord < canonicalWord {
+					canonicalWord = aliasWord
+				}
+			}
+		}
+		sort.Strings(aliasWords)
+		familyCandidates = append(familyCandidates, topWordFamilyCandidate{
+			FamilyKey:      familyKey,
+			CanonicalWord:  canonicalWord,
+			AliasWords:     aliasWords,
+			TotalFrequency: familyEntry.TotalFrequency,
+		})
+	}
+	fillStats.ScannedFamilyCount = len(familyCandidates)
+
+	sort.SliceStable(familyCandidates, func(leftIndex, rightIndex int) bool {
+		leftCandidate := familyCandidates[leftIndex]
+		rightCandidate := familyCandidates[rightIndex]
+		if leftCandidate.TotalFrequency != rightCandidate.TotalFrequency {
+			return leftCandidate.TotalFrequency > rightCandidate.TotalFrequency
+		}
+		if leftCandidate.CanonicalWord != rightCandidate.CanonicalWord {
+			return leftCandidate.CanonicalWord < rightCandidate.CanonicalWord
+		}
+		return leftCandidate.FamilyKey < rightCandidate.FamilyKey
+	})
+
+	selectedFamilyCandidates := familyCandidates
+	if len(selectedFamilyCandidates) > topWordFamilyCandidatesCap {
+		selectedFamilyCandidates = selectedFamilyCandidates[:topWordFamilyCandidatesCap]
+	}
+	fillStats.SelectedFamilyCount = len(selectedFamilyCandidates)
+
+	workingDictionarySlots := append([]string(nil), inputDictionarySlots...)
+	for _, familyCandidate := range selectedFamilyCandidates {
+		canonicalWord := familyCandidate.CanonicalWord
+		canonicalDictionaryID, canonicalAlreadyExists := syllableToID[canonicalWord]
+		if !canonicalAlreadyExists {
+			if len(workingDictionarySlots) >= targetDictionarySlots {
+				break
+			}
+			workingDictionarySlots = append(workingDictionarySlots, canonicalWord)
+			canonicalDictionaryID = uint8(len(workingDictionarySlots))
+			syllableToID[canonicalWord] = canonicalDictionaryID
+			fillStats.AddedCanonicalWordCount++
+		}
+		for _, aliasWord := range familyCandidate.AliasWords {
+			if _, aliasAlreadyExists := syllableToID[aliasWord]; aliasAlreadyExists {
+				continue
+			}
+			syllableToID[aliasWord] = canonicalDictionaryID
+			fillStats.AddedAliasMappingCount++
+		}
+	}
+	return workingDictionarySlots, fillStats
+}
+
+func resolveWordFamilyKey(wordToken string, wordFrequencyByToken map[string]int) string {
+	if strings.HasSuffix(wordToken, "es") && utf8.RuneCountInString(wordToken) > 3 {
+		singularWord := strings.TrimSuffix(wordToken, "es")
+		if singularWord != "" {
+			if _, exists := wordFrequencyByToken[singularWord]; exists {
+				return singularWord
+			}
+		}
+	}
+	if strings.HasSuffix(wordToken, "s") && utf8.RuneCountInString(wordToken) > 2 {
+		singularWord := strings.TrimSuffix(wordToken, "s")
+		if singularWord != "" {
+			if _, exists := wordFrequencyByToken[singularWord]; exists {
+				return singularWord
+			}
+		}
+	}
+	return wordToken
+}
+
+func isAlphabeticToken(token string) bool {
+	for _, currentRune := range token {
+		if currentRune < 'a' || currentRune > 'z' {
+			return false
+		}
+	}
+	return true
 }
 
 func encodeProductName(cleanedProductName string, syllableToID map[string]uint8) (EncodedNameRecord, error) {
@@ -196,24 +429,13 @@ func encodeProductName(cleanedProductName string, syllableToID map[string]uint8)
 	wordSizes := make([]uint8, 0, len(wordTokens))
 
 	for _, wordToken := range wordTokens {
-		extractedSyllables := splitWordIntoSyllables(wordToken)
-		if len(extractedSyllables) == 0 {
-			continue
-		}
-		encodedWord := make([]uint8, 0, len(extractedSyllables))
-		for _, syllable := range extractedSyllables {
-			syllableID, exists := syllableToID[syllable]
-			if !exists {
-				continue
-			}
-			encodedWord = append(encodedWord, syllableID)
-		}
+		encodedWord := encodeWordTokenWithFallback(wordToken, syllableToID)
 		if len(encodedWord) == 0 {
 			continue
 		}
-		if len(encodedWord) > 16 {
-			// V3 enforces the hard bound used by shape class packing.
-			return EncodedNameRecord{}, fmt.Errorf("word exceeds max syllables=16 token=%q syllables=%d", wordToken, len(encodedWord))
+		// Strategy clamp: keep at most 7 syllables per word to fit 3-bit shape slots.
+		if len(encodedWord) > 7 {
+			encodedWord = encodedWord[:7]
 		}
 		wordSizes = append(wordSizes, uint8(len(encodedWord)))
 		encodedContent = append(encodedContent, encodedWord...)
@@ -228,14 +450,124 @@ func encodeProductName(cleanedProductName string, syllableToID map[string]uint8)
 func encodedRecordUnknownSyllables(cleanedProductName string, syllableToID map[string]uint8) []string {
 	unknownSyllables := make([]string, 0, 8)
 	for _, wordToken := range strings.Fields(cleanedProductName) {
-		for _, extractedSyllable := range splitWordIntoSyllables(wordToken) {
+		normalizedWordToken := normalizeToken(wordToken)
+		if normalizedWordToken == "" {
+			continue
+		}
+		if compactNumericID, compactSuffix, hasCompactNumericPrefix := splitCompactNumericTokenAndSuffix(normalizedWordToken); hasCompactNumericPrefix {
+			if _, exists := syllableToID[buildCompactNumericToken(compactNumericID)]; !exists {
+				unknownSyllables = append(unknownSyllables, buildCompactNumericToken(compactNumericID))
+			}
+			if compactSuffix == "" {
+				continue
+			}
+			normalizedWordToken = compactSuffix
+		}
+		if _, exists := syllableToID[normalizedWordToken]; exists {
+			continue
+		}
+		if compactNumericID, isCompactNumericToken := decodeCompactNumericToken(wordToken); isCompactNumericToken {
+			if _, exists := syllableToID[buildCompactNumericToken(compactNumericID)]; !exists {
+				unknownSyllables = append(unknownSyllables, buildCompactNumericToken(compactNumericID))
+			}
+			continue
+		}
+		extractedSyllables := splitWordIntoSyllables(wordToken)
+		if len(extractedSyllables) == 0 {
+			normalizedWordToken := normalizeToken(wordToken)
+			if normalizedWordToken != "" {
+				extractedSyllables = []string{normalizedWordToken}
+			}
+		}
+		for _, extractedSyllable := range extractedSyllables {
 			if _, exists := syllableToID[extractedSyllable]; exists {
+				continue
+			}
+			missingAfterSingleLetterFallback := false
+			for _, singleRune := range extractedSyllable {
+				if _, exists := syllableToID[string(singleRune)]; exists {
+					continue
+				}
+				missingAfterSingleLetterFallback = true
+				break
+			}
+			if !missingAfterSingleLetterFallback {
 				continue
 			}
 			unknownSyllables = append(unknownSyllables, extractedSyllable)
 		}
 	}
 	return unknownSyllables
+}
+
+func encodeWordTokenWithFallback(wordToken string, syllableToID map[string]uint8) []uint8 {
+	normalizedWordToken := normalizeToken(wordToken)
+	if normalizedWordToken == "" {
+		return nil
+	}
+	// Prefer full-token alias mapping (e.g. "unidades" -> slot of "ud") before syllable splitting.
+	if fullTokenID, exists := syllableToID[normalizedWordToken]; exists {
+		return []uint8{fullTokenID}
+	}
+	if compactNumericID, isCompactNumericToken := decodeCompactNumericToken(normalizedWordToken); isCompactNumericToken {
+		compactNumericKey := buildCompactNumericToken(compactNumericID)
+		if mappedID, exists := syllableToID[compactNumericKey]; exists {
+			return []uint8{mappedID}
+		}
+		return nil
+	}
+	if compactNumericID, compactSuffix, hasCompactNumericPrefix := splitCompactNumericTokenAndSuffix(normalizedWordToken); hasCompactNumericPrefix {
+		encodedWord := make([]uint8, 0, 4)
+		compactNumericKey := buildCompactNumericToken(compactNumericID)
+		if mappedID, exists := syllableToID[compactNumericKey]; exists {
+			encodedWord = append(encodedWord, mappedID)
+		}
+		if compactSuffix == "" {
+			return encodedWord
+		}
+		if suffixID, exists := syllableToID[compactSuffix]; exists {
+			encodedWord = append(encodedWord, suffixID)
+			return encodedWord
+		}
+		for _, suffixSyllable := range splitWordIntoSyllables(compactSuffix) {
+			if suffixID, exists := syllableToID[suffixSyllable]; exists {
+				encodedWord = append(encodedWord, suffixID)
+				continue
+			}
+			for _, singleRune := range suffixSyllable {
+				singleToken := string(singleRune)
+				if singleTokenID, singleExists := syllableToID[singleToken]; singleExists {
+					encodedWord = append(encodedWord, singleTokenID)
+				}
+			}
+		}
+		return encodedWord
+	}
+
+	extractedSyllables := splitWordIntoSyllables(normalizedWordToken)
+	if len(extractedSyllables) == 0 {
+		extractedSyllables = []string{normalizedWordToken}
+	}
+
+	encodedWord := make([]uint8, 0, len(extractedSyllables))
+	for _, syllable := range extractedSyllables {
+		syllableID, exists := syllableToID[syllable]
+		if exists {
+			encodedWord = append(encodedWord, syllableID)
+			continue
+		}
+
+		// Fallback: encode unknown chunk as single-character tokens.
+		for _, singleRune := range syllable {
+			singleToken := string(singleRune)
+			singleTokenID, singleTokenExists := syllableToID[singleToken]
+			if !singleTokenExists {
+				continue
+			}
+			encodedWord = append(encodedWord, singleTokenID)
+		}
+	}
+	return encodedWord
 }
 
 func extractSyllableStats(cleanedProductNames []string) (int, int) {
@@ -283,10 +615,7 @@ func buildEffectiveFixedSet(
 		if normalizedSyllable == "" {
 			continue
 		}
-		shouldKeep := extractedFrequencyBySyllable[normalizedSyllable] > 0 || isNumericToken(normalizedSyllable)
-		if !shouldKeep {
-			continue
-		}
+		// Keep every fixed slot to preserve preassigned aliases regardless of corpus frequency.
 		keptFixedSlots = append(keptFixedSlots, normalizedSyllable)
 		oldSlotToNewSlot[uint16(slotIndex+1)] = uint16(len(keptFixedSlots))
 	}
@@ -337,6 +666,10 @@ func isNumericToken(token string) bool {
 	return true
 }
 
+func isSingleCharacterToken(token string) bool {
+	return utf8.RuneCountInString(token) == 1
+}
+
 func validateAndLogFixedSyllables(fixedSlots []string) error {
 	seenSyllables := make(map[string]int, len(fixedSlots))
 	for slotIndex, syllable := range fixedSlots {
@@ -379,6 +712,7 @@ func buildBinaryIndexPayload(dictionarySlots []string, encodedRecords []EncodedN
 	}
 
 	dictionarySection := dictionarySectionRaw
+	activeDictionaryTokens := append([]string(nil), compactedDictionaryTokens...)
 	headerFlags := uint8(0)
 	if len(dictionarySectionDelta) < len(dictionarySectionRaw) {
 		// Delta dictionary requires remapping content IDs into sorted dictionary order.
@@ -392,39 +726,50 @@ func buildBinaryIndexPayload(dictionarySlots []string, encodedRecords []EncodedN
 			}
 		}
 		dictionarySection = dictionarySectionDelta
+		sortedDictionaryTokens, buildSortedTokensError := rebuildSortedDictionaryTokensByID(compactedDictionaryTokens, remapFromRawToSorted)
+		if buildSortedTokensError != nil {
+			return nil, buildSortedTokensError
+		}
+		activeDictionaryTokens = sortedDictionaryTokens
 		headerFlags |= headerFlagDictionaryDelta
 	}
 
-	class0Buckets, class1Buckets, splitError := groupRecordsBySortedShapes(remappedRecords)
-	if splitError != nil {
-		return nil, splitError
+	sortedRecords, sortError := buildRecordsSortedByShapeValue(remappedRecords)
+	if sortError != nil {
+		return nil, sortError
 	}
-	class0CompactCount, class0OverflowCount, class0CountError := splitShapeCountCompactAndOverflow(len(class0Buckets))
+	if writeDebugError := writeSortedShapeDebugRows("libs/word_parser_v2/shape_debug_rows.log", sortedRecords, activeDictionaryTokens); writeDebugError != nil {
+		return nil, writeDebugError
+	}
+	shapeUsageSection, shapeDeltaStreamUsesEscape, shapeDeltaStats, shapeStreamError := buildTablelessShapeDeltaUsageSection(sortedRecords)
+	if shapeStreamError != nil {
+		return nil, shapeStreamError
+	}
+
+	class0CompactCount, class0OverflowCount, class0CountError := splitShapeCountCompactAndOverflow(0)
 	if class0CountError != nil {
 		return nil, class0CountError
 	}
-	class1CompactCount, class1OverflowCount, class1CountError := splitShapeCountCompactAndOverflow(len(class1Buckets))
+	class1CompactCount, class1OverflowCount, class1CountError := splitShapeCountCompactAndOverflow(0)
 	if class1CountError != nil {
 		return nil, class1CountError
 	}
 
-	class0ShapeTable, class0UseDelta, class0ShapeTableError := buildShapeTableSection(class0Buckets, shapeClassTwoBit)
-	if class0ShapeTableError != nil {
-		return nil, class0ShapeTableError
-	}
-	class1ShapeTable, class1UseDelta, class1ShapeTableError := buildShapeTableSection(class1Buckets, shapeClassFourBit)
-	if class1ShapeTableError != nil {
-		return nil, class1ShapeTableError
-	}
-	if class0UseDelta {
-		headerFlags |= headerFlagShapeDeltaC0
-	}
+	class0ShapeTable := []uint8(nil)
+	class1ShapeTable := []uint8(nil)
+	class0UsageSection := []uint8(nil)
+	class1UsageSection := shapeUsageSection
+	class0UseDelta := false
+	// Shape delta stream is always active in unified inline mode.
+	class1UseDelta := true
+	headerFlags |= headerFlagShapeInlineC1
+	headerFlags |= headerFlagShapeCompactV2
 	if class1UseDelta {
 		headerFlags |= headerFlagShapeDeltaC1
 	}
-	class0UsageSection := buildShapeUsageSection(class0Buckets)
-	class1UsageSection := buildShapeUsageSection(class1Buckets)
-	contentSection := buildContentSection(class0Buckets, class1Buckets)
+
+	contentSection := buildContentSectionFromSortedShapeRecords(sortedRecords)
+	totalStoredShapeBytes := len(class0ShapeTable) + len(class1ShapeTable) + len(class0UsageSection) + len(class1UsageSection)
 
 	binaryPayload := make([]uint8, 0, headerSizeV3+len(dictionarySection)+len(class0ShapeTable)+len(class1ShapeTable)+len(class0UsageSection)+len(class1UsageSection)+len(contentSection))
 	binaryPayload = append(binaryPayload, []byte(binaryIndexMagicV3)...)
@@ -467,22 +812,445 @@ func buildBinaryIndexPayload(dictionarySlots []string, encodedRecords []EncodedN
 	binaryPayload = append(binaryPayload, contentSection...)
 
 	log.Printf(
-		"word_parser_v2: v3_index header_size=%d index_size=%d content_size=%d header_flags=%d dictionary_count=%d dictionary_bytes=%d shape_class0=%d shape_class1=%d shape_class0_overflow=%d shape_class1_overflow=%d shape_table_mode_c0=%t shape_table_mode_c1=%t",
+		"word_parser_v2: v3_index header_size=%d index_size=%d content_size=%d header_flags=%d dictionary_count=%d dictionary_bytes=%d shape_class0=%d shape_class1=%d shape_class0_overflow=%d shape_class1_overflow=%d shape_table_mode_c0=%t shape_table_mode_c1=%t shape_inline_c0=%t shape_inline_c1=%t unified_shape_stream=%t",
 		headerSizeV3,
 		len(binaryPayload),
 		len(contentSection),
 		headerFlags,
 		len(compactedDictionaryTokens),
 		len(dictionarySection),
-		len(class0Buckets),
-		len(class1Buckets),
+		0,
+		0,
 		class0OverflowCount,
 		class1OverflowCount,
 		class0UseDelta,
 		class1UseDelta,
+		headerFlags&headerFlagShapeInlineC0 != 0,
+		headerFlags&headerFlagShapeInlineC1 != 0,
+		shapeDeltaStreamUsesEscape,
+	)
+	log.Printf(
+		"word_parser_v2: shape_storage_stats normal_delta_u16_bytes=%d escaped_delta_bytes=%d escaped_delta_count=%d first_shape_value_bytes=%d shape_delta_stream_bytes=%d total_stored_shapes_bytes=%d actual_content_bytes=%d",
+		shapeDeltaStats.NormalDeltaByteCount,
+		shapeDeltaStats.EscapedDeltaByteCount,
+		shapeDeltaStats.EscapedDeltaCount,
+		shapeDeltaStats.FirstShapeValueByteCount,
+		shapeDeltaStats.TotalDeltaStreamBytes,
+		totalStoredShapeBytes,
+		len(contentSection),
 	)
 
 	return binaryPayload, nil
+}
+
+func buildRecordsSortedByShapeValue(records []EncodedNameRecord) ([]sortedRecordByShapeValue, error) {
+	sortedRecords := make([]sortedRecordByShapeValue, 0, len(records))
+	for recordIndex, encodedRecord := range records {
+		shapeValue, shapeValueError := encodeShapeWordSizesToFixed24BitValue(encodedRecord.WordSizes)
+		if shapeValueError != nil {
+			return nil, fmt.Errorf("encode shape value record=%d: %w", recordIndex, shapeValueError)
+		}
+		totalSyllableCount := 0
+		for _, wordSize := range encodedRecord.WordSizes {
+			totalSyllableCount += int(wordSize)
+		}
+		if totalSyllableCount != len(encodedRecord.EncodedContent) {
+			return nil, fmt.Errorf("record content length mismatch record=%d expected=%d got=%d", recordIndex, totalSyllableCount, len(encodedRecord.EncodedContent))
+		}
+		sortedRecords = append(sortedRecords, sortedRecordByShapeValue{
+			ShapeValue:     shapeValue,
+			WordSizes:      append([]uint8(nil), encodedRecord.WordSizes...),
+			EncodedContent: append([]uint8(nil), encodedRecord.EncodedContent...),
+		})
+	}
+
+	sort.SliceStable(sortedRecords, func(leftIndex, rightIndex int) bool {
+		if sortedRecords[leftIndex].ShapeValue != sortedRecords[rightIndex].ShapeValue {
+			return sortedRecords[leftIndex].ShapeValue < sortedRecords[rightIndex].ShapeValue
+		}
+		return compareWordSizeSlices(sortedRecords[leftIndex].WordSizes, sortedRecords[rightIndex].WordSizes) < 0
+	})
+	return sortedRecords, nil
+}
+
+func rebuildSortedDictionaryTokensByID(rawDictionaryTokens []string, remapFromRawToSorted []uint8) ([]string, error) {
+	sortedDictionaryTokens := make([]string, len(rawDictionaryTokens))
+	for rawIndex, rawToken := range rawDictionaryTokens {
+		rawID := uint8(rawIndex + 1)
+		if int(rawID) >= len(remapFromRawToSorted) {
+			return nil, fmt.Errorf("dictionary remap out of bounds raw_id=%d", rawID)
+		}
+		sortedID := remapFromRawToSorted[rawID]
+		if sortedID == 0 || int(sortedID) > len(sortedDictionaryTokens) {
+			return nil, fmt.Errorf("dictionary remap invalid raw_id=%d sorted_id=%d", rawID, sortedID)
+		}
+		sortedDictionaryTokens[int(sortedID)-1] = rawToken
+	}
+	for sortedIndex, sortedToken := range sortedDictionaryTokens {
+		if sortedToken == "" {
+			return nil, fmt.Errorf("dictionary remap left empty sorted slot=%d", sortedIndex+1)
+		}
+	}
+	return sortedDictionaryTokens, nil
+}
+
+func writeSortedShapeDebugRows(outputPath string, sortedRecords []sortedRecordByShapeValue, dictionaryTokens []string) error {
+	outputDirectoryPath := filepath.Dir(outputPath)
+	if outputDirectoryPath != "." && outputDirectoryPath != "" {
+		if mkdirError := os.MkdirAll(outputDirectoryPath, 0o755); mkdirError != nil {
+			return fmt.Errorf("create shape debug directory: %w", mkdirError)
+		}
+	}
+	debugLines := make([]string, 0, len(sortedRecords)+1)
+	debugLines = append(debugLines, "record_index\tshape_value\tdelta_value\tshape\tshape_2bit_bytes\tphrase_plain")
+	previousShapeValue := uint32(0)
+	for recordIndex, sortedRecord := range sortedRecords {
+		currentShapeValue := sortedRecord.ShapeValue
+		deltaValue := uint32(0)
+		if currentShapeValue >= previousShapeValue {
+			deltaValue = currentShapeValue - previousShapeValue
+		}
+		shapeTwoBitBytesText := buildShapeTwoBitBytesDebugText(sortedRecord.WordSizes)
+		decodedPhrase, decodePhraseError := decodePlainPhraseFromRecord(sortedRecord, dictionaryTokens)
+		if decodePhraseError != nil {
+			return fmt.Errorf("decode debug phrase record=%d: %w", recordIndex, decodePhraseError)
+		}
+		debugLines = append(
+			debugLines,
+			fmt.Sprintf(
+				"%d\t%s\t%s\t%v\t%s\t%s",
+				recordIndex,
+				fmt.Sprintf("%d", currentShapeValue),
+				fmt.Sprintf("%d", deltaValue),
+				sortedRecord.WordSizes,
+				shapeTwoBitBytesText,
+				decodedPhrase,
+			),
+		)
+		previousShapeValue = currentShapeValue
+	}
+	if writeError := os.WriteFile(outputPath, []byte(strings.Join(debugLines, "\n")+"\n"), 0o644); writeError != nil {
+		return fmt.Errorf("write shape debug rows: %w", writeError)
+	}
+	log.Printf("word_parser_v2: wrote shape debug rows file=%s rows=%d", outputPath, len(sortedRecords))
+	return nil
+}
+
+func buildShapeTwoBitBytesDebugText(wordSizes []uint8) string {
+	for _, wordSize := range wordSizes {
+		if wordSize < 1 || wordSize > 4 {
+			return "overflow_word_gt4"
+		}
+	}
+	twoBitPacked := packTwoBitValues(convertWordSizesToTwoBitDigits(wordSizes))
+	if len(twoBitPacked) == 0 {
+		return "empty"
+	}
+	formattedBytes := make([]string, 0, len(twoBitPacked))
+	for _, currentByte := range twoBitPacked {
+		formattedBytes = append(formattedBytes, fmt.Sprintf("%02x", currentByte))
+	}
+	return strings.Join(formattedBytes, "")
+}
+
+func convertWordSizesToTwoBitDigits(wordSizes []uint8) []uint8 {
+	twoBitDigits := make([]uint8, 0, len(wordSizes))
+	for _, wordSize := range wordSizes {
+		twoBitDigits = append(twoBitDigits, wordSize-1)
+	}
+	return twoBitDigits
+}
+
+func decodePlainPhraseFromRecord(sortedRecord sortedRecordByShapeValue, dictionaryTokens []string) (string, error) {
+	wordTexts := make([]string, 0, len(sortedRecord.WordSizes))
+	contentCursor := 0
+	for _, wordSize := range sortedRecord.WordSizes {
+		syllableCount := int(wordSize)
+		if contentCursor+syllableCount > len(sortedRecord.EncodedContent) {
+			return "", fmt.Errorf("content overflow cursor=%d need=%d total=%d", contentCursor, syllableCount, len(sortedRecord.EncodedContent))
+		}
+		var wordBuilder strings.Builder
+		for syllableIndex := 0; syllableIndex < syllableCount; syllableIndex++ {
+			dictionaryID := int(sortedRecord.EncodedContent[contentCursor])
+			contentCursor++
+			if dictionaryID <= 0 || dictionaryID > len(dictionaryTokens) {
+				return "", fmt.Errorf("invalid dictionary id=%d", dictionaryID)
+			}
+			wordBuilder.WriteString(dictionaryTokens[dictionaryID-1])
+		}
+		wordTexts = append(wordTexts, wordBuilder.String())
+	}
+	if contentCursor != len(sortedRecord.EncodedContent) {
+		return "", fmt.Errorf("unused encoded content bytes=%d", len(sortedRecord.EncodedContent)-contentCursor)
+	}
+	return strings.Join(wordTexts, " "), nil
+}
+
+func buildTablelessShapeDeltaUsageSection(sortedRecords []sortedRecordByShapeValue) ([]uint8, bool, shapeDeltaStreamStats, error) {
+	shapeDeltaStreamBytes, usesEscapeEncoding, streamStats, streamError := buildShapeValueDeltaStream(sortedRecords)
+	if streamError != nil {
+		return nil, false, shapeDeltaStreamStats{}, streamError
+	}
+
+	shapeUsageSection := make([]uint8, 0, len(shapeDeltaStreamBytes)+binary.MaxVarintLen64)
+	shapeUsageSection = appendUvarint(shapeUsageSection, uint64(len(shapeDeltaStreamBytes)))
+	shapeUsageSection = append(shapeUsageSection, shapeDeltaStreamBytes...)
+	return shapeUsageSection, usesEscapeEncoding, streamStats, nil
+}
+
+func buildShapeValueDeltaStream(sortedRecords []sortedRecordByShapeValue) ([]uint8, bool, shapeDeltaStreamStats, error) {
+	if len(sortedRecords) == 0 {
+		return nil, false, shapeDeltaStreamStats{}, fmt.Errorf("shape value stream requires at least one record")
+	}
+
+	streamStats := shapeDeltaStreamStats{}
+	usesEscapeEncoding := false
+	shapeBitWriter := newBitWriter()
+	previousShapeValue := uint32(0)
+	for recordIndex, sortedRecord := range sortedRecords {
+		currentShapeValue := sortedRecord.ShapeValue
+		if currentShapeValue < previousShapeValue {
+			return nil, false, shapeDeltaStreamStats{}, fmt.Errorf("shape values must be monotonic previous=%d current=%d", previousShapeValue, currentShapeValue)
+		}
+		shapeDeltaValue := currentShapeValue - previousShapeValue
+		tokenKind, writtenBits, appendError := appendShapeDeltaTokenBits(shapeBitWriter, shapeDeltaValue)
+		if appendError != nil {
+			return nil, false, shapeDeltaStreamStats{}, fmt.Errorf("encode shape delta record=%d: %w", recordIndex, appendError)
+		}
+		if recordIndex == 0 {
+			streamStats.FirstShapeValueByteCount = (writtenBits + 7) / 8
+		}
+		switch tokenKind {
+		case shapeDeltaTokenKindSmall8:
+			streamStats.NormalDeltaByteCount += writtenBits
+		case shapeDeltaTokenKindMedium16:
+			streamStats.EscapedDeltaByteCount += writtenBits
+		case shapeDeltaTokenKindEscape24:
+			usesEscapeEncoding = true
+			streamStats.EscapedDeltaCount++
+			streamStats.EscapedDeltaByteCount += writtenBits
+		}
+		previousShapeValue = currentShapeValue
+	}
+
+	shapeDeltaStreamBytes := shapeBitWriter.Bytes()
+	streamStats.TotalDeltaStreamBytes = len(shapeDeltaStreamBytes)
+	logShapeStreamProgressByFivePercent(len(sortedRecords), shapeDeltaStreamBytes)
+	return shapeDeltaStreamBytes, usesEscapeEncoding, streamStats, nil
+}
+
+type shapeDeltaTokenKind uint8
+
+const (
+	shapeDeltaTokenKindSmall8 shapeDeltaTokenKind = iota
+	shapeDeltaTokenKindMedium16
+	shapeDeltaTokenKindEscape24
+)
+
+func appendShapeDeltaTokenBits(shapeBitWriter *bitWriter, shapeDeltaValue uint32) (shapeDeltaTokenKind, int, error) {
+	if shapeDeltaValue <= 255 {
+		shapeBitWriter.WriteBit(0)
+		shapeBitWriter.WriteBits(shapeDeltaValue, 8)
+		return shapeDeltaTokenKindSmall8, 9, nil
+	}
+	if shapeDeltaValue <= 65534 {
+		shapeBitWriter.WriteBit(1)
+		shapeBitWriter.WriteBits(shapeDeltaValue, 16)
+		return shapeDeltaTokenKindMedium16, 17, nil
+	}
+	if shapeDeltaValue <= 0xFFFFFF {
+		shapeBitWriter.WriteBit(1)
+		shapeBitWriter.WriteBits(0xFFFF, 16)
+		shapeBitWriter.WriteBits(shapeDeltaValue, 24)
+		return shapeDeltaTokenKindEscape24, 41, nil
+	}
+	return shapeDeltaTokenKindEscape24, 0, fmt.Errorf("shape delta exceeds 24-bit max delta=%d", shapeDeltaValue)
+}
+
+func encodeShapeWordSizesToFixed24BitValue(wordSizes []uint8) (uint32, error) {
+	if len(wordSizes) == 0 {
+		return 0, fmt.Errorf("shape has zero words")
+	}
+	if len(wordSizes) > 8 {
+		return 0, fmt.Errorf("shape has too many words count=%d max=8", len(wordSizes))
+	}
+
+	shapeValue := uint32(0)
+	for wordIndex := 0; wordIndex < 8; wordIndex++ {
+		wordCode := uint8(0)
+		if wordIndex < len(wordSizes) {
+			wordSize := wordSizes[wordIndex]
+			if wordSize < 1 || wordSize > 7 {
+				return 0, fmt.Errorf("invalid word size at index=%d value=%d allowed=1..7", wordIndex, wordSize)
+			}
+			wordCode = wordSize
+		}
+		shapeValue = (shapeValue << 3) | uint32(wordCode)
+	}
+	return shapeValue, nil
+}
+
+func countConnectorTokensInNames(cleanedProductNames []string, connectorSet map[string]struct{}) int {
+	connectorTokenCount := 0
+	for _, cleanedName := range cleanedProductNames {
+		for _, token := range strings.Fields(cleanedName) {
+			if _, isConnector := connectorSet[token]; isConnector {
+				connectorTokenCount++
+			}
+		}
+	}
+	return connectorTokenCount
+}
+
+func logShapeStreamProgressByFivePercent(recordCount int, shapeDeltaStreamBytes []uint8) {
+	if recordCount == 0 {
+		return
+	}
+
+	thresholdRecordByPercent := make(map[int]int, 21)
+	for percentStep := 0; percentStep <= 100; percentStep += 5 {
+		thresholdRecord := int(math.Ceil(float64(recordCount) * float64(percentStep) / 100.0))
+		if thresholdRecord < 1 {
+			thresholdRecord = 1
+		}
+		if thresholdRecord > recordCount {
+			thresholdRecord = recordCount
+		}
+		thresholdRecordByPercent[percentStep] = thresholdRecord
+	}
+
+	percentProgressBytes := make(map[int]int, 21)
+	shapeBitReader := newBitReader(shapeDeltaStreamBytes)
+	for recordIndex := 0; recordIndex < recordCount; recordIndex++ {
+		_, readError := readShapeDeltaTokenFromBits(shapeBitReader)
+		if readError != nil {
+			return
+		}
+		processedRecords := recordIndex + 1
+		for percentStep := 0; percentStep <= 100; percentStep += 5 {
+			if thresholdRecordByPercent[percentStep] == processedRecords {
+				percentProgressBytes[percentStep] = shapeBitReader.BytesConsumed()
+			}
+		}
+	}
+
+	progressEntries := make([]string, 0, 21)
+	for percentStep := 0; percentStep <= 100; percentStep += 5 {
+		progressEntries = append(progressEntries, fmt.Sprintf("p%d=%d", percentStep, percentProgressBytes[percentStep]))
+	}
+	log.Printf("word_parser_v2: shape_stream_progress_5pct %s", strings.Join(progressEntries, ", "))
+}
+
+type bitWriter struct {
+	bytes         []uint8
+	bitOffsetInByte uint8
+}
+
+func newBitWriter() *bitWriter {
+	return &bitWriter{bytes: make([]uint8, 0, 128)}
+}
+
+func (bitStreamWriter *bitWriter) WriteBit(bitValue uint8) {
+	if bitStreamWriter.bitOffsetInByte == 0 {
+		bitStreamWriter.bytes = append(bitStreamWriter.bytes, 0)
+	}
+	if bitValue&1 == 1 {
+		lastByteIndex := len(bitStreamWriter.bytes) - 1
+		bitPosition := 7 - bitStreamWriter.bitOffsetInByte
+		bitStreamWriter.bytes[lastByteIndex] |= 1 << bitPosition
+	}
+	bitStreamWriter.bitOffsetInByte++
+	if bitStreamWriter.bitOffsetInByte == 8 {
+		bitStreamWriter.bitOffsetInByte = 0
+	}
+}
+
+func (bitStreamWriter *bitWriter) WriteBits(bitsValue uint32, bitCount int) {
+	for bitIndex := bitCount - 1; bitIndex >= 0; bitIndex-- {
+		nextBit := uint8((bitsValue >> bitIndex) & 1)
+		bitStreamWriter.WriteBit(nextBit)
+	}
+}
+
+func (bitStreamWriter *bitWriter) Bytes() []uint8 {
+	return append([]uint8(nil), bitStreamWriter.bytes...)
+}
+
+type bitReader struct {
+	bytes         []uint8
+	totalBitOffset int
+}
+
+func newBitReader(sourceBytes []uint8) *bitReader {
+	return &bitReader{bytes: sourceBytes}
+}
+
+func (bitStreamReader *bitReader) ReadBit() (uint8, error) {
+	totalBitCount := len(bitStreamReader.bytes) * 8
+	if bitStreamReader.totalBitOffset >= totalBitCount {
+		return 0, fmt.Errorf("bitstream exhausted")
+	}
+	byteIndex := bitStreamReader.totalBitOffset / 8
+	bitIndexInByte := uint8(bitStreamReader.totalBitOffset % 8)
+	bitPosition := 7 - bitIndexInByte
+	nextBit := (bitStreamReader.bytes[byteIndex] >> bitPosition) & 1
+	bitStreamReader.totalBitOffset++
+	return nextBit, nil
+}
+
+func (bitStreamReader *bitReader) ReadBits(bitCount int) (uint32, error) {
+	readValue := uint32(0)
+	for bitIndex := 0; bitIndex < bitCount; bitIndex++ {
+		nextBit, readError := bitStreamReader.ReadBit()
+		if readError != nil {
+			return 0, readError
+		}
+		readValue = (readValue << 1) | uint32(nextBit)
+	}
+	return readValue, nil
+}
+
+func (bitStreamReader *bitReader) BytesConsumed() int {
+	if bitStreamReader.totalBitOffset == 0 {
+		return 0
+	}
+	return (bitStreamReader.totalBitOffset + 7) / 8
+}
+
+func readShapeDeltaTokenFromBits(shapeBitReader *bitReader) (uint32, error) {
+	flagBit, readFlagError := shapeBitReader.ReadBit()
+	if readFlagError != nil {
+		return 0, readFlagError
+	}
+	if flagBit == 0 {
+		smallDeltaValue, readDeltaError := shapeBitReader.ReadBits(8)
+		if readDeltaError != nil {
+			return 0, readDeltaError
+		}
+		return smallDeltaValue, nil
+	}
+
+	mediumDeltaValue, readMediumDeltaError := shapeBitReader.ReadBits(16)
+	if readMediumDeltaError != nil {
+		return 0, readMediumDeltaError
+	}
+	if mediumDeltaValue != 0xFFFF {
+		return mediumDeltaValue, nil
+	}
+
+	escapeDeltaValue, readEscapeDeltaError := shapeBitReader.ReadBits(24)
+	if readEscapeDeltaError != nil {
+		return 0, readEscapeDeltaError
+	}
+	return escapeDeltaValue, nil
+}
+
+func buildContentSectionFromSortedShapeRecords(sortedRecords []sortedRecordByShapeValue) []uint8 {
+	contentSection := make([]uint8, 0, 1024)
+	for _, currentRecord := range sortedRecords {
+		contentSection = append(contentSection, currentRecord.EncodedContent...)
+	}
+	return contentSection
 }
 
 func compactDictionaryAndRemapRecords(dictionarySlots []string, encodedRecords []EncodedNameRecord) ([]string, []EncodedNameRecord, error) {
@@ -622,24 +1390,225 @@ func sortedBucketsFromMap(bucketMap map[string]*shapeBucket) []shapeBucket {
 	for shapeKey := range bucketMap {
 		keys = append(keys, shapeKey)
 	}
+	if len(keys) == 0 {
+		return nil
+	}
+
+	// Deterministic seed order: highest frequency first, then lexicographic shape as tie-break.
 	sort.Slice(keys, func(leftIndex, rightIndex int) bool {
 		leftBucket := bucketMap[keys[leftIndex]]
 		rightBucket := bucketMap[keys[rightIndex]]
 		leftFrequency := len(leftBucket.RecordContents)
 		rightFrequency := len(rightBucket.RecordContents)
 		if leftFrequency != rightFrequency {
-			// Prioritize highest-frequency shapes so compact slots cover more records.
 			return leftFrequency > rightFrequency
 		}
 		return compareWordSizeSlices(leftBucket.WordSizes, rightBucket.WordSizes) < 0
 	})
 
-	buckets := make([]shapeBucket, 0, len(keys))
+	orderedBuckets := make([]shapeBucket, 0, len(keys))
+	unusedKeys := make(map[string]struct{}, len(keys))
 	for _, shapeKey := range keys {
-		bucket := bucketMap[shapeKey]
-		buckets = append(buckets, *bucket)
+		unusedKeys[shapeKey] = struct{}{}
 	}
-	return buckets
+
+	currentKey := keys[0]
+	for len(unusedKeys) > 0 {
+		_, currentStillUnused := unusedKeys[currentKey]
+		if !currentStillUnused {
+			currentKey = nextBestSeedKey(keys, bucketMap, unusedKeys)
+			if currentKey == "" {
+				break
+			}
+		}
+
+		currentBucket := bucketMap[currentKey]
+		orderedBuckets = append(orderedBuckets, *currentBucket)
+		delete(unusedKeys, currentKey)
+
+		nextKey := nextNearestNeighborKey(currentBucket, keys, bucketMap, unusedKeys)
+		if nextKey == "" {
+			currentKey = nextBestSeedKey(keys, bucketMap, unusedKeys)
+		} else {
+			currentKey = nextKey
+		}
+	}
+
+	return orderedBuckets
+}
+
+func buildUnifiedDeltaOrderedBuckets(class0Buckets []shapeBucket, class1Buckets []shapeBucket) []shapeBucket {
+	mergedBuckets := make([]shapeBucket, 0, len(class0Buckets)+len(class1Buckets))
+	mergedBuckets = append(mergedBuckets, class0Buckets...)
+	mergedBuckets = append(mergedBuckets, class1Buckets...)
+	if len(mergedBuckets) <= 1 {
+		return mergedBuckets
+	}
+
+	seedIndexes := make([]int, len(mergedBuckets))
+	for bucketIndex := range mergedBuckets {
+		seedIndexes[bucketIndex] = bucketIndex
+	}
+	sort.Slice(seedIndexes, func(leftIndex, rightIndex int) bool {
+		leftBucket := mergedBuckets[seedIndexes[leftIndex]]
+		rightBucket := mergedBuckets[seedIndexes[rightIndex]]
+		leftFrequency := len(leftBucket.RecordContents)
+		rightFrequency := len(rightBucket.RecordContents)
+		if leftFrequency != rightFrequency {
+			return leftFrequency > rightFrequency
+		}
+		return compareWordSizeSlices(leftBucket.WordSizes, rightBucket.WordSizes) < 0
+	})
+
+	unusedByIndex := make(map[int]struct{}, len(mergedBuckets))
+	for bucketIndex := range mergedBuckets {
+		unusedByIndex[bucketIndex] = struct{}{}
+	}
+
+	pickNextSeed := func() int {
+		for _, seedIndex := range seedIndexes {
+			if _, exists := unusedByIndex[seedIndex]; exists {
+				return seedIndex
+			}
+		}
+		return -1
+	}
+
+	orderedBuckets := make([]shapeBucket, 0, len(mergedBuckets))
+	currentIndex := pickNextSeed()
+	for len(unusedByIndex) > 0 {
+		if _, exists := unusedByIndex[currentIndex]; !exists {
+			currentIndex = pickNextSeed()
+			if currentIndex < 0 {
+				break
+			}
+		}
+
+		currentBucket := mergedBuckets[currentIndex]
+		orderedBuckets = append(orderedBuckets, currentBucket)
+		delete(unusedByIndex, currentIndex)
+		if len(unusedByIndex) == 0 {
+			break
+		}
+
+		nextIndex := -1
+		bestTransitionCost := int(^uint(0) >> 1)
+		bestFrequency := -1
+		for candidateIndex := range unusedByIndex {
+			candidateBucket := mergedBuckets[candidateIndex]
+			transitionCost, transitionError := deltaTransitionCostBytesUnifiedCompact(currentBucket.WordSizes, candidateBucket.WordSizes)
+			if transitionError != nil {
+				continue
+			}
+			candidateFrequency := len(candidateBucket.RecordContents)
+			if transitionCost < bestTransitionCost {
+				bestTransitionCost = transitionCost
+				nextIndex = candidateIndex
+				bestFrequency = candidateFrequency
+				continue
+			}
+			if transitionCost == bestTransitionCost {
+				if candidateFrequency > bestFrequency {
+					nextIndex = candidateIndex
+					bestFrequency = candidateFrequency
+					continue
+				}
+				if candidateFrequency == bestFrequency && nextIndex >= 0 {
+					if compareWordSizeSlices(candidateBucket.WordSizes, mergedBuckets[nextIndex].WordSizes) < 0 {
+						nextIndex = candidateIndex
+						bestFrequency = candidateFrequency
+					}
+				}
+			}
+		}
+		if nextIndex >= 0 {
+			currentIndex = nextIndex
+			continue
+		}
+		currentIndex = pickNextSeed()
+	}
+
+	return orderedBuckets
+}
+
+func nextBestSeedKey(sortedKeys []string, bucketMap map[string]*shapeBucket, unusedKeys map[string]struct{}) string {
+	for _, shapeKey := range sortedKeys {
+		if _, exists := unusedKeys[shapeKey]; exists {
+			return shapeKey
+		}
+	}
+	return ""
+}
+
+func nextNearestNeighborKey(
+	currentBucket *shapeBucket,
+	sortedKeys []string,
+	bucketMap map[string]*shapeBucket,
+	unusedKeys map[string]struct{},
+) string {
+	if len(unusedKeys) == 0 {
+		return ""
+	}
+
+	bestKey := ""
+	bestCost := int(^uint(0) >> 1)
+	bestFrequency := -1
+	for _, shapeKey := range sortedKeys {
+		if _, exists := unusedKeys[shapeKey]; !exists {
+			continue
+		}
+
+		candidateBucket := bucketMap[shapeKey]
+		transitionCost, costError := deltaTransitionCostBytes(currentBucket.WordSizes, candidateBucket.WordSizes, classifyShapeBucket(currentBucket.WordSizes))
+		if costError != nil {
+			continue
+		}
+		candidateFrequency := len(candidateBucket.RecordContents)
+		if transitionCost < bestCost {
+			bestCost = transitionCost
+			bestKey = shapeKey
+			bestFrequency = candidateFrequency
+			continue
+		}
+		if transitionCost == bestCost {
+			if candidateFrequency > bestFrequency {
+				bestKey = shapeKey
+				bestFrequency = candidateFrequency
+				continue
+			}
+			if candidateFrequency == bestFrequency && bestKey != "" {
+				if compareWordSizeSlices(candidateBucket.WordSizes, bucketMap[bestKey].WordSizes) < 0 {
+					bestKey = shapeKey
+					bestFrequency = candidateFrequency
+				}
+			}
+		}
+	}
+	return bestKey
+}
+
+func classifyShapeBucket(wordSizes []uint8) uint8 {
+	shapeClass, classifyError := classifyShapeWordSizes(wordSizes)
+	if classifyError != nil {
+		return shapeClassFourBit
+	}
+	return shapeClass
+}
+
+func deltaTransitionCostBytes(previousWordSizes []uint8, currentWordSizes []uint8, shapeClass uint8) (int, error) {
+	encodedRow, encodeError := encodeDeltaShapeRow(previousWordSizes, currentWordSizes, shapeClass)
+	if encodeError != nil {
+		return 0, encodeError
+	}
+	return len(encodedRow), nil
+}
+
+func deltaTransitionCostBytesUnifiedCompact(previousWordSizes []uint8, currentWordSizes []uint8) (int, error) {
+	encodedRow, encodeError := encodeUnifiedCompactDeltaShapeRow(previousWordSizes, currentWordSizes)
+	if encodeError != nil {
+		return 0, encodeError
+	}
+	return len(encodedRow), nil
 }
 
 func buildShapeTableSection(buckets []shapeBucket, shapeClass uint8) ([]uint8, bool, error) {
@@ -683,6 +1652,164 @@ func buildDeltaShapeTableSection(buckets []shapeBucket, shapeClass uint8) ([]uin
 		previousWordSizes = bucket.WordSizes
 	}
 	return section, nil
+}
+
+func buildInlineShapeStreamSection(buckets []shapeBucket, shapeClass uint8) ([]uint8, bool, error) {
+	section := make([]uint8, 0, len(buckets)*8)
+	var previousWordSizes []uint8
+	usesDeltaRows := false
+	for shapeIndex, bucket := range buckets {
+		section = appendUvarint(section, uint64(len(bucket.RecordContents)))
+		encodedShapeRow, encodeError := encodeDeltaShapeRow(previousWordSizes, bucket.WordSizes, shapeClass)
+		if encodeError != nil {
+			return nil, false, fmt.Errorf("encode inline shape row shape_index=%d: %w", shapeIndex, encodeError)
+		}
+		if len(encodedShapeRow) > 0 && encodedShapeRow[0] != shapeDeltaDecoratorRaw {
+			usesDeltaRows = true
+		}
+		section = append(section, encodedShapeRow...)
+		previousWordSizes = bucket.WordSizes
+	}
+	return section, usesDeltaRows, nil
+}
+
+// buildUnifiedInlineShapeStreamSection writes one run-length + delta-shape stream.
+// Compact V2 removes redundant packed-length varints in delta rows.
+func buildUnifiedInlineShapeStreamSection(buckets []shapeBucket) ([]uint8, bool, error) {
+	section := make([]uint8, 0, len(buckets)*6)
+	var previousWordSizes []uint8
+	usesDeltaRows := false
+	for shapeIndex, currentBucket := range buckets {
+		section = appendUvarint(section, uint64(len(currentBucket.RecordContents)))
+		encodedShapeRow, encodeError := encodeUnifiedCompactDeltaShapeRow(previousWordSizes, currentBucket.WordSizes)
+		if encodeError != nil {
+			return nil, false, fmt.Errorf("encode unified compact shape row shape_index=%d: %w", shapeIndex, encodeError)
+		}
+		if len(encodedShapeRow) > 0 && encodedShapeRow[0] != shapeDeltaDecoratorRaw {
+			usesDeltaRows = true
+		}
+		section = append(section, encodedShapeRow...)
+		previousWordSizes = currentBucket.WordSizes
+	}
+	return section, usesDeltaRows, nil
+}
+
+func encodeUnifiedCompactDeltaShapeRow(previousWordSizes []uint8, currentWordSizes []uint8) ([]uint8, error) {
+	rawRow, rawError := encodeUnifiedCompactRawShapeRow(currentWordSizes)
+	if rawError != nil {
+		return nil, rawError
+	}
+	bestRow := rawRow
+
+	smallMutationRow, smallMutationSupported := encodeUnifiedCompactSmallMutationRow(previousWordSizes, currentWordSizes)
+	if smallMutationSupported && len(smallMutationRow) < len(bestRow) {
+		bestRow = smallMutationRow
+	}
+
+	prefixAppendRow, prefixAppendSupported, prefixAppendError := encodeUnifiedCompactPrefixAppendRow(previousWordSizes, currentWordSizes)
+	if prefixAppendError != nil {
+		return nil, prefixAppendError
+	}
+	if prefixAppendSupported && len(prefixAppendRow) < len(bestRow) {
+		bestRow = prefixAppendRow
+	}
+
+	trimAppendRow, trimAppendSupported, trimAppendError := encodeUnifiedCompactTrimAppendRow(previousWordSizes, currentWordSizes)
+	if trimAppendError != nil {
+		return nil, trimAppendError
+	}
+	if trimAppendSupported && len(trimAppendRow) < len(bestRow) {
+		bestRow = trimAppendRow
+	}
+
+	return bestRow, nil
+}
+
+func encodeUnifiedCompactRawShapeRow(wordSizes []uint8) ([]uint8, error) {
+	packedWordSizes, packError := packShapeWordSizes(wordSizes, shapeClassFourBit)
+	if packError != nil {
+		return nil, packError
+	}
+	encodedRow := make([]uint8, 0, 1+1+len(packedWordSizes))
+	encodedRow = append(encodedRow, shapeDeltaDecoratorRaw)
+	encodedRow = appendUvarint(encodedRow, uint64(len(wordSizes)))
+	encodedRow = append(encodedRow, packedWordSizes...)
+	return encodedRow, nil
+}
+
+func encodeUnifiedCompactSmallMutationRow(previousWordSizes []uint8, currentWordSizes []uint8) ([]uint8, bool) {
+	if len(previousWordSizes) == 0 || len(previousWordSizes) != len(currentWordSizes) {
+		return nil, false
+	}
+
+	mutationOps := make([]uint8, len(currentWordSizes))
+	for wordIndex := range currentWordSizes {
+		deltaValue := int(currentWordSizes[wordIndex]) - int(previousWordSizes[wordIndex])
+		switch deltaValue {
+		case -1:
+			mutationOps[wordIndex] = 0
+		case 0:
+			mutationOps[wordIndex] = 1
+		case 1:
+			mutationOps[wordIndex] = 2
+		case 2:
+			mutationOps[wordIndex] = 3
+		default:
+			return nil, false
+		}
+	}
+
+	mutationBytes := packTwoBitValues(mutationOps)
+	encodedRow := make([]uint8, 0, 1+len(mutationBytes))
+	encodedRow = append(encodedRow, shapeDeltaDecoratorSmallMut2Bit)
+	encodedRow = append(encodedRow, mutationBytes...)
+	return encodedRow, true
+}
+
+func encodeUnifiedCompactPrefixAppendRow(previousWordSizes []uint8, currentWordSizes []uint8) ([]uint8, bool, error) {
+	if len(previousWordSizes) == 0 || len(currentWordSizes) <= len(previousWordSizes) {
+		return nil, false, nil
+	}
+	sharedPrefixLength := sharedPrefixLengthWordSizes(previousWordSizes, currentWordSizes)
+	if sharedPrefixLength != len(previousWordSizes) {
+		return nil, false, nil
+	}
+
+	appendWordSizes := currentWordSizes[len(previousWordSizes):]
+	packedAppendWordSizes, packError := packShapeWordSizes(appendWordSizes, shapeClassFourBit)
+	if packError != nil {
+		return nil, false, packError
+	}
+	encodedRow := make([]uint8, 0, 1+1+len(packedAppendWordSizes))
+	encodedRow = append(encodedRow, shapeDeltaDecoratorPrefixAppend)
+	encodedRow = appendUvarint(encodedRow, uint64(len(appendWordSizes)))
+	encodedRow = append(encodedRow, packedAppendWordSizes...)
+	return encodedRow, true, nil
+}
+
+func encodeUnifiedCompactTrimAppendRow(previousWordSizes []uint8, currentWordSizes []uint8) ([]uint8, bool, error) {
+	if len(previousWordSizes) == 0 {
+		return nil, false, nil
+	}
+	sharedPrefixLength := sharedPrefixLengthWordSizes(previousWordSizes, currentWordSizes)
+	trimCount := len(previousWordSizes) - sharedPrefixLength
+	if trimCount <= 0 {
+		return nil, false, nil
+	}
+	appendWordSizes := currentWordSizes[sharedPrefixLength:]
+	if len(appendWordSizes) == 0 {
+		return nil, false, nil
+	}
+	packedAppendWordSizes, packError := packShapeWordSizes(appendWordSizes, shapeClassFourBit)
+	if packError != nil {
+		return nil, false, packError
+	}
+	encodedRow := make([]uint8, 0, 1+2+len(packedAppendWordSizes))
+	encodedRow = append(encodedRow, shapeDeltaDecoratorTrimAppend)
+	encodedRow = appendUvarint(encodedRow, uint64(trimCount))
+	encodedRow = appendUvarint(encodedRow, uint64(len(appendWordSizes)))
+	encodedRow = append(encodedRow, packedAppendWordSizes...)
+	return encodedRow, true, nil
 }
 
 func encodeDeltaShapeRow(previousWordSizes []uint8, currentWordSizes []uint8, shapeClass uint8) ([]uint8, error) {
@@ -864,6 +1991,16 @@ func buildContentSection(class0Buckets []shapeBucket, class1Buckets []shapeBucke
 	return section
 }
 
+func buildContentSectionFromOrderedBuckets(orderedBuckets []shapeBucket) []uint8 {
+	section := make([]uint8, 0, 1024)
+	for _, currentBucket := range orderedBuckets {
+		for _, recordContent := range currentBucket.RecordContents {
+			section = append(section, recordContent...)
+		}
+	}
+	return section
+}
+
 func classifyShapeWordSizes(wordSizes []uint8) (uint8, error) {
 	if len(wordSizes) == 0 {
 		return 0, fmt.Errorf("shape has zero words")
@@ -1026,13 +2163,117 @@ func normalizeAndFilterTokens(rawText string, connectorSet map[string]struct{}) 
 
 	allTokens := strings.Fields(normalizedText)
 	filteredTokens := make([]string, 0, len(allTokens))
-	for _, token := range allTokens {
+	appendFilteredToken := func(token string, preserveSingleChar bool) {
+		if token == "" {
+			return
+		}
 		if _, isConnector := connectorSet[token]; isConnector {
-			continue
+			return
+		}
+		if !preserveSingleChar && isSingleCharacterToken(token) {
+			return
 		}
 		filteredTokens = append(filteredTokens, token)
 	}
+	for tokenIndex := 0; tokenIndex < len(allTokens); tokenIndex++ {
+		token := allTokens[tokenIndex]
+		if leadingNumericToken, trailingWordToken, hasAttachedNumericPrefix := splitNumericPrefixToken(token); hasAttachedNumericPrefix {
+			// Always compact numeric prefix to one uint8-equivalent token.
+			compactNumericToken := convertNumericTokenToCompactToken(leadingNumericToken)
+			// Keep compact numeric + short unit in the same word, e.g. "olg".
+			if len(trailingWordToken) > 0 && len(trailingWordToken) <= 3 {
+				appendFilteredToken(compactNumericToken+trailingWordToken, true)
+			} else {
+				filteredTokens = append(filteredTokens, compactNumericToken)
+				// Long suffix tokens stay separate.
+				appendFilteredToken(trailingWordToken, false)
+			}
+			continue
+		}
+		// Compact standalone numbers to deterministic 1..244 buckets.
+		if isNumericToken(token) {
+			compactNumericToken := convertNumericTokenToCompactToken(token)
+			if tokenIndex+1 < len(allTokens) {
+				nextToken := allTokens[tokenIndex+1]
+				if _, isNextConnector := connectorSet[nextToken]; !isNextConnector && len(nextToken) <= 3 && !isNumericToken(nextToken) {
+					// Keep compact numeric + short unit in the same word, e.g. "olg".
+					appendFilteredToken(compactNumericToken+nextToken, true)
+					tokenIndex++
+					continue
+				}
+			}
+			filteredTokens = append(filteredTokens, compactNumericToken)
+			continue
+		}
+		appendFilteredToken(token, false)
+	}
 	return filteredTokens
+}
+
+func convertNumericTokenToCompactToken(rawNumericToken string) string {
+	parsedNumber, parseError := strconv.Atoi(rawNumericToken)
+	if parseError != nil || parsedNumber <= 0 {
+		return buildCompactNumericToken(1)
+	}
+	compactBucket := uint8(((parsedNumber - 1) % 244) + 1)
+	return buildCompactNumericToken(compactBucket)
+}
+
+func buildCompactNumericToken(compactBucket uint8) string {
+	return fmt.Sprintf("%s%03d", compactNumericTokenPrefix, compactBucket)
+}
+
+func decodeCompactNumericToken(normalizedWordToken string) (uint8, bool) {
+	if !strings.HasPrefix(normalizedWordToken, compactNumericTokenPrefix) {
+		return 0, false
+	}
+	if len(normalizedWordToken) != len(compactNumericTokenPrefix)+3 {
+		return 0, false
+	}
+	rawBucketDigits := normalizedWordToken[len(compactNumericTokenPrefix):]
+	parsedBucket, parseError := strconv.Atoi(rawBucketDigits)
+	if parseError != nil || parsedBucket < 1 || parsedBucket > 244 {
+		return 0, false
+	}
+	return uint8(parsedBucket), true
+}
+
+func splitNumericPrefixToken(rawToken string) (string, string, bool) {
+	if rawToken == "" {
+		return "", "", false
+	}
+	splitIndex := 0
+	for splitIndex < len(rawToken) {
+		currentByte := rawToken[splitIndex]
+		if currentByte < '0' || currentByte > '9' {
+			break
+		}
+		splitIndex++
+	}
+	if splitIndex == 0 || splitIndex >= len(rawToken) {
+		return "", "", false
+	}
+	for trailingIndex := splitIndex; trailingIndex < len(rawToken); trailingIndex++ {
+		currentByte := rawToken[trailingIndex]
+		if currentByte < 'a' || currentByte > 'z' {
+			return "", "", false
+		}
+	}
+	return rawToken[:splitIndex], rawToken[splitIndex:], true
+}
+
+func splitCompactNumericTokenAndSuffix(normalizedWordToken string) (uint8, string, bool) {
+	const compactNumericTokenLength = 5 // "n0" + 3 digits
+	if len(normalizedWordToken) <= compactNumericTokenLength {
+		return 0, "", false
+	}
+	compactNumericTokenCandidate := normalizedWordToken[:compactNumericTokenLength]
+	compactNumericID, isCompactNumericToken := decodeCompactNumericToken(compactNumericTokenCandidate)
+	if !isCompactNumericToken {
+		return 0, "", false
+	}
+	compactSuffix := normalizedWordToken[compactNumericTokenLength:]
+	return compactNumericID, compactSuffix, true
 }
 
 func buildConnectorSet(connectorTokens []string) map[string]struct{} {

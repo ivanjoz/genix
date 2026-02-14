@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -59,8 +60,11 @@ func TestBuildNamesBinaryIndexFromFileWritesBinaryOutput(t *testing.T) {
 		t.Fatalf("expected dictionary_count > 0")
 	}
 	totalShapeCount := int(shapeCountClass0) + int(shapeCountClass1) + int(shapeCountClass0Overflow) + int(shapeCountClass1Overflow)
-	if totalShapeCount == 0 {
-		t.Fatalf("expected at least one shape in header")
+	if totalShapeCount != 0 {
+		t.Fatalf("expected tableless shape header counters=0 got=%d", totalShapeCount)
+	}
+	if shapeTableClass0Bytes != 0 || shapeTableClass1Bytes != 0 {
+		t.Fatalf("expected tableless shape table bytes=0 got class0=%d class1=%d", shapeTableClass0Bytes, shapeTableClass1Bytes)
 	}
 
 	sectionStart := uint32(headerSizeV3)
@@ -162,11 +166,11 @@ func TestBuildBinaryIndexPayloadStoresShapeClasses(t *testing.T) {
 
 	shapeCountClass0 := binaryOutput[15]
 	shapeCountClass1 := binaryOutput[16]
-	if shapeCountClass0 != 1 {
-		t.Fatalf("expected class0 shape count=1 got=%d", shapeCountClass0)
+	if shapeCountClass0 != 0 {
+		t.Fatalf("expected unified stream to keep class0 shape count=0 got=%d", shapeCountClass0)
 	}
-	if shapeCountClass1 != 1 {
-		t.Fatalf("expected class1 shape count=1 got=%d", shapeCountClass1)
+	if shapeCountClass1 != 0 {
+		t.Fatalf("expected tableless shape stream class1 shape count=0 got=%d", shapeCountClass1)
 	}
 }
 
@@ -234,14 +238,15 @@ func TestBuildBinaryIndexPayloadStoresOverflowShapeCounters(t *testing.T) {
 	if buildError != nil {
 		t.Fatalf("unexpected payload build error: %v", buildError)
 	}
-
+	if len(binaryOutput) < headerSizeV3 {
+		t.Fatalf("payload too small: %d", len(binaryOutput))
+	}
 	shapeCountClass0Compact := binaryOutput[15]
 	shapeCountClass0Overflow := binary.LittleEndian.Uint16(binaryOutput[17:19])
-	if shapeCountClass0Compact != 255 {
-		t.Fatalf("expected class0 compact count=255 got=%d", shapeCountClass0Compact)
-	}
-	if shapeCountClass0Overflow != uint16(targetShapeCount-255) {
-		t.Fatalf("expected class0 overflow=%d got=%d", targetShapeCount-255, shapeCountClass0Overflow)
+	shapeCountClass1Compact := binaryOutput[16]
+	shapeCountClass1Overflow := binary.LittleEndian.Uint16(binaryOutput[19:21])
+	if shapeCountClass0Compact != 0 || shapeCountClass0Overflow != 0 || shapeCountClass1Compact != 0 || shapeCountClass1Overflow != 0 {
+		t.Fatalf("expected tableless shape counters all zero got c0=%d c0o=%d c1=%d c1o=%d", shapeCountClass0Compact, shapeCountClass0Overflow, shapeCountClass1Compact, shapeCountClass1Overflow)
 	}
 }
 
@@ -288,14 +293,12 @@ func TestBuildBinaryIndexPayloadEnablesShapeDeltaModeWhenSmaller(t *testing.T) {
 		t.Fatalf("insufficient generated records for delta-mode test: %d", len(records))
 	}
 
-	binaryOutput, buildError := buildBinaryIndexPayload(dictionarySlots, records)
-	if buildError != nil {
-		t.Fatalf("unexpected payload build error: %v", buildError)
+	_, buildError := buildBinaryIndexPayload(dictionarySlots, records)
+	if buildError == nil {
+		t.Fatalf("expected payload build error for shape with >8 words")
 	}
-
-	headerFlags := binaryOutput[9]
-	if headerFlags&headerFlagShapeDeltaC0 == 0 {
-		t.Fatalf("expected class-0 shape delta mode enabled flags=%08b", headerFlags)
+	if !strings.Contains(buildError.Error(), "too many words") {
+		t.Fatalf("expected max-8-words error, got: %v", buildError)
 	}
 }
 
@@ -325,6 +328,28 @@ func TestBuildDeltaShapeTableSectionRoundTripDecorators(t *testing.T) {
 		if compareWordSizeSlices(expected, got) != 0 {
 			t.Fatalf("shape mismatch index=%d expected=%v got=%v", shapeIndex, expected, got)
 		}
+	}
+}
+
+func TestEncodeProductNameFallsBackToSingleLettersForUnknownSyllable(t *testing.T) {
+	syllableToID := map[string]uint8{
+		"c": 1,
+		"h": 2,
+		"o": 3,
+	}
+
+	encodedRecord, encodeError := encodeProductName("cho", syllableToID)
+	if encodeError != nil {
+		t.Fatalf("unexpected encode error: %v", encodeError)
+	}
+	if len(encodedRecord.WordSizes) != 1 || encodedRecord.WordSizes[0] != 3 {
+		t.Fatalf("unexpected word sizes: %v", encodedRecord.WordSizes)
+	}
+	if len(encodedRecord.EncodedContent) != 3 {
+		t.Fatalf("unexpected encoded content length: %v", encodedRecord.EncodedContent)
+	}
+	if encodedRecord.EncodedContent[0] != 1 || encodedRecord.EncodedContent[1] != 2 || encodedRecord.EncodedContent[2] != 3 {
+		t.Fatalf("unexpected encoded content values: %v", encodedRecord.EncodedContent)
 	}
 }
 
@@ -552,4 +577,166 @@ func unpackShapeWordSizesForTest(packedWordSizes []uint8, wordCount int, shapeCl
 		return wordSizes, nil
 	}
 	return nil, os.ErrInvalid
+}
+
+func TestAtomicFirstFrequentSelectionPrioritizesTwoLetterSyllables(t *testing.T) {
+	productNames := []string{
+		"casa mesa taza",
+		"barco masa pasa",
+		"queso bote lata",
+	}
+
+	generatedDictionary, generationError := GenerateFrequentSyllableSlotsWithReserved(
+		productNames,
+		nil,
+		nil,
+		FrequentSyllableGeneratorConfig{
+			TopFrequentCount: 40,
+			TotalSlots:       40,
+			Strategy:         "atomic_first",
+		},
+	)
+	if generationError != nil {
+		t.Fatalf("unexpected generation error: %v", generationError)
+	}
+
+	foundShortSyllable := false
+	foundLongSyllable := false
+	seenLongBeforeShort := false
+	for _, currentSyllable := range generatedDictionary.FrequentSlots {
+		syllableLength := len([]rune(currentSyllable))
+		if syllableLength <= 2 {
+			foundShortSyllable = true
+			if foundLongSyllable {
+				seenLongBeforeShort = true
+				break
+			}
+			continue
+		}
+		foundLongSyllable = true
+	}
+
+	if !foundShortSyllable || !foundLongSyllable {
+		t.Fatalf("test corpus must produce both <=2 and >2 syllables, got frequent=%v", generatedDictionary.FrequentSlots)
+	}
+	if seenLongBeforeShort {
+		t.Fatalf("atomic_first should prioritize <=2 syllables before >2 syllables, got frequent=%v", generatedDictionary.FrequentSlots)
+	}
+}
+
+func TestExtractedSyllablesReduceSingleLetterUsageVsSingleLetterOnlyDictionary(t *testing.T) {
+	cleanedProductNames := []string{
+		"batido chocolate puleva botella 1 l",
+		"zumo naranja natural botella 1 l",
+		"leche desnatada botella 1 l",
+		"queso semicurado pieza",
+	}
+
+	singleLetterDictionary := buildSingleLetterDictionaryForTest(cleanedProductNames)
+	extractedDictionary := buildExtractedDictionaryWithSingleLetterFallbackForTest(cleanedProductNames)
+
+	baselineSingleLetterUsage, baselineTotalUsage, baselineEncodeError := countSingleLetterUsageForDictionary(cleanedProductNames, singleLetterDictionary)
+	if baselineEncodeError != nil {
+		t.Fatalf("unexpected baseline encode error: %v", baselineEncodeError)
+	}
+	extractedSingleLetterUsage, extractedTotalUsage, extractedEncodeError := countSingleLetterUsageForDictionary(cleanedProductNames, extractedDictionary)
+	if extractedEncodeError != nil {
+		t.Fatalf("unexpected extracted encode error: %v", extractedEncodeError)
+	}
+
+	if extractedSingleLetterUsage >= baselineSingleLetterUsage {
+		t.Fatalf(
+			"expected extracted syllables to reduce 1-letter usage baseline=%d extracted=%d baseline_total=%d extracted_total=%d",
+			baselineSingleLetterUsage,
+			extractedSingleLetterUsage,
+			baselineTotalUsage,
+			extractedTotalUsage,
+		)
+	}
+	t.Logf(
+		"single_letter_usage baseline=%d extracted=%d baseline_total=%d extracted_total=%d reduction=%d",
+		baselineSingleLetterUsage,
+		extractedSingleLetterUsage,
+		baselineTotalUsage,
+		extractedTotalUsage,
+		baselineSingleLetterUsage-extractedSingleLetterUsage,
+	)
+}
+
+func buildSingleLetterDictionaryForTest(cleanedProductNames []string) map[string]uint8 {
+	singleLetterSet := make(map[string]struct{}, 64)
+	for _, cleanedProductName := range cleanedProductNames {
+		for _, wordToken := range strings.Fields(cleanedProductName) {
+			normalizedWordToken := normalizeToken(wordToken)
+			for _, currentRune := range normalizedWordToken {
+				singleLetterSet[string(currentRune)] = struct{}{}
+			}
+		}
+	}
+	sortedSingleLetters := make([]string, 0, len(singleLetterSet))
+	for singleLetter := range singleLetterSet {
+		sortedSingleLetters = append(sortedSingleLetters, singleLetter)
+	}
+	sort.Strings(sortedSingleLetters)
+
+	dictionary := make(map[string]uint8, len(sortedSingleLetters))
+	for letterIndex, singleLetter := range sortedSingleLetters {
+		dictionary[singleLetter] = uint8(letterIndex + 1)
+	}
+	return dictionary
+}
+
+func buildExtractedDictionaryWithSingleLetterFallbackForTest(cleanedProductNames []string) map[string]uint8 {
+	dictionary := buildSingleLetterDictionaryForTest(cleanedProductNames)
+	nextID := len(dictionary) + 1
+
+	extractedSet := make(map[string]struct{}, 256)
+	for _, cleanedProductName := range cleanedProductNames {
+		for _, wordToken := range strings.Fields(cleanedProductName) {
+			for _, extractedSyllable := range splitWordIntoSyllables(wordToken) {
+				if len([]rune(extractedSyllable)) <= 1 {
+					continue
+				}
+				extractedSet[extractedSyllable] = struct{}{}
+			}
+		}
+	}
+	sortedExtracted := make([]string, 0, len(extractedSet))
+	for extractedSyllable := range extractedSet {
+		sortedExtracted = append(sortedExtracted, extractedSyllable)
+	}
+	sort.Strings(sortedExtracted)
+
+	for _, extractedSyllable := range sortedExtracted {
+		if _, exists := dictionary[extractedSyllable]; exists {
+			continue
+		}
+		dictionary[extractedSyllable] = uint8(nextID)
+		nextID++
+	}
+	return dictionary
+}
+
+func countSingleLetterUsageForDictionary(cleanedProductNames []string, dictionary map[string]uint8) (int, int, error) {
+	idToToken := make(map[uint8]string, len(dictionary))
+	for token, tokenID := range dictionary {
+		idToToken[tokenID] = token
+	}
+
+	singleLetterUsage := 0
+	totalUsage := 0
+	for _, cleanedProductName := range cleanedProductNames {
+		encodedRecord, encodeError := encodeProductName(cleanedProductName, dictionary)
+		if encodeError != nil {
+			return 0, 0, encodeError
+		}
+		for _, tokenID := range encodedRecord.EncodedContent {
+			totalUsage++
+			token := idToToken[tokenID]
+			if len([]rune(token)) == 1 {
+				singleLetterUsage++
+			}
+		}
+	}
+	return singleLetterUsage, totalUsage, nil
 }

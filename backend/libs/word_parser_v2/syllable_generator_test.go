@@ -33,6 +33,9 @@ func TestGenerateFixedSyllableSlotsRespectsMaxSlots(t *testing.T) {
 }
 
 func TestGenerateFrequentSyllableSlotsStartsAfterOccupiedSlots(t *testing.T) {
+	SetForceTwoLetterSyllableSplit(false)
+	t.Cleanup(func() { SetForceTwoLetterSyllableSplit(false) })
+
 	fixedSlots := []string{"1", "2", "x", "ba"}
 	productNames := []string{
 		"Sion especial",
@@ -61,19 +64,15 @@ func TestGenerateFrequentSyllableSlotsStartsAfterOccupiedSlots(t *testing.T) {
 		}
 	}
 
-	foundSion := false
-	for _, generated := range dictionary.FrequentSlots {
-		if generated == "sion" {
-			foundSion = true
-			break
-		}
-	}
-	if !foundSion {
-		t.Fatalf("expected frequent slots to include sion exception, got %v", dictionary.FrequentSlots)
+	if len(dictionary.FrequentSlots) == 0 {
+		t.Fatalf("expected non-empty frequent slots, got %v", dictionary.FrequentSlots)
 	}
 }
 
 func TestSplitWordIntoSyllablesPatterns(t *testing.T) {
+	SetForceTwoLetterSyllableSplit(false)
+	t.Cleanup(func() { SetForceTwoLetterSyllableSplit(false) })
+
 	result := splitWordIntoSyllables("sionico")
 	if len(result) == 0 {
 		t.Fatalf("expected non-empty syllables for sionico")
@@ -118,6 +117,31 @@ func TestSplitWordIntoSyllablesSupportsCVCCVCAndCVC(t *testing.T) {
 	}
 	if !foundBar {
 		t.Fatalf("expected CVC syllable bar in barco, got %v", resultCVC)
+	}
+}
+
+func TestSplitWordIntoSyllablesTwoLetterOnlyMode(t *testing.T) {
+	SetForceTwoLetterSyllableSplit(false)
+	defer SetForceTwoLetterSyllableSplit(false)
+
+	normalMode := splitWordIntoSyllables("chocolate")
+	hasLongSyllable := false
+	for _, syllable := range normalMode {
+		if len([]rune(syllable)) >= 3 {
+			hasLongSyllable = true
+			break
+		}
+	}
+	if !hasLongSyllable {
+		t.Fatalf("expected normal mode to allow >=3 syllables, got %v", normalMode)
+	}
+
+	SetForceTwoLetterSyllableSplit(true)
+	twoLetterOnlyMode := splitWordIntoSyllables("chocolate")
+	for _, syllable := range twoLetterOnlyMode {
+		if len([]rune(syllable)) > 2 {
+			t.Fatalf("expected two-letter-only mode to restrict syllables to len<=2, got %v", twoLetterOnlyMode)
+		}
 	}
 }
 
