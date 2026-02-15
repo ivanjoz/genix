@@ -65,3 +65,7 @@ backend/libs/productos.txt
 backend/libs/products_search.idx
 backend/libs/products_search.tar.zst
 backend/libs/productos.tar.zst
+backend/libs/index_builder/productos_stats.py
+backend/libs/productos_sep/*
+backend/libs/index_builder/productos.psv.backup
+backend/libs/index_builder/productos.idx
