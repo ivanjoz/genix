@@ -84,15 +84,12 @@ export interface ExcelImportOptions<T> {
   headerRows?: number[];
 }
 
-export interface ExcelImportError {
-  row: number;
-  column: string;
-  message: string;
-}
-
 export interface ExcelImportResult<T> {
-  rows: Partial<T>[];
-  errors: ExcelImportError[];
+	rows: Partial<T>[];
+  rowsWithoutErrors: Partial<T>[];
+  /** Excel row number (1-based) for each parsed row, aligned by index with `rows`. */
+  rowNumbers?: number[];
+  errors: string[];
   mappedColumns: string[];
   ignoredHeaders: string[];
   sheetName: string;

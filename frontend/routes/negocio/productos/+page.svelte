@@ -251,7 +251,10 @@ import {
     console.log("[productos-import] starting excel import:", file.name);
 
     try {
-      const importResult = await processProductosImportFile(productoImportColumns, file, listas);
+      const importResult = await processProductosImportFile(productoImportColumns, file, listas, {
+        byID: productos.productosMap,
+        normalizedNameToID: productos.productosNameToIDMap,
+      });
 
       importExcelRowsPreview = importResult.rows;
       importExcelErrors = importResult.errors;
@@ -733,7 +736,7 @@ import {
   <Modal
     id={IMPORT_PRODUCTOS_MODAL_ID}
     title="Importar Productos desde Excel"
-    size={6}
+    size={6} css="px-4"
     useFileImportWithErrors={true}
     fileErrors={importExcelErrors}
     onFileChange={onImportExcelFileChange}

@@ -296,7 +296,17 @@ export function parseDefaultByType(type: ExcelColumnConfig<unknown>['type'], raw
 
   if (type === 'number') {
     const parsed = Number(raw);
-    return Number.isFinite(parsed) ? parsed : undefined;
+    if (Number.isFinite(parsed)) return parsed;
+
+    // Fallback for decorated numeric strings like "23%" or "S/ 19.90".
+    const numberToken = String(raw).trim().match(/[-+]?\d+(?:[.,]\d+)?/)?.[0];
+    if (!numberToken) return undefined;
+
+    const normalizedToken = numberToken.includes(',') && !numberToken.includes('.')
+      ? numberToken.replace(',', '.')
+      : numberToken;
+    const parsedToken = Number.parseFloat(normalizedToken);
+    return Number.isFinite(parsedToken) ? parsedToken : undefined;
   }
 
   if (type === 'boolean') {

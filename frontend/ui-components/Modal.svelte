@@ -48,10 +48,7 @@
 	let modalDiv: HTMLDivElement | undefined = $state();
 	let selectedImportFile = $state<File | undefined>(undefined);
 	let selectedImportView = $state(1);
-	const importViewOptions = [
-		[1, "Records"],
-		[2, "Errors"],
-	] as [number, string][];
+	const importViewOptions = [[1, "Registros"], [2, "Errores"]] as [number, string][];
 
 	// Watch for changes in openModals array
 	$effect(() => {

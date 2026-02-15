@@ -1,4 +1,4 @@
-import type { ExcelImportError, ExcelImportOptions, ExcelImportResult } from './types';
+import type { ExcelImportOptions, ExcelImportResult } from './types';
 import {
   assertExcelCall,
   buildResolvedTree,
@@ -57,6 +57,15 @@ function sanitizeHeaderRows(headerRows: number[] | undefined): number[] {
   return [...new Set(rows)].sort((a, b) => a - b);
 }
 
+function formatImportError(row: number, message: string): string {
+  const normalizedMessage = String(message || '').trim();
+  const accentNormalizedMessage = normalizedMessage.replace(/\bno valido\b/gi, 'no válido');
+  const finalMessage = accentNormalizedMessage
+    ? accentNormalizedMessage.charAt(0).toUpperCase() + accentNormalizedMessage.slice(1)
+    : 'Error de validacion';
+  return `Fila ${row}: ${finalMessage}`;
+}
+
 export async function parseExcelFile<T>(options: ExcelImportOptions<T>): Promise<ExcelImportResult<T>> {
   const { columns, source, sheetName } = options;
   const headerRows = sanitizeHeaderRows(options.headerRows);
@@ -81,6 +90,8 @@ export async function parseExcelFile<T>(options: ExcelImportOptions<T>): Promise
   if (rows.length < lastHeaderRow) {
     return {
       rows: [],
+      rowsWithoutErrors: [],
+      rowNumbers: [],
       errors: [],
       mappedColumns: [],
       ignoredHeaders: [],
@@ -141,7 +152,10 @@ export async function parseExcelFile<T>(options: ExcelImportOptions<T>): Promise
   }
 
   const parsedRows: Partial<T>[] = [];
-  const errors: ExcelImportError[] = [];
+  const parsedRowsWithoutErrors: Partial<T>[] = [];
+  const parsedRowNumbers: number[] = [];
+  const errors: string[] = [];
+  const rowNumbersWithErrors = new Set<number>();
 
   for (let rowIndex = lastHeaderRow; rowIndex < rows.length; rowIndex++) {
     const row = rows[rowIndex] || [];
@@ -149,15 +163,13 @@ export async function parseExcelFile<T>(options: ExcelImportOptions<T>): Promise
     let hasAnyValue = false;
 
     for (const [columnIndex, leaf] of mappedIndexes.entries()) {
-      const rawValue = row[columnIndex] ?? '';
+      const rawCellValue = row[columnIndex] ?? '';
+      const rawValue = String(rawCellValue).trim();
       if (rawValue !== '') hasAnyValue = true;
 
       const saveError = (message: string) => {
-        errors.push({
-          row: rowIndex + 1,
-          column: leaf.header,
-          message,
-        });
+        rowNumbersWithErrors.add(rowIndex + 1);
+        errors.push(formatImportError(rowIndex + 1, message));
       };
 
       let parsed: unknown;
@@ -182,11 +194,17 @@ export async function parseExcelFile<T>(options: ExcelImportOptions<T>): Promise
 
     if (hasAnyValue) {
       parsedRows.push(draft);
+      parsedRowNumbers.push(rowIndex + 1);
+      if (!rowNumbersWithErrors.has(rowIndex + 1)) {
+        parsedRowsWithoutErrors.push(draft);
+      }
     }
   }
 
   return {
     rows: parsedRows,
+    rowsWithoutErrors: parsedRowsWithoutErrors,
+    rowNumbers: parsedRowNumbers,
     errors,
     mappedColumns: [...mappedIndexes.values()].map((leaf) => leaf.header),
     ignoredHeaders,

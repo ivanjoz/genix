@@ -1,5 +1,6 @@
 import { GetHandler, POST } from '$libs/http.svelte';
 import type { ImageSource } from '$components/ImageUploader.svelte';
+import { normalizeStringN } from '$libs/helpers';
 
 export interface IProductoPropiedad {
   id: number, nm: string, ss: number
@@ -77,6 +78,7 @@ export class ProductosService extends GetHandler {
 
   productos: IProducto[] = $state([])
   productosMap: Map<number,IProducto> = $state(new Map())
+  productosNameToIDMap: Map<string, number> = $state(new Map())
 
   handler(result: IProducto[]): void {
     console.log("productos result::", result)
@@ -87,6 +89,17 @@ export class ProductosService extends GetHandler {
 
     this.productos = result.filter(x => x.ss)
     this.productosMap = new Map(result.map(x => [x.ID, x]))
+    const normalizedNameToIDMap = new Map<string, number>()
+    for (const producto of this.productos) {
+      normalizedNameToIDMap.set(normalizeStringN(producto.Nombre), producto.ID)
+    }
+    this.productosNameToIDMap = normalizedNameToIDMap
+  }
+
+  getByName(name: string): IProducto | undefined {
+    const matchedID = this.productosNameToIDMap.get(normalizeStringN(name))
+    if (!matchedID) return undefined
+    return this.productosMap.get(matchedID)
   }
 
   constructor(){

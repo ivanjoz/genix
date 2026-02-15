@@ -48,9 +48,9 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 - **backend/docs/ORM_DATABASE_QUERY.md** - Comprehensive ScyllaDB ORM documentation covering model definitions, CRUD operations, query building
 
 ### Frontend Documentation
-- **frontend/FRONTEND.md** - Monorepo architecture with independent store app, directory structure, package system, development workflow
-- **frontend/UI_COMPONENTS.md** - UI component library documentation: Page, OptionsStrip, Layer/Modal components, form components, VTable, services
-- **frontend/STORE.md** - Store integration notes: thumbhash implementation, store routes, CSS hashing
+- **frontend/FRONTEND.md** - Monorepo architecture with independent ecommerce app, directory structure, package system, development workflow
+- **frontend/docs/UI_COMPONENTS.md** - UI component library documentation: Page, OptionsStrip, Layer/Modal components, form components, VTable, services
+- **frontend/ecommerce/ECOMMERCE.md** - Ecommerce integration notes: thumbhash implementation, routes, CSS hashing
 - **frontend/docs/SERVICES_GUIDE.md** - Guide for creating frontend services (connectors), explaining Cached Services (Delta Cache) vs. Report Services. ALWAYS read before creating one.
 
 ### Scripts
@@ -61,6 +61,7 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 ### Frontend Rules
 - Use untrack inside $effect to avoid render loop
 - GetHandler fetched records need fields: "upd" (Updated) and "ID" (unique id) for delta cache. Or use GetHandler.keyID or .KeysIDs for setting another field.
+- Tailwind --spacing is 1px. So "h-4" is actually 4px.
 
 ### Backend Rules
 - NEVER trust the client. ALWAYS validate the required field and consistency of the data, and return a descriptive error if any validation fails.

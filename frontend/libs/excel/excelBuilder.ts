@@ -6,10 +6,21 @@ export * from './types';
 export * from './export';
 export * from './import';
 
+export type ExcelExtractRecordsHandler<T> = (record: T) => string[] | undefined;
+
+const formatExtractRecordError = (row: number, message: string): string => {
+  const normalizedMessage = String(message || '').trim();
+  const accentNormalizedMessage = normalizedMessage.replace(/\bno valido\b/gi, 'no válido');
+  const finalMessage = accentNormalizedMessage
+    ? accentNormalizedMessage.charAt(0).toUpperCase() + accentNormalizedMessage.slice(1)
+    : 'Error de validacion';
+  return `Fila ${row}: ${finalMessage}`;
+};
+
 export class ExcelBuilder<T> {
   private columns: ExcelTableColumn<T>[] = [];
   private records: T[] = [];
-  private source: File | Uint8Array | ArrayBuffer | null = null;
+  private loadedImportResult: ExcelImportResult<T> | null = null;
   private exportSheetName = 'Sheet1';
   private importSheetName: string | undefined = undefined;
   private title: string | undefined = undefined;
@@ -27,11 +38,6 @@ export class ExcelBuilder<T> {
 
   setRecords(records: T[]): this {
     this.records = records;
-    return this;
-  }
-
-  setSource(source: File | Uint8Array | ArrayBuffer): this {
-    this.source = source;
     return this;
   }
 
@@ -99,11 +105,10 @@ export class ExcelBuilder<T> {
     };
   }
 
-  private resolveImportOptions(overrides?: Partial<ExcelImportOptions<T>>): ExcelImportOptions<T> {
-    const source = overrides?.source ?? this.source;
-    if (!source) {
-      throw new Error('[excel-builder] Missing import source. Use setSource() or pass source in import().');
-    }
+  private resolveImportOptions(
+    source: File | Uint8Array | ArrayBuffer,
+    overrides?: Omit<Partial<ExcelImportOptions<T>>, 'source'>,
+  ): ExcelImportOptions<T> {
     return {
       columns: overrides?.columns || this.columns,
       source,
@@ -123,11 +128,71 @@ export class ExcelBuilder<T> {
     });
   }
 
-  async import(overrides?: Partial<ExcelImportOptions<T>>): Promise<ExcelImportResult<T>> {
-    return parseExcelFile(this.resolveImportOptions(overrides));
+  // Step 1: Parse and cache workbook rows so extractRecords can run handlers separately.
+  async loadFile(
+    source: File | Uint8Array | ArrayBuffer,
+    overrides?: Omit<Partial<ExcelImportOptions<T>>, 'source'>,
+  ): Promise<this> {
+    this.loadedImportResult = await parseExcelFile(this.resolveImportOptions(source, overrides));
+    return this;
   }
 
-  extractRecords(importResult: ExcelImportResult<T>): Partial<T>[] {
-    return importResult.rows;
+  // Step 2: Return parsed rows and optionally append row-aware validation errors from handler.
+  extractRecords(handler?: ExcelExtractRecordsHandler<T>): ExcelImportResult<T> {
+    if (!this.loadedImportResult) {
+      throw new Error('[excel-builder] No loaded file found. Call loadFile() before extractRecords().');
+    }
+
+    const baseResult = this.loadedImportResult;
+    if (!handler) {
+      return {
+        ...baseResult,
+        rows: [...baseResult.rows],
+        rowsWithoutErrors: [...baseResult.rowsWithoutErrors],
+        errors: [...baseResult.errors],
+        mappedColumns: [...baseResult.mappedColumns],
+        ignoredHeaders: [...baseResult.ignoredHeaders],
+        rowNumbers: baseResult.rowNumbers ? [...baseResult.rowNumbers] : undefined,
+      };
+    }
+
+    const extractedRows: Partial<T>[] = [];
+    const extractedRowsWithoutErrors: Partial<T>[] = [];
+    const handlerErrors = [...baseResult.errors];
+    const baseRowsWithoutErrorsSet = new Set(baseResult.rowsWithoutErrors);
+
+    for (let index = 0; index < baseResult.rows.length; index++) {
+      const rowDraft = { ...baseResult.rows[index] } as Partial<T>;
+      const hasParserError = !baseRowsWithoutErrorsSet.has(baseResult.rows[index]);
+      let validationErrors: string[] | undefined;
+
+      try {
+        validationErrors = handler(rowDraft as T);
+      } catch (error) {
+        validationErrors = [String(error)];
+      }
+
+      if (validationErrors?.length) {
+        const excelRow = baseResult.rowNumbers?.[index] ?? index + 1;
+        for (const message of validationErrors) {
+          handlerErrors.push(formatExtractRecordError(excelRow, message));
+        }
+      } else if (!hasParserError) {
+        extractedRowsWithoutErrors.push(rowDraft);
+      }
+
+      extractedRows.push(rowDraft);
+    }
+
+    return {
+      ...baseResult,
+      rows: extractedRows,
+      rowsWithoutErrors: extractedRowsWithoutErrors,
+      errors: handlerErrors,
+      mappedColumns: [...baseResult.mappedColumns],
+      ignoredHeaders: [...baseResult.ignoredHeaders],
+      rowNumbers: baseResult.rowNumbers ? [...baseResult.rowNumbers] : undefined,
+    };
   }
+
 }
