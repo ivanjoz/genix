@@ -4,7 +4,7 @@ import Input from '$components/Input.svelte';
 import Modal from '$components/Modal.svelte';
 import { closeAllModals, closeModal, imagesToUpload, openModal } from '$core/store.svelte';
 import { Loading, Notify } from '$libs/helpers';
-    import { postListaRegistros, type IListaRegistro, type INewIDToID, type ListasCompartidasService } from "./productos.svelte";
+    import { postListaRegistros, type IListaRegistro, type INewIDToID, type ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
 
   const {
     listas, origin

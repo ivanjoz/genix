@@ -471,3 +471,39 @@ export const decrypt = async (encryptedString: string, key: string) => {
   const decryptedString = new TextDecoder().decode(decryptedData)
   return decryptedString
 }
+
+export function normalizeStringN(string: string): string {
+  if (typeof (string as any) === 'number') return String(string)
+  if (typeof string !== 'string') return ''
+  const separators = new Set(["-", "_"])
+  const capitals2: { [e: string]: string } = {
+    'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+    '/': '_', 'ñ': 'n', '.': '.', '-': '-', '+': '+'
+  }
+  let normalized = ""
+  let charLast = ""
+  const words = string.trim().toLowerCase().split(" ")
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].trim()
+    if (i > 0 && normalized && !separators.has(charLast)) {
+      normalized += "_"; charLast = "_"
+    }
+    for (let j = 0; j < word.length; j++) {
+      const char = word[j]
+      let charToAdd
+      if (separators.has(charLast) && separators.has(char)) continue
+      const code = char.charCodeAt(0)
+      if ((code > 47 && code < 58) || (code > 96 && code < 123) || code == 95) {
+        charToAdd = char
+      } else if (typeof capitals2[char] === 'string') {
+        charToAdd = capitals2[char]
+      }
+      if (charToAdd) {
+        if (separators.has(charLast) && separators.has(charToAdd)) continue
+        normalized += charToAdd
+        charLast = charToAdd
+      }
+    }
+  }
+  return normalized
+}

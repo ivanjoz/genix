@@ -16,10 +16,10 @@ import { POST } from '$libs/http.svelte';
 import type { ExcelTableColumn } from '$libs/excel/excelBuilder';
 import Atributos from './Atributos.svelte';
 import CategoriasMarcas from './CategoriasMarcas.svelte';
-import { exportProductosToExcel } from './productos.excel';
-import { productoMonedaOptions, productoUnidadOptions } from './lists/productos-lists';
+import { exportProductosToExcel, processProductosImportFile } from './productos.excel';
+import { productoMonedaOptions, productoUnidadOptions } from '$core/products-lists';
+import { ListasCompartidasService } from '$services/negocio/listas-compartidas.svelte';
 import {
-    ListasCompartidasService,
     postProducto,
     ProductosService,
     type IProducto,
@@ -40,8 +40,9 @@ import {
   // svelte-ignore non_reactive_update
   let MarcasLayer: CategoriasMarcas | null = null;
   let imageUploaderHandler: (() => void) | undefined;
-  let importExcelInputElement: HTMLInputElement | null = null;
-  let selectedImportExcelFile = $state<File | null>(null);
+  let importExcelRowsPreview = $state<IProducto[]>([]);
+  let importExcelErrors = $state<string[]>([]);
+  let isImportExcelProcessing = $state(false);
 
   const IMPORT_PRODUCTOS_MODAL_ID = 11;
 
@@ -74,6 +75,9 @@ import {
       header: "Categorías",
       highlight: true,
       getValue: (e) => {
+        if (isImport && (e._categoriasNames || "").trim().length > 0 && (e.CategoriasIDs || []).length === 0) {
+          return e._categoriasNames || "";
+        }
         const nombres = [];
         for (const id of e.CategoriasIDs || []) {
           const nombre = listas.get(id)?.Nombre || `Categoría-${id}`;
@@ -105,6 +109,11 @@ import {
         type: "number",
         format: "#,##0.00",
         exportValue: (e) => e.Precio / 100,
+        // Converts imported decimal price into backend cents model.
+        setValue: (rowDraft, parsedValue) => {
+          if (typeof parsedValue !== "number" || !Number.isFinite(parsedValue)) return;
+          rowDraft.Precio = Math.round(parsedValue * 100);
+        },
       },
       mobile: {
         order: 4,
@@ -135,6 +144,11 @@ import {
         type: "number",
         format: "#,##0.00",
         exportValue: (e) => e.PrecioFinal / 100,
+        // Keeps imported final price aligned with backend cents model.
+        setValue: (rowDraft, parsedValue) => {
+          if (typeof parsedValue !== "number" || !Number.isFinite(parsedValue)) return;
+          rowDraft.PrecioFinal = Math.round(parsedValue * 100);
+        },
       },
       mobile: {
         order: 6,
@@ -165,14 +179,14 @@ import {
     {
       header: "Marca",
       hidden: !isImport,
-      getValue: (e) => listas.get(e.MarcaID)?.Nombre || "",
-      excel: { type: "string" },
+      getValue: (e) => e._marcaNombre || listas.get(e.MarcaID)?.Nombre || "",
+      excel: { type: "string", importField: "_marcaNombre" },
     },
     {
       header: "Unidad",
       hidden: !isImport,
-      getValue: (e) => unidadLabelById.get(e.UnidadID) || "",
-      excel: { type: "string" },
+      getValue: (e) => e._unidadNombre || unidadLabelById.get(e.UnidadID) || "",
+      excel: { type: "string", importField: "_unidadNombre" },
     },
     {
       header: "Volumen",
@@ -191,26 +205,16 @@ import {
     {
       header: "Moneda",
       hidden: !isImport,
-      getValue: (e) => monedaLabelById.get(e.MonedaID) || "",
-      excel: { type: "string" },
+      getValue: (e) => e._monedaNombre || monedaLabelById.get(e.MonedaID) || "",
+      excel: { type: "string", importField: "_monedaNombre" },
     },
   ];
 
   const productoColumns = makeProductColumns(false);
   const productoImportColumns = makeProductColumns(true);
 
-  const importColumnHeaders = $derived.by(() => {
-    return productoImportColumns.map((column) => {
-      return typeof column.header === "function" ? column.header() : String(column.header || "");
-    }).filter((header) => header.length > 0);
-  });
-
   const categorias = $derived.by(() => {
     return listas.ListaRecordsMap.get(1) || [];
-  });
-
-  const selectedImportExcelFileName = $derived.by(() => {
-    return selectedImportExcelFile?.name || "Ningún archivo seleccionado";
   });
 
   const exportProductosExcel = async () => {
@@ -227,17 +231,44 @@ import {
   };
 
   const openImportProductosModal = () => {
-    selectedImportExcelFile = null;
+    importExcelRowsPreview = [];
+    importExcelErrors = [];
+    isImportExcelProcessing = false;
     Core.openModal(IMPORT_PRODUCTOS_MODAL_ID);
   };
 
-  const selectImportExcelFile = () => {
-    importExcelInputElement?.click();
-  };
+  const onImportExcelFileChange = async (file?: File, isRemoved?: boolean) => {
+    importExcelRowsPreview = [];
+    importExcelErrors = [];
 
-  const onImportExcelFileSelected = (event: Event) => {
-    const input = event.currentTarget as HTMLInputElement;
-    selectedImportExcelFile = input.files?.[0] || null;
+    if (isRemoved || !file) {
+      isImportExcelProcessing = false;
+      console.log("[productos-import] file removed or empty selection");
+      return;
+    }
+
+    isImportExcelProcessing = true;
+    console.log("[productos-import] starting excel import:", file.name);
+
+    try {
+      const importResult = await processProductosImportFile(productoImportColumns, file, listas);
+
+      importExcelRowsPreview = importResult.rows;
+      importExcelErrors = importResult.errors;
+
+      console.log("[productos-import] import completed:", {
+        rows: importResult.rows.length,
+        mappedColumns: importResult.mappedColumns,
+        ignoredHeaders: importResult.ignoredHeaders,
+        errors: importExcelErrors.length,
+      });
+    } catch (error) {
+      console.error("[productos-import] import failed:", error);
+      importExcelErrors = [`Error procesando el archivo: ${error}`];
+      Notify.failure(`No se pudo procesar el Excel: ${error}`);
+    } finally {
+      isImportExcelProcessing = false;
+    }
   };
 
   const onSave = async (isDelete?: boolean) => {
@@ -699,35 +730,24 @@ import {
     <CategoriasMarcas {listas} origin={2} bind:this={MarcasLayer} />
   {/if}
 
-  <Modal id={IMPORT_PRODUCTOS_MODAL_ID} title="Importar Productos desde Excel" size={6}>
-    <div class="px-6 py-6 md:px-10 md:py-8">
-      <div class="mb-8 text-slate-700">
-        <strong>Columnas esperadas para importación</strong>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12 max-h-260 overflow-y-auto pr-4">
-        {#each importColumnHeaders as columnHeader}
-          <div class="px-4 py-3 rounded border border-slate-200 bg-slate-50">
-            {columnHeader}
-          </div>
-        {/each}
-      </div>
-
-      <!-- Hidden file input keeps the modal button UX simple and consistent. -->
-      <input
-        bind:this={importExcelInputElement}
-        class="hidden"
-        type="file"
-        accept=".xlsx,.xls"
-        onchange={onImportExcelFileSelected}
-      />
-
-      <div class="flex flex-col md:flex-row md:items-center gap-5">
-        <button class="bx-blue" onclick={selectImportExcelFile}>
-          <i class="icon-upload"></i>
-          <span>Seleccionar Excel</span>
-        </button>
-        <div class="text-slate-700 break-all">{selectedImportExcelFileName}</div>
+  <Modal
+    id={IMPORT_PRODUCTOS_MODAL_ID}
+    title="Importar Productos desde Excel"
+    size={6}
+    useFileImportWithErrors={true}
+    fileErrors={importExcelErrors}
+    onFileChange={onImportExcelFileChange}
+  >
+    <div class="">
+      <div class="border border-slate-200 rounded-md overflow-hidden">
+        <VTable
+          columns={productoImportColumns}
+          data={importExcelRowsPreview}
+          maxHeight="360px"
+          emptyMessage={isImportExcelProcessing
+            ? "Procesando archivo Excel..."
+            : "Selecciona un archivo para visualizar las filas procesadas."}
+        />
       </div>
     </div>
   </Modal>
