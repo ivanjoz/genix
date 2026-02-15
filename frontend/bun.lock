@@ -14,6 +14,7 @@
         "axios": "^1.13.2",
         "embla-carousel-svelte": "^8.6.0",
         "esbuild": "^0.25.12",
+        "excelize-wasm": "^0.1.1",
         "mime-types": "^3.0.1",
         "notiflix": "^3.2.8",
         "onnxruntime-web": "^1.23.2",
@@ -46,7 +47,7 @@
         "vite": "npm:rolldown-vite@latest",
       },
     },
-    "pkg-store": {
+    "ecommerce": {
       "name": "@genix/store",
       "version": "1.0.0",
       "dependencies": {
@@ -140,7 +141,7 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.25.12", "", { "os": "win32", "cpu": "x64" }, "sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA=="],
 
-    "@genix/store": ["@genix/store@workspace:pkg-store"],
+    "@genix/store": ["@genix/store@workspace:ecommerce"],
 
     "@huggingface/jinja": ["@huggingface/jinja@0.5.3", "", {}, "sha512-asqfZ4GQS0hD876Uw4qiUb7Tr/V5Q+JZuo2L+BtdrD4U40QU58nIRq3ZSgAzJgT874VLjhGVacaYfrdpXtEvtA=="],
 
@@ -497,6 +498,8 @@
     "eventemitter3": ["eventemitter3@4.0.7", "", {}, "sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw=="],
 
     "events-universal": ["events-universal@1.0.1", "", { "dependencies": { "bare-events": "^2.7.0" } }, "sha512-LUd5euvbMLpwOF8m6ivPCbhQeSiYVNb8Vs0fQ8QjXo0JTkEHpz8pxdQf0gStltaPpw0Cca8b39KxvK9cfKRiAw=="],
+
+    "excelize-wasm": ["excelize-wasm@0.1.1", "", {}, "sha512-EFAv5pbCQW5rZg2ts5bI46Uh4Lo7B0QEZZwskwxaX4DBq4iFj9rfohI5pvHTBqumMnLI4ypKNDYPQxQFCmEktQ=="],
 
     "expand-template": ["expand-template@2.0.3", "", {}, "sha512-XYfuKMvj4O35f/pOXLObndIRvyQ+/+6AhODh+OKWj9S9498pHHn/IMszH+gt0fBCRWMNfk1ZSp5x3AifmnI2vg=="],
 

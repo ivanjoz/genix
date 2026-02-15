@@ -1,6 +1,9 @@
 package types
 
-import "app/db"
+import (
+	"app/core"
+	"app/db"
+)
 
 type ProductoImagen struct {
 	Name        string `ms:"n" json:"n" cbor:"n"`
@@ -24,11 +27,11 @@ type ProductoPesentacion struct {
 
 type Producto struct {
 	db.TableStruct[ProductoTable, Producto]
-	EmpresaID      int32   `json:",omitempty" db:"empresa_id,pk"`
+	EmpresaID      int32   `json:",omitempty"`
 	ID             int32   `db:"id,pk"`
 	TempID         int32   `json:"-" db:"-"`
 	Nombre         string  `db:"nombre"`
-	Descripcion    string  `json:",omitempty" db:"descripcion"`
+	Descripcion    string  `json:",omitempty"`
 	ContentHTML    string  `json:",omitempty" db:"content_html"`
 	CategoriasIDs  []int32 `json:",omitempty" db:"categorias_ids"`
 	MarcaID        int32   `json:",omitempty" db:"marca_id"`
@@ -45,6 +48,7 @@ type Producto struct {
 	SbnPrecio      int32   `json:",omitempty" db:"sbn_precio"`
 	SbnDescuento   float32 `json:",omitempty" db:"sbn_decuento"`
 	SbnPrecioFinal int32   `json:",omitempty" db:"sbn_precio_final"`
+	NombreHash int32   `json:",omitempty"`
 
 	Propiedades    []ProductoPropiedades `json:",omitempty" db:"propiedades"`
 	Presentaciones []ProductoPesentacion `json:",omitempty" db:"presentaciones"`
@@ -85,6 +89,7 @@ type ProductoTable struct {
 	SbnPrecio          db.Col[ProductoTable, int32]
 	SbnDescuento       db.Col[ProductoTable, float32]
 	SbnPrecioFinal     db.Col[ProductoTable, int32]
+	NombreHash         db.Col[ProductoTable, int32]
 	Propiedades        db.Col[ProductoTable, []ProductoPropiedades]
 	Presentaciones     db.Col[ProductoTable, []ProductoPesentacion]
 	Images             db.Col[ProductoTable, []ProductoImagen]
@@ -106,6 +111,10 @@ func (e *Producto) FillCategoriasConStock() {
 			e.CategoriasConStock = append(e.CategoriasConStock, e.EmpresaID*10000+cid)
 		}
 	}
+}
+
+func (e *Producto) SelfParse() {
+	e.NombreHash = core.BasicHashInt(e.Nombre)
 }
 
 func (e ProductoTable) GetSchema() db.TableSchema {

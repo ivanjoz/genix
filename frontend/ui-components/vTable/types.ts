@@ -21,6 +21,7 @@ export interface ITableMobileCard<T> {
 export interface ITableColumn<T> {
   id?: number | string
   header: string | (() => string)
+  hidden?: boolean
   headerCss?: string
   headerStyle?: Record<string, string>
   cellStyle?: Record<string, string>

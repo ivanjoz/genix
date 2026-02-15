@@ -6,15 +6,17 @@ import Layer from '$components/Layer.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
 import SearchCard from '$components/SearchCard.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
-import type { ITableColumn } from '$components/vTable/types';
 import VTable from '$components/vTable/VTable.svelte';
 import { Core } from '$core/store.svelte';
 import HTMLEditor from '$domain/HTMLEditor/HTMLEditor.svelte';
 import Page from '$domain/Page.svelte';
 import { ConfirmWarn, formatN, Loading, Notify, throttle } from '$libs/helpers';
 import { POST } from '$libs/http.svelte';
+import type { ExcelTableColumn } from '$libs/excel/builder';
 import Atributos from './Atributos.svelte';
 import CategoriasMarcas from './CategoriasMarcas.svelte';
+import { exportProductosToExcel } from './productos.excel';
+import { productoMonedaOptions, productoUnidadOptions } from './lists/productos-lists';
 import {
     ListasCompartidasService,
     postProducto,
@@ -22,6 +24,8 @@ import {
     type IProducto,
     type IProductoImage
 } from "./productos.svelte";
+
+  type ProductoExcelColumn = ExcelTableColumn<IProducto>;
 
   let filterText = $state("");
   const productos = new ProductosService();
@@ -36,18 +40,25 @@ import {
   let MarcasLayer: CategoriasMarcas | null = null;
   let imageUploaderHandler: (() => void) | undefined;
 
-  let productoColumns: ITableColumn<IProducto>[] = [
+  // Reuse option lists as the single source for labels in UI and Excel export.
+  const monedaLabelById = new Map(productoMonedaOptions.map((option) => [option.i, option.v]));
+  const unidadLabelById = new Map(productoUnidadOptions.map((option) => [option.i, option.v]));
+
+  let productoColumns: ProductoExcelColumn[] = [
     {
       header: "ID",
       css: "c-blue text-center",
       headerCss: "w-48",
       getValue: (e) => e.ID,
+      excel: { type: "number", width: 10 },
       mobile: { order: 1, css: "col-span-6 ff-bold", icon: "tag" },
     },
     {
       header: "Producto",
       highlight: true,
       getValue: (e) => e.Nombre,
+      field: "Nombre",
+      excel: { width: 36, type: "string" },
       mobile: {
         order: 2,
         css: "col-span-18",
@@ -65,6 +76,7 @@ import {
         }
         return nombres.join(", ");
       },
+      excel: { width: 36, type: "string" },
       mobile: {
         order: 3,
         css: "col-span-24",
@@ -82,6 +94,13 @@ import {
       header: "Precio",
       css: "text-right",
       getValue: (e) => formatN(e.Precio / 100, 2),
+      field: "Precio",
+      excel: {
+        width: 14,
+        type: "number",
+        format: "#,##0.00",
+        exportValue: (e) => e.Precio / 100,
+      },
       mobile: {
         order: 4,
         css: "col-span-8",
@@ -93,6 +112,8 @@ import {
       header: "Descuento",
       css: "text-right",
       getValue: (e) => (e.Descuento ? String(e.Descuento) + "%" : ""),
+      field: "Descuento",
+      excel: { width: 12, type: "number" },
       mobile: {
         order: 5,
         css: "col-span-8",
@@ -104,6 +125,13 @@ import {
       header: "Precio Final",
       css: "text-right",
       getValue: (e) => formatN(e.PrecioFinal / 100, 2),
+      field: "PrecioFinal",
+      excel: {
+        width: 16,
+        type: "number",
+        format: "#,##0.00",
+        exportValue: (e) => e.PrecioFinal / 100,
+      },
       mobile: {
         order: 6,
         css: "col-span-8",
@@ -119,6 +147,7 @@ import {
         if (!e.SbnUnidad) return "";
         return `${e.SbnCantidad} x ${e.SbnUnidad}`;
       },
+      excel: { width: 20, type: "string" },
       mobile: {
         order: 7,
         css: "col-span-24",
@@ -129,11 +158,68 @@ import {
         },
       },
     },
+    {
+      header: "Marca",
+      hidden: true,
+      getValue: (e) => listas.get(e.MarcaID)?.Nombre || "",
+      excel: {
+        width: 26,
+        type: "string",
+        exportValue: (e) => listas.get(e.MarcaID)?.Nombre || "",
+      },
+    },
+    {
+      header: "Unidad",
+      hidden: true,
+      getValue: (e) => unidadLabelById.get(e.UnidadID) || "",
+      excel: {
+        width: 14,
+        type: "string",
+        exportValue: (e) => unidadLabelById.get(e.UnidadID) || "",
+      },
+    },
+    {
+      header: "Volumen",
+      hidden: true,
+      getValue: (e) => e.Volumen || "",
+      field: "Volumen",
+      excel: { width: 14, type: "number", format: "#,##0.00" },
+    },
+    {
+      header: "Peso",
+      hidden: true,
+      getValue: (e) => e.Peso || "",
+      field: "Peso",
+      excel: { width: 14, type: "number", format: "#,##0.00" },
+    },
+    {
+      header: "Moneda",
+      hidden: true,
+      getValue: (e) => monedaLabelById.get(e.MonedaID) || "",
+      excel: {
+        width: 18,
+        type: "string",
+        exportValue: (e) => monedaLabelById.get(e.MonedaID) || "",
+      },
+    },
   ];
 
   const categorias = $derived.by(() => {
     return listas.ListaRecordsMap.get(1) || [];
   });
+
+  const exportProductosExcel = async () => {
+    Loading.standard("Generando archivo Excel...");
+    try {
+      await exportProductosToExcel(productoColumns, productos.productos);
+      Loading.remove();
+      Notify.success("Excel generado correctamente.");
+    } catch (error) {
+      console.error("Error exportando productos:", error);
+      Loading.remove();
+      Notify.failure(`No se pudo exportar el archivo: ${error}`);
+    }
+  };
 
   const onSave = async (isDelete?: boolean) => {
     if ((productoForm.Nombre?.length || 0) < 4) {
@@ -232,8 +318,20 @@ import {
       />
     </div>
 
+    {#if view === 1}
+      <button
+        class="bx-purple ml-auto mr-8 col-span-3"
+        onclick={(ev) => {
+          ev.stopPropagation();
+          exportProductosExcel();
+        }}
+      >
+        <i class="icon-download"></i><span class="hidden md:block">Exportar</span>
+      </button>
+    {/if}
+
     <button
-      class="bx-green ml-auto col-span-7"
+      class={`bx-green col-span-7 ${view === 1 ? "" : "ml-auto"}`}
       onclick={(ev) => {
         ev.stopPropagation();
         if (view === 2) {
@@ -396,10 +494,7 @@ import {
           save="MonedaID"
           keyId="i"
           keyName="v"
-          options={[
-            { i: 1, v: "PEN (S/.)" },
-            { i: 2, v: "USD ($)" },
-          ]}
+          options={productoMonedaOptions}
         />
         <Input
           label="Peso"
@@ -415,11 +510,7 @@ import {
           save="UnidadID"
           keyId="i"
           keyName="v"
-          options={[
-            { i: 1, v: "Kg" },
-            { i: 2, v: "g" },
-            { i: 3, v: "Libras" },
-          ]}
+          options={productoUnidadOptions}
         />
         <Input
           label="Volumen"

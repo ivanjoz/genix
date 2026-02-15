@@ -53,6 +53,7 @@
 		"axios": "^1.13.2",
 		"embla-carousel-svelte": "^8.6.0",
 		"esbuild": "^0.25.12",
+		"excelize-wasm": "^0.1.1",
 		"mime-types": "^3.0.1",
 		"notiflix": "^3.2.8",
 		"onnxruntime-web": "^1.23.2",

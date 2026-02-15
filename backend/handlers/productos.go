@@ -7,6 +7,7 @@ import (
 	s "app/types"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -72,98 +73,98 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	productosIDsSet := core.SliceSet[int32]{}
-
 	for i := range productos {
 		e := &productos[i]
 		if e.ID < 1 {
 			e.TempID = e.ID
-		} else {
-			productosIDsSet.Add(e.ID)
 		}
 		if len(e.Nombre) < 4 {
 			return req.MakeErr("Faltan propiedades de en el producto.")
 		}
+		e.EmpresaID = req.Usuario.EmpresaID
 	}
-
-	productosCurrent := []s.Producto{}
-	if len(productosIDsSet.Values) > 0 {
-		query := db.Query(&productosCurrent).
-			EmpresaID.Equals(req.Usuario.EmpresaID).
-			ID.In(productosIDsSet.Values...)		
-		
-		if err = query.Exec(); err != nil {
-			return req.MakeErr("Error al obtener los productos actuales:", err)
-		}
-	}
-
-	productosCurrentMap := core.SliceToMapK(productosCurrent,
-		func(e s.Producto) int32 { return e.ID })
 
 	nowTime := time.Now().Unix()
+	core.Log("PostProductos merge payload:", len(productos))
 
-	for i := range productos {
-		e := &productos[i]
-		if e.ID < 1 {
-			// Autoincrement is handled automatically by the ORM via handlePreInsert
-			e.Created = nowTime
-			e.CreatedBy = req.Usuario.ID
-			e.Status = 1
-		} else {
-			e.UpdatedBy = req.Usuario.ID
-		}
-		e.EmpresaID = req.Usuario.EmpresaID
-		e.Updated = nowTime
-
-		current := productosCurrentMap[e.ID]
-
-		// Lógica para hacer un merge de las propiedades de los productos
+	buildPresentaciones := func(current *s.Producto, incoming *s.Producto) {
 		presentacionesMap := map[int16]s.ProductoPesentacion{}
 		presentacionesNameMap := map[string]s.ProductoPesentacion{}
 		presentacionMaxID := int16(0)
 
 		if current != nil {
-			// Estas propiedades no cambian
-			e.Stock = current.Stock
-			e.StockReservado = current.StockReservado
-			e.StockStatus = current.StockStatus
-			e.CategoriasConStock = current.CategoriasConStock
-			e.Created = current.Created
-			e.CreatedBy = current.CreatedBy
-			e.Images = current.Images
-
-			for _, e := range current.Presentaciones {
-				presentacionesNameMap[core.Concatn(e.AtributoID, strings.ToLower(e.Name))] = e
-				if e.ID > presentacionMaxID {
-					presentacionMaxID = e.ID
+			for _, presentacionActual := range current.Presentaciones {
+				presentacionesNameMap[core.Concatn(presentacionActual.AtributoID, strings.ToLower(presentacionActual.Name))] = presentacionActual
+				if presentacionActual.ID > presentacionMaxID {
+					presentacionMaxID = presentacionActual.ID
 				}
 			}
 		}
 
-		for _, pr := range e.Presentaciones {
-			name := core.Concatn(pr.AtributoID, strings.ToLower(pr.Name))
-			if current, ok := presentacionesNameMap[name]; ok && pr.ID != 0 {
-				pr.ID = current.ID
+		for _, presentacionNueva := range incoming.Presentaciones {
+			presentacionName := core.Concatn(presentacionNueva.AtributoID, strings.ToLower(presentacionNueva.Name))
+			if current, ok := presentacionesNameMap[presentacionName]; ok && presentacionNueva.ID != 0 {
+				presentacionNueva.ID = current.ID
 			}
-			if pr.ID <= 0 {
+			if presentacionNueva.ID <= 0 {
 				presentacionMaxID++
-				pr.ID = presentacionMaxID
+				presentacionNueva.ID = presentacionMaxID
 			}
-			presentacionesMap[pr.ID] = pr
+			presentacionesMap[presentacionNueva.ID] = presentacionNueva
 		}
-		
+
 		// Add the removed presentaciones with status = 0
-		for _, pr := range presentacionesNameMap {
-			if _ , ok := presentacionesMap[pr.ID]; !ok {
-				pr.Status = 0
-				presentacionesMap[pr.ID] = pr
+		for _, presentacionActual := range presentacionesNameMap {
+			if _, ok := presentacionesMap[presentacionActual.ID]; !ok {
+				presentacionActual.Status = 0
+				presentacionesMap[presentacionActual.ID] = presentacionActual
 			}
 		}
 
-		e.Presentaciones = core.MapToSliceT(presentacionesMap)
+		incoming.Presentaciones = core.MapToSliceT(presentacionesMap)
 	}
 
-	if err = db.Insert(&productos); err != nil {
+
+	t := s.ProductoTable{}
+	
+	// Merge resolves insert/update per primary key and applies only required writes.
+	err = db.Merge(&productos,
+		[]db.Coln{t.Stock, t.StockReservado, t.StockStatus, t.CategoriasConStock, t.Created, t.CreatedBy, t.Images},
+		func(prev, current *s.Producto) bool {
+			current.EmpresaID = req.Usuario.EmpresaID
+			current.Created = prev.Created
+			current.CreatedBy = prev.CreatedBy
+			current.Stock = prev.Stock
+			current.StockReservado = prev.StockReservado
+			current.StockStatus = prev.StockStatus
+			current.CategoriasConStock = prev.CategoriasConStock
+			current.Images = prev.Images
+			buildPresentaciones(prev, current)
+
+			comparableCurrent := *current
+			comparableCurrent.Updated = prev.Updated
+			comparableCurrent.UpdatedBy = prev.UpdatedBy
+			if reflect.DeepEqual(*prev, comparableCurrent) {
+				core.Log("PostProductos merge skip update product:", current.ID)
+				return false
+			}
+
+			current.Updated = nowTime
+			current.UpdatedBy = req.Usuario.ID
+			return true
+		},
+		func(current *s.Producto) {
+			current.EmpresaID = req.Usuario.EmpresaID
+			current.Created = nowTime
+			current.CreatedBy = req.Usuario.ID
+			current.Updated = nowTime
+			if current.Status == 0 {
+				current.Status = 1
+			}
+			buildPresentaciones(nil, current)
+		},
+	)
+	if err != nil {
 		return req.MakeErr("Error al actualizar / insertar la sede: " + err.Error())
 	}
 

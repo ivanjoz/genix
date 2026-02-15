@@ -83,13 +83,17 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     const flatColumns: ITableColumn<T>[] = [];
 
     for (const col of columns) {
+      if (col.hidden) continue;
+
       const colWithSpan = { ...col };
-      colWithSpan._colspan = col.subcols?.length || 0;
+      const visibleSubcols = (col.subcols || []).filter((subcol) => !subcol.hidden);
+      colWithSpan._colspan = visibleSubcols.length || 0;
+      colWithSpan.subcols = visibleSubcols;
 
       level1.push(colWithSpan);
 
-      if (col.subcols && col.subcols.length > 0) {
-        for (const subcol of col.subcols) {
+      if (visibleSubcols.length > 0) {
+        for (const subcol of visibleSubcols) {
           level2.push(subcol);
           flatColumns.push(subcol);
         }
