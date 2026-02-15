@@ -69,3 +69,6 @@ backend/libs/index_builder/productos_stats.py
 backend/libs/productos_sep/*
 backend/libs/index_builder/productos.psv.backup
 backend/libs/index_builder/productos.idx
+backend/libs/index_builder/parsed_chunks/chunk_6.psv
+backend/libs/index_builder/parsed_chunks/productos_parsed.psv
+backend/libs/index_builder/parsed_chunks/chunk_11.psv

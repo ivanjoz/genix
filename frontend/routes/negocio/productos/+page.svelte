@@ -3,6 +3,7 @@ import CheckboxOptions from '$components/CheckboxOptions.svelte';
 import ImageUploader from '$components/ImageUploader.svelte';
 import Input from '$components/Input.svelte';
 import Layer from '$components/Layer.svelte';
+import Modal from '$components/Modal.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
 import SearchCard from '$components/SearchCard.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
@@ -12,7 +13,7 @@ import HTMLEditor from '$domain/HTMLEditor/HTMLEditor.svelte';
 import Page from '$domain/Page.svelte';
 import { ConfirmWarn, formatN, Loading, Notify, throttle } from '$libs/helpers';
 import { POST } from '$libs/http.svelte';
-import type { ExcelTableColumn } from '$libs/excel/builder';
+import type { ExcelTableColumn } from '$libs/excel/excelBuilder';
 import Atributos from './Atributos.svelte';
 import CategoriasMarcas from './CategoriasMarcas.svelte';
 import { exportProductosToExcel } from './productos.excel';
@@ -39,18 +40,22 @@ import {
   // svelte-ignore non_reactive_update
   let MarcasLayer: CategoriasMarcas | null = null;
   let imageUploaderHandler: (() => void) | undefined;
+  let importExcelInputElement: HTMLInputElement | null = null;
+  let selectedImportExcelFile = $state<File | null>(null);
+
+  const IMPORT_PRODUCTOS_MODAL_ID = 11;
 
   // Reuse option lists as the single source for labels in UI and Excel export.
   const monedaLabelById = new Map(productoMonedaOptions.map((option) => [option.i, option.v]));
   const unidadLabelById = new Map(productoUnidadOptions.map((option) => [option.i, option.v]));
 
-  let productoColumns: ProductoExcelColumn[] = [
+  const makeProductColumns = (isImport = false): ProductoExcelColumn[] => [
     {
       header: "ID",
       css: "c-blue text-center",
       headerCss: "w-48",
       getValue: (e) => e.ID,
-      excel: { type: "number", width: 10 },
+      excel: { type: "number" },
       mobile: { order: 1, css: "col-span-6 ff-bold", icon: "tag" },
     },
     {
@@ -58,7 +63,7 @@ import {
       highlight: true,
       getValue: (e) => e.Nombre,
       field: "Nombre",
-      excel: { width: 36, type: "string" },
+      excel: { type: "string" },
       mobile: {
         order: 2,
         css: "col-span-18",
@@ -76,7 +81,8 @@ import {
         }
         return nombres.join(", ");
       },
-      excel: { width: 36, type: "string" },
+      // Record the raw category names on import so another step can resolve the IDs.
+      excel: { type: "string", importField: "_categoriasNames" },
       mobile: {
         order: 3,
         css: "col-span-24",
@@ -96,7 +102,6 @@ import {
       getValue: (e) => formatN(e.Precio / 100, 2),
       field: "Precio",
       excel: {
-        width: 14,
         type: "number",
         format: "#,##0.00",
         exportValue: (e) => e.Precio / 100,
@@ -113,7 +118,7 @@ import {
       css: "text-right",
       getValue: (e) => (e.Descuento ? String(e.Descuento) + "%" : ""),
       field: "Descuento",
-      excel: { width: 12, type: "number" },
+      excel: { type: "number" },
       mobile: {
         order: 5,
         css: "col-span-8",
@@ -127,7 +132,6 @@ import {
       getValue: (e) => formatN(e.PrecioFinal / 100, 2),
       field: "PrecioFinal",
       excel: {
-        width: 16,
         type: "number",
         format: "#,##0.00",
         exportValue: (e) => e.PrecioFinal / 100,
@@ -147,7 +151,7 @@ import {
         if (!e.SbnUnidad) return "";
         return `${e.SbnCantidad} x ${e.SbnUnidad}`;
       },
-      excel: { width: 20, type: "string" },
+      excel: { type: "string" },
       mobile: {
         order: 7,
         css: "col-span-24",
@@ -160,52 +164,53 @@ import {
     },
     {
       header: "Marca",
-      hidden: true,
+      hidden: !isImport,
       getValue: (e) => listas.get(e.MarcaID)?.Nombre || "",
-      excel: {
-        width: 26,
-        type: "string",
-        exportValue: (e) => listas.get(e.MarcaID)?.Nombre || "",
-      },
+      excel: { type: "string" },
     },
     {
       header: "Unidad",
-      hidden: true,
+      hidden: !isImport,
       getValue: (e) => unidadLabelById.get(e.UnidadID) || "",
-      excel: {
-        width: 14,
-        type: "string",
-        exportValue: (e) => unidadLabelById.get(e.UnidadID) || "",
-      },
+      excel: { type: "string" },
     },
     {
       header: "Volumen",
-      hidden: true,
+      hidden: !isImport,
       getValue: (e) => e.Volumen || "",
       field: "Volumen",
-      excel: { width: 14, type: "number", format: "#,##0.00" },
+      excel: { type: "number", format: "#,##0.00" },
     },
     {
       header: "Peso",
-      hidden: true,
+      hidden: !isImport,
       getValue: (e) => e.Peso || "",
       field: "Peso",
-      excel: { width: 14, type: "number", format: "#,##0.00" },
+      excel: { type: "number", format: "#,##0.00" },
     },
     {
       header: "Moneda",
-      hidden: true,
+      hidden: !isImport,
       getValue: (e) => monedaLabelById.get(e.MonedaID) || "",
-      excel: {
-        width: 18,
-        type: "string",
-        exportValue: (e) => monedaLabelById.get(e.MonedaID) || "",
-      },
+      excel: { type: "string" },
     },
   ];
 
+  const productoColumns = makeProductColumns(false);
+  const productoImportColumns = makeProductColumns(true);
+
+  const importColumnHeaders = $derived.by(() => {
+    return productoImportColumns.map((column) => {
+      return typeof column.header === "function" ? column.header() : String(column.header || "");
+    }).filter((header) => header.length > 0);
+  });
+
   const categorias = $derived.by(() => {
     return listas.ListaRecordsMap.get(1) || [];
+  });
+
+  const selectedImportExcelFileName = $derived.by(() => {
+    return selectedImportExcelFile?.name || "Ningún archivo seleccionado";
   });
 
   const exportProductosExcel = async () => {
@@ -219,6 +224,20 @@ import {
       Loading.remove();
       Notify.failure(`No se pudo exportar el archivo: ${error}`);
     }
+  };
+
+  const openImportProductosModal = () => {
+    selectedImportExcelFile = null;
+    Core.openModal(IMPORT_PRODUCTOS_MODAL_ID);
+  };
+
+  const selectImportExcelFile = () => {
+    importExcelInputElement?.click();
+  };
+
+  const onImportExcelFileSelected = (event: Event) => {
+    const input = event.currentTarget as HTMLInputElement;
+    selectedImportExcelFile = input.files?.[0] || null;
   };
 
   const onSave = async (isDelete?: boolean) => {
@@ -320,7 +339,16 @@ import {
 
     {#if view === 1}
       <button
-        class="bx-purple ml-auto mr-8 col-span-3"
+        class="bx-blue ml-auto mr-8 col-span-3"
+        onclick={(ev) => {
+          ev.stopPropagation();
+          openImportProductosModal();
+        }}
+      >
+        <i class="icon-upload"></i><span class="hidden md:block">Importar</span>
+      </button>
+      <button
+        class="bx-purple mr-8 col-span-3"
         onclick={(ev) => {
           ev.stopPropagation();
           exportProductosExcel();
@@ -670,4 +698,37 @@ import {
   {#if view === 3}
     <CategoriasMarcas {listas} origin={2} bind:this={MarcasLayer} />
   {/if}
+
+  <Modal id={IMPORT_PRODUCTOS_MODAL_ID} title="Importar Productos desde Excel" size={6}>
+    <div class="px-6 py-6 md:px-10 md:py-8">
+      <div class="mb-8 text-slate-700">
+        <strong>Columnas esperadas para importación</strong>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12 max-h-260 overflow-y-auto pr-4">
+        {#each importColumnHeaders as columnHeader}
+          <div class="px-4 py-3 rounded border border-slate-200 bg-slate-50">
+            {columnHeader}
+          </div>
+        {/each}
+      </div>
+
+      <!-- Hidden file input keeps the modal button UX simple and consistent. -->
+      <input
+        bind:this={importExcelInputElement}
+        class="hidden"
+        type="file"
+        accept=".xlsx,.xls"
+        onchange={onImportExcelFileSelected}
+      />
+
+      <div class="flex flex-col md:flex-row md:items-center gap-5">
+        <button class="bx-blue" onclick={selectImportExcelFile}>
+          <i class="icon-upload"></i>
+          <span>Seleccionar Excel</span>
+        </button>
+        <div class="text-slate-700 break-all">{selectedImportExcelFileName}</div>
+      </div>
+    </div>
+  </Modal>
 </Page>

@@ -68,20 +68,61 @@ func GetProductosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	productos := []s.Producto{}
-	err := json.Unmarshal([]byte(*req.Body), &productos)
-	if err != nil {
+	if err := json.Unmarshal([]byte(*req.Body), &productos); err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
+	nameHashToName := make(map[int32]*s.Producto, len(productos))
+	// SelfParse each producto to populate NombreHash and fail fast on duplicate names in this payload.
 	for i := range productos {
 		e := &productos[i]
-		if e.ID < 1 {
-			e.TempID = e.ID
-		}
 		if len(e.Nombre) < 4 {
 			return req.MakeErr("Faltan propiedades de en el producto.")
 		}
 		e.EmpresaID = req.Usuario.EmpresaID
+		e.SelfParse()
+		if previousProduct, duplicate := nameHashToName[e.NombreHash]; duplicate {
+			return req.MakeErr(fmt.Sprintf("Hay nombres duplicados en la solicitud: %s y %s", previousProduct.Nombre, e.Nombre))
+		}
+		nameHashToName[e.NombreHash] = e
+	}
+
+	// Group existing records by NombreHash so we can check active collisions and reuse inactive IDs.
+	existingProductsByHash := make(map[int32][]s.Producto, len(nameHashToName))
+	for nombreHash := range nameHashToName {
+		existing := []s.Producto{}
+		query := db.Query(&existing)
+		
+		query.Select(query.NombreHash, query.ID, query.Status).
+			EmpresaID.Equals(req.Usuario.EmpresaID).
+			NombreHash.Equals(nombreHash).AllowFilter()
+		
+		if err := query.Exec(); err != nil {
+			return req.MakeErr(fmt.Sprintf("Error al validar los nombres de productos: %v", err))
+		}
+		if len(existing) > 0 {
+			existingProductsByHash[nombreHash] = existing
+		}
+	}
+
+	// Enforce name uniqueness across the database and reassign inactive IDs when needed.
+	for i := range productos {
+		currentProduct := &productos[i]
+		if existingProducts, found := existingProductsByHash[currentProduct.NombreHash]; found {
+			for _, candidate := range existingProducts {
+				if candidate.Status > 0 && candidate.ID != currentProduct.ID {
+					return req.MakeErr(fmt.Sprintf(`Ya existe un producto activo con el nombre "%s". ID=%v`, currentProduct.Nombre, candidate.ID))
+				}
+			}
+			if currentProduct.ID == 0 {
+				for _, candidate := range existingProducts {
+					if candidate.Status == 0 {
+						currentProduct.ID = candidate.ID
+						break
+					}
+				}
+			}
+		}
 	}
 
 	nowTime := time.Now().Unix()
@@ -128,7 +169,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	t := s.ProductoTable{}
 	
 	// Merge resolves insert/update per primary key and applies only required writes.
-	err = db.Merge(&productos,
+	err := db.Merge(&productos,
 		[]db.Coln{t.Stock, t.StockReservado, t.StockStatus, t.CategoriasConStock, t.Created, t.CreatedBy, t.Images},
 		func(prev, current *s.Producto) bool {
 			current.EmpresaID = req.Usuario.EmpresaID

@@ -1,4 +1,4 @@
-import { downloadExcel, type ExcelTableColumn } from '$libs/excel/builder';
+import { downloadExcel, type ExcelTableColumn } from '$libs/excel/excelBuilder';
 import type { IProducto } from './productos.svelte';
 
 // Centralizes Productos Excel export so the page only triggers the action.

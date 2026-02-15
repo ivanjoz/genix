@@ -9,6 +9,24 @@ import (
 	"github.com/viant/xunsafe"
 )
 
+type selfParser interface {
+	SelfParse()
+}
+
+func runSelfParseIfDefined[T TableBaseInterface[E, T], E TableSchemaInterface[E]](records *[]T) {
+	if len(*records) == 0 {
+		return
+	}
+
+	firstRecordPointer := any(&(*records)[0])
+	if _, hasSelfParse := firstRecordPointer.(selfParser); hasSelfParse {
+		for i := range *records {
+			any(&(*records)[i]).(selfParser).SelfParse()
+		}
+		return
+	}
+}
+
 func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T, scyllaTable ScyllaTable[any],
 ) error {
@@ -250,6 +268,8 @@ func Insert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	refTable := initStructTable[E, T](new(E))
 	scyllaTable := makeTable(refTable)
 
+	runSelfParseIfDefined(records)
+
 	if err := handlePreInsert(records, scyllaTable); err != nil {
 		return err
 	}
@@ -460,6 +480,8 @@ func Update[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		panic("No se incluyeron columnas a actualizar.")
 	}
 
+	runSelfParseIfDefined(records)
+
 	queryStatements := makeUpdateStatementsBase(records, columnsToInclude, nil, false)
 	queryUpdate := makeQueryStatement(queryStatements)
 
@@ -488,6 +510,8 @@ func UpdateOne[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 func UpdateExclude[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T, columnsToExclude ...Coln,
 ) error {
+
+	runSelfParseIfDefined(records)
 
 	queryStatements := makeUpdateStatementsBase(records, nil, columnsToExclude, false)
 	queryInsert := makeQueryStatement(queryStatements)

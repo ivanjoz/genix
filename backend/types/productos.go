@@ -29,7 +29,6 @@ type Producto struct {
 	db.TableStruct[ProductoTable, Producto]
 	EmpresaID      int32   `json:",omitempty"`
 	ID             int32   `db:"id,pk"`
-	TempID         int32   `json:"-" db:"-"`
 	Nombre         string  `db:"nombre"`
 	Descripcion    string  `json:",omitempty"`
 	ContentHTML    string  `json:",omitempty" db:"content_html"`
@@ -114,7 +113,7 @@ func (e *Producto) FillCategoriasConStock() {
 }
 
 func (e *Producto) SelfParse() {
-	e.NombreHash = core.BasicHashInt(e.Nombre)
+	e.NombreHash = core.BasicHashInt(core.NormaliceString(&e.Nombre))
 }
 
 func (e ProductoTable) GetSchema() db.TableSchema {

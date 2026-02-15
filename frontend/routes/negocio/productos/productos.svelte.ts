@@ -56,6 +56,8 @@ export interface IProducto {
   _stock?: number
   _moneda?: string
   _imageSource?: ImageSource
+  /** Holds the raw category names read from Excel so we can resolve IDs afterward. */
+  _categoriasNames?: string
 }
 
 export interface IProductoResult {
