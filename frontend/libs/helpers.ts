@@ -472,6 +472,37 @@ export const decrypt = async (encryptedString: string, key: string) => {
   return decryptedString
 }
 
+export const normalizeComparableValue = (value: unknown): unknown => {
+  if (!value || (Array.isArray(value) && value.length === 0)) return 0
+
+  if (Array.isArray(value)) {
+    const normalizedValues = value
+      .filter(entry => !!entry)
+      .map(entry => normalizeComparableValue(entry))
+      .filter((entry) => entry !== 0)
+      .map((entry) => String(entry))
+      .filter((entry) => entry.length > 0)
+      .sort()
+
+    return normalizedValues.length > 0 ? normalizedValues.join('|') : 0
+  }
+
+  if (typeof value === 'object') {
+    const objectValue = value as Record<string, unknown>
+    const keys = Object.keys(objectValue).sort()
+    const normalizedPairs: string[] = []
+    for (const key of keys) {
+      const normalizedEntry = normalizeComparableValue(objectValue[key])
+      if (normalizedEntry === 0) continue
+      normalizedPairs.push(`${key}:${String(normalizedEntry)}`)
+    }
+    return normalizedPairs.length > 0 ? normalizedPairs.join(',') : 0
+  }
+
+  if (typeof value === 'string') return value.trim() || 0
+  return value
+}
+
 export function normalizeStringN(string: string): string {
   if (typeof (string as any) === 'number') return String(string)
   if (typeof string !== 'string') return ''

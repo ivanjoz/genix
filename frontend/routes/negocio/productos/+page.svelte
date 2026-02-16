@@ -49,6 +49,11 @@ import {
   // Reuse option lists as the single source for labels in UI and Excel export.
   const monedaLabelById = new Map(productoMonedaOptions.map((option) => [option.i, option.v]));
   const unidadLabelById = new Map(productoUnidadOptions.map((option) => [option.i, option.v]));
+  const getUpdatedFieldCellCss = (record: IProducto, fieldKey: string): string | undefined => {
+    // Highlight imported cells that differ from the current persisted product value.
+    if (!record._updatedFields?.includes(fieldKey)) return undefined;
+    return "bg-purple-100";
+  };
 
   const makeProductColumns = (isImport = false): ProductoExcelColumn[] => [
     {
@@ -56,6 +61,7 @@ import {
       css: "c-blue text-center",
       headerCss: "w-48",
       getValue: (e) => e.ID,
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "ID"),
       excel: { type: "number" },
       mobile: { order: 1, css: "col-span-6 ff-bold", icon: "tag" },
     },
@@ -64,6 +70,7 @@ import {
       highlight: true,
       getValue: (e) => e.Nombre,
       field: "Nombre",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Nombre"),
       excel: { type: "string" },
       mobile: {
         order: 2,
@@ -85,6 +92,7 @@ import {
         }
         return nombres.join(", ");
       },
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "CategoriasIDs"),
       // Record the raw category names on import so another step can resolve the IDs.
       excel: { type: "string", importField: "_categoriasNames" },
       mobile: {
@@ -105,6 +113,7 @@ import {
       css: "text-right",
       getValue: (e) => formatN(e.Precio / 100, 2),
       field: "Precio",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Precio"),
       excel: {
         type: "number",
         format: "#,##0.00",
@@ -127,6 +136,7 @@ import {
       css: "text-right",
       getValue: (e) => (e.Descuento ? String(e.Descuento) + "%" : ""),
       field: "Descuento",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Descuento"),
       excel: { type: "number" },
       mobile: {
         order: 5,
@@ -140,6 +150,7 @@ import {
       css: "text-right",
       getValue: (e) => formatN(e.PrecioFinal / 100, 2),
       field: "PrecioFinal",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "PrecioFinal"),
       excel: {
         type: "number",
         format: "#,##0.00",
@@ -180,12 +191,14 @@ import {
       header: "Marca",
       hidden: !isImport,
       getValue: (e) => e._marcaNombre || listas.get(e.MarcaID)?.Nombre || "",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "MarcaID"),
       excel: { type: "string", importField: "_marcaNombre" },
     },
     {
       header: "Unidad",
       hidden: !isImport,
       getValue: (e) => e._unidadNombre || unidadLabelById.get(e.UnidadID) || "",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "UnidadID"),
       excel: { type: "string", importField: "_unidadNombre" },
     },
     {
@@ -193,6 +206,7 @@ import {
       hidden: !isImport,
       getValue: (e) => e.Volumen || "",
       field: "Volumen",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Volumen"),
       excel: { type: "number", format: "#,##0.00" },
     },
     {
@@ -200,12 +214,14 @@ import {
       hidden: !isImport,
       getValue: (e) => e.Peso || "",
       field: "Peso",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Peso"),
       excel: { type: "number", format: "#,##0.00" },
     },
     {
       header: "Moneda",
       hidden: !isImport,
       getValue: (e) => e._monedaNombre || monedaLabelById.get(e.MonedaID) || "",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "MonedaID"),
       excel: { type: "string", importField: "_monedaNombre" },
     },
   ];
@@ -372,23 +388,23 @@ import {
     </div>
 
     {#if view === 1}
-      <button
+      <button aria-label="Importar"
         class="bx-blue ml-auto mr-8 col-span-3"
         onclick={(ev) => {
           ev.stopPropagation();
           openImportProductosModal();
         }}
       >
-        <i class="icon-upload"></i><span class="hidden md:block">Importar</span>
+        <i class="icon-upload"></i>
       </button>
-      <button
+      <button  aria-label="Descargar"
         class="bx-purple mr-8 col-span-3"
         onclick={(ev) => {
           ev.stopPropagation();
           exportProductosExcel();
         }}
       >
-        <i class="icon-download"></i><span class="hidden md:block">Exportar</span>
+        <i class="icon-download"></i>
       </button>
     {/if}
 
@@ -733,10 +749,9 @@ import {
     <CategoriasMarcas {listas} origin={2} bind:this={MarcasLayer} />
   {/if}
 
-  <Modal
-    id={IMPORT_PRODUCTOS_MODAL_ID}
+  <Modal id={IMPORT_PRODUCTOS_MODAL_ID}
     title="Importar Productos desde Excel"
-    size={6} css="px-4"
+    size={9} css="px-4"
     useFileImportWithErrors={true}
     fileErrors={importExcelErrors}
     onFileChange={onImportExcelFileChange}
@@ -746,7 +761,7 @@ import {
         <VTable
           columns={productoImportColumns}
           data={importExcelRowsPreview}
-          maxHeight="360px"
+          maxHeight="100%"
           emptyMessage={isImportExcelProcessing
             ? "Procesando archivo Excel..."
             : "Selecciona un archivo para visualizar las filas procesadas."}

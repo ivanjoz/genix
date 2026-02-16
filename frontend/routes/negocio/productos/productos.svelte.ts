@@ -63,7 +63,8 @@ export interface IProducto {
   /** Holds the raw unit label read from Excel so we can resolve UnidadID afterward. */
   _unidadNombre?: string
   /** Holds the raw currency label read from Excel so we can resolve MonedaID afterward. */
-  _monedaNombre?: string
+	_monedaNombre?: string
+  _updatedFields?: string[]
 }
 
 export interface IProductoResult {

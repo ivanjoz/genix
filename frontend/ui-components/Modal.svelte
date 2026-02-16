@@ -107,15 +107,15 @@
 	}
 
 	const modalSizesMap = new Map([
-		[1, "w-600 max-w-[64vw]"],
-		[2, "w-650 max-w-[66vw]"],
-		[3, "w-700 max-w-[68vw]"],
-		[4, "w-750 max-w-[72vw]"],
-		[5, "w-800 max-w-[75vw]"],
-		[6, "w-850 max-w-[78vw]"],
-		[7, "w-900 max-w-[82vw]"],
-		[8, "w-950 max-w-[84vw]"],
-		[9, "w-1000 max-w-[88vw]"],
+		[1, "w-650 max-w-[66vw]"],
+		[2, "w-700 max-w-[68vw]"],
+		[3, "w-750 max-w-[72vw]"],
+		[4, "w-800 max-w-[75vw]"],
+		[5, "w-850 max-w-[78vw]"],
+		[6, "w-900 max-w-[82vw]"],
+		[7, "w-950 max-w-[84vw]"],
+		[8, "w-1000 max-w-[88vw]"],
+		[9, "w-1080 max-w-[89vw]"],
 	]);
 
 	const saveLabel = $derived.by(() => {

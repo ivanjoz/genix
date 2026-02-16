@@ -1,6 +1,7 @@
 import {
   downloadExcel,
   ExcelBuilder,
+  type ResolvedLeafColumn,
   type ExcelTableColumn,
 } from '$libs/excel/excelBuilder';
 import {
@@ -11,7 +12,7 @@ import {
   PRODUCT_SHARED_LIST_MARCA_ID,
 } from '$core/products-lists';
 import type { ListasCompartidasService } from '$services/negocio/listas-compartidas.svelte';
-import { normalizeStringN } from '$libs/helpers';
+import { normalizeComparableValue, normalizeStringN } from '$libs/helpers';
 import type { IProducto } from './productos.svelte';
 
 // Centralizes Productos Excel export so the page only triggers the action.
@@ -57,6 +58,33 @@ interface ExistingProductosLookup {
   byID: Map<number, IProducto>;
   normalizedNameToID: Map<string, number>;
 }
+
+const IMPORT_FIELD_TO_PRODUCT_FIELD: Record<string, keyof IProducto> = {
+  _categoriasNames: 'CategoriasIDs',
+  _marcaNombre: 'MarcaID',
+  _unidadNombre: 'UnidadID',
+  _monedaNombre: 'MonedaID',
+};
+
+const collectComparableFieldKeys = (
+  mappedLeafColumns: ResolvedLeafColumn<IProducto>[],
+): string[] => {
+  const collectedKeys: string[] = [];
+  const usedKeys = new Set<string>();
+
+  for (const mappedLeafColumn of mappedLeafColumns) {
+    const comparableFieldKey = mappedLeafColumn.field
+      || (mappedLeafColumn.importField
+        ? IMPORT_FIELD_TO_PRODUCT_FIELD[mappedLeafColumn.importField]
+        : undefined);
+    if (!comparableFieldKey || usedKeys.has(comparableFieldKey)) continue;
+    usedKeys.add(comparableFieldKey);
+    collectedKeys.push(comparableFieldKey);
+  }
+
+  console.log('[productos-import] collected comparable field keys:', collectedKeys);
+  return collectedKeys;
+};
 
 // Executes the complete import flow (parse + resolve + error shaping) for the Productos page.
 export const processProductosImportFile = async (
@@ -125,10 +153,45 @@ export const processProductosImportFile = async (
     }
 
     return validationErrors.length > 0 ? validationErrors : undefined;
-  });
+	});
+
+  const comparableFieldKeys = collectComparableFieldKeys(importResult.mappedLeafColumns);
+  console.log('[productos-import] comparable fields for diff:', comparableFieldKeys);
+
+	const rowsWithUpdatedFields: IProducto[] = [];
+  
+  for (const importedProducto of (importResult.rowsWithoutErrors as IProducto[])) {
+    const existingProducto = isValidPositiveID(importedProducto.ID)
+      ? existingProductos.byID.get(importedProducto.ID)
+      : undefined;
+    if (!existingProducto) {
+      importedProducto._updatedFields = ['ID'];
+      rowsWithUpdatedFields.push(importedProducto);
+      continue;
+    }
+
+    const updatedFieldKeys: string[] = [];
+    for (const fieldKey of comparableFieldKeys) {
+      const importedValue = normalizeComparableValue(
+        (importedProducto as unknown as Record<string, unknown>)[fieldKey],
+      );
+      const existingValue = normalizeComparableValue(
+        (existingProducto as unknown as Record<string, unknown>)[fieldKey],
+      );
+      if (!Object.is(importedValue, existingValue)) {
+        updatedFieldKeys.push(fieldKey);
+      }
+		}
+    
+    if (updatedFieldKeys.length === 0) continue;
+    importedProducto._updatedFields = updatedFieldKeys;
+    rowsWithUpdatedFields.push(importedProducto);
+  }
+  
+  console.log("rowsWithUpdatedFields", rowsWithUpdatedFields)
 
   return {
-    rows: importResult.rowsWithoutErrors as IProducto[],
+    rows: rowsWithUpdatedFields,
     errors: importResult.errors,
     mappedColumns: importResult.mappedColumns,
     ignoredHeaders: importResult.ignoredHeaders,

@@ -28,6 +28,8 @@ export interface ITableColumn<T> {
   css?: string
 	inputCss?: string
 	cellCss?: string
+	// Allow columns to inject runtime cell classes per record
+	setCellCss?: (record: T) => string | undefined
   cardCss?: string
   field?: string
   subcols?: ITableColumn<T>[]

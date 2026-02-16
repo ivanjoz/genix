@@ -90,6 +90,8 @@ export interface ExcelImportResult<T> {
   /** Excel row number (1-based) for each parsed row, aligned by index with `rows`. */
   rowNumbers?: number[];
   errors: string[];
+  /** Leaf columns that were matched against incoming Excel headers. */
+  mappedLeafColumns: ResolvedLeafColumn<T>[];
   mappedColumns: string[];
   ignoredHeaders: string[];
   sheetName: string;

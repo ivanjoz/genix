@@ -93,6 +93,7 @@ export async function parseExcelFile<T>(options: ExcelImportOptions<T>): Promise
       rowsWithoutErrors: [],
       rowNumbers: [],
       errors: [],
+      mappedLeafColumns: [],
       mappedColumns: [],
       ignoredHeaders: [],
       sheetName: selectedSheet,
@@ -201,12 +202,15 @@ export async function parseExcelFile<T>(options: ExcelImportOptions<T>): Promise
     }
   }
 
+  const mappedLeafColumns = [...mappedIndexes.values()];
+
   return {
     rows: parsedRows,
     rowsWithoutErrors: parsedRowsWithoutErrors,
     rowNumbers: parsedRowNumbers,
     errors,
-    mappedColumns: [...mappedIndexes.values()].map((leaf) => leaf.header),
+    mappedLeafColumns,
+    mappedColumns: mappedLeafColumns.map((leaf) => leaf.header),
     ignoredHeaders,
     sheetName: selectedSheet,
   };

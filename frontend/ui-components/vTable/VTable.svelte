@@ -237,6 +237,11 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     rec.css = typeof column.cellCss === 'string'
       ? column.cellCss
       : (column.onCellEdit ? "relative" : "px-8 py-4")
+    // Append runtime classes returned by setCellCss for this row
+    const dynamicCellCss = column.setCellCss?.(record)
+    if (dynamicCellCss) {
+      rec.css += ` ${dynamicCellCss}`
+    }
     if(column.css){ rec.css += " " + column.css }
 
     return rec
@@ -613,6 +618,8 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     display: flex;
     align-items: center;
     justify-content: center;
+    line-height: 1.1;
+    padding: 0 4px;
   }
 
   .vtable-body {
