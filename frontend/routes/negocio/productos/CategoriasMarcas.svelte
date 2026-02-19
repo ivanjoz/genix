@@ -71,8 +71,9 @@ import { Loading, Notify } from '$libs/helpers';
       Object.assign(selected, form)
     } else {
       form.ID = result[0].NewID
-      newCategorias.push(form)
-      listas.RecordsMap.set(form.ID, form)
+      listas.addSavedRecords(form)
+      listas.afterSaveRecords(form)
+      newCategorias = listas.ListaRecordsMap.get(origin) || []
     }
 
     console.log("newCategorias", newCategorias.length,"|",categorias.length)

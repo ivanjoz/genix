@@ -55,12 +55,11 @@ func GetListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &response)
 }
 
-
-// PostListasCompartidas performs batch upsert by normalized name hash.
+// PostListasCompartidas performs batch upsert by (ListaID + normalized name hash).
 // Behavior summary:
 //  1. Validates required fields and computes NombreHash using SelfParse.
-//  2. Rejects duplicate names in the same payload (same hash).
-//  3. Loads existing rows by incoming hashes for the tenant.
+//  2. Rejects duplicate names in the same payload for the same ListaID.
+//  3. Loads existing rows by incoming (ListaID, hash) scope for the tenant.
 //  4. If a colliding row is active (Status > 0) and is not the same ID, it rejects the request.
 //  5. For incoming inserts (ID <= 0), if collision is only with deleted rows (Status = 0),
 //     it reuses that historical ID so the operation becomes an update instead of a new insert.
@@ -78,39 +77,46 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se recibieron registros para guardar.")
 	}
 
-	uniqueIncomingHashToIndex := map[int32]int{}
+	uniqueIncomingRecordKeyToIndex := map[string]int{}
 	uniqueIncomingHashes := []int32{}
 	seenIncomingHashes := map[int32]bool{}
-	
+	uniqueIncomingListaIDs := []int32{}
+	seenIncomingListaIDs := map[int32]bool{}
+
 	// Preserve client IDs as TempID for response mapping.
 	newIDs := []s.NewIDToID{}
-	
+
 	for index := range records {
 		e := &records[index]
 		// Enforce minimum validation rules for business consistency.
 		if len(e.Nombre) < 4 || e.ListaID == 0 {
 			return req.MakeErr("Faltan propiedades de en uno de los registros.")
 		}
-		
+
 		// Save original incoming ID before potential ID reuse/autoincrement.
 		newIDs = append(newIDs, s.NewIDToID{TempID: e.ID})
 
 		// Keep NombreHash consistent with model SelfParse logic.
 		e.SelfParse()
-		// Prevent repeated names in the same request payload.
-		if previousIndex, duplicateHashExists := uniqueIncomingHashToIndex[e.NombreHash]; duplicateHashExists {
+		recordKey := fmt.Sprintf("%v_%v", e.ListaID, e.NombreHash)
+		// Prevent repeated names in the same request payload for the same list.
+		if previousIndex, duplicateHashExists := uniqueIncomingRecordKeyToIndex[recordKey]; duplicateHashExists {
 			previousRecordName := records[previousIndex].Nombre
 			return req.MakeErr(fmt.Sprintf(
 				"Hay registros repetidos por nombre en el mismo envío para la lista %v: \"%s\" y \"%s\".",
 				e.ListaID, previousRecordName, e.Nombre,
 			))
 		}
-		
-		// Keep a unique list of hashes for the DB collision query.
-		uniqueIncomingHashToIndex[e.NombreHash] = index
+
+		// Keep a unique list of hash/lista keys for the DB collision query.
+		uniqueIncomingRecordKeyToIndex[recordKey] = index
 		if !seenIncomingHashes[e.NombreHash] {
 			uniqueIncomingHashes = append(uniqueIncomingHashes, e.NombreHash)
 			seenIncomingHashes[e.NombreHash] = true
+		}
+		if !seenIncomingListaIDs[e.ListaID] {
+			uniqueIncomingListaIDs = append(uniqueIncomingListaIDs, e.ListaID)
+			seenIncomingListaIDs[e.ListaID] = true
 		}
 	}
 
@@ -118,25 +124,29 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	existingRecordsByHash := []s.ListaCompartidaRegistro{}
 	existingRecordsQuery := db.Query(&existingRecordsByHash)
 	existingRecordsQuery.Select().
-		EmpresaID.Equals(req.Usuario.EmpresaID).NombreHash.In(uniqueIncomingHashes...).AllowFilter()
-	
+		EmpresaID.Equals(req.Usuario.EmpresaID).
+		NombreHash.In(uniqueIncomingHashes...).
+		ListaID.In(uniqueIncomingListaIDs...).
+		AllowFilter()
+
 	if err = existingRecordsQuery.Exec(); err != nil {
 		return req.MakeErr("Error al consultar registros existentes de lista compartida: " + err.Error())
 	}
 
-	existingRecordsGroupedByHash := core.SliceToMapP(existingRecordsByHash, 
-		func(e s.ListaCompartidaRegistro) int32 { return e.NombreHash })
+	existingRecordsGroupedByRecordKey := core.SliceToMapP(existingRecordsByHash,
+		func(e s.ListaCompartidaRegistro) string { return fmt.Sprintf("%v_%v", e.ListaID, e.NombreHash) })
 
 	nowTime := time.Now().Unix()
-	
+
 	for index := range records {
 		incomingRecord := &records[index]
 		// Enforce tenant and audit fields on every write.
 		incomingRecord.EmpresaID = req.Usuario.EmpresaID
 		incomingRecord.Updated = nowTime
 		incomingRecord.UpdatedBy = req.Usuario.ID
-		
-		collidingExistingRecords := existingRecordsGroupedByHash[incomingRecord.NombreHash]
+
+		recordKey := fmt.Sprintf("%v_%v", incomingRecord.ListaID, incomingRecord.NombreHash)
+		collidingExistingRecords := existingRecordsGroupedByRecordKey[recordKey]
 		reusableDeletedRecordID := int32(0)
 
 		for _, existingRecord := range collidingExistingRecords {

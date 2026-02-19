@@ -284,7 +284,7 @@ import {
         mappedColumns: importResult.mappedColumns,
         ignoredHeaders: importResult.ignoredHeaders,
         errors: importExcelErrors.length,
-        pendingSharedListRecords: listas.getTempRecordsCount(),
+        pendingSharedListRecords: listas.getTempRecords().length,
       });
     } catch (error) {
       console.error("[productos-import] import failed:", error);
@@ -307,13 +307,13 @@ import {
 
     try {
       Loading.standard("Guardando importación de productos...");
-      const pendingSharedListRecords = listas.getTempRecordsCount();
+      const pendingSharedListRecords = listas.getTempRecords().length;
       let tempIDToNewID = new Map<number, number>();
 
       // Persist temporary categorías/marcas and get TempID -> NewID mappings.
       if (pendingSharedListRecords > 0) {
         Loading.change(`Creando categorías/marcas nuevas (${pendingSharedListRecords})...`);
-        tempIDToNewID = await listas.syncTemp();
+        tempIDToNewID = await listas.syncTempRecords();
       }
 
       const productosToSave = importExcelRowsPreview.map((importedProducto) => {

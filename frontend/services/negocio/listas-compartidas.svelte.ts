@@ -1,5 +1,4 @@
-import { normalizeStringN } from '$libs/helpers';
-import { GetHandler, POST } from '$libs/http.svelte';
+import { GetHandler, POST, type INewIDToID as IBaseNewIDToID } from '$libs/http.svelte';
 
 export interface IListaRegistro {
   ID: number;
@@ -13,8 +12,8 @@ export interface IListaRegistro {
 }
 
 export interface IListas {
-  Records: IListaRegistro[];
-  RecordsMap: Map<number, IListaRegistro>;
+  records: IListaRegistro[];
+  recordsMap: Map<number, IListaRegistro>;
 }
 
 export const listasCompartidas = [
@@ -26,44 +25,26 @@ export class ListasCompartidasService extends GetHandler<IListaRegistro> {
   route = 'listas-compartidas';
   useCache = { min: 5, ver: 6 };
 
-  Records: IListaRegistro[] = $state([]);
-  RecordsMap: Map<number, IListaRegistro> = $state(new Map());
   ListaRecordsMap: Map<number, IListaRegistro[]> = $state(new Map());
-
-  nameToRecordMap: Map<number, Map<string, IListaRegistro>> = new Map();
-  nextTempID = -1;
-
-  private ensureNamesMap(listaID: number): Map<string, IListaRegistro> {
-		if (!this.nameToRecordMap.has(listaID)) {
-			const records = this.ListaRecordsMap.get(listaID) || []
-      this.nameToRecordMap.set(listaID, new Map(records.map(e => [normalizeStringN(e.Nombre), e])));
-    }
-    return this.nameToRecordMap.get(listaID) as Map<string, IListaRegistro>;
-  }
 	
 	makeName(e: Partial<IListaRegistro>) {
 		return [e.ListaID, e.Nombre].join("_")
 	}
   
-
-  getByName(listaID: number, name: string): IListaRegistro {
-    const normalizedName = normalizeStringN(name);
-    const namesMap = this.ensureNamesMap(listaID);
-    return namesMap.get(normalizedName) as IListaRegistro;
-  }
-
   handler(result: { [k: string]: IListaRegistro[] }): void {
     console.log('result getted::', result);
 
-    this.Records = [];
+    this.records = [];
+    this.recordsMap = new Map();
     this.ListaRecordsMap = new Map();
+    this.nameToRecordMap = new Map();
+    const savedRecords: IListaRegistro[] = []
 
-    for (const [key, records] of Object.entries(result)) {
+    for (const [key, recordGroups] of Object.entries(result)) {
       const listaID = parseInt(key.split('_')[1]);
 
-      for (const record of records) {
+      for (const record of recordGroups) {
         if (!record.ss) continue;
-        this.Records.push(record);
 
         if ([1, 2].includes(listaID)) {
           // Preserve category/brand image ordering by numeric suffix.
@@ -77,93 +58,27 @@ export class ListasCompartidasService extends GetHandler<IListaRegistro> {
           }
         }
 
-        this.ListaRecordsMap.has(record.ListaID)
-          ? this.ListaRecordsMap.get(record.ListaID)?.push(record)
-          : this.ListaRecordsMap.set(record.ListaID, [record]);
+        savedRecords.push(record)
       }
     }
-
-    this.RecordsMap = new Map(this.Records.map((record) => [record.ID, record]));
-    this.nameToRecordMap = new Map();
-  }
-
-	addNew(record: IListaRegistro, partial?: boolean, avoidRerender?: boolean) {
-		if (!partial) {
-			this.ensureNamesMap(record.ListaID).set(normalizeStringN(record.Nombre), record);
-		}
-		
-		this.RecordsMap.set(record.ID, record);
-    const records = this.ListaRecordsMap.get(record.ListaID) || [];
-    records.unshift(record);
-		this.Records.push(record);
-		
-		if (!avoidRerender) {
-   		this.ListaRecordsMap.set(record.ListaID, [...records]);
-    	this.ListaRecordsMap = new Map(this.ListaRecordsMap);
-    }
-  }
-
-  addNewTemp(record: IListaRegistro): void {
-    const normalizedName = normalizeStringN(record.Nombre || '');
-    const namesMap = this.ensureNamesMap(record.ListaID);
-    const existingRecord = namesMap.get(normalizedName);
-		if (existingRecord) {
-      record.ID = existingRecord.ID;
-      return;
-    }
     
-    record.ID = this.nextTempID--;
-    record.ss = record.ss || 1;
-    this.RecordsMap.set(record.ID, record);
-    namesMap.set(normalizedName, record);
-
-    console.log('[listas-compartidas] temp record created:', record);
+    this.addSavedRecords(...savedRecords)
+    this.afterSaveRecords(...savedRecords)
   }
 
-  clearTempRecords() {
-    for (const [recordID, record] of this.RecordsMap.entries()) {
-      if (recordID >= 0) continue;
-			this.RecordsMap.delete(recordID);
-			
-			const namesMap = this.nameToRecordMap.get(record.ListaID)			
-			for (const [key, e] of namesMap || new Map() as  Map<string, IListaRegistro>){
-				if(e.ID <= 0){ namesMap?.delete(key) }
-			}
-    }
-  }
-
-  getTempRecordsCount(): number {
-    return [...this.RecordsMap.keys()].filter(x => x < 0).length
-  }
-
-  async syncTemp(): Promise<Map<number, number>> {
-    let tempToNewIDs = new Map<number, number>();
-    const pendingRecordsByLista = new Map<number, IListaRegistro[]>();
-
-    for (const pendingRecord of this.RecordsMap.values()) {
-      if (pendingRecord.ID >= 0) continue;
-      if (!pendingRecordsByLista.has(pendingRecord.ListaID)) {
-        pendingRecordsByLista.set(pendingRecord.ListaID, []);
+	afterSaveRecords(...records: IListaRegistro[]) {
+    for (const record of records) {
+      const currentListaRecords = this.ListaRecordsMap.get(record.ListaID) || [];
+      const existingRecordPosition = currentListaRecords.findIndex((existingRecord) => existingRecord.ID === record.ID)
+      if (existingRecordPosition >= 0) {
+        currentListaRecords[existingRecordPosition] = record
+      } else {
+        currentListaRecords.push(record)
       }
-      pendingRecordsByLista.get(pendingRecord.ListaID)?.push(pendingRecord);
+      this.ListaRecordsMap.set(record.ListaID, currentListaRecords);
     }
-
-    for (const pendingRecords of pendingRecordsByLista.values()) {
-      if (pendingRecords.length === 0) continue;
-			const createdMappings = await postListaRegistros(pendingRecords);
-			for(const e  of createdMappings){ tempToNewIDs.set(e.TempID, e.NewID) }
-      
-			for (const [id, record] of this.RecordsMap) {
-				if (id <= 0 && tempToNewIDs.has(id)) {
-					record.ID = tempToNewIDs.get(id) as number
-					this.addNew(record, true, true)
-				}
-			}
-		}
     
-    // Clear synced temp records from in-memory indexes.
-    this.clearTempRecords();
-    return tempToNewIDs;
+    this.ListaRecordsMap = new Map(this.ListaRecordsMap);
   }
 
   constructor(ids: number[] = []) {
@@ -177,10 +92,7 @@ export class ListasCompartidasService extends GetHandler<IListaRegistro> {
   }
 }
 
-export interface INewIDToID {
-  NewID: number;
-  TempID: number;
-}
+export type INewIDToID = IBaseNewIDToID
 
 export const postListaRegistros = (data: IListaRegistro[]): Promise<INewIDToID[]> => {
   return POST({

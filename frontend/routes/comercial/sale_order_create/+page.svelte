@@ -98,7 +98,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
       const stocks = productoToStockMap.get(producto.ID) || [];
       if (stocks.length === 0) continue;
 
-      const brandName = listasService.RecordsMap.get(producto.MarcaID)?.Nombre || "";
+      const brandName = listasService.recordsMap.get(producto.MarcaID)?.Nombre || "";
 
       const base: ProductoVenta = {
         producto: producto,
