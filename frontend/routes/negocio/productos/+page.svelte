@@ -11,7 +11,7 @@ import VTable from '$components/vTable/VTable.svelte';
 import { Core } from '$core/store.svelte';
 import HTMLEditor from '$domain/HTMLEditor/HTMLEditor.svelte';
 import Page from '$domain/Page.svelte';
-import { ConfirmWarn, formatN, Loading, Notify, throttle } from '$libs/helpers';
+import { ConfirmWarn, formatN, Loading, normalizeStringN, Notify, throttle } from '$libs/helpers';
 import { POST } from '$libs/http.svelte';
 import type { ExcelTableColumn } from '$libs/excel/excelBuilder';
 import Atributos from './Atributos.svelte';
@@ -57,12 +57,13 @@ import {
 
   const makeProductColumns = (isImport = false): ProductoExcelColumn[] => [
     {
-      header: "ID",
+      header: "ID", 
+      field: 'ID',
       css: "c-blue text-center",
       headerCss: "w-48",
       getValue: (e) => e.ID,
       setCellCss: (record) => getUpdatedFieldCellCss(record, "ID"),
-      excel: { type: "number" },
+      excel: { type: "number"  },
       mobile: { order: 1, css: "col-span-6 ff-bold", icon: "tag" },
     },
     {
@@ -316,19 +317,28 @@ import {
       }
 
       const productosToSave = importExcelRowsPreview.map((importedProducto) => {
-        const categoriaIDsRemapeados = (importedProducto.CategoriasIDs || []).map((categoriaID) => {
-          if (categoriaID > 0) return categoriaID;
-          return tempIDToNewID.get(categoriaID) || categoriaID;
+      	
+        const existingProducto = productos.productosMap.get(importedProducto.ID)
+      	importedProducto.MarcaID = tempIDToNewID.get(importedProducto.MarcaID) || importedProducto.MarcaID      
+      
+        importedProducto.CategoriasIDs = (importedProducto.CategoriasIDs || []).map((id) => {
+          return tempIDToNewID.get(id) || id;
         });
-        const marcaIDRemapeado = importedProducto.MarcaID > 0
-          ? importedProducto.MarcaID
-          : (tempIDToNewID.get(importedProducto.MarcaID) || importedProducto.MarcaID);
-
-        return {
-          ...importedProducto,
-          CategoriasIDs: categoriaIDsRemapeados,
-          MarcaID: marcaIDRemapeado,
-        };
+        
+        const excelKeys: (keyof IProducto)[] = [
+          "ID", "Nombre", "CategoriasIDs", "Precio", "Descuento", "PrecioFinal",
+          "MarcaID", "UnidadID", "Volumen", "Peso", "MonedaID",
+        ];
+											
+        if (existingProducto) {
+        	for(const key in existingProducto){
+         		if(!excelKeys.includes(key as keyof IProducto)){
+           		(importedProducto as any)[key as keyof IProducto] = existingProducto[key as keyof IProducto]
+           	}
+         	}
+        }
+        
+        return importedProducto
       });
       const unresolvedIDProducto = productosToSave.find((productoDraft) => {
         const hasInvalidCategoriaID = (productoDraft.CategoriasIDs || []).some((categoriaID) => categoriaID <= 0);
@@ -346,7 +356,7 @@ import {
       });
 
       Loading.change(`Guardando productos (${productosToSave.length})...`);
-      await postProducto(productosToSave);
+      await doPostProductos(productosToSave);
       Loading.remove();
 
       Notify.success("Importación completada correctamente.");
@@ -357,6 +367,36 @@ import {
       Notify.failure(`No se pudo completar la importación: ${error}`);
       Loading.remove();
     }
+  };
+
+  const doPostProductos = async (payload: IProducto[]): Promise<IProducto[]> => {
+    const productosUpdated = (await postProducto(payload)) as IProducto[];
+    
+    const productosByID = new Map(productos.productos.map((producto) => [producto.ID, producto]));
+
+    for (const productoActualizado of productosUpdated || []) {
+      productoActualizado.Image = productoActualizado.Images?.[0];
+      productoActualizado.CategoriasIDs = productoActualizado.CategoriasIDs || [];
+      const productoLocal = productosByID.get(productoActualizado.ID);
+      if (productoLocal && productoActualizado.ss > 0) {
+        Object.assign(productoLocal, productoActualizado);
+      } else if (productoLocal && productoActualizado.ss <= 0) {
+        productos.productos = productos.productos.filter((producto) => producto.ID !== productoActualizado.ID);
+        productosByID.delete(productoActualizado.ID);
+      } else if (productoActualizado.ss > 0) {
+        productos.productos.unshift(productoActualizado);
+        productosByID.set(productoActualizado.ID, productoActualizado);
+      }
+    }
+
+    // Force table refresh and keep lookup maps in sync for next import cycle.
+    productos.productos = [...productos.productos];
+    productos.productosMap = new Map(productos.productos.map((producto) => [producto.ID, producto]));
+    productos.productosNameToIDMap = new Map(
+      productos.productos.map((producto) => [normalizeStringN(producto.Nombre), producto.ID]),
+    );
+    
+    return productosUpdated;
   };
 
   const onSave = async (isDelete?: boolean) => {
@@ -379,26 +419,16 @@ import {
 
     Loading.standard("Guardando producto...");
     try {
-      var productosUpdated = await postProducto([productoForm]);
+      const productosUpdated = await doPostProductos([productoForm]);
+      if (!isDelete && productoForm.ID <= 0 && (productosUpdated?.[0]?.ID || 0) > 0) {
+        productoForm.ID = productosUpdated[0].ID;
+      }
     } catch (error) {
       Notify.failure(error as string);
       Loading.remove();
       return;
     }
     Loading.remove();
-
-    const producto = productos.productos.find((x) => x.ID === productoForm.ID);
-    if (producto && isDelete) {
-      productos.productos = productos.productos.filter(
-        (x) => x.ID !== productoForm.ID,
-      );
-    } else if (producto) {
-      Object.assign(producto, productoForm);
-    } else {
-      productoForm.ID = productosUpdated[0].ID;
-      productos.productos.unshift(productoForm);
-      productos.productos = [...productos.productos];
-    }
     Core.openSideLayer(0);
   };
 

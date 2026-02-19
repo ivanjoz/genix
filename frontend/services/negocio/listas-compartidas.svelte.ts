@@ -102,23 +102,21 @@ export class ListasCompartidasService extends GetHandler {
     }
   }
 
-  addNewTemp(record: Omit<IListaRegistro, 'ID'>): IListaRegistro {
+  addNewTemp(record: IListaRegistro): void {
     const normalizedName = normalizeStringN(record.Nombre || '');
     const namesMap = this.ensureNamesMap(record.ListaID);
     const existingRecord = namesMap.get(normalizedName);
-		if (existingRecord) return existingRecord;
+		if (existingRecord) {
+      record.ID = existingRecord.ID;
+      return;
+    }
     
-    const tempRecord: IListaRegistro = {
-      ...record,
-      ID: this.nextTempID--,
-      ss: record.ss || 1,
-      upd: record.upd || 0,
-    };
-    this.RecordsMap.set(tempRecord.ID, tempRecord);
-    namesMap.set(normalizedName, tempRecord);
+    record.ID = this.nextTempID--;
+    record.ss = record.ss || 1;
+    this.RecordsMap.set(record.ID, record);
+    namesMap.set(normalizedName, record);
 
-    console.log('[listas-compartidas] temp record created:', tempRecord);
-    return tempRecord;
+    console.log('[listas-compartidas] temp record created:', record);
   }
 
   clearTempRecords() {

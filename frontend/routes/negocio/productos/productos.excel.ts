@@ -11,7 +11,7 @@ import {
   PRODUCT_SHARED_LIST_CATEGORIA_ID,
   PRODUCT_SHARED_LIST_MARCA_ID,
 } from '$core/products-lists';
-import type { ListasCompartidasService } from '$services/negocio/listas-compartidas.svelte';
+import type { IListaRegistro, ListasCompartidasService } from '$services/negocio/listas-compartidas.svelte';
 import { normalizeComparableValue, normalizeStringN } from '$libs/helpers';
 import type { IProducto } from './productos.svelte';
 
@@ -110,12 +110,14 @@ export const processProductosImportFile = async (
           continue;
         }
 
-        const categoriaTemporal = listasService.addNewTemp({
+        const categoriaTemporal: IListaRegistro = {
+          ID: 0,
           ListaID: PRODUCT_SHARED_LIST_CATEGORIA_ID,
           Nombre: categoriaName,
           ss: 1,
           upd: 0,
-        });
+        };
+        listasService.addNewTemp(categoriaTemporal);
         categoriasIDs.push(categoriaTemporal.ID);
       }
       currentRow.CategoriasIDs = categoriasIDs;
@@ -128,12 +130,14 @@ export const processProductosImportFile = async (
         if (marcaExistente?.ID) {
           currentRow.MarcaID = marcaExistente.ID;
         } else {
-          const marcaTemporal = listasService.addNewTemp({
+          const marcaTemporal: IListaRegistro = {
+            ID: 0,
             ListaID: PRODUCT_SHARED_LIST_MARCA_ID,
             Nombre: marcaNombre,
             ss: 1,
             upd: 0,
-          });
+          };
+          listasService.addNewTemp(marcaTemporal);
           currentRow.MarcaID = marcaTemporal.ID;
         }
       }
