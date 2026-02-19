@@ -355,7 +355,7 @@ export const GET = (props: httpProps): Promise<any> => {
 }
 
 export interface INewIDToID {
-  NewID: number;
+  ID: number;
   TempID: number;
 }
 
@@ -368,7 +368,8 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
   keysIDs: { [e: string]: string | string[] } = {}
 
   useCache: { min: number, ver: number  } | undefined = undefined
-  headers: { [k: string]: string } | undefined = undefined
+	headers: { [k: string]: string } | undefined = undefined
+  
 
 	handler(e: any) { }
   isReady = $state(0)
@@ -473,13 +474,28 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 			}
 			recordsToKeep.push(rec)
 		}
-		
-		const ids = records.map(x => x.ID)
-		const recordsWithoutCurrent = this.records.filter((existingRecord) => !ids.includes(existingRecord.ID))
-		
+
+		const currentIDs = new Set(this.records.map((existingRecord) => existingRecord.ID))
+		const incomingIDs = new Set(records.map((incomingRecord) => incomingRecord.ID))
+		const incomingRecordByID = new Map(recordsToKeep.map((incomingRecord) => [incomingRecord.ID, incomingRecord]))
+
+		// Preserve order of existing rows; replace in-place when an updated version exists.
+		const updatedExistingRecords: T[] = []
+		for (const existingRecord of this.records) {
+			if (!incomingIDs.has(existingRecord.ID)) {
+				updatedExistingRecords.push(existingRecord)
+				continue
+			}
+			const updatedRecord = incomingRecordByID.get(existingRecord.ID)
+			// Skip if the incoming record is filtered out (e.g. ss=0 with inferRemoveFromStatus).
+			if (updatedRecord) { updatedExistingRecords.push(updatedRecord) }
+		}
+
+		// Append/prepend only brand-new records; never reorder existing ones.
+		const newRecords = recordsToKeep.filter((incomingRecord) => !currentIDs.has(incomingRecord.ID))
 		this.records = this.prependOnSave
-			? [...recordsToKeep, ...recordsWithoutCurrent]
-			: [...recordsWithoutCurrent, ...recordsToKeep]
+			? [...newRecords, ...updatedExistingRecords]
+			: [...updatedExistingRecords, ...newRecords]
 	}
 
 	setTempID(record: T): number {
@@ -569,15 +585,15 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 		const tempToNewIDs = new Map<number, number>()
 
 		for (const mapping of idMappings) {
-			if (!mapping || mapping.NewID <= 0 || mapping.TempID === 0) { continue }
-			tempToNewIDs.set(mapping.TempID, mapping.NewID)
-			this.tempToNewID.set(mapping.TempID, mapping.NewID)
+			if (!mapping || mapping.ID <= 0 || mapping.TempID === 0) { continue }
+			tempToNewIDs.set(mapping.TempID, mapping.ID)
+			this.tempToNewID.set(mapping.TempID, mapping.ID)
 
 			for (const record of records) {
 				if (record.ID !== mapping.TempID) { continue }
 				if (mapping.TempID < 0) { this.recordsMap.delete(mapping.TempID) }
-				record.ID = mapping.NewID
-				this.onTempRecordSynced(record, mapping.TempID, mapping.NewID)
+				record.ID = mapping.ID
+				this.onTempRecordSynced(record, mapping.TempID, mapping.ID)
 			}
 		}
 

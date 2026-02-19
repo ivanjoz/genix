@@ -13,7 +13,7 @@ import {
 } from '$core/products-lists';
 import type { IListaRegistro, ListasCompartidasService } from '$services/negocio/listas-compartidas.svelte';
 import { normalizeComparableValue, normalizeStringN } from '$libs/helpers';
-import type { IProducto } from './productos.svelte';
+import type { IProducto, ProductosService } from './productos.svelte';
 
 // Centralizes Productos Excel export so the page only triggers the action.
 export const exportProductosToExcel = async (
@@ -54,11 +54,6 @@ interface ProductoImportProcessResult {
   ignoredHeaders: string[];
 }
 
-interface ExistingProductosLookup {
-  byID: Map<number, IProducto>;
-  normalizedNameToID: Map<string, number>;
-}
-
 const IMPORT_FIELD_TO_PRODUCT_FIELD: Record<string, keyof IProducto> = {
   _categoriasNames: 'CategoriasIDs',
   _marcaNombre: 'MarcaID',
@@ -91,7 +86,7 @@ export const processProductosImportFile = async (
   columns: ExcelTableColumn<IProducto>[],
   source: File,
   listasService: ListasCompartidasService,
-  existingProductos: ExistingProductosLookup,
+  productosService: ProductosService,
 ): Promise<ProductoImportProcessResult> => {
 	const builder = await importProductosFromExcel(columns, source);
   
@@ -161,15 +156,13 @@ export const processProductosImportFile = async (
       }
     }
 
-    const matchedByID = isValidPositiveID(currentRow.ID) ? existingProductos.byID.get(currentRow.ID) : undefined;
+    const matchedByID = isValidPositiveID(currentRow.ID) ? productosService.recordsMap.get(currentRow.ID) : undefined;
     if (matchedByID) {
       currentRow.ID = matchedByID.ID;
     } else if (isValidPositiveID(currentRow.ID)) {
       validationErrors.push(`ID de producto no encontrado "${currentRow.ID}"`);
     } else {
-      const normalizedName = normalizeStringN(currentRow.Nombre || '');
-      const matchedByNameID = existingProductos.normalizedNameToID.get(normalizedName);
-      currentRow.ID = matchedByNameID || 0;
+      currentRow.ID = productosService.getByName({ Nombre: currentRow.Nombre })?.ID || 0;
     }
 
     return validationErrors.length > 0 ? validationErrors : undefined;
@@ -181,9 +174,7 @@ export const processProductosImportFile = async (
 	const rowsWithUpdatedFields: IProducto[] = [];
   
   for (const importedProducto of (importResult.rowsWithoutErrors as IProducto[])) {
-    const existingProducto = isValidPositiveID(importedProducto.ID)
-      ? existingProductos.byID.get(importedProducto.ID)
-      : undefined;
+    const existingProducto = productosService.recordsMap.get(importedProducto.ID)
     if (!existingProducto) {
       importedProducto._updatedFields = ['ID'];
       rowsWithUpdatedFields.push(importedProducto);

@@ -50,18 +50,18 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetProductosByIDs(req *core.HandlerArgs) core.HandlerResponse {
-  cachedIDs := core.ExtractCacheVersionValues(req)
-	
-  if len(cachedIDs) == 0 {
-  	return req.MakeErr("No se enviaron ids a buscar.")
-  }  
-  
-  productos := []s.Producto{}
-  err := db.QueryCachedIDs(&productos, cachedIDs)
-  if err != nil {
-    return req.MakeErr("Error al obtener los productos.", err)
-  }
-  
+	cachedIDs := core.ExtractCacheVersionValues(req)
+
+	if len(cachedIDs) == 0 {
+		return req.MakeErr("No se enviaron ids a buscar.")
+	}
+
+	productos := []s.Producto{}
+	err := db.QueryCachedIDs(&productos, cachedIDs)
+	if err != nil {
+		return req.MakeErr("Error al obtener los productos.", err)
+	}
+
 	return core.MakeResponse(req, &productos)
 }
 
@@ -79,6 +79,8 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		if len(e.Nombre) < 4 {
 			return req.MakeErr("Faltan propiedades de en el producto.")
 		}
+		// Preserve incoming ID so frontend can map TempID -> ID after merge/upsert.
+		e.TempID = e.ID
 		e.EmpresaID = req.Usuario.EmpresaID
 		e.SelfParse()
 		if previousProduct, duplicate := nameHashToName[e.NombreHash]; duplicate {
@@ -92,11 +94,11 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	for nombreHash := range nameHashToName {
 		existing := []s.Producto{}
 		query := db.Query(&existing)
-		
+
 		query.Select(query.NombreHash, query.ID, query.Status).
 			EmpresaID.Equals(req.Usuario.EmpresaID).
 			NombreHash.Equals(nombreHash).AllowFilter()
-		
+
 		if err := query.Exec(); err != nil {
 			return req.MakeErr(fmt.Sprintf("Error al validar los nombres de productos: %v", err))
 		}
@@ -165,9 +167,8 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		incoming.Presentaciones = core.MapToSliceT(presentacionesMap)
 	}
 
-
 	t := s.ProductoTable{}
-	
+
 	// Merge resolves insert/update per primary key and applies only required writes.
 	err := db.Merge(&productos,
 		[]db.Coln{t.Stock, t.StockReservado, t.StockStatus, t.CategoriasConStock, t.Created, t.CreatedBy, t.Images},
@@ -183,6 +184,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 			buildPresentaciones(prev, current)
 
 			comparableCurrent := *current
+			comparableCurrent.TempID = prev.TempID
 			comparableCurrent.Updated = prev.Updated
 			comparableCurrent.UpdatedBy = prev.UpdatedBy
 			if reflect.DeepEqual(*prev, comparableCurrent) {

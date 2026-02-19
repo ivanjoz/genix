@@ -83,7 +83,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
   }
 
   function parseProductos() {
-    if (!productosService.productos.length || !productosStock.length) return;
+    if (!productosService.records.length || !productosStock.length) return;
 
     const productoToStockMap = new Map<number, IProductoStock[]>();
     for (const s of productosStock) {
@@ -94,7 +94,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
 
     const newProductos: ProductoVenta[] = [];
 
-    for (const producto of productosService.productos) {
+    for (const producto of productosService.records) {
       const stocks = productoToStockMap.get(producto.ID) || [];
       if (stocks.length === 0) continue;
 

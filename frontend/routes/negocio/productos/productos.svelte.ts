@@ -1,6 +1,5 @@
-import { GetHandler, POST } from '$libs/http.svelte';
+import { GetHandler } from '$libs/http.svelte';
 import type { ImageSource } from '$components/ImageUploader.svelte';
-import { normalizeStringN } from '$libs/helpers';
 
 export interface IProductoPropiedad {
   id: number, nm: string, ss: number
@@ -27,6 +26,7 @@ export interface IProductoImage {
 
 export interface IProducto {
   ID: number,
+  TempID?: number,
   Nombre: string
   Descripcion: string
   Precio: number
@@ -69,17 +69,19 @@ export interface IProducto {
 
 export interface IProductoResult {
   Records?: IProducto[]
-  productos: IProducto[]
-  productosMap: Map<number,IProducto>
+  records: IProducto[]
+  recordsMap: Map<number,IProducto>
 }
 
-export class ProductosService extends GetHandler {
+export class ProductosService extends GetHandler<IProducto> {
   route = "productos"
   useCache = { min: 5, ver: 9 }
-
-  productos: IProducto[] = $state([])
-  productosMap: Map<number,IProducto> = $state(new Map())
-  productosNameToIDMap: Map<string, number> = $state(new Map())
+	inferRemoveFromStatus = true
+  prependOnSave = true
+	
+	makeName(record: Partial<IProducto>) {
+		return record.Nombre || ""
+	}
 
   handler(result: IProducto[]): void {
     console.log("productos result::", result)
@@ -87,34 +89,17 @@ export class ProductosService extends GetHandler {
       e.Image = e.Images?.[0]
       e.CategoriasIDs = e.CategoriasIDs || []
     }
-
-    this.productos = result.filter(x => x.ss)
-    this.productosMap = new Map(result.map(x => [x.ID, x]))
-    const normalizedNameToIDMap = new Map<string, number>()
-    for (const producto of this.productos) {
-      normalizedNameToIDMap.set(normalizeStringN(producto.Nombre), producto.ID)
-    }
-    this.productosNameToIDMap = normalizedNameToIDMap
-  }
-
-  getByName(name: string): IProducto | undefined {
-    const matchedID = this.productosNameToIDMap.get(normalizeStringN(name))
-    if (!matchedID) return undefined
-    return this.productosMap.get(matchedID)
+    this.records = []
+    this.recordsMap = new Map()
+    this.nameToRecordMap = new Map()
+		this.addSavedRecords(...result)
+    this.records.sort((a,b) => b.ID - a.ID)
   }
 
   constructor(){
     super()
     this.fetch()
   }
-}
-
-export const postProducto = (data: IProducto[]) => {
-  return POST({
-    data,
-    route: "productos",
-    refreshRoutes: ["productos"]
-  })
 }
 
 export const productoAtributos = [

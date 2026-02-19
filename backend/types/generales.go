@@ -108,7 +108,7 @@ func (e *ListaCompartidaRegistro) SelfParse() {
 }
 
 type NewIDToID struct {
-	NewID  int32
+	ID  int32
 	TempID int32
 }
 

@@ -24,7 +24,7 @@ import Checkbox from '$components/Checkbox.svelte';
   let almacenStockGetted = [] as IProductoStock[]
   let form = $state({} as IProductoStock)
 
-  let formProducto = $derived(productos?.productosMap?.get(form.ProductoID||0))
+  let formProducto = $derived(productos?.recordsMap?.get(form.ProductoID||0))
 
   $effect(() => {
     if(!filters.almacenID){ return }
@@ -33,7 +33,7 @@ import Checkbox from '$components/Checkbox.svelte';
   let columns: ITableColumn<IProductoStock>[] = [
     { header: "Producto", highlight: true,
       getValue: e => {
-        const producto = productos.productosMap.get(e.ProductoID)?.Nombre
+        const producto = productos.recordsMap.get(e.ProductoID)?.Nombre
         return producto || `Producto-${e.ProductoID}`
       }
     },
@@ -46,7 +46,7 @@ import Checkbox from '$components/Checkbox.svelte';
     { header: "Presentación",
       getValue: e => {
         if(!e.PresentacionID){ return "" }
-        const producto = productos.productosMap.get(e.ProductoID)
+        const producto = productos.recordsMap.get(e.ProductoID)
         const pr = producto?.Presentaciones?.find(x => x.id === e.PresentacionID)
         return pr?.nm || `Tipo-${e.PresentacionID}`
       }
@@ -119,7 +119,7 @@ import Checkbox from '$components/Checkbox.svelte';
     console.log("almacenStockGetted", $state.snapshot(almacenStockGetted))
 
     const productosStockMap = new Map(almacenStockGetted?.map(x => [x.ID, x]))
-    for(const pr of productos.productos){
+    for(const pr of productos.records){
       const presentacionesIDs = pr.Presentaciones?.length > 0 ? pr.Presentaciones.map(x => x.id) : [0]
       for(const presentacionID of presentacionesIDs){
         const stockID = [filters.almacenID, pr.ID, presentacionID || "", "", ""].join("_")
@@ -216,7 +216,7 @@ import Checkbox from '$components/Checkbox.svelte';
     filterText={filterText}
     useFilterCache={true}
     getFilterContent={e => {
-      const producto = productos.productosMap.get(e.ProductoID)
+      const producto = productos.recordsMap.get(e.ProductoID)
       return [producto?.Nombre, e.SKU, e.Lote].filter(x => x).join(" ").toLowerCase()
     }}
   >
@@ -235,7 +235,7 @@ import Checkbox from '$components/Checkbox.svelte';
   >
     <div class="grid grid-cols-24 gap-10 mt-6 p-4">
       <SearchSelect label="Producto" css="col-span-24" required={true}
-        bind:saveOn={form} save="ProductoID" options={productos.productos||[]}
+        bind:saveOn={form} save="ProductoID" options={productos.records||[]}
         keyName="Nombre" keyId="ID"
       />
       {#if (formProducto?.Presentaciones?.filter(x => x.ss)||[]).length > 0}

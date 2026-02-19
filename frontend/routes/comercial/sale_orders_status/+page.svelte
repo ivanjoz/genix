@@ -28,7 +28,7 @@
     // Keep product-name lookup in the view as requested; service only provides ranked IDs/amounts.
     return saleOrder.TopPaidProducts
       .map((topProduct) => {
-        const productName = productosService.productosMap.get(topProduct.ProductID)?.Nombre || `Producto #${topProduct.ProductID}`;
+        const productName = productosService.recordsMap.get(topProduct.ProductID)?.Nombre || `Producto #${topProduct.ProductID}`;
         return `${productName} (${formatN(topProduct.LineAmount / 100, 2)})`;
       })
       .join(', ');
@@ -38,7 +38,7 @@
   $effect(() => {
   	selectedGroup;
   	untrack(() => {
- 		console.log("productos service::",$state.snapshot(productosService.productos))
+ 		console.log("productos service::",$state.snapshot(productosService.records))
    
 			service = new SaleOrdersService(selectedGroup);
 			service.fetch();

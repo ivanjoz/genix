@@ -183,7 +183,7 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Complete TempID -> NewID mapping with final IDs after persistence.
 	for i := range records {
-		newIDs[i].NewID = records[i].ID
+		newIDs[i].ID = records[i].ID
 	}
 
 	return req.MakeResponse(newIDs)

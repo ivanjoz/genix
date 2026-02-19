@@ -29,6 +29,7 @@ type Producto struct {
 	db.TableStruct[ProductoTable, Producto]
 	EmpresaID      int32   `json:",omitempty"`
 	ID             int32   `db:"id,pk"`
+	TempID         int32   `json:",omitempty"`
 	Nombre         string  `db:"nombre"`
 	Descripcion    string  `json:",omitempty"`
 	ContentHTML    string  `json:",omitempty" db:"content_html"`
@@ -47,7 +48,7 @@ type Producto struct {
 	SbnPrecio      int32   `json:",omitempty" db:"sbn_precio"`
 	SbnDescuento   float32 `json:",omitempty" db:"sbn_decuento"`
 	SbnPrecioFinal int32   `json:",omitempty" db:"sbn_precio_final"`
-	NombreHash int32   `json:",omitempty"`
+	NombreHash     int32   `json:",omitempty"`
 
 	Propiedades    []ProductoPropiedades `json:",omitempty" db:"propiedades"`
 	Presentaciones []ProductoPesentacion `json:",omitempty" db:"presentaciones"`
@@ -63,7 +64,7 @@ type Producto struct {
 	CreatedBy int32 `json:",omitempty" db:"created_by"`
 	/* concatenada con la Empresa-ID para ser indexadas*/
 	CategoriasConStock []int32 `json:",omitempty" db:"categorias_con_stock,gindex"`
-	CacheVersion uint8 `json:"ccv,omitempty"`
+	CacheVersion       uint8   `json:"ccv,omitempty"`
 }
 
 type ProductoTable struct {
@@ -118,12 +119,12 @@ func (e *Producto) SelfParse() {
 
 func (e ProductoTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:          "productos",
-		Partition:     e.EmpresaID,
-		UseSequences:  true,
+		Name:             "productos",
+		Partition:        e.EmpresaID,
+		UseSequences:     true,
 		SaveCacheVersion: true,
-		Keys:          []db.Coln{e.ID.Autoincrement(0)},
-		GlobalIndexes: [][]db.Coln{{ e.CategoriasConStock }},
+		Keys:             []db.Coln{e.ID.Autoincrement(0)},
+		GlobalIndexes:    [][]db.Coln{{e.CategoriasConStock}},
 		ViewsDeprecated: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.StockStatus}, KeepPart: true},
@@ -155,13 +156,13 @@ type Almacen struct {
 	Descripcion string          `db:"descripcion"`
 	Layout      []AlmacenLayout `db:"layout"`
 	// Propiedades generales
-	Status    int8  `json:"ss,omitempty" db:"status,view"`
-	Updated   int64 `json:"upd,omitempty" db:"updated,view"`
-		UpdatedBy   int32  `json:",omitempty" db:"updated_by"`
-		Created     int64  `json:",omitempty" db:"created"`
-		CreatedBy   int32  `json:",omitempty" db:"created_by"`
-		Ciudad      string `json:",omitempty"`
-	}
+	Status    int8   `json:"ss,omitempty" db:"status,view"`
+	Updated   int64  `json:"upd,omitempty" db:"updated,view"`
+	UpdatedBy int32  `json:",omitempty" db:"updated_by"`
+	Created   int64  `json:",omitempty" db:"created"`
+	CreatedBy int32  `json:",omitempty" db:"created_by"`
+	Ciudad    string `json:",omitempty"`
+}
 
 type AlmacenTable struct {
 	db.TableStruct[AlmacenTable, Almacen]
@@ -250,7 +251,7 @@ func (e SedeTable) GetSchema() db.TableSchema {
 
 type AlmacenProducto struct {
 	db.TableStruct[AlmacenProductoTable, AlmacenProducto]
-	EmpresaID int32 `json:",omitempty"`
+	EmpresaID      int32 `json:",omitempty"`
 	ID             string
 	SKU            string  `json:",omitempty"`
 	Lote           string  `json:",omitempty"`
@@ -304,19 +305,18 @@ func (e AlmacenProductoTable) GetSchema() db.TableSchema {
 	}
 }
 
-
 type AlmacenMovimiento struct {
 	db.TableStruct[AlmacenMovimientoTable, AlmacenMovimiento]
 	EmpresaID int32 `json:",omitempty"`
 	// [Almacen-ID] + [Created] + [Ramdom Number]
-	ID                 int64 
+	ID                 int64
 	SKU                string `json:",omitempty"`
 	Lote               string `json:",omitempty"`
 	AlmacenID          int32  `json:",omitempty"`
 	AlmacenRefID       int32  `json:",omitempty"`
 	AlmacenRefCantidad int32  `json:",omitempty"`
-	Fecha          int16  `json:",omitempty"`
-	DocumentID            int64  `json:",omitempty"`
+	Fecha              int16  `json:",omitempty"`
+	DocumentID         int64  `json:",omitempty"`
 	ProductoID         int32  `json:",omitempty"`
 	PresentacionID     int16  `json:",omitempty"`
 	Cantidad           int32  `json:",omitempty"`
@@ -368,8 +368,8 @@ func (e AlmacenMovimientoTable) GetSchema() db.TableSchema {
 type MovimientoInterno struct {
 	ProductoID           int32
 	PresentacionID       int16
-		ReemplazarCantidad   bool
-		Tipo int8
+	ReemplazarCantidad   bool
+	Tipo                 int8
 	SKU                  string
 	Lote                 string
 	AlmacenID            int32
@@ -378,7 +378,7 @@ type MovimientoInterno struct {
 	SubCantidad          int32
 	ModificarCantidad    int32
 	ModificarSubCantidad int32
-	DocumentID 					 int64
+	DocumentID           int64
 }
 
 func (e *MovimientoInterno) GetAlmacenProductoID() string {

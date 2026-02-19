@@ -11,7 +11,7 @@ import VTable from '$components/vTable/VTable.svelte';
 import { Core } from '$core/store.svelte';
 import HTMLEditor from '$domain/HTMLEditor/HTMLEditor.svelte';
 import Page from '$domain/Page.svelte';
-import { ConfirmWarn, formatN, Loading, normalizeStringN, Notify, throttle } from '$libs/helpers';
+import { ConfirmWarn, formatN, Loading, Notify, throttle } from '$libs/helpers';
 import { POST } from '$libs/http.svelte';
 import type { ExcelTableColumn } from '$libs/excel/excelBuilder';
 import Atributos from './Atributos.svelte';
@@ -20,7 +20,6 @@ import { exportProductosToExcel, processProductosImportFile } from './productos.
 import { productoMonedaOptions, productoUnidadOptions } from '$core/products-lists';
 import { ListasCompartidasService } from '$services/negocio/listas-compartidas.svelte';
 import {
-    postProducto,
     ProductosService,
     type IProducto,
     type IProductoImage
@@ -238,7 +237,7 @@ import {
   const exportProductosExcel = async () => {
     Loading.standard("Generando archivo Excel...");
     try {
-      await exportProductosToExcel(productoColumns, productos.productos);
+      await exportProductosToExcel(productoColumns, productos.records);
       Loading.remove();
       Notify.success("Excel generado correctamente.");
     } catch (error) {
@@ -271,10 +270,7 @@ import {
     console.log("[productos-import] starting excel import:", file.name);
 
     try {
-      const importResult = await processProductosImportFile(productoImportColumns, file, listas, {
-        byID: productos.productosMap,
-        normalizedNameToID: productos.productosNameToIDMap,
-      });
+      const importResult = await processProductosImportFile(productoImportColumns, file, listas, productos);
 
       importExcelRowsPreview = importResult.rows;
       importExcelErrors = importResult.errors;
@@ -310,36 +306,30 @@ import {
       const pendingSharedListRecords = listas.getTempRecords().length;
       let tempIDToNewID = new Map<number, number>();
 
-      // Persist temporary categorías/marcas and get TempID -> NewID mappings.
+      // Persist temporary categorías/marcas and get TempID -> ID mappings.
       if (pendingSharedListRecords > 0) {
         Loading.change(`Creando categorías/marcas nuevas (${pendingSharedListRecords})...`);
         tempIDToNewID = await listas.syncTempRecords();
       }
 
       const productosToSave = importExcelRowsPreview.map((importedProducto) => {
-      	
-        const existingProducto = productos.productosMap.get(importedProducto.ID)
-      	importedProducto.MarcaID = tempIDToNewID.get(importedProducto.MarcaID) || importedProducto.MarcaID      
-      
-        importedProducto.CategoriasIDs = (importedProducto.CategoriasIDs || []).map((id) => {
-          return tempIDToNewID.get(id) || id;
+        importedProducto.MarcaID = tempIDToNewID.get(importedProducto.MarcaID) || importedProducto.MarcaID;
+        importedProducto.CategoriasIDs = (importedProducto.CategoriasIDs || []).map((categoriaID) => {
+          return tempIDToNewID.get(categoriaID) || categoriaID;
         });
-        
-        const excelKeys: (keyof IProducto)[] = [
-          "ID", "Nombre", "CategoriasIDs", "Precio", "Descuento", "PrecioFinal",
-          "MarcaID", "UnidadID", "Volumen", "Peso", "MonedaID",
-        ];
-											
+
+        const existingProducto = productos.recordsMap.get(importedProducto.ID);
         if (existingProducto) {
-        	for(const key in existingProducto){
-         		if(!excelKeys.includes(key as keyof IProducto)){
-           		(importedProducto as any)[key as keyof IProducto] = existingProducto[key as keyof IProducto]
-           	}
-         	}
+          for (const fieldKey in existingProducto) {
+            const typedFieldKey = fieldKey as keyof IProducto;
+            if (importEditableProductKeys.has(typedFieldKey)) { continue; }
+            (importedProducto as any)[typedFieldKey] = existingProducto[typedFieldKey];
+          }
         }
-        
-        return importedProducto
+
+        return importedProducto;
       });
+
       const unresolvedIDProducto = productosToSave.find((productoDraft) => {
         const hasInvalidCategoriaID = (productoDraft.CategoriasIDs || []).some((categoriaID) => categoriaID <= 0);
         return hasInvalidCategoriaID || productoDraft.MarcaID <= 0;
@@ -362,6 +352,7 @@ import {
       Notify.success("Importación completada correctamente.");
       importExcelRowsPreview = [];
       Core.closeModal(IMPORT_PRODUCTOS_MODAL_ID);
+      productoForm = {} as IProducto
     } catch (error) {
       console.error("[productos-import] save import failed:", error);
       Notify.failure(`No se pudo completar la importación: ${error}`);
@@ -369,35 +360,19 @@ import {
     }
   };
 
-  const doPostProductos = async (payload: IProducto[]): Promise<IProducto[]> => {
-    const productosUpdated = (await postProducto(payload)) as IProducto[];
-    
-    const productosByID = new Map(productos.productos.map((producto) => [producto.ID, producto]));
-
-    for (const productoActualizado of productosUpdated || []) {
-      productoActualizado.Image = productoActualizado.Images?.[0];
-      productoActualizado.CategoriasIDs = productoActualizado.CategoriasIDs || [];
-      const productoLocal = productosByID.get(productoActualizado.ID);
-      if (productoLocal && productoActualizado.ss > 0) {
-        Object.assign(productoLocal, productoActualizado);
-      } else if (productoLocal && productoActualizado.ss <= 0) {
-        productos.productos = productos.productos.filter((producto) => producto.ID !== productoActualizado.ID);
-        productosByID.delete(productoActualizado.ID);
-      } else if (productoActualizado.ss > 0) {
-        productos.productos.unshift(productoActualizado);
-        productosByID.set(productoActualizado.ID, productoActualizado);
-      }
+  const doPostProductos = async (payload: IProducto[]): Promise<Map<number, number>> => {
+    for (const producto of payload) {
+      // Keep local shape consistent even when backend omits optional fields in responses.
+      producto.Image = producto.Images?.[0];
+      producto.CategoriasIDs = producto.CategoriasIDs || [];
     }
-
-    // Force table refresh and keep lookup maps in sync for next import cycle.
-    productos.productos = [...productos.productos];
-    productos.productosMap = new Map(productos.productos.map((producto) => [producto.ID, producto]));
-    productos.productosNameToIDMap = new Map(
-      productos.productos.map((producto) => [normalizeStringN(producto.Nombre), producto.ID]),
-    );
-    
-    return productosUpdated;
+    return await productos.postAndSync(payload);
   };
+
+  const importEditableProductKeys = new Set<keyof IProducto>([
+    "ID", "Nombre", "CategoriasIDs", "Precio", "Descuento", "PrecioFinal",
+    "MarcaID", "UnidadID", "Volumen", "Peso", "MonedaID",
+  ]);
 
   const onSave = async (isDelete?: boolean) => {
     if ((productoForm.Nombre?.length || 0) < 4) {
@@ -411,24 +386,19 @@ import {
       Loading.change("Guardando producto...")
     }
 
-    console.log("productor a enviar:", $state.snapshot(productoForm));
-    
-    if (isDelete) {
-      productoForm.ss = 0;
-    }
+    console.log("productor a enviar:", $state.snapshot(productoForm));    
+    if (isDelete) {  productoForm.ss = 0; }
 
     Loading.standard("Guardando producto...");
     try {
-      const productosUpdated = await doPostProductos([productoForm]);
-      if (!isDelete && productoForm.ID <= 0 && (productosUpdated?.[0]?.ID || 0) > 0) {
-        productoForm.ID = productosUpdated[0].ID;
-      }
+    	await doPostProductos([productoForm]);
     } catch (error) {
       Notify.failure(error as string);
       Loading.remove();
       return;
     }
     Loading.remove();
+    productoForm = {} as IProducto
     Core.openSideLayer(0);
   };
 
@@ -516,6 +486,7 @@ import {
         } else if (view === 3) {
           MarcasLayer?.newRecord();
         } else {
+       		productoForm = { ss: 1 } as IProducto
           Core.openSideLayer(1);
         }
       }}
@@ -528,7 +499,7 @@ import {
     <Layer type="content">
       <VTable
         columns={productoColumns}
-        data={productos.productos}
+        data={productos.records}
         {filterText}
         selected={productoForm?.ID}
         isSelected={(e, id) => e.ID === id}
