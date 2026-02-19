@@ -1,6 +1,9 @@
 package types
 
-import "app/db"
+import (
+	"app/core"
+	"app/db"
+)
 
 type Increment struct {
 	db.TableStruct[IncrementTable, Increment]
@@ -57,16 +60,17 @@ func (e PaisCiudadTable) GetSchema() db.TableSchema {
 
 type ListaCompartidaRegistro struct {
 	db.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
-	EmpresaID   int32    `db:"empresa_id,pk"`
-	ID          int32    `db:"id,pk"`
-	ListaID     int32    `db:"lista_id,view,view.1,view.2"`
-	Nombre      string   `json:",omitempty" db:"nombre"`
-	Images      []string `json:",omitempty" db:"images"`
-	Descripcion string   `json:",omitempty" db:"descripcion"`
+	EmpresaID   int32 
+	ID          int32 
+	ListaID     int32   
+	Nombre      string   `json:",omitempty"`
+	Images      []string `json:",omitempty"`
+	Descripcion string   `json:",omitempty"`
+	NombreHash int32  `json:",omitempty"`
 	// Propiedades generales
-	Status    int8  `json:"ss,omitempty" db:"status,view.1"`
-	Updated   int64 `json:"upd,omitempty" db:"updated,view.2"`
-	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
+	Status    int8  `json:"ss,omitempty"`
+	Updated   int64 `json:"upd,omitempty"`
+	UpdatedBy int32 `json:",omitempty"`
 }
 
 type ListaCompartidaRegistroTable struct {
@@ -77,6 +81,7 @@ type ListaCompartidaRegistroTable struct {
 	Nombre      db.Col[ListaCompartidaRegistroTable, string]
 	Images      db.ColSlice[ListaCompartidaRegistroTable, string]
 	Descripcion db.Col[ListaCompartidaRegistroTable, string]
+	NombreHash   db.Col[ListaCompartidaRegistroTable, int32]
 	Status      db.Col[ListaCompartidaRegistroTable, int8]
 	Updated     db.Col[ListaCompartidaRegistroTable, int64]
 	UpdatedBy   db.Col[ListaCompartidaRegistroTable, int32]
@@ -88,12 +93,18 @@ func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
 		Partition:    e.EmpresaID,
 		UseSequences: true,
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
+		Indexes: [][]db.Coln{{e.NombreHash}},
 		ViewsDeprecated: []db.View{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
 			{Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
 			{Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
 		},
 	}
+}
+
+func (e *ListaCompartidaRegistro) SelfParse() {
+	name := core.Concatn(e.ListaID, e.Nombre)
+	e.NombreHash = core.BasicHashInt(core.NormaliceString(&name))
 }
 
 type NewIDToID struct {
