@@ -102,24 +102,40 @@ export const processProductosImportFile = async (
     if ((currentRow._categoriasNames || '').length > 0) {
       const categoriasIDs: number[] = [];
       for (const categoriaNameRaw of (currentRow._categoriasNames || '').split(',')) {
-        const categoriaName = categoriaNameRaw;
+        const categoriaName = categoriaNameRaw.trim();
         if (!categoriaName) continue;
-        const categoria = listasService.getByName(PRODUCT_SHARED_LIST_CATEGORIA_ID, categoriaName);
-        if (!categoria?.ID) {
-          validationErrors.push(`categoría no encontrada "${categoriaName}"`);
+        const categoriaExistente = listasService.getByName(PRODUCT_SHARED_LIST_CATEGORIA_ID, categoriaName);
+        if (categoriaExistente?.ID) {
+          categoriasIDs.push(categoriaExistente.ID);
           continue;
         }
-        categoriasIDs.push(categoria.ID);
+
+        const categoriaTemporal = listasService.addNewTemp({
+          ListaID: PRODUCT_SHARED_LIST_CATEGORIA_ID,
+          Nombre: categoriaName,
+          ss: 1,
+          upd: 0,
+        });
+        categoriasIDs.push(categoriaTemporal.ID);
       }
       currentRow.CategoriasIDs = categoriasIDs;
     }
 
     if ((currentRow._marcaNombre || '').length > 0) {
-      const marca = listasService.getByName(PRODUCT_SHARED_LIST_MARCA_ID, currentRow._marcaNombre || '');
-      if (!marca?.ID) {
-        validationErrors.push(`marca no encontrada "${currentRow._marcaNombre}"`);
-      } else {
-        currentRow.MarcaID = marca.ID;
+      const marcaNombre = (currentRow._marcaNombre || '').trim();
+      if (marcaNombre.length > 0) {
+        const marcaExistente = listasService.getByName(PRODUCT_SHARED_LIST_MARCA_ID, marcaNombre);
+        if (marcaExistente?.ID) {
+          currentRow.MarcaID = marcaExistente.ID;
+        } else {
+          const marcaTemporal = listasService.addNewTemp({
+            ListaID: PRODUCT_SHARED_LIST_MARCA_ID,
+            Nombre: marcaNombre,
+            ss: 1,
+            upd: 0,
+          });
+          currentRow.MarcaID = marcaTemporal.ID;
+        }
       }
     }
 

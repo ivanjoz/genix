@@ -82,7 +82,8 @@ import {
       header: "Categorías",
       highlight: true,
       getValue: (e) => {
-        if (isImport && (e._categoriasNames || "").trim().length > 0 && (e.CategoriasIDs || []).length === 0) {
+        // Keep import preview readable by showing original labels from Excel.
+        if (isImport && (e._categoriasNames || "").trim().length > 0) {
           return e._categoriasNames || "";
         }
         const nombres = [];
@@ -250,12 +251,14 @@ import {
     importExcelRowsPreview = [];
     importExcelErrors = [];
     isImportExcelProcessing = false;
+    listas.clearTempRecords();
     Core.openModal(IMPORT_PRODUCTOS_MODAL_ID);
   };
 
   const onImportExcelFileChange = async (file?: File, isRemoved?: boolean) => {
     importExcelRowsPreview = [];
     importExcelErrors = [];
+    listas.clearTempRecords();
 
     if (isRemoved || !file) {
       isImportExcelProcessing = false;
@@ -280,6 +283,7 @@ import {
         mappedColumns: importResult.mappedColumns,
         ignoredHeaders: importResult.ignoredHeaders,
         errors: importExcelErrors.length,
+        pendingSharedListRecords: listas.getTempRecordsCount(),
       });
     } catch (error) {
       console.error("[productos-import] import failed:", error);
@@ -287,6 +291,71 @@ import {
       Notify.failure(`No se pudo procesar el Excel: ${error}`);
     } finally {
       isImportExcelProcessing = false;
+    }
+  };
+
+  const saveImportProductos = async () => {
+    if (importExcelErrors.length > 0) {
+      Notify.failure("Corrige los errores de importación antes de guardar.");
+      return;
+    }
+    if (importExcelRowsPreview.length === 0) {
+      Notify.failure("No hay filas válidas para importar.");
+      return;
+    }
+
+    try {
+      Loading.standard("Guardando importación de productos...");
+      const pendingSharedListRecords = listas.getTempRecordsCount();
+      let tempIDToNewID = new Map<number, number>();
+
+      // Persist temporary categorías/marcas and get TempID -> NewID mappings.
+      if (pendingSharedListRecords > 0) {
+        Loading.change(`Creando categorías/marcas nuevas (${pendingSharedListRecords})...`);
+        tempIDToNewID = await listas.syncTemp();
+      }
+
+      const productosToSave = importExcelRowsPreview.map((importedProducto) => {
+        const categoriaIDsRemapeados = (importedProducto.CategoriasIDs || []).map((categoriaID) => {
+          if (categoriaID > 0) return categoriaID;
+          return tempIDToNewID.get(categoriaID) || categoriaID;
+        });
+        const marcaIDRemapeado = importedProducto.MarcaID > 0
+          ? importedProducto.MarcaID
+          : (tempIDToNewID.get(importedProducto.MarcaID) || importedProducto.MarcaID);
+
+        return {
+          ...importedProducto,
+          CategoriasIDs: categoriaIDsRemapeados,
+          MarcaID: marcaIDRemapeado,
+        };
+      });
+      const unresolvedIDProducto = productosToSave.find((productoDraft) => {
+        const hasInvalidCategoriaID = (productoDraft.CategoriasIDs || []).some((categoriaID) => categoriaID <= 0);
+        return hasInvalidCategoriaID || productoDraft.MarcaID <= 0;
+      });
+      if (unresolvedIDProducto) {
+        throw new Error(
+          `No se pudieron resolver IDs temporales para el producto "${unresolvedIDProducto.Nombre || unresolvedIDProducto.ID}".`,
+        );
+      }
+
+      console.log("[productos-import] final payload before productos POST:", {
+        productos: productosToSave.length,
+        tempIDMappings: Array.from(tempIDToNewID.entries()),
+      });
+
+      Loading.change(`Guardando productos (${productosToSave.length})...`);
+      await postProducto(productosToSave);
+      Loading.remove();
+
+      Notify.success("Importación completada correctamente.");
+      importExcelRowsPreview = [];
+      Core.closeModal(IMPORT_PRODUCTOS_MODAL_ID);
+    } catch (error) {
+      console.error("[productos-import] save import failed:", error);
+      Notify.failure(`No se pudo completar la importación: ${error}`);
+      Loading.remove();
     }
   };
 
@@ -755,6 +824,9 @@ import {
     useFileImportWithErrors={true}
     fileErrors={importExcelErrors}
     onFileChange={onImportExcelFileChange}
+    onSave={saveImportProductos}
+    saveButtonLabel="Importar"
+    saveIcon="icon-upload"
   >
     <div class="">
       <div class="border border-slate-200 rounded-md overflow-hidden">
