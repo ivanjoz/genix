@@ -440,6 +440,7 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 	nameToRecordMap: Map<string,T> = new Map()
 	records: T[] = $state([])
 	prependOnSave?: boolean
+	inferRemoveFromStatus?: boolean
 	
 	makeName(record: Partial<T>){ return "" }
 	onTempRecordAdded(_record: T) {}
@@ -447,20 +448,44 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 	afterSaveRecords(...records: T[]) {}
 
 	addSavedRecords(...records: T[]) {
+		const recordsToKeep: T[] = []
 		for (const rec of records) {
-			const name = this.makeName(rec)
-			if (name) {
-				this.nameToRecordMap.set(normalizeStringN(name), rec)
-			}	
+			// Always keep the ID lookup map updated, even for ss=0 records.
 			this.recordsMap.set(rec.ID, rec)
+
+			const shouldRemoveByStatus = this.inferRemoveFromStatus && rec.ss === 0
+			const normalizedRecordName = normalizeStringN(this.makeName(rec) || "")
+			if (shouldRemoveByStatus) {
+				if (normalizedRecordName) {
+					this.nameToRecordMap.delete(normalizedRecordName)
+				}
+				// Also clear any stale normalized-name keys pointing to the same record.
+				for (const [normalizedNameKey, indexedRecord] of this.nameToRecordMap.entries()) {
+					if (indexedRecord.ID === rec.ID) {
+						this.nameToRecordMap.delete(normalizedNameKey)
+					}
+				}
+				continue
+			}
+
+			if (normalizedRecordName) {
+				this.nameToRecordMap.set(normalizedRecordName, rec)
+			}
+			recordsToKeep.push(rec)
 		}
 		
 		const ids = records.map(x => x.ID)
 		const recordsWithoutCurrent = this.records.filter((existingRecord) => !ids.includes(existingRecord.ID))
 		
 		this.records = this.prependOnSave
-			? [...records, ...recordsWithoutCurrent]
-			: [...recordsWithoutCurrent, ...records]
+			? [...recordsToKeep, ...recordsWithoutCurrent]
+			: [...recordsWithoutCurrent, ...recordsToKeep]
+	}
+
+	setTempID(record: T): number {
+		if (!record.ID) { record.ID = this.nextTempID-- }
+		if(record.ID <= 0){ this.tempToNewID.set(record.ID, 0) }
+		return record.ID
 	}
 	
 	addTempRecord(record: T) {
@@ -473,10 +498,9 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 		if (record.ID > 0) { return record }
 
 		// Use negative IDs in-memory so the UI can reference unsaved records safely.
-		record.ID = this.nextTempID--
+		this.setTempID(record)
 		if (!record.ss) { record.ss = 1 }
 
-		this.tempToNewID.set(record.ID, 0)
 		this.recordsMap.set(record.ID, record)
 		
 		const name = this.makeName(record)
@@ -538,32 +562,39 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 		return response
 	}
 
+	async postAndSync(records: T[], reqWrapper?: { [e: string]: any }): Promise<Map<number, number>> {
+		for (const record of records) { this.setTempID(record) }
+
+		const idMappings = await this.post(records, reqWrapper)
+		const tempToNewIDs = new Map<number, number>()
+
+		for (const mapping of idMappings) {
+			if (!mapping || mapping.NewID <= 0 || mapping.TempID === 0) { continue }
+			tempToNewIDs.set(mapping.TempID, mapping.NewID)
+			this.tempToNewID.set(mapping.TempID, mapping.NewID)
+
+			for (const record of records) {
+				if (record.ID !== mapping.TempID) { continue }
+				if (mapping.TempID < 0) { this.recordsMap.delete(mapping.TempID) }
+				record.ID = mapping.NewID
+				this.onTempRecordSynced(record, mapping.TempID, mapping.NewID)
+			}
+		}
+
+		this.addSavedRecords(...records)
+		this.afterSaveRecords(...records)
+		return tempToNewIDs
+	}
+
 	async syncTempRecords(reqWrapper?: { [e: string]: any }): Promise<Map<number, number>> {
 		const pendingRecords = this.getTempRecords()
 		if (pendingRecords.length === 0) { return new Map() }
 
 		console.log("[GetHandler] syncing temp records:", this.route, pendingRecords.length)
-		const idMappings = await this.post(pendingRecords, reqWrapper)
-		const tempToNewIDs = new Map<number, number>()
-		const syncedTempIDs = new Set<number>()
-
-		// Apply ID remap in-place so components keep object references.
-		for (const mapping of idMappings) {
-			if (!mapping || mapping.TempID >= 0 || mapping.NewID <= 0) { continue }
-			tempToNewIDs.set(mapping.TempID, mapping.NewID)
-			this.tempToNewID.set(mapping.TempID, mapping.NewID)
-
-			const syncedRecord = this.recordsMap.get(mapping.TempID)
-			if (!syncedRecord) { continue }
-			this.recordsMap.delete(mapping.TempID)
-			syncedRecord.ID = mapping.NewID
-			syncedTempIDs.add(mapping.TempID)
-			this.onTempRecordSynced(syncedRecord, mapping.TempID, mapping.NewID)
-		}
-		this.addSavedRecords(...pendingRecords)
-		this.afterSaveRecords(...pendingRecords)
+		const tempToNewIDs = await this.postAndSync(pendingRecords, reqWrapper)
 
 		// Remove only synced temp entries so unsynced rows are preserved for retries.
+		const syncedTempIDs = new Set<number>([...tempToNewIDs.keys()].filter((tempID) => tempID < 0))
 		this.clearTempRecords(syncedTempIDs)
 		console.log("[GetHandler] temp sync completed:", this.route, tempToNewIDs.size)
 		return tempToNewIDs

@@ -24,6 +24,7 @@ export const listasCompartidas = [
 export class ListasCompartidasService extends GetHandler<IListaRegistro> {
   route = 'listas-compartidas';
   useCache = { min: 5, ver: 6 };
+  inferRemoveFromStatus = true
 
   ListaRecordsMap: Map<number, IListaRegistro[]> = $state(new Map());
 	

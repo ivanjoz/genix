@@ -4,7 +4,7 @@ import Input from '$components/Input.svelte';
 import Modal from '$components/Modal.svelte';
 import { closeAllModals, closeModal, imagesToUpload, openModal } from '$core/store.svelte';
 import { Loading, Notify } from '$libs/helpers';
-    import { postListaRegistros, type IListaRegistro, type INewIDToID, type ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
+import { type IListaRegistro, type ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
 
   const {
     listas, origin
@@ -53,32 +53,30 @@ import { Loading, Notify } from '$libs/helpers';
     console.log("form a enviar 2::",$state.snapshot(form))
     Loading.change("Guardando categoría...")
 
-    let result: INewIDToID[]
     try {
-      result = await postListaRegistros([form])
+      await listas.postAndSync([form])
     } catch (error) {
       Notify.failure(error as string)
-      // Loading.remove()
+      Loading.remove()
       return
     }
+    
+    if(!(form.ID > 0)){
+   		Notify.failure("No se asignó el ID")
+     	return
+    }
 
-    const selected = categorias.find(x => x.ID === form.ID)
     let newCategorias = [...categorias]
 
-    if(selected && isDelete){
-      newCategorias = newCategorias.filter(x => x.ID !== form.ID)
-    } else if(selected) {
-      Object.assign(selected, form)
+    if (isDelete) {
+      newCategorias = newCategorias.filter((existingRecord) => existingRecord.ID !== form.ID)
     } else {
-      form.ID = result[0].NewID
-      listas.addSavedRecords(form)
-      listas.afterSaveRecords(form)
-      newCategorias = listas.ListaRecordsMap.get(origin) || []
+      newCategorias = [...(listas.ListaRecordsMap.get(origin) || [])]
     }
 
     console.log("newCategorias", newCategorias.length,"|",categorias.length)
 
-    listas.ListaRecordsMap.set(origin, newCategorias)
+    listas.ListaRecordsMap.set(origin, [...newCategorias])
     listas.ListaRecordsMap = new Map(listas.ListaRecordsMap)
     closeAllModals()
     Loading.remove()
@@ -107,7 +105,7 @@ import { Loading, Notify } from '$libs/helpers';
 </script>
 
 <div class="w-full flex flex-wrap gap-12">
-  {#each categorias as e }
+	{#each categorias as e }
     <div class="_1 px-12 py-10 w-250 min-h-140" role="button" tabindex="0"
       onkeydown={ev => {
         ev.stopPropagation()
