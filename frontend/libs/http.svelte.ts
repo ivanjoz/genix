@@ -1,4 +1,4 @@
-import { Notify } from '$libs/helpers';
+import { normalizeStringN, Notify } from '$libs/helpers';
 import axios, { type AxiosProgressEvent } from 'axios';
 import { formatN } from '$libs/helpers';
 import type { CacheMode, serviceHttpProps } from '$libs/workers/service-worker';
@@ -354,7 +354,12 @@ export const GET = (props: httpProps): Promise<any> => {
   }
 }
 
-export class GetHandler {
+export interface INewIDToID {
+  NewID: number;
+  TempID: number;
+}
+
+export class GetHandler<T = any> {
 
   route = ""
   routeParsed = ""
@@ -433,5 +438,67 @@ export class GetHandler {
         this.isReady++
       }
     })
+	}
+  
+	// Post Method
+	routePost = ""
+	refreshRoutes: string[] = []
+	loadingMessage = "Enviando Registros..."
+	tempToNewID: Map<number, number> = new Map()	
+	recordsMap: Map<number, T> = $state(new Map())
+	nameToRecordMap: Map<string,T> = new Map()
+	records: T[] = $state([])
+	
+	makeName(record: Partial<T>){ return "" }
+	
+	addTempRecord(record: T) {
+		if (!record.ID) {
+			const newID = (this.tempToNewID.size + 1) * -1
+			record.ID = newID
+			this.tempToNewID.set(newID, 0)
+			this.recordsMap.set(newID, record)
+			
+			const name = this.makeName(record)
+			if (name) {
+				this.nameToRecordMap.set(normalizeStringN(name), record)
+			}
+		}
+	}
+	
+ 	get(id: number) {
+	   return this.recordsMap.get(id);
+	}
+	
+	getByName(record: Partial<T>): T | undefined {
+		const name = this.makeName(record)
+		return name ? this.nameToRecordMap.get(normalizeStringN(name)) as T : undefined
+	}
+	
+ 	clearTempRecords() {
+    for (const [recordID, record] of this.recordsMap.entries()) {
+      if (recordID >= 0) continue;
+      this.recordsMap.delete(recordID);
+    }
   }
+	
+	async post(records: T[], reqWrapper?: { [e: string]: any }) {
+		if (reqWrapper) { reqWrapper.records = records }
+		const data = reqWrapper ? reqWrapper : records
+		
+		let response: INewIDToID[]
+		try {
+		  response = await POST({
+		    data,
+		    route: this.routePost,
+		    refreshRoutes: [this.route].concat(this.refreshRoutes||[])
+		  })			
+		} catch(err) {
+			console.log("Error al hacer POST:", err)
+			return
+		}
+		
+		if (response.length > 0 && response[0].NewID) {
+			
+		}
+	}
 }

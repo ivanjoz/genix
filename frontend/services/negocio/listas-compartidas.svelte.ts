@@ -22,7 +22,7 @@ export const listasCompartidas = [
   { id: 2, name: 'Marca' },
 ];
 
-export class ListasCompartidasService extends GetHandler {
+export class ListasCompartidasService extends GetHandler<IListaRegistro> {
   route = 'listas-compartidas';
   useCache = { min: 5, ver: 6 };
 
@@ -40,10 +40,11 @@ export class ListasCompartidasService extends GetHandler {
     }
     return this.nameToRecordMap.get(listaID) as Map<string, IListaRegistro>;
   }
-
-  get(id: number) {
-    return this.RecordsMap.get(id);
-  }
+	
+	makeName(e: Partial<IListaRegistro>) {
+		return [e.ListaID, e.Nombre].join("_")
+	}
+  
 
   getByName(listaID: number, name: string): IListaRegistro {
     const normalizedName = normalizeStringN(name);
