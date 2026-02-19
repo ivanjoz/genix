@@ -115,3 +115,48 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		},
 	}
 }
+
+// Table to save the summary per day
+type SaleSummary struct {
+	db.TableStruct[SaleSummaryTable, SaleSummary]
+	EmpresaID int32 `json:",omitempty"`
+	Fecha     int16 `json:",omitempty"`
+	// uint16 productos and quantity
+	ProductIDs_16              []uint16 `json:",omitempty"`
+	Quantity_16                []uint16 `json:",omitempty"`
+	QuantityPendingDelivery_16 []uint16 `json:",omitempty"`
+	TotalAmount_16             []int32  `json:",omitempty"`
+	TotalDebtAmount_16         []int32  `json:",omitempty"`
+	// uint32 productos and quantity
+	ProductIDs_32              []int32 `json:",omitempty"`
+	Quantity_32                []int32 `json:",omitempty"`
+	QuantityPendingDelivery_32 []int32 `json:",omitempty"`
+	TotalAmount_32             []int32 `json:",omitempty"`
+	TotalDebtAmount_32         []int32 `json:",omitempty"`
+	Updated                    int32   `json:"upd,omitempty"`
+}
+
+type SaleSummaryTable struct {
+	db.TableStruct[SaleSummaryTable, SaleSummary]
+	EmpresaID                  db.Col[SaleSummaryTable, int32]
+	Fecha                      db.Col[SaleSummaryTable, int16]
+	ProductIDs_16              db.Col[SaleSummaryTable, []uint16]
+	Quantity_16                db.Col[SaleSummaryTable, []uint16]
+	QuantityPendingDelivery_16 db.Col[SaleSummaryTable, []uint16]
+	TotalAmount_16             db.Col[SaleSummaryTable, []int32]
+	TotalDebtAmount_16         db.Col[SaleSummaryTable, []int32]
+	ProductIDs_32              db.Col[SaleSummaryTable, []int32]
+	Quantity_32                db.Col[SaleSummaryTable, []int32]
+	QuantityPendingDelivery_32 db.Col[SaleSummaryTable, []int32]
+	TotalAmount_32             db.Col[SaleSummaryTable, []int32]
+	TotalDebtAmount_32         db.Col[SaleSummaryTable, []int32]
+	Updated                    db.Col[SaleSummaryTable, int32]
+}
+
+func (e SaleSummaryTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "sale_summary",
+		Partition: e.EmpresaID,
+		Keys:      []db.Coln{e.Fecha},
+	}
+}

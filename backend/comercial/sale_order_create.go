@@ -38,17 +38,17 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	sale.Updated = nowTime
 	sale.UpdatedBy = req.Usuario.ID
 	sale.Status = 1
-	
+
 	// 2 = Pago (Registro en Caja)
 	if slices.Contains(sale.ProcessesIncluded_, 2) {
 		sale.AddStatus(2)
 		if sale.CajaID_ == 0 {
 			return req.MakeErr("Se requiere CajaID_ para procesar el pago.")
-		}		
+		}
 	} else {
-		sale.OrderPendingPaymentUpdated = sale.Updated 
+		sale.OrderPendingPaymentUpdated = sale.Updated
 	}
-	
+
 	// 3 = Entrega (Movimiento de Almacén)
 	if slices.Contains(sale.ProcessesIncluded_, 3) {
 		sale.AddStatus(3)
@@ -59,14 +59,14 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		if len(sale.DetailProductsIDs) == 0 {
 			return req.MakeErr("No hay productos en el detalle para procesar la entrega.")
 		}
-	}	else {
-		sale.OrderPendingDeliveryUpdated = sale.Updated 
+	} else {
+		sale.OrderPendingDeliveryUpdated = sale.Updated
 	}
-	
+
 	if sale.Status != 4 {
-		sale.OrderCompletedUpdated = sale.Updated 
+		sale.OrderCompletedUpdated = sale.Updated
 	}
-	
+
 	sales := []types.SaleOrder{sale}
 
 	// Insertar el registro de venta para obtener el ID (autoincrement)
@@ -77,6 +77,11 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	sale.ID = sales[0].ID
 	if sale.ID == 0 {
 		return req.MakeErr("Error al obtener el ID de la venta.")
+	}
+
+	if err := updateSaleSummaryForChange(sale, nil); err != nil {
+		core.Log("Error actualizando resumen de ventas:", err)
+		return req.MakeErr("Error al actualizar el resumen de ventas:", err)
 	}
 
 	eg := errgroup.Group{}

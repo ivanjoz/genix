@@ -1,6 +1,7 @@
 package db
 
 import (
+	"encoding/binary"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -202,6 +203,149 @@ func reflectToFloat32(v any) float32 {
 		return float32(*t)
 	}
 	return 0
+}
+
+func supportsUnsignedBlobEncoding(targetType reflect.Type) bool {
+	if targetType == nil {
+		return false
+	}
+	for targetType.Kind() == reflect.Pointer {
+		targetType = targetType.Elem()
+	}
+
+	switch targetType.Kind() {
+	case reflect.Uint8, reflect.Uint16:
+		return true
+	case reflect.Slice:
+		elementKind := targetType.Elem().Kind()
+		return elementKind == reflect.Uint8 || elementKind == reflect.Uint16
+	default:
+		return false
+	}
+}
+
+func encodeUnsignedValueToBlob(value any, targetType reflect.Type) ([]byte, bool, error) {
+	if !supportsUnsignedBlobEncoding(targetType) {
+		return nil, false, nil
+	}
+	if value == nil {
+		return nil, true, nil
+	}
+
+	valueRef := reflect.ValueOf(value)
+	for targetType.Kind() == reflect.Pointer {
+		if valueRef.Kind() != reflect.Pointer {
+			return nil, true, fmt.Errorf("expected pointer value for type %v, got %T", targetType, value)
+		}
+		if valueRef.IsNil() {
+			return nil, true, nil
+		}
+		valueRef = valueRef.Elem()
+		targetType = targetType.Elem()
+	}
+
+	switch targetType.Kind() {
+	case reflect.Uint8:
+		return []byte{byte(valueRef.Uint())}, true, nil
+	case reflect.Uint16:
+		blob := make([]byte, 2)
+		binary.LittleEndian.PutUint16(blob, uint16(valueRef.Uint()))
+		return blob, true, nil
+	case reflect.Slice:
+		if valueRef.Kind() != reflect.Slice {
+			return nil, true, fmt.Errorf("expected slice value for type %v, got %T", targetType, value)
+		}
+
+		elementKind := targetType.Elem().Kind()
+		if elementKind == reflect.Uint8 {
+			blob := make([]byte, valueRef.Len())
+			reflect.Copy(reflect.ValueOf(blob), valueRef)
+			return blob, true, nil
+		}
+
+		blob := make([]byte, valueRef.Len()*2)
+		for index := 0; index < valueRef.Len(); index++ {
+			offset := index * 2
+			binary.LittleEndian.PutUint16(blob[offset:offset+2], uint16(valueRef.Index(index).Uint()))
+		}
+		return blob, true, nil
+	}
+
+	return nil, true, fmt.Errorf("unsupported unsigned blob type %v", targetType)
+}
+
+func readBlobBytes(rawValue any) ([]byte, bool) {
+	switch blobValue := rawValue.(type) {
+	case []byte:
+		return blobValue, true
+	case *[]byte:
+		if blobValue == nil {
+			return nil, true
+		}
+		return *blobValue, true
+	default:
+		return nil, false
+	}
+}
+
+func decodeUnsignedValueFromBlob(rawValue any, targetType reflect.Type) (any, bool, error) {
+	if !supportsUnsignedBlobEncoding(targetType) {
+		return nil, false, nil
+	}
+
+	blob, isBlob := readBlobBytes(rawValue)
+	if !isBlob {
+		return nil, true, fmt.Errorf("expected []byte value for unsigned blob decode, got %T", rawValue)
+	}
+
+	// Decode base type first, then wrap it as pointer recursively if needed.
+	if targetType.Kind() == reflect.Pointer {
+		if blob == nil {
+			return reflect.Zero(targetType).Interface(), true, nil
+		}
+		decodedElement, _, err := decodeUnsignedValueFromBlob(blob, targetType.Elem())
+		if err != nil {
+			return nil, true, err
+		}
+		decodedValue := reflect.New(targetType.Elem())
+		decodedValue.Elem().Set(reflect.ValueOf(decodedElement))
+		return decodedValue.Interface(), true, nil
+	}
+
+	switch targetType.Kind() {
+	case reflect.Uint8:
+		if len(blob) == 0 {
+			return uint8(0), true, nil
+		}
+		return uint8(blob[0]), true, nil
+	case reflect.Uint16:
+		if len(blob) == 0 {
+			return uint16(0), true, nil
+		}
+		if len(blob) < 2 {
+			return nil, true, fmt.Errorf("invalid blob length %d for uint16", len(blob))
+		}
+		return binary.LittleEndian.Uint16(blob[:2]), true, nil
+	case reflect.Slice:
+		elementKind := targetType.Elem().Kind()
+		if elementKind == reflect.Uint8 {
+			decodedBytes := make([]byte, len(blob))
+			copy(decodedBytes, blob)
+			return decodedBytes, true, nil
+		}
+		if len(blob)%2 != 0 {
+			return nil, true, fmt.Errorf("invalid blob length %d for []uint16", len(blob))
+		}
+
+		decodedSlice := make([]uint16, len(blob)/2)
+		for index := 0; index < len(decodedSlice); index++ {
+			offset := index * 2
+			decodedSlice[index] = binary.LittleEndian.Uint16(blob[offset : offset+2])
+		}
+		return decodedSlice, true, nil
+	}
+
+	return nil, true, fmt.Errorf("unsupported unsigned blob target type %v", targetType)
 }
 
 const pipeByte byte = '|'
@@ -665,6 +809,14 @@ func makeScyllaValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8) any {
 		concatenatedValues := Concatx(",", reflectToSlicePtr(f, ptr))
 		return "{" + concatenatedValues + "}"
 	case 9: // []byte / blob (could be complex type)
+		// Keep literal blob generation consistent with statement-value encoding for unsigned fields.
+		if encodedBlob, encoded, err := encodeUnsignedValueToBlob(f.Interface(ptr), f.Type); encoded {
+			if err != nil {
+				fmt.Println("Error encoding unsigned blob:", f.Name, err)
+				return ""
+			}
+			return encodedBlob
+		}
 		// Check if it's a complex type or just []byte
 		if f.Type.Kind() != reflect.Slice || f.Type.Elem().Kind() != reflect.Uint8 {
 			// Complex type

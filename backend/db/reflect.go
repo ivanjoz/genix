@@ -75,6 +75,16 @@ func (c *columnInfo) GetStatementValue(ptr unsafe.Pointer) any {
 		}
 		return c.Field.Interface(ptr)
 	}
+	// Unsupported unsigned types are stored as raw blob bytes instead of numeric CQL types.
+	if c.Type == 9 {
+		if encodedBlob, encoded, err := encodeUnsignedValueToBlob(c.Field.Interface(ptr), c.RefType); encoded {
+			if err != nil {
+				fmt.Println("Error encoding unsigned blob:", c.FieldName, err)
+				return nil
+			}
+			return encodedBlob
+		}
+	}
 	if c.IsComplexType {
 		fieldValue := c.Field.Interface(ptr)
 		recordBytes, err := cbor.Marshal(fieldValue)
@@ -92,6 +102,16 @@ func (c *columnInfo) SetValue(ptr unsafe.Pointer, v any) {
 		return
 	}
 	if c.Type == 9 {
+		if decodedValue, decoded, err := decodeUnsignedValueFromBlob(v, c.RefType); decoded {
+			if err != nil {
+				// Keep backward compatibility with legacy CBOR blobs when binary decode is not possible.
+				fmt.Printf("Error decoding unsigned blob for Col %s, trying legacy CBOR: %v\n", c.Name, err)
+			} else {
+				c.Field.Set(ptr, decodedValue)
+				return
+			}
+		}
+
 		var vl []byte
 		if b, ok := v.(*[]byte); ok {
 			vl = *b

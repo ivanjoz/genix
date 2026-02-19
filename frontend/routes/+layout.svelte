@@ -54,8 +54,6 @@ import { testRecordsByIDs } from "../demo/records-by-id.svelte"
 
 	onMount(() => {
 		if(redirectsToLogin){ Env.navigate("/login") }
-		
-		testRecordsByIDs()
 	})
 
 	$effect(() => {
