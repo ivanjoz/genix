@@ -22,12 +22,20 @@ type ConnParams struct {
 	Password    string
 	Reconnect   bool
 	ConnTimeout int64 //Seconds
+	QueryTimeout int64 //Seconds
+	WriteTimeout int64 //Seconds
 	Keyspace    string
 }
 
 func SetScyllaConnection(params ConnParams) {
 	if params.ConnTimeout == 0 {
-		params.ConnTimeout = 10
+		params.ConnTimeout = 5
+	}
+	if params.QueryTimeout == 0 {
+		params.QueryTimeout = 15
+	}
+	if params.WriteTimeout == 0 {
+		params.WriteTimeout = params.QueryTimeout
 	}
 	connParams = params
 }
@@ -35,6 +43,12 @@ func SetScyllaConnection(params ConnParams) {
 func MakeScyllaConnection(params ConnParams) *gocql.Session {
 	if params.ConnTimeout == 0 {
 		params.ConnTimeout = 10
+	}
+	if params.QueryTimeout == 0 {
+		params.QueryTimeout = 30
+	}
+	if params.WriteTimeout == 0 {
+		params.WriteTimeout = params.QueryTimeout
 	}
 	connParams = params
 	return getScyllaConnection()
@@ -70,6 +84,8 @@ func getScyllaConnection() *gocql.Session {
 	cluster.Consistency = gocql.LocalOne
 	cluster.ProtoVersion = 4
 	cluster.ConnectTimeout = time.Second * time.Duration(connParams.ConnTimeout)
+	cluster.Timeout = time.Second * time.Duration(connParams.QueryTimeout)
+	cluster.WriteTimeout = time.Second * time.Duration(connParams.WriteTimeout)
 	cluster.Compressor = gocql.SnappyCompressor{}
 	cluster.Authenticator = gocql.PasswordAuthenticator{
 		Username:              connParams.User,

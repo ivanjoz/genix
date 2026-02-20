@@ -13,6 +13,8 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     content: string;
     contentHTML: string;
     contentAST: ElementAST | ElementAST[],
+    prefixHTML: string;
+    prefixAST: ElementAST | ElementAST[],
     useSnippet: boolean;
     css: string
   }
@@ -219,6 +221,15 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
 
     const rec = { } as ICellContent
 
+    if (column.renderPrefix) {
+      const renderedPrefix = column.renderPrefix(record, index)
+      if (typeof renderedPrefix === 'string') {
+        rec.prefixHTML = renderedPrefix
+      } else if (renderedPrefix) {
+        rec.prefixAST = renderedPrefix
+      }
+    }
+
     if (column.render) {
       const renderedContent = column.render(record, index)
       if(typeof renderedContent === 'string'){
@@ -314,6 +325,15 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                             {/if}
                           </div>
                         {/if}
+                        {#if cellData.prefixAST}
+                          <span class="vtable-cell-prefix">
+                            <Renderer elements={cellData.prefixAST}/>
+                          </span>
+                        {:else if cellData.prefixHTML}
+                          <span class="vtable-cell-prefix">
+                            {@html cellData.prefixHTML}
+                          </span>
+                        {/if}
                         <div class="mobile-card-content">
                           {#if mobile?.render}
                             {@const renderedContent = mobile.render(record, index)}
@@ -359,6 +379,15 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                             <Renderer elements={mobile.elementLeft}/>
                           {/if}
                         </div>
+                      {/if}
+                      {#if cellData.prefixAST}
+                        <span class="vtable-cell-prefix">
+                          <Renderer elements={cellData.prefixAST}/>
+                        </span>
+                      {:else if cellData.prefixHTML}
+                        <span class="vtable-cell-prefix">
+                          {@html cellData.prefixHTML}
+                        </span>
                       {/if}
                       <div class="mobile-card-content">
                         {#if mobile?.render}
@@ -411,7 +440,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
             colspan={column._colspan || 1}
             rowspan={column._colspan ? 1 : (processedColumns.hasSubcols ? 2 : 1)}
           >
-            <div>
+            <div class={column.headerInnerCss || ''}>
               {getHeaderContent(column)}
             </div>
           </th>
@@ -426,7 +455,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
               class="vtable-header-cell {column.headerCss || ''}"
               style={column.headerStyle ? Object.entries(column.headerStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}
             >
-              <div>
+              <div class={column.headerInnerCss || ''}>
                 {getHeaderContent(column)}
               </div>
             </th>
@@ -470,6 +499,15 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                   if(column.onCellEdit){ ev.stopPropagation() }
                 }}
               >
+                {#if cellData.prefixAST}
+                  <span class="vtable-cell-prefix">
+                    <Renderer elements={cellData.prefixAST}/>
+                  </span>
+                {:else if cellData.prefixHTML}
+                  <span class="vtable-cell-prefix">
+                    {@html cellData.prefixHTML}
+                  </span>
+                {/if}
                 {#if column.onCellEdit}
                   <CellEditable contentClass={column.css}
                     inputClass={column.inputCss}
@@ -552,12 +590,19 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     background-color: #e9ecef;
   }
 
+  .vtable-cell-prefix {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+  }
+
   .vtable-container:not(._14) {
     background-color: white;
     border: 1px solid #dee2e6;
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    padding: 2px;
+    /* No inner top inset: prevents body rows from peeking above sticky header while scrolling */
+    padding: 0;
   }
 
   .vtable-container._14 {
@@ -578,12 +623,14 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     background-color: white;
     border-spacing: 0;
     background-color: white;
+    isolation: isolate;
   }
 
   .vtable-header {
     position: sticky;
     top: 0;
-    z-index: 10;
+    /* Keep header fully above transformed virtual rows */
+    z-index: 30;
     background-color: #f8f9fa;
   }
 
@@ -604,6 +651,8 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     border: none;
     border-right: 1px solid #e9ecef;
     position: relative;
+    /* Prevent body rows from bleeding through sticky header cells */
+    background-color: #f8f9fa;
   }
 
   .vtable-header-cell:last-child {
@@ -612,7 +661,6 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
 
   .vtable-header-cell > div {
     height: 100%;
-    width: 100%;
     min-height: 36px;
     border-bottom: 1px solid rgb(204, 204, 204);
     display: flex;
@@ -620,6 +668,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     justify-content: center;
     line-height: 1.1;
     padding: 0 4px;
+    background-color: #f8f9fa;
   }
 
   .vtable-body {

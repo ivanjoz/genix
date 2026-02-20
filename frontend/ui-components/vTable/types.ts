@@ -23,6 +23,8 @@ export interface ITableColumn<T> {
   header: string | (() => string)
   hidden?: boolean
   headerCss?: string
+  // Class hook for the inner header wrapper (<th><div>...</div></th>)
+  headerInnerCss?: string
   headerStyle?: Record<string, string>
   cellStyle?: Record<string, string>
   css?: string
@@ -39,7 +41,8 @@ export interface ITableColumn<T> {
 	onCellSelect?: (e:T, value: string|number) => void
   cardRender?: (e: T, idx: number) => (any)
   getValue?: (e: T, idx: number) => (string|number)
-	
+  // Renders extra visual content before the main cell output without replacing it.
+  renderPrefix?: (e: T, idx: number) => string | ElementAST | ElementAST[] | false
   render?: (e: T, idx: number) => string | ElementAST | ElementAST[]
   _colspan?: number
 	highlight?: boolean

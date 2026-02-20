@@ -111,7 +111,7 @@ const clearSelectedFile = () => {
 };
 </script>
 
-<div class="inline-flex w-fit min-w-[280px] max-w-[400px] items-center gap-4 rounded-[10px] border border-[#e6e8eb] bg-white p-4">
+<div class="inline-flex w-fit min-w-[280px] max-w-[400px] items-center gap-4 rounded-[10px] bg-[#edf4ff] p-4 ring-1 ring-[#c6d8fb] transition-colors duration-150 hover:bg-[#e3eeff]">
   <input
     bind:this={hiddenFileInputElement}
     type="file"
@@ -123,14 +123,14 @@ const clearSelectedFile = () => {
 
   <button
     type="button"
-    class="flex min-w-0 grow items-center gap-5 rounded-lg border border-[#edf0f2] bg-[#fafbfc] px-6 py-5 text-left disabled:opacity-60"
+    class="flex h-34 min-w-0 grow items-center gap-5 rounded-lg border border-transparent bg-white/70 px-6 text-left transition-all duration-150 hover:bg-white/90 hover:shadow-[0_1px_3px_rgba(16,24,40,0.08)] disabled:opacity-60"
     onclick={openNativeFilePicker}
     disabled={disabled}
   >
     {#if selectedFile}
       {@const selectedFileTypeIcon = resolveFileTypeIcon(selectedFileExtension)}
       {#if selectedFileTypeIcon}
-        <img src={selectedFileTypeIcon} alt="Tipo de archivo" class="h-20 w-20 shrink-0 object-contain" />
+        <img src={selectedFileTypeIcon} alt="Tipo de archivo" class="h-16 w-16 shrink-0 object-contain" />
       {:else}
         <i class="icon-upload text-[#3c4650]"></i>
       {/if}
@@ -144,11 +144,11 @@ const clearSelectedFile = () => {
   {#if selectedFile}
     <button
       type="button"
-      class="flex h-24 w-24 shrink-0 items-center justify-center rounded-[50%] border border-[#ffcfcf] bg-[#fff3f3] text-[#d72828]"
+      class="flex h-30 w-30 shrink-0 items-center justify-center rounded-[50%] border border-[#ffcfcf] bg-[#fff3f3] text-[#d72828] transition-colors duration-200 hover:border-[#d63232] hover:bg-[#e54545] hover:text-white"
       aria-label="Quitar archivo"
       onclick={clearSelectedFile}
     >
-      <i class="icon-cancel"></i>
+      <i class="icon-cancel text-[15px]"></i>
     </button>
   {/if}
 </div>

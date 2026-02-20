@@ -9,6 +9,8 @@ import (
 	"github.com/viant/xunsafe"
 )
 
+const maxInsertBatchRows = 200
+
 type selfParser interface {
 	SelfParse()
 }
@@ -62,21 +64,20 @@ func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	for partKey, group := range groups {
 		partValues := strings.Split(partKey, "|")
 
-		// Filter to only include records that need autoincrement (ID == 0)
+		// Filter records that need autoincrement.
+		// Rule: autoincrement applies when the configured autoincrement column is <= 0.
 		recordsNeedingAutoincrement := []*T{}
 		recordNeedsAutoincrement := map[*T]bool{}
 
 		for _, rec := range group {
 			ptr := xunsafe.AsPointer(rec)
-			// Check if the primary key has a value of 0
-			var keyVal int64 = 0
-			if len(scyllaTable.keys) > 0 {
-				rawKeyVal := scyllaTable.keys[0].GetRawValue(ptr)
-				keyVal = convertToInt64(rawKeyVal)
+			autoincrementColumnValue := int64(0)
+			if scyllaTable.autoincrementCol != nil {
+				rawAutoincrementValue := scyllaTable.autoincrementCol.GetRawValue(ptr)
+				autoincrementColumnValue = convertToInt64(rawAutoincrementValue)
 			}
 
-			// Only apply autoincrement if key is exactly 0
-			if keyVal <= 0 {
+			if autoincrementColumnValue <= 0 {
 				recordsNeedingAutoincrement = append(recordsNeedingAutoincrement, rec)
 				recordNeedsAutoincrement[rec] = true
 			}
@@ -103,7 +104,7 @@ func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 			ptr := xunsafe.AsPointer(rec)
 			var currentAutoVal int64
 
-			// Only apply autoincrement if schema has Autoincrement defined AND record ID is 0
+			// Only apply autoincrement when this record was marked as needing it (<= 0 rule).
 			if scyllaTable.autoincrementCol != nil && recordNeedsAutoincrement[rec] {
 				currentAutoVal = counterVal
 				counterVal++
@@ -275,15 +276,19 @@ func Insert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	}
 
 	session := getScyllaConnection()
-	//fmt.Println("BATCH (1)::")
-	queryBatch := makeInsertBatch(records, scyllaTable, columnsToExclude...)
+	for start := 0; start < len(*records); start += maxInsertBatchRows {
+		end := start + maxInsertBatchRows
+		if end > len(*records) {
+			end = len(*records)
+		}
 
-	//fmt.Println("BATCH (2)::")
-	//fmt.Println(queryBatch.Entries)
-
-	if err := session.ExecuteBatch(queryBatch); err != nil {
-		fmt.Println("Error inserting records:", err)
-		return err
+		recordsChunk := (*records)[start:end]
+		// Keep unlogged batches small to reduce coordinator pressure and avoid write timeouts.
+		queryBatch := makeInsertBatch(&recordsChunk, scyllaTable, columnsToExclude...)
+		if err := session.ExecuteBatch(queryBatch); err != nil {
+			fmt.Println("Error inserting records:", err)
+			return err
+		}
 	}
 
 	// Cache-version is updated only after a successful write to keep counters consistent with persisted rows.

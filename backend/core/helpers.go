@@ -742,17 +742,17 @@ func DecompressGzip64(content *string) string {
 	return DecompressGzip(&compressedBytes)
 }
 
-func NormaliceStringT(content string) string {
-	return NormaliceString(&content)
+func NormalizeStringT(content string) string {
+	return NormalizeString(&content)
 }
 
-func NormaliceString(content *string) string {
+func NormalizeString(content *string) string {
 
 	content2 := strings.ToLower(*content)
 	finalRunes := []rune{}
 
 	runesReplaceMap := map[rune]rune{
-		225: 97, 233: 101, 237: 105, 243: 111, 250: 117,
+		225: 97, 233: 101, 237: 105, 243: 111, 250: 117, 241: 110,
 	}
 
 	for _, rune := range content2 {

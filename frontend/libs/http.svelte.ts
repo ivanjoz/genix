@@ -533,8 +533,9 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 	}
 	
 	getByName(record: Partial<T>): T | undefined {
-		const name = this.makeName(record)
-		return name ? this.nameToRecordMap.get(normalizeStringN(name)) as T : undefined
+		const name = normalizeStringN(this.makeName(record))
+		// console.log("Comparando nombre::", name, [...this.nameToRecordMap.keys()])
+		return name ? this.nameToRecordMap.get(name) as T : undefined
 	}
 	
 	getTempRecords(): T[] {

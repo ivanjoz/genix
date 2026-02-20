@@ -506,35 +506,38 @@ export const normalizeComparableValue = (value: unknown): unknown => {
 export function normalizeStringN(string: string): string {
   if (typeof (string as any) === 'number') return String(string)
   if (typeof string !== 'string') return ''
-  const separators = new Set(["-", "_"])
-  const capitals2: { [e: string]: string } = {
-    'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
-    '/': '_', 'ñ': 'n', '.': '.', '-': '-', '+': '+'
+  // Keep this logic aligned with backend/core/helpers.go::NormalizeString.
+  const normalizedCharsByAccent: Record<string, string> = {
+    'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n',
   }
-  let normalized = ""
-  let charLast = ""
-  const words = string.trim().toLowerCase().split(" ")
-  for (let i = 0; i < words.length; i++) {
-    const word = words[i].trim()
-    if (i > 0 && normalized && !separators.has(charLast)) {
-      normalized += "_"; charLast = "_"
+  const lowerCasedText = string.toLowerCase()
+  let normalizedString = ''
+
+  for (const currentChar of lowerCasedText) {
+    const charCode = currentChar.charCodeAt(0)
+    const isAsciiDigit = charCode > 47 && charCode < 58
+    const isAsciiLowerCaseLetter = charCode > 96 && charCode < 123
+    const isUnderscore = charCode === 95
+
+    if (isAsciiDigit || isAsciiLowerCaseLetter || isUnderscore) {
+      normalizedString += currentChar
+      continue
     }
-    for (let j = 0; j < word.length; j++) {
-      const char = word[j]
-      let charToAdd
-      if (separators.has(charLast) && separators.has(char)) continue
-      const code = char.charCodeAt(0)
-      if ((code > 47 && code < 58) || (code > 96 && code < 123) || code == 95) {
-        charToAdd = char
-      } else if (typeof capitals2[char] === 'string') {
-        charToAdd = capitals2[char]
+
+    const isWordSeparator = charCode === 32 || charCode === 160 || charCode === 45 || charCode === 95
+    if (isWordSeparator) {
+      const lastChar = normalizedString[normalizedString.length - 1]
+      if (normalizedString.length > 0 && lastChar !== '_') {
+        normalizedString += '_'
       }
-      if (charToAdd) {
-        if (separators.has(charLast) && separators.has(charToAdd)) continue
-        normalized += charToAdd
-        charLast = charToAdd
-      }
+      continue
+    }
+
+    const normalizedAccentChar = normalizedCharsByAccent[currentChar]
+    if (normalizedAccentChar) {
+      normalizedString += normalizedAccentChar
     }
   }
-  return normalized
+
+  return normalizedString
 }

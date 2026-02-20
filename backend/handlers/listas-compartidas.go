@@ -89,8 +89,8 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	for index := range records {
 		e := &records[index]
 		// Enforce minimum validation rules for business consistency.
-		if len(e.Nombre) < 4 || e.ListaID == 0 {
-			return req.MakeErr("Faltan propiedades de en uno de los registros.")
+		if len(e.Nombre) < 2 || e.ListaID == 0 {
+			return req.MakeErr("Faltan propiedades de en un registro. | Nombre:",e.Nombre,"| LID:",e.ListaID)
 		}
 
 		// Save original incoming ID before potential ID reuse/autoincrement.

@@ -91,20 +91,24 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Group existing records by NombreHash so we can check active collisions and reuse inactive IDs.
 	existingProductsByHash := make(map[int32][]s.Producto, len(nameHashToName))
+	nombreHashesToValidate := make([]int32, 0, len(nameHashToName))
 	for nombreHash := range nameHashToName {
-		existing := []s.Producto{}
-		query := db.Query(&existing)
+		nombreHashesToValidate = append(nombreHashesToValidate, nombreHash)
+	}
 
-		query.Select(query.NombreHash, query.ID, query.Status).
-			EmpresaID.Equals(req.Usuario.EmpresaID).
-			NombreHash.Equals(nombreHash).AllowFilter()
+	existingProducts := []s.Producto{}
+	query := db.Query(&existingProducts)
+	query.Select(query.NombreHash, query.ID, query.Status).
+		EmpresaID.Equals(req.Usuario.EmpresaID).
+		NombreHash.In(nombreHashesToValidate...).AllowFilter()
 
-		if err := query.Exec(); err != nil {
-			return req.MakeErr(fmt.Sprintf("Error al validar los nombres de productos: %v", err))
-		}
-		if len(existing) > 0 {
-			existingProductsByHash[nombreHash] = existing
-		}
+	if err := query.Exec(); err != nil {
+		return req.MakeErr(fmt.Sprintf("Error al validar los nombres de productos: %v", err))
+	}
+
+	for _, existingProduct := range existingProducts {
+		existingProductsByHash[existingProduct.NombreHash] = append(
+			existingProductsByHash[existingProduct.NombreHash],		existingProduct)
 	}
 
 	// Enforce name uniqueness across the database and reassign inactive IDs when needed.

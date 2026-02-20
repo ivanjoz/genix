@@ -25,8 +25,6 @@ import {
     type IProductoImage
 } from "./productos.svelte";
 
-  type ProductoExcelColumn = ExcelTableColumn<IProducto>;
-
   let filterText = $state("");
   const productos = new ProductosService();
   const listas = new ListasCompartidasService([1, 2]);
@@ -54,13 +52,14 @@ import {
     return "bg-purple-100";
   };
 
-  const makeProductColumns = (isImport = false): ProductoExcelColumn[] => [
+  const makeProductColumns = (isImport = false): ExcelTableColumn<IProducto>[] => [
     {
       header: "ID", 
       field: 'ID',
       css: "c-blue text-center",
-      headerCss: "w-48",
-      getValue: (e) => e.ID,
+      headerCss: "w-48", headerInnerCss: "min-w-42",
+      getValue: (e) => e.ID || "",
+      render: e => e.ID ? String(e.ID) : `<i class="icon-arrows-cw"></i>`,
       setCellCss: (record) => getUpdatedFieldCellCss(record, "ID"),
       excel: { type: "number"  },
       mobile: { order: 1, css: "col-span-6 ff-bold", icon: "tag" },
@@ -81,6 +80,7 @@ import {
     {
       header: "Categorías",
       highlight: true,
+      renderPrefix: e => (e.CategoriasIDs||[]).some(x => x <= 0) && `<i class="icon-arrows-cw text-purple-400"></i>`,
       getValue: (e) => {
         // Keep import preview readable by showing original labels from Excel.
         if (isImport && (e._categoriasNames || "").trim().length > 0) {
@@ -191,6 +191,7 @@ import {
     {
       header: "Marca",
       hidden: !isImport,
+      renderPrefix: e => !(e.MarcaID > 0) && `<i class="icon-arrows-cw text-purple-500"></i>`,
       getValue: (e) => e._marcaNombre || listas.get(e.MarcaID)?.Nombre || "",
       setCellCss: (record) => getUpdatedFieldCellCss(record, "MarcaID"),
       excel: { type: "string", importField: "_marcaNombre" },
@@ -347,8 +348,9 @@ import {
 
       Loading.change(`Guardando productos (${productosToSave.length})...`);
       await doPostProductos(productosToSave);
+      for(const e of productos.records){ delete e._updatedFields }
       Loading.remove();
-
+      
       Notify.success("Importación completada correctamente.");
       importExcelRowsPreview = [];
       Core.closeModal(IMPORT_PRODUCTOS_MODAL_ID);
@@ -825,12 +827,13 @@ import {
     useFileImportWithErrors={true}
     fileErrors={importExcelErrors}
     onFileChange={onImportExcelFileChange}
-    onSave={saveImportProductos}
+    onSave={importExcelRowsPreview.length > 0 ? saveImportProductos : undefined}
     saveButtonLabel="Importar"
     saveIcon="icon-upload"
   >
     <div class="">
-      <div class="border border-slate-200 rounded-md overflow-hidden">
+      <div class="border border-slate-200 rounded-md overflow-hidden h-[58vh] min-h-[260px]">
+        <!-- VTable virtualizes against its own scroll container, so it needs a concrete height -->
         <VTable
           columns={productoImportColumns}
           data={importExcelRowsPreview}

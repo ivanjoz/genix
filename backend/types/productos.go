@@ -114,7 +114,7 @@ func (e *Producto) FillCategoriasConStock() {
 }
 
 func (e *Producto) SelfParse() {
-	e.NombreHash = core.BasicHashInt(core.NormaliceString(&e.Nombre))
+	e.NombreHash = core.BasicHashInt(core.NormalizeString(&e.Nombre))
 }
 
 func (e ProductoTable) GetSchema() db.TableSchema {

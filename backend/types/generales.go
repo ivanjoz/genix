@@ -104,7 +104,7 @@ func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
 
 func (e *ListaCompartidaRegistro) SelfParse() {
 	name := core.Concatn(e.ListaID, e.Nombre)
-	e.NombreHash = core.BasicHashInt(core.NormaliceString(&name))
+	e.NombreHash = core.BasicHashInt(core.NormalizeString(&name))
 }
 
 type NewIDToID struct {
