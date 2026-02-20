@@ -181,6 +181,8 @@ import { type IListaRegistro, type ListasCompartidasService } from "$services/ne
     overflow-x: hidden;
     padding-right: 4px;
     padding-top: 2px;
+    padding-left: 2px;
+    padding-right: 2px;
   }
 
   ._1 {

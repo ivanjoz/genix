@@ -108,7 +108,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	for _, existingProduct := range existingProducts {
 		existingProductsByHash[existingProduct.NombreHash] = append(
-			existingProductsByHash[existingProduct.NombreHash],		existingProduct)
+			existingProductsByHash[existingProduct.NombreHash], existingProduct)
 	}
 
 	// Enforce name uniqueness across the database and reassign inactive IDs when needed.

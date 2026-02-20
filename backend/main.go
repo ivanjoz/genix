@@ -190,7 +190,16 @@ func main() {
 			return
 		}
 		args := core.ExecArgs{Message: ""}
-		funcToInvoke(&args)
+		funcResponse := funcToInvoke(&args)
+		if len(funcResponse.Error) > 0 {
+			core.Log("Exec function error::", funcResponse.Error)
+		}
+		if len(funcResponse.Message) > 0 {
+			core.Log("Exec function message::", funcResponse.Message)
+		}
+		if len(funcResponse.Content) > 0 {
+			core.Print(funcResponse.Content)
+		}
 		return
 	}
 

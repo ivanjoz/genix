@@ -22,6 +22,8 @@ const (
 
 type RecordInput struct {
 	ID   int32
+	CategoriesIDs []int32
+	BrandID int32
 	Text string
 }
 

@@ -128,19 +128,37 @@ func Test40(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test41(args *core.ExecArgs) core.FuncResponse {
-	/* 
-	controller := makeDBController[comercial.SaleOrder]()
-	controller.ReloadRecords(1)
+	/*
+		controller := makeDBController[comercial.SaleOrder]()
+		controller.ReloadRecords(1)
 	*/
-	
+
 	core.Log(core.SUnix5Min())
-	
+
 	return core.FuncResponse{}
 }
 
 func Test43(args *core.ExecArgs) core.FuncResponse {
+	indexOutput, indexErr := handlers.BuildProductosSearchIndex(1)
+	if indexErr != nil {
+		return core.FuncResponse{Error: indexErr.Error()}
+	}
 
-	db.InitCacheVersionTable()
-	
-	return core.FuncResponse{}
+	return core.FuncResponse{
+		Message: "Índice de productos generado.",
+		Content: map[string]any{
+			"stage1_input_records":     indexOutput.TextIndexResult.Stats.InputRecords,
+			"stage1_encoded_records":   indexOutput.TextIndexResult.Stats.EncodedRecords,
+			"stage1_dictionary_count":  indexOutput.TextIndexResult.Stats.DictionaryCount,
+			"stage1_shapes_bytes":      indexOutput.TextIndexResult.Stats.ShapesBytes,
+			"stage1_content_bytes":     indexOutput.TextIndexResult.Stats.ContentBytes,
+			"stage1_total_bytes":       indexOutput.TextIndexResult.Stats.TotalBytes,
+			"stage2_brand_ids":         len(indexOutput.TaxonomyIndexResult.BrandIDs),
+			"stage2_category_ids":      len(indexOutput.TaxonomyIndexResult.CategoryIDs),
+			"stage2_brand_indexes_u8":  len(indexOutput.TaxonomyIndexResult.ProductBrandIndexesU8),
+			"stage2_brand_indexes_u16": len(indexOutput.TaxonomyIndexResult.ProductBrandIndexesU16),
+			"stage2_category_count":    len(indexOutput.TaxonomyIndexResult.ProductCategoryCount),
+			"stage2_category_indexes":  len(indexOutput.TaxonomyIndexResult.ProductCategoryIndexes),
+		},
+	}
 }
