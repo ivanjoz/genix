@@ -7,15 +7,27 @@ import { Loading, Notify } from '$libs/helpers';
 import { type IListaRegistro, type ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
 
   const {
-    listas, origin
+    listas, origin, filterText = ""
   }: {
     listas: ListasCompartidasService,
     origin: 1 /* Categorías */ | 2 /* Marcas */,
+    filterText?: string,
   } = $props()
 
   const categorias = $derived.by(() => {
     console.log("listas getted:", $state.snapshot(listas))
     return listas.ListaRecordsMap.get(origin) || []
+  })
+  const filteredCategorias = $derived.by(() => {
+    // Keep filter behavior aligned with other views: case-insensitive and supports multiple fields.
+    const normalizedFilterText = String(filterText || "").toLowerCase().trim()
+    if (!normalizedFilterText) return categorias
+    return categorias.filter((record) => {
+      return (
+        String(record.Nombre || "").toLowerCase().includes(normalizedFilterText) ||
+        String(record.Descripcion || "").toLowerCase().includes(normalizedFilterText)
+      )
+    })
   })
 
   let form = $state({} as IListaRegistro)
@@ -104,27 +116,27 @@ import { type IListaRegistro, type ListasCompartidasService } from "$services/ne
 
 </script>
 
-<div class="w-full flex flex-wrap gap-12">
-	{#each categorias as e }
-    <div class="_1 px-12 py-10 w-250 min-h-140" role="button" tabindex="0"
-      onkeydown={ev => {
-        ev.stopPropagation()
-        if (ev.key === 'Enter' || ev.key === ' ') {
-          ev.preventDefault()
+<div class="w-full cards-scroll-container">
+  <div class="w-full flex flex-wrap gap-12 content-start">
+    {#each filteredCategorias as e }
+      <div class="_1 px-12 py-10 w-250 min-h-140" role="button" tabindex="0"
+        onkeydown={ev => {
+          ev.stopPropagation()
+          if (ev.key === 'Enter' || ev.key === ' ') {
+            ev.preventDefault()
+            selectCategoria(e)
+          }
+        }}
+        onclick={ev => {
+          ev.stopPropagation()
           selectCategoria(e)
-        }
-      }}
-      onclick={ev => {
-        ev.stopPropagation()
-        selectCategoria(e)
-      }}>
-      <div class="min-h-70 _2 mb-2">
-
+        }}>
+        <div class="min-h-70 _2 mb-2"></div>
+        <div class="fs17 ff-semibold">{e.Nombre}</div>
+        <div class="fs15">{e.Descripcion}</div>
       </div>
-      <div class="fs17 ff-semibold">{e.Nombre}</div>
-      <div class="fs15">{e.Descripcion}</div>
-    </div>
-  {/each}
+    {/each}
+  </div>
 </div>
 <Modal title="CATEGORÍA" id={2} size={6}
   onClose={() => {
@@ -161,6 +173,16 @@ import { type IListaRegistro, type ListasCompartidasService } from "$services/ne
 </Modal>
 
 <style>
+  .cards-scroll-container {
+    /* Use dynamic viewport height so the cards pane fills available space under the top controls. */
+    height: calc(100dvh - 120px);
+    max-height: calc(100dvh - 120px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+    padding-top: 2px;
+  }
+
   ._1 {
     background-color: rgb(255, 255, 255);
     border-radius: 8px;

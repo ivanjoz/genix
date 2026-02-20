@@ -815,10 +815,10 @@ import {
     {/if}
   </Layer>
   {#if view === 2}
-    <CategoriasMarcas {listas} origin={1} bind:this={CategoriasLayer} />
+    <CategoriasMarcas {listas} {filterText} origin={1} bind:this={CategoriasLayer} />
   {/if}
   {#if view === 3}
-    <CategoriasMarcas {listas} origin={2} bind:this={MarcasLayer} />
+    <CategoriasMarcas {listas} {filterText} origin={2} bind:this={MarcasLayer} />
   {/if}
 
   <Modal id={IMPORT_PRODUCTOS_MODAL_ID}
