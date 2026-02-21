@@ -144,21 +144,48 @@ func Test43(args *core.ExecArgs) core.FuncResponse {
 		return core.FuncResponse{Error: indexErr.Error()}
 	}
 
+	brandNamesBytes := 0
+	for _, brandName := range indexOutput.TaxonomyIndexResult.BrandNames {
+		// String column wire size uses 1-byte length prefix + UTF-8 bytes.
+		brandNamesBytes += 1 + len([]byte(brandName))
+	}
+	categoryNamesBytes := 0
+	for _, categoryName := range indexOutput.TaxonomyIndexResult.CategoryNames {
+		// String column wire size uses 1-byte length prefix + UTF-8 bytes.
+		categoryNamesBytes += 1 + len([]byte(categoryName))
+	}
+	brandIDsBytes := len(indexOutput.TaxonomyIndexResult.BrandIDs) * 2
+	categoryIDsBytes := len(indexOutput.TaxonomyIndexResult.CategoryIDs) * 2
+	brandIndexesBytes := indexOutput.TaxonomyIndexResult.ProductBrandIndexesBytes()
+	categoryCountBytes := len(indexOutput.TaxonomyIndexResult.ProductCategoryCount)
+	categoryIndexesBytes := len(indexOutput.TaxonomyIndexResult.ProductCategoryIndexes)
+	stage2TotalBytes := brandNamesBytes + categoryNamesBytes + brandIDsBytes + categoryIDsBytes +
+		brandIndexesBytes + categoryCountBytes + categoryIndexesBytes
+
 	return core.FuncResponse{
 		Message: "Índice de productos generado.",
 		Content: map[string]any{
-			"stage1_input_records":     indexOutput.TextIndexResult.Stats.InputRecords,
-			"stage1_encoded_records":   indexOutput.TextIndexResult.Stats.EncodedRecords,
-			"stage1_dictionary_count":  indexOutput.TextIndexResult.Stats.DictionaryCount,
-			"stage1_shapes_bytes":      indexOutput.TextIndexResult.Stats.ShapesBytes,
-			"stage1_content_bytes":     indexOutput.TextIndexResult.Stats.ContentBytes,
-			"stage1_total_bytes":       indexOutput.TextIndexResult.Stats.TotalBytes,
-			"stage2_brand_ids":         len(indexOutput.TaxonomyIndexResult.BrandIDs),
-			"stage2_category_ids":      len(indexOutput.TaxonomyIndexResult.CategoryIDs),
-			"stage2_brand_indexes_u8":  len(indexOutput.TaxonomyIndexResult.ProductBrandIndexesU8),
-			"stage2_brand_indexes_u16": len(indexOutput.TaxonomyIndexResult.ProductBrandIndexesU16),
-			"stage2_category_count":    len(indexOutput.TaxonomyIndexResult.ProductCategoryCount),
-			"stage2_category_indexes":  len(indexOutput.TaxonomyIndexResult.ProductCategoryIndexes),
+			"stage1_input_records":          indexOutput.TextIndexResult.Stats.InputRecords,
+			"stage1_encoded_records":        indexOutput.TextIndexResult.Stats.EncodedRecords,
+			"stage1_dictionary_count":       indexOutput.TextIndexResult.Stats.DictionaryCount,
+			"stage1_shapes_bytes":           indexOutput.TextIndexResult.Stats.ShapesBytes,
+			"stage1_content_bytes":          indexOutput.TextIndexResult.Stats.ContentBytes,
+			"stage1_total_bytes":            indexOutput.TextIndexResult.Stats.TotalBytes,
+			"stage2_brand_ids":              len(indexOutput.TaxonomyIndexResult.BrandIDs),
+			"stage2_category_ids":           len(indexOutput.TaxonomyIndexResult.CategoryIDs),
+			"stage2_brand_index_mode":       indexOutput.TaxonomyIndexResult.BrandIndexEncodingName(),
+			"stage2_brand_index_flag":       indexOutput.TaxonomyIndexResult.BrandIndexEncodingFlag,
+			"stage2_brand_indexes_count":    indexOutput.TaxonomyIndexResult.ProductBrandIndexesCount(),
+			"stage2_category_count":         len(indexOutput.TaxonomyIndexResult.ProductCategoryCount),
+			"stage2_category_indexes":       len(indexOutput.TaxonomyIndexResult.ProductCategoryIndexes),
+			"stage2_brand_ids_bytes":        brandIDsBytes,
+			"stage2_brand_names_bytes":      brandNamesBytes,
+			"stage2_category_ids_bytes":     categoryIDsBytes,
+			"stage2_category_names_bytes":   categoryNamesBytes,
+			"stage2_brand_indexes_bytes":    brandIndexesBytes,
+			"stage2_category_count_bytes":   categoryCountBytes,
+			"stage2_category_indexes_bytes": categoryIndexesBytes,
+			"stage2_total_bytes":            stage2TotalBytes,
 		},
 	}
 }

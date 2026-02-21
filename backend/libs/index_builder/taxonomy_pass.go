@@ -9,6 +9,13 @@ const (
 	maxTopCategories              = 243
 	othersCategoryIndex     uint8 = 243
 	maxCategoriesPerProduct       = 4
+	maxBrandIndexUint12           = 4095
+	maxBrandIndexUint16           = 65535
+
+	// BrandIndexEncodingUint12 means product brand-indexes are packed as 12-bit values.
+	BrandIndexEncodingUint12 uint8 = 1
+	// BrandIndexEncodingUint16 means product brand-indexes are encoded as uint16 values.
+	BrandIndexEncodingUint16 uint8 = 2
 )
 
 // BuildInput is the stage-2 taxonomy input envelope.
@@ -29,10 +36,14 @@ type TaxonomyBuildResult struct {
 	CategoryIDs   []uint16
 	CategoryNames []string
 
-	// ProductBrandIndexesU8 keeps the first product brand-index rows that fit into uint8.
-	// ProductBrandIndexesU16 stores the remaining rows; decoder concatenates both arrays.
-	ProductBrandIndexesU8  []uint8
-	ProductBrandIndexesU16 []uint16
+	// BrandIndexEncodingFlag selects product brand-index column format.
+	// 1 => ProductBrandIndexesUint12Packed
+	// 2 => ProductBrandIndexesUint16
+	BrandIndexEncodingFlag uint8
+	// ProductBrandIndexesUint12Packed stores 2 indexes per 3 bytes.
+	ProductBrandIndexesUint12Packed []uint8
+	// ProductBrandIndexesUint16 stores one uint16 per product row.
+	ProductBrandIndexesUint16 []uint16
 
 	// ProductCategoryCount stores 2-bit counters (count-1) packed in groups of 4 products per byte.
 	ProductCategoryCount []uint8
@@ -107,9 +118,12 @@ func BuildTaxonomySecondPass(sortedProductIDs []int32, input BuildInput) (*Taxon
 		productBrandIndexes = append(productBrandIndexes, newBrandIndex)
 	}
 
-	productBrandIndexesU8, productBrandIndexesU16, splitErr := splitBrandIndexesColumns(productBrandIndexes)
-	if splitErr != nil {
-		return nil, splitErr
+	brandIndexEncodingFlag, packedBrandIndexesUint12, productBrandIndexesUint16, encodeBrandIndexesErr := encodeProductBrandIndexes(
+		productBrandIndexes,
+		len(orderedBrandIDs),
+	)
+	if encodeBrandIndexesErr != nil {
+		return nil, encodeBrandIndexesErr
 	}
 
 	// Rank categories by usage frequency, then category ID for deterministic ties.
@@ -194,15 +208,16 @@ func BuildTaxonomySecondPass(sortedProductIDs []int32, input BuildInput) (*Taxon
 	}
 
 	return &TaxonomyBuildResult{
-		SortedProductIDs:       append([]int32(nil), sortedProductIDs...),
-		BrandIDs:               orderedBrandIDs,
-		BrandNames:             orderedBrandNames,
-		CategoryIDs:            categoryIDs,
-		CategoryNames:          categoryNames,
-		ProductBrandIndexesU8:  productBrandIndexesU8,
-		ProductBrandIndexesU16: productBrandIndexesU16,
-		ProductCategoryCount:   packedCategoryCount,
-		ProductCategoryIndexes: productCategoryIndexes,
+		SortedProductIDs:                append([]int32(nil), sortedProductIDs...),
+		BrandIDs:                        orderedBrandIDs,
+		BrandNames:                      orderedBrandNames,
+		CategoryIDs:                     categoryIDs,
+		CategoryNames:                   categoryNames,
+		BrandIndexEncodingFlag:          brandIndexEncodingFlag,
+		ProductBrandIndexesUint12Packed: packedBrandIndexesUint12,
+		ProductBrandIndexesUint16:       productBrandIndexesUint16,
+		ProductCategoryCount:            packedCategoryCount,
+		ProductCategoryIndexes:          productCategoryIndexes,
 	}, nil
 }
 
@@ -217,24 +232,158 @@ func buildNameLookupByID(records []RecordInput, entityLabel string) (map[int32]s
 	return nameByID, nil
 }
 
-func splitBrandIndexesColumns(productBrandIndexes []int) ([]uint8, []uint16, error) {
-	productBrandIndexesU8 := make([]uint8, 0, len(productBrandIndexes))
-	productBrandIndexesU16 := make([]uint16, 0, len(productBrandIndexes))
-
-	startedU16Segment := false
-	for _, brandIndex := range productBrandIndexes {
-		if brandIndex < 0 || brandIndex > 65535 {
-			return nil, nil, fmt.Errorf("brand index=%d overflows uint16", brandIndex)
-		}
-		// Keep concat-friendly ordering: once u16 segment starts, all remaining rows go to u16.
-		if !startedU16Segment && brandIndex <= 255 {
-			productBrandIndexesU8 = append(productBrandIndexesU8, uint8(brandIndex))
-			continue
-		}
-		startedU16Segment = true
-		productBrandIndexesU16 = append(productBrandIndexesU16, uint16(brandIndex))
+func encodeProductBrandIndexes(productBrandIndexes []int, uniqueBrandCount int) (uint8, []uint8, []uint16, error) {
+	if uniqueBrandCount <= 0 {
+		return 0, nil, nil, fmt.Errorf("invalid unique brand count=%d", uniqueBrandCount)
 	}
-	return productBrandIndexesU8, productBrandIndexesU16, nil
+	if uniqueBrandCount <= maxBrandIndexUint12 {
+		// Use 12-bit mode when total dictionary cardinality fits 0..4094 index range.
+		packedIndexes, packErr := packIntSliceToUint12(
+			productBrandIndexes,
+			"brand index",
+			maxBrandIndexUint12,
+		)
+		if packErr != nil {
+			return 0, nil, nil, packErr
+		}
+		return BrandIndexEncodingUint12, packedIndexes, nil, nil
+	}
+
+	// Fallback to uint16 mode for large brand dictionaries.
+	encodedIndexes, encodeErr := convertIntSliceToUint16(
+		productBrandIndexes,
+		"brand index",
+		maxBrandIndexUint16,
+	)
+	if encodeErr != nil {
+		return 0, nil, nil, encodeErr
+	}
+	return BrandIndexEncodingUint16, nil, encodedIndexes, nil
+}
+
+func (taxonomyBuildResult *TaxonomyBuildResult) ProductBrandIndexesCount() int {
+	// Count is inferred from encoded column payload and selected format.
+	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint12 {
+		if len(taxonomyBuildResult.SortedProductIDs) > 0 {
+			return len(taxonomyBuildResult.SortedProductIDs)
+		}
+		return (len(taxonomyBuildResult.ProductBrandIndexesUint12Packed) / 3) * 2
+	}
+	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint16 {
+		return len(taxonomyBuildResult.ProductBrandIndexesUint16)
+	}
+	return 0
+}
+
+func (taxonomyBuildResult *TaxonomyBuildResult) ProductBrandIndexesBytes() int {
+	// Byte accounting depends on the active encoding flag.
+	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint12 {
+		return len(taxonomyBuildResult.ProductBrandIndexesUint12Packed)
+	}
+	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint16 {
+		return len(taxonomyBuildResult.ProductBrandIndexesUint16) * 2
+	}
+	return 0
+}
+
+func (taxonomyBuildResult *TaxonomyBuildResult) BrandIndexEncodingName() string {
+	// Human-readable mode name for logs/stats payloads.
+	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint12 {
+		return "uint12"
+	}
+	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint16 {
+		return "uint16"
+	}
+	return "unknown"
+}
+
+func (taxonomyBuildResult *TaxonomyBuildResult) ValidateForBinary() error {
+	if taxonomyBuildResult == nil {
+		return fmt.Errorf("nil taxonomy result")
+	}
+	if len(taxonomyBuildResult.SortedProductIDs) == 0 {
+		return fmt.Errorf("taxonomy payload requires sorted product IDs")
+	}
+	if len(taxonomyBuildResult.BrandIDs) != len(taxonomyBuildResult.BrandNames) {
+		return fmt.Errorf("brand dictionary columns length mismatch")
+	}
+	if len(taxonomyBuildResult.CategoryIDs) != len(taxonomyBuildResult.CategoryNames) {
+		return fmt.Errorf("category dictionary columns length mismatch")
+	}
+	if taxonomyBuildResult.ProductBrandIndexesCount() != len(taxonomyBuildResult.SortedProductIDs) {
+		return fmt.Errorf("brand indexes count mismatch sorted products")
+	}
+
+	expectedPackedCategoryCountBytes := (len(taxonomyBuildResult.SortedProductIDs) + 3) / 4
+	if len(taxonomyBuildResult.ProductCategoryCount) != expectedPackedCategoryCountBytes {
+		return fmt.Errorf(
+			"category count bytes mismatch expected=%d got=%d",
+			expectedPackedCategoryCountBytes,
+			len(taxonomyBuildResult.ProductCategoryCount),
+		)
+	}
+
+	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint12 {
+		if len(taxonomyBuildResult.ProductBrandIndexesUint16) > 0 {
+			return fmt.Errorf("invalid uint12 mode with uint16 brand indexes")
+		}
+		expectedPackedBrandBytes := expectedUint12PackedBytes(len(taxonomyBuildResult.SortedProductIDs))
+		if len(taxonomyBuildResult.ProductBrandIndexesUint12Packed) != expectedPackedBrandBytes {
+			return fmt.Errorf(
+				"uint12 brand bytes mismatch expected=%d got=%d",
+				expectedPackedBrandBytes,
+				len(taxonomyBuildResult.ProductBrandIndexesUint12Packed),
+			)
+		}
+	} else if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint16 {
+		if len(taxonomyBuildResult.ProductBrandIndexesUint12Packed) > 0 {
+			return fmt.Errorf("invalid uint16 mode with uint12 brand indexes")
+		}
+		if len(taxonomyBuildResult.ProductBrandIndexesUint16) != len(taxonomyBuildResult.SortedProductIDs) {
+			return fmt.Errorf(
+				"uint16 brand rows mismatch expected=%d got=%d",
+				len(taxonomyBuildResult.SortedProductIDs),
+				len(taxonomyBuildResult.ProductBrandIndexesUint16),
+			)
+		}
+	} else {
+		return fmt.Errorf("unsupported brand index encoding flag=%d", taxonomyBuildResult.BrandIndexEncodingFlag)
+	}
+
+	totalMappedCategoryIndexes := decodeTotalCategoryIndexes(
+		taxonomyBuildResult.ProductCategoryCount,
+		len(taxonomyBuildResult.SortedProductIDs),
+	)
+	if len(taxonomyBuildResult.ProductCategoryIndexes) != totalMappedCategoryIndexes {
+		return fmt.Errorf(
+			"category indexes length mismatch expected=%d got=%d",
+			totalMappedCategoryIndexes,
+			len(taxonomyBuildResult.ProductCategoryIndexes),
+		)
+	}
+
+	categoryDictionarySize := len(taxonomyBuildResult.CategoryIDs)
+	for categoryIndexPosition, mappedCategoryIndex := range taxonomyBuildResult.ProductCategoryIndexes {
+		if int(mappedCategoryIndex) >= categoryDictionarySize {
+			return fmt.Errorf(
+				"mapped category index=%d out of bounds at position=%d dictionary=%d",
+				mappedCategoryIndex,
+				categoryIndexPosition,
+				categoryDictionarySize,
+			)
+		}
+	}
+	return nil
+}
+
+func decodeTotalCategoryIndexes(packedCategoryCount []uint8, productCount int) int {
+	totalIndexes := 0
+	for productIndex := 0; productIndex < productCount; productIndex++ {
+		shift := uint(6 - (productIndex%4)*2)
+		countMinusOne := (packedCategoryCount[productIndex/4] >> shift) & 0x03
+		totalIndexes += int(countMinusOne) + 1
+	}
+	return totalIndexes
 }
 
 func packTwoBitCategoryCounts(productCategoryCountMinusOne []uint8) ([]uint8, error) {

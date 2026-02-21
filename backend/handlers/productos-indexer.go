@@ -16,6 +16,7 @@ const (
 	productSharedListCategoriaID = int32(1)
 	productSharedListMarcaID     = int32(2)
 	productIndexerCacheTTL       = 15 * time.Minute
+	productIndexerOutputFilePath = "libs/index_builder/productos.idx"
 )
 
 type ProductosIndexBuildOutput struct {
@@ -39,15 +40,45 @@ func BuildProductosSearchIndex(empresaID int32) (*ProductosIndexBuildOutput, err
 		return nil, fmt.Errorf("no se encontraron productos activos para indexar")
 	}
 
+	brandNameByID := make(map[int32]string, len(productosData.Marcas)+1)
+	for _, marca := range productosData.Marcas {
+		brandNameByID[marca.ID] = marca.Nombre
+	}
+	if _, hasSentinelBrand := brandNameByID[0]; !hasSentinelBrand {
+		brandNameByID[0] = "Sin marca"
+	}
+
+	optimizedProductTextCount := 0
+	optimizedProductTextFallbackCount := 0
+	removedBrandOccurrencesTotal := 0
+	removedDuplicateTokensTotal := 0
+	originalNormalizedTokensTotal := 0
+	finalNormalizedTokensTotal := 0
+
 	productIndexRecords := make([]index_builder.RecordInput, 0, len(productosData.Productos))
 	for _, producto := range productosData.Productos {
 		if producto.ID <= 0 {
 			return nil, fmt.Errorf("producto con ID inválido=%d", producto.ID)
 		}
 
+		brandNameForProduct := brandNameByID[producto.MarcaID]
+		optimizedProductText, optimizationStats := index_builder.OptimizeProductTextAggressive(producto.Nombre, brandNameForProduct)
+		originalNormalizedTokensTotal += optimizationStats.OriginalNormalizedTokens
+		finalNormalizedTokensTotal += optimizationStats.FinalNormalizedTokens
+		removedBrandOccurrencesTotal += optimizationStats.RemovedBrandOccurrences
+		removedDuplicateTokensTotal += optimizationStats.RemovedDuplicateTokens
+		if optimizationStats.Changed {
+			optimizedProductTextCount++
+		}
+		// Keep original name if aggressive normalization strips all searchable tokens.
+		if optimizedProductText == "" {
+			optimizedProductTextFallbackCount++
+			optimizedProductText = producto.Nombre
+		}
+
 		productIndexRecords = append(productIndexRecords, index_builder.RecordInput{
 			ID:            producto.ID,
-			Text:          producto.Nombre,
+			Text:          optimizedProductText,
 			BrandID:       producto.MarcaID,
 			CategoriesIDs: append([]int32(nil), producto.CategoriasIDs...),
 		})
@@ -80,6 +111,13 @@ func BuildProductosSearchIndex(empresaID int32) (*ProductosIndexBuildOutput, err
 	core.Log("BuildProductosSearchIndex:: productos:", len(productosData.Productos),
 		"| marcas únicas:", len(brandIndexRecords),
 		"| categorías únicas:", len(categoryIndexRecords))
+	core.Log("BuildProductosSearchIndex:: text optimization",
+		"| changed:", optimizedProductTextCount,
+		"| fallbackOriginal:", optimizedProductTextFallbackCount,
+		"| removedBrandOccurrences:", removedBrandOccurrencesTotal,
+		"| removedDuplicateTokens:", removedDuplicateTokensTotal,
+		"| normalizedTokensBefore:", originalNormalizedTokensTotal,
+		"| normalizedTokensAfter:", finalNormalizedTokensTotal)
 
 	stageOneOptions := index_builder.DefaultOptions()
 	stageOneIndexResult, stageOneErr := index_builder.Build(productIndexRecords, stageOneOptions)
@@ -92,7 +130,6 @@ func BuildProductosSearchIndex(empresaID int32) (*ProductosIndexBuildOutput, err
 		"| shapes bytes:", stageOneIndexResult.Stats.ShapesBytes,
 		"| content bytes:", stageOneIndexResult.Stats.ContentBytes,
 		"| total bytes:", stageOneIndexResult.Stats.TotalBytes)
-
 	stageTwoInput := index_builder.BuildInput{
 		Products: productIndexRecords, Brands: brandIndexRecords, Categories: categoryIndexRecords,
 	}
@@ -105,10 +142,21 @@ func BuildProductosSearchIndex(empresaID int32) (*ProductosIndexBuildOutput, err
 	core.Log("BuildProductosSearchIndex:: stage 2 completado",
 		"| brandIDs:", len(stageTwoIndexResult.BrandIDs),
 		"| categoryIDs:", len(stageTwoIndexResult.CategoryIDs),
-		"| brandIdxU8:", len(stageTwoIndexResult.ProductBrandIndexesU8),
-		"| brandIdxU16:", len(stageTwoIndexResult.ProductBrandIndexesU16),
+		"| brandIdxMode:", stageTwoIndexResult.BrandIndexEncodingName(),
+		"| brandIdxFlag:", stageTwoIndexResult.BrandIndexEncodingFlag,
+		"| brandIdxCount:", stageTwoIndexResult.ProductBrandIndexesCount(),
+		"| brandIdxBytes:", stageTwoIndexResult.ProductBrandIndexesBytes(),
 		"| catCountPacked:", len(stageTwoIndexResult.ProductCategoryCount),
 		"| catIndexes:", len(stageTwoIndexResult.ProductCategoryIndexes))
+	// Persist stage-1 + stage-2 sections in one binary payload for downstream search runtime usage.
+	if writeIndexErr := index_builder.WriteCombinedBinaryFile(
+		productIndexerOutputFilePath,
+		stageOneIndexResult,
+		stageTwoIndexResult,
+	); writeIndexErr != nil {
+		return nil, fmt.Errorf("error al guardar archivo índice productos en %s: %w", productIndexerOutputFilePath, writeIndexErr)
+	}
+	core.Log("BuildProductosSearchIndex:: archivo índice actualizado:", productIndexerOutputFilePath)
 	core.Log("BuildProductosSearchIndex:: completado")
 
 	return &ProductosIndexBuildOutput{
