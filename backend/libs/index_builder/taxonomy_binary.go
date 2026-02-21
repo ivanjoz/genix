@@ -3,18 +3,20 @@ package index_builder
 import (
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"os"
 )
 
 const (
 	taxonomyBinaryMagic   = "GIXTAX01"
-	taxonomyBinaryVersion = uint8(1)
-	taxonomyHeaderSize    = 8 + 1 + 1 + 4 + (7 * 4)
+	taxonomyBinaryVersion = uint8(2)
 )
 
 type taxonomyBinarySection struct {
-	name string
-	data []byte
+	id        uint8
+	name      string
+	data      []byte
+	itemCount uint32
 }
 
 // WriteCombinedBinaryFile writes stage-1 index bytes plus a trailing stage-2 taxonomy block.
@@ -79,16 +81,19 @@ func marshalTaxonomyBinary(taxonomyBuildResult *TaxonomyBuildResult) ([]byte, er
 	}
 
 	sections := []taxonomyBinarySection{
-		{name: "brand_ids", data: brandIDsSection},
-		{name: "brand_names", data: brandNamesSection},
-		{name: "category_ids", data: categoryIDsSection},
-		{name: "category_names", data: categoryNamesSection},
-		{name: "brand_indexes", data: brandIndexesSection},
-		{name: "category_count", data: taxonomyBuildResult.ProductCategoryCount},
-		{name: "category_indexes", data: taxonomyBuildResult.ProductCategoryIndexes},
+		{id: 1, name: "brand_ids", data: brandIDsSection, itemCount: uint32(len(taxonomyBuildResult.BrandIDs))},
+		{id: 2, name: "brand_names", data: brandNamesSection, itemCount: uint32(len(taxonomyBuildResult.BrandNames))},
+		{id: 3, name: "category_ids", data: categoryIDsSection, itemCount: uint32(len(taxonomyBuildResult.CategoryIDs))},
+		{id: 4, name: "category_names", data: categoryNamesSection, itemCount: uint32(len(taxonomyBuildResult.CategoryNames))},
+		{id: 5, name: "brand_indexes", data: brandIndexesSection, itemCount: uint32(len(taxonomyBuildResult.SortedProductIDs))},
+		{id: 6, name: "category_count", data: taxonomyBuildResult.ProductCategoryCount, itemCount: uint32(len(taxonomyBuildResult.SortedProductIDs))},
+		{id: 7, name: "category_indexes", data: taxonomyBuildResult.ProductCategoryIndexes, itemCount: uint32(len(taxonomyBuildResult.ProductCategoryIndexes))},
 	}
 
-	totalSize := taxonomyHeaderSize
+	const sectionEntrySize = 1 + 4 + 4 + 4 + 4 // section_id + offset + length + item_count + checksum_crc32
+	baseHeaderSize := len(taxonomyBinaryMagic) + 1 + 1 + 4 + 1 + 2
+	headerSize := baseHeaderSize + len(sections)*sectionEntrySize
+	totalSize := headerSize
 	for _, taxonomySection := range sections {
 		if len(taxonomySection.data) > int(^uint32(0)) {
 			return nil, fmt.Errorf("section=%s length overflows uint32", taxonomySection.name)
@@ -107,14 +112,30 @@ func marshalTaxonomyBinary(taxonomyBuildResult *TaxonomyBuildResult) ([]byte, er
 	var sortedCountBytes [4]byte
 	binary.LittleEndian.PutUint32(sortedCountBytes[:], uint32(len(taxonomyBuildResult.SortedProductIDs)))
 	payload = append(payload, sortedCountBytes[:]...)
-
-	appendU32 := func(sectionLen int) {
-		var lenBytes [4]byte
-		binary.LittleEndian.PutUint32(lenBytes[:], uint32(sectionLen))
-		payload = append(payload, lenBytes[:]...)
+	payload = append(payload, uint8(len(sections)))
+	if headerSize > 65535 {
+		return nil, fmt.Errorf("taxonomy header too large bytes=%d", headerSize)
 	}
+	var headerSizeBytes [2]byte
+	binary.LittleEndian.PutUint16(headerSizeBytes[:], uint16(headerSize))
+	payload = append(payload, headerSizeBytes[:]...)
+
+	currentOffset := uint32(headerSize)
 	for _, taxonomySection := range sections {
-		appendU32(len(taxonomySection.data))
+		payload = append(payload, taxonomySection.id)
+		var offsetBytes [4]byte
+		binary.LittleEndian.PutUint32(offsetBytes[:], currentOffset)
+		payload = append(payload, offsetBytes[:]...)
+		var lengthBytes [4]byte
+		binary.LittleEndian.PutUint32(lengthBytes[:], uint32(len(taxonomySection.data)))
+		payload = append(payload, lengthBytes[:]...)
+		var countBytes [4]byte
+		binary.LittleEndian.PutUint32(countBytes[:], taxonomySection.itemCount)
+		payload = append(payload, countBytes[:]...)
+		var checksumBytes [4]byte
+		binary.LittleEndian.PutUint32(checksumBytes[:], crc32.ChecksumIEEE(taxonomySection.data))
+		payload = append(payload, checksumBytes[:]...)
+		currentOffset += uint32(len(taxonomySection.data))
 	}
 	for _, taxonomySection := range sections {
 		payload = append(payload, taxonomySection.data...)

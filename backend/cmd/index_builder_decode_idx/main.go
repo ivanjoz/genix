@@ -38,6 +38,8 @@ func main() {
 		fmt.Printf("taxonomy_brands: %d\n", decodedResult.Stats.TaxonomyBrandCount)
 		fmt.Printf("taxonomy_categories: %d\n", decodedResult.Stats.TaxonomyCategoryCount)
 		fmt.Printf("taxonomy_brand_index_mode: %s\n", decodedResult.Stats.TaxonomyBrandIndexMode)
+	} else {
+		fmt.Printf("taxonomy: none (text-only index)\n")
 	}
 	fmt.Printf("input: %s\n", *inputPath)
 

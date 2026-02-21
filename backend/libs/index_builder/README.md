@@ -169,10 +169,11 @@ How it is guaranteed:
 
 Text block is serialized by `BuildResult.MarshalBinary` with:
 
-1. header (`GIXIDX01`, version, flags, section lengths)
-2. dictionary section
-3. shape stream section
-4. content section
+1. header (`GIXIDX01`, version, flags, record/dictionary counters)
+2. section table entries (section id, offset, length, item count, CRC32 checksum)
+3. dictionary section
+4. shape stream section
+5. content section
 
 Shape stream uses delta encoding with compact paths for small deltas.
 
@@ -186,7 +187,7 @@ Taxonomy header contains:
 - taxonomy version
 - brand encoding flag
 - sorted product count
-- seven section lengths
+- seven section table entries (section id, offset, length, item count, CRC32 checksum)
 
 Sections (fixed order):
 

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"os"
 	"sort"
 	"strconv"
@@ -13,18 +14,24 @@ import (
 
 const (
 	BinaryMagic   = "GIXIDX01"
-	BinaryVersion = uint8(1)
+	BinaryVersion = uint8(2)
 
 	HeaderFlagDictionaryDelta = uint8(1 << 0)
 	HeaderFlagShapeDelta      = uint8(1 << 1)
 	HeaderFlagNumericCompact  = uint8(1 << 2)
 )
 
+const (
+	textSectionDictionary uint8 = 1
+	textSectionShapes     uint8 = 2
+	textSectionContent    uint8 = 3
+)
+
 type RecordInput struct {
-	ID   int32
+	ID            int32
 	CategoriesIDs []int32
-	BrandID int32
-	Text string
+	BrandID       int32
+	Text          string
 }
 
 type BuildOptions struct {
@@ -291,7 +298,21 @@ func (buildResult *BuildResult) MarshalBinary() ([]byte, error) {
 		return nil, fmt.Errorf("too many records=%d", len(buildResult.SortedIDs))
 	}
 
-	const headerSize = 26
+	type textSectionDescriptor struct {
+		sectionID uint8
+		data      []byte
+		itemCount uint32
+	}
+	sections := []textSectionDescriptor{
+		// Explicit section table keeps decode cursor logic trivial and stable across versions.
+		{sectionID: textSectionDictionary, data: buildResult.DictionarySection, itemCount: uint32(len(buildResult.DictionaryTokens))},
+		{sectionID: textSectionShapes, data: buildResult.Shapes, itemCount: uint32(len(buildResult.SortedIDs))},
+		{sectionID: textSectionContent, data: buildResult.Content, itemCount: uint32(len(buildResult.Content))},
+	}
+
+	const sectionEntrySize = 1 + 4 + 4 + 4 + 4 // section_id + offset + length + item_count + checksum_crc32
+	baseHeaderSize := len(BinaryMagic) + 1 + 1 + 4 + 1 + 1 + 2
+	headerSize := baseHeaderSize + len(sections)*sectionEntrySize
 	payload := make([]byte, 0, headerSize+len(buildResult.DictionarySection)+len(buildResult.Shapes)+len(buildResult.Content))
 	payload = append(payload, []byte(BinaryMagic)...)
 	payload = append(payload, BinaryVersion)
@@ -302,22 +323,38 @@ func (buildResult *BuildResult) MarshalBinary() ([]byte, error) {
 	payload = append(payload, recordCountBytes[:]...)
 
 	payload = append(payload, uint8(len(buildResult.DictionaryTokens)))
+	payload = append(payload, uint8(len(sections)))
+	if headerSize > 65535 {
+		return nil, fmt.Errorf("text header too large bytes=%d", headerSize)
+	}
+	var headerSizeBytes [2]byte
+	binary.LittleEndian.PutUint16(headerSizeBytes[:], uint16(headerSize))
+	payload = append(payload, headerSizeBytes[:]...)
 
-	var dictionaryBytes [4]byte
-	binary.LittleEndian.PutUint32(dictionaryBytes[:], uint32(len(buildResult.DictionarySection)))
-	payload = append(payload, dictionaryBytes[:]...)
+	currentOffset := uint32(headerSize)
+	for _, section := range sections {
+		if len(section.data) > int(^uint32(0)) {
+			return nil, fmt.Errorf("text section overflows uint32 section=%d", section.sectionID)
+		}
+		payload = append(payload, section.sectionID)
+		var offsetBytes [4]byte
+		binary.LittleEndian.PutUint32(offsetBytes[:], currentOffset)
+		payload = append(payload, offsetBytes[:]...)
+		var lengthBytes [4]byte
+		binary.LittleEndian.PutUint32(lengthBytes[:], uint32(len(section.data)))
+		payload = append(payload, lengthBytes[:]...)
+		var countBytes [4]byte
+		binary.LittleEndian.PutUint32(countBytes[:], section.itemCount)
+		payload = append(payload, countBytes[:]...)
+		var checksumBytes [4]byte
+		binary.LittleEndian.PutUint32(checksumBytes[:], crc32.ChecksumIEEE(section.data))
+		payload = append(payload, checksumBytes[:]...)
+		currentOffset += uint32(len(section.data))
+	}
 
-	var shapesBytes [4]byte
-	binary.LittleEndian.PutUint32(shapesBytes[:], uint32(len(buildResult.Shapes)))
-	payload = append(payload, shapesBytes[:]...)
-
-	var contentBytes [4]byte
-	binary.LittleEndian.PutUint32(contentBytes[:], uint32(len(buildResult.Content)))
-	payload = append(payload, contentBytes[:]...)
-
-	payload = append(payload, buildResult.DictionarySection...)
-	payload = append(payload, buildResult.Shapes...)
-	payload = append(payload, buildResult.Content...)
+	for _, section := range sections {
+		payload = append(payload, section.data...)
+	}
 	return payload, nil
 }
 
