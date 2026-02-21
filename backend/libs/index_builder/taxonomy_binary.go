@@ -69,9 +69,9 @@ func marshalTaxonomyBinary(taxonomyBuildResult *TaxonomyBuildResult) ([]byte, er
 		return nil, fmt.Errorf("marshal category names: %w", marshalCategoryNamesErr)
 	}
 
-	brandIndexesSection := make([]byte, 0, taxonomyBuildResult.ProductBrandIndexesBytes())
+	var brandIndexesSection []byte
 	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint12 {
-		brandIndexesSection = append(brandIndexesSection, taxonomyBuildResult.ProductBrandIndexesUint12Packed...)
+		brandIndexesSection = taxonomyBuildResult.ProductBrandIndexesUint12Packed
 	} else if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint16 {
 		brandIndexesSection = marshalUint16SliceLE(taxonomyBuildResult.ProductBrandIndexesUint16)
 	} else {
@@ -133,10 +133,11 @@ func marshalUint16SliceLE(values []uint16) []byte {
 func marshalStringColumn(values []string) ([]byte, error) {
 	totalBytes := 0
 	for _, value := range values {
-		if len([]byte(value)) > 255 {
+		valueBytes := []byte(value)
+		if len(valueBytes) > 255 {
 			return nil, fmt.Errorf("string exceeds 255 bytes: %q", value)
 		}
-		totalBytes += 1 + len([]byte(value))
+		totalBytes += 1 + len(valueBytes)
 	}
 
 	sectionBytes := make([]byte, 0, totalBytes)

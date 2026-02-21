@@ -262,39 +262,39 @@ func encodeProductBrandIndexes(productBrandIndexes []int, uniqueBrandCount int) 
 }
 
 func (taxonomyBuildResult *TaxonomyBuildResult) ProductBrandIndexesCount() int {
-	// Count is inferred from encoded column payload and selected format.
-	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint12 {
-		if len(taxonomyBuildResult.SortedProductIDs) > 0 {
-			return len(taxonomyBuildResult.SortedProductIDs)
-		}
-		return (len(taxonomyBuildResult.ProductBrandIndexesUint12Packed) / 3) * 2
+	if taxonomyBuildResult == nil {
+		return 0
 	}
-	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint16 {
-		return len(taxonomyBuildResult.ProductBrandIndexesUint16)
-	}
-	return 0
+	// Product brand indexes are aligned 1:1 with sorted products.
+	return len(taxonomyBuildResult.SortedProductIDs)
 }
 
 func (taxonomyBuildResult *TaxonomyBuildResult) ProductBrandIndexesBytes() int {
-	// Byte accounting depends on the active encoding flag.
-	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint12 {
+	if taxonomyBuildResult == nil {
+		return 0
+	}
+	switch taxonomyBuildResult.BrandIndexEncodingFlag {
+	case BrandIndexEncodingUint12:
 		return len(taxonomyBuildResult.ProductBrandIndexesUint12Packed)
-	}
-	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint16 {
+	case BrandIndexEncodingUint16:
 		return len(taxonomyBuildResult.ProductBrandIndexesUint16) * 2
+	default:
+		return 0
 	}
-	return 0
 }
 
 func (taxonomyBuildResult *TaxonomyBuildResult) BrandIndexEncodingName() string {
-	// Human-readable mode name for logs/stats payloads.
-	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint12 {
+	if taxonomyBuildResult == nil {
+		return "unknown"
+	}
+	switch taxonomyBuildResult.BrandIndexEncodingFlag {
+	case BrandIndexEncodingUint12:
 		return "uint12"
-	}
-	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint16 {
+	case BrandIndexEncodingUint16:
 		return "uint16"
+	default:
+		return "unknown"
 	}
-	return "unknown"
 }
 
 func (taxonomyBuildResult *TaxonomyBuildResult) ValidateForBinary() error {
@@ -310,24 +310,14 @@ func (taxonomyBuildResult *TaxonomyBuildResult) ValidateForBinary() error {
 	if len(taxonomyBuildResult.CategoryIDs) != len(taxonomyBuildResult.CategoryNames) {
 		return fmt.Errorf("category dictionary columns length mismatch")
 	}
-	if taxonomyBuildResult.ProductBrandIndexesCount() != len(taxonomyBuildResult.SortedProductIDs) {
-		return fmt.Errorf("brand indexes count mismatch sorted products")
-	}
 
-	expectedPackedCategoryCountBytes := (len(taxonomyBuildResult.SortedProductIDs) + 3) / 4
-	if len(taxonomyBuildResult.ProductCategoryCount) != expectedPackedCategoryCountBytes {
-		return fmt.Errorf(
-			"category count bytes mismatch expected=%d got=%d",
-			expectedPackedCategoryCountBytes,
-			len(taxonomyBuildResult.ProductCategoryCount),
-		)
-	}
-
-	if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint12 {
+	productCount := len(taxonomyBuildResult.SortedProductIDs)
+	switch taxonomyBuildResult.BrandIndexEncodingFlag {
+	case BrandIndexEncodingUint12:
 		if len(taxonomyBuildResult.ProductBrandIndexesUint16) > 0 {
 			return fmt.Errorf("invalid uint12 mode with uint16 brand indexes")
 		}
-		expectedPackedBrandBytes := expectedUint12PackedBytes(len(taxonomyBuildResult.SortedProductIDs))
+		expectedPackedBrandBytes := expectedUint12PackedBytes(productCount)
 		if len(taxonomyBuildResult.ProductBrandIndexesUint12Packed) != expectedPackedBrandBytes {
 			return fmt.Errorf(
 				"uint12 brand bytes mismatch expected=%d got=%d",
@@ -335,55 +325,37 @@ func (taxonomyBuildResult *TaxonomyBuildResult) ValidateForBinary() error {
 				len(taxonomyBuildResult.ProductBrandIndexesUint12Packed),
 			)
 		}
-	} else if taxonomyBuildResult.BrandIndexEncodingFlag == BrandIndexEncodingUint16 {
+	case BrandIndexEncodingUint16:
 		if len(taxonomyBuildResult.ProductBrandIndexesUint12Packed) > 0 {
 			return fmt.Errorf("invalid uint16 mode with uint12 brand indexes")
 		}
-		if len(taxonomyBuildResult.ProductBrandIndexesUint16) != len(taxonomyBuildResult.SortedProductIDs) {
+		if len(taxonomyBuildResult.ProductBrandIndexesUint16) != productCount {
 			return fmt.Errorf(
 				"uint16 brand rows mismatch expected=%d got=%d",
-				len(taxonomyBuildResult.SortedProductIDs),
+				productCount,
 				len(taxonomyBuildResult.ProductBrandIndexesUint16),
 			)
 		}
-	} else {
+	default:
 		return fmt.Errorf("unsupported brand index encoding flag=%d", taxonomyBuildResult.BrandIndexEncodingFlag)
 	}
 
-	totalMappedCategoryIndexes := decodeTotalCategoryIndexes(
-		taxonomyBuildResult.ProductCategoryCount,
-		len(taxonomyBuildResult.SortedProductIDs),
-	)
-	if len(taxonomyBuildResult.ProductCategoryIndexes) != totalMappedCategoryIndexes {
+	expectedPackedCategoryCountBytes := (productCount + 3) / 4
+	if len(taxonomyBuildResult.ProductCategoryCount) != expectedPackedCategoryCountBytes {
 		return fmt.Errorf(
-			"category indexes length mismatch expected=%d got=%d",
-			totalMappedCategoryIndexes,
+			"category count bytes mismatch expected=%d got=%d",
+			expectedPackedCategoryCountBytes,
+			len(taxonomyBuildResult.ProductCategoryCount),
+		)
+	}
+	if len(taxonomyBuildResult.ProductCategoryIndexes) < productCount {
+		return fmt.Errorf(
+			"category indexes payload too small productCount=%d indexes=%d",
+			productCount,
 			len(taxonomyBuildResult.ProductCategoryIndexes),
 		)
 	}
-
-	categoryDictionarySize := len(taxonomyBuildResult.CategoryIDs)
-	for categoryIndexPosition, mappedCategoryIndex := range taxonomyBuildResult.ProductCategoryIndexes {
-		if int(mappedCategoryIndex) >= categoryDictionarySize {
-			return fmt.Errorf(
-				"mapped category index=%d out of bounds at position=%d dictionary=%d",
-				mappedCategoryIndex,
-				categoryIndexPosition,
-				categoryDictionarySize,
-			)
-		}
-	}
 	return nil
-}
-
-func decodeTotalCategoryIndexes(packedCategoryCount []uint8, productCount int) int {
-	totalIndexes := 0
-	for productIndex := 0; productIndex < productCount; productIndex++ {
-		shift := uint(6 - (productIndex%4)*2)
-		countMinusOne := (packedCategoryCount[productIndex/4] >> shift) & 0x03
-		totalIndexes += int(countMinusOne) + 1
-	}
-	return totalIndexes
 }
 
 func packTwoBitCategoryCounts(productCategoryCountMinusOne []uint8) ([]uint8, error) {

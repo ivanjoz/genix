@@ -1,241 +1,250 @@
 # Index Builder
+This package builds the product search binary used by Genix.
 
-This package builds a compact binary index from product records.
+Current output is one combined `productos.idx` payload:
 
-## Goal
+1. Text block (encoded product text index)
+2. Taxonomy block (brand/category dictionaries and product mappings)
 
-Given input records:
+`decoder.go` exists for decode/debug and is not part of the build path.
 
-- `ID int32`
-- `Text string`
+## Purpose
 
-produce:
+The implementation is optimized for:
 
-- reordered record IDs (`SortedIDs`) aligned with index storage order
-- shape stream bytes (`Shapes`)
-- content stream bytes (`Content`)
-- dictionary section bytes
-- build stats
-- a binary `.idx` payload
-- decoder support to reconstruct records from `.idx`
+1. Small payload size
+2. Deterministic output
+3. Strict row alignment between text and taxonomy
+4. Operationally visible build stats
 
-## Public API
+## Build Path Files
 
-### Input
+Every `.go` file under `libs/index_builder` is in the build path except `decoder.go`.
+
+- `index_builder.go`
+  - text index encoding
+  - dictionary generation
+  - shape/content stream generation
+  - text binary serialization
+- `builder.go`
+  - sequential orchestration entrypoint (`BuildProductosIndex`)
+  - aggressive product text optimization integration
+  - optimization metrics aggregation
+- `text_optimizer.go`
+  - removes brand-token occurrences from product text
+  - removes duplicate tokens
+  - returns per-product optimization stats
+- `taxonomy_pass.go`
+  - taxonomy dictionaries and product taxonomy columns
+  - brand index encoding mode selection (`uint12` or `uint16`)
+  - validation for binary writing
+- `taxonomy_binary.go`
+  - serializes taxonomy block
+  - concatenates text + taxonomy into one payload
+  - writes file
+- `packing.go`
+  - reusable low-level numeric packing helpers
+  - `int -> uint16` conversion
+  - `uint12` packing
+- `syllable_generator.go`
+  - canonical alias rules
+  - syllable split/frequency support used by text build
+
+## Main Data Contracts
+
+### `RecordInput`
 
 ```go
 type RecordInput struct {
-    ID   int32
-    Text string
+    ID            int32
+    CategoriesIDs []int32
+    BrandID       int32
+    Text          string
 }
 ```
 
-### Options
+Context usage:
+
+- product rows use all fields
+- brand rows use `ID`, `Text`
+- category rows use `ID`, `Text`
+
+### `BuildInput`
 
 ```go
-type BuildOptions struct {
-    MaxWordsPerRecord   int32
-    MaxSyllablesPerWord int32
-    MaxDictionarySlots  int32
-    ConnectorWords      []string
+type BuildInput struct {
+    Products   []RecordInput
+    Brands     []RecordInput
+    Categories []RecordInput
 }
 ```
 
-Use `DefaultOptions()` for a working baseline.
+### `ProductosIndexBuildArtifacts`
 
-### Build
+`BuildProductosIndex` returns:
 
-```go
-func Build(records []RecordInput, options BuildOptions) (*BuildResult, error)
-```
+- `TextIndexResult *BuildResult`
+- `TaxonomyIndexResult *TaxonomyBuildResult`
+- `OptimizationStats ProductTextOptimizationAggregate`
 
-### Decode
+## End-to-End Flow
 
-```go
-func DecodeBinary(indexBytes []byte) (*DecodeResult, error)
-func SampleDecodedRecords(records []DecodedRecord, sampleCount int32, seed int64) []DecodedRecord
-```
+`BuildProductosIndex(buildInput)` runs a sequential process:
 
-### Input Loader
+1. product text optimization
+2. text index build
+3. taxonomy build aligned to text `SortedIDs`
 
-```go
-func LoadRecordsFromTextFile(inputPath string) ([]RecordInput, error)
-```
+Writing combined bytes is done with:
 
-### Result
+- `MarshalCombinedBinary(textResult, taxonomyResult)`
+- `WriteCombinedBinaryFile(path, textResult, taxonomyResult)`
 
-```go
-type BuildResult struct {
-    SortedIDs []int32
-    Shapes    []byte
-    Content   []byte
+### Phase 1: Product Text Optimization
 
-    HeaderFlags       uint8
-    DictionaryTokens  []string
-    DictionarySection []byte
+For each product:
 
-    Stats BuildStats
-}
-```
+1. Resolve brand name using `BrandID`
+2. Run `OptimizeProductTextAggressive(productText, brandName)`
+3. Collect stats
+4. If optimized text becomes empty, fallback to original product text
+5. Keep same IDs/relations, only replace `Text`
 
-### Serialization
+Why this exists:
 
-```go
-func (r *BuildResult) MarshalBinary() ([]byte, error)
-func (r *BuildResult) WriteBinaryFile(outputPath string) error
-```
+- brand words are duplicated across many products
+- removing them reduces text entropy and content bytes
+- duplicate token removal avoids redundant syllable encoding
+- fallback preserves product visibility in text index
 
-### Syllable Utilities
+### Phase 2: Text Index Build (`Build`)
 
-```go
-type SyllableFrequency struct {
-    Syllable string
-    Count    int32
-}
+Core behavior:
 
-func SplitTokenIntoSyllables(token string) []string
-func ExtractTopSyllableFrequencies(records []RecordInput, limit int32) []SyllableFrequency
-```
+1. normalize text
+2. remove connector words
+3. compact numeric tokens
+4. build dictionary from fixed aliases + frequency
+5. encode words into syllable IDs
+6. encode record shapes
+7. sort encoded records deterministically
+8. emit `SortedIDs`, `Shapes`, `Content`, stats
 
-## Processing Pipeline
+`SortedIDs` is the row-order contract consumed by taxonomy.
 
-1. Normalize text
-- lowercases text
-- normalizes accented characters to ASCII
-- keeps `a-z`, `0-9`, and spaces
+### Phase 3: Taxonomy Build (`BuildTaxonomySecondPass`)
 
-2. Token filtering
-- splits by spaces
-- removes connector words
-- applies numeric compaction for numeric-prefix tokens
-- drops single-character tokens at this stage
+Taxonomy rows are built in `SortedIDs` order:
 
-3. Dictionary construction
-- starts from fixed canonical tokens and aliases
-- computes syllable frequency on normalized records
-- fills dictionary up to `MaxDictionarySlots` (max `255`)
+1. reorder products by `SortedIDs`
+2. brand dictionary by first appearance in sorted sequence
+3. category ranking by usage frequency
+4. fixed category dictionary with `"Otros"` bucket
+5. per-product brand index encoding
+6. per-product category count and category index payload
 
-4. Record encoding
-- each word is encoded as 1..N syllable IDs
-- each word contributes its syllable count to record shape
-- each record shape is encoded as fixed 24-bit value (`8 words * 3 bits`)
+Brand encoding mode:
 
-5. Reorder records
-- sorts records by shape value ascending
-- keeps stable order for ties
-- emits `SortedIDs` aligned with final storage order
+- `uint12` packed mode when dictionary cardinality fits
+- `uint16` otherwise
 
-6. Shape stream
-- delta-encodes sorted shape values
-- token format:
-  - `0 + 8 bits` for delta `<=255`
-  - `1 + 16 bits` for delta `<=65534`
-  - `1 + 0xFFFF + 24 bits` escape for larger deltas
+Category storage:
 
-7. Content stream
-- concatenates encoded record content bytes in sorted order
+- packed per-product count (2-bit counters)
+- flat category index payload consumed by packed counts
 
-## Binary Format
+## Alignment Invariant
 
-The binary payload written by `MarshalBinary()` is:
+Critical invariant:
 
-1. Header
-2. Dictionary section
-3. Shape stream section
-4. Content section
+- row `i` in text block and row `i` in taxonomy block represent the same product.
 
-### Header Layout
+How it is guaranteed:
 
-- magic: `GIXIDX01` (8 bytes)
-- version: `u8`
-- flags: `u8`
-- record_count: `u32` little-endian
-- dictionary_count: `u8`
-- dictionary_bytes: `u32` little-endian
-- shapes_bytes: `u32` little-endian
-- content_bytes: `u32` little-endian
+- text builder defines `SortedIDs`
+- taxonomy builder uses the same `SortedIDs` to reorder products
+- taxonomy serialization validates row-consistency assumptions
 
-### Flags
+## Text Block Binary
 
-- `bit0`: dictionary delta mode
-- `bit1`: shape delta stream enabled
-- `bit2`: numeric compaction enabled
+Text block is serialized by `BuildResult.MarshalBinary` with:
 
-## Stats
+1. header (`GIXIDX01`, version, flags, section lengths)
+2. dictionary section
+3. shape stream section
+4. content section
 
-`BuildStats` exposes:
+Shape stream uses delta encoding with compact paths for small deltas.
 
-- record counts (input and encoded)
-- dictionary size/count
-- shape/content/total byte sizes
-- shape delta bucket counts (`8/16/24`)
+## Taxonomy Block Binary
 
-All numeric stats use `int32`.
+Taxonomy block is appended after text block.
 
-## Example
+Taxonomy header contains:
 
-```go
-records := []index_builder.RecordInput{
-    {ID: 101, Text: "Vino tinto reserva 750 ml"},
-    {ID: 102, Text: "Queso curado unidad"},
-}
+- magic (`GIXTAX01`)
+- taxonomy version
+- brand encoding flag
+- sorted product count
+- seven section lengths
 
-opts := index_builder.DefaultOptions()
-result, err := index_builder.Build(records, opts)
-if err != nil {
-    panic(err)
-}
+Sections (fixed order):
 
-err = result.WriteBinaryFile("productos.idx")
-if err != nil {
-    panic(err)
-}
-```
+1. brand IDs (`uint16` LE)
+2. brand names (len-prefixed strings)
+3. category IDs (`uint16` LE)
+4. category names (len-prefixed strings)
+5. brand indexes (`uint12` packed or `uint16`)
+6. packed category counts
+7. category indexes
 
-## CLI + Script
+## Validation in Build Path
 
-Build CLI:
+Before taxonomy serialization, `ValidateForBinary` enforces:
 
-```bash
-go run ./cmd/index_builder_build_idx \
-  -input libs/index_builder/productos.txt \
-  -output libs/index_builder/productos.idx \
-  -max-words 8 \
-  -max-syllables-per-word 7 \
-  -slots 255
-```
+- non-nil and non-empty sorted products
+- dictionary ID/name column length parity
+- valid brand index encoding flag
+- payload consistency with selected brand mode
+- category-count packed byte length sanity
+- category index payload minimum size sanity
 
-Convenience script:
+These checks fail early before writing bytes.
 
-```bash
-libs/index_builder/run_build_and_stats.sh
-```
+## Determinism Rules
 
-Decode CLI:
+To preserve deterministic binaries:
 
-```bash
-go run ./cmd/index_builder_decode_idx \
-  -input libs/index_builder/productos.idx \
-  -sample 10 \
-  -seed 0
-```
+1. keep tie-break ordering explicit
+2. avoid map iteration as output order source
+3. keep section write order fixed
+4. keep normalization rules stable
 
-Decode script:
+## Operational Integration
 
-```bash
-libs/index_builder/run_decode_and_stats.sh
-```
+Typical runtime integration:
 
-Script parameters:
+1. handler fetches products, brands, categories
+2. map source rows into `BuildInput`
+3. call `BuildProductosIndex`
+4. write output with `WriteCombinedBinaryFile`
+5. log stage stats and optimization aggregate
 
-1. input path (default: `libs/index_builder/productos.txt`)
-2. output path (default: `libs/index_builder/productos.idx`)
-3. max words per record (default: `8`)
-4. max syllables per word (default: `7`)
-5. max dictionary slots (default: `255`)
+Output path used by current integration:
 
-Decode script parameters:
+- `libs/index_builder/productos.idx`
 
-1. input path (default: `libs/index_builder/productos.idx`)
-2. sample count (default: `10`)
-3. seed (default: `0`, random each run)
+## Extension Guidelines
+
+When adding fields or sections:
+
+1. keep existing section order unless version changes
+2. add explicit validation checks
+3. expose stats for observability
+4. update this README in same PR
+5. ensure tests cover size/consistency regressions
+
+## Testing Guidance
+
+Current tests focus on text optimization and taxonomy validation sanity.
+For binary contract changes, add validation and payload-length assertions.
