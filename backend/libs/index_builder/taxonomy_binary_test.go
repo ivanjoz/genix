@@ -12,8 +12,8 @@ func TestValidateForBinary_OK(t *testing.T) {
 		t.Fatalf("pack brand indexes: %v", packBrandErr)
 	}
 
-	taxonomyBuildResult := &TaxonomyBuildResult{
-		SortedProductIDs:                []int32{10, 11, 12},
+	taxonomyBuildResult := &ProductosIndexBuild{
+		SortedIDs:                       []int32{10, 11, 12},
 		BrandIDs:                        []uint16{20, 21, 22},
 		BrandNames:                      []string{"a", "b", "c"},
 		CategoryIDs:                     []uint16{30, 31, 32, 33},
@@ -30,8 +30,8 @@ func TestValidateForBinary_OK(t *testing.T) {
 }
 
 func TestValidateForBinary_CategoryCountBytesMismatch(t *testing.T) {
-	taxonomyBuildResult := &TaxonomyBuildResult{
-		SortedProductIDs:          []int32{1, 2, 3, 4, 5},
+	taxonomyBuildResult := &ProductosIndexBuild{
+		SortedIDs:                 []int32{1, 2, 3, 4, 5},
 		BrandIDs:                  []uint16{1},
 		BrandNames:                []string{"a"},
 		CategoryIDs:               []uint16{1},

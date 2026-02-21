@@ -3,6 +3,7 @@ package types
 import (
 	"app/core"
 	"app/db"
+	"encoding/binary"
 )
 
 type Increment struct {
@@ -60,13 +61,13 @@ func (e PaisCiudadTable) GetSchema() db.TableSchema {
 
 type ListaCompartidaRegistro struct {
 	db.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
-	EmpresaID   int32 
-	ID          int32 
-	ListaID     int32   
+	EmpresaID   int32
+	ID          int32
+	ListaID     int32
 	Nombre      string   `json:",omitempty"`
 	Images      []string `json:",omitempty"`
 	Descripcion string   `json:",omitempty"`
-	NombreHash int32  `json:",omitempty"`
+	NombreHash  int32    `json:",omitempty"`
 	// Propiedades generales
 	Status    int8  `json:"ss,omitempty"`
 	Updated   int64 `json:"upd,omitempty"`
@@ -81,7 +82,7 @@ type ListaCompartidaRegistroTable struct {
 	Nombre      db.Col[ListaCompartidaRegistroTable, string]
 	Images      db.ColSlice[ListaCompartidaRegistroTable, string]
 	Descripcion db.Col[ListaCompartidaRegistroTable, string]
-	NombreHash   db.Col[ListaCompartidaRegistroTable, int32]
+	NombreHash  db.Col[ListaCompartidaRegistroTable, int32]
 	Status      db.Col[ListaCompartidaRegistroTable, int8]
 	Updated     db.Col[ListaCompartidaRegistroTable, int64]
 	UpdatedBy   db.Col[ListaCompartidaRegistroTable, int32]
@@ -93,7 +94,7 @@ func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
 		Partition:    e.EmpresaID,
 		UseSequences: true,
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
-		Indexes: [][]db.Coln{{e.NombreHash}},
+		Indexes:      [][]db.Coln{{e.NombreHash}},
 		ViewsDeprecated: []db.View{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
 			{Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
@@ -108,7 +109,7 @@ func (e *ListaCompartidaRegistro) SelfParse() {
 }
 
 type NewIDToID struct {
-	ID  int32
+	ID     int32
 	TempID int32
 }
 
@@ -141,10 +142,131 @@ type ParametrosTable struct {
 
 func (e ParametrosTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:         "parametros",
-		Partition:    e.EmpresaID,
-		UseSequences: true,
-		Keys:         []db.Coln{e.Grupo, e.Key},
-		ViewsDeprecated:        []db.View{},
+		Name:            "parametros",
+		Partition:       e.EmpresaID,
+		UseSequences:    true,
+		Keys:            []db.Coln{e.Grupo, e.Key},
+		ViewsDeprecated: []db.View{},
+	}
+}
+
+func EncodeIDs(ids []int32) []byte {
+	// Header-only payload means "empty ID list".
+	if len(ids) == 0 {
+		return []byte{0}
+	}
+
+	maxBytesPerID := 1
+	for _, currentID := range ids {
+		requiredBytes := 1
+		// Negative IDs are preserved using full int32 width.
+		if currentID < 0 {
+			requiredBytes = 4
+		} else {
+			unsignedID := uint32(currentID)
+			if unsignedID > 0xFFFFFF {
+				requiredBytes = 4
+			} else if unsignedID > 0xFFFF {
+				requiredBytes = 3
+			} else if unsignedID > 0xFF {
+				requiredBytes = 2
+			}
+		}
+		if requiredBytes > maxBytesPerID {
+			maxBytesPerID = requiredBytes
+		}
+	}
+
+	bitWidth := byte(maxBytesPerID * 8)
+	encodedIDs := make([]byte, 1+len(ids)*maxBytesPerID)
+	encodedIDs[0] = bitWidth
+
+	for idIndex, currentID := range ids {
+		writeOffset := 1 + idIndex*maxBytesPerID
+		unsignedID := uint32(currentID)
+		switch maxBytesPerID {
+		case 1:
+			encodedIDs[writeOffset] = byte(unsignedID)
+		case 2:
+			binary.LittleEndian.PutUint16(encodedIDs[writeOffset:], uint16(unsignedID))
+		case 3:
+			encodedIDs[writeOffset] = byte(unsignedID)
+			encodedIDs[writeOffset+1] = byte(unsignedID >> 8)
+			encodedIDs[writeOffset+2] = byte(unsignedID >> 16)
+		case 4:
+			binary.LittleEndian.PutUint32(encodedIDs[writeOffset:], unsignedID)
+		}
+	}
+
+	return encodedIDs
+}
+
+func DecodeIDs(encodedIDs []byte) []int32 {
+	if len(encodedIDs) == 0 {
+		return nil
+	}
+
+	bitWidth := encodedIDs[0]
+	// Header-only payload for empty lists.
+	if bitWidth == 0 {
+		return []int32{}
+	}
+	if bitWidth != 8 && bitWidth != 16 && bitWidth != 24 && bitWidth != 32 {
+		return nil
+	}
+
+	bytesPerID := int(bitWidth / 8)
+	encodedValues := encodedIDs[1:]
+	// Protect against truncated payloads.
+	if len(encodedValues)%bytesPerID != 0 {
+		return nil
+	}
+
+	decodedIDs := make([]int32, len(encodedValues)/bytesPerID)
+	for idIndex := range decodedIDs {
+		readOffset := idIndex * bytesPerID
+		var unsignedID uint32
+		switch bytesPerID {
+		case 1:
+			unsignedID = uint32(encodedValues[readOffset])
+		case 2:
+			unsignedID = uint32(binary.LittleEndian.Uint16(encodedValues[readOffset:]))
+		case 3:
+			unsignedID = uint32(encodedValues[readOffset]) |
+				uint32(encodedValues[readOffset+1])<<8 |
+				uint32(encodedValues[readOffset+2])<<16
+		case 4:
+			unsignedID = binary.LittleEndian.Uint32(encodedValues[readOffset:])
+		}
+		decodedIDs[idIndex] = int32(unsignedID)
+	}
+
+	return decodedIDs
+}
+
+type Cache struct {
+	db.TableStruct[CacheTable, Cache]
+	EmpresaID    int32
+	ID           int32
+	Key          string
+	ContentBytes []byte
+	Content      string
+	Updated      int32
+}
+
+type CacheTable struct {
+	db.TableStruct[CacheTable, Cache]
+	EmpresaID    db.Col[CacheTable, int32]
+	ID           db.Col[CacheTable, int32]
+	ContentBytes db.Col[CacheTable, []byte]
+	Content      db.Col[CacheTable, string]
+	Updated      db.Col[CacheTable, int32]
+}
+
+func (e CacheTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "cache",
+		Partition: e.EmpresaID,
+		Keys:      []db.Coln{e.ID},
 	}
 }

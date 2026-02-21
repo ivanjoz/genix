@@ -30,10 +30,6 @@ Every `.go` file under `libs/index_builder` is in the build path except `decoder
   - sequential orchestration entrypoint (`BuildProductosIndex`)
   - aggressive product text optimization integration
   - optimization metrics aggregation
-- `text_optimizer.go`
-  - removes brand-token occurrences from product text
-  - removes duplicate tokens
-  - returns per-product optimization stats
 - `taxonomy_pass.go`
   - taxonomy dictionaries and product taxonomy columns
   - brand index encoding mode selection (`uint12` or `uint16`)
@@ -79,12 +75,12 @@ type BuildInput struct {
 }
 ```
 
-### `ProductosIndexBuildArtifacts`
+### `ProductosIndexBuild`
 
 `BuildProductosIndex` returns:
 
-- `TextIndexResult *BuildResult`
-- `TaxonomyIndexResult *TaxonomyBuildResult`
+- Stage-1 text fields (`SortedIDs`, `Shapes`, `Content`, `DictionaryTokens`, `Stats`, etc.)
+- Stage-2 taxonomy fields (`BrandIDs`, `CategoryIDs`, packed indexes, etc.)
 - `OptimizationStats ProductTextOptimizationAggregate`
 
 ## End-to-End Flow
@@ -97,15 +93,14 @@ type BuildInput struct {
 
 Writing combined bytes is done with:
 
-- `MarshalCombinedBinary(textResult, taxonomyResult)`
-- `WriteCombinedBinaryFile(path, textResult, taxonomyResult)`
+- `buildResult.ToBytes()`
 
 ### Phase 1: Product Text Optimization
 
 For each product:
 
 1. Resolve brand name using `BrandID`
-2. Run `OptimizeProductTextAggressive(productText, brandName)`
+2. Inline-remove brand token sequence and duplicate tokens from normalized product text
 3. Collect stats
 4. If optimized text becomes empty, fallback to original product text
 5. Keep same IDs/relations, only replace `Text`
@@ -167,9 +162,9 @@ How it is guaranteed:
 
 ## Text Block Binary
 
-Text block is serialized by `BuildResult.MarshalBinary` with:
+Text block is serialized by `ProductosIndexBuild.MarshalBinary` with:
 
-1. header (`GIXIDX01`, version, flags, record/dictionary counters)
+1. header (`GIXIDX01`, version, flags, record count, build_sunix_time, dictionary counters)
 2. section table entries (section id, offset, length, item count, CRC32 checksum)
 3. dictionary section
 4. shape stream section
@@ -228,7 +223,7 @@ Typical runtime integration:
 1. handler fetches products, brands, categories
 2. map source rows into `BuildInput`
 3. call `BuildProductosIndex`
-4. write output with `WriteCombinedBinaryFile`
+4. call `indexBuild.ToBytes()` and write bytes to disk
 5. log stage stats and optimization aggregate
 
 Output path used by current integration:

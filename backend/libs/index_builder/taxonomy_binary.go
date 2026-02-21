@@ -9,7 +9,7 @@ import (
 
 const (
 	taxonomyBinaryMagic   = "GIXTAX01"
-	taxonomyBinaryVersion = uint8(2)
+	taxonomyBinaryVersion = uint8(1)
 )
 
 type taxonomyBinarySection struct {
@@ -19,32 +19,17 @@ type taxonomyBinarySection struct {
 	itemCount uint32
 }
 
-// WriteCombinedBinaryFile writes stage-1 index bytes plus a trailing stage-2 taxonomy block.
-func WriteCombinedBinaryFile(outputPath string, textBuildResult *BuildResult, taxonomyBuildResult *TaxonomyBuildResult) error {
-	combinedPayload, marshalErr := MarshalCombinedBinary(textBuildResult, taxonomyBuildResult)
-	if marshalErr != nil {
-		return marshalErr
-	}
-	if writeErr := os.WriteFile(outputPath, combinedPayload, 0o644); writeErr != nil {
-		return fmt.Errorf("write combined index file: %w", writeErr)
-	}
-	return nil
-}
-
-// MarshalCombinedBinary serializes stage-1 payload and appends stage-2 taxonomy columns.
-func MarshalCombinedBinary(textBuildResult *BuildResult, taxonomyBuildResult *TaxonomyBuildResult) ([]byte, error) {
-	if textBuildResult == nil {
-		return nil, fmt.Errorf("nil text build result")
-	}
-	if taxonomyBuildResult == nil {
-		return nil, fmt.Errorf("nil taxonomy build result")
+// ToBytes serializes stage-1 payload and appends stage-2 taxonomy columns.
+func (buildResult *ProductosIndexBuild) ToBytes() ([]byte, error) {
+	if buildResult == nil {
+		return nil, fmt.Errorf("nil productos build result")
 	}
 
-	textPayload, marshalTextErr := textBuildResult.MarshalBinary()
+	textPayload, marshalTextErr := buildResult.MarshalBinary()
 	if marshalTextErr != nil {
 		return nil, marshalTextErr
 	}
-	taxonomyPayload, marshalTaxonomyErr := marshalTaxonomyBinary(taxonomyBuildResult)
+	taxonomyPayload, marshalTaxonomyErr := marshalTaxonomyBinary(buildResult)
 	if marshalTaxonomyErr != nil {
 		return nil, marshalTaxonomyErr
 	}
@@ -55,7 +40,26 @@ func MarshalCombinedBinary(textBuildResult *BuildResult, taxonomyBuildResult *Ta
 	return combinedPayload, nil
 }
 
-func marshalTaxonomyBinary(taxonomyBuildResult *TaxonomyBuildResult) ([]byte, error) {
+// WriteCombinedBinaryFile persists the final combined payload to disk.
+// Deprecated abstraction: prefer calling ProductosIndexBuild.ToBytes() and writing explicitly.
+func WriteCombinedBinaryFile(outputPath string, buildResult *ProductosIndexBuild) error {
+	combinedPayload, marshalErr := buildResult.ToBytes()
+	if marshalErr != nil {
+		return marshalErr
+	}
+	if writeErr := os.WriteFile(outputPath, combinedPayload, 0o644); writeErr != nil {
+		return fmt.Errorf("write combined index file: %w", writeErr)
+	}
+	return nil
+}
+
+// MarshalCombinedBinary returns the final combined payload.
+// Deprecated abstraction: prefer calling ProductosIndexBuild.ToBytes().
+func MarshalCombinedBinary(buildResult *ProductosIndexBuild) ([]byte, error) {
+	return buildResult.ToBytes()
+}
+
+func marshalTaxonomyBinary(taxonomyBuildResult *ProductosIndexBuild) ([]byte, error) {
 	if validateErr := taxonomyBuildResult.ValidateForBinary(); validateErr != nil {
 		return nil, validateErr
 	}
@@ -85,8 +89,8 @@ func marshalTaxonomyBinary(taxonomyBuildResult *TaxonomyBuildResult) ([]byte, er
 		{id: 2, name: "brand_names", data: brandNamesSection, itemCount: uint32(len(taxonomyBuildResult.BrandNames))},
 		{id: 3, name: "category_ids", data: categoryIDsSection, itemCount: uint32(len(taxonomyBuildResult.CategoryIDs))},
 		{id: 4, name: "category_names", data: categoryNamesSection, itemCount: uint32(len(taxonomyBuildResult.CategoryNames))},
-		{id: 5, name: "brand_indexes", data: brandIndexesSection, itemCount: uint32(len(taxonomyBuildResult.SortedProductIDs))},
-		{id: 6, name: "category_count", data: taxonomyBuildResult.ProductCategoryCount, itemCount: uint32(len(taxonomyBuildResult.SortedProductIDs))},
+		{id: 5, name: "brand_indexes", data: brandIndexesSection, itemCount: uint32(len(taxonomyBuildResult.SortedIDs))},
+		{id: 6, name: "category_count", data: taxonomyBuildResult.ProductCategoryCount, itemCount: uint32(len(taxonomyBuildResult.SortedIDs))},
 		{id: 7, name: "category_indexes", data: taxonomyBuildResult.ProductCategoryIndexes, itemCount: uint32(len(taxonomyBuildResult.ProductCategoryIndexes))},
 	}
 
@@ -106,11 +110,11 @@ func marshalTaxonomyBinary(taxonomyBuildResult *TaxonomyBuildResult) ([]byte, er
 	payload = append(payload, taxonomyBinaryVersion)
 	payload = append(payload, taxonomyBuildResult.BrandIndexEncodingFlag)
 
-	if len(taxonomyBuildResult.SortedProductIDs) > int(^uint32(0)) {
+	if len(taxonomyBuildResult.SortedIDs) > int(^uint32(0)) {
 		return nil, fmt.Errorf("sorted products count overflows uint32")
 	}
 	var sortedCountBytes [4]byte
-	binary.LittleEndian.PutUint32(sortedCountBytes[:], uint32(len(taxonomyBuildResult.SortedProductIDs)))
+	binary.LittleEndian.PutUint32(sortedCountBytes[:], uint32(len(taxonomyBuildResult.SortedIDs)))
 	payload = append(payload, sortedCountBytes[:]...)
 	payload = append(payload, uint8(len(sections)))
 	if headerSize > 65535 {

@@ -25,11 +25,11 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[s.CajaCuadre](),
 		makeDBController[s.Parametros](),
 		makeDBController[s.SystemParameters](),
+		makeDBController[s.Cache](),
 		makeDBController[comercial.SaleOrder](),
 		makeDBController[comercial.SaleSummary](),
 		makeDBController[db.CacheVersion](),
 		makeDBController[DemoStruct](),
-		//	makeDBController[s.Increment](),
 	}
 }
 

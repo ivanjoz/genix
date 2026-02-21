@@ -14,7 +14,7 @@ import (
 
 const (
 	BinaryMagic   = "GIXIDX01"
-	BinaryVersion = uint8(2)
+	BinaryVersion = uint8(1)
 
 	HeaderFlagDictionaryDelta = uint8(1 << 0)
 	HeaderFlagShapeDelta      = uint8(1 << 1)
@@ -60,17 +60,6 @@ type BuildStats struct {
 	ShapeDelta24Count       int32
 }
 
-type BuildResult struct {
-	SortedIDs []int32
-	Shapes    []byte
-	Content   []byte
-
-	HeaderFlags       uint8
-	DictionaryTokens  []string
-	DictionarySection []byte
-	Stats             BuildStats
-}
-
 func DefaultOptions() BuildOptions {
 	return BuildOptions{
 		MaxWordsPerRecord:   8,
@@ -92,7 +81,7 @@ type encodedRecord struct {
 	shapeV  uint32
 }
 
-func Build(records []RecordInput, options BuildOptions) (*BuildResult, error) {
+func BuildIndex(records []RecordInput, options BuildOptions) (*ProductosIndexBuild, error) {
 	if len(records) == 0 {
 		return nil, fmt.Errorf("no records provided")
 	}
@@ -254,10 +243,12 @@ func Build(records []RecordInput, options BuildOptions) (*BuildResult, error) {
 		shapeCoverageTop255Pct = 100.0 * float32(recordsInTop255) / float32(len(encoded))
 	}
 
-	result := &BuildResult{
-		SortedIDs:         sortedIDs,
-		Shapes:            shapeStream,
-		Content:           content,
+	result := &ProductosIndexBuild{
+		SortedIDs: sortedIDs,
+		Shapes:    shapeStream,
+		Content:   content,
+		// Caller can overwrite this timestamp when persisting the final .idx payload.
+		BuildSunixTime:    0,
 		HeaderFlags:       HeaderFlagShapeDelta | HeaderFlagNumericCompact,
 		DictionaryTokens:  dictionaryTokens,
 		DictionarySection: dictionarySection,
@@ -287,7 +278,7 @@ func Build(records []RecordInput, options BuildOptions) (*BuildResult, error) {
 	return result, nil
 }
 
-func (buildResult *BuildResult) MarshalBinary() ([]byte, error) {
+func (buildResult *ProductosIndexBuild) MarshalBinary() ([]byte, error) {
 	if buildResult == nil {
 		return nil, fmt.Errorf("nil result")
 	}
@@ -311,7 +302,8 @@ func (buildResult *BuildResult) MarshalBinary() ([]byte, error) {
 	}
 
 	const sectionEntrySize = 1 + 4 + 4 + 4 + 4 // section_id + offset + length + item_count + checksum_crc32
-	baseHeaderSize := len(BinaryMagic) + 1 + 1 + 4 + 1 + 1 + 2
+	// Header layout: magic + version + flags + record_count + build_sunix_time + dictionary_count + section_count + header_size.
+	baseHeaderSize := len(BinaryMagic) + 1 + 1 + 4 + 4 + 1 + 1 + 2
 	headerSize := baseHeaderSize + len(sections)*sectionEntrySize
 	payload := make([]byte, 0, headerSize+len(buildResult.DictionarySection)+len(buildResult.Shapes)+len(buildResult.Content))
 	payload = append(payload, []byte(BinaryMagic)...)
@@ -321,6 +313,9 @@ func (buildResult *BuildResult) MarshalBinary() ([]byte, error) {
 	var recordCountBytes [4]byte
 	binary.LittleEndian.PutUint32(recordCountBytes[:], uint32(len(buildResult.SortedIDs)))
 	payload = append(payload, recordCountBytes[:]...)
+	var buildSunixTimeBytes [4]byte
+	binary.LittleEndian.PutUint32(buildSunixTimeBytes[:], uint32(buildResult.BuildSunixTime))
+	payload = append(payload, buildSunixTimeBytes[:]...)
 
 	payload = append(payload, uint8(len(buildResult.DictionaryTokens)))
 	payload = append(payload, uint8(len(sections)))
@@ -358,7 +353,7 @@ func (buildResult *BuildResult) MarshalBinary() ([]byte, error) {
 	return payload, nil
 }
 
-func (buildResult *BuildResult) WriteBinaryFile(outputPath string) error {
+func (buildResult *ProductosIndexBuild) WriteBinaryFile(outputPath string) error {
 	payload, marshalErr := buildResult.MarshalBinary()
 	if marshalErr != nil {
 		return marshalErr

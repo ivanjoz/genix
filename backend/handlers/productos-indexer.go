@@ -17,11 +17,11 @@ const (
 	productSharedListMarcaID     = int32(2)
 	productIndexerCacheTTL       = 15 * time.Minute
 	productIndexerOutputFilePath = "libs/index_builder/productos.idx"
+	productSortedIDsCacheKey     = "productos_sorted_ids"
 )
 
 type ProductosIndexBuildOutput struct {
-	TextIndexResult     *index_builder.BuildResult
-	TaxonomyIndexResult *index_builder.TaxonomyBuildResult
+	IndexBuild *index_builder.ProductosIndexBuild
 }
 
 // BuildProductosSearchIndex builds both index passes from productos:
@@ -78,7 +78,7 @@ func BuildProductosSearchIndex(empresaID int32) (*ProductosIndexBuildOutput, err
 		})
 	}
 
-	core.Log("BuildProductosSearchIndex:: productos:", len(productosData.Productos),
+	core.Log("BuildIndex:: productos:", len(productosData.Productos),
 		"| marcas únicas:", len(brandIndexRecords),
 		"| categorías únicas:", len(categoryIndexRecords))
 	buildInput := index_builder.BuildInput{
@@ -88,47 +88,95 @@ func BuildProductosSearchIndex(empresaID int32) (*ProductosIndexBuildOutput, err
 	if buildErr != nil {
 		return nil, fmt.Errorf("error al construir índice de productos: %w", buildErr)
 	}
-	core.Log("BuildProductosSearchIndex:: text optimization",
+	core.Log("BuildIndex:: text optimization",
 		"| changed:", indexBuildArtifacts.OptimizationStats.ChangedProducts,
-		"| fallbackOriginal:", indexBuildArtifacts.OptimizationStats.FallbackOriginalProducts,
-		"| removedBrandOccurrences:", indexBuildArtifacts.OptimizationStats.RemovedBrandOccurrences,
-		"| removedDuplicateTokens:", indexBuildArtifacts.OptimizationStats.RemovedDuplicateTokens,
-		"| normalizedTokensBefore:", indexBuildArtifacts.OptimizationStats.NormalizedTokensBefore,
-		"| normalizedTokensAfter:", indexBuildArtifacts.OptimizationStats.NormalizedTokensAfter)
+		"| fallbackOriginal:", indexBuildArtifacts.OptimizationStats.FallbackOriginalProducts)
 
-	stageOneIndexResult := indexBuildArtifacts.TextIndexResult
-	core.Log("BuildProductosSearchIndex:: stage 1 completado",
-		"| sorted IDs:", len(stageOneIndexResult.SortedIDs),
-		"| dict:", stageOneIndexResult.Stats.DictionaryCount,
-		"| shapes bytes:", stageOneIndexResult.Stats.ShapesBytes,
-		"| content bytes:", stageOneIndexResult.Stats.ContentBytes,
-		"| total bytes:", stageOneIndexResult.Stats.TotalBytes)
+	stageOneIndexResult := indexBuildArtifacts
+	core.Log("BuildIndex:: stage1.sorted_ids_count:", len(stageOneIndexResult.SortedIDs))
+	core.Log("BuildIndex:: stage1.dictionary_count:", stageOneIndexResult.Stats.DictionaryCount)
+	core.Log("BuildIndex:: stage1.shapes_bytes:", stageOneIndexResult.Stats.ShapesBytes)
+	core.Log("BuildIndex:: stage1.content_bytes:", stageOneIndexResult.Stats.ContentBytes)
+	core.Log("BuildIndex:: stage1.total_bytes:", stageOneIndexResult.Stats.TotalBytes)
 
-	stageTwoIndexResult := indexBuildArtifacts.TaxonomyIndexResult
-	core.Log("BuildProductosSearchIndex:: stage 2 completado",
-		"| brandIDs:", len(stageTwoIndexResult.BrandIDs),
-		"| categoryIDs:", len(stageTwoIndexResult.CategoryIDs),
-		"| brandIdxMode:", stageTwoIndexResult.BrandIndexEncodingName(),
-		"| brandIdxFlag:", stageTwoIndexResult.BrandIndexEncodingFlag,
-		"| brandIdxCount:", stageTwoIndexResult.ProductBrandIndexesCount(),
-		"| brandIdxBytes:", stageTwoIndexResult.ProductBrandIndexesBytes(),
-		"| catCountPacked:", len(stageTwoIndexResult.ProductCategoryCount),
-		"| catIndexes:", len(stageTwoIndexResult.ProductCategoryIndexes))
-	// Persist stage-1 + stage-2 using the shared combined-binary writer.
-	if writeIndexErr := index_builder.WriteCombinedBinaryFile(
-		productIndexerOutputFilePath,
-		stageOneIndexResult,
-		stageTwoIndexResult,
-	); writeIndexErr != nil {
+	stageTwoIndexResult := indexBuildArtifacts
+	// Persist build time in the text header so the final .idx carries one explicit freshness slot.
+	stageOneIndexResult.BuildSunixTime = core.SUnixTime()
+
+	brandNamesBytes := 0
+	for _, currentBrandName := range stageTwoIndexResult.BrandNames {
+		// String column format: 1-byte length prefix + utf8 bytes.
+		brandNamesBytes += 1 + len([]byte(currentBrandName))
+	}
+	categoryNamesBytes := 0
+	for _, currentCategoryName := range stageTwoIndexResult.CategoryNames {
+		// String column format: 1-byte length prefix + utf8 bytes.
+		categoryNamesBytes += 1 + len([]byte(currentCategoryName))
+	}
+	core.Log("BuildIndex:: stage2.build_sunix_time:", stageOneIndexResult.BuildSunixTime)
+	core.Log("BuildIndex:: stage2.brand_unique_ids_count:", len(stageTwoIndexResult.BrandIDs))
+	core.Log("BuildIndex:: stage2.brand_names_bytes:", brandNamesBytes)
+	core.Log("BuildIndex:: stage2.brand_index_bytes:", stageTwoIndexResult.ProductBrandIndexesBytes())
+	core.Log("BuildIndex:: stage2.category_unique_count:", len(stageTwoIndexResult.CategoryIDs))
+	core.Log("BuildIndex:: stage2.category_names_bytes:", categoryNamesBytes)
+	core.Log("BuildIndex:: stage2.category_index_bytes:", len(stageTwoIndexResult.ProductCategoryIndexes))
+
+	combinedIndexBytes, indexBytesErr := stageOneIndexResult.ToBytes()
+	if indexBytesErr != nil {
+		return nil, fmt.Errorf("error al serializar índice combinado de productos: %w", indexBytesErr)
+	}
+	core.Log("BuildIndex:: final.total_bytes_stage1_plus_stage2:", len(combinedIndexBytes))
+	// Persist final binary bytes generated by ProductosIndexBuild.ToBytes.
+	if writeIndexErr := os.WriteFile(productIndexerOutputFilePath, combinedIndexBytes, 0o644); writeIndexErr != nil {
 		return nil, fmt.Errorf("error al guardar archivo índice productos en %s: %w", productIndexerOutputFilePath, writeIndexErr)
 	}
-	core.Log("BuildProductosSearchIndex:: archivo índice actualizado:", productIndexerOutputFilePath)
-	core.Log("BuildProductosSearchIndex:: completado")
+
+	if persistSortedIDsErr := persistProductosSortedIDsCache(empresaID, stageOneIndexResult.SortedIDs); persistSortedIDsErr != nil {
+		return nil, persistSortedIDsErr
+	}
+	core.Log("BuildIndex:: archivo índice actualizado:", productIndexerOutputFilePath)
+	core.Log("BuildIndex:: completado")
 
 	return &ProductosIndexBuildOutput{
-		TextIndexResult:     stageOneIndexResult,
-		TaxonomyIndexResult: stageTwoIndexResult,
+		IndexBuild: stageOneIndexResult,
 	}, nil
+}
+
+func persistProductosSortedIDsCache(empresaID int32, sortedProductIDs []int32) error {
+	if empresaID <= 0 {
+		return fmt.Errorf("empresa ID inválido para guardar sorted IDs de productos")
+	}
+	if len(sortedProductIDs) == 0 {
+		return fmt.Errorf("no hay sorted IDs de productos para guardar")
+	}
+
+	encodedSortedIDs := s.EncodeIDs(sortedProductIDs)
+	// Cache row ID is deterministic per semantic key, isolated by EmpresaID partition.
+	cacheRecordID := core.BasicHashInt(productSortedIDsCacheKey)
+	if cacheRecordID < 0 {
+		cacheRecordID *= -1
+	}
+	if cacheRecordID == 0 {
+		cacheRecordID = 1
+	}
+
+	cacheRow := s.Cache{
+		EmpresaID:    empresaID,
+		ID:           cacheRecordID,
+		Key:          productSortedIDsCacheKey,
+		ContentBytes: encodedSortedIDs,
+		Updated:      core.SUnixTime(),
+	}
+	if insertErr := db.Insert(&[]s.Cache{cacheRow}); insertErr != nil {
+		return fmt.Errorf("error al guardar sorted IDs de productos en cache (empresa=%d, cache_id=%d): %w", empresaID, cacheRecordID, insertErr)
+	}
+
+	core.Log("BuildIndex:: sorted IDs cache actualizado",
+		"| key:", productSortedIDsCacheKey,
+		"| cacheID:", cacheRecordID,
+		"| count:", len(sortedProductIDs),
+		"| encodedBytes:", len(encodedSortedIDs))
+	return nil
 }
 
 type ProductosData struct {
@@ -142,7 +190,7 @@ func loadIndexerSourceDataWithCache(
 ) (ProductosData, error) {
 	cacheFilePath := filepath.Join("tmp", fmt.Sprintf("productos-indexer-%d.gob", empresaID))
 	if cachedPayload, cacheHit, cacheErr := loadProductosIndexerCache(cacheFilePath); cacheErr == nil && cacheHit {
-		core.Log("BuildProductosSearchIndex:: cache hit:", cacheFilePath, "| productos:", len(cachedPayload.Productos))
+		core.Log("BuildIndex:: cache hit:", cacheFilePath, "| productos:", len(cachedPayload.Productos))
 		return cachedPayload, nil
 	}
 
@@ -185,19 +233,19 @@ func loadIndexerSourceDataWithCache(
 
 	// Persist the full source payload as a short-lived cache to avoid repeated DB scans.
 	if mkdirErr := os.MkdirAll(filepath.Dir(cacheFilePath), 0o755); mkdirErr != nil {
-		core.Log("BuildProductosSearchIndex:: no se pudo crear carpeta cache:", mkdirErr)
+		core.Log("BuildIndex:: no se pudo crear carpeta cache:", mkdirErr)
 		return productosData, nil
 	}
 	cacheFile, createErr := os.Create(cacheFilePath)
 	if createErr != nil {
-		core.Log("BuildProductosSearchIndex:: no se pudo crear archivo cache:", createErr)
+		core.Log("BuildIndex:: no se pudo crear archivo cache:", createErr)
 		return productosData, nil
 	}
 	defer cacheFile.Close()
 
 	cacheEncoder := gob.NewEncoder(cacheFile)
 	if encodeErr := cacheEncoder.Encode(productosData); encodeErr != nil {
-		core.Log("BuildProductosSearchIndex:: no se pudo serializar cache gob:", encodeErr)
+		core.Log("BuildIndex:: no se pudo serializar cache gob:", encodeErr)
 	}
 
 	core.Log("loadIndexerSourceDataWithCache:: marcas:", len(marcas), "| categorías:", len(categorias))

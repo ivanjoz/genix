@@ -26,49 +26,29 @@ type BuildInput struct {
 	Categories []RecordInput
 }
 
-// TaxonomyBuildResult stores columnar taxonomy sections aligned to sorted products.
-type TaxonomyBuildResult struct {
-	SortedProductIDs []int32
-
-	BrandIDs   []uint16
-	BrandNames []string
-
-	CategoryIDs   []uint16
-	CategoryNames []string
-
-	// BrandIndexEncodingFlag selects product brand-index column format.
-	// 1 => ProductBrandIndexesUint12Packed
-	// 2 => ProductBrandIndexesUint16
-	BrandIndexEncodingFlag uint8
-	// ProductBrandIndexesUint12Packed stores 2 indexes per 3 bytes.
-	ProductBrandIndexesUint12Packed []uint8
-	// ProductBrandIndexesUint16 stores one uint16 per product row.
-	ProductBrandIndexesUint16 []uint16
-
-	// ProductCategoryCount stores 2-bit counters (count-1) packed in groups of 4 products per byte.
-	ProductCategoryCount []uint8
-	// ProductCategoryIndexes stores flattened mapped category indexes, consumed using ProductCategoryCount.
-	ProductCategoryIndexes []uint8
-}
-
 type rankedCategoryRow struct {
 	categoryID int32
 	usageCount int
 }
 
-// BuildTaxonomySecondPass builds taxonomy columns aligned to stage-1 SortedIDs.
-func BuildTaxonomySecondPass(sortedProductIDs []int32, input BuildInput) (*TaxonomyBuildResult, error) {
+// BuildTaxonomySecondPass builds taxonomy columns aligned to stage-1 SortedIDs and
+// fills the same ProductosIndexBuild instance in-place.
+func BuildTaxonomySecondPass(indexBuild *ProductosIndexBuild, input BuildInput) error {
+	if indexBuild == nil {
+		return fmt.Errorf("taxonomy pass requires non-nil index build")
+	}
+	sortedProductIDs := indexBuild.SortedIDs
 	if len(sortedProductIDs) == 0 {
-		return nil, fmt.Errorf("taxonomy pass requires non-empty sorted product IDs")
+		return fmt.Errorf("taxonomy pass requires non-empty sorted product IDs")
 	}
 	if len(input.Products) == 0 {
-		return nil, fmt.Errorf("taxonomy pass requires products")
+		return fmt.Errorf("taxonomy pass requires products")
 	}
 
 	productByID := make(map[int32]RecordInput, len(input.Products))
 	for _, productRecord := range input.Products {
 		if _, alreadyExists := productByID[productRecord.ID]; alreadyExists {
-			return nil, fmt.Errorf("duplicated product ID=%d", productRecord.ID)
+			return fmt.Errorf("duplicated product ID=%d", productRecord.ID)
 		}
 		productByID[productRecord.ID] = productRecord
 	}
@@ -77,18 +57,18 @@ func BuildTaxonomySecondPass(sortedProductIDs []int32, input BuildInput) (*Taxon
 	for _, sortedProductID := range sortedProductIDs {
 		productRecord, exists := productByID[sortedProductID]
 		if !exists {
-			return nil, fmt.Errorf("sorted product ID=%d not found in taxonomy products", sortedProductID)
+			return fmt.Errorf("sorted product ID=%d not found in taxonomy products", sortedProductID)
 		}
 		productsInSortedOrder = append(productsInSortedOrder, productRecord)
 	}
 
 	brandNameByID, brandNameErr := buildNameLookupByID(input.Brands, "brand")
 	if brandNameErr != nil {
-		return nil, brandNameErr
+		return brandNameErr
 	}
 	categoryNameByID, categoryNameErr := buildNameLookupByID(input.Categories, "category")
 	if categoryNameErr != nil {
-		return nil, categoryNameErr
+		return categoryNameErr
 	}
 
 	// Build brand dictionary by first appearance in the stage-1 sorted product sequence.
@@ -105,10 +85,10 @@ func BuildTaxonomySecondPass(sortedProductIDs []int32, input BuildInput) (*Taxon
 
 		brandName, brandExists := brandNameByID[productRecord.BrandID]
 		if !brandExists {
-			return nil, fmt.Errorf("product ID=%d references unknown brand ID=%d", productRecord.ID, productRecord.BrandID)
+			return fmt.Errorf("product ID=%d references unknown brand ID=%d", productRecord.ID, productRecord.BrandID)
 		}
 		if productRecord.BrandID < 0 || productRecord.BrandID > 65535 {
-			return nil, fmt.Errorf("brand ID=%d overflows uint16", productRecord.BrandID)
+			return fmt.Errorf("brand ID=%d overflows uint16", productRecord.BrandID)
 		}
 
 		newBrandIndex := len(orderedBrandIDs)
@@ -123,7 +103,7 @@ func BuildTaxonomySecondPass(sortedProductIDs []int32, input BuildInput) (*Taxon
 		len(orderedBrandIDs),
 	)
 	if encodeBrandIndexesErr != nil {
-		return nil, encodeBrandIndexesErr
+		return encodeBrandIndexesErr
 	}
 
 	// Rank categories by usage frequency, then category ID for deterministic ties.
@@ -162,11 +142,11 @@ func BuildTaxonomySecondPass(sortedProductIDs []int32, input BuildInput) (*Taxon
 	for rowIndex := 0; rowIndex < topCategoriesCount; rowIndex++ {
 		categoryID := rankedCategories[rowIndex].categoryID
 		if categoryID < 0 || categoryID > 65535 {
-			return nil, fmt.Errorf("category ID=%d overflows uint16", categoryID)
+			return fmt.Errorf("category ID=%d overflows uint16", categoryID)
 		}
 		categoryName, hasCategoryName := categoryNameByID[categoryID]
 		if !hasCategoryName {
-			return nil, fmt.Errorf("missing category name for category ID=%d", categoryID)
+			return fmt.Errorf("missing category name for category ID=%d", categoryID)
 		}
 		categoryIDs[rowIndex] = uint16(categoryID)
 		categoryNames[rowIndex] = categoryName
@@ -175,6 +155,7 @@ func BuildTaxonomySecondPass(sortedProductIDs []int32, input BuildInput) (*Taxon
 
 	productCategoryCountMinusOne := make([]uint8, 0, len(productsInSortedOrder))
 	productCategoryIndexes := make([]uint8, 0, len(productsInSortedOrder)*2)
+
 	for _, productRecord := range productsInSortedOrder {
 		uniqueMappedCategories := make([]uint8, 0, maxCategoriesPerProduct)
 		seenMappedCategory := make(map[uint8]struct{}, len(productRecord.CategoriesIDs))
@@ -204,21 +185,19 @@ func BuildTaxonomySecondPass(sortedProductIDs []int32, input BuildInput) (*Taxon
 
 	packedCategoryCount, packErr := packTwoBitCategoryCounts(productCategoryCountMinusOne)
 	if packErr != nil {
-		return nil, packErr
+		return packErr
 	}
-
-	return &TaxonomyBuildResult{
-		SortedProductIDs:                append([]int32(nil), sortedProductIDs...),
-		BrandIDs:                        orderedBrandIDs,
-		BrandNames:                      orderedBrandNames,
-		CategoryIDs:                     categoryIDs,
-		CategoryNames:                   categoryNames,
-		BrandIndexEncodingFlag:          brandIndexEncodingFlag,
-		ProductBrandIndexesUint12Packed: packedBrandIndexesUint12,
-		ProductBrandIndexesUint16:       productBrandIndexesUint16,
-		ProductCategoryCount:            packedCategoryCount,
-		ProductCategoryIndexes:          productCategoryIndexes,
-	}, nil
+	// Enrich the same build struct created by stage-1 with taxonomy columns.
+	indexBuild.BrandIDs = orderedBrandIDs
+	indexBuild.BrandNames = orderedBrandNames
+	indexBuild.CategoryIDs = categoryIDs
+	indexBuild.CategoryNames = categoryNames
+	indexBuild.BrandIndexEncodingFlag = brandIndexEncodingFlag
+	indexBuild.ProductBrandIndexesUint12Packed = packedBrandIndexesUint12
+	indexBuild.ProductBrandIndexesUint16 = productBrandIndexesUint16
+	indexBuild.ProductCategoryCount = packedCategoryCount
+	indexBuild.ProductCategoryIndexes = productCategoryIndexes
+	return nil
 }
 
 func buildNameLookupByID(records []RecordInput, entityLabel string) (map[int32]string, error) {
@@ -261,15 +240,15 @@ func encodeProductBrandIndexes(productBrandIndexes []int, uniqueBrandCount int) 
 	return BrandIndexEncodingUint16, nil, encodedIndexes, nil
 }
 
-func (taxonomyBuildResult *TaxonomyBuildResult) ProductBrandIndexesCount() int {
+func (taxonomyBuildResult *ProductosIndexBuild) ProductBrandIndexesCount() int {
 	if taxonomyBuildResult == nil {
 		return 0
 	}
 	// Product brand indexes are aligned 1:1 with sorted products.
-	return len(taxonomyBuildResult.SortedProductIDs)
+	return len(taxonomyBuildResult.SortedIDs)
 }
 
-func (taxonomyBuildResult *TaxonomyBuildResult) ProductBrandIndexesBytes() int {
+func (taxonomyBuildResult *ProductosIndexBuild) ProductBrandIndexesBytes() int {
 	if taxonomyBuildResult == nil {
 		return 0
 	}
@@ -283,7 +262,7 @@ func (taxonomyBuildResult *TaxonomyBuildResult) ProductBrandIndexesBytes() int {
 	}
 }
 
-func (taxonomyBuildResult *TaxonomyBuildResult) BrandIndexEncodingName() string {
+func (taxonomyBuildResult *ProductosIndexBuild) BrandIndexEncodingName() string {
 	if taxonomyBuildResult == nil {
 		return "unknown"
 	}
@@ -297,11 +276,11 @@ func (taxonomyBuildResult *TaxonomyBuildResult) BrandIndexEncodingName() string 
 	}
 }
 
-func (taxonomyBuildResult *TaxonomyBuildResult) ValidateForBinary() error {
+func (taxonomyBuildResult *ProductosIndexBuild) ValidateForBinary() error {
 	if taxonomyBuildResult == nil {
 		return fmt.Errorf("nil taxonomy result")
 	}
-	if len(taxonomyBuildResult.SortedProductIDs) == 0 {
+	if len(taxonomyBuildResult.SortedIDs) == 0 {
 		return fmt.Errorf("taxonomy payload requires sorted product IDs")
 	}
 	if len(taxonomyBuildResult.BrandIDs) != len(taxonomyBuildResult.BrandNames) {
@@ -311,7 +290,7 @@ func (taxonomyBuildResult *TaxonomyBuildResult) ValidateForBinary() error {
 		return fmt.Errorf("category dictionary columns length mismatch")
 	}
 
-	productCount := len(taxonomyBuildResult.SortedProductIDs)
+	productCount := len(taxonomyBuildResult.SortedIDs)
 	switch taxonomyBuildResult.BrandIndexEncodingFlag {
 	case BrandIndexEncodingUint12:
 		if len(taxonomyBuildResult.ProductBrandIndexesUint16) > 0 {

@@ -30,7 +30,7 @@ func TestDecodeBinary_Sample50PrintBrandAndCategories(t *testing.T) {
 
 	decodedResult, decodeErr := DecodeBinary(indexBytes)
 	if decodeErr != nil {
-		// This fixture can be stale while format is evolving; strict decoder supports only current v2.
+		// This fixture can be stale while format is evolving; strict decoder supports only the current format.
 		if strings.Contains(decodeErr.Error(), "unsupported text version=") {
 			t.Skipf("fixture is not current format v%d: %v", BinaryVersion, decodeErr)
 		}
@@ -61,7 +61,7 @@ func TestDecodeBinary_Sample50PrintBrandAndCategories(t *testing.T) {
 	}
 }
 
-func TestDecodeBinary_V2CombinedRoundtrip(t *testing.T) {
+func TestDecodeBinary_CombinedRoundtrip(t *testing.T) {
 	buildInput := BuildInput{
 		Products: []RecordInput{
 			{ID: 101, Text: "Leche Entera 1L", BrandID: 1, CategoriesIDs: []int32{10, 11}},
@@ -84,9 +84,9 @@ func TestDecodeBinary_V2CombinedRoundtrip(t *testing.T) {
 	if buildErr != nil {
 		t.Fatalf("build productos index: %v", buildErr)
 	}
-	combinedPayload, marshalErr := MarshalCombinedBinary(artifacts.TextIndexResult, artifacts.TaxonomyIndexResult)
-	if marshalErr != nil {
-		t.Fatalf("marshal combined binary: %v", marshalErr)
+	combinedPayload, toBytesErr := artifacts.ToBytes()
+	if toBytesErr != nil {
+		t.Fatalf("build combined bytes: %v", toBytesErr)
 	}
 	if len(combinedPayload) == 0 {
 		t.Fatalf("combined payload should not be empty")
@@ -94,13 +94,13 @@ func TestDecodeBinary_V2CombinedRoundtrip(t *testing.T) {
 
 	decodedResult, decodeErr := DecodeBinary(combinedPayload)
 	if decodeErr != nil {
-		t.Fatalf("decode combined v2 payload: %v", decodeErr)
+		t.Fatalf("decode combined payload: %v", decodeErr)
 	}
 	if decodedResult.Stats.RecordCount != int32(len(decodedResult.Records)) {
 		t.Fatalf("record count mismatch stats=%d rows=%d", decodedResult.Stats.RecordCount, len(decodedResult.Records))
 	}
 	if decodedResult.Taxonomy == nil {
-		t.Fatalf("taxonomy should exist in combined v2 payload")
+		t.Fatalf("taxonomy should exist in combined payload")
 	}
 	if decodedResult.Stats.DictionaryBytes <= 0 || decodedResult.Stats.ShapesBytes <= 0 || decodedResult.Stats.ContentBytes <= 0 {
 		t.Fatalf("text section stats must be positive")

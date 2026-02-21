@@ -26,7 +26,7 @@ func main() {
 	options.MaxSyllablesPerWord = int32(*maxSyllablesPerWord)
 	options.MaxDictionarySlots = int32(*maxSlots)
 
-	result, buildErr := index_builder.Build(records, options)
+	result, buildErr := index_builder.BuildIndex(records, options)
 	if buildErr != nil {
 		log.Fatalf("index_builder: build failed: %v", buildErr)
 	}

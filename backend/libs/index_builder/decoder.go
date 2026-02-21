@@ -47,6 +47,7 @@ type DecodedTaxonomy struct {
 
 type DecodeStats struct {
 	RecordCount       int32
+	BuildSunixTime    int32
 	DictionaryCount   int32
 	DictionaryBytes   int32
 	ShapesBytes       int32
@@ -77,7 +78,7 @@ type binarySectionDescriptor struct {
 }
 
 func DecodeBinary(indexBytes []byte) (*DecodeResult, error) {
-	textHeader, textHeaderErr := decodeTextHeaderV2(indexBytes)
+	textHeader, textHeaderErr := decodeTextHeader(indexBytes)
 	if textHeaderErr != nil {
 		return nil, textHeaderErr
 	}
@@ -113,6 +114,7 @@ func DecodeBinary(indexBytes []byte) (*DecodeResult, error) {
 		Records:          decodedRecords,
 		Stats: DecodeStats{
 			RecordCount:       textHeader.recordCount,
+			BuildSunixTime:    textHeader.buildSunixTime,
 			DictionaryCount:   textHeader.dictionaryCount,
 			DictionaryBytes:   int32(len(dictionarySection)),
 			ShapesBytes:       int32(len(shapeSection)),
@@ -127,7 +129,7 @@ func DecodeBinary(indexBytes []byte) (*DecodeResult, error) {
 		return decodeResult, nil
 	}
 
-	decodedTaxonomy, taxonomyBytes, taxonomyErr := decodeTaxonomyBlockV2(indexBytes[textHeader.payloadEnd:], int(textHeader.recordCount))
+	decodedTaxonomy, taxonomyBytes, taxonomyErr := decodeTaxonomyBlock(indexBytes[textHeader.payloadEnd:], int(textHeader.recordCount))
 	if taxonomyErr != nil {
 		return nil, taxonomyErr
 	}
@@ -147,13 +149,15 @@ func DecodeBinary(indexBytes []byte) (*DecodeResult, error) {
 
 type decodedTextHeader struct {
 	recordCount     int32
+	buildSunixTime  int32
 	dictionaryCount int32
 	sectionsByID    map[uint8]binarySectionDescriptor
 	payloadEnd      int
 }
 
-func decodeTextHeaderV2(indexBytes []byte) (*decodedTextHeader, error) {
-	const baseHeaderSize = len(BinaryMagic) + 1 + 1 + 4 + 1 + 1 + 2
+func decodeTextHeader(indexBytes []byte) (*decodedTextHeader, error) {
+	// Header layout: magic + version + flags + record_count + build_sunix_time + dictionary_count + section_count + header_size.
+	const baseHeaderSize = len(BinaryMagic) + 1 + 1 + 4 + 4 + 1 + 1 + 2
 	if len(indexBytes) < baseHeaderSize {
 		return nil, fmt.Errorf("index too small bytes=%d", len(indexBytes))
 	}
@@ -169,6 +173,8 @@ func decodeTextHeaderV2(indexBytes []byte) (*decodedTextHeader, error) {
 	cursor++
 
 	recordCount := int32(binary.LittleEndian.Uint32(indexBytes[cursor : cursor+4]))
+	cursor += 4
+	buildSunixTime := int32(binary.LittleEndian.Uint32(indexBytes[cursor : cursor+4]))
 	cursor += 4
 	dictionaryCount := int32(indexBytes[cursor])
 	cursor++
@@ -211,6 +217,7 @@ func decodeTextHeaderV2(indexBytes []byte) (*decodedTextHeader, error) {
 
 	return &decodedTextHeader{
 		recordCount:     recordCount,
+		buildSunixTime:  buildSunixTime,
 		dictionaryCount: dictionaryCount,
 		sectionsByID:    sectionsByID,
 		payloadEnd:      payloadEnd,
@@ -425,7 +432,7 @@ func decodeContentRecords(content []byte, shapes [][]uint8, dictionaryTokens []s
 	return decodedRecords, nil
 }
 
-func decodeTaxonomyBlockV2(taxonomyBytes []byte, expectedProductCount int) (*DecodedTaxonomy, int, error) {
+func decodeTaxonomyBlock(taxonomyBytes []byte, expectedProductCount int) (*DecodedTaxonomy, int, error) {
 	const baseTaxonomyHeaderSize = len(taxonomyBinaryMagic) + 1 + 1 + 4 + 1 + 2
 	if len(taxonomyBytes) < baseTaxonomyHeaderSize {
 		return nil, 0, fmt.Errorf("taxonomy section too small bytes=%d", len(taxonomyBytes))

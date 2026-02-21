@@ -2,67 +2,54 @@ package index_builder
 
 import "testing"
 
-func TestOptimizeProductTextAggressive_RemovesAllBrandOccurrencesAndDedupes(t *testing.T) {
-	optimizedText, optimizationStats := OptimizeProductTextAggressive(
-		"Coca Cola Zero Coca Cola 500ml zero",
-		"COCA COLA",
-	)
+func TestRemoveAllTokenSequenceOccurrences_RemovesRepeatedBrandSequence(t *testing.T) {
+	productTokens := splitNormalizedTokens("Coca Cola Zero Coca Cola 500ml zero")
+	brandTokens := splitNormalizedTokens("COCA COLA")
 
-	if optimizedText != "zero 500ml" {
-		t.Fatalf("unexpected optimized text: %q", optimizedText)
+	filteredTokens, removedOccurrences := removeAllTokenSequenceOccurrences(productTokens, brandTokens)
+	if removedOccurrences != 2 {
+		t.Fatalf("expected 2 brand occurrences removed, got=%d", removedOccurrences)
 	}
-	if optimizationStats.RemovedBrandOccurrences != 2 {
-		t.Fatalf("expected 2 brand occurrences removed, got=%d", optimizationStats.RemovedBrandOccurrences)
-	}
-	if optimizationStats.RemovedDuplicateTokens != 1 {
-		t.Fatalf("expected 1 duplicate token removed, got=%d", optimizationStats.RemovedDuplicateTokens)
-	}
-	if !optimizationStats.Changed {
-		t.Fatalf("expected changed=true")
+	if len(filteredTokens) != 3 || filteredTokens[0] != "zero" || filteredTokens[1] != "500ml" || filteredTokens[2] != "zero" {
+		t.Fatalf("unexpected filtered tokens: %#v", filteredTokens)
 	}
 }
 
-func TestOptimizeProductTextAggressive_MatchesAccentsAndCase(t *testing.T) {
-	optimizedText, optimizationStats := OptimizeProductTextAggressive(
-		"Café Perú Tostado CAFE PERU",
-		"cafe peru",
-	)
+func TestSplitNormalizedTokens_MatchesAccentsAndCase(t *testing.T) {
+	productTokens := splitNormalizedTokens("Café Perú Tostado CAFE PERU")
+	brandTokens := splitNormalizedTokens("cafe peru")
 
-	if optimizedText != "tostado" {
-		t.Fatalf("unexpected optimized text: %q", optimizedText)
+	filteredTokens, removedOccurrences := removeAllTokenSequenceOccurrences(productTokens, brandTokens)
+	if removedOccurrences != 2 {
+		t.Fatalf("expected 2 brand occurrences removed, got=%d", removedOccurrences)
 	}
-	if optimizationStats.RemovedBrandOccurrences != 2 {
-		t.Fatalf("expected 2 brand occurrences removed, got=%d", optimizationStats.RemovedBrandOccurrences)
+	if len(filteredTokens) != 1 || filteredTokens[0] != "tostado" {
+		t.Fatalf("unexpected filtered tokens: %#v", filteredTokens)
 	}
 }
 
-func TestOptimizeProductTextAggressive_DoesNotRemoveSubstrings(t *testing.T) {
-	optimizedText, optimizationStats := OptimizeProductTextAggressive(
-		"detergente soluble 500ml",
-		"sol",
-	)
+func TestRemoveAllTokenSequenceOccurrences_DoesNotRemoveSubstrings(t *testing.T) {
+	productTokens := splitNormalizedTokens("detergente soluble 500ml")
+	brandTokens := splitNormalizedTokens("sol")
 
-	if optimizedText != "detergente soluble 500ml" {
-		t.Fatalf("unexpected optimized text: %q", optimizedText)
+	filteredTokens, removedOccurrences := removeAllTokenSequenceOccurrences(productTokens, brandTokens)
+	if removedOccurrences != 0 {
+		t.Fatalf("expected 0 removed occurrences, got=%d", removedOccurrences)
 	}
-	if optimizationStats.RemovedBrandOccurrences != 0 {
-		t.Fatalf("expected 0 removed brand occurrences, got=%d", optimizationStats.RemovedBrandOccurrences)
-	}
-	if optimizationStats.Changed {
-		t.Fatalf("expected changed=false")
+	if len(filteredTokens) != 3 || filteredTokens[0] != "detergente" || filteredTokens[1] != "soluble" || filteredTokens[2] != "500ml" {
+		t.Fatalf("unexpected filtered tokens: %#v", filteredTokens)
 	}
 }
 
-func TestOptimizeProductTextAggressive_AllowsEmptyResult(t *testing.T) {
-	optimizedText, optimizationStats := OptimizeProductTextAggressive(
-		"ab ab",
-		"ab",
-	)
+func TestRemoveAllTokenSequenceOccurrences_AllowsEmptyResult(t *testing.T) {
+	productTokens := splitNormalizedTokens("ab ab")
+	brandTokens := splitNormalizedTokens("ab")
 
-	if optimizedText != "" {
-		t.Fatalf("expected empty optimized text, got=%q", optimizedText)
+	filteredTokens, removedOccurrences := removeAllTokenSequenceOccurrences(productTokens, brandTokens)
+	if removedOccurrences != 2 {
+		t.Fatalf("expected 2 removed occurrences, got=%d", removedOccurrences)
 	}
-	if optimizationStats.RemovedBrandOccurrences != 2 {
-		t.Fatalf("expected 2 removed occurrences, got=%d", optimizationStats.RemovedBrandOccurrences)
+	if len(filteredTokens) != 0 {
+		t.Fatalf("expected empty filtered tokens, got=%#v", filteredTokens)
 	}
 }
