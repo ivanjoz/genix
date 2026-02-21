@@ -142,7 +142,7 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 	empresaPublicBytes, _ := json.Marshal(empresaPublic)
 	core.Log("Guardando::", string(empresaPublicBytes))
 
-	aws.SendFileToS3(aws.FileToS3Args{
+	aws.SaveFile(aws.SaveFileArgs{
 		Bucket:      core.Env.S3_BUCKET,
 		Path:        "empresas",
 		FileContent: empresaPublicBytes,

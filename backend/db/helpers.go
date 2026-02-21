@@ -44,7 +44,12 @@ func IncrementLogCount() {
 func BasicHashInt(s string) int32 {
 	h := fnv.New32a()
 	h.Write([]byte(s))
-	return int32(h.Sum32())
+	hashValue := int32(h.Sum32())
+	// Keep hash deterministic while reserving 0 as an invalid/sentinel ID.
+	if hashValue == 0 {
+		return 1
+	}
+	return hashValue
 }
 
 const base64Chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/"

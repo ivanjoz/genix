@@ -5,6 +5,21 @@ const MAIN_PORT = 3570;
 const STORE_PORT = 3571;
 const PROXY_PORT = 3572;
 
+// Parse only the pathname so query strings like /store?p=... still route to Store.
+const getRequestPathname = (requestUrl = '/') => {
+  try {
+    return new URL(requestUrl, 'http://localhost').pathname;
+  } catch {
+    return requestUrl.split('?')[0] || '/';
+  }
+};
+
+// Match all Store entry points: /store, /store/, and any nested path under /store.
+const isStoreRequest = (requestUrl = '/') => {
+  const requestPathname = getRequestPathname(requestUrl);
+  return requestPathname === '/store' || requestPathname.startsWith('/store/');
+};
+
 // Create proxy instances for each target
 const mainProxy = httpProxy.createProxyServer({
   target: `http://localhost:${MAIN_PORT}`,
@@ -66,7 +81,7 @@ storeProxy.on('proxyErrorWs', (err, req, socket) => {
 
 // Create main HTTP server
 const server = http.createServer((req, res) => {
-  const isStore = req.url === '/store' || req.url.startsWith('/store/');
+  const isStore = isStoreRequest(req.url);
   const isServiceWorkerComm = req.url.startsWith('/_sw_');
   
   if (isStore) {
@@ -85,7 +100,7 @@ const server = http.createServer((req, res) => {
 
 // Handle WebSocket upgrade requests
 server.on('upgrade', (req, socket, head) => {
-  const isStore = req.url === '/store' || req.url.startsWith('/store/');
+  const isStore = isStoreRequest(req.url);
   
   if (isStore) {
     console.log(`[WS Upgrade] ${req.url} → Store`);

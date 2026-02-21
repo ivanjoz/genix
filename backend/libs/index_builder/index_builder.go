@@ -364,6 +364,24 @@ func (buildResult *ProductosIndexBuild) WriteBinaryFile(outputPath string) error
 	return nil
 }
 
+// ReadBuildSunixTimeFromHeader reads the build_sunix_time int32 directly from the
+// text header prefix without decoding full sections.
+func ReadBuildSunixTimeFromHeader(indexBytes []byte) (int32, error) {
+	const headerPrefixSize = len(BinaryMagic) + 1 + 1 + 4 + 4 // magic + version + flags + record_count + build_sunix_time
+	if len(indexBytes) < headerPrefixSize {
+		return 0, fmt.Errorf("index too small bytes=%d", len(indexBytes))
+	}
+	if string(indexBytes[:len(BinaryMagic)]) != BinaryMagic {
+		return 0, fmt.Errorf("invalid text magic")
+	}
+	if indexBytes[len(BinaryMagic)] != BinaryVersion {
+		return 0, fmt.Errorf("unsupported text version=%d (expected=%d)", indexBytes[len(BinaryMagic)], BinaryVersion)
+	}
+	buildSunixOffset := len(BinaryMagic) + 1 + 1 + 4
+	buildSunixTime := int32(binary.LittleEndian.Uint32(indexBytes[buildSunixOffset : buildSunixOffset+4]))
+	return buildSunixTime, nil
+}
+
 func LoadRecordsFromTextFile(inputPath string) ([]RecordInput, error) {
 	inputFile, openErr := os.Open(inputPath)
 	if openErr != nil {

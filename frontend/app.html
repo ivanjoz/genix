@@ -15,7 +15,8 @@
 			console.log('[Main App] Path:', window.location.pathname, 'Search:', window.location.search, '_IS_STORE_APP:', !!window._IS_STORE_APP);
 			// GitHub Pages SPA routing hack for /store sub-app
 			(function() {
-				var path = window.location.pathname;
+				var currentLocation = window.location;
+				var path = currentLocation.pathname;
 				if (path.startsWith('/store') && !window._IS_STORE_APP) {
 					console.log('[Main App] Redirecting to store...');
 					// Check if it's a file request (has a dot in the last segment)
@@ -25,15 +26,31 @@
 						return;
 					}
 
+					// In local dev, force Store routes to go through the proxy server.
+					var isLocalDevHost = currentLocation.hostname === 'localhost' || currentLocation.hostname === '127.0.0.1';
+					var isMainDevPort = currentLocation.port === '3570';
+					if (isLocalDevHost && isMainDevPort) {
+						var proxyTarget = currentLocation.protocol + '//' + currentLocation.hostname + ':3572' + path + currentLocation.search + currentLocation.hash;
+						console.log('[Main App] Dev mode redirect to proxy:', proxyTarget);
+						window.location.replace(proxyTarget);
+						return;
+					}
+
+					// On the proxy host, avoid fallback rewriting that can create dev-only loops.
+					if (isLocalDevHost && currentLocation.port === '3572') {
+						console.log('[Main App] Proxy host detected, skipping p-parameter fallback');
+						return;
+					}
+
 					// Redirect to store index with the path as a parameter
 					var repoName = ''; // Since it's a custom domain, repoName is empty
 					var storePath = path.substring(6); // Remove '/store'
-					var search = window.location.search;
+					var search = currentLocation.search;
 					if (search.indexOf('?p=') !== -1 || search.indexOf('&p=') !== -1) {
 						console.log('[Main App] Already has p parameter, avoiding loop');
 						return;
 					}
-					var target = '/store/?p=' + encodeURIComponent(storePath) + search.replace('?', '&') + window.location.hash;
+					var target = '/store/?p=' + encodeURIComponent(storePath) + search.replace('?', '&') + currentLocation.hash;
 					console.log('[Main App] Replacing location with:', target);
 					window.location.replace(target);
 				}

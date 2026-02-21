@@ -243,30 +243,3 @@ func DecodeIDs(encodedIDs []byte) []int32 {
 
 	return decodedIDs
 }
-
-type Cache struct {
-	db.TableStruct[CacheTable, Cache]
-	EmpresaID    int32
-	ID           int32
-	Key          string
-	ContentBytes []byte
-	Content      string
-	Updated      int32
-}
-
-type CacheTable struct {
-	db.TableStruct[CacheTable, Cache]
-	EmpresaID    db.Col[CacheTable, int32]
-	ID           db.Col[CacheTable, int32]
-	ContentBytes db.Col[CacheTable, []byte]
-	Content      db.Col[CacheTable, string]
-	Updated      db.Col[CacheTable, int32]
-}
-
-func (e CacheTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
-		Name:      "cache",
-		Partition: e.EmpresaID,
-		Keys:      []db.Coln{e.ID},
-	}
-}

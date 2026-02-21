@@ -60,7 +60,7 @@ func SaveBackup(empresaID int32) error {
 
 	core.Log("Enviando archivo a S3:", fileName)
 
-	err = aws.SendFileToS3(aws.FileToS3Args{
+	err = aws.SaveFile(aws.SaveFileArgs{
 		Bucket:      core.Env.S3_BUCKET,
 		Path:        fmt.Sprintf("backups/%v", empresaID),
 		FileContent: buf.Bytes(),
@@ -95,7 +95,7 @@ func GetBackups(args *core.HandlerArgs) core.HandlerResponse {
 
 	prefix := fmt.Sprintf("backups/%v/", args.Usuario.EmpresaID)
 
-	s3Files, err := aws.S3ListFiles(aws.FileToS3Args{
+	s3Files, err := aws.S3ListFiles(aws.SaveFileArgs{
 		Bucket:  core.Env.S3_BUCKET,
 		Prefix:  prefix,
 		MaxKeys: 30,

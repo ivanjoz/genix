@@ -205,7 +205,7 @@ func SunixToUnix(sunixTime int32) int64 {
 	return (int64(sunixTime) + 1e9) * 2
 }
 func SUnix5Min() int32 {
-	return int32((time.Now().Unix() - 1e9) / (60*5))
+	return int32((time.Now().Unix() - 1e9) / (60 * 5))
 }
 
 // Makes an UUID based on SUnixTime in milliseconds and random 3 last digits
@@ -826,7 +826,12 @@ func BasicHash(s string) uint32 {
 func BasicHashInt(s string) int32 {
 	h := fnv.New32a()
 	h.Write([]byte(s))
-	return int32(h.Sum32())
+	hashValue := int32(h.Sum32())
+	// Keep hash deterministic while reserving 0 as an invalid/sentinel ID.
+	if hashValue == 0 {
+		return 1
+	}
+	return hashValue
 }
 
 func Base64MD5Hash(content string, len int32) string {

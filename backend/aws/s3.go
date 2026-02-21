@@ -19,7 +19,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type FileToS3Args struct {
+type SaveFileArgs struct {
 	Account       uint8
 	Bucket        string
 	LocalFilePath string
@@ -32,7 +32,7 @@ type FileToS3Args struct {
 	MaxKeys       int32
 }
 
-func SendFileToS3(args FileToS3Args) error {
+func SaveFile(args SaveFileArgs) error {
 	core.Log("Enviando a s3:", args.Bucket, "| Folder:", args.Path, "|", args.Name, "|", args.ContentType)
 
 	client := s3.NewFromConfig(core.GetAwsConfig())
@@ -72,7 +72,7 @@ func SendFileToS3(args FileToS3Args) error {
 	return nil
 }
 
-func GetFileFromS3(args FileToS3Args) ([]byte, error) {
+func GetFileFromS3(args SaveFileArgs) ([]byte, error) {
 	core.Log("Obteniendo archvivo a s3 | Path: ", args.Path, " | ", args.Name)
 	/*
 		// Create a file to download to
@@ -101,7 +101,7 @@ func GetFileFromS3(args FileToS3Args) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func GetObjectFromFileS3[T any](args FileToS3Args, obj *T) (*T, error) {
+func GetObjectFromFileS3[T any](args SaveFileArgs, obj *T) (*T, error) {
 	core.Log("Obteniendo archivo de s3::")
 	core.Print(args)
 
@@ -142,7 +142,7 @@ func GetObjectFromFileS3[T any](args FileToS3Args, obj *T) (*T, error) {
 	return obj, nil
 }
 
-func S3ListFiles(args FileToS3Args) ([]types.Object, error) {
+func S3ListFiles(args SaveFileArgs) ([]types.Object, error) {
 	core.Log("Envío de archivo a s3::")
 
 	client := s3.NewFromConfig(core.GetAwsConfig())
@@ -214,7 +214,7 @@ func SaveConvertImage(args ImageArgs) ([]imageconv.Image, error) {
 	saveImage := func(image imageconv.Image) {
 		fmt.Println("args.Folder:", args.Folder)
 
-		args := FileToS3Args{
+		args := SaveFileArgs{
 			Bucket:      core.Env.S3_BUCKET,
 			Path:        args.Folder,
 			FileContent: image.Content,
@@ -222,7 +222,7 @@ func SaveConvertImage(args ImageArgs) ([]imageconv.Image, error) {
 			Name: fmt.Sprintf("%v-%v.%v", args.Name,
 				args.Resolutions[uint16(image.Resolution)], image.Format),
 		}
-		SendFileToS3(args)
+		SaveFile(args)
 		image.Content = nil
 		images = append(images, image)
 	}
@@ -317,13 +317,13 @@ func SaveImage(image ImageArgs) (string, error) {
 
 	bytes := core.Base64ToBytes(image.Content)
 
-	args := FileToS3Args{
+	args := SaveFileArgs{
 		Bucket:      core.Env.S3_BUCKET,
 		Path:        image.Folder,
 		FileContent: bytes,
 		ContentType: fmt.Sprintf("image/%v", image.Type),
 		Name:        fmt.Sprintf("%v-x%v.%v", image.Name, image.Resolution, image.Type),
 	}
-	err := SendFileToS3(args)
+	err := SaveFile(args)
 	return args.Name, err
 }
