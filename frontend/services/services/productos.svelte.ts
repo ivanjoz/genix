@@ -1,6 +1,7 @@
 import { Env } from '$core/env';
 import { arrayToMapN } from '$libs/helpers';
-import { GET } from '$libs/http.svelte';
+import { GET, GetHandler } from '$libs/http.svelte';
+import type { IListaRegistro } from '$services/negocio/listas-compartidas.svelte';
 
 const maxCacheTime = 60 * 5 // 2 segundos
 const productosPromiseMap: Map<string, Promise<any>> = new Map()
@@ -35,7 +36,8 @@ export interface IProducto {
   SbnDescuento?: number
   SbnPreciFinal?: number
   Images?: IProductoImage[]
-  Image?: IProductoImage
+	Image?: IProductoImage
+  MarcaID?: number
   CategoriasIDs?: number[]
   Stock?: { a /* almacen */: number, c /* cantidad */: number }[]
   ss: number
@@ -195,4 +197,51 @@ export const getCategoryByID = async (id: number): Promise<IProductoCategoria | 
 	// 3. Después de cargar (o si ya había categorías pero no la que buscamos), 
 	// buscamos en el mapa actualizado. Si no está aquí, es que no existe.
 	return productosServiceState.categoriasMap.get(id);
+}
+
+interface IProductoDeltaResult {
+	productos: IProducto[]
+	marcasCategorias: IListaRegistro[]
+}
+
+export class ProductosDeltaService extends GetHandler<IProducto> {
+  route = "p-productos-index-delta"
+  useCache = { min: 1, ver: 1 }
+	inferRemoveFromStatus = true
+	prependOnSave = true
+	productos: IProducto[] = []
+	categorias: IListaRegistro[] = []
+  marcas: IListaRegistro[] = []
+	
+	makeName(record: Partial<IProducto>) {
+		return record.Nombre || ""
+	}
+
+  handler(result: IProductoDeltaResult): void {
+		console.log("productos delta result::", result)
+		const marcasIDs: Set<number> = new Set()
+		const categoriasIDs: Set<number> = new Set()
+		
+		if (result.productos?.length > 0) {
+			this.productos = []
+			this.categorias = []
+			this.marcas = []
+		}
+		
+		for (const e of result.productos||[]) {
+			if (e.MarcaID) { marcasIDs.add(e.MarcaID) }
+			for(const id of e.CategoriasIDs||[]){ categoriasIDs.add(id) }
+    	this.productos.push(e)
+		}
+		
+		for (const e of result.marcasCategorias || []) {
+			if (marcasIDs.has(e.ID)) { this.marcas.push(e) }
+			if (categoriasIDs.has(e.ID)) { this.categorias.push(e) }
+		}
+  }
+
+  constructor(fetch?: boolean){
+		super()
+    if(fetch){ this.fetch() }
+  }
 }

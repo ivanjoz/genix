@@ -32,38 +32,39 @@ type Producto struct {
 	TempID         int32   `json:",omitempty"`
 	Nombre         string  `db:"nombre"`
 	Descripcion    string  `json:",omitempty"`
-	ContentHTML    string  `json:",omitempty" db:"content_html"`
-	CategoriasIDs  []int32 `json:",omitempty" db:"categorias_ids"`
-	MarcaID        int32   `json:",omitempty" db:"marca_id"`
-	Params         []int8  `json:",omitempty" db:"params_ids"`
-	Precio         int32   `json:",omitempty" db:"precio"`
-	MonedaID       int16   `json:",omitempty" db:"moneda_id"`
-	UnidadID       int16   `json:",omitempty" db:"unidad_id"`
-	Descuento      float32 `json:",omitempty" db:"descuento"`
-	PrecioFinal    int32   `json:",omitempty" db:"precio_final"`
-	Peso           float32 `json:",omitempty" db:"peso"`
-	Volumen        float32 `json:",omitempty" db:"volumen"`
-	SbnCantidad    int32   `json:",omitempty" db:"sbn_cantidad"`
-	SbnUnidad      string  `json:",omitempty" db:"sbn_unidad"`
-	SbnPrecio      int32   `json:",omitempty" db:"sbn_precio"`
-	SbnDescuento   float32 `json:",omitempty" db:"sbn_decuento"`
-	SbnPrecioFinal int32   `json:",omitempty" db:"sbn_precio_final"`
+	ContentHTML    string  `json:",omitempty"`
+	CategoriasIDs  []int32 `json:",omitempty"`
+	MarcaID        int32   `json:",omitempty"`
+	Params         []int8  `json:",omitempty"`
+	Precio         int32   `json:",omitempty"`
+	MonedaID       int16   `json:",omitempty"`
+	UnidadID       int16   `json:",omitempty"`
+	Descuento      float32 `json:",omitempty"`
+	PrecioFinal    int32   `json:",omitempty"`
+	Peso           float32 `json:",omitempty"`
+	Volumen        float32 `json:",omitempty"`
+	SbnCantidad    int32   `json:",omitempty"`
+	SbnUnidad      string  `json:",omitempty"`
+	SbnPrecio      int32   `json:",omitempty"`
+	SbnDescuento   float32 `json:",omitempty"`
+	SbnPrecioFinal int32   `json:",omitempty"`
 	NombreHash     int32   `json:",omitempty"`
 
-	Propiedades    []ProductoPropiedades `json:",omitempty" db:"propiedades"`
-	Presentaciones []ProductoPesentacion `json:",omitempty" db:"presentaciones"`
-	Images         []ProductoImagen      `json:",omitempty" db:"images"`
-	Stock          []AlmacenStockMin     `json:",omitempty" db:"stock"`
-	StockReservado []AlmacenStockMin     `json:",omitempty" db:"stock_reservado"`
-	StockStatus    int8                  `json:",omitempty" db:"stock_status,view.1"`
+	Propiedades    []ProductoPropiedades `json:",omitempty"`
+	Presentaciones []ProductoPesentacion `json:",omitempty"`
+	Images         []ProductoImagen      `json:",omitempty"`
+	Stock          []AlmacenStockMin     `json:",omitempty"`
+	StockReservado []AlmacenStockMin     `json:",omitempty"`
+	StockStatus    int8                  `json:",omitempty"`
+	NameUpdated   int32 `json:",omitempty"`
 	// Propiedades generales
-	Status    int8  `json:"ss,omitempty" db:"status,view"`
-	Updated   int64 `json:"upd,omitempty" db:"updated,view.2"`
-	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
-	Created   int64 `json:",omitempty" db:"created"`
-	CreatedBy int32 `json:",omitempty" db:"created_by"`
+	Status    int8  `json:"ss,omitempty"`
+	Updated   int64 `json:"upd,omitempty"`
+	UpdatedBy int32 `json:",omitempty"`
+	Created   int64 `json:",omitempty"`
+	CreatedBy int32 `json:",omitempty"`
 	/* concatenada con la Empresa-ID para ser indexadas*/
-	CategoriasConStock []int32 `json:",omitempty" db:"categorias_con_stock,gindex"`
+	CategoriasConStock []int32 `json:",omitempty"`
 	CacheVersion       uint8   `json:"ccv,omitempty"`
 }
 
@@ -96,6 +97,7 @@ type ProductoTable struct {
 	Stock              db.Col[ProductoTable, []AlmacenStockMin]
 	StockReservado     db.Col[ProductoTable, []AlmacenStockMin]
 	StockStatus        db.Col[ProductoTable, int8]
+	NameUpdated        db.Col[ProductoTable, int32]
 	Status             db.Col[ProductoTable, int8]
 	Updated            db.Col[ProductoTable, int64]
 	UpdatedBy          db.Col[ProductoTable, int32]
@@ -125,6 +127,7 @@ func (e ProductoTable) GetSchema() db.TableSchema {
 		SaveCacheVersion: true,
 		Keys:             []db.Coln{e.ID.Autoincrement(0)},
 		GlobalIndexes:    [][]db.Coln{{e.CategoriasConStock}},
+		Indexes: [][]db.Coln{{ e.NameUpdated }},
 		ViewsDeprecated: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.StockStatus}, KeepPart: true},

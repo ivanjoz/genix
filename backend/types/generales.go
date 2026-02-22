@@ -61,9 +61,9 @@ func (e PaisCiudadTable) GetSchema() db.TableSchema {
 
 type ListaCompartidaRegistro struct {
 	db.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
-	EmpresaID   int32
+	EmpresaID   int32 `json:",omitempty"`
 	ID          int32
-	ListaID     int32
+	ListaID     int32 `json:",omitempty"`
 	Nombre      string   `json:",omitempty"`
 	Images      []string `json:",omitempty"`
 	Descripcion string   `json:",omitempty"`
@@ -96,7 +96,6 @@ func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
 		Indexes:      [][]db.Coln{{e.NombreHash}},
 		ViewsDeprecated: []db.View{
-			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
 			{Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
 			{Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
 		},

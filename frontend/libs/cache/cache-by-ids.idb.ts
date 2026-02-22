@@ -3,7 +3,7 @@
  * Provide a minimal IndexedDB adapter for cache-by-ids using `typed-idb`,
  * auto-creating one objectStore per table (`tableName`) with keyPath `ID`.
  */
-import { IndexedDBRepository, type DatabaseInformation, type IDatabase } from "./typed-idb"
+import { IndexedDBRepository, type DatabaseInformation, type IDatabase } from "../typed-idb"
 
 const LOG_PREFIX = "[cache-by-ids:idb]"
 const IDB_DB_NAME = "cached_ids"
@@ -58,6 +58,43 @@ class CacheByIDsDatabase implements IDatabase {
 		})
 	}
 
+	private async openLatestVersion(): Promise<IDBDatabase> {
+		return await new Promise<IDBDatabase>((resolve, reject) => {
+			const openRequest = indexedDB.open(IDB_DB_NAME)
+			openRequest.onsuccess = () => resolve(openRequest.result)
+			openRequest.onerror = () => reject(openRequest.error)
+		})
+	}
+
+	private isVersionError(error: unknown): boolean {
+		if (!error || typeof error !== "object") return false
+		const errorName = (error as { name?: string }).name
+		return errorName === "VersionError"
+	}
+
+	private async openWithRecoveredVersion(version: number, storesToEnsure: string[]): Promise<IDBDatabase> {
+		try {
+			return await this.openWithVersion(version, storesToEnsure)
+		} catch (openError) {
+			if (!this.isVersionError(openError)) {
+				throw openError
+			}
+			// Recover when localStorage version lags behind actual IndexedDB version.
+			const latestDatabase = await this.openLatestVersion()
+			const actualVersion = latestDatabase.version
+			writeLocalStorageNumber(IDB_DB_VERSION_KEY, actualVersion)
+			console.warn(`${LOG_PREFIX} Recovered IndexedDB version mismatch.`, {
+				requestedVersion: version,
+				actualVersion,
+			})
+			latestDatabase.close()
+			const recoveredVersion = storesToEnsure.length > 0 ? actualVersion + 1 : actualVersion
+			const recoveredDatabase = await this.openWithVersion(recoveredVersion, storesToEnsure)
+			writeLocalStorageNumber(IDB_DB_VERSION_KEY, recoveredDatabase.version)
+			return recoveredDatabase
+		}
+	}
+
 	private async ensureStoresExist(storeNames: string[]): Promise<IDBDatabase> {
 		const currentVersion = this.getCurrentVersion()
 
@@ -72,7 +109,7 @@ class CacheByIDsDatabase implements IDatabase {
 		}
 
 		// Open current DB version first; upgrade only when requested stores are missing.
-		let db = await this.openWithVersion(currentVersion, [])
+		let db = await this.openWithRecoveredVersion(currentVersion, [])
 		const missingStores = storeNames.filter((storeName) => !db.objectStoreNames.contains(storeName))
 		if (missingStores.length === 0) {
 			this.cachedDB = db
@@ -80,11 +117,11 @@ class CacheByIDsDatabase implements IDatabase {
 			return db
 		}
 
-		// Upgrade path: bump version by 1 and create only missing stores.
-		db.close()
-		const upgradedVersion = currentVersion + 1
-		db = await this.openWithVersion(upgradedVersion, missingStores)
-		writeLocalStorageNumber(IDB_DB_VERSION_KEY, upgradedVersion)
+			// Upgrade path: bump version by 1 and create only missing stores.
+			db.close()
+			const upgradedVersion = currentVersion + 1
+			db = await this.openWithRecoveredVersion(upgradedVersion, missingStores)
+			writeLocalStorageNumber(IDB_DB_VERSION_KEY, db.version)
 
 		this.cachedDB = db
 		this.cachedVersion = db.version
@@ -100,7 +137,7 @@ class CacheByIDsDatabase implements IDatabase {
 		const currentVersion = this.getCurrentVersion()
 		if (this.cachedDB && this.cachedVersion === currentVersion) return this.cachedDB
 
-		const db = await this.openWithVersion(currentVersion, [])
+		const db = await this.openWithRecoveredVersion(currentVersion, [])
 		this.cachedDB = db
 		this.cachedVersion = db.version
 		return db

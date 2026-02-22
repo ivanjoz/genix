@@ -7,6 +7,7 @@ import {
 } from "./encoder";
 import { Env } from "$core/env";
 import type { IndexedProduct, ProductSearchHit } from "./types";
+import { ProductosDeltaService } from "$services/services/productos.svelte";
 
 export interface ProductQueryWordDebugInfo {
 	queryWord: string;
@@ -67,6 +68,8 @@ interface FastQueryWordMatchResult {
 	exactWordMatch: boolean;
 	bestSyllablePrefixLength: number;
 }
+
+const productsDeltaService = new ProductosDeltaService()
 
 export class ProductIndex {
 	// Keep scoring constants explicit so ranking behavior is predictable and easy to tune.
@@ -151,8 +154,14 @@ export class ProductIndex {
 				);
 			}
 		}
+		this.loadDeltas()
 	}
 
+	async loadDeltas() {
+		await productsDeltaService.fetchOnline()
+		console.log("productsDeltaService", productsDeltaService, productsDeltaService.records.length)
+	}
+	
 	static fromBinary(indexBytesInput: Uint8Array | ArrayBuffer): ProductIndex {
 		return new ProductIndex(indexBytesInput);
 	}

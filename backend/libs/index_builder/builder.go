@@ -48,39 +48,22 @@ func BuildProductosIndex(buildInput BuildInput) (*ProductosIndexBuild, error) {
 		return nil, fmt.Errorf("build input requires products")
 	}
 
-	brandNameByID := make(map[int32]string, len(buildInput.Brands)+1)
+	brandNormalizedNameByID := make(map[int32]string, len(buildInput.Brands)+1)
 	for _, currentBrandRecord := range buildInput.Brands {
-		brandNameByID[currentBrandRecord.ID] = currentBrandRecord.Text
+		brandNormalizedNameByID[currentBrandRecord.ID] = normalizeText(currentBrandRecord.Text)
 	}
-	// Keep a sentinel brand label for products without explicit brand assignment.
-	if _, hasSentinelBrand := brandNameByID[0]; !hasSentinelBrand {
-		brandNameByID[0] = "Sin marca"
+	// Keep a normalized sentinel brand label for products without explicit brand assignment.
+	if _, hasSentinelBrand := brandNormalizedNameByID[0]; !hasSentinelBrand {
+		brandNormalizedNameByID[0] = normalizeText("Sin marca")
 	}
 
 	optimizedProductRecords := make([]RecordInput, 0, len(buildInput.Products))
 	optimizationStats := ProductTextOptimizationAggregate{}
 
 	for _, currentProductRecord := range buildInput.Products {
-		// Strip brand terms + duplicate tokens before stage-1 encoding to reduce content bytes.
-		brandNameForProduct := brandNameByID[currentProductRecord.BrandID]
-		productTokens := splitNormalizedTokens(currentProductRecord.Text)
-		brandTokens := splitNormalizedTokens(brandNameForProduct)
-		if len(productTokens) > 0 && len(brandTokens) > 0 {
-			filteredTokens, _ := removeAllTokenSequenceOccurrences(productTokens, brandTokens)
-			productTokens = filteredTokens
-		}
-
-		dedupedTokens := make([]string, 0, len(productTokens))
-		seenNormalizedTokens := make(map[string]struct{}, len(productTokens))
-		for _, normalizedToken := range productTokens {
-			if _, alreadySeen := seenNormalizedTokens[normalizedToken]; alreadySeen {
-				continue
-			}
-			seenNormalizedTokens[normalizedToken] = struct{}{}
-			dedupedTokens = append(dedupedTokens, normalizedToken)
-		}
-
-		optimizedProductText := strings.Join(dedupedTokens, " ")
+		// Apply centralized cleaning so all product-text optimization rules stay in one function.
+		normalizedBrandNameForProduct := brandNormalizedNameByID[currentProductRecord.BrandID]
+		optimizedProductText := CleanProductTextByBrand(currentProductRecord.Text, normalizedBrandNameForProduct)
 		if optimizedProductText != normalizeText(currentProductRecord.Text) {
 			optimizationStats.ChangedProducts++
 		}
@@ -120,43 +103,69 @@ func BuildProductosIndex(buildInput BuildInput) (*ProductosIndexBuild, error) {
 	return textBuildResult, nil
 }
 
-func splitNormalizedTokens(rawText string) []string {
-	normalizedText := normalizeText(rawText)
-	if normalizedText == "" {
-		return nil
-	}
-	return strings.Fields(normalizedText)
-}
-
-func removeAllTokenSequenceOccurrences(sourceTokens []string, sequenceTokens []string) ([]string, int) {
-	if len(sourceTokens) == 0 || len(sequenceTokens) == 0 || len(sequenceTokens) > len(sourceTokens) {
-		return append([]string(nil), sourceTokens...), 0
+// CleanProductTextByBrand normalizes product text and removes:
+// 1) brand token sequences and standalone brand tokens
+// 2) connector words from default options
+// 3) single-letter tokens
+// The brand input must already be normalized (normalizeText output).
+func CleanProductTextByBrand(rawProductName string, normalizedBrandName string) string {
+	productTokens := strings.Fields(normalizeText(rawProductName))
+	if len(productTokens) == 0 {
+		return ""
 	}
 
-	filteredTokens := make([]string, 0, len(sourceTokens))
-	removedOccurrences := 0
-	currentIndex := 0
-	for currentIndex < len(sourceTokens) {
-		if currentIndex+len(sequenceTokens) <= len(sourceTokens) &&
-			tokenSequenceEquals(sourceTokens[currentIndex:currentIndex+len(sequenceTokens)], sequenceTokens) {
-			removedOccurrences++
-			currentIndex += len(sequenceTokens)
+	brandTokens := strings.Fields(normalizedBrandName)
+	if len(brandTokens) > 0 {
+		// Remove contiguous brand-name sequence occurrences across the product tokens.
+		productTokensWithoutBrandSequence := make([]string, 0, len(productTokens))
+		for productTokenIndex := 0; productTokenIndex < len(productTokens); {
+			canCompareBrandSequence := productTokenIndex+len(brandTokens) <= len(productTokens)
+			brandSequenceMatches := canCompareBrandSequence
+			if canCompareBrandSequence {
+				for brandTokenIndex := 0; brandTokenIndex < len(brandTokens); brandTokenIndex++ {
+					if productTokens[productTokenIndex+brandTokenIndex] != brandTokens[brandTokenIndex] {
+						brandSequenceMatches = false
+						break
+					}
+				}
+			}
+			if brandSequenceMatches {
+				productTokenIndex += len(brandTokens)
+				continue
+			}
+			productTokensWithoutBrandSequence = append(productTokensWithoutBrandSequence, productTokens[productTokenIndex])
+			productTokenIndex++
+		}
+		productTokens = productTokensWithoutBrandSequence
+
+		brandTokenSet := make(map[string]struct{}, len(brandTokens))
+		for _, brandToken := range brandTokens {
+			brandTokenSet[brandToken] = struct{}{}
+		}
+
+		// Remove remaining standalone brand tokens to avoid leftover brand noise.
+		filteredByBrandWords := make([]string, 0, len(productTokens))
+		for _, productToken := range productTokens {
+			if _, isBrandToken := brandTokenSet[productToken]; isBrandToken {
+				continue
+			}
+			filteredByBrandWords = append(filteredByBrandWords, productToken)
+		}
+		productTokens = filteredByBrandWords
+	}
+
+	// Deduplicate while preserving order so repeated words do not bloat search payload.
+	deduplicatedTokens := make([]string, 0, len(productTokens))
+	seenTokenSet := make(map[string]struct{}, len(productTokens))
+	for _, productToken := range productTokens {
+		if _, alreadySeen := seenTokenSet[productToken]; alreadySeen {
 			continue
 		}
-		filteredTokens = append(filteredTokens, sourceTokens[currentIndex])
-		currentIndex++
+		seenTokenSet[productToken] = struct{}{}
+		deduplicatedTokens = append(deduplicatedTokens, productToken)
 	}
-	return filteredTokens, removedOccurrences
-}
 
-func tokenSequenceEquals(leftTokens []string, rightTokens []string) bool {
-	if len(leftTokens) != len(rightTokens) {
-		return false
-	}
-	for tokenIndex := 0; tokenIndex < len(leftTokens); tokenIndex++ {
-		if leftTokens[tokenIndex] != rightTokens[tokenIndex] {
-			return false
-		}
-	}
-	return true
+	// Reuse shared token normalization/filter logic to keep behavior aligned with BuildIndex.
+	cleanedTokens := normalizeAndFilterTokens(strings.Join(deduplicatedTokens, " "), defaultConnectorWordSet)
+	return strings.Join(cleanedTokens, " ")
 }

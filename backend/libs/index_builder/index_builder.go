@@ -31,6 +31,12 @@ const (
 
 const productIDUint32Sentinel uint16 = 0
 
+// Keep connector words centralized so all default normalization paths share one source.
+var defaultConnectorWords = []string{"de", "la", "con", "del", "para", "en", "al", "sin"}
+
+// Build once for hot paths that always use defaults (e.g. product text cleaner).
+var defaultConnectorWordSet = buildConnectorSet(defaultConnectorWords)
+
 type RecordInput struct {
 	ID            int32
 	CategoriesIDs []int32
@@ -71,7 +77,8 @@ func DefaultOptions() BuildOptions {
 		MaxWordsPerRecord:   8,
 		MaxSyllablesPerWord: 7,
 		MaxDictionarySlots:  255,
-		ConnectorWords:      []string{"de", "la", "con", "del", "para", "en", "al", "con", "sin"},
+		// Return a copy to prevent accidental mutation of package-level defaults.
+		ConnectorWords: append([]string(nil), defaultConnectorWords...),
 	}
 }
 
@@ -101,14 +108,7 @@ func BuildIndex(records []RecordInput, options BuildOptions) (*ProductosIndexBui
 		options.MaxDictionarySlots = 255
 	}
 
-	connectorSet := make(map[string]struct{}, len(options.ConnectorWords))
-	for _, connector := range options.ConnectorWords {
-		normalizedConnector := normalizeToken(connector)
-		if normalizedConnector == "" {
-			continue
-		}
-		connectorSet[normalizedConnector] = struct{}{}
-	}
+	connectorSet := buildConnectorSet(options.ConnectorWords)
 
 	normalized := make([]normalizedRecord, 0, len(records))
 	for _, inputRecord := range records {
@@ -471,6 +471,14 @@ func normalizeAndFilterTokens(rawText string, connectorSet map[string]struct{}) 
 	return filtered
 }
 
+func buildConnectorSet(connectorWords []string) map[string]struct{} {
+	connectorSet := make(map[string]struct{}, len(connectorWords))
+	for _, connectorWord := range connectorWords {
+		connectorSet[connectorWord] = struct{}{}
+	}
+	return connectorSet
+}
+
 func normalizeText(text string) string {
 	var output strings.Builder
 	output.Grow(len(text))
@@ -494,6 +502,11 @@ func normalizeText(text string) string {
 		}
 	}
 	return strings.Join(strings.Fields(output.String()), " ")
+}
+
+// NormalizeTextForIndex exposes the same normalization logic used by the index builder.
+func NormalizeTextForIndex(text string) string {
+	return normalizeText(text)
 }
 
 func normalizeToken(token string) string {

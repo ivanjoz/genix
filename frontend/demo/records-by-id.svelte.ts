@@ -1,4 +1,4 @@
-import { getRecordByID } from "../libs/cache-by-ids.svelte"
+import { getRecordByID } from "../libs/cache/cache-by-ids.svelte"
 
 export const testRecordsByIDs = () => {
 	

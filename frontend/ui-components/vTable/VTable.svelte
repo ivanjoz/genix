@@ -602,7 +602,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     /* No inner top inset: prevents body rows from peeking above sticky header while scrolling */
-    padding: 0;
+    padding: 0 2px;
   }
 
   .vtable-container._14 {

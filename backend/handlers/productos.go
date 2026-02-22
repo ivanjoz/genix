@@ -7,7 +7,7 @@ import (
 	s "app/types"
 	"encoding/json"
 	"fmt"
-	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -172,6 +172,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	t := s.ProductoTable{}
+	sunixTime := core.SUnixTime()
 
 	// Merge resolves insert/update per primary key and applies only required writes.
 	err := db.Merge(&productos,
@@ -185,15 +186,17 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 			current.StockStatus = prev.StockStatus
 			current.CategoriasConStock = prev.CategoriasConStock
 			current.Images = prev.Images
+			current.NameUpdated = prev.NameUpdated
 			buildPresentaciones(prev, current)
 
 			comparableCurrent := *current
 			comparableCurrent.TempID = prev.TempID
 			comparableCurrent.Updated = prev.Updated
 			comparableCurrent.UpdatedBy = prev.UpdatedBy
-			if reflect.DeepEqual(*prev, comparableCurrent) {
-				core.Log("PostProductos merge skip update product:", current.ID)
-				return false
+
+			// NameUpdated es para el delta si se han actualizado los nombres
+			if current.Nombre != prev.Nombre || current.MarcaID != prev.MarcaID || !slices.Equal(current.CategoriasIDs, prev.CategoriasIDs) {
+				current.NameUpdated = sunixTime
 			}
 
 			current.Updated = nowTime
@@ -205,9 +208,8 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 			current.Created = nowTime
 			current.CreatedBy = req.Usuario.ID
 			current.Updated = nowTime
-			if current.Status == 0 {
-				current.Status = 1
-			}
+			current.NameUpdated = sunixTime
+			current.Status = 1
 			buildPresentaciones(nil, current)
 		},
 	)

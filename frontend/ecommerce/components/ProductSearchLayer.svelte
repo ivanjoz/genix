@@ -3,6 +3,7 @@
   import { Env } from "$core/env";
   import { readBuildSunixTimeFromHeader } from "$libs/index-decoder/decoder";
   import { ProductIndex } from "$libs/index-decoder/product-index";
+  import ProductSearchResultCard from "./ProductSearchResultCard.svelte";
   import type { ProductSearchHit } from "$libs/index-decoder/types";
 
   interface ProductSearchLayerProps {
@@ -155,7 +156,7 @@
       pendingQueryTimer = null;
     }
   });
-</script>
+</script>getRecordWithCache
 
 {#if shouldRenderLayer}
   <div class="search-layer" role="dialog" aria-label="Resultados de busqueda de productos">
@@ -168,14 +169,12 @@
     {:else}
       <div class="results-grid">
         {#each topProductSearchHits as searchHit (searchHit.product.productID)}
-          <article class="result-card">
-            <div class="result-name" title={searchHit.product.productNameLossy}>
-              {searchHit.product.productNameLossy}
-            </div>
-            <div class="result-brand" title={searchHit.product.brandName || "Sin marca"}>
-              {searchHit.product.brandName || "Sin marca"}
-            </div>
-          </article>
+          <ProductSearchResultCard
+            productID={searchHit.product.productID}
+            fallbackName={searchHit.product.productNameLossy}
+            fallbackBrand={searchHit.product.brandName || ""}
+            fallbackCategory={searchHit.product.categoryNames?.[0] || ""}
+          />
         {/each}
       </div>
     {/if}
@@ -211,46 +210,13 @@
 
   .results-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
-  }
-
-  .result-card {
-    border: 1px solid #e4e7ef;
-    border-radius: 10px;
-    background: #f9fbff;
-    padding: 10px;
-    min-height: 88px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-
-  .result-name {
-    color: #1d253b;
-    font-weight: 600;
-    line-height: 1.2;
-    font-size: 14px;
-    display: -webkit-box;
-    line-clamp: 2;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
-
-  .result-brand {
-    color: #63708e;
-    font-size: 12px;
-    margin-top: 8px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   @media (max-width: 1140px) {
     .results-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
@@ -267,9 +233,5 @@
       gap: 8px;
     }
 
-    .result-card {
-      min-height: 80px;
-      padding: 9px;
-    }
   }
 </style>

@@ -388,22 +388,19 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
     return props
   }
 
-	fetchOnline() {
+	async fetchOnline() {
   	if(!browser){ return }
     if(this.route.length === 0){
       Notify.failure("No se especificó el route en productos.")
       return
 		}
     
-  	fetchCacheParsed(this.makeProps('refresh'))
-    .then(cachedResponse => {
-      if(cachedResponse){
-        delete cachedResponse.__version__
-        this.handler(cachedResponse)
-      }
-      this.isReady++
-      return fetchCacheParsed(this.makeProps())
-    })
+		const cachedResponse = await fetchCacheParsed(this.makeProps('refresh'))
+	  if(cachedResponse){
+      delete cachedResponse.__version__
+      this.handler(cachedResponse)
+		}
+		this.isReady++
 	}
   
   fetch(){

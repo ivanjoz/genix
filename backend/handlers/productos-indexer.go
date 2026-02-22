@@ -55,6 +55,80 @@ func GetProductsIndex(req *core.HandlerArgs) core.HandlerResponse {
 	})
 }
 
+func GetProductsIndexDelta(req *core.HandlerArgs) core.HandlerResponse {
+	
+	updated := req.GetQueryInt("productos")
+	empresaID := req.GetQueryInt("empresa-id")
+	if updated == 0 {
+		cacheRecords, err := core.GetCacheByKeys(empresaID, productSortedIDsCacheKey + "_current")
+		if err != nil {
+			return req.MakeErr(err)
+		}
+		
+		core.Log("Cache records::", len(cacheRecords))		
+		if len(cacheRecords) == 0 {	
+			return  req.MakeResponse([]string{})	
+		}
+		
+		updated = cacheRecords[0].Updated
+	}
+	
+	productosDelta := []s.Producto{}
+	q1 := db.Query(&productosDelta)
+	err := q1.Select(q1.Nombre, q1.MarcaID, q1.CategoriasIDs, q1.NameUpdated, q1.Status, q1.StockStatus).
+		NameUpdated.GreaterEqual(updated).AllowFilter().Exec()
+	
+	if err != nil {
+		return  req.MakeErr(err)
+	}
+	
+	if len(productosDelta) == 0 {
+		return req.MakeResponse(productosDelta)
+	}
+	
+	marcasCategoriasIDs := core.SliceSet[int32]{}
+	for index := range productosDelta {
+		e := &productosDelta[index]
+		marcasCategoriasIDs.AddIf(e.MarcaID)
+		marcasCategoriasIDs.AddIfBulk(e.CategoriasIDs...)
+		e.Updated = int64(e.NameUpdated)
+		e.NameUpdated = 0
+	}
+	
+	marcasCategorias := []s.ListaCompartidaRegistro{}
+	q2 := db.Query(&marcasCategorias)
+	err = q2.Select(q2.ID, q2.Nombre, q2.Updated).
+		ID.In(marcasCategoriasIDs.Values...).Exec()
+	
+	if err != nil {
+		return  req.MakeErr(err)
+	}
+
+	normalizedBrandNameByID := make(map[int32]string, len(marcasCategorias)+1)
+	for _, sharedRecord := range marcasCategorias {
+		normalizedBrandNameByID[sharedRecord.ID] = index_builder.NormalizeTextForIndex(sharedRecord.Nombre)
+	}
+	// Fallback for products without explicit brand assignment.
+	if _, hasSentinelBrand := normalizedBrandNameByID[0]; !hasSentinelBrand {
+		normalizedBrandNameByID[0] = index_builder.NormalizeTextForIndex("Sin marca")
+	}
+
+	// Normalize product names and remove brand terms/connectors/single-letter words.
+	for productIndex := range productosDelta {
+		currentProduct := &productosDelta[productIndex]
+		normalizedBrandName := normalizedBrandNameByID[currentProduct.MarcaID]
+		currentProduct.Nombre = index_builder.CleanProductTextByBrand(currentProduct.Nombre, normalizedBrandName)
+		core.Log("currentProduct.Nombre", currentProduct.Nombre)
+	}
+	
+	response := map[string]any{
+		"productos": &productosDelta,
+		"marcasCategorias": &marcasCategorias,
+	}
+	
+	return req.MakeResponse(response)	
+}
+
 const (
 	productSharedListCategoriaID = int32(1)
 	productSharedListMarcaID     = int32(2)

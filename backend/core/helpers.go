@@ -313,6 +313,12 @@ func (e *SliceSet[T]) AddIf(value T) {
 	}
 }
 
+func (e *SliceSet[T]) AddIfBulk(values ...T) {
+	for _, v := range values {
+		e.AddIf(v)
+	}
+}
+
 func (e *SliceSet[T]) Include(id T) bool {
 	if _, ok := e.valuesMap[id]; ok {
 		return true
