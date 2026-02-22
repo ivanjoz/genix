@@ -13,12 +13,15 @@ type ProductTextOptimizationAggregate struct {
 type ProductosIndexBuild struct {
 	// Stage-1 text index fields.
 	SortedIDs         []int32
+	ProductIDsSection []byte
 	Shapes            []byte
 	Content           []byte
 	BuildSunixTime    int32
 	HeaderFlags       uint8
 	DictionaryTokens  []string
 	DictionarySection []byte
+	AliasSection      []byte
+	AliasCount        int32
 	Stats             BuildStats
 
 	// Stage-2 taxonomy fields.

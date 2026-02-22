@@ -67,6 +67,112 @@ type ProductosIndexBuildOutput struct {
 	IndexBuild *index_builder.ProductosIndexBuild
 }
 
+func buildInputFromProductosData(productosData ProductosData) (index_builder.BuildInput, error) {
+	if len(productosData.Productos) == 0 {
+		return index_builder.BuildInput{}, fmt.Errorf("no se encontraron productos activos para indexar")
+	}
+
+	productIndexRecords := make([]index_builder.RecordInput, 0, len(productosData.Productos))
+	for _, currentProduct := range productosData.Productos {
+		// Validate source integrity before encoding because record IDs are persisted in section payloads.
+		if currentProduct.ID <= 0 {
+			return index_builder.BuildInput{}, fmt.Errorf("producto con ID inválido=%d", currentProduct.ID)
+		}
+		productIndexRecords = append(productIndexRecords, index_builder.RecordInput{
+			ID:            currentProduct.ID,
+			Text:          currentProduct.Nombre,
+			BrandID:       currentProduct.MarcaID,
+			CategoriesIDs: append([]int32(nil), currentProduct.CategoriasIDs...),
+		})
+	}
+
+	brandIndexRecords := make([]index_builder.RecordInput, 0, len(productosData.Marcas)+1)
+	hasSentinelBrandIDZero := false
+	for _, currentBrand := range productosData.Marcas {
+		if currentBrand.ID == 0 {
+			hasSentinelBrandIDZero = true
+		}
+		brandIndexRecords = append(brandIndexRecords, index_builder.RecordInput{
+			ID: currentBrand.ID, Text: currentBrand.Nombre,
+		})
+	}
+	// Keep MarcaID=0 as a valid sentinel so stage 2 can index products without explicit brand.
+	if !hasSentinelBrandIDZero {
+		brandIndexRecords = append(brandIndexRecords, index_builder.RecordInput{
+			ID: 0, Text: "Sin marca",
+		})
+	}
+
+	categoryIndexRecords := make([]index_builder.RecordInput, 0, len(productosData.Categorias))
+	for _, currentCategory := range productosData.Categorias {
+		categoryIndexRecords = append(categoryIndexRecords, index_builder.RecordInput{
+			ID: currentCategory.ID, Text: currentCategory.Nombre,
+		})
+	}
+
+	return index_builder.BuildInput{
+		Products:   productIndexRecords,
+		Brands:     brandIndexRecords,
+		Categories: categoryIndexRecords,
+	}, nil
+}
+
+func logSourceCardinality(prefix string, buildInput index_builder.BuildInput) {
+	core.Log(prefix+":: productos:", len(buildInput.Products),
+		"| marcas únicas:", len(buildInput.Brands),
+		"| categorías únicas:", len(buildInput.Categories))
+}
+
+func logStageOneBuildStats(prefix string, buildArtifacts *index_builder.ProductosIndexBuild) {
+	core.Log(prefix+":: text optimization",
+		"| changed:", buildArtifacts.OptimizationStats.ChangedProducts,
+		"| fallbackOriginal:", buildArtifacts.OptimizationStats.FallbackOriginalProducts)
+	core.Log(prefix+":: stage1.sorted_ids_count:", len(buildArtifacts.SortedIDs))
+	core.Log(prefix+":: stage1.dictionary_bytes:", buildArtifacts.Stats.DictionaryBytes)
+	core.Log(prefix+":: stage1.aliases_bytes:", buildArtifacts.Stats.AliasBytes)
+	core.Log(prefix+":: stage1.shapes_bytes:", buildArtifacts.Stats.ShapesBytes)
+	core.Log(prefix+":: stage1.content_bytes:", buildArtifacts.Stats.ContentBytes)
+	core.Log(prefix+":: stage1.product_ids_bytes:", buildArtifacts.Stats.ProductIDsBytes)
+	core.Log(prefix+":: stage1.total_bytes:", buildArtifacts.Stats.TotalBytes)
+}
+
+// BuildProductosSearchIndexNoPersist builds the same two-stage index as BuildProductosSearchIndex
+// but keeps all artifacts in-memory only:
+// - no S3 upload
+// - no sorted IDs cache persistence in DB
+// - no local gob source cache read/write
+func BuildProductosSearchIndexNoPersist(empresaID int32) (*ProductosIndexBuildOutput, error) {
+	if empresaID <= 0 {
+		return nil, fmt.Errorf("empresa ID inválido para construir el índice")
+	}
+
+	productosData, loadErr := loadIndexerSourceDataWithoutCache(empresaID)
+	if loadErr != nil {
+		return nil, loadErr
+	}
+	buildInput, buildInputErr := buildInputFromProductosData(productosData)
+	if buildInputErr != nil {
+		return nil, buildInputErr
+	}
+
+	logSourceCardinality("BuildIndex(NoPersist)", buildInput)
+	indexBuildArtifacts, buildErr := index_builder.BuildProductosIndex(buildInput)
+	if buildErr != nil {
+		return nil, fmt.Errorf("error al construir índice de productos (no persist): %w", buildErr)
+	}
+	logStageOneBuildStats("BuildIndex(NoPersist)", indexBuildArtifacts)
+
+	combinedIndexBytes, indexBytesErr := indexBuildArtifacts.ToBytes()
+	if indexBytesErr != nil {
+		return nil, fmt.Errorf("error al serializar índice combinado de productos (no persist): %w", indexBytesErr)
+	}
+	core.Log("BuildIndex(NoPersist):: final.total_bytes_stage1_plus_stage2:", len(combinedIndexBytes))
+
+	return &ProductosIndexBuildOutput{
+		IndexBuild: indexBuildArtifacts,
+	}, nil
+}
+
 // BuildProductosSearchIndex builds both index passes from productos:
 // 1) generic text index by product ID + Nombre
 // 2) taxonomy pass by querying brand/category names from shared lists.
@@ -79,69 +185,19 @@ func BuildProductosSearchIndex(empresaID int32) (*ProductosIndexBuildOutput, err
 	if loadErr != nil {
 		return nil, loadErr
 	}
-	if len(productosData.Productos) == 0 {
-		return nil, fmt.Errorf("no se encontraron productos activos para indexar")
+	buildInput, buildInputErr := buildInputFromProductosData(productosData)
+	if buildInputErr != nil {
+		return nil, buildInputErr
 	}
 
-	productIndexRecords := make([]index_builder.RecordInput, 0, len(productosData.Productos))
-	for _, producto := range productosData.Productos {
-		if producto.ID <= 0 {
-			return nil, fmt.Errorf("producto con ID inválido=%d", producto.ID)
-		}
-
-		productIndexRecords = append(productIndexRecords, index_builder.RecordInput{
-			ID:            producto.ID,
-			Text:          producto.Nombre,
-			BrandID:       producto.MarcaID,
-			CategoriesIDs: append([]int32(nil), producto.CategoriasIDs...),
-		})
-	}
-
-	brandIndexRecords := make([]index_builder.RecordInput, 0, len(productosData.Marcas))
-	hasSentinelBrandZero := false
-	for _, marca := range productosData.Marcas {
-		if marca.ID == 0 {
-			hasSentinelBrandZero = true
-		}
-		brandIndexRecords = append(brandIndexRecords, index_builder.RecordInput{
-			ID: marca.ID, Text: marca.Nombre,
-		})
-	}
-	// Keep MarcaID=0 as a valid sentinel so stage 2 can index products without explicit brand.
-	if !hasSentinelBrandZero {
-		brandIndexRecords = append(brandIndexRecords, index_builder.RecordInput{
-			ID: 0, Text: "Sin marca",
-		})
-	}
-
-	categoryIndexRecords := make([]index_builder.RecordInput, 0, len(productosData.Categorias))
-	for _, categoria := range productosData.Categorias {
-		categoryIndexRecords = append(categoryIndexRecords, index_builder.RecordInput{
-			ID: categoria.ID, Text: categoria.Nombre,
-		})
-	}
-
-	core.Log("BuildIndex:: productos:", len(productosData.Productos),
-		"| marcas únicas:", len(brandIndexRecords),
-		"| categorías únicas:", len(categoryIndexRecords))
-	buildInput := index_builder.BuildInput{
-		Products: productIndexRecords, Brands: brandIndexRecords, Categories: categoryIndexRecords,
-	}
+	logSourceCardinality("BuildIndex", buildInput)
 	indexBuildArtifacts, buildErr := index_builder.BuildProductosIndex(buildInput)
 	if buildErr != nil {
 		return nil, fmt.Errorf("error al construir índice de productos: %w", buildErr)
 	}
-	core.Log("BuildIndex:: text optimization",
-		"| changed:", indexBuildArtifacts.OptimizationStats.ChangedProducts,
-		"| fallbackOriginal:", indexBuildArtifacts.OptimizationStats.FallbackOriginalProducts)
+	logStageOneBuildStats("BuildIndex", indexBuildArtifacts)
 
 	stageOneIndexResult := indexBuildArtifacts
-	core.Log("BuildIndex:: stage1.sorted_ids_count:", len(stageOneIndexResult.SortedIDs))
-	core.Log("BuildIndex:: stage1.dictionary_count:", stageOneIndexResult.Stats.DictionaryCount)
-	core.Log("BuildIndex:: stage1.shapes_bytes:", stageOneIndexResult.Stats.ShapesBytes)
-	core.Log("BuildIndex:: stage1.content_bytes:", stageOneIndexResult.Stats.ContentBytes)
-	core.Log("BuildIndex:: stage1.total_bytes:", stageOneIndexResult.Stats.TotalBytes)
-
 	stageTwoIndexResult := indexBuildArtifacts
 	// Persist build time in the text header so the final .idx carries one explicit freshness slot.
 	buildSunixTime := core.SUnixTime()
@@ -171,11 +227,11 @@ func BuildProductosSearchIndex(empresaID int32) (*ProductosIndexBuildOutput, err
 	}
 	core.Log("BuildIndex:: final.total_bytes_stage1_plus_stage2:", len(combinedIndexBytes))
 
-	indexFileName := "c" + fmt.Sprintf("%v",empresaID) + "_products.idx"
-	
+	indexFileName := "c" + fmt.Sprintf("%v", empresaID) + "_products.idx"
+
 	if uploadErr := aws.SaveFile(aws.SaveFileArgs{
 		Bucket:      core.Env.S3_BUCKET,
-		Path:        "public",
+		Path:        "live",
 		Name:        indexFileName,
 		FileContent: combinedIndexBytes,
 		ContentType: "application/octet-stream",
@@ -183,55 +239,38 @@ func BuildProductosSearchIndex(empresaID int32) (*ProductosIndexBuildOutput, err
 		return nil, fmt.Errorf("error al guardar índice productos en S3 (public/%s): %w", indexFileName, uploadErr)
 	}
 
-	if persistSortedIDsErr := persistProductosSortedIDsCache(empresaID, stageOneIndexResult.SortedIDs, buildSunixTime); persistSortedIDsErr != nil {
-		return nil, persistSortedIDsErr
+	if persistUpdatedCacheErr := persistProductosIndexUpdatedCache(empresaID, buildSunixTime); persistUpdatedCacheErr != nil {
+		return nil, persistUpdatedCacheErr
 	}
-	core.Log("BuildIndex:: archivo índice actualizado:","| s3:", "public/" + indexFileName)
+	core.Log("BuildIndex:: archivo índice actualizado:", "| s3:", "public/"+indexFileName)
 
 	return &ProductosIndexBuildOutput{
 		IndexBuild: stageOneIndexResult,
 	}, nil
 }
 
-func persistProductosSortedIDsCache(empresaID int32, sortedProductIDs []int32, updatedSunixTime int32) error {
+func persistProductosIndexUpdatedCache(empresaID int32, updatedSunixTime int32) error {
 	if empresaID <= 0 {
-		return fmt.Errorf("empresa ID inválido para guardar sorted IDs de productos")
-	}
-	if len(sortedProductIDs) == 0 {
-		return fmt.Errorf("no hay sorted IDs de productos para guardar")
+		return fmt.Errorf("empresa ID inválido para guardar updated de índice de productos")
 	}
 	if updatedSunixTime <= 0 {
-		return fmt.Errorf("updated sunix inválido para guardar sorted IDs de productos")
-	}
-
-	cacheKey := core.Concatn(productSortedIDsCacheKey, updatedSunixTime)
-	// Cache row ID is deterministic per key+version, isolated by EmpresaID partition.
-	cacheRecordID := core.BasicHashInt(cacheKey)
-
-	cacheRow := core.Cache{
-		EmpresaID:    empresaID,
-		ID:           cacheRecordID,
-		Key:          cacheKey,
-		ContentBytes: s.EncodeIDs(sortedProductIDs),
-		// Keep cache metadata timestamp equal to index header build timestamp.
-		Updated: updatedSunixTime,
+		return fmt.Errorf("updated sunix inválido para guardar updated de índice de productos")
 	}
 
 	cacheRowCurrent := core.Cache{
 		EmpresaID: empresaID,
 		ID:        core.BasicHashInt(productSortedIDsCacheKey + "_current"),
 		Key:       productSortedIDsCacheKey + "_current",
-		Updated:   updatedSunixTime,
+		// Keep cache metadata timestamp equal to index header build timestamp.
+		Updated: updatedSunixTime,
 	}
 
-	if insertErr := db.Insert(&[]core.Cache{cacheRow, cacheRowCurrent}); insertErr != nil {
+	if insertErr := db.Insert(&[]core.Cache{cacheRowCurrent}); insertErr != nil {
 		core.Log(insertErr)
-		return fmt.Errorf("error al guardar sorted IDs de productos en cache (empresa=%d, cache_id=%d): %w", empresaID, cacheRecordID, insertErr)
+		return fmt.Errorf("error al guardar updated de índice de productos en cache (empresa=%d): %w", empresaID, insertErr)
 	}
 
-	core.Log("BuildIndex:: sorted IDs cache actualizado",
-		"| key:", cacheKey,
-		"| bytes:", len(cacheRow.ContentBytes))
+	core.Log("BuildIndex:: updated cache actualizado", "| key:", cacheRowCurrent.Key, "| updated:", cacheRowCurrent.Updated)
 	return nil
 }
 
@@ -305,6 +344,50 @@ func loadIndexerSourceDataWithCache(
 	}
 
 	core.Log("loadIndexerSourceDataWithCache:: marcas:", len(marcas), "| categorías:", len(categorias))
+	return productosData, nil
+}
+
+func loadIndexerSourceDataWithoutCache(
+	empresaID int32,
+) (ProductosData, error) {
+	productos := []s.Producto{}
+	query := db.Query(&productos)
+	query.Select(query.ID, query.Nombre, query.CategoriasIDs, query.MarcaID).
+		EmpresaID.Equals(empresaID).
+		Status.GreaterThan(0)
+	if queryErr := query.Exec(); queryErr != nil {
+		return ProductosData{}, fmt.Errorf("error al obtener productos para indexado: %w", queryErr)
+	}
+
+	marcas := []s.ListaCompartidaRegistro{}
+	categorias := []s.ListaCompartidaRegistro{}
+	// Query all active categories and brands to avoid large clustering-key IN cartesian products.
+	listRows := []s.ListaCompartidaRegistro{}
+	listQuery := db.Query(&listRows)
+	listQuery.Select(listQuery.ID, listQuery.Nombre, listQuery.ListaID).
+		EmpresaID.Equals(empresaID).
+		ListaID.In(productSharedListCategoriaID, productSharedListMarcaID).
+		Status.GreaterThan(0).
+		AllowFilter()
+	if queryErr := listQuery.Exec(); queryErr != nil {
+		return ProductosData{}, fmt.Errorf("error al obtener marcas/categorías para índice: %w", queryErr)
+	}
+
+	for _, listRow := range listRows {
+		if listRow.ListaID == productSharedListMarcaID {
+			marcas = append(marcas, listRow)
+		} else if listRow.ListaID == productSharedListCategoriaID {
+			categorias = append(categorias, listRow)
+		}
+	}
+
+	productosData := ProductosData{
+		Productos:  productos,
+		Marcas:     marcas,
+		Categorias: categorias,
+	}
+
+	core.Log("loadIndexerSourceDataWithoutCache:: marcas:", len(marcas), "| categorías:", len(categorias))
 	return productosData, nil
 }
 

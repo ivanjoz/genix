@@ -33,7 +33,7 @@ func splitTokenIntoSyllables(token string) []string {
 
 func defaultFixedAliases() (map[string]string, []string) {
 	groups := [][]string{
-		{"1"}, {"2"}, {"3", "y"}, {"4", "-"}, {"5"}, {"6", "z"}, {"7", "x"}, {"8", "w"}, {"9"},
+		{"1"}, {"2"}, {"y", "3"}, {"4"}, {"5"}, {"z", "6"}, {"x", "7"}, {"w", "8"}, {"9"},
 		{"g", "gr", "grs"},
 		{"ml", "mm", "mg", "mgs", "m3", "m2"},
 		{"k", "kg", "kgs", "kilo", "kilos", "kilogramos"},

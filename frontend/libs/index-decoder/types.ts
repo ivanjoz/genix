@@ -1,13 +1,16 @@
 // Constants mirror the backend binary contract for text and taxonomy payloads.
 export const TEXT_BINARY_MAGIC = "GIXIDX01";
-export const TEXT_BINARY_VERSION = 2;
+export const TEXT_BINARY_VERSION = 1;
 export const TAXONOMY_BINARY_MAGIC = "GIXTAX01";
-export const TAXONOMY_BINARY_VERSION = 2;
+export const TAXONOMY_BINARY_VERSION = 1;
 
 // Text sections are fixed and validated in the decoder.
 export const TEXT_SECTION_DICTIONARY = 1;
 export const TEXT_SECTION_SHAPES = 2;
 export const TEXT_SECTION_CONTENT = 3;
+export const TEXT_SECTION_ALIASES = 4;
+export const TEXT_SECTION_PRODUCT_IDS = 5;
+export const PRODUCT_ID_UINT32_SENTINEL = 0;
 
 // Taxonomy sections are fixed and validated in the decoder.
 export const TAXONOMY_SECTION_BRAND_IDS = 1;
@@ -25,7 +28,9 @@ export const BRAND_INDEX_ENCODING_UINT16 = 2;
 // Decoded product row including attached taxonomy references.
 export interface DecodedRecord {
 	recordIndex: number;
+	productID: number;
 	shape: number[];
+	productBytes: Uint8Array;
 	text: string;
 	brandDictionaryIndex: number;
 	brandID: number;
@@ -50,10 +55,14 @@ export interface DecodedTaxonomy {
 // Decoder operational stats used for debug and observability.
 export interface DecodeStats {
 	recordCount: number;
+	buildSunixTime: number;
+	updated: number;
 	dictionaryCount: number;
 	dictionaryBytes: number;
+	aliasBytes: number;
 	shapesBytes: number;
 	contentBytes: number;
+	productIDsBytes: number;
 	shapeDelta8Count: number;
 	shapeDelta16Count: number;
 	shapeDelta24Count: number;
@@ -66,8 +75,27 @@ export interface DecodeStats {
 // Top-level decoded payload for web consumption.
 export interface DecodeResult {
 	dictionaryTokens: string[];
+	dictionaryAliases: Map<string, number>;
 	records: DecodedRecord[];
 	taxonomy: DecodedTaxonomy | null;
 	stats: DecodeStats;
 }
 
+// Product view optimized for map-based access patterns in clients.
+export interface IndexedProduct {
+	productID: number;
+	productBytes: Uint8Array;
+	productNameLossy: string;
+	brandDictionaryIndex: number;
+	brandID: number;
+	brandName: string;
+	categoryDictionaryIndexes: number[];
+	categoryIDs: number[];
+	categoryNames: string[];
+}
+
+// Search hit row including the final ranking score used for ordering.
+export interface ProductSearchHit {
+	product: IndexedProduct;
+	rank: number;
+}

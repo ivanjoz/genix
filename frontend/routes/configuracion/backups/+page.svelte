@@ -39,7 +39,7 @@ import { Env } from '$core/env';
 
   const downloadBackup = (backup: IBackup) => {
     const s3key = ["backups", 1, backup.Name].join("/")
-    const url = Env.S3_URL + s3key
+    const url = Env.CDN_URL + s3key
     console.log("url to download::", url)
 
     const aElement = document.createElement("a")

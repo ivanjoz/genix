@@ -47,6 +47,7 @@ func main() {
 	fmt.Printf("unique_shapes: %d\n", result.Stats.UniqueShapes)
 	fmt.Printf("shape_size_bytes: %d\n", result.Stats.ShapesBytes)
 	fmt.Printf("text_content_size_bytes: %d\n", result.Stats.ContentBytes)
+	fmt.Printf("product_ids_size_bytes: %d\n", result.Stats.ProductIDsBytes)
 	fmt.Printf("total_size_bytes: %d\n", result.Stats.TotalBytes)
 	fmt.Printf("output: %s\n", *outputPath)
 }

@@ -74,3 +74,4 @@ backend/libs/index_builder/parsed_chunks/productos_parsed.psv
 backend/libs/index_builder/parsed_chunks/chunk_11.psv
 backend/libs/index_builder/productos.idx.tar.gz
 backend/libs/index_builder/productos.tar.zst
+backend/libs/index_builder/productos.idx.tar.zst

@@ -5,7 +5,6 @@ declare global {
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 import { PUBLIC_LAMBDA_URL, PUBLIC_SIGNALING_ENDPOINT, PUBLIC_SIGNALING_API_KEY, PUBLIC_FRONTEND_CDN } from '$env/static/public';
-
 export { browser };
 
 export const IsClient = () => {
@@ -44,7 +43,6 @@ export interface IEmpresaParams {
 
 export const Env = {
   appId: "genix",
-	S3_URL: "https://d16qwm950j0pjf.cloudfront.net/",
   CDN_URL: PUBLIC_FRONTEND_CDN,
   serviceWorker: "/sw.js",
   enviroment: "dev",
@@ -73,11 +71,6 @@ export const Env = {
   imageCounter: 10000,
   clearAccesos: null as (() => void) | null,
   navigate: goto,
-  history: {
-    pushState: (data: any, unused: string, url?: string | URL | null) => {
-      console.log("Es server!!", data, unused, url)
-    }
-  },
   getPathname: () => {
     if(browser){ return window.location.pathname }
     return Env.pathname || ""
@@ -112,7 +105,7 @@ export const Env = {
     if(Env.empresa.id){ return }
     const empresaID = Env.getEmpresaID()
     if(empresaID){
-      fetch(Env.S3_URL +`empresas/e-${empresaID}.json`)
+      fetch(Env.CDN_URL +`empresas/e-${empresaID}.json`)
       .then(res => res.json())
       .then(res => {
         Env.empresa = res

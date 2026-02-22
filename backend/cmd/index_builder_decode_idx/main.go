@@ -28,10 +28,11 @@ func main() {
 
 	fmt.Printf("Decoder Summary\n")
 	fmt.Printf("records: %d\n", decodedResult.Stats.RecordCount)
-	fmt.Printf("dictionary_count: %d\n", decodedResult.Stats.DictionaryCount)
-	fmt.Printf("dictionary_bytes: %d\n", decodedResult.Stats.DictionaryBytes)
+	fmt.Printf("dictionary_size_bytes: %d\n", decodedResult.Stats.DictionaryBytes)
+	fmt.Printf("aliases_size_bytes: %d\n", decodedResult.Stats.AliasBytes)
 	fmt.Printf("shape_size_bytes: %d\n", decodedResult.Stats.ShapesBytes)
 	fmt.Printf("content_size_bytes: %d\n", decodedResult.Stats.ContentBytes)
+	fmt.Printf("product_ids_size_bytes: %d\n", decodedResult.Stats.ProductIDsBytes)
 	fmt.Printf("shape_delta_counts: d8=%d d16=%d d24=%d\n", decodedResult.Stats.ShapeDelta8Count, decodedResult.Stats.ShapeDelta16Count, decodedResult.Stats.ShapeDelta24Count)
 	if decodedResult.Taxonomy != nil {
 		fmt.Printf("taxonomy_bytes: %d\n", decodedResult.Stats.TaxonomyBytes)
@@ -56,7 +57,7 @@ func main() {
 			if brandPreview == "" {
 				brandPreview = "-"
 			}
-			fmt.Printf("[%03d] ROW=%d BRAND=%s CATEGORIES=%s SHAPE=%v TEXT=%s\n", sampleIndex+1, sample.RecordIndex+1, brandPreview, categoryPreview, sample.Shape, sample.Text)
+			fmt.Printf("[%03d] PRODUCT_ID=%d BRAND=%s CATEGORIES=%s SHAPE=%v TEXT=%s\n", sampleIndex+1, sample.ProductID, brandPreview, categoryPreview, sample.Shape, sample.Text)
 		}
 	}
 }

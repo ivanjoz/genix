@@ -79,7 +79,7 @@ type BuildInput struct {
 
 `BuildProductosIndex` returns:
 
-- Stage-1 text fields (`SortedIDs`, `Shapes`, `Content`, `DictionaryTokens`, `Stats`, etc.)
+- Stage-1 text fields (`SortedIDs`, `Shapes`, `Content`, `AliasSection`, `ProductIDsSection`, `DictionaryTokens`, `Stats`, etc.)
 - Stage-2 taxonomy fields (`BrandIDs`, `CategoryIDs`, packed indexes, etc.)
 - `OptimizationStats ProductTextOptimizationAggregate`
 
@@ -123,7 +123,7 @@ Core behavior:
 5. encode words into syllable IDs
 6. encode record shapes
 7. sort encoded records deterministically
-8. emit `SortedIDs`, `Shapes`, `Content`, stats
+8. emit `SortedIDs`, `Shapes`, `Content`, `AliasSection`, `ProductIDsSection`, stats
 
 `SortedIDs` is the row-order contract consumed by taxonomy.
 
@@ -169,8 +169,23 @@ Text block is serialized by `ProductosIndexBuild.MarshalBinary` with:
 3. dictionary section
 4. shape stream section
 5. content section
+6. alias section
+7. product IDs section
 
 Shape stream uses delta encoding with compact paths for small deltas.
+
+### Product IDs Section Encoding
+
+`product_ids` stores one product ID per row with a compact variable-width layout:
+
+1. default path: one `uint16` little-endian word
+2. extended path: sentinel `uint16(0)` + two `uint16` words that reconstruct one `uint32`
+
+Reconstruction formula for extended IDs:
+
+- `id = lowWord | (highWord << 16)`
+
+This keeps small IDs compact while allowing large IDs without changing row alignment.
 
 ## Taxonomy Block Binary
 
@@ -224,11 +239,17 @@ Typical runtime integration:
 2. map source rows into `BuildInput`
 3. call `BuildProductosIndex`
 4. call `indexBuild.ToBytes()` and write bytes to disk
-5. log stage stats and optimization aggregate
+5. log stage stats and optimization aggregate (`dictionary_bytes`, `aliases_bytes`, `shapes_bytes`, `content_bytes`, `product_ids_bytes`)
 
 Output path used by current integration:
 
 - `libs/index_builder/productos.idx`
+
+Local helper script:
+
+- `libs/index_builder/run_build_and_stats_local.sh`
+  - runs DB no-persist build path
+  - writes `libs/index_builder/productos.idx`
 
 ## Extension Guidelines
 

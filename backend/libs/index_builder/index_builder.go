@@ -25,7 +25,11 @@ const (
 	textSectionDictionary uint8 = 1
 	textSectionShapes     uint8 = 2
 	textSectionContent    uint8 = 3
+	textSectionAliases    uint8 = 4
+	textSectionProductIDs uint8 = 5
 )
+
+const productIDUint32Sentinel uint16 = 0
 
 type RecordInput struct {
 	ID            int32
@@ -52,8 +56,10 @@ type BuildStats struct {
 	ShapeCoverageTop255Pct  float32
 	DictionaryCount         int32
 	DictionaryBytes         int32
+	AliasBytes              int32
 	ShapesBytes             int32
 	ContentBytes            int32
+	ProductIDsBytes         int32
 	TotalBytes              int32
 	ShapeDelta8Count        int32
 	ShapeDelta16Count       int32
@@ -141,7 +147,7 @@ func BuildIndex(records []RecordInput, options BuildOptions) (*ProductosIndexBui
 	}
 	// Map compact numeric buckets to valid dictionary IDs so numbers always encode in one byte.
 	for compactBucket := 1; compactBucket <= 244; compactBucket++ {
-		compactNumeric := fmt.Sprintf("n%03d", compactBucket)
+		compactNumeric := fmt.Sprintf("%03d", compactBucket)
 		remappedDictionaryID := uint8(((compactBucket - 1) % len(dictionaryTokens)) + 1)
 		dictionaryIDByToken[compactNumeric] = remappedDictionaryID
 	}
@@ -207,10 +213,18 @@ func BuildIndex(records []RecordInput, options BuildOptions) (*ProductosIndexBui
 	if shapeErr != nil {
 		return nil, shapeErr
 	}
+	productIDsSection, productIDsErr := encodeProductIDsSection(sortedIDs)
+	if productIDsErr != nil {
+		return nil, productIDsErr
+	}
 
 	dictionarySection, dictionaryErr := encodeDictionarySection(dictionaryTokens)
 	if dictionaryErr != nil {
 		return nil, dictionaryErr
+	}
+	aliasSection, aliasCount, aliasSectionErr := encodeAliasSection(aliasToCanonical, dictionaryIDByToken)
+	if aliasSectionErr != nil {
+		return nil, aliasSectionErr
 	}
 	shapeFrequencyByValue := make(map[uint32]int32, len(encoded))
 	for _, shapeValue := range sortedShapeValues {
@@ -244,14 +258,17 @@ func BuildIndex(records []RecordInput, options BuildOptions) (*ProductosIndexBui
 	}
 
 	result := &ProductosIndexBuild{
-		SortedIDs: sortedIDs,
-		Shapes:    shapeStream,
-		Content:   content,
+		SortedIDs:         sortedIDs,
+		ProductIDsSection: productIDsSection,
+		Shapes:            shapeStream,
+		Content:           content,
 		// Caller can overwrite this timestamp when persisting the final .idx payload.
 		BuildSunixTime:    0,
 		HeaderFlags:       HeaderFlagShapeDelta | HeaderFlagNumericCompact,
 		DictionaryTokens:  dictionaryTokens,
 		DictionarySection: dictionarySection,
+		AliasSection:      aliasSection,
+		AliasCount:        int32(aliasCount),
 		Stats: BuildStats{
 			InputRecords:            int32(len(records)),
 			EncodedRecords:          int32(len(encoded)),
@@ -263,8 +280,10 @@ func BuildIndex(records []RecordInput, options BuildOptions) (*ProductosIndexBui
 			ShapeCoverageTop255Pct:  shapeCoverageTop255Pct,
 			DictionaryCount:         int32(len(dictionaryTokens)),
 			DictionaryBytes:         int32(len(dictionarySection)),
+			AliasBytes:              int32(len(aliasSection)),
 			ShapesBytes:             int32(len(shapeStream)),
 			ContentBytes:            int32(len(content)),
+			ProductIDsBytes:         int32(len(productIDsSection)),
 			ShapeDelta8Count:        int32(d8),
 			ShapeDelta16Count:       int32(d16),
 			ShapeDelta24Count:       int32(d24),
@@ -299,13 +318,15 @@ func (buildResult *ProductosIndexBuild) MarshalBinary() ([]byte, error) {
 		{sectionID: textSectionDictionary, data: buildResult.DictionarySection, itemCount: uint32(len(buildResult.DictionaryTokens))},
 		{sectionID: textSectionShapes, data: buildResult.Shapes, itemCount: uint32(len(buildResult.SortedIDs))},
 		{sectionID: textSectionContent, data: buildResult.Content, itemCount: uint32(len(buildResult.Content))},
+		{sectionID: textSectionAliases, data: buildResult.AliasSection, itemCount: uint32(buildResult.AliasCount)},
+		{sectionID: textSectionProductIDs, data: buildResult.ProductIDsSection, itemCount: uint32(len(buildResult.SortedIDs))},
 	}
 
 	const sectionEntrySize = 1 + 4 + 4 + 4 + 4 // section_id + offset + length + item_count + checksum_crc32
 	// Header layout: magic + version + flags + record_count + build_sunix_time + dictionary_count + section_count + header_size.
 	baseHeaderSize := len(BinaryMagic) + 1 + 1 + 4 + 4 + 1 + 1 + 2
 	headerSize := baseHeaderSize + len(sections)*sectionEntrySize
-	payload := make([]byte, 0, headerSize+len(buildResult.DictionarySection)+len(buildResult.Shapes)+len(buildResult.Content))
+	payload := make([]byte, 0, headerSize+len(buildResult.DictionarySection)+len(buildResult.Shapes)+len(buildResult.Content)+len(buildResult.ProductIDsSection))
 	payload = append(payload, []byte(BinaryMagic)...)
 	payload = append(payload, BinaryVersion)
 	payload = append(payload, buildResult.HeaderFlags)
@@ -506,10 +527,10 @@ func splitNumericPrefixToken(token string) (string, string, bool) {
 func compactNumericToken(rawNumber string) string {
 	parsed, err := strconv.Atoi(rawNumber)
 	if err != nil || parsed <= 0 {
-		return "n001"
+		return "001"
 	}
 	bucket := ((parsed - 1) % 244) + 1
-	return fmt.Sprintf("n%03d", bucket)
+	return fmt.Sprintf("%03d", bucket)
 }
 
 func isNumericToken(token string) bool {
@@ -524,12 +545,46 @@ func isNumericToken(token string) bool {
 	return true
 }
 
+func splitCompactNumericToken(token string) (string, bool) {
+	// Expected format: 3 digits + optional [a-z] suffix.
+	if len(token) < 3 {
+		return "", false
+	}
+	for digitIndex := 0; digitIndex < 3; digitIndex++ {
+		currentByte := token[digitIndex]
+		if currentByte < '0' || currentByte > '9' {
+			return "", false
+		}
+	}
+	for suffixIndex := 3; suffixIndex < len(token); suffixIndex++ {
+		currentByte := token[suffixIndex]
+		if currentByte < 'a' || currentByte > 'z' {
+			return "", false
+		}
+	}
+	return token[3:], true
+}
+
 func extractSyllableFrequency(records []normalizedRecord, aliasToCanonical map[string]string) map[string]int {
 	frequency := make(map[string]int, 1024)
 	for _, record := range records {
 		for _, token := range record.tokens {
 			if canonical, exists := aliasToCanonical[token]; exists {
 				frequency[canonical]++
+				continue
+			}
+			if compactSuffix, isCompactNumeric := splitCompactNumericToken(token); isCompactNumeric {
+				// Never include numeric fragments (e.g. "75") in dictionary frequencies.
+				if compactSuffix == "" {
+					continue
+				}
+				if canonicalSuffix, hasCanonicalSuffix := aliasToCanonical[compactSuffix]; hasCanonicalSuffix {
+					frequency[canonicalSuffix]++
+					continue
+				}
+				for _, suffixSyllable := range splitTokenIntoSyllables(compactSuffix) {
+					frequency[suffixSyllable]++
+				}
 				continue
 			}
 			for _, syllable := range splitTokenIntoSyllables(token) {
@@ -545,6 +600,10 @@ func buildDictionaryTokens(fixedCanonical []string, frequencyBySyllable map[stri
 	seen := make(map[string]struct{}, maxSlots*2)
 	appendToken := func(token string) {
 		if len(tokens) >= maxSlots || token == "" {
+			return
+		}
+		// Keep single-digit numeric canonicals, but block 2+ digit pure numbers from dictionary slots.
+		if isNumericToken(token) && len(token) > 1 {
 			return
 		}
 		if _, exists := seen[token]; exists {
@@ -612,14 +671,9 @@ func encodeWordToken(token string, dictionaryIDByToken map[string]uint8, aliasTo
 		}
 	}
 
-	// Compact numeric prefix token: nXYZ + optional suffix.
-	if len(token) >= 4 && token[0] == 'n' {
-		numericPart := token
-		suffix := ""
-		if len(token) > 4 {
-			numericPart = token[:4]
-			suffix = token[4:]
-		}
+	// Compact numeric prefix token: XYZ + optional suffix.
+	if suffix, isCompactNumeric := splitCompactNumericToken(token); isCompactNumeric {
+		numericPart := token[:3]
 		if dictionaryID, ok := dictionaryIDByToken[numericPart]; ok {
 			encoded := []uint8{dictionaryID}
 			if suffix != "" {
@@ -681,6 +735,68 @@ func encodeDictionarySection(tokens []string) ([]byte, error) {
 		section = append(section, token...)
 	}
 	return section, nil
+}
+
+func encodeAliasSection(aliasToCanonical map[string]string, dictionaryIDByToken map[string]uint8) ([]byte, int, error) {
+	type aliasRow struct {
+		aliasToken          string
+		canonicalDictionary uint8
+	}
+
+	aliasRows := make([]aliasRow, 0, len(aliasToCanonical))
+	for aliasToken, canonicalToken := range aliasToCanonical {
+		if aliasToken == canonicalToken {
+			continue
+		}
+		canonicalDictionaryID, exists := dictionaryIDByToken[canonicalToken]
+		if !exists || canonicalDictionaryID == 0 {
+			continue
+		}
+		aliasRows = append(aliasRows, aliasRow{
+			aliasToken:          aliasToken,
+			canonicalDictionary: canonicalDictionaryID,
+		})
+	}
+
+	sort.SliceStable(aliasRows, func(leftIndex, rightIndex int) bool {
+		return aliasRows[leftIndex].aliasToken < aliasRows[rightIndex].aliasToken
+	})
+
+	section := make([]byte, 0, len(aliasRows)*4)
+	for _, alias := range aliasRows {
+		if len(alias.aliasToken) == 0 || len(alias.aliasToken) > 255 {
+			return nil, 0, fmt.Errorf("invalid alias token len=%d token=%q", len(alias.aliasToken), alias.aliasToken)
+		}
+		section = append(section, uint8(len(alias.aliasToken)))
+		section = append(section, alias.aliasToken...)
+		section = append(section, alias.canonicalDictionary)
+	}
+	return section, len(aliasRows), nil
+}
+
+func encodeProductIDsSection(sortedProductIDs []int32) ([]byte, error) {
+	// Compact IDs as uint16 words; sentinel(0) means the next two words hold one uint32.
+	sectionBytes := make([]byte, 0, len(sortedProductIDs)*2)
+	appendWord := func(word uint16) {
+		sectionBytes = append(sectionBytes, byte(word), byte(word>>8))
+	}
+
+	for recordIndex, currentProductID := range sortedProductIDs {
+		if currentProductID <= 0 {
+			return nil, fmt.Errorf("invalid product id at record=%d id=%d", recordIndex, currentProductID)
+		}
+
+		productIDAsUint32 := uint32(currentProductID)
+		if productIDAsUint32 <= uint32(^uint16(0)) && productIDAsUint32 != uint32(productIDUint32Sentinel) {
+			appendWord(uint16(productIDAsUint32))
+			continue
+		}
+
+		appendWord(productIDUint32Sentinel)
+		appendWord(uint16(productIDAsUint32 & 0xFFFF))
+		appendWord(uint16(productIDAsUint32 >> 16))
+	}
+	return sectionBytes, nil
 }
 
 type bitWriter struct {

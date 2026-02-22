@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
-	"os"
 )
 
 const (
@@ -38,25 +37,6 @@ func (buildResult *ProductosIndexBuild) ToBytes() ([]byte, error) {
 	combinedPayload = append(combinedPayload, textPayload...)
 	combinedPayload = append(combinedPayload, taxonomyPayload...)
 	return combinedPayload, nil
-}
-
-// WriteCombinedBinaryFile persists the final combined payload to disk.
-// Deprecated abstraction: prefer calling ProductosIndexBuild.ToBytes() and writing explicitly.
-func WriteCombinedBinaryFile(outputPath string, buildResult *ProductosIndexBuild) error {
-	combinedPayload, marshalErr := buildResult.ToBytes()
-	if marshalErr != nil {
-		return marshalErr
-	}
-	if writeErr := os.WriteFile(outputPath, combinedPayload, 0o644); writeErr != nil {
-		return fmt.Errorf("write combined index file: %w", writeErr)
-	}
-	return nil
-}
-
-// MarshalCombinedBinary returns the final combined payload.
-// Deprecated abstraction: prefer calling ProductosIndexBuild.ToBytes().
-func MarshalCombinedBinary(buildResult *ProductosIndexBuild) ([]byte, error) {
-	return buildResult.ToBytes()
 }
 
 func marshalTaxonomyBinary(taxonomyBuildResult *ProductosIndexBuild) ([]byte, error) {

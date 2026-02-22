@@ -31,7 +31,7 @@ func TestDecodeBinary_Sample50PrintBrandAndCategories(t *testing.T) {
 	decodedResult, decodeErr := DecodeBinary(indexBytes)
 	if decodeErr != nil {
 		// This fixture can be stale while format is evolving; strict decoder supports only the current format.
-		if strings.Contains(decodeErr.Error(), "unsupported text version=") {
+		if strings.Contains(decodeErr.Error(), "unsupported text version=") || strings.Contains(decodeErr.Error(), "invalid text section count=") {
 			t.Skipf("fixture is not current format v%d: %v", BinaryVersion, decodeErr)
 		}
 		t.Fatalf("decode productos.idx: %v", decodeErr)
@@ -57,7 +57,7 @@ func TestDecodeBinary_Sample50PrintBrandAndCategories(t *testing.T) {
 			brandPreview = "-"
 		}
 		// Print random sample rows for manual decoder verification against source data expectations.
-		t.Logf("[%03d] ROW=%d BRAND=%s CATEGORIES=%s TEXT=%s", sampleIndex+1, sampledRecord.RecordIndex+1, brandPreview, categoryPreview, sampledRecord.Text)
+		t.Logf("[%03d] ROW=%d PRODUCT_ID=%d BRAND=%s CATEGORIES=%s TEXT=%s", sampleIndex+1, sampledRecord.RecordIndex+1, sampledRecord.ProductID, brandPreview, categoryPreview, sampledRecord.Text)
 	}
 }
 
@@ -108,6 +108,11 @@ func TestDecodeBinary_CombinedRoundtrip(t *testing.T) {
 	if decodedResult.Stats.TaxonomyBytes <= 0 {
 		t.Fatalf("taxonomy bytes must be positive")
 	}
+	expectedProductIDSet := map[int32]struct{}{
+		101: {},
+		102: {},
+		103: {},
+	}
 
 	for recordIndex, decodedRecord := range decodedResult.Records {
 		// Every decoded row must be enriched by taxonomy mappings in combined payloads.
@@ -116,6 +121,9 @@ func TestDecodeBinary_CombinedRoundtrip(t *testing.T) {
 		}
 		if len(decodedRecord.CategoryNames) == 0 {
 			t.Fatalf("record %d missing categories", recordIndex)
+		}
+		if _, exists := expectedProductIDSet[decodedRecord.ProductID]; !exists {
+			t.Fatalf("record %d has unexpected product id=%d", recordIndex, decodedRecord.ProductID)
 		}
 	}
 }

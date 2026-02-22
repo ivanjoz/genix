@@ -1,4 +1,5 @@
-import { BRAND_INDEX_ENCODING_UINT12, BRAND_INDEX_ENCODING_UINT16, DecodedRecord } from "./types";
+import { BRAND_INDEX_ENCODING_UINT12, BRAND_INDEX_ENCODING_UINT16 } from "./types";
+import type { DecodedRecord } from "./types";
 
 // Maps the taxonomy brand index encoding flag to a readable mode name.
 export const brandEncodingName = (flag: number): string => {
@@ -112,4 +113,3 @@ const fisherYatesPermutation = (size: number, randomGenerator: () => number): nu
 	}
 	return indexes;
 };
-

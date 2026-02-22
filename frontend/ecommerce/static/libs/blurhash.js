@@ -303,7 +303,6 @@
 
 		const handleScroll = () => {
 			if (!subheader0) { subheader0 = document.getElementById("sh-0") }
-			console.log("recalculando scroll::", subheader0)
 			if(!subheader0){ return }
 			
       if (window.scrollY > (subheader0?.offsetTop || 0)) {

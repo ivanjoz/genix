@@ -1,9 +1,6 @@
 import {
 	BRAND_INDEX_ENCODING_UINT12,
 	BRAND_INDEX_ENCODING_UINT16,
-	DecodeResult,
-	DecodedRecord,
-	DecodedTaxonomy,
 	TAXONOMY_BINARY_MAGIC,
 	TAXONOMY_BINARY_VERSION,
 	TAXONOMY_SECTION_BRAND_IDS,
@@ -13,12 +10,16 @@ import {
 	TAXONOMY_SECTION_CATEGORY_IDS,
 	TAXONOMY_SECTION_CATEGORY_INDEX,
 	TAXONOMY_SECTION_CATEGORY_NAMES,
+	PRODUCT_ID_UINT32_SENTINEL,
 	TEXT_BINARY_MAGIC,
 	TEXT_BINARY_VERSION,
+	TEXT_SECTION_ALIASES,
 	TEXT_SECTION_CONTENT,
 	TEXT_SECTION_DICTIONARY,
+	TEXT_SECTION_PRODUCT_IDS,
 	TEXT_SECTION_SHAPES
 } from "./types";
+import type { DecodeResult, DecodedRecord, DecodedTaxonomy } from "./types";
 
 import {
 	brandEncodingName,
@@ -40,6 +41,7 @@ interface BinarySectionDescriptor {
 
 interface DecodedTextHeader {
 	recordCount: number;
+	buildSunixTime: number;
 	dictionaryCount: number;
 	sectionsByID: Map<number, BinarySectionDescriptor>;
 	payloadEnd: number;
@@ -54,11 +56,25 @@ export const decodeBinary = (indexBytesInput: Uint8Array | ArrayBuffer): DecodeR
 	const dictionarySection = requiredSection(indexBytes, textHeader.sectionsByID, TEXT_SECTION_DICTIONARY);
 	const shapeSection = requiredSection(indexBytes, textHeader.sectionsByID, TEXT_SECTION_SHAPES);
 	const contentSection = requiredSection(indexBytes, textHeader.sectionsByID, TEXT_SECTION_CONTENT);
+	const aliasSection = requiredSection(indexBytes, textHeader.sectionsByID, TEXT_SECTION_ALIASES);
+	const productIDsSection = requiredSection(indexBytes, textHeader.sectionsByID, TEXT_SECTION_PRODUCT_IDS);
 
 	const dictionaryTokens = decodeDictionarySectionRaw(dictionarySection, textHeader.dictionaryCount);
+	const decodedProductIDs = decodeProductIDsSection(productIDsSection, textHeader.recordCount);
 	const decodedShapeDelta = decodeShapeDeltaStream(shapeSection, textHeader.recordCount);
 	const decodedShapes = decodedShapeDelta.shapeValues.map((shapeValue) => decodeShapeValue(shapeValue));
-	const decodedRecords = decodeContentRecords(contentSection, decodedShapes, dictionaryTokens);
+	const decodedRecords = decodeContentRecords(
+		contentSection,
+		decodedShapes,
+		dictionaryTokens,
+		decodedProductIDs
+	);
+	const aliasDescriptor = textHeader.sectionsByID.get(TEXT_SECTION_ALIASES)!;
+	const dictionaryAliases = decodeAliasSection(
+		aliasSection,
+		dictionaryTokens.length,
+		aliasDescriptor.itemCount
+	);
 
 	if (decodedRecords.length !== textHeader.recordCount) {
 		throw new Error(
@@ -68,14 +84,19 @@ export const decodeBinary = (indexBytesInput: Uint8Array | ArrayBuffer): DecodeR
 
 	const decodeResult: DecodeResult = {
 		dictionaryTokens,
+		dictionaryAliases,
 		records: decodedRecords,
 		taxonomy: null,
 		stats: {
 			recordCount: textHeader.recordCount,
+			buildSunixTime: textHeader.buildSunixTime,
+			updated: textHeader.buildSunixTime,
 			dictionaryCount: textHeader.dictionaryCount,
 			dictionaryBytes: dictionarySection.length,
+			aliasBytes: aliasSection.length,
 			shapesBytes: shapeSection.length,
 			contentBytes: contentSection.length,
+			productIDsBytes: productIDsSection.length,
 			shapeDelta8Count: decodedShapeDelta.delta8Count,
 			shapeDelta16Count: decodedShapeDelta.delta16Count,
 			shapeDelta24Count: decodedShapeDelta.delta24Count,
@@ -106,9 +127,30 @@ export const decodeBinary = (indexBytesInput: Uint8Array | ArrayBuffer): DecodeR
 
 const utf8Decoder = new TextDecoder();
 
+export const readBuildSunixTimeFromHeader = (
+	indexBytesInput: Uint8Array | ArrayBuffer
+): number => {
+	const indexBytes =
+		indexBytesInput instanceof Uint8Array ? indexBytesInput : new Uint8Array(indexBytesInput);
+	const headerPrefixSize = TEXT_BINARY_MAGIC.length + 1 + 1 + 4 + 4;
+	if (indexBytes.length < headerPrefixSize) {
+		throw new Error(`index too small bytes=${indexBytes.length}`);
+	}
+	if (decodeAscii(indexBytes.subarray(0, TEXT_BINARY_MAGIC.length)) !== TEXT_BINARY_MAGIC) {
+		throw new Error("invalid text magic");
+	}
+	if (indexBytes[TEXT_BINARY_MAGIC.length] !== TEXT_BINARY_VERSION) {
+		throw new Error(
+			`unsupported text version=${indexBytes[TEXT_BINARY_MAGIC.length]} (expected=${TEXT_BINARY_VERSION})`
+		);
+	}
+	const buildSunixOffset = TEXT_BINARY_MAGIC.length + 1 + 1 + 4;
+	return readUint32LE(indexBytes, buildSunixOffset);
+};
+
 const decodeTextHeaderV2 = (indexBytes: Uint8Array): DecodedTextHeader => {
-	// Base header matches backend: magic + version + flags + counters + section table size.
-	const baseHeaderSize = TEXT_BINARY_MAGIC.length + 1 + 1 + 4 + 1 + 1 + 2;
+	// Base header matches backend v1: magic + version + flags + record_count + build_sunix_time + counters + section table size.
+	const baseHeaderSize = TEXT_BINARY_MAGIC.length + 1 + 1 + 4 + 4 + 1 + 1 + 2;
 	if (indexBytes.length < baseHeaderSize) {
 		throw new Error(`index too small bytes=${indexBytes.length}`);
 	}
@@ -125,6 +167,8 @@ const decodeTextHeaderV2 = (indexBytes: Uint8Array): DecodedTextHeader => {
 	cursor += 1; // Reserved flags.
 	const recordCount = readUint32LE(indexBytes, cursor);
 	cursor += 4;
+	const buildSunixTime = readUint32LE(indexBytes, cursor);
+	cursor += 4;
 	const dictionaryCount = indexBytes[cursor];
 	cursor += 1;
 	const sectionCount = indexBytes[cursor];
@@ -138,12 +182,18 @@ const decodeTextHeaderV2 = (indexBytes: Uint8Array): DecodedTextHeader => {
 	if (dictionaryCount <= 0 || dictionaryCount > 255) {
 		throw new Error(`invalid dictionary count=${dictionaryCount}`);
 	}
-	if (sectionCount !== 3) {
+	if (sectionCount !== 5) {
 		throw new Error(`invalid text section count=${sectionCount}`);
 	}
 
 	const decodedSectionTable = decodeSectionTable(indexBytes, cursor, headerSize, sectionCount);
-	const requiredTextSections = [TEXT_SECTION_DICTIONARY, TEXT_SECTION_SHAPES, TEXT_SECTION_CONTENT];
+	const requiredTextSections = [
+		TEXT_SECTION_DICTIONARY,
+		TEXT_SECTION_SHAPES,
+		TEXT_SECTION_CONTENT,
+		TEXT_SECTION_ALIASES,
+		TEXT_SECTION_PRODUCT_IDS
+	];
 	for (const sectionID of requiredTextSections) {
 		if (!decodedSectionTable.sectionsByID.has(sectionID)) {
 			throw new Error(`missing text section=${sectionID}`);
@@ -168,9 +218,15 @@ const decodeTextHeaderV2 = (indexBytes: Uint8Array): DecodedTextHeader => {
 			`text content item count mismatch expected=${decodedSectionTable.sectionsByID.get(TEXT_SECTION_CONTENT)!.length} got=${decodedSectionTable.sectionsByID.get(TEXT_SECTION_CONTENT)!.itemCount}`
 		);
 	}
+	if (decodedSectionTable.sectionsByID.get(TEXT_SECTION_PRODUCT_IDS)!.itemCount !== recordCount) {
+		throw new Error(
+			`text product_ids item count mismatch expected=${recordCount} got=${decodedSectionTable.sectionsByID.get(TEXT_SECTION_PRODUCT_IDS)!.itemCount}`
+		);
+	}
 
 	return {
 		recordCount,
+		buildSunixTime,
 		dictionaryCount,
 		sectionsByID: decodedSectionTable.sectionsByID,
 		payloadEnd: decodedSectionTable.maxPayloadEnd
@@ -269,6 +325,78 @@ const decodeDictionarySectionRaw = (section: Uint8Array, dictionaryCount: number
 	return tokens;
 };
 
+const decodeAliasSection = (
+	section: Uint8Array,
+	dictionaryTokenCount: number,
+	expectedAliases: number
+): Map<string, number> => {
+	const decodedAliases = new Map<string, number>();
+	let cursor = 0;
+	for (let aliasIndex = 0; aliasIndex < expectedAliases; aliasIndex++) {
+		if (cursor >= section.length) {
+			throw new Error(`alias section truncated at alias=${aliasIndex}`);
+		}
+		const aliasLength = section[cursor];
+		cursor += 1;
+		if (aliasLength <= 0 || cursor + aliasLength > section.length) {
+			throw new Error(`invalid alias length at alias=${aliasIndex}`);
+		}
+		const aliasToken = utf8Decoder.decode(section.subarray(cursor, cursor + aliasLength));
+		cursor += aliasLength;
+		if (cursor >= section.length) {
+			throw new Error(`alias section missing dictionary id at alias=${aliasIndex}`);
+		}
+		const dictionaryID = section[cursor];
+		cursor += 1;
+		if (dictionaryID <= 0 || dictionaryID > dictionaryTokenCount) {
+			throw new Error(
+				`alias dictionary id out of range alias=${aliasToken} id=${dictionaryID} dict=${dictionaryTokenCount}`
+			);
+		}
+		decodedAliases.set(aliasToken, dictionaryID);
+	}
+	if (cursor !== section.length) {
+		throw new Error(`alias section trailing bytes=${section.length - cursor}`);
+	}
+	return decodedAliases;
+};
+
+const decodeProductIDsSection = (section: Uint8Array, expectedRecordCount: number): number[] => {
+	const decodedProductIDs: number[] = [];
+	let cursor = 0;
+
+	const readWord = (): number => {
+		if (cursor + 2 > section.length) {
+			throw new Error(`product_ids section truncated at byte=${cursor}`);
+		}
+		const wordValue = readUint16LE(section, cursor);
+		cursor += 2;
+		return wordValue;
+	};
+
+	for (let recordIndex = 0; recordIndex < expectedRecordCount; recordIndex++) {
+		const firstWord = readWord();
+		let decodedProductID = 0;
+		if (firstWord !== PRODUCT_ID_UINT32_SENTINEL) {
+			decodedProductID = firstWord;
+		} else {
+			const lowWord = readWord();
+			const highWord = readWord();
+			decodedProductID = (lowWord | (highWord << 16)) >>> 0;
+		}
+
+		if (decodedProductID <= 0) {
+			throw new Error(`invalid decoded product id=${decodedProductID} at record=${recordIndex}`);
+		}
+		decodedProductIDs.push(decodedProductID);
+	}
+
+	if (cursor !== section.length) {
+		throw new Error(`product_ids section trailing bytes=${section.length - cursor}`);
+	}
+	return decodedProductIDs;
+};
+
 class BitReader {
 	private readonly bytes: Uint8Array;
 	private offset = 0;
@@ -357,13 +485,19 @@ const decodeShapeValue = (shapeValue: number): number[] => {
 const decodeContentRecords = (
 	content: Uint8Array,
 	shapes: number[][],
-	dictionaryTokens: string[]
+	dictionaryTokens: string[],
+	productIDs: number[]
 ): DecodedRecord[] => {
+	if (shapes.length !== productIDs.length) {
+		throw new Error(`shape/product id count mismatch shapes=${shapes.length} ids=${productIDs.length}`);
+	}
+
 	let cursor = 0;
 	const decodedRecords: DecodedRecord[] = [];
 
 	for (let recordIndex = 0; recordIndex < shapes.length; recordIndex++) {
 		const shape = shapes[recordIndex];
+		const recordContentStart = cursor;
 		const decodedWords: string[] = [];
 		for (const wordSyllableCount of shape) {
 			if (cursor + wordSyllableCount > content.length) {
@@ -383,7 +517,10 @@ const decodeContentRecords = (
 
 		decodedRecords.push({
 			recordIndex,
+			productID: productIDs[recordIndex],
 			shape: [...shape],
+			// Preserve raw syllable-token IDs for direct, fast product reconstruction.
+			productBytes: content.slice(recordContentStart, cursor),
 			text: decodedWords.join(" "),
 			brandDictionaryIndex: 0,
 			brandID: 0,

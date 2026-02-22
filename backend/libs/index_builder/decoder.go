@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
+	"math"
 	"math/rand"
 	"sort"
 	"strings"
@@ -22,6 +23,7 @@ const (
 
 type DecodedRecord struct {
 	RecordIndex int32
+	ProductID   int32
 	Shape       []uint8
 	Text        string
 
@@ -50,8 +52,10 @@ type DecodeStats struct {
 	BuildSunixTime    int32
 	DictionaryCount   int32
 	DictionaryBytes   int32
+	AliasBytes        int32
 	ShapesBytes       int32
 	ContentBytes      int32
+	ProductIDsBytes   int32
 	ShapeDelta8Count  int32
 	ShapeDelta16Count int32
 	ShapeDelta24Count int32
@@ -63,10 +67,11 @@ type DecodeStats struct {
 }
 
 type DecodeResult struct {
-	DictionaryTokens []string
-	Records          []DecodedRecord
-	Taxonomy         *DecodedTaxonomy
-	Stats            DecodeStats
+	DictionaryTokens  []string
+	DictionaryAliases map[string]uint8
+	Records           []DecodedRecord
+	Taxonomy          *DecodedTaxonomy
+	Stats             DecodeStats
 }
 
 type binarySectionDescriptor struct {
@@ -86,10 +91,17 @@ func DecodeBinary(indexBytes []byte) (*DecodeResult, error) {
 	dictionarySection := textHeader.requiredSection(indexBytes, textSectionDictionary)
 	shapeSection := textHeader.requiredSection(indexBytes, textSectionShapes)
 	contentSection := textHeader.requiredSection(indexBytes, textSectionContent)
+	aliasSection := textHeader.requiredSection(indexBytes, textSectionAliases)
+	productIDsSection := textHeader.requiredSection(indexBytes, textSectionProductIDs)
 
 	dictionaryTokens, dictionaryErr := decodeDictionarySectionRaw(dictionarySection, int(textHeader.dictionaryCount))
 	if dictionaryErr != nil {
 		return nil, dictionaryErr
+	}
+
+	decodedProductIDs, productIDsErr := decodeProductIDsSection(productIDsSection, int(textHeader.recordCount))
+	if productIDsErr != nil {
+		return nil, productIDsErr
 	}
 
 	shapeValues, delta8Count, delta16Count, delta24Count, shapeErr := decodeShapeDeltaStream(shapeSection, int(textHeader.recordCount))
@@ -101,7 +113,7 @@ func DecodeBinary(indexBytes []byte) (*DecodeResult, error) {
 		decodedShapes = append(decodedShapes, decodeShapeValue(shapeValue))
 	}
 
-	decodedRecords, contentErr := decodeContentRecords(contentSection, decodedShapes, dictionaryTokens)
+	decodedRecords, contentErr := decodeContentRecords(contentSection, decodedShapes, dictionaryTokens, decodedProductIDs)
 	if contentErr != nil {
 		return nil, contentErr
 	}
@@ -110,20 +122,28 @@ func DecodeBinary(indexBytes []byte) (*DecodeResult, error) {
 	}
 
 	decodeResult := &DecodeResult{
-		DictionaryTokens: dictionaryTokens,
-		Records:          decodedRecords,
+		DictionaryTokens:  dictionaryTokens,
+		DictionaryAliases: map[string]uint8{},
+		Records:           decodedRecords,
 		Stats: DecodeStats{
 			RecordCount:       textHeader.recordCount,
 			BuildSunixTime:    textHeader.buildSunixTime,
 			DictionaryCount:   textHeader.dictionaryCount,
 			DictionaryBytes:   int32(len(dictionarySection)),
+			AliasBytes:        int32(len(aliasSection)),
 			ShapesBytes:       int32(len(shapeSection)),
 			ContentBytes:      int32(len(contentSection)),
+			ProductIDsBytes:   int32(len(productIDsSection)),
 			ShapeDelta8Count:  int32(delta8Count),
 			ShapeDelta16Count: int32(delta16Count),
 			ShapeDelta24Count: int32(delta24Count),
 		},
 	}
+	decodedAliases, aliasErr := decodeAliasSection(aliasSection, dictionaryTokens, int(textHeader.sectionsByID[textSectionAliases].itemCount))
+	if aliasErr != nil {
+		return nil, aliasErr
+	}
+	decodeResult.DictionaryAliases = decodedAliases
 
 	if textHeader.payloadEnd == len(indexBytes) {
 		return decodeResult, nil
@@ -189,7 +209,7 @@ func decodeTextHeader(indexBytes []byte) (*decodedTextHeader, error) {
 	if dictionaryCount <= 0 || dictionaryCount > 255 {
 		return nil, fmt.Errorf("invalid dictionary count=%d", dictionaryCount)
 	}
-	if sectionCount != 3 {
+	if sectionCount != 5 {
 		return nil, fmt.Errorf("invalid text section count=%d", sectionCount)
 	}
 
@@ -198,7 +218,7 @@ func decodeTextHeader(indexBytes []byte) (*decodedTextHeader, error) {
 		return nil, fmt.Errorf("decode text section table: %w", sectionErr)
 	}
 
-	requiredTextSections := []uint8{textSectionDictionary, textSectionShapes, textSectionContent}
+	requiredTextSections := []uint8{textSectionDictionary, textSectionShapes, textSectionContent, textSectionAliases, textSectionProductIDs}
 	for _, sectionID := range requiredTextSections {
 		if _, hasSection := sectionsByID[sectionID]; !hasSection {
 			return nil, fmt.Errorf("missing text section=%d", sectionID)
@@ -214,6 +234,9 @@ func decodeTextHeader(indexBytes []byte) (*decodedTextHeader, error) {
 	if sectionsByID[textSectionContent].itemCount != uint32(sectionsByID[textSectionContent].length) {
 		return nil, fmt.Errorf("text content item count mismatch expected=%d got=%d", sectionsByID[textSectionContent].length, sectionsByID[textSectionContent].itemCount)
 	}
+	if sectionsByID[textSectionProductIDs].itemCount != uint32(recordCount) {
+		return nil, fmt.Errorf("text product_ids item count mismatch expected=%d got=%d", recordCount, sectionsByID[textSectionProductIDs].itemCount)
+	}
 
 	return &decodedTextHeader{
 		recordCount:     recordCount,
@@ -222,6 +245,36 @@ func decodeTextHeader(indexBytes []byte) (*decodedTextHeader, error) {
 		sectionsByID:    sectionsByID,
 		payloadEnd:      payloadEnd,
 	}, nil
+}
+
+func decodeAliasSection(section []byte, dictionaryTokens []string, expectedAliases int) (map[string]uint8, error) {
+	decodedAliases := make(map[string]uint8, expectedAliases)
+	cursor := 0
+	for aliasIndex := 0; aliasIndex < expectedAliases; aliasIndex++ {
+		if cursor >= len(section) {
+			return nil, fmt.Errorf("alias section truncated at alias=%d", aliasIndex)
+		}
+		aliasLen := int(section[cursor])
+		cursor++
+		if aliasLen <= 0 || cursor+aliasLen > len(section) {
+			return nil, fmt.Errorf("invalid alias length at alias=%d", aliasIndex)
+		}
+		aliasToken := string(section[cursor : cursor+aliasLen])
+		cursor += aliasLen
+		if cursor >= len(section) {
+			return nil, fmt.Errorf("alias section missing dictionary id at alias=%d", aliasIndex)
+		}
+		dictionaryID := section[cursor]
+		cursor++
+		if dictionaryID == 0 || int(dictionaryID) > len(dictionaryTokens) {
+			return nil, fmt.Errorf("alias dictionary id out of range alias=%s id=%d dict=%d", aliasToken, dictionaryID, len(dictionaryTokens))
+		}
+		decodedAliases[aliasToken] = dictionaryID
+	}
+	if cursor != len(section) {
+		return nil, fmt.Errorf("alias section trailing bytes=%d", len(section)-cursor)
+	}
+	return decodedAliases, nil
 }
 
 func (decodedHeader *decodedTextHeader) requiredSection(indexBytes []byte, sectionID uint8) []byte {
@@ -307,6 +360,55 @@ func decodeDictionarySectionRaw(section []byte, dictionaryCount int) ([]string, 
 		return nil, fmt.Errorf("dictionary trailing bytes=%d", len(section)-cursor)
 	}
 	return tokens, nil
+}
+
+func decodeProductIDsSection(section []byte, expectedRecordCount int) ([]int32, error) {
+	decodedProductIDs := make([]int32, 0, expectedRecordCount)
+	cursor := 0
+
+	readWord := func() (uint16, error) {
+		if cursor+2 > len(section) {
+			return 0, fmt.Errorf("product_ids section truncated at byte=%d", cursor)
+		}
+		wordValue := binary.LittleEndian.Uint16(section[cursor : cursor+2])
+		cursor += 2
+		return wordValue, nil
+	}
+
+	for recordIndex := 0; recordIndex < expectedRecordCount; recordIndex++ {
+		firstWord, readErr := readWord()
+		if readErr != nil {
+			return nil, fmt.Errorf("read product id word at record=%d: %w", recordIndex, readErr)
+		}
+
+		var decodedProductID uint32
+		if firstWord != productIDUint32Sentinel {
+			decodedProductID = uint32(firstWord)
+		} else {
+			lowWord, lowErr := readWord()
+			if lowErr != nil {
+				return nil, fmt.Errorf("read product id low word at record=%d: %w", recordIndex, lowErr)
+			}
+			highWord, highErr := readWord()
+			if highErr != nil {
+				return nil, fmt.Errorf("read product id high word at record=%d: %w", recordIndex, highErr)
+			}
+			decodedProductID = uint32(lowWord) | (uint32(highWord) << 16)
+		}
+
+		if decodedProductID == 0 {
+			return nil, fmt.Errorf("invalid decoded product id=0 at record=%d", recordIndex)
+		}
+		if decodedProductID > math.MaxInt32 {
+			return nil, fmt.Errorf("decoded product id overflows int32 at record=%d id=%d", recordIndex, decodedProductID)
+		}
+		decodedProductIDs = append(decodedProductIDs, int32(decodedProductID))
+	}
+
+	if cursor != len(section) {
+		return nil, fmt.Errorf("product_ids section trailing bytes=%d", len(section)-cursor)
+	}
+	return decodedProductIDs, nil
 }
 
 type bitReader struct {
@@ -399,7 +501,11 @@ func decodeShapeValue(shapeValue uint32) []uint8 {
 	return decodedWordSizes
 }
 
-func decodeContentRecords(content []byte, shapes [][]uint8, dictionaryTokens []string) ([]DecodedRecord, error) {
+func decodeContentRecords(content []byte, shapes [][]uint8, dictionaryTokens []string, productIDs []int32) ([]DecodedRecord, error) {
+	if len(shapes) != len(productIDs) {
+		return nil, fmt.Errorf("shape/product id count mismatch shapes=%d ids=%d", len(shapes), len(productIDs))
+	}
+
 	cursor := 0
 	decodedRecords := make([]DecodedRecord, 0, len(shapes))
 	for recordIndex, shape := range shapes {
@@ -422,6 +528,7 @@ func decodeContentRecords(content []byte, shapes [][]uint8, dictionaryTokens []s
 		}
 		decodedRecords = append(decodedRecords, DecodedRecord{
 			RecordIndex: int32(recordIndex),
+			ProductID:   productIDs[recordIndex],
 			Shape:       append([]uint8(nil), shape...),
 			Text:        strings.Join(decodedWords, " "),
 		})
