@@ -8,6 +8,9 @@ type SyllableFrequency struct {
 	Count    int32
 }
 
+var spanishVowels = []string{"a", "e", "i", "o", "u"}
+var spanishConsonants = []string{"b", "c", "d", "f", "g", "h", "j", "k", "l", "m", "n", "p", "q", "r", "s", "t", "v", "w", "x", "y", "z"}
+
 // SplitTokenIntoSyllables exposes the package syllable splitter for tests/tools.
 func SplitTokenIntoSyllables(token string) []string {
 	return splitTokenIntoSyllables(token)
@@ -32,7 +35,7 @@ func splitTokenIntoSyllables(token string) []string {
 }
 
 func defaultFixedAliases() (map[string]string, []string) {
-	groups := [][]string{
+	baseGroups := [][]string{
 		{"1"}, {"2"}, {"y", "3"}, {"4"}, {"5"}, {"z", "6"}, {"x", "7"}, {"w", "8"}, {"9"},
 		{"g", "gr", "grs"},
 		{"ml", "mm", "mg", "mgs", "m3", "m2"},
@@ -43,8 +46,31 @@ func defaultFixedAliases() (map[string]string, []string) {
 		{"r", "rr"},
 		{"q", "qu"},
 		{"p", "pack", "paq", "paquete"},
-		{"a"}, {"e"}, {"i"}, {"o"}, {"u"},
-		{"b"}, {"d"}, {"f"}, {"h"}, {"j"}, {"m"}, {"n"}, {"s"}, {"t"}, {"v"},
+	}
+	groups := make([][]string, 0, len(baseGroups)+len(spanishVowels)+len(spanishConsonants))
+	groups = append(groups, baseGroups...)
+	canonicalTokenSet := make(map[string]struct{}, len(baseGroups)+len(spanishVowels)+len(spanishConsonants))
+	for _, group := range groups {
+		if len(group) == 0 {
+			continue
+		}
+		normalizedCanonical := normalizeToken(group[0])
+		if normalizedCanonical == "" {
+			continue
+		}
+		canonicalTokenSet[normalizedCanonical] = struct{}{}
+	}
+	// Keep frontend/backend parity by computing missing single-letter canonicals dynamically.
+	for _, singleLetterToken := range append(append([]string(nil), spanishVowels...), spanishConsonants...) {
+		normalizedSingle := normalizeToken(singleLetterToken)
+		if normalizedSingle == "" {
+			continue
+		}
+		if _, exists := canonicalTokenSet[normalizedSingle]; exists {
+			continue
+		}
+		groups = append(groups, []string{normalizedSingle})
+		canonicalTokenSet[normalizedSingle] = struct{}{}
 	}
 
 	aliasToCanonical := make(map[string]string, 128)

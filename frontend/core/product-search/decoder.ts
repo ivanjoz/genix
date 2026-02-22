@@ -1,3 +1,4 @@
+// Product-search binary decoder: validates idx/taxonomy payloads and reconstructs searchable records.
 import {
 	BRAND_INDEX_ENCODING_UINT12,
 	BRAND_INDEX_ENCODING_UINT16,
@@ -49,16 +50,20 @@ interface DecodedTextHeader {
 
 // Decoder supports both ArrayBuffer and Uint8Array inputs from fetch/file APIs.
 export const decodeBinary = (indexBytesInput: Uint8Array | ArrayBuffer): DecodeResult => {
+	// Normalize input once so the rest of the decoder only works with Uint8Array views.
 	const indexBytes =
 		indexBytesInput instanceof Uint8Array ? indexBytesInput : new Uint8Array(indexBytesInput);
+	// Decode and validate the text header + section table before touching payload data.
 	const textHeader = decodeTextHeaderV2(indexBytes);
 
+	// Resolve each mandatory text section by id (dictionary, shapes, content, aliases, product IDs).
 	const dictionarySection = requiredSection(indexBytes, textHeader.sectionsByID, TEXT_SECTION_DICTIONARY);
 	const shapeSection = requiredSection(indexBytes, textHeader.sectionsByID, TEXT_SECTION_SHAPES);
 	const contentSection = requiredSection(indexBytes, textHeader.sectionsByID, TEXT_SECTION_CONTENT);
 	const aliasSection = requiredSection(indexBytes, textHeader.sectionsByID, TEXT_SECTION_ALIASES);
 	const productIDsSection = requiredSection(indexBytes, textHeader.sectionsByID, TEXT_SECTION_PRODUCT_IDS);
 
+	// Decode text payload columns and rebuild record rows in the exact sorted index order.
 	const dictionaryTokens = decodeDictionarySectionRaw(dictionarySection, textHeader.dictionaryCount);
 	const decodedProductIDs = decodeProductIDsSection(productIDsSection, textHeader.recordCount);
 	const decodedShapeDelta = decodeShapeDeltaStream(shapeSection, textHeader.recordCount);
@@ -108,11 +113,14 @@ export const decodeBinary = (indexBytesInput: Uint8Array | ArrayBuffer): DecodeR
 	};
 
 	if (textHeader.payloadEnd === indexBytes.length) {
+		// Some payloads only contain the text block; taxonomy is optional by design.
 		return decodeResult;
 	}
 
+	// Any trailing bytes after text payload are interpreted as taxonomy block.
 	const taxonomySlice = indexBytes.subarray(textHeader.payloadEnd);
 	const decodedTaxonomyBlock = decodeTaxonomyBlockV2(taxonomySlice, textHeader.recordCount);
+	// Mutate decoded records in-place to attach brand/category information by row index.
 	attachTaxonomyToRecords(decodeResult.records, decodedTaxonomyBlock.taxonomy);
 
 	decodeResult.taxonomy = decodedTaxonomyBlock.taxonomy;
@@ -130,6 +138,7 @@ const utf8Decoder = new TextDecoder();
 export const readBuildSunixTimeFromHeader = (
 	indexBytesInput: Uint8Array | ArrayBuffer
 ): number => {
+	// Fast-path reader used when only the build watermark is needed (no full decode).
 	const indexBytes =
 		indexBytesInput instanceof Uint8Array ? indexBytesInput : new Uint8Array(indexBytesInput);
 	const headerPrefixSize = TEXT_BINARY_MAGIC.length + 1 + 1 + 4 + 4;
@@ -187,6 +196,7 @@ const decodeTextHeaderV2 = (indexBytes: Uint8Array): DecodedTextHeader => {
 	}
 
 	const decodedSectionTable = decodeSectionTable(indexBytes, cursor, headerSize, sectionCount);
+	// Keep section ids explicit so unexpected/partial payloads fail early.
 	const requiredTextSections = [
 		TEXT_SECTION_DICTIONARY,
 		TEXT_SECTION_SHAPES,
@@ -238,6 +248,7 @@ const requiredSection = (
 	sectionsByID: Map<number, BinarySectionDescriptor>,
 	sectionID: number
 ): Uint8Array => {
+	// Centralized section lookup keeps all "missing required section" errors consistent.
 	const sectionDescriptor = sectionsByID.get(sectionID);
 	if (!sectionDescriptor) {
 		throw new Error(`missing required section=${sectionID}`);
@@ -268,6 +279,7 @@ const decodeSectionTable = (
 	let maxPayloadEnd = headerSize;
 
 	for (let sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++) {
+		// Read one fixed-size section row from the table.
 		const sectionID = payload[cursor];
 		cursor += 1;
 		const offset = readUint32LE(payload, cursor);
@@ -287,6 +299,7 @@ const decodeSectionTable = (
 		}
 
 		const sectionPayload = payload.subarray(offset, offset + length);
+		// Verify integrity exactly as backend wrote it (CRC32 per section).
 		if (computeCrc32(sectionPayload) !== checksum) {
 			throw new Error(`checksum mismatch id=${sectionID}`);
 		}
@@ -298,6 +311,7 @@ const decodeSectionTable = (
 	}
 
 	if (cursor !== headerSize) {
+		// Header size must match table parsing cursor to detect malformed section table metadata.
 		throw new Error(`header size mismatch expected=${headerSize} got=${cursor}`);
 	}
 
@@ -316,6 +330,7 @@ const decodeDictionarySectionRaw = (section: Uint8Array, dictionaryCount: number
 		if (tokenLength <= 0 || cursor + tokenLength > section.length) {
 			throw new Error(`invalid dictionary token len at token=${tokenIndex}`);
 		}
+		// Dictionary tokens are stored as [len][utf8 bytes] with no delimiters.
 		tokens.push(utf8Decoder.decode(section.subarray(cursor, cursor + tokenLength)));
 		cursor += tokenLength;
 	}
@@ -346,6 +361,7 @@ const decodeAliasSection = (
 		if (cursor >= section.length) {
 			throw new Error(`alias section missing dictionary id at alias=${aliasIndex}`);
 		}
+		// Alias payload points to 1-based dictionary IDs used in content bytes.
 		const dictionaryID = section[cursor];
 		cursor += 1;
 		if (dictionaryID <= 0 || dictionaryID > dictionaryTokenCount) {
@@ -378,8 +394,10 @@ const decodeProductIDsSection = (section: Uint8Array, expectedRecordCount: numbe
 		const firstWord = readWord();
 		let decodedProductID = 0;
 		if (firstWord !== PRODUCT_ID_UINT32_SENTINEL) {
+			// Compact path: 16-bit id directly embedded.
 			decodedProductID = firstWord;
 		} else {
+			// Extended path: sentinel + two uint16 words (low/high) reconstruct one uint32 id.
 			const lowWord = readWord();
 			const highWord = readWord();
 			decodedProductID = (lowWord | (highWord << 16)) >>> 0;
@@ -438,6 +456,7 @@ const decodeShapeDeltaStream = (
 	let delta24Count = 0;
 
 	for (let recordIndex = 0; recordIndex < recordCount; recordIndex++) {
+		// Flag 0 => 8-bit delta, flag 1 => 16-bit delta or escaped 24-bit delta.
 		const flagBit = readWithRecordContext(recordIndex, () => bitReader.readBit(), "read shape flag");
 		let deltaValue = 0;
 		if (flagBit === 0) {
@@ -450,6 +469,7 @@ const decodeShapeDeltaStream = (
 				"read 16-bit delta"
 			);
 			if (decodedDelta16 === 0xffff) {
+				// 0xffff is the sentinel that upgrades delta width to 24 bits.
 				deltaValue = readWithRecordContext(
 					recordIndex,
 					() => bitReader.readBits(24),
@@ -462,6 +482,7 @@ const decodeShapeDeltaStream = (
 			}
 		}
 		const currentShapeValue = (previousShapeValue + deltaValue) >>> 0;
+		// Delta stream is cumulative; each shape value is relative to the previous one.
 		shapeValues.push(currentShapeValue);
 		previousShapeValue = currentShapeValue;
 	}
@@ -473,6 +494,7 @@ const decodeShapeValue = (shapeValue: number): number[] => {
 	const decodedWordSizes: number[] = [];
 	for (let wordIndex = 0; wordIndex < 8; wordIndex++) {
 		const shift = 21 - wordIndex * 3;
+		// Shape packs up to 8 words, each one encoded in 3 bits as syllable count.
 		const wordSyllableCount = (shapeValue >>> shift) & 0x07;
 		if (wordSyllableCount === 0) {
 			break;
@@ -515,6 +537,7 @@ const decodeContentRecords = (
 			decodedWords.push(decodedWord);
 		}
 
+		// Taxonomy fields are attached later in a second pass when taxonomy block is present.
 		decodedRecords.push({
 			recordIndex,
 			productID: productIDs[recordIndex],
@@ -575,6 +598,7 @@ const decodeTaxonomyBlockV2 = (
 	}
 
 	const decodedTaxonomySectionTable = decodeSectionTable(taxonomyBytes, cursor, headerSize, sectionCount);
+	// Taxonomy has seven fixed sections and must remain schema-stable.
 	const requiredTaxonomySections = [
 		TAXONOMY_SECTION_BRAND_IDS,
 		TAXONOMY_SECTION_BRAND_NAMES,
@@ -682,6 +706,7 @@ const decodeTaxonomyBlockV2 = (
 		brandEncodingFlag,
 		sortedProductCount
 	);
+	// Validate every brand reference before attaching taxonomy to text records.
 	for (let rowIndex = 0; rowIndex < productBrandIndexes.length; rowIndex++) {
 		const brandDictionaryIndex = productBrandIndexes[rowIndex];
 		if (brandDictionaryIndex < 0 || brandDictionaryIndex >= brandIDs.length) {
@@ -701,6 +726,7 @@ const decodeTaxonomyBlockV2 = (
 	}
 	const productCategoryCounts = decodePackedCategoryCounts(categoryCountsSection, sortedProductCount);
 
+	// Category index payload is flat; per-record boundaries come from packed 2-bit counts.
 	const totalCategoryReferences = productCategoryCounts.reduce((sum, categoryCount) => sum + categoryCount, 0);
 	if (totalCategoryReferences !== categoryIndexesSection.length) {
 		throw new Error(
@@ -745,6 +771,7 @@ const decodeUint16Section = (section: Uint8Array, sectionName: string): number[]
 	}
 	const values: number[] = [];
 	for (let cursor = 0; cursor < section.length; cursor += 2) {
+		// All uint16 columns are little-endian to mirror backend serializer.
 		values.push(readUint16LE(section, cursor));
 	}
 	return values;
@@ -754,6 +781,7 @@ const decodeStringColumnSection = (section: Uint8Array, sectionName: string): st
 	const values: string[] = [];
 	let cursor = 0;
 	while (cursor < section.length) {
+		// String columns are compact [len][bytes] tuples.
 		const valueLength = section[cursor];
 		cursor += 1;
 		if (cursor + valueLength > section.length) {
@@ -771,6 +799,7 @@ const decodeBrandIndexes = (
 	sortedProductCount: number
 ): number[] => {
 	if (brandEncodingFlag === BRAND_INDEX_ENCODING_UINT12) {
+		// Packed uint12 path keeps brand indexes dense for small dictionaries.
 		return unpackUint12Values(brandIndexesSection, sortedProductCount);
 	}
 	if (brandEncodingFlag === BRAND_INDEX_ENCODING_UINT16) {
@@ -781,6 +810,7 @@ const decodeBrandIndexes = (
 		}
 		const indexes: number[] = [];
 		for (let cursor = 0; cursor < brandIndexesSection.length; cursor += 2) {
+			// Wider uint16 path is used when brand dictionary does not fit uint12.
 			indexes.push(readUint16LE(brandIndexesSection, cursor));
 		}
 		return indexes;
@@ -796,6 +826,7 @@ const unpackUint12Values = (packed: Uint8Array, expectedValues: number): number[
 
 	const values: number[] = [];
 	for (let cursor = 0; cursor < packed.length; cursor += 3) {
+		// Two 12-bit values are packed into 3 bytes: [LLLLLLLL][LLLLRRRR][RRRRRRRR].
 		const leftValue = (packed[cursor] << 4) | ((packed[cursor + 1] >> 4) & 0x0f);
 		values.push(leftValue);
 		if (values.length === expectedValues) {
@@ -817,6 +848,7 @@ const decodePackedCategoryCounts = (packedCounts: Uint8Array, sortedProductCount
 
 	const counts: number[] = [];
 	for (let productIndex = 0; productIndex < sortedProductCount; productIndex++) {
+		// Four 2-bit counters per byte, stored as (count-1) to represent range [1..4].
 		const packedByte = packedCounts[Math.floor(productIndex / 4)];
 		const shift = 6 - (productIndex % 4) * 2;
 		const countMinusOne = (packedByte >> shift) & 0x03;
@@ -839,6 +871,7 @@ const attachTaxonomyToRecords = (records: DecodedRecord[], taxonomy: DecodedTaxo
 
 	let categoryPayloadCursor = 0;
 	for (let recordIndex = 0; recordIndex < records.length; recordIndex++) {
+		// Brand payload is row-aligned: one dictionary index per record.
 		const brandDictionaryIndex = taxonomy.productBrandDictionaryIndex[recordIndex];
 		records[recordIndex].brandDictionaryIndex = brandDictionaryIndex;
 		records[recordIndex].brandID = taxonomy.brandIDs[brandDictionaryIndex];
@@ -849,6 +882,7 @@ const attachTaxonomyToRecords = (records: DecodedRecord[], taxonomy: DecodedTaxo
 			throw new Error(`category payload overflow at record=${recordIndex}`);
 		}
 
+		// Category payload is a shared flat stream; consume exactly categoryCount entries for this row.
 		const categoryDictionaryIndexes: number[] = [];
 		const categoryIDs: number[] = [];
 		const categoryNames: string[] = [];

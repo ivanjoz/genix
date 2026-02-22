@@ -1,3 +1,4 @@
+// Product-search encoder helpers: normalize query text and map words into dictionary syllable IDs.
 const DEFAULT_CONNECTOR_WORDS = ["de", "la", "con", "del", "para", "en", "al", "con", "sin"];
 
 const normalizedConnectorSet = (() => {

@@ -1,3 +1,4 @@
+// Product-search shared utilities for binary reads, checksums, sampling, and debug-friendly error context.
 import { BRAND_INDEX_ENCODING_UINT12, BRAND_INDEX_ENCODING_UINT16 } from "./types";
 import type { DecodedRecord } from "./types";
 

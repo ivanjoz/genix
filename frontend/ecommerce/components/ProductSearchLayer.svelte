@@ -1,10 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { Env } from "$core/env";
-  import { readBuildSunixTimeFromHeader } from "$libs/index-decoder/decoder";
-  import { ProductIndex } from "$libs/index-decoder/product-index";
+  import { ProductSearch } from "$core/product-search/product-search";
   import ProductSearchResultCard from "./ProductSearchResultCard.svelte";
-  import type { ProductSearchHit } from "$libs/index-decoder/types";
+  import type { ProductSearchHit } from "$core/product-search/types";
 
   interface ProductSearchLayerProps {
     queryText?: string;
@@ -16,7 +15,7 @@
   const SEARCH_QUERY_THROTTLE_MS = 120;
   const ENABLE_FULL_PRODUCT_SEARCH_DEBUG = Env.PRODUCT_SEARCH_FULL_DEBUG_LOG_ENABLED;
 
-  let productIndexInstance = $state<ProductIndex | null>(null);
+  let productIndexInstance = $state<ProductSearch | null>(null);
   let isProductIndexLoading = $state(false);
   let productIndexLoadErrorMessage = $state("");
   let throttledQueryText = $state("");
@@ -110,35 +109,19 @@
 
     isProductIndexLoading = true;
     productIndexLoadErrorMessage = "";
-    const productsIndexUrl = Env.makeCDNRoute("live", `c${1}_products.idx`);
-    if (ENABLE_FULL_PRODUCT_SEARCH_DEBUG) {
-      console.log("[ProductSearchLayer] Fetching product index", { productsIndexUrl });
-    }
-
     try {
-      const indexResponse = await fetch(productsIndexUrl);
-      if (!indexResponse.ok) {
-        throw new Error(`products.idx fetch failed with status=${indexResponse.status}`);
-      }
-
-      const indexBinaryBuffer = await indexResponse.arrayBuffer();
-      const indexBinaryBytes = new Uint8Array(indexBinaryBuffer);
-      const updatedSunix = readBuildSunixTimeFromHeader(indexBinaryBytes);
-      const updatedUnix = updatedSunix * 2 + 1_000_000_000;
-      const createdAtISODate = new Date(updatedUnix * 1000).toISOString();
-
-      productIndexInstance = new ProductIndex(indexBinaryBytes);
+      const nextProductSearch = new ProductSearch();
+      await nextProductSearch.readyPromise;
+      productIndexInstance = nextProductSearch;
       if (ENABLE_FULL_PRODUCT_SEARCH_DEBUG) {
-        console.info("[ProductSearchLayer] Product index loaded", {
+        console.info("[ProductSearchLayer] Product search loaded", {
           productsCount: productIndexInstance.size,
-          updatedSunix,
-          updatedUnix,
-          createdAtISODate
+          updatedSunix: productIndexInstance.updated,
+          source: productIndexInstance.source
         });
       }
     } catch (loadError) {
-      productIndexLoadErrorMessage =
-        loadError instanceof Error ? loadError.message : "Unknown error loading product index";
+      productIndexLoadErrorMessage = loadError instanceof Error ? loadError.message : "Unknown error loading product search";
       console.error("[ProductSearchLayer] Product index load error", loadError);
     } finally {
       isProductIndexLoading = false;
@@ -156,7 +139,7 @@
       pendingQueryTimer = null;
     }
   });
-</script>getRecordWithCache
+</script>
 
 {#if shouldRenderLayer}
   <div class="search-layer" role="dialog" aria-label="Resultados de busqueda de productos">

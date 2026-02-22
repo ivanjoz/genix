@@ -1,3 +1,4 @@
+// Product-search contracts/constants shared by decoder, encoder, and runtime ranking modules.
 // Constants mirror the backend binary contract for text and taxonomy payloads.
 export const TEXT_BINARY_MAGIC = "GIXIDX01";
 export const TEXT_BINARY_VERSION = 1;

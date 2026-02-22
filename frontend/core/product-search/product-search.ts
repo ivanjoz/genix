@@ -1,3 +1,4 @@
+// ProductSearch runtime: bootstraps from idx/deltas, maintains in-memory product index, and ranks queries.
 import { decodeBinary } from "./decoder";
 import {
 	encodeQueryWordToDictionarySyllables,
@@ -7,7 +8,9 @@ import {
 } from "./encoder";
 import { Env } from "$core/env";
 import type { IndexedProduct, ProductSearchHit } from "./types";
-import { ProductosDeltaService } from "$services/services/productos.svelte";
+import { ProductosDeltaService } from "./productos-delta-service";
+import type { IListaRegistro } from "$services/negocio/listas-compartidas.svelte";
+import type { IProducto } from "$services/services/productos.svelte";
 
 export interface ProductQueryWordDebugInfo {
 	queryWord: string;
@@ -69,45 +72,178 @@ interface FastQueryWordMatchResult {
 	bestSyllablePrefixLength: number;
 }
 
-const productsDeltaService = new ProductosDeltaService()
+interface ProductSearchBootstrapSource {
+	source: "idx_plus_delta" | "delta_only";
+}
 
-export class ProductIndex {
+const SPANISH_VOWELS = ["a", "e", "i", "o", "u"];
+const SPANISH_CONSONANTS = ["b", "c", "d", "f", "g", "h", "j", "k", "l", "m", "n", "p", "q", "r", "s", "t", "v", "w", "x", "y", "z"];
+
+// Keep canonical aliases aligned with backend defaultFixedAliases() so query and record encoding stay compatible.
+const BASE_FIXED_ALIAS_GROUPS: readonly (readonly string[])[] = [
+	["1"],
+	["2"],
+	["y", "3"],
+	["4"],
+	["5"],
+	["z", "6"],
+	["x", "7"],
+	["w", "8"],
+	["9"],
+	["g", "gr", "grs"],
+	["ml", "mm", "mg", "mgs", "m3", "m2"],
+	["k", "kg", "kgs", "kilo", "kilos", "kilogramos"],
+	["ud", "un", "uns", "unidad", "unidades"],
+	["c", "cm", "cm2", "cm3", "cl"],
+	["l", "lt", "lts", "litro", "litos"],
+	["r", "rr"],
+	["q", "qu"],
+	["p", "pack", "paq", "paquete"]
+];
+
+const buildFixedAliasGroups = (): readonly (readonly string[])[] => {
+	const fixedAliasGroups: string[][] = BASE_FIXED_ALIAS_GROUPS.map((group) => [...group]);
+	// Add single-letter vowel/consonant canonicals only when not already present in base groups.
+	const canonicalTokenSet = new Set<string>();
+	for (const aliasGroup of fixedAliasGroups) {
+		const normalizedCanonicalToken = normalizeSearchToken(aliasGroup[0]).replace(/\s+/g, "");
+		if (normalizedCanonicalToken) {
+			canonicalTokenSet.add(normalizedCanonicalToken);
+		}
+	}
+	for (const singleLetterToken of [...SPANISH_VOWELS, ...SPANISH_CONSONANTS]) {
+		if (canonicalTokenSet.has(singleLetterToken)) {
+			continue;
+		}
+		fixedAliasGroups.push([singleLetterToken]);
+		canonicalTokenSet.add(singleLetterToken);
+	}
+	return fixedAliasGroups;
+};
+
+const FIXED_ALIAS_GROUPS = buildFixedAliasGroups();
+
+export class ProductSearch implements ProductSearchBootstrapSource {
 	// Keep scoring constants explicit so ranking behavior is predictable and easy to tune.
 	private static readonly SYLLABLE_MATCH_POINTS = 4;
 	private static readonly COMPLETE_WORD_MATCH_POINTS = 5;
 	private static readonly BRAND_PREFIX_MATCH_POINTS = 2;
 	private static readonly FIRST_WORD_POSITIONAL_POINTS = 2;
 	private static readonly SECOND_WORD_POSITIONAL_POINTS = 1;
+	private static readonly MAX_DICTIONARY_TOKENS = 255;
+	private static readonly INDEX_COMPANY_ID = 1;
 
 	private readonly productNameBytesByProductID = new Map<number, Uint8Array>();
 	private readonly brandDictionaryIndexByProductID = new Map<number, number>();
 	private readonly brandIDMapByProductID = new Map<number, number>();
 	private readonly categoryIDsMapByProductID = new Map<number, number[]>();
-	private readonly productIDsSorted: number[] = [];
-	private readonly dictionaryTokens: string[] = [];
+	private productIDsSorted: number[] = [];
+	private dictionaryTokens: string[] = [];
 	private readonly dictionaryTokenIDByNormalizedToken = new Map<string, number>();
 	private readonly aliasDictionaryIDByNormalizedToken = new Map<string, number>();
 	private readonly brandNameByID = new Map<number, string>();
 	private readonly categoryNameByID = new Map<number, string>();
 	private readonly normalizedBrandWordsByBrandID = new Map<number, string[]>();
-	private readonly updatedInt32: number;
+	private updatedInt32 = 0;
+	private readonly productsDeltaService = new ProductosDeltaService();
 	private latestSearchDebugSnapshot: ProductSearchDebugSnapshot | null = null;
+	readonly readyPromise: Promise<void>;
+	isLoading = false;
+	isReady = false;
+	loadError: string | null = null;
+	source: ProductSearchBootstrapSource["source"] = "delta_only";
 
-	constructor(indexBytesInput: Uint8Array | ArrayBuffer) {
-		const decodedPayload = decodeBinary(indexBytesInput);
+	constructor() {
+		// Keep constructor synchronous and expose readiness through readyPromise.
+		this.readyPromise = this.bootstrap();
+	}
+
+	private async bootstrap(): Promise<void> {
+		this.isLoading = true;
+		this.loadError = null;
+
+		let didLoadFromBinary = false;
+		try {
+			didLoadFromBinary = await this.tryLoadBinaryIndex();
+			await this.loadDeltas();
+			if (!didLoadFromBinary) {
+				this.rebuildFromDeltaOnly();
+				this.source = "delta_only";
+				console.info("[ProductSearch] initialized from delta-only source", {
+					products: this.productIDsSorted.length,
+					dictionaryTokens: this.dictionaryTokens.length
+				});
+			} else {
+				this.source = "idx_plus_delta";
+				console.info("[ProductSearch] initialized from idx + delta source", {
+					products: this.productIDsSorted.length,
+					dictionaryTokens: this.dictionaryTokens.length
+				});
+			}
+			this.isReady = true;
+		} catch (bootstrapError) {
+			this.loadError =
+				bootstrapError instanceof Error
+					? bootstrapError.message
+					: "Unknown ProductSearch bootstrap error";
+			console.error("[ProductSearch] bootstrap failed", bootstrapError);
+			throw bootstrapError;
+		} finally {
+			this.isLoading = false;
+		}
+	}
+
+	private async tryLoadBinaryIndex(): Promise<boolean> {
+		const productsIndexUrl = Env.makeCDNRoute(
+			"live",
+			`c${ProductSearch.INDEX_COMPANY_ID}_products.idx`
+		);
+		console.log("[ProductSearch] trying to load idx", { productsIndexUrl });
+		try {
+			const indexResponse = await fetch(productsIndexUrl);
+			if (!indexResponse.ok) {
+				console.warn("[ProductSearch] idx response not ok", {
+					status: indexResponse.status,
+					statusText: indexResponse.statusText
+				});
+				return false;
+			}
+			const indexBinaryBuffer = await indexResponse.arrayBuffer();
+			const decodedPayload = decodeBinary(indexBinaryBuffer);
+			this.resetIndexState();
+			this.loadFromDecodedPayload(decodedPayload);
+			console.log("[ProductSearch] idx loaded", {
+				records: decodedPayload.records.length,
+				dictionaryTokens: decodedPayload.dictionaryTokens.length
+			});
+			return true;
+		} catch (idxLoadError) {
+			console.warn("[ProductSearch] idx load failed, using delta-only fallback", idxLoadError);
+			return false;
+		}
+	}
+
+	private async loadDeltas(): Promise<void> {
+		await this.productsDeltaService.fetchOnline();
+		const deltaProducts = this.productsDeltaService.productos ?? [];
+		const deltaBrands = this.productsDeltaService.marcas ?? [];
+		const deltaCategories = this.productsDeltaService.categorias ?? [];
+		console.log("[ProductSearch] delta fetched", {
+			productos: deltaProducts.length,
+			marcas: deltaBrands.length,
+			categorias: deltaCategories.length
+		});
+		this.applyTaxonomyDeltas(deltaBrands, deltaCategories);
+		if (this.productIDsSorted.length > 0) {
+			this.applyProductDeltas(deltaProducts);
+		}
+	}
+
+	private loadFromDecodedPayload(decodedPayload: ReturnType<typeof decodeBinary>): void {
 		// Keep build/update watermark from the text header for delta sync workflows.
 		this.updatedInt32 = decodedPayload.stats.updated;
-		this.dictionaryTokens = decodedPayload.dictionaryTokens;
-		for (let tokenIndex = 0; tokenIndex < this.dictionaryTokens.length; tokenIndex++) {
-			const normalizedDictionaryToken = normalizeSearchToken(this.dictionaryTokens[tokenIndex]).replace(
-				/\s+/g,
-				""
-			);
-			if (!normalizedDictionaryToken) {
-				continue;
-			}
-			this.dictionaryTokenIDByNormalizedToken.set(normalizedDictionaryToken, tokenIndex + 1);
-		}
+		this.dictionaryTokens = [...decodedPayload.dictionaryTokens];
+		this.rebuildDictionaryIDLookup();
 		for (const [aliasToken, dictionaryID] of decodedPayload.dictionaryAliases.entries()) {
 			const normalizedAliasToken = normalizeSearchToken(aliasToken).replace(/\s+/g, "");
 			if (!normalizedAliasToken || dictionaryID <= 0) {
@@ -121,15 +257,13 @@ export class ProductIndex {
 				decodedRecord.productBytes,
 				decodedRecord.shape
 			);
-			const productID = decodedRecord.productID;
-			if (this.productNameBytesByProductID.has(productID)) {
-				throw new Error(`duplicated product id=${productID}`);
-			}
-			this.productIDsSorted.push(productID);
-			this.productNameBytesByProductID.set(productID, separatedWordBytes);
-			this.brandDictionaryIndexByProductID.set(productID, decodedRecord.brandDictionaryIndex);
-			this.brandIDMapByProductID.set(productID, decodedRecord.brandID);
-			this.categoryIDsMapByProductID.set(productID, [...decodedRecord.categoryIDs]);
+			this.upsertEncodedProduct({
+				productID: decodedRecord.productID,
+				productBytes: separatedWordBytes,
+				brandDictionaryIndex: decodedRecord.brandDictionaryIndex,
+				brandID: decodedRecord.brandID,
+				categoryIDs: decodedRecord.categoryIDs
+			});
 		}
 
 		// Keep tiny taxonomy dictionaries for on-demand name resolution during get(productID).
@@ -137,10 +271,7 @@ export class ProductIndex {
 			for (let brandIndex = 0; brandIndex < decodedPayload.taxonomy.brandIDs.length; brandIndex++) {
 				const brandName = decodedPayload.taxonomy.brandNames[brandIndex];
 				const brandID = decodedPayload.taxonomy.brandIDs[brandIndex];
-				this.brandNameByID.set(
-					brandID,
-					brandName
-				);
+				this.brandNameByID.set(brandID, brandName);
 				this.normalizedBrandWordsByBrandID.set(brandID, splitNormalizedWords(brandName));
 			}
 			for (
@@ -154,16 +285,237 @@ export class ProductIndex {
 				);
 			}
 		}
-		this.loadDeltas()
 	}
 
-	async loadDeltas() {
-		await productsDeltaService.fetchOnline()
-		console.log("productsDeltaService", productsDeltaService, productsDeltaService.records.length)
+	private rebuildFromDeltaOnly(): void {
+		this.resetIndexState();
+		this.seedDictionaryFromFixedSpanishSyllables();
+		this.applyTaxonomyDeltas(
+			this.productsDeltaService.marcas ?? [],
+			this.productsDeltaService.categorias ?? []
+		);
+		this.applyProductDeltas(this.productsDeltaService.productos ?? []);
 	}
-	
-	static fromBinary(indexBytesInput: Uint8Array | ArrayBuffer): ProductIndex {
-		return new ProductIndex(indexBytesInput);
+
+	private seedDictionaryFromFixedSpanishSyllables(): void {
+		for (const aliasGroup of FIXED_ALIAS_GROUPS) {
+			const normalizedCanonicalToken = normalizeSearchToken(aliasGroup[0]).replace(/\s+/g, "");
+			if (!normalizedCanonicalToken) {
+				continue;
+			}
+			const canonicalDictionaryID = this.ensureDictionaryTokenID(normalizedCanonicalToken);
+			for (const aliasToken of aliasGroup) {
+				const normalizedAliasToken = normalizeSearchToken(aliasToken).replace(/\s+/g, "");
+				if (!normalizedAliasToken || canonicalDictionaryID <= 0) {
+					continue;
+				}
+				this.aliasDictionaryIDByNormalizedToken.set(normalizedAliasToken, canonicalDictionaryID);
+			}
+		}
+		for (const consonant of SPANISH_CONSONANTS) {
+			for (const vowel of SPANISH_VOWELS) {
+				this.ensureDictionaryTokenID(consonant + vowel);
+				this.ensureDictionaryTokenID(vowel + consonant);
+			}
+		}
+		this.ensureDictionaryTokenID("sin");
+		this.ensureDictionaryTokenID("marca");
+	}
+
+	private applyTaxonomyDeltas(
+		brandRows: readonly IListaRegistro[],
+		categoryRows: readonly IListaRegistro[]
+	): void {
+		for (const brandRow of brandRows) {
+			const normalizedBrandName = normalizeSearchToken(brandRow.Nombre);
+			this.brandNameByID.set(brandRow.ID, normalizedBrandName);
+			this.normalizedBrandWordsByBrandID.set(brandRow.ID, splitNormalizedWords(normalizedBrandName));
+		}
+		for (const categoryRow of categoryRows) {
+			this.categoryNameByID.set(categoryRow.ID, normalizeSearchToken(categoryRow.Nombre));
+		}
+	}
+
+	private applyProductDeltas(deltaProducts: readonly IProducto[]): void {
+		for (const deltaProduct of deltaProducts) {
+			if (!deltaProduct || deltaProduct.ID <= 0) {
+				continue;
+			}
+			const productUpdated = Number(deltaProduct.upd || 0);
+			if (productUpdated > this.updatedInt32) {
+				this.updatedInt32 = productUpdated;
+			}
+			if (deltaProduct.ss === 0) {
+				this.removeProduct(deltaProduct.ID);
+				continue;
+			}
+			const encodedNameBytes = this.encodeProductNameToByteRow(deltaProduct.Nombre || "");
+			if (encodedNameBytes.length === 0) {
+				continue;
+			}
+			this.upsertEncodedProduct({
+				productID: deltaProduct.ID,
+				productBytes: encodedNameBytes,
+				brandDictionaryIndex: 0,
+				brandID: deltaProduct.MarcaID ?? 0,
+				categoryIDs: deltaProduct.CategoriasIDs ?? []
+			});
+		}
+	}
+
+	private encodeProductNameToByteRow(rawProductName: string): Uint8Array {
+		const normalizedTokens = normalizeAndFilterQueryTokens(rawProductName);
+		if (normalizedTokens.length === 0) {
+			return new Uint8Array(0);
+		}
+		const encodedWordSyllables: number[][] = [];
+		for (const normalizedToken of normalizedTokens) {
+			const encodedSyllables = this.encodeWordTokenForProduct(normalizedToken);
+			if (encodedSyllables.length === 0) {
+				continue;
+			}
+			encodedWordSyllables.push(encodedSyllables);
+		}
+		if (encodedWordSyllables.length === 0) {
+			return new Uint8Array(0);
+		}
+		const totalSyllables = encodedWordSyllables.reduce(
+			(accumulated, currentWord) => accumulated + currentWord.length,
+			0
+		);
+		const separatorCount = Math.max(0, encodedWordSyllables.length - 1);
+		const byteRow = new Uint8Array(totalSyllables + separatorCount);
+		let outputOffset = 0;
+		for (let wordIndex = 0; wordIndex < encodedWordSyllables.length; wordIndex++) {
+			const currentWordSyllables = encodedWordSyllables[wordIndex];
+			for (const syllableID of currentWordSyllables) {
+				byteRow[outputOffset++] = syllableID;
+			}
+			if (wordIndex < encodedWordSyllables.length - 1) {
+				byteRow[outputOffset++] = 0;
+			}
+		}
+		return byteRow;
+	}
+
+	private encodeWordTokenForProduct(normalizedToken: string): number[] {
+		const encodedSyllables: number[] = [];
+		const aliasDictionaryID = this.aliasDictionaryIDByNormalizedToken.get(normalizedToken);
+		if (aliasDictionaryID) {
+			return [aliasDictionaryID];
+		}
+		for (const syllableToken of this.splitTokenIntoSyllables(normalizedToken)) {
+			const normalizedSyllableToken = normalizeSearchToken(syllableToken).replace(/\s+/g, "");
+			if (!normalizedSyllableToken) {
+				continue;
+			}
+			let dictionaryID = this.aliasDictionaryIDByNormalizedToken.get(normalizedSyllableToken);
+			if (!dictionaryID) {
+				dictionaryID =
+					this.dictionaryTokenIDByNormalizedToken.get(normalizedSyllableToken) ??
+					this.ensureDictionaryTokenID(normalizedSyllableToken);
+			}
+			if (dictionaryID) {
+				encodedSyllables.push(dictionaryID);
+				continue;
+			}
+			for (const currentRune of normalizedSyllableToken) {
+				const runeDictionaryID = this.ensureDictionaryTokenID(currentRune);
+				if (runeDictionaryID) {
+					encodedSyllables.push(runeDictionaryID);
+				}
+			}
+		}
+		return encodedSyllables;
+	}
+
+	private splitTokenIntoSyllables(token: string): string[] {
+		if (!token) {
+			return [];
+		}
+		if (token.length <= 2) {
+			return [token];
+		}
+		const syllableTokens: string[] = [];
+		for (let offset = 0; offset < token.length; offset += 2) {
+			syllableTokens.push(token.slice(offset, Math.min(offset + 2, token.length)));
+		}
+		return syllableTokens;
+	}
+
+	private ensureDictionaryTokenID(rawToken: string): number {
+		const normalizedToken = normalizeSearchToken(rawToken).replace(/\s+/g, "");
+		if (!normalizedToken) {
+			return 0;
+		}
+		const existingDictionaryID = this.dictionaryTokenIDByNormalizedToken.get(normalizedToken);
+		if (existingDictionaryID) {
+			return existingDictionaryID;
+		}
+		if (this.dictionaryTokens.length >= ProductSearch.MAX_DICTIONARY_TOKENS) {
+			return 0;
+		}
+		this.dictionaryTokens.push(normalizedToken);
+		const createdDictionaryID = this.dictionaryTokens.length;
+		this.dictionaryTokenIDByNormalizedToken.set(normalizedToken, createdDictionaryID);
+		return createdDictionaryID;
+	}
+
+	private rebuildDictionaryIDLookup(): void {
+		this.dictionaryTokenIDByNormalizedToken.clear();
+		for (let tokenIndex = 0; tokenIndex < this.dictionaryTokens.length; tokenIndex++) {
+			const normalizedDictionaryToken = normalizeSearchToken(this.dictionaryTokens[tokenIndex]).replace(
+				/\s+/g,
+				""
+			);
+			if (!normalizedDictionaryToken) {
+				continue;
+			}
+			this.dictionaryTokenIDByNormalizedToken.set(normalizedDictionaryToken, tokenIndex + 1);
+		}
+	}
+
+	private upsertEncodedProduct(payload: {
+		productID: number;
+		productBytes: Uint8Array;
+		brandDictionaryIndex: number;
+		brandID: number;
+		categoryIDs: number[];
+	}): void {
+		const wasExisting = this.productNameBytesByProductID.has(payload.productID);
+		this.productNameBytesByProductID.set(payload.productID, payload.productBytes);
+		this.brandDictionaryIndexByProductID.set(payload.productID, payload.brandDictionaryIndex);
+		this.brandIDMapByProductID.set(payload.productID, payload.brandID);
+		this.categoryIDsMapByProductID.set(payload.productID, [...payload.categoryIDs]);
+		if (!wasExisting) {
+			this.productIDsSorted.push(payload.productID);
+		}
+	}
+
+	private removeProduct(productID: number): void {
+		if (!this.productNameBytesByProductID.has(productID)) {
+			return;
+		}
+		this.productNameBytesByProductID.delete(productID);
+		this.brandDictionaryIndexByProductID.delete(productID);
+		this.brandIDMapByProductID.delete(productID);
+		this.categoryIDsMapByProductID.delete(productID);
+		this.productIDsSorted = this.productIDsSorted.filter((currentID) => currentID !== productID);
+	}
+
+	private resetIndexState(): void {
+		this.productNameBytesByProductID.clear();
+		this.brandDictionaryIndexByProductID.clear();
+		this.brandIDMapByProductID.clear();
+		this.categoryIDsMapByProductID.clear();
+		this.productIDsSorted = [];
+		this.dictionaryTokens = [];
+		this.dictionaryTokenIDByNormalizedToken.clear();
+		this.aliasDictionaryIDByNormalizedToken.clear();
+		this.brandNameByID.clear();
+		this.categoryNameByID.clear();
+		this.normalizedBrandWordsByBrandID.clear();
+		this.updatedInt32 = 0;
 	}
 
 	get size(): number {
@@ -363,14 +715,14 @@ export class ProductIndex {
 				productWordSyllables.length > 0 &&
 				this.hasAnyPrefixMatchInWordBySyllables(encodedQueryWords, productWordSyllables[0])
 			) {
-				firstWordPoints = ProductIndex.FIRST_WORD_POSITIONAL_POINTS;
+				firstWordPoints = ProductSearch.FIRST_WORD_POSITIONAL_POINTS;
 			}
 			let secondWordPoints = 0;
 			if (
 				productWordSyllables.length > 1 &&
 				this.hasAnyPrefixMatchInWordBySyllables(encodedQueryWords, productWordSyllables[1])
 			) {
-				secondWordPoints = ProductIndex.SECOND_WORD_POSITIONAL_POINTS;
+				secondWordPoints = ProductSearch.SECOND_WORD_POSITIONAL_POINTS;
 			}
 			const totalRankPoints = brandPoints + productNamePoints + firstWordPoints + secondWordPoints;
 
@@ -532,7 +884,6 @@ export class ProductIndex {
 		productWordSyllables: Uint8Array[]
 	): ProductQueryWordMatchDebugInfo {
 		// Track best product-word candidate so ranking output can explain why a word scored.
-		const minimumCharacterPrefixLength = Math.min(2, queryWord.length);
 		let bestMatchedSyllablePrefixLength = 0;
 		let bestMatchedCharacterPrefixLength = 0;
 		let hasExactWordMatch = false;
@@ -584,9 +935,9 @@ export class ProductIndex {
 
 		let pointsAwarded = 0;
 		// Core relevance is awarded per matched syllable (uint8 token IDs).
-		pointsAwarded += bestMatchedSyllablePrefixLength * ProductIndex.SYLLABLE_MATCH_POINTS;
+		pointsAwarded += bestMatchedSyllablePrefixLength * ProductSearch.SYLLABLE_MATCH_POINTS;
 		if (hasExactWordMatch) {
-			pointsAwarded += ProductIndex.COMPLETE_WORD_MATCH_POINTS;
+			pointsAwarded += ProductSearch.COMPLETE_WORD_MATCH_POINTS;
 		}
 
 		return {
@@ -598,33 +949,6 @@ export class ProductIndex {
 			exactWordMatch: hasExactWordMatch,
 			pointsAwarded
 		};
-	}
-
-	private hasAnyPrefixMatchInWord(
-		encodedQueryWords: Array<{ word: string; syllables: Uint8Array }>,
-		productWordSyllables: Uint8Array
-	): boolean {
-		const decodedProductWord = this.decodeWordFromSyllables(productWordSyllables);
-		for (const encodedQueryWord of encodedQueryWords) {
-			const minimumCharacterPrefixLength = Math.min(2, encodedQueryWord.word.length);
-			const querySyllables = encodedQueryWord.syllables;
-			const comparableLength = Math.min(querySyllables.length, productWordSyllables.length);
-			const matchedCharacterPrefixLength = this.countSharedPrefixCharacters(
-				encodedQueryWord.word,
-				decodedProductWord
-			);
-			if (matchedCharacterPrefixLength >= minimumCharacterPrefixLength) {
-				return true;
-			}
-			for (let offset = 0; offset < comparableLength; offset++) {
-				if (querySyllables[offset] !== productWordSyllables[offset]) {
-					break;
-				}
-				// Partial or full prefix match both qualify for positional bonus.
-				return true;
-			}
-		}
-		return false;
 	}
 
 	private hasAnyPrefixMatchInWordBySyllables(
@@ -672,9 +996,9 @@ export class ProductIndex {
 		}
 
 		let pointsAwarded =
-			bestMatchedSyllablePrefixLength * ProductIndex.SYLLABLE_MATCH_POINTS;
+			bestMatchedSyllablePrefixLength * ProductSearch.SYLLABLE_MATCH_POINTS;
 		if (hasExactWordMatch) {
-			pointsAwarded += ProductIndex.COMPLETE_WORD_MATCH_POINTS;
+			pointsAwarded += ProductSearch.COMPLETE_WORD_MATCH_POINTS;
 		}
 		return {
 			pointsAwarded,
@@ -696,11 +1020,11 @@ export class ProductIndex {
 				for (const brandWord of brandWords) {
 					// Brand influence is intentionally lower than name relevance: +2 fixed per matched query token.
 					if (brandWord === queryWord || brandWord.startsWith(queryWord)) {
-						totalBonusPoints += ProductIndex.BRAND_PREFIX_MATCH_POINTS;
+						totalBonusPoints += ProductSearch.BRAND_PREFIX_MATCH_POINTS;
 						brandMatches.push({
 							queryWord,
 							brandWord,
-							pointsAwarded: ProductIndex.BRAND_PREFIX_MATCH_POINTS
+							pointsAwarded: ProductSearch.BRAND_PREFIX_MATCH_POINTS
 						});
 						break;
 					}
@@ -721,7 +1045,7 @@ export class ProductIndex {
 			for (const queryWord of normalizedQueryWords) {
 				for (const brandWord of brandWords) {
 					if (brandWord === queryWord || brandWord.startsWith(queryWord)) {
-						totalBonusPoints += ProductIndex.BRAND_PREFIX_MATCH_POINTS;
+						totalBonusPoints += ProductSearch.BRAND_PREFIX_MATCH_POINTS;
 						break;
 					}
 				}
