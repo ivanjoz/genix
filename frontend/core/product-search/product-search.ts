@@ -102,6 +102,7 @@ const BASE_FIXED_ALIAS_GROUPS: readonly (readonly string[])[] = [
 ];
 
 const buildFixedAliasGroups = (): readonly (readonly string[])[] => {
+	// Start from backend-aligned canonical/alias groups and then complete missing single-letter tokens.
 	const fixedAliasGroups: string[][] = BASE_FIXED_ALIAS_GROUPS.map((group) => [...group]);
 	// Add single-letter vowel/consonant canonicals only when not already present in base groups.
 	const canonicalTokenSet = new Set<string>();
@@ -125,9 +126,10 @@ const FIXED_ALIAS_GROUPS = buildFixedAliasGroups();
 
 export class ProductSearch implements ProductSearchBootstrapSource {
 	// Keep scoring constants explicit so ranking behavior is predictable and easy to tune.
-	private static readonly SYLLABLE_MATCH_POINTS = 4;
+	private static readonly SYLLABLE_MATCH_POINTS_TWO_LETTER = 4;
+	private static readonly SYLLABLE_MATCH_POINTS_ONE_LETTER = 2;
 	private static readonly COMPLETE_WORD_MATCH_POINTS = 5;
-	private static readonly BRAND_PREFIX_MATCH_POINTS = 2;
+	private static readonly BRAND_WORD_MATCH_PENALTY_POINTS = 1;
 	private static readonly FIRST_WORD_POSITIONAL_POINTS = 2;
 	private static readonly SECOND_WORD_POSITIONAL_POINTS = 1;
 	private static readonly MAX_DICTIONARY_TOKENS = 255;
@@ -159,6 +161,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private async bootstrap(): Promise<void> {
+	// Bootstrap order is fixed: try idx, fetch deltas, then fallback rebuild if needed.
 		this.isLoading = true;
 		this.loadError = null;
 
@@ -194,12 +197,14 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private async tryLoadBinaryIndex(): Promise<boolean> {
+		// Keep source url centralized so all callers/diagnostics use the same route.
 		const productsIndexUrl = Env.makeCDNRoute(
 			"live",
 			`c${ProductSearch.INDEX_COMPANY_ID}_products.idx`
 		);
 		console.log("[ProductSearch] trying to load idx", { productsIndexUrl });
 		try {
+			// A non-200 response is treated as "no idx available" rather than hard-failing startup.
 			const indexResponse = await fetch(productsIndexUrl);
 			if (!indexResponse.ok) {
 				console.warn("[ProductSearch] idx response not ok", {
@@ -210,6 +215,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 			}
 			const indexBinaryBuffer = await indexResponse.arrayBuffer();
 			const decodedPayload = decodeBinary(indexBinaryBuffer);
+			// Reset first to avoid mixed state if bootstrap runs more than once.
 			this.resetIndexState();
 			this.loadFromDecodedPayload(decodedPayload);
 			console.log("[ProductSearch] idx loaded", {
@@ -224,6 +230,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private async loadDeltas(): Promise<void> {
+		// Delta service is authoritative for post-build changes and taxonomy updates.
 		await this.productsDeltaService.fetchOnline();
 		const deltaProducts = this.productsDeltaService.productos ?? [];
 		const deltaBrands = this.productsDeltaService.marcas ?? [];
@@ -235,11 +242,13 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 		});
 		this.applyTaxonomyDeltas(deltaBrands, deltaCategories);
 		if (this.productIDsSorted.length > 0) {
+			// Only merge directly when base index already exists.
 			this.applyProductDeltas(deltaProducts);
 		}
 	}
 
 	private loadFromDecodedPayload(decodedPayload: ReturnType<typeof decodeBinary>): void {
+		// Persist build watermark so callers can inspect freshness after startup.
 		// Keep build/update watermark from the text header for delta sync workflows.
 		this.updatedInt32 = decodedPayload.stats.updated;
 		this.dictionaryTokens = [...decodedPayload.dictionaryTokens];
@@ -288,6 +297,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private rebuildFromDeltaOnly(): void {
+		// Delta-only mode must synthesize dictionary + records in-memory without idx bytes.
 		this.resetIndexState();
 		this.seedDictionaryFromFixedSpanishSyllables();
 		this.applyTaxonomyDeltas(
@@ -298,6 +308,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private seedDictionaryFromFixedSpanishSyllables(): void {
+		// Fixed aliases ensure consistent compact encoding even for very small catalogs.
 		for (const aliasGroup of FIXED_ALIAS_GROUPS) {
 			const normalizedCanonicalToken = normalizeSearchToken(aliasGroup[0]).replace(/\s+/g, "");
 			if (!normalizedCanonicalToken) {
@@ -314,10 +325,12 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 		}
 		for (const consonant of SPANISH_CONSONANTS) {
 			for (const vowel of SPANISH_VOWELS) {
+				// Add both CV and VC to improve prefix coverage when idx is unavailable.
 				this.ensureDictionaryTokenID(consonant + vowel);
 				this.ensureDictionaryTokenID(vowel + consonant);
 			}
 		}
+		// Keep sentinel tokens available for products without explicit brand.
 		this.ensureDictionaryTokenID("sin");
 		this.ensureDictionaryTokenID("marca");
 	}
@@ -326,26 +339,31 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 		brandRows: readonly IListaRegistro[],
 		categoryRows: readonly IListaRegistro[]
 	): void {
+		// Keep normalized brand words precomputed so brand scoring stays O(words) per brand.
 		for (const brandRow of brandRows) {
 			const normalizedBrandName = normalizeSearchToken(brandRow.Nombre);
 			this.brandNameByID.set(brandRow.ID, normalizedBrandName);
 			this.normalizedBrandWordsByBrandID.set(brandRow.ID, splitNormalizedWords(normalizedBrandName));
 		}
 		for (const categoryRow of categoryRows) {
+			// Category names are only used for hydrated product views.
 			this.categoryNameByID.set(categoryRow.ID, normalizeSearchToken(categoryRow.Nombre));
 		}
 	}
 
 	private applyProductDeltas(deltaProducts: readonly IProducto[]): void {
+		// Delta payload can contain upserts and logical deletes (ss=0).
 		for (const deltaProduct of deltaProducts) {
 			if (!deltaProduct || deltaProduct.ID <= 0) {
 				continue;
 			}
 			const productUpdated = Number(deltaProduct.upd || 0);
 			if (productUpdated > this.updatedInt32) {
+				// Keep latest observed update watermark across all merged deltas.
 				this.updatedInt32 = productUpdated;
 			}
 			if (deltaProduct.ss === 0) {
+				// Remove deleted rows from all in-memory indexes/maps.
 				this.removeProduct(deltaProduct.ID);
 				continue;
 			}
@@ -364,12 +382,14 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private encodeProductNameToByteRow(rawProductName: string): Uint8Array {
+		// Reuse query normalization so fallback encoding follows the same token rules as search.
 		const normalizedTokens = normalizeAndFilterQueryTokens(rawProductName);
 		if (normalizedTokens.length === 0) {
 			return new Uint8Array(0);
 		}
 		const encodedWordSyllables: number[][] = [];
 		for (const normalizedToken of normalizedTokens) {
+			// Encode each normalized word into dictionary syllable ids.
 			const encodedSyllables = this.encodeWordTokenForProduct(normalizedToken);
 			if (encodedSyllables.length === 0) {
 				continue;
@@ -392,6 +412,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 				byteRow[outputOffset++] = syllableID;
 			}
 			if (wordIndex < encodedWordSyllables.length - 1) {
+				// Zero byte acts as explicit word boundary in the compact row encoding.
 				byteRow[outputOffset++] = 0;
 			}
 		}
@@ -399,6 +420,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private encodeWordTokenForProduct(normalizedToken: string): number[] {
+		// Prefer canonical alias resolution first to keep encoded rows compact and deterministic.
 		const encodedSyllables: number[] = [];
 		const aliasDictionaryID = this.aliasDictionaryIDByNormalizedToken.get(normalizedToken);
 		if (aliasDictionaryID) {
@@ -420,6 +442,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 				continue;
 			}
 			for (const currentRune of normalizedSyllableToken) {
+				// Last-resort path: fallback to single-rune dictionary tokens when syllable is unknown.
 				const runeDictionaryID = this.ensureDictionaryTokenID(currentRune);
 				if (runeDictionaryID) {
 					encodedSyllables.push(runeDictionaryID);
@@ -430,6 +453,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private splitTokenIntoSyllables(token: string): string[] {
+		// Use the same 2-char chunking strategy as backend syllable splitter.
 		if (!token) {
 			return [];
 		}
@@ -444,6 +468,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private ensureDictionaryTokenID(rawToken: string): number {
+		// Dictionary ids are 1-based and capped to 255 to preserve uint8 encoding.
 		const normalizedToken = normalizeSearchToken(rawToken).replace(/\s+/g, "");
 		if (!normalizedToken) {
 			return 0;
@@ -453,6 +478,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 			return existingDictionaryID;
 		}
 		if (this.dictionaryTokens.length >= ProductSearch.MAX_DICTIONARY_TOKENS) {
+			// Refuse to overflow dictionary id space in fallback mode.
 			return 0;
 		}
 		this.dictionaryTokens.push(normalizedToken);
@@ -462,6 +488,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private rebuildDictionaryIDLookup(): void {
+		// Rebuild normalized-token -> dictionary-id map after bulk dictionary replacement.
 		this.dictionaryTokenIDByNormalizedToken.clear();
 		for (let tokenIndex = 0; tokenIndex < this.dictionaryTokens.length; tokenIndex++) {
 			const normalizedDictionaryToken = normalizeSearchToken(this.dictionaryTokens[tokenIndex]).replace(
@@ -482,6 +509,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 		brandID: number;
 		categoryIDs: number[];
 	}): void {
+		// Upsert keeps product order stable and only appends IDs when first seen.
 		const wasExisting = this.productNameBytesByProductID.has(payload.productID);
 		this.productNameBytesByProductID.set(payload.productID, payload.productBytes);
 		this.brandDictionaryIndexByProductID.set(payload.productID, payload.brandDictionaryIndex);
@@ -493,6 +521,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private removeProduct(productID: number): void {
+		// Delete product from all per-product maps and ordered id list.
 		if (!this.productNameBytesByProductID.has(productID)) {
 			return;
 		}
@@ -504,6 +533,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private resetIndexState(): void {
+		// Hard reset all mutable runtime collections before rebuilding/bootstrap.
 		this.productNameBytesByProductID.clear();
 		this.brandDictionaryIndexByProductID.clear();
 		this.brandIDMapByProductID.clear();
@@ -531,6 +561,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	get(productID: number): IndexedProduct | undefined {
+		// Hydrate an indexed product view on demand; avoids storing duplicated derived objects.
 		const productBytesWithWordSeparator = this.productNameBytesByProductID.get(productID);
 		if (!productBytesWithWordSeparator) {
 			return undefined;
@@ -615,6 +646,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 			options?.enableFullDebugLog ?? Env.PRODUCT_SEARCH_FULL_DEBUG_LOG_ENABLED;
 		const encodedQueryTokens = normalizeAndFilterQueryTokens(queryText);
 		if (encodedQueryTokens.length === 0) {
+			// Empty/connector-only queries short-circuit and optionally publish empty debug snapshots.
 			this.latestSearchDebugSnapshot = fullDebugEnabled
 				? {
 						queryText,
@@ -650,14 +682,9 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 			: [];
 
 		// Score query-brand affinity once, then apply bonus only to products that belong to matched brands.
-		const debugBrandScoring = fullDebugEnabled
-			? this.computeBrandScoringByBrandID(encodedQueryTokens)
-			: null;
-		const brandPointsByBrandID =
-			debugBrandScoring?.brandPointsByBrandID ??
-			this.computeBrandPointsByBrandID(encodedQueryTokens);
-		const brandMatchesByBrandID =
-			debugBrandScoring?.brandMatchesByBrandID ?? new Map<number, ProductBrandMatchDebugInfo[]>();
+		const brandScoring = this.computeBrandScoringByBrandID(encodedQueryWords, fullDebugEnabled);
+		const brandPointsByBrandID = brandScoring.brandPointsByBrandID;
+		const brandMatchesByBrandID = brandScoring.brandMatchesByBrandID;
 		const rankingDebugInfoByProductID = new Map<number, ProductRankingDebugInfo>();
 		const rankingTieBreakByProductID = new Map<number, ProductRankingTieBreakInfo>();
 
@@ -727,6 +754,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 			const totalRankPoints = brandPoints + productNamePoints + firstWordPoints + secondWordPoints;
 
 			if (totalRankPoints > 0) {
+				// Only keep positively scored products in ranking candidates.
 				rankingByProductID.set(productID, totalRankPoints);
 				rankingTieBreakByProductID.set(productID, {
 					exactWordMatchCount,
@@ -755,6 +783,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 		const sortedRankedProductIDs = Array.from(rankingByProductID.entries()).sort(
 			([leftProductID, leftRank], [rightProductID, rightRank]) => {
 				if (rightRank !== leftRank) {
+					// Primary order: total score descending.
 					return rightRank - leftRank;
 				}
 				const leftTieBreakInfo = rankingTieBreakByProductID.get(leftProductID);
@@ -762,11 +791,13 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 				const leftExactWordMatchCount = leftTieBreakInfo?.exactWordMatchCount ?? 0;
 				const rightExactWordMatchCount = rightTieBreakInfo?.exactWordMatchCount ?? 0;
 				if (rightExactWordMatchCount !== leftExactWordMatchCount) {
+					// Tie-breaker 1: prefer products with more exact word matches.
 					return rightExactWordMatchCount - leftExactWordMatchCount;
 				}
 				const leftBestSyllablePrefixLength = leftTieBreakInfo?.bestSyllablePrefixLength ?? 0;
 				const rightBestSyllablePrefixLength = rightTieBreakInfo?.bestSyllablePrefixLength ?? 0;
 				if (rightBestSyllablePrefixLength !== leftBestSyllablePrefixLength) {
+					// Tie-breaker 2: prefer longer matched syllable prefixes.
 					return rightBestSyllablePrefixLength - leftBestSyllablePrefixLength;
 				}
 				// Keep deterministic order as final fallback.
@@ -776,6 +807,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 
 		const topSearchHits: ProductSearchHit[] = [];
 		for (const [productID, rank] of sortedRankedProductIDs.slice(0, 20)) {
+			// Materialize top-20 hits only; ranking map can be larger.
 			const product = this.get(productID);
 			if (!product) {
 				continue;
@@ -860,6 +892,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private splitProductWordsBySeparator(productNameBytes: Uint8Array): Uint8Array[] {
+		// Split one row into word views without copying data (subarray-based).
 		const productWordSyllables: Uint8Array[] = [];
 		let wordStartOffset = 0;
 		for (let byteOffset = 0; byteOffset < productNameBytes.length; byteOffset++) {
@@ -885,20 +918,16 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	): ProductQueryWordMatchDebugInfo {
 		// Track best product-word candidate so ranking output can explain why a word scored.
 		let bestMatchedSyllablePrefixLength = 0;
+		let bestMatchedSyllablePrefixPoints = 0;
 		let bestMatchedCharacterPrefixLength = 0;
 		let hasExactWordMatch = false;
 		let matchedProductWord = "";
 		let matchedBy: "syllable_prefix" | "character_prefix" | "none" = "none";
 
 		for (const productWord of productWordSyllables) {
-			const comparableLength = Math.min(queryWordSyllables.length, productWord.length);
-			let matchedSyllablePrefixLength = 0;
-			for (let offset = 0; offset < comparableLength; offset++) {
-				if (queryWordSyllables[offset] !== productWord[offset]) {
-					break;
-				}
-				matchedSyllablePrefixLength += 1;
-			}
+			const syllablePrefixMatch = this.computeSyllablePrefixMatch(queryWordSyllables, productWord);
+			const matchedSyllablePrefixLength = syllablePrefixMatch.matchedSyllablePrefixLength;
+			const matchedSyllablePrefixPoints = syllablePrefixMatch.matchedSyllablePrefixPoints;
 
 			// Character-prefix fallback enables matches like query "cho" against syllable pairs "ch"+"oc".
 			const decodedProductWord = this.decodeWordFromSyllables(productWord);
@@ -911,10 +940,12 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 				matchedCharacterPrefixLength > bestMatchedCharacterPrefixLength;
 			const hasSameCharacterButBetterSyllable =
 				matchedCharacterPrefixLength === bestMatchedCharacterPrefixLength &&
-				matchedSyllablePrefixLength > bestMatchedSyllablePrefixLength;
+				matchedSyllablePrefixPoints > bestMatchedSyllablePrefixPoints;
 			if (hasBetterCharacterPrefix || hasSameCharacterButBetterSyllable) {
+				// Keep the strongest match candidate so debug output reflects final scoring path.
 				bestMatchedCharacterPrefixLength = matchedCharacterPrefixLength;
 				bestMatchedSyllablePrefixLength = matchedSyllablePrefixLength;
+				bestMatchedSyllablePrefixPoints = matchedSyllablePrefixPoints;
 				matchedProductWord = decodedProductWord;
 				if (matchedSyllablePrefixLength > 0) {
 					matchedBy = "syllable_prefix";
@@ -933,12 +964,10 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 			}
 		}
 
-		let pointsAwarded = 0;
-		// Core relevance is awarded per matched syllable (uint8 token IDs).
-		pointsAwarded += bestMatchedSyllablePrefixLength * ProductSearch.SYLLABLE_MATCH_POINTS;
-		if (hasExactWordMatch) {
-			pointsAwarded += ProductSearch.COMPLETE_WORD_MATCH_POINTS;
-		}
+		const pointsAwarded = this.computeWordMatchPoints(
+			bestMatchedSyllablePrefixPoints,
+			hasExactWordMatch
+		);
 
 		return {
 			queryWord,
@@ -955,6 +984,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 		encodedQueryWords: Array<{ word: string; syllables: Uint8Array }>,
 		productWordSyllables: Uint8Array
 	): boolean {
+		// Positional bonus helper: checks if query shares at least one leading syllable with the word.
 		for (const encodedQueryWord of encodedQueryWords) {
 			const querySyllables = encodedQueryWord.syllables;
 			const comparableLength = Math.min(querySyllables.length, productWordSyllables.length);
@@ -973,19 +1003,19 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 		queryWordSyllables: Uint8Array,
 		productWordSyllables: Uint8Array[]
 	): FastQueryWordMatchResult {
+		// Fast path skips verbose debug details but preserves the same scoring behavior.
 		let bestMatchedSyllablePrefixLength = 0;
+		let bestMatchedSyllablePrefixPoints = 0;
 		let hasExactWordMatch = false;
 		for (const productWord of productWordSyllables) {
-			const comparableLength = Math.min(queryWordSyllables.length, productWord.length);
-			let matchedSyllablePrefixLength = 0;
-			for (let offset = 0; offset < comparableLength; offset++) {
-				if (queryWordSyllables[offset] !== productWord[offset]) {
-					break;
-				}
-				matchedSyllablePrefixLength++;
-			}
+			const syllablePrefixMatch = this.computeSyllablePrefixMatch(queryWordSyllables, productWord);
+			const matchedSyllablePrefixLength = syllablePrefixMatch.matchedSyllablePrefixLength;
+			const matchedSyllablePrefixPoints = syllablePrefixMatch.matchedSyllablePrefixPoints;
 			if (matchedSyllablePrefixLength > bestMatchedSyllablePrefixLength) {
 				bestMatchedSyllablePrefixLength = matchedSyllablePrefixLength;
+			}
+			if (matchedSyllablePrefixPoints > bestMatchedSyllablePrefixPoints) {
+				bestMatchedSyllablePrefixPoints = matchedSyllablePrefixPoints;
 			}
 			if (
 				matchedSyllablePrefixLength === queryWordSyllables.length &&
@@ -995,11 +1025,10 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 			}
 		}
 
-		let pointsAwarded =
-			bestMatchedSyllablePrefixLength * ProductSearch.SYLLABLE_MATCH_POINTS;
-		if (hasExactWordMatch) {
-			pointsAwarded += ProductSearch.COMPLETE_WORD_MATCH_POINTS;
-		}
+		const pointsAwarded = this.computeWordMatchPoints(
+			bestMatchedSyllablePrefixPoints,
+			hasExactWordMatch
+		);
 		return {
 			pointsAwarded,
 			exactWordMatch: hasExactWordMatch,
@@ -1007,54 +1036,41 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 		};
 	}
 
-	private computeBrandScoringByBrandID(normalizedQueryWords: string[]): {
+	private computeBrandScoringByBrandID(
+		encodedQueryWords: Array<{ word: string; syllables: Uint8Array }>,
+		includeDebugMatches = false
+	): {
 		brandPointsByBrandID: Map<number, number>;
 		brandMatchesByBrandID: Map<number, ProductBrandMatchDebugInfo[]>;
 	} {
+		// Score all brands once per query; products then reuse points by their brandID.
 		const brandPointsByBrandID = new Map<number, number>();
 		const brandMatchesByBrandID = new Map<number, ProductBrandMatchDebugInfo[]>();
 		for (const [brandID, brandWords] of this.normalizedBrandWordsByBrandID.entries()) {
 			let totalBonusPoints = 0;
 			const brandMatches: ProductBrandMatchDebugInfo[] = [];
-			for (const queryWord of normalizedQueryWords) {
-				for (const brandWord of brandWords) {
-					// Brand influence is intentionally lower than name relevance: +2 fixed per matched query token.
-					if (brandWord === queryWord || brandWord.startsWith(queryWord)) {
-						totalBonusPoints += ProductSearch.BRAND_PREFIX_MATCH_POINTS;
+			for (const encodedQueryWord of encodedQueryWords) {
+				const bestBrandWordMatch = this.findBestBrandWordMatch(encodedQueryWord, brandWords);
+				if (bestBrandWordMatch.pointsAwarded > 0) {
+					totalBonusPoints += bestBrandWordMatch.pointsAwarded;
+					if (includeDebugMatches) {
 						brandMatches.push({
-							queryWord,
-							brandWord,
-							pointsAwarded: ProductSearch.BRAND_PREFIX_MATCH_POINTS
+							queryWord: encodedQueryWord.word,
+							brandWord: bestBrandWordMatch.brandWord,
+							pointsAwarded: bestBrandWordMatch.pointsAwarded
 						});
-						break;
 					}
 				}
 			}
 			if (totalBonusPoints > 0) {
 				brandPointsByBrandID.set(brandID, totalBonusPoints);
-				brandMatchesByBrandID.set(brandID, brandMatches);
+				if (includeDebugMatches) {
+					// Debug payload only stores contributing brand-word matches when explicitly requested.
+					brandMatchesByBrandID.set(brandID, brandMatches);
+				}
 			}
 		}
 		return { brandPointsByBrandID, brandMatchesByBrandID };
-	}
-
-	private computeBrandPointsByBrandID(normalizedQueryWords: string[]): Map<number, number> {
-		const brandPointsByBrandID = new Map<number, number>();
-		for (const [brandID, brandWords] of this.normalizedBrandWordsByBrandID.entries()) {
-			let totalBonusPoints = 0;
-			for (const queryWord of normalizedQueryWords) {
-				for (const brandWord of brandWords) {
-					if (brandWord === queryWord || brandWord.startsWith(queryWord)) {
-						totalBonusPoints += ProductSearch.BRAND_PREFIX_MATCH_POINTS;
-						break;
-					}
-				}
-			}
-			if (totalBonusPoints > 0) {
-				brandPointsByBrandID.set(brandID, totalBonusPoints);
-			}
-		}
-		return brandPointsByBrandID;
 	}
 
 	private decodeWordFromSyllables(wordSyllableIDs: Uint8Array): string {
@@ -1070,6 +1086,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private countSharedPrefixCharacters(queryWord: string, candidateWord: string): number {
+		// Character-prefix metric is used as a fallback tie-breaker when syllable ids diverge.
 		const comparableLength = Math.min(queryWord.length, candidateWord.length);
 		let matchedPrefixLength = 0;
 		for (let charOffset = 0; charOffset < comparableLength; charOffset++) {
@@ -1079,5 +1096,80 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 			matchedPrefixLength++;
 		}
 		return matchedPrefixLength;
+	}
+
+	private computeWordMatchPoints(syllablePrefixPoints: number, exactWordMatch: boolean): number {
+		// Shared word scoring primitive used by both product-name and brand matching logic.
+		let pointsAwarded = syllablePrefixPoints;
+		if (exactWordMatch) {
+			pointsAwarded += ProductSearch.COMPLETE_WORD_MATCH_POINTS;
+		}
+		return pointsAwarded;
+	}
+
+	private findBestBrandWordMatch(
+		encodedQueryWord: { word: string; syllables: Uint8Array },
+		brandWords: readonly string[]
+	): { brandWord: string; pointsAwarded: number } {
+		// For each query word, keep only the highest-scoring brand word contribution.
+		let bestMatchedBrandWord = "";
+		let bestWordPointsForQuery = 0;
+		for (const brandWord of brandWords) {
+			const encodedBrandWordSyllables = encodeQueryWordToDictionarySyllables(
+				brandWord,
+				this.dictionaryTokenIDByNormalizedToken,
+				this.aliasDictionaryIDByNormalizedToken
+			);
+			const syllablePrefixMatch = this.computeSyllablePrefixMatch(
+				encodedQueryWord.syllables,
+				encodedBrandWordSyllables
+			);
+			let wordPoints = this.computeWordMatchPoints(
+				syllablePrefixMatch.matchedSyllablePrefixPoints,
+				brandWord === encodedQueryWord.word
+			);
+			if (wordPoints > 0) {
+				// Brand relevance tracks name relevance but with a -1 penalty per matched word.
+				wordPoints = Math.max(1, wordPoints - ProductSearch.BRAND_WORD_MATCH_PENALTY_POINTS);
+			}
+			if (wordPoints > bestWordPointsForQuery) {
+				bestWordPointsForQuery = wordPoints;
+				bestMatchedBrandWord = brandWord;
+			}
+		}
+		return {
+			brandWord: bestMatchedBrandWord,
+			pointsAwarded: bestWordPointsForQuery
+		};
+	}
+
+	private computeSyllablePrefixMatch(
+		queryWordSyllables: Uint8Array,
+		candidateWordSyllables: Uint8Array
+	): { matchedSyllablePrefixLength: number; matchedSyllablePrefixPoints: number } {
+		// Prefix scoring works on encoded syllable ids to avoid repeated string allocations.
+		const comparableLength = Math.min(queryWordSyllables.length, candidateWordSyllables.length);
+		let matchedSyllablePrefixLength = 0;
+		let matchedSyllablePrefixPoints = 0;
+		for (let offset = 0; offset < comparableLength; offset++) {
+			if (queryWordSyllables[offset] !== candidateWordSyllables[offset]) {
+				break;
+			}
+			matchedSyllablePrefixLength++;
+			matchedSyllablePrefixPoints += this.getSyllableMatchPoints(queryWordSyllables[offset]);
+		}
+		return { matchedSyllablePrefixLength, matchedSyllablePrefixPoints };
+	}
+
+	private getSyllableMatchPoints(dictionaryTokenID: number): number {
+		// One-letter syllables are weaker signals than two-letter syllables.
+		if (dictionaryTokenID <= 0 || dictionaryTokenID > this.dictionaryTokens.length) {
+			return 0;
+		}
+		const dictionaryToken = this.dictionaryTokens[dictionaryTokenID - 1];
+		const dictionaryTokenLength = [...dictionaryToken].length;
+		return dictionaryTokenLength <= 1
+			? ProductSearch.SYLLABLE_MATCH_POINTS_ONE_LETTER
+			: ProductSearch.SYLLABLE_MATCH_POINTS_TWO_LETTER;
 	}
 }
