@@ -1,24 +1,31 @@
 <script lang="ts">
-  const handleKeydown = (event: KeyboardEvent) => {
+  import ProductSearchLayer from "$ecommerce/components/ProductSearchLayer.svelte";
+
+  // Keep query text local to the search bar so the layer can react on each keystroke.
+  let queryText = $state("");
+
+  const handleSearchKeydown = (event: KeyboardEvent) => {
     const target = event.target as HTMLTextAreaElement;
     if (
       target &&
       (event.key === "Enter" || event.keyCode === 13 || event.charCode === 13)
     ) {
-      // Prevent the default action (inserting a new line)
-      event.preventDefault()
+      // Prevent multiline input because search behavior is single-line.
+      event.preventDefault();
     }
-  }
+  };
 </script>
 
 <div class="_1 relative lg:w-340 w-[34vw]">
   <textarea
     class="_2 w-full pl-12 rounded-[16px] pt-10 pl-14"
     cols="1"
-    onkeydown={handleKeydown}
+    bind:value={queryText}
+    onkeydown={handleSearchKeydown}
     placeholder="Buscar..."
   ></textarea>
   <i class="icon1-search absolute top-8 md:top-9 right-7 md:right-10"></i>
+  <ProductSearchLayer queryText={queryText} maxResults={12} />
 </div>
 
 <style>

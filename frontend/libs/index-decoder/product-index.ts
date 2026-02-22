@@ -5,9 +5,77 @@ import {
 	normalizeSearchToken,
 	splitNormalizedWords
 } from "./encoder";
+import { Env } from "$core/env";
 import type { IndexedProduct, ProductSearchHit } from "./types";
 
+export interface ProductQueryWordDebugInfo {
+	queryWord: string;
+	encodedSyllableIDs: number[];
+}
+
+export interface ProductSearchOptions {
+	enableFullDebugLog?: boolean;
+}
+
+export interface ProductBrandMatchDebugInfo {
+	queryWord: string;
+	brandWord: string;
+	pointsAwarded: number;
+}
+
+export interface ProductQueryWordMatchDebugInfo {
+	queryWord: string;
+	matchedBy: "syllable_prefix" | "character_prefix" | "none";
+	matchedProductWord: string;
+	matchedSyllablePrefixLength: number;
+	matchedCharacterPrefixLength: number;
+	exactWordMatch: boolean;
+	pointsAwarded: number;
+}
+
+export interface ProductRankingDebugInfo {
+	productID: number;
+	productNameLossy: string;
+	brandID: number;
+	brandName: string;
+	brandPoints: number;
+	productNamePoints: number;
+	firstWordPoints: number;
+	secondWordPoints: number;
+	exactWordMatchCount: number;
+	bestCharacterPrefixLength: number;
+	totalRankPoints: number;
+	brandWordMatches: ProductBrandMatchDebugInfo[];
+	queryWordMatches: ProductQueryWordMatchDebugInfo[];
+}
+
+export interface ProductSearchDebugSnapshot {
+	queryText: string;
+	normalizedQueryTokens: string[];
+	encodedQueryWords: ProductQueryWordDebugInfo[];
+	rankedProducts: ProductRankingDebugInfo[];
+	generatedAtISO: string;
+}
+
+interface ProductRankingTieBreakInfo {
+	exactWordMatchCount: number;
+	bestSyllablePrefixLength: number;
+}
+
+interface FastQueryWordMatchResult {
+	pointsAwarded: number;
+	exactWordMatch: boolean;
+	bestSyllablePrefixLength: number;
+}
+
 export class ProductIndex {
+	// Keep scoring constants explicit so ranking behavior is predictable and easy to tune.
+	private static readonly SYLLABLE_MATCH_POINTS = 4;
+	private static readonly COMPLETE_WORD_MATCH_POINTS = 5;
+	private static readonly BRAND_PREFIX_MATCH_POINTS = 2;
+	private static readonly FIRST_WORD_POSITIONAL_POINTS = 2;
+	private static readonly SECOND_WORD_POSITIONAL_POINTS = 1;
+
 	private readonly productNameBytesByProductID = new Map<number, Uint8Array>();
 	private readonly brandDictionaryIndexByProductID = new Map<number, number>();
 	private readonly brandIDMapByProductID = new Map<number, number>();
@@ -20,6 +88,7 @@ export class ProductIndex {
 	private readonly categoryNameByID = new Map<number, string>();
 	private readonly normalizedBrandWordsByBrandID = new Map<number, string[]>();
 	private readonly updatedInt32: number;
+	private latestSearchDebugSnapshot: ProductSearchDebugSnapshot | null = null;
 
 	constructor(indexBytesInput: Uint8Array | ArrayBuffer) {
 		const decodedPayload = decodeBinary(indexBytesInput);
@@ -178,9 +247,27 @@ export class ProductIndex {
 		return filteredProducts;
 	}
 
-	search(queryText: string): ProductSearchHit[] {
+	search(queryText: string, options?: ProductSearchOptions): ProductSearchHit[] {
+		// Measure full search execution time for mandatory query telemetry.
+		const searchStartedAtMs = typeof performance !== "undefined" ? performance.now() : Date.now();
+		const fullDebugEnabled =
+			options?.enableFullDebugLog ?? Env.PRODUCT_SEARCH_FULL_DEBUG_LOG_ENABLED;
 		const encodedQueryTokens = normalizeAndFilterQueryTokens(queryText);
 		if (encodedQueryTokens.length === 0) {
+			this.latestSearchDebugSnapshot = fullDebugEnabled
+				? {
+						queryText,
+						normalizedQueryTokens: [],
+						encodedQueryWords: [],
+						rankedProducts: [],
+						generatedAtISO: new Date().toISOString()
+				  }
+					: null;
+			const emptyQueryElapsedMs =
+				(typeof performance !== "undefined" ? performance.now() : Date.now()) - searchStartedAtMs;
+			console.log(
+				`Search: ${queryText}. Found: 0 matches in ${Math.max(0, Math.round(emptyQueryElapsedMs))}ms`
+			);
 			return [];
 		}
 
@@ -193,14 +280,25 @@ export class ProductIndex {
 					this.dictionaryTokenIDByNormalizedToken,
 					this.aliasDictionaryIDByNormalizedToken
 				)
-			}))
-			.filter((encodedWord) => encodedWord.syllables.length > 0);
-		if (encodedQueryWords.length === 0) {
-			return [];
-		}
+			}));
+		const debugEncodedQueryWords: ProductQueryWordDebugInfo[] = fullDebugEnabled
+			? encodedQueryWords.map((encodedQueryWord) => ({
+					queryWord: encodedQueryWord.word,
+					encodedSyllableIDs: Array.from(encodedQueryWord.syllables)
+			  }))
+			: [];
 
 		// Score query-brand affinity once, then apply bonus only to products that belong to matched brands.
-		const brandBonusByBrandID = this.computeBrandBonusByBrandID(encodedQueryTokens);
+		const debugBrandScoring = fullDebugEnabled
+			? this.computeBrandScoringByBrandID(encodedQueryTokens)
+			: null;
+		const brandPointsByBrandID =
+			debugBrandScoring?.brandPointsByBrandID ??
+			this.computeBrandPointsByBrandID(encodedQueryTokens);
+		const brandMatchesByBrandID =
+			debugBrandScoring?.brandMatchesByBrandID ?? new Map<number, ProductBrandMatchDebugInfo[]>();
+		const rankingDebugInfoByProductID = new Map<number, ProductRankingDebugInfo>();
+		const rankingTieBreakByProductID = new Map<number, ProductRankingTieBreakInfo>();
 
 		const rankingByProductID = new Map<number, number>();
 		for (const productID of this.productIDsSorted) {
@@ -211,38 +309,108 @@ export class ProductIndex {
 
 			// Split product byte row by 0 separators to evaluate per-word prefix matches.
 			const productWordSyllables = this.splitProductWordsBySeparator(productNameBytes);
-			let totalRankPoints = 0;
 			const productBrandID = this.brandIDMapByProductID.get(productID) ?? 0;
-			totalRankPoints += brandBonusByBrandID.get(productBrandID) ?? 0;
-			for (const encodedQueryWord of encodedQueryWords) {
-				totalRankPoints += this.computeBestWordPrefixSyllableScore(
-					encodedQueryWord.syllables,
-					productWordSyllables
-				);
+			const productBrandName = this.brandNameByID.get(productBrandID) ?? "";
+			const brandPoints = brandPointsByBrandID.get(productBrandID) ?? 0;
+			let productNamePoints = 0;
+			let exactWordMatchCount = 0;
+			let bestSyllablePrefixLength = 0;
+			const queryWordMatches: ProductQueryWordMatchDebugInfo[] = [];
+			if (fullDebugEnabled) {
+				for (const encodedQueryWord of encodedQueryWords) {
+					const queryWordMatchDebugInfo = this.evaluateQueryWordAgainstProductWords(
+						encodedQueryWord.word,
+						encodedQueryWord.syllables,
+						productWordSyllables
+					);
+					productNamePoints += queryWordMatchDebugInfo.pointsAwarded;
+					if (queryWordMatchDebugInfo.exactWordMatch) {
+						exactWordMatchCount++;
+					}
+					if (
+						queryWordMatchDebugInfo.matchedSyllablePrefixLength > bestSyllablePrefixLength
+					) {
+						bestSyllablePrefixLength = queryWordMatchDebugInfo.matchedSyllablePrefixLength;
+					}
+					queryWordMatches.push(queryWordMatchDebugInfo);
+				}
+			} else {
+				for (const encodedQueryWord of encodedQueryWords) {
+					const fastQueryWordMatch = this.evaluateQueryWordAgainstProductWordsFast(
+						encodedQueryWord.syllables,
+						productWordSyllables
+					);
+					productNamePoints += fastQueryWordMatch.pointsAwarded;
+					if (fastQueryWordMatch.exactWordMatch) {
+						exactWordMatchCount++;
+					}
+					if (fastQueryWordMatch.bestSyllablePrefixLength > bestSyllablePrefixLength) {
+						bestSyllablePrefixLength = fastQueryWordMatch.bestSyllablePrefixLength;
+					}
+				}
 			}
-			// Expand score range so lower/intermediate matches have more ranking headroom.
-			totalRankPoints *= 4;
+			let firstWordPoints = 0;
 			if (
 				productWordSyllables.length > 0 &&
-				this.hasAnyPrefixMatchInWord(encodedQueryWords, productWordSyllables[0])
+				this.hasAnyPrefixMatchInWordBySyllables(encodedQueryWords, productWordSyllables[0])
 			) {
-				totalRankPoints += 2;
+				firstWordPoints = ProductIndex.FIRST_WORD_POSITIONAL_POINTS;
 			}
+			let secondWordPoints = 0;
 			if (
 				productWordSyllables.length > 1 &&
-				this.hasAnyPrefixMatchInWord(encodedQueryWords, productWordSyllables[1])
+				this.hasAnyPrefixMatchInWordBySyllables(encodedQueryWords, productWordSyllables[1])
 			) {
-				totalRankPoints += 1;
+				secondWordPoints = ProductIndex.SECOND_WORD_POSITIONAL_POINTS;
 			}
+			const totalRankPoints = brandPoints + productNamePoints + firstWordPoints + secondWordPoints;
 
 			if (totalRankPoints > 0) {
 				rankingByProductID.set(productID, totalRankPoints);
+				rankingTieBreakByProductID.set(productID, {
+					exactWordMatchCount,
+					bestSyllablePrefixLength
+				});
+				if (fullDebugEnabled) {
+					rankingDebugInfoByProductID.set(productID, {
+						productID,
+						productNameLossy: this.decodeLossyName(productNameBytes),
+						brandID: productBrandID,
+						brandName: productBrandName,
+						brandPoints,
+						productNamePoints,
+						firstWordPoints,
+						secondWordPoints,
+						exactWordMatchCount,
+						bestCharacterPrefixLength: bestSyllablePrefixLength,
+						totalRankPoints,
+						brandWordMatches: [...(brandMatchesByBrandID.get(productBrandID) ?? [])],
+						queryWordMatches
+					});
+				}
 			}
 		}
 
 		const sortedRankedProductIDs = Array.from(rankingByProductID.entries()).sort(
-			([leftProductID, leftRank], [rightProductID, rightRank]) =>
-				rightRank - leftRank || leftProductID - rightProductID
+			([leftProductID, leftRank], [rightProductID, rightRank]) => {
+				if (rightRank !== leftRank) {
+					return rightRank - leftRank;
+				}
+				const leftTieBreakInfo = rankingTieBreakByProductID.get(leftProductID);
+				const rightTieBreakInfo = rankingTieBreakByProductID.get(rightProductID);
+				const leftExactWordMatchCount = leftTieBreakInfo?.exactWordMatchCount ?? 0;
+				const rightExactWordMatchCount = rightTieBreakInfo?.exactWordMatchCount ?? 0;
+				if (rightExactWordMatchCount !== leftExactWordMatchCount) {
+					return rightExactWordMatchCount - leftExactWordMatchCount;
+				}
+				const leftBestSyllablePrefixLength = leftTieBreakInfo?.bestSyllablePrefixLength ?? 0;
+				const rightBestSyllablePrefixLength = rightTieBreakInfo?.bestSyllablePrefixLength ?? 0;
+				if (rightBestSyllablePrefixLength !== leftBestSyllablePrefixLength) {
+					return rightBestSyllablePrefixLength - leftBestSyllablePrefixLength;
+				}
+				// Keep deterministic order as final fallback.
+				return leftProductID - rightProductID;
+			}
 		);
 
 		const topSearchHits: ProductSearchHit[] = [];
@@ -253,7 +421,31 @@ export class ProductIndex {
 			}
 			topSearchHits.push({ product, rank });
 		}
+
+		// Persist the full ranked-debug payload only when debug mode is explicitly enabled.
+		this.latestSearchDebugSnapshot = fullDebugEnabled
+			? {
+					queryText,
+					normalizedQueryTokens: encodedQueryTokens,
+					encodedQueryWords: debugEncodedQueryWords,
+					rankedProducts: sortedRankedProductIDs
+						.map(([productID]) => rankingDebugInfoByProductID.get(productID))
+						.filter((rankingDebugInfo): rankingDebugInfo is ProductRankingDebugInfo =>
+							Boolean(rankingDebugInfo)
+						),
+					generatedAtISO: new Date().toISOString()
+			  }
+			: null;
+		const searchElapsedMs =
+			(typeof performance !== "undefined" ? performance.now() : Date.now()) - searchStartedAtMs;
+		console.log(
+			`Search: ${queryText}. Found: ${sortedRankedProductIDs.length} matches in ${Math.max(0, Math.round(searchElapsedMs))}ms`
+		);
 		return topSearchHits;
+	}
+
+	getLastSearchDebugSnapshot(): ProductSearchDebugSnapshot | null {
+		return this.latestSearchDebugSnapshot;
 	}
 
 	private buildZeroSeparatedWordBytes(
@@ -314,55 +506,107 @@ export class ProductIndex {
 				continue;
 			}
 			if (byteOffset > wordStartOffset) {
-				productWordSyllables.push(productNameBytes.slice(wordStartOffset, byteOffset));
+				// Use subarray to avoid copying word bytes in the search hot path.
+				productWordSyllables.push(productNameBytes.subarray(wordStartOffset, byteOffset));
 			}
 			wordStartOffset = byteOffset + 1;
 		}
 		if (wordStartOffset < productNameBytes.length) {
-			productWordSyllables.push(productNameBytes.slice(wordStartOffset));
+			productWordSyllables.push(productNameBytes.subarray(wordStartOffset));
 		}
 		return productWordSyllables;
 	}
 
-	private computeBestWordPrefixSyllableScore(
+	private evaluateQueryWordAgainstProductWords(
+		queryWord: string,
 		queryWordSyllables: Uint8Array,
 		productWordSyllables: Uint8Array[]
-	): number {
-		// Score by prefix syllable matches from the start of both words and keep the best word hit.
-		let bestWordMatchPoints = 0;
+	): ProductQueryWordMatchDebugInfo {
+		// Track best product-word candidate so ranking output can explain why a word scored.
+		const minimumCharacterPrefixLength = Math.min(2, queryWord.length);
+		let bestMatchedSyllablePrefixLength = 0;
+		let bestMatchedCharacterPrefixLength = 0;
+		let hasExactWordMatch = false;
+		let matchedProductWord = "";
+		let matchedBy: "syllable_prefix" | "character_prefix" | "none" = "none";
+
 		for (const productWord of productWordSyllables) {
 			const comparableLength = Math.min(queryWordSyllables.length, productWord.length);
-			let matchedPrefixSyllables = 0;
+			let matchedSyllablePrefixLength = 0;
 			for (let offset = 0; offset < comparableLength; offset++) {
 				if (queryWordSyllables[offset] !== productWord[offset]) {
 					break;
 				}
-				matchedPrefixSyllables += 1;
+				matchedSyllablePrefixLength += 1;
 			}
-			let wordMatchScore = matchedPrefixSyllables;
-			const isWholeWordMatch =
-				matchedPrefixSyllables === queryWordSyllables.length &&
-				queryWordSyllables.length === productWord.length;
-			if (isWholeWordMatch) {
-				wordMatchScore += 1;
-				if (productWord.length >= 3) {
-					wordMatchScore += 2;
+
+			// Character-prefix fallback enables matches like query "cho" against syllable pairs "ch"+"oc".
+			const decodedProductWord = this.decodeWordFromSyllables(productWord);
+			const matchedCharacterPrefixLength = this.countSharedPrefixCharacters(
+				queryWord,
+				decodedProductWord
+			);
+
+			const hasBetterCharacterPrefix =
+				matchedCharacterPrefixLength > bestMatchedCharacterPrefixLength;
+			const hasSameCharacterButBetterSyllable =
+				matchedCharacterPrefixLength === bestMatchedCharacterPrefixLength &&
+				matchedSyllablePrefixLength > bestMatchedSyllablePrefixLength;
+			if (hasBetterCharacterPrefix || hasSameCharacterButBetterSyllable) {
+				bestMatchedCharacterPrefixLength = matchedCharacterPrefixLength;
+				bestMatchedSyllablePrefixLength = matchedSyllablePrefixLength;
+				matchedProductWord = decodedProductWord;
+				if (matchedSyllablePrefixLength > 0) {
+					matchedBy = "syllable_prefix";
+				} else if (matchedCharacterPrefixLength > 0) {
+					matchedBy = "character_prefix";
+				} else {
+					matchedBy = "none";
 				}
 			}
-			if (wordMatchScore > bestWordMatchPoints) {
-				bestWordMatchPoints = wordMatchScore;
+
+			if (
+				matchedCharacterPrefixLength === queryWord.length &&
+				decodedProductWord.length === queryWord.length
+			) {
+				hasExactWordMatch = true;
 			}
 		}
-		return bestWordMatchPoints;
+
+		let pointsAwarded = 0;
+		// Core relevance is awarded per matched syllable (uint8 token IDs).
+		pointsAwarded += bestMatchedSyllablePrefixLength * ProductIndex.SYLLABLE_MATCH_POINTS;
+		if (hasExactWordMatch) {
+			pointsAwarded += ProductIndex.COMPLETE_WORD_MATCH_POINTS;
+		}
+
+		return {
+			queryWord,
+			matchedBy,
+			matchedProductWord,
+			matchedSyllablePrefixLength: bestMatchedSyllablePrefixLength,
+			matchedCharacterPrefixLength: bestMatchedCharacterPrefixLength,
+			exactWordMatch: hasExactWordMatch,
+			pointsAwarded
+		};
 	}
 
 	private hasAnyPrefixMatchInWord(
 		encodedQueryWords: Array<{ word: string; syllables: Uint8Array }>,
 		productWordSyllables: Uint8Array
 	): boolean {
+		const decodedProductWord = this.decodeWordFromSyllables(productWordSyllables);
 		for (const encodedQueryWord of encodedQueryWords) {
+			const minimumCharacterPrefixLength = Math.min(2, encodedQueryWord.word.length);
 			const querySyllables = encodedQueryWord.syllables;
 			const comparableLength = Math.min(querySyllables.length, productWordSyllables.length);
+			const matchedCharacterPrefixLength = this.countSharedPrefixCharacters(
+				encodedQueryWord.word,
+				decodedProductWord
+			);
+			if (matchedCharacterPrefixLength >= minimumCharacterPrefixLength) {
+				return true;
+			}
 			for (let offset = 0; offset < comparableLength; offset++) {
 				if (querySyllables[offset] !== productWordSyllables[offset]) {
 					break;
@@ -374,38 +618,133 @@ export class ProductIndex {
 		return false;
 	}
 
-	private computeBrandBonusByBrandID(normalizedQueryWords: string[]): Map<number, number> {
-		const brandBonusByBrandID = new Map<number, number>();
+	private hasAnyPrefixMatchInWordBySyllables(
+		encodedQueryWords: Array<{ word: string; syllables: Uint8Array }>,
+		productWordSyllables: Uint8Array
+	): boolean {
+		for (const encodedQueryWord of encodedQueryWords) {
+			const querySyllables = encodedQueryWord.syllables;
+			const comparableLength = Math.min(querySyllables.length, productWordSyllables.length);
+			for (let offset = 0; offset < comparableLength; offset++) {
+				if (querySyllables[offset] !== productWordSyllables[offset]) {
+					break;
+				}
+				// Partial or full syllable-prefix match qualifies for positional bonus.
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private evaluateQueryWordAgainstProductWordsFast(
+		queryWordSyllables: Uint8Array,
+		productWordSyllables: Uint8Array[]
+	): FastQueryWordMatchResult {
+		let bestMatchedSyllablePrefixLength = 0;
+		let hasExactWordMatch = false;
+		for (const productWord of productWordSyllables) {
+			const comparableLength = Math.min(queryWordSyllables.length, productWord.length);
+			let matchedSyllablePrefixLength = 0;
+			for (let offset = 0; offset < comparableLength; offset++) {
+				if (queryWordSyllables[offset] !== productWord[offset]) {
+					break;
+				}
+				matchedSyllablePrefixLength++;
+			}
+			if (matchedSyllablePrefixLength > bestMatchedSyllablePrefixLength) {
+				bestMatchedSyllablePrefixLength = matchedSyllablePrefixLength;
+			}
+			if (
+				matchedSyllablePrefixLength === queryWordSyllables.length &&
+				productWord.length === queryWordSyllables.length
+			) {
+				hasExactWordMatch = true;
+			}
+		}
+
+		let pointsAwarded =
+			bestMatchedSyllablePrefixLength * ProductIndex.SYLLABLE_MATCH_POINTS;
+		if (hasExactWordMatch) {
+			pointsAwarded += ProductIndex.COMPLETE_WORD_MATCH_POINTS;
+		}
+		return {
+			pointsAwarded,
+			exactWordMatch: hasExactWordMatch,
+			bestSyllablePrefixLength: bestMatchedSyllablePrefixLength
+		};
+	}
+
+	private computeBrandScoringByBrandID(normalizedQueryWords: string[]): {
+		brandPointsByBrandID: Map<number, number>;
+		brandMatchesByBrandID: Map<number, ProductBrandMatchDebugInfo[]>;
+	} {
+		const brandPointsByBrandID = new Map<number, number>();
+		const brandMatchesByBrandID = new Map<number, ProductBrandMatchDebugInfo[]>();
 		for (const [brandID, brandWords] of this.normalizedBrandWordsByBrandID.entries()) {
 			let totalBonusPoints = 0;
+			const brandMatches: ProductBrandMatchDebugInfo[] = [];
 			for (const queryWord of normalizedQueryWords) {
 				for (const brandWord of brandWords) {
-					if (brandWord === queryWord) {
-						totalBonusPoints += Math.ceil(queryWord.length / 2);
-						break;
-					}
-					let hasPrefixMatch = false;
-					for (const prefixLength of [5, 4, 3]) {
-						if (queryWord.length < prefixLength) {
-							continue;
-						}
-						const queryPrefix = queryWord.slice(0, prefixLength);
-						if (!brandWord.startsWith(queryPrefix)) {
-							continue;
-						}
-						totalBonusPoints += Math.ceil(prefixLength / 2);
-						hasPrefixMatch = true;
-						break;
-					}
-					if (hasPrefixMatch) {
+					// Brand influence is intentionally lower than name relevance: +2 fixed per matched query token.
+					if (brandWord === queryWord || brandWord.startsWith(queryWord)) {
+						totalBonusPoints += ProductIndex.BRAND_PREFIX_MATCH_POINTS;
+						brandMatches.push({
+							queryWord,
+							brandWord,
+							pointsAwarded: ProductIndex.BRAND_PREFIX_MATCH_POINTS
+						});
 						break;
 					}
 				}
 			}
 			if (totalBonusPoints > 0) {
-				brandBonusByBrandID.set(brandID, totalBonusPoints);
+				brandPointsByBrandID.set(brandID, totalBonusPoints);
+				brandMatchesByBrandID.set(brandID, brandMatches);
 			}
 		}
-		return brandBonusByBrandID;
+		return { brandPointsByBrandID, brandMatchesByBrandID };
+	}
+
+	private computeBrandPointsByBrandID(normalizedQueryWords: string[]): Map<number, number> {
+		const brandPointsByBrandID = new Map<number, number>();
+		for (const [brandID, brandWords] of this.normalizedBrandWordsByBrandID.entries()) {
+			let totalBonusPoints = 0;
+			for (const queryWord of normalizedQueryWords) {
+				for (const brandWord of brandWords) {
+					if (brandWord === queryWord || brandWord.startsWith(queryWord)) {
+						totalBonusPoints += ProductIndex.BRAND_PREFIX_MATCH_POINTS;
+						break;
+					}
+				}
+			}
+			if (totalBonusPoints > 0) {
+				brandPointsByBrandID.set(brandID, totalBonusPoints);
+			}
+		}
+		return brandPointsByBrandID;
+	}
+
+	private decodeWordFromSyllables(wordSyllableIDs: Uint8Array): string {
+		// Reconstruct a normalized word from dictionary IDs for character-level prefix matching.
+		let decodedWord = "";
+		for (const dictionaryTokenID of wordSyllableIDs) {
+			if (dictionaryTokenID <= 0 || dictionaryTokenID > this.dictionaryTokens.length) {
+				continue;
+			}
+			decodedWord += this.dictionaryTokens[dictionaryTokenID - 1];
+		}
+		return normalizeSearchToken(decodedWord).replace(/\s+/g, "");
+	}
+
+	private countSharedPrefixCharacters(queryWord: string, candidateWord: string): number {
+		const comparableLength = Math.min(queryWord.length, candidateWord.length);
+		let matchedPrefixLength = 0;
+		for (let charOffset = 0; charOffset < comparableLength; charOffset++) {
+			if (queryWord[charOffset] !== candidateWord[charOffset]) {
+				break;
+			}
+			matchedPrefixLength++;
+		}
+		return matchedPrefixLength;
 	}
 }

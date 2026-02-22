@@ -69,6 +69,8 @@ export const Env = {
   empresaID: 0,
   empresa: {} as IEmpresaParams,
   imageCounter: 10000,
+  // Product-search debug and telemetry logs are centralized here.
+  PRODUCT_SEARCH_FULL_DEBUG_LOG_ENABLED: false,
   clearAccesos: null as (() => void) | null,
   navigate: goto,
   getPathname: () => {

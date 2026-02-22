@@ -57,8 +57,8 @@ const hits = productIndex.search("word1 word2 word3"); // ProductSearchHit[] top
 - `readBuildSunixTimeFromHeader` can read `updated` directly from header without full decode.
 - `ProductIndex` is productID-based (not row-index-based).
 - `ProductIndex.search()` ranking model:
-  - per-word prefix/whole-word syllable scoring
-  - whole-word bonus (`+1`) and long-word whole match bonus (`+2` for 3+ syllables)
-  - total score scaling (`*4`) to increase spacing
-  - positional bonus after scaling (`+2` if match in first product word, `+1` if match in second)
+  - product-name match priority: `+4` per matched query token in product name
+  - brand prefix influence: `+2` per matched query token in brand words
+  - character-prefix fallback on decoded word text to match combinations such as query `cho` over syllables `ch` + `oc`
+  - light positional tie-breakers (`+1` first word, `+1` second word)
 - Decoder error messages are designed for debug visibility and contract validation.
