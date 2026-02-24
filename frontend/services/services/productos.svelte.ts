@@ -126,7 +126,15 @@ export const getProductos = async (categoriasIDs?: number[]): Promise<IProductos
 
 let loadingPromise: Promise<IProductosResult> | null = null;
 
+/**
+ * @deprecated Use `getRecordWithCache("p-productos-ids", productID)` from `$libs/cache/cache-by-ids.svelte`.
+ * This compatibility helper remains only for legacy callers and will be removed in a future cleanup.
+ */
 export const getProductoByID = async (id: number): Promise<IProducto | undefined> => {
+	console.warn(
+		"[productosService] getProductoByID is deprecated. Use getRecordWithCache('p-productos-ids', id) instead.",
+		{ id },
+	);
 	// 1. Si ya lo tenemos en el mapa, lo retornamos inmediatamente
 	const p = productosServiceState.productosMap.get(id);
 	if (p) return p;

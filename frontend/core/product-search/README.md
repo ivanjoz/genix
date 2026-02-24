@@ -7,7 +7,7 @@ It is the base layer for product semantic search and decouples:
 - fast name matching (local index)
 - full product payload retrieval (`getRecordWithCache` / ID-based cache)
 
-By resolving search by product `ID` (for example: `getRecordWithCache<ISearchProductRecord>("productos-ids", selectedProductID)`) instead of caching by word queries, this strategy improves cache hit rate and keeps query-time work small even with large catalogs.
+By resolving search by product `ID` (for example: `getRecordWithCache<ISearchProductRecord>("p-productos-ids", selectedProductID)`) instead of caching by word queries, this strategy improves cache hit rate and keeps query-time work small even with large catalogs.
 Current target scale:
 - up to ~20k active products
 - ~300 KB `.idx` payload when `.zstd` compressed (for 20k active products)

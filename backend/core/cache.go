@@ -71,10 +71,16 @@ func GetCacheByKeys(empresaID int32, cacheKeys ...string) ([]Cache, error) {
 	return cacheRows, nil
 }
 
-func ExtractCacheVersionValues(req *HandlerArgs) []db.IDCacheVersion {
+func ExtractCacheVersionValues(req *HandlerArgs)( []db.IDCacheVersion, error) {
 	idsStr := req.GetQuery("ids")
 	cachedIDsStr := req.GetQuery("cids")
 	cacheVersionsFromIDsStr := req.GetQuery("ccv")
+	empresaID := Coalesce(req.GetQueryInt("cmp"),req.Usuario.EmpresaID)
+	
+	if empresaID == 0 {
+		Log("Error: No se envió: Empresa-ID")
+		return nil, Err("No se envió: Empresa-ID")
+	}
 
 	ids := parseConcatenatedInts(idsStr)
 	cachedIDs := parseConcatenatedInts(cachedIDsStr)
@@ -83,7 +89,7 @@ func ExtractCacheVersionValues(req *HandlerArgs) []db.IDCacheVersion {
 	records := []db.IDCacheVersion{}
 
 	for _, id := range ids {
-		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: 0, PartitionID: req.Usuario.EmpresaID})
+		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: 0, PartitionID: empresaID})
 	}
 
 	for i, id := range cachedIDs {
@@ -91,11 +97,11 @@ func ExtractCacheVersionValues(req *HandlerArgs) []db.IDCacheVersion {
 		if i < len(cacheVersionsFromIDs) {
 			version = uint8(cacheVersionsFromIDs[i])
 		}
-		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: version, PartitionID: req.Usuario.EmpresaID})
+		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: version, PartitionID: empresaID})
 	}
 
 	Log("records extracted:", len(records))
-	return records
+	return records, nil
 }
 
 func parseConcatenatedInts(s string) []int64 {

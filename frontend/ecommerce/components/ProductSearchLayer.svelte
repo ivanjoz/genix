@@ -1,17 +1,23 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy, onMount, untrack } from "svelte";
   import { Env } from "$core/env";
-  import { ProductSearch } from "$core/product-search/product-search";
-  import ProductSearchResultCard from "./ProductSearchResultCard.svelte";
+  import { preloadProductSearch } from "$core/product-search/product-search-runtime";
+  import type { ProductSearch } from "$core/product-search/product-search";
+  import ProductCard from "./ProductCard.svelte";
   import type { ProductSearchHit } from "$core/product-search/types";
 
   interface ProductSearchLayerProps {
     queryText?: string;
     maxResults?: number;
+    renderAsInnerContent?: boolean;
   }
 
   // Receive search text from the top-bar input and limit visible cards for quick scanning.
-  const { queryText = "", maxResults = 12 }: ProductSearchLayerProps = $props();
+  const {
+    queryText = "",
+    maxResults = 12,
+    renderAsInnerContent = false
+  }: ProductSearchLayerProps = $props();
   const SEARCH_QUERY_THROTTLE_MS = 120;
   const ENABLE_FULL_PRODUCT_SEARCH_DEBUG = Env.PRODUCT_SEARCH_FULL_DEBUG_LOG_ENABLED;
 
@@ -27,25 +33,29 @@
   $effect(() => {
     // Debounce query updates so the search index is not recomputed on every keystroke.
     const nextQueryText = trimmedQueryText;
-    if (pendingQueryTimer) {
-      clearTimeout(pendingQueryTimer);
-      pendingQueryTimer = null;
-    }
+    untrack(() => {
+      if (pendingQueryTimer) {
+        clearTimeout(pendingQueryTimer);
+        pendingQueryTimer = null;
+      }
+    });
     if (ENABLE_FULL_PRODUCT_SEARCH_DEBUG) {
       console.log("[ProductSearchLayer] Query throttle scheduled", {
         queryText: nextQueryText,
         throttleMs: SEARCH_QUERY_THROTTLE_MS
       });
     }
-    pendingQueryTimer = setTimeout(() => {
-      throttledQueryText = nextQueryText;
-      if (ENABLE_FULL_PRODUCT_SEARCH_DEBUG) {
-        console.log("[ProductSearchLayer] Query throttle applied", {
-          queryText: throttledQueryText
-        });
-      }
-      pendingQueryTimer = null;
-    }, SEARCH_QUERY_THROTTLE_MS);
+    untrack(() => {
+      pendingQueryTimer = setTimeout(() => {
+        throttledQueryText = nextQueryText;
+        if (ENABLE_FULL_PRODUCT_SEARCH_DEBUG) {
+          console.log("[ProductSearchLayer] Query throttle applied", {
+            queryText: throttledQueryText
+          });
+        }
+        pendingQueryTimer = null;
+      }, SEARCH_QUERY_THROTTLE_MS);
+    });
   });
 
   const topProductSearchHits = $derived.by<ProductSearchHit[]>(() => {
@@ -110,8 +120,10 @@
     isProductIndexLoading = true;
     productIndexLoadErrorMessage = "";
     try {
-      const nextProductSearch = new ProductSearch();
-      await nextProductSearch.readyPromise;
+      const nextProductSearch = await preloadProductSearch();
+      if (!nextProductSearch) {
+        throw new Error("ProductSearch is only available in browser runtime");
+      }
       productIndexInstance = nextProductSearch;
       if (ENABLE_FULL_PRODUCT_SEARCH_DEBUG) {
         console.info("[ProductSearchLayer] Product search loaded", {
@@ -141,7 +153,7 @@
   });
 </script>
 
-{#if shouldRenderLayer}
+{#if shouldRenderLayer && !renderAsInnerContent}
   <div class="search-layer" role="dialog" aria-label="Resultados de busqueda de productos">
     {#if isProductIndexLoading}
       <div class="status-row">Cargando indice de productos...</div>
@@ -152,16 +164,37 @@
     {:else}
       <div class="results-grid">
         {#each topProductSearchHits as searchHit (searchHit.product.productID)}
-          <ProductSearchResultCard
-            productID={searchHit.product.productID}
-            fallbackName={searchHit.product.productNameLossy}
-            fallbackBrand={searchHit.product.brandName || ""}
-            fallbackCategory={searchHit.product.categoryNames?.[0] || ""}
+          <ProductCard
+            mode="horizontal"
+            productoID={searchHit.product.productID}
+            hideCloseButton={true}
+            useQuantityControls={false}
           />
         {/each}
       </div>
     {/if}
   </div>
+{/if}
+
+{#if shouldRenderLayer && renderAsInnerContent}
+  {#if isProductIndexLoading}
+    <div class="status-row">Cargando indice de productos...</div>
+  {:else if productIndexLoadErrorMessage}
+    <div class="status-row error-state">No se pudo cargar el indice ({productIndexLoadErrorMessage}).</div>
+  {:else if topProductSearchHits.length === 0}
+    <div class="status-row">Sin resultados para "{trimmedQueryText}".</div>
+  {:else}
+    <div class="results-grid p-4 overflow-auto">
+      {#each topProductSearchHits as searchHit (searchHit.product.productID)}
+        <ProductCard
+          mode="horizontal"
+          productoID={searchHit.product.productID}
+          hideCloseButton={true}
+          useQuantityControls={false}
+        />
+      {/each}
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -176,7 +209,7 @@
     background: #fff;
     border: 1px solid #e3e7f0;
     border-radius: 14px;
-    padding: 12px;
+    padding: 8px;
     box-shadow: rgba(33, 39, 55, 0.2) 0 10px 28px;
     z-index: 350;
   }
@@ -193,8 +226,9 @@
 
   .results-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+    max-height: calc(80vh - 2rem - 200px);
   }
 
   @media (max-width: 1140px) {
@@ -212,7 +246,7 @@
     }
 
     .results-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
       gap: 8px;
     }
 

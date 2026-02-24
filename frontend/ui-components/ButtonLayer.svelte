@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
 import { parseSVG } from '$libs/helpers';
-import angleSvg from '$domain/assets/angle.svg';
+import angleSvg from '$domain/assets/angle.svg?raw';
 
   interface Props {
     /** Button text or content */
@@ -29,6 +29,8 @@ import angleSvg from '$domain/assets/angle.svg';
     onClose?: () => void;
     /** css of the content */
     contentCss?: string;
+    /** Disable default click-to-toggle behavior when parent controls isOpen externally */
+    disableTriggerToggle?: boolean;
   }
 
   let {
@@ -41,6 +43,7 @@ import angleSvg from '$domain/assets/angle.svg';
     isOpen = $bindable(false),
     defaultOpen = false,
     contentCss = '',
+    disableTriggerToggle = false,
     children,
     button,
     onOpen,
@@ -76,6 +79,7 @@ import angleSvg from '$domain/assets/angle.svg';
 
   // Toggle the layer open/closed
   function toggleLayer() {
+    if (disableTriggerToggle) return;
     isOpen = !isOpen;
     if (isOpen) {
       onOpen?.();
@@ -220,11 +224,15 @@ import angleSvg from '$domain/assets/angle.svg';
   {#if button}
     <div
       bind:this={buttonElement}
-      onclick={toggleLayer}
+      onclick={() => {
+        if (!disableTriggerToggle) toggleLayer();
+      }}
       class="button-layer-trigger-wrapper {buttonClass}"
       role="button"
       tabindex="0"
-      onkeydown={(e) => e.key === 'Enter' && toggleLayer()}
+      onkeydown={(e) => {
+        if (e.key === 'Enter' && !disableTriggerToggle) toggleLayer();
+      }}
     >
       {@render button(isOpen)}
     </div>
@@ -348,6 +356,7 @@ import angleSvg from '$domain/assets/angle.svg';
   .button-layer-angle-img {
     width: 24px;
     height: 24px;
+    margin-top: 2px;
     filter: drop-shadow(0 -1px 1px rgba(0, 0, 0, 0.05));
   }
 

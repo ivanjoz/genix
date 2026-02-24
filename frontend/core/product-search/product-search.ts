@@ -205,7 +205,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 		console.log("[ProductSearch] trying to load idx", { productsIndexUrl });
 		try {
 			// A non-200 response is treated as "no idx available" rather than hard-failing startup.
-			const indexResponse = await fetch(productsIndexUrl);
+			const indexResponse = await fetch(productsIndexUrl+"?use-cache=60");
 			if (!indexResponse.ok) {
 				console.warn("[ProductSearch] idx response not ok", {
 					status: indexResponse.status,

@@ -8,6 +8,7 @@ import { GET } from '../http.svelte'
  */
 import { concatenateInts } from "../funcs/parsers"
 import { readRecordsFromIDBByIDs, upsertRecordsIntoIDB } from "./cache-by-ids.idb"
+import { Env } from '$core/env'
 
 const CACHE_TIME = 5
 
@@ -34,8 +35,10 @@ let fetchFromServer: CacheByIDsFetchFromServer = async <T extends IMinimalRecord
 	uriParams: string,
 ): Promise<T[]> => {
 	try {
-		// `apiRoute` is treated as the backend route (example: `productos-ids`).
-		const responsePayload = await GET({ route: `${apiRoute}?${uriParams}` })
+		// `apiRoute` is treated as the backend route (example: `p-productos-ids`).
+		const responsePayload = await GET({
+			route: `${apiRoute}?${uriParams}&cmp=${Env.getEmpresaID()}`
+		})
 
 		// Support both raw array responses and wrapped `{ records: [...] }` payloads.
 		if (Array.isArray(responsePayload)) return responsePayload as T[]

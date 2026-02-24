@@ -5,8 +5,8 @@
     icon?: string;
   }
 
-import arrow2Svg from '$domain/assets/flecha_fin.svg';
-import arrow1Svg from '$domain/assets/flecha_inicio.svg';
+import arrow2Svg from '$domain/assets/flecha_fin.svg?raw';
+import arrow1Svg from '$domain/assets/flecha_inicio.svg?raw';
 import { cn, parseSVG } from '$libs/helpers';
 import { Core } from '$core/store.svelte'
 import s1 from './styles.module.css';

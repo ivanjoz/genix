@@ -15,7 +15,7 @@ import { parseSVG } from '$libs/helpers';
 	import { Globals } from "$ecommerce/stores/globals.svelte";
 	import Input from "$components/Input.svelte";
 	import CiudadesSelector from "$ecommerce/components/CiudadesSelector.svelte";
-	import ProductCardHorizonal from "$ecommerce/components/ProductCardHorizonal.svelte";
+	import ProductCard from "$ecommerce/components/ProductCard.svelte";
 	import { Core } from "$core/store.svelte";
 	import { Ecommerce } from "$ecommerce/stores/globals.svelte";
 
@@ -90,7 +90,7 @@ import { parseSVG } from '$libs/helpers';
 				<div class="mt-8 mb-8 fs18 ff-bold">Total a pagar:</div>
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-12 pb-6">
 					{#each ProductsSelectedMap.values() as cartProducto}
-						<ProductCardHorizonal productoID={cartProducto.producto.ID} />
+						<ProductCard mode="horizontal" productoID={cartProducto.producto.ID} />
 					{/each}
 				</div>
 			{/if}

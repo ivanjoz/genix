@@ -25,7 +25,7 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.sedes":                    PostSedes,
 	"POST.almacenes":                PostAlmacen,
 	"GET.productos":                 GetProductos,
-	"GET.productos-ids":             GetProductosByIDs,
+	"GET.p-productos-ids":             GetProductosByIDs,
 	"GET.p-productos-cms":           GetProductosCMS,
 	"GET.p-productos-index":         GetProductsIndex,
 	"GET.p-productos-index-delta":   GetProductsIndexDelta,
