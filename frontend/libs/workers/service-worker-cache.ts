@@ -160,7 +160,7 @@ self.addEventListener('fetch', (event) => {
 	
 	if (url.pathname === "/_sw_") {
 		event.respondWith((async () => {
-			// 3. Parse incoming data (from URL params or request body)
+			// Handle internal SW RPC requests as direct request/response JSON.
 			const accion = parseInt(url.searchParams.get('accion') || "0")
 			const reqID = parseInt(url.searchParams.get('req') || "0")
 			const enviroment = url.searchParams.get('env') || "main"
@@ -173,22 +173,11 @@ self.addEventListener('fetch', (event) => {
 			if (usedReqTime && (Date.now() - usedReqTime) < 1000) {
 				const haceMs = Date.now() - usedReqTime
 				console.log("El id ", reqID, " está duplicado. | Client:", event.clientId, "| Hace:", haceMs, "ms")
-				return new Response(JSON.stringify({ "Error": "ReqID Duplicado." }), {
+				return new Response(JSON.stringify({ error: "ReqID Duplicado." }), {
 					headers: { 'Content-Type': 'application/json' }
 				})
 			}
-			usedRequestIDs.set(reqID, Date.now())
-			const client = await self.clients.get(event.clientId)
-			if (!client) {
-				console.warn(`No se encontró el client con ID ${event.clientId}`)
-				const msg = { error: `No se encontró el client con ID ${event.clientId}` }
-				return new Response(JSON.stringify(msg), {
-					headers: { 'Content-Type': 'application/json' }
-				})
-			}
-			sendHandlers.set(clientID, (content: any) => {
-				client.postMessage(content)
-			})
+			usedRequestIDs.set(clientReqID, Date.now())
 			const handler = HandlersMap.get(accion)
 			if (!handler) {
 				console.warn(`No se encontró el handler para la acción ${accion}`)
@@ -210,11 +199,9 @@ self.addEventListener('fetch', (event) => {
 			if (accion === 3) {
 				info = [content.route, content.cacheMode, reqID].join(" | ")
 			}
-			// console.log("Respuesta a enviar:", info, response)
-			client.postMessage(message)
-			// 5. Respond to the fetch request
+			// Return the action payload directly to the caller instead of postMessage.
 			console.log(`Respondiendo Fetch (${info}):`, (parseObject(message)))
-			return new Response(JSON.stringify({ "ok": 1 }), {
+			return new Response(JSON.stringify(message), {
 				headers: { 'Content-Type': 'application/json' }
 			});
 		})())

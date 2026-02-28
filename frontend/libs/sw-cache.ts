@@ -5,9 +5,6 @@ import type { IGetCacheSubObject, serviceHttpProps } from '$libs/workers/service
 import { setFetchProgress } from '$libs/http.svelte';
 
 let tempID = parseInt(String(Math.floor(Date.now()/1000)).substring(4))
-const serviceWorkerResolverMap: Map<number,((value: any) => void)> = new Map()
-const serviceWorkerHandlerMap: Map<number,((value: any) => void)> = new Map()
-const successfulResponses: Set<number> = new Set()
 
 const getTS = () => {
   const d = new Date();
@@ -25,6 +22,44 @@ export interface FetchCacheResponse {
 
 let swReadyPromise: Promise<void> | null = null;
 let swIsInitialized = false;
+const textDecoder = new TextDecoder()
+
+const parseJSONSafe = (textPayload: string) => {
+  if (!textPayload) return {}
+  try {
+    return JSON.parse(textPayload)
+  } catch (error) {
+    return { error: `Invalid JSON response: ${String(error)}` }
+  }
+}
+
+const readServiceWorkerResponse = async (
+  response: Response, shouldTrackProgress: boolean
+) => {
+  // If stream is unavailable, parse directly and keep the fallback robust.
+  if (!response.body) {
+    const textPayload = await response.text()
+    return parseJSONSafe(textPayload)
+  }
+
+  const reader = response.body.getReader()
+  let textPayload = ""
+
+  // Stream chunks so we can update byte progress without postMessage.
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value) {
+      if (shouldTrackProgress) {
+        setFetchProgress(value.length)
+      }
+      textPayload += textDecoder.decode(value, { stream: true })
+    }
+  }
+  textPayload += textDecoder.decode()
+
+  return parseJSONSafe(textPayload)
+}
 
 export const doInitServiceWorker = (): Promise<number> => {
   if(typeof navigator.serviceWorker === 'undefined'){
@@ -33,32 +68,6 @@ export const doInitServiceWorker = (): Promise<number> => {
   }
 
   if (swReadyPromise) return Promise.resolve(1);
-
-  // 1. Register listener IMMEDIATELY to avoid missing early messages
-  navigator.serviceWorker.addEventListener('message', ({ data }) => {
-    console.log(`[${getTS()}] [SW-Cache] Message from Service Worker:`, data);
-
-    if(data.__response__ === 5){
-      setFetchProgress(data.bytes)
-    } else if (data.__response__ === 40){
-      // Handle incoming WebRTC signals
-      const handler = serviceWorkerHandlerMap.get(40)
-      if(handler){
-        handler(data)
-      } else {
-        console.log("No handler registered for action 40 (WebRTC signal)")
-      }
-    } else if (data.__response__ > 0 && data.__req__ > 0) {
-      if(data.__response__ === 3){
-        fetchEvent(data.__req__, 0)
-      }
-      successfulResponses.add(data.__req__)
-      if(serviceWorkerResolverMap.get(data.__req__)){
-        serviceWorkerResolverMap.get(data.__req__)?.(data)
-        serviceWorkerResolverMap.delete(data.__req__)
-      }
-    }
-  });
 
   swReadyPromise = new Promise((resolve) => {
     navigator.serviceWorker.register(
@@ -77,7 +86,9 @@ export const doInitServiceWorker = (): Promise<number> => {
 }
 
 export const registerServiceHandler = async (id: number, handler: (e: any) => void) => {
-  serviceWorkerHandlerMap.set(id, handler)
+  // Deprecated path: SW now uses direct fetch/response for request-reply actions.
+  console.warn(`[SW-Cache] registerServiceHandler(${id}) is deprecated and ignored.`)
+  void handler
 }
 
 export const sendServiceMessage = async (accion: number, content: any): Promise<any> => {
@@ -87,74 +98,46 @@ export const sendServiceMessage = async (accion: number, content: any): Promise<
   }
 
   const reqID = tempID
-  let info = ""
+  let requestInfo = ""
+  const shouldTrackProgress = accion === 3
+  const shouldNotifyFetchLifecycle = accion === 3 && content.cacheMode !== 'offline'
   if(accion === 3){
-    info = [content.route, content.cacheMode, reqID].join(" | ")
-    if(content.cacheMode !== 'offline'){
+    requestInfo = [content.route, content.cacheMode, reqID].join(" | ")
+    if(shouldNotifyFetchLifecycle){
       fetchEvent(reqID, { url: content.route })
     }
   }
 
   tempID++
 
-  return new Promise((resolve) => {
-    serviceWorkerResolverMap.set(reqID, resolve)
-    const status = { id: 0, updated: 0, tryCount: 0 }
-
-    const doFetch = () => {
-      status.id = 0
-      status.updated = Date.now() // Initialize with now to prevent immediate retry
-
-      if(status.tryCount > 0){
-        console.log(`[${getTS()}] [SW-Cache] Retrying fetch (Action: ${accion}, Attempt: ${status.tryCount})`);
-      } else {
-        console.log(`[${getTS()}] [SW-Cache] First fetch attempt (Action: ${accion})`);
-      }
-
-      let route = `${window.location.origin}/_sw_?accion=${accion}&req=${reqID}&env=${Env.enviroment}`
-      if(content.route){
-        route += "&r=" + content.route.replaceAll("?","_").replaceAll("&","_")
-      }
-
-      status.tryCount++
-      fetch(route,{
-        method: 'POST',
-        body: JSON.stringify(content),
-        headers: {
-          'Content-Type': 'application/json' // Indicate body type
-        },
-      })
-      .then(res => res.json())
-      .then(res => {
-        console.log(`[${getTS()}] [SW-Cache] Fetch response received (Action: ${accion}):`, res);
-        status.id = 2
-        status.updated = Date.now()
-      })
-      .catch(err => {
-        console.log(`[${getTS()}] [SW-Cache] Fetch error (Action: ${accion}):`, err);
-        status.id = 3
-        status.updated = Date.now()
-      })
+  try {
+    let route = `${window.location.origin}/_sw_?accion=${accion}&req=${reqID}&env=${Env.enviroment}`
+    if(content.route){
+      route += "&r=" + content.route.replaceAll("?","_").replaceAll("&","_")
     }
+    console.log(`[${getTS()}] [SW-Cache] Fetch request (${accion}):`, route, requestInfo)
 
-    const interval = setInterval(() => {
-      if(successfulResponses.has(reqID)){
-        clearInterval(interval)
-        return
-      }
-      if(!status.updated){ return }
-      if(status.id === 3){
-        doFetch()
-      } else {
-        // Revisa si han pasado más de 2 segundos
-        if(Date.now() - status.updated >= 2000){
-          doFetch()
-        }
-      }
-    },1000)
+    const swResponse = await fetch(route,{
+      method: 'POST',
+      body: JSON.stringify(content),
+      headers: {
+        'Content-Type': 'application/json'
+      },
+    })
 
-    doFetch()
-  })
+    const parsedResponse = await readServiceWorkerResponse(swResponse, shouldTrackProgress)
+    console.log(`[${getTS()}] [SW-Cache] Fetch response received (Action: ${accion}):`, parsedResponse)
+    return parsedResponse
+  } catch (error) {
+    const errorMessage = String((error as any)?.message || error)
+    console.error(`[${getTS()}] [SW-Cache] Fetch error (Action: ${accion}):`, error)
+    return { error: errorMessage, __response__: accion, __req__: reqID }
+  } finally {
+    // Ensure UI fetch lifecycle is closed even on stream parse/network failures.
+    if (shouldNotifyFetchLifecycle) {
+      fetchEvent(reqID, 0)
+    }
+  }
 }
 
 export const getCacheSubObject = async (args: IGetCacheSubObject): Promise<any[]> => {

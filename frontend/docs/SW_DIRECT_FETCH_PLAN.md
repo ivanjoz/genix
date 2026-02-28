@@ -76,3 +76,25 @@
 
 ## Decisión recomendada
 - Ejecutar corte directo en una sola iteración, validar `empresa-parametros`, y limpiar legacy en el mismo PR.
+
+
+Implementado con **forma 1**: progreso por `ReadableStream` en cliente, sin listener `message`.
+
+Qué quedó:
+- `sendServiceMessage` ahora hace request/response directo y parsea el body por chunks.
+- En cada chunk recibido, si `accion === 3`, llama `setFetchProgress(value.length)`.
+- Se eliminó la dependencia del canal `postMessage` para resolver requests de cache.
+- El SW `/_sw_` devuelve el payload real en el `Response` JSON.
+
+Archivos:
+- [frontend/libs/sw-cache.ts](/home/ivanjoz/projects/genix/frontend/libs/sw-cache.ts:36)
+- [frontend/libs/workers/service-worker-cache.ts](/home/ivanjoz/projects/genix/frontend/libs/workers/service-worker-cache.ts:161)
+- [frontend/libs/workers/service-worker.ts](/home/ivanjoz/projects/genix/frontend/libs/workers/service-worker.ts:67)
+
+Cómo se emite progreso ahora:
+1. Cliente llama `fetch('/_sw_?...')`.
+2. Cliente lee `response.body.getReader()`.
+3. Por cada chunk: `setFetchProgress(chunk.length)`.
+4. Al finalizar, parsea JSON y cierra `fetchEvent(reqID, 0)`.
+
+Nota práctica: si la respuesta del SW llega en un solo chunk grande, verás pocos updates (o uno); eso depende del streaming real del navegador/red para ese payload.

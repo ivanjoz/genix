@@ -1,5 +1,5 @@
 import { unmarshall } from '$libs/funcs/unmarshall';
-import { CACHE_APP, getCacheRecord, HandlersMap, hasCacheKey, parseObject, sendClientMessage, setCacheRecord } from "./service-worker-cache"
+import { CACHE_APP, getCacheRecord, HandlersMap, hasCacheKey, parseObject, setCacheRecord } from "./service-worker-cache"
 import { connectAppSync, sendSignalToAppSync, disconnectAppSync, type AppSyncWebRTCConfig } from "./service-worker-webrtc"
 
 export type CacheMode = 'offline' | 'updateOnly' | 'refresh' | 'fetchOnly'
@@ -64,7 +64,7 @@ const parseResponseAsStream = async (
               controller.close()
               return Promise.resolve()
             }
-            sendClientMessage(props.__client__, { __response__: 5, bytes: value.length })
+            // Keep stream copy behavior but avoid SW message-channel progress reporting.
             // Enqueue the next data chunk into our target stream
             controller.enqueue(value)
             return pump()
