@@ -1,8 +1,8 @@
 module app
 
-go 1.25
+go 1.26
 
-toolchain go1.25.5
+toolchain go1.26.0
 
 require (
 	github.com/andybalholm/brotli v1.1.0
@@ -45,7 +45,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.28.1 // indirect
 	github.com/aws/smithy-go v1.20.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic/loader v0.4.0 // indirect
+	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/go-test/deep v1.1.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
@@ -68,7 +68,7 @@ require (
 require (
 	github.com/DmitriyVTitov/size v1.5.0
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.53.1
-	github.com/bytedance/sonic v1.14.2
+	github.com/bytedance/sonic v1.15.0
 	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
 	github.com/kr/pretty v0.3.1
