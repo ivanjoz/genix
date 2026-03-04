@@ -6,157 +6,7 @@ import (
 	"slices"
 	"strings"
 	"unsafe"
-
-	"github.com/fxamacker/cbor/v2"
-	"github.com/viant/xunsafe"
 )
-
-type colInfo struct {
-	Name         string
-	FieldName    string
-	NameAlias    string
-	IsPrimaryKey int8
-	FieldIdx     int
-	IsVirtual    bool
-	HasView      bool
-	ViewIdx      int8
-	Idx          int16
-	RefType      reflect.Type
-	Field        *xunsafe.Field
-}
-
-type columnInfo struct {
-	colInfo
-	colType
-	getValue              func(ptr unsafe.Pointer) any
-	getRawValue           func(ptr unsafe.Pointer) any
-	decimalSize           int8
-	autoincrementRandSize int8
-	compositeBucketing    []int8
-	isWeek                bool
-	useInt32Packing       bool
-}
-
-func (c *columnInfo) GetValue(ptr unsafe.Pointer) any {
-	if c.getValue != nil {
-		return c.getValue(ptr)
-	}
-	return makeScyllaValue(c.Field, ptr, c.Type)
-}
-
-func (c *columnInfo) GetRawValue(ptr unsafe.Pointer) any {
-	if c.getRawValue != nil {
-		return c.getRawValue(ptr)
-	}
-	if c.Field == nil {
-		return nil
-	}
-	if c.IsPointer {
-		if c.Field.IsNil(ptr) {
-			return nil
-		}
-	}
-	return c.Field.Interface(ptr)
-}
-
-func (c *columnInfo) GetStatementValue(ptr unsafe.Pointer) any {
-	if c.getRawValue != nil {
-		return c.getRawValue(ptr)
-	}
-	if c.getValue != nil {
-		return c.getValue(ptr)
-	}
-	if c.Field == nil {
-		return nil
-	}
-	if c.IsPointer {
-		if c.Field.IsNil(ptr) {
-			return nil
-		}
-		return c.Field.Interface(ptr)
-	}
-	// Unsupported unsigned types are stored as raw blob bytes instead of numeric CQL types.
-	if c.Type == 9 {
-		if encodedBlob, encoded, err := encodeUnsignedValueToBlob(c.Field.Interface(ptr), c.RefType); encoded {
-			if err != nil {
-				fmt.Println("Error encoding unsigned blob:", c.FieldName, err)
-				return nil
-			}
-			return encodedBlob
-		}
-	}
-	if c.IsComplexType {
-		fieldValue := c.Field.Interface(ptr)
-		recordBytes, err := cbor.Marshal(fieldValue)
-		if err != nil {
-			fmt.Println("Error al encodeding .cbor:: ", c.FieldName, err)
-			return ""
-		}
-		return recordBytes
-	}
-	return c.Field.Interface(ptr)
-}
-
-func (c *columnInfo) SetValue(ptr unsafe.Pointer, v any) {
-	if c.Field == nil {
-		return
-	}
-	if c.Type == 9 {
-		if decodedValue, decoded, err := decodeUnsignedValueFromBlob(v, c.RefType); decoded {
-			if err != nil {
-				// Keep backward compatibility with legacy CBOR blobs when binary decode is not possible.
-				fmt.Printf("Error decoding unsigned blob for Col %s, trying legacy CBOR: %v\n", c.Name, err)
-			} else {
-				c.Field.Set(ptr, decodedValue)
-				return
-			}
-		}
-
-		var vl []byte
-		if b, ok := v.(*[]byte); ok {
-			vl = *b
-		} else if b, ok := v.([]byte); ok {
-			vl = b
-		}
-
-		if len(vl) > 3 && c.Field != nil {
-			// Direct unmarshal into the field memory using xunsafe pointer
-			dest := reflect.NewAt(c.RefType, c.Field.Pointer(ptr)).Interface()
-			err := cbor.Unmarshal(vl, dest)
-			if err != nil {
-				fmt.Printf("Error al convertir ComplexType for Col %s: %v\n", c.Name, err)
-			}
-		} else if ShouldLog() {
-			fmt.Printf("Complex Type could not be parsed or empty: %s (Type: %T)\n", c.Name, v)
-		}
-	} else {
-		assingValue(c.Field, ptr, c.Type, v)
-	}
-}
-
-func (c *columnInfo) GetType() *colType {
-	return &c.colType
-}
-
-func (c *columnInfo) GetName() string {
-	return c.Name
-}
-
-func (c *columnInfo) GetInfo() *colInfo {
-	return &c.colInfo
-}
-
-func (c *columnInfo) IsNil() bool {
-	return c == nil
-}
-
-func (c *columnInfo) SetAutoincrementRandSize(size int8) {
-	c.autoincrementRandSize = size
-}
-
-func (c *columnInfo) SetDecimalSize(size int8) {
-	c.decimalSize = size
-}
 
 var rangeOperators = []string{">", "<", ">=", "<="}
 
@@ -1176,6 +1026,13 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		}
 
 		dbTable.views[view.name] = view
+	}
+
+	for _, col := range dbTable.columnsMap {
+		if columnMetadata, isColumnInfo := col.(*columnInfo); isColumnInfo {
+			// Compile fast accessors once per table build so row scan/write paths avoid generic branching.
+			columnMetadata.compileFastAccessors()
+		}
 	}
 
 	for _, col := range dbTable.columnsMap {

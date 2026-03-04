@@ -12,10 +12,10 @@ type bulkLookupRecord struct {
 }
 
 type bulkLookupGroup struct {
-	partitionValue      any
-	keyValues           []any
-	seenKeyValues       map[string]bool
-	recordsToResolve    []bulkLookupRecord
+	partitionValue   any
+	keyValues        []any
+	seenKeyValues    map[string]bool
+	recordsToResolve []bulkLookupRecord
 }
 
 func makeLookupToken(value any) string {
@@ -69,10 +69,10 @@ func preloadExistingRecordsBySingleKey[T TableBaseInterface[E, T], E TableSchema
 		group, groupExists := groupsByPartition[partitionToken]
 		if !groupExists {
 			group = &bulkLookupGroup{
-				partitionValue:      partitionValue,
-				keyValues:           []any{},
-				seenKeyValues:       map[string]bool{},
-				recordsToResolve:    []bulkLookupRecord{},
+				partitionValue:   partitionValue,
+				keyValues:        []any{},
+				seenKeyValues:    map[string]bool{},
+				recordsToResolve: []bulkLookupRecord{},
 			}
 			groupsByPartition[partitionToken] = group
 		}
@@ -100,7 +100,7 @@ func preloadExistingRecordsBySingleKey[T TableBaseInterface[E, T], E TableSchema
 		if partitionColumn != nil {
 			// Keep tenant isolation by constraining the optional partition key when present.
 			statements = append(statements, ColumnStatement{
-				Col:      partitionColumn.GetName(),		Operator: "=",				Value:    group.partitionValue,
+				Col: partitionColumn.GetName(), Operator: "=", Value: group.partitionValue,
 			})
 		}
 
@@ -136,7 +136,7 @@ func preloadExistingRecordsBySingleKey[T TableBaseInterface[E, T], E TableSchema
 func Merge[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T,
 	columnsToExcludeUpdate []Coln,
-	onUpdateHandler func(prev, current *T) bool /* need update? */,
+	onUpdateHandler func(prev, current *T) bool, /* need update? */
 	onInsertHandler func(e *T),
 ) error {
 	if onUpdateHandler == nil || onInsertHandler == nil {
@@ -152,7 +152,7 @@ func Merge[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	}
 
 	queryTable := initStructTable[E, T](new(E))
-	scyllaTable := makeTable(queryTable)
+	scyllaTable := getOrCompileScyllaTable(queryTable)
 	if len(scyllaTable.GetKeys()) != 1 {
 		return Err(`merge requires exactly one key column in schema`)
 	}
@@ -169,8 +169,8 @@ func Merge[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		currentRecord := &(*records)[recordIndex]
 		currentRecordPointer := xunsafe.AsPointer(currentRecord)
 		recordKey := makePrimaryKeyRecordKey(currentRecordPointer, scyllaTable)
-		
-		if previousRecord, wasFound := existingByRecordKey[recordKey]; wasFound {		
+
+		if previousRecord, wasFound := existingByRecordKey[recordKey]; wasFound {
 			if recordNeedsUpdate := onUpdateHandler(previousRecord, currentRecord); recordNeedsUpdate {
 				recordsToUpdate = append(recordsToUpdate, *currentRecord)
 			}

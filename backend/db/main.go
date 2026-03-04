@@ -5,8 +5,6 @@ import (
 	"reflect"
 	"strings"
 	"unsafe"
-
-	"github.com/viant/xunsafe"
 )
 
 var indexTypes = map[int8]string{
@@ -270,7 +268,7 @@ func (e *TableStruct[T, E]) MakeTableSchema() TableSchema {
 }
 
 func (e *TableStruct[T, E]) MakeScyllaTable() ScyllaTable[any] {
-	return makeTable(initStructTable[T, E](new(T)))
+	return getOrCompileScyllaTable(initStructTable[T, E](new(T)))
 }
 
 func (e *TableStruct[T, E]) SetWhere(colname string, operator string, value any) {
@@ -556,7 +554,7 @@ func Query[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSlice *[]T)
 
 func MakeScyllaTable[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() ScyllaTable[any] {
 	refTable := initStructTable[E, T](new(E))
-	return makeTable(refTable)
+	return getOrCompileScyllaTable(refTable)
 }
 
 func MakeSchema[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() TableSchema {
@@ -570,47 +568,10 @@ type tableStructCacheMetaSetter interface {
 }
 
 func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
-	// fmt.Println("making table...")
-	structRefValue := reflect.ValueOf(*new(E))
-	structRefType := structRefValue.Type()
-
-	fieldNameIdxMap := map[string]*columnInfo{}
+	// Build/refetch immutable record metadata once; bind only query state per call.
+	structRefType := reflect.TypeOf(*new(E))
+	recordMetadata := getOrBuildStructFieldMetadata(structRefType)
 	refTableInfo := &TableInfo{}
-
-	for i := 0; i < structRefType.NumField(); i++ {
-		field := structRefType.Field(i)
-		if field.Name == "TableStruct" {
-			continue
-		}
-		xfield := xunsafe.FieldByName(structRefType, field.Name)
-		col := &columnInfo{
-			colInfo: colInfo{
-				FieldIdx:  i,
-				FieldName: field.Name,
-				RefType:   field.Type,
-				Field:     xfield,
-			},
-			colType: GetColTypeByName(field.Type.String(), ""),
-		}
-
-		if col.colType.Type == 0 {
-			col.colType = GetColTypeByID(9)
-		}
-
-		if tag := field.Tag.Get("db"); tag != "" {
-			col.Name = strings.Split(tag, ",")[0]
-		}
-
-		if DebugFull {
-			offset := uintptr(0)
-			if xfield != nil {
-				offset = xfield.Offset
-			}
-			fmt.Printf("Base Struct Field: %-20s | Type: %-15s | Offset: %d\n", field.Name, field.Type.String(), offset)
-		}
-
-		fieldNameIdxMap[col.FieldName] = col
-	}
 
 	structValue := reflect.ValueOf(schemaStruct).Elem()
 	structType := structValue.Type()
@@ -641,7 +602,7 @@ func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 			columnName = strings.Split(tag, ",")[0]
 		}
 
-		if colBase, ok := fieldNameIdxMap[fieldType.Name]; ok {
+		if colBase, ok := recordMetadata.fieldMetadataByName[fieldType.Name]; ok {
 			if columnName == "" {
 				columnName = colBase.Name
 			}
@@ -653,7 +614,8 @@ func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 			// fmt.Println("seteando nombre:", columnName)
 
 			colInfo := column.GetInfoPointer()
-			*colInfo = *colBase
+			// Copy cached metadata to keep immutable cache entries untouched.
+			*colInfo = colBase
 			colInfo.Name = columnName
 
 			column1, ok1 := fieldAddr.Interface().(Coln)
@@ -686,8 +648,8 @@ func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 	}
 
 	if tableStructMeta, ok := any(schemaStruct).(tableStructCacheMetaSetter); ok {
-		tableStructMeta.setBaseStructType(structRefType)
-		tableStructMeta.setCacheVersionFieldIndex(findCacheVersionFieldIndexInRecordType(structRefType))
+		tableStructMeta.setBaseStructType(recordMetadata.recordType)
+		tableStructMeta.setCacheVersionFieldIndex(append([]int(nil), recordMetadata.cacheVersionFieldIndex...))
 	}
 	// fmt.Println("schemaStruct (1)", schemaStruct)
 	return schemaStruct
@@ -707,7 +669,7 @@ func makeQueryStatement(statements []string) string {
 // execQuery executes a query based on TableInfo and returns records
 func execQuery[T TableSchemaInterface[T], E any](schemaStruct *T, tableInfo *TableInfo) error {
 	records := (tableInfo.refSlice).(*[]E)
-	scyllaTable := makeTable(schemaStruct)
+	scyllaTable := getOrCompileScyllaTable(schemaStruct)
 	return selectExec(records, tableInfo, scyllaTable)
 }
 

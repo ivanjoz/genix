@@ -161,7 +161,7 @@ func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 
 func MakeInsertStatement[T TableBaseInterface[E, T], E TableSchemaInterface[E]](records *[]T, columnsToExclude ...Coln) []string {
 	refTable := initStructTable[E, T](new(E))
-	scyllaTable := makeTable(refTable)
+	scyllaTable := getOrCompileScyllaTable(refTable)
 
 	columns := []IColInfo{}
 	if len(columnsToExclude) > 0 {
@@ -267,7 +267,7 @@ func Insert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T, columnsToExclude ...Coln,
 ) error {
 	refTable := initStructTable[E, T](new(E))
-	scyllaTable := makeTable(refTable)
+	scyllaTable := getOrCompileScyllaTable(refTable)
 
 	runSelfParseIfDefined(records)
 
@@ -311,7 +311,7 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 ) []string {
 
 	refTable := initStructTable[E, T](new(E))
-	scyllaTable := makeTable(refTable)
+	scyllaTable := getOrCompileScyllaTable(refTable)
 	columnsToUpdate := []IColInfo{}
 
 	if len(columnsToInclude) > 0 {
@@ -497,7 +497,7 @@ func Update[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	}
 
 	refTable := initStructTable[E, T](new(E))
-	scyllaTable := makeTable(refTable)
+	scyllaTable := getOrCompileScyllaTable(refTable)
 	// Version groups are incremented after update commit using the same record IDs as the update payload.
 	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
 		fmt.Println("Error updating cache versions after update:", err)
@@ -528,7 +528,7 @@ func UpdateExclude[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	}
 
 	refTable := initStructTable[E, T](new(E))
-	scyllaTable := makeTable(refTable)
+	scyllaTable := getOrCompileScyllaTable(refTable)
 	// UpdateExclude still mutates records, so it participates in the same cache-version increment flow.
 	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
 		fmt.Println("Error updating cache versions after update-exclude:", err)

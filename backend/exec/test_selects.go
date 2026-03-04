@@ -17,7 +17,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	q7 := db.Query(&recordSalesOrders2)
 	err = q7.EmpresaID.Equals(1).
 		Status.Equals(1).
-		Updated.Between(385298000, 385299000).
+		Updated.Between(385298000, 385299000).AllowFilter().
 		Exec()
 
 	if err != nil {
@@ -26,7 +26,6 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 		fmt.Printf("Found %d records in range\n", len(recordSalesOrders2))
 	}
 	
-	return  core.FuncResponse{}
 	
 	// 6. Test bucket query CONTAINS + "RANGE" with hash index
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
@@ -34,7 +33,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	q6 := db.Query(&recordSalesOrders)
 	err = q6.EmpresaID.Equals(1).
 		DetailProductsIDs.Contains(1).
-		Fecha.Between(20475, 20495).
+		Fecha.Between(20475, 20495).AllowFilter().
 		Exec()
 
 	if err != nil {

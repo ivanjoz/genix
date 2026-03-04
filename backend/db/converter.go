@@ -1,8 +1,8 @@
 package db
 
 import (
-	"encoding/binary"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"reflect"
@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/fxamacker/cbor/v2"
@@ -63,6 +64,8 @@ var colTypesMap = map[int8]colType{}
 var colTypesFieldMap = map[string]colType{}
 var colTypesDBMap = map[string]colType{}
 var initColTypesOnce sync.Once
+var assignFallbackCountByType [64]uint64
+var assignFallbackLoggedByType [64]uint32
 
 type number1 interface {
 	int | int32 | int8 | uint8 | int16 | uint16 | int64 | float32 | float64
@@ -653,11 +656,46 @@ func trySetNumberSlicePointer[T number1](f *xunsafe.Field, ptr unsafe.Pointer, c
 	}
 }
 
-func assingValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, value any) {
-	if value == nil {
+func incrementAssignFallbackStats(colType int8) {
+	// Fallback stats show where fast accessors are still missing or bypassed.
+	// This keeps optimization work data-driven instead of guess-based.
+	if colType <= 0 || int(colType) >= len(assignFallbackCountByType) {
 		return
 	}
 
+	atomic.AddUint64(&assignFallbackCountByType[colType], 1)
+	// Log only first hit per type to keep diagnostics visible without flooding logs.
+	if ShouldLog() && atomic.CompareAndSwapUint32(&assignFallbackLoggedByType[colType], 0, 1) {
+		fmt.Printf("assingValue fallback engaged for colType=%d (%s)\n", colType, GetColTypeByID(colType).FieldType)
+	}
+}
+
+// GetAssignFallbackUsageByType returns fallback usage counters keyed by colType id.
+func GetAssignFallbackUsageByType() map[int8]uint64 {
+	// Return only non-zero counters to keep debug output compact.
+	fallbackUsageByType := map[int8]uint64{}
+	for typeID := range len(assignFallbackCountByType) {
+		currentCount := atomic.LoadUint64(&assignFallbackCountByType[typeID])
+		if currentCount == 0 {
+			continue
+		}
+		fallbackUsageByType[int8(typeID)] = currentCount
+	}
+	return fallbackUsageByType
+}
+
+// ResetAssignFallbackUsageByType clears fallback counters to measure a fresh runtime window.
+func ResetAssignFallbackUsageByType() {
+	// Reset both counters and one-shot log guards for fresh profiling windows.
+	for typeID := range len(assignFallbackCountByType) {
+		atomic.StoreUint64(&assignFallbackCountByType[typeID], 0)
+		atomic.StoreUint32(&assignFallbackLoggedByType[typeID], 0)
+	}
+}
+
+func assignScalarFallback(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, value any) {
+	// Scalar fallback is centralized to keep assingValue focused on uncommon branches.
+	// This path preserves legacy behavior when fast accessors are not used.
 	switch colType {
 	case 1: // string
 		if vl, ok := value.(string); ok {
@@ -687,38 +725,8 @@ func assingValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, value any) 
 		} else {
 			printError(GetColTypeByID(colType).FieldType, value)
 		}
-	case 9: // IsComplexType = true | []byte as cbor
-		if vl, ok := value.([]byte); ok {
-			f.Set(ptr, vl)
-		} else if vl, ok := value.(*[]byte); ok {
-			f.Set(ptr, *vl)
-		} else {
-			printError(GetColTypeByID(colType).FieldType, value)
-		}
 	case 10: // int
 		f.SetInt(ptr, int(reflectToInt64(value)))
-
-	case 11: // []string
-		if vl, ok := value.([]string); ok {
-			f.Set(ptr, slices.Clone(vl))
-		} else if vl, ok := value.(*[]string); ok {
-			f.Set(ptr, slices.Clone(*vl))
-		} else {
-			printError(GetColTypeByID(colType).FieldType, value)
-		}
-	case 12: // []int64
-		trySetNumberSlice[int64](f, ptr, colType, value)
-	case 13: // []int32
-		trySetNumberSlice[int32](f, ptr, colType, value)
-	case 14: // []int16
-		trySetNumberSlice[int16](f, ptr, colType, value)
-	case 15: // []int8
-		trySetNumberSlice[int8](f, ptr, colType, value)
-	case 16: // []float32
-		trySetNumberSlice[float32](f, ptr, colType, value)
-	case 17: // []float64
-		trySetNumberSlice[float64](f, ptr, colType, value)
-
 	case 21: // *string
 		if vl, ok := value.(string); ok {
 			f.Set(ptr, &vl)
@@ -748,8 +756,52 @@ func assingValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, value any) 
 	case 28: // *int
 		val := int(reflectToInt64(value))
 		f.Set(ptr, &val)
+	default:
+		printError(GetColTypeByID(colType).FieldType, value)
+	}
+}
 
+func assingValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, value any) {
+	if value == nil {
+		return
+	}
+	incrementAssignFallbackStats(colType)
+
+	// Keep fallback switch focused on uncommon/collection types now that common cases have fast accessors.
+	// Any type not handled here routes to scalar fallback to preserve compatibility.
+	switch colType {
+	case 9: // IsComplexType = true | []byte as cbor
+		if vl, ok := value.([]byte); ok {
+			f.Set(ptr, vl)
+		} else if vl, ok := value.(*[]byte); ok {
+			f.Set(ptr, *vl)
+		} else {
+			printError(GetColTypeByID(colType).FieldType, value)
+		}
+	case 11: // []string
+		// Clone slices on assignment to avoid sharing mutable backing arrays with caller buffers.
+		if vl, ok := value.([]string); ok {
+			f.Set(ptr, slices.Clone(vl))
+		} else if vl, ok := value.(*[]string); ok {
+			f.Set(ptr, slices.Clone(*vl))
+		} else {
+			printError(GetColTypeByID(colType).FieldType, value)
+		}
+	case 12: // []int64
+		// Numeric slice helpers keep support for multiple incoming numeric widths in fallback mode.
+		trySetNumberSlice[int64](f, ptr, colType, value)
+	case 13: // []int32
+		trySetNumberSlice[int32](f, ptr, colType, value)
+	case 14: // []int16
+		trySetNumberSlice[int16](f, ptr, colType, value)
+	case 15: // []int8
+		trySetNumberSlice[int8](f, ptr, colType, value)
+	case 16: // []float32
+		trySetNumberSlice[float32](f, ptr, colType, value)
+	case 17: // []float64
+		trySetNumberSlice[float64](f, ptr, colType, value)
 	case 31: // *[]string
+		// Pointer-to-slice fallback keeps pointer semantics while still cloning payload data.
 		if vl, ok := value.([]string); ok {
 			val := slices.Clone(vl)
 			f.Set(ptr, &val)
@@ -771,6 +823,8 @@ func assingValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, value any) 
 		trySetNumberSlicePointer[float32](f, ptr, colType, value)
 	case 37: // *[]float64
 		trySetNumberSlicePointer[float64](f, ptr, colType, value)
+	default:
+		assignScalarFallback(f, ptr, colType, value)
 	}
 }
 
