@@ -270,9 +270,10 @@ Views: []db.View{
     // Simple view with partition key
     {Cols: []db.Coln{e.ListaID, e.Status}, KeepPart: true},
     
-    // Concatenated integer view (for range queries)
-    {Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
-    {Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
+    // Packed integer view (for range queries)
+    // Rule: only first column can be inferred; all following columns must set DecimalSize().
+    {Cols: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
+    {Cols: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
 }
 ```
 

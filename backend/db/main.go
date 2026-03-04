@@ -127,7 +127,7 @@ type TableSchema struct {
 	HashIndexes       [][]Coln
 	Indexes           [][]Coln //  new column
 	GlobalIndexes     [][]Coln //  new column
-	Views   []View
+	Views             []View
 	SequenceColumn    Coln
 	CounterColumn     Coln
 	UseSequences      bool
@@ -158,10 +158,8 @@ func (q ColumnStatement) GetValue() any {
 
 type View struct {
 	Cols []Coln
-	// Para concatenar numeros como = int64(e.AlmacenID)*1e9 + int64(e.Updated)
-	ConcatI64 []int8
-	// Para concatenar numeros como = int32(e.AlmacenID)*1e5 + int64(e.Updated)
-	ConcatI32 []int8
+	// Packed/range views are declared with DecimalSize() on Cols[1:].
+	// Example: {Cols: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}}
 	// Keep the original table partition in the created view.
 	// Example: key = (part_col) new_col, pk_col
 	KeepPart bool

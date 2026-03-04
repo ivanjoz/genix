@@ -63,7 +63,7 @@ type ListaCompartidaRegistro struct {
 	db.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
 	EmpresaID   int32 `json:",omitempty"`
 	ID          int32
-	ListaID     int32 `json:",omitempty"`
+	ListaID     int32    `json:",omitempty"`
 	Nombre      string   `json:",omitempty"`
 	Images      []string `json:",omitempty"`
 	Descripcion string   `json:",omitempty"`
@@ -96,8 +96,8 @@ func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
 		Indexes:      [][]db.Coln{{e.NombreHash}},
 		Views: []db.View{
-			{Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
-			{Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
+			{Cols: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
+			{Cols: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
 		},
 	}
 }
@@ -141,11 +141,11 @@ type ParametrosTable struct {
 
 func (e ParametrosTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:            "parametros",
-		Partition:       e.EmpresaID,
-		UseSequences:    true,
-		Keys:            []db.Coln{e.Grupo, e.Key},
-		Views: []db.View{},
+		Name:         "parametros",
+		Partition:    e.EmpresaID,
+		UseSequences: true,
+		Keys:         []db.Coln{e.Grupo, e.Key},
+		Views:        []db.View{},
 	}
 }
 

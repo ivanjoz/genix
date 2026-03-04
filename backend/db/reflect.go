@@ -725,7 +725,18 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		viewCfg := viewConfig
 		colNames := []string{}
 		columns := []IColInfo{} // No incluye la particion
-		isRangeView := len(viewCfg.ConcatI64) > 0 || len(viewCfg.ConcatI32) > 0
+		viewColumnsConfig := make([]columnInfo, 0, len(viewCfg.Cols))
+		packedViewHintFound := false
+		for _, declaredColumn := range viewCfg.Cols {
+			columnConfig := declaredColumn.GetInfo()
+			viewColumnsConfig = append(viewColumnsConfig, columnConfig)
+			// Packed views are declared via column metadata hints instead of View.Concat* fields.
+			if columnConfig.decimalSize > 0 || columnConfig.useInt32Packing {
+				packedViewHintFound = true
+			}
+		}
+
+		isRangeView := len(viewCfg.Cols) > 1 && packedViewHintFound
 		if isRangeView {
 			viewCfg.KeepPart = true
 		}
@@ -789,25 +800,37 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		if len(columns) == 1 {
 			view.column = columns[0]
 		} else if isRangeView {
-			isInt64 := len(viewCfg.ConcatI64) > 0
-			if isInt64 {
-				view.column.GetType().FieldType = "int64"
-				view.column.GetType().ColType = "bigint"
-			}
 			view.Type = 8
+			// Packed views default to int64 unless Int32() is explicitly set on the first column.
+			view.column.GetType().FieldType = "int64"
+			view.column.GetType().ColType = "bigint"
 
-			// Si ha especificado un int64 radix entonces se puede concatener, maximo 2 columnas
 			if len(columns) < 2 {
-				panic(fmt.Sprintf(`La view "%v" de la tabla "%v" posee menos de 2 columnas para usar el IntConcatRadix`, dbTable.name, view.name))
+				panic(fmt.Sprintf(`The view "%v" in "%v" requires at least 2 columns for DecimalSize() packed range views`, view.name, dbTable.name))
 			}
 
-			radixes := append(append(viewCfg.ConcatI64, viewCfg.ConcatI32...), 0)
-
-			if len(radixes) != len(columns) {
-				panic(fmt.Sprintf(`The view "%v" in "%v" need to have %v radix arguments for the %v columns provided`,
-					view.name, dbTable.name, len(columns)-1, len(columns)))
+			if viewColumnsConfig[0].decimalSize > 0 {
+				panic(fmt.Sprintf(`The view "%v" in "%v" cannot set DecimalSize() on the first column; it is inferred from the remaining columns`, view.name, dbTable.name))
 			}
 
+			isInt32PackedView := viewColumnsConfig[0].useInt32Packing
+			if isInt32PackedView {
+				view.column.GetType().FieldType = "int32"
+				view.column.GetType().ColType = "int"
+			}
+
+			radixSlotsByColumn := make([]int8, 0, len(viewColumnsConfig)-1)
+			for columnIndex := 1; columnIndex < len(viewColumnsConfig); columnIndex++ {
+				decimalSize := viewColumnsConfig[columnIndex].decimalSize
+				// Only the first column can be inferred. Every following column must set DecimalSize().
+				if decimalSize <= 0 {
+					panic(fmt.Sprintf(`The view "%v" in "%v" must set DecimalSize() on column "%v" (only the first column can be inferred)`,
+						view.name, dbTable.name, columns[columnIndex].GetName()))
+				}
+				radixSlotsByColumn = append(radixSlotsByColumn, decimalSize)
+			}
+
+			radixes := append(radixSlotsByColumn, 0)
 			slices.Reverse(radixes)
 			sum := int8(0)
 			for i, v := range radixes {
@@ -844,7 +867,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			}
 
 			viewCols := columns
-			isI64 := isInt64
+			useInt32Output := isInt32PackedView
 			view.column.(*columnInfo).getValue = func(ptr unsafe.Pointer) any {
 				values := []int64{}
 				for _, col := range viewCols {
@@ -852,10 +875,10 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				}
 				sumValue := makeValue(values)
 				// fmt.Printf("Radix Sum Calculado %v | %v | %v\n", sumValue, values, radixesI64)
-				if isI64 {
-					return any(sumValue)
-				} else {
+				if useInt32Output {
 					return any(int32(sumValue))
+				} else {
+					return any(sumValue)
 				}
 			}
 

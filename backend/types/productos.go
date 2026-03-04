@@ -56,7 +56,7 @@ type Producto struct {
 	Stock          []AlmacenStockMin     `json:",omitempty"`
 	StockReservado []AlmacenStockMin     `json:",omitempty"`
 	StockStatus    int8                  `json:",omitempty"`
-	NameUpdated   int32 `json:",omitempty"`
+	NameUpdated    int32                 `json:",omitempty"`
 	// Propiedades generales
 	Status    int8  `json:"ss,omitempty"`
 	Updated   int64 `json:"upd,omitempty"`
@@ -127,7 +127,7 @@ func (e ProductoTable) GetSchema() db.TableSchema {
 		SaveCacheVersion: true,
 		Keys:             []db.Coln{e.ID.Autoincrement(0)},
 		GlobalIndexes:    [][]db.Coln{{e.CategoriasConStock}},
-		Indexes: [][]db.Coln{{ e.NameUpdated }},
+		Indexes:          [][]db.Coln{{e.NameUpdated}},
 		Views: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.StockStatus}, KeepPart: true},
@@ -295,14 +295,12 @@ func (e AlmacenProductoTable) GetSchema() db.TableSchema {
 		LocalIndexes:    []db.Coln{e.SKU, e.Lote},
 		Views: []db.View{
 			{
-				Cols:      []db.Coln{e.ProductoID, e.Status},
-				KeepPart:  true,
-				ConcatI32: []int8{1},
+				Cols:     []db.Coln{e.ProductoID.Int32(), e.Status.DecimalSize(1)},
+				KeepPart: true,
 			},
 			{
-				Cols:      []db.Coln{e.AlmacenID, e.Status, e.Updated},
-				KeepPart:  true,
-				ConcatI64: []int8{1, 9},
+				Cols:     []db.Coln{e.AlmacenID, e.Status.DecimalSize(1), e.Updated.DecimalSize(9)},
+				KeepPart: true,
 			},
 		},
 	}
@@ -363,7 +361,7 @@ func (e AlmacenMovimientoTable) GetSchema() db.TableSchema {
 		Views: []db.View{
 			{Cols: []db.Coln{e.SKU}, KeepPart: true},
 			{Cols: []db.Coln{e.Lote}, KeepPart: true},
-			{Cols: []db.Coln{e.AlmacenRefID, e.Created}, ConcatI64: []int8{9}},
+			{Cols: []db.Coln{e.AlmacenRefID, e.Created.DecimalSize(9)}},
 		},
 	}
 }

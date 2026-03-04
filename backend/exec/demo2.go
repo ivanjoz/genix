@@ -53,8 +53,8 @@ func (e DemoStructTable) GetSchema() db.TableSchema {
 		Keys:      []db.Coln{e.ID},
 		Views: []db.View{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
-			{Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
-			{Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},
+			{Cols: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
+			{Cols: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
 		},
 	}
 }
