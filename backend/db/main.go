@@ -127,7 +127,7 @@ type TableSchema struct {
 	HashIndexes       [][]Coln
 	Indexes           [][]Coln //  new column
 	GlobalIndexes     [][]Coln //  new column
-	ViewsDeprecated   []View
+	Views   []View
 	SequenceColumn    Coln
 	CounterColumn     Coln
 	UseSequences      bool

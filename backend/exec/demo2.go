@@ -51,7 +51,7 @@ func (e DemoStructTable) GetSchema() db.TableSchema {
 		Name:      "zz_demo_struct",
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.ID},
-		ViewsDeprecated: []db.View{
+		Views: []db.View{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
 			{Cols: []db.Coln{e.ListaID, e.Status}, ConcatI32: []int8{2}},
 			{Cols: []db.Coln{e.ListaID, e.Updated}, ConcatI64: []int8{10}},

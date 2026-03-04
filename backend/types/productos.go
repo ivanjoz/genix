@@ -128,7 +128,7 @@ func (e ProductoTable) GetSchema() db.TableSchema {
 		Keys:             []db.Coln{e.ID.Autoincrement(0)},
 		GlobalIndexes:    [][]db.Coln{{e.CategoriasConStock}},
 		Indexes: [][]db.Coln{{ e.NameUpdated }},
-		ViewsDeprecated: []db.View{
+		Views: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.StockStatus}, KeepPart: true},
 			{Cols: []db.Coln{e.Updated}, KeepPart: true},
@@ -188,7 +188,7 @@ func (e AlmacenTable) GetSchema() db.TableSchema {
 		Partition:    e.EmpresaID,
 		UseSequences: true,
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
-		ViewsDeprecated: []db.View{
+		Views: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.Updated}, KeepPart: true},
 		},
@@ -245,7 +245,7 @@ func (e SedeTable) GetSchema() db.TableSchema {
 		Partition:    e.EmpresaID,
 		UseSequences: true,
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
-		ViewsDeprecated: []db.View{
+		Views: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.Updated}, KeepPart: true},
 		},
@@ -293,7 +293,7 @@ func (e AlmacenProductoTable) GetSchema() db.TableSchema {
 		Keys:            []db.Coln{e.ID},
 		KeyConcatenated: []db.Coln{e.AlmacenID, e.ProductoID, e.PresentacionID, e.SKU, e.Lote},
 		LocalIndexes:    []db.Coln{e.SKU, e.Lote},
-		ViewsDeprecated: []db.View{
+		Views: []db.View{
 			{
 				Cols:      []db.Coln{e.ProductoID, e.Status},
 				KeepPart:  true,
@@ -360,7 +360,7 @@ func (e AlmacenMovimientoTable) GetSchema() db.TableSchema {
 			e.AlmacenID.DecimalSize(5), e.Fecha.DecimalSize(5), e.Autoincrement(3),
 		},
 		AutoincrementPart: e.Fecha,
-		ViewsDeprecated: []db.View{
+		Views: []db.View{
 			{Cols: []db.Coln{e.SKU}, KeepPart: true},
 			{Cols: []db.Coln{e.Lote}, KeepPart: true},
 			{Cols: []db.Coln{e.AlmacenRefID, e.Created}, ConcatI64: []int8{9}},

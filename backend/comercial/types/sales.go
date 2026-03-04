@@ -110,7 +110,7 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		GlobalIndexes: [][]db.Coln{
 			{e.Status.Int32(), e.Updated.DecimalSize(8)},
 		},
-		ViewsDeprecated: []db.View{
+		Views: []db.View{
 			{Cols: []db.Coln{e.Fecha, e.Updated}, KeepPart: true},
 		},
 	}

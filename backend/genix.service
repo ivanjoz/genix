@@ -1,0 +1,23 @@
+[Unit]
+Description=Genix Backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=ivanjoz
+Group=ivanjoz
+WorkingDirectory=/home/ivanjoz/projects/genix/backend
+ExecStart=/home/ivanjoz/projects/genix/backend/app
+Restart=always
+RestartSec=5
+# Ensure the application has access to its configuration
+Environment=IS_LOCAL=true
+
+# Security hardening (optional but recommended for non-root)
+NoNewPrivileges=yes
+# ProtectSystem=full
+# ProtectHome=read-only
+# If the app needs to write to its own directory, don't use read-only
+
+[Install]
+WantedBy=multi-user.target

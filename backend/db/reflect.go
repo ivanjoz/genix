@@ -721,7 +721,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	}
 
 	// VIEWS
-	for _, viewConfig := range schema.ViewsDeprecated {
+	for _, viewConfig := range schema.Views {
 		viewCfg := viewConfig
 		colNames := []string{}
 		columns := []IColInfo{} // No incluye la particion
