@@ -25,7 +25,7 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.sedes":                    PostSedes,
 	"POST.almacenes":                PostAlmacen,
 	"GET.productos":                 GetProductos,
-	"GET.p-productos-ids":             GetProductosByIDs,
+	"GET.p-productos-ids":           GetProductosByIDs,
 	"GET.p-productos-cms":           GetProductosCMS,
 	"GET.p-productos-index":         GetProductsIndex,
 	"GET.p-productos-index-delta":   GetProductsIndexDelta,
@@ -52,4 +52,5 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.system-parameters":         GetSystemParameters,
 	"POST.system-parameters":        PostSystemParameters,
 	"GET.system-metrics-stream":     GetSystemMetricsStream,
+	"GET.system-memory-packages":    GetSystemMemoryPackages,
 }
