@@ -536,6 +536,7 @@ type HandlerResponse struct {
 	Headers    map[string]string
 	Route      string
 	MergeID    int32
+	StreamHandled bool
 }
 
 type MainResponse struct {
@@ -895,6 +896,82 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 		Log(string(bodyBytes[0:bodyLen]))
 	*/
 	respWriter.Write(bodyBytes)
+}
+
+// SendServerEvent writes one SSE event to the current HTTP response stream.
+// It is safe to call repeatedly (for example every second in a ticker loop).
+func SendServerEvent(args *HandlerArgs, eventName string, payload any) error {
+	if args == nil || args.ResponseWriter == nil {
+		return errors.New("no se encontró ResponseWriter para enviar SSE")
+	}
+
+	respWriter := *args.ResponseWriter
+	flusher, ok := respWriter.(http.Flusher)
+	if !ok {
+		return errors.New("el servidor no soporta streaming SSE (http.Flusher)")
+	}
+
+	// Set SSE headers once and keep them stable for the stream lifetime.
+	if len(respWriter.Header().Get("Content-Type")) == 0 {
+		respWriter.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	}
+	respWriter.Header().Set("Cache-Control", "no-cache")
+	respWriter.Header().Set("Connection", "keep-alive")
+	respWriter.Header().Set("X-Accel-Buffering", "no")
+	respWriter.Header().Set("Access-Control-Allow-Origin", "*")
+
+	payloadJson, err := sonic.Marshal(payload)
+	if err != nil {
+		return errors.New("no se pudo serializar el payload SSE: " + err.Error())
+	}
+
+	// SSE format: optional event name, then one or more data lines, ending with blank line.
+	var eventBuilder strings.Builder
+	if len(eventName) > 0 {
+		eventBuilder.WriteString("event: ")
+		eventBuilder.WriteString(eventName)
+		eventBuilder.WriteString("\n")
+	}
+	eventBuilder.WriteString("data: ")
+	eventBuilder.Write(payloadJson)
+	eventBuilder.WriteString("\n\n")
+
+	if _, err := respWriter.Write([]byte(eventBuilder.String())); err != nil {
+		return errors.New("error al escribir el evento SSE: " + err.Error())
+	}
+
+	flusher.Flush()
+	Log("SSE enviado | route:", args.Route, " | event:", eventName, " | bytes:", len(payloadJson))
+	return nil
+}
+
+// SendServerComment writes an SSE comment line, useful for lightweight keepalive heartbeats.
+func SendServerComment(args *HandlerArgs, commentBody string) error {
+	if args == nil || args.ResponseWriter == nil {
+		return errors.New("no se encontró ResponseWriter para enviar comentario SSE")
+	}
+
+	respWriter := *args.ResponseWriter
+	flusher, ok := respWriter.(http.Flusher)
+	if !ok {
+		return errors.New("el servidor no soporta streaming SSE (http.Flusher)")
+	}
+
+	if len(respWriter.Header().Get("Content-Type")) == 0 {
+		respWriter.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	}
+	respWriter.Header().Set("Cache-Control", "no-cache")
+	respWriter.Header().Set("Connection", "keep-alive")
+	respWriter.Header().Set("X-Accel-Buffering", "no")
+	respWriter.Header().Set("Access-Control-Allow-Origin", "*")
+
+	cleanCommentBody := strings.ReplaceAll(commentBody, "\n", " ")
+	if _, err := respWriter.Write([]byte(": " + cleanCommentBody + "\n\n")); err != nil {
+		return errors.New("error al escribir comentario SSE: " + err.Error())
+	}
+
+	flusher.Flush()
+	return nil
 }
 
 // TODO: deprecar después

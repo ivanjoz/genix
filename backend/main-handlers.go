@@ -260,6 +260,10 @@ func ExecFuncHandler(lambdaInput string) (response core.FuncResponse) {
 func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerResponse) core.MainResponse {
 	response := core.MainResponse{}
 	if core.Env.IS_LOCAL {
+		// Stream handlers (SSE) write directly to ResponseWriter and must bypass normal compression flow.
+		if handlerResponse.StreamHandled {
+			return response
+		}
 		// core.Print(handlerResponse)
 		core.SendLocalResponse(*args, *handlerResponse)
 		// In local/VPS HTTP mode we skip request-log persistence to avoid global

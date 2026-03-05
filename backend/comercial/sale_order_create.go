@@ -79,7 +79,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener el ID de la venta.")
 	}
 
-	if err := updateSaleSummaryForChange(sale, nil); err != nil {
+	if err := updateSaleSummaryForChange(sale, actionsFromCreatedSale(sale)...); err != nil {
 		core.Log("Error actualizando resumen de ventas:", err)
 		return req.MakeErr("Error al actualizar el resumen de ventas:", err)
 	}

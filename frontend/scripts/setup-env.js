@@ -10,8 +10,6 @@ export const setupEnv = () => {
       const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf-8'));
       const envContent = [
         `PUBLIC_LAMBDA_URL=${credentials.LAMBDA_URL || ''}`,
-        `PUBLIC_SIGNALING_ENDPOINT=${credentials.SIGNALING_ENDPOINT || ''}`,
-        `PUBLIC_SIGNALING_API_KEY=${credentials.SIGNALING_API_KEY || ''}`,
         `PUBLIC_FRONTEND_CDN=${credentials.FRONTEND_CDN || ''}`
       ].join('\n') + '\n';
       

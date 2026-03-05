@@ -4,7 +4,7 @@ declare global {
 
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
-import { PUBLIC_LAMBDA_URL, PUBLIC_SIGNALING_ENDPOINT, PUBLIC_SIGNALING_API_KEY, PUBLIC_FRONTEND_CDN } from '$env/static/public';
+import { PUBLIC_LAMBDA_URL, PUBLIC_FRONTEND_CDN } from '$env/static/public';
 export { browser };
 
 export const IsClient = () => {
@@ -46,8 +46,6 @@ export const Env = {
   CDN_URL: PUBLIC_FRONTEND_CDN,
   serviceWorker: "/sw.js",
   enviroment: "dev",
-	SIGNALING_ENDPOINT: PUBLIC_SIGNALING_ENDPOINT || "",
-  SIGNALING_API_KEY: PUBLIC_SIGNALING_API_KEY || "",
   counterID: 1,
 	sideLayerSize: 0,
   useTopMinimalMenu: false,

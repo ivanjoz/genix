@@ -16,7 +16,6 @@ import Modules from '$core/modules';
 import { Core, getDeviceType } from '$core/store.svelte';
 import ImageWorker from '$libs/workers/image-worker?worker';
 import { Env } from '$core/env';
-import { initWebRTC, webRTCManager } from '$libs/webrtc/manager';
 import { testRecordsByIDs } from "../demo/records-by-id.svelte"
 
 	let { children } = $props();
@@ -30,15 +29,6 @@ import { testRecordsByIDs } from "../demo/records-by-id.svelte"
 		} catch (error) {
 			console.error('❌ Failed to initialize image worker:', error)
 		}
-		/* 
-		console.log('🔧 Initializing WebRTC P2P bridge...')
-		try {
-			initWebRTC(Env.SIGNALING_ENDPOINT)
-			console.log('✅ WebRTC bridge initialization started')
-		} catch (error) {
-			console.error('❌ Failed to initialize WebRTC bridge:', error)
-		}
-		*/
 	}
 
 	const redirectsToLogin = $derived.by(() => {
@@ -69,19 +59,6 @@ import { testRecordsByIDs } from "../demo/records-by-id.svelte"
 			Core.isLoading = 0
 		})
 
-		// Subscribe to WebRTC state changes for logging
-		if (browser) {
-			webRTCManager.subscribe(() => {
-				const status = webRTCManager.getConnectionStatus()
-				console.log('📡 WebRTC Status:', status)
-				
-				// Update Core state for UI access
-				Core.webRTCConnected = status.connected
-				Core.webRTCConnecting = status.connecting
-				Core.webRTCReconnectAttempts = status.reconnectAttempts
-				Core.webRTCError = status.error
-			})
-		}
 	})
 
 	const routesWithoutLayout: string[] = ["/login","/store"]

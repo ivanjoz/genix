@@ -20,10 +20,7 @@ interface Window {
   appId: string
   PRD_HOSTS: strings[]
   QAS_HOSTS: strings[]
-  _env: {
-    SIGNALING_ENDPOINT: string;
-    SIGNALING_API_KEY: string;
-  };
+  _env: {};
 }
 
 // Build-time constants injected via Vite

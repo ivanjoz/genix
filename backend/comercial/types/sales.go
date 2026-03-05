@@ -125,14 +125,14 @@ type SaleSummary struct {
 	ProductIDs_16              []uint16 `json:",omitempty"`
 	Quantity_16                []uint16 `json:",omitempty"`
 	QuantityPendingDelivery_16 []uint16 `json:",omitempty"`
-	TotalAmount_16             []int32  `json:",omitempty"`
-	TotalDebtAmount_16         []int32  `json:",omitempty"`
+	TotalAmount_16             []int32  `json:",omitempty" db:",list"`
+	TotalDebtAmount_16         []int32  `json:",omitempty" db:",list"`
 	// uint32 productos and quantity
-	ProductIDs_32              []int32 `json:",omitempty"`
-	Quantity_32                []int32 `json:",omitempty"`
-	QuantityPendingDelivery_32 []int32 `json:",omitempty"`
-	TotalAmount_32             []int32 `json:",omitempty"`
-	TotalDebtAmount_32         []int32 `json:",omitempty"`
+	ProductIDs_32              []int32 `json:",omitempty" db:",list"`
+	Quantity_32                []int32 `json:",omitempty" db:",list"`
+	QuantityPendingDelivery_32 []int32 `json:",omitempty" db:",list"`
+	TotalAmount_32             []int32 `json:",omitempty" db:",list"`
+	TotalDebtAmount_32         []int32 `json:",omitempty" db:",list"`
 	Updated                    int32   `json:"upd,omitempty"`
 }
 
@@ -159,4 +159,32 @@ func (e SaleSummaryTable) GetSchema() db.TableSchema {
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.Fecha},
 	}
+}
+
+
+// FlattenSaleSummary converts 16-bit packed slices into the 32-bit slices and
+// clears *_16 fields so clients consume one single flat shape.
+func (summary *SaleSummary) FlattenSaleSummary() {
+	if summary == nil {
+		return
+	}
+
+	// Keep existing int32 rows and only append converted int16 rows.
+	for index, productID := range summary.ProductIDs_16 {
+		if productID == 0 {
+			continue
+		}
+		summary.ProductIDs_32 = append(summary.ProductIDs_32, int32(productID))
+		summary.Quantity_32 = append(summary.Quantity_32, int32(summary.Quantity_16[index]))
+		summary.QuantityPendingDelivery_32 = append(summary.QuantityPendingDelivery_32, int32(summary.QuantityPendingDelivery_16[index]))
+		summary.TotalAmount_32 = append(summary.TotalAmount_32, summary.TotalAmount_16[index])
+		summary.TotalDebtAmount_32 = append(summary.TotalDebtAmount_32, summary.TotalDebtAmount_16[index])
+	}
+
+	// Clear packed 16-bit slices from API output.
+	summary.ProductIDs_16 = nil
+	summary.Quantity_16 = nil
+	summary.QuantityPendingDelivery_16 = nil
+	summary.TotalAmount_16 = nil
+	summary.TotalDebtAmount_16 = nil
 }

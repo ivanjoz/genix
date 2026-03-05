@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"runtime/debug"
@@ -219,9 +220,14 @@ func main() {
 			Handler:           corsMiddleware.Handler(http.HandlerFunc(LocalHandler)),
 			ReadHeaderTimeout: 5 * time.Second,
 			ReadTimeout:       30 * time.Second,
-			WriteTimeout:      60 * time.Second,
+			// Keep disabled to allow long-lived SSE streams (metrics and future real-time endpoints).
+			WriteTimeout:      0,
 			IdleTimeout:       120 * time.Second,
 			MaxHeaderBytes:    1 << 20, // 1 MiB
+			// Track active connections for operational metrics and SSE dashboards.
+			ConnState: func(connection net.Conn, currentState http.ConnState) {
+				core.UpdateHTTPConnectionState(connection, currentState)
+			},
 		}
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

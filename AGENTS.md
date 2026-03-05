@@ -59,7 +59,7 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 - **scripts/SCRIPTS.md** - Central dispatcher and wrapper script management for project utilities
 
 ### Frontend Rules
-- Use untrack inside $effect to avoid render loop
+- Use untrack inside $effect to avoid render loops
 - GetHandler fetched records need fields: "upd" (Updated) and "ID" (unique id) for delta cache. Or use GetHandler.keyID or .KeysIDs for setting another field.
 - Tailwind --spacing is 1px. So "h-4" is actually 4px.
 

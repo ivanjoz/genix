@@ -43,6 +43,7 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.caja-movimiento":          PostMovimientoCaja,
 	"POST.sale_order":               comercial.PostSaleOrder,
 	"GET.sale_orders":               comercial.GetSaleOrders,
+	"GET.sale_summary":              comercial.GetSaleSummary,
 	"GET.p-demo-serialization":      Demo1,
 	"POST.galeria-image":            PostGaleriaImage,
 	"GET.galeria-images":            GetGaleriaImages,
@@ -50,4 +51,5 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.parametros":                GetParametros,
 	"GET.system-parameters":         GetSystemParameters,
 	"POST.system-parameters":        PostSystemParameters,
+	"GET.system-metrics-stream":     GetSystemMetricsStream,
 }

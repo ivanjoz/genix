@@ -2,7 +2,6 @@
 import { Core, fetchOnCourse } from '$core/store.svelte';
 import ButtonLayer from '$components/ButtonLayer.svelte';
 import HeaderConfig from '$domain/HeaderConfig.svelte';
-import WebRTCStatus from '$domain/WebRTCStatus.svelte';
 
 	// Props
 	const {
@@ -97,11 +96,6 @@ import WebRTCStatus from '$domain/WebRTCStatus.svelte';
 				<span>{"Cargando..."}</span>
 			</div>
 		{/if}
-
-		<!-- WebRTC Status -->
-		<div class="mr-4">
-			<WebRTCStatus />
-		</div>
 
 		<!-- Settings Dropdown -->
 		<div class="relative">

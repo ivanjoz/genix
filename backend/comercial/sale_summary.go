@@ -11,6 +11,15 @@ type ProductSummaryChange struct {
 	productID, quantity, quantityPendingDelivery, amount, totalDebtAmount int32
 }
 
+const (
+	// Action 1: register the sale lines in summary.
+	saleSummaryActionSale int8 = 1
+	// Action 2: settle full payment for the sale lines.
+	saleSummaryActionPayment int8 = 2
+	// Action 3: settle full delivery for the sale lines.
+	saleSummaryActionDelivery int8 = 3
+)
+
 func UpdateProductOnSumary(summary *types.SaleSummary, summaryChanges ...ProductSummaryChange) error {
 	if summary == nil || len(summaryChanges) == 0 {
 		return nil
@@ -154,21 +163,19 @@ func UpdateProductOnSumary(summary *types.SaleSummary, summaryChanges ...Product
 	return nil
 }
 
-func UpdateSaleSumary(summary *types.SaleSummary, newSale types.SaleOrder, prevSale *types.SaleOrder) error {
+func UpdateSaleSumary(summary *types.SaleSummary, sale types.SaleOrder, actions ...int8) error {
 	if summary == nil {
 		return core.Err("sale summary is nil")
 	}
 
-	core.Log("UpdateSaleSumary start. EmpresaID:", summary.EmpresaID, " Fecha:", summary.Fecha)
+	actionFlags, err := parseSaleSummaryActionFlags(actions...)
+	if err != nil {
+		return err
+	}
 
 	changesByProduct := map[int32]ProductSummaryChange{}
-	if prevSale != nil {
-		if err := collectSaleChanges(changesByProduct, *prevSale, -1); err != nil {
-			return err
-		}
-	}
-	if len(newSale.DetailProductsIDs) > 0 {
-		if err := collectSaleChanges(changesByProduct, newSale, 1); err != nil {
+	if len(sale.DetailProductsIDs) > 0 {
+		if err := collectSaleChangesByActions(changesByProduct, sale, actionFlags); err != nil {
 			return err
 		}
 	}
@@ -188,20 +195,15 @@ func UpdateSaleSumary(summary *types.SaleSummary, newSale types.SaleOrder, prevS
 	if err := db.InsertOne(*summary); err != nil {
 		return core.Err("error saving sale summary:", err)
 	}
-	core.Log("UpdateSaleSumary done. products16:", len(summary.ProductIDs_16), " products32:", len(summary.ProductIDs_32))
 	return nil
 }
 
-func updateSaleSummaryForChange(newSale types.SaleOrder, prevSale *types.SaleOrder) error {
-	if prevSale != nil && (prevSale.EmpresaID != newSale.EmpresaID || prevSale.Fecha != newSale.Fecha) {
-		return core.Err("sale summary key mismatch: EmpresaID/Fecha cannot change for the same sale")
-	}
-
-	previousSummary, err := loadSaleSummary(newSale.EmpresaID, newSale.Fecha)
+func updateSaleSummaryForChange(sale types.SaleOrder, actions ...int8) error {
+	previousSummary, err := loadSaleSummary(sale.EmpresaID, sale.Fecha)
 	if err != nil {
 		return err
 	}
-	return UpdateSaleSumary(&previousSummary, newSale, prevSale)
+	return UpdateSaleSumary(&previousSummary, sale, actions...)
 }
 
 func loadSaleSummary(empresaID int32, fecha int16) (types.SaleSummary, error) {
@@ -218,7 +220,41 @@ func loadSaleSummary(empresaID int32, fecha int16) (types.SaleSummary, error) {
 	return types.SaleSummary{EmpresaID: empresaID, Fecha: fecha}, nil
 }
 
-func collectSaleChanges(changesByProduct map[int32]ProductSummaryChange, sale types.SaleOrder, sign int32) error {
+type saleSummaryActionFlags struct {
+	includeSale     bool
+	includePayment  bool
+	includeDelivery bool
+}
+
+func parseSaleSummaryActionFlags(actions ...int8) (saleSummaryActionFlags, error) {
+	flags := saleSummaryActionFlags{}
+	
+	for _, actionID := range actions {
+		if actionID == saleSummaryActionSale {
+			flags.includeSale = true
+		} else if actionID == saleSummaryActionPayment {
+			flags.includePayment = true
+		} else if actionID == saleSummaryActionDelivery {
+			flags.includeDelivery = true
+		} else {
+			return saleSummaryActionFlags{}, core.Err("invalid sale summary action:", actionID)	
+		}
+	}
+	return flags, nil
+}
+
+func actionsFromCreatedSale(sale types.SaleOrder) []int8 {
+	// Every new order must register the sale rows in product summary.
+	actions := []int8{saleSummaryActionSale}
+	for _, actionID := range sale.ProcessesIncluded_ {
+		if actionID == saleSummaryActionPayment || actionID == saleSummaryActionDelivery {
+			actions = append(actions, actionID)
+		}
+	}
+	return actions
+}
+
+func collectSaleChangesByActions(changesByProduct map[int32]ProductSummaryChange, sale types.SaleOrder, actionFlags saleSummaryActionFlags) error {
 	if len(sale.DetailProductsIDs) == 0 {
 		return nil
 	}
@@ -226,20 +262,6 @@ func collectSaleChanges(changesByProduct map[int32]ProductSummaryChange, sale ty
 		return core.Err("sale detail slices have inconsistent lengths")
 	}
 
-	debtTotal := sale.DebtAmount
-	if debtTotal < 0 {
-		debtTotal = 0
-	}
-
-	// Pending delivery is the full quantity unless the sale is already delivered.
-	pendingDeliveryMultiplier := int32(1)
-	if sale.Status == 3 || sale.Status == 4 {
-		pendingDeliveryMultiplier = 0
-	}
-
-	// Split total debt across lines proportionally to line amount.
-	allocatedDebt := int32(0)
-	lastLineIndex := len(sale.DetailProductsIDs) - 1
 	for lineIndex, productID := range sale.DetailProductsIDs {
 		quantity := sale.DetailQuantities[lineIndex]
 		if productID <= 0 || quantity <= 0 {
@@ -247,22 +269,30 @@ func collectSaleChanges(changesByProduct map[int32]ProductSummaryChange, sale ty
 		}
 
 		lineAmount := multiplyInt32(sale.DetailPrices[lineIndex], quantity)
-		lineDebtAmount := int32(0)
-		if sale.TotalAmount > 0 && debtTotal > 0 {
-			if lineIndex == lastLineIndex {
-				lineDebtAmount = maxZero(debtTotal - allocatedDebt)
-			} else {
-				lineDebtAmount = maxZero(int32((int64(lineAmount) * int64(debtTotal)) / int64(sale.TotalAmount)))
-				allocatedDebt += lineDebtAmount
-			}
-		}
-
 		currentSummaryChange := changesByProduct[productID]
 		currentSummaryChange.productID = productID
-		currentSummaryChange.quantity += sign * quantity
-		currentSummaryChange.quantityPendingDelivery += sign * (quantity * pendingDeliveryMultiplier)
-		currentSummaryChange.amount += sign * lineAmount
-		currentSummaryChange.totalDebtAmount += sign * lineDebtAmount
+
+		if actionFlags.includeSale {
+			// On sale creation we add units and amount once.
+			currentSummaryChange.quantity += quantity
+			currentSummaryChange.amount += lineAmount
+			// If delivery is not included, full line quantity starts as pending.
+			if !actionFlags.includeDelivery {
+				currentSummaryChange.quantityPendingDelivery += quantity
+			}
+			// If payment is not included, full line amount starts as pending debt.
+			if !actionFlags.includePayment {
+				currentSummaryChange.totalDebtAmount += lineAmount
+			}
+		}
+		if actionFlags.includePayment && !actionFlags.includeSale {
+			// Full payment settlement removes all debt contributed by this sale lines.
+			currentSummaryChange.totalDebtAmount -= lineAmount
+		}
+		if actionFlags.includeDelivery && !actionFlags.includeSale {
+			// Full delivery settlement removes all pending quantity from this sale lines.
+			currentSummaryChange.quantityPendingDelivery -= quantity
+		}
 		changesByProduct[productID] = currentSummaryChange
 	}
 	return nil

@@ -118,8 +118,19 @@ func (c *columnInfo) SetValue(ptr unsafe.Pointer, v any) {
 				// Keep backward compatibility with legacy CBOR blobs when binary decode is not possible.
 				fmt.Printf("Error decoding unsigned blob for Col %s, trying legacy CBOR: %v\n", c.Name, err)
 			} else {
-				c.Field.Set(ptr, decodedValue)
-				return
+				// xunsafe generic Set does not reliably assign []uint16 slices; use direct typed memory assignment.
+				destination := reflect.NewAt(c.RefType, c.Field.Pointer(ptr)).Elem()
+				decodedReflectValue := reflect.ValueOf(decodedValue)
+				if decodedReflectValue.IsValid() {
+					if decodedReflectValue.Type().AssignableTo(c.RefType) {
+						destination.Set(decodedReflectValue)
+						return
+					}
+					if decodedReflectValue.Type().ConvertibleTo(c.RefType) {
+						destination.Set(decodedReflectValue.Convert(c.RefType))
+						return
+					}
+				}
 			}
 		}
 

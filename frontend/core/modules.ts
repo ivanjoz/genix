@@ -85,6 +85,9 @@ export const AdminModule: IModule = {
 				{ name: "Gestión Ventas", route: "/comercial/sale_orders_status",
           icon: "icon-flash"
 				},
+				{ name: "Gráficos Ventas", route: "/comercial/sale_orders_charts",
+          icon: "icon-chart-bar"
+				},
 				{ name: "Costos de Envio", route: "/comercial/shipping-costs",
           icon: "icon-flash"
         },

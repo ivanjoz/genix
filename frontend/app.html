@@ -5,10 +5,7 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		%sveltekit.head%
 		<script>
-			window._env = {
-				SIGNALING_ENDPOINT: "%PUBLIC_SIGNALING_ENDPOINT%",
-				SIGNALING_API_KEY: "%PUBLIC_SIGNALING_API_KEY%"
-			};
+			window._env = {};
 			//ENVIROMENT_VARIABLES
 
 			window.global = window;
@@ -56,7 +53,6 @@
 				}
 			})();
 		</script>
-		<script src="/libs/simplepeer.min.js"></script>
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">%sveltekit.body%</div>

@@ -35,10 +35,6 @@ export const Core = $state({
   pageOptions: [] as {id: number, name: string}[],
   pageOptionSelected: 1,
   showMobileSearchLayer: null as ITopSearchLayer | null,
-  webRTCConnected: false as boolean,
-  webRTCConnecting: false as boolean,
-  webRTCReconnectAttempts: 0 as number,
-  webRTCError: null as string | null,
   toggleMobileMenu: (() => {}) as () => void,
   openSideLayer: (layerId: number) => {
     Core.showSideLayer = layerId
