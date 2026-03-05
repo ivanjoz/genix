@@ -1,83 +1,86 @@
-# ScyllaDB ORM (db2)
+# ScyllaDB ORM Query Guide (`db`)
 
-A type-safe, reflection-based ORM for ScyllaDB/Cassandra with fluent query building and automatic schema management.
+This guide explains how to model tables, define schema strategies, and execute queries with the Genix ORM from an application developer perspective.
 
-## Features
+---
 
-- **Type-safe queries** with compile-time checking using Go generics
-- **Fluent query API** with method chaining
-- **Automatic schema inference** from struct tags
-- **Support for views and indexes**
-- **Batch operations** for inserts and updates
-- **Complex type handling** (structs, slices) with CBOR serialization
+## 1. What You Get
 
-## Model Definition
+- Type-safe query building with Go generics
+- Fluent query API (`Equals`, `In`, `Between`, etc.)
+- Insert/update batch helpers
+- Schema declaration in Go (`TableSchema`)
+- Packed indexes, views, hash indexes, and smart key strategies
+- Optional per-record cache-version selective fetch (`QueryCachedIDs`)
 
-### Basic Structure
+---
 
-Every model requires two structs:
+## 2. Model Structure
 
-1. **Base Struct**: Embeds `db.TableStruct` and contains your data fields
-2. **Table Struct**: Defines columns as `db.Col` or `db.ColSlice` for query building
+Each entity uses two structs:
+1. **Record/Base struct**: actual persisted fields
+2. **Table struct**: typed query columns (`db.Col`, `db.ColSlice`)
 
 ```go
-// Base struct - holds the actual data
-type ListaCompartidaRegistro struct {
-    db.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
-    EmpresaID   int32    `db:"empresa_id,pk"`
-    ID          int32    `db:"id,pk"`
-    ListaID     int32    `db:"lista_id,view.1,view.2"`
-    Nombre      string   `json:",omitempty" db:"nombre"`
-    Images      []string `json:",omitempty" db:"images"`
-    Descripcion string   `json:",omitempty" db:"descripcion"`
-    Status      int8     `json:"ss,omitempty" db:"status,view.1"`
-    Updated     int64    `json:"upd,omitempty" db:"updated,view.2"`
-    UpdatedBy   int32    `json:",omitempty" db:"updated_by"`
+// Purpose: Record struct holds persisted data and JSON payload fields.
+// Rationale: Keep runtime data model separate from query builder fields.
+type Product struct {
+    db.TableStruct[ProductTable, Product]
+    EmpresaID int32    `db:"empresa_id"`
+    ID        int64    `db:"id"`
+    Nombre    string   `db:"nombre"`
+    Status    int8     `db:"status"`
+    Updated   int64    `db:"updated"`
+    Tags      []string `db:"tags"`
+    CacheV    uint8    `db:"-" json:"ccv,omitempty"`
 }
 
-// Table struct - for type-safe queries
-type ListaCompartidaRegistroTable struct {
-    db.TableStruct[ListaCompartidaRegistroTable, ListaCompartidaRegistro]
-    EmpresaID   db.Col[ListaCompartidaRegistroTable, int32]
-    ID          db.Col[ListaCompartidaRegistroTable, int32]
-    ListaID     db.Col[ListaCompartidaRegistroTable, int32]
-    Nombre      db.Col[ListaCompartidaRegistroTable, string]
-    Images      db.ColSlice[ListaCompartidaRegistroTable, string]  // For slices
-    Descripcion db.Col[ListaCompartidaRegistroTable, string]
-    Status      db.Col[ListaCompartidaRegistroTable, int8]
-    Updated     db.Col[ListaCompartidaRegistroTable, int64]
-    UpdatedBy   db.Col[ListaCompartidaRegistroTable, int32]
+// Purpose: Table struct exposes typed fluent query fields.
+// Rationale: Compile-time safety for query operators and schema references.
+type ProductTable struct {
+    db.TableStruct[ProductTable, Product]
+    EmpresaID db.Col[ProductTable, int32]
+    ID        db.Col[ProductTable, int64]
+    Nombre    db.Col[ProductTable, string]
+    Status    db.Col[ProductTable, int8]
+    Updated   db.Col[ProductTable, int64]
+    Tags      db.ColSlice[ProductTable, string]
 }
+```
 
-// GetSchema defines the table structure and keys
-func (e CajaMovimientoTable) GetSchema() db.TableSchema {
+### Rules
+
+- Field names must match between record and table structs.
+- Column name is inferred from `db` tag or snake_case field name.
+- Partition/key columns are defined in `GetSchema()` (not by tag alone).
+- For cached delta APIs, record should expose `ID`, partition field, and cache-version response field (`uint8`).
+
+---
+
+## 3. Defining `GetSchema()`
+
+```go
+// Purpose: Declare partitioning, keys, and optional acceleration structures.
+// Rationale: Query routing and write behavior are derived from this contract.
+func (e ProductTable) GetSchema() db.TableSchema {
     return db.TableSchema{
-        Name:      "caja_movimientos",
+        Name:      "product",
         Partition: e.EmpresaID,
         Keys:      []db.Coln{e.ID},
-        // Pack multiple values into a single int64 ID
-        KeyIntPacking: []db.Coln{
-            e.CajaID.DecimalSize(5), 
-            e.Fecha.DecimalSize(5), 
-            e.Autoincrement(3), // Automated counter with 3 random digits
-        },
-        // Partition the autoincrement sequence by Fecha
-        AutoincrementPart: e.Fecha,
+
+        // Optional: enable per-record cache-version support.
+        SaveCacheVersion: true,
     }
 }
 ```
 
-### Column Definition Rules
+---
 
-1. **Field Names**: Column names are inferred from field names converted to snake_case, or explicitly set with the `db` tag
-2. **Primary Keys**: Use `db:"column_name,pk"` to mark partition/clustering keys
-3. **DecimalSize**: Used for `KeyIntPacking` to define the digit width of a component.
-4. **Autoincrement**: Marks a column (or a packing slot) to be automatically filled by the ORM's sequence manager.
-5. **Both structs must have matching field names** to map columns correctly
-
-## Connection Setup
+## 4. Connection Setup
 
 ```go
+// Purpose: Configure one Scylla session used by ORM operations.
+// Rationale: Keyspace and credentials are shared by query/insert/update flows.
 db.MakeScyllaConnection(db.ConnParams{
     Host:     "localhost",
     Port:     9042,
@@ -87,206 +90,325 @@ db.MakeScyllaConnection(db.ConnParams{
 })
 ```
 
-## CRUD Operations
+---
 
-### Insert
+## 5. CRUD Operations
+
+### 5.1 Insert
 
 ```go
-records := []types.ListaCompartidaRegistro{
-    {
-        ID:          1,
-        EmpresaID:   1,
-        ListaID:     3,
-        Nombre:      "Demo Record",
-        Images:      []string{"img1.jpg", "img2.jpg"},
-        Descripcion: "Description here",
-        Status:      1,
-        Updated:     time.Now().Unix(),
-        UpdatedBy:   100,
-    },
+// Purpose: Insert many rows in one call.
+// Rationale: ORM batches writes for better throughput.
+rows := []Product{
+    {EmpresaID: 1, ID: 101, Nombre: "A", Status: 1, Updated: time.Now().Unix()},
+    {EmpresaID: 1, ID: 102, Nombre: "B", Status: 1, Updated: time.Now().Unix()},
 }
-
-// Insert all fields
-err := db.Insert(&records)
-
-// Insert excluding specific columns
-err := db.Insert(&records, q1.UpdatedBy)
-
-// Insert single record
-err := db.InsertOne(records[0])
+err := db.Insert(&rows)
 ```
 
-### Update
-
 ```go
-recordToUpdate := types.ListaCompartidaRegistro{
-    ID:          1,
-    EmpresaID:   1,
-    ListaID:     3,
-    Nombre:      "Updated Name",
-    Images:      []string{"new1.jpg", "new2.jpg"},
-    Status:      1,
-    Updated:     time.Now().Unix(),
-}
-
-// Get table reference for column selection
-q1 := db.Table[types.ListaCompartidaRegistro]()
-
-// Update specific columns only
-err := db.Update(&[]types.ListaCompartidaRegistro{recordToUpdate},
-    q1.Status, q1.ListaID, q1.Nombre, q1.Images, q1.Updated)
-
-// Update single record
-err := db.UpdateOne(recordToUpdate, q1.Nombre, q1.Status)
-
-// Update all fields except specified
-err := db.UpdateExclude(&records, q1.UpdatedBy, q1.Created)
+// Purpose: Skip selected columns during insert.
+// Rationale: Useful when server-managed fields should not be written from input.
+q := db.Table[Product]()
+err := db.Insert(&rows, q.Updated)
 ```
 
-### Select/Query
+```go
+// Purpose: Insert one row with the same validation/path as bulk insert.
+// Rationale: Single-row helper keeps API uniform.
+err := db.InsertOne(rows[0])
+```
+
+### 5.2 Update
 
 ```go
-registros := []types.ListaCompartidaRegistro{}
+// Purpose: Update only explicit fields.
+// Rationale: Prevents accidental full-row overwrite.
+q := db.Table[Product]()
+row := Product{EmpresaID: 1, ID: 101, Nombre: "A+", Status: 2, Updated: time.Now().Unix()}
+err := db.Update(&[]Product{row}, q.Nombre, q.Status, q.Updated)
+```
 
-// Build and execute query
-query := db.Query(&registros)
-query.Select().
+```go
+// Purpose: Update all mutable fields except selected ones.
+// Rationale: Useful for broad updates while protecting audit/system columns.
+err := db.UpdateExclude(&[]Product{row}, q.Updated)
+```
+
+```go
+// Purpose: Update one row with explicit include list.
+// Rationale: Keeps single-row path consistent with bulk update semantics.
+err := db.UpdateOne(row, q.Nombre, q.Status)
+```
+
+### 5.3 Query / Select
+
+```go
+// Purpose: Build typed query and stream results into a slice.
+// Rationale: Fluent API keeps query intent readable and safe.
+results := []Product{}
+query := db.Query(&results)
+
+err := query.
     EmpresaID.Equals(1).
-    ListaID.Equals(2).
-    Status.Equals(1).
-    AllowFilter()
+    Status.In(1, 2).
+    Updated.Between(startUnix, endUnix).
+    Limit(200).
+    Exec()
+```
 
-if err := query.Exec(); err != nil {
-    panic(err)
+```go
+// Purpose: Read only required fields.
+// Rationale: Reduces network and decode cost for list endpoints.
+q := db.Query(&results)
+err := q.Select(q.ID, q.Nombre, q.Updated).EmpresaID.Equals(1).Exec()
+```
+
+```go
+// Purpose: Exclude expensive/large fields.
+// Rationale: Useful when blobs/slices are not needed in current response.
+q := db.Query(&results)
+err := q.Exclude(q.Tags).EmpresaID.Equals(1).Exec()
+```
+
+---
+
+## 6. Query Operators
+
+```go
+// Purpose: Equality and membership filters.
+// Rationale: These are index-friendly for most schemas.
+q.ID.Equals(1001)
+q.Status.In(1, 2, 3)
+```
+
+```go
+// Purpose: Numeric/time range filters.
+// Rationale: Combine with packed indexes/views for efficient range routing.
+q.Updated.GreaterThan(ts)
+q.Updated.GreaterEqual(ts)
+q.Updated.LessThan(ts)
+q.Updated.LessEqual(ts)
+q.Updated.Between(tsFrom, tsTo)
+```
+
+```go
+// Purpose: Search item membership in slice-backed set columns.
+// Rationale: Uses `CONTAINS` semantics for set-like fields.
+q.Tags.Contains("featured")
+```
+
+---
+
+## 7. Advanced Schema Strategies
+
+### 7.1 Key Packing (`KeyIntPacking`)
+
+Use when a single `int64` key should encode multiple components.
+
+```go
+// Purpose: Compose one bigint key from multiple numeric components.
+// Rationale: Keeps key compact while preserving sortable structure.
+func (e MovementTable) GetSchema() db.TableSchema {
+    return db.TableSchema{
+        Name:      "movement",
+        Partition: e.EmpresaID,
+        Keys:      []db.Coln{e.ID},
+        KeyIntPacking: []db.Coln{
+            e.StoreID.DecimalSize(5),
+            e.DayCode.DecimalSize(5),
+            e.Autoincrement(3),
+        },
+        AutoincrementPart: e.DayCode,
+    }
 }
-
-// Select specific columns
-query.Select(q1.ID, q1.Nombre, q1.Status)
-
-// Exclude specific columns
-query.Exclude(q1.Images, q1.Descripcion)
-
-// Additional query options
-query.Limit(100).
-    OrderDesc().
-    AllowFilter()
 ```
 
-### Query Operators
+Rules:
+- Use exactly one key column (`int64`) in `Keys`.
+- First packing component must not define `DecimalSize()`.
+- Remaining components should define `DecimalSize()`.
+- `Autoincrement(size)` may be used as a packed component placeholder.
+
+### 7.2 Key Concatenation (`KeyConcatenated`)
+
+Use when one string key should encode multiple fields.
 
 ```go
-// Comparison operators
-query.ID.Equals(1)
-query.Status.In(1, 2, 3)
-query.Updated.GreaterThan(timestamp)
-query.Updated.GreaterEqual(timestamp)
-query.Updated.LessThan(timestamp)
-query.Updated.LessEqual(timestamp)
-query.Updated.Between(start, end)
-
-// For slice columns
-query.Images.Contains("image.jpg")
-```
-
-## Schema Definition
-
-### Partition and Clustering Keys
-
-```go
-db.TableSchema{
-    Name:      "table_name",
-    Partition: e.CompanyID,           // Partition key
-    Keys:      []db.Coln{e.ID},      // Clustering keys
+// Purpose: Flatten multi-field key into a compact string key.
+// Rationale: Enables prefix/range-style key patterns with one PK column.
+func (e InvoiceTable) GetSchema() db.TableSchema {
+    return db.TableSchema{
+        Name:          "invoice",
+        Partition:     e.EmpresaID,
+        Keys:          []db.Coln{e.ID}, // string key field
+        KeyConcatenated: []db.Coln{e.CustomerID, e.Year, e.Serial},
+    }
 }
 ```
 
-### Packed Indexes (Local) - `Indexes`
-Use `Indexes` when you need fast queries that include the partition key plus a composite predicate like:
-- `Status IN (...)` + `Updated BETWEEN/GT`
+### 7.3 Local Packed Indexes (`Indexes`)
 
-Definition example:
+Use for partition + composite predicate patterns.
 
 ```go
-db.TableSchema{
-    Name:      "sale_order",
-    Partition: e.EmpresaID,
-    Keys:      []db.Coln{e.ID},
-    // Local packed index: creates a stored virtual packed column and a local index:
-    // CREATE INDEX ... ON sale_order ((empresa_id), zz_ixp_status_updated)
-    Indexes: [][]db.Coln{
-        {e.Status.Int32(), e.Updated.DecimalSize(8)},
+// Purpose: Accelerate `partition + status + updated-range` style reads.
+// Rationale: Packs multiple numeric predicates into one indexed virtual column.
+func (e OrderTable) GetSchema() db.TableSchema {
+    return db.TableSchema{
+        Name:      "sale_order",
+        Partition: e.EmpresaID,
+        Keys:      []db.Coln{e.ID},
+        Indexes: [][]db.Coln{
+            {e.Status.Int32(), e.Updated.DecimalSize(8)},
+        },
+    }
+}
+```
+
+### 7.4 Global Indexes (`GlobalIndexes`)
+
+Use for cross-partition equality lookups.
+
+```go
+// Purpose: Add a global secondary index for direct equality lookups.
+// Rationale: Useful for unique-like lookup fields such as email.
+GlobalIndexes: [][]db.Coln{
+    {e.Email},
+}
+```
+
+```go
+// Purpose: Add packed global index for composite equality-oriented filters.
+// Rationale: Supports compact global lookup shape on multiple numeric fields.
+GlobalIndexes: [][]db.Coln{
+    {e.Status.Int32(), e.Updated.DecimalSize(8)},
+}
+```
+
+Important:
+- Do not depend on global indexes for general range scans.
+- Prefer local packed indexes or views for robust range workloads.
+
+### 7.5 Views (`Views`)
+
+```go
+// Purpose: Materialize alternative query paths.
+// Rationale: Duplicate data intentionally for read patterns you must optimize.
+Views: []db.View{
+    {Cols: []db.Coln{e.CustomerID, e.Status}, KeepPart: true},
+    {Cols: []db.Coln{e.StoreID.Int32(), e.Updated.DecimalSize(10)}},
+}
+```
+
+### 7.6 Hash Indexes with Composite Bucketing (`HashIndexes`)
+
+Use for range + multi-field membership scenarios over numeric dimensions.
+
+```go
+// Purpose: Create hash-set virtual indexes with bucketed range support.
+// Rationale: Efficient for tuple-style filters plus bounded time/week ranges.
+HashIndexes: [][]db.Coln{
+    {
+        e.ProductID,
+        e.ChannelID,
+        e.WeekCode.CompositeBucketing(1, 2, 4).IsWeek(),
     },
 }
 ```
 
 Rules:
-- First column MUST NOT set `DecimalSize()` (its width is implicit).
-- All remaining columns MUST set `DecimalSize()`.
-- Packed components must be non-negative integers.
-- `.Int32()` means the packed column is stored as CQL `int` (computed as int64 first, trimmed to 9 digits, then cast).
-- Truncation (via `DecimalSize`) can overfetch; the ORM will post-filter results to guarantee correctness.
+- Each hash index entry supports 2 to 3 numeric source columns.
+- Exactly one source column must define `CompositeBucketing(...)`.
+- `IsWeek()` enables week-based normalization for bucket/range math.
 
-### Global Indexes - `GlobalIndexes`
-Use `GlobalIndexes` for:
-1. Simple global secondary indexes (single column).
-2. Packed composite global indexes (2+ columns) for equality-oriented lookups.
+---
 
-Single-column example:
+## 8. Cache-Version Delta Queries
+
+If `SaveCacheVersion` is enabled in schema, you can fetch only changed records.
 
 ```go
-db.TableSchema{
-    Name:      "users",
-    Partition: e.EmpresaID,
-    Keys:      []db.Coln{e.ID},
-    GlobalIndexes: [][]db.Coln{
-        {e.Email}, // CREATE INDEX users__email_index_0 ON users (email)
-    },
+// Purpose: Return only rows whose server cache-version changed.
+// Rationale: Reduces payload for sync endpoints with client-side caches.
+changed := []Product{}
+cached := []db.IDCacheVersion{
+    {PartitionID: 1, ID: 101, CacheVersion: 5},
+    {PartitionID: 1, ID: 102, CacheVersion: 2},
 }
+err := db.QueryCachedIDs(&changed, cached)
 ```
 
-Packed composite example:
+Requirements:
+- `SaveCacheVersion: true` in `GetSchema()`
+- one partition field and one key field resolvable by ORM
+- response model includes cache-version output field (`uint8`) if you expose it to client
+
+---
+
+## 9. Merge and Upsert Helpers
+
+### 9.1 `InsertOrUpdate`
 
 ```go
-db.TableSchema{
-    Name:      "sale_order",
-    Partition: e.EmpresaID,
-    Keys:      []db.Coln{e.ID},
-    GlobalIndexes: [][]db.Coln{
-        {e.Status.Int32(), e.Updated.DecimalSize(8)}, // CREATE INDEX ... ON sale_order (zz_gixp_status_updated)
-    },
-}
+// Purpose: Split a batch into insert/update using a custom predicate.
+// Rationale: Reuse one API call for mixed write payloads.
+q := db.Table[Product]()
+err := db.InsertOrUpdate(
+    &rows,
+    func(r *Product) bool { return r.ID <= 0 },
+    []db.Coln{q.Updated},
+)
 ```
 
-Important:
-- Scylla global secondary indexes are not reliable for general range scans.
-- The ORM intentionally does not route range queries (`BETWEEN`, `>`, `<`) through packed global indexes to avoid `ALLOW FILTERING` surprises.
-
-### Views
-
-Create materialized views for alternative query patterns:
+### 9.2 `Merge`
 
 ```go
-Views: []db.View{
-    // Simple view with partition key
-    {Cols: []db.Coln{e.ListaID, e.Status}, KeepPart: true},
-    
-    // Packed integer view (for range queries)
-    // Rule: only first column can be inferred; all following columns must set DecimalSize().
-    {Cols: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
-    {Cols: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
-}
+// Purpose: Compare incoming rows against DB and apply insert/update selectively.
+// Rationale: Reduces write churn when only changed rows should be updated.
+q := db.Table[Product]()
+err := db.Merge(
+    &rows,
+    []db.Coln{q.Updated},
+    func(prev, cur *Product) bool { return prev.Nombre != cur.Nombre || prev.Status != cur.Status },
+    func(r *Product) { r.Updated = time.Now().Unix() },
+)
 ```
 
-## Best Practices
+---
 
-1. **Always specify columns for Update**: This prevents accidental overwrites and improves performance
-2. **Use batch operations**: Insert/Update multiple records at once for better performance
-3. **Define views carefully**: Views duplicate data; only create them for essential query patterns
-4. **Partition key design**: Choose partition keys that distribute data evenly
-5. **Use AllowFilter() sparingly**: It forces full table scans; prefer indexed queries
+## 10. Best Practices
 
-## Type Support
+1. Validate required fields server-side before insert/update.
+2. For updates, pass explicit column list whenever possible.
+3. Design partition keys for even distribution and practical query locality.
+4. Prefer schema-driven routing (indexes/views) over `AllowFilter()`.
+5. Use local packed indexes or range views for heavy range workloads.
+6. Use `QueryCachedIDs` for sync endpoints with client cache metadata.
+7. Keep slice field types consistent across model and usage (`[]int32` with `[]int32`, etc.).
+8. Benchmark critical query patterns before and after adding views/indexes.
+
+---
+
+## 11. Supported Field Types
 
 - **Primitives**: `int8`, `int16`, `int32`, `int64`, `int`, `float32`, `float64`, `string`, `bool`
-- **Slices**: Stored as ScyllaDB sets (use `db.ColSlice`)
-- **Complex types**: Structs automatically serialized to CBOR and stored as blobs
+- **Pointers**: pointer equivalents for nullable scalar values
+- **Slices / set-backed**: `[]string`, numeric slices, and pointer-to-slice variants
+- **Complex structs/maps/slices**: persisted as CBOR `blob`
+
+---
+
+## 12. Common Errors and Fixes
+
+- **"use ALLOW FILTERING"**: query shape is not covered by your keys/indexes/views.
+  - Fix: add suitable `Indexes`, `GlobalIndexes`, `Views`, or adjust predicates.
+
+- **Packed index overfetch concerns**:
+  - Fix: keep `DecimalSize` design coherent and rely on ORM post-filter exactness.
+
+- **Autoincrement/key packing panic**:
+  - Fix: verify `KeyIntPacking` rules (single bigint key, decimal sizes, non-negative domain).
+
+- **Composite bucketing config panic**:
+  - Fix: ensure exactly one `CompositeBucketing(...)` column in each `HashIndexes` entry.

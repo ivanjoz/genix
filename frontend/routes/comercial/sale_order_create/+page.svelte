@@ -21,6 +21,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
     import { SystemParametersService } from '$services/services/system-parameters.svelte';
     import CheckboxOptions from '$components/CheckboxOptions.svelte';
     import { CajasService, type ICaja } from '$routes/finanzas/cajas/cajas.svelte';
+    import { untrack } from 'svelte';
 
   // Helpers
   const formatMo = (n: number) => formatN(n / 100, 2);
@@ -59,20 +60,22 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
 
   // Effects
   $effect(() => {
-    // Auto-select first almacen
-    if (almacenSelected === -1 && almacenesService.Almacenes.length > 0) {
-      almacenSelected = almacenesService.Almacenes[0].ID;
-      ventasState.form.AlmacenID = almacenSelected;
-      loadStock(almacenSelected);
-    }
-    
-    if(cajas.isReady && cajas.Cajas.length > 0){
-    	ventasState.form.CajaID_ = cajas.Cajas[0].ID
-    }
+  	almacenesService.Almacenes;
+  	productosService.records;
+   
+		untrack(() => {
+	    if (almacenSelected === -1 && almacenesService.Almacenes.length > 0) {
+	      almacenSelected = almacenesService.Almacenes[0].ID;
+	      ventasState.form.AlmacenID = almacenSelected;
+	      loadStock(almacenSelected);
+	    }		
+		})
   });
 
   $effect(() => {
-    console.log("parametrosService", parametrosService)
+	  if(cajas.isReady && cajas.Cajas.length > 0){
+	  	ventasState.form.CajaID_ = cajas.Cajas[0].ID
+	  }
   });
 
   async function loadStock(almacenID: number) {

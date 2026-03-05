@@ -125,8 +125,6 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
   const filterTextArray = $derived((filterText||"").toLowerCase().split(" ").filter(x => x.length > 1))
 
   const filteredData = $derived.by(() => {
-    console.log("filterText", filterText)
-
     if(filterText && getFilterContent){
       const filtered = data.filter(
         x => {
@@ -144,17 +142,9 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
           }
           return include(content, filterTextArray)
         })
-
-      console.log("data filtrada::", filtered)
       return filtered
     } else {
       return data
-    }
-  })
-
-  $effect(() => {
-    if(selected || !selected){
-      console.log("selected::", selected)
     }
   })
 

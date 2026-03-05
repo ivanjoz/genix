@@ -63,7 +63,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		sale.OrderPendingDeliveryUpdated = sale.Updated
 	}
 
-	if sale.Status != 4 {
+	if sale.Status == 4 {
 		sale.OrderCompletedUpdated = sale.Updated
 	}
 
