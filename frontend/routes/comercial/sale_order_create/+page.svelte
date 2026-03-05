@@ -61,14 +61,12 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
   // Effects
   $effect(() => {
   	almacenesService.Almacenes;
-  	productosService.records;
+   	if(!almacenesService.Almacenes.length || almacenSelected > 0){ return }
    
 		untrack(() => {
-	    if (almacenSelected === -1 && almacenesService.Almacenes.length > 0) {
-	      almacenSelected = almacenesService.Almacenes[0].ID;
-	      ventasState.form.AlmacenID = almacenSelected;
-	      loadStock(almacenSelected);
-	    }		
+		   almacenSelected = almacenesService.Almacenes[0].ID;
+		   ventasState.form.AlmacenID = almacenSelected;
+		   loadStock(almacenSelected);	
 		})
   });
 
@@ -76,6 +74,13 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
 	  if(cajas.isReady && cajas.Cajas.length > 0){
 	  	ventasState.form.CajaID_ = cajas.Cajas[0].ID
 	  }
+  });
+  
+  $effect(() => {
+  	productosService.records;
+	   untrack(() => {
+	      	if(productosStock.length > 0){ parseProductos() }
+	   });
   });
 
   async function loadStock(almacenID: number) {

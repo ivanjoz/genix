@@ -101,7 +101,7 @@ Representative mappings:
 - `2`: `int64` <-> `bigint`
 - `3`: `int32` <-> `int`
 - `9`: `[]byte` / complex blob
-- `11`: `[]string` <-> `set<text>`
+- `11`: `[]string` <-> `set<text>` (default; can be overridden with db tag flags)
 - `22`: `*int64` <-> nullable bigint
 
 ### 4.2 Conversion Paths

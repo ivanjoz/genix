@@ -394,7 +394,14 @@ err := db.Merge(
 
 - **Primitives**: `int8`, `int16`, `int32`, `int64`, `int`, `float32`, `float64`, `string`, `bool`
 - **Pointers**: pointer equivalents for nullable scalar values
-- **Slices / set-backed**: `[]string`, numeric slices, and pointer-to-slice variants
+- **Slices / set-backed by default**: `[]string`, numeric slices, and pointer-to-slice variants
+- **Table-field default freeze policy**:
+  - `db.Col[..., []T]` defaults to `frozen<set<...>>`
+  - `db.ColSlice[..., T]` defaults to `set<...>` (not frozen)
+- **Collection tag options**:
+  - `db:",set"` forces `set<...>`
+  - `db:",frozen"` forces `frozen<list<...>>`
+  - `db:",frozen,set"` (or `db:",set,frozen"`) forces `frozen<set<...>>`
 - **Complex structs/maps/slices**: persisted as CBOR `blob`
 
 ---

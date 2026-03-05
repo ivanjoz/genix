@@ -3,7 +3,6 @@ package db
 import (
 	"fmt"
 	"reflect"
-	"strings"
 	"sync"
 
 	"github.com/viant/xunsafe"
@@ -43,20 +42,19 @@ func getOrBuildStructFieldMetadata(recordType reflect.Type) *structFieldMetadata
 			columnType = GetColTypeByID(9)
 		}
 
-		columnName := ""
-		if dbTag := recordField.Tag.Get("db"); dbTag != "" {
-			columnName = strings.Split(dbTag, ",")[0]
-		}
+		tagConfig := parseDBTagConfig(recordField.Tag.Get("db"))
+		columnType = applyCollectionTagOptions(recordType.Name(), recordField.Name, columnType, tagConfig)
 
 		metadataByFieldName[recordField.Name] = columnInfo{
 			colInfo: colInfo{
-				Name:      columnName,
+				Name:      tagConfig.columnName,
 				FieldIdx:  fieldIndex,
 				FieldName: recordField.Name,
 				RefType:   recordField.Type,
 				Field:     unsafeField,
 			},
-			colType: columnType,
+			colType:                 columnType,
+			hasCollectionTagOptions: tagConfig.hasCollectionOptions(),
 		}
 	}
 

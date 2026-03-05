@@ -29,22 +29,23 @@ type colInfo struct {
 type columnInfo struct {
 	colInfo
 	colType
-	getValue              func(ptr unsafe.Pointer) any
-	getRawValue           func(ptr unsafe.Pointer) any
-	getStatementValue     func(ptr unsafe.Pointer) any
-	setValue              func(ptr unsafe.Pointer, v any)
-	decimalSize           int8
-	autoincrementRandSize int8
-	compositeBucketing    []int8
-	isWeek                bool
-	useInt32Packing       bool
+	hasCollectionTagOptions bool
+	getValue                func(ptr unsafe.Pointer) any
+	getRawValue             func(ptr unsafe.Pointer) any
+	getStatementValue       func(ptr unsafe.Pointer) any
+	setValue                func(ptr unsafe.Pointer, v any)
+	decimalSize             int8
+	autoincrementRandSize   int8
+	compositeBucketing      []int8
+	isWeek                  bool
+	useInt32Packing         bool
 }
 
 func (c *columnInfo) GetValue(ptr unsafe.Pointer) any {
 	if c.getValue != nil {
 		return c.getValue(ptr)
 	}
-	return makeScyllaValue(c.Field, ptr, c.Type)
+	return makeScyllaValue(c.Field, ptr, c.Type, c.ColType)
 }
 
 func (c *columnInfo) GetRawValue(ptr unsafe.Pointer) any {
@@ -199,7 +200,7 @@ func (c *columnInfo) compileFastAccessors() {
 		c.getStatementValue = c.getRawValue
 		// Keep direct SQL statement builders fast for []string-heavy write paths.
 		c.getValue = func(ptr unsafe.Pointer) any {
-			return makeStringSetLiteral(*(*[]string)(c.Field.Pointer(ptr)))
+			return makeStringCollectionLiteral(c.ColType, *(*[]string)(c.Field.Pointer(ptr)))
 		}
 		c.setValue = func(ptr unsafe.Pointer, v any) {
 			switch typedValue := v.(type) {
@@ -220,7 +221,7 @@ func (c *columnInfo) compileFastAccessors() {
 		c.getRawValue = func(ptr unsafe.Pointer) any { return *(*[]int64)(c.Field.Pointer(ptr)) }
 		c.getStatementValue = c.getRawValue
 		c.getValue = func(ptr unsafe.Pointer) any {
-			return makeSignedIntSetLiteral(*(*[]int64)(c.Field.Pointer(ptr)))
+			return makeSignedIntCollectionLiteral(c.ColType, *(*[]int64)(c.Field.Pointer(ptr)))
 		}
 		c.setValue = func(ptr unsafe.Pointer, v any) {
 			switch typedValue := v.(type) {
@@ -241,7 +242,7 @@ func (c *columnInfo) compileFastAccessors() {
 		c.getRawValue = func(ptr unsafe.Pointer) any { return *(*[]int32)(c.Field.Pointer(ptr)) }
 		c.getStatementValue = c.getRawValue
 		c.getValue = func(ptr unsafe.Pointer) any {
-			return makeSignedIntSetLiteral(*(*[]int32)(c.Field.Pointer(ptr)))
+			return makeSignedIntCollectionLiteral(c.ColType, *(*[]int32)(c.Field.Pointer(ptr)))
 		}
 		c.setValue = func(ptr unsafe.Pointer, v any) {
 			switch typedValue := v.(type) {
@@ -262,7 +263,7 @@ func (c *columnInfo) compileFastAccessors() {
 		c.getRawValue = func(ptr unsafe.Pointer) any { return *(*[]int16)(c.Field.Pointer(ptr)) }
 		c.getStatementValue = c.getRawValue
 		c.getValue = func(ptr unsafe.Pointer) any {
-			return makeSignedIntSetLiteral(*(*[]int16)(c.Field.Pointer(ptr)))
+			return makeSignedIntCollectionLiteral(c.ColType, *(*[]int16)(c.Field.Pointer(ptr)))
 		}
 		c.setValue = func(ptr unsafe.Pointer, v any) {
 			switch typedValue := v.(type) {
@@ -283,7 +284,7 @@ func (c *columnInfo) compileFastAccessors() {
 		c.getRawValue = func(ptr unsafe.Pointer) any { return *(*[]int8)(c.Field.Pointer(ptr)) }
 		c.getStatementValue = c.getRawValue
 		c.getValue = func(ptr unsafe.Pointer) any {
-			return makeSignedIntSetLiteral(*(*[]int8)(c.Field.Pointer(ptr)))
+			return makeSignedIntCollectionLiteral(c.ColType, *(*[]int8)(c.Field.Pointer(ptr)))
 		}
 		c.setValue = func(ptr unsafe.Pointer, v any) {
 			switch typedValue := v.(type) {
@@ -430,7 +431,7 @@ func (c *columnInfo) compileFastAccessors() {
 			if stringSlicePointer == nil {
 				return nil
 			}
-			return makeStringSetLiteral(*stringSlicePointer)
+			return makeStringCollectionLiteral(c.ColType, *stringSlicePointer)
 		}
 		c.setValue = func(ptr unsafe.Pointer, v any) {
 			switch typedValue := v.(type) {
@@ -463,7 +464,7 @@ func (c *columnInfo) compileFastAccessors() {
 			if int64SlicePointer == nil {
 				return nil
 			}
-			return makeSignedIntSetLiteral(*int64SlicePointer)
+			return makeSignedIntCollectionLiteral(c.ColType, *int64SlicePointer)
 		}
 		c.setValue = func(ptr unsafe.Pointer, v any) {
 			switch typedValue := v.(type) {
@@ -496,7 +497,7 @@ func (c *columnInfo) compileFastAccessors() {
 			if int32SlicePointer == nil {
 				return nil
 			}
-			return makeSignedIntSetLiteral(*int32SlicePointer)
+			return makeSignedIntCollectionLiteral(c.ColType, *int32SlicePointer)
 		}
 		c.setValue = func(ptr unsafe.Pointer, v any) {
 			switch typedValue := v.(type) {
@@ -529,7 +530,7 @@ func (c *columnInfo) compileFastAccessors() {
 			if int16SlicePointer == nil {
 				return nil
 			}
-			return makeSignedIntSetLiteral(*int16SlicePointer)
+			return makeSignedIntCollectionLiteral(c.ColType, *int16SlicePointer)
 		}
 		c.setValue = func(ptr unsafe.Pointer, v any) {
 			switch typedValue := v.(type) {
@@ -562,7 +563,7 @@ func (c *columnInfo) compileFastAccessors() {
 			if int8SlicePointer == nil {
 				return nil
 			}
-			return makeSignedIntSetLiteral(*int8SlicePointer)
+			return makeSignedIntCollectionLiteral(c.ColType, *int8SlicePointer)
 		}
 		c.setValue = func(ptr unsafe.Pointer, v any) {
 			switch typedValue := v.(type) {
@@ -618,29 +619,39 @@ func coerceBool(value any) bool {
 	return false
 }
 
-func makeStringSetLiteral(values []string) string {
+func makeStringCollectionLiteral(collectionColType string, values []string) string {
+	openBracket, closeBracket := getCollectionLiteralBrackets(collectionColType)
 	stringValuesQuoted := make([]string, len(values))
 	for valueIndex, currentValue := range values {
 		stringValuesQuoted[valueIndex] = "'" + currentValue + "'"
 	}
-	return "{" + strings.Join(stringValuesQuoted, ",") + "}"
+	return openBracket + strings.Join(stringValuesQuoted, ",") + closeBracket
 }
 
-func makeSignedIntSetLiteral[T ~int64 | ~int32 | ~int16 | ~int8](values []T) string {
+func makeSignedIntCollectionLiteral[T ~int64 | ~int32 | ~int16 | ~int8](collectionColType string, values []T) string {
+	openBracket, closeBracket := getCollectionLiteralBrackets(collectionColType)
 	if len(values) == 0 {
-		return "{}"
+		return openBracket + closeBracket
 	}
 	var statementBuilder strings.Builder
 	statementBuilder.Grow(len(values) * 4)
-	statementBuilder.WriteByte('{')
+	statementBuilder.WriteString(openBracket)
 	for valueIndex, currentValue := range values {
 		if valueIndex > 0 {
 			statementBuilder.WriteByte(',')
 		}
 		statementBuilder.WriteString(strconv.FormatInt(int64(currentValue), 10))
 	}
-	statementBuilder.WriteByte('}')
+	statementBuilder.WriteString(closeBracket)
 	return statementBuilder.String()
+}
+
+func getCollectionLiteralBrackets(collectionColType string) (string, string) {
+	normalizedCollectionType := strings.ToLower(unwrapFrozenCollectionType(collectionColType))
+	if strings.HasPrefix(normalizedCollectionType, "list<") {
+		return "[", "]"
+	}
+	return "{", "}"
 }
 
 func (c *columnInfo) GetType() *colType {

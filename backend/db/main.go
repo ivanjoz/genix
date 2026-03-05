@@ -567,6 +567,17 @@ type tableStructCacheMetaSetter interface {
 	setCacheVersionFieldIndex([]int)
 }
 
+func getCollectionFrozenDefaultForTableField(tableFieldType reflect.Type) (bool, bool) {
+	tableFieldTypeName := tableFieldType.String()
+	if strings.Contains(tableFieldTypeName, "ColSlice[") {
+		return true, false
+	}
+	if strings.Contains(tableFieldTypeName, "Col[") {
+		return true, true
+	}
+	return false, false
+}
+
 func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 	// Build/refetch immutable record metadata once; bind only query state per call.
 	structRefType := reflect.TypeOf(*new(E))
@@ -597,10 +608,7 @@ func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 		}
 
 		// Extract column name from db tag or convert field name to snake_case
-		columnName := ""
-		if tag := fieldType.Tag.Get("db"); tag != "" {
-			columnName = strings.Split(tag, ",")[0]
-		}
+		columnName := parseDBTagConfig(fieldType.Tag.Get("db")).columnName
 
 		if colBase, ok := recordMetadata.fieldMetadataByName[fieldType.Name]; ok {
 			if columnName == "" {
@@ -617,6 +625,13 @@ func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 			// Copy cached metadata to keep immutable cache entries untouched.
 			*colInfo = colBase
 			colInfo.Name = columnName
+			if colInfo.IsSlice && !colInfo.hasCollectionTagOptions {
+				shouldApplyFrozenDefault, shouldBeFrozen := getCollectionFrozenDefaultForTableField(fieldType.Type)
+				if shouldApplyFrozenDefault {
+					// Apply Col vs ColSlice default frozen behavior only when record tags did not force collection options.
+					colInfo.ColType = applyFrozenCollectionDefault(colInfo.ColType, shouldBeFrozen)
+				}
+			}
 
 			column1, ok1 := fieldAddr.Interface().(Coln)
 			if ok1 {

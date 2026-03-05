@@ -37,6 +37,7 @@ var colTypes = []colType{
 	{7, "float64", "double", false, false, false},
 	{8, "bool", "boolean", false, false, false},
 	{9, "[]byte", "blob", false, false, true},
+	// Slice defaults use set semantics; record-level db tags can override to list/set/frozen variants.
 	{11, "[]string", "set<text>", true, false, false},
 	{12, "[]int64", "set<bigint>", true, false, false},
 	{13, "[]int32", "set<int>", true, false, false},
@@ -828,7 +829,7 @@ func assingValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, value any) 
 	}
 }
 
-func makeScyllaValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8) any {
+func makeScyllaValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, colTypeName string) any {
 	if f == nil || ptr == nil {
 		return nil
 	}
@@ -858,10 +859,12 @@ func makeScyllaValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8) any {
 		for i, v := range values {
 			strValues[i] = "'" + v + "'"
 		}
-		return "{" + strings.Join(strValues, ",") + "}"
+		openBracket, closeBracket := getCollectionLiteralBrackets(colTypeName)
+		return openBracket + strings.Join(strValues, ",") + closeBracket
 	case 12, 13, 14, 15, 16, 17, 32, 33, 34, 35, 36, 37: // other slices/pointers to slices
 		concatenatedValues := Concatx(",", reflectToSlicePtr(f, ptr))
-		return "{" + concatenatedValues + "}"
+		openBracket, closeBracket := getCollectionLiteralBrackets(colTypeName)
+		return openBracket + concatenatedValues + closeBracket
 	case 9: // []byte / blob (could be complex type)
 		// Keep literal blob generation consistent with statement-value encoding for unsigned fields.
 		if encodedBlob, encoded, err := encodeUnsignedValueToBlob(f.Interface(ptr), f.Type); encoded {
