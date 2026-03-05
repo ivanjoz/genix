@@ -465,6 +465,11 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
           </td>
         </tr>
       {:else}
+        <!-- Spacer row to keep selected outline visible under sticky header -->
+        <tr class="vtable-edge-spacer" aria-hidden="true">
+          <td colspan={processedColumns.flatColumns.length}></td>
+        </tr>
+
         {#each virtualItems as row, i (`${row.index}-${dataVersion}`)}
           {@const firstItemStart = virtualItems[0]?.start || 0}
           {@const isFinal = i === virtualItems.length - 1}
@@ -564,6 +569,11 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
           {/if}
           {/if}
         {/each}
+
+        <!-- Spacer row to keep selected outline visible at table bottom -->
+        <tr class="vtable-edge-spacer" aria-hidden="true">
+          <td colspan={processedColumns.flatColumns.length}></td>
+        </tr>
       {/if}
     </tbody>
   </table>
@@ -692,6 +702,13 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     border-radius: 5px;
     position: relative;
     z-index: 12;
+  }
+
+  .vtable-edge-spacer td {
+    height: 2px;
+    padding: 0;
+    border: none !important;
+    background: transparent;
   }
 
   .vtable-row > td:not(:last-of-type) {

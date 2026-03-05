@@ -91,6 +91,11 @@ func TestApplyCollectionTagOptions(t *testing.T) {
 	// Confirm tag options remap defaults to set/list/frozen variants deterministically.
 	baseType := GetColTypeByName("[]int32", "")
 
+	tagList := parseDBTagConfig(",list")
+	if got := applyCollectionTagOptions("SaleOrder", "DetailPrices", baseType, tagList).ColType; got != "list<int>" {
+		t.Fatalf("expected list<int> got=%s", got)
+	}
+
 	tagSet := parseDBTagConfig(",set")
 	if got := applyCollectionTagOptions("SaleOrder", "DetailPrices", baseType, tagSet).ColType; got != "set<int>" {
 		t.Fatalf("expected set<int> got=%s", got)
@@ -105,6 +110,20 @@ func TestApplyCollectionTagOptions(t *testing.T) {
 	if got := applyCollectionTagOptions("SaleOrder", "DetailPrices", baseType, tagFrozenSet).ColType; got != "frozen<set<int>>" {
 		t.Fatalf("expected frozen<set<int>> got=%s", got)
 	}
+}
+
+func TestApplyCollectionTagOptionsPanicsOnConflictingKinds(t *testing.T) {
+	// Protect schema compilation from ambiguous collection kind tags.
+	defer func() {
+		panicValue := recover()
+		if panicValue == nil {
+			t.Fatalf("expected panic when both list and set options are used")
+		}
+	}()
+
+	baseType := GetColTypeByName("[]int32", "")
+	conflictingTag := parseDBTagConfig(",list,set")
+	_ = applyCollectionTagOptions("SaleOrder", "DetailPrices", baseType, conflictingTag)
 }
 
 func TestCollectionLiteralBrackets(t *testing.T) {

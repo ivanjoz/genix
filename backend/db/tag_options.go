@@ -7,11 +7,13 @@ import (
 
 type dbTagConfig struct {
 	columnName string
-	options    map[string]struct{}
+	isFrozen   bool
+	isTypeList bool
+	isTypeSet  bool
 }
 
 func parseDBTagConfig(dbTagRaw string) dbTagConfig {
-	tagConfig := dbTagConfig{options: map[string]struct{}{}}
+	tagConfig := dbTagConfig{}
 	if dbTagRaw == "" {
 		return tagConfig
 	}
@@ -25,19 +27,23 @@ func parseDBTagConfig(dbTagRaw string) dbTagConfig {
 		if tagOption == "" {
 			continue
 		}
-		tagConfig.options[tagOption] = struct{}{}
+
+		// Keep collection tags as strongly typed booleans to avoid magic-string checks.
+		switch tagOption {
+		case "frozen":
+			tagConfig.isFrozen = true
+		case "list":
+			tagConfig.isTypeList = true
+		case "set":
+			tagConfig.isTypeSet = true
+		}
 	}
 
 	return tagConfig
 }
 
-func (tagConfig dbTagConfig) hasOption(optionName string) bool {
-	_, hasOption := tagConfig.options[strings.ToLower(optionName)]
-	return hasOption
-}
-
 func (tagConfig dbTagConfig) hasCollectionOptions() bool {
-	return tagConfig.hasOption("set") || tagConfig.hasOption("frozen")
+	return tagConfig.isTypeList || tagConfig.isTypeSet || tagConfig.isFrozen
 }
 
 func applyCollectionTagOptions(recordTypeName string, recordFieldName string, inferredColType colType, tagConfig dbTagConfig) colType {
@@ -50,23 +56,27 @@ func applyCollectionTagOptions(recordTypeName string, recordFieldName string, in
 			recordTypeName, recordFieldName, inferredColType.FieldType))
 	}
 
-	collectionColType := normalizeCollectionColType(inferredColType.ColType, tagConfig.hasOption("set"), tagConfig.hasOption("frozen"))
-	inferredColType.ColType = collectionColType
-	return inferredColType
-}
+	// Reject ambiguous collection kind options so tag behavior is explicit and deterministic.
+	if tagConfig.isTypeList && tagConfig.isTypeSet {
+		panic(fmt.Sprintf(`Record "%v": field "%v" cannot declare both "list" and "set" db options.`,
+			recordTypeName, recordFieldName))
+	}
 
-func normalizeCollectionColType(baseColType string, useSet bool, useFrozen bool) string {
-	innerCollectionType := unwrapFrozenCollectionType(baseColType)
-	if useSet {
+	innerCollectionType := unwrapFrozenCollectionType(inferredColType.ColType)
+	if tagConfig.isTypeSet {
 		innerCollectionType = swapCollectionKind(innerCollectionType, "set")
 	} else {
 		innerCollectionType = swapCollectionKind(innerCollectionType, "list")
 	}
 
-	if useFrozen {
-		return "frozen<" + innerCollectionType + ">"
+	if tagConfig.isFrozen {
+		inferredColType.ColType = "frozen<" + innerCollectionType + ">"
+		return inferredColType
 	}
-	return innerCollectionType
+
+	collectionColType := innerCollectionType
+	inferredColType.ColType = collectionColType
+	return inferredColType
 }
 
 func applyFrozenCollectionDefault(baseColType string, shouldBeFrozen bool) string {
