@@ -1,8 +1,8 @@
 <script lang="ts">
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 import { generatePaletteStyles } from '$ecommerce/renderer/token-resolver';
-import { editorStore } from '$stores/editor.svelte';
-import { liveCSS } from '$stores/live-css.svelte';
+import { editorStore } from '$ecommerce/stores/editor.svelte';
+import { liveCSS } from '$ecommerce/stores/live-css.svelte';
   import SectionEditorLayer from './SectionEditorLayer.svelte';
   import BuilderSectionRender from './BuilderSectionRender.svelte';
 
@@ -16,8 +16,8 @@ import type { SectionData } from '$ecommerce/renderer/section-types';
   }
 
   let {
-    elements = [],
-    values = {},
+    elements = $bindable([]),
+    values = $bindable({}),
     palette,
     onUpdate
   }: Props = $props();
@@ -33,7 +33,7 @@ import type { SectionData } from '$ecommerce/renderer/section-types';
   $effect(() => {
     // Track changes to any CSS property in any section
     // We stringify the CSS objects to ensure the effect re-runs on any deep change
-    const cssData = JSON.stringify(editorStore.sections.map(s => s.css));
+    const cssData = JSON.stringify(editorStore.sections.map((s: SectionData) => s.css));
     liveCSS.update();
   });
 
@@ -103,6 +103,8 @@ import type { SectionData } from '$ecommerce/renderer/section-types';
 <div class="ecommerce-builder">
   <div 
     class="builder-canvas" 
+    role="region"
+    aria-label="Editor Canvas"
     class:is-dragging-over={isDraggingOver}
     ondrop={handleDrop}
     ondragenter={(e) => {

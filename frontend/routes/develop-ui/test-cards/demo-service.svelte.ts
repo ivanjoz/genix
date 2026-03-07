@@ -12,6 +12,5 @@ export class DemoService extends GetHandler {
 
   constructor(){
     super()
-    this.Test()
   }
 }

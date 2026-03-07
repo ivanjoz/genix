@@ -4,15 +4,17 @@ export const recreateObject = (obj: any, keysMap: Map<string,string|number>): an
   for(const [key, value] of Object.entries(obj)){
     if(keysMap.has(key)){
       const newKey = keysMap.get(key)
-      if(newKey === key){ continue }
-      obj[newKey] = value
+      if(newKey === undefined || newKey === key){ continue }
+      obj[newKey as string | number] = value
       delete obj[key]
     }
   }
 
   for(let i = 0; i < obj._.length; i+=2){
     const key = keysMap.get(obj._[i])
-    obj[key] = recreateObject(obj._[i+1], keysMap)
+    if(key !== undefined){
+      obj[key as string | number] = recreateObject(obj._[i+1], keysMap)
+    }
   }
   delete obj._
   return obj

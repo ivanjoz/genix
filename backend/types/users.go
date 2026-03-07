@@ -52,23 +52,25 @@ type EmpresaPub struct {
 
 type Usuario struct { // DynamoDB + ScyllaDB
 	db.TableStruct[UsuarioTable, Usuario]
-	ID           int32   `json:"id" db:"id,pk"`
-	EmpresaID    int32   `json:"empresaID,omitempty" db:"empresa_id,pk"`
-	Usuario      string  `json:"usuario" db:"usuario"`
-	Apellidos    string  `json:"apellidos,omitempty" db:"apellidos"`
-	Nombres      string  `json:"nombres,omitempty" db:"nombres"`
-	PerfilesIDs  []int32 `json:"perfilesIDs,omitempty" db:"perfiles_ids"`
-	RolesIDs     []int32 `json:"rolesIDs,omitempty" db:"roles_ids"`
-	Email        string  `json:"email,omitempty" db:"email"`
-	Cargo        string  `json:"cargo,omitempty" db:"cargo"`
-	DocumentoNro string  `json:"documentoNro,omitempty" db:"documento_nro"`
-	PasswordHash string  `json:"passwordHash,omitempty"`
-	Password     string  `json:"password1,omitempty"`
-	Created      int64   `json:"created,omitempty" db:"created"`
-	CreatedBy    int32   `json:"createdBy,omitempty" db:"created_by"`
-	Updated      int64   `json:"upd,omitempty" db:"updated"`
-	UpdatedBy    int32   `json:"updatedBy,omitempty" db:"updated_by"`
-	Status       int8    `json:"ss,omitempty" db:"status"`
+	ID           int32   `json:",omitempty" db:"id,pk"`
+	EmpresaID    int32   `json:",omitempty" db:"empresa_id,pk"`
+	Usuario      string  `json:",omitempty" db:"usuario"`
+	Apellidos    string  `json:",omitempty" db:"apellidos"`
+	Nombres      string  `json:",omitempty" db:"nombres"`
+	PerfilesIDs  []int32 `json:",omitempty" db:"perfiles_ids"`
+	RolesIDs     []int32 `json:",omitempty" db:"roles_ids"`
+	Email        string  `json:",omitempty" db:"email"`
+	Cargo        string  `json:",omitempty" db:"cargo"`
+	DocumentoNro string  `json:",omitempty" db:"documento_nro"`
+	PasswordHash string  `json:",omitempty"`
+	Password     string  `json:",omitempty"`
+	Created      int64   `json:",omitempty" db:"created"`
+	CreatedBy    int32   `json:",omitempty" db:"created_by"`
+	Updated      int64   `json:",omitempty" db:"updated"`
+	UpdatedBy    int32   `json:",omitempty" db:"updated_by"`
+	Status       int8    `json:",omitempty" db:"status"`
+	// CacheVersion is returned in delta-by-IDs endpoints to let clients track per-record cache freshness.
+	CacheVersion uint8 `json:",omitempty"`
 }
 
 type UsuarioTable struct {
@@ -92,10 +94,11 @@ type UsuarioTable struct {
 
 func (e UsuarioTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:         "usuarios",
-		Partition:    e.EmpresaID,
-		UseSequences: true,
-		Keys:         []db.Coln{e.ID.Autoincrement(0)},
+		Name:             "usuarios",
+		Partition:        e.EmpresaID,
+		UseSequences:     true,
+		SaveCacheVersion: true,
+		Keys:             []db.Coln{e.ID.Autoincrement(0)},
 	}
 }
 

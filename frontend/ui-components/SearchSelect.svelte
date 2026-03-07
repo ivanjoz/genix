@@ -181,6 +181,7 @@ import { Core } from '$core/store.svelte';
     const text = String(target.value || "").toLowerCase();
 
     throttle(() => {
+      if(!inputRef){ return }
       words = String(inputRef.value).toLowerCase().split(" ");
       filteredOptions = filter(text);
       arrowSelected = -1;
@@ -299,13 +300,13 @@ import { Core } from '$core/store.svelte';
         onblur={(ev) => {
           ev.stopPropagation();
           console.log("avoidBlur 2", avoidBlur)
-          if(avoidBlur){
+          if (options.length === 1) {
             avoidBlur = false
-            inputRef.focus()
+            inputRef?.focus()
             return
           }
 
-          let inputValue = String(inputRef.value || "").toLowerCase();
+          let inputValue = String(inputRef?.value || "").toLowerCase();
           const selectedItem = options.find((x) => {
             const itemName = String(x[keyName] || "");
             return itemName.toLowerCase() === inputValue;

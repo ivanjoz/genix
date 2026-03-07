@@ -13,7 +13,7 @@ export class UsuariosService extends GetHandler {
 
   handler(response: IUsuario[]) {
     this.usuarios = response || []
-    this.usuariosMap = new Map(this.usuarios.map(x => [x.id, x]))
+    this.usuariosMap = new Map(this.usuarios.map((usuarioRecord) => [usuarioRecord.ID, usuarioRecord]))
   }
 
   constructor() {
@@ -22,17 +22,17 @@ export class UsuariosService extends GetHandler {
   }
 
   updateUsuario(usuario: IUsuario) {
-    const existing = this.usuarios.find(x => x.id === usuario.id)
+    const existing = this.usuarios.find((usuarioRecord) => usuarioRecord.ID === usuario.ID)
     if (existing) {
       Object.assign(existing, usuario)
     } else {
       this.usuarios.unshift(usuario)
     }
-    this.usuariosMap.set(usuario.id, usuario)
+    this.usuariosMap.set(usuario.ID, usuario)
   }
 
   removeUsuario(id: number) {
-    this.usuarios = this.usuarios.filter(x => x.id !== id)
+    this.usuarios = this.usuarios.filter(x => x.ID !== id)
     this.usuariosMap.delete(id)
   }
 }

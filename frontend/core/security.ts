@@ -220,8 +220,9 @@ export class AccessHelper {
     const userInfoStr = await decrypt(login.UserInfo, cipherKey as string)
     const userInfo = JSON.parse(userInfoStr) as IUsuario
 
-    const rolesIDsParsed = (userInfo.rolesIDs||[]).map(x => x * 10 + 8)
-    const accesosIDs = (userInfo.accesosIDs||[]).concat(rolesIDsParsed)
+    // Normalize accesos from the updated capitalized user payload shape.
+    const rolesIDsParsed = (userInfo.RolesIDs || []).map((roleID) => roleID * 10 + 8)
+    const accesosIDs = (userInfo.AccesosIDs || []).concat(rolesIDsParsed)
 
     const UnixTime = Math.floor(Date.now()/1000)
     LocalStorage.setItem(Env.appId + "TokenCreated", String(UnixTime))

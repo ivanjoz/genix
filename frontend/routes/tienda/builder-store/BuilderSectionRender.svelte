@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { SectionData } from '$ecommerce/renderer/section-types';
 import { SectionRegistry } from '$ecommerce/templates/registry';
-import { editorStore } from '$stores/editor.svelte';
+import { editorStore } from '$ecommerce/stores/editor.svelte';
 
   interface Props {
     section: SectionData;

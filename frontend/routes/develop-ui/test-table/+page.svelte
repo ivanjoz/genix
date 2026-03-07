@@ -11,6 +11,8 @@ import { type ITableColumn } from '$components/vTable/types';
     apellidos: string
     numero: number
     _updated?: boolean
+    edadChanged?: number
+    selector?: string
   }
 
   let data = $state<TestRecord[]>(makeData())
@@ -78,7 +80,7 @@ import { type ITableColumn } from '$components/vTable/types';
           },
           css: 'text-center',
           onCellEdit(e, value) {
-            e.edadChanged = parseInt(value as number)
+            e.edadChanged = parseInt(String(value))
           },
         },
       ],
@@ -150,7 +152,7 @@ import { type ITableColumn } from '$components/vTable/types';
   }
 </script>
 
-<Page>
+<Page title="Test Table">
   <div class="header-section">
     <h2>VTable Component - Snippet-based cellRenderer Demo</h2>
     <p class="text-sm text-gray-600 mt-2">

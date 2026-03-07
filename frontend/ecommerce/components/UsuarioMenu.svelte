@@ -63,11 +63,11 @@ import { accessHelper } from '$core/security';
       {#if selectedTab === 1}
         <div class="fs18 ff-bold mb-12">Detalles de la Cuenta</div>
         <div class="flex flex-col gap-6">
-          <div class="flex flex-col gap-1">
+          <div class="flex flex-col">
             <span class="text-gray-500 text-sm">Nombre Completo</span>
-            <span class="ff-semibold">{userInfo?.Nombre || userInfo?.Usuario || "Usuario Invitado"}</span>
+            <span class="ff-semibold">{(userInfo?.Nombres ? (userInfo.Nombres + " " + (userInfo.Apellidos || "")) : userInfo?.Usuario) || "Usuario Invitado"}</span>
           </div>
-          <div class="flex flex-col gap-1">
+          <div class="flex flex-col">
             <span class="text-gray-500 text-sm">Correo Electrónico</span>
             <span class="ff-semibold">{userInfo?.Email || "No especificado"}</span>
           </div>

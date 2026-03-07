@@ -1,6 +1,6 @@
 <script lang="ts">
 import SearchSelect from '$components/SearchSelect.svelte';
-import { useCiudadesAPI } from '$services/services/ciudades.svelte';
+import { useCiudadesAPI, type ICiudad } from '$services/services/ciudades.svelte';
 
   export interface ICiudades {
     css: string
@@ -13,51 +13,49 @@ import { useCiudadesAPI } from '$services/services/ciudades.svelte';
     css, saveOn, save, onChange
   }: ICiudades = $props();
 
+  // svelte-ignore state_referenced_locally
   let form = $state({
-    departamentoID: saveOn.departamentoID || "",
-    provinciaID: saveOn.provinciaID || "",
-    distritoID: saveOn.distritoID || ""
+    departamentoID: (saveOn?.departamentoID || "") as string,
+    provinciaID: (saveOn?.provinciaID || "") as string,
+    distritoID: (saveOn?.distritoID || "") as string
   })
 
   const ciudades = useCiudadesAPI()
   let provincias = $state([] as ICiudad[])
   let distritos = $state([] as ICiudad[])
 
-  $effect(() => {
-    if(!saveOn || !save || !ciudades.ciudadesMap){ return }
+$effect(() => {
+  if(!saveOn || !save || !ciudades.ciudadesMap){ return }
 
-    const ciudad = ciudades.ciudadesMap.get(saveOn[save] as string)
+  const ciudad = ciudades.ciudadesMap.get(saveOn[save] as string)
 
-    if(ciudad){
-      if(ciudad.ID.length === 2){
-        form.departamentoID = ciudad.ID
-      } else if(ciudad.ID.length === 4){
-        form.departamentoID = ciudad.PadreID
-        form.provinciaID = ciudad.ID
-      } else {
-        const provincia = ciudades.ciudadesMap.get(ciudad.PadreID)
+  if(ciudad){
+    if(ciudad.ID.length === 2){
+      form.departamentoID = ciudad.ID
+    } else if(ciudad.ID.length === 4){
+      form.departamentoID = ciudad.PadreID
+      form.provinciaID = ciudad.ID
+    } else {
+      const provincia = ciudades.ciudadesMap.get(ciudad.PadreID)
+      if(provincia){
         form.departamentoID = provincia.PadreID
         form.provinciaID = ciudad.PadreID
-        form.distritoID = ciudad.ID
       }
-      if(form.departamentoID){
-        provincias = ciudades.ciudadHijosMap.get(form.departamentoID)
-      } else {
-        provincias = []
-      }
-      if(form.provinciaID){
-        distritos = ciudades.ciudadHijosMap.get(form.provinciaID)
-      } else {
-        distritos = []
-      }
-    } else {
-      provincias = []
-      distritos = []
-      form.provinciaID = ""
-      form.distritoID = ""
-      form.provinciaID = ""
     }
-  })
+  }
+
+  if(form.departamentoID){
+    provincias = ciudades.ciudadHijosMap.get(form.departamentoID) || []
+  } else {
+    provincias = []
+  }
+
+  if(form.provinciaID){
+    distritos = ciudades.ciudadHijosMap.get(form.provinciaID) || []
+  } else {
+    distritos = []
+  }
+})
 
   const doSave = () => {
     if(!saveOn || !save){ return }
@@ -73,8 +71,8 @@ import { useCiudadesAPI } from '$services/services/ciudades.svelte';
   options={ciudades.departamentos}
   onChange={e => {
     console.log("departamento::", e)
-    form.distritoID = null
-    form.provinciaID = null
+    form.distritoID = ""
+    form.provinciaID = ""
     provincias = ciudades.ciudadHijosMap.get(e?.ID) || []
     distritos = []
     doSave()
@@ -84,7 +82,7 @@ import { useCiudadesAPI } from '$services/services/ciudades.svelte';
   label="Provincia" keyId="ID" keyName="Nombre" required={true}
   options={provincias}
   onChange={e => {
-    form.distritoID = null
+    form.distritoID = ""
     distritos = ciudades.ciudadHijosMap.get(e?.ID) || []
     doSave()
   }}

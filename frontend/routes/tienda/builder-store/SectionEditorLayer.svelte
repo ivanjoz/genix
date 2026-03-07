@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
-import { editorStore } from '$stores/editor.svelte';
+import { editorStore } from '$ecommerce/stores/editor.svelte';
   import EditorTab from './components/EditorTab.svelte';
   import TemplatesTab from './components/TemplatesTab.svelte';
   import AIChatTab from './components/AIChatTab.svelte';

@@ -193,6 +193,29 @@ func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &records)
 }
 
+func GetUsuariosByIDs(req *core.HandlerArgs) core.HandlerResponse {
+	// Parse IDs + cache versions sent by the client to resolve only changed records.
+	cachedIDs, cacheExtractError := core.ExtractCacheVersionValues(req)
+	if cacheExtractError != nil {
+		return req.MakeErr(cacheExtractError)
+	}
+
+	if len(cachedIDs) == 0 {
+		return req.MakeErr("No se enviaron ids a buscar.")
+	}
+
+	core.Log("buscando usuarios ids::", len(cachedIDs), "|", cachedIDs)
+
+	usuarios := []s.Usuario{}
+	// QueryCachedIDs checks cache version and only fetches stale/missing records from ScyllaDB.
+	queryError := db.QueryCachedIDs(&usuarios, cachedIDs)
+	if queryError != nil {
+		return req.MakeErr("Error al obtener los usuarios.", queryError)
+	}
+
+	return core.MakeResponse(req, &usuarios)
+}
+
 func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	body := s.Usuario{}
 	err := json.Unmarshal([]byte(*req.Body), &body)

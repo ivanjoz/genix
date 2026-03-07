@@ -243,7 +243,5 @@ import Popover2 from '$components/popover2/Popover2.svelte';
     border-radius: 7px;
     box-shadow: rgba(0, 0, 0, 0.24) 0px 3px 8px;
   }
-  ._5 {
 
-  }
 </style>

@@ -26,7 +26,7 @@ import type { IUsuario } from '$core/types/common';
   })
 
   const saveUsuario = async () => {
-    if(userInfo.password1 && userInfo.password1 !== userInfo.password2){
+    if(userInfo.Password && userInfo.Password !== userInfo.Password2){
       Notify.failure("Los password no coinciden.")
     }
 
@@ -67,28 +67,28 @@ import type { IUsuario } from '$core/types/common';
   </div>
   <div class="grid grid-cols-24 w-full gap-10">
     <Input label="Nombres" css="col-span-12"
-      saveOn={userInfo} save="nombres"
+      saveOn={userInfo} save="Nombres"
     />
     <Input label="Apellidos" css="col-span-12"
-      saveOn={userInfo} save="apellidos"
+      saveOn={userInfo} save="Apellidos"
     />
     <Input label="Email" css="col-span-12"
-      saveOn={userInfo} save="email"
+      saveOn={userInfo} save="Email"
     />
     <Input label="Cargo" css="col-span-12"
-      saveOn={userInfo} save="cargo"
+      saveOn={userInfo} save="Cargo"
     />
     <Input label="Nº Documento" css="col-span-12"
-      saveOn={userInfo} save="documentoNro"
+      saveOn={userInfo} save="DocumentoNro"
     />
     <div class="col-span-24">
       <div class="ff-bold mb-[-4px] mt-2">Cambiar Password</div>
     </div>
     <Input label="Password" css="col-span-12"
-      saveOn={userInfo} save="password1" type="password"
+      saveOn={userInfo} save="Password" type="password"
     />
     <Input label="Repetir Password" css="col-span-12"
-      saveOn={userInfo} save="password2" type="password"
+      saveOn={userInfo} save="Password2" type="password"
     />
   </div>
 {/if}

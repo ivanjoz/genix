@@ -1,5 +1,5 @@
 <script lang="ts">
-import ImageUploader from '$components/ImageUploader.svelte';
+import ImageUploader, { type ImageSource } from '$components/ImageUploader.svelte';
 import Input from '$components/Input.svelte';
 import Modal from '$components/Modal.svelte';
 import { closeAllModals, closeModal, imagesToUpload, openModal } from '$core/store.svelte';

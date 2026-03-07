@@ -3,7 +3,7 @@
 import Portal from '$components/popover2/Portal.svelte';
 import { parseSVG } from '$libs/helpers';
 import angleSvg from '$domain/assets/angle.svg';
-import { calculatePosition, type Position } from './positioning';
+import { calculatePosition, type Placement, type PositionResult } from './positioning';
 
 	interface Props {
 		/** The reference element to position relative to */
@@ -40,7 +40,7 @@ import { calculatePosition, type Position } from './positioning';
 
 	let floatingElement: HTMLElement | null = $state(null);
 	// svelte-ignore state_referenced_locally
-	let position = $state({ top: 0, left: 0, placement: placement as Placement });
+	let position = $state<PositionResult>({ top: 0, left: 0, placement: (placement || 'bottom') as Placement });
 
 	// Update position when open changes or elements are ready
 	$effect(() => {

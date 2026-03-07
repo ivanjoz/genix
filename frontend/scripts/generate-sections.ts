@@ -6,8 +6,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Paths relative to the project root or script location
-const SECTIONS_ROOT = path.resolve(__dirname, '../pkg-store/sections/templates');
-const OUTPUT_FILE = path.resolve(__dirname, '../pkg-store/sections/registry.ts');
+const SECTIONS_ROOT = path.resolve(__dirname, '../ecommerce/templates');
+const OUTPUT_FILE = path.resolve(__dirname, '../ecommerce/templates/registry.ts');
 
 function generateRegistry() {
   console.log('🚀 Generating Section Registry...');
@@ -56,11 +56,11 @@ function generateRegistry() {
  */
 ${imports}
 
-import type { ComponentType } from 'svelte';
+import type { Component } from 'svelte';
 import type { SectionSchema } from '../renderer/section-types';
 
 export interface RegistryEntry {
-  component: ComponentType;
+  component: Component<any>;
   schema: SectionSchema;
 }
 

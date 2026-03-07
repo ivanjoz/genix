@@ -36,6 +36,7 @@ export interface httpProps {
     min: number, /* minutos del caché */
     ver: number  /* versión del caché */
   },
+  contentLength?: number
 }
 
 export const buildHeaders = (contentType?: string) => {
@@ -148,7 +149,7 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
     sendServiceMessage(24, { routes: props.refreshRoutes })
 	}
 	const status: IHttpStatus = { code: 200, message: "" }
-  const requestFetchID = browser ? (fetchEvent(0) as number) : 0
+  const requestFetchID = browser ? (fetchEvent(0, 0) as number) : 0
 
   return new Promise((resolve, reject) => {
     console.log(`Fetching ${method} : ` + props.route)
@@ -231,7 +232,7 @@ const apiRoute = Env.makeRoute(props.route)
 let progressLastTime = 0
 let progressTimeStart = 0
 let progressBytes = 0
-let fetchOnCourse = 0
+let fetchOnCourseCount = 0
 
 export const setFetchProgress = (bytesLen: number) => {
   const nowTime = Date.now()
@@ -259,12 +260,14 @@ export const setFetchProgress = (bytesLen: number) => {
   const loadingMsgDiv = document.getElementById("NotiflixLoadingMessage")
   if(loadingMsgDiv){
     let nextElement = loadingMsgDiv.nextElementSibling
-    if(!nextElement){
+    if(!nextElement && loadingMsgDiv.parentNode){
       nextElement = document.createElement("div")
       nextElement.setAttribute("id","NotifyProgressMessage")
       loadingMsgDiv.parentNode.insertBefore(nextElement, loadingMsgDiv.nextSibling)
     }
-    nextElement.innerHTML = msg
+    if(nextElement){
+      nextElement.innerHTML = msg
+    }
   }
 }
 
@@ -279,19 +282,19 @@ const parseResponseAsStream = async (fetchResponse: Response, status: any, props
     status.message = fetchResponse.statusText
   }
 
-  if (fetchResponse.status === 200) {
+  if (fetchResponse.status === 200 && fetchResponse.body) {
     const reader = fetchResponse.body.getReader()
     const stream = new ReadableStream({
       start(controller) {
-        fetchOnCourse++
+        fetchOnCourseCount++
         return pump()
-        function pump() {
+        function pump(): Promise<void> {
           return reader.read().then(({ done, value }) => {
             // When no more data needs to be consumed, close the stream
             if (done) {
               controller.close()
-              fetchOnCourse--
-              if(fetchOnCourse <= 0){ progressBytes = 0 }
+              fetchOnCourseCount--
+              if(fetchOnCourseCount <= 0){ progressBytes = 0 }
               return
             }
             // console.log("chunk obtenido:: ", value.length)
@@ -312,7 +315,6 @@ const parseResponseAsStream = async (fetchResponse: Response, status: any, props
     document.dispatchEvent(new Event('userLogout'))
     console.warn('Error 401, la sesión ha expirado.')
     Notify.failure('La sesión ha expirado, vuelva a iniciar sesión.')
-    Notify.remove()
   }
   else if (fetchResponse.status !== 200) {
     console.log(fetchResponse)

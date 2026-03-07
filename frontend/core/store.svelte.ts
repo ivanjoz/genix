@@ -171,9 +171,9 @@ if(typeof window !== 'undefined'){
   window.addEventListener('popstate', () => {
     navFlags = navFlags.filter(x => document.getElementById(x.elementId))
 
-    let flag: NavFlag
+    let flag: NavFlag | undefined = undefined;
     for(const e of navFlags){
-      if(!flag || e.updated > flag.updated){
+      if(!flag || (e.updated ?? 0) > (flag.updated ?? 0)){
         flag = e
       }
     }

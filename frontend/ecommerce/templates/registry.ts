@@ -6,11 +6,11 @@ import FeatureListSimple, { schema as Schema0 } from './features/FeatureListSimp
 import ProductGridSimple, { schema as Schema1 } from './products/ProductGridSimple.svelte';
 import HeroStandard, { schema as Schema2 } from './hero/HeroStandard.svelte';
 
-import type { ComponentType } from 'svelte';
+import type { Component } from 'svelte';
 import type { SectionSchema } from '../renderer/section-types';
 
 export interface RegistryEntry {
-  component: ComponentType;
+  component: Component<any>;
   schema: SectionSchema;
 }
 

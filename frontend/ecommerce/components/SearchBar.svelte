@@ -91,9 +91,6 @@
   ._1, ._2 {
     height: 36px;
   }
-  ._1 > i {
-    color: #6d698d;
-  }
   ._2 {
     box-shadow:#20202329 0px 1px 3px, #20202329 0px 1px 2px;
     line-height: 1;

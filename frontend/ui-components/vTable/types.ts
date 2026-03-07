@@ -44,6 +44,7 @@ export interface ITableColumn<T> {
   // Renders extra visual content before the main cell output without replacing it.
   renderPrefix?: (e: T, idx: number) => string | ElementAST | ElementAST[] | false
   render?: (e: T, idx: number) => string | ElementAST | ElementAST[]
+  renderHTML?: (e: T, idx: number) => string
   _colspan?: number
 	highlight?: boolean
 	/* Buttons */

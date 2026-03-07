@@ -1,5 +1,5 @@
 <script lang="ts">
-import { editorStore } from '$stores/editor.svelte';
+import { editorStore } from '$ecommerce/stores/editor.svelte';
 import type { StandardContent } from '$ecommerce/renderer/section-types';
 
   const section = $derived(editorStore.selectedSection);
@@ -36,7 +36,7 @@ import type { StandardContent } from '$ecommerce/renderer/section-types';
 
   function removeTextLine(index: number) {
     if (!section) return;
-    const lines = (section.content.textLines || []).filter((_, i) => i !== index);
+    const lines = (section.content.textLines || []).filter((_: any, i: number) => i !== index);
     editorStore.updateContent(section.id, 'textLines', lines);
   }
 </script>
@@ -54,10 +54,11 @@ import type { StandardContent } from '$ecommerce/renderer/section-types';
         <h4 class="group-title">Content</h4>
         <div class="fields-list">
           {#each schema.content as fieldKey}
+            {@const field = fieldKey as string}
             <div class="field-item">
               <label class="field-label" for={`content-${fieldKey}`}>{fieldKey}</label>
               
-              {#if fieldKey === 'textLines'}
+              {#if field === 'textLines'}
                 <div class="text-lines-editor">
                   {#each section.content.textLines || [] as line, i}
                     <div class="text-line-item">
@@ -72,7 +73,7 @@ import type { StandardContent } from '$ecommerce/renderer/section-types';
                   {/each}
                   <button class="add-btn" onclick={addTextLine}>+ Add Line</button>
                 </div>
-              {:else if fieldKey === 'description' || fieldKey.includes('text')}
+              {:else if field === 'description' || field.includes('text')}
                 <textarea
                   id={`content-${fieldKey}`}
                   class="field-input textarea"
@@ -80,7 +81,7 @@ import type { StandardContent } from '$ecommerce/renderer/section-types';
                   oninput={(e) => handleContentInput(fieldKey, e.currentTarget.value)}
                   rows="3"
                 ></textarea>
-              {:else if fieldKey.includes('IDs')}
+              {:else if field.includes('IDs')}
                  <input
                   id={`content-${fieldKey}`}
                   type="text"

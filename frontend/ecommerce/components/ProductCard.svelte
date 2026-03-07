@@ -168,7 +168,7 @@
 		</div>
 			{#if !hideCloseButton}
 				<!-- Keep explicit remove action optional so search-card usage can hide destructive controls. -->
-				<button class="remove-button" onclick={removeProductFromSelection}>
+				<button class="remove-button" onclick={removeProductFromSelection} aria-label="Remover">
 					<i class="icon-cancel"></i>
 				</button>
 			{/if}
@@ -190,14 +190,14 @@
 					<i class="icon1-basket"></i>
 				</div>
 			</div>
-			<div class="vertical-add-button" onclick={incrementSelectedQuantity}>
+			<button class="vertical-add-button" onclick={incrementSelectedQuantity} type="button">
 				{#if selectedProductQuantity === 0}
 					Agregar <i class="icon1-basket"></i>
 				{/if}
 				{#if selectedProductQuantity > 0}
 					Agregar mas ({selectedProductQuantity}) <i class="icon1-basket"></i>
 				{/if}
-			</div>
+			</button>
 		</div>
 	</div>
 {/if}
@@ -225,6 +225,11 @@
 		bottom: 0;
 		left: 0;
 		user-select: none;
+		border: none;
+		background: transparent;
+		font-family: inherit;
+		font-size: inherit;
+		padding: 0;
 	}
 
 	.vertical-content {

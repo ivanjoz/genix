@@ -1,21 +1,25 @@
 export interface IUsuario {
-  id: number;
-  companyID: number;
-  nombres: string;
-  apellidos: string;
-  email: string;
-  usuario: string;
-  documentoNro: string;
-  cargo: string;
-  perfilesIDs: number[];
-  rolesIDs: number[];
-  ss: number;
-  upd: number;
-  created: number;
-  password1: string;
-  password2: string;
+  ID: number;
+  EmpresaID: number;
+  Nombres: string;
+  Apellidos: string;
+  Email: string;
+  Usuario: string;
+  DocumentoNro: string;
+  Cargo: string;
+  PerfilesIDs: number[];
+  RolesIDs: number[];
+  Status: number;
+  Updated: number;
+  Created: number;
+  Password: string;
+  Password2: string;
+  CreatedBy: number;
+  UpdatedBy: number;
+  CacheVersion: number;
+  PasswordHash: string;
   //Extra
-  accesosIDs: number[];
+  AccesosIDs: number[];
 }
 
 export interface IPerfil {

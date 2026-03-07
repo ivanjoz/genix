@@ -39,7 +39,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
 
   let almacenSelected = $state(-1);
   let productoSelected = $state(-1);
-  let searchInput: HTMLInputElement;
+  let searchInput = $state<HTMLInputElement>();
 
   // Computed
   const separarProcesoVenta = $derived(systemParamsService.recordsMap.get(1)?.ValueInts || []);

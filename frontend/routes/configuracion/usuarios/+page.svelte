@@ -21,19 +21,19 @@ const { Loading } = pkg
   async function saveUsuario(isDelete?: boolean) {
     const form = usuarioForm
 
-    if ((form.usuario?.length || 0) < 4 || (form.nombres?.length || 0) < 4) {
+    if ((form.Usuario?.length || 0) < 4 || (form.Nombres?.length || 0) < 4) {
       Notify.failure("El usuario y el nombre deben tener al menos 4 caracteres.")
       return
     }
 
-    if (form.password1) form.password1 = form.password1.trim()
-    if (form.password2) form.password2 = form.password2.trim()
+    if (form.Password) form.Password = form.Password.trim()
+    if (form.Password2) form.Password2 = form.Password2.trim()
 
-    if (!form.id || form.password1) {
+    if (!form.ID || form.Password) {
       let err = ""
-      if ((form.password1?.length || 0) < 6) {
+      if ((form.Password?.length || 0) < 6) {
         err = "El password tiene menos de 6 caracteres."
-      } else if (form.password1 !== form.password2) {
+      } else if (form.Password !== form.Password2) {
         err = "Los password no coinciden."
       }
       if (err) {
@@ -47,10 +47,11 @@ const { Loading } = pkg
       const result = await postUsuario(form)
 
       if (isDelete) {
-        usuariosService.removeUsuario(form.id)
+        usuariosService.removeUsuario(form.ID)
       } else {
-        if (!form.id) {
-          form.id = result.id
+        // Keep local state synchronized with backend-assigned ID for brand-new users.
+        if (!form.ID) {
+          form.ID = result.ID
         }
         usuariosService.updateUsuario(form)
       }
@@ -67,33 +68,33 @@ const { Loading } = pkg
       header: "ID",
       headerCss: "w-54",
       cellCss: "text-center ff-bold",
-      getValue: e => e.id
+      getValue: e => e.ID
     },
     {
       header: "Usuario", highlight: true,
       cellCss: "px-6 c-purple",
-      getValue: e => e.usuario
+      getValue: e => e.Usuario
     },
     {
       header: "Nombres", highlight: true,
-      getValue: e => `${e.nombres} ${e.apellidos||""}`
+      getValue: e => `${e.Nombres} ${e.Apellidos || ""}`
     },
     {
       header: "Email",
       cellCss: "px-6",
-      getValue: e => e.email
+      getValue: e => e.Email
     },
     {
       header: "Estado",
       headerCss: "w-80",
       cellCss: "text-center",
-      getValue: e => e.ss
+      getValue: e => e.Status
     },
     {
       header: "Actualizado",
       headerCss: "w-144",
       cellCss: "px-6 nowrap",
-      getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
+      getValue: e => formatTime(e.Updated, "Y-m-d h:n") as string
     },
     {
       header: "...",
@@ -123,7 +124,8 @@ const { Loading } = pkg
       <div class="flex items-center">
         <button class="bx-green" onclick={ev => {
           ev.stopPropagation()
-          usuarioForm = { ss: 1 } as IUsuario
+          // Default active status when opening an empty user form.
+          usuarioForm = { Status: 1 } as IUsuario
           Core.openModal(1)
         }} aria-label="Agregar usuario">
           <i class="icon-plus"></i>
@@ -137,7 +139,7 @@ const { Loading } = pkg
       css="w-full"
       maxHeight="calc(80vh - 13rem)"
       filterText={filterText}
-      getFilterContent={e => [e.usuario, e.nombres, e.apellidos, e.email].filter(x => x).join(" ").toLowerCase()}
+      getFilterContent={e => [e.Usuario, e.Nombres, e.Apellidos, e.Email].filter(x => x).join(" ").toLowerCase()}
     >
     </VTable>
   </div>
@@ -145,54 +147,54 @@ const { Loading } = pkg
   <Modal
     id={1}
     size={5}
-    title={(usuarioForm?.id > 0 ? "Actualizar" : "Guardar") + " Usuario"}
-    isEdit={usuarioForm?.id > 0}
+    title={(usuarioForm?.ID > 0 ? "Actualizar" : "Guardar") + " Usuario"}
+    isEdit={usuarioForm?.ID > 0}
     onSave={() => saveUsuario()}
-    onDelete={usuarioForm?.id > 0 ? () => saveUsuario(true) : undefined}
+    onDelete={usuarioForm?.ID > 0 ? () => saveUsuario(true) : undefined}
   >
     <div class="grid grid-cols-24 gap-10 p-6">
       <Input
         bind:saveOn={usuarioForm}
-        save="usuario"
+        save="Usuario"
         css="col-span-12"
         label="Usuario"
         required={true}
-        disabled={usuarioForm?.id > 0}
+        disabled={usuarioForm?.ID > 0}
       />
       <Input
         bind:saveOn={usuarioForm}
-        save="nombres"
+        save="Nombres"
         css="col-span-12"
         label="Nombres"
         required={true}
       />
       <Input
         bind:saveOn={usuarioForm}
-        save="apellidos"
+        save="Apellidos"
         css="col-span-12"
         label="Apellidos"
       />
       <Input
         bind:saveOn={usuarioForm}
-        save="documentoNro"
+        save="DocumentoNro"
         css="col-span-12"
         label="Nº Documento"
       />
       <Input
         bind:saveOn={usuarioForm}
-        save="cargo"
+        save="Cargo"
         css="col-span-12"
         label="Cargo"
       />
       <Input
         bind:saveOn={usuarioForm}
-        save="email"
+        save="Email"
         css="col-span-12"
         label="Email"
       />
       <SearchCard
         bind:saveOn={usuarioForm}
-        save="perfilesIDs"
+        save="PerfilesIDs"
         css="col-span-24"
         options={perfilesService.perfiles}
         keyId="id"
@@ -201,20 +203,20 @@ const { Loading } = pkg
       />
       <Input
         bind:saveOn={usuarioForm}
-        save="password1"
+        save="Password"
         css="col-span-12"
         label="Password"
         type="password"
-        required={!usuarioForm.id}
-        placeholder={usuarioForm.id > 0 ? "SIN CAMBIAR" : ""}
+        required={!usuarioForm.ID}
+        placeholder={usuarioForm.ID > 0 ? "SIN CAMBIAR" : ""}
       />
       <Input
         bind:saveOn={usuarioForm}
-        save="password2"
+        save="Password2"
         css="col-span-12"
         label="Password (Repetir)"
         type="password"
-        required={!usuarioForm.id}
+        required={!usuarioForm.ID}
       />
     </div>
   </Modal>

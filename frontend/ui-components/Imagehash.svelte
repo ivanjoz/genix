@@ -6,7 +6,7 @@ import { Env } from '$core/env';
     import { derived } from "svelte/store";
 
 	export interface IImageHash {
-			src: string, css: string, hash: string, alt: string, size: number, folder?: string
+			src: string, css: string, hash?: string, alt?: string, size?: number, folder?: string
 	}
 
   const {
@@ -15,7 +15,7 @@ import { Env } from '$core/env';
 
 
   let imageSrc = $derived.by(() => {
-	  if (hash?.length > 0) {
+	  if (hash && hash.length > 0) {
 	  	let imageName = hash.substring(0, 12).replaceAll(".", "/").replaceAll("-", "=") +
 	   ".webp"
 	   	
@@ -32,12 +32,11 @@ import { Env } from '$core/env';
   })
   
   let placeholderSrc = $derived.by(() => {
-  	return hash?.length > 0 ? "/?"+hash : ""
+    return (hash && hash.length > 0) ? "/?"+hash : ""
   })
-
   onMount(() => {
-    if (hash?.length > 0) {
-    	let imageName = hash.substring(0, 12).replaceAll(".", "/").replaceAll("-", "=") +
+    if (hash && hash.length > 0) {
+        let imageName = hash.substring(0, 12).replaceAll(".", "/").replaceAll("-", "=") +
      ".webp"
      	
       imageSrc = Env.makeCDNRoute(folder as string, imageName)
