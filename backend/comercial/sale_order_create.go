@@ -56,7 +56,10 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 		sale = existingSales[0]
 		sale.ActionsIncluded = saleRequest.ActionsIncluded
-		sale.LastPaymentCajaID = saleRequest.LastPaymentCajaID
+		// Preserve existing payment caja on delivery-only updates (payload may omit LastPaymentCajaID).
+		if saleRequest.LastPaymentCajaID > 0 {
+			sale.LastPaymentCajaID = saleRequest.LastPaymentCajaID
+		}
 		if saleRequest.AlmacenID > 0 {
 			sale.AlmacenID = saleRequest.AlmacenID
 		}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import SearchSelect from '$components/SearchSelect.svelte';
   import LoadingBar from '$components/micro/LoadingBar.svelte';
+  import RecordByIDText from '$components/micro/RecordByIDText.svelte';
   import Layer from '$components/Layer.svelte';
   import OptionsStrip from '$components/OptionsStrip.svelte';
   import TableGrid from '$components/vTable/TableGrid.svelte';
@@ -476,7 +477,8 @@
                 <div class="text-13 leading-20 text-gray-700">
                   <span class="ff-bold text-xs color-label mr-2">Pagado el:</span> {formatActionTime(selectedSaleOrder.LastPaymentTime)}.<br>
                   <span class="ff-bold text-xs color-label mr-2">En:</span> {getCajaName(selectedSaleOrder.LastPaymentCajaID)}.<br>
-                  <span class="ff-bold text-xs color-label mr-2">Usuario:</span> {selectedSaleOrder.LastPaymentUser || '-'}.
+                  <span class="ff-bold text-xs color-label mr-2">Usuario:</span>
+                  <RecordByIDText apiRoute="usuarios-ids" recordID={selectedSaleOrder.LastPaymentUser} placeholder="-" />.
                 </div>
               {/if}
             </div>
@@ -508,7 +510,7 @@
                 <div class="text-13 leading-20 text-gray-700">
                   <span class="ff-bold text-xs color-label">Entregado el</span> {formatActionTime(selectedSaleOrder.DeliveryTime)}.<br>
                   <span class="ff-bold text-xs color-label">En</span> {getAlmacenName(selectedSaleOrder.AlmacenID)}.<br>
-                  <span class="ff-bold text-xs color-label">Registrado por</span> {selectedSaleOrder.DeliveryUser || '-'}.
+                  <RecordByIDText apiRoute="usuarios-ids" recordID={selectedSaleOrder.DeliveryUser} placeholder="-" />.
                 </div>
               {/if}
             </div>
