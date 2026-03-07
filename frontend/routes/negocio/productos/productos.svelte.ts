@@ -84,7 +84,6 @@ export class ProductosService extends GetHandler<IProducto> {
 	}
 
   handler(result: IProducto[]): void {
-    console.log("productos result::", result)
     for(const e of result){
       e.Image = e.Images?.[0]
       e.CategoriasIDs = e.CategoriasIDs || []

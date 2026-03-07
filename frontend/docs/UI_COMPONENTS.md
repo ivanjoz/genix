@@ -493,3 +493,81 @@ export class ProductosService extends GetHandler {
   ... 
 />
 ```
+
+---
+
+### TableGrid
+
+Lightweight virtualized data grid for large datasets. Use this when you need a simpler and more performant alternative to `VTable`.
+
+**Key characteristics:**
+- Uses `@humanspeak/svelte-virtual-list`
+- Fixed row height (`rowHeight`)
+- No `<table>`; rows and header use CSS Grid
+- Static column widths with optional flex tracks (`minmax(..., 1fr)`)
+- Desktop-focused V1 with horizontal scrolling support
+
+**Props:**
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `columns` | `TableGridColumn<T>[]` | Yes | Column definitions (`id`, `header`, `width`, `getValue`) |
+| `data` | `T[]` | Yes | Data rows |
+| `height` | `string` | No | Fixed component height (default `"460px"`) |
+| `rowHeight` | `number` | No | Fixed row height in px (default `36`) |
+| `bufferSize` | `number` | No | Virtual list buffer size (default `12`) |
+| `css` | `string` | No | Extra CSS classes for root container |
+| `headerCss` | `string` | No | Extra CSS classes for header |
+| `rowCss` | `string` | No | Extra CSS classes for each row |
+| `emptyMessage` | `string` | No | Message shown when data is empty |
+| `onRowClick` | `(row: T, index: number) => void` | No | Row click handler |
+| `selectedRowId` | `string \| number` | No | Controlled selected row ID |
+| `selectedRecord` | `T` | No | Controlled selected record reference/object |
+| `getRowId` | `(row: T, index: number) => string \| number` | No | ID resolver for stable selection |
+| `cellRenderer` | `Snippet<[row, column, defaultValue, rowIndex]>` | No | Optional snippet for custom cell rendering |
+
+**Example:**
+```svelte
+<script lang="ts">
+  import TableGrid from '$components/vTable/TableGrid.svelte';
+  import type { TableGridColumn } from '$components/vTable/tableGridTypes';
+
+  interface RowRecord {
+    id: string;
+    name: string;
+    amount: number;
+    status: 'open' | 'closed';
+  }
+
+  const records: RowRecord[] = [
+    { id: '1', name: 'Order A', amount: 120, status: 'open' },
+    { id: '2', name: 'Order B', amount: 540, status: 'closed' },
+  ];
+
+  const columns: TableGridColumn<RowRecord>[] = [
+    { id: 'id', header: 'ID', width: '120px', getValue: (row) => row.id },
+    { id: 'name', header: 'Name', width: 'minmax(220px, 1fr)', getValue: (row) => row.name },
+    { id: 'amount', header: 'Amount', width: '120px', align: 'right', getValue: (row) => row.amount },
+    { id: 'status', header: 'Status', width: '140px', getValue: (row) => row.status },
+  ];
+
+  let selectedId = $state<string | number | undefined>(undefined);
+</script>
+
+<TableGrid
+  {columns}
+  data={records}
+  height="420px"
+  rowHeight={38}
+  selectedRowId={selectedId}
+  getRowId={(row) => row.id}
+  onRowClick={(row) => { selectedId = row.id; }}
+>
+  {#snippet cellRenderer(row, column, defaultValue)}
+    {#if column.id === 'status'}
+      <span class="badge">{defaultValue}</span>
+    {:else}
+      {defaultValue}
+    {/if}
+  {/snippet}
+</TableGrid>
+```

@@ -14,6 +14,19 @@
 	--font-size-xl: 20px;
 	--font-size-2xl: 22px;
 	--leading-tight: 1.2;
+	--font-weight-semibold: 600;
+}
+
+@layer utilities {
+	/* Override Tailwind core utility output for `.font-semibold`. */
+	.font-semibold {
+		font-weight: normal;
+		font-family: 'semibold';
+	}
+	.font-bold {
+		font-weight: normal;
+		font-family: 'bold';
+	}
 }
 
 /* CSS Variables */

@@ -11,3 +11,4 @@ export type { VirtualItem, VirtualizerOptions, VirtualizerStore } from './index.
 
 // Types
 export type { ITableColumn, CellRendererFn, CellRendererSnippet } from './types';
+export type { TableGridColumn, TableGridCellAlign, TableGridCellRendererSnippet } from './tableGridTypes';
