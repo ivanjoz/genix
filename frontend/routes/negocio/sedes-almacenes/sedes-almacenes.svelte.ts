@@ -114,7 +114,7 @@ export class PaisCiudadesService extends GetHandler {
     const distritos: IPaisCiudad[] = []
     const ciudadesMap = new Map(ciudades.map(e => [e.ID, e]))
 
-    for(let e of ciudades){
+    for(const e of ciudades){
       const padre = ciudadesMap.get(e.PadreID)
       if(e.Jerarquia === 3){ distritos.push(e) }
       if(padre){
@@ -129,11 +129,11 @@ export class PaisCiudadesService extends GetHandler {
     }
 
     // Build display names
-    for(let e of distritos){
+    for(const e of distritos){
       e._nombre = `${e.Departamento?.Nombre||"-"} ► ${e.Provincia?.Nombre||""} ► ${e.Nombre}`
     }
 
-    console.log("distritos:", distritos)
+    // console.log("distritos:", distritos)
 
     this.ciudades = ciudades
     this.distritos = distritos

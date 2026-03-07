@@ -708,6 +708,20 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				radixesI64 = append(radixesI64, int64(v))
 			}
 
+			totalDigitsForPackedView := int64(19)
+			if isInt32PackedView {
+				totalDigitsForPackedView = 9
+			}
+			slotDigitsPerColumn := make([]int64, 0, len(viewColumnsConfig))
+			sumTrailingDigits := int64(0)
+			for _, decimalSize := range radixSlotsByColumn {
+				sumTrailingDigits += int64(decimalSize)
+			}
+			slotDigitsPerColumn = append(slotDigitsPerColumn, totalDigitsForPackedView-sumTrailingDigits)
+			for _, decimalSize := range radixSlotsByColumn {
+				slotDigitsPerColumn = append(slotDigitsPerColumn, int64(decimalSize))
+			}
+
 			supportedTypes := []string{"int8", "int16", "int32", "int64", "int"}
 
 			for _, col := range columns {
@@ -718,12 +732,9 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			}
 
 			var makeValue = func(values []int64) int64 {
-				sumValue := int64(0)
-				for i, value := range values {
-					valueI64 := value * Pow10Int64(radixesI64[i])
-					sumValue += valueI64
-				}
-				return sumValue
+				// Packed range views must trim each component to its allocated slot digits
+				// so persisted rows and query bounds use identical DecimalSize() semantics.
+				return computePackedInt64ValueNonNegative(values, slotDigitsPerColumn)
 			}
 
 			viewCols := columns

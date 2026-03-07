@@ -2,6 +2,7 @@ package exec
 
 import (
 	comercial "app/comercial/types"
+	negocio "app/negocio/types"
 	"app/core"
 	"app/db"
 	s "app/types"
@@ -29,6 +30,7 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[comercial.SaleOrder](),
 		makeDBController[comercial.SaleSummary](),
 		makeDBController[db.CacheVersion](),
+		makeDBController[negocio.Entity](),
 		makeDBController[DemoStruct](),
 	}
 }

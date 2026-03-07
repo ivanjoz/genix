@@ -4,7 +4,7 @@ import { GET } from '../http.svelte'
  * Goal:
  * Resolve records by IDs using a 3-layer strategy:
  * 1) in-memory map, 2) IndexedDB persistent cache, 3) server delta sync.
- * It sends `ids`, `cached`, and `ccv` so backend returns only new/changed records.
+ * It sends `ids`, `cc-ids`, and `cc-ver` so backend returns only new/changed records.
  */
 import { concatenateInts } from "../funcs/parsers"
 import { readRecordsFromIDBByIDs, upsertRecordsIntoIDB } from "./cache-by-ids.idb"
@@ -253,12 +253,12 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(
 
 	// Build delta-validation payload:
 	// - `ids`: records with no local cache.
-	// - `cached`: records that exist locally and can be checked by backend.
-	// - `ccv`: local update-group values aligned by position with `cached`.
+	// - `cc-ids`: records that exist locally and can be checked by backend.
+	// - `cc-ver`: local update-group values aligned by position with `cc-ids`.
 	const uriParams = [
 		recordsWitoutCache.length > 0 && `ids=${concatenateInts(recordsWitoutCache)}`,
-		recordsCachedIDs.length > 0 && `cids=${concatenateInts(recordsCachedIDs)}`,
-		recordsCachedUpdatedGroupsIDs.length > 0 && `ccv=${concatenateInts(recordsCachedUpdatedGroupsIDs)}`,
+		recordsCachedIDs.length > 0 && `cc-ids=${concatenateInts(recordsCachedIDs)}`,
+		recordsCachedUpdatedGroupsIDs.length > 0 && `cc-ver=${concatenateInts(recordsCachedUpdatedGroupsIDs)}`,
 	]
 	.filter(Boolean)
 	.join("&")

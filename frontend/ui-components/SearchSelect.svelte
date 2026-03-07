@@ -69,6 +69,38 @@ import { Core } from '$core/store.svelte';
   const isMobile = $derived(Core.deviceType === 3);
   const useLayerPicker = $derived(isMobile);
   const isDisabled = $derived(disabled || showLoading);
+  type SearchOptionID = number | string;
+
+  // Keep id normalization centralized so all caches use the same key format.
+  function getOptionId(option: E): SearchOptionID {
+    const rawOptionId = option[keyId as keyof E] as unknown;
+    if (typeof rawOptionId === "number" || typeof rawOptionId === "string") {
+      return rawOptionId;
+    }
+    return String(rawOptionId ?? "");
+  }
+
+  // Normalize input once and reuse it in filter + highlight logic.
+  function splitSearchWords(text: string): string[] {
+    return String(text).toLowerCase().split(" ").filter((word) => word.length > 1);
+  }
+
+  // Precompute lowercase names so filtering does not lowercase each option per keypress.
+  const searchableNameByOptionId = $derived.by(() => {
+    const optionNameIndex = new Map<SearchOptionID, string>();
+    for (const option of options) {
+      const optionId = getOptionId(option);
+      const rawOptionName = option[keyName as keyof E];
+      const normalizedOptionName = typeof rawOptionName === "string"
+        ? rawOptionName.toLowerCase()
+        : "";
+      optionNameIndex.set(optionId, normalizedOptionName);
+    }
+    return optionNameIndex;
+  });
+
+  // Recreate this set only when avoidIDs changes.
+  const avoidedOptionIdSet = $derived.by(() => new Set(avoidIDs || []));
 
   function checkPosition() {
     if (inputRef) {
@@ -149,47 +181,43 @@ import { Core } from '$core/store.svelte';
     }
   }
 
-  const filter = (text: string) => {
-    console.log("options filtered::", label, options)
-    if (!text && (avoidIDs?.length || 0) === 0) {
+  const filter = (text: string, preparedWords?: string[]) => {
+    const searchWords = preparedWords || splitSearchWords(text);
+    if (searchWords.length === 0 && avoidedOptionIdSet.size === 0) {
       return [...options];
     }
-    const avoidIDSet = new Set(avoidIDs || [])
     const filtered: E[] = []
-    const searchWords = text.toLowerCase().split(" ").filter(x => x.length > 1)
 
     for (const opt of options) {
-      if (avoidIDSet.size > 0 && avoidIDSet.has(opt[keyId as keyof E] as number)){
+      const optionId = getOptionId(opt);
+      if (avoidedOptionIdSet.has(optionId)) {
         continue;
       }
-      if(searchWords.length === 0){
+      if (searchWords.length === 0) {
         filtered.push(opt)
       } else {
-        const name = opt[keyName] as string
-        if (typeof name === "string") {
-          if(include(name.toLowerCase(), searchWords)){ filtered.push(opt) }
+        const searchableOptionName = searchableNameByOptionId.get(optionId);
+        if (searchableOptionName) {
+          if (include(searchableOptionName, searchWords)) { filtered.push(opt) }
         }
       }
     }
-    console.log("options filtered 2::", label, options, filtered)
     return filtered;
   }
 
   function onKeyUp(ev: KeyboardEvent) {
     ev.stopPropagation();
-    const target = ev.target as HTMLInputElement;
-    const text = String(target.value || "").toLowerCase();
-
     throttle(() => {
       if(!inputRef){ return }
-      words = String(inputRef.value).toLowerCase().split(" ");
-      filteredOptions = filter(text);
+      const currentInputValue = String(inputRef.value || "");
+      const currentSearchWords = splitSearchWords(currentInputValue);
+      words = currentSearchWords;
+      filteredOptions = filter(currentInputValue, currentSearchWords);
       arrowSelected = -1;
     }, 120);
   }
 
   function onKeyDown(ev: KeyboardEvent) {
-    console.log("avoid hover:: ", avoidhover);
     ev.stopPropagation();
 
     if (!show || filteredOptions.length === 0) return;
@@ -283,7 +311,6 @@ import { Core } from '$core/store.svelte';
         oncut={onKeyUp as any}
         onkeydown={(ev) => {
           ev.stopPropagation();
-          console.log(ev);
           onKeyDown(ev);
         }}
         placeholder={showLoading ? "" : placeholder || ":: seleccione ::"}
@@ -299,7 +326,12 @@ import { Core } from '$core/store.svelte';
         }}
         onblur={(ev) => {
           ev.stopPropagation();
-          console.log("avoidBlur 2", avoidBlur)
+          // Ignore blur caused by interactions inside the dropdown list.
+          if (avoidBlur) {
+            avoidBlur = false;
+            return;
+          }
+
           if (options.length === 1) {
             avoidBlur = false
             inputRef?.focus()
@@ -355,13 +387,13 @@ import { Core } from '$core/store.svelte';
       class:open-up={openUp}
       role="button" tabindex="0"
       onmousedown={(ev) => {
+        // Keep focus on input while interacting with list content.
+        ev.preventDefault()
         ev.stopPropagation()
         avoidBlur = true
-        console.log("avoidBlur 1", avoidBlur)
       }}
       onmousemove={avoidhover
         ? (ev) => {
-            console.log("hover aqui:: ", arrowSelected);
             ev.stopPropagation();
             if (avoidhover) {
               arrowSelected = -1;
@@ -380,7 +412,9 @@ import { Core } from '$core/store.svelte';
             role="option"
             aria-selected={arrowSelected === i}
             tabindex="0"
-            onclick={(ev) => {
+            onmousedown={(ev) => {
+              // Commit selection before blur/click ordering can clear the input.
+              ev.preventDefault();
               ev.stopPropagation();
               onOptionClick(e);
             }}

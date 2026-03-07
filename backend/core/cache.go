@@ -73,8 +73,9 @@ func GetCacheByKeys(empresaID int32, cacheKeys ...string) ([]Cache, error) {
 
 func ExtractCacheVersionValues(req *HandlerArgs)( []db.IDCacheVersion, error) {
 	idsStr := req.GetQuery("ids")
-	cachedIDsStr := req.GetQuery("cids")
-	cacheVersionsFromIDsStr := req.GetQuery("ccv")
+	// New cache delta protocol keys: cc-ids for cached IDs and cc-ver for aligned cache versions.
+	cachedIDsStr := req.GetQuery("cc-ids")
+	cacheVersionsFromIDsStr := req.GetQuery("cc-ver")
 	empresaID := Coalesce(req.GetQueryInt("cmp"),req.Usuario.EmpresaID)
 	
 	if empresaID == 0 {

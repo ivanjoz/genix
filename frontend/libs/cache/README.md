@@ -2,6 +2,9 @@
 
 This folder groups the ID-based cache stack used by product search cards and any feature that resolves records by `ID`.
 
+For full cross-layer internals (frontend + backend handlers + ORM `SaveCacheVersion`), see:
+- `docs/CACHE_VERSIONED_BY_IDS.md`
+
 ## Why this exists
 
 - Reduce repeated API calls for the same IDs.
@@ -34,7 +37,7 @@ This folder groups the ID-based cache stack used by product search cards and any
 3. Server revalidation:
 - For stale/missing records, requests include:
   - `ids` for local misses.
-  - `cids` + `ccv` for cached records to validate delta.
+  - `cc-ids` + `cc-ver` for cached records to validate delta.
 - Backend returns only new/changed records.
 - Cached IDs omitted by backend are treated as unchanged and their `_fch` is refreshed.
 

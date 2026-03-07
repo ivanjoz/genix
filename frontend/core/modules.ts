@@ -72,7 +72,7 @@ export const AdminModule: IModule = {
 					descripcion: "Crea productos y agrúpalos por categoría y marca. Edita precios, unidades y presentaciones de tus productos.",
           icon: "icon-cube"
 				},
-				{ name: "Clientes & Proveedores", route: "/negocio/clientes-proveedores",
+				{ name: "Clientes & Proveedores", route: "/negocio/entidades",
           icon: "icon-cube"
         },
       ]
