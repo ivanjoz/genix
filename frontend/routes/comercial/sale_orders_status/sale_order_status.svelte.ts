@@ -1,5 +1,6 @@
 import { Notify } from '$libs/helpers';
 import { GetHandler } from '$libs/http.svelte';
+import { POST } from '$libs/http.svelte';
 
 export interface ISaleOrderTopProduct {
 	ProductID: number;
@@ -26,6 +27,15 @@ export interface ISaleOrder {
     UpdatedBy: number;
     ss: number;
     TopPaidProducts?: ISaleOrderTopProduct[];
+}
+
+// API payload for sale-order transitions (payment and delivery updates).
+export interface ISaleOrderUpdatePayload {
+	ID: number;
+	ActionsIncluded: number[];
+	CajaID_?: number;
+	AlmacenID?: number;
+	DebtAmount?: number;
 }
 
 // UI groups map 1:1 to backend query params:
@@ -118,3 +128,12 @@ export class SaleOrdersService extends GetHandler {
 		console.debug("[SaleOrdersService] route:", this.route)
   }
 }
+
+export const postSaleOrderUpdate = (payload: ISaleOrderUpdatePayload) => {
+	// Keep route invalidation explicit so all sale-orders views can re-sync after updates.
+	return POST({
+		route: 'sale_order',
+		data: payload,
+		refreshRoutes: ['sale_orders'],
+	});
+};

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SearchSelect from '$components/SearchSelect.svelte';
   import Layer from '$components/Layer.svelte';
   import OptionsStrip from '$components/OptionsStrip.svelte';
   import VTable from '$components/vTable/VTable.svelte';
@@ -6,9 +7,15 @@
   import { Core } from '$core/store.svelte';
   import Page from '$domain/Page.svelte';
   import { Notify, formatN, formatTime } from '$libs/helpers';
+  import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
   import { ProductosService } from '$routes/negocio/productos/productos.svelte';
   import { untrack } from 'svelte';
-  import { SaleOrderGroup, SaleOrdersService, type ISaleOrder } from './sale_order_status.svelte';
+  import {
+    SaleOrderGroup,
+    SaleOrdersService,
+    postSaleOrderUpdate,
+    type ISaleOrder
+  } from './sale_order_status.svelte';
 
   interface ISaleOrderDetailLine {
     detailPosition: number;
@@ -24,8 +31,11 @@
   let saleOrdersService = $state<SaleOrdersService | null>(null);
   let saleOrderDetailsView = $state(1);
   let selectedSaleOrder = $state<ISaleOrder | null>(null);
+  let isPostingSaleOrderAction = $state(false);
+  let saleOrderPaymentForm = $state({ CajaID_: 0 });
 
   const productosService = new ProductosService();
+  const cajasService = new CajasService();
 
   // Render tabs mapped to backend status filters.
   const options = [
@@ -117,9 +127,24 @@
       Notify.failure('No hay una orden seleccionada.');
       return;
     }
+    if (isPostingSaleOrderAction) {
+      Notify.failure('Ya se está procesando una acción para esta orden.');
+      return;
+    }
+    // Payment caja priority: order caja first, otherwise use the user-selected caja.
+    const paymentCajaID = selectedSaleOrder.CajaID_ || saleOrderPaymentForm.CajaID_;
+    if (!paymentCajaID) {
+      Notify.failure('La orden no posee Caja ID para registrar el pago.');
+      return;
+    }
 
-    // Action button is ready in UI; backend transition route is pending definition.
-    Notify.failure('Acción de pago pendiente de implementación en backend.');
+    // Payment transition: mark as paid and set debt to zero for a full payment flow.
+    void processSaleOrderAction('pago', {
+      ID: selectedSaleOrder.ID,
+      ActionsIncluded: [2],
+      CajaID_: paymentCajaID,
+      DebtAmount: 0,
+    });
   }
 
   function onClickEntregar() {
@@ -127,9 +152,60 @@
       Notify.failure('No hay una orden seleccionada.');
       return;
     }
+    if (isPostingSaleOrderAction) {
+      Notify.failure('Ya se está procesando una acción para esta orden.');
+      return;
+    }
+    if (!selectedSaleOrder.AlmacenID) {
+      Notify.failure('La orden no posee Almacén ID para registrar la entrega.');
+      return;
+    }
 
-    // Action button is ready in UI; backend transition route is pending definition.
-    Notify.failure('Acción de entrega pendiente de implementación en backend.');
+    // Delivery transition: trigger stock movement using the existing order details.
+    void processSaleOrderAction('entrega', {
+      ID: selectedSaleOrder.ID,
+      ActionsIncluded: [3],
+      AlmacenID: selectedSaleOrder.AlmacenID,
+    });
+  }
+
+  async function processSaleOrderAction(actionLabel: 'pago' | 'entrega', updatePayload: {
+    ID: number;
+    ActionsIncluded: number[];
+    CajaID_?: number;
+    AlmacenID?: number;
+    DebtAmount?: number;
+  }) {
+    if (!selectedSaleOrder) { return; }
+    isPostingSaleOrderAction = true;
+    console.debug('[sale_orders_status] starting action', {
+      actionLabel,
+      saleOrderID: selectedSaleOrder.ID,
+      updatePayload,
+    });
+
+    try {
+      const updateResult = await postSaleOrderUpdate(updatePayload);
+      const updatedSaleOrder = updateResult as ISaleOrder;
+      selectedSaleOrder = updatedSaleOrder;
+      // Force immediate refresh to sync table group filters after status transitions.
+      saleOrdersService?.fetch();
+      Notify.success(`Pedido actualizado (${actionLabel}).`);
+      console.debug('[sale_orders_status] action success', {
+        actionLabel,
+        saleOrderID: updatedSaleOrder.ID,
+        nextStatus: updatedSaleOrder.ss,
+      });
+    } catch (error) {
+      console.error('[sale_orders_status] action error', {
+        actionLabel,
+        updatePayload,
+        error,
+      });
+      Notify.failure(`No se pudo procesar la ${actionLabel}.`);
+    } finally {
+      isPostingSaleOrderAction = false;
+    }
   }
 
   // Instantiate and fetch when the selected group changes.
@@ -168,7 +244,7 @@
     {
       header: 'Deuda',
       css: 'ff-mono text-right',
-      getValue: saleOrder => formatN(saleOrder.DebtAmount / 100, 2),
+      getValue: saleOrder => formatN((saleOrder.DebtAmount || 0) / 100, 2),
       mobile: { order: 4, css: 'col-span-12', labelLeft: 'Deuda:' }
     },
     {
@@ -187,32 +263,35 @@
   ];
 </script>
 
-<Page title="Gestión de Pedidos">
-  <div class="p-10">
-    <OptionsStrip
-      {options}
-      selected={selectedGroup}
-      onSelect={(selectedOption) => {
-        // Skip reactive work when user clicks the already selected tab.
-        const nextSelectedGroup = selectedOption[0] as number;
-        if (nextSelectedGroup === selectedGroup) { return; }
-        selectedGroup = nextSelectedGroup;
-      }}
-      useMobileGrid
-      css="mb-10"
-    />
-
-    <VTable
-      {columns}
-      data={saleOrdersService?.records || []}
-      selected={selectedSaleOrder?.ID || 0}
-      isSelected={(saleOrder, selectedID) => saleOrder.ID === selectedID}
-      onRowClick={(saleOrder) => {
-      	console.log("saleOrder", $state.snapshot(saleOrder))
-        openSaleOrderDetailsLayer(saleOrder);
-      }}
-      mobileCardCss="mb-10"
-    />
+<Page title="Gestión de Pedidos" sideLayerSize={780}>
+  <div class="">
+	 	<div class="h-46 flex items-center">
+	  <OptionsStrip
+	    {options}
+	    selected={selectedGroup}
+	    onSelect={(selectedOption) => {
+	      // Skip reactive work when user clicks the already selected tab.
+	      const nextSelectedGroup = selectedOption[0] as number;
+	      if (nextSelectedGroup === selectedGroup) { return; }
+	      selectedGroup = nextSelectedGroup;
+	    }}
+	    useMobileGrid
+	    css="mb-10"
+	  />
+	  </div>
+     <Layer type="content">
+	     <VTable
+	       {columns}
+	       data={saleOrdersService?.records || []}
+	       selected={selectedSaleOrder?.ID || 0}
+	       isSelected={(saleOrder, selectedID) => saleOrder.ID === selectedID}
+	       onRowClick={(saleOrder) => {
+	       	console.log("saleOrder", $state.snapshot(saleOrder))
+	         openSaleOrderDetailsLayer(saleOrder);
+	       }}
+	       mobileCardCss="mb-10"
+	     />
+     </Layer>
   </div>
 
   <Layer
@@ -243,16 +322,12 @@
             <div class="ff-mono">{selectedSaleOrder.AlmacenID || '-'}</div>
           </div>
           <div class="col-span-12 md:col-span-8">
-            <div class="text-gray-500">Caja ID</div>
-            <div class="ff-mono">{selectedSaleOrder.CajaID_ || '-'}</div>
-          </div>
-          <div class="col-span-12 md:col-span-8">
             <div class="text-gray-500">Total</div>
             <div class="ff-mono">S/ {formatN(selectedSaleOrder.TotalAmount / 100, 2)}</div>
           </div>
           <div class="col-span-12 md:col-span-8">
             <div class="text-gray-500">Deuda</div>
-            <div class="ff-mono">S/ {formatN(selectedSaleOrder.DebtAmount / 100, 2)}</div>
+            <div class="ff-mono">S/ {formatN((selectedSaleOrder.DebtAmount || 0) / 100, 2)}</div>
           </div>
         </div>
 
@@ -281,26 +356,37 @@
         </div>
 
         <div class="grid grid-cols-2 gap-8 mt-4">
-          <button
-            class={`bx-green h-36 ${!canPaySaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
-            disabled={!canPaySaleOrder(selectedSaleOrder)}
-            onclick={() => {
-              onClickPagar();
-            }}
-          >
-            <i class="icon-check"></i>
-            <span>Pagar</span>
-          </button>
-          <button
-            class={`bx-blue h-36 ${!canDeliverSaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
-            disabled={!canDeliverSaleOrder(selectedSaleOrder)}
-            onclick={() => {
-              onClickEntregar();
-            }}
-          >
-            <i class="icon-truck"></i>
-            <span>Entregar</span>
-          </button>
+	       	<div class="p-10 bg-gray-100 min-h-64 w-full rounded-md">
+          	<SearchSelect
+              bind:saveOn={saleOrderPaymentForm}
+              save="CajaID_" css="mb-8"
+              options={(cajasService.Cajas || []).filter((cajaRecord) => (cajaRecord?.ss || 0) > 0)}
+              keyId="ID"
+              keyName="Nombre"
+              label="Caja para Pago"
+              placeholder=":: seleccione ::"
+            />
+		        <button class={`bx-green justify-center w-[50%] h-36 ${!canPaySaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
+		          disabled={!canPaySaleOrder(selectedSaleOrder) || isPostingSaleOrderAction}
+		          onclick={() => {
+		            onClickPagar();
+		          }}
+		        >
+		          <i class="icon-ok"></i>
+		          <span class="mr-12">Pagar</span>
+		        </button>
+	        </div>
+					<div class="p-10 bg-gray-100 min-h-64 w-full rounded-md flex items-end">
+	      		<button class={`w-[50%] justify-center bx-blue h-36 ${!canDeliverSaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
+	            disabled={!canDeliverSaleOrder(selectedSaleOrder) || isPostingSaleOrderAction}
+	            onclick={() => {
+	              onClickEntregar();
+	            }}
+	          >
+	            <i class="icon-truck"></i>
+	            <span>Entregar</span>
+	          </button>
+					</div>
         </div>
       </div>
     {/if}

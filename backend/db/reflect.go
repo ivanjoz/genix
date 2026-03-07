@@ -429,7 +429,13 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 					IsVirtual: true,
 					Idx:       dbTable._maxColIdx,
 				},
-				colType: GetColTypeByName("[]int32", ""),
+				// Keep generated hash collections as list<int> to match existing deployed zz_hb_* columns.
+				colType: colType{
+					Type:     13,
+					FieldType:"[]int32",
+					ColType:  "list<int>",
+					IsSlice:  true,
+				},
 			}
 
 			bucketIsWeekLocal := compositeIndex.bucketIsWeek
@@ -438,7 +444,11 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				hashValues := computeCompositeHashSet(ptr, sourceColumnsLocal, bucketColumnLocal, bucketSizeLocal, bucketIsWeekLocal)
 				return hashValues
 			}
-			virtualColumn.getValue = virtualColumn.getRawValue
+			virtualColumn.getValue = func(ptr unsafe.Pointer) any {
+				// UPDATE statements require CQL collection literal syntax, not Go slice formatting.
+				hashValues := computeCompositeHashSet(ptr, sourceColumnsLocal, bucketColumnLocal, bucketSizeLocal, bucketIsWeekLocal)
+				return makeSignedIntCollectionLiteral(virtualColumn.ColType, hashValues)
+			}
 
 			dbTable._maxColIdx++
 			dbTable.columnsMap[virtualColumn.GetName()] = virtualColumn
