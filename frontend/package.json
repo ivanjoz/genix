@@ -66,6 +66,7 @@
 		"svelte-lexical": "^0.6.3",
 		"tailwind-merge": "^3.3.1",
 		"tailwind-variants": "^3.1.1",
-		"thumbhash": "^0.1.1"
+		"thumbhash": "^0.1.1",
+		"yaml": "^2.8.2"
 	}
 }

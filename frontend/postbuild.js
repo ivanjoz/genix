@@ -45,12 +45,17 @@ const zipBundledAssets = () => {
     
     // We want to exclude these items when zipping the build folder
     // Note: build/ folder contains everything from static/ plus bundled assets
-    const excludeArgs = staticItems.map(item => {
+    const excludeArgs = staticItems.flatMap(item => {
+      // Generated runtime assets are built into static/ on purpose and must stay inside frontend.zip.
+      if (item === 'generated') {
+        return [];
+      }
+
       // If it's a directory, we need to exclude its contents too
       if (fs.statSync(path.join(STATIC_DIR, item)).isDirectory()) {
-        return `-x "${item}/*"`;
+        return [`-x "${item}/*"`];
       }
-      return `-x "${item}"`;
+      return [`-x "${item}"`];
     }).join(' ');
 
     console.log(`📦 Zipping bundled assets to '${ZIP_PATH}'...`);

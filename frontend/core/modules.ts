@@ -5,32 +5,12 @@ export interface IModule {
   id: number
   code: string
   menus: IMenuRecord[]
-  indexedDBTables: {[e: string]: string }
 }
 
 export const AdminModule: IModule = {
   name: "Administración",
   id: 1,
   code: "admin",
-  indexedDBTables: {
-    empresas: "id",
-    empresa: "id",
-    usuarios: "id",
-    seguridad_accesos: "id",
-    perfiles: "id",
-    fetchedIDBTables: 'key',
-    cacheUpdates: 'key,route',
-    cacheStatic: 'key',
-    backups: 'Name',
-    cajas: "ID",
-    // Scylla
-    productos: "ID",
-    sedes_almacenes: '[_pk+ID]',
-    productos_stock: '[AlmacenID+ID]',
-    listas_compartidas: '[pk+ID]',
-    pais_ciudades: '[PaisID+ID]',
-    galeria_images: 'Image'
-  },
   menus: [
     { name: "CONFIGURACIÓN", minName: "CON", id: 1, icon: "icon-flow-merge",
       options: [
@@ -153,14 +133,11 @@ export const AdminModule: IModule = {
     },
   ]
 }
-
+/*
 export const ComercialModule: IModule = {
   name: "Comercial",
   id: 2,
   code: "comercial",
-  indexedDBTables: {
-    ecommerce_cache: "key"
-  },
   menus: [
     { name: "Productos", minName: "PRD",  id: 2, icon: "icon-flow-merge",
       options: [
@@ -188,6 +165,6 @@ export const ComercialModule: IModule = {
     },
   ]
 }
-
-const Modules: IModule[] = [AdminModule, ComercialModule]
+ */
+const Modules: IModule[] = [AdminModule]
 export default Modules

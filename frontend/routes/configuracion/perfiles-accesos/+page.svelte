@@ -2,12 +2,12 @@
 import Input from '$components/Input.svelte';
 import Modal from '$components/Modal.svelte';
 import Page from '$domain/Page.svelte';
-import Layer from '$components/Layer.svelte';
 import SearchCard from '$components/SearchCard.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
 import CheckboxOptions from '$components/CheckboxOptions.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
+import { onMount } from 'svelte';
 import { arrayToMapN, Notify, throttle } from '$libs/helpers';
 import { Core, closeModal } from '$core/store.svelte';
 import Modules from '$core/modules';
@@ -23,6 +23,8 @@ const { Loading } = pkg
     type IAcceso,
     type IPerfil
   } from "./perfiles-accesos.svelte"
+import { accessListHash } from '$core/generated/access-list';
+import { fetchAccessListCatalog, type IAccessListCatalogEntry } from './access-list-catalog';
 import AccesoCard from './AccesoCard.svelte';
 
   const accesosService = new AccesosService()
@@ -36,6 +38,8 @@ import AccesoCard from './AccesoCard.svelte';
   let moduleSelected = $state(0)
   let filterText = $state("")
   let accesoEdit = $state(false)
+  let accessListEntries = $state([] as IAccessListCatalogEntry[])
+  let accessListLoadError = $state("")
 
   const accesosGrouped = $derived.by(() => {
     const gruposMap: Map<string, IAcceso[]> = new Map()
@@ -71,6 +75,21 @@ import AccesoCard from './AccesoCard.svelte';
     }
 
     return accesosGrouped_
+  })
+
+  onMount(async () => {
+    try {
+      // Load the hashed static catalog so this page can compare backend records against the CDN-shipped source of truth.
+      const accessListPayload = await fetchAccessListCatalog()
+      accessListEntries = accessListPayload.access_list || []
+      console.info('[access-list] Catalog loaded', {
+        totalEntries: accessListEntries.length,
+        accessListHash
+      })
+    } catch (error) {
+      accessListLoadError = error as string
+      console.error('[access-list] Catalog load failed', { error })
+    }
   })
 
   async function saveAcceso() {
@@ -213,6 +232,11 @@ import AccesoCard from './AccesoCard.svelte';
       <div class="flex justify-between w-full mb-6">
         <div class="ff-bold text-xl">
           <span>Accesos</span>
+          {#if accessListEntries.length > 0}
+            <span class="ml-8 text-sm text-gray-500">
+              Catálogo estático: {accessListEntries.length} items ({accessListHash})
+            </span>
+          {/if}
           {#if accesoEdit}
             <span class="text-red-500">(Modo Edición)</span>
           {/if}
@@ -257,6 +281,11 @@ import AccesoCard from './AccesoCard.svelte';
       {#if !accesoEdit && !perfilForm.id}
         <div class="mb-8 px-12 py-8 bg-red-100 border border-red-400 text-red-700 rounded w-fit">
           Debe seleccionar un perfil para editar sus accesos.
+        </div>
+      {/if}
+      {#if accessListLoadError}
+        <div class="mb-8 px-12 py-8 bg-amber-100 border border-amber-400 text-amber-700 rounded w-fit">
+          {accessListLoadError}
         </div>
       {/if}
       {#each accesosGrouped as ag}
