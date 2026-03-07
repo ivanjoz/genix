@@ -430,7 +430,8 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
         this.handler(cachedResponse)
 			}
       this.isReady++
-      return fetchCacheParsed(this.makeProps())
+      // Delta-only online sync: return null when server has no updates, so handler is not called twice.
+      return fetchCacheParsed(this.makeProps('updateOnly'))
     })
     .then(fetchedResponse => {
       if(fetchedResponse){

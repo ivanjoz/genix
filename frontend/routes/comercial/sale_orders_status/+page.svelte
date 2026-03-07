@@ -62,6 +62,31 @@
     }
   }
 
+  function isSaleOrderPaid(saleOrder: ISaleOrder): boolean {
+    // Paid is true for paid and finalized orders.
+    return saleOrder.ss === 2 || saleOrder.ss === 4;
+  }
+
+  function isSaleOrderDelivered(saleOrder: ISaleOrder): boolean {
+    // Delivered is true for delivered and finalized orders.
+    return saleOrder.ss === 3 || saleOrder.ss === 4;
+  }
+
+  function renderSaleOrderStateSquares(saleOrder: ISaleOrder): string {
+    const paidBadgeCss = isSaleOrderPaid(saleOrder)
+      ? 'bg-green-100 text-green-800 border border-green-300'
+      : 'bg-red-100 text-red-800 border border-red-300';
+    const deliveredBadgeCss = isSaleOrderDelivered(saleOrder)
+      ? 'bg-green-100 text-green-800 border border-green-300'
+      : 'bg-red-100 text-red-800 border border-red-300';
+
+    // Render compact square-like badges so operators can read status at a glance.
+    return `<div class="flex items-center justify-center gap-4">
+      <span class="inline-flex h-22 min-w-22 px-4 rounded-[3px] text-10 ff-bold items-center justify-center ${paidBadgeCss}">PAG</span>
+      <span class="inline-flex h-22 min-w-22 px-4 rounded-[3px] text-10 ff-bold items-center justify-center ${deliveredBadgeCss}">ENT</span>
+    </div>`;
+  }
+
   function renderTopProductsSummary(saleOrder: ISaleOrder): string {
     if (!saleOrder.TopPaidProducts || saleOrder.TopPaidProducts.length === 0) {
       return '-';
@@ -144,6 +169,19 @@
   const selectedSaleOrderDetailLines = $derived.by(() => {
     if (!selectedSaleOrder) { return []; }
     return getSaleOrderDetailLines(selectedSaleOrder);
+  });
+
+  const filteredSaleOrders = $derived.by(() => {
+    const fetchedSaleOrders = saleOrdersService?.records || [];
+
+    // Enforce UI-specific tab filters after service fetch to keep badge semantics strict.
+    if (selectedGroup === SaleOrderGroup.PENDIENTE_DE_PAGO) {
+      return fetchedSaleOrders.filter((saleOrderRecord) => !isSaleOrderPaid(saleOrderRecord));
+    }
+    if (selectedGroup === SaleOrderGroup.PENDIENTE_DE_ENTREGA) {
+      return fetchedSaleOrders.filter((saleOrderRecord) => !isSaleOrderDelivered(saleOrderRecord));
+    }
+    return fetchedSaleOrders;
   });
 
   const detailTableColumns: TableGridColumn<ISaleOrderDetailLine>[] = [
@@ -335,29 +373,35 @@
       mobile: { order: 2, css: 'col-span-6', icon: 'clock' }
     },
     {
+      header: 'Estado',
+      id: 'status',
+      headerCss: 'w-82',
+      css: 'text-center',
+      render: saleOrder => renderSaleOrderStateSquares(saleOrder),
+      mobile: {
+        order: 3,
+        css: 'col-span-24',
+        render: saleOrder => renderSaleOrderStateSquares(saleOrder)
+      }
+    },
+    {
       header: 'Total',
       css: 'ff-mono text-right',
       getValue: saleOrder => formatN(saleOrder.TotalAmount / 100, 2),
-      mobile: { order: 3, css: 'col-span-12', labelLeft: 'Total:' }
+      mobile: { order: 4, css: 'col-span-12', labelLeft: 'Total:' }
     },
     {
       header: 'Deuda',
       css: 'ff-mono text-right',
       getValue: saleOrder => formatN((saleOrder.DebtAmount || 0) / 100, 2),
-      mobile: { order: 4, css: 'col-span-12', labelLeft: 'Deuda:' }
+      mobile: { order: 5, css: 'col-span-12', labelLeft: 'Deuda:' }
     },
     {
       header: 'Top Productos',
       css: 'fs15',
       id: 'top-products',
       getValue: saleOrder => renderTopProductsSummary(saleOrder),
-      mobile: { order: 5, css: 'col-span-24', labelTop: 'Top Productos', render: saleOrder => renderTopProductsSummary(saleOrder) }
-    },
-    {
-      header: 'Estado',
-      id: 'status',
-      getValue: saleOrder => getSaleOrderStatusName(saleOrder),
-      mobile: { order: 6, css: 'col-span-24' }
+      mobile: { order: 6, css: 'col-span-24', labelTop: 'Top Productos', render: saleOrder => renderTopProductsSummary(saleOrder) }
     }
   ];
 </script>
@@ -381,7 +425,7 @@
      <Layer type="content">
 	     <VTable
 	       {columns}
-	       data={saleOrdersService?.records || []}
+	       data={filteredSaleOrders}
 	       selected={selectedSaleOrder?.ID || 0}
 	       isSelected={(saleOrder, selectedID) => saleOrder.ID === selectedID}
 	       onRowClick={(saleOrder) => {

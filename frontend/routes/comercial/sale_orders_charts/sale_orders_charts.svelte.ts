@@ -21,14 +21,10 @@ export class SaleOrdersChartsService extends GetHandler {
 	records: ISaleSummaryRecord[] = $state([]);
 
 	handler(result: ISaleSummaryRecord[]): void {
-		const nextRecords = Array.isArray(result)
-			? result
-			: result
-				? [result]
-				: [];
-
+		result = result || []
+		
 		// Keep charts stable by always rendering records in date order.
-		this.records = nextRecords
+		this.records = result
 			.filter((summaryRecord) => (summaryRecord?.Fecha || 0) > 0)
 			.sort((leftRecord, rightRecord) => leftRecord.Fecha - rightRecord.Fecha);
 
