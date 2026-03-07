@@ -1,1 +1,1 @@
-export const env={"PUBLIC_LAMBDA_URL":"https://genix-dev-api-1.un.pe/","PUBLIC_FRONTEND_CDN":"d2lbyor24fqj74.cloudfront.net","PUBLIC_SIGNALING_API_KEY":"da2-czyagszanfbptkl57l3t45xmo4","PUBLIC_SIGNALING_ENDPOINT":"https://2v7tfrfxenfpvgf356vcuw3iie.appsync-api.us-east-1.amazonaws.com"}
+export const env={"PUBLIC_LAMBDA_URL":"https://genix-dev-api-1.un.pe/","PUBLIC_FRONTEND_CDN":"d2lbyor24fqj74.cloudfront.net"}
