@@ -243,17 +243,6 @@ func parseSaleSummaryActionFlags(actions ...int8) (saleSummaryActionFlags, error
 	return flags, nil
 }
 
-func actionsFromCreatedSale(sale types.SaleOrder) []int8 {
-	// Every new order must register the sale rows in product summary.
-	actions := []int8{saleSummaryActionSale}
-	for _, actionID := range sale.ProcessesIncluded_ {
-		if actionID == saleSummaryActionPayment || actionID == saleSummaryActionDelivery {
-			actions = append(actions, actionID)
-		}
-	}
-	return actions
-}
-
 func collectSaleChangesByActions(changesByProduct map[int32]ProductSummaryChange, sale types.SaleOrder, actionFlags saleSummaryActionFlags) error {
 	if len(sale.DetailProductsIDs) == 0 {
 		return nil

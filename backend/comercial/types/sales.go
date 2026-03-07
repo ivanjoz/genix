@@ -32,7 +32,7 @@ type SaleOrder struct {
 	CajaID_ int32 `json:",omitempty"`
 	// If contains 2 = the payment is done
 	// If contains 3 = the delivery of the product is done
-	ProcessesIncluded_ []int8 `json:",omitempty"`
+	ActionsIncluded []int8 `json:",omitempty"`
 	// This fields are used for fast filtering the last pending orders
 	OrderPendingPaymentUpdated  int32 `json:",omitempty"`
 	OrderPendingDeliveryUpdated int32 `json:",omitempty"`
