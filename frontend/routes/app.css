@@ -39,6 +39,10 @@
 	font-family: mono;
 }
 
+.color-label {
+	color: #6d5dad;
+}
+
 /* Buttons */
 button {
 	cursor: pointer;

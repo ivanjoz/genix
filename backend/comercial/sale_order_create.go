@@ -20,6 +20,14 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	if err != nil {
 		return req.MakeErr("Error al deserializar el body: " + err.Error())
 	}
+	legacySaleRequest := struct {
+		CajaID_ int32 `json:",omitempty"`
+	}{}
+	_ = json.Unmarshal([]byte(*req.Body), &legacySaleRequest)
+	if saleRequest.LastPaymentCajaID == 0 && legacySaleRequest.CajaID_ > 0 {
+		// Backward compatibility: accept legacy CajaID_ payloads during rollout.
+		saleRequest.LastPaymentCajaID = legacySaleRequest.CajaID_
+	}
 
 	isUpdate := saleRequest.ID > 0
 	if isUpdate {
@@ -48,7 +56,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 		sale = existingSales[0]
 		sale.ActionsIncluded = saleRequest.ActionsIncluded
-		sale.CajaID_ = saleRequest.CajaID_
+		sale.LastPaymentCajaID = saleRequest.LastPaymentCajaID
 		if saleRequest.AlmacenID > 0 {
 			sale.AlmacenID = saleRequest.AlmacenID
 		}
@@ -80,8 +88,11 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	// 2 = Pago (Registro en Caja)
 	if slices.Contains(sale.ActionsIncluded, 2) {
 		sale.AddStatus(2)
-		if sale.CajaID_ == 0 {
-			return req.MakeErr("Se requiere CajaID_ para procesar el pago.")
+		// Track when and who executed the latest payment action.
+		sale.LastPaymentTime = nowTime
+		sale.LastPaymentUser = req.Usuario.ID
+		if sale.LastPaymentCajaID == 0 {
+			return req.MakeErr("Se requiere LastPaymentCajaID para procesar el pago.")
 		}
 	} else if !isUpdate {
 		sale.OrderPendingPaymentUpdated = sale.Updated
@@ -90,6 +101,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	// 3 = Entrega (Movimiento de Almacén)
 	if slices.Contains(sale.ActionsIncluded, 3) {
 		sale.AddStatus(3)
+		// Track when and who executed the latest delivery action.
+		sale.DeliveryTime = nowTime
+		sale.DeliveryUser = req.Usuario.ID
 		if sale.AlmacenID == 0 {
 			return req.MakeErr("Se requiere AlmacenID para procesar la entrega.")
 		}
@@ -128,7 +142,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		montoPago := sale.TotalAmount - sale.DebtAmount
 		if montoPago != 0 {
 			movimiento := s.CajaMovimientoInterno{
-				CajaID:     sale.CajaID_,
+				CajaID:     sale.LastPaymentCajaID,
 				DocumentID: sale.ID,
 				Tipo:       8, // Cobro (Venta)
 				Monto:      montoPago,
@@ -197,6 +211,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			// Keep composite view columns in sync: {Fecha, Updated} must be updated together.
 			saleTable.Fecha,
 			saleTable.AlmacenID,
+			saleTable.LastPaymentCajaID,
 			saleTable.DebtAmount,
 			saleTable.Updated,
 			saleTable.UpdatedBy,
@@ -204,6 +219,10 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			saleTable.OrderPendingPaymentUpdated,
 			saleTable.OrderPendingDeliveryUpdated,
 			saleTable.OrderCompletedUpdated,
+			saleTable.LastPaymentTime,
+			saleTable.LastPaymentUser,
+			saleTable.DeliveryTime,
+			saleTable.DeliveryUser,
 			saleTable.DetailProductsIDs,
 		); err != nil {
 			return req.MakeErr("Error al actualizar la venta:", err)

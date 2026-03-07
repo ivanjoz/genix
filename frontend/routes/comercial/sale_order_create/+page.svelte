@@ -72,7 +72,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
 
   $effect(() => {
 	  if(cajas.isReady && cajas.Cajas.length > 0){
-	  	ventasState.form.CajaID_ = cajas.Cajas[0].ID
+	  	ventasState.form.LastPaymentCajaID = cajas.Cajas[0].ID
 	  }
   });
   
@@ -361,7 +361,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
         </div>
         <div class="flex w-full px-12 py-6">
 	        <SearchSelect css="mr-16"
-	          label="" save="CajaID_"
+	          label="" save="LastPaymentCajaID"
 	          keyId="ID"
 	          keyName="Nombre" saveOn={ventasState.form}
 	          options={cajas?.Cajas||[]}

@@ -7,6 +7,7 @@ import { fetchCache, fetchCacheParsed, sendServiceMessage } from '$libs/sw-cache
 import { browser } from "$app/environment";
 import { unmarshall } from '$libs/funcs/unmarshall';
 import { Env } from '$core/env';
+import { fetchEvent } from '$core/store.svelte';
 import {  ConcatenateIntsTest } from "./funcs/parsers"
 
 ConcatenateIntsTest()
@@ -147,9 +148,14 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
     sendServiceMessage(24, { routes: props.refreshRoutes })
 	}
 	const status: IHttpStatus = { code: 200, message: "" }
+  const requestFetchID = browser ? (fetchEvent(0) as number) : 0
 
   return new Promise((resolve, reject) => {
     console.log(`Fetching ${method} : ` + props.route)
+    // Reuse global fetch lifecycle so header shows the same top-right loader for POST/PUT.
+    if (requestFetchID > 0) {
+      fetchEvent(requestFetchID, { url: props.route })
+    }
 
     fetch(apiRoute, {
       method: method,
@@ -169,6 +175,11 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
         Notify.failure(String(error))
       }
       reject(error)
+    })
+    .finally(() => {
+      if (requestFetchID > 0) {
+        fetchEvent(requestFetchID, 0)
+      }
     })
   })
 }

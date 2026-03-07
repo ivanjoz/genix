@@ -1,13 +1,17 @@
 <script lang="ts">
   import SearchSelect from '$components/SearchSelect.svelte';
+  import LoadingBar from '$components/micro/LoadingBar.svelte';
   import Layer from '$components/Layer.svelte';
   import OptionsStrip from '$components/OptionsStrip.svelte';
+  import TableGrid from '$components/vTable/TableGrid.svelte';
+  import type { TableGridColumn } from '$components/vTable/tableGridTypes';
   import VTable from '$components/vTable/VTable.svelte';
   import type { ITableColumn } from '$components/vTable/types';
   import { Core } from '$core/store.svelte';
   import Page from '$domain/Page.svelte';
   import { Notify, formatN, formatTime } from '$libs/helpers';
   import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
+  import { AlmacenesService } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte';
   import { ProductosService } from '$routes/negocio/productos/productos.svelte';
   import { untrack } from 'svelte';
   import {
@@ -32,10 +36,13 @@
   let saleOrderDetailsView = $state(1);
   let selectedSaleOrder = $state<ISaleOrder | null>(null);
   let isPostingSaleOrderAction = $state(false);
-  let saleOrderPaymentForm = $state({ CajaID_: 0 });
+  let saleOrderActionInProgress = $state<'pago' | 'entrega' | null>(null);
+  let saleOrderPaymentForm = $state({ LastPaymentCajaID: 0 });
+  let saleOrderDeliveryForm = $state({ AlmacenID: 0 });
 
   const productosService = new ProductosService();
   const cajasService = new CajasService();
+  const almacenesService = new AlmacenesService();
 
   // Render tabs mapped to backend status filters.
   const options = [
@@ -111,13 +118,88 @@
     return saleOrder.ss === 1 || saleOrder.ss === 2;
   }
 
+  function getCajaName(cajaID: number): string {
+    if (!cajaID) { return '-'; }
+    return cajasService.CajasMap.get(cajaID)?.Nombre || `Caja #${cajaID}`;
+  }
+
+  function getAlmacenName(almacenID: number): string {
+    if (!almacenID) { return '-'; }
+    return almacenesService.AlmacenesMap.get(almacenID)?.Nombre || `Almacén #${almacenID}`;
+  }
+
+  function formatActionTime(unixTime: number): string {
+    if (!unixTime) { return '-'; }
+    return String(formatTime(unixTime, 'd-M-Y h:n'));
+  }
+
+  function getActionInProgressLabel(actionInProgress: 'pago' | 'entrega' | null): string {
+    // Keep message explicit so operators know the exact transition being processed.
+    if (actionInProgress === 'pago') { return 'Realizando Pago...'; }
+    if (actionInProgress === 'entrega') { return 'Realizando Entrega...'; }
+    return 'Procesando';
+  }
+
   const selectedSaleOrderDetailLines = $derived.by(() => {
     if (!selectedSaleOrder) { return []; }
     return getSaleOrderDetailLines(selectedSaleOrder);
   });
 
+  const detailTableColumns: TableGridColumn<ISaleOrderDetailLine>[] = [
+    {
+      id: 'productName',
+      header: 'Producto',
+      width: 'minmax(280px, 1.7fr)',
+      getValue: (detailLineRecord) => detailLineRecord.productName,
+    },
+    {
+      id: 'sku',
+      header: 'SKU',
+      width: 'minmax(120px, 0.7fr)',
+      align: 'center',
+      getValue: (detailLineRecord) => detailLineRecord.sku || '-',
+    },
+    {
+      id: 'quantity',
+      header: 'Cant.',
+      width: '90px',
+      align: 'right',
+      getValue: (detailLineRecord) => detailLineRecord.quantity,
+    },
+    {
+      id: 'unitPrice',
+      header: 'Precio',
+      width: '120px',
+      align: 'right',
+      getValue: (detailLineRecord) => `S/ ${formatN(detailLineRecord.unitPrice / 100, 2)}`,
+    },
+    {
+      id: 'subtotalAmount',
+      header: 'Subtotal',
+      width: '130px',
+      align: 'right',
+      getValue: (detailLineRecord) => `S/ ${formatN(detailLineRecord.subtotalAmount / 100, 2)}`,
+    },
+  ];
+
+  $effect(() => {
+    cajasService.Cajas;
+    saleOrderPaymentForm.LastPaymentCajaID;
+    untrack(() => {
+      // Default caja selector to the first active caja so payment can be processed in one click.
+      if (saleOrderPaymentForm.LastPaymentCajaID > 0) { return; }
+      const firstActiveCajaRecord = (cajasService.Cajas || []).find((cajaRecord) => (cajaRecord?.ss || 0) > 0);
+      if (firstActiveCajaRecord?.ID) {
+        saleOrderPaymentForm.LastPaymentCajaID = firstActiveCajaRecord.ID;
+      }
+    });
+  });
+
   function openSaleOrderDetailsLayer(saleOrder: ISaleOrder) {
     selectedSaleOrder = saleOrder;
+    // Keep selectors prefilled with the order values to reduce manual clicks.
+    saleOrderPaymentForm.LastPaymentCajaID = saleOrder.LastPaymentCajaID || 0;
+    saleOrderDeliveryForm.AlmacenID = saleOrder.AlmacenID || 0;
     saleOrderDetailsView = 1;
     Core.openSideLayer(10);
   }
@@ -132,7 +214,7 @@
       return;
     }
     // Payment caja priority: order caja first, otherwise use the user-selected caja.
-    const paymentCajaID = selectedSaleOrder.CajaID_ || saleOrderPaymentForm.CajaID_;
+    const paymentCajaID = selectedSaleOrder.LastPaymentCajaID || saleOrderPaymentForm.LastPaymentCajaID;
     if (!paymentCajaID) {
       Notify.failure('La orden no posee Caja ID para registrar el pago.');
       return;
@@ -142,7 +224,7 @@
     void processSaleOrderAction('pago', {
       ID: selectedSaleOrder.ID,
       ActionsIncluded: [2],
-      CajaID_: paymentCajaID,
+      LastPaymentCajaID: paymentCajaID,
       DebtAmount: 0,
     });
   }
@@ -156,7 +238,9 @@
       Notify.failure('Ya se está procesando una acción para esta orden.');
       return;
     }
-    if (!selectedSaleOrder.AlmacenID) {
+    // Delivery uses the selector value so the operator can choose a different almacén.
+    const selectedAlmacenID = saleOrderDeliveryForm.AlmacenID || selectedSaleOrder.AlmacenID;
+    if (!selectedAlmacenID) {
       Notify.failure('La orden no posee Almacén ID para registrar la entrega.');
       return;
     }
@@ -165,18 +249,31 @@
     void processSaleOrderAction('entrega', {
       ID: selectedSaleOrder.ID,
       ActionsIncluded: [3],
-      AlmacenID: selectedSaleOrder.AlmacenID,
+      AlmacenID: selectedAlmacenID,
     });
+  }
+
+  function onClickAnularSoloUI() {
+    // This button is intentionally UI-only until backend supports cancel action.
+    Notify.failure('Anulación disponible próximamente.');
+  }
+
+  function getSaleOrderLayerTitle(saleOrder: ISaleOrder | null): string {
+    if (!saleOrder) { return 'Detalle de Pedido'; }
+    // Keep ID and date in the same title line as requested.
+    return `Pedido #${saleOrder.ID} · ${formatTime(saleOrder.Created, 'd-M-Y h:n')}`;
   }
 
   async function processSaleOrderAction(actionLabel: 'pago' | 'entrega', updatePayload: {
     ID: number;
     ActionsIncluded: number[];
-    CajaID_?: number;
+    LastPaymentCajaID?: number;
     AlmacenID?: number;
     DebtAmount?: number;
   }) {
     if (!selectedSaleOrder) { return; }
+    // Lock the action area to a single progress card while this transition is running.
+    saleOrderActionInProgress = actionLabel;
     isPostingSaleOrderAction = true;
     console.debug('[sale_orders_status] starting action', {
       actionLabel,
@@ -205,6 +302,7 @@
       Notify.failure(`No se pudo procesar la ${actionLabel}.`);
     } finally {
       isPostingSaleOrderAction = false;
+      saleOrderActionInProgress = null;
     }
   }
 
@@ -298,95 +396,123 @@
     type="side"
     id={10}
     bind:selected={saleOrderDetailsView}
-    title={selectedSaleOrder ? `Pedido #${selectedSaleOrder.ID}` : 'Detalle de Pedido'}
+    title={getSaleOrderLayerTitle(selectedSaleOrder)}
     titleCss="h2"
     css="px-8 py-8 md:px-16 md:py-10"
     contentCss="px-0"
     onClose={() => {
       selectedSaleOrder = null;
+      saleOrderActionInProgress = null;
     }}
   >
+    {#snippet titleSide()}
+      {#if selectedSaleOrder}
+     	<div class="flex items-center">
+    		<div class="mr-8 ml-6 ff-semibold">{formatTime(selectedSaleOrder.Created, 'd-M-Y h:n')}</div>
+	       <button
+	         class="w-30 h-30 text-sm rounded-full bg-red-100 text-red-700 fx-c"
+	         type="button"
+	         title="Anular pedido"
+	         onclick={() => {
+	           onClickAnularSoloUI();
+	         }}
+	       >
+	         <i class="icon-trash"></i>
+	       </button>
+      </div>
+      {/if}
+    {/snippet}
     {#if selectedSaleOrder}
       <div class="flex flex-col gap-10 mt-8">
         <div class="grid grid-cols-24 gap-x-8 gap-y-8 text-13 md:text-14">
-          <div class="col-span-12 md:col-span-8">
-            <div class="text-gray-500">Fecha</div>
-            <div>{formatTime(selectedSaleOrder.Created, 'd-M-Y h:n')}</div>
-          </div>
-          <div class="col-span-12 md:col-span-8">
+          <div class="col-span-8">
             <div class="text-gray-500">Estado</div>
             <div>{getSaleOrderStatusName(selectedSaleOrder)}</div>
           </div>
-          <div class="col-span-12 md:col-span-8">
-            <div class="text-gray-500">Almacén ID</div>
-            <div class="ff-mono">{selectedSaleOrder.AlmacenID || '-'}</div>
-          </div>
-          <div class="col-span-12 md:col-span-8">
+          <div class="col-span-8">
             <div class="text-gray-500">Total</div>
             <div class="ff-mono">S/ {formatN(selectedSaleOrder.TotalAmount / 100, 2)}</div>
           </div>
-          <div class="col-span-12 md:col-span-8">
+          <div class="col-span-8">
             <div class="text-gray-500">Deuda</div>
             <div class="ff-mono">S/ {formatN((selectedSaleOrder.DebtAmount || 0) / 100, 2)}</div>
           </div>
         </div>
 
-        <div class="border border-gray-200 rounded-md overflow-hidden">
-          <div class="grid grid-cols-24 gap-6 px-8 py-6 bg-gray-100 ff-bold text-12 md:text-13">
-            <div class="col-span-8">Producto</div>
-            <div class="col-span-4 text-center">SKU</div>
-            <div class="col-span-3 text-right">Cant.</div>
-            <div class="col-span-4 text-right">Precio</div>
-            <div class="col-span-5 text-right">Subtotal</div>
-          </div>
-
-          {#if selectedSaleOrderDetailLines.length === 0}
-            <div class="px-8 py-10 text-gray-500 text-center">No hay productos en el detalle.</div>
-          {:else}
-            {#each selectedSaleOrderDetailLines as saleOrderDetailLine (saleOrderDetailLine.detailPosition)}
-              <div class="grid grid-cols-24 gap-6 px-8 py-6 border-t border-gray-100 text-12 md:text-13">
-                <div class="col-span-8 leading-16">{saleOrderDetailLine.productName}</div>
-                <div class="col-span-4 text-center ff-mono">{saleOrderDetailLine.sku || '-'}</div>
-                <div class="col-span-3 text-right ff-mono">{saleOrderDetailLine.quantity}</div>
-                <div class="col-span-4 text-right ff-mono">S/ {formatN(saleOrderDetailLine.unitPrice / 100, 2)}</div>
-                <div class="col-span-5 text-right ff-mono">S/ {formatN(saleOrderDetailLine.subtotalAmount / 100, 2)}</div>
-              </div>
-            {/each}
-          {/if}
-        </div>
+        <VTable
+          columns={detailTableColumns}
+          data={selectedSaleOrderDetailLines}
+          emptyMessage="No hay productos en el detalle."
+        />
 
         <div class="grid grid-cols-2 gap-8 mt-4">
-	       	<div class="p-10 bg-gray-100 min-h-64 w-full rounded-md">
-          	<SearchSelect
-              bind:saveOn={saleOrderPaymentForm}
-              save="CajaID_" css="mb-8"
-              options={(cajasService.Cajas || []).filter((cajaRecord) => (cajaRecord?.ss || 0) > 0)}
-              keyId="ID"
-              keyName="Nombre"
-              label="Caja para Pago"
-              placeholder=":: seleccione ::"
-            />
-		        <button class={`bx-green justify-center w-[50%] h-36 ${!canPaySaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
-		          disabled={!canPaySaleOrder(selectedSaleOrder) || isPostingSaleOrderAction}
-		          onclick={() => {
-		            onClickPagar();
-		          }}
-		        >
-		          <i class="icon-ok"></i>
-		          <span class="mr-12">Pagar</span>
-		        </button>
-	        </div>
-					<div class="p-10 bg-gray-100 min-h-64 w-full rounded-md flex items-end">
-	      		<button class={`w-[50%] justify-center bx-blue h-36 ${!canDeliverSaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
-	            disabled={!canDeliverSaleOrder(selectedSaleOrder) || isPostingSaleOrderAction}
-	            onclick={() => {
-	              onClickEntregar();
-	            }}
-	          >
-	            <i class="icon-truck"></i>
-	            <span>Entregar</span>
-	          </button>
-					</div>
+          {#if isPostingSaleOrderAction}
+            <div class="col-span-2 p-12 bg-gray-100 min-h-64 w-full rounded-md fx-c">
+              <LoadingBar label={getActionInProgressLabel(saleOrderActionInProgress)} />
+            </div>
+          {:else}
+            <div class="p-10 bg-gray-100 min-h-64 w-full rounded-md">
+              {#if canPaySaleOrder(selectedSaleOrder)}
+                <SearchSelect
+                  bind:saveOn={saleOrderPaymentForm}
+                  save="LastPaymentCajaID"
+                  css="mb-8"
+                  options={(cajasService.Cajas || []).filter((cajaRecord) => (cajaRecord?.ss || 0) > 0)}
+                  keyId="ID"
+                  keyName="Nombre"
+                  label="Caja para Pago"
+                  placeholder=":: seleccione ::"
+                />
+                <button class={`bx-green justify-center w-[50%] h-36 ${!canPaySaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
+                  disabled={!canPaySaleOrder(selectedSaleOrder) || isPostingSaleOrderAction}
+                  onclick={() => {
+                    onClickPagar();
+                  }}
+                >
+                  <i class="icon-ok"></i>
+                  <span class="mr-12">Pagar</span>
+                </button>
+              {:else}
+                <div class="text-13 leading-20 text-gray-700">
+                  <span class="ff-bold text-xs color-label mr-2">Pagado el:</span> {formatActionTime(selectedSaleOrder.LastPaymentTime)}.<br>
+                  <span class="ff-bold text-xs color-label mr-2">En:</span> {getCajaName(selectedSaleOrder.LastPaymentCajaID)}.<br>
+                  <span class="ff-bold text-xs color-label mr-2">Usuario:</span> {selectedSaleOrder.LastPaymentUser || '-'}.
+                </div>
+              {/if}
+            </div>
+            <div class="p-10 bg-gray-100 min-h-64 w-full rounded-md flex flex-col justify-between">
+              {#if canDeliverSaleOrder(selectedSaleOrder)}
+                <SearchSelect
+                  bind:saveOn={saleOrderDeliveryForm}
+                  save="AlmacenID"
+                  css="mb-8 w-full"
+                  inputCss="w-full"
+                  options={(almacenesService.Almacenes || []).filter((almacenRecord) => (almacenRecord?.ss || 0) > 0)}
+                  keyId="ID"
+                  keyName="Nombre"
+                  label="Almacén para Entrega"
+                  placeholder=":: seleccione ::"
+                />
+                <div class="flex items-center">
+                  <button class={`w-[50%] justify-center bx-blue h-36 ${!canDeliverSaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
+                    disabled={!canDeliverSaleOrder(selectedSaleOrder) || isPostingSaleOrderAction}
+                    onclick={() => {
+                      onClickEntregar();
+                    }}
+                  >
+                    <i class="icon-truck"></i>
+                    <span>Entregar</span>
+                  </button>
+                </div>
+              {:else}
+                <div class="text-13 leading-20 text-gray-700">
+                  <span class="ff-bold text-xs color-label">Entregado el</span> {formatActionTime(selectedSaleOrder.DeliveryTime)}.<br>
+                  <span class="ff-bold text-xs color-label">En</span> {getAlmacenName(selectedSaleOrder.AlmacenID)}.<br>
+                  <span class="ff-bold text-xs color-label">Registrado por</span> {selectedSaleOrder.DeliveryUser || '-'}.
+                </div>
+              {/if}
+            </div>
+          {/if}
         </div>
       </div>
     {/if}

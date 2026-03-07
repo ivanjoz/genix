@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import { tick } from 'svelte'
 import { Core } from '$core/store.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
@@ -15,6 +16,7 @@ import { Env } from '$core/env';
     children,
     css,
     title,
+    titleSide,
     titleCss,
     contentCss,
     id,
@@ -31,6 +33,7 @@ import { Env } from '$core/env';
     children: any
     css?: string
     title?: string
+    titleSide?: Snippet
     titleCss?: string
     options?: [number, string, string[]?][]
     contentCss?: string
@@ -145,7 +148,14 @@ import { Env } from '$core/env';
     style={layerWidth ? `width: ${layerWidth};` : ''}
   >
     <div class="flex items-center justify-between">
-      <div class="overflow-hidden text-nowrap mr-8 {titleCss}">{title}</div>
+      <div class="flex items-center gap-8 overflow-hidden mr-8">
+        <div class="overflow-hidden text-nowrap {titleCss}">{title}</div>
+        {#if titleSide}
+          <div class="shrink-0">
+            {@render titleSide()}
+          </div>
+        {/if}
+      </div>
       <div class="shrink-0 flex items-center mb-2">
         {#if onDelete}
           <button

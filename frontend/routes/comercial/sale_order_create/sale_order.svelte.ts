@@ -30,7 +30,7 @@ export interface ISaleOrder {
   ID: number
   EmpresaID: number
   AlmacenID: number
-  CajaID_: number
+  LastPaymentCajaID: number
   TotalAmount: number
   TaxAmount: number
   DebtAmount: number
@@ -49,7 +49,7 @@ export class SaleOrderState {
   // State
   productosStock = $state([] as IProductoStock[])
   form = $state({
-    ID: 0, EmpresaID: 0, AlmacenID: 0, CajaID_: 1, // Default CajaID_ to 1 for now or handle in UI
+    ID: 0, EmpresaID: 0, AlmacenID: 0, LastPaymentCajaID: 1, // Default payment caja; UI can overwrite.
     TotalAmount: 0, TaxAmount: 0, DebtAmount: 0,
     ProcessesIncluded_: [2, 3],
     DetailProductsIDs: [], DetailPrices: [], DetailQuantities: [],

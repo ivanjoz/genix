@@ -20,9 +20,13 @@ export interface ISaleOrder {
     TaxAmount: number;
     DebtAmount: number;
     DeliveryStatus: number;
-    CajaID_: number;
+    LastPaymentCajaID: number;
     ProcessesIncluded_: number[];
     Created: number;
+    LastPaymentTime: number;
+    LastPaymentUser: number;
+    DeliveryTime: number;
+    DeliveryUser: number;
     upd: number;
     UpdatedBy: number;
     ss: number;
@@ -33,7 +37,7 @@ export interface ISaleOrder {
 export interface ISaleOrderUpdatePayload {
 	ID: number;
 	ActionsIncluded: number[];
-	CajaID_?: number;
+	LastPaymentCajaID?: number;
 	AlmacenID?: number;
 	DebtAmount?: number;
 }
@@ -63,8 +67,10 @@ export class SaleOrdersService extends GetHandler {
 		const activeOrders = data.filter((saleOrder) => (saleOrder?.ss || 0) > 0);
 		this.records = activeOrders.map((saleOrder) => {
 			const topPaidProducts = this.getTopPaidProductsByAmount(saleOrder);
+			const normalizedLastPaymentCajaID = saleOrder.LastPaymentCajaID || (saleOrder as any).CajaID_ || 0;
 			return {
 				...saleOrder,
+				LastPaymentCajaID: normalizedLastPaymentCajaID,
 				TopPaidProducts: topPaidProducts,
 			};
 		});

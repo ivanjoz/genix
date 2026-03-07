@@ -28,8 +28,9 @@ type SaleOrder struct {
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
 	Status int8 `json:"ss,omitempty"`
 
-	// Extra field for post request
-	CajaID_ int32 `json:",omitempty"`
+	// Last payment caja used for payment action tracking.
+	// Keep db column mapped to legacy `caja_id_` to avoid data migration breaks.
+	LastPaymentCajaID int32 `json:",omitempty" db:"caja_id_"`
 	// If contains 2 = the payment is done
 	// If contains 3 = the delivery of the product is done
 	ActionsIncluded []int8 `json:",omitempty"`
@@ -37,6 +38,11 @@ type SaleOrder struct {
 	OrderPendingPaymentUpdated  int32 `json:",omitempty"`
 	OrderPendingDeliveryUpdated int32 `json:",omitempty"`
 	OrderCompletedUpdated       int32 `json:",omitempty"`
+	// Audit trail fields for payment and delivery actions.
+	LastPaymentTime int32 `json:",omitempty"`
+	LastPaymentUser int32 `json:",omitempty"`
+	DeliveryTime    int32 `json:",omitempty"`
+	DeliveryUser    int32 `json:",omitempty"`
 }
 
 func (e *SaleOrder) AddStatus(orderState int8) error {
@@ -77,6 +83,7 @@ type SaleOrderTable struct {
 	ID                          db.Col[SaleOrderTable, int64]
 	Fecha                       db.Col[SaleOrderTable, int16]
 	AlmacenID                   db.Col[SaleOrderTable, int32]
+	LastPaymentCajaID           db.Col[SaleOrderTable, int32]
 	DetailProductsIDs           db.Col[SaleOrderTable, []int32]
 	DetailPrices                db.Col[SaleOrderTable, []int32]
 	DetailQuantities            db.Col[SaleOrderTable, []int32]
@@ -91,6 +98,10 @@ type SaleOrderTable struct {
 	OrderPendingPaymentUpdated  db.Col[SaleOrderTable, int32]
 	OrderPendingDeliveryUpdated db.Col[SaleOrderTable, int32]
 	OrderCompletedUpdated       db.Col[SaleOrderTable, int32]
+	LastPaymentTime             db.Col[SaleOrderTable, int32]
+	LastPaymentUser             db.Col[SaleOrderTable, int32]
+	DeliveryTime                db.Col[SaleOrderTable, int32]
+	DeliveryUser                db.Col[SaleOrderTable, int32]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
@@ -160,7 +171,6 @@ func (e SaleSummaryTable) GetSchema() db.TableSchema {
 		Keys:      []db.Coln{e.Fecha},
 	}
 }
-
 
 // FlattenSaleSummary converts 16-bit packed slices into the 32-bit slices and
 // clears *_16 fields so clients consume one single flat shape.
