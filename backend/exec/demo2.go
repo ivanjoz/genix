@@ -1,7 +1,7 @@
 package exec
 
 import (
-	"app/cloud"
+
 	// comercial "app/comercial/types"
 	"app/core"
 	"app/db"
@@ -108,24 +108,6 @@ func Test39(args *core.ExecArgs) core.FuncResponse {
 	return core.FuncResponse{}
 }
 
-func Test40(args *core.ExecArgs) core.FuncResponse {
-
-	query := cloud.DynamoQueryParam{Index: "ix3", GreaterThan: "0"}
-	query.GreaterThan = fmt.Sprintf("1_%v", 0)
-
-	dynamoTable := handlers.MakeUsuarioTable(1)
-	records, err := dynamoTable.QueryBatch([]cloud.DynamoQueryParam{query})
-
-	if err != nil {
-		panic(err)
-	}
-
-	if err = db.Insert(&records); err != nil {
-		panic(err.Error())
-	}
-
-	return core.FuncResponse{}
-}
 
 func Test41(args *core.ExecArgs) core.FuncResponse {
 	/*

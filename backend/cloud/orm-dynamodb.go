@@ -218,7 +218,7 @@ func (o *DynamoORM[T]) GetByID(record T) (*T, error) {
 	if err != nil {
 		return nil, err
 	}
-	if output.Item == nil || len(output.Item) == 0 {
+	if len(output.Item) == 0 {
 		return nil, nil // Not found
 	}
 
@@ -318,16 +318,20 @@ func (b *dynamoQueryBuilder[T]) Exec() error {
 	}
 
 	client := dynamodb.NewFromConfig(core.GetAwsConfig())
+	// Indexed queries use the table hash prefix as the fixed partition when the model has no explicit pk field.
+	dynamoPartitionKey := b.orm.hashPrefix
 
 	var expr string
-	attrValues := map[string]types.AttributeValue{}
+	attrValues := map[string]types.AttributeValue{
+		":pk": &types.AttributeValueMemberS{Value: dynamoPartitionKey},
+	}
 
 	if b.operator == "BETWEEN" {
-		expr = fmt.Sprintf("%s BETWEEN :val1 AND :val2", dynIndex)
+		expr = fmt.Sprintf("pk = :pk AND %s BETWEEN :val1 AND :val2", dynIndex)
 		attrValues[":val1"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%v", b.value)}
 		attrValues[":val2"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%v", b.valueEnd)}
 	} else {
-		expr = fmt.Sprintf("%s %s :val", dynIndex, b.operator)
+		expr = fmt.Sprintf("pk = :pk AND %s %s :val", dynIndex, b.operator)
 		attrValues[":val"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%v", b.value)}
 	}
 

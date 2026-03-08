@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"app/cloud"
 	"app/core"
 	"app/db"
 	"app/facturacion"
@@ -74,19 +73,6 @@ func TestZstdCompression(args *core.ExecArgs) core.FuncResponse {
 	textUncompressed := core.DecompressZstd(&textCompressed)
 	core.Log("Texto Descomprimido:")
 	core.Log(textUncompressed)
-
-	return core.FuncResponse{}
-}
-
-func TestDynamoCounter(args *core.ExecArgs) core.FuncResponse {
-
-	counter, err := cloud.GetDynamoCounter("demo")
-
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("Counter actual:: ", counter)
 
 	return core.FuncResponse{}
 }

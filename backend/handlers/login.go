@@ -31,11 +31,9 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("El CipherKey es necesario.")
 	}
 
-	usuarioTable := MakeUsuarioTable(body.EmpresaID)
-	usuarios, err := usuarioTable.QueryBatch([]cloud.DynamoQueryParam{
-		{Index: "ix1", Equals: body.Usuario},
-	})
-
+	usuarios := []types.Usuario{}
+	companyUserIndex := fmt.Sprintf("%d_%s", body.EmpresaID, body.Usuario)
+	err = cloud.Select(&usuarios).Where("company_usuario").Equals(companyUserIndex).Exec()
 	if err != nil {
 		return req.MakeErr("Error al consultar el usuario.", err.Error())
 	}
@@ -88,18 +86,16 @@ func MakeUsuarioResponse(usuario types.Usuario, cipherKey string) (map[string]an
 		}
 		// Obtiene los acceso en base a los perfiles
 	} else if len(usuario.PerfilesIDs) > 0 {
-		dynamoTable := MakePerfilTable(usuario.EmpresaID)
-		querys := []cloud.DynamoQueryParam{}
 		for _, perfilID := range usuario.PerfilesIDs {
-			querys = append(querys, cloud.DynamoQueryParam{
-				Index: "sk", Equals: fmt.Sprintf("%v", perfilID),
+			perfil, err := cloud.GetByID(types.Perfil{
+				CloudKey: fmt.Sprintf("%d_%d", usuario.EmpresaID, perfilID),
 			})
-		}
-		perfiles, err := dynamoTable.QueryBatch(querys)
-		if err != nil {
-			return nil, core.Err("Error al obtener perfiles.", err)
-		}
-		for _, perfil := range perfiles {
+			if err != nil {
+				return nil, core.Err("Error al obtener perfiles.", err)
+			}
+			if perfil == nil {
+				continue
+			}
 			usuarioToken.AccesosIDs = append(usuarioToken.AccesosIDs, perfil.Accesos...)
 		}
 		usuarioToken.AccesosIDs = core.MakeUnique(usuarioToken.AccesosIDs)
@@ -151,18 +147,17 @@ func MakeUsuarioResponse(usuario types.Usuario, cipherKey string) (map[string]an
 func ReloadLogin(req *core.HandlerArgs) core.HandlerResponse {
 
 	cipherKey := req.GetQuery("cipher-key")
-	usuarioTable := MakeUsuarioTable(req.Usuario.EmpresaID)
 
-	usuarios, err := usuarioTable.QueryBatch([]cloud.DynamoQueryParam{
-		{Index: "ix1", Equals: req.Usuario.Usuario},
+	usuario, err := cloud.GetByID(types.Usuario{
+		CloudKey: fmt.Sprintf("%d_%d", req.Usuario.EmpresaID, req.Usuario.ID),
 	})
-
 	if err != nil {
 		return req.MakeErr("Error al obtener el usuario.", err)
 	}
-
-	usuario := usuarios[0]
-	response, err := MakeUsuarioResponse(usuario, cipherKey)
+	if usuario == nil {
+		return req.MakeErr("No se encontró el usuario.")
+	}
+	response, err := MakeUsuarioResponse(*usuario, cipherKey)
 	if err != nil {
 		return req.MakeErr(err)
 	}

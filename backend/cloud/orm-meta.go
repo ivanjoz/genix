@@ -70,6 +70,11 @@ func parseColumns(model interface{}) ([]ColumnMeta, string, string) {
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 
+		// Embedded helper structs like db.TableStruct are not persisted by the cloud ORM.
+		if field.Anonymous {
+			continue
+		}
+
 		// Ignore unexported fields
 		if field.PkgPath != "" {
 			continue
@@ -85,6 +90,9 @@ func parseColumns(model interface{}) ([]ColumnMeta, string, string) {
 			colMeta.ColumnName = toSnakeCase(field.Name)
 		} else {
 			parts := strings.Split(colTag, ",")
+			if parts[0] == "-" {
+				continue
+			}
 			if parts[0] == "" {
 				colMeta.ColumnName = toSnakeCase(field.Name)
 			} else {

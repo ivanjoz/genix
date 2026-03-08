@@ -1,9 +1,9 @@
 package exec
 
 import (
+	"app/cloud"
 	"app/core"
 	"app/db"
-	"app/handlers"
 	s "app/types"
 	"encoding/csv"
 	"encoding/json"
@@ -24,9 +24,17 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	if err := db.Init(); err != nil {
 		panic("Error al inicializar las tablas internas del ORM. " + err.Error())
 	}
+	if err := cloud.Init[s.Empresa](); err != nil {
+		panic("Error al inicializar la tabla cloud de empresas. " + err.Error())
+	}
+	if err := cloud.Init[s.Usuario](); err != nil {
+		panic("Error al inicializar la tabla cloud de usuarios. " + err.Error())
+	}
+	if err := cloud.Init[s.Perfil](); err != nil {
+		panic("Error al inicializar la tabla cloud de perfiles. " + err.Error())
+	}
 
 	seedTimestamp := time.Now().Unix()
-	empresaTable := handlers.MakeEmpresaTable()
 	empresa := s.Empresa{
 		ID:          1,
 		Nombre:      "Principal",
@@ -35,12 +43,14 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 		Updated:     seedTimestamp,
 	}
 
-	err := empresaTable.PutItem(&empresa, 1)
-	if err != nil {
-		panic("Error al crear el usuario admin. " + err.Error())
+	// Seed the root company in ScyllaDB first so the relational source of truth is ready.
+	if err := db.Insert(&[]s.Empresa{empresa}); err != nil {
+		panic("Error al crear la empresa principal en ScyllaDB. " + err.Error())
 	}
-
-	core.Log("Se creo/actualizó la empresa en DynamoDB.")
+	if err := cloud.Insert([]s.Empresa{empresa}); err != nil {
+		panic("Error al crear la empresa principal en cloud. " + err.Error())
+	}
+	core.Log("Se creo/actualizó la empresa principal en ScyllaDB y cloud.")
 	password := core.Env.SECRET_PHRASE + core.Env.ADMIN_PASSWORD
 	passwordHash := core.FnvHashString64(password, -1, 20)
 
@@ -55,27 +65,20 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 		Created:      seedTimestamp,
 		Updated:      seedTimestamp,
 	}
-
-	usuarioTable := handlers.MakeUsuarioTable(empresa.ID)
-
-	err = usuarioTable.PutItem(&usuario, 1)
-	if err != nil {
-		panic("Error al crear el usuario admin en DynamoDB. " + err.Error())
-	}
-
-	core.Log("Se creo/actualizó el usuario admin en DynamoDB.")
+	usuario.PrepareCloudSync()
 
 	// Seed the same admin user into ScyllaDB so delta-cache and ID-based reads stay consistent.
-	if err = db.Insert(&[]s.Usuario{usuario}); err != nil {
+	if err := db.Insert(&[]s.Usuario{usuario}); err != nil {
 		panic("Error al crear el usuario admin en ScyllaDB. " + err.Error())
 	}
-
-	core.Log("Se creo/actualizó el usuario admin en ScyllaDB.")
+	if err := cloud.Insert([]s.Usuario{usuario}); err != nil {
+		panic("Error al crear el usuario admin en cloud. " + err.Error())
+	}
+	core.Log("Se creo/actualizó el usuario admin en ScyllaDB y cloud.")
 
 	// Run the city import as part of the base bootstrap to leave the environment operational after init.
 	ImportCiudades(args)
 	core.Log("Se importaron las ciudades iniciales.")
-
 	core.Print(usuario)
 
 	return core.FuncResponse{}

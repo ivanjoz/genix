@@ -3,118 +3,27 @@ package handlers
 import (
 	"app/cloud"
 	"app/core"
+	"app/db"
 	s "app/types"
 	"encoding/json"
 	"fmt"
 	"time"
 )
 
-/* ACCESOS */
-func MakeAccesoTable() cloud.DynamoTableRecords[s.SeguridadAcceso] {
-	return cloud.DynamoTableRecords[s.SeguridadAcceso]{
-		TableName:      core.Env.DYNAMO_TABLE,
-		PK:             "acceso",
-		UseCompression: true,
-		GetIndexKeys: func(e s.SeguridadAcceso, idx uint8) string {
-			switch idx {
-			case 0: // SK (Sort Key)
-				return core.Concatn(e.ID)
-			case 2: // ix2
-				return core.Concatn(e.Status, e.Updated)
-			case 3: // ix3
-				return core.Concatn(e.Updated)
-			}
-			return ""
-		},
-	}
-}
-
-func PostAcceso(req *core.HandlerArgs) core.HandlerResponse {
-
-	body := s.SeguridadAcceso{}
-	err := json.Unmarshal([]byte(*req.Body), &body)
-	if err != nil {
-		return req.MakeErr("Error al deserilizar el body: " + err.Error())
-	}
-
-	if body.ID < 1 {
-		counter, err := cloud.GetDynamoCounter("empresa")
-		if err != nil {
-			return req.MakeErr("Error al obtener el counter.", counter)
-		}
-		body.ID = int32(counter)
-	}
-
-	body.Updated = time.Now().Unix()
-	accesosTable := MakeAccesoTable()
-	err = accesosTable.PutItem(&body, 1)
-
-	if err != nil {
-		return req.MakeErr("Error al actualizar el acceso: " + err.Error())
-	}
-
-	return req.MakeResponse(body)
-}
-
-func GetAccesos(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetQueryInt64("upd")
-
-	query := cloud.DynamoQueryParam{Index: "ix3", GreaterThan: "0"}
-	query.GreaterThan = fmt.Sprintf("%v", updated)
-
-	dynamoTable := MakeAccesoTable()
-	records, err := dynamoTable.QueryBatch([]cloud.DynamoQueryParam{query})
-	if err != nil {
-		panic(err)
-	}
-
-	for i := range records {
-		e := &records[i]
-		if e.Updated == 0 {
-			e.Updated = 1
-		}
-	}
-
-	core.Log("Accesos obtenidos:: ", len(records))
-
-	return core.MakeResponse(req, &records)
-}
-
-/* PERFILES */
-func MakePerfilTable(empresaID int32) cloud.DynamoTableRecords[s.Perfil] {
-	return cloud.DynamoTableRecords[s.Perfil]{
-		TableName:      core.Env.DYNAMO_TABLE,
-		PK:             core.Concatn("perf", empresaID),
-		UseCompression: true,
-		GetIndexKeys: func(e s.Perfil, idx uint8) string {
-			switch idx {
-			case 0: // SK (Sort Key)
-				return core.Concatn(e.ID)
-			case 2: // ix2
-				return core.Concatn(e.Status, e.Updated)
-			case 3: // ix3
-				return core.Concatn(e.Updated)
-			}
-			return ""
-		},
-	}
-}
-
 func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt64("upd")
+	records := []s.Perfil{}
 
-	query := cloud.DynamoQueryParam{Index: "ix3", GreaterThan: "0"}
+	var err error
 	if updated > 0 {
-		query.GreaterThan = fmt.Sprintf("%v", updated)
+		companyUpdated := fmt.Sprintf("%d_%020d", req.Usuario.EmpresaID, updated)
+		err = cloud.Select(&records).Where("company_updated").GreaterEqual(companyUpdated).Exec()
 	} else {
-		query.Index = "ix2"
-		query.GreaterThan = fmt.Sprintf("1_%v", updated)
+		activeProfiles := fmt.Sprintf("%d_%d_%020d", req.Usuario.EmpresaID, 1, updated)
+		err = cloud.Select(&records).Where("company_status_updated").GreaterEqual(activeProfiles).Exec()
 	}
-
-	dynamoTable := MakePerfilTable(req.Usuario.EmpresaID)
-	records, err := dynamoTable.QueryBatch([]cloud.DynamoQueryParam{query})
 	if err != nil {
-		panic(err)
+		return req.MakeErr("Error al obtener perfiles.", err)
 	}
 
 	core.Log("Perfiles obtenidos:: ", len(records))
@@ -124,29 +33,26 @@ func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
-
 	body := s.Perfil{}
 	err := json.Unmarshal([]byte(*req.Body), &body)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	if body.ID < 1 {
-		counter, err := cloud.GetDynamoCounter(core.Concatn("perfiles", req.Usuario.EmpresaID))
-		if err != nil {
-			return req.MakeErr("Error al obtener el counter.", counter)
-		}
-		body.ID = int32(counter)
-	}
-
+	body.EmpresaID = req.Usuario.EmpresaID
 	core.Print(body)
 
 	body.Updated = time.Now().Unix()
-	accesosTable := MakePerfilTable(req.Usuario.EmpresaID)
-	err = accesosTable.PutItem(&body, 1)
+	body.PrepareCloudSync()
+	perfilesToSave := []s.Perfil{body}
+	if err = db.Insert(&perfilesToSave); err != nil {
+		return req.MakeErr("Error al actualizar el perfil en ScyllaDB: " + err.Error())
+	}
 
-	if err != nil {
-		return req.MakeErr("Error al actualizar el acceso: " + err.Error())
+	body = perfilesToSave[0]
+	body.PrepareCloudSync()
+	if err = cloud.Insert([]s.Perfil{body}); err != nil {
+		return req.MakeErr("Error al actualizar el perfil en cloud: " + err.Error())
 	}
 
 	return req.MakeResponse(body)

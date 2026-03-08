@@ -1,7 +1,6 @@
 package main
 
 import (
-	"app/cloud"
 	"app/core"
 	"app/exec"
 	"app/handlers"
@@ -227,23 +226,23 @@ func ExecFuncHandler(lambdaInput string) (response core.FuncResponse) {
 		if len(funcsToInvokeMap) == 0 {
 			return core.FuncResponse{}
 		}
-
+		/* 
 		messages := []string{}
 
 		for funcName, funcToInvoke := range funcsToInvokeMap {
 			nowTime := time.Now().Unix()
 			core.Log("*Ejecutando función:: ", funcToInvoke.HourMin, " | ", funcName)
 			core.LogsSaved = []string{}
-
+			
 			args := core.ExecArgs{Message: ""}
 			funcMessage := funcToInvoke.Exec(&args).Message
 			duration := int(time.Now().Unix() - nowTime)
-			cloud.PutFuncLog(funcName, funcMessage, duration)
 
 			message := core.Concat(" | ", "Func: "+funcName, core.Concats(duration, "s"))
 			messages = append(messages, message)
 		}
 		core.Log(messages)
+		*/
 		// Función a ejecutarse con nombre específico
 	} else if len(args.FuncToExec) > 0 {
 		for key := range exec.ExecHandlers {
@@ -281,30 +280,6 @@ func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerRespon
 			response.LambdaResponse = core.MakeResponseFinal(handlerResponse)
 		}
 	}
-
-	// Revisa si es necesario guardar el Log
-	/*
-		logRecord := core.MakeReqLog()
-		apisToAvoid := []string{"logs-"}
-
-		saveLogs := true
-		if strings.Contains(logRecord.IP, "::1") || strings.Contains(logRecord.IP, "127.0.0.1") {
-			saveLogs = false
-		}
-		if len(logRecord.PathName) < 4 || strings.Contains(logRecord.PathName, ".p-") {
-			saveLogs = false
-		}
-
-		for _, e := range apisToAvoid {
-			if strings.Contains(logRecord.ApiUrl, e) {
-				saveLogs = false
-				break
-			}
-		}
-		if saveLogs {
-			cloud.MakeTableLogs2().PutItem(&logRecord, 1)
-		}
-	*/
 	return response
 }
 

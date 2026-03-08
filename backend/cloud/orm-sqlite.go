@@ -190,6 +190,7 @@ func (o *SqliteORM[T]) Init() error {
 func (o *SqliteORM[T]) BuildInitQueries() []string {
 	var queries []string
 	var colDefs []string
+	primaryKeyColumns := []string{}
 
 	for _, col := range o.columns {
 		var sqlType string
@@ -215,10 +216,24 @@ func (o *SqliteORM[T]) BuildInitQueries() []string {
 		}
 
 		def := fmt.Sprintf("%s %s", col.ColumnName, sqlType)
-		if col.IsPK {
-			def += " PRIMARY KEY"
+		if col.IsPK || col.IsSK {
+			// Keep PK parts explicit so SQLite can build a composite primary key when both exist.
+			primaryKeyColumns = append(primaryKeyColumns, col.ColumnName)
 		}
 		colDefs = append(colDefs, def)
+	}
+
+	if len(primaryKeyColumns) == 1 {
+		primaryKeyColumnName := primaryKeyColumns[0]
+		for columnIndex, columnDefinition := range colDefs {
+			if strings.HasPrefix(columnDefinition, primaryKeyColumnName+" ") {
+				colDefs[columnIndex] = columnDefinition + " PRIMARY KEY"
+				break
+			}
+		}
+	} else if len(primaryKeyColumns) > 1 {
+		// Composite keys are required for entities like Usuario where id is scoped by empresa_id.
+		colDefs = append(colDefs, fmt.Sprintf("PRIMARY KEY (%s)", strings.Join(primaryKeyColumns, ", ")))
 	}
 
 	createTableQuery := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n\t%s\n);",
@@ -254,6 +269,8 @@ func (o *SqliteORM[T]) buildInsertQuery(record *T) (string, []interface{}) {
 	var cols []string
 	var placeholders []string
 	var args []interface{}
+	primaryKeyColumns := []string{}
+	updateAssignments := []string{}
 
 	v := reflect.ValueOf(record)
 	if v.Kind() == reflect.Ptr {
@@ -263,6 +280,12 @@ func (o *SqliteORM[T]) buildInsertQuery(record *T) (string, []interface{}) {
 	for _, col := range o.columns {
 		cols = append(cols, col.ColumnName)
 		placeholders = append(placeholders, "?")
+		if col.IsPK || col.IsSK {
+			primaryKeyColumns = append(primaryKeyColumns, col.ColumnName)
+		} else {
+			// Replace non-key columns on conflict so SQLite mirrors DynamoDB PutItem semantics.
+			updateAssignments = append(updateAssignments, fmt.Sprintf("%s = excluded.%s", col.ColumnName, col.ColumnName))
+		}
 
 		fieldVal := v.FieldByName(col.FieldName)
 		kind := fieldVal.Kind()
@@ -277,8 +300,20 @@ func (o *SqliteORM[T]) buildInsertQuery(record *T) (string, []interface{}) {
 		}
 	}
 
-	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);",
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
 		o.tableName, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
+
+	if len(primaryKeyColumns) > 0 {
+		if len(updateAssignments) > 0 {
+			query += fmt.Sprintf(" ON CONFLICT (%s) DO UPDATE SET %s",
+				strings.Join(primaryKeyColumns, ", "),
+				strings.Join(updateAssignments, ", "))
+		} else {
+			query += fmt.Sprintf(" ON CONFLICT (%s) DO NOTHING", strings.Join(primaryKeyColumns, ", "))
+		}
+	}
+
+	query += ";"
 
 	return query, args
 }
@@ -290,24 +325,29 @@ func (o *SqliteORM[T]) GetByID(record T) (*T, error) {
 		v = v.Elem()
 	}
 
-	var pkCol string
-	var idValue interface{}
+	primaryKeyColumns := []string{}
+	primaryKeyValues := []interface{}{}
 
 	for _, col := range o.columns {
-		if col.IsPK {
-			pkCol = col.ColumnName
-			idValue = v.FieldByName(col.FieldName).Interface()
-			break
+		if col.IsPK || col.IsSK {
+			primaryKeyColumns = append(primaryKeyColumns, col.ColumnName)
+			primaryKeyValues = append(primaryKeyValues, v.FieldByName(col.FieldName).Interface())
 		}
 	}
 
-	if pkCol == "" {
-		return nil, errors.New("record must have a pk column for GetByID")
+	if len(primaryKeyColumns) == 0 {
+		return nil, errors.New("record must have at least one key column for GetByID")
 	}
 
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = ? LIMIT 1;", o.tableName, pkCol)
+	whereClauses := make([]string, 0, len(primaryKeyColumns))
+	for _, columnName := range primaryKeyColumns {
+		whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", columnName))
+	}
 
-	reqs := []d1Request{{SQL: query, Params: []interface{}{idValue}}}
+	// Query by all key parts so D1 matches the same identity rules used by DynamoDB.
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s LIMIT 1;", o.tableName, strings.Join(whereClauses, " AND "))
+
+	reqs := []d1Request{{SQL: query, Params: primaryKeyValues}}
 	results, err := executeD1Queries(reqs)
 	if err != nil {
 		return nil, err

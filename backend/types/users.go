@@ -1,28 +1,60 @@
 package types
 
-import "app/db"
+import (
+	"app/db"
+	"fmt"
+)
 
 type TAGS struct{}
 
-type Empresa struct { // DynamoDB
-	TAGS               `table:"empresas"`
-	ID                 int32        `json:"id"`
-	Nombre             string       `json:",omitempty"`
-	RazonSocial        string       `json:",omitempty"`
-	RUC                string       `json:",omitempty"`
-	Email              string       `json:",omitempty"`
-	NotificacionEmail  string       `json:",omitempty"`
-	Telefono           string       `json:",omitempty"`
-	Representante      string       `json:",omitempty"`
-	Direccion          string       `json:",omitempty"`
-	Ciudad             string       `json:",omitempty"`
-	FormApiKey         string       `json:",omitempty"`
-	EmailVerificado    int8         `json:",omitempty"`
-	TelefonoVerificado int8         `json:",omitempty"`
-	SmtpConfig         SmtpConfig   `json:",omitempty"`
-	CulquiConfig       CulquiConfig `json:",omitempty"`
-	Updated            int64        `json:"upd"`
-	Status             int8         `json:"ss"`
+type Empresa struct {
+	db.TableStruct[EmpresaTable, Empresa]
+	ID                 int32        `json:"id" db:"id,pk" col:",sk"`
+	Nombre             string       `json:",omitempty" db:"nombre" col:""`
+	RazonSocial        string       `json:",omitempty" db:"razon_social" col:""`
+	RUC                string       `json:",omitempty" db:"ruc" col:",index"`
+	Email              string       `json:",omitempty" db:"email" col:",index"`
+	NotificacionEmail  string       `json:",omitempty" db:"notificacion_email" col:""`
+	Telefono           string       `json:",omitempty" db:"telefono" col:""`
+	Representante      string       `json:",omitempty" db:"representante" col:""`
+	Direccion          string       `json:",omitempty" db:"direccion" col:""`
+	Ciudad             string       `json:",omitempty" db:"ciudad" col:""`
+	FormApiKey         string       `json:",omitempty" db:"form_api_key" col:""`
+	EmailVerificado    int8         `json:",omitempty" db:"email_verificado" col:""`
+	TelefonoVerificado int8         `json:",omitempty" db:"telefono_verificado" col:""`
+	SmtpConfig         SmtpConfig   `json:",omitempty" db:"smtp_config" col:""`
+	CulquiConfig       CulquiConfig `json:",omitempty" db:"culqui_config" col:""`
+	Updated            int64        `json:"upd" db:"updated" col:",index"`
+	Status             int8         `json:"ss" db:"status" col:""`
+}
+
+type EmpresaTable struct {
+	db.TableStruct[EmpresaTable, Empresa]
+	ID                 db.Col[EmpresaTable, int32]
+	Nombre             db.Col[EmpresaTable, string]
+	RazonSocial        db.Col[EmpresaTable, string]
+	RUC                db.Col[EmpresaTable, string]
+	Email              db.Col[EmpresaTable, string]
+	NotificacionEmail  db.Col[EmpresaTable, string]
+	Telefono           db.Col[EmpresaTable, string]
+	Representante      db.Col[EmpresaTable, string]
+	Direccion          db.Col[EmpresaTable, string]
+	Ciudad             db.Col[EmpresaTable, string]
+	FormApiKey         db.Col[EmpresaTable, string]
+	EmailVerificado    db.Col[EmpresaTable, int8]
+	TelefonoVerificado db.Col[EmpresaTable, int8]
+	SmtpConfig         db.Col[EmpresaTable, SmtpConfig]
+	CulquiConfig       db.Col[EmpresaTable, CulquiConfig]
+	Updated            db.Col[EmpresaTable, int64]
+	Status             db.Col[EmpresaTable, int8]
+}
+
+func (e EmpresaTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:         "empresas",
+		UseSequences: true,
+		Keys:         []db.Coln{e.ID.Autoincrement(0)},
+	}
 }
 
 type SmtpConfig struct {
@@ -52,25 +84,35 @@ type EmpresaPub struct {
 
 type Usuario struct { // DynamoDB + ScyllaDB
 	db.TableStruct[UsuarioTable, Usuario]
-	ID           int32   `json:",omitempty" db:"id,pk"`
-	EmpresaID    int32   `json:",omitempty" db:"empresa_id,pk"`
-	Usuario      string  `json:",omitempty" db:"usuario"`
-	Apellidos    string  `json:",omitempty" db:"apellidos"`
-	Nombres      string  `json:",omitempty" db:"nombres"`
-	PerfilesIDs  []int32 `json:",omitempty" db:"perfiles_ids"`
-	RolesIDs     []int32 `json:",omitempty" db:"roles_ids"`
-	Email        string  `json:",omitempty" db:"email"`
-	Cargo        string  `json:",omitempty" db:"cargo"`
-	DocumentoNro string  `json:",omitempty" db:"documento_nro"`
-	PasswordHash string  `json:",omitempty"`
-	Password     string  `json:",omitempty"`
-	Created      int64   `json:",omitempty" db:"created"`
-	CreatedBy    int32   `json:",omitempty" db:"created_by"`
-	Updated      int64   `json:",omitempty" db:"updated"`
-	UpdatedBy    int32   `json:",omitempty" db:"updated_by"`
-	Status       int8    `json:",omitempty" db:"status"`
+	CloudKey                string  `json:"-" col:"cloud_user_key,sk"`
+	ID                      int32   `json:",omitempty" db:"id,pk" col:"id"`
+	EmpresaID               int32   `json:",omitempty" db:"empresa_id,pk" col:"empresa_id"`
+	Usuario                 string  `json:",omitempty" db:"usuario" col:"usuario,index"`
+	Apellidos               string  `json:",omitempty" db:"apellidos" col:"apellidos"`
+	Nombres                 string  `json:",omitempty" db:"nombres" col:"nombres"`
+	PerfilesIDs             []int32 `json:",omitempty" db:"perfiles_ids" col:"perfiles_ids"`
+	RolesIDs                []int32 `json:",omitempty" db:"roles_ids" col:"roles_ids"`
+	Email                   string  `json:",omitempty" db:"email" col:"email,index"`
+	Cargo                   string  `json:",omitempty" db:"cargo" col:"cargo"`
+	DocumentoNro            string  `json:",omitempty" db:"documento_nro" col:"documento_nro"`
+	PasswordHash            string  `json:",omitempty" col:"password_hash"`
+	Password                string  `json:",omitempty" col:"-"`
+	Created                 int64   `json:",omitempty" db:"created" col:"created"`
+	CreatedBy               int32   `json:",omitempty" db:"created_by" col:"created_by"`
+	Updated                 int64   `json:",omitempty" db:"updated" col:"updated"`
+	UpdatedBy               int32   `json:",omitempty" db:"updated_by" col:"updated_by"`
+	Status                  int8    `json:",omitempty" db:"status" col:"status"`
+	CompanyUserIndex        string  `json:"-" col:"company_usuario,index"`
+	CompanyStatusIndex      string  `json:"-" col:"company_status_updated,index"`
 	// CacheVersion is returned in delta-by-IDs endpoints to let clients track per-record cache freshness.
-	CacheVersion uint8 `json:",omitempty"`
+	CacheVersion uint8 `json:",omitempty" col:"-"`
+}
+
+func (e *Usuario) PrepareCloudSync() {
+	// Company + status + padded updated keeps delta queries lexicographically sortable across providers.
+	e.CloudKey = fmt.Sprintf("%d_%d", e.EmpresaID, e.ID)
+	e.CompanyUserIndex = fmt.Sprintf("%d_%s", e.EmpresaID, e.Usuario)
+	e.CompanyStatusIndex = fmt.Sprintf("%d_%d_%020d", e.EmpresaID, e.Status, e.Updated)
 }
 
 type UsuarioTable struct {
@@ -103,7 +145,6 @@ func (e UsuarioTable) GetSchema() db.TableSchema {
 }
 
 type SeguridadAcceso struct { // DynamoDB
-	TAGS        `table:"seguridad_acceso"`
 	ID          int32   `json:"id"`
 	Nombre      string  `json:"nombre" db:"nombre"`
 	Descripcion string  `json:"descripcion" db:"descripcion"`
@@ -116,13 +157,44 @@ type SeguridadAcceso struct { // DynamoDB
 }
 
 type Perfil struct { // DynamoDB
-	TAGS        `table:"seguridad_perfiles"`
-	ID          int32   `json:"id"`
-	EmpresaID   int32   `json:"empresaID" db:"company_id,pk"`
-	Nombre      string  `json:"nombre" db:"nombre"`
-	Descripcion string  `json:"descripcion" db:"descripcion"`
-	Modulos     []int16 `json:"modulosIDs" db:"modulos_ids"`
-	Accesos     []int32 `json:"accesos" db:"accesos"`
-	Status      int8    `json:"ss" db:"status"`
-	Updated     int64   `json:"upd" db:"updated"`
+	db.TableStruct[PerfilTable, Perfil]
+	CloudKey           string  `json:"-" col:"cloud_profile_key,sk"`
+	ID                 int32   `json:"id" db:"id,pk" col:"id"`
+	EmpresaID          int32   `json:"empresaID" db:"empresa_id,pk" col:"empresa_id"`
+	Nombre             string  `json:"nombre" db:"nombre" col:"nombre"`
+	Descripcion        string  `json:"descripcion" db:"descripcion" col:"descripcion"`
+	Modulos            []int16 `json:"modulosIDs" db:"modulos_ids" col:"modulos_ids"`
+	Accesos            []int32 `json:"accesos" db:"accesos" col:"accesos"`
+	Status             int8    `json:"ss" db:"status" col:"status"`
+	Updated            int64   `json:"upd" db:"updated" col:"updated"`
+	CompanyUpdatedIndex string `json:"-" col:"company_updated,index"`
+	CompanyStatusIndex string  `json:"-" col:"company_status_updated,index"`
+}
+
+func (e *Perfil) PrepareCloudSync() {
+	// Synthetic keys keep profile lookups and delta queries scoped by company across providers.
+	e.CloudKey = fmt.Sprintf("%d_%d", e.EmpresaID, e.ID)
+	e.CompanyUpdatedIndex = fmt.Sprintf("%d_%020d", e.EmpresaID, e.Updated)
+	e.CompanyStatusIndex = fmt.Sprintf("%d_%d_%020d", e.EmpresaID, e.Status, e.Updated)
+}
+
+type PerfilTable struct {
+	db.TableStruct[PerfilTable, Perfil]
+	ID          db.Col[PerfilTable, int32]
+	EmpresaID   db.Col[PerfilTable, int32]
+	Nombre      db.Col[PerfilTable, string]
+	Descripcion db.Col[PerfilTable, string]
+	Modulos     db.ColSlice[PerfilTable, int16] `db:"modulos_ids"`
+	Accesos     db.ColSlice[PerfilTable, int32] `db:"accesos"`
+	Status      db.Col[PerfilTable, int8]
+	Updated     db.Col[PerfilTable, int64]
+}
+
+func (e PerfilTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:         "seguridad_perfiles",
+		Partition:    e.EmpresaID,
+		UseSequences: true,
+		Keys:         []db.Coln{e.ID.Autoincrement(0)},
+	}
 }
