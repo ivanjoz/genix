@@ -369,7 +369,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
 	        />
         	<CheckboxOptions type="multiple"
        			options={[ { id: 2, name: "Pagado" }, { id: 3, name: "Recibido" } ]}
-         		keyId="id" keyName="name" save="ProcessesIncluded_"
+         		keyId="id" keyName="name" save="ActionsIncluded"
          		saveOn={ventasState.form}
          	/>
         </div>

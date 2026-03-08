@@ -21,7 +21,7 @@ export interface ISaleOrder {
     DebtAmount: number;
     DeliveryStatus: number;
     LastPaymentCajaID: number;
-    ProcessesIncluded_: number[];
+    ActionsIncluded: number[];
     Created: number;
     LastPaymentTime: number;
     LastPaymentUser: number;

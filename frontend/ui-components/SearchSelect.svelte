@@ -332,12 +332,6 @@ import { Core } from '$core/store.svelte';
             return;
           }
 
-          if (options.length === 1) {
-            avoidBlur = false
-            inputRef?.focus()
-            return
-          }
-
           let inputValue = String(inputRef?.value || "").toLowerCase();
           const selectedItem = options.find((x) => {
             const itemName = String(x[keyName] || "");
