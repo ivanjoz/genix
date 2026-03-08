@@ -8,9 +8,14 @@ export const setupEnv = () => {
     const credentialsPath = path.resolve(process.cwd(), '..', 'credentials.json');
     if (fs.existsSync(credentialsPath)) {
       const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf-8'));
+      // Keep the endpoint selector config available at build time for SvelteKit.
+      const serializedPublicEndpoints = JSON.stringify(
+        Array.isArray(credentials.ENPOINTS) ? credentials.ENPOINTS : []
+      );
       const envContent = [
         `PUBLIC_LAMBDA_URL=${credentials.LAMBDA_URL || ''}`,
-        `PUBLIC_FRONTEND_CDN=${credentials.FRONTEND_CDN || ''}`
+        `PUBLIC_FRONTEND_CDN=${credentials.FRONTEND_CDN || ''}`,
+        `PUBLIC_ENDPOINTS=${serializedPublicEndpoints}`
       ].join('\n') + '\n';
       
       console.log("Seteando Enviroment:")

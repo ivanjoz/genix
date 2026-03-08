@@ -20,13 +20,19 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 		panic("No se especificado el ADMIN_PASSWORD y el SECRET_PHRASE en credentials.json")
 	}
 
+	// Bootstrap ORM internal tables before any ScyllaDB seed writes depend on them.
+	if err := db.Init(); err != nil {
+		panic("Error al inicializar las tablas internas del ORM. " + err.Error())
+	}
+
+	seedTimestamp := time.Now().Unix()
 	empresaTable := handlers.MakeEmpresaTable()
 	empresa := s.Empresa{
 		ID:          1,
 		Nombre:      "Principal",
 		RazonSocial: "Principal",
 		RUC:         "11000000000",
-		Updated:     time.Now().Unix(),
+		Updated:     seedTimestamp,
 	}
 
 	err := empresaTable.PutItem(&empresa, 1)
@@ -34,7 +40,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 		panic("Error al crear el usuario admin. " + err.Error())
 	}
 
-	core.Log("Se creo/actualizó la empresa.")
+	core.Log("Se creo/actualizó la empresa en DynamoDB.")
 	password := core.Env.SECRET_PHRASE + core.Env.ADMIN_PASSWORD
 	passwordHash := core.FnvHashString64(password, -1, 20)
 
@@ -46,18 +52,30 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 		Apellidos:    "root",
 		PasswordHash: passwordHash,
 		Status:       1,
-		Created:      time.Now().Unix(),
-		Updated:      time.Now().Unix(),
+		Created:      seedTimestamp,
+		Updated:      seedTimestamp,
 	}
 
 	usuarioTable := handlers.MakeUsuarioTable(empresa.ID)
 
 	err = usuarioTable.PutItem(&usuario, 1)
 	if err != nil {
-		panic("Error al crear el usuario admin. " + err.Error())
+		panic("Error al crear el usuario admin en DynamoDB. " + err.Error())
 	}
 
-	core.Log("Se creo/actualizó el usuario.")
+	core.Log("Se creo/actualizó el usuario admin en DynamoDB.")
+
+	// Seed the same admin user into ScyllaDB so delta-cache and ID-based reads stay consistent.
+	if err = db.Insert(&[]s.Usuario{usuario}); err != nil {
+		panic("Error al crear el usuario admin en ScyllaDB. " + err.Error())
+	}
+
+	core.Log("Se creo/actualizó el usuario admin en ScyllaDB.")
+
+	// Run the city import as part of the base bootstrap to leave the environment operational after init.
+	ImportCiudades(args)
+	core.Log("Se importaron las ciudades iniciales.")
+
 	core.Print(usuario)
 
 	return core.FuncResponse{}
@@ -66,7 +84,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	wd, _ := os.Getwd()
-	filePath := wd + "/docs/ubigeo_distrito.csv"
+	filePath := wd + "/assets/ubigeo_distrito.csv"
 	core.Log("Leyendo archivo .csv: ", filePath)
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -79,9 +97,6 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 	if err != nil {
 		panic(err)
 	}
-
-	core.Print(records[0])
-	core.Print(records[1])
 
 	recordsMap := map[string]s.PaisCiudad{}
 

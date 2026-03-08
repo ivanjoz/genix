@@ -1,13 +1,31 @@
 <script lang="ts">
   import { onMount } from "svelte";
-import Input from '$components/Input.svelte';
-import { Notify } from '$libs/helpers';
-import { sendUserLogin, type ILogin } from '$services/login';
-import { checkIsLogin } from '$core/security';
-import { Env } from '$core/env';
+  import Input from '$components/Input.svelte';
+  import SearchSelect from '$components/SearchSelect.svelte';
+  import { Notify } from '$libs/helpers';
+  import { sendUserLogin, type ILogin } from '$services/login';
+  import { checkIsLogin } from '$core/security';
+  import { Env, type IApiEndpointOption } from '$core/env';
 
   let form = $state({ Usuario: "", Password: "", EmpresaID: 1, CipherKey: "" } as ILogin)
+  let selectorForm = $state({ selectedApiEndpointRoute: "" })
   let isLoading = $state(false)
+  let apiEndpointOptions = $state<IApiEndpointOption[]>([])
+
+  // Keep the login selector state and Env route state aligned from the first render.
+  const syncApiEndpointSelector = () => {
+    apiEndpointOptions = [...Env.availableApiEndpoints]
+    selectorForm.selectedApiEndpointRoute = Env.selectedApiEndpointRoute || apiEndpointOptions[0]?.route || ""
+  }
+
+  const onApiEndpointChange = (selectedEndpoint?: IApiEndpointOption) => {
+    if (!selectedEndpoint?.route) {
+      return
+    }
+    Env.setSelectedApiEndpoint(selectedEndpoint.route)
+    selectorForm.selectedApiEndpointRoute = selectedEndpoint.route
+    console.info("[Login] API endpoint changed from selector:", selectedEndpoint)
+  }
 
   const sendLogin = async () => {
     if(form.Usuario.length < 4 || form.Password.length < 4){
@@ -29,6 +47,7 @@ import { Env } from '$core/env';
   }
 
   onMount(() => {
+    syncApiEndpointSelector()
     if(checkIsLogin() === 2){
       Env.navigate("/")
     }
@@ -64,6 +83,19 @@ import { Env } from '$core/env';
         save="Password"
         type="password"
       />
+      {#if apiEndpointOptions.length > 0}
+        <SearchSelect
+          css="mb-8 w-full text-lg login-server-selector"
+          inputCss="text-base"
+          label="Servidor"
+          saveOn={selectorForm}
+          save="selectedApiEndpointRoute"
+          options={apiEndpointOptions}
+          keyId="route"
+          keyName="name"
+          onChange={onApiEndpointChange}
+        />
+      {/if}
       <div class="flex w-full justify-center items-center mt-[1.4rem]">
         <button
           class="bn1 big d-blue"
@@ -164,6 +196,10 @@ import { Env } from '$core/env';
   .d-blue:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  :global(.login-server-selector .aqI) {
+    background-color: #f8f9ff;
   }
 
   @media (max-width: 768px) {

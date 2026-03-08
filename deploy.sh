@@ -17,7 +17,7 @@ echo "[3] Backend (VPS)"
 echo "[4] Backup Lib (S3 Binary)"
 echo "Ejecutar Proceso ---------------"
 echo "[5] Recrear Tablas (Backend)"
-echo "[6] Poblar Estructuras (Backend)"
+echo "[6] Poblar Datos Iniciales (Backend)"
 echo "[7] Inspeccionar/Compilar Backend"
 echo "Local Development --------------"
 echo "[8] Serve Local Build (docs/)"
@@ -95,6 +95,14 @@ if [[ $ACCIONES == *"5"* ]]; then
     echo "=== RECREANDO TABLAS ==="
     cd ./backend
     $GO_PATH run . fn-homologate
+    cd ..
+fi
+
+# POBLAR DATOS INICIALES
+if [[ $ACCIONES == *"6"* ]]; then
+    echo "=== POBLANDO DATOS INICIALES ==="
+    cd ./backend
+    $GO_PATH run . fn-init
     cd ..
 fi
 

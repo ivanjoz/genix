@@ -77,3 +77,5 @@ backend/libs/index_builder/productos.tar.zst
 backend/libs/index_builder/productos.idx.tar.zst
 backend/genix_app
 backend/genix_app.zst
+scripts/app
+tmp/*

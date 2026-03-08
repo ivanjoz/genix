@@ -7,135 +7,259 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
 )
 
+type ServerCredentials struct {
+	Host             string `json:"host"`
+	User             string `json:"user"`
+	Key              string `json:"key"`
+	RemoteBinaryPath string `json:"bin"`
+}
+
 type Credentials struct {
-	VPS_IP               string `json:"VPS_IP"`
-	VPS_KEY              string `json:"VPS_KEY"`
-	VPS_INSTALL_LOCATION string `json:"VPS_INSTALL_LOCATION"`
+	Servers []ServerCredentials `json:"SERVERS"`
 }
 
 func DeployVPS() {
 	fmt.Println("Starting VPS deployment...")
 
-	// 1. Read credentials.json
-	credPath := "../credentials.json"
-	content, err := os.ReadFile(credPath)
-	if err != nil {
-		fmt.Printf("Error reading credentials.json: %v\n", err)
+	// Read the deploy targets from the shared credentials file so all server rules stay in one place.
+	credentialsFilePath := "../credentials.json"
+	credentialsContent, readCredentialsError := os.ReadFile(credentialsFilePath)
+	if readCredentialsError != nil {
+		fmt.Printf("Error reading credentials.json: %v\n", readCredentialsError)
 		return
 	}
 
-	var creds Credentials
-	if err := json.Unmarshal(content, &creds); err != nil {
-		fmt.Printf("Error parsing credentials.json: %v\n", err)
+	var credentials Credentials
+	if parseCredentialsError := json.Unmarshal(credentialsContent, &credentials); parseCredentialsError != nil {
+		fmt.Printf("Error parsing credentials.json: %v\n", parseCredentialsError)
 		return
 	}
 
-	// 2. Compile backend for linux amd64
+	if len(credentials.Servers) == 0 {
+		fmt.Println("Error: SERVERS is empty in credentials.json")
+		return
+	}
+
+	// Keep generated artifacts out of source folders so deploy runs do not dirty application directories.
+	localTempDirectoryPath := "../tmp"
+	if createTempDirectoryError := os.MkdirAll(localTempDirectoryPath, 0o755); createTempDirectoryError != nil {
+		fmt.Printf("Error creating tmp directory: %v\n", createTempDirectoryError)
+		return
+	}
+
+	// Build once and reuse the same artifact for every configured server.
 	fmt.Println("Compiling backend for linux/amd64...")
-	binaryName := "genix_app"
+	localBinaryName := "genix_app"
 	buildDate := time.Now().Format("2006-01-02 15:04:05")
-	ldflags := fmt.Sprintf("-s -w -X 'app/core.BuildDate=%s'", buildDate)
-	cmd := exec.Command("go", "build", "-ldflags", ldflags, "-o", binaryName, ".")
-	cmd.Dir = "../backend"
-	cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH=amd64")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	buildFlags := fmt.Sprintf("-s -w -X 'app/core.BuildDate=%s'", buildDate)
+	localBinaryPath := filepath.Join(localTempDirectoryPath, localBinaryName)
+	buildBackendCommand := exec.Command("go", "build", "-ldflags", buildFlags, "-o", localBinaryPath, ".")
+	buildBackendCommand.Dir = "../backend"
+	buildBackendCommand.Env = append(os.Environ(), "GOOS=linux", "GOARCH=amd64")
+	buildBackendCommand.Stdout = os.Stdout
+	buildBackendCommand.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("Error compiling backend: %v\n", err)
+	if buildBackendError := buildBackendCommand.Run(); buildBackendError != nil {
+		fmt.Printf("Error compiling backend: %v\n", buildBackendError)
 		return
 	}
 	fmt.Println("Compilation successful.")
 
-	// 3. Compress with Zstd
+	// Compress once so every server receives the same deployment artifact.
 	fmt.Println("Compressing binary with Zstd...")
-	binaryPath := filepath.Join("../backend", binaryName)
-	compressedPath := binaryPath + ".zst"
+	localCompressedBinaryPath := localBinaryPath + ".zst"
 
-	err = func() error {
-		inputFile, err := os.Open(binaryPath)
-		if err != nil {
-			return err
-		}
-		defer inputFile.Close()
-
-		outputFile, err := os.Create(compressedPath)
-		if err != nil {
-			return err
-		}
-		defer outputFile.Close()
-
-		encoder, err := zstd.NewWriter(outputFile)
-		if err != nil {
-			return err
-		}
-		defer encoder.Close()
-
-		_, err = io.Copy(encoder, inputFile)
-		return err
-	}()
-
-	if err != nil {
-		fmt.Printf("Error compressing binary: %v\n", err)
+	compressBinaryError := compressBinary(localBinaryPath, localCompressedBinaryPath)
+	if compressBinaryError != nil {
+		fmt.Printf("Error compressing binary: %v\n", compressBinaryError)
 		return
 	}
 	fmt.Println("Compression successful.")
 
-	// Expand tilde in key path if present
-	keyPath := creds.VPS_KEY
-	if len(keyPath) > 0 && keyPath[0] == '~' {
-		home, _ := os.UserHomeDir()
-		keyPath = filepath.Join(home, keyPath[1:])
+	for _, server := range credentials.Servers {
+		loginUser := server.User
+		if loginUser == "" {
+			loginUser = "root"
+		}
+
+		if server.RemoteBinaryPath == "" {
+			fmt.Printf("Error: bin path is empty for host %s\n", server.Host)
+			return
+		}
+
+		serverTarget := fmt.Sprintf("%s@%s", loginUser, server.Host)
+		resolvedKeyPath := expandHomePath(server.Key)
+		remoteCompressedBinaryPath := server.RemoteBinaryPath + ".zst"
+
+		fmt.Printf("Deploying to %s\n", serverTarget)
+		fmt.Printf("Debug: host=%s user=%s key=%q bin=%s\n", server.Host, loginUser, resolvedKeyPath, server.RemoteBinaryPath)
+
+		hasAutoReloadStrategy, strategyDetectionError := detectAutoReloadStrategy(resolvedKeyPath, serverTarget)
+		if strategyDetectionError != nil {
+			fmt.Printf("Error checking auto-reload strategy on %s: %v\n", serverTarget, strategyDetectionError)
+			return
+		}
+		fmt.Printf("Debug: auto_reload_strategy=%t on %s\n", hasAutoReloadStrategy, serverTarget)
+
+		// Only stop the service when the server does not have the path-watcher strategy configured.
+		if !hasAutoReloadStrategy {
+			fmt.Printf("Stopping genix service on %s...\n", serverTarget)
+			stopServiceCommand := buildSSHCommand(resolvedKeyPath, serverTarget, "systemctl stop genix")
+			stopServiceCommand.Stdout = os.Stdout
+			stopServiceCommand.Stderr = os.Stderr
+
+			if stopServiceError := stopServiceCommand.Run(); stopServiceError != nil {
+				fmt.Printf("Error stopping service on %s: %v\n", serverTarget, stopServiceError)
+				return
+			}
+		}
+
+		fmt.Printf("Uploading compressed binary to %s:%s...\n", serverTarget, remoteCompressedBinaryPath)
+		uploadBinaryCommand := buildRsyncCommand(resolvedKeyPath, localCompressedBinaryPath, serverTarget, remoteCompressedBinaryPath)
+		uploadBinaryCommand.Stdout = os.Stdout
+		uploadBinaryCommand.Stderr = os.Stderr
+
+		if uploadError := uploadBinaryCommand.Run(); uploadError != nil {
+			fmt.Printf("Error uploading binary to %s: %v\n", serverTarget, uploadError)
+
+			if !hasAutoReloadStrategy {
+				restartAfterUploadFailureCommand := buildSSHCommand(resolvedKeyPath, serverTarget, "systemctl start genix")
+				restartAfterUploadFailureCommand.Stdout = os.Stdout
+				restartAfterUploadFailureCommand.Stderr = os.Stderr
+				_ = restartAfterUploadFailureCommand.Run()
+			}
+
+			return
+		}
+
+		fmt.Printf("Decompressing binary on %s...\n", serverTarget)
+		decompressRemoteBinaryCommand := buildSSHCommand(
+			resolvedKeyPath,
+			serverTarget,
+			fmt.Sprintf(
+				"zstd -d --force %s -o %s && rm %s && chmod +x %s",
+				remoteCompressedBinaryPath,
+				server.RemoteBinaryPath,
+				remoteCompressedBinaryPath,
+				server.RemoteBinaryPath,
+			),
+		)
+		decompressRemoteBinaryCommand.Stdout = os.Stdout
+		decompressRemoteBinaryCommand.Stderr = os.Stderr
+
+		if decompressError := decompressRemoteBinaryCommand.Run(); decompressError != nil {
+			fmt.Printf("Error decompressing on %s: %v\n", serverTarget, decompressError)
+			return
+		}
+
+		// The watcher strategy will restart automatically after the binary file changes.
+		if hasAutoReloadStrategy {
+			fmt.Printf("Auto-reload strategy detected on %s. Skipping manual service restart.\n", serverTarget)
+			fmt.Printf("Deployment completed for %s.\n", serverTarget)
+			continue
+		}
+
+		fmt.Printf("Starting genix service on %s...\n", serverTarget)
+		startServiceCommand := buildSSHCommand(resolvedKeyPath, serverTarget, "systemctl start genix")
+		startServiceCommand.Stdout = os.Stdout
+		startServiceCommand.Stderr = os.Stderr
+
+		if startServiceError := startServiceCommand.Run(); startServiceError != nil {
+			fmt.Printf("Error starting service on %s: %v\n", serverTarget, startServiceError)
+			return
+		}
+
+		fmt.Printf("Deployment completed for %s.\n", serverTarget)
 	}
 
-	// 4. Stop service before upload
-	fmt.Println("Stopping genix service on VPS...")
-	stopCmd := exec.Command("ssh", "-i", keyPath, fmt.Sprintf("root@%s", creds.VPS_IP), "systemctl stop genix")
-	_ = stopCmd.Run() // Ignore error if it's already stopped
+	fmt.Println("Deployment complete!")
+}
 
-	// 5. Upload to VPS with rsync for progress
-	targetCompressed := fmt.Sprintf("%s.zst", creds.VPS_INSTALL_LOCATION)
-	fmt.Printf("Uploading compressed binary to root@%s:%s...\n", creds.VPS_IP, targetCompressed)
-	
-	// Using rsync -P to show progress
-	rsyncCmd := exec.Command("rsync", "-ahP", "-e", fmt.Sprintf("ssh -i %s", keyPath), compressedPath, fmt.Sprintf("root@%s:%s", creds.VPS_IP, targetCompressed))
-	rsyncCmd.Stdout = os.Stdout
-	rsyncCmd.Stderr = os.Stderr
-
-	if err := rsyncCmd.Run(); err != nil {
-		fmt.Printf("Error uploading binary: %v\n", err)
-		exec.Command("ssh", "-i", keyPath, fmt.Sprintf("root@%s", creds.VPS_IP), "systemctl start genix").Run()
-		return
+func compressBinary(localBinaryPath string, localCompressedBinaryPath string) error {
+	inputBinaryFile, openInputError := os.Open(localBinaryPath)
+	if openInputError != nil {
+		return openInputError
 	}
-	fmt.Println("Upload successful.")
+	defer inputBinaryFile.Close()
 
-	// 6. Decompress on VPS
-	fmt.Println("Decompressing binary on VPS...")
-	decompressCmd := exec.Command("ssh", "-i", keyPath, fmt.Sprintf("root@%s", creds.VPS_IP), 
-		fmt.Sprintf("zstd -d --force %s -o %s && rm %s && chmod +x %s", 
-			targetCompressed, creds.VPS_INSTALL_LOCATION, targetCompressed, creds.VPS_INSTALL_LOCATION))
-	decompressCmd.Stdout = os.Stdout
-	decompressCmd.Stderr = os.Stderr
+	outputCompressedFile, createOutputError := os.Create(localCompressedBinaryPath)
+	if createOutputError != nil {
+		return createOutputError
+	}
+	defer outputCompressedFile.Close()
 
-	if err := decompressCmd.Run(); err != nil {
-		fmt.Printf("Error decompressing on VPS: %v\n", err)
-		return
+	compressionWriter, createWriterError := zstd.NewWriter(outputCompressedFile)
+	if createWriterError != nil {
+		return createWriterError
+	}
+	defer compressionWriter.Close()
+
+	_, copyError := io.Copy(compressionWriter, inputBinaryFile)
+	return copyError
+}
+
+func detectAutoReloadStrategy(resolvedKeyPath string, serverTarget string) (bool, error) {
+	// Check for both units because the path watcher and the helper service are required together.
+	checkStrategyCommand := buildSSHCommand(
+		resolvedKeyPath,
+		serverTarget,
+		"systemctl cat genix-restart.path >/dev/null 2>&1 && systemctl cat genix-restart.service >/dev/null 2>&1",
+	)
+
+	strategyCheckError := checkStrategyCommand.Run()
+	if strategyCheckError == nil {
+		return true, nil
 	}
 
-	// 7. Start service
-	fmt.Println("Starting genix service on VPS...")
-	startCmd := exec.Command("ssh", "-i", keyPath, fmt.Sprintf("root@%s", creds.VPS_IP), "systemctl start genix")
-	startCmd.Stdout = os.Stdout
-	startCmd.Stderr = os.Stderr
-
-	if err := startCmd.Run(); err != nil {
-		fmt.Printf("Error starting service: %v\n", err)
-		return
+	if exitError, ok := strategyCheckError.(*exec.ExitError); ok && exitError.ExitCode() == 1 {
+		return false, nil
 	}
-	fmt.Println("Service started successfully. Deployment complete!")
+
+	return false, strategyCheckError
+}
+
+func expandHomePath(originalPath string) string {
+	if originalPath == "" || !strings.HasPrefix(originalPath, "~") {
+		return originalPath
+	}
+
+	homeDirectory, homeDirectoryError := os.UserHomeDir()
+	if homeDirectoryError != nil {
+		return originalPath
+	}
+
+	return filepath.Join(homeDirectory, strings.TrimPrefix(originalPath, "~"))
+}
+
+func buildSSHCommand(resolvedKeyPath string, serverTarget string, remoteCommand string) *exec.Cmd {
+	sshArguments := []string{}
+	if resolvedKeyPath != "" {
+		sshArguments = append(sshArguments, "-i", resolvedKeyPath)
+	}
+
+	sshArguments = append(sshArguments, serverTarget, remoteCommand)
+
+	command := exec.Command("ssh", sshArguments...)
+	return command
+}
+
+func buildRsyncCommand(resolvedKeyPath string, localCompressedBinaryPath string, serverTarget string, remoteCompressedBinaryPath string) *exec.Cmd {
+	sshTransportCommand := "ssh"
+	if resolvedKeyPath != "" {
+		sshTransportCommand = fmt.Sprintf("ssh -i %s", resolvedKeyPath)
+	}
+
+	return exec.Command(
+		"rsync",
+		"-ahP",
+		"-e", sshTransportCommand,
+		localCompressedBinaryPath,
+		fmt.Sprintf("%s:%s", serverTarget, remoteCompressedBinaryPath),
+	)
 }
