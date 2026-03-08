@@ -38,13 +38,10 @@ import { Env } from '$core/env';
   }
 
   const downloadBackup = (backup: IBackup) => {
-    const s3key = ["backups", 1, backup.Name].join("/")
-    const url = Env.CDN_URL + s3key
-    console.log("url to download::", url)
-
     const aElement = document.createElement("a")
     aElement.setAttribute("download", backup.Name)
-    aElement.href = url
+    aElement.href = Env.makeCDNRoute("backups","1", backup.Name)
+    console.log("url to download::", aElement.href)
     aElement.setAttribute("target", "_blank")
     aElement.click()
     aElement.remove()
