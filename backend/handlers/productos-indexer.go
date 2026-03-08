@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"app/aws"
+	"app/cloud"
 	"app/core"
 	"app/db"
 	"app/libs/index_builder"
@@ -303,7 +303,7 @@ func BuildProductosSearchIndex(empresaID int32) (*ProductosIndexBuildOutput, err
 
 	indexFileName := "c" + fmt.Sprintf("%v", empresaID) + "_products.idx"
 
-	if uploadErr := aws.SaveFile(aws.SaveFileArgs{
+	if uploadErr := cloud.SaveFile(cloud.SaveFileArgs{
 		Bucket:      core.Env.S3_BUCKET,
 		Path:        "live",
 		Name:        indexFileName,

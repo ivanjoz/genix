@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"app/aws"
+	"app/cloud"
 	"app/core"
 	"app/types"
 	"encoding/json"
@@ -32,7 +32,7 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	usuarioTable := MakeUsuarioTable(body.EmpresaID)
-	usuarios, err := usuarioTable.QueryBatch([]aws.DynamoQueryParam{
+	usuarios, err := usuarioTable.QueryBatch([]cloud.DynamoQueryParam{
 		{Index: "ix1", Equals: body.Usuario},
 	})
 
@@ -89,9 +89,9 @@ func MakeUsuarioResponse(usuario types.Usuario, cipherKey string) (map[string]an
 		// Obtiene los acceso en base a los perfiles
 	} else if len(usuario.PerfilesIDs) > 0 {
 		dynamoTable := MakePerfilTable(usuario.EmpresaID)
-		querys := []aws.DynamoQueryParam{}
+		querys := []cloud.DynamoQueryParam{}
 		for _, perfilID := range usuario.PerfilesIDs {
-			querys = append(querys, aws.DynamoQueryParam{
+			querys = append(querys, cloud.DynamoQueryParam{
 				Index: "sk", Equals: fmt.Sprintf("%v", perfilID),
 			})
 		}
@@ -153,7 +153,7 @@ func ReloadLogin(req *core.HandlerArgs) core.HandlerResponse {
 	cipherKey := req.GetQuery("cipher-key")
 	usuarioTable := MakeUsuarioTable(req.Usuario.EmpresaID)
 
-	usuarios, err := usuarioTable.QueryBatch([]aws.DynamoQueryParam{
+	usuarios, err := usuarioTable.QueryBatch([]cloud.DynamoQueryParam{
 		{Index: "ix1", Equals: req.Usuario.Usuario},
 	})
 

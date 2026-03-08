@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"app/aws"
+	"app/cloud"
 	"app/core"
 	"app/db"
 	s "app/types"
@@ -269,7 +269,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	name := core.ToBase36(time.Now().UnixMilli())
 
-	imageArgs := aws.ImageArgs{
+	imageArgs := cloud.ImageArgs{
 		Content: image.Content, Folder: "img-productos", Name: name, Type: "avif",
 		Resolutions: map[uint16]string{980: "x6", 570: "x4", 360: "x2"},
 	}
@@ -302,7 +302,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 			cloned := imageArgs
 			cloned.Resolution = resolution
 			cloned.Content = *content
-			_, err = aws.SaveImage(cloned)
+			_, err = cloud.SaveImage(cloned)
 			if err != nil {
 				return req.MakeErr("Error al guardar la imagen:", err)
 			}
@@ -310,7 +310,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 
 		addImage()
 	} else {
-		_, err = aws.SaveConvertImage(imageArgs)
+		_, err = cloud.SaveConvertImage(imageArgs)
 		if err != nil {
 			return req.MakeErr("Error al guardar la imagen:", err)
 		}
@@ -392,7 +392,7 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostProductoCategoriaImage(req *core.HandlerArgs) core.HandlerResponse {
-	image := aws.ImageArgs{}
+	image := cloud.ImageArgs{}
 	err := json.Unmarshal([]byte(*req.Body), &image)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -403,7 +403,7 @@ func PostProductoCategoriaImage(req *core.HandlerArgs) core.HandlerResponse {
 	image.Folder = "img-public"
 	image.Resolutions = map[uint16]string{980: "x6", 540: "x4", 340: "x2"}
 
-	if _, err = aws.SaveConvertImage(image); err != nil {
+	if _, err = cloud.SaveConvertImage(image); err != nil {
 		return req.MakeErr("Error al guardar la imagen: " + err.Error())
 	}
 

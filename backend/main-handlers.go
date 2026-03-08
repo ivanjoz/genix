@@ -1,7 +1,7 @@
 package main
 
 import (
-	"app/aws"
+	"app/cloud"
 	"app/core"
 	"app/exec"
 	"app/handlers"
@@ -238,7 +238,7 @@ func ExecFuncHandler(lambdaInput string) (response core.FuncResponse) {
 			args := core.ExecArgs{Message: ""}
 			funcMessage := funcToInvoke.Exec(&args).Message
 			duration := int(time.Now().Unix() - nowTime)
-			aws.PutFuncLog(funcName, funcMessage, duration)
+			cloud.PutFuncLog(funcName, funcMessage, duration)
 
 			message := core.Concat(" | ", "Func: "+funcName, core.Concats(duration, "s"))
 			messages = append(messages, message)
@@ -302,7 +302,7 @@ func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerRespon
 			}
 		}
 		if saveLogs {
-			aws.MakeTableLogs2().PutItem(&logRecord, 1)
+			cloud.MakeTableLogs2().PutItem(&logRecord, 1)
 		}
 	*/
 	return response

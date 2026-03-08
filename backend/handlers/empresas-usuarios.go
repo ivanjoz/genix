@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"app/aws"
+	"app/cloud"
 	"app/core"
 	"app/db"
 	s "app/types"
@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-func MakeEmpresaTable() aws.DynamoTableRecords[s.Empresa] {
-	return aws.DynamoTableRecords[s.Empresa]{
+func MakeEmpresaTable() cloud.DynamoTableRecords[s.Empresa] {
+	return cloud.DynamoTableRecords[s.Empresa]{
 		TableName:      core.Env.DYNAMO_TABLE,
 		PK:             "empr",
 		UseCompression: true,
@@ -45,7 +45,7 @@ func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Revisa si hay que crearla
 	if body.ID == 0 {
-		counter, err := aws.GetDynamoCounter("empresa")
+		counter, err := cloud.GetDynamoCounter("empresa")
 		if err != nil {
 			return req.MakeErr("Error al obtener el counter.", counter)
 		}
@@ -65,13 +65,13 @@ func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
 func GetEmpresas(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt64("upd")
 
-	query := aws.DynamoQueryParam{Index: "sk", GreaterThan: "0"}
+	query := cloud.DynamoQueryParam{Index: "sk", GreaterThan: "0"}
 	if updated > 0 {
 		query.GreaterThan = fmt.Sprintf("%v", updated)
 	}
 
 	dynamoTable := MakeEmpresaTable()
-	records, err := dynamoTable.QueryBatch([]aws.DynamoQueryParam{query})
+	records, err := dynamoTable.QueryBatch([]cloud.DynamoQueryParam{query})
 	if err != nil {
 		panic(err)
 	}
@@ -142,7 +142,7 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 	empresaPublicBytes, _ := json.Marshal(empresaPublic)
 	core.Log("Guardando::", string(empresaPublicBytes))
 
-	aws.SaveFile(aws.SaveFileArgs{
+	cloud.SaveFile(cloud.SaveFileArgs{
 		Bucket:      core.Env.S3_BUCKET,
 		Path:        "empresas",
 		FileContent: empresaPublicBytes,
@@ -154,8 +154,8 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 // USUARIOS
-func MakeUsuarioTable(empresaID int32) aws.DynamoTableRecords[s.Usuario] {
-	return aws.DynamoTableRecords[s.Usuario]{
+func MakeUsuarioTable(empresaID int32) cloud.DynamoTableRecords[s.Usuario] {
+	return cloud.DynamoTableRecords[s.Usuario]{
 		TableName:      core.Env.DYNAMO_TABLE,
 		PK:             core.Concatn("user", empresaID),
 		UseCompression: true,
@@ -178,11 +178,11 @@ func MakeUsuarioTable(empresaID int32) aws.DynamoTableRecords[s.Usuario] {
 func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt64("upd")
 
-	query := aws.DynamoQueryParam{Index: "ix3", GreaterThan: "0"}
+	query := cloud.DynamoQueryParam{Index: "ix3", GreaterThan: "0"}
 	query.GreaterThan = fmt.Sprintf("1_%v", updated)
 
 	dynamoTable := MakeUsuarioTable(req.Usuario.EmpresaID)
-	records, err := dynamoTable.QueryBatch([]aws.DynamoQueryParam{query})
+	records, err := dynamoTable.QueryBatch([]cloud.DynamoQueryParam{query})
 
 	if err != nil {
 		panic(err)
@@ -250,7 +250,7 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 
 	if body.ID == 0 {
 		pk := core.Concatn("usuario", req.Usuario.EmpresaID)
-		counter, err := aws.GetDynamoCounter(pk, 2)
+		counter, err := cloud.GetDynamoCounter(pk, 2)
 		if err != nil {
 			return req.MakeErr("Error al obtener el counter.", counter)
 		}

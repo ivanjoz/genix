@@ -1,7 +1,7 @@
 package exec
 
 import (
-	"app/aws"
+	"app/cloud"
 	"app/core"
 	"app/db"
 	"app/facturacion"
@@ -80,7 +80,7 @@ func TestZstdCompression(args *core.ExecArgs) core.FuncResponse {
 
 func TestDynamoCounter(args *core.ExecArgs) core.FuncResponse {
 
-	counter, err := aws.GetDynamoCounter("demo")
+	counter, err := cloud.GetDynamoCounter("demo")
 
 	if err != nil {
 		panic(err)

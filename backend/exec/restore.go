@@ -1,7 +1,7 @@
 package exec
 
 import (
-	"app/aws"
+	"app/cloud"
 	"app/core"
 	"app/db"
 	"archive/tar"
@@ -31,7 +31,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se envió el nombre del archivo a buscar.")
 	}
 
-	fileBytes, err := aws.GetFileFromS3(aws.SaveFileArgs{
+	fileBytes, err := cloud.GetFileFromS3(cloud.SaveFileArgs{
 		Bucket: core.Env.S3_BUCKET,
 		Path:   fmt.Sprintf("backups/%v", req.Usuario.EmpresaID),
 		Name:   body.Name,

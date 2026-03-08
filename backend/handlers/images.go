@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"app/aws"
+	"app/cloud"
 	"app/core"
 	"encoding/json"
 	"fmt"
@@ -9,7 +9,7 @@ import (
 )
 
 func PostImage(req *core.HandlerArgs) core.HandlerResponse {
-	image := aws.ImageArgs{}
+	image := cloud.ImageArgs{}
 	err := json.Unmarshal([]byte(*req.Body), &image)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -19,7 +19,7 @@ func PostImage(req *core.HandlerArgs) core.HandlerResponse {
 	image.Folder = "img-productos"
 	image.Resolutions = map[uint16]string{980: "x6", 540: "x4", 340: "x2"}
 
-	_, err = aws.SaveConvertImage(image)
+	_, err = cloud.SaveConvertImage(image)
 	if err != nil {
 		return req.MakeErr("Error al guardar la imagen: " + err.Error())
 	}

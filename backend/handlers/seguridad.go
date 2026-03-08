@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"app/aws"
+	"app/cloud"
 	"app/core"
 	s "app/types"
 	"encoding/json"
@@ -10,8 +10,8 @@ import (
 )
 
 /* ACCESOS */
-func MakeAccesoTable() aws.DynamoTableRecords[s.SeguridadAcceso] {
-	return aws.DynamoTableRecords[s.SeguridadAcceso]{
+func MakeAccesoTable() cloud.DynamoTableRecords[s.SeguridadAcceso] {
+	return cloud.DynamoTableRecords[s.SeguridadAcceso]{
 		TableName:      core.Env.DYNAMO_TABLE,
 		PK:             "acceso",
 		UseCompression: true,
@@ -38,7 +38,7 @@ func PostAcceso(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if body.ID < 1 {
-		counter, err := aws.GetDynamoCounter("empresa")
+		counter, err := cloud.GetDynamoCounter("empresa")
 		if err != nil {
 			return req.MakeErr("Error al obtener el counter.", counter)
 		}
@@ -59,11 +59,11 @@ func PostAcceso(req *core.HandlerArgs) core.HandlerResponse {
 func GetAccesos(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt64("upd")
 
-	query := aws.DynamoQueryParam{Index: "ix3", GreaterThan: "0"}
+	query := cloud.DynamoQueryParam{Index: "ix3", GreaterThan: "0"}
 	query.GreaterThan = fmt.Sprintf("%v", updated)
 
 	dynamoTable := MakeAccesoTable()
-	records, err := dynamoTable.QueryBatch([]aws.DynamoQueryParam{query})
+	records, err := dynamoTable.QueryBatch([]cloud.DynamoQueryParam{query})
 	if err != nil {
 		panic(err)
 	}
@@ -81,8 +81,8 @@ func GetAccesos(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 /* PERFILES */
-func MakePerfilTable(empresaID int32) aws.DynamoTableRecords[s.Perfil] {
-	return aws.DynamoTableRecords[s.Perfil]{
+func MakePerfilTable(empresaID int32) cloud.DynamoTableRecords[s.Perfil] {
+	return cloud.DynamoTableRecords[s.Perfil]{
 		TableName:      core.Env.DYNAMO_TABLE,
 		PK:             core.Concatn("perf", empresaID),
 		UseCompression: true,
@@ -103,7 +103,7 @@ func MakePerfilTable(empresaID int32) aws.DynamoTableRecords[s.Perfil] {
 func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt64("upd")
 
-	query := aws.DynamoQueryParam{Index: "ix3", GreaterThan: "0"}
+	query := cloud.DynamoQueryParam{Index: "ix3", GreaterThan: "0"}
 	if updated > 0 {
 		query.GreaterThan = fmt.Sprintf("%v", updated)
 	} else {
@@ -112,7 +112,7 @@ func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	dynamoTable := MakePerfilTable(req.Usuario.EmpresaID)
-	records, err := dynamoTable.QueryBatch([]aws.DynamoQueryParam{query})
+	records, err := dynamoTable.QueryBatch([]cloud.DynamoQueryParam{query})
 	if err != nil {
 		panic(err)
 	}
@@ -132,7 +132,7 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if body.ID < 1 {
-		counter, err := aws.GetDynamoCounter(core.Concatn("perfiles", req.Usuario.EmpresaID))
+		counter, err := cloud.GetDynamoCounter(core.Concatn("perfiles", req.Usuario.EmpresaID))
 		if err != nil {
 			return req.MakeErr("Error al obtener el counter.", counter)
 		}

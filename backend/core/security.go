@@ -49,6 +49,10 @@ type EnvStruct struct {
 	SMTP_USER      string
 	SMTP_PASSWORD  string
 	SMTP_PORT      int32
+	CLOUD_PROVIDER string
+	CLOUDFLARE_ACCOUNT string
+	CLOUDFLARE_TOKEN string
+	CLOUDFLARE_DATABASE_ID string
 }
 
 var Env *EnvStruct

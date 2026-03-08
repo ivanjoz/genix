@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"app/aws"
+	"app/cloud"
 	"app/core"
 	"app/db"
 	s "app/types"
@@ -26,7 +26,7 @@ func PostGaleriaImage(req *core.HandlerArgs) core.HandlerResponse {
 	imageName := core.ToBase36(time.Now().UnixMilli())
 
 	// Convierte y guarda la imagen en S3
-	imageArgs := aws.ImageArgs{
+	imageArgs := cloud.ImageArgs{
 		Content:     image.Content,
 		Folder:      "img-galeria",
 		Name:        imageName,
@@ -34,7 +34,7 @@ func PostGaleriaImage(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	core.Env.IS_LOCAL = false
-	_, err = aws.SaveConvertImage(imageArgs)
+	_, err = cloud.SaveConvertImage(imageArgs)
 	if err != nil {
 		return req.MakeErr("Error al guardar la imagen: " + err.Error())
 	}
