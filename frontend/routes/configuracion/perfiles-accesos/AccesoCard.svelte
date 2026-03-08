@@ -7,34 +7,35 @@ import { Core } from '$core/store.svelte';
 
   let {
     acceso,
-    perfilForm = $bindable(),
-    isEdit,
-    onEdit
+    perfilForm = $bindable()
   }: {
     acceso: IAcceso
     perfilForm?: IPerfil
-    isEdit: boolean
-    onEdit: () => void
   } = $props()
 
   const acciones = $derived(perfilForm?.accesosMap?.get(acceso.id) || [])
 
   const accionColor = $derived.by(() => {
-    if (acciones.length === 0 || isEdit) return undefined
+    if (acciones.length === 0) return undefined
     const acciones_ = [...acciones].sort().reverse()
     const accion = accesoAccionesMap.get(acciones_[0] || 0)
     return accion?.color2 || accion?.color || ""
   })
 
+  const cardIsSelected = $derived((acciones?.length || 0) > 0)
+
   function handleCardClick(ev: MouseEvent) {
     if (Core.deviceType === 1 || !perfilForm) { return }
     ev.stopPropagation()
     const currentAcciones = perfilForm.accesosMap.get(acceso.id) || []
-    if (currentAcciones.length >= acceso.acciones.length) {
+    if (currentAcciones.length > 0) {
       perfilForm.accesosMap.delete(acceso.id)
     } else {
-      const missing = acceso.acciones.filter(x => !currentAcciones.includes(x))
-      const newAcciones = [...currentAcciones, missing[0]].filter(x => x)
+      // A card click should behave like a fast toggle, promoting to full access when that level exists.
+      const preferredAccessLevel = acceso.acciones.includes(7)
+        ? 7
+        : [...acceso.acciones].sort((leftLevel, rightLevel) => rightLevel - leftLevel)[0]
+      const newAcciones = preferredAccessLevel ? [preferredAccessLevel] : []
       perfilForm.accesosMap.set(acceso.id, newAcciones)
     }
     // Force reactivity
@@ -64,7 +65,6 @@ import { Core } from '$core/store.svelte';
 
   const cN = $derived.by(() => {
     let className = "acceso-card"
-    if (isEdit) { className += " sel" }
     if (Core.deviceType > 1) { className += " mobile" }
     return className
   })
@@ -72,6 +72,7 @@ import { Core } from '$core/store.svelte';
 
 <div
   class={cN}
+  class:is-selected={cardIsSelected}
   style:border-left-color={accionColor}
   onclick={handleCardClick}
   role="button"
@@ -83,54 +84,29 @@ import { Core } from '$core/store.svelte';
     }
   }}
 >
-  <div class="mr-4">{acceso.nombre}</div>
+  <div class="content-wrap">
+    <div class="title-row">
+      <div class="title-text">{acceso.nombre}</div>
+    </div>
+    {#if acceso.descripcion}
+      <div class="route-text">{acceso.descripcion}</div>
+    {/if}
+  </div>
 
   {#if Core.deviceType > 1}
     <div class="line-1 p-abs" style:background-color={accionColor}></div>
   {/if}
 
-  {#if isEdit}
-    <div
-      class="absolute flex items-center justify-center i-edit"
-      onclick={ev => {
-        ev.stopPropagation()
-        onEdit()
-      }}
-      role="button"
-      tabindex="0"
-      onkeydown={(ev) => {
-        if (ev.key === 'Enter' || ev.key === ' ') {
-          ev.preventDefault()
-          onEdit()
-        }
-      }}
-    >
-      <i class="icon-pencil"></i>
-    </div>
-    <div class="absolute flex items-center justify-center a-id c-purple">{acceso.id}</div>
-  {/if}
-
-  {#if !isEdit && perfilForm}
-    <div class="acciones-ac1">
-      {#each acciones as id}
-        {@const accion = accesoAccionesMap.get(id)}
-        {#if accion}
-          <div
-            class="bnc1"
-            style:background-color={accion.color}
-          >
-            <i class={accion.icon}></i>
-          </div>
-        {/if}
-      {/each}
-    </div>
-    <div class="acciones-ac2 w-full flex justify-center z-10">
+  {#if perfilForm}
+    <div class="acciones-ac2 w-full flex justify-start z-10">
       {#each acceso.acciones as id}
         {@const accion = accesoAccionesMap.get(id)}
         {@const selected = acciones.includes(id)}
         {#if accion}
           <div
             class="accion-btn"
+            title={accion.name}
+            aria-label={accion.name}
             style:background-color={selected ? accion.color : undefined}
             style:border-color={selected ? accion.color : undefined}
             style:color={selected ? 'white' : undefined}
@@ -144,7 +120,7 @@ import { Core } from '$core/store.svelte';
               }
             }}
           >
-            {accion.short}
+            <i class={accion.icon}></i>
           </div>
         {/if}
       {/each}
@@ -154,126 +130,107 @@ import { Core } from '$core/store.svelte';
 
 <style>
   .acceso-card {
-    height: 38px;
+    min-height: 68px;
     position: relative;
-    box-shadow: 0 1px 8px #5a5e6330;
     background-color: white;
     cursor: pointer;
     display: flex;
-    padding: 3px 6px 3px 4px;
-    align-items: center;
-    line-height: 1.05;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 8px;
+    line-height: 1.15;
+    border: 1px solid #d9dce8;
     border-left: 4px solid transparent;
+    border-radius: 10px;
     user-select: none;
+    transition: border-color 0.12s ease, outline-color 0.12s ease, background-color 0.12s ease;
+  }
+
+  .acceso-card:hover {
+    outline: 1px solid #9ca3af;
+    outline-offset: 0;
+  }
+
+  .acceso-card.is-selected {
+    border-color: #b4a3ff;
+    outline: 1px solid #7c5cff;
+    outline-offset: 0;
+    background: #f8f6ff;
+  }
+
+  .acceso-card .content-wrap {
+    width: 100%;
+    min-height: 0;
+  }
+
+  .acceso-card .title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .acceso-card .title-text {
+    font-weight: 700;
+    font-size: 13px;
+    color: #20243b;
+  }
+
+  .acceso-card .route-text {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #6b7280;
+    overflow-wrap: anywhere;
+    line-height: 1.15;
   }
 
   .acceso-card .acciones-ac2 {
-    position: absolute;
-    left: 0;
-    bottom: 0;
-  }
-
-  .acceso-card.sel:hover {
-    outline: 1px solid rgba(0, 0, 0, 0.54);
+    position: static;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .acciones-ac2 {
-    visibility: hidden;
-  }
-
-  .acceso-card .i-edit {
-    background-color: transparent;
-    top: 0;
-    right: 0;
-    height: 1.7rem;
-    font-size: 0.94rem;
-    border-radius: 0;
-    width: 2.2rem;
-    visibility: hidden;
-  }
-
-  .acceso-card:hover .i-edit {
     visibility: visible;
-  }
-
-  .acceso-card .i-edit:hover {
-    background-color: black;
-    color: white;
-  }
-
-  .acceso-card .a-id {
-    background-color: transparent;
-    top: 0;
-    right: 0;
-    height: 1.7rem;
-    font-size: 0.94rem;
-    border-radius: 0;
-    width: 2rem;
-  }
-
-  .acceso-card:hover .a-id {
-    visibility: hidden;
-  }
-
-  .acceso-card:hover:not(.mobile) .acciones-ac2 {
-    visibility: visible;
-  }
-
-  .acceso-card:hover:not(.mobile) .acciones-ac1 {
-    visibility: hidden;
   }
 
   .acceso-card.mobile {
-    padding-top: 0.8rem;
-    height: 3rem;
+    padding-top: 0.6rem;
+    min-height: 4.25rem;
     border-left-width: 0;
   }
 
   .acceso-card .line-1 {
     height: 4px;
-    width: 4rem;
+    width: 2.5rem;
     top: 3px;
     left: 4px;
   }
 
   .acciones-ac2 > div {
-    height: 1.7rem;
-    padding: 3px 7px 0 7px;
-    margin: 0 2px;
+    height: 1.55rem;
+    min-width: 50px;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background-color: #eae8f9;
-    border-radius: 7px 7px 0 0;
-    min-width: 4rem;
+    border-radius: 10px;
     color: rgb(82, 77, 124);
-    border-bottom: 2px solid #eae8f9;
+    border: 1px solid #eae8f9;
     user-select: none;
+    font-size: 11px;
   }
 
   .acciones-ac2 > div:hover {
-    border-bottom-color: black;
-  }
-
-  .acceso-card .bnc1 {
-    color: #fff;
-    height: 1.25rem;
-    display: inline-flex;
-    padding: 0 3px;
-    align-items: center;
-    border-radius: 2px;
-    margin: 0 2px;
-    width: 1.6rem;
-    justify-content: center;
+    border-color: black;
   }
 
   /* Mobile specific styles */
   @media (max-width: 749px) {
     .acceso-card {
-      width: calc((100% / 2) - 6px);
-      margin: 4px 3px;
-    }
-    .acceso-card .acciones-ac1 {
-      position: absolute;
-      top: -5px;
-      right: 4px;
+      width: 100%;
+      margin: 0;
     }
   }
 </style>

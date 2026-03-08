@@ -1,5 +1,4 @@
 import { GetHandler, POST } from '$libs/http.svelte';
-import Modules from '$core/modules';
 
 export interface IAcceso {
   id: number
@@ -25,57 +24,18 @@ export interface IPerfil {
   _open?: boolean
 }
 
-export const accesosGrupos = [
-  { id: 1, name: "Gestión" },
-  { id: 2, name: "Seguridad" },
-  { id: 3, name: "Maestros" },
-  { id: 4, name: "Productos" },
-  { id: 5, name: "Reportes" },
-]
-
 export const accesoAcciones = [
   { id: 1, name: "Visualizar", short: "VER",
     icon: "icon-eye", color: "#00c07d", color2: "#49c99c" },
-  { id: 2, name: "Editar", short: "EDITAR",
+  { id: 2, name: "Crear", short: "CREAR",
     icon: "icon-pencil", color: "#0080f9" },
-  { id: 3, name: "Eliminar", short: "ELIMINAR",
-    icon: "icon-trash", color: "#0080f9" },
+  { id: 3, name: "Editar", short: "EDITAR",
+    icon: "icon-pencil", color: "#0f6bff" },
+  { id: 4, name: "Eliminar", short: "ELIM",
+    icon: "icon-trash", color: "#ff5b5b" },
   { id: 7, name: "Todo", short: "EDITAR",
     icon: "icon-shield", color: "#af12eb", color2: "#d35eff" },
 ]
-
-export class AccesosService extends GetHandler {
-  route = "seguridad-accesos"
-  useCache = { min: 5, ver: 1 }
-
-  accesos: IAcceso[] = $state([])
-  accesosMap: Map<number, IAcceso> = $state(new Map())
-
-  handler(response: IAcceso[]) {
-    this.accesos = response || []
-    this.accesosMap = new Map(this.accesos.map(x => [x.id, x]))
-  }
-
-  constructor() {
-    super()
-    this.fetch()
-  }
-
-  updateAcceso(acceso: IAcceso) {
-    const existing = this.accesos.find(x => x.id === acceso.id)
-    if (existing) {
-      Object.assign(existing, acceso)
-    } else {
-      this.accesos.unshift(acceso)
-    }
-    this.accesosMap.set(acceso.id, acceso)
-  }
-
-  removeAcceso(id: number) {
-    this.accesos = this.accesos.filter(x => x.id !== id)
-    this.accesosMap.delete(id)
-  }
-}
 
 export class PerfilesService extends GetHandler {
   route = "perfiles"
@@ -121,14 +81,6 @@ export class PerfilesService extends GetHandler {
     this.perfiles = this.perfiles.filter(x => x.id !== id)
     this.perfilesMap.delete(id)
   }
-}
-
-export const postSeguridadAccesos = (data: IAcceso) => {
-  return POST({
-    data,
-    route: "seguridad/accesos",
-    refreshRoutes: ["seguridad/accesos"]
-  })
 }
 
 export const postPerfil = (data: IPerfil) => {

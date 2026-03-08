@@ -2,9 +2,6 @@
 import Input from '$components/Input.svelte';
 import Modal from '$components/Modal.svelte';
 import Page from '$domain/Page.svelte';
-import SearchCard from '$components/SearchCard.svelte';
-import SearchSelect from '$components/SearchSelect.svelte';
-import CheckboxOptions from '$components/CheckboxOptions.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import { onMount } from 'svelte';
@@ -14,43 +11,102 @@ import Modules from '$core/modules';
   import pkg from 'notiflix'
 const { Loading } = pkg
   import {
-    AccesosService,
     PerfilesService,
-    postSeguridadAccesos,
     postPerfil,
-    accesosGrupos,
     accesoAcciones,
     type IAcceso,
     type IPerfil
   } from "./perfiles-accesos.svelte"
-import { accessListHash } from '$core/generated/access-list';
 import { fetchAccessListCatalog, type IAccessListCatalogEntry } from './access-list-catalog';
 import AccesoCard from './AccesoCard.svelte';
 
-  const accesosService = new AccesosService()
   const perfilesService = new PerfilesService()
 
-  const accesosGruposMap = arrayToMapN(accesosGrupos, 'id')
   const modulesMap = arrayToMapN(Modules, 'id')
+  const routeCatalogIndex = new Map<string, {
+    moduleID: number
+    moduleName: string
+    groupID: number
+    groupName: string
+  }>()
 
-  let accesoForm = $state({} as IAcceso)
+  for (const moduleRecord of Modules) {
+    for (const menuRecord of moduleRecord.menus) {
+      for (const menuOption of menuRecord.options || []) {
+        const normalizedRoute = (menuOption.route || "").replace(/^\//, "")
+        if (!normalizedRoute) { continue }
+        routeCatalogIndex.set(normalizedRoute, {
+          moduleID: moduleRecord.id,
+          moduleName: moduleRecord.name,
+          groupID: menuRecord.id || 0,
+          groupName: menuRecord.name
+        })
+      }
+    }
+  }
+
   let perfilForm = $state({} as IPerfil)
   let moduleSelected = $state(0)
   let filterText = $state("")
-  let accesoEdit = $state(false)
   let accessListEntries = $state([] as IAccessListCatalogEntry[])
   let accessListLoadError = $state("")
+
+  function decodeAccessLevels(accessLevelMask: number): number[] {
+    const levelDigitMap = new Map<number, number>([
+      [1, 1],
+      [2, 2],
+      [3, 3],
+      [4, 4],
+      [8, 8],
+      [9, 7]
+    ])
+
+    // The YAML catalog stores levels as concatenated digits, e.g. 19 => VER + TODO.
+    return [...String(accessLevelMask)]
+      .map(levelDigit => levelDigitMap.get(Number(levelDigit)) || 0)
+      .filter(levelValue => levelValue > 0)
+  }
+
+  const accesosCatalog = $derived.by(() => {
+    if (accessListEntries.length === 0) { return [] as IAcceso[] }
+
+    const catalogAccesos = accessListEntries.map((accessListEntry) => {
+      const normalizedRoute = (accessListEntry.frontend_routes || "").replace(/^\//, "")
+      const routeMeta = routeCatalogIndex.get(normalizedRoute)
+      const catalogActions = decodeAccessLevels(accessListEntry.levels)
+
+      return {
+        id: accessListEntry.id,
+        nombre: accessListEntry.name,
+        descripcion: normalizedRoute,
+        orden: accessListEntry.id,
+        acciones: catalogActions.length > 0 ? catalogActions : [1],
+        grupo: routeMeta?.groupID || 0,
+        modulosIDs: routeMeta ? [routeMeta.moduleID] : [],
+        ss: 1,
+        upd: 0
+      }
+    })
+
+    return catalogAccesos.sort((leftAccess, rightAccess) => leftAccess.orden - rightAccess.orden)
+  })
 
   const accesosGrouped = $derived.by(() => {
     const gruposMap: Map<string, IAcceso[]> = new Map()
     const moduleSelectedID = moduleSelected
 
-    for (let acs of accesosService.accesos) {
-      for (let md of acs.modulosIDs) {
-        if (moduleSelectedID && moduleSelectedID !== md) { continue }
-        const key = [md, acs.grupo].join("_")
-        if (!gruposMap.has(key)) { gruposMap.set(key, []) }
-        gruposMap.get(key)!.push(acs)
+    for (const accessRecord of accesosCatalog) {
+      const routeMeta = routeCatalogIndex.get((accessRecord.descripcion || "").replace(/^\//, ""))
+      const moduleIDs = accessRecord.modulosIDs.length > 0
+        ? accessRecord.modulosIDs
+        : routeMeta ? [routeMeta.moduleID] : [0]
+      const groupID = accessRecord.grupo || routeMeta?.groupID || 0
+
+      for (const moduleID of moduleIDs) {
+        if (moduleSelectedID && moduleSelectedID !== moduleID) { continue }
+        const groupKey = [moduleID, groupID].join("_")
+        if (!gruposMap.has(groupKey)) { gruposMap.set(groupKey, []) }
+        gruposMap.get(groupKey)!.push(accessRecord)
         break
       }
     }
@@ -69,12 +125,19 @@ import AccesoCard from './AccesoCard.svelte';
         moduleID,
         group,
         accesos: accesosGroup,
-        groupName: accesosGruposMap.get(group)?.name || "",
-        moduleName: moduleSelectedID ? "" : modulesMap.get(moduleID)?.name || ""
+        groupName: routeCatalogIndex.get((accesosGroup[0]?.descripcion || "").replace(/^\//, ""))?.groupName
+          || "Sin grupo",
+        moduleName: moduleSelectedID ? "" : routeCatalogIndex.get((accesosGroup[0]?.descripcion || "").replace(/^\//, ""))?.moduleName
+          || modulesMap.get(moduleID)?.name || "Sin módulo"
       })
     }
 
-    return accesosGrouped_
+    return accesosGrouped_.sort((leftGroup, rightGroup) => {
+      if (leftGroup.moduleID !== rightGroup.moduleID) {
+        return leftGroup.moduleID - rightGroup.moduleID
+      }
+      return leftGroup.group - rightGroup.group
+    })
   })
 
   onMount(async () => {
@@ -82,40 +145,12 @@ import AccesoCard from './AccesoCard.svelte';
       // Load the hashed static catalog so this page can compare backend records against the CDN-shipped source of truth.
       const accessListPayload = await fetchAccessListCatalog()
       accessListEntries = accessListPayload.access_list || []
-      console.info('[access-list] Catalog loaded', {
-        totalEntries: accessListEntries.length,
-        accessListHash
-      })
+      console.info('[access-list] Catalog loaded', { totalEntries: accessListEntries.length })
     } catch (error) {
       accessListLoadError = error as string
       console.error('[access-list] Catalog load failed', { error })
     }
   })
-
-  async function saveAcceso() {
-    const form = accesoForm
-    if (!form.nombre || !form.orden || (form.acciones?.length || 0) == 0
-      || !form.grupo || (form.modulosIDs?.length || 0) === 0) {
-      Notify.failure("Faltan propiedades para agregar el acceso.")
-      return
-    }
-
-    Loading.standard("Actualizando Acceso...")
-
-    try {
-      const result = await postSeguridadAccesos(form)
-
-      if ((form.id || 0) <= 0) form.id = result.id
-      accesosService.updateAcceso(form)
-
-      accesoForm = {} as IAcceso
-      closeModal(1)
-      Notify.success("Acceso guardado correctamente")
-    } catch (error) {
-      Notify.failure(error as string)
-    }
-    Loading.remove()
-  }
 
   async function savePerfil(onDelete?: boolean, isAccesos?: boolean) {
     const form = perfilForm
@@ -132,7 +167,7 @@ import AccesoCard from './AccesoCard.svelte';
           form.accesos.push(accesoID * 10 + n)
         }
       }
-      const accesosFiltered = accesosService.accesos.filter(x => form.accesosMap.has(x.id))
+      const accesosFiltered = accesosCatalog.filter(x => form.accesosMap.has(x.id))
       const modulosIDSet: Set<number> = new Set()
       for (let e of accesosFiltered) {
         for (let md of e.modulosIDs) { modulosIDSet.add(md) }
@@ -176,7 +211,6 @@ import AccesoCard from './AccesoCard.svelte';
       id: "actions",
       buttonEditHandler: (rec) => {
         perfilForm = { ...rec, accesosMap: new Map(rec.accesosMap) }
-        accesoEdit = false
         Core.openModal(2)
       }
     }
@@ -217,7 +251,6 @@ import AccesoCard from './AccesoCard.svelte';
         getFilterContent={e => [e.nombre].filter(x => x).join(" ").toLowerCase()}
         isSelected={(e, id) => e.id === id}
         onRowClick={e => {
-          accesoEdit = false
           if (e.id === perfilForm.id) {
             perfilForm = {} as IPerfil
           } else {
@@ -232,29 +265,12 @@ import AccesoCard from './AccesoCard.svelte';
       <div class="flex justify-between w-full mb-6">
         <div class="ff-bold text-xl">
           <span>Accesos</span>
-          {#if accessListEntries.length > 0}
-            <span class="ml-8 text-sm text-gray-500">
-              Catálogo estático: {accessListEntries.length} items ({accessListHash})
-            </span>
-          {/if}
-          {#if accesoEdit}
-            <span class="text-red-500">(Modo Edición)</span>
-          {/if}
           {#if perfilForm.id > 0}
             <span class="mr-4">:</span>
             <span class="c-purple ml-4">{perfilForm.nombre}</span>
           {/if}
         </div>
         <div class="flex items-center max-md:absolute max-md:top-0 max-md:right-0">
-          {#if accesoEdit}
-            <button class="bx-green mr-8" onclick={ev => {
-              ev.stopPropagation()
-              accesoForm = { ss: 1, modulosIDs: [], acciones: [], id: 0, nombre: "", orden: 0, grupo: 0, upd: 0 }
-              Core.openModal(1)
-            }} aria-label="Agregar acceso">
-              <i class="icon-plus"></i>
-            </button>
-          {/if}
           {#if perfilForm.id > 0}
             <button class="bx-blue mr-8" onclick={ev => {
               ev.stopPropagation()
@@ -264,21 +280,9 @@ import AccesoCard from './AccesoCard.svelte';
               <span class="max-md:hidden">Guardar</span>
             </button>
           {/if}
-          {#if !perfilForm.id}
-            <button class="bn-white" onclick={ev => {
-              ev.stopPropagation()
-              accesoEdit = !accesoEdit
-            }} aria-label="Editar">
-              {#if accesoEdit}
-                <i class="text-red-500 icon-cancel"></i>
-              {:else}
-                <i class="icon-pencil"></i>
-              {/if}
-            </button>
-          {/if}
         </div>
       </div>
-      {#if !accesoEdit && !perfilForm.id}
+      {#if !perfilForm.id}
         <div class="mb-8 px-12 py-8 bg-red-100 border border-red-400 text-red-700 rounded w-fit">
           Debe seleccionar un perfil para editar sus accesos.
         </div>
@@ -296,83 +300,13 @@ import AccesoCard from './AccesoCard.svelte';
           {#each ag.accesos as acceso}
             <AccesoCard
               {acceso}
-              isEdit={accesoEdit}
               bind:perfilForm
-              onEdit={() => {
-                accesoForm = { ...acceso }
-                Core.openModal(1)
-              }}
             />
           {/each}
         </div>
       {/each}
     </div>
   </div>
-
-  <!-- Modal for Acceso -->
-  <Modal
-    id={1}
-    size={6}
-    title={(accesoForm?.id > 0 ? "Editando" : "Creando") + " Acceso"}
-    isEdit={!!accesoForm?.id}
-    onSave={() => saveAcceso()}
-  >
-    <div class="grid grid-cols-24 gap-10 p-6">
-      <Input
-        bind:saveOn={accesoForm}
-        save="nombre"
-        css="col-span-14"
-        label="Nombre"
-        required={true}
-      />
-      <SearchSelect
-        bind:saveOn={accesoForm}
-        save="grupo"
-        css="col-span-10"
-        label="Grupo"
-        required={true}
-        options={accesosGrupos}
-        keyId="id"
-        keyName="name"
-      />
-      <Input
-        bind:saveOn={accesoForm}
-        save="descripcion"
-        css="col-span-16"
-        label="Descripción"
-      />
-      <Input
-        bind:saveOn={accesoForm}
-        save="orden"
-        css="col-span-8"
-        label="Orden"
-        type="number"
-      />
-      <SearchCard
-        bind:saveOn={accesoForm}
-        save="modulosIDs"
-        css="col-span-24"
-        label="Módulos"
-        options={Modules}
-        keyId="id"
-        keyName="name"
-      />
-      <div class="col-span-24 flex items-center gap-12 mb-4">
-        <div class="h-[1px] grow bg-gray-300"></div>
-        <div class="ff-bold text-lg">Acciones</div>
-        <div class="h-[1px] grow bg-gray-300"></div>
-      </div>
-      <CheckboxOptions
-        bind:saveOn={accesoForm}
-        save="acciones"
-        css="col-span-24 flex-wrap gap-y-8"
-        options={accesoAcciones}
-        keyId="id"
-        keyName="name"
-        type="multiple"
-      />
-    </div>
-  </Modal>
 
   <!-- Modal for Perfil -->
   <Modal
