@@ -1,1 +1,1 @@
-export const env={"PUBLIC_LAMBDA_URL":"https://genix-dev-api-1.un.pe/","PUBLIC_FRONTEND_CDN":"d2lbyor24fqj74.cloudfront.net"}
+export const env={"PUBLIC_LAMBDA_URL":"https://genix-dev-api-1.un.pe/","PUBLIC_FRONTEND_CDN":"d2lbyor24fqj74.cloudfront.net","PUBLIC_ENDPOINTS":"[{\"name\":\"Principal (US)\",\"route\":\"https://genix-dev-api-1.un.pe/\"},{\"name\":\"HomeLab (PE)\",\"route\":\"https://genix-home-api.un.pe/\"}]"}
