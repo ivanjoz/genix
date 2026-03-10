@@ -84,9 +84,8 @@ type EmpresaPub struct {
 
 type Usuario struct { // DynamoDB + ScyllaDB
 	db.TableStruct[UsuarioTable, Usuario]
-	CloudKey                string  `json:"-" col:"cloud_user_key,sk"`
-	ID                      int32   `json:",omitempty" db:"id,pk" col:"id"`
-	EmpresaID               int32   `json:",omitempty" db:"empresa_id,pk" col:"empresa_id"`
+	EmpresaID               int32   `json:",omitempty" db:"empresa_id,pk" col:"empresa_id,pk"`
+	ID                      int32   `json:",omitempty" db:"id,pk" col:"id,pk,sk"`
 	Usuario                 string  `json:",omitempty" db:"usuario" col:"usuario,index"`
 	Apellidos               string  `json:",omitempty" db:"apellidos" col:"apellidos"`
 	Nombres                 string  `json:",omitempty" db:"nombres" col:"nombres"`
@@ -110,7 +109,6 @@ type Usuario struct { // DynamoDB + ScyllaDB
 
 func (e *Usuario) PrepareCloudSync() {
 	// Company + status + padded updated keeps delta queries lexicographically sortable across providers.
-	e.CloudKey = fmt.Sprintf("%d_%d", e.EmpresaID, e.ID)
 	e.CompanyUserIndex = fmt.Sprintf("%d_%s", e.EmpresaID, e.Usuario)
 	e.CompanyStatusIndex = fmt.Sprintf("%d_%d_%020d", e.EmpresaID, e.Status, e.Updated)
 }
@@ -158,22 +156,20 @@ type SeguridadAcceso struct { // DynamoDB
 
 type Perfil struct { // DynamoDB
 	db.TableStruct[PerfilTable, Perfil]
-	CloudKey           string  `json:"-" col:"cloud_profile_key,sk"`
-	ID                 int32   `json:"id" db:"id,pk" col:"id"`
-	EmpresaID          int32   `json:"empresaID" db:"empresa_id,pk" col:"empresa_id"`
+	EmpresaID           int32   `json:"empresaID" db:"empresa_id,pk" col:"empresa_id,pk"`
+	ID                  int32   `json:"id" db:"id,pk" col:"id,pk,sk"`
 	Nombre             string  `json:"nombre" db:"nombre" col:"nombre"`
 	Descripcion        string  `json:"descripcion" db:"descripcion" col:"descripcion"`
 	Modulos            []int16 `json:"modulosIDs" db:"modulos_ids" col:"modulos_ids"`
 	Accesos            []int32 `json:"accesos" db:"accesos" col:"accesos"`
 	Status             int8    `json:"ss" db:"status" col:"status"`
 	Updated            int64   `json:"upd" db:"updated" col:"updated"`
-	CompanyUpdatedIndex string `json:"-" col:"company_updated,index"`
-	CompanyStatusIndex string  `json:"-" col:"company_status_updated,index"`
+	CompanyUpdatedIndex string  `json:"-" col:"company_updated,index"`
+	CompanyStatusIndex  string  `json:"-" col:"company_status_updated,index"`
 }
 
 func (e *Perfil) PrepareCloudSync() {
 	// Synthetic keys keep profile lookups and delta queries scoped by company across providers.
-	e.CloudKey = fmt.Sprintf("%d_%d", e.EmpresaID, e.ID)
 	e.CompanyUpdatedIndex = fmt.Sprintf("%d_%020d", e.EmpresaID, e.Updated)
 	e.CompanyStatusIndex = fmt.Sprintf("%d_%d_%020d", e.EmpresaID, e.Status, e.Updated)
 }

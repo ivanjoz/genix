@@ -21,6 +21,8 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[s.ListaCompartidaRegistro](),
 		makeDBController[s.AlmacenMovimiento](),
 		makeDBController[s.Usuario](),
+			makeDBController[s.Empresa](),
+				makeDBController[s.Perfil](),
 		makeDBController[s.Caja](),
 		makeDBController[s.CajaMovimiento](),
 		makeDBController[s.CajaCuadre](),

@@ -19,10 +19,15 @@ case "$1" in
     echo "Executing edit command..."
     (cd scripts && go run table/create_edit_table.go edit "${@:2}")
     ;;
+  "configure_server")
+    # For "configure_server", install the Genix systemd services and writable binary directory.
+    echo "Executing configure_server script..."
+    python3 scripts/configure_server.py "${@:2}"
+    ;;
   *)
     # If the command is not recognized, show an error and usage instructions.
     echo "Unknown command: $1"
-    echo "Usage: $0 {check_tables|create|edit}"
+    echo "Usage: $0 {check_tables|create|edit|configure_server}"
     exit 1
     ;;
 esac

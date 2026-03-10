@@ -64,7 +64,6 @@ func parseColumns(model interface{}) ([]ColumnMeta, string, string) {
 	hashPrefix := getStructHashPrefix(structName)
 
 	ixCount := 1
-	pkCount := 0
 	skCount := 0
 
 	for i := 0; i < t.NumField(); i++ {
@@ -102,10 +101,6 @@ func parseColumns(model interface{}) ([]ColumnMeta, string, string) {
 				switch part {
 				case "pk":
 					colMeta.IsPK = true
-					pkCount++
-					if pkCount > 1 {
-						panic("multiple fields tagged with 'pk' found; only one pk is allowed per struct")
-					}
 				case "sk":
 					colMeta.IsSK = true
 					skCount++

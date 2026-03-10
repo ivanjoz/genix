@@ -127,15 +127,15 @@ func (o *DynamoORM[T]) insertOne(record *T) error {
 	}
 
 	item := map[string]types.AttributeValue{}
-	var pkValue string
+	var dynamoPartitionValue string
 	var skValue string
 
 	for _, col := range o.columns {
 		fieldVal := v.FieldByName(col.FieldName)
 		strVal := stringify(fieldVal)
 
-		if col.IsPK {
-			pkValue = strVal
+		if col.IsPK && dynamoPartitionValue == "" {
+			dynamoPartitionValue = strVal
 		}
 
 		if col.IsSK {
@@ -148,8 +148,8 @@ func (o *DynamoORM[T]) insertOne(record *T) error {
 	}
 
 	dynamoPK := o.hashPrefix
-	if pkValue != "" {
-		dynamoPK += pkValue
+	if dynamoPartitionValue != "" {
+		dynamoPK += dynamoPartitionValue
 	}
 
 	item["pk"] = &types.AttributeValueMemberS{Value: dynamoPK}
@@ -181,14 +181,14 @@ func (o *DynamoORM[T]) GetByID(record T) (*T, error) {
 		v = v.Elem()
 	}
 
-	var pkValue, skValue string
+	var dynamoPartitionValue, skValue string
 
 	for _, col := range o.columns {
 		fieldVal := v.FieldByName(col.FieldName)
 		strVal := stringify(fieldVal)
 
-		if col.IsPK {
-			pkValue = strVal
+		if col.IsPK && dynamoPartitionValue == "" {
+			dynamoPartitionValue = strVal
 		}
 		if col.IsSK {
 			skValue = strVal
@@ -200,8 +200,8 @@ func (o *DynamoORM[T]) GetByID(record T) (*T, error) {
 	}
 
 	dynamoPK := o.hashPrefix
-	if pkValue != "" {
-		dynamoPK += pkValue
+	if dynamoPartitionValue != "" {
+		dynamoPK += dynamoPartitionValue
 	}
 
 	key := map[string]types.AttributeValue{
@@ -249,10 +249,16 @@ func (o *DynamoORM[T]) Select(dest *[]T) QueryBuilder[T] {
 type dynamoQueryBuilder[T any] struct {
 	orm       *DynamoORM[T]
 	dest      *[]T
+	partition interface{}
 	column    string
 	operator  string
 	value     interface{}
 	valueEnd  interface{} // Used for Between
+}
+
+func (b *dynamoQueryBuilder[T]) Partition(value interface{}) QueryBuilder[T] {
+	b.partition = value
+	return b
 }
 
 func (b *dynamoQueryBuilder[T]) Where(columnName string) QueryBuilder[T] {
@@ -318,8 +324,16 @@ func (b *dynamoQueryBuilder[T]) Exec() error {
 	}
 
 	client := dynamodb.NewFromConfig(core.GetAwsConfig())
-	// Indexed queries use the table hash prefix as the fixed partition when the model has no explicit pk field.
 	dynamoPartitionKey := b.orm.hashPrefix
+	if b.partition != nil {
+		dynamoPartitionKey += fmt.Sprintf("%v", b.partition)
+	} else {
+		for _, col := range b.orm.columns {
+			if col.IsPK {
+				return fmt.Errorf("column %s requires Partition() for Dynamo queries because the model has a logical pk", b.column)
+			}
+		}
+	}
 
 	var expr string
 	attrValues := map[string]types.AttributeValue{

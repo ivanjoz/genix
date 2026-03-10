@@ -17,6 +17,7 @@ type ServerCredentials struct {
 	Host             string `json:"host"`
 	User             string `json:"user"`
 	Key              string `json:"key"`
+	Arch             string `json:"arch"`
 	RemoteBinaryPath string `json:"bin"`
 }
 
@@ -53,36 +54,10 @@ func DeployVPS() {
 		return
 	}
 
-	// Build once and reuse the same artifact for every configured server.
-	fmt.Println("Compiling backend for linux/amd64...")
-	localBinaryName := "genix_app"
-	buildDate := time.Now().Format("2006-01-02 15:04:05")
-	buildFlags := fmt.Sprintf("-s -w -X 'app/core.BuildDate=%s'", buildDate)
-	localBinaryPath := filepath.Join(localTempDirectoryPath, localBinaryName)
-	buildBackendCommand := exec.Command("go", "build", "-ldflags", buildFlags, "-o", localBinaryPath, ".")
-	buildBackendCommand.Dir = "../backend"
-	buildBackendCommand.Env = append(os.Environ(), "GOOS=linux", "GOARCH=amd64")
-	buildBackendCommand.Stdout = os.Stdout
-	buildBackendCommand.Stderr = os.Stderr
-
-	if buildBackendError := buildBackendCommand.Run(); buildBackendError != nil {
-		fmt.Printf("Error compiling backend: %v\n", buildBackendError)
-		return
-	}
-	fmt.Println("Compilation successful.")
-
-	// Compress once so every server receives the same deployment artifact.
-	fmt.Println("Compressing binary with Zstd...")
-	localCompressedBinaryPath := localBinaryPath + ".zst"
-
-	compressBinaryError := compressBinary(localBinaryPath, localCompressedBinaryPath)
-	if compressBinaryError != nil {
-		fmt.Printf("Error compressing binary: %v\n", compressBinaryError)
-		return
-	}
-	fmt.Println("Compression successful.")
+	localCompressedBinaryPathsByArchitecture := map[string]string{}
 
 	for _, server := range credentials.Servers {
+		targetArchitecture := resolveTargetArchitecture(server.Arch)
 		loginUser := server.User
 		if loginUser == "" {
 			loginUser = "root"
@@ -95,10 +70,16 @@ func DeployVPS() {
 
 		serverTarget := fmt.Sprintf("%s@%s", loginUser, server.Host)
 		resolvedKeyPath := expandHomePath(server.Key)
+		localCompressedBinaryPath, buildArtifactError := getOrCreateCompressedBinaryForArchitecture(localTempDirectoryPath, targetArchitecture, localCompressedBinaryPathsByArchitecture)
+		if buildArtifactError != nil {
+			fmt.Printf("Error preparing %s artifact for host %s: %v\n", targetArchitecture, server.Host, buildArtifactError)
+			return
+		}
+
 		remoteCompressedBinaryPath := server.RemoteBinaryPath + ".zst"
 
 		fmt.Printf("Deploying to %s\n", serverTarget)
-		fmt.Printf("Debug: host=%s user=%s key=%q bin=%s\n", server.Host, loginUser, resolvedKeyPath, server.RemoteBinaryPath)
+		fmt.Printf("Debug: host=%s user=%s arch=%s key=%q bin=%s\n", server.Host, loginUser, targetArchitecture, resolvedKeyPath, server.RemoteBinaryPath)
 
 		hasAutoReloadStrategy, strategyDetectionError := detectAutoReloadStrategy(resolvedKeyPath, serverTarget)
 		if strategyDetectionError != nil {
@@ -179,6 +160,54 @@ func DeployVPS() {
 	}
 
 	fmt.Println("Deployment complete!")
+}
+
+func resolveTargetArchitecture(configuredArchitecture string) string {
+	normalizedArchitecture := strings.TrimSpace(strings.ToLower(configuredArchitecture))
+	if normalizedArchitecture == "arm64" {
+		return "arm64"
+	}
+
+	return "amd64"
+}
+
+func getOrCreateCompressedBinaryForArchitecture(
+	localTempDirectoryPath string,
+	targetArchitecture string,
+	localCompressedBinaryPathsByArchitecture map[string]string,
+) (string, error) {
+	if cachedCompressedBinaryPath, hasCachedArtifact := localCompressedBinaryPathsByArchitecture[targetArchitecture]; hasCachedArtifact {
+		fmt.Printf("Debug: reusing cached linux/%s artifact: %s\n", targetArchitecture, cachedCompressedBinaryPath)
+		return cachedCompressedBinaryPath, nil
+	}
+
+	// Build one artifact per target architecture so mixed VPS fleets can reuse the right binary safely.
+	localBinaryName := fmt.Sprintf("genix_app_linux_%s", targetArchitecture)
+	localBinaryPath := filepath.Join(localTempDirectoryPath, localBinaryName)
+	localCompressedBinaryPath := localBinaryPath + ".zst"
+	buildDate := time.Now().Format("2006-01-02 15:04:05")
+	buildFlags := fmt.Sprintf("-s -w -X 'app/core.BuildDate=%s'", buildDate)
+
+	fmt.Printf("Compiling backend for linux/%s...\n", targetArchitecture)
+	buildBackendCommand := exec.Command("go", "build", "-ldflags", buildFlags, "-o", localBinaryPath, ".")
+	buildBackendCommand.Dir = "../backend"
+	buildBackendCommand.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+targetArchitecture)
+	buildBackendCommand.Stdout = os.Stdout
+	buildBackendCommand.Stderr = os.Stderr
+
+	if buildBackendError := buildBackendCommand.Run(); buildBackendError != nil {
+		return "", buildBackendError
+	}
+	fmt.Printf("Compilation successful for linux/%s.\n", targetArchitecture)
+
+	fmt.Printf("Compressing linux/%s binary with Zstd...\n", targetArchitecture)
+	if compressBinaryError := compressBinary(localBinaryPath, localCompressedBinaryPath); compressBinaryError != nil {
+		return "", compressBinaryError
+	}
+	fmt.Printf("Compression successful for linux/%s.\n", targetArchitecture)
+
+	localCompressedBinaryPathsByArchitecture[targetArchitecture] = localCompressedBinaryPath
+	return localCompressedBinaryPath, nil
 }
 
 func compressBinary(localBinaryPath string, localCompressedBinaryPath string) error {

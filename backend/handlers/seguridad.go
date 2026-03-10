@@ -17,10 +17,10 @@ func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	var err error
 	if updated > 0 {
 		companyUpdated := fmt.Sprintf("%d_%020d", req.Usuario.EmpresaID, updated)
-		err = cloud.Select(&records).Where("company_updated").GreaterEqual(companyUpdated).Exec()
+		err = cloud.Select(&records).Partition(req.Usuario.EmpresaID).Where("company_updated").GreaterEqual(companyUpdated).Exec()
 	} else {
 		activeProfiles := fmt.Sprintf("%d_%d_%020d", req.Usuario.EmpresaID, 1, updated)
-		err = cloud.Select(&records).Where("company_status_updated").GreaterEqual(activeProfiles).Exec()
+		err = cloud.Select(&records).Partition(req.Usuario.EmpresaID).Where("company_status_updated").GreaterEqual(activeProfiles).Exec()
 	}
 	if err != nil {
 		return req.MakeErr("Error al obtener perfiles.", err)

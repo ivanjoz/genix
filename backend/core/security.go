@@ -28,30 +28,30 @@ type EnvStruct struct {
 	REQ_PARAMS     string
 	REQ_USER_AGENT string
 	// HANDLER_PARH   string
-	REQ_PATH       string
-	AWS_PROFILE    string
-	AWS_REGION     string
-	S3_BUCKET      string
-	DYNAMO_TABLE   string
-	REQ_LAMBDA_ID  string
-	API_ROUTE      string
-	LAMBDA_NAME    string
-	LOGS_FULL      bool
-	LOGS_DEBUG     bool
-	LOGS_ONLY_SAVE bool
-	DB_DISABLE_SSL bool
-	DB_PORT        int32
-	USUARIO_ID     int32
-	ADMIN_PASSWORD string
-	SECRET_PHRASE  string
-	SMTP_HOST      string
-	SMTP_EMAIL     string
-	SMTP_USER      string
-	SMTP_PASSWORD  string
-	SMTP_PORT      int32
-	CLOUD_PROVIDER string
-	CLOUDFLARE_ACCOUNT string
-	CLOUDFLARE_TOKEN string
+	REQ_PATH               string
+	AWS_PROFILE            string
+	AWS_REGION             string
+	S3_BUCKET              string
+	DYNAMO_TABLE           string
+	REQ_LAMBDA_ID          string
+	API_ROUTE              string
+	LAMBDA_NAME            string
+	LOGS_FULL              bool
+	LOGS_DEBUG             bool
+	LOGS_ONLY_SAVE         bool
+	DB_DISABLE_SSL         bool
+	DB_PORT                int32
+	USUARIO_ID             int32
+	ADMIN_PASSWORD         string
+	SECRET_PHRASE          string
+	SMTP_HOST              string
+	SMTP_EMAIL             string
+	SMTP_USER              string
+	SMTP_PASSWORD          string
+	SMTP_PORT              int32
+	CLOUD_PROVIDER         string
+	CLOUDFLARE_ACCOUNT     string
+	CLOUDFLARE_TOKEN       string
 	CLOUDFLARE_DATABASE_ID string
 }
 
@@ -63,6 +63,7 @@ func PopulateVariables() {
 
 	APP_CODE := os.Getenv("APP_CODE")
 	IS_LOCAL := len(APP_CODE) == 0
+	configuredCredentialsPath := strings.TrimSpace(os.Getenv("GENIX_CREDENTIALS_FILE"))
 
 	wd, _ := os.Getwd()
 
@@ -72,11 +73,19 @@ func PopulateVariables() {
 		APP_CODE = "genix"
 		dirname := strings.Split(wd, "/")
 		parentPath := strings.Join(dirname[0:len(dirname)-1], "/")
+		var fileError error
 
-		for _, filePath := range []string{parentPath, wd} {
-			file, err := os.Open(filePath + "/credentials.json")
+		credentialsSearchPaths := []string{parentPath+"/credentials.json", wd+"/credentials.json"}
+		if len(configuredCredentialsPath) > 0 {
+			// Allow systemd and other runtimes to point the backend to a fixed credentials location.
+			credentialsSearchPaths = append(credentialsSearchPaths, configuredCredentialsPath)
+		}
+
+		for _, candidateCredentialsPath := range credentialsSearchPaths {
+			fmt.Println("Buscando credentials.json en:", candidateCredentialsPath)
+			file, err := os.Open(candidateCredentialsPath)
 			if err != nil {
-				fmt.Println("Error opening file:", err)
+				fileError = err
 				continue
 			}
 			defer file.Close()
@@ -84,14 +93,16 @@ func PopulateVariables() {
 			// Read the content of the file
 			variablesBytes, err = io.ReadAll(file)
 			if err != nil {
-				fmt.Println("Error reading credentials.json:", err)
+				fileError = err
 				continue
 			}
 		}
 
 		if len(variablesBytes) == 0 {
-			panic("Archivo credentials.json no encontrado.")
+			fmt.Println(fileError)
+			panic("Archivo credentials.json no encontrado. Configure GENIX_CREDENTIALS_FILE o suba el archivo al directorio esperado.")
 		}
+
 	} else {
 		configJsonBase64 := os.Getenv("CONFIG")
 		if len(configJsonBase64) == 0 {

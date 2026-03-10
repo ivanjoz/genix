@@ -31,10 +31,18 @@ const parsePublicApiEndpoints = (serializedEndpoints: string): IApiEndpointOptio
 
     const parsedEndpoints = rawEndpoints
       .filter(endpointOption => endpointOption.name && endpointOption.route)
+      // Only explicit credentials endpoints should be visible in the login selector.
+      .map((endpointOption) => ({
+        name: String(endpointOption.name || "").trim(),
+        route: String(endpointOption.route || "").trim(),
+        hash: ""
+      }))
 
-    if (PUBLIC_LAMBDA_URL && !parsedEndpoints.some((endpointOption) => endpointOption.route === PUBLIC_LAMBDA_URL)) {
-      parsedEndpoints.push({ name: "Principal", route: PUBLIC_LAMBDA_URL, hash: "" })
-    }
+    console.info("[Env] Parsed API endpoints from PUBLIC_ENDPOINTS:", {
+      configuredRoutes: parsedEndpoints.map((endpointOption) => endpointOption.route),
+      configuredNames: parsedEndpoints.map((endpointOption) => endpointOption.name),
+      lambdaUrl: PUBLIC_LAMBDA_URL || ""
+    })
 
     if (globalThis._isLocal) {
       parsedEndpoints.unshift({ name: "Local", route: "http://localhost:3589/", hash: "" })

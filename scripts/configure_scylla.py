@@ -368,11 +368,46 @@ def upsert_yaml_setting(yaml_content, setting_name, setting_value):
         updated_content += replacement_line + '\n'
     return updated_content
 
-def configure_sysconfig():
-    print("[*] Configuring /etc/sysconfig/scylla-server for 8GB memory & 2 cores...")
-    sysconfig_path = "/etc/sysconfig/scylla-server"
+def resolve_scylla_environment_file():
+    # Scylla packages use different env-file locations across distro families.
+    candidate_environment_paths = [
+        "/etc/sysconfig/scylla-server",
+        "/etc/default/scylla-server",
+    ]
 
-    desired_scylla_arguments = ["--smp", "2", "-m", "4G", "--overprovisioned"]
+    for candidate_environment_path in candidate_environment_paths:
+        if os.path.exists(candidate_environment_path):
+            print(f"[*] Using Scylla environment file: {candidate_environment_path}")
+            return candidate_environment_path
+
+    print("[!] Could not find a Scylla environment file.")
+    print("    Checked: /etc/sysconfig/scylla-server, /etc/default/scylla-server")
+    print("    Verify that the Scylla package is installed correctly on this host.")
+    sys.exit(1)
+
+def get_available_processing_units():
+    # Prefer the scheduler affinity mask because it reflects CPU restrictions better than os.cpu_count().
+    try:
+        available_processing_units = len(os.sched_getaffinity(0))
+        if available_processing_units > 0:
+            return available_processing_units
+    except AttributeError:
+        pass
+
+    detected_processing_units = os.cpu_count() or 1
+    return max(1, detected_processing_units)
+
+def configure_sysconfig():
+    sysconfig_path = resolve_scylla_environment_file()
+    available_processing_units = get_available_processing_units()
+    desired_smp_units = max(1, min(2, available_processing_units))
+    print(
+        f"[*] Configuring {sysconfig_path} for 8GB memory and "
+        f"{desired_smp_units} Scylla core(s) based on {available_processing_units} available CPU(s)..."
+    )
+
+    # Clamp the core count so small cloud instances stay bootable while preserving the lightweight profile.
+    desired_scylla_arguments = ["--smp", str(desired_smp_units), "-m", "4G", "--overprovisioned"]
     managed_option_names = {
         "--smp",
         "-m",

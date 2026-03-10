@@ -34,6 +34,15 @@ type d1Result struct {
 	Error   string                   `json:"error"`
 }
 
+func slicesContains(values []string, expected string) bool {
+	for _, currentValue := range values {
+		if currentValue == expected {
+			return true
+		}
+	}
+	return false
+}
+
 func executeD1Queries(queries []d1Request) ([]d1Result, error) {
 	if core.Env.CLOUDFLARE_DATABASE_ID == "" {
 		return nil, errors.New("CLOUDFLARE_DATABASE_ID is missing from credentials")
@@ -191,6 +200,7 @@ func (o *SqliteORM[T]) BuildInitQueries() []string {
 	var queries []string
 	var colDefs []string
 	primaryKeyColumns := []string{}
+	sortKeyColumn := ""
 
 	for _, col := range o.columns {
 		var sqlType string
@@ -216,11 +226,19 @@ func (o *SqliteORM[T]) BuildInitQueries() []string {
 		}
 
 		def := fmt.Sprintf("%s %s", col.ColumnName, sqlType)
-		if col.IsPK || col.IsSK {
-			// Keep PK parts explicit so SQLite can build a composite primary key when both exist.
+		if col.IsPK {
+			// SQLite models logical primary keys directly from pk tags.
 			primaryKeyColumns = append(primaryKeyColumns, col.ColumnName)
 		}
+		if col.IsSK {
+			sortKeyColumn = col.ColumnName
+		}
 		colDefs = append(colDefs, def)
+	}
+
+	if len(primaryKeyColumns) == 0 && sortKeyColumn != "" {
+		// Global entities like Empresa still need a stable D1 primary key even if they only declare a Dynamo sort key.
+		primaryKeyColumns = append(primaryKeyColumns, sortKeyColumn)
 	}
 
 	if len(primaryKeyColumns) == 1 {
@@ -242,8 +260,8 @@ func (o *SqliteORM[T]) BuildInitQueries() []string {
 
 	// Create indexes
 	for _, col := range o.columns {
-		if col.IsIndex || col.IsSK {
-			// For DynamoDB sk it's just another column, but in D1 we probably want an index.
+		if col.IsIndex || (col.IsSK && !slicesContains(primaryKeyColumns, col.ColumnName)) {
+			// Keep Dynamo sort keys searchable in D1 when they are not part of the logical primary key.
 			idxQuery := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s_%s_idx ON %s(%s);",
 				o.tableName, col.ColumnName, o.tableName, col.ColumnName)
 			queries = append(queries, idxQuery)
@@ -271,6 +289,7 @@ func (o *SqliteORM[T]) buildInsertQuery(record *T) (string, []interface{}) {
 	var args []interface{}
 	primaryKeyColumns := []string{}
 	updateAssignments := []string{}
+	sortKeyColumn := ""
 
 	v := reflect.ValueOf(record)
 	if v.Kind() == reflect.Ptr {
@@ -280,9 +299,13 @@ func (o *SqliteORM[T]) buildInsertQuery(record *T) (string, []interface{}) {
 	for _, col := range o.columns {
 		cols = append(cols, col.ColumnName)
 		placeholders = append(placeholders, "?")
-		if col.IsPK || col.IsSK {
+		if col.IsPK {
 			primaryKeyColumns = append(primaryKeyColumns, col.ColumnName)
-		} else {
+		}
+		if col.IsSK {
+			sortKeyColumn = col.ColumnName
+		}
+		if !col.IsPK {
 			// Replace non-key columns on conflict so SQLite mirrors DynamoDB PutItem semantics.
 			updateAssignments = append(updateAssignments, fmt.Sprintf("%s = excluded.%s", col.ColumnName, col.ColumnName))
 		}
@@ -298,6 +321,10 @@ func (o *SqliteORM[T]) buildInsertQuery(record *T) (string, []interface{}) {
 		} else {
 			args = append(args, fieldVal.Interface())
 		}
+	}
+
+	if len(primaryKeyColumns) == 0 && sortKeyColumn != "" {
+		primaryKeyColumns = append(primaryKeyColumns, sortKeyColumn)
 	}
 
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
@@ -327,12 +354,23 @@ func (o *SqliteORM[T]) GetByID(record T) (*T, error) {
 
 	primaryKeyColumns := []string{}
 	primaryKeyValues := []interface{}{}
+	sortKeyColumn := ""
+	var sortKeyValue interface{}
 
 	for _, col := range o.columns {
-		if col.IsPK || col.IsSK {
+		if col.IsPK {
 			primaryKeyColumns = append(primaryKeyColumns, col.ColumnName)
 			primaryKeyValues = append(primaryKeyValues, v.FieldByName(col.FieldName).Interface())
 		}
+		if col.IsSK {
+			sortKeyColumn = col.ColumnName
+			sortKeyValue = v.FieldByName(col.FieldName).Interface()
+		}
+	}
+
+	if len(primaryKeyColumns) == 0 && sortKeyColumn != "" {
+		primaryKeyColumns = append(primaryKeyColumns, sortKeyColumn)
+		primaryKeyValues = append(primaryKeyValues, sortKeyValue)
 	}
 
 	if len(primaryKeyColumns) == 0 {
@@ -372,10 +410,16 @@ func (o *SqliteORM[T]) Select(dest *[]T) QueryBuilder[T] {
 type sqliteQueryBuilder[T any] struct {
 	orm      *SqliteORM[T]
 	dest     *[]T
+	partition interface{}
 	column   string
 	operator string
 	value    interface{}
 	valueEnd interface{} // Used for Between
+}
+
+func (b *sqliteQueryBuilder[T]) Partition(value interface{}) QueryBuilder[T] {
+	b.partition = value
+	return b
 }
 
 func (b *sqliteQueryBuilder[T]) Where(columnName string) QueryBuilder[T] {

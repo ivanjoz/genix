@@ -33,7 +33,7 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 
 	usuarios := []types.Usuario{}
 	companyUserIndex := fmt.Sprintf("%d_%s", body.EmpresaID, body.Usuario)
-	err = cloud.Select(&usuarios).Where("company_usuario").Equals(companyUserIndex).Exec()
+	err = cloud.Select(&usuarios).Partition(body.EmpresaID).Where("company_usuario").Equals(companyUserIndex).Exec()
 	if err != nil {
 		return req.MakeErr("Error al consultar el usuario.", err.Error())
 	}
@@ -88,7 +88,8 @@ func MakeUsuarioResponse(usuario types.Usuario, cipherKey string) (map[string]an
 	} else if len(usuario.PerfilesIDs) > 0 {
 		for _, perfilID := range usuario.PerfilesIDs {
 			perfil, err := cloud.GetByID(types.Perfil{
-				CloudKey: fmt.Sprintf("%d_%d", usuario.EmpresaID, perfilID),
+				EmpresaID: usuario.EmpresaID,
+				ID:        perfilID,
 			})
 			if err != nil {
 				return nil, core.Err("Error al obtener perfiles.", err)
@@ -149,7 +150,8 @@ func ReloadLogin(req *core.HandlerArgs) core.HandlerResponse {
 	cipherKey := req.GetQuery("cipher-key")
 
 	usuario, err := cloud.GetByID(types.Usuario{
-		CloudKey: fmt.Sprintf("%d_%d", req.Usuario.EmpresaID, req.Usuario.ID),
+		EmpresaID: req.Usuario.EmpresaID,
+		ID:        req.Usuario.ID,
 	})
 	if err != nil {
 		return req.MakeErr("Error al obtener el usuario.", err)

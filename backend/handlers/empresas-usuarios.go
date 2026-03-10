@@ -128,7 +128,7 @@ func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	companyStatusUpdated := fmt.Sprintf("%d_%d_%020d", req.Usuario.EmpresaID, 1, updated)
 
 	records := []s.Usuario{}
-	if err := cloud.Select(&records).Where("company_status_updated").GreaterEqual(companyStatusUpdated).Exec(); err != nil {
+	if err := cloud.Select(&records).Partition(req.Usuario.EmpresaID).Where("company_status_updated").GreaterEqual(companyStatusUpdated).Exec(); err != nil {
 		return req.MakeErr("Error al obtener los usuarios.", err)
 	}
 
