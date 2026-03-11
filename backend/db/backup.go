@@ -150,9 +150,6 @@ func CsvToRecords[T any](
 				colInfo := columns[colIdx]
 				if colInfo != nil {
 					value := base64CSVStringToValue(string(currentValue), colInfo.GetType().Type)
-					if colInfo.GetType().Type == 9 {
-						fmt.Println("Blob:", colInfo.GetName(), "|", value, "|", string(currentValue), "|", colInfo.GetType().Type)
-					}
 					colInfo.SetValue(unsafe.Pointer(&currentRecord), value)
 				}
 			}

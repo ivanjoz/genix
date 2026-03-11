@@ -41,9 +41,33 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener el backup desde el S3", err)
 	}
 
+	// Build the table registry once so restore logs can distinguish a bad TAR from a missing controller.
 	controllersMap := map[string]db.ScyllaControllerInterface{}
+	registeredTableNames := []string{}
+	for _, controller := range MakeScyllaControllers() {
+		tableName := controller.GetTableName()
+		controllersMap[tableName] = controller
+		registeredTableNames = append(registeredTableNames, tableName)
+	}
+
+	core.Log(
+		"RestoreBackup start | company:", req.Usuario.EmpresaID,
+		"| backup:", body.Name,
+		"| tar_bytes:", len(fileBytes),
+		"| registered_tables:", len(registeredTableNames),
+		"| tables:", strings.Join(registeredTableNames, ","),
+	)
 
 	reader := tar.NewReader(bytes.NewReader(fileBytes))
+	decoder, decoderErr := zstd.NewReader(nil, zstd.WithDecoderConcurrency(0))
+	if decoderErr != nil {
+		return req.MakeErr("Error al crear el decoder zstd", decoderErr)
+	}
+	defer decoder.Close()
+
+	processedEntriesCount := 0
+	restoredEntriesCount := 0
+	skippedEntriesCount := 0
 
 	for {
 		header, err := reader.Next()
@@ -56,46 +80,87 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 			log.Fatalf("Error reading tar file: %s", err)
 		}
 
-		fmt.Printf("Header name: %v", header.Name)
+		processedEntriesCount++
+		core.Log(
+			"RestoreBackup entry | index:", processedEntriesCount,
+			"| header_name:", header.Name,
+			"| header_size:", header.Size,
+			"| header_type:", header.Typeflag,
+		)
+
 		nameSlice := strings.Split(header.Name, ".")
+		if len(nameSlice) == 0 || len(nameSlice[0]) == 0 {
+			skippedEntriesCount++
+			core.Log("RestoreBackup skip | invalid header name:", header.Name)
+			continue
+		}
 		tableName := nameSlice[0]
 
 		if tableName == "empresa" || tableName == "accesos" || tableName == "perfiles" {
-			fmt.Printf(`La tabla "%v" debe guardarse en DynamoDB, no configurado.`, tableName)
+			skippedEntriesCount++
+			core.Log(`RestoreBackup skip | dynamodb table not configured | table:`, tableName)
 			continue
 		}
 
-		if _, ok := controllersMap[tableName]; !ok {
-			core.Log("No se encontró la tabla:", tableName)
+		controller, ok := controllersMap[tableName]
+		if !ok {
+			skippedEntriesCount++
+			core.Log(
+				"RestoreBackup skip | controller not found | table:", tableName,
+				"| header_name:", header.Name,
+				"| available_tables:", strings.Join(registeredTableNames, ","),
+			)
 			continue
 		}
 
-		controller := controllersMap[tableName]
-
-		// Create a buffer to store the content of the file
+		// Copy the raw TAR entry first so we can compare compressed and decompressed sizes in logs.
 		buf := new(bytes.Buffer)
-
-		// Copy the content of the file to the buffer
 		_, err = io.Copy(buf, reader)
 		if err != nil {
 			log.Fatalf("Error reading file content: %s", err)
 		}
 
 		contentCompressed := buf.Bytes()
-		decoder, _ := zstd.NewReader(nil, zstd.WithDecoderConcurrency(0))
 		content, err := decoder.DecodeAll(contentCompressed, nil)
 
 		if err != nil {
 			log.Fatalf("Error descomprimiendo registro TAR: %v | %v", header.Name, err)
 		}
 
-		fmt.Printf("Restaurando registros: %v\n", header.Name)
+		csvPreview := string(content)
+		if len(csvPreview) > 180 {
+			csvPreview = csvPreview[:180]
+		}
+		csvPreview = strings.ReplaceAll(csvPreview, "\n", "\\n")
+
+		core.Log(
+			"RestoreBackup payload | table:", tableName,
+			"| compressed_bytes:", len(contentCompressed),
+			"| decompressed_bytes:", len(content),
+			"| preview:", csvPreview,
+		)
+
+		core.Log("Restaurando registros:", header.Name, "| table:", tableName)
 		if err = controller.RestoreCSVRecords(req.Usuario.EmpresaID, &content); err != nil {
 			core.Log(err)
+			continue
 		}
 
-		controller.ResetCounter(req.Usuario.EmpresaID)
+		restoredEntriesCount++
+		if err = controller.ResetCounter(req.Usuario.EmpresaID); err != nil {
+			core.Log("RestoreBackup reset counter error | table:", tableName, "| err:", err)
+			continue
+		}
+
+		core.Log("RestoreBackup entry restored | table:", tableName, "| company:", req.Usuario.EmpresaID)
 	}
+
+	core.Log(
+		"RestoreBackup summary | backup:", body.Name,
+		"| processed_entries:", processedEntriesCount,
+		"| restored_entries:", restoredEntriesCount,
+		"| skipped_entries:", skippedEntriesCount,
+	)
 
 	return req.MakeResponse(map[string]int{"ok": 1})
 }

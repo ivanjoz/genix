@@ -537,7 +537,7 @@ func base64CSVStringToValue(val string, valType int8) any {
 		}
 		return res
 	case 12, 13, 14, 15: // []int64, []int32, []int16, []int8
-		fmt.Println("slice value:", val)
+		// fmt.Println("slice value:", val)
 		parts := strings.Split(val, ",")
 		switch valType {
 		case 12:
