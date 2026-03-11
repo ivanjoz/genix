@@ -23,11 +23,12 @@ export interface IUsuario {
 }
 
 export interface IPerfil {
-  id: number;
-  nombre: string;
-  descripcion?: string;
-  accesos: number[];
-  modulosIDs: number[];
+  ID: number;
+  EmpresaID: number;
+  Nombre: string;
+  Descripcion?: string;
+  Accesos: number[];
+  Modulos: number[];
   accesosMap: Map<number, number[]>;
   ss: number;
   upd: number;

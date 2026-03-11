@@ -91,7 +91,7 @@ func GetProductsIndexDelta(req *core.HandlerArgs) core.HandlerResponse {
 		e := &productosDelta[index]
 		marcasCategoriasIDs.AddIf(e.MarcaID)
 		marcasCategoriasIDs.AddIfBulk(e.CategoriasIDs...)
-		e.Updated = int64(e.NameUpdated)
+		e.Updated = e.NameUpdated
 		e.NameUpdated = 0
 	}
 	

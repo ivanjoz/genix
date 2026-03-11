@@ -6,7 +6,6 @@ import (
 	s "app/types"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -25,7 +24,7 @@ func GetListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	eg := errgroup.Group{}
 
 	for _, listaID := range listasIDs {
-		updated := req.GetQueryInt64(fmt.Sprintf("id_%v", listaID))
+		updated := req.GetQueryInt(fmt.Sprintf("id_%v", listaID))
 
 		eg.Go(func() error {
 			query := db.Query(listaRegistrosMap[listaID])
@@ -136,7 +135,7 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	existingRecordsGroupedByRecordKey := core.SliceToMapP(existingRecordsByHash,
 		func(e s.ListaCompartidaRegistro) string { return fmt.Sprintf("%v_%v", e.ListaID, e.NombreHash) })
 
-	nowTime := time.Now().Unix()
+	nowTime := core.SUnixTime()
 
 	for index := range records {
 		incomingRecord := &records[index]

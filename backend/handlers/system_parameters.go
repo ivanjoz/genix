@@ -5,12 +5,11 @@ import (
 	"app/db"
 	s "app/types"
 	"encoding/json"
-	"time"
 )
 
 func GetSystemParameters(req *core.HandlerArgs) core.HandlerResponse {
 	empresaID := req.Usuario.EmpresaID
-	updated := core.Coalesce(req.GetQueryInt64("upd"), req.GetQueryInt64("updated"))
+	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
 
 	records := []s.SystemParameters{}
 	q := db.Query(&records)
@@ -42,7 +41,7 @@ func PostSystemParameters(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se enviaron registros a guardar.")
 	}
 
-	now := time.Now().Unix()
+	now := core.SUnixTime()
 	for i := range records {
 		e := &records[i]
 		if e.ID == 0 {

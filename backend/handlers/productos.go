@@ -15,7 +15,7 @@ import (
 )
 
 func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
-	updated := core.Coalesce(req.GetQueryInt64("upd"), req.GetQueryInt64("updated"))
+	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
 
 	productos := []s.Producto{}
 	errGroup := errgroup.Group{}
@@ -136,7 +136,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	nowTime := time.Now().Unix()
+	nowTime := core.SUnixTime()
 	core.Log("PostProductos merge payload:", len(productos))
 
 	buildPresentaciones := func(current *s.Producto, incoming *s.Producto) {
@@ -318,7 +318,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 		addImage()
 	}
 
-	producto.Updated = time.Now().Unix()
+	producto.Updated = core.SUnixTime()
 	producto.UpdatedBy = req.Usuario.ID
 
 	core.Print(producto)

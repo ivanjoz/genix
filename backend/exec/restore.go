@@ -43,10 +43,6 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 
 	controllersMap := map[string]db.ScyllaControllerInterface{}
 
-	for _, e := range MakeScyllaControllers() {
-		controllersMap[e.GetTableName()] = e
-	}
-
 	reader := tar.NewReader(bytes.NewReader(fileBytes))
 
 	for {
@@ -94,10 +90,11 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		fmt.Printf("Restaurando registros: %v\n", header.Name)
-		err = controller.RestoreCSVRecords(req.Usuario.EmpresaID, &content)
-		if err != nil {
+		if err = controller.RestoreCSVRecords(req.Usuario.EmpresaID, &content); err != nil {
 			core.Log(err)
 		}
+
+		controller.ResetCounter(req.Usuario.EmpresaID)
 	}
 
 	return req.MakeResponse(map[string]int{"ok": 1})
@@ -111,4 +108,25 @@ func CreateBackup(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	return req.MakeResponse(map[string]int{"ok": 1})
+}
+
+func ResetCounters(partValue any) {
+	fmt.Println("Recalculando Counter de Tablas...")
+	resetAppliedCount := 0
+	resetErrorCount := 0
+	for _, sc := range MakeScyllaControllers() {
+		if err := sc.ResetCounter(partValue); err != nil {
+			resetErrorCount++
+			fmt.Printf("ResetCounter error | table=%s | partition=%v | err=%v\n", sc.GetTableName(), partValue, err)
+			continue
+		}
+		resetAppliedCount++
+	}
+	fmt.Printf("ResetCounter summary | partition=%v | processed=%d | errors=%d\n", partValue, resetAppliedCount, resetErrorCount)
+}
+
+func ResetCounterPart(args *core.ExecArgs) core.FuncResponse {
+	// Reuse the connected reset flow so exec mode behaves the same as the shared helper.
+	ResetCounters(1)
+	return core.FuncResponse{}
 }

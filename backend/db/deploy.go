@@ -27,7 +27,7 @@ type ScyllaControllerInterface interface {
 	RestoreCSVRecords(partValue int32, content *[]byte) error
 	GetRecordsCSV(partValue int32) (CSVResult, error)
 	ReloadRecords(partValue int32) error
- //	ResetCounter(partValue any) error
+	ResetCounter(partValue any) error
 }
 
 func (e *ScyllaController[T, E]) GetTable() ScyllaTable[any] {
@@ -95,6 +95,94 @@ func (e *ScyllaController[T, E]) ReloadRecords(partValue int32) error {
 	}
 
 	return nil
+}
+
+func (e *ScyllaController[T, E]) ResetCounter(partValue any) error {
+	scyllaTable := &e.Table
+
+	// Sequence reset only applies to partitioned tables with explicit autoincrement usage.
+	partitionColumn := scyllaTable.GetPartKey()
+	if partitionColumn == nil || partitionColumn.IsNil() {
+		return nil
+	}
+	if !scyllaTable.useSequences || scyllaTable.autoincrementCol == nil {
+		return nil
+	}
+	if len(scyllaTable.keys) == 0 {
+		return Err("ResetCounter requires at least one key column for table:", scyllaTable.name)
+	}
+	if partValue == nil {
+		return Err("ResetCounter requires a non-nil partition value for table:", scyllaTable.name)
+	}
+
+	// Read max persisted key in the target partition to align sequence with current data.
+	keyColumn := scyllaTable.keys[0]
+	// Use column metadata to validate the key once, then reuse the shared numeric converter.
+	switch keyColumn.GetType().Type {
+	case 2, 3, 4, 5:
+	default:
+		return Err("ResetCounter only supports numeric key types. table:", scyllaTable.name, "key:", keyColumn.GetName())
+	}
+
+	maxValueQuery := fmt.Sprintf(
+		"SELECT max(%v) FROM %v WHERE %v = ?",
+		keyColumn.GetName(), scyllaTable.GetFullName(), partitionColumn.GetName(),
+	)
+
+	// Let gocql allocate the aggregate destination types, then normalize the first value.
+	queryIterator := getScyllaConnection().Query(maxValueQuery, partValue).Iter()
+	rowData, err := queryIterator.RowData()
+	if err != nil {
+		return Err("ResetCounter max-value query failed for table", scyllaTable.name, ":", err)
+	}
+
+	maxKeyValue := int64(0)
+	rowScanner := queryIterator.Scanner()
+	if rowScanner.Next() {
+		if err := rowScanner.Scan(rowData.Values...); err != nil {
+			return Err("ResetCounter max-value query failed for table", scyllaTable.name, ":", err)
+		}
+		if len(rowData.Values) > 0 && rowData.Values[0] != nil {
+			maxKeyValue = reflectToInt64(rowData.Values[0])
+		}
+	}
+	if err := queryIterator.Close(); err != nil {
+		return Err("ResetCounter max-value query failed for table", scyllaTable.name, ":", err)
+	}
+
+	// Counter naming must match the insert path (x{partition}_{table}_{autoincrementPart}).
+	counterName := fmt.Sprintf("x%v_%v_%v", partValue, scyllaTable.name, 0)
+	currentCounterValue, err := getSequenceCurrentValue(counterName)
+	if err != nil {
+		return Err("ResetCounter sequence read failed for", counterName, ":", err)
+	}
+
+	// Counters are increment-only, so we apply the delta to move to the target absolute value.
+	delta := maxKeyValue - currentCounterValue
+	if delta == 0 {
+		return nil
+	}
+
+	updateStatement := fmt.Sprintf("UPDATE %v.sequences SET current_value = current_value + ? WHERE name = ?", scyllaTable.keyspace)
+	if err := getScyllaConnection().Query(updateStatement, delta, counterName).Exec(); err != nil {
+		return Err("ResetCounter sequence update failed for", counterName, ":", err)
+	}
+
+	fmt.Printf("ResetCounter | table=%s | partition=%v | counter=%s | previous=%d | maxKey=%d | delta=%d\n",
+		scyllaTable.name, partValue, counterName, currentCounterValue, maxKeyValue, delta)
+
+	return nil
+}
+
+func getSequenceCurrentValue(counterName string) (int64, error) {
+	result := []Increment{}
+	if err := Query(&result).Name.Equals(counterName).Exec(); err != nil {
+		return 0, err
+	}
+	if len(result) == 0 {
+		return 0, nil
+	}
+	return result[0].CurrentValue, nil
 }
 
 func (e *ScyllaController[T, E]) GetRecordsGob(partValue, limit int32, lastKey any) ([]byte, error) {

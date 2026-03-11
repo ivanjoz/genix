@@ -6,7 +6,7 @@ export type { IUsuario, IPerfil };
 
 export class UsuariosService extends GetHandler {
   route = "usuarios"
-  useCache = { min: 5, ver: 1 }
+  useCache = { min: 0.1, ver: 1 }
 
   usuarios: IUsuario[] = $state([])
   usuariosMap: Map<number, IUsuario> = $state(new Map())
@@ -39,22 +39,23 @@ export class UsuariosService extends GetHandler {
 
 export class PerfilesService extends GetHandler {
   route = "perfiles"
-  useCache = { min: 5, ver: 1 }
+  // Bump cache version because perfiles now arrive with Go field names instead of lowercase aliases.
+  useCache = { min: 5, ver: 2 }
 
   perfiles: IPerfil[] = $state([])
 
   handler(response: IPerfil[]) {
     const perfiles = (response || []).filter(x => x.ss > 0)
     for (const pr of perfiles) {
-      pr.accesos = pr.accesos || []
+      pr.Accesos = pr.Accesos || []
       pr.accesosMap = pr.accesosMap || new Map()
 
-      for (const e of pr.accesos) {
-        const id = Math.floor(e / 10)
-        const nivel = e - (id * 10)
-        pr.accesosMap.has(id)
-          ? pr.accesosMap.get(id)!.push(nivel)
-          : pr.accesosMap.set(id, [nivel])
+      for (const encodedAccess of pr.Accesos) {
+        const accessID = Math.floor(encodedAccess / 10)
+        const accessLevel = encodedAccess - (accessID * 10)
+        pr.accesosMap.has(accessID)
+          ? pr.accesosMap.get(accessID)!.push(accessLevel)
+          : pr.accesosMap.set(accessID, [accessLevel])
       }
     }
     this.perfiles = perfiles

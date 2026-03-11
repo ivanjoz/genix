@@ -86,10 +86,10 @@ import { Core } from '$core/store.svelte';
 >
   <div class="content-wrap">
     <div class="title-row">
-      <div class="title-text">{acceso.nombre}</div>
+      <div class="title-text text-[15px] ff-semibold">{acceso.nombre}</div>
     </div>
     {#if acceso.descripcion}
-      <div class="route-text">{acceso.descripcion}</div>
+      <div class="route-text text-[13px]">{acceso.descripcion}</div>
     {/if}
   </div>
 
@@ -171,14 +171,11 @@ import { Core } from '$core/store.svelte';
   }
 
   .acceso-card .title-text {
-    font-weight: 700;
-    font-size: 13px;
     color: #20243b;
   }
 
   .acceso-card .route-text {
     margin-top: 4px;
-    font-size: 11px;
     color: #6b7280;
     overflow-wrap: anywhere;
     line-height: 1.15;
@@ -219,7 +216,7 @@ import { Core } from '$core/store.svelte';
     color: rgb(82, 77, 124);
     border: 1px solid #eae8f9;
     user-select: none;
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .acciones-ac2 > div:hover {

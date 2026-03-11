@@ -19,6 +19,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-backup":            DoSaveBackup,
 	"fn-homologate":        Homologate,
 	"fn-recalc":            RecalcVirtualColumnsValues,
+	"fn-reset-counters":    ResetCounterPart,
 	"compress-image":       CompressImage,
 }
 

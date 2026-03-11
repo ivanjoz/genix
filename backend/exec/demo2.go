@@ -6,6 +6,7 @@ import (
 	"app/core"
 	"app/db"
 	"app/handlers"
+	s "app/types"
 	"fmt"
 )
 
@@ -110,13 +111,67 @@ func Test39(args *core.ExecArgs) core.FuncResponse {
 
 
 func Test41(args *core.ExecArgs) core.FuncResponse {
-	/*
-		controller := makeDBController[comercial.SaleOrder]()
-		controller.ReloadRecords(1)
+	/* 
+	records := []s.ListaCompartidaRegistro{}
+	
+	query := db.Query(&records)
+	err := query.EmpresaID.Equals(1).Exec()
+	if err != nil {
+		panic(err)
+	}
+	
+	core.Log("registros obtenidos::", len(records))
+	
+	for i := range records {
+		records[i].Updated = core.SUnixTime()
+	}
+	
+	err = db.Update(&records, query.ListaID, query.Updated, query.Status)
+	if err != nil {
+		panic(err)
+	}
 	*/
-
-	core.Log(core.SUnix5Min())
-
+	/*
+	records := []s.PaisCiudad{}
+	
+	query := db.Query(&records)
+	err := query.Exec()
+	if err != nil {
+		panic(err)
+	}
+	
+	core.Log("registros obtenidos::", len(records))
+	
+	for i := range records {
+		records[i].Updated = core.SUnixTime()
+	}
+	
+	err = db.Update(&records, query.Updated)
+	if err != nil {
+		panic(err)
+	}
+	 */
+		
+	records := []s.Producto{}
+	
+	query := db.Query(&records)
+	err := query.Select(query.ID).Exec()
+	if err != nil {
+		panic(err)
+	}
+	
+	core.Log("registros obtenidos::", len(records))
+	
+	for i := range records {
+		records[i].Updated = core.SUnixTime()
+		records[i].Created = core.SUnixTime()
+	}
+	
+	err = db.Update(&records, query.Updated, query.Created)
+	if err != nil {
+		panic(err)
+	}
+	
 	return core.FuncResponse{}
 }
 

@@ -15,7 +15,6 @@ type ORM[T any] interface {
 
 // QueryBuilder provides a fluent interface to build and execute queries.
 type QueryBuilder[T any] interface {
-	Partition(value interface{}) QueryBuilder[T]
 	Where(column string) QueryBuilder[T]
 	Equals(value interface{}) QueryBuilder[T]
 	Between(start interface{}, end interface{}) QueryBuilder[T]
@@ -89,12 +88,11 @@ type errorQueryBuilder[T any] struct {
 	err error
 }
 
-func (b *errorQueryBuilder[T]) Partition(value interface{}) QueryBuilder[T] { return b }
-func (b *errorQueryBuilder[T]) Where(column string) QueryBuilder[T] { return b }
-func (b *errorQueryBuilder[T]) Equals(value interface{}) QueryBuilder[T] { return b }
+func (b *errorQueryBuilder[T]) Where(column string) QueryBuilder[T]                        { return b }
+func (b *errorQueryBuilder[T]) Equals(value interface{}) QueryBuilder[T]                   { return b }
 func (b *errorQueryBuilder[T]) Between(start interface{}, end interface{}) QueryBuilder[T] { return b }
-func (b *errorQueryBuilder[T]) Greater(value any) QueryBuilder[T] { return b }
-func (b *errorQueryBuilder[T]) Less(value any) QueryBuilder[T] { return b }
-func (b *errorQueryBuilder[T]) GreaterEqual(value any) QueryBuilder[T] { return b }
-func (b *errorQueryBuilder[T]) LessEqual(value any) QueryBuilder[T] { return b }
-func (b *errorQueryBuilder[T]) Exec() error { return b.err }
+func (b *errorQueryBuilder[T]) Greater(value any) QueryBuilder[T]                          { return b }
+func (b *errorQueryBuilder[T]) Less(value any) QueryBuilder[T]                             { return b }
+func (b *errorQueryBuilder[T]) GreaterEqual(value any) QueryBuilder[T]                     { return b }
+func (b *errorQueryBuilder[T]) LessEqual(value any) QueryBuilder[T]                        { return b }
+func (b *errorQueryBuilder[T]) Exec() error                                                { return b.err }

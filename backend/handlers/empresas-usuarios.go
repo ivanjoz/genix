@@ -7,7 +7,6 @@ import (
 	s "app/types"
 	"encoding/json"
 	"fmt"
-	"time"
 )
 
 func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
@@ -21,7 +20,7 @@ func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Faltan parámetros para la empresa a crear/actualizar.")
 	}
 
-	body.Updated = time.Now().Unix()
+	body.Updated = core.SUnixTime()
 	empresasToSave := []s.Empresa{body}
 	if err = db.Insert(&empresasToSave); err != nil {
 		return req.MakeErr("Error guardar la empresa en ScyllaDB.", err)
@@ -89,7 +88,7 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 		record.FormApiKey = core.MakeRandomBase36String(18)
 	}
 
-	record.Updated = time.Now().Unix()
+	record.Updated = core.SUnixTime()
 	empresasToSave := []s.Empresa{record}
 	if err = db.Insert(&empresasToSave); err != nil {
 		return req.MakeErr("Error al guardar el registro de la empresa en ScyllaDB:", err)
@@ -124,11 +123,11 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetQueryInt64("upd")
+	updated := req.GetQueryInt64("updated")
 	companyStatusUpdated := fmt.Sprintf("%d_%d_%020d", req.Usuario.EmpresaID, 1, updated)
 
 	records := []s.Usuario{}
-	if err := cloud.Select(&records).Partition(req.Usuario.EmpresaID).Where("company_status_updated").GreaterEqual(companyStatusUpdated).Exec(); err != nil {
+	if err := cloud.Select(&records).Where("empresa_id").Equals(req.Usuario.EmpresaID).Where("company_status_updated").GreaterEqual(companyStatusUpdated).Exec(); err != nil {
 		return req.MakeErr("Error al obtener los usuarios.", err)
 	}
 
@@ -188,10 +187,11 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	body.EmpresaID = req.Usuario.EmpresaID
 
-	now := time.Now().Unix()
+	now := core.SUnixTime()
 	if body.ID == 0 {
 		body.Created = now
 		body.CreatedBy = req.Usuario.ID
+		body.Status = 1
 	} else {
 		usuariosExistentes := []s.Usuario{}
 		query := db.Query(&usuariosExistentes)

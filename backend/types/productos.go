@@ -59,9 +59,9 @@ type Producto struct {
 	NameUpdated    int32                 `json:",omitempty"`
 	// Propiedades generales
 	Status    int8  `json:"ss,omitempty"`
-	Updated   int64 `json:"upd,omitempty"`
+	Updated   int32 `json:"upd,omitempty"`
 	UpdatedBy int32 `json:",omitempty"`
-	Created   int64 `json:",omitempty"`
+	Created   int32 `json:",omitempty"`
 	CreatedBy int32 `json:",omitempty"`
 	/* concatenada con la Empresa-ID para ser indexadas*/
 	CategoriasConStock []int32 `json:",omitempty"`
@@ -99,9 +99,9 @@ type ProductoTable struct {
 	StockStatus        db.Col[ProductoTable, int8]
 	NameUpdated        db.Col[ProductoTable, int32]
 	Status             db.Col[ProductoTable, int8]
-	Updated            db.Col[ProductoTable, int64]
+	Updated            db.Col[ProductoTable, int32]
 	UpdatedBy          db.Col[ProductoTable, int32]
-	Created            db.Col[ProductoTable, int64]
+	Created            db.Col[ProductoTable, int32]
 	CreatedBy          db.Col[ProductoTable, int32]
 	CategoriasConStock db.ColSlice[ProductoTable, int32]
 }
@@ -160,9 +160,9 @@ type Almacen struct {
 	Layout      []AlmacenLayout `db:"layout"`
 	// Propiedades generales
 	Status    int8   `json:"ss,omitempty" db:"status,view"`
-	Updated   int64  `json:"upd,omitempty" db:"updated,view"`
+	Updated   int32  `json:"upd,omitempty" db:"updated,view"`
 	UpdatedBy int32  `json:",omitempty" db:"updated_by"`
-	Created   int64  `json:",omitempty" db:"created"`
+	Created   int32  `json:",omitempty" db:"created"`
 	CreatedBy int32  `json:",omitempty" db:"created_by"`
 	Ciudad    string `json:",omitempty"`
 }
@@ -176,9 +176,9 @@ type AlmacenTable struct {
 	Descripcion db.Col[AlmacenTable, string]
 	Layout      db.Col[AlmacenTable, []AlmacenLayout]
 	Status      db.Col[AlmacenTable, int8]
-	Updated     db.Col[AlmacenTable, int64]
+	Updated     db.Col[AlmacenTable, int32]
 	UpdatedBy   db.Col[AlmacenTable, int32]
-	Created     db.Col[AlmacenTable, int64]
+	Created     db.Col[AlmacenTable, int32]
 	CreatedBy   db.Col[AlmacenTable, int32]
 }
 
@@ -218,9 +218,9 @@ type Sede struct {
 	Direccion   string `db:"direccion"`
 	CiudadID    string `db:"pais_ciudad_id"`
 	Status      int8   `json:"ss,omitempty" db:"status,view"`
-	Updated     int64  `json:"upd,omitempty" db:"updated,view"`
+	Updated     int32  `json:"upd,omitempty" db:"updated,view"`
 	UpdatedBy   int32  `json:",omitempty" db:"updated_by"`
-	Created     int64  `json:",omitempty" db:"created"`
+	Created     int32  `json:",omitempty" db:"created"`
 	CreatedBy   int32  `json:",omitempty" db:"created_by"`
 }
 
@@ -233,9 +233,9 @@ type SedeTable struct {
 	Direccion   db.Col[SedeTable, string]
 	CiudadID    db.Col[SedeTable, string] `db:"pais_ciudad_id"`
 	Status      db.Col[SedeTable, int8]
-	Updated     db.Col[SedeTable, int64]
+	Updated     db.Col[SedeTable, int32]
 	UpdatedBy   db.Col[SedeTable, int32]
-	Created     db.Col[SedeTable, int64]
+	Created     db.Col[SedeTable, int32]
 	CreatedBy   db.Col[SedeTable, int32]
 }
 

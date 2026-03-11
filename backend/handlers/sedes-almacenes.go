@@ -6,13 +6,12 @@ import (
 	s "app/types"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 )
 
 func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetQueryInt64("upd")
+	updated := req.GetQueryInt("upd")
 
 	almacenes := []s.Almacen{}
 	errGroup := errgroup.Group{}
@@ -128,8 +127,8 @@ func PostSedes(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Autoincrement is handled automatically by the ORM via handlePreInsert
 	body.EmpresaID = req.Usuario.EmpresaID
-	body.Updated = time.Now().Unix()
-	body.Created = time.Now().Unix()
+	body.Updated = core.SUnixTime()
+	body.Created = core.SUnixTime()
 	body.CreatedBy = req.Usuario.ID
 
 	if err = db.Insert(&[]s.Sede{body}); err != nil {
@@ -141,7 +140,7 @@ func PostSedes(req *core.HandlerArgs) core.HandlerResponse {
 
 func GetPaisCiudades(req *core.HandlerArgs) core.HandlerResponse {
 	paisID := req.GetQueryInt("pais-id")
-	updated := req.GetQueryInt64("upd")
+	updated := req.GetQueryInt("upd")
 
 	paisCiudades := []s.PaisCiudad{}
 	query := db.Query(&paisCiudades)
@@ -187,8 +186,8 @@ func PostAlmacen(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	body.EmpresaID = req.Usuario.EmpresaID
-	body.Updated = time.Now().Unix()
-	body.Created = time.Now().Unix()
+	body.Updated = core.SUnixTime()
+	body.Created = core.SUnixTime()
 	body.CreatedBy = req.Usuario.ID
 
 	if err := db.Insert(&[]s.Almacen{body}); err != nil {

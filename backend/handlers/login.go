@@ -33,7 +33,7 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 
 	usuarios := []types.Usuario{}
 	companyUserIndex := fmt.Sprintf("%d_%s", body.EmpresaID, body.Usuario)
-	err = cloud.Select(&usuarios).Partition(body.EmpresaID).Where("company_usuario").Equals(companyUserIndex).Exec()
+	err = cloud.Select(&usuarios).Where("empresa_id").Equals(body.EmpresaID).Where("company_usuario").Equals(companyUserIndex).Exec()
 	if err != nil {
 		return req.MakeErr("Error al consultar el usuario.", err.Error())
 	}

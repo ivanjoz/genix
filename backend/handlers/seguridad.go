@@ -7,7 +7,6 @@ import (
 	s "app/types"
 	"encoding/json"
 	"fmt"
-	"time"
 )
 
 func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
@@ -17,10 +16,10 @@ func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	var err error
 	if updated > 0 {
 		companyUpdated := fmt.Sprintf("%d_%020d", req.Usuario.EmpresaID, updated)
-		err = cloud.Select(&records).Partition(req.Usuario.EmpresaID).Where("company_updated").GreaterEqual(companyUpdated).Exec()
+		err = cloud.Select(&records).Where("empresa_id").Equals(req.Usuario.EmpresaID).Where("company_updated").GreaterEqual(companyUpdated).Exec()
 	} else {
 		activeProfiles := fmt.Sprintf("%d_%d_%020d", req.Usuario.EmpresaID, 1, updated)
-		err = cloud.Select(&records).Partition(req.Usuario.EmpresaID).Where("company_status_updated").GreaterEqual(activeProfiles).Exec()
+		err = cloud.Select(&records).Where("empresa_id").Equals(req.Usuario.EmpresaID).Where("company_status_updated").GreaterEqual(activeProfiles).Exec()
 	}
 	if err != nil {
 		return req.MakeErr("Error al obtener perfiles.", err)
@@ -42,7 +41,7 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	body.EmpresaID = req.Usuario.EmpresaID
 	core.Print(body)
 
-	body.Updated = time.Now().Unix()
+	body.Updated = core.SUnixTime()
 	body.PrepareCloudSync()
 	perfilesToSave := []s.Perfil{body}
 	if err = db.Insert(&perfilesToSave); err != nil {

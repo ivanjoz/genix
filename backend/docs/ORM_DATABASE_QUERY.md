@@ -2,6 +2,8 @@
 
 This guide explains how to model tables, define schema strategies, and execute queries with the Genix ORM from an application developer perspective.
 
+It also documents the cloud ORM used by `app/cloud`, which mirrors the same model metadata for DynamoDB and Cloudflare D1 / SQLite.
+
 ---
 
 ## 1. What You Get
@@ -170,6 +172,52 @@ err := q.Select(q.ID, q.Nombre, q.Updated).EmpresaID.Equals(1).Exec()
 q := db.Query(&results)
 err := q.Exclude(q.Tags).EmpresaID.Equals(1).Exec()
 ```
+
+### 5.4 Cloud Query (`cloud.Select`)
+
+`cloud.Select` is the provider-agnostic query API used for DynamoDB and Cloudflare D1 / SQLite.
+
+Rules:
+- `Partition()` was removed from the cloud query API. Do not use it.
+- If the model has a logical partition column such as `empresa_id`, every cloud query must include `Where("<partition_column>").Equals(...)`.
+- DynamoDB requires exactly:
+  - one `Where()` for the partition column using `Equals()`
+  - one additional `Where()` over an indexed cloud column
+- SQLite / D1 also requires the partition `Where()`, but it can combine multiple `Where()` clauses with `AND`.
+- Calling `Where("column")` without an operator such as `Equals()` or `GreaterEqual()` returns an error on `Exec()`.
+
+Example:
+
+```go
+// Purpose: Scope the cloud query by empresa_id and then query the sortable synthetic index.
+// Rationale: Keeps DynamoDB and SQLite behavior aligned and prevents cross-company reads.
+records := []types.Usuario{}
+companyStatusUpdated := fmt.Sprintf("%d_%d_%020d", empresaID, 1, updated)
+
+err := cloud.Select(&records).
+    Where("empresa_id").Equals(empresaID).
+    Where("company_status_updated").GreaterEqual(companyStatusUpdated).
+    Exec()
+```
+
+Login-style point lookup:
+
+```go
+// Purpose: Resolve one user by empresa_id plus indexed company_usuario key.
+// Rationale: DynamoDB requires the logical partition and one indexed predicate.
+usuarios := []types.Usuario{}
+companyUserIndex := fmt.Sprintf("%d_%s", empresaID, usuario)
+
+err := cloud.Select(&usuarios).
+    Where("empresa_id").Equals(empresaID).
+    Where("company_usuario").Equals(companyUserIndex).
+    Exec()
+```
+
+Common errors:
+- `missing required partition filter Where("empresa_id").Equals(...)`
+- `partition column empresa_id must use Equals()`
+- `dynamo queries require exactly one indexed Where() in addition to the partition Where()`
 
 ---
 

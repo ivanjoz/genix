@@ -10,8 +10,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"time"
 )
 
 func ConfigInit(args *core.ExecArgs) core.FuncResponse {
@@ -34,7 +32,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 		panic("Error al inicializar la tabla cloud de perfiles. " + err.Error())
 	}
 
-	seedTimestamp := time.Now().Unix()
+	seedTimestamp := core.SUnixTime()
 	password := core.Env.SECRET_PHRASE + core.Env.ADMIN_PASSWORD
 	passwordHash := core.FnvHashString64(password, -1, 20)
 	empresas := []s.Empresa{
@@ -135,7 +133,7 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 				PadreID:   padreID,
 				Nombre:    nombre,
 				Jerarquia: jerarquia,
-				Updated:   time.Now().Unix(),
+				Updated:   core.SUnixTime(),
 			}
 		}
 	}
@@ -264,22 +262,4 @@ func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
 	db.QueryExec("DELETE FROM genix.almacen_movimiento where empresa_id = 1")
 
 	return core.FuncResponse{}
-}
-
-func RecalcSequences(partValue any) {
-
-	db.MakeScyllaConnection(db.ConnParams{
-		Host:     core.Env.DB_HOST,
-		Port:     int(core.Env.DB_PORT),
-		User:     core.Env.DB_USER,
-		Password: core.Env.DB_PASSWORD,
-		Keyspace: core.Env.DB_NAME,
-	})
-
-	fmt.Println("Recalculando Counter de Tablas...")
-	/* 
-	for _, sc := range MakeScyllaControllers() {
-		sc.ResetCounter(partValue)
-	}
-	*/
 }

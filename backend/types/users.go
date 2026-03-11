@@ -24,7 +24,7 @@ type Empresa struct {
 	TelefonoVerificado int8         `json:",omitempty" db:"telefono_verificado" col:""`
 	SmtpConfig         SmtpConfig   `json:",omitempty" db:"smtp_config" col:""`
 	CulquiConfig       CulquiConfig `json:",omitempty" db:"culqui_config" col:""`
-	Updated            int64        `json:"upd" db:"updated" col:",index"`
+	Updated            int32        `json:"upd" db:"updated" col:",index"`
 	Status             int8         `json:"ss" db:"status" col:""`
 }
 
@@ -45,7 +45,7 @@ type EmpresaTable struct {
 	TelefonoVerificado db.Col[EmpresaTable, int8]
 	SmtpConfig         db.Col[EmpresaTable, SmtpConfig]
 	CulquiConfig       db.Col[EmpresaTable, CulquiConfig]
-	Updated            db.Col[EmpresaTable, int64]
+	Updated            db.Col[EmpresaTable, int32]
 	Status             db.Col[EmpresaTable, int8]
 }
 
@@ -84,25 +84,25 @@ type EmpresaPub struct {
 
 type Usuario struct { // DynamoDB + ScyllaDB
 	db.TableStruct[UsuarioTable, Usuario]
-	EmpresaID               int32   `json:",omitempty" db:"empresa_id,pk" col:"empresa_id,pk"`
-	ID                      int32   `json:",omitempty" db:"id,pk" col:"id,pk,sk"`
-	Usuario                 string  `json:",omitempty" db:"usuario" col:"usuario,index"`
-	Apellidos               string  `json:",omitempty" db:"apellidos" col:"apellidos"`
-	Nombres                 string  `json:",omitempty" db:"nombres" col:"nombres"`
-	PerfilesIDs             []int32 `json:",omitempty" db:"perfiles_ids" col:"perfiles_ids"`
-	RolesIDs                []int32 `json:",omitempty" db:"roles_ids" col:"roles_ids"`
-	Email                   string  `json:",omitempty" db:"email" col:"email,index"`
-	Cargo                   string  `json:",omitempty" db:"cargo" col:"cargo"`
-	DocumentoNro            string  `json:",omitempty" db:"documento_nro" col:"documento_nro"`
-	PasswordHash            string  `json:",omitempty" col:"password_hash"`
-	Password                string  `json:",omitempty" col:"-"`
-	Created                 int64   `json:",omitempty" db:"created" col:"created"`
-	CreatedBy               int32   `json:",omitempty" db:"created_by" col:"created_by"`
-	Updated                 int64   `json:",omitempty" db:"updated" col:"updated"`
-	UpdatedBy               int32   `json:",omitempty" db:"updated_by" col:"updated_by"`
-	Status                  int8    `json:",omitempty" db:"status" col:"status"`
-	CompanyUserIndex        string  `json:"-" col:"company_usuario,index"`
-	CompanyStatusIndex      string  `json:"-" col:"company_status_updated,index"`
+	EmpresaID          int32   `json:",omitempty" db:"empresa_id,pk" col:"empresa_id,pk"`
+	ID                 int32   `json:",omitempty" db:"id,pk" col:"id,pk,sk"`
+	Usuario            string  `json:",omitempty" db:"usuario" col:"usuario,index"`
+	Apellidos          string  `json:",omitempty" db:"apellidos" col:"apellidos"`
+	Nombres            string  `json:",omitempty" db:"nombres" col:"nombres"`
+	PerfilesIDs        []int32 `json:",omitempty" db:"perfiles_ids" col:"perfiles_ids"`
+	RolesIDs           []int32 `json:",omitempty" db:"roles_ids" col:"roles_ids"`
+	Email              string  `json:",omitempty" db:"email" col:"email,index"`
+	Cargo              string  `json:",omitempty" db:"cargo" col:"cargo"`
+	DocumentoNro       string  `json:",omitempty" db:"documento_nro" col:"documento_nro"`
+	PasswordHash       string  `json:",omitempty" col:"password_hash"`
+	Password           string  `json:",omitempty" col:"-"`
+	Created            int32   `json:",omitempty" db:"created" col:"created"`
+	CreatedBy          int32   `json:",omitempty" db:"created_by" col:"created_by"`
+	Updated            int32   `json:"upd,omitempty" db:"updated" col:"updated"`
+	UpdatedBy          int32   `json:",omitempty" db:"updated_by" col:"updated_by"`
+	Status             int8    `json:"ss,omitempty" db:"status" col:"status"`
+	CompanyUserIndex   string  `json:"-" col:"company_usuario,index"`
+	CompanyStatusIndex string  `json:"-" col:"company_status_updated,index"`
 	// CacheVersion is returned in delta-by-IDs endpoints to let clients track per-record cache freshness.
 	CacheVersion uint8 `json:",omitempty" col:"-"`
 }
@@ -125,9 +125,9 @@ type UsuarioTable struct {
 	Email        db.Col[UsuarioTable, string]
 	Cargo        db.Col[UsuarioTable, string]
 	DocumentoNro db.Col[UsuarioTable, string]
-	Created      db.Col[UsuarioTable, int64]
+	Created      db.Col[UsuarioTable, int32]
 	CreatedBy    db.Col[UsuarioTable, int32]
-	Updated      db.Col[UsuarioTable, int64]
+	Updated      db.Col[UsuarioTable, int32]
 	UpdatedBy    db.Col[UsuarioTable, int32]
 	Status       db.Col[UsuarioTable, int8]
 }
@@ -142,28 +142,16 @@ func (e UsuarioTable) GetSchema() db.TableSchema {
 	}
 }
 
-type SeguridadAcceso struct { // DynamoDB
-	ID          int32   `json:"id"`
-	Nombre      string  `json:"nombre" db:"nombre"`
-	Descripcion string  `json:"descripcion" db:"descripcion"`
-	Grupo       int16   `json:"grupo" db:"grupo"`
-	Orden       int16   `json:"orden" db:"orden"`
-	Modulos     []int16 `json:"modulosIDs" db:"modulos_ids"`
-	Acciones    []int16 `json:"acciones" db:"acciones"`
-	Status      int8    `json:"ss" db:"status"`
-	Updated     int64   `json:"upd" db:"updated"`
-}
-
-type Perfil struct { // DynamoDB
+type Perfil struct {
 	db.TableStruct[PerfilTable, Perfil]
-	EmpresaID           int32   `json:"empresaID" db:"empresa_id,pk" col:"empresa_id,pk"`
-	ID                  int32   `json:"id" db:"id,pk" col:"id,pk,sk"`
-	Nombre             string  `json:"nombre" db:"nombre" col:"nombre"`
-	Descripcion        string  `json:"descripcion" db:"descripcion" col:"descripcion"`
-	Modulos            []int16 `json:"modulosIDs" db:"modulos_ids" col:"modulos_ids"`
-	Accesos            []int32 `json:"accesos" db:"accesos" col:"accesos"`
-	Status             int8    `json:"ss" db:"status" col:"status"`
-	Updated            int64   `json:"upd" db:"updated" col:"updated"`
+	EmpresaID           int32   `db:"empresa_id,pk" col:"empresa_id,pk"`
+	ID                  int32   `db:"id,pk" col:"id,pk,sk"`
+	Nombre              string  `db:"nombre" col:"nombre"`
+	Descripcion         string  `db:"descripcion" col:"descripcion"`
+	Modulos             []int16 `db:"modulos_ids" col:"modulos_ids"`
+	Accesos             []int32 `db:"accesos" col:"accesos"`
+	Status              int8    `json:"ss" db:"status" col:"status"`
+	Updated             int32   `json:"upd" db:"updated" col:"updated"`
 	CompanyUpdatedIndex string  `json:"-" col:"company_updated,index"`
 	CompanyStatusIndex  string  `json:"-" col:"company_status_updated,index"`
 }
@@ -183,7 +171,7 @@ type PerfilTable struct {
 	Modulos     db.ColSlice[PerfilTable, int16] `db:"modulos_ids"`
 	Accesos     db.ColSlice[PerfilTable, int32] `db:"accesos"`
 	Status      db.Col[PerfilTable, int8]
-	Updated     db.Col[PerfilTable, int64]
+	Updated     db.Col[PerfilTable, int32]
 }
 
 func (e PerfilTable) GetSchema() db.TableSchema {

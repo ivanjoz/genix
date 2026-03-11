@@ -185,7 +185,7 @@ func NewSqliteORM[T any]() (*SqliteORM[T], error) {
 // Init constructs and executes the D1 CREATE TABLE statements via HTTP.
 func (o *SqliteORM[T]) Init() error {
 	queries := o.BuildInitQueries()
-	
+
 	var reqs []d1Request
 	for _, q := range queries {
 		reqs = append(reqs, d1Request{SQL: q})
@@ -312,7 +312,7 @@ func (o *SqliteORM[T]) buildInsertQuery(record *T) (string, []interface{}) {
 
 		fieldVal := v.FieldByName(col.FieldName)
 		kind := fieldVal.Kind()
-		
+
 		if kind == reflect.Slice && fieldVal.Type().Elem().Kind() == reflect.Uint8 {
 			args = append(args, fieldVal.Interface())
 		} else if kind == reflect.Slice || kind == reflect.Struct || kind == reflect.Map || kind == reflect.Array {
@@ -332,11 +332,12 @@ func (o *SqliteORM[T]) buildInsertQuery(record *T) (string, []interface{}) {
 
 	if len(primaryKeyColumns) > 0 {
 		if len(updateAssignments) > 0 {
-			query += fmt.Sprintf(" ON CONFLICT (%s) DO UPDATE SET %s",
-				strings.Join(primaryKeyColumns, ", "),
-				strings.Join(updateAssignments, ", "))
+			// Omit the conflict target so the upsert keeps working even when a D1 table
+			// was created with an older primary-key shape and has not been recreated yet.
+			query += fmt.Sprintf(" ON CONFLICT DO UPDATE SET %s", strings.Join(updateAssignments, ", "))
 		} else {
-			query += fmt.Sprintf(" ON CONFLICT (%s) DO NOTHING", strings.Join(primaryKeyColumns, ", "))
+			// Keep no-op inserts equally tolerant of legacy D1 key definitions.
+			query += " ON CONFLICT DO NOTHING"
 		}
 	}
 
@@ -408,80 +409,80 @@ func (o *SqliteORM[T]) Select(dest *[]T) QueryBuilder[T] {
 
 // sqliteQueryBuilder implements the QueryBuilder interface for SQLite / D1.
 type sqliteQueryBuilder[T any] struct {
-	orm      *SqliteORM[T]
-	dest     *[]T
-	partition interface{}
-	column   string
-	operator string
-	value    interface{}
-	valueEnd interface{} // Used for Between
-}
-
-func (b *sqliteQueryBuilder[T]) Partition(value interface{}) QueryBuilder[T] {
-	b.partition = value
-	return b
+	orm           *SqliteORM[T]
+	dest          *[]T
+	pendingColumn string
+	conditions    []queryCondition
 }
 
 func (b *sqliteQueryBuilder[T]) Where(columnName string) QueryBuilder[T] {
-	b.column = columnName
+	b.pendingColumn = columnName
 	return b
 }
 
 func (b *sqliteQueryBuilder[T]) Equals(value interface{}) QueryBuilder[T] {
-	b.operator = "="
-	b.value = value
+	b.conditions = appendCondition(b.conditions, b.pendingColumn, "=", value, nil)
+	b.pendingColumn = ""
 	return b
 }
 
 func (b *sqliteQueryBuilder[T]) Between(start interface{}, end interface{}) QueryBuilder[T] {
-	b.operator = "BETWEEN"
-	b.value = start
-	b.valueEnd = end
+	b.conditions = appendCondition(b.conditions, b.pendingColumn, "BETWEEN", start, end)
+	b.pendingColumn = ""
 	return b
 }
 
 func (b *sqliteQueryBuilder[T]) Greater(value interface{}) QueryBuilder[T] {
-	b.operator = ">"
-	b.value = value
+	b.conditions = appendCondition(b.conditions, b.pendingColumn, ">", value, nil)
+	b.pendingColumn = ""
 	return b
 }
 
 func (b *sqliteQueryBuilder[T]) Less(value interface{}) QueryBuilder[T] {
-	b.operator = "<"
-	b.value = value
+	b.conditions = appendCondition(b.conditions, b.pendingColumn, "<", value, nil)
+	b.pendingColumn = ""
 	return b
 }
 
 func (b *sqliteQueryBuilder[T]) GreaterEqual(value interface{}) QueryBuilder[T] {
-	b.operator = ">="
-	b.value = value
+	b.conditions = appendCondition(b.conditions, b.pendingColumn, ">=", value, nil)
+	b.pendingColumn = ""
 	return b
 }
 
 func (b *sqliteQueryBuilder[T]) LessEqual(value interface{}) QueryBuilder[T] {
-	b.operator = "<="
-	b.value = value
+	b.conditions = appendCondition(b.conditions, b.pendingColumn, "<=", value, nil)
+	b.pendingColumn = ""
 	return b
 }
 
 func (b *sqliteQueryBuilder[T]) Exec() error {
-	if b.column == "" {
-		return errors.New("must specify a column using Where() before Exec()")
+	if b.pendingColumn != "" {
+		return fmt.Errorf("column %s is missing an operator before Exec()", b.pendingColumn)
 	}
-	if b.operator == "" {
-		return errors.New("must specify an operator (e.g. Equals, Greater) before Exec()")
+	if len(b.conditions) == 0 {
+		return errors.New("must specify at least one condition using Where() before Exec()")
+	}
+
+	partitionColumn, hasLogicalPartition := findLogicalPartitionColumn(b.orm.columns)
+	_, _, validationError := splitQueryConditions(b.conditions, partitionColumn, hasLogicalPartition)
+	if validationError != nil {
+		return validationError
 	}
 
 	var query string
 	var args []interface{}
-
-	if b.operator == "BETWEEN" {
-		query = fmt.Sprintf("SELECT * FROM %s WHERE %s BETWEEN ? AND ?;", b.orm.tableName, b.column)
-		args = append(args, b.value, b.valueEnd)
-	} else {
-		query = fmt.Sprintf("SELECT * FROM %s WHERE %s %s ?;", b.orm.tableName, b.column, b.operator)
-		args = append(args, b.value)
+	whereClauses := make([]string, 0, len(b.conditions))
+	for _, condition := range b.conditions {
+		if condition.Operator == "BETWEEN" {
+			whereClauses = append(whereClauses, fmt.Sprintf("%s BETWEEN ? AND ?", condition.ColumnName))
+			args = append(args, condition.Value, condition.ValueEnd)
+			continue
+		}
+		whereClauses = append(whereClauses, fmt.Sprintf("%s %s ?", condition.ColumnName, condition.Operator))
+		args = append(args, condition.Value)
 	}
+	query = fmt.Sprintf("SELECT * FROM %s WHERE %s;", b.orm.tableName, strings.Join(whereClauses, " AND "))
 
 	reqs := []d1Request{{SQL: query, Params: args}}
 	results, err := executeD1Queries(reqs)

@@ -154,17 +154,17 @@ import AccesoCard from './AccesoCard.svelte';
 
   async function savePerfil(onDelete?: boolean, isAccesos?: boolean) {
     const form = perfilForm
-    if (!form.nombre) {
+    if (!form.Nombre) {
       Notify.failure("Faltan propiedades para agregar el perfil.")
       return
     }
 
     if (isAccesos) {
-      form.accesos = []
+      form.Accesos = []
       for (let [accesoID, niveles] of form.accesosMap) {
         if (niveles.length === 0) { form.accesosMap.delete(accesoID) }
         for (let n of niveles) {
-          form.accesos.push(accesoID * 10 + n)
+          form.Accesos.push(accesoID * 10 + n)
         }
       }
       const accesosFiltered = accesosCatalog.filter(x => form.accesosMap.has(x.id))
@@ -172,7 +172,7 @@ import AccesoCard from './AccesoCard.svelte';
       for (let e of accesosFiltered) {
         for (let md of e.modulosIDs) { modulosIDSet.add(md) }
       }
-      form.modulosIDs = [...modulosIDSet]
+      form.Modulos = [...modulosIDSet]
     }
 
     Loading.standard("Actualizando Perfil...")
@@ -180,7 +180,7 @@ import AccesoCard from './AccesoCard.svelte';
     try {
       const result = await postPerfil(form)
 
-      if ((form.id || 0) <= 0) form.id = result.id
+      if ((form.ID || 0) <= 0) form.ID = result.ID
       form._open = false
       perfilesService.updatePerfil(form)
 
@@ -198,11 +198,11 @@ import AccesoCard from './AccesoCard.svelte';
       header: "ID",
       headerCss: "w-54",
       cellCss: "text-center c-purple",
-      getValue: e => e.id
+      getValue: e => e.ID
     },
     {
       header: "Perfil", highlight: true,
-      getValue: e => e.nombre
+      getValue: e => e.Nombre
     },
     {
       header: "...",
@@ -246,12 +246,12 @@ import AccesoCard from './AccesoCard.svelte';
         columns={columns}
         maxHeight="calc(100vh - 8rem - 16px)"
         data={perfilesService.perfiles}
-        selected={perfilForm.id}
+        selected={perfilForm.ID}
         filterText={filterText}
-        getFilterContent={e => [e.nombre].filter(x => x).join(" ").toLowerCase()}
-        isSelected={(e, id) => e.id === id}
+        getFilterContent={e => [e.Nombre].filter(x => x).join(" ").toLowerCase()}
+        isSelected={(e, id) => e.ID === id}
         onRowClick={e => {
-          if (e.id === perfilForm.id) {
+          if (e.ID === perfilForm.ID) {
             perfilForm = {} as IPerfil
           } else {
             perfilForm = { ...e, _open: true, accesosMap: new Map(e.accesosMap) }
@@ -262,49 +262,52 @@ import AccesoCard from './AccesoCard.svelte';
 
     <!-- Right side: Accesos -->
     <div class="w-full md:w-[66.5%]">
-      <div class="flex justify-between w-full mb-6">
-        <div class="ff-bold text-xl">
-          <span>Accesos</span>
-          {#if perfilForm.id > 0}
-            <span class="mr-4">:</span>
-            <span class="c-purple ml-4">{perfilForm.nombre}</span>
-          {/if}
-        </div>
-        <div class="flex items-center max-md:absolute max-md:top-0 max-md:right-0">
-          {#if perfilForm.id > 0}
-            <button class="bx-blue mr-8" onclick={ev => {
-              ev.stopPropagation()
-              savePerfil(false, true)
-            }} aria-label="Guardar">
-              <i class="icon-floppy"></i>
-              <span class="max-md:hidden">Guardar</span>
-            </button>
-          {/if}
-        </div>
-      </div>
-      {#if !perfilForm.id}
-        <div class="mb-8 px-12 py-8 bg-red-100 border border-red-400 text-red-700 rounded w-fit">
-          Debe seleccionar un perfil para editar sus accesos.
-        </div>
+      {#if perfilForm.ID}
+	      <div class="flex justify-between w-full mb-6">
+	        <div class="ff-bold text-xl">
+	          <span>Accesos</span>
+	          {#if perfilForm.ID > 0}
+	            <span class="mr-4">:</span>
+	            <span class="c-purple ml-4">{perfilForm.Nombre}</span>
+	          {/if}
+	        </div>
+	        <div class="flex items-center max-md:absolute max-md:top-0 max-md:right-0">
+	          {#if perfilForm.ID > 0}
+	            <button class="bx-blue mr-8" onclick={ev => {
+	              ev.stopPropagation()
+	              savePerfil(false, true)
+	            }} aria-label="Guardar">
+	              <i class="icon-floppy"></i>
+	              <span class="max-md:hidden">Guardar</span>
+	            </button>
+	          {/if}
+	        </div>
+	      </div>
+      {:else}
+	      <div class="mb-8 px-12 py-8 bg-red-100 border border-red-400 text-red-700 rounded w-fit">
+	        Debe seleccionar un perfil para editar sus accesos.
+	      </div>
       {/if}
       {#if accessListLoadError}
         <div class="mb-8 px-12 py-8 bg-amber-100 border border-amber-400 text-amber-700 rounded w-fit">
           {accessListLoadError}
         </div>
       {/if}
-      {#each accesosGrouped as ag}
-        <div class="ff-bold h3 mb-6">
-          {ag.moduleName}{ag.moduleName ? " > " : ""}{ag.groupName}
-        </div>
-        <div class="grid grid-cols-3 gap-x-12 gap-y-8 mb-16">
-          {#each ag.accesos as acceso}
-            <AccesoCard
-              {acceso}
-              bind:perfilForm
-            />
-          {/each}
-        </div>
-      {/each}
+      <div class="max-h-[calc(100vh-var(--header-height)-1rem-64px)] overflow-y-auto pr-4">
+	      {#each accesosGrouped as ag}
+	        <div class="ff-bold h3 mb-6">
+	          {ag.moduleName}{ag.moduleName ? " > " : ""}{ag.groupName}
+	        </div>
+	        <div class="grid grid-cols-3 gap-x-12 gap-y-8 mb-16">
+	          {#each ag.accesos as acceso}
+	            <AccesoCard
+	              {acceso}
+	              bind:perfilForm
+	            />
+	          {/each}
+	        </div>
+	      {/each}
+      </div>
     </div>
   </div>
 
@@ -312,22 +315,22 @@ import AccesoCard from './AccesoCard.svelte';
   <Modal
     id={2}
     size={5}
-    title={(perfilForm?.id > 0 ? "Editando" : "Creando") + " Perfil"}
-    isEdit={!!perfilForm?.id}
+    title={(perfilForm?.ID > 0 ? "Editando" : "Creando") + " Perfil"}
+    isEdit={!!perfilForm?.ID}
     onSave={() => savePerfil()}
     onClose={() => { perfilForm = {} as IPerfil }}
   >
     <div class="grid grid-cols-24 gap-10 p-6">
       <Input
         bind:saveOn={perfilForm}
-        save="nombre"
+        save="Nombre"
         css="col-span-24"
         label="Nombre"
         required={true}
       />
       <Input
         bind:saveOn={perfilForm}
-        save="descripcion"
+        save="Descripcion"
         css="col-span-24"
         label="Descripción"
       />

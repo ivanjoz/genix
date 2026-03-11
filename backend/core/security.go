@@ -82,7 +82,6 @@ func PopulateVariables() {
 		}
 
 		for _, candidateCredentialsPath := range credentialsSearchPaths {
-			fmt.Println("Buscando credentials.json en:", candidateCredentialsPath)
 			file, err := os.Open(candidateCredentialsPath)
 			if err != nil {
 				fileError = err
@@ -95,6 +94,9 @@ func PopulateVariables() {
 			if err != nil {
 				fileError = err
 				continue
+			} else {
+				fmt.Println("Seteando credentials.json desde:", candidateCredentialsPath)
+				break
 			}
 		}
 

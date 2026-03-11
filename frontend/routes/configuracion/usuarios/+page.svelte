@@ -197,8 +197,8 @@ const { Loading } = pkg
         save="PerfilesIDs"
         css="col-span-24"
         options={perfilesService.perfiles}
-        keyId="id"
-        keyName="nombre"
+        keyId="ID"
+        keyName="Nombre"
         label="PERFILES ::"
       />
       <Input

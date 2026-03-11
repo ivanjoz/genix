@@ -3,9 +3,9 @@ package cloud
 import (
 	"app/core"
 	"context"
-	"github.com/bytedance/sonic"
 	"errors"
 	"fmt"
+	"github.com/bytedance/sonic"
 	"reflect"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -247,92 +247,87 @@ func (o *DynamoORM[T]) Select(dest *[]T) QueryBuilder[T] {
 
 // dynamoQueryBuilder implements the QueryBuilder interface for DynamoDB.
 type dynamoQueryBuilder[T any] struct {
-	orm       *DynamoORM[T]
-	dest      *[]T
-	partition interface{}
-	column    string
-	operator  string
-	value     interface{}
-	valueEnd  interface{} // Used for Between
-}
-
-func (b *dynamoQueryBuilder[T]) Partition(value interface{}) QueryBuilder[T] {
-	b.partition = value
-	return b
+	orm           *DynamoORM[T]
+	dest          *[]T
+	pendingColumn string
+	conditions    []queryCondition
 }
 
 func (b *dynamoQueryBuilder[T]) Where(columnName string) QueryBuilder[T] {
-	b.column = columnName
+	b.pendingColumn = columnName
 	return b
 }
 
 func (b *dynamoQueryBuilder[T]) Equals(value interface{}) QueryBuilder[T] {
-	b.operator = "="
-	b.value = value
+	b.conditions = appendCondition(b.conditions, b.pendingColumn, "=", value, nil)
+	b.pendingColumn = ""
 	return b
 }
 
 func (b *dynamoQueryBuilder[T]) Between(start interface{}, end interface{}) QueryBuilder[T] {
-	b.operator = "BETWEEN"
-	b.value = start
-	b.valueEnd = end
+	b.conditions = appendCondition(b.conditions, b.pendingColumn, "BETWEEN", start, end)
+	b.pendingColumn = ""
 	return b
 }
 
 func (b *dynamoQueryBuilder[T]) Greater(value interface{}) QueryBuilder[T] {
-	b.operator = ">"
-	b.value = value
+	b.conditions = appendCondition(b.conditions, b.pendingColumn, ">", value, nil)
+	b.pendingColumn = ""
 	return b
 }
 
 func (b *dynamoQueryBuilder[T]) Less(value interface{}) QueryBuilder[T] {
-	b.operator = "<"
-	b.value = value
+	b.conditions = appendCondition(b.conditions, b.pendingColumn, "<", value, nil)
+	b.pendingColumn = ""
 	return b
 }
 
 func (b *dynamoQueryBuilder[T]) GreaterEqual(value interface{}) QueryBuilder[T] {
-	b.operator = ">="
-	b.value = value
+	b.conditions = appendCondition(b.conditions, b.pendingColumn, ">=", value, nil)
+	b.pendingColumn = ""
 	return b
 }
 
 func (b *dynamoQueryBuilder[T]) LessEqual(value interface{}) QueryBuilder[T] {
-	b.operator = "<="
-	b.value = value
+	b.conditions = appendCondition(b.conditions, b.pendingColumn, "<=", value, nil)
+	b.pendingColumn = ""
 	return b
 }
 
 func (b *dynamoQueryBuilder[T]) Exec() error {
-	if b.column == "" {
-		return errors.New("must specify a column using Where() before Exec()")
+	if b.pendingColumn != "" {
+		return fmt.Errorf("column %s is missing an operator before Exec()", b.pendingColumn)
 	}
-	if b.operator == "" {
-		return errors.New("must specify an operator (e.g. Equals, Greater) before Exec()")
+	if len(b.conditions) == 0 {
+		return errors.New("must specify at least one condition using Where() before Exec()")
 	}
 
+	partitionColumn, hasLogicalPartition := findLogicalPartitionColumn(b.orm.columns)
+	partitionCondition, indexedConditions, validationError := splitQueryConditions(b.conditions, partitionColumn, hasLogicalPartition)
+	if validationError != nil {
+		return validationError
+	}
+	if len(indexedConditions) != 1 {
+		return errors.New("dynamo queries require exactly one indexed Where() in addition to the partition Where()")
+	}
+
+	indexedCondition := indexedConditions[0]
 	var dynIndex string
 	for _, col := range b.orm.columns {
-		if col.ColumnName == b.column && col.IsIndex {
+		if col.ColumnName == indexedCondition.ColumnName && col.IsIndex {
 			dynIndex = col.DynamoIndex
 			break
 		}
 	}
 
 	if dynIndex == "" {
-		return fmt.Errorf("column %s is not marked as an index", b.column)
+		return fmt.Errorf("column %s is not marked as an index", indexedCondition.ColumnName)
 	}
 
 	client := dynamodb.NewFromConfig(core.GetAwsConfig())
 	dynamoPartitionKey := b.orm.hashPrefix
-	if b.partition != nil {
-		dynamoPartitionKey += fmt.Sprintf("%v", b.partition)
-	} else {
-		for _, col := range b.orm.columns {
-			if col.IsPK {
-				return fmt.Errorf("column %s requires Partition() for Dynamo queries because the model has a logical pk", b.column)
-			}
-		}
+	if partitionCondition != nil {
+		dynamoPartitionKey += fmt.Sprintf("%v", partitionCondition.Value)
 	}
 
 	var expr string
@@ -340,19 +335,19 @@ func (b *dynamoQueryBuilder[T]) Exec() error {
 		":pk": &types.AttributeValueMemberS{Value: dynamoPartitionKey},
 	}
 
-	if b.operator == "BETWEEN" {
+	if indexedCondition.Operator == "BETWEEN" {
 		expr = fmt.Sprintf("pk = :pk AND %s BETWEEN :val1 AND :val2", dynIndex)
-		attrValues[":val1"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%v", b.value)}
-		attrValues[":val2"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%v", b.valueEnd)}
+		attrValues[":val1"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%v", indexedCondition.Value)}
+		attrValues[":val2"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%v", indexedCondition.ValueEnd)}
 	} else {
-		expr = fmt.Sprintf("pk = :pk AND %s %s :val", dynIndex, b.operator)
-		attrValues[":val"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%v", b.value)}
+		expr = fmt.Sprintf("pk = :pk AND %s %s :val", dynIndex, indexedCondition.Operator)
+		attrValues[":val"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%v", indexedCondition.Value)}
 	}
 
 	queryInput := &dynamodb.QueryInput{
-		TableName:              core.PtrString(core.Env.DYNAMO_TABLE),
-		IndexName:              core.PtrString(dynIndex),
-		KeyConditionExpression: core.PtrString(expr),
+		TableName:                 core.PtrString(core.Env.DYNAMO_TABLE),
+		IndexName:                 core.PtrString(dynIndex),
+		KeyConditionExpression:    core.PtrString(expr),
 		ExpressionAttributeValues: attrValues,
 	}
 

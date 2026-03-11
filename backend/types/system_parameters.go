@@ -9,7 +9,7 @@ type SystemParameters struct {
 	ValueInts []int32 `json:",omitempty" db:"value_ints"`
 	Value     int32   `json:",omitempty" db:"value"`
 	EmpresaID int32   `json:",omitempty" db:"empresa_id"`
-	Updated   int64   `json:"upd," db:"updated"`
+	Updated   int32   `json:"upd," db:"updated"`
 	UpdatedBy int32   `json:",omitempty" db:"updated_by"`
 }
 
@@ -20,7 +20,7 @@ type SystemParametersTable struct {
 	ValueText db.Col[SystemParametersTable, string]
 	ValueInts db.ColSlice[SystemParametersTable, int32]
 	Value     db.Col[SystemParametersTable, int32]
-	Updated   db.Col[SystemParametersTable, int64]
+	Updated   db.Col[SystemParametersTable, int32]
 	UpdatedBy db.Col[SystemParametersTable, int32]
 }
 

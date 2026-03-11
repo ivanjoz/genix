@@ -331,7 +331,7 @@ func scanSelectQueryRows[E any](
 		}
 
 		scanner := iter.Scanner()
-		fmt.Println("starting iterator | columns::", len(scyllaTable.columns))
+		// fmt.Println("starting iterator | columns::", len(scyllaTable.columns))
 
 		for scanner.Next() {
 			rowValues := rd.Values

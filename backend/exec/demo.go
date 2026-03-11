@@ -17,7 +17,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"time"
 
 	"github.com/fxamacker/cbor/v2"
 	mail "github.com/xhit/go-simple-mail/v2"
@@ -47,8 +46,8 @@ func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 			Nombres:     "Hola 2",
 			Apellidos:   "Mundo 2",
 			PerfilesIDs: []int32{2, 3, 4},
-			Updated:     time.Now().Unix(),
-			Created:     time.Now().Unix(),
+			Updated:     core.SUnixTime(),
+			Created:     core.SUnixTime(),
 		},
 	}
 	
@@ -635,7 +634,7 @@ func Test29(args *core.ExecArgs) core.FuncResponse {
 func Test30(args *core.ExecArgs) core.FuncResponse {
 
 	listasIDs := []int32{1, 2}
-	updated := int64(789456123)
+	updated := int32(789456123)
 	errGroup := errgroup.Group{}
 
 	listasRegistrosMap := map[int32]*[]s.ListaCompartidaRegistro{}

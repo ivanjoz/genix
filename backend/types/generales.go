@@ -33,7 +33,7 @@ type PaisCiudad struct {
 	Nombre       string      `db:"nombre"`
 	PadreID      string      `db:"padre_id"`
 	Jerarquia    int8        `json:",omitempty" db:"jerarquia"`
-	Updated      int64       `json:"upd,omitempty" db:"updated,view"`
+	Updated      int32       `json:"upd,omitempty" db:"updated,view"`
 	Departamento *PaisCiudad `json:"-"`
 	Provincia    *PaisCiudad `json:"-"`
 }
@@ -45,7 +45,7 @@ type PaisCiudadTable struct {
 	Nombre    db.Col[PaisCiudadTable, string]
 	PadreID   db.Col[PaisCiudadTable, string]
 	Jerarquia db.Col[PaisCiudadTable, int8]
-	Updated   db.Col[PaisCiudadTable, int64]
+	Updated   db.Col[PaisCiudadTable, int32]
 }
 
 func (e PaisCiudadTable) GetSchema() db.TableSchema {
@@ -70,7 +70,7 @@ type ListaCompartidaRegistro struct {
 	NombreHash  int32    `json:",omitempty"`
 	// Propiedades generales
 	Status    int8  `json:"ss,omitempty"`
-	Updated   int64 `json:"upd,omitempty"`
+	Updated   int32 `json:"upd,omitempty"`
 	UpdatedBy int32 `json:",omitempty"`
 }
 
@@ -84,7 +84,7 @@ type ListaCompartidaRegistroTable struct {
 	Descripcion db.Col[ListaCompartidaRegistroTable, string]
 	NombreHash  db.Col[ListaCompartidaRegistroTable, int32]
 	Status      db.Col[ListaCompartidaRegistroTable, int8]
-	Updated     db.Col[ListaCompartidaRegistroTable, int64]
+	Updated     db.Col[ListaCompartidaRegistroTable, int32]
 	UpdatedBy   db.Col[ListaCompartidaRegistroTable, int32]
 }
 
@@ -122,7 +122,7 @@ type Parametros struct {
 	Valores   []int32
 	// Propiedades generales
 	Status    int8
-	Updated   int64
+	Updated   int32
 	UpdatedBy int32
 }
 
@@ -135,7 +135,7 @@ type ParametrosTable struct {
 	ValorInt  db.Col[ParametrosTable, int32]
 	Valores   db.ColSlice[ParametrosTable, int32]
 	Status    db.Col[ParametrosTable, int8]
-	Updated   db.Col[ParametrosTable, int64]
+	Updated   db.Col[ParametrosTable, int32]
 	UpdatedBy db.Col[ParametrosTable, int32]
 }
 
