@@ -206,6 +206,7 @@ func main() {
 
 	// Si se está desarrollando en local
 	if core.Env.IS_LOCAL {
+		exec.StartUsageLogFlushWorker()
 		core.Log("Ejecutando en local. http://localhost" + serverPort)
 
 		corsMiddleware := cors.New(cors.Options{
@@ -221,9 +222,9 @@ func main() {
 			ReadHeaderTimeout: 5 * time.Second,
 			ReadTimeout:       30 * time.Second,
 			// Keep disabled to allow long-lived SSE streams (metrics and future real-time endpoints).
-			WriteTimeout:      0,
-			IdleTimeout:       120 * time.Second,
-			MaxHeaderBytes:    1 << 20, // 1 MiB
+			WriteTimeout:   0,
+			IdleTimeout:    120 * time.Second,
+			MaxHeaderBytes: 1 << 20, // 1 MiB
 			// Track active connections for operational metrics and SSE dashboards.
 			ConnState: func(connection net.Conn, currentState http.ConnState) {
 				core.UpdateHTTPConnectionState(connection, currentState)

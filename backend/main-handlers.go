@@ -41,6 +41,8 @@ func makeAppHandlers() *core.AppRouterType {
 var apiNames = []string{"api", "go1", "go2", "go3", "go4", "go5"}
 
 func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
+	requestStartedAt := time.Now().UnixMilli()
+
 	defer func() {
 		if r := recover(); r != nil {
 			errStr := fmt.Sprintf("Internal Server Error (Panic): %v", r)
@@ -125,9 +127,41 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 			respLen = len(*handlerResponse.Body)
 		}
 		core.Log("Finalizado Handler::", funcPath, " | Len: ", respLen)
+
+		if core.Env.IS_LOCAL {
+			registerLocalRequestUsage(args, &handlerResponse, requestStartedAt)
+		}
 	}
 
 	return prepareResponse(args, &handlerResponse)
+}
+
+func registerLocalRequestUsage(args *core.HandlerArgs, handlerResponse *core.HandlerResponse, requestStartedAt int64) {
+	companyID, usuarioID := int32(0), int32(0)
+	
+	if args.Usuario != nil {
+		companyID, usuarioID = args.Usuario.EmpresaID, args.Usuario.ID
+	}
+	if args.Usuario.EmpresaID <= 0 {
+		return
+	}
+
+	requestType := core.If(args.Method == "GET",int8(1),2)
+	bandwidthTotalBytes := 0
+
+	if args.Body != nil {
+		bandwidthTotalBytes += len(*args.Body)
+	}
+
+	if handlerResponse.Body != nil {
+		bandwidthTotalBytes = len(*handlerResponse.Body)
+	}
+
+	bandwidthUnits := int32((bandwidthTotalBytes + 4095) / 4096)
+	elapsedMilliseconds := time.Now().UnixMilli() - requestStartedAt
+	usageTimeUnits := int32((elapsedMilliseconds + 3) / 4)
+
+	core.AddRequestUsage(companyID, usuarioID, bandwidthUnits, usageTimeUnits, requestType)
 }
 
 func clearEnvVariables() {
@@ -226,23 +260,6 @@ func ExecFuncHandler(lambdaInput string) (response core.FuncResponse) {
 		if len(funcsToInvokeMap) == 0 {
 			return core.FuncResponse{}
 		}
-		/* 
-		messages := []string{}
-
-		for funcName, funcToInvoke := range funcsToInvokeMap {
-			nowTime := time.Now().Unix()
-			core.Log("*Ejecutando función:: ", funcToInvoke.HourMin, " | ", funcName)
-			core.LogsSaved = []string{}
-			
-			args := core.ExecArgs{Message: ""}
-			funcMessage := funcToInvoke.Exec(&args).Message
-			duration := int(time.Now().Unix() - nowTime)
-
-			message := core.Concat(" | ", "Func: "+funcName, core.Concats(duration, "s"))
-			messages = append(messages, message)
-		}
-		core.Log(messages)
-		*/
 		// Función a ejecutarse con nombre específico
 	} else if len(args.FuncToExec) > 0 {
 		for key := range exec.ExecHandlers {
