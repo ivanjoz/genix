@@ -32,9 +32,7 @@ export const accesoAcciones = [
     icon: "icon-pencil", color: "#0080f9" },
   { id: 3, name: "Editar", short: "EDITAR",
     icon: "icon-pencil", color: "#0f6bff" },
-  { id: 4, name: "Eliminar", short: "ELIM",
-    icon: "icon-trash", color: "#ff5b5b" },
-  { id: 7, name: "Todo", short: "EDITAR",
+  { id: 4, name: "Todo", short: "TODO",
     icon: "icon-shield", color: "#af12eb", color2: "#d35eff" },
 ]
 

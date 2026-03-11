@@ -7,7 +7,94 @@ import (
 	s "app/types"
 	"encoding/json"
 	"fmt"
+	"sort"
 )
+
+func makeAccesoNivelUint16(accesoID int32, nivel int32) uint16 {
+	// Clamp invalid levels to the minimum allowed representation to avoid granting extra permissions.
+	if nivel < 1 || nivel > 4 {
+		nivel = 1
+	}
+
+	return uint16(accesoID<<2) | uint16(nivel-1)
+}
+
+func getPerfilesMapByIDs(empresaID int32, perfilesIDs []int32) (map[int32]s.Perfil, error) {
+	if len(perfilesIDs) == 0 {
+		core.Log("getPerfilesMapByIDs:: sin perfiles solicitados")
+		return map[int32]s.Perfil{}, nil
+	}
+
+	uniquePerfilesIDs := core.MakeUnique(perfilesIDs)
+	perfiles := []s.Perfil{}
+	query := db.Query(&perfiles)
+	query.EmpresaID.Equals(empresaID).ID.In(uniquePerfilesIDs...)
+
+	if err := query.Exec(); err != nil {
+		return nil, err
+	}
+
+	core.Log("getPerfilesMapByIDs:: perfiles encontrados", len(perfiles), "de", len(uniquePerfilesIDs))
+
+	perfilesByID := make(map[int32]s.Perfil, len(perfiles))
+	for _, perfil := range perfiles {
+		perfilesByID[perfil.ID] = perfil
+	}
+
+	return perfilesByID, nil
+}
+
+func buildAccesosComputedFromPerfiles(perfilesByID map[int32]s.Perfil, perfilesIDs []int32) ([]uint16, error) {
+	if len(perfilesIDs) == 0 {
+		core.Log("buildAccesosComputedFromPerfiles:: usuario sin perfiles")
+		return []uint16{}, nil
+	}
+
+	highestLevelByAccesoID := map[int32]int32{}
+
+	for _, perfilID := range perfilesIDs {
+		perfil, exists := perfilesByID[perfilID]
+		if !exists {
+			core.Log("buildAccesosComputedFromPerfiles:: perfil no encontrado", perfilID)
+			continue
+		}
+
+		core.Log("buildAccesosComputedFromPerfiles:: perfil", perfil.ID, "accesos", len(perfil.Accesos))
+
+		for _, accesoNivelID := range perfil.Accesos {
+			accesoID := accesoNivelID / 10
+			nivel := accesoNivelID % 10
+
+			// Normalize malformed levels to the minimum valid level expected by the bit-packing format.
+			if nivel > 4 || nivel < 1 {
+				core.Log("buildAccesosComputedFromPerfiles:: normalizando nivel", accesoNivelID, "=>", accesoID, 1)
+				nivel = 1
+			}
+
+			currentLevel, alreadyExists := highestLevelByAccesoID[accesoID]
+			if !alreadyExists || nivel > currentLevel {
+				highestLevelByAccesoID[accesoID] = nivel
+			}
+		}
+	}
+
+	sortedAccesoIDs := make([]int32, 0, len(highestLevelByAccesoID))
+	for accesoID := range highestLevelByAccesoID {
+		sortedAccesoIDs = append(sortedAccesoIDs, accesoID)
+	}
+	sort.Slice(sortedAccesoIDs, func(i int, j int) bool {
+		return sortedAccesoIDs[i] < sortedAccesoIDs[j]
+	})
+
+	accesosComputed := make([]uint16, 0, len(sortedAccesoIDs))
+	for _, accesoID := range sortedAccesoIDs {
+		accesosComputed = append(accesosComputed, makeAccesoNivelUint16(accesoID, highestLevelByAccesoID[accesoID]))
+	}
+
+	core.Log("buildAccesosComputedFromPerfiles:: accesos computados", len(accesosComputed))
+
+	return accesosComputed, nil
+}
 
 func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
 	body := s.Empresa{}
@@ -219,9 +306,21 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.PasswordHash = core.FnvHashString64(passwordConcat, -1, 20)
 	}
 
+	perfilesByID, err := getPerfilesMapByIDs(body.EmpresaID, body.PerfilesIDs)
+	if err != nil {
+		return req.MakeErr("Error al obtener los perfiles del usuario.", err)
+	}
+
+	accesosComputed, err := buildAccesosComputedFromPerfiles(perfilesByID, body.PerfilesIDs)
+	if err != nil {
+		return req.MakeErr("Error al obtener los accesos del perfil.", err)
+	}
+
 	body.Password = ""
+	body.AccesosComputed = accesosComputed
 	body.Updated = now
 	body.UpdatedBy = req.Usuario.ID
+	core.Log("PostUsuarios:: usuario", body.ID, "perfiles", body.PerfilesIDs, "accesosComputed", len(body.AccesosComputed))
 	body.PrepareCloudSync()
 	core.Print(body)
 

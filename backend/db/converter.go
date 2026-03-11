@@ -866,13 +866,13 @@ func makeScyllaValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, colType
 		openBracket, closeBracket := getCollectionLiteralBrackets(colTypeName)
 		return openBracket + concatenatedValues + closeBracket
 	case 9: // []byte / blob (could be complex type)
-		// Keep literal blob generation consistent with statement-value encoding for unsigned fields.
+		// UPDATE statements need blob literals (0x...) instead of raw []byte formatting.
 		if encodedBlob, encoded, err := encodeUnsignedValueToBlob(f.Interface(ptr), f.Type); encoded {
 			if err != nil {
 				fmt.Println("Error encoding unsigned blob:", f.Name, err)
 				return ""
 			}
-			return encodedBlob
+			return "0x" + hex.EncodeToString(encodedBlob)
 		}
 		// Check if it's a complex type or just []byte
 		if f.Type.Kind() != reflect.Slice || f.Type.Elem().Kind() != reflect.Uint8 {
@@ -887,7 +887,8 @@ func makeScyllaValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, colType
 			return "0x" + hexString
 		}
 		// Plain []byte
-		return f.Interface(ptr)
+		blobValue := f.Interface(ptr).([]byte)
+		return "0x" + hex.EncodeToString(blobValue)
 	default:
 		return f.Interface(ptr)
 	}

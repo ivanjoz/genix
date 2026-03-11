@@ -1,24 +1,21 @@
 <script lang="ts">
 import Input from '$components/Input.svelte';
 import Modal from '$components/Modal.svelte';
-import Page from '$domain/Page.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { onMount } from 'svelte';
-import { arrayToMapN, Notify, throttle } from '$libs/helpers';
-import { Core, closeModal } from '$core/store.svelte';
 import Modules from '$core/modules';
-  import pkg from 'notiflix'
-const { Loading } = pkg
-  import {
+import { closeModal, Core } from '$core/store.svelte';
+import Page from '$domain/Page.svelte';
+import { arrayToMapN, Loading, Notify, throttle } from '$libs/helpers';
+import { onMount } from 'svelte';
+import AccesoCard from './AccesoCard.svelte';
+import { fetchAccessListCatalog, type IAccessListCatalogEntry } from './access-list-catalog';
+import {
     PerfilesService,
     postPerfil,
-    accesoAcciones,
     type IAcceso,
     type IPerfil
-  } from "./perfiles-accesos.svelte"
-import { fetchAccessListCatalog, type IAccessListCatalogEntry } from './access-list-catalog';
-import AccesoCard from './AccesoCard.svelte';
+} from "./perfiles-accesos.svelte";
 
   const perfilesService = new PerfilesService()
 
@@ -57,8 +54,6 @@ import AccesoCard from './AccesoCard.svelte';
       [2, 2],
       [3, 3],
       [4, 4],
-      [8, 8],
-      [9, 7]
     ])
 
     // The YAML catalog stores levels as concatenated digits, e.g. 19 => VER + TODO.

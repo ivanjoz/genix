@@ -1,126 +1,126 @@
 access_list:
   - id: 1
     name: "Mi Empresa"
-    levels: 19
+    levels: 14
     frontend_routes: "configuracion/parametros"
     backend_apis: ""
   - id: 2
     name: "Usuarios"
-    levels: 19
+    levels: 14
     frontend_routes: "configuracion/usuarios"
     backend_apis: ""
   - id: 3
     name: "Perfiles & Accesos"
-    levels: 19
+    levels: 14
     frontend_routes: "configuracion/perfiles-accesos"
     backend_apis: ""
   - id: 4
     name: "Backups"
-    levels: 19
+    levels: 14
     frontend_routes: "configuracion/backups"
     backend_apis: ""
   - id: 5
     name: "Empresas"
-    levels: 19
+    levels: 14
     frontend_routes: "configuracion/empresas"
     backend_apis: ""
   - id: 6
     name: "Server Panel"
-    levels: 19
+    levels: 14
     frontend_routes: "configuracion/server-panel"
     backend_apis: ""
   - id: 7
     name: "Sedes & Almacenes"
-    levels: 19
+    levels: 14
     frontend_routes: "negocio/sedes-almacenes"
     backend_apis: ""
   - id: 8
     name: "Productos"
-    levels: 19
+    levels: 14
     frontend_routes: "negocio/productos"
     backend_apis: ""
   - id: 9
     name: "Clientes & Proveedores"
-    levels: 19
+    levels: 14
     frontend_routes: "negocio/entidades"
     backend_apis: ""
   - id: 10
     name: "Punto de Venta"
-    levels: 19
+    levels: 14
     frontend_routes: "comercial/sale_order_create"
     backend_apis: ""
   - id: 11
     name: "Gestión Ventas"
-    levels: 19
+    levels: 14
     frontend_routes: "comercial/sale_orders_status"
     backend_apis: ""
   - id: 12
     name: "Gráficos Ventas"
-    levels: 19
+    levels: 14
     frontend_routes: "comercial/sale_orders_charts"
     backend_apis: ""
   - id: 13
     name: "Costos de Envio"
-    levels: 19
+    levels: 14
     frontend_routes: "comercial/shipping-costs"
     backend_apis: ""
   - id: 14
     name: "Gestión de Stock"
-    levels: 19
+    levels: 14
     frontend_routes: "logistica/productos-stock"
     backend_apis: ""
   - id: 15
     name: "Rep. Movimientos"
-    levels: 19
+    levels: 14
     frontend_routes: "logistica/almacen-movimientos"
     backend_apis: ""
   - id: 16
     name: "Órdenes Compra"
-    levels: 19
+    levels: 14
     frontend_routes: "logistica/ordenes-de-compra"
     backend_apis: ""
   - id: 17
     name: "Cajas & Bancos"
-    levels: 19
+    levels: 14
     frontend_routes: "finanzas/cajas"
     backend_apis: ""
   - id: 18
     name: "Cajas Movimientos"
-    levels: 19
+    levels: 14
     frontend_routes: "finanzas/cajas-movimientos"
     backend_apis: ""
   - id: 19
     name: "Gastos"
-    levels: 19
+    levels: 14
     frontend_routes: "finanzas/gastos"
     backend_apis: ""
   - id: 20
     name: "Gestión de Cuentas"
-    levels: 19
+    levels: 14
     frontend_routes: "finanzas/gestion-cuentas"
     backend_apis: ""
   - id: 21
     name: "Flujo de Caja"
-    levels: 19
+    levels: 14
     frontend_routes: "finanzas/flujo-de-caja"
     backend_apis: ""
   - id: 22
     name: "Facturación"
-    levels: 19
+    levels: 14
     frontend_routes: ""
     backend_apis: ""
   - id: 23
     name: "Estados Financieros"
-    levels: 19
+    levels: 14
     frontend_routes: ""
     backend_apis: ""
   - id: 24
     name: "Balance"
-    levels: 19
+    levels: 14
     frontend_routes: ""
     backend_apis: ""
   - id: 25
     name: "Activos"
-    levels: 19
+    levels: 14
     frontend_routes: ""
     backend_apis: ""

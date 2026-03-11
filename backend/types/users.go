@@ -84,25 +84,28 @@ type EmpresaPub struct {
 
 type Usuario struct { // DynamoDB + ScyllaDB
 	db.TableStruct[UsuarioTable, Usuario]
-	EmpresaID          int32   `json:",omitempty" db:"empresa_id,pk" col:"empresa_id,pk"`
-	ID                 int32   `json:",omitempty" db:"id,pk" col:"id,pk,sk"`
-	Usuario            string  `json:",omitempty" db:"usuario" col:"usuario,index"`
-	Apellidos          string  `json:",omitempty" db:"apellidos" col:"apellidos"`
-	Nombres            string  `json:",omitempty" db:"nombres" col:"nombres"`
-	PerfilesIDs        []int32 `json:",omitempty" db:"perfiles_ids" col:"perfiles_ids"`
-	RolesIDs           []int32 `json:",omitempty" db:"roles_ids" col:"roles_ids"`
-	Email              string  `json:",omitempty" db:"email" col:"email,index"`
-	Cargo              string  `json:",omitempty" db:"cargo" col:"cargo"`
-	DocumentoNro       string  `json:",omitempty" db:"documento_nro" col:"documento_nro"`
-	PasswordHash       string  `json:",omitempty" col:"password_hash"`
-	Password           string  `json:",omitempty" col:"-"`
-	Created            int32   `json:",omitempty" db:"created" col:"created"`
-	CreatedBy          int32   `json:",omitempty" db:"created_by" col:"created_by"`
-	Updated            int32   `json:"upd,omitempty" db:"updated" col:"updated"`
-	UpdatedBy          int32   `json:",omitempty" db:"updated_by" col:"updated_by"`
-	Status             int8    `json:"ss,omitempty" db:"status" col:"status"`
-	CompanyUserIndex   string  `json:"-" col:"company_usuario,index"`
-	CompanyStatusIndex string  `json:"-" col:"company_status_updated,index"`
+	EmpresaID   int32   `json:",omitempty" col:"empresa_id,pk"`
+	ID          int32   `json:",omitempty" col:"id,pk,sk"`
+	Usuario     string  `json:",omitempty" col:"usuario,index"`
+	Apellidos   string  `json:",omitempty" col:"apellidos"`
+	Nombres     string  `json:",omitempty" col:"nombres"`
+	PerfilesIDs []int32 `json:",omitempty" col:"perfiles_ids"`
+	// AccesoID * 10 + Nivel
+	AccesosNivelIDs    []int32  `json:",omitempty" col:"accesos_nivel_ids"`
+	RolesIDs           []int32  `json:",omitempty" col:"roles_ids"`
+	AccesosComputed    []uint16 `json:",omitempty" col:"accesos_computed"`
+	Email              string   `json:",omitempty" col:"email,index"`
+	Cargo              string   `json:",omitempty" col:"cargo"`
+	DocumentoNro       string   `json:",omitempty" col:"documento_nro"`
+	PasswordHash       string   `json:",omitempty" col:"password_hash"`
+	Password           string   `json:",omitempty" col:"-"`
+	Created            int32    `json:",omitempty" col:"created"`
+	CreatedBy          int32    `json:",omitempty"  col:"created_by"`
+	Updated            int32    `json:"upd,omitempty" col:"updated"`
+	UpdatedBy          int32    `json:",omitempty" col:"updated_by"`
+	Status             int8     `json:"ss,omitempty" col:"status"`
+	CompanyUserIndex   string   `json:"-" col:"company_usuario,index"`
+	CompanyStatusIndex string   `json:"-" col:"company_status_updated,index"`
 	// CacheVersion is returned in delta-by-IDs endpoints to let clients track per-record cache freshness.
 	CacheVersion uint8 `json:",omitempty" col:"-"`
 }
@@ -115,21 +118,23 @@ func (e *Usuario) PrepareCloudSync() {
 
 type UsuarioTable struct {
 	db.TableStruct[UsuarioTable, Usuario]
-	ID           db.Col[UsuarioTable, int32]
-	EmpresaID    db.Col[UsuarioTable, int32]
-	Usuario      db.Col[UsuarioTable, string]
-	Apellidos    db.Col[UsuarioTable, string]
-	Nombres      db.Col[UsuarioTable, string]
-	PerfilesIDs  db.ColSlice[UsuarioTable, int32] `db:"perfiles_ids"`
-	RolesIDs     db.ColSlice[UsuarioTable, int32] `db:"roles_ids"`
-	Email        db.Col[UsuarioTable, string]
-	Cargo        db.Col[UsuarioTable, string]
-	DocumentoNro db.Col[UsuarioTable, string]
-	Created      db.Col[UsuarioTable, int32]
-	CreatedBy    db.Col[UsuarioTable, int32]
-	Updated      db.Col[UsuarioTable, int32]
-	UpdatedBy    db.Col[UsuarioTable, int32]
-	Status       db.Col[UsuarioTable, int8]
+	ID              db.Col[UsuarioTable, int32]
+	EmpresaID       db.Col[UsuarioTable, int32]
+	Usuario         db.Col[UsuarioTable, string]
+	Apellidos       db.Col[UsuarioTable, string]
+	Nombres         db.Col[UsuarioTable, string]
+	PerfilesIDs     db.ColSlice[UsuarioTable, int32] `db:"perfiles_ids"`
+	AccesosNivelIDs db.Col[UsuarioTable, []int32]    `db:"accesos_nivel_ids"`
+	RolesIDs        db.ColSlice[UsuarioTable, int32] `db:"roles_ids"`
+	AccesosComputed db.Col[UsuarioTable, []uint16]
+	Email           db.Col[UsuarioTable, string]
+	Cargo           db.Col[UsuarioTable, string]
+	DocumentoNro    db.Col[UsuarioTable, string]
+	Created         db.Col[UsuarioTable, int32]
+	CreatedBy       db.Col[UsuarioTable, int32]
+	Updated         db.Col[UsuarioTable, int32]
+	UpdatedBy       db.Col[UsuarioTable, int32]
+	Status          db.Col[UsuarioTable, int8]
 }
 
 func (e UsuarioTable) GetSchema() db.TableSchema {
