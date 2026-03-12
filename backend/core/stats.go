@@ -2,15 +2,18 @@ package core
 
 import (
 	"sync"
+	types "app/core/types"
 )
 
 type UsageCounter struct {
 	// Bandwidth is stored in 4 KB increments.
-	GetBandwith  int32
+	GetBandwith int32
 	// Bandwidth is stored in 4 KB increments.
 	PostBandwith int32
 	// CPU time is stored in 4 ms increments.
-	CpuTimeUsage int32
+	GetCpuTimeUsage int32
+	// CPU time is stored in 4 ms increments.
+	PostCpuTimeUsage int32
 }
 
 type CompanyUsageBucket struct {
@@ -25,7 +28,7 @@ type CompanyUsageBucket struct {
 var UsageCompanyUserMap = map[int32]*CompanyUsageBucket{}
 var usageCompanyUserMapMu sync.Mutex
 var pendingUsageLogsMu sync.Mutex
-var pendingUsageLogsByKey = map[string]UsageLog{}
+var pendingUsageLogsByKey = map[string]types.UsageLog{}
 var usageLastSaved int32 = 0
 
 const usageLogWindowTicks int32 = 150 // 5 minutes with 2-second SUnixTime ticks
@@ -58,11 +61,12 @@ func AddRequestUsage(companyID, usuarioID, bandwith, usageTime int32, requestTyp
 			companyUsageBucket.UserUsageMap[targetUsuarioID] = usageCounter
 		}
 
-		usageCounter.CpuTimeUsage += usageTime
 		if requestType == 1 {
 			usageCounter.GetBandwith += bandwith
+			usageCounter.GetCpuTimeUsage += usageTime
 		} else if requestType == 2 {
 			usageCounter.PostBandwith += bandwith
+			usageCounter.PostCpuTimeUsage += usageTime
 		}
 	}
 
@@ -85,7 +89,7 @@ func getOrCreateCompanyUsageBucket(companyID int32) *CompanyUsageBucket {
 	return companyUsageBucket
 }
 
-func TakeUsageLogs() []UsageLog {
+func TakeUsageLogs() []types.UsageLog {
 	usageLogs := takePendingUsageLogs()
 
 	usageCompanyUserMapMu.Lock()
@@ -113,7 +117,7 @@ func TakeUsageLogs() []UsageLog {
 	return usageLogs
 }
 
-func RestoreUsageLogs(usageLogs []UsageLog) {
+func RestoreUsageLogs(usageLogs []types.UsageLog) {
 	for _, usageLog := range usageLogs {
 		companyUsageBucket := getOrCreateCompanyUsageBucket(usageLog.CompanyID)
 		companyUsageBucket.Mu.Lock()
@@ -139,21 +143,23 @@ func GetCurrentUsageLogID() int32 {
 	return nowTime - (nowTime % usageLogWindowTicks)
 }
 
-func buildUsageLog(companyID, usageLogID int32, usageMap map[int32]*UsageCounter) (UsageLog, bool) {
-	usageLog := UsageLog{
-		CompanyID:          companyID,
-		ID:                 usageLogID,
-		DetailUserID:       make([]int32, 0, len(usageMap)),
-		DetailGetBandwith:  make([]int32, 0, len(usageMap)),
-		DetailPostBandwith: make([]int32, 0, len(usageMap)),
-		DetailCpuTimeUsage: make([]int32, 0, len(usageMap)),
+func buildUsageLog(companyID, usageLogID int32, usageMap map[int32]*UsageCounter) (types.UsageLog, bool) {
+	usageLog := types.UsageLog{
+		CompanyID:              companyID,
+		ID:                     usageLogID,
+		DetailUserID:           make([]int32, 0, len(usageMap)),
+		DetailGetBandwith:      make([]int32, 0, len(usageMap)),
+		DetailPostBandwith:     make([]int32, 0, len(usageMap)),
+		DetailGetCpuTimeUsage:  make([]int32, 0, len(usageMap)),
+		DetailPostCpuTimeUsage: make([]int32, 0, len(usageMap)),
 	}
 
 	totalUsageCounter := usageMap[-1]
 	if totalUsageCounter != nil {
 		usageLog.GetBandwith = totalUsageCounter.GetBandwith
 		usageLog.PostBandwith = totalUsageCounter.PostBandwith
-		usageLog.CpuTimeUsage = totalUsageCounter.CpuTimeUsage
+		usageLog.GetCpuTimeUsage = totalUsageCounter.GetCpuTimeUsage
+		usageLog.PostCpuTimeUsage = totalUsageCounter.PostCpuTimeUsage
 	}
 
 	for usuarioID, usageCounter := range usageMap {
@@ -163,24 +169,29 @@ func buildUsageLog(companyID, usageLogID int32, usageMap map[int32]*UsageCounter
 		usageLog.DetailUserID = append(usageLog.DetailUserID, usuarioID)
 		usageLog.DetailGetBandwith = append(usageLog.DetailGetBandwith, usageCounter.GetBandwith)
 		usageLog.DetailPostBandwith = append(usageLog.DetailPostBandwith, usageCounter.PostBandwith)
-		usageLog.DetailCpuTimeUsage = append(usageLog.DetailCpuTimeUsage, usageCounter.CpuTimeUsage)
+		usageLog.DetailGetCpuTimeUsage = append(usageLog.DetailGetCpuTimeUsage, usageCounter.GetCpuTimeUsage)
+		usageLog.DetailPostCpuTimeUsage = append(usageLog.DetailPostCpuTimeUsage, usageCounter.PostCpuTimeUsage)
 	}
 
-	hasData := usageLog.GetBandwith != 0 || usageLog.PostBandwith != 0 || usageLog.CpuTimeUsage != 0 || len(usageLog.DetailUserID) > 0
+	hasData := usageLog.GetBandwith != 0 ||
+		usageLog.PostBandwith != 0 ||
+		usageLog.GetCpuTimeUsage != 0 ||
+		usageLog.PostCpuTimeUsage != 0 ||
+		len(usageLog.DetailUserID) > 0
 	return usageLog, hasData
 }
 
-func storePendingUsageLog(usageLog UsageLog) {
+func storePendingUsageLog(usageLog types.UsageLog) {
 	pendingUsageLogsMu.Lock()
 	pendingUsageLogsByKey[makeUsageLogKey(usageLog.CompanyID, usageLog.ID)] = usageLog
 	pendingUsageLogsMu.Unlock()
 }
 
-func takePendingUsageLogs() []UsageLog {
+func takePendingUsageLogs() []types.UsageLog {
 	pendingUsageLogsMu.Lock()
 	defer pendingUsageLogsMu.Unlock()
 
-	usageLogs := make([]UsageLog, 0, len(pendingUsageLogsByKey))
+	usageLogs := make([]types.UsageLog, 0, len(pendingUsageLogsByKey))
 	for usageLogKey, usageLog := range pendingUsageLogsByKey {
 		usageLogs = append(usageLogs, usageLog)
 		delete(pendingUsageLogsByKey, usageLogKey)
