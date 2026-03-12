@@ -11,7 +11,7 @@ import (
 )
 
 func GetSystemMetricsStream(req *core.HandlerArgs) core.HandlerResponse {
-	if !core.Env.IS_LOCAL {
+	if core.Env.IS_SERVERLESS {
 		return req.MakeErr("La API SSE de métricas solo está disponible en modo servidor local/VPS.")
 	}
 

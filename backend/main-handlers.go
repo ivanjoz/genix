@@ -63,7 +63,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 
 	// NOTE: The Lambda runtime processes one invocation at a time per execution environment,
 	// but local/VPS HTTP mode is concurrent. Avoid mutating global per-request state when local.
-	if !core.Env.IS_LOCAL {
+	if core.Env.IS_SERVERLESS {
 		core.StartTime = (time.Now()).UnixMilli()
 		core.Env.REQ_PARAMS = core.MapGetKeys(args.Headers, "x-api-key", "X-Api-Key")
 		core.Env.REQ_USER_AGENT = core.MapGetKeys(args.Headers, "User-Agent", "user-agent")
@@ -94,7 +94,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	funcPath := args.Method + "." + args.Route
 
 	// Request header log is only meaningful in Lambda mode (it uses REQ_ID / REQ_LAMBDA_ID).
-	if !core.Env.IS_LOCAL {
+	if core.Env.IS_SERVERLESS {
 		reqPathsParsed := []string{}
 		for _, name := range core.REQ_PATHS {
 			hash := core.FnvHashString64(name, 64, 5)
@@ -128,7 +128,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		}
 		core.Log("Finalizado Handler::", funcPath, " | Len: ", respLen)
 
-		if core.Env.IS_LOCAL {
+		if !core.Env.IS_SERVERLESS && !core.Env.IS_LOCAL {
 			registerLocalRequestUsage(args, &handlerResponse, requestStartedAt)
 		}
 	}
@@ -138,7 +138,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 
 func registerLocalRequestUsage(args *core.HandlerArgs, handlerResponse *core.HandlerResponse, requestStartedAt int64) {
 	companyID, usuarioID := int32(0), int32(0)
-	
+
 	if args.Usuario != nil {
 		companyID, usuarioID = args.Usuario.EmpresaID, args.Usuario.ID
 	}
@@ -146,7 +146,7 @@ func registerLocalRequestUsage(args *core.HandlerArgs, handlerResponse *core.Han
 		return
 	}
 
-	requestType := core.If(args.Method == "GET",int8(1),2)
+	requestType := core.If(args.Method == "GET", int8(1), 2)
 	bandwidthTotalBytes := 0
 
 	if args.Body != nil {
@@ -275,7 +275,7 @@ func ExecFuncHandler(lambdaInput string) (response core.FuncResponse) {
 
 func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerResponse) core.MainResponse {
 	response := core.MainResponse{}
-	if core.Env.IS_LOCAL {
+	if !core.Env.IS_SERVERLESS {
 		// Stream handlers (SSE) write directly to ResponseWriter and must bypass normal compression flow.
 		if handlerResponse.StreamHandled {
 			return response

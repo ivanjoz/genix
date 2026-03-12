@@ -41,7 +41,7 @@ func ExecLambda(args core.ExecArgs) LambdaExecOutput {
 	nowTime := time.Now().Unix()
 
 	// Si es local, entonces envía hacia el backend local
-	if core.Env.IS_LOCAL {
+	if !core.Env.IS_SERVERLESS {
 		bodyBuff := bytes.NewBuffer([]byte(body))
 		req, _ := http.NewRequest("POST", core.Env.API_ROUTE, bodyBuff)
 		req.Header.Set("Content-Type", "plain/text")

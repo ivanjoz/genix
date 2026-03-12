@@ -27,8 +27,8 @@ func Log(args ...any) {
 
 	logMsg := strings.ToLower(Concats(args...))
 
-	doLog := Env.LOGS_FULL || Env.IS_LOCAL
-	if !Env.IS_LOCAL {
+	doLog := Env.LOGS_FULL || !Env.IS_SERVERLESS
+	if Env.IS_SERVERLESS {
 		if len(logMsg) > 1 && logMsg[0:1] == "*" {
 			doLog = true
 			args[0] = fmt.Sprintf("%v", args[0])[1:]
@@ -41,7 +41,7 @@ func Log(args ...any) {
 
 	// LogsSaved is primarily used for Lambda request log persistence.
 	// Protect the slice for cases where handlers run goroutines (errgroup).
-	if Env.LOGS_ONLY_SAVE || (!Env.IS_LOCAL && doLog) {
+	if Env.LOGS_ONLY_SAVE || (Env.IS_SERVERLESS && doLog) {
 		logsMu.Lock()
 		LogsSaved = append(LogsSaved, logMsg)
 		logsMu.Unlock()
@@ -50,7 +50,7 @@ func Log(args ...any) {
 		return
 	}
 
-	if !Env.IS_LOCAL {
+	if Env.IS_SERVERLESS {
 		newCounter := atomic.AddInt32(LogCounter, 1)
 		hashs := []string{Env.REQ_ID, fmt.Sprintf("%v", newCounter)}
 

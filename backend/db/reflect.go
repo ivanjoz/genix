@@ -431,10 +431,10 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				},
 				// Keep generated hash collections as list<int> to match existing deployed zz_hb_* columns.
 				colType: colType{
-					Type:     13,
-					FieldType:"[]int32",
-					ColType:  "list<int>",
-					IsSlice:  true,
+					Type:      13,
+					FieldType: "[]int32",
+					ColType:   "list<int>",
+					IsSlice:   true,
 				},
 			}
 
@@ -584,7 +584,8 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	for _, viewConfig := range schema.Views {
 		viewCfg := viewConfig
 		colNames := []string{}
-		columns := []IColInfo{} // No incluye la particion
+		declaredColumns := []IColInfo{} // Only the user-declared view columns, never the base partition.
+		columns := []IColInfo{}         // Internal working set; may prepend partition for composite/hash views.
 		viewColumnsConfig := make([]columnInfo, 0, len(viewCfg.Cols))
 		packedViewHintFound := false
 		for _, declaredColumn := range viewCfg.Cols {
@@ -610,18 +611,24 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				panic("No puede usar un slice como columna de una view. Intente con un índice global.")
 			}
 			colNames = append(colNames, column.GetName())
+			declaredColumns = append(declaredColumns, column)
 			columns = append(columns, column)
 		}
 
 		colNamesNoPart := colNames
+		declaredColumnCount := len(declaredColumns)
+		// A single declared view column should remain a simple MV.
+		// KeepPart only changes the MV primary key/capability prefix, not whether a synthetic hash column is needed.
+		isSingleDeclaredSimpleView := declaredColumnCount == 1 && !isRangeView
 
 		colNamesJoined := strings.Join(colNames, "_")
 		pk := dbTable.GetPartKey()
 		if pk != nil && !pk.IsNil() {
-			colNames = append([]string{pk.GetName()}, colNames...)
 			if viewCfg.KeepPart {
+				colNames = append([]string{pk.GetName()}, colNames...)
 				colNamesJoined = "pk_" + colNamesJoined
-			} else {
+			} else if !isSingleDeclaredSimpleView {
+				colNames = append([]string{pk.GetName()}, colNames...)
 				colNamesJoined = pk.GetName() + "_" + colNamesJoined
 				columns = append([]IColInfo{pk}, columns...)
 			}
@@ -656,8 +663,14 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			dbTable.columnsMap[view.column.GetName()] = view.column
 		}
 
-		// Si sólo es una columna, no es necesario autogenerar
-		if len(columns) == 1 {
+		// If the user declared a single column, reuse that column directly and let MV PK generation
+		// append the base partition/key columns without creating a synthetic hash column.
+		if isSingleDeclaredSimpleView {
+			view.column = declaredColumns[0]
+			if !viewCfg.KeepPart {
+				view.columns = colNamesNoPart
+			}
+		} else if len(columns) == 1 {
 			view.column = columns[0]
 		} else if isRangeView {
 			view.Type = 8
@@ -995,7 +1008,20 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 		viewPtr := view
 		view.getCreateScript = func() string {
-			whereCols := append([]IColInfo{viewPtr.column}, dbTable.keys...)
+			appendUniqueColumn := func(target []IColInfo, column IColInfo) []IColInfo {
+				if column == nil || column.IsNil() {
+					return target
+				}
+				for _, existingColumn := range target {
+					if existingColumn.GetName() == column.GetName() {
+						return target
+					}
+				}
+				return append(target, column)
+			}
+
+			whereCols := []IColInfo{}
+			whereCols = appendUniqueColumn(whereCols, viewPtr.column)
 			var wherePartCol IColInfo
 
 			pk_ := dbTable.GetPartKey()
@@ -1003,8 +1029,11 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				if viewCfg.KeepPart {
 					wherePartCol = pk_
 				} else {
-					whereCols = append([]IColInfo{viewPtr.column, pk_}, dbTable.keys...)
+					whereCols = appendUniqueColumn(whereCols, pk_)
 				}
+			}
+			for _, keyColumn := range dbTable.keys {
+				whereCols = appendUniqueColumn(whereCols, keyColumn)
 			}
 
 			keyNames := []string{}
@@ -1018,6 +1047,13 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			}
 
 			whereColumnsNotNull := []string{}
+			if wherePartCol != nil {
+				if wherePartCol.GetType().ColType == "text" {
+					whereColumnsNotNull = append(whereColumnsNotNull, wherePartCol.GetName()+" > ''")
+				} else {
+					whereColumnsNotNull = append(whereColumnsNotNull, wherePartCol.GetName()+" > 0")
+				}
+			}
 			for _, col := range whereCols {
 				if col.GetType().ColType == "text" {
 					whereColumnsNotNull = append(whereColumnsNotNull, col.GetName()+" > ''")

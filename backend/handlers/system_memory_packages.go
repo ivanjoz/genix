@@ -8,7 +8,7 @@ import (
 )
 
 func GetSystemMemoryPackages(req *core.HandlerArgs) core.HandlerResponse {
-	if !core.Env.IS_LOCAL {
+	if core.Env.IS_SERVERLESS {
 		return req.MakeErr("La API de memoria por paquetes solo está disponible en modo servidor local/VPS.")
 	}
 

@@ -33,12 +33,12 @@ func PostGaleriaImage(req *core.HandlerArgs) core.HandlerResponse {
 		Resolutions: map[uint16]string{1400: "x8", 540: "x4", 340: "x2"},
 	}
 
-	core.Env.IS_LOCAL = false
+	core.Env.IS_SERVERLESS = true
 	_, err = cloud.SaveConvertImage(imageArgs)
 	if err != nil {
 		return req.MakeErr("Error al guardar la imagen: " + err.Error())
 	}
-	core.Env.IS_LOCAL = true
+	core.Env.IS_SERVERLESS = false
 
 	// Guarda la imagen en BD
 	galeriaImage := s.GaleriaImagen{

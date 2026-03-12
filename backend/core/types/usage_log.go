@@ -4,17 +4,17 @@ import "app/db"
 
 type UsageLog struct {
 	db.TableStruct[UsageLogTable, UsageLog]
-	CompanyID              int32   `json:"companyID,omitempty" db:"company_id"`
-	ID                     int32   `json:"id,omitempty" db:"id"`
-	GetBandwith            int32   `json:"getBandwith,omitempty" db:"get_bandwith"`
-	PostBandwith           int32   `json:"postBandwith,omitempty" db:"post_bandwith"`
-	GetCpuTimeUsage        int32   `json:"getCpuTimeUsage,omitempty" db:"get_cpu_time_usage"`
-	PostCpuTimeUsage       int32   `json:"postCpuTimeUsage,omitempty" db:"post_cpu_time_usage"`
-	DetailUserID           []int32 `json:"detailUserID,omitempty" db:"detail_user_id"`
-	DetailGetBandwith      []int32 `json:"detailGetBandwith,omitempty" db:"detail_get_bandwith"`
-	DetailPostBandwith     []int32 `json:"detailPostBandwith,omitempty" db:"detail_post_bandwith"`
-	DetailGetCpuTimeUsage  []int32 `json:"detailGetCpuTimeUsage,omitempty" db:"detail_get_cpu_time_usage"`
-	DetailPostCpuTimeUsage []int32 `json:"detailPostCpuTimeUsage,omitempty" db:"detail_post_cpu_time_usage"`
+	CompanyID              int32   `json:",omitempty"`
+	ID                     int32   `json:",omitempty"`
+	GetBandwith            int32   `json:",omitempty"`
+	PostBandwith           int32   `json:",omitempty"`
+	GetCpuTimeUsage        int32   `json:",omitempty"`
+	PostCpuTimeUsage       int32   `json:",omitempty"`
+	DetailUserID           []int32 `json:",omitempty" db:",list"`
+	DetailGetBandwith      []int32 `json:",omitempty" db:",list"`
+	DetailPostBandwith     []int32 `json:",omitempty" db:",list"`
+	DetailGetCpuTimeUsage  []int32 `json:",omitempty" db:",list"`
+	DetailPostCpuTimeUsage []int32 `json:",omitempty" db:",list"`
 }
 
 type UsageLogTable struct {
@@ -37,5 +37,8 @@ func (usageLogTable UsageLogTable) GetSchema() db.TableSchema {
 		Name:      "usage_log",
 		Partition: usageLogTable.CompanyID,
 		Keys:      []db.Coln{usageLogTable.ID},
+		Views: []db.View{
+			{ Cols: []db.Coln{ usageLogTable.ID }, KeepPart: false },
+		},
 	}
 }

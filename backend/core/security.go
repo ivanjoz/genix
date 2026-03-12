@@ -15,6 +15,7 @@ import (
 type EnvStruct struct {
 	IS_PROD        bool
 	IS_LOCAL       bool
+	IS_SERVERLESS  bool
 	STACK_NAME     string
 	APP_CODE       string
 	ENVIROMENT     string
@@ -62,20 +63,21 @@ func PopulateVariables() {
 	fmt.Println("Populando Variables:: ")
 
 	APP_CODE := os.Getenv("APP_CODE")
-	IS_LOCAL := len(APP_CODE) == 0
+	isServerlessRuntime := IsRunningInLambda()
+	useCredentialsFile := len(APP_CODE) == 0
 	configuredCredentialsPath := strings.TrimSpace(os.Getenv("GENIX_CREDENTIALS_FILE"))
 
 	wd, _ := os.Getwd()
 
 	var variablesBytes []byte
 
-	if IS_LOCAL {
+	if useCredentialsFile {
 		APP_CODE = "genix"
 		dirname := strings.Split(wd, "/")
 		parentPath := strings.Join(dirname[0:len(dirname)-1], "/")
 		var fileError error
 
-		credentialsSearchPaths := []string{parentPath+"/credentials.json", wd+"/credentials.json"}
+		credentialsSearchPaths := []string{parentPath + "/credentials.json", wd + "/credentials.json"}
 		if len(configuredCredentialsPath) > 0 {
 			// Allow systemd and other runtimes to point the backend to a fixed credentials location.
 			credentialsSearchPaths = append(credentialsSearchPaths, configuredCredentialsPath)
@@ -121,7 +123,7 @@ func PopulateVariables() {
 		return
 	}
 
-	fmt.Println("Credenciales .json Parseadas:: ")
+	fmt.Println("Credenciales .json Parseadas:: ","| Is Local:", Env.IS_LOCAL)
 
 	if len(Env.DYNAMO_TABLE) == 0 {
 		Env.DYNAMO_TABLE = Env.STACK_NAME + "-db"
@@ -132,8 +134,8 @@ func PopulateVariables() {
 
 	Env.LAMBDA_NAME = Env.STACK_NAME + "-backend"
 	Env.APP_CODE = APP_CODE
-	Env.IS_LOCAL = IS_LOCAL
-	Env.TMP_DIR = If(Env.IS_LOCAL, wd+"/tmp/", "/tmp/")
+	Env.IS_SERVERLESS = isServerlessRuntime
+	Env.TMP_DIR = If(Env.IS_SERVERLESS, "/tmp/", wd+"/tmp/")
 
 	Env.IS_PROD = strings.Contains(APP_CODE, "_prd")
 	for _, value := range os.Args {
@@ -142,6 +144,13 @@ func PopulateVariables() {
 			break
 		}
 	}
+}
+
+func IsRunningInLambda() bool {
+	// AWS Lambda sets one or more of these runtime variables.
+	return len(strings.TrimSpace(os.Getenv("AWS_LAMBDA_FUNCTION_NAME"))) > 0 ||
+		len(strings.TrimSpace(os.Getenv("AWS_EXECUTION_ENV"))) > 0 ||
+		len(strings.TrimSpace(os.Getenv("LAMBDA_TASK_ROOT"))) > 0
 }
 
 var REQ_PATHS = []string{}
@@ -229,7 +238,7 @@ func CheckUser(req *HandlerArgs, access int) *IUsuario {
 	}
 
 	// NOTE: In local/VPS HTTP mode requests are concurrent; avoid mutating global user state.
-	if !Env.IS_LOCAL {
+	if Env.IS_SERVERLESS {
 		Usuario = usuario
 		Env.USUARIO_ID = usuario.ID
 	}

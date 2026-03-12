@@ -151,7 +151,7 @@ func main() {
 	fmt.Println("Setting full logs...")
 	// os.Setenv("LOGS_FULL", "1")
 
-	if !core.Env.IS_LOCAL { // Controla los panic error
+	if core.Env.IS_SERVERLESS { // Controla los panic error
 		defer func() {
 			if r := recover(); r != nil {
 				OnPanic(r)
@@ -205,7 +205,7 @@ func main() {
 	}
 
 	// Si se está desarrollando en local
-	if core.Env.IS_LOCAL {
+	if !core.Env.IS_SERVERLESS {
 		exec.StartUsageLogFlushWorker()
 		core.Log("Ejecutando en local. http://localhost" + serverPort)
 

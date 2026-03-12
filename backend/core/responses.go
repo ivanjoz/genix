@@ -528,14 +528,14 @@ func (e HandlerArgs) GetQuerySlice(key string) []string {
 }
 
 type HandlerResponse struct {
-	Body       *[]byte
-	BodyOnDisk string
-	StatusCode int
-	Error      string
-	Encoding   string
-	Headers    map[string]string
-	Route      string
-	MergeID    int32
+	Body          *[]byte
+	BodyOnDisk    string
+	StatusCode    int
+	Error         string
+	Encoding      string
+	Headers       map[string]string
+	Route         string
+	MergeID       int32
 	StreamHandled bool
 }
 
@@ -604,20 +604,20 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 	if fmt.Sprintf("%T", *new(T)) == "string" {
 		body := []byte(fmt.Sprintf("%v", *respStruct))
 		response.Body = &body
-	} else if structLen < 102400 || Env.IS_LOCAL {
+	} else if structLen < 102400 || !Env.IS_SERVERLESS {
 		/*
 			marshall1, _ := serialize.Marshal(respStruct)
 			fmt.Println(string(marshall1))
 		*/
 		var bodyBytes []byte
 		var err error
-		
+
 		if Env.IS_LOCAL {
-			bodyBytes, err = json.Marshal(respStruct)	
+			bodyBytes, err = json.Marshal(respStruct)
 		} else {
-			bodyBytes, err = serialize.Marshal(respStruct)	
+			bodyBytes, err = serialize.Marshal(respStruct)
 		}
-		
+
 		// fmt.Println("Json Size:", len(bodyBytes), "| vs:", len(marshall1))
 
 		if err != nil {
