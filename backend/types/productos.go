@@ -127,7 +127,7 @@ func (e ProductoTable) GetSchema() db.TableSchema {
 		SaveCacheVersion: true,
 		Keys:             []db.Coln{e.ID.Autoincrement(0)},
 		GlobalIndexes:    [][]db.Coln{{e.CategoriasConStock}},
-		Indexes:          [][]db.Coln{{e.NameUpdated}},
+		Indexes:          [][]db.Coln{{e.NameUpdated},{e.NombreHash}},
 		Views: []db.View{
 			{Cols: []db.Coln{e.Status}, KeepPart: true},
 			{Cols: []db.Coln{e.StockStatus}, KeepPart: true},

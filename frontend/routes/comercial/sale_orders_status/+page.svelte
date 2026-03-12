@@ -406,7 +406,7 @@
   ];
 </script>
 
-<Page title="Gestión de Pedidos" sideLayerSize={780}>
+<Page title="Gestión de Pedidos">
   <div class="">
 	 	<div class="h-46 flex items-center">
 	  <OptionsStrip
@@ -440,6 +440,7 @@
   <Layer
     type="side"
     id={10}
+    sideLayerSize={780}
     bind:selected={saleOrderDetailsView}
     title={getSaleOrderLayerTitle(selectedSaleOrder)}
     titleCss="h2"

@@ -1,9 +1,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
-  import { tick } from 'svelte'
+  import { tick, untrack } from 'svelte'
 import { Core } from '$core/store.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
-import { Env } from '$core/env';
 
   // svelte-ignore non_reactive_update
   let divLayer: HTMLDivElement
@@ -29,6 +28,7 @@ import { Env } from '$core/env';
     saveButtonName,
     saveButtonIcon,
     contentOverflow,
+    sideLayerSize,
   }: {
     children: any
     css?: string
@@ -45,6 +45,7 @@ import { Env } from '$core/env';
     saveButtonName?: string
     saveButtonIcon?: string
     contentOverflow?: boolean
+    sideLayerSize?: number
     type: 'side' | 'bottom' | 'content'
     id?: number
   } = $props()
@@ -53,14 +54,42 @@ import { Env } from '$core/env';
   // svelte-ignore state_referenced_locally
   let isVisible = $state(Core.deviceType !== 3 || type !== 'side')
 
+  const resolvedSideLayerWidth = $derived.by(() => {
+    // Use the layer-local prop as the source of truth and fall back to the CSS default width.
+    if (type !== 'side') { return 0 }
+    return sideLayerSize || 800
+  })
+
   const layerWidth = $derived.by(() => {
-    return Env.sideLayerSize ? Env.sideLayerSize + 'px' : ''
+  	return resolvedSideLayerWidth ? resolvedSideLayerWidth + 'px' : ''
   })
 
   const contentWidth = $derived.by(() => {
-    return Core.showSideLayer > 0 && Core.deviceType !== 3
+   	const layerWidth = Core.sideLayerSize ? Core.sideLayerSize + 'px' : ''
+   
+    return Core.showSideLayer > 0 && Core.sideLayerSize > 0 && Core.deviceType !== 3
       ? `calc(var(--page-width) - ${layerWidth || '0'} - 8px)`
       : undefined
+  })
+
+  $effect(() => {
+    // Publish the active side-layer width so sibling content layers can reduce their width.
+    if (type !== 'side' || Core.showSideLayer !== id) { return }
+
+    const nextSideLayerWidth = resolvedSideLayerWidth
+    untrack(() => {
+      if (Core.sideLayerSize !== nextSideLayerWidth) {
+        Core.sideLayerSize = nextSideLayerWidth
+      }
+    })
+
+    return () => {
+      untrack(() => {
+        if (Core.sideLayerSize === nextSideLayerWidth) {
+          Core.sideLayerSize = 0
+        }
+      })
+    }
   })
 
   // Helper function to close layer with view transition on mobile

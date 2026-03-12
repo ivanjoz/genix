@@ -1,12 +1,12 @@
 <script lang="ts">
 import Input from '$components/Input.svelte';
-import Modal from '$components/Modal.svelte';
+import Layer from '$components/Layer.svelte';
 import Page from '$domain/Page.svelte';
 import SearchCard from '$components/SearchCard.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import { Notify, throttle } from '$libs/helpers';
-import { Core, closeModal } from '$core/store.svelte';
+import { Core } from '$core/store.svelte';
 import { formatTime } from '$libs/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg
@@ -17,6 +17,24 @@ const { Loading } = pkg
 
   let filterText = $state("")
   let usuarioForm = $state({} as IUsuario)
+
+  const resetUsuarioForm = () => {
+    // Initialize the create form with an active status so the layer always opens in a valid default state.
+    usuarioForm = { Status: 1 } as IUsuario
+  }
+
+  const openCreateUsuarioLayer = () => {
+    resetUsuarioForm()
+    console.log("openCreateUsuarioLayer::")
+    Core.openSideLayer(1)
+  }
+
+  const openEditUsuarioLayer = (selectedUsuario: IUsuario) => {
+    // Clone the selected record so the table does not update optimistically while the user edits the layer.
+    usuarioForm = { ...selectedUsuario }
+    console.log("openEditUsuarioLayer::", $state.snapshot(usuarioForm))
+    Core.openSideLayer(1)
+  }
 
   async function saveUsuario(isDelete?: boolean) {
     const form = usuarioForm
@@ -43,6 +61,7 @@ const { Loading } = pkg
     }
 
     Loading.standard("Creando/Actualizando Usuario...")
+    console.log("saveUsuario payload::", { isDelete: !!isDelete, form: $state.snapshot(form) })
     try {
       const result = await postUsuario(form)
 
@@ -56,8 +75,11 @@ const { Loading } = pkg
         usuariosService.updateUsuario(form)
       }
 
-      closeModal(1)
+      console.log("saveUsuario result::", result)
+      Core.hideSideLayer()
+      resetUsuarioForm()
     } catch (error) {
+      console.warn("saveUsuario error::", error)
       Notify.failure(error as string)
     }
     Loading.remove()
@@ -95,68 +117,69 @@ const { Loading } = pkg
       headerCss: "w-144",
       cellCss: "px-6 nowrap",
       getValue: e => formatTime(e.Updated, "Y-m-d h:n") as string
-    },
-    {
-      header: "...",
-      headerCss: "w-42",
-      cellCss: "t-c",
-      id: "actions",
-      buttonEditHandler: (rec) => {
-        usuarioForm = { ...rec }
-        Core.openModal(1)
-      }
     }
   ]
 </script>
 
 <Page title="Usuarios">
-  <div class="h-full">
-    <div class="flex items-center justify-between mb-6">
-      <div class="i-search mr-16 w-256">
-        <div><i class="icon-search"></i></div>
-        <input class="w-full" autocomplete="off" type="text" onkeyup={ev => {
-          ev.stopPropagation()
-          throttle(() => {
-            filterText = ((ev.target as HTMLInputElement).value || "").toLowerCase().trim()
-          }, 150)
-        }}>
+  <Layer type="content">
+    <div class="h-full w-full">
+      <div class="flex items-center justify-between mb-6">
+        <div class="i-search mr-16 w-256">
+          <div><i class="icon-search"></i></div>
+          <input class="w-full" autocomplete="off" type="text" onkeyup={ev => {
+            ev.stopPropagation()
+            throttle(() => {
+              filterText = ((ev.target as HTMLInputElement).value || "").toLowerCase().trim()
+            }, 150)
+          }}>
+        </div>
+        <div class="flex items-center">
+          <button class="bx-green" onclick={ev => {
+            ev.stopPropagation()
+            openCreateUsuarioLayer()
+          }} aria-label="Agregar usuario">
+            <i class="icon-plus"></i>
+          </button>
+        </div>
       </div>
-      <div class="flex items-center">
-        <button class="bx-green" onclick={ev => {
-          ev.stopPropagation()
-          // Default active status when opening an empty user form.
-          usuarioForm = { Status: 1 } as IUsuario
-          Core.openModal(1)
-        }} aria-label="Agregar usuario">
-          <i class="icon-plus"></i>
-        </button>
-      </div>
+
+      <VTable
+        columns={columns}
+        data={usuariosService.usuarios}
+        css="w-full"
+        maxHeight="calc(80vh - 13rem)"
+        filterText={filterText}
+        getFilterContent={e => [e.Usuario, e.Nombres, e.Apellidos, e.Email].filter(x => x).join(" ").toLowerCase()}
+        selected={usuarioForm?.ID}
+        isSelected={(usuarioRecord, selectedUsuarioID) => usuarioRecord.ID === selectedUsuarioID}
+        onRowClick={(selectedUsuario) => {
+          openEditUsuarioLayer(selectedUsuario)
+        }}
+      >
+      </VTable>
     </div>
+  </Layer>
 
-    <VTable
-      columns={columns}
-      data={usuariosService.usuarios}
-      css="w-full"
-      maxHeight="calc(80vh - 13rem)"
-      filterText={filterText}
-      getFilterContent={e => [e.Usuario, e.Nombres, e.Apellidos, e.Email].filter(x => x).join(" ").toLowerCase()}
-    >
-    </VTable>
-  </div>
-
-  <Modal
+  <Layer
     id={1}
-    size={5}
+    type="side"
+    sideLayerSize={760}
     title={(usuarioForm?.ID > 0 ? "Actualizar" : "Guardar") + " Usuario"}
-    isEdit={usuarioForm?.ID > 0}
+    titleCss="h2 mb-6"
+    css="px-12 py-10"
+    contentCss="px-0"
     onSave={() => saveUsuario()}
     onDelete={usuarioForm?.ID > 0 ? () => saveUsuario(true) : undefined}
+    onClose={() => {
+      resetUsuarioForm()
+    }}
   >
-    <div class="grid grid-cols-24 gap-10 p-6">
+    <div class="grid grid-cols-24 gap-10 mt-8">
       <Input
         bind:saveOn={usuarioForm}
         save="Usuario"
-        css="col-span-12"
+        css="col-span-24 md:col-span-12"
         label="Usuario"
         required={true}
         disabled={usuarioForm?.ID > 0}
@@ -164,32 +187,32 @@ const { Loading } = pkg
       <Input
         bind:saveOn={usuarioForm}
         save="Nombres"
-        css="col-span-12"
+        css="col-span-24 md:col-span-12"
         label="Nombres"
         required={true}
       />
       <Input
         bind:saveOn={usuarioForm}
         save="Apellidos"
-        css="col-span-12"
+        css="col-span-24 md:col-span-12"
         label="Apellidos"
       />
       <Input
         bind:saveOn={usuarioForm}
         save="DocumentoNro"
-        css="col-span-12"
+        css="col-span-24 md:col-span-12"
         label="Nº Documento"
       />
       <Input
         bind:saveOn={usuarioForm}
         save="Cargo"
-        css="col-span-12"
+        css="col-span-24 md:col-span-12"
         label="Cargo"
       />
       <Input
         bind:saveOn={usuarioForm}
         save="Email"
-        css="col-span-12"
+        css="col-span-24 md:col-span-12"
         label="Email"
       />
       <SearchCard
@@ -204,7 +227,7 @@ const { Loading } = pkg
       <Input
         bind:saveOn={usuarioForm}
         save="Password"
-        css="col-span-12"
+        css="col-span-24 md:col-span-12"
         label="Password"
         type="password"
         required={!usuarioForm.ID}
@@ -213,11 +236,11 @@ const { Loading } = pkg
       <Input
         bind:saveOn={usuarioForm}
         save="Password2"
-        css="col-span-12"
+        css="col-span-24 md:col-span-12"
         label="Password (Repetir)"
         type="password"
         required={!usuarioForm.ID}
       />
     </div>
-  </Modal>
+  </Layer>
 </Page>

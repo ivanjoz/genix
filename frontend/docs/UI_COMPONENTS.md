@@ -22,7 +22,6 @@ The `Page` component automatically manages the selection state in the global `Co
 | `title` | `string` | Yes | Page title displayed in header |
 | `children` | `Snippet` | Yes | Page content |
 | `options` | `{id: number, name: string}[]` | No | Tab options rendered in header menu (max 3 recommended) |
-| `sideLayerSize` | `number` | No | Width of side layer in pixels |
 
 **Example:**
 ```svelte
@@ -106,6 +105,7 @@ The Layer can show a horizontal menu bar for conditional rendering using the `op
 | `saveButtonName` | `string` | No | Custom save button label |
 | `saveButtonIcon` | `string` | No | Custom save button icon class |
 | `contentOverflow` | `boolean` | No | Allow content overflow |
+| `sideLayerSize` | `number` | No | Width of side layer in pixels when `type="side"` |
 
 Use `Core.openSideLayer(id)` to open and `Core.hideSideLayer()` to close.
 

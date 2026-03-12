@@ -212,7 +212,7 @@
   ]
 </script>
 
-<Page title="Entidades" sideLayerSize={760}>
+<Page title="Entidades">
   <Layer type="content">
     <div class="w-full">
       <OptionsStrip
@@ -269,6 +269,7 @@
   <Layer
     id={11}
     type="side"
+    sideLayerSize={760}
     title={entityForm.ID
       ? (selectedEntityType === EntityType.PROVIDER ? 'Editar Proveedor' : 'Editar Cliente')
       : (selectedEntityType === EntityType.PROVIDER ? 'Nuevo Proveedor' : 'Nuevo Cliente')}

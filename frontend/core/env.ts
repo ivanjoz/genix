@@ -122,7 +122,6 @@ export const Env = {
   serviceWorker: "/sw.js",
   enviroment: getSelectedApiEndpoint(getSelectedApiEndpointRoute()).hash,
   counterID: 1,
-	sideLayerSize: 0,
   useTopMinimalMenu: false,
   fetchID: 1000,
   imageWorker: null as unknown as Worker,

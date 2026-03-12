@@ -428,7 +428,7 @@ import {
   };
 </script>
 
-<Page sideLayerSize={780} title="Productos">
+<Page title="Productos">
   <div class="grid grid-cols-12 md:flex md:flex-row items-center mb-8">
     <OptionsStrip
       selected={view}
@@ -520,6 +520,7 @@ import {
   {/if}
   <Layer
     type="side"
+    sideLayerSize={780}
     css="px-8 py-8 md:px-16 md:py-10"
     title={productoForm?.Nombre || ""}
     titleCss="h2 mb-6"

@@ -4,9 +4,8 @@ import { checkIsLogin } from '$core/security';
 import { closeAllModals, Core, openModal } from '$core/store.svelte';
 import { Env } from '$core/env';
 
-  let { children, sideLayerSize, title, options, containerCss, useTopMinimalMenu, fixedFullHeight }: {
+  let { children, title, options, containerCss, useTopMinimalMenu, fixedFullHeight }: {
     children: any, 
-    sideLayerSize?: number, 
     title: string, 
     containerCss?: string,
     useTopMinimalMenu?: boolean,
@@ -15,7 +14,6 @@ import { Env } from '$core/env';
   } = $props();
 
   $effect(() => {
-    Env.sideLayerSize = sideLayerSize || 0
     Env.useTopMinimalMenu = useTopMinimalMenu || false
     Core.useTopMinimalMenu = useTopMinimalMenu || false
   })

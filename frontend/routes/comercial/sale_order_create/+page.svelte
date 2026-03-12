@@ -227,7 +227,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
 
 <svelte:window onkeydown={handleKeydown} />
 
-<Page title="Ventas" sideLayerSize={400}
+<Page title="Ventas"
   options={[{ id: 1, name: "Ventas" }, { id: 2, name: "Configuración" }]}
 >
   {#if Core.pageOptionSelected === 1}

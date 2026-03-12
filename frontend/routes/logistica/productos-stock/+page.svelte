@@ -174,7 +174,7 @@ import Checkbox from '$components/Checkbox.svelte';
 
 </script>
 
-<Page sideLayerSize={640} title="productos-stock">
+<Page title="productos-stock">
   <div class="flex items-center mb-8">
     <SearchSelect options={almacenes?.Almacenes||[]} keyId="ID" keyName="Nombre"
       bind:saveOn={filters} save="almacenID" placeholder="ALMACÉN ::"
