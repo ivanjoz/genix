@@ -9,7 +9,11 @@ import Page from '$domain/Page.svelte';
 import { arrayToMapN, Loading, Notify, throttle } from '$libs/helpers';
 import { onMount } from 'svelte';
 import AccesoCard from './AccesoCard.svelte';
-import { fetchAccessListCatalog, type IAccessListCatalogEntry } from './access-list-catalog';
+import {
+  fetchAccessListCatalog,
+  type IAccessGroupCatalogEntry,
+  type IAccessListCatalogEntry
+} from './access-list-catalog';
 import {
     PerfilesService,
     postPerfil,
@@ -45,8 +49,17 @@ import {
   let perfilForm = $state({} as IPerfil)
   let moduleSelected = $state(0)
   let filterText = $state("")
+  let accessGroups = $state([] as IAccessGroupCatalogEntry[])
   let accessListEntries = $state([] as IAccessListCatalogEntry[])
   let accessListLoadError = $state("")
+
+  const accessGroupNameByID = $derived.by(() => {
+    const accessGroupMap = new Map<number, string>()
+    for (const accessGroupRecord of accessGroups) {
+      accessGroupMap.set(accessGroupRecord.id, accessGroupRecord.name)
+    }
+    return accessGroupMap
+  })
 
   function decodeAccessLevels(accessLevelMask: number): number[] {
     const levelDigitMap = new Map<number, number>([
@@ -76,7 +89,7 @@ import {
         descripcion: normalizedRoute,
         orden: accessListEntry.id,
         acciones: catalogActions.length > 0 ? catalogActions : [1],
-        grupo: routeMeta?.groupID || 0,
+        grupo: accessListEntry.group || routeMeta?.groupID || 0,
         modulosIDs: routeMeta ? [routeMeta.moduleID] : [],
         ss: 1,
         upd: 0
@@ -120,7 +133,8 @@ import {
         moduleID,
         group,
         accesos: accesosGroup,
-        groupName: routeCatalogIndex.get((accesosGroup[0]?.descripcion || "").replace(/^\//, ""))?.groupName
+        groupName: accessGroupNameByID.get(group)
+          || routeCatalogIndex.get((accesosGroup[0]?.descripcion || "").replace(/^\//, ""))?.groupName
           || "Sin grupo",
         moduleName: moduleSelectedID ? "" : routeCatalogIndex.get((accesosGroup[0]?.descripcion || "").replace(/^\//, ""))?.moduleName
           || modulesMap.get(moduleID)?.name || "Sin módulo"
@@ -139,8 +153,12 @@ import {
     try {
       // Load the hashed static catalog so this page can compare backend records against the CDN-shipped source of truth.
       const accessListPayload = await fetchAccessListCatalog()
+      accessGroups = accessListPayload.access_groups || []
       accessListEntries = accessListPayload.access_list || []
-      console.info('[access-list] Catalog loaded', { totalEntries: accessListEntries.length })
+      console.info('[access-list] Catalog loaded', {
+        totalGroups: accessGroups.length,
+        totalEntries: accessListEntries.length
+      })
     } catch (error) {
       accessListLoadError = error as string
       console.error('[access-list] Catalog load failed', { error })
@@ -262,7 +280,7 @@ import {
 	        <div class="ff-bold text-xl">
 	          <span>Accesos</span>
 	          {#if perfilForm.ID > 0}
-	            <span class="mr-4">:</span>
+	            <span class="mr-2">de</span>
 	            <span class="c-purple ml-4">{perfilForm.Nombre}</span>
 	          {/if}
 	        </div>
@@ -288,10 +306,10 @@ import {
           {accessListLoadError}
         </div>
       {/if}
-      <div class="max-h-[calc(100vh-var(--header-height)-1rem-64px)] overflow-y-auto pr-4">
+      <div class="max-h-[calc(100vh-var(--header-height)-1rem-64px)] overflow-y-auto p-2">
 	      {#each accesosGrouped as ag}
-	        <div class="ff-bold h3 mb-6">
-	          {ag.moduleName}{ag.moduleName ? " > " : ""}{ag.groupName}
+	        <div class="ff-bold h3 mb-3 _access-group-title">
+	          {ag.groupName}
 	        </div>
 	        <div class="grid grid-cols-3 gap-x-12 gap-y-8 mb-16">
 	          {#each ag.accesos as acceso}
@@ -332,3 +350,9 @@ import {
     </div>
   </Modal>
 </Page>
+
+<style>
+  ._access-group-title {
+    color: #5f6dff;
+  }
+</style>

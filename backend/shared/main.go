@@ -2,19 +2,19 @@ package shared
 
 import (
 	"app/core"
+	coretypes "app/core/types"
 	"app/db"
-	"app/types"
 	s "app/types"
 )
 
-func GetUsuarios(empresaID int32, usuariosIDs []int32) ([]types.Usuario, error) {
+func GetUsuarios(empresaID int32, usuariosIDs []int32) ([]coretypes.Usuario, error) {
 	ids := core.MakeSliceInclude(usuariosIDs)
 
 	if len(usuariosIDs) == 0 {
-		return []s.Usuario{}, nil
+		return []coretypes.Usuario{}, nil
 	}
 
-	usuarios := []s.Usuario{}
+	usuarios := []coretypes.Usuario{}
 	query := db.Query(&usuarios)
 	query.Select().
 		EmpresaID.Equals(empresaID).

@@ -1,14 +1,21 @@
 import { accessListUrl, accessListHash } from '$core/generated/access-list';
 
+export interface IAccessGroupCatalogEntry {
+  id: number
+  name: string
+}
+
 export interface IAccessListCatalogEntry {
   id: number
   name: string
+  group: number
   levels: number
   frontend_routes: string
   backend_apis: string
 }
 
 export interface IAccessListCatalogPayload {
+  access_groups: IAccessGroupCatalogEntry[]
   access_list: IAccessListCatalogEntry[]
 }
 

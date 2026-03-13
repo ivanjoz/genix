@@ -88,7 +88,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	if !isPublicPath {
 		args.Usuario = core.CheckUser(args, 0)
 	} else {
-		args.Usuario = &core.IUsuario{}
+		args.Usuario = &core.UsuarioInfo{}
 	}
 
 	funcPath := args.Method + "." + args.Route
@@ -165,7 +165,7 @@ func registerLocalRequestUsage(args *core.HandlerArgs, handlerResponse *core.Han
 }
 
 func clearEnvVariables() {
-	core.Usuario = core.IUsuario{}
+	core.Usuario = core.UsuarioInfo{}
 	core.LogsSaved = []string{}
 	core.REQ_PATHS = []string{}
 	core.Env.USUARIO_ID = 0

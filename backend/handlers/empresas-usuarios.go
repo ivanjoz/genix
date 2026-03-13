@@ -3,6 +3,7 @@ package handlers
 import (
 	"app/cloud"
 	"app/core"
+	coretypes "app/core/types"
 	"app/db"
 	s "app/types"
 	"encoding/json"
@@ -17,6 +18,11 @@ func makeAccesoNivelUint16(accesoID int32, nivel int32) uint16 {
 	}
 
 	return uint16(accesoID<<2) | uint16(nivel-1)
+}
+
+func makeAccesoNivelPacked(accesoNivelID int32) uint16 {
+	// Reuse the same normalization path for any acceso encoded as accesoID*10+nivel.
+	return makeAccesoNivelUint16(accesoNivelID/10, accesoNivelID%10)
 }
 
 func getPerfilesMapByIDs(empresaID int32, perfilesIDs []int32) (map[int32]s.Perfil, error) {
@@ -88,7 +94,7 @@ func buildAccesosComputedFromPerfiles(perfilesByID map[int32]s.Perfil, perfilesI
 
 	accesosComputed := make([]uint16, 0, len(sortedAccesoIDs))
 	for _, accesoID := range sortedAccesoIDs {
-		accesosComputed = append(accesosComputed, makeAccesoNivelUint16(accesoID, highestLevelByAccesoID[accesoID]))
+		accesosComputed = append(accesosComputed, makeAccesoNivelPacked(accesoID*10+highestLevelByAccesoID[accesoID]))
 	}
 
 	core.Log("buildAccesosComputedFromPerfiles:: accesos computados", len(accesosComputed))
@@ -213,7 +219,7 @@ func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt64("updated")
 	companyStatusUpdated := fmt.Sprintf("%d_%d_%020d", req.Usuario.EmpresaID, 1, updated)
 
-	records := []s.Usuario{}
+	records := []coretypes.Usuario{}
 	if err := cloud.Select(&records).Where("empresa_id").Equals(req.Usuario.EmpresaID).Where("company_status_updated").GreaterEqual(companyStatusUpdated).Exec(); err != nil {
 		return req.MakeErr("Error al obtener los usuarios.", err)
 	}
@@ -236,7 +242,7 @@ func GetUsuariosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Log("buscando usuarios ids::", len(cachedIDs), "|", cachedIDs)
 
-	usuarios := []s.Usuario{}
+	usuarios := []coretypes.Usuario{}
 	// QueryCachedIDs checks cache version and only fetches stale/missing records from ScyllaDB.
 	queryError := db.QueryCachedIDs(&usuarios, cachedIDs)
 	if queryError != nil {
@@ -247,7 +253,7 @@ func GetUsuariosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
-	body := s.Usuario{}
+	body := coretypes.Usuario{}
 	err := json.Unmarshal([]byte(*req.Body), &body)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -280,7 +286,7 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.CreatedBy = req.Usuario.ID
 		body.Status = 1
 	} else {
-		usuariosExistentes := []s.Usuario{}
+		usuariosExistentes := []coretypes.Usuario{}
 		query := db.Query(&usuariosExistentes)
 		query.EmpresaID.Equals(req.Usuario.EmpresaID).ID.Equals(body.ID).Limit(1)
 		if err = query.Exec(); err != nil {
@@ -315,6 +321,10 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	if err != nil {
 		return req.MakeErr("Error al obtener los accesos del perfil.", err)
 	}
+	for _, accesoNivelID := range body.AccesosNivelIDs {
+		accesosComputed = append(accesosComputed, makeAccesoNivelPacked(accesoNivelID))
+	}
+	accesosComputed = core.MakeUnique(accesosComputed)
 
 	body.Password = ""
 	body.AccesosComputed = accesosComputed
@@ -324,14 +334,14 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	body.PrepareCloudSync()
 	core.Print(body)
 
-	usuariosToSave := []s.Usuario{body}
+	usuariosToSave := []coretypes.Usuario{body}
 	if err = db.Insert(&usuariosToSave); err != nil {
 		return req.MakeErr("Error al actualizar el usuario (SQL): " + err.Error())
 	}
 
 	body = usuariosToSave[0]
 	body.PrepareCloudSync()
-	if err = cloud.Insert([]s.Usuario{body}); err != nil {
+	if err = cloud.Insert([]coretypes.Usuario{body}); err != nil {
 		return req.MakeErr("Error al actualizar el usuario (Cloud ORM): " + err.Error())
 	}
 

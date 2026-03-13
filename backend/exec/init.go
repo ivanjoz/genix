@@ -3,6 +3,7 @@ package exec
 import (
 	"app/cloud"
 	"app/core"
+	coreTypes "app/core/types"
 	"app/db"
 	s "app/types"
 	"encoding/csv"
@@ -25,7 +26,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	if err := cloud.Init[s.Empresa](); err != nil {
 		panic("Error al inicializar la tabla cloud de empresas. " + err.Error())
 	}
-	if err := cloud.Init[s.Usuario](); err != nil {
+	if err := cloud.Init[coreTypes.Usuario](); err != nil {
 		panic("Error al inicializar la tabla cloud de usuarios. " + err.Error())
 	}
 	if err := cloud.Init[s.Perfil](); err != nil {
@@ -51,7 +52,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 			Updated:     seedTimestamp,
 		},
 	}
-	usuarios := []s.Usuario{
+	usuarios := []coreTypes.Usuario{
 		{
 			ID:           1,
 			EmpresaID:    1,

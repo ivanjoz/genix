@@ -33,8 +33,11 @@ export const sendUserLogin = async (data: ILogin): Promise<any> => {
 	console.log("loginInfo", loginInfo)
 
   try {
-    await accessHelper.parseAccesos(loginInfo, data.CipherKey)
-    if(!accessHelper.checkAcceso(1)){
+		await accessHelper.parseAccesos(loginInfo, data.CipherKey)
+		const hasAccess = accessHelper.checkAcceso(1)
+		console.log("hasAccess", hasAccess)
+		
+		if (!hasAccess) {
       Env.clearAccesos?.()
     } else {
       Env.navigate("/")

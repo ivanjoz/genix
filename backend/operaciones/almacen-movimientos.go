@@ -2,6 +2,7 @@ package operaciones
 
 import (
 	"app/core"
+	coretypes "app/core/types"
 	"app/db"
 	s "app/types"
 	"encoding/json"
@@ -63,14 +64,14 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	type Result struct {
 		Movimientos []s.AlmacenMovimiento
-		Usuarios    []s.Usuario
+		Usuarios    []coretypes.Usuario
 		Productos   []s.Producto
 	}
 
 	result := Result{}
 
 	query := db.Query(&result.Movimientos)
-	
+
 	query.EmpresaID.Equals(req.Usuario.EmpresaID).
 		AlmacenID.Equals(almacenID).
 		Fecha.Between(fechaInicio, fechaFin).OrderDesc().Limit(1000)
@@ -268,7 +269,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []s.MovimientoInterno) 
 	almacenProductos := []s.AlmacenProducto{}
 	for _, e := range movimientos {
 		movimiento := s.AlmacenMovimiento{
-			DocumentID: 		e.DocumentID,
+			DocumentID:     e.DocumentID,
 			EmpresaID:      req.Usuario.EmpresaID,
 			AlmacenID:      e.AlmacenID,
 			ProductoID:     e.ProductoID,
@@ -276,7 +277,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []s.MovimientoInterno) 
 			SKU:            e.SKU,
 			Lote:           e.Lote,
 			Tipo:           core.Coalesce(e.Tipo, core.If(e.Cantidad > 0, int8(1), 2)),
-			Fecha: 					core.TimeToFechaUnix(time.Now()),
+			Fecha:          core.TimeToFechaUnix(time.Now()),
 			Created:        core.SUnixTime(),
 			CreatedBy:      req.Usuario.ID,
 		}

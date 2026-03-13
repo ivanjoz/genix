@@ -5,7 +5,7 @@ import Input from '$components/Input.svelte';
 import Layer from '$components/Layer.svelte';
 import Modal from '$components/Modal.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
-import SearchCard from '$components/SearchCard.svelte';
+import SearchCard from '$components/SearchCard.svelte'; 
 import SearchSelect from '$components/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import { Core } from '$core/store.svelte';

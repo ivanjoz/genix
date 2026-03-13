@@ -35,12 +35,19 @@ const generatedModulePath = path.resolve(projectDir, 'core/generated/access-list
 interface IAccessListEntry {
   id: number
   name: string
+  group: number
   levels: number
   frontend_routes: string
   backend_apis: string
 }
 
+interface IAccessGroupEntry {
+  id: number
+  name: string
+}
+
 interface IAccessListPayload {
+  access_groups: IAccessGroupEntry[]
   access_list: IAccessListEntry[]
 }
 
@@ -48,6 +55,7 @@ function validateAccessListEntry(entryCandidate: Partial<IAccessListEntry>): IAc
   const requiredKeys: (keyof IAccessListEntry)[] = [
     'id',
     'name',
+    'group',
     'levels',
     'frontend_routes',
     'backend_apis'
@@ -68,6 +76,10 @@ function buildAccessListArtifacts() {
   const yamlContent = fs.readFileSync(accessListYamlPath, 'utf8')
   const parsedYamlPayload = parseYaml(yamlContent) as IAccessListPayload
   const accessListPayload: IAccessListPayload = {
+    access_groups: (parsedYamlPayload?.access_groups || []).map((accessGroupCandidate) => ({
+      id: Number(accessGroupCandidate?.id || 0),
+      name: String(accessGroupCandidate?.name || "")
+    })),
     // Validate and normalize the YAML source before it is shipped as a long-lived CDN artifact.
     access_list: (parsedYamlPayload?.access_list || []).map(validateAccessListEntry)
   }

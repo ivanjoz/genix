@@ -2,6 +2,7 @@ package exec
 
 import (
 	"app/core"
+	coreTypes "app/core/types"
 	"app/db"
 	"app/facturacion"
 	"app/serialize"
@@ -39,7 +40,7 @@ func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
 
 func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 	// Autoincrement is handled automatically by the ORM via handlePreInsert
-	usuarios := []s.Usuario{
+	usuarios := []coreTypes.Usuario{
 		{
 			ID:          0, // Set to 0 to trigger autoincrement
 			EmpresaID:   1,
@@ -50,12 +51,12 @@ func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 			Created:     core.SUnixTime(),
 		},
 	}
-	
+
 	if err := db.Insert(&usuarios); err != nil {
 		core.Log("Error inserting usuario:", err)
 		panic(err)
 	}
-	
+
 	core.Log("Usuario insertado con ID:", usuarios[0].ID)
 
 	return core.FuncResponse{}
@@ -167,7 +168,7 @@ func Test16(args *core.ExecArgs) core.FuncResponse {
 
 func Test17(args *core.ExecArgs) core.FuncResponse {
 
-	usuarios := []s.Usuario{}
+	usuarios := []coreTypes.Usuario{}
 	// core.DBSelect(&usuarios)
 
 	core.Print(usuarios)

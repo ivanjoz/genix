@@ -2,25 +2,147 @@
 import Input from '$components/Input.svelte';
 import Layer from '$components/Layer.svelte';
 import Page from '$domain/Page.svelte';
-import SearchCard from '$components/SearchCard.svelte';
+import UserProfilesAccessSelector from './UserProfilesAccessSelector.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import { Notify, throttle } from '$libs/helpers';
 import { Core } from '$core/store.svelte';
 import { formatTime } from '$libs/helpers';
+import { onMount } from 'svelte';
   import pkg from 'notiflix'
 const { Loading } = pkg
+  import { fetchAccessListCatalog, type IAccessGroupCatalogEntry, type IAccessListCatalogEntry } from "../perfiles-accesos/access-list-catalog"
+  import { accesoAcciones } from "../perfiles-accesos/perfiles-accesos.svelte"
   import { UsuariosService, PerfilesService, postUsuario, type IUsuario } from "./usuarios.svelte"
 
   const usuariosService = new UsuariosService()
   const perfilesService = new PerfilesService()
+  const accessActionShortNameByID = new Map(accesoAcciones.map((accessActionRecord) => [accessActionRecord.id, accessActionRecord.short]))
 
   let filterText = $state("")
   let usuarioForm = $state({} as IUsuario)
+  let accessGroupEntries = $state([] as IAccessGroupCatalogEntry[])
+  let accessCatalogEntries = $state([] as IAccessListCatalogEntry[])
+  let accessCatalogLoadError = $state("")
+
+  interface IUsuarioAccessSummary {
+    readableAccessNames: string[]
+    editableAccessNames: string[]
+  }
+
+  function formatAccessSummary(accessNames: string[], maxVisibleAccesses = 8): string {
+    // Keep the table compact by truncating long access lists with a clear remaining-count suffix.
+    if (accessNames.length <= maxVisibleAccesses) {
+      return accessNames.join(", ")
+    }
+
+    const visibleAccessNames = accessNames.slice(0, maxVisibleAccesses)
+    const hiddenAccessCount = accessNames.length - maxVisibleAccesses
+    return `${visibleAccessNames.join(", ")} ... (${hiddenAccessCount} más)`
+  }
+
+  function decodeAccessLevels(accessLevelMask: number): number[] {
+    // Expand the compact catalog format (for example 14) into individual selectable access levels.
+    return [...String(accessLevelMask)]
+      .map((levelDigit) => Number(levelDigit))
+      .filter((levelValue) => levelValue > 0)
+  }
+
+  const sortedPerfiles = $derived.by(() => {
+    // Keep profile ordering stable for the selector without re-sorting inside the child component.
+    return [...perfilesService.perfiles].sort((leftProfile, rightProfile) => {
+      const nameComparison = leftProfile.Nombre.localeCompare(rightProfile.Nombre)
+      return nameComparison !== 0 ? nameComparison : leftProfile.ID - rightProfile.ID
+    })
+  })
+
+  const accessLevelOptions = $derived.by(() => {
+    const flattenedAccessLevelOptions: { ID: number, Nombre: string }[] = []
+
+    // Build and sort access options once per catalog refresh so the child component stays render-only.
+    for (const accessCatalogEntry of accessCatalogEntries) {
+      const accessLevels = decodeAccessLevels(accessCatalogEntry.levels)
+      for (const accessLevel of accessLevels) {
+        const accessActionShortName = accessActionShortNameByID.get(accessLevel) || `N${accessLevel}`
+        flattenedAccessLevelOptions.push({
+          ID: accessCatalogEntry.id * 10 + accessLevel,
+          Nombre: `${accessCatalogEntry.name} (${accessActionShortName})`
+        })
+      }
+    }
+
+    return flattenedAccessLevelOptions.sort((leftOption, rightOption) => {
+      const nameComparison = leftOption.Nombre.localeCompare(rightOption.Nombre)
+      return nameComparison !== 0 ? nameComparison : leftOption.ID - rightOption.ID
+    })
+  })
+
+  const perfilesByID = $derived.by(() => {
+    return new Map(sortedPerfiles.map((profileRecord) => [profileRecord.ID, profileRecord]))
+  })
+
+  const accessCatalogNameByID = $derived.by(() => {
+    const accessNameByID = new Map<number, string>()
+
+    for (const accessCatalogEntry of accessCatalogEntries) {
+      accessNameByID.set(accessCatalogEntry.id, accessCatalogEntry.name)
+    }
+
+    return accessNameByID
+  })
+
+  function summarizeUsuarioAccesses(usuarioRecord: IUsuario): IUsuarioAccessSummary {
+    const accessLevelsByAccessID = new Map<number, Set<number>>()
+
+    // Merge profile-derived and user-specific access levels so the table shows the effective access summary.
+    for (const profileID of usuarioRecord.PerfilesIDs || []) {
+      const profileRecord = perfilesByID.get(profileID)
+      if (!profileRecord?.accesosMap) { continue }
+
+      for (const [accessID, accessLevels] of profileRecord.accesosMap) {
+        if (!accessLevelsByAccessID.has(accessID)) {
+          accessLevelsByAccessID.set(accessID, new Set())
+        }
+        for (const accessLevel of accessLevels) {
+          accessLevelsByAccessID.get(accessID)!.add(accessLevel)
+        }
+      }
+    }
+
+    for (const encodedAccessLevelID of usuarioRecord.AccesosNivelIDs || []) {
+      const accessID = Math.floor(encodedAccessLevelID / 10)
+      const accessLevel = encodedAccessLevelID % 10
+      if (!accessLevelsByAccessID.has(accessID)) {
+        accessLevelsByAccessID.set(accessID, new Set())
+      }
+      accessLevelsByAccessID.get(accessID)!.add(accessLevel)
+    }
+
+    const readableAccessNames = new Set<string>()
+    const editableAccessNames = new Set<string>()
+
+    for (const [accessID, accessLevels] of accessLevelsByAccessID) {
+      const accessName = accessCatalogNameByID.get(accessID)
+      if (!accessName) { continue }
+
+      if (accessLevels.has(1)) {
+        readableAccessNames.add(accessName)
+      }
+
+      if ([...accessLevels].some((accessLevel) => accessLevel > 1)) {
+        editableAccessNames.add(accessName)
+      }
+    }
+
+    return {
+      readableAccessNames: [...readableAccessNames].sort((leftName, rightName) => leftName.localeCompare(rightName)),
+      editableAccessNames: [...editableAccessNames].sort((leftName, rightName) => leftName.localeCompare(rightName))
+    }
+  }
 
   const resetUsuarioForm = () => {
     // Initialize the create form with an active status so the layer always opens in a valid default state.
-    usuarioForm = { Status: 1 } as IUsuario
+    usuarioForm = { Status: 1, PerfilesIDs: [], AccesosNivelIDs: [] } as unknown as IUsuario
   }
 
   const openCreateUsuarioLayer = () => {
@@ -31,10 +153,29 @@ const { Loading } = pkg
 
   const openEditUsuarioLayer = (selectedUsuario: IUsuario) => {
     // Clone the selected record so the table does not update optimistically while the user edits the layer.
-    usuarioForm = { ...selectedUsuario }
+    usuarioForm = {
+      ...selectedUsuario,
+      PerfilesIDs: [...(selectedUsuario.PerfilesIDs || [])],
+      AccesosNivelIDs: [...(selectedUsuario.AccesosNivelIDs || [])]
+    }
     console.log("openEditUsuarioLayer::", $state.snapshot(usuarioForm))
     Core.openSideLayer(1)
   }
+
+  onMount(async () => {
+    try {
+      const accessCatalogPayload = await fetchAccessListCatalog()
+      accessGroupEntries = accessCatalogPayload.access_groups || []
+      accessCatalogEntries = accessCatalogPayload.access_list || []
+      console.info("usuarios::accessCatalogLoaded", {
+        totalGroups: accessGroupEntries.length,
+        totalEntries: accessCatalogEntries.length
+      })
+    } catch (error) {
+      accessCatalogLoadError = error as string
+      console.error("usuarios::accessCatalogLoadError", { error })
+    }
+  })
 
   async function saveUsuario(isDelete?: boolean) {
     const form = usuarioForm
@@ -93,12 +234,15 @@ const { Loading } = pkg
       getValue: e => e.ID
     },
     {
+      id: "usuario_info",
       header: "Usuario", highlight: true,
-      cellCss: "px-6 c-purple",
+      cellCss: "px-8 py-6 align-top",
       getValue: e => e.Usuario
     },
     {
-      header: "Nombres", highlight: true,
+      id: "usuario_accesos", headerCss: "w-[47%]",
+      header: "Accesos", highlight: true,
+      cellCss: "px-8 py-6 align-top _usuario-access-td",
       getValue: e => `${e.Nombres} ${e.Apellidos || ""}`
     },
     {
@@ -144,11 +288,19 @@ const { Loading } = pkg
         </div>
       </div>
 
+      {#snippet accessSummaryRow(iconName: string, iconCss: string, accessNames: string[])}
+        <div class="_usuario-access-row">
+          <i class={`${iconName} _usuario-access-icon ${iconCss}`}></i>
+          <span class="text-sm">{formatAccessSummary(accessNames)}</span>
+        </div>
+      {/snippet}
+
       <VTable
         columns={columns}
         data={usuariosService.usuarios}
         css="w-full"
         maxHeight="calc(80vh - 13rem)"
+        estimateSize={72}
         filterText={filterText}
         getFilterContent={e => [e.Usuario, e.Nombres, e.Apellidos, e.Email].filter(x => x).join(" ").toLowerCase()}
         selected={usuarioForm?.ID}
@@ -157,6 +309,24 @@ const { Loading } = pkg
           openEditUsuarioLayer(selectedUsuario)
         }}
       >
+        {#snippet cellRenderer(usuarioRecord: IUsuario, columnDefinition: ITableColumn<IUsuario>)}
+          {#if columnDefinition.id === "usuario_info"}
+            <div class="_usuario-info-cell">
+              <div class="_usuario-info-name ff-semibold">{usuarioRecord.Nombres} {usuarioRecord.Apellidos || ""}</div>
+              <div class="_usuario-info-login">{usuarioRecord.Usuario}</div>
+            </div>
+          {:else if columnDefinition.id === "usuario_accesos"}
+            {@const usuarioAccessSummary = summarizeUsuarioAccesses(usuarioRecord)}
+            <div class="_usuario-access-cell">
+              {#if usuarioAccessSummary.readableAccessNames.length > 0}
+                {@render accessSummaryRow("icon-eye", "text-blue-600", usuarioAccessSummary.readableAccessNames)}
+              {/if}
+              {#if usuarioAccessSummary.editableAccessNames.length > 0}
+                {@render accessSummaryRow("icon-pencil", "text-red-600", usuarioAccessSummary.editableAccessNames)}
+              {/if}
+            </div>
+          {/if}
+        {/snippet}
       </VTable>
     </div>
   </Layer>
@@ -215,14 +385,14 @@ const { Loading } = pkg
         css="col-span-24 md:col-span-12"
         label="Email"
       />
-      <SearchCard
+      <UserProfilesAccessSelector
         bind:saveOn={usuarioForm}
-        save="PerfilesIDs"
+        perfiles={sortedPerfiles}
+        accessGroupEntries={accessGroupEntries}
+        accessCatalogEntries={accessCatalogEntries}
+        accessLevelOptions={accessLevelOptions}
+        accessCatalogLoadError={accessCatalogLoadError}
         css="col-span-24"
-        options={perfilesService.perfiles}
-        keyId="ID"
-        keyName="Nombre"
-        label="PERFILES ::"
       />
       <Input
         bind:saveOn={usuarioForm}
@@ -244,3 +414,52 @@ const { Loading } = pkg
     </div>
   </Layer>
 </Page>
+
+<style>
+  :global(.vtable-row > td._usuario-access-td) {
+    text-overflow: initial;
+    white-space: normal;
+  }
+
+  ._usuario-info-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.2;
+  }
+
+  ._usuario-info-name {
+    color: #304256;
+  }
+
+  ._usuario-info-login {
+    color: #7762ba;
+    line-height: 16px;
+  }
+
+  ._usuario-access-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    line-height: 1.25;
+    max-width: 100%;
+  }
+
+  ._usuario-access-row {
+    align-items: flex-start;
+    color: #435166;
+    display: flex;
+    gap: 6px;
+  }
+
+  ._usuario-access-icon {
+    flex: 0 0 auto;
+    margin-top: 2px;
+  }
+
+  ._usuario-access-row span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+</style>

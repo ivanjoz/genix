@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -39,8 +40,36 @@ type HandlerArgs struct {
 	ResponseError  string
 	ReqParams      string
 	Encoding       string
-	Usuario        *IUsuario
+	Usuario        *UsuarioInfo
 	StartTime      int64
+	accesosNivel   []uint16
+}
+
+func makeAccesoNivelUint16(accesoID int32, nivel uint8) uint16 {
+	// Pack acceso + nivel into the same sortable representation used by AccesosComputed.
+	if nivel < 1 || nivel > 4 {
+		nivel = 1
+	}
+	return uint16(accesoID<<2) | uint16(nivel-1)
+}
+
+func getAccesoNivelSearchRange(accesoID int32, nivel uint8) (uint16, uint16) {
+	// Map each requested level to the packed values that satisfy it in the sorted access slice.
+	basePackedAccesoNivel := makeAccesoNivelUint16(accesoID, 1)
+	if nivel < 1 || nivel > 4 {
+		nivel = 1
+	}
+	return basePackedAccesoNivel, basePackedAccesoNivel + uint16(nivel-1)
+}
+
+func hasPackedAccesoInRange(accesosNivel []uint16, rangeStart uint16, rangeEnd uint16) bool {
+	// Use binary search over the sorted packed access slice instead of scanning every user access.
+	searchStartIndex, foundExactStart := slices.BinarySearch(accesosNivel, rangeStart)
+	if foundExactStart {
+		return true
+	} else {
+		return searchStartIndex < len(accesosNivel) && accesosNivel[searchStartIndex] <= rangeEnd
+	}
 }
 
 func PrintMemUsage() {
@@ -317,16 +346,26 @@ func (e HandlerArgs) HasRol(rolesIDs ...int32) bool {
 }
 
 func (e HandlerArgs) HasAcceso(accesosIDs ...int32) bool {
-	if e.Usuario.ID == 0 {
+	if e.Usuario == nil || e.Usuario.ID == 0 || len(e.accesosNivel) == 0 {
 		return false
 	}
-	accesosIDsInclude := MakeSliceInclude(accesosIDs)
-	for _, accesoID := range e.Usuario.AccesosIDs {
-		if accesosIDsInclude.Include(accesoID) {
+
+	for _, accesoID := range accesosIDs {
+		// Plain access checks require at least level 1 for the requested access ID.
+		if e.HasAccesoNivel(accesoID, 1) {
 			return true
 		}
 	}
 	return false
+}
+
+func (e HandlerArgs) HasAccesoNivel(accesoID int32, nivel uint8) bool {
+	if e.Usuario == nil || e.Usuario.ID == 0 || len(e.accesosNivel) == 0 || accesoID <= 0 {
+		return false
+	}
+
+	rangeStart, rangeEnd := getAccesoNivelSearchRange(accesoID, nivel)
+	return hasPackedAccesoInRange(e.accesosNivel, rangeStart, rangeEnd)
 }
 
 func (e HandlerArgs) IsUser(usuarioIDs ...int32) bool {

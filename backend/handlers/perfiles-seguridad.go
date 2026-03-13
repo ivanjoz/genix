@@ -3,6 +3,7 @@ package handlers
 import (
 	"app/cloud"
 	"app/core"
+	coretypes "app/core/types"
 	"app/db"
 	s "app/types"
 	"encoding/json"
@@ -56,7 +57,7 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if isExistingPerfil {
-		affectedUsers := []s.Usuario{}
+		affectedUsers := []coretypes.Usuario{}
 		affectedUsersQuery := db.Query(&affectedUsers)
 		affectedUsersQuery.EmpresaID.Equals(req.Usuario.EmpresaID).PerfilesIDs.Contains(body.ID)
 		if err = affectedUsersQuery.AllowFilter().Exec(); err != nil {
@@ -79,7 +80,7 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 			// Keep the just-saved profile in-memory so recomputations use the new access list immediately.
 			perfilesByID[body.ID] = body
 
-			usersWithChangedAccesos := make([]s.Usuario, 0, len(affectedUsers))
+			usersWithChangedAccesos := make([]coretypes.Usuario, 0, len(affectedUsers))
 
 			for userIndex := range affectedUsers {
 				affectedUser := &affectedUsers[userIndex]

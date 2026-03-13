@@ -8,6 +8,7 @@ export interface IUsuario {
   DocumentoNro: string;
   Cargo: string;
   PerfilesIDs: number[];
+  AccesosNivelIDs: number[];
   RolesIDs: number[];
   Status: number;
   Updated: number;

@@ -3,6 +3,7 @@ package handlers
 import (
 	"app/cloud"
 	"app/core"
+	coretypes "app/core/types"
 	"app/types"
 	"encoding/json"
 	"fmt"
@@ -31,7 +32,7 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("El CipherKey es necesario.")
 	}
 
-	usuarios := []types.Usuario{}
+	usuarios := []coretypes.Usuario{}
 	companyUserIndex := fmt.Sprintf("%d_%s", body.EmpresaID, body.Usuario)
 	err = cloud.Select(&usuarios).Where("empresa_id").Equals(body.EmpresaID).Where("company_usuario").Equals(companyUserIndex).Exec()
 	if err != nil {
@@ -64,25 +65,22 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(response)
 }
 
-func MakeUsuarioResponse(usuario types.Usuario, cipherKey string) (map[string]any, error) {
+func MakeUsuarioResponse(usuario coretypes.Usuario, cipherKey string) (map[string]any, error) {
 
-	usuarioToken := core.IUsuario{
+	usuarioToken := core.UsuarioInfo{
 		EmpresaID:   usuario.EmpresaID,
 		ID:          usuario.ID,
 		Expired:     time.Now().Unix() + (60 * 60 * 5),
 		Usuario:     usuario.Usuario,
 		RolesIDs:    usuario.RolesIDs,
 		PerfilesIDs: usuario.PerfilesIDs,
-		AccesosIDs:  []int32{},
+		AccesosIDs:  []int32{11},
 	}
 
 	if usuario.ID == 1 {
 		usuarioToken.PerfilesIDs = []int32{-1}
 		for i := 1; i < 200; i++ {
 			usuarioToken.AccesosIDs = append(usuarioToken.AccesosIDs, int32(i)*10+7)
-		}
-		for i := 1; i < 20; i++ {
-			usuarioToken.RolesIDs = append(usuarioToken.RolesIDs, int32(i))
 		}
 		// Obtiene los acceso en base a los perfiles
 	} else if len(usuario.PerfilesIDs) > 0 {
@@ -149,7 +147,7 @@ func ReloadLogin(req *core.HandlerArgs) core.HandlerResponse {
 
 	cipherKey := req.GetQuery("cipher-key")
 
-	usuario, err := cloud.GetByID(types.Usuario{
+	usuario, err := cloud.GetByID(coretypes.Usuario{
 		EmpresaID: req.Usuario.EmpresaID,
 		ID:        req.Usuario.ID,
 	})
