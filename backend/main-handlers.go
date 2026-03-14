@@ -85,13 +85,29 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 
 	// Los es públicos comienzan con "p-" y no necesitan validacion del user Tocken
 	isPublicPath := len(args.Route) > 2 && args.Route[0:2] == "p-"
+	funcPath := args.Method + "." + args.Route
+
 	if !isPublicPath {
 		args.Usuario = core.CheckUser(args, 0)
+
+		if len(args.Usuario.Error) == 0 {
+			accessInfo, ok := getRouteAccessInfo(funcPath)
+			if !ok {
+				accessInfo, ok = getRouteAccessInfo(args.Route)
+			}
+			if ok {
+				nivel := uint8(1)
+				if args.Method == "POST" || args.Method == "PUT" {
+					nivel = 2
+				}
+				if !args.HasAccesoNivel(accessInfo.ID, nivel) {
+					args.Usuario.Error = fmt.Sprintf("El usuario no posee el acceso %s (visualización o edición)", accessInfo.Name)
+				}
+			}
+		}
 	} else {
 		args.Usuario = &core.UsuarioInfo{}
 	}
-
-	funcPath := args.Method + "." + args.Route
 
 	// Request header log is only meaningful in Lambda mode (it uses REQ_ID / REQ_LAMBDA_ID).
 	if core.Env.IS_SERVERLESS {

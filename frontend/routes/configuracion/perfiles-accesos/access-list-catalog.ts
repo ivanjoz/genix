@@ -1,4 +1,5 @@
-import { accessListUrl, accessListHash } from '$core/generated/access-list';
+import { parse as parseYaml } from 'yaml';
+import accessListYamlContent from '../../../../backend/access_list.yml?raw';
 
 export interface IAccessGroupCatalogEntry {
   id: number
@@ -19,23 +20,14 @@ export interface IAccessListCatalogPayload {
   access_list: IAccessListCatalogEntry[]
 }
 
-export async function fetchAccessListCatalog(): Promise<IAccessListCatalogPayload> {
-  // The hash is emitted at build time so CDN clients can cache forever and refresh on content changes.
-  console.info('[access-list] Fetching access catalog', { accessListHash, accessListUrl })
+// Parse the backend-owned YAML once so every screen reads the same catalog without a generated module.
+const accessListCatalogPayload = parseYaml(accessListYamlContent) as IAccessListCatalogPayload
 
-  const accessListResponse = await fetch(accessListUrl, {
-    headers: {
-      'cache-control': 'no-cache'
-    }
+export async function fetchAccessListCatalog(): Promise<IAccessListCatalogPayload> {
+  console.info('[access-list] Loaded access catalog from backend/access_list.yml', {
+    accessGroupCount: accessListCatalogPayload?.access_groups?.length || 0,
+    accessEntryCount: accessListCatalogPayload?.access_list?.length || 0
   })
 
-  if (!accessListResponse.ok) {
-    console.error('[access-list] Failed to fetch access catalog', {
-      status: accessListResponse.status,
-      accessListUrl
-    })
-    throw new Error(`No se pudo cargar el catálogo de accesos: ${accessListResponse.status}`)
-  }
-
-  return accessListResponse.json() as Promise<IAccessListCatalogPayload>
+  return accessListCatalogPayload
 }

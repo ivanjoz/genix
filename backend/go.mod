@@ -77,6 +77,7 @@ require (
 	github.com/xhit/go-simple-mail/v2 v2.16.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/sync v0.8.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 replace github.com/gocql/gocql v1.6.0 => github.com/scylladb/gocql v1.13.0

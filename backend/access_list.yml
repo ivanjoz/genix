@@ -61,6 +61,7 @@ access_list:
     group: 2
     levels: 14
     frontend_routes: "negocio/productos"
+    backend_routes: "POST.productos"
     backend_apis: ""
   - id: 9
     name: "Clientes & Proveedores"
