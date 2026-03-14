@@ -157,6 +157,22 @@ func makeCompanyUsuarioAccesosKey(empresaID, usuarioID int32) uint64 {
 	return uint64(uint32(empresaID))<<32 | uint64(uint32(usuarioID))
 }
 
+func formatAccesosNivelForLog(accesosNivel []uint16) string {
+	// Decode packed acceso+nivel values into a readable list for auth debugging.
+	if len(accesosNivel) == 0 {
+		return ""
+	}
+
+	formattedAccesos := make([]string, 0, len(accesosNivel))
+	for _, packedAccesoNivel := range accesosNivel {
+		accesoID := int32(packedAccesoNivel >> 2)
+		nivel := uint8(packedAccesoNivel&0b11) + 1
+		formattedAccesos = append(formattedAccesos, fmt.Sprintf("%d:%d", accesoID, nivel))
+	}
+
+	return strings.Join(formattedAccesos, ",")
+}
+
 func loadUsuarioAccesosComputed(empresaID, usuarioID int32) ([]uint16, error) {
 	nowTime := SUnixTime()
 	cacheKey := makeCompanyUsuarioAccesosKey(empresaID, usuarioID)
@@ -196,9 +212,9 @@ func loadUsuarioAccesosComputed(empresaID, usuarioID int32) ([]uint16, error) {
 		cachedUsuarioAccesos = companyUsuarioAccesos[cacheKey]
 		companyUsuarioAccesosMu.Unlock()
 
-		Log("CheckUser:: cache updated", "empresaID", empresaID, "usuarioID", usuarioID, "accesosComputed", len(cachedUsuarioAccesos.accesosNivelComputed), "updated", nowTime)
+		Log("CheckUser:: cache updated", "empresaID", empresaID, "usuarioID", usuarioID, "accesosComputed", len(cachedUsuarioAccesos.accesosNivelComputed), "accesosDetalle", formatAccesosNivelForLog(cachedUsuarioAccesos.accesosNivelComputed), "updated", nowTime)
 	} else {
-		Log("CheckUser:: cache hit", "empresaID", empresaID, "usuarioID", usuarioID, "accesosComputed", len(cachedUsuarioAccesos.accesosNivelComputed))
+		Log("CheckUser:: cache hit", "empresaID", empresaID, "usuarioID", usuarioID, "accesosComputed", len(cachedUsuarioAccesos.accesosNivelComputed), "accesosDetalle", formatAccesosNivelForLog(cachedUsuarioAccesos.accesosNivelComputed))
 	}
 
 	return cachedUsuarioAccesos.accesosNivelComputed, nil

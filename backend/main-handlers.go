@@ -123,6 +123,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 
 		for _, accessInfo := range accessInfos {
 			if args.HasAccesoNivel(accessInfo.ID, nivel) {
+				core.Log("Acceso:",funcPath,"con",accessInfo.ID,":",nivel)
 				hasAllowedAccess = true
 				break
 			}

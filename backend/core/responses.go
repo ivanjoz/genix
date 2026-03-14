@@ -54,12 +54,13 @@ func makeAccesoNivelUint16(accesoID int32, nivel uint8) uint16 {
 }
 
 func getAccesoNivelSearchRange(accesoID int32, nivel uint8) (uint16, uint16) {
-	// Map each requested level to the packed values that satisfy it in the sorted access slice.
-	basePackedAccesoNivel := makeAccesoNivelUint16(accesoID, 1)
+	// Require granted levels to be >= the requested level while staying within the same access ID bucket.
 	if nivel < 1 || nivel > 4 {
 		nivel = 1
 	}
-	return basePackedAccesoNivel, basePackedAccesoNivel + uint16(nivel-1)
+	requiredPackedAccesoNivel := makeAccesoNivelUint16(accesoID, nivel)
+	maxPackedAccesoNivel := makeAccesoNivelUint16(accesoID, 4)
+	return requiredPackedAccesoNivel, maxPackedAccesoNivel
 }
 
 func hasPackedAccesoInRange(accesosNivel []uint16, rangeStart uint16, rangeEnd uint16) bool {

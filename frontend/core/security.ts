@@ -193,7 +193,7 @@ export class AccessHelper {
 
   #storedAccesos = ''
   #accesosComputed = new Uint16Array()
-  #cachedResults: Map<string,boolean> = new Map()
+  #cachedResults: Map<number,boolean> = new Map()
   #userInfo: IUsuario = null as unknown as IUsuario
 
   #loadAccesosComputedFromStorage() {
@@ -258,7 +258,7 @@ export class AccessHelper {
     }
 
     const requestedNivel = normalizeAccesoNivel(nivel)
-    const cacheKey = `${accesoID}:${requestedNivel}`
+    const cacheKey = accesoID * 10 + requestedNivel
     if (!this.#cachedResults.has(cacheKey)) {
       const [rangeStart, rangeEnd] = getAccesoNivelSearchRange(accesoID, requestedNivel)
       this.#cachedResults.set(cacheKey, hasPackedAccesoInRange(this.#accesosComputed, rangeStart, rangeEnd))
@@ -298,9 +298,10 @@ const makeAccesoNivelUint16 = (accesoID: number, nivel: number): number => {
 }
 
 const getAccesoNivelSearchRange = (accesoID: number, nivel: number): [number, number] => {
+  // Require granted levels to be >= the requested level within the same access bucket.
   const normalizedNivel = normalizeAccesoNivel(nivel)
-  const rangeStart = makeAccesoNivelUint16(accesoID, 1)
-  const rangeEnd = rangeStart + (normalizedNivel - 1)
+  const rangeStart = makeAccesoNivelUint16(accesoID, normalizedNivel)
+  const rangeEnd = makeAccesoNivelUint16(accesoID, 4)
   return [rangeStart, rangeEnd]
 }
 

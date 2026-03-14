@@ -41,11 +41,6 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
-	core.Log("productos obtenidos::", len(productos))
-	if len(productos) > 0 {
-		core.Print(productos[0])
-	}
-
 	return core.MakeResponse(req, &productos)
 }
 
