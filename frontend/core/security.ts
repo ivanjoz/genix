@@ -1,6 +1,7 @@
 import { Env, IsClient, LocalStorage } from '$core/env';
 import { decrypt, Notify, throttle } from '$libs/helpers';
 import type { IUsuario, ILoginResult } from '$core/types/common';
+import { getAccessEntriesForRoute } from '$routes/configuracion/perfiles-accesos/access-list-catalog';
 
 // Token refresh constants (all in seconds)
 const TOKEN_REFRESH_THRESHOLD = 40 * 60 // 40 minutes in seconds
@@ -16,14 +17,6 @@ let reloadLoginFn: () => Promise<any> = async () => {
 export const registerReloadLogin = (fn: () => Promise<any>) => {
   reloadLoginFn = fn;
 };
-
-interface UserInfo {
-  d: number // userID
-  u: string // usuario
-  r: number[] // roles ids
-  m: number[] // modules ids
-  a: number[] // accesos ids
-}
 
 export interface UserInfoParsed {
   id: number
@@ -79,6 +72,11 @@ export const getShowStore = (pathname?: string): number => {
     return Env.getEmpresaID() || -1
   }
   return 0
+}
+
+export const isPublicFrontendRoute = (routeValue?: string | null): boolean => {
+  const normalizedRoute = String(routeValue || "").trim()
+  return normalizedRoute === '/' || normalizedRoute === '/login' || normalizedRoute.startsWith('/store')
 }
 
 // TOKEN REFRESH MANAGEMENT
@@ -184,8 +182,6 @@ if (IsClient()) {
   // Wait a bit for the app to initialize (1 second)
   setTimeout(initTokenRefreshCheck, 1 * 1000)
 }
-
-
 
 export class AccessHelper {
   constructor() {
@@ -295,6 +291,28 @@ export class AccessHelper {
     return this.checkAcceso(roleID as number, 8)
   }
 
+  canUserAccessRoute(routeValue?: string | null): boolean {
+    const route = String(routeValue || '').trim() || '/'
+    const normalizedRoute = route.replace(/^\//, '')
+
+    if (isPublicFrontendRoute(route)) { return true }
+
+    const matchedAccessEntries = getAccessEntriesForRoute(route)
+    if (matchedAccessEntries.length === 0) {
+      console.info('[AccessHelper] Route without explicit access mapping, allowing navigation', {
+        route,
+        normalizedRoute
+      })
+      return true
+		}
+    
+		console.log("matchedAccessEntries", matchedAccessEntries)
+
+		return matchedAccessEntries.some((accessEntry) => {
+      return this.checkAcceso(accessEntry.id, 1)
+    })
+  }
+
   #checkAccesosCheckSum() {
     const accesos = this.#accesos
     const accesosInternal = accesos.substring(2, accesos.length - 2)
@@ -330,10 +348,12 @@ export const checksum = (string: string): string => {
 }
 
 export const accessHelper = new AccessHelper()
+export const canUserAccessRoute = (routeValue?: string | null) => accessHelper.canUserAccessRoute(routeValue)
 
 // Params
 export const Params = {
   checkAcceso: (accesoID: number, nivel?: number) => accessHelper.checkAcceso(accesoID,nivel),
+  canUserAccessRoute: (routeValue?: string | null) => accessHelper.canUserAccessRoute(routeValue),
   checkRol: (a: number) => accessHelper.checkRol(a),
   userInfo: () => accessHelper.getUserInfo(),
   setValue(key: string, value: string | number) {

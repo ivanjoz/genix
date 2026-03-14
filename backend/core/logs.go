@@ -26,22 +26,27 @@ func Log(args ...any) {
 	}
 
 	logMsg := strings.ToLower(Concats(args...))
+	envIsReady := Env != nil
+	doLog := true
 
-	doLog := Env.LOGS_FULL || !Env.IS_SERVERLESS
-	if Env.IS_SERVERLESS {
-		if len(logMsg) > 1 && logMsg[0:1] == "*" {
-			doLog = true
-			args[0] = fmt.Sprintf("%v", args[0])[1:]
-		} else {
-			if strings.Contains(logMsg, "error") || strings.Contains(logMsg, "warn") {
+	// Allow startup/package-init logging before Env is configured to avoid nil dereferences.
+	if envIsReady {
+		doLog = Env.LOGS_FULL || !Env.IS_SERVERLESS
+		if Env.IS_SERVERLESS {
+			if len(logMsg) > 1 && logMsg[0:1] == "*" {
 				doLog = true
+				args[0] = fmt.Sprintf("%v", args[0])[1:]
+			} else {
+				if strings.Contains(logMsg, "error") || strings.Contains(logMsg, "warn") {
+					doLog = true
+				}
 			}
 		}
 	}
 
 	// LogsSaved is primarily used for Lambda request log persistence.
 	// Protect the slice for cases where handlers run goroutines (errgroup).
-	if Env.LOGS_ONLY_SAVE || (Env.IS_SERVERLESS && doLog) {
+	if envIsReady && (Env.LOGS_ONLY_SAVE || (Env.IS_SERVERLESS && doLog)) {
 		logsMu.Lock()
 		LogsSaved = append(LogsSaved, logMsg)
 		logsMu.Unlock()
@@ -50,7 +55,7 @@ func Log(args ...any) {
 		return
 	}
 
-	if Env.IS_SERVERLESS {
+	if envIsReady && Env.IS_SERVERLESS {
 		newCounter := atomic.AddInt32(LogCounter, 1)
 		hashs := []string{Env.REQ_ID, fmt.Sprintf("%v", newCounter)}
 

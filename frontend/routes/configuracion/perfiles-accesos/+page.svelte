@@ -11,6 +11,7 @@ import { onMount } from 'svelte';
 import AccesoCard from './AccesoCard.svelte';
 import {
   fetchAccessListCatalog,
+  normalizeAccessFrontendRoutes,
   type IAccessGroupCatalogEntry,
   type IAccessListCatalogEntry
 } from './access-list-catalog';
@@ -79,7 +80,8 @@ import {
     if (accessListEntries.length === 0) { return [] as IAcceso[] }
 
     const catalogAccesos = accessListEntries.map((accessListEntry) => {
-      const normalizedRoute = (accessListEntry.frontend_routes || "").replace(/^\//, "")
+      // Resolve the primary frontend route from the shared catalog normalizer so arrays and strings behave the same.
+      const normalizedRoute = normalizeAccessFrontendRoutes(accessListEntry.frontend_routes)[0] || ""
       const routeMeta = routeCatalogIndex.get(normalizedRoute)
       const catalogActions = decodeAccessLevels(accessListEntry.levels)
 

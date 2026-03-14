@@ -5,6 +5,7 @@ import (
 	"app/exec"
 	"app/handlers"
 	"app/operaciones"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -39,6 +40,16 @@ func makeAppHandlers() *core.AppRouterType {
 
 // Handler principal (para lambda y para local)
 var apiNames = []string{"api", "go1", "go2", "go3", "go4", "go5"}
+
+// Keep the YAML embedded in the main package because the source file remains in backend/.
+//
+//go:embed access_list.yml
+var accessListYamlContent []byte
+
+// The helper lives in core, but the main package owns the embedded bytes and injects them once.
+var accessHelper = func() *core.AccessHelper {
+	return core.LoadEmbeddedAccessList(accessListYamlContent)
+}()
 
 func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	requestStartedAt := time.Now().UnixMilli()
@@ -82,6 +93,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	}
 
 	core.Log("Route:", args.Route)
+	handlerResponse := core.HandlerResponse{Encoding: args.Encoding}
 
 	// Los es públicos comienzan con "p-" y no necesitan validacion del user Tocken
 	isPublicPath := len(args.Route) > 2 && args.Route[0:2] == "p-"
@@ -90,23 +102,43 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	if !isPublicPath {
 		args.Usuario = core.CheckUser(args, 0)
 
-		if len(args.Usuario.Error) == 0 {
-			accessInfo, ok := getRouteAccessInfo(funcPath)
-			if !ok {
-				accessInfo, ok = getRouteAccessInfo(args.Route)
-			}
-			if ok {
-				nivel := uint8(1)
-				if args.Method == "POST" || args.Method == "PUT" {
-					nivel = 2
-				}
-				if !args.HasAccesoNivel(accessInfo.ID, nivel) {
-					args.Usuario.Error = fmt.Sprintf("El usuario no posee el acceso %s (visualización o edición)", accessInfo.Name)
-				}
+		// Si no es público, valida el usuario
+		if len(args.Usuario.Error) > 0 {
+			core.Log("Usuario Error::", args.Usuario.Error)
+			handlerResponse.Error = args.Usuario.Error
+			return prepareResponse(args, &handlerResponse)
+		}
+
+		accessInfos, _ := accessHelper.GetAccesosByRoute(funcPath)
+		//GET routes are allow by default, POST / PUT routes require setted access
+		hasAllowedAccess := core.If(args.Method == "GET", true, false)
+
+		nivel := uint8(1)
+		if args.Method == "POST" || args.Method == "PUT" {
+			nivel = 2
+			if len(accessInfos) == 0 {
+				core.Log(fmt.Sprintf(`Warning: La ruta "%v" está desprotegida.`, funcPath))
 			}
 		}
+
+		for _, accessInfo := range accessInfos {
+			if args.HasAccesoNivel(accessInfo.ID, nivel) {
+				hasAllowedAccess = true
+				break
+			}
+		}
+
+		if !hasAllowedAccess && args.Usuario.ID != 1 {
+			accessNames := []string{}
+			for _, accessInfo := range accessInfos {
+				accessNames = append(accessNames, accessInfo.Name)
+			}
+
+			handlerResponse.Error = fmt.Sprintf("El usuario no posee alguno de los accesos: %s", strings.Join(accessNames, ", "))
+			return prepareResponse(args, &handlerResponse)
+		}
 	} else {
-		args.Usuario = &core.UsuarioInfo{}
+		args.Usuario = &core.UsuarioToken{}
 	}
 
 	// Request header log is only meaningful in Lambda mode (it uses REQ_ID / REQ_LAMBDA_ID).
@@ -120,15 +152,6 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		logHeader := core.Concat("|", "$Req", core.Env.REQ_ID, core.Env.REQ_LAMBDA_ID,
 			args.Usuario.ID, args.Usuario.Usuario, strings.Join(reqPathsParsed, "&"))
 		fmt.Println(logHeader)
-	}
-
-	handlerResponse := core.HandlerResponse{Encoding: args.Encoding}
-
-	// Si no es público, valida el usuario
-	if !isPublicPath && len(args.Usuario.Error) > 0 {
-		core.Log("Usuario Error::", args.Usuario.Error)
-		handlerResponse.Error = args.Usuario.Error
-		return prepareResponse(args, &handlerResponse)
 	}
 
 	handlerFunc, ok := appHandlers[funcPath]
@@ -181,7 +204,7 @@ func registerLocalRequestUsage(args *core.HandlerArgs, handlerResponse *core.Han
 }
 
 func clearEnvVariables() {
-	core.Usuario = core.UsuarioInfo{}
+	core.Usuario = core.UsuarioToken{}
 	core.LogsSaved = []string{}
 	core.REQ_PATHS = []string{}
 	core.Env.USUARIO_ID = 0

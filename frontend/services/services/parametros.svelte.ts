@@ -1,4 +1,4 @@
-import { GetHandler } from '$libs/http.svelt';
+import { GetHandler } from '$libs/http.svelte';
 
 export interface IParametro {
 

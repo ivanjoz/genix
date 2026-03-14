@@ -40,7 +40,7 @@ type HandlerArgs struct {
 	ResponseError  string
 	ReqParams      string
 	Encoding       string
-	Usuario        *UsuarioInfo
+	Usuario        *UsuarioToken
 	StartTime      int64
 	accesosNivel   []uint16
 }
@@ -330,19 +330,6 @@ func MakeErrRespFinal(statusCode int32, body string) *events.APIGatewayV2HTTPRes
 	response.Body = string(responseJSON)
 	// Log("Error a enviar::", body)
 	return response
-}
-
-func (e HandlerArgs) HasRol(rolesIDs ...int32) bool {
-	if e.Usuario.ID == 0 {
-		return false
-	}
-	rolesIDsInclude := MakeSliceInclude(rolesIDs)
-	for _, rolID := range e.Usuario.RolesIDs {
-		if rolesIDsInclude.Include(rolID) {
-			return true
-		}
-	}
-	return false
 }
 
 func (e HandlerArgs) HasAcceso(accesosIDs ...int32) bool {

@@ -133,38 +133,6 @@ export const AdminModule: IModule = {
     },
   ]
 }
-/*
-export const ComercialModule: IModule = {
-  name: "Comercial",
-  id: 2,
-  code: "comercial",
-  menus: [
-    { name: "Productos", minName: "PRD",  id: 2, icon: "icon-flow-merge",
-      options: [
-        { name: "Módulo de Venta",
-        },
-        { name: "Productos",
-        },
-        { name: "Almacenes",
-        },
-      ]
-    },
-    { name: "Página Web", minName: "PGW",  id: 3, icon: "icon-buffer",
-      options: [
-        { name: "Inicio", route: "/cms/webpage/1"
-        },
-        { name: "Nosotros", route: "/cms/webpage/2"
-        },
-        { name: "Tienda", route: "/cms/webpage/3"
-        },
-        { name: "Producto", route: "/cms/webpage/4"
-        },
-        { name: "Carrito Compra", route: "/cms/webpage/5"
-        },
-      ]
-    },
-  ]
-}
- */
+
 const Modules: IModule[] = [AdminModule]
 export default Modules

@@ -2,13 +2,14 @@ import { normalizeStringN, Notify } from '$libs/helpers';
 import axios, { type AxiosProgressEvent } from 'axios';
 import { formatN } from '$libs/helpers';
 import type { CacheMode, serviceHttpProps } from '$libs/workers/service-worker';
-import { accessHelper, getToken } from '$core/security';
+import { accessHelper, canUserAccessRoute, getToken } from '$core/security';
 import { fetchCache, fetchCacheParsed, sendServiceMessage } from '$libs/sw-cache';
 import { browser } from "$app/environment";
 import { unmarshall } from '$libs/funcs/unmarshall';
 import { Env } from '$core/env';
 import { fetchEvent } from '$core/store.svelte';
 import {  ConcatenateIntsTest } from "./funcs/parsers"
+import { getAccessEntriesForRoute } from '$routes/configuracion/perfiles-accesos/access-list-catalog';
 
 ConcatenateIntsTest()
 
@@ -407,6 +408,11 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
       Notify.failure("No se especificó el route en productos.")
       return
 		}
+
+		if (!canUserAccessRoute(Env.getPathname())) {
+   		console.error(`Servicio "${this.route}" no cargado debido a acceso.`)
+      return
+    }
     
 		const cachedResponse = await fetchCacheParsed(this.makeProps('refresh'))
 	  if(cachedResponse){
@@ -420,6 +426,11 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
     if(!browser){ return }
     if(this.route.length === 0){
       Notify.failure("No se especificó el route en productos.")
+      return
+    }
+
+    if (!canUserAccessRoute(Env.getPathname())) {
+   		console.error(`Servicio "${this.route}" no cargado debido a acceso.`)
       return
     }
 

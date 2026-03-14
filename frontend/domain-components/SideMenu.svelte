@@ -2,16 +2,53 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { Core } from '$core/store.svelte';
+	import { canUserAccessRoute } from '$core/security';
 	import type { IMenuRecord, IModule } from '$core/types/modules';
 
 	// State
 	const module = $derived(Core.module);
+	const filteredMenus = $derived.by(() => {
+		const activeModule = module;
+		if (!activeModule?.menus?.length) { return [] as IMenuRecord[] }
+
+		return activeModule.menus
+			.map((menuRecord) => {
+				const allowedOptions = (menuRecord.options || []).filter((menuOption) => canRenderMenuOption(menuOption))
+				return {
+					...menuRecord,
+					options: allowedOptions
+				}
+			})
+			.filter((menuRecord) => (menuRecord.options?.length || 0) > 0)
+	})
 	let menuOpen = $state<[number, string]>([0, '']);
 	let currentPathname = $state('');
 	let mobileMenuPanel: HTMLElement;
 	let mobileMenuBackdrop: HTMLElement;
 
 	// Functions
+	function normalizeMenuRoute(routeValue: string | undefined): string {
+		return String(routeValue || '').trim().replace(/^\//, '');
+	}
+
+	function canRenderMenuOption(menuOption: IMenuRecord): boolean {
+		const normalizedRoute = normalizeMenuRoute(menuOption.route)
+		if (!normalizedRoute) {
+			console.info('[SideMenu] Keeping menu option without route restriction', {
+				menuOptionName: menuOption.name
+			})
+			return true
+		}
+
+		const routeAccessDecision = canUserAccessRoute(menuOption.route)
+		console.info('[SideMenu] Evaluated menu option access', {
+			menuOptionName: menuOption.name,
+			normalizedRoute,
+			userHasAccess: routeAccessDecision
+		})
+		return routeAccessDecision
+	}
+
 	function getMenuOpenFromRoute(mod: IModule, pathname: string): [number, string] {
 		for (let menu of mod.menus) {
 			for (let opt of menu.options || []) {
@@ -93,7 +130,7 @@
 		if ($page?.url?.pathname) {
 			currentPathname = $page.url.pathname;
 			if (module) {
-				menuOpen = getMenuOpenFromRoute(module, currentPathname);
+				menuOpen = getMenuOpenFromRoute({ ...module, menus: filteredMenus }, currentPathname);
 			}
 		}
 	});
@@ -134,7 +171,7 @@
 
 	<!-- Menu Items -->
 	<div class="flex-1 transition-all duration-300 w-full">
-		{#each module.menus as menu}
+		{#each filteredMenus as menu}
 			{@const isOpen = menuOpen[0] === menu.id}
 			{@const optionsCount = menu.options?.length || 0}
 			{@const menuHeight = isOpen ? `${optionsCount * 38 + 48}px` : '48px'}
@@ -241,7 +278,7 @@
 
 		<!-- Mobile Menu Items -->
 		<div class="mobile-menu-content">
-			{#each (module?.menus||[]) as menu}
+			{#each filteredMenus as menu}
 				{@const isOpen = menuOpen[0] === menu.id}
 
 				<div class="mobile-menu-group">

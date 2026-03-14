@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"app/cbor"
 	"app/cloud"
 	"app/core"
 	coretypes "app/core/types"
@@ -9,6 +10,32 @@ import (
 	"fmt"
 	"time"
 )
+
+func makeUniqueAccessIDsFromPerfiles(perfiles []types.Perfil) []int32 {
+	highestLevelByAccessID := map[int32]int32{}
+
+	// Normalize perfil access entries from accesoID*10+nivel to plain access IDs for the login payload.
+	for _, perfil := range perfiles {
+		for _, accesoNivelID := range perfil.Accesos {
+			accessID := accesoNivelID / 10
+			accessLevel := accesoNivelID % 10
+
+			if accessLevel < 1 || accessLevel > 4 {
+				accessLevel = 1
+			}
+			if currentLevel, exists := highestLevelByAccessID[accessID]; !exists || accessLevel > currentLevel {
+				highestLevelByAccessID[accessID] = accessLevel
+			}
+		}
+	}
+
+	uniqueAccessIDs := make([]int32, 0, len(highestLevelByAccessID))
+	for accessID := range highestLevelByAccessID {
+		uniqueAccessIDs = append(uniqueAccessIDs, accessID)
+	}
+
+	return core.MakeUnique(uniqueAccessIDs)
+}
 
 func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 
@@ -67,23 +94,24 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 
 func MakeUsuarioResponse(usuario coretypes.Usuario, cipherKey string) (map[string]any, error) {
 
-	usuarioToken := core.UsuarioInfo{
-		EmpresaID:   usuario.EmpresaID,
-		ID:          usuario.ID,
-		Expired:     time.Now().Unix() + (60 * 60 * 5),
-		Usuario:     usuario.Usuario,
-		RolesIDs:    usuario.RolesIDs,
-		PerfilesIDs: usuario.PerfilesIDs,
-		AccesosIDs:  []int32{11},
+	usuarioToken := core.UsuarioToken{
+		EmpresaID: usuario.EmpresaID,
+		ID:        usuario.ID,
+		Created:   core.SUnixTime(),
+		Usuario:   usuario.Usuario,
 	}
 
+	accesosIDs := []int32{}
+
 	if usuario.ID == 1 {
-		usuarioToken.PerfilesIDs = []int32{-1}
-		for i := 1; i < 200; i++ {
-			usuarioToken.AccesosIDs = append(usuarioToken.AccesosIDs, int32(i)*10+7)
+		usuario.PerfilesIDs = []int32{-1}
+		systemAccessIDs, err := core.GetAllEmbeddedAccesosIDs()
+		if err != nil {
+			return nil, core.Err("Error al obtener la lista global de accesos.", err)
 		}
-		// Obtiene los acceso en base a los perfiles
+		accesosIDs = systemAccessIDs
 	} else if len(usuario.PerfilesIDs) > 0 {
+		perfiles := make([]types.Perfil, 0, len(usuario.PerfilesIDs))
 		for _, perfilID := range usuario.PerfilesIDs {
 			perfil, err := cloud.GetByID(types.Perfil{
 				EmpresaID: usuario.EmpresaID,
@@ -95,29 +123,31 @@ func MakeUsuarioResponse(usuario coretypes.Usuario, cipherKey string) (map[strin
 			if perfil == nil {
 				continue
 			}
-			usuarioToken.AccesosIDs = append(usuarioToken.AccesosIDs, perfil.Accesos...)
+			perfiles = append(perfiles, *perfil)
 		}
-		usuarioToken.AccesosIDs = core.MakeUnique(usuarioToken.AccesosIDs)
+
+		accesosIDs = makeUniqueAccessIDsFromPerfiles(perfiles)
 	}
 
-	usuarioTokenJson := core.ToJsonNoErr(usuarioToken)
-	core.Log("usuarioInfoString", usuarioTokenJson)
+	// Persist a deterministic keyed fingerprint in the token so auth can recompute and validate it.
+	usuarioToken.Hash = core.ComputeUsuarioTokenHash(usuarioToken)
 
-	// Crea el Token del usuario encriptado
-	usuarioTokenCompressed := core.CompressZstd(&usuarioTokenJson)
-	usuarioTokenEncrypted, err := core.Encrypt(usuarioTokenCompressed)
-
-	core.Log("Accesos Len:", len(usuarioTokenJson), "|", len(usuarioTokenCompressed), "|", len(usuarioTokenEncrypted))
-
+	// Encode the auth token as CBOR to keep the encrypted payload compact and schema-driven.
+	usuarioTokenCBOR, err := cbor.Marshal(usuarioToken)
 	if err != nil {
-		return nil, core.Err("Error al generar el Token de usuario.", err)
+		return nil, core.Err("Error al serializar el Token de usuario en CBOR.", err)
 	}
+	core.Log("MakeUsuarioResponse:: usuarioTokenCBOR bytes", len(usuarioTokenCBOR))
+	core.Log("MakeUsuarioResponse:: token hash", usuarioToken.Hash, "empresaID", usuario.EmpresaID, "usuarioID", usuario.ID, "accesosIDs", len(accesosIDs))
+
+	// Publish the token as raw CBOR bytes in base64 so auth can decode it without extra transforms.
+	core.Log("MakeUsuarioResponse:: token bytes", len(usuarioTokenCBOR))
 
 	// Crea la informacion del usuario encriptada
 	userInfo := map[string]any{
 		"Usuario":      usuario.Usuario,
-		"AccesosIDs":   usuarioToken.AccesosIDs,
-		"RolesIDs":     usuarioToken.RolesIDs,
+		"AccesosIDs":   accesosIDs,
+		"RolesIDs":     []int32{},
 		"Nombres":      usuario.Nombres,
 		"Apellidos":    usuario.Apellidos,
 		"Email":        usuario.Email,
@@ -134,8 +164,8 @@ func MakeUsuarioResponse(usuario coretypes.Usuario, cipherKey string) (map[strin
 
 	response := map[string]any{
 		"UserID":       usuario.ID,
-		"UserToken":    core.BytesToBase64(usuarioTokenEncrypted, true),
-		"TokenExpTime": usuarioToken.Expired,
+		"UserToken":    core.BytesToBase64(usuarioTokenCBOR, true),
+		"TokenExpTime": time.Now().Unix() + (4 * 60 * 40),
 		"UserInfo":     core.BytesToBase64(userInfoJsonEncrypted),
 		"EmpresaID":    usuario.EmpresaID,
 	}

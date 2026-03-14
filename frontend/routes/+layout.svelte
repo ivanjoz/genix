@@ -1,22 +1,23 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
-import TopLayerSelector from '$components/TopLayerSelector.svelte';
-import favicon from '$domain/assets/favicon.svg?raw';
-import { checkIsLogin } from '$core/security';
-import { doInitServiceWorker } from '$libs/sw-cache';
+	import TopLayerSelector from '$components/TopLayerSelector.svelte';
+	import { Env } from '$core/env';
+	import Modules from '$core/modules';
+	import { canUserAccessRoute, checkIsLogin } from '$core/security';
+	import { Core, getDeviceType } from '$core/store.svelte';
+	import AppHeader from '$domain/AppHeader.svelte';
+	import favicon from '$domain/assets/favicon.svg?raw';
+	import '$domain/libs/fontello-embedded.css';
+	import Page from '$domain/Page.svelte';
+	import SideMenu from '$domain/SideMenu.svelte';
+	import { Notify } from '$libs/helpers';
+	import { doInitServiceWorker } from '$libs/sw-cache';
+	import ImageWorker from '$libs/workers/image-worker?worker';
 	import { onMount } from 'svelte';
-		import './app.css';
+	import './app.css';
+	import { getAccessEntriesForRoute } from './configuracion/perfiles-accesos/access-list-catalog';
 	import './tailwind.css';
-	import '$domain/libs/fontello-embedded.css'
-import AppHeader from '$domain/AppHeader.svelte';
-import Page from '$domain/Page.svelte';
-import SideMenu from '$domain/SideMenu.svelte';
-import Modules from '$core/modules';
-import { Core, getDeviceType } from '$core/store.svelte';
-import ImageWorker from '$libs/workers/image-worker?worker';
-import { Env } from '$core/env';
-import { testRecordsByIDs } from "../demo/records-by-id.svelte"
 
 	let { children } = $props();
 
@@ -42,6 +43,8 @@ import { testRecordsByIDs } from "../demo/records-by-id.svelte"
 		return checkIsLogin() !== 2
 	})
 
+	let lastDeniedRoute = $state('')
+
 	onMount(() => {
 		if(redirectsToLogin){ Env.navigate("/login") }
 	})
@@ -59,6 +62,25 @@ import { testRecordsByIDs } from "../demo/records-by-id.svelte"
 			Core.isLoading = 0
 		})
 
+	})
+
+	$effect(() => {
+		if (!browser || redirectsToLogin) { return }
+
+		const currentPath = page.url.pathname
+		if (canUserAccessRoute(currentPath)) {
+			lastDeniedRoute = ''
+			return
+		}
+
+		if (lastDeniedRoute === currentPath) { return }
+		lastDeniedRoute = currentPath
+
+		const accessNames = getAccessEntriesForRoute(currentPath)
+			.map((accessEntry) => accessEntry.name)
+			.join(', ')
+		Notify.failure(`No posee el acceso "${accessNames}" para acceder a ${currentPath}`)
+		Env.navigate('/')
 	})
 
 	const routesWithoutLayout: string[] = ["/login","/store"]

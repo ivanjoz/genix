@@ -51,18 +51,17 @@ access_list:
     frontend_routes: "configuracion/server-panel"
     backend_apis: ""
   - id: 7
-    name: "Sedes & Almacenes"
+    name: "Almacenes"
     group: 2
     levels: 14
     frontend_routes: "negocio/sedes-almacenes"
-    backend_apis: ""
+    backend_apis: "POST.almacenes"
   - id: 8
     name: "Productos"
     group: 2
     levels: 14
     frontend_routes: "negocio/productos"
-    backend_routes: "POST.productos"
-    backend_apis: ""
+    backend_apis: "POST.productos"
   - id: 9
     name: "Clientes & Proveedores"
     group: 2
