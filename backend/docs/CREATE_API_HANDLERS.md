@@ -16,7 +16,7 @@ func PostEntity(req *core.HandlerArgs) core.HandlerResponse { ... }
 
 ### Request Context (`core.HandlerArgs`)
 The `req` object is the primary source of information for the handler:
-- **`req.Usuario`**: The authenticated user object, containing `EmpresaID`, `ID`, `RolesIDs`, and `AccesosIDs`. This is the single source of truth for multi-tenancy.
+- **`req.Usuario`**: The authenticated user object, containing `EmpresaID` and `ID`. Access validation is resolved from the packed `AccesosComputed` slice loaded during auth. This is the single source of truth for multi-tenancy.
 - **`req.Body`**: A pointer to the raw request body string. The system handles decompression (e.g., Zstd) before it reaches the handler.
 - **`req.Route`**: The specific request path (e.g., `/productos`).
 - **`req.GetQueryInt(name)`**: Extracts a query parameter as an `int32`.
@@ -119,10 +119,10 @@ if body.SedeID == 0 {
 ```
 
 ### Authorization Checks
-Use `req.Usuario.AccesosIDs` to verify specific permissions.
+Use `req.HasAcceso(...)` or `req.HasAccesoNivel(...)` to verify specific permissions.
 ```go
 const AccesoAlmacenEscritura = 105
-if !core.SliceContains(req.Usuario.AccesosIDs, AccesoAlmacenEscritura) {
+if !req.HasAcceso(AccesoAlmacenEscritura) {
     return req.MakeErr("No tiene permiso para realizar esta acción.")
 }
 ```
@@ -449,7 +449,7 @@ type Entity struct {
 - [ ] Structs are properly tagged with both JSON and CBOR integer keys.
 - [ ] All user-facing error messages are in Spanish.
 - [ ] Use `errgroup` for multiple unrelated data fetches.
-- [ ] Verify permissions using `req.Usuario.AccesosIDs`.
+- [ ] Verify permissions using `req.HasAcceso(...)` or `req.HasAccesoNivel(...)`.
 
 ---
 

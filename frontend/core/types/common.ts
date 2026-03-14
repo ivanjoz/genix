@@ -9,7 +9,6 @@ export interface IUsuario {
   Cargo: string;
   PerfilesIDs: number[];
   AccesosNivelIDs: number[];
-  RolesIDs: number[];
   Status: number;
   Updated: number;
   Created: number;
@@ -19,8 +18,6 @@ export interface IUsuario {
   UpdatedBy: number;
   CacheVersion: number;
   PasswordHash: string;
-  //Extra
-  AccesosIDs: number[];
 }
 
 export interface IPerfil {
@@ -47,6 +44,7 @@ export interface ILoginResult {
   UserEmail: string;
   UserToken: string;
   UserInfo: string;
+  AccesosComputed: string;
   TokenExpTime: number;
   EmpresaID: number;
 }

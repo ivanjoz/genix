@@ -15,7 +15,6 @@ type Usuario struct { // DynamoDB + ScyllaDB
 	PerfilesIDs []int32 `json:",omitempty" col:"perfiles_ids"`
 	// AccesoID * 10 + Nivel
 	AccesosNivelIDs    []int32  `json:",omitempty" col:"accesos_nivel_ids"`
-	RolesIDs           []int32  `json:",omitempty" col:"roles_ids"`
 	AccesosComputed    []uint16 `json:",omitempty" col:"accesos_computed"`
 	Email              string   `json:",omitempty" col:"email,index"`
 	Cargo              string   `json:",omitempty" col:"cargo"`
@@ -48,7 +47,6 @@ type UsuarioTable struct {
 	Nombres         db.Col[UsuarioTable, string]
 	PerfilesIDs     db.ColSlice[UsuarioTable, int32] `db:"perfiles_ids"`
 	AccesosNivelIDs db.Col[UsuarioTable, []int32]    `db:"accesos_nivel_ids"`
-	RolesIDs        db.ColSlice[UsuarioTable, int32] `db:"roles_ids"`
 	AccesosComputed db.Col[UsuarioTable, []uint16]
 	Email           db.Col[UsuarioTable, string]
 	Cargo           db.Col[UsuarioTable, string]

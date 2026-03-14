@@ -1,7 +1,8 @@
 import { Env, IsClient, LocalStorage } from '$core/env';
 import { decrypt, Notify, throttle } from '$libs/helpers';
 import type { IUsuario, ILoginResult } from '$core/types/common';
-import { getAccessEntriesForRoute } from '$routes/configuracion/perfiles-accesos/access-list-catalog';
+import { base64ToUInt16, checksum } from '$libs/funcs/parsers';
+import { getAccessEntriesForRoute } from '../routes/configuracion/perfiles-accesos/access-list-catalog';
 
 // Token refresh constants (all in seconds)
 const TOKEN_REFRESH_THRESHOLD = 40 * 60 // 40 minutes in seconds
@@ -153,8 +154,9 @@ export const stopTokenRefreshCheck = () => {
 
 // Clear accesos and logout
 Env.clearAccesos = () => {
-  if(!IsClient){ return }
+  if(!IsClient()){ return }
   stopTokenRefreshCheck()
+  accessHelper.clearStoredAccesosState()
   LocalStorage.removeItem(Env.appId+ "Accesos")
   LocalStorage.removeItem(Env.appId+ "UserInfo")
   LocalStorage.removeItem(Env.appId+ "UserToken")
@@ -185,40 +187,55 @@ if (IsClient()) {
 
 export class AccessHelper {
   constructor() {
-    const b32l = []
-    for (let i = 32; i < 36; i++) { b32l.push(i.toString(36)) }
-    this.#b32l = b32l
-    this.#b32ls = b32l.join(',')
+    this.#loadAccesosComputedFromStorage()
     this.#setUserInfo()
   }
 
-  #b32l: string[] = []
-  #b32ls = ''
-  #avoidCheckSum = false
-  #accesos = ''
+  #storedAccesos = ''
+  #accesosComputed = new Uint16Array()
   #cachedResults: Map<string,boolean> = new Map()
   #userInfo: IUsuario = null as unknown as IUsuario
 
+  #loadAccesosComputedFromStorage() {
+    const storedAccesosComputed = LocalStorage.getItem(Env.appId + "Accesos") || ""
+    if (storedAccesosComputed === this.#storedAccesos) {
+      return
+    }
+
+    this.#storedAccesos = storedAccesosComputed
+    this.#accesosComputed = new Uint16Array(decodeStoredAccesosComputed(storedAccesosComputed))
+    this.#cachedResults.clear()
+  }
+
   #setUserInfo(){
     const userInfoJson = LocalStorage?.getItem(Env.appId+ "UserInfo")
-    if(!userInfoJson){ return }
+    if(!userInfoJson){
+      this.#userInfo = null as unknown as IUsuario
+      return
+    }
     this.#userInfo = JSON.parse(userInfoJson)
+  }
+  clearStoredAccesosState(){
+    this.#storedAccesos = ""
+    this.#accesosComputed = new Uint16Array()
+    this.#cachedResults.clear()
   }
   clearAccesos = Env.clearAccesos
   getUserInfo(){ return this.#userInfo }
+  isTokenValid() {
+    const empresaID = parseInt(LocalStorage.getItem(Env.appId + "EmpresaID") || "0")
+    const tokenValue = getToken(true)
+    const accesosComputed = decodeStoredAccesosComputed(LocalStorage.getItem(Env.appId + "Accesos") || "")
+    return empresaID > 0 && tokenValue.length > 0 && accesosComputed.length > 0
+  }
   setUserInfo(userInfo: IUsuario){
     this.#userInfo = userInfo
     LocalStorage.setItem(Env.appId + "UserInfo", JSON.stringify(userInfo))
   }
 
   async parseAccesos(login: ILoginResult, cipherKey?: string) {
-    debugger
     const userInfoStr = await decrypt(login.UserInfo, cipherKey as string)
     const userInfo = JSON.parse(userInfoStr) as IUsuario
-
-    // Normalize accesos from the updated capitalized user payload shape.
-    const rolesIDsParsed = (userInfo.RolesIDs || []).map((roleID) => roleID * 10 + 8)
-    const accesosIDs = (userInfo.AccesosIDs || []).concat(rolesIDsParsed)
 
     const UnixTime = Math.floor(Date.now()/1000)
     LocalStorage.setItem(Env.appId + "TokenCreated", String(UnixTime))
@@ -227,68 +244,27 @@ export class AccessHelper {
     // unix time un seconds expiration
     LocalStorage.setItem(Env.appId + "TokenExpTime", String(login.TokenExpTime))
     LocalStorage.setItem(Env.appId + "EmpresaID", String(login.EmpresaID))
+    LocalStorage.setItem(Env.appId + "Accesos", wrapAccesosComputed(login.AccesosComputed || ""))
     this.#setUserInfo()
-
-    const b32l = this.#b32l
-    let parsedAccesos = b32l[b32l.length - 1]
-    let i = 0
-    for(let e of accesosIDs.map(x => x.toString(32))) {
-      if(i > 3){  i = 0 }
-      parsedAccesos += e
-      parsedAccesos += b32l[i]
-      i++
-    }
-    const hash = checksum(parsedAccesos)
-    const hashParsed = `${hash.substring(0, 2)}${parsedAccesos}${hash.substring(2, 4)}`
-    LocalStorage.setItem(Env.appId+ "Accesos", hashParsed)
-    debugger
+    this.#loadAccesosComputedFromStorage()
     // Start token refresh check after successful login
     startTokenRefreshCheck()
   }
 
   checkAcceso(accesoID: number, nivel?: number) {
-    nivel = nivel || 1
-    const b32ls = this.#b32ls
-    if(this.#accesos === ""){
-      this.#accesos = LocalStorage.getItem(Env.appId + "Accesos") || ""
-    }
-
-    if(!this.#accesos) return false
-
-    if (!this.#avoidCheckSum) {
-      const passCheckSum = this.#checkAccesosCheckSum()
-      if (!passCheckSum) {
-        console.warn('Los accesos han sido modificados.');
-        return false
-      }
-      // Evita que el checksum se calcule seguidamente
-      this.#avoidCheckSum = true
-      setTimeout(() => { this.#avoidCheckSum = false }, 50)
-    }
-
-    const check = (niveles: number[]) => {
-      for (let nivel of niveles) {
-        const code = (accesoID * 10 + nivel).toString(32)
-        if(!this.#cachedResults.has(code)){
-          const hasAccess = (new RegExp(`[${b32ls}]${code}[${b32ls}]`)).test(this.#accesos)
-          this.#cachedResults.set(code,hasAccess)
-        }
-        const hasAccess = this.#cachedResults.get(code)
-        if(hasAccess){ return hasAccess }
-      }
+    this.#loadAccesosComputedFromStorage()
+    if (!this.#accesosComputed.length || accesoID <= 0) {
       return false
     }
 
-    if (!nivel || nivel === 1) return check([1, 7]) // VER
-    else if (nivel === 2) return check([2, 7]) // CREA
-    else if (nivel === 3) return check([3, 7]) // EDITA
-    else if (nivel === 4) return check([4, 7]) // ELIMINA
-    else if (nivel === 8) return check([8]) // ES UN ROL
-    else return check([7])
-  }
+    const requestedNivel = normalizeAccesoNivel(nivel)
+    const cacheKey = `${accesoID}:${requestedNivel}`
+    if (!this.#cachedResults.has(cacheKey)) {
+      const [rangeStart, rangeEnd] = getAccesoNivelSearchRange(accesoID, requestedNivel)
+      this.#cachedResults.set(cacheKey, hasPackedAccesoInRange(this.#accesosComputed, rangeStart, rangeEnd))
+    }
 
-  checkRol(roleID?: number) {
-    return this.checkAcceso(roleID as number, 8)
+    return this.#cachedResults.get(cacheKey) || false
   }
 
   canUserAccessRoute(routeValue?: string | null): boolean {
@@ -299,62 +275,91 @@ export class AccessHelper {
 
     const matchedAccessEntries = getAccessEntriesForRoute(route)
     if (matchedAccessEntries.length === 0) {
-      console.info('[AccessHelper] Route without explicit access mapping, allowing navigation', {
-        route,
-        normalizedRoute
-      })
       return true
 		}
-    
-		console.log("matchedAccessEntries", matchedAccessEntries)
 
 		return matchedAccessEntries.some((accessEntry) => {
       return this.checkAcceso(accessEntry.id, 1)
     })
   }
-
-  #checkAccesosCheckSum() {
-    const accesos = this.#accesos
-    const accesosInternal = accesos.substring(2, accesos.length - 2)
-    const cks = accesos.substring(0, 2) + accesos.substring(accesos.length - 2)
-    return (cks === checksum(accesosInternal))
-  }
 }
 
-export const checksum = (string: string): string => {
-  let seed = 888888
-  for (let i = 0; i < string.length; i++) {
-    const in3 = i % 1000
-    const char = string[i]
-    const code = char.charCodeAt(0)
-    const ld = Math.abs(seed - code + in3) % 10
-    if (ld > 6) seed += ((code + in3) * ld) + ld
-    else if (ld > 3) seed -= ((code - in3) * ld) - in3
-    else {
-      seed += Math.abs((code - in3) * (ld + 1)) - (ld * (i % 10))
-      if (seed >= 1000000) seed = Math.abs(seed) % 100000
+const normalizeAccesoNivel = (nivel?: number): number => {
+  if (!nivel || nivel < 1 || nivel > 4) {
+    return 1
+  }
+
+  return nivel
+}
+
+const makeAccesoNivelUint16 = (accesoID: number, nivel: number): number => {
+  // Mirror the backend bit-packing so route checks behave exactly the same on both sides.
+  return ((accesoID << 2) | (normalizeAccesoNivel(nivel) - 1)) >>> 0
+}
+
+const getAccesoNivelSearchRange = (accesoID: number, nivel: number): [number, number] => {
+  const normalizedNivel = normalizeAccesoNivel(nivel)
+  const rangeStart = makeAccesoNivelUint16(accesoID, 1)
+  const rangeEnd = rangeStart + (normalizedNivel - 1)
+  return [rangeStart, rangeEnd]
+}
+
+const hasPackedAccesoInRange = (accesosComputed: Uint16Array, rangeStart: number, rangeEnd: number): boolean => {
+  let leftIndex = 0
+  let rightIndex = accesosComputed.length - 1
+
+  while (leftIndex <= rightIndex) {
+    const middleIndex = (leftIndex + rightIndex) >> 1
+    const middleValue = accesosComputed[middleIndex]
+
+    if (middleValue < rangeStart) {
+      leftIndex = middleIndex + 1
+    } else if (middleValue > rangeEnd) {
+      rightIndex = middleIndex - 1
+    } else {
+      return true
     }
   }
-  const rs = String(seed % 1000)
-  for (let i = 0; i < rs.length; i++) {
-    seed += Math.pow(parseInt(rs[0]), (6 - i))
+
+  return false
+}
+
+const wrapAccesosComputed = (packedAccesosBase64: string): string => {
+  if (!packedAccesosBase64) {
+    return ""
   }
-  let seedT = seed.toString(32).split('').reverse().join('')
-  if (seedT.length > 4) seedT = seedT.substring(0, 4)
-  else if (seedT.length < 4) {
-    for (let i = seedT.length; i < 4; i++) { seedT += String(4 - i) }
+
+  const packedAccessHash = checksum(packedAccesosBase64)
+  return `${packedAccessHash.substring(0, 2)}${packedAccesosBase64}${packedAccessHash.substring(2, 4)}`
+}
+
+const decodeStoredAccesosComputed = (storedAccesosComputed: string): Uint16Array => {
+  if (!storedAccesosComputed) {
+    return new Uint16Array()
   }
-  return seedT
+  if (storedAccesosComputed.length < 5) {
+    console.warn("[AccessHelper] invalid accesos payload")
+    return new Uint16Array()
+  }
+
+  const packedAccesosComputedBase64 = storedAccesosComputed.substring(2, storedAccesosComputed.length - 2)
+  const storedHash = storedAccesosComputed.substring(0, 2) + storedAccesosComputed.substring(storedAccesosComputed.length - 2)
+  if (checksum(packedAccesosComputedBase64) !== storedHash) {
+    console.warn("[AccessHelper] invalid accesos payload")
+    return new Uint16Array()
+  }
+  return base64ToUInt16(packedAccesosComputedBase64)
 }
 
 export const accessHelper = new AccessHelper()
 export const canUserAccessRoute = (routeValue?: string | null) => accessHelper.canUserAccessRoute(routeValue)
+export const isTokenValid = () => accessHelper.isTokenValid()
 
 // Params
 export const Params = {
   checkAcceso: (accesoID: number, nivel?: number) => accessHelper.checkAcceso(accesoID,nivel),
   canUserAccessRoute: (routeValue?: string | null) => accessHelper.canUserAccessRoute(routeValue),
-  checkRol: (a: number) => accessHelper.checkRol(a),
+  isTokenValid: () => accessHelper.isTokenValid(),
   userInfo: () => accessHelper.getUserInfo(),
   setValue(key: string, value: string | number) {
     LocalStorage.setItem(key, String(value))

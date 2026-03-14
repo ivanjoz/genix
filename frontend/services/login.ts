@@ -34,10 +34,10 @@ export const sendUserLogin = async (data: ILogin): Promise<any> => {
 
   try {
 		await accessHelper.parseAccesos(loginInfo, data.CipherKey)
-		const hasAccess = accessHelper.checkAcceso(1)
-		console.log("hasAccess", hasAccess)
+		const hasValidToken = accessHelper.isTokenValid()
+		console.log("hasValidToken", hasValidToken)
 		
-		if (!hasAccess) {
+		if (!hasValidToken) {
       Env.clearAccesos?.()
     } else {
       Env.navigate("/")
@@ -66,7 +66,7 @@ export const reloadLogin = async (): Promise<any> => {
 
   try {
     await accessHelper.parseAccesos(loginInfo, CipherKey)
-    if(!accessHelper.checkAcceso(1)){
+    if(!accessHelper.isTokenValid()){
       Env.clearAccesos?.()
     }
   } catch (error) {

@@ -302,7 +302,6 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.CreatedBy = usuarioActual.CreatedBy
 		if isUsuarioPropio {
 			body.PerfilesIDs = usuarioActual.PerfilesIDs
-			body.RolesIDs = usuarioActual.RolesIDs
 			body.Usuario = usuarioActual.Usuario
 		}
 	}

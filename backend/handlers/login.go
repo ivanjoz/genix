@@ -5,36 +5,24 @@ import (
 	"app/cloud"
 	"app/core"
 	coretypes "app/core/types"
-	"app/types"
+	"encoding/binary"
 	"encoding/json"
-	"fmt"
+	"slices"
 	"time"
 )
 
-func makeUniqueAccessIDsFromPerfiles(perfiles []types.Perfil) []int32 {
-	highestLevelByAccessID := map[int32]int32{}
-
-	// Normalize perfil access entries from accesoID*10+nivel to plain access IDs for the login payload.
-	for _, perfil := range perfiles {
-		for _, accesoNivelID := range perfil.Accesos {
-			accessID := accesoNivelID / 10
-			accessLevel := accesoNivelID % 10
-
-			if accessLevel < 1 || accessLevel > 4 {
-				accessLevel = 1
-			}
-			if currentLevel, exists := highestLevelByAccessID[accessID]; !exists || accessLevel > currentLevel {
-				highestLevelByAccessID[accessID] = accessLevel
-			}
-		}
+func encodeAccesosComputedBase64(accesosComputed []uint16) string {
+	if len(accesosComputed) == 0 {
+		return ""
 	}
 
-	uniqueAccessIDs := make([]int32, 0, len(highestLevelByAccessID))
-	for accessID := range highestLevelByAccessID {
-		uniqueAccessIDs = append(uniqueAccessIDs, accessID)
+	// Encode packed accesses as little-endian uint16 bytes so the frontend can hydrate a Uint16Array directly.
+	packedAccessBytes := make([]byte, len(accesosComputed)*2)
+	for index, packedAccesoNivel := range accesosComputed {
+		binary.LittleEndian.PutUint16(packedAccessBytes[index*2:], packedAccesoNivel)
 	}
 
-	return core.MakeUnique(uniqueAccessIDs)
+	return core.BytesToBase64(packedAccessBytes, true)
 }
 
 func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
@@ -60,8 +48,9 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	usuarios := []coretypes.Usuario{}
-	companyUserIndex := fmt.Sprintf("%d_%s", body.EmpresaID, body.Usuario)
-	err = cloud.Select(&usuarios).Where("empresa_id").Equals(body.EmpresaID).Where("company_usuario").Equals(companyUserIndex).Exec()
+	companyUserIndex := coretypes.Usuario{EmpresaID: body.EmpresaID, Usuario: body.Usuario}
+	companyUserIndex.PrepareCloudSync()
+	err = cloud.Select(&usuarios).Where("empresa_id").Equals(body.EmpresaID).Where("company_usuario").Equals(companyUserIndex.CompanyUserIndex).Exec()
 	if err != nil {
 		return req.MakeErr("Error al consultar el usuario.", err.Error())
 	}
@@ -101,33 +90,9 @@ func MakeUsuarioResponse(usuario coretypes.Usuario, cipherKey string) (map[strin
 		Usuario:   usuario.Usuario,
 	}
 
-	accesosIDs := []int32{}
-
-	if usuario.ID == 1 {
-		usuario.PerfilesIDs = []int32{-1}
-		systemAccessIDs, err := core.GetAllEmbeddedAccesosIDs()
-		if err != nil {
-			return nil, core.Err("Error al obtener la lista global de accesos.", err)
-		}
-		accesosIDs = systemAccessIDs
-	} else if len(usuario.PerfilesIDs) > 0 {
-		perfiles := make([]types.Perfil, 0, len(usuario.PerfilesIDs))
-		for _, perfilID := range usuario.PerfilesIDs {
-			perfil, err := cloud.GetByID(types.Perfil{
-				EmpresaID: usuario.EmpresaID,
-				ID:        perfilID,
-			})
-			if err != nil {
-				return nil, core.Err("Error al obtener perfiles.", err)
-			}
-			if perfil == nil {
-				continue
-			}
-			perfiles = append(perfiles, *perfil)
-		}
-
-		accesosIDs = makeUniqueAccessIDsFromPerfiles(perfiles)
-	}
+	sortedAccesosComputed := append([]uint16{}, usuario.AccesosComputed...)
+	slices.Sort(sortedAccesosComputed)
+	accesosComputedBase64 := encodeAccesosComputedBase64(sortedAccesosComputed)
 
 	// Persist a deterministic keyed fingerprint in the token so auth can recompute and validate it.
 	usuarioToken.Hash = core.ComputeUsuarioTokenHash(usuarioToken)
@@ -138,7 +103,7 @@ func MakeUsuarioResponse(usuario coretypes.Usuario, cipherKey string) (map[strin
 		return nil, core.Err("Error al serializar el Token de usuario en CBOR.", err)
 	}
 	core.Log("MakeUsuarioResponse:: usuarioTokenCBOR bytes", len(usuarioTokenCBOR))
-	core.Log("MakeUsuarioResponse:: token hash", usuarioToken.Hash, "empresaID", usuario.EmpresaID, "usuarioID", usuario.ID, "accesosIDs", len(accesosIDs))
+	core.Log("MakeUsuarioResponse:: token hash", usuarioToken.Hash, "empresaID", usuario.EmpresaID, "usuarioID", usuario.ID, "accesosComputed", len(sortedAccesosComputed))
 
 	// Publish the token as raw CBOR bytes in base64 so auth can decode it without extra transforms.
 	core.Log("MakeUsuarioResponse:: token bytes", len(usuarioTokenCBOR))
@@ -146,8 +111,7 @@ func MakeUsuarioResponse(usuario coretypes.Usuario, cipherKey string) (map[strin
 	// Crea la informacion del usuario encriptada
 	userInfo := map[string]any{
 		"Usuario":      usuario.Usuario,
-		"AccesosIDs":   accesosIDs,
-		"RolesIDs":     []int32{},
+		"PerfilesIDs":  usuario.PerfilesIDs,
 		"Nombres":      usuario.Nombres,
 		"Apellidos":    usuario.Apellidos,
 		"Email":        usuario.Email,
@@ -163,11 +127,12 @@ func MakeUsuarioResponse(usuario coretypes.Usuario, cipherKey string) (map[strin
 	}
 
 	response := map[string]any{
-		"UserID":       usuario.ID,
-		"UserToken":    core.BytesToBase64(usuarioTokenCBOR, true),
-		"TokenExpTime": time.Now().Unix() + (4 * 60 * 40),
-		"UserInfo":     core.BytesToBase64(userInfoJsonEncrypted),
-		"EmpresaID":    usuario.EmpresaID,
+		"UserID":          usuario.ID,
+		"UserToken":       core.BytesToBase64(usuarioTokenCBOR, true),
+		"TokenExpTime":    time.Now().Unix() + (4 * 60 * 40),
+		"UserInfo":        core.BytesToBase64(userInfoJsonEncrypted),
+		"AccesosComputed": accesosComputedBase64,
+		"EmpresaID":       usuario.EmpresaID,
 	}
 
 	return response, nil
