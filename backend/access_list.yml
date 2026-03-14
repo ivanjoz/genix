@@ -66,8 +66,8 @@ access_list:
     name: "Clientes & Proveedores"
     group: 2
     levels: 14
-    frontend_routes: "negocio/entidades"
-    backend_apis: ""
+    frontend_routes: "negocio/clientes"
+    backend_apis: "POST.client-provider"
   - id: 10
     name: "Punto de Venta"
     group: 3

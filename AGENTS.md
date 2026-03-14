@@ -20,11 +20,12 @@ IMPORTANT: If you have any questions, ask. NEVER have long trains of thought wit
 - **Extensive Logging**: Always implement and use debug logs extensively to diagnose errors and trace execution flow.
 
 ## 4. RULES
+- This project in is pre-alpha, you can remove deprecated stuff. DO NOT implemente backwards compatibility.
+- NEVER write more code than necesary. ALWAYS TRY to reduce code size to the minimun posible.
 - Search for the correct .md documentation before proceed
 - If some points in the task are unclear, stop and ask for clarification
 - ALWAYS add concise comments in every code block to explain the rationale and the goal, especially when code contains business logic.
 - ALWAYS use expresive names for varibles and functions. DONT USE generic names.
-
 ## Project Overview
 
 The Genix project is an ERP and E-commerce platform for small businesses. It consists of a Go backend and a Svelte.js frontend. The project is currently migrating its frontend from Solid.js to Svelte.js.

@@ -225,7 +225,8 @@ export class AccessHelper {
   isTokenValid() {
     const empresaID = parseInt(LocalStorage.getItem(Env.appId + "EmpresaID") || "0")
     const tokenValue = getToken(true)
-    const accesosComputed = decodeStoredAccesosComputed(LocalStorage.getItem(Env.appId + "Accesos") || "")
+		const accesosComputed = decodeStoredAccesosComputed(LocalStorage.getItem(Env.appId + "Accesos") || "")
+		debugger
     return empresaID > 0 && tokenValue.length > 0 && accesosComputed.length > 0
   }
   setUserInfo(userInfo: IUsuario){

@@ -91,7 +91,19 @@ func MakeUsuarioResponse(usuario coretypes.Usuario, cipherKey string) (map[strin
 	}
 
 	sortedAccesosComputed := append([]uint16{}, usuario.AccesosComputed...)
+	if usuario.ID == 1 {
+		// Bootstrap admin receives all declared accesses at max level in the login payload.
+		allAccessIDs, err := core.GetAllEmbeddedAccesosIDs()
+		if err != nil {
+			return nil, core.Err("No se pudo cargar el catálogo de accesos para el usuario administrador.", err)
+		}
+
+		for _, accessID := range allAccessIDs {
+			sortedAccesosComputed = append(sortedAccesosComputed, uint16(accessID<<2)|3)
+		}
+	}
 	slices.Sort(sortedAccesosComputed)
+	sortedAccesosComputed = slices.Compact(sortedAccesosComputed)
 	accesosComputedBase64 := encodeAccesosComputedBase64(sortedAccesosComputed)
 
 	// Persist a deterministic keyed fingerprint in the token so auth can recompute and validate it.

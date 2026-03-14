@@ -53,6 +53,6 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.system-parameters":        PostSystemParameters,
 	"GET.system-metrics-stream":     GetSystemMetricsStream,
 	"GET.system-memory-packages":    GetSystemMemoryPackages,
-	"GET.entities":                  negocio.GetEntities,
-	"POST.entities":                 negocio.PostEntities,
+	"GET.client-provider":           negocio.GetClientProviders,
+	"POST.client-provider":          negocio.PostClientProviders,
 }

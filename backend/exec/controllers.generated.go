@@ -32,7 +32,7 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[comercial.SaleOrder](),
 		makeDBController[comercial.SaleSummary](),
 		makeDBController[db.CacheVersion](),
-		makeDBController[negocio.Entity](),
+		makeDBController[negocio.ClientProvider](),
 		makeDBController[coreTypes.UsageLog](),
 		makeDBController[DemoStruct](),
 	}

@@ -99,8 +99,14 @@ export const defaultModule: IModule = {
 				{
 					name: 'Clientes',
 					minName: 'CLI',
-					route: '/negocio/clientes-proveedores',
+					route: '/negocio/clientes',
 					icon: 'icon-user'
+				},
+				{
+					name: 'Proveedores',
+					minName: 'PRO',
+					route: '/negocio/proveedores',
+					icon: 'icon-truck'
 				},
 				{
 					name: 'Reportes',
