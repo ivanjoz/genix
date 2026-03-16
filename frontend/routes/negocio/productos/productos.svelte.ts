@@ -92,7 +92,7 @@ export class ProductosService extends GetHandler<IProducto> {
     this.recordsMap = new Map()
     this.nameToRecordMap = new Map()
 		this.addSavedRecords(...result)
-    this.records.sort((a,b) => b.ID - a.ID)
+		this.records.sort((a, b) => b.ID - a.ID)
   }
 
   constructor(){

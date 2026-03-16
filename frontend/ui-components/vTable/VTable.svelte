@@ -517,8 +517,23 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                     }}
                   />
                 {:else if column.onCellSelect}
-                  <CellSelector options={column.cellOptions as any[]}
-                    keyId="" keyName=""
+                  {console.log('[VTable] CellSelector props', {
+                    selectorId: `${String(column.id || column.field || j)}_${row.index}`,
+                    rowIndex: row.index,
+                    columnField: column.field,
+                    columnId: column.id,
+                    optionsLength: column.cellOptions?.length || 0,
+                    firstOption: column.cellOptions?.[0] || null,
+                    currentFieldValue: column.field ? (record as any)?.[column.field] : undefined,
+                  })}
+                  <CellSelector
+                    id={`${String(column.id || column.field || j)}_${row.index}`}
+                    saveOn={record}
+                    save={column.field as keyof T}
+                    options={column.cellOptions as any[]}
+                    keyId={(column.cellOptionsKeyId || 'ID') as never}
+                    keyName={(column.cellOptionsKeyName || 'Name') as never}
+                    contentClass={column.css}
                     onChange={v => {
                       column.onCellSelect?.(record,v)
                     }}
@@ -540,7 +555,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                 {/if}
                 {#if column.buttonEditHandler || column.buttonDeleteHandler}
                   <div class="flex gap-4 items-center justify-center">
-                    {#if column.buttonEditHandler}
+                    {#if column.buttonEditHandler && (!column.buttonEditIf || column.buttonEditIf(record))}
                       <button class="_11 _e" title="edit" onclick={ev => {
                         ev.stopPropagation()
                         column.buttonEditHandler?.(record)
@@ -548,7 +563,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                         <i class="icon-pencil"></i>
                       </button>
                     {/if}
-                    {#if column.buttonDeleteHandler}
+                    {#if column.buttonDeleteHandler && (!column.buttonDeleteIf || column.buttonDeleteIf(record))}
                       <button class="_11 _d" title="delete" onclick={ev => {
                         ev.stopPropagation()
                         column.buttonDeleteHandler?.(record)

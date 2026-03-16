@@ -49,8 +49,6 @@ import Popover2 from '$components/popover2/Popover2.svelte';
   buildMap()
 
   let optionsFiltered = $derived.by(() => {
-    console.log("filtrando valores::", filterValue)
-
     if(!filterValue){ return options }
     else {
       return options.filter(x => String(x[keyName]||"").toLowerCase().includes(filterValue))
@@ -74,7 +72,6 @@ import Popover2 from '$components/popover2/Popover2.svelte';
   }
 
   const onSelect = (e: E) => {
-    console.log("selected", e)
     selected = e
     if(inputRef){ inputRef.value = e[keyName] as string }
     if(saveOn && save){
@@ -83,22 +80,21 @@ import Popover2 from '$components/popover2/Popover2.svelte';
     Core.popoverShowID = 0
   }
 
-  $effect(() => {
-    if(selected || !selected){
-      console.log("selected 2",selected)
-    }
-	})
-
   const renderContent = $derived(
     render ? render(selected, show) : selected?.[keyName] || "" as string
   );
 
   const handlwShowClick = () => {
     filterValue = ""
+    // Ignore the first blur right after opening because the cell swaps from a div to an input.
+    avoidBlur = true
     Core.popoverShowID = id as (number|string)
+    setTimeout(() => {
+      avoidBlur = false
+    }, 120)
 	}
 
-  $effect(() => {
+	$effect(() => {
 		if (show && inputRef) {
       if(selected){ inputRef.value = selected[keyName] as string }
 			inputRef.focus();
@@ -111,7 +107,6 @@ import Popover2 from '$components/popover2/Popover2.svelte';
       untrack(() => {
         const idToRecord = WeakSearchRef.get(options)?.idToRecord || new Map()
         selected = saveOn[save] ? idToRecord.get(saveOn[save]) as E : null as E
-        console.log("selected 3",selected)
         if (selected) {
           if(inputRef){ inputRef.value = selected[keyName] as string }
         } else {
@@ -127,14 +122,24 @@ import Popover2 from '$components/popover2/Popover2.svelte';
 <div class="_1" bind:this={refElement}
   role="button"
   tabindex="0"
+  onmousedown={ev => {
+    // Open from mousedown so the input can take focus without triggering an immediate blur cycle.
+    ev.preventDefault()
+    ev.stopPropagation()
+    if (!show) {
+      handlwShowClick()
+    }
+  }}
   onkeydown={(ev) => {
     if (ev.key === 'Enter' || ev.key === ' ') {
       ev.preventDefault();
+      if (!show) {
+        handlwShowClick()
+      }
     }
   }}
   onclick={ev => {
     ev.stopPropagation()
-    handlwShowClick()
   }}
 >
   <div class="{contentClass}"

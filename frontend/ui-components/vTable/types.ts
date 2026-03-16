@@ -18,6 +18,35 @@ export interface ITableMobileCard<T> {
 	if?: (e: T, idx: number) => boolean
 }
 
+export interface ICardCell<T> {
+  id?: number | string
+  label: string | (() => string)
+  hidden?: boolean
+  field?: string
+  type?: string
+  css?: string
+	inputCss?: string
+	contentCss?: string
+	labelCss?: string
+	itemCss?: string
+	cellCss?: string
+	// Allow cards to inject runtime field classes per record.
+	setCellCss?: (record: T) => string | undefined
+	cellOptions?: any[]
+	cellOptionsKeyId?: string
+	cellOptionsKeyName?: string
+	onCellEdit?: (record: T, value: string | number) => void
+	onCellSelect?: (record: T, value: string | number) => void
+  getValue?: (record: T, idx: number) => string | number
+  renderPrefix?: (record: T, idx: number) => string | ElementAST | ElementAST[] | false
+  render?: (record: T, idx: number) => string | ElementAST | ElementAST[]
+  if?: (record: T, idx: number) => boolean
+}
+
+export interface ICardButtonDeleteHandler<T> {
+  (record: T, idx: number): void
+}
+
 export interface ITableColumn<T> {
   id?: number | string
   header: string | (() => string)
@@ -35,8 +64,10 @@ export interface ITableColumn<T> {
   cardCss?: string
   field?: string
   subcols?: ITableColumn<T>[]
-  cardColumn?: [number, (1|2|3)?]
+	cardColumn?: [number, (1|2|3)?]
 	cellOptions?: any[]
+	cellOptionsKeyId?: string
+	cellOptionsKeyName?: string
 	onCellEdit?: (e:T, value: string|number) => void
 	onCellSelect?: (e:T, value: string|number) => void
   cardRender?: (e: T, idx: number) => (any)
@@ -50,6 +81,8 @@ export interface ITableColumn<T> {
 	/* Buttons */
 	buttonEditHandler?: (e:T) => void
 	buttonDeleteHandler?: (e:T) => void
+	buttonEditIf?: (e:T) => boolean
+	buttonDeleteIf?: (e:T) => boolean
 	mobile?: ITableMobileCard<T>
 }
 
@@ -70,6 +103,16 @@ export type CellRendererFn<T> = (
 export type CellRendererSnippet<T> = Snippet<[
   T,                              // record
   ITableColumn<T>,    						// column
+  any,                            // defaultContent
+	number,                         // rowIndex
+]>;
+
+/**
+ * Card renderer snippet type for rendering Svelte components inside card cells.
+ */
+export type CardRendererSnippet<T> = Snippet<[
+  T,                              // record
+  ICardCell<T>,                   // cell
   any,                            // defaultContent
 	number,                         // rowIndex
 ]>;

@@ -206,22 +206,23 @@ import HeaderConfig from '$domain/HeaderConfig.svelte';
 
 	._2 {
 		color: white;
-		min-width: 150px;
-		background-color: rgba(0, 0, 0, 0.123);
-		height: calc(var(--header-height) - 8px);
-		margin-top: 8px;
-		margin-right: 8px;
-		border-radius: 8px 8px 0 0;
-		border-bottom: 5px solid transparent;
-		padding-top: 4px;
-		opacity: 0.7;
+    min-width: 150px;
+    background-color: rgba(0, 0, 0, 0.123);
+    height: calc(var(--header-height) - 6px);
+    margin-top: 6px;
+    margin-right: 8px;
+    border-radius: 8px 8px 0 0;
+    border-bottom: 2px solid transparent;
+    padding-top: 2px;
+    opacity: 0.7;
+    line-height: 1.1;
 	}
 	._2._3 {
 		background-color: rgba(0, 0, 0, 0.2);
-		border-bottom: 2px solid white;
-		border-bottom: 5px solid #2b2b4c;
-		font-family: semibold;
-		opacity: 1;
+    border-bottom: 2px solid white;
+    border-bottom-color: #00000080;
+    font-family: semibold;
+    opacity: 1;
 	}
 
 	/* LOADING BAR */

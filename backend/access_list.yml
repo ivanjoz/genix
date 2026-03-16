@@ -97,7 +97,7 @@ access_list:
     group: 4
     levels: 14
     frontend_routes: "logistica/productos-stock"
-    backend_apis: ""
+    backend_apis: "POST.productos-stock,POST.product-supply"
   - id: 15
     name: "Rep. Movimientos"
     group: 4

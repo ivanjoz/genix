@@ -10,5 +10,5 @@ export { createVirtualizer } from './index.svelte';
 export type { VirtualItem, VirtualizerOptions, VirtualizerStore } from './index.svelte';
 
 // Types
-export type { ITableColumn, CellRendererFn, CellRendererSnippet } from './types';
+export type { ITableColumn, ICardCell, ICardButtonDeleteHandler, CellRendererFn, CellRendererSnippet, CardRendererSnippet } from './types';
 export type { TableGridColumn, TableGridCellAlign, TableGridCellRendererSnippet } from './tableGridTypes';

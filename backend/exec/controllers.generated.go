@@ -16,6 +16,7 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[s.Almacen](),
 		makeDBController[s.Sede](),
 		makeDBController[s.AlmacenProducto](),
+		makeDBController[s.ProductSupply](),
 		makeDBController[s.PaisCiudad](),
 		makeDBController[s.GaleriaImagen](),
 		makeDBController[s.ListaCompartidaRegistro](),

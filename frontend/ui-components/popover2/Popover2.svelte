@@ -2,7 +2,7 @@
 	import { tick } from 'svelte';
 import Portal from '$components/popover2/Portal.svelte';
 import { parseSVG } from '$libs/helpers';
-import angleSvg from '$domain/assets/angle.svg';
+import angleSvg from '$domain/assets/angle.svg?raw';
 import { calculatePosition, type Placement, type PositionResult } from './positioning';
 
 	interface Props {
@@ -45,7 +45,6 @@ import { calculatePosition, type Placement, type PositionResult } from './positi
 	// Update position when open changes or elements are ready
 	$effect(() => {
 		if (open && referenceElement && floatingElement) {
-      console.log("referenceElement", referenceElement)
 			updatePosition();
 		}
 	});
