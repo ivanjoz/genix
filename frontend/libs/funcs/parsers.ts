@@ -83,6 +83,35 @@ export const checksum = (content: string): string => {
 	return packedHash
 }
 
+export const checksumBase64_6 = (content: string): string => {
+	let hashAccumulator = 2166136261
+
+	for (let index = 0; index < content.length; index++) {
+		hashAccumulator ^= content.charCodeAt(index)
+		hashAccumulator = Math.imul(hashAccumulator, 16777619) >>> 0
+	}
+
+	// Encode the 32-bit hash as URL-safe base64 and keep a fixed 6-char key for localStorage payloads.
+	const hashBytes = new Uint8Array([
+		(hashAccumulator >>> 24) & 255,
+		(hashAccumulator >>> 16) & 255,
+		(hashAccumulator >>> 8) & 255,
+		hashAccumulator & 255
+	])
+
+	let hashBinary = ""
+	for (const hashByte of hashBytes) {
+		hashBinary += String.fromCharCode(hashByte)
+	}
+
+	return btoa(hashBinary)
+		.replaceAll("=", "")
+		.replaceAll("+", "-")
+		.replaceAll("/", "_")
+		.padEnd(6, "0")
+		.slice(0, 6)
+}
+
 export const base64ToUInt16 = (packedValuesBase64: string): Uint16Array => {
 	if (!packedValuesBase64) {
 		return new Uint16Array()

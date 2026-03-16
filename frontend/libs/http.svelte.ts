@@ -471,6 +471,8 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 	afterSaveRecords(...records: T[]) {}
 
 	addSavedRecords(...records: T[]) {
+		console.log("addSavedRecords", this.route, records.length)
+		
 		const recordsToKeep: T[] = []
 		for (const rec of records) {
 			// Always keep the ID lookup map updated, even for ss=0 records.
