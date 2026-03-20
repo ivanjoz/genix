@@ -16,15 +16,15 @@ var isConnectingTime int64 = 0
 var connParams ConnParams = ConnParams{}
 
 type ConnParams struct {
-	Host        string
-	Port        int
-	User        string
-	Password    string
-	Reconnect   bool
-	ConnTimeout int64 //Seconds
+	Host         string
+	Port         int
+	User         string
+	Password     string
+	Reconnect    bool
+	ConnTimeout  int64 //Seconds
 	QueryTimeout int64 //Seconds
 	WriteTimeout int64 //Seconds
-	Keyspace    string
+	Keyspace     string
 }
 
 func SetScyllaConnection(params ConnParams) {

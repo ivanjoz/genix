@@ -1,13 +1,13 @@
 package exec
 
 import (
+	configuracionTypes "app/configuracion/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
 	"app/facturacion"
+	negocioTypes "app/negocio/types"
 	"app/serialize"
-	"app/types"
-	s "app/types"
 	"bufio"
 	"bytes"
 	"encoding/gob"
@@ -26,7 +26,7 @@ import (
 
 /*
 func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
-	usuarios := []types.Usuario{}
+	usuarios := []coreTypes.Usuario{}
 	if err := core.DBSelect(&usuarios); err != nil {
 		panic(err)
 	}
@@ -194,32 +194,32 @@ type DemoStruct3 struct {
 }
 
 type DemoStruct5 struct {
-	s.TAGS    `table:"demo_structs"`
-	CompanyID int32         `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
-	ID        int32         `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
-	Edad      int32         `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre    string        `cbor:"4,keyasint,omitempty" json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras  []string      `cbor:"5,keyasint,omitempty" json:"palabras,omitempty" db:"palabras"`
-	Peso      float32       `cbor:"6,keyasint,omitempty" json:"peso,omitempty" db:"peso"`
-	Peso64    float64       `cbor:"7,keyasint,omitempty" json:"peso64,omitempty" db:"peso_64"`
-	Rangos    []int32       `cbor:"8,keyasint,omitempty" json:"rangos,omitempty" db:"rangos"`
-	Smallint  int16         `cbor:"9,keyasint,omitempty" db:"small_int,zx2"`
-	Struct1   DemoStruct1   `cbor:"10,keyasint,omitempty" json:"struct_1,omitempty" db:"struct_1"`
-	Struct2   DemoStruct3   `cbor:"11,keyasint,omitempty" json:"struct_2,omitempty" db:"struct_2"`
-	Struct3   []DemoStruct1 `cbor:"12,keyasint,omitempty" json:"struct_3,omitempty" db:"struct_3"`
+	configuracionTypes.TAGS `table:"demo_structs"`
+	CompanyID               int32         `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
+	ID                      int32         `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
+	Edad                    int32         `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre                  string        `cbor:"4,keyasint,omitempty" json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras                []string      `cbor:"5,keyasint,omitempty" json:"palabras,omitempty" db:"palabras"`
+	Peso                    float32       `cbor:"6,keyasint,omitempty" json:"peso,omitempty" db:"peso"`
+	Peso64                  float64       `cbor:"7,keyasint,omitempty" json:"peso64,omitempty" db:"peso_64"`
+	Rangos                  []int32       `cbor:"8,keyasint,omitempty" json:"rangos,omitempty" db:"rangos"`
+	Smallint                int16         `cbor:"9,keyasint,omitempty" db:"small_int,zx2"`
+	Struct1                 DemoStruct1   `cbor:"10,keyasint,omitempty" json:"struct_1,omitempty" db:"struct_1"`
+	Struct2                 DemoStruct3   `cbor:"11,keyasint,omitempty" json:"struct_2,omitempty" db:"struct_2"`
+	Struct3                 []DemoStruct1 `cbor:"12,keyasint,omitempty" json:"struct_3,omitempty" db:"struct_3"`
 }
 
 type DemoStruct4 struct {
-	s.TAGS    `table:"demo_structs"`
-	CompanyID int32    `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
-	ID        int32    `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
-	Edad      int32    `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre    string   `cbor:"4,keyasint,omitempty" json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras  []string `cbor:"5,keyasint,omitempty" json:"palabras,omitempty" db:"palabras"`
-	Rangos    []int32  `cbor:"6,keyasint,omitempty" json:"rangos,omitempty" db:"rangos"`
-	Smallint  int16    `cbor:"7,keyasint,omitempty" json:"small_int,omitempty" db:"small_int,zx2"`
-	Peso      float32  `cbor:"8,keyasint,omitempty" json:"peso,omitempty" db:"peso"`
-	Peso64    float64  `cbor:"9,keyasint,omitempty" json:"peso64,omitempty" db:"peso_64"`
+	configuracionTypes.TAGS `table:"demo_structs"`
+	CompanyID               int32    `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
+	ID                      int32    `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
+	Edad                    int32    `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre                  string   `cbor:"4,keyasint,omitempty" json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras                []string `cbor:"5,keyasint,omitempty" json:"palabras,omitempty" db:"palabras"`
+	Rangos                  []int32  `cbor:"6,keyasint,omitempty" json:"rangos,omitempty" db:"rangos"`
+	Smallint                int16    `cbor:"7,keyasint,omitempty" json:"small_int,omitempty" db:"small_int,zx2"`
+	Peso                    float32  `cbor:"8,keyasint,omitempty" json:"peso,omitempty" db:"peso"`
+	Peso64                  float64  `cbor:"9,keyasint,omitempty" json:"peso64,omitempty" db:"peso_64"`
 }
 
 func Test18(args *core.ExecArgs) core.FuncResponse {
@@ -627,7 +627,7 @@ func Test28(args *core.ExecArgs) core.FuncResponse {
 func Test29(args *core.ExecArgs) core.FuncResponse {
 
 	// Migrated to db2 - db.RecalcVirtualColumns not needed anymore
-	// db.RecalcVirtualColumns[s.ListaCompartidaRegistro]()
+	// db.RecalcVirtualColumns[negocioTypes.ListaCompartidaRegistro]()
 
 	return core.FuncResponse{}
 }
@@ -638,14 +638,14 @@ func Test30(args *core.ExecArgs) core.FuncResponse {
 	updated := int32(789456123)
 	errGroup := errgroup.Group{}
 
-	listasRegistrosMap := map[int32]*[]s.ListaCompartidaRegistro{}
+	listasRegistrosMap := map[int32]*[]negocioTypes.ListaCompartidaRegistro{}
 	for _, listaID := range listasIDs {
-		listasRegistrosMap[listaID] = &[]s.ListaCompartidaRegistro{}
+		listasRegistrosMap[listaID] = &[]negocioTypes.ListaCompartidaRegistro{}
 	}
 
 	// Migrated to db2
 	errGroup.Go(func() error {
-		registros := []s.ListaCompartidaRegistro{}
+		registros := []negocioTypes.ListaCompartidaRegistro{}
 		query := db.Query(&registros)
 		query.Select().
 			EmpresaID.Equals(1).
@@ -670,7 +670,7 @@ func Test30(args *core.ExecArgs) core.FuncResponse {
 		panic(err)
 	}
 
-	listasRegistros := []s.ListaCompartidaRegistro{}
+	listasRegistros := []negocioTypes.ListaCompartidaRegistro{}
 	for _, registros := range listasRegistrosMap {
 		listasRegistros = append(listasRegistros, *registros...)
 	}
@@ -688,8 +688,8 @@ func Test32(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 	// Migrated to db2 - use makeDBController and db.DeployScylla
-	// db.DeployScylla(0, s.ListaCompartidaRegistro{})
-	controller := makeDBController[s.ListaCompartidaRegistro]()
+	// db.DeployScylla(0, negocioTypes.ListaCompartidaRegistro{})
+	controller := makeDBController[negocioTypes.ListaCompartidaRegistro]()
 	db.DeployScylla(0, controller)
 	return core.FuncResponse{}
 }
@@ -759,7 +759,7 @@ func (e TableHelper[T]) Query2() []int32 {
 		core.Log(records)
 	*/
 	// Migrated to db2 - db.RecalcVirtualColumns not needed anymore
-	// db.RecalcVirtualColumns[s.ListaCompartidaRegistro]()
+	// db.RecalcVirtualColumns[negocioTypes.ListaCompartidaRegistro]()
 
 	return []int32{}
 }
@@ -797,9 +797,9 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 		Password: core.Env.DB_PASSWORD,
 		Keyspace: core.Env.DB_NAME,
 	})
-	registros := []types.ListaCompartidaRegistro{}
+	registros := []negocioTypes.ListaCompartidaRegistro{}
 
-	recordToInsert := types.ListaCompartidaRegistro{
+	recordToInsert := negocioTypes.ListaCompartidaRegistro{
 		ID:          2,
 		EmpresaID:   1,
 		ListaID:     3,
@@ -813,7 +813,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Insertando registro...")
 
-	err := db.Insert(&[]types.ListaCompartidaRegistro{recordToInsert})
+	err := db.Insert(&[]negocioTypes.ListaCompartidaRegistro{recordToInsert})
 	if err != nil {
 		fmt.Println("Error al insertar::", err)
 		panic(err)
@@ -821,7 +821,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Registros insertado!")
 
-	recordToUpdate := types.ListaCompartidaRegistro{
+	recordToUpdate := negocioTypes.ListaCompartidaRegistro{
 		ID:          1,
 		EmpresaID:   1,
 		ListaID:     3,
@@ -835,8 +835,8 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Actualizando registros....")
 
-	q1 := db.Table[types.ListaCompartidaRegistro]()
-	err = db.Update(&[]types.ListaCompartidaRegistro{recordToUpdate},
+	q1 := db.Table[negocioTypes.ListaCompartidaRegistro]()
+	err = db.Update(&[]negocioTypes.ListaCompartidaRegistro{recordToUpdate},
 		q1.Status, q1.ListaID, q1.Nombre, q1.Images, q1.Descripcion, q1.Updated)
 	if err != nil {
 		fmt.Println("Error al actualizar::", err)

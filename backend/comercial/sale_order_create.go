@@ -4,8 +4,10 @@ import (
 	"app/comercial/types"
 	"app/core"
 	"app/db"
-	"app/operaciones"
-	s "app/types"
+	finanzasTypes "app/finanzas/types"
+	"app/finanzas"
+	"app/logistica"
+	negocioTypes "app/negocio/types"
 	"encoding/json"
 	"slices"
 	"time"
@@ -144,7 +146,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 		montoPago := sale.TotalAmount - sale.DebtAmount
 		if montoPago != 0 {
-			movimiento := s.CajaMovimientoInterno{
+			movimiento := finanzasTypes.CajaMovimientoInterno{
 				CajaID:     sale.LastPaymentCajaID,
 				DocumentID: sale.ID,
 				Tipo:       8, // Cobro (Venta)
@@ -152,7 +154,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			}
 
 			eg.Go(func() error {
-				if err := operaciones.ApplyCajaMovimientos(req, []s.CajaMovimientoInterno{movimiento}); err != nil {
+				if err := finanzas.ApplyCajaMovimientos(req, []finanzasTypes.CajaMovimientoInterno{movimiento}); err != nil {
 					core.Log("Error al aplicar movimiento de caja:", err)
 					return core.Err("Error al registrar el movimiento de caja:", err)
 				}
@@ -169,7 +171,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	if slices.Contains(sale.ActionsIncluded, 3) {
 		core.Log("Incluyendo movimientos internos...", len(sale.DetailProductsIDs))
 
-		movimientosInternos := []s.MovimientoInterno{}
+		movimientosInternos := []negocioTypes.MovimientoInterno{}
 		for i, productoID := range sale.DetailProductsIDs {
 			if i >= len(sale.DetailQuantities) {
 				break
@@ -179,7 +181,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				continue
 			}
 
-			movimientosInternos = append(movimientosInternos, s.MovimientoInterno{
+			movimientosInternos = append(movimientosInternos, negocioTypes.MovimientoInterno{
 				AlmacenID:  sale.AlmacenID,
 				ProductoID: productoID,
 				DocumentID: sale.ID,
@@ -192,7 +194,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 		if len(movimientosInternos) > 0 {
 			eg.Go(func() error {
-				if err := operaciones.ApplyMovimientos(req, movimientosInternos); err != nil {
+				if err := logistica.ApplyMovimientos(req, movimientosInternos); err != nil {
 					core.Log("Error al aplicar movimientos de almacén:", err)
 					return core.Err("Error al procesar la salida de almacén:", err)
 				}

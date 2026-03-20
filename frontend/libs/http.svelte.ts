@@ -9,7 +9,7 @@ import { unmarshall } from '$libs/funcs/unmarshall';
 import { Env } from '$core/env';
 import { fetchEvent } from '$core/store.svelte';
 import {  ConcatenateIntsTest } from "./funcs/parsers"
-import { getAccessEntriesForRoute } from '../routes/configuracion/perfiles-accesos/access-list-catalog';
+import { getAccessEntriesForRoute } from '../routes/seguridad/perfiles-accesos/access-list-catalog';
 
 ConcatenateIntsTest()
 

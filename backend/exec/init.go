@@ -2,10 +2,12 @@ package exec
 
 import (
 	"app/cloud"
+	configuracionTypes "app/configuracion/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	s "app/types"
+	negocioTypes "app/negocio/types"
+	seguridadTypes "app/seguridad/types"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -23,20 +25,20 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	if err := db.Init(); err != nil {
 		panic("Error al inicializar las tablas internas del ORM. " + err.Error())
 	}
-	if err := cloud.Init[s.Empresa](); err != nil {
+	if err := cloud.Init[configuracionTypes.Empresa](); err != nil {
 		panic("Error al inicializar la tabla cloud de empresas. " + err.Error())
 	}
 	if err := cloud.Init[coreTypes.Usuario](); err != nil {
 		panic("Error al inicializar la tabla cloud de usuarios. " + err.Error())
 	}
-	if err := cloud.Init[s.Perfil](); err != nil {
+	if err := cloud.Init[seguridadTypes.Perfil](); err != nil {
 		panic("Error al inicializar la tabla cloud de perfiles. " + err.Error())
 	}
 
 	seedTimestamp := core.SUnixTime()
 	password := core.Env.SECRET_PHRASE + core.Env.ADMIN_PASSWORD
 	passwordHash := core.FnvHashString64(password, -1, 20)
-	empresas := []s.Empresa{
+	empresas := []configuracionTypes.Empresa{
 		{
 			ID:          1,
 			Nombre:      "Principal",
@@ -124,11 +126,11 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 		panic(err)
 	}
 
-	recordsMap := map[string]s.PaisCiudad{}
+	recordsMap := map[string]negocioTypes.PaisCiudad{}
 
 	addRecords := func(id, padreID, nombre string, jerarquia int8) {
 		if _, ok := recordsMap[id]; !ok {
-			recordsMap[id] = s.PaisCiudad{
+			recordsMap[id] = negocioTypes.PaisCiudad{
 				PaisID:    604,
 				CiudadID:  id,
 				PadreID:   padreID,
@@ -174,7 +176,7 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	// ciudades de Peru
-	ciudades := []s.PaisCiudad{}
+	ciudades := []negocioTypes.PaisCiudad{}
 	q1 := db.Query(&ciudades)
 	err := q1.Select(q1.Nombre, q1.CiudadID, q1.PadreID).
 		PaisID.Equals(604).Exec()

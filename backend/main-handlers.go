@@ -1,18 +1,21 @@
 package main
 
 import (
+	"app/comercial"
+	"app/configuracion"
 	"app/core"
 	"app/exec"
-	"app/handlers"
-	"app/operaciones"
+	"app/finanzas"
+	"app/logistica"
+	"app/negocio"
+	"app/seguridad"
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"slices"
-
 	"reflect"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 )
@@ -20,8 +23,12 @@ import (
 // Agrupa los handlers de los módulos en uns solo map
 var appHandlersModules = []core.AppRouterType{
 	exec.ModuleHandlers,
-	handlers.ModuleHandlers,
-	operaciones.ModuleHandlers,
+	comercial.ModuleHandlers,
+	configuracion.ModuleHandlers,
+	finanzas.ModuleHandlers,
+	logistica.ModuleHandlers,
+	negocio.ModuleHandlers,
+	seguridad.ModuleHandlers,
 }
 
 var appHandlers = core.AppRouterType{}
@@ -117,13 +124,13 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		if args.Method == "POST" || args.Method == "PUT" {
 			nivel = 2
 			if len(accessInfos) == 0 {
-				core.Log(fmt.Sprintf(`Warning: La ruta "%v" está desprotegida.`, funcPath))
+				core.Log(fmt.Sprintf("Warning: La ruta \"%v\" está desprotegida.", funcPath))
 			}
 		}
 
 		for _, accessInfo := range accessInfos {
 			if args.HasAccesoNivel(accessInfo.ID, nivel) {
-				core.Log("Acceso:",funcPath,"con",accessInfo.ID,":",nivel)
+				core.Log("Acceso:", funcPath, "con", accessInfo.ID, ":", nivel)
 				hasAllowedAccess = true
 				break
 			}

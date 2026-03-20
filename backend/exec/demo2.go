@@ -5,8 +5,8 @@ import (
 	// comercial "app/comercial/types"
 	"app/core"
 	"app/db"
-	"app/handlers"
-	s "app/types"
+	"app/negocio"
+	negocioTypes "app/negocio/types"
 	"fmt"
 )
 
@@ -108,7 +108,7 @@ func Test39(args *core.ExecArgs) core.FuncResponse {
 
 func Test41(args *core.ExecArgs) core.FuncResponse {
 	/*
-		records := []s.ListaCompartidaRegistro{}
+		records := []negocioTypes.ListaCompartidaRegistro{}
 
 		query := db.Query(&records)
 		err := query.EmpresaID.Equals(1).Exec()
@@ -128,7 +128,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 	/*
-		records := []s.PaisCiudad{}
+		records := []negocioTypes.PaisCiudad{}
 
 		query := db.Query(&records)
 		err := query.Exec()
@@ -148,7 +148,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 
-	records := []s.Producto{}
+	records := []negocioTypes.Producto{}
 
 	query := db.Query(&records)
 	err := query.Select(query.ID).Exec()
@@ -172,7 +172,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test43(args *core.ExecArgs) core.FuncResponse {
-	indexOutput, indexErr := handlers.BuildProductosSearchIndex(1)
+	indexOutput, indexErr := negocio.BuildProductosSearchIndex(1)
 	if indexErr != nil {
 		return core.FuncResponse{Error: indexErr.Error()}
 	}

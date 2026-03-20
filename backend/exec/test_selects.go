@@ -1,10 +1,11 @@
 package exec
 
 import (
+	comercial "app/comercial/types"
 	"app/core"
 	"app/db"
-	"app/types"
-	comercial "app/comercial/types"
+	finanzasTypes "app/finanzas/types"
+	negocioTypes "app/negocio/types"
 	"fmt"
 )
 
@@ -25,8 +26,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	} else {
 		fmt.Printf("Found %d records in range\n", len(recordSalesOrders2))
 	}
-	
-	
+
 	// 6. Test bucket query CONTAINS + "RANGE" with hash index
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
 	recordSalesOrders := []comercial.SaleOrder{}
@@ -41,11 +41,11 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	} else {
 		fmt.Printf("Found %d records in range\n", len(recordSalesOrders))
 	}
-	
+
 	// 1. Test AlmacenProducto with KeyConcatenated Smart Logic
 	// This should trigger a range query on the 'id' column because it's the first column of KeyConcatenated.
 	fmt.Println("\n--- Test 1: AlmacenProducto (Smart ORM for KeyConcatenated) ---")
-	productos := []types.AlmacenProducto{}
+	productos := []negocioTypes.AlmacenProducto{}
 	q1 := db.Query(&productos)
 	err = q1.EmpresaID.Equals(1).
 		AlmacenID.Equals(1). // This is the first column in KeyConcatenated for AlmacenProducto
@@ -59,7 +59,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// 2. Test AlmacenProducto with multiple prefix columns
 	fmt.Println("\n--- Test 2: AlmacenProducto (Multiple prefix columns) ---")
-	productos2 := []types.AlmacenProducto{}
+	productos2 := []negocioTypes.AlmacenProducto{}
 	q2 := db.Query(&productos2)
 	err = q2.EmpresaID.Equals(1).
 		AlmacenID.Equals(1).
@@ -71,10 +71,10 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	} else {
 		fmt.Printf("Found %d products\n", len(productos2))
 	}
-	
+
 	// New test
 	fmt.Println("\n--- Test 21: AlmacenProducto. Using view: []db.Coln{e.AlmacenID, e.Status, e.Updated} ---")
-	productos21 := []types.AlmacenProducto{}
+	productos21 := []negocioTypes.AlmacenProducto{}
 	q21 := db.Query(&productos21)
 	err = q21.EmpresaID.Equals(1).
 		AlmacenID.Equals(1).Status.Equals(1).Updated.GreaterEqual(1000).
@@ -88,7 +88,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// 3. Test ListaCompartidaRegistro with complex view concatenation
 	fmt.Println("\n--- Test 3: ListaCompartidaRegistro (Complex View/Concatenation) ---")
-	registros := []types.ListaCompartidaRegistro{}
+	registros := []negocioTypes.ListaCompartidaRegistro{}
 	q3 := db.Query(&registros)
 	// This query should use a view that concatenates ListaID and Status or Updated
 	err = q3.EmpresaID.Equals(1).
@@ -104,7 +104,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// 4. Test CajaMovimiento with View
 	fmt.Println("\n--- Test 4: CajaMovimiento (Query using View) ---")
-	movimientos := []types.CajaMovimiento{}
+	movimientos := []finanzasTypes.CajaMovimiento{}
 	q4 := db.Query(&movimientos)
 	err = q4.EmpresaID.Equals(1).
 		DocumentoID.Equals(12345). // This uses a view defined in CajaMovimientoTable
@@ -118,7 +118,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// 5. Test with range query (Between)
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
-	recordRegistrosListas := []types.ListaCompartidaRegistro{}
+	recordRegistrosListas := []negocioTypes.ListaCompartidaRegistro{}
 	q5 := db.Query(&recordRegistrosListas)
 	err = q5.EmpresaID.Equals(1).
 		ListaID.Equals(1).
@@ -130,7 +130,6 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	} else {
 		fmt.Printf("Found %d records in range\n", len(recordRegistrosListas))
 	}
-
 
 	return core.FuncResponse{}
 }

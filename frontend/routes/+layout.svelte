@@ -16,7 +16,7 @@
 	import ImageWorker from '$libs/workers/image-worker?worker';
 	import { onMount } from 'svelte';
 	import './app.css';
-	import { getAccessEntriesForRoute } from './configuracion/perfiles-accesos/access-list-catalog';
+	import { getAccessEntriesForRoute } from './seguridad/perfiles-accesos/access-list-catalog';
 	import './tailwind.css';
 
 	let { children } = $props();

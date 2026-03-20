@@ -228,7 +228,7 @@ type saleSummaryActionFlags struct {
 
 func parseSaleSummaryActionFlags(actions ...int8) (saleSummaryActionFlags, error) {
 	flags := saleSummaryActionFlags{}
-	
+
 	for _, actionID := range actions {
 		if actionID == saleSummaryActionSale {
 			flags.includeSale = true
@@ -237,7 +237,7 @@ func parseSaleSummaryActionFlags(actions ...int8) (saleSummaryActionFlags, error
 		} else if actionID == saleSummaryActionDelivery {
 			flags.includeDelivery = true
 		} else {
-			return saleSummaryActionFlags{}, core.Err("invalid sale summary action:", actionID)	
+			return saleSummaryActionFlags{}, core.Err("invalid sale summary action:", actionID)
 		}
 	}
 	return flags, nil

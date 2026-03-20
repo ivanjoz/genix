@@ -2,33 +2,37 @@ package exec
 
 import (
 	comercial "app/comercial/types"
+	configuracionTypes "app/configuracion/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
+	finanzasTypes "app/finanzas/types"
+	logisticaTypes "app/logistica/types"
 	negocio "app/negocio/types"
-	s "app/types"
+	negocioTypes "app/negocio/types"
+	seguridadTypes "app/seguridad/types"
 )
 
 func MakeScyllaControllers() []db.ScyllaControllerInterface {
 	return []db.ScyllaControllerInterface{
 
-		makeDBController[s.Producto](),
-		makeDBController[s.Almacen](),
-		makeDBController[s.Sede](),
-		makeDBController[s.AlmacenProducto](),
-		makeDBController[s.ProductSupply](),
-		makeDBController[s.PaisCiudad](),
-		makeDBController[s.GaleriaImagen](),
-		makeDBController[s.ListaCompartidaRegistro](),
-		makeDBController[s.AlmacenMovimiento](),
+		makeDBController[negocioTypes.Producto](),
+		makeDBController[negocioTypes.Almacen](),
+		makeDBController[negocioTypes.Sede](),
+		makeDBController[negocioTypes.AlmacenProducto](),
+		makeDBController[logisticaTypes.ProductSupply](),
+		makeDBController[negocioTypes.PaisCiudad](),
+		makeDBController[negocioTypes.GaleriaImagen](),
+		makeDBController[negocioTypes.ListaCompartidaRegistro](),
+		makeDBController[negocioTypes.AlmacenMovimiento](),
 		makeDBController[coreTypes.Usuario](),
-		makeDBController[s.Empresa](),
-		makeDBController[s.Perfil](),
-		makeDBController[s.Caja](),
-		makeDBController[s.CajaMovimiento](),
-		makeDBController[s.CajaCuadre](),
-		makeDBController[s.Parametros](),
-		makeDBController[s.SystemParameters](),
+		makeDBController[configuracionTypes.Empresa](),
+		makeDBController[seguridadTypes.Perfil](),
+		makeDBController[finanzasTypes.Caja](),
+		makeDBController[finanzasTypes.CajaMovimiento](),
+		makeDBController[finanzasTypes.CajaCuadre](),
+		makeDBController[configuracionTypes.Parametros](),
+		makeDBController[configuracionTypes.SystemParameters](),
 		makeDBController[core.Cache](),
 		makeDBController[comercial.SaleOrder](),
 		makeDBController[comercial.SaleSummary](),

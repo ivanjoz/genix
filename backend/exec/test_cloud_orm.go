@@ -9,23 +9,23 @@ import (
 
 // TestUsuario represents the entity to test the new Cloud ORM.
 // It uses 'col' tags for mapping.
-// 
+//
 
 type InnerStruct10 struct {
-	Name string
-	Value int32
+	Name     string
+	Value    int32
 	Valores2 []int32
 }
 
 type TestUsuario struct {
-	ID        int32  `col:",sk"`         // Sort key for DynamoDB
-	EmpresaID int32  `col:",pk"` // Partition key for DynamoDB / Primary key for D1
-	Email     string `col:",index"`   // GSI Index
-	Nombre    string `col:""`
-	Valores1 []int32 `col:""`
-	Valores2 []int32 `col:""`
-	Complex1 InnerStruct10
-	Complex2 []InnerStruct10
+	ID        int32   `col:",sk"`    // Sort key for DynamoDB
+	EmpresaID int32   `col:",pk"`    // Partition key for DynamoDB / Primary key for D1
+	Email     string  `col:",index"` // GSI Index
+	Nombre    string  `col:""`
+	Valores1  []int32 `col:""`
+	Valores2  []int32 `col:""`
+	Complex1  InnerStruct10
+	Complex2  []InnerStruct10
 }
 
 // RunCloudORMTest tests the generic ORM features with the 'cloudflare' provider.

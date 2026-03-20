@@ -1,7 +1,7 @@
 package core
 
 import (
-	"app/cbor"
+	"app/libs/cbor"
 	coretypes "app/core/types"
 	"app/db"
 	"crypto/hmac"

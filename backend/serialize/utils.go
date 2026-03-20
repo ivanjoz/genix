@@ -32,10 +32,10 @@ type TypeInfo struct {
 
 // FieldRegistry manages the mapping between types and their IDs
 type FieldRegistry struct {
-	mu         sync.RWMutex
-	typeToID   map[reflect.Type]int
-	idToInfo   map[int]*TypeInfo
-	nextID     int
+	mu       sync.RWMutex
+	typeToID map[reflect.Type]int
+	idToInfo map[int]*TypeInfo
+	nextID   int
 }
 
 func NewFieldRegistry() *FieldRegistry {

@@ -1,8 +1,8 @@
 package core
 
 import (
-	"sync"
 	types "app/core/types"
+	"sync"
 )
 
 type UsageCounter struct {

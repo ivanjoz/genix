@@ -19,11 +19,11 @@ export const AdminModule: IModule = {
 					descripcion: "Edita los datos de tu empresa, pasarela de pago, envío de correos."
         },
 				{
-					name: "Usuarios", route: "/configuracion/usuarios", icon: "icon-adult",
+					name: "Usuarios", route: "/seguridad/usuarios", icon: "icon-adult",
 					descripcion: "Gestiona usuario y asígnales perfiles."
 				},
 				{
-					name: "Perfiles & Accesos", route: "/configuracion/perfiles-accesos",
+					name: "Perfiles & Accesos", route: "/seguridad/perfiles-accesos",
 					descripcion: "Crea perfiles y asígnales accesos.",
           icon: "icon-shield",
 				},

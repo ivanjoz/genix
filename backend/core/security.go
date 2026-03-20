@@ -123,7 +123,7 @@ func PopulateVariables() {
 		return
 	}
 
-	fmt.Println("Credenciales .json Parseadas:: ","| Is Local:", Env.IS_LOCAL)
+	fmt.Println("Credenciales .json Parseadas:: ", "| Is Local:", Env.IS_LOCAL)
 
 	if len(Env.DYNAMO_TABLE) == 0 {
 		Env.DYNAMO_TABLE = Env.STACK_NAME + "-db"

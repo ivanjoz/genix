@@ -70,7 +70,7 @@ export const highlString = (
       }
     }
   }
-  console.log("words 111:", arr.filter(x => x),"|",phrase,words)
+  // console.log("words 111:", arr.filter(x => x),"|",phrase,words)
   return arr.filter(x => x)
 }
 

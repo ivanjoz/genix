@@ -60,21 +60,21 @@ func (e simpleSchema) GetSchema() TableSchema {
 // MediumTable - medium complexity with 15 columns and 2 indexes
 type mediumRecord struct {
 	TableStruct[mediumSchema, mediumRecord]
-	EmpresaID      int32   `db:"empresa_id"`
-	ID             string  `db:"id"`
-	SKU            string  `db:"sku"`
-	Name           string  `db:"name"`
-	Description    string  `db:"description"`
-	Price          float64 `db:"price"`
-	Quantity       int32   `db:"quantity"`
-	CategoryID     int32   `db:"category_id"`
-	SubcategoryID  int32   `db:"subcategory_id"`
-	BrandID        int32   `db:"brand_id"`
-	SupplierID     int32   `db:"supplier_id"`
-	Weight         float64 `db:"weight"`
-	Active         bool    `db:"active"`
-	Updated        int64   `db:"updated"`
-	Status         int8    `db:"status"`
+	EmpresaID     int32   `db:"empresa_id"`
+	ID            string  `db:"id"`
+	SKU           string  `db:"sku"`
+	Name          string  `db:"name"`
+	Description   string  `db:"description"`
+	Price         float64 `db:"price"`
+	Quantity      int32   `db:"quantity"`
+	CategoryID    int32   `db:"category_id"`
+	SubcategoryID int32   `db:"subcategory_id"`
+	BrandID       int32   `db:"brand_id"`
+	SupplierID    int32   `db:"supplier_id"`
+	Weight        float64 `db:"weight"`
+	Active        bool    `db:"active"`
+	Updated       int64   `db:"updated"`
+	Status        int8    `db:"status"`
 }
 
 type mediumSchema struct {

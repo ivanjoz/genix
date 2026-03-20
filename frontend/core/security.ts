@@ -2,7 +2,7 @@ import { Env, IsClient, LocalStorage } from '$core/env';
 import { decrypt, Notify, throttle } from '$libs/helpers';
 import type { IUsuario, ILoginResult } from '$core/types/common';
 import { base64ToUInt16, checksum } from '$libs/funcs/parsers';
-import { getAccessEntriesForRoute } from '../routes/configuracion/perfiles-accesos/access-list-catalog';
+import { getAccessEntriesForRoute } from '../routes/seguridad/perfiles-accesos/access-list-catalog';
 
 // Token refresh constants (all in seconds)
 const TOKEN_REFRESH_THRESHOLD = 40 * 60 // 40 minutes in seconds

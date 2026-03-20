@@ -286,7 +286,7 @@ func Insert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		// Keep unlogged batches small to reduce coordinator pressure and avoid write timeouts.
 		queryBatch := makeInsertBatch(&recordsChunk, scyllaTable, columnsToExclude...)
 		// fmt.Println(queryBatch)
-		
+
 		if err := session.ExecuteBatch(queryBatch); err != nil {
 			fmt.Println("Error inserting records:", err)
 			return err

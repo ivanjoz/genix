@@ -28,19 +28,19 @@ type ConnectionsMetrics struct {
 }
 
 type BandwidthMetrics struct {
-	InterfaceName  string `json:"interface_name"`
-	RXBytesPerSec  uint64 `json:"rx_bytes_per_sec"`
-	TXBytesPerSec  uint64 `json:"tx_bytes_per_sec"`
-	TotalRXBytes   uint64 `json:"total_rx_bytes"`
-	TotalTXBytes   uint64 `json:"total_tx_bytes"`
+	InterfaceName string `json:"interface_name"`
+	RXBytesPerSec uint64 `json:"rx_bytes_per_sec"`
+	TXBytesPerSec uint64 `json:"tx_bytes_per_sec"`
+	TotalRXBytes  uint64 `json:"total_rx_bytes"`
+	TotalTXBytes  uint64 `json:"total_tx_bytes"`
 }
 
 type ServerMetricsSnapshot struct {
-	TimestampUnix int64              `json:"timestamp_unix"`
-	CPU           CPUMetrics         `json:"cpu"`
-	Memory        MemoryMetrics      `json:"memory"`
+	TimestampUnix  int64                 `json:"timestamp_unix"`
+	CPU            CPUMetrics            `json:"cpu"`
+	Memory         MemoryMetrics         `json:"memory"`
 	BackendProcess BackendProcessMetrics `json:"backend_process"`
-	Disk          DiskMetrics        `json:"disk"`
-	Connections   ConnectionsMetrics `json:"connections"`
-	Bandwidth     BandwidthMetrics   `json:"bandwidth"`
+	Disk           DiskMetrics           `json:"disk"`
+	Connections    ConnectionsMetrics    `json:"connections"`
+	Bandwidth      BandwidthMetrics      `json:"bandwidth"`
 }

@@ -1,0 +1,83 @@
+package negocio
+
+import (
+	"app/cloud"
+	"app/core"
+	"app/db"
+	negocioTypes "app/negocio/types"
+	"encoding/json"
+	"time"
+)
+
+type GaleriaImage struct {
+	Content       string
+	Folder        string
+	Description   string
+	ImageToDelete string
+}
+
+func PostGaleriaImage(req *core.HandlerArgs) core.HandlerResponse {
+	image := productoImage{}
+	err := json.Unmarshal([]byte(*req.Body), &image)
+	if err != nil {
+		return req.MakeErr("Error al deserilizar el body:", err)
+	}
+
+	imageName := core.ToBase36(time.Now().UnixMilli())
+
+	// Convierte y guarda la imagen en S3
+	imageArgs := cloud.ImageArgs{
+		Content:     image.Content,
+		Folder:      "img-galeria",
+		Name:        imageName,
+		Resolutions: map[uint16]string{1400: "x8", 540: "x4", 340: "x2"},
+	}
+
+	core.Env.IS_SERVERLESS = true
+	_, err = cloud.SaveConvertImage(imageArgs)
+	if err != nil {
+		return req.MakeErr("Error al guardar la imagen: " + err.Error())
+	}
+	core.Env.IS_SERVERLESS = false
+
+	// Guarda la imagen en BD
+	galeriaImage := negocioTypes.GaleriaImagen{
+		EmpresaID:   req.Usuario.EmpresaID,
+		Image:       imageName,
+		Description: image.Description,
+		Status:      1,
+		Updated:     core.SUnixTime(),
+	}
+
+	err = db.Insert(&[]negocioTypes.GaleriaImagen{galeriaImage})
+	if err != nil {
+		core.Log("Error al guardar la imagen.")
+		return req.MakeErr("Error al guardar la imagen en BD.", err)
+	}
+
+	return req.MakeResponse(map[string]any{"imageName": imageName})
+}
+
+func GetGaleriaImages(req *core.HandlerArgs) core.HandlerResponse {
+
+	updated := core.UnixToSunix(req.GetQueryInt64("updated"))
+
+	imagenes := []negocioTypes.GaleriaImagen{}
+	query := db.Query(&imagenes)
+	q1 := db.Table[negocioTypes.GaleriaImagen]()
+
+	query.Exclude(q1.EmpresaID).
+		EmpresaID.Equals(req.Usuario.EmpresaID)
+
+	if updated > 0 {
+		query.Updated.GreaterEqual(updated)
+	} else {
+		query.Status.GreaterEqual(1)
+	}
+
+	if err := query.Exec(); err != nil {
+		return req.MakeErr("Error al obtener las imágenes:", err)
+	}
+
+	return req.MakeResponse(imagenes)
+}

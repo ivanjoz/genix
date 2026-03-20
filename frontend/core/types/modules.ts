@@ -58,7 +58,7 @@ export const defaultModule: IModule = {
 				{
 					name: 'Usuarios',
 					minName: 'USR',
-					route: '/configuracion/usuarios',
+					route: '/seguridad/usuarios',
 					icon: 'icon-users'
 				},
 				{ name: 'Sedes', minName: 'SED', route: '/negocio/sedes-almacenes', icon: 'icon-location' }

@@ -71,13 +71,13 @@ func GetCacheByKeys(empresaID int32, cacheKeys ...string) ([]Cache, error) {
 	return cacheRows, nil
 }
 
-func ExtractCacheVersionValues(req *HandlerArgs)( []db.IDCacheVersion, error) {
+func ExtractCacheVersionValues(req *HandlerArgs) ([]db.IDCacheVersion, error) {
 	idsStr := req.GetQuery("ids")
 	// New cache delta protocol keys: cc-ids for cached IDs and cc-ver for aligned cache versions.
 	cachedIDsStr := req.GetQuery("cc-ids")
 	cacheVersionsFromIDsStr := req.GetQuery("cc-ver")
-	empresaID := Coalesce(req.GetQueryInt("cmp"),req.Usuario.EmpresaID)
-	
+	empresaID := Coalesce(req.GetQueryInt("cmp"), req.Usuario.EmpresaID)
+
 	if empresaID == 0 {
 		Log("Error: No se envió: Empresa-ID")
 		return nil, Err("No se envió: Empresa-ID")
