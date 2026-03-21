@@ -109,8 +109,8 @@ import { calculatePosition, type Placement, type PositionResult } from './positi
 			{@render children?.()}
 			<div class={[
 					"absolute overflow-hidden h-18 flex justify-center w-full",
-					position.placement === "bottom" && "top-[-18px]",
-					position.placement === "top" && "bottom-[-18px] rotate-180",
+					position.placement.startsWith("bottom") && "top-[-18px]",
+					position.placement.startsWith("top") && "bottom-[-18px] rotate-180",
 				]}
 			>
 				<img class={`_5 w-24 h-24 top`} alt="" src={parseSVG(angleSvg)}/>

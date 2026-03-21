@@ -358,10 +358,10 @@ func (e AlmacenMovimientoTable) GetSchema() db.TableSchema {
 			e.AlmacenID.DecimalSize(5), e.Fecha.DecimalSize(5), e.Autoincrement(3),
 		},
 		AutoincrementPart: e.Fecha,
+		Indexes: [][]db.Coln{{e.SKU},{e.Lote}},
 		Views: []db.View{
-			{Cols: []db.Coln{e.SKU}, KeepPart: true},
-			{Cols: []db.Coln{e.Lote}, KeepPart: true},
-			{Cols: []db.Coln{e.AlmacenRefID, e.Created.DecimalSize(9)}},
+			{Cols: []db.Coln{e.Created}, KeepPart: true},
+			{Cols: []db.Coln{e.AlmacenRefID, e.Created.DecimalSize(9)}, KeepPart: true},
 		},
 	}
 }

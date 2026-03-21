@@ -10,7 +10,7 @@ import Renderer from '$components/Renderer.svelte';
 		contentClass?: string;
 		inputClass?: string;
 		onChange?: (newValue: string | number) => void;
-		render?: (value: number | string) => ElementAST | ElementAST[];
+		render?: (value: number | string) => string | ElementAST | ElementAST[];
 		getValue?: (e: T) => number | string;
 		required?: boolean;
 		type?: string;
@@ -40,6 +40,7 @@ import Renderer from '$components/Renderer.svelte';
 		: ((saveOn || ({} as T))[save as keyof T] as number | string);
 
 	let currentValue = $state(initialValue);
+	const renderedContent = $derived(render ? render(currentValue) : null);
 
 	// Focus input when editing starts
 	$effect(() => {
@@ -57,6 +58,10 @@ import Renderer from '$components/Renderer.svelte';
 
 	function handleClick(ev: MouseEvent) {
 		ev.stopPropagation();
+		// Always hydrate the input from getValue so edit mode uses the raw persisted value.
+		currentValue = getValue
+			? getValue(saveOn as T)
+			: ((saveOn || ({} as T))[save as keyof T] as number | string);
 		isEditing = true;
 	}
 
@@ -87,8 +92,10 @@ import Renderer from '$components/Renderer.svelte';
 			}
 		}}
 	>
-		{#if render}
-			<Renderer elements={render(currentValue)}/>
+		{#if typeof renderedContent === 'string'}
+			{renderedContent}
+		{:else if renderedContent}
+			<Renderer elements={renderedContent}/>
 		{:else}
 			{currentValue}
 		{/if}

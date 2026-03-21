@@ -235,11 +235,16 @@
                           contentClass={cell.contentCss}
                           inputClass={cell.inputCss}
                           type={cell.type || 'text'}
-                          getValue={() => cellData.content}
+                          getValue={() => {
+                            // Prefer the raw getter for edit mode so render formatting never leaks into the input value.
+                            return cell.getValue
+                              ? cell.getValue(record, recordIndex)
+                              : cellData.content
+                          }}
                           render={
                             (cell.render
                               ? () => cell.render?.(record, recordIndex)
-                              : undefined) as (value: number | string) => ElementAST[]
+                              : undefined) as (value: number | string) => string | ElementAST | ElementAST[]
                           }
                           onChange={value => {
                             console.debug('[CardsList] onCellEdit', {

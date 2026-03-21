@@ -123,12 +123,20 @@ import Popover2 from '$components/popover2/Popover2.svelte';
   role="button"
   tabindex="0"
   onmousedown={ev => {
-    // Open from mousedown so the input can take focus without triggering an immediate blur cycle.
-    ev.preventDefault()
     ev.stopPropagation()
-    if (!show) {
-      handlwShowClick()
+    // Preserve native text selection when the user is already interacting with the real input.
+    if (ev.target === inputRef) {
+      return
     }
+
+    // Open from mousedown so the input can take focus without triggering an immediate blur cycle.
+    if (!show) {
+      ev.preventDefault()
+      handlwShowClick()
+      return
+    }
+
+    inputRef?.focus()
   }}
   onkeydown={(ev) => {
     if (ev.key === 'Enter' || ev.key === ' ') {
@@ -170,9 +178,9 @@ import Popover2 from '$components/popover2/Popover2.svelte';
     />
   {/if}
   <Popover2
-    referenceElement={refElement}
+    referenceElement={inputRef || refElement}
     open={show}
-    placement="bottom"
+    placement="bottom-start"
   >
     <div class="h-200 w-400 p-4 _4 overflow-auto">
       <SvelteVirtualList items={optionsFiltered}>

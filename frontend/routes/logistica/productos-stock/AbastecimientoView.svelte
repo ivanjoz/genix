@@ -92,6 +92,7 @@ import {
         field: 'Capacity',
         type: 'number',
         itemCss: 'col-span-12 md:col-span-4',
+        contentCss: 'w-full justify-end text-right pr-6',
         inputCss: 'text-right pr-6',
         getValue: (providerSupplyRow) => providerSupplyRow.Capacity || 0,
         onCellEdit: (providerSupplyRow, nextValue) => {
@@ -103,6 +104,7 @@ import {
         field: 'DeliveryTime',
         type: 'number',
         itemCss: 'col-span-12 md:col-span-4',
+        contentCss: 'w-full justify-end text-right pr-6',
         inputCss: 'text-right pr-6',
         getValue: (providerSupplyRow) => providerSupplyRow.DeliveryTime || 0,
         onCellEdit: (providerSupplyRow, nextValue) => {
@@ -113,13 +115,13 @@ import {
         label: 'Precio',
         field: 'Price',
         itemCss: 'col-span-12 md:col-span-4',
+        contentCss: 'w-full justify-end text-right pr-6',
         inputCss: 'text-right pr-6',
         getValue: (providerSupplyRow) => formatN((providerSupplyRow.Price || 0) / 100, 2),
+        render: e => e.Price ? formatN((e.Price||0)/100,2) : "",
         onCellEdit: (providerSupplyRow, nextValue) => {
           const parsedPrice = parseFloat(String(nextValue || '0'))
-          providerSupplyRow.Price = Number.isFinite(parsedPrice)
-            ? Math.round(parsedPrice * 100)
-            : 0
+          providerSupplyRow.Price = Math.round((parsedPrice||0) * 100)
         },
       },
     ]
