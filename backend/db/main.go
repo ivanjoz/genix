@@ -318,7 +318,14 @@ func (e *TableStruct[T, E]) GetRefSchema() *T {
 }
 
 func (e *TableStruct[T, E]) Exec() error {
-	return execQuery[T, E](e.schemaStruct, e.tableInfo)
+	return execQuery[T, E](e.schemaStruct, e.tableInfo, nil, nil)
+}
+
+func (e *TableStruct[T, E]) ExecGroup(
+	getKey func(record *E) string,
+	groupHandler func(newRecord *E, groupedRecord *E),
+) error {
+	return execQuery[T, E](e.schemaStruct, e.tableInfo, getKey, groupHandler)
 }
 
 func (e *TableStruct[T, E]) AllowFilter() *T {
@@ -681,11 +688,16 @@ func makeQueryStatement(statements []string) string {
 	return queryStr
 }
 
-// execQuery executes a query based on TableInfo and returns records
-func execQuery[T TableSchemaInterface[T], E any](schemaStruct *T, tableInfo *TableInfo) error {
+// execQuery executes a query based on TableInfo and optionally groups decoded records before returning.
+func execQuery[T TableSchemaInterface[T], E any](
+	schemaStruct *T,
+	tableInfo *TableInfo,
+	getKey func(record *E) string,
+	groupHandler func(newRecord *E, groupedRecord *E),
+) error {
 	records := (tableInfo.refSlice).(*[]E)
 	scyllaTable := getOrCompileScyllaTable(schemaStruct)
-	return selectExec(records, tableInfo, scyllaTable)
+	return selectExec(records, tableInfo, scyllaTable, getKey, groupHandler)
 }
 
 /* Increment Table */

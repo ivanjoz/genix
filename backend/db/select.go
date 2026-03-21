@@ -57,6 +57,79 @@ type compositeBucketQueryPlan struct {
 	filterStatements []ColumnStatement
 }
 
+type groupedQueryResult[E any] struct {
+	recordsByKey map[string]E
+	keysInOrder  []string
+}
+
+func newGroupedQueryResult[E any]() *groupedQueryResult[E] {
+	// Keep first-seen key order so grouped output remains deterministic for one execution.
+	return &groupedQueryResult[E]{
+		recordsByKey: map[string]E{},
+		keysInOrder:  []string{},
+	}
+}
+
+func addRecordToGroupedResult[E any](
+	groupedResult *groupedQueryResult[E],
+	record *E,
+	getKey func(record *E) string,
+	groupHandler func(newRecord *E, groupedRecord *E),
+) error {
+	if groupedResult == nil {
+		return errors.New("grouped query result is nil")
+	}
+	if getKey == nil {
+		return errors.New("ExecGroup requires a getKey handler")
+	}
+	if groupHandler == nil {
+		return errors.New("ExecGroup requires a groupHandler handler")
+	}
+
+	groupKey := getKey(record)
+	if groupKey == "" {
+		return errors.New("ExecGroup getKey returned an empty key")
+	}
+
+	groupedRecord, exists := groupedResult.recordsByKey[groupKey]
+	if !exists {
+		groupedResult.keysInOrder = append(groupedResult.keysInOrder, groupKey)
+		groupHandler(record, nil)
+		groupedResult.recordsByKey[groupKey] = *record
+		return nil
+	}
+	groupHandler(record, &groupedRecord)
+	groupedResult.recordsByKey[groupKey] = groupedRecord
+	return nil
+}
+
+func appendGroupedResultToSlice[E any](groupedResult *groupedQueryResult[E], target *[]E) {
+	if groupedResult == nil || target == nil {
+		return
+	}
+	for _, groupKey := range groupedResult.keysInOrder {
+		*target = append(*target, groupedResult.recordsByKey[groupKey])
+	}
+}
+
+func mergeGroupedResults[E any](
+	target *groupedQueryResult[E],
+	source *groupedQueryResult[E],
+	getKey func(record *E) string,
+	groupHandler func(newRecord *E, groupedRecord *E),
+) error {
+	if source == nil {
+		return nil
+	}
+	for _, groupKey := range source.keysInOrder {
+		record := source.recordsByKey[groupKey]
+		if err := addRecordToGroupedResult(target, &record, getKey, groupHandler); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func getStatementValueListForHash(statement ColumnStatement) ([]int64, bool) {
 	// Only numeric operators that can be converted into deterministic hash inputs are allowed in composite hash planning.
 	switch statement.Operator {
@@ -313,8 +386,12 @@ func scanSelectQueryRows[E any](
 	scyllaTable ScyllaTable[any],
 	refRecords *[]E,
 	postFilterStatements []ColumnStatement,
+	groupedResult *groupedQueryResult[E],
+	getKey func(record *E) string,
+	groupHandler func(newRecord *E, groupedRecord *E),
 ) error {
 	usePostFilter := len(postFilterStatements) > 0
+	useGrouping := groupedResult != nil
 
 	doScan := func() error {
 		iter := getScyllaConnection().Query(queryStr, queryValues...).Iter()
@@ -382,6 +459,14 @@ func scanSelectQueryRows[E any](
 
 			// Post-filter keeps exact semantics when indexed query planning intentionally overfetches.
 			if usePostFilter && !recordMatchesPostFilter(xunsafe.AsPointer(record), postFilterStatements, scyllaTable) {
+				continue
+			}
+
+			if useGrouping {
+				// Group rows during scan when fanout deduplication is not required.
+				if err := addRecordToGroupedResult(groupedResult, record, getKey, groupHandler); err != nil {
+					return err
+				}
 				continue
 			}
 
@@ -538,7 +623,17 @@ func tryBuildCompositeBucketPlan(statements []ColumnStatement, scyllaTable Scyll
 }
 
 // selectExec executes a query using TableSchema and TableInfo
-func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable ScyllaTable[any]) error {
+func selectExec[E any](
+	recordsGetted *[]E,
+	tableInfo *TableInfo,
+	scyllaTable ScyllaTable[any],
+	getKey func(record *E) string,
+	groupHandler func(newRecord *E, groupedRecord *E),
+) error {
+	useGrouping := getKey != nil || groupHandler != nil
+	if useGrouping && (getKey == nil || groupHandler == nil) {
+		return errors.New("ExecGroup requires both getKey and groupHandler handlers")
+	}
 
 	viewTableName := scyllaTable.name
 
@@ -921,18 +1016,26 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 	}
 
 	recordsMap := map[int]*[]E{}
+	groupedResultsMap := map[int]*groupedQueryResult[E]{}
 	for i := range queryWhereStatements {
 		recordsMap[i] = &[]E{}
+		groupedResultsMap[i] = newGroupedQueryResult[E]()
 	}
 
 	eg := errgroup.Group{}
+	shouldGroupDuringScan := useGrouping && !(len(queryWhereStatements) > 1 && shouldDeduplicateFanoutResults)
 
 	for i, whereStatement := range queryWhereStatements {
 		queryStr := fmt.Sprintf(queryTemplate, scyllaTable.keyspace, viewTableName, whereStatement)
 		records := recordsMap[i]
+		groupedResult := groupedResultsMap[i]
 		recordsTarget := records
-		if len(queryWhereStatements) == 1 {
+		if len(queryWhereStatements) == 1 && !useGrouping {
 			recordsTarget = recordsGetted
+		}
+		groupedTarget := (*groupedQueryResult[E])(nil)
+		if shouldGroupDuringScan {
+			groupedTarget = groupedResult
 		}
 
 		fmt.Println("Query::", queryStr)
@@ -949,7 +1052,17 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 				}
 			}()
 
-			err = scanSelectQueryRows(queryStr, queryValues, columnNames, scyllaTable, recordsTarget, queryPostFilterStatements)
+			err = scanSelectQueryRows(
+				queryStr,
+				queryValues,
+				columnNames,
+				scyllaTable,
+				recordsTarget,
+				queryPostFilterStatements,
+				groupedTarget,
+				getKey,
+				groupHandler,
+			)
 			return err
 		})
 	}
@@ -958,7 +1071,48 @@ func selectExec[E any](recordsGetted *[]E, tableInfo *TableInfo, scyllaTable Scy
 		return err
 	}
 
-	if len(queryWhereStatements) > 1 {
+	if useGrouping {
+		finalGroupedResult := newGroupedQueryResult[E]()
+
+		if shouldGroupDuringScan {
+			for _, groupedResult := range groupedResultsMap {
+				if err := mergeGroupedResults(finalGroupedResult, groupedResult, getKey, groupHandler); err != nil {
+					return err
+				}
+			}
+		} else if shouldDeduplicateFanoutResults {
+			// Deduplicate fan-out rows by primary key before grouped reduction to avoid double counting.
+			recordsUniqueMap := map[string]E{}
+			recordsUniqueOrder := []string{}
+			for _, records := range recordsMap {
+				for _, rec := range *records {
+					recPtr := xunsafe.AsPointer(&rec)
+					recordKey := makePrimaryKeyRecordKey(recPtr, scyllaTable)
+					if _, exists := recordsUniqueMap[recordKey]; !exists {
+						recordsUniqueOrder = append(recordsUniqueOrder, recordKey)
+					}
+					recordsUniqueMap[recordKey] = rec
+				}
+			}
+			for _, recordKey := range recordsUniqueOrder {
+				record := recordsUniqueMap[recordKey]
+				if err := addRecordToGroupedResult(finalGroupedResult, &record, getKey, groupHandler); err != nil {
+					return err
+				}
+			}
+		} else {
+			for _, records := range recordsMap {
+				for _, rec := range *records {
+					record := rec
+					if err := addRecordToGroupedResult(finalGroupedResult, &record, getKey, groupHandler); err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		appendGroupedResultToSlice(finalGroupedResult, recordsGetted)
+	} else if len(queryWhereStatements) > 1 {
 		if shouldDeduplicateFanoutResults {
 			// Deduplicate fan-out results by partition+primary-key tuple before returning.
 			recordsUniqueMap := map[string]E{}

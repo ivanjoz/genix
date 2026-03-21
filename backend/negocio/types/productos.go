@@ -326,6 +326,10 @@ type AlmacenMovimiento struct {
 	Tipo               int8   `json:",omitempty"`
 	Created            int32  `json:",omitempty"`
 	CreatedBy          int32  `json:",omitempty"`
+	
+	// Extra fields
+	Inflows_           int32  `json:",omitempty"`
+	Outflows_          int32  `json:",omitempty"`
 }
 
 type AlmacenMovimientoTable struct {

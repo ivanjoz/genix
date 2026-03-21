@@ -173,6 +173,32 @@ q := db.Query(&results)
 err := q.Exclude(q.Tags).EmpresaID.Equals(1).Exec()
 ```
 
+```go
+// Purpose: Group decoded rows in memory after query execution.
+// Rationale: Useful when endpoints need custom aggregation without changing table schema.
+q := db.Query(&results)
+q.EmpresaID.Equals(1).Status.Equals(1)
+
+err := q.ExecGroup(
+    func(record *Product) string {
+        return fmt.Sprintf("%d", record.ID)
+    },
+    func(newRecord *Product, groupedRecord *Product) {
+        if groupedRecord == nil {
+            return
+        }
+        if newRecord.Updated > groupedRecord.Updated {
+            groupedRecord.Updated = newRecord.Updated
+        }
+    },
+)
+```
+
+Rules:
+- `ExecGroup` is an in-memory reducer, not a Scylla `GROUP BY`.
+- `LIMIT` still applies to raw rows before grouping.
+- `getKey` and `groupHandler` are both required.
+
 ### 5.4 Cloud Query (`cloud.Select`)
 
 `cloud.Select` is the provider-agnostic query API used for DynamoDB and Cloudflare D1 / SQLite.

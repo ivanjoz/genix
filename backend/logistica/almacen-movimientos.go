@@ -6,6 +6,7 @@ import (
 	"app/db"
 	negocioTypes "app/negocio/types"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"time"
 
@@ -178,6 +179,40 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	almacenProductos1 = slices.Concat(almacenProductos1, almacenProductos2)
 
 	return req.MakeResponse(almacenProductos1)
+}
+
+func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
+
+	fecha := req.GetQueryInt16("updated")
+
+	movimientos := []negocioTypes.AlmacenMovimiento{}
+
+	query := db.Query(&movimientos).
+		EmpresaID.Equals(req.Usuario.EmpresaID).
+		Fecha.GreaterEqual(fecha)
+
+	if err := query.AllowFilter().ExecGroup(
+		func(record *negocioTypes.AlmacenMovimiento) string {
+			// Group rows by business date and product to produce daily inflow/outflow totals.
+			return fmt.Sprintf("%d|%d", record.Fecha, record.ProductoID)
+		},
+		func(newRecord *negocioTypes.AlmacenMovimiento, groupedRecord *negocioTypes.AlmacenMovimiento) {
+			// Normalize the incoming row so the first record already carries the grouped totals.
+			if newRecord.Cantidad > 0 {
+				newRecord.Inflows_ = newRecord.Cantidad
+			} else if newRecord.Cantidad < 0 {
+				newRecord.Outflows_ = - newRecord.Cantidad
+			}
+			if groupedRecord != nil {
+				groupedRecord.Inflows_ += newRecord.Inflows_
+				groupedRecord.Outflows_ += newRecord.Outflows_
+			}
+		},
+	); err != nil {
+		return req.MakeErr("Error al obtener los registros del almacén:", err)
+	}
+	
+	return req.MakeResponse(movimientos)
 }
 
 type almacenStockCount struct {

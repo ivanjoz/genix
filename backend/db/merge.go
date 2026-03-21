@@ -109,7 +109,7 @@ func preloadExistingRecordsBySingleKey[T TableBaseInterface[E, T], E TableSchema
 			statements: statements,
 		}
 
-		if err := execQuery[E, T](queryTable, queryInfo); err != nil {
+		if err := execQuery[E, T](queryTable, queryInfo, nil, nil); err != nil {
 			return nil, err
 		}
 

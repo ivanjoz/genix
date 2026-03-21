@@ -466,7 +466,7 @@ func QueryCachedIDs[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSl
 			strings.Join(valuePlaceholders, ", "),
 		)
 
-		if err := scanSelectQueryRows(queryString, queryValues, columnNames, scyllaTable, &fetchedRecords, nil); err != nil {
+		if err := scanSelectQueryRows(queryString, queryValues, columnNames, scyllaTable, &fetchedRecords, nil, nil, nil, nil); err != nil {
 			return err
 		}
 	}
