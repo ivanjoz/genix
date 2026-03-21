@@ -1,14 +1,19 @@
 <script lang="ts">
 import Input from '$components/Input.svelte'
 import Layer from '$components/Layer.svelte'
+import ChartCanvas from '$components/ChartCanvas.svelte'
 import CardsList from '$components/vTable/CardsList.svelte'
-import VTable from '$components/vTable/VTable.svelte'
-import type { ICardCell, ITableColumn } from '$components/vTable/types'
+import TableGrid from '$components/vTable/TableGrid.svelte'
+import type { TableGridColumn } from '$components/vTable/tableGridTypes'
+import type { ICardCell } from '$components/vTable/types'
 import { Core } from '$core/store.svelte'
+import { FechaHelper } from '$libs/fecha'
 import { formatN, Loading, Notify, throttle } from '$libs/helpers'
+import { untrack } from 'svelte'
 import { ClientProviderService, ClientProviderType } from '../../negocio/clientes/clientes-proveedores.svelte'
 import { ProductosService } from '../../negocio/productos/productos.svelte'
 import {
+  AlmacenMovimientosGroupedService,
   createEmptyProviderSupplyRow,
   normalizeProviderSupplyRows,
   postProductSupply,
@@ -20,6 +25,25 @@ import {
   const productos = new ProductosService()
   const providers = new ClientProviderService(ClientProviderType.PROVIDER)
   const productSupplyService = new ProductSupplyService()
+  const groupedMovementsService = new AlmacenMovimientosGroupedService()
+  const fechaHelper = new FechaHelper()
+  const salesWindowDays = 30
+
+  // Freeze the 30-day window in fechaUnix units so every row uses the same oldest->newest categories.
+  const last30FechaUnix = Array.from({ length: salesWindowDays }, (_, dayOffset) => {
+    return fechaHelper.fechaUnixCurrent() - (salesWindowDays - 1) + dayOffset
+  })
+
+  $effect(() => {
+    if (!groupedMovementsService.isReady) {
+      return
+    }
+
+    // Keep logging side-effects outside the tracked section so service updates do not create render loops.
+    untrack(() => {
+      console.log('AbastecimientoView::groupedMovementRecords', groupedMovementsService.records)
+    })
+  })
 
   let supplyFilterText = $state('')
   let productSupplyForm = $state({
@@ -43,28 +67,66 @@ import {
     })
   })
 
-  const productSupplyColumns: ITableColumn<IProductSupplyRow>[] = [
+  const filteredProductSupplyRows = $derived.by(() => {
+    const normalizedFilterText = supplyFilterText.trim().toLowerCase()
+    if (!normalizedFilterText) {
+      return productSupplyTableRows
+    }
+
+    return productSupplyTableRows.filter((productSupplyRecord) => {
+      const productRecord = productos.recordsMap.get(productSupplyRecord.ProductID)
+      const providerNames = (productSupplyRecord.ProviderSupply || []).map((providerSupplyRow) => {
+        return providers.recordsMap.get(providerSupplyRow.ProviderID)?.Name || ''
+      })
+
+      // Keep the filter inline with the virtualized grid so we only render matching rows.
+      const filterableContent = [
+        productRecord?.Nombre || '',
+        String(productSupplyRecord.MinimunStock || 0),
+        String(productSupplyRecord.SalesPerDayEstimated || 0),
+        ...providerNames,
+      ].filter((value) => value).join(' ').toLowerCase()
+
+      return filterableContent.includes(normalizedFilterText)
+    })
+  })
+
+  const productSupplyColumns: TableGridColumn<IProductSupplyRow>[] = [
     {
+      id: 'product-name',
       header: 'Producto',
-      highlight: true,
-      cellCss: 'px-6',
+      width: '34%',
+      cellCss: 'px-6 py-4 leading-[1.1] whitespace-normal',
       getValue: (productSupplyRecord) => productos.recordsMap.get(productSupplyRecord.ProductID)?.Nombre || `Producto-${productSupplyRecord.ProductID}`,
     },
     {
+      id: 'minimum-stock',
       header: 'Stock Min.',
-      headerCss: 'w-112',
+      width: '6%',
+      align: 'right',
       cellCss: 'px-6 text-right',
       getValue: (productSupplyRecord) => productSupplyRecord.MinimunStock || 0,
     },
     {
+      id: 'sales-last-30-days',
+      header: 'Ventas',
+      width: '34%',
+      useCellRenderer: true,
+      cellCss: 'px-6',
+    },
+    {
+      id: 'sales-per-day',
       header: 'Ventas / Día',
-      headerCss: 'w-128',
+      width: '8%',
+      align: 'right',
       cellCss: 'px-6 text-right',
       getValue: (productSupplyRecord) => productSupplyRecord.SalesPerDayEstimated || 0,
     },
     {
+      id: 'providers',
       header: 'Proveedores',
-      cellCss: 'px-6',
+      width: '18%',
+      cellCss: 'px-6 whitespace-normal',
       getValue: (productSupplyRecord) => {
         return (productSupplyRecord.ProviderSupply || []).map((providerSupplyRow) => {
           return providers.recordsMap.get(providerSupplyRow.ProviderID)?.Name || `Proveedor-${providerSupplyRow.ProviderID}`
@@ -205,36 +267,54 @@ import {
 	    </div>
 	    <div class="flex items-center">
 	      <div class="h6 ff-bold pr-8 text-slate-500">
-	        {productSupplyTableRows.length} registros
+	        {filteredProductSupplyRows.length} registros
 	      </div>
 	    </div>
 	  </div>
-  	<VTable
+	  	<TableGrid
 	      css="h-full w-full"
-	      maxHeight="calc(100vh - var(--header-height) - 60px - 1rem)"
+        headerCss="text-[14px]"
+	      height="calc(100vh - var(--header-height) - 60px - 1rem)"
+        rowHeight={48}
 	      columns={productSupplyColumns}
-	      data={productSupplyTableRows}
-	      filterText={supplyFilterText}
-	      useFilterCache={true}
-	      getFilterContent={(productSupplyRecord) => {
-	        const productRecord = productos.recordsMap.get(productSupplyRecord.ProductID)
-	        const providerNames = (productSupplyRecord.ProviderSupply || []).map((providerSupplyRow) => {
-	          return providers.recordsMap.get(providerSupplyRow.ProviderID)?.Name || ''
-	        })
-	
-	        return [
-	          productRecord?.Nombre || '',
-	          String(productSupplyRecord.MinimunStock || 0),
-	          String(productSupplyRecord.SalesPerDayEstimated || 0),
-	          ...providerNames,
-	        ].filter((value) => value).join(' ').toLowerCase()
-	      }}
-	      selected={productSupplyForm?.ProductID}
-	      isSelected={(productSupplyRecord, selectedProductID) => productSupplyRecord.ProductID === selectedProductID}
+	      data={filteredProductSupplyRows}
+        selectedRowId={productSupplyForm?.ProductID || undefined}
+        getRowId={(productSupplyRecord) => productSupplyRecord.ProductID}
 	      onRowClick={(selectedProductSupplyRecord) => {
 	        openProductSupplyLayer(selectedProductSupplyRecord)
 	      }}
-	    /> 
+	    >
+        {#snippet cellRenderer(productSupplyRecord, columnDefinition)}
+          {#if columnDefinition.id === 'sales-last-30-days'}
+            <!-- Keep the sales chart inline with TableGrid so virtualization owns the full row render path. -->
+            {@const productMovements = groupedMovementsService.productMovementsMap.get(productSupplyRecord.ProductID)}
+            {@const outflowsValues = last30FechaUnix.map((fechaUnix) => productMovements?.getOutflows(fechaUnix) || 0)}
+            {@const inflowsValues = last30FechaUnix.map((fechaUnix) => productMovements?.getInflows(fechaUnix) || 0)}
+            {@const minimumStockValues = last30FechaUnix.map((fechaUnix) => productMovements?.getMinimumStock(fechaUnix) || 0)}
+            <div class="h-50 w-full min-w-0">
+              <ChartCanvas
+                id={productSupplyRecord.ProductID}
+                height={48}
+                className="h-full w-full"
+                data={[
+                  // Keep the red outflow stack first so demand pressure remains visually dominant.
+                  { name: 'Salidas', type: 'bar', values: outflowsValues, color: '#ef4444' },
+                  { name: 'Entradas', type: 'bar', values: inflowsValues, color: '#3b82f6' },
+                  // Use the configured daily minimum stock as the reference line for replenishment decisions.
+                  {
+                    name: 'Stock Minimo',
+                    type: 'line',
+                    values: minimumStockValues.map((minimumStockValue) => minimumStockValue !== 0 ? minimumStockValue : null),
+                    color: '#000000',
+                    lineWidth: 1,
+                    pointSize: 3
+                  },
+                ]}
+              />
+            </div>
+          {/if}
+        {/snippet}
+      </TableGrid>
   </Layer>
 </div>
 

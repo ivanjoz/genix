@@ -1,4 +1,5 @@
 <script lang="ts" generics="TRecord">
+  import { onMount } from 'svelte';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import type { TableGridCellRendererSnippet, TableGridColumn } from './tableGridTypes';
 
@@ -44,6 +45,8 @@
     visibleColumns.map((columnDefinition) => columnDefinition.width).join(' '),
   );
   const normalizedRowHeight = $derived(Math.max(24, Math.round(rowHeight)));
+  let shellElement = $state<HTMLDivElement | undefined>(undefined);
+  let verticalScrollbarWidth = $state(0);
 
   // Resolve the selected record identity only when a resolver exists.
   const selectedRecordResolvedId = $derived.by(() => {
@@ -106,10 +109,54 @@
     }
     onRowClick?.(rowRecord, rowIndex);
   };
+
+  const syncHeaderScrollbarCompensation = () => {
+    if (!shellElement) return;
+
+    const viewportElement = shellElement.querySelector('.table-grid-virtual-viewport') as HTMLDivElement | null;
+    if (!viewportElement) return;
+
+    // Match header width to the scrollable body viewport when the vertical scrollbar consumes space.
+    verticalScrollbarWidth = Math.max(0, viewportElement.offsetWidth - viewportElement.clientWidth);
+  };
+
+  onMount(() => {
+    if (!shellElement) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      syncHeaderScrollbarCompensation();
+    });
+
+    resizeObserver.observe(shellElement);
+
+    const viewportElement = shellElement.querySelector('.table-grid-virtual-viewport') as HTMLDivElement | null;
+    if (viewportElement) {
+      resizeObserver.observe(viewportElement);
+    }
+
+    queueMicrotask(() => {
+      syncHeaderScrollbarCompensation();
+    });
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  });
+
+  $effect(() => {
+    data.length;
+    normalizedRowHeight;
+    bufferSize;
+
+    queueMicrotask(() => {
+      syncHeaderScrollbarCompensation();
+    });
+  });
 </script>
 
 <div class="table-grid-shell {css}"
-  style="height: {height}; --table-grid-template-columns: {gridTemplateColumns}; --table-grid-row-height: {normalizedRowHeight}px;"
+  bind:this={shellElement}
+  style="height: {height}; --table-grid-template-columns: {gridTemplateColumns}; --table-grid-row-height: {normalizedRowHeight}px; --table-grid-scrollbar-width: {verticalScrollbarWidth}px;"
 >
   <div class="table-grid-scroll-host">
     <div class="table-grid-header {headerCss}">
@@ -160,8 +207,8 @@
                     role="cell"
                     title={`${defaultCellValue}`}
                   >
-                    {#if cellRenderer}
-                      {@render cellRenderer(rowRecord, columnDefinition, defaultCellValue, rowIndex)}
+                    {#if cellRenderer && columnDefinition.useCellRenderer}
+                      {@render cellRenderer(rowRecord, columnDefinition, rowIndex)}
                     {:else}
                       {defaultCellValue}
                     {/if}
@@ -182,13 +229,16 @@
     border-radius: 8px;
     background-color: #ffffff;
     overflow: hidden;
+    min-height: 0;
+    box-sizing: border-box;
   }
 
   .table-grid-scroll-host {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     height: 100%;
-    overflow-x: auto;
+    min-height: 0;
+    overflow-x: hidden;
     overflow-y: hidden;
   }
 
@@ -197,6 +247,8 @@
     background: #f8f9fa;
     position: relative;
     z-index: 2;
+    padding-right: var(--table-grid-scrollbar-width);
+    box-sizing: border-box;
   }
 
   .table-grid-header-row,
@@ -209,8 +261,7 @@
 
   .table-grid-header-cell {
     padding: 8px 10px;
-    font-weight: 600;
-    font-size: 12px;
+    font-family: bold;
     color: #495057;
     border-right: 1px solid #edf2f7;
     white-space: nowrap;
@@ -221,8 +272,10 @@
   }
 
   .table-grid-body {
+    height: 100%;
     min-height: 0;
     position: relative;
+    box-sizing: border-box;
   }
 
   .table-grid-empty {
@@ -237,12 +290,16 @@
 
   .table-grid-row-shell {
     width: 100%;
+    padding: 1px 2px;
+    box-sizing: border-box;
   }
 
   .table-grid-row {
     height: var(--table-grid-row-height);
     cursor: pointer;
     border-bottom: 1px solid #edf2f7;
+    transition: background-color 0.15s ease;
+    position: relative;
   }
 
   .table-grid-row:focus-visible {
@@ -250,18 +307,26 @@
     outline-offset: -2px;
   }
 
+  .table-grid-row:hover {
+    background-color: #f1f3f5;
+  }
+
   .table-grid-row-even {
     background: #ffffff;
   }
 
   .table-grid-row-odd {
-    background: #fbfdff;
+    background: #f8f9fa;
   }
 
-  .table-grid-row-selected {
-    background: #e6f0ff;
-    outline: 1px solid #60a5fa;
+  .table-grid-row-selected,
+  .table-grid-row-selected.table-grid-row:hover {
+    background-color: #f6f6ff;
+    outline: 2px solid var(--color-11);
     outline-offset: -1px;
+    border-radius: 4px;
+    border-bottom-color: transparent;
+    z-index: 12;
   }
 
   .table-grid-cell {
@@ -274,7 +339,17 @@
   }
 
   :global(.table-grid-virtual-viewport) {
+    height: 100% !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
+  }
+
+  :global(.table-grid-virtual-container) {
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+
+  :global(.table-grid-virtual-content) {
+    min-height: 100%;
   }
 </style>

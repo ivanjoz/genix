@@ -328,8 +328,9 @@ type AlmacenMovimiento struct {
 	CreatedBy          int32  `json:",omitempty"`
 	
 	// Extra fields
-	Inflows_           int32  `json:",omitempty"`
-	Outflows_          int32  `json:",omitempty"`
+	Inflows_           int32  `json:"-"`
+	Outflows_          int32  `json:"-"`
+	WarehouseStockMinimum_          map[int32]int32  `json:"-"`
 }
 
 type AlmacenMovimientoTable struct {

@@ -72,12 +72,14 @@
       id: 'status',
       header: 'Status',
       width: '140px',
+      useCellRenderer: true,
       getValue: (rowRecord) => rowRecord.status,
     },
     {
       id: 'actions',
       header: 'Actions',
       width: '150px',
+      useCellRenderer: true,
       align: 'center',
       getValue: () => '',
     },
@@ -118,7 +120,7 @@
     getRowId={resolveRowId}
     onRowClick={selectRow}
   >
-    {#snippet cellRenderer(rowRecord, columnDefinition, defaultCellValue)}
+    {#snippet cellRenderer(rowRecord, columnDefinition)}
       {#if columnDefinition.id === 'status'}
         <span class="status-pill status-{rowRecord.status}">{rowRecord.status}</span>
       {:else if columnDefinition.id === 'actions'}
@@ -130,8 +132,6 @@
         >
           Open
         </button>
-      {:else}
-        {defaultCellValue}
       {/if}
     {/snippet}
   </TableGrid>

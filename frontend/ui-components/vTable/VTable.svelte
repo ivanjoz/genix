@@ -729,7 +729,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
   .vtable-row > td:not(:last-of-type) {
     display: table-cell;
     text-overflow: ellipsis;
-    white-space: nowrap;
+   /*  white-space: nowrap; */
     vertical-align: middle;
     border-right: 1px solid #f1f3f5;
     position: relative;

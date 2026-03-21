@@ -254,6 +254,7 @@
 				id: weekColumn.key,
 				header: weekColumn.label,
 				width: '100px',
+				useCellRenderer: true,
 				align: 'right',
 				getValue: (rowRecord) => {
 					// Keep weekly sum as cell title fallback while rendering daily bars in the snippet.
@@ -314,21 +315,17 @@
 					height="560px"
 					rowHeight={48}
 				>
-					{#snippet cellRenderer(rowRecord, columnDefinition, defaultCellValue)}
-						{#if columnDefinition.id === 'productName'}
-							{defaultCellValue}
-						{:else}
-							{@const cellValues = rowRecord.weeklyTotalsByWeekKey[String(columnDefinition.id)] || Array.from({ length: 7 }, () => [0, 0] as [number, number])}
-							{@const weeklyTotalSales = cellValues.reduce((sumAmount, [dailyTotalSales]) => {
-								return sumAmount + (dailyTotalSales || 0);
-							}, 0)}
-							<div class="relative h-full w-full pt-10 pr-2">
-								<div class="absolute top-2 right-2 text-[13px] leading-none font-semibold text-slate-700">
-									{weeklyTotalSales ? formatN(weeklyTotalSales) : ""}
-								</div>
-								<CellHorizontalBars values={cellValues} maxValue={weeklyBarsMaxValue} />
+					{#snippet cellRenderer(rowRecord, columnDefinition)}
+						{@const cellValues = rowRecord.weeklyTotalsByWeekKey[String(columnDefinition.id)] || Array.from({ length: 7 }, () => [0, 0] as [number, number])}
+						{@const weeklyTotalSales = cellValues.reduce((sumAmount, [dailyTotalSales]) => {
+							return sumAmount + (dailyTotalSales || 0);
+						}, 0)}
+						<div class="relative h-full w-full pt-10 pr-2">
+							<div class="absolute top-2 right-2 text-[13px] leading-none font-semibold text-slate-700">
+								{weeklyTotalSales ? formatN(weeklyTotalSales) : ""}
 							</div>
-						{/if}
+							<CellHorizontalBars values={cellValues} maxValue={weeklyBarsMaxValue} />
+						</div>
 					{/snippet}
 				</TableGrid>
 			{/if}

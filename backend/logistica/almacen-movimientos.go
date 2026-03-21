@@ -181,38 +181,83 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(almacenProductos1)
 }
 
+type FechaProductoMovimientos struct {
+	Fecha              int16
+	DetailProductsIDs  []int32
+	DetailInflows      []int32
+	DetailOutflows     []int32
+	DetailMinimumStock []int32
+	Updated            int16 `json:"upd"`
+}
+
 func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 
-	fecha := req.GetQueryInt16("updated")
+	updated := int16(core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated")))
 
 	movimientos := []negocioTypes.AlmacenMovimiento{}
 
 	query := db.Query(&movimientos).
 		EmpresaID.Equals(req.Usuario.EmpresaID).
-		Fecha.GreaterEqual(fecha)
+		Fecha.GreaterEqual(updated)
+	
+	query.Select(query.Fecha, query.AlmacenID, query.AlmacenCantidad, query.Cantidad, query.ProductoID)
 
 	if err := query.AllowFilter().ExecGroup(
 		func(record *negocioTypes.AlmacenMovimiento) string {
-			// Group rows by business date and product to produce daily inflow/outflow totals.
+			// Group rows by business date and product so each intermediate record already contains the daily product totals.
 			return fmt.Sprintf("%d|%d", record.Fecha, record.ProductoID)
 		},
 		func(newRecord *negocioTypes.AlmacenMovimiento, groupedRecord *negocioTypes.AlmacenMovimiento) {
-			// Normalize the incoming row so the first record already carries the grouped totals.
+			// Normalize signed quantities into inflow/outflow buckets before merging them into the grouped row.
 			if newRecord.Cantidad > 0 {
 				newRecord.Inflows_ = newRecord.Cantidad
 			} else if newRecord.Cantidad < 0 {
-				newRecord.Outflows_ = - newRecord.Cantidad
+				newRecord.Outflows_ = -newRecord.Cantidad
 			}
 			if groupedRecord != nil {
 				groupedRecord.Inflows_ += newRecord.Inflows_
 				groupedRecord.Outflows_ += newRecord.Outflows_
+				currentQuantity := groupedRecord.WarehouseStockMinimum_[newRecord.AlmacenID]
+				if currentQuantity < newRecord.AlmacenCantidad {
+					groupedRecord.WarehouseStockMinimum_[newRecord.AlmacenID] = newRecord.AlmacenCantidad
+				}
+			} else {
+				newRecord.WarehouseStockMinimum_ = map[int32]int32{ newRecord.AlmacenID: newRecord.AlmacenCantidad }
 			}
 		},
 	); err != nil {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)
 	}
 	
-	return req.MakeResponse(movimientos)
+	core.PrintTable(movimientos,30,30,"Fecha", "ProductoID","AlmacenID", "AlmacenCantidad")
+
+	// Fold the already grouped-by-date-product rows into one column-oriented row per business date.
+	dailyGroupedRecords := map[int16]*FechaProductoMovimientos{}
+	for _, movimiento := range movimientos {
+		if _, exists := dailyGroupedRecords[movimiento.Fecha]; !exists {
+			dailyGroupedRecords[movimiento.Fecha] = &FechaProductoMovimientos{
+				Fecha: movimiento.Fecha, Updated: movimiento.Fecha,
+			}
+		}
+
+		dailyGroupedRecord := dailyGroupedRecords[movimiento.Fecha]
+		dailyGroupedRecord.DetailProductsIDs = append(dailyGroupedRecord.DetailProductsIDs, movimiento.ProductoID)
+		dailyGroupedRecord.DetailInflows = append(dailyGroupedRecord.DetailInflows, movimiento.Inflows_)
+		dailyGroupedRecord.DetailOutflows = append(dailyGroupedRecord.DetailOutflows, movimiento.Outflows_)
+		
+		minimumStock := int32(0)
+		for _, stock := range movimiento.WarehouseStockMinimum_ {
+			minimumStock += stock
+		}
+		dailyGroupedRecord.DetailMinimumStock = append(dailyGroupedRecord.DetailMinimumStock, minimumStock)
+	}
+
+	movimientosAgrupados := make([]FechaProductoMovimientos, 0, len(dailyGroupedRecords))
+	for _, groupedRecord := range dailyGroupedRecords {
+		movimientosAgrupados = append(movimientosAgrupados, *groupedRecord)
+	}
+
+	return req.MakeResponse(movimientosAgrupados)
 }
 
 type almacenStockCount struct {

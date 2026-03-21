@@ -7,6 +7,7 @@ export interface TableGridColumn<TRecord> {
   header: string;
   width: string;
   hidden?: boolean;
+  useCellRenderer?: boolean;
   align?: TableGridCellAlign;
   headerCss?: string;
   cellCss?: string;
@@ -17,6 +18,5 @@ export interface TableGridColumn<TRecord> {
 export type TableGridCellRendererSnippet<TRecord> = Snippet<[
   record: TRecord,
   columnDefinition: TableGridColumn<TRecord>,
-  defaultCellValue: string | number,
   rowIndex: number,
 ]>;
