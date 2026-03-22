@@ -1,7 +1,7 @@
 import { Params } from '$core/security'
 import { decodeFromBase62 } from '$libs/helpers'
 import { GetHandler, POST } from '$libs/http.svelte'
-import type { IProductoStock } from './productos-stock.svelte'
+import type { IProductoStock } from './stock-movement'
 
 export interface IProductSupplyProviderRow {
   ProviderID: number
@@ -234,7 +234,7 @@ const extractProductIDFromStockID = (productStockID: string) => {
 export class AlmacenMovimientosGroupedService extends GetHandler {
   route = 'almacen-movimientos-grouped'
   keyID = 'Fecha'
-  useCache = { min: 5, ver: 7 }
+  useCache = { min: 5, ver: 8 }
 
   records: IFechaProductoMovimientos[] = $state([])
   recordsMap: Map<number, IFechaProductoMovimientos> = $state(new Map())

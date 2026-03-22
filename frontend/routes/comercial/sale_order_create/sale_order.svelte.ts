@@ -1,6 +1,6 @@
 import { POST } from '$libs/http.svelte';
 import { type IProducto } from '$routes/negocio/productos/productos.svelte';
-import { type IProductoStock } from '$routes/logistica/productos-stock/productos-stock.svelte';
+import { type IProductoStock } from '$routes/logistica/products-stock/stock-movement';
 import { Loading, Notify } from '$libs/helpers';
 
 export interface ProductoVenta {

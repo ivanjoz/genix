@@ -5,6 +5,7 @@ import (
 	"app/core"
 	"app/db"
 	finanzasTypes "app/finanzas/types"
+	logisticaTypes "app/logistica/types"
 	negocioTypes "app/negocio/types"
 	"fmt"
 )
@@ -45,7 +46,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	// 1. Test AlmacenProducto with KeyConcatenated Smart Logic
 	// This should trigger a range query on the 'id' column because it's the first column of KeyConcatenated.
 	fmt.Println("\n--- Test 1: AlmacenProducto (Smart ORM for KeyConcatenated) ---")
-	productos := []negocioTypes.AlmacenProducto{}
+	productos := []logisticaTypes.ProductoStock{}
 	q1 := db.Query(&productos)
 	err = q1.EmpresaID.Equals(1).
 		AlmacenID.Equals(1). // This is the first column in KeyConcatenated for AlmacenProducto
@@ -59,7 +60,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// 2. Test AlmacenProducto with multiple prefix columns
 	fmt.Println("\n--- Test 2: AlmacenProducto (Multiple prefix columns) ---")
-	productos2 := []negocioTypes.AlmacenProducto{}
+	productos2 := []logisticaTypes.ProductoStock{}
 	q2 := db.Query(&productos2)
 	err = q2.EmpresaID.Equals(1).
 		AlmacenID.Equals(1).
@@ -74,7 +75,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// New test
 	fmt.Println("\n--- Test 21: AlmacenProducto. Using view: []db.Coln{e.AlmacenID, e.Status, e.Updated} ---")
-	productos21 := []negocioTypes.AlmacenProducto{}
+	productos21 := []logisticaTypes.ProductoStock{}
 	q21 := db.Query(&productos21)
 	err = q21.EmpresaID.Equals(1).
 		AlmacenID.Equals(1).Status.Equals(1).Updated.GreaterEqual(1000).

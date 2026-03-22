@@ -1,16 +1,16 @@
 <script lang="ts">
 import { Core } from '$core/store.svelte'
 import Page from '$domain/Page.svelte'
-import AbastecimientoView from './AbastecimientoView.svelte'
-import GestionStockView from './GestionStockView.svelte'
+import ProductSupplyManagement from './ProductSupplyManagement.svelte'
+import ProductStockMovement from './ProductStockMovement.svelte'
 
   const pageOptions = [{ id: 1, name: 'Gestión Stock' }, { id: 2, name: 'Abastecimiento' }]
 </script>
 
 <Page title="productos-stock" options={pageOptions}>
   {#if Core.pageOptionSelected === 1}
-    <GestionStockView />
+    <ProductStockMovement />
   {:else if Core.pageOptionSelected === 2}
-    <AbastecimientoView />
+    <ProductSupplyManagement />
   {/if}
 </Page>

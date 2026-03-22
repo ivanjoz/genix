@@ -6,6 +6,7 @@ import (
 	logisticaTypes "app/logistica/types"
 	negocioTypes "app/negocio/types"
 	"encoding/json"
+	"fmt"
 	"slices"
 )
 
@@ -144,4 +145,95 @@ func validateProviderSupplyRows(req *core.HandlerArgs, providerSupplyRows []logi
 	}
 
 	return nil
+}
+
+/* GET: ALMACEN MOVIMIENTOS GROUPED */
+
+type FechaProductoMovimientos struct {
+	Fecha              int16
+	DetailProductsIDs  []int32
+	DetailInflows      []int32
+	DetailOutflows     []int32
+	DetailMinimumStock []int32
+	Updated            int16 `json:"upd"`
+}
+
+func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
+
+	movimientosFecha := int16(req.GetQueryInt("movimientos"))
+	productosStockUpdated := req.GetQueryInt("productosStock")
+
+	movimientos := []logisticaTypes.AlmacenMovimiento{}
+
+	query := db.Query(&movimientos).
+		EmpresaID.Equals(req.Usuario.EmpresaID).
+		Fecha.GreaterEqual(movimientosFecha)
+
+	query.Select(query.Fecha, query.Cantidad, query.ProductoID)
+
+	if err := query.AllowFilter().ExecGroup(
+		func(record *logisticaTypes.AlmacenMovimiento) string {
+			// Group rows by business date and product so each intermediate record already contains the daily product totals.
+			return fmt.Sprintf("%d|%d", record.Fecha, record.ProductoID)
+		},
+		func(newRecord *logisticaTypes.AlmacenMovimiento, groupedRecord *logisticaTypes.AlmacenMovimiento) {
+			// Normalize signed quantities into inflow/outflow buckets before merging them into the grouped row.
+			if newRecord.Cantidad > 0 {
+				newRecord.Inflows_ = newRecord.Cantidad
+			} else if newRecord.Cantidad < 0 {
+				newRecord.Outflows_ = -newRecord.Cantidad
+			}
+			if groupedRecord != nil {
+				groupedRecord.Inflows_ += newRecord.Inflows_
+				groupedRecord.Outflows_ += newRecord.Outflows_
+			}
+		},
+	); err != nil {
+		return req.MakeErr("Error al obtener los registros del almacén:", err)
+	}
+
+	core.PrintTable(movimientos, 30, 30, "Fecha", "ProductoID", "AlmacenID", "AlmacenCantidad")
+
+	// Fold the already grouped-by-date-product rows into one column-oriented row per business date.
+	dailyGroupedRecords := map[int16]*FechaProductoMovimientos{}
+	for _, movimiento := range movimientos {
+		if _, exists := dailyGroupedRecords[movimiento.Fecha]; !exists {
+			dailyGroupedRecords[movimiento.Fecha] = &FechaProductoMovimientos{
+				Fecha: movimiento.Fecha, Updated: movimiento.Fecha,
+			}
+		}
+
+		dailyGroupedRecord := dailyGroupedRecords[movimiento.Fecha]
+		dailyGroupedRecord.DetailProductsIDs = append(dailyGroupedRecord.DetailProductsIDs, movimiento.ProductoID)
+		dailyGroupedRecord.DetailInflows = append(dailyGroupedRecord.DetailInflows, movimiento.Inflows_)
+		dailyGroupedRecord.DetailOutflows = append(dailyGroupedRecord.DetailOutflows, movimiento.Outflows_)
+	}
+
+	movimientosAgrupados := make([]FechaProductoMovimientos, 0, len(dailyGroupedRecords))
+	for _, groupedRecord := range dailyGroupedRecords {
+		movimientosAgrupados = append(movimientosAgrupados, *groupedRecord)
+	}
+
+	// Productos Stock
+	productosStock := []logisticaTypes.ProductoStock{}
+
+	psQuery := db.Query(&productosStock).AllowFilter()
+	psQuery.Select(psQuery.ID, psQuery.Updated, psQuery.Cantidad)
+
+	if productosStockUpdated == 0 {
+		psQuery.Status.Equals(1)
+	} else {
+		psQuery.Updated.GreaterEqual(productosStockUpdated)
+	}
+
+	if err := psQuery.Exec(); err != nil {
+		return req.MakeErr("Error al obtener los productos stock:", err)
+	}
+
+	response := map[string]any{
+		"productosStock": &productosStock,
+		"movimientos":    &movimientosAgrupados,
+	}
+
+	return req.MakeResponse(response)
 }

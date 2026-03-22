@@ -23,7 +23,7 @@ export const getProductosStock = async (almacenID: number): Promise<IProductoSto
     records = await GET({ 
       route: `productos-stock?almacen-id=${almacenID}`,
       errorMessage: 'Hubo un error al obtener el stock.',
-      useCache: { min: 0, ver: 6 },
+      useCache: { min: 0.2, ver: 7 },
     })
   } catch (error) {
     Notify.failure(error as string)

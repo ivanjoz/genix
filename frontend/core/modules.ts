@@ -78,7 +78,7 @@ export const AdminModule: IModule = {
 		},
 		{ name: "Logística", minName: "LOG",  id: 4, icon: "icon-tasks",
       options: [
-	      { name: "Gestión de Stock", route: "/logistica/productos-stock",
+	      { name: "Gestión de Stock", route: "/logistica/products-stock",
 	        icon: "icon-chart-bar"
 	      },
 	      { name: "Rep. Movimientos", route: "/logistica/almacen-movimientos",

@@ -5,8 +5,7 @@ import Page from '$domain/Page.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
 import { Loading, include } from '$libs/helpers';
 import { formatN } from '$libs/helpers';
-import type { IProductoStock } from '$routes/logistica/productos-stock/productos-stock.svelte';
-import { getProductosStock } from '$routes/logistica/productos-stock/productos-stock.svelte';
+
 import { ProductosService } from '$routes/negocio/productos/productos.svelte';
 import type { IAlmacen } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte";
   import { AlmacenesService } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte";
@@ -22,6 +21,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
     import CheckboxOptions from '$components/CheckboxOptions.svelte';
     import { CajasService, type ICaja } from '$routes/finanzas/cajas/cajas.svelte';
     import { untrack } from 'svelte';
+    import { getProductosStock, type IProductoStock } from '$routes/logistica/products-stock/stock-movement';
 
   // Helpers
   const formatMo = (n: number) => formatN(n / 100, 2);

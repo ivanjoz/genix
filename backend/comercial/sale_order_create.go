@@ -7,7 +7,7 @@ import (
 	"app/finanzas"
 	finanzasTypes "app/finanzas/types"
 	"app/logistica"
-	negocioTypes "app/negocio/types"
+	logisticaTypes "app/logistica/types"
 	"encoding/json"
 	"slices"
 	"time"
@@ -37,7 +37,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	sale := saleRequest
 	stockSolicitadoPorID := map[string]int32{}
-	stockActualPorID := map[string]*negocioTypes.AlmacenProducto{}
+	stockActualPorID := map[string]*logisticaTypes.ProductoStock{}
 	if isUpdate {
 		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
 		existingSales := []types.SaleOrder{}
@@ -93,7 +93,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		if len(stockSolicitadoPorID) > 0 {
-			productosStock := []negocioTypes.AlmacenProducto{}
+			productosStock := []logisticaTypes.ProductoStock{}
 			query := db.Query(&productosStock)
 			err := query.Select(
 				query.ID,
@@ -216,7 +216,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	if slices.Contains(sale.ActionsIncluded, 3) {
 		core.Log("Incluyendo movimientos internos...", len(sale.DetailProductsIDs))
 
-		movimientosInternos := []negocioTypes.MovimientoInterno{}
+		movimientosInternos := []logisticaTypes.MovimientoInterno{}
 		for i, productoID := range sale.DetailProductsIDs {
 			if i >= len(sale.DetailQuantities) {
 				break
@@ -234,7 +234,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				core.GetIndex(sale.DetailProductLots, i),
 			)
 
-			movimientosInternos = append(movimientosInternos, negocioTypes.MovimientoInterno{
+			movimientosInternos = append(movimientosInternos, logisticaTypes.MovimientoInterno{
 				AlmacenID:      sale.AlmacenID,
 				ProductoID:     productoID,
 				PresentacionID: core.GetIndex(sale.DetailProductPresentations, i),

@@ -10,7 +10,7 @@ import { Loading, Notify, throttle } from '$libs/helpers'
 import { untrack } from 'svelte'
 import { ProductosService } from '../../negocio/productos/productos.svelte'
 import { AlmacenesService } from '../../negocio/sedes-almacenes/sedes-almacenes.svelte'
-import { getProductosStock, postProductosStock, type IProductoStock } from './productos-stock.svelte'
+import { getProductosStock, postProductosStock, type IProductoStock } from './stock-movement'
 
   const almacenes = new AlmacenesService()
   const productos = new ProductosService()

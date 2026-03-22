@@ -20,7 +20,7 @@ import {
   ProductSupplyService,
   type IProductSupplyProviderRow,
   type IProductSupplyRow,
-} from './abastecimiento.svelte'
+} from './supply-management.svelte'
 
   const productos = new ProductosService()
   const providers = new ClientProviderService(ClientProviderType.PROVIDER)

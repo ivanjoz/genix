@@ -96,7 +96,7 @@ access_list:
     name: "Gestión de Stock"
     group: 4
     levels: 14
-    frontend_routes: "logistica/productos-stock"
+    frontend_routes: "logistica/products-stock"
     backend_apis: "POST.productos-stock,POST.product-supply"
   - id: 15
     name: "Rep. Movimientos"
