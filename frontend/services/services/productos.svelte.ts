@@ -1,4 +1,3 @@
-import { Env } from '$core/env';
 import { arrayToMapN } from '$libs/helpers';
 import { GET } from '$libs/http.svelte';
 

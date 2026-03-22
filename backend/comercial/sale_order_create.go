@@ -8,6 +8,7 @@ import (
 	finanzasTypes "app/finanzas/types"
 	"app/logistica"
 	logisticaTypes "app/logistica/types"
+	coreTypes "app/core/types"
 	"encoding/json"
 	"slices"
 	"time"
@@ -294,6 +295,12 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	if err := updateSaleSummaryForChange(sale, saleActions...); err != nil {
 		core.Log("Error actualizando resumen de ventas:", err)
 	}
+	
+	core.ScheduleCronAction(coreTypes.CronAction{
+		CompanyID: req.Usuario.EmpresaID,
+		ActionID: 2, 
+		Params: coreTypes.CronActionParams{ Param1: int64(sale.Fecha) },
+	},10)
 
 	return req.MakeResponse(sale)
 }

@@ -4,163 +4,66 @@ import (
 	"app/comercial/types"
 	"app/core"
 	"app/db"
-	"math"
+	"slices"
 )
 
 type ProductSummaryChange struct {
 	productID, quantity, quantityPendingDelivery, amount, totalDebtAmount int32
 }
 
-const (
-	// Action 1: register the sale lines in summary.
-	saleSummaryActionSale int8 = 1
-	// Action 2: settle full payment for the sale lines.
-	saleSummaryActionPayment int8 = 2
-	// Action 3: settle full delivery for the sale lines.
-	saleSummaryActionDelivery int8 = 3
-)
-
-func UpdateProductOnSumary(summary *types.SaleSummary, summaryChanges ...ProductSummaryChange) error {
-	if summary == nil || len(summaryChanges) == 0 {
-		return nil
+func MakeSummaryChangeFromOSaleOrder(sale types.SaleOrder, actions ...int8) []ProductSummaryChange {
+	changes := []ProductSummaryChange{}
+	if len(sale.DetailProductsIDs) == 0 {
+		return changes
+	}
+	if len(sale.DetailProductsIDs) != len(sale.DetailQuantities) || len(sale.DetailProductsIDs) != len(sale.DetailPrices) {
+		return changes
 	}
 
-	// Index existing int32 rows so small deltas for already-promoted products stay on int32.
-	existingProductsInt32 := map[int32]int{}
-	for index, productID := range summary.ProductIDs_32 {
-		if productID > 0 {
-			existingProductsInt32[productID] = index
-		}
-	}
+	// Resolve actions once so each line only applies simple numeric updates.
+	includeSale := slices.Contains(actions, 1)
+	includePayment := slices.Contains(actions, 2)
+	includeDelivery := slices.Contains(actions, 3)
+	changesByProduct := map[int32]ProductSummaryChange{}
 
-	// Create 2 maps: pending deltas for int16 and int32 storage.
-	productosInt16 := map[uint16]ProductSummaryChange{}
-	productosInt32 := map[int32]ProductSummaryChange{}
-
-	for _, summaryChange := range summaryChanges {
-		if summaryChange.productID <= 0 {
+	for lineIndex, productID := range sale.DetailProductsIDs {
+		quantity := sale.DetailQuantities[lineIndex]
+		if productID <= 0 || quantity <= 0 {
 			continue
 		}
 
-		mustUseInt32 := summaryChange.productID > math.MaxUint16 ||
-			absInt32(summaryChange.quantity) > math.MaxUint16 ||
-			absInt32(summaryChange.quantityPendingDelivery) > math.MaxUint16
-		if !mustUseInt32 {
-			_, existsInInt32 := existingProductsInt32[summaryChange.productID]
-			mustUseInt32 = existsInInt32
-		}
+		lineAmount := core.MultiplyInt32Saturated(sale.DetailPrices[lineIndex], quantity)
+		currentChange := changesByProduct[productID]
+		currentChange.productID = productID
 
-		if mustUseInt32 {
-			if _, exists := productosInt32[summaryChange.productID]; exists {
-				return core.Err("duplicated product in summary changes:", summaryChange.productID)
+		if includeSale {
+			// Sale creation adds units and total amount once.
+			currentChange.quantity += quantity
+			currentChange.amount += lineAmount
+			// When delivery is still pending, the full quantity remains pending.
+			if !includeDelivery {
+				currentChange.quantityPendingDelivery += quantity
 			}
-			productosInt32[summaryChange.productID] = summaryChange
-			continue
-		}
-
-		productID16 := uint16(summaryChange.productID)
-		if _, exists := productosInt16[productID16]; exists {
-			return core.Err("duplicated product in summary changes:", summaryChange.productID)
-		}
-		productosInt16[productID16] = summaryChange
-	}
-
-	// Update existing int16 rows directly by index and promote overflows to int32 pending map.
-	for index, productID16 := range summary.ProductIDs_16 {
-		if productID16 == 0 {
-			continue
-		}
-
-		summaryChange, exists := productosInt16[productID16]
-		if !exists {
-			continue
-		}
-
-		nextQuantity16 := int32(summary.Quantity_16[index]) + summaryChange.quantity
-		nextQuantityPendingDelivery16 := int32(summary.QuantityPendingDelivery_16[index]) + summaryChange.quantityPendingDelivery
-		nextAmount16 := summary.TotalAmount_16[index] + summaryChange.amount
-		nextTotalDebtAmount16 := summary.TotalDebtAmount_16[index] + summaryChange.totalDebtAmount
-
-		if nextQuantity16 > math.MaxUint16 || nextQuantityPendingDelivery16 > math.MaxUint16 {
-			promotedChange, existsPromoted := productosInt32[int32(productID16)]
-			if existsPromoted {
-				return core.Err("duplicated promoted product in summary changes:", int32(productID16))
+			// When payment is still pending, the full line amount remains as debt.
+			if !includePayment {
+				currentChange.totalDebtAmount += lineAmount
 			}
-			promotedChange.productID = int32(productID16)
-			promotedChange.quantity += nextQuantity16
-			promotedChange.quantityPendingDelivery += nextQuantityPendingDelivery16
-			promotedChange.amount += nextAmount16
-			promotedChange.totalDebtAmount += nextTotalDebtAmount16
-			productosInt32[int32(productID16)] = promotedChange
-
-			summary.ProductIDs_16[index] = 0
-			summary.Quantity_16[index] = 0
-			summary.QuantityPendingDelivery_16[index] = 0
-			summary.TotalAmount_16[index] = 0
-			summary.TotalDebtAmount_16[index] = 0
-			delete(productosInt16, productID16)
-			continue
 		}
-
-		summary.Quantity_16[index] = uint16(maxZero(nextQuantity16))
-		summary.QuantityPendingDelivery_16[index] = uint16(maxZero(nextQuantityPendingDelivery16))
-		summary.TotalAmount_16[index] = maxZero(nextAmount16)
-		summary.TotalDebtAmount_16[index] = maxZero(nextTotalDebtAmount16)
-		delete(productosInt16, productID16)
+		if includePayment && !includeSale {
+			// Pure payment updates only reduce pending debt.
+			currentChange.totalDebtAmount -= lineAmount
+		}
+		if includeDelivery && !includeSale {
+			// Pure delivery updates only reduce pending quantity.
+			currentChange.quantityPendingDelivery -= quantity
+		}
+		changesByProduct[productID] = currentChange
 	}
 
-	// Append remaining int16 products that did not exist before.
-	for productID16, summaryChange := range productosInt16 {
-		quantity := maxZero(summaryChange.quantity)
-		quantityPendingDelivery := maxZero(summaryChange.quantityPendingDelivery)
-		amount := maxZero(summaryChange.amount)
-		totalDebtAmount := maxZero(summaryChange.totalDebtAmount)
-		if quantity == 0 && quantityPendingDelivery == 0 && amount == 0 && totalDebtAmount == 0 {
-			continue
-		}
-
-		newIndex := appendSummaryRow16(summary, productID16)
-		summary.Quantity_16[newIndex] = uint16(quantity)
-		summary.QuantityPendingDelivery_16[newIndex] = uint16(quantityPendingDelivery)
-		summary.TotalAmount_16[newIndex] = amount
-		summary.TotalDebtAmount_16[newIndex] = totalDebtAmount
+	for _, summaryChange := range changesByProduct {
+		changes = append(changes, summaryChange)
 	}
-
-	// Update existing int32 rows directly by index.
-	for index, productID32 := range summary.ProductIDs_32 {
-		if productID32 == 0 {
-			continue
-		}
-
-		summaryChange, exists := productosInt32[productID32]
-		if !exists {
-			continue
-		}
-
-		summary.Quantity_32[index] = maxZero(summary.Quantity_32[index] + summaryChange.quantity)
-		summary.QuantityPendingDelivery_32[index] = maxZero(summary.QuantityPendingDelivery_32[index] + summaryChange.quantityPendingDelivery)
-		summary.TotalAmount_32[index] = maxZero(summary.TotalAmount_32[index] + summaryChange.amount)
-		summary.TotalDebtAmount_32[index] = maxZero(summary.TotalDebtAmount_32[index] + summaryChange.totalDebtAmount)
-		delete(productosInt32, productID32)
-	}
-
-	// Append remaining int32 products that did not exist before.
-	for productID32, summaryChange := range productosInt32 {
-		quantity := maxZero(summaryChange.quantity)
-		quantityPendingDelivery := maxZero(summaryChange.quantityPendingDelivery)
-		amount := maxZero(summaryChange.amount)
-		totalDebtAmount := maxZero(summaryChange.totalDebtAmount)
-		if quantity == 0 && quantityPendingDelivery == 0 && amount == 0 && totalDebtAmount == 0 {
-			continue
-		}
-
-		newIndex := appendSummaryRow32(summary, productID32)
-		summary.Quantity_32[newIndex] = quantity
-		summary.QuantityPendingDelivery_32[newIndex] = quantityPendingDelivery
-		summary.TotalAmount_32[newIndex] = amount
-		summary.TotalDebtAmount_32[newIndex] = totalDebtAmount
-	}
-	return nil
+	return changes
 }
 
 func UpdateSaleSumary(summary *types.SaleSummary, sale types.SaleOrder, actions ...int8) error {
@@ -168,29 +71,17 @@ func UpdateSaleSumary(summary *types.SaleSummary, sale types.SaleOrder, actions 
 		return core.Err("sale summary is nil")
 	}
 
-	actionFlags, err := parseSaleSummaryActionFlags(actions...)
-	if err != nil {
-		return err
-	}
+	// Step 1: convert the sale plus action set into one delta per product.
+	allChanges := MakeSummaryChangeFromOSaleOrder(sale, actions...)
 
-	changesByProduct := map[int32]ProductSummaryChange{}
-	if len(sale.DetailProductsIDs) > 0 {
-		if err := collectSaleChangesByActions(changesByProduct, sale, actionFlags); err != nil {
-			return err
-		}
-	}
-
-	allChanges := make([]ProductSummaryChange, 0, len(changesByProduct))
-	for _, summaryChange := range changesByProduct {
-		allChanges = append(allChanges, summaryChange)
-	}
+	// Step 2: apply all product deltas against the in-memory summary.
 	if len(allChanges) > 0 {
 		if err := UpdateProductOnSumary(summary, allChanges...); err != nil {
 			return err
 		}
 	}
 
-	removeEmptySummaryRows(summary)
+	// Step 3: persist the refreshed summary snapshot.
 	summary.Updated = core.SUnixTime()
 	if err := db.InsertOne(*summary); err != nil {
 		return core.Err("error saving sale summary:", err)
@@ -199,6 +90,7 @@ func UpdateSaleSumary(summary *types.SaleSummary, sale types.SaleOrder, actions 
 }
 
 func updateSaleSummaryForChange(sale types.SaleOrder, actions ...int8) error {
+	// Load the current day snapshot first, then apply the requested action deltas.
 	previousSummary, err := loadSaleSummary(sale.EmpresaID, sale.Fecha)
 	if err != nil {
 		return err
@@ -207,6 +99,7 @@ func updateSaleSummaryForChange(sale types.SaleOrder, actions ...int8) error {
 }
 
 func loadSaleSummary(empresaID int32, fecha int16) (types.SaleSummary, error) {
+	// Read at most one daily summary because the table key is empresa + fecha.
 	summaries := []types.SaleSummary{}
 	query := db.Query(&summaries)
 	query.EmpresaID.Equals(empresaID).Fecha.Equals(fecha).Limit(1)
@@ -220,167 +113,56 @@ func loadSaleSummary(empresaID int32, fecha int16) (types.SaleSummary, error) {
 	return types.SaleSummary{EmpresaID: empresaID, Fecha: fecha}, nil
 }
 
-type saleSummaryActionFlags struct {
-	includeSale     bool
-	includePayment  bool
-	includeDelivery bool
-}
-
-func parseSaleSummaryActionFlags(actions ...int8) (saleSummaryActionFlags, error) {
-	flags := saleSummaryActionFlags{}
-
-	for _, actionID := range actions {
-		if actionID == saleSummaryActionSale {
-			flags.includeSale = true
-		} else if actionID == saleSummaryActionPayment {
-			flags.includePayment = true
-		} else if actionID == saleSummaryActionDelivery {
-			flags.includeDelivery = true
-		} else {
-			return saleSummaryActionFlags{}, core.Err("invalid sale summary action:", actionID)
-		}
-	}
-	return flags, nil
-}
-
-func collectSaleChangesByActions(changesByProduct map[int32]ProductSummaryChange, sale types.SaleOrder, actionFlags saleSummaryActionFlags) error {
-	if len(sale.DetailProductsIDs) == 0 {
+func UpdateProductOnSumary(summary *types.SaleSummary, summaryChanges ...ProductSummaryChange) error {
+	if summary == nil || len(summaryChanges) == 0 {
 		return nil
 	}
-	if len(sale.DetailProductsIDs) != len(sale.DetailQuantities) || len(sale.DetailProductsIDs) != len(sale.DetailPrices) {
-		return core.Err("sale detail slices have inconsistent lengths")
+
+	// Step 1: index existing rows so each product update can find its slot in O(1).
+	productIndexes := map[int32]int{}
+	for index, productID := range summary.ProductIDs {
+		if productID > 0 {
+			productIndexes[productID] = index
+		}
 	}
 
-	for lineIndex, productID := range sale.DetailProductsIDs {
-		quantity := sale.DetailQuantities[lineIndex]
-		if productID <= 0 || quantity <= 0 {
+	// Step 2: merge duplicated product deltas so callers can pass raw line changes safely.
+	mergedChanges := map[int32]ProductSummaryChange{}
+	for _, summaryChange := range summaryChanges {
+		if summaryChange.productID <= 0 {
 			continue
 		}
+		currentChange := mergedChanges[summaryChange.productID]
+		currentChange.productID = summaryChange.productID
+		currentChange.quantity += summaryChange.quantity
+		currentChange.quantityPendingDelivery += summaryChange.quantityPendingDelivery
+		currentChange.amount += summaryChange.amount
+		currentChange.totalDebtAmount += summaryChange.totalDebtAmount
+		mergedChanges[summaryChange.productID] = currentChange
+	}
 
-		lineAmount := multiplyInt32(sale.DetailPrices[lineIndex], quantity)
-		currentSummaryChange := changesByProduct[productID]
-		currentSummaryChange.productID = productID
+	// Step 3: update the existing row or append a new one for each product delta.
+	for productID, summaryChange := range mergedChanges {
+		index, exists := productIndexes[productID]
+		if !exists {
+			index = appendSummaryRow(summary, productID)
+			productIndexes[productID] = index
+		}
 
-		if actionFlags.includeSale {
-			// On sale creation we add units and amount once.
-			currentSummaryChange.quantity += quantity
-			currentSummaryChange.amount += lineAmount
-			// If delivery is not included, full line quantity starts as pending.
-			if !actionFlags.includeDelivery {
-				currentSummaryChange.quantityPendingDelivery += quantity
-			}
-			// If payment is not included, full line amount starts as pending debt.
-			if !actionFlags.includePayment {
-				currentSummaryChange.totalDebtAmount += lineAmount
-			}
-		}
-		if actionFlags.includePayment && !actionFlags.includeSale {
-			// Full payment settlement removes all debt contributed by this sale lines.
-			currentSummaryChange.totalDebtAmount -= lineAmount
-		}
-		if actionFlags.includeDelivery && !actionFlags.includeSale {
-			// Full delivery settlement removes all pending quantity from this sale lines.
-			currentSummaryChange.quantityPendingDelivery -= quantity
-		}
-		changesByProduct[productID] = currentSummaryChange
+		summary.Quantity[index] = core.ClampInt32ToZero(summary.Quantity[index] + summaryChange.quantity)
+		summary.QuantityPendingDelivery[index] = core.ClampInt32ToZero(summary.QuantityPendingDelivery[index] + summaryChange.quantityPendingDelivery)
+		summary.TotalAmount[index] = core.ClampInt32ToZero(summary.TotalAmount[index] + summaryChange.amount)
+		summary.TotalDebtAmount[index] = core.ClampInt32ToZero(summary.TotalDebtAmount[index] + summaryChange.totalDebtAmount)
 	}
 	return nil
 }
 
-func removeEmptySummaryRows(summary *types.SaleSummary) {
-	// Compact sparse slices after decrements/promotions to avoid storing dead rows.
-	productIDs16 := make([]uint16, 0, len(summary.ProductIDs_16))
-	quantities16 := make([]uint16, 0, len(summary.Quantity_16))
-	quantitiesPendingDelivery16 := make([]uint16, 0, len(summary.QuantityPendingDelivery_16))
-	totalAmounts16 := make([]int32, 0, len(summary.TotalAmount_16))
-	totalDebtAmounts16 := make([]int32, 0, len(summary.TotalDebtAmount_16))
-
-	for index, productID := range summary.ProductIDs_16 {
-		if productID == 0 {
-			continue
-		}
-		if summary.Quantity_16[index] == 0 && summary.QuantityPendingDelivery_16[index] == 0 && summary.TotalAmount_16[index] == 0 && summary.TotalDebtAmount_16[index] == 0 {
-			continue
-		}
-		productIDs16 = append(productIDs16, productID)
-		quantities16 = append(quantities16, summary.Quantity_16[index])
-		quantitiesPendingDelivery16 = append(quantitiesPendingDelivery16, summary.QuantityPendingDelivery_16[index])
-		totalAmounts16 = append(totalAmounts16, summary.TotalAmount_16[index])
-		totalDebtAmounts16 = append(totalDebtAmounts16, summary.TotalDebtAmount_16[index])
-	}
-
-	summary.ProductIDs_16 = productIDs16
-	summary.Quantity_16 = quantities16
-	summary.QuantityPendingDelivery_16 = quantitiesPendingDelivery16
-	summary.TotalAmount_16 = totalAmounts16
-	summary.TotalDebtAmount_16 = totalDebtAmounts16
-
-	productIDs32 := make([]int32, 0, len(summary.ProductIDs_32))
-	quantities32 := make([]int32, 0, len(summary.Quantity_32))
-	quantitiesPendingDelivery32 := make([]int32, 0, len(summary.QuantityPendingDelivery_32))
-	totalAmounts32 := make([]int32, 0, len(summary.TotalAmount_32))
-	totalDebtAmounts32 := make([]int32, 0, len(summary.TotalDebtAmount_32))
-
-	for index, productID := range summary.ProductIDs_32 {
-		if productID == 0 {
-			continue
-		}
-		if summary.Quantity_32[index] == 0 && summary.QuantityPendingDelivery_32[index] == 0 && summary.TotalAmount_32[index] == 0 && summary.TotalDebtAmount_32[index] == 0 {
-			continue
-		}
-		productIDs32 = append(productIDs32, productID)
-		quantities32 = append(quantities32, summary.Quantity_32[index])
-		quantitiesPendingDelivery32 = append(quantitiesPendingDelivery32, summary.QuantityPendingDelivery_32[index])
-		totalAmounts32 = append(totalAmounts32, summary.TotalAmount_32[index])
-		totalDebtAmounts32 = append(totalDebtAmounts32, summary.TotalDebtAmount_32[index])
-	}
-
-	summary.ProductIDs_32 = productIDs32
-	summary.Quantity_32 = quantities32
-	summary.QuantityPendingDelivery_32 = quantitiesPendingDelivery32
-	summary.TotalAmount_32 = totalAmounts32
-	summary.TotalDebtAmount_32 = totalDebtAmounts32
-}
-
-func appendSummaryRow16(summary *types.SaleSummary, productID uint16) int {
-	summary.ProductIDs_16 = append(summary.ProductIDs_16, productID)
-	summary.Quantity_16 = append(summary.Quantity_16, 0)
-	summary.QuantityPendingDelivery_16 = append(summary.QuantityPendingDelivery_16, 0)
-	summary.TotalAmount_16 = append(summary.TotalAmount_16, 0)
-	summary.TotalDebtAmount_16 = append(summary.TotalDebtAmount_16, 0)
-	return len(summary.ProductIDs_16) - 1
-}
-
-func appendSummaryRow32(summary *types.SaleSummary, productID int32) int {
-	summary.ProductIDs_32 = append(summary.ProductIDs_32, productID)
-	summary.Quantity_32 = append(summary.Quantity_32, 0)
-	summary.QuantityPendingDelivery_32 = append(summary.QuantityPendingDelivery_32, 0)
-	summary.TotalAmount_32 = append(summary.TotalAmount_32, 0)
-	summary.TotalDebtAmount_32 = append(summary.TotalDebtAmount_32, 0)
-	return len(summary.ProductIDs_32) - 1
-}
-
-func absInt32(value int32) int32 {
-	if value < 0 {
-		return -value
-	}
-	return value
-}
-
-func maxZero(value int32) int32 {
-	if value < 0 {
-		return 0
-	}
-	return value
-}
-
-func multiplyInt32(valueA int32, valueB int32) int32 {
-	result64 := int64(valueA) * int64(valueB)
-	if result64 > math.MaxInt32 {
-		return math.MaxInt32
-	}
-	if result64 < math.MinInt32 {
-		return math.MinInt32
-	}
-	return int32(result64)
+func appendSummaryRow(summary *types.SaleSummary, productID int32) int {
+	// Keep all summary slices aligned by appending the new product row to each one.
+	summary.ProductIDs = append(summary.ProductIDs, productID)
+	summary.Quantity = append(summary.Quantity, 0)
+	summary.QuantityPendingDelivery = append(summary.QuantityPendingDelivery, 0)
+	summary.TotalAmount = append(summary.TotalAmount, 0)
+	summary.TotalDebtAmount = append(summary.TotalDebtAmount, 0)
+	return len(summary.ProductIDs) - 1
 }

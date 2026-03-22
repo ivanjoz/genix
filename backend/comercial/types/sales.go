@@ -134,36 +134,27 @@ type SaleSummary struct {
 	db.TableStruct[SaleSummaryTable, SaleSummary]
 	EmpresaID int32 `json:",omitempty"`
 	Fecha     int16 `json:",omitempty"`
-	// uint16 productos and quantity
-	ProductIDs_16              []uint16 `json:",omitempty"`
-	Quantity_16                []uint16 `json:",omitempty"`
-	QuantityPendingDelivery_16 []uint16 `json:",omitempty"`
-	TotalAmount_16             []int32  `json:",omitempty" db:",list"`
-	TotalDebtAmount_16         []int32  `json:",omitempty" db:",list"`
-	// uint32 productos and quantity
-	ProductIDs_32              []int32 `json:",omitempty" db:",list"`
-	Quantity_32                []int32 `json:",omitempty" db:",list"`
-	QuantityPendingDelivery_32 []int32 `json:",omitempty" db:",list"`
-	TotalAmount_32             []int32 `json:",omitempty" db:",list"`
-	TotalDebtAmount_32         []int32 `json:",omitempty" db:",list"`
-	Updated                    int32   `json:"upd,omitempty"`
+	// Single int32 representation keeps the summary format simple and stable.
+	ProductIDs              []int32 `json:",omitempty" db:",list"`
+	Quantity                []int32 `json:",omitempty" db:",list"`
+	QuantityPendingDelivery []int32 `json:",omitempty" db:",list"`
+	TotalAmount             []int32 `json:",omitempty" db:",list"`
+	TotalDebtAmount         []int32 `json:",omitempty" db:",list"`
+	Updated                 int32   `json:"upd,omitempty"`
+	ReprocessUpdated        int32   `json:"-,omitempty"`
 }
 
 type SaleSummaryTable struct {
 	db.TableStruct[SaleSummaryTable, SaleSummary]
-	EmpresaID                  db.Col[SaleSummaryTable, int32]
-	Fecha                      db.Col[SaleSummaryTable, int16]
-	ProductIDs_16              db.Col[SaleSummaryTable, []uint16]
-	Quantity_16                db.Col[SaleSummaryTable, []uint16]
-	QuantityPendingDelivery_16 db.Col[SaleSummaryTable, []uint16]
-	TotalAmount_16             db.Col[SaleSummaryTable, []int32]
-	TotalDebtAmount_16         db.Col[SaleSummaryTable, []int32]
-	ProductIDs_32              db.Col[SaleSummaryTable, []int32]
-	Quantity_32                db.Col[SaleSummaryTable, []int32]
-	QuantityPendingDelivery_32 db.Col[SaleSummaryTable, []int32]
-	TotalAmount_32             db.Col[SaleSummaryTable, []int32]
-	TotalDebtAmount_32         db.Col[SaleSummaryTable, []int32]
-	Updated                    db.Col[SaleSummaryTable, int32]
+	EmpresaID               db.Col[SaleSummaryTable, int32]
+	Fecha                   db.Col[SaleSummaryTable, int16]
+	ProductIDs              db.Col[SaleSummaryTable, []int32]
+	Quantity                db.Col[SaleSummaryTable, []int32]
+	QuantityPendingDelivery db.Col[SaleSummaryTable, []int32]
+	TotalAmount             db.Col[SaleSummaryTable, []int32]
+	TotalDebtAmount         db.Col[SaleSummaryTable, []int32]
+	Updated                 db.Col[SaleSummaryTable, int32]
+	ReprocessUpdated        db.Col[SaleSummaryTable, int32]
 }
 
 func (e SaleSummaryTable) GetSchema() db.TableSchema {
@@ -172,31 +163,4 @@ func (e SaleSummaryTable) GetSchema() db.TableSchema {
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.Fecha},
 	}
-}
-
-// FlattenSaleSummary converts 16-bit packed slices into the 32-bit slices and
-// clears *_16 fields so clients consume one single flat shape.
-func (summary *SaleSummary) FlattenSaleSummary() {
-	if summary == nil {
-		return
-	}
-
-	// Keep existing int32 rows and only append converted int16 rows.
-	for index, productID := range summary.ProductIDs_16 {
-		if productID == 0 {
-			continue
-		}
-		summary.ProductIDs_32 = append(summary.ProductIDs_32, int32(productID))
-		summary.Quantity_32 = append(summary.Quantity_32, int32(summary.Quantity_16[index]))
-		summary.QuantityPendingDelivery_32 = append(summary.QuantityPendingDelivery_32, int32(summary.QuantityPendingDelivery_16[index]))
-		summary.TotalAmount_32 = append(summary.TotalAmount_32, summary.TotalAmount_16[index])
-		summary.TotalDebtAmount_32 = append(summary.TotalDebtAmount_32, summary.TotalDebtAmount_16[index])
-	}
-
-	// Clear packed 16-bit slices from API output.
-	summary.ProductIDs_16 = nil
-	summary.Quantity_16 = nil
-	summary.QuantityPendingDelivery_16 = nil
-	summary.TotalAmount_16 = nil
-	summary.TotalDebtAmount_16 = nil
 }

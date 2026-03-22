@@ -39,6 +39,10 @@ export const AdminModule: IModule = {
 					name: "Server Panel", route: "/configuracion/server-panel", icon: "icon-shield",
 					onlySaaS: true,
 				},
+				{
+					name: "Acciones Cron", route: "/configuracion/cron-actions", icon: "icon-shield",
+					onlySaaS: true,
+				},
       ]
     },
     { name: "NEGOCIO", minName: "NEG",  id: 2, icon: "icon-cube",

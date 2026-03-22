@@ -9,3 +9,7 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.sale_orders":  GetSaleOrders,
 	"GET.sale_summary": GetSaleSummary,
 }
+
+func init(){
+	core.RegisterActionHandler(2,"Reprocesar Resumen de Ventas", SaleOrderReprocessHandler)
+}

@@ -4,6 +4,7 @@ import "app/core"
 
 var ModuleHandlers = core.AppRouterType{
 	"GET.p-hello":                HelloWorld,
+	"GET.cron-actions-scheduled": GetCronActionsScheduled,
 	"GET.empresas":               GetEmpresas,
 	"GET.empresa-parametros":     GetEmpresaParametros,
 	"POST.empresa-parametros":    PostEmpresaParametros,

@@ -38,11 +38,6 @@ func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener el resumen de ventas.", err)
 	}
 
-	for index := range summaries {
-		// Parse and flatten each summary in-place to avoid extra copies.
-		summaries[index].FlattenSaleSummary()
-	}
-
 	core.Log("GetSaleSummary response count:", len(summaries))
 	return req.MakeResponse(summaries)
 }

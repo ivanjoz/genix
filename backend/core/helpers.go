@@ -196,6 +196,27 @@ func MakeUniqueInts[T any, N Number1](slice []T, f func(T) N) []N {
 func SUnixTime() int32 {
 	return int32((time.Now().Unix() - 1e9) / 2)
 }
+
+// ClampInt32ToZero prevents persisted counters from going negative after decrements.
+func ClampInt32ToZero(value int32) int32 {
+	if value < 0 {
+		return 0
+	}
+	return value
+}
+
+// MultiplyInt32Saturated keeps line amount calculations inside the int32 range.
+func MultiplyInt32Saturated(valueA int32, valueB int32) int32 {
+	result64 := int64(valueA) * int64(valueB)
+	if result64 > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if result64 < math.MinInt32 {
+		return math.MinInt32
+	}
+	return int32(result64)
+}
+
 func SUnixTimeMilli() int64 {
 	return int64((time.Now().UnixMilli() - 1e12) / 2)
 }
@@ -1676,4 +1697,36 @@ func HashInt64(values ...any) int64 {
 	h := fnv.New64()
 	h.Write(buf.Bytes())
 	return int64(h.Sum64())
+}
+
+func HashInt32(values ...any) int32 {
+	buf := new(bytes.Buffer)
+
+	for _, anyVal := range values {
+		switch val := anyVal.(type) {
+		case int:
+			binary.Write(buf, binary.LittleEndian, int64(val))
+		case int32:
+			binary.Write(buf, binary.LittleEndian, val)
+		case int64:
+			binary.Write(buf, binary.LittleEndian, val)
+		case int16:
+			binary.Write(buf, binary.LittleEndian, val)
+		case int8:
+			binary.Write(buf, binary.LittleEndian, val)
+		case float32:
+			binary.Write(buf, binary.LittleEndian, val)
+		case float64:
+			binary.Write(buf, binary.LittleEndian, val)
+		case string:
+			buf.WriteString(val)
+		default:
+			buf.WriteString(fmt.Sprintf("%v", val))
+		}
+		buf.WriteByte(0)
+	}
+
+	h := fnv.New32()
+	h.Write(buf.Bytes())
+	return int32(h.Sum32())
 }

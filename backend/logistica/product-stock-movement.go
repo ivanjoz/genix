@@ -340,6 +340,8 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 	// Actualiza solo el estado mutable del stock para no reescribir columnas estables.
 	almacenProductoTable := db.Table[logisticaTypes.ProductoStock]()
 	if err := db.Update(&almacenProductos,
+		almacenProductoTable.AlmacenID,
+		almacenProductoTable.ProductoID,
 		almacenProductoTable.Cantidad,
 		almacenProductoTable.Status,
 		almacenProductoTable.Updated,
@@ -378,7 +380,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 	// core.Print(productosToUpdate)
 
 	q2 := db.Table[negocioTypes.Producto]()
-	if err := db.Update(&productosToUpdate, q2.Stock, q2.StockStatus); err != nil {
+	if err := db.Update(&productosToUpdate, q2.Stock, q2.StockStatus, q2.CategoriasConStock); err != nil {
 		// Este error es interno, dado que el stock ya se guardó en la tabla principal de almacén_productos
 		core.Log("Error al actualizar el stock en productos:", err)
 	}

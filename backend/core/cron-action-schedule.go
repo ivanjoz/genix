@@ -3,6 +3,7 @@ package core
 import (
 	types "app/core/types"
 	"app/db"
+	"math"
 	"time"
 )
 
@@ -12,7 +13,24 @@ type ActionHandler struct {
 	Fn   func(args *ExecArgs) FuncResponse
 }
 
+type ActionHandlerInfo struct {
+	ID   int16
+	Name string
+}
+
 var actionHandlerMap = map[int16]ActionHandler{}
+
+func GetRegisteredActionHandlers(actionIDs ...int16) []ActionHandlerInfo {
+	actionHandlersInfo := []ActionHandlerInfo{}
+
+	for _, actionID := range actionIDs {
+		if e, ok := actionHandlerMap[actionID]; ok {
+			actionHandlersInfo = append(actionHandlersInfo, ActionHandlerInfo{ e.ID, e.Name })
+		}
+	}
+
+	return actionHandlersInfo
+}
 
 func RegisterActionHandler(id int16, name string, handler func(args *ExecArgs) FuncResponse) {
 	if id <= 0 {
@@ -34,8 +52,13 @@ func RegisterActionHandler(id int16, name string, handler func(args *ExecArgs) F
 	actionHandlerMap[id] = ActionHandler{ID: id, Name: name, Fn: handler}
 }
 
-
 func ScheduleCronAction(action types.CronAction, frameLengthInMinutes int8) {
+	if action.ActionID == 0 || action.CompanyID == 0 {
+		panic("ActionID and CompanyID needed for: ScheduleCronAction")
+	}
+	if action.CompanyID > math.MaxUint16 {
+		panic("ScheduleCronAction: CompanyID must fit in 16 bits")
+	}
 	if frameLengthInMinutes == 0 {
 		frameLengthInMinutes = 5
 	}
@@ -43,8 +66,9 @@ func ScheduleCronAction(action types.CronAction, frameLengthInMinutes int8) {
 		panic("ScheduleCronAction: frameLengthInMinutes must be divisible by 5")
 	}
 
-	// Hash only the action payload so the schedule key stays stable for the same logical job.
-	paramsHash := uint64(HashInt64(
+	// Compose the row ID as company namespace + action namespace + payload hash.
+	// This keeps duplicate detection stable for the same logical cron job.
+	paramsHash := uint32(HashInt32(
 		action.Params.Param1,
 		action.Params.Param2,
 		action.Params.Param3,
@@ -52,10 +76,7 @@ func ScheduleCronAction(action types.CronAction, frameLengthInMinutes int8) {
 		action.Params.Param5,
 		action.Params.Param6,
 	))
-
-	// Reserve the high 16 bits for the action type and keep 48 hash bits for uniqueness.
-	// This lets the executor recover the action namespace from the ID without extra columns.
-	action.ID = (action.ID << 48) | int64(paramsHash&0x0000FFFFFFFFFFFF)
+	action.ID = int64(uint64(uint16(action.CompanyID))<<48 | uint64(uint16(action.ActionID))<<32 | uint64(paramsHash))
 
 	currentUnixSeconds := time.Now().Unix()
 	frameLengthInSeconds := int64(frameLengthInMinutes) * 60
@@ -67,6 +88,20 @@ func ScheduleCronAction(action types.CronAction, frameLengthInMinutes int8) {
 	nextAlignedUnixSeconds := ((currentUnixSeconds / frameLengthInSeconds) + 1) * frameLengthInSeconds
 	action.UnixMinutesFrame = int32(nextAlignedUnixSeconds / fiveMinuteFrameLength)
 	action.Updated = SUnixTime()
+
+	existingActions := []types.CronAction{}
+	existingActionQuery := db.Query(&existingActions)
+	existingActionQuery.Select(existingActionQuery.ID, existingActionQuery.Status).
+		UnixMinutesFrame.Equals(action.UnixMinutesFrame).
+		ID.Equals(action.ID)
+
+	if err := existingActionQuery.Exec(); err != nil {
+		panic(err)
+	}
+	if len(existingActions) > 0 && existingActions[0].Status == 0 {
+		Log("ScheduleCronAction skipped existing pending action:", "company_id", action.CompanyID, "action_id", action.ActionID, "cron_id", action.ID)
+		return
+	}
 
 	if err := db.InsertOne(action); err != nil {
 		panic(err)
