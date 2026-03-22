@@ -4,6 +4,7 @@
 	interface CellHorizontalBarsProps {
 		values: CellHorizontalBarsEntry[];
 		maxValue: number;
+		logScaleFactor?: number;
 		totalBarColor?: string;
 		pendingBarColor?: string;
 	}
@@ -11,14 +12,21 @@
 	let {
 		values,
 		maxValue,
+		logScaleFactor = 0,
 		totalBarColor = '#4874f5',
 		pendingBarColor = '#e67676'
 	}: CellHorizontalBarsProps = $props();
 
-	// Keep percentage computation centralized so bars stay proportional across the table.
+	// Keep percentage computation centralized so the caller can tune log compression strength.
 	const calculateWidthPercent = (rawValue: number): number => {
 		const safeMaxValue = maxValue > 0 ? maxValue : 1;
 		const normalizedValue = Math.max(0, rawValue);
+		const normalizedLogScaleFactor = Math.max(0, logScaleFactor);
+		if (normalizedLogScaleFactor > 0) {
+			const scaledValue = Math.log1p(normalizedValue * normalizedLogScaleFactor);
+			const scaledMaxValue = Math.log1p(safeMaxValue * normalizedLogScaleFactor);
+			return Math.min(100, (scaledValue / (scaledMaxValue || 1)) * 100);
+		}
 		return Math.min(100, (normalizedValue / safeMaxValue) * 100);
 	};
 

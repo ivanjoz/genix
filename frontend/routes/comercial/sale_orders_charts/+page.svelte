@@ -1,6 +1,8 @@
 <script lang="ts">
+	import Checkbox from '$components/Checkbox.svelte';
 	import CheckboxOptions from '$components/CheckboxOptions.svelte';
 	import CellHorizontalBars from '$components/charts/CellHorizontalBars.svelte';
+	import OptionsStrip from '$components/OptionsStrip.svelte';
 	import TableGrid from '$components/vTable/TableGrid.svelte';
 	import type { TableGridColumn } from '$components/vTable/tableGridTypes';
 	import Page from '$domain/Page.svelte';
@@ -9,6 +11,9 @@
 	import { untrack } from 'svelte';
 	import { ProductosService } from '$routes/negocio/productos/productos.svelte';
 	import { SaleOrdersChartsService } from './sale_orders_charts.svelte';
+
+	type TChartsView = 1 | 2 | 3;
+	type TChartViewOption = [TChartsView, string];
 
 	interface IWeeklySalesColumn {
 		key: string;
@@ -27,18 +32,27 @@
 
 	interface IChartMetricForm {
 		metricMode?: TChartMetricMode;
+		useLogScale?: boolean;
 	}
 
 	const saleOrdersChartsService = new SaleOrdersChartsService();
 	const productosService = new ProductosService();
 	const fechaHelper = new FechaHelper();
 	const TOTAL_WEEKS_TO_RENDER = 10;
+	const LOG_SCALE_FACTOR = 0.08;
+	const chartViewOptions: TChartViewOption[] = [
+		[1, 'Por Producto'],
+		[2, 'Resumen Diario'],
+		[3, 'Resumen Semanal']
+	];
 	const chartMetricSelectionOptions: Array<{ ID: TChartMetricMode; Nombre: string }> = [
 		{ ID: 'amount', Nombre: 'Por Monto Facturado' },
 		{ ID: 'quantity', Nombre: 'Por Cantidad' }
 	];
 	let chartMetricForm = $state<IChartMetricForm>({ metricMode: 'amount' });
+	let view = $state<TChartsView>(1);
 	const selectedMetricMode = $derived<TChartMetricMode>(chartMetricForm.metricMode || 'amount');
+	const logScaleFactor = $derived(chartMetricForm.useLogScale ? LOG_SCALE_FACTOR : 0);
 
 	// FechaHelper range helpers operate with internal offset-based week code (YYYYWW-like).
 	// Domain week code arrives as YYWW (e.g. 2610 => week 10 of 2026), so normalize it.
@@ -232,6 +246,7 @@
 		console.debug('[sale_orders_charts] weekly bars max value', {
 			maxTotalSales,
 			selectedMetricMode,
+			logScaleFactor,
 			rowsCount: weeklySalesRows.length,
 			weeksCount: weekColumns.length
 		});
@@ -283,6 +298,7 @@
 			console.debug('[sale_orders_charts] weekly table rebuild', {
 				effectRunsCount,
 				selectedMetricMode,
+				logScaleFactor,
 				recordsCount,
 				rowsCount,
 				weeksCount
@@ -291,44 +307,69 @@
 	});
 </script>
 
-<Page title="Ventas por Producto (10 Semanas)">
+<Page title="Gráficos de Ventas">
+	<div class="flex">
+		<OptionsStrip 
+			selected={view}
+			options={chartViewOptions}
+			useMobileGrid={true} 
+			css="mb-10" itemCss="md:w-160"
+			onSelect={(selectedOption: TChartViewOption) => {
+				// Keep the tab state explicit so each chart section renders independently.
+				view = selectedOption[0] as TChartsView;
+			}}
+		/>
+	</div>
 	<div class="p-10">
-		<div class="bg-white border border-gray-200 rounded-md p-10">
-			<h3 class="h3 mb-8">Resumen Semanal de Ventas por Producto</h3>
-			<CheckboxOptions
-				options={chartMetricSelectionOptions}
-				saveOn={chartMetricForm}
-				save={'metricMode'}
-				keyId={'ID'}
-				keyName={'Nombre'}
-				type="single"
-				css="mb-10"
-			/>
-			{#if saleOrdersChartsService.records.length === 0}
-				<div class="text-gray-500">No hay registros de ventas para mostrar.</div>
-			{:else if weeklySalesRows.length === 0}
-				<div class="text-gray-500">No se encontraron productos con ventas en las últimas 10 semanas.</div>
-			{:else}
-				<TableGrid
-					columns={tableColumns}
-					data={weeklySalesRows}
-					height="560px"
-					rowHeight={48}
-				>
-					{#snippet cellRenderer(rowRecord, columnDefinition)}
-						{@const cellValues = rowRecord.weeklyTotalsByWeekKey[String(columnDefinition.id)] || Array.from({ length: 7 }, () => [0, 0] as [number, number])}
-						{@const weeklyTotalSales = cellValues.reduce((sumAmount, [dailyTotalSales]) => {
-							return sumAmount + (dailyTotalSales || 0);
-						}, 0)}
-						<div class="relative h-full w-full pt-10 pr-2">
-							<div class="absolute top-2 right-2 text-[13px] leading-none font-semibold text-slate-700">
-								{weeklyTotalSales ? formatN(weeklyTotalSales) : ""}
+		{#if view === 1}
+			<div>
+				<div class="flex ">
+					<CheckboxOptions
+						options={chartMetricSelectionOptions}
+						saveOn={chartMetricForm}
+						save={'metricMode'}
+						keyId={'ID'}
+						keyName={'Nombre'}
+						type="single"
+						css="mb-10"
+					/>
+					<div class="mr-8 ml-8">|</div>
+					<Checkbox label="Escala Log." bind:saveOn={chartMetricForm} save="useLogScale" css="mb-10" />
+				</div>
+				{#if saleOrdersChartsService.records.length === 0}
+					<div class="text-gray-500">No hay registros de ventas para mostrar.</div>
+				{:else if weeklySalesRows.length === 0}
+					<div class="text-gray-500">No se encontraron productos con ventas en las últimas 10 semanas.</div>
+				{:else}
+					<TableGrid
+						columns={tableColumns}
+						data={weeklySalesRows}
+						height="560px"
+						rowHeight={48}
+					>
+						{#snippet cellRenderer(rowRecord, columnDefinition)}
+							{@const cellValues = rowRecord.weeklyTotalsByWeekKey[String(columnDefinition.id)] || Array.from({ length: 7 }, () => [0, 0] as [number, number])}
+							{@const weeklyTotalSales = cellValues.reduce((sumAmount, [dailyTotalSales]) => {
+								return sumAmount + (dailyTotalSales || 0);
+							}, 0)}
+							<div class="relative h-full w-full pt-10 pr-2">
+								<div class="absolute top-2 right-2 text-[13px] leading-none font-semibold text-slate-700">
+									{weeklyTotalSales ? formatN(weeklyTotalSales) : ""}
+								</div>
+								<CellHorizontalBars
+									values={cellValues}
+									maxValue={weeklyBarsMaxValue}
+									logScaleFactor={logScaleFactor}
+								/>
 							</div>
-							<CellHorizontalBars values={cellValues} maxValue={weeklyBarsMaxValue} />
-						</div>
-					{/snippet}
-				</TableGrid>
-			{/if}
-		</div>
+						{/snippet}
+					</TableGrid>
+				{/if}
+			</div>
+		{:else if view === 2}
+			<div class="text-gray-500">Resumen Diario pendiente.</div>
+		{:else if view === 3}
+			<div class="text-gray-500">Resumen Semanal pendiente.</div>
+		{/if}
 	</div>
 </Page>

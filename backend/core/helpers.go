@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"encoding/base32"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
 	"errors"
@@ -1643,4 +1644,36 @@ func GetIndex[T NumberStr2](array []T, index int) T {
 		return emptyValue
 	}
 	return array[index]
+}
+
+func HashInt64(values ...any) int64 {
+	buf := new(bytes.Buffer)
+
+	for _, anyVal := range values {
+		switch val := anyVal.(type) {
+		case int:
+			binary.Write(buf, binary.LittleEndian, int64(val))
+		case int32:
+			binary.Write(buf, binary.LittleEndian, val)
+		case int64:
+			binary.Write(buf, binary.LittleEndian, val)
+		case int16:
+			binary.Write(buf, binary.LittleEndian, val)
+		case int8:
+			binary.Write(buf, binary.LittleEndian, val)
+		case float32:
+			binary.Write(buf, binary.LittleEndian, val)
+		case float64:
+			binary.Write(buf, binary.LittleEndian, val)
+		case string:
+			buf.WriteString(val)
+		default:
+			buf.WriteString(fmt.Sprintf("%v", val))
+		}
+		buf.WriteByte(0)
+	}
+
+	h := fnv.New64()
+	h.Write(buf.Bytes())
+	return int64(h.Sum64())
 }
