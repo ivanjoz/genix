@@ -290,17 +290,19 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("Error al actualizar la venta:", err)
 		}
 	}
-
-	if err := updateSaleSummaryForChange(sale, saleActions...); err != nil {
-		core.Log("Error actualizando resumen de ventas:", err)
-	}
 	
-	core.ScheduleCronAction(core.CronAction{
-		CompanyID: req.Usuario.EmpresaID,
-		ActionID: 2, 
-		// Keep the cron payload compact: company and fecha are the only inputs the reprocess action needs.
-		Params: core.ExecArgs{Param1: int64(req.Usuario.EmpresaID), Param2: int64(sale.Fecha)},
-	},10)
+	go func() {		
+		core.ScheduleCronAction(core.CronAction{
+			CompanyID: req.Usuario.EmpresaID,
+			ActionID: 2, 
+			// Keep the cron payload compact: company and fecha are the only inputs the reprocess action needs.
+			Params: core.ExecArgs{Param1: int64(req.Usuario.EmpresaID), Param2: int64(sale.Fecha)},
+		},10)
+		
+		if err := updateSaleSummaryForChange(sale, saleActions...); err != nil {
+			core.Log("Error actualizando resumen de ventas:", err)
+		}
+	}()
 
 	return req.MakeResponse(sale)
 }

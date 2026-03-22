@@ -51,6 +51,8 @@ func RegisterActionHandler(id int16, name string, handler func(args *ExecArgs) F
 	actionHandlerMap[id] = ActionHandler{ID: id, Name: name, Fn: handler}
 }
 
+const fiveMinuteFrameLength = int64(5 * 60)
+
 func ScheduleCronAction(action CronAction, frameLengthInMinutes int8) {
 	if action.ActionID == 0 || action.CompanyID == 0 {
 		panic("ActionID and CompanyID needed for: ScheduleCronAction")
@@ -79,8 +81,6 @@ func ScheduleCronAction(action CronAction, frameLengthInMinutes int8) {
 
 	currentUnixSeconds := time.Now().Unix()
 	frameLengthInSeconds := int64(frameLengthInMinutes) * 60
-	fiveMinuteFrameLength := int64(5 * 60)
-
 	// Align to the next boundary of the requested interval, not to the nearest 5-minute slot.
 	// Example: with a 20-minute interval we jump to the next 20-minute boundary and then
 	// convert it back to 5-minute units, so repeated scheduling keeps the 20-minute cadence.
@@ -125,7 +125,7 @@ func StartCronWatcher(){
 }
 
 func runCronWatcherTick() {
-	currentUnixMinutesFrame := int32(SUnix5Min())
+	currentUnixMinutesFrame := int32(time.Now().Unix() / fiveMinuteFrameLength)
 	if currentUnixMinutesFrame == lastUnixMinutesFrame {
 		return
 	}

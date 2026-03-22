@@ -112,6 +112,23 @@ func appendGroupedResultToSlice[E any](groupedResult *groupedQueryResult[E], tar
 	}
 }
 
+func buildRemainingWhereClauses(statements []ColumnStatement) []string {
+	clauses := []string{}
+	for _, statement := range statements {
+		if len(statement.From) > 0 {
+			for idx := range statement.From {
+				columnName := statement.From[idx].Col
+				// Keep BETWEEN inclusive to match the fluent API and post-filter behavior.
+				clauses = append(clauses, fmt.Sprintf("%v >= %v", columnName, statement.From[idx].GetValue()))
+				clauses = append(clauses, fmt.Sprintf("%v <= %v", columnName, statement.To[idx].GetValue()))
+			}
+			continue
+		}
+		clauses = append(clauses, fmt.Sprintf("%v %v %v", statement.Col, statement.Operator, statement.GetValue()))
+	}
+	return clauses
+}
+
 func mergeGroupedResults[E any](
 	target *groupedQueryResult[E],
 	source *groupedQueryResult[E],
@@ -972,23 +989,7 @@ func selectExec[E any](
 	}
 
 	// fmt.Println("where statements::", whereStatements)
-	whereStatementsRemainSects := []string{}
-	for _, st := range statementsRemain {
-		if len(st.From) > 0 {
-			for i := range st.From {
-				colname := st.From[i].Col
-				w1 := fmt.Sprintf("%v >= %v", colname, st.From[i].GetValue())
-				whereStatementsRemainSects = append(whereStatementsRemainSects, w1)
-				w2 := fmt.Sprintf("%v < %v", colname, st.To[i].GetValue())
-				whereStatementsRemainSects = append(whereStatementsRemainSects, w2)
-			}
-		} else {
-			whereStatementsRemainSects = append(whereStatementsRemainSects,
-				fmt.Sprintf("%v %v %v", st.Col, st.Operator, st.GetValue()))
-		}
-	}
-
-	whereStatementsRemain := strings.Join(whereStatementsRemainSects, " AND ")
+	whereStatementsRemain := strings.Join(buildRemainingWhereClauses(statementsRemain), " AND ")
 	queryWhereStatements := []string{}
 
 	for _, whereStatement := range whereStatements {
