@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"math"
 	"math/rand/v2"
 	"os"
 	"reflect"
@@ -427,18 +426,13 @@ func encodeToBase62(number uint64) string {
 
 // DecodeUint64 decodes a base62 encoded string to an uint64.
 func decodeFromBase62(token string) uint64 {
+	// Decode incrementally to avoid float math and repeated exponentiation.
 	number := uint64(0)
-	idx := float64(0.0)
-	chars := []byte(base32Alphabet)
+	baseLength := uint64(len(base32Alphabet))
 
-	charsLength := float64(len(chars))
-	tokenLength := float64(len(token))
-
-	for _, c := range []byte(token) {
-		power := tokenLength - (idx + 1)
-		index := uint64(bytes.IndexByte(chars, c))
-		number += index * uint64(math.Pow(charsLength, power))
-		idx++
+	for currentIndex := 0; currentIndex < len(token); currentIndex++ {
+		digitValue := uint64(strings.IndexByte(base32Alphabet, token[currentIndex]))
+		number = number*baseLength + digitValue
 	}
 
 	return number

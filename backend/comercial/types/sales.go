@@ -13,10 +13,12 @@ type SaleOrder struct {
 	ID        int64
 
 	//Table: Following slices must be same size
-	DetailProductsIDs []int32  `json:",omitempty" db:",list"`
-	DetailPrices      []int32  `json:",omitempty" db:",list"`
-	DetailQuantities  []int32  `json:",omitempty" db:",list"`
-	DetailProductSkus []string `json:",omitempty" db:",list"`
+	DetailProductsIDs          []int32  `json:",omitempty" db:",list"`
+	DetailPrices               []int32  `json:",omitempty" db:",list"`
+	DetailQuantities           []int32  `json:",omitempty" db:",list"`
+	DetailProductSkus          []string `json:",omitempty" db:",list"`
+	DetailProductLots          []string `json:",omitempty" db:",list"`
+	DetailProductPresentations []int16  `json:",omitempty" db:",list"`
 
 	TotalAmount    int32 `json:",omitempty"`
 	TaxAmount      int32 `json:",omitempty"`

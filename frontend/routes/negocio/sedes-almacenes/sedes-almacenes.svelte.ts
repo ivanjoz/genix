@@ -46,7 +46,7 @@ export interface IAlmacenes {
 
 export class AlmacenesService extends GetHandler {
   route = "sedes-almacenes"
-  useCache = { min: 5, ver: 1 }
+  useCache = { min: 5, ver: 3 }
 
   Almacenes: IAlmacen[] = $state([])
   AlmacenesMap: Map<number,IAlmacen> = $state(new Map())

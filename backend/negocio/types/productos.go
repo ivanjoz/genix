@@ -330,7 +330,6 @@ type AlmacenMovimiento struct {
 	// Extra fields
 	Inflows_           int32  `json:"-"`
 	Outflows_          int32  `json:"-"`
-	WarehouseStockMinimum_          map[int32]int32  `json:"-"`
 }
 
 type AlmacenMovimientoTable struct {
@@ -385,6 +384,7 @@ type MovimientoInterno struct {
 	ModificarCantidad    int32
 	ModificarSubCantidad int32
 	DocumentID           int64
+	Stock *AlmacenProducto
 }
 
 func (e *MovimientoInterno) GetAlmacenProductoID() string {

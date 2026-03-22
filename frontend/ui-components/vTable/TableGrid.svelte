@@ -1,7 +1,11 @@
 <script lang="ts" generics="TRecord">
   import { onMount } from 'svelte';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
-  import type { TableGridCellRendererSnippet, TableGridColumn } from './tableGridTypes';
+  import type {
+    TableGridCellRendererSnippet,
+    TableGridColumn,
+    TableGridHeaderRendererSnippet,
+  } from './tableGridTypes';
 
   interface TableGridProps<TRecord> {
     columns: TableGridColumn<TRecord>[];
@@ -19,6 +23,7 @@
     selectedRecord?: TRecord;
     getRowId?: (rowRecord: TRecord, rowIndex: number) => string | number;
     cellRenderer?: TableGridCellRendererSnippet<TRecord>;
+    headerRenderer?: TableGridHeaderRendererSnippet<TRecord>;
   }
 
   let {
@@ -37,6 +42,7 @@
     selectedRecord,
     getRowId,
     cellRenderer,
+    headerRenderer,
   }: TableGridProps<TRecord> = $props();
 
   // Keep a stable filtered list so hidden columns never affect row rendering logic.
@@ -161,11 +167,15 @@
   <div class="table-grid-scroll-host">
     <div class="table-grid-header {headerCss}">
       <div class="table-grid-header-row" role="row">
-        {#each visibleColumns as columnDefinition (columnDefinition.id)}
+        {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id)}
           <div class="table-grid-header-cell {getAlignClassName(columnDefinition.align)} {columnDefinition.headerCss || ''}"
             role="columnheader"
           >
-            {columnDefinition.header}
+            {#if headerRenderer}
+              {@render headerRenderer(columnDefinition, columnIndex)}
+            {:else}
+              {columnDefinition.header}
+            {/if}
           </div>
         {/each}
       </div>
@@ -260,7 +270,6 @@
   }
 
   .table-grid-header-cell {
-    padding: 8px 10px;
     font-family: bold;
     color: #495057;
     border-right: 1px solid #edf2f7;

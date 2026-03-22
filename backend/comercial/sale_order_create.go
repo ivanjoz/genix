@@ -4,8 +4,8 @@ import (
 	"app/comercial/types"
 	"app/core"
 	"app/db"
-	finanzasTypes "app/finanzas/types"
 	"app/finanzas"
+	finanzasTypes "app/finanzas/types"
 	"app/logistica"
 	negocioTypes "app/negocio/types"
 	"encoding/json"
@@ -22,14 +22,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	if err != nil {
 		return req.MakeErr("Error al deserializar el body: " + err.Error())
 	}
-	legacySaleRequest := struct {
-		CajaID_ int32 `json:",omitempty"`
-	}{}
-	_ = json.Unmarshal([]byte(*req.Body), &legacySaleRequest)
-	if saleRequest.LastPaymentCajaID == 0 && legacySaleRequest.CajaID_ > 0 {
-		// Backward compatibility: accept legacy CajaID_ payloads during rollout.
-		saleRequest.LastPaymentCajaID = legacySaleRequest.CajaID_
-	}
 
 	isUpdate := saleRequest.ID > 0
 	if isUpdate {
@@ -44,6 +36,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	sale := saleRequest
+	stockSolicitadoPorID := map[string]int32{}
+	stockActualPorID := map[string]*negocioTypes.AlmacenProducto{}
 	if isUpdate {
 		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
 		existingSales := []types.SaleOrder{}
@@ -70,8 +64,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	} else {
 		// Create rule: detail slices must keep one-to-one cardinality.
-		if len(sale.DetailProductsIDs) != len(sale.DetailPrices) ||
-			len(sale.DetailProductsIDs) != len(sale.DetailQuantities) {
+		if len(sale.DetailProductsIDs) != len(sale.DetailPrices) || len(sale.DetailProductsIDs) != len(sale.DetailQuantities) {
 			return req.MakeErr("El registro posee propiedades incorrectas.")
 		}
 
@@ -84,6 +77,55 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		sale.Fecha = core.TimeToFechaUnix(time.Now())
 		sale.Created = nowTime
 		sale.Status = 1
+	}
+
+	if !isUpdate || slices.Contains(sale.ActionsIncluded, 3) {
+		// Agrupa por stock real para validar una sola vez por combinacion almacen-producto-presentacion-sku-lote.
+		for index, productID := range sale.DetailProductsIDs {
+			stockID := db.Concat62(
+				sale.AlmacenID,
+				productID,
+				core.GetIndex(sale.DetailProductPresentations, index),
+				core.GetIndex(sale.DetailProductSkus, index),
+				core.GetIndex(sale.DetailProductLots, index),
+			)
+			stockSolicitadoPorID[stockID] += sale.DetailQuantities[index]
+		}
+
+		if len(stockSolicitadoPorID) > 0 {
+			productosStock := []negocioTypes.AlmacenProducto{}
+			query := db.Query(&productosStock)
+			err := query.Select(
+				query.ID,
+				query.Cantidad,
+				query.CostoUn,
+				query.Status,
+			).
+				EmpresaID.Equals(req.Usuario.EmpresaID).
+				ID.In(core.MapToKeys(stockSolicitadoPorID)...).
+				Exec()
+
+			if err != nil {
+				return req.MakeErr("Error al obtener el stock de productos:", err)
+			}
+
+			for index := range productosStock {
+				stockActualPorID[productosStock[index].ID] = &productosStock[index]
+			}
+
+			for stockID, cantidadSolicitada := range stockSolicitadoPorID {
+				stockActual := stockActualPorID[stockID]
+				cantidadDisponible := int32(0)
+				if stockActual != nil && stockActual.Status == 1 {
+					cantidadDisponible = stockActual.Cantidad
+				}
+				if cantidadDisponible < cantidadSolicitada {
+					return req.MakeErr("No hay stock suficiente para completar la venta.")
+				}
+			}
+
+			core.Log("PostSaleOrder stock validado. Items:", len(stockSolicitadoPorID), "Stocks encontrados:", len(stockActualPorID))
+		}
 	}
 
 	sale.EmpresaID = req.Usuario.EmpresaID
@@ -116,6 +158,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		if len(sale.DetailProductsIDs) == 0 {
 			return req.MakeErr("No hay productos en el detalle para procesar la entrega.")
 		}
+
+		// Revisa si hay stock necesario
+
 	} else if !isUpdate {
 		sale.OrderPendingDeliveryUpdated = sale.Updated
 	}
@@ -181,12 +226,24 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				continue
 			}
 
+			stockID := db.Concat62(
+				sale.AlmacenID,
+				productoID,
+				core.GetIndex(sale.DetailProductPresentations, i),
+				core.GetIndex(sale.DetailProductSkus, i),
+				core.GetIndex(sale.DetailProductLots, i),
+			)
+
 			movimientosInternos = append(movimientosInternos, negocioTypes.MovimientoInterno{
-				AlmacenID:  sale.AlmacenID,
-				ProductoID: productoID,
-				DocumentID: sale.ID,
-				Tipo:       8,         // Entrega a cliente final (Venta)
-				Cantidad:   -cantidad, // Salida de almacén
+				AlmacenID:      sale.AlmacenID,
+				ProductoID:     productoID,
+				PresentacionID: core.GetIndex(sale.DetailProductPresentations, i),
+				SKU:            core.GetIndex(sale.DetailProductSkus, i),
+				Lote:           core.GetIndex(sale.DetailProductLots, i),
+				DocumentID:     sale.ID,
+				Tipo:           8,         // Entrega a cliente final (Venta)
+				Cantidad:       -cantidad, // Salida de almacén
+				Stock:          stockActualPorID[stockID],
 			})
 		}
 

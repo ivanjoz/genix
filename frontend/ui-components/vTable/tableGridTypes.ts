@@ -20,3 +20,8 @@ export type TableGridCellRendererSnippet<TRecord> = Snippet<[
   columnDefinition: TableGridColumn<TRecord>,
   rowIndex: number,
 ]>;
+
+export type TableGridHeaderRendererSnippet<TRecord> = Snippet<[
+  columnDefinition: TableGridColumn<TRecord>,
+  columnIndex: number,
+]>;

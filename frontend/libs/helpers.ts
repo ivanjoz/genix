@@ -82,6 +82,33 @@ export const cn = (...classNames: (string|boolean)[]) => {
   return classNames.filter(x => x).join(" ")
 }
 
+const base62Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+const base62IndexesByCharCode = new Int16Array(123)
+
+export const decodeFromBase62 = (token: string): number => {
+	if (base62IndexesByCharCode[0] === 0) {
+		base62IndexesByCharCode.fill(-1)
+		
+		for (let currentIndex = 0; currentIndex < base62Alphabet.length; currentIndex++) {
+		  // Precompute base62 indexes by ASCII code to avoid scanning the alphabet on every decode.
+		  const currentCharCode = base62Alphabet.charCodeAt(currentIndex)
+		  base62IndexesByCharCode[currentCharCode] = currentIndex
+		}
+	}
+	
+  // Keep this logic aligned with backend/db/helpers.go::decodeFromBase62.
+  let decodedNumber = 0
+  const alphabetLength = base62Alphabet.length
+
+  for (let currentIndex = 0; currentIndex < token.length; currentIndex++) {
+    const currentCharCode = token.charCodeAt(currentIndex)
+    const charIndex = base62IndexesByCharCode[currentCharCode]
+    decodedNumber = decodedNumber * alphabetLength + charIndex
+  }
+
+  return decodedNumber
+}
+
 export function include(e: string, h: string | string[]) {
   if (h && typeof h === 'string') {
     h = h.split(' ').filter(x => x.length > 0)

@@ -468,6 +468,14 @@ func MapToSliceT[T any, N NumberStr](map1 map[N]T) []T {
 	return slice1
 }
 
+func MapToKeys[T any, N NumberStr](map1 map[N]T) []N {
+	slice1 := []N{}
+	for key := range map1 {
+		slice1 = append(slice1, key)
+	}
+	return slice1
+}
+
 func ToSrt(d float64) string {
 	return strconv.FormatFloat(d, 'f', -1, 64)
 }
@@ -1610,18 +1618,13 @@ func encodeToBase62(number uint64) string {
 
 // DecodeUint64 decodes a base62 encoded string to an uint64.
 func decodeFromBase62(token string) uint64 {
+	// Decode incrementally to avoid float math and repeated exponentiation.
 	number := uint64(0)
-	idx := float64(0.0)
-	chars := []byte(base32Alphabet)
+	baseLength := uint64(len(base32Alphabet))
 
-	charsLength := float64(len(chars))
-	tokenLength := float64(len(token))
-
-	for _, c := range []byte(token) {
-		power := tokenLength - (idx + 1)
-		index := uint64(bytes.IndexByte(chars, c))
-		number += index * uint64(math.Pow(charsLength, power))
-		idx++
+	for currentIndex := 0; currentIndex < len(token); currentIndex++ {
+		digitValue := uint64(strings.IndexByte(base32Alphabet, token[currentIndex]))
+		number = number*baseLength + digitValue
 	}
 
 	return number
@@ -1632,4 +1635,12 @@ func ConcatInt64(num1, num2 int64) int64 {
 		return 0
 	}
 	return num1*10_000_000_000 + num2
+}
+
+func GetIndex[T NumberStr2](array []T, index int) T {
+	if index < 0 || index >= len(array) {
+		var emptyValue T
+		return emptyValue
+	}
+	return array[index]
 }
