@@ -243,8 +243,8 @@ func SaveConvertImage(args ImageArgs) ([]imageconv.Image, error) {
 			lambdaInput := core.ExecArgs{
 				LambdaName:    core.Env.LAMBDA_NAME + "_2",
 				FuncToExec:    "compress-image",
-				Param6:        args.Content,
-				Param7:        string(convertInputJson),
+				Param5:        args.Content,
+				Param6:        string(convertInputJson),
 				ParseResponse: true,
 			}
 

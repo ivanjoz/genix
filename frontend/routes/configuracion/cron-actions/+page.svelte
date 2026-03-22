@@ -29,12 +29,12 @@ const getStatusLabel = (status: number) => {
 const formatParams = (row: ICronActionTableRow) => {
   const params = row.Params || {}
   const paramsEntries = [
-    [1, params.Param1],
-    [2, params.Param2],
-    [3, params.Param3],
-    [4, params.Param4],
-    [5, params.Param5],
-    [6, params.Param6],
+    [1, params.p1],
+    [2, params.p2],
+    [3, params.p3],
+    [4, params.p4],
+    [5, params.p5],
+    [6, params.p6],
   ]
 
   // Keep the column compact by showing only filled params on a single line.
@@ -91,13 +91,13 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
     header: "Status",
     headerCss: "w-120",
     cellCss: "text-center",
-    getValue: (row) => getStatusLabel(row.Status||0),
+    getValue: (row) => getStatusLabel(row.ss||0),
   },
   {
     header: "Updated",
     headerCss: "w-160",
     cellCss: "px-6 nowrap",
-    getValue: (row) => formatUpdatedSunix(row.Updated),
+    getValue: (row) => formatUpdatedSunix(row.upd),
   },
 ]
 </script>
@@ -133,7 +133,7 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
         formatParams(row),
         row.ID,
         row.InvocationCount,
-        row.Status,
+        row.ss,
       ].join(" ").toLowerCase()}
     />
   </div>

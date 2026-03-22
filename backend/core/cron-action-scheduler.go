@@ -1,7 +1,6 @@
 package core
 
 import (
-	types "app/core/types"
 	"app/db"
 	"math"
 	"time"
@@ -52,7 +51,7 @@ func RegisterActionHandler(id int16, name string, handler func(args *ExecArgs) F
 	actionHandlerMap[id] = ActionHandler{ID: id, Name: name, Fn: handler}
 }
 
-func ScheduleCronAction(action types.CronAction, frameLengthInMinutes int8) {
+func ScheduleCronAction(action CronAction, frameLengthInMinutes int8) {
 	if action.ActionID == 0 || action.CompanyID == 0 {
 		panic("ActionID and CompanyID needed for: ScheduleCronAction")
 	}
@@ -89,7 +88,7 @@ func ScheduleCronAction(action types.CronAction, frameLengthInMinutes int8) {
 	action.UnixMinutesFrame = int32(nextAlignedUnixSeconds / fiveMinuteFrameLength)
 	action.Updated = SUnixTime()
 
-	existingActions := []types.CronAction{}
+	existingActions := []CronAction{}
 	existingActionQuery := db.Query(&existingActions)
 	existingActionQuery.Select(existingActionQuery.ID, existingActionQuery.Status).
 		UnixMinutesFrame.Equals(action.UnixMinutesFrame).
@@ -106,4 +105,98 @@ func ScheduleCronAction(action types.CronAction, frameLengthInMinutes int8) {
 	if err := db.InsertOne(action); err != nil {
 		panic(err)
 	}
+}
+
+var lastUnixMinutesFrame = int32(0)
+
+func StartCronWatcher(){
+	time.Sleep(10*time.Second)
+	
+	go func() {
+		cronTick := time.NewTicker(time.Minute)
+
+		// Run once on startup so already-due rows do not wait for the first ticker tick.
+		runCronWatcherTick()
+
+		for range cronTick.C {
+			runCronWatcherTick()
+		}
+	}()
+}
+
+func runCronWatcherTick() {
+	currentUnixMinutesFrame := int32(SUnix5Min())
+	if currentUnixMinutesFrame == lastUnixMinutesFrame {
+		return
+	}
+
+	firstFrameToProcess := currentUnixMinutesFrame - 12
+	pendingActionsByID := map[int64][]CronAction{}
+	
+	pendingActionsGetted := []CronAction{}
+	// Query the whole lookback window in one pass and keep one row per logical cron ID.
+	pendingActionsQuery := db.Query(&pendingActionsGetted).
+		UnixMinutesFrame.Between(firstFrameToProcess, currentUnixMinutesFrame).
+		Status.Equals(0)
+
+	if err := pendingActionsQuery.AllowFilter().Exec(); err != nil {
+		Log("StartCronWatcher query error:", "from_frame", firstFrameToProcess, "error", err)
+		return
+	}
+
+	for _, e := range pendingActionsGetted {
+		pendingActionsByID[e .ID] = append(pendingActionsByID[e .ID], e)
+	}
+
+	for _, pendingActionsSameID := range pendingActionsByID {
+		pendingAction := pendingActionsSameID[0]
+		cronActionTable := db.Table[CronAction]()
+		
+		actionHandler, exists := actionHandlerMap[pendingAction.ActionID]
+		if !exists {
+			Log("StartCronWatcher missing handler:", "cron_id", pendingAction.ID, "action_id", pendingAction.ActionID)
+			continue
+		}
+		// Reuse the rows already loaded for this cron ID instead of querying them again.
+		var markCronActionRowsAttempted_ = func(status int8) {
+			for i := range pendingActionsSameID {
+				e := &pendingActionsSameID[i]
+				e.InvocationCount++
+				e.Updated = SUnixTime()
+				e.Status = status
+			}
+			
+			if err := db.Update(
+				&pendingActionsSameID,
+				cronActionTable.Status,
+				cronActionTable.InvocationCount,
+				cronActionTable.Updated,
+			); err != nil {
+				Log("StartCronWatcher update rows error:", "cron_id", pendingAction.ID, "status", status, "error", err)
+			}
+		}
+
+		// Pass the persisted ExecArgs payload directly so scheduling and execution use one shape.
+		func() {
+			defer func() {
+				if recoveredValue := recover(); recoveredValue != nil {
+					Log("StartCronWatcher panic executing action:", "cron_id", pendingAction.ID, "action_id", pendingAction.ActionID, "panic", recoveredValue)
+					markCronActionRowsAttempted_(0)
+				}
+			}()
+
+			handlerResponse := actionHandler.Fn(&pendingAction.Params)
+			if handlerResponse.Error != "" {
+				Log("StartCronWatcher handler error:", "cron_id", pendingAction.ID, "action_id", pendingAction.ActionID, "error", handlerResponse.Error)
+				markCronActionRowsAttempted_(0)
+				return
+			}
+
+			Log("StartCronWatcher action executed:", "cron_id", pendingAction.ID, "action_id", pendingAction.ActionID, "handler", actionHandler.Name)
+			markCronActionRowsAttempted_(1)
+		}()
+	}
+
+	// Advance the watermark only after the current frame window was processed.
+	lastUnixMinutesFrame = currentUnixMinutesFrame
 }

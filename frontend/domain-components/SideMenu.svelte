@@ -41,11 +41,6 @@
 		}
 
 		const routeAccessDecision = canUserAccessRoute(menuOption.route)
-		console.info('[SideMenu] Evaluated menu option access', {
-			menuOptionName: menuOption.name,
-			normalizedRoute,
-			userHasAccess: routeAccessDecision
-		})
 		return routeAccessDecision
 	}
 

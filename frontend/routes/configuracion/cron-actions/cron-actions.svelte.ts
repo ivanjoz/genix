@@ -6,12 +6,12 @@ export interface IActionRegistered {
 }
 
 export interface ICronActionParams {
-  Param1?: number
-  Param2?: number
-  Param3?: number
-  Param4?: number
-  Param5?: string
-  Param6?: string
+  p1?: number
+  p2?: number
+  p3?: number
+  p4?: number
+  p5?: string
+  p6?: string
 }
 
 export interface ICronActionScheduled {
@@ -19,10 +19,10 @@ export interface ICronActionScheduled {
   UnixMinutesFrame: number
   CompanyID: number
   ActionID: number
-  Updated: number
-  Status: number
   InvocationCount: number
-  Params?: ICronActionParams
+	Params?: ICronActionParams
+	upd: number
+  ss: number
 }
 
 export interface ICronActionsScheduledResponse {
@@ -37,7 +37,8 @@ export interface ICronActionTableRow extends ICronActionScheduled {
 export class CronActionsService extends GetHandler {
   // The backend currently uses `actionsScheduled` as the delta query key.
   route = 'cron-actions-scheduled?actionsScheduled=0'
-  useCache = { min: 0.2, ver: 1 }
+	useCache = { min: 0.25, ver: 4 }
+	keysIDs = { "actionsScheduled": ["UnixMinutesFrame", "ID"] }
 
   response: ICronActionsScheduledResponse = $state({
     actionsScheduled: [],

@@ -104,7 +104,7 @@ const extractUpdated = (
     }
     let maxOrMin = 0
     for(const v of values||[]){
-      const updated = v.updated || v.upd || 0
+      const updated = v.updated || v.upd || v.Updated || 0
       if(useMin){
         if(maxOrMin === 0 || updated < maxOrMin){ maxOrMin = updated }
       } else {

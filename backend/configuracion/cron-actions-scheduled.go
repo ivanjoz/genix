@@ -2,7 +2,6 @@ package configuracion
 
 import (
 	"app/core"
-	coreTypes "app/core/types"
 	"app/db"
 )
 
@@ -18,7 +17,7 @@ func GetCronActionsScheduled(req *core.HandlerArgs) core.HandlerResponse {
 		updated = core.SUnixTime() - int32((7*24*60*60)/2) // Last 7 days
 	}
 	
-	cronActions := []coreTypes.CronAction{}
+	cronActions := []core.CronAction{}
 	cronActionsQuery := db.Query(&cronActions).Updated.GreaterThan(updated)
 
 	core.Log("GetCronActionsScheduled query:", "updated", updated)

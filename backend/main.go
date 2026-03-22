@@ -207,6 +207,8 @@ func main() {
 	// Si se está desarrollando en local
 	if !core.Env.IS_SERVERLESS {
 		exec.StartUsageLogFlushWorker()
+		core.StartCronWatcher()
+		
 		core.Log("Ejecutando en local. http://localhost" + serverPort)
 
 		corsMiddleware := cors.New(cors.Options{
