@@ -3,11 +3,11 @@ import { GetHandler } from '$libs/http.svelte';
 export interface ISaleSummaryRecord {
 	EmpresaID: number;
 	Fecha: number;
-	ProductIDs_32: number[];
-	Quantity_32: number[];
-	QuantityPendingDelivery_32: number[];
-	TotalAmount_32: number[];
-	TotalDebtAmount_32: number[];
+	ProductIDs: number[];
+	Quantity: number[];
+	QuantityPendingDelivery: number[];
+	TotalAmount: number[];
+	TotalDebtAmount: number[];
 	upd: number;
 }
 

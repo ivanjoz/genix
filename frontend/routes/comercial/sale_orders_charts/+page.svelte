@@ -173,11 +173,11 @@
 			}
 			matchedSummaryRecordsCount += 1;
 
-			const productIDs = summaryRecord.ProductIDs_32 || [];
-			const weeklyAmountsInCents = summaryRecord.TotalAmount_32 || [];
-			const weeklyUnpaidAmountsInCents = summaryRecord.TotalDebtAmount_32 || [];
-			const weeklySoldQuantities = summaryRecord.Quantity_32 || [];
-			const weeklyPendingQuantities = summaryRecord.QuantityPendingDelivery_32 || [];
+			const productIDs = summaryRecord.ProductIDs || [];
+			const weeklyAmountsInCents = summaryRecord.TotalAmount || [];
+			const weeklyUnpaidAmountsInCents = summaryRecord.TotalDebtAmount || [];
+			const weeklySoldQuantities = summaryRecord.Quantity || [];
+			const weeklyPendingQuantities = summaryRecord.QuantityPendingDelivery || [];
 
 			for (let recordIndex = 0; recordIndex < productIDs.length; recordIndex += 1) {
 				const productID = productIDs[recordIndex] || 0;

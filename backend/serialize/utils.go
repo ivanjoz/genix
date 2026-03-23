@@ -17,6 +17,7 @@ type FieldInfo struct {
 	Used       bool   // Whether this field was used in any marshaled record
 	RawName    string // Original field name (without JSON tag)
 	UsageCount int    // How many times this field was used (for optimization)
+	Ignored    bool   // Whether the field is omitted (json:"-")
 }
 
 // TypeInfo stores metadata for a registered type
@@ -49,7 +50,10 @@ func NewFieldRegistry() *FieldRegistry {
 // getFieldName extracts the JSON tag name or falls back to the field name
 func getFieldName(field reflect.StructField) string {
 	jsonTag := field.Tag.Get("json")
-	if jsonTag == "" || jsonTag == "-" {
+	if jsonTag == "-" {
+		return "-"
+	}
+	if jsonTag == "" {
 		return field.Name
 	}
 	// Handle "name,omitempty" format
@@ -80,11 +84,17 @@ func (r *FieldRegistry) GetID(t reflect.Type) int {
 
 	for i := 0; i < t.NumField(); i++ {
 		sf := t.Field(i)
+		name := getFieldName(sf)
+		ignored := name == "-"
+		if ignored {
+			name = sf.Name // Keep a name for debug, but mark ignored
+		}
 		fields[i] = FieldInfo{
 			Index:   i,
-			Name:    getFieldName(sf),
+			Name:    name,
 			RawName: sf.Name,
 			Used:    false,
+			Ignored: ignored,
 		}
 	}
 
@@ -142,10 +152,12 @@ func (r *FieldRegistry) ComputeOptimizedOrder() {
 	defer r.mu.Unlock()
 
 	for _, info := range r.idToInfo {
-		// Create a slice of field indices
-		order := make([]int, len(info.Fields))
-		for i := range order {
-			order[i] = i
+		// Create a slice of field indices for non-ignored fields
+		var order []int
+		for i, field := range info.Fields {
+			if !field.Ignored {
+				order = append(order, i)
+			}
 		}
 
 		// Sort by usage count (descending) - most used first
@@ -199,10 +211,15 @@ func (r *FieldRegistry) GetKeysList() [][]any {
 			}
 		} else {
 			// Use original order
+			orderIdx := 0
 			for i, field := range info.Fields {
-				if info.UsedMask[i] {
-					keyEntry = append(keyEntry, i, field.Name) // 0-based index
+				if field.Ignored {
+					continue
 				}
+				if info.UsedMask[i] {
+					keyEntry = append(keyEntry, orderIdx, field.Name) // 0-based index
+				}
+				orderIdx++
 			}
 		}
 		// Only add if there are used fields
@@ -222,8 +239,13 @@ func (r *FieldRegistry) GetKeysListAll() [][]any {
 	result := [][]any{}
 	for id, info := range r.idToInfo {
 		keyEntry := []any{id}
-		for i, field := range info.Fields {
-			keyEntry = append(keyEntry, i, field.Name) // 0-based index
+		orderIdx := 0
+		for _, field := range info.Fields {
+			if field.Ignored {
+				continue
+			}
+			keyEntry = append(keyEntry, orderIdx, field.Name) // 0-based index
+			orderIdx++
 		}
 		result = append(result, keyEntry)
 	}

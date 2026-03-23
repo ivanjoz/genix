@@ -6,18 +6,19 @@ import (
 	"sort"
 
 	"github.com/bytedance/sonic"
-	"github.com/viant/xunsafe"
 )
 
 type Encoder struct {
 	lastType    reflect.Type
 	registry    *FieldRegistry
 	isAnalyzing bool // true during first pass (analysis), false during second pass (marshal)
+	seen        map[uintptr]bool
 }
 
 func NewEncoder() *Encoder {
 	return &Encoder{
 		registry: globalRegistry,
+		seen:     make(map[uintptr]bool),
 	}
 }
 
@@ -47,6 +48,7 @@ func Marshal(v any) ([]byte, error) {
 	// === SECOND PASS: Marshal with optimized field order ===
 	e.isAnalyzing = false
 	e.lastType = nil // Reset for fresh type tracking
+	e.seen = make(map[uintptr]bool)
 	content, err := e.marshalContent(v)
 	if err != nil {
 		return nil, err
@@ -75,6 +77,14 @@ func (e *Encoder) marshalContent(v any) (any, error) {
 
 	val := reflect.ValueOf(v)
 	for (val.Kind() == reflect.Ptr || val.Kind() == reflect.Interface) && !val.IsNil() {
+		if val.Kind() == reflect.Ptr {
+			ptr := val.Pointer()
+			if e.seen[ptr] {
+				return nil, nil // Cycle detected, break recursion
+			}
+			e.seen[ptr] = true
+			defer func(p uintptr) { delete(e.seen, p) }(ptr)
+		}
 		val = val.Elem()
 	}
 
@@ -133,7 +143,6 @@ func (e *Encoder) marshalMap(val reflect.Value) ([]any, error) {
 func (e *Encoder) marshalStruct(val reflect.Value) ([]any, error) {
 	t := val.Type()
 	id := e.registry.GetID(t)
-	xStruct := e.registry.GetStruct(id)
 	typeInfo := e.registry.GetTypeInfo(id)
 
 	isNewType := e.lastType != t
@@ -152,7 +161,6 @@ func (e *Encoder) marshalStruct(val reflect.Value) ([]any, error) {
 		newVal.Set(val)
 		val = newVal
 	}
-	ptr := xunsafe.AsPointer(val.Addr().Interface())
 
 	// Determine field iteration order
 	var fieldOrder []int
@@ -160,9 +168,10 @@ func (e *Encoder) marshalStruct(val reflect.Value) ([]any, error) {
 		fieldOrder = typeInfo.OptimizedOrder
 	} else {
 		// Default order
-		fieldOrder = make([]int, len(xStruct.Fields))
-		for i := range fieldOrder {
-			fieldOrder[i] = i
+		for i, field := range typeInfo.Fields {
+			if !field.Ignored {
+				fieldOrder = append(fieldOrder, i)
+			}
 		}
 	}
 
@@ -176,8 +185,7 @@ func (e *Encoder) marshalStruct(val reflect.Value) ([]any, error) {
 	lastNonZeroIdx := -1
 
 	for orderIdx, fieldIdx := range fieldOrder {
-		field := &xStruct.Fields[fieldIdx]
-		fVal := field.Interface(ptr)
+		fVal := val.Field(fieldIdx).Interface()
 
 		if isZero(fVal) {
 			fieldDataList[orderIdx] = fieldData{orderIdx: orderIdx, isZero: true}
@@ -243,6 +251,14 @@ func (e *Encoder) marshalValue(v any) (any, error) {
 
 	val := reflect.ValueOf(v)
 	for (val.Kind() == reflect.Ptr || val.Kind() == reflect.Interface) && !val.IsNil() {
+		if val.Kind() == reflect.Ptr {
+			ptr := val.Pointer()
+			if e.seen[ptr] {
+				return nil, nil // Cycle detected, break recursion
+			}
+			e.seen[ptr] = true
+			defer func(p uintptr) { delete(e.seen, p) }(ptr)
+		}
 		val = val.Elem()
 	}
 

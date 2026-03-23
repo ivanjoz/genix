@@ -225,13 +225,19 @@ func (d *Decoder) populateStruct(xStruct *xunsafe.Struct, typeID int, values []a
 		fieldOrder = typeInfo.OptimizedOrder
 	} else {
 		// Default order
-		fieldOrder = make([]int, len(xStruct.Fields))
-		for i := range fieldOrder {
-			fieldOrder[i] = i
+		if typeInfo != nil {
+			for i, field := range typeInfo.Fields {
+				if !field.Ignored {
+					fieldOrder = append(fieldOrder, i)
+				}
+			}
+		} else {
+			for i := range xStruct.Fields {
+				fieldOrder = append(fieldOrder, i)
+			}
 		}
 	}
 
-	valPtr := xunsafe.AsPointer(val.Addr().Interface())
 	valueIdx := 0
 	for orderIdx, fieldIdx := range fieldOrder {
 		if skipMap[orderIdx] { // Skip indices are in order space, not field space
@@ -248,7 +254,7 @@ func (d *Decoder) populateStruct(xStruct *xunsafe.Struct, typeID int, values []a
 			return err
 		}
 
-		field.SetValue(valPtr, fVal.Interface())
+		val.Field(fieldIdx).Set(fVal)
 		valueIdx++
 	}
 	return nil
