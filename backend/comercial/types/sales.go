@@ -164,3 +164,37 @@ func (e SaleSummaryTable) GetSchema() db.TableSchema {
 		Keys:      []db.Coln{e.Fecha},
 	}
 }
+
+/* Sale summary 2 */
+type SaleOrderProductStats struct {
+	Quantity                int32
+	QuantityPendingDelivery int32
+	TotalAmount             int32
+	TotalDebtAmount         int32
+}
+
+type ProductSaleSummary struct {
+	db.TableStruct[ProductSaleSummaryTable, ProductSaleSummary]
+	CompanyID int32  `json:",omitempty"`
+	Fecha     int16  `json:",omitempty"`
+	ProductID int32  `json:",omitempty"`
+	Updated   int32  `json:",omitempty"`
+	Stats     []byte `json:",omitempty"`
+}
+
+type ProductSaleSummaryTable struct {
+	db.TableStruct[ProductSaleSummaryTable, ProductSaleSummary]
+	CompanyID db.Col[ProductSaleSummaryTable, int32]
+	Fecha     db.Col[ProductSaleSummaryTable, int16]
+	ProductID db.Col[ProductSaleSummaryTable, int32]
+	Stats     db.Col[ProductSaleSummaryTable, []byte]
+	Updated   db.Col[ProductSaleSummaryTable, int32]
+}
+
+func (e ProductSaleSummaryTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "product_sale_summary",
+		Partition: e.CompanyID,
+		Keys:      []db.Coln{e.Fecha, e.ProductID},
+	}
+}

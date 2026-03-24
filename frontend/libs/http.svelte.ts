@@ -379,7 +379,9 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
   routeParsed = ""
   module = "a"
   keyID: string | string[] = ""
-  keysIDs: { [e: string]: string | string[] } = {}
+	keysIDs: { [e: string]: string | string[] } = {}
+	columnarIDField = ""
+  combineColumnarValuesOnFields: string[] = []
 
   useCache: { min: number, ver: number  } | undefined = undefined
 	headers: { [k: string]: string } | undefined = undefined

@@ -3,8 +3,11 @@ package exec
 import (
 
 	// comercial "app/comercial/types"
+	"app/comercial"
+	comercialTypes "app/comercial/types"
 	"app/core"
 	"app/db"
+	"app/libs"
 	"app/negocio"
 	negocioTypes "app/negocio/types"
 	"fmt"
@@ -222,4 +225,33 @@ func Test43(args *core.ExecArgs) core.FuncResponse {
 			"stage2_total_bytes":            stage2TotalBytes,
 		},
 	}
+}
+
+func Test44(args *core.ExecArgs) core.FuncResponse {
+	
+	s1 := comercialTypes.SaleOrderProductStats{
+		Quantity: 123,
+		QuantityPendingDelivery: 12332,
+		TotalAmount: 338829,
+		TotalDebtAmount: 78954,
+	}
+	
+	core.Print(s1)
+	
+	bytes1 := libs.SerializeInt30Struct(s1)
+	core.Log("struct bytes:", bytes1)
+	
+	decodedStruct := comercialTypes.SaleOrderProductStats{}
+	libs.DeserializeInt30Struct(bytes1, &decodedStruct)
+	
+	core.Print(decodedStruct)
+	
+	return core.FuncResponse{}
+}
+
+func Test45(args *core.ExecArgs) core.FuncResponse {
+	
+	comercial.SaleOrderReprocess(1,0)
+
+	return core.FuncResponse{}
 }

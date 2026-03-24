@@ -4,11 +4,13 @@ import (
 	"app/comercial/types"
 	"app/core"
 	"app/db"
+	"app/libs"
 	"slices"
 )
 
 type ProductSummaryChange struct {
-	productID, quantity, quantityPendingDelivery, amount, totalDebtAmount int32
+	productID int32
+	types.SaleOrderProductStats
 }
 
 func MakeSummaryChangeFromOSaleOrder(sale types.SaleOrder, actions ...int8) []ProductSummaryChange {
@@ -38,24 +40,24 @@ func MakeSummaryChangeFromOSaleOrder(sale types.SaleOrder, actions ...int8) []Pr
 
 		if includeSale {
 			// Sale creation adds units and total amount once.
-			currentChange.quantity += quantity
-			currentChange.amount += lineAmount
+			currentChange.Quantity += quantity
+			currentChange.TotalAmount += lineAmount
 			// When delivery is still pending, the full quantity remains pending.
 			if !includeDelivery {
-				currentChange.quantityPendingDelivery += quantity
+				currentChange.QuantityPendingDelivery += quantity
 			}
 			// When payment is still pending, the full line amount remains as debt.
 			if !includePayment {
-				currentChange.totalDebtAmount += lineAmount
+				currentChange.TotalDebtAmount += lineAmount
 			}
 		}
 		if includePayment && !includeSale {
 			// Pure payment updates only reduce pending debt.
-			currentChange.totalDebtAmount -= lineAmount
+			currentChange.TotalDebtAmount -= lineAmount
 		}
 		if includeDelivery && !includeSale {
 			// Pure delivery updates only reduce pending quantity.
-			currentChange.quantityPendingDelivery -= quantity
+			currentChange.QuantityPendingDelivery -= quantity
 		}
 		changesByProduct[productID] = currentChange
 	}
@@ -66,103 +68,186 @@ func MakeSummaryChangeFromOSaleOrder(sale types.SaleOrder, actions ...int8) []Pr
 	return changes
 }
 
-func UpdateSaleSumary(summary *types.SaleSummary, sale types.SaleOrder, actions ...int8) error {
-	if summary == nil {
-		return core.Err("sale summary is nil")
+func updateSaleSummaryForChange(sale types.SaleOrder, actions ...int8) error {
+	summaryChanges := MakeSummaryChangeFromOSaleOrder(sale, actions...)
+	return applyChangesToSaleSumary(sale.EmpresaID, sale.Fecha, summaryChanges, false)
+}
+
+func loadSaleSummaryRowsByProducts(companyID int32, fecha int16, summaryChanges []ProductSummaryChange) (map[int32]types.ProductSaleSummary, error) {
+	productIDs := make([]int32, 0, len(summaryChanges))
+	seenProducts := map[int32]struct{}{}
+
+	// Build the target product list once so the query only fetches touched rows.
+	for _, summaryChange := range summaryChanges {
+		if summaryChange.productID <= 0 {
+			continue
+		}
+		if _, exists := seenProducts[summaryChange.productID]; exists {
+			continue
+		}
+		seenProducts[summaryChange.productID] = struct{}{}
+		productIDs = append(productIDs, summaryChange.productID)
 	}
 
-	// Step 1: convert the sale plus action set into one delta per product.
-	allChanges := MakeSummaryChangeFromOSaleOrder(sale, actions...)
+	if len(productIDs) == 0 {
+		return map[int32]types.ProductSaleSummary{}, nil
+	}
 
-	// Step 2: apply all product deltas against the in-memory summary.
-	if len(allChanges) > 0 {
-		if err := UpdateProductOnSumary(summary, allChanges...); err != nil {
-			return err
+	summaries := []types.ProductSaleSummary{}
+	query := db.Query(&summaries)
+	query.CompanyID.Equals(companyID).Fecha.Equals(fecha).ProductID.In(productIDs...)
+	if err := query.Exec(); err != nil {
+		return nil, core.Err("error querying sale summary rows:", err)
+	}
+
+	summaryByProductID := make(map[int32]types.ProductSaleSummary, len(summaries))
+	for _, summary := range summaries {
+		if summary.ProductID > 0 {
+			summaryByProductID[summary.ProductID] = summary
 		}
 	}
-
-	// Step 3: persist the refreshed summary snapshot.
-	summary.Updated = core.SUnixTime()
-	if err := db.InsertOne(*summary); err != nil {
-		return core.Err("error saving sale summary:", err)
-	}
-	return nil
+	return summaryByProductID, nil
 }
 
-func updateSaleSummaryForChange(sale types.SaleOrder, actions ...int8) error {
-	// Load the current day snapshot first, then apply the requested action deltas.
-	previousSummary, err := loadSaleSummary(sale.EmpresaID, sale.Fecha)
-	if err != nil {
-		return err
-	}
-	return UpdateSaleSumary(&previousSummary, sale, actions...)
-}
-
-func loadSaleSummary(empresaID int32, fecha int16) (types.SaleSummary, error) {
-	// Read at most one daily summary because the table key is empresa + fecha.
-	summaries := []types.SaleSummary{}
+func loadSaleSummaryRowsByDay(companyID int32, fecha int16) ([]types.ProductSaleSummary, error) {
+	summaries := []types.ProductSaleSummary{}
 	query := db.Query(&summaries)
-	query.EmpresaID.Equals(empresaID).Fecha.Equals(fecha).Limit(1)
+	query.CompanyID.Equals(companyID).Fecha.Equals(fecha)
 	if err := query.Exec(); err != nil {
-		return types.SaleSummary{}, core.Err("error querying sale summary:", err)
+		return nil, core.Err("error querying daily sale summary rows:", err)
 	}
-
-	if len(summaries) > 0 {
-		return summaries[0], nil
-	}
-	return types.SaleSummary{EmpresaID: empresaID, Fecha: fecha}, nil
+	return summaries, nil
 }
 
-func UpdateProductOnSumary(summary *types.SaleSummary, summaryChanges ...ProductSummaryChange) error {
-	if summary == nil || len(summaryChanges) == 0 {
+func encodeSaleSummaryStats(summaryStats types.SaleOrderProductStats) []byte {
+	// The summary blob must stay in the compact int30 format shared by incremental and rebuild flows.
+	return libs.SerializeInt30Struct(summaryStats)
+}
+
+func decodeSaleSummaryStats(encodedStats []byte) (types.SaleOrderProductStats, error) {
+	summaryStats := types.SaleOrderProductStats{}
+	if len(encodedStats) == 0 {
+		return summaryStats, nil
+	}
+
+	// Empty rows decode to zero-value stats, while malformed payloads fail fast for diagnosis.
+	if err := libs.DeserializeInt30Struct(encodedStats, &summaryStats); err != nil {
+		return types.SaleOrderProductStats{}, err
+	}
+	return summaryStats, nil
+}
+
+func applySummaryChangeToStats(summaryStats *types.SaleOrderProductStats, summaryChange ProductSummaryChange) {
+	if summaryStats == nil {
+		return
+	}
+
+	// Clamp every counter to zero because the compact serializer only stores unsigned values.
+	summaryStats.Quantity = core.ClampInt32ToZero(summaryStats.Quantity + summaryChange.Quantity)
+	summaryStats.QuantityPendingDelivery = core.ClampInt32ToZero(summaryStats.QuantityPendingDelivery + summaryChange.QuantityPendingDelivery)
+	summaryStats.TotalAmount = core.ClampInt32ToZero(summaryStats.TotalAmount + summaryChange.TotalAmount)
+	summaryStats.TotalDebtAmount = core.ClampInt32ToZero(summaryStats.TotalDebtAmount + summaryChange.TotalDebtAmount)
+}
+
+func applyChangesToSaleSumary(companyID int32, fecha int16, changes []ProductSummaryChange, replaceCurrentValues bool) error {
+	if companyID <= 0 || fecha <= 0 {
+		return core.Err("invalid sale summary scope")
+	}
+	if len(changes) == 0 {
+		core.Log("applyChangesToSaleSumary skipped: no changes", "companyID", companyID, "fecha", fecha, "replaceCurrentValues", replaceCurrentValues)
 		return nil
 	}
 
-	// Step 1: index existing rows so each product update can find its slot in O(1).
-	productIndexes := map[int32]int{}
-	for index, productID := range summary.ProductIDs {
-		if productID > 0 {
-			productIndexes[productID] = index
-		}
-	}
-
-	// Step 2: merge duplicated product deltas so callers can pass raw line changes safely.
 	mergedChanges := map[int32]ProductSummaryChange{}
-	for _, summaryChange := range summaryChanges {
+	for _, summaryChange := range changes {
 		if summaryChange.productID <= 0 {
 			continue
 		}
 		currentChange := mergedChanges[summaryChange.productID]
 		currentChange.productID = summaryChange.productID
-		currentChange.quantity += summaryChange.quantity
-		currentChange.quantityPendingDelivery += summaryChange.quantityPendingDelivery
-		currentChange.amount += summaryChange.amount
-		currentChange.totalDebtAmount += summaryChange.totalDebtAmount
+		currentChange.Quantity += summaryChange.Quantity
+		currentChange.QuantityPendingDelivery += summaryChange.QuantityPendingDelivery
+		currentChange.TotalAmount += summaryChange.TotalAmount
+		currentChange.TotalDebtAmount += summaryChange.TotalDebtAmount
 		mergedChanges[summaryChange.productID] = currentChange
 	}
+	if len(mergedChanges) == 0 {
+		core.Log("applyChangesToSaleSumary skipped: merged changes empty", "companyID", companyID, "fecha", fecha, "replaceCurrentValues", replaceCurrentValues)
+		return nil
+	}
 
-	// Step 3: update the existing row or append a new one for each product delta.
-	for productID, summaryChange := range mergedChanges {
-		index, exists := productIndexes[productID]
+	mergedChangesList := make([]ProductSummaryChange, 0, len(mergedChanges))
+	for _, summaryChange := range mergedChanges {
+		mergedChangesList = append(mergedChangesList, summaryChange)
+	}
+
+	summaryByProductID, err := loadSaleSummaryRowsByProducts(companyID, fecha, mergedChangesList)
+	if err != nil {
+		return err
+	}
+
+	summaryRows := make([]types.ProductSaleSummary, 0, len(mergedChangesList))
+	summaryUpdated := core.SUnixTime()
+
+	for _, summaryChange := range mergedChangesList {
+		currentRow, exists := summaryByProductID[summaryChange.productID]
 		if !exists {
-			index = appendSummaryRow(summary, productID)
-			productIndexes[productID] = index
+			currentRow = types.ProductSaleSummary{
+				CompanyID: companyID,
+				Fecha:     fecha,
+				ProductID: summaryChange.productID,
+			}
 		}
 
-		summary.Quantity[index] = core.ClampInt32ToZero(summary.Quantity[index] + summaryChange.quantity)
-		summary.QuantityPendingDelivery[index] = core.ClampInt32ToZero(summary.QuantityPendingDelivery[index] + summaryChange.quantityPendingDelivery)
-		summary.TotalAmount[index] = core.ClampInt32ToZero(summary.TotalAmount[index] + summaryChange.amount)
-		summary.TotalDebtAmount[index] = core.ClampInt32ToZero(summary.TotalDebtAmount[index] + summaryChange.totalDebtAmount)
+		var nextStats types.SaleOrderProductStats
+		if replaceCurrentValues {
+			// Reprocess sends final product totals, so the stored payload is replaced instead of adjusted.
+			nextStats = makeSaleSummaryStatsFromChange(summaryChange)
+			if exists {
+				currentStats, err := decodeSaleSummaryStats(currentRow.Stats)
+				if err != nil {
+					return core.Err("error decoding sale summary stats:", err)
+				}
+				if currentStats == nextStats {
+					// Reprocess can skip rows that already have the target totals.
+					continue
+				}
+			}
+		} else {
+			// Incremental updates reuse current counters and only apply the requested deltas.
+			nextStats, err = decodeSaleSummaryStats(currentRow.Stats)
+			if err != nil {
+				return core.Err("error decoding sale summary stats:", err)
+			}
+			applySummaryChangeToStats(&nextStats, summaryChange)
+		}
+
+		currentRow.Stats = encodeSaleSummaryStats(nextStats)
+		currentRow.Updated = summaryUpdated
+		summaryRows = append(summaryRows, currentRow)
+	}
+
+	// Persist one sentinel row per fecha so clients can query fecha=-1 and discover which day buckets changed.
+	summaryRows = append(summaryRows, types.ProductSaleSummary{
+		CompanyID: companyID,
+		Fecha:     -1,
+		ProductID: int32(fecha),
+		Updated:   summaryUpdated,
+	})
+
+	core.Log("applyChangesToSaleSumary saving rows", "companyID", companyID, "fecha", fecha, "rows", len(summaryRows), "replaceCurrentValues", replaceCurrentValues)
+	if err := db.Insert(&summaryRows); err != nil {
+		return core.Err("error saving sale summary rows:", err)
 	}
 	return nil
 }
 
-func appendSummaryRow(summary *types.SaleSummary, productID int32) int {
-	// Keep all summary slices aligned by appending the new product row to each one.
-	summary.ProductIDs = append(summary.ProductIDs, productID)
-	summary.Quantity = append(summary.Quantity, 0)
-	summary.QuantityPendingDelivery = append(summary.QuantityPendingDelivery, 0)
-	summary.TotalAmount = append(summary.TotalAmount, 0)
-	summary.TotalDebtAmount = append(summary.TotalDebtAmount, 0)
-	return len(summary.ProductIDs) - 1
+func makeSaleSummaryStatsFromChange(summaryChange ProductSummaryChange) types.SaleOrderProductStats {
+	// Rebuild rows use the change struct as the final summary payload for the product.
+	return types.SaleOrderProductStats{
+		Quantity:                core.ClampInt32ToZero(summaryChange.Quantity),
+		QuantityPendingDelivery: core.ClampInt32ToZero(summaryChange.QuantityPendingDelivery),
+		TotalAmount:             core.ClampInt32ToZero(summaryChange.TotalAmount),
+		TotalDebtAmount:         core.ClampInt32ToZero(summaryChange.TotalDebtAmount),
+	}
 }

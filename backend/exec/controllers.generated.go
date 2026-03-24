@@ -40,6 +40,7 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[negocio.ClientProvider](),
 		makeDBController[core.CronAction](),
 		makeDBController[coreTypes.UsageLog](),
+		makeDBController[comercial.ProductSaleSummary](),
 		makeDBController[DemoStruct](),
 	}
 }
