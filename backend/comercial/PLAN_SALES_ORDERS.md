@@ -18,11 +18,11 @@ The goal is to create a page that displays sales orders filtered by status: "Fin
 - The API will return all sales orders for the company (respecting `upd` for delta sync) to allow the frontend to manage the state efficiently using its local cache mechanism.
 
 ### 1.2. Register Handler
-- Add `"GET.sale_orders": comercial.GetSaleOrders` to `backend/handlers/main.go`.
+- Add `"GET.sale-orders": comercial.GetSaleOrders` to `backend/handlers/main.go`.
 
 ## 2. Frontend: Service and UI Implementation
 
-### 2.1. Create `frontend/services/services/sale_orders.svelte.ts`
+### 2.1. Create `frontend/services/services/sale-orders.svelte.ts`
 - Implement a cached service for `SaleOrder` using the `CachedService` pattern (if available) or a standard fetch with delta sync support.
 - Follow the patterns in `frontend/docs/SERVICES_GUIDE.md`.
 

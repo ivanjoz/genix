@@ -55,6 +55,14 @@ import { formatN } from '$libs/helpers';
      return productoStock.cant - ventaCant
   })
 
+  const stockCubeCount = $derived.by(() => {
+    // Represent stock in compact blocks: one cube per started group of 10, capped for readability.
+    if (getCant <= 0) return 0
+    return Math.min(8, Math.ceil(getCant / 10))
+  })
+
+  const hasCriticalStock = $derived(getCant <= 2)
+
   // SKU Logic filtering
   const firstSkus = $derived.by(() => {
     let skus = productoStock.skus || []
@@ -165,11 +173,15 @@ import { formatN } from '$libs/helpers';
 
         <!-- Col 3: Stock -->
         {#if !isSku}
-          <div class="font-mono absolute bottom-0 left-0 text-sm text-gray-500 text-right w-64">
-              <span class={getCant === 0 ? "text-red-500 font-bold" : ""}>
-                  {getCant}
-              </span>
-              <span class="text-gray-300 text-xs ml-4">stk</span>
+          <div class="flex absolute bottom-0 left-0 text-sm text-gray-500 text-right group-hover:invisible">
+            <div class={"font-mono w-50 mr-2" + (getCant === 0 ? " text-red-500 font-bold" : "")}>
+                {getCant}
+            </div>
+            <div class="-mt-1 flex gap-1">
+              {#each Array.from({ length: stockCubeCount }) as _, cubeIndex (`stock-cube-${idx}-${cubeIndex}`)}
+                <i class={"icon-cube" + (hasCriticalStock ? " text-red-500" : "")}></i>
+              {/each}
+            </div>
           </div>
         {/if}
         <!-- Col 4: Price -->

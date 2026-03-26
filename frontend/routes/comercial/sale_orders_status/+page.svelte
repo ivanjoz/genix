@@ -369,7 +369,7 @@
       header: 'Fecha Hora',
       getValue: saleOrder => formatTime(saleOrder.Created, 'd-M h:n') as string,
       css: 'text-right',
-      headerCss: 'w-52',
+      headerCss: 'w-100', cellCss: "whitespace-nowrap",
       mobile: { order: 2, css: 'col-span-6', icon: 'clock' }
     },
     {

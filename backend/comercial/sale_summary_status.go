@@ -65,6 +65,11 @@ func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
 	productRows := []types.ProductSaleSummary{}
 	query := db.Query(&productRows)
 	query.CompanyID.Equals(req.Usuario.EmpresaID).Fecha.In(fechasToInclude...)
+	
+	if updated > 0 {
+		query.Updated.GreaterEqual(updated).AllowFilter()
+	}
+	
 	if err := query.Exec(); err != nil {
 		core.Log("GetSaleSummary query error:", err)
 		return req.MakeErr("Error al obtener el resumen de ventas.", err)

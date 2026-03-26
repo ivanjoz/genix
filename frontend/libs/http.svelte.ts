@@ -28,6 +28,8 @@ export interface httpProps {
   refreshRoutes?: string[]
   keysIDs?: { [e: string]: string | string[] }
   keyID?: string | string[]
+  columnarIDField?: string
+  combineColumnarValuesOnFields?: string[]
   cacheMode?: CacheMode
   useCache?: {
     min: number, /* minutos del caché */
@@ -391,6 +393,8 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
   isReady = $state(0)
 
   makeProps(cacheMode?: CacheMode): serviceHttpProps {
+    // Forward cache merge metadata so the service worker can apply
+    // columnar delta updates without each service reimplementing it.
     const props = {
       routeParsed: Env.makeRoute(this.route),
       route: this.route,
@@ -400,6 +404,8 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
       cacheMode,
       keyID: this.keyID,
       keysIDs: this.keysIDs,
+      columnarIDField: this.columnarIDField,
+      combineColumnarValuesOnFields: this.combineColumnarValuesOnFields,
     } as serviceHttpProps
     return props
   }

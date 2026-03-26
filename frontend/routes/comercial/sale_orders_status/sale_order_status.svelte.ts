@@ -53,7 +53,7 @@ export const SaleOrderGroup = {
 }
 
 export class SaleOrdersService extends GetHandler {
-    route = "sale_orders"
+    route = "sale-orders"
     // Route now depends on group; bump version to avoid mixing old cached queries.
     useCache = { min: 0.1, ver: 2 }
 
@@ -138,8 +138,8 @@ export class SaleOrdersService extends GetHandler {
 export const postSaleOrderUpdate = (payload: ISaleOrderUpdatePayload) => {
 	// Keep route invalidation explicit so all sale-orders views can re-sync after updates.
 	return POST({
-		route: 'sale_order',
+		route: 'sale-order',
 		data: payload,
-		refreshRoutes: ['sale_orders'],
+		refreshRoutes: ['sale-orders'],
 	});
 };

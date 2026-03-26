@@ -15,6 +15,8 @@ export type serviceHttpProps = {
   headers?: { [e: string]: string } | Headers
   keyID?: string | string[]
   keysIDs?: { [e: string]: string | string[] }
+  columnarIDField?: string
+  combineColumnarValuesOnFields?: string[]
   fields?: string[]
   keyFilterIfEmpty?: string
   keyForUpdated?: string
@@ -188,6 +190,58 @@ const getKeyValue = (record: any, keyIDs: string |string[]): (string|number) => 
 
 export interface IResponse { [k: string]: any[] }
 
+const mergeColumnarRecord = (prevRecord: any, newRecord: any, args: serviceHttpProps
+): { mergedRecord: any, missingCount: number } => {
+  const columnarIDField = args.columnarIDField || ""
+  const combineFields = args.combineColumnarValuesOnFields || []
+  const nextColumnarIDs = Array.isArray(newRecord?.[columnarIDField]) ? newRecord[columnarIDField] : []
+  const prevColumnarIDs = Array.isArray(prevRecord?.[columnarIDField]) ? prevRecord[columnarIDField] : []
+  const mergedRecord = { ...prevRecord, ...newRecord }
+  let missingCount = 0
+
+  // Rebuild only the configured columnar arrays so deltas can update inner rows
+  // by product ID while preserving cached values for untouched IDs.
+  mergedRecord[columnarIDField] = [...prevColumnarIDs]
+  for(const field of combineFields){
+    mergedRecord[field] = Array.isArray(prevRecord?.[field]) ? [...prevRecord[field]] : []
+  }
+
+  const columnarIndexByID = new Map<string|number, number>()
+  for(let index = 0; index < mergedRecord[columnarIDField].length; index++){
+    const columnarID = mergedRecord[columnarIDField][index]
+    if(columnarID !== undefined && columnarID !== null && columnarID !== ""){
+      columnarIndexByID.set(columnarID, index)
+    }
+  }
+
+  for(let nextIndex = 0; nextIndex < nextColumnarIDs.length; nextIndex++){
+    const columnarID = nextColumnarIDs[nextIndex]
+    if(columnarID === undefined || columnarID === null || columnarID === ""){
+      missingCount++
+      continue
+    }
+
+    const existingIndex = columnarIndexByID.get(columnarID)
+    if(existingIndex === undefined){
+      // New inner IDs are appended so the cache grows incrementally with deltas.
+      columnarIndexByID.set(columnarID, mergedRecord[columnarIDField].length)
+      mergedRecord[columnarIDField].push(columnarID)
+      for(const field of combineFields){
+        const fieldValues = Array.isArray(newRecord?.[field]) ? newRecord[field] : []
+        mergedRecord[field].push(fieldValues[nextIndex])
+      }
+      continue
+    }
+
+    for(const field of combineFields){
+      const fieldValues = Array.isArray(newRecord?.[field]) ? newRecord[field] : []
+      mergedRecord[field][existingIndex] = fieldValues[nextIndex]
+    }
+  }
+
+  return { mergedRecord, missingCount }
+}
+
 const handleFetchResponse = async (
   args: serviceHttpProps, lastSync: ILastSync, response: CacheContent, nowTime: number
 ): Promise<any> => {
@@ -217,7 +271,7 @@ const handleFetchResponse = async (
   if(!hasChanged && args.cacheMode !== 'updateOnly'){
     response = (await getCacheRecord(key, cacheName)) as { [k: string]: any[] }
   } else if(hasChanged){
-    const prevResponse = (await getCacheRecord(key, cacheName)) as IResponse
+    const prevResponse = ((await getCacheRecord(key, cacheName)) || {}) as IResponse
     console.log("cache obtenido:",key,cacheName, args)
 
     if(self._isLocal){
@@ -248,20 +302,28 @@ const handleFetchResponse = async (
       const recordsMap: Map<number|string,any> = new Map()
 
       for(const e of prevRecords){ recordsMap.set(makeKeyID(e), e) }
-      for(const e of newRecords){ recordsMap.set(makeKeyID(e), e) }
+      for(const e of newRecords){
+        const recordKey = makeKeyID(e)
+        const prevRecord = recordsMap.get(recordKey)
+        // Only activate the columnar merge when the service explicitly provides
+        // the inner ID field and the list of aligned value arrays to update.
+        const canMergeColumnar = !!(prevRecord && args.columnarIDField && args.combineColumnarValuesOnFields?.length)
+
+        if(canMergeColumnar){
+          // Merge by inner columnar ID instead of replacing the whole summary row.
+          const mergedColumnarRecord = mergeColumnarRecord(prevRecord, e, args)
+          missingCount += mergedColumnarRecord.missingCount
+          recordsMap.set(recordKey, mergedColumnarRecord.mergedRecord)
+        } else {
+          recordsMap.set(recordKey, e)
+        }
+      }
 
       if(missingCount > 0){
         console.warn(`Cache Error: En "${args.route}" (${respKey}) hay ${missingCount} registros sin la key: ${keyIDs}`)
       }
       console.log("Cache usedKeysCount", usedKeysCount)
-
-      const mergedRecords: any[] = []
-      for(const e of recordsMap.values()){
-        // if(args.keyFilterIfEmpty && !e[args.keyFilterIfEmpty]){ continue }
-        mergedRecords.push(e)
-      }
-
-      prevResponse[respKey] = mergedRecords
+      prevResponse[respKey] = [...recordsMap.values()]
     }
 
     if(self._isLocal){

@@ -200,7 +200,7 @@ export class SaleOrderState {
 
     try {
       const res = await POST({
-        route: "sale_order",
+        route: "sale-order",
         data: this.form,
         successMessage: "Venta registrada con éxito"
       })

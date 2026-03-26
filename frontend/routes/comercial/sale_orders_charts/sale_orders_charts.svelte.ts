@@ -12,11 +12,15 @@ export interface ISaleSummaryRecord {
 }
 
 export class SaleOrdersChartsService extends GetHandler {
-	route = 'sale_summary';
+	route = 'sale-summary';
 	// Keep cache short for chart pages while preserving delta behavior.
-	useCache = { min: 0.2, ver: 1 };
+	useCache = { min: 0.2, ver: 2 };
 	// Backend key for delta merge when records don't expose `ID`.
 	keyID = 'Fecha';
+	columnarIDField = "ProductIDs";
+	combineColumnarValuesOnFields = [
+		"Quantity", "QuantityPendingDelivery", "TotalAmount", "TotalDebtAmount"
+	];
 
 	records: ISaleSummaryRecord[] = $state([]);
 

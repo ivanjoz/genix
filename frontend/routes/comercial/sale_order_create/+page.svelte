@@ -286,7 +286,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
         <!-- Grid/List -->
         <div class="flex-1 overflow-y-auto">
           {#each chunkedProductos as group, groupIdx (group[0].key)}
-            <div class="flex gap-4 mb-4">
+            <div class="flex gap-8 mb-6">
               {#each group as item, itemIdx (item.key)}
                 <div class="flex-1 min-w-0">
                   <ProductoVentaCard
