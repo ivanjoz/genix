@@ -16,6 +16,11 @@
     points: Array<{ x: number, y: number }>
   }
 
+  interface IChartCanvasLineRange {
+    minValue: number
+    maxValue: number
+  }
+
   interface IChartCanvasCacheEntry {
     renderKey: string
     stackedBarFrames: IChartCanvasRectFrame[]
@@ -37,6 +42,14 @@
     hideLabel: boolean
   }
 
+  interface IChartCanvasXAxisLabel {
+    key: string
+    label: string
+    left: number
+    width: number
+    align: "left" | "center" | "right"
+  }
+
   export interface ChartCanvasSeries {
     type: "bar" | "line"
     values: Array<number | null>
@@ -44,11 +57,17 @@
     color?: string
     lineWidth?: number
     pointSize?: number
+    yAxisMin?: number
+    yAxisMax?: number
   }
 
   export interface ChartCanvasProps {
     id?: number | string
     data: ChartCanvasSeries[]
+    dateLabels?: Array<string | number>
+    dateLabelFormatter?: (dateLabel: string | number, labelIndex: number) => string
+    dateLabelEvery?: number
+    useHtmlRendered?: boolean
     className?: string
     style?: string
     height?: number
@@ -64,6 +83,10 @@
   const {
     id = "",
     data = [],
+    dateLabels = [],
+    dateLabelFormatter = (dateLabel) => String(dateLabel ?? ""),
+    dateLabelEvery = 1,
+    useHtmlRendered = false,
     className = "h100 w100",
     style = "",
     height = 64,
@@ -86,6 +109,14 @@
   const yAxisLabelWidthPx = 28
   const yAxisGuideSpacingPx = 16
   const yAxisPaddingTopPx = 2
+  const xAxisLabelHeightPx = 18
+
+  const snapRectStart = (value: number) => Math.round(value)
+  const snapRectSize = (value: number) => value > 0 ? Math.max(1, Math.round(value)) : 0
+  const snapStrokePoint = (value: number, strokeWidth: number) => {
+    const roundedValue = Math.round(value)
+    return Math.round(strokeWidth) % 2 === 1 ? roundedValue + 0.5 : roundedValue
+  }
 
   const loadLeafer = () => {
     if (!sharedLeaferPromise) {
@@ -161,23 +192,74 @@
     const barSeries = data.filter((chartSeries) => chartSeries.type === 'bar')
 
     return Array.from({ length: metrics.pointsCount }, (_, pointIndex) => {
+      const columnBarEntries = barSeries.flatMap((chartSeries, seriesIndex) => {
+        const pointValue = chartSeries.values[pointIndex] || 0
+        if (pointValue <= 0) { return [] }
+
+        return [{
+          pointValue,
+          fill: chartSeries.color || (seriesIndex % 2 === 0 ? '#ef4444' : '#3b82f6'),
+        }]
+      })
+      const usesStackedLayout = columnBarEntries.length > 1
       let stackedHeight = 0
 
-      // Keep each series section in one column so the mini chart stays cheap to draw.
-      return barSeries.map((chartSeries, seriesIndex) => {
-        const pointValue = chartSeries.values[pointIndex] || 0
+      // Decide per column if we need stacking; most charts end up mixed instead of globally stacked.
+      return columnBarEntries.map((columnBarEntry) => {
+        const pointValue = columnBarEntry.pointValue
         const frameHeight = metrics.maxChartValue > 0 ? (pointValue / metrics.maxChartValue) * height : 0
+        const frameX = snapRectStart(pointIndex * metrics.columnWidth)
+        const frameWidth = snapRectSize(Math.max(1, metrics.columnWidth - 1))
+        const frameHeightPx = snapRectSize(frameHeight)
+        const frameY = usesStackedLayout
+          ? snapRectStart(height - stackedHeight - frameHeight)
+          : snapRectStart(height - frameHeight)
         const frame = {
-          x: pointIndex * metrics.columnWidth,
-          y: height - stackedHeight - frameHeight,
-          width: Math.max(1, metrics.columnWidth - 1),
-          height: frameHeight,
-          fill: chartSeries.color || (seriesIndex % 2 === 0 ? '#ef4444' : '#3b82f6'),
+          x: frameX,
+          y: frameY,
+          width: frameWidth,
+          height: frameHeightPx,
+          fill: columnBarEntry.fill,
         }
-        stackedHeight += frameHeight
+        if (usesStackedLayout) {
+          stackedHeight += frameHeightPx
+        }
         return frame
       })
     }).flat()
+  }
+
+  const getLineRange = (chartSeries: ChartCanvasSeries, metrics: IChartCanvasMetrics): IChartCanvasLineRange => {
+    const numericValues = chartSeries.values.filter((pointValue): pointValue is number => {
+      return pointValue !== null && pointValue !== undefined
+    })
+
+    const fallbackMaxValue = metrics.maxChartValue > 0 ? metrics.maxChartValue : 1
+    const rawMinValue = chartSeries.yAxisMin ?? (numericValues.length ? Math.min(...numericValues) : 0)
+    const rawMaxValue = chartSeries.yAxisMax ?? (numericValues.length ? Math.max(...numericValues) : fallbackMaxValue)
+
+    if (rawMaxValue > rawMinValue) {
+      return {
+        minValue: rawMinValue,
+        maxValue: rawMaxValue,
+      }
+    }
+
+    // Keep constant-value lines visible by expanding a tiny local range around the value.
+    const centerValue = rawMaxValue || rawMinValue || 0
+    const paddingValue = Math.max(Math.abs(centerValue) * 0.1, 1)
+    return {
+      minValue: centerValue - paddingValue,
+      maxValue: centerValue + paddingValue,
+    }
+  }
+
+  const getLinePointY = (pointValue: number, lineRange: IChartCanvasLineRange) => {
+    const valueSpan = lineRange.maxValue - lineRange.minValue
+    if (valueSpan <= 0) { return height / 2 }
+
+    const normalizedPointValue = Math.min(lineRange.maxValue, Math.max(lineRange.minValue, pointValue))
+    return height - (((normalizedPointValue - lineRange.minValue) / valueSpan) * height)
   }
 
   const buildLineFrames = (metrics: IChartCanvasMetrics): IChartCanvasLineFrame[] => {
@@ -186,6 +268,8 @@
     return lineSeries.map((chartSeries) => {
       const segments: Array<number[]> = []
       let currentSegment: number[] = []
+      const lineRange = getLineRange(chartSeries, metrics)
+      const strokeWidth = chartSeries.lineWidth || 2
 
       for (let pointIndex = 0; pointIndex < chartSeries.values.length; pointIndex += 1) {
         const pointValue = chartSeries.values[pointIndex]
@@ -195,9 +279,8 @@
           continue
         }
 
-        const x = (pointIndex * metrics.columnWidth) + (metrics.columnWidth / 2)
-        const clampedPointValue = Math.max(0, pointValue)
-        const y = metrics.maxChartValue > 0 ? height - ((clampedPointValue / metrics.maxChartValue) * height) : height
+        const x = snapStrokePoint((pointIndex * metrics.columnWidth) + (metrics.columnWidth / 2), strokeWidth)
+        const y = snapStrokePoint(getLinePointY(pointValue, lineRange), strokeWidth)
         currentSegment.push(x, y)
       }
 
@@ -206,14 +289,13 @@
       const lineFrame: IChartCanvasLineFrame = {
         name: chartSeries.name,
         stroke: chartSeries.color || '#0f172a',
-        strokeWidth: chartSeries.lineWidth || 2,
+        strokeWidth,
         segments,
         pointSize: chartSeries.pointSize || 0,
         points: chartSeries.values.flatMap((pointValue, pointIndex) => {
           if (pointValue === null || pointValue === undefined) { return [] }
-          const x = (pointIndex * metrics.columnWidth) + (metrics.columnWidth / 2)
-          const clampedPointValue = Math.max(0, pointValue)
-          const y = metrics.maxChartValue > 0 ? height - ((clampedPointValue / metrics.maxChartValue) * height) : height
+          const x = snapStrokePoint((pointIndex * metrics.columnWidth) + (metrics.columnWidth / 2), strokeWidth)
+          const y = snapStrokePoint(getLinePointY(pointValue, lineRange), strokeWidth)
           return [{ x, y }]
         }),
       }
@@ -230,18 +312,55 @@
     return getChartMetrics()
   })
 
+  const xAxisLabels = $derived.by((): IChartCanvasXAxisLabel[] => {
+    if (!dateLabels.length || chartMetrics.pointsCount <= 0) { return [] }
+
+    const labelStep = Math.max(1, Math.floor(dateLabelEvery || 1))
+    const visibleLabels: IChartCanvasXAxisLabel[] = []
+
+    for (let labelIndex = 0; labelIndex < Math.min(dateLabels.length, chartMetrics.pointsCount); labelIndex += labelStep) {
+      const spanPointsCount = Math.min(labelStep, chartMetrics.pointsCount - labelIndex)
+      visibleLabels.push({
+        key: `${labelIndex}-${String(dateLabels[labelIndex] ?? "")}`,
+        label: dateLabelFormatter(dateLabels[labelIndex], labelIndex),
+        left: labelIndex * chartMetrics.columnWidth,
+        width: spanPointsCount * chartMetrics.columnWidth,
+        align: labelIndex === 0
+          ? "left"
+          : labelIndex + spanPointsCount >= chartMetrics.pointsCount
+            ? "right"
+            : "center",
+      })
+    }
+
+    return visibleLabels
+  })
+
+  const stackedBarFrames = $derived.by(() => {
+    return buildStackedBarFrames(chartMetrics)
+  })
+
+  const lineFrames = $derived.by(() => {
+    return buildLineFrames(chartMetrics)
+  })
+
   const getRenderKey = () => {
     return JSON.stringify({
       measuredWidth,
       height,
       id,
       fixedPointWidthPx: fixedPointWidthPx || 0,
+      dateLabels,
+      dateLabelEvery,
+      useHtmlRendered,
       series: data.map((chartSeries) => ({
         type: chartSeries.type,
         name: chartSeries.name,
         color: chartSeries.color || "",
         lineWidth: chartSeries.lineWidth || 0,
         pointSize: chartSeries.pointSize || 0,
+        yAxisMin: chartSeries.yAxisMin ?? null,
+        yAxisMax: chartSeries.yAxisMax ?? null,
         values: chartSeries.values,
       })),
     })
@@ -259,14 +378,14 @@
     const cacheID = String(id || '')
     const cachedChart = cacheID ? sharedChartCache.get(cacheID) : undefined
     const useCachedFrames = cachedChart?.renderKey === nextRenderKey
-    const stackedBarFrames = useCachedFrames ? cachedChart.stackedBarFrames : buildStackedBarFrames(metrics)
-    const lineFrames = useCachedFrames ? cachedChart.lineFrames : buildLineFrames(metrics)
+    const nextStackedBarFrames = useCachedFrames ? cachedChart.stackedBarFrames : buildStackedBarFrames(metrics)
+    const nextLineFrames = useCachedFrames ? cachedChart.lineFrames : buildLineFrames(metrics)
 
     if (cacheID && !useCachedFrames) {
       sharedChartCache.set(cacheID, {
         renderKey: nextRenderKey,
-        stackedBarFrames,
-        lineFrames,
+        stackedBarFrames: nextStackedBarFrames,
+        lineFrames: nextLineFrames,
       })
     }
 
@@ -279,12 +398,14 @@
     })
 
     // Rebuild from the flat frame list so updates stay deterministic and minimal.
-    for (const stackedBarFrame of stackedBarFrames) {
-      if (!stackedBarFrame.height) { continue }
-      chartLeafer.add(new Rect(stackedBarFrame))
+    if (!useHtmlRendered) {
+      for (const stackedBarFrame of nextStackedBarFrames) {
+        if (!stackedBarFrame.height) { continue }
+        chartLeafer.add(new Rect(stackedBarFrame))
+      }
     }
 
-    for (const lineFrame of lineFrames) {
+    for (const lineFrame of nextLineFrames) {
       for (const segment of lineFrame.segments) {
         if (segment.length < 4) { continue }
         chartLeafer.add(new Line({
@@ -347,6 +468,9 @@
 
   $effect(() => {
     data
+    dateLabels
+    dateLabelEvery
+    useHtmlRendered
     className
     style
     height
@@ -362,22 +486,38 @@
   })
 </script>
 
-<div bind:this={containerElement} class={className} style={`${style};height:${height}px`}>
-  <div class="relative flex h-full w-full min-w-0">
+<div bind:this={containerElement} class={className} style={`${style};height:${height + (xAxisLabels.length ? xAxisLabelHeightPx : 0)}px`}>
+  <div class="relative flex h-full w-full min-w-0 flex-col">
+    <div class="relative flex min-h-0 flex-1 w-full min-w-0">
     <div class="relative shrink-0 text-right text-[12px] leading-none text-slate-500" style={`width:${yAxisLabelWidthPx}px`}>
       {#each yAxisGuides as yAxisGuide (yAxisGuide.top)}
         {#if !yAxisGuide.hideLabel}
-          <div class="pointer-events-none absolute right-0 pr-4" style={`top:${yAxisGuide.top + yAxisGuide.labelOffsetPx}px;transform:${yAxisGuide.transform}`}>
-            {yAxisGuide.label}
+          <div class="pointer-events-none absolute right-0 pr-4 [&>div]:block" style={`top:${yAxisGuide.top + yAxisGuide.labelOffsetPx}px;transform:${yAxisGuide.transform}`}>
+            <div>{yAxisGuide.label}</div>
           </div>
         {/if}
       {/each}
     </div>
 
     <div class="relative h-full min-w-0 flex-1 overflow-hidden" bind:this={plotFrameElement}>
-      {#each yAxisGuides as yAxisGuide (yAxisGuide.top)}
-        <div class="pointer-events-none absolute left-0 right-0 border-t border-dashed border-slate-300/80" style={`top:${yAxisGuide.top}px`}></div>
-      {/each}
+      <div class="absolute inset-0 [&>div]:pointer-events-none [&>div]:absolute [&>div]:left-0 [&>div]:right-0 [&>div]:border-t [&>div]:border-dashed [&>div]:border-slate-300/80">
+        {#each yAxisGuides as yAxisGuide (yAxisGuide.top)}
+          <div style={`top:${yAxisGuide.top}px`}></div>
+        {/each}
+      </div>
+
+      {#if useHtmlRendered}
+        <!-- Render bars in the DOM so narrow stacked columns can use the browser's pixel snapping. -->
+        <div class="absolute inset-y-0 [&>div]:pointer-events-none [&>div]:absolute" style={`width:${chartMetrics.plotWidth}px;right:0`}>
+          {#each stackedBarFrames as stackedBarFrame, frameIndex (`${frameIndex}-${stackedBarFrame.x}-${stackedBarFrame.y}-${stackedBarFrame.height}`)}
+            {#if stackedBarFrame.height}
+              <div
+                style={`left:${stackedBarFrame.x}px;top:${stackedBarFrame.y}px;width:${stackedBarFrame.width}px;height:${stackedBarFrame.height}px;background:${stackedBarFrame.fill}`}
+              ></div>
+            {/if}
+          {/each}
+        </div>
+      {/if}
 
       <div
         bind:this={plotCanvasElement}
@@ -385,5 +525,24 @@
         style={`width:${chartMetrics.plotWidth}px;right:0`}
       ></div>
     </div>
+    </div>
+
+    {#if xAxisLabels.length}
+      <div class="relative mt-2 flex w-full min-w-0">
+        <div class="shrink-0" style={`width:${yAxisLabelWidthPx}px`}></div>
+        <div class="relative min-w-0 flex-1 overflow-hidden" style={`height:${xAxisLabelHeightPx}px`}>
+          <div class="absolute inset-y-0 [&>div]:pointer-events-none [&>div]:absolute [&>div]:overflow-hidden [&>div]:text-[11px] [&>div]:uppercase [&>div]:leading-none [&>div]:text-slate-500 [&>div]:whitespace-nowrap" style={`width:${chartMetrics.plotWidth}px;right:0`}>
+            {#each xAxisLabels as xAxisLabel (xAxisLabel.key)}
+              <div
+                class={`${xAxisLabel.align === 'left' ? '[&>div]:text-left' : xAxisLabel.align === 'right' ? '[&>div]:text-right' : '[&>div]:text-center'}`}
+                style={`left:${xAxisLabel.left}px;width:${xAxisLabel.width}px`}
+              >
+                <div>{xAxisLabel.label}</div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      </div>
+    {/if}
   </div>
 </div>

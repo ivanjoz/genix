@@ -1,10 +1,7 @@
 <script lang="ts">
-	import Checkbox from '$components/Checkbox.svelte';
+	import ChartCanvas, { type ChartCanvasSeries } from '$components/ChartCanvas.svelte';
 	import CheckboxOptions from '$components/CheckboxOptions.svelte';
-	import CellHorizontalBars from '$components/charts/CellHorizontalBars.svelte';
 	import OptionsStrip from '$components/OptionsStrip.svelte';
-	import TableGrid from '$components/vTable/TableGrid.svelte';
-	import type { TableGridColumn } from '$components/vTable/tableGridTypes';
 	import Page from '$domain/Page.svelte';
 	import { FechaHelper } from '$libs/fecha';
 	import { formatN, formatTime } from '$libs/helpers';
@@ -14,32 +11,30 @@
 
 	type TChartsView = 1 | 2 | 3;
 	type TChartViewOption = [TChartsView, string];
-
-	interface IWeeklySalesColumn {
-		key: string;
-		label: string;
-		weekStartFechaUnix: number;
-	}
-
-	interface IProductWeeklySalesRow {
-		productID: number;
-		productName: string;
-		weeklyTotalsByWeekKey: Record<string, Array<[number, number]>>;
-		totalAmount: number;
-	}
-
 	type TChartMetricMode = 'amount' | 'quantity';
 
 	interface IChartMetricForm {
 		metricMode?: TChartMetricMode;
-		useLogScale?: boolean;
+	}
+
+	interface IProductChartCard {
+		productID: number;
+		productName: string;
+		paidValues: number[];
+		unpaidValues: number[];
+		priceValues: Array<number | null>;
+		priceAxisMin: number;
+		priceAxisMax: number;
+		totalMetricValue: number;
+		totalPaidMetricValue: number;
+		totalUnpaidMetricValue: number;
+		priceReference: number;
 	}
 
 	const saleOrdersChartsService = new SaleOrdersChartsService();
 	const productosService = new ProductosService();
 	const fechaHelper = new FechaHelper();
-	const TOTAL_WEEKS_TO_RENDER = 10;
-	const LOG_SCALE_FACTOR = 0.08;
+	const TOTAL_DAYS_TO_RENDER = 45;
 	const chartViewOptions: TChartViewOption[] = [
 		[1, 'Por Producto'],
 		[2, 'Resumen Diario'],
@@ -49,28 +44,43 @@
 		{ ID: 'amount', Nombre: 'Por Monto Facturado' },
 		{ ID: 'quantity', Nombre: 'Por Cantidad' }
 	];
+
 	let chartMetricForm = $state<IChartMetricForm>({ metricMode: 'amount' });
 	let view = $state<TChartsView>(1);
-	const selectedMetricMode = $derived<TChartMetricMode>(chartMetricForm.metricMode || 'amount');
-	const logScaleFactor = $derived(chartMetricForm.useLogScale ? LOG_SCALE_FACTOR : 0);
 
-	// FechaHelper range helpers operate with internal offset-based week code (YYYYWW-like).
-	// Domain week code arrives as YYWW (e.g. 2610 => week 10 of 2026), so normalize it.
-	const toRangeWeekCode = (domainWeekCode: number): number => {
-		if (!domainWeekCode) return 0;
-		return domainWeekCode < 10000 ? domainWeekCode + 200000 : domainWeekCode;
+	const selectedMetricMode = $derived<TChartMetricMode>(chartMetricForm.metricMode || 'amount');
+
+	const getLineAxisRangeWithMargin = (lineValues: Array<number | null>) => {
+		const numericLineValues = lineValues.filter((lineValue): lineValue is number => {
+			return lineValue !== null && lineValue !== undefined;
+		});
+
+		if (!numericLineValues.length) {
+			return {
+				minValue: 0,
+				maxValue: 1
+			};
+		}
+
+		const minLineValue = Math.min(...numericLineValues);
+		const maxLineValue = Math.max(...numericLineValues);
+		const lowerMargin = Math.max(Math.abs(minLineValue) * 0.2, 1);
+		const upperMargin = Math.max(Math.abs(maxLineValue) * 0.2, 1);
+
+		return {
+			minValue: minLineValue - lowerMargin,
+			maxValue: maxLineValue + upperMargin
+		};
 	};
 
 	// Normalize mixed backend date formats to internal "fecha unix" day units.
 	const toFechaUnix = (rawFechaValue: number): number => {
 		if (!rawFechaValue) return 0;
 
-		// Some routes already expose fechaUnix day values directly (around 10k-100k).
 		if (rawFechaValue > 10_000 && rawFechaValue < 100_000) {
 			return Math.floor(rawFechaValue);
 		}
 
-		// If backend sends milliseconds, convert to seconds before FechaHelper.toFechaUnix.
 		const normalizedFechaValue = rawFechaValue > 1_000_000_000_000
 			? Math.floor(rawFechaValue / 1000)
 			: rawFechaValue;
@@ -78,294 +88,244 @@
 		return fechaHelper.toFechaUnix(normalizedFechaValue);
 	};
 
-	const weekColumns = $derived.by((): IWeeklySalesColumn[] => {
-		const summaryRecords = saleOrdersChartsService.records;
-		const latestFechaUnixInSummary = summaryRecords.reduce((latestFechaUnix, summaryRecord) => {
-			const recordFechaUnix = toFechaUnix(summaryRecord.Fecha || 0);
-			return Math.max(latestFechaUnix, recordFechaUnix);
+	const last45FechaUnix = $derived.by(() => {
+		const latestFechaUnixInSummary = saleOrdersChartsService.records.reduce((latestFechaUnix, summaryRecord) => {
+			return Math.max(latestFechaUnix, toFechaUnix(summaryRecord.Fecha || 0));
 		}, 0);
+		const anchorFechaUnix = latestFechaUnixInSummary || fechaHelper.fechaUnixCurrent();
 
-		// Anchor the 10-week window to the latest available sales week, not always "today".
-		const anchorWeek = latestFechaUnixInSummary > 0
-			? fechaHelper.toWeek(latestFechaUnixInSummary)
-			: fechaHelper.weekCurrent();
-		const rangeAnchorWeekCode = toRangeWeekCode(anchorWeek.code);
-
-		const weeksRange = fechaHelper.makeWeekRangeFromWeek(
-			rangeAnchorWeekCode,
-			0,
-			TOTAL_WEEKS_TO_RENDER
-		);
-
-		const generatedColumns = weeksRange.map((currentSemana) => {
-			const weekStartFechaUnix = currentSemana.fechaUnix;
-			return {
-				key: `week-${weekStartFechaUnix}`,
-				// Show only week start label.
-				label: `${formatTime(weekStartFechaUnix, 'd-M')}`,
-				weekStartFechaUnix
-			};
+		// Keep every card aligned to the same oldest->newest window.
+		return Array.from({ length: TOTAL_DAYS_TO_RENDER }, (_, dayIndex) => {
+			return anchorFechaUnix - (TOTAL_DAYS_TO_RENDER - 1) + dayIndex;
 		});
-		// Display columns from most recent week to oldest week.
-		generatedColumns.sort((leftWeek, rightWeek) => rightWeek.weekStartFechaUnix - leftWeek.weekStartFechaUnix);
-
-		console.debug('[sale_orders_charts] generated week columns', {
-			anchorWeekCode: anchorWeek.code,
-			rangeAnchorWeekCode,
-			latestFechaUnixInSummary,
-			summaryRecordsCount: summaryRecords.length,
-			totalColumns: generatedColumns.length,
-			weekStartUnixList: generatedColumns.map((weekColumn) => weekColumn.weekStartFechaUnix),
-			weekLabels: generatedColumns.map((weekColumn) => weekColumn.label)
-		});
-
-		return generatedColumns;
 	});
 
-	const weeklySalesRows = $derived.by((): IProductWeeklySalesRow[] => {
-		const summaryRecords = saleOrdersChartsService.records;
-		const productsByIdMap = productosService.recordsMap;
-		const weekColumnsByStartFechaUnix = new Map<number, IWeeklySalesColumn>();
-		const productRowsByID = new Map<number, IProductWeeklySalesRow>();
-		let matchedSummaryRecordsCount = 0;
-		let unmatchedSummaryRecordsCount = 0;
-		const unmatchedRecordsPreview: Array<{
-			fechaRaw: number;
-			fechaUnix: number;
-			weekStartFechaUnix: number;
-			weekCode: number;
-		}> = [];
-		const normalizationPreview: Array<{
-			fechaRaw: number;
-			fechaUnix: number;
-			weekStartFechaUnix: number;
-			weekCode: number;
-		}> = [];
+	const chartWindowSummary = $derived.by(() => {
+		const firstFechaUnix = last45FechaUnix[0] || 0;
+		const lastFechaUnix = last45FechaUnix[last45FechaUnix.length - 1] || 0;
 
-		for (const weekColumn of weekColumns) {
-			weekColumnsByStartFechaUnix.set(weekColumn.weekStartFechaUnix, weekColumn);
+		return {
+			firstFechaUnix,
+			lastFechaUnix
+		};
+	});
+
+	const productChartCards = $derived.by((): IProductChartCard[] => {
+		const productChartsByID = new Map<number, IProductChartCard>();
+		const fechaIndexByUnix = new Map<number, number>();
+		let recordsInsideWindowCount = 0;
+		let recordsOutsideWindowCount = 0;
+
+		for (let dayIndex = 0; dayIndex < last45FechaUnix.length; dayIndex += 1) {
+			fechaIndexByUnix.set(last45FechaUnix[dayIndex], dayIndex);
 		}
 
-		for (const summaryRecord of summaryRecords) {
+		for (const summaryRecord of saleOrdersChartsService.records) {
 			const recordFechaUnix = toFechaUnix(summaryRecord.Fecha || 0);
-			const recordWeek = fechaHelper.toWeek(recordFechaUnix);
-			const recordWeekStartFechaUnix = recordWeek.fechaUnix;
-			const matchingWeekColumn = weekColumnsByStartFechaUnix.get(recordWeekStartFechaUnix);
-			if (normalizationPreview.length < 10) {
-				normalizationPreview.push({
-					fechaRaw: summaryRecord.Fecha || 0,
-					fechaUnix: recordFechaUnix,
-					weekStartFechaUnix: recordWeekStartFechaUnix,
-					weekCode: recordWeek.code
-				});
-			}
-			if (!matchingWeekColumn) {
-				unmatchedSummaryRecordsCount += 1;
-				if (unmatchedRecordsPreview.length < 10) {
-					unmatchedRecordsPreview.push({
-						fechaRaw: summaryRecord.Fecha || 0,
-						fechaUnix: recordFechaUnix,
-						weekStartFechaUnix: recordWeekStartFechaUnix,
-						weekCode: recordWeek.code
-					});
-				}
+			const recordDayIndex = fechaIndexByUnix.get(recordFechaUnix);
+			if (recordDayIndex === undefined) {
+				recordsOutsideWindowCount += 1;
 				continue;
 			}
-			matchedSummaryRecordsCount += 1;
+			recordsInsideWindowCount += 1;
 
 			const productIDs = summaryRecord.ProductIDs || [];
-			const weeklyAmountsInCents = summaryRecord.TotalAmount || [];
-			const weeklyUnpaidAmountsInCents = summaryRecord.TotalDebtAmount || [];
-			const weeklySoldQuantities = summaryRecord.Quantity || [];
-			const weeklyPendingQuantities = summaryRecord.QuantityPendingDelivery || [];
+			const totalAmountsInCents = summaryRecord.TotalAmount || [];
+			const unpaidAmountsInCents = summaryRecord.TotalDebtAmount || [];
+			const soldQuantities = summaryRecord.Quantity || [];
+			const pendingQuantities = summaryRecord.QuantityPendingDelivery || [];
 
 			for (let recordIndex = 0; recordIndex < productIDs.length; recordIndex += 1) {
 				const productID = productIDs[recordIndex] || 0;
-				if (!productID) continue;
+				if (!productID) { continue; }
 
-				const rowAmountInCurrency = (weeklyAmountsInCents[recordIndex] || 0) / 100;
-				let productRow = productRowsByID.get(productID);
+				const productRecord = productosService.recordsMap.get(productID);
+				const totalMetricValue = selectedMetricMode === 'quantity'
+					? (soldQuantities[recordIndex] || 0)
+					: (totalAmountsInCents[recordIndex] || 0) / 100;
+				const unpaidMetricValue = selectedMetricMode === 'quantity'
+					? (pendingQuantities[recordIndex] || 0)
+					: (unpaidAmountsInCents[recordIndex] || 0) / 100;
+				const paidMetricValue = Math.max(0, totalMetricValue - unpaidMetricValue);
 
-				if (!productRow) {
-					const productRecord = productsByIdMap.get(productID);
-					// Initialize all 7 daily slots per week so zero-sales days still render as empty bars.
-					const rowTotalsByWeekKey: Record<string, Array<[number, number]>> = {};
-					for (const weekColumn of weekColumns) {
-						rowTotalsByWeekKey[weekColumn.key] = Array.from({ length: 7 }, () => [0, 0] as [number, number]);
-					}
-
-					productRow = {
+				let productChartCard = productChartsByID.get(productID);
+				if (!productChartCard) {
+					const productPrice = (productRecord?.PrecioFinal || productRecord?.Precio || 0) / 100;
+					const priceValues = Array.from({ length: TOTAL_DAYS_TO_RENDER }, () => productPrice > 0 ? productPrice : null);
+					const priceAxisRange = getLineAxisRangeWithMargin(priceValues);
+					productChartCard = {
 						productID,
 						productName: productRecord?.Nombre || `Producto #${productID}`,
-						weeklyTotalsByWeekKey: rowTotalsByWeekKey,
-						totalAmount: 0
+						paidValues: Array.from({ length: TOTAL_DAYS_TO_RENDER }, () => 0),
+						unpaidValues: Array.from({ length: TOTAL_DAYS_TO_RENDER }, () => 0),
+						priceValues,
+						priceAxisMin: priceAxisRange.minValue,
+						priceAxisMax: priceAxisRange.maxValue,
+						totalMetricValue: 0,
+						totalPaidMetricValue: 0,
+						totalUnpaidMetricValue: 0,
+						priceReference: productPrice
 					};
-					productRowsByID.set(productID, productRow);
+					productChartsByID.set(productID, productChartCard);
 				}
 
-				// Resolve which day (0..6) inside the week this summary record belongs to.
-				// Keep metric switch centralized so amount/quantity modes use the same rendering pipeline.
-				const metricTotalValue = selectedMetricMode === 'quantity'
-					? (weeklySoldQuantities[recordIndex] || 0)
-					: rowAmountInCurrency;
-				const metricPendingValue = selectedMetricMode === 'quantity'
-					? (weeklyPendingQuantities[recordIndex] || 0)
-					: (weeklyUnpaidAmountsInCents[recordIndex] || 0) / 100;
-				const dayIndexInWeek = Math.max(0, Math.min(6, recordFechaUnix - recordWeekStartFechaUnix));
-				productRow.weeklyTotalsByWeekKey[matchingWeekColumn.key][dayIndexInWeek][0] += metricTotalValue;
-				productRow.weeklyTotalsByWeekKey[matchingWeekColumn.key][dayIndexInWeek][1] += metricPendingValue;
-				productRow.totalAmount += metricTotalValue;
+				productChartCard.paidValues[recordDayIndex] += paidMetricValue;
+				productChartCard.unpaidValues[recordDayIndex] += unpaidMetricValue;
+				productChartCard.totalMetricValue += totalMetricValue;
+				productChartCard.totalPaidMetricValue += paidMetricValue;
+				productChartCard.totalUnpaidMetricValue += unpaidMetricValue;
 			}
 		}
-		console.debug('[sale_orders_charts] week match stats', {
-			totalSummaryRecords: summaryRecords.length,
-			selectedMetricMode,
-			matchedSummaryRecordsCount,
-			unmatchedSummaryRecordsCount,
-			weekColumnsCount: weekColumns.length,
-			normalizationPreview,
-			unmatchedRecordsPreview
+
+		const sortedCards = [...productChartsByID.values()].sort((leftCard, rightCard) => {
+			return rightCard.totalMetricValue - leftCard.totalMetricValue;
 		});
-
-		return [...productRowsByID.values()].sort((leftRow, rightRow) => {
-			return rightRow.totalAmount - leftRow.totalAmount;
-		});
-	});
-
-	const weeklyBarsMaxValue = $derived.by(() => {
-		const maxTotalSales = weeklySalesRows.reduce((maxValue, weeklySalesRow) => {
-			for (const weekColumn of weekColumns) {
-				const currentWeekDailyTotals = weeklySalesRow.weeklyTotalsByWeekKey[weekColumn.key] || [];
-				for (const [dailyTotalSales] of currentWeekDailyTotals) {
-					maxValue = Math.max(maxValue, dailyTotalSales || 0);
-				}
-			}
-			return maxValue;
-		}, 0);
-
-		console.debug('[sale_orders_charts] weekly bars max value', {
-			maxTotalSales,
-			selectedMetricMode,
-			logScaleFactor,
-			rowsCount: weeklySalesRows.length,
-			weeksCount: weekColumns.length
-		});
-
-		return maxTotalSales;
-	});
-
-	const tableColumns = $derived.by((): TableGridColumn<IProductWeeklySalesRow>[] => {
-		const baseColumns: TableGridColumn<IProductWeeklySalesRow>[] = [
-			{
-				id: 'productName', cellCss: "py-2 px-6",
-				header: 'Producto',
-				width: 'minmax(280px, 1.8fr)',
-				getValue: (rowRecord) => rowRecord.productName
-			}
-		];
-
-		for (const weekColumn of weekColumns) {
-			baseColumns.push({
-				id: weekColumn.key,
-				header: weekColumn.label,
-				width: '100px',
-				useCellRenderer: true,
-				align: 'right',
-				getValue: (rowRecord) => {
-					// Keep weekly sum as cell title fallback while rendering daily bars in the snippet.
-					const weekAmount = (rowRecord.weeklyTotalsByWeekKey[weekColumn.key] || []).reduce((sumAmount, [dailyTotal]) => {
-						return sumAmount + (dailyTotal || 0);
-					}, 0);
-					if (selectedMetricMode === 'quantity') {
-						return formatN(weekAmount, 0);
-					}
-					return `S/ ${formatN(weekAmount, 2)}`;
-				}
-			});
-		}
-
-		return baseColumns;
-	});
-
-	let effectRunsCount = 0;
-	$effect(() => {
-		const recordsCount = saleOrdersChartsService.records.length;
-		const rowsCount = weeklySalesRows.length;
-		const weeksCount = weekColumns.length;
 
 		untrack(() => {
-			effectRunsCount += 1;
-			console.debug('[sale_orders_charts] weekly table rebuild', {
-				effectRunsCount,
+			console.debug('[sale_orders_charts] product cards rebuild', {
 				selectedMetricMode,
-				logScaleFactor,
-				recordsCount,
-				rowsCount,
-				weeksCount
+				totalDays: TOTAL_DAYS_TO_RENDER,
+				recordsCount: saleOrdersChartsService.records.length,
+				recordsInsideWindowCount,
+				recordsOutsideWindowCount,
+				cardsCount: sortedCards.length,
+				firstVisibleDate: chartWindowSummary.firstFechaUnix,
+				lastVisibleDate: chartWindowSummary.lastFechaUnix,
+				priceAxisPreview: sortedCards.slice(0, 3).map((productChartCard) => ({
+					productID: productChartCard.productID,
+					priceReference: productChartCard.priceReference,
+					priceAxisMin: productChartCard.priceAxisMin,
+					priceAxisMax: productChartCard.priceAxisMax
+				}))
 			});
 		});
+
+		return sortedCards;
 	});
+
+	const chartLegendSeries = $derived.by((): ChartCanvasSeries[] => {
+		// Reuse the exact palette shown in every card so the legend stays honest.
+		return [
+			{ name: 'Ventas no pagadas', type: 'bar', values: [1], color: '#ef4444' },
+			{ name: 'Ventas pagadas', type: 'bar', values: [1], color: '#3b82f6' },
+			{ name: 'Precio', type: 'line', values: [1], color: '#111827', lineWidth: 2 }
+		];
+	});
+
+	const formatMetricValue = (metricValue: number) => {
+		if (!metricValue) { return '0'; }
+		return selectedMetricMode === 'quantity'
+			? formatN(metricValue, 0)
+			: `S/ ${formatN(metricValue, 2)}`;
+	};
 </script>
 
 <Page title="Gráficos de Ventas">
 	<div class="flex">
-		<OptionsStrip 
+		<OptionsStrip
 			selected={view}
 			options={chartViewOptions}
-			useMobileGrid={true} 
-			css="mb-10" itemCss="md:w-160"
+			useMobileGrid={true}
+			css="mb-10"
+			itemCss="md:w-160"
 			onSelect={(selectedOption: TChartViewOption) => {
-				// Keep the tab state explicit so each chart section renders independently.
 				view = selectedOption[0] as TChartsView;
 			}}
 		/>
 	</div>
+
 	<div class="p-10">
 		{#if view === 1}
-			<div>
-				<div class="flex ">
-					<CheckboxOptions
-						options={chartMetricSelectionOptions}
-						saveOn={chartMetricForm}
-						save={'metricMode'}
-						keyId={'ID'}
-						keyName={'Nombre'}
-						type="single"
-						css="mb-10"
-					/>
-					<div class="mr-8 ml-8">|</div>
-					<Checkbox label="Escala Log." bind:saveOn={chartMetricForm} save="useLogScale" css="mb-10" />
+			<div class="mb-12 flex flex-wrap items-center justify-between gap-10">
+				<CheckboxOptions
+					options={chartMetricSelectionOptions}
+					saveOn={chartMetricForm}
+					save={'metricMode'}
+					keyId={'ID'}
+					keyName={'Nombre'}
+					type="single"
+				/>
+
+				<div class="flex items-center gap-12 text-[13px] text-slate-600">
+					<div>{productChartCards.length} productos</div>
+					<div>{TOTAL_DAYS_TO_RENDER} días</div>
 				</div>
-				{#if saleOrdersChartsService.records.length === 0}
-					<div class="text-gray-500">No hay registros de ventas para mostrar.</div>
-				{:else if weeklySalesRows.length === 0}
-					<div class="text-gray-500">No se encontraron productos con ventas en las últimas 10 semanas.</div>
-				{:else}
-					<TableGrid
-						columns={tableColumns}
-						data={weeklySalesRows}
-						height="560px"
-						rowHeight={48}
-					>
-						{#snippet cellRenderer(rowRecord, columnDefinition)}
-							{@const cellValues = rowRecord.weeklyTotalsByWeekKey[String(columnDefinition.id)] || Array.from({ length: 7 }, () => [0, 0] as [number, number])}
-							{@const weeklyTotalSales = cellValues.reduce((sumAmount, [dailyTotalSales]) => {
-								return sumAmount + (dailyTotalSales || 0);
-							}, 0)}
-							<div class="relative h-full w-full pt-10 pr-2">
-								<div class="absolute top-2 right-2 text-[13px] leading-none font-semibold text-slate-700">
-									{weeklyTotalSales ? formatN(weeklyTotalSales) : ""}
-								</div>
-								<CellHorizontalBars
-									values={cellValues}
-									maxValue={weeklyBarsMaxValue}
-									logScaleFactor={logScaleFactor}
-								/>
-							</div>
-						{/snippet}
-					</TableGrid>
-				{/if}
 			</div>
+
+			{#if saleOrdersChartsService.records.length === 0}
+				<div class="text-gray-500">No hay registros de ventas para mostrar.</div>
+			{:else if productChartCards.length === 0}
+				<div class="text-gray-500">No se encontraron productos con ventas en los últimos 45 días.</div>
+			{:else}
+				<div class="mb-14 flex flex-wrap items-center gap-12 rounded-[14px] border border-slate-200 bg-white px-14 py-12">
+					{#each chartLegendSeries as chartLegendItem (chartLegendItem.name)}
+						<div class="flex items-center gap-8 text-[13px] text-slate-600">
+							<div class={`h-10 w-18 rounded-[3px] ${chartLegendItem.type === 'line' ? 'bg-slate-900' : ''}`}
+								style={chartLegendItem.type === 'bar'
+									? `background:${chartLegendItem.color || '#000000'}`
+									: 'height:2px;background:#111827'}
+							></div>
+							<span>{chartLegendItem.name}</span>
+						</div>
+					{/each}
+				</div>
+
+				<div class="grid grid-cols-1 gap-12 md:grid-cols-2 xl:grid-cols-3">
+					{#each productChartCards as productChartCard (productChartCard.productID)}
+						<div class="rounded-[12px] border border-slate-200 bg-white p-8 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+							<div class="mb-8">
+								<div class="line-clamp-2 font-semibold leading-[1.2] text-slate-800">
+									{productChartCard.productName}
+								</div>
+							</div>
+
+							<div class="mb-8 flex flex-wrap items-center gap-8 rounded-[10px] bg-slate-50 px-8 py-6 text-[14px] leading-none">
+								{#if productChartCard.totalPaidMetricValue > 0}
+									<div class="flex items-center gap-6 text-slate-800">
+										<div class="h-10 w-10 rounded-[3px] bg-[#3b82f6]"></div>
+										<div class="font-semibold">{formatMetricValue(productChartCard.totalPaidMetricValue)}</div>
+									</div>
+								{/if}
+								{#if productChartCard.totalUnpaidMetricValue > 0}
+									<div class="flex items-center gap-6 text-slate-800">
+										<div class="h-10 w-10 rounded-[3px] bg-[#ef4444]"></div>
+										<div class="font-semibold">{formatMetricValue(productChartCard.totalUnpaidMetricValue)}</div>
+									</div>
+								{/if}
+								<div class="flex items-center gap-6 text-slate-800">
+									<i class="icon-tag text-slate-600"></i>
+									<div class="font-semibold">
+										{productChartCard.priceReference ? `S/ ${formatN(productChartCard.priceReference, 2)}` : 'Sin precio'}
+									</div>
+								</div>
+							</div>
+
+							<ChartCanvas
+								id={`sale-orders-product-${productChartCard.productID}-${selectedMetricMode}`}
+								height={80}
+								className="h-full w-full"
+								dateLabels={last45FechaUnix}
+								dateLabelEvery={6}
+								dateLabelFormatter={(fechaUnix) => String(formatTime(Number(fechaUnix || 0), 'd-M') || '')}
+								useHtmlRendered={true}
+								data={[
+									{ name: 'Ventas no pagadas', type: 'bar', values: productChartCard.unpaidValues, color: '#ef4444' },
+									{ name: 'Ventas pagadas', type: 'bar', values: productChartCard.paidValues, color: '#3b82f6' },
+									{
+										name: 'Precio',
+										type: 'line',
+										values: productChartCard.priceValues,
+										color: '#111827',
+										lineWidth: 1.5,
+										yAxisMin: productChartCard.priceAxisMin,
+										yAxisMax: productChartCard.priceAxisMax
+									}
+								]}
+							/>
+						</div>
+					{/each}
+				</div>
+			{/if}
 		{:else if view === 2}
 			<div class="text-gray-500">Resumen Diario pendiente.</div>
 		{:else if view === 3}
