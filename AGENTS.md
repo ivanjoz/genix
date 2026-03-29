@@ -59,11 +59,17 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 - **scripts/CHECK_TABLES_SCRIPT.md** - Validates data model conventions for the custom ORM
 - **scripts/SCRIPTS.md** - Central dispatcher and wrapper script management for project utilities
 
+### General Rules
+- ALWAYS save dates in UnixDay int16 format: The number of days since unix-epoch
+- ALWAYS save datetime as int32 SUnixTime(). SUnixTime = int32((time.Now().Unix() - 1e9) / 2)
+
 ### Frontend Rules
 - Use untrack inside $effect to avoid render loops
 - GetHandler fetched records need fields: "upd" (Updated) and "ID" (unique id) for delta cache. Or use GetHandler.keyID or .KeysIDs for setting another field.
 - Tailwind --spacing is 1px. So "h-4" is actually 4px.
 - NEVER use font-weight or font-size in a css class. USE tailwind instead.
+- ALWAYS use this helpers functions:
+	- formatTime(unix day | unix time, layout)
 
 ### Backend Rules
 - NEVER trust the client. ALWAYS validate the required field and consistency of the data, and return a descriptive error if any validation fails.

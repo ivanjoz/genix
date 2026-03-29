@@ -571,3 +571,61 @@ Lightweight virtualized data grid for large datasets. Use this when you need a s
   {/snippet}
 </TableGrid>
 ```
+
+---
+
+### VirtualCards
+
+Virtualized cards container for dashboards or catalogs where each row renders multiple cards. It uses `@humanspeak/svelte-virtual-list` internally and groups items into rows automatically.
+
+**Key characteristics:**
+- Renders cards through a `renderCard` snippet
+- Virtualizes by row instead of by individual card
+- Uses `maxColumns` on desktop and switches to `1` column on mobile
+- Keeps a fixed estimated row height for predictable scroll performance
+
+**Props:**
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `items` | `T[]` | Yes | Source records to render |
+| `renderCard` | `Snippet<[item, index]>` | Yes | Snippet used to render each card |
+| `height` | `string` | No | Component height (default `"100%"`) |
+| `maxColumns` | `number` | No | Maximum desktop columns (default `3`) |
+| `mobileBreakpointPx` | `number` | No | Width threshold to switch to one column (default `767`) |
+| `estimatedRowHeight` | `number` | No | Estimated virtual row height in px |
+| `bufferSize` | `number` | No | Virtual list overscan buffer |
+| `containerCss` | `string` | No | Extra classes for root container |
+| `rowGapPx` | `number` | No | Vertical gap between rows |
+| `columnGapPx` | `number` | No | Horizontal gap between columns |
+| `emptyMessage` | `string` | No | Message shown when no items exist |
+
+**Example:**
+```svelte
+<script lang="ts">
+  import VirtualCards from '$components/VirtualCards.svelte';
+
+  interface ProductCard {
+    id: number;
+    name: string;
+  }
+
+  const cards: ProductCard[] = [
+    { id: 1, name: 'A' },
+    { id: 2, name: 'B' },
+    { id: 3, name: 'C' }
+  ];
+</script>
+
+<VirtualCards
+  items={cards}
+  height="480px"
+  maxColumns={3}
+  estimatedRowHeight={180}
+>
+  {#snippet renderCard(card)}
+    <div class="rounded-[12px] border border-slate-200 bg-white p-12">
+      {card.name}
+    </div>
+  {/snippet}
+</VirtualCards>
+```

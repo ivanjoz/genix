@@ -105,7 +105,7 @@ import { Core } from '$core/store.svelte';
       padding: 0 2px 0 2px;
       height: 38px;
       min-width: 86px;
-      word-break: break-all;
+      /* word-break: break-all; */
       align-items: center;
     }
   }
