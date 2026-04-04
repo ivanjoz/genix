@@ -65,7 +65,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
    
 		untrack(() => {
 		   almacenSelected = almacenesService.Almacenes[0].ID;
-		   ventasState.form.AlmacenID = almacenSelected;
+		   ventasState.form.WarehouseID = almacenSelected;
 		   loadStock(almacenSelected);	
 		})
   });
@@ -247,7 +247,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
               onChange={(e: IAlmacen) => {
                 if (e) {
                   almacenSelected = e.ID;
-                  ventasState.form.AlmacenID = e.ID;
+                  ventasState.form.WarehouseID = e.ID;
                   loadStock(e.ID);
                 }
               }}

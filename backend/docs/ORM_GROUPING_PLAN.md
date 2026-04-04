@@ -199,7 +199,7 @@ query.
         (*groupedRecords)[0].SubCantidad += newRecord.SubCantidad
     }).
     EmpresaID.Equals(req.Usuario.EmpresaID).
-    AlmacenID.Equals(almacenID).
+    WarehouseID.Equals(almacenID).
     Fecha.Between(fechaInicio, fechaFin).
     OrderDesc().
     Limit(1000)

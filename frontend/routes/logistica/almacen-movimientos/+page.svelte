@@ -143,7 +143,7 @@ import { Loading, formatTime, throttle, highlString } from '$libs/helpers';
     },
     {
       header: "Almacén Destino",
-      render: e => almacenRender(e.AlmacenID, e.AlmacenCantidad)
+      render: e => almacenRender(e.WarehouseID, e.AlmacenCantidad)
     },
     {
       header: "Documento",

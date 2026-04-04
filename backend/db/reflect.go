@@ -326,7 +326,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			for _, col := range concatCols {
 				values = append(values, col.GetRawValue(ptr))
 			}
-			return Concat62(values...)
+			return MakeKeyConcat(values...)
 		}
 
 		keyCol.getValue = func(ptr unsafe.Pointer) any {
@@ -746,6 +746,8 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			for _, decimalSize := range radixSlotsByColumn {
 				slotDigitsPerColumn = append(slotDigitsPerColumn, int64(decimalSize))
 			}
+			view.packedSourceColumns = append([]IColInfo{}, columns...)
+			view.packedSlotDigitsPerColumn = append([]int64{}, slotDigitsPerColumn...)
 
 			supportedTypes := []string{"int8", "int16", "int32", "int64", "int"}
 
@@ -760,6 +762,19 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				// Packed range views must trim each component to its allocated slot digits
 				// so persisted rows and query bounds use identical DecimalSize() semantics.
 				return computePackedInt64ValueNonNegative(values, slotDigitsPerColumn)
+			}
+
+			slotDigitsCopy := append([]int64{}, slotDigitsPerColumn...)
+			viewColsCopy := append([]IColInfo{}, columns...)
+
+			view.decomposeVirtualValue = func(rawValue any) []any {
+				// Decode packed group keys back into the original primitive columns so grouped scans can fill the record struct.
+				packedValues := decomposePackedInt64ValueNonNegative(convertToInt64(rawValue), slotDigitsCopy)
+				values := make([]any, 0, len(viewColsCopy))
+				for _, packedValue := range packedValues {
+					values = append(values, packedValue)
+				}
+				return values
 			}
 
 			viewCols := columns
@@ -1034,23 +1049,34 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		}
 
 		selectableColumns := []IColInfo{}
-		partKeyColumn := dbTable.GetPartKey()
-		if partKeyColumn != nil && !partKeyColumn.IsNil() {
-			selectableColumns = appendUniqueColumn(selectableColumns, partKeyColumn)
-		}
-		if view.Type == 6 {
-			for _, declaredViewColumn := range declaredColumns {
-				selectableColumns = appendUniqueColumn(selectableColumns, declaredViewColumn)
+		if len(projectedColumns) == 0 {
+			// Views without explicit Cols are emitted as SELECT * materialized views.
+			// Expose every real base column so the planner can reuse the MV for full-record reads.
+			for _, baseColumn := range dbTable.columnsMap {
+				if baseColumn.GetInfo().IsVirtual {
+					continue
+				}
+				selectableColumns = appendUniqueColumn(selectableColumns, baseColumn)
 			}
-		}
-		for _, keyColumn := range dbTable.keys {
-			selectableColumns = appendUniqueColumn(selectableColumns, keyColumn)
-		}
-		if view.column != nil && !view.column.IsNil() && !view.column.GetInfo().IsVirtual {
-			selectableColumns = appendUniqueColumn(selectableColumns, view.column)
-		}
-		for _, projectedColumn := range projectedColumns {
-			selectableColumns = appendUniqueColumn(selectableColumns, projectedColumn)
+		} else {
+			partKeyColumn := dbTable.GetPartKey()
+			if partKeyColumn != nil && !partKeyColumn.IsNil() {
+				selectableColumns = appendUniqueColumn(selectableColumns, partKeyColumn)
+			}
+			if view.Type == 6 {
+				for _, declaredViewColumn := range declaredColumns {
+					selectableColumns = appendUniqueColumn(selectableColumns, declaredViewColumn)
+				}
+			}
+			for _, keyColumn := range dbTable.keys {
+				selectableColumns = appendUniqueColumn(selectableColumns, keyColumn)
+			}
+			if view.column != nil && !view.column.IsNil() && !view.column.GetInfo().IsVirtual {
+				selectableColumns = appendUniqueColumn(selectableColumns, view.column)
+			}
+			for _, projectedColumn := range projectedColumns {
+				selectableColumns = appendUniqueColumn(selectableColumns, projectedColumn)
+			}
 		}
 		for _, selectableColumn := range selectableColumns {
 			view.availableColumns = append(view.availableColumns, selectableColumn.GetName())

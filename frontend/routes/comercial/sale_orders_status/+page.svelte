@@ -39,7 +39,7 @@
   let isPostingSaleOrderAction = $state(false);
   let saleOrderActionInProgress = $state<'pago' | 'entrega' | null>(null);
   let saleOrderPaymentForm = $state({ LastPaymentCajaID: 0 });
-  let saleOrderDeliveryForm = $state({ AlmacenID: 0 });
+  let saleOrderDeliveryForm = $state({ WarehouseID: 0 });
 
   const productosService = new ProductosService();
   const cajasService = new CajasService();
@@ -238,7 +238,7 @@
     selectedSaleOrder = saleOrder;
     // Keep selectors prefilled with the order values to reduce manual clicks.
     saleOrderPaymentForm.LastPaymentCajaID = saleOrder.LastPaymentCajaID || 0;
-    saleOrderDeliveryForm.AlmacenID = saleOrder.AlmacenID || 0;
+    saleOrderDeliveryForm.WarehouseID = saleOrder.WarehouseID || 0;
     saleOrderDetailsView = 1;
     Core.openSideLayer(10);
   }
@@ -278,7 +278,7 @@
       return;
     }
     // Delivery uses the selector value so the operator can choose a different almacén.
-    const selectedAlmacenID = saleOrderDeliveryForm.AlmacenID || selectedSaleOrder.AlmacenID;
+    const selectedAlmacenID = saleOrderDeliveryForm.WarehouseID || selectedSaleOrder.WarehouseID;
     if (!selectedAlmacenID) {
       Notify.failure('La orden no posee Almacén ID para registrar la entrega.');
       return;
@@ -288,7 +288,7 @@
     void processSaleOrderAction('entrega', {
       ID: selectedSaleOrder.ID,
       ActionsIncluded: [3],
-      AlmacenID: selectedAlmacenID,
+      WarehouseID: selectedAlmacenID,
     });
   }
 
@@ -307,7 +307,7 @@
     ID: number;
     ActionsIncluded: number[];
     LastPaymentCajaID?: number;
-    AlmacenID?: number;
+    WarehouseID?: number;
     DebtAmount?: number;
   }) {
     if (!selectedSaleOrder) { return; }
@@ -531,7 +531,7 @@
               {#if canDeliverSaleOrder(selectedSaleOrder)}
                 <SearchSelect
                   bind:saveOn={saleOrderDeliveryForm}
-                  save="AlmacenID"
+                  save="WarehouseID"
                   css="mb-8 w-full"
                   inputCss="w-full"
                   options={(almacenesService.Almacenes || []).filter((almacenRecord) => (almacenRecord?.ss || 0) > 0)}
@@ -554,7 +554,7 @@
               {:else}
                 <div class="text-13 leading-20 text-gray-700">
                   <span class="ff-bold text-xs color-label">Entregado el</span> {formatActionTime(selectedSaleOrder.DeliveryTime)}.<br>
-                  <span class="ff-bold text-xs color-label">En</span> {getAlmacenName(selectedSaleOrder.AlmacenID)}.<br>
+                  <span class="ff-bold text-xs color-label">En</span> {getAlmacenName(selectedSaleOrder.WarehouseID)}.<br>
                   <RecordByIDText apiRoute="usuarios-ids" recordID={selectedSaleOrder.DeliveryUser} placeholder="-" />.
                 </div>
               {/if}

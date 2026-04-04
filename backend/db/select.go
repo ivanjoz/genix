@@ -77,6 +77,8 @@ func canUseProjectedView(selectedColumnNames []string, view *viewInfo) bool {
 
 	for _, selectedColumnName := range selectedColumnNames {
 		if !slices.Contains(view.availableColumns, selectedColumnName) {
+			fmt.Printf("Projected view rejected: view=%s missing_column=%s available=%v\n",
+				view.name, selectedColumnName, view.availableColumns)
 			return false
 		}
 	}
@@ -410,10 +412,25 @@ func recordMatchesPostFilter(ptr unsafe.Pointer, statements []ColumnStatement, s
 	return true
 }
 
+func normalizeScannedValue(value any) any {
+	// RowData stores pointers for scalar columns; grouped virtual decomposition works with the plain value.
+	if value == nil {
+		return nil
+	}
+	valueRef := reflect.ValueOf(value)
+	for valueRef.Kind() == reflect.Pointer {
+		if valueRef.IsNil() {
+			return nil
+		}
+		valueRef = valueRef.Elem()
+	}
+	return valueRef.Interface()
+}
+
 func scanSelectQueryRows[E any](
 	queryStr string,
 	queryValues []any,
-	columnNames []string,
+	scanColumns []selectScanColumn,
 	scyllaTable ScyllaTable[any],
 	refRecords *[]E,
 	postFilterStatements []ColumnStatement,
@@ -457,7 +474,8 @@ func scanSelectQueryRows[E any](
 			}
 
 			// Map each scanned DB column into the destination struct using precomputed column metadata.
-			for columnIndex, columnName := range columnNames {
+			for columnIndex, scanColumn := range scanColumns {
+				columnName := scanColumn.ColumnName
 				column := scyllaTable.columnsMap[columnName]
 				value := rowValues[columnIndex]
 
@@ -474,6 +492,17 @@ func scanSelectQueryRows[E any](
 				}
 
 				if value == nil {
+					continue
+				}
+				if scanColumn.DecomposeView != nil && scanColumn.DecomposeView.decomposeVirtualValue != nil {
+					// Packed group keys are scanned as one virtual column and decomposed back into the primitive fields.
+					decomposedValues := scanColumn.DecomposeView.decomposeVirtualValue(normalizeScannedValue(value))
+					for valueIndex, sourceColumn := range scanColumn.DecomposeView.packedSourceColumns {
+						if valueIndex >= len(decomposedValues) {
+							break
+						}
+						sourceColumn.SetValue(recordPtr, decomposedValues[valueIndex])
+					}
 					continue
 				}
 				if shouldLog {
@@ -666,6 +695,11 @@ func selectExec[E any](
 		return errors.New("ExecGroup requires both getKey and groupHandler handlers")
 	}
 
+	groupByPlan, err := buildNativeGroupByPlan(tableInfo, tableInfo.statements, scyllaTable)
+	if err != nil {
+		return err
+	}
+
 	viewTableName := scyllaTable.name
 
 	if len(scyllaTable.keyspace) == 0 {
@@ -676,10 +710,20 @@ func selectExec[E any](
 	}
 
 	columnNames := []string{}
-	if len(tableInfo.columnsInclude) > 0 {
+	scanColumns := []selectScanColumn{}
+	selectExpressions := []string{}
+	if groupByPlan != nil {
+		selectExpressions = append(selectExpressions, groupByPlan.SelectExpressions...)
+		scanColumns = append(scanColumns, groupByPlan.ScanColumns...)
+		for _, scanColumn := range scanColumns {
+			columnNames = append(columnNames, scanColumn.ColumnName)
+		}
+	} else if len(tableInfo.columnsInclude) > 0 {
 		for _, col := range tableInfo.columnsInclude {
 			columnNames = append(columnNames, col.GetName())
 		}
+		scanColumns = buildDefaultScanColumns(columnNames)
+		selectExpressions = append(selectExpressions, columnNames...)
 	} else {
 		columnsExclude := []string{}
 		for _, col := range tableInfo.columnsExclude {
@@ -690,11 +734,12 @@ func selectExec[E any](
 				columnNames = append(columnNames, col.GetName())
 			}
 		}
+		columnNames = ensureCacheVersionColumnsForSelect(columnNames, scyllaTable)
+		scanColumns = buildDefaultScanColumns(columnNames)
+		selectExpressions = append(selectExpressions, columnNames...)
 	}
-	// Force internal selection of partition/key when cache-version is enabled to resolve group IDs reliably.
-	columnNames = ensureCacheVersionColumnsForSelect(columnNames, scyllaTable)
 
-	queryTemplate := fmt.Sprintf("SELECT %v ", strings.Join(columnNames, ", ")) + "FROM %v.%v %v"
+	queryTemplate := fmt.Sprintf("SELECT %v ", strings.Join(selectExpressions, ", ")) + "FROM %v.%v %v"
 	hashOperators := []string{"=", "IN"}
 	isHash := true
 
@@ -719,13 +764,30 @@ func selectExec[E any](
 	statementsSelected := []ColumnStatement{}
 	statementsRemain := []ColumnStatement{}
 	whereStatements := []string{}
+	groupByColumns := []string{}
 	orderColumn := scyllaTable.keys[0]
 	postFilterStatements := []ColumnStatement{}
 	usePostFilter := false
 	shouldDeduplicateFanoutResults := false
 
+	if groupByPlan != nil {
+		if groupByPlan.ViewTableName != "" {
+			viewTableName = groupByPlan.ViewTableName
+		}
+		if len(groupByPlan.WhereStatements) > 0 {
+			whereStatements = append(whereStatements, groupByPlan.WhereStatements...)
+		}
+		groupByColumns = append(groupByColumns, groupByPlan.GroupByColumns...)
+		if groupByPlan.OrderColumn != nil && !groupByPlan.OrderColumn.IsNil() {
+			orderColumn = groupByPlan.OrderColumn
+		}
+	}
+
 	compositePlan := tryBuildCompositeBucketPlan(statements, scyllaTable)
-	if compositePlan != nil {
+	if groupByPlan != nil {
+		// Native GroupBy planning owns the source view and predicates; do not reroute it through the generic capability matcher.
+		statementsRemain = nil
+	} else if compositePlan != nil {
 		// Composite plan handles the hash+bucket part; remaining statements are applied as normal SQL predicates.
 		usePostFilter = true
 		shouldDeduplicateFanoutResults = true
@@ -789,6 +851,9 @@ func selectExec[E any](
 						statementsRemain = statements
 					}
 				} else {
+					if viewOrIndex.Type >= 6 {
+						fmt.Printf("Planner fallback to base table: view=%s selected_columns=%v\n", viewOrIndex.name, columnNames)
+					}
 					// Fall back to the base table when the projected view cannot satisfy the requested columns.
 					statementsRemain = statements
 				}
@@ -834,7 +899,7 @@ func selectExec[E any](
 					if len(prefixValues) > 0 || rangeSt != nil {
 						prefixStr := ""
 						if len(prefixValues) > 0 {
-							prefixStr = Concat62(prefixValues...)
+							prefixStr = MakeKeyConcat(prefixValues...)
 						}
 
 						var newSt ColumnStatement
@@ -852,8 +917,8 @@ func selectExec[E any](
 							}
 						} else {
 							if rangeSt.Operator == "BETWEEN" {
-								valFrom := Concat62(append(prefixValues, rangeSt.From[0].Value)...)
-								valTo := Concat62(append(prefixValues, rangeSt.To[0].Value)...)
+								valFrom := MakeKeyConcat(append(prefixValues, rangeSt.From[0].Value)...)
+								valTo := MakeKeyConcat(append(prefixValues, rangeSt.To[0].Value)...)
 								newSt = ColumnStatement{
 									Col:      keyCol.GetName(),
 									Operator: "BETWEEN",
@@ -861,7 +926,7 @@ func selectExec[E any](
 									To:       []ColumnStatement{{Col: keyCol.GetName(), Value: valTo + "\uffff"}},
 								}
 							} else if trans, ok := smartRangeMap[rangeSt.Operator]; ok {
-								valWithRange := Concat62(append(prefixValues, rangeSt.Value)...)
+								valWithRange := MakeKeyConcat(append(prefixValues, rangeSt.Value)...)
 								prefixMin, prefixMax := "", "\uffff"
 								if prefixStr != "" {
 									prefixMin = prefixStr + "_"
@@ -1019,6 +1084,9 @@ func selectExec[E any](
 		if whereStatement != "" {
 			whereStatement = " WHERE " + whereStatement
 		}
+		if len(groupByColumns) > 0 {
+			whereStatement += " GROUP BY " + strings.Join(groupByColumns, ", ")
+		}
 		if len(tableInfo.orderBy) > 0 {
 			whereStatement += " " + fmt.Sprintf(tableInfo.orderBy, orderColumn.GetName())
 		}
@@ -1072,7 +1140,7 @@ func selectExec[E any](
 			err = scanSelectQueryRows(
 				queryStr,
 				queryValues,
-				columnNames,
+				scanColumns,
 				scyllaTable,
 				recordsTarget,
 				queryPostFilterStatements,
@@ -1150,8 +1218,10 @@ func selectExec[E any](
 		}
 	}
 
-	if err := assignCacheVersionsAfterSelect(recordsGetted, scyllaTable); err != nil {
-		return err
+	if len(tableInfo.groupByColumns) == 0 {
+		if err := assignCacheVersionsAfterSelect(recordsGetted, scyllaTable); err != nil {
+			return err
+		}
 	}
 
 	return nil

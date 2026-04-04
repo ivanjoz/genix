@@ -39,6 +39,7 @@ type columnInfo struct {
 	compositeBucketing      []int8
 	isWeek                  bool
 	useInt32Packing         bool
+	aggregateFn             string
 }
 
 func (c *columnInfo) GetValue(ptr unsafe.Pointer) any {

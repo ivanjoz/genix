@@ -365,26 +365,63 @@ func Print(Struct any) {
 	pretty.Println(Struct)
 }
 
-func Concat62(values ...any) string {
+func MakeKeyConcat(values ...any) string {
 	valuesStrings := []string{}
 	for _, va := range values {
 		str := ""
 		if v, ok := va.(string); ok {
 			str = v
 		} else if v, ok := va.(int32); ok {
-			str = EncodeToBase62(int64(v))
+			if v > 0 {
+				str = EncodeToBase62(int64(v))	
+			}
 		} else if v, ok := va.(int64); ok {
-			str = EncodeToBase62(int64(v))
+			if v > 0 {
+				str = EncodeToBase62(int64(v))	
+			}
 		} else if v, ok := va.(int); ok {
-			str = EncodeToBase62(int64(v))
+			if v > 0 {
+				str = EncodeToBase62(int64(v))	
+			}
 		} else if v, ok := va.(int16); ok {
-			str = EncodeToBase62(int64(v))
+			if v > 0 {
+				str = EncodeToBase62(int64(v))	
+			}
 		} else {
 			str = fmt.Sprintf("%v", v)
 		}
 		valuesStrings = append(valuesStrings, str)
 	}
-	return strings.Join(valuesStrings, "_")
+	return strings.TrimRight(strings.Join(valuesStrings, "_"),"_")
+}
+
+type KeyParser struct {
+	Key string
+	keySplited []string
+}
+
+func (e *KeyParser) GetNumber(index int) int64 {
+	if len(e.keySplited) == 0 {
+		e.keySplited = strings.Split(e.Key,"_")
+	}
+	
+	if len(e.keySplited) > index {
+		return DecodeFromBase62(e.keySplited[index])
+	} else {
+		return  0
+	}
+}
+
+func (e *KeyParser) GetString(index int) string {
+	if len(e.keySplited) == 0 {
+		e.keySplited = strings.Split(e.Key,"_")
+	}
+	
+	if len(e.keySplited) > index {
+		return e.keySplited[index]
+	} else {
+		return ""
+	}
 }
 
 // characters used for conversion

@@ -29,7 +29,7 @@ export interface VentaProducto {
 export interface ISaleOrder {
   ID: number
   EmpresaID: number
-  AlmacenID: number
+  WarehouseID: number
   LastPaymentCajaID: number
   TotalAmount: number
   TaxAmount: number
@@ -49,7 +49,7 @@ export class SaleOrderState {
   // State
   productosStock = $state([] as IProductoStock[])
   form = $state({
-    ID: 0, EmpresaID: 0, AlmacenID: 0, LastPaymentCajaID: 1, // Default payment caja; UI can overwrite.
+    ID: 0, EmpresaID: 0, WarehouseID: 0, LastPaymentCajaID: 1, // Default payment caja; UI can overwrite.
     TotalAmount: 0, TaxAmount: 0, DebtAmount: 0,
     ActionsIncluded: [2, 3],
     DetailProductsIDs: [], DetailPrices: [], DetailQuantities: [],
@@ -156,7 +156,7 @@ export class SaleOrderState {
       return
     }
 
-    if (this.form.AlmacenID === 0) {	
+    if (this.form.WarehouseID === 0) {	
       Notify.failure("Seleccione un almacén.")
       return
     }

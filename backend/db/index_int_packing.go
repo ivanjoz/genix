@@ -74,3 +74,30 @@ func computePackedInt64ValueNonNegative(componentValues []int64, slotDigitsPerCo
 	}
 	return packed
 }
+
+func decomposePackedInt64ValueNonNegative(packed int64, slotDigitsPerColumn []int64) []int64 {
+	if packed < 0 {
+		panic(fmt.Sprintf("decomposePackedInt64ValueNonNegative: negative packed value %d", packed))
+	}
+	if len(slotDigitsPerColumn) == 0 {
+		return nil
+	}
+
+	shiftDigits := make([]int64, len(slotDigitsPerColumn))
+	suffix := int64(0)
+	for i := len(slotDigitsPerColumn) - 1; i >= 0; i-- {
+		shiftDigits[i] = suffix
+		suffix += slotDigitsPerColumn[i]
+	}
+
+	values := make([]int64, 0, len(slotDigitsPerColumn))
+	for i, slotDigits := range slotDigitsPerColumn {
+		componentValue := packed / Pow10Int64(shiftDigits[i])
+		if slotDigits > 0 {
+			componentValue = componentValue % Pow10Int64(slotDigits)
+		}
+		values = append(values, componentValue)
+	}
+
+	return values
+}

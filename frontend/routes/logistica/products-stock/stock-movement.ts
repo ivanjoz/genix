@@ -4,7 +4,7 @@ import { GET, POST } from '$libs/http.svelte';
 export interface IProductoStock {
   ID: string
   SKU?: string
-  AlmacenID: number
+  WarehouseID: number
   ProductoID: number
   PresentacionID: number
   Cantidad: number

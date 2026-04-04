@@ -16,7 +16,7 @@ export interface IAlmacenMovimiento {
   ID: string
   SKU: string
   Lote: string
-  AlmacenID: number
+  WarehouseID: number
   AlmacenOrigenID: number
   DocumentID: number
   ProductoID: number

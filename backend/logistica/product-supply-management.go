@@ -6,7 +6,6 @@ import (
 	logisticaTypes "app/logistica/types"
 	negocioTypes "app/negocio/types"
 	"encoding/json"
-	"fmt"
 	"slices"
 )
 
@@ -163,59 +162,61 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 	movimientosFecha := int16(req.GetQueryInt("movimientos"))
 	productosStockUpdated := req.GetQueryInt("productosStock")
 
-	movimientos := []logisticaTypes.AlmacenMovimiento{}
+	movimientos := []logisticaTypes.WarehouseProductMovement{}
 
 	query := db.Query(&movimientos).
-		EmpresaID.Equals(req.Usuario.EmpresaID).
+		CompanyID.Equals(req.Usuario.EmpresaID).
 		Fecha.GreaterEqual(movimientosFecha)
 
-	query.Select(query.Fecha, query.Cantidad, query.ProductoID)
-
-	if err := query.AllowFilter().ExecGroup(
-		func(record *logisticaTypes.AlmacenMovimiento) string {
-			// Group rows by business date and product so each intermediate record already contains the daily product totals.
-			return fmt.Sprintf("%d|%d", record.Fecha, record.ProductoID)
-		},
-		func(newRecord *logisticaTypes.AlmacenMovimiento, groupedRecord *logisticaTypes.AlmacenMovimiento) {
-			// Normalize signed quantities into inflow/outflow buckets before merging them into the grouped row.
-			if newRecord.Cantidad > 0 {
-				newRecord.Inflows_ = newRecord.Cantidad
-			} else if newRecord.Cantidad < 0 {
-				newRecord.Outflows_ = -newRecord.Cantidad
-			}
-			if groupedRecord != nil {
-				groupedRecord.Inflows_ += newRecord.Inflows_
-				groupedRecord.Outflows_ += newRecord.Outflows_
-			}
-		},
-	); err != nil {
+	if err := query.GroupBy(query.Fecha, query.ProductoID, query.Tipo, query.Cantidad.Sum()).Exec(); err != nil {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)
 	}
 
-	core.PrintTable(movimientos, 30, 30, "Fecha", "ProductoID", "AlmacenID", "AlmacenCantidad")
+	core.PrintTable(movimientos, 30, 30, "Fecha", "ProductoID", "WarehouseID", "AlmacenCantidad")
 
-	// Fold the already grouped-by-date-product rows into one column-oriented row per business date.
-	dailyGroupedRecords := map[int16]*FechaProductoMovimientos{}
+	// Keep one row per date and reuse the product position to avoid duplicated product IDs.
+	type fechaMovimientosAccumulator struct {
+		record                  *FechaProductoMovimientos
+		productIndexByProductID map[int32]int
+	}
+
+	dailyGroupedRecords := map[int16]*fechaMovimientosAccumulator{}
 	for _, movimiento := range movimientos {
-		if _, exists := dailyGroupedRecords[movimiento.Fecha]; !exists {
-			dailyGroupedRecords[movimiento.Fecha] = &FechaProductoMovimientos{
-				Fecha: movimiento.Fecha, Updated: movimiento.Fecha,
+		fechaAccumulator, exists := dailyGroupedRecords[movimiento.Fecha]
+		if !exists {
+			fechaAccumulator = &fechaMovimientosAccumulator{
+				record: &FechaProductoMovimientos{
+					Fecha: movimiento.Fecha, Updated: movimiento.Fecha,
+				},
+				productIndexByProductID: map[int32]int{},
 			}
+			dailyGroupedRecords[movimiento.Fecha] = fechaAccumulator
 		}
 
-		dailyGroupedRecord := dailyGroupedRecords[movimiento.Fecha]
-		dailyGroupedRecord.DetailProductsIDs = append(dailyGroupedRecord.DetailProductsIDs, movimiento.ProductoID)
-		dailyGroupedRecord.DetailInflows = append(dailyGroupedRecord.DetailInflows, movimiento.Inflows_)
-		dailyGroupedRecord.DetailOutflows = append(dailyGroupedRecord.DetailOutflows, movimiento.Outflows_)
+		productIndex, productExists := fechaAccumulator.productIndexByProductID[movimiento.ProductoID]
+		if !productExists {
+			productIndex = len(fechaAccumulator.record.DetailProductsIDs)
+			fechaAccumulator.productIndexByProductID[movimiento.ProductoID] = productIndex
+			fechaAccumulator.record.DetailProductsIDs = append(fechaAccumulator.record.DetailProductsIDs, movimiento.ProductoID)
+			fechaAccumulator.record.DetailInflows = append(fechaAccumulator.record.DetailInflows, 0)
+			fechaAccumulator.record.DetailOutflows = append(fechaAccumulator.record.DetailOutflows, 0)
+		}
+
+		// Split the signed grouped quantity into inflow/outflow columns for the cached payload.
+		if movimiento.Cantidad > 0 {
+			fechaAccumulator.record.DetailInflows[productIndex] += movimiento.Cantidad
+		} else if movimiento.Cantidad < 0 {
+			fechaAccumulator.record.DetailOutflows[productIndex] += -movimiento.Cantidad
+		}
 	}
 
 	movimientosAgrupados := make([]FechaProductoMovimientos, 0, len(dailyGroupedRecords))
-	for _, groupedRecord := range dailyGroupedRecords {
-		movimientosAgrupados = append(movimientosAgrupados, *groupedRecord)
+	for _, fechaAccumulator := range dailyGroupedRecords {
+		movimientosAgrupados = append(movimientosAgrupados, *fechaAccumulator.record)
 	}
 
 	// Productos Stock
-	productosStock := []logisticaTypes.ProductoStock{}
+	productosStock := []logisticaTypes.ProductStock{}
 
 	psQuery := db.Query(&productosStock).AllowFilter()
 	psQuery.Select(psQuery.ID, psQuery.Updated, psQuery.Cantidad)

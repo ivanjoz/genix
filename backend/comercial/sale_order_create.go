@@ -37,7 +37,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	sale := saleRequest
 	stockSolicitadoPorID := map[string]int32{}
-	stockActualPorID := map[string]*logisticaTypes.ProductoStock{}
+	stockActualPorID := map[string]*logisticaTypes.ProductStock{}
 	if isUpdate {
 		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
 		existingSales := []types.SaleOrder{}
@@ -56,8 +56,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		if saleRequest.LastPaymentCajaID > 0 {
 			sale.LastPaymentCajaID = saleRequest.LastPaymentCajaID
 		}
-		if saleRequest.AlmacenID > 0 {
-			sale.AlmacenID = saleRequest.AlmacenID
+		if saleRequest.WarehouseID > 0 {
+			sale.WarehouseID = saleRequest.WarehouseID
 		}
 		if slices.Contains(saleRequest.ActionsIncluded, 2) {
 			sale.DebtAmount = saleRequest.DebtAmount
@@ -82,8 +82,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	if !isUpdate || slices.Contains(sale.ActionsIncluded, 3) {
 		// Agrupa por stock real para validar una sola vez por combinacion almacen-producto-presentacion-sku-lote.
 		for index, productID := range sale.DetailProductsIDs {
-			stockID := db.Concat62(
-				sale.AlmacenID,
+			stockID := db.MakeKeyConcat(
+				sale.WarehouseID,
 				productID,
 				core.GetIndex(sale.DetailProductPresentations, index),
 				core.GetIndex(sale.DetailProductSkus, index),
@@ -93,7 +93,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		if len(stockSolicitadoPorID) > 0 {
-			productosStock := []logisticaTypes.ProductoStock{}
+			productosStock := []logisticaTypes.ProductStock{}
 			query := db.Query(&productosStock)
 			err := query.Select(
 				query.ID,
@@ -101,7 +101,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				query.CostoUn,
 				query.Status,
 			).
-				EmpresaID.Equals(req.Usuario.EmpresaID).
+				CompanyID.Equals(req.Usuario.EmpresaID).
 				ID.In(core.MapToKeys(stockSolicitadoPorID)...).
 				Exec()
 
@@ -151,8 +151,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		// Track when and who executed the latest delivery action.
 		sale.DeliveryTime = nowTime
 		sale.DeliveryUser = req.Usuario.ID
-		if sale.AlmacenID == 0 {
-			return req.MakeErr("Se requiere AlmacenID para procesar la entrega.")
+		if sale.WarehouseID == 0 {
+			return req.MakeErr("Se requiere WarehouseID para procesar la entrega.")
 		}
 
 		if len(sale.DetailProductsIDs) == 0 {
@@ -226,8 +226,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				continue
 			}
 
-			stockID := db.Concat62(
-				sale.AlmacenID,
+			stockID := db.MakeKeyConcat(
+				sale.WarehouseID,
 				productoID,
 				core.GetIndex(sale.DetailProductPresentations, i),
 				core.GetIndex(sale.DetailProductSkus, i),
@@ -235,7 +235,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			)
 
 			movimientosInternos = append(movimientosInternos, logisticaTypes.MovimientoInterno{
-				AlmacenID:      sale.AlmacenID,
+				WarehouseID:      sale.WarehouseID,
 				ProductoID:     productoID,
 				PresentacionID: core.GetIndex(sale.DetailProductPresentations, i),
 				SKU:            core.GetIndex(sale.DetailProductSkus, i),
@@ -272,7 +272,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		if err := db.Update(&salesToUpdate,
 			// Keep composite view columns in sync: {Fecha, Updated} must be updated together.
 			saleTable.Fecha,
-			saleTable.AlmacenID,
+			saleTable.WarehouseID,
 			saleTable.LastPaymentCajaID,
 			saleTable.DebtAmount,
 			saleTable.Updated,

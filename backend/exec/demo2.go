@@ -259,7 +259,7 @@ func Test45(args *core.ExecArgs) core.FuncResponse {
 
 func Test46(args *core.ExecArgs) core.FuncResponse {
 	
-	controller := makeDBController[logisticaTypes.AlmacenMovimiento]()
+	controller := makeDBController[logisticaTypes.WarehouseProductMovement]()
 	
 	controller.RecalcVirtualColumns(1)
 	

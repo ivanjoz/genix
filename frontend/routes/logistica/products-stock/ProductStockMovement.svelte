@@ -96,6 +96,7 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
       // Reset the visual diff marker only after the backend confirms the save.
       for (const productStockRecord of almacenStock) {
         productStockRecord._cantidadPrev = 0
+        productStockRecord._hasUpdated = false
       }
     } finally {
       Loading.remove()
@@ -116,7 +117,7 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
 
         productStockMap.set(stockID, {
           ID: stockID,
-          AlmacenID: stockFilters.almacenID,
+          WarehouseID: stockFilters.almacenID,
           ProductoID: productRecord.ID,
           PresentacionID: presentacionID,
           Cantidad: 0
@@ -129,7 +130,7 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
   const updateStockQuantity = (productStockRecord: IProductoStock, cantidad: number) => {
     if (!productStockRecord.ID) {
       productStockRecord.ID = [
-        productStockRecord.AlmacenID, productStockRecord.ProductoID, productStockRecord.PresentacionID || 0, productStockRecord.SKU || '', productStockRecord.Lote || ''
+        productStockRecord.WarehouseID, productStockRecord.ProductoID, productStockRecord.PresentacionID || 0, productStockRecord.SKU || '', productStockRecord.Lote || ''
       ].join('_')
     }
 
@@ -186,7 +187,7 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
         <i class="icon-floppy"></i>Guardar
       </button>
       <button class="bx-green" aria-label="agregar" onclick={() => {
-        stockForm = { AlmacenID: stockFilters.almacenID } as IProductoStock
+        stockForm = { WarehouseID: stockFilters.almacenID } as IProductoStock
         Core.openSideLayer(1)
       }}>
         <i class="icon-plus"></i>

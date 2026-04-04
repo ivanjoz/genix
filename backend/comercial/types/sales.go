@@ -9,7 +9,7 @@ type SaleOrder struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
 	EmpresaID int32 `json:",omitempty"`
 	Fecha     int16 `json:",omitempty"`
-	AlmacenID int32 `json:",omitempty"`
+	WarehouseID int32 `json:",omitempty"`
 	ID        int64
 
 	//Table: Following slices must be same size
@@ -84,7 +84,7 @@ type SaleOrderTable struct {
 	EmpresaID                   db.Col[SaleOrderTable, int32]
 	ID                          db.Col[SaleOrderTable, int64]
 	Fecha                       db.Col[SaleOrderTable, int16]
-	AlmacenID                   db.Col[SaleOrderTable, int32]
+	WarehouseID                   db.Col[SaleOrderTable, int32]
 	LastPaymentCajaID           db.Col[SaleOrderTable, int32]
 	DetailProductsIDs           db.Col[SaleOrderTable, []int32]
 	DetailPrices                db.Col[SaleOrderTable, []int32]

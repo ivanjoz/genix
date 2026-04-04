@@ -101,12 +101,17 @@ type viewInfo struct {
 	// availableColumns tracks the real base-table columns that can be selected from the MV.
 	// Rationale: projected views cannot satisfy default "select all columns" reads.
 	availableColumns []string
-	Operators        []string
+	// packedSourceColumns keeps the original key columns behind packed range views so grouped scans can decompose them back.
+	packedSourceColumns []IColInfo
+	// packedSlotDigitsPerColumn mirrors packedSourceColumns and is reused for prefix-range planning and scan decomposition.
+	packedSlotDigitsPerColumn []int64
+	Operators                 []string
 	// RequiresPostFilter indicates the index/view can overfetch and should be exact-filtered in memory.
 	// This is required for packed indexes when DecimalSize() truncation is applied.
-	RequiresPostFilter bool
-	getStatement       func(statements ...ColumnStatement) []string
-	getCreateScript    func() string
+	RequiresPostFilter    bool
+	getStatement          func(statements ...ColumnStatement) []string
+	decomposeVirtualValue func(rawValue any) []any
+	getCreateScript       func() string
 }
 
 type ColumnStatement struct {
@@ -173,6 +178,7 @@ type TableInfo struct {
 	statements     []ColumnStatement
 	columnsInclude []columnInfo
 	columnsExclude []columnInfo
+	groupByColumns []columnInfo
 	between        ColumnStatement
 	orderBy        string
 	limit          int32
@@ -304,6 +310,13 @@ func (e TableStruct[T, E]) GetTableStruct() T {
 func (e *TableStruct[T, E]) Select(columns ...Coln) *T {
 	for _, col := range columns {
 		e.tableInfo.columnsInclude = append(e.tableInfo.columnsInclude, col.GetInfo())
+	}
+	return e.schemaStruct
+}
+
+func (e *TableStruct[T, E]) GroupBy(columns ...Coln) *T {
+	for _, col := range columns {
+		e.tableInfo.groupByColumns = append(e.tableInfo.groupByColumns, col.GetInfo())
 	}
 	return e.schemaStruct
 }
@@ -505,6 +518,16 @@ func (e *Col[T, E]) Between(v1 E, v2 E) *T {
 		To:       []ColumnStatement{{Col: e.info.Name, Value: v2}},
 	})
 	return e.schemaStruct
+}
+
+func (e Col[T, E]) Sum() Col[T, E] {
+	e.info.aggregateFn = "SUM"
+	return e
+}
+
+func (e Col[T, E]) Avg() Col[T, E] {
+	e.info.aggregateFn = "AVG"
+	return e
 }
 
 type ColSlice[T TableInterface[T], E any] struct {

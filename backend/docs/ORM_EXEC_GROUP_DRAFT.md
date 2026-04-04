@@ -68,14 +68,14 @@ query := db.Query(&result.Movimientos)
 
 query.
     EmpresaID.Equals(req.Usuario.EmpresaID).
-    AlmacenID.Equals(almacenID).
+    WarehouseID.Equals(almacenID).
     Fecha.Between(fechaInicio, fechaFin).
     OrderDesc().
     Limit(1000)
 
 err := query.ExecGroup(
     func(record *negocioTypes.AlmacenMovimiento) string {
-        return fmt.Sprintf("%d|%d|%s", record.ProductoID, record.AlmacenID, record.Lote)
+        return fmt.Sprintf("%d|%d|%s", record.ProductoID, record.WarehouseID, record.Lote)
     },
     func(newRecord *negocioTypes.AlmacenMovimiento, groupedRecord *negocioTypes.AlmacenMovimiento) {
         if groupedRecord == nil {

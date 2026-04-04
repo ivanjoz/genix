@@ -7,6 +7,7 @@ import (
 	logisticaTypes "app/logistica/types"
 	negocioTypes "app/negocio/types"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"slices"
 	"time"
@@ -16,7 +17,7 @@ import (
 
 func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 
-	stock := []logisticaTypes.ProductoStock{}
+	stock := []logisticaTypes.ProductStock{}
 	err := json.Unmarshal([]byte(*req.Body), &stock)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -27,7 +28,7 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	for _, e := range stock {
-		if e.AlmacenID == 0 || e.ProductoID == 0 {
+		if e.WarehouseID == 0 || e.ProductoID == 0 {
 			return req.MakeErr("Hay un registros sin Almacén-ID o Producto-ID")
 		}
 	}
@@ -37,7 +38,7 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	for _, e := range stock {
 		movimientosInternos = append(movimientosInternos, logisticaTypes.MovimientoInterno{
 			ReemplazarCantidad: true,
-			AlmacenID:          e.AlmacenID,
+			WarehouseID:          e.WarehouseID,
 			ProductoID:         e.ProductoID,
 			PresentacionID:     e.PresentacionID,
 			SKU:                e.SKU,
@@ -65,7 +66,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	type Result struct {
-		Movimientos []logisticaTypes.AlmacenMovimiento
+		Movimientos []logisticaTypes.WarehouseProductMovement
 		Usuarios    []coretypes.Usuario
 		Productos   []negocioTypes.Producto
 	}
@@ -74,8 +75,8 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	query := db.Query(&result.Movimientos)
 
-	query.EmpresaID.Equals(req.Usuario.EmpresaID).
-		AlmacenID.Equals(almacenID).
+	query.CompanyID.Equals(req.Usuario.EmpresaID).
+		WarehouseID.Equals(almacenID).
 		Fecha.Between(fechaInicio, fechaFin).OrderDesc().Limit(1000)
 
 	if err := query.Exec(); err != nil {
@@ -136,8 +137,8 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt("updated")
 	core.Log("updated::", updated)
 
-	almacenProductos1 := []logisticaTypes.ProductoStock{}
-	almacenProductos2 := []logisticaTypes.ProductoStock{}
+	almacenProductos1 := []logisticaTypes.ProductStock{}
+	almacenProductos2 := []logisticaTypes.ProductStock{}
 
 	eg := errgroup.Group{}
 
@@ -146,8 +147,8 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 		eg.Go(func() error {
 			query := db.Query(&almacenProductos1)
 			query.Select().
-				EmpresaID.Equals(req.Usuario.EmpresaID).
-				AlmacenID.Equals(int32(almacenID)).
+				CompanyID.Equals(req.Usuario.EmpresaID).
+				WarehouseID.Equals(int32(almacenID)).
 				Status.Equals(1).
 				Updated.Between(int32(updated), int32(999999999))
 			return query.Exec()
@@ -155,8 +156,8 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 		eg.Go(func() error {
 			query := db.Query(&almacenProductos2)
 			query.Select().
-				EmpresaID.Equals(req.Usuario.EmpresaID).
-				AlmacenID.Equals(int32(almacenID)).
+				CompanyID.Equals(req.Usuario.EmpresaID).
+				WarehouseID.Equals(int32(almacenID)).
 				Status.Equals(0).
 				Updated.Between(int32(updated), int32(999999999))
 			return query.Exec()
@@ -165,8 +166,8 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 		eg.Go(func() error {
 			query := db.Query(&almacenProductos2)
 			query.Select().
-				EmpresaID.Equals(req.Usuario.EmpresaID).
-				AlmacenID.Equals(int32(almacenID)).
+				CompanyID.Equals(req.Usuario.EmpresaID).
+				WarehouseID.Equals(int32(almacenID)).
 				Status.Equals(1).
 				Updated.Between(int32(0), int32(999999999))
 			return query.Exec()
@@ -194,64 +195,71 @@ type productoStockCounter struct {
 
 func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.MovimientoInterno) error {
 
-	keysPendientes := []string{}
+	pendingWarehouseProductIDs := core.SliceSet[string]{}
 	productosIDs := core.SliceSet[int32]{}
-	currentStockMap := map[string]logisticaTypes.ProductoStock{}
+	currentStockMap := map[string]*logisticaTypes.ProductStock{}
 	reusedStockCount := 0
 
 	for _, mov := range movimientos {
+		if mov.Cantidad == 0 {
+			continue
+		}
 		productosIDs.Add(mov.ProductoID)
 		if mov.Stock != nil {
 			reusedStockCount++
-			currentStockMap[mov.GetAlmacenProductoID()] = *mov.Stock
+			currentStockMap[mov.GetAlmacenProductoID()] = mov.Stock
 		}
 	}
 
 	for _, mov := range movimientos {
-		almacenProductoID := mov.GetAlmacenProductoID()
-		if _, exists := currentStockMap[almacenProductoID]; !exists {
-			keysPendientes = append(keysPendientes, almacenProductoID)
+		for _, key := range []string{ mov.GetAlmacenProductoID(), mov.GetAlmacenProductoGrupoID() }{
+			if _, exists := currentStockMap[key]; !exists {
+				pendingWarehouseProductIDs.Add(key)
+			}	
 		}
 	}
 
-	// Obtiene información de los productos
-	productos := []negocioTypes.Producto{}
-	query := db.Query(&productos)
-	q1 := db.Table[negocioTypes.Producto]()
-	query.Select(q1.EmpresaID, q1.ID, q1.CategoriasIDs).
-		EmpresaID.Equals(req.Usuario.EmpresaID).
-		ID.In(productosIDs.Values...)
-
-	if err := query.Exec(); err != nil {
-		return core.Err("Error al obtener los productos (en almacén movimientos):", err)
-	}
-
-	productosMap := core.SliceToMapE(productos, func(e negocioTypes.Producto) int32 { return e.ID })
-
 	// Consulta solo los stocks que no llegaron adjuntos en el movimiento.
-	if len(keysPendientes) > 0 {
-		currentStock := []logisticaTypes.ProductoStock{}
+	if !pendingWarehouseProductIDs.IsEmpty() {
+		currentStock := []logisticaTypes.ProductStock{}
 		currentStockQuery := db.Query(&currentStock)
 		currentStockQuery.Select().
-			EmpresaID.Equals(req.Usuario.EmpresaID).
-			ID.In(keysPendientes...)
+			CompanyID.Equals(req.Usuario.EmpresaID).
+			ID.In(pendingWarehouseProductIDs.Values...)
 
 		if err := currentStockQuery.Exec(); err != nil {
 			return core.Err("Error al obtener el stock previo (1):", err)
 		}
 
-		for _, stockActual := range currentStock {
-			currentStockMap[stockActual.ID] = stockActual
+		for i := range currentStock {
+			currentStockMap[currentStock[i].ID] = &currentStock[i]
 		}
 	}
-	core.Log("ApplyMovimientos stock reutilizado:", reusedStockCount, "stock consultado:", len(keysPendientes))
+	core.Log("ApplyMovimientos stock reutilizado:", reusedStockCount, "stock consultado:", len(pendingWarehouseProductIDs.Values))
 
+	for _, key := range pendingWarehouseProductIDs.Values {
+		if currentStockMap[key] == nil {
+			keyParser := db.KeyParser{ Key: key }
+			
+			currentStockMap[key] = &logisticaTypes.ProductStock{
+				CompanyID: req.Usuario.EmpresaID,
+				ID: key,
+				WarehouseID: int32(keyParser.GetNumber(0)),
+				ProductoID: int32(keyParser.GetNumber(1)),
+				PresentacionID: int16(keyParser.GetNumber(2)),
+				SKU: keyParser.GetString(3),
+				Lote: keyParser.GetString(4),
+				IsNewRecord: true,
+			}
+		}
+	}
+	
 	// Obtiene el stock del producto en todos los almacenes
-	almacenProductosStock := []logisticaTypes.ProductoStock{}
+	almacenProductosStock := []logisticaTypes.ProductStock{}
 	apTable := db.Query(&almacenProductosStock)
 
-	apTable.Select(apTable.ProductoID, apTable.AlmacenID, apTable.Cantidad, apTable.SubCantidad).
-		EmpresaID.Equals(req.Usuario.EmpresaID).
+	apTable.Select(apTable.ProductoID, apTable.WarehouseID, apTable.Cantidad, apTable.SubCantidad).
+		CompanyID.Equals(req.Usuario.EmpresaID).
 		Status.Equals(1).
 		ProductoID.In(productosIDs.Values...)
 
@@ -279,20 +287,20 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 	}
 
 	for _, e := range almacenProductosStock {
-		addProductoStock(e.ProductoID, e.AlmacenID, e.Cantidad)
+		addProductoStock(e.ProductoID, e.WarehouseID, e.Cantidad)
 	}
 
 	//Genera los movimientos correspondientes al stock actual
-	almacenMovimientos := []logisticaTypes.AlmacenMovimiento{}
+	almacenMovimientos := []logisticaTypes.WarehouseProductMovement{}
 	updatedStockTime := core.SUnixTime()
 	// Clona el stock actual para acumular movimientos repetidos sin mutar el mapa base.
 	almacenProductosMap := maps.Clone(currentStockMap)
 
 	for _, e := range movimientos {
-		movimiento := logisticaTypes.AlmacenMovimiento{
+		movimiento := logisticaTypes.WarehouseProductMovement{
 			DocumentID:     e.DocumentID,
-			EmpresaID:      req.Usuario.EmpresaID,
-			AlmacenID:      e.AlmacenID,
+			CompanyID:      req.Usuario.EmpresaID,
+			WarehouseID:      e.WarehouseID,
 			ProductoID:     e.ProductoID,
 			PresentacionID: e.PresentacionID,
 			SKU:            e.SKU,
@@ -317,43 +325,78 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 
 		almacenMovimientos = append(almacenMovimientos, movimiento)
 
-		addProductoStock(e.ProductoID, e.AlmacenID, movimiento.Cantidad)
+		addProductoStock(e.ProductoID, e.WarehouseID, movimiento.Cantidad)
 
 		// Mantiene un acumulado por stock ID para que movimientos repetidos sumen sobre el saldo ya ajustado.
 		stockActual.ID = almProdID
-		stockActual.AlmacenID = e.AlmacenID
+		stockActual.WarehouseID = e.WarehouseID
 		stockActual.ProductoID = e.ProductoID
-		stockActual.EmpresaID = req.Usuario.EmpresaID
+		stockActual.CompanyID = req.Usuario.EmpresaID
 		stockActual.Cantidad = movimiento.AlmacenCantidad
 		stockActual.Status = core.If(movimiento.AlmacenCantidad == 0, int8(0), 1)
 		stockActual.Updated = updatedStockTime
-		almacenProductosMap[almProdID] = stockActual
+		
+		// Computa la cantidad del grupo
+		almProdGrupoID := e.GetAlmacenProductoGrupoID()
+		stockActualGrupo := almacenProductosMap[almProdGrupoID]
+		stockActualGrupo.WarehouseProductQuantity = stockActualGrupo.WarehouseProductQuantity + movimiento.Cantidad
+		stockActual.Updated = updatedStockTime
 	}
 
-	almacenProductos := make([]logisticaTypes.ProductoStock, 0, len(almacenProductosMap))
-	for _, almacenProducto := range almacenProductosMap {
-		almacenProductos = append(almacenProductos, almacenProducto)
+	almacenProductosToInsert := []logisticaTypes.ProductStock{}
+	almacenProductosToUpdate := []logisticaTypes.ProductStock{}
+	
+	for _, e := range core.MapToSlice(almacenProductosMap) {
+		if e.Cantidad < 0 {
+			return core.Err(fmt.Sprintf(`El producto %v | almacen %v | presentacion %v, resulta en un stock menor a 0.`, e.ProductoID, e.WarehouseID, e.PresentacionID))
+		}
+		
+		if e.IsNewRecord {
+			almacenProductosToInsert = append(almacenProductosToInsert, e)
+		} else {
+			almacenProductosToUpdate = append(almacenProductosToUpdate, e)
+		}
 	}
 
-	core.Print(almacenProductos)
-
+	core.Log("almacenProductosToInsert:", len(almacenProductosToInsert),"|","almacenProductosToUpdate:",len(almacenProductosToUpdate))
+	
 	// Actualiza solo el estado mutable del stock para no reescribir columnas estables.
-	almacenProductoTable := db.Table[logisticaTypes.ProductoStock]()
-	if err := db.Update(&almacenProductos,
-		almacenProductoTable.AlmacenID,
-		almacenProductoTable.ProductoID,
-		almacenProductoTable.Cantidad,
-		almacenProductoTable.Status,
-		almacenProductoTable.Updated,
-	); err != nil {
-		return core.Err("Error al guardar el stock de productos:", err)
+	apT := db.Table[logisticaTypes.ProductStock]()
+	
+	if len(almacenProductosToUpdate) > 0 {
+		if err := db.Update(&almacenProductosToUpdate,
+			apT.WarehouseID, apT.ProductoID, apT.Cantidad, apT.Status, apT.Updated,	apT.WarehouseProductQuantity, apT.IsWarehouseProductStatus,
+		); err != nil {
+			return core.Err("Error al guardar el stock de productos:", err)
+		}	
+	}
+	
+	if len(almacenProductosToInsert) > 0 {
+		if err := db.Insert(&almacenProductosToInsert); err != nil {
+			return core.Err("Error al guardar el stock de productos:", err)
+		}	
 	}
 
-	// Insert AlmacenMovimiento using db2
+	// Insert AlmacenMovimiento using db
 	if err := db.Insert(&almacenMovimientos); err != nil {
 		return core.Err("Error al guardar los movimientos:", err)
 	}
 
+	/* 
+	// Obtiene información de los productos
+	productos := []negocioTypes.Producto{}
+	query := db.Query(&productos)
+	q1 := db.Table[negocioTypes.Producto]()
+	query.Select(q1.EmpresaID, q1.ID, q1.CategoriasIDs).
+		EmpresaID.Equals(req.Usuario.EmpresaID).
+		ID.In(productosIDs.Values...)
+
+	if err := query.Exec(); err != nil {
+		return core.Err("Error al obtener los productos (en almacén movimientos):", err)
+	}
+
+	productosMap := core.SliceToMapE(productos, func(e negocioTypes.Producto) int32 { return e.ID })
+	
 	// Agrega los datos del stock a los productos
 	productosToUpdate := []negocioTypes.Producto{}
 	for _, e := range productoStock {
@@ -363,7 +406,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 				continue
 			}
 			almacenStock = append(almacenStock, negocioTypes.AlmacenStockMin{
-				AlmacenID: almacenID,
+				WarehouseID: almacenID,
 				Cantidad:  cant.cantidad,
 			})
 		}
@@ -384,7 +427,6 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 		// Este error es interno, dado que el stock ya se guardó en la tabla principal de almacén_productos
 		core.Log("Error al actualizar el stock en productos:", err)
 	}
-
+	*/
 	return nil
 }
-

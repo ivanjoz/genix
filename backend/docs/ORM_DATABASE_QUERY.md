@@ -199,6 +199,23 @@ Rules:
 - `LIMIT` still applies to raw rows before grouping.
 - `getKey` and `groupHandler` are both required.
 
+```go
+// Purpose: Execute a real Scylla GROUP BY when the schema exposes a compatible key/view path.
+// Rationale: Packed views let the ORM group multiple logical columns through one physical grouped key.
+q := db.Query(&results)
+
+err := q.
+    EmpresaID.Equals(1).
+    Fecha.GreaterEqual(startUnixDay).
+    GroupBy(q.Fecha, q.ProductoID, q.Cantidad.Sum()).
+    Exec()
+```
+
+Rules:
+- `GroupBy()` emits a real Scylla `GROUP BY`, unlike `ExecGroup`.
+- `Avg()` requires a `float32` or `float64` destination field.
+- Multi-column `GroupBy()` requires a compatible packed view whose key columns match the grouped columns in order.
+
 ### 5.4 Cloud Query (`cloud.Select`)
 
 `cloud.Select` is the provider-agnostic query API used for DynamoDB and Cloudflare D1 / SQLite.

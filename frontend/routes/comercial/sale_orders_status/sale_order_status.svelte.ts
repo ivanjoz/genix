@@ -11,7 +11,7 @@ export interface ISaleOrder {
     ID: number;
     EmpresaID: number;
     Fecha: number;
-    AlmacenID: number;
+    WarehouseID: number;
     DetailProductsIDs: number[];
     DetailPrices: number[];
     DetailQuantities: number[];
@@ -38,7 +38,7 @@ export interface ISaleOrderUpdatePayload {
 	ID: number;
 	ActionsIncluded: number[];
 	LastPaymentCajaID?: number;
-	AlmacenID?: number;
+	WarehouseID?: number;
 	DebtAmount?: number;
 }
 

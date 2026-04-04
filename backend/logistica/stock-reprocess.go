@@ -11,25 +11,25 @@ import (
 func RecalcProductStockByMovements(empresaID int32) error {
 
 	// 1. Fetch all movements for the company
-	movimientos := []logisticaTypes.AlmacenMovimiento{}
+	movimientos := []logisticaTypes.WarehouseProductMovement{}
 	query := db.Query(&movimientos)
-	query.Select().EmpresaID.Equals(empresaID)
+	query.Select().CompanyID.Equals(empresaID)
 
 	if err := query.Exec(); err != nil {
 		return core.Err("Error al obtener movimientos:", err)
 	}
 
 	// 2. Compute stock
-	computedStocks := make(map[string]*logisticaTypes.ProductoStock)
+	computedStocks := make(map[string]*logisticaTypes.ProductStock)
 	productoTotalStock := make(map[int32]int32)
 
 	for _, mov := range movimientos {
-		key := core.Concat62(mov.AlmacenID, mov.ProductoID, mov.PresentacionID, mov.SKU, mov.Lote)
+		key := core.Concat62(mov.WarehouseID, mov.ProductoID, mov.PresentacionID, mov.SKU, mov.Lote)
 		if _, exists := computedStocks[key]; !exists {
-			computedStocks[key] = &logisticaTypes.ProductoStock{
-				EmpresaID:      empresaID,
+			computedStocks[key] = &logisticaTypes.ProductStock{
+				CompanyID:      empresaID,
 				ID:             key,
-				AlmacenID:      mov.AlmacenID,
+				WarehouseID:      mov.WarehouseID,
 				ProductoID:     mov.ProductoID,
 				PresentacionID: mov.PresentacionID,
 				SKU:            mov.SKU,
@@ -44,7 +44,7 @@ func RecalcProductStockByMovements(empresaID int32) error {
 	}
 
 	// 3. Prepare the new slice
-	newStocks := make([]logisticaTypes.ProductoStock, 0, len(computedStocks))
+	newStocks := make([]logisticaTypes.ProductStock, 0, len(computedStocks))
 	updatedTime := core.SUnixTime()
 
 	for _, stock := range computedStocks {

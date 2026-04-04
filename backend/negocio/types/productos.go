@@ -11,7 +11,7 @@ type ProductoImagen struct {
 }
 
 type AlmacenStockMin struct {
-	AlmacenID int32 `cbor:"a" json:"a"`
+	WarehouseID int32 `cbor:"a" json:"a"`
 	Cantidad  int32 `cbor:"c" json:"c"`
 }
 
