@@ -45,11 +45,11 @@ func (e ProductoStockTable) GetSchema() db.TableSchema {
 		LocalIndexes:    []db.Coln{e.SKU, e.Lote},
 		Views: []db.View{
 			{
-				Cols:     []db.Coln{e.ProductoID.Int32(), e.Status.DecimalSize(1)},
+				Keys:     []db.Coln{e.ProductoID.Int32(), e.Status.DecimalSize(1)},
 				KeepPart: true,
 			},
 			{
-				Cols:     []db.Coln{e.AlmacenID, e.Status.DecimalSize(1), e.Updated.DecimalSize(9)},
+				Keys:     []db.Coln{e.AlmacenID, e.Status.DecimalSize(1), e.Updated.DecimalSize(9)},
 				KeepPart: true,
 			},
 		},

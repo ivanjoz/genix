@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
+
+	"github.com/viant/xunsafe"
 )
 
 type ScyllaController[T TableBaseInterface[E, T], E TableSchemaInterface[E]] struct {
@@ -19,6 +22,11 @@ type CSVResult struct {
 	RowsCount int32
 }
 
+type virtualColumnsRecalcUpdate[T any] struct {
+	record                T
+	changedVirtualColumns []IColInfo
+}
+
 type ScyllaControllerInterface interface {
 	GetTable() ScyllaTable[any]
 	GetTableName() string
@@ -27,6 +35,7 @@ type ScyllaControllerInterface interface {
 	RestoreCSVRecords(partValue int32, content *[]byte) error
 	GetRecordsCSV(partValue int32) (CSVResult, error)
 	ReloadRecords(partValue int32) error
+	RecalcVirtualColumns(partValue int32) error
 	ResetCounter(partValue any) error
 }
 
@@ -95,6 +104,191 @@ func (e *ScyllaController[T, E]) ReloadRecords(partValue int32) error {
 	}
 
 	return nil
+}
+
+func (e *ScyllaController[T, E]) RecalcVirtualColumns(partValue int32) error {
+	scyllaTable := getOrCompileScyllaTable(initStructTable[E, T](new(E)))
+	virtualColumns := []IColInfo{}
+	selectedColumns := make([]IColInfo, 0, len(scyllaTable.columns))
+	for _, column := range scyllaTable.columns {
+		if column == nil || column.IsNil() {
+			continue
+		}
+		selectedColumns = append(selectedColumns, column)
+		// Recalc only persists generated ORM columns; physical source fields stay untouched.
+		if column.GetInfo().IsVirtual {
+			virtualColumns = append(virtualColumns, column)
+		}
+	}
+	if len(virtualColumns) == 0 {
+		return nil
+	}
+
+	// Keep query projection order stable so scanned values map back to ORM columns by position.
+	slices.SortFunc(selectedColumns, func(leftColumn, rightColumn IColInfo) int {
+		return int(leftColumn.GetInfo().Idx - rightColumn.GetInfo().Idx)
+	})
+
+	selectColumnNames := make([]string, 0, len(selectedColumns))
+	for _, selectedColumn := range selectedColumns {
+		selectColumnNames = append(selectColumnNames, selectedColumn.GetName())
+	}
+
+	queryStr := fmt.Sprintf("SELECT %v FROM %v", strings.Join(selectColumnNames, ", "), scyllaTable.GetFullName())
+	partitionColumn := scyllaTable.GetPartKey()
+	if partValue > 0 && partitionColumn != nil && !partitionColumn.IsNil() {
+		queryStr = fmt.Sprintf("%v WHERE %v = %v", queryStr, partitionColumn.GetName(), partValue)
+	}
+
+	fmt.Printf("RecalcVirtualColumns | table=%s | query=%s\n", scyllaTable.name, queryStr)
+	queryIterator := getScyllaConnection().Query(queryStr).Iter()
+	rowData, err := queryIterator.RowData()
+	if err != nil {
+		return Err("RecalcVirtualColumns RowData failed for table", scyllaTable.name, ":", err)
+	}
+
+	updatesToApply := []virtualColumnsRecalcUpdate[T]{}
+	rowsScanned := 0
+
+	scanner := queryIterator.Scanner()
+	for scanner.Next() {
+		if err := scanner.Scan(rowData.Values...); err != nil {
+			return Err("RecalcVirtualColumns scan failed for table", scyllaTable.name, ":", err)
+		}
+		rowsScanned++
+
+		record := *new(T)
+		recordPointer := xunsafe.AsPointer(&record)
+		persistedVirtualValueByName := map[string]string{}
+
+		for valueIndex, selectedColumn := range selectedColumns {
+			rawValue := dereferenceScyllaValue(rowData.Values[valueIndex])
+			if selectedColumn.GetInfo().IsVirtual {
+				persistedVirtualValueByName[selectedColumn.GetName()] = makeVirtualValueSignature(rawValue)
+				continue
+			}
+			// Rebuild the source record from raw DB values so virtual accessors recompute from persisted inputs.
+			selectedColumn.SetValue(recordPointer, rawValue)
+		}
+
+		changedVirtualColumns := []IColInfo{}
+		for _, virtualColumn := range virtualColumns {
+			persistedValueSignature := persistedVirtualValueByName[virtualColumn.GetName()]
+			recalculatedValueSignature := makeVirtualValueSignature(virtualColumn.GetStatementValue(recordPointer))
+			if persistedValueSignature != recalculatedValueSignature {
+				changedVirtualColumns = append(changedVirtualColumns, virtualColumn)
+				fmt.Printf("RecalcVirtualColumns | changed virtual column=%s | persisted=%s | recalculated=%s\n",
+					virtualColumn.GetName(), persistedValueSignature, recalculatedValueSignature)
+			}
+		}
+		if len(changedVirtualColumns) == 0 {
+			continue
+		}
+
+		updatesToApply = append(updatesToApply, virtualColumnsRecalcUpdate[T]{
+			record:                record,
+			changedVirtualColumns: changedVirtualColumns,
+		})
+	}
+
+	if err := queryIterator.Close(); err != nil {
+		return Err("RecalcVirtualColumns query close failed for table", scyllaTable.name, ":", err)
+	}
+
+	if len(updatesToApply) == 0 {
+		fmt.Printf("RecalcVirtualColumns | table=%s | rows_scanned=%d | rows_updated=0\n", scyllaTable.name, rowsScanned)
+		return nil
+	}
+
+	updateStatements := make([]string, 0, len(updatesToApply))
+	for _, updateToApply := range updatesToApply {
+		recordPointer := xunsafe.AsPointer(&updateToApply.record)
+		setStatements := make([]string, 0, len(updateToApply.changedVirtualColumns))
+		for _, column := range updateToApply.changedVirtualColumns {
+			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, column.GetName(), column.GetValue(recordPointer)))
+		}
+
+		whereColumns := scyllaTable.keys
+		if partitionColumn != nil && !partitionColumn.IsNil() {
+			whereColumns = append([]IColInfo{partitionColumn}, whereColumns...)
+		}
+
+		whereStatements := make([]string, 0, len(whereColumns))
+		for _, whereColumn := range whereColumns {
+			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, whereColumn.GetName(), whereColumn.GetValue(recordPointer)))
+		}
+
+		updateStatements = append(updateStatements, fmt.Sprintf(
+			"UPDATE %v SET %v WHERE %v",
+			scyllaTable.GetFullName(),
+			Concatx(", ", setStatements),
+			Concatx(" and ", whereStatements),
+		))
+	}
+
+	if len(updateStatements) == 0 {
+		return nil
+	}
+
+	if err := QueryExecStatements(updateStatements); err != nil {
+		return Err("RecalcVirtualColumns update failed for table", scyllaTable.name, ":", err)
+	}
+
+	fmt.Printf("RecalcVirtualColumns | table=%s | rows_scanned=%d | rows_updated=%d\n",
+		scyllaTable.name, rowsScanned, len(updatesToApply))
+	return nil
+}
+
+func dereferenceScyllaValue(value any) any {
+	if value == nil {
+		return nil
+	}
+
+	valueRef := reflect.ValueOf(value)
+	for valueRef.Kind() == reflect.Pointer {
+		if valueRef.IsNil() {
+			return nil
+		}
+		valueRef = valueRef.Elem()
+	}
+
+	return valueRef.Interface()
+}
+
+func makeVirtualValueSignature(value any) string {
+	if value == nil {
+		return "<nil>"
+	}
+
+	value = dereferenceScyllaValue(value)
+	if value == nil {
+		return "<nil>"
+	}
+
+	valueRef := reflect.ValueOf(value)
+	switch valueRef.Kind() {
+	case reflect.Slice, reflect.Array:
+		parts := make([]string, 0, valueRef.Len())
+		for valueIndex := 0; valueIndex < valueRef.Len(); valueIndex++ {
+			parts = append(parts, makeVirtualValueSignature(valueRef.Index(valueIndex).Interface()))
+		}
+		return "[" + strings.Join(parts, ",") + "]"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return fmt.Sprintf("%d", valueRef.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return fmt.Sprintf("%d", valueRef.Uint())
+	case reflect.Float32, reflect.Float64:
+		return fmt.Sprintf("%g", valueRef.Float())
+	case reflect.Bool:
+		return fmt.Sprintf("%t", valueRef.Bool())
+	case reflect.String:
+		return valueRef.String()
+	default:
+		if byteSlice, ok := value.([]byte); ok {
+			return fmt.Sprintf("%v", byteSlice)
+		}
+		return fmt.Sprintf("%v", value)
+	}
 }
 
 func (e *ScyllaController[T, E]) ResetCounter(partValue any) error {

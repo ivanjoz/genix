@@ -104,7 +104,7 @@ func (e mediumSchema) GetSchema() TableSchema {
 		LocalIndexes: []Coln{e.SKU, e.CategoryID},
 		Views: []View{
 			{
-				Cols:     []Coln{e.CategoryID, e.Status},
+				Keys:     []Coln{e.CategoryID, e.Status},
 				KeepPart: true,
 			},
 		},
@@ -181,15 +181,15 @@ func (e complexSchema) GetSchema() TableSchema {
 		Indexes:      [][]Coln{{e.SupplierID}, {e.BrandID}},
 		Views: []View{
 			{
-				Cols:     []Coln{e.CategoryID, e.Status},
+				Keys:     []Coln{e.CategoryID, e.Status},
 				KeepPart: true,
 			},
 			{
-				Cols:     []Coln{e.WarehouseID, e.Updated},
+				Keys:     []Coln{e.WarehouseID, e.Updated},
 				KeepPart: true,
 			},
 			{
-				Cols:     []Coln{e.SupplierID, e.Active},
+				Keys:     []Coln{e.SupplierID, e.Active},
 				KeepPart: true,
 			},
 		},
@@ -295,23 +295,23 @@ func (e veryComplexSchema) GetSchema() TableSchema {
 		Indexes:         [][]Coln{{e.SupplierID}, {e.BrandID}, {e.LocationID}},
 		Views: []View{
 			{
-				Cols:     []Coln{e.CategoryID, e.Status},
+				Keys:     []Coln{e.CategoryID, e.Status},
 				KeepPart: true,
 			},
 			{
-				Cols:     []Coln{e.WarehouseID, e.Updated},
+				Keys:     []Coln{e.WarehouseID, e.Updated},
 				KeepPart: true,
 			},
 			{
-				Cols:     []Coln{e.SupplierID, e.Active},
+				Keys:     []Coln{e.SupplierID, e.Active},
 				KeepPart: true,
 			},
 			{
-				Cols:     []Coln{e.ZoneID, e.Quantity},
+				Keys:     []Coln{e.ZoneID, e.Quantity},
 				KeepPart: true,
 			},
 			{
-				Cols:     []Coln{e.RegionID, e.Price},
+				Keys:     []Coln{e.RegionID, e.Price},
 				KeepPart: true,
 			},
 		},

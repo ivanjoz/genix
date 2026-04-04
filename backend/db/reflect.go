@@ -583,12 +583,24 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	// VIEWS
 	for _, viewConfig := range schema.Views {
 		viewCfg := viewConfig
+		appendUniqueColumn := func(target []IColInfo, column IColInfo) []IColInfo {
+			if column == nil || column.IsNil() {
+				return target
+			}
+			for _, existingColumn := range target {
+				if existingColumn.GetName() == column.GetName() {
+					return target
+				}
+			}
+			return append(target, column)
+		}
+
 		colNames := []string{}
 		declaredColumns := []IColInfo{} // Only the user-declared view columns, never the base partition.
 		columns := []IColInfo{}         // Internal working set; may prepend partition for composite/hash views.
-		viewColumnsConfig := make([]columnInfo, 0, len(viewCfg.Cols))
+		viewColumnsConfig := make([]columnInfo, 0, len(viewCfg.Keys))
 		packedViewHintFound := false
-		for _, declaredColumn := range viewCfg.Cols {
+		for _, declaredColumn := range viewCfg.Keys {
 			columnConfig := declaredColumn.GetInfo()
 			viewColumnsConfig = append(viewColumnsConfig, columnConfig)
 			// Packed views are declared via column metadata hints instead of View.Concat* fields.
@@ -597,12 +609,12 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			}
 		}
 
-		isRangeView := len(viewCfg.Cols) > 1 && packedViewHintFound
+		isRangeView := len(viewCfg.Keys) > 1 && packedViewHintFound
 		if isRangeView {
 			viewCfg.KeepPart = true
 		}
 
-		for _, colInfo := range viewCfg.Cols {
+		for _, colInfo := range viewCfg.Keys {
 			column := dbTable.columnsMap[colInfo.GetInfo().Name]
 			if column.GetType().IsComplexType {
 				panic("No puede usar un struct como columna de una view.")
@@ -1006,22 +1018,54 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			}
 		}
 
+		projectedColumnsConfig := viewCfg.Cols
+		projectedColumns := []IColInfo{}
+		for _, declaredProjectedColumn := range projectedColumnsConfig {
+			projectedColumn := dbTable.columnsMap[declaredProjectedColumn.GetInfo().Name]
+			if projectedColumn == nil || projectedColumn.IsNil() {
+				panic(fmt.Sprintf(`The projected column "%v" for view "%v" in "%v" wasn't found.`,
+					declaredProjectedColumn.GetInfo().Name, view.name, dbTable.name))
+			}
+			if projectedColumn.GetInfo().IsVirtual {
+				panic(fmt.Sprintf(`The projected column "%v" for view "%v" in "%v" cannot be virtual.`,
+					projectedColumn.GetName(), view.name, dbTable.name))
+			}
+			projectedColumns = appendUniqueColumn(projectedColumns, projectedColumn)
+		}
+
+		selectableColumns := []IColInfo{}
+		partKeyColumn := dbTable.GetPartKey()
+		if partKeyColumn != nil && !partKeyColumn.IsNil() {
+			selectableColumns = appendUniqueColumn(selectableColumns, partKeyColumn)
+		}
+		if view.Type == 6 {
+			for _, declaredViewColumn := range declaredColumns {
+				selectableColumns = appendUniqueColumn(selectableColumns, declaredViewColumn)
+			}
+		}
+		for _, keyColumn := range dbTable.keys {
+			selectableColumns = appendUniqueColumn(selectableColumns, keyColumn)
+		}
+		if view.column != nil && !view.column.IsNil() && !view.column.GetInfo().IsVirtual {
+			selectableColumns = appendUniqueColumn(selectableColumns, view.column)
+		}
+		for _, projectedColumn := range projectedColumns {
+			selectableColumns = appendUniqueColumn(selectableColumns, projectedColumn)
+		}
+		for _, selectableColumn := range selectableColumns {
+			view.availableColumns = append(view.availableColumns, selectableColumn.GetName())
+		}
+
 		viewPtr := view
 		view.getCreateScript = func() string {
-			appendUniqueColumn := func(target []IColInfo, column IColInfo) []IColInfo {
-				if column == nil || column.IsNil() {
-					return target
-				}
-				for _, existingColumn := range target {
-					if existingColumn.GetName() == column.GetName() {
-						return target
-					}
-				}
-				return append(target, column)
-			}
-
 			whereCols := []IColInfo{}
-			whereCols = appendUniqueColumn(whereCols, viewPtr.column)
+			if viewPtr.Type == 6 && !viewPtr.column.GetInfo().IsVirtual {
+				for _, declaredViewColumn := range declaredColumns {
+					whereCols = appendUniqueColumn(whereCols, declaredViewColumn)
+				}
+			} else {
+				whereCols = appendUniqueColumn(whereCols, viewPtr.column)
+			}
 			var wherePartCol IColInfo
 
 			pk_ := dbTable.GetPartKey()
@@ -1065,19 +1109,21 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				}
 			}
 
-			colNames := []string{}
-			for _, col := range dbTable.columns {
-				if !col.GetInfo().IsVirtual || col.GetName() == viewPtr.column.GetName() {
-					colNames = append(colNames, col.GetName())
+			selectClause := "*"
+			if len(projectedColumns) > 0 {
+				projectedColumnNames := make([]string, 0, len(projectedColumns))
+				for _, projectedColumn := range projectedColumns {
+					projectedColumnNames = append(projectedColumnNames, projectedColumn.GetName())
 				}
+				selectClause = strings.Join(projectedColumnNames, ", ")
 			}
 
 			query := fmt.Sprintf(`CREATE MATERIALIZED VIEW %v.%v AS
-			SELECT * FROM %v
+			SELECT %v FROM %v
 			WHERE %v
 			PRIMARY KEY (%v)
 			%v;`,
-				dbTable.keyspace, viewPtr.name, dbTable.GetFullName(),
+				dbTable.keyspace, viewPtr.name, selectClause, dbTable.GetFullName(),
 				strings.Join(whereColumnsNotNull, " AND "), pk, makeStatementWith)
 			return query
 		}

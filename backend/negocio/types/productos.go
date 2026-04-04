@@ -129,9 +129,9 @@ func (e ProductoTable) GetSchema() db.TableSchema {
 		GlobalIndexes:    [][]db.Coln{{e.CategoriasConStock}},
 		Indexes:          [][]db.Coln{{e.NameUpdated}, {e.NombreHash}},
 		Views: []db.View{
-			{Cols: []db.Coln{e.Status}, KeepPart: true},
-			{Cols: []db.Coln{e.StockStatus}, KeepPart: true},
-			{Cols: []db.Coln{e.Updated}, KeepPart: true},
+			{Keys: []db.Coln{e.Status}, KeepPart: true},
+			{Keys: []db.Coln{e.StockStatus}, KeepPart: true},
+			{Keys: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
@@ -189,8 +189,8 @@ func (e AlmacenTable) GetSchema() db.TableSchema {
 		UseSequences: true,
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
 		Views: []db.View{
-			{Cols: []db.Coln{e.Status}, KeepPart: true},
-			{Cols: []db.Coln{e.Updated}, KeepPart: true},
+			{Keys: []db.Coln{e.Status}, KeepPart: true},
+			{Keys: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
@@ -246,8 +246,8 @@ func (e SedeTable) GetSchema() db.TableSchema {
 		UseSequences: true,
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
 		Views: []db.View{
-			{Cols: []db.Coln{e.Status}, KeepPart: true},
-			{Cols: []db.Coln{e.Updated}, KeepPart: true},
+			{Keys: []db.Coln{e.Status}, KeepPart: true},
+			{Keys: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }

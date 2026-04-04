@@ -33,7 +33,7 @@ func (e PaisCiudadTable) GetSchema() db.TableSchema {
 		Partition: e.PaisID,
 		Keys:      []db.Coln{e.CiudadID},
 		Views: []db.View{
-			{Cols: []db.Coln{e.Updated}, KeepPart: true},
+			{Keys: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
@@ -75,8 +75,8 @@ func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
 		Indexes:      [][]db.Coln{{e.NombreHash}},
 		Views: []db.View{
-			{Cols: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
-			{Cols: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
+			{Keys: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
+			{Keys: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
 		},
 	}
 }

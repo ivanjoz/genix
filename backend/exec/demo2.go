@@ -8,6 +8,7 @@ import (
 	"app/core"
 	"app/db"
 	"app/libs"
+	logisticaTypes "app/logistica/types"
 	"app/negocio"
 	negocioTypes "app/negocio/types"
 	"fmt"
@@ -55,8 +56,8 @@ func (e DemoStructTable) GetSchema() db.TableSchema {
 		Keys:      []db.Coln{e.ID},
 		Views: []db.View{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
-			{Cols: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
-			{Cols: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
+			{Keys: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
+			{Keys: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
 		},
 	}
 }
@@ -253,5 +254,14 @@ func Test45(args *core.ExecArgs) core.FuncResponse {
 	
 	comercial.SaleOrderReprocess(1,0)
 
+	return core.FuncResponse{}
+}
+
+func Test46(args *core.ExecArgs) core.FuncResponse {
+	
+	controller := makeDBController[logisticaTypes.AlmacenMovimiento]()
+	
+	controller.RecalcVirtualColumns(1)
+	
 	return core.FuncResponse{}
 }

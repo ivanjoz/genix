@@ -56,9 +56,9 @@ func (clientProviderTable ClientProviderTable) GetSchema() db.TableSchema {
 		Keys:         []db.Coln{clientProviderTable.ID.Autoincrement(0)},
 		Views: []db.View{
 			// Keep GET client-provider efficient for delta sync filtered by type.
-			{Cols: []db.Coln{clientProviderTable.Type.Int32(), clientProviderTable.Updated.DecimalSize(8)}, KeepPart: true},
+			{Keys: []db.Coln{clientProviderTable.Type.Int32(), clientProviderTable.Updated.DecimalSize(8)}, KeepPart: true},
 			// Keep initial sync efficient by filtering active rows for each type.
-			{Cols: []db.Coln{clientProviderTable.Type.Int32(), clientProviderTable.Status.DecimalSize(1)}, KeepPart: true},
+			{Keys: []db.Coln{clientProviderTable.Type.Int32(), clientProviderTable.Status.DecimalSize(1)}, KeepPart: true},
 		},
 	}
 }

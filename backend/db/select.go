@@ -70,6 +70,20 @@ func newGroupedQueryResult[E any]() *groupedQueryResult[E] {
 	}
 }
 
+func canUseProjectedView(selectedColumnNames []string, view *viewInfo) bool {
+	if view == nil || len(view.availableColumns) == 0 {
+		return true
+	}
+
+	for _, selectedColumnName := range selectedColumnNames {
+		if !slices.Contains(view.availableColumns, selectedColumnName) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func addRecordToGroupedResult[E any](
 	groupedResult *groupedQueryResult[E],
 	record *E,
@@ -737,43 +751,45 @@ func selectExec[E any](
 			if bestCap.Source != nil {
 				viewOrIndex := bestCap.Source
 				fmt.Println("Selected Index/View:", viewOrIndex.name)
-				if viewOrIndex.Type >= 6 {
+				if viewOrIndex.Type >= 6 && canUseProjectedView(columnNames, viewOrIndex) {
 					viewTableName = viewOrIndex.name
-				}
-
-				if viewOrIndex.getStatement != nil {
-					// Identify which statements match the view columns
-					for _, st := range statements {
-						if slices.Contains(viewOrIndex.columns, st.Col) {
-							statementsSelected = append(statementsSelected, st)
-						} else if len(st.From) > 0 { // BETWEEN
-							isIncluded := true
-							for _, e := range st.From {
-								if !slices.Contains(viewOrIndex.columns, e.Col) {
-									isIncluded = false
-									break
-								}
-							}
-							if isIncluded {
+					if viewOrIndex.getStatement != nil {
+						// Identify which statements match the view columns
+						for _, st := range statements {
+							if slices.Contains(viewOrIndex.columns, st.Col) {
 								statementsSelected = append(statementsSelected, st)
+							} else if len(st.From) > 0 { // BETWEEN
+								isIncluded := true
+								for _, e := range st.From {
+									if !slices.Contains(viewOrIndex.columns, e.Col) {
+										isIncluded = false
+										break
+									}
+								}
+								if isIncluded {
+									statementsSelected = append(statementsSelected, st)
+								} else {
+									statementsRemain = append(statementsRemain, st)
+								}
 							} else {
 								statementsRemain = append(statementsRemain, st)
 							}
-						} else {
-							statementsRemain = append(statementsRemain, st)
 						}
-					}
-					orderColumn = viewOrIndex.column
-					whereStatements = viewOrIndex.getStatement(statementsSelected...)
+						orderColumn = viewOrIndex.column
+						whereStatements = viewOrIndex.getStatement(statementsSelected...)
 
-					if viewOrIndex.RequiresPostFilter {
-						// Packed indexes with DecimalSize truncation can overfetch; enforce exact semantics in memory.
-						usePostFilter = true
-						shouldDeduplicateFanoutResults = true
-						postFilterStatements = slices.Clone(statementsSelected)
+						if viewOrIndex.RequiresPostFilter {
+							// Packed indexes with DecimalSize truncation can overfetch; enforce exact semantics in memory.
+							usePostFilter = true
+							shouldDeduplicateFanoutResults = true
+							postFilterStatements = slices.Clone(statementsSelected)
+						}
+					} else {
+						// Direct index usage, no special statement generator
+						statementsRemain = statements
 					}
 				} else {
-					// Direct index usage, no special statement generator
+					// Fall back to the base table when the projected view cannot satisfy the requested columns.
 					statementsRemain = statements
 				}
 			} else if bestCap.IsKey {

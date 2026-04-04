@@ -39,8 +39,8 @@ func (productSupplyTable ProductSupplyTable) GetSchema() db.TableSchema {
 		Partition: productSupplyTable.CompanyID,
 		Keys:      []db.Coln{productSupplyTable.ProductID},
 		Views: []db.View{
-			{Cols: []db.Coln{productSupplyTable.Status}, KeepPart: true},
-			{Cols: []db.Coln{productSupplyTable.Updated}, KeepPart: true},
+			{Keys: []db.Coln{productSupplyTable.Status}, KeepPart: true},
+			{Keys: []db.Coln{productSupplyTable.Updated}, KeepPart: true},
 		},
 	}
 }

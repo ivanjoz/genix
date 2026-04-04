@@ -98,7 +98,10 @@ type viewInfo struct {
 	columns       []string
 	columnsNoPart []string
 	columnsIdx    []int16
-	Operators     []string
+	// availableColumns tracks the real base-table columns that can be selected from the MV.
+	// Rationale: projected views cannot satisfy default "select all columns" reads.
+	availableColumns []string
+	Operators        []string
 	// RequiresPostFilter indicates the index/view can overfetch and should be exact-filtered in memory.
 	// This is required for packed indexes when DecimalSize() truncation is applied.
 	RequiresPostFilter bool
@@ -155,16 +158,15 @@ func (q ColumnStatement) GetValue() any {
 }
 
 type View struct {
-	Cols []Coln
-	// Packed/range views are declared with DecimalSize() on Cols[1:].
-	// Example: {Cols: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}}
+	Keys []Coln
+	// Cols declares the non-key payload columns to keep in the MV.
+	// When empty, the ORM keeps the previous SELECT * behavior.
 	// Keep the original table partition in the created view.
 	// Example: key = (part_col) new_col, pk_col
+	Cols     []Coln
 	KeepPart bool
 	// Create a hash for use with IN operators
 	UseHash bool
-	// Columns to project, all by default
-	Project []Coln
 }
 
 type TableInfo struct {

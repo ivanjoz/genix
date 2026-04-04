@@ -38,7 +38,7 @@ func (usageLogTable UsageLogTable) GetSchema() db.TableSchema {
 		Partition: usageLogTable.CompanyID,
 		Keys:      []db.Coln{usageLogTable.ID},
 		Views: []db.View{
-			{Cols: []db.Coln{usageLogTable.ID}, KeepPart: false},
+			{Keys: []db.Coln{usageLogTable.ID}, KeepPart: false},
 		},
 	}
 }

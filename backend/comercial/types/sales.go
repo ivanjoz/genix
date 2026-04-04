@@ -124,7 +124,7 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			{e.Status.Int32(), e.Updated.DecimalSize(8)},
 		},
 		Views: []db.View{
-			{Cols: []db.Coln{e.Fecha, e.Updated}, KeepPart: true},
+			{Keys: []db.Coln{e.Fecha, e.Updated}, KeepPart: true},
 		},
 	}
 }
