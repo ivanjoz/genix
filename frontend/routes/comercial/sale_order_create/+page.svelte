@@ -332,20 +332,20 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
         <div class="px-16 py-12 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
         >
        	<div class="grow mr-16">
-          <div class="font-bold text-gray-800 mb-4 flex items-center justify-between">
-            <span>DETALLE DE VENTA</span>
+          <div class="font-bold font-xl mb-2 -mt-2 text-gray-800 mb-4 flex items-center justify-between">
+            <span>Detalle de Venta</span>
           </div>
           <div class="grid grid-cols-3 gap-12">
-            <div class="bg-gray-50 p-12 rounded-xl border border-gray-100 shadow-sm">
-                <div class="text-[10px] text-gray-500 mb-4 uppercase font-bold tracking-wider">Sub Total</div>
-                <div class="font-mono text-gray-800 text-xl">
+            <div class="bg-gray-50 flex p-6 rounded-md items-center border border-gray-100 shadow-sm">
+                <div class="text-[10px] leading-[1.1] text-gray-500 mb-4 font-bold tracking-wider">SUB <br> TOTAL</div>
+                <div class="leading-[1] text-gray-800 text-[17px] ml-auto">
                     {formatMo(ventasState.form.TotalAmount - ventasState.form.TaxAmount)}
                 </div>
             </div>
 
-            <div class="bg-blue-50 p-12 rounded-xl border border-blue-100 shadow-sm">
+            <div class="bg-blue-50 items-center flex p-6 rounded-md border border-blue-100 shadow-sm">
                 <div class="text-[10px] text-blue-600 mb-4 uppercase font-bold tracking-wider">Total</div>
-                <div class="font-mono text-blue-700 font-bold text-xl">
+                <div class="leading-[1] text-blue-700 font-bold text-xl ml-auto">
                     {formatMo(ventasState.form.TotalAmount)}
                 </div>
             </div>

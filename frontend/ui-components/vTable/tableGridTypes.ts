@@ -8,6 +8,7 @@ export interface TableGridColumn<TRecord> {
   width: string;
   hidden?: boolean;
   useCellRenderer?: boolean;
+  splitString?: number;
   align?: TableGridCellAlign;
   headerCss?: string;
   cellCss?: string;

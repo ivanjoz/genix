@@ -297,6 +297,8 @@
                 values: productChartCard.priceValues,
                 color: '#111827',
                 lineWidth: 1.5,
+                // Keep price readable against sales volume bars with its own configured range.
+                useOwnAxis: true,
                 yAxisMin: productChartCard.priceAxisMin,
                 yAxisMax: productChartCard.priceAxisMax
               }

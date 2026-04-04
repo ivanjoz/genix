@@ -159,7 +159,7 @@ type SaleSummaryTable struct {
 
 func (e SaleSummaryTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:      "sale-summary",
+		Name:      "sale_summary",
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.Fecha},
 	}

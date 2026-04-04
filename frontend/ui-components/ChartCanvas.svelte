@@ -57,6 +57,8 @@
     color?: string
     lineWidth?: number
     pointSize?: number
+    renderPointOnlyOnChange?: boolean
+    useOwnAxis?: boolean
     yAxisMin?: number
     yAxisMax?: number
   }
@@ -109,6 +111,7 @@
   const yAxisLabelWidthPx = 28
   const yAxisGuideSpacingPx = 16
   const yAxisPaddingTopPx = 2
+  const linePaddingBottomPx = 1
   const xAxisLabelHeightPx = 18
 
   const snapRectStart = (value: number) => Math.round(value)
@@ -230,6 +233,14 @@
   }
 
   const getLineRange = (chartSeries: ChartCanvasSeries, metrics: IChartCanvasMetrics): IChartCanvasLineRange => {
+    // Default line series to the shared chart axis so bars and lines stay comparable.
+    if (!chartSeries.useOwnAxis) {
+      return {
+        minValue: 0,
+        maxValue: metrics.maxChartValue > 0 ? metrics.maxChartValue : 1,
+      }
+    }
+
     const numericValues = chartSeries.values.filter((pointValue): pointValue is number => {
       return pointValue !== null && pointValue !== undefined
     })
@@ -259,7 +270,8 @@
     if (valueSpan <= 0) { return height / 2 }
 
     const normalizedPointValue = Math.min(lineRange.maxValue, Math.max(lineRange.minValue, pointValue))
-    return height - (((normalizedPointValue - lineRange.minValue) / valueSpan) * height)
+    const usableHeight = Math.max(1, height - linePaddingBottomPx)
+    return usableHeight - (((normalizedPointValue - lineRange.minValue) / valueSpan) * usableHeight)
   }
 
   const buildLineFrames = (metrics: IChartCanvasMetrics): IChartCanvasLineFrame[] => {
@@ -294,6 +306,10 @@
         pointSize: chartSeries.pointSize || 0,
         points: chartSeries.values.flatMap((pointValue, pointIndex) => {
           if (pointValue === null || pointValue === undefined) { return [] }
+          const previousPointValue = pointIndex > 0 ? chartSeries.values[pointIndex - 1] : null
+          if (chartSeries.renderPointOnlyOnChange && previousPointValue === pointValue) {
+            return []
+          }
           const x = snapStrokePoint((pointIndex * metrics.columnWidth) + (metrics.columnWidth / 2), strokeWidth)
           const y = snapStrokePoint(getLinePointY(pointValue, lineRange), strokeWidth)
           return [{ x, y }]
@@ -359,6 +375,8 @@
         color: chartSeries.color || "",
         lineWidth: chartSeries.lineWidth || 0,
         pointSize: chartSeries.pointSize || 0,
+        renderPointOnlyOnChange: chartSeries.renderPointOnlyOnChange || false,
+        useOwnAxis: chartSeries.useOwnAxis || false,
         yAxisMin: chartSeries.yAxisMin ?? null,
         yAxisMax: chartSeries.yAxisMax ?? null,
         values: chartSeries.values,

@@ -1,6 +1,7 @@
 <script lang="ts" generics="TRecord">
   import { onMount } from 'svelte';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
+  import { splitTwoStrings } from '$libs/helpers';
   import type {
     TableGridCellRendererSnippet,
     TableGridColumn,
@@ -72,6 +73,18 @@
   ): string | number => {
     if (!columnDefinition.getValue) return '';
     return columnDefinition.getValue(rowRecord, rowIndex);
+  };
+
+  const getSplitCellValue = (
+    cellValue: string | number,
+    columnDefinition: TableGridColumn<TRecord>,
+  ): [string, string] => {
+    if (typeof cellValue !== 'string' || !columnDefinition.splitString) {
+      return [String(cellValue ?? ''), ''];
+    }
+
+    // Split long labels into two balanced lines so adjacent columns remain visible.
+    return splitTwoStrings(cellValue, columnDefinition.splitString);
   };
 
   const getAlignClassName = (align: TableGridColumn<TRecord>['align']) => {
@@ -213,12 +226,18 @@
               >
                 {#each visibleColumns as columnDefinition (columnDefinition.id)}
                   {@const defaultCellValue = getCellValue(rowRecord, columnDefinition, rowIndex)}
+                  {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, columnDefinition)}
                   <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(columnDefinition.align)} {columnDefinition.cellCss || ''}"
                     role="cell"
                     title={`${defaultCellValue}`}
                   >
                     {#if cellRenderer && columnDefinition.useCellRenderer}
                       {@render cellRenderer(rowRecord, columnDefinition, rowIndex)}
+                    {:else if splitCellSecondLine}
+                      <div class="flex flex-col leading-[1.1]">
+                        <div>{splitCellFirstLine}</div>
+                        <div>{splitCellSecondLine}</div>
+                      </div>
                     {:else}
                       {defaultCellValue}
                     {/if}
@@ -273,7 +292,7 @@
     font-family: bold;
     color: #495057;
     border-right: 1px solid #edf2f7;
-    white-space: nowrap;
+    line-height: 1.1;
   }
 
   .table-grid-header-cell:last-child {

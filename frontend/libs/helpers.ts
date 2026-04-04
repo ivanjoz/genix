@@ -568,3 +568,25 @@ export function normalizeStringN(string: string): string {
 
   return normalizedString
 }
+
+export const splitTwoStrings = (str: string, maxLen?: number): [string,string] => {
+  if(!str){ return ["",""] }
+  if(maxLen && str?.length <= maxLen){ return [str,""] }
+  let bestDiff = Infinity;
+  let bestIndex = -1;
+
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] === " ") {
+      let leftLen = i;                  // length of left part
+      let rightLen = str.length - i - 1; // minus the space
+      let diff = Math.abs(leftLen - rightLen);
+
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestIndex = i;
+      }
+    }
+  }
+  
+  return [str.slice(0, bestIndex), str.slice(bestIndex + 1)]
+}

@@ -19,10 +19,11 @@
   interface CardsListProps<T> {
     cells: ICardCell<T>[];
     data: T[];
-    maxHeight?: string;
+    height?: string;
     css?: string;
     cardCss?: string;
     viewportClass?: string;
+    itemsClass?: string;
     estimateSize?: number;
     overscan?: number;
     onRowClick?: (row: T, index: number) => void;
@@ -40,10 +41,11 @@
   let {
     cells,
     data,
-    maxHeight = 'calc(100vh - 8rem)',
+    height = 'calc(100vh - 8rem)',
     css = '',
     cardCss = '',
     viewportClass = '',
+    itemsClass = '',
     estimateSize = 180,
     overscan = 6,
     onRowClick,
@@ -59,6 +61,9 @@
   }: CardsListProps<T> = $props();
 
   const filterCache = new WeakMap<T & object, string>();
+  // Keep the virtualizer base classes and append custom classes without breaking layout internals.
+  const virtualViewportClass = $derived(`virtual-list-viewport ${viewportClass}`.trim());
+  const virtualItemsClass = $derived(`virtual-list-items ${itemsClass}`.trim());
 
   // Keep the visible card configuration stable and skip hidden entries early.
   const visibleCells = $derived.by(() => {
@@ -167,14 +172,15 @@
 </script>
 
 <div class="cards-list-container {css}"
-  style="height: {maxHeight}; max-height: {maxHeight};"
+  style="height: {height};"
 >
   {#if filteredData.length === 0}
     <div class="cards-list-empty-message">
       {emptyMessage}
     </div>
   {:else}
-    <SvelteVirtualList viewportClass={viewportClass}
+    <SvelteVirtualList viewportClass={virtualViewportClass}
+      itemsClass={virtualItemsClass}
       items={filteredData}
       defaultEstimatedItemHeight={estimateSize}
       bufferSize={overscan}
@@ -312,15 +318,31 @@
     border-radius: 0;
     box-shadow: none;
     padding: 0;
+    min-height: 0;
   }
 
+  /* Force the virtual list wrapper to inherit the card list height so its viewport can scroll. */
+  .cards-list-container :global(.virtual-list) {
+    height: 100%;
+    min-height: 0;
+  }
+
+  /* Avoid flex gap here because the virtualizer does not include it in scroll height calculations. */
   .cards-list-container :global(.virtual-list-items) {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: block;
+  }
+
+  .cards-list-container :global(.virtual-list-items > div) {
+    margin-bottom: 8px;
+  }
+
+  .cards-list-container :global(.virtual-list-items > div:last-child) {
+    margin-bottom: 0;
   }
 
   .cards-list-container :global(.virtual-list-viewport) {
+    height: 100%;
+    min-height: 0;
     overflow-y: auto;
   }
 

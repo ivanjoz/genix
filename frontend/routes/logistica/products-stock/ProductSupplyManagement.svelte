@@ -77,6 +77,26 @@ import {
     return groupedLabels
   })
 
+  const trimLeadingAndTrailingZeroStocks = (stockValues: number[]) => {
+    const trimmedStockValues = [...stockValues]
+    let firstNonZeroIndex = trimmedStockValues.findIndex((stockValue) => stockValue !== 0)
+    let lastNonZeroIndex = trimmedStockValues.findLastIndex((stockValue) => stockValue !== 0)
+
+    if (firstNonZeroIndex === -1 || lastNonZeroIndex === -1) {
+      return trimmedStockValues.map(() => null)
+    }
+
+    // Hide empty margins only; keep interior zero-stock runs visible as real stockouts.
+    for (let stockIndex = 0; stockIndex < firstNonZeroIndex; stockIndex += 1) {
+      trimmedStockValues[stockIndex] = null as unknown as number
+    }
+    for (let stockIndex = lastNonZeroIndex + 1; stockIndex < trimmedStockValues.length; stockIndex += 1) {
+      trimmedStockValues[stockIndex] = null as unknown as number
+    }
+
+    return trimmedStockValues as Array<number | null>
+  }
+
   $effect(() => {
     if (!groupedMovementsService.isReady) {
       return
@@ -97,17 +117,21 @@ import {
     const debugOutflowsValues = last30FechaUnix.map((fechaUnix) => debugProductMovements.getOutflows(fechaUnix) || 0)
     const debugInflowsValues = last30FechaUnix.map((fechaUnix) => debugProductMovements.getInflows(fechaUnix) || 0)
     const debugFinalStockValues = last30FechaUnix.map((fechaUnix) => debugProductMovements.getFinalStock(fechaUnix) || 0)
-    const debugFinalStockLineValues = debugFinalStockValues.map((finalStockValue) => finalStockValue !== 0 ? finalStockValue : null)
+    const debugFinalStockLineValues = trimLeadingAndTrailingZeroStocks(debugFinalStockValues)
 
-    // Keep the chart diagnostics grouped so the raw vector and rendered series are easy to compare.
+    // Keep the chart diagnostics grouped so the stored columnar series and rendered values are easy to compare.
     untrack(() => {
       console.group(`AbastecimientoView::debugProduct:${debugProductID}`)
-      console.log('rawMovementVector', Array.from(debugProductMovements.v))
+      console.log('rawMovementColumns', {
+        detailFecha: debugProductMovements.DetailFecha,
+        detailOutflows: debugProductMovements.DetailOutflows,
+        detailInflows: debugProductMovements.DetailInflows,
+        detailFinalStock: debugProductMovements.DetailFinalStock,
+      })
       console.table(last30FechaUnix.map((fechaUnix, dayIndex) => ({
         dayIndex,
         fechaUnix,
         dateLabel: String(formatTime(fechaUnix, 'Y-m-d') || ''),
-        fechaIndex: debugProductMovements.getFechaIndex(fechaUnix),
         outflows: debugOutflowsValues[dayIndex],
         inflows: debugInflowsValues[dayIndex],
         finalStock: debugFinalStockValues[dayIndex],
@@ -174,16 +198,18 @@ import {
       {
         id: 'product-name',
         header: 'Producto',
-        width: '32%',
+        width: '30%',
         cellCss: 'px-6 py-4 leading-[1.1] whitespace-normal',
+        splitString: 64,
         getValue: (productSupplyRecord) => productos.recordsMap.get(productSupplyRecord.ProductID)?.Nombre || `Producto-${productSupplyRecord.ProductID}`,
       },
       {
-        id: 'minimum-stock',
-        header: 'Stock Min.',
+        id: 'stock-min-actual',
+        header: 'Stock Actual /Min',
         width: '6%',
         align: 'right',
         cellCss: 'px-6 text-right',
+        useCellRenderer: true,
         getValue: (productSupplyRecord) => productSupplyRecord.MinimunStock || 0,
       },
       {
@@ -196,7 +222,7 @@ import {
       {
         id: 'sales-per-day',
         header: 'Ventas / Día',
-        width: '8%',
+        width: '6%',
         align: 'right',
         cellCss: 'px-6 text-right',
         getValue: (productSupplyRecord) => productSupplyRecord.SalesPerDayEstimated || 0,
@@ -204,8 +230,9 @@ import {
       {
         id: 'providers',
         header: 'Proveedores',
-        width: '18%',
+        width: 'auto',
         cellCss: 'px-6 whitespace-normal',
+        useCellRenderer: true,
         getValue: (productSupplyRecord) => {
           return (productSupplyRecord.ProviderSupply || []).map((providerSupplyRow) => {
             return providers.recordsMap.get(providerSupplyRow.ProviderID)?.Name || `Proveedor-${providerSupplyRow.ProviderID}`
@@ -400,16 +427,17 @@ import {
             </div>
           {/if}
         {/snippet}
-        {#snippet cellRenderer(productSupplyRecord, columnDefinition)}
+        {#snippet cellRenderer(record, columnDefinition)}
           {#if columnDefinition.id === 'sales-last-30-days'}
             <!-- Keep the sales chart inline with TableGrid so virtualization owns the full row render path. -->
-            {@const productMovements = groupedMovementsService.productMovementsMap.get(productSupplyRecord.ProductID)}
+            {@const productMovements = groupedMovementsService.productMovementsMap.get(record.ProductID)}
             {@const outflowsValues = last30FechaUnix.map((fechaUnix) => productMovements?.getOutflows(fechaUnix) || 0)}
             {@const inflowsValues = last30FechaUnix.map((fechaUnix) => productMovements?.getInflows(fechaUnix) || 0)}
             {@const finalStockValues = last30FechaUnix.map((fechaUnix) => productMovements?.getFinalStock(fechaUnix) || 0)}
+            {@const finalStockLineValues = trimLeadingAndTrailingZeroStocks(finalStockValues)}
             <div class="h-50 min-w-0" style={`width:${ventasPixelMetrics.ventasColumnWidthPx}px`}>
-              <ChartCanvas
-                id={productSupplyRecord.ProductID}
+              <ChartCanvas useHtmlRendered
+                id={record.ProductID}
                 height={48}
                 className="h-full w-full"
                 fixedPointWidthPx={ventasPixelMetrics.ventasBarWidthPx}
@@ -421,13 +449,62 @@ import {
                   {
                     name: 'Stock Final',
                     type: 'line',
-                    values: finalStockValues.map((finalStockValue) => finalStockValue !== 0 ? finalStockValue : null),
+                    // Trim empty edges while keeping interior zero-stock runs connected.
+                    values: finalStockLineValues,
                     color: '#000000',
                     lineWidth: 1,
+                    renderPointOnlyOnChange: true,
                     pointSize: 3
                   },
                 ]}
               />
+            </div>
+          {/if}
+          {#if columnDefinition.id === 'stock-min-actual'}
+          	{@const productMovements = groupedMovementsService.productMovementsMap.get(record.ProductID)}
+            {@const currentStock = Math.max(0, productMovements?.CurrentStock || 0)}
+            {@const minimunStock = Math.max(0, record.MinimunStock || 0)}
+            {@const maxComparableStock = Math.max(currentStock, minimunStock, 1)}
+            {@const currentStockBarWidth = (currentStock / maxComparableStock) * 100}
+            {@const minimunStockBarWidth = (minimunStock / maxComparableStock) * 100}
+            {@const minimunStockBarCss = minimunStock > currentStock ? 'bg-red-200' : 'bg-blue-200'}
+            <div class="flex flex-col gap-2 py-4">
+              <!-- Render each stock metric inside its own light bar so the value stays readable above the fill. -->
+              <div class="relative h-18 overflow-hidden rounded-sm">
+                <div class="absolute inset-y-1 left-0 rounded-sm bg-green-200" style={`width:${currentStockBarWidth}%`}></div>
+                <div class="relative z-1 flex h-full items-center justify-end pr-3">
+                  <div class="ff-mono text-sm leading-none">{currentStock || '-'}</div>
+                </div>
+              </div>
+              <div class="relative h-18 overflow-hidden rounded-sm">
+                <div class={`absolute inset-y-1 left-0 rounded-sm ${minimunStockBarCss}`} style={`width:${minimunStockBarWidth}%`}></div>
+                <div class="relative z-1 flex h-full items-center justify-end pr-3">
+                  <div class="ff-mono text-sm leading-none">{record.MinimunStock || '-'}</div>
+                </div>
+              </div>
+            </div>
+          {/if}
+          {#if columnDefinition.id === 'providers'}
+            <!-- Keep provider chips compact so long supplier lists stay readable inside the virtualized row. -->
+            {@const visibleProviderRows = (record.ProviderSupply || []).filter((providerSupplyRow) => providerSupplyRow.ProviderID > 0).slice(0, 2)}
+            <div class="flex flex-col text-sm">
+              {#each visibleProviderRows as providerSupplyRow (providerSupplyRow.ProviderID)}
+                {@const providerName = providers.recordsMap.get(providerSupplyRow.ProviderID)?.Name || `Proveedor-${providerSupplyRow.ProviderID}`}
+                <div class="flex min-w-0 items-center leading-[1.15] justify-between gap-8">
+                  <div class="min-w-0 flex-1 whitespace-normal break-words">
+                    {providerName}
+                  </div>
+                  <div class="flex shrink-0 items-center gap-8 whitespace-nowrap text-slate-600">
+                    <div class="flex items-center gap-4">
+                      <span>{providerSupplyRow.Price ? `s/ ${formatN((providerSupplyRow.Price || 0) / 100, 2)}` : '-'}</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                      <i class="icon-calendar"></i>
+                      <span>{providerSupplyRow.DeliveryTime || 0}</span>
+                    </div>
+                  </div>
+                </div>
+              {/each}
             </div>
           {/if}
         {/snippet}
@@ -488,9 +565,9 @@ import {
 
     <CardsList
       css="w-full"
-      maxHeight="320px"
+      height="calc(100vh - var(--header-height) - 260px)"
       cardCss="p-14"
-      viewportClass="p-4"
+      itemsClass="p-4"
       cells={providerSupplyCards}
       data={productSupplyForm.ProviderSupply || []}
       emptyMessage="No hay proveedores agregados."
