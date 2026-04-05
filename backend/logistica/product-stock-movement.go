@@ -11,7 +11,6 @@ import (
 	"maps"
 	"slices"
 	"sync"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -312,7 +311,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 
 	//Genera los movimientos correspondientes al stock actual
 	almacenMovimientos := []logisticaTypes.WarehouseProductMovement{}
-	updatedStockTime := core.SUnixTime()
+	updatedStockTime := req.EffectiveSUnixTime()
 	// Clona el stock actual para acumular movimientos repetidos sin mutar el mapa base.
 	almacenProductosMap := maps.Clone(currentStockMap)
 
@@ -326,8 +325,8 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 			SKU:            e.SKU,
 			Lote:           e.Lote,
 			Tipo:           core.Coalesce(e.Tipo, core.If(e.Cantidad > 0, int8(1), 2)),
-			Fecha:          core.TimeToFechaUnix(time.Now()),
-			Created:        core.SUnixTime(),
+			Fecha:          req.EffectiveFechaUnix(),
+			Created:        req.EffectiveSUnixTime(),
 			CreatedBy:      req.Usuario.ID,
 		}
 

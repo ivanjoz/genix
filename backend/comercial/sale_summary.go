@@ -70,7 +70,7 @@ func MakeSummaryChangeFromOSaleOrder(sale types.SaleOrder, actions ...int8) []Pr
 
 func updateSaleSummaryForChange(sale types.SaleOrder, actions ...int8) error {
 	summaryChanges := MakeSummaryChangeFromOSaleOrder(sale, actions...)
-	return applyChangesToSaleSumary(sale.EmpresaID, sale.Fecha, summaryChanges, false)
+	return applyChangesToSaleSumary(sale.CompanyID, sale.Fecha, summaryChanges, false)
 }
 
 func loadSaleSummaryRowsByProducts(companyID int32, fecha int16, summaryChanges []ProductSummaryChange) (map[int32]types.ProductSaleSummary, error) {

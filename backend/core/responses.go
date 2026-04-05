@@ -41,6 +41,8 @@ type HandlerArgs struct {
 	ReqParams      string
 	Encoding       string
 	Usuario        *UsuarioToken
+	// HistoricalUnix overrides the effective write timestamp for sample/seed flows.
+	HistoricalUnix int64
 	StartTime      int64
 	accesosNivel   []uint16
 }

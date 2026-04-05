@@ -8,17 +8,18 @@ import (
 	finanzasTypes "app/finanzas/types"
 	"app/logistica"
 	logisticaTypes "app/logistica/types"
+	"app/negocio"
+	negocioTypes "app/negocio/types"
 	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 )
 
 func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
-	nowTime := core.SUnixTime()
+	nowTime := req.EffectiveSUnixTime()
 	saleRequest := types.SaleOrder{}
 	err := json.Unmarshal([]byte(*req.Body), &saleRequest)
 	if err != nil {
@@ -44,7 +45,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
 		existingSales := []types.SaleOrder{}
 		query := db.Query(&existingSales)
-		query.EmpresaID.Equals(req.Usuario.EmpresaID).ID.Equals(saleRequest.ID).Limit(1)
+		query.CompanyID.Equals(req.Usuario.EmpresaID).ID.Equals(saleRequest.ID).Limit(1)
 		if err := query.Exec(); err != nil {
 			return req.MakeErr("Error al obtener la venta a actualizar:", err)
 		}
@@ -77,9 +78,17 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			}
 		}
 
-		sale.Fecha = core.TimeToFechaUnix(time.Now())
+		sale.Fecha = req.EffectiveFechaUnix()
 		sale.Created = nowTime
 		sale.Status = 1
+	}
+
+	if saleRequest.ClientInfo != nil {
+		clientID, resolveClientError := resolveSaleOrderClientID(saleRequest.ClientInfo, req.Usuario.EmpresaID, req.Usuario.ID)
+		if resolveClientError != nil {
+			return req.MakeErr("Error al guardar el cliente de la venta:", resolveClientError)
+		}
+		sale.ClientID = clientID
 	}
 
 	if !isUpdate || slices.Contains(sale.ActionsIncluded, 3) {
@@ -140,7 +149,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	sale.EmpresaID = req.Usuario.EmpresaID
+	sale.CompanyID = req.Usuario.EmpresaID
 	sale.Updated = nowTime
 	sale.UpdatedBy = req.Usuario.ID
 
@@ -304,4 +313,34 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}()
 
 	return req.MakeResponse(sale)
+}
+
+func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, empresaID int32, usuarioID int32) (int32, error) {
+	clientName := strings.TrimSpace(clientInfo.Name)
+	clientRegistryNumber := strings.TrimSpace(clientInfo.Code)
+	if clientName == "" {
+		return 0, core.Err("ClientInfo.Name es obligatorio.")
+	}
+
+	clientPersonType := negocioTypes.PersonTypeNatural
+	if clientRegistryNumber != "" {
+		// Preserve the provided registry number so identity matching can reuse existing client rows.
+		clientPersonType = negocioTypes.PersonTypeCompany
+	}
+
+	clientProviders := []negocioTypes.ClientProvider{{
+		Type:           negocioTypes.ClientProviderTypeClient,
+		Name:           clientName,
+		RegistryNumber: clientRegistryNumber,
+		PersonType:     clientPersonType,
+	}}
+	saveError := negocio.SaveClientProviders(&clientProviders, empresaID, usuarioID, clientInfo.OnlyInsert)
+	if saveError != nil {
+		return 0, saveError
+	}
+	if len(clientProviders) == 0 || clientProviders[0].ID <= 0 {
+		return 0, core.Err("No se pudo resolver el ClientID de la venta.")
+	}
+
+	return clientProviders[0].ID, nil
 }

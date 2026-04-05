@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/viant/xunsafe"
@@ -382,10 +383,13 @@ func scanSelectQueryRows[E any](
 	refRecords *[]E,
 	postFilterStatements []ColumnStatement,
 	scanHandler func(record *E) bool,
+	queryNoticeTime time.Time,
 ) error {
 	usePostFilter := len(postFilterStatements) > 0
 
 	doScan := func() error {
+		fmt.Printf("Select Timing | Elapsed: %d | Query: %s\n", time.Since(queryNoticeTime).Milliseconds(), queryStr)
+
 		iter := getScyllaConnection().Query(queryStr, queryValues...).Iter()
 		rd, err := iter.RowData()
 		if err != nil {
@@ -400,8 +404,6 @@ func scanSelectQueryRows[E any](
 		}
 
 		scanner := iter.Scanner()
-		// fmt.Println("starting iterator | columns::", len(scyllaTable.columns))
-
 		for scanner.Next() {
 			rowValues := rd.Values
 			if err := scanner.Scan(rowValues...); err != nil {
@@ -486,6 +488,79 @@ func scanSelectQueryRows[E any](
 	}
 
 	return err
+}
+
+func executeBoundSelectQueries[E any](
+	recordsGetted *[]E,
+	boundStatements []BoundSelectStatement,
+	scanColumns []selectScanColumn,
+	requiresDeduplication bool,
+	scanHandler func(record *E) bool,
+	scyllaTable ScyllaTable[any],
+	queryNoticeTime time.Time,
+) error {
+	// Keep query execution shared so cached and legacy planning paths use the same scan, merge, and dedup behavior.
+	if len(boundStatements) == 0 {
+		return nil
+	}
+
+	recordsMap := map[int]*[]E{}
+	for statementIndex := range boundStatements {
+		recordsMap[statementIndex] = &[]E{}
+	}
+
+	eg := errgroup.Group{}
+	for statementIndex, boundStatement := range boundStatements {
+		records := recordsMap[statementIndex]
+		recordsTarget := records
+		if len(boundStatements) == 1 {
+			recordsTarget = recordsGetted
+		}
+
+		fmt.Println("Query::", boundStatement.QueryStr)
+		boundStatement := boundStatement
+		eg.Go(func() (err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("Panic in select goroutine: %v", r)
+				}
+			}()
+
+			return scanSelectQueryRows(
+				boundStatement.QueryStr,
+				boundStatement.QueryValues,
+				scanColumns,
+				scyllaTable,
+				recordsTarget,
+				boundStatement.PostFilterStatements,
+				scanHandler,
+				queryNoticeTime,
+			)
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+
+	if len(boundStatements) > 1 {
+		if requiresDeduplication {
+			recordsMerged := []E{}
+			for _, records := range recordsMap {
+				recordsMerged = append(recordsMerged, (*records)...)
+			}
+			*recordsGetted = append(*recordsGetted, recordsMerged...)
+			deduplicateRecordsByPrimaryKey(recordsGetted, scyllaTable)
+		} else {
+			for _, records := range recordsMap {
+				*recordsGetted = append(*recordsGetted, *records...)
+			}
+		}
+	} else if requiresDeduplication {
+		deduplicateRecordsByPrimaryKey(recordsGetted, scyllaTable)
+	}
+
+	return nil
 }
 
 func tryBuildCompositeBucketPlan(statements []ColumnStatement, scyllaTable ScyllaTable[any]) *compositeBucketQueryPlan {
@@ -629,14 +704,8 @@ func selectExec[E any](
 	tableInfo *TableInfo,
 	scyllaTable ScyllaTable[any],
 	scanHandler func(record *E) bool,
+	selectStartTime time.Time,
 ) error {
-	groupByPlan, err := buildNativeGroupByPlan(tableInfo, tableInfo.statements, scyllaTable)
-	if err != nil {
-		return err
-	}
-
-	viewTableName := scyllaTable.name
-
 	if len(scyllaTable.keyspace) == 0 {
 		scyllaTable.keyspace = connParams.Keyspace
 	}
@@ -644,465 +713,29 @@ func selectExec[E any](
 		return errors.New("no se ha especificado un keyspace")
 	}
 
-	columnNames := []string{}
-	scanColumns := []selectScanColumn{}
-	selectExpressions := []string{}
-	if groupByPlan != nil {
-		selectExpressions = append(selectExpressions, groupByPlan.SelectExpressions...)
-		scanColumns = append(scanColumns, groupByPlan.ScanColumns...)
-		for _, scanColumn := range scanColumns {
-			columnNames = append(columnNames, scanColumn.ColumnName)
-		}
-	} else if len(tableInfo.columnsInclude) > 0 {
-		for _, col := range tableInfo.columnsInclude {
-			columnNames = append(columnNames, col.GetName())
-		}
-		scanColumns = buildDefaultScanColumns(columnNames)
-		selectExpressions = append(selectExpressions, columnNames...)
-	} else {
-		columnsExclude := []string{}
-		for _, col := range tableInfo.columnsExclude {
-			columnsExclude = append(columnsExclude, col.GetName())
-		}
-		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columnsExclude, col.GetName()) && !col.GetInfo().IsVirtual {
-				columnNames = append(columnNames, col.GetName())
-			}
-		}
-		columnNames = ensureCacheVersionColumnsForSelect(columnNames, scyllaTable)
-		scanColumns = buildDefaultScanColumns(columnNames)
-		selectExpressions = append(selectExpressions, columnNames...)
-	}
-
-	queryTemplate := fmt.Sprintf("SELECT %v ", strings.Join(selectExpressions, ", ")) + "FROM %v.%v %v"
-	hashOperators := []string{"=", "IN"}
-	isHash := true
-
-	statements := []ColumnStatement{}
-	colsWhereIdx := []int16{}
-
-	for _, st := range tableInfo.statements {
-		col := scyllaTable.columnsMap[st.Col]
-
-		colsWhereIdx = append(colsWhereIdx, col.GetInfo().Idx)
-		statements = append(statements, st)
-		if isHash && !slices.Contains(hashOperators, st.Operator) {
-			isHash = false
-		}
-	}
-
-	// Between Statement
-	if len(tableInfo.between.From) > 0 {
-		statements = append(statements, tableInfo.between)
-	}
-
-	statementsSelected := []ColumnStatement{}
-	statementsRemain := []ColumnStatement{}
-	whereStatements := []string{}
-	groupByColumns := []string{}
-	orderColumn := scyllaTable.keys[0]
-	postFilterStatements := []ColumnStatement{}
-	usePostFilter := false
-	shouldDeduplicateFanoutResults := false
-
-	if groupByPlan != nil {
-		if groupByPlan.ViewTableName != "" {
-			viewTableName = groupByPlan.ViewTableName
-		}
-		if len(groupByPlan.WhereStatements) > 0 {
-			whereStatements = append(whereStatements, groupByPlan.WhereStatements...)
-		}
-		groupByColumns = append(groupByColumns, groupByPlan.GroupByColumns...)
-		if groupByPlan.OrderColumn != nil && !groupByPlan.OrderColumn.IsNil() {
-			orderColumn = groupByPlan.OrderColumn
-		}
-	}
-
-	compositePlan := tryBuildCompositeBucketPlan(statements, scyllaTable)
-	if groupByPlan != nil {
-		// Native GroupBy planning owns the source view and predicates; do not reroute it through the generic capability matcher.
-		statementsRemain = nil
-	} else if compositePlan != nil {
-		// Composite plan handles the hash+bucket part; remaining statements are applied as normal SQL predicates.
-		usePostFilter = true
-		shouldDeduplicateFanoutResults = true
-		whereStatements = compositePlan.whereStatements
-		postFilterStatements = compositePlan.filterStatements
-		for _, statement := range statements {
-			if !compositePlan.handledColumns[statement.Col] {
-				statementsRemain = append(statementsRemain, statement)
-			}
-		}
-	} else {
-		bestCap := MatchQueryCapability(statements, scyllaTable.capabilities)
-
-		if bestCap != nil {
-			fmt.Println("Best Match Signature:", bestCap.Signature)
-
-			handledCols := make(map[string]bool)
-			parts := strings.Split(bestCap.Signature, "|")
-			for i := 0; i < len(parts); i += 2 {
-				handledCols[parts[i]] = true
-			}
-
-			if bestCap.Source != nil {
-				viewOrIndex := bestCap.Source
-				fmt.Println("Selected Index/View:", viewOrIndex.name)
-				if viewOrIndex.Type >= 6 && canUseProjectedView(columnNames, viewOrIndex) {
-					viewTableName = viewOrIndex.name
-					if viewOrIndex.Type == 9 {
-						// Fan-out view tables can surface the same base row more than once; collapse them after the scan.
-						shouldDeduplicateFanoutResults = true
-					}
-					if viewOrIndex.getStatement != nil {
-						// Identify which statements match the view columns
-						for _, st := range statements {
-							if slices.Contains(viewOrIndex.columns, st.Col) {
-								statementsSelected = append(statementsSelected, st)
-							} else if len(st.From) > 0 { // BETWEEN
-								isIncluded := true
-								for _, e := range st.From {
-									if !slices.Contains(viewOrIndex.columns, e.Col) {
-										isIncluded = false
-										break
-									}
-								}
-								if isIncluded {
-									statementsSelected = append(statementsSelected, st)
-								} else {
-									statementsRemain = append(statementsRemain, st)
-								}
-							} else {
-								statementsRemain = append(statementsRemain, st)
-							}
-						}
-						orderColumn = viewOrIndex.column
-						whereStatements = viewOrIndex.getStatement(statementsSelected...)
-
-						if viewOrIndex.RequiresPostFilter {
-							// Packed indexes with DecimalSize truncation can overfetch; enforce exact semantics in memory.
-							usePostFilter = true
-							shouldDeduplicateFanoutResults = true
-							postFilterStatements = slices.Clone(statementsSelected)
-						}
-					} else {
-						// Direct index usage, no special statement generator
-						statementsRemain = statements
-					}
-				} else {
-					if viewOrIndex.Type >= 6 {
-						fmt.Printf("Planner fallback to base table: view=%s selected_columns=%v\n", viewOrIndex.name, columnNames)
-					}
-					// Fall back to the base table when the projected view cannot satisfy the requested columns.
-					statementsRemain = statements
-				}
-			} else if bestCap.IsKey {
-				// Key or KeyConcatenated logic
-				keyCol := scyllaTable.keys[0]
-				hasKeyColQuery := false
-				for _, st := range statements {
-					if st.Col == keyCol.GetName() {
-						hasKeyColQuery = true
-						break
-					}
-				}
-
-				if !hasKeyColQuery && len(scyllaTable.keyConcatenated) > 0 {
-					// Apply KeyConcatenated smart logic
-					prefixValues := []any{}
-					var rangeSt *ColumnStatement
-					handledInKeyConcat := make(map[string]bool)
-
-					for _, concatCol := range scyllaTable.keyConcatenated {
-						found := false
-						for _, st := range statements {
-							if st.Col == concatCol.GetName() {
-								if st.Operator == "=" {
-									prefixValues = append(prefixValues, st.Value)
-									handledInKeyConcat[st.Col] = true
-									found = true
-									break
-								} else if slices.Contains(rangeOperators, st.Operator) || st.Operator == "BETWEEN" {
-									rangeSt = &st
-									handledInKeyConcat[st.Col] = true
-									found = true
-									break
-								}
-							}
-						}
-						if !found || rangeSt != nil {
-							break
-						}
-					}
-
-					if len(prefixValues) > 0 || rangeSt != nil {
-						prefixStr := ""
-						if len(prefixValues) > 0 {
-							prefixStr = MakeKeyConcat(prefixValues...)
-						}
-
-						var newSt ColumnStatement
-						if rangeSt == nil {
-							val := prefixStr
-							if len(prefixValues) == len(scyllaTable.keyConcatenated) {
-								newSt = ColumnStatement{Col: keyCol.GetName(), Operator: "=", Value: val}
-							} else {
-								newSt = ColumnStatement{
-									Col:      keyCol.GetName(),
-									Operator: "BETWEEN",
-									From:     []ColumnStatement{{Col: keyCol.GetName(), Value: val + "_"}},
-									To:       []ColumnStatement{{Col: keyCol.GetName(), Value: val + "_\uffff"}},
-								}
-							}
-						} else {
-							if rangeSt.Operator == "BETWEEN" {
-								valFrom := MakeKeyConcat(append(prefixValues, rangeSt.From[0].Value)...)
-								valTo := MakeKeyConcat(append(prefixValues, rangeSt.To[0].Value)...)
-								newSt = ColumnStatement{
-									Col:      keyCol.GetName(),
-									Operator: "BETWEEN",
-									From:     []ColumnStatement{{Col: keyCol.GetName(), Value: valFrom}},
-									To:       []ColumnStatement{{Col: keyCol.GetName(), Value: valTo + "\uffff"}},
-								}
-							} else if trans, ok := smartRangeMap[rangeSt.Operator]; ok {
-								valWithRange := MakeKeyConcat(append(prefixValues, rangeSt.Value)...)
-								prefixMin, prefixMax := "", "\uffff"
-								if prefixStr != "" {
-									prefixMin = prefixStr + "_"
-									prefixMax = prefixStr + "_\uffff"
-								}
-								fromVal := trans.from(valWithRange, prefixMin, prefixMax)
-								toVal := trans.to(valWithRange, prefixMin, prefixMax)
-								newSt = ColumnStatement{Col: keyCol.GetName(), Operator: "BETWEEN"}
-								if fromVal != "" {
-									newSt.From = append(newSt.From, ColumnStatement{Col: keyCol.GetName(), Operator: ">=", Value: fromVal})
-								}
-								if toVal != "" {
-									newSt.To = append(newSt.To, ColumnStatement{Col: keyCol.GetName(), Operator: "<", Value: toVal})
-								}
-							}
-						}
-
-						// Add the new PK statement and skip handled concatenated columns
-						statementsRemain = append(statementsRemain, newSt)
-						for _, st := range statements {
-							if !handledInKeyConcat[st.Col] {
-								statementsRemain = append(statementsRemain, st)
-							}
-						}
-					} else {
-						statementsRemain = statements
-					}
-				} else if !hasKeyColQuery && len(scyllaTable.keyIntPacking) > 0 {
-					// Apply KeyIntPacking smart logic
-					prefixValues := []any{}
-					var rangeSt *ColumnStatement
-					handledInKeyPack := make(map[string]bool)
-
-					for _, packedCol := range scyllaTable.keyIntPacking {
-						colName := packedCol.GetName()
-						if colName == "autoincrement_placeholder" {
-							break
-						}
-						found := false
-						for _, st := range statements {
-							if st.Col == colName {
-								if st.Operator == "=" {
-									prefixValues = append(prefixValues, st.Value)
-									handledInKeyPack[st.Col] = true
-									found = true
-									break
-								} else if slices.Contains(rangeOperators, st.Operator) || st.Operator == "BETWEEN" {
-									rangeSt = &st
-									handledInKeyPack[st.Col] = true
-									found = true
-									break
-								}
-							}
-						}
-						if !found || rangeSt != nil {
-							break
-						}
-					}
-
-					if len(prefixValues) > 0 || rangeSt != nil {
-						// Calculation formula: packedValue = (packedValue * 10^col.decimalSize) + val
-						// We need to calculate the value and the remaining shift to place it in the correct slot
-
-						makePacked := func(vals []any, rSt *ColumnStatement) (fromVal int64, toVal int64, isEquality bool) {
-							remainingDigits := int64(19)
-							var currentPacked int64
-
-							// Process equality prefix
-							for i, col := range scyllaTable.keyIntPacking {
-								colInfo := col.(*columnInfo)
-								decSize := int64(colInfo.decimalSize)
-								if i == len(scyllaTable.keyIntPacking)-1 && decSize == 0 {
-									decSize = remainingDigits
-								}
-								remainingDigits -= decSize
-
-								if i < len(vals) {
-									val := convertToInt64(vals[i])
-									currentPacked += val * Pow10Int64(remainingDigits)
-								} else if rSt != nil && col.GetName() == rSt.Col {
-									// Handle range on current column
-									if rSt.Operator == "BETWEEN" {
-										fromVal = currentPacked + convertToInt64(rSt.From[0].Value)*Pow10Int64(remainingDigits)
-										toVal = currentPacked + (convertToInt64(rSt.To[0].Value)+1)*Pow10Int64(remainingDigits)
-									} else {
-										// Handle other range operators if needed, or fallback to simple prefix range
-										val := convertToInt64(rSt.Value)
-										fromVal = currentPacked + val*Pow10Int64(remainingDigits)
-										// For range operators like >, < we might need more complex logic,
-										// but for now let's focus on the common prefix range case.
-										toVal = fromVal + Pow10Int64(remainingDigits)
-									}
-									return fromVal, toVal, false
-								} else {
-									// End of provided values
-									fromVal = currentPacked
-									toVal = currentPacked + Pow10Int64(remainingDigits+decSize)
-									isEquality = (i == len(scyllaTable.keyIntPacking))
-									return fromVal, toVal, isEquality
-								}
-							}
-							return currentPacked, currentPacked, true
-						}
-
-						from, to, isEq := makePacked(prefixValues, rangeSt)
-
-						var newSt ColumnStatement
-						if isEq {
-							newSt = ColumnStatement{Col: keyCol.GetName(), Operator: "=", Value: from}
-						} else {
-							newSt = ColumnStatement{
-								Col:      keyCol.GetName(),
-								Operator: "BETWEEN",
-								From:     []ColumnStatement{{Col: keyCol.GetName(), Value: from}},
-								To:       []ColumnStatement{{Col: keyCol.GetName(), Value: to}},
-							}
-						}
-
-						// Add the new PK statement and skip handled packed columns
-						statementsRemain = append(statementsRemain, newSt)
-						for _, st := range statements {
-							if !handledInKeyPack[st.Col] {
-								statementsRemain = append(statementsRemain, st)
-							}
-						}
-					} else {
-						statementsRemain = statements
-					}
-				} else {
-					statementsRemain = statements
-				}
-			}
-		} else {
-			// No match found, fallback to default behavior (all remain)
-			statementsRemain = statements
-		}
-	}
-
-	if len(whereStatements) == 0 {
-		whereStatements = append(whereStatements, "")
-	}
-
-	// fmt.Println("where statements::", whereStatements)
-	whereStatementsRemain := strings.Join(buildRemainingWhereClauses(statementsRemain), " AND ")
-	queryWhereStatements := []string{}
-
-	for _, whereStatement := range whereStatements {
-		whereRemainClause := whereStatementsRemain
-		if whereStatementsRemain != "" {
-			if whereStatement != "" {
-				whereRemainClause = " AND " + whereRemainClause
-			}
-			whereStatement += whereRemainClause
-		}
-		if whereStatement != "" {
-			whereStatement = " WHERE " + whereStatement
-		}
-		if len(groupByColumns) > 0 {
-			whereStatement += " GROUP BY " + strings.Join(groupByColumns, ", ")
-		}
-		if len(tableInfo.orderBy) > 0 {
-			whereStatement += " " + fmt.Sprintf(tableInfo.orderBy, orderColumn.GetName())
-		}
-		if tableInfo.limit > 0 {
-			whereStatement += fmt.Sprintf(" LIMIT %v", tableInfo.limit)
-		}
-		// Explicitly opt into filtered queries when the handler requested it.
-		if tableInfo.allowFilter {
-			whereStatement += " ALLOW FILTERING"
-		}
-		queryWhereStatements = append(queryWhereStatements, whereStatement)
-	}
-
-	recordsMap := map[int]*[]E{}
-	for i := range queryWhereStatements {
-		recordsMap[i] = &[]E{}
-	}
-
-	eg := errgroup.Group{}
-
-	for i, whereStatement := range queryWhereStatements {
-		queryStr := fmt.Sprintf(queryTemplate, scyllaTable.keyspace, viewTableName, whereStatement)
-		records := recordsMap[i]
-		recordsTarget := records
-		if len(queryWhereStatements) == 1 {
-			recordsTarget = recordsGetted
-		}
-
-		fmt.Println("Query::", queryStr)
-		queryValues := []any{}
-		queryPostFilterStatements := []ColumnStatement{}
-		if usePostFilter {
-			queryPostFilterStatements = postFilterStatements
-		}
-
-		eg.Go(func() (err error) {
-			defer func() {
-				if r := recover(); r != nil {
-					err = fmt.Errorf("Panic in select goroutine: %v", r)
-				}
-			}()
-
-			err = scanSelectQueryRows(
-				queryStr,
-				queryValues,
-				scanColumns,
-				scyllaTable,
-				recordsTarget,
-				queryPostFilterStatements,
-				scanHandler,
-			)
-			return err
-		})
-	}
-
-	if err := eg.Wait(); err != nil {
+	compiledSelect, err := tryGetOrCompileSelectStatement(tableInfo, scyllaTable)
+	if err != nil {
 		return err
 	}
 
-	if len(queryWhereStatements) > 1 {
-		if shouldDeduplicateFanoutResults {
-			recordsMerged := []E{}
-			for _, records := range recordsMap {
-				recordsMerged = append(recordsMerged, (*records)...)
-			}
-			*recordsGetted = append(*recordsGetted, recordsMerged...)
-			deduplicateRecordsByPrimaryKey(recordsGetted, scyllaTable)
-		} else {
-			for _, records := range recordsMap {
-				(*recordsGetted) = append((*recordsGetted), *records...)
-			}
-		}
-	} else if shouldDeduplicateFanoutResults {
-		deduplicateRecordsByPrimaryKey(recordsGetted, scyllaTable)
+	boundPlan, err := compiledSelect.Compute(tableInfo, scyllaTable)
+	if err != nil {
+		return err
 	}
 
-	if len(tableInfo.groupByColumns) == 0 {
+	if err := executeBoundSelectQueries(
+		recordsGetted,
+		boundPlan.Statements,
+		boundPlan.ScanColumns,
+		boundPlan.RequiresDeduplication,
+		scanHandler,
+		scyllaTable,
+		selectStartTime,
+	); err != nil {
+		return err
+	}
+
+	if boundPlan.AssignCacheVersions {
 		if err := assignCacheVersionsAfterSelect(recordsGetted, scyllaTable); err != nil {
 			return err
 		}

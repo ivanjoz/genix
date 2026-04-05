@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gocql/gocql"
 	"github.com/viant/xunsafe"
@@ -466,7 +467,16 @@ func QueryCachedIDs[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSl
 			strings.Join(valuePlaceholders, ", "),
 		)
 
-		if err := scanSelectQueryRows(queryString, queryValues, buildDefaultScanColumns(columnNames), scyllaTable, &fetchedRecords, nil, nil); err != nil {
+		if err := scanSelectQueryRows(
+			queryString,
+			queryValues,
+			buildDefaultScanColumns(columnNames),
+			scyllaTable,
+			&fetchedRecords,
+			nil,
+			nil,
+			time.Now(),
+		); err != nil {
 			return err
 		}
 	}

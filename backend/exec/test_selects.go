@@ -18,7 +18,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
 	recordSalesOrders := []comercial.SaleOrder{}
 	q6 := db.Query(&recordSalesOrders)
-	err = q6.EmpresaID.Equals(1).
+	err = q6.CompanyID.Equals(1).
 		DetailProductsIDs.Contains(1).
 		Fecha.Between(20475, 20495). //.AllowFilter().
 		Exec()
@@ -34,7 +34,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	fmt.Println("\n--- Test 7: Range query in int packet column local index ---")
 	recordSalesOrders2 := []comercial.SaleOrder{}
 	q7 := db.Query(&recordSalesOrders2)
-	err = q7.EmpresaID.Equals(1).
+	err = q7.CompanyID.Equals(1).
 		Status.Equals(1).
 		Updated.Between(385298000, 385299000).AllowFilter().
 		Exec()

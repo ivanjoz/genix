@@ -13,15 +13,16 @@ var ModuleHandlers = core.AppRouterType{
 }
 
 var ExecHandlers = ExecRouterType{
-	"fn-init":              ConfigInit,
-	"fn-importar-ciudades": ImportCiudades,
-	"fn-exportar-ciudades": ExportCiudades,
-	"fn-backup":            DoSaveBackup,
-	"fn-homologate":        Homologate,
-	"fn-recalc":            RecalcVirtualColumnsValues,
-	"fn-recalc-stock":      RecalcStock,
-	"fn-reset-counters":    ResetCounterPart,
-	"compress-image":       CompressImage,
+	"fn-init":                 ConfigInit,
+	"fn-importar-ciudades":    ImportCiudades,
+	"fn-exportar-ciudades":    ExportCiudades,
+	"fn-backup":               DoSaveBackup,
+	"fn-homologate":           Homologate,
+	"fn-recalc":               RecalcVirtualColumnsValues,
+	"fn-recalc-stock":         RecalcStock,
+	"fn-generate-sale-orders": GenerateSampleSaleOrders,
+	"fn-reset-counters":       ResetCounterPart,
+	"compress-image":          CompressImage,
 }
 
 var ExecHandlersCron = ExecRouterType{}

@@ -4,7 +4,6 @@ import (
 	"app/core"
 	"app/db"
 	finanzasTypes "app/finanzas/types"
-	"time"
 )
 
 func ApplyCajaMovimientos(req *core.HandlerArgs, movimientos []finanzasTypes.CajaMovimientoInterno) error {
@@ -12,8 +11,8 @@ func ApplyCajaMovimientos(req *core.HandlerArgs, movimientos []finanzasTypes.Caj
 		return nil
 	}
 
-	nowTime := core.SUnixTime()
-	fechaUnix := core.TimeToFechaUnix(time.Now())
+	nowTime := req.EffectiveSUnixTime()
+	fechaUnix := req.EffectiveFechaUnix()
 
 	// Agrupar movimientos por CajaID para manejar saldos
 	cajasIDs := core.SliceSet[int32]{}
@@ -56,7 +55,7 @@ func ApplyCajaMovimientos(req *core.HandlerArgs, movimientos []finanzasTypes.Caj
 		}
 
 		record := finanzasTypes.CajaMovimiento{
-			ID:          core.SUnixTimeUUIDConcatID(m.CajaID),
+			ID:          core.SUnixTimeUUIDConcatID(m.CajaID, req.EffectiveSUnixTimeUUID()),
 			EmpresaID:   req.Usuario.EmpresaID,
 			CajaID:      m.CajaID,
 			CajaRefID:   m.CajaRefID,

@@ -11,7 +11,7 @@ func SaleOrderReprocess(companyID int32, fecha int16) {
 	sales := []types.SaleOrder{}
 	query := db.Query(&sales)
 	query.Select(query.ID, query.Status, query.Fecha, query.DetailProductsIDs, query.DetailPrices, query.DetailQuantities).
-		EmpresaID.Equals(companyID)
+		CompanyID.Equals(companyID)
 
 	if fecha > 0 {
 		query.Fecha.Equals(fecha)

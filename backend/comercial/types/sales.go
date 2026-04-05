@@ -5,9 +5,15 @@ import (
 	"app/db"
 )
 
+type SaleOrderClientInfo struct {
+	Name       string
+	Code       string
+	OnlyInsert bool
+}
+
 type SaleOrder struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
-	EmpresaID   int32 `json:",omitempty"`
+	CompanyID   int32 `json:",omitempty"`
 	Fecha       int16 `json:",omitempty"`
 	WarehouseID int32 `json:",omitempty"`
 	ID          int64
@@ -24,9 +30,10 @@ type SaleOrder struct {
 	TaxAmount      int32 `json:",omitempty"`
 	DebtAmount     int32 `json:",omitempty"`
 	DeliveryStatus int8  `json:",omitempty"`
+	ClientID       int32 `json:",omitempty"`
 	Created        int32 `json:",omitempty"`
 	Updated        int32 `json:"upd,omitempty"`
-	UpdateCounter int32 `json:"upc,omitempty"`
+	UpdateCounter  int32 `json:"upc,omitempty"`
 	UpdatedBy      int32 `json:",omitempty"`
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
 	Status      int8 `json:"ss,omitempty"`
@@ -38,10 +45,11 @@ type SaleOrder struct {
 	// If contains 3 = the delivery of the product is done
 	ActionsIncluded []int8 `json:",omitempty"`
 	// Audit trail fields for payment and delivery actions.
-	LastPaymentTime int32 `json:",omitempty"`
-	LastPaymentUser int32 `json:",omitempty"`
-	DeliveryTime    int32 `json:",omitempty"`
-	DeliveryUser    int32 `json:",omitempty"`
+	LastPaymentTime int32                `json:",omitempty"`
+	LastPaymentUser int32                `json:",omitempty"`
+	DeliveryTime    int32                `json:",omitempty"`
+	DeliveryUser    int32                `json:",omitempty"`
+	ClientInfo      *SaleOrderClientInfo `json:",omitempty"`
 }
 
 func (e *SaleOrder) AddStatus(orderState int8) error {
@@ -65,7 +73,7 @@ func (e *SaleOrder) AddStatus(orderState int8) error {
 
 type SaleOrderTable struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
-	EmpresaID                  db.Col[SaleOrderTable, int32]
+	CompanyID                  db.Col[SaleOrderTable, int32]
 	ID                         db.Col[SaleOrderTable, int64]
 	Fecha                      db.Col[SaleOrderTable, int16]
 	WarehouseID                db.Col[SaleOrderTable, int32]
@@ -79,6 +87,7 @@ type SaleOrderTable struct {
 	TaxAmount                  db.Col[SaleOrderTable, int32]
 	DebtAmount                 db.Col[SaleOrderTable, int32]
 	Created                    db.Col[SaleOrderTable, int32]
+	ClientID                   db.Col[SaleOrderTable, int32]
 	Updated                    db.Col[SaleOrderTable, int32]
 	UpdatedBy                  db.Col[SaleOrderTable, int32]
 	Status                     db.Col[SaleOrderTable, int8]
@@ -87,35 +96,48 @@ type SaleOrderTable struct {
 	DeliveryTime               db.Col[SaleOrderTable, int32]
 	DeliveryUser               db.Col[SaleOrderTable, int32]
 	StatusTrace                db.Col[SaleOrderTable, int8]
-	UpdateCounter               db.Col[SaleOrderTable, int32]
+	UpdateCounter              db.Col[SaleOrderTable, int32]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:         "sale_order",
-		Partition:    e.EmpresaID,
-		Keys:         []db.Coln{e.ID.Autoincrement(3)},
+		Name:             "sale_order",
+		Partition:        e.CompanyID,
+		Keys:             []db.Coln{e.ID.Autoincrement(2)},
 		UseUpdateCounter: e.UpdateCounter,
-		LocalIndexes: []db.Coln{e.Updated},
-		HashIndexes: [][]db.Coln{
-			{e.DetailProductsIDs, e.Fecha.CompositeBucketing(2, 6, 12, 20)},
-		},
-		GlobalIndexes: [][]db.Coln{
-			{e.Status.Int32(), e.Updated.DecimalSize(8)},
-		},
+		LocalIndexes:     []db.Coln{e.Updated},
 		ViewTables: []db.View{
-			{ 
-				Keys: []db.Coln{e.DetailProductsIDs, e.Fecha}, 
-				Cols: []db.Coln{e.Updated}, 
-				KeepPart: true, 
+			{
+				Keys:     []db.Coln{e.DetailProductsIDs, e.Fecha},
+				Cols:     []db.Coln{e.Updated},
+				KeepPart: true,
 			},
 		},
 		Views: []db.View{
 			{Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
 			{Keys: []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
-			{Keys: []db.Coln{e.Fecha, e.Updated}, KeepPart: true},
-			{Keys: []db.Coln{e.ID}, Cols: []db.Coln{e.Status, e.StatusTrace}, KeepPart: true},
 		},
+		/*
+			HashIndexes: [][]db.Coln{
+				{e.DetailProductsIDs, e.Fecha.CompositeBucketing(2, 6, 12, 20)},
+			},
+			GlobalIndexes: [][]db.Coln{
+				{e.Status.Int32(), e.Updated.DecimalSize(8)},
+			},
+			ViewTables: []db.View{
+				{
+					Keys: []db.Coln{e.DetailProductsIDs, e.Fecha},
+					Cols: []db.Coln{e.Updated},
+					KeepPart: true,
+				},
+			},
+			Views: []db.View{
+				{Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
+				{Keys: []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
+				{Keys: []db.Coln{e.Fecha, e.Updated}, KeepPart: true},
+				{Keys: []db.Coln{e.ID}, Cols: []db.Coln{e.Status, e.StatusTrace}, KeepPart: true},
+			},
+		*/
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 	"unsafe"
 )
 
@@ -61,7 +62,9 @@ type ScyllaTable[T any] struct {
 	capabilities      []QueryCapability
 	// Composite bucket metadata is used to materialize virtual hash sets and plan range+contains reads.
 	compositeBucketIndexes []compositeBucketIndex
-	_maxColIdx             int16
+	// selectStatementCache is shared across copied ScyllaTable values, so it must stay behind a pointer.
+	selectStatementCache *selectPlanCache
+	_maxColIdx           int16
 }
 
 // compositeBucketIndex stores the source columns and generated virtual bucket columns for one HashIndexes entry.
@@ -748,9 +751,10 @@ func execQuery[T TableSchemaInterface[T], E any](
 	tableInfo *TableInfo,
 	scanHandler func(record *E) bool,
 ) error {
+	selectStartTime := time.Now()
 	records := (tableInfo.refSlice).(*[]E)
 	scyllaTable := getOrCompileScyllaTable(schemaStruct)
-	return selectExec(records, tableInfo, scyllaTable, scanHandler)
+	return selectExec(records, tableInfo, scyllaTable, scanHandler, selectStartTime)
 }
 
 /* Increment Table */

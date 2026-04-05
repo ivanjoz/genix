@@ -63,8 +63,46 @@ func (e fullViewSchema) GetSchema() TableSchema {
 		Partition: e.EmpresaID,
 		Keys:      []Coln{e.ID},
 		Views: []View{
-			// No Cols means the MV keeps the full base payload via SELECT *.
+			// No Cols means the MV keeps the full base payload with an explicit non-virtual projection.
 			{Keys: []Coln{e.Status, e.Updated.DecimalSize(9)}, KeepPart: true},
+		},
+	}
+}
+
+type hashIndexedFullViewRecord struct {
+	TableStruct[hashIndexedFullViewSchema, hashIndexedFullViewRecord]
+	EmpresaID  int32   `db:"empresa_id"`
+	ID         int64   `db:"id"`
+	Status     int8    `db:"status"`
+	Updated    int32   `db:"updated"`
+	Fecha      int16   `db:"fecha"`
+	ProductIDs []int32 `db:",list"`
+	Nombre     string  `db:"nombre"`
+}
+
+type hashIndexedFullViewSchema struct {
+	TableStruct[hashIndexedFullViewSchema, hashIndexedFullViewRecord]
+	EmpresaID  Col[hashIndexedFullViewSchema, int32]
+	ID         Col[hashIndexedFullViewSchema, int64]
+	Status     Col[hashIndexedFullViewSchema, int8]
+	Updated    Col[hashIndexedFullViewSchema, int32]
+	Fecha      Col[hashIndexedFullViewSchema, int16]
+	ProductIDs Col[hashIndexedFullViewSchema, []int32]
+	Nombre     Col[hashIndexedFullViewSchema, string]
+}
+
+func (e hashIndexedFullViewSchema) GetSchema() TableSchema {
+	return TableSchema{
+		Name:      "hash_indexed_full_view_records",
+		Partition: e.EmpresaID,
+		Keys:      []Coln{e.ID},
+		HashIndexes: [][]Coln{
+			// Hash indexes add zz_hb_* generated columns on the base table.
+			{e.ProductIDs, e.Fecha.CompositeBucketing(2, 6)},
+		},
+		Views: []View{
+			// Full-payload packed view should keep only its own view key virtual column.
+			{Keys: []Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
 		},
 	}
 }
@@ -222,6 +260,37 @@ func TestVirtualViewWithoutProjectedColsKeepsFullSelectablePayload(t *testing.T)
 	for _, expectedColumn := range []string{"empresa_id", "id", "status", "updated", "nombre"} {
 		if !slices.Contains(packedView.availableColumns, expectedColumn) {
 			t.Fatalf("expected view to expose column %q, available=%v", expectedColumn, packedView.availableColumns)
+		}
+	}
+}
+
+func TestVirtualViewCreateScriptExcludesUnrelatedVirtualColumns(t *testing.T) {
+	scyllaTable := MakeScyllaTable[hashIndexedFullViewRecord, hashIndexedFullViewSchema]()
+
+	var packedView *viewInfo
+	for _, view := range scyllaTable.indexViews {
+		if view.Type == 8 {
+			packedView = view
+			break
+		}
+	}
+	if packedView == nil {
+		t.Fatal("expected a packed range view")
+	}
+
+	createScript := packedView.getCreateScript()
+	if strings.Contains(createScript, "SELECT *") {
+		t.Fatalf("expected explicit view projection, got %q", createScript)
+	}
+	if !strings.Contains(createScript, packedView.column.GetName()) {
+		t.Fatalf("expected view key virtual column %q in create script, got %q", packedView.column.GetName(), createScript)
+	}
+	if strings.Contains(createScript, "zz_hb_product_ids_fecha_b2") || strings.Contains(createScript, "zz_hb_product_ids_fecha_b6") {
+		t.Fatalf("expected unrelated hash virtual columns to be excluded, got %q", createScript)
+	}
+	for _, expectedColumn := range []string{"empresa_id", "id", "status", "updated", "fecha", "product_ids", "nombre"} {
+		if !strings.Contains(createScript, expectedColumn) {
+			t.Fatalf("expected base column %q in create script, got %q", expectedColumn, createScript)
 		}
 	}
 }

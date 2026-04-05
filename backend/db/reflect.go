@@ -146,15 +146,16 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 	}
 
 	dbTable := ScyllaTable[any]{
-		keyspace:         schema.Keyspace,
-		name:             schema.Name,
-		saveCacheVersion: schema.SaveCacheVersion,
-		columnsMap:       map[string]IColInfo{},
-		columnsIdxMap:    map[int16]IColInfo{},
-		indexes:          map[string]*viewInfo{},
-		views:            map[string]*viewInfo{},
-		useSequences:     schema.UseSequences,
-		_maxColIdx:       int16(structRefValue.NumField()) + 1,
+		keyspace:             schema.Keyspace,
+		name:                 schema.Name,
+		saveCacheVersion:     schema.SaveCacheVersion,
+		columnsMap:           map[string]IColInfo{},
+		columnsIdxMap:        map[int16]IColInfo{},
+		indexes:              map[string]*viewInfo{},
+		views:                map[string]*viewInfo{},
+		selectStatementCache: newSelectPlanCache(),
+		useSequences:         schema.UseSequences,
+		_maxColIdx:           int16(structRefValue.NumField()) + 1,
 	}
 
 	if dbTable.keyspace == "" {
@@ -451,11 +452,11 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 					IsVirtual: true,
 					Idx:       dbTable._maxColIdx,
 				},
-				// Keep generated hash collections as list<int> to match existing deployed zz_hb_* columns.
+				// Hash bucket indexes rely on set membership semantics for VALUES(col) lookups.
 				colType: colType{
 					Type:      13,
 					FieldType: "[]int32",
-					ColType:   "list<int>",
+					ColType:   "set<int>",
 					IsSlice:   true,
 				},
 			}
@@ -799,6 +800,17 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 				}
 			}
 			return append(target, column)
+		}
+		orderColumnsBySchemaIndex := func(columns []IColInfo) []IColInfo {
+			// Keep generated SELECT lists deterministic so DDL diffs only reflect real schema changes.
+			orderedColumns := slices.Clone(columns)
+			slices.SortFunc(orderedColumns, func(leftColumn, rightColumn IColInfo) int {
+				if idxDiff := int(leftColumn.GetInfo().Idx - rightColumn.GetInfo().Idx); idxDiff != 0 {
+					return idxDiff
+				}
+				return strings.Compare(leftColumn.GetName(), rightColumn.GetName())
+			})
+			return orderedColumns
 		}
 
 		colNames := []string{}
@@ -1259,8 +1271,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 		selectableColumns := []IColInfo{}
 		if len(projectedColumns) == 0 {
-			// Views without explicit Cols are emitted as SELECT * materialized views.
-			// Expose every real base column so the planner can reuse the MV for full-record reads.
+			// Views without explicit Cols keep the full real payload, but exclude unrelated virtual columns.
 			for _, baseColumn := range dbTable.columnsMap {
 				if baseColumn.GetInfo().IsVirtual {
 					continue
@@ -1351,6 +1362,21 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 					projectedColumnNames = append(projectedColumnNames, projectedColumn.GetName())
 				}
 				selectClause = strings.Join(projectedColumnNames, ", ")
+			} else {
+				selectColumns := slices.Clone(selectableColumns)
+				for _, whereColumn := range whereCols {
+					// Full-payload views must include their own virtual key column, but never unrelated virtual columns.
+					if whereColumn != nil && !whereColumn.IsNil() && whereColumn.GetInfo().IsVirtual {
+						selectColumns = appendUniqueColumn(selectColumns, whereColumn)
+					}
+				}
+				selectColumns = orderColumnsBySchemaIndex(selectColumns)
+
+				selectColumnNames := make([]string, 0, len(selectColumns))
+				for _, selectColumn := range selectColumns {
+					selectColumnNames = append(selectColumnNames, selectColumn.GetName())
+				}
+				selectClause = strings.Join(selectColumnNames, ", ")
 			}
 
 			query := fmt.Sprintf(`CREATE MATERIALIZED VIEW %v.%v AS
