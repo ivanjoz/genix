@@ -4,6 +4,8 @@ import (
 	"app/comercial/types"
 	"app/core"
 	"app/db"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // GetSaleOrders returns sales orders for the authenticated company.
@@ -14,50 +16,94 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 	orderStatus := req.GetQueryInt("order-status")
 
 	sales := []types.SaleOrder{}
+	statusTracesToQuery := []int8{}
+	statusTracesCompletedToQuery := []int8{}
+
+	if orderPendingStatus > 0 {
+		statusTracesToQuery = GetSaleOrderStatusTracesByPendingStatus(int8(orderPendingStatus))
+		statusTracesCompletedToQuery = []int8{SaleOrderTraceStage3GeneratedDeliveredPaid}
+		if orderPendingStatus == 2 {
+			statusTracesCompletedToQuery = append(statusTracesCompletedToQuery, SaleOrderTraceStage2CompletedFromGeneratedDelivered)
+		} else if orderPendingStatus == 3 {
+			statusTracesCompletedToQuery = append(statusTracesCompletedToQuery, SaleOrderTraceStage2CompletedFromGeneratedPaid)
+		}
+	} else if orderStatus > 0 {
+		statusTracesToQuery = GetSaleOrderStatusTracesByOrderStatus(int8(orderStatus))
+	}
 
 	// Get the delta data
 	if updated > 0 {
-		query := db.Query(&sales).EmpresaID.Equals(req.Usuario.EmpresaID)
-
-		if orderPendingStatus == 2 { // Pending payment
-			query.OrderPendingPaymentUpdated.GreaterEqual(updated)
-		} else if orderPendingStatus == 3 { // Pending delivery
-			query.OrderPendingDeliveryUpdated.GreaterEqual(updated)
-		} else { // Finished
-			query.OrderCompletedUpdated.GreaterEqual(updated)
-		}
-
-		if err := query.AllowFilter().Exec(); err != nil {
-			core.Log("Error querying sale orders:", err)
+		// Delta sync for pending views must include completed traces too so the frontend can
+		// evict rows that left the pending group after the last sync.
+		pendingSales, err := getSaleOrdersByStatusTraces(req.Usuario.EmpresaID, statusTracesToQuery, updated)
+		if err != nil {
+			core.Log("Error querying pending sale orders:", err)
 			return req.MakeErr("Error al obtener las órdenes de venta.")
 		}
+		sales = append(sales, pendingSales...)
+
+		completedSales, err := getSaleOrdersByStatusTraces(req.Usuario.EmpresaID, statusTracesCompletedToQuery, updated)
+		if err != nil {
+			core.Log("Error querying completed sale orders:", err)
+			return req.MakeErr("Error al obtener las órdenes de venta.")
+		}
+		sales = append(sales, completedSales...)
+
+		salesByID := map[int64]*types.SaleOrder{}
+		for i := range sales {
+			sale := &sales[i]
+			salesByID[sale.ID] = sale
+		}
+		sales = core.MapToSlice(salesByID)
 
 		// Get the full data
 	} else {
-		orderStatusToQuery := []int8{}
-
-		if orderStatus > 0 {
-			orderStatusToQuery = []int8{int8(orderStatus)}
-		} else if orderPendingStatus > 0 {
-			orderStatusNotCompleted := []int8{1, 2, 3}
-
-			for _, id := range orderStatusNotCompleted {
-				if id != int8(orderPendingStatus) {
-					orderStatusToQuery = append(orderStatusToQuery, id)
-				}
-			}
+		filteredSales, err := getSaleOrdersByStatusTraces(req.Usuario.EmpresaID, statusTracesToQuery, 0)
+		if err != nil {
+			core.Log("Error querying sale orders:", err)
+			return req.MakeErr("Error al obtener las órdenes de venta.")
 		}
-
-		for _, status := range orderStatusToQuery {
-			query := db.Query(&sales)
-			query.EmpresaID.Equals(req.Usuario.EmpresaID).Status.Equals(status)
-
-			if err := query.AllowFilter().Exec(); err != nil {
-				core.Log("Error querying sale orders:", err)
-				return req.MakeErr("Error al obtener las órdenes de venta.")
-			}
-		}
+		sales = filteredSales
 	}
 
 	return req.MakeResponse(sales)
+}
+
+func getSaleOrdersByStatusTraces(companyID int32, statusTraces []int8, updated int32) ([]types.SaleOrder, error) {
+	if len(statusTraces) == 0 {
+		return nil, nil
+	}
+
+	queryResults := make([][]types.SaleOrder, len(statusTraces))
+	queryGroup := errgroup.Group{}
+
+	for traceIndex, statusTrace := range statusTraces {
+		queryGroup.Go(func() error {
+			traceSales := []types.SaleOrder{}
+			query := db.Query(&traceSales)
+			query.EmpresaID.Equals(companyID).StatusTrace.Equals(statusTrace)
+
+			// Delta mode only needs rows updated since the last client sync.
+			if updated > 0 {
+				query.Updated.GreaterEqual(updated)
+			}
+
+			if err := query.Exec(); err != nil {
+				return err
+			}
+
+			queryResults[traceIndex] = traceSales
+			return nil
+		})
+	}
+
+	if err := queryGroup.Wait(); err != nil {
+		return nil, err
+	}
+
+	mergedSales := []types.SaleOrder{}
+	for _, traceSales := range queryResults {
+		mergedSales = append(mergedSales, traceSales...)
+	}
+	return mergedSales, nil
 }

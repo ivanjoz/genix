@@ -7,10 +7,10 @@ import (
 
 type SaleOrder struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
-	EmpresaID int32 `json:",omitempty"`
-	Fecha     int16 `json:",omitempty"`
+	EmpresaID   int32 `json:",omitempty"`
+	Fecha       int16 `json:",omitempty"`
 	WarehouseID int32 `json:",omitempty"`
-	ID        int64
+	ID          int64
 
 	//Table: Following slices must be same size
 	DetailProductsIDs          []int32  `json:",omitempty" db:",list"`
@@ -28,18 +28,14 @@ type SaleOrder struct {
 	Updated        int32 `json:"upd,omitempty"`
 	UpdatedBy      int32 `json:",omitempty"`
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
-	Status int8 `json:"ss,omitempty"`
-
+	Status      int8 `json:"ss,omitempty"`
+	StatusTrace int8 `json:",omitempty"`
 	// Last payment caja used for payment action tracking.
 	// Keep db column mapped to legacy `caja_id_` to avoid data migration breaks.
 	LastPaymentCajaID int32 `json:",omitempty" db:"caja_id_"`
 	// If contains 2 = the payment is done
 	// If contains 3 = the delivery of the product is done
 	ActionsIncluded []int8 `json:",omitempty"`
-	// This fields are used for fast filtering the last pending orders
-	OrderPendingPaymentUpdated  int32 `json:",omitempty"`
-	OrderPendingDeliveryUpdated int32 `json:",omitempty"`
-	OrderCompletedUpdated       int32 `json:",omitempty"`
 	// Audit trail fields for payment and delivery actions.
 	LastPaymentTime int32 `json:",omitempty"`
 	LastPaymentUser int32 `json:",omitempty"`
@@ -48,7 +44,6 @@ type SaleOrder struct {
 }
 
 func (e *SaleOrder) AddStatus(orderState int8) error {
-	updated := core.SUnixTime()
 	if orderState == 2 {
 		if e.Status == 1 || e.Status == 3 {
 			e.Status += 1
@@ -64,47 +59,33 @@ func (e *SaleOrder) AddStatus(orderState int8) error {
 			return core.Err("Error: No se puede agregar el estado Entregado a ", e.Status)
 		}
 	}
-
-	if e.OrderPendingPaymentUpdated > 0 && e.OrderPendingPaymentUpdated != updated {
-		e.OrderPendingPaymentUpdated = updated
-	}
-
-	if e.OrderPendingDeliveryUpdated > 0 && e.OrderPendingDeliveryUpdated != updated {
-		e.OrderPendingDeliveryUpdated = updated
-	}
-
-	if e.Status == 4 {
-		e.OrderCompletedUpdated = updated
-	}
 	return nil
 }
 
 type SaleOrderTable struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
-	EmpresaID                   db.Col[SaleOrderTable, int32]
-	ID                          db.Col[SaleOrderTable, int64]
-	Fecha                       db.Col[SaleOrderTable, int16]
-	WarehouseID                   db.Col[SaleOrderTable, int32]
-	LastPaymentCajaID           db.Col[SaleOrderTable, int32]
-	DetailProductsIDs           db.Col[SaleOrderTable, []int32]
-	DetailPrices                db.Col[SaleOrderTable, []int32]
-	DetailQuantities            db.Col[SaleOrderTable, []int32]
-	DetailProductSkus           db.Col[SaleOrderTable, []string]
-	DetailProductPresentations  db.Col[SaleOrderTable, []int16]
-	TotalAmount                 db.Col[SaleOrderTable, int32]
-	TaxAmount                   db.Col[SaleOrderTable, int32]
-	DebtAmount                  db.Col[SaleOrderTable, int32]
-	Created                     db.Col[SaleOrderTable, int32]
-	Updated                     db.Col[SaleOrderTable, int32]
-	UpdatedBy                   db.Col[SaleOrderTable, int32]
-	Status                      db.Col[SaleOrderTable, int8]
-	OrderPendingPaymentUpdated  db.Col[SaleOrderTable, int32]
-	OrderPendingDeliveryUpdated db.Col[SaleOrderTable, int32]
-	OrderCompletedUpdated       db.Col[SaleOrderTable, int32]
-	LastPaymentTime             db.Col[SaleOrderTable, int32]
-	LastPaymentUser             db.Col[SaleOrderTable, int32]
-	DeliveryTime                db.Col[SaleOrderTable, int32]
-	DeliveryUser                db.Col[SaleOrderTable, int32]
+	EmpresaID                  db.Col[SaleOrderTable, int32]
+	ID                         db.Col[SaleOrderTable, int64]
+	Fecha                      db.Col[SaleOrderTable, int16]
+	WarehouseID                db.Col[SaleOrderTable, int32]
+	LastPaymentCajaID          db.Col[SaleOrderTable, int32]
+	DetailProductsIDs          db.Col[SaleOrderTable, []int32]
+	DetailPrices               db.Col[SaleOrderTable, []int32]
+	DetailQuantities           db.Col[SaleOrderTable, []int32]
+	DetailProductSkus          db.Col[SaleOrderTable, []string]
+	DetailProductPresentations db.Col[SaleOrderTable, []int16]
+	TotalAmount                db.Col[SaleOrderTable, int32]
+	TaxAmount                  db.Col[SaleOrderTable, int32]
+	DebtAmount                 db.Col[SaleOrderTable, int32]
+	Created                    db.Col[SaleOrderTable, int32]
+	Updated                    db.Col[SaleOrderTable, int32]
+	UpdatedBy                  db.Col[SaleOrderTable, int32]
+	Status                     db.Col[SaleOrderTable, int8]
+	LastPaymentTime            db.Col[SaleOrderTable, int32]
+	LastPaymentUser            db.Col[SaleOrderTable, int32]
+	DeliveryTime               db.Col[SaleOrderTable, int32]
+	DeliveryUser               db.Col[SaleOrderTable, int32]
+	StatusTrace                db.Col[SaleOrderTable, int8]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
@@ -116,16 +97,14 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		HashIndexes: [][]db.Coln{
 			{e.DetailProductsIDs, e.Fecha.CompositeBucketing(2, 6, 12, 20)},
 		},
-		Indexes: [][]db.Coln{
-			{e.OrderPendingPaymentUpdated},
-			{e.OrderPendingDeliveryUpdated},
-			{e.OrderCompletedUpdated},
-		},
 		GlobalIndexes: [][]db.Coln{
 			{e.Status.Int32(), e.Updated.DecimalSize(8)},
 		},
 		Views: []db.View{
+			{Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
+			{Keys: []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
 			{Keys: []db.Coln{e.Fecha, e.Updated}, KeepPart: true},
+			{Keys: []db.Coln{e.ID}, Cols: []db.Coln{e.Status, e.StatusTrace}, KeepPart: true},
 		},
 	}
 }

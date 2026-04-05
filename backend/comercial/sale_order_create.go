@@ -38,6 +38,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	sale := saleRequest
+	previousStatusTrace := int8(0)
 
 	if isUpdate {
 		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
@@ -52,6 +53,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		sale = existingSales[0]
+		previousStatusTrace = sale.StatusTrace
 		sale.ActionsIncluded = saleRequest.ActionsIncluded
 		// Preserve existing payment caja on delivery-only updates (payload may omit LastPaymentCajaID).
 		if saleRequest.LastPaymentCajaID > 0 {
@@ -82,7 +84,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	if !isUpdate || slices.Contains(sale.ActionsIncluded, 3) {
 		stockSolicitadoPorID := map[string]int32{}
-			
+
 		// Agrupa por stock real para validar una sola vez por combinacion almacen-producto-presentacion-sku-lote.
 		for index, productID := range sale.DetailProductsIDs {
 			stockID := db.MakeKeyConcat(
@@ -97,9 +99,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 		if len(stockSolicitadoPorID) > 0 {
 			productsCurrentStock := []logisticaTypes.ProductStock{}
-			
+
 			query := db.Query(&productsCurrentStock)
-			err := query.Select(query.ID, query.Quantity,	query.Status).
+			err := query.Select(query.ID, query.Quantity, query.Status).
 				CompanyID.Equals(req.Usuario.EmpresaID).
 				ID.In(core.MapToKeys(stockSolicitadoPorID)...).
 				Exec()
@@ -108,18 +110,18 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				return req.MakeErr("Error al obtener el stock de productos:", err)
 			}
 
-			currentStockByID := core.SliceToMapE(productsCurrentStock, 
+			currentStockByID := core.SliceToMapE(productsCurrentStock,
 				func(e logisticaTypes.ProductStock) string { return e.ID })
 
 			for stockID, cantidadSolicitada := range stockSolicitadoPorID {
 				stockActual := currentStockByID[stockID]
 				if stockActual.Quantity < cantidadSolicitada {
-					keyParser := db.KeyParser{ Key: stockID }
+					keyParser := db.KeyParser{Key: stockID}
 					metadata := []string{
 						fmt.Sprintf(`Almacén: %v`, keyParser.GetNumber(0)),
 						fmt.Sprintf(`Producto: %v`, keyParser.GetNumber(1)),
 					}
-					
+
 					if keyParser.GetNumber(2) > 0 {
 						metadata = append(metadata, fmt.Sprintf(`Presentación: %v`, keyParser.GetNumber(2)))
 					}
@@ -129,8 +131,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 					if keyParser.GetString(4) != "" {
 						metadata = append(metadata, fmt.Sprintf(`Lote: %v`, keyParser.GetString(3)))
 					}
-					
-					return req.MakeErr(strings.Join(metadata, " | ")+". ",fmt.Sprintf(`Se necesita %v. Se posee en stock: %v`,cantidadSolicitada, stockActual.Quantity))
+
+					return req.MakeErr(strings.Join(metadata, " | ")+". ", fmt.Sprintf(`Se necesita %v. Se posee en stock: %v`, cantidadSolicitada, stockActual.Quantity))
 				}
 			}
 
@@ -151,8 +153,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		if sale.LastPaymentCajaID == 0 {
 			return req.MakeErr("Se requiere LastPaymentCajaID para procesar el pago.")
 		}
-	} else if !isUpdate {
-		sale.OrderPendingPaymentUpdated = sale.Updated
 	}
 
 	// 3 = Entrega (Movimiento de Almacén)
@@ -170,14 +170,14 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		// Revisa si hay stock necesario
-
-	} else if !isUpdate {
-		sale.OrderPendingDeliveryUpdated = sale.Updated
 	}
 
-	if sale.Status == 4 {
-		sale.OrderCompletedUpdated = sale.Updated
+	// Keep the compact 1..9 trace synchronized with the executed action flow.
+	nextStatusTrace, err := CalculateSaleOrderStatusTrace(previousStatusTrace, sale.ActionsIncluded)
+	if err != nil {
+		return req.MakeErr("No se pudo calcular el StatusTrace de la venta:", err)
 	}
+	sale.StatusTrace = nextStatusTrace
 
 	saleActions := []int8{}
 	if !isUpdate {
@@ -235,9 +235,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			if cantidad == 0 {
 				continue
 			}
-			
+
 			movimientosInternos = append(movimientosInternos, logisticaTypes.MovimientoInterno{
-				WarehouseID:      sale.WarehouseID,
+				WarehouseID:    sale.WarehouseID,
 				ProductoID:     productoID,
 				PresentacionID: core.GetIndex(sale.DetailProductPresentations, i),
 				SKU:            core.GetIndex(sale.DetailProductSkus, i),
@@ -279,9 +279,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			saleTable.Updated,
 			saleTable.UpdatedBy,
 			saleTable.Status,
-			saleTable.OrderPendingPaymentUpdated,
-			saleTable.OrderPendingDeliveryUpdated,
-			saleTable.OrderCompletedUpdated,
+			saleTable.StatusTrace,
 			saleTable.LastPaymentTime,
 			saleTable.LastPaymentUser,
 			saleTable.DeliveryTime,
@@ -291,15 +289,15 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("Error al actualizar la venta:", err)
 		}
 	}
-	
-	go func() {		
+
+	go func() {
 		core.ScheduleCronAction(core.CronAction{
 			CompanyID: req.Usuario.EmpresaID,
-			ActionID: 2, 
+			ActionID:  2,
 			// Keep the cron payload compact: company and fecha are the only inputs the reprocess action needs.
 			Params: core.ExecArgs{Param1: int64(req.Usuario.EmpresaID), Param2: int64(sale.Fecha)},
-		},10)
-		
+		}, 10)
+
 		if err := updateSaleSummaryForChange(sale, saleActions...); err != nil {
 			core.Log("Error actualizando resumen de ventas:", err)
 		}
