@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unsafe"
 
 	"github.com/gocql/gocql"
 	"github.com/viant/xunsafe"
@@ -191,12 +192,11 @@ func MakeInsertStatement[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	for i := range *records {
 		rec := &(*records)[i]
 		ptr := xunsafe.AsPointer(rec)
-		// fmt.Println("Type:", reflect.TypeOf(rec).String())
 
 		recordInsertValues := []string{}
 
 		for _, col := range columns {
-			value := col.GetValue(ptr)
+			value := getNormalizedWriteLiteral(col, ptr)
 			recordInsertValues = append(recordInsertValues, fmt.Sprintf("%v", value))
 		}
 
@@ -208,6 +208,40 @@ func MakeInsertStatement[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 
 func Table[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() *E {
 	return initStructTable[E, T](new(E))
+}
+
+func normalizeEmptyStringWriteValue(value any) any {
+	// Rationale: Scylla should persist empty strings as NULL on write operations to keep storage semantics consistent.
+	switch typedValue := value.(type) {
+	case string:
+		if typedValue == "" {
+			return nil
+		}
+	case *string:
+		if typedValue == nil || *typedValue == "" {
+			return nil
+		}
+	}
+
+	return value
+}
+
+func normalizeEmptyStringWriteLiteral(value any) any {
+	// Rationale: UPDATE/statement helpers use raw CQL literals, so NULL must be emitted as the keyword instead of a Go nil.
+	if normalizedValue := normalizeEmptyStringWriteValue(value); normalizedValue == nil {
+		return "null"
+	}
+
+	return value
+}
+
+func getNormalizedWriteLiteral(column IColInfo, ptr unsafe.Pointer) any {
+	// Rationale: direct CQL builders quote strings early, so empty-string detection must inspect the raw field value first.
+	if normalizedValue := normalizeEmptyStringWriteLiteral(column.GetRawValue(ptr)); normalizedValue == "null" {
+		return normalizedValue
+	}
+
+	return column.GetValue(ptr)
 }
 
 func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
@@ -253,6 +287,7 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 			if value == nil {
 				value = col.GetValue(ptr)
 			}
+			value = normalizeEmptyStringWriteValue(value)
 			values = append(values, value)
 		}
 
@@ -452,7 +487,7 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 
 		setStatements := []string{}
 		for _, col := range columnsToUpdate {
-			v := col.GetValue(ptr)
+			v := getNormalizedWriteLiteral(col, ptr)
 			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, col.GetName(), v))
 		}
 

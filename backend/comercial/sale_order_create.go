@@ -9,7 +9,9 @@ import (
 	"app/logistica"
 	logisticaTypes "app/logistica/types"
 	"encoding/json"
+	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -36,8 +38,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	sale := saleRequest
-	stockSolicitadoPorID := map[string]int32{}
-	stockActualPorID := map[string]*logisticaTypes.ProductStock{}
+
 	if isUpdate {
 		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
 		existingSales := []types.SaleOrder{}
@@ -80,6 +81,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if !isUpdate || slices.Contains(sale.ActionsIncluded, 3) {
+		stockSolicitadoPorID := map[string]int32{}
+			
 		// Agrupa por stock real para validar una sola vez por combinacion almacen-producto-presentacion-sku-lote.
 		for index, productID := range sale.DetailProductsIDs {
 			stockID := db.MakeKeyConcat(
@@ -93,14 +96,10 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		if len(stockSolicitadoPorID) > 0 {
-			productosStock := []logisticaTypes.ProductStock{}
-			query := db.Query(&productosStock)
-			err := query.Select(
-				query.ID,
-				query.Cantidad,
-				query.CostoUn,
-				query.Status,
-			).
+			productsCurrentStock := []logisticaTypes.ProductStock{}
+			
+			query := db.Query(&productsCurrentStock)
+			err := query.Select(query.ID, query.Quantity,	query.Status).
 				CompanyID.Equals(req.Usuario.EmpresaID).
 				ID.In(core.MapToKeys(stockSolicitadoPorID)...).
 				Exec()
@@ -109,22 +108,33 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				return req.MakeErr("Error al obtener el stock de productos:", err)
 			}
 
-			for index := range productosStock {
-				stockActualPorID[productosStock[index].ID] = &productosStock[index]
-			}
+			currentStockByID := core.SliceToMapE(productsCurrentStock, 
+				func(e logisticaTypes.ProductStock) string { return e.ID })
 
 			for stockID, cantidadSolicitada := range stockSolicitadoPorID {
-				stockActual := stockActualPorID[stockID]
-				cantidadDisponible := int32(0)
-				if stockActual != nil && stockActual.Status == 1 {
-					cantidadDisponible = stockActual.Cantidad
-				}
-				if cantidadDisponible < cantidadSolicitada {
-					return req.MakeErr("No hay stock suficiente para completar la venta.")
+				stockActual := currentStockByID[stockID]
+				if stockActual.Quantity < cantidadSolicitada {
+					keyParser := db.KeyParser{ Key: stockID }
+					metadata := []string{
+						fmt.Sprintf(`Almacén: %v`, keyParser.GetNumber(0)),
+						fmt.Sprintf(`Producto: %v`, keyParser.GetNumber(1)),
+					}
+					
+					if keyParser.GetNumber(2) > 0 {
+						metadata = append(metadata, fmt.Sprintf(`Presentación: %v`, keyParser.GetNumber(2)))
+					}
+					if keyParser.GetString(3) != "" {
+						metadata = append(metadata, fmt.Sprintf(`Sku: %v`, keyParser.GetString(3)))
+					}
+					if keyParser.GetString(4) != "" {
+						metadata = append(metadata, fmt.Sprintf(`Lote: %v`, keyParser.GetString(3)))
+					}
+					
+					return req.MakeErr(strings.Join(metadata, " | ")+". ",fmt.Sprintf(`Se necesita %v. Se posee en stock: %v`,cantidadSolicitada, stockActual.Quantity))
 				}
 			}
 
-			core.Log("PostSaleOrder stock validado. Items:", len(stockSolicitadoPorID), "Stocks encontrados:", len(stockActualPorID))
+			core.Log("PostSaleOrder stock validado. Items:", len(stockSolicitadoPorID), "Stocks encontrados:", len(currentStockByID))
 		}
 	}
 
@@ -225,15 +235,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			if cantidad == 0 {
 				continue
 			}
-
-			stockID := db.MakeKeyConcat(
-				sale.WarehouseID,
-				productoID,
-				core.GetIndex(sale.DetailProductPresentations, i),
-				core.GetIndex(sale.DetailProductSkus, i),
-				core.GetIndex(sale.DetailProductLots, i),
-			)
-
+			
 			movimientosInternos = append(movimientosInternos, logisticaTypes.MovimientoInterno{
 				WarehouseID:      sale.WarehouseID,
 				ProductoID:     productoID,
@@ -243,7 +245,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				DocumentID:     sale.ID,
 				Tipo:           8,         // Entrega a cliente final (Venta)
 				Cantidad:       -cantidad, // Salida de almacén
-				Stock:          stockActualPorID[stockID],
 			})
 		}
 

@@ -88,7 +88,7 @@ export class SaleOrderState {
         const skuAdded = currentSkus.get(sku)
 
         if(skuAdded){
-          const stockCant = e.skus?.find(x => x.SKU === sku)?.Cantidad || 0
+          const stockCant = e.skus?.find(x => x.SKU === sku)?.Quantity || 0
           if((skuAdded + 1) > stockCant){
             this.ventaErrorMessage = `El SKU ${sku} del producto "${e.producto?.Nombre}" sólo posee ${stockCant} unidad(es).`
             return

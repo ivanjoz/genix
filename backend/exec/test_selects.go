@@ -64,7 +64,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	q2 := db.Query(&productos2)
 	err = q2.CompanyID.Equals(1).
 		WarehouseID.Equals(1).
-		ProductoID.GreaterEqual(8).
+		ProductID.GreaterEqual(8).
 		Limit(5).Exec()
 
 	if err != nil {
@@ -146,7 +146,7 @@ func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 		CompanyID.Equals(1).
 		Fecha.GreaterEqual(1827)
 
-	if err := query.GroupBy(query.Fecha, query.ProductoID, query.Tipo, query.Cantidad.Sum()).Exec(); err != nil {
+	if err := query.GroupBy(query.Fecha, query.ProductoID, query.Tipo, query.Quantity.Sum()).Exec(); err != nil {
 		panic(err)
 	}
 	

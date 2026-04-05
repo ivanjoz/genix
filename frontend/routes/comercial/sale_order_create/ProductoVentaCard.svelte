@@ -70,7 +70,7 @@ import { formatN } from '$libs/helpers';
     // Filter out SKUs that are fully in cart (no stock left)
     skus = skus.filter(s => {
         const inCart = ventaProducto?.skus?.get(s.SKU as string) || 0
-        return (s.Cantidad - inCart) > 0
+        return (s.Quantity - inCart) > 0
     })
 
     return skus.slice(0, 5)

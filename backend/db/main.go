@@ -333,14 +333,13 @@ func (e *TableStruct[T, E]) GetRefSchema() *T {
 }
 
 func (e *TableStruct[T, E]) Exec() error {
-	return execQuery[T, E](e.schemaStruct, e.tableInfo, nil, nil)
+	return execQuery[T, E](e.schemaStruct, e.tableInfo, nil)
 }
 
-func (e *TableStruct[T, E]) ExecGroup(
-	getKey func(record *E) string,
-	groupHandler func(newRecord *E, groupedRecord *E),
+func (e *TableStruct[T, E]) ExecScan(
+	scanHandler func(record *E) bool,
 ) error {
-	return execQuery[T, E](e.schemaStruct, e.tableInfo, getKey, groupHandler)
+	return execQuery[T, E](e.schemaStruct, e.tableInfo, scanHandler)
 }
 
 func (e *TableStruct[T, E]) AllowFilter() *T {
@@ -713,16 +712,15 @@ func makeQueryStatement(statements []string) string {
 	return queryStr
 }
 
-// execQuery executes a query based on TableInfo and optionally groups decoded records before returning.
+// execQuery executes a query based on TableInfo and optionally lets callers skip storing decoded rows.
 func execQuery[T TableSchemaInterface[T], E any](
 	schemaStruct *T,
 	tableInfo *TableInfo,
-	getKey func(record *E) string,
-	groupHandler func(newRecord *E, groupedRecord *E),
+	scanHandler func(record *E) bool,
 ) error {
 	records := (tableInfo.refSlice).(*[]E)
 	scyllaTable := getOrCompileScyllaTable(schemaStruct)
-	return selectExec(records, tableInfo, scyllaTable, getKey, groupHandler)
+	return selectExec(records, tableInfo, scyllaTable, scanHandler)
 }
 
 /* Increment Table */

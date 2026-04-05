@@ -5,10 +5,10 @@ export interface IProductoStock {
   ID: string
   SKU?: string
   WarehouseID: number
-  ProductoID: number
-  PresentacionID: number
-  Cantidad: number
-  SubCantidad: number
+  ProductID: number
+  PresentationID: number
+  Quantity: number
+  SubQuantity: number
   Lote?: string
   CostoUn?: number
   _cantidadPrev?: number

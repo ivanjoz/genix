@@ -86,6 +86,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
   async function loadStock(almacenID: number) {
     Loading.standard("Cargando stock...");
     productosStock = await getProductosStock(almacenID);
+    console.log("productosStock:", productosStock)
     parseProductos();
     Loading.remove();
   }
@@ -95,9 +96,9 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
 
     const productoToStockMap = new Map<number, IProductoStock[]>();
     for (const s of productosStock) {
-      const list = productoToStockMap.get(s.ProductoID) || [];
+      const list = productoToStockMap.get(s.ProductID) || [];
       list.push(s);
-      productoToStockMap.set(s.ProductoID, list);
+      productoToStockMap.set(s.ProductID, list);
     }
 
     const newProductos: ProductoVenta[] = [];
@@ -125,7 +126,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
       // SKU entries
       if (skusStock.length > 0) {
         const clone = { ...base, skus: skusStock, key: `K${producto.ID}` };
-        for (const e of skusStock) clone.cant += e.Cantidad;
+        for (const e of skusStock) clone.cant += e.Quantity;
         newProductos.push(clone);
       }
 
@@ -144,7 +145,7 @@ import { EmpresaParametrosService } from '../../configuracion/parametros/empresa
           // Legacy logic sets cant to `SbnCantidad`. Let's stick to it.
         }
 
-        for (const e of mainStock) base.cant += e.Cantidad;
+        for (const e of mainStock) base.cant += e.Quantity;
         newProductos.push(base);
 
         if (clone) newProductos.push(clone);

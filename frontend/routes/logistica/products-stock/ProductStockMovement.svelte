@@ -15,19 +15,19 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
   const almacenes = new AlmacenesService()
   const productos = new ProductosService()
 
-  let stockFilters = $state({ almacenID: 0, showTodosProductos: false })
+  let stockFilters = $state({ warehouseID: 0, showTodosProductos: false })
   let stockFilterText = $state('')
   let almacenStock = $state([] as IProductoStock[])
   let almacenStockGetted = [] as IProductoStock[]
   let stockForm = $state({} as IProductoStock)
 
-  const stockFormProducto = $derived(productos?.recordsMap?.get(stockForm.ProductoID || 0))
+  const stockFormProducto = $derived(productos?.recordsMap?.get(stockForm.ProductID || 0))
 
   const stockColumns: ITableColumn<IProductoStock>[] = [
     { header: 'Producto', highlight: true,
       getValue: (productStockRecord) => {
-        const productRecord = productos.recordsMap.get(productStockRecord.ProductoID)?.Nombre
-        return productRecord || `Producto-${productStockRecord.ProductoID}`
+        const productRecord = productos.recordsMap.get(productStockRecord.ProductID)?.Nombre
+        return productRecord || `Producto-${productStockRecord.ProductID}`
       }
     },
     { header: 'Lote',
@@ -38,29 +38,29 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
     },
     { header: 'Presentación',
       getValue: (productStockRecord) => {
-        if (!productStockRecord.PresentacionID) { return '' }
-        const productRecord = productos.recordsMap.get(productStockRecord.ProductoID)
-        const presentationRecord = productRecord?.Presentaciones?.find((presentationOption) => presentationOption.id === productStockRecord.PresentacionID)
-        return presentationRecord?.nm || `Tipo-${productStockRecord.PresentacionID}`
+        if (!productStockRecord.PresentationID) { return '' }
+        const productRecord = productos.recordsMap.get(productStockRecord.ProductID)
+        const presentationRecord = productRecord?.Presentaciones?.find((presentationOption) => presentationOption.id === productStockRecord.PresentationID)
+        return presentationRecord?.nm || `Tipo-${productStockRecord.PresentationID}`
       }
     },
     { header: 'Stock', css: 'justify-end', inputCss: 'text-right pr-6',
-      getValue: (productStockRecord) => productStockRecord.Cantidad,
+      getValue: (productStockRecord) => productStockRecord.Quantity,
       onCellEdit: (productStockRecord, value) => {
         updateStockQuantity(productStockRecord, parseInt(value as string || '0'))
       },
       render: (productStockRecord) => {
-        if (productStockRecord._cantidadPrev && productStockRecord._cantidadPrev !== productStockRecord.Cantidad) {
+        if (productStockRecord._cantidadPrev && productStockRecord._cantidadPrev !== productStockRecord.Quantity) {
           return {
             css: 'flex items-center',
             children: [
               { text: String(productStockRecord._cantidadPrev > 0 ? productStockRecord._cantidadPrev : 0) },
               { text: '→', css: 'ml-2 mr-2' },
-              { text: productStockRecord.Cantidad, css: 'text-red-500' }
+              { text: productStockRecord.Quantity, css: 'text-red-500' }
             ]
           }
         }
-        return { text: productStockRecord.Cantidad || '' }
+        return { text: productStockRecord.Quantity || '' }
       }
     },
     { header: 'Costo Un.',
@@ -72,10 +72,10 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
   ]
 
   const onChangeAlmacen = async () => {
-    if (!stockFilters.almacenID) { return }
+    if (!stockFilters.warehouseID) { return }
     Loading.standard()
     try {
-      const result = await getProductosStock(stockFilters.almacenID)
+      const result = await getProductosStock(stockFilters.warehouseID)
       almacenStock = result || []
       almacenStockGetted = result || []
     } finally {
@@ -108,19 +108,19 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
     for (const productRecord of productos.records) {
       const presentationIDs = productRecord.Presentaciones?.length > 0 ? productRecord.Presentaciones.map((presentationOption) => presentationOption.id) : [0]
       for (const presentacionID of presentationIDs) {
-        const stockID = [stockFilters.almacenID, productRecord.ID, presentacionID || '', '', ''].join('_')
+        const stockID = [stockFilters.warehouseID, productRecord.ID, presentacionID || '', '', ''].join('_')
         if (productStockMap.has(stockID)) {
           const existingProductStock = productStockMap.get(stockID) as IProductoStock
-          existingProductStock.PresentacionID = presentacionID
+          existingProductStock.PresentationID = presentacionID
           continue
         }
 
         productStockMap.set(stockID, {
           ID: stockID,
-          WarehouseID: stockFilters.almacenID,
-          ProductoID: productRecord.ID,
-          PresentacionID: presentacionID,
-          Cantidad: 0
+          WarehouseID: stockFilters.warehouseID,
+          ProductID: productRecord.ID,
+          PresentationID: presentacionID,
+          Quantity: 0
         } as IProductoStock)
       }
     }
@@ -130,7 +130,7 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
   const updateStockQuantity = (productStockRecord: IProductoStock, cantidad: number) => {
     if (!productStockRecord.ID) {
       productStockRecord.ID = [
-        productStockRecord.WarehouseID, productStockRecord.ProductoID, productStockRecord.PresentacionID || 0, productStockRecord.SKU || '', productStockRecord.Lote || ''
+        productStockRecord.WarehouseID, productStockRecord.ProductID, productStockRecord.PresentationID || 0, productStockRecord.SKU || '', productStockRecord.Lote || ''
       ].join('_')
     }
 
@@ -138,8 +138,8 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
 
     if (existingProductStock) {
       existingProductStock._hasUpdated = true
-      existingProductStock._cantidadPrev = existingProductStock._cantidadPrev || existingProductStock.Cantidad || -1
-      existingProductStock.Cantidad = cantidad
+      existingProductStock._cantidadPrev = existingProductStock._cantidadPrev || existingProductStock.Quantity || -1
+      existingProductStock.Quantity = cantidad
     } else {
       productStockRecord._cantidadPrev = -1
       productStockRecord._hasUpdated = true
@@ -160,13 +160,13 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
 
 <div class="flex items-center mb-8">
   <SearchSelect options={almacenes?.Almacenes || []} keyId="ID" keyName="Nombre"
-    bind:saveOn={stockFilters} save="almacenID" placeholder="ALMACÉN ::"
+    bind:saveOn={stockFilters} save="warehouseID" placeholder="ALMACÉN ::"
     css="w-270"
     onChange={() => {
       onChangeAlmacen()
     }}
   />
-  {#if !stockFilters.almacenID}
+  {#if !stockFilters.warehouseID}
     <div class="ml-12 text-red-500"><i class="icon-attention"></i>Debe seleccionar un almacén.</div>
   {:else}
     <div class="i-search w-full md:w-200 md:ml-12 col-span-5">
@@ -180,14 +180,14 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
       css="ml-16" />
   {/if}
   <div class="ml-auto">
-    {#if stockFilters.almacenID > 0}
+    {#if stockFilters.warehouseID > 0}
       <button class="bx-blue mr-8" onclick={() => {
         guardarRegistros()
       }}>
         <i class="icon-floppy"></i>Guardar
       </button>
       <button class="bx-green" aria-label="agregar" onclick={() => {
-        stockForm = { WarehouseID: stockFilters.almacenID } as IProductoStock
+        stockForm = { WarehouseID: stockFilters.warehouseID } as IProductoStock
         Core.openSideLayer(1)
       }}>
         <i class="icon-plus"></i>
@@ -200,7 +200,7 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
   filterText={stockFilterText}
   useFilterCache={true}
   getFilterContent={(productStockRecord) => {
-    const productRecord = productos.recordsMap.get(productStockRecord.ProductoID)
+    const productRecord = productos.recordsMap.get(productStockRecord.ProductID)
     return [productRecord?.Nombre, productStockRecord.SKU, productStockRecord.Lote].filter((value) => value).join(' ').toLowerCase()
   }}
 />
@@ -208,22 +208,22 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
 <Layer id={1} type="bottom" css="p-12 min-h-360" title="Agregar Stock" titleCss="h2"
   saveButtonName="Agregar" saveButtonIcon="icon-ok" contentOverflow={true}
   onSave={() => {
-    if (!stockForm.ProductoID || !stockForm.Cantidad) {
+    if (!stockForm.ProductID || !stockForm.Quantity) {
       Notify.failure('Debe seleccionar un producto y una cantidad.')
       return
     }
-    updateStockQuantity(stockForm, stockForm.Cantidad)
+    updateStockQuantity(stockForm, stockForm.Quantity)
     Core.hideSideLayer()
   }}
 >
   <div class="grid grid-cols-24 gap-10 mt-6 p-4">
     <SearchSelect label="Producto" css="col-span-24" required={true}
-      bind:saveOn={stockForm} save="ProductoID" options={productos.records || []}
+      bind:saveOn={stockForm} save="ProductID" options={productos.records || []}
       keyName="Nombre" keyId="ID"
     />
     {#if (stockFormProducto?.Presentaciones?.filter((presentationOption) => presentationOption.ss) || []).length > 0}
       <SearchSelect label="Presentación" css="col-span-24"
-        bind:saveOn={stockForm} save="PresentacionID" options={stockFormProducto?.Presentaciones || []}
+        bind:saveOn={stockForm} save="PresentationID" options={stockFormProducto?.Presentaciones || []}
         keyName="nm" keyId="id"
       />
     {/if}
@@ -231,7 +231,7 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
       bind:saveOn={stockForm} save="SKU"
     />
     <Input label="Cantidad" required={true} css="col-span-8"
-      bind:saveOn={stockForm} save="Cantidad" type="number"
+      bind:saveOn={stockForm} save="Quantity" type="number"
     />
     <Input label="Lote" css="col-span-16"
       bind:saveOn={stockForm} save="Lote"

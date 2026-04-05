@@ -268,10 +268,10 @@ export class AlmacenMovimientosGroupedService extends GetHandler {
 		this.productoCurrentStock = new Map()
 		
 		for (const e of response.productosStock) {
-			if(!e.Cantidad || e.Cantidad < 0){ continue }
+			if(!e.Quantity || e.Quantity < 0){ continue }
 			const productoID = extractProductIDFromStockID(e.ID)
 			const currentStock = this.productoCurrentStock.get(productoID) || 0
-			this.productoCurrentStock.set(productoID, (e.Cantidad||0) + currentStock)
+			this.productoCurrentStock.set(productoID, (e.Quantity||0) + currentStock)
 		}
 		
 		const fechaCurrent = Params.getFechaUnix()

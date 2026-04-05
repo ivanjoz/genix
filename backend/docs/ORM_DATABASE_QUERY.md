@@ -174,30 +174,26 @@ err := q.Exclude(q.Tags).EmpresaID.Equals(1).Exec()
 ```
 
 ```go
-// Purpose: Group decoded rows in memory after query execution.
-// Rationale: Useful when endpoints need custom aggregation without changing table schema.
+// Purpose: Process decoded rows while scanning and optionally avoid storing them.
+// Rationale: Useful when callers need side effects or custom aggregation with lower memory usage.
 q := db.Query(&results)
 q.EmpresaID.Equals(1).Status.Equals(1)
 
-err := q.ExecGroup(
-    func(record *Product) string {
-        return fmt.Sprintf("%d", record.ID)
-    },
-    func(newRecord *Product, groupedRecord *Product) {
-        if groupedRecord == nil {
-            return
-        }
-        if newRecord.Updated > groupedRecord.Updated {
-            groupedRecord.Updated = newRecord.Updated
-        }
-    },
-)
+latestByID := map[int64]int32{}
+
+err := q.ExecScan(func(record *Product) bool {
+    // Keep only the latest Updated value in the external accumulator.
+    if record.Updated > latestByID[record.ID] {
+        latestByID[record.ID] = record.Updated
+    }
+    return true
+})
 ```
 
 Rules:
-- `ExecGroup` is an in-memory reducer, not a Scylla `GROUP BY`.
-- `LIMIT` still applies to raw rows before grouping.
-- `getKey` and `groupHandler` are both required.
+- `ExecScan` runs after row decode and in-memory post-filtering.
+- Returning `true` skips storing the row in the destination slice.
+- `LIMIT` still applies to raw DB rows before `ExecScan`.
 
 ```go
 // Purpose: Execute a real Scylla GROUP BY when the schema exposes a compatible key/view path.
@@ -212,7 +208,7 @@ err := q.
 ```
 
 Rules:
-- `GroupBy()` emits a real Scylla `GROUP BY`, unlike `ExecGroup`.
+- `GroupBy()` emits a real Scylla `GROUP BY`, unlike `ExecScan`.
 - `Avg()` requires a `float32` or `float64` destination field.
 - Multi-column `GroupBy()` requires a compatible packed view whose key columns match the grouped columns in order.
 

@@ -168,7 +168,7 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 		CompanyID.Equals(req.Usuario.EmpresaID).
 		Fecha.GreaterEqual(movimientosFecha)
 
-	if err := query.GroupBy(query.Fecha, query.ProductoID, query.Tipo, query.Cantidad.Sum()).Exec(); err != nil {
+	if err := query.GroupBy(query.Fecha, query.ProductoID, query.Tipo, query.Quantity.Sum()).Exec(); err != nil {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)
 	}
 
@@ -203,10 +203,10 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		// Split the signed grouped quantity into inflow/outflow columns for the cached payload.
-		if movimiento.Cantidad > 0 {
-			fechaAccumulator.record.DetailInflows[productIndex] += movimiento.Cantidad
-		} else if movimiento.Cantidad < 0 {
-			fechaAccumulator.record.DetailOutflows[productIndex] += -movimiento.Cantidad
+		if movimiento.Quantity > 0 {
+			fechaAccumulator.record.DetailInflows[productIndex] += movimiento.Quantity
+		} else if movimiento.Quantity < 0 {
+			fechaAccumulator.record.DetailOutflows[productIndex] += -movimiento.Quantity
 		}
 	}
 
@@ -219,7 +219,7 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 	productosStock := []logisticaTypes.ProductStock{}
 
 	psQuery := db.Query(&productosStock).AllowFilter()
-	psQuery.Select(psQuery.ID, psQuery.Updated, psQuery.Cantidad)
+	psQuery.Select(psQuery.ID, psQuery.Updated, psQuery.Quantity)
 
 	if productosStockUpdated == 0 {
 		psQuery.Status.Equals(1)
