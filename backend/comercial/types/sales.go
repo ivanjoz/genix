@@ -6,9 +6,9 @@ import (
 )
 
 type SaleOrderClientInfo struct {
-	Name       string
-	Code       string
-	OnlyInsert bool
+	Name       string `json:",omitempty"`
+	RegistryNumber       string `json:",omitempty"`
+	OnlyInsert bool `json:",omitempty"`
 }
 
 type SaleOrder struct {

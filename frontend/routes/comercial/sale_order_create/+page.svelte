@@ -1,4 +1,5 @@
 <script lang="ts">
+import Input from '$components/Input.svelte';
 import LayerStatic from '$components/LayerStatic.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
 import Page from '$domain/Page.svelte';
@@ -9,6 +10,7 @@ import { Core } from '$core/store.svelte';
 import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
 import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
 import { getProductosStock, type IProductoStock } from '$routes/logistica/products-stock/stock-movement';
+import { ClientProviderService, ClientProviderType, type IClientProvider } from '$routes/negocio/clientes/clientes-proveedores.svelte';
 import { ProductosService } from '$routes/negocio/productos/productos.svelte';
 import { ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
 import { SystemParametersService } from '$services/services/system-parameters.svelte';
@@ -25,6 +27,7 @@ import { SaleOrderState } from "./sale_order.svelte";
 
   // Services
   const almacenesService = new AlmacenesService();
+  const clientesService = new ClientProviderService(ClientProviderType.CLIENT);
   const productosService = new ProductosService();
   const listasService = new ListasCompartidasService([2]); // 2: Marcas
   const parametrosService = new EmpresaParametrosService();
@@ -37,10 +40,24 @@ import { SaleOrderState } from "./sale_order.svelte";
   let almacenSelected = $state(-1);
   let productoSelected = $state(-1);
   let searchInput = $state<HTMLInputElement>();
+  let clientModeSelected = $state(0);
 
   // Computed
   const separarProcesoVenta = $derived(systemParamsService.recordsMap.get(1)?.ValueInts || []);
   const isSeparadoProceso = $derived(separarProcesoVenta.includes(2));
+  const clientModeOptions = [
+    { ID: 1, Nombre: "Selecionar Cliente" },
+    { ID: 2, Nombre: "Registrar Cliente" },
+  ];
+  const clientOptions = $derived.by(() => {
+    // Build a combined label so the selector matches by name and registry number with the shared SearchSelect component.
+    return clientesService.records.map((clientRecord) => ({
+      ...clientRecord,
+      DisplayName: clientRecord.RegistryNumber
+        ? `${clientRecord.Name} ${clientRecord.RegistryNumber}`
+        : clientRecord.Name,
+    }));
+  });
 
   // Data
   let productosStock = $state([] as IProductoStock[]);
@@ -78,6 +95,22 @@ import { SaleOrderState } from "./sale_order.svelte";
 	   untrack(() => {
 	      	if(productosStock.length > 0){ parseProductos() }
 	   });
+  });
+
+  $effect(() => {
+    // Keep the outgoing payload in sync with the chosen client mode to avoid stale values.
+    if (clientModeSelected === 1) {
+      ventasState.form.ClientInfo = undefined;
+    } else if (clientModeSelected === 2) {
+      ventasState.form.ClientID = 0;
+      ventasState.form.ClientInfo = ventasState.form.ClientInfo || {
+        Name: "",
+        RegistryNumber: "",
+      };
+    } else {
+      ventasState.form.ClientID = 0;
+      ventasState.form.ClientInfo = undefined;
+    }
   });
 
   async function loadStock(almacenID: number) {
@@ -262,6 +295,21 @@ import { SaleOrderState } from "./sale_order.svelte";
       searchInput?.focus();
     }
   }
+
+  function handleClientModeChange(option?: { ID: number }) {
+    clientModeSelected = option?.ID || 0;
+  }
+
+  function handleClientSelected(clientRecord?: IClientProvider) {
+    ventasState.form.ClientID = clientRecord?.ID || 0;
+  }
+
+  async function handlePostSaleOrder() {
+    const wasSaved = await ventasState.postSaleOrder();
+    if (wasSaved) {
+      clientModeSelected = 0;
+    }
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -391,7 +439,7 @@ import { SaleOrderState } from "./sale_order.svelte";
           </div>
         </div>
           <button class="bx-blue"
-            onclick={() => ventasState.postSaleOrder()}
+            onclick={handlePostSaleOrder}
             title="Guardar venta"
           >
           	Generar
@@ -411,6 +459,45 @@ import { SaleOrderState } from "./sale_order.svelte";
          		keyId="id" keyName="name" save="ActionsIncluded"
          		saveOn={ventasState.form}
          	/>
+	        <SearchSelect useStyle={1}
+	           label=""
+	           keyId="ID" css="ml-auto max-w-168 text-sm"
+	           keyName="Nombre"
+	           options={clientModeOptions}
+	           selected={clientModeSelected}
+	           onChange={handleClientModeChange}
+	           placeholder="SIN CLIENTE"
+	         />
+        </div>
+        <div class="px-12 pb-10 mt-6">
+          <div class="grid grid-cols-[170px,1fr] gap-8">
+            {#if clientModeSelected === 1}
+              <SearchSelect
+                label=""
+                keyId="ID"
+                keyName="DisplayName"
+                options={clientOptions}
+                selected={ventasState.form.ClientID}
+                onChange={handleClientSelected}
+                placeholder="Buscar cliente por nombre o documento"
+              />
+            {:else if clientModeSelected === 2 && ventasState.form.ClientInfo}
+              <div class="grid grid-cols-12 gap-8">
+	              <Input
+	                label="" css="col-span-5"
+	                saveOn={ventasState.form.ClientInfo}
+	                save="RegistryNumber"
+	                placeholder="Documento / RUC"
+	              />
+                <Input
+                  label="" css="col-span-7"
+                  saveOn={ventasState.form.ClientInfo}
+                  save="Name"
+                  placeholder="Nombre del cliente"
+                />
+              </div>
+            {/if}
+          </div>
         </div>
         <!-- List -->
         <div class="flex-1 overflow-y-auto px-8 py-4 space-y-4">

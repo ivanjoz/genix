@@ -9,6 +9,7 @@ import { Core } from '$core/store.svelte';
     saveOn?: T;
     save?: keyof T;
     css?: string;
+    useStyle?: number;
     optionsCss?: string
     options: E[];
     keyId: keyof E;
@@ -32,6 +33,7 @@ import { Core } from '$core/store.svelte';
     saveOn = $bindable(),
     save,
     css = "",
+    useStyle = 0,
     options = [],
     label,
     placeholder,
@@ -60,6 +62,7 @@ import { Core } from '$core/store.svelte';
   let selectedValue = $state("");
   let avoidBlur = false
   let openUp = $state(false);
+  let isFocused = $state(false);
 
   // let searchCardID = Math.random();
   let inputRef = $state<HTMLInputElement>();
@@ -69,6 +72,7 @@ import { Core } from '$core/store.svelte';
   const isMobile = $derived(Core.deviceType === 3);
   const useLayerPicker = $derived(isMobile);
   const isDisabled = $derived(disabled || showLoading);
+  const useVirtualizedOptions = $derived(filteredOptions.length > 15);
   type SearchOptionID = number | string;
 
   // Keep id normalization centralized so all caches use the same key format.
@@ -240,8 +244,10 @@ import { Core } from '$core/store.svelte';
   }
 
   let cN = $derived(
-    `${s1.input} p-rel${css ? ` ${css}` : ""}${!label ? " no-label" : ""}`,
+    `${s1.input} p-rel${css ? ` ${css}` : ""}${!label ? " no-label" : ""}${useStyle ? ` use-style-${useStyle}` : ""}`,
   )
+
+  const arrowDirectionClass = $derived(show ? "arrow-up is-open" : "arrow-down");
 
   function iconValid() {
     if (!isValid) return null;
@@ -331,6 +337,7 @@ import { Core } from '$core/store.svelte';
         disabled={isDisabled || isMobile}
         onfocus={(ev) => {
           ev.stopPropagation();
+          isFocused = true;
           if(!show){
             checkPosition();
             words = [];
@@ -340,6 +347,7 @@ import { Core } from '$core/store.svelte';
         }}
         onblur={(ev) => {
           ev.stopPropagation();
+          isFocused = false;
           // Ignore blur caused by interactions inside the dropdown list.
           if (avoidBlur) {
             avoidBlur = false;
@@ -363,6 +371,13 @@ import { Core } from '$core/store.svelte';
             handleOpenMobileLayer();
           }
         }}
+        onfocus={() => {
+          isFocused = true;
+          checkPosition();
+        }}
+        onblur={() => {
+          isFocused = false;
+        }}
         onclick={(ev) => {
           ev.stopPropagation();
           handleOpenMobileLayer();
@@ -385,7 +400,7 @@ import { Core } from '$core/store.svelte';
     <div>Cargando...</div>
   {/if}
   {#if !isDisabled}
-    <div class="absolute bottom-8 right-6 pointer-events-none {show && !icon ? 'show' : ''}">
+    <div class={`absolute bottom-8 right-6 pointer-events-none select-arrow ${arrowDirectionClass}`}>
       <i class={icon || "icon-down-open-1"}></i>
     </div>
   {/if}
@@ -410,31 +425,41 @@ import { Core } from '$core/store.svelte';
           }
         : undefined}
     >
-      <SvelteVirtualList bind:this={vlRef} items={filteredOptions}>
-        {#snippet renderItem(e, i)}
-          {@const name = String(e[keyName])}
-          {@const highlighted = highlString(name, words)}
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <div
-            class="flex ai-center _highlight{arrowSelected === i ? ' _selected' : ''}"
-            role="option"
-            aria-selected={arrowSelected === i}
-            tabindex="0"
-            onmousedown={(ev) => {
-              // Commit selection before blur/click ordering can clear the input.
-              ev.preventDefault();
-              ev.stopPropagation();
-              onOptionClick(e);
-            }}
-          >
-            <div>
-              {#each highlighted as w}
-                <span class={w.highl ? "_8" : ""} class:mr-4={w.isEnd}>{w.text}</span>
-              {/each}
-            </div>
+      {#snippet optionRow(e: E, i: number)}
+        {@const name = String(e[keyName])}
+        {@const highlighted = highlString(name, words)}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div
+          class="flex ai-center _highlight{arrowSelected === i ? ' _selected' : ''}"
+          role="option"
+          aria-selected={arrowSelected === i}
+          tabindex="0"
+          onmousedown={(ev) => {
+            // Commit selection before blur/click ordering can clear the input.
+            ev.preventDefault();
+            ev.stopPropagation();
+            onOptionClick(e);
+          }}
+        >
+          <div>
+            {#each highlighted as w}
+              <span class={w.highl ? "_8" : ""} class:mr-4={w.isEnd}>{w.text}</span>
+            {/each}
           </div>
-        {/snippet}
-      </SvelteVirtualList>
+        </div>
+      {/snippet}
+
+      {#if useVirtualizedOptions}
+        <SvelteVirtualList bind:this={vlRef} items={filteredOptions}>
+          {#snippet renderItem(e, i)}
+            {@render optionRow(e, i)}
+          {/snippet}
+        </SvelteVirtualList>
+      {:else}
+        {#each filteredOptions as e, i}
+          {@render optionRow(e, i)}
+        {/each}
+      {/if}
     </div>
   {/if}
 </div>
@@ -486,5 +511,23 @@ import { Core } from '$core/store.svelte';
   }
   ._10 {
     color: #6d5dad;
+  }
+
+  .select-arrow {
+    transition: transform 0.18s ease, color 0.18s ease;
+    transform-origin: center;
+    transform-style: preserve-3d;
+  }
+
+  .select-arrow.arrow-up {
+    transform: perspective(120px) rotateX(180deg);
+  }
+
+  .select-arrow.arrow-down {
+    transform: perspective(120px) rotateX(0deg);
+  }
+
+  .select-arrow.is-open {
+    color: #3a3945;
   }
 </style>

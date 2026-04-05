@@ -45,6 +45,22 @@
   background: linear-gradient(0deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.2) 100%);
 }
 
+.input:global(.use-style-1.no-label) .input_div {
+  border: none;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: rgb(50 50 93 / 13%) 0px 1px 3px 0px, rgb(0 0 0 / 30%) 0px 1px 3px -1px;
+  height: calc(var(--input-height) - 6px);
+  outline: 1px solid #47465521;
+  background: #f5f3fa;
+}
+
+.input:global(.use-style-1.no-label:hover) .input_div,
+.input:global(.use-style-1.no-label:focus-within) .input_div {
+  outline-color: #8d8ab630;
+  box-shadow: rgb(50 50 93 / 16%) 0px 2px 6px 0px, rgb(0 0 0 / 22%) 0px 1px 3px -1px;
+}
+
 .input_div_1 {
   height: 100%;
   width: 100%;
@@ -76,6 +92,17 @@
 .input:global(.no-label) .input_inp {
   height: 100%;
   margin-top: unset;
+}
+
+.input:global(.use-style-1.no-label) .input_inp {
+  height: 100%;
+  margin-top: unset;
+  padding-left: 10px;
+  padding-right: 24px;
+}
+
+.input:global(.use-style-1.no-label) .input_inp::placeholder {
+  color: #7f80a8;
 }
 
 .input_inp::placeholder {

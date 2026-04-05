@@ -317,7 +317,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, empresaID int32, usuarioID int32) (int32, error) {
 	clientName := strings.TrimSpace(clientInfo.Name)
-	clientRegistryNumber := strings.TrimSpace(clientInfo.Code)
+	clientRegistryNumber := strings.TrimSpace(clientInfo.RegistryNumber)
 	if clientName == "" {
 		return 0, core.Err("ClientInfo.Name es obligatorio.")
 	}
@@ -334,7 +334,9 @@ func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, empresaID i
 		RegistryNumber: clientRegistryNumber,
 		PersonType:     clientPersonType,
 	}}
-	saveError := negocio.SaveClientProviders(&clientProviders, empresaID, usuarioID, clientInfo.OnlyInsert)
+	// Sale-order client creation must never update an existing client record from frontend input 
+	// to prevent accidental data corruption of shared client/provider records.
+	saveError := negocio.SaveClientProviders(&clientProviders, empresaID, usuarioID, true)
 	if saveError != nil {
 		return 0, saveError
 	}

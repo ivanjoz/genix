@@ -37,6 +37,7 @@ export interface ISaleOrder {
   EmpresaID: number
   WarehouseID: number
   LastPaymentCajaID: number
+  ClientID: number
   TotalAmount: number
   TaxAmount: number
   DebtAmount: number
@@ -46,6 +47,10 @@ export interface ISaleOrder {
   DetailQuantities: number[]
 	DetailProductSkus: string[]
   DetailProductPresentations: number[]
+  ClientInfo?: {
+    Name: string
+    RegistryNumber: string
+  }
   
   // UI Helpers (not sent or ignored by backend if not in struct)
   montoRecibido: number
@@ -56,7 +61,7 @@ export class SaleOrderState {
   // State
   productosStock = $state([] as IProductoStock[])
   form = $state({
-    ID: 0, EmpresaID: 0, WarehouseID: 0, LastPaymentCajaID: 1, // Default payment caja; UI can overwrite.
+    ID: 0, EmpresaID: 0, WarehouseID: 0, LastPaymentCajaID: 1, ClientID: 0, // Default payment caja; UI can overwrite.
     TotalAmount: 0, TaxAmount: 0, DebtAmount: 0,
     ActionsIncluded: [2, 3],
     DetailProductsIDs: [], DetailPrices: [], DetailQuantities: [],
@@ -163,12 +168,12 @@ export class SaleOrderState {
   async postSaleOrder() {
     if (this.ventaProductos.length === 0) {
       Notify.failure("El carrito está vacío.")
-      return
+      return false
     }
 
     if (this.form.WarehouseID === 0) {	
       Notify.failure("Seleccione un almacén.")
-      return
+      return false
     }
 
     Loading.standard("Procesando venta...")
@@ -212,6 +217,17 @@ export class SaleOrderState {
     }
 
     try {
+      // Send a single client source to the backend: either an existing ID or a new client payload.
+      if (this.form.ClientInfo?.Name?.trim()) {
+        this.form.ClientInfo = {
+          Name: this.form.ClientInfo.Name.trim(),
+          RegistryNumber: this.form.ClientInfo.RegistryNumber?.trim() || "",
+        }
+        this.form.ClientID = 0
+      } else {
+        this.form.ClientInfo = undefined
+      }
+
       const res = await POST({
         route: "sale-order",
         data: this.form,
@@ -222,13 +238,18 @@ export class SaleOrderState {
         // Reset state
         this.ventaProductos = []
         this.recalcTotales()
+        this.form.ClientID = 0
+        this.form.ClientInfo = undefined
         this.form.montoRecibido = 0
         this.form.montoVuelto = 0
+        return true
       }
     } catch (error) {
       console.error("Error posting sale order:", error)
     } finally {
       Loading.remove()
     }
+
+    return false
   }
 }
