@@ -14,6 +14,23 @@ import (
 func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	var err error
 	
+	// 6. Test bucket query CONTAINS + "RANGE" with hash index
+	fmt.Println("\n--- Test 5: Range Query (Between) ---")
+	recordSalesOrders := []comercial.SaleOrder{}
+	q6 := db.Query(&recordSalesOrders)
+	err = q6.EmpresaID.Equals(1).
+		DetailProductsIDs.Contains(1).
+		Fecha.Between(20475, 20495). //.AllowFilter().
+		Exec()
+
+	if err != nil {
+		fmt.Println("Error in Test 6:", err)
+	} else {
+		fmt.Printf("Found %d records in range\n", len(recordSalesOrders))
+	}
+
+	return core.FuncResponse{}
+	
 	fmt.Println("\n--- Test 7: Range query in int packet column local index ---")
 	recordSalesOrders2 := []comercial.SaleOrder{}
 	q7 := db.Query(&recordSalesOrders2)
@@ -26,21 +43,6 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 		fmt.Println("Error in Test 6:", err)
 	} else {
 		fmt.Printf("Found %d records in range\n", len(recordSalesOrders2))
-	}
-
-	// 6. Test bucket query CONTAINS + "RANGE" with hash index
-	fmt.Println("\n--- Test 5: Range Query (Between) ---")
-	recordSalesOrders := []comercial.SaleOrder{}
-	q6 := db.Query(&recordSalesOrders)
-	err = q6.EmpresaID.Equals(1).
-		DetailProductsIDs.Contains(1).
-		Fecha.Between(20475, 20495).AllowFilter().
-		Exec()
-
-	if err != nil {
-		fmt.Println("Error in Test 6:", err)
-	} else {
-		fmt.Printf("Found %d records in range\n", len(recordSalesOrders))
 	}
 
 	// 1. Test AlmacenProducto with KeyConcatenated Smart Logic

@@ -52,6 +52,15 @@ func isCompositeNumericFieldType(fieldType string) bool {
 	return false
 }
 
+func isUpdateCounterFieldType(fieldType string) bool {
+	// Update counters are shared scalar sequence values written back into one numeric column.
+	switch fieldType {
+	case "int", "int8", "int16", "int32", "int64":
+		return true
+	}
+	return false
+}
+
 func flattenCompositeInt64Values(rawValue any) []int64 {
 	// Treat scalar values as a single-item list so composite hashing works for both scalar and slice numeric columns.
 	if rawValue == nil {
@@ -248,6 +257,19 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 	if schema.AutoincrementPart != nil {
 		dbTable.autoincrementPart = dbTable.columnsMap[schema.AutoincrementPart.GetInfo().Name]
+	}
+
+	if schema.UseUpdateCounter != nil {
+		updateCounterColumnName := schema.UseUpdateCounter.GetName()
+		updateCounterColumn := dbTable.columnsMap[updateCounterColumnName]
+		if updateCounterColumn == nil {
+			panic(fmt.Sprintf(`Table "%v": UseUpdateCounter column "%v" was not found`, dbTable.name, updateCounterColumnName))
+		}
+		if updateCounterColumn.GetType().IsSlice || !isUpdateCounterFieldType(updateCounterColumn.GetType().FieldType) {
+			panic(fmt.Sprintf(`Table "%v": UseUpdateCounter column "%v" must be an integer scalar. Found: %v`,
+				dbTable.name, updateCounterColumn.GetName(), updateCounterColumn.GetType().FieldType))
+		}
+		dbTable.updateCounterCol = updateCounterColumn
 	}
 
 	// Identify autoincrement column from direct column definitions (backward compatibility)
@@ -619,9 +641,6 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			if column.GetType().IsComplexType {
 				panic("No puede usar un struct como columna de una view.")
 			}
-			if column.GetType().IsSlice {
-				panic("No puede usar un slice como columna de una view. Intente con un índice global.")
-			}
 			colNames = append(colNames, column.GetName())
 			declaredColumns = append(declaredColumns, column)
 			columns = append(columns, column)
@@ -686,6 +705,9 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			view.column = columns[0]
 		} else if isRangeView {
 			view.Type = 8
+			// Packed range views can truncate DecimalSize() components, so exact filtering must
+			// still run in memory after the routed MV scan.
+			view.RequiresPostFilter = true
 			// Packed views default to int64 unless Int32() is explicitly set on the first column.
 			view.column.GetType().FieldType = "int64"
 			view.column.GetType().ColType = "bigint"
@@ -916,20 +938,23 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 					valuesGroups, rangeColumns := getValuesGroups()
 
 					// Create the ranges
-					for _, valuesFrom := range valuesGroups {
-						idxEnd := len(valuesFrom) - 1
-						valuesTo := slices.Clone(valuesFrom)
-						valuesTo[idxEnd]++
+					for _, prefixValues := range valuesGroups {
+						valuesFrom := slices.Clone(prefixValues)
+						prefixFloorValues := slices.Clone(prefixValues)
 
 						for _, col := range rangeColumns {
 							st := statementsMap[col.GetName()]
 							valuesFrom = append(valuesFrom, convertToInt64(st.from.Value))
-							valuesTo = append(valuesTo, 0)
+							prefixFloorValues = append(prefixFloorValues, 0)
 						}
+
+						// Compute the exclusive upper bound by moving one radix step at the end of
+						// the equality prefix instead of incrementing the component and re-trimming it.
+						upperBound := makeValue(prefixFloorValues) + Pow10Int64(sumSlotDigits(slotDigitsPerColumn, len(prefixValues)))
 
 						whereStatement := fmt.Sprintf("%v >= %v AND %v < %v",
 							viewPtr.column.GetName(), makeValue(valuesFrom),
-							viewPtr.column.GetName(), makeValue(valuesTo),
+							viewPtr.column.GetName(), upperBound,
 						)
 						whereStatements = append(whereStatements, whereStatement)
 					}

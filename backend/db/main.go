@@ -56,6 +56,7 @@ type ScyllaTable[T any] struct {
 	packedIndexes     []*packedIndexInfo
 	autoincrementPart IColInfo
 	autoincrementCol  IColInfo
+	updateCounterCol  IColInfo
 	capabilities      []QueryCapability
 	// Composite bucket metadata is used to materialize virtual hash sets and plan range+contains reads.
 	compositeBucketIndexes []compositeBucketIndex
@@ -142,6 +143,7 @@ type TableSchema struct {
 	KeyIntPacking     []Coln
 	AutoincrementPart Coln
 	SaveCacheVersion  bool
+	UseUpdateCounter  Coln
 }
 
 func (q ColumnStatement) GetValue() any {

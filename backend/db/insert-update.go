@@ -12,6 +12,8 @@ import (
 
 const maxInsertBatchRows = 200
 
+var getWriteCounterValue = GetCounter
+
 type selfParser interface {
 	SelfParse()
 }
@@ -28,6 +30,33 @@ func runSelfParseIfDefined[T TableBaseInterface[E, T], E TableSchemaInterface[E]
 		}
 		return
 	}
+}
+
+func applyWriteManagedColumns[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	records *[]T, scyllaTable ScyllaTable[any],
+) error {
+	if len(*records) == 0 || scyllaTable.updateCounterCol == nil {
+		return nil
+	}
+
+	// Advance the shared write counter once so every row in this ORM write call receives the same marker.
+	counterName := fmt.Sprintf("%s_update_counter", scyllaTable.name)
+	counterValue, err := getWriteCounterValue(scyllaTable.keyspace, counterName, 1)
+	if err != nil {
+		return fmt.Errorf("write update counter %s: %w", counterName, err)
+	}
+
+	for recordIndex := range *records {
+		recordPointer := xunsafe.AsPointer(&(*records)[recordIndex])
+		scyllaTable.updateCounterCol.SetValue(recordPointer, counterValue)
+	}
+
+	if DebugFull {
+		fmt.Printf("Write update counter assigned: table=%s column=%s value=%d records=%d\n",
+			scyllaTable.name, scyllaTable.updateCounterCol.GetName(), counterValue, len(*records))
+	}
+
+	return nil
 }
 
 func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
@@ -171,7 +200,8 @@ func MakeInsertStatement[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 			columsToExcludeNames = append(columsToExcludeNames, e.GetInfo().Name)
 		}
 		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columsToExcludeNames, col.GetName()) {
+			mustIncludeUpdateCounter := scyllaTable.updateCounterCol != nil && col.GetName() == scyllaTable.updateCounterCol.GetName()
+			if mustIncludeUpdateCounter || !slices.Contains(columsToExcludeNames, col.GetName()) {
 				columns = append(columns, col)
 			}
 		}
@@ -260,7 +290,8 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 			columsToExcludeNames = append(columsToExcludeNames, e.GetInfo().Name)
 		}
 		for _, col := range scyllaTable.columns {
-			if !slices.Contains(columsToExcludeNames, col.GetName()) {
+			mustIncludeUpdateCounter := scyllaTable.updateCounterCol != nil && col.GetName() == scyllaTable.updateCounterCol.GetName()
+			if mustIncludeUpdateCounter || !slices.Contains(columsToExcludeNames, col.GetName()) {
 				columns = append(columns, col)
 			}
 		}
@@ -311,6 +342,10 @@ func Insert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 
 	runSelfParseIfDefined(records)
 
+	if err := applyWriteManagedColumns(records, scyllaTable); err != nil {
+		return err
+	}
+
 	if err := handlePreInsert(records, scyllaTable); err != nil {
 		return err
 	}
@@ -357,6 +392,7 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 	columnsToUpdate := []IColInfo{}
 
 	if len(columnsToInclude) > 0 {
+		updateCounterAlreadyIncluded := scyllaTable.updateCounterCol == nil
 		for _, col_ := range columnsToInclude {
 			col := scyllaTable.columnsMap[col_.GetName()]
 			if col == nil {
@@ -368,6 +404,13 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 				panic(msg)
 			}
 			columnsToUpdate = append(columnsToUpdate, col)
+			if scyllaTable.updateCounterCol != nil && col.GetName() == scyllaTable.updateCounterCol.GetName() {
+				updateCounterAlreadyIncluded = true
+			}
+		}
+		if !updateCounterAlreadyIncluded {
+			// UseUpdateCounter must always persist, even when callers provide an explicit include list.
+			columnsToUpdate = append(columnsToUpdate, scyllaTable.updateCounterCol)
 		}
 	} else {
 		columnsToExcludeNames := []string{}
@@ -376,7 +419,8 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 		}
 		for _, col := range scyllaTable.columns {
 			isExcluded := slices.Contains(columnsToExcludeNames, col.GetName())
-			if !col.GetInfo().IsVirtual && !isExcluded && !slices.Contains(scyllaTable.keysIdx, col.GetInfo().Idx) {
+			mustIncludeUpdateCounter := scyllaTable.updateCounterCol != nil && col.GetName() == scyllaTable.updateCounterCol.GetName()
+			if !col.GetInfo().IsVirtual && (mustIncludeUpdateCounter || !isExcluded) && !slices.Contains(scyllaTable.keysIdx, col.GetInfo().Idx) {
 				columnsToUpdate = append(columnsToUpdate, col)
 			}
 		}
@@ -527,20 +571,25 @@ func Update[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		panic("No se incluyeron columnas a actualizar.")
 	}
 
+	refTable := initStructTable[E, T](new(E))
+	scyllaTable := getOrCompileScyllaTable(refTable)
+
 	runSelfParseIfDefined(records)
+
+	if err := applyWriteManagedColumns(records, scyllaTable); err != nil {
+		return err
+	}
 
 	queryStatements := makeUpdateStatementsBase(records, columnsToInclude, nil, false)
 	queryUpdate := makeQueryStatement(queryStatements)
-	
+
 	fmt.Println(queryUpdate)
-		
+
 	if err := QueryExec(queryUpdate); err != nil {
 		fmt.Println("Error updating records:", err)
 		return err
 	}
 
-	refTable := initStructTable[E, T](new(E))
-	scyllaTable := getOrCompileScyllaTable(refTable)
 	// Version groups are incremented after update commit using the same record IDs as the update payload.
 	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
 		fmt.Println("Error updating cache versions after update:", err)
@@ -561,6 +610,13 @@ func UpdateExclude[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 
 	runSelfParseIfDefined(records)
 
+	refTable := initStructTable[E, T](new(E))
+	scyllaTable := getOrCompileScyllaTable(refTable)
+
+	if err := applyWriteManagedColumns(records, scyllaTable); err != nil {
+		return err
+	}
+
 	queryStatements := makeUpdateStatementsBase(records, nil, columnsToExclude, false)
 	queryInsert := makeQueryStatement(queryStatements)
 
@@ -570,8 +626,6 @@ func UpdateExclude[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		return err
 	}
 
-	refTable := initStructTable[E, T](new(E))
-	scyllaTable := getOrCompileScyllaTable(refTable)
 	// UpdateExclude still mutates records, so it participates in the same cache-version increment flow.
 	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
 		fmt.Println("Error updating cache versions after update-exclude:", err)

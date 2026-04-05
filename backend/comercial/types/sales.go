@@ -26,6 +26,7 @@ type SaleOrder struct {
 	DeliveryStatus int8  `json:",omitempty"`
 	Created        int32 `json:",omitempty"`
 	Updated        int32 `json:"upd,omitempty"`
+	UpdateCounter int32 `json:"upc,omitempty"`
 	UpdatedBy      int32 `json:",omitempty"`
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
 	Status      int8 `json:"ss,omitempty"`
@@ -86,6 +87,7 @@ type SaleOrderTable struct {
 	DeliveryTime               db.Col[SaleOrderTable, int32]
 	DeliveryUser               db.Col[SaleOrderTable, int32]
 	StatusTrace                db.Col[SaleOrderTable, int8]
+	UpdateCounter               db.Col[SaleOrderTable, int32]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
@@ -93,6 +95,7 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		Name:         "sale_order",
 		Partition:    e.EmpresaID,
 		Keys:         []db.Coln{e.ID.Autoincrement(3)},
+		UseUpdateCounter: e.UpdateCounter,
 		LocalIndexes: []db.Coln{e.Updated},
 		HashIndexes: [][]db.Coln{
 			{e.DetailProductsIDs, e.Fecha.CompositeBucketing(2, 6, 12, 20)},
@@ -105,6 +108,7 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			{Keys: []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
 			{Keys: []db.Coln{e.Fecha, e.Updated}, KeepPart: true},
 			{Keys: []db.Coln{e.ID}, Cols: []db.Coln{e.Status, e.StatusTrace}, KeepPart: true},
+			{Keys: []db.Coln{e.DetailProductsIDs}, KeepPart: true},
 		},
 	}
 }

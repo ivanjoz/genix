@@ -23,9 +23,11 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 		statusTracesToQuery = GetSaleOrderStatusTracesByPendingStatus(int8(orderPendingStatus))
 		statusTracesCompletedToQuery = []int8{SaleOrderTraceStage3GeneratedDeliveredPaid}
 		if orderPendingStatus == 2 {
-			statusTracesCompletedToQuery = append(statusTracesCompletedToQuery, SaleOrderTraceStage2CompletedFromGeneratedDelivered)
+			statusTracesCompletedToQuery = append(statusTracesCompletedToQuery,
+				SaleOrderTraceStage2GeneratedPaid, SaleOrderTraceStage2CompletedFromGeneratedDelivered)
 		} else if orderPendingStatus == 3 {
-			statusTracesCompletedToQuery = append(statusTracesCompletedToQuery, SaleOrderTraceStage2CompletedFromGeneratedPaid)
+			statusTracesCompletedToQuery = append(statusTracesCompletedToQuery,
+				SaleOrderTraceStage2GeneratedDelivered, SaleOrderTraceStage2CompletedFromGeneratedPaid)
 		}
 	} else if orderStatus > 0 {
 		statusTracesToQuery = GetSaleOrderStatusTracesByOrderStatus(int8(orderStatus))
@@ -82,11 +84,9 @@ func getSaleOrdersByStatusTraces(companyID int32, statusTraces []int8, updated i
 			traceSales := []types.SaleOrder{}
 			query := db.Query(&traceSales)
 			query.EmpresaID.Equals(companyID).StatusTrace.Equals(statusTrace)
-
-			// Delta mode only needs rows updated since the last client sync.
-			if updated > 0 {
-				query.Updated.GreaterEqual(updated)
-			}
+			// Always keep Updated as a range predicate so the planner can route to the
+			// packed StatusTrace+Updated view instead of falling back to base-table filtering.
+			query.Updated.GreaterEqual(updated)
 
 			if err := query.Exec(); err != nil {
 				return err
