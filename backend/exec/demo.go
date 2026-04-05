@@ -6,6 +6,7 @@ import (
 	coreTypes "app/core/types"
 	"app/db"
 	"app/facturacion"
+	logisticaTypes "app/logistica/types"
 	negocioTypes "app/negocio/types"
 	"app/serialize"
 	"bufio"
@@ -868,5 +869,19 @@ func Test37(args *core.ExecArgs) core.FuncResponse {
 	serialize.Test3()
 	serialize.Test4()
 
+	return core.FuncResponse{}
+}
+
+func Test40(args *core.ExecArgs) core.FuncResponse {
+	/*
+		err1 := db.QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.lista_compartida_registros__lista_id_view`)
+		if err1 != nil {
+			fmt.Println("error:", err1)
+		}
+	*/
+	// Migrated to db2 - use makeDBController and db.DeployScylla
+	// db.DeployScylla(0, negocioTypes.ListaCompartidaRegistro{})
+	controller := makeDBController[logisticaTypes.ProductStock]()
+	controller.RecalcVirtualColumns(1)
 	return core.FuncResponse{}
 }

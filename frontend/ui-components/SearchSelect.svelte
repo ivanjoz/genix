@@ -35,7 +35,7 @@ import { Core } from '$core/store.svelte';
     options = [],
     label,
     placeholder,
-    max = 100,
+    max = 200,
     onChange,
     selected = $bindable(),
     notEmpty = false,
@@ -85,22 +85,16 @@ import { Core } from '$core/store.svelte';
     return String(text).toLowerCase().split(" ").filter((word) => word.length > 1);
   }
 
-  // Precompute lowercase names so filtering does not lowercase each option per keypress.
-  const searchableNameByOptionId = $derived.by(() => {
-    const optionNameIndex = new Map<SearchOptionID, string>();
-    for (const option of options) {
-      const optionId = getOptionId(option);
-      const rawOptionName = option[keyName as keyof E];
-      const normalizedOptionName = typeof rawOptionName === "string"
-        ? rawOptionName.toLowerCase()
-        : "";
-      optionNameIndex.set(optionId, normalizedOptionName);
-    }
-    return optionNameIndex;
-  });
+  type PreparedOption = {
+    id: SearchOptionID;
+    label: string;
+    normalizedLabel: string;
+    option: E;
+  };
 
-  // Recreate this set only when avoidIDs changes.
-  const avoidedOptionIdSet = $derived.by(() => new Set(avoidIDs || []));
+  let preparedOptions: PreparedOption[] = [];
+  let optionById = new Map<SearchOptionID, E>();
+  let avoidedOptionIdSet = new Set<SearchOptionID>();
 
   function checkPosition() {
     if (inputRef) {
@@ -125,11 +119,10 @@ import { Core } from '$core/store.svelte';
     if (typeof currValue === "undefined" && save && saveOn) {
       currValue = saveOn[save as keyof T] as number | string;
     }
-    let selectedItem: E | undefined;
-    if (currValue) {
-      selectedItem = options.find((x) => x[keyId] === currValue);
+    if (!currValue) {
+      return undefined;
     }
-    return selectedItem;
+    return optionById.get(currValue);
   }
 
   function isRequired() {
@@ -184,22 +177,24 @@ import { Core } from '$core/store.svelte';
   const filter = (text: string, preparedWords?: string[]) => {
     const searchWords = preparedWords || splitSearchWords(text);
     if (searchWords.length === 0 && avoidedOptionIdSet.size === 0) {
-      return [...options];
+      return options
     }
     const filtered: E[] = []
 
-    for (const opt of options) {
-      const optionId = getOptionId(opt);
-      if (avoidedOptionIdSet.has(optionId)) {
+    for (const preparedOption of preparedOptions) {
+      if (avoidedOptionIdSet.has(preparedOption.id)) {
         continue;
       }
       if (searchWords.length === 0) {
-        filtered.push(opt)
+        filtered.push(preparedOption.option)
       } else {
-        const searchableOptionName = searchableNameByOptionId.get(optionId);
-        if (searchableOptionName) {
-          if (include(searchableOptionName, searchWords)) { filtered.push(opt) }
+        if (include(preparedOption.normalizedLabel, searchWords)) {
+          filtered.push(preparedOption.option)
         }
+      }
+      // Stop as soon as the visible batch is filled to avoid scanning all 10k options.
+      if (max > 0 && filtered.length >= max) {
+        break;
       }
     }
     return filtered;
@@ -272,6 +267,25 @@ import { Core } from '$core/store.svelte';
   });
 
   $effect(() => {
+    const nextPreparedOptions: PreparedOption[] = [];
+    const nextOptionById = new Map<SearchOptionID, E>();
+
+    // Build plain caches once per options change so the keystroke path stays allocation-light.
+    for (const option of options) {
+      const optionId = getOptionId(option);
+      const optionLabel = String(option[keyName] ?? "");
+      nextPreparedOptions.push({
+        id: optionId,
+        label: optionLabel,
+        normalizedLabel: optionLabel.toLowerCase(),
+        option,
+      });
+      nextOptionById.set(optionId, option);
+    }
+
+    preparedOptions = nextPreparedOptions;
+    optionById = nextOptionById;
+    avoidedOptionIdSet = new Set(avoidIDs || []);
     filteredOptions = filter("");
     arrowSelected = -1;
   });

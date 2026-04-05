@@ -25,12 +25,16 @@
   interface ISaleOrderDetailLine {
     detailPosition: number;
     productID: number;
+    productBaseName: string;
     productName: string;
+    presentationName: string;
     sku: string;
     quantity: number;
     unitPrice: number;
     subtotalAmount: number;
   }
+
+  type ISaleOrderDetailColumn = ITableColumn<ISaleOrderDetailLine> & TableGridColumn<ISaleOrderDetailLine>;
 
   let selectedGroup = $state(SaleOrderGroup.PENDIENTE_DE_PAGO);
   let saleOrdersService = $state<SaleOrdersService | null>(null);
@@ -101,12 +105,30 @@
       .join(', ');
   }
 
+  function getProductPresentationName(productID: number, presentationID: number): string {
+    if (!presentationID) { return ''; }
+
+    const productRecord = productosService.recordsMap.get(productID);
+    const presentationRecord = productRecord?.Presentaciones?.find((presentationOption) => presentationOption.id === presentationID);
+    return presentationRecord?.nm || `Presentación ${presentationID}`;
+  }
+
+  function getSaleOrderDetailProductName(productID: number, presentationID: number): string {
+    const productRecord = productosService.recordsMap.get(productID);
+    const productName = productRecord?.Nombre || `Producto #${productID}`;
+    const presentationName = getProductPresentationName(productID, presentationID);
+
+    if (!presentationName) { return productName; }
+    return `${productName} (${presentationName})`;
+  }
+
   function getSaleOrderDetailLines(saleOrder: ISaleOrder): ISaleOrderDetailLine[] {
     // Normalize arrays because old/partial records may omit one or more detail fields.
     const detailProductIDs = saleOrder.DetailProductsIDs || [];
     const detailPrices = saleOrder.DetailPrices || [];
     const detailQuantities = saleOrder.DetailQuantities || [];
     const detailProductSkus = saleOrder.DetailProductSkus || [];
+    const detailProductPresentations = saleOrder.DetailProductPresentations || [];
 
     // Build row-safe detail lines by using the shortest common detail length.
     const detailCount = Math.min(
@@ -121,11 +143,14 @@
       const unitPrice = detailPrices[detailPosition] || 0;
       const quantity = detailQuantities[detailPosition] || 0;
       const sku = detailProductSkus[detailPosition] || '';
+      const presentationID = detailProductPresentations[detailPosition] || 0;
 
       saleOrderDetailLines.push({
         detailPosition,
         productID,
-        productName: productosService.recordsMap.get(productID)?.Nombre || `Producto #${productID}`,
+        productBaseName: productosService.recordsMap.get(productID)?.Nombre || `Producto #${productID}`,
+        productName: getSaleOrderDetailProductName(productID, presentationID),
+        presentationName: getProductPresentationName(productID, presentationID),
         sku,
         quantity,
         unitPrice,
@@ -184,12 +209,19 @@
     return fetchedSaleOrders;
   });
 
-  const detailTableColumns: TableGridColumn<ISaleOrderDetailLine>[] = [
+  const detailTableColumns: ISaleOrderDetailColumn[] = [
     {
       id: 'productName',
       header: 'Producto',
       width: 'minmax(280px, 1.7fr)',
       getValue: (detailLineRecord) => detailLineRecord.productName,
+      render: (detailLineRecord) => {
+        if (!detailLineRecord.presentationName) {
+          return detailLineRecord.productBaseName;
+        }
+
+        return `${detailLineRecord.productBaseName}<span class="text-blue-600 text-sm ff-bold"> (${detailLineRecord.presentationName})</span>`;
+      },
     },
     {
       id: 'sku',

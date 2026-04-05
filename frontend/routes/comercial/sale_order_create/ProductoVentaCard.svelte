@@ -83,6 +83,14 @@ import { formatN } from '$libs/helpers';
       return productoStock.producto.PrecioFinal
   })
 
+  const highlightedDisplayName = $derived.by(() => {
+    const productName = highlightText(productoStock.producto.Nombre, filterText)
+    if (!productoStock.presentationName) return productName
+
+    const highlightedPresentationName = highlightText(productoStock.presentationName, filterText)
+    return `${productName} <span class="text-blue-600 font-bold">(${highlightedPresentationName})</span>`
+  })
+
   // Helper for quantities
   const cantidades = [2,3,4,5,6,8,10,12]
 
@@ -120,7 +128,7 @@ import { formatN } from '$libs/helpers';
     <!-- Header: Name + Line -->
     <div class="flex items-center gap-8">
        <div class="leading-tight text-gray-700 flex items-center gap-8">
-          <span>{@html highlightText(productoStock.producto.Nombre, filterText)}</span>
+          <span>{@html highlightedDisplayName}</span>
           {#if productoStock.isSubUnidad}
              <span class="text-gray-300">|</span>
              <span class="text-purple-600 font-bold text-xs">{productoStock.producto.SbnUnidad}</span>

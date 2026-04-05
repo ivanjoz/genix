@@ -88,64 +88,106 @@ import { SaleOrderState } from "./sale_order.svelte";
     Loading.remove();
   }
 
+  function getPresentationName(producto: ProductoVenta["producto"], presentationID: number) {
+    if (!presentationID) return "";
+
+    const presentationRecord = producto.Presentaciones?.find((presentationOption) => presentationOption.id === presentationID);
+    return presentationRecord?.nm || `Presentación ${presentationID}`;
+  }
+
+  function createProductoVenta(
+    producto: ProductoVenta["producto"],
+    brandName: string,
+    presentationID: number,
+    keyPrefix: string,
+    cant: number,
+    extraData: Partial<ProductoVenta> = {},
+  ): ProductoVenta {
+    const presentationName = getPresentationName(producto, presentationID);
+    const displayName = presentationName ? `${producto.Nombre} (${presentationName})` : producto.Nombre;
+
+    return {
+      producto,
+      cant,
+      key: `${keyPrefix}${producto.ID}-${presentationID}`,
+      presentationID,
+      presentationName,
+      displayName,
+      searchText: `${producto.Nombre} ${presentationName} ${brandName}`.toLowerCase(),
+      ...extraData,
+    };
+  }
+
   function parseProductos() {
     if (!productosService.records.length || !productosStock.length) return;
 
-    const productoToStockMap = new Map<number, IProductoStock[]>();
+    const productoPresentacionToStockMap = new Map<string, IProductoStock[]>();
     for (const s of productosStock) {
-      const list = productoToStockMap.get(s.ProductID) || [];
+      const stockKey = `${s.ProductID}-${s.PresentationID || 0}`;
+      const list = productoPresentacionToStockMap.get(stockKey) || [];
       list.push(s);
-      productoToStockMap.set(s.ProductID, list);
+      productoPresentacionToStockMap.set(stockKey, list);
     }
 
     const newProductos: ProductoVenta[] = [];
 
     for (const producto of productosService.records) {
-      const stocks = productoToStockMap.get(producto.ID) || [];
-      if (stocks.length === 0) continue;
-
       const brandName = listasService.recordsMap.get(producto.MarcaID)?.Nombre || "";
+      const presentationIDs = new Set<number>([0]);
 
-      const base: ProductoVenta = {
-        producto: producto,
-        cant: 0,
-        key: `P${producto.ID}`,
-        searchText: (producto.Nombre + " " + brandName).toLowerCase(),
-      };
-
-      const skusStock: IProductoStock[] = [];
-      const mainStock: IProductoStock[] = [];
-
-      for (const e of stocks) {
-        e.SKU ? skusStock.push(e) : mainStock.push(e);
+      for (const productStockRecord of productosStock) {
+        if (productStockRecord.ProductID === producto.ID) {
+          presentationIDs.add(productStockRecord.PresentationID || 0);
+        }
       }
 
-      // SKU entries
-      if (skusStock.length > 0) {
-        const clone = { ...base, skus: skusStock, key: `K${producto.ID}` };
-        for (const e of skusStock) clone.cant += e.Quantity;
-        newProductos.push(clone);
-      }
+      for (const presentationID of presentationIDs) {
+        const stocks = productoPresentacionToStockMap.get(`${producto.ID}-${presentationID}`) || [];
+        if (stocks.length === 0) continue;
 
-      // Main entries & Sub-units
-      if (mainStock.length > 0) {
-        let clone: ProductoVenta | undefined;
-        if ((producto.SbnCantidad || 0) > 1) {
-          clone = {
-            ...base,
-            key: `S${producto.ID}`,
-            isSubUnidad: true,
-            cant: producto.SbnCantidad!,
-          };
-          // Recalculate generic quantity for sub-units?
-          // Legacy: `clone.cant = producto.SbnCantidad` (Logic seems to be per unit or just flagging?)
-          // Legacy logic sets cant to `SbnCantidad`. Let's stick to it.
+        const skusStock: IProductoStock[] = [];
+        const mainStock: IProductoStock[] = [];
+
+        for (const stockRecord of stocks) {
+          stockRecord.SKU ? skusStock.push(stockRecord) : mainStock.push(stockRecord);
         }
 
-        for (const e of mainStock) base.cant += e.Quantity;
-        newProductos.push(base);
+        if (skusStock.length > 0) {
+          const skuProductoVenta = createProductoVenta(
+            producto,
+            brandName,
+            presentationID,
+            "K",
+            skusStock.reduce((totalStock, stockRecord) => totalStock + stockRecord.Quantity, 0),
+            { skus: skusStock },
+          );
+          newProductos.push(skuProductoVenta);
+        }
 
-        if (clone) newProductos.push(clone);
+        if (mainStock.length > 0) {
+          const genericStock = mainStock.reduce((totalStock, stockRecord) => totalStock + stockRecord.Quantity, 0);
+          const baseProductoVenta = createProductoVenta(
+            producto,
+            brandName,
+            presentationID,
+            "P",
+            genericStock,
+          );
+
+          newProductos.push(baseProductoVenta);
+
+          if ((producto.SbnCantidad || 0) > 1) {
+            // Preserve the existing sub-unit flow but keep it tied to the same presentation.
+            newProductos.push(createProductoVenta(
+              producto,
+              brandName,
+              presentationID,
+              "S",
+              producto.SbnCantidad!,
+              { isSubUnidad: true },
+            ));
+          }
+        }
       }
     }
 
@@ -153,7 +195,6 @@ import { SaleOrderState } from "./sale_order.svelte";
     filterProductos(ventasState.filterText);
   }
 
-  let filterTimeout: any;
   function applyFilters() {
     const text = ventasState.filterText.toLowerCase();
     const skuText = ventasState.filterSku.toLowerCase();
@@ -380,7 +421,7 @@ import { SaleOrderState } from "./sale_order.svelte";
               <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium text-gray-800 truncate">
                   <span class="text-blue-600 font-bold mr-4">{item.cantidad} X</span>
-                  {item.producto?.Nombre}
+                  {item.displayName}
                   {#if item.isSubUnidad}
                     <span class="text-purple-600 text-[10px] ml-4 font-normal"
                       >({item.producto?.SbnUnidad})</span

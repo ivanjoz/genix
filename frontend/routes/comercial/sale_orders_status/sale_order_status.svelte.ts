@@ -16,6 +16,7 @@ export interface ISaleOrder {
     DetailPrices: number[];
     DetailQuantities: number[];
     DetailProductSkus: string[];
+    DetailProductPresentations: number[];
     TotalAmount: number;
     TaxAmount: number;
     DebtAmount: number;

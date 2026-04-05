@@ -236,8 +236,13 @@ func normalizeEmptyStringWriteLiteral(value any) any {
 }
 
 func getNormalizedWriteLiteral(column IColInfo, ptr unsafe.Pointer) any {
-	// Rationale: direct CQL builders quote strings early, so empty-string detection must inspect the raw field value first.
-	if normalizedValue := normalizeEmptyStringWriteLiteral(column.GetRawValue(ptr)); normalizedValue == "null" {
+	// Rationale: virtual columns may not have a backing field, so updates must normalize the computed statement value
+	// instead of treating a missing raw field as NULL before the virtual accessor runs.
+	writeValue := column.GetStatementValue(ptr)
+	if writeValue == nil {
+		writeValue = column.GetRawValue(ptr)
+	}
+	if normalizedValue := normalizeEmptyStringWriteLiteral(writeValue); normalizedValue == "null" {
 		return normalizedValue
 	}
 
@@ -526,9 +531,10 @@ func Update[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 
 	queryStatements := makeUpdateStatementsBase(records, columnsToInclude, nil, false)
 	queryUpdate := makeQueryStatement(queryStatements)
-
+	
+	fmt.Println(queryUpdate)
+		
 	if err := QueryExec(queryUpdate); err != nil {
-		fmt.Println(queryUpdate)
 		fmt.Println("Error updating records:", err)
 		return err
 	}

@@ -90,6 +90,7 @@ type SaleOrderTable struct {
 	DetailPrices                db.Col[SaleOrderTable, []int32]
 	DetailQuantities            db.Col[SaleOrderTable, []int32]
 	DetailProductSkus           db.Col[SaleOrderTable, []string]
+	DetailProductPresentations  db.Col[SaleOrderTable, []int16]
 	TotalAmount                 db.Col[SaleOrderTable, int32]
 	TaxAmount                   db.Col[SaleOrderTable, int32]
 	DebtAmount                  db.Col[SaleOrderTable, int32]

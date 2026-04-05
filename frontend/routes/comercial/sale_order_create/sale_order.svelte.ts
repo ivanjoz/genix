@@ -7,6 +7,9 @@ export interface ProductoVenta {
   key: string
   cant: number
   producto: IProducto
+  presentationID: number
+  presentationName: string
+  displayName: string
   searchText: string
   isSubUnidad?: boolean
   skus?: IProductoStock[]
@@ -19,6 +22,9 @@ export interface SkuCant {
 export interface VentaProducto {
   key: string
   productoID: number
+  presentationID: number
+  presentationName: string
+  displayName: string
   skus?: Map<string,number>
   lote?: string
   cantidad: number
@@ -38,7 +44,8 @@ export interface ISaleOrder {
   DetailProductsIDs: number[]
   DetailPrices: number[]
   DetailQuantities: number[]
-  DetailProductSkus: string[]
+	DetailProductSkus: string[]
+  DetailProductPresentations: number[]
   
   // UI Helpers (not sent or ignored by backend if not in struct)
   montoRecibido: number
@@ -53,7 +60,7 @@ export class SaleOrderState {
     TotalAmount: 0, TaxAmount: 0, DebtAmount: 0,
     ActionsIncluded: [2, 3],
     DetailProductsIDs: [], DetailPrices: [], DetailQuantities: [],
-    DetailProductSkus: [],
+    DetailProductSkus: [], DetailProductPresentations: [],
     montoRecibido: 0, montoVuelto: 0
   } as ISaleOrder)
   filterText = $state("")
@@ -76,7 +83,7 @@ export class SaleOrderState {
     const stock = e.cant - ventaCant
 
     if(stock < cant){
-      this.ventaErrorMessage = `No hay suficiente stock de "${e.producto?.Nombre}" para agregar ${cant} unidades.`
+      this.ventaErrorMessage = `No hay suficiente stock de "${e.displayName}" para agregar ${cant} unidades.`
       return
     }
 
@@ -90,7 +97,7 @@ export class SaleOrderState {
         if(skuAdded){
           const stockCant = e.skus?.find(x => x.SKU === sku)?.Quantity || 0
           if((skuAdded + 1) > stockCant){
-            this.ventaErrorMessage = `El SKU ${sku} del producto "${e.producto?.Nombre}" sólo posee ${stockCant} unidad(es).`
+            this.ventaErrorMessage = `El SKU ${sku} del producto "${e.displayName}" sólo posee ${stockCant} unidad(es).`
             return
           }
           const newSkus = new Map(currentSkus)
@@ -108,6 +115,9 @@ export class SaleOrderState {
         key: e.key,
         cantidad: cant,
         productoID: e.producto.ID,
+        presentationID: e.presentationID,
+        presentationName: e.presentationName,
+        displayName: e.displayName,
         skus: new Map(sku ? [[sku,1]] : []),
         isSubUnidad: e.isSubUnidad || false,
         producto: e.producto
@@ -167,7 +177,8 @@ export class SaleOrderState {
     this.form.DetailProductsIDs = []
     this.form.DetailPrices = []
     this.form.DetailQuantities = []
-    this.form.DetailProductSkus = []
+		this.form.DetailProductSkus = []
+    this.form.DetailProductPresentations = []
 
     // Flatten cart into order details, splitting by SKU for inventory tracking
     for (const vp of this.ventaProductos) {
@@ -184,6 +195,7 @@ export class SaleOrderState {
           this.form.DetailPrices.push(precio)
           this.form.DetailQuantities.push(qty)
           this.form.DetailProductSkus.push(sku)
+          this.form.DetailProductPresentations.push(vp.presentationID)
           totalSkuQty += qty
         }
       }
@@ -195,6 +207,7 @@ export class SaleOrderState {
         this.form.DetailPrices.push(precio)
         this.form.DetailQuantities.push(remainingQty)
         this.form.DetailProductSkus.push("")
+        this.form.DetailProductPresentations.push(vp.presentationID)
       }
     }
 
