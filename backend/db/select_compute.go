@@ -564,6 +564,35 @@ func (dbTable *ScyllaTable[T]) ComputeCapabilities() []QueryCapability {
 					})
 				}
 			}
+		} else if view.Type == 9 { // Table-backed view
+			currentSig := ""
+			for i, col := range view.columns {
+				if i > 0 {
+					currentSig += "|"
+				}
+
+				operatorToken := capabilityDefaultOpForColumn(dbTable.columnsMap[col])
+				currentSig += col + "|" + operatorToken
+
+				priority := 10
+				if i > 0 {
+					priority = 25 + (i-1)*2
+				}
+
+				caps = append(caps, QueryCapability{
+					Signature: currentSig,
+					Source:    view,
+					Priority:  priority,
+				})
+
+				if i > 0 {
+					caps = append(caps, QueryCapability{
+						Signature: currentSig[:len(currentSig)-1] + "~",
+						Source:    view,
+						Priority:  priority - 5,
+					})
+				}
+			}
 		} else if view.Type == 8 { // Range/Radix
 			// Radix views always have equality on prefix, range on last.
 			// They also usually keep part.

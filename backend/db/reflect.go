@@ -602,6 +602,190 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		})
 	}
 
+	// VIEW TABLES
+	for _, viewConfig := range schema.ViewTables {
+		viewCfg := viewConfig
+		if !viewCfg.KeepPart {
+			panic(fmt.Sprintf(`Table "%v": ViewTables requires KeepPart = true to preserve the base partition`, dbTable.name))
+		}
+		if viewCfg.UseHash {
+			panic(fmt.Sprintf(`Table "%v": ViewTables does not support UseHash`, dbTable.name))
+		}
+		if len(viewCfg.Keys) == 0 {
+			panic(fmt.Sprintf(`Table "%v": ViewTables entry must declare at least one key column`, dbTable.name))
+		}
+		if len(dbTable.keys) != 1 {
+			panic(fmt.Sprintf(`Table "%v": ViewTables currently requires exactly one base key column for ID maintenance`, dbTable.name))
+		}
+
+		partKey := dbTable.GetPartKey()
+		if partKey == nil || partKey.IsNil() {
+			panic(fmt.Sprintf(`Table "%v": ViewTables requires a partition column`, dbTable.name))
+		}
+
+		declaredColumns := []IColInfo{}
+		keyColumnNames := []string{}
+		physicalColumns := []viewTableColumnInfo{
+			makeViewTableColumn(partKey, false),
+		}
+		physicalKeyColumns := []viewTableColumnInfo{}
+		rebuildColumnNames := map[string]bool{}
+		fanoutColumnName := ""
+		sliceKeyCount := 0
+
+		for _, declaredColumn := range viewCfg.Keys {
+			column := dbTable.columnsMap[declaredColumn.GetInfo().Name]
+			if column == nil || column.IsNil() {
+				panic(fmt.Sprintf(`Table "%v": ViewTables column "%v" was not found`, dbTable.name, declaredColumn.GetInfo().Name))
+			}
+			if column.GetType().IsComplexType {
+				panic(fmt.Sprintf(`Table "%v": ViewTables column "%v" cannot be a complex type`, dbTable.name, column.GetName()))
+			}
+			if column.GetInfo().Name == dbTable.keys[0].GetName() {
+				panic(fmt.Sprintf(`Table "%v": ViewTables key "%v" must not repeat the base ID column`, dbTable.name, column.GetName()))
+			}
+
+			useSliceElement := column.GetType().IsSlice
+			if useSliceElement {
+				sliceKeyCount++
+				fanoutColumnName = column.GetName()
+			}
+
+			keyColumnNames = append(keyColumnNames, column.GetName())
+			declaredColumns = append(declaredColumns, column)
+			rebuildColumnNames[column.GetName()] = true
+
+			physicalColumn := makeViewTableColumn(column, useSliceElement)
+			physicalColumns = appendUniqueViewTableColumn(physicalColumns, physicalColumn)
+			physicalKeyColumns = append(physicalKeyColumns, physicalColumn)
+		}
+
+		if sliceKeyCount > 1 {
+			panic(fmt.Sprintf(`Table "%v": ViewTables currently supports only one slice-backed key column`, dbTable.name))
+		}
+
+		idColumn := dbTable.keys[0]
+		physicalColumns = appendUniqueViewTableColumn(physicalColumns, makeViewTableColumn(idColumn, false))
+
+		projectedColumns := []IColInfo{}
+		if len(viewCfg.Cols) == 0 {
+			for _, baseColumn := range dbTable.columnsMap {
+				if baseColumn.GetInfo().IsVirtual {
+					continue
+				}
+				if baseColumn.GetName() == fanoutColumnName {
+					continue
+				}
+				projectedColumns = append(projectedColumns, baseColumn)
+			}
+		} else {
+			for _, declaredProjectedColumn := range viewCfg.Cols {
+				projectedColumn := dbTable.columnsMap[declaredProjectedColumn.GetInfo().Name]
+				if projectedColumn == nil || projectedColumn.IsNil() {
+					panic(fmt.Sprintf(`Table "%v": ViewTables projected column "%v" wasn't found`, dbTable.name, declaredProjectedColumn.GetInfo().Name))
+				}
+				if projectedColumn.GetInfo().IsVirtual {
+					panic(fmt.Sprintf(`Table "%v": ViewTables projected column "%v" cannot be virtual`, dbTable.name, projectedColumn.GetName()))
+				}
+				if projectedColumn.GetName() == fanoutColumnName {
+					continue
+				}
+				projectedColumns = append(projectedColumns, projectedColumn)
+			}
+		}
+
+		for _, projectedColumn := range projectedColumns {
+			physicalColumns = appendUniqueViewTableColumn(physicalColumns, makeViewTableColumn(projectedColumn, false))
+			rebuildColumnNames[projectedColumn.GetName()] = true
+		}
+
+		viewColumns := append([]string{partKey.GetName()}, keyColumnNames...)
+		viewName := fmt.Sprintf(`%v__%v_view`, dbTable.name, strings.Join(keyColumnNames, "_"))
+		view := &viewInfo{
+			Type:                9,
+			name:                viewName,
+			columns:             viewColumns,
+			columnsNoPart:       append([]string{}, keyColumnNames...),
+			column:              declaredColumns[0],
+			availableColumns:    []string{},
+			Operators:           []string{"=", "IN", "CONTAINS"},
+			fanoutColumnName:    fanoutColumnName,
+			tableColumns:        physicalColumns,
+			tableKeyColumns:     physicalKeyColumns,
+			maintenanceIDColumn: idColumn,
+			rebuildColumnNames:  rebuildColumnNames,
+		}
+
+		selectableColumnNames := map[string]bool{}
+		selectableColumnNames[partKey.GetName()] = true
+		selectableColumnNames[idColumn.GetName()] = true
+		for _, declaredColumn := range declaredColumns {
+			if declaredColumn.GetName() == fanoutColumnName {
+				continue
+			}
+			selectableColumnNames[declaredColumn.GetName()] = true
+		}
+		for _, projectedColumn := range projectedColumns {
+			if projectedColumn.GetName() == fanoutColumnName {
+				continue
+			}
+			selectableColumnNames[projectedColumn.GetName()] = true
+		}
+		for selectableColumnName := range selectableColumnNames {
+			view.availableColumns = append(view.availableColumns, selectableColumnName)
+		}
+		slices.Sort(view.availableColumns)
+
+		viewPtr := view
+		view.getStatement = func(statements ...ColumnStatement) []string {
+			whereClauses := []string{}
+			for _, statement := range statements {
+				if len(statement.From) > 0 {
+					for idx := range statement.From {
+						whereClauses = append(whereClauses, fmt.Sprintf("%v >= %v", statement.From[idx].Col, statement.From[idx].GetValue()))
+						whereClauses = append(whereClauses, fmt.Sprintf("%v <= %v", statement.To[idx].Col, statement.To[idx].GetValue()))
+					}
+					continue
+				}
+
+				operator := statement.Operator
+				if viewPtr.fanoutColumnName == statement.Col && operator == "CONTAINS" {
+					// Slice-backed source columns are scalar in the derived table, so CONTAINS becomes scalar equality.
+					operator = "="
+				}
+				whereClauses = append(whereClauses, fmt.Sprintf("%v %v %v", statement.Col, operator, statement.GetValue()))
+			}
+			return []string{strings.Join(whereClauses, " AND ")}
+		}
+
+		view.getCreateScript = func() string {
+			columnDefinitions := make([]string, 0, len(viewPtr.tableColumns))
+			for _, column := range viewPtr.tableColumns {
+				columnDefinitions = append(columnDefinitions, fmt.Sprintf("%v %v",
+					getViewTableColumnName(column),
+					getViewTableColumnType(column.SourceColumn, column.UsesSliceElement).ColType,
+				))
+			}
+
+			primaryKeyColumns := append([]string{}, keyColumnNames...)
+			primaryKeyColumns = append(primaryKeyColumns, idColumn.GetName())
+			return fmt.Sprintf(`CREATE TABLE %v.%v (
+			%v,
+			PRIMARY KEY ((%v), %v)
+		)
+		%v;`,
+				dbTable.keyspace,
+				viewPtr.name,
+				strings.Join(columnDefinitions, ", "),
+				partKey.GetName(),
+				strings.Join(primaryKeyColumns, ", "),
+				makeStatementWith,
+			)
+		}
+
+		dbTable.views[view.name] = view
+	}
+
 	// VIEWS
 	for _, viewConfig := range schema.Views {
 		viewCfg := viewConfig

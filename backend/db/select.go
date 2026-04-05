@@ -73,6 +73,25 @@ func canUseProjectedView(selectedColumnNames []string, view *viewInfo) bool {
 	return true
 }
 
+func deduplicateRecordsByPrimaryKey[E any](records *[]E, scyllaTable ScyllaTable[any]) {
+	if records == nil || len(*records) <= 1 {
+		return
+	}
+
+	recordsUniqueMap := map[string]E{}
+	for _, record := range *records {
+		recordPointer := xunsafe.AsPointer(&record)
+		recordKey := makePrimaryKeyRecordKey(recordPointer, scyllaTable)
+		recordsUniqueMap[recordKey] = record
+	}
+
+	recordsDeduplicated := make([]E, 0, len(recordsUniqueMap))
+	for _, record := range recordsUniqueMap {
+		recordsDeduplicated = append(recordsDeduplicated, record)
+	}
+	*records = recordsDeduplicated
+}
+
 func buildRemainingWhereClauses(statements []ColumnStatement) []string {
 	clauses := []string{}
 	for _, statement := range statements {
@@ -262,10 +281,11 @@ func makePrimaryKeyRecordKey(ptr unsafe.Pointer, scyllaTable ScyllaTable[any]) s
 	parts := []string{}
 	partKey := scyllaTable.GetPartKey()
 	if partKey != nil && !partKey.IsNil() {
-		parts = append(parts, fmt.Sprintf("%s=%v", partKey.GetName(), partKey.GetRawValue(ptr)))
+		parts = append(parts, fmt.Sprintf("%s=%v", partKey.GetName(), scyllaTable.GetPartValue(ptr)))
 	}
-	for _, keyColumn := range scyllaTable.keys {
-		parts = append(parts, fmt.Sprintf("%s=%v", keyColumn.GetName(), keyColumn.GetRawValue(ptr)))
+	keyValues := scyllaTable.GetKeyValues(ptr)
+	for keyIndex, keyColumn := range scyllaTable.keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", keyColumn.GetName(), keyValues[keyIndex]))
 	}
 	return strings.Join(parts, "|")
 }
@@ -730,6 +750,10 @@ func selectExec[E any](
 				fmt.Println("Selected Index/View:", viewOrIndex.name)
 				if viewOrIndex.Type >= 6 && canUseProjectedView(columnNames, viewOrIndex) {
 					viewTableName = viewOrIndex.name
+					if viewOrIndex.Type == 9 {
+						// Fan-out view tables can surface the same base row more than once; collapse them after the scan.
+						shouldDeduplicateFanoutResults = true
+					}
 					if viewOrIndex.getStatement != nil {
 						// Identify which statements match the view columns
 						for _, st := range statements {
@@ -1063,23 +1087,19 @@ func selectExec[E any](
 
 	if len(queryWhereStatements) > 1 {
 		if shouldDeduplicateFanoutResults {
-			// Deduplicate fan-out results by partition+primary-key tuple before returning.
-			recordsUniqueMap := map[string]E{}
+			recordsMerged := []E{}
 			for _, records := range recordsMap {
-				for _, rec := range *records {
-					recPtr := xunsafe.AsPointer(&rec)
-					recordKey := makePrimaryKeyRecordKey(recPtr, scyllaTable)
-					recordsUniqueMap[recordKey] = rec
-				}
+				recordsMerged = append(recordsMerged, (*records)...)
 			}
-			for _, rec := range recordsUniqueMap {
-				(*recordsGetted) = append((*recordsGetted), rec)
-			}
+			*recordsGetted = append(*recordsGetted, recordsMerged...)
+			deduplicateRecordsByPrimaryKey(recordsGetted, scyllaTable)
 		} else {
 			for _, records := range recordsMap {
 				(*recordsGetted) = append((*recordsGetted), *records...)
 			}
 		}
+	} else if shouldDeduplicateFanoutResults {
+		deduplicateRecordsByPrimaryKey(recordsGetted, scyllaTable)
 	}
 
 	if len(tableInfo.groupByColumns) == 0 {

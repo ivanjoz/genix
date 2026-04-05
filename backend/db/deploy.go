@@ -628,18 +628,37 @@ func DeployScylla(cacheCode int32, controllers ...ScyllaControllerInterface) {
 		for _, view := range table.views {
 			name := table.keyspace + "." + view.name
 			if _, ok := tableColumnsMap[name]; ok {
-				continue
-			}
-			Logx(5, fmt.Sprintf(`No se encontró la view "%v" en la tabla "%v". Preparando creación...`+"\n", view.name, table.name))
+			} else {
+				Logx(5, fmt.Sprintf(`No se encontró la view "%v" en la tabla "%v". Preparando creación...`+"\n", view.name, table.name))
 
-			createScript := view.getCreateScript()
-			fmt.Println(createScript)
-			if err := QueryExec(createScript); err != nil {
-				fmt.Println(err)
-				panic(fmt.Sprintf(`Error creando la view "%v" en %v`, view.name, tableName))
+				createScript := view.getCreateScript()
+				fmt.Println(createScript)
+				if err := QueryExec(createScript); err != nil {
+					fmt.Println(err)
+					panic(fmt.Sprintf(`Error creando la view "%v" en %v`, view.name, tableName))
+				}
+
+				Logx(2, fmt.Sprintf(`View created "%v"`+"\n", view.name))
 			}
 
-			Logx(2, fmt.Sprintf(`View created "%v"`+"\n", view.name))
+			viewTableName := table.keyspace + "." + view.name
+			if view.Type == 9 {
+				maintenanceIndexName := getViewTableMaintenanceIndexName(view)
+				viewTableIndexes := tableIndexesMap[viewTableName]
+				if slices.Contains(viewTableIndexes, maintenanceIndexName) {
+					continue
+				}
+				Logx(5, fmt.Sprintf(`No se encontró el índice "%v" en "%v". Creando...`+"\n", maintenanceIndexName, viewTableName))
+
+				createScript := getViewTableMaintenanceIndexCreateScript(view, table)
+				fmt.Println(createScript)
+				if err := QueryExec(createScript); err != nil {
+					fmt.Println(err)
+					panic(fmt.Sprintf(`Error creando el índice "%v" en %v`, maintenanceIndexName, viewTableName))
+				}
+
+				Logx(2, fmt.Sprintf(`Index created "%v"`+"\n", maintenanceIndexName))
+			}
 		}
 	}
 

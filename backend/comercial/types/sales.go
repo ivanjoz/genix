@@ -103,12 +103,18 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		GlobalIndexes: [][]db.Coln{
 			{e.Status.Int32(), e.Updated.DecimalSize(8)},
 		},
+		ViewTables: []db.View{
+			{ 
+				Keys: []db.Coln{e.DetailProductsIDs, e.Fecha}, 
+				Cols: []db.Coln{e.Updated}, 
+				KeepPart: true, 
+			},
+		},
 		Views: []db.View{
 			{Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
 			{Keys: []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
 			{Keys: []db.Coln{e.Fecha, e.Updated}, KeepPart: true},
 			{Keys: []db.Coln{e.ID}, Cols: []db.Coln{e.Status, e.StatusTrace}, KeepPart: true},
-			{Keys: []db.Coln{e.DetailProductsIDs}, KeepPart: true},
 		},
 	}
 }

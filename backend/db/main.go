@@ -12,6 +12,7 @@ var indexTypes = map[int8]string{
 	2: "Local Index",
 	3: "Hash Index",
 	4: "View",
+	9: "View Table",
 }
 
 type IColInfo interface {
@@ -89,6 +90,22 @@ func (e ScyllaTable[T]) GetKeys() []IColInfo {
 func (e ScyllaTable[T]) GetPartKey() IColInfo {
 	return e.partKey
 }
+func (e ScyllaTable[T]) GetPartValue(ptr unsafe.Pointer) int64 {
+	if e.partKey == nil || e.partKey.IsNil() {
+		return 0
+	}
+	return convertToInt64(e.partKey.GetRawValue(ptr))
+}
+func (e ScyllaTable[T]) GetKeyValues(ptr unsafe.Pointer) []any {
+	if len(e.keys) == 0 {
+		return nil
+	}
+	keyValues := make([]any, 0, len(e.keys))
+	for _, keyColumn := range e.keys {
+		keyValues = append(keyValues, keyColumn.GetRawValue(ptr))
+	}
+	return keyValues
+}
 
 type viewInfo struct {
 	/* 1 = Global index, 2 = Local index, 3 = Hash index, 4 = view*/
@@ -113,6 +130,16 @@ type viewInfo struct {
 	getStatement          func(statements ...ColumnStatement) []string
 	decomposeVirtualValue func(rawValue any) []any
 	getCreateScript       func() string
+	fanoutColumnName      string
+	tableColumns          []viewTableColumnInfo
+	tableKeyColumns       []viewTableColumnInfo
+	maintenanceIDColumn   IColInfo
+	rebuildColumnNames    map[string]bool
+}
+
+type viewTableColumnInfo struct {
+	SourceColumn     IColInfo
+	UsesSliceElement bool
 }
 
 type ColumnStatement struct {
@@ -135,6 +162,7 @@ type TableSchema struct {
 	Indexes           [][]Coln //  new column
 	GlobalIndexes     [][]Coln //  new column
 	Views             []View
+	ViewTables        []View
 	SequenceColumn    Coln
 	CounterColumn     Coln
 	UseSequences      bool

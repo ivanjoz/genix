@@ -334,6 +334,91 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	return batch
 }
 
+func collectAllWritableColumns(scyllaTable *ScyllaTable[any]) []IColInfo {
+	affectedColumns := []IColInfo{}
+	for _, column := range scyllaTable.columns {
+		if column.GetInfo().IsVirtual {
+			continue
+		}
+		affectedColumns = append(affectedColumns, column)
+	}
+	return affectedColumns
+}
+
+func collectAffectedColumnsForInclude(scyllaTable *ScyllaTable[any], columnsToInclude []Coln) []IColInfo {
+	affectedColumns := []IColInfo{}
+	for _, columnToInclude := range columnsToInclude {
+		column := scyllaTable.columnsMap[columnToInclude.GetName()]
+		if column == nil || column.IsNil() || column.GetInfo().IsVirtual {
+			continue
+		}
+		affectedColumns = append(affectedColumns, column)
+	}
+	return affectedColumns
+}
+
+func collectAffectedColumnsForExclude(scyllaTable *ScyllaTable[any], columnsToExclude []Coln) []IColInfo {
+	excludedColumnNames := map[string]bool{}
+	for _, columnToExclude := range columnsToExclude {
+		excludedColumnNames[columnToExclude.GetName()] = true
+	}
+
+	affectedColumns := []IColInfo{}
+	for _, column := range scyllaTable.columns {
+		if column.GetInfo().IsVirtual || excludedColumnNames[column.GetName()] {
+			continue
+		}
+		affectedColumns = append(affectedColumns, column)
+	}
+	return affectedColumns
+}
+
+func syncTableBackedViews[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	records *[]T, scyllaTable *ScyllaTable[any], affectedColumns []IColInfo,
+) error {
+	if len(*records) == 0 || len(scyllaTable.views) == 0 {
+		return nil
+	}
+
+	session := getScyllaConnection()
+	partColumn := scyllaTable.GetPartKey()
+	if partColumn == nil || partColumn.IsNil() {
+		return nil
+	}
+
+	for _, view := range scyllaTable.views {
+		if view.Type != 9 {
+			continue
+		}
+		if len(affectedColumns) > 0 {
+			shouldSyncCurrentView := false
+			for _, affectedColumn := range affectedColumns {
+				if view.rebuildColumnNames[affectedColumn.GetName()] {
+					shouldSyncCurrentView = true
+					break
+				}
+			}
+			if !shouldSyncCurrentView {
+				continue
+			}
+		}
+
+		for start := 0; start < len(*records); start += maxInsertBatchRows {
+			end := start + maxInsertBatchRows
+			if end > len(*records) {
+				end = len(*records)
+			}
+
+			recordsChunk := (*records)[start:end]
+			if err := executeViewTableSyncChunk(view, &recordsChunk, session, scyllaTable); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func Insert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T, columnsToExclude ...Coln,
 ) error {
@@ -366,6 +451,12 @@ func Insert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 			fmt.Println("Error inserting records:", err)
 			return err
 		}
+	}
+
+	affectedColumns := collectAllWritableColumns(&scyllaTable)
+	if err := syncTableBackedViews(records, &scyllaTable, affectedColumns); err != nil {
+		fmt.Println("Error syncing view tables after insert:", err)
+		return err
 	}
 
 	// Cache-version is updated only after a successful write to keep counters consistent with persisted rows.
@@ -590,6 +681,12 @@ func Update[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		return err
 	}
 
+	affectedColumns := collectAffectedColumnsForInclude(&scyllaTable, columnsToInclude)
+	if err := syncTableBackedViews(records, &scyllaTable, affectedColumns); err != nil {
+		fmt.Println("Error syncing view tables after update:", err)
+		return err
+	}
+
 	// Version groups are incremented after update commit using the same record IDs as the update payload.
 	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
 		fmt.Println("Error updating cache versions after update:", err)
@@ -623,6 +720,12 @@ func UpdateExclude[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	if err := QueryExec(queryInsert); err != nil {
 		fmt.Println(queryInsert)
 		fmt.Println("Error inserting records:", err)
+		return err
+	}
+
+	affectedColumns := collectAffectedColumnsForExclude(&scyllaTable, columnsToExclude)
+	if err := syncTableBackedViews(records, &scyllaTable, affectedColumns); err != nil {
+		fmt.Println("Error syncing view tables after update-exclude:", err)
 		return err
 	}
 
