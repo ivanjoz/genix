@@ -1,27 +1,24 @@
 <script lang="ts">
-import Input from '$components/Input.svelte';
 import LayerStatic from '$components/LayerStatic.svelte';
-import Page from '$domain/Page.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
-import { Loading, include } from '$libs/helpers';
-import { formatN } from '$libs/helpers';
+import Page from '$domain/Page.svelte';
+import { Loading, formatN, include } from '$libs/helpers';
 
+import CheckboxOptions from '$components/CheckboxOptions.svelte';
+import { Core } from '$core/store.svelte';
+import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
+import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
+import { getProductosStock, type IProductoStock } from '$routes/logistica/products-stock/stock-movement';
 import { ProductosService } from '$routes/negocio/productos/productos.svelte';
-import type { IAlmacen } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte";
-  import { AlmacenesService } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte";
 import { ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
+import { SystemParametersService } from '$services/services/system-parameters.svelte';
+import { untrack } from 'svelte';
+import { EmpresaParametrosService } from '../../configuracion/parametros/empresas.svelte';
+import type { IAlmacen } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte";
+import { AlmacenesService } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte";
 import ProductoVentaCard from './ProductoVentaCard.svelte';
 import type { ProductoVenta } from "./sale_order.svelte";
 import { SaleOrderState } from "./sale_order.svelte";
-import { EmpresaParametrosService } from '../../configuracion/parametros/empresas.svelte';
-    import { Env } from '$core/env';
-    import { Core } from '$core/store.svelte';
-    import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
-    import { SystemParametersService } from '$services/services/system-parameters.svelte';
-    import CheckboxOptions from '$components/CheckboxOptions.svelte';
-    import { CajasService, type ICaja } from '$routes/finanzas/cajas/cajas.svelte';
-    import { untrack } from 'svelte';
-    import { getProductosStock, type IProductoStock } from '$routes/logistica/products-stock/stock-movement';
 
   // Helpers
   const formatMo = (n: number) => formatN(n / 100, 2);
