@@ -18,9 +18,11 @@
   import {
     SaleOrderGroup,
     SaleOrdersService,
+    type ISaleOrderTopProduct,
     postSaleOrderUpdate,
     type ISaleOrder
   } from './sale_order_status.svelte';
+    import { getRecordByIDUpdated } from '$libs/cache/cache-by-ids.svelte';
 
   interface ISaleOrderDetailLine {
     detailPosition: number;
@@ -91,13 +93,54 @@
     </div>`;
   }
 
+  function getTopPaidProductsByAmount(saleOrder: ISaleOrder): ISaleOrderTopProduct[] {
+    const detailCount = Math.min(
+      saleOrder.DetailProductsIDs?.length || 0,
+      saleOrder.DetailPrices?.length || 0,
+      saleOrder.DetailQuantities?.length || 0
+    );
+    const productAmountByID = new Map<number, ISaleOrderTopProduct>();
+
+    // Rebuild top products from detail arrays so hydrated rows and list rows behave the same.
+    for (let detailIndex = 0; detailIndex < detailCount; detailIndex += 1) {
+      const productID = saleOrder.DetailProductsIDs[detailIndex] || 0;
+      const linePrice = saleOrder.DetailPrices[detailIndex] || 0;
+      const lineQuantity = saleOrder.DetailQuantities[detailIndex] || 0;
+      const lineAmount = linePrice * lineQuantity;
+      if (!productID || lineAmount <= 0) { continue; }
+
+      const previousProductData = productAmountByID.get(productID);
+      if (previousProductData) {
+        previousProductData.LineAmount += lineAmount;
+        continue;
+      }
+
+      productAmountByID.set(productID, {
+        ProductID: productID,
+        LineAmount: lineAmount,
+      });
+    }
+
+    const sortedProducts = Array.from(productAmountByID.values()).sort((leftProduct, rightProduct) => {
+      if (rightProduct.LineAmount !== leftProduct.LineAmount) {
+        return rightProduct.LineAmount - leftProduct.LineAmount;
+      }
+      return leftProduct.ProductID - rightProduct.ProductID;
+    });
+    if (sortedProducts.length <= 3) { return sortedProducts; }
+
+    const tieAwareCutoffAmount = sortedProducts[2].LineAmount;
+    return sortedProducts.filter((product) => product.LineAmount >= tieAwareCutoffAmount);
+  }
+
   function renderTopProductsSummary(saleOrder: ISaleOrder): string {
-    if (!saleOrder.TopPaidProducts || saleOrder.TopPaidProducts.length === 0) {
+    const topPaidProducts = getTopPaidProductsByAmount(saleOrder);
+    if (topPaidProducts.length === 0) {
       return '-';
     }
 
-    // Keep product-name lookup in the view as requested; service only provides ranked IDs/amounts.
-    return saleOrder.TopPaidProducts
+    // Keep product-name lookup in the view and derive amounts from the raw detail arrays.
+    return topPaidProducts
       .map((topProduct) => {
         const productName = productosService.recordsMap.get(topProduct.ProductID)?.Nombre || `Producto #${topProduct.ProductID}`;
         return `${productName} (${formatN(topProduct.LineAmount / 100, 2)})`;
@@ -430,7 +473,7 @@
     },
     {
       header: 'Top Productos',
-      css: 'fs15',
+      css: 'fs15 leading-[1.15]',
       id: 'top-products',
       getValue: saleOrder => renderTopProductsSummary(saleOrder),
       mobile: { order: 6, css: 'col-span-24', labelTop: 'Top Productos', render: saleOrder => renderTopProductsSummary(saleOrder) }
@@ -464,7 +507,9 @@
 	       	console.log("saleOrder", $state.snapshot(saleOrder))
 	         openSaleOrderDetailsLayer(saleOrder);
 	       }}
+				 estimateSize={38}
 	       mobileCardCss="mb-10"
+				 getRowObject={(e) => getRecordByIDUpdated("sale-order-by-ids", e.ID||0, e.upd||0) as Promise<ISaleOrder>}
 	     />
      </Layer>
   </div>

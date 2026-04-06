@@ -14,9 +14,10 @@ const CACHE_TIME = 5
 
 export interface IMinimalRecord {
 	ID: number /* ID f the record */ 
-	ccv: number /* cache version a number from 0 to 255 */
+	ccv?: number /* cache version a number from 0 to 255 */
 	ss: number /* status: 1 active, 0 deleted */
-	_fch: number /* fetched: when the record was last fetched (in seconds) */
+	_fch?: number /* fetched: when the record was last fetched (in seconds) */
+	upd: number /* for used in getRecordByIDUpdated */
 }
 
 const cacheRecordIdTable: Map<string,Map<number,IMinimalRecord>> = new Map()
@@ -26,14 +27,33 @@ const CACHE_DEBUG_PREFIX = `${LOG_PREFIX}:stale-debug`
 
 export type CacheByIDsFetchFromServer = <T extends IMinimalRecord>(
 	apiRoute: string,
-	uriParams: string,
+	ids: number[],
+	ccIDs: number[],
+	ccVer: number[],
 ) => Promise<T[]>
+
+const buildFetchUriParams = (
+	ids: number[],
+	ccIDs: number[],
+	ccVer: number[],
+): string => {
+	return [
+		ids.length > 0 && `ids=${concatenateInts(ids)}`,
+		ccIDs.length > 0 && `cc-ids=${concatenateInts(ccIDs)}`,
+		ccVer.length > 0 && `cc-ver=${concatenateInts(ccVer)}`,
+	]
+		.filter(Boolean)
+		.join("&")
+}
 
 // Configure this from your app when the backend endpoint is ready.
 let fetchFromServer: CacheByIDsFetchFromServer = async <T extends IMinimalRecord>(
 	apiRoute: string,
-	uriParams: string,
+	ids: number[],
+	ccIDs: number[],
+	ccVer: number[],
 ): Promise<T[]> => {
+	const uriParams = buildFetchUriParams(ids, ccIDs, ccVer)
 	try {
 		// `apiRoute` is treated as the backend route (example: `p-productos-ids`).
 		const responsePayload = await GET({
@@ -72,6 +92,34 @@ const getOrCreateTableCache = (apiRoute: string): Map<number, IMinimalRecord> =>
 	const createdTableCache = new Map<number, IMinimalRecord>()
 	cacheRecordIdTable.set(apiRoute, createdTableCache)
 	return createdTableCache
+}
+
+const mergeFetchedRecordsIntoCache = async <T extends IMinimalRecord>(
+	apiRoute: string,
+	records: T[],
+	fetchedAtSeconds: number,
+): Promise<Map<number, T>> => {
+	const tableCache = getOrCreateTableCache(apiRoute)
+	const mergedRecords = new Map<number, T>()
+
+	// Normalize server rows before writing so memory and IDB keep the same invariant.
+	for (const fetchedRecord of records) {
+		if (!fetchedRecord || typeof fetchedRecord.ID !== "number") {
+			console.warn(`${LOG_PREFIX} Invalid record received from server. Skipping.`, fetchedRecord)
+			continue
+		}
+		fetchedRecord._fch = fetchedAtSeconds
+		if (typeof fetchedRecord.ccv !== "number") fetchedRecord.ccv = 0
+		if (typeof fetchedRecord.ss !== "number") fetchedRecord.ss = 1
+		tableCache.set(fetchedRecord.ID, fetchedRecord)
+		mergedRecords.set(fetchedRecord.ID, fetchedRecord)
+	}
+
+	if (mergedRecords.size > 0) {
+		await upsertRecordsIntoIDB<T>(apiRoute, Array.from(mergedRecords.values()))
+	}
+
+	return mergedRecords
 }
 
 const normalizeIDs = (ids: number[]): number[] => {
@@ -255,13 +303,11 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(
 	// - `ids`: records with no local cache.
 	// - `cc-ids`: records that exist locally and can be checked by backend.
 	// - `cc-ver`: local update-group values aligned by position with `cc-ids`.
-	const uriParams = [
-		recordsWitoutCache.length > 0 && `ids=${concatenateInts(recordsWitoutCache)}`,
-		recordsCachedIDs.length > 0 && `cc-ids=${concatenateInts(recordsCachedIDs)}`,
-		recordsCachedUpdatedGroupsIDs.length > 0 && `cc-ver=${concatenateInts(recordsCachedUpdatedGroupsIDs)}`,
-	]
-	.filter(Boolean)
-	.join("&")
+	const uriParams = buildFetchUriParams(
+		recordsWitoutCache,
+		recordsCachedIDs,
+		recordsCachedUpdatedGroupsIDs,
+	)
 
 	// Why not only `uriParams.length > 0`?
 	// Because `cached` can be non-empty even when data is still fresh. In that case, network
@@ -294,7 +340,12 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(
 	if (shouldFetchFromServer) {
 		try {
 			console.log(`${LOG_PREFIX} Fetching from server.`, { apiRoute, uriParams })
-			updatedOrNewRecordsFromServer = await fetchFromServer<T>(apiRoute, uriParams)
+			updatedOrNewRecordsFromServer = await fetchFromServer<T>(
+				apiRoute,
+				recordsWitoutCache,
+				recordsCachedIDs,
+				recordsCachedUpdatedGroupsIDs,
+			)
 			console.log(`${LOG_PREFIX} Server response received.`, {
 				apiRoute,
 				recordsCount: updatedOrNewRecordsFromServer.length,
@@ -323,24 +374,7 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(
 	}
 
 	if (updatedOrNewRecordsFromServer.length > 0) {
-		// Merge server delta into memory map and stamp fresh fetch time.
-		for (const record of updatedOrNewRecordsFromServer) {
-			if (!record || typeof record.ID !== "number") {
-				console.warn(`${LOG_PREFIX} Invalid record received from server. Skipping.`, record)
-				continue
-			}
-			// Always refresh fetch timestamp for records the server returned (new or changed).
-			record._fch = currentTimeSeconds
-
-			// Ensure required fields exist to keep cache invariant.
-			if (typeof record.ccv !== "number") record.ccv = 0
-			if (typeof record.ss !== "number") record.ss = 1
-
-			tableCache.set(record.ID, record)
-		}
-
-		// Persist merged changes so next page load can hit IDB before network.
-		await upsertRecordsIntoIDB<T>(apiRoute, updatedOrNewRecordsFromServer)
+		await mergeFetchedRecordsIntoCache<T>(apiRoute, updatedOrNewRecordsFromServer, currentTimeSeconds)
 	}
 
 	// Final read is stable by requested ID order; tombstones remain hidden.
@@ -369,8 +403,16 @@ const bufferedResolversByTableAndID: Map<
 	string,
 	{ resolve: (value: any) => void; reject: (reason?: any) => void }
 > = new Map()
+const updatedRecordIDsBufferByTable: Map<string, Set<number>> = new Map()
+const bufferedUpdatedPromiseByTableAndID: Map<string, Promise<any>> = new Map()
+const bufferedUpdatedResolversByTableAndID: Map<
+	string,
+	{ resolve: (value: any) => void; reject: (reason?: any) => void }
+> = new Map()
 let bufferStarTime = 0
 let bufferFlushTimer: ReturnType<typeof setTimeout> | null = null
+let updatedBufferStarTime = 0
+let updatedBufferFlushTimer: ReturnType<typeof setTimeout> | null = null
 
 // Runs once per buffer window and resolves every pending getRecordByID Promise.
 // It batches IDs per table, does one request per table, then fans out each result by ID.
@@ -442,6 +484,61 @@ const flushBufferedRequests = async () => {
 
 export interface GetRecordByIDOptions<T extends IMinimalRecord> {
 	cachedRecord?: T | false
+}
+
+const flushBufferedUpdatedRequests = async () => {
+	const bufferedStartTime = updatedBufferStarTime
+	updatedBufferStarTime = 0
+	if (updatedBufferFlushTimer) {
+		clearTimeout(updatedBufferFlushTimer)
+		updatedBufferFlushTimer = null
+	}
+
+	const idsByTableToFetch: Array<{ apiRoute: string; ids: number[] }> = []
+	for (const [apiRoute, idsSet] of updatedRecordIDsBufferByTable) {
+		if (idsSet.size === 0) continue
+		idsByTableToFetch.push({ apiRoute, ids: Array.from(idsSet) })
+		idsSet.clear()
+	}
+
+	if (idsByTableToFetch.length === 0) return
+
+	console.debug(`${LOG_PREFIX} Flushing buffered getRecordByIDUpdated requests.`, {
+		bufferedForMs: bufferedStartTime ? Date.now() - bufferedStartTime : 0,
+		tablesCount: idsByTableToFetch.length,
+	})
+
+	for (const { apiRoute, ids } of idsByTableToFetch) {
+		try {
+			console.debug(`${CACHE_DEBUG_PREFIX} flush updated table batch`, {
+				apiRoute,
+				idsCount: ids.length,
+				ids: summarizeIDs(ids),
+			})
+			const fetchedRecords = await fetchFromServer<any>(apiRoute, ids, [], [])
+			const fetchedRecordsByID = await mergeFetchedRecordsIntoCache<any>(apiRoute, fetchedRecords, nowSeconds())
+
+			for (const id of ids) {
+				const key = `${apiRoute}:${id}`
+				const pending = bufferedUpdatedResolversByTableAndID.get(key)
+				if (!pending) continue
+				bufferedUpdatedResolversByTableAndID.delete(key)
+				bufferedUpdatedPromiseByTableAndID.delete(key)
+				const fetchedRecord = fetchedRecordsByID.get(id)
+				pending.resolve(fetchedRecord && fetchedRecord.ss !== 0 ? fetchedRecord : undefined)
+			}
+		} catch (error) {
+			console.warn(`${LOG_PREFIX} Buffered updated fetch failed. Rejecting pending promises.`, { apiRoute }, error)
+			for (const id of ids) {
+				const key = `${apiRoute}:${id}`
+				const pending = bufferedUpdatedResolversByTableAndID.get(key)
+				if (!pending) continue
+				bufferedUpdatedResolversByTableAndID.delete(key)
+				bufferedUpdatedPromiseByTableAndID.delete(key)
+				pending.reject(error)
+			}
+		}
+	}
 }
 
 export const getRecordByID = async <T extends IMinimalRecord>(
@@ -546,6 +643,73 @@ export const getRecordByID = async <T extends IMinimalRecord>(
 	}
 
 	return createdPromise
+}
+
+export const getRecordByIDUpdated = async <T extends IMinimalRecord>(
+	apiRoute: string, id: number,	updated: number,
+): Promise<T | undefined> => {
+	const numericID = Number(id)
+	if (!Number.isFinite(numericID) || numericID <= 0) return undefined
+
+	const localResolution = await getLocalRecordByID<T>(apiRoute, numericID)
+	if (localResolution.record && localResolution.record.upd >= updated) {
+		console.debug(`${CACHE_DEBUG_PREFIX} getRecordByIDUpdated returns local cache`, {
+			apiRoute,
+			id: numericID,
+			updated,
+		})
+		return localResolution.record
+	}
+
+	let returnedRecord: T | undefined
+	try {
+		console.debug(`${CACHE_DEBUG_PREFIX} getRecordByIDUpdated queued into updated buffer`, {
+			apiRoute,
+			id: numericID,
+			requestedUpdated: updated,
+			localUpdated: localResolution.record?.upd || 0,
+			bufferWindowMs: buffetMaxTime,
+		})
+		const promiseKey = `${apiRoute}:${numericID}`
+		const existingPromise = bufferedUpdatedPromiseByTableAndID.get(promiseKey)
+		if (existingPromise) {
+			returnedRecord = await existingPromise as T | undefined
+		} else {
+			if (!updatedBufferStarTime) updatedBufferStarTime = Date.now()
+
+			let idsBuffer = updatedRecordIDsBufferByTable.get(apiRoute)
+			if (!idsBuffer) {
+				idsBuffer = new Set()
+				updatedRecordIDsBufferByTable.set(apiRoute, idsBuffer)
+			}
+			idsBuffer.add(numericID)
+
+			const createdPromise = new Promise<T | undefined>((resolve, reject) => {
+				bufferedUpdatedResolversByTableAndID.set(promiseKey, { resolve, reject })
+			})
+			bufferedUpdatedPromiseByTableAndID.set(promiseKey, createdPromise)
+
+			if (!updatedBufferFlushTimer) {
+				updatedBufferFlushTimer = setTimeout(() => {
+					void flushBufferedUpdatedRequests()
+				}, buffetMaxTime)
+			}
+
+			returnedRecord = await createdPromise
+		}
+	} catch (fetchError) {
+		console.warn(`${LOG_PREFIX} Failed to refresh record by updated.`, {
+			apiRoute,
+			id: numericID,
+			updated,
+		}, fetchError)
+		return undefined
+	}
+
+	// Once we fetched from server, that row is authoritative even when its `upd` advanced.
+	const fetchedRecord = returnedRecord
+	if (!fetchedRecord || fetchedRecord.ss === 0) return undefined
+	return fetchedRecord
 }
 
 const isRecordStale = (record: IMinimalRecord, nowTimeSeconds: number): boolean => {

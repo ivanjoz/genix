@@ -8,6 +8,7 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.sale-order":  PostSaleOrder,
 	"GET.sale-orders":  GetSaleOrders,
 	"GET.sale-summary": GetSaleSummary,
+	"GET.sale-order-by-ids": GetSaleOrderByIDs,
 }
 
 func init(){

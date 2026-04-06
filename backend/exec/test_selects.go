@@ -14,6 +14,20 @@ import (
 func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	var err error
 	
+	traceSales := []comercial.SaleOrder{}
+	query := db.Query(&traceSales)
+	query.Select(query.ID, query.ClientID, query.DetailProductsIDs, query.Updated)
+	query.CompanyID.Equals(1).StatusTrace.Equals(2).Updated.GreaterEqual(0)
+
+	
+	if err := query.Exec(); err != nil {
+		fmt.Println("Error in Test 6:", err)
+	} else {
+		fmt.Printf("Found %d traceSales in range\n", len(traceSales))
+	}
+	
+	return core.FuncResponse{}
+		
 	// 6. Test bucket query CONTAINS + "RANGE" with hash index
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
 	recordSalesOrders := []comercial.SaleOrder{}

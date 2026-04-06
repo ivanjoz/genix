@@ -3,7 +3,9 @@ package db
 import (
 	"fmt"
 	"hash/fnv"
+	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -212,6 +214,93 @@ func makeSelectQueryTemplate(selectExpressions []string, keyspace, sourceTableNa
 	return fmt.Sprintf("SELECT %v FROM %v.%v %%v", strings.Join(selectExpressions, ", "), keyspace, sourceTableName)
 }
 
+func getMaxClusteringKeyRestrictionsPerQuery() int {
+	// Keep the Scylla clustering-key fanout limit configurable while staying safe by default.
+	rawMaxClusteringKeys := strings.TrimSpace(os.Getenv("MAX_CLUSTERING_KEY"))
+	if rawMaxClusteringKeys == "" {
+		return 100
+	}
+
+	maxClusteringKeys, parseError := strconv.Atoi(rawMaxClusteringKeys)
+	if parseError != nil || maxClusteringKeys <= 0 {
+		fmt.Printf("Invalid MAX_CLUSTERING_KEY=%q. Using default 100.\n", rawMaxClusteringKeys)
+		return 100
+	}
+	return maxClusteringKeys
+}
+
+func chunkStatementInValues(values []any, chunkSize int) [][]any {
+	if len(values) == 0 {
+		return nil
+	}
+	if chunkSize <= 0 {
+		chunkSize = 1
+	}
+
+	valueChunks := make([][]any, 0, (len(values)+chunkSize-1)/chunkSize)
+	for startIndex := 0; startIndex < len(values); startIndex += chunkSize {
+		endIndex := min(startIndex+chunkSize, len(values))
+		valueChunks = append(valueChunks, slices.Clone(values[startIndex:endIndex]))
+	}
+	return valueChunks
+}
+
+func buildRemainingWhereClauseBatches(remainingStatements []ColumnStatement) []string {
+	if len(remainingStatements) == 0 {
+		return []string{""}
+	}
+
+	maxClusteringKeys := getMaxClusteringKeyRestrictionsPerQuery()
+	statementBatches := [][]ColumnStatement{{}}
+	currentCartesianProductSize := 1
+
+	for _, statement := range remainingStatements {
+		if statement.Operator != "IN" || len(statement.Values) == 0 {
+			for batchIndex := range statementBatches {
+				statementBatches[batchIndex] = append(statementBatches[batchIndex], statement)
+			}
+			continue
+		}
+
+		maxValuesPerBatch := maxClusteringKeys / currentCartesianProductSize
+		if maxValuesPerBatch < 1 {
+			maxValuesPerBatch = 1
+		}
+
+		valueChunks := chunkStatementInValues(statement.Values, maxValuesPerBatch)
+		nextStatementBatches := make([][]ColumnStatement, 0, len(statementBatches)*len(valueChunks))
+		maxChunkSize := 0
+
+		for _, valueChunk := range valueChunks {
+			if len(valueChunk) > maxChunkSize {
+				maxChunkSize = len(valueChunk)
+			}
+			for _, currentBatchStatements := range statementBatches {
+				statementBatch := slices.Clone(currentBatchStatements)
+				statementCopy := statement
+				statementCopy.Values = slices.Clone(valueChunk)
+				statementBatch = append(statementBatch, statementCopy)
+				nextStatementBatches = append(nextStatementBatches, statementBatch)
+			}
+		}
+
+		statementBatches = nextStatementBatches
+		currentCartesianProductSize *= max(1, maxChunkSize)
+	}
+
+	whereClauseBatches := make([]string, 0, len(statementBatches))
+	for _, statementBatch := range statementBatches {
+		whereClauseBatches = append(whereClauseBatches, strings.Join(buildRemainingWhereClauses(statementBatch), " AND "))
+	}
+
+	if len(whereClauseBatches) > 1 {
+		fmt.Printf("Select batching IN query: statements=%d max_clustering_key=%d batches=%d\n",
+			len(remainingStatements), maxClusteringKeys, len(whereClauseBatches))
+	}
+
+	return whereClauseBatches
+}
+
 func buildBoundSelectPlan(
 	queryTemplate string,
 	scanColumns []selectScanColumn,
@@ -230,38 +319,41 @@ func buildBoundSelectPlan(
 		whereStatements = []string{""}
 	}
 
-	whereStatementsRemain := strings.Join(buildRemainingWhereClauses(remainingStatements), " AND ")
-	boundStatements := make([]BoundSelectStatement, 0, max(1, len(whereStatements)))
+	remainingWhereClauseBatches := buildRemainingWhereClauseBatches(remainingStatements)
+	boundStatements := make([]BoundSelectStatement, 0, max(1, len(whereStatements)*len(remainingWhereClauseBatches)))
 
 	for _, whereStatement := range whereStatements {
-		whereRemainClause := whereStatementsRemain
-		if whereStatementsRemain != "" {
-			if whereStatement != "" {
-				whereRemainClause = " AND " + whereRemainClause
+		for _, remainingWhereClause := range remainingWhereClauseBatches {
+			whereStatementCombined := whereStatement
+			whereRemainClause := remainingWhereClause
+			if remainingWhereClause != "" {
+				if whereStatementCombined != "" {
+					whereRemainClause = " AND " + whereRemainClause
+				}
+				whereStatementCombined += whereRemainClause
 			}
-			whereStatement += whereRemainClause
-		}
-		if whereStatement != "" {
-			whereStatement = " WHERE " + whereStatement
-		}
-		if len(groupByColumns) > 0 {
-			whereStatement += " GROUP BY " + strings.Join(groupByColumns, ", ")
-		}
-		if orderBy != "" {
-			whereStatement += " " + fmt.Sprintf(orderBy, orderColumnName)
-		}
-		if limit > 0 {
-			whereStatement += fmt.Sprintf(" LIMIT %v", limit)
-		}
-		if allowFilter {
-			whereStatement += " ALLOW FILTERING"
-		}
+			if whereStatementCombined != "" {
+				whereStatementCombined = " WHERE " + whereStatementCombined
+			}
+			if len(groupByColumns) > 0 {
+				whereStatementCombined += " GROUP BY " + strings.Join(groupByColumns, ", ")
+			}
+			if orderBy != "" {
+				whereStatementCombined += " " + fmt.Sprintf(orderBy, orderColumnName)
+			}
+			if limit > 0 {
+				whereStatementCombined += fmt.Sprintf(" LIMIT %v", limit)
+			}
+			if allowFilter {
+				whereStatementCombined += " ALLOW FILTERING"
+			}
 
-		boundStatements = append(boundStatements, BoundSelectStatement{
-			QueryStr:             fmt.Sprintf(queryTemplate, whereStatement),
-			QueryValues:          nil,
-			PostFilterStatements: slices.Clone(postFilterStatements),
-		})
+			boundStatements = append(boundStatements, BoundSelectStatement{
+				QueryStr:             fmt.Sprintf(queryTemplate, whereStatementCombined),
+				QueryValues:          nil,
+				PostFilterStatements: slices.Clone(postFilterStatements),
+			})
+		}
 	}
 
 	return &BoundSelectPlan{
@@ -563,13 +655,13 @@ func compileSelectStatement(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) 
 	}
 
 	compiledStatement := &SelectStatement{
-		hash:            computeSelectShapeHash(tableInfo, scyllaTable),
-		scanColumns:     slices.Clone(scanColumns),
-		orderBy:         tableInfo.orderBy,
-		orderColumnName: orderColumnName,
-		limit:           tableInfo.limit,
-		allowFilter:     tableInfo.allowFilter,
-		route:           selectRouteAllStatements,
+		hash:                computeSelectShapeHash(tableInfo, scyllaTable),
+		scanColumns:         slices.Clone(scanColumns),
+		orderBy:             tableInfo.orderBy,
+		orderColumnName:     orderColumnName,
+		limit:               tableInfo.limit,
+		allowFilter:         tableInfo.allowFilter,
+		route:               selectRouteAllStatements,
 		assignCacheVersions: true,
 	}
 

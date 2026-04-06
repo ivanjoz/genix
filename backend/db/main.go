@@ -128,7 +128,7 @@ type viewInfo struct {
 	packedSlotDigitsPerColumn []int64
 	Operators                 []string
 	// RequiresPostFilter indicates the index/view can overfetch and should be exact-filtered in memory.
-	// This is required for packed indexes when DecimalSize() truncation is applied.
+	// Keep this for hash-style plans that intentionally trade exact routing for bounded overfetch.
 	RequiresPostFilter    bool
 	getStatement          func(statements ...ColumnStatement) []string
 	decomposeVirtualValue func(rawValue any) []any

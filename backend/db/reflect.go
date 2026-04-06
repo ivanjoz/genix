@@ -901,9 +901,6 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			view.column = columns[0]
 		} else if isRangeView {
 			view.Type = 8
-			// Packed range views can truncate DecimalSize() components, so exact filtering must
-			// still run in memory after the routed MV scan.
-			view.RequiresPostFilter = true
 			// Packed views default to int64 unless Int32() is explicitly set on the first column.
 			view.column.GetType().FieldType = "int64"
 			view.column.GetType().ColType = "bigint"

@@ -36,6 +36,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     getFilterContent?: (row: T) => string;
     useFilterCache?: boolean;
     mobileCardCss?: string
+    getRowObject?: (row: Partial<T>) => Promise<T>
   }
 
   let {
@@ -54,7 +55,8 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     filterText,
     getFilterContent,
     useFilterCache = false,
-    mobileCardCss = ''
+    mobileCardCss = '',
+    getRowObject
   }: VTableProps<T> = $props();
 
   // State
@@ -64,7 +66,11 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
   let virtualizerStore: ReturnType<typeof createVirtualizer> | null = null;
   let isInitialized = false;
   let dataVersion = $state(0);
+  let rowObjectVersion = $state(0);
   const filterCache = new WeakMap<T & object, string>();
+  const resolvedRowByKey = new Map<object | string, T>();
+  const loadingRowKeys = new Set<object | string>();
+  const queuedRowKeys = new Set<object | string>();
 
   // Mobile view state
   let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1024);
@@ -147,6 +153,56 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
       return data
     }
   })
+
+  function getRowKey(record: T, index: number): object | string {
+    return typeof record === 'object' && record !== null ? record : `row_${index}`;
+  }
+
+  // Resolve row objects lazily so tables can start from partial rows and hydrate details on demand.
+  function getResolvedRow(record: T, index: number): T | null {
+    if (!getRowObject) {
+      return record;
+    }
+
+    rowObjectVersion;
+    const rowKey = getRowKey(record, index);
+    const cachedRow = resolvedRowByKey.get(rowKey);
+    if (cachedRow) {
+      return cachedRow;
+    }
+
+    if (!loadingRowKeys.has(rowKey) && !queuedRowKeys.has(rowKey)) {
+      queuedRowKeys.add(rowKey);
+
+      // Defer hydration kickoff so template evaluation stays side-effect free.
+      queueMicrotask(() => {
+        queuedRowKeys.delete(rowKey);
+        if (loadingRowKeys.has(rowKey) || resolvedRowByKey.has(rowKey)) {
+          return;
+        }
+
+        loadingRowKeys.add(rowKey);
+        rowObjectVersion++;
+
+        void getRowObject(record as Partial<T>)
+          .then((resolvedRow) => {
+            // Keep the source row visible when hydration returns nothing.
+            resolvedRowByKey.set(rowKey, resolvedRow || record);
+          })
+          .catch((resolveError) => {
+            console.error('[VTable] getRowObject error', resolveError);
+            // Stop the loading loop and keep the original row if the async hydration fails.
+            resolvedRowByKey.set(rowKey, record);
+          })
+          .finally(() => {
+            loadingRowKeys.delete(rowKey);
+            rowObjectVersion++;
+          });
+      });
+    }
+
+    return null;
+  }
 
   // Initialize virtualizer
   $effect(() => {
@@ -281,21 +337,27 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
       {:else}
         <SvelteVirtualList items={filteredData}>
           {#snippet renderItem(record, index)}
+            {@const resolvedRecord = getResolvedRow(record, index)}
             <div class="mobile-card mb-6 {mobileCardCss || ''}"
               role="button"
               tabindex="0"
-              onclick={() => handleRowClick(record, index)}
+              onclick={() => resolvedRecord && handleRowClick(resolvedRecord, index)}
               onkeydown={(ev) => {
-                if (ev.key === 'Enter' || ev.key === ' ') {
-                  handleRowClick(record, index);
+                if (resolvedRecord && (ev.key === 'Enter' || ev.key === ' ')) {
+                  handleRowClick(resolvedRecord, index);
                 }
               }}>
+              {#if !resolvedRecord}
+                <div class="mobile-loading-message" style="height: {estimateSize}px;">
+                  Loading...
+                </div>
+              {:else}
               <div class="mobile-card-grid">
                 {#each mobileColumns as column}
                   {@const mobile = column.mobile}
-                  {@const shouldRender = !mobile?.if || mobile.if(record, index)}
+                  {@const shouldRender = !mobile?.if || mobile.if(resolvedRecord, index)}
                   {#if shouldRender}
-                    {@const cellData = getCellContent(column, record, index)}
+                    {@const cellData = getCellContent(column, resolvedRecord, index)}
                     {#if mobile?.labelTop}
                     <div class="mobile-card-item mobile-card-item-vertical {mobile?.css || 'col-span-full'}">
                       <div class="mobile-card-label-top">{mobile.labelTop}</div>
@@ -326,14 +388,14 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                         {/if}
                         <div class="mobile-card-content">
                           {#if mobile?.render}
-                            {@const renderedContent = mobile.render(record, index)}
+                            {@const renderedContent = mobile.render(resolvedRecord, index)}
                             {#if typeof renderedContent === 'string'}
                               {@html renderedContent}
                             {:else}
                               <Renderer elements={renderedContent}/>
                             {/if}
                           {:else if cellData.useSnippet && cellRenderer}
-                            {@render cellRenderer(record, column, cellData.content, index)}
+                            {@render cellRenderer(resolvedRecord, column, cellData.content, index)}
                           {:else if cellData.contentAST}
                             <Renderer elements={cellData.contentAST}/>
                           {:else if cellData.contentHTML}
@@ -381,14 +443,14 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                       {/if}
                       <div class="mobile-card-content">
                         {#if mobile?.render}
-                          {@const renderedContent = mobile.render(record, index)}
+                          {@const renderedContent = mobile.render(resolvedRecord, index)}
                           {#if typeof renderedContent === 'string'}
                             {@html renderedContent}
                           {:else}
                             <Renderer elements={renderedContent}/>
                           {/if}
                         {:else if cellData.useSnippet && cellRenderer}
-                          {@render cellRenderer(record, column, cellData.content, index)}
+                          {@render cellRenderer(resolvedRecord, column, cellData.content, index)}
                         {:else if cellData.contentAST}
                           <Renderer elements={cellData.contentAST}/>
                         {:else if cellData.contentHTML}
@@ -411,6 +473,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                   {/if}
                 {/each}
               </div>
+              {/if}
             </div>
           {/snippet}
         </SvelteVirtualList>
@@ -475,106 +538,116 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
           {@const isFinal = i === virtualItems.length - 1}
           {@const remainingSize = totalSize - (virtualItems[0]?.size || estimateSize) * virtualItems.length}
           {@const record = filteredData[row.index]}
+          {@const resolvedRecord = record ? getResolvedRow(record, row.index) : null}
 
           {#if record}
-            {@const selected = isRowSelected(record, row.index)}
+            {@const selected = resolvedRecord ? isRowSelected(resolvedRecord, row.index) : false}
 
             <tr class="vtable-row"
             class:vtable-row-even={row.index % 2 === 0}
             class:vtable-row-odd={row.index % 2 !== 0}
             class:vtable-row-selected={selected}
-            style="transform: translateY({firstItemStart}px);"
-            onclick={() => handleRowClick(record, row.index)}
+            style="transform: translateY({firstItemStart}px); height: {estimateSize}px;"
+            onclick={() => resolvedRecord && handleRowClick(resolvedRecord, row.index)}
           >
-            {#each processedColumns.flatColumns as column, j (`${j}_${filterText||""}`)}
-              {@const cellData = getCellContent(column, record, row.index)}
-              <td class="{cellData.css}"
-                style={column.cellStyle ? Object.entries(column.cellStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}
-                onclick={ev => {
-                  if(column.onCellEdit){ ev.stopPropagation() }
-                }}
+            {#if !resolvedRecord}
+              <td colspan={processedColumns.flatColumns.length}
+                class="vtable-loading"
+                style="height: {estimateSize}px;"
               >
-                {#if cellData.prefixAST}
-                  <span class="vtable-cell-prefix">
-                    <Renderer elements={cellData.prefixAST}/>
-                  </span>
-                {:else if cellData.prefixHTML}
-                  <span class="vtable-cell-prefix">
-                    {@html cellData.prefixHTML}
-                  </span>
-                {/if}
-                {#if column.onCellEdit}
-                  <CellEditable contentClass={column.css}
-                    inputClass={column.inputCss}
-                    getValue={() => cellData.content}
-                    render={
-                      (column.render
-                      ? () => column.render?.(record, row.index)
-                      : undefined) as (value: number | string) => ElementAST[]
-                    }
-                    onChange={v => {
-                      column.onCellEdit?.(record,v)
-                    }}
-                  />
-                {:else if column.onCellSelect}
-                  {console.log('[VTable] CellSelector props', {
-                    selectorId: `${String(column.id || column.field || j)}_${row.index}`,
-                    rowIndex: row.index,
-                    columnField: column.field,
-                    columnId: column.id,
-                    optionsLength: column.cellOptions?.length || 0,
-                    firstOption: column.cellOptions?.[0] || null,
-                    currentFieldValue: column.field ? (record as any)?.[column.field] : undefined,
-                  })}
-                  <CellSelector
-                    id={`${String(column.id || column.field || j)}_${row.index}`}
-                    saveOn={record}
-                    save={column.field as keyof T}
-                    options={column.cellOptions as any[]}
-                    keyId={(column.cellOptionsKeyId || 'ID') as never}
-                    keyName={(column.cellOptionsKeyName || 'Name') as never}
-                    contentClass={column.css}
-                    onChange={v => {
-                      column.onCellSelect?.(record,v)
-                    }}
-                  />
-                {:else if cellData.useSnippet && cellRenderer}
-                  {@render cellRenderer(record, column, cellData.content, row.index)}
-                {:else if cellData.contentAST}
-                  <Renderer elements={cellData.contentAST}/>
-                {:else if cellData.contentHTML}
-                  {@html cellData.contentHTML}
-                {:else}
-                  {#if filterText && column.highlight}
-                    {#each highlString(cellData.content, filterTextArray) as part }
-                      <span class:_2={part.highl}>{part.text}</span>
-                    {/each }
-                  {:else}
-                    { cellData.content }
-                  {/if}
-                {/if}
-                {#if column.buttonEditHandler || column.buttonDeleteHandler}
-                  <div class="flex gap-4 items-center justify-center">
-                    {#if column.buttonEditHandler && (!column.buttonEditIf || column.buttonEditIf(record))}
-                      <button class="_11 _e" title="edit" onclick={ev => {
-                        ev.stopPropagation()
-                        column.buttonEditHandler?.(record)
-                      }}>
-                        <i class="icon-pencil"></i>
-                      </button>
-                    {/if}
-                    {#if column.buttonDeleteHandler && (!column.buttonDeleteIf || column.buttonDeleteIf(record))}
-                      <button class="_11 _d" title="delete" onclick={ev => {
-                        ev.stopPropagation()
-                        column.buttonDeleteHandler?.(record)
-                      }}>
-                        <i class="icon-trash"></i>
-                      </button>
-                    {/if}
-                  </div>
-                {/if}
+                Loading...
               </td>
-            {/each}
+            {:else}
+              {#each processedColumns.flatColumns as column, j (`${j}_${filterText||""}`)}
+                {@const cellData = getCellContent(column, resolvedRecord, row.index)}
+                <td class="{cellData.css}"
+                  style={column.cellStyle ? Object.entries(column.cellStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}
+                  onclick={ev => {
+                    if(column.onCellEdit){ ev.stopPropagation() }
+                  }}
+                >
+                  {#if cellData.prefixAST}
+                    <span class="vtable-cell-prefix">
+                      <Renderer elements={cellData.prefixAST}/>
+                    </span>
+                  {:else if cellData.prefixHTML}
+                    <span class="vtable-cell-prefix">
+                      {@html cellData.prefixHTML}
+                    </span>
+                  {/if}
+                  {#if column.onCellEdit}
+                    <CellEditable contentClass={column.css}
+                      inputClass={column.inputCss}
+                      getValue={() => cellData.content}
+                      render={
+                        (column.render
+                        ? () => column.render?.(resolvedRecord, row.index)
+                        : undefined) as (value: number | string) => ElementAST[]
+                      }
+                      onChange={v => {
+                        column.onCellEdit?.(resolvedRecord,v)
+                      }}
+                    />
+                  {:else if column.onCellSelect}
+                    {console.log('[VTable] CellSelector props', {
+                      selectorId: `${String(column.id || column.field || j)}_${row.index}`,
+                      rowIndex: row.index,
+                      columnField: column.field,
+                      columnId: column.id,
+                      optionsLength: column.cellOptions?.length || 0,
+                      firstOption: column.cellOptions?.[0] || null,
+                      currentFieldValue: column.field ? (resolvedRecord as any)?.[column.field] : undefined,
+                    })}
+                    <CellSelector
+                      id={`${String(column.id || column.field || j)}_${row.index}`}
+                      saveOn={resolvedRecord}
+                      save={column.field as keyof T}
+                      options={column.cellOptions as any[]}
+                      keyId={(column.cellOptionsKeyId || 'ID') as never}
+                      keyName={(column.cellOptionsKeyName || 'Name') as never}
+                      contentClass={column.css}
+                      onChange={v => {
+                        column.onCellSelect?.(resolvedRecord,v)
+                      }}
+                    />
+                  {:else if cellData.useSnippet && cellRenderer}
+                    {@render cellRenderer(resolvedRecord, column, cellData.content, row.index)}
+                  {:else if cellData.contentAST}
+                    <Renderer elements={cellData.contentAST}/>
+                  {:else if cellData.contentHTML}
+                    {@html cellData.contentHTML}
+                  {:else}
+                    {#if filterText && column.highlight}
+                      {#each highlString(cellData.content, filterTextArray) as part }
+                        <span class:_2={part.highl}>{part.text}</span>
+                      {/each }
+                    {:else}
+                      { cellData.content }
+                    {/if}
+                  {/if}
+                  {#if column.buttonEditHandler || column.buttonDeleteHandler}
+                    <div class="flex gap-4 items-center justify-center">
+                      {#if column.buttonEditHandler && (!column.buttonEditIf || column.buttonEditIf(resolvedRecord))}
+                        <button class="_11 _e" title="edit" onclick={ev => {
+                          ev.stopPropagation()
+                          column.buttonEditHandler?.(resolvedRecord)
+                        }}>
+                          <i class="icon-pencil"></i>
+                        </button>
+                      {/if}
+                      {#if column.buttonDeleteHandler && (!column.buttonDeleteIf || column.buttonDeleteIf(resolvedRecord))}
+                        <button class="_11 _d" title="delete" onclick={ev => {
+                          ev.stopPropagation()
+                          column.buttonDeleteHandler?.(resolvedRecord)
+                        }}>
+                          <i class="icon-trash"></i>
+                        </button>
+                      {/if}
+                    </div>
+                  {/if}
+                </td>
+              {/each}
+            {/if}
           </tr>
 
           {#if isFinal}
@@ -744,6 +817,12 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     text-align: center;
   }
 
+  .vtable-loading {
+    padding: 0 8px;
+    text-align: center;
+    vertical-align: middle;
+  }
+
   .vtable-empty-message {
     color: #6c757d;
     font-size: 0.875rem;
@@ -775,6 +854,14 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
   .mobile-empty-message {
     text-align: center;
     padding: 2rem;
+    color: #6c757d;
+    font-size: 0.875rem;
+  }
+
+  .mobile-loading-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: #6c757d;
     font-size: 0.875rem;
   }

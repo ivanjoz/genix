@@ -342,8 +342,8 @@ func TestInt32PackedViewUpperBoundKeepsCarryDigit(t *testing.T) {
 	if bestCapability == nil || bestCapability.Source == nil || bestCapability.Source.Type != 8 {
 		t.Fatalf("expected an int32 packed range view, got %+v", bestCapability)
 	}
-	if !bestCapability.Source.RequiresPostFilter {
-		t.Fatal("expected int32 packed range views to enable exact post-filtering")
+	if bestCapability.Source.RequiresPostFilter {
+		t.Fatal("expected int32 packed range views to skip post-filtering")
 	}
 
 	whereStatements := bestCapability.Source.getStatement(query.GetTableInfo().statements...)

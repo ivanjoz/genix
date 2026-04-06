@@ -115,7 +115,11 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		},
 		Views: []db.View{
 			{Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
-			{Keys: []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
+			{
+				Keys: []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)}, 
+				Cols: []db.Coln{e.ClientID, e.Updated, e.DetailProductsIDs, e.Status},
+				KeepPart: true,
+			},
 		},
 		/*
 			HashIndexes: [][]db.Coln{

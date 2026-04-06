@@ -6,12 +6,15 @@ import (
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	"app/finanzas"
+	finanzasTypes "app/finanzas/types"
 	"app/logistica"
 	logisticaTypes "app/logistica/types"
+	"app/negocio"
 	negocioTypes "app/negocio/types"
+	_ "embed"
 	"encoding/json"
 	mrand "math/rand"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,16 +22,21 @@ import (
 )
 
 const (
-	sampleCompanyID       int32 = 1
-	sampleUserID          int32 = 1
-	sampleWarehouseID     int32 = 1
-	sampleCajaID          int32 = 1
-	selectedProductsCount       = 100
-	selectedSKUProducts         = 15
-	historicalDaysCount         = 30
-	dailyOrdersMin              = 300
-	dailyOrdersMax              = 600
+	sampleCompanyID         int32 = 1
+	sampleUserID            int32 = 1
+	sampleWarehouseID       int32 = 1
+	saleOrdersProgressPath        = "/tmp/genix_generate_sale_orders_unixday.txt"
+	selectedProductsCount         = 100
+	skuHeavyProductsPercent       = 20
+	minSKUsPerHeavyProduct        = 50
+	stockSeedBatchSize            = 90
+	historicalDaysCount           = 30
+	dailyOrdersMin                = 300
+	dailyOrdersMax                = 600
 )
+
+//go:embed sale_order_clients.json
+var saleOrderClientsJSON []byte
 
 type saleOrderStatusTarget int8
 
@@ -51,14 +59,23 @@ type stockLedgerRecord struct {
 }
 
 type saleOrderGenerator struct {
-	random               *mrand.Rand
-	timeHelper           core.TimeHelper
-	userToken            core.UsuarioToken
-	productNamesByID     map[int32]string
-	productPricesByID    map[int32]int32
-	selectedProductIDs   []int32
-	stockLedgerByProduct map[int32][]*stockLedgerRecord
-	totalRemainingUnits  int32
+	random                *mrand.Rand
+	timeHelper            core.TimeHelper
+	userToken             core.UsuarioToken
+	selectedCajaID        int32
+	availableClientIDs    []int32
+	productNamesByID      map[int32]string
+	productPricesByID     map[int32]int32
+	selectedProductIDs    []int32
+	stockLedgerByProduct  map[int32][]*stockLedgerRecord
+	remainingByProductSKU map[string]int32
+	totalRemainingUnits   int32
+}
+
+type saleOrderClientSeed struct {
+	Name           string `json:"name"`
+	PersonType     int8   `json:"personType"`
+	RegistryNumber string `json:"registryNumber"`
 }
 
 // GenerateSaleOrders creates stock and historical sale orders for local sample data generation.
@@ -69,12 +86,13 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 			EmpresaID: sampleCompanyID,
 			ID:        sampleUserID,
 		},
-		productNamesByID:     map[int32]string{},
-		productPricesByID:    map[int32]int32{},
-		stockLedgerByProduct: map[int32][]*stockLedgerRecord{},
+		productNamesByID:      map[int32]string{},
+		productPricesByID:     map[int32]int32{},
+		stockLedgerByProduct:  map[int32][]*stockLedgerRecord{},
+		remainingByProductSKU: map[string]int32{},
 	}
 
-	core.Log("GenerateSaleOrders:: validating context", "company", sampleCompanyID, "user", sampleUserID, "warehouse", sampleWarehouseID, "caja", sampleCajaID)
+	core.Log("GenerateSaleOrders:: validating context", "company", sampleCompanyID, "user", sampleUserID, "warehouse", sampleWarehouseID)
 	if err := generator.validateContext(); err != nil {
 		return args.MakeErr("No se pudo validar el contexto de sample records:", err)
 	}
@@ -85,7 +103,8 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr("No se pudo cargar el stock del almacén:", err)
 	}
 
-	selectedProductIDs, err := generator.selectProductsFromStock(initialStocks)
+	core.Log("GenerateSaleOrders:: selecting products from stock and catalog")
+	selectedProductIDs, err := generator.selectProducts(initialStocks)
 	if err != nil {
 		return args.MakeErr("No se pudieron seleccionar productos:", err)
 	}
@@ -96,8 +115,18 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr("No se pudo cargar el catálogo de productos:", err)
 	}
 
+	core.Log("GenerateSaleOrders:: saving sample clients from JSON")
+	if err := generator.seedClientsFromJSON(); err != nil {
+		return args.MakeErr("No se pudieron guardar los clientes sample:", err)
+	}
+
+	core.Log("GenerateSaleOrders:: loading active clients")
+	if err := generator.loadAvailableClients(); err != nil {
+		return args.MakeErr("No se pudieron cargar los clientes activos:", err)
+	}
+
 	core.Log("GenerateSaleOrders:: seeding base stock")
-	if err := generator.seedBaseStock(); err != nil {
+	if err := generator.seedBaseStock(initialStocks); err != nil {
 		return args.MakeErr("No se pudo sembrar el stock base:", err)
 	}
 
@@ -111,8 +140,16 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	historicalDates := generator.makeHistoricalDates()
-	dailyCounts, statusPlan := generator.makeGenerationPlan(len(historicalDates))
-	core.Log("GenerateSaleOrders:: generation plan", "days", len(historicalDates), "orders", len(statusPlan), "remainingUnits", generator.totalRemainingUnits)
+	resumeUnixDay, err := generator.loadResumeUnixDay()
+	if err != nil {
+		return args.MakeErr("No se pudo cargar el progreso de fechas sample:", err)
+	}
+	historicalDates = generator.filterDatesForResume(historicalDates, resumeUnixDay)
+	if len(historicalDates) == 0 {
+		return args.MakeErr("No quedaron fechas por procesar para las órdenes sample.")
+	}
+	dailyCounts, statusPlan, clientPlan := generator.makeGenerationPlan(len(historicalDates))
+	core.Log("GenerateSaleOrders:: generation plan", "days", len(historicalDates), "orders", len(statusPlan), "remainingUnits", generator.totalRemainingUnits, "resumeUnixDay", resumeUnixDay)
 	if generator.totalRemainingUnits < int32(len(statusPlan)) {
 		return args.MakeErr("El stock total no alcanza para garantizar al menos un item por orden.")
 	}
@@ -120,6 +157,9 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 	createdOrders := 0
 	for dayIndex, historicalDate := range historicalDates {
 		dailyOrdersCount := dailyCounts[dayIndex]
+		if err := generator.saveResumeUnixDay(historicalDate); err != nil {
+			return args.MakeErr("No se pudo guardar el progreso de fecha sample:", err)
+		}
 		core.Log("GenerateSaleOrders:: creating day batch", "dayIndex", dayIndex+1, "fecha", historicalDate, "orders", dailyOrdersCount, "remainingUnitsBefore", generator.totalRemainingUnits)
 
 		for orderIndex := 0; orderIndex < dailyOrdersCount; orderIndex++ {
@@ -127,14 +167,11 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 			historicalUnix := generator.makeHistoricalUnix(historicalDate, orderIndex)
 			ordersRemaining := len(statusPlan) - createdOrders
 
-			salePayload, err := generator.makeSalePayload(status, ordersRemaining)
+			createdSaleOrder, err := generator.createOrderWithRetry(status, ordersRemaining, clientPlan[createdOrders], historicalUnix)
 			if err != nil {
-				return args.MakeErr("No se pudo construir la orden de venta:", err)
-			}
-
-			if _, err := generator.createSaleOrder(historicalUnix, salePayload); err != nil {
 				return args.MakeErr("No se pudo registrar la orden de venta:", err)
 			}
+			_ = createdSaleOrder
 
 			createdOrders++
 			if createdOrders%250 == 0 {
@@ -143,6 +180,9 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 		}
 	}
 
+	if err := generator.clearResumeUnixDay(); err != nil {
+		return args.MakeErr("No se pudo limpiar el progreso de fecha sample:", err)
+	}
 	core.Log("GenerateSaleOrders:: completed", "createdOrders", createdOrders, "remainingUnits", generator.totalRemainingUnits)
 	return core.FuncResponse{
 		Message: "Órdenes de venta sample generadas correctamente.",
@@ -150,7 +190,7 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 			"companyID":      sampleCompanyID,
 			"userID":         sampleUserID,
 			"warehouseID":    sampleWarehouseID,
-			"cajaID":         sampleCajaID,
+			"cajaID":         generator.selectedCajaID,
 			"ordersCreated":  createdOrders,
 			"remainingUnits": generator.totalRemainingUnits,
 		},
@@ -185,13 +225,119 @@ func (generator *saleOrderGenerator) validateContext() error {
 		return core.Err("no se encontró el almacén sample")
 	}
 
-	if _, err := finanzas.GetCaja(sampleCompanyID, sampleCajaID); err != nil {
-		return core.Err("error al consultar la caja sample:", err)
+	resolvedCajaID, err := generator.resolveActiveCajaID()
+	if err != nil {
+		return core.Err("error al consultar cajas activas:", err)
 	}
+	generator.selectedCajaID = resolvedCajaID
+	core.Log("GenerateSaleOrders:: selected caja", "cajaID", generator.selectedCajaID)
 	return nil
 }
 
-// loadWarehouseStock uses the existing stock handler because the requested flow must start there.
+// resolveActiveCajaID picks the lowest active caja ID so the sample generator can run in seeded environments without assuming ID=1.
+func (generator *saleOrderGenerator) resolveActiveCajaID() (int32, error) {
+	activeCajas := []finanzasTypes.Caja{}
+	cajaQuery := db.Query(&activeCajas)
+	cajaQuery.Select(cajaQuery.ID, cajaQuery.Status).
+		EmpresaID.Equals(sampleCompanyID).
+		Status.Equals(1)
+	if err := cajaQuery.Exec(); err != nil {
+		return 0, err
+	}
+	if len(activeCajas) == 0 {
+		return 0, core.Err("no se encontró ninguna caja activa")
+	}
+
+	slices.SortFunc(activeCajas, func(leftCaja, rightCaja finanzasTypes.Caja) int {
+		switch {
+		case leftCaja.ID < rightCaja.ID:
+			return -1
+		case leftCaja.ID > rightCaja.ID:
+			return 1
+		default:
+			return 0
+		}
+	})
+	return activeCajas[0].ID, nil
+}
+
+// seedClientsFromJSON keeps the client seed list in JSON so the sample catalog stays editable outside Go code.
+func (generator *saleOrderGenerator) seedClientsFromJSON() error {
+	clientSeeds := []saleOrderClientSeed{}
+	if err := json.Unmarshal(saleOrderClientsJSON, &clientSeeds); err != nil {
+		return core.Err("error al deserializar el JSON de clientes sample:", err)
+	}
+	if len(clientSeeds) != 50 {
+		return core.Err("el JSON de clientes sample debe contener exactamente 50 registros")
+	}
+
+	clientPayload := make([]negocioTypes.ClientProvider, 0, len(clientSeeds))
+	for seedIndex, clientSeed := range clientSeeds {
+		if strings.TrimSpace(clientSeed.Name) == "" {
+			return core.Err("el cliente sample en posición", seedIndex, "no tiene Name")
+		}
+		if clientSeed.PersonType != negocioTypes.PersonTypeNatural && clientSeed.PersonType != negocioTypes.PersonTypeCompany {
+			return core.Err("el cliente sample en posición", seedIndex, "tiene PersonType inválido")
+		}
+
+		// Keep the JSON as the source of truth so sample seeds can mix clients with and without registry numbers.
+		clientPayload = append(clientPayload, negocioTypes.ClientProvider{
+			Type:           negocioTypes.ClientProviderTypeClient,
+			Name:           clientSeed.Name,
+			PersonType:     clientSeed.PersonType,
+			RegistryNumber: strings.TrimSpace(clientSeed.RegistryNumber),
+		})
+	}
+
+	bodyBytes, err := json.Marshal(clientPayload)
+	if err != nil {
+		return err
+	}
+
+	request := generator.makeRequest("POST.client-provider", nil, string(bodyBytes), 0)
+	response := negocio.PostClientProviders(&request)
+	if response.StatusCode != 200 {
+		return core.Err(response.Error)
+	}
+
+	core.Log("GenerateSaleOrders:: sample clients saved", "payloadCount", len(clientPayload))
+	return nil
+}
+
+// loadAvailableClients fetches active clients after POST so generated sales use persisted IDs instead of payload-local assumptions.
+func (generator *saleOrderGenerator) loadAvailableClients() error {
+	query := map[string]string{
+		"type":    strconv.Itoa(int(negocioTypes.ClientProviderTypeClient)),
+		"updated": "0",
+	}
+	request := generator.makeRequest("GET.client-provider", query, "", 0)
+	response := negocio.GetClientProviders(&request)
+	if response.StatusCode != 200 {
+		return core.Err(response.Error)
+	}
+
+	clientProviders := []negocioTypes.ClientProvider{}
+	if err := json.Unmarshal(*response.Body, &clientProviders); err != nil {
+		return err
+	}
+
+	generator.availableClientIDs = generator.availableClientIDs[:0]
+	for _, clientProvider := range clientProviders {
+		if clientProvider.Type != negocioTypes.ClientProviderTypeClient || clientProvider.Status == 0 || clientProvider.ID <= 0 {
+			continue
+		}
+		generator.availableClientIDs = append(generator.availableClientIDs, clientProvider.ID)
+	}
+
+	if len(generator.availableClientIDs) == 0 {
+		return core.Err("no se encontraron clientes activos para asignar a las ventas")
+	}
+
+	core.Log("GenerateSaleOrders:: active clients loaded", "count", len(generator.availableClientIDs))
+	return nil
+}
+
+// loadWarehouseStock uses the existing stock handler because the requested flow must start there after seeding.
 func (generator *saleOrderGenerator) loadWarehouseStock() ([]logisticaTypes.ProductStock, error) {
 	query := map[string]string{
 		"almacen-id": strconv.Itoa(int(sampleWarehouseID)),
@@ -209,24 +355,53 @@ func (generator *saleOrderGenerator) loadWarehouseStock() ([]logisticaTypes.Prod
 	return stocks, nil
 }
 
-// selectProductsFromStock keeps the selection tied to real warehouse stock instead of arbitrary products.
-func (generator *saleOrderGenerator) selectProductsFromStock(stocks []logisticaTypes.ProductStock) ([]int32, error) {
-	productIDs := []int32{}
-	seenProducts := map[int32]bool{}
+// selectProducts prioritizes products that already have stock and only complements from the catalog when needed.
+func (generator *saleOrderGenerator) selectProducts(stocks []logisticaTypes.ProductStock) ([]int32, error) {
+	selectedProductIDs := []int32{}
+	selectedProductSet := map[int32]bool{}
+
 	for _, stock := range stocks {
-		if stock.ProductID <= 0 || seenProducts[stock.ProductID] {
+		if stock.ProductID <= 0 || stock.Status == 0 || stock.Quantity <= 0 || selectedProductSet[stock.ProductID] {
 			continue
 		}
-		seenProducts[stock.ProductID] = true
-		productIDs = append(productIDs, stock.ProductID)
+		selectedProductSet[stock.ProductID] = true
+		selectedProductIDs = append(selectedProductIDs, stock.ProductID)
 	}
-	if len(productIDs) < selectedProductsCount {
-		return nil, core.Err("se encontraron menos de 100 productos con stock en el almacén")
+
+	if len(selectedProductIDs) >= selectedProductsCount {
+		generator.random.Shuffle(len(selectedProductIDs), func(i, j int) {
+			selectedProductIDs[i], selectedProductIDs[j] = selectedProductIDs[j], selectedProductIDs[i]
+		})
+		return slices.Clone(selectedProductIDs[:selectedProductsCount]), nil
 	}
-	generator.random.Shuffle(len(productIDs), func(i, j int) {
-		productIDs[i], productIDs[j] = productIDs[j], productIDs[i]
+
+	products := []negocioTypes.Producto{}
+	productQuery := db.Query(&products)
+	productQuery.Select(productQuery.ID, productQuery.Status).
+		EmpresaID.Equals(sampleCompanyID).
+		Status.Equals(1)
+	if err := productQuery.Exec(); err != nil {
+		return nil, err
+	}
+
+	complementProductIDs := make([]int32, 0, len(products))
+	for _, product := range products {
+		if product.ID > 0 && !selectedProductSet[product.ID] {
+			complementProductIDs = append(complementProductIDs, product.ID)
+		}
+	}
+	missingProductsCount := selectedProductsCount - len(selectedProductIDs)
+	if len(complementProductIDs) < missingProductsCount {
+		return nil, core.Err("no hay suficientes productos activos para completar los 100 productos objetivo")
+	}
+	generator.random.Shuffle(len(complementProductIDs), func(i, j int) {
+		complementProductIDs[i], complementProductIDs[j] = complementProductIDs[j], complementProductIDs[i]
 	})
-	return slices.Clone(productIDs[:selectedProductsCount]), nil
+	selectedProductIDs = append(selectedProductIDs, complementProductIDs[:missingProductsCount]...)
+	generator.random.Shuffle(len(selectedProductIDs), func(i, j int) {
+		selectedProductIDs[i], selectedProductIDs[j] = selectedProductIDs[j], selectedProductIDs[i]
+	})
+	return selectedProductIDs, nil
 }
 
 // loadProductCatalog resolves names and prices once so every generated line uses the persisted product price.
@@ -256,14 +431,59 @@ func (generator *saleOrderGenerator) loadProductCatalog() error {
 	return nil
 }
 
-// seedBaseStock resets the chosen product stock to a controlled sample distribution before generating orders.
-func (generator *saleOrderGenerator) seedBaseStock() error {
+// seedBaseStock resets the chosen product stock and ensures a subset reaches the required SKU depth.
+func (generator *saleOrderGenerator) seedBaseStock(currentStocks []logisticaTypes.ProductStock) error {
 	stockPayload := []logisticaTypes.ProductStock{}
-	productIDsWithSKU := slices.Clone(generator.selectedProductIDs)
-	generator.random.Shuffle(len(productIDsWithSKU), func(i, j int) {
-		productIDsWithSKU[i], productIDsWithSKU[j] = productIDsWithSKU[j], productIDsWithSKU[i]
+	existingSKUCountByProduct := map[int32]int{}
+	existingSKUSetByProduct := map[int32]map[string]bool{}
+	selectedProductSet := map[int32]bool{}
+
+	for _, productID := range generator.selectedProductIDs {
+		selectedProductSet[productID] = true
+	}
+
+	for _, currentStock := range currentStocks {
+		if !selectedProductSet[currentStock.ProductID] || currentStock.Status == 0 || currentStock.Quantity <= 0 || currentStock.SKU == "" {
+			continue
+		}
+		existingSKUSet := existingSKUSetByProduct[currentStock.ProductID]
+		if existingSKUSet == nil {
+			existingSKUSet = map[string]bool{}
+			existingSKUSetByProduct[currentStock.ProductID] = existingSKUSet
+		}
+		if existingSKUSet[currentStock.SKU] {
+			continue
+		}
+		existingSKUSet[currentStock.SKU] = true
+		existingSKUCountByProduct[currentStock.ProductID]++
+	}
+
+	heavySKUProductsCount := maxInt(1, len(generator.selectedProductIDs)*skuHeavyProductsPercent/100)
+	productIDsWithExistingSKUs := []int32{}
+	productIDsWithoutSKUs := []int32{}
+	for _, productID := range generator.selectedProductIDs {
+		if existingSKUCountByProduct[productID] > 0 {
+			productIDsWithExistingSKUs = append(productIDsWithExistingSKUs, productID)
+		} else {
+			productIDsWithoutSKUs = append(productIDsWithoutSKUs, productID)
+		}
+	}
+
+	generator.random.Shuffle(len(productIDsWithExistingSKUs), func(i, j int) {
+		productIDsWithExistingSKUs[i], productIDsWithExistingSKUs[j] = productIDsWithExistingSKUs[j], productIDsWithExistingSKUs[i]
 	})
-	productIDsWithSKU = productIDsWithSKU[:selectedSKUProducts]
+	generator.random.Shuffle(len(productIDsWithoutSKUs), func(i, j int) {
+		productIDsWithoutSKUs[i], productIDsWithoutSKUs[j] = productIDsWithoutSKUs[j], productIDsWithoutSKUs[i]
+	})
+
+	productIDsWithManySKUs := make([]int32, 0, heavySKUProductsCount)
+	if len(productIDsWithExistingSKUs) >= heavySKUProductsCount {
+		productIDsWithManySKUs = append(productIDsWithManySKUs, productIDsWithExistingSKUs[:heavySKUProductsCount]...)
+	} else {
+		productIDsWithManySKUs = append(productIDsWithManySKUs, productIDsWithExistingSKUs...)
+		missingHeavySKUProductsCount := heavySKUProductsCount - len(productIDsWithManySKUs)
+		productIDsWithManySKUs = append(productIDsWithManySKUs, productIDsWithoutSKUs[:missingHeavySKUProductsCount]...)
+	}
 
 	for _, productID := range generator.selectedProductIDs {
 		stockPayload = append(stockPayload, logisticaTypes.ProductStock{
@@ -273,30 +493,50 @@ func (generator *saleOrderGenerator) seedBaseStock() error {
 		})
 	}
 
-	for _, productID := range productIDsWithSKU {
-		stockPayload = append(stockPayload, logisticaTypes.ProductStock{
-			WarehouseID: sampleWarehouseID,
-			ProductID:   productID,
-			SKU:         generator.randomAlphaNumeric(10),
-			Quantity:    generator.randomInt(1, 10),
-		})
+	for _, productID := range productIDsWithManySKUs {
+		skusMissingCount := maxInt(0, minSKUsPerHeavyProduct-existingSKUCountByProduct[productID])
+		usedSKUs := existingSKUSetByProduct[productID]
+		if usedSKUs == nil {
+			usedSKUs = map[string]bool{}
+			existingSKUSetByProduct[productID] = usedSKUs
+		}
+
+		for skuIndex := 0; skuIndex < skusMissingCount; skuIndex++ {
+			uniqueSKU := generator.randomUniqueSKU(usedSKUs)
+			stockPayload = append(stockPayload, logisticaTypes.ProductStock{
+				WarehouseID: sampleWarehouseID,
+				ProductID:   productID,
+				SKU:         uniqueSKU,
+				Quantity:    generator.randomInt(1, 10),
+			})
+		}
 	}
 
-	bodyBytes, err := json.Marshal(stockPayload)
-	if err != nil {
-		return err
+	for batchStart := 0; batchStart < len(stockPayload); batchStart += stockSeedBatchSize {
+		batchEnd := minInt(batchStart+stockSeedBatchSize, len(stockPayload))
+		currentBatch := stockPayload[batchStart:batchEnd]
+
+		// Keep each stock write below Scylla clustering-key IN limits triggered by ApplyMovimientos.
+		bodyBytes, err := json.Marshal(currentBatch)
+		if err != nil {
+			return err
+		}
+		request := generator.makeRequest("POST.productos-stock", nil, string(bodyBytes), 0)
+		response := logistica.PostAlmacenStock(&request)
+		if response.StatusCode != 200 {
+			return core.Err(response.Error)
+		}
+
+		core.Log("GenerateSaleOrders:: seeded stock batch", "batchStart", batchStart, "batchEnd", batchEnd, "batchSize", len(currentBatch))
 	}
-	request := generator.makeRequest("POST.productos-stock", nil, string(bodyBytes), 0)
-	response := logistica.PostAlmacenStock(&request)
-	if response.StatusCode != 200 {
-		return core.Err(response.Error)
-	}
+	core.Log("GenerateSaleOrders:: seeded heavy sku products", "productsWith50SKUs", len(productIDsWithManySKUs), "minimumSKUsPerProduct", minSKUsPerHeavyProduct)
 	return nil
 }
 
 // rebuildLedger keeps an in-memory reservation view so total generated demand never exceeds seeded stock.
 func (generator *saleOrderGenerator) rebuildLedger(stocks []logisticaTypes.ProductStock) error {
 	generator.stockLedgerByProduct = map[int32][]*stockLedgerRecord{}
+	generator.remainingByProductSKU = map[string]int32{}
 	generator.totalRemainingUnits = 0
 
 	selectedProductsMap := map[int32]bool{}
@@ -319,6 +559,7 @@ func (generator *saleOrderGenerator) rebuildLedger(stocks []logisticaTypes.Produ
 			remaining:      stock.Quantity,
 		}
 		generator.stockLedgerByProduct[stock.ProductID] = append(generator.stockLedgerByProduct[stock.ProductID], record)
+		generator.remainingByProductSKU[generator.makeProductSKUKey(stock.ProductID, stock.SKU)] += stock.Quantity
 		generator.totalRemainingUnits += stock.Quantity
 	}
 
@@ -326,6 +567,15 @@ func (generator *saleOrderGenerator) rebuildLedger(stocks []logisticaTypes.Produ
 		return core.Err("no se encontraron registros en el ledger de stock")
 	}
 	return nil
+}
+
+// reloadStockLedger refreshes the in-memory counters from persisted warehouse stock after a stock mismatch.
+func (generator *saleOrderGenerator) reloadStockLedger() error {
+	currentStocks, err := generator.loadWarehouseStock()
+	if err != nil {
+		return err
+	}
+	return generator.rebuildLedger(currentStocks)
 }
 
 // makeHistoricalDates returns the last 30 local unixday dates including today.
@@ -338,14 +588,70 @@ func (generator *saleOrderGenerator) makeHistoricalDates() []int16 {
 	return historicalDates
 }
 
-// makeGenerationPlan precomputes daily volume and exact status counts before creating any order.
-func (generator *saleOrderGenerator) makeGenerationPlan(daysCount int) ([]int, []saleOrderStatusTarget) {
+// loadResumeUnixDay reads the persisted unixday checkpoint so interrupted runs can resume from the same date.
+func (generator *saleOrderGenerator) loadResumeUnixDay() (int16, error) {
+	progressBytes, err := os.ReadFile(saleOrdersProgressPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	progressValue := strings.TrimSpace(string(progressBytes))
+	if len(progressValue) == 0 {
+		return 0, nil
+	}
+
+	resumeUnixDay, err := strconv.Atoi(progressValue)
+	if err != nil {
+		return 0, err
+	}
+	return int16(resumeUnixDay), nil
+}
+
+// saveResumeUnixDay persists the current batch date before processing it so retries restart from that unixday.
+func (generator *saleOrderGenerator) saveResumeUnixDay(unixDay int16) error {
+	return os.WriteFile(saleOrdersProgressPath, []byte(strconv.Itoa(int(unixDay))), 0o644)
+}
+
+// clearResumeUnixDay removes the checkpoint once the generation completes successfully.
+func (generator *saleOrderGenerator) clearResumeUnixDay() error {
+	err := os.Remove(saleOrdersProgressPath)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// filterDatesForResume keeps only dates at or after the checkpoint so reruns continue from the interrupted day.
+func (generator *saleOrderGenerator) filterDatesForResume(historicalDates []int16, resumeUnixDay int16) []int16 {
+	if resumeUnixDay == 0 {
+		return historicalDates
+	}
+
+	pendingDates := []int16{}
+	for _, historicalDate := range historicalDates {
+		if historicalDate >= resumeUnixDay {
+			pendingDates = append(pendingDates, historicalDate)
+		}
+	}
+	return pendingDates
+}
+
+// makeGenerationPlan precomputes daily volume, statuses and exact client assignment before creating any order.
+func (generator *saleOrderGenerator) makeGenerationPlan(daysCount int) ([]int, []saleOrderStatusTarget, []bool) {
 	dailyCounts := make([]int, 0, daysCount)
 	totalOrders := 0
 	for dayIndex := 0; dayIndex < daysCount; dayIndex++ {
 		dailyOrdersCount := int(generator.randomInt(dailyOrdersMin, dailyOrdersMax))
 		dailyCounts = append(dailyCounts, dailyOrdersCount)
 		totalOrders += dailyOrdersCount
+	}
+	if totalOrders%2 != 0 && len(dailyCounts) > 0 {
+		// Force an even total so the client assignment rule can stay exactly 50/50.
+		dailyCounts[len(dailyCounts)-1]--
+		totalOrders--
 	}
 
 	generatedCount := totalOrders / 10
@@ -370,7 +676,21 @@ func (generator *saleOrderGenerator) makeGenerationPlan(daysCount int) ([]int, [
 	generator.random.Shuffle(len(statusPlan), func(i, j int) {
 		statusPlan[i], statusPlan[j] = statusPlan[j], statusPlan[i]
 	})
-	return dailyCounts, statusPlan
+
+	// Keep the requirement exact instead of probabilistic so half the generated sales have a client and half remain anonymous.
+	clientPlan := make([]bool, 0, totalOrders)
+	ordersWithClient := totalOrders / 2
+	for index := 0; index < ordersWithClient; index++ {
+		clientPlan = append(clientPlan, true)
+	}
+	for index := ordersWithClient; index < totalOrders; index++ {
+		clientPlan = append(clientPlan, false)
+	}
+	generator.random.Shuffle(len(clientPlan), func(i, j int) {
+		clientPlan[i], clientPlan[j] = clientPlan[j], clientPlan[i]
+	})
+
+	return dailyCounts, statusPlan, clientPlan
 }
 
 // makeHistoricalUnix assigns each order a unique local second inside the target day to keep IDs spread out.
@@ -383,7 +703,7 @@ func (generator *saleOrderGenerator) makeHistoricalUnix(targetDate int16, orderI
 }
 
 // makeSalePayload reserves stock in-memory first and then maps the selected lines to the real sale payload.
-func (generator *saleOrderGenerator) makeSalePayload(status saleOrderStatusTarget, ordersRemaining int) (comercialTypes.SaleOrder, error) {
+func (generator *saleOrderGenerator) makeSalePayload(status saleOrderStatusTarget, ordersRemaining int, shouldAssignClient bool) (comercialTypes.SaleOrder, error) {
 	if generator.totalRemainingUnits < int32(ordersRemaining) {
 		return comercialTypes.SaleOrder{}, core.Err("no queda stock suficiente para completar el plan de órdenes")
 	}
@@ -417,6 +737,7 @@ func (generator *saleOrderGenerator) makeSalePayload(status saleOrderStatusTarge
 		selectedStock := availableStocks[generator.random.Intn(len(availableStocks))]
 		linesRemainingAfterCurrent := len(selectedProductIDs) - lineIndex - 1
 		maxQuantity := minInt32(5, selectedStock.remaining)
+		maxQuantity = minInt32(maxQuantity, generator.remainingByProductSKU[generator.makeProductSKUKey(selectedStock.productID, selectedStock.sku)])
 		maxQuantity = minInt32(maxQuantity, remainingUnitsToAssign-int32(linesRemainingAfterCurrent))
 		if maxQuantity < 1 {
 			return comercialTypes.SaleOrder{}, core.Err("no se pudo asignar cantidad válida a la línea")
@@ -427,6 +748,7 @@ func (generator *saleOrderGenerator) makeSalePayload(status saleOrderStatusTarge
 			quantity = remainingUnitsToAssign
 		}
 		selectedStock.remaining -= quantity
+		generator.remainingByProductSKU[generator.makeProductSKUKey(selectedStock.productID, selectedStock.sku)] -= quantity
 		generator.totalRemainingUnits -= quantity
 		remainingUnitsToAssign -= quantity
 
@@ -437,7 +759,7 @@ func (generator *saleOrderGenerator) makeSalePayload(status saleOrderStatusTarge
 	totalAmount := int32(0)
 	payload := comercialTypes.SaleOrder{
 		WarehouseID:                sampleWarehouseID,
-		LastPaymentCajaID:          sampleCajaID,
+		LastPaymentCajaID:          generator.selectedCajaID,
 		DetailProductsIDs:          make([]int32, 0, len(selectedStocks)),
 		DetailPrices:               make([]int32, 0, len(selectedStocks)),
 		DetailQuantities:           make([]int32, 0, len(selectedStocks)),
@@ -457,6 +779,12 @@ func (generator *saleOrderGenerator) makeSalePayload(status saleOrderStatusTarge
 		totalAmount += selectedStock.price * lineQuantity
 	}
 	payload.TotalAmount = totalAmount
+	if shouldAssignClient {
+		if len(generator.availableClientIDs) == 0 {
+			return comercialTypes.SaleOrder{}, core.Err("no hay clientes disponibles para asignar ClientID")
+		}
+		payload.ClientID = generator.availableClientIDs[generator.random.Intn(len(generator.availableClientIDs))]
+	}
 
 	switch status {
 	case saleOrderStatusGenerated:
@@ -492,6 +820,33 @@ func (generator *saleOrderGenerator) createSaleOrder(historicalUnix int64, paylo
 		return nil, err
 	}
 	return &saleOrder, nil
+}
+
+// createOrderWithRetry regenerates the order once after reloading stock if the handler reports a stock mismatch.
+func (generator *saleOrderGenerator) createOrderWithRetry(status saleOrderStatusTarget, ordersRemaining int, shouldAssignClient bool, historicalUnix int64) (*comercialTypes.SaleOrder, error) {
+	salePayload, err := generator.makeSalePayload(status, ordersRemaining, shouldAssignClient)
+	if err != nil {
+		return nil, err
+	}
+
+	createdSaleOrder, err := generator.createSaleOrder(historicalUnix, salePayload)
+	if err == nil {
+		return createdSaleOrder, nil
+	}
+	if !generator.isStockShortageError(err) {
+		return nil, err
+	}
+
+	core.Log("GenerateSaleOrders:: stock mismatch detected, reloading ledger", "error", err.Error())
+	if reloadErr := generator.reloadStockLedger(); reloadErr != nil {
+		return nil, core.Err("no se pudo recargar el stock tras error de validación:", reloadErr)
+	}
+
+	salePayload, err = generator.makeSalePayload(status, ordersRemaining, shouldAssignClient)
+	if err != nil {
+		return nil, err
+	}
+	return generator.createSaleOrder(historicalUnix, salePayload)
 }
 
 // makeRequest centralizes the synthetic handler request so sample flows stay consistent.
@@ -533,6 +888,15 @@ func (generator *saleOrderGenerator) availableStocksForProduct(productID int32) 
 		}
 	}
 	return availableStocks
+}
+
+// makeProductSKUKey tracks stock at the same granularity requested by the user: productID + sku.
+func (generator *saleOrderGenerator) makeProductSKUKey(productID int32, sku string) string {
+	return strconv.Itoa(int(productID)) + "|" + sku
+}
+
+func (generator *saleOrderGenerator) isStockShortageError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "Se posee en stock")
 }
 
 // pickDistinctProducts randomly chooses the products that will appear in one order.
@@ -610,8 +974,34 @@ func (generator *saleOrderGenerator) randomAlphaNumeric(length int) string {
 	return string(buffer)
 }
 
+// randomUniqueSKU avoids collisions with existing warehouse SKU rows for the same product.
+func (generator *saleOrderGenerator) randomUniqueSKU(usedSKUs map[string]bool) string {
+	for {
+		candidateSKU := generator.randomAlphaNumeric(10)
+		if usedSKUs[candidateSKU] {
+			continue
+		}
+		usedSKUs[candidateSKU] = true
+		return candidateSKU
+	}
+}
+
 func minInt32(valueA, valueB int32) int32 {
 	if valueA < valueB {
+		return valueA
+	}
+	return valueB
+}
+
+func minInt(valueA, valueB int) int {
+	if valueA < valueB {
+		return valueA
+	}
+	return valueB
+}
+
+func maxInt(valueA, valueB int) int {
+	if valueA > valueB {
 		return valueA
 	}
 	return valueB

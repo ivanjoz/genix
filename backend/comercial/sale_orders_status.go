@@ -83,6 +83,7 @@ func getSaleOrdersByStatusTraces(companyID int32, statusTraces []int8, updated i
 		queryGroup.Go(func() error {
 			traceSales := []types.SaleOrder{}
 			query := db.Query(&traceSales)
+			query.Select(query.ID, query.ClientID, query.DetailProductsIDs, query.Updated, query.Status)
 			query.CompanyID.Equals(companyID).StatusTrace.Equals(statusTrace)
 			// Always keep Updated as a range predicate so the planner can route to the
 			// packed StatusTrace+Updated view instead of falling back to base-table filtering.

@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -100,5 +101,78 @@ func TestCompiledSelectStatementBindsPackedViewFanout(t *testing.T) {
 		if !expectedQueries[boundStatement.QueryStr] {
 			t.Fatalf("unexpected bound query: %q", boundStatement.QueryStr)
 		}
+	}
+}
+
+func TestBuildBoundSelectPlanSplitsLargeInQueriesWithDefaultLimit(t *testing.T) {
+	// Keep single-column IN queries below Scylla's clustering-key default restriction.
+	t.Setenv("MAX_CLUSTERING_KEY", "")
+
+	inValues := make([]any, 0, 120)
+	for currentID := 1; currentID <= 120; currentID++ {
+		inValues = append(inValues, currentID)
+	}
+
+	boundPlan := buildBoundSelectPlan(
+		"SELECT id FROM genix.sale_order %v",
+		nil,
+		false,
+		false,
+		[]string{"company_id = 1"},
+		[]ColumnStatement{{Col: "id", Operator: "IN", Values: inValues}},
+		nil,
+		nil,
+		"",
+		"",
+		0,
+		false,
+	)
+
+	if len(boundPlan.Statements) != 2 {
+		t.Fatalf("expected 2 batched queries, got %d", len(boundPlan.Statements))
+	}
+	if !strings.Contains(boundPlan.Statements[0].QueryStr, "id IN (1, 2") {
+		t.Fatalf("expected first batch to keep the first IDs, got %q", boundPlan.Statements[0].QueryStr)
+	}
+	if !strings.Contains(boundPlan.Statements[1].QueryStr, "id IN (101, 102") {
+		t.Fatalf("expected second batch to continue after the default limit, got %q", boundPlan.Statements[1].QueryStr)
+	}
+}
+
+func TestBuildBoundSelectPlanSplitsCartesianInQueriesByEnvLimit(t *testing.T) {
+	// Split only enough to keep the IN cartesian product within the configured budget.
+	t.Setenv("MAX_CLUSTERING_KEY", "6")
+
+	boundPlan := buildBoundSelectPlan(
+		"SELECT id FROM genix.sale_order %v",
+		nil,
+		false,
+		false,
+		[]string{"company_id = 1"},
+		[]ColumnStatement{
+			{Col: "status", Operator: "IN", Values: []any{1, 2, 3}},
+			{Col: "id", Operator: "IN", Values: []any{10, 11, 12, 13}},
+		},
+		nil,
+		nil,
+		"",
+		"",
+		0,
+		false,
+	)
+
+	if len(boundPlan.Statements) != 2 {
+		t.Fatalf("expected 2 cartesian batches, got %d", len(boundPlan.Statements))
+	}
+	for _, boundStatement := range boundPlan.Statements {
+		if !strings.Contains(boundStatement.QueryStr, "status IN (1, 2, 3)") {
+			t.Fatalf("expected status IN clause to stay intact, got %q", boundStatement.QueryStr)
+		}
+	}
+	if !strings.Contains(boundPlan.Statements[0].QueryStr, "id IN (10, 11)") {
+		t.Fatalf("expected first cartesian batch to keep the first ID chunk, got %q", boundPlan.Statements[0].QueryStr)
+	}
+	if !strings.Contains(boundPlan.Statements[1].QueryStr, "id IN (12, 13)") {
+		t.Fatalf("expected second cartesian batch to keep the second ID chunk, got %q", boundPlan.Statements[1].QueryStr)
 	}
 }

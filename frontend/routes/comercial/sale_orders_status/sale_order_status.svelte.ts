@@ -67,57 +67,13 @@ export class SaleOrdersService extends GetHandler {
 		// Never show deleted/canceled records in the UI; cache merge still works via IDs.
 		const activeOrders = data.filter((saleOrder) => (saleOrder?.ss || 0) > 0);
 		this.records = activeOrders.map((saleOrder) => {
-			const topPaidProducts = this.getTopPaidProductsByAmount(saleOrder);
 			const normalizedLastPaymentCajaID = saleOrder.LastPaymentCajaID || (saleOrder as any).CajaID_ || 0;
 			return {
 				...saleOrder,
 				LastPaymentCajaID: normalizedLastPaymentCajaID,
-				TopPaidProducts: topPaidProducts,
 			};
 		});
     }
-
-	private getTopPaidProductsByAmount(saleOrder: ISaleOrder): ISaleOrderTopProduct[] {
-		const detailCount = Math.min(
-			saleOrder.DetailProductsIDs?.length || 0,
-			saleOrder.DetailPrices?.length || 0,
-			saleOrder.DetailQuantities?.length || 0
-		);
-		const productAmountMap = new Map<number, ISaleOrderTopProduct>();
-
-		// Aggregate line subtotal by product, then keep top records with tie-aware cutoff.
-		for (let detailIndex = 0; detailIndex < detailCount; detailIndex += 1) {
-			const productID = saleOrder.DetailProductsIDs[detailIndex];
-			const linePrice = saleOrder.DetailPrices[detailIndex] || 0;
-			const lineQuantity = saleOrder.DetailQuantities[detailIndex] || 0;
-			const lineAmount = linePrice * lineQuantity;
-			if (!productID || lineAmount <= 0) { continue; }
-
-			const previousProductData = productAmountMap.get(productID);
-
-			if (previousProductData) {
-				previousProductData.LineAmount += lineAmount;
-				continue;
-			}
-
-			productAmountMap.set(productID, {
-				ProductID: productID,
-				LineAmount: lineAmount,
-			});
-		}
-
-		const sortedProducts = Array.from(productAmountMap.values()).sort((leftProduct, rightProduct) => {
-			if (rightProduct.LineAmount !== leftProduct.LineAmount) {
-				return rightProduct.LineAmount - leftProduct.LineAmount;
-			}
-			return leftProduct.ProductID - rightProduct.ProductID;
-		});
-		if (sortedProducts.length <= 3) { return sortedProducts; }
-
-		const topThreeIndex = 2;
-		const tieAwareCutoffAmount = sortedProducts[topThreeIndex].LineAmount;
-		return sortedProducts.filter(product => product.LineAmount >= tieAwareCutoffAmount);
-	}
 
 	constructor(group: number) {
 		super()

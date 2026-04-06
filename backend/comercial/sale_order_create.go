@@ -346,3 +346,21 @@ func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, empresaID i
 
 	return clientProviders[0].ID, nil
 }
+
+func GetSaleOrderByIDs(req *core.HandlerArgs) core.HandlerResponse {
+	saleOrderIDRecords, err := core.ExtractCacheVersionValues(req)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+
+	saleOrderIDs := core.Map(saleOrderIDRecords, func(e db.IDCacheVersion) int64 { return  e.ID })
+
+	saleOrders := []types.SaleOrder{}
+	query := db.Query(&saleOrders).CompanyID.Equals(req.Usuario.EmpresaID)
+	
+	if err = query.ID.In(saleOrderIDs...).Exec(); err != nil {
+		return req.MakeErr("Error al obtener los productos.", err)
+	}
+
+	return core.MakeResponse(req, &saleOrders)
+}

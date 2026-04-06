@@ -110,11 +110,6 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, empresaID i
 			return core.Err("El registro en posición", clientProviderIndex, "debe tener RegistryNumber numérico de 7 a 12 dígitos para proveedores.")
 		}
 
-		// Natural persons don't need a registry number, so clear forged values the server does not need to persist.
-		if clientProvider.PersonType == s.PersonTypeNatural {
-			clientProvider.RegistryNumber = ""
-		}
-
 		// Keep the deduplication hash server-owned so DB lookups and writes use the same identity rule.
 		clientProvider.SelfParse()
 
@@ -140,7 +135,7 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, empresaID i
 	// Resolve existing IDs before Merge so equal identities update instead of inserting duplicates.
 	existingByRegistryNumber := []s.ClientProvider{}
 	if !clientProviderRegistryNumbers.IsEmpty() {
-		q := db.Query(&existingByRegistryNumber)
+		q := db.Query(&existingByRegistryNumber).AllowFilter()
 		err := q.Select(q.RegistryNumber, q.ID).
 			EmpresaID.Equals(empresaID).
 			RegistryNumber.In(clientProviderRegistryNumbers.Values...).Exec()
@@ -155,7 +150,7 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, empresaID i
 
 	existingByHash := []s.ClientProvider{}
 	if !clientProviderHashes.IsEmpty() {
-		q := db.Query(&existingByHash)
+		q := db.Query(&existingByHash).AllowFilter()
 		err := q.Select(q.NameRegistryHash, q.ID).
 			EmpresaID.Equals(empresaID).
 			NameRegistryHash.In(clientProviderHashes.Values...).Exec()
