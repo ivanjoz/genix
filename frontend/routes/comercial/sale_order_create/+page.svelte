@@ -120,105 +120,167 @@ import { SaleOrderState } from "./sale_order.svelte";
     parseProductos();
     Loading.remove();
   }
-
-  function getPresentationName(producto: ProductoVenta["producto"], presentationID: number) {
-    if (!presentationID) return "";
-
-    const presentationRecord = producto.Presentaciones?.find((presentationOption) => presentationOption.id === presentationID);
-    return presentationRecord?.nm || `Presentación ${presentationID}`;
-  }
-
-  function createProductoVenta(
-    producto: ProductoVenta["producto"],
-    brandName: string,
-    presentationID: number,
-    keyPrefix: string,
-    cant: number,
-    extraData: Partial<ProductoVenta> = {},
-  ): ProductoVenta {
-    const presentationName = getPresentationName(producto, presentationID);
-    const displayName = presentationName ? `${producto.Nombre} (${presentationName})` : producto.Nombre;
-
-    return {
-      producto,
-      cant,
-      key: `${keyPrefix}${producto.ID}-${presentationID}`,
-      presentationID,
-      presentationName,
-      displayName,
-      searchText: `${producto.Nombre} ${presentationName} ${brandName}`.toLowerCase(),
-      ...extraData,
-    };
-  }
-
+  
   function parseProductos() {
     if (!productosService.records.length || !productosStock.length) return;
 
-    const productoPresentacionToStockMap = new Map<string, IProductoStock[]>();
-    for (const s of productosStock) {
-      const stockKey = `${s.ProductID}-${s.PresentationID || 0}`;
-      const list = productoPresentacionToStockMap.get(stockKey) || [];
-      list.push(s);
-      productoPresentacionToStockMap.set(stockKey, list);
+  	const productStockGroups: Map<string,ProductoVenta> = new Map()
+   
+   	for(const e of productosStock){
+      const producto = productosService.recordsMap.get(e.ProductID)
+      if(!producto){ continue }
+
+    	const key = [e.ProductID, e.PresentationID||0, e.SKU ? 1 : 0].join("_")
+     	if(!productStockGroups.has(key)){
+        const presentationID = e.PresentationID || 0
+        const presentationName = presentationID
+          ? producto.Presentaciones?.find((presentationOption) => presentationOption.id === presentationID)?.nm || `Presentación ${presentationID}`
+          : ""
+        const brandName = listasService.recordsMap.get(producto.MarcaID)?.Nombre || ""
+        const displayName = presentationName ? `${producto.Nombre} (${presentationName})` : producto.Nombre
+
+        // Build the final sale row once and only mutate the aggregated fields while iterating stock.
+      	productStockGroups.set(key, {
+      	  key,
+      	  cant: 0,
+      	  presentationID,
+      	  presentationName,
+      	  displayName,
+      	  searchText: `${producto.Nombre} ${presentationName} ${brandName}`.toLowerCase(),
+      	  producto,
+       	  skus: [] as IProductoStock[],
+       } as ProductoVenta)
+      }
+      
+     	if(e.SKU){
+      	productStockGroups.get(key)?.skus?.push(e)
+      }
+
+      const productStockGroup = productStockGroups.get(key)
+      if(productStockGroup){
+        productStockGroup.cant += e.Quantity
+      }
+    }
+
+    const productosParsedNew = [...productStockGroups.values()]
+
+    for (const productoVenta of [...productStockGroups.values()]) {
+      if (productoVenta.key.endsWith("_1") || (productoVenta.producto.SbnCantidad || 0) <= 1) { continue }
+
+      // Only create sub-unit rows for generic stock groups so the UI preserves the existing sale flow.
+      productosParsedNew.push({
+        key: `${productoVenta.key}_s`,
+        cant: productoVenta.producto.SbnCantidad!,
+        producto: productoVenta.producto,
+        presentationID: productoVenta.presentationID,
+        presentationName: productoVenta.presentationName,
+        displayName: productoVenta.displayName,
+        searchText: productoVenta.searchText,
+        isSubUnidad: true,
+      })
+    }
+
+    productosParsedAll = productosParsedNew
+    filterProductos(ventasState.filterText)
+  }
+
+  function parseProductosDeprecated() {
+    if (!productosService.records.length || !productosStock.length) return;
+
+    const stockGroupsByProductID = new Map<number, Map<number, {
+      presentationID: number
+      genericQuantity: number
+      skuQuantity: number
+      skus: IProductoStock[]
+    }>>();
+
+    // Group stock once so we avoid scanning the full stock list for every product.
+    for (const stockRecord of productosStock) {
+      const presentationID = stockRecord.PresentationID || 0;
+      let stockGroupsByPresentationID = stockGroupsByProductID.get(stockRecord.ProductID);
+
+      if (!stockGroupsByPresentationID) {
+        stockGroupsByPresentationID = new Map();
+        stockGroupsByProductID.set(stockRecord.ProductID, stockGroupsByPresentationID);
+      }
+
+      let stockGroup = stockGroupsByPresentationID.get(presentationID);
+      if (!stockGroup) {
+        stockGroup = {
+          presentationID,
+          genericQuantity: 0,
+          skuQuantity: 0,
+          skus: [],
+        };
+        stockGroupsByPresentationID.set(presentationID, stockGroup);
+      }
+
+      if (stockRecord.SKU) {
+        stockGroup.skus.push(stockRecord);
+        stockGroup.skuQuantity += stockRecord.Quantity;
+      } else {
+        stockGroup.genericQuantity += stockRecord.Quantity;
+      }
     }
 
     const newProductos: ProductoVenta[] = [];
 
     for (const producto of productosService.records) {
+      const stockGroupsByPresentationID = stockGroupsByProductID.get(producto.ID);
+      if (!stockGroupsByPresentationID) continue;
+
       const brandName = listasService.recordsMap.get(producto.MarcaID)?.Nombre || "";
-      const presentationIDs = new Set<number>([0]);
+      const baseSearchText = `${producto.Nombre} ${brandName}`.toLowerCase();
+      const presentationNameByID = new Map(
+        (producto.Presentaciones || []).map((presentationOption) => [presentationOption.id, presentationOption.nm]),
+      );
 
-      for (const productStockRecord of productosStock) {
-        if (productStockRecord.ProductID === producto.ID) {
-          presentationIDs.add(productStockRecord.PresentationID || 0);
-        }
-      }
+      for (const stockGroup of stockGroupsByPresentationID.values()) {
+        const presentationName = stockGroup.presentationID
+          ? presentationNameByID.get(stockGroup.presentationID) || `Presentación ${stockGroup.presentationID}`
+          : "";
+        const displayName = presentationName ? `${producto.Nombre} (${presentationName})` : producto.Nombre;
+        const searchText = presentationName
+          ? `${baseSearchText} ${presentationName}`.toLowerCase()
+          : baseSearchText;
 
-      for (const presentationID of presentationIDs) {
-        const stocks = productoPresentacionToStockMap.get(`${producto.ID}-${presentationID}`) || [];
-        if (stocks.length === 0) continue;
-
-        const skusStock: IProductoStock[] = [];
-        const mainStock: IProductoStock[] = [];
-
-        for (const stockRecord of stocks) {
-          stockRecord.SKU ? skusStock.push(stockRecord) : mainStock.push(stockRecord);
-        }
-
-        if (skusStock.length > 0) {
-          const skuProductoVenta = createProductoVenta(
+        if (stockGroup.skuQuantity > 0) {
+          // Reuse the aggregated stock group instead of creating intermediate rows first.
+          newProductos.push({
             producto,
-            brandName,
-            presentationID,
-            "K",
-            skusStock.reduce((totalStock, stockRecord) => totalStock + stockRecord.Quantity, 0),
-            { skus: skusStock },
-          );
-          newProductos.push(skuProductoVenta);
+            cant: stockGroup.skuQuantity,
+            key: `K${producto.ID}-${stockGroup.presentationID}`,
+            presentationID: stockGroup.presentationID,
+            presentationName,
+            displayName,
+            searchText,
+            skus: stockGroup.skus,
+          });
         }
 
-        if (mainStock.length > 0) {
-          const genericStock = mainStock.reduce((totalStock, stockRecord) => totalStock + stockRecord.Quantity, 0);
-          const baseProductoVenta = createProductoVenta(
+        if (stockGroup.genericQuantity > 0) {
+          newProductos.push({
             producto,
-            brandName,
-            presentationID,
-            "P",
-            genericStock,
-          );
-
-          newProductos.push(baseProductoVenta);
+            cant: stockGroup.genericQuantity,
+            key: `P${producto.ID}-${stockGroup.presentationID}`,
+            presentationID: stockGroup.presentationID,
+            presentationName,
+            displayName,
+            searchText,
+          });
 
           if ((producto.SbnCantidad || 0) > 1) {
-            // Preserve the existing sub-unit flow but keep it tied to the same presentation.
-            newProductos.push(createProductoVenta(
+            // Preserve the sub-unit sale flow only when the base presentation has stock.
+            newProductos.push({
               producto,
-              brandName,
-              presentationID,
-              "S",
-              producto.SbnCantidad!,
-              { isSubUnidad: true },
-            ));
+              cant: producto.SbnCantidad!,
+              key: `S${producto.ID}-${stockGroup.presentationID}`,
+              presentationID: stockGroup.presentationID,
+              presentationName,
+              displayName,
+              searchText,
+              isSubUnidad: true,
+            });
           }
         }
       }
