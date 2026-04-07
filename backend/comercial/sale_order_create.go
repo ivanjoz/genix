@@ -281,7 +281,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		salesToUpdate := []types.SaleOrder{sale}
 		if err := db.Update(&salesToUpdate,
 			// Keep composite view columns in sync: {Fecha, Updated} must be updated together.
-			saleTable.Fecha,
 			saleTable.WarehouseID,
 			saleTable.LastPaymentCajaID,
 			saleTable.DebtAmount,
@@ -293,7 +292,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			saleTable.LastPaymentUser,
 			saleTable.DeliveryTime,
 			saleTable.DeliveryUser,
-			saleTable.DetailProductsIDs,
+			saleTable.ClientID,
 		); err != nil {
 			return req.MakeErr("Error al actualizar la venta:", err)
 		}

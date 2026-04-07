@@ -98,12 +98,14 @@ type mediumSchema struct {
 
 func (e mediumSchema) GetSchema() TableSchema {
 	return TableSchema{
-		Name:         "medium_table",
-		Partition:    e.EmpresaID,
-		Keys:         []Coln{e.ID},
-		LocalIndexes: []Coln{e.SKU, e.CategoryID},
-		Views: []View{
+		Name:      "medium_table",
+		Partition: e.EmpresaID,
+		Keys:      []Coln{e.ID},
+		Indexes: []Index{
+			{Type: TypeLocalIndex, Keys: []Coln{e.SKU}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.CategoryID}},
 			{
+				Type:     TypeView,
 				Keys:     []Coln{e.CategoryID, e.Status},
 				KeepPart: true,
 			},
@@ -174,21 +176,28 @@ type complexSchema struct {
 
 func (e complexSchema) GetSchema() TableSchema {
 	return TableSchema{
-		Name:         "complex_table",
-		Partition:    e.EmpresaID,
-		Keys:         []Coln{e.ID},
-		LocalIndexes: []Coln{e.Code, e.Reference, e.CategoryID, e.WarehouseID},
-		Indexes:      [][]Coln{{e.SupplierID}, {e.BrandID}},
-		Views: []View{
+		Name:      "complex_table",
+		Partition: e.EmpresaID,
+		Keys:      []Coln{e.ID},
+		Indexes: []Index{
+			{Type: TypeLocalIndex, Keys: []Coln{e.Code}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.Reference}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.CategoryID}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.WarehouseID}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.SupplierID}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.BrandID}},
 			{
+				Type:     TypeView,
 				Keys:     []Coln{e.CategoryID, e.Status},
 				KeepPart: true,
 			},
 			{
+				Type:     TypeView,
 				Keys:     []Coln{e.WarehouseID, e.Updated},
 				KeepPart: true,
 			},
 			{
+				Type:     TypeView,
 				Keys:     []Coln{e.SupplierID, e.Active},
 				KeepPart: true,
 			},
@@ -291,26 +300,38 @@ func (e veryComplexSchema) GetSchema() TableSchema {
 		Partition:       e.EmpresaID,
 		Keys:            []Coln{e.ID},
 		KeyConcatenated: []Coln{e.WarehouseID, e.CategoryID, e.SupplierID},
-		LocalIndexes:    []Coln{e.Code, e.Reference, e.CategoryID, e.WarehouseID, e.ZoneID, e.RegionID},
-		Indexes:         [][]Coln{{e.SupplierID}, {e.BrandID}, {e.LocationID}},
-		Views: []View{
+		Indexes: []Index{
+			{Type: TypeLocalIndex, Keys: []Coln{e.Code}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.Reference}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.CategoryID}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.WarehouseID}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.ZoneID}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.RegionID}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.SupplierID}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.BrandID}},
+			{Type: TypeLocalIndex, Keys: []Coln{e.LocationID}},
 			{
+				Type:     TypeView,
 				Keys:     []Coln{e.CategoryID, e.Status},
 				KeepPart: true,
 			},
 			{
+				Type:     TypeView,
 				Keys:     []Coln{e.WarehouseID, e.Updated},
 				KeepPart: true,
 			},
 			{
+				Type:     TypeView,
 				Keys:     []Coln{e.SupplierID, e.Active},
 				KeepPart: true,
 			},
 			{
+				Type:     TypeView,
 				Keys:     []Coln{e.ZoneID, e.Quantity},
 				KeepPart: true,
 			},
 			{
+				Type:     TypeView,
 				Keys:     []Coln{e.RegionID, e.Price},
 				KeepPart: true,
 			},

@@ -25,9 +25,9 @@ func (e GaleriaImagenTable) GetSchema() db.TableSchema {
 		Name:      "galeria_imagenes",
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.Image},
-		Views: []db.View{
-			{Keys: []db.Coln{e.Status}, KeepPart: true},
-			{Keys: []db.Coln{e.Updated}, KeepPart: true},
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: []db.Coln{e.Status}, KeepPart: true},
+			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }

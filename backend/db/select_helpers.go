@@ -97,6 +97,18 @@ func collectSelectStatements(tableInfo *TableInfo) []ColumnStatement {
 	return statements
 }
 
+func shouldAutoSelectColumn(column IColInfo) bool {
+	if column == nil || column.IsNil() {
+		return false
+	}
+	if column.GetInfo().IsVirtual {
+		return false
+	}
+	// Managed write-only columns may exist in Scylla metadata without a backing struct field.
+	// They should not be injected into default SELECT projections.
+	return column.GetInfo().Field != nil
+}
+
 func buildSelectProjection(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) ([]string, []selectScanColumn, []string) {
 	columnNames := []string{}
 	scanColumns := []selectScanColumn{}
@@ -117,14 +129,14 @@ func buildSelectProjection(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) (
 			excludedColumns = append(excludedColumns, col.GetName())
 		}
 		for _, col := range scyllaTable.columns {
-			if slices.Contains(excludedColumns, col.GetName()) || col.GetInfo().IsVirtual {
+			if slices.Contains(excludedColumns, col.GetName()) || !shouldAutoSelectColumn(col) {
 				continue
 			}
 			columnNames = append(columnNames, col.GetName())
 		}
 	} else {
 		for _, col := range scyllaTable.columns {
-			if col.GetInfo().IsVirtual {
+			if !shouldAutoSelectColumn(col) {
 				continue
 			}
 			columnNames = append(columnNames, col.GetName())
@@ -147,25 +159,10 @@ func computeSelectShapeHash(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) 
 	}
 
 	writeText(scyllaTable.name)
-
-	switch {
-	case len(tableInfo.columnsInclude) > 0:
-		writeText("projection:include")
-		for _, col := range tableInfo.columnsInclude {
-			writeText(col.GetName())
-		}
-	case len(tableInfo.columnsExclude) > 0:
-		writeText("projection:exclude")
-		excludedNames := make([]string, 0, len(tableInfo.columnsExclude))
-		for _, col := range tableInfo.columnsExclude {
-			excludedNames = append(excludedNames, col.GetName())
-		}
-		slices.Sort(excludedNames)
-		for _, colName := range excludedNames {
-			writeText(colName)
-		}
-	default:
-		writeText("projection:all")
+	columnNames, _, _ := buildSelectProjection(tableInfo, scyllaTable)
+	writeText("projection:resolved")
+	for _, columnName := range columnNames {
+		writeText(columnName)
 	}
 
 	if len(tableInfo.groupByColumns) > 0 {

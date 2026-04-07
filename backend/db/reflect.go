@@ -10,6 +10,12 @@ import (
 
 var rangeOperators = []string{">", "<", ">=", "<="}
 
+const (
+	managedCreatedColumnName       = "created"
+	managedUpdatedColumnName       = "updated"
+	managedUpdateCounterColumnName = "update_counter"
+)
+
 var makeStatementWith string = `	WITH caching = {'keys': 'ALL', 'rows_per_partition': 'ALL'}
 	and compaction = {'class': 'SizeTieredCompactionStrategy'}
 	and compression = {'compression_level': '3', 'sstable_compression': 'org.apache.cassandra.io.compress.ZstdCompressor'}
@@ -59,6 +65,46 @@ func isUpdateCounterFieldType(fieldType string) bool {
 		return true
 	}
 	return false
+}
+
+func ensureManagedIntColumn(dbTable *ScyllaTable[any], columnName string) IColInfo {
+	if currentColumn := dbTable.columnsMap[columnName]; currentColumn != nil {
+		if currentColumn.GetType().IsSlice || !isUpdateCounterFieldType(currentColumn.GetType().FieldType) {
+			panic(fmt.Sprintf(`Table "%v": managed column "%v" must be an integer scalar. Found: %v`,
+				dbTable.name, columnName, currentColumn.GetType().FieldType))
+		}
+		return currentColumn
+	}
+
+	dbTable._maxColIdx++
+	managedColumn := &columnInfo{
+		colInfo: colInfo{
+			Name:      columnName,
+			FieldName: columnName,
+			Idx:       dbTable._maxColIdx,
+			RefType:   reflect.TypeOf(int32(0)),
+		},
+		colType: GetColTypeByID(3),
+		// DB-only managed columns exist in Scylla even when a record struct does not expose them.
+		getRawValue:       func(ptr unsafe.Pointer) any { return nil },
+		getStatementValue: func(ptr unsafe.Pointer) any { return nil },
+		getValue:          func(ptr unsafe.Pointer) any { return nil },
+	}
+	dbTable.columnsMap[columnName] = managedColumn
+	return managedColumn
+}
+
+func bindManagedAuditColumns(dbTable *ScyllaTable[any], schema TableSchema) {
+	dbTable.createdCol = ensureManagedIntColumn(dbTable, managedCreatedColumnName)
+	dbTable.updatedCol = ensureManagedIntColumn(dbTable, managedUpdatedColumnName)
+	if !schema.DisableUpdateCounter {
+		dbTable.updateCounterCol = ensureManagedIntColumn(dbTable, managedUpdateCounterColumnName)
+	}
+
+	if schema.UseUpdateCounter != nil && schema.UseUpdateCounter.GetName() != managedUpdateCounterColumnName {
+		panic(fmt.Sprintf(`Table "%v": UseUpdateCounter is deprecated. Managed writes always use "%v".`,
+			dbTable.name, managedUpdateCounterColumnName))
+	}
 }
 
 func flattenCompositeInt64Values(rawValue any) []int64 {
@@ -226,6 +272,9 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		}
 	}
 
+	// Every table keeps the same audit columns in Scylla, even when a struct hides them.
+	bindManagedAuditColumns(&dbTable, schema)
+
 	if schema.Partition != nil {
 		dbTable.partKey = dbTable.columnsMap[schema.Partition.GetInfo().Name]
 		if dbTable.partKey != nil && !dbTable.partKey.IsNil() {
@@ -258,19 +307,6 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 
 	if schema.AutoincrementPart != nil {
 		dbTable.autoincrementPart = dbTable.columnsMap[schema.AutoincrementPart.GetInfo().Name]
-	}
-
-	if schema.UseUpdateCounter != nil {
-		updateCounterColumnName := schema.UseUpdateCounter.GetName()
-		updateCounterColumn := dbTable.columnsMap[updateCounterColumnName]
-		if updateCounterColumn == nil {
-			panic(fmt.Sprintf(`Table "%v": UseUpdateCounter column "%v" was not found`, dbTable.name, updateCounterColumnName))
-		}
-		if updateCounterColumn.GetType().IsSlice || !isUpdateCounterFieldType(updateCounterColumn.GetType().FieldType) {
-			panic(fmt.Sprintf(`Table "%v": UseUpdateCounter column "%v" must be an integer scalar. Found: %v`,
-				dbTable.name, updateCounterColumn.GetName(), updateCounterColumn.GetType().FieldType))
-		}
-		dbTable.updateCounterCol = updateCounterColumn
 	}
 
 	// Identify autoincrement column from direct column definitions (backward compatibility)
@@ -364,1029 +400,136 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		dbTable.sequencePartCol = &gi
 	}
 
-	for _, column := range schema.LocalIndexes {
-		colInfo := column.GetInfo()
-		index := &viewInfo{
-			Type:    2,
-			name:    fmt.Sprintf(`%v__%v_index_1`, dbTable.name, colInfo.GetName()),
-			idx:     idxCount,
-			column:  dbTable.columnsMap[colInfo.GetName()],
-			columns: []string{dbTable.GetPartKey().GetName(), colInfo.GetName()},
-		}
-		index.getCreateScript = func() string {
-			return fmt.Sprintf(`CREATE INDEX %v ON %v ((%v),%v)`,
-				index.name, dbTable.GetFullName(), index.columns[0], index.columns[1])
-		}
-
-		idxCount++
-		dbTable.indexes[index.name] = index
-	}
-
-	for _, indexColumns := range schema.HashIndexes {
-		// HashIndexes for this strategy supports 2-3 source columns and exactly one CompositeBucketing numeric column.
-		if len(indexColumns) < 2 || len(indexColumns) > 3 {
-			panic(fmt.Sprintf(`Table "%v": HashIndexes entries must have 2 to 3 columns. Found: %v`, dbTable.name, len(indexColumns)))
-		}
-
-		sourceColumns := make([]IColInfo, 0, len(indexColumns))
-		var bucketColumn IColInfo
-		bucketIsWeek := false
-		var bucketSizes []int8
-		sourceColumnNames := make([]string, 0, len(indexColumns))
-
-		for _, indexColumn := range indexColumns {
-			indexColumnInfo := indexColumn.GetInfo()
-			column := dbTable.columnsMap[indexColumnInfo.Name]
-			if column == nil {
-				panic(fmt.Sprintf(`Table "%v": HashIndexes column "%v" was not found`, dbTable.name, indexColumnInfo.Name))
-			}
-			if !isCompositeNumericFieldType(column.GetType().FieldType) {
-				panic(fmt.Sprintf(`Table "%v": HashIndexes column "%v" must be integer scalar/slice. Found: %v`, dbTable.name, column.GetName(), column.GetType().FieldType))
-			}
-			sourceColumns = append(sourceColumns, column)
-			sourceColumnNames = append(sourceColumnNames, column.GetName())
-
-			bucketDefs := indexColumnInfo.compositeBucketing
-			// Exactly one source column defines bucket sizes; all others are hashed as-is.
-			if len(bucketDefs) > 0 {
-				if bucketColumn != nil {
-					panic(fmt.Sprintf(`Table "%v": HashIndexes supports exactly one CompositeBucketing column per index`, dbTable.name))
-				}
-				if column.GetType().IsSlice {
-					panic(fmt.Sprintf(`Table "%v": CompositeBucketing column "%v" must be numeric (not a slice)`, dbTable.name, column.GetName()))
-				}
-				bucketColumn = column
-				bucketIsWeek = indexColumnInfo.isWeek
-				bucketSizes = normalizeCompositeBucketSizes(bucketDefs)
-			}
-		}
-
-		if bucketColumn == nil {
-			panic(fmt.Sprintf(`Table "%v": HashIndexes requires one column marked with CompositeBucketing`, dbTable.name))
-		}
-
-		compositeIndex := compositeBucketIndex{
-			name:                 strings.Join(sourceColumnNames, "_"),
-			sourceColumns:        sourceColumns,
-			bucketColumn:         bucketColumn,
-			bucketIsWeek:         bucketIsWeek,
-			bucketSizes:          bucketSizes,
-			virtualColumnsBySize: map[int8]IColInfo{},
-		}
-
-		for _, bucketSize := range bucketSizes {
-			// One virtual set<int> column per bucket size allows independent global index lookups.
-			virtualColName := fmt.Sprintf("zz_hb_%s_b%d", strings.Join(sourceColumnNames, "_"), bucketSize)
-			if _, exists := dbTable.columnsMap[virtualColName]; exists {
-				panic(fmt.Sprintf(`Table "%v": generated virtual composite bucket column already exists: %v`, dbTable.name, virtualColName))
-			}
-
-			bucketSizeLocal := bucketSize
-			sourceColumnsLocal := sourceColumns
-			bucketColumnLocal := bucketColumn
-
-			virtualColumn := &columnInfo{
-				colInfo: colInfo{
-					Name:      virtualColName,
-					FieldName: virtualColName,
-					IsVirtual: true,
-					Idx:       dbTable._maxColIdx,
-				},
-				// Hash bucket indexes rely on set membership semantics for VALUES(col) lookups.
-				colType: colType{
-					Type:      13,
-					FieldType: "[]int32",
-					ColType:   "set<int>",
-					IsSlice:   true,
-				},
-			}
-
-			bucketIsWeekLocal := compositeIndex.bucketIsWeek
-			virtualColumn.getRawValue = func(ptr unsafe.Pointer) any {
-				// Materialize bucketed hashes on demand so insert/update always persists index-consistent values.
-				hashValues := computeCompositeHashSet(ptr, sourceColumnsLocal, bucketColumnLocal, bucketSizeLocal, bucketIsWeekLocal)
-				return hashValues
-			}
-			virtualColumn.getValue = func(ptr unsafe.Pointer) any {
-				// UPDATE statements require CQL collection literal syntax, not Go slice formatting.
-				hashValues := computeCompositeHashSet(ptr, sourceColumnsLocal, bucketColumnLocal, bucketSizeLocal, bucketIsWeekLocal)
-				return makeSignedIntCollectionLiteral(virtualColumn.ColType, hashValues)
-			}
-
-			dbTable._maxColIdx++
-			dbTable.columnsMap[virtualColumn.GetName()] = virtualColumn
-			compositeIndex.virtualColumnsBySize[bucketSize] = virtualColumn
-
-			index := &viewInfo{
-				Type:    1,
-				name:    fmt.Sprintf(`%v__%v_index_0`, dbTable.name, virtualColumn.GetName()),
-				idx:     idxCount,
-				column:  virtualColumn,
-				columns: []string{virtualColumn.GetName()},
-			}
-			index.getCreateScript = func() string {
-				// Scylla requires VALUES(set_col) for indexing set membership queries.
-				return fmt.Sprintf(`CREATE INDEX %v ON %v (VALUES(%v))`, index.name, dbTable.GetFullName(), virtualColumn.GetName())
-			}
-
-			idxCount++
-			dbTable.indexes[index.name] = index
-		}
-
-		dbTable.compositeBucketIndexes = append(dbTable.compositeBucketIndexes, compositeIndex)
-		fmt.Printf("CompositeBucketing index registered: table=%s index=%s bucketSizes=%v\n", dbTable.name, compositeIndex.name, compositeIndex.bucketSizes)
-	}
-
-	for _, indexColumns := range schema.Indexes {
-		// TableSchema.Indexes: build local secondary indexes.
-		// - If entry has 1 column: create a simple local index on that column (replacement for deprecated LocalIndexes).
-		// - If entry has 2+ columns: create a packed virtual column and a local index on it.
-		if len(indexColumns) == 0 {
+	// Compile schema indexes in one pass to keep the public API and compiler flow simple.
+	for _, indexCfg := range schema.Indexes {
+		if len(indexCfg.Keys) == 0 {
 			panic(fmt.Sprintf(`Table "%v": Indexes entry must not be empty`, dbTable.name))
 		}
-
-		// Simple local index on a single column (including slice => VALUES(col)).
-		if len(indexColumns) == 1 {
-			colCfg := indexColumns[0]
-			colInfo := colCfg.GetInfo()
-			column := dbTable.columnsMap[colInfo.Name]
-			if column == nil {
-				panic(fmt.Sprintf(`Table "%v": Indexes column "%v" was not found`, dbTable.name, colInfo.Name))
+		if indexCfg.UseIndexGroup {
+			registerIndexGroup(&dbTable, &idxCount, indexCfg)
+			continue
+		}
+		if hasCompositeBucketing(indexCfg) {
+			indexColumns := indexCfg.Keys
+			if len(indexColumns) < 2 || len(indexColumns) > 3 {
+				panic(fmt.Sprintf(`Table "%v": composite-bucketing index entries must have 2 to 3 columns. Found: %v`, dbTable.name, len(indexColumns)))
 			}
 
-			indexName := fmt.Sprintf(`%v__%v_index_1`, dbTable.name, column.GetName())
-			if _, exists := dbTable.indexes[indexName]; exists {
-				// Avoid duplicate index definitions if the same column is listed multiple times.
-				continue
-			}
+			sourceColumns := make([]IColInfo, 0, len(indexColumns))
+			var bucketColumn IColInfo
+			bucketIsWeek := false
+			var bucketSizes []int8
+			sourceColumnNames := make([]string, 0, len(indexColumns))
 
-			index := &viewInfo{
-				Type:    2,
-				name:    indexName,
-				idx:     idxCount,
-				column:  column,
-				columns: []string{dbTable.GetPartKey().GetName(), column.GetName()},
-			}
-			index.getCreateScript = func() string {
-				colName := column.GetName()
-				if column.GetType().IsSlice {
-					colName = fmt.Sprintf("VALUES(%v)", colName)
+			for _, indexColumn := range indexColumns {
+				indexColumnInfo := indexColumn.GetInfo()
+				column := dbTable.columnsMap[indexColumnInfo.Name]
+				if column == nil {
+					panic(fmt.Sprintf(`Table "%v": composite-bucketing column "%v" was not found`, dbTable.name, indexColumnInfo.Name))
 				}
-				// Local index: partition + column
-				return fmt.Sprintf(`CREATE INDEX %v ON %v ((%v),%v)`,
-					indexName, dbTable.GetFullName(), dbTable.GetPartKey().GetName(), colName)
+				if !isCompositeNumericFieldType(column.GetType().FieldType) {
+					panic(fmt.Sprintf(`Table "%v": composite-bucketing column "%v" must be integer scalar/slice. Found: %v`, dbTable.name, column.GetName(), column.GetType().FieldType))
+				}
+				sourceColumns = append(sourceColumns, column)
+				sourceColumnNames = append(sourceColumnNames, column.GetName())
+
+				bucketDefs := indexColumnInfo.compositeBucketing
+				if len(bucketDefs) > 0 {
+					if bucketColumn != nil {
+						panic(fmt.Sprintf(`Table "%v": composite-bucketing supports exactly one CompositeBucketing column per index`, dbTable.name))
+					}
+					if column.GetType().IsSlice {
+						panic(fmt.Sprintf(`Table "%v": CompositeBucketing column "%v" must be numeric (not a slice)`, dbTable.name, column.GetName()))
+					}
+					bucketColumn = column
+					bucketIsWeek = indexColumnInfo.isWeek
+					bucketSizes = normalizeCompositeBucketSizes(bucketDefs)
+				}
 			}
 
-			idxCount++
-			dbTable.indexes[index.name] = index
+			if bucketColumn == nil {
+				panic(fmt.Sprintf(`Table "%v": composite-bucketing requires one column marked with CompositeBucketing`, dbTable.name))
+			}
+
+			compositeIndex := compositeBucketIndex{
+				name:                 strings.Join(sourceColumnNames, "_"),
+				sourceColumns:        sourceColumns,
+				bucketColumn:         bucketColumn,
+				bucketIsWeek:         bucketIsWeek,
+				bucketSizes:          bucketSizes,
+				virtualColumnsBySize: map[int8]IColInfo{},
+			}
+
+			for _, bucketSize := range bucketSizes {
+				virtualColName := fmt.Sprintf("zz_hb_%s_b%d", strings.Join(sourceColumnNames, "_"), bucketSize)
+				if _, exists := dbTable.columnsMap[virtualColName]; exists {
+					panic(fmt.Sprintf(`Table "%v": generated virtual composite bucket column already exists: %v`, dbTable.name, virtualColName))
+				}
+
+				bucketSizeLocal := bucketSize
+				sourceColumnsLocal := sourceColumns
+				bucketColumnLocal := bucketColumn
+
+				virtualColumn := &columnInfo{
+					colInfo: colInfo{
+						Name:      virtualColName,
+						FieldName: virtualColName,
+						IsVirtual: true,
+						Idx:       dbTable._maxColIdx,
+					},
+					colType: colType{
+						Type:      13,
+						FieldType: "[]int32",
+						ColType:   "set<int>",
+						IsSlice:   true,
+					},
+				}
+
+				bucketIsWeekLocal := compositeIndex.bucketIsWeek
+				virtualColumn.getRawValue = func(ptr unsafe.Pointer) any {
+					return computeCompositeHashSet(ptr, sourceColumnsLocal, bucketColumnLocal, bucketSizeLocal, bucketIsWeekLocal)
+				}
+				virtualColumn.getValue = func(ptr unsafe.Pointer) any {
+					hashValues := computeCompositeHashSet(ptr, sourceColumnsLocal, bucketColumnLocal, bucketSizeLocal, bucketIsWeekLocal)
+					return makeSignedIntCollectionLiteral(virtualColumn.ColType, hashValues)
+				}
+
+				dbTable._maxColIdx++
+				dbTable.columnsMap[virtualColumn.GetName()] = virtualColumn
+				compositeIndex.virtualColumnsBySize[bucketSize] = virtualColumn
+
+				index := &viewInfo{
+					Type:    1,
+					name:    fmt.Sprintf(`%v__%v_index_0`, dbTable.name, virtualColumn.GetName()),
+					idx:     idxCount,
+					column:  virtualColumn,
+					columns: []string{virtualColumn.GetName()},
+				}
+				index.getCreateScript = func() string {
+					return fmt.Sprintf(`CREATE INDEX %v ON %v (VALUES(%v))`, index.name, dbTable.GetFullName(), virtualColumn.GetName())
+				}
+
+				idxCount++
+				dbTable.indexes[index.name] = index
+			}
+
+			dbTable.compositeBucketIndexes = append(dbTable.compositeBucketIndexes, compositeIndex)
+			fmt.Printf("CompositeBucketing index registered: table=%s index=%s bucketSizes=%v\n", dbTable.name, compositeIndex.name, compositeIndex.bucketSizes)
 			continue
 		}
 
-		registerPackedIndex(&dbTable, &idxCount, indexColumns, packedIndexBuildConfig{
-			scope:               packedIndexScopeLocal,
-			schemaFieldName:     "Indexes",
-			virtualColumnPrefix: "zz_ixp_",
-			indexType:           2,
-			requireInOnlyFirst:  false,
-		})
-	}
-
-	for _, indexColumns := range schema.GlobalIndexes {
-		// TableSchema.GlobalIndexes: build global secondary indexes.
-		// - If entry has 1 column: create a simple global index on that column.
-		// - If entry has 2+ columns: create a packed virtual column and a global index on it.
-		if len(indexColumns) == 0 {
-			panic(fmt.Sprintf(`Table "%v": GlobalIndexes entry must not be empty`, dbTable.name))
+		switch resolveSchemaIndexType(indexCfg) {
+		case TypeGlobalIndex:
+			registerSchemaGlobalIndex(&dbTable, &idxCount, indexCfg)
+		case TypeLocalIndex:
+			registerSchemaLocalIndex(&dbTable, &idxCount, indexCfg)
+		case TypeViewTable:
+			compileSchemaViewTable(&dbTable, indexCfg)
+		case TypeView:
+			compileSchemaView(&dbTable, indexCfg)
+		default:
+			panic(fmt.Sprintf(`Table "%v": unsupported index type %d`, dbTable.name, resolveSchemaIndexType(indexCfg)))
 		}
-
-		// Simple global index on a single column (including slice => VALUES(col)).
-		if len(indexColumns) == 1 {
-			colCfg := indexColumns[0]
-			colInfo := colCfg.GetInfo()
-			column := dbTable.columnsMap[colInfo.Name]
-			if column == nil {
-				panic(fmt.Sprintf(`Table "%v": GlobalIndexes column "%v" was not found`, dbTable.name, colInfo.Name))
-			}
-
-			indexName := fmt.Sprintf(`%v__%v_index_0`, dbTable.name, column.GetName())
-			if _, exists := dbTable.indexes[indexName]; exists {
-				// Avoid duplicate index definitions if the same column is listed multiple times.
-				continue
-			}
-
-			index := &viewInfo{
-				Type:    1,
-				name:    indexName,
-				idx:     idxCount,
-				column:  column,
-				columns: []string{column.GetName()},
-			}
-			index.getCreateScript = func() string {
-				colName := column.GetName()
-				if column.GetType().IsSlice {
-					colName = fmt.Sprintf("VALUES(%v)", colName)
-				}
-				return fmt.Sprintf(`CREATE INDEX %v ON %v (%v)`, indexName, dbTable.GetFullName(), colName)
-			}
-
-			idxCount++
-			dbTable.indexes[index.name] = index
-			continue
-		}
-
-		registerPackedIndex(&dbTable, &idxCount, indexColumns, packedIndexBuildConfig{
-			scope:               packedIndexScopeGlobal,
-			schemaFieldName:     "GlobalIndexes",
-			virtualColumnPrefix: "zz_gixp_",
-			indexType:           1,
-			requireInOnlyFirst:  true,
-		})
-	}
-
-	// VIEW TABLES
-	for _, viewConfig := range schema.ViewTables {
-		viewCfg := viewConfig
-		if !viewCfg.KeepPart {
-			panic(fmt.Sprintf(`Table "%v": ViewTables requires KeepPart = true to preserve the base partition`, dbTable.name))
-		}
-		if viewCfg.UseHash {
-			panic(fmt.Sprintf(`Table "%v": ViewTables does not support UseHash`, dbTable.name))
-		}
-		if len(viewCfg.Keys) == 0 {
-			panic(fmt.Sprintf(`Table "%v": ViewTables entry must declare at least one key column`, dbTable.name))
-		}
-		if len(dbTable.keys) != 1 {
-			panic(fmt.Sprintf(`Table "%v": ViewTables currently requires exactly one base key column for ID maintenance`, dbTable.name))
-		}
-
-		partKey := dbTable.GetPartKey()
-		if partKey == nil || partKey.IsNil() {
-			panic(fmt.Sprintf(`Table "%v": ViewTables requires a partition column`, dbTable.name))
-		}
-
-		declaredColumns := []IColInfo{}
-		keyColumnNames := []string{}
-		physicalColumns := []viewTableColumnInfo{
-			makeViewTableColumn(partKey, false),
-		}
-		physicalKeyColumns := []viewTableColumnInfo{}
-		rebuildColumnNames := map[string]bool{}
-		fanoutColumnName := ""
-		sliceKeyCount := 0
-
-		for _, declaredColumn := range viewCfg.Keys {
-			column := dbTable.columnsMap[declaredColumn.GetInfo().Name]
-			if column == nil || column.IsNil() {
-				panic(fmt.Sprintf(`Table "%v": ViewTables column "%v" was not found`, dbTable.name, declaredColumn.GetInfo().Name))
-			}
-			if column.GetType().IsComplexType {
-				panic(fmt.Sprintf(`Table "%v": ViewTables column "%v" cannot be a complex type`, dbTable.name, column.GetName()))
-			}
-			if column.GetInfo().Name == dbTable.keys[0].GetName() {
-				panic(fmt.Sprintf(`Table "%v": ViewTables key "%v" must not repeat the base ID column`, dbTable.name, column.GetName()))
-			}
-
-			useSliceElement := column.GetType().IsSlice
-			if useSliceElement {
-				sliceKeyCount++
-				fanoutColumnName = column.GetName()
-			}
-
-			keyColumnNames = append(keyColumnNames, column.GetName())
-			declaredColumns = append(declaredColumns, column)
-			rebuildColumnNames[column.GetName()] = true
-
-			physicalColumn := makeViewTableColumn(column, useSliceElement)
-			physicalColumns = appendUniqueViewTableColumn(physicalColumns, physicalColumn)
-			physicalKeyColumns = append(physicalKeyColumns, physicalColumn)
-		}
-
-		if sliceKeyCount > 1 {
-			panic(fmt.Sprintf(`Table "%v": ViewTables currently supports only one slice-backed key column`, dbTable.name))
-		}
-
-		idColumn := dbTable.keys[0]
-		physicalColumns = appendUniqueViewTableColumn(physicalColumns, makeViewTableColumn(idColumn, false))
-
-		projectedColumns := []IColInfo{}
-		if len(viewCfg.Cols) == 0 {
-			for _, baseColumn := range dbTable.columnsMap {
-				if baseColumn.GetInfo().IsVirtual {
-					continue
-				}
-				if baseColumn.GetName() == fanoutColumnName {
-					continue
-				}
-				projectedColumns = append(projectedColumns, baseColumn)
-			}
-		} else {
-			for _, declaredProjectedColumn := range viewCfg.Cols {
-				projectedColumn := dbTable.columnsMap[declaredProjectedColumn.GetInfo().Name]
-				if projectedColumn == nil || projectedColumn.IsNil() {
-					panic(fmt.Sprintf(`Table "%v": ViewTables projected column "%v" wasn't found`, dbTable.name, declaredProjectedColumn.GetInfo().Name))
-				}
-				if projectedColumn.GetInfo().IsVirtual {
-					panic(fmt.Sprintf(`Table "%v": ViewTables projected column "%v" cannot be virtual`, dbTable.name, projectedColumn.GetName()))
-				}
-				if projectedColumn.GetName() == fanoutColumnName {
-					continue
-				}
-				projectedColumns = append(projectedColumns, projectedColumn)
-			}
-		}
-
-		for _, projectedColumn := range projectedColumns {
-			physicalColumns = appendUniqueViewTableColumn(physicalColumns, makeViewTableColumn(projectedColumn, false))
-			rebuildColumnNames[projectedColumn.GetName()] = true
-		}
-
-		viewColumns := append([]string{partKey.GetName()}, keyColumnNames...)
-		viewName := fmt.Sprintf(`%v__%v_view`, dbTable.name, strings.Join(keyColumnNames, "_"))
-		view := &viewInfo{
-			Type:                9,
-			name:                viewName,
-			columns:             viewColumns,
-			columnsNoPart:       append([]string{}, keyColumnNames...),
-			column:              declaredColumns[0],
-			availableColumns:    []string{},
-			Operators:           []string{"=", "IN", "CONTAINS"},
-			fanoutColumnName:    fanoutColumnName,
-			tableColumns:        physicalColumns,
-			tableKeyColumns:     physicalKeyColumns,
-			maintenanceIDColumn: idColumn,
-			rebuildColumnNames:  rebuildColumnNames,
-		}
-
-		selectableColumnNames := map[string]bool{}
-		selectableColumnNames[partKey.GetName()] = true
-		selectableColumnNames[idColumn.GetName()] = true
-		for _, declaredColumn := range declaredColumns {
-			if declaredColumn.GetName() == fanoutColumnName {
-				continue
-			}
-			selectableColumnNames[declaredColumn.GetName()] = true
-		}
-		for _, projectedColumn := range projectedColumns {
-			if projectedColumn.GetName() == fanoutColumnName {
-				continue
-			}
-			selectableColumnNames[projectedColumn.GetName()] = true
-		}
-		for selectableColumnName := range selectableColumnNames {
-			view.availableColumns = append(view.availableColumns, selectableColumnName)
-		}
-		slices.Sort(view.availableColumns)
-
-		viewPtr := view
-		view.getStatement = func(statements ...ColumnStatement) []string {
-			whereClauses := []string{}
-			for _, statement := range statements {
-				if len(statement.From) > 0 {
-					for idx := range statement.From {
-						whereClauses = append(whereClauses, fmt.Sprintf("%v >= %v", statement.From[idx].Col, statement.From[idx].GetValue()))
-						whereClauses = append(whereClauses, fmt.Sprintf("%v <= %v", statement.To[idx].Col, statement.To[idx].GetValue()))
-					}
-					continue
-				}
-
-				operator := statement.Operator
-				if viewPtr.fanoutColumnName == statement.Col && operator == "CONTAINS" {
-					// Slice-backed source columns are scalar in the derived table, so CONTAINS becomes scalar equality.
-					operator = "="
-				}
-				whereClauses = append(whereClauses, fmt.Sprintf("%v %v %v", statement.Col, operator, statement.GetValue()))
-			}
-			return []string{strings.Join(whereClauses, " AND ")}
-		}
-
-		view.getCreateScript = func() string {
-			columnDefinitions := make([]string, 0, len(viewPtr.tableColumns))
-			for _, column := range viewPtr.tableColumns {
-				columnDefinitions = append(columnDefinitions, fmt.Sprintf("%v %v",
-					getViewTableColumnName(column),
-					getViewTableColumnType(column.SourceColumn, column.UsesSliceElement).ColType,
-				))
-			}
-
-			primaryKeyColumns := append([]string{}, keyColumnNames...)
-			primaryKeyColumns = append(primaryKeyColumns, idColumn.GetName())
-			return fmt.Sprintf(`CREATE TABLE %v.%v (
-			%v,
-			PRIMARY KEY ((%v), %v)
-		)
-		%v;`,
-				dbTable.keyspace,
-				viewPtr.name,
-				strings.Join(columnDefinitions, ", "),
-				partKey.GetName(),
-				strings.Join(primaryKeyColumns, ", "),
-				makeStatementWith,
-			)
-		}
-
-		dbTable.views[view.name] = view
-	}
-
-	// VIEWS
-	for _, viewConfig := range schema.Views {
-		viewCfg := viewConfig
-		appendUniqueColumn := func(target []IColInfo, column IColInfo) []IColInfo {
-			if column == nil || column.IsNil() {
-				return target
-			}
-			for _, existingColumn := range target {
-				if existingColumn.GetName() == column.GetName() {
-					return target
-				}
-			}
-			return append(target, column)
-		}
-		orderColumnsBySchemaIndex := func(columns []IColInfo) []IColInfo {
-			// Keep generated SELECT lists deterministic so DDL diffs only reflect real schema changes.
-			orderedColumns := slices.Clone(columns)
-			slices.SortFunc(orderedColumns, func(leftColumn, rightColumn IColInfo) int {
-				if idxDiff := int(leftColumn.GetInfo().Idx - rightColumn.GetInfo().Idx); idxDiff != 0 {
-					return idxDiff
-				}
-				return strings.Compare(leftColumn.GetName(), rightColumn.GetName())
-			})
-			return orderedColumns
-		}
-
-		colNames := []string{}
-		declaredColumns := []IColInfo{} // Only the user-declared view columns, never the base partition.
-		columns := []IColInfo{}         // Internal working set; may prepend partition for composite/hash views.
-		viewColumnsConfig := make([]columnInfo, 0, len(viewCfg.Keys))
-		packedViewHintFound := false
-		for _, declaredColumn := range viewCfg.Keys {
-			columnConfig := declaredColumn.GetInfo()
-			viewColumnsConfig = append(viewColumnsConfig, columnConfig)
-			// Packed views are declared via column metadata hints instead of View.Concat* fields.
-			if columnConfig.decimalSize > 0 || columnConfig.useInt32Packing {
-				packedViewHintFound = true
-			}
-		}
-
-		isRangeView := len(viewCfg.Keys) > 1 && packedViewHintFound
-		if isRangeView {
-			viewCfg.KeepPart = true
-		}
-
-		for _, colInfo := range viewCfg.Keys {
-			column := dbTable.columnsMap[colInfo.GetInfo().Name]
-			if column.GetType().IsComplexType {
-				panic("No puede usar un struct como columna de una view.")
-			}
-			colNames = append(colNames, column.GetName())
-			declaredColumns = append(declaredColumns, column)
-			columns = append(columns, column)
-		}
-
-		colNamesNoPart := colNames
-		declaredColumnCount := len(declaredColumns)
-		// A single declared view column should remain a simple MV.
-		// KeepPart only changes the MV primary key/capability prefix, not whether a synthetic hash column is needed.
-		isSingleDeclaredSimpleView := declaredColumnCount == 1 && !isRangeView
-
-		colNamesJoined := strings.Join(colNames, "_")
-		pk := dbTable.GetPartKey()
-		if pk != nil && !pk.IsNil() {
-			if viewCfg.KeepPart {
-				colNames = append([]string{pk.GetName()}, colNames...)
-				colNamesJoined = "pk_" + colNamesJoined
-			} else if !isSingleDeclaredSimpleView {
-				colNames = append([]string{pk.GetName()}, colNames...)
-				colNamesJoined = pk.GetName() + "_" + colNamesJoined
-				columns = append([]IColInfo{pk}, columns...)
-			}
-		}
-		if isRangeView {
-			colNamesJoined = colNamesJoined + "_rng"
-		}
-
-		view := &viewInfo{
-			Type:          6,
-			name:          fmt.Sprintf(`%v__%v_view`, dbTable.name, colNamesJoined),
-			columns:       colNames,
-			columnsNoPart: colNamesNoPart,
-		}
-
-		for _, e := range columns {
-			fmt.Println("view:", view.name, "| ", e.GetName())
-		}
-
-		if len(columns) > 1 {
-			view.column = &columnInfo{
-				colInfo: colInfo{
-					IsVirtual: true,
-					Idx:       dbTable._maxColIdx,
-				},
-				colType: colType{
-					FieldType: "int32", ColType: "int",
-				},
-			}
-			view.column.GetInfo().Name = fmt.Sprintf(`zz_%v`, colNamesJoined)
-			dbTable._maxColIdx++
-			dbTable.columnsMap[view.column.GetName()] = view.column
-		}
-
-		// If the user declared a single column, reuse that column directly and let MV PK generation
-		// append the base partition/key columns without creating a synthetic hash column.
-		if isSingleDeclaredSimpleView {
-			view.column = declaredColumns[0]
-			if !viewCfg.KeepPart {
-				view.columns = colNamesNoPart
-			}
-		} else if len(columns) == 1 {
-			view.column = columns[0]
-		} else if isRangeView {
-			view.Type = 8
-			// Packed views default to int64 unless Int32() is explicitly set on the first column.
-			view.column.GetType().FieldType = "int64"
-			view.column.GetType().ColType = "bigint"
-
-			if len(columns) < 2 {
-				panic(fmt.Sprintf(`The view "%v" in "%v" requires at least 2 columns for DecimalSize() packed range views`, view.name, dbTable.name))
-			}
-
-			if viewColumnsConfig[0].decimalSize > 0 {
-				panic(fmt.Sprintf(`The view "%v" in "%v" cannot set DecimalSize() on the first column; it is inferred from the remaining columns`, view.name, dbTable.name))
-			}
-
-			isInt32PackedView := viewColumnsConfig[0].useInt32Packing
-			if isInt32PackedView {
-				view.column.GetType().FieldType = "int32"
-				view.column.GetType().ColType = "int"
-			}
-
-			radixSlotsByColumn := make([]int8, 0, len(viewColumnsConfig)-1)
-			for columnIndex := 1; columnIndex < len(viewColumnsConfig); columnIndex++ {
-				decimalSize := viewColumnsConfig[columnIndex].decimalSize
-				// Only the first column can be inferred. Every following column must set DecimalSize().
-				if decimalSize <= 0 {
-					panic(fmt.Sprintf(`The view "%v" in "%v" must set DecimalSize() on column "%v" (only the first column can be inferred)`,
-						view.name, dbTable.name, columns[columnIndex].GetName()))
-				}
-				radixSlotsByColumn = append(radixSlotsByColumn, decimalSize)
-			}
-
-			radixes := append(radixSlotsByColumn, 0)
-			slices.Reverse(radixes)
-			sum := int8(0)
-			for i, v := range radixes {
-				radixes[i] = v + sum
-				sum += v
-			}
-			slices.Reverse(radixes)
-
-			if radixes[0] > 17 {
-				panic(fmt.Sprintf(`For view "%v" in "%v" the max radix must not be greater than 17.`, view.name, dbTable.name))
-			}
-
-			radixesI64 := []int64{}
-			for _, v := range radixes {
-				radixesI64 = append(radixesI64, int64(v))
-			}
-
-			totalDigitsForPackedView := int64(19)
-			if isInt32PackedView {
-				totalDigitsForPackedView = 9
-			}
-			slotDigitsPerColumn := make([]int64, 0, len(viewColumnsConfig))
-			sumTrailingDigits := int64(0)
-			for _, decimalSize := range radixSlotsByColumn {
-				sumTrailingDigits += int64(decimalSize)
-			}
-			slotDigitsPerColumn = append(slotDigitsPerColumn, totalDigitsForPackedView-sumTrailingDigits)
-			for _, decimalSize := range radixSlotsByColumn {
-				slotDigitsPerColumn = append(slotDigitsPerColumn, int64(decimalSize))
-			}
-			view.packedSourceColumns = append([]IColInfo{}, columns...)
-			view.packedSlotDigitsPerColumn = append([]int64{}, slotDigitsPerColumn...)
-
-			supportedTypes := []string{"int8", "int16", "int32", "int64", "int"}
-
-			for _, col := range columns {
-				if col.GetType().IsSlice || !slices.Contains(supportedTypes, col.GetType().FieldType) {
-					panic(fmt.Sprintf(`For view "%v" in "%v" need the column %v need to be a int type for the radix value be computed.`,
-						view.name, dbTable.name, col.GetName()))
-				}
-			}
-
-			var makeValue = func(values []int64) int64 {
-				// Packed range views must trim each component to its allocated slot digits
-				// so persisted rows and query bounds use identical DecimalSize() semantics.
-				return computePackedInt64ValueNonNegative(values, slotDigitsPerColumn)
-			}
-
-			slotDigitsCopy := append([]int64{}, slotDigitsPerColumn...)
-			viewColsCopy := append([]IColInfo{}, columns...)
-
-			view.decomposeVirtualValue = func(rawValue any) []any {
-				// Decode packed group keys back into the original primitive columns so grouped scans can fill the record struct.
-				packedValues := decomposePackedInt64ValueNonNegative(convertToInt64(rawValue), slotDigitsCopy)
-				values := make([]any, 0, len(viewColsCopy))
-				for _, packedValue := range packedValues {
-					values = append(values, packedValue)
-				}
-				return values
-			}
-
-			viewCols := columns
-			useInt32Output := isInt32PackedView
-			view.column.(*columnInfo).getValue = func(ptr unsafe.Pointer) any {
-				values := []int64{}
-				for _, col := range viewCols {
-					values = append(values, convertToInt64(col.GetValue(ptr)))
-				}
-				sumValue := makeValue(values)
-				// fmt.Printf("Radix Sum Calculado %v | %v | %v\n", sumValue, values, radixesI64)
-				if useInt32Output {
-					return any(int32(sumValue))
-				} else {
-					return any(sumValue)
-				}
-			}
-
-			viewPtr := view
-			viewCfgPtr := &viewCfg
-			view.getStatement = func(statements ...ColumnStatement) []string {
-
-				//Identify is a statement has a partition value
-				statementsMap := map[string]statementRangeGroup{}
-				useBeetween := false
-
-				// fmt.Println(statements)
-
-				for i := range statements {
-					st := &statements[i]
-					// fmt.Println("statement (2):", st.Col, "|", st.Value, "|", st.Operator)
-
-					if st.Operator == "BETWEEN" {
-						useBeetween = true
-						for i := range st.From {
-							statementsMap[st.From[i].Col] = statementRangeGroup{
-								from:      &st.From[i],
-								betweenTo: &st.To[i],
-							}
-						}
-					} else {
-						statementsMap[st.Col] = statementRangeGroup{from: st}
-					}
-				}
-
-				whereStatements := []string{}
-				var partStatement *ColumnStatement
-
-				if viewCfgPtr.KeepPart {
-					pk := dbTable.GetPartKey()
-					if pk == nil || pk.IsNil() {
-						panic(fmt.Sprintf(`The partition for table "%v" wasn't found.`, dbTable.name))
-					}
-					partStatement = statementsMap[pk.GetName()].from
-					if partStatement == nil {
-						panic(fmt.Sprintf(`The partition "%v" for table "%v" wasn't found.`, pk.GetName(), dbTable.name))
-					}
-				}
-
-				for _, col := range viewCols {
-					if _, ok := statementsMap[col.GetName()]; !ok {
-						statementsMap[col.GetName()] = statementRangeGroup{
-							from: &ColumnStatement{Value: int64(0)},
-						}
-					}
-				}
-
-				getValuesGroups := func() (valuesGroups [][]int64, rangeColumns []IColInfo) {
-					for _, col := range viewCols {
-						// fmt.Println("iterando columna::", col.GetName())
-						st := statementsMap[col.GetName()].from
-						if len(rangeColumns) > 0 || slices.Contains(rangeOperators, st.Operator) {
-							rangeColumns = append(rangeColumns, col)
-							// fmt.Println("continue here::", col.GetName())
-							continue
-						}
-
-						if st == nil {
-							// fmt.Println("iterando columna 1::", col.GetName())
-							for i := range valuesGroups {
-								valuesGroups[i] = append(valuesGroups[i], 0)
-							}
-						} else {
-							statementValues := st.Values
-							if len(statementValues) == 0 {
-								statementValues = append(statementValues, st.Value)
-							}
-
-							// fmt.Println("iterando columna 2::", col.GetName(), statementValues)
-
-							if len(valuesGroups) > 0 {
-								valuesGroupsCurrent := valuesGroups
-								valuesGroups = [][]int64{}
-								for _, value := range statementValues {
-									valueInt64 := convertToInt64(value)
-									for _, vg := range valuesGroupsCurrent {
-										valuesGroups = append(valuesGroups, append(vg, valueInt64))
-									}
-								}
-							} else {
-								for _, v := range statementValues {
-									valuesGroups = append(valuesGroups, []int64{convertToInt64(v)})
-								}
-							}
-						}
-					}
-					return valuesGroups, rangeColumns
-				}
-
-				if useBeetween {
-					valuesFrom, valuesTo := []int64{}, []int64{}
-
-					for _, col := range viewCols {
-						srg := statementsMap[col.GetName()]
-						valuesFrom = append(valuesFrom, convertToInt64(srg.from.Value))
-						if srg.betweenTo != nil {
-							valuesTo = append(valuesTo, convertToInt64(srg.betweenTo.Value))
-						} else {
-							valuesTo = append(valuesTo, convertToInt64(srg.from.Value))
-						}
-					}
-
-					whereSt := fmt.Sprintf("%v >= %v AND %v < %v",
-						viewPtr.column.GetName(), makeValue(valuesFrom),
-						viewPtr.column.GetName(), makeValue(valuesTo)+1,
-					)
-					if partStatement != nil {
-						pk := dbTable.GetPartKey()
-						if pk != nil && !pk.IsNil() {
-							whereSt = fmt.Sprintf("%v = %v AND %v",
-								pk.GetName(), convertToInt64(partStatement.Value), whereSt)
-						}
-					}
-
-					fmt.Println("Is useBeetween::", whereSt)
-
-					return []string{whereSt}
-				} else if slices.Contains(rangeOperators, statements[len(statements)-1].Operator) {
-					valuesGroups, rangeColumns := getValuesGroups()
-
-					// Create the ranges
-					for _, prefixValues := range valuesGroups {
-						valuesFrom := slices.Clone(prefixValues)
-						prefixFloorValues := slices.Clone(prefixValues)
-
-						for _, col := range rangeColumns {
-							st := statementsMap[col.GetName()]
-							valuesFrom = append(valuesFrom, convertToInt64(st.from.Value))
-							prefixFloorValues = append(prefixFloorValues, 0)
-						}
-
-						// Compute the exclusive upper bound by moving one radix step at the end of
-						// the equality prefix instead of incrementing the component and re-trimming it.
-						upperBound := makeValue(prefixFloorValues) + Pow10Int64(sumSlotDigits(slotDigitsPerColumn, len(prefixValues)))
-
-						whereStatement := fmt.Sprintf("%v >= %v AND %v < %v",
-							viewPtr.column.GetName(), makeValue(valuesFrom),
-							viewPtr.column.GetName(), upperBound,
-						)
-						whereStatements = append(whereStatements, whereStatement)
-					}
-				} else {
-					valuesGroups, _ := getValuesGroups()
-					fmt.Println("values group::", valuesGroups)
-
-					hashValues := []int64{}
-					for _, values := range valuesGroups {
-						hashValues = append(hashValues, makeValue(values))
-					}
-					whereStatements = append(whereStatements,
-						fmt.Sprintf("%v IN (%v)", viewPtr.column.GetName(), Concatx(", ", hashValues)),
-					)
-				}
-
-				if partStatement != nil {
-					pk := dbTable.GetPartKey()
-					if pk != nil && !pk.IsNil() {
-						for i, ws := range whereStatements {
-							whereStatements[i] = fmt.Sprintf("%v = %v AND %v",
-								pk.GetName(), convertToInt64(partStatement.Value), ws)
-						}
-					}
-				}
-
-				fmt.Println("where statements::", whereStatements)
-				return whereStatements
-			}
-		} else {
-			viewPtr := view
-			viewCfgPtr := &viewCfg
-			viewCols := columns
-			view.Operators = []string{"=", "IN"}
-			view.Type = 7
-			// Sino crea un hash de las columnas
-			view.column.(*columnInfo).getValue = func(ptr unsafe.Pointer) any {
-				values := []any{}
-				// Si una de las columnas es un slice puede iterar por el slice para obtener los values y gurdarla en una columa Set<any>
-				for _, e := range viewCols {
-					values = append(values, e.GetValue(ptr))
-				}
-				return HashInt(values...)
-			}
-
-			view.getStatement = func(statements ...ColumnStatement) []string {
-				for i, e := range statements {
-					fmt.Println("Statement ", i, " | ", e)
-				}
-
-				valuesGroups := [][]any{{}}
-				statement := ""
-				// Si una de las columnas es un slice puede iterar por el slice para obtener los values y gurdarla en una columa Set<any>
-				for _, e := range viewCols {
-					for _, st := range statements {
-						if st.Col == e.GetName() {
-							if len(st.Values) >= 2 {
-								valuesGroupsCurrent := valuesGroups
-								valuesGroups = [][]any{}
-								for _, vg := range valuesGroupsCurrent {
-									for _, value := range st.Values {
-										valuesGroups = append(valuesGroups, append(vg, value))
-									}
-								}
-							} else {
-								if len(st.Values) == 1 {
-									st.Value = st.Values[0]
-								}
-								for i := range valuesGroups {
-									valuesGroups[i] = append(valuesGroups[i], st.Value)
-								}
-							}
-							break
-						}
-					}
-				}
-
-				hashValues := []string{}
-				for _, values := range valuesGroups {
-					hashValues = append(hashValues, fmt.Sprintf("%v", HashInt(values...)))
-				}
-
-				if len(hashValues) == 1 {
-					statement = fmt.Sprintf("%v = %v", viewPtr.column.GetName(), hashValues[0])
-				} else {
-					values := strings.Join(hashValues, ", ")
-					statement = fmt.Sprintf("%v IN (%v)", viewPtr.column.GetName(), values)
-				}
-
-				if viewCfgPtr.KeepPart {
-					pk := dbTable.GetPartKey()
-					if pk != nil && !pk.IsNil() {
-						for _, st := range statements {
-							if st.Col == pk.GetName() {
-								statement = fmt.Sprintf("%v = %v AND ", st.Col, st.Value) + statement
-							}
-						}
-					}
-				}
-				return []string{statement}
-			}
-		}
-
-		projectedColumnsConfig := viewCfg.Cols
-		projectedColumns := []IColInfo{}
-		for _, declaredProjectedColumn := range projectedColumnsConfig {
-			projectedColumn := dbTable.columnsMap[declaredProjectedColumn.GetInfo().Name]
-			if projectedColumn == nil || projectedColumn.IsNil() {
-				panic(fmt.Sprintf(`The projected column "%v" for view "%v" in "%v" wasn't found.`,
-					declaredProjectedColumn.GetInfo().Name, view.name, dbTable.name))
-			}
-			if projectedColumn.GetInfo().IsVirtual {
-				panic(fmt.Sprintf(`The projected column "%v" for view "%v" in "%v" cannot be virtual.`,
-					projectedColumn.GetName(), view.name, dbTable.name))
-			}
-			projectedColumns = appendUniqueColumn(projectedColumns, projectedColumn)
-		}
-
-		selectableColumns := []IColInfo{}
-		if len(projectedColumns) == 0 {
-			// Views without explicit Cols keep the full real payload, but exclude unrelated virtual columns.
-			for _, baseColumn := range dbTable.columnsMap {
-				if baseColumn.GetInfo().IsVirtual {
-					continue
-				}
-				selectableColumns = appendUniqueColumn(selectableColumns, baseColumn)
-			}
-		} else {
-			partKeyColumn := dbTable.GetPartKey()
-			if partKeyColumn != nil && !partKeyColumn.IsNil() {
-				selectableColumns = appendUniqueColumn(selectableColumns, partKeyColumn)
-			}
-			if view.Type == 6 {
-				for _, declaredViewColumn := range declaredColumns {
-					selectableColumns = appendUniqueColumn(selectableColumns, declaredViewColumn)
-				}
-			}
-			for _, keyColumn := range dbTable.keys {
-				selectableColumns = appendUniqueColumn(selectableColumns, keyColumn)
-			}
-			if view.column != nil && !view.column.IsNil() && !view.column.GetInfo().IsVirtual {
-				selectableColumns = appendUniqueColumn(selectableColumns, view.column)
-			}
-			for _, projectedColumn := range projectedColumns {
-				selectableColumns = appendUniqueColumn(selectableColumns, projectedColumn)
-			}
-		}
-		for _, selectableColumn := range selectableColumns {
-			view.availableColumns = append(view.availableColumns, selectableColumn.GetName())
-		}
-
-		viewPtr := view
-		view.getCreateScript = func() string {
-			whereCols := []IColInfo{}
-			if viewPtr.Type == 6 && !viewPtr.column.GetInfo().IsVirtual {
-				for _, declaredViewColumn := range declaredColumns {
-					whereCols = appendUniqueColumn(whereCols, declaredViewColumn)
-				}
-			} else {
-				whereCols = appendUniqueColumn(whereCols, viewPtr.column)
-			}
-			var wherePartCol IColInfo
-
-			pk_ := dbTable.GetPartKey()
-			if pk_ != nil && !pk_.IsNil() {
-				if viewCfg.KeepPart {
-					wherePartCol = pk_
-				} else {
-					whereCols = appendUniqueColumn(whereCols, pk_)
-				}
-			}
-			for _, keyColumn := range dbTable.keys {
-				whereCols = appendUniqueColumn(whereCols, keyColumn)
-			}
-
-			keyNames := []string{}
-			for _, col := range whereCols {
-				keyNames = append(keyNames, col.GetName())
-			}
-
-			pk := strings.Join(keyNames, ",")
-			if wherePartCol != nil {
-				pk = fmt.Sprintf("(%v), %v", wherePartCol.GetName(), pk)
-			}
-
-			whereColumnsNotNull := []string{}
-			if wherePartCol != nil {
-				if wherePartCol.GetType().ColType == "text" {
-					whereColumnsNotNull = append(whereColumnsNotNull, wherePartCol.GetName()+" > ''")
-				} else {
-					whereColumnsNotNull = append(whereColumnsNotNull, wherePartCol.GetName()+" > 0")
-				}
-			}
-			for _, col := range whereCols {
-				if col.GetType().ColType == "text" {
-					whereColumnsNotNull = append(whereColumnsNotNull, col.GetName()+" > ''")
-					/*} else if col.IsSlice {
-					whereColumnsNotNull = append(whereColumnsNotNull, col.Name+" IS NOT NULL")
-					*/
-				} else {
-					whereColumnsNotNull = append(whereColumnsNotNull, col.GetName()+" > 0")
-				}
-			}
-
-			selectClause := "*"
-			if len(projectedColumns) > 0 {
-				projectedColumnNames := make([]string, 0, len(projectedColumns))
-				for _, projectedColumn := range projectedColumns {
-					projectedColumnNames = append(projectedColumnNames, projectedColumn.GetName())
-				}
-				selectClause = strings.Join(projectedColumnNames, ", ")
-			} else {
-				selectColumns := slices.Clone(selectableColumns)
-				for _, whereColumn := range whereCols {
-					// Full-payload views must include their own virtual key column, but never unrelated virtual columns.
-					if whereColumn != nil && !whereColumn.IsNil() && whereColumn.GetInfo().IsVirtual {
-						selectColumns = appendUniqueColumn(selectColumns, whereColumn)
-					}
-				}
-				selectColumns = orderColumnsBySchemaIndex(selectColumns)
-
-				selectColumnNames := make([]string, 0, len(selectColumns))
-				for _, selectColumn := range selectColumns {
-					selectColumnNames = append(selectColumnNames, selectColumn.GetName())
-				}
-				selectClause = strings.Join(selectColumnNames, ", ")
-			}
-
-			query := fmt.Sprintf(`CREATE MATERIALIZED VIEW %v.%v AS
-			SELECT %v FROM %v
-			WHERE %v
-			PRIMARY KEY (%v)
-			%v;`,
-				dbTable.keyspace, viewPtr.name, selectClause, dbTable.GetFullName(),
-				strings.Join(whereColumnsNotNull, " AND "), pk, makeStatementWith)
-			return query
-		}
-
-		dbTable.views[view.name] = view
 	}
 
 	for _, col := range dbTable.columnsMap {

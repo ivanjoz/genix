@@ -31,8 +31,9 @@ func (e fanoutViewRecordTable) GetSchema() TableSchema {
 		Name:      "fanout_view_record",
 		Partition: e.EmpresaID,
 		Keys:      []Coln{e.ID},
-		ViewTables: []View{
+		Indexes: []Index{
 			{
+				Type:     TypeViewTable,
 				Keys:     []Coln{e.ProductIDs, e.Fecha},
 				Cols:     []Coln{e.Updated},
 				KeepPart: true,

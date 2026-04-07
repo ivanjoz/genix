@@ -32,8 +32,8 @@ func (e PaisCiudadTable) GetSchema() db.TableSchema {
 		Name:      "pais_ciudades",
 		Partition: e.PaisID,
 		Keys:      []db.Coln{e.CiudadID},
-		Views: []db.View{
-			{Keys: []db.Coln{e.Updated}, KeepPart: true},
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
@@ -73,10 +73,10 @@ func (e ListaCompartidaRegistroTable) GetSchema() db.TableSchema {
 		Partition:    e.EmpresaID,
 		UseSequences: true,
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
-		Indexes:      [][]db.Coln{{e.NombreHash}},
-		Views: []db.View{
-			{Keys: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
-			{Keys: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
+		Indexes: []db.Index{
+			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.NombreHash}},
+			{Type: db.TypeView, Keys: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
+			{Type: db.TypeView, Keys: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
 		},
 	}
 }

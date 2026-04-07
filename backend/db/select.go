@@ -564,7 +564,7 @@ func executeBoundSelectQueries[E any](
 }
 
 func tryBuildCompositeBucketPlan(statements []ColumnStatement, scyllaTable ScyllaTable[any]) *compositeBucketQueryPlan {
-	// Build a specialized plan for HashIndexes+CompositeBucketing before generic capability matching.
+	// Build a specialized plan for composite-bucket indexes before generic capability matching.
 	partitionColumn := scyllaTable.GetPartKey()
 	if partitionColumn == nil || partitionColumn.IsNil() {
 		return nil

@@ -70,22 +70,27 @@ func (e ProductStockTable) GetSchema() db.TableSchema {
 		Partition:       e.CompanyID,
 		Keys:            []db.Coln{e.ID},
 		KeyConcatenated: []db.Coln{e.WarehouseID, e.ProductID, e.PresentationID, e.SKU, e.Lote},
-		LocalIndexes:    []db.Coln{e.SKU, e.Lote},
-		Views: []db.View{
+		Indexes: []db.Index{
+			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.SKU}},
+			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.Lote}},
 			{
+				Type:     db.TypeView,
 				Keys:     []db.Coln{e.IsWarehouseProductStatus, e.Updated.DecimalSize(10)},
 				Cols:     []db.Coln{e.WarehouseProductQuantity, e.PresentationID},
 				KeepPart: true,
 			},
 			{
+				Type:     db.TypeView,
 				Keys:     []db.Coln{e.ProductID.Int32(), e.Status.DecimalSize(1)},
 				KeepPart: true,
 			},
 			{
+				Type:     db.TypeView,
 				Keys:     []db.Coln{e.ProductID.Int32(), e.Status.DecimalSize(1)},
 				KeepPart: true,
 			},
 			{
+				Type:     db.TypeView,
 				Keys:     []db.Coln{e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(9)},
 				KeepPart: true,
 			},

@@ -114,6 +114,10 @@ func (e *ScyllaController[T, E]) RecalcVirtualColumns(partValue int32) error {
 		if column == nil || column.IsNil() {
 			continue
 		}
+		if !column.GetInfo().IsVirtual && column.GetInfo().Field == nil {
+			// Managed write-only columns are not readable from schemas that don't expose them.
+			continue
+		}
 		selectedColumns = append(selectedColumns, column)
 		// Recalc only persists generated ORM columns; physical source fields stay untouched.
 		if column.GetInfo().IsVirtual {
@@ -608,6 +612,27 @@ func DeployScylla(cacheCode int32, controllers ...ScyllaControllerInterface) {
 
 		// Revisa si posee índices, en su defecto los crea
 		tableIndexes := tableIndexesMap[tableName]
+
+		if table.indexUpdatedTable != nil {
+			indexUpdatedTableName := fmt.Sprintf("%v.%v", table.keyspace, table.indexUpdatedTable.name)
+			if _, exists := tableColumnsMap[indexUpdatedTableName]; !exists {
+				Logx(5, fmt.Sprintf(`No se encontró la tabla de index updates "%v". Creando...`+"\n", indexUpdatedTableName))
+
+				createScript := getIndexUpdatedTableCreateScript(table.keyspace, table.indexUpdatedTable)
+				fmt.Println(createScript)
+				if err := QueryExec(createScript); err != nil {
+					fmt.Println(err)
+					panic(fmt.Sprintf(`Error creando la tabla de index updates "%v" en %v`, table.indexUpdatedTable.name, tableName))
+				}
+
+				tableColumnsMap[indexUpdatedTableName] = []ScyllaColumns{
+					{Name: "partition_id", Type: "int", Keyspace: table.keyspace, Table: table.indexUpdatedTable.name},
+					{Name: "index_hash", Type: "int", Keyspace: table.keyspace, Table: table.indexUpdatedTable.name},
+					{Name: "update_counter", Type: "int", Keyspace: table.keyspace, Table: table.indexUpdatedTable.name},
+				}
+				Logx(2, fmt.Sprintf(`Index update table created "%v"`+"\n", table.indexUpdatedTable.name))
+			}
+		}
 
 		for _, index := range table.indexes {
 			if slices.Contains(tableIndexes, index.name) {

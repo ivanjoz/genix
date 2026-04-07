@@ -12,7 +12,7 @@ type ProductoImagen struct {
 
 type AlmacenStockMin struct {
 	WarehouseID int32 `cbor:"a" json:"a"`
-	Cantidad  int32 `cbor:"c" json:"c"`
+	Cantidad    int32 `cbor:"c" json:"c"`
 }
 
 type ProductoPesentacion struct {
@@ -126,12 +126,13 @@ func (e ProductoTable) GetSchema() db.TableSchema {
 		UseSequences:     true,
 		SaveCacheVersion: true,
 		Keys:             []db.Coln{e.ID.Autoincrement(0)},
-		GlobalIndexes:    [][]db.Coln{{e.CategoriasConStock}},
-		Indexes:          [][]db.Coln{{e.NameUpdated}, {e.NombreHash}},
-		Views: []db.View{
-			{Keys: []db.Coln{e.Status}, KeepPart: true},
-			{Keys: []db.Coln{e.StockStatus}, KeepPart: true},
-			{Keys: []db.Coln{e.Updated}, KeepPart: true},
+		Indexes: []db.Index{
+			{Type: db.TypeGlobalIndex, Keys: []db.Coln{e.CategoriasConStock}},
+			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.NameUpdated}},
+			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.NombreHash}},
+			{Type: db.TypeView, Keys: []db.Coln{e.Status}, KeepPart: true},
+			{Type: db.TypeView, Keys: []db.Coln{e.StockStatus}, KeepPart: true},
+			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
@@ -188,9 +189,9 @@ func (e AlmacenTable) GetSchema() db.TableSchema {
 		Partition:    e.EmpresaID,
 		UseSequences: true,
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
-		Views: []db.View{
-			{Keys: []db.Coln{e.Status}, KeepPart: true},
-			{Keys: []db.Coln{e.Updated}, KeepPart: true},
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: []db.Coln{e.Status}, KeepPart: true},
+			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
@@ -245,9 +246,9 @@ func (e SedeTable) GetSchema() db.TableSchema {
 		Partition:    e.EmpresaID,
 		UseSequences: true,
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
-		Views: []db.View{
-			{Keys: []db.Coln{e.Status}, KeepPart: true},
-			{Keys: []db.Coln{e.Updated}, KeepPart: true},
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: []db.Coln{e.Status}, KeepPart: true},
+			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }

@@ -54,10 +54,10 @@ func (e DemoStructTable) GetSchema() db.TableSchema {
 		Name:      "zz_demo_struct",
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.ID},
-		Views: []db.View{
+		Indexes: []db.Index{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
-			{Keys: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
-			{Keys: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
+			{Type: db.TypeView, Keys: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
+			{Type: db.TypeView, Keys: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
 		},
 	}
 }
@@ -229,52 +229,51 @@ func Test43(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test44(args *core.ExecArgs) core.FuncResponse {
-	
+
 	s1 := comercialTypes.SaleOrderProductStats{
-		Quantity: 123,
+		Quantity:                123,
 		QuantityPendingDelivery: 12332,
-		TotalAmount: 338829,
-		TotalDebtAmount: 78954,
+		TotalAmount:             338829,
+		TotalDebtAmount:         78954,
 	}
-	
+
 	core.Print(s1)
-	
+
 	bytes1 := libs.SerializeInt30Struct(s1)
 	core.Log("struct bytes:", bytes1)
-	
+
 	decodedStruct := comercialTypes.SaleOrderProductStats{}
 	libs.DeserializeInt30Struct(bytes1, &decodedStruct)
-	
+
 	core.Print(decodedStruct)
-	
+
 	return core.FuncResponse{}
 }
 
 func Test45(args *core.ExecArgs) core.FuncResponse {
-	
-	comercial.SaleOrderReprocess(1,0)
+
+	comercial.SaleOrderReprocess(1, 0)
 
 	return core.FuncResponse{}
 }
 
 func Test46(args *core.ExecArgs) core.FuncResponse {
-	
+
 	controller := makeDBController[logisticaTypes.WarehouseProductMovement]()
-	
+
 	controller.RecalcVirtualColumns(1)
-	
+
 	return core.FuncResponse{}
 }
 
-
 func Test51(args *core.ExecArgs) core.FuncResponse {
-	
+
 	orders := []comercialTypes.SaleOrder{}
 	db.Query(&orders).CompanyID.Equals(1)
-	
+
 	controller := makeDBController[logisticaTypes.WarehouseProductMovement]()
-	
+
 	controller.RecalcVirtualColumns(1)
-	
+
 	return core.FuncResponse{}
 }

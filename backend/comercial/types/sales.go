@@ -6,9 +6,9 @@ import (
 )
 
 type SaleOrderClientInfo struct {
-	Name       string `json:",omitempty"`
-	RegistryNumber       string `json:",omitempty"`
-	OnlyInsert bool `json:",omitempty"`
+	Name           string `json:",omitempty"`
+	RegistryNumber string `json:",omitempty"`
+	OnlyInsert     bool   `json:",omitempty"`
 }
 
 type SaleOrder struct {
@@ -33,7 +33,6 @@ type SaleOrder struct {
 	ClientID       int32 `json:",omitempty"`
 	Created        int32 `json:",omitempty"`
 	Updated        int32 `json:"upd,omitempty"`
-	UpdateCounter  int32 `json:"upc,omitempty"`
 	UpdatedBy      int32 `json:",omitempty"`
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
 	Status      int8 `json:"ss,omitempty"`
@@ -96,52 +95,52 @@ type SaleOrderTable struct {
 	DeliveryTime               db.Col[SaleOrderTable, int32]
 	DeliveryUser               db.Col[SaleOrderTable, int32]
 	StatusTrace                db.Col[SaleOrderTable, int8]
-	UpdateCounter              db.Col[SaleOrderTable, int32]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:             "sale_order",
-		Partition:        e.CompanyID,
-		Keys:             []db.Coln{e.ID.Autoincrement(2)},
-		UseUpdateCounter: e.UpdateCounter,
-		LocalIndexes:     []db.Coln{e.Updated},
-		ViewTables: []db.View{
+		Name:      "sale_order",
+		Partition: e.CompanyID,
+		Keys:      []db.Coln{e.ID.Autoincrement(2)},
+		Indexes: []db.Index{
 			{
+				Type: db.TypeLocalIndex,
+				Keys: []db.Coln{e.Updated},
+			},
+			{
+				Keys:          []db.Coln{e.Fecha},
+				UseIndexGroup: true,
+			},
+			{
+				Keys:          []db.Coln{e.Fecha.StoreAsWeek(), e.Status},
+				UseIndexGroup: true,
+			},
+			{
+				Keys:          []db.Coln{e.Fecha.StoreAsWeek(), e.ClientID},
+				UseIndexGroup: true,
+			},
+			{
+				Keys:          []db.Coln{e.Fecha.StoreAsWeek(), e.ClientID, e.DetailProductsIDs},
+				UseIndexGroup: true,
+			},
+			{
+				Type:     db.TypeViewTable,
 				Keys:     []db.Coln{e.DetailProductsIDs, e.Fecha},
 				Cols:     []db.Coln{e.Updated},
 				KeepPart: true,
 			},
-		},
-		Views: []db.View{
-			{Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
 			{
-				Keys: []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)}, 
-				Cols: []db.Coln{e.ClientID, e.Updated, e.DetailProductsIDs, e.Status},
+				Type:     db.TypeView,
+				Keys:     []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)},
+				KeepPart: true,
+			},
+			{
+				Type:     db.TypeView,
+				Keys:     []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)},
+				Cols:     []db.Coln{e.ClientID, e.Updated, e.DetailProductsIDs, e.Status},
 				KeepPart: true,
 			},
 		},
-		/*
-			HashIndexes: [][]db.Coln{
-				{e.DetailProductsIDs, e.Fecha.CompositeBucketing(2, 6, 12, 20)},
-			},
-			GlobalIndexes: [][]db.Coln{
-				{e.Status.Int32(), e.Updated.DecimalSize(8)},
-			},
-			ViewTables: []db.View{
-				{
-					Keys: []db.Coln{e.DetailProductsIDs, e.Fecha},
-					Cols: []db.Coln{e.Updated},
-					KeepPart: true,
-				},
-			},
-			Views: []db.View{
-				{Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
-				{Keys: []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
-				{Keys: []db.Coln{e.Fecha, e.Updated}, KeepPart: true},
-				{Keys: []db.Coln{e.ID}, Cols: []db.Coln{e.Status, e.StatusTrace}, KeepPart: true},
-			},
-		*/
 	}
 }
 
@@ -209,8 +208,9 @@ type ProductSaleSummaryTable struct {
 
 func (e ProductSaleSummaryTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:      "product_sale_summary",
-		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.Fecha, e.ProductID},
+		Name:                 "product_sale_summary",
+		Partition:            e.CompanyID,
+		Keys:                 []db.Coln{e.Fecha, e.ProductID},
+		DisableUpdateCounter: true,
 	}
 }

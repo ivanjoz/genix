@@ -16,7 +16,7 @@ const (
 
 type packedIndexBuildConfig struct {
 	scope packedIndexScope
-	// schemaFieldName is used only for panic/error messages ("Indexes" vs "GlobalIndexes").
+	// schemaFieldName is used only for panic/error messages so callers can name the index family being compiled.
 	schemaFieldName string
 	// virtualColumnPrefix differentiates local/global packed columns (e.g. "zz_ixp_" vs "zz_gixp_").
 	virtualColumnPrefix string
@@ -311,7 +311,7 @@ func registerPackedIndex(
 		return whereStatements
 	}
 
-	*idxCount++
+	*idxCount = *idxCount + 1
 	dbTable.indexes[index.name] = index
 
 	fmt.Printf("Packed index registered: table=%s scope=%v index=%s packedCol=%s isInt32=%v slotDigits=%v\n",

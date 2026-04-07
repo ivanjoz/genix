@@ -12,7 +12,7 @@ var indexTypes = map[int8]string{
 	1: "Global Index",
 	2: "Local Index",
 	3: "Hash Index",
-	4: "View",
+	6: "View",
 	9: "View Table",
 }
 
@@ -58,16 +58,20 @@ type ScyllaTable[T any] struct {
 	packedIndexes     []*packedIndexInfo
 	autoincrementPart IColInfo
 	autoincrementCol  IColInfo
+	createdCol        IColInfo
+	updatedCol        IColInfo
 	updateCounterCol  IColInfo
 	capabilities      []QueryCapability
 	// Composite bucket metadata is used to materialize virtual hash sets and plan range+contains reads.
 	compositeBucketIndexes []compositeBucketIndex
+	indexGroups            []indexGroupInfo
+	indexUpdatedTable      *indexUpdatedTableInfo
 	// selectStatementCache is shared across copied ScyllaTable values, so it must stay behind a pointer.
 	selectStatementCache *selectPlanCache
 	_maxColIdx           int16
 }
 
-// compositeBucketIndex stores the source columns and generated virtual bucket columns for one HashIndexes entry.
+// compositeBucketIndex stores the source columns and generated virtual bucket columns for one composite-bucket index.
 type compositeBucketIndex struct {
 	name          string
 	sourceColumns []IColInfo
@@ -76,6 +80,23 @@ type compositeBucketIndex struct {
 	bucketIsWeek         bool
 	bucketSizes          []int8
 	virtualColumnsBySize map[int8]IColInfo
+}
+
+type indexGroupInfo struct {
+	name                 string
+	sourceColumns        []indexGroupSourceColumn
+	virtualColumn        IColInfo
+	usesCollectionValues bool
+}
+
+type indexUpdatedTableInfo struct {
+	name string
+}
+
+type indexGroupSourceColumn struct {
+	column      IColInfo
+	storeAsWeek bool
+	weekOnly    bool
 }
 
 func (e ScyllaTable[T]) GetFullName() string {
@@ -157,24 +178,20 @@ type ColumnStatement struct {
 type TableSchema struct {
 	Keyspace string
 	// StructType    T
-	Name              string
-	Keys              []Coln
-	Partition         Coln
-	LocalIndexes      []Coln
-	HashIndexes       [][]Coln
-	Indexes           [][]Coln //  new column
-	GlobalIndexes     [][]Coln //  new column
-	Views             []View
-	ViewTables        []View
-	SequenceColumn    Coln
-	CounterColumn     Coln
-	UseSequences      bool
-	SequencePartCol   Coln
-	KeyConcatenated   []Coln
-	KeyIntPacking     []Coln
-	AutoincrementPart Coln
-	SaveCacheVersion  bool
-	UseUpdateCounter  Coln
+	Name                 string
+	Keys                 []Coln
+	Partition            Coln
+	Indexes              []Index
+	SequenceColumn       Coln
+	CounterColumn        Coln
+	UseSequences         bool
+	SequencePartCol      Coln
+	KeyConcatenated      []Coln
+	KeyIntPacking        []Coln
+	AutoincrementPart    Coln
+	SaveCacheVersion     bool
+	UseUpdateCounter     Coln
+	DisableUpdateCounter bool
 }
 
 func (q ColumnStatement) GetValue() any {
@@ -195,7 +212,15 @@ func (q ColumnStatement) GetValue() any {
 	}
 }
 
-type View struct {
+const (
+	TypeGlobalIndex int8 = 1
+	TypeLocalIndex  int8 = 2
+	TypeView        int8 = 6
+	TypeViewTable   int8 = 9
+)
+
+type Index struct {
+	Type int8
 	Keys []Coln
 	// Cols declares the non-key payload columns to keep in the MV.
 	// When empty, the ORM keeps the previous SELECT * behavior.
@@ -204,7 +229,8 @@ type View struct {
 	Cols     []Coln
 	KeepPart bool
 	// Create a hash for use with IN operators
-	UseHash bool
+	UseHash       bool
+	UseIndexGroup bool
 }
 
 type TableInfo struct {
@@ -477,6 +503,11 @@ func (q Col[T, E]) Autoincrement(randSufixSize int8) Col[T, E] {
 		randSufixSize = -1
 	}
 	q.info.autoincrementRandSize = randSufixSize
+	return q
+}
+
+func (q Col[T, E]) StoreAsWeek() Col[T, E] {
+	q.info.storeAsWeek = true
 	return q
 }
 

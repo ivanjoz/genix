@@ -190,10 +190,15 @@ This is the primary mechanism used to avoid accidental `ALLOW FILTERING` queries
 ### 8.1 Local and Global Secondary Indexes
 
 `TableSchema` supports:
-- `Indexes [][]Coln` (local)
-- `GlobalIndexes [][]Coln` (global)
+- `Indexes []Index`
 
-Single-column entries create simple indexes; multi-column entries create packed virtual columns.
+Inference rules:
+- one key, no explicit type: local secondary index
+- two or more numeric keys, no explicit type: packed local index
+- `Type: TypeGlobalIndex`: global secondary index
+- `Cols != nil`: materialized view payload declaration
+- `Type: TypeViewTable`: derived table with write-side maintenance
+- `UseIndexGroup: true`: write-maintained hash group metadata
 
 ### 8.2 Packed Indexes
 
@@ -205,7 +210,7 @@ Rules:
 - values exceeding slot width are truncated by rule
 - `.Int32()` allows packed value storage in `int32` with post-filter exactness when needed
 
-### 8.3 Hash and Range Views
+### 8.3 Views
 
 - **Hash views**: equality/IN routing via computed hash columns.
 - **Range (radix) views**: multi-column range routing via radix-weighted composite values.

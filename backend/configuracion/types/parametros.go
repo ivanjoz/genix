@@ -35,7 +35,7 @@ func (e ParametrosTable) GetSchema() db.TableSchema {
 		Partition:    e.EmpresaID,
 		UseSequences: true,
 		Keys:         []db.Coln{e.Grupo, e.Key},
-		Views:        []db.View{},
+		Indexes:      []db.Index{},
 	}
 }
 

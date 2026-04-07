@@ -32,9 +32,9 @@ func (e groupedMovementSchema) GetSchema() TableSchema {
 		Name:      "grouped_movements",
 		Partition: e.EmpresaID,
 		Keys:      []Coln{e.ID},
-		Views: []View{
+		Indexes: []Index{
 			// Keep the packed grouping view minimal: partition + packed key + aggregated payload column.
-			{Keys: []Coln{e.Fecha, e.ProductoID.DecimalSize(10)}, Cols: []Coln{e.Cantidad}, KeepPart: true},
+			{Type: TypeView, Keys: []Coln{e.Fecha, e.ProductoID.DecimalSize(10)}, Cols: []Coln{e.Cantidad}, KeepPart: true},
 		},
 	}
 }
@@ -62,9 +62,9 @@ func (e fullViewSchema) GetSchema() TableSchema {
 		Name:      "full_view_records",
 		Partition: e.EmpresaID,
 		Keys:      []Coln{e.ID},
-		Views: []View{
+		Indexes: []Index{
 			// No Cols means the MV keeps the full base payload with an explicit non-virtual projection.
-			{Keys: []Coln{e.Status, e.Updated.DecimalSize(9)}, KeepPart: true},
+			{Type: TypeView, Keys: []Coln{e.Status, e.Updated.DecimalSize(9)}, KeepPart: true},
 		},
 	}
 }
@@ -96,13 +96,10 @@ func (e hashIndexedFullViewSchema) GetSchema() TableSchema {
 		Name:      "hash_indexed_full_view_records",
 		Partition: e.EmpresaID,
 		Keys:      []Coln{e.ID},
-		HashIndexes: [][]Coln{
-			// Hash indexes add zz_hb_* generated columns on the base table.
-			{e.ProductIDs, e.Fecha.CompositeBucketing(2, 6)},
-		},
-		Views: []View{
+		Indexes: []Index{
+			{Keys: []Coln{e.ProductIDs, e.Fecha.CompositeBucketing(2, 6)}},
 			// Full-payload packed view should keep only its own view key virtual column.
-			{Keys: []Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
+			{Type: TypeView, Keys: []Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
 		},
 	}
 }
@@ -128,9 +125,9 @@ func (e int32PackedViewSchema) GetSchema() TableSchema {
 		Name:      "int32_packed_view_records",
 		Partition: e.EmpresaID,
 		Keys:      []Coln{e.ID},
-		Views: []View{
+		Indexes: []Index{
 			// Match the sale-order status trace view: a small enum prefix packed with an 8-digit updated slot.
-			{Keys: []Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
+			{Type: TypeView, Keys: []Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
 		},
 	}
 }

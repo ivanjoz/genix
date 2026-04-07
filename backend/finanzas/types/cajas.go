@@ -47,9 +47,9 @@ func (e CajaTable) GetSchema() db.TableSchema {
 		Partition:    e.EmpresaID,
 		UseSequences: true,
 		Keys:         []db.Coln{e.ID.Autoincrement(0)},
-		Views: []db.View{
-			{Keys: []db.Coln{e.Status}, KeepPart: true},
-			{Keys: []db.Coln{e.Updated}, KeepPart: true},
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: []db.Coln{e.Status}, KeepPart: true},
+			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }
@@ -93,7 +93,10 @@ func (e CajaMovimientoTable) GetSchema() db.TableSchema {
 			e.CajaID.DecimalSize(5), e.Fecha.DecimalSize(5), e.Autoincrement(3),
 		},
 		AutoincrementPart: e.Fecha,
-		LocalIndexes:      []db.Coln{e.DocumentoID, e.CreatedBy},
+		Indexes: []db.Index{
+			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.DocumentoID}},
+			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.CreatedBy}},
+		},
 	}
 }
 
@@ -130,8 +133,8 @@ func (e CajaCuadreTable) GetSchema() db.TableSchema {
 		Name:      "caja_cuadre",
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.ID},
-		Views: []db.View{
-			{Keys: []db.Coln{e.CreatedBy}, KeepPart: true},
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: []db.Coln{e.CreatedBy}, KeepPart: true},
 		},
 	}
 }

@@ -29,8 +29,8 @@ func (e SystemParametersTable) GetSchema() db.TableSchema {
 		Name:      "system_parameters",
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.ID},
-		Views: []db.View{
-			{Keys: []db.Coln{e.Updated}, KeepPart: true},
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}
 }

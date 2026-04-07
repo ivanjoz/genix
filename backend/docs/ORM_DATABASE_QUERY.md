@@ -346,30 +346,38 @@ func (e OrderTable) GetSchema() db.TableSchema {
         Name:      "sale_order",
         Partition: e.EmpresaID,
         Keys:      []db.Coln{e.ID},
-        Indexes: [][]db.Coln{
-            {e.Status.Int32(), e.Updated.DecimalSize(8)},
+        Indexes: []db.Index{
+            {
+                Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)},
+            },
         },
     }
 }
 ```
 
-### 7.4 Global Indexes (`GlobalIndexes`)
+### 7.4 Global Indexes
 
 Use for cross-partition equality lookups.
 
 ```go
 // Purpose: Add a global secondary index for direct equality lookups.
 // Rationale: Useful for unique-like lookup fields such as email.
-GlobalIndexes: [][]db.Coln{
-    {e.Email},
+Indexes: []db.Index{
+    {
+        Type: db.TypeGlobalIndex,
+        Keys: []db.Coln{e.Email},
+    },
 }
 ```
 
 ```go
 // Purpose: Add packed global index for composite equality-oriented filters.
 // Rationale: Supports compact global lookup shape on multiple numeric fields.
-GlobalIndexes: [][]db.Coln{
-    {e.Status.Int32(), e.Updated.DecimalSize(8)},
+Indexes: []db.Index{
+    {
+        Type: db.TypeGlobalIndex,
+        Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)},
+    },
 }
 ```
 
@@ -377,37 +385,47 @@ Important:
 - Do not depend on global indexes for general range scans.
 - Prefer local packed indexes or views for robust range workloads.
 
-### 7.5 Views (`Views`)
+### 7.5 Views
 
 ```go
 // Purpose: Materialize alternative query paths.
 // Rationale: Duplicate data intentionally for read patterns you must optimize.
-Views: []db.View{
-    {Cols: []db.Coln{e.CustomerID, e.Status}, KeepPart: true},
-    {Cols: []db.Coln{e.StoreID.Int32(), e.Updated.DecimalSize(10)}},
+Indexes: []db.Index{
+    {
+        Type:     db.TypeView,
+        Keys:     []db.Coln{e.CustomerID, e.Status},
+        KeepPart: true,
+    },
+    {
+        Type: db.TypeView,
+        Keys: []db.Coln{e.StoreID.Int32(), e.Updated.DecimalSize(10)},
+    },
 }
 ```
 
-### 7.6 Hash Indexes with Composite Bucketing (`HashIndexes`)
+### 7.6 Composite-Bucket Indexes
 
 Use for range + multi-field membership scenarios over numeric dimensions.
 
 ```go
 // Purpose: Create hash-set virtual indexes with bucketed range support.
 // Rationale: Efficient for tuple-style filters plus bounded time/week ranges.
-HashIndexes: [][]db.Coln{
+Indexes: []db.Index{
     {
-        e.ProductID,
-        e.ChannelID,
-        e.WeekCode.CompositeBucketing(1, 2, 4).IsWeek(),
+        Type: db.TypeGlobalIndex,
+        Keys: []db.Coln{
+            e.ProductID,
+            e.ChannelID,
+            e.WeekCode.CompositeBucketing(1, 2, 4).StoreAsWeek(),
+        },
     },
 }
 ```
 
 Rules:
-- Each hash index entry supports 2 to 3 numeric source columns.
+- Each composite-bucket index supports 2 to 3 numeric source columns.
 - Exactly one source column must define `CompositeBucketing(...)`.
-- `IsWeek()` enables week-based normalization for bucket/range math.
+- `StoreAsWeek()` enables week-based normalization for bucket/range math.
 
 ---
 
@@ -496,7 +514,7 @@ err := db.Merge(
 ## 12. Common Errors and Fixes
 
 - **"use ALLOW FILTERING"**: query shape is not covered by your keys/indexes/views.
-  - Fix: add suitable `Indexes`, `GlobalIndexes`, `Views`, or adjust predicates.
+  - Fix: add suitable `Indexes` entries or adjust predicates.
 
 - **Packed index overfetch concerns**:
   - Fix: keep `DecimalSize` design coherent and rely on ORM post-filter exactness.
@@ -505,4 +523,4 @@ err := db.Merge(
   - Fix: verify `KeyIntPacking` rules (single bigint key, decimal sizes, non-negative domain).
 
 - **Composite bucketing config panic**:
-  - Fix: ensure exactly one `CompositeBucketing(...)` column in each `HashIndexes` entry.
+  - Fix: ensure exactly one `CompositeBucketing(...)` column in each composite-bucket `Indexes` entry.

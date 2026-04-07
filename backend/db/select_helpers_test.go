@@ -176,3 +176,38 @@ func TestBuildBoundSelectPlanSplitsCartesianInQueriesByEnvLimit(t *testing.T) {
 		t.Fatalf("expected second cartesian batch to keep the second ID chunk, got %q", boundPlan.Statements[1].QueryStr)
 	}
 }
+
+func TestCompiledSelectStatementSkipsWriteOnlyManagedColumns(t *testing.T) {
+	resetORMTableCachesForTesting()
+
+	scyllaTable := MakeScyllaTable[Increment, IncrementTable]()
+	scyllaTable.keyspace = "genix_test"
+
+	records := []Increment{}
+	query := Query[Increment, IncrementTable](&records)
+	query.Name.Equals("x1_sale_order_updated")
+
+	compiledStatement, err := tryGetOrCompileSelectStatement(query.GetTableInfo(), scyllaTable)
+	if err != nil {
+		t.Fatalf("unexpected compile error: %v", err)
+	}
+	if compiledStatement == nil {
+		t.Fatal("expected a compiled select statement")
+	}
+
+	if strings.Contains(compiledStatement.queryTemplate, managedCreatedColumnName) {
+		t.Fatalf("did not expect %q in query template: %s", managedCreatedColumnName, compiledStatement.queryTemplate)
+	}
+	if strings.Contains(compiledStatement.queryTemplate, managedUpdatedColumnName) {
+		t.Fatalf("did not expect %q in query template: %s", managedUpdatedColumnName, compiledStatement.queryTemplate)
+	}
+	if strings.Contains(compiledStatement.queryTemplate, managedUpdateCounterColumnName) {
+		t.Fatalf("did not expect %q in query template: %s", managedUpdateCounterColumnName, compiledStatement.queryTemplate)
+	}
+	if !strings.Contains(compiledStatement.queryTemplate, "FROM genix_test.sequences") {
+		t.Fatalf("unexpected query template: %s", compiledStatement.queryTemplate)
+	}
+	if !strings.Contains(compiledStatement.queryTemplate, "name") || !strings.Contains(compiledStatement.queryTemplate, "current_value") {
+		t.Fatalf("unexpected query template: %s", compiledStatement.queryTemplate)
+	}
+}

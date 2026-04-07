@@ -38,6 +38,7 @@ type columnInfo struct {
 	autoincrementRandSize   int8
 	compositeBucketing      []int8
 	isWeek                  bool
+	storeAsWeek             bool
 	useInt32Packing         bool
 	aggregateFn             string
 }
