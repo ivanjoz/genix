@@ -90,13 +90,16 @@ func TestViewTablesCompileAsTableBackedViews(t *testing.T) {
 		t.Fatalf("expected view table capability match, got %+v", bestCapability)
 	}
 
-	whereStatements := view.getStatement(
+	whereStatements := view.getStatementPrepared(
 		ColumnStatement{Col: "empresa_id", Operator: "=", Value: int32(7)},
 		ColumnStatement{Col: "product_ids", Operator: "CONTAINS", Value: int64(9)},
 		ColumnStatement{Col: "fecha", Operator: ">=", Value: int16(3)},
 	)
-	if len(whereStatements) != 1 || whereStatements[0] != "empresa_id = 7 AND product_ids = 9 AND fecha >= 3" {
+	if len(whereStatements) != 1 || whereStatements[0].Clause != "empresa_id = ? AND product_ids = ? AND fecha >= ?" {
 		t.Fatalf("unexpected translated where clause: %v", whereStatements)
+	}
+	if got := whereStatements[0].Values; len(got) != 3 || convertToInt64(got[0]) != 7 || convertToInt64(got[1]) != 9 || convertToInt64(got[2]) != 3 {
+		t.Fatalf("unexpected translated where values: %v", got)
 	}
 }
 

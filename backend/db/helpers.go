@@ -147,46 +147,37 @@ func HashInt(values ...any) int32 {
 }
 
 func HashInt64(values ...int64) int32 {
-	// Use typed int64 arguments in composite planners and delegate the final hashing to HashInt for consistency.
-	switch len(values) {
-	case 0:
-		return HashInt()
-	case 1:
-		return HashInt(values[0])
-	case 2:
-		return HashInt(values[0], values[1])
-	case 3:
-		return HashInt(values[0], values[1], values[2])
+	buf := new(bytes.Buffer)
+
+	for _, value := range values {
+		binary.Write(buf, binary.LittleEndian, value)
+		buf.WriteByte(0)
 	}
 
-	// Fallback for future extensions beyond 3 values while keeping one hashing implementation.
-	hashValues := make([]any, len(values))
-	for i, value := range values {
-		hashValues[i] = value
-	}
-	return HashInt(hashValues...)
+	h := fnv.New32a()
+	h.Write(buf.Bytes())
+	return int32(h.Sum32())
 }
 
-func weekCodeToOrdinal(weekCode int64) (int64, bool) {
-	// Convert YYWW codes (e.g. 2553, 2601) into a contiguous ordinal timeline for arithmetic/bucketing.
-	year := weekCode / 100
-	week := weekCode % 100
-	if week < 1 || week > 53 {
+func makeWeekIndexFromWeekCode(weekCode int64) (int64, bool) {
+	// Use the Monday unix-day as the real timeline, then collapse it into contiguous week units.
+	mondayUnixDay := makeUnixDayFromWeekCode(int16(weekCode))
+	if mondayUnixDay == 0 {
 		return 0, false
 	}
-	return year*53 + (week - 1), true
+	return int64(mondayUnixDay) / 7, true
 }
 
 func normalizeCompositeRange(from, to int64, isWeek bool) (int64, int64) {
-	// Range planning needs contiguous numbers; week-coded values use ordinal conversion.
+	// Range planning needs contiguous numbers; week-coded values use Monday-fecha conversion.
 	if isWeek {
-		fromOrdinal, fromOk := weekCodeToOrdinal(from)
-		toOrdinal, toOk := weekCodeToOrdinal(to)
+		fromWeekIndex, fromOk := makeWeekIndexFromWeekCode(from)
+		toWeekIndex, toOk := makeWeekIndexFromWeekCode(to)
 		if fromOk && toOk {
-			if toOrdinal < fromOrdinal {
-				return toOrdinal, fromOrdinal
+			if toWeekIndex < fromWeekIndex {
+				return toWeekIndex, fromWeekIndex
 			}
-			return fromOrdinal, toOrdinal
+			return fromWeekIndex, toWeekIndex
 		}
 	}
 	if to < from {
@@ -196,11 +187,11 @@ func normalizeCompositeRange(from, to int64, isWeek bool) (int64, int64) {
 }
 
 func makeCompositeBucketID(value int64, bucketSize int8, isWeek bool) int64 {
-	// Bucket IDs are computed on a contiguous domain so week boundaries across years remain adjacent.
+	// Bucket IDs are computed on a contiguous domain using fecha-derived week indexes when needed.
 	basisValue := value
 	if isWeek {
-		if ordinal, ok := weekCodeToOrdinal(value); ok {
-			basisValue = ordinal
+		if weekIndex, ok := makeWeekIndexFromWeekCode(value); ok {
+			basisValue = weekIndex
 		}
 	}
 	return basisValue / int64(bucketSize)
@@ -373,50 +364,50 @@ func MakeKeyConcat(values ...any) string {
 			str = v
 		} else if v, ok := va.(int32); ok {
 			if v > 0 {
-				str = EncodeToBase62(int64(v))	
+				str = EncodeToBase62(int64(v))
 			}
 		} else if v, ok := va.(int64); ok {
 			if v > 0 {
-				str = EncodeToBase62(int64(v))	
+				str = EncodeToBase62(int64(v))
 			}
 		} else if v, ok := va.(int); ok {
 			if v > 0 {
-				str = EncodeToBase62(int64(v))	
+				str = EncodeToBase62(int64(v))
 			}
 		} else if v, ok := va.(int16); ok {
 			if v > 0 {
-				str = EncodeToBase62(int64(v))	
+				str = EncodeToBase62(int64(v))
 			}
 		} else {
 			str = fmt.Sprintf("%v", v)
 		}
 		valuesStrings = append(valuesStrings, str)
 	}
-	return strings.TrimRight(strings.Join(valuesStrings, "_"),"_")
+	return strings.TrimRight(strings.Join(valuesStrings, "_"), "_")
 }
 
 type KeyParser struct {
-	Key string
+	Key        string
 	keySplited []string
 }
 
 func (e *KeyParser) GetNumber(index int) int64 {
 	if len(e.keySplited) == 0 {
-		e.keySplited = strings.Split(e.Key,"_")
+		e.keySplited = strings.Split(e.Key, "_")
 	}
-	
+
 	if len(e.keySplited) > index {
 		return DecodeFromBase62(e.keySplited[index])
 	} else {
-		return  0
+		return 0
 	}
 }
 
 func (e *KeyParser) GetString(index int) string {
 	if len(e.keySplited) == 0 {
-		e.keySplited = strings.Split(e.Key,"_")
+		e.keySplited = strings.Split(e.Key, "_")
 	}
-	
+
 	if len(e.keySplited) > index {
 		return e.keySplited[index]
 	} else {

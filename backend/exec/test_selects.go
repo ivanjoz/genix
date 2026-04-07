@@ -14,10 +14,13 @@ import (
 func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	var err error
 	
-	traceSales := []comercial.SaleOrder{}
-	query := db.Query(&traceSales)
-	query.Select(query.ID, query.ClientID, query.DetailProductsIDs, query.Updated)
-	query.CompanyID.Equals(1).StatusTrace.Equals(2).Updated.GreaterEqual(0)
+	traceSales := []db.RecordGroup[comercial.SaleOrder]{}
+	query := db.QueryIndexGroup(&traceSales)
+	
+	query.IncludeCachedGroup(12340001, 1001)
+	query.IncludeCachedGroup(12340002, 1002)
+	
+	query.CompanyID.Equals(1).DetailProductsIDs.Contains(3372).Fecha.Between(20500, 20558)
 
 	
 	if err := query.Exec(); err != nil {
@@ -26,7 +29,9 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 		fmt.Printf("Found %d traceSales in range\n", len(traceSales))
 	}
 	
-	return core.FuncResponse{}
+	for _, e := range traceSales {
+		fmt.Println(e.GroupHash,"|",e.IndexGroupValues,"| Records:",len(e.Records))
+	}
 		
 	// 6. Test bucket query CONTAINS + "RANGE" with hash index
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
@@ -43,7 +48,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 		fmt.Printf("Found %d records in range\n", len(recordSalesOrders))
 	}
 
-	return core.FuncResponse{}
+	// return core.FuncResponse{}
 	
 	fmt.Println("\n--- Test 7: Range query in int packet column local index ---")
 	recordSalesOrders2 := []comercial.SaleOrder{}

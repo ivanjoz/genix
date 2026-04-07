@@ -124,6 +124,10 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 				UseIndexGroup: true,
 			},
 			{
+				Keys:          []db.Coln{e.Fecha.StoreAsWeek(), e.DetailProductsIDs},
+				UseIndexGroup: true,
+			},
+			{
 				Type:     db.TypeViewTable,
 				Keys:     []db.Coln{e.DetailProductsIDs, e.Fecha},
 				Cols:     []db.Coln{e.Updated},

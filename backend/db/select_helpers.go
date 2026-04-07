@@ -26,6 +26,11 @@ type selectPlanCache struct {
 	plans map[uint64]*SelectStatement
 }
 
+type boundWhereClause struct {
+	Clause string
+	Values []any
+}
+
 type BoundSelectStatement struct {
 	QueryStr             string
 	QueryValues          []any
@@ -242,9 +247,9 @@ func chunkStatementInValues(values []any, chunkSize int) [][]any {
 	return valueChunks
 }
 
-func buildRemainingWhereClauseBatches(remainingStatements []ColumnStatement) []string {
+func buildRemainingWhereClauseBatches(remainingStatements []ColumnStatement) []boundWhereClause {
 	if len(remainingStatements) == 0 {
-		return []string{""}
+		return []boundWhereClause{{}}
 	}
 
 	maxClusteringKeys := getMaxClusteringKeyRestrictionsPerQuery()
@@ -285,9 +290,19 @@ func buildRemainingWhereClauseBatches(remainingStatements []ColumnStatement) []s
 		currentCartesianProductSize *= max(1, maxChunkSize)
 	}
 
-	whereClauseBatches := make([]string, 0, len(statementBatches))
+	whereClauseBatches := make([]boundWhereClause, 0, len(statementBatches))
 	for _, statementBatch := range statementBatches {
-		whereClauseBatches = append(whereClauseBatches, strings.Join(buildRemainingWhereClauses(statementBatch), " AND "))
+		boundClauses := buildRemainingWhereClauses(statementBatch)
+		clauseParts := make([]string, 0, len(boundClauses))
+		queryValues := make([]any, 0, len(boundClauses))
+		for _, boundClause := range boundClauses {
+			clauseParts = append(clauseParts, boundClause.Clause)
+			queryValues = append(queryValues, boundClause.Values...)
+		}
+		whereClauseBatches = append(whereClauseBatches, boundWhereClause{
+			Clause: strings.Join(clauseParts, " AND "),
+			Values: queryValues,
+		})
 	}
 
 	if len(whereClauseBatches) > 1 {
@@ -303,7 +318,7 @@ func buildBoundSelectPlan(
 	scanColumns []selectScanColumn,
 	requiresDeduplication bool,
 	assignCacheVersions bool,
-	whereStatements []string,
+	whereStatements []boundWhereClause,
 	remainingStatements []ColumnStatement,
 	postFilterStatements []ColumnStatement,
 	groupByColumns []string,
@@ -313,7 +328,7 @@ func buildBoundSelectPlan(
 	allowFilter bool,
 ) *BoundSelectPlan {
 	if len(whereStatements) == 0 {
-		whereStatements = []string{""}
+		whereStatements = []boundWhereClause{{}}
 	}
 
 	remainingWhereClauseBatches := buildRemainingWhereClauseBatches(remainingStatements)
@@ -321,13 +336,15 @@ func buildBoundSelectPlan(
 
 	for _, whereStatement := range whereStatements {
 		for _, remainingWhereClause := range remainingWhereClauseBatches {
-			whereStatementCombined := whereStatement
-			whereRemainClause := remainingWhereClause
-			if remainingWhereClause != "" {
+			whereStatementCombined := whereStatement.Clause
+			whereRemainClause := remainingWhereClause.Clause
+			queryValues := append([]any{}, whereStatement.Values...)
+			if remainingWhereClause.Clause != "" {
 				if whereStatementCombined != "" {
 					whereRemainClause = " AND " + whereRemainClause
 				}
 				whereStatementCombined += whereRemainClause
+				queryValues = append(queryValues, remainingWhereClause.Values...)
 			}
 			if whereStatementCombined != "" {
 				whereStatementCombined = " WHERE " + whereStatementCombined
@@ -347,7 +364,7 @@ func buildBoundSelectPlan(
 
 			boundStatements = append(boundStatements, BoundSelectStatement{
 				QueryStr:             fmt.Sprintf(queryTemplate, whereStatementCombined),
-				QueryValues:          nil,
+				QueryValues:          queryValues,
 				PostFilterStatements: slices.Clone(postFilterStatements),
 			})
 		}
@@ -681,7 +698,7 @@ func compileSelectStatement(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) 
 					compiledStatement.requiresDeduplication = true
 				}
 
-				if selectedView.getStatement != nil {
+				if selectedView.getStatementPrepared != nil {
 					selectedStatementIndexes := []int{}
 					remainingStatementIndexes := []int{}
 
@@ -743,7 +760,7 @@ func compileSelectStatement(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) 
 func (e *SelectStatement) Compute(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) (*BoundSelectPlan, error) {
 	// Bind current values into the cached query shape without rerunning planner selection in selectExec.
 	statements := collectSelectStatements(tableInfo)
-	whereStatements := []string{""}
+	whereStatements := []boundWhereClause{{}}
 	remainingStatements := statements
 	postFilterStatements := pickStatementsByIndexes(statements, e.postFilterStatementIndexes)
 	scanColumns := slices.Clone(e.scanColumns)
@@ -755,7 +772,7 @@ func (e *SelectStatement) Compute(tableInfo *TableInfo, scyllaTable ScyllaTable[
 	case selectRouteViewStatements:
 		selectedStatements := pickStatementsByIndexes(statements, e.selectedStatementIndexes)
 		remainingStatements = pickStatementsByIndexes(statements, e.remainingStatementIndexes)
-		whereStatements = e.sourceView.getStatement(selectedStatements...)
+		whereStatements = e.sourceView.getStatementPrepared(selectedStatements...)
 	case selectRouteKeyConcatenated:
 		rewrittenStatements, canRewrite := buildKeyConcatenatedStatements(statements, scyllaTable)
 		if !canRewrite {

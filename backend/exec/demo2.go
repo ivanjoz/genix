@@ -259,10 +259,13 @@ func Test45(args *core.ExecArgs) core.FuncResponse {
 
 func Test46(args *core.ExecArgs) core.FuncResponse {
 
-	controller := makeDBController[logisticaTypes.WarehouseProductMovement]()
+	controller := makeDBController[comercialTypes.SaleOrder]()
 
-	controller.RecalcVirtualColumns(1)
-
+	err := controller.RecalcVirtualColumns(1)
+	if err != nil {
+		fmt.Println(err)
+	}
+	
 	return core.FuncResponse{}
 }
 

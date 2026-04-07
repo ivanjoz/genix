@@ -36,6 +36,7 @@ type ScyllaControllerInterface interface {
 	GetRecordsCSV(partValue int32) (CSVResult, error)
 	ReloadRecords(partValue int32) error
 	RecalcVirtualColumns(partValue int32) error
+	RecalcGroupIndexHashes(partValue int32) error
 	ResetCounter(partValue any) error
 }
 
@@ -153,6 +154,7 @@ func (e *ScyllaController[T, E]) RecalcVirtualColumns(partValue int32) error {
 
 	updatesToApply := []virtualColumnsRecalcUpdate[T]{}
 	rowsScanned := 0
+	updatedRowsByVirtualColumn := map[string]int{}
 
 	scanner := queryIterator.Scanner()
 	for scanner.Next() {
@@ -181,8 +183,7 @@ func (e *ScyllaController[T, E]) RecalcVirtualColumns(partValue int32) error {
 			recalculatedValueSignature := makeVirtualValueSignature(virtualColumn.GetStatementValue(recordPointer))
 			if persistedValueSignature != recalculatedValueSignature {
 				changedVirtualColumns = append(changedVirtualColumns, virtualColumn)
-				fmt.Printf("RecalcVirtualColumns | changed virtual column=%s | persisted=%s | recalculated=%s\n",
-					virtualColumn.GetName(), persistedValueSignature, recalculatedValueSignature)
+				updatedRowsByVirtualColumn[virtualColumn.GetName()]++
 			}
 		}
 		if len(changedVirtualColumns) == 0 {
@@ -234,12 +235,161 @@ func (e *ScyllaController[T, E]) RecalcVirtualColumns(partValue int32) error {
 		return nil
 	}
 
-	if err := QueryExecStatements(updateStatements); err != nil {
-		return Err("RecalcVirtualColumns update failed for table", scyllaTable.name, ":", err)
+	const maxRecalcUpdatesPerBatch = 200
+	totalChunks := (len(updateStatements) + maxRecalcUpdatesPerBatch - 1) / maxRecalcUpdatesPerBatch
+	for chunkIndex := 0; chunkIndex < totalChunks; chunkIndex++ {
+		fromIndex := chunkIndex * maxRecalcUpdatesPerBatch
+		toIndex := fromIndex + maxRecalcUpdatesPerBatch
+		if toIndex > len(updateStatements) {
+			toIndex = len(updateStatements)
+		}
+
+		updateStatementsChunk := updateStatements[fromIndex:toIndex]
+		fmt.Printf("RecalcVirtualColumns | table=%s | chunk=%d/%d | rows_in_chunk=%d\n",
+			scyllaTable.name, chunkIndex+1, totalChunks, len(updateStatementsChunk))
+
+		if err := QueryExecStatements(updateStatementsChunk); err != nil {
+			return Err("RecalcVirtualColumns update failed for table", scyllaTable.name, "chunk", chunkIndex+1, "of", totalChunks, ":", err)
+		}
+	}
+
+	virtualColumnNames := make([]string, 0, len(updatedRowsByVirtualColumn))
+	for virtualColumnName := range updatedRowsByVirtualColumn {
+		virtualColumnNames = append(virtualColumnNames, virtualColumnName)
+	}
+	slices.Sort(virtualColumnNames)
+	for _, virtualColumnName := range virtualColumnNames {
+		fmt.Printf("RecalcVirtualColumns | table=%s | virtual_column=%s | rows_saved=%d\n",
+			scyllaTable.name, virtualColumnName, updatedRowsByVirtualColumn[virtualColumnName])
 	}
 
 	fmt.Printf("RecalcVirtualColumns | table=%s | rows_scanned=%d | rows_updated=%d\n",
 		scyllaTable.name, rowsScanned, len(updatesToApply))
+	return nil
+}
+
+func (e *ScyllaController[T, E]) RecalcGroupIndexHashes(partValue int32) error {
+	scyllaTable := getOrCompileScyllaTable(initStructTable[E, T](new(E)))
+	if scyllaTable.indexUpdatedTable == nil || len(scyllaTable.indexGroups) == 0 {
+		return nil
+	}
+
+	partitionColumn := scyllaTable.GetPartKey()
+	if partitionColumn == nil || partitionColumn.IsNil() {
+		return Err("RecalcGroupIndexHashes requires a partition column for table:", scyllaTable.name)
+	}
+	if partValue <= 0 {
+		return Err("RecalcGroupIndexHashes requires a partition value > 0 for table:", scyllaTable.name)
+	}
+
+	selectedColumns := []IColInfo{}
+	selectedColumnNamesSeen := map[string]bool{}
+	appendSelectedColumn := func(column IColInfo) {
+		if column == nil || column.IsNil() {
+			return
+		}
+		if selectedColumnNamesSeen[column.GetName()] {
+			return
+		}
+		selectedColumnNamesSeen[column.GetName()] = true
+		selectedColumns = append(selectedColumns, column)
+	}
+
+	appendSelectedColumn(partitionColumn)
+	if scyllaTable.updateCounterCol != nil {
+		appendSelectedColumn(scyllaTable.updateCounterCol)
+	}
+	for _, indexGroup := range scyllaTable.indexGroups {
+		if !shouldPersistIndexUpdatedGroup(indexGroup) {
+			continue
+		}
+		for _, sourceColumn := range indexGroup.sourceColumns {
+			appendSelectedColumn(sourceColumn.column)
+		}
+	}
+	if len(selectedColumns) == 0 {
+		return nil
+	}
+
+	slices.SortFunc(selectedColumns, func(leftColumn, rightColumn IColInfo) int {
+		return int(leftColumn.GetInfo().Idx - rightColumn.GetInfo().Idx)
+	})
+
+	selectColumnNames := make([]string, 0, len(selectedColumns))
+	for _, selectedColumn := range selectedColumns {
+		selectColumnNames = append(selectColumnNames, selectedColumn.GetName())
+	}
+
+	deleteStatement := fmt.Sprintf(
+		"DELETE FROM %v.%v WHERE partition_id = %v",
+		scyllaTable.keyspace,
+		scyllaTable.indexUpdatedTable.name,
+		partValue,
+	)
+	if err := QueryExec(deleteStatement); err != nil {
+		return Err("RecalcGroupIndexHashes delete failed for table", scyllaTable.name, ":", err)
+	}
+
+	queryStr := fmt.Sprintf(
+		"SELECT %v FROM %v WHERE %v = %v",
+		strings.Join(selectColumnNames, ", "),
+		scyllaTable.GetFullName(),
+		partitionColumn.GetName(),
+		partValue,
+	)
+	fmt.Printf("RecalcGroupIndexHashes | table=%s | query=%s\n", scyllaTable.name, queryStr)
+
+	queryIterator := getScyllaConnection().Query(queryStr).Iter()
+	rowData, err := queryIterator.RowData()
+	if err != nil {
+		return Err("RecalcGroupIndexHashes RowData failed for table", scyllaTable.name, ":", err)
+	}
+
+	rowsScanned := 0
+	rowsToPersist := []indexUpdatedRow{}
+	rowsByPartitionAndHash := map[string]indexUpdatedRow{}
+	scanner := queryIterator.Scanner()
+	for scanner.Next() {
+		if err := scanner.Scan(rowData.Values...); err != nil {
+			return Err("RecalcGroupIndexHashes scan failed for table", scyllaTable.name, ":", err)
+		}
+		rowsScanned++
+
+		record := *new(T)
+		recordPointer := xunsafe.AsPointer(&record)
+		updateCounterValue := int64(0)
+
+		for valueIndex, selectedColumn := range selectedColumns {
+			rawValue := dereferenceScyllaValue(rowData.Values[valueIndex])
+			if selectedColumn.GetName() == managedUpdateCounterColumnName {
+				updateCounterValue = convertToInt64(rawValue)
+				continue
+			}
+			selectedColumn.SetValue(recordPointer, rawValue)
+		}
+		if updateCounterValue == 0 {
+			continue
+		}
+
+		appendIndexUpdatedRowsForRecord(recordPointer, &scyllaTable, int32(partValue), updateCounterValue, rowsByPartitionAndHash, &rowsToPersist)
+	}
+
+	if err := queryIterator.Close(); err != nil {
+		return Err("RecalcGroupIndexHashes query close failed for table", scyllaTable.name, ":", err)
+	}
+
+	if len(rowsToPersist) == 0 {
+		fmt.Printf("RecalcGroupIndexHashes | table=%s | partition=%d | rows_scanned=%d | rows_persisted=0\n",
+			scyllaTable.name, partValue, rowsScanned)
+		return nil
+	}
+
+	if err := persistIndexUpdatedRows(scyllaTable.keyspace, scyllaTable.indexUpdatedTable.name, rowsToPersist); err != nil {
+		return Err("RecalcGroupIndexHashes persist failed for table", scyllaTable.name, ":", err)
+	}
+
+	fmt.Printf("RecalcGroupIndexHashes | table=%s | partition=%d | rows_scanned=%d | rows_persisted=%d\n",
+		scyllaTable.name, partValue, rowsScanned, len(rowsToPersist))
 	return nil
 }
 

@@ -288,7 +288,7 @@ func TestGetIndexUpdatedTableCreateScriptUsesExpectedPrimaryKey(t *testing.T) {
 	if !strings.Contains(createScript, "partition_id int") {
 		t.Fatalf("expected int partition_id column: %s", createScript)
 	}
-	if !strings.Contains(createScript, "PRIMARY KEY ((partition_id), update_counter, index_hash)") {
+	if !strings.Contains(createScript, "PRIMARY KEY ((partition_id), index_hash)") {
 		t.Fatalf("unexpected index-updated primary key: %s", createScript)
 	}
 }
@@ -399,6 +399,9 @@ func TestSyncIndexGroupsAfterWritePersistsDedupedRows(t *testing.T) {
 
 	expectedHashes := map[int32]struct{}{}
 	for _, indexGroup := range scyllaTable.indexGroups {
+		if !shouldPersistIndexUpdatedGroup(indexGroup) {
+			continue
+		}
 		for _, hashValue := range computeIndexGroupHashes(unsafe.Pointer(&records[0]), indexGroup.sourceColumns) {
 			expectedHashes[hashValue] = struct{}{}
 		}
@@ -423,6 +426,52 @@ func TestSyncIndexGroupsAfterWritePersistsDedupedRows(t *testing.T) {
 			t.Fatalf("duplicate index hash persisted: %+v", row)
 		}
 		seenHashes[row.indexHash] = struct{}{}
+	}
+}
+
+func TestShouldPersistIndexUpdatedGroupSkipsWeekOnlyHashes(t *testing.T) {
+	scyllaTable := MakeScyllaTable[weekIndexGroupRecord, weekIndexGroupSchema]()
+	if len(scyllaTable.indexGroups) != 2 {
+		t.Fatalf("expected raw and week variants, got %d", len(scyllaTable.indexGroups))
+	}
+
+	if !shouldPersistIndexUpdatedGroup(scyllaTable.indexGroups[0]) {
+		t.Fatal("expected raw index-group hashes to be persisted")
+	}
+	if shouldPersistIndexUpdatedGroup(scyllaTable.indexGroups[1]) {
+		t.Fatal("expected week-only index-group hashes to be excluded from __index_updated")
+	}
+}
+
+func TestAppendIndexUpdatedRowsForRecordKeepsMaxUpdateCounterPerHash(t *testing.T) {
+	scyllaTable := MakeScyllaTable[indexGroupRecord, indexGroupSchema]()
+	record := indexGroupRecord{
+		EmpresaID:  7,
+		ID:         1,
+		Fecha:      18754,
+		ClientID:   5,
+		ProductIDs: []int32{11, 17},
+	}
+
+	rowsByPartitionAndHash := map[string]indexUpdatedRow{}
+	rowsToPersist := []indexUpdatedRow{}
+	recordPointer := unsafe.Pointer(&record)
+
+	appendIndexUpdatedRowsForRecord(recordPointer, &scyllaTable, 7, 41, rowsByPartitionAndHash, &rowsToPersist)
+	appendIndexUpdatedRowsForRecord(recordPointer, &scyllaTable, 7, 55, rowsByPartitionAndHash, &rowsToPersist)
+	appendIndexUpdatedRowsForRecord(recordPointer, &scyllaTable, 7, 12, rowsByPartitionAndHash, &rowsToPersist)
+
+	if len(rowsToPersist) == 0 {
+		t.Fatal("expected persisted rows")
+	}
+
+	for _, row := range rowsToPersist {
+		if row.partitionID != 7 {
+			t.Fatalf("unexpected partition id: %+v", row)
+		}
+		if row.updateCounter != 55 {
+			t.Fatalf("expected deduped row to keep max update counter 55, got %+v", row)
+		}
 	}
 }
 

@@ -151,7 +151,7 @@ type viewInfo struct {
 	// RequiresPostFilter indicates the index/view can overfetch and should be exact-filtered in memory.
 	// Keep this for hash-style plans that intentionally trade exact routing for bounded overfetch.
 	RequiresPostFilter    bool
-	getStatement          func(statements ...ColumnStatement) []string
+	getStatementPrepared  func(statements ...ColumnStatement) []boundWhereClause
 	decomposeVirtualValue func(rawValue any) []any
 	getCreateScript       func() string
 	fanoutColumnName      string
@@ -242,7 +242,11 @@ type TableInfo struct {
 	orderBy        string
 	limit          int32
 	allowFilter    bool
-	refSlice       any /* referencia al slice de resultados */
+	// cachedIndexGroups stores client freshness by hash for QueryIndexGroup.
+	cachedIndexGroups map[int32]int32
+	// useIndexGroupSelect routes Exec into grouped hash fetches.
+	useIndexGroupSelect bool
+	refSlice            any /* referencia al slice de resultados */
 }
 
 // Interfaces
@@ -392,6 +396,9 @@ func (e *TableStruct[T, E]) GetRefSchema() *T {
 }
 
 func (e *TableStruct[T, E]) Exec() error {
+	if e.tableInfo.useIndexGroupSelect {
+		return execIndexGroupQuery[T, E](e.schemaStruct, e.tableInfo)
+	}
 	return execQuery[T, E](e.schemaStruct, e.tableInfo, nil)
 }
 
@@ -645,6 +652,22 @@ func Query[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSlice *[]T)
 	refTable := initStructTable[E, T](new(E))
 	any(refTable).(TableStructInterfaceQuery[E, T]).SetRefSlice(refSlice)
 	return refTable
+}
+
+func QueryIndexGroup[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSlice *[]RecordGroup[T]) *E {
+	refTable := initStructTable[E, T](new(E))
+	tableInfo := any(refTable).(interface{ GetTableInfo() *TableInfo }).GetTableInfo()
+	tableInfo.refSlice = refSlice
+	tableInfo.useIndexGroupSelect = true
+	return refTable
+}
+
+func (e *TableStruct[T, E]) IncludeCachedGroup(indexGroupHash int32, updateCountValue int32) *T {
+	if e.tableInfo.cachedIndexGroups == nil {
+		e.tableInfo.cachedIndexGroups = map[int32]int32{}
+	}
+	e.tableInfo.cachedIndexGroups[indexGroupHash] = updateCountValue
+	return e.schemaStruct
 }
 
 func MakeScyllaTable[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() ScyllaTable[any] {

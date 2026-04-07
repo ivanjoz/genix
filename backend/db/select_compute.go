@@ -23,7 +23,7 @@ type nativeGroupByPlan struct {
 	SelectExpressions []string
 	ScanColumns       []selectScanColumn
 	GroupByColumns    []string
-	WhereStatements   []string
+	WhereStatements   []boundWhereClause
 	OrderColumn       IColInfo
 }
 
@@ -89,7 +89,7 @@ func computePackedBound(slotDigits []int64, prefixValues []int64, rangeIndex int
 	return computePackedInt64ValueNonNegative(componentValues, slotDigits)
 }
 
-func buildPackedPrefixRangeClauses(view *viewInfo, statements []ColumnStatement, scyllaTable ScyllaTable[any]) ([]string, error) {
+func buildPackedPrefixRangeClauses(view *viewInfo, statements []ColumnStatement, scyllaTable ScyllaTable[any]) ([]boundWhereClause, error) {
 	if view == nil || len(view.packedSourceColumns) == 0 || len(view.packedSlotDigitsPerColumn) == 0 {
 		return nil, fmt.Errorf("packed GroupBy requires a packed view")
 	}
@@ -114,23 +114,35 @@ func buildPackedPrefixRangeClauses(view *viewInfo, statements []ColumnStatement,
 		statementByColumn[statement.Col] = statement
 	}
 
-	partitionClause := ""
+	var partitionClause *boundWhereClause
 	if partitionColumn != nil && !partitionColumn.IsNil() {
 		partitionStatement, exists := statementByColumn[partitionColumn.GetName()]
 		if !exists || partitionStatement.Operator != "=" {
 			return nil, fmt.Errorf(`GroupBy packed view "%v" requires partition equality on "%v"`, view.name, partitionColumn.GetName())
 		}
-		partitionClause = fmt.Sprintf("%v = %v", partitionColumn.GetName(), partitionStatement.GetValue())
+		partitionClause = &boundWhereClause{
+			Clause: fmt.Sprintf("%v = ?", partitionColumn.GetName()),
+			Values: []any{partitionStatement.Value},
+		}
 	}
 
-	appendPartitionClause := func(packedClause string) string {
-		if partitionClause == "" {
-			return packedClause
+	appendPartitionClause := func(clauses ...boundWhereClause) boundWhereClause {
+		combined := boundWhereClause{}
+		if partitionClause != nil {
+			combined.Clause = partitionClause.Clause
+			combined.Values = append(combined.Values, partitionClause.Values...)
 		}
-		if packedClause == "" {
-			return partitionClause
+		for _, clause := range clauses {
+			if clause.Clause == "" {
+				continue
+			}
+			if combined.Clause != "" {
+				combined.Clause += " AND "
+			}
+			combined.Clause += clause.Clause
+			combined.Values = append(combined.Values, clause.Values...)
 		}
-		return partitionClause + " AND " + packedClause
+		return combined
 	}
 
 	prefixValueGroups := [][]int64{{}}
@@ -182,15 +194,18 @@ func buildPackedPrefixRangeClauses(view *viewInfo, statements []ColumnStatement,
 	}
 
 	packedColumnName := view.column.GetName()
-	whereStatements := []string{}
+	whereStatements := []boundWhereClause{}
 
 	switch {
 	case rangeStatement == nil && rangeStatementIndex == 0:
-		whereStatements = append(whereStatements, appendPartitionClause(""))
+		whereStatements = append(whereStatements, appendPartitionClause())
 	case rangeStatement == nil && rangeStatementIndex >= len(view.packedSourceColumns):
 		for _, prefixValues := range prefixValueGroups {
 			packedValue := computePackedBound(view.packedSlotDigitsPerColumn, prefixValues, -1, 0)
-			whereStatements = append(whereStatements, appendPartitionClause(fmt.Sprintf("%v = %v", packedColumnName, packedValue)))
+			whereStatements = append(whereStatements, appendPartitionClause(boundWhereClause{
+				Clause: fmt.Sprintf("%v = ?", packedColumnName),
+				Values: []any{packedValue},
+			}))
 		}
 	case rangeStatement == nil:
 		remainingDigits := sumSlotDigits(view.packedSlotDigitsPerColumn, rangeStatementIndex)
@@ -198,7 +213,8 @@ func buildPackedPrefixRangeClauses(view *viewInfo, statements []ColumnStatement,
 			fromValue := computePackedBound(view.packedSlotDigitsPerColumn, prefixValues, -1, 0)
 			toValue := fromValue + Pow10Int64(remainingDigits)
 			whereStatements = append(whereStatements, appendPartitionClause(
-				fmt.Sprintf("%v >= %v AND %v < %v", packedColumnName, fromValue, packedColumnName, toValue),
+				boundWhereClause{Clause: fmt.Sprintf("%v >= ?", packedColumnName), Values: []any{fromValue}},
+				boundWhereClause{Clause: fmt.Sprintf("%v < ?", packedColumnName), Values: []any{toValue}},
 			))
 		}
 	default:
@@ -211,20 +227,33 @@ func buildPackedPrefixRangeClauses(view *viewInfo, statements []ColumnStatement,
 				fromValue := computePackedBound(view.packedSlotDigitsPerColumn, prefixValues, rangeStatementIndex, convertToInt64(rangeStatement.From[0].Value))
 				toValue := computePackedBound(view.packedSlotDigitsPerColumn, prefixValues, rangeStatementIndex, convertToInt64(rangeStatement.To[0].Value)+1)
 				whereStatements = append(whereStatements, appendPartitionClause(
-					fmt.Sprintf("%v >= %v AND %v < %v", packedColumnName, fromValue, packedColumnName, toValue),
+					boundWhereClause{Clause: fmt.Sprintf("%v >= ?", packedColumnName), Values: []any{fromValue}},
+					boundWhereClause{Clause: fmt.Sprintf("%v < ?", packedColumnName), Values: []any{toValue}},
 				))
 			case ">":
 				fromValue := computePackedBound(view.packedSlotDigitsPerColumn, prefixValues, rangeStatementIndex, convertToInt64(rangeStatement.Value)+1)
-				whereStatements = append(whereStatements, appendPartitionClause(fmt.Sprintf("%v >= %v", packedColumnName, fromValue)))
+				whereStatements = append(whereStatements, appendPartitionClause(boundWhereClause{
+					Clause: fmt.Sprintf("%v >= ?", packedColumnName),
+					Values: []any{fromValue},
+				}))
 			case ">=":
 				fromValue := computePackedBound(view.packedSlotDigitsPerColumn, prefixValues, rangeStatementIndex, convertToInt64(rangeStatement.Value))
-				whereStatements = append(whereStatements, appendPartitionClause(fmt.Sprintf("%v >= %v", packedColumnName, fromValue)))
+				whereStatements = append(whereStatements, appendPartitionClause(boundWhereClause{
+					Clause: fmt.Sprintf("%v >= ?", packedColumnName),
+					Values: []any{fromValue},
+				}))
 			case "<":
 				toValue := computePackedBound(view.packedSlotDigitsPerColumn, prefixValues, rangeStatementIndex, convertToInt64(rangeStatement.Value))
-				whereStatements = append(whereStatements, appendPartitionClause(fmt.Sprintf("%v < %v", packedColumnName, toValue)))
+				whereStatements = append(whereStatements, appendPartitionClause(boundWhereClause{
+					Clause: fmt.Sprintf("%v < ?", packedColumnName),
+					Values: []any{toValue},
+				}))
 			case "<=":
 				toValue := computePackedBound(view.packedSlotDigitsPerColumn, prefixValues, rangeStatementIndex, convertToInt64(rangeStatement.Value)+1)
-				whereStatements = append(whereStatements, appendPartitionClause(fmt.Sprintf("%v < %v", packedColumnName, toValue)))
+				whereStatements = append(whereStatements, appendPartitionClause(boundWhereClause{
+					Clause: fmt.Sprintf("%v < ?", packedColumnName),
+					Values: []any{toValue},
+				}))
 			}
 		}
 	}

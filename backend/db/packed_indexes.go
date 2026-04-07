@@ -216,14 +216,13 @@ func registerPackedIndex(
 
 	packedColumnNameLocal := virtualPackedColName
 	lastSourceColNameLocal := sourceColumnNames[len(sourceColumnNames)-1]
-
-	index.getStatement = func(statements ...ColumnStatement) []string {
+	index.getStatementPrepared = func(statements ...ColumnStatement) []boundWhereClause {
 		statementByColumn := map[string]ColumnStatement{}
 		for _, st := range statements {
 			statementByColumn[st.Col] = st
 		}
 
-		// Expand prefix value groups (all but the last column). This can produce fan-out.
+		// Expand prefix fanout first so each emitted clause keeps a deterministic packed value order.
 		prefixValueGroups := [][]int64{{}}
 		for i := 0; i < len(sourceColumnNames)-1; i++ {
 			colName := sourceColumnNames[i]
@@ -270,11 +269,11 @@ func registerPackedIndex(
 			return trimRightToDigitsNonNegative(packed, 9)
 		}
 
-		emitRangeClause := func(prefixValues []int64, operator string, boundValue int64) string {
+		emitRangeClause := func(prefixValues []int64, operator string, boundValue int64) boundWhereClause {
 			componentValues := append(slices.Clone(prefixValues), boundValue)
 			packed := finalizePackedForStorageType(computePackedInt64ValueNonNegative(componentValues, slotDigitsLocal))
 
-			// Avoid underfetch due to truncation on strict bounds.
+			// Truncation can widen the physical bound, so keep the ORM exact with post-filtering.
 			switch operator {
 			case ">":
 				operator = ">="
@@ -282,16 +281,22 @@ func registerPackedIndex(
 				operator = "<="
 			}
 
-			return fmt.Sprintf("%v %v %v", packedColumnNameLocal, operator, packed)
+			return boundWhereClause{
+				Clause: fmt.Sprintf("%v %v ?", packedColumnNameLocal, operator),
+				Values: []any{packed},
+			}
 		}
 
-		whereStatements := []string{}
+		whereStatements := []boundWhereClause{}
 		for _, prefixValues := range prefixValueGroups {
 			switch lastStatement.Operator {
 			case "=":
 				componentValues := append(slices.Clone(prefixValues), convertToInt64(lastStatement.Value))
 				packed := finalizePackedForStorageType(computePackedInt64ValueNonNegative(componentValues, slotDigitsLocal))
-				whereStatements = append(whereStatements, fmt.Sprintf("%v = %v", packedColumnNameLocal, packed))
+				whereStatements = append(whereStatements, boundWhereClause{
+					Clause: fmt.Sprintf("%v = ?", packedColumnNameLocal),
+					Values: []any{packed},
+				})
 			case "BETWEEN":
 				if len(lastStatement.From) == 0 || len(lastStatement.To) == 0 {
 					return nil
@@ -300,7 +305,10 @@ func registerPackedIndex(
 				toValue := convertToInt64(lastStatement.To[0].Value)
 				fromClause := emitRangeClause(prefixValues, ">=", fromValue)
 				toClause := emitRangeClause(prefixValues, "<=", toValue)
-				whereStatements = append(whereStatements, fromClause+" AND "+toClause)
+				whereStatements = append(whereStatements, boundWhereClause{
+					Clause: fromClause.Clause + " AND " + toClause.Clause,
+					Values: append(fromClause.Values, toClause.Values...),
+				})
 			case ">", ">=", "<", "<=":
 				whereStatements = append(whereStatements, emitRangeClause(prefixValues, lastStatement.Operator, convertToInt64(lastStatement.Value)))
 			default:

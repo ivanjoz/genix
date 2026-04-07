@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -91,10 +92,10 @@ func TestCompiledSelectStatementBindsPackedViewFanout(t *testing.T) {
 	}
 
 	selectedStatements := pickStatementsByIndexes(collectSelectStatements(query.GetTableInfo()), compiledStatement.selectedStatementIndexes)
-	expectedWhereStatements := compiledStatement.sourceView.getStatement(selectedStatements...)
+	expectedWhereStatements := compiledStatement.sourceView.getStatementPrepared(selectedStatements...)
 	expectedQueries := map[string]bool{}
 	for _, whereStatement := range expectedWhereStatements {
-		expectedQueries[fmt.Sprintf(compiledStatement.queryTemplate, " WHERE "+whereStatement)] = true
+		expectedQueries[fmt.Sprintf(compiledStatement.queryTemplate, " WHERE "+whereStatement.Clause)] = true
 	}
 
 	for _, boundStatement := range boundPlan.Statements {
@@ -118,7 +119,7 @@ func TestBuildBoundSelectPlanSplitsLargeInQueriesWithDefaultLimit(t *testing.T) 
 		nil,
 		false,
 		false,
-		[]string{"company_id = 1"},
+		[]boundWhereClause{{Clause: "company_id = ?", Values: []any{1}}},
 		[]ColumnStatement{{Col: "id", Operator: "IN", Values: inValues}},
 		nil,
 		nil,
@@ -131,11 +132,14 @@ func TestBuildBoundSelectPlanSplitsLargeInQueriesWithDefaultLimit(t *testing.T) 
 	if len(boundPlan.Statements) != 2 {
 		t.Fatalf("expected 2 batched queries, got %d", len(boundPlan.Statements))
 	}
-	if !strings.Contains(boundPlan.Statements[0].QueryStr, "id IN (1, 2") {
-		t.Fatalf("expected first batch to keep the first IDs, got %q", boundPlan.Statements[0].QueryStr)
+	if !strings.Contains(boundPlan.Statements[0].QueryStr, "id IN (?, ?") {
+		t.Fatalf("expected first batch to keep placeholders, got %q", boundPlan.Statements[0].QueryStr)
 	}
-	if !strings.Contains(boundPlan.Statements[1].QueryStr, "id IN (101, 102") {
-		t.Fatalf("expected second batch to continue after the default limit, got %q", boundPlan.Statements[1].QueryStr)
+	if firstID, lastID := boundPlan.Statements[0].QueryValues[1], boundPlan.Statements[0].QueryValues[len(boundPlan.Statements[0].QueryValues)-1]; firstID != 1 || lastID != 100 {
+		t.Fatalf("expected first batch values 1..100, got %v", boundPlan.Statements[0].QueryValues)
+	}
+	if secondID, lastID := boundPlan.Statements[1].QueryValues[1], boundPlan.Statements[1].QueryValues[len(boundPlan.Statements[1].QueryValues)-1]; secondID != 101 || lastID != 120 {
+		t.Fatalf("expected second batch values 101..120, got %v", boundPlan.Statements[1].QueryValues)
 	}
 }
 
@@ -148,7 +152,7 @@ func TestBuildBoundSelectPlanSplitsCartesianInQueriesByEnvLimit(t *testing.T) {
 		nil,
 		false,
 		false,
-		[]string{"company_id = 1"},
+		[]boundWhereClause{{Clause: "company_id = ?", Values: []any{1}}},
 		[]ColumnStatement{
 			{Col: "status", Operator: "IN", Values: []any{1, 2, 3}},
 			{Col: "id", Operator: "IN", Values: []any{10, 11, 12, 13}},
@@ -165,15 +169,15 @@ func TestBuildBoundSelectPlanSplitsCartesianInQueriesByEnvLimit(t *testing.T) {
 		t.Fatalf("expected 2 cartesian batches, got %d", len(boundPlan.Statements))
 	}
 	for _, boundStatement := range boundPlan.Statements {
-		if !strings.Contains(boundStatement.QueryStr, "status IN (1, 2, 3)") {
-			t.Fatalf("expected status IN clause to stay intact, got %q", boundStatement.QueryStr)
+		if !strings.Contains(boundStatement.QueryStr, "status IN (?, ?, ?)") {
+			t.Fatalf("expected status IN clause to keep placeholders, got %q", boundStatement.QueryStr)
 		}
 	}
-	if !strings.Contains(boundPlan.Statements[0].QueryStr, "id IN (10, 11)") {
-		t.Fatalf("expected first cartesian batch to keep the first ID chunk, got %q", boundPlan.Statements[0].QueryStr)
+	if got := boundPlan.Statements[0].QueryValues; !slices.Equal(got, []any{1, 1, 2, 3, 10, 11}) {
+		t.Fatalf("expected first cartesian batch values, got %v", got)
 	}
-	if !strings.Contains(boundPlan.Statements[1].QueryStr, "id IN (12, 13)") {
-		t.Fatalf("expected second cartesian batch to keep the second ID chunk, got %q", boundPlan.Statements[1].QueryStr)
+	if got := boundPlan.Statements[1].QueryValues; !slices.Equal(got, []any{1, 1, 2, 3, 12, 13}) {
+		t.Fatalf("expected second cartesian batch values, got %v", got)
 	}
 }
 

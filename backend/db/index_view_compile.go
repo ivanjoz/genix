@@ -140,13 +140,21 @@ func compileSchemaViewTable(dbTable *ScyllaTable[any], viewCfg Index) {
 	slices.Sort(view.availableColumns)
 
 	viewPtr := view
-	view.getStatement = func(statements ...ColumnStatement) []string {
-		whereClauses := []string{}
+	view.getStatementPrepared = func(statements ...ColumnStatement) []boundWhereClause {
+		whereClauses := []boundWhereClause{}
 		for _, statement := range statements {
 			if len(statement.From) > 0 {
 				for idx := range statement.From {
-					whereClauses = append(whereClauses, fmt.Sprintf("%v >= %v", statement.From[idx].Col, statement.From[idx].GetValue()))
-					whereClauses = append(whereClauses, fmt.Sprintf("%v <= %v", statement.To[idx].Col, statement.To[idx].GetValue()))
+					whereClauses = append(whereClauses,
+						boundWhereClause{
+							Clause: fmt.Sprintf("%v >= ?", statement.From[idx].Col),
+							Values: []any{statement.From[idx].Value},
+						},
+						boundWhereClause{
+							Clause: fmt.Sprintf("%v <= ?", statement.To[idx].Col),
+							Values: []any{statement.To[idx].Value},
+						},
+					)
 				}
 				continue
 			}
@@ -155,11 +163,35 @@ func compileSchemaViewTable(dbTable *ScyllaTable[any], viewCfg Index) {
 			if viewPtr.fanoutColumnName == statement.Col && operator == "CONTAINS" {
 				operator = "="
 			}
-			whereClauses = append(whereClauses, fmt.Sprintf("%v %v %v", statement.Col, operator, statement.GetValue()))
+			if operator == "IN" {
+				placeholders := make([]string, 0, len(statement.Values))
+				queryValues := make([]any, 0, len(statement.Values))
+				for _, value := range statement.Values {
+					placeholders = append(placeholders, "?")
+					queryValues = append(queryValues, value)
+				}
+				whereClauses = append(whereClauses, boundWhereClause{
+					Clause: fmt.Sprintf("%v IN (%v)", statement.Col, strings.Join(placeholders, ", ")),
+					Values: queryValues,
+				})
+				continue
+			}
+			whereClauses = append(whereClauses, boundWhereClause{
+				Clause: fmt.Sprintf("%v %v ?", statement.Col, operator),
+				Values: []any{statement.Value},
+			})
 		}
-		return []string{strings.Join(whereClauses, " AND ")}
-	}
 
+		combinedClause := boundWhereClause{}
+		for _, whereClause := range whereClauses {
+			if combinedClause.Clause != "" {
+				combinedClause.Clause += " AND "
+			}
+			combinedClause.Clause += whereClause.Clause
+			combinedClause.Values = append(combinedClause.Values, whereClause.Values...)
+		}
+		return []boundWhereClause{combinedClause}
+	}
 	view.getCreateScript = func() string {
 		columnDefinitions := make([]string, 0, len(viewPtr.tableColumns))
 		for _, column := range viewPtr.tableColumns {
@@ -383,7 +415,7 @@ func compileSchemaView(dbTable *ScyllaTable[any], viewCfg Index) {
 
 		viewPtr := view
 		viewCfgPtr := &viewCfg
-		view.getStatement = func(statements ...ColumnStatement) []string {
+		view.getStatementPrepared = func(statements ...ColumnStatement) []boundWhereClause {
 			statementsMap := map[string]statementRangeGroup{}
 			useBeetween := false
 
@@ -453,7 +485,7 @@ func compileSchemaView(dbTable *ScyllaTable[any], viewCfg Index) {
 				return valuesGroups, rangeColumns
 			}
 
-			whereStatements := []string{}
+			whereStatements := []boundWhereClause{}
 			if useBeetween {
 				valuesFrom, valuesTo := []int64{}, []int64{}
 				for _, col := range viewCols {
@@ -465,18 +497,20 @@ func compileSchemaView(dbTable *ScyllaTable[any], viewCfg Index) {
 						valuesTo = append(valuesTo, convertToInt64(srg.from.Value))
 					}
 				}
-				whereStatement := fmt.Sprintf("%v >= %v AND %v < %v",
-					viewPtr.column.GetName(), makeValue(valuesFrom),
-					viewPtr.column.GetName(), makeValue(valuesTo)+1,
-				)
+				whereStatement := boundWhereClause{
+					Clause: fmt.Sprintf("%v >= ? AND %v < ?", viewPtr.column.GetName(), viewPtr.column.GetName()),
+					Values: []any{makeValue(valuesFrom), makeValue(valuesTo) + 1},
+				}
 				if partStatement != nil {
 					pk := dbTable.GetPartKey()
 					if pk != nil && !pk.IsNil() {
-						whereStatement = fmt.Sprintf("%v = %v AND %v",
-							pk.GetName(), convertToInt64(partStatement.Value), whereStatement)
+						whereStatement = boundWhereClause{
+							Clause: fmt.Sprintf("%v = ? AND %v", pk.GetName(), whereStatement.Clause),
+							Values: append([]any{convertToInt64(partStatement.Value)}, whereStatement.Values...),
+						}
 					}
 				}
-				return []string{whereStatement}
+				return []boundWhereClause{whereStatement}
 			} else if len(statements) > 0 && slices.Contains(rangeOperators, statements[len(statements)-1].Operator) {
 				valuesGroups, rangeColumns := getValuesGroups()
 				for _, prefixValues := range valuesGroups {
@@ -490,28 +524,33 @@ func compileSchemaView(dbTable *ScyllaTable[any], viewCfg Index) {
 					}
 
 					upperBound := makeValue(prefixFloorValues) + Pow10Int64(sumSlotDigits(slotDigitsPerColumn, len(prefixValues)))
-					whereStatements = append(whereStatements, fmt.Sprintf("%v >= %v AND %v < %v",
-						viewPtr.column.GetName(), makeValue(valuesFrom),
-						viewPtr.column.GetName(), upperBound,
-					))
+					whereStatements = append(whereStatements, boundWhereClause{
+						Clause: fmt.Sprintf("%v >= ? AND %v < ?", viewPtr.column.GetName(), viewPtr.column.GetName()),
+						Values: []any{makeValue(valuesFrom), upperBound},
+					})
 				}
 			} else {
 				valuesGroups, _ := getValuesGroups()
-				hashValues := []int64{}
+				hashValues := make([]any, 0, len(valuesGroups))
+				placeholders := make([]string, 0, len(valuesGroups))
 				for _, values := range valuesGroups {
 					hashValues = append(hashValues, makeValue(values))
+					placeholders = append(placeholders, "?")
 				}
-				whereStatements = append(whereStatements,
-					fmt.Sprintf("%v IN (%v)", viewPtr.column.GetName(), Concatx(", ", hashValues)),
-				)
+				whereStatements = append(whereStatements, boundWhereClause{
+					Clause: fmt.Sprintf("%v IN (%v)", viewPtr.column.GetName(), strings.Join(placeholders, ", ")),
+					Values: hashValues,
+				})
 			}
 
 			if partStatement != nil {
 				pk := dbTable.GetPartKey()
 				if pk != nil && !pk.IsNil() {
 					for i, ws := range whereStatements {
-						whereStatements[i] = fmt.Sprintf("%v = %v AND %v",
-							pk.GetName(), convertToInt64(partStatement.Value), ws)
+						whereStatements[i] = boundWhereClause{
+							Clause: fmt.Sprintf("%v = ? AND %v", pk.GetName(), ws.Clause),
+							Values: append([]any{convertToInt64(partStatement.Value)}, ws.Values...),
+						}
 					}
 				}
 			}
@@ -531,9 +570,8 @@ func compileSchemaView(dbTable *ScyllaTable[any], viewCfg Index) {
 			return HashInt(values...)
 		}
 
-		view.getStatement = func(statements ...ColumnStatement) []string {
+		view.getStatementPrepared = func(statements ...ColumnStatement) []boundWhereClause {
 			valuesGroups := [][]any{{}}
-			statement := ""
 			for _, e := range viewCols {
 				for _, st := range statements {
 					if st.Col == e.GetName() {
@@ -558,16 +596,26 @@ func compileSchemaView(dbTable *ScyllaTable[any], viewCfg Index) {
 				}
 			}
 
-			hashValues := []string{}
+			hashValues := make([]any, 0, len(valuesGroups))
 			for _, values := range valuesGroups {
-				hashValues = append(hashValues, fmt.Sprintf("%v", HashInt(values...)))
+				hashValues = append(hashValues, HashInt(values...))
 			}
 
+			statement := boundWhereClause{}
 			if len(hashValues) == 1 {
-				statement = fmt.Sprintf("%v = %v", viewPtr.column.GetName(), hashValues[0])
+				statement = boundWhereClause{
+					Clause: fmt.Sprintf("%v = ?", viewPtr.column.GetName()),
+					Values: []any{hashValues[0]},
+				}
 			} else {
-				values := strings.Join(hashValues, ", ")
-				statement = fmt.Sprintf("%v IN (%v)", viewPtr.column.GetName(), values)
+				placeholders := make([]string, 0, len(hashValues))
+				for range hashValues {
+					placeholders = append(placeholders, "?")
+				}
+				statement = boundWhereClause{
+					Clause: fmt.Sprintf("%v IN (%v)", viewPtr.column.GetName(), strings.Join(placeholders, ", ")),
+					Values: hashValues,
+				}
 			}
 
 			if viewCfgPtr.KeepPart {
@@ -575,12 +623,16 @@ func compileSchemaView(dbTable *ScyllaTable[any], viewCfg Index) {
 				if pk != nil && !pk.IsNil() {
 					for _, st := range statements {
 						if st.Col == pk.GetName() {
-							statement = fmt.Sprintf("%v = %v AND ", st.Col, st.Value) + statement
+							statement = boundWhereClause{
+								Clause: fmt.Sprintf("%v = ? AND %v", st.Col, statement.Clause),
+								Values: append([]any{st.Value}, statement.Values...),
+							}
+							break
 						}
 					}
 				}
 			}
-			return []string{statement}
+			return []boundWhereClause{statement}
 		}
 	}
 

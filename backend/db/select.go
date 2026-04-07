@@ -53,7 +53,7 @@ type compositeBucketSelection struct {
 
 // compositeBucketQueryPlan captures the generated indexed where-clauses plus source statements to keep for final exact filtering.
 type compositeBucketQueryPlan struct {
-	whereStatements  []string
+	whereStatements  []boundWhereClause
 	handledColumns   map[string]bool
 	filterStatements []ColumnStatement
 }
@@ -93,19 +93,43 @@ func deduplicateRecordsByPrimaryKey[E any](records *[]E, scyllaTable ScyllaTable
 	*records = recordsDeduplicated
 }
 
-func buildRemainingWhereClauses(statements []ColumnStatement) []string {
-	clauses := []string{}
+func buildRemainingWhereClauses(statements []ColumnStatement) []boundWhereClause {
+	clauses := []boundWhereClause{}
 	for _, statement := range statements {
 		if len(statement.From) > 0 {
 			for idx := range statement.From {
 				columnName := statement.From[idx].Col
 				// Keep BETWEEN inclusive to match the fluent API and post-filter behavior.
-				clauses = append(clauses, fmt.Sprintf("%v >= %v", columnName, statement.From[idx].GetValue()))
-				clauses = append(clauses, fmt.Sprintf("%v <= %v", columnName, statement.To[idx].GetValue()))
+				clauses = append(clauses, boundWhereClause{
+					Clause: fmt.Sprintf("%v >= ?", columnName),
+					Values: []any{statement.From[idx].Value},
+				})
+				clauses = append(clauses, boundWhereClause{
+					Clause: fmt.Sprintf("%v <= ?", columnName),
+					Values: []any{statement.To[idx].Value},
+				})
 			}
 			continue
 		}
-		clauses = append(clauses, fmt.Sprintf("%v %v %v", statement.Col, statement.Operator, statement.GetValue()))
+
+		if statement.Operator == "IN" {
+			placeholders := make([]string, 0, len(statement.Values))
+			queryValues := make([]any, 0, len(statement.Values))
+			for _, value := range statement.Values {
+				placeholders = append(placeholders, "?")
+				queryValues = append(queryValues, value)
+			}
+			clauses = append(clauses, boundWhereClause{
+				Clause: fmt.Sprintf("%v IN (%v)", statement.Col, strings.Join(placeholders, ", ")),
+				Values: queryValues,
+			})
+			continue
+		}
+
+		clauses = append(clauses, boundWhereClause{
+			Clause: fmt.Sprintf("%v %v ?", statement.Col, statement.Operator),
+			Values: []any{statement.Value},
+		})
 	}
 	return clauses
 }
@@ -652,7 +676,7 @@ func tryBuildCompositeBucketPlan(statements []ColumnStatement, scyllaTable Scyll
 			queryValueGroups = nextGroups
 		}
 
-		whereStatements := []string{}
+		whereStatements := []boundWhereClause{}
 		// Emit one indexed CONTAINS statement per (bucket selection x source tuple) combination.
 		partitionValue := partitionStatements[0].GetValue()
 		for _, bucketSelection := range bucketSelections {
@@ -673,9 +697,10 @@ func tryBuildCompositeBucketPlan(statements []ColumnStatement, scyllaTable Scyll
 				}
 
 				hashValue := HashInt64(hashValues...)
-				whereStatements = append(whereStatements,
-					fmt.Sprintf("%v = %v AND %v CONTAINS %v", partitionColumn.GetName(), partitionValue, virtualColumn.GetName(), hashValue),
-				)
+				whereStatements = append(whereStatements, boundWhereClause{
+					Clause: fmt.Sprintf("%v = ? AND %v CONTAINS ?", partitionColumn.GetName(), virtualColumn.GetName()),
+					Values: []any{partitionValue, hashValue},
+				})
 			}
 		}
 

@@ -176,10 +176,12 @@ func TestBuildNativeGroupByPlanWithPackedView(t *testing.T) {
 	}
 
 	packedView := plan.ScanColumns[0].DecomposeView
-	expectedLowerBound := computePackedInt64ValueNonNegative([]int64{15, 0}, packedView.packedSlotDigitsPerColumn)
-	expectedClause := fmt.Sprintf("empresa_id = 7 AND %s >= %d", packedView.column.GetName(), expectedLowerBound)
-	if len(plan.WhereStatements) != 1 || plan.WhereStatements[0] != expectedClause {
+	expectedClause := fmt.Sprintf("empresa_id = ? AND %s >= ?", packedView.column.GetName())
+	if len(plan.WhereStatements) != 1 || plan.WhereStatements[0].Clause != expectedClause {
 		t.Fatalf("unexpected packed where clauses: %v", plan.WhereStatements)
+	}
+	if got := plan.WhereStatements[0].Values; len(got) != 2 || convertToInt64(got[0]) != 7 || convertToInt64(got[1]) <= 0 {
+		t.Fatalf("unexpected packed where values: %v", got)
 	}
 }
 
@@ -309,7 +311,7 @@ func TestPackedViewCapabilityMatchesEqualityPrefixPlusRange(t *testing.T) {
 		t.Fatalf("expected a packed range view, got %+v", bestCapability.Source)
 	}
 
-	whereStatements := bestCapability.Source.getStatement(query.GetTableInfo().statements...)
+	whereStatements := bestCapability.Source.getStatementPrepared(query.GetTableInfo().statements...)
 	if len(whereStatements) != 1 {
 		t.Fatalf("expected a single packed where clause, got %v", whereStatements)
 	}
@@ -317,12 +319,15 @@ func TestPackedViewCapabilityMatchesEqualityPrefixPlusRange(t *testing.T) {
 	packedView := bestCapability.Source
 	expectedLowerBound := computePackedInt64ValueNonNegative([]int64{6, 0}, packedView.packedSlotDigitsPerColumn)
 	expectedUpperBound := computePackedInt64ValueNonNegative([]int64{7, 0}, packedView.packedSlotDigitsPerColumn)
-	expectedWhere := fmt.Sprintf("empresa_id = 1 AND %s >= %d AND %s < %d",
-		packedView.column.GetName(), expectedLowerBound,
-		packedView.column.GetName(), expectedUpperBound,
+	expectedWhere := fmt.Sprintf("empresa_id = ? AND %s >= ? AND %s < ?",
+		packedView.column.GetName(),
+		packedView.column.GetName(),
 	)
-	if whereStatements[0] != expectedWhere {
+	if whereStatements[0].Clause != expectedWhere {
 		t.Fatalf("unexpected packed where clause: %v", whereStatements[0])
+	}
+	if got := whereStatements[0].Values; len(got) != 3 || convertToInt64(got[0]) != 1 || convertToInt64(got[1]) != expectedLowerBound || convertToInt64(got[2]) != expectedUpperBound {
+		t.Fatalf("unexpected packed where values: %v", got)
 	}
 }
 
@@ -343,16 +348,19 @@ func TestInt32PackedViewUpperBoundKeepsCarryDigit(t *testing.T) {
 		t.Fatal("expected int32 packed range views to skip post-filtering")
 	}
 
-	whereStatements := bestCapability.Source.getStatement(query.GetTableInfo().statements...)
+	whereStatements := bestCapability.Source.getStatementPrepared(query.GetTableInfo().statements...)
 	if len(whereStatements) != 1 {
 		t.Fatalf("expected a single packed where clause, got %v", whereStatements)
 	}
 
-	expectedWhere := fmt.Sprintf("empresa_id = 1 AND %s >= 938768176 AND %s < 1000000000",
+	expectedWhere := fmt.Sprintf("empresa_id = ? AND %s >= ? AND %s < ?",
 		bestCapability.Source.column.GetName(),
 		bestCapability.Source.column.GetName(),
 	)
-	if whereStatements[0] != expectedWhere {
+	if whereStatements[0].Clause != expectedWhere {
 		t.Fatalf("unexpected int32 packed where clause: %v", whereStatements[0])
+	}
+	if got := whereStatements[0].Values; len(got) != 3 || convertToInt64(got[0]) != 1 || convertToInt64(got[1]) != 938768176 || convertToInt64(got[2]) != 1000000000 {
+		t.Fatalf("unexpected int32 packed where values: %v", got)
 	}
 }
