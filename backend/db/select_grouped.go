@@ -119,11 +119,6 @@ func buildIndexGroupSelectPlan(tableInfo *TableInfo, scyllaTable ScyllaTable[any
 	bestScore := -1
 	for indexGroupIndex := range scyllaTable.indexGroups {
 		indexGroup := &scyllaTable.indexGroups[indexGroupIndex]
-		if indexGroup.virtualColumn == nil || indexGroup.virtualColumn.IsNil() {
-			// Single-column IndexGroups do not have a queryable hash column yet.
-			continue
-		}
-
 		score, isValid := scoreIndexGroupCandidate(*indexGroup, statementByColumn)
 		if !isValid || score <= bestScore {
 			continue
@@ -405,7 +400,7 @@ func fetchIndexGroupRecordGroups[E any](
 		fetchState := fetchState
 
 		eg.Go(func() error {
-			queryStr, queryValues := buildIndexGroupFetchQuery(scyllaTable, queryPlan, fetchState.hashValue, selectExpressions)
+			queryStr, queryValues := buildIndexGroupFetchQuery(scyllaTable, queryPlan, fetchState, selectExpressions)
 			records := []E{}
 			if err := scanSelectQueryRows(
 				queryStr,
@@ -440,18 +435,26 @@ func fetchIndexGroupRecordGroups[E any](
 func buildIndexGroupFetchQuery(
 	scyllaTable ScyllaTable[any],
 	queryPlan *indexGroupSelectPlan,
-	hashValue int32,
+	fetchState indexGroupFetchState,
 	selectExpressions []string,
 ) (string, []any) {
 	whereStatements := []string{
 		fmt.Sprintf("%v = ?", scyllaTable.GetPartKey().GetName()),
 	}
-	queryValues := []any{queryPlan.partitionValue, hashValue}
+	queryValues := []any{queryPlan.partitionValue}
 
-	if queryPlan.indexGroup.usesCollectionValues {
+	// Single-column groups already have a real secondary index on the source column,
+	// so grouped fetches can probe that column directly without a virtual hash column.
+	if queryPlan.indexGroup.virtualColumn == nil || queryPlan.indexGroup.virtualColumn.IsNil() {
+		sourceColumn := queryPlan.indexGroup.sourceColumns[0].column
+		whereStatements = append(whereStatements, fmt.Sprintf("%v = ?", sourceColumn.GetName()))
+		queryValues = append(queryValues, fetchState.indexGroupValues[0])
+	} else if queryPlan.indexGroup.usesCollectionValues {
 		whereStatements = append(whereStatements, fmt.Sprintf("%v CONTAINS ?", queryPlan.indexGroup.virtualColumn.GetName()))
+		queryValues = append(queryValues, fetchState.hashValue)
 	} else {
 		whereStatements = append(whereStatements, fmt.Sprintf("%v = ?", queryPlan.indexGroup.virtualColumn.GetName()))
+		queryValues = append(queryValues, fetchState.hashValue)
 	}
 
 	queryStr := fmt.Sprintf(

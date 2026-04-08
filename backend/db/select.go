@@ -723,6 +723,8 @@ func tryBuildCompositeBucketPlan(statements []ColumnStatement, scyllaTable Scyll
 	return nil
 }
 
+
+
 // selectExec executes a query using TableSchema and TableInfo
 func selectExec[E any](
 	recordsGetted *[]E,

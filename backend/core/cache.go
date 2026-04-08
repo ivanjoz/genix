@@ -71,6 +71,27 @@ func GetCacheByKeys(empresaID int32, cacheKeys ...string) ([]Cache, error) {
 	return cacheRows, nil
 }
 
+func ExtractGroupIndexCacheValues(req *HandlerArgs) ([]db.GroupIndexCache, error) {
+
+	groupHashes := parseConcatenatedInts(req.GetQuery("cc-gh"))
+	updateCounters := parseConcatenatedInts(req.GetQuery("cc-upc"))
+
+	records := []db.GroupIndexCache{}
+
+	for i, gh := range groupHashes {
+		if i >= len(updateCounters) {
+			continue
+		}
+		records = append(records, db.GroupIndexCache{
+			GroupHash: int32(gh),
+			UpdateCounter: int32(updateCounters[1]),
+		})
+	}
+
+	Log("records extracted:", len(records))
+	return records, nil
+}
+
 func ExtractCacheVersionValues(req *HandlerArgs) ([]db.IDCacheVersion, error) {
 	idsStr := req.GetQuery("ids")
 	// New cache delta protocol keys: cc-ids for cached IDs and cc-ver for aligned cache versions.

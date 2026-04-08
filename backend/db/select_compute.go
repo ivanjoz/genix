@@ -546,12 +546,14 @@ func (dbTable *ScyllaTable[T]) ComputeCapabilities() []QueryCapability {
 
 	// 3. Views
 	for _, view := range dbTable.indexViews {
-		if view.Type < 6 {
+		// Type 3 (index group hash views) are allowed even though they are < 6;
+		// all other sub-6 types (local/global indexes) are handled above.
+		if view.Type != 3 && view.Type < 6 {
 			continue
 		}
 
 		sigBase := ""
-		if view.Type == 7 || view.Type == 3 { // Hash
+		if view.Type == 7 || view.Type == 3 { // Hash / Index-Group
 			cols := []string{}
 			for _, col := range view.columns {
 				column := dbTable.columnsMap[col]
@@ -564,6 +566,29 @@ func (dbTable *ScyllaTable[T]) ComputeCapabilities() []QueryCapability {
 				Source:    view,
 				Priority:  30 + len(view.columns)*2,
 			})
+
+			// Index groups support BETWEEN on each non-slice source column by
+			// enumerating discrete values and computing one hash per value.
+			for rangeColIdx, col := range view.columns {
+				colInfo := dbTable.columnsMap[col]
+				if colInfo != nil && colInfo.GetType().IsSlice {
+					continue // slice columns only support CONTAINS, not range
+				}
+				rangeSigParts := make([]string, 0, len(view.columns)*2)
+				for i, c := range view.columns {
+					ci := dbTable.columnsMap[c]
+					if i == rangeColIdx {
+						rangeSigParts = append(rangeSigParts, c, "~")
+					} else {
+						rangeSigParts = append(rangeSigParts, c, capabilityDefaultOpForColumn(ci))
+					}
+				}
+				caps = append(caps, QueryCapability{
+					Signature: strings.Join(rangeSigParts, "|"),
+					Source:    view,
+					Priority:  28 + len(view.columns)*2, // slightly lower than full equality
+				})
+			}
 		} else if view.Type == 6 { // Simple View
 			currentSig := ""
 			for i, col := range view.columns {

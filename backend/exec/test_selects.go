@@ -38,8 +38,8 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	recordSalesOrders := []comercial.SaleOrder{}
 	q6 := db.Query(&recordSalesOrders)
 	err = q6.CompanyID.Equals(1).
-		DetailProductsIDs.Contains(1).
-		Fecha.Between(20475, 20495). //.AllowFilter().
+		DetailProductsIDs.Contains(3372).
+		Fecha.Between(20530, 20540). //.AllowFilter().
 		Exec()
 
 	if err != nil {

@@ -692,51 +692,56 @@ func compileSelectStatement(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) 
 	if bestCapability != nil {
 		if bestCapability.Source != nil {
 			selectedView := bestCapability.Source
-			if selectedView.Type >= 6 && canUseProjectedView(columnNames, selectedView) {
+			// Index group views (Type 3) query the main table via a virtual hash column;
+			// projected views (Type >= 6) redirect to a separate view table.
+			isIndexGroupView := selectedView.Type == 3 && selectedView.getStatementPrepared != nil
+			isProjectedView := selectedView.Type >= 6 && canUseProjectedView(columnNames, selectedView)
+
+			if isProjectedView {
 				viewTableName = selectedView.name
 				if selectedView.Type == 9 {
 					compiledStatement.requiresDeduplication = true
 				}
+			}
 
-				if selectedView.getStatementPrepared != nil {
-					selectedStatementIndexes := []int{}
-					remainingStatementIndexes := []int{}
+			if (isProjectedView && selectedView.getStatementPrepared != nil) || isIndexGroupView {
+				selectedStatementIndexes := []int{}
+				remainingStatementIndexes := []int{}
 
-					for statementIndex, statement := range statements {
-						if slices.Contains(selectedView.columns, statement.Col) {
+				for statementIndex, statement := range statements {
+					if slices.Contains(selectedView.columns, statement.Col) {
+						selectedStatementIndexes = append(selectedStatementIndexes, statementIndex)
+						continue
+					}
+					if len(statement.From) > 0 {
+						isIncluded := true
+						for _, betweenStatement := range statement.From {
+							if !slices.Contains(selectedView.columns, betweenStatement.Col) {
+								isIncluded = false
+								break
+							}
+						}
+						if isIncluded {
 							selectedStatementIndexes = append(selectedStatementIndexes, statementIndex)
-							continue
+						} else {
+							remainingStatementIndexes = append(remainingStatementIndexes, statementIndex)
 						}
-						if len(statement.From) > 0 {
-							isIncluded := true
-							for _, betweenStatement := range statement.From {
-								if !slices.Contains(selectedView.columns, betweenStatement.Col) {
-									isIncluded = false
-									break
-								}
-							}
-							if isIncluded {
-								selectedStatementIndexes = append(selectedStatementIndexes, statementIndex)
-							} else {
-								remainingStatementIndexes = append(remainingStatementIndexes, statementIndex)
-							}
-							continue
-						}
-						remainingStatementIndexes = append(remainingStatementIndexes, statementIndex)
+						continue
 					}
+					remainingStatementIndexes = append(remainingStatementIndexes, statementIndex)
+				}
 
-					compiledStatement.route = selectRouteViewStatements
-					compiledStatement.sourceView = selectedView
-					compiledStatement.selectedStatementIndexes = selectedStatementIndexes
-					compiledStatement.remainingStatementIndexes = remainingStatementIndexes
-					if selectedView.column != nil && !selectedView.column.IsNil() {
-						compiledStatement.orderColumnName = selectedView.column.GetName()
-					}
-					if selectedView.RequiresPostFilter {
-						// Post-filter must use current runtime values, so only the statement indexes are cached.
-						compiledStatement.postFilterStatementIndexes = slices.Clone(selectedStatementIndexes)
-						compiledStatement.requiresDeduplication = true
-					}
+				compiledStatement.route = selectRouteViewStatements
+				compiledStatement.sourceView = selectedView
+				compiledStatement.selectedStatementIndexes = selectedStatementIndexes
+				compiledStatement.remainingStatementIndexes = remainingStatementIndexes
+				if selectedView.column != nil && !selectedView.column.IsNil() {
+					compiledStatement.orderColumnName = selectedView.column.GetName()
+				}
+				if selectedView.RequiresPostFilter || isIndexGroupView {
+					// Index group views: always post-filter to guard against hash collisions.
+					compiledStatement.postFilterStatementIndexes = slices.Clone(selectedStatementIndexes)
+					compiledStatement.requiresDeduplication = true
 				}
 			}
 		} else if bestCapability.IsKey {

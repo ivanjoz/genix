@@ -68,6 +68,72 @@ func TestBuildIndexGroupSelectPlanPrefersMostSpecificRawGroup(t *testing.T) {
 	}
 }
 
+func TestBuildIndexGroupSelectPlanAllowsSingleColumnRawGroup(t *testing.T) {
+	scyllaTable := MakeScyllaTable[indexGroupRecord, indexGroupSchema]()
+	tableInfo := &TableInfo{
+		statements: []ColumnStatement{
+			{Col: "empresa_id", Operator: "=", Value: int32(7)},
+			{Col: "fecha", Operator: "BETWEEN", From: []ColumnStatement{{Col: "fecha", Value: int16(18754)}}, To: []ColumnStatement{{Col: "fecha", Value: int16(18756)}}},
+		},
+	}
+
+	queryPlan, err := buildIndexGroupSelectPlan(tableInfo, scyllaTable)
+	if err != nil {
+		t.Fatalf("buildIndexGroupSelectPlan returned error: %v", err)
+	}
+
+	if queryPlan.indexGroup.name != "fecha" {
+		t.Fatalf("expected single-column index group, got %q", queryPlan.indexGroup.name)
+	}
+	if queryPlan.indexGroup.virtualColumn != nil && !queryPlan.indexGroup.virtualColumn.IsNil() {
+		t.Fatalf("single-column index group should not require a virtual column, got %s", queryPlan.indexGroup.virtualColumn.GetName())
+	}
+	if len(queryPlan.hashGroups) != 3 {
+		t.Fatalf("expected 3 hash groups, got %+v", queryPlan.hashGroups)
+	}
+	expectedFechas := map[int64]bool{
+		18754: false,
+		18755: false,
+		18756: false,
+	}
+	for _, hashGroup := range queryPlan.hashGroups {
+		if len(hashGroup.indexGroupValues) != 1 {
+			t.Fatalf("unexpected single-column values: %+v", hashGroup)
+		}
+		fechaValue := hashGroup.indexGroupValues[0]
+		if _, exists := expectedFechas[fechaValue]; !exists {
+			t.Fatalf("unexpected single-column value: %+v", hashGroup)
+		}
+		expectedFechas[fechaValue] = true
+	}
+	for fechaValue, wasSeen := range expectedFechas {
+		if !wasSeen {
+			t.Fatalf("missing expected fecha value %d in %+v", fechaValue, queryPlan.hashGroups)
+		}
+	}
+}
+
+func TestBuildIndexGroupFetchQueryUsesSourceColumnForSingleColumnGroup(t *testing.T) {
+	scyllaTable := MakeScyllaTable[indexGroupRecord, indexGroupSchema]()
+	queryPlan := &indexGroupSelectPlan{
+		partitionValue: 7,
+		indexGroup:     scyllaTable.indexGroups[0],
+	}
+	fetchState := indexGroupFetchState{
+		hashValue:        HashInt64(18754),
+		indexGroupValues: []int64{18754},
+	}
+
+	queryStr, queryValues := buildIndexGroupFetchQuery(scyllaTable, queryPlan, fetchState, []string{"*"})
+	expectedQuery := "SELECT * FROM test_keyspace.index_group_records WHERE empresa_id = ? AND fecha = ?"
+	if queryStr != expectedQuery {
+		t.Fatalf("unexpected query: %s", queryStr)
+	}
+	if len(queryValues) != 2 || queryValues[0] != int32(7) || queryValues[1] != int64(18754) {
+		t.Fatalf("unexpected query values: %+v", queryValues)
+	}
+}
+
 func TestFilterIndexGroupFetchesSkipsMissingAndFreshHashes(t *testing.T) {
 	hashGroups := []queryIndexGroupHash{
 		{hashValue: 11, indexGroupValues: []int64{1, 11}},

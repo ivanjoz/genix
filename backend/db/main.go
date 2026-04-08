@@ -545,9 +545,9 @@ func (e *Col[T, E]) Equals(v E) *T {
 	return e.schemaStruct
 }
 
-func (e *Col[T, E]) Contains(v int64) *T {
+func (e *Col[T, E]) Contains(v any) *T {
 	// fmt.Println("e.schemaStruct", e.schemaStruct)
-	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: "CONTAINS", Value: any(v)})
+	e.tableInfo.statements = append(e.tableInfo.statements, ColumnStatement{Col: e.info.Name, Operator: "CONTAINS", Value: v})
 	return e.schemaStruct
 }
 

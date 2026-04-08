@@ -10,6 +10,11 @@ import (
 	"github.com/viant/xunsafe"
 )
 
+type GroupIndexCache struct {
+	GroupHash     int32
+	UpdateCounter int32
+}
+
 type indexUpdatedRow struct {
 	partitionID   int32
 	indexHash     int32
@@ -334,29 +339,49 @@ func registerIndexGroup(dbTable *ScyllaTable[any], idxCount *int8, indexCfg Inde
 		}
 
 		virtualColumnNameLocal := virtualColumnName
+		usesCollectionLocal := usesCollectionValues
 		index.getStatementPrepared = func(statements ...ColumnStatement) []boundWhereClause {
-			hashValues := buildIndexGroupHashValues(sourceColumnsLocal, statements)
-			if len(hashValues) == 0 {
-				return nil
+			// Build all hash input combinations using resolveIndexGroupQueryValues, which handles
+			// =, CONTAINS, IN, and BETWEEN (BETWEEN is expanded into one value per step in range).
+			valuesGroups := [][]int64{{}}
+			for _, sourceColumn := range sourceColumnsLocal {
+				st, err := findIndexGroupStatement(sourceColumn.column.GetName(), statements)
+				if err != nil {
+					return nil
+				}
+				columnValues, err := resolveIndexGroupQueryValues(sourceColumn, st)
+				if err != nil || len(columnValues) == 0 {
+					return nil
+				}
+				nextGroups := make([][]int64, 0, len(valuesGroups)*len(columnValues))
+				for _, vg := range valuesGroups {
+					for _, v := range columnValues {
+						nextGroups = append(nextGroups, append(append([]int64{}, vg...), v))
+					}
+				}
+				valuesGroups = nextGroups
 			}
 
-			if len(hashValues) == 1 {
-				return []boundWhereClause{{
-					Clause: fmt.Sprintf("%v = ?", virtualColumnNameLocal),
-					Values: []any{hashValues[0]},
-				}}
+			// Emit one WHERE clause per unique hash value.
+			// Collection columns (set<int>) require CONTAINS; scalar columns use =.
+			seen := map[int32]struct{}{}
+			clauses := make([]boundWhereClause, 0, len(valuesGroups))
+			for _, vg := range valuesGroups {
+				hashValue := HashInt64(vg...)
+				if _, exists := seen[hashValue]; exists {
+					continue
+				}
+				seen[hashValue] = struct{}{}
+				clause := fmt.Sprintf("%v = ?", virtualColumnNameLocal)
+				if usesCollectionLocal {
+					clause = fmt.Sprintf("%v CONTAINS ?", virtualColumnNameLocal)
+				}
+				clauses = append(clauses, boundWhereClause{
+					Clause: clause,
+					Values: []any{hashValue},
+				})
 			}
-
-			placeholders := make([]string, 0, len(hashValues))
-			queryValues := make([]any, 0, len(hashValues))
-			for _, hashValue := range hashValues {
-				placeholders = append(placeholders, "?")
-				queryValues = append(queryValues, hashValue)
-			}
-			return []boundWhereClause{{
-				Clause: fmt.Sprintf("%v IN (%v)", virtualColumnNameLocal, strings.Join(placeholders, ", ")),
-				Values: queryValues,
-			}}
+			return clauses
 		}
 		*idxCount = *idxCount + 1
 		dbTable.indexes[index.name] = index
