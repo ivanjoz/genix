@@ -65,6 +65,8 @@ type ScyllaTable[T any] struct {
 	// Composite bucket metadata is used to materialize virtual hash sets and plan range+contains reads.
 	compositeBucketIndexes []compositeBucketIndex
 	indexGroups            []indexGroupInfo
+	// indexGroupIDs prevents per-table collisions when logical IndexGroup names hash to the same int16.
+	indexGroupIDs     map[int16]string
 	indexUpdatedTable      *indexUpdatedTableInfo
 	// selectStatementCache is shared across copied ScyllaTable values, so it must stay behind a pointer.
 	selectStatementCache *selectPlanCache
@@ -84,6 +86,7 @@ type compositeBucketIndex struct {
 
 type indexGroupInfo struct {
 	name                 string
+	indexID              int16
 	sourceColumns        []indexGroupSourceColumn
 	virtualColumn        IColInfo
 	usesCollectionValues bool

@@ -36,6 +36,9 @@ func TestBuildIndexGroupSelectPlanPrefersMostSpecificRawGroup(t *testing.T) {
 	if queryPlan.indexGroup.name != "fecha_client_id_product_ids" {
 		t.Fatalf("expected the most specific raw index group, got %q", queryPlan.indexGroup.name)
 	}
+	if queryPlan.indexGroup.indexID == 0 {
+		t.Fatal("expected selected index group to have a stable index_id")
+	}
 	if queryPlan.indexGroup.virtualColumn.GetName() != "zz_igs_fecha_client_id_product_ids" {
 		t.Fatalf("unexpected selected virtual column: %s", queryPlan.indexGroup.virtualColumn.GetName())
 	}

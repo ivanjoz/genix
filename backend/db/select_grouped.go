@@ -10,6 +10,7 @@ import (
 )
 
 type RecordGroup[T any] struct {
+	IndexID          int16   `json:"ig"`
 	GroupHash        int32   `json:"id"`
 	IndexGroupValues []int64 `json:"igVal"`
 	Records          []T     `json:"records"`
@@ -70,7 +71,7 @@ func execIndexGroupQuery[T TableSchemaInterface[T], E any](schemaStruct *T, tabl
 	}
 
 	hashValues := extractQueryIndexGroupHashes(queryPlan.hashGroups)
-	serverFreshnessByHash, err := loadIndexGroupFreshnessRows(scyllaTable, queryPlan.partitionValue, hashValues)
+	serverFreshnessByHash, err := loadIndexGroupFreshnessRows(scyllaTable, queryPlan.indexGroup, queryPlan.partitionValue, hashValues)
 	if err != nil {
 		return err
 	}
@@ -304,6 +305,7 @@ func resolveIndexGroupQueryValues(sourceColumn indexGroupSourceColumn, statement
 
 func loadIndexGroupFreshnessRowsFromScylla(
 	scyllaTable ScyllaTable[any],
+	indexGroup indexGroupInfo,
 	partitionValue int32,
 	hashValues []int32,
 ) (map[int32]int32, error) {
@@ -328,22 +330,23 @@ func loadIndexGroupFreshnessRowsFromScylla(
 
 		hashChunk := hashValues[startIndex:endIndex]
 		placeholders := make([]string, 0, len(hashChunk))
-		queryValues := make([]any, 0, len(hashChunk)+1)
+		queryValues := make([]any, 0, len(hashChunk)+2)
 		queryValues = append(queryValues, partitionValue)
+		queryValues = append(queryValues, indexGroup.indexID)
 		for _, hashValue := range hashChunk {
 			placeholders = append(placeholders, "?")
 			queryValues = append(queryValues, hashValue)
 		}
 
 		queryStr := fmt.Sprintf(
-			`SELECT index_hash, update_counter FROM %v.%v WHERE partition_id = ? AND index_hash IN (%v)`,
+			`SELECT index_hash, update_counter FROM %v.%v WHERE partition_id = ? AND index_id = ? AND index_hash IN (%v)`,
 			scyllaTable.keyspace,
 			scyllaTable.indexUpdatedTable.name,
 			strings.Join(placeholders, ", "),
 		)
 
-		fmt.Printf("QueryIndexGroup freshness probe: table=%s partition=%d hashes=%d\n",
-			scyllaTable.name, partitionValue, len(hashChunk))
+		fmt.Printf("QueryIndexGroup freshness probe: table=%s partition=%d index_id=%d hashes=%d\n",
+			scyllaTable.name, partitionValue, indexGroup.indexID, len(hashChunk))
 
 		iter := getScyllaConnection().Query(queryStr, queryValues...).Iter()
 		var hashValue int32
@@ -416,6 +419,7 @@ func fetchIndexGroupRecordGroups[E any](
 			}
 
 			groupsByIndex[fetchIndex] = RecordGroup[E]{
+				IndexID:          queryPlan.indexGroup.indexID,
 				GroupHash:        fetchState.hashValue,
 				IndexGroupValues: append([]int64(nil), fetchState.indexGroupValues...),
 				Records:          records,

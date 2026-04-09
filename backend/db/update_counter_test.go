@@ -288,7 +288,10 @@ func TestGetIndexUpdatedTableCreateScriptUsesExpectedPrimaryKey(t *testing.T) {
 	if !strings.Contains(createScript, "partition_id int") {
 		t.Fatalf("expected int partition_id column: %s", createScript)
 	}
-	if !strings.Contains(createScript, "PRIMARY KEY ((partition_id), index_hash)") {
+	if !strings.Contains(createScript, "index_id smallint") {
+		t.Fatalf("expected smallint index_id column: %s", createScript)
+	}
+	if !strings.Contains(createScript, "PRIMARY KEY ((partition_id), index_id, index_hash)") {
 		t.Fatalf("unexpected index-updated primary key: %s", createScript)
 	}
 }
@@ -416,6 +419,9 @@ func TestSyncIndexGroupsAfterWritePersistsDedupedRows(t *testing.T) {
 		if row.partitionID != 7 {
 			t.Fatalf("unexpected partition id: %+v", row)
 		}
+		if row.indexID == 0 {
+			t.Fatalf("expected persisted index_id: %+v", row)
+		}
 		if row.updateCounter != 41 {
 			t.Fatalf("unexpected update counter: %+v", row)
 		}
@@ -440,6 +446,37 @@ func TestShouldPersistIndexUpdatedGroupSkipsWeekOnlyHashes(t *testing.T) {
 	}
 	if shouldPersistIndexUpdatedGroup(scyllaTable.indexGroups[1]) {
 		t.Fatal("expected week-only index-group hashes to be excluded from __index_updated")
+	}
+	if scyllaTable.indexGroups[0].indexID != scyllaTable.indexGroups[1].indexID {
+		t.Fatalf("expected raw and week index groups to reuse the same index_id, got %d and %d",
+			scyllaTable.indexGroups[0].indexID, scyllaTable.indexGroups[1].indexID)
+	}
+}
+
+func TestAllocateIndexGroupIDAvoidsHashCollisions(t *testing.T) {
+	scyllaTable := &ScyllaTable[any]{}
+
+	firstID := allocateIndexGroupID(scyllaTable, []string{"fecha", "client_id"})
+	reusedID := allocateIndexGroupID(scyllaTable, []string{"fecha", "client_id"})
+	if firstID != reusedID {
+		t.Fatalf("expected the same logical index group to reuse its id, got %d and %d", firstID, reusedID)
+	}
+
+	collisionStart := int16(BasicHashInt("new_group"))
+	if collisionStart == 0 {
+		collisionStart = 1
+	}
+	scyllaTable.indexGroupIDs = map[int16]string{
+		collisionStart:   "occupied_a",
+		collisionStart+1: "occupied_b",
+	}
+
+	nextID := allocateIndexGroupID(scyllaTable, []string{"new_group"})
+	if nextID != collisionStart+2 {
+		t.Fatalf("expected collision handling to advance to %d, got %d", collisionStart+2, nextID)
+	}
+	if scyllaTable.indexGroupIDs[nextID] != "new_group" {
+		t.Fatalf("expected allocated id %d to be assigned to new_group", nextID)
 	}
 }
 

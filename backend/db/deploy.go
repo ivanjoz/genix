@@ -777,6 +777,7 @@ func DeployScylla(cacheCode int32, controllers ...ScyllaControllerInterface) {
 
 				tableColumnsMap[indexUpdatedTableName] = []ScyllaColumns{
 					{Name: "partition_id", Type: "int", Keyspace: table.keyspace, Table: table.indexUpdatedTable.name},
+					{Name: "index_id", Type: "smallint", Keyspace: table.keyspace, Table: table.indexUpdatedTable.name},
 					{Name: "index_hash", Type: "int", Keyspace: table.keyspace, Table: table.indexUpdatedTable.name},
 					{Name: "update_counter", Type: "int", Keyspace: table.keyspace, Table: table.indexUpdatedTable.name},
 				}

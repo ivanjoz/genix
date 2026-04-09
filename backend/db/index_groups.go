@@ -11,14 +11,45 @@ import (
 )
 
 type GroupIndexCache struct {
+	IndexID       int16
 	GroupHash     int32
 	UpdateCounter int32
 }
 
 type indexUpdatedRow struct {
 	partitionID   int32
+	indexID       int16
 	indexHash     int32
 	updateCounter int64
+}
+
+func makeIndexGroupCacheKey(indexID int16, indexHash int32) int64 {
+	return (int64(indexID) << 32) | int64(uint32(indexHash))
+}
+
+func allocateIndexGroupID(scyllaTable *ScyllaTable[any], sourceColumnNames []string) int16 {
+	logicalName := strings.Join(sourceColumnNames, "_")
+	if scyllaTable.indexGroupIDs == nil {
+		scyllaTable.indexGroupIDs = map[int16]string{}
+	}
+
+	candidateID := int16(BasicHashInt(logicalName))
+	if candidateID == 0 {
+		candidateID = 1
+	}
+
+	for {
+		if existingName, exists := scyllaTable.indexGroupIDs[candidateID]; !exists {
+			scyllaTable.indexGroupIDs[candidateID] = logicalName
+			return candidateID
+		} else if existingName == logicalName {
+			return candidateID
+		}
+		candidateID++
+		if candidateID == 0 {
+			candidateID = 1
+		}
+	}
 }
 
 func shouldPersistIndexUpdatedGroup(indexGroup indexGroupInfo) bool {
@@ -45,7 +76,7 @@ func appendIndexUpdatedRowsForRecord(
 
 		hashValues := computeIndexGroupHashes(recordPointer, indexGroup.sourceColumns)
 		for _, hashValue := range hashValues {
-			dedupKey := fmt.Sprintf("%d|%d", partitionValue, hashValue)
+			dedupKey := fmt.Sprintf("%d|%d|%d", partitionValue, indexGroup.indexID, hashValue)
 			currentRow, exists := rowsByPartitionAndHash[dedupKey]
 			if exists && currentRow.updateCounter >= updateCounterValue {
 				continue
@@ -53,6 +84,7 @@ func appendIndexUpdatedRowsForRecord(
 
 			nextRow := indexUpdatedRow{
 				partitionID:   partitionValue,
+				indexID:       indexGroup.indexID,
 				indexHash:     hashValue,
 				updateCounter: updateCounterValue,
 			}
@@ -60,7 +92,7 @@ func appendIndexUpdatedRowsForRecord(
 			if exists {
 				for rowIndex := range *rowsToPersist {
 					row := &(*rowsToPersist)[rowIndex]
-					if row.partitionID == partitionValue && row.indexHash == hashValue {
+					if row.partitionID == partitionValue && row.indexID == indexGroup.indexID && row.indexHash == hashValue {
 						*row = nextRow
 						break
 					}
@@ -77,9 +109,10 @@ func getIndexUpdatedTableCreateScript(keyspace string, tableInfo *indexUpdatedTa
 	// partition_id stays int because table partitions in this codebase are standardized as int32.
 	return fmt.Sprintf(`CREATE TABLE %v.%v (
 		partition_id int,
+		index_id smallint,
 		index_hash int,
 		update_counter int,
-		PRIMARY KEY ((partition_id), index_hash)
+		PRIMARY KEY ((partition_id), index_id, index_hash)
 	)
 	%v;`,
 		keyspace,
@@ -98,11 +131,11 @@ func persistIndexUpdatedRowsBatch(keyspace string, tableName string, rows []inde
 
 	session := getScyllaConnection()
 	batch := session.NewBatch(gocql.UnloggedBatch)
-	insertQuery := fmt.Sprintf(`INSERT INTO %v.%v (partition_id, index_hash, update_counter) VALUES (?, ?, ?)`,
+	insertQuery := fmt.Sprintf(`INSERT INTO %v.%v (partition_id, index_id, index_hash, update_counter) VALUES (?, ?, ?, ?)`,
 		keyspace, tableName)
 
 	for _, row := range rows {
-		batch.Query(insertQuery, row.partitionID, row.indexHash, row.updateCounter)
+		batch.Query(insertQuery, row.partitionID, row.indexID, row.indexHash, row.updateCounter)
 	}
 
 	return session.ExecuteBatch(batch)
@@ -219,11 +252,18 @@ func buildIndexGroupHashValues(sourceColumns []indexGroupSourceColumn, statement
 }
 
 func registerIndexGroup(dbTable *ScyllaTable[any], idxCount *int8, indexCfg Index) {
+	sourceColumnNames := make([]string, 0, len(indexCfg.Keys))
+	for _, key := range indexCfg.Keys {
+		sourceColumnNames = append(sourceColumnNames, key.GetName())
+	}
+	indexID := allocateIndexGroupID(dbTable, sourceColumnNames)
+
 	if len(indexCfg.Keys) == 1 {
 		singleKeyIndex := Index{Type: TypeLocalIndex, Keys: indexCfg.Keys}
 		registerSchemaLocalIndex(dbTable, idxCount, singleKeyIndex)
 		dbTable.indexGroups = append(dbTable.indexGroups, indexGroupInfo{
-			name: indexCfg.Keys[0].GetName(),
+			name:    indexCfg.Keys[0].GetName(),
+			indexID: indexID,
 			sourceColumns: []indexGroupSourceColumn{{
 				column:      dbTable.columnsMap[indexCfg.Keys[0].GetName()],
 				storeAsWeek: indexCfg.Keys[0].GetInfo().storeAsWeek,
@@ -235,7 +275,6 @@ func registerIndexGroup(dbTable *ScyllaTable[any], idxCount *int8, indexCfg Inde
 		return
 	}
 
-	sourceColumnNames := make([]string, 0, len(indexCfg.Keys))
 	rawSourceColumns := make([]indexGroupSourceColumn, 0, len(indexCfg.Keys))
 	weekSourceColumns := make([]indexGroupSourceColumn, 0, len(indexCfg.Keys))
 	usesCollectionValues := false
@@ -255,7 +294,6 @@ func registerIndexGroup(dbTable *ScyllaTable[any], idxCount *int8, indexCfg Inde
 			storeAsWeek: key.GetInfo().storeAsWeek,
 			weekOnly:    key.GetInfo().storeAsWeek,
 		})
-		sourceColumnNames = append(sourceColumnNames, baseColumn.GetName())
 		if baseColumn.GetType().IsSlice {
 			usesCollectionValues = true
 		}
@@ -387,6 +425,7 @@ func registerIndexGroup(dbTable *ScyllaTable[any], idxCount *int8, indexCfg Inde
 		dbTable.indexes[index.name] = index
 		dbTable.indexGroups = append(dbTable.indexGroups, indexGroupInfo{
 			name:                 strings.Join(sourceColumnNames, "_"),
+			indexID:              indexID,
 			sourceColumns:        sourceColumns,
 			virtualColumn:        virtualColumn,
 			usesCollectionValues: usesCollectionValues,
