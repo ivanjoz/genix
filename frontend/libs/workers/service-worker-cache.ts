@@ -1,13 +1,11 @@
 /// <reference lib="WebWorker" />
 "use-strict"
-import { recreateObject } from '$libs/sharedHelpers';
 // Names of the two caches used in this version of the service worker.
 // Change to v2, etc. when you update any of the local resources, which will
 // in turn trigger the install event again.
 const PRECACHE = 'precache-v2'
 const CACHE_ASSETS = 'assets-v2'
 const CACHE_STATIC = 'static-v2'
-export const CACHE_APP = 'app'
 export const HandlersMap: Map<number, (input: any) => Promise<any>> = new Map()
 // A list of local resources we always want to be cached.
 const PRECACHE_URLS: string[] = [
@@ -44,18 +42,21 @@ self.addEventListener('install', (event) => {
 
 // The activate handler takes care of cleaning up old caches.
 self.addEventListener('activate', event => {
-	const currentCaches = [PRECACHE, CACHE_ASSETS, CACHE_STATIC, CACHE_APP];
+	const currentCaches = [PRECACHE, CACHE_ASSETS, CACHE_STATIC];
 	event.waitUntil(
-		self.clients.claim()
-		/*
 		caches.keys().then(cacheNames => {
-			return cacheNames.filter(cacheName => !currentCaches.includes(cacheName));
+			// The legacy app cache lived in Cache Storage under `app` or `*_app` names.
+			return cacheNames.filter(cacheName => (
+				cacheName === 'app' ||
+				cacheName.endsWith('_app') ||
+				!currentCaches.includes(cacheName)
+			));
 		}).then(cachesToDelete => {
 			return Promise.all(cachesToDelete.map(cacheToDelete => {
+				console.log('[Service Worker] Removing legacy cache store:', cacheToDelete)
 				return caches.delete(cacheToDelete);
 			}));
 		}).then(() => self.clients.claim())
-		*/
 	)
 })
 
@@ -442,83 +443,6 @@ self.addEventListener('fetch', (event) => {
 		})
 	)
 })
-
-const appMemoryCache: Map<string, Map<string, any>> = new Map()
-
-export const hasCacheKey = async (key: string, cache: string): Promise<any> => {
-	const cacheName = cache ? cache + "_" + CACHE_APP : CACHE_APP
-	const appCache = await caches.open(cacheName)
-	const hasCache = await appCache.match(key)
-	const memoryCache = appMemoryCache.get(cacheName)
-	if (!hasCache && memoryCache) { memoryCache.delete(key) }
-	return hasCache
-}
-
-export const getCacheRecord = async (key: string, cache: string): Promise<any> => {
-	
-	const cacheName = cache ? cache + "_" + CACHE_APP : CACHE_APP
-	if (!appMemoryCache.has(cacheName)) { appMemoryCache.set(cacheName, new Map()) }
-	const memoryCache = appMemoryCache.get(cacheName)
-	
-	if (memoryCache?.has(key)) {
-		// Revisa si el cache realmente existe, eso debido a que puede haber sido eliminado y se debe limpiar tambien el que está en memoria
-		const cacheExists = await caches.has(cacheName)
-		if (cacheExists) {
-			return memoryCache.get(key)
-		} else {
-			appMemoryCache.set(cacheName, new Map())
-		}
-	}
-	
-	const appCache = await caches.open(cacheName)
-	const startTime = Date.now()
-	const response = await appCache.match(key);
-	
-	if (response) {
-		let jsonResponse = await response.json(); // Parse the response body as JSON
-		if (jsonResponse.__keys__) {
-			const keysMap = new Map(jsonResponse.__keys__) as Map<string, string | number>
-			// console.log("cache parsedContent 2", jsonResponse.content, keysMap)
-			const keysMapReversed = new Map([...keysMap.entries()].map(x => [x[1], x[0]]))
-			jsonResponse = recreateObject(jsonResponse.content, keysMapReversed as unknown as Map<string, number>)
-		}
-		console.log(`Cache response "${key}" in ${Date.now() - startTime}ms (v2)`)
-		return jsonResponse
-	}
-	
-	return undefined; // Or handle as you see fit if the key is not found
-};
-
-export const setCacheRecord = async (key: string, content: any, cache: string): Promise<void> => {
-	const cacheName = cache ? cache + "_" + CACHE_APP : CACHE_APP
-	if (!appMemoryCache.has(cacheName)) { appMemoryCache.set(cacheName, new Map()) }
-	const appCache = await caches.open(cacheName)
-	const memoryCache = appMemoryCache.get(cacheName)
-	if (!content) { // Elimina el caché si se señala que no hay contenido
-		memoryCache?.delete(key)
-		await appCache.delete(key)
-		return
-	}
-	memoryCache?.set(key, content)
-	const startTime = Date.now()
-	if (typeof content !== 'string') {
-		/*
-		const keysMap = new Map()
-		const parsedContent = simplifyObject(content, keysMap)
-		content = JSON.stringify({ __keys__: [...keysMap.entries()], content: parsedContent })
-		*/
-		content = JSON.stringify(content)
-	}
-	// Create a Response object with the JSON content
-	const response = new Response(content, {
-		headers: {
-			'Content-Type': 'application/json',
-			'Content-Length': String(content.length)
-		}
-	});
-	await appCache.put(key, response);
-	console.log(`Cache put "${key}" in ${Date.now() - startTime}ms (v2)`)
-};
 
 export const parseObject = (rec: any) => {
 	const newObject = {} as any

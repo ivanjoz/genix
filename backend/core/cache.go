@@ -76,20 +76,26 @@ func ExtractGroupIndexCacheValues(req *HandlerArgs) ([]db.GroupIndexCache, error
 	groupHashes := parseConcatenatedInts(req.GetQuery("cc-gh"))
 	updateCounters := parseConcatenatedInts(req.GetQuery("cc-upc"))
 
-	records := []db.GroupIndexCache{}
-
-	for i, gh := range groupHashes {
-		if i >= len(updateCounters) {
-			continue
-		}
-		records = append(records, db.GroupIndexCache{
-			GroupHash: int32(gh),
-			UpdateCounter: int32(updateCounters[1]),
-		})
-	}
+	records := makeGroupIndexCacheValues(groupHashes, updateCounters)
 
 	Log("records extracted:", len(records))
 	return records, nil
+}
+
+func makeGroupIndexCacheValues(groupHashes []int64, updateCounters []int64) []db.GroupIndexCache {
+	records := make([]db.GroupIndexCache, 0, len(groupHashes))
+	for index, encodedGroupHash := range groupHashes {
+		if index >= len(updateCounters) {
+			continue
+		}
+
+		// Frontend sends signed int32 hashes through uint32 packing because the compact encoder is unsigned.
+		records = append(records, db.GroupIndexCache{
+			GroupHash:     int32(uint32(encodedGroupHash)),
+			UpdateCounter: int32(updateCounters[index]),
+		})
+	}
+	return records
 }
 
 func ExtractCacheVersionValues(req *HandlerArgs) ([]db.IDCacheVersion, error) {

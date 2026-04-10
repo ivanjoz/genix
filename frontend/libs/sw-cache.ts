@@ -111,6 +111,10 @@ export const sendServiceMessage = async (accion: number, content: any): Promise<
   tempID++
 
   try {
+    if (content && typeof content === 'object') {
+      content.__companyID__ = Env.getEmpresaID()
+    }
+
     let route = `${window.location.origin}/_sw_?accion=${accion}&req=${reqID}&env=${Env.enviroment}`
     if(content.route){
       route += "&r=" + content.route.replaceAll("?","_").replaceAll("&","_")
@@ -147,6 +151,7 @@ export const getCacheSubObject = async (args: IGetCacheSubObject): Promise<any[]
 export const fetchCache = async (args: serviceHttpProps): Promise<FetchCacheResponse> => {
   args.routeParsed = Env.makeRoute(args.route)
   args.__version__ = args.useCache?.ver || 1
+  args.__companyID__ = Env.getEmpresaID()
   console.log("fetching cache...", args)
 
   const response = await sendServiceMessage(3,args)

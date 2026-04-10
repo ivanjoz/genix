@@ -6,7 +6,7 @@ type TAGS struct{}
 
 type Empresa struct {
 	db.TableStruct[EmpresaTable, Empresa]
-	ID                 int32        `json:"id" db:"id,pk" col:",sk"`
+	ID                 int32        `db:"id,pk" col:",sk"`
 	Nombre             string       `json:",omitempty" db:"nombre" col:""`
 	RazonSocial        string       `json:",omitempty" db:"razon_social" col:""`
 	RUC                string       `json:",omitempty" db:"ruc" col:",index"`

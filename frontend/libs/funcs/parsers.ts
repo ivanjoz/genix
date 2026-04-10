@@ -36,15 +36,6 @@ export const concatenateInts = (values: number[], sorted?: boolean): string => {
 		.map((s) => s.replaceAll("=", "").replaceAll("+", "-").replaceAll("/", "_")).join(".");
 };
 
-
-export const ConcatenateIntsTest = () => {
-	
-	const values = [3,6,13,142,333,432,543534,32,4444,34242525,3241,23,23,51,3245543,32,3256,43452,2222,11,111]
-	
-	console.log("concatenateInts",concatenateInts(values))
-	
-}
-
 export const checksum = (content: string): string => {
 	let rollingSeed = 888888
 

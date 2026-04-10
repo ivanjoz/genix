@@ -47,6 +47,7 @@
 		"axios": "^1.13.2",
 		"billboard.js": "^3.14.3",
 		"date-fns": "^4.1.0",
+		"dexie": "^4.2.0",
 		"embla-carousel-svelte": "^8.6.0",
 		"esbuild": "^0.25.12",
 		"excelize-wasm": "^0.1.1",

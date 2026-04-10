@@ -172,3 +172,29 @@ func TestFilterIndexGroupFetchesSkipsMissingAndFreshHashes(t *testing.T) {
 		t.Fatalf("unexpected second fetch state values: %+v", fetchStates[1])
 	}
 }
+
+func TestSplitIndexGroupFetchesReturnsCachedMetadataStates(t *testing.T) {
+	hashGroups := []queryIndexGroupHash{
+		{hashValue: 11, indexGroupValues: []int64{1, 11}},
+		{hashValue: 12, indexGroupValues: []int64{2, 12}},
+	}
+	serverFreshnessByHash := map[int32]int32{
+		11: 100,
+		12: 200,
+	}
+	cachedIndexGroups := map[int32]int32{
+		11: 100,
+		12: 150,
+	}
+
+	fetchStates, cachedStates := splitIndexGroupFetches(hashGroups, serverFreshnessByHash, cachedIndexGroups)
+	if len(fetchStates) != 1 || fetchStates[0].hashValue != 12 || fetchStates[0].updateCounter != 200 {
+		t.Fatalf("unexpected fetch states: %+v", fetchStates)
+	}
+	if len(cachedStates) != 1 || cachedStates[0].hashValue != 11 || cachedStates[0].updateCounter != 100 {
+		t.Fatalf("unexpected cached states: %+v", cachedStates)
+	}
+	if len(cachedStates[0].indexGroupValues) != 2 || cachedStates[0].indexGroupValues[0] != 1 || cachedStates[0].indexGroupValues[1] != 11 {
+		t.Fatalf("unexpected cached state values: %+v", cachedStates[0])
+	}
+}

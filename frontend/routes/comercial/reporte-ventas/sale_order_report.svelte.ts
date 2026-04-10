@@ -1,4 +1,4 @@
-import { GET } from '$libs/http.svelte';
+import { GETWithGroupCache } from '$libs/http.svelte';
 import { Notify } from '$libs/helpers';
 
 export interface ISaleOrder {
@@ -56,15 +56,13 @@ export const querySaleOrderReport = async (filters: ISaleOrderReportForm): Promi
 		queryParams.set('client-id', String(filters.clientID));
 	}
 
-	const route = `sale-order-query?${queryParams.toString()}`;
-	console.debug('[sale_order_report] querying route', route);
+	const route = 'sale-order-query';
+	const uriParams = Object.fromEntries(queryParams.entries());
+	console.debug('[sale_order_report] querying route', { route, uriParams });
 
 	let result: ISaleOrderGroupRecord[];
 	try {
-		result = await GET({
-			route,
-			errorMessage: 'Hubo un error al obtener el reporte de ventas.',
-		});
+		result = await GETWithGroupCache<ISaleOrder>(route, uriParams);
 	} catch (error) {
 		Notify.failure(String(error || 'No se pudo consultar el reporte de ventas.'));
 		throw error;

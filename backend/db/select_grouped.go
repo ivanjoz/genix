@@ -76,8 +76,8 @@ func execIndexGroupQuery[T TableSchemaInterface[T], E any](schemaStruct *T, tabl
 		return err
 	}
 
-	fetchStates := filterIndexGroupFetches(queryPlan.hashGroups, serverFreshnessByHash, tableInfo.cachedIndexGroups)
-	if len(fetchStates) == 0 {
+	fetchStates, cachedStates := splitIndexGroupFetches(queryPlan.hashGroups, serverFreshnessByHash, tableInfo.cachedIndexGroups)
+	if len(fetchStates) == 0 && len(cachedStates) == 0 {
 		fmt.Printf("QueryIndexGroup skipped all groups: table=%s partition=%d hashes=%d\n",
 			scyllaTable.name, queryPlan.partitionValue, len(hashValues))
 		return nil
@@ -88,7 +88,26 @@ func execIndexGroupQuery[T TableSchemaInterface[T], E any](schemaStruct *T, tabl
 		return err
 	}
 
-	*refGroups = append(*refGroups, fetchedGroups...)
+	groupsByHash := map[int32]RecordGroup[E]{}
+	for _, cachedState := range cachedStates {
+		// Metadata-only groups let the frontend read unchanged records from IndexedDB by igVal key.
+		groupsByHash[cachedState.hashValue] = RecordGroup[E]{
+			IndexID:          queryPlan.indexGroup.indexID,
+			GroupHash:        cachedState.hashValue,
+			IndexGroupValues: append([]int64(nil), cachedState.indexGroupValues...),
+			Records:          []E{},
+			UpdateCounter:    cachedState.updateCounter,
+		}
+	}
+	for _, fetchedGroup := range fetchedGroups {
+		groupsByHash[fetchedGroup.GroupHash] = fetchedGroup
+	}
+	for _, hashGroup := range queryPlan.hashGroups {
+		groupRecord, exists := groupsByHash[hashGroup.hashValue]
+		if exists {
+			*refGroups = append(*refGroups, groupRecord)
+		}
+	}
 	return nil
 }
 
@@ -367,7 +386,17 @@ func filterIndexGroupFetches(
 	serverFreshnessByHash map[int32]int32,
 	cachedIndexGroups map[int32]int32,
 ) []indexGroupFetchState {
+	fetchStates, _ := splitIndexGroupFetches(hashGroups, serverFreshnessByHash, cachedIndexGroups)
+	return fetchStates
+}
+
+func splitIndexGroupFetches(
+	hashGroups []queryIndexGroupHash,
+	serverFreshnessByHash map[int32]int32,
+	cachedIndexGroups map[int32]int32,
+) ([]indexGroupFetchState, []indexGroupFetchState) {
 	fetchStates := make([]indexGroupFetchState, 0, len(hashGroups))
+	cachedStates := make([]indexGroupFetchState, 0, len(hashGroups))
 	for _, hashGroup := range hashGroups {
 		updateCounter, existsOnServer := serverFreshnessByHash[hashGroup.hashValue]
 		if !existsOnServer {
@@ -375,6 +404,11 @@ func filterIndexGroupFetches(
 		}
 		if cachedIndexGroups != nil {
 			if cachedCounter, existsInCache := cachedIndexGroups[hashGroup.hashValue]; existsInCache && cachedCounter == updateCounter {
+				cachedStates = append(cachedStates, indexGroupFetchState{
+					hashValue:        hashGroup.hashValue,
+					indexGroupValues: append([]int64(nil), hashGroup.indexGroupValues...),
+					updateCounter:    updateCounter,
+				})
 				continue
 			}
 		}
@@ -384,7 +418,7 @@ func filterIndexGroupFetches(
 			updateCounter:    updateCounter,
 		})
 	}
-	return fetchStates
+	return fetchStates, cachedStates
 }
 
 func fetchIndexGroupRecordGroups[E any](

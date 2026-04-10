@@ -1,17 +1,21 @@
-import { normalizeStringN, Notify } from '$libs/helpers';
-import axios, { type AxiosProgressEvent } from 'axios';
-import { formatN } from '$libs/helpers';
-import type { CacheMode, serviceHttpProps } from '$libs/workers/service-worker';
-import { accessHelper, canUserAccessRoute, getToken } from '$core/security';
-import { fetchCache, fetchCacheParsed, sendServiceMessage } from '$libs/sw-cache';
 import { browser } from "$app/environment";
-import { unmarshall } from '$libs/funcs/unmarshall';
 import { Env } from '$core/env';
+import { accessHelper, canUserAccessRoute, getToken } from '$core/security';
 import { fetchEvent } from '$core/store.svelte';
-import {  ConcatenateIntsTest } from "./funcs/parsers"
-import { getAccessEntriesForRoute } from '../routes/seguridad/perfiles-accesos/access-list-catalog';
-
-ConcatenateIntsTest()
+import { unmarshall } from '$libs/funcs/unmarshall';
+import { formatN, normalizeStringN, Notify } from '$libs/helpers';
+import { fetchCacheParsed, sendServiceMessage } from '$libs/sw-cache';
+import type { CacheMode, serviceHttpProps } from '$libs/workers/service-worker';
+import axios, { type AxiosProgressEvent } from 'axios';
+import { concatenateInts } from './funcs/parsers';
+import {
+  makeGroupCacheKey,
+  makeGroupQueryShape,
+  readGroupCacheMetadata,
+  readGroupCacheRows,
+  upsertGroupCacheRows,
+  type IGroupCacheRecord,
+} from './cache/group-cache.idb';
 
 export interface IHttpStatus { code: number, message: string }
 
@@ -368,6 +372,96 @@ export const GET = (props: httpProps): Promise<any> => {
       })
     })
   }
+}
+
+const normalizeGroupCacheResponse = <T>(responsePayload: any): IGroupCacheRecord<T>[] => {
+  if(Array.isArray(responsePayload)){ return responsePayload as IGroupCacheRecord<T>[] }
+  if(Array.isArray(responsePayload?.records)){ return responsePayload.records as IGroupCacheRecord<T>[] }
+  if(Array.isArray(responsePayload?.response)){ return responsePayload.response as IGroupCacheRecord<T>[] }
+  return []
+}
+
+const makeGroupCacheRoute = (route: string, uriParams: {[k: string]: string}) => {
+  const requestParams = new URLSearchParams()
+  for(const paramName of Object.keys(uriParams).sort()){
+    requestParams.set(paramName, uriParams[paramName])
+  }
+  const queryString = requestParams.toString()
+  return queryString ? `${route}?${queryString}` : route
+}
+
+export const GETWithGroupCache = async <T = any>(
+  route: string,
+  uriParams: {[k: string]: string},
+): Promise<IGroupCacheRecord<T>[]> => {
+  if(!browser){
+    return normalizeGroupCacheResponse<T>(await GET({ route: makeGroupCacheRoute(route, uriParams) }))
+  }
+
+  // The database name already scopes company and API endpoint, so the row key only needs the route shape.
+  const queryShape = makeGroupQueryShape(route, Object.keys(uriParams))
+  const cachedMetadataRows = await readGroupCacheMetadata(queryShape)
+  const requestParams = new URLSearchParams()
+  for(const paramName of Object.keys(uriParams).sort()){
+    requestParams.set(paramName, uriParams[paramName])
+  }
+
+  if(cachedMetadataRows.length > 0){
+    // Group ids stay signed in IndexedDB and are converted to uint32 only for compact transport.
+    requestParams.set("cc-gh", concatenateInts(cachedMetadataRows.map((row) => row.id >>> 0)))
+    requestParams.set("cc-upc", concatenateInts(cachedMetadataRows.map((row) => row.upc)))
+  }
+
+  const routeWithCacheParams = requestParams.toString() ? `${route}?${requestParams.toString()}` : route
+  console.debug("[GETWithGroupCache] Fetching grouped route.", {
+    route,
+    queryShape,
+    cachedGroups: cachedMetadataRows.length,
+  })
+
+  const responseGroups = normalizeGroupCacheResponse<T>(await GET({ route: routeWithCacheParams }))
+  const responseKeys = responseGroups.map(makeGroupCacheKey).filter(Boolean)
+  const cachedRowsByKey = await readGroupCacheRows<T>(queryShape, responseKeys)
+  const rowsToPersist: IGroupCacheRecord<T>[] = []
+  const mergedGroups: IGroupCacheRecord<T>[] = []
+
+  for(const responseGroup of responseGroups){
+    const key = makeGroupCacheKey(responseGroup)
+    if(!key){
+      console.warn("[GETWithGroupCache] Ignoring grouped response without igVal.", responseGroup)
+      continue
+    }
+
+    const cachedRow = cachedRowsByKey.get(key)
+    const responseRecords = Array.isArray(responseGroup.records) ? responseGroup.records : []
+    const canUseCachedRecords = cachedRow && cachedRow.upc === responseGroup.upc && responseRecords.length === 0
+
+    if(canUseCachedRecords){
+      mergedGroups.push({
+        ig: responseGroup.ig,
+        id: responseGroup.id,
+        igVal: responseGroup.igVal,
+        records: cachedRow.records || [],
+        upc: responseGroup.upc,
+      })
+      continue
+    }
+
+    const freshGroup = { ...responseGroup, records: responseRecords }
+    rowsToPersist.push(freshGroup)
+    mergedGroups.push(freshGroup)
+  }
+
+  await upsertGroupCacheRows(queryShape, rowsToPersist)
+  console.debug("[GETWithGroupCache] Grouped cache merged.", {
+    route,
+    queryShape,
+    responseGroups: responseGroups.length,
+    persistedGroups: rowsToPersist.length,
+    mergedGroups: mergedGroups.length,
+  })
+
+  return mergedGroups
 }
 
 export interface INewIDToID {
