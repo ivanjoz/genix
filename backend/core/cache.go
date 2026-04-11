@@ -98,7 +98,7 @@ func makeGroupIndexCacheValues(groupHashes []int64, updateCounters []int64) []db
 	return records
 }
 
-func ExtractCacheVersionValues(req *HandlerArgs) ([]db.IDCacheVersion, error) {
+func (req *HandlerArgs) ExtractCacheVersionValues() []db.IDCacheVersion {
 	idsStr := req.GetQuery("ids")
 	// New cache delta protocol keys: cc-ids for cached IDs and cc-ver for aligned cache versions.
 	cachedIDsStr := req.GetQuery("cc-ids")
@@ -106,8 +106,9 @@ func ExtractCacheVersionValues(req *HandlerArgs) ([]db.IDCacheVersion, error) {
 	empresaID := Coalesce(req.GetQueryInt("cmp"), req.Usuario.EmpresaID)
 
 	if empresaID == 0 {
-		Log("Error: No se envió: Empresa-ID")
-		return nil, Err("No se envió: Empresa-ID")
+		// Invalid company scope means the cache query cannot be resolved safely.
+		Log("error al extraer versiones de cache: no se envio Empresa-ID")
+		return []db.IDCacheVersion{}
 	}
 
 	ids := parseConcatenatedInts(idsStr)
@@ -129,7 +130,7 @@ func ExtractCacheVersionValues(req *HandlerArgs) ([]db.IDCacheVersion, error) {
 	}
 
 	Log("records extracted:", len(records))
-	return records, nil
+	return records
 }
 
 func parseConcatenatedInts(s string) []int64 {

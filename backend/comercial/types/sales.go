@@ -128,12 +128,6 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 				UseIndexGroup: true,
 			},
 			{
-				Type:     db.TypeViewTable,
-				Keys:     []db.Coln{e.DetailProductsIDs, e.Fecha},
-				Cols:     []db.Coln{e.Updated},
-				KeepPart: true,
-			},
-			{
 				Type:     db.TypeView,
 				Keys:     []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)},
 				KeepPart: true,
@@ -141,7 +135,6 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			{
 				Type:     db.TypeView,
 				Keys:     []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)},
-				Cols:     []db.Coln{e.ClientID, e.Updated, e.DetailProductsIDs, e.Status},
 				KeepPart: true,
 			},
 		},

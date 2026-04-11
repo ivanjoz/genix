@@ -36,6 +36,7 @@ type ClientProvider struct {
 	Status           int8   `json:"ss,omitempty"`
 	Updated          int32  `json:"upd,omitempty"`
 	UpdatedBy        int32  `json:",omitempty"`
+	CacheVersion     uint8  `json:"ccv,omitempty"`
 }
 
 type ClientProviderTable struct {
@@ -63,10 +64,10 @@ func (e *ClientProvider) SelfParse() {
 
 func (t ClientProviderTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:         "client_provider",
-		Partition:    t.EmpresaID,
-		UseSequences: true,
-		Keys:         []db.Coln{t.ID.Autoincrement(0)},
+		Name:             "client_provider",
+		Partition:        t.EmpresaID,
+		SaveCacheVersion: true,
+		Keys:             []db.Coln{t.ID.Autoincrement(0)},
 		Indexes: []db.Index{
 			{Type: db.TypeLocalIndex, Keys: []db.Coln{t.RegistryNumber}},
 			{Type: db.TypeLocalIndex, Keys: []db.Coln{t.NameRegistryHash}},

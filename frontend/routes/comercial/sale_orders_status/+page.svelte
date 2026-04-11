@@ -5,24 +5,29 @@
   import Layer from '$components/Layer.svelte';
   import OptionsStrip from '$components/OptionsStrip.svelte';
   import TableGrid from '$components/vTable/TableGrid.svelte';
-  import type { TableGridColumn } from '$components/vTable/tableGridTypes';
   import VTable from '$components/vTable/VTable.svelte';
+  import type { TableGridColumn } from '$components/vTable/tableGridTypes';
   import type { ITableColumn } from '$components/vTable/types';
   import { Core } from '$core/store.svelte';
   import Page from '$domain/Page.svelte';
   import { Notify, formatN, formatTime } from '$libs/helpers';
+  import type { IMinimalRecord } from '$libs/cache/cache-by-ids.svelte';
+  import { getRecordsByID } from '$libs/cache/cache-by-ids.svelte';
   import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
   import { AlmacenesService } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte';
-  import { ProductosService } from '$routes/negocio/productos/productos.svelte';
-  import { untrack } from 'svelte';
+  import type { IClientProvider } from '$routes/negocio/clientes/clientes-proveedores.svelte';
+  import type { IProducto, IProductoPresentacion } from '$routes/negocio/productos/productos.svelte';
+  import { onMount, untrack } from 'svelte';
+  import SaleOrdersTable from '../SaleOrdersTable.svelte';
   import {
     SaleOrderGroup,
     SaleOrdersService,
-    type ISaleOrderTopProduct,
     postSaleOrderUpdate,
     type ISaleOrder
   } from './sale_order_status.svelte';
-    import { getRecordByIDUpdated } from '$libs/cache/cache-by-ids.svelte';
+
+  interface IProductoByIDRecord extends IMinimalRecord, Pick<IProducto, 'Nombre' | 'Presentaciones'> {}
+  interface IClientByIDRecord extends IMinimalRecord, Pick<IClientProvider, 'Name'> {}
 
   interface ISaleOrderDetailLine {
     detailPosition: number;
@@ -36,20 +41,107 @@
     subtotalAmount: number;
   }
 
+  interface ISaleOrderFilterForm {
+    clientID: number;
+    productID: number;
+  }
+
+  interface ISaleOrderClientOption extends IClientByIDRecord {
+    DisplayName: string;
+  }
+
   type ISaleOrderDetailColumn = ITableColumn<ISaleOrderDetailLine> & TableGridColumn<ISaleOrderDetailLine>;
 
   let selectedGroup = $state(SaleOrderGroup.PENDIENTE_DE_PAGO);
-  let saleOrdersService = $state<SaleOrdersService | null>(null);
+  let saleOrderRecords = $state<ISaleOrder[]>([]);
   let saleOrderDetailsView = $state(1);
   let selectedSaleOrder = $state<ISaleOrder | null>(null);
+  let isQueryingSaleOrders = $state(false);
   let isPostingSaleOrderAction = $state(false);
   let saleOrderActionInProgress = $state<'pago' | 'entrega' | null>(null);
   let saleOrderPaymentForm = $state({ LastPaymentCajaID: 0 });
   let saleOrderDeliveryForm = $state({ WarehouseID: 0 });
+  let saleOrderFilterForm = $state<ISaleOrderFilterForm>({ clientID: 0, productID: 0 });
+  let productRecordsByID = $state<Map<number, IProductoByIDRecord>>(new Map());
+  let clientRecordsByID = $state<Map<number, IClientByIDRecord>>(new Map());
+  let saleOrdersQueryRequestID = 0;
 
-  const productosService = new ProductosService();
   const cajasService = new CajasService();
   const almacenesService = new AlmacenesService();
+
+  async function querySaleOrders(orderStatus: number): Promise<void> {
+    const currentRequestID = ++saleOrdersQueryRequestID;
+    selectedSaleOrder = null;
+    isQueryingSaleOrders = true;
+    saleOrderRecords = [];
+
+    const nextSaleOrdersService = new SaleOrdersService(orderStatus);
+    const queryRoute = nextSaleOrdersService.route;
+    console.debug('[sale_orders_status] querying sale orders', {
+      orderStatus,
+      queryRoute,
+    });
+
+    await nextSaleOrdersService.fetchOnline();
+    const fetchedSaleOrders = nextSaleOrdersService.records;
+    if (currentRequestID !== saleOrdersQueryRequestID) return;
+
+    // Commit table rows first so the page does not stay blank while related lookups resolve.
+    saleOrderRecords = fetchedSaleOrders;
+
+    const uniqueProductIDs = new Set<number>();
+    const uniqueClientIDs = new Set<number>();
+    for (const saleOrder of fetchedSaleOrders) {
+      const clientID = Number(saleOrder.ClientID || 0);
+      if (Number.isFinite(clientID) && clientID > 0) {
+        uniqueClientIDs.add(clientID);
+      }
+
+      const detailProductIDs = saleOrder.DetailProductsIDs || [];
+      for (const rawProductID of detailProductIDs) {
+        const productID = Number(rawProductID || 0);
+        if (!Number.isFinite(productID) || productID <= 0) continue;
+        uniqueProductIDs.add(productID);
+      }
+    }
+    const productIDs = Array.from(uniqueProductIDs);
+    const clientIDs = Array.from(uniqueClientIDs);
+
+    console.debug('[sale_orders_status] querying related records', {
+      saleOrderCount: fetchedSaleOrders.length,
+      productIDsCount: productIDs.length,
+      clientIDsCount: clientIDs.length,
+    });
+
+    try {
+      const nextProductRecordsByID = await getRecordsByID<IProductoByIDRecord>('p-productos-ids', productIDs);
+      if (currentRequestID !== saleOrdersQueryRequestID) return;
+      productRecordsByID = nextProductRecordsByID;
+
+      const nextClientRecordsByID = await getRecordsByID<IClientByIDRecord>('client-provider-ids', clientIDs);
+      if (currentRequestID !== saleOrdersQueryRequestID) return;
+      clientRecordsByID = nextClientRecordsByID;
+
+      console.debug('[sale_orders_status] sale orders ready', {
+        saleOrdersCount: fetchedSaleOrders.length,
+        resolvedProducts: nextProductRecordsByID.size,
+        resolvedClients: nextClientRecordsByID.size,
+      });
+    } catch (queryError) {
+      if (currentRequestID !== saleOrdersQueryRequestID) return;
+      console.error('[sale_orders_status] failed to query sale orders', {
+        queryError,
+        queryRoute,
+        productIDs,
+        clientIDs,
+      });
+      // Keep the already loaded sale orders visible even if auxiliary lookups fail.
+    } finally {
+      if (currentRequestID === saleOrdersQueryRequestID) {
+        isQueryingSaleOrders = false;
+      }
+    }
+  }
 
   // Render tabs mapped to backend status filters.
   const options = [
@@ -68,96 +160,26 @@
     }
   }
 
-  function isSaleOrderPaid(saleOrder: ISaleOrder): boolean {
-    // Paid is true for paid and finalized orders.
-    return saleOrder.ss === 2 || saleOrder.ss === 4;
+  function getSaleOrderClientName(saleOrder: ISaleOrder): string {
+    if (!saleOrder.ClientID) { return '-'; }
+    return clientRecordsByID.get(saleOrder.ClientID)?.Name || `Cliente #${saleOrder.ClientID}`;
   }
 
-  function isSaleOrderDelivered(saleOrder: ISaleOrder): boolean {
-    // Delivered is true for delivered and finalized orders.
-    return saleOrder.ss === 3 || saleOrder.ss === 4;
-  }
-
-  function renderSaleOrderStateSquares(saleOrder: ISaleOrder): string {
-    const paidBadgeCss = isSaleOrderPaid(saleOrder)
-      ? 'bg-green-100 text-green-800 border border-green-300'
-      : 'bg-red-100 text-red-800 border border-red-300';
-    const deliveredBadgeCss = isSaleOrderDelivered(saleOrder)
-      ? 'bg-green-100 text-green-800 border border-green-300'
-      : 'bg-red-100 text-red-800 border border-red-300';
-
-    // Render compact square-like badges so operators can read status at a glance.
-    return `<div class="flex items-center justify-center gap-4">
-      <span class="inline-flex h-22 min-w-22 px-4 rounded-[3px] text-10 ff-bold items-center justify-center ${paidBadgeCss}">PAG</span>
-      <span class="inline-flex h-22 min-w-22 px-4 rounded-[3px] text-10 ff-bold items-center justify-center ${deliveredBadgeCss}">ENT</span>
-    </div>`;
-  }
-
-  function getTopPaidProductsByAmount(saleOrder: ISaleOrder): ISaleOrderTopProduct[] {
-    const detailCount = Math.min(
-      saleOrder.DetailProductsIDs?.length || 0,
-      saleOrder.DetailPrices?.length || 0,
-      saleOrder.DetailQuantities?.length || 0
-    );
-    const productAmountByID = new Map<number, ISaleOrderTopProduct>();
-
-    // Rebuild top products from detail arrays so hydrated rows and list rows behave the same.
-    for (let detailIndex = 0; detailIndex < detailCount; detailIndex += 1) {
-      const productID = saleOrder.DetailProductsIDs[detailIndex] || 0;
-      const linePrice = saleOrder.DetailPrices[detailIndex] || 0;
-      const lineQuantity = saleOrder.DetailQuantities[detailIndex] || 0;
-      const lineAmount = linePrice * lineQuantity;
-      if (!productID || lineAmount <= 0) { continue; }
-
-      const previousProductData = productAmountByID.get(productID);
-      if (previousProductData) {
-        previousProductData.LineAmount += lineAmount;
-        continue;
-      }
-
-      productAmountByID.set(productID, {
-        ProductID: productID,
-        LineAmount: lineAmount,
-      });
-    }
-
-    const sortedProducts = Array.from(productAmountByID.values()).sort((leftProduct, rightProduct) => {
-      if (rightProduct.LineAmount !== leftProduct.LineAmount) {
-        return rightProduct.LineAmount - leftProduct.LineAmount;
-      }
-      return leftProduct.ProductID - rightProduct.ProductID;
-    });
-    if (sortedProducts.length <= 3) { return sortedProducts; }
-
-    const tieAwareCutoffAmount = sortedProducts[2].LineAmount;
-    return sortedProducts.filter((product) => product.LineAmount >= tieAwareCutoffAmount);
-  }
-
-  function renderTopProductsSummary(saleOrder: ISaleOrder): string {
-    const topPaidProducts = getTopPaidProductsByAmount(saleOrder);
-    if (topPaidProducts.length === 0) {
-      return '-';
-    }
-
-    // Keep product-name lookup in the view and derive amounts from the raw detail arrays.
-    return topPaidProducts
-      .map((topProduct) => {
-        const productName = productosService.recordsMap.get(topProduct.ProductID)?.Nombre || `Producto #${topProduct.ProductID}`;
-        return `${productName} (${formatN(topProduct.LineAmount / 100, 2)})`;
-      })
-      .join(', ');
+  function saleOrderHasSelectedProduct(saleOrder: ISaleOrder, selectedProductID: number): boolean {
+    if (!selectedProductID) { return true; }
+    return (saleOrder.DetailProductsIDs || []).some((productID) => Number(productID || 0) === selectedProductID);
   }
 
   function getProductPresentationName(productID: number, presentationID: number): string {
     if (!presentationID) { return ''; }
 
-    const productRecord = productosService.recordsMap.get(productID);
-    const presentationRecord = productRecord?.Presentaciones?.find((presentationOption) => presentationOption.id === presentationID);
+    const productRecord = productRecordsByID.get(productID);
+    const presentationRecord = productRecord?.Presentaciones?.find((presentationOption: IProductoPresentacion) => presentationOption.id === presentationID);
     return presentationRecord?.nm || `Presentación ${presentationID}`;
   }
 
   function getSaleOrderDetailProductName(productID: number, presentationID: number): string {
-    const productRecord = productosService.recordsMap.get(productID);
+    const productRecord = productRecordsByID.get(productID);
     const productName = productRecord?.Nombre || `Producto #${productID}`;
     const presentationName = getProductPresentationName(productID, presentationID);
 
@@ -191,7 +213,7 @@
       saleOrderDetailLines.push({
         detailPosition,
         productID,
-        productBaseName: productosService.recordsMap.get(productID)?.Nombre || `Producto #${productID}`,
+        productBaseName: productRecordsByID.get(productID)?.Nombre || `Producto #${productID}`,
         productName: getSaleOrderDetailProductName(productID, presentationID),
         presentationName: getProductPresentationName(productID, presentationID),
         sku,
@@ -239,17 +261,34 @@
     return getSaleOrderDetailLines(selectedSaleOrder);
   });
 
-  const filteredSaleOrders = $derived.by(() => {
-    const fetchedSaleOrders = saleOrdersService?.records || [];
+  const clientOptions = $derived.by((): ISaleOrderClientOption[] => {
+    // Build a combined label so the selector can match both customer name and ID.
+    return Array.from(clientRecordsByID.values())
+      .map((clientRecord) => ({
+        ...clientRecord,
+        DisplayName: clientRecord.Name
+          ? `${clientRecord.Name} · ${clientRecord.ID}`
+          : `Cliente #${clientRecord.ID}`,
+      }))
+      .sort((leftClient, rightClient) => leftClient.DisplayName.localeCompare(rightClient.DisplayName));
+  });
 
-    // Enforce UI-specific tab filters after service fetch to keep badge semantics strict.
-    if (selectedGroup === SaleOrderGroup.PENDIENTE_DE_PAGO) {
-      return fetchedSaleOrders.filter((saleOrderRecord) => !isSaleOrderPaid(saleOrderRecord));
-    }
-    if (selectedGroup === SaleOrderGroup.PENDIENTE_DE_ENTREGA) {
-      return fetchedSaleOrders.filter((saleOrderRecord) => !isSaleOrderDelivered(saleOrderRecord));
-    }
-    return fetchedSaleOrders;
+  const productOptions = $derived.by((): IProductoByIDRecord[] => {
+    // Keep filter options scoped to the loaded orders so the selector stays small and relevant.
+    return Array.from(productRecordsByID.values())
+      .sort((leftProduct, rightProduct) => leftProduct.Nombre.localeCompare(rightProduct.Nombre));
+  });
+
+  const filteredSaleOrderRecords = $derived.by(() => {
+    const selectedClientID = Number(saleOrderFilterForm.clientID || 0);
+    const selectedProductID = Number(saleOrderFilterForm.productID || 0);
+
+    return saleOrderRecords.filter((saleOrder) => {
+      if (selectedClientID > 0 && Number(saleOrder.ClientID || 0) !== selectedClientID) {
+        return false;
+      }
+      return saleOrderHasSelectedProduct(saleOrder, selectedProductID);
+    });
   });
 
   const detailTableColumns: ISaleOrderDetailColumn[] = [
@@ -396,16 +435,12 @@
     });
 
     try {
-      const updateResult = await postSaleOrderUpdate(updatePayload);
-      const updatedSaleOrder = updateResult as ISaleOrder;
-      selectedSaleOrder = updatedSaleOrder;
-      // Force immediate refresh to sync table group filters after status transitions.
-      saleOrdersService?.fetch();
+      await postSaleOrderUpdate(updatePayload);
+      await querySaleOrders(selectedGroup);
       Notify.success(`Pedido actualizado (${actionLabel}).`);
       console.debug('[sale_orders_status] action success', {
         actionLabel,
-        saleOrderID: updatedSaleOrder.ID,
-        nextStatus: updatedSaleOrder.ss,
+        saleOrderID: updatePayload.ID,
       });
     } catch (error) {
       console.error('[sale_orders_status] action error', {
@@ -420,97 +455,69 @@
     }
   }
 
-  // Instantiate and fetch when the selected group changes.
-  $effect(() => {
-    selectedGroup;
-    untrack(() => {
-      // Rebuild the service when group changes so cache keys stay isolated by route query.
-      const nextSaleOrdersService = new SaleOrdersService(selectedGroup);
-      saleOrdersService = nextSaleOrdersService;
-      nextSaleOrdersService.fetch();
-      selectedSaleOrder = null;
-    });
+  onMount(() => {
+    void querySaleOrders(selectedGroup);
   });
 
-  const columns: ITableColumn<ISaleOrder>[] = [
-    {
-      header: 'ID',
-      getValue: saleOrder => saleOrder.ID,
-      css: 'ff-mono fs15 text-right',
-      headerCss: 'w-52',
-      mobile: { order: 1, css: 'col-span-6', icon: 'tag' }
-    },
-    {
-      header: 'Fecha Hora',
-      getValue: saleOrder => formatTime(saleOrder.Created, 'd-M h:n') as string,
-      css: 'text-right',
-      headerCss: 'w-100', cellCss: "whitespace-nowrap",
-      mobile: { order: 2, css: 'col-span-6', icon: 'clock' }
-    },
-    {
-      header: 'Estado',
-      id: 'status',
-      headerCss: 'w-82',
-      css: 'text-center',
-      render: saleOrder => renderSaleOrderStateSquares(saleOrder),
-      mobile: {
-        order: 3,
-        css: 'col-span-24',
-        render: saleOrder => renderSaleOrderStateSquares(saleOrder)
-      }
-    },
-    {
-      header: 'Total',
-      css: 'ff-mono text-right',
-      getValue: saleOrder => formatN(saleOrder.TotalAmount / 100, 2),
-      mobile: { order: 4, css: 'col-span-12', labelLeft: 'Total:' }
-    },
-    {
-      header: 'Deuda',
-      css: 'ff-mono text-right',
-      getValue: saleOrder => formatN((saleOrder.DebtAmount || 0) / 100, 2),
-      mobile: { order: 5, css: 'col-span-12', labelLeft: 'Deuda:' }
-    },
-    {
-      header: 'Top Productos',
-      css: 'fs15 leading-[1.15]',
-      id: 'top-products',
-      getValue: saleOrder => renderTopProductsSummary(saleOrder),
-      mobile: { order: 6, css: 'col-span-24', labelTop: 'Top Productos', render: saleOrder => renderTopProductsSummary(saleOrder) }
-    }
-  ];
 </script>
 
 <Page title="Gestión de Pedidos">
   <div class="">
-	 	<div class="h-46 flex items-center">
-	  <OptionsStrip
-	    {options}
-	    selected={selectedGroup}
-	    onSelect={(selectedOption) => {
-	      // Skip reactive work when user clicks the already selected tab.
-	      const nextSelectedGroup = selectedOption[0] as number;
-	      if (nextSelectedGroup === selectedGroup) { return; }
-	      selectedGroup = nextSelectedGroup;
-	    }}
-	    useMobileGrid
-	    css="mb-10"
-	  />
-	  </div>
+    <div class="flex flex-col gap-10 mb-10 xl:flex-row xl:items-center">
+      <div class="h-46 flex items-center">
+        <OptionsStrip
+          {options}
+          selected={selectedGroup}
+          onSelect={(selectedOption) => {
+            const nextSelectedGroup = selectedOption[0] as number;
+            if (nextSelectedGroup === selectedGroup) { return; }
+            selectedGroup = nextSelectedGroup;
+            void querySaleOrders(nextSelectedGroup);
+          }}
+          useMobileGrid
+        />
+      </div>
+
+      <div class="grid grid-cols-24 gap-10 ml-16 grow-1">
+        <SearchSelect
+          bind:saveOn={saleOrderFilterForm}
+          save="clientID"
+          css="col-span-24 md:col-span-6"
+          label=""
+          keyId="ID"
+          keyName="DisplayName"
+          options={clientOptions}
+          placeholder="CLIENTE ::"
+        />
+        <SearchSelect
+          bind:saveOn={saleOrderFilterForm}
+          save="productID"
+          css="col-span-24 md:col-span-9"
+          label=""
+          keyId="ID"
+          keyName="Nombre" placeholder="PRODUCTO ::"
+          options={productOptions}
+        />
+      </div>
+    </div>
      <Layer type="content">
-	     <VTable
-	       {columns}
-	       data={filteredSaleOrders}
-	       selected={selectedSaleOrder?.ID || 0}
-	       isSelected={(saleOrder, selectedID) => saleOrder.ID === selectedID}
-	       onRowClick={(saleOrder) => {
-	       	console.log("saleOrder", $state.snapshot(saleOrder))
-	         openSaleOrderDetailsLayer(saleOrder);
-	       }}
-				 estimateSize={38}
-	       mobileCardCss="mb-10"
-				 getRowObject={(e) => getRecordByIDUpdated("sale-order-by-ids", e.ID||0, e.upd||0) as Promise<ISaleOrder>}
-	     />
+       {#if isQueryingSaleOrders}
+         <div class="p-8 min-h-240 w-full fx-c rounded-md bg-gray-50">
+           <LoadingBar label="Cargando pedidos..." />
+         </div>
+       {:else}
+	       <SaleOrdersTable
+	         data={filteredSaleOrderRecords}
+	         getProductName={(productID) => productRecordsByID.get(productID)?.Nombre || `Producto #${productID}`}
+	         getClientName={getSaleOrderClientName}
+	         selected={selectedSaleOrder?.ID || 0}
+	         isSelected={(saleOrder, selectedID) => saleOrder.ID === selectedID}
+	         onRowClick={(saleOrder) => {
+	         	console.log("saleOrder", $state.snapshot(saleOrder))
+	           openSaleOrderDetailsLayer(saleOrder);
+	         }}
+	       />
+       {/if}
      </Layer>
   </div>
 

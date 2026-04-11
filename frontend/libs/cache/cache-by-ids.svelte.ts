@@ -21,9 +21,35 @@ export interface IMinimalRecord {
 }
 
 const cacheRecordIdTable: Map<string,Map<number,IMinimalRecord>> = new Map()
+const inFlightRecordsBatchPromiseByTable: Map<
+	string,
+	Map<number, Promise<Map<number, IMinimalRecord>>>
+> = new Map()
 
 const LOG_PREFIX = "[cache-by-ids]"
-const CACHE_DEBUG_PREFIX = `${LOG_PREFIX}:stale-debug`
+const DEBUG_CACHE_RECORD_IDS = new Set<number>([26])
+
+const shouldDebugCacheRecord = (id: number): boolean => {
+	return DEBUG_CACHE_RECORD_IDS.has(id)
+}
+
+const logDebugCacheRecord = (
+	stage: string,
+	apiRoute: string,
+	id: number,
+	record: Partial<IMinimalRecord> | null | undefined,
+	extra?: Record<string, unknown>,
+) => {
+	if (!shouldDebugCacheRecord(id)) return
+	console.debug(`${LOG_PREFIX} debug ${apiRoute} | ${stage}`, {
+		id,
+		ccv: record?.ccv,
+		_fch: record?._fch,
+		ss: record?.ss,
+		upd: record?.upd,
+		...extra,
+	})
+}
 
 export type CacheByIDsFetchFromServer = <T extends IMinimalRecord>(
 	apiRoute: string,
@@ -33,17 +59,46 @@ export type CacheByIDsFetchFromServer = <T extends IMinimalRecord>(
 ) => Promise<T[]>
 
 const buildFetchUriParams = (
-	ids: number[],
-	ccIDs: number[],
-	ccVer: number[],
+	ids: number[], ccIDs: number[], ccVer: number[],
 ): string => {
+	const cachedRecordsU8IDs: number[] = []
+	const cachedRecordsU8Versions: number[] = []
+	const cachedRecordsU16IDs: number[] = []
+	const cachedRecordsU16Versions: number[] = []
+	const cachedRecordsU32IDs: number[] = []
+	const cachedRecordsU32Versions: number[] = []
+
+	for (let index = 0; index < ccIDs.length; index++) {
+		const cachedID = ccIDs[index]
+		const cachedVersion = ccVer[index] || 0
+		if (cachedVersion < 0 || cachedVersion > 255) {
+			// Cache-version protocol is uint8 on backend; fail loudly before corrupting alignment.
+			throw new Error(`${LOG_PREFIX} invalid cc-ver for ${cachedID}: ${cachedVersion}`)
+		}
+
+		// Keep `cc-ids` and `cc-ver` in the same bucket order the compact encoder emits.
+		if (cachedID >= 0 && cachedID <= 255) {
+			cachedRecordsU8IDs.push(cachedID)
+			cachedRecordsU8Versions.push(cachedVersion)
+			continue
+		}
+		if (cachedID >= 0 && cachedID <= 65535) {
+			cachedRecordsU16IDs.push(cachedID)
+			cachedRecordsU16Versions.push(cachedVersion)
+			continue
+		}
+		cachedRecordsU32IDs.push(cachedID)
+		cachedRecordsU32Versions.push(cachedVersion)
+	}
+
+	const alignedCachedIDs = [...cachedRecordsU8IDs, ...cachedRecordsU16IDs, ...cachedRecordsU32IDs]
+	const alignedCachedVersions = [...cachedRecordsU8Versions,...cachedRecordsU16Versions,...cachedRecordsU32Versions]
+
 	return [
 		ids.length > 0 && `ids=${concatenateInts(ids)}`,
-		ccIDs.length > 0 && `cc-ids=${concatenateInts(ccIDs)}`,
-		ccVer.length > 0 && `cc-ver=${concatenateInts(ccVer)}`,
-	]
-		.filter(Boolean)
-		.join("&")
+		alignedCachedIDs.length > 0 && `cc-ids=${concatenateInts(alignedCachedIDs)}`,
+		alignedCachedVersions.length > 0 && `cc-ver=${concatenateInts(alignedCachedVersions)}`,
+	].filter(Boolean).join("&")
 }
 
 // Configure this from your app when the backend endpoint is ready.
@@ -64,18 +119,10 @@ let fetchFromServer: CacheByIDsFetchFromServer = async <T extends IMinimalRecord
 		if (Array.isArray(responsePayload)) return responsePayload as T[]
 		if (Array.isArray(responsePayload?.records)) return responsePayload.records as T[]
 
-		console.warn(`${LOG_PREFIX} Unexpected server response shape. Returning empty list.`, {
-			apiRoute,
-			uriParams,
-			responsePayload,
-		})
+		console.warn(`${LOG_PREFIX} ${apiRoute} unexpected server response shape; returning empty list`, responsePayload)
 		return []
 	} catch (serverFetchError) {
-		console.warn(`${LOG_PREFIX} Failed to fetch records from server. Returning empty list.`, {
-			apiRoute,
-			uriParams,
-			serverFetchError,
-		})
+		console.warn(`${LOG_PREFIX} ${apiRoute} failed to fetch records from server; returning empty list`, serverFetchError)
 		return []
 	}
 }
@@ -92,6 +139,16 @@ const getOrCreateTableCache = (apiRoute: string): Map<number, IMinimalRecord> =>
 	const createdTableCache = new Map<number, IMinimalRecord>()
 	cacheRecordIdTable.set(apiRoute, createdTableCache)
 	return createdTableCache
+}
+
+const getOrCreateInFlightRecordsTable = (
+	apiRoute: string,
+): Map<number, Promise<Map<number, IMinimalRecord>>> => {
+	const existingInFlightTable = inFlightRecordsBatchPromiseByTable.get(apiRoute)
+	if (existingInFlightTable) return existingInFlightTable
+	const createdInFlightTable = new Map<number, Promise<Map<number, IMinimalRecord>>>()
+	inFlightRecordsBatchPromiseByTable.set(apiRoute, createdInFlightTable)
+	return createdInFlightTable
 }
 
 const mergeFetchedRecordsIntoCache = async <T extends IMinimalRecord>(
@@ -112,25 +169,20 @@ const mergeFetchedRecordsIntoCache = async <T extends IMinimalRecord>(
 		if (typeof fetchedRecord.ccv !== "number") fetchedRecord.ccv = 0
 		if (typeof fetchedRecord.ss !== "number") fetchedRecord.ss = 1
 		tableCache.set(fetchedRecord.ID, fetchedRecord)
+		logDebugCacheRecord("server record merged into memory", apiRoute, fetchedRecord.ID, fetchedRecord)
 		mergedRecords.set(fetchedRecord.ID, fetchedRecord)
 	}
 
 	if (mergedRecords.size > 0) {
 		await upsertRecordsIntoIDB<T>(apiRoute, Array.from(mergedRecords.values()))
+		for (const mergedRecord of mergedRecords.values()) {
+			if (!shouldDebugCacheRecord(mergedRecord.ID)) continue
+			const idbRecord = (await readRecordsFromIDBByIDs<T>(apiRoute, [mergedRecord.ID])).get(mergedRecord.ID)
+			logDebugCacheRecord("record read back from indexedDB after upsert", apiRoute, mergedRecord.ID, idbRecord)
+		}
 	}
 
 	return mergedRecords
-}
-
-const normalizeIDs = (ids: number[]): number[] => {
-	const uniqueIDs = new Set<number>()
-	for (const rawID of ids) {
-		const numericID = Number(rawID)
-		if (!Number.isFinite(numericID)) continue
-		if (numericID <= 0) continue
-		uniqueIDs.add(numericID)
-	}
-	return Array.from(uniqueIDs).sort((a, b) => a - b)
 }
 
 const summarizeIDs = (ids: number[]) => {
@@ -138,13 +190,29 @@ const summarizeIDs = (ids: number[]) => {
 	return `${ids.slice(0, 10).join(",")} ... (+${ids.length - 10})`
 }
 
-export const getRecordsByIDs = async <T extends IMinimalRecord>(
+const normalizePositiveIDs = (ids: number[]): number[] => {
+	const normalizedIDs: number[] = []
+	const seenIDs = new Set<number>()
+
+	for (const rawID of ids) {
+		const numericID = Number(rawID)
+		if (!Number.isFinite(numericID)) continue
+		if (numericID <= 0) continue
+		if (seenIDs.has(numericID)) continue
+		seenIDs.add(numericID)
+		normalizedIDs.push(numericID)
+	}
+
+	return normalizedIDs
+}
+
+export const doGetRecordsByIDs = async <T extends IMinimalRecord>(
 	apiRoute: string,
 	ids: number[],
 	cacheHintsByID?: Map<number, T | false>,
-): Promise<T[]> => {
+): Promise<Map<number, T>> => {
 	// Normalize early to avoid duplicated work and to keep deterministic order.
-	const normalizedSortedIDs = normalizeIDs(ids)
+	const normalizedSortedIDs = normalizePositiveIDs(ids)
 	const currentTimeSeconds = nowSeconds()
 
 	console.debug(`${LOG_PREFIX} getRecordsByIDs start.`, {
@@ -160,6 +228,9 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(
 	// - cached entries (send ID + ccv for server-side delta validation),
 	// - stale cache count (forces revalidation call).
 	const idsMissingFromMemoryCache: number[] = []
+	const idsCachedOnMemory: number[] = []
+	const idsCachedFromIndexedDB: number[] = []
+	const staleIDsToFetch: number[] = []
 	const recordsWitoutCache: number[] = []
 	const recordsCachedIDs: number[] = []
 	const recordsCachedUpdatedGroupsIDs: number[] = []
@@ -173,42 +244,26 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(
 		if (cacheHintsByID && cacheHintsByID.has(id)) {
 			const hintedRecord = cacheHintsByID.get(id)
 			if (hintedRecord === false) {
-				console.debug(`${CACHE_DEBUG_PREFIX} hint says local miss`, { apiRoute, id })
 				recordsWitoutCache.push(id)
 				continue
 			}
 			if (!hintedRecord) {
-				console.debug(`${CACHE_DEBUG_PREFIX} hint undefined, treat as miss`, { apiRoute, id })
 				recordsWitoutCache.push(id)
 				continue
 			}
 			// Tombstone: never fetch again, and never return as "active" record.
 			if (hintedRecord.ss === 0) continue
 
+			idsCachedOnMemory.push(id)
 			recordsCachedIDs.push(id)
 			recordsCachedUpdatedGroupsIDs.push(hintedRecord.ccv || 0)
 
 			const recordFetchAgeSeconds = currentTimeSeconds-(hintedRecord._fch || 0)
 			if (recordFetchAgeSeconds > CACHE_TIME) {
 				staleCachedRecordsCount++
-				console.debug(`${CACHE_DEBUG_PREFIX} hint says stale`, {
-					apiRoute,
-					id,
-					recordFetchAgeSeconds,
-					cacheTimeSeconds: CACHE_TIME,
-					fetchedAt: hintedRecord._fch || 0,
-					now: currentTimeSeconds,
-				})
-			} else {
-				console.debug(`${CACHE_DEBUG_PREFIX} hint says fresh`, {
-					apiRoute,
-					id,
-					recordFetchAgeSeconds,
-					cacheTimeSeconds: CACHE_TIME,
-					fetchedAt: hintedRecord._fch || 0,
-					now: currentTimeSeconds,
-				})
+				staleIDsToFetch.push(id)
 			}
+			
 			// Keep memory cache aligned with caller-provided local state.
 			tableCache.set(id, hintedRecord)
 			continue
@@ -216,36 +271,23 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(
 
 		const cachedRecord = tableCache.get(id) as T | undefined
 		if (!cachedRecord) {
+			logDebugCacheRecord("memory miss before indexedDB lookup", apiRoute, id, null)
 			idsMissingFromMemoryCache.push(id)
 			continue
 		}
+		logDebugCacheRecord("memory hit before stale check", apiRoute, id, cachedRecord)
 
 		// Tombstone: never fetch again, and never return as "active" record.
 		if (cachedRecord.ss === 0) continue
 
+		idsCachedOnMemory.push(id)
 		recordsCachedIDs.push(id)
 		recordsCachedUpdatedGroupsIDs.push(cachedRecord.ccv || 0)
 
 		const recordFetchAgeSeconds = currentTimeSeconds - (cachedRecord._fch || 0)
 		if (recordFetchAgeSeconds > CACHE_TIME) {
 			staleCachedRecordsCount++
-			console.debug(`${CACHE_DEBUG_PREFIX} memory says stale`, {
-				apiRoute,
-				id,
-				recordFetchAgeSeconds,
-				cacheTimeSeconds: CACHE_TIME,
-				fetchedAt: cachedRecord._fch || 0,
-				now: currentTimeSeconds,
-			})
-		} else {
-			console.debug(`${CACHE_DEBUG_PREFIX} memory says fresh`, {
-				apiRoute,
-				id,
-				recordFetchAgeSeconds,
-				cacheTimeSeconds: CACHE_TIME,
-				fetchedAt: cachedRecord._fch || 0,
-				now: currentTimeSeconds,
-			})
+			staleIDsToFetch.push(id)
 		}
 	}
 
@@ -262,42 +304,35 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(
 		for (const id of idsMissingFromMemoryCache) {
 			const idbRecord = idbRecordsByID.get(id)
 			if (!idbRecord) {
+				logDebugCacheRecord("indexedDB miss", apiRoute, id, null)
 				recordsWitoutCache.push(id)
 				continue
 			}
+			logDebugCacheRecord("indexedDB hit before promotion", apiRoute, id, idbRecord)
 
 			// Promote from IndexedDB to memory cache.
 			tableCache.set(id, idbRecord)
+			logDebugCacheRecord("indexedDB record promoted to memory", apiRoute, id, idbRecord)
 
 			// Tombstone: never fetch again, and never return as "active" record.
 			if (idbRecord.ss === 0) continue
 
+			idsCachedFromIndexedDB.push(id)
 			recordsCachedIDs.push(id)
 			recordsCachedUpdatedGroupsIDs.push(idbRecord.ccv || 0)
 
 			const recordFetchAgeSeconds = currentTimeSeconds - (idbRecord._fch || 0)
 			if (recordFetchAgeSeconds > CACHE_TIME) {
 				staleCachedRecordsCount++
-				console.debug(`${CACHE_DEBUG_PREFIX} idb says stale`, {
-					apiRoute,
-					id,
-					recordFetchAgeSeconds,
-					cacheTimeSeconds: CACHE_TIME,
-					fetchedAt: idbRecord._fch || 0,
-					now: currentTimeSeconds,
-				})
-			} else {
-				console.debug(`${CACHE_DEBUG_PREFIX} idb says fresh`, {
-					apiRoute,
-					id,
-					recordFetchAgeSeconds,
-					cacheTimeSeconds: CACHE_TIME,
-					fetchedAt: idbRecord._fch || 0,
-					now: currentTimeSeconds,
-				})
+				staleIDsToFetch.push(id)
 			}
 		}
 	}
+
+	console.debug(`${LOG_PREFIX} ${apiRoute} memory cache hits`, idsCachedOnMemory)
+	console.debug(`${LOG_PREFIX} ${apiRoute} indexedDB cache hits`, idsCachedFromIndexedDB)
+	console.debug(`${LOG_PREFIX} ${apiRoute} stale IDs to fetch`, staleIDsToFetch)
+	console.debug(`${LOG_PREFIX} ${apiRoute} missing IDs to fetch`, recordsWitoutCache)
 
 	// Build delta-validation payload:
 	// - `ids`: records with no local cache.
@@ -318,38 +353,55 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(
 	const shouldFetchFromServer =
 		(recordsWitoutCache.length > 0 || staleCachedRecordsCount > 0) && uriParams.length > 0
 
-	console.debug(`${LOG_PREFIX} Cache partitioned.`, {
-		apiRoute,
-		recordsWitoutCacheCount: recordsWitoutCache.length,
-		recordsCachedCount: recordsCachedIDs.length,
-		staleCachedRecordsCount,
-		uriParams,
-		shouldFetchFromServer,
-	})
-	if (!shouldFetchFromServer) {
-		console.debug(`${CACHE_DEBUG_PREFIX} skip server fetch`, {
-			apiRoute,
-			reason: "no miss and no stale cached records (or empty uriParams)",
-			recordsWitoutCacheCount: recordsWitoutCache.length,
-			staleCachedRecordsCount,
-			uriParams,
+	for (const id of normalizedSortedIDs) {
+		if (!shouldDebugCacheRecord(id)) continue
+		logDebugCacheRecord("request payload version snapshot", apiRoute, id, {
+			ID: id,
+			ccv: recordsCachedIDs.includes(id)
+				? recordsCachedUpdatedGroupsIDs[recordsCachedIDs.indexOf(id)]
+				: undefined,
+			_fch: (tableCache.get(id) as T | undefined)?._fch,
+			ss: (tableCache.get(id) as T | undefined)?.ss,
+			upd: (tableCache.get(id) as T | undefined)?.upd,
+		}, {
+			isMissing: recordsWitoutCache.includes(id),
+			isStale: staleIDsToFetch.includes(id),
+			willFetch: shouldFetchFromServer,
 		})
+	}
+
+	console.debug(
+		`${LOG_PREFIX} ${apiRoute} cache partitioned` +
+		` | memory=${idsCachedOnMemory.length}` +
+		` | indexedDB=${idsCachedFromIndexedDB.length}` +
+		` | stale=${staleCachedRecordsCount}` +
+		` | missing=${recordsWitoutCache.length}` +
+		` | fetch=${shouldFetchFromServer}`,
+	)
+	if (!shouldFetchFromServer) {
+		console.debug(`${LOG_PREFIX} ${apiRoute} skip server fetch | stale=${staleCachedRecordsCount} | missing=${recordsWitoutCache.length}`)
 	}
 
 	let updatedOrNewRecordsFromServer: T[] = []
 	if (shouldFetchFromServer) {
 		try {
-			console.log(`${LOG_PREFIX} Fetching from server.`, { apiRoute, uriParams })
+			console.log(
+				`${LOG_PREFIX} ${apiRoute} fetching from server` +
+				` | stale=${staleCachedRecordsCount}` +
+				` | missing=${recordsWitoutCache.length}` +
+				` | cached=${recordsCachedIDs.length}`,
+			)
 			updatedOrNewRecordsFromServer = await fetchFromServer<T>(
 				apiRoute,
 				recordsWitoutCache,
 				recordsCachedIDs,
 				recordsCachedUpdatedGroupsIDs,
 			)
-			console.log(`${LOG_PREFIX} Server response received.`, {
-				apiRoute,
-				recordsCount: updatedOrNewRecordsFromServer.length,
-			})
+			for (const fetchedRecord of updatedOrNewRecordsFromServer) {
+				if (!fetchedRecord || typeof fetchedRecord.ID !== "number") continue
+				logDebugCacheRecord("server response record", apiRoute, fetchedRecord.ID, fetchedRecord)
+			}
+			console.log(`${LOG_PREFIX} ${apiRoute} server response received | records=${updatedOrNewRecordsFromServer.length}`)
 		} catch (error) {
 			console.warn(`${LOG_PREFIX} Server fetch failed. Using local cache only.`, error)
 			updatedOrNewRecordsFromServer = []
@@ -370,6 +422,7 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(
 			if (!existingCachedRecord) continue
 			existingCachedRecord._fch = currentTimeSeconds
 			tableCache.set(cachedID, existingCachedRecord)
+			logDebugCacheRecord("unchanged cached record refreshed in memory", apiRoute, cachedID, existingCachedRecord)
 		}
 	}
 
@@ -378,21 +431,112 @@ export const getRecordsByIDs = async <T extends IMinimalRecord>(
 	}
 
 	// Final read is stable by requested ID order; tombstones remain hidden.
-	const resolvedRecords: T[] = []
+	const resolvedRecordsByID = new Map<number, T>()
 	for (const id of normalizedSortedIDs) {
 		const record = tableCache.get(id) as T | undefined
 		if (!record) continue
 		if (record.ss === 0) continue
-		resolvedRecords.push(record)
+		resolvedRecordsByID.set(id, record)
 	}
 
 	console.debug(`${LOG_PREFIX} getRecordsByIDs done.`, {
 		apiRoute,
 		requestedCount: normalizedSortedIDs.length,
-		returnedCount: resolvedRecords.length,
+		returnedCount: resolvedRecordsByID.size,
 	})
 
-	return resolvedRecords
+	return resolvedRecordsByID
+}
+
+export const getRecordsByID = async <T extends IMinimalRecord>(
+	apiRoute: string, ids: number[],
+): Promise<Map<number, T>> => {
+	// Keep one canonical pass so duplicated/invalid IDs do not create duplicated waits.
+	const normalizedIDs = normalizePositiveIDs(ids)
+	if (normalizedIDs.length === 0) return new Map<number, T>()
+
+	const currentTimeSeconds = nowSeconds()
+	const tableCache = cacheRecordIdTable.get(apiRoute)
+	const resolvedRecordsByID = new Map<number, T>()
+
+	const inFlightTable = getOrCreateInFlightRecordsTable(apiRoute)
+	const existingBatchPromisesByID = new Map<number, Promise<Map<number, T>>>()
+	const idsWithoutPromise: number[] = []
+
+	for (const id of normalizedIDs) {
+		const cachedRecord = tableCache?.get(id) as T | undefined
+		if (cachedRecord) {
+			if (cachedRecord.ss === 0) continue
+
+			const cachedRecordAgeSeconds = currentTimeSeconds - (cachedRecord._fch || 0)
+			const cachedRecordIsStale = cachedRecordAgeSeconds > CACHE_TIME
+
+			// Fresh memory rows are authoritative for this call and must not re-enter batching.
+			if (!cachedRecordIsStale) {
+				resolvedRecordsByID.set(id, cachedRecord)
+				continue
+			}
+		}
+
+		const existingBatchPromise = inFlightTable.get(id) as Promise<Map<number, T>> | undefined
+		if (existingBatchPromise) {
+			existingBatchPromisesByID.set(id, existingBatchPromise)
+			continue
+		}
+		idsWithoutPromise.push(id)
+	}
+
+	console.debug(
+		`${LOG_PREFIX} ${apiRoute} getRecordsByID partition` +
+		` | requested=${normalizedIDs.length}` +
+		` | freshMemory=${resolvedRecordsByID.size}` +
+		` | inFlight=${existingBatchPromisesByID.size}` +
+		` | fetch=${idsWithoutPromise.length}`,
+	)
+
+	let createdFetchPromise: Promise<Map<number, T>> | null = null
+	if (idsWithoutPromise.length > 0) {
+		// Assign one shared batch promise per missing ID to avoid creating per-ID derived promises.
+		createdFetchPromise = doGetRecordsByIDs<T>(apiRoute, idsWithoutPromise)
+		for (const id of idsWithoutPromise) {
+			inFlightTable.set(
+				id,
+				createdFetchPromise as Promise<Map<number, IMinimalRecord>>,
+			)
+			existingBatchPromisesByID.set(id, createdFetchPromise)
+		}
+		void createdFetchPromise.finally(() => {
+			const currentInFlightTable = inFlightRecordsBatchPromiseByTable.get(apiRoute)
+			if (!currentInFlightTable) return
+			for (const id of idsWithoutPromise) {
+				const currentPromise = currentInFlightTable.get(id)
+				if (currentPromise !== createdFetchPromise) continue
+				currentInFlightTable.delete(id)
+			}
+			if (currentInFlightTable.size === 0) {
+				inFlightRecordsBatchPromiseByTable.delete(apiRoute)
+			}
+		})
+	}
+
+	const resolvedEntries = await Promise.all(
+		normalizedIDs.map(async (id) => {
+			const pendingBatchPromise = existingBatchPromisesByID.get(id)
+			if (!pendingBatchPromise) return null
+			const recordsByID = await pendingBatchPromise
+			const record = recordsByID.get(id)
+			if (!record) return null
+			if (record.ss === 0) return null
+			return [id, record] as const
+		}),
+	)
+
+	for (const resolvedEntry of resolvedEntries) {
+		if (!resolvedEntry) continue
+		resolvedRecordsByID.set(resolvedEntry[0], resolvedEntry[1])
+	}
+
+	return resolvedRecordsByID
 }
 
 const buffetMaxTime = 80 // milliseconds
@@ -434,10 +578,11 @@ const flushBufferedRequests = async () => {
 
 	if (idsByTableToFetch.length === 0) return
 
-	console.debug(`${LOG_PREFIX} Flushing buffered getRecordByID requests.`, {
-		bufferedForMs: bufferedStartTime ? Date.now() - bufferedStartTime : 0,
-		tablesCount: idsByTableToFetch.length,
-	})
+	console.debug(
+		`${LOG_PREFIX} flush buffered getRecordByID` +
+		` | bufferedMs=${bufferedStartTime ? Date.now() - bufferedStartTime : 0}` +
+		` | tables=${idsByTableToFetch.length}`,
+	)
 
 	for (const { apiRoute, ids } of idsByTableToFetch) {
 		try {
@@ -451,14 +596,8 @@ const flushBufferedRequests = async () => {
 			}
 
 			// One batched call per table, then fan out by ID.
-			console.debug(`${CACHE_DEBUG_PREFIX} flush table batch`, {
-				apiRoute,
-				idsCount: ids.length,
-				ids: summarizeIDs(ids),
-				hintsCount: cacheHintsByID.size,
-			})
-			const records = await getRecordsByIDs<any>(apiRoute, ids, cacheHintsByID)
-			const recordsByID = new Map<number, any>(records.map((record) => [record.ID, record]))
+			console.debug(`${LOG_PREFIX} ${apiRoute} flush table batch | ids=${ids.length} | hints=${cacheHintsByID.size}`)
+			const recordsByID = await doGetRecordsByIDs<any>(apiRoute, ids, cacheHintsByID)
 
 			for (const id of ids) {
 				const key = `${apiRoute}:${id}`
@@ -469,7 +608,7 @@ const flushBufferedRequests = async () => {
 				pending.resolve(recordsByID.get(id))
 			}
 		} catch (error) {
-			console.warn(`${LOG_PREFIX} Buffered fetch failed. Rejecting pending promises.`, { apiRoute }, error)
+			console.warn(`${LOG_PREFIX} ${apiRoute} buffered fetch failed; rejecting pending promises`, error)
 			for (const id of ids) {
 				const key = `${apiRoute}:${id}`
 				const pending = bufferedResolversByTableAndID.get(key)
@@ -503,18 +642,15 @@ const flushBufferedUpdatedRequests = async () => {
 
 	if (idsByTableToFetch.length === 0) return
 
-	console.debug(`${LOG_PREFIX} Flushing buffered getRecordByIDUpdated requests.`, {
-		bufferedForMs: bufferedStartTime ? Date.now() - bufferedStartTime : 0,
-		tablesCount: idsByTableToFetch.length,
-	})
+	console.debug(
+		`${LOG_PREFIX} flush buffered getRecordByIDUpdated` +
+		` | bufferedMs=${bufferedStartTime ? Date.now() - bufferedStartTime : 0}` +
+		` | tables=${idsByTableToFetch.length}`,
+	)
 
 	for (const { apiRoute, ids } of idsByTableToFetch) {
 		try {
-			console.debug(`${CACHE_DEBUG_PREFIX} flush updated table batch`, {
-				apiRoute,
-				idsCount: ids.length,
-				ids: summarizeIDs(ids),
-			})
+			console.debug(`${LOG_PREFIX} ${apiRoute} flush updated table batch | ids=${ids.length}`)
 			const fetchedRecords = await fetchFromServer<any>(apiRoute, ids, [], [])
 			const fetchedRecordsByID = await mergeFetchedRecordsIntoCache<any>(apiRoute, fetchedRecords, nowSeconds())
 
@@ -528,7 +664,7 @@ const flushBufferedUpdatedRequests = async () => {
 				pending.resolve(fetchedRecord && fetchedRecord.ss !== 0 ? fetchedRecord : undefined)
 			}
 		} catch (error) {
-			console.warn(`${LOG_PREFIX} Buffered updated fetch failed. Rejecting pending promises.`, { apiRoute }, error)
+			console.warn(`${LOG_PREFIX} ${apiRoute} buffered updated fetch failed; rejecting pending promises`, error)
 			for (const id of ids) {
 				const key = `${apiRoute}:${id}`
 				const pending = bufferedUpdatedResolversByTableAndID.get(key)
@@ -557,27 +693,9 @@ export const getRecordByID = async <T extends IMinimalRecord>(
 		if (!!knownCachedRecord) {
 			if (knownCachedRecord.ss === 0) return undefined
 			const cachedRecordIsStale = isRecordStale(knownCachedRecord, currentTimeSeconds)
-			console.debug(`${CACHE_DEBUG_PREFIX} getRecordByID cachedRecord option`, {
-				apiRoute,
-				id: numericID,
-				hasCachedRecord: true,
-				cachedRecordIsStale,
-				fetchedAt: knownCachedRecord._fch || 0,
-				cacheTimeSeconds: CACHE_TIME,
-			})
 			if (!cachedRecordIsStale) {
-				console.debug(`${CACHE_DEBUG_PREFIX} getRecordByID returns fresh option record immediately`, {
-					apiRoute,
-					id: numericID,
-				})
 				return knownCachedRecord
 			}
-		}
-		if (knownCachedRecord === false) {
-			console.debug(`${CACHE_DEBUG_PREFIX} getRecordByID option says local miss`, {
-				apiRoute,
-				id: numericID,
-			})
 		}
 	}
 
@@ -590,21 +708,9 @@ export const getRecordByID = async <T extends IMinimalRecord>(
 			if (cachedRecord.ss === 0) return undefined
 			const cachedRecordAgeSeconds = currentTimeSeconds - (cachedRecord._fch || 0)
 			const cachedRecordIsStale = cachedRecordAgeSeconds > CACHE_TIME
-			console.debug(`${CACHE_DEBUG_PREFIX} getRecordByID memory fast path hit`, {
-				apiRoute,
-				id: numericID,
-				cachedRecordAgeSeconds,
-				cacheTimeSeconds: CACHE_TIME,
-				isStale: cachedRecordIsStale,
-				fetchedAt: cachedRecord._fch || 0,
-			})
 			if (!cachedRecordIsStale) {
 				return cachedRecord
 			}
-			console.debug(`${CACHE_DEBUG_PREFIX} getRecordByID memory stale hit, continue to buffered revalidation`, {
-				apiRoute,
-				id: numericID,
-			})
 		}
 	}
 
@@ -628,13 +734,6 @@ export const getRecordByID = async <T extends IMinimalRecord>(
 	if (options && options.cachedRecord !== undefined) {
 		bufferedCacheHintByTableAndID.set(promiseKey, options.cachedRecord)
 	}
-	console.debug(`${CACHE_DEBUG_PREFIX} getRecordByID queued into buffer`, {
-		apiRoute,
-		id: numericID,
-		hasCachedHint: Boolean(options && options.cachedRecord !== undefined),
-		bufferWindowMs: buffetMaxTime,
-	})
-
 	// Start one timer per active buffer window; all requests inside this window are batched.
 	if (!bufferFlushTimer) {
 		bufferFlushTimer = setTimeout(() => {
@@ -653,23 +752,11 @@ export const getRecordByIDUpdated = async <T extends IMinimalRecord>(
 
 	const localResolution = await getLocalRecordByID<T>(apiRoute, numericID)
 	if (localResolution.record && localResolution.record.upd >= updated) {
-		console.debug(`${CACHE_DEBUG_PREFIX} getRecordByIDUpdated returns local cache`, {
-			apiRoute,
-			id: numericID,
-			updated,
-		})
 		return localResolution.record
 	}
 
 	let returnedRecord: T | undefined
 	try {
-		console.debug(`${CACHE_DEBUG_PREFIX} getRecordByIDUpdated queued into updated buffer`, {
-			apiRoute,
-			id: numericID,
-			requestedUpdated: updated,
-			localUpdated: localResolution.record?.upd || 0,
-			bufferWindowMs: buffetMaxTime,
-		})
 		const promiseKey = `${apiRoute}:${numericID}`
 		const existingPromise = bufferedUpdatedPromiseByTableAndID.get(promiseKey)
 		if (existingPromise) {
@@ -715,16 +802,7 @@ export const getRecordByIDUpdated = async <T extends IMinimalRecord>(
 const isRecordStale = (record: IMinimalRecord, nowTimeSeconds: number): boolean => {
 	const fetchedAtSeconds = record._fch || 0
 	const ageSeconds = nowTimeSeconds-fetchedAtSeconds
-	const stale = ageSeconds > CACHE_TIME
-	console.debug(`${CACHE_DEBUG_PREFIX} stale-check`, {
-		id: record.ID,
-		fetchedAtSeconds,
-		nowTimeSeconds,
-		ageSeconds,
-		cacheTimeSeconds: CACHE_TIME,
-		stale,
-	})
-	return stale
+	return ageSeconds > CACHE_TIME
 }
 
 const getLocalRecordByID = async <T extends IMinimalRecord>(
@@ -741,21 +819,18 @@ const getLocalRecordByID = async <T extends IMinimalRecord>(
 	const memoryRecord = cacheTable.get(numericID) as T | undefined
 	if (memoryRecord) {
 		if (memoryRecord.ss === 0) return { record: null, stale: false }
-		console.debug(`${CACHE_DEBUG_PREFIX} local resolve hit memory`, { apiRoute, id: numericID })
 		return { record: memoryRecord, stale: isRecordStale(memoryRecord, currentTimeSeconds) }
 	}
 
 	const idbRecordsByID = await readRecordsFromIDBByIDs<T>(apiRoute, [numericID])
 	const idbRecord = idbRecordsByID.get(numericID)
 	if (!idbRecord) {
-		console.debug(`${CACHE_DEBUG_PREFIX} local resolve miss in IDB`, { apiRoute, id: numericID })
 		return { record: null, stale: false }
 	}
 
 	// Promote IDB hit into memory cache for subsequent synchronous reads.
 	cacheTable.set(numericID, idbRecord)
 	if (idbRecord.ss === 0) return { record: null, stale: false }
-	console.debug(`${CACHE_DEBUG_PREFIX} local resolve hit IDB`, { apiRoute, id: numericID })
 	return { record: idbRecord, stale: isRecordStale(idbRecord, currentTimeSeconds) }
 }
 
@@ -781,12 +856,6 @@ export const getRecordWithCache = <T extends IMinimalRecord>(
 		}
 
 		const localResolution = await getLocalRecordByID<T>(apiRoute, numericID)
-		console.debug(`${CACHE_DEBUG_PREFIX} ref.refresh local resolution`, {
-			apiRoute,
-			id: numericID,
-			hasLocalRecord: Boolean(localResolution.record),
-			stale: localResolution.stale,
-		})
 		// Show loading spinner only when we don't have local data for first paint.
 		loading = !Boolean(localResolution.record)
 		if (localResolution.record) {
@@ -795,10 +864,6 @@ export const getRecordWithCache = <T extends IMinimalRecord>(
 
 		// Fresh local hit: skip network and complete.
 		if (localResolution.record && !localResolution.stale) {
-			console.debug(`${CACHE_DEBUG_PREFIX} ref.refresh skip network due fresh local record`, {
-				apiRoute,
-				id: numericID,
-			})
 			loading = false
 			return localResolution.record
 		}
@@ -806,11 +871,6 @@ export const getRecordWithCache = <T extends IMinimalRecord>(
 		// Local miss or stale local hit: refresh from server and update ref if changed/new.
 		const refreshedRecord = await getRecordByID<T>(apiRoute, numericID, {
 			cachedRecord: localResolution.record || false,
-		})
-		console.debug(`${CACHE_DEBUG_PREFIX} ref.refresh server refresh result`, {
-			apiRoute,
-			id: numericID,
-			hasRefreshedRecord: Boolean(refreshedRecord),
 		})
 		const isRecordChanged =
 			Boolean(refreshedRecord) &&

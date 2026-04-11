@@ -333,7 +333,7 @@ func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, empresaID i
 		RegistryNumber: clientRegistryNumber,
 		PersonType:     clientPersonType,
 	}}
-	// Sale-order client creation must never update an existing client record from frontend input 
+	// Sale-order client creation must never update an existing client record from frontend input
 	// to prevent accidental data corruption of shared client/provider records.
 	saveError := negocio.SaveClientProviders(&clientProviders, empresaID, usuarioID, true)
 	if saveError != nil {
@@ -347,17 +347,14 @@ func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, empresaID i
 }
 
 func GetSaleOrderByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	saleOrderIDRecords, err := core.ExtractCacheVersionValues(req)
-	if err != nil {
-		return req.MakeErr(err)
-	}
+	saleOrderIDRecords := req.ExtractCacheVersionValues()
 
-	saleOrderIDs := core.Map(saleOrderIDRecords, func(e db.IDCacheVersion) int64 { return  e.ID })
+	saleOrderIDs := core.Map(saleOrderIDRecords, func(e db.IDCacheVersion) int64 { return e.ID })
 
 	saleOrders := []types.SaleOrder{}
 	query := db.Query(&saleOrders).CompanyID.Equals(req.Usuario.EmpresaID)
-	
-	if err = query.ID.In(saleOrderIDs...).Exec(); err != nil {
+
+	if err := query.ID.In(saleOrderIDs...).Exec(); err != nil {
 		return req.MakeErr("Error al obtener los productos.", err)
 	}
 

@@ -29,8 +29,6 @@ export const concatenateInts = (values: number[], sorted?: boolean): string => {
 	const b64u8 = toBase64(new Uint8Array(u8));
 	const b64u16 = toBase64(new Uint16Array(u16));
 	const b64u32 = toBase64(new Uint32Array(u32));
-	
-	console.log("sizes:", u8.length, u16.length, u32.length)
 
 	return [b64u8, b64u16, b64u32]
 		.map((s) => s.replaceAll("=", "").replaceAll("+", "-").replaceAll("/", "_")).join(".");

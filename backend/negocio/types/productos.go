@@ -123,7 +123,6 @@ func (e ProductoTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:             "productos",
 		Partition:        e.EmpresaID,
-		UseSequences:     true,
 		SaveCacheVersion: true,
 		Keys:             []db.Coln{e.ID.Autoincrement(0)},
 		Indexes: []db.Index{

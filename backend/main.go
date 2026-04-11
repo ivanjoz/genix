@@ -171,12 +171,12 @@ func main() {
 	for _, value := range os.Args {
 		if len(value) >= 2 && value[0:2] == "fn" {
 			core.Env.LOGS_FULL = true
-			core.Env.APP_CODE = "smbr-qas"
 			invokeFun = value
 		}
-		if value == "prod" {
-			core.Env.APP_CODE = "smbr-prod"
-		}
+	}
+	
+	if core.Env.IS_LOCAL {
+		core.Env.LOGS_FULL = true
 	}
 
 	// Revisa si lo que se requiere es ejecutar una función

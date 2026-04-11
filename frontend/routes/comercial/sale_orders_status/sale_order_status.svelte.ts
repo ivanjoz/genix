@@ -28,6 +28,7 @@ export interface ISaleOrder {
     LastPaymentUser: number;
     DeliveryTime: number;
     DeliveryUser: number;
+		ClientID: number;
     upd: number;
     UpdatedBy: number;
     ss: number;
@@ -54,26 +55,17 @@ export const SaleOrderGroup = {
 }
 
 export class SaleOrdersService extends GetHandler {
-    route = "sale-orders"
-    // Route now depends on group; bump version to avoid mixing old cached queries.
-    useCache = { min: 0.1, ver: 2 }
+  route = "sale-orders"
+  // Route now depends on group; bump version to avoid mixing old cached queries.
+  useCache = { min: 0.1, ver: 3 }
 
 	records: ISaleOrder[] = $state([])
 
 	handler(result: ISaleOrder[]): void {
-		// Keep diagnostics lightweight to avoid blocking the main thread with large object logs.
-		const data = Array.isArray(result) ? result : [result];
-		console.debug('[SaleOrdersService] fetched rows:', data.length);
-		// Never show deleted/canceled records in the UI; cache merge still works via IDs.
-		const activeOrders = data.filter((saleOrder) => (saleOrder?.ss || 0) > 0);
-		this.records = activeOrders.map((saleOrder) => {
-			const normalizedLastPaymentCajaID = saleOrder.LastPaymentCajaID || (saleOrder as any).CajaID_ || 0;
-			return {
-				...saleOrder,
-				LastPaymentCajaID: normalizedLastPaymentCajaID,
-			};
-		});
-    }
+		// Normalize once here so page consumers can reuse the service data without extra passes.
+		this.records = (result||[]).filter((saleOrder) => (saleOrder?.ss || 0) > 0)
+		console.debug('[SaleOrdersService] fetched rows:', result?.length,"|",this.records.length);
+  }
 
 	constructor(group: number) {
 		super()

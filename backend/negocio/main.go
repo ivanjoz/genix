@@ -21,5 +21,6 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.galeria-image":            PostGaleriaImage,
 	"GET.galeria-images":            GetGaleriaImages,
 	"GET.client-provider":           GetClientProviders,
+	"GET.client-provider-ids":       GetClientProvidersByIDs,
 	"POST.client-provider":          PostClientProviders,
 }

@@ -335,6 +335,67 @@ type IDCacheVersion struct {
 	CacheVersion uint8
 }
 
+type cacheVersionMismatchDebugRow struct {
+	ID            int64
+	GroupID       uint8
+	ClientVersion uint8
+	ServerVersion uint8
+}
+
+const queryCachedIDsMaxBatchSize = 100
+
+func splitIDsIntoBatches(ids []int64, batchSize int) [][]int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+	if batchSize <= 0 {
+		batchSize = len(ids)
+	}
+
+	idBatches := make([][]int64, 0, (len(ids)+batchSize-1)/batchSize)
+	for startIndex := 0; startIndex < len(ids); startIndex += batchSize {
+		endIndex := startIndex + batchSize
+		if endIndex > len(ids) {
+			endIndex = len(ids)
+		}
+		// Copy the batch to keep query input deterministic and isolated from later mutations.
+		currentBatch := append([]int64(nil), ids[startIndex:endIndex]...)
+		idBatches = append(idBatches, currentBatch)
+	}
+
+	return idBatches
+}
+
+func buildCollisionIDsByPartition(uniqueIDsByPartition map[int32]map[int64]struct{}) map[int32]map[uint8][]int64 {
+	collisionIDsByPartition := map[int32]map[uint8][]int64{}
+
+	for partitionID, idsSet := range uniqueIDsByPartition {
+		groupIDsToRecordIDs := map[uint8][]int64{}
+		for recordID := range idsSet {
+			groupID := uint8(recordID)
+			groupIDsToRecordIDs[groupID] = append(groupIDsToRecordIDs[groupID], recordID)
+		}
+
+		collidingGroupIDs := map[uint8][]int64{}
+		for groupID, recordIDs := range groupIDsToRecordIDs {
+			if len(recordIDs) < 2 {
+				continue
+			}
+			sort.Slice(recordIDs, func(leftIndex, rightIndex int) bool {
+				return recordIDs[leftIndex] < recordIDs[rightIndex]
+			})
+			collidingGroupIDs[groupID] = recordIDs
+		}
+
+		if len(collidingGroupIDs) == 0 {
+			continue
+		}
+		collisionIDsByPartition[partitionID] = collidingGroupIDs
+	}
+
+	return collisionIDsByPartition
+}
+
 // Only return records whose server cache version differs from the client-provided version.
 func QueryCachedIDs[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSlice *[]T, cachedIDs []IDCacheVersion) error {
 	if len(cachedIDs) == 0 {
@@ -384,6 +445,13 @@ func QueryCachedIDs[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSl
 		fmt.Println("QueryCachedIDs: no unique IDs after normalization")
 		return nil
 	}
+	if DebugFull {
+		collisionIDsByPartition := buildCollisionIDsByPartition(uniqueIDsByPartition)
+		if len(collisionIDsByPartition) > 0 {
+			// Debug only: make cache-version bucket collisions explicit for the current request.
+			fmt.Println("QueryCachedIDs: colliding uint8(id) groups by partition:", collisionIDsByPartition)
+		}
+	}
 
 	columnNames := make([]string, 0, len(scyllaTable.columns))
 	for _, column := range scyllaTable.columns {
@@ -397,6 +465,7 @@ func QueryCachedIDs[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSl
 	recordsToFetchByPartition := map[int32]map[int64]struct{}{}
 	fullyCachedIDsByPartition := map[int32][]int64{}
 	cacheVersionByPackedID := map[int64]map[uint8]uint8{}
+	mismatchDebugRowsByPartition := map[int32][]cacheVersionMismatchDebugRow{}
 
 	// Phase 1: compare client versions against cache_version table, without touching the main table.
 	tableID := BasicHashInt(scyllaTable.name)
@@ -419,6 +488,17 @@ func QueryCachedIDs[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSl
 				fullyCachedIDsByPartition[partitionID] = append(fullyCachedIDsByPartition[partitionID], recordID)
 				continue
 			}
+			if DebugFull {
+				mismatchDebugRowsByPartition[partitionID] = append(
+					mismatchDebugRowsByPartition[partitionID],
+					cacheVersionMismatchDebugRow{
+						ID:            recordID,
+						GroupID:       groupID,
+						ClientVersion: clientVersion,
+						ServerVersion: serverVersion,
+					},
+				)
+			}
 			if _, exists := recordsToFetchByPartition[partitionID]; !exists {
 				recordsToFetchByPartition[partitionID] = map[int64]struct{}{}
 			}
@@ -434,6 +514,10 @@ func QueryCachedIDs[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSl
 	}
 	fmt.Println("QueryCachedIDs: fully cached IDs by partition:", fullyCachedIDsByPartition)
 	fmt.Println("QueryCachedIDs: IDs selected from table by partition:", idsSelectedFromTableByPartition)
+	if DebugFull && len(mismatchDebugRowsByPartition) > 0 {
+		// Debug only: show the exact client/server version mismatch that forced each fetch.
+		fmt.Println("QueryCachedIDs: version mismatches by partition:", mismatchDebugRowsByPartition)
+	}
 
 	if len(recordsToFetchByPartition) == 0 {
 		fmt.Println("QueryCachedIDs: all IDs resolved from cache_version, skipping table select")
@@ -448,36 +532,52 @@ func QueryCachedIDs[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSl
 			continue
 		}
 
-		queryValues := make([]any, 0, len(recordIDSet)+1)
-		valuePlaceholders := make([]string, 0, len(recordIDSet))
-		queryValues = append(queryValues, partitionID)
-		for recordID := range recordIDSet {
-			queryValues = append(queryValues, recordID)
-			valuePlaceholders = append(valuePlaceholders, "?")
-		}
+		recordIDsToFetch := idsSelectedFromTableByPartition[partitionID]
+		recordIDBatches := splitIDsIntoBatches(recordIDsToFetch, queryCachedIDsMaxBatchSize)
+		fmt.Println("QueryCachedIDs: batched IDs selected from table", map[string]any{
+			"partitionID": partitionID,
+			"totalIDs":    len(recordIDsToFetch),
+			"batchCount":  len(recordIDBatches),
+		})
 
-		// Query each partition independently to preserve partition semantics and avoid cross-partition ambiguity.
-		queryString := fmt.Sprintf(
-			"SELECT %v FROM %v.%v WHERE %v = ? AND %v IN (%v)",
-			strings.Join(columnNames, ", "),
-			scyllaTable.keyspace,
-			scyllaTable.name,
-			partitionColumn.GetName(),
-			keyColumn.GetName(),
-			strings.Join(valuePlaceholders, ", "),
-		)
+		for batchIndex, recordIDBatch := range recordIDBatches {
+			queryValues := make([]any, 0, len(recordIDBatch)+1)
+			valuePlaceholders := make([]string, 0, len(recordIDBatch))
+			queryValues = append(queryValues, partitionID)
+			for _, recordID := range recordIDBatch {
+				queryValues = append(queryValues, recordID)
+				valuePlaceholders = append(valuePlaceholders, "?")
+			}
 
-		if err := scanSelectQueryRows(
-			queryString,
-			queryValues,
-			buildDefaultScanColumns(columnNames),
-			scyllaTable,
-			&fetchedRecords,
-			nil,
-			nil,
-			time.Now(),
-		); err != nil {
-			return err
+			// Query each partition independently and cap the IN clause to Scylla's clustering-key restriction limit.
+			queryString := fmt.Sprintf(
+				"SELECT %v FROM %v.%v WHERE %v = ? AND %v IN (%v)",
+				strings.Join(columnNames, ", "),
+				scyllaTable.keyspace,
+				scyllaTable.name,
+				partitionColumn.GetName(),
+				keyColumn.GetName(),
+				strings.Join(valuePlaceholders, ", "),
+			)
+
+			fmt.Println("QueryCachedIDs: executing batch", map[string]any{
+				"partitionID": partitionID,
+				"batchIndex":  batchIndex,
+				"batchSize":   len(recordIDBatch),
+			})
+
+			if err := scanSelectQueryRows(
+				queryString,
+				queryValues,
+				buildDefaultScanColumns(columnNames),
+				scyllaTable,
+				&fetchedRecords,
+				nil,
+				nil,
+				time.Now(),
+			); err != nil {
+				return err
+			}
 		}
 	}
 

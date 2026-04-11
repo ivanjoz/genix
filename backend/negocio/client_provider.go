@@ -45,6 +45,25 @@ func GetClientProviders(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(clientProviders)
 }
 
+func GetClientProvidersByIDs(req *core.HandlerArgs) core.HandlerResponse {
+	clientProviderCachedIDs := req.ExtractCacheVersionValues()
+	if len(clientProviderCachedIDs) == 0 {
+		return req.MakeErr("No se enviaron ids a buscar.")
+	}
+
+	core.Log("GetClientProvidersByIDs cached_ids_count:", len(clientProviderCachedIDs))
+
+	clientProviders := []s.ClientProvider{}
+	// Query only stale or missing cached rows using the cache-version payload provided by the frontend.
+	if queryError := db.QueryCachedIDs(&clientProviders, clientProviderCachedIDs); queryError != nil {
+		core.Log("GetClientProvidersByIDs query error:", queryError)
+		return req.MakeErr("Error al obtener clientes/proveedores.", queryError)
+	}
+
+	core.Log("GetClientProvidersByIDs result_count:", len(clientProviders))
+	return req.MakeResponse(clientProviders)
+}
+
 func PostClientProviders(req *core.HandlerArgs) core.HandlerResponse {
 	clientProvidersPayload := []s.ClientProvider{}
 	if deserializeError := json.Unmarshal([]byte(*req.Body), &clientProvidersPayload); deserializeError != nil {
