@@ -3,7 +3,7 @@ import Input from '$components/Input.svelte';
 import LayerStatic from '$components/LayerStatic.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
 import Page from '$domain/Page.svelte';
-import { Loading, formatN, include } from '$libs/helpers';
+import { Loading, formatN, wordInclude } from '$libs/helpers';
 
 import CheckboxOptions from '$components/CheckboxOptions.svelte';
 import { Core } from '$core/store.svelte';
@@ -303,7 +303,7 @@ import { SaleOrderState } from "./sale_order.svelte";
 
     productosParsed = productosParsedAll.filter((e) => {
         // Filter by Name
-        const matchName = terms.length === 0 || include(e.searchText, terms);
+        const matchName = terms.length === 0 || wordInclude(e.searchText, terms);
 
         // Filter by SKU
         let matchSku = true;

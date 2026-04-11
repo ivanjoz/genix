@@ -439,7 +439,7 @@ func QueryCachedIDs[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSl
 		clientVersionByPartitionAndID[partitionID][cachedID.ID] = cachedID.CacheVersion
 		incomingIDsByPartition[partitionID] = append(incomingIDsByPartition[partitionID], cachedID.ID)
 	}
-	fmt.Println("QueryCachedIDs: incoming IDs by partition:", incomingIDsByPartition)
+	// fmt.Println("QueryCachedIDs: incoming IDs by partition:", incomingIDsByPartition)
 
 	if len(uniqueIDsByPartition) == 0 {
 		fmt.Println("QueryCachedIDs: no unique IDs after normalization")
@@ -512,8 +512,8 @@ func QueryCachedIDs[T TableBaseInterface[E, T], E TableSchemaInterface[E]](refSl
 			idsSelectedFromTableByPartition[partitionID] = append(idsSelectedFromTableByPartition[partitionID], recordID)
 		}
 	}
-	fmt.Println("QueryCachedIDs: fully cached IDs by partition:", fullyCachedIDsByPartition)
-	fmt.Println("QueryCachedIDs: IDs selected from table by partition:", idsSelectedFromTableByPartition)
+	// fmt.Println("QueryCachedIDs: fully cached IDs by partition:", fullyCachedIDsByPartition)
+	// fmt.Println("QueryCachedIDs: IDs selected from table by partition:", idsSelectedFromTableByPartition)
 	if DebugFull && len(mismatchDebugRowsByPartition) > 0 {
 		// Debug only: show the exact client/server version mismatch that forced each fetch.
 		fmt.Println("QueryCachedIDs: version mismatches by partition:", mismatchDebugRowsByPartition)

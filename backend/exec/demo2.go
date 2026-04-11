@@ -261,7 +261,7 @@ func Test46(args *core.ExecArgs) core.FuncResponse {
 
 	controller := makeDBController[comercialTypes.SaleOrder]()
 
-	err := controller.RecalcGroupIndexHashes(1)
+	err := controller.RecalcVirtualColumns(1)
 	if err != nil {
 		fmt.Println(err)
 	}

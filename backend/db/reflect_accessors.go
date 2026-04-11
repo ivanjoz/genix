@@ -150,7 +150,7 @@ func (c *columnInfo) SetValue(ptr unsafe.Pointer, v any) {
 			if err != nil {
 				fmt.Printf("Error al convertir ComplexType for Col %s: %v\n", c.Name, err)
 			}
-		} else if ShouldLog() {
+		} else if ShouldLogFull() {
 			fmt.Printf("Complex Type could not be parsed or empty: %s (Type: %T)\n", c.Name, v)
 		}
 	} else {

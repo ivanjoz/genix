@@ -78,7 +78,7 @@ func ExtractGroupIndexCacheValues(req *HandlerArgs) ([]db.GroupIndexCache, error
 
 	records := makeGroupIndexCacheValues(groupHashes, updateCounters)
 
-	Log("records extracted:", len(records))
+	// Log("records extracted:", len(records))
 	return records, nil
 }
 

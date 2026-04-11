@@ -8,103 +8,98 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// GetSaleOrders returns sales orders for the authenticated company.
-// It supports delta sync via the "upd" query parameter.
-func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
-	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
-	orderPendingStatus := req.GetQueryInt("pending-status")
-	orderStatus := req.GetQueryInt("order-status")
-
-	sales := []types.SaleOrder{}
-	statusTracesToQuery := []int8{}
-	statusTracesCompletedToQuery := []int8{}
-
-	if orderPendingStatus > 0 {
-		statusTracesToQuery = GetSaleOrderStatusTracesByPendingStatus(int8(orderPendingStatus))
-		statusTracesCompletedToQuery = []int8{SaleOrderTraceStage3GeneratedDeliveredPaid}
-		if orderPendingStatus == 2 {
-			statusTracesCompletedToQuery = append(statusTracesCompletedToQuery,
-				SaleOrderTraceStage2GeneratedPaid, SaleOrderTraceStage2CompletedFromGeneratedDelivered)
-		} else if orderPendingStatus == 3 {
-			statusTracesCompletedToQuery = append(statusTracesCompletedToQuery,
-				SaleOrderTraceStage2GeneratedDelivered, SaleOrderTraceStage2CompletedFromGeneratedPaid)
-		}
-	} else if orderStatus > 0 {
-		statusTracesToQuery = GetSaleOrderStatusTracesByOrderStatus(int8(orderStatus))
-	}
-
-	// Get the delta data
-	if updated > 0 {
-		// Delta sync for pending views must include completed traces too so the frontend can
-		// evict rows that left the pending group after the last sync.
-		pendingSales, err := getSaleOrdersByStatusTraces(req.Usuario.EmpresaID, statusTracesToQuery, updated)
-		if err != nil {
-			core.Log("Error querying pending sale orders:", err)
-			return req.MakeErr("Error al obtener las órdenes de venta.")
-		}
-		sales = append(sales, pendingSales...)
-
-		completedSales, err := getSaleOrdersByStatusTraces(req.Usuario.EmpresaID, statusTracesCompletedToQuery, updated)
-		if err != nil {
-			core.Log("Error querying completed sale orders:", err)
-			return req.MakeErr("Error al obtener las órdenes de venta.")
-		}
-		sales = append(sales, completedSales...)
-
-		salesByID := map[int64]*types.SaleOrder{}
-		for i := range sales {
-			sale := &sales[i]
-			salesByID[sale.ID] = sale
-		}
-		sales = core.MapToSlice(salesByID)
-
-		// Get the full data
-	} else {
-		filteredSales, err := getSaleOrdersByStatusTraces(req.Usuario.EmpresaID, statusTracesToQuery, 0)
-		if err != nil {
-			core.Log("Error querying sale orders:", err)
-			return req.MakeErr("Error al obtener las órdenes de venta.")
-		}
-		sales = filteredSales
-	}
-
-	return req.MakeResponse(sales)
+var pendingStatusToStatus = map[int8][]int8{
+	types.OrderStatusPaid:      {types.OrderStatusPending, types.OrderStatusDelivered},
+	types.OrderStatusDelivered: {types.OrderStatusPending, types.OrderStatusPaid},
 }
 
-func getSaleOrdersByStatusTraces(companyID int32, statusTraces []int8, updated int32) ([]types.SaleOrder, error) {
-	if len(statusTraces) == 0 {
-		return nil, nil
-	}
-
-	queryResults := make([][]types.SaleOrder, len(statusTraces))
+// It supports delta sync via the "upc" query parameter.
+func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
+	updateCounter := req.GetQueryInt("records")
+	orderPendingStatus := int8(req.GetQueryInt("pending-status"))
+	orderStatus := int8(req.GetQueryInt("order-status"))
 	queryGroup := errgroup.Group{}
 
-	for traceIndex, statusTrace := range statusTraces {
+	// Clone the configured slice before appending so request-specific filters do not
+	// mutate the shared backing array stored in the status map.
+	orderStatusToQuery := append([]int8{}, pendingStatusToStatus[orderPendingStatus]...)
+
+	if orderStatus > 0 {
+		orderStatusToQuery = append(orderStatusToQuery, orderStatus)
+	}
+
+	if len(orderStatusToQuery) == 0 {
+		return req.MakeErr("El order status es incorrecto.")
+	}
+
+	orderStatusToRemove := []int8{types.OrderStatusCompleted, types.OrderStatusAnnulled}
+	if orderPendingStatus > 0 {
+		orderStatusToRemove = append(orderStatusToRemove, orderPendingStatus)
+	}
+
+	saleOrdersByStatus := make([][]types.SaleOrder, len(orderStatusToQuery))
+	for resultIndex, currentOrderStatus := range orderStatusToQuery {
+
 		queryGroup.Go(func() error {
-			traceSales := []types.SaleOrder{}
-			query := db.Query(&traceSales)
+			query := db.Query(&saleOrdersByStatus[resultIndex]).Limit(5000).OrderDesc()
 			query.Exclude(query.CompanyID)
-			query.CompanyID.Equals(companyID).StatusTrace.Equals(statusTrace)
-			// Always keep Updated as a range predicate so the planner can route to the
-			// packed StatusTrace+Updated view instead of falling back to base-table filtering.
-			query.Updated.GreaterEqual(updated)
 
-			if err := query.Exec(); err != nil {
-				return err
-			}
+			query.CompanyID.Equals(req.Usuario.EmpresaID).
+				Status.Equals(currentOrderStatus).
+				UpdateCounter.GreaterEqual(updateCounter)
 
-			queryResults[traceIndex] = traceSales
-			return nil
+			return query.Exec()
 		})
 	}
 
-	if err := queryGroup.Wait(); err != nil {
-		return nil, err
+	saleOrdersToRemoveIDsGroups := make([][]int64, len(orderStatusToRemove))
+	core.Log("orderStatusToRemove:", orderStatusToRemove)
+	
+	if updateCounter > 0 {
+		for resultIndex, currentOrderStatus := range orderStatusToRemove {
+
+			queryGroup.Go(func() error {
+				idsToSave := &saleOrdersToRemoveIDsGroups[resultIndex]
+
+				query := db.Query(&[]types.SaleOrder{})
+				query.Select(query.ID)
+
+				query.CompanyID.Equals(req.Usuario.EmpresaID).
+					Status.Equals(currentOrderStatus).
+					UpdateCounter.GreaterEqual(updateCounter)
+
+				if err := query.ExecScan(func(record *types.SaleOrder) bool {					
+					(*idsToSave) = append((*idsToSave), record.ID)
+					// Skip storing the decoded row because this query only needs the IDs.
+					return true
+				}); err != nil {
+					return err
+				}
+				return nil
+			})
+		}
 	}
 
-	mergedSales := []types.SaleOrder{}
-	for _, traceSales := range queryResults {
-		mergedSales = append(mergedSales, traceSales...)
+	if err := queryGroup.Wait(); err != nil {
+		return req.MakeErr("Error al obtener los registros de ventas:", err)
 	}
-	return mergedSales, nil
+
+	saleOrders := []types.SaleOrder{}
+	for _, saleOrdersByCurrentStatus := range saleOrdersByStatus {
+		saleOrders = append(saleOrders, saleOrdersByCurrentStatus...)
+	}
+
+	saleOrdersToRemoveIDs := []int64{}
+	for _, idsToRemove := range saleOrdersToRemoveIDsGroups {
+		saleOrdersToRemoveIDs = append(saleOrdersToRemoveIDs, idsToRemove...)
+	}
+	
+	core.Log("saleOrdersToRemoveIDs::",saleOrdersToRemoveIDsGroups)
+	
+	response := map[string]any{
+		"records":             &saleOrders,
+		"records_IDsToRemove": &saleOrdersToRemoveIDs,
+	}
+
+	return req.MakeResponse(&response)
 }

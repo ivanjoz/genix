@@ -109,7 +109,7 @@ export const decodeFromBase62 = (token: string): number => {
   return decodedNumber
 }
 
-export function include(e: string, h: string | string[]) {
+export function wordInclude(e: string, h: string | string[]) {
   if (h && typeof h === 'string') {
     h = h.split(' ').filter(x => x.length > 0)
   }

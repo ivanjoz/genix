@@ -666,7 +666,7 @@ func incrementAssignFallbackStats(colType int8) {
 
 	atomic.AddUint64(&assignFallbackCountByType[colType], 1)
 	// Log only first hit per type to keep diagnostics visible without flooding logs.
-	if ShouldLog() && atomic.CompareAndSwapUint32(&assignFallbackLoggedByType[colType], 0, 1) {
+	if ShouldLogFull() && atomic.CompareAndSwapUint32(&assignFallbackLoggedByType[colType], 0, 1) {
 		fmt.Printf("assingValue fallback engaged for colType=%d (%s)\n", colType, GetColTypeByID(colType).FieldType)
 	}
 }

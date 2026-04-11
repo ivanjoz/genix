@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, type Snippet } from 'svelte';
 import { parseSVG } from '$libs/helpers';
 import angleSvg from '$domain/assets/angle.svg?raw';
 
@@ -20,9 +20,9 @@ import angleSvg from '$domain/assets/angle.svg?raw';
     /** Whether the layer is open by default */
     defaultOpen?: boolean;
     /** Children content to render in the layer */
-    children?: import('svelte').Snippet;
+    children?: Snippet;
     /** Optional custom button snippet */
-    button?: import('svelte').Snippet<[boolean]>;
+    button?: Snippet<[boolean]>;
     /** Callback when layer opens */
     onOpen?: () => void;
     /** Callback when layer closes */
@@ -31,10 +31,16 @@ import angleSvg from '$domain/assets/angle.svg?raw';
     contentCss?: string;
     /** Disable default click-to-toggle behavior when parent controls isOpen externally */
     disableTriggerToggle?: boolean;
+    icon?: string;
+    /** Icon class to show instead of `icon` while the layer is open */
+    iconOnShow?: string;
+    useOutline?: boolean;
+    /** Button class to use instead of `buttonClass` while the layer is open */
+    buttonClassOnShow?: string;
   }
 
   let {
-    buttonText = 'Open',
+    buttonText = '',
     wrapperClass = '',
     buttonClass = '',
     layerClass = '',
@@ -48,7 +54,11 @@ import angleSvg from '$domain/assets/angle.svg?raw';
     button,
     onOpen,
     onClose,
-    useBig
+    useBig,
+    icon,
+    iconOnShow,
+    useOutline,
+    buttonClassOnShow
   }: Props = $props();
 
   // svelte-ignore state_referenced_locally
@@ -240,10 +250,13 @@ import angleSvg from '$domain/assets/angle.svg?raw';
     <button
       bind:this={buttonElement}
       onclick={toggleLayer}
-      class="button-layer-trigger {buttonClass}"
+      class="{(isOpen ? buttonClassOnShow : buttonClass) || buttonClass || 'bx-purple min-w-40'}"
       type="button"
     >
       {buttonText}
+      {#if (isOpen ? iconOnShow : icon) || icon}
+        <i class={isOpen ? (iconOnShow || icon) : icon}></i>
+      {/if}
     </button>
   {/if}
 
@@ -254,6 +267,7 @@ import angleSvg from '$domain/assets/angle.svg?raw';
       class:use-big={useBig}
       class:placement-top={placement === 'top'}
       class:placement-bottom={placement === 'bottom'}
+      class:use-outline={useOutline}
     >
       <!-- Angle pointer -->
       <div class="button-layer-angle" style="left: {angleLeft}px;" class:use-big={useBig}>
@@ -274,21 +288,6 @@ import angleSvg from '$domain/assets/angle.svg?raw';
     display: inline-block;
   }
 
-  .button-layer-trigger {
-    padding: 8px 16px;
-    background-color: #6d5dad;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background-color 0.2s;
-  }
-
-  .button-layer-trigger:hover {
-    background-color: #5a4a94;
-  }
-
   .button-layer {
     position: fixed;
     z-index: 210;
@@ -300,6 +299,11 @@ import angleSvg from '$domain/assets/angle.svg?raw';
       0 0 0 1px rgba(0, 0, 0, 0.05);
     animation: slideDown 0.2s ease-out;
     overflow: visible;
+  }
+  
+  .button-layer.use-outline {
+  	outline: 4px solid #4d447424;
+    border: 1px solid #4d447452;
   }
 
   .button-layer.placement-top {

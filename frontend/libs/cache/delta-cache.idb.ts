@@ -164,6 +164,14 @@ export const bulkPutRouteRecordRows = async (dbName: string, rows: ICacheRecordR
   await getDeltaCacheDatabase(dbName).cacheRecords.bulkPut(rows)
 }
 
+export const bulkDeleteRouteRecordRows = async (
+  dbName: string,
+  rowKeys: [number, string, CacheRecordID][]
+): Promise<void> => {
+  if (rowKeys.length === 0) { return }
+  await getDeltaCacheDatabase(dbName).cacheRecords.bulkDelete(rowKeys)
+}
+
 export const replaceRouteRecordRows = async (
   routeRow: ICacheRouteRow, responseKeys: string[], rows: ICacheRecordRow[]
 ): Promise<void> => {

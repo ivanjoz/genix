@@ -33,6 +33,7 @@ type SaleOrder struct {
 	ClientID       int32 `json:",omitempty"`
 	Created        int32 `json:",omitempty"`
 	Updated        int32 `json:"upd,omitempty"`
+	UpdateCounter  int32 `json:"upc,omitempty"`
 	UpdatedBy      int32 `json:",omitempty"`
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
 	Status      int8 `json:"ss,omitempty"`
@@ -88,6 +89,7 @@ type SaleOrderTable struct {
 	Created                    db.Col[SaleOrderTable, int32]
 	ClientID                   db.Col[SaleOrderTable, int32]
 	Updated                    db.Col[SaleOrderTable, int32]
+	UpdateCounter	             db.Col[SaleOrderTable, int32]
 	UpdatedBy                  db.Col[SaleOrderTable, int32]
 	Status                     db.Col[SaleOrderTable, int8]
 	LastPaymentTime            db.Col[SaleOrderTable, int32]
@@ -129,12 +131,12 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			},
 			{
 				Type:     db.TypeView,
-				Keys:     []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)},
+				Keys:     []db.Coln{e.Status.Int32(), e.UpdateCounter.DecimalSize(8)},
 				KeepPart: true,
 			},
 			{
 				Type:     db.TypeView,
-				Keys:     []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)},
+				Keys:     []db.Coln{e.StatusTrace.Int32(), e.UpdateCounter.DecimalSize(8)},
 				KeepPart: true,
 			},
 		},
@@ -211,3 +213,11 @@ func (e ProductSaleSummaryTable) GetSchema() db.TableSchema {
 		DisableUpdateCounter: true,
 	}
 }
+
+const (
+	OrderStatusPending = int8(1)
+	OrderStatusPaid = int8(2)
+	OrderStatusDelivered = int8(3)
+	OrderStatusCompleted = int8(4)
+	OrderStatusAnnulled = int8(0)
+)

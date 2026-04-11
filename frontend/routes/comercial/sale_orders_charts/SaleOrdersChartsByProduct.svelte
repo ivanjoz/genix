@@ -4,7 +4,7 @@
   import HighlightText from '$components/micro/HighlightText.svelte'
   import VirtualCards from '$components/VirtualCards.svelte'
   import { FechaHelper } from '$libs/fecha'
-  import { formatN, formatTime, include, throttle } from '$libs/helpers'
+  import { formatN, formatTime, wordInclude, throttle } from '$libs/helpers'
   import type { IProducto } from '$routes/negocio/productos/productos.svelte'
   import type { ISaleSummaryRecord } from './sale_orders_charts.svelte'
 
@@ -185,7 +185,7 @@
     if (!filterText) { return productChartCards }
 
     return productChartCards.filter((productChartCard) => {
-      return include(productChartCard.productName.toLowerCase(), filterWords)
+      return wordInclude(productChartCard.productName.toLowerCase(), filterWords)
     })
   })
 

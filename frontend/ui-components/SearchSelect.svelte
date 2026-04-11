@@ -1,5 +1,5 @@
 <script lang="ts" generics="T,E">
-import { highlString, include } from '$libs/helpers';
+import { highlString, wordInclude } from '$libs/helpers';
 import { throttle } from '$libs/helpers';
 import { Core } from '$core/store.svelte';
   import s1 from "./components.module.css";
@@ -192,7 +192,7 @@ import { Core } from '$core/store.svelte';
       if (searchWords.length === 0) {
         filtered.push(preparedOption.option)
       } else {
-        if (include(preparedOption.normalizedLabel, searchWords)) {
+        if (wordInclude(preparedOption.normalizedLabel, searchWords)) {
           filtered.push(preparedOption.option)
         }
       }
@@ -434,6 +434,7 @@ import { Core } from '$core/store.svelte';
           role="option"
           aria-selected={arrowSelected === i}
           tabindex="0"
+          title={name}
           onmousedown={(ev) => {
             // Commit selection before blur/click ordering can clear the input.
             ev.preventDefault();
@@ -441,7 +442,7 @@ import { Core } from '$core/store.svelte';
             onOptionClick(e);
           }}
         >
-          <div>
+          <div class="_option_text">
             {#each highlighted as w}
               <span class={w.highl ? "_8" : ""} class:mr-4={w.isEnd}>{w.text}</span>
             {/each}
@@ -503,6 +504,14 @@ import { Core } from '$core/store.svelte';
     font-style: normal;
     font-weight: bold;
     color: #1890ff;
+  }
+
+  ._option_text {
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   ._8 {

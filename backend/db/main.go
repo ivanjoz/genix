@@ -408,7 +408,7 @@ func (e *TableStruct[T, E]) Exec() error {
 func (e *TableStruct[T, E]) ExecScan(
 	scanHandler func(record *E) bool,
 ) error {
-	return execQuery[T, E](e.schemaStruct, e.tableInfo, scanHandler)
+	return execQuery(e.schemaStruct, e.tableInfo, scanHandler)
 }
 
 func (e *TableStruct[T, E]) AllowFilter() *T {

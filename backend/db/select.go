@@ -1,13 +1,11 @@
 package db
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -384,6 +382,132 @@ func recordMatchesPostFilter(ptr unsafe.Pointer, statements []ColumnStatement, s
 	return true
 }
 
+func formatDebugQuery(queryStr string, queryValues []any) string {
+	// Keep debug output short by collapsing the projected column list before injecting values.
+	minifiedQuery := minifySelectColumns(queryStr)
+	if len(queryValues) == 0 {
+		return minifiedQuery
+	}
+
+	var formattedQuery strings.Builder
+	formattedQuery.Grow(len(minifiedQuery) + len(queryValues)*8)
+
+	valueIndex := 0
+	for _, queryChar := range minifiedQuery {
+		if queryChar == '?' && valueIndex < len(queryValues) {
+			formattedQuery.WriteString(formatDebugValue(queryValues[valueIndex]))
+			valueIndex++
+			continue
+		}
+		formattedQuery.WriteRune(queryChar)
+	}
+
+	if valueIndex < len(queryValues) {
+		formattedQuery.WriteString(" /* extra_values=")
+		formattedQuery.WriteString(formatDebugValues(queryValues[valueIndex:]))
+		formattedQuery.WriteString(" */")
+	}
+
+	return formattedQuery.String()
+}
+
+func minifySelectColumns(queryStr string) string {
+	// Only rewrite the top-level SELECT projection so the rest of the query stays intact.
+	upperQuery := strings.ToUpper(queryStr)
+	selectIndex := strings.Index(upperQuery, "SELECT ")
+	fromIndex := strings.Index(upperQuery, " FROM ")
+	if selectIndex < 0 || fromIndex <= selectIndex+len("SELECT ") {
+		return queryStr
+	}
+
+	selectColumns := queryStr[selectIndex+len("SELECT ") : fromIndex]
+	columnCount := countTopLevelCSVColumns(selectColumns)
+	if columnCount == 0 {
+		return queryStr
+	}
+
+	return queryStr[:selectIndex] + fmt.Sprintf("SELECT (%d)", columnCount) + queryStr[fromIndex:]
+}
+
+func countTopLevelCSVColumns(columnsText string) int {
+	// Count only commas at the top level so function calls like foo(a, b) stay as one projected column.
+	trimmedColumns := strings.TrimSpace(columnsText)
+	if len(trimmedColumns) == 0 {
+		return 0
+	}
+
+	columnCount := 1
+	parenthesisDepth := 0
+	for _, currentChar := range trimmedColumns {
+		switch currentChar {
+		case '(':
+			parenthesisDepth++
+		case ')':
+			if parenthesisDepth > 0 {
+				parenthesisDepth--
+			}
+		case ',':
+			if parenthesisDepth == 0 {
+				columnCount++
+			}
+		}
+	}
+
+	return columnCount
+}
+
+func formatDebugValues(queryValues []any) string {
+	formattedValues := make([]string, 0, len(queryValues))
+	for _, queryValue := range queryValues {
+		formattedValues = append(formattedValues, formatDebugValue(queryValue))
+	}
+	return "[" + strings.Join(formattedValues, ", ") + "]"
+}
+
+func formatDebugValue(rawValue any) string {
+	// Render bound values as valid-enough CQL literals for debugging and copy-paste inspection.
+	if rawValue == nil {
+		return "null"
+	}
+
+	switch value := rawValue.(type) {
+	case string:
+		return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+	case []byte:
+		return fmt.Sprintf("0x%x", value)
+	case fmt.Stringer:
+		return "'" + strings.ReplaceAll(value.String(), "'", "''") + "'"
+	case time.Time:
+		return "'" + value.Format(time.RFC3339Nano) + "'"
+	case bool:
+		if value {
+			return "true"
+		}
+		return "false"
+	}
+
+	valueRef := reflect.ValueOf(rawValue)
+	for valueRef.Kind() == reflect.Pointer {
+		if valueRef.IsNil() {
+			return "null"
+		}
+		valueRef = valueRef.Elem()
+	}
+
+	switch valueRef.Kind() {
+	case reflect.String:
+		return "'" + strings.ReplaceAll(valueRef.String(), "'", "''") + "'"
+	case reflect.Slice, reflect.Array:
+		formattedValues := make([]string, 0, valueRef.Len())
+		for idx := 0; idx < valueRef.Len(); idx++ {
+			formattedValues = append(formattedValues, formatDebugValue(valueRef.Index(idx).Interface()))
+		}
+		return "[" + strings.Join(formattedValues, ", ") + "]"
+	}
+
+	return fmt.Sprintf("%v", valueRef.Interface())
+}
+
 func normalizeScannedValue(value any) any {
 	// RowData stores pointers for scalar columns; grouped virtual decomposition works with the plain value.
 	if value == nil {
@@ -412,7 +536,13 @@ func scanSelectQueryRows[E any](
 	usePostFilter := len(postFilterStatements) > 0
 
 	doScan := func() error {
-		fmt.Printf("Select Timing | Elapsed: %d | Query: %s\n", time.Since(queryNoticeTime).Milliseconds(), queryStr)
+		if ShouldLog() {
+			// Log the executable statement with compact projection output to keep noisy SELECTs readable.
+			fmt.Printf("Select Elapsed: %d | %s\n",
+				time.Since(queryNoticeTime).Milliseconds(),
+				formatDebugQuery(queryStr, queryValues),
+			)
+		}
 
 		iter := getScyllaConnection().Query(queryStr, queryValues...).Iter()
 		rd, err := iter.RowData()
@@ -437,11 +567,13 @@ func scanSelectQueryRows[E any](
 
 			record := new(E)
 			recordPtr := xunsafe.AsPointer(record)
-			shouldLog := ShouldLog()
+			shouldLog := ShouldLogFull()
 
+			/* 
 			if shouldLog {
 				fmt.Printf("\n--- Scanning record %d ---\n", atomic.LoadUint32(&LogCount)+1)
 			}
+			*/
 
 			// Map each scanned DB column into the destination struct using precomputed column metadata.
 			for columnIndex, scanColumn := range scanColumns {
@@ -480,12 +612,12 @@ func scanSelectQueryRows[E any](
 				}
 				column.SetValue(recordPtr, value)
 			}
-
+			/* 
 			if shouldLog {
 				recordJSON, _ := json.MarshalIndent(record, "", "  ")
 				fmt.Printf("Resulting Struct: %s\n", string(recordJSON))
-				IncrementLogCount()
 			}
+			*/
 
 			// Post-filter keeps exact semantics when indexed query planning intentionally overfetches.
 			if usePostFilter && !recordMatchesPostFilter(xunsafe.AsPointer(record), postFilterStatements, scyllaTable) {
@@ -541,7 +673,7 @@ func executeBoundSelectQueries[E any](
 			recordsTarget = recordsGetted
 		}
 
-		fmt.Println("Query::", boundStatement.QueryStr)
+		// fmt.Println("Query::", boundStatement.QueryStr)
 		boundStatement := boundStatement
 		eg.Go(func() (err error) {
 			defer func() {
@@ -722,8 +854,6 @@ func tryBuildCompositeBucketPlan(statements []ColumnStatement, scyllaTable Scyll
 
 	return nil
 }
-
-
 
 // selectExec executes a query using TableSchema and TableInfo
 func selectExec[E any](

@@ -39,7 +39,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	sale := saleRequest
-	previousStatusTrace := int8(0)
 
 	if isUpdate {
 		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
@@ -54,7 +53,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		sale = existingSales[0]
-		previousStatusTrace = sale.StatusTrace
 		sale.ActionsIncluded = saleRequest.ActionsIncluded
 		// Preserve existing payment caja on delivery-only updates (payload may omit LastPaymentCajaID).
 		if saleRequest.LastPaymentCajaID > 0 {
@@ -177,16 +175,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		if len(sale.DetailProductsIDs) == 0 {
 			return req.MakeErr("No hay productos en el detalle para procesar la entrega.")
 		}
-
-		// Revisa si hay stock necesario
 	}
-
-	// Keep the compact 1..9 trace synchronized with the executed action flow.
-	nextStatusTrace, err := CalculateSaleOrderStatusTrace(previousStatusTrace, sale.ActionsIncluded)
-	if err != nil {
-		return req.MakeErr("No se pudo calcular el StatusTrace de la venta:", err)
-	}
-	sale.StatusTrace = nextStatusTrace
 
 	saleActions := []int8{}
 	if !isUpdate {

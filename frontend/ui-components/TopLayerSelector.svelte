@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Core } from '$core/store.svelte';
-import { highlString, include, throttle } from '$libs/helpers';
+import { highlString, wordInclude, throttle } from '$libs/helpers';
     import { untrack } from 'svelte';
 
 // Local state for this modal instance
@@ -22,7 +22,7 @@ const optionsFiltered = $derived.by(() => {
     for (const opt of Core.showMobileSearchLayer?.options || []){
       const name = opt[keyName] as string
       if (typeof name === "string") {
-        if(include(name.toLowerCase(), searchWords)){
+        if(wordInclude(name.toLowerCase(), searchWords)){
           filtered.push(opt)
         }
       }

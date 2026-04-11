@@ -74,7 +74,7 @@ func getOrCompileScyllaTable[T TableInterface[T]](schemaStruct *T) ScyllaTable[a
 	cacheEntryAny, _ := scyllaTableCache.LoadOrStore(cacheKey, &scyllaTableCacheEntry{})
 	cacheEntry := cacheEntryAny.(*scyllaTableCacheEntry)
 	cacheEntry.once.Do(func() {
-		if ShouldLog() {
+		if ShouldLogFull() {
 			fmt.Printf("Compiling ScyllaTable metadata once for %s\n", cacheKey)
 		}
 		cacheEntry.table = makeTable(schemaStruct)

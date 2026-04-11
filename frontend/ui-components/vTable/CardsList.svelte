@@ -2,7 +2,7 @@
   import Renderer, { type ElementAST } from '$components/Renderer.svelte';
   import CellEditable from '$components/vTable/CellEditable.svelte';
   import CellSelector from '$components/vTable/CellSelector.svelte';
-  import { highlString, include } from '$libs/helpers';
+  import { highlString, wordInclude } from '$libs/helpers';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import type { CardRendererSnippet, ICardButtonDeleteHandler, ICardCell } from './types';
 
@@ -88,7 +88,7 @@
         } else {
           content = getFilterContent(record).toLowerCase();
         }
-        return include(content, filterTextArray);
+        return wordInclude(content, filterTextArray);
       });
     }
     return data;

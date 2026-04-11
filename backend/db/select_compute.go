@@ -794,12 +794,14 @@ func MatchQueryCapability(statements []ColumnStatement, capabilities []QueryCapa
 		}
 
 		if match {
+			/* 
 			sourceName := "base-key"
 			if cap.Source != nil {
 				sourceName = cap.Source.name
 			}
-			fmt.Printf("Capability match: signature=%s priority=%d source=%s isKey=%v\n",
-				cap.Signature, cap.Priority, sourceName, cap.IsKey)
+			fmt.Printf("Capability match: signature=%s priority=%d source=%s isKey=%v\n",	cap.Signature, cap.Priority, sourceName, cap.IsKey)
+			*/
+			
 			if bestMatch == nil || cap.Priority > bestMatch.Priority {
 				bestMatch = cap
 			} else if cap.Priority == bestMatch.Priority {

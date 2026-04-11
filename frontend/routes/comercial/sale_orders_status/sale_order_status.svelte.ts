@@ -54,17 +54,23 @@ export const SaleOrderGroup = {
 	FINALIZADO: 4,
 }
 
+export interface ISaleOrdersResult {
+	records: ISaleOrder[]
+}
+
 export class SaleOrdersService extends GetHandler {
   route = "sale-orders"
   // Route now depends on group; bump version to avoid mixing old cached queries.
-  useCache = { min: 0.1, ver: 3 }
+  useCache = { min: 0.1, ver: 8 }
 
 	records: ISaleOrder[] = $state([])
 
-	handler(result: ISaleOrder[]): void {
+	handler(result: ISaleOrdersResult): void {
+		console.log("ISaleOrdersResult", result)
+		
 		// Normalize once here so page consumers can reuse the service data without extra passes.
-		this.records = (result||[]).filter((saleOrder) => (saleOrder?.ss || 0) > 0)
-		console.debug('[SaleOrdersService] fetched rows:', result?.length,"|",this.records.length);
+		this.records = (result?.records||[]).filter((saleOrder) => (saleOrder?.ss || 0) > 0)
+		console.debug('[SaleOrdersService] fetched rows:', result?.records?.length,"|",this.records.length);
   }
 
 	constructor(group: number) {

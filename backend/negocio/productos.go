@@ -51,7 +51,7 @@ func GetProductosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se enviaron ids a buscar.")
 	}
 
-	core.Log("buscando ids::", len(cachedIDs), "|", cachedIDs)
+	// core.Log("buscando ids::", len(cachedIDs), "|", cachedIDs)
 
 	productos := []negocioTypes.Producto{}
 	err := db.QueryCachedIDs(&productos, cachedIDs)

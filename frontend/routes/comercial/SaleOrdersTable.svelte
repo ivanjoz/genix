@@ -1,8 +1,17 @@
 <script lang="ts" generics="T extends ISaleOrderTableRecord">
+  import HighlightText from '$components/micro/HighlightText.svelte';
   import InlineButton from '$components/micro/InlineButton.svelte';
   import VTable from '$components/vTable/VTable.svelte';
   import type { ITableColumn } from '$components/vTable/types';
-  import { formatN, formatTime } from '$libs/helpers';
+  import { formatN, formatTime, wordInclude } from '$libs/helpers';
+
+  interface IProductLookupRecord {
+    Nombre?: string;
+  }
+
+  interface IClientLookupRecord {
+    Name?: string;
+  }
 
   interface ISaleOrderTableRecord {
     ID: number;
@@ -23,16 +32,22 @@
     totalAmount: number;
   }
 
+  interface ISaleOrderLookupEntry<T extends ISaleOrderTableRecord> {
+    saleOrder: T;
+    clientID: number;
+    productIDs: number[];
+  }
+
   interface SaleOrdersTableProps<T extends ISaleOrderTableRecord> {
     data: T[];
-    getProductName: (productID: number) => string;
-    getClientName?: (saleOrder: T) => string;
+    productsMap: Map<number, IProductLookupRecord>;
+    clientsMap?: Map<number, IClientLookupRecord>;
     selected?: T | number;
     isSelected?: (saleOrder: T, selected: T | number) => boolean;
     onRowClick?: (saleOrder: T, index: number) => void;
     css?: string;
     maxHeight?: string;
-    filterText?: string;
+    searchText?: string;
     getFilterContent?: (saleOrder: T) => string;
     emptyMessage?: string;
     showClientColumn?: boolean;
@@ -40,18 +55,115 @@
 
   let {
     data,
-    getProductName,
-    getClientName,
+    productsMap,
+    clientsMap,
     selected,
     isSelected,
     onRowClick,
     css = '',
     maxHeight,
-    filterText = '',
+    searchText = '',
     getFilterContent,
     emptyMessage,
     showClientColumn = true,
   }: SaleOrdersTableProps<T> = $props();
+
+  function getProductName(productID: number): string {
+    // Resolve product labels from the shared records map so both pages use the same lookup source.
+    return productsMap.get(productID)?.Nombre || `Producto #${productID}`;
+  }
+
+  function getClientName(clientID: number): string {
+    // Keep client fallback text centralized in the table because every consumer uses the same rule.
+    return clientsMap?.get(clientID)?.Name || `Cliente #${clientID}`;
+  }
+
+  function getSaleOrderClientName(saleOrder: T): string {
+    if (!saleOrder.ClientID) {
+      return '-';
+    }
+
+    return getClientName(saleOrder.ClientID);
+  }
+
+  const normalizedSearchTerms = $derived(
+    searchText
+      .toLowerCase()
+      .trim()
+      .split(' ')
+      .filter((searchTerm) => searchTerm.length > 1)
+  );
+
+  const saleOrderLookupEntries = $derived.by(() => {
+    // Precompute the client and product ids used by each sale order once per data refresh.
+    return data.map((saleOrder) => ({
+      saleOrder,
+      clientID: Number(saleOrder.ClientID || 0),
+      productIDs: Array.from(
+        new Set(
+          (saleOrder.DetailProductsIDs || [])
+            .map((rawProductID) => Number(rawProductID || 0))
+            .filter((productID) => Number.isFinite(productID) && productID > 0)
+        )
+      ),
+    }) satisfies ISaleOrderLookupEntry<T>);
+  });
+
+  const usedClientIDs = $derived.by(() => {
+    // Keep the lookup set scoped to the current table rows so search work scales with visible data only.
+    return Array.from(
+      new Set(
+        saleOrderLookupEntries
+          .map((lookupEntry) => lookupEntry.clientID)
+          .filter((clientID) => clientID > 0)
+      )
+    );
+  });
+
+  const usedProductIDs = $derived.by(() => {
+    // Flatten once so later search updates only scan the distinct product ids that appear in current rows.
+    return Array.from(
+      new Set(
+        saleOrderLookupEntries.flatMap((lookupEntry) => lookupEntry.productIDs)
+      )
+    );
+  });
+
+  const filteredClientIDs = $derived.by(() => {
+    if (!normalizedSearchTerms.length) {
+      return new Set<number>();
+    }
+
+    return new Set(
+      usedClientIDs.filter((clientID) => wordInclude(getClientName(clientID).toLowerCase(), normalizedSearchTerms))
+    );
+  });
+
+  const filteredProductIDs = $derived.by(() => {
+    if (!normalizedSearchTerms.length) {
+      return new Set<number>();
+    }
+
+    return new Set(
+      usedProductIDs.filter((productID) => wordInclude(getProductName(productID).toLowerCase(), normalizedSearchTerms))
+    );
+  });
+
+  const filteredData = $derived.by(() => {
+    if (!normalizedSearchTerms.length) {
+      return data;
+    }
+
+    return saleOrderLookupEntries
+      .filter((lookupEntry) => {
+        if (lookupEntry.clientID > 0 && filteredClientIDs.has(lookupEntry.clientID)) {
+          return true;
+        }
+
+        return lookupEntry.productIDs.some((productID) => filteredProductIDs.has(productID));
+      })
+      .map((lookupEntry) => lookupEntry.saleOrder);
+  });
 
   function isSaleOrderPaid(saleOrder: T): boolean {
     return saleOrder.ss === 2 || saleOrder.ss === 4;
@@ -162,8 +274,9 @@
 
     if (showClientColumn) {
       saleOrderColumns.push({
+        id: 'client-name',
         header: 'Cliente',
-        getValue: saleOrder => getClientName?.(saleOrder) || '-',
+        getValue: saleOrder => getSaleOrderClientName(saleOrder),
         headerCss: 'w-220',
         cellCss: 'px-6 line-clamp-2 whitespace-nowrap',
         mobile: { order: 3, css: 'col-span-24', labelTop: 'Cliente' }
@@ -188,18 +301,13 @@
   });
 
   function getSaleOrderFilterContent(saleOrder: T): string {
-    const extraFilterContent = getFilterContent?.(saleOrder) || '';
-    return [
-      saleOrder.ID,
-      getClientName?.(saleOrder) || '',
-      getTopProductsSummary(saleOrder),
-      extraFilterContent
-    ].join(' ').toLowerCase();
+    // Preserve optional extra filtering hooks without recomputing client/product labels per row.
+    return `${saleOrder.ID} ${getFilterContent?.(saleOrder) || ''}`.toLowerCase();
   }
 </script>
 
 <VTable
-  data={data}
+  data={filteredData}
   {columns}
   {selected}
   {isSelected}
@@ -207,7 +315,6 @@
   {css}
   {maxHeight}
   {emptyMessage}
-  {filterText}
   getFilterContent={getSaleOrderFilterContent}
   estimateSize={38}
   mobileCardCss="mb-10"
@@ -219,6 +326,10 @@
         <!-- Keep both state toggles adjacent so operators can scan the workflow quickly. -->
         <InlineButton label="P" color="green" mode={isSaleOrderPaid(saleOrder) ? 'checked' : 'default'} />
         <InlineButton label="E" color="blue" mode={isSaleOrderDelivered(saleOrder) ? 'checked' : 'default'} />
+      </div>
+    {:else if columnDefinition.id === 'client-name'}
+      <div class="line-clamp-2 whitespace-nowrap">
+        <HighlightText text={getSaleOrderClientName(saleOrder)} words={normalizedSearchTerms} />
       </div>
     {:else if columnDefinition.id === 'top-products'}
       {@const topProductsCards = getTopProductsCards(saleOrder)}
@@ -239,7 +350,7 @@
               </div>
               <!-- Clamp product names so the table row keeps a stable height. -->
               <div class="line-clamp-2 text-sm leading-[1.15] text-slate-800">
-                {topProductCard.productName}
+                <HighlightText text={topProductCard.productName} words={normalizedSearchTerms} />
               </div>
             </div>
           {/each}

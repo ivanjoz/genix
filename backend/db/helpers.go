@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math/rand/v2"
-	"os"
 	"reflect"
 	"regexp"
 	"strings"
-	"sync/atomic"
 	"unsafe"
 
 	"github.com/fatih/color"
@@ -20,24 +18,21 @@ import (
 )
 
 var (
-	DebugFull          bool
-	logVariableCheched bool
-	LogCount           uint32
+	DebugFull              bool
+	DebugNormal 					 bool
 )
 
-func ShouldLog() bool {
-	if !logVariableCheched {
-		DebugFull = os.Getenv("LOGS_FULL") != ""
-		logVariableCheched = true
-	}
-	if !DebugFull {
-		return false
-	}
-	return atomic.LoadUint32(&LogCount) < 5
+func SetDebugLogging(enabled bool) {
+	// Allow the runtime bootstrap to control DB debug logs without importing core into db.
+	DebugNormal = enabled
 }
 
-func IncrementLogCount() {
-	atomic.AddUint32(&LogCount, 1)
+func ShouldLogFull() bool {
+	return DebugFull
+}
+
+func ShouldLog() bool {
+	return DebugNormal
 }
 
 func BasicHashInt(s string) int32 {

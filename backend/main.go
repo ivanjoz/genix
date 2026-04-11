@@ -159,6 +159,8 @@ func main() {
 		}()
 	}
 
+	fmt.Println("Starting DB connection...")
+
 	db.SetScyllaConnection(db.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
@@ -167,6 +169,8 @@ func main() {
 		Keyspace: core.Env.DB_NAME,
 	})
 
+	fmt.Println("DB connection started!")
+
 	invokeFun := ""
 	for _, value := range os.Args {
 		if len(value) >= 2 && value[0:2] == "fn" {
@@ -174,10 +178,13 @@ func main() {
 			invokeFun = value
 		}
 	}
-	
+
 	if core.Env.IS_LOCAL {
 		core.Env.LOGS_FULL = true
 	}
+
+	// Mirror runtime logging flags into db so query debug logs follow the resolved environment.
+	db.SetDebugLogging(core.Env.LOGS_FULL || core.Env.IS_LOCAL)
 
 	// Revisa si lo que se requiere es ejecutar una función
 	if len(invokeFun) != 0 {
@@ -207,8 +214,10 @@ func main() {
 	// Si se está desarrollando en local
 	if !core.Env.IS_SERVERLESS {
 		exec.StartUsageLogFlushWorker()
-		core.StartCronWatcher()
-		
+		if !core.Env.IS_LOCAL {
+			core.StartCronWatcher()
+		}
+
 		core.Log("Ejecutando en local. http://localhost" + serverPort)
 
 		corsMiddleware := cors.New(cors.Options{
@@ -236,7 +245,6 @@ func main() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			core.Log("HTTP server error:", err)
 		}
-
 	} else {
 		// Si se está en Lamnda
 		logger := log.New(os.Stdout, "", log.LstdFlags|log.Llongfile)

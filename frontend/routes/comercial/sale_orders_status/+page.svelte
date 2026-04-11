@@ -181,11 +181,6 @@
     }
   }
 
-  function getSaleOrderClientName(saleOrder: ISaleOrder): string {
-    if (!saleOrder.ClientID) { return '-'; }
-    return clientesService.recordsMap.get(saleOrder.ClientID)?.Name || `Cliente #${saleOrder.ClientID}`;
-  }
-
   function saleOrderHasSelectedProduct(saleOrder: ISaleOrder, selectedProductID: number): boolean {
     if (!selectedProductID) { return true; }
     return (saleOrder.DetailProductsIDs || []).some((productID) => Number(productID || 0) === selectedProductID);
@@ -277,6 +272,26 @@
     return 'Procesando';
   }
 
+  function resetSaleOrderActionForms(saleOrder: ISaleOrder): void {
+    // Rehydrate mutable selectors from the latest backend state after each action.
+    saleOrderPaymentForm.LastPaymentCajaID = saleOrder.LastPaymentCajaID || 0;
+    saleOrderDeliveryForm.WarehouseID = saleOrder.WarehouseID || 0;
+  }
+
+  function applyUpdatedSaleOrderLocally(updatedSaleOrder: ISaleOrder): void {
+    // Keep side panel and current table row in sync with the write response.
+    // Do not remove the row from the current table; let the next full query/page reload do that.
+    selectedSaleOrder = updatedSaleOrder;
+    resetSaleOrderActionForms(updatedSaleOrder);
+
+    const saleOrderIndex = saleOrderRecords.findIndex((saleOrderRecord) => saleOrderRecord.ID === updatedSaleOrder.ID);
+    if (saleOrderIndex < 0) { return; }
+
+    const nextSaleOrderRecords = [...saleOrderRecords];
+    nextSaleOrderRecords[saleOrderIndex] = updatedSaleOrder;
+    saleOrderRecords = nextSaleOrderRecords;
+  }
+
   const selectedSaleOrderDetailLines = $derived.by(() => {
     if (!selectedSaleOrder) { return []; }
     return getSaleOrderDetailLines(selectedSaleOrder);
@@ -354,8 +369,7 @@
   function openSaleOrderDetailsLayer(saleOrder: ISaleOrder) {
     selectedSaleOrder = saleOrder;
     // Keep selectors prefilled with the order values to reduce manual clicks.
-    saleOrderPaymentForm.LastPaymentCajaID = saleOrder.LastPaymentCajaID || 0;
-    saleOrderDeliveryForm.WarehouseID = saleOrder.WarehouseID || 0;
+    resetSaleOrderActionForms(saleOrder);
     saleOrderDetailsView = 1;
     Core.openSideLayer(10);
   }
@@ -438,8 +452,9 @@
     });
 
     try {
-      await postSaleOrderUpdate(updatePayload);
-      await querySaleOrders(selectedGroup);
+      const updatedSaleOrder = await postSaleOrderUpdate(updatePayload) as ISaleOrder;
+      applyUpdatedSaleOrderLocally(updatedSaleOrder);
+      
       Notify.success(`Pedido actualizado (${actionLabel}).`);
       console.debug('[sale_orders_status] action success', {
         actionLabel,
@@ -509,10 +524,10 @@
            <LoadingBar label="Cargando pedidos..." />
          </div>
        {:else}
-	       <SaleOrdersTable
+	       <SaleOrdersTable maxHeight="calc(100vh - var(--header-height) - 84px)"
 	         data={filteredSaleOrderRecords}
-	         getProductName={(productID) => productosService.recordsMap.get(productID)?.Nombre || `Producto #${productID}`}
-	         getClientName={getSaleOrderClientName}
+	         productsMap={productosService.recordsMap}
+	         clientsMap={clientesService.recordsMap}
 	         selected={selectedSaleOrder?.ID || 0}
 	         isSelected={(saleOrder, selectedID) => saleOrder.ID === selectedID}
 	         onRowClick={(saleOrder) => {
@@ -541,7 +556,6 @@
     {#snippet titleSide()}
       {#if selectedSaleOrder}
      	<div class="flex items-center">
-    		<div class="mr-8 ml-6 ff-semibold">{formatTime(selectedSaleOrder.Created, 'd-M-Y h:n')}</div>
 	       <button
 	         class="w-30 h-30 text-sm rounded-full bg-red-100 text-red-700 fx-c"
 	         type="button"

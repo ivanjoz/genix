@@ -1,5 +1,6 @@
 import { unmarshall } from '$libs/funcs/unmarshall';
 import {
+  bulkDeleteRouteRecordRows,
   bulkGetRouteRecordRows,
   bulkPutRouteRecordRows,
   clearEnvironmentCache,
@@ -24,7 +25,6 @@ import type { serviceHttpProps } from '$libs/workers/service-worker';
 import { parseObject } from '$libs/workers/service-worker-cache';
 
 type CacheContent = { __version__?: number } & { [key: string]: any[] }
-type IResponse = { [key: string]: any[] }
 
 export interface ICacheSyncUpdate {
   args: serviceHttpProps
@@ -46,6 +46,7 @@ export interface IGetCacheSubObject {
 let forceFetch = false
 let forcedFetchRequests: Set<string> = new Set()
 const textEncoder = new TextEncoder()
+const IDsToRemoveSuffix = "_IDsToRemove"
 
 export const triggerDeltaForceFetchWindow = async () => {
   forceFetch = true
@@ -85,6 +86,46 @@ const makeCacheKey = (args: serviceHttpProps) => {
 const normalizeResponse = (response: CacheContent | any[]): CacheContent => {
   if(Array.isArray(response)){ return { _default: response } }
   return response as CacheContent
+}
+
+const isRecordsToRemoveFlagKey = (responseKey: string) => {
+  return responseKey.endsWith(IDsToRemoveSuffix)
+}
+
+const getTargetResponseKeyFromFlag = (responseKey: string) => {
+  return responseKey.slice(0, responseKey.length - IDsToRemoveSuffix.length)
+}
+
+const isRecordResponseEntry = (entry: [string, unknown]): entry is [string, any[]] => {
+  const [responseKey, records] = entry
+  return responseKey !== "__version__" && !isRecordsToRemoveFlagKey(responseKey) && Array.isArray(records)
+}
+
+const listRecordResponseEntries = (response: CacheContent): [string, any[]][] => {
+  return Object.entries(response).filter(isRecordResponseEntry)
+}
+
+const listIDsToRemoveByResponseKey = (response: CacheContent) => {
+  const idsToRemoveByResponseKey = new Map<string, CacheRecordID[]>()
+
+  for(const [responseKey, idsToRemove] of Object.entries(response)){
+    if(!isRecordsToRemoveFlagKey(responseKey) || !Array.isArray(idsToRemove)){ continue }
+
+    const targetResponseKey = getTargetResponseKeyFromFlag(responseKey)
+    const validIDs = idsToRemove.filter((recordID): recordID is CacheRecordID => {
+      return typeof recordID === 'string' || typeof recordID === 'number'
+    })
+
+    if(validIDs.length !== idsToRemove.length){
+      console.warn(`Cache Error: En "${targetResponseKey}" se recibió un flag ${responseKey} con IDs inválidos`)
+    }
+
+    if(validIDs.length > 0){
+      idsToRemoveByResponseKey.set(targetResponseKey, validIDs)
+    }
+  }
+
+  return idsToRemoveByResponseKey
 }
 
 const addToRoute = (route: string, key: string, value: string | number) => {
@@ -139,10 +180,7 @@ const parseResponseAsStream = async (
 }
 
 const getRecordUpdateValue = (record: any): number => {
-  const rawUpdated = record?.upd ?? record?.upc ?? 0
-  if(typeof rawUpdated === 'number'){ return rawUpdated }
-  const parsedUpdated = parseInt(String(rawUpdated || 0))
-  return isNaN(parsedUpdated) ? 0 : parsedUpdated
+  return record?.upc || record?.upd || 0
 }
 
 const getRecordStatusValue = (record: any): number => {
@@ -214,10 +252,9 @@ const buildRouteRowsFromResponse = (
   args: serviceHttpProps, routeRow: ICacheRouteRow, response: CacheContent,
 ) => {
   const rows: ICacheRecordRow[] = []
-  const responseKeys = Object.keys(response).filter((responseKey) => responseKey !== "__version__")
+  const responseKeys = listRecordResponseEntries(response).map(([responseKey]) => responseKey)
 
-  for(const [responseKey, records] of Object.entries(response)){
-    if(responseKey === "__version__" || !Array.isArray(records)){ continue }
+  for(const [responseKey, records] of listRecordResponseEntries(response)){
     for(const record of records){
       rows.push(buildRecordRow(
         routeRow.id as number,
@@ -236,8 +273,7 @@ const extractUpdated = (
 ) => {
   const updatedStatus: { [key: string]: number } = {}
 
-  for(const [key, values] of Object.entries(content)){
-    if(values && !Array.isArray(values)){ continue }
+  for(const [key, values] of listRecordResponseEntries(content as CacheContent)){
 
     let maxOrMin = 0
     for(const record of values || []){
@@ -257,8 +293,7 @@ const extractUpdated = (
 
 const countResponseRecords = (response: CacheContent) => {
   let recordsCount = 0
-  for(const [responseKey, records] of Object.entries(response)){
-    if(responseKey === "__version__" || !Array.isArray(records)){ continue }
+  for(const [, records] of listRecordResponseEntries(response)){
     recordsCount += records.length
   }
   return recordsCount
@@ -331,7 +366,7 @@ const makeStats = (content: any) => {
   if(!content || Object.keys(content).length === 0){ return ["sin registros"] }
 
   const stats: string[] = []
-  for(const key of Object.keys(content)){
+  for(const [key] of listRecordResponseEntries(content as CacheContent)){
     stats.push(`${key}=${(content[key] || []).length}`)
   }
   return stats
@@ -447,7 +482,8 @@ const handleFetchResponse = async (
 
   const updatedStatusDelta = extractUpdated(response)
   const updatedMinDelta = extractUpdated(response, true)
-  let hasChanged = false
+  const idsToRemoveByResponseKey = listIDsToRemoveByResponseKey(response)
+  let hasChanged = [...idsToRemoveByResponseKey.values()].some((idsToRemove) => idsToRemove.length > 0)
 
   for(const [key, updated] of Object.entries(updatedStatusDelta)){
     if(!updated){ continue }
@@ -466,14 +502,24 @@ const handleFetchResponse = async (
   if(!hasChanged && args.cacheMode !== 'updateOnly'){
     response = (await readCachedRouteResponse(routeRow)) as CacheContent
   } else if(hasChanged){
-    const responseKeys = Object.keys(response).filter((responseKey) => responseKey !== "__version__")
+    const responseKeys = listRecordResponseEntries(response).map(([responseKey]) => responseKey)
     await extendRouteResponseKeys(routeRow, responseKeys)
     console.log("[DeltaCache] aplicando delta:", routeRow.cacheKey, responseKeys)
 
+    const recordRowKeysToDelete: [number, string, CacheRecordID][] = []
+    for(const [responseKey, idsToRemove] of idsToRemoveByResponseKey.entries()){
+      for(const recordID of idsToRemove){
+        // Flags ending in `_IDsToRemove` delete persisted rows before applying incoming deltas.
+        recordRowKeysToDelete.push([routeRow.id as number, responseKey, recordID])
+      }
+    }
+
+    await bulkDeleteRouteRecordRows(routeRow.dbName, recordRowKeysToDelete)
+
     const nextRecordRows: ICacheRecordRow[] = []
     const allowColumnarMerge = !!(args.columnarIDField && args.combineColumnarValuesOnFields?.length)
-    for(const [responseKey, records] of Object.entries(response as IResponse)){
-      if(responseKey === "__version__" || !Array.isArray(records) || records.length === 0){ continue }
+    for(const [responseKey, records] of listRecordResponseEntries(response as CacheContent)){
+      if(records.length === 0){ continue }
 
       const rowKeys = records.map((record) => [
         routeRow.id as number,
