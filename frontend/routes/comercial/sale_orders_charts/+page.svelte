@@ -14,7 +14,7 @@
 	}
 
 	const saleOrdersChartsService = new SaleOrdersChartsService();
-	const productosService = new ProductosService();
+	const productosService = new ProductosService(true);
 	const chartViewOptions: TChartViewOption[] = [
 		[1, 'Por Producto'],
 		[2, 'Resumen Diario'],

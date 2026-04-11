@@ -59,9 +59,11 @@ export class ProductSupplyService extends GetHandler<any> {
     )
   }
 
-  constructor() {
+  constructor(init: boolean = false) {
     super()
-    this.fetch()
+    if (init) {
+      this.fetch()
+    }
   }
 }
 

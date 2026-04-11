@@ -8,8 +8,8 @@
   import SaleOrdersTable from '../SaleOrdersTable.svelte';
   import { querySaleOrderReport, saleOrderStatusOptions, type ISaleOrder } from './sale_order_report.svelte';
 
-  const productosService = new ProductosService();
-  const clientesService = new ClientProviderService(ClientProviderType.CLIENT);
+  const productosService = new ProductosService(true);
+  const clientesService = new ClientProviderService(ClientProviderType.CLIENT, true);
 
   const getCurrentUnixDay = (): number => Math.floor(Date.now() / (1000 * 60 * 60 * 24));
 

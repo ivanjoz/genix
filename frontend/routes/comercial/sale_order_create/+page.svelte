@@ -27,9 +27,9 @@ import { SaleOrderState } from "./sale_order.svelte";
 
   // Services
   const almacenesService = new AlmacenesService();
-  const clientesService = new ClientProviderService(ClientProviderType.CLIENT);
-  const productosService = new ProductosService();
-  const listasService = new ListasCompartidasService([2]); // 2: Marcas
+  const clientesService = new ClientProviderService(ClientProviderType.CLIENT, true);
+  const productosService = new ProductosService(true);
+  const listasService = new ListasCompartidasService([2], true); // 2: Marcas
   const parametrosService = new EmpresaParametrosService();
   const systemParamsService = new SystemParametersService();
   const cajas = new CajasService()

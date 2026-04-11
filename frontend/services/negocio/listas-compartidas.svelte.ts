@@ -82,12 +82,12 @@ export class ListasCompartidasService extends GetHandler<IListaRegistro> {
     this.ListaRecordsMap = new Map(this.ListaRecordsMap);
   }
 
-  constructor(ids: number[] = []) {
+  constructor(ids: number[] = [], init: boolean = false) {
     super();
     if (ids.length > 0) {
       this.route = `listas-compartidas?ids=${ids.join(',')}`;
     }
-    if (ids) {
+    if (init) {
       this.fetch();
     }
   }

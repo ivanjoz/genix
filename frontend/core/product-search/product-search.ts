@@ -147,7 +147,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	private readonly categoryNameByID = new Map<number, string>();
 	private readonly normalizedBrandWordsByBrandID = new Map<number, string[]>();
 	private updatedInt32 = 0;
-	private readonly productsDeltaService = new ProductosDeltaService();
+	private readonly productsDeltaService = new ProductosDeltaService(true);
 	private latestSearchDebugSnapshot: ProductSearchDebugSnapshot | null = null;
 	readonly readyPromise: Promise<void>;
 	isLoading = false;

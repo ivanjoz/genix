@@ -35,16 +35,19 @@ export const postClientProviders = (clientProvidersPayload: IClientProvider[]) =
 
 export class ClientProviderService extends GetHandler<IClientProvider> {
   route = ''
+  routeByID = "client-provider-ids"
   keyID = 'ID'
   useCache = { min: 5, ver: 1 }
 
   records: IClientProvider[] = $state([])
   recordsMap: Map<number, IClientProvider> = $state(new Map())
 
-  constructor(clientProviderType: number) {
+  constructor(clientProviderType: number = 0, init: boolean = false) {
     super()
     this.route = `client-provider?type=${clientProviderType}`
-    this.fetch()
+    if (init) {
+      this.fetch()
+    }
   }
 
   handler(result: IClientProvider[]): void {

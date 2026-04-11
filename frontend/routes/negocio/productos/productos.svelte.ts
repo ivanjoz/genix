@@ -75,6 +75,7 @@ export interface IProductoResult {
 
 export class ProductosService extends GetHandler<IProducto> {
   route = "productos"
+  routeByID = "p-productos-ids"
   useCache = { min: 5, ver: 9 }
 	inferRemoveFromStatus = true
   prependOnSave = true
@@ -95,9 +96,11 @@ export class ProductosService extends GetHandler<IProducto> {
 		this.records.sort((a, b) => b.ID - a.ID)
   }
 
-  constructor(){
+  constructor(init: boolean = false){
     super()
-    this.fetch()
+    if (init) {
+      this.fetch()
+    }
   }
 }
 

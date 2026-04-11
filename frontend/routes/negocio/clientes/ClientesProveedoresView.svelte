@@ -47,7 +47,7 @@
 
   $effect(() => {
     // Instantiate the shared client-provider source from the page config so both routes reuse the same data flow.
-    clientProviderService = new ClientProviderService(clientProviderType)
+    clientProviderService = new ClientProviderService(clientProviderType, true)
   })
 
   function createEmptyClientProviderForm(): IClientProvider {

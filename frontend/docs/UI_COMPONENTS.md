@@ -486,7 +486,7 @@ export class ProductosService extends GetHandler {
 ```svelte
 <script>
   const warehouseID = 1
-  const productos = new ProductosService(warehouseID)
+  const productos = new ProductosService(true)
 </script>
 
 <VTable data={productos.productos}

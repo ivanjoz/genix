@@ -13,7 +13,7 @@ import { AlmacenesService } from '../../negocio/sedes-almacenes/sedes-almacenes.
 import { getProductosStock, postProductosStock, type IProductoStock } from './stock-movement'
 
   const almacenes = new AlmacenesService()
-  const productos = new ProductosService()
+  const productos = new ProductosService(true)
 
   let stockFilters = $state({ warehouseID: 0, showTodosProductos: false })
   let stockFilterText = $state('')

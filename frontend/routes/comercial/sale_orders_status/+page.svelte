@@ -11,12 +11,18 @@
   import { Core } from '$core/store.svelte';
   import Page from '$domain/Page.svelte';
   import { Notify, formatN, formatTime } from '$libs/helpers';
-  import type { IMinimalRecord } from '$libs/cache/cache-by-ids.svelte';
-  import { getRecordsByID } from '$libs/cache/cache-by-ids.svelte';
   import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
   import { AlmacenesService } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte';
-  import type { IClientProvider } from '$routes/negocio/clientes/clientes-proveedores.svelte';
-  import type { IProducto, IProductoPresentacion } from '$routes/negocio/productos/productos.svelte';
+  import {
+    ClientProviderService,
+    ClientProviderType,
+    type IClientProvider,
+  } from '$routes/negocio/clientes/clientes-proveedores.svelte';
+  import {
+    ProductosService,
+    type IProducto,
+    type IProductoPresentacion,
+  } from '$routes/negocio/productos/productos.svelte';
   import { onMount, untrack } from 'svelte';
   import SaleOrdersTable from '../SaleOrdersTable.svelte';
   import {
@@ -25,9 +31,6 @@
     postSaleOrderUpdate,
     type ISaleOrder
   } from './sale_order_status.svelte';
-
-  interface IProductoByIDRecord extends IMinimalRecord, Pick<IProducto, 'Nombre' | 'Presentaciones'> {}
-  interface IClientByIDRecord extends IMinimalRecord, Pick<IClientProvider, 'Name'> {}
 
   interface ISaleOrderDetailLine {
     detailPosition: number;
@@ -46,7 +49,7 @@
     productID: number;
   }
 
-  interface ISaleOrderClientOption extends IClientByIDRecord {
+  interface ISaleOrderClientOption extends IClientProvider {
     DisplayName: string;
   }
 
@@ -62,12 +65,14 @@
   let saleOrderPaymentForm = $state({ LastPaymentCajaID: 0 });
   let saleOrderDeliveryForm = $state({ WarehouseID: 0 });
   let saleOrderFilterForm = $state<ISaleOrderFilterForm>({ clientID: 0, productID: 0 });
-  let productRecordsByID = $state<Map<number, IProductoByIDRecord>>(new Map());
-  let clientRecordsByID = $state<Map<number, IClientByIDRecord>>(new Map());
+  let clientOptions = $state<ISaleOrderClientOption[]>([]);
+  let productOptions = $state<IProducto[]>([]);
   let saleOrdersQueryRequestID = 0;
 
   const cajasService = new CajasService();
   const almacenesService = new AlmacenesService();
+  const productosService = new ProductosService();
+  const clientesService = new ClientProviderService();
 
   async function querySaleOrders(orderStatus: number): Promise<void> {
     const currentRequestID = ++saleOrdersQueryRequestID;
@@ -114,18 +119,34 @@
     });
 
     try {
-      const nextProductRecordsByID = await getRecordsByID<IProductoByIDRecord>('p-productos-ids', productIDs);
+      await Promise.all([
+        productosService.syncIDs(productIDs),
+        clientesService.syncIDs(clientIDs),
+      ]);
       if (currentRequestID !== saleOrdersQueryRequestID) return;
-      productRecordsByID = nextProductRecordsByID;
 
-      const nextClientRecordsByID = await getRecordsByID<IClientByIDRecord>('client-provider-ids', clientIDs);
-      if (currentRequestID !== saleOrdersQueryRequestID) return;
-      clientRecordsByID = nextClientRecordsByID;
+      // Keep selectors scoped to the current query result so they never show unrelated cached records.
+      clientOptions = clientIDs
+        .map((clientID) => clientesService.recordsMap.get(clientID))
+        .filter((clientRecord): clientRecord is IClientProvider => Boolean(clientRecord))
+        .map((clientRecord) => ({
+          ...clientRecord,
+          DisplayName: clientRecord.Name
+            ? `${clientRecord.Name} · ${clientRecord.ID}`
+            : `Cliente #${clientRecord.ID}`,
+        }))
+        .sort((leftClient, rightClient) => leftClient.DisplayName.localeCompare(rightClient.DisplayName));
+
+      // Reuse the synced records map but expose only the products present in the loaded sale orders.
+      productOptions = productIDs
+        .map((productID) => productosService.recordsMap.get(productID))
+        .filter((productRecord): productRecord is IProducto => Boolean(productRecord))
+        .sort((leftProduct, rightProduct) => leftProduct.Nombre.localeCompare(rightProduct.Nombre));
 
       console.debug('[sale_orders_status] sale orders ready', {
         saleOrdersCount: fetchedSaleOrders.length,
-        resolvedProducts: nextProductRecordsByID.size,
-        resolvedClients: nextClientRecordsByID.size,
+        resolvedProducts: productIDs.filter((productID) => productosService.recordsMap.has(productID)).length,
+        resolvedClients: clientIDs.filter((clientID) => clientesService.recordsMap.has(clientID)).length,
       });
     } catch (queryError) {
       if (currentRequestID !== saleOrdersQueryRequestID) return;
@@ -162,7 +183,7 @@
 
   function getSaleOrderClientName(saleOrder: ISaleOrder): string {
     if (!saleOrder.ClientID) { return '-'; }
-    return clientRecordsByID.get(saleOrder.ClientID)?.Name || `Cliente #${saleOrder.ClientID}`;
+    return clientesService.recordsMap.get(saleOrder.ClientID)?.Name || `Cliente #${saleOrder.ClientID}`;
   }
 
   function saleOrderHasSelectedProduct(saleOrder: ISaleOrder, selectedProductID: number): boolean {
@@ -173,13 +194,13 @@
   function getProductPresentationName(productID: number, presentationID: number): string {
     if (!presentationID) { return ''; }
 
-    const productRecord = productRecordsByID.get(productID);
+    const productRecord = productosService.recordsMap.get(productID);
     const presentationRecord = productRecord?.Presentaciones?.find((presentationOption: IProductoPresentacion) => presentationOption.id === presentationID);
     return presentationRecord?.nm || `Presentación ${presentationID}`;
   }
 
   function getSaleOrderDetailProductName(productID: number, presentationID: number): string {
-    const productRecord = productRecordsByID.get(productID);
+    const productRecord = productosService.recordsMap.get(productID);
     const productName = productRecord?.Nombre || `Producto #${productID}`;
     const presentationName = getProductPresentationName(productID, presentationID);
 
@@ -213,7 +234,7 @@
       saleOrderDetailLines.push({
         detailPosition,
         productID,
-        productBaseName: productRecordsByID.get(productID)?.Nombre || `Producto #${productID}`,
+        productBaseName: productosService.recordsMap.get(productID)?.Nombre || `Producto #${productID}`,
         productName: getSaleOrderDetailProductName(productID, presentationID),
         presentationName: getProductPresentationName(productID, presentationID),
         sku,
@@ -259,24 +280,6 @@
   const selectedSaleOrderDetailLines = $derived.by(() => {
     if (!selectedSaleOrder) { return []; }
     return getSaleOrderDetailLines(selectedSaleOrder);
-  });
-
-  const clientOptions = $derived.by((): ISaleOrderClientOption[] => {
-    // Build a combined label so the selector can match both customer name and ID.
-    return Array.from(clientRecordsByID.values())
-      .map((clientRecord) => ({
-        ...clientRecord,
-        DisplayName: clientRecord.Name
-          ? `${clientRecord.Name} · ${clientRecord.ID}`
-          : `Cliente #${clientRecord.ID}`,
-      }))
-      .sort((leftClient, rightClient) => leftClient.DisplayName.localeCompare(rightClient.DisplayName));
-  });
-
-  const productOptions = $derived.by((): IProductoByIDRecord[] => {
-    // Keep filter options scoped to the loaded orders so the selector stays small and relevant.
-    return Array.from(productRecordsByID.values())
-      .sort((leftProduct, rightProduct) => leftProduct.Nombre.localeCompare(rightProduct.Nombre));
   });
 
   const filteredSaleOrderRecords = $derived.by(() => {
@@ -508,7 +511,7 @@
        {:else}
 	       <SaleOrdersTable
 	         data={filteredSaleOrderRecords}
-	         getProductName={(productID) => productRecordsByID.get(productID)?.Nombre || `Producto #${productID}`}
+	         getProductName={(productID) => productosService.recordsMap.get(productID)?.Nombre || `Producto #${productID}`}
 	         getClientName={getSaleOrderClientName}
 	         selected={selectedSaleOrder?.ID || 0}
 	         isSelected={(saleOrder, selectedID) => saleOrder.ID === selectedID}

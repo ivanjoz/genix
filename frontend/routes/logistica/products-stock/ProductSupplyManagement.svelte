@@ -22,9 +22,9 @@ import {
   type IProductSupplyRow,
 } from './supply-management.svelte'
 
-  const productos = new ProductosService()
-  const providers = new ClientProviderService(ClientProviderType.PROVIDER)
-  const productSupplyService = new ProductSupplyService()
+  const productos = new ProductosService(true)
+  const providers = new ClientProviderService(ClientProviderType.PROVIDER, true)
+  const productSupplyService = new ProductSupplyService(true)
   const groupedMovementsService = new AlmacenMovimientosGroupedService()
   const fechaHelper = new FechaHelper()
   const salesWindowDays = 30

@@ -16,6 +16,7 @@ import {
   upsertGroupCacheRows,
   type IGroupCacheRecord,
 } from './cache/group-cache.idb';
+import { getRecordsByID, type IMinimalRecord } from './cache/cache-by-ids.svelte';
 
 export interface IHttpStatus { code: number, message: string }
 
@@ -472,7 +473,8 @@ export interface INewIDToID {
 export class GetHandler<T extends { ID: number, ss?: number } = any> {
 
   route = ""
-  routeParsed = ""
+	routeParsed = ""
+  routeByID = ""
   module = "a"
   keyID: string | string[] = ""
 	keysIDs: { [e: string]: string | string[] } = {}
@@ -522,6 +524,32 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
       this.handler(cachedResponse)
 		}
 		this.isReady++
+	}
+	
+	async syncIDs(ids: number[]) {
+		if (!this.routeByID) {
+			Notify.failure("[syncIDs] Missing routeByID in: " + this.route)
+			return
+		}
+
+		// Resolve only valid, not-yet-loaded IDs so we keep the merge minimal and deterministic.
+		const missingIDs = [...new Set(
+			ids.filter((recordID) => recordID > 0 && !this.recordsMap.has(recordID))
+		)]
+		if (missingIDs.length === 0) { return }
+
+		console.debug("[GetHandler] syncIDs fetching missing records:", this.route, {
+			routeByID: this.routeByID,
+			requestedIDs: ids.length,
+			missingIDs,
+		})
+
+		const fetchedRecordsByID = await getRecordsByID<T & IMinimalRecord>(this.routeByID, missingIDs)
+		const fetchedRecords = [...fetchedRecordsByID.values()]
+		if (fetchedRecords.length === 0) { return }
+
+		// Reuse the standard merge path so `records`, `recordsMap`, and name indexes stay aligned.
+		this.addSavedRecords(...fetchedRecords)
 	}
   
   fetch(){

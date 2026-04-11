@@ -52,9 +52,9 @@ export class ProductosDeltaService extends GetHandler<IProducto> {
 		}
 	}
 
-	constructor(fetch?: boolean) {
+	constructor(init: boolean = false) {
 		super();
-		if (fetch) {
+		if (init) {
 			this.fetch();
 		}
 	}

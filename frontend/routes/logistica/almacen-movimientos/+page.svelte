@@ -14,7 +14,7 @@ import { Loading, formatTime, throttle, highlString } from '$libs/helpers';
     import { untrack } from "svelte";
 
   const almacenes = new AlmacenesService()
-  const productos = new ProductosService()
+  const productos = new ProductosService(true)
 
   // Get current date and 7 days ago as Unix days
   const getFechaUnix = (): number => {

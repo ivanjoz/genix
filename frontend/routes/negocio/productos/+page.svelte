@@ -26,8 +26,8 @@ import {
 } from "./productos.svelte";
 
   let filterText = $state("");
-  const productos = new ProductosService();
-  const listas = new ListasCompartidasService([1, 2]);
+  const productos = new ProductosService(true);
+  const listas = new ListasCompartidasService([1, 2], true);
 
   let view = $state(1);
   let layerView = $state(1);
