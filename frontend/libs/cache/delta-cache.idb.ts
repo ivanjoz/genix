@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
+import type { ICacheDebugRow } from './cache-debug.types'
 import type {
   CacheRecordID,
   ICacheRecordRow,
@@ -53,6 +54,14 @@ const rememberRouteRow = (routeRow: ICacheRouteRow) => {
 
 const forgetRouteRow = (routeRow: Pick<ICacheRouteRow, 'dbName' | 'routeLookupKey'>) => {
   routeMemoryByLookupKey.delete(getRouteMemoryKey(routeRow))
+}
+
+const forgetRoutesByDatabaseName = (dbName: string) => {
+  // Full environment cleanup must evict stale memory rows even if IndexedDB is already empty.
+  for (const routeMemoryKey of routeMemoryByLookupKey.keys()) {
+    if (!routeMemoryKey.startsWith(`${dbName}::`)) { continue }
+    routeMemoryByLookupKey.delete(routeMemoryKey)
+  }
 }
 
 const deleteRouteRecords = async (routeRow: ICacheRouteRow): Promise<void> => {
@@ -293,23 +302,20 @@ export const refreshRoutesByPrefix = async (
 }
 
 export const clearEnvironmentCache = async (dbName: string): Promise<number> => {
-  // The database name already scopes environment and company, so cleanup drops every route in it.
+  // The database name already scopes environment and company, so we can safely wipe both tables.
   const database = getDeltaCacheDatabase(dbName)
   const routeRows = await database.cacheRoutes.toArray()
 
-  if (routeRows.length === 0) { return 0 }
-
-  const routeIDs = routeRows.map((routeRow) => routeRow.id as number)
   await database.transaction('rw', database.cacheRoutes, database.cacheRecords, async () => {
-    for (const routeRow of routeRows) {
-      await deleteRouteRecords(routeRow)
-    }
-    await database.cacheRoutes.bulkDelete(routeIDs)
+    // Clearing both stores also removes orphan record rows that no longer have route metadata.
+    await database.cacheRecords.clear()
+    await database.cacheRoutes.clear()
   })
 
   for (const routeRow of routeRows) {
     forgetRouteRow(routeRow)
   }
+  forgetRoutesByDatabaseName(dbName)
 
   return routeRows.length
 }
@@ -354,4 +360,27 @@ export const listEnvironmentCacheStats = async (dbName: string) => {
   }
 
   return [...moduleStats.values()]
+}
+
+export const listEnvironmentCacheRouteStats = async (dbName: string): Promise<ICacheDebugRow[]> => {
+  // Route-level stats power the cache inspector UI without rebuilding full response payloads.
+  const routeRows = await getDeltaCacheDatabase(dbName).cacheRoutes.toArray()
+  const routeStats = await Promise.all(routeRows.map(async (routeRow) => {
+    rememberRouteRow(routeRow)
+    return {
+      source: 'delta' as const,
+      baseRoute: String(routeRow.route || '').split('?')[0] || '(sin ruta)',
+      apiRoute: routeRow.route || '',
+      recordsCount: await countRouteRecords(routeRow),
+      // The current inspector uses the persisted fetch payload bytes as the only available size metric.
+      sizeMB: Number(routeRow.fetchedBytes || 0) / (1024 * 1024),
+    }
+  }))
+
+  return routeStats.sort((leftRow, rightRow) => {
+    if (leftRow.baseRoute === rightRow.baseRoute) {
+      return leftRow.apiRoute.localeCompare(rightRow.apiRoute)
+    }
+    return leftRow.baseRoute.localeCompare(rightRow.baseRoute)
+  })
 }

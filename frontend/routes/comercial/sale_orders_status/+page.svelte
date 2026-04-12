@@ -1,10 +1,9 @@
 <script lang="ts">
+  import Layer from '$components/Layer.svelte';
+  import OptionsStrip from '$components/OptionsStrip.svelte';
   import SearchSelect from '$components/SearchSelect.svelte';
   import LoadingBar from '$components/micro/LoadingBar.svelte';
   import RecordByIDText from '$components/micro/RecordByIDText.svelte';
-  import Layer from '$components/Layer.svelte';
-  import OptionsStrip from '$components/OptionsStrip.svelte';
-  import TableGrid from '$components/vTable/TableGrid.svelte';
   import VTable from '$components/vTable/VTable.svelte';
   import type { TableGridColumn } from '$components/vTable/tableGridTypes';
   import type { ITableColumn } from '$components/vTable/types';
@@ -12,24 +11,23 @@
   import Page from '$domain/Page.svelte';
   import { Notify, formatN, formatTime } from '$libs/helpers';
   import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
-  import { AlmacenesService } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte';
   import {
-    ClientProviderService,
-    ClientProviderType,
-    type IClientProvider,
+      ClientProviderService,
+      type IClientProvider
   } from '$routes/negocio/clientes/clientes-proveedores.svelte';
   import {
-    ProductosService,
-    type IProducto,
-    type IProductoPresentacion,
+      ProductosService,
+      type IProducto,
+      type IProductoPresentacion,
   } from '$routes/negocio/productos/productos.svelte';
+  import { AlmacenesService } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte';
   import { onMount, untrack } from 'svelte';
   import SaleOrdersTable from '../SaleOrdersTable.svelte';
   import {
-    SaleOrderGroup,
-    SaleOrdersService,
-    postSaleOrderUpdate,
-    type ISaleOrder
+      SaleOrderGroup,
+      SaleOrdersService,
+      postSaleOrderUpdate,
+      type ISaleOrder
   } from './sale_order_status.svelte';
 
   interface ISaleOrderDetailLine {

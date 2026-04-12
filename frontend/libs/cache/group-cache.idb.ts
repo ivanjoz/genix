@@ -1,5 +1,6 @@
 import Dexie from 'dexie'
 import { Env } from '$core/env'
+import type { ICacheDebugRow } from './cache-debug.types'
 
 const GROUP_CACHE_DB_VERSION = 2
 const LOG_PREFIX = '[group-cache:idb]'
@@ -66,6 +67,11 @@ const getGroupCacheDatabase = (): GroupCacheDatabase => {
 	const createdDatabase = new GroupCacheDatabase(databaseName)
 	groupCacheDatabasesByName.set(databaseName, createdDatabase)
 	return createdDatabase
+}
+
+const deleteCachedGroupDatabaseReference = (databaseName: string) => {
+	// Removing the in-memory instance prevents stale handles after cache cleanup.
+	groupCacheDatabasesByName.delete(databaseName)
 }
 
 export const makeGroupCacheKey = (groupRecord: Pick<IGroupCacheRecord, 'igVal'>): string => {
@@ -173,5 +179,55 @@ export const upsertGroupCacheRows = async <T>(
 		console.debug(`${LOG_PREFIX} Rows upserted.`, { queryShape, rows: rows.length })
 	} catch (error) {
 		console.warn(`${LOG_PREFIX} Failed to upsert rows.`, { queryShape, rows: rows.length }, error)
+	}
+}
+
+export const listGroupCacheStats = async (): Promise<ICacheDebugRow[]> => {
+	try {
+		// Primary keys expose queryShape without deserializing the records payload stored in each row.
+		const primaryKeys = await getGroupCacheDatabase().groupRows
+			.orderBy('queryShape')
+			.primaryKeys() as [string, string][]
+
+		const rowsCountByQueryShape = new Map<string, number>()
+		for (const primaryKey of primaryKeys) {
+			const queryShape = String(primaryKey?.[0] || '')
+			if (!queryShape) { continue }
+			rowsCountByQueryShape.set(queryShape, (rowsCountByQueryShape.get(queryShape) || 0) + 1)
+		}
+
+		const statsRows = [...rowsCountByQueryShape.entries()].map(([queryShape, recordsCount]) => ({
+			source: 'group' as const,
+			baseRoute: queryShape.split('|')[0] || '(sin ruta)',
+			apiRoute: queryShape,
+			recordsCount,
+		}))
+
+		console.debug(`${LOG_PREFIX} Stats listed.`, {
+			queryShapes: statsRows.length,
+			rows: primaryKeys.length,
+		})
+		return statsRows
+	} catch (error) {
+		console.warn(`${LOG_PREFIX} Failed to list stats.`, error)
+		return []
+	}
+}
+
+export const clearGroupCache = async (): Promise<number> => {
+	const databaseName = makeGroupCacheDatabaseName()
+	const database = getGroupCacheDatabase()
+
+	try {
+		// Row count is returned so the UI can report how much cached grouped data was removed.
+		const deletedRows = await database.groupRows.count()
+		database.close()
+		deleteCachedGroupDatabaseReference(databaseName)
+		await Dexie.delete(databaseName)
+		console.debug(`${LOG_PREFIX} Cache cleared.`, { databaseName, deletedRows })
+		return deletedRows
+	} catch (error) {
+		console.warn(`${LOG_PREFIX} Failed to clear cache.`, { databaseName }, error)
+		throw error
 	}
 }

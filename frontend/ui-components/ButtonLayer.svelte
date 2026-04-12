@@ -274,7 +274,7 @@ import angleSvg from '$domain/assets/angle.svg?raw';
 
   {#if isOpen}
     <div bind:this={layerElement}
-      class="button-layer min-w-200 {layerClass||'w-[calc(100vw-12px)]'}"
+      class="button-layer min-w-200 {layerClass}"
       style="top: {position.top}px; left: {position.left}px;"
       class:use-big={useBig}
       class:placement-top={placement === 'top'}
@@ -302,7 +302,7 @@ import angleSvg from '$domain/assets/angle.svg?raw';
 
   .button-layer {
     position: fixed;
-    z-index: 210;
+    z-index: 360;
     background-color: white;
     border-radius: 8px;
     box-shadow:
@@ -329,6 +329,8 @@ import angleSvg from '$domain/assets/angle.svg?raw';
   /* Mobile: fixed width and max-height */
   @media (max-width: 748px) {
     .button-layer {
+      /* Force full available mobile width even when callers pass desktop width classes. */
+      width: calc(100vw - 12px);
       max-width: calc(100vw - 12px);
       max-height: calc(100vh - 100px);
       overflow: visible;
@@ -349,7 +351,7 @@ import angleSvg from '$domain/assets/angle.svg?raw';
     width: 24px;
     display: flex;
     justify-content: center;
-    z-index: 211;
+    z-index: 361;
   }
 
   .button-layer.placement-top .button-layer-angle {
