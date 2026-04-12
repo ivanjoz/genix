@@ -4,10 +4,19 @@
  * auto-creating one objectStore per table (`tableName`) with keyPath `ID`.
  */
 import { IndexedDBRepository, type DatabaseInformation, type IDatabase } from "../typed-idb"
+import { Env } from '$core/env'
 
 const LOG_PREFIX = "[cache-by-ids:idb]"
-const IDB_DB_NAME = "cached_ids"
-const IDB_DB_VERSION_KEY = `${IDB_DB_NAME}__version`
+const CACHE_BY_IDS_DB_PREFIX = "cached_ids"
+
+export const makeCacheByIDsDatabaseName = (companyID: number, env: string): string => {
+	// Keep cache-by-ids partitioned per company/environment like the other offline caches.
+	return `${companyID || 0}_${CACHE_BY_IDS_DB_PREFIX}_${env || 'main'}`
+}
+
+const makeCacheByIDsVersionStorageKey = (databaseName: string): string => {
+	return `${databaseName}__version`
+}
 
 const readLocalStorageNumber = (key: string, fallback: number): number => {
 	try {
@@ -31,17 +40,47 @@ const writeLocalStorageNumber = (key: string, value: number) => {
 }
 
 class CacheByIDsDatabase implements IDatabase {
-	private cachedDB: IDBDatabase | null = null
-	private cachedVersion = 0
+	private cachedDBByName = new Map<string, IDBDatabase>()
+	private cachedVersionByName = new Map<string, number>()
 
-	private getCurrentVersion(): number {
-		const version = readLocalStorageNumber(IDB_DB_VERSION_KEY, 1)
+	private getCurrentDatabaseName(): string {
+		return makeCacheByIDsDatabaseName(Env.getEmpresaID(), Env.enviroment || 'main')
+	}
+
+	private getCurrentVersion(databaseName: string): number {
+		const version = readLocalStorageNumber(makeCacheByIDsVersionStorageKey(databaseName), 1)
 		return version
 	}
 
-	private async openWithVersion(version: number, storesToEnsure: string[]): Promise<IDBDatabase> {
+	private getCachedDatabase(databaseName: string): IDBDatabase | null {
+		return this.cachedDBByName.get(databaseName) || null
+	}
+
+	private getCachedVersion(databaseName: string): number {
+		return this.cachedVersionByName.get(databaseName) || 0
+	}
+
+	private rememberDatabase(databaseName: string, database: IDBDatabase) {
+		this.cachedDBByName.set(databaseName, database)
+		this.cachedVersionByName.set(databaseName, database.version)
+	}
+
+	closeCachedDatabase(databaseName: string) {
+		const cachedDatabase = this.cachedDBByName.get(databaseName)
+		if (cachedDatabase) {
+			cachedDatabase.close()
+		}
+		this.cachedDBByName.delete(databaseName)
+		this.cachedVersionByName.delete(databaseName)
+	}
+
+	private async openWithVersion(
+		databaseName: string,
+		version: number,
+		storesToEnsure: string[],
+	): Promise<IDBDatabase> {
 		return await new Promise<IDBDatabase>((resolve, reject) => {
-			const openRequest = indexedDB.open(IDB_DB_NAME, version)
+			const openRequest = indexedDB.open(databaseName, version)
 
 			openRequest.onupgradeneeded = () => {
 				const db = openRequest.result
@@ -58,9 +97,9 @@ class CacheByIDsDatabase implements IDatabase {
 		})
 	}
 
-	private async openLatestVersion(): Promise<IDBDatabase> {
+	private async openLatestVersion(databaseName: string): Promise<IDBDatabase> {
 		return await new Promise<IDBDatabase>((resolve, reject) => {
-			const openRequest = indexedDB.open(IDB_DB_NAME)
+			const openRequest = indexedDB.open(databaseName)
 			openRequest.onsuccess = () => resolve(openRequest.result)
 			openRequest.onerror = () => reject(openRequest.error)
 		})
@@ -72,74 +111,83 @@ class CacheByIDsDatabase implements IDatabase {
 		return errorName === "VersionError"
 	}
 
-	private async openWithRecoveredVersion(version: number, storesToEnsure: string[]): Promise<IDBDatabase> {
+	private async openWithRecoveredVersion(
+		databaseName: string,
+		version: number,
+		storesToEnsure: string[],
+	): Promise<IDBDatabase> {
 		try {
-			return await this.openWithVersion(version, storesToEnsure)
+			return await this.openWithVersion(databaseName, version, storesToEnsure)
 		} catch (openError) {
 			if (!this.isVersionError(openError)) {
 				throw openError
 			}
 			// Recover when localStorage version lags behind actual IndexedDB version.
-			const latestDatabase = await this.openLatestVersion()
+			const latestDatabase = await this.openLatestVersion(databaseName)
 			const actualVersion = latestDatabase.version
-			writeLocalStorageNumber(IDB_DB_VERSION_KEY, actualVersion)
+			writeLocalStorageNumber(makeCacheByIDsVersionStorageKey(databaseName), actualVersion)
 			console.warn(`${LOG_PREFIX} Recovered IndexedDB version mismatch.`, {
+				databaseName,
 				requestedVersion: version,
 				actualVersion,
 			})
 			latestDatabase.close()
 			const recoveredVersion = storesToEnsure.length > 0 ? actualVersion + 1 : actualVersion
-			const recoveredDatabase = await this.openWithVersion(recoveredVersion, storesToEnsure)
-			writeLocalStorageNumber(IDB_DB_VERSION_KEY, recoveredDatabase.version)
+			const recoveredDatabase = await this.openWithVersion(databaseName, recoveredVersion, storesToEnsure)
+			writeLocalStorageNumber(
+				makeCacheByIDsVersionStorageKey(databaseName),
+				recoveredDatabase.version,
+			)
 			return recoveredDatabase
 		}
 	}
 
-	private async ensureStoresExist(storeNames: string[]): Promise<IDBDatabase> {
-		const currentVersion = this.getCurrentVersion()
+	private async ensureStoresExist(databaseName: string, storeNames: string[]): Promise<IDBDatabase> {
+		const currentVersion = this.getCurrentVersion(databaseName)
+		const cachedDatabase = this.getCachedDatabase(databaseName)
 
 		// Reuse cached connection if it's the correct version.
-		if (this.cachedDB && this.cachedVersion === currentVersion) {
-			const missingStores = storeNames.filter((storeName) => !this.cachedDB!.objectStoreNames.contains(storeName))
-			if (missingStores.length === 0) return this.cachedDB
+		if (cachedDatabase && this.getCachedVersion(databaseName) === currentVersion) {
+			const missingStores = storeNames.filter((storeName) => !cachedDatabase.objectStoreNames.contains(storeName))
+			if (missingStores.length === 0) return cachedDatabase
 			// Need upgrade: close and reopen with bumped version.
-			this.cachedDB.close()
-			this.cachedDB = null
-			this.cachedVersion = 0
+			this.closeCachedDatabase(databaseName)
 		}
 
 		// Open current DB version first; upgrade only when requested stores are missing.
-		let db = await this.openWithRecoveredVersion(currentVersion, [])
+		let db = await this.openWithRecoveredVersion(databaseName, currentVersion, [])
 		const missingStores = storeNames.filter((storeName) => !db.objectStoreNames.contains(storeName))
 		if (missingStores.length === 0) {
-			this.cachedDB = db
-			this.cachedVersion = db.version
+			this.rememberDatabase(databaseName, db)
 			return db
 		}
 
-			// Upgrade path: bump version by 1 and create only missing stores.
-			db.close()
-			const upgradedVersion = currentVersion + 1
-			db = await this.openWithRecoveredVersion(upgradedVersion, missingStores)
-			writeLocalStorageNumber(IDB_DB_VERSION_KEY, db.version)
+		// Upgrade path: bump version by 1 and create only missing stores.
+		db.close()
+		const upgradedVersion = currentVersion + 1
+		db = await this.openWithRecoveredVersion(databaseName, upgradedVersion, missingStores)
+		writeLocalStorageNumber(makeCacheByIDsVersionStorageKey(databaseName), db.version)
 
-		this.cachedDB = db
-		this.cachedVersion = db.version
+		this.rememberDatabase(databaseName, db)
 		return db
 	}
 
 	async openConnection(): Promise<IDBDatabase> {
+		return await this.openScopedConnection(this.getCurrentDatabaseName())
+	}
+
+	async openScopedConnection(databaseName: string): Promise<IDBDatabase> {
 		if (typeof indexedDB === "undefined") {
 			throw new Error("IndexedDB is not available in this environment.")
 		}
 
 		// Caller might call this without store context; open the DB as-is.
-		const currentVersion = this.getCurrentVersion()
-		if (this.cachedDB && this.cachedVersion === currentVersion) return this.cachedDB
+		const currentVersion = this.getCurrentVersion(databaseName)
+		const cachedDatabase = this.getCachedDatabase(databaseName)
+		if (cachedDatabase && this.getCachedVersion(databaseName) === currentVersion) return cachedDatabase
 
-		const db = await this.openWithRecoveredVersion(currentVersion, [])
-		this.cachedDB = db
-		this.cachedVersion = db.version
+		const db = await this.openWithRecoveredVersion(databaseName, currentVersion, [])
+		this.rememberDatabase(databaseName, db)
 		return db
 	}
 
@@ -152,7 +200,7 @@ class CacheByIDsDatabase implements IDatabase {
 			throw new Error("IndexedDB is not available in this environment.")
 		}
 
-		const db = await this.ensureStoresExist(storeNames)
+		const db = await this.ensureStoresExist(this.getCurrentDatabaseName(), storeNames)
 		const transaction = db.transaction(storeNames, mode)
 
 		return await new Promise<T>((resolve, reject) => {
@@ -219,4 +267,38 @@ export const upsertRecordsIntoIDB = async <T extends { ID: number }>(
 	} catch (error) {
 		console.warn(`${LOG_PREFIX} Failed to upsert into IndexedDB.`, { tableName, recordsCount: records.length }, error)
 	}
+}
+
+const deleteIndexedDBDatabase = async (databaseName: string): Promise<void> => {
+	await new Promise<void>((resolve, reject) => {
+		const deleteRequest = indexedDB.deleteDatabase(databaseName)
+		deleteRequest.onsuccess = () => resolve()
+		deleteRequest.onerror = () => reject(deleteRequest.error)
+		deleteRequest.onblocked = () => reject(new Error(`Deletion blocked for ${databaseName}`))
+	})
+}
+
+export const clearCacheByIDsDatabase = async (
+	companyID: number,
+	env: string,
+): Promise<{ databaseName: string }> => {
+	if (typeof indexedDB === "undefined") {
+		throw new Error("IndexedDB is not available in this environment.")
+	}
+
+	const databaseName = makeCacheByIDsDatabaseName(companyID, env)
+	database.closeCachedDatabase(databaseName)
+	repositoryByStore.clear()
+	await deleteIndexedDBDatabase(databaseName)
+
+	try {
+		if (typeof localStorage !== "undefined") {
+			localStorage.removeItem(makeCacheByIDsVersionStorageKey(databaseName))
+		}
+	} catch {
+		// Ignore: private mode or restricted storage should not block cache cleanup.
+	}
+
+	console.debug(`${LOG_PREFIX} Cache database cleared.`, { databaseName })
+	return { databaseName }
 }

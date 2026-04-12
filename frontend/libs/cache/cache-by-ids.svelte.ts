@@ -7,7 +7,7 @@ import { GET } from '../http.svelte'
  * It sends `ids`, `cc-ids`, and `cc-ver` so backend returns only new/changed records.
  */
 import { concatenateInts } from "../funcs/parsers"
-import { readRecordsFromIDBByIDs, upsertRecordsIntoIDB } from "./cache-by-ids.idb"
+import { clearCacheByIDsDatabase, readRecordsFromIDBByIDs, upsertRecordsIntoIDB } from "./cache-by-ids.idb"
 import { Env } from '$core/env'
 
 const CACHE_TIME = 5
@@ -557,6 +557,64 @@ let bufferStarTime = 0
 let bufferFlushTimer: ReturnType<typeof setTimeout> | null = null
 let updatedBufferStarTime = 0
 let updatedBufferFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+const resetPendingBufferState = (
+	pendingResolvers: Map<string, { resolve: (value: any) => void; reject: (reason?: any) => void }>,
+	pendingPromises: Map<string, Promise<any>>,
+	bufferedIDsByTable: Map<string, Set<number>>,
+	bufferedHints?: Map<string, IMinimalRecord | false>,
+) => {
+	for (const pending of pendingResolvers.values()) {
+		pending.reject(new Error(`${LOG_PREFIX} cache cleared while request was pending`))
+	}
+	pendingResolvers.clear()
+	pendingPromises.clear()
+	bufferedIDsByTable.clear()
+	bufferedHints?.clear()
+}
+
+export const clearCacheByIDs = async (): Promise<{ databaseName: string; clearedMemoryTables: number }> => {
+	// Memory maps are global in this module, so clear them before dropping persisted IndexedDB state.
+	const clearedMemoryTables = cacheRecordIdTable.size
+	cacheRecordIdTable.clear()
+	inFlightRecordsBatchPromiseByTable.clear()
+
+	resetPendingBufferState(
+		bufferedResolversByTableAndID,
+		bufferedPromiseByTableAndID,
+		recordIDsBufferByTable,
+		bufferedCacheHintByTableAndID,
+	)
+	resetPendingBufferState(
+		bufferedUpdatedResolversByTableAndID,
+		bufferedUpdatedPromiseByTableAndID,
+		updatedRecordIDsBufferByTable,
+	)
+
+	if (bufferFlushTimer) {
+		clearTimeout(bufferFlushTimer)
+		bufferFlushTimer = null
+	}
+	if (updatedBufferFlushTimer) {
+		clearTimeout(updatedBufferFlushTimer)
+		updatedBufferFlushTimer = null
+	}
+	bufferStarTime = 0
+	updatedBufferStarTime = 0
+
+	const clearedDatabase = await clearCacheByIDsDatabase(
+		Env.getEmpresaID(),
+		Env.enviroment || 'main',
+	)
+	console.debug(`${LOG_PREFIX} Cache cleared.`, {
+		databaseName: clearedDatabase.databaseName,
+		clearedMemoryTables,
+	})
+	return {
+		databaseName: clearedDatabase.databaseName,
+		clearedMemoryTables,
+	}
+}
 
 // Runs once per buffer window and resolves every pending getRecordByID Promise.
 // It batches IDs per table, does one request per table, then fans out each result by ID.
