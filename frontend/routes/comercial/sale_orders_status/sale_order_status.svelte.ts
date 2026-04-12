@@ -67,9 +67,11 @@ export class SaleOrdersService extends GetHandler {
 
 	handler(result: ISaleOrdersResult): void {
 		console.log("ISaleOrdersResult", result)
+		const records = (result?.records || []).filter((saleOrder) => (saleOrder?.ss || 0) > 0)
+		records.sort((a,b) => a.Created > b.Created ? -1 : 1)
 		
 		// Normalize once here so page consumers can reuse the service data without extra passes.
-		this.records = (result?.records||[]).filter((saleOrder) => (saleOrder?.ss || 0) > 0)
+		this.records = records
 		console.debug('[SaleOrdersService] fetched rows:', result?.records?.length,"|",this.records.length);
   }
 

@@ -106,6 +106,14 @@ import angleSvg from '$domain/assets/angle.svg?raw';
     }
   }
 
+  function clickIsInsideProtectedTopLayer(target: Node | null) {
+    // Global mobile pickers live outside this component tree, so mark them explicitly.
+    if (!(target instanceof Element)) {
+      return false;
+    }
+    return !!target.closest('[data-button-layer-protected="true"]');
+  }
+
   // Calculate position of the layer below or above the button
   async function updatePosition() {
     await tick();
@@ -192,6 +200,10 @@ import angleSvg from '$domain/assets/angle.svg?raw';
 
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
+
+      if (clickIsInsideProtectedTopLayer(target)) {
+        return;
+      }
 
       // Check if click is outside both button and layer
       if (

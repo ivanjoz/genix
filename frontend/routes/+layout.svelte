@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
+	import TopLayerDatePicker from '$components/TopLayerDatePicker.svelte';
 	import TopLayerSelector from '$components/TopLayerSelector.svelte';
 	import { Env } from '$core/env';
 	import Modules from '$core/modules';
@@ -97,6 +98,7 @@
 
 {#if showLayout && !redirectsToLogin}
 	<TopLayerSelector></TopLayerSelector>
+	<TopLayerDatePicker></TopLayerDatePicker>
 	<!-- Header with mobile menu toggle -->
 	<AppHeader showMenuButton={true}/>
 	<!-- Side Menu -->

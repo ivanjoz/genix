@@ -18,7 +18,18 @@ export interface ITopSearchLayer {
   keyName: string
   keyID: string | number
   onSelect: (e: any) => void
+  onClear?: () => void
   onRemove?: (e: any) => void
+}
+
+export interface ITopDateLayer {
+  selectedUnixDay: number
+  focusedUnixDay?: number
+  selectedMonthKey: number
+  label?: string
+  placeholder?: string
+  onSelect: (unixDay: number) => void
+  onClose?: () => void
 }
 
 export const Core = $state({
@@ -37,6 +48,7 @@ export const Core = $state({
   pageOptions: [] as {id: number, name: string}[],
   pageOptionSelected: 1,
   showMobileSearchLayer: null as ITopSearchLayer | null,
+  showMobileDateLayer: null as ITopDateLayer | null,
   toggleMobileMenu: (() => {}) as () => void,
   openSideLayer: (layerId: number) => {
     Core.showSideLayer = layerId

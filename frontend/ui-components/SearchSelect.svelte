@@ -243,6 +243,13 @@ import { Core } from '$core/store.svelte';
     show = false
   }
 
+  function clearSelectedValue() {
+    // Keep the clear path explicit so the mobile layer can reset the component without selecting a fake option.
+    setValueSaveOn(undefined, true)
+    if (inputRef) { inputRef.blur() }
+    show = false
+  }
+
   let cN = $derived(
     `${s1.input} p-rel${css ? ` ${css}` : ""}${!label ? " no-label" : ""}${useStyle ? ` use-style-${useStyle}` : ""}`,
   )
@@ -302,6 +309,9 @@ import { Core } from '$core/store.svelte';
       keyName: keyName as string,
       keyID: keyId as string,
       onSelect: (e) => { onOptionClick(e) },
+      onClear: notEmpty ? undefined : () => {
+        clearSelectedValue()
+      },
       onRemove: (e) => {
 
       }
@@ -383,11 +393,15 @@ import { Core } from '$core/store.svelte';
           handleOpenMobileLayer();
         }}
       >
-        <div class="h100 w100 flex items-center">
+        <div class="h100 w100 min-w-0 flex items-center">
           {#if selectedValue}
-            {selectedValue}
+            <!-- Keep mobile trigger text on a single line so dense filters stay aligned. -->
+            <div class="w-full truncate">
+              {selectedValue}
+            </div>
           {:else}
-            <div class="fs15 mt-2 _10">{placeholder||""}</div>
+            <!-- Apply the same single-line constraint to placeholder text. -->
+            <div class="fs15 mt-2 w-full truncate _10">{placeholder||""}</div>
           {/if}
         </div>
       </div>
