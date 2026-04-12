@@ -70,8 +70,8 @@
 </script>
 
 <Page title="Reporte Ventas">
-  <div class="flex items-center justify-between mb-12 gap-12">
-    <div class="flex items-center w-full gap-12">
+  <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start mb-12 gap-12 md:flex md:items-center md:justify-between">
+    <div class="contents md:flex md:items-center md:w-full md:gap-12">
   		<ButtonLayer buttonClass="bx-purple" bind:isOpen={isSearchOpen}
 				horizontalOffset={0} useOutline={true}
 				edgeMargin={0} buttonClassOnShow="bx-red"
@@ -136,6 +136,7 @@
 				</div>
 			</ButtonLayer>
 			<KeyValueStrip
+				css="col-span-2 row-start-2 w-full md:w-auto"
 				label1="Fec. Inicio"
 				value1={reportForm.fechaInicio}
 				getContent1={v => formatTime(v,"d-m-Y") as string}
@@ -167,7 +168,7 @@
 			/>
     </div>
 
-    <div class="flex items-center mr-16 w-224 ml-auto relative">
+    <div class="relative col-start-2 row-start-1 flex items-start self-start w-full max-w-224 ml-auto md:mr-16 md:w-224">
       <div class="absolute left-12 text-gray-400">
         <i class="icon-search"></i>
       </div>

@@ -97,7 +97,6 @@ import { Core } from '$core/store.svelte';
   };
 
   let preparedOptions: PreparedOption[] = [];
-  let optionById = new Map<SearchOptionID, E>();
   let avoidedOptionIdSet = new Set<SearchOptionID>();
 
   function checkPosition() {
@@ -126,7 +125,10 @@ import { Core } from '$core/store.svelte';
     if (!currValue) {
       return undefined;
     }
-    return optionById.get(currValue);
+    const normalizedSelectedId = String(currValue);
+
+    // Resolve against current options so hydration still works after remounts or async option refreshes.
+    return options.find((option) => String(getOptionId(option)) === normalizedSelectedId);
   }
 
   function isRequired() {
@@ -281,7 +283,6 @@ import { Core } from '$core/store.svelte';
 
   $effect(() => {
     const nextPreparedOptions: PreparedOption[] = [];
-    const nextOptionById = new Map<SearchOptionID, E>();
 
     // Build plain caches once per options change so the keystroke path stays allocation-light.
     for (const option of options) {
@@ -293,11 +294,9 @@ import { Core } from '$core/store.svelte';
         normalizedLabel: optionLabel.toLowerCase(),
         option,
       });
-      nextOptionById.set(optionId, option);
     }
 
     preparedOptions = nextPreparedOptions;
-    optionById = nextOptionById;
     avoidedOptionIdSet = new Set(avoidIDs || []);
     filteredOptions = filter("");
     arrowSelected = -1;

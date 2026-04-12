@@ -18,6 +18,62 @@
 	src: url("/fonts/jetbrains-mono-regular.woff2");
 }
 
+/* Keep the mobile font switch centralized by exposing Inter through the same aliases. */
+@font-face {
+	font-family: 'main-mobile';
+	src: url("/fonts/inter-v20-latin-regular.woff2");
+}
+
+@font-face {
+	font-family: 'bold-mobile';
+	src: url("/fonts/inter-v20-latin-700.woff2");
+}
+
+@font-face {
+	font-family: 'semibold-mobile';
+	src: url("/fonts/inter-v20-latin-600.woff2");
+}
+
+/* Re-map the shared aliases on small screens so existing components inherit Inter automatically. */
+@media only screen and (max-width: 749px) {
+	body {
+		font-family: main-mobile, 'Inter', system-ui, -apple-system, sans-serif;
+	}
+
+	.ff-bold {
+		font-family: bold-mobile;
+	}
+
+	.ff-semibold {
+		font-family: semibold-mobile;
+	}
+
+	.ff-main {
+		font-family: main-mobile;
+	}
+
+	.font-bold {
+		font-family: 'bold-mobile';
+	}
+
+	.font-semibold {
+		font-family: 'semibold-mobile';
+	}
+
+	.bnr-gray {
+		font-family: main-mobile;
+	}
+
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		font-family: bold-mobile;
+	}
+}
+
 .ff-bold {
 	font-family: bold;
 }
