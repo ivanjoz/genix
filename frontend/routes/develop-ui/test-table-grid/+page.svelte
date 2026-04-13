@@ -41,24 +41,43 @@
       id: 'id',
       header: 'ID',
       width: '120px',
+      mobile: {
+        order: 1,
+        labelTop: 'Codigo',
+        css: 'col-span-full',
+      },
       getValue: (rowRecord) => rowRecord.id,
     },
     {
       id: 'fullName',
       header: 'Name',
       width: 'minmax(190px, 1.2fr)',
+      mobile: {
+        order: 0,
+        labelTop: 'Cliente',
+        css: 'col-span-full',
+      },
       getValue: (rowRecord) => rowRecord.fullName,
     },
     {
       id: 'email',
       header: 'Email',
       width: 'minmax(260px, 1.6fr)',
+      mobile: {
+        order: 2,
+        labelTop: 'Correo',
+        css: 'col-span-full',
+      },
       getValue: (rowRecord) => rowRecord.email,
     },
     {
       id: 'city',
       header: 'City',
       width: '140px',
+      mobile: {
+        order: 3,
+        labelLeft: 'Ciudad:',
+      },
       getValue: (rowRecord) => rowRecord.city,
     },
     {
@@ -66,6 +85,10 @@
       header: 'Age',
       width: '90px',
       align: 'right',
+      mobile: {
+        order: 4,
+        labelLeft: 'Edad:',
+      },
       getValue: (rowRecord) => rowRecord.age,
     },
     {
@@ -73,6 +96,10 @@
       header: 'Status',
       width: '140px',
       useCellRenderer: true,
+      mobile: {
+        order: 5,
+        labelTop: 'Estado',
+      },
       getValue: (rowRecord) => rowRecord.status,
     },
     {
@@ -81,6 +108,10 @@
       width: '150px',
       useCellRenderer: true,
       align: 'center',
+      mobile: {
+        order: 6,
+        labelTop: 'Acciones',
+      },
       getValue: () => '',
     },
   ];

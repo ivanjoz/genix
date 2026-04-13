@@ -2,6 +2,7 @@
 import { Core, fetchOnCourse } from '$core/store.svelte';
 import ButtonLayer from '$components/ButtonLayer.svelte';
 import HeaderConfig from '$domain/HeaderConfig.svelte';
+import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 
 	// Props
 	const {
@@ -99,7 +100,9 @@ import HeaderConfig from '$domain/HeaderConfig.svelte';
 
 		<!-- Settings Dropdown -->
 		<div class="relative">
+			<!-- Bind the floating settings layer state so nested actions can close it explicitly. -->
 			<ButtonLayer layerClass="md:w-640 md:h-460 px-8 py-6"
+				bind:isOpen={Core.headerSettingsOpen}
 				buttonClass="w-40 h-40 rounded-full bg-white/10 hover:bg-white/20
 					flex items-center justify-center transition-colors shadow-sm"
 				contentCss="px-4 pb-8 md:px-8 md:py-8"
@@ -124,6 +127,8 @@ import HeaderConfig from '$domain/HeaderConfig.svelte';
 		</button>
 	</div>
 </header>
+
+<HeaderRequestLogsModal />
 
 <!-- Click outside to close settings -->
 {#if showSettings}

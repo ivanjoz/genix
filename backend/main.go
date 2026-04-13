@@ -224,6 +224,7 @@ func main() {
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{http.MethodPost, http.MethodPut, http.MethodGet},
 			AllowedHeaders:   []string{"*"},
+			ExposedHeaders:   []string{"X-Metadata"},
 			AllowCredentials: false,
 		})
 		// Inicia el servidor con timeouts (previene slowloris y mejora resiliencia).

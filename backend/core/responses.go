@@ -241,7 +241,7 @@ func DecompressBase64GzipM(base64String *string, isUrl ...bool) (string, error) 
 func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTTPResponse {
 	response := &events.APIGatewayV2HTTPResponse{}
 	response.StatusCode = http.StatusOK
-	response.Headers = handlerResponse.Headers
+	response.Headers = ensureResponseHeaders(handlerResponse.Headers)
 	if _, ok := response.Headers["Content-Type"]; !ok {
 		response.Headers["Content-Type"] = "application/json; charset=utf-8"
 	}
@@ -259,6 +259,7 @@ func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTT
 			response.Headers["Content-Encoding"] = "gzip"
 		}
 		response.IsBase64Encoded = true
+		setMetadataHeader(response.Headers, handlerResponse.PreSerializeMs, time.Now().UnixMilli()-handlerResponse.RequestStart)
 		return response
 	}
 
@@ -310,6 +311,7 @@ func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTT
 	} else {
 		response.Body = string(body)
 	}
+	setMetadataHeader(response.Headers, handlerResponse.PreSerializeMs, time.Now().UnixMilli()-handlerResponse.RequestStart)
 	return response
 }
 
@@ -325,7 +327,7 @@ func MakeErrRespFinal(statusCode int32, body string) *events.APIGatewayV2HTTPRes
 	} else {
 		response.StatusCode = http.StatusBadRequest
 	}
-	response.Headers = make(map[string]string)
+	response.Headers = ensureResponseHeaders(nil)
 	// responseErr.Headers["Content-Type"] = "plain/text"
 	response.Headers["Content-Type"] = "application/json; charset=utf-8"
 	errorMsg := ErrorMsg{Error: body}
@@ -557,15 +559,17 @@ func (e HandlerArgs) GetQuerySlice(key string) []string {
 }
 
 type HandlerResponse struct {
-	Body          *[]byte
-	BodyOnDisk    string
-	StatusCode    int
-	Error         string
-	Encoding      string
-	Headers       map[string]string
-	Route         string
-	MergeID       int32
-	StreamHandled bool
+	Body           *[]byte
+	BodyOnDisk     string
+	StatusCode     int
+	Error          string
+	Encoding       string
+	Headers        map[string]string
+	RequestStart   int64
+	PreSerializeMs int64
+	Route          string
+	MergeID        int32
+	StreamHandled  bool
 }
 
 type MainResponse struct {
@@ -612,6 +616,25 @@ func makeHeaders() map[string]string {
 		"Content-Type": "application/json; charset=utf-8",
 	}
 	return headers
+}
+
+func ensureResponseHeaders(headers map[string]string) map[string]string {
+	if headers == nil {
+		headers = map[string]string{}
+	}
+
+	// Browsers only expose custom headers cross-origin when the server whitelists them.
+	headers["Access-Control-Expose-Headers"] = "X-Metadata"
+	return headers
+}
+
+func setMetadataHeader(headers map[string]string, preSerializeMs, totalMs int64) {
+	if headers == nil {
+		return
+	}
+
+	// Format: "<before-json-and-compression-ms>,<total-response-ms>".
+	headers["X-Metadata"] = fmt.Sprintf("%d,%d", preSerializeMs, totalMs)
 }
 
 // Crea una respuesta serializando un struct
@@ -854,6 +877,7 @@ func (req *HandlerArgs) MakeResponsePlain(body *[]byte) HandlerResponse {
 func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 	respWriter := *args.ResponseWriter
 	respWriter.Header().Set("Access-Control-Allow-Origin", "*")
+	respWriter.Header().Set("Access-Control-Expose-Headers", "X-Metadata")
 
 	PrintMemUsage()
 	// Setea los headers de la respuesta
@@ -874,6 +898,8 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 		if response.StatusCode != 0 {
 			statusCode = response.StatusCode
 		}
+		elapsed := time.Now().UnixMilli() - args.StartTime
+		respWriter.Header().Set("X-Metadata", fmt.Sprintf("%d,%d", response.PreSerializeMs, elapsed))
 		respWriter.WriteHeader(statusCode)
 		errorMap := map[string]string{
 			"error": response.Error,
@@ -915,6 +941,7 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 	elapsed := time.Now().UnixMilli() - args.StartTime
 	serverInfo := fmt.Sprintf("Genix-v1.0:%v", elapsed)
 	respWriter.Header().Set("Server", serverInfo)
+	respWriter.Header().Set("X-Metadata", fmt.Sprintf("%d,%d", response.PreSerializeMs, elapsed))
 
 	/*
 		bodyLen := 240

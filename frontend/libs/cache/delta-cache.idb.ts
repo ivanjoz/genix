@@ -1,14 +1,16 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type { ICacheDebugRow } from './cache-debug.types'
+import type { IGroupCacheRow } from './group-cache.idb'
 import type {
   CacheRecordID,
   ICacheRecordRow,
   ICacheRouteRow,
   IDeltaCacheRouteRef,
   ILastSync,
+  IRequestLogRow,
 } from './delta-cache.types'
 
-const CACHE_DB_VERSION = 2
+const CACHE_DB_VERSION = 3
 
 const deltaCacheDatabasesByName = new Map<string, DeltaCacheDatabase>()
 const routeMemoryByLookupKey = new Map<string, ICacheRouteRow>()
@@ -16,6 +18,8 @@ const routeMemoryByLookupKey = new Map<string, ICacheRouteRow>()
 class DeltaCacheDatabase extends Dexie {
   cacheRoutes!: EntityTable<ICacheRouteRow, 'id'>
   cacheRecords!: Dexie.Table<ICacheRecordRow, [number, string, CacheRecordID]>
+  requestLogs!: EntityTable<IRequestLogRow, 'id'>
+  groupRows!: Dexie.Table<IGroupCacheRow<any>, [string, string]>
 
   constructor(databaseName: string) {
     super(databaseName)
@@ -24,12 +28,18 @@ class DeltaCacheDatabase extends Dexie {
     this.version(CACHE_DB_VERSION).stores({
       cacheRoutes: '++id,&routeLookupKey,module',
       cacheRecords: '[cR+rK+ID],[cR+ss]',
+      requestLogs: '&id,route',
+      groupRows: '[queryShape+key],[queryShape+id+upc],queryShape',
     })
   }
 }
 
+export const makeCacheDatabaseName = (companyID: number, env: string): string => {
+  return `${companyID || 0}_cache_${env || 'main'}`
+}
+
 export const makeDeltaCacheDatabaseName = (companyID: number, env: string): string => {
-  return `${companyID || 0}_delta_cache_${env || 'main'}`
+  return makeCacheDatabaseName(companyID, env)
 }
 
 const getDeltaCacheDatabase = (dbName: string): DeltaCacheDatabase => {
@@ -198,6 +208,26 @@ export const replaceRouteRecordRows = async (
   rememberRouteRow(routeRow)
 }
 
+export const addRequestLogRow = async (dbName: string, requestLogRow: Omit<IRequestLogRow, 'id'>): Promise<IRequestLogRow> => {
+  const database = getDeltaCacheDatabase(dbName)
+  let nextRequestLogRow = {} as IRequestLogRow
+
+  await database.transaction('rw', database.requestLogs, async () => {
+    const createdAtMilliseconds = Date.now()
+    const lastLogRow = await database.requestLogs.orderBy('id').last()
+
+    // Keep IDs monotonic even when multiple requests finish inside the same millisecond.
+    nextRequestLogRow = {
+      ...requestLogRow,
+      id: Math.max(createdAtMilliseconds, (lastLogRow?.id || 0) + 1),
+    }
+
+    await database.requestLogs.add(nextRequestLogRow)
+  })
+
+  return nextRequestLogRow
+}
+
 export const extendRouteResponseKeys = async (
   routeRow: ICacheRouteRow, responseKeys: string[]
 ): Promise<ICacheRouteRow> => {
@@ -302,14 +332,16 @@ export const refreshRoutesByPrefix = async (
 }
 
 export const clearEnvironmentCache = async (dbName: string): Promise<number> => {
-  // The database name already scopes environment and company, so we can safely wipe both tables.
+  // The database name already scopes environment and company, so we can safely wipe cache data and request logs.
   const database = getDeltaCacheDatabase(dbName)
   const routeRows = await database.cacheRoutes.toArray()
 
-  await database.transaction('rw', database.cacheRoutes, database.cacheRecords, async () => {
+  await database.transaction('rw', database.cacheRoutes, database.cacheRecords, database.requestLogs, database.groupRows, async () => {
     // Clearing both stores also removes orphan record rows that no longer have route metadata.
     await database.cacheRecords.clear()
     await database.cacheRoutes.clear()
+    await database.requestLogs.clear()
+    await database.groupRows.clear()
   })
 
   for (const routeRow of routeRows) {
@@ -383,4 +415,20 @@ export const listEnvironmentCacheRouteStats = async (dbName: string): Promise<IC
     }
     return leftRow.baseRoute.localeCompare(rightRow.baseRoute)
   })
+}
+
+export const listRecentRequestLogRows = async (dbName: string, limit = 200): Promise<IRequestLogRow[]> => {
+  const normalizedLimit = Math.max(1, Math.min(500, Math.round(limit || 200)))
+
+  try {
+    // Reverse by monotonic id so the UI can inspect the newest requests first without scanning the full store.
+    return await getDeltaCacheDatabase(dbName).requestLogs
+      .orderBy('id')
+      .reverse()
+      .limit(normalizedLimit)
+      .toArray()
+  } catch (error) {
+    console.warn('[DeltaCache] Failed to list recent request logs.', { dbName, normalizedLimit }, error)
+    return []
+  }
 }

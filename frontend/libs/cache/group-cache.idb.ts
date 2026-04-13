@@ -1,8 +1,9 @@
 import Dexie from 'dexie'
 import { Env } from '$core/env'
 import type { ICacheDebugRow } from './cache-debug.types'
+import { makeCacheDatabaseName } from './delta-cache.idb'
 
-const GROUP_CACHE_DB_VERSION = 2
+const GROUP_CACHE_DB_VERSION = 3
 const LOG_PREFIX = '[group-cache:idb]'
 const groupCacheDatabasesByName = new Map<string, GroupCacheDatabase>()
 
@@ -35,28 +36,27 @@ export interface IGroupCacheMetadata {
 }
 
 class GroupCacheDatabase extends Dexie {
+	cacheRoutes!: Dexie.Table<any, number>
+	cacheRecords!: Dexie.Table<any, [number, string, string | number]>
+	requestLogs!: Dexie.Table<any, number>
 	groupRows!: Dexie.Table<IGroupCacheRow<any>, [string, string]>
 
 	constructor(databaseName: string) {
 		super(databaseName)
 
 		// Indexed metadata lets GETWithGroupCache send freshness keys without loading record JSON.
-		this.version(1).stores({
-			groupRows: '[queryShape+key],[queryShape+id+upc],queryShape',
-		})
 		this.version(GROUP_CACHE_DB_VERSION).stores({
+			cacheRoutes: '++id,&routeLookupKey,module',
+			cacheRecords: '[cR+rK+ID],[cR+ss]',
+			requestLogs: '&id,route',
 			// Primary key fetches exact groups; secondary index streams all freshness pairs by shape.
 			groupRows: '[queryShape+key],[queryShape+id+upc],queryShape',
-		}).upgrade(async (transaction) => {
-			// Version bumps can discard report caches; the backend remains the source of truth.
-			await transaction.table('groupRows').clear()
 		})
 	}
 }
 
 const makeGroupCacheDatabaseName = (): string => {
-	// Company and API endpoint live in the database name, so rows do not need partition fields.
-	return `${Env.getEmpresaID()}_group_cache_${Env.enviroment || 'main'}`
+	return makeCacheDatabaseName(Env.getEmpresaID(), Env.enviroment || 'main')
 }
 
 const getGroupCacheDatabase = (): GroupCacheDatabase => {
@@ -219,11 +219,8 @@ export const clearGroupCache = async (): Promise<number> => {
 	const database = getGroupCacheDatabase()
 
 	try {
-		// Row count is returned so the UI can report how much cached grouped data was removed.
 		const deletedRows = await database.groupRows.count()
-		database.close()
-		deleteCachedGroupDatabaseReference(databaseName)
-		await Dexie.delete(databaseName)
+		await database.groupRows.clear()
 		console.debug(`${LOG_PREFIX} Cache cleared.`, { databaseName, deletedRows })
 		return deletedRows
 	} catch (error) {

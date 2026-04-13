@@ -40,7 +40,14 @@ export type serviceHttpProps = {
     value: string | number
     param?: string
   }
-  status?: { code: number, message: string }
+  status?: {
+    code: number
+    message: string
+    metadata?: {
+      preSerializeMs: number
+      finalMs: number
+    }
+  }
   updatedStatus?: { [key: string]: string }
   cacheSyncTime?: number
   useCache?: {

@@ -60,6 +60,18 @@ var accessHelper = func() *core.AccessHelper {
 
 func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	requestStartedAt := time.Now().UnixMilli()
+	setResponseMetadata := func(handlerResponse *core.HandlerResponse) {
+		if handlerResponse == nil {
+			return
+		}
+		if handlerResponse.Headers == nil {
+			handlerResponse.Headers = map[string]string{}
+		}
+
+		// Persist both timings so the transport layer can append the final total after encoding.
+		handlerResponse.RequestStart = requestStartedAt
+		handlerResponse.PreSerializeMs = time.Now().UnixMilli() - requestStartedAt
+	}
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -71,6 +83,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 				Error:      errStr,
 				StatusCode: 500,
 			}
+			setResponseMetadata(&handlerResponse)
 			response = prepareResponse(args, &handlerResponse)
 		}
 	}()
@@ -113,6 +126,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		if len(args.Usuario.Error) > 0 {
 			core.Log("Usuario Error::", args.Usuario.Error)
 			handlerResponse.Error = args.Usuario.Error
+			setResponseMetadata(&handlerResponse)
 			return prepareResponse(args, &handlerResponse)
 		}
 
@@ -143,6 +157,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 			}
 
 			handlerResponse.Error = fmt.Sprintf("El usuario no posee alguno de los accesos: %s", strings.Join(accessNames, ", "))
+			setResponseMetadata(&handlerResponse)
 			return prepareResponse(args, &handlerResponse)
 		}
 	} else {
@@ -180,6 +195,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		}
 	}
 
+	setResponseMetadata(&handlerResponse)
 	return prepareResponse(args, &handlerResponse)
 }
 
@@ -340,6 +356,14 @@ func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerRespon
 				statusCode = int32(handlerResponse.StatusCode)
 			}
 			response.LambdaResponse = core.MakeErrRespFinal(statusCode, error)
+			if response.LambdaResponse.Headers == nil {
+				response.LambdaResponse.Headers = map[string]string{}
+			}
+			response.LambdaResponse.Headers["Access-Control-Expose-Headers"] = "X-Metadata"
+			response.LambdaResponse.Headers["X-Metadata"] = fmt.Sprintf("%d,%d",
+				handlerResponse.PreSerializeMs,
+				time.Now().UnixMilli()-handlerResponse.RequestStart,
+			)
 		} else {
 			response.LambdaResponse = core.MakeResponseFinal(handlerResponse)
 		}

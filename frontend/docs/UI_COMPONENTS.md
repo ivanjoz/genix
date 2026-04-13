@@ -505,7 +505,8 @@ Lightweight virtualized data grid for large datasets. Use this when you need a s
 - Fixed row height (`rowHeight`)
 - No `<table>`; rows and header use CSS Grid
 - Static column widths with optional flex tracks (`minmax(..., 1fr)`)
-- Desktop-focused V1 with horizontal scrolling support
+- Optional mobile card mode through `column.mobile`
+- Horizontal scrolling support on desktop
 
 **Props:**
 | Prop | Type | Required | Description |
@@ -515,15 +516,22 @@ Lightweight virtualized data grid for large datasets. Use this when you need a s
 | `height` | `string` | No | Fixed component height (default `"460px"`) |
 | `rowHeight` | `number` | No | Fixed row height in px (default `36`) |
 | `bufferSize` | `number` | No | Virtual list buffer size (default `12`) |
+| `mobileBreakpointPx` | `number` | No | Width threshold to switch to card mode when mobile columns exist (default `580`) |
 | `css` | `string` | No | Extra CSS classes for root container |
 | `headerCss` | `string` | No | Extra CSS classes for header |
 | `rowCss` | `string` | No | Extra CSS classes for each row |
+| `mobileCardCss` | `string` | No | Extra CSS classes for each mobile card |
 | `emptyMessage` | `string` | No | Message shown when data is empty |
 | `onRowClick` | `(row: T, index: number) => void` | No | Row click handler |
 | `selectedRowId` | `string \| number` | No | Controlled selected row ID |
 | `selectedRecord` | `T` | No | Controlled selected record reference/object |
 | `getRowId` | `(row: T, index: number) => string \| number` | No | ID resolver for stable selection |
-| `cellRenderer` | `Snippet<[row, column, defaultValue, rowIndex]>` | No | Optional snippet for custom cell rendering |
+| `cellRenderer` | `Snippet<[row, column, rowIndex]>` | No | Optional snippet for custom cell rendering |
+
+**Mobile column config:**
+- Add `mobile` to any `TableGridColumn` to opt that field into card mode.
+- Card mode activates only when `window.innerWidth < mobileBreakpointPx` and at least one visible column has `mobile`.
+- Supported keys: `order`, `labelTop`, `labelLeft`, `css`, `icon`, `iconCss`, `render`, `if`.
 
 **Example:**
 ```svelte
@@ -544,10 +552,10 @@ Lightweight virtualized data grid for large datasets. Use this when you need a s
   ];
 
   const columns: TableGridColumn<RowRecord>[] = [
-    { id: 'id', header: 'ID', width: '120px', getValue: (row) => row.id },
-    { id: 'name', header: 'Name', width: 'minmax(220px, 1fr)', getValue: (row) => row.name },
-    { id: 'amount', header: 'Amount', width: '120px', align: 'right', getValue: (row) => row.amount },
-    { id: 'status', header: 'Status', width: '140px', getValue: (row) => row.status },
+    { id: 'id', header: 'ID', width: '120px', mobile: { order: 1, labelTop: 'Codigo' }, getValue: (row) => row.id },
+    { id: 'name', header: 'Name', width: 'minmax(220px, 1fr)', mobile: { order: 0, labelTop: 'Cliente', css: 'col-span-full' }, getValue: (row) => row.name },
+    { id: 'amount', header: 'Amount', width: '120px', align: 'right', mobile: { order: 2, labelLeft: 'Monto:' }, getValue: (row) => row.amount },
+    { id: 'status', header: 'Status', width: '140px', mobile: { order: 3, labelTop: 'Estado' }, getValue: (row) => row.status },
   ];
 
   let selectedId = $state<string | number | undefined>(undefined);
@@ -558,15 +566,16 @@ Lightweight virtualized data grid for large datasets. Use this when you need a s
   data={records}
   height="420px"
   rowHeight={38}
+  mobileCardCss="shadow-sm"
   selectedRowId={selectedId}
   getRowId={(row) => row.id}
   onRowClick={(row) => { selectedId = row.id; }}
 >
-  {#snippet cellRenderer(row, column, defaultValue)}
+  {#snippet cellRenderer(row, column)}
     {#if column.id === 'status'}
-      <span class="badge">{defaultValue}</span>
+      <span class="badge">{row.status}</span>
     {:else}
-      {defaultValue}
+      {row[column.id as keyof RowRecord]}
     {/if}
   {/snippet}
 </TableGrid>

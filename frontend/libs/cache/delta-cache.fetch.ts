@@ -1,5 +1,6 @@
 import { unmarshall } from '$libs/funcs/unmarshall';
 import {
+  addRequestLogRow,
   bulkDeleteRouteRecordRows,
   bulkGetRouteRecordRows,
   bulkPutRouteRecordRows,
@@ -47,6 +48,7 @@ let forceFetch = false
 let forcedFetchRequests: Set<string> = new Set()
 const textEncoder = new TextEncoder()
 const IDsToRemoveSuffix = "_IDsToRemove"
+const apiRoutePrefixes = new Set(["api", "go1", "go2", "go3", "go4", "go5"])
 
 export const triggerDeltaForceFetchWindow = async () => {
   forceFetch = true
@@ -133,6 +135,24 @@ const addToRoute = (route: string, key: string, value: string | number) => {
   return route + `${sign}${key}=${String(value).replace("?","&")}`
 }
 
+const parseRequestLogRoute = (requestRoute: string) => {
+  const parsedURL = new URL(requestRoute, self.location.origin)
+  const routeSegments = parsedURL.pathname.split('/').filter(Boolean)
+  const logicalRouteSegments = apiRoutePrefixes.has(routeSegments[0] || "")
+    ? routeSegments.slice(1)
+    : routeSegments
+
+  return {
+    route: `GET.${logicalRouteSegments.join('/') || parsedURL.pathname.replace(/^\/+/, '')}`,
+    qp: parsedURL.search.replace(/^\?/, ''),
+  }
+}
+
+const measureResponseSizeKB = (contentLengthBytes?: number) => {
+  const sizeInBytes = contentLengthBytes || 0
+  return Number((sizeInBytes / 1000).toFixed(2))
+}
+
 const parseResponseAsStream = async (
   fetchResponse: Response,
   args: serviceHttpProps,
@@ -142,6 +162,14 @@ const parseResponseAsStream = async (
   if (fetchResponse.status && args.status) {
     args.status.code = fetchResponse.status
     args.status.message = fetchResponse.statusText
+    const rawMetadata = fetchResponse.headers.get("X-Metadata") || ""
+    if(rawMetadata){
+      const [preSerializeMsRaw, finalMsRaw] = rawMetadata.split(",")
+      args.status.metadata = {
+        preSerializeMs: parseInt(preSerializeMsRaw || "0"),
+        finalMs: parseInt(finalMsRaw || "0"),
+      }
+    }
   }
 
   if (fetchResponse.status === 200) {
@@ -454,12 +482,22 @@ const shouldUseNetwork = async (
 
 const fetchNetworkResponse = async (args: serviceHttpProps, route: string) => {
   console.log(`Realizando fetch (${route})...`)
+  const requestStartedAt = Date.now()
   const preResponse = await self.fetch(route, { headers: args.headers })
+  const responseReceivedAt = Date.now()
 
   if(preResponse.status && preResponse.status !== 200){
     throw new Error(await preResponse.text())
   }
 
+  return {
+    preResponse,
+    requestMs: responseReceivedAt - requestStartedAt,
+    responseReceivedAt,
+  }
+}
+
+const parseNetworkResponse = async (args: serviceHttpProps, preResponse: Response) => {
   let response = ((await parseResponseAsStream(preResponse, args)) || {}) as CacheContent
   response = unmarshall(response)
 
@@ -628,7 +666,7 @@ export const fetchDeltaCache = async (args: serviceHttpProps) => {
   }
 
   const fetchTime = Math.floor(Date.now()/1000)
-  args.status = { code: 200, message: "" }
+  args.status = args.status || { code: 200, message: "" }
 
   try {
     let { route, lastSync } = getNextRouteURL(args, routeRow)
@@ -658,11 +696,25 @@ export const fetchDeltaCache = async (args: serviceHttpProps) => {
       }
     }
 
-    const response = await fetchNetworkResponse(args, route)
+    const networkResponse = await fetchNetworkResponse(args, route)
+    const response = await parseNetworkResponse(args, networkResponse.preResponse)
     console.log(`Fetch response recibida! (${route}) | Has-caché: ${hasCache}`)
     const content = routeRow && routeRow.fetchTime
       ? await handleFetchResponse(args, routeRow, response, fetchTime)
       : await saveInitialSnapshot(args, routeReference, response, fetchTime)
+    const responsePreparedAt = Date.now()
+    const requestRouteInfo = parseRequestLogRoute(route)
+
+    await addRequestLogRow(routeReference.dbName, {
+      route: requestRouteInfo.route,
+      qp: requestRouteInfo.qp,
+      sPs: args.status.metadata?.preSerializeMs || 0,
+      sF: args.status.metadata?.finalMs || 0,
+      req: networkResponse.requestMs,
+      // This covers parse/unmarshall work plus IndexedDB writes/reads before replying to the client.
+      spc: responsePreparedAt - networkResponse.responseReceivedAt,
+      size: measureResponseSizeKB(args.contentLength),
+    })
 
     console.log(`${args.route}: Retornando registros "${args.cacheMode||"normal"}". ${makeStats(content).join(" | ")}`)
     return { content }
@@ -751,9 +803,11 @@ export const clearDeltaModuleCache = async (args: { __enviroment__: string, __co
 
 export const clearDeltaEnvironmentCache = async (args: { __enviroment__: string, __companyID__?: number }) => {
   console.log("Eliminando caché...")
-  await clearEnvironmentCache(makeScopedDeltaDBName(args))
+  forcedFetchRequests = new Set()
+  forceFetch = false
+  const deletedRoutes = await clearEnvironmentCache(makeScopedDeltaDBName(args))
   console.log("Caché eliminado.")
-  return { ok: 1 }
+  return { ok: 1, deletedRoutes }
 }
 
 export const refreshDeltaRoutes = async (args: { __enviroment__: string, __companyID__?: number, module: string, routes: string[] }) => {

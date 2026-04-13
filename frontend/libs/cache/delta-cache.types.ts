@@ -40,3 +40,14 @@ export interface ICacheRecordRow {
   E: any
   ss: number
 }
+
+export interface IRequestLogRow {
+  id: number /* unix milliseconds timestamp */
+  route: string
+  qp: string /* query params */
+  sPs: number /* server pre-parsing request time */
+  sF: number /* server final request time */
+  req: number /* client request time */
+  spc: number /* client serialize, parse and cache loading time  */
+  size: number /* size in kb */
+}

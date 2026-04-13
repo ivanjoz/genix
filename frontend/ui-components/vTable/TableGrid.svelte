@@ -1,5 +1,6 @@
 <script lang="ts" generics="TRecord">
   import { onMount } from 'svelte';
+  import Renderer from '$components/Renderer.svelte';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import { splitTwoStrings } from '$libs/helpers';
   import type {
@@ -14,9 +15,12 @@
     height?: string;
     rowHeight?: number;
     bufferSize?: number;
+    mobileBreakpointPx?: number;
+    useInnerMobilePadding?: boolean;
     css?: string;
     headerCss?: string;
     rowCss?: string;
+    mobileCardCss?: string;
     emptyMessage?: string;
     debug?: boolean;
     onRowClick?: (rowRecord: TRecord, rowIndex: number) => void;
@@ -33,9 +37,12 @@
     height = '460px',
     rowHeight = 36,
     bufferSize = 12,
+    mobileBreakpointPx = 580,
+    useInnerMobilePadding = false,
     css = '',
     headerCss = '',
     rowCss = '',
+    mobileCardCss = '',
     emptyMessage = 'No se encontraron registros.',
     debug = false,
     onRowClick,
@@ -48,11 +55,22 @@
 
   // Keep a stable filtered list so hidden columns never affect row rendering logic.
   const visibleColumns = $derived(columns.filter((columnDefinition) => !columnDefinition.hidden));
+  // Reuse a `VTable`-style mobile contract so existing column definitions can opt into cards incrementally.
+  const mobileColumns = $derived.by(() => {
+    return visibleColumns
+      .filter((columnDefinition) => columnDefinition.mobile)
+      .sort((leftColumn, rightColumn) => {
+        return (leftColumn.mobile?.order || 0) - (rightColumn.mobile?.order || 0);
+      });
+  });
   const gridTemplateColumns = $derived(
     visibleColumns.map((columnDefinition) => columnDefinition.width).join(' '),
   );
   const normalizedRowHeight = $derived(Math.max(24, Math.round(rowHeight)));
+  const estimatedMobileCardHeight = $derived(Math.max(128, normalizedRowHeight * 3 + 24));
   const useVirtualScroll = $derived(data.length >= 30);
+  let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const isMobileView = $derived(windowWidth < mobileBreakpointPx && mobileColumns.length > 0);
   let shellElement = $state<HTMLDivElement | undefined>(undefined);
   let verticalScrollbarWidth = $state(0);
 
@@ -94,6 +112,21 @@
     return 'text-left';
   };
 
+  const isHtmlContent = (contentValue: unknown): contentValue is string => {
+    return typeof contentValue === 'string';
+  };
+
+  const shouldRenderMobileColumn = (
+    rowRecord: TRecord,
+    columnDefinition: TableGridColumn<TRecord>,
+    rowIndex: number,
+  ): boolean => {
+    const mobileConfiguration = columnDefinition.mobile;
+    if (!mobileConfiguration) return false;
+    if (!mobileConfiguration.if) return true;
+    return mobileConfiguration.if(rowRecord, rowIndex);
+  };
+
   const isSelectedRow = (rowRecord: TRecord, rowIndex: number): boolean => {
     // Fast path for record-reference selection used by existing VTable screens.
     if (selectedRecord && rowRecord === selectedRecord) {
@@ -133,7 +166,7 @@
   const syncHeaderScrollbarCompensation = () => {
     if (!shellElement) return;
 
-    if (!useVirtualScroll) {
+    if (isMobileView || !useVirtualScroll) {
       // Plain mode uses one sticky-scroll container, so the header aligns naturally without compensation.
       verticalScrollbarWidth = 0;
       return;
@@ -152,6 +185,11 @@
   onMount(() => {
     if (!shellElement) return;
 
+    const handleResize = () => {
+      windowWidth = window.innerWidth;
+    };
+    window.addEventListener('resize', handleResize);
+
     const resizeObserver = new ResizeObserver(() => {
       syncHeaderScrollbarCompensation();
     });
@@ -168,6 +206,7 @@
     });
 
     return () => {
+      window.removeEventListener('resize', handleResize);
       resizeObserver.disconnect();
     };
   });
@@ -176,6 +215,7 @@
     data.length;
     normalizedRowHeight;
     bufferSize;
+    isMobileView;
 
     queueMicrotask(() => {
       syncHeaderScrollbarCompensation();
@@ -184,10 +224,147 @@
 </script>
 
 <div class="table-grid-shell {css}"
+  class:table-grid-shell-mobile={isMobileView}
   bind:this={shellElement}
-  style="height: {useVirtualScroll ? height : 'auto'}; max-height: {height}; --table-grid-template-columns: {gridTemplateColumns}; --table-grid-row-height: {normalizedRowHeight}px; --table-grid-scrollbar-width: {verticalScrollbarWidth}px;"
+  style="height: {isMobileView || useVirtualScroll ? height : 'auto'}; max-height: {height}; --table-grid-template-columns: {gridTemplateColumns}; --table-grid-row-height: {normalizedRowHeight}px; --table-grid-scrollbar-width: {verticalScrollbarWidth}px;"
 >
-  {#if !useVirtualScroll}
+  {#if isMobileView}
+    <div class="table-grid-mobile-shell"
+      class:table-grid-mobile-shell-inner-padding={useInnerMobilePadding}
+    >
+      {#if data.length === 0}
+        <div class="table-grid-empty">{emptyMessage}</div>
+      {:else}
+        <SvelteVirtualList items={data}
+          bufferSize={bufferSize}
+          defaultEstimatedItemHeight={estimatedMobileCardHeight}
+          debug={debug}
+          debugFunction={debugVirtualListInfo}
+        >
+          {#snippet renderItem(rowRecord, rowIndex)}
+            {@const selected = isSelectedRow(rowRecord, rowIndex)}
+            <div class="table-grid-mobile-card mb-6 {mobileCardCss || ''}"
+                class:table-grid-mobile-card-selected={selected}
+                role="button"
+                tabindex="0"
+                onclick={() => handleRowClick(rowRecord, rowIndex)}
+                onkeydown={(eventInfo) => {
+                  if (eventInfo.key === 'Enter' || eventInfo.key === ' ') {
+                    handleRowClick(rowRecord, rowIndex);
+                  }
+                }}
+              >
+                <div class="table-grid-mobile-card-grid">
+                  {#each mobileColumns as columnDefinition (columnDefinition.id)}
+                    {@const mobileConfiguration = columnDefinition.mobile}
+                    {@const defaultCellValue = getCellValue(rowRecord, columnDefinition, rowIndex)}
+                    {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, columnDefinition)}
+                    {#if mobileConfiguration && shouldRenderMobileColumn(rowRecord, columnDefinition, rowIndex)}
+                      {#if mobileConfiguration.labelTop}
+                      <div class="table-grid-mobile-item table-grid-mobile-item-vertical {mobileConfiguration.css || 'col-span-full'}">
+                        <div class="table-grid-mobile-label-top">{mobileConfiguration.labelTop}</div>
+                        <div class="table-grid-mobile-content-wrapper">
+                          {#if mobileConfiguration.icon}
+                            <i class="icon-{mobileConfiguration.icon} {mobileConfiguration.iconCss || ''}"></i>
+                          {/if}
+                          {#if mobileConfiguration.labelLeft}
+                            <span class="table-grid-mobile-label-left">{mobileConfiguration.labelLeft}</span>
+                          {/if}
+                          {#if mobileConfiguration.elementLeft}
+                            <div class="table-grid-mobile-left">
+                              {#if isHtmlContent(mobileConfiguration.elementLeft)}
+                                {@html mobileConfiguration.elementLeft}
+                              {:else}
+                                <Renderer elements={mobileConfiguration.elementLeft}/>
+                              {/if}
+                            </div>
+                          {/if}
+                          <div class="table-grid-mobile-content {getAlignClassName(columnDefinition.align)} {columnDefinition.cellCss || ''}">
+                            {#if mobileConfiguration.render}
+                              {@const renderedContent = mobileConfiguration.render(rowRecord, rowIndex)}
+                              {#if isHtmlContent(renderedContent)}
+                                {@html renderedContent}
+                              {:else}
+                                <Renderer elements={renderedContent}/>
+                              {/if}
+                            {:else if cellRenderer && columnDefinition.useCellRenderer}
+                              {@render cellRenderer(rowRecord, columnDefinition, rowIndex)}
+                            {:else if splitCellSecondLine}
+                              <div class="flex flex-col leading-[1.1]">
+                                <div>{splitCellFirstLine}</div>
+                                <div>{splitCellSecondLine}</div>
+                              </div>
+                            {:else}
+                              {defaultCellValue}
+                            {/if}
+                          </div>
+                          {#if mobileConfiguration.elementRight}
+                            <div class="table-grid-mobile-right">
+                              {#if isHtmlContent(mobileConfiguration.elementRight)}
+                                {@html mobileConfiguration.elementRight}
+                              {:else}
+                                <Renderer elements={mobileConfiguration.elementRight}/>
+                              {/if}
+                            </div>
+                          {/if}
+                        </div>
+                      </div>
+                    {:else}
+                      <div class="table-grid-mobile-item {mobileConfiguration.css || 'col-span-full'}">
+                        {#if mobileConfiguration.icon}
+                          <i class="icon-{mobileConfiguration.icon} {mobileConfiguration.iconCss || ''}"></i>
+                        {/if}
+                        {#if mobileConfiguration.labelLeft}
+                          <span class="table-grid-mobile-label-left">{mobileConfiguration.labelLeft}</span>
+                        {/if}
+                        {#if mobileConfiguration.elementLeft}
+                          <div class="table-grid-mobile-left">
+                            {#if isHtmlContent(mobileConfiguration.elementLeft)}
+                              {@html mobileConfiguration.elementLeft}
+                            {:else}
+                              <Renderer elements={mobileConfiguration.elementLeft}/>
+                            {/if}
+                          </div>
+                        {/if}
+                        <div class="table-grid-mobile-content {getAlignClassName(columnDefinition.align)} {columnDefinition.cellCss || ''}">
+                          {#if mobileConfiguration.render}
+                            {@const renderedContent = mobileConfiguration.render(rowRecord, rowIndex)}
+                            {#if isHtmlContent(renderedContent)}
+                              {@html renderedContent}
+                            {:else}
+                              <Renderer elements={renderedContent}/>
+                            {/if}
+                          {:else if cellRenderer && columnDefinition.useCellRenderer}
+                            {@render cellRenderer(rowRecord, columnDefinition, rowIndex)}
+                          {:else if splitCellSecondLine}
+                            <div class="flex flex-col leading-[1.1]">
+                              <div>{splitCellFirstLine}</div>
+                              <div>{splitCellSecondLine}</div>
+                            </div>
+                          {:else}
+                            {defaultCellValue}
+                          {/if}
+                        </div>
+                        {#if mobileConfiguration.elementRight}
+                          <div class="table-grid-mobile-right">
+                            {#if isHtmlContent(mobileConfiguration.elementRight)}
+                              {@html mobileConfiguration.elementRight}
+                            {:else}
+                              <Renderer elements={mobileConfiguration.elementRight}/>
+                            {/if}
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
+                    {/if}
+                  {/each}
+                </div>
+            </div>
+          {/snippet}
+        </SvelteVirtualList>
+      {/if}
+    </div>
+  {:else if !useVirtualScroll}
     <div class="table-grid-plain-scroll">
       <div class="table-grid-header table-grid-header-sticky {headerCss}">
         <div class="table-grid-header-row" role="row">
@@ -331,6 +508,13 @@
     box-sizing: border-box;
   }
 
+  .table-grid-shell-mobile {
+    border: none;
+    width: calc(100% + 8px);
+    margin-left: -4px;
+    margin-right: -4px;
+  }
+
   .table-grid-scroll-host {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
@@ -376,7 +560,8 @@
     display: grid;
     grid-template-columns: var(--table-grid-template-columns);
     width: 100%;
-    min-width: max-content;
+    /* Let fractional columns shrink inside the viewport so cell ellipsis can work. */
+    min-width: 0;
   }
 
   .table-grid-header-cell {
@@ -410,6 +595,94 @@
     min-height: 140px;
     color: #6c757d;
     padding: 16px;
+  }
+
+  .table-grid-mobile-shell {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .table-grid-mobile-shell-inner-padding {
+    box-sizing: border-box;
+  }
+
+  .table-grid-mobile-shell-inner-padding :global(.virtual-list-viewport) {
+    padding: 4px;
+  }
+
+  .table-grid-mobile-card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 12px;
+    cursor: pointer;
+    transition: box-shadow 0.2s ease;
+  }
+
+  .table-grid-mobile-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  .table-grid-mobile-card-selected,
+  .table-grid-mobile-card-selected.table-grid-mobile-card:hover {
+    background-color: #f6f6ff;
+    outline: 2px solid var(--color-11);
+    outline-offset: -1px;
+  }
+
+  .table-grid-mobile-card:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: -2px;
+  }
+
+  .table-grid-mobile-card-grid {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    gap: 4px;
+  }
+
+  .table-grid-mobile-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .table-grid-mobile-item-vertical {
+    flex-direction: column;
+    align-items: flex-start;
+    row-gap: 0;
+  }
+
+  .table-grid-mobile-label-top {
+    font-size: 14px;
+    color: #64748b;
+    line-height: 1;
+  }
+
+  .table-grid-mobile-content-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .table-grid-mobile-label-left {
+    font-size: 14px;
+    color: #64748b;
+    flex-shrink: 0;
+  }
+
+  .table-grid-mobile-left,
+  .table-grid-mobile-right {
+    flex-shrink: 0;
+  }
+
+  .table-grid-mobile-content {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
   }
 
   .table-grid-row-shell {
@@ -522,4 +795,5 @@
   :global(.table-grid-virtual-content) {
     min-height: 100%;
   }
+
 </style>

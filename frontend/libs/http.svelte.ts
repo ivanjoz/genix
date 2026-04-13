@@ -18,7 +18,14 @@ import {
 } from './cache/group-cache.idb';
 import { getRecordsByID, type IMinimalRecord } from './cache/cache-by-ids.svelte';
 
-export interface IHttpStatus { code: number, message: string }
+export interface IHttpStatus {
+  code: number
+  message: string
+  metadata?: {
+    preSerializeMs: number
+    finalMs: number
+  }
+}
 
 export interface httpProps {
   data?: any
@@ -107,6 +114,17 @@ const checkErrorResponse = (result: any, status: IHttpStatus) => {
   }
 }
 
+const setResponseMetadata = (headers: Headers, status: IHttpStatus) => {
+  const rawMetadata = headers.get("X-Metadata") || ""
+  if(!rawMetadata){ return }
+
+  const [preSerializeMsRaw, finalMsRaw] = rawMetadata.split(",")
+  status.metadata = {
+    preSerializeMs: parseInt(preSerializeMsRaw || "0"),
+    finalMs: parseInt(finalMsRaw || "0"),
+  }
+}
+
 // Parsea los headers de la respuesta antes parseado el body
 const parsePreResponse = (res: any, status: IHttpStatus): Promise<any> => {
   const contentType = res.headers.get("content-type")
@@ -114,6 +132,7 @@ const parsePreResponse = (res: any, status: IHttpStatus): Promise<any> => {
     status.code = res.status
     status.message = res.statusText
   }
+  setResponseMetadata(res.headers, status)
   if (res.status === 200) { return res.json() }
   else if (res.status === 401) {
     accessHelper.clearAccesos?.()
@@ -156,7 +175,7 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
   if((props.refreshRoutes||[]).length > 0){
     sendServiceMessage(24, { routes: props.refreshRoutes })
 	}
-	const status: IHttpStatus = { code: 200, message: "" }
+	const status: IHttpStatus = props.status || { code: 200, message: "" }
   const requestFetchID = browser ? (fetchEvent(0, 0) as number) : 0
 
   return new Promise((resolve, reject) => {
@@ -289,6 +308,7 @@ const parseResponseAsStream = async (fetchResponse: Response, status: any, props
     status.code = fetchResponse.status
     status.message = fetchResponse.statusText
   }
+  setResponseMetadata(fetchResponse.headers, status)
 
   if (fetchResponse.status === 200 && fetchResponse.body) {
     const reader = fetchResponse.body.getReader()
@@ -337,7 +357,7 @@ const parseResponseAsStream = async (fetchResponse: Response, status: any, props
 }
 
 export const GET = (props: httpProps): Promise<any> => {
-  const status: IHttpStatus = { code: 200, message: "" }
+  const status: IHttpStatus = props.status || { code: 200, message: "" }
   const routeParsed = Env.makeRoute(props.route)
 
   if(props.useCache){
@@ -348,6 +368,7 @@ export const GET = (props: httpProps): Promise<any> => {
       module: props.module || "a",
       headers: buildHeaders('json'),
       cacheMode: props.cacheMode,
+      status,
     } as serviceHttpProps
 
     return new Promise((resolve, reject) => {

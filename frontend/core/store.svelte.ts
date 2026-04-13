@@ -42,6 +42,7 @@ export const Core = $state({
   useTopMinimalMenu: false as boolean,
   popoverShowID: 0 as number | string,
   showSideLayer: 0 as number,
+  headerSettingsOpen: false as boolean,
   isLoading: 1,
   pageTitle: "" as string,
   openLayers: [] as number[],
@@ -54,6 +55,8 @@ export const Core = $state({
     Core.showSideLayer = layerId
   },
   hideSideLayer: (() => { Core.showSideLayer = 0 }) as () => void,
+  openHeaderSettings: (() => { Core.headerSettingsOpen = true }) as () => void,
+  closeHeaderSettings: (() => { Core.headerSettingsOpen = false }) as () => void,
   openModal: (id: number) => {
     if (!openModals.includes(id)) { openModals.push(id); }
   },

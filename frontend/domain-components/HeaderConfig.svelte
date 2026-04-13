@@ -5,18 +5,23 @@ import Input from '$components/Input.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
 import TableGrid from '$components/vTable/TableGrid.svelte';
 import { accessHelper } from '$core/security';
+import { Core } from '$core/store.svelte';
 import { Env } from '$core/env';
 import type { ICacheDebugRow } from '$libs/cache/cache-debug.types';
 import type { TableGridColumn } from '$components/vTable/tableGridTypes';
-import { clearEnvironmentCache, listEnvironmentCacheRouteStats, makeDeltaCacheDatabaseName } from '$libs/cache/delta-cache.idb';
-import { clearGroupCache, listGroupCacheStats } from '$libs/cache/group-cache.idb';
+import {
+  listEnvironmentCacheRouteStats,
+  makeDeltaCacheDatabaseName,
+} from '$libs/cache/delta-cache.idb';
+import { listGroupCacheStats } from '$libs/cache/group-cache.idb';
 import { clearCacheByIDs } from '$libs/cache/cache-by-ids.svelte';
+import { sendServiceMessage } from '$libs/sw-cache';
 import pkg from 'notiflix'
 const { Loading, Notify } = pkg;
 import { postUsuarioPropio } from '$services/services/usuarios.svelte';
 import type { IUsuario } from '$core/types/common';
-    import { formatN } from '$libs/helpers';
-
+import { HEADER_REQUEST_LOGS_MODAL_ID } from '$domain/HeaderRequestLogsModal.svelte';
+import { formatN } from '$libs/helpers';
 
   const options = [
     { id: 1, name: "Usuario" }, { id: 2, name: "Config." }, { id: 3, name: "Data" }
@@ -179,21 +184,20 @@ import type { IUsuario } from '$core/types/common';
     })
 
     try {
-      // Clear every local cache layer scoped to the current company/environment.
-      const [deletedDeltaRoutes, deletedGroupRows, clearedIDsCache] = await Promise.all([
-        clearEnvironmentCache(getCurrentDeltaDatabaseName()),
-        clearGroupCache(),
+      // The service worker owns the hot delta-cache memory, so cache clearing must happen there.
+      const [deltaClearResponse, clearedIDsCache] = await Promise.all([
+        sendServiceMessage(26, {}),
         clearCacheByIDs(),
       ])
+      const deletedDeltaRoutes = Number(deltaClearResponse?.deletedRoutes || 0)
 
       cacheRows = []
       cacheDataLoaded = false
       console.debug('[HeaderConfig] Local cache cleared.', {
         deletedDeltaRoutes,
-        deletedGroupRows,
         clearedIDsCache,
       })
-      Notify.success(`Cache eliminado. Delta: ${deletedDeltaRoutes} rutas. Group: ${deletedGroupRows} filas. IDs: ${clearedIDsCache.databaseName}.`)
+      Notify.success(`Cache eliminado. Cache: ${deletedDeltaRoutes} rutas. IDs: ${clearedIDsCache.databaseName}.`)
     } catch (error) {
       console.warn('[HeaderConfig] Failed to clear local cache.', error)
       Notify.failure('No se pudo eliminar el cache local.')
@@ -287,6 +291,22 @@ import type { IUsuario } from '$core/types/common';
     <Input label="Repetir Password" css="col-span-12"
       saveOn={userInfo} save="Password2" type="password"
     />
+  </div>
+{/if}
+{#if selected === 2}
+  <div class="w-full flex mb-12 mt-[-2px]">
+    <div class="mr-auto"></div>
+    <button class="bx-blue min-w-120 px-12" aria-label="Ver logs de requests"
+      onclick={() => { 
+	      // Close the global header dropdown first so the modal is the only visible overlay.
+	      Core.closeHeaderSettings()
+	      // Opening a globally mounted modal avoids losing it when the settings dropdown auto-closes.
+	      Core.openModal(HEADER_REQUEST_LOGS_MODAL_ID)
+      }}
+    >
+      <i class="icon-list"></i>
+      <span>Reqs. Logs</span>
+    </button>
   </div>
 {/if}
 {#if selected === 3}
