@@ -494,11 +494,11 @@
         />
       </div>
 
-      <div class="grid grid-cols-24 gap-10 ml-16 grow-1">
+      <div class="grid grid-cols-24 gap-10 md:ml-16 grow-1">
         <SearchSelect
           bind:saveOn={saleOrderFilterForm}
           save="clientID"
-          css="col-span-24 md:col-span-6"
+          css="col-span-10 md:col-span-6"
           label=""
           keyId="ID"
           keyName="DisplayName"
@@ -508,7 +508,7 @@
         <SearchSelect
           bind:saveOn={saleOrderFilterForm}
           save="productID"
-          css="col-span-24 md:col-span-9"
+          css="col-span-14 md:col-span-9"
           label=""
           keyId="ID"
           keyName="Nombre" placeholder="PRODUCTO ::"

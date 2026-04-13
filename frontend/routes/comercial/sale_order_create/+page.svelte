@@ -2,6 +2,7 @@
 import Input from '$components/Input.svelte';
 import LayerStatic from '$components/LayerStatic.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
+import VirtualCards from '$components/VirtualCards.svelte';
 import Page from '$domain/Page.svelte';
 import { Loading, formatN, wordInclude } from '$libs/helpers';
 
@@ -63,14 +64,6 @@ import { SaleOrderState } from "./sale_order.svelte";
   let productosStock = $state([] as IProductoStock[]);
   let productosParsed = $state([] as ProductoVenta[]);
   let productosParsedAll = $state([] as ProductoVenta[]); // cache for filtering
-
-  const chunkedProductos = $derived.by(() => {
-    const result = [];
-    for (let i = 0; i < productosParsed.length; i += 2) {
-      result.push(productosParsed.slice(i, i + 2));
-    }
-    return result;
-  });
 
   // Effects
   $effect(() => {
@@ -433,37 +426,35 @@ import { SaleOrderState } from "./sale_order.svelte";
         </div>
 
         <!-- Grid/List -->
-        <div class="flex-1 overflow-y-auto">
-          {#each chunkedProductos as group, groupIdx (group[0].key)}
-            <div class="flex gap-8 mb-6">
-              {#each group as item, itemIdx (item.key)}
-                <div class="flex-1 min-w-0">
-                  <ProductoVentaCard
-                    idx={groupIdx * 2 + itemIdx}
-                    productoStock={item}
-                    isSelected={(groupIdx * 2 + itemIdx) === productoSelected}
-                    ventaProducto={ventasState.ventaProductosMap.get(item.key)}
-                    filterText={ventasState.filterText}
-                    onselect={(i) => (productoSelected = i)}
-                    onmouseover={() => (productoSelected = -1)}
-                    onadd={(n, sku) => {
-                      ventasState.addProducto(item, n, sku);
-                      filterProductos("");
-                    }}
-                  />
-                </div>
-              {/each}
-              {#if group.length === 1}
-                <div class="flex-1 min-w-0"></div>
-              {/if}
-            </div>
-          {/each}
-
-          {#if productosParsed.length === 0}
-            <div class="text-center py-48 text-gray-400">
-              No se encontraron productos
-            </div>
-          {/if}
+        <div class="flex-1 min-h-0 overflow-hidden">
+          <VirtualCards
+            items={productosParsed}
+            height="calc(100vh - 76px - var(--header-height))"
+            maxColumns={2}
+            mobileBreakpointPx={920}
+            estimatedRowHeight={98}
+            bufferSize={6}
+            columnGapPx={8}
+            rowGapPx={6}
+            containerCss="h-full"
+            emptyMessage="No se encontraron productos"
+          >
+            {#snippet children(item, itemIndex)}
+              <ProductoVentaCard
+                idx={itemIndex}
+                productoStock={item}
+                isSelected={itemIndex === productoSelected}
+                ventaProducto={ventasState.ventaProductosMap.get(item.key)}
+                filterText={ventasState.filterText}
+                onselect={(i) => (productoSelected = i)}
+                onmouseover={() => (productoSelected = -1)}
+                onadd={(n, sku) => {
+                  ventasState.addProducto(item, n, sku);
+                  filterProductos("");
+                }}
+              />
+            {/snippet}
+          </VirtualCards>
         </div>
       </div>
 

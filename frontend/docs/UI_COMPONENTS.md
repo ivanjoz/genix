@@ -378,6 +378,7 @@ For more control, VTable accepts a `cellRenderer` Svelte 5 snippet. The snippet 
 | `col` | `ITableColumn<T>` | Column definition |
 | `cellContent` | `any` | Default cell content |
 | `index` | `number` | Row index |
+| `isMobileCardView` | `boolean` | `true` when the snippet is rendered inside the mobile card layout |
 
 Important: Use it instead or large HTML strings.
 

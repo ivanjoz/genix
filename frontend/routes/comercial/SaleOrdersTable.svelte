@@ -173,7 +173,7 @@
     return saleOrder.ss === 3 || saleOrder.ss === 4;
   }
 
-  function getTopProductsCards(saleOrder: T): ITopProductCard[] {
+  function getRankedProducts(saleOrder: T): ITopProductCard[] {
     const detailCount = Math.min(
       saleOrder.DetailProductsIDs?.length || 0,
       saleOrder.DetailPrices?.length || 0,
@@ -208,13 +208,16 @@
         }
         return leftProduct[0] - rightProduct[0];
       })
-      .slice(0, 3)
       .map(([productID, productTotals]) => ({
         productID,
         productName: getProductName(productID),
         totalQuantity: productTotals.totalQuantity,
         totalAmount: productTotals.totalAmount,
       }));
+  }
+
+  function getTopProductsCards(saleOrder: T): ITopProductCard[] {
+    return getRankedProducts(saleOrder).slice(0, 3);
   }
 
   function getTopProductsSummary(saleOrder: T): string {
@@ -238,7 +241,7 @@
         getValue: saleOrder => saleOrder.ID,
         css: 'ff-mono fs15 text-right',
         headerCss: 'w-52',
-        mobile: { order: 1, css: 'col-span-6', icon: 'tag' }
+        mobile: { order: 3, css: 'col-span-10 ff-semibold text-sm justify-self-end' }
       },
       {
         header: 'Fecha Hora',
@@ -246,7 +249,7 @@
         css: 'text-right',
         headerCss: 'w-100',
         cellCss: 'px-6 whitespace-nowrap',
-        mobile: { order: 2, css: 'col-span-6', icon: 'clock' }
+        mobile: { order: 1, css: 'col-span-8' }
       },
       {
         header: 'Entregado /Pagado',
@@ -254,21 +257,21 @@
         headerCss: 'w-82',
         css: 'text-center',
         mobile: {
-          order: 4,
-          css: 'col-span-24'
+          order: 3,
+          css: 'col-span-6 flex content-right'
         }
       },
       {
         header: 'Total',
         css: 'ff-mono text-right',
         getValue: saleOrder => formatN((saleOrder.TotalAmount || 0) / 100, 2),
-        mobile: { order: 5, css: 'col-span-12', labelLeft: 'Total:' }
+        mobile: { order: 4, css: 'col-span-7', labelTop: 'Total' }
       },
       {
         header: 'Deuda',
         css: 'ff-mono text-right',
         getValue: saleOrder => formatN((saleOrder.DebtAmount || 0) / 100, 2),
-        mobile: { order: 6, css: 'col-span-12', labelLeft: 'Deuda:' }
+        mobile: { order: 5, css: 'col-span-7', labelTop: 'Deuda' }
       },
     ];
 
@@ -279,7 +282,7 @@
         getValue: saleOrder => getSaleOrderClientName(saleOrder),
         headerCss: 'w-220',
         cellCss: 'px-6 line-clamp-2 whitespace-nowrap',
-        mobile: { order: 3, css: 'col-span-24', labelTop: 'Cliente' }
+        mobile: { order: 6, css: 'col-span-9', labelTop: 'Cliente' }
       });
     }
 
@@ -292,8 +295,6 @@
       mobile: {
         order: 7,
         css: 'col-span-24',
-        labelTop: 'Top Productos',
-        render: saleOrder => getTopProductsSummary(saleOrder)
       }
     });
 
@@ -320,22 +321,37 @@
   mobileCardCss="mb-10"
   tableCss="w-full"
 >
-  {#snippet cellRenderer(saleOrder: T, columnDefinition: ITableColumn<T>, _defaultValue: string)}
-    {#if columnDefinition.id === 'delivery-payment-status'}
-      <div class="flex items-center justify-center gap-6">
+  {#snippet cellRenderer(saleOrder: T, col: ITableColumn<T>, _1, _2, isMobile)}
+    {#if col.id === 'delivery-payment-status'}
+      <div class="flex items-center justify-end md:justify-center gap-6">
         <!-- Keep both state toggles adjacent so operators can scan the workflow quickly. -->
         <InlineButton label="P" color="green" mode={isSaleOrderPaid(saleOrder) ? 'checked' : 'default'} />
         <InlineButton label="E" color="blue" mode={isSaleOrderDelivered(saleOrder) ? 'checked' : 'default'} />
       </div>
-    {:else if columnDefinition.id === 'client-name'}
+    {:else if col.id === 'client-name'}
       <div class="line-clamp-2 whitespace-nowrap">
         <HighlightText text={getSaleOrderClientName(saleOrder)} words={normalizedSearchTerms} />
       </div>
-    {:else if columnDefinition.id === 'top-products'}
+    {:else if col.id === 'top-products'}
+      {@const rankedProducts = getRankedProducts(saleOrder)}
       {@const topProductsCards = getTopProductsCards(saleOrder)}
-      <div class="flex w-full min-w-0">
+      <div class="md:flex w-full min-w-0">
         {#if topProductsCards.length === 0}
           <div class="px-8 py-6 text-gray-400">-</div>
+        {:else if isMobile}
+          <div class="w-full px-8 py-4">
+            <!-- Mobile keeps one compact line per product so each order card stays readable while preserving product priority. -->
+            {#each rankedProducts.slice(0, 3) as topProductCard (topProductCard.productID)}
+              <div class="truncate text-sm leading-[1.15] text-slate-800">
+                <span class="ff-mono text-slate-900">{topProductCard.totalQuantity}x</span>
+                {' '}
+                <HighlightText text={topProductCard.productName} words={normalizedSearchTerms} />
+              </div>
+            {/each}
+            {#if rankedProducts.length > 3}
+              <div class="mt-2 text-xs text-slate-500 -mb-12">({rankedProducts.length - 3} more...)</div>
+            {/if}
+          </div>
         {:else}
           {#each topProductsCards as topProductCard, productIndex (topProductCard.productID)}
             <div

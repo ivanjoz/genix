@@ -18,9 +18,9 @@
 
   let {
     items = [],
-    height = '100%',
+    height = 'calc(100vh - 180px - var(--header-height))',
     maxColumns = 3,
-    mobileBreakpointPx = 767,
+    mobileBreakpointPx = 600,
     estimatedRowHeight = 220,
     bufferSize = 4,
     containerCss = '',
@@ -32,6 +32,7 @@
 
   let containerElement = $state<HTMLDivElement | undefined>(undefined)
   let containerWidthPx = $state(0)
+  let viewportWidthPx = $state(0)
   let resizeObserver: ResizeObserver | undefined
 
   const updateContainerWidth = () => {
@@ -39,8 +40,15 @@
     containerWidthPx = Math.max(0, Math.floor(containerElement.clientWidth))
   }
 
+  const updateViewportWidth = () => {
+    // Use the page viewport as the primary responsive signal so cards collapse consistently across layouts.
+    viewportWidthPx = Math.max(0, Math.floor(window.innerWidth || 0))
+  }
+
   const activeColumns = $derived.by(() => {
-    if (containerWidthPx > 0 && containerWidthPx <= mobileBreakpointPx) {
+    const responsiveWidthPx = viewportWidthPx || containerWidthPx
+
+    if (responsiveWidthPx > 0 && responsiveWidthPx <= mobileBreakpointPx) {
       return 1
     }
     return Math.max(1, Math.floor(maxColumns || 1))
@@ -67,14 +75,21 @@
   })
 
   onMount(() => {
+    updateViewportWidth()
     updateContainerWidth()
 
     if (!containerElement) { return }
 
+    // Keep responsive columns tied to the page width, not only to the card shell width.
+    window.addEventListener('resize', updateViewportWidth)
     resizeObserver = new ResizeObserver(() => {
       updateContainerWidth()
     })
     resizeObserver.observe(containerElement)
+
+    return () => {
+      window.removeEventListener('resize', updateViewportWidth)
+    }
   })
 
   onDestroy(() => {

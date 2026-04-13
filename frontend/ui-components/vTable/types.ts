@@ -105,6 +105,7 @@ export type CellRendererSnippet<T> = Snippet<[
   ITableColumn<T>,    						// column
   any,                            // defaultContent
 	number,                         // rowIndex
+  boolean,                        // isMobileCardView
 ]>;
 
 /**

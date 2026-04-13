@@ -360,13 +360,13 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                     {@const cellData = getCellContent(column, resolvedRecord, index)}
                     {#if mobile?.labelTop}
                     <div class="mobile-card-item mobile-card-item-vertical {mobile?.css || 'col-span-full'}">
-                      <div class="mobile-card-label-top">{mobile.labelTop}</div>
+                      <div class="mobile-card-label-top color-label">{mobile.labelTop}</div>
                       <div class="mobile-card-content-wrapper">
                         {#if mobile?.icon}
                           <i class="icon-{mobile.icon} {mobile?.iconCss || ''}"></i>
                         {/if}
                         {#if mobile?.labelLeft}
-                          <span class="mobile-card-label-left">{mobile.labelLeft}</span>
+                          <span class="mobile-card-label-left color-label">{mobile.labelLeft}</span>
                         {/if}
                         {#if mobile?.elementLeft}
                           <div class="mobile-card-left">
@@ -395,7 +395,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                               <Renderer elements={renderedContent}/>
                             {/if}
                           {:else if cellData.useSnippet && cellRenderer}
-                            {@render cellRenderer(resolvedRecord, column, cellData.content, index)}
+                            {@render cellRenderer(resolvedRecord, column, cellData.content, index, true)}
                           {:else if cellData.contentAST}
                             <Renderer elements={cellData.contentAST}/>
                           {:else if cellData.contentHTML}
@@ -450,7 +450,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                             <Renderer elements={renderedContent}/>
                           {/if}
                         {:else if cellData.useSnippet && cellRenderer}
-                          {@render cellRenderer(resolvedRecord, column, cellData.content, index)}
+                          {@render cellRenderer(resolvedRecord, column, cellData.content, index, true)}
                         {:else if cellData.contentAST}
                           <Renderer elements={cellData.contentAST}/>
                         {:else if cellData.contentHTML}
@@ -611,7 +611,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                       }}
                     />
                   {:else if cellData.useSnippet && cellRenderer}
-                    {@render cellRenderer(resolvedRecord, column, cellData.content, row.index)}
+                    {@render cellRenderer(resolvedRecord, column, cellData.content, row.index, false)}
                   {:else if cellData.contentAST}
                     <Renderer elements={cellData.contentAST}/>
                   {:else if cellData.contentHTML}
@@ -899,7 +899,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
 
   .mobile-card-label-top {
     font-size: 14px;
-    color: #666;
+   /*  color: #666;*/
     line-height: 1;
   }
 
@@ -912,7 +912,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
 
   .mobile-card-label-left {
     font-size: 14px;
-    color: #666;
+    /*  color: #666;*/
     flex-shrink: 0;
   }
 
