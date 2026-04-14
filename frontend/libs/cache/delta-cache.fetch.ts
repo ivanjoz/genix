@@ -2,7 +2,6 @@ import { unmarshall } from '$libs/funcs/unmarshall';
 import {
   addRequestLogRow,
   bulkDeleteRouteRecordRows,
-  bulkGetRouteRecordRows,
   bulkPutRouteRecordRows,
   clearEnvironmentCache,
   clearModuleCache,
@@ -49,12 +48,57 @@ let forcedFetchRequests: Set<string> = new Set()
 const textEncoder = new TextEncoder()
 const IDsToRemoveSuffix = "_IDsToRemove"
 const apiRoutePrefixes = new Set(["api", "go1", "go2", "go3", "go4", "go5"])
+const routeSnapshotMemoryByLookupKey = new Map<string, CacheContent>()
 
 export const triggerDeltaForceFetchWindow = async () => {
   forceFetch = true
   forcedFetchRequests = new Set()
   setTimeout(() => { forceFetch = false }, 8000)
   return { ok: 1 }
+}
+
+const getRouteSnapshotMemoryKey = (
+  routeRef: Pick<IDeltaCacheRouteRef, 'dbName' | 'routeLookupKey'>,
+) => {
+  // Snapshot memory uses the same scoped key as route metadata so one SW can serve multiple environments safely.
+  return [routeRef.dbName, routeRef.routeLookupKey].join('::')
+}
+
+const rememberRouteSnapshot = (
+  routeRow: Pick<ICacheRouteRow, 'dbName' | 'routeLookupKey' | 'responseKeys' | '__version__'>,
+  response: CacheContent,
+) => {
+  // Keep empty response groups stable in memory so the client receives the same contract as IndexedDB rebuilds.
+  const normalizedResponse = normalizeResponse(response)
+  for (const responseKey of routeRow.responseKeys || []) {
+    if (!Array.isArray(normalizedResponse[responseKey])) {
+      normalizedResponse[responseKey] = []
+    }
+  }
+  normalizedResponse.__version__ = routeRow.__version__
+  routeSnapshotMemoryByLookupKey.set(getRouteSnapshotMemoryKey(routeRow), normalizedResponse)
+  return normalizedResponse
+}
+
+const forgetRouteSnapshot = (routeRef: Pick<IDeltaCacheRouteRef, 'dbName' | 'routeLookupKey'>) => {
+  routeSnapshotMemoryByLookupKey.delete(getRouteSnapshotMemoryKey(routeRef))
+}
+
+const forgetRouteSnapshotsByDatabaseName = (dbName: string) => {
+  // Environment wipes must evict in-memory snapshots too, otherwise the next offline hit revives stale content.
+  for (const routeSnapshotKey of routeSnapshotMemoryByLookupKey.keys()) {
+    if (!routeSnapshotKey.startsWith(`${dbName}::`)) { continue }
+    routeSnapshotMemoryByLookupKey.delete(routeSnapshotKey)
+  }
+}
+
+const forgetRouteSnapshotsByModule = (dbName: string, module: string) => {
+  // Module cleanup mirrors the same dbName::module::cacheKey shape used by routeLookupKey.
+  const modulePrefix = `${dbName}::${module}::`
+  for (const routeSnapshotKey of routeSnapshotMemoryByLookupKey.keys()) {
+    if (!routeSnapshotKey.startsWith(modulePrefix)) { continue }
+    routeSnapshotMemoryByLookupKey.delete(routeSnapshotKey)
+  }
 }
 
 const makeRouteReference = (args: serviceHttpProps): IDeltaCacheRouteRef => {
@@ -402,7 +446,15 @@ const makeStats = (content: any) => {
 
 const readCachedContent = async (routeRow?: ICacheRouteRow): Promise<CacheContent | undefined> => {
   if(!routeRow){ return undefined }
-  return await readCachedRouteResponse(routeRow) as CacheContent | undefined
+  const memorySnapshot = routeSnapshotMemoryByLookupKey.get(getRouteSnapshotMemoryKey(routeRow))
+  if(memorySnapshot){
+    memorySnapshot.__version__ = routeRow.__version__
+    return memorySnapshot
+  }
+
+  const persistedSnapshot = await readCachedRouteResponse(routeRow) as CacheContent | undefined
+  if(!persistedSnapshot){ return undefined }
+  return rememberRouteSnapshot(routeRow, persistedSnapshot)
 }
 
 const getNextRouteURL = (args: serviceHttpProps, routeRow?: ICacheRouteRow) => {
@@ -538,12 +590,14 @@ const handleFetchResponse = async (
   console.log("Fetch cache ha cambiado?:", hasChanged, "|", args.route, "|", updatedStatusDelta)
 
   if(!hasChanged && args.cacheMode !== 'updateOnly'){
-    response = (await readCachedRouteResponse(routeRow)) as CacheContent
+    response = (await readCachedContent(routeRow)) as CacheContent
   } else if(hasChanged){
     const responseKeys = listRecordResponseEntries(response).map(([responseKey]) => responseKey)
     await extendRouteResponseKeys(routeRow, responseKeys)
     console.log("[DeltaCache] aplicando delta:", routeRow.cacheKey, responseKeys)
 
+    const baseSnapshot = (await readCachedContent(routeRow)) || ({ __version__: routeRow.__version__ } as CacheContent)
+    const nextSnapshot = { ...baseSnapshot } as CacheContent
     const recordRowKeysToDelete: [number, string, CacheRecordID][] = []
     for(const [responseKey, idsToRemove] of idsToRemoveByResponseKey.entries()){
       for(const recordID of idsToRemove){
@@ -556,37 +610,38 @@ const handleFetchResponse = async (
 
     const nextRecordRows: ICacheRecordRow[] = []
     const allowColumnarMerge = !!(args.columnarIDField && args.combineColumnarValuesOnFields?.length)
-    for(const [responseKey, records] of listRecordResponseEntries(response as CacheContent)){
-      if(records.length === 0){ continue }
+    const touchedResponseKeys = new Set<string>()
+    for(const [responseKey] of listRecordResponseEntries(response as CacheContent)){
+      touchedResponseKeys.add(responseKey)
+    }
+    for(const responseKey of idsToRemoveByResponseKey.keys()){
+      touchedResponseKeys.add(responseKey)
+    }
 
-      const rowKeys = records.map((record) => [
-        routeRow.id as number,
-        responseKey,
-        getRequiredRecordID(args, record, args.route, responseKey),
-      ] as [number, string, CacheRecordID])
-
-      const prevRecordRows = new Map<CacheRecordID, ICacheRecordRow>()
-      if(allowColumnarMerge){
-        const currentRows = await bulkGetRouteRecordRows(routeRow.dbName, rowKeys)
-        for(const currentRow of currentRows){
-          if(currentRow){
-            prevRecordRows.set(currentRow.ID, currentRow)
-          }
-        }
+    for(const responseKey of touchedResponseKeys){
+      const previousRecords = Array.isArray(baseSnapshot[responseKey]) ? baseSnapshot[responseKey] : []
+      const idsToRemove = new Set(idsToRemoveByResponseKey.get(responseKey) || [])
+      const nextRecordsByID = new Map<CacheRecordID, any>()
+      for(const previousRecord of previousRecords){
+        const previousRecordID = getRequiredRecordID(args, previousRecord, args.route, responseKey)
+        if(idsToRemove.has(previousRecordID)){ continue }
+        nextRecordsByID.set(previousRecordID, previousRecord)
       }
 
+      const incomingRecords = Array.isArray(response[responseKey]) ? response[responseKey] : []
       let missingCount = 0
-      for(const record of records){
+      for(const record of incomingRecords){
         const recordID = getRequiredRecordID(args, record, args.route, responseKey)
-        const prevRecordRow = prevRecordRows.get(recordID)
+        const prevRecord = nextRecordsByID.get(recordID)
         let nextRecord = record
 
-        if(prevRecordRow && allowColumnarMerge){
-          const merged = mergeColumnarRecord(prevRecordRow.E, record, args)
+        if(prevRecord && allowColumnarMerge){
+          const merged = mergeColumnarRecord(prevRecord, record, args)
           nextRecord = merged.mergedRecord
           missingCount += merged.missingCount
         }
 
+        nextRecordsByID.set(recordID, nextRecord)
         nextRecordRows.push(buildRecordRow(
           routeRow.id as number,
           responseKey,
@@ -595,6 +650,7 @@ const handleFetchResponse = async (
         ))
       }
 
+      nextSnapshot[responseKey] = [...nextRecordsByID.values()]
       if(missingCount > 0){
         console.warn(`Cache Error: En "${args.route}" (${responseKey}) hay ${missingCount} registros sin key configurada`)
       }
@@ -604,7 +660,7 @@ const handleFetchResponse = async (
       await bulkPutRouteRecordRows(routeRow.dbName, nextRecordRows)
     }
 
-    response = (await readCachedRouteResponse(routeRow)) as CacheContent
+    response = rememberRouteSnapshot(routeRow, nextSnapshot)
   } else {
     response = null as unknown as CacheContent
   }
@@ -633,7 +689,7 @@ const saveInitialSnapshot = async (
   const nextRouteRows = buildRouteRowsFromResponse(args, routeRow, response)
   await replaceRouteRecordRows(routeRow, nextRouteRows.responseKeys, nextRouteRows.rows)
   await saveCacheRouteRow(routeRow)
-  return response
+  return rememberRouteSnapshot(routeRow, response)
 }
 
 export const getDeltaUpdatedStatus = async (args: serviceHttpProps) => {
@@ -651,6 +707,7 @@ export const fetchDeltaCache = async (args: serviceHttpProps) => {
   let routeRow = await getCacheRouteRow(routeReference)
 
   if(routeRow?.fetchTime && routeRow.__version__ !== args.__version__){
+    forgetRouteSnapshot(routeReference)
     routeRow = await resetCacheRouteRow(routeRow, routeReference.version)
   }
 
@@ -658,6 +715,7 @@ export const fetchDeltaCache = async (args: serviceHttpProps) => {
     const content = await readCachedContent(routeRow)
     if(routeRow?.fetchTime && !content){
       console.warn(`[DeltaCache] Offline cache vacío, reseteando metadata: ${routeReference.cacheKey}`)
+      forgetRouteSnapshot(routeReference)
       routeRow = await resetCacheRouteRow(routeRow, routeReference.version)
     }
     console.log("Enviando fetch response (offline):", args.route)
@@ -685,6 +743,7 @@ export const fetchDeltaCache = async (args: serviceHttpProps) => {
         const content = await readCachedContent(routeRow)
         if(!content){
           console.warn(`[DeltaCache] Cache inconsistente, faltan rows para ${routeReference.cacheKey}. Reintentando desde red.`)
+          forgetRouteSnapshot(routeReference)
           routeRow = await resetCacheRouteRow(routeRow, routeReference.version)
           const rebuiltRequest = getNextRouteURL(args, routeRow)
           route = rebuiltRequest.route
@@ -722,10 +781,12 @@ export const fetchDeltaCache = async (args: serviceHttpProps) => {
     console.log("Fetch Error::", error)
     return { error }
   } finally {
-    // Defer storage verification so the next request can recover from manual tampering.
-    void verifyRouteMemoryState(routeReference).catch((error) => {
-      console.warn("[DeltaCache] Error verificando memoria vs IndexedDB:", error)
-    })
+    // Route verification is debug-only because it adds extra IndexedDB work after every response.
+    if(args.verifyRouteMemoryState){
+      void verifyRouteMemoryState(routeReference).catch((error) => {
+        console.warn("[DeltaCache] Error verificando memoria vs IndexedDB:", error)
+      })
+    }
   }
 }
 
@@ -797,6 +858,7 @@ export const clearDeltaModuleCache = async (args: { __enviroment__: string, __co
     ? args.cacheName.split("_")[1] || ""
     : args.cacheName
   await clearModuleCache(makeScopedDeltaDBName(args), module)
+  forgetRouteSnapshotsByModule(makeScopedDeltaDBName(args), module)
   console.log(`Caché "${args.cacheName}" eliminado! (Enviroment ${args.__enviroment__})...`)
   return { ok: 1 }
 }
@@ -806,6 +868,7 @@ export const clearDeltaEnvironmentCache = async (args: { __enviroment__: string,
   forcedFetchRequests = new Set()
   forceFetch = false
   const deletedRoutes = await clearEnvironmentCache(makeScopedDeltaDBName(args))
+  forgetRouteSnapshotsByDatabaseName(makeScopedDeltaDBName(args))
   console.log("Caché eliminado.")
   return { ok: 1, deletedRoutes }
 }

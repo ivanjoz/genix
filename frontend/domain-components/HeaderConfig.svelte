@@ -13,7 +13,7 @@ import {
   listEnvironmentCacheRouteStats,
   makeDeltaCacheDatabaseName,
 } from '$libs/cache/delta-cache.idb';
-import { listGroupCacheStats } from '$libs/cache/group-cache.idb';
+import { clearGroupCache, listGroupCacheStats } from '$libs/cache/group-cache.idb';
 import { clearCacheByIDs } from '$libs/cache/cache-by-ids.svelte';
 import { sendServiceMessage } from '$libs/sw-cache';
 import pkg from 'notiflix'
@@ -185,9 +185,10 @@ import { formatN } from '$libs/helpers';
 
     try {
       // The service worker owns the hot delta-cache memory, so cache clearing must happen there.
-      const [deltaClearResponse, clearedIDsCache] = await Promise.all([
+      const [deltaClearResponse, clearedIDsCache, deletedGroupRows] = await Promise.all([
         sendServiceMessage(26, {}),
         clearCacheByIDs(),
+        clearGroupCache(),
       ])
       const deletedDeltaRoutes = Number(deltaClearResponse?.deletedRoutes || 0)
 
@@ -196,8 +197,11 @@ import { formatN } from '$libs/helpers';
       console.debug('[HeaderConfig] Local cache cleared.', {
         deletedDeltaRoutes,
         clearedIDsCache,
+        deletedGroupRows,
       })
-      Notify.success(`Cache eliminado. Cache: ${deletedDeltaRoutes} rutas. IDs: ${clearedIDsCache.databaseName}.`)
+      Notify.success(
+        `Cache eliminado. Delta: ${deletedDeltaRoutes} rutas. Group: ${deletedGroupRows} grupos. IDs: ${clearedIDsCache.databaseName}.`
+      )
     } catch (error) {
       console.warn('[HeaderConfig] Failed to clear local cache.', error)
       Notify.failure('No se pudo eliminar el cache local.')

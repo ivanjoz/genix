@@ -221,6 +221,9 @@ export const clearGroupCache = async (): Promise<number> => {
 	try {
 		const deletedRows = await database.groupRows.count()
 		await database.groupRows.clear()
+		// Drop the Dexie instance reference so cache cleanup also resets the in-memory database handle.
+		database.close()
+		deleteCachedGroupDatabaseReference(databaseName)
 		console.debug(`${LOG_PREFIX} Cache cleared.`, { databaseName, deletedRows })
 		return deletedRows
 	} catch (error) {

@@ -20,9 +20,161 @@ export interface FetchCacheResponse {
   notUpdated?: boolean
 }
 
+interface IServiceWorkerStructuredRequest {
+  __swrpc__: true
+  accion: number
+  reqID: number
+  enviroment: string
+  content: any
+}
+
+interface IServiceWorkerStructuredAck {
+  type: 'ack'
+  __response__: number
+  __req__: number
+}
+
+interface IServiceWorkerStructuredResult {
+  type: 'result'
+  __response__: number
+  __req__: number
+  content?: any
+  error?: any
+}
+
 let swReadyPromise: Promise<void> | null = null;
 let swIsInitialized = false;
 const textDecoder = new TextDecoder()
+
+const waitForServiceWorkerEndpoint = async (timeoutMs = 2000): Promise<ServiceWorker> => {
+  const registration = await navigator.serviceWorker.ready
+  const currentController = navigator.serviceWorker.controller
+  if (currentController?.state === 'activated') {
+    return currentController
+  }
+  if (registration.active?.state === 'activated') {
+    return registration.active
+  }
+
+  return await new Promise((resolve, reject) => {
+    let isResolved = false
+    const timeoutID = window.setTimeout(() => {
+      cleanup()
+      reject(new Error('Service worker endpoint not ready'))
+    }, timeoutMs)
+
+    const candidateWorkers = [
+      navigator.serviceWorker.controller,
+      registration.active,
+      registration.waiting,
+      registration.installing,
+    ].filter(Boolean) as ServiceWorker[]
+
+    const cleanup = () => {
+      if (isResolved) { return }
+      window.clearTimeout(timeoutID)
+      navigator.serviceWorker.removeEventListener('controllerchange', tryResolveEndpoint)
+      for (const candidateWorker of candidateWorkers) {
+        candidateWorker.removeEventListener('statechange', tryResolveEndpoint)
+      }
+      isResolved = true
+    }
+
+    const tryResolveEndpoint = () => {
+      if (isResolved) { return }
+      const nextController = navigator.serviceWorker.controller
+      if (nextController?.state === 'activated') {
+        cleanup()
+        resolve(nextController)
+        return
+      }
+
+      const nextActiveWorker = registration.active
+      if (nextActiveWorker?.state === 'activated') {
+        cleanup()
+        resolve(nextActiveWorker)
+      }
+    }
+
+    navigator.serviceWorker.addEventListener('controllerchange', tryResolveEndpoint)
+    for (const candidateWorker of candidateWorkers) {
+      candidateWorker.addEventListener('statechange', tryResolveEndpoint)
+    }
+    tryResolveEndpoint()
+  })
+}
+
+const sendStructuredAction3Message = async (
+  accion: number,
+  reqID: number,
+  content: any,
+): Promise<any> => {
+  let latestError: Error | null = null
+
+  // A missing ack usually means the worker is transitioning, so retry once with a fresh endpoint lookup.
+  for (let attemptNumber = 1; attemptNumber <= 2; attemptNumber++) {
+    const targetWorker = await waitForServiceWorkerEndpoint()
+    try {
+      const structuredResponse = await new Promise((resolve, reject) => {
+        const responseChannel = new MessageChannel()
+        let didReceiveAck = false
+        const ackTimeoutID = window.setTimeout(() => {
+          responseChannel.port1.close()
+          reject(new Error(`Service worker ack timeout on attempt ${attemptNumber}`))
+        }, 2000)
+        const resultTimeoutID = window.setTimeout(() => {
+          responseChannel.port1.close()
+          reject(new Error(`Service worker result timeout on attempt ${attemptNumber}`))
+        }, 30000)
+
+        responseChannel.port1.onmessage = (event) => {
+          const message = event.data as IServiceWorkerStructuredAck | IServiceWorkerStructuredResult | undefined
+          if (!message || message.__req__ !== reqID || message.__response__ !== accion) {
+            return
+          }
+
+          if (message.type === 'ack') {
+            didReceiveAck = true
+            window.clearTimeout(ackTimeoutID)
+            return
+          }
+
+          if (!didReceiveAck) {
+            window.clearTimeout(ackTimeoutID)
+          }
+          window.clearTimeout(resultTimeoutID)
+          responseChannel.port1.close()
+          resolve(message)
+        }
+
+        responseChannel.port1.onmessageerror = () => {
+          window.clearTimeout(ackTimeoutID)
+          window.clearTimeout(resultTimeoutID)
+          responseChannel.port1.close()
+          reject(new Error(`Service worker message deserialization failed on attempt ${attemptNumber}`))
+        }
+
+        const requestMessage: IServiceWorkerStructuredRequest = {
+          __swrpc__: true,
+          accion,
+          reqID,
+          enviroment: Env.enviroment,
+          content,
+        }
+
+        targetWorker.postMessage(requestMessage, [responseChannel.port2])
+      })
+
+      console.log(`[${getTS()}] [SW-Cache] Message response received (Action: ${accion}):`, structuredResponse)
+      return structuredResponse
+    } catch (error) {
+      latestError = error as Error
+      console.warn(`[${getTS()}] [SW-Cache] Action ${accion} attempt ${attemptNumber} failed:`, latestError)
+    }
+  }
+
+  throw latestError || new Error(`Service worker action ${accion} failed without ack`)
+}
 
 const parseJSONSafe = (textPayload: string) => {
   if (!textPayload) return {}
@@ -115,6 +267,11 @@ export const sendServiceMessage = async (accion: number, content: any): Promise<
       content.__companyID__ = Env.getEmpresaID()
     }
 
+    // Action 3 stays on MessageChannel only so the hot path avoids JSON round-trips entirely.
+    if (accion === 3) {
+      return await sendStructuredAction3Message(accion, reqID, content)
+    }
+
     let route = `${window.location.origin}/_sw_?accion=${accion}&req=${reqID}&env=${Env.enviroment}`
     if(content.route){
       route += "&r=" + content.route.replaceAll("?","_").replaceAll("&","_")
@@ -152,6 +309,7 @@ export const fetchCache = async (args: serviceHttpProps): Promise<FetchCacheResp
   args.routeParsed = Env.makeRoute(args.route)
   args.__version__ = args.useCache?.ver || 1
   args.__companyID__ = Env.getEmpresaID()
+  args.verifyRouteMemoryState = args.verifyRouteMemoryState ?? Env.DELTA_CACHE_VERIFY_ROUTE_MEMORY
   console.log("fetching cache...", args)
 
   const response = await sendServiceMessage(3,args)

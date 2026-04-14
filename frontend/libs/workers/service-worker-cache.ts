@@ -134,6 +134,29 @@ const compareVersionUpdate = async (versionCurrent: string): Promise<string> => 
 const clientIDsMap: Map<string, number> = new Map()
 const usedRequestIDs: Map<number, number> = new Map()
 const sendHandlers: Map<number, (c: any) => void> = new Map()
+
+interface IServiceWorkerStructuredRequest {
+	__swrpc__: true
+	accion: number
+	reqID: number
+	enviroment: string
+	content: any
+}
+
+interface IServiceWorkerStructuredAck {
+	type: 'ack'
+	__response__: number
+	__req__: number
+}
+
+interface IServiceWorkerStructuredResult {
+	type: 'result'
+	__response__: number
+	__req__: number
+	content?: any
+	error?: any
+}
+
 export const sendClientMessage = (clientID: number, content: any) => {
 	const handler = sendHandlers.get(clientID)
 	if (!handler) {
@@ -142,6 +165,96 @@ export const sendClientMessage = (clientID: number, content: any) => {
 		handler(content)
 	}
 }
+
+const resolveServiceWorkerClientID = (clientIdentifier: string) => {
+	// Stable numeric ids keep the duplicate-request guard compatible across fetch and MessageChannel callers.
+	if (!clientIDsMap.has(clientIdentifier)) {
+		clientIDsMap.set(clientIdentifier, clientIDsMap.size + 1)
+	}
+	return clientIDsMap.get(clientIdentifier) || 0
+}
+
+const buildServiceWorkerRPCResponse = async (
+	accion: number,
+	reqID: number,
+	enviroment: string,
+	content: any,
+	clientIdentifier: string,
+) => {
+	const clientID = resolveServiceWorkerClientID(clientIdentifier)
+	const clientReqID = reqID * 1000 + clientID
+	const usedReqTime = usedRequestIDs.get(clientReqID) || 0
+
+	if (usedReqTime && (Date.now() - usedReqTime) < 1000) {
+		const haceMs = Date.now() - usedReqTime
+		console.log("El id ", reqID, " está duplicado. | Client:", clientIdentifier, "| Hace:", haceMs, "ms")
+		return { error: "ReqID Duplicado.", __response__: accion, __req__: reqID }
+	}
+
+	usedRequestIDs.set(clientReqID, Date.now())
+	const actionHandler = HandlersMap.get(accion)
+	if (!actionHandler) {
+		console.warn(`No se encontró el handler para la acción ${accion}`)
+		return { error: `No se encontró el handler para la acción ${accion}`, __response__: accion, __req__: reqID }
+	}
+
+	content.__enviroment__ = enviroment
+	content.__client__ = clientID
+	const response = await actionHandler(content)
+	const message = { ...response, __response__: accion, __req__: reqID }
+	let info = ""
+	if (accion === 3) {
+		info = [content.route, content.cacheMode, reqID].join(" | ")
+	}
+	console.log(`Respondiendo Fetch (${info}):`, parseObject(message))
+	return message
+}
+
+self.addEventListener('message', (event) => {
+	const rpcMessage = event.data as IServiceWorkerStructuredRequest | undefined
+	if (!rpcMessage?.__swrpc__) { return }
+
+	const responsePort = event.ports?.[0]
+	if (!responsePort) { return }
+
+	const sourceClient = event.source as Client | null
+	const clientIdentifier = sourceClient?.id || "message-channel"
+
+	event.waitUntil((async () => {
+		try {
+			const ackMessage: IServiceWorkerStructuredAck = {
+				type: 'ack',
+				__response__: rpcMessage.accion,
+				__req__: rpcMessage.reqID,
+			}
+			// Ack immediately so the client can distinguish a transition failure from slow cache work.
+			responsePort.postMessage(ackMessage)
+
+			const response = await buildServiceWorkerRPCResponse(
+				rpcMessage.accion,
+				rpcMessage.reqID,
+				rpcMessage.enviroment,
+				rpcMessage.content || {},
+				clientIdentifier,
+			)
+			const resultMessage: IServiceWorkerStructuredResult = {
+				type: 'result',
+				...response,
+			}
+			responsePort.postMessage(resultMessage)
+		} catch (error) {
+			const resultMessage: IServiceWorkerStructuredResult = {
+				type: 'result',
+				error: String((error as Error)?.message || error),
+				__response__: rpcMessage.accion,
+				__req__: rpcMessage.reqID,
+			}
+			responsePort.postMessage(resultMessage)
+		} finally {
+			responsePort.close()
+		}
+	})())
+})
 
 self.addEventListener('fetch', (event) => {
 	const request = event.request
@@ -165,43 +278,19 @@ self.addEventListener('fetch', (event) => {
 			const accion = parseInt(url.searchParams.get('accion') || "0")
 			const reqID = parseInt(url.searchParams.get('req') || "0")
 			const enviroment = url.searchParams.get('env') || "main"
-			if (!clientIDsMap.has(event.clientId)) {
-				clientIDsMap.set(event.clientId, clientIDsMap.size + 1)
-			}
-			const clientID = clientIDsMap.get(event.clientId) || 0
-			const clientReqID = reqID * 1000 + clientID
-			const usedReqTime = usedRequestIDs.get(clientReqID) || 0
-			if (usedReqTime && (Date.now() - usedReqTime) < 1000) {
-				const haceMs = Date.now() - usedReqTime
-				console.log("El id ", reqID, " está duplicado. | Client:", event.clientId, "| Hace:", haceMs, "ms")
-				return new Response(JSON.stringify({ error: "ReqID Duplicado." }), {
-					headers: { 'Content-Type': 'application/json' }
-				})
-			}
-			usedRequestIDs.set(clientReqID, Date.now())
-			const handler = HandlersMap.get(accion)
-			if (!handler) {
-				console.warn(`No se encontró el handler para la acción ${accion}`)
-				const msg = { error: `No se encontró el handler para la acción ${accion}` }
-				return new Response(JSON.stringify(msg), {
-					headers: { 'Content-Type': 'application/json' }
-				})
-			}
 			// You MUST clone the request if you intend to read its body
 			// AND then potentially pass the original request on to fetch() later.
 			// Reading the body consumes the stream.
 			const requestClone = event.request.clone()
 			const content = await requestClone.json()
-			content.__enviroment__ = enviroment
-			content.__client__ = clientID
-			const response = await handler(content)
-			const message = { ...response, __response__: accion, __req__: reqID }
-			let info = ""
-			if (accion === 3) {
-				info = [content.route, content.cacheMode, reqID].join(" | ")
-			}
-			// Return the action payload directly to the caller instead of postMessage.
-			console.log(`Respondiendo Fetch (${info}):`, (parseObject(message)))
+			const message = await buildServiceWorkerRPCResponse(
+				accion,
+				reqID,
+				enviroment,
+				content || {},
+				event.clientId || "fetch-rpc",
+			)
+			// Keep the fetch fallback for uncontrolled pages and older callers.
 			return new Response(JSON.stringify(message), {
 				headers: { 'Content-Type': 'application/json' }
 			});

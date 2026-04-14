@@ -50,6 +50,7 @@ export type serviceHttpProps = {
   }
   updatedStatus?: { [key: string]: string }
   cacheSyncTime?: number
+  verifyRouteMemoryState?: boolean
   useCache?: {
     min: number
     ver: number

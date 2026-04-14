@@ -368,6 +368,8 @@ export const GET = (props: httpProps): Promise<any> => {
       module: props.module || "a",
       headers: buildHeaders('json'),
       cacheMode: props.cacheMode,
+      // Keep the integrity pass opt-in because it adds extra post-response IndexedDB work.
+      verifyRouteMemoryState: Env.DELTA_CACHE_VERIFY_ROUTE_MEMORY,
       status,
     } as serviceHttpProps
 
@@ -519,6 +521,8 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
       module: this.module,
       headers: buildHeaders('json'),
       cacheMode,
+      // The verification pass is useful for debugging corruption, not for the default mobile path.
+      verifyRouteMemoryState: Env.DELTA_CACHE_VERIFY_ROUTE_MEMORY,
       keyID: this.keyID,
       keysIDs: this.keysIDs,
       columnarIDField: this.columnarIDField,
