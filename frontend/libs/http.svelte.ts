@@ -561,7 +561,11 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 		const missingIDs = [...new Set(
 			ids.filter((recordID) => recordID > 0 && !this.recordsMap.has(recordID))
 		)]
-		if (missingIDs.length === 0) { return }
+		console.debug(`[GetHandler] syncIDs:start route=${this.route} byID=${this.routeByID} requested=${ids.length} missing=${missingIDs.length}`)
+		if (missingIDs.length === 0) {
+			console.debug(`[GetHandler] syncIDs:skip route=${this.route} reason=no-missing-ids`)
+			return
+		}
 
 		console.debug("[GetHandler] syncIDs fetching missing records:", this.route, {
 			routeByID: this.routeByID,
@@ -569,12 +573,23 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 			missingIDs,
 		})
 
-		const fetchedRecordsByID = await getRecordsByID<T & IMinimalRecord>(this.routeByID, missingIDs)
-		const fetchedRecords = [...fetchedRecordsByID.values()]
-		if (fetchedRecords.length === 0) { return }
+		try {
+			const fetchedRecordsByID = await getRecordsByID<T & IMinimalRecord>(this.routeByID, missingIDs)
+			const fetchedRecords = [...fetchedRecordsByID.values()]
+			console.debug(`[GetHandler] syncIDs:fetched route=${this.route} byID=${this.routeByID} fetched=${fetchedRecords.length}`)
+			if (fetchedRecords.length === 0) {
+				console.debug(`[GetHandler] syncIDs:empty route=${this.route} byID=${this.routeByID}`)
+				return
+			}
 
-		// Reuse the standard merge path so `records`, `recordsMap`, and name indexes stay aligned.
-		this.addSavedRecords(...fetchedRecords)
+			// Reuse the standard merge path so `records`, `recordsMap`, and name indexes stay aligned.
+			this.addSavedRecords(...fetchedRecords)
+			console.debug(`[GetHandler] syncIDs:end route=${this.route} byID=${this.routeByID} merged=${fetchedRecords.length}`)
+		} catch (syncIDsError) {
+			console.error(`[GetHandler] syncIDs:error route=${this.route} byID=${this.routeByID}`)
+			console.error(syncIDsError)
+			throw syncIDsError
+		}
 	}
   
   fetch(){

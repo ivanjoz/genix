@@ -432,7 +432,7 @@ self.addEventListener('fetch', (event) => {
 	}
 	
 	const contentType = request.headers.get('Content-Type');
-	console.log("event URL:: ", request.url, "|", contentType)
+	console.log("event URL:: ", request.url.split("?")[0], "|", contentType)
 	if (!request.url.startsWith(self.location.origin)) return
 	const [filename, ext] = parseFileExtension(request.url)
 	if (filename === '/app-version') { return }

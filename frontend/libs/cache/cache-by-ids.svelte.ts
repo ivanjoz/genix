@@ -293,6 +293,7 @@ export const doGetRecordsByIDs = async <T extends IMinimalRecord>(
 
 	// Resolve all memory misses from persistent cache in one batch read.
 	if (idsMissingFromMemoryCache.length > 0) {
+		console.debug(`${LOG_PREFIX} ${apiRoute} idb:start ids=${idsMissingFromMemoryCache.length}`)
 		console.debug(`${LOG_PREFIX} Reading from IndexedDB.`, {
 			apiRoute,
 			idsCount: idsMissingFromMemoryCache.length,
@@ -300,6 +301,7 @@ export const doGetRecordsByIDs = async <T extends IMinimalRecord>(
 		})
 
 		const idbRecordsByID = await readRecordsFromIDBByIDs<T>(apiRoute, idsMissingFromMemoryCache)
+		console.debug(`${LOG_PREFIX} ${apiRoute} idb:end ids=${idsMissingFromMemoryCache.length} hits=${idbRecordsByID.size}`)
 
 		for (const id of idsMissingFromMemoryCache) {
 			const idbRecord = idbRecordsByID.get(id)
@@ -444,6 +446,7 @@ export const doGetRecordsByIDs = async <T extends IMinimalRecord>(
 		requestedCount: normalizedSortedIDs.length,
 		returnedCount: resolvedRecordsByID.size,
 	})
+	console.debug(`${LOG_PREFIX} ${apiRoute} done requested=${normalizedSortedIDs.length} returned=${resolvedRecordsByID.size}`)
 
 	return resolvedRecordsByID
 }

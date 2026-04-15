@@ -72,11 +72,22 @@
   const productosService = new ProductosService();
   const clientesService = new ClientProviderService();
 
+  function withTimeout<T>(promise: Promise<T>, timeoutLabel: string, timeoutMs: number = 8000): Promise<T> {
+    // Prevent auxiliary lookups from leaving the whole page in a perpetual loading state.
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        setTimeout(() => reject(new Error(`Timeout while waiting for ${timeoutLabel}`)), timeoutMs);
+      }),
+    ]);
+  }
+
   async function querySaleOrders(orderStatus: number): Promise<void> {
     const currentRequestID = ++saleOrdersQueryRequestID;
     selectedSaleOrder = null;
     isQueryingSaleOrders = true;
     saleOrderRecords = [];
+    console.debug(`[sale_orders_status] query:start req=${currentRequestID} status=${orderStatus}`);
 
     const nextSaleOrdersService = new SaleOrdersService(orderStatus);
     const queryRoute = nextSaleOrdersService.route;
@@ -87,6 +98,7 @@
 
     await nextSaleOrdersService.fetchOnline();
     const fetchedSaleOrders = nextSaleOrdersService.records;
+    console.debug(`[sale_orders_status] query:fetched req=${currentRequestID} rows=${fetchedSaleOrders.length}`);
     if (currentRequestID !== saleOrdersQueryRequestID) return;
 
     // Commit table rows first so the page does not stay blank while related lookups resolve.
@@ -117,11 +129,29 @@
     });
 
     try {
-      await Promise.all([
-        productosService.syncIDs(productIDs),
-        clientesService.syncIDs(clientIDs),
+      const [productosSyncResult, clientesSyncResult] = await Promise.allSettled([
+        withTimeout(productosService.syncIDs(productIDs), 'productosService.syncIDs'),
+        withTimeout(clientesService.syncIDs(clientIDs), 'clientesService.syncIDs'),
       ]);
+      console.debug(
+        `[sale_orders_status] sync:settled req=${currentRequestID} productos=${productosSyncResult.status} clientes=${clientesSyncResult.status}`
+      );
       if (currentRequestID !== saleOrdersQueryRequestID) return;
+
+      if (productosSyncResult.status === 'rejected') {
+        console.error('[sale_orders_status] failed to sync products by IDs', {
+          queryRoute,
+          productIDs,
+          productosSyncError: productosSyncResult.reason,
+        });
+      }
+      if (clientesSyncResult.status === 'rejected') {
+        console.error('[sale_orders_status] failed to sync clients by IDs', {
+          queryRoute,
+          clientIDs,
+          clientesSyncError: clientesSyncResult.reason,
+        });
+      }
 
       // Keep selectors scoped to the current query result so they never show unrelated cached records.
       clientOptions = clientIDs
@@ -146,8 +176,12 @@
         resolvedProducts: productIDs.filter((productID) => productosService.recordsMap.has(productID)).length,
         resolvedClients: clientIDs.filter((clientID) => clientesService.recordsMap.has(clientID)).length,
       });
+      console.debug(
+        `[sale_orders_status] query:ready req=${currentRequestID} rows=${fetchedSaleOrders.length} products=${productOptions.length} clients=${clientOptions.length}`
+      );
     } catch (queryError) {
       if (currentRequestID !== saleOrdersQueryRequestID) return;
+      console.error(`[sale_orders_status] query:error req=${currentRequestID} route=${queryRoute}`);
       console.error('[sale_orders_status] failed to query sale orders', {
         queryError,
         queryRoute,
@@ -158,6 +192,7 @@
     } finally {
       if (currentRequestID === saleOrdersQueryRequestID) {
         isQueryingSaleOrders = false;
+        console.debug(`[sale_orders_status] query:end req=${currentRequestID} loading=${isQueryingSaleOrders}`);
       }
     }
   }
