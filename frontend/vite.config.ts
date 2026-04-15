@@ -19,6 +19,8 @@ const __dirname = path.dirname(__filename);
 const projectDir = process.cwd()
 
 const isBuild = process.argv.includes('build');
+// Keep all production build artifacts under the same minification rule.
+const shouldMinifyBuildOutput = isBuild;
 const cssModuleMap = new Map<string, string>();
 
 if (isBuild) {
@@ -112,7 +114,7 @@ const serviceWorkerPlugin = () => ({
 
     await esbuild.build({
       ...serviceWorkerConfig,
-      minify: process.env.NODE_ENV === 'production',
+      minify: shouldMinifyBuildOutput,
     }).catch(() => process.exit(1));
   },
   // In dev mode, we can also watch the service worker file for changes
@@ -197,10 +199,8 @@ export default defineConfig({
     }
   },
   build: {
-    // This disables minification for the entire build
-    minify: false,
-    // You can also disable CSS minification specifically if needed
-    cssMinify: false,
+    minify: shouldMinifyBuildOutput,
+    cssMinify: shouldMinifyBuildOutput,
     rollupOptions: {
       cache: true,
       output: {

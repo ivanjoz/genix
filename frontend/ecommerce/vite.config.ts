@@ -9,6 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const isBuild = process.argv.includes('build');
+// Keep store chunks minified whenever Vite is running a build.
+const shouldMinifyBuildOutput = isBuild;
 const cssModuleMap = new Map();
 
 if (isBuild) {
@@ -40,8 +42,8 @@ export default defineConfig({
     }
   },
   build: {
-    minify: false,
-    cssMinify: false,
+    minify: shouldMinifyBuildOutput,
+    cssMinify: shouldMinifyBuildOutput,
     rollupOptions: {
       output: {
         hashCharacters: 'base64',
