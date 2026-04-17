@@ -12,6 +12,7 @@
     containerCss?: string
     rowGapPx?: number
     columnGapPx?: number
+    useInnerPadding?: boolean
     emptyMessage?: string
     children?: Snippet<[TItem, number]>
   }
@@ -26,6 +27,7 @@
     containerCss = '',
     rowGapPx = 12,
     columnGapPx = 12,
+    useInnerPadding = false,
     emptyMessage = 'No se encontraron registros.',
     children,
   }: VirtualCardsProps<TItem> = $props()
@@ -95,11 +97,22 @@
   onDestroy(() => {
     resizeObserver?.disconnect()
   })
+  const containerCompensationCss = $derived.by(() => {
+    // Inner padding keeps mobile cards away from the viewport edge without shrinking the virtual row width.
+    return useInnerPadding ? ' virtual-cards-container-with-inner-padding' : ''
+  })
+
+  const virtualItemsClass = $derived.by(() => {
+    // Keep the virtual-list base class and add a dedicated modifier only for the optional inner padding.
+    return useInnerPadding
+      ? 'virtual-list-items virtual-list-items-with-inner-padding w-full [&>div]:w-full'
+      : 'virtual-list-items w-full [&>div]:w-full'
+  })
 </script>
 
 <div
   bind:this={containerElement}
-  class={`virtual-cards-container ${containerCss}`}
+  class={`virtual-cards-container${containerCompensationCss} ${containerCss}`}
   style={`height:${height}`}
 >
   {#if items.length === 0}
@@ -111,7 +124,7 @@
       items={itemRows}
       defaultEstimatedItemHeight={estimatedRowHeight}
       bufferSize={bufferSize}
-      itemsClass="w-full [&>div]:w-full"
+      itemsClass={virtualItemsClass}
     >
       {#snippet renderItem(itemRow, rowIndex)}
         <div class="w-full">
@@ -145,11 +158,16 @@
     height: 100%;
   }
 
-  .virtual-cards-container :global(.virtual-list-items) {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding-bottom: 12px;
+  .virtual-cards-container.virtual-cards-container-with-inner-padding {
+    margin-left: -6px;
+    margin-right: -6px;
+    width: calc(100% + 12px);
+  }
+
+  .virtual-cards-container :global(.virtual-list-items.virtual-list-items-with-inner-padding) {
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 2px;
   }
 
   .virtual-cards-empty-message {

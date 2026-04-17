@@ -25,6 +25,7 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
 
   const stockColumns: ITableColumn<IProductoStock>[] = [
     { header: 'Producto', highlight: true,
+   		mobile: { order: 1, css: "col-span-24" },
       getValue: (productStockRecord) => {
         const productRecord = productos.recordsMap.get(productStockRecord.ProductID)?.Nombre
         return productRecord || `Producto-${productStockRecord.ProductID}`
@@ -34,9 +35,11 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
       getValue: (productStockRecord) => productStockRecord.Lote || ''
     },
     { header: 'SKU',
-      getValue: (productStockRecord) => productStockRecord.SKU || ''
+      getValue: (productStockRecord) => productStockRecord.SKU || '',
+      mobile: { order: 3, css: "col-span-12" },
     },
     { header: 'Presentación',
+    	mobile: { order: 2, css: "col-span-24" },
       getValue: (productStockRecord) => {
         if (!productStockRecord.PresentationID) { return '' }
         const productRecord = productos.recordsMap.get(productStockRecord.ProductID)
@@ -45,6 +48,7 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
       }
     },
     { header: 'Stock', css: 'justify-end', inputCss: 'text-right pr-6',
+    	mobile: { order: 4, css: "col-span-12" },
       getValue: (productStockRecord) => productStockRecord.Quantity,
       onCellEdit: (productStockRecord, value) => {
         updateStockQuantity(productStockRecord, parseInt(value as string || '0'))
@@ -158,35 +162,25 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
   })
 </script>
 
-<div class="flex items-center mb-8">
-  <SearchSelect options={almacenes?.Almacenes || []} keyId="ID" keyName="Nombre"
-    bind:saveOn={stockFilters} save="warehouseID" placeholder="ALMACÉN ::"
-    css="w-270"
-    onChange={() => {
-      onChangeAlmacen()
-    }}
-  />
-  {#if !stockFilters.warehouseID}
-    <div class="ml-12 text-red-500"><i class="icon-attention"></i>Debe seleccionar un almacén.</div>
-  {:else}
-    <div class="i-search w-full md:w-200 md:ml-12 col-span-5">
-      <div><i class="icon-search"></i></div>
-      <input type="text" onkeyup={(event) => {
-        const value = String((event.target as HTMLInputElement).value || '')
-        throttle(() => { stockFilterText = value }, 150)
-      }}>
-    </div>
-    <Checkbox label="Todos los Productos" bind:saveOn={stockFilters} save="showTodosProductos"
-      css="ml-16" />
-  {/if}
-  <div class="ml-auto">
+<div class="grid grid-cols-24 gap-8 mb-8 items-start">
+  <div class="col-span-14 md:col-span-12 min-w-0 mr-8">
+    <SearchSelect options={almacenes?.Almacenes || []} keyId="ID" keyName="Nombre"
+      bind:saveOn={stockFilters} save="warehouseID" placeholder="ALMACÉN ::"
+      css="w-full"
+      onChange={() => {
+        onChangeAlmacen()
+      }}
+    />
+  </div>
+
+  <div class="col-span-10 md:col-span-12 min-w-0 flex justify-end gap-8">
     {#if stockFilters.warehouseID > 0}
-      <button class="bx-blue mr-8" onclick={() => {
+      <button class="bx-blue shrink-0" onclick={() => {
         guardarRegistros()
       }}>
         <i class="icon-floppy"></i>Guardar
       </button>
-      <button class="bx-green" aria-label="agregar" onclick={() => {
+      <button class="bx-green shrink-0" aria-label="agregar" onclick={() => {
         stockForm = { WarehouseID: stockFilters.warehouseID } as IProductoStock
         Core.openSideLayer(1)
       }}>
@@ -194,6 +188,20 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
       </button>
     {/if}
   </div>
+
+  {#if !stockFilters.warehouseID}
+    <div class="col-span-24 text-red-500"><i class="icon-attention"></i>Debe seleccionar un almacén.</div>
+  {:else}
+    <div class="col-span-12 md:col-span-14 min-w-0 i-search w-full">
+      <div><i class="icon-search"></i></div>
+      <input type="text" onkeyup={(event) => {
+        const value = String((event.target as HTMLInputElement).value || '')
+        throttle(() => { stockFilterText = value }, 150)
+      }}>
+    </div>
+    <Checkbox label="Todos los Productos" bind:saveOn={stockFilters} save="showTodosProductos"
+      css="col-span-12 md:col-span-10 min-w-0 self-center" />
+  {/if}
 </div>
 
 <VTable columns={stockColumns} data={almacenStock}

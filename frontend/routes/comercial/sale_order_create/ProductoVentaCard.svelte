@@ -1,4 +1,5 @@
 <script lang="ts">
+import { Core } from '$core/store.svelte';
 import { formatN } from '$libs/helpers';
   import { type ProductoVenta, type VentaProducto } from "./sale_order.svelte";
 
@@ -38,6 +39,7 @@ import { formatN } from '$libs/helpers';
   };
 
   const isSku = $derived((productoStock.skus?.length || 0) > 0);
+  const mobileSelectedCount = $derived(ventaProducto?.cantidad || 0)
 
   const getCant = $derived.by(() => {
      let ventaCant = ventaProducto?.cantidad || 0
@@ -53,12 +55,6 @@ import { formatN } from '$libs/helpers';
      // But strictly speaking, stock is shared if it's the main unit.
      // Let's implement basic stock substraction first.
      return productoStock.cant - ventaCant
-  })
-
-  const stockCubeCount = $derived.by(() => {
-    // Represent stock in compact blocks: one cube per started group of 10, capped for readability.
-    if (getCant <= 0) return 0
-    return Math.min(8, Math.ceil(getCant / 10))
   })
 
   const hasCriticalStock = $derived(getCant <= 2)
@@ -92,12 +88,18 @@ import { formatN } from '$libs/helpers';
   })
 
   // Helper for quantities
-  const cantidades = [2,3,4,5,6,8,10,12]
+  const desktopQuickQuantities = [2,3,4,5,6,8,10,12]
+  const mobileQuickQuantities = [1,2,5,10]
+  const quickQuantities = $derived.by(() => {
+    const availableQuantities = Core.deviceType === 3 ? mobileQuickQuantities : desktopQuickQuantities
+    return availableQuantities.filter((cantidad) => cantidad <= getCant)
+  })
 
   const css = $derived.by(() => {
-    let cn = "px-8 py-4 border border-transparent rounded-lg "
+    let cn = "relative px-8 py-4 border border-transparent rounded-lg "
     if(isSelected){
-      cn += "bg-white ring-2 ring-blue-500 ring-inset shadow-[inset_0_0_12px_rgba(59,130,246,0.1)]"
+      // Keep mobile selection quiet while restoring the stronger desktop ring from md and up.
+      cn += "bg-white shadow-sm border-gray-200 md:ring-2 md:ring-blue-500 md:ring-inset md:shadow-[inset_0_0_12px_rgba(59,130,246,0.1)]"
     } else {
       cn += "bg-white hover:border-gray-200 hover:shadow-sm"
     }
@@ -122,12 +124,17 @@ import { formatN } from '$libs/helpers';
     onmouseover()
   }}
 >
+  {#if mobileSelectedCount > 0}
+    <div class="absolute -right-4 -top-4 z-20 flex h-28 min-w-28 items-center justify-center rounded-full bg-red-600 px-6 text-[12px] font-bold text-white shadow-[0_6px_14px_rgba(220,38,38,0.35)] md:hidden">
+      {mobileSelectedCount}
+    </div>
+  {/if}
   <div class="flex relative flex-col gap-4 cursor-pointer group"
     onclick={() => onselect(idx)}
   >
     <!-- Header: Name + Line -->
     <div class="flex items-center gap-8">
-       <div class="leading-tight text-gray-700 flex items-center gap-8">
+       <div class="flex items-center gap-8 pr-20 leading-tight text-gray-700 md:pr-0">
           <span>{@html highlightedDisplayName}</span>
           {#if productoStock.isSubUnidad}
              <span class="text-gray-300">|</span>
@@ -141,7 +148,7 @@ import { formatN } from '$libs/helpers';
     </div>
 
     <!-- Body: Grid -->
-    <div class="flex items-center">
+    <div class="flex items-center gap-6">
         <!-- Col 1: Quick Actions / SKUs -->
         <div class="flex items-center">
             {#if isSku}
@@ -158,19 +165,21 @@ import { formatN } from '$libs/helpers';
                   {/each}
                </div>
             {:else}
-              <div class="flex gap-4 z-10 opacity-0 group-hover:opacity-100 duration-200">
-                  {#each cantidades as n}
-                     {#if n <= getCant}
+              <div class={"flex w-50 shrink-0 flex-col items-center justify-center rounded bg-gray-50 py-2 leading-none md:hidden" + (hasCriticalStock ? " text-red-500" : " text-gray-600")}>
+                  <span class="text-[13px] text-gray-500">Stock</span>
+                  <span class="font-mono ff-bold">{getCant}</span>
+              </div>
+              <div class="z-10 flex flex-1 flex-wrap justify-center gap-4 md:flex-none md:opacity-0 md:duration-200 md:group-hover:opacity-100">
+                  {#each quickQuantities as cantidad}
                      <button
-                       class="w-32 h-30 flex items-center justify-center text-xs font-bold text-gray-500 bg-gray-100 hover:bg-blue-100 hover:text-blue-600 rounded cursor-pointer transition-colors"
+                       class="flex h-30 w-[56px] min-w-[14%] items-center justify-center rounded bg-gray-100 text-xs font-bold text-gray-500 transition-colors hover:bg-blue-100 hover:text-blue-600 md:w-32 md:min-w-0"
                        onclick={(e) => {
                            e.stopPropagation()
-                           onadd(n)
+                           onadd(cantidad)
                        }}
                      >
-                        {n}
+                        {cantidad}
                      </button>
-                     {/if}
                   {/each}
               </div>
             {/if}
@@ -181,14 +190,9 @@ import { formatN } from '$libs/helpers';
 
         <!-- Col 3: Stock -->
         {#if !isSku}
-          <div class="flex absolute bottom-0 left-0 text-sm text-gray-500 text-right group-hover:invisible">
-            <div class={"font-mono w-50 mr-2" + (getCant === 0 ? " text-red-500 font-bold" : "")}>
+          <div class={"absolute bottom-0 left-0 text-right text-sm text-gray-500 group-hover:invisible" + (hasCriticalStock ? " text-red-500 font-bold" : "")}>
+            <div class="hidden w-50 font-mono md:block">
                 {getCant}
-            </div>
-            <div class="-mt-1 flex gap-1">
-              {#each Array.from({ length: stockCubeCount }) as _, cubeIndex (`stock-cube-${idx}-${cubeIndex}`)}
-                <i class={"icon-cube" + (hasCriticalStock ? " text-red-500" : "")}></i>
-              {/each}
             </div>
           </div>
         {/if}

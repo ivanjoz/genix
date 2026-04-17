@@ -373,12 +373,12 @@ import { SaleOrderState } from "./sale_order.svelte";
   options={[{ id: 1, name: "Ventas" }, { id: 2, name: "Configuración" }]}
 >
   {#if Core.pageOptionSelected === 1}
-    <div class="flex h-full gap-16">
+    <div class="flex h-full gap-20">
       <!-- Main Content -->
-      <div class="flex-1 flex flex-col min-w-0">
+      <div class="flex-1 flex flex-col min-w-0 relative">
         <!-- Toolbar -->
-        <div class="flex mb-12">
-          <div class="w-250 mr-12">
+        <div class="mb-12 flex gap-6 md:gap-12">
+          <div class="w-[40%] md:w-250 md:mr-12">
             <SearchSelect
               label=""
               keyId="ID"
@@ -396,27 +396,21 @@ import { SaleOrderState } from "./sale_order.svelte";
             />
           </div>
 
-          <div class="flex-1 relative flex gap-4">
-            <div class="relative flex-1">
-               <i
-                 class="icon-search absolute left-12 top-1/2 -translate-y-1/2 text-gray-400"
-               ></i>
+          <div class="flex w-[60%] gap-6 md:flex-1 md:gap-4">
+            <div class="w-1/2 md:flex-1">
                <input
                  bind:this={searchInput}
                  type="text"
-                 class="w-full pl-36 pr-16 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                 placeholder="Producto..."
+                 class="w-full px-12 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                 placeholder="PRODUCTO..."
                  value={ventasState.filterText}
                  oninput={(e) => filterProductos(e.currentTarget.value)}
                />
             </div>
-            <div class="relative w-200">
-               <i
-                 class="icon-barcode absolute left-12 top-1/2 -translate-y-1/2 text-gray-400"
-               ></i>
+            <div class="w-1/2 md:w-200">
                <input
                  type="text"
-                 class="w-full pl-36 pr-16 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                 class="w-full px-12 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                  placeholder="SKU..."
                  value={ventasState.filterSku}
                  oninput={(e) => filterSkus(e.currentTarget.value)}
@@ -426,7 +420,7 @@ import { SaleOrderState } from "./sale_order.svelte";
         </div>
 
         <!-- Grid/List -->
-        <div class="flex-1 min-h-0 overflow-hidden">
+        <div class="flex-1 min-h-0">
           <VirtualCards
             items={productosParsed}
             height="calc(100vh - 76px - var(--header-height))"
@@ -438,6 +432,7 @@ import { SaleOrderState } from "./sale_order.svelte";
             rowGapPx={6}
             containerCss="h-full"
             emptyMessage="No se encontraron productos"
+            useInnerPadding
           >
             {#snippet children(item, itemIndex)}
               <ProductoVentaCard
@@ -458,9 +453,12 @@ import { SaleOrderState } from "./sale_order.svelte";
         </div>
       </div>
 
-      <!-- Side Cart -->
-      <div class="w-[38%] min-w-350 ml-24"></div>
-      <LayerStatic css="w-[38%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-60px)] shadow-lg">
+      <LayerStatic
+        css="w-[40%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
+        mobileLayerTitle="Detalle de Venta"
+        useMobileLayerVertical={124}
+
+      >
         <!-- Error Message -->
         {#if ventasState.ventaErrorMessage}
           <div class="bg-red-50 m-8 text-red-600 p-12 text-sm font-medium border-b border-red-100 animate-in slide-in-from-top-2"
@@ -469,58 +467,68 @@ import { SaleOrderState } from "./sale_order.svelte";
           </div>
         {/if}
         <!-- Header -->
-        <div class="px-16 py-12 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
+        <div class="px-10 py-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
         >
        	<div class="grow mr-16">
-          <div class="font-bold font-xl mb-2 -mt-2 text-gray-800 mb-4 flex items-center justify-between">
+          <div class="hidden font-bold font-xl mb-2 -mt-2 text-gray-800 mb-4 items-center justify-between md:flex">
             <span>Detalle de Venta</span>
           </div>
-          <div class="grid grid-cols-3 gap-12">
-            <div class="bg-gray-50 flex p-6 rounded-md items-center border border-gray-100 shadow-sm">
-                <div class="text-[10px] leading-[1.1] text-gray-500 mb-4 font-bold tracking-wider">SUB <br> TOTAL</div>
-                <div class="leading-[1] text-gray-800 text-[17px] ml-auto">
+          <div class="flex items-center gap-6">
+            <div class="bg-gray-50 flex flex-1 p-6 rounded-md items-center gap-6 border border-gray-100 shadow-sm">
+                <div class="text-[10px] leading-[1] text-gray-500 font-bold tracking-wider uppercase">
+                  <div>Sub</div>
+                  <div>Total</div>
+                </div>
+                <div class="leading-[1] text-gray-800 text-[16px] ml-auto">
                     {formatMo(ventasState.form.TotalAmount - ventasState.form.TaxAmount)}
                 </div>
             </div>
 
-            <div class="bg-blue-50 items-center flex p-6 rounded-md border border-blue-100 shadow-sm">
-                <div class="text-[10px] text-blue-600 mb-4 uppercase font-bold tracking-wider">Total</div>
-                <div class="leading-[1] text-blue-700 font-bold text-xl ml-auto">
+            <div class="bg-blue-50 items-center flex flex-1 p-6 rounded-md gap-6 border border-blue-100 shadow-sm">
+                <div class="text-[10px] text-blue-600 uppercase font-bold tracking-wider">Total</div>
+                <div class="leading-[1] text-blue-700 font-bold text-[22px] ml-auto">
                     {formatMo(ventasState.form.TotalAmount)}
                 </div>
             </div>
           </div>
         </div>
-          <button class="bx-blue"
+          <button class="bx-blue shrink-0"
             onclick={handlePostSaleOrder}
             title="Guardar venta"
           >
-          	Generar
+            <span class="hidden md:inline">Generar</span>
             <i class="icon-floppy"></i>
           </button>
         </div>
-        <div class="flex w-full px-12 py-6">
-	        <SearchSelect css="mr-16"
-	          label="" save="LastPaymentCajaID"
-	          keyId="ID"
-	          keyName="Nombre" saveOn={ventasState.form}
-	          options={cajas?.Cajas||[]}
-	          placeholder="CAJA"
-	        />
-        	<CheckboxOptions type="multiple"
-       			options={[ { id: 2, name: "Pagado" }, { id: 3, name: "Recibido" } ]}
-         		keyId="id" keyName="name" save="ActionsIncluded"
-         		saveOn={ventasState.form}
-         	/>
-	        <SearchSelect useStyle={1}
-	           label=""
-	           keyId="ID" css="ml-auto max-w-168 text-sm"
-	           keyName="Nombre"
-	           options={clientModeOptions}
-	           selected={clientModeSelected}
-	           onChange={handleClientModeChange}
-	           placeholder="SIN CLIENTE"
-	         />
+        <div class="grid w-full grid-cols-2 gap-8 px-12 py-6 md:flex md:items-center">
+          <div class="col-span-2 md:col-span-1 md:order-2">
+        	  <CheckboxOptions type="multiple"
+       			  options={[ { id: 2, name: "Pagado" }, { id: 3, name: "Recibido" } ]}
+         		  keyId="id" keyName="name" save="ActionsIncluded"
+         		  saveOn={ventasState.form}
+         	  />
+          </div>
+          <div class="md:order-1 md:mr-16">
+	          <SearchSelect
+              css="w-full"
+	            label="" save="LastPaymentCajaID"
+	            keyId="ID"
+	            keyName="Nombre" saveOn={ventasState.form}
+	            options={cajas?.Cajas||[]}
+	            placeholder="CAJA"
+	          />
+          </div>
+          <div class="md:order-3 md:ml-auto md:max-w-168">
+	          <SearchSelect useStyle={1}
+	             label=""
+	             keyId="ID" css="w-full text-sm"
+	             keyName="Nombre"
+	             options={clientModeOptions}
+	             selected={clientModeSelected}
+	             onChange={handleClientModeChange}
+	             placeholder="SIN CLIENTE"
+	           />
+          </div>
         </div>
         <div class="px-12 pb-10 mt-6">
           <div class="grid grid-cols-[170px,1fr] gap-8">
@@ -586,7 +594,7 @@ import { SaleOrderState } from "./sale_order.svelte";
                   {formatMo((item.isSubUnidad && item.producto?.SbnPreciFinal ? item.producto.SbnPreciFinal : (item.producto?.PrecioFinal || 0)) * item.cantidad)}
                 </div>
                 <button
-                  class="text-red-400 hover:text-red-600 p-4 opacity-0 group-hover:opacity-100 transition-opacity"
+                  class="p-4 text-red-400 transition-opacity hover:text-red-600 md:opacity-0 md:group-hover:opacity-100"
                   onclick={() => ventasState.removeProducto(item.key)}
                   title="Eliminar"
                 >

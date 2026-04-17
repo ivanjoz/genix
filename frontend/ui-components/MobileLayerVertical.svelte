@@ -1,122 +1,148 @@
 <script lang="ts">
-import { Core, suscribeUrlFlag } from '$core/store.svelte';
+  interface Props {
+    title?: string
+    show?: boolean
+    closedHeightPx?: number
+    onToggle?: (nextState: boolean) => void
+    children?: import('svelte').Snippet
+  }
 
-  const {
-    id = false, title = ""
-  } = $props<{ id: number, title: string }>();
-  let divContainer: HTMLDivElement
+  let {
+    title = '',
+    show = false,
+    closedHeightPx = 64,
+    onToggle,
+    children,
+  }: Props = $props()
 
-  const show = $derived(Core.openLayers.includes(id))
-
-  $effect(() => {
-    if(show){
-      suscribeUrlFlag("mob-layer", () => {
-        Core.openLayers = Core.openLayers.filter(x => x !== id)
-      })
-    }
-  })
-
-  let showInner = $state(show)
-
-  $effect(() => {
-    if(typeof show !== 'undefined' && typeof document !== 'undefined'){
-      divContainer.style.setProperty("view-transition-name", "mobile-layer-vertical")
-      setTimeout(() => {
-        divContainer.style.setProperty("view-transition-name","")
-      },400)
-
-      if (document.startViewTransition) {
-        document.startViewTransition(() => {
-          showInner = show
-        })
-      } else {
-        showInner = show
-      }
-    }
-  })
-
-  let css = $derived.by(() => {
-    let value = "_1";
-    if (showInner) { value += " _2"; }
-    return value;
-  })
+  // Keep the interaction explicit so the parent owns the open/close state.
+  const toggleLayer = () => {
+    onToggle?.(!show)
+  }
 </script>
 
-<div class={css + " top-10 left-0 fixed w-[100vw]"} aria-hidden={!showInner}
-  bind:this={divContainer} id="mob-layer"
->
-  <div class="flex items-center justify-between absolute w-full top-9 pl-20 pr-4">
-    <div class="fs18 text-[white]">{title}</div>
-    <button class="_4 fs20 border-none outline-none text-[white] bg-transparent"
-      onclick={ev => {
-        ev.stopPropagation()
-        Core.openLayers = Core.openLayers.filter(x => x !== id)
-      }}
+<div class="mobile-layer-shell" aria-hidden={!show}>
+  <button
+    class="mobile-layer-backdrop"
+    class:is-visible={show}
+    aria-label="Cerrar panel"
+    onclick={toggleLayer}
+  ></button>
+
+  <div
+    class="mobile-layer-panel"
+    class:is-open={show}
+    style={`--mobile-layer-closed-height:${closedHeightPx}px;`}
+  >
+    <button
+      class="mobile-layer-header"
+      aria-expanded={show}
+      aria-label={show ? 'Ocultar panel' : 'Mostrar panel'}
+      onclick={toggleLayer}
     >
-      <i class="icon-cancel"></i>
+      <div class="mobile-layer-handle"></div>
+      <div class="mobile-layer-title-row">
+        <span class="mobile-layer-title">{title}</span>
+        <i class={`icon-${show ? 'down-open' : 'up-open'} mobile-layer-icon`}></i>
+      </div>
     </button>
-  </div>
-  <div class="_3 w-full absolute bottom-0">
-    <slot />
+
+    <div class="mobile-layer-body">
+      {@render children?.()}
+    </div>
   </div>
 </div>
 
 <style>
-  ._1 {
-    height: calc(100vh - 10px);
-    background-color: #2c2d31;
-    border-radius: 16px 16px 0 0;
-    overflow: hidden;
-    outline: 4px solid #ffffff69;
-    opacity: 0;
+  .mobile-layer-shell {
+    position: fixed;
+    inset: 0;
+    z-index: var(--layer-zindex);
     pointer-events: none;
-    z-index: -1;
-   /* transform: translateY(56vh); */
   }
 
-  ._2 {
+  .mobile-layer-backdrop {
+    position: absolute;
+    inset: 0;
+    border: none;
+    background: rgb(15 23 42 / 0.22);
+    opacity: 0;
+    transition: opacity 220ms ease;
+    pointer-events: none;
+  }
+
+  .mobile-layer-backdrop.is-visible {
     opacity: 1;
     pointer-events: auto;
-    z-index: 221;
-    /* transform: translateY(0); */
   }
 
-  ._3 {
-    height: calc(100vh - 55px);
-    background-color: #f4f4fa;
-    border-radius: 16px 16px 0 0;
-    outline: 2px solid #000000c2;
-    padding: 8px;
+  .mobile-layer-panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(100vh - var(--header-height) - 8px);
+    background: white;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -10px 26px rgb(15 23 42 / 0.22);
+    overflow: hidden;
+    pointer-events: auto;
+    transform: translateY(calc(100% - var(--mobile-layer-closed-height)));
+    transition: transform 320ms cubic-bezier(.23,.21,.64,.97);
+    will-change: transform;
   }
 
-  /* View Transitions for Mobile Layer Vartical*/
-  @keyframes slide-up {
-    from {
-      transform: translateY(40vh);
-      opacity: 0.4;
+  .mobile-layer-panel.is-open {
+    transform: translateY(0);
+  }
+
+  .mobile-layer-header {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 16px 12px;
+    border: none;
+    border-bottom: 1px solid rgb(226 232 240);
+    background: linear-gradient(180deg, rgb(248 250 252) 0%, rgb(255 255 255) 100%);
+    text-align: left;
+  }
+
+  .mobile-layer-handle {
+    width: 44px;
+    height: 5px;
+    margin: 0 auto;
+    border-radius: 999px;
+    background: rgb(148 163 184);
+  }
+
+  .mobile-layer-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .mobile-layer-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: rgb(51 65 85);
+  }
+
+  .mobile-layer-icon {
+    font-size: 16px;
+    color: rgb(71 85 105);
+  }
+
+  .mobile-layer-body {
+    height: calc(100% - 58px);
+    overflow: auto;
+    background: white;
+  }
+
+  @media (min-width: 750px) {
+    .mobile-layer-shell {
+      display: none;
     }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
-  }
-
-  @keyframes slide-down {
-    from {
-      transform: translateY(0);
-      opacity: 1;
-    }
-    to {
-      transform: translateY(40vh);
-      opacity: 0;
-    }
-  }
-
-  ::view-transition-new(mobile-layer-vertical) {
-    animation: slide-up 320ms cubic-bezier(.23,.21,.64,.97) forwards;
-  }
-
-  ::view-transition-old(mobile-layer-vertical) {
-    animation: slide-down 300ms cubic-bezier(.46,.17,.69,.66) forwards;
   }
 </style>
