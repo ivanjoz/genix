@@ -4,8 +4,7 @@ import Layer from '$components/Layer.svelte'
 import ChartCanvas from '$components/ChartCanvas.svelte'
 import CardsList from '$components/vTable/CardsList.svelte'
 import TableGrid from '$components/vTable/TableGrid.svelte'
-import type { TableGridColumn } from '$components/vTable/tableGridTypes'
-import type { ICardCell } from '$components/vTable/types'
+import type { ICardCell, ITableColumn } from '$components/vTable/types'
 import { Core } from '$core/store.svelte'
 import { FechaHelper } from '$libs/fecha'
 import { formatN, formatTime, Loading, Notify, throttle } from '$libs/helpers'
@@ -193,7 +192,7 @@ import {
     })
   })
 
-  const productSupplyColumns = $derived.by((): TableGridColumn<IProductSupplyRow>[] => {
+  const productSupplyColumns = $derived.by((): ITableColumn<IProductSupplyRow>[] => {
     return [
       {
         id: 'product-name',

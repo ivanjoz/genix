@@ -37,12 +37,22 @@
   border-radius: 5px;
 }
 
+/*
 .input:global(.no-label) .input_div {
   height: calc(var(--input-height) - 4px);
   box-shadow: rgb(74 70 86 / 22%) 0px 1px 3px 0px, rgb(55 52 64 / 14%) 0px 0px 2px 0px;
   border: 1px solid rgb(193 197 220);
   border-bottom: 1px solid var(--input-color-bottom);
   background: linear-gradient(0deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.2) 100%);
+}
+*/
+
+.input:global(.no-label) .input_div {
+	height: calc(var(--input-height) - 4px);
+	box-shadow: rgb(74 70 86 / 12%) 0px 1px 2px 0px, rgb(55 52 64 / 15%) 0px 0px 3px 0px;
+	outline: 1px solid rgb(63 56 96 / 7%);
+	border-bottom: 1px solid rgb(109 92 150 / 25%);
+	background: linear-gradient(0deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.2) 100%);
 }
 
 .input:global(.use-style-1.no-label) .input_div {
@@ -168,7 +178,7 @@
 }
 
 .input_shadow_layer > div {
-  box-shadow: #6e789030 0 1px 2px 1px, #585a6630 0 0 2px;
+  box-shadow: #6e789030 0 1px 1px 0, #585a6630 0 0 2px;
   position: absolute;
   left: 4px;
   bottom: 4px;

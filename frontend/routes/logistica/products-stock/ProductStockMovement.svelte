@@ -31,13 +31,6 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
         return productRecord || `Producto-${productStockRecord.ProductID}`
       }
     },
-    { header: 'Lote',
-      getValue: (productStockRecord) => productStockRecord.Lote || ''
-    },
-    { header: 'SKU',
-      getValue: (productStockRecord) => productStockRecord.SKU || '',
-      mobile: { order: 3, css: "col-span-12" },
-    },
     { header: 'Presentación',
     	mobile: { order: 2, css: "col-span-24" },
       getValue: (productStockRecord) => {
@@ -46,6 +39,13 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
         const presentationRecord = productRecord?.Presentaciones?.find((presentationOption) => presentationOption.id === productStockRecord.PresentationID)
         return presentationRecord?.nm || `Tipo-${productStockRecord.PresentationID}`
       }
+    },
+    { header: 'Lote',
+      getValue: (productStockRecord) => productStockRecord.Lote || ''
+    },
+    { header: 'SKU',
+      getValue: (productStockRecord) => productStockRecord.SKU || '',
+      mobile: { order: 3, css: "col-span-12" },
     },
     { header: 'Stock', css: 'justify-end', inputCss: 'text-right pr-6',
     	mobile: { order: 4, css: "col-span-12" },
@@ -66,12 +66,6 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
         }
         return { text: productStockRecord.Quantity || '' }
       }
-    },
-    { header: 'Costo Un.',
-      onCellEdit: (productStockRecord, value) => {
-        productStockRecord._hasUpdated = true
-        productStockRecord.CostoUn = parseInt(value as string || '0')
-      },
     },
   ]
 
@@ -162,18 +156,18 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
   })
 </script>
 
-<div class="grid grid-cols-24 gap-8 mb-8 items-start">
-  <div class="col-span-14 md:col-span-12 min-w-0 mr-8">
+<div class="grid grid-cols-24 gap-8 mb-8 items-center md:flex">
+  <div class="col-span-14 md:col-span-5 min-w-0 mr-8">
     <SearchSelect options={almacenes?.Almacenes || []} keyId="ID" keyName="Nombre"
       bind:saveOn={stockFilters} save="warehouseID" placeholder="ALMACÉN ::"
-      css="w-full"
+      css="w-full md:w-240"
       onChange={() => {
         onChangeAlmacen()
       }}
     />
   </div>
 
-  <div class="col-span-10 md:col-span-12 min-w-0 flex justify-end gap-8">
+  <div class="col-span-10 md:col-span-5 md:order-3 min-w-0 flex justify-end gap-8 md:ml-auto">
     {#if stockFilters.warehouseID > 0}
       <button class="bx-blue shrink-0" onclick={() => {
         guardarRegistros()
@@ -192,7 +186,7 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
   {#if !stockFilters.warehouseID}
     <div class="col-span-24 text-red-500"><i class="icon-attention"></i>Debe seleccionar un almacén.</div>
   {:else}
-    <div class="col-span-12 md:col-span-14 min-w-0 i-search w-full">
+    <div class="col-span-12 md:col-span-4 md:order-1 min-w-0 i-search w-full md:w-180">
       <div><i class="icon-search"></i></div>
       <input type="text" onkeyup={(event) => {
         const value = String((event.target as HTMLInputElement).value || '')
@@ -200,7 +194,7 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
       }}>
     </div>
     <Checkbox label="Todos los Productos" bind:saveOn={stockFilters} save="showTodosProductos"
-      css="col-span-12 md:col-span-10 min-w-0 self-center" />
+      css="col-span-12 md:col-span-5 md:order-2 min-w-0 self-center" />
   {/if}
 </div>
 

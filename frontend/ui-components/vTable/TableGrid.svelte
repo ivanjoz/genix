@@ -3,14 +3,17 @@
   import Renderer from '$components/Renderer.svelte';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import { splitTwoStrings } from '$libs/helpers';
+  import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
   import type {
+    IMobileCardsListCell,
+    ITableColumn,
+    TableGridCellAlign,
     TableGridCellRendererSnippet,
-    TableGridColumn,
     TableGridHeaderRendererSnippet,
-  } from './tableGridTypes';
+  } from './types';
 
   interface TableGridProps<TRecord> {
-    columns: TableGridColumn<TRecord>[];
+    columns: ITableColumn<TRecord>[];
     data: TRecord[];
     height?: string;
     rowHeight?: number;
@@ -20,6 +23,7 @@
     css?: string;
     headerCss?: string;
     rowCss?: string;
+    cellCss?: string;
     mobileCardCss?: string;
     emptyMessage?: string;
     debug?: boolean;
@@ -42,6 +46,7 @@
     css = '',
     headerCss = '',
     rowCss = '',
+    cellCss = '',
     mobileCardCss = '',
     emptyMessage = 'No se encontraron registros.',
     debug = false,
@@ -64,13 +69,14 @@
       });
   });
   const gridTemplateColumns = $derived(
-    visibleColumns.map((columnDefinition) => columnDefinition.width).join(' '),
+    visibleColumns
+      .map((columnDefinition) => columnDefinition.width || 'minmax(0, 1fr)')
+      .join(' '),
   );
   const normalizedRowHeight = $derived(Math.max(24, Math.round(rowHeight)));
   const estimatedMobileCardHeight = $derived(Math.max(128, normalizedRowHeight * 3 + 24));
   const useVirtualScroll = $derived(data.length >= 30);
   let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1024);
-  const isMobileView = $derived(windowWidth < mobileBreakpointPx && mobileColumns.length > 0);
   let shellElement = $state<HTMLDivElement | undefined>(undefined);
   let verticalScrollbarWidth = $state(0);
 
@@ -87,7 +93,7 @@
 
   const getCellValue = (
     rowRecord: TRecord,
-    columnDefinition: TableGridColumn<TRecord>,
+    columnDefinition: ITableColumn<TRecord>,
     rowIndex: number,
   ): string | number => {
     if (!columnDefinition.getValue) return '';
@@ -96,7 +102,7 @@
 
   const getSplitCellValue = (
     cellValue: string | number,
-    columnDefinition: TableGridColumn<TRecord>,
+    columnDefinition: ITableColumn<TRecord>,
   ): [string, string] => {
     if (typeof cellValue !== 'string' || !columnDefinition.splitString) {
       return [String(cellValue ?? ''), ''];
@@ -106,25 +112,40 @@
     return splitTwoStrings(cellValue, columnDefinition.splitString);
   };
 
-  const getAlignClassName = (align: TableGridColumn<TRecord>['align']) => {
+  const getAlignClassName = (align: TableGridCellAlign | undefined) => {
     if (align === 'center') return 'text-center';
     if (align === 'right') return 'text-right';
     return 'text-left';
   };
 
+  // Reuse the same shared card renderer as VTable/CardsList while keeping grid-specific align classes.
+  const mobileCardCells = $derived.by((): IMobileCardsListCell<TRecord, ITableColumn<TRecord>>[] => {
+    return mobileColumns.map((columnDefinition) => ({
+      ...columnDefinition,
+      source: columnDefinition,
+      itemCss: columnDefinition.mobile?.css || 'col-span-full',
+      labelTop: columnDefinition.mobile?.labelTop,
+      labelLeft: columnDefinition.mobile?.labelLeft,
+      icon: columnDefinition.mobile?.icon,
+      iconCss: columnDefinition.mobile?.iconCss,
+      elementLeft: columnDefinition.mobile?.elementLeft,
+      elementRight: columnDefinition.mobile?.elementRight,
+      mobileRender: columnDefinition.mobile?.render,
+      if: columnDefinition.mobile?.if,
+      contentCss: getAlignClassName(columnDefinition.align),
+      useRenderer: Boolean(cellRenderer && columnDefinition.useCellRenderer),
+    }));
+  });
+  const isMobileView = $derived(windowWidth < mobileBreakpointPx && mobileCardCells.length > 0);
+
   const isHtmlContent = (contentValue: unknown): contentValue is string => {
     return typeof contentValue === 'string';
   };
 
-  const shouldRenderMobileColumn = (
-    rowRecord: TRecord,
-    columnDefinition: TableGridColumn<TRecord>,
-    rowIndex: number,
-  ): boolean => {
-    const mobileConfiguration = columnDefinition.mobile;
-    if (!mobileConfiguration) return false;
-    if (!mobileConfiguration.if) return true;
-    return mobileConfiguration.if(rowRecord, rowIndex);
+  const getHeaderContent = (columnDefinition: ITableColumn<TRecord>): string => {
+    return typeof columnDefinition.header === 'function'
+      ? columnDefinition.header()
+      : columnDefinition.header;
   };
 
   const isSelectedRow = (rowRecord: TRecord, rowIndex: number): boolean => {
@@ -154,6 +175,37 @@
     }
 
     return false;
+  };
+
+  const isSelectedRowByValue = (
+    rowRecord: TRecord,
+    selectedValue: TRecord | string | number,
+  ): boolean => {
+    // Reuse the same selection rules from desktop without mutating parent-bound state.
+    if (selectedRecord && rowRecord === selectedRecord) {
+      return true;
+    }
+
+    const resolvedIndex = data.indexOf(rowRecord);
+    const rowIndex = resolvedIndex >= 0 ? resolvedIndex : -1;
+
+    if (typeof selectedValue === 'string' || typeof selectedValue === 'number') {
+      if (!getRowId) {
+        return false;
+      }
+      return getRowId(rowRecord, rowIndex) === selectedValue;
+    }
+
+    if (selectedValue === rowRecord) {
+      return true;
+    }
+
+    if (!getRowId) {
+      return false;
+    }
+
+    const currentRowId = getRowId(rowRecord, rowIndex);
+    return getRowId(selectedValue, -1) === currentRowId;
   };
 
   const handleRowClick = (rowRecord: TRecord, rowIndex: number) => {
@@ -232,150 +284,38 @@
     <div class="table-grid-mobile-shell"
       class:table-grid-mobile-shell-inner-padding={useInnerMobilePadding}
     >
-      {#if data.length === 0}
-        <div class="table-grid-empty">{emptyMessage}</div>
-      {:else}
-        <SvelteVirtualList items={data}
-          bufferSize={bufferSize}
-          defaultEstimatedItemHeight={estimatedMobileCardHeight}
-          debug={debug}
-          debugFunction={debugVirtualListInfo}
-        >
-          {#snippet renderItem(rowRecord, rowIndex)}
-            {@const selected = isSelectedRow(rowRecord, rowIndex)}
-            <div class="table-grid-mobile-card mb-6 {mobileCardCss || ''}"
-                class:table-grid-mobile-card-selected={selected}
-                role="button"
-                tabindex="0"
-                onclick={() => handleRowClick(rowRecord, rowIndex)}
-                onkeydown={(eventInfo) => {
-                  if (eventInfo.key === 'Enter' || eventInfo.key === ' ') {
-                    handleRowClick(rowRecord, rowIndex);
-                  }
-                }}
-              >
-                <div class="table-grid-mobile-card-grid">
-                  {#each mobileColumns as columnDefinition (columnDefinition.id)}
-                    {@const mobileConfiguration = columnDefinition.mobile}
-                    {@const defaultCellValue = getCellValue(rowRecord, columnDefinition, rowIndex)}
-                    {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, columnDefinition)}
-                    {#if mobileConfiguration && shouldRenderMobileColumn(rowRecord, columnDefinition, rowIndex)}
-                      {#if mobileConfiguration.labelTop}
-                      <div class="table-grid-mobile-item table-grid-mobile-item-vertical {mobileConfiguration.css || 'col-span-full'}">
-                        <div class="table-grid-mobile-label-top">{mobileConfiguration.labelTop}</div>
-                        <div class="table-grid-mobile-content-wrapper">
-                          {#if mobileConfiguration.icon}
-                            <i class="icon-{mobileConfiguration.icon} {mobileConfiguration.iconCss || ''}"></i>
-                          {/if}
-                          {#if mobileConfiguration.labelLeft}
-                            <span class="table-grid-mobile-label-left">{mobileConfiguration.labelLeft}</span>
-                          {/if}
-                          {#if mobileConfiguration.elementLeft}
-                            <div class="table-grid-mobile-left">
-                              {#if isHtmlContent(mobileConfiguration.elementLeft)}
-                                {@html mobileConfiguration.elementLeft}
-                              {:else}
-                                <Renderer elements={mobileConfiguration.elementLeft}/>
-                              {/if}
-                            </div>
-                          {/if}
-                          <div class="table-grid-mobile-content {getAlignClassName(columnDefinition.align)} {columnDefinition.cellCss || ''}">
-                            {#if mobileConfiguration.render}
-                              {@const renderedContent = mobileConfiguration.render(rowRecord, rowIndex)}
-                              {#if isHtmlContent(renderedContent)}
-                                {@html renderedContent}
-                              {:else}
-                                <Renderer elements={renderedContent}/>
-                              {/if}
-                            {:else if cellRenderer && columnDefinition.useCellRenderer}
-                              {@render cellRenderer(rowRecord, columnDefinition, rowIndex)}
-                            {:else if splitCellSecondLine}
-                              <div class="flex flex-col leading-[1.1]">
-                                <div>{splitCellFirstLine}</div>
-                                <div>{splitCellSecondLine}</div>
-                              </div>
-                            {:else}
-                              {defaultCellValue}
-                            {/if}
-                          </div>
-                          {#if mobileConfiguration.elementRight}
-                            <div class="table-grid-mobile-right">
-                              {#if isHtmlContent(mobileConfiguration.elementRight)}
-                                {@html mobileConfiguration.elementRight}
-                              {:else}
-                                <Renderer elements={mobileConfiguration.elementRight}/>
-                              {/if}
-                            </div>
-                          {/if}
-                        </div>
-                      </div>
-                    {:else}
-                      <div class="table-grid-mobile-item {mobileConfiguration.css || 'col-span-full'}">
-                        {#if mobileConfiguration.icon}
-                          <i class="icon-{mobileConfiguration.icon} {mobileConfiguration.iconCss || ''}"></i>
-                        {/if}
-                        {#if mobileConfiguration.labelLeft}
-                          <span class="table-grid-mobile-label-left">{mobileConfiguration.labelLeft}</span>
-                        {/if}
-                        {#if mobileConfiguration.elementLeft}
-                          <div class="table-grid-mobile-left">
-                            {#if isHtmlContent(mobileConfiguration.elementLeft)}
-                              {@html mobileConfiguration.elementLeft}
-                            {:else}
-                              <Renderer elements={mobileConfiguration.elementLeft}/>
-                            {/if}
-                          </div>
-                        {/if}
-                        <div class="table-grid-mobile-content {getAlignClassName(columnDefinition.align)} {columnDefinition.cellCss || ''}">
-                          {#if mobileConfiguration.render}
-                            {@const renderedContent = mobileConfiguration.render(rowRecord, rowIndex)}
-                            {#if isHtmlContent(renderedContent)}
-                              {@html renderedContent}
-                            {:else}
-                              <Renderer elements={renderedContent}/>
-                            {/if}
-                          {:else if cellRenderer && columnDefinition.useCellRenderer}
-                            {@render cellRenderer(rowRecord, columnDefinition, rowIndex)}
-                          {:else if splitCellSecondLine}
-                            <div class="flex flex-col leading-[1.1]">
-                              <div>{splitCellFirstLine}</div>
-                              <div>{splitCellSecondLine}</div>
-                            </div>
-                          {:else}
-                            {defaultCellValue}
-                          {/if}
-                        </div>
-                        {#if mobileConfiguration.elementRight}
-                          <div class="table-grid-mobile-right">
-                            {#if isHtmlContent(mobileConfiguration.elementRight)}
-                              {@html mobileConfiguration.elementRight}
-                            {:else}
-                              <Renderer elements={mobileConfiguration.elementRight}/>
-                            {/if}
-                          </div>
-                        {/if}
-                      </div>
-                    {/if}
-                    {/if}
-                  {/each}
-                </div>
-            </div>
-          {/snippet}
-        </SvelteVirtualList>
-      {/if}
+      <MobileCardsVirtualList
+        data={data}
+        cells={mobileCardCells}
+        variant="compact"
+        cardCss={`mb-6 ${mobileCardCss}`.trim()}
+        showSelectedCard={true}
+        estimateSize={estimatedMobileCardHeight}
+        overscan={bufferSize}
+        emptyMessage={emptyMessage}
+        onRowClick={onRowClick ? handleRowClick : undefined}
+        selected={selectedRecord || selectedRowId}
+        isSelected={isSelectedRowByValue}
+        getRecordIndex={(rowRecord, fallbackIndex) => {
+          const resolvedIndex = data.indexOf(rowRecord);
+          return resolvedIndex >= 0 ? resolvedIndex : fallbackIndex;
+        }}
+        debugName="TableGrid"
+        gridCellRenderer={cellRenderer}
+      />
     </div>
   {:else if !useVirtualScroll}
     <div class="table-grid-plain-scroll">
       <div class="table-grid-header table-grid-header-sticky {headerCss}">
         <div class="table-grid-header-row" role="row">
-          {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id)}
+          {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id || columnIndex)}
             <div class="table-grid-header-cell {getAlignClassName(columnDefinition.align)} {columnDefinition.headerCss || ''}"
               role="columnheader"
             >
               {#if headerRenderer}
                 {@render headerRenderer(columnDefinition, columnIndex)}
               {:else}
-                {columnDefinition.header}
+                {getHeaderContent(columnDefinition)}
               {/if}
             </div>
           {/each}
@@ -401,15 +341,22 @@
                 }
               }}
             >
-              {#each visibleColumns as columnDefinition (columnDefinition.id)}
+              {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id || columnIndex)}
                 {@const defaultCellValue = getCellValue(rowRecord, columnDefinition, rowIndex)}
                 {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, columnDefinition)}
-                <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(columnDefinition.align)} {columnDefinition.cellCss || ''}"
+                <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(columnDefinition.align)} {cellCss} {columnDefinition.cellCss || ''}"
                   role="cell"
                   title={`${defaultCellValue}`}
                 >
                   {#if cellRenderer && columnDefinition.useCellRenderer}
                     {@render cellRenderer(rowRecord, columnDefinition, rowIndex)}
+                  {:else if columnDefinition.render}
+                    {@const renderedContent = columnDefinition.render(rowRecord, rowIndex)}
+                    {#if isHtmlContent(renderedContent)}
+                      {@html renderedContent}
+                    {:else}
+                      <Renderer elements={renderedContent}/>
+                    {/if}
                   {:else if splitCellSecondLine}
                     <div class="flex flex-col leading-[1.1]">
                       <div>{splitCellFirstLine}</div>
@@ -429,14 +376,14 @@
     <div class="table-grid-scroll-host use-virtual-scroll">
       <div class="table-grid-header {headerCss}">
         <div class="table-grid-header-row" role="row">
-          {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id)}
+          {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id || columnIndex)}
             <div class="table-grid-header-cell {getAlignClassName(columnDefinition.align)} {columnDefinition.headerCss || ''}"
               role="columnheader"
             >
               {#if headerRenderer}
                 {@render headerRenderer(columnDefinition, columnIndex)}
               {:else}
-                {columnDefinition.header}
+                {getHeaderContent(columnDefinition)}
               {/if}
             </div>
           {/each}
@@ -470,15 +417,22 @@
                   }
                 }}
               >
-                {#each visibleColumns as columnDefinition (columnDefinition.id)}
+                {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id || columnIndex)}
                   {@const defaultCellValue = getCellValue(rowRecord, columnDefinition, rowIndex)}
                   {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, columnDefinition)}
-                  <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(columnDefinition.align)} {columnDefinition.cellCss || ''}"
+                  <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(columnDefinition.align)} {cellCss} {columnDefinition.cellCss || ''}"
                     role="cell"
                     title={`${defaultCellValue}`}
                   >
                     {#if cellRenderer && columnDefinition.useCellRenderer}
                       {@render cellRenderer(rowRecord, columnDefinition, rowIndex)}
+                    {:else if columnDefinition.render}
+                      {@const renderedContent = columnDefinition.render(rowRecord, rowIndex)}
+                      {#if isHtmlContent(renderedContent)}
+                        {@html renderedContent}
+                      {:else}
+                        <Renderer elements={renderedContent}/>
+                      {/if}
                     {:else if splitCellSecondLine}
                       <div class="flex flex-col leading-[1.1]">
                         <div>{splitCellFirstLine}</div>

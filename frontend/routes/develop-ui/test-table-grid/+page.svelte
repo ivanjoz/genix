@@ -1,7 +1,7 @@
 <script lang="ts">
   import Page from '$domain/Page.svelte';
   import TableGrid from '$components/vTable/TableGrid.svelte';
-  import type { TableGridColumn } from '$components/vTable/tableGridTypes';
+  import type { ITableColumn } from '$components/vTable/types';
 
   interface DemoTableGridRow {
     id: string;
@@ -36,7 +36,7 @@
   let selectedRecord = $state<DemoTableGridRow | undefined>(undefined);
   let selectedRowId = $state<string | number | undefined>(undefined);
 
-  const columnDefinitions: TableGridColumn<DemoTableGridRow>[] = [
+  const columnDefinitions: ITableColumn<DemoTableGridRow>[] = [
     {
       id: 'id',
       header: 'ID',

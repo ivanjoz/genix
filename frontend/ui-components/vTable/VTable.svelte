@@ -1,13 +1,13 @@
 <script lang="ts" generics="T">
   import { untrack } from 'svelte';
   import { createVirtualizer } from './index.svelte';
-  import type { ITableColumn, CellRendererSnippet } from "./types";
+  import type { ITableColumn, CellRendererSnippet, IMobileCardsListCell } from "./types";
   import type { VirtualItem } from './index.svelte';
-import CellEditable from '$components/vTable/CellEditable.svelte';
-import { highlString, wordInclude } from '$libs/helpers';
-import Renderer, { type ElementAST } from '$components/Renderer.svelte';
-import CellSelector from '$components/vTable/CellSelector.svelte';
-  import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
+  import CellEditable from '$components/vTable/CellEditable.svelte';
+  import CellSelector from '$components/vTable/CellSelector.svelte';
+  import { highlString, wordInclude } from '$libs/helpers';
+  import Renderer, { type ElementAST } from '$components/Renderer.svelte';
+  import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
 
   interface ICellContent {
     content: string;
@@ -25,6 +25,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     maxHeight?: string;
     css?: string;
     tableCss?: string;
+    cellCss?: string;
     estimateSize?: number;
     overscan?: number;
     onRowClick?: (row: T, index: number) => void;
@@ -45,6 +46,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     maxHeight = 'calc(100vh - 8rem)',
     css = '',
     tableCss = '',
+    cellCss = '',
     estimateSize = 34,
     overscan = 15,
     onRowClick,
@@ -118,11 +120,26 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
     };
   });
 
-  // Mobile columns sorted by order
-  const mobileColumns = $derived.by(() => {
+  // Flatten the mobile-only configuration so the shared renderer can treat table cards like any other card list.
+  const mobileColumns = $derived.by((): IMobileCardsListCell<T, ITableColumn<T>>[] => {
     return processedColumns.flatColumns
       .filter(col => col.mobile)
-      .sort((a, b) => (a.mobile?.order || 0) - (b.mobile?.order || 0));
+      .sort((a, b) => (a.mobile?.order || 0) - (b.mobile?.order || 0))
+      .map((column) => ({
+        ...column,
+        source: column,
+        itemCss: column.mobile?.css || 'col-span-full',
+        labelTop: column.mobile?.labelTop,
+        labelLeft: column.mobile?.labelLeft,
+        labelCss: 'color-label',
+        icon: column.mobile?.icon,
+        iconCss: column.mobile?.iconCss,
+        elementLeft: column.mobile?.elementLeft,
+        elementRight: column.mobile?.elementRight,
+        mobileRender: column.mobile?.render,
+        if: column.mobile?.if,
+        useRenderer: Boolean(cellRenderer && column.id),
+      }));
   });
 
   // Mobile view - only enable if columns have mobile config and screen is small
@@ -321,15 +338,6 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
       onRowClick(record, index);
     }
   }
-
-  // Keep interactive mobile fields keyed the same way as desktop selectors.
-  function buildSelectorId(column: ITableColumn<T>, rowIndex: number, cellIndex: number): string {
-    return `${String(column.id || column.field || cellIndex)}_${rowIndex}`;
-  }
-
-  function isInteractiveColumn(column: ITableColumn<T>): boolean {
-    return Boolean(column.onCellEdit || column.onCellSelect);
-  }
 </script>
 
 <div bind:this={containerRef}
@@ -339,249 +347,20 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
   {#if isMobileView}
     <!-- Mobile Card View -->
     <div class="mobile-card-container" style="height: {maxHeight};">
-      {#if filteredData.length === 0}
-        <div class="mobile-empty-message">
-          {emptyMessage}
-        </div>
-      {:else}
-        <SvelteVirtualList items={filteredData}>
-          {#snippet renderItem(record, index)}
-            {@const resolvedRecord = getResolvedRow(record, index)}
-            <div class="mobile-card mb-6 {mobileCardCss || ''}"
-              role="button"
-              tabindex="0"
-              onclick={() => resolvedRecord && handleRowClick(resolvedRecord, index)}
-              onkeydown={(ev) => {
-                if (ev.target !== ev.currentTarget) {
-                  return;
-                }
-                if (resolvedRecord && (ev.key === 'Enter' || ev.key === ' ')) {
-                  handleRowClick(resolvedRecord, index);
-                }
-              }}>
-              {#if !resolvedRecord}
-                <div class="mobile-loading-message" style="height: {estimateSize}px;">
-                  Loading...
-                </div>
-              {:else}
-              <div class="mobile-card-grid">
-                {#each mobileColumns as column, columnIndex}
-                  {@const mobile = column.mobile}
-                  {@const shouldRender = !mobile?.if || mobile.if(resolvedRecord, index)}
-                  {#if shouldRender}
-                    {@const cellData = getCellContent(column, resolvedRecord, index)}
-                    {#if mobile?.labelTop}
-                    <div class="mobile-card-item mobile-card-item-vertical {mobile?.css || 'col-span-full'}">
-                      <div class="mobile-card-label-top color-label">{mobile.labelTop}</div>
-                      <div class="mobile-card-content-wrapper">
-                        {#if mobile?.icon}
-                          <i class="icon-{mobile.icon} {mobile?.iconCss || ''}"></i>
-                        {/if}
-                        {#if mobile?.labelLeft}
-                          <span class="mobile-card-label-left color-label">{mobile.labelLeft}</span>
-                        {/if}
-                        {#if mobile?.elementLeft}
-                          <div class="mobile-card-left">
-                            {#if typeof mobile.elementLeft === 'string'}
-                              {@html mobile.elementLeft}
-                            {:else}
-                              <Renderer elements={mobile.elementLeft}/>
-                            {/if}
-                          </div>
-                        {/if}
-                        {#if cellData.prefixAST}
-                          <span class="vtable-cell-prefix">
-                            <Renderer elements={cellData.prefixAST}/>
-                          </span>
-                        {:else if cellData.prefixHTML}
-                          <span class="vtable-cell-prefix">
-                            {@html cellData.prefixHTML}
-                          </span>
-                        {/if}
-                        <div class="mobile-card-content {cellData.css}" class:mobile-card-content-interactive={isInteractiveColumn(column)}>
-                          {#if column.onCellEdit}
-                            <div class="mobile-cell-editable-border"><div></div></div>
-                            <CellEditable contentClass={column.css}
-                              inputClass={column.inputCss}
-                              getValue={() => {
-                                // Read the raw row value so mobile edit mode does not reuse formatted render output.
-                                return column.getValue
-                                  ? column.getValue(resolvedRecord, index)
-                                  : cellData.content
-                              }}
-                              render={
-                                (column.render
-                                ? () => column.render?.(resolvedRecord, index)
-                                : undefined) as (value: number | string) => string | ElementAST | ElementAST[]
-                              }
-                              onChange={value => {
-                                console.debug('[VTable] mobile onCellEdit', {
-                                  rowIndex: index,
-                                  columnId: column.id,
-                                  field: column.field,
-                                  value
-                                });
-                                column.onCellEdit?.(resolvedRecord, value)
-                              }}
-                            />
-                          {:else if column.onCellSelect}
-                            <div class="mobile-cell-editable-border"><div></div></div>
-                            <CellSelector
-                              id={buildSelectorId(column, index, columnIndex)}
-                              saveOn={resolvedRecord}
-                              save={column.field as keyof T}
-                              options={column.cellOptions as any[]}
-                              keyId={(column.cellOptionsKeyId || 'ID') as never}
-                              keyName={(column.cellOptionsKeyName || 'Name') as never}
-                              contentClass={column.css}
-                              onChange={value => {
-                                console.debug('[VTable] mobile onCellSelect', {
-                                  rowIndex: index,
-                                  columnId: column.id,
-                                  field: column.field,
-                                  value,
-                                  optionsLength: column.cellOptions?.length || 0
-                                });
-                                column.onCellSelect?.(resolvedRecord, value)
-                              }}
-                            />
-                          {:else if mobile?.render}
-                            {@const renderedContent = mobile.render(resolvedRecord, index)}
-                            {#if typeof renderedContent === 'string'}
-                              {@html renderedContent}
-                            {:else}
-                              <Renderer elements={renderedContent}/>
-                            {/if}
-                          {:else if cellData.useSnippet && cellRenderer}
-                            {@render cellRenderer(resolvedRecord, column, cellData.content, index, true)}
-                          {:else if cellData.contentAST}
-                            <Renderer elements={cellData.contentAST}/>
-                          {:else if cellData.contentHTML}
-                            {@html cellData.contentHTML}
-                          {:else}
-                            {cellData.content}
-                          {/if}
-                        </div>
-                        {#if mobile?.elementRight}
-                          <div class="mobile-card-right">
-                            {#if typeof mobile.elementRight === 'string'}
-                              {@html mobile.elementRight}
-                            {:else}
-                              <Renderer elements={mobile.elementRight}/>
-                            {/if}
-                          </div>
-                        {/if}
-                      </div>
-                    </div>
-                  {:else}
-                    <div class="mobile-card-item {mobile?.css || 'col-span-full'}">
-                      {#if mobile?.icon}
-                        <i class="icon-{mobile.icon} {mobile?.iconCss || ''}"></i>
-                      {/if}
-                      {#if mobile?.labelLeft}
-                        <span class="mobile-card-label-left">{mobile.labelLeft}</span>
-                      {/if}
-                      {#if mobile?.elementLeft}
-                        <div class="mobile-card-left">
-                          {#if typeof mobile.elementLeft === 'string'}
-                            {@html mobile.elementLeft}
-                          {:else}
-                            <Renderer elements={mobile.elementLeft}/>
-                          {/if}
-                        </div>
-                      {/if}
-                      {#if cellData.prefixAST}
-                        <span class="vtable-cell-prefix">
-                          <Renderer elements={cellData.prefixAST}/>
-                        </span>
-                      {:else if cellData.prefixHTML}
-                        <span class="vtable-cell-prefix">
-                          {@html cellData.prefixHTML}
-                        </span>
-                      {/if}
-                      <div class="mobile-card-content {cellData.css}" class:mobile-card-content-interactive={isInteractiveColumn(column)}>
-                        {#if column.onCellEdit}
-                          <div class="mobile-cell-editable-border"><div></div></div>
-                          <CellEditable contentClass={column.css}
-                            inputClass={column.inputCss}
-                            getValue={() => {
-                              // Read the raw row value so mobile edit mode does not reuse formatted render output.
-                              return column.getValue
-                                ? column.getValue(resolvedRecord, index)
-                                : cellData.content
-                            }}
-                            render={
-                              (column.render
-                              ? () => column.render?.(resolvedRecord, index)
-                              : undefined) as (value: number | string) => string | ElementAST | ElementAST[]
-                            }
-                            onChange={value => {
-                              console.debug('[VTable] mobile onCellEdit', {
-                                rowIndex: index,
-                                columnId: column.id,
-                                field: column.field,
-                                value
-                              });
-                              column.onCellEdit?.(resolvedRecord, value)
-                            }}
-                          />
-                        {:else if column.onCellSelect}
-                          <div class="mobile-cell-editable-border"><div></div></div>
-                          <CellSelector
-                            id={buildSelectorId(column, index, columnIndex)}
-                            saveOn={resolvedRecord}
-                            save={column.field as keyof T}
-                            options={column.cellOptions as any[]}
-                            keyId={(column.cellOptionsKeyId || 'ID') as never}
-                            keyName={(column.cellOptionsKeyName || 'Name') as never}
-                            contentClass={column.css}
-                            onChange={value => {
-                              console.debug('[VTable] mobile onCellSelect', {
-                                rowIndex: index,
-                                columnId: column.id,
-                                field: column.field,
-                                value,
-                                optionsLength: column.cellOptions?.length || 0
-                              });
-                              column.onCellSelect?.(resolvedRecord, value)
-                            }}
-                          />
-                        {:else if mobile?.render}
-                          {@const renderedContent = mobile.render(resolvedRecord, index)}
-                          {#if typeof renderedContent === 'string'}
-                            {@html renderedContent}
-                          {:else}
-                            <Renderer elements={renderedContent}/>
-                          {/if}
-                        {:else if cellData.useSnippet && cellRenderer}
-                          {@render cellRenderer(resolvedRecord, column, cellData.content, index, true)}
-                        {:else if cellData.contentAST}
-                          <Renderer elements={cellData.contentAST}/>
-                        {:else if cellData.contentHTML}
-                          {@html cellData.contentHTML}
-                        {:else}
-                          {cellData.content}
-                        {/if}
-                      </div>
-                      {#if mobile?.elementRight}
-                        <div class="mobile-card-right">
-                          {#if typeof mobile.elementRight === 'string'}
-                            {@html mobile.elementRight}
-                          {:else}
-                            <Renderer elements={mobile.elementRight}/>
-                          {/if}
-                        </div>
-                      {/if}
-                    </div>
-                  {/if}
-                  {/if}
-                {/each}
-              </div>
-              {/if}
-            </div>
-          {/snippet}
-        </SvelteVirtualList>
-      {/if}
+      <MobileCardsVirtualList
+        data={filteredData}
+        cells={mobileColumns}
+        variant="compact"
+        cardCss={`mb-6 ${mobileCardCss}`.trim()}
+        estimateSize={estimateSize}
+        overscan={overscan}
+        emptyMessage={emptyMessage}
+        loadingMessage="Loading..."
+        onRowClick={onRowClick ? handleRowClick : undefined}
+        resolveRecord={getRowObject ? getResolvedRow : undefined}
+        debugName="VTable"
+        tableCellRenderer={cellRenderer}
+      />
     </div>
   {:else}
     <!-- Desktop Table View -->
@@ -664,7 +443,7 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
             {:else}
               {#each processedColumns.flatColumns as column, j (`${j}_${filterText||""}`)}
                 {@const cellData = getCellContent(column, resolvedRecord, row.index)}
-                <td class="{cellData.css}"
+                <td class="{cellCss} {cellData.css}"
                   style={column.cellStyle ? Object.entries(column.cellStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}
                   onclick={ev => {
                     if(column.onCellEdit){ ev.stopPropagation() }
@@ -688,8 +467,8 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                         ? () => column.render?.(resolvedRecord, row.index)
                         : undefined) as (value: number | string) => ElementAST[]
                       }
-                      onChange={v => {
-                        column.onCellEdit?.(resolvedRecord,v)
+                      onChange={(value: string | number) => {
+                        column.onCellEdit?.(resolvedRecord, value)
                       }}
                     />
                   {:else if column.onCellSelect}
@@ -710,8 +489,8 @@ import CellSelector from '$components/vTable/CellSelector.svelte';
                       keyId={(column.cellOptionsKeyId || 'ID') as never}
                       keyName={(column.cellOptionsKeyName || 'Name') as never}
                       contentClass={column.css}
-                      onChange={v => {
-                        column.onCellSelect?.(resolvedRecord,v)
+                      onChange={(value: string | number) => {
+                        column.onCellSelect?.(resolvedRecord, value)
                       }}
                     />
                   {:else if cellData.useSnippet && cellRenderer}

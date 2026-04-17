@@ -13,7 +13,7 @@ import { openModals } from '$core/store.svelte';
 import { listRecentRequestLogRows, makeDeltaCacheDatabaseName } from '$libs/cache/delta-cache.idb';
 import type { IRequestLogRow } from '$libs/cache/delta-cache.types';
 import { formatN, formatTime } from '$libs/helpers';
-import type { TableGridColumn } from '$components/vTable/tableGridTypes';
+import type { ITableColumn } from '$components/vTable/types';
 import pkg from 'notiflix'
 
 const { Notify } = pkg;
@@ -52,7 +52,7 @@ const formatRequestParamsLabel = (requestLogRow: IRequestLogRow) => {
   return visibleParams.join(', ')
 }
 
-const requestLogColumns: TableGridColumn<IRequestLogRow>[] = [
+const requestLogColumns: ITableColumn<IRequestLogRow>[] = [
   {
     id: 'time',
     header: 'Hora',

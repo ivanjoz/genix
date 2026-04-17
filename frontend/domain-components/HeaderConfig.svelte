@@ -8,7 +8,7 @@ import { accessHelper } from '$core/security';
 import { Core } from '$core/store.svelte';
 import { Env } from '$core/env';
 import type { ICacheDebugRow } from '$libs/cache/cache-debug.types';
-import type { TableGridColumn } from '$components/vTable/tableGridTypes';
+import type { ITableColumn } from '$components/vTable/types';
 import {
   listEnvironmentCacheRouteStats,
   makeDeltaCacheDatabaseName,
@@ -100,7 +100,7 @@ import { formatN } from '$libs/helpers';
       .sort((leftRow, rightRow) => leftRow.baseRoute.localeCompare(rightRow.baseRoute))
   })
 
-  const cacheGridColumns: TableGridColumn<IGroupedCacheRow>[] = [
+  const cacheGridColumns: ITableColumn<IGroupedCacheRow>[] = [
     {
       id: 'api',
       header: 'API',

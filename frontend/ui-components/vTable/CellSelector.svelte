@@ -23,7 +23,7 @@ import Popover2 from '$components/popover2/Popover2.svelte';
 	}
 
   let {
-		id, options, saveOn, save, keyId, keyName, contentClass, required, render
+		id, options, saveOn, save, keyId, keyName, contentClass, required, render, onChange
 	}: ICellSelector<T,E> = $props();
 
   let show = $derived(Core.popoverShowID === id);
@@ -69,6 +69,7 @@ import Popover2 from '$components/popover2/Popover2.svelte';
         delete saveOn[save]
       }
     }
+    onChange?.((selected?.[keyId] as string | number) || '')
   }
 
   const onSelect = (e: E) => {
@@ -77,6 +78,7 @@ import Popover2 from '$components/popover2/Popover2.svelte';
     if(saveOn && save){
       saveOn[save] = e[keyId] as unknown as NonNullable<T>[keyof T]
     }
+    onChange?.(e[keyId] as string | number)
     Core.popoverShowID = 0
   }
 

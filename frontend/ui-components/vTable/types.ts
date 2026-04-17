@@ -47,10 +47,55 @@ export interface ICardButtonDeleteHandler<T> {
   (record: T, idx: number): void
 }
 
+export type TableGridCellAlign = 'left' | 'center' | 'right';
+
+export type MobileCardsListVariant = 'compact' | 'cards';
+
+export interface IMobileCardsListCell<T, TSource = unknown> {
+  id?: number | string
+  source?: TSource
+  hidden?: boolean
+  field?: string
+  type?: string
+  css?: string
+  inputCss?: string
+  contentCss?: string
+  label?: string | (() => string)
+  labelCss?: string
+  itemCss?: string
+  cellCss?: string
+  setCellCss?: (record: T) => string | undefined
+  cellOptions?: any[]
+  cellOptionsKeyId?: string
+  cellOptionsKeyName?: string
+  onCellEdit?: (record: T, value: string | number) => void
+  onCellSelect?: (record: T, value: string | number) => void
+  getValue?: (record: T, idx: number) => string | number
+  renderPrefix?: (record: T, idx: number) => string | ElementAST | ElementAST[] | false
+  render?: (record: T, idx: number) => string | ElementAST | ElementAST[]
+  mobileRender?: (record: T, idx: number) => string | number | ElementAST | ElementAST[]
+  splitString?: number
+  if?: (record: T, idx: number) => boolean
+  labelLeft?: string
+  labelTop?: string
+  icon?: string
+  iconCss?: string
+  elementLeft?: string | ElementAST | ElementAST[]
+  elementRight?: string | ElementAST | ElementAST[]
+  useRenderer?: boolean
+}
+
 export interface ITableColumn<T> {
   id?: number | string
   header: string | (() => string)
+  // Grid mode uses an explicit width track; table mode can ignore it.
+  width?: string
   hidden?: boolean
+  // Grid mode can render snippet-only cells without affecting VTable defaults.
+  useCellRenderer?: boolean
+  // Split compact text cells into two lines when the grid layout gets tight.
+  splitString?: number
+  align?: TableGridCellAlign
   headerCss?: string
   // Class hook for the inner header wrapper (<th><div>...</div></th>)
   headerInnerCss?: string
@@ -116,6 +161,24 @@ export type CardRendererSnippet<T> = Snippet<[
   ICardCell<T>,                   // cell
   any,                            // defaultContent
 	number,                         // rowIndex
+]>;
+
+export type TableGridCellRendererSnippet<T> = Snippet<[
+  record: T,
+  columnDefinition: ITableColumn<T>,
+  rowIndex: number,
+]>;
+
+export type TableGridHeaderRendererSnippet<T> = Snippet<[
+  columnDefinition: ITableColumn<T>,
+  columnIndex: number,
+]>;
+
+export type MobileCardsListRendererSnippet<T, TCell> = Snippet<[
+  record: T,
+  cell: TCell,
+  defaultContent: any,
+  rowIndex: number,
 ]>;
 
 export interface VirtualItem {

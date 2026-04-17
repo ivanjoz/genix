@@ -5,7 +5,6 @@
   import LoadingBar from '$components/micro/LoadingBar.svelte';
   import RecordByIDText from '$components/micro/RecordByIDText.svelte';
   import VTable from '$components/vTable/VTable.svelte';
-  import type { TableGridColumn } from '$components/vTable/tableGridTypes';
   import type { ITableColumn } from '$components/vTable/types';
   import { Core } from '$core/store.svelte';
   import Page from '$domain/Page.svelte';
@@ -51,7 +50,7 @@
     DisplayName: string;
   }
 
-  type ISaleOrderDetailColumn = ITableColumn<ISaleOrderDetailLine> & TableGridColumn<ISaleOrderDetailLine>;
+  type ISaleOrderDetailColumn = ITableColumn<ISaleOrderDetailLine>;
 
   let selectedGroup = $state(SaleOrderGroup.PENDIENTE_DE_PAGO);
   let saleOrderRecords = $state<ISaleOrder[]>([]);
