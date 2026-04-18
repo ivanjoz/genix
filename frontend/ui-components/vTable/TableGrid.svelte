@@ -353,26 +353,27 @@
                 }
               }}
             >
-              {#each visibleColumns as columnDefinition, columnIndex (`${columnDefinition.id || columnIndex}_${rowVersions.get(rowIndex) || 0}`)}
-                {@const defaultCellValue = getCellValue(rowRecord, columnDefinition, rowIndex)}
-                {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, columnDefinition)}
-                <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(columnDefinition.align)} {cellCss} {columnDefinition.cellCss || ''} {columnDefinition.setCellCss?.(rowRecord) || ''}"
+              {#each visibleColumns as colDef, columnIndex (`${colDef.id || columnIndex}_${rowVersions.get(rowIndex) || 0}`)}
+                {@const defaultCellValue = getCellValue(rowRecord, colDef, rowIndex)}
+                {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, colDef)}
+                
+                <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(colDef.align)} {cellCss} {colDef.cellCss||""} {colDef.setCellCss?.(rowRecord) || ''}"
                   role="cell"
                   title={`${defaultCellValue}`}
                 >
-                  {#if columnDefinition.onCellEdit && !columnDefinition.hideCellEdit?.(rowRecord, rowIndex)}
-                    <CellEditable contentClass={columnDefinition.css}
-                      inputClass={columnDefinition.inputCss}
-                      type={columnDefinition.cellInputType || cellInputType}
+                  {#if colDef.onCellEdit && !colDef.hideCellEdit?.(rowRecord, rowIndex)}
+                    <CellEditable contentClass={"px-6 " + (colDef.css||"")}
+                      inputClass={"px-6 " + (colDef.inputCss)}
+                      type={colDef.cellInputType || cellInputType}
                       getValue={() => String(defaultCellValue)}
-                      render={columnDefinition.render ? () => columnDefinition.render?.(rowRecord, rowIndex) : undefined}
-                      onBeforeCellChange={columnDefinition.onBeforeCellChange ? (value) => columnDefinition.onBeforeCellChange!(rowRecord, value) : undefined}
-                      onChange={(value) => columnDefinition.onCellEdit?.(rowRecord, value, () => rerenderRow(rowIndex))}
+                      render={colDef.render ? () => colDef.render?.(rowRecord, rowIndex) : undefined}
+                      onBeforeCellChange={colDef.onBeforeCellChange ? (value) => colDef.onBeforeCellChange!(rowRecord, value) : undefined}
+                      onChange={(value) => colDef.onCellEdit?.(rowRecord, value, () => rerenderRow(rowIndex))}
                     />
-                  {:else if cellRenderer && columnDefinition.useCellRenderer}
-                    {@render cellRenderer(rowRecord, columnDefinition, rowIndex)}
-                  {:else if columnDefinition.render}
-                    {@const renderedContent = columnDefinition.render(rowRecord, rowIndex)}
+                  {:else if cellRenderer && colDef.useCellRenderer}
+                    {@render cellRenderer(rowRecord, colDef, rowIndex)}
+                  {:else if colDef.render}
+                    {@const renderedContent = colDef.render(rowRecord, rowIndex)}
                     {#if isHtmlContent(renderedContent)}
                       {@html renderedContent}
                     {:else}
@@ -438,26 +439,26 @@
                   }
                 }}
               >
-                {#each visibleColumns as columnDefinition, columnIndex (`${columnDefinition.id || columnIndex}_${rowVersions.get(rowIndex) || 0}`)}
-                  {@const defaultCellValue = getCellValue(rowRecord, columnDefinition, rowIndex)}
-                  {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, columnDefinition)}
-                  <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(columnDefinition.align)} {cellCss} {columnDefinition.cellCss || ''} {columnDefinition.setCellCss?.(rowRecord) || ''}"
+                {#each visibleColumns as colDef, columnIndex (`${colDef.id || columnIndex}_${rowVersions.get(rowIndex) || 0}`)}
+                  {@const defaultCellValue = getCellValue(rowRecord, colDef, rowIndex)}
+                  {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, colDef)}
+                  <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(colDef.align)} {cellCss} {colDef.cellCss || ''} {colDef.setCellCss?.(rowRecord) || ''}"
                     role="cell"
                     title={`${defaultCellValue}`}
                   >
-                    {#if columnDefinition.onCellEdit && !columnDefinition.hideCellEdit?.(rowRecord, rowIndex)}
-                      <CellEditable contentClass={columnDefinition.css}
-                        inputClass={columnDefinition.inputCss}
-                        type={columnDefinition.cellInputType || cellInputType}
+                    {#if colDef.onCellEdit && !colDef.hideCellEdit?.(rowRecord, rowIndex)}
+	                    <CellEditable contentClass={"px-6 " + (colDef.css||"")}
+	                      inputClass={"px-6 " + (colDef.inputCss)}
+                        type={colDef.cellInputType || cellInputType}
                         getValue={() => String(defaultCellValue)}
-                        render={columnDefinition.render ? () => columnDefinition.render?.(rowRecord, rowIndex) : undefined}
-                        onBeforeCellChange={columnDefinition.onBeforeCellChange ? (value) => columnDefinition.onBeforeCellChange!(rowRecord, value) : undefined}
-                        onChange={(value) => columnDefinition.onCellEdit?.(rowRecord, value, () => rerenderRow(rowIndex))}
+                        render={colDef.render ? () => colDef.render?.(rowRecord, rowIndex) : undefined}
+                        onBeforeCellChange={colDef.onBeforeCellChange ? (value) => colDef.onBeforeCellChange!(rowRecord, value) : undefined}
+                        onChange={(value) => colDef.onCellEdit?.(rowRecord, value, () => rerenderRow(rowIndex))}
                       />
-                    {:else if cellRenderer && columnDefinition.useCellRenderer}
-                      {@render cellRenderer(rowRecord, columnDefinition, rowIndex)}
-                    {:else if columnDefinition.render}
-                      {@const renderedContent = columnDefinition.render(rowRecord, rowIndex)}
+                    {:else if cellRenderer && colDef.useCellRenderer}
+                      {@render cellRenderer(rowRecord, colDef, rowIndex)}
+                    {:else if colDef.render}
+                      {@const renderedContent = colDef.render(rowRecord, rowIndex)}
                       {#if isHtmlContent(renderedContent)}
                         {@html renderedContent}
                       {:else}

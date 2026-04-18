@@ -294,6 +294,11 @@
 
     const rec = { } as ICellContent
 
+    // getValue runs first so any side-effects (e.g. lazy compute) are visible to render
+    if (column.getValue) {
+      rec.content = column.getValue(record, index) as string
+    }
+
     if (column.renderPrefix) {
       const renderedPrefix = column.renderPrefix(record, index)
       if (typeof renderedPrefix === 'string') {
@@ -310,9 +315,6 @@
       } else if(renderedContent){
         rec.contentAST = renderedContent
       }
-    }
-    if (column.getValue) {
-      rec.content = column.getValue(record, index) as string
     }
 
     // Check if we should use snippet renderer (takes priority over function renderer)
@@ -453,6 +455,8 @@
             {:else}
               {#each processedColumns.flatColumns as column, j (`${j}_${filterText||""}`)}
                 {@const cellData = getCellContent(column, resolvedRecord, row.index)}
+                
+                
                 <td class="{cellCss} {cellData.css}"
                   style={column.cellStyle ? Object.entries(column.cellStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}
                   onclick={ev => {
@@ -468,9 +472,9 @@
                       {@html cellData.prefixHTML}
                     </span>
                   {/if}
-                  {#if column.onCellEdit}
-                    <CellEditable contentClass={column.css}
-                      inputClass={column.inputCss}
+                  {#if column.onCellEdit && !column.hideCellEdit?.(resolvedRecord, row.index)}
+                    <CellEditable contentClass={"px-6 "+(column.css||"")}
+                      inputClass={"px-6 "+(column.inputCss)}
                       type={column.cellInputType || cellInputType}
                       getValue={() => cellData.content}
                       render={

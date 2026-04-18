@@ -12,6 +12,7 @@ import { untrack } from 'svelte'
 import { ProductosService } from '../../negocio/productos/productos.svelte'
 import { AlmacenesService } from '../../negocio/sedes-almacenes/sedes-almacenes.svelte'
 import { getProductosStock, makeStockID, postProductosStock, type IProductoStock } from './stock-movement'
+    import type { ElementAST } from '$components/Renderer.svelte';
 
   type IProductoStockDisplay = {
   	base: IProductoStock
@@ -124,6 +125,10 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
           const backend = selectedSkus.filter(s => !s._isNew)
           selectedSkus = [...pending, freshPendingSku(), ...backend]
         }
+      },
+      render: e => {
+      	if(!e.SKU){ return { css: "text-xs c-red", text: "NUEVO SKU..." } }
+     		return e.SKU as string
       }
     },
     {
@@ -160,7 +165,7 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
             { text: sku.Quantity, css: 'text-red-500' }
           ]}
         }
-        return { text: sku.Quantity || '' }
+        return { css: "text-right", text: sku.Quantity || '' }
       }
     }
   ]
@@ -201,6 +206,16 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
       getValue: (e) => {
         const productRecord = productos.recordsMap.get(e.base.ProductID)?.Nombre
         return productRecord || `Producto-${e.base.ProductID}`
+      },
+      render: e => {
+        const productRecord = productos.recordsMap.get(e.base.ProductID)?.Nombre || `Producto-${e.base.ProductID}`
+      		return {
+       	css: "flex",
+        children: [
+      		{ tagName: "SPAN", text: productRecord  },
+         	e.isSkuGroup && {tagName: "SPAN",  text: "(SKU)", css: "ff-bold c-red ml-6"  },
+         ]
+        } as ElementAST
       }
     },
     { header: 'Presentación',
@@ -221,10 +236,11 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
       },
       mobile: { order: 3, css: "col-span-12" },
     },
-    { header: 'Stock Simple', css: 'justify-end', inputCss: 'text-right pr-6',
+    { header: 'Stock Simple', css: 'justify-end px-6', inputCss: 'text-right',
    		headerCss: 'w-150',
     	mobile: { order: 4, css: "col-span-12" },
-     	hideCellEdit: (e) => e.isSkuGroup,
+     	hideCellEdit: (e) => e.isSkuGroup, 
+      cellInputType: "number",
       getValue: (e) => { computeStockDisplay(e); return e.stockSimpleNew },
       onCellEdit: (e, value, rerender) => {
         if (e.isSkuGroup) { return }
@@ -235,7 +251,7 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
       render: (e) => {
         if (e.stockSimpleNew !== e.stockSimple) {
           return {
-            css: 'flex items-center',
+            css: 'flex items-center justify-end',
             children: [
               { text: String(e.stockSimple) },
               { text: '→', css: 'ml-2 mr-2' },
@@ -243,7 +259,7 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
             ]
           }
         }
-        return { text: e.stockSimpleNew || '' }
+        return { css: "text-right", text: e.stockSimpleNew || '' }
       }
     },
     { header: 'Stock Loteado',
@@ -260,7 +276,7 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
             ]
           }
         }
-        return { text: e.stockLoteadoNew || '' }
+        return { css: "text-right", text: e.stockLoteadoNew || '' }
       }
     },
     { header: 'Stock Total', css: 'justify-end text-right',
@@ -281,6 +297,20 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
   }
 
   const guardarRegistros = async () => {
+    // Flush pending new SKU/Lote records held in the side-layer maps into almacenStock
+    // so they participate in the save. Clear the maps to avoid double-counting in displayStock.
+    const pendingNewRecords: IProductoStock[] = []
+    for (const newRecords of groupToNewStockRecords.values()) { pendingNewRecords.push(...newRecords) }
+    for (const newRecords of groupToNewLoteRecords.values()) { pendingNewRecords.push(...newRecords) }
+    groupToNewStockRecords.clear()
+    groupToNewLoteRecords.clear()
+
+    for (const r of pendingNewRecords) {
+      if (!r.ID) { r.ID = makeStockID(r) }
+      r._hasUpdated = true
+      almacenStock.push(r)
+    }
+
     const recordsForUpdate = almacenStock.filter((productStockRecord) => productStockRecord._hasUpdated)
     if (recordsForUpdate.length === 0) {
       Notify.failure('No hay registros a actualizar.')
@@ -304,7 +334,9 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
       for (const productStockRecord of almacenStock) {
         productStockRecord._cantidadPrev = 0
         productStockRecord._hasUpdated = false
+        productStockRecord._isNew = false
       }
+      rerenderHandler?.()
     } finally {
       Loading.remove()
     }
@@ -369,7 +401,7 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
   <div class="col-span-14 md:col-span-5 min-w-0 mr-8">
     <SearchSelect options={almacenes?.Almacenes || []} keyId="ID" keyName="Nombre"
       bind:saveOn={stockFilters} save="warehouseID" placeholder="ALMACÉN ::"
-      css="w-full md:w-240"
+      css="w-full md:w-240" id={1} useCache
       onChange={() => {
         onChangeAlmacen()
       }}
@@ -439,7 +471,7 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
         groupToNewStockRecords.set(selected.groupKey, newSkus)
       }
       selected.computed = false
-      console.log("selectedSkuGroup",$state.snapshot(selected))
+      console.log("selectedSkuGroup",$state.snapshot(selected),"|", rerenderHandler)
       rerenderHandler?.()
     }
     selectedSkus = []
@@ -448,6 +480,7 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
 >
   <TableGrid columns={skuColumns} data={selectedSkus} height="calc(100vh - 14rem)"
  		cellCss="px-6" headerCss="px-6 flex items-center min-h-32" css="mt-6"
+  	getRowId={e => `${e.SKU}_${e.Lote}`}
   />
 </Layer>
 

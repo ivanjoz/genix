@@ -27,10 +27,12 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se enviaron registros.")
 	}
 
-	for _, e := range stock {
+	for i := range stock {
+		e := stock[i]
 		if e.WarehouseID == 0 || e.ProductID == 0 {
 			return req.MakeErr("Hay un registros sin Almacén-ID o Producto-ID")
 		}
+		e.SelfParse()
 	}
 
 	// Genera los movimientos internos

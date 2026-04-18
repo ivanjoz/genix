@@ -2,6 +2,7 @@
     import { untrack } from "svelte";
     import s1 from "./components.module.css";
 import type { ElementAST } from '$components/Renderer.svelte';
+import { persistFieldValue } from '$libs/helpers';
 
     export interface IInput<T> {
         id?: number;
@@ -207,10 +208,14 @@ import type { ElementAST } from '$components/Renderer.svelte';
                 }}
                 onblur={(ev) => {
                     console.log("input saveon:", $state.snapshot(saveOn));
+                    const hadChange = isChange === 1;
                     onKeyUp(ev, true);
                     if (onChange && isChange) {
                         onChange();
                         isChange = 0;
+                    }
+                    if (hadChange && typeof id === "number" && id > 0) {
+                        persistFieldValue(id, (saveOn?.[save] ?? null) as number | string | null);
                     }
                 }}
             ></textarea>
@@ -231,10 +236,14 @@ import type { ElementAST } from '$components/Renderer.svelte';
                     focusValue = target.value;
                 }}
                 onblur={(ev) => {
+                    const hadChange = isChange === 1;
                     onKeyUp(ev, true);
                     if (onChange && isChange) {
                         onChange();
                         isChange = 0;
+                    }
+                    if (hadChange && typeof id === "number" && id > 0) {
+                        persistFieldValue(id, (saveOn?.[save] ?? null) as number | string | null);
                     }
                     focusValue = null;
                 }}

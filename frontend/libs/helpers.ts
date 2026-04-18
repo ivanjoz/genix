@@ -590,3 +590,73 @@ export const splitTwoStrings = (str: string, maxLen?: number): [string,string] =
   
   return [str.slice(0, bestIndex), str.slice(bestIndex + 1)]
 }
+
+const FIELD_PERSIST_GROUP_SIZE = 20;
+
+// Persist a single component's selected/typed value into a grouped localStorage key
+// keyed by the active backend hash + empresa id, so different environments stay isolated.
+// Values from neighboring component ids share one key (groups of FIELD_PERSIST_GROUP_SIZE)
+// to avoid creating thousands of localStorage entries.
+export function persistFieldValue(componentId: number, value: number | string | null | undefined) {
+  if (typeof window === "undefined") { return; }
+  if (typeof componentId !== "number" || componentId <= 0) { return; }
+  const empresaID = Env.getEmpresaID();
+  const enviroment = Env.enviroment;
+  if (!empresaID || !enviroment) { return; }
+
+  const groupKey = Math.ceil(componentId / FIELD_PERSIST_GROUP_SIZE) * FIELD_PERSIST_GROUP_SIZE;
+  const storageKey = `${enviroment}_${empresaID}_${groupKey}`;
+  const idKey = String(componentId);
+
+  const entries = new Map<string, string>();
+  const raw = localStorage.getItem(storageKey) || "";
+  if (raw) {
+    for (const pair of raw.split(",")) {
+      if (!pair) { continue; }
+      const sepIdx = pair.indexOf(":");
+      if (sepIdx <= 0) { continue; }
+      entries.set(pair.slice(0, sepIdx), pair.slice(sepIdx + 1));
+    }
+  }
+
+  if (value === null || value === undefined || value === "") {
+    entries.delete(idKey);
+  } else {
+    entries.set(idKey, String(value));
+  }
+
+  if (entries.size === 0) {
+    localStorage.removeItem(storageKey);
+    return;
+  }
+  const serialized: string[] = [];
+  for (const [k, v] of entries) { serialized.push(`${k}:${v}`); }
+  localStorage.setItem(storageKey, serialized.join(","));
+}
+
+// Read back a single component's previously-persisted value. Returns null when
+// missing or when persistence preconditions (browser, empresa, environment) are not met.
+export function readFieldValue(componentId: number): string | null {
+  if (typeof window === "undefined") { return null; }
+  if (typeof componentId !== "number" || componentId <= 0) { return null; }
+  const empresaID = Env.getEmpresaID();
+  const enviroment = Env.enviroment;
+  if (!empresaID || !enviroment) { return null; }
+
+  const groupKey = Math.ceil(componentId / FIELD_PERSIST_GROUP_SIZE) * FIELD_PERSIST_GROUP_SIZE;
+  const storageKey = `${enviroment}_${empresaID}_${groupKey}`;
+  const idKey = String(componentId);
+
+  const raw = localStorage.getItem(storageKey) || "";
+  if (!raw) { return null; }
+
+  for (const pair of raw.split(",")) {
+    if (!pair) { continue; }
+    const sepIdx = pair.indexOf(":");
+    if (sepIdx <= 0) { continue; }
+    if (pair.slice(0, sepIdx) === idKey) {
+      return pair.slice(sepIdx + 1);
+    }
+  }
+  return null;
+}

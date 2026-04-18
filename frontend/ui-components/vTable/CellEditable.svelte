@@ -2,7 +2,6 @@
 import type { ElementAST } from '$components/Renderer.svelte';
 import Renderer from '$components/Renderer.svelte';
 
-
 	export interface ICellEditableProps<T> {
 		saveOn?: T;
 		save?: string;
@@ -36,29 +35,33 @@ import Renderer from '$components/Renderer.svelte';
 	let isEditing = $state(false);
 	let inputRef = $state<HTMLInputElement>();
 
-	// svelte-ignore state_referenced_locally
-	const initialValue = getValue
-		? getValue(saveOn as T)
-		: ((saveOn || ({} as T))[save as keyof T] as number | string);
+	const GetValue = () => {
+		return getValue ? getValue(saveOn as T) : ((saveOn || ({} as T))[save as keyof T] as number | string)
+	}
+	
+	let currentValue = $state<number | string>(GetValue());
 
-	let currentValue = $state(initialValue);
+	$effect(() => {
+		if (isEditing) return;
+		const freshValue = GetValue()
+		if (currentValue !== freshValue){ currentValue = freshValue }
+	});
+	
 	const renderedContent = $derived(render ? render(currentValue) : null);
 
 	// Focus input when editing starts
 	$effect(() => {
-		if (isEditing && inputRef) {
-			inputRef.focus();
-		}
+		if (isEditing && inputRef) { 	inputRef.focus();	}
 	});
 
-	function extractValue(newValue?: string | number): string | number {
+	const extractValue = (newValue?: string | number): string | number  => {
 		if (type === 'number') {
 			return parseFloat((newValue as string) || '0');
 		}
 		return newValue as string | number;
 	}
 
-	function handleClick(ev: MouseEvent) {
+	const handleClick = (ev: MouseEvent) => {
 		ev.stopPropagation();
 		// Always hydrate the input from getValue so edit mode uses the raw persisted value.
 		currentValue = getValue
@@ -67,7 +70,7 @@ import Renderer from '$components/Renderer.svelte';
 		isEditing = true;
 	}
 
-	function handleBlur(ev: FocusEvent) {
+	const handleBlur = (ev: FocusEvent) => {
 		ev.stopPropagation()
 		const newValue = extractValue((ev.target as HTMLInputElement).value);
 		if (currentValue !== newValue) {
@@ -80,7 +83,7 @@ import Renderer from '$components/Renderer.svelte';
 		}
 		isEditing = false;
 	}
-
+	
 </script>
 
 <div class="_2">{currentValue}</div>
@@ -128,7 +131,7 @@ import Renderer from '$components/Renderer.svelte';
     left: 0;
     display: flex;
     align-items: center;
-    padding: 0 6px;
+   /* padding: 0 6px; */
     width: 100%;
     height: 100%;
     border: 1px solid transparent;

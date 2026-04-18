@@ -1,5 +1,5 @@
 <script lang="ts" generics="T,E">
-import { highlString, wordInclude } from '$libs/helpers';
+import { highlString, persistFieldValue, readFieldValue, wordInclude } from '$libs/helpers';
 import { throttle } from '$libs/helpers';
 import { Core } from '$core/store.svelte';
   import s1 from "./components.module.css";
@@ -27,6 +27,8 @@ import { Core } from '$core/store.svelte';
     inputCss?: string;
     icon?: string;
     showLoading?: boolean;
+    id?: number;
+    useCache?: boolean;
   }
 
   const {
@@ -50,7 +52,9 @@ import { Core } from '$core/store.svelte';
     showLoading = false,
     keyId,
     optionsCss,
-    keyName
+    keyName,
+    id,
+    useCache = false
   }: SearchSelectProps<T,E> = $props();
 
   let show = $state(false);
@@ -98,6 +102,7 @@ import { Core } from '$core/store.svelte';
 
   let preparedOptions: PreparedOption[] = [];
   let avoidedOptionIdSet = new Set<SearchOptionID>();
+  let cacheHydratedForId: number | undefined;
 
   function checkPosition() {
     if (inputRef) {
@@ -159,7 +164,9 @@ import { Core } from '$core/store.svelte';
       isValid = newValue ? 2 : 1;
     }
 
+    let valueChanged = false;
     if (clearOnSelect) {
+      valueChanged = true;
       if (onChange) {
         onChange(selectedItem as E);
       }
@@ -167,16 +174,22 @@ import { Core } from '$core/store.svelte';
       const current = (saveOn[save as keyof T] || null) as number;
       if (current !== newValue) {
         saveOn[save as keyof T] = newValue as NonNullable<T>[keyof T];
+        valueChanged = true;
         if (onChange) {
           onChange(selectedItem as E);
         }
       }
     } else if (typeof selected !== "undefined") {
       if ((selected || null) !== newValue) {
+        valueChanged = true;
         if (onChange) {
           onChange(selectedItem as E);
         }
       }
+    }
+
+    if (valueChanged && typeof id === "number" && id > 0) {
+      persistFieldValue(id, newValue as number | string | null);
     }
   }
 
@@ -300,6 +313,23 @@ import { Core } from '$core/store.svelte';
     avoidedOptionIdSet = new Set(avoidIDs || []);
     filteredOptions = filter("");
     arrowSelected = -1;
+
+    // Hydrate from localStorage once options are available, but only the first time per id.
+    if (useCache && typeof id === "number" && id > 0 && options.length >= 1 && cacheHydratedForId !== id) {
+      cacheHydratedForId = id;
+      const cachedRaw = readFieldValue(id);
+      if (cachedRaw) {
+        const matchedOption = options.find((opt) => String(getOptionId(opt)) === cachedRaw);
+        if (matchedOption) {
+          // Bypass the 80ms throttle so the very-first hydration call is not swallowed.
+          prevSetValueTime = 0;
+          setValueSaveOn(matchedOption, true);
+        } else {
+          // Cached id no longer matches any current option; drop the stale entry.
+          persistFieldValue(id, null);
+        }
+      }
+    }
   });
 
   const handleOpenMobileLayer = () => {
