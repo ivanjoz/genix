@@ -3,14 +3,28 @@ import Checkbox from '$components/Checkbox.svelte'
 import Input from '$components/Input.svelte'
 import Layer from '$components/Layer.svelte'
 import SearchSelect from '$components/SearchSelect.svelte'
+import TableGrid from '$components/vTable/TableGrid.svelte'
 import VTable from '$components/vTable/VTable.svelte'
 import type { ITableColumn } from '$components/vTable/types'
 import { Core } from '$core/store.svelte'
-import { Loading, Notify, throttle } from '$libs/helpers'
+import { formatN, Loading, Notify, throttle } from '$libs/helpers'
 import { untrack } from 'svelte'
 import { ProductosService } from '../../negocio/productos/productos.svelte'
 import { AlmacenesService } from '../../negocio/sedes-almacenes/sedes-almacenes.svelte'
-import { getProductosStock, postProductosStock, type IProductoStock } from './stock-movement'
+import { getProductosStock, makeStockID, postProductosStock, type IProductoStock } from './stock-movement'
+
+  type IProductoStockDisplay = {
+  	base: IProductoStock
+    groupKey: string
+  	lotes: IProductoStock[] 
+  	skus: IProductoStock[] 
+   	isSkuGroup: boolean
+    stockSimple: number
+    stockLoteado: number
+    stockSimpleNew: number
+    stockLoteadoNew: number
+    computed?: boolean
+  }
 
   const almacenes = new AlmacenesService()
   const productos = new ProductosService(true)
@@ -20,52 +34,237 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
   let almacenStock = $state([] as IProductoStock[])
   let almacenStockGetted = [] as IProductoStock[]
   let stockForm = $state({} as IProductoStock)
+  let selectedSkuGroup = $state<IProductoStockDisplay | null>(null)
+  let selectedSkus = $state<IProductoStock[]>([])
+  const freshPendingSku = (): IProductoStock => ({ _isNew: true, SKU: '', Lote: '', Quantity: 0 } as IProductoStock)
 
   const stockFormProducto = $derived(productos?.recordsMap?.get(stockForm.ProductID || 0))
+  const groupToNewStockRecords: Map<string,IProductoStock[]> = new Map()
+  const groupToNewLoteRecords: Map<string,IProductoStock[]> = new Map()
+  
+  const getCantPrevia = (r: IProductoStock) => {
+  	if(r._cantidadPrev === -1){ return 0 }
+  	return (typeof r._cantidadPrev === 'number' && r._cantidadPrev !== -1) ? r._cantidadPrev : r.Quantity
+  }
+  
+  const displayStock = $derived.by((): IProductoStockDisplay[] => {
+  	almacenStock;
+   	const result: IProductoStockDisplay[] = []
+  	untrack(() => {
+		   const recordGroup = new Map<string, IProductoStockDisplay>()
+		   for (const record of almacenStock) {
+				 const isSku = record.SKU ? 1 : 0
+				 const groupKey = [record.ProductID, record.PresentationID||0, isSku].join('_')
+				
+				 if(!recordGroup.has(groupKey)){
+						recordGroup.set(groupKey, {
+							groupKey,
+						  isSkuGroup: !!record.SKU, 
+								lotes: [] as IProductoStock[], 
+								skus: [] as IProductoStock[] 
+						} as IProductoStockDisplay)
+				 }
+				 
+				 const group = recordGroup.get(groupKey) as IProductoStockDisplay
+					
+		     if (record.SKU) {
+						group?.skus?.push(record)				 
+					} else if (record.Lote){
+						group.lotes?.push(record)
+					}		else {
+						group.base = record
+					}
+		   }
+					
+			 for(const e of recordGroup.values()){
+					if(!e.base){
+						const record = e.lotes[0] || e.skus[0]
 
-  const stockColumns: ITableColumn<IProductoStock>[] = [
+						e.base = {
+							ID: makeStockID(record),
+							WarehouseID: record.WarehouseID,
+							ProductID: record.ProductID,
+							PresentationID: record.PresentationID,
+						} as IProductoStock
+					}
+
+					result.push(e)
+				}
+   	})
+   	return result
+  })
+
+  const selectedSkuGroupTitle = $derived.by(() => {
+    if (!selectedSkuGroup) { return 'SKUs' }
+    const productName = productos.recordsMap.get(selectedSkuGroup.base.ProductID)?.Nombre || ''
+    const count = selectedSkus.filter(s => s.SKU).length
+    return `${productName} — ${count} SKU${count !== 1 ? 's' : ''}`
+  })
+
+  const validateLoteSkuUnique = (record: IProductoStock, checkSku: string, checkLote: string): boolean => {
+    if (!checkSku) return true
+    const isDuplicate = (r: IProductoStock) =>
+      r !== record && r.SKU === checkSku && (r.Lote || '') === (checkLote || '')
+    const duplicate = selectedSkus.some(isDuplicate)
+    if (duplicate) { Notify.warning('La combinación Lote + SKU ya existe.') }
+    return !duplicate
+  }
+
+  const skuColumns: ITableColumn<IProductoStock>[] = [
+    {
+      header: 'SKU', cellCss: 'ff-mono',
+      getValue: (sku) => sku.SKU || '',
+      hideCellEdit: (sku) => !sku._isNew,
+      onBeforeCellChange: (sku, value) => validateLoteSkuUnique(sku, String(value || ''), sku.Lote || ''),
+      onCellEdit: (sku, value) => {
+        const newSku = String(value || '')
+        sku.SKU = newSku
+        if (sku._isNew && newSku && !selectedSkus.some(s => s._isNew && !s.SKU)) {
+          const pending = selectedSkus.filter(s => s._isNew)
+          const backend = selectedSkus.filter(s => !s._isNew)
+          selectedSkus = [...pending, freshPendingSku(), ...backend]
+        }
+      }
+    },
+    {
+      header: 'Lote',
+      getValue: (sku) => sku.Lote || '',
+      onBeforeCellChange: (sku, value) => validateLoteSkuUnique(sku, sku.SKU || '', String(value || '')),
+      onCellEdit: (sku, value) => {
+        sku.Lote = String(value || '')
+        if (!sku._isNew) {
+          sku.ID = makeStockID(sku)
+          sku._hasUpdated = true
+        }
+      }
+    },
+    {
+      header: 'Cant.', css: 'justify-end', inputCss: 'text-right pr-6',
+      getValue: (sku) => sku.Quantity ?? '',
+      hideCellEdit: (sku) => !sku._isNew,
+      cellInputType: "number",
+      onCellEdit: (sku, value) => {
+        if (!sku._isNew) return
+        sku.WarehouseID = selectedSkuGroup!.base.WarehouseID
+        sku.ProductID = selectedSkuGroup!.base.ProductID
+        sku.PresentationID = selectedSkuGroup!.base.PresentationID || 0
+        sku.Quantity = parseInt(value as string || '0')
+        sku._cantidadPrev = -1
+        sku._hasUpdated = true
+      },
+      render: (sku) => {
+        if (sku._cantidadPrev && sku._cantidadPrev !== sku.Quantity) {
+          return { css: 'flex items-center', children: [
+            { text: String(sku._cantidadPrev > 0 ? sku._cantidadPrev : 0) },
+            { text: '→', css: 'ml-2 mr-2' },
+            { text: sku.Quantity, css: 'text-red-500' }
+          ]}
+        }
+        return { text: sku.Quantity || '' }
+      }
+    }
+  ]
+
+  const computeStockDisplay = (e: IProductoStockDisplay) => {
+		
+    if (e.computed) return
+
+    if (e.isSkuGroup) {      
+      e.stockSimple = 0; e.stockSimpleNew = 0
+      e.stockLoteado = 0; e.stockLoteadoNew = 0
+
+      for (const r of [...e.skus, ...(groupToNewStockRecords.get(e.groupKey) || [])]) {
+        if (r.Lote) {
+          e.stockLoteado += getCantPrevia(r)
+          e.stockLoteadoNew += r.Quantity
+        } else {
+          e.stockSimple += getCantPrevia(r)
+          e.stockSimpleNew += r.Quantity
+        }
+      }
+    } else {
+      e.stockSimple = getCantPrevia(e.base)
+      e.stockSimpleNew = e.base.Quantity || 0
+      e.stockLoteado = 0; e.stockLoteadoNew = 0
+      
+      for (const r of [...e.lotes, ...(groupToNewLoteRecords.get(e.groupKey) || [])]) {       
+        e.stockLoteado += getCantPrevia(r) || 0
+        e.stockLoteadoNew += r.Quantity || 0
+      }
+    }
+    e.computed = true
+  }
+
+  const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
     { header: 'Producto', highlight: true,
    		mobile: { order: 1, css: "col-span-24" },
-      getValue: (productStockRecord) => {
-        const productRecord = productos.recordsMap.get(productStockRecord.ProductID)?.Nombre
-        return productRecord || `Producto-${productStockRecord.ProductID}`
+      getValue: (e) => {
+        const productRecord = productos.recordsMap.get(e.base.ProductID)?.Nombre
+        return productRecord || `Producto-${e.base.ProductID}`
       }
     },
     { header: 'Presentación',
     	mobile: { order: 2, css: "col-span-24" },
-      getValue: (productStockRecord) => {
-        if (!productStockRecord.PresentationID) { return '' }
-        const productRecord = productos.recordsMap.get(productStockRecord.ProductID)
-        const presentationRecord = productRecord?.Presentaciones?.find((presentationOption) => presentationOption.id === productStockRecord.PresentationID)
-        return presentationRecord?.nm || `Tipo-${productStockRecord.PresentationID}`
+      getValue: (e) => {
+        if (!e.base.PresentationID) { return '' }
+        const productRecord = productos.recordsMap.get(e.base.ProductID)
+        const presentationRecord = productRecord?.Presentaciones?.find(p => p.id === e.base.PresentationID)
+        return presentationRecord?.nm || `Tipo-${e.base.PresentationID}`
       }
     },
-    { header: 'Lote',
-      getValue: (productStockRecord) => productStockRecord.Lote || ''
-    },
     { header: 'SKU',
-      getValue: (productStockRecord) => productStockRecord.SKU || '',
+      getValue: (e) => {
+        if (e.isSkuGroup) {
+          return `${e.skus.length} SKUs`
+        }
+        return e.base.SKU || ''
+      },
       mobile: { order: 3, css: "col-span-12" },
     },
-    { header: 'Stock', css: 'justify-end', inputCss: 'text-right pr-6',
+    { header: 'Stock Simple', css: 'justify-end', inputCss: 'text-right pr-6',
+   		headerCss: 'w-150',
     	mobile: { order: 4, css: "col-span-12" },
-      getValue: (productStockRecord) => productStockRecord.Quantity,
-      onCellEdit: (productStockRecord, value) => {
-        updateStockQuantity(productStockRecord, parseInt(value as string || '0'))
+     	hideCellEdit: (e) => e.isSkuGroup,
+      getValue: (e) => { computeStockDisplay(e); return e.stockSimpleNew },
+      onCellEdit: (e, value, rerender) => {
+        if (e.isSkuGroup) { return }
+        e.computed = false
+        updateStockQuantity(e.base, parseInt(value as string || '0'))
+        rerender()
       },
-      render: (productStockRecord) => {
-        if (productStockRecord._cantidadPrev && productStockRecord._cantidadPrev !== productStockRecord.Quantity) {
+      render: (e) => {
+        if (e.stockSimpleNew !== e.stockSimple) {
           return {
             css: 'flex items-center',
             children: [
-              { text: String(productStockRecord._cantidadPrev > 0 ? productStockRecord._cantidadPrev : 0) },
+              { text: String(e.stockSimple) },
               { text: '→', css: 'ml-2 mr-2' },
-              { text: productStockRecord.Quantity, css: 'text-red-500' }
+              { text: e.stockSimpleNew, css: 'text-red-500' }
             ]
           }
         }
-        return { text: productStockRecord.Quantity || '' }
+        return { text: e.stockSimpleNew || '' }
       }
+    },
+    { header: 'Stock Loteado',
+      getValue: (e) => { computeStockDisplay(e); return e.stockLoteadoNew },
+      render: (e) => {
+      	computeStockDisplay(e)
+        if (e.stockLoteadoNew !== e.stockLoteado) {
+          return {
+            css: 'flex justify-end items-center',
+            children: [
+              { text: String(e.stockLoteado) },
+              { text: '→', css: 'ml-2 mr-2' },
+              { text: e.stockLoteadoNew, css: 'text-red-500' }
+            ]
+          }
+        }
+        return { text: e.stockLoteadoNew || '' }
+      }
+    },
+    { header: 'Stock Total', css: 'justify-end text-right',
+      getValue: e => formatN(e.stockLoteadoNew + e.stockSimpleNew)
     },
   ]
 
@@ -88,6 +287,16 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
       return
     }
 
+    const seenIDs = new Set<string>()
+    for (const r of recordsForUpdate) {
+      const id = r.ID || makeStockID(r)
+      if (seenIDs.has(id)) {
+        Notify.failure('Hay registros con ID duplicado (mismo SKU y Lote). Verifica antes de guardar.')
+        return
+      }
+      seenIDs.add(id)
+    }
+
     Loading.standard('Enviando registros...')
     try {
       await postProductosStock(recordsForUpdate)
@@ -106,7 +315,7 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
     for (const productRecord of productos.records) {
       const presentationIDs = productRecord.Presentaciones?.length > 0 ? productRecord.Presentaciones.map((presentationOption) => presentationOption.id) : [0]
       for (const presentacionID of presentationIDs) {
-        const stockID = [stockFilters.warehouseID, productRecord.ID, presentacionID || '', '', ''].join('_')
+        const stockID = makeStockID({ WarehouseID: stockFilters.warehouseID, ProductID: productRecord.ID, PresentationID: presentacionID } as IProductoStock)
         if (productStockMap.has(stockID)) {
           const existingProductStock = productStockMap.get(stockID) as IProductoStock
           existingProductStock.PresentationID = presentacionID
@@ -126,10 +335,9 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
   }
 
   const updateStockQuantity = (productStockRecord: IProductoStock, cantidad: number) => {
+ 		// alert("hola")
     if (!productStockRecord.ID) {
-      productStockRecord.ID = [
-        productStockRecord.WarehouseID, productStockRecord.ProductID, productStockRecord.PresentationID || 0, productStockRecord.SKU || '', productStockRecord.Lote || ''
-      ].join('_')
+      productStockRecord.ID = makeStockID(productStockRecord)
     }
 
     const existingProductStock = almacenStock.find((rowRecord) => rowRecord.ID === productStockRecord.ID) || almacenStockGetted.find((rowRecord) => rowRecord.ID === productStockRecord.ID)
@@ -143,7 +351,6 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
       productStockRecord._hasUpdated = true
       almacenStockGetted.unshift(productStockRecord)
       almacenStock.unshift(productStockRecord)
-      almacenStock = [...almacenStock]
     }
   }
 
@@ -154,6 +361,8 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
       untrack(() => { almacenStock = almacenStockGetted })
     }
   })
+  
+  let rerenderHandler: ((() => void)|undefined) = undefined
 </script>
 
 <div class="grid grid-cols-24 gap-8 mb-8 items-center md:flex">
@@ -198,14 +407,49 @@ import { getProductosStock, postProductosStock, type IProductoStock } from './st
   {/if}
 </div>
 
-<VTable columns={stockColumns} data={almacenStock}
+<VTable columns={stockColumns} data={displayStock}
   filterText={stockFilterText}
   useFilterCache={true}
-  getFilterContent={(productStockRecord) => {
-    const productRecord = productos.recordsMap.get(productStockRecord.ProductID)
-    return [productRecord?.Nombre, productStockRecord.SKU, productStockRecord.Lote].filter((value) => value).join(' ').toLowerCase()
+  getFilterContent={(e) => {
+    const productRecord = productos.recordsMap.get(e.base.ProductID)
+    const skuText = e.isSkuGroup
+      ? e.skus.map(r => r.SKU).filter(Boolean).join(' ')
+      : e.base.SKU
+    return [productRecord?.Nombre, skuText, e.base.Lote].filter((value) => value).join(' ').toLowerCase()
+  }}
+  onRowClick={(record,index,rerender) => {
+  	rerenderHandler = rerender
+    if (record.isSkuGroup) {
+      const cached = groupToNewStockRecords.get(record.groupKey) || []
+      selectedSkuGroup = record
+      selectedSkus = [...cached, freshPendingSku(), ...record.skus]
+      Core.openSideLayer(2)
+    }
   }}
 />
+
+<Layer id={2} type="side" sideLayerSize={740} title={selectedSkuGroupTitle} titleCss="h2"
+  css="px-12 py-10"
+  onClose={() => {
+    if (selectedSkuGroup) {
+   		const selected = displayStock.find(x => x.base.ID === selectedSkuGroup?.base.ID) as IProductoStockDisplay
+     	
+      const newSkus = selectedSkus.filter(s => s._isNew && s.SKU)
+      if (newSkus.length > 0) {
+        groupToNewStockRecords.set(selected.groupKey, newSkus)
+      }
+      selected.computed = false
+      console.log("selectedSkuGroup",$state.snapshot(selected))
+      rerenderHandler?.()
+    }
+    selectedSkus = []
+    selectedSkuGroup = null
+  }}
+>
+  <TableGrid columns={skuColumns} data={selectedSkus} height="calc(100vh - 14rem)"
+ 		cellCss="px-6" headerCss="px-6 flex items-center min-h-32" css="mt-6"
+  />
+</Layer>
 
 <Layer id={1} type="bottom" css="p-12 min-h-360" title="Agregar Stock" titleCss="h2"
   saveButtonName="Agregar" saveButtonIcon="icon-ok" contentOverflow={true}

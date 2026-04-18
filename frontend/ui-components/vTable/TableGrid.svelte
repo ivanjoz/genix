@@ -1,6 +1,8 @@
 <script lang="ts" generics="TRecord">
   import { onMount } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import Renderer from '$components/Renderer.svelte';
+  import CellEditable from '$components/vTable/CellEditable.svelte';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import { splitTwoStrings } from '$libs/helpers';
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
@@ -27,12 +29,13 @@
     mobileCardCss?: string;
     emptyMessage?: string;
     debug?: boolean;
-    onRowClick?: (rowRecord: TRecord, rowIndex: number) => void;
+    onRowClick?: (rowRecord: TRecord, rowIndex: number, rerender: () => void) => void;
     selectedRowId?: string | number;
     selectedRecord?: TRecord;
     getRowId?: (rowRecord: TRecord, rowIndex: number) => string | number;
     cellRenderer?: TableGridCellRendererSnippet<TRecord>;
     headerRenderer?: TableGridHeaderRendererSnippet<TRecord>;
+    cellInputType?: 'number';
   }
 
   let {
@@ -56,6 +59,7 @@
     getRowId,
     cellRenderer,
     headerRenderer,
+    cellInputType,
   }: TableGridProps<TRecord> = $props();
 
   // Keep a stable filtered list so hidden columns never affect row rendering logic.
@@ -208,11 +212,19 @@
     return getRowId(selectedValue, -1) === currentRowId;
   };
 
+  // Per-row version counters bumped when cell handlers invoke their `rerender` callback;
+  // included in the cells' each-key so only the affected row remounts.
+  const rowVersions = new SvelteMap<number, number>();
+
+  const rerenderRow = (rowIndex: number) => {
+    rowVersions.set(rowIndex, (rowVersions.get(rowIndex) || 0) + 1);
+  };
+
   const handleRowClick = (rowRecord: TRecord, rowIndex: number) => {
     if (debug) {
       console.debug('[TableGrid] row click', { rowIndex, rowRecord });
     }
-    onRowClick?.(rowRecord, rowIndex);
+    onRowClick?.(rowRecord, rowIndex, () => rerenderRow(rowIndex));
   };
 
   const syncHeaderScrollbarCompensation = () => {
@@ -341,14 +353,23 @@
                 }
               }}
             >
-              {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id || columnIndex)}
+              {#each visibleColumns as columnDefinition, columnIndex (`${columnDefinition.id || columnIndex}_${rowVersions.get(rowIndex) || 0}`)}
                 {@const defaultCellValue = getCellValue(rowRecord, columnDefinition, rowIndex)}
                 {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, columnDefinition)}
-                <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(columnDefinition.align)} {cellCss} {columnDefinition.cellCss || ''}"
+                <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(columnDefinition.align)} {cellCss} {columnDefinition.cellCss || ''} {columnDefinition.setCellCss?.(rowRecord) || ''}"
                   role="cell"
                   title={`${defaultCellValue}`}
                 >
-                  {#if cellRenderer && columnDefinition.useCellRenderer}
+                  {#if columnDefinition.onCellEdit && !columnDefinition.hideCellEdit?.(rowRecord, rowIndex)}
+                    <CellEditable contentClass={columnDefinition.css}
+                      inputClass={columnDefinition.inputCss}
+                      type={columnDefinition.cellInputType || cellInputType}
+                      getValue={() => String(defaultCellValue)}
+                      render={columnDefinition.render ? () => columnDefinition.render?.(rowRecord, rowIndex) : undefined}
+                      onBeforeCellChange={columnDefinition.onBeforeCellChange ? (value) => columnDefinition.onBeforeCellChange!(rowRecord, value) : undefined}
+                      onChange={(value) => columnDefinition.onCellEdit?.(rowRecord, value, () => rerenderRow(rowIndex))}
+                    />
+                  {:else if cellRenderer && columnDefinition.useCellRenderer}
                     {@render cellRenderer(rowRecord, columnDefinition, rowIndex)}
                   {:else if columnDefinition.render}
                     {@const renderedContent = columnDefinition.render(rowRecord, rowIndex)}
@@ -417,14 +438,23 @@
                   }
                 }}
               >
-                {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id || columnIndex)}
+                {#each visibleColumns as columnDefinition, columnIndex (`${columnDefinition.id || columnIndex}_${rowVersions.get(rowIndex) || 0}`)}
                   {@const defaultCellValue = getCellValue(rowRecord, columnDefinition, rowIndex)}
                   {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, columnDefinition)}
-                  <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(columnDefinition.align)} {cellCss} {columnDefinition.cellCss || ''}"
+                  <div class="table-grid-cell [&:last-child]:border-r-0 {getAlignClassName(columnDefinition.align)} {cellCss} {columnDefinition.cellCss || ''} {columnDefinition.setCellCss?.(rowRecord) || ''}"
                     role="cell"
                     title={`${defaultCellValue}`}
                   >
-                    {#if cellRenderer && columnDefinition.useCellRenderer}
+                    {#if columnDefinition.onCellEdit && !columnDefinition.hideCellEdit?.(rowRecord, rowIndex)}
+                      <CellEditable contentClass={columnDefinition.css}
+                        inputClass={columnDefinition.inputCss}
+                        type={columnDefinition.cellInputType || cellInputType}
+                        getValue={() => String(defaultCellValue)}
+                        render={columnDefinition.render ? () => columnDefinition.render?.(rowRecord, rowIndex) : undefined}
+                        onBeforeCellChange={columnDefinition.onBeforeCellChange ? (value) => columnDefinition.onBeforeCellChange!(rowRecord, value) : undefined}
+                        onChange={(value) => columnDefinition.onCellEdit?.(rowRecord, value, () => rerenderRow(rowIndex))}
+                      />
+                    {:else if cellRenderer && columnDefinition.useCellRenderer}
                       {@render cellRenderer(rowRecord, columnDefinition, rowIndex)}
                     {:else if columnDefinition.render}
                       {@const renderedContent = columnDefinition.render(rowRecord, rowIndex)}
@@ -654,8 +684,7 @@
   }
 
   .table-grid-row:focus-visible {
-    outline: 2px solid #3b82f6;
-    outline-offset: -2px;
+    outline: none;
   }
 
   .table-grid-row:hover {
@@ -687,6 +716,7 @@
     white-space: nowrap;
     align-content: center;
     min-width: 0;
+    position: relative;
   }
   
   :global(.table-grid-virtual-viewport) {

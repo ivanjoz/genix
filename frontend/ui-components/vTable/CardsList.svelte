@@ -18,7 +18,7 @@
     itemsClass?: string;
     estimateSize?: number;
     overscan?: number;
-    onRowClick?: (row: T, index: number) => void;
+    onRowClick?: (row: T, index: number, rerender: () => void) => void;
     selected?: T | number;
     isSelected?: (row: T, selected: T | number) => boolean;
     emptyMessage?: string;
@@ -95,9 +95,9 @@
     return isSelected(record, selected);
   }
 
-  function handleRowClick(record: T, index: number) {
+  function handleRowClick(record: T, index: number, rerender: () => void) {
     if (onRowClick) {
-      onRowClick(record, getRecordIndex(record, index));
+      onRowClick(record, getRecordIndex(record, index), rerender);
     }
   }
   function getRecordIndex(record: T, fallbackIndex: number): number {

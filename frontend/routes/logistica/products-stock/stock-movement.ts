@@ -1,6 +1,9 @@
 import { Notify } from '$libs/helpers';
 import { GET, POST } from '$libs/http.svelte';
 
+export const makeStockID = (e: IProductoStock): string =>
+  [e.WarehouseID, e.ProductID, e.PresentationID || 0, e.Lote || '', e.SKU || ''].join('_')
+
 export interface IProductoStock {
   ID: string
   SKU?: string
@@ -13,6 +16,7 @@ export interface IProductoStock {
   CostoUn?: number
   _cantidadPrev?: number
   _isVirtual?: boolean
+  _isNew?: boolean
   _hasUpdated?: boolean
   _search?: string
 }

@@ -1,5 +1,6 @@
 <script lang="ts" generics="T">
   import { untrack } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import { createVirtualizer } from './index.svelte';
   import type { ITableColumn, CellRendererSnippet, IMobileCardsListCell } from "./types";
   import type { VirtualItem } from './index.svelte';
@@ -28,7 +29,7 @@
     cellCss?: string;
     estimateSize?: number;
     overscan?: number;
-    onRowClick?: (row: T, index: number) => void;
+    onRowClick?: (row: T, index: number, rerender: () => void) => void;
     selected?: T | number;
     isSelected?: (row: T, selected: T | number) => boolean;
     emptyMessage?: string;
@@ -38,6 +39,7 @@
     useFilterCache?: boolean;
     mobileCardCss?: string
     getRowObject?: (row: Partial<T>) => Promise<T>
+    cellInputType?: 'number';
   }
 
   let {
@@ -58,7 +60,8 @@
     getFilterContent,
     useFilterCache = false,
     mobileCardCss = '',
-    getRowObject
+    getRowObject,
+    cellInputType,
   }: VTableProps<T> = $props();
 
   // State
@@ -73,6 +76,13 @@
   const resolvedRowByKey = new Map<object | string, T>();
   const loadingRowKeys = new Set<object | string>();
   const queuedRowKeys = new Set<object | string>();
+  // Per-row version counters used to force a specific row to unmount/remount
+  // when handlers invoke the `rerender` callback.
+  const rowVersions = new SvelteMap<number, number>();
+
+  function rerenderRow(rowIndex: number) {
+    rowVersions.set(rowIndex, (rowVersions.get(rowIndex) || 0) + 1);
+  }
 
   // Mobile view state
   let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1024);
@@ -333,9 +343,9 @@
   }
 
   // Handle row click
-  function handleRowClick(record: T, index: number) {
+  function handleRowClick(record: T, index: number, rerender: () => void) {
     if (onRowClick) {
-      onRowClick(record, index);
+      onRowClick(record, index, rerender);
     }
   }
 </script>
@@ -416,7 +426,7 @@
           <td colspan={processedColumns.flatColumns.length}></td>
         </tr>
 
-        {#each virtualItems as row, i (`${row.index}-${dataVersion}`)}
+        {#each virtualItems as row, i (`${row.index}-${dataVersion}-${rowVersions.get(row.index) || 0}`)}
           {@const firstItemStart = virtualItems[0]?.start || 0}
           {@const isFinal = i === virtualItems.length - 1}
           {@const remainingSize = totalSize - (virtualItems[0]?.size || estimateSize) * virtualItems.length}
@@ -431,7 +441,7 @@
             class:vtable-row-odd={row.index % 2 !== 0}
             class:vtable-row-selected={selected}
             style="transform: translateY({firstItemStart}px); height: {estimateSize}px;"
-            onclick={() => resolvedRecord && handleRowClick(resolvedRecord, row.index)}
+            onclick={() => resolvedRecord && handleRowClick(resolvedRecord, row.index, () => rerenderRow(row.index))}
           >
             {#if !resolvedRecord}
               <td colspan={processedColumns.flatColumns.length}
@@ -461,6 +471,7 @@
                   {#if column.onCellEdit}
                     <CellEditable contentClass={column.css}
                       inputClass={column.inputCss}
+                      type={column.cellInputType || cellInputType}
                       getValue={() => cellData.content}
                       render={
                         (column.render
@@ -468,7 +479,7 @@
                         : undefined) as (value: number | string) => ElementAST[]
                       }
                       onChange={(value: string | number) => {
-                        column.onCellEdit?.(resolvedRecord, value)
+                        column.onCellEdit?.(resolvedRecord, value, () => rerenderRow(row.index))
                       }}
                     />
                   {:else if column.onCellSelect}
@@ -490,7 +501,7 @@
                       keyName={(column.cellOptionsKeyName || 'Name') as never}
                       contentClass={column.css}
                       onChange={(value: string | number) => {
-                        column.onCellSelect?.(resolvedRecord, value)
+                        column.onCellSelect?.(resolvedRecord, value, () => rerenderRow(row.index))
                       }}
                     />
                   {:else if cellData.useSnippet && cellRenderer}

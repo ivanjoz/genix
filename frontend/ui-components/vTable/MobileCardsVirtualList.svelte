@@ -4,6 +4,7 @@
   import CellSelector from '$components/vTable/CellSelector.svelte';
   import { highlString, splitTwoStrings } from '$libs/helpers';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
+  import { SvelteMap } from 'svelte/reactivity';
   import type {
     CardRendererSnippet,
     CellRendererSnippet,
@@ -37,7 +38,7 @@
     loadingMessage?: string;
     filterText?: string;
     highlightPlainText?: boolean;
-    onRowClick?: (row: TRecord, index: number) => void;
+    onRowClick?: (row: TRecord, index: number, rerender: () => void) => void;
     selected?: TRecord | string | number;
     isSelected?: (row: TRecord, selected: TRecord | string | number) => boolean;
     getRecordIndex?: (record: TRecord, fallbackIndex: number) => number;
@@ -153,11 +154,19 @@
   }
 
   function handleRowClick(record: TRecord, index: number) {
-    onRowClick?.(record, index);
+    onRowClick?.(record, index, () => rerenderRow(index));
   }
 
   function buildSelectorId(cell: TCell, rowIndex: number, cellIndex: number): string {
     return `${String(cell.id || cell.field || cellIndex)}_${rowIndex}`;
+  }
+
+  // Per-row version counters bumped when handlers invoke their `rerender` callback;
+  // read inside the renderItem snippet so only the affected card re-keys its cells.
+  const rowVersions = new SvelteMap<number, number>();
+
+  function rerenderRow(rowIndex: number) {
+    rowVersions.set(rowIndex, (rowVersions.get(rowIndex) || 0) + 1);
   }
 
   function isInteractiveCell(cell: TCell): boolean {
@@ -228,8 +237,9 @@
             </button>
           {/if}
 
+          {@const rowVersion = rowVersions.get(recordIndex) || 0}
           <div class="mobile-cards-grid mobile-cards-grid-{variant}">
-            {#each visibleCells as cell, cellIndex (`${String(cell.id || cell.field || cellIndex)}_${filterText || ''}`)}
+            {#each visibleCells as cell, cellIndex (`${String(cell.id || cell.field || cellIndex)}_${filterText || ''}_${rowVersion}`)}
               {@const shouldRender = !cell.if || cell.if(resolvedRecord, recordIndex)}
               {#if shouldRender}
                 {@const cellData = getCellContent(cell, resolvedRecord, recordIndex)}
@@ -274,7 +284,7 @@
                                 field: cell.field,
                                 value,
                               });
-                              cell.onCellEdit?.(resolvedRecord, value);
+                              cell.onCellEdit?.(resolvedRecord, value, () => rerenderRow(recordIndex));
                             }}
                           />
                         {:else if cell.onCellSelect}
@@ -295,7 +305,7 @@
                                 value,
                                 optionsLength: cell.cellOptions?.length || 0,
                               });
-                              cell.onCellSelect?.(resolvedRecord, value);
+                              cell.onCellSelect?.(resolvedRecord, value, () => rerenderRow(recordIndex));
                             }}
                           />
                         {:else if cell.useRenderer && cardCellRenderer}
@@ -370,7 +380,7 @@
                                 field: cell.field,
                                 value,
                               });
-                              cell.onCellEdit?.(resolvedRecord, value);
+                              cell.onCellEdit?.(resolvedRecord, value, () => rerenderRow(recordIndex));
                             }}
                           />
                         {:else if cell.onCellSelect}
@@ -391,7 +401,7 @@
                                 value,
                                 optionsLength: cell.cellOptions?.length || 0,
                               });
-                              cell.onCellSelect?.(resolvedRecord, value);
+                              cell.onCellSelect?.(resolvedRecord, value, () => rerenderRow(recordIndex));
                             }}
                           />
                         {:else if cell.mobileRender}
@@ -484,7 +494,7 @@
                               field: cell.field,
                               value,
                             });
-                            cell.onCellEdit?.(resolvedRecord, value);
+                            cell.onCellEdit?.(resolvedRecord, value, () => rerenderRow(recordIndex));
                           }}
                         />
                       {:else if cell.onCellSelect}
@@ -505,7 +515,7 @@
                               value,
                               optionsLength: cell.cellOptions?.length || 0,
                             });
-                            cell.onCellSelect?.(resolvedRecord, value);
+                            cell.onCellSelect?.(resolvedRecord, value, () => rerenderRow(recordIndex));
                           }}
                         />
                       {:else if cell.mobileRender}

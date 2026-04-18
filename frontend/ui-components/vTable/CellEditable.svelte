@@ -10,6 +10,7 @@ import Renderer from '$components/Renderer.svelte';
 		contentClass?: string;
 		inputClass?: string;
 		onChange?: (newValue: string | number) => void;
+		onBeforeCellChange?: (newValue: string | number) => boolean;
 		render?: (value: number | string) => string | ElementAST | ElementAST[];
 		getValue?: (e: T) => number | string;
 		required?: boolean;
@@ -25,6 +26,7 @@ import Renderer from '$components/Renderer.svelte';
 		contentClass = '',
 		inputClass = '',
 		onChange,
+		onBeforeCellChange,
 		render,
 		getValue,
 		required = false,
@@ -69,8 +71,11 @@ import Renderer from '$components/Renderer.svelte';
 		ev.stopPropagation()
 		const newValue = extractValue((ev.target as HTMLInputElement).value);
 		if (currentValue !== newValue) {
-			console.log("cambiando::")
-			if (onChange) { onChange(newValue);	}
+			if (onBeforeCellChange && onBeforeCellChange(newValue) === false) {
+				isEditing = false;
+				return;
+			}
+			if (onChange) { onChange(newValue); }
 			currentValue = newValue
 		}
 		isEditing = false;

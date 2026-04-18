@@ -1,4 +1,5 @@
 <script lang="ts" generics="T">
+  import { SvelteMap } from 'svelte/reactivity';
   import Renderer, { type ElementAST } from '$components/Renderer.svelte';
   import type { ITableColumn } from './types';
 
@@ -9,7 +10,7 @@
     maxHeight?: string;
     css?: string;
     tableCss?: string;
-    onRowClick?: (row: T, index: number) => void;
+    onRowClick?: (row: T, index: number, rerender: () => void) => void;
     selected?: T | number;
     isSelected?: (row: T, selected: T | number) => boolean;
     emptyMessage?: string;
@@ -29,6 +30,13 @@
   }: TableStreamProps<T> = $props();
 
   let streamRecords = $state<T[]>([]);
+  // Per-row version counters bumped when `onRowClick` invokes its `rerender` callback;
+  // included in the row `#each` key so only the affected row remounts.
+  const rowVersions = new SvelteMap<number, number>();
+
+  const rerenderRow = (rowIndex: number) => {
+    rowVersions.set(rowIndex, (rowVersions.get(rowIndex) || 0) + 1);
+  };
 
   // Keep an internal bounded buffer so append operations always enforce maxRecords.
   const normalizeRecords = (incomingRecords: T[]) => {
@@ -106,12 +114,12 @@
             <td colspan={Math.max(1, getVisibleColumns().length)} class="stream-empty">{emptyMessage}</td>
           </tr>
         {:else}
-          {#each streamRecords as rowRecord, rowIndex (`${rowIndex}`)}
+          {#each streamRecords as rowRecord, rowIndex (`${rowIndex}_${rowVersions.get(rowIndex) || 0}`)}
             <tr
               class:stream-row-selected={getRowSelected(rowRecord)}
               class:stream-row-even={rowIndex % 2 === 0}
               class:stream-row-odd={rowIndex % 2 !== 0}
-              onclick={() => onRowClick?.(rowRecord, rowIndex)}
+              onclick={() => onRowClick?.(rowRecord, rowIndex, () => rerenderRow(rowIndex))}
             >
               {#each getVisibleColumns() as columnDefinition}
                 {@const renderedCellContent = getCellRenderedContent(columnDefinition, rowRecord, rowIndex)}

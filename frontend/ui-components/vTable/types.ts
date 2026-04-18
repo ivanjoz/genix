@@ -35,8 +35,8 @@ export interface ICardCell<T> {
 	cellOptions?: any[]
 	cellOptionsKeyId?: string
 	cellOptionsKeyName?: string
-	onCellEdit?: (record: T, value: string | number) => void
-	onCellSelect?: (record: T, value: string | number) => void
+	onCellEdit?: (record: T, value: string | number, rerender: () => void) => void
+	onCellSelect?: (record: T, value: string | number, rerender: () => void) => void
   getValue?: (record: T, idx: number) => string | number
   renderPrefix?: (record: T, idx: number) => string | ElementAST | ElementAST[] | false
   render?: (record: T, idx: number) => string | ElementAST | ElementAST[]
@@ -68,8 +68,8 @@ export interface IMobileCardsListCell<T, TSource = unknown> {
   cellOptions?: any[]
   cellOptionsKeyId?: string
   cellOptionsKeyName?: string
-  onCellEdit?: (record: T, value: string | number) => void
-  onCellSelect?: (record: T, value: string | number) => void
+  onCellEdit?: (record: T, value: string | number, rerender: () => void) => void
+  onCellSelect?: (record: T, value: string | number, rerender: () => void) => void
   getValue?: (record: T, idx: number) => string | number
   renderPrefix?: (record: T, idx: number) => string | ElementAST | ElementAST[] | false
   render?: (record: T, idx: number) => string | ElementAST | ElementAST[]
@@ -104,6 +104,7 @@ export interface ITableColumn<T> {
   css?: string
 	inputCss?: string
 	cellCss?: string
+	cellInputType?: 'number'
 	// Allow columns to inject runtime cell classes per record
 	setCellCss?: (record: T) => string | undefined
   cardCss?: string
@@ -113,8 +114,10 @@ export interface ITableColumn<T> {
 	cellOptions?: any[]
 	cellOptionsKeyId?: string
 	cellOptionsKeyName?: string
-	onCellEdit?: (e:T, value: string|number) => void
-	onCellSelect?: (e:T, value: string|number) => void
+	onBeforeCellChange?: (e: T, value: string|number) => boolean
+	onCellEdit?: (e: T, value: string|number, rerender: () => void) => void
+	hideCellEdit?: (e:T, idx?: number) => boolean
+	onCellSelect?: (e: T, value: string|number, rerender: () => void) => void
   cardRender?: (e: T, idx: number) => (any)
   getValue?: (e: T, idx: number) => (string|number)
   // Renders extra visual content before the main cell output without replacing it.
