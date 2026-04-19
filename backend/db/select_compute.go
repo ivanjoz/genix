@@ -664,12 +664,12 @@ func (dbTable *ScyllaTable[T]) ComputeCapabilities() []QueryCapability {
 					caps = append(caps, QueryCapability{
 						Signature: sigPrefix + col + "|=",
 						Source:    view,
-						Priority:  35 + len(view.columns)*2,
+						Priority:  36 + len(view.columns)*2,
 					})
 					caps = append(caps, QueryCapability{
 						Signature: sigPrefix + col + "|~",
 						Source:    view,
-						Priority:  30 + len(view.columns)*2,
+						Priority:  35 + len(view.columns)*2,
 					})
 				}
 			}

@@ -371,6 +371,10 @@ export const GET = (props: httpProps): Promise<any> => {
       // Keep the integrity pass opt-in because it adds extra post-response IndexedDB work.
       verifyRouteMemoryState: Env.DELTA_CACHE_VERIFY_ROUTE_MEMORY,
       status,
+      keyID: props.keyID,
+      keysIDs: props.keysIDs,
+      columnarIDField: props.columnarIDField,
+      combineColumnarValuesOnFields: props.combineColumnarValuesOnFields,
     } as serviceHttpProps
 
     return new Promise((resolve, reject) => {

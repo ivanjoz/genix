@@ -54,9 +54,10 @@ type WarehouseProductMovementTable struct {
 
 func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:      "warehouse_product_movement",
-		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID},
+		Name:                 "warehouse_product_movement",
+		Partition:            e.CompanyID,
+		Keys:                 []db.Coln{e.ID},
+		DisableUpdateCounter: true,
 		KeyIntPacking: []db.Coln{
 			e.Fecha.DecimalSize(5), e.WarehouseID.DecimalSize(5), e.Autoincrement(3),
 		},

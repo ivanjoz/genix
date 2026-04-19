@@ -348,7 +348,7 @@ func (generator *saleOrderGenerator) loadWarehouseStock() ([]logisticaTypes.Prod
 	if err := json.Unmarshal(*response.Body, &result); err != nil {
 		return nil, err
 	}
-	return result.Stocks, nil
+	return result.ProductStock, nil
 }
 
 // selectProducts prioritizes products that already have stock and only complements from the catalog when needed.

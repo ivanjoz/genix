@@ -16,6 +16,11 @@ import (
 // PostStockAdjustItem is one absolute "set stock to X" instruction from the client.
 // ReemplazarCantidad is always true for this handler (the UI shows current stock and
 // the user types the new value).
+//
+// Lot resolution:
+//   - LotID > 0          → reference an existing lot.
+//   - LotID == 0 + LotCode → resolve / create a lot via Hash(today, SupplierID, LotCode).
+//     SupplierID is optional here (manual adjustments have no supplier context).
 type PostStockAdjustItem struct {
 	WarehouseID    int32  `json:",omitempty"`
 	ProductID      int32  `json:",omitempty"`
@@ -24,7 +29,7 @@ type PostStockAdjustItem struct {
 	SubQuantity    int32  `json:",omitempty"`
 	SerialNumber   string `json:",omitempty"`
 	LotID          int32  `json:",omitempty"`
-	LotName        string `json:",omitempty"`
+	LotCode        string `json:",omitempty"`
 	SupplierID     int32  `json:",omitempty"`
 }
 
@@ -37,7 +42,7 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	if len(items) == 0 {
 		return req.MakeErr("No se enviaron registros.")
 	}
-
+	
 	movimientos := make([]logisticaTypes.MovimientoInterno, 0, len(items))
 	for _, item := range items {
 		if item.WarehouseID == 0 || item.ProductID == 0 {
@@ -50,10 +55,11 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 			PresentacionID:     item.PresentationID,
 			SerialNumber:       item.SerialNumber,
 			LotID:              item.LotID,
-			LotName:            item.LotName,
-			SupplierID:         item.SupplierID,
-			Cantidad:           item.Quantity,
-			SubCantidad:        item.SubQuantity,
+			// LotName is the internal field; PostStockAdjustItem exposes it as LotCode on the wire.
+			LotName:     item.LotCode,
+			SupplierID:  item.SupplierID,
+			Cantidad:    item.Quantity,
+			SubCantidad: item.SubQuantity,
 		})
 	}
 
@@ -62,6 +68,27 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	return req.MakeResponse(items)
+}
+
+// GetProductStockLotsByIDs resolves ProductStockLot rows by ID.
+// Static-lookup endpoint: no cache-version protocol, just `ids`. The frontend treats the response
+// as immutable-per-ID so cached rows are never revalidated (see getStaticRecordsByID on the client).
+func GetProductStockLotsByIDs(req *core.HandlerArgs) core.HandlerResponse {
+	lotIDRecords := req.ExtractCacheVersionValues()
+	if len(lotIDRecords) == 0 {
+		return req.MakeErr("No se enviaron ids de lotes.")
+	}
+
+	// ProductStockLot.ID is int32; cache-version values come in as int64.
+	lotIDs := core.Map(lotIDRecords, func(e db.IDCacheVersion) int32 { return int32(e.ID) })
+
+	lots := []logisticaTypes.ProductStockLot{}
+	query := db.Query(&lots)
+	if err := query.CompanyID.Equals(req.Usuario.EmpresaID).ID.In(lotIDs...).Exec(); err != nil {
+		return req.MakeErr("Error al obtener los lotes.", err)
+	}
+
+	return core.MakeResponse(req, &lots)
 }
 
 func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
@@ -140,60 +167,71 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 type GetProductosStockResult struct {
-	Stocks  []logisticaTypes.ProductStockV2     `json:"stocks"`
-	Details []logisticaTypes.ProductStockDetail `json:"details"`
-	Lots    []logisticaTypes.ProductStockLot    `json:"lots"`
+	ProductStock       []logisticaTypes.ProductStockV2
+	ProductStockDetail []logisticaTypes.ProductStockDetail
 }
 
 func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	// Returns V2 stock rows + their detail rows + the lot catalog.
 	// `updated` enables delta-cache fetches via the `upd` field on stocks/details.
 	almacenID := int32(req.GetQueryInt("almacen-id"))
-	updated := int32(req.GetQueryInt("updated"))
+	productStockUpdated := int32(req.GetQueryInt("ProductStock"))
+	productStockDetailUpdated := int32(req.GetQueryInt("ProductStockDetail"))
+
+	statuses := []int8{1}
+	if productStockUpdated > 0 || productStockDetailUpdated > 0 {
+		// Delta fetches must include deactivated rows so clients can evict them from cache.
+		statuses = []int8{0, 1}
+	}
 
 	result := GetProductosStockResult{}
 
 	eg := errgroup.Group{}
 
 	eg.Go(func() error {
-		query := db.Query(&result.Stocks)
-		query.Select().
-			CompanyID.Equals(req.Usuario.EmpresaID).
-			WarehouseID.Equals(almacenID)
-		if updated > 0 {
-			query.Updated.GreaterEqual(updated)
-		}
-		return query.Exec()
-	})
+		// Query each status bucket explicitly to stay on the WarehouseID+Status+Updated view.
+		records := make([]logisticaTypes.ProductStockV2, 0)
+		for _, status := range statuses {
+			statusRecords := []logisticaTypes.ProductStockV2{}
+			query := db.Query(&statusRecords)
+			query.Select().
+				CompanyID.Equals(req.Usuario.EmpresaID).
+				WarehouseID.Equals(almacenID).
+				Status.Equals(status).
+				Updated.GreaterEqual(productStockDetailUpdated)
 
-	eg.Go(func() error {
-		// Detail rows don't have WarehouseID on the partition/cluster key path, so we filter in memory.
-		details := []logisticaTypes.ProductStockDetail{}
-		query := db.Query(&details)
-		query.Select().CompanyID.Equals(req.Usuario.EmpresaID)
-		if updated > 0 {
-			query.Updated.GreaterEqual(updated).AllowFilter()
-		}
-		if err := query.Exec(); err != nil {
-			return err
-		}
-		for _, detail := range details {
-			if detail.WarehouseID == almacenID {
-				result.Details = append(result.Details, detail)
+			if err := query.Exec(); err != nil {
+				return err
 			}
+			records = append(records, statusRecords...)
 		}
+		result.ProductStock = records
 		return nil
 	})
 
 	eg.Go(func() error {
-		// Full lot catalog is small and shared across warehouses; a delta filter is unnecessary for now.
-		query := db.Query(&result.Lots)
-		query.Select().CompanyID.Equals(req.Usuario.EmpresaID)
-		return query.Exec()
+		// Detail rows use the same WarehouseID+Status+Updated view, so query each status directly.
+		records := make([]logisticaTypes.ProductStockDetail, 0)
+		for _, status := range statuses {
+			statusRecords := []logisticaTypes.ProductStockDetail{}
+			query := db.Query(&statusRecords)
+			query.Select().
+				CompanyID.Equals(req.Usuario.EmpresaID).
+				WarehouseID.Equals(almacenID).
+				Status.Equals(status).
+				Updated.GreaterEqual(productStockDetailUpdated)
+
+			if err := query.Exec(); err != nil {
+				return err
+			}
+			records = append(records, statusRecords...)
+		}
+		result.ProductStockDetail = records
+		return nil
 	})
 
 	if err := eg.Wait(); err != nil {
-		return req.MakeErr("Error al obtener los registros del almacén:", err)
+		return req.MakeErr("Error al obtener el stock de productos del almacén.:", err)
 	}
 
 	return req.MakeResponse(result)
@@ -247,11 +285,8 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 			return core.Err(fmt.Sprintf("Movimiento con Lote %q sin LotID para salida (producto %v, almacén %v).",
 				mov.LotName, mov.ProductoID, mov.WarehouseID))
 		}
-		// Inbound lot-by-name needs SupplierID for the dedup hash.
-		if mov.LotID == 0 && mov.LotName != "" && mov.SupplierID == 0 {
-			return core.Err(fmt.Sprintf("Movimiento con Lote %q sin SupplierID (producto %v, almacén %v).",
-				mov.LotName, mov.ProductoID, mov.WarehouseID))
-		}
+		// SupplierID == 0 is allowed for manual stock-adjustment lots; the dedup hash
+		// becomes (today, 0, name) which stays consistent within the day.
 		activeMovements = append(activeMovements, mov)
 	}
 	if len(activeMovements) == 0 {
@@ -478,6 +513,8 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 			if err := db.InsertUpdateInclude(&stocks,
 				func(e *logisticaTypes.ProductStockV2) bool { return e.Created > 0 },
 				[]db.Coln{
+					// Keep the materialized view tuple consistent on updates.
+					stockTable.WarehouseID,
 					stockTable.Quantity, stockTable.SubQuantity,
 					stockTable.DetailQuantity, stockTable.DetailSubQuantity,
 					stockTable.Updated, stockTable.UpdatedBy, stockTable.Status,
@@ -494,6 +531,8 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 			if err := db.InsertUpdateInclude(&details,
 				func(e *logisticaTypes.ProductStockDetail) bool { return e.Created > 0 },
 				[]db.Coln{
+					// Keep the materialized view tuple consistent on updates.
+					detailTable.WarehouseID,
 					detailTable.Quantity, detailTable.SubQuantity,
 					detailTable.Updated, detailTable.UpdatedBy, detailTable.Status,
 				},

@@ -81,7 +81,11 @@
   const rowVersions = new SvelteMap<number, number>();
 
   function rerenderRow(rowIndex: number) {
-    rowVersions.set(rowIndex, (rowVersions.get(rowIndex) || 0) + 1);
+    const nextRowVersion = (rowVersions.get(rowIndex) || 0) + 1;
+    rowVersions.set(rowIndex, nextRowVersion);
+    // SvelteMap updates alone have not been enough to invalidate the keyed row
+    // in all call paths, so also bump the table version to force reconciliation.
+    dataVersion++;
   }
 
   // Mobile view state
@@ -438,7 +442,7 @@
           {#if record}
             {@const selected = resolvedRecord ? isRowSelected(resolvedRecord, row.index) : false}
 
-            <tr class="vtable-row"
+          <tr class="vtable-row"
             class:vtable-row-even={row.index % 2 === 0}
             class:vtable-row-odd={row.index % 2 !== 0}
             class:vtable-row-selected={selected}
@@ -454,8 +458,7 @@
               </td>
             {:else}
               {#each processedColumns.flatColumns as column, j (`${j}_${filterText||""}`)}
-                {@const cellData = getCellContent(column, resolvedRecord, row.index)}
-                
+                {@const cellData = getCellContent(column, resolvedRecord, row.index)}                
                 
                 <td class="{cellCss} {cellData.css} {column.onCellClick && !column.disableCellInteractions?.(resolvedRecord, row.index) ? '_clickable-cell' : ''}"
                   style={column.cellStyle ? Object.entries(column.cellStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}

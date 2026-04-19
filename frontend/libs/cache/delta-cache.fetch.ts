@@ -301,8 +301,13 @@ const getRequiredRecordID = (
   }
 
   const keyParts = recordKeyFields.map((keyField) => {
-    return getRequiredKeyPartValue(record, keyField, route, responseKey)
+    const v = record?.[keyField]
+    return (v === undefined || v === null || v === "") ? null : v
   })
+
+  if(keyParts.every(v => v === null)){
+    throw new Error(`Cache Error: En "${route}" (${responseKey}) se recibió un registro sin ninguna key (${recordKeyFields.join(", ")})`)
+  }
 
   return `cmp:${JSON.stringify(keyParts)}`
 }

@@ -720,16 +720,18 @@ func compileSchemaView(dbTable *ScyllaTable[any], viewCfg Index) {
 		whereColumnsNotNull := []string{}
 		if wherePartCol != nil {
 			if wherePartCol.GetType().ColType == "text" {
-				whereColumnsNotNull = append(whereColumnsNotNull, wherePartCol.GetName()+" > ''")
+				whereColumnsNotNull = append(whereColumnsNotNull, wherePartCol.GetName()+" IS NOT NULL")
 			} else {
-				whereColumnsNotNull = append(whereColumnsNotNull, wherePartCol.GetName()+" > 0")
+				// whereColumnsNotNull = append(whereColumnsNotNull, wherePartCol.GetName()+" > 0")
+				whereColumnsNotNull = append(whereColumnsNotNull, wherePartCol.GetName()+" IS NOT NULL")
 			}
 		}
 		for _, col := range whereCols {
 			if col.GetType().ColType == "text" {
-				whereColumnsNotNull = append(whereColumnsNotNull, col.GetName()+" > ''")
+				whereColumnsNotNull = append(whereColumnsNotNull, col.GetName()+" IS NOT NULL")
 			} else {
-				whereColumnsNotNull = append(whereColumnsNotNull, col.GetName()+" > 0")
+				// whereColumnsNotNull = append(whereColumnsNotNull, col.GetName()+" > 0")
+				whereColumnsNotNull = append(whereColumnsNotNull, col.GetName()+" IS NOT NULL")
 			}
 		}
 

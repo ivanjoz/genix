@@ -531,12 +531,12 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES (%v)`,
 		scyllaTable.GetFullName(), strings.Join(columnsNames, ", "), strings.Join(columnPlaceholders, ", "))
 
-	appendInsertQueriesToBatch(batch, queryStrInsert, records, columns, managedValues)
+	appendInsertQueriesToBatch(batch, queryStrInsert, records, columns, scyllaTable.keysIdx, managedValues)
 	return batch
 }
 
 func appendInsertQueriesToBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
-	batch *gocql.Batch, queryStrInsert string, records *[]T, columns []IColInfo, managedValues managedWriteValues,
+	batch *gocql.Batch, queryStrInsert string, records *[]T, columns []IColInfo, keysIdx []int16, managedValues managedWriteValues,
 ) {
 	for i := range *records {
 		rec := &(*records)[i]
@@ -547,6 +547,9 @@ func appendInsertQueriesToBatch[T TableBaseInterface[E, T], E TableSchemaInterfa
 			var value any
 			if managedValue, found := managedValues.getValueForColumn(i, col, true); found {
 				value = managedValue
+			} else if slices.Contains(keysIdx, col.GetInfo().Idx) {
+				// Key columns must never be coerced to null — keep empty string as-is.
+				value = col.GetStatementValue(ptr)
 			} else {
 				value = getNormalizedWriteValue(col, ptr)
 			}
@@ -943,7 +946,7 @@ func executeInsertUpdateBatch[T TableBaseInterface[E, T], E TableSchemaInterface
 		}
 		insertQueryStatement := fmt.Sprintf(`INSERT INTO %v (%v) VALUES (%v)`,
 			scyllaTable.GetFullName(), strings.Join(insertColumnNames, ", "), strings.Join(insertColumnPlaceholders, ", "))
-		appendInsertQueriesToBatch(queryBatch, insertQueryStatement, recordsForInsert, insertColumns, managedInsertValues)
+		appendInsertQueriesToBatch(queryBatch, insertQueryStatement, recordsForInsert, insertColumns, scyllaTable.keysIdx, managedInsertValues)
 	}
 
 	if len(*recordsForUpdate) > 0 {

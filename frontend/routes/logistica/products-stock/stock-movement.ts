@@ -1,19 +1,59 @@
 import { Notify } from '$libs/helpers';
 import { GET, POST } from '$libs/http.svelte';
 
-export const makeStockID = (e: IProductoStock): string =>
-  [e.WarehouseID, e.ProductID, e.PresentationID || 0, e.Lote || '', e.SKU || ''].join('_')
+export const makeStockID = (e: Pick<IProductoStock, 'WarehouseID' | 'ProductID' | 'PresentationID'>): number =>
+  // Mirrors backend/logistica/product-stock-movement.go::packProductStockID.
+  e.WarehouseID * 1e14 + e.ProductID * 1e5 + (e.PresentationID || 0) * 10
+
+export interface IProductStockDetail {
+  ProductStockID: number
+  LotID: number
+  SerialNumber?: string
+  WarehouseID: number
+  ProductID: number
+  Quantity: number
+  SubQuantity: number
+  ExpirationDate?: number
+  upd?: number
+  UpdatedBy?: number
+  Created?: number
+  CreatedBy?: number
+	ss?: number
+	LotCode?: string
+}
+
+export interface IProductStockLot {
+  ID: number
+  Date?: number
+  Name?: string
+  SupplierID?: number
+  DeliveryNoteID?: number
+  DeliveryNoteCode?: string
+  Hash?: string
+  Created?: number
+  CreatedBy?: number
+  ss?: number
+}
 
 export interface IProductoStock {
-  ID: string
-  SKU?: string
+  ID: number
   WarehouseID: number
   ProductID: number
   PresentationID: number
   Quantity: number
   SubQuantity: number
-  Lote?: string
-  CostoUn?: number
+  DetailQuantity?: number
+  DetailSubQuantity?: number
+  DetailComputedDate?: number
+  DetailComputedQuantity?: number
+  DetailComputedSubQuantity?: number
+  StockStatus?: number
+  Created?: number
+  CreatedBy?: number
+  upd?: number
+  UpdatedBy?: number
+  ss?: number
+  StockDetails: IProductStockDetail[]
   _cantidadPrev?: number
   _isVirtual?: boolean
   _isNew?: boolean
@@ -21,13 +61,57 @@ export interface IProductoStock {
   _search?: string
 }
 
+interface IGetProductosStockResponse {
+  ProductStock?: IProductoStock[]
+  ProductStockDetail?: IProductStockDetail[]
+}
+
+export interface IPostProductoStockItem {
+  WarehouseID: number
+  ProductID: number
+  PresentationID: number
+  Quantity: number
+  SubQuantity?: number
+  SerialNumber?: string
+  LotID?: number
+  LotCode?: string
+}
+
 export const getProductosStock = async (almacenID: number): Promise<IProductoStock[]> => {
-  let records = []
+  let records: IProductoStock[] = []
   try {
-    records = await GET({ 
+    const response = await GET({ 
       route: `productos-stock?almacen-id=${almacenID}`,
       errorMessage: 'Hubo un error al obtener el stock.',
-      useCache: { min: 0.2, ver: 7 },
+			useCache: { min: 0.2, ver: 8 },
+			keysIDs: { ProductStockDetail: ["ProductStockID","LotID","SerialNumber"] }
+    })
+		const normalizedResponse = response as IGetProductosStockResponse | null | undefined
+    console.log("getProductosStock::", normalizedResponse)
+		
+		if (!normalizedResponse) {
+      records = []
+    } else {
+      const stockDetailsByStockID = new Map<number, IProductStockDetail[]>()
+      for (const stockDetail of normalizedResponse.ProductStockDetail || []) {
+        const stockDetails = stockDetailsByStockID.get(stockDetail.ProductStockID)
+        if (stockDetails) {
+          stockDetails.push(stockDetail)
+        } else {
+          stockDetailsByStockID.set(stockDetail.ProductStockID, [stockDetail])
+        }
+      }
+
+      records = normalizedResponse.ProductStock || []
+      for (const productStockRecord of normalizedResponse.ProductStock || []) {
+        // Attach the matching detail rows directly to each backend stock row.
+        productStockRecord.StockDetails = stockDetailsByStockID.get(productStockRecord.ID) || []
+      }
+    }
+    console.debug('getProductosStock::normalizedResponse', {
+      almacenID,
+      productStockCount: records.length,
+      productStockDetailCount: records.reduce((detailCount, productStockRecord) => detailCount + productStockRecord.StockDetails.length, 0),
     })
   } catch (error) {
     Notify.failure(error as string)
@@ -35,7 +119,7 @@ export const getProductosStock = async (almacenID: number): Promise<IProductoSto
   return records
 }
 
-export const postProductosStock = (data: IProductoStock[]) => {
+export const postProductosStock = (data: IPostProductoStockItem[]) => {
   return POST({
     data,
     route: "productos-stock",

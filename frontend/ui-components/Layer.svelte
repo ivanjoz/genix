@@ -151,17 +151,6 @@ import OptionsStrip from '$components/OptionsStrip.svelte';
     }
   })
 
-  $effect(() => {
-    if (Core.showSideLayer || type) {
-      console.log(
-        'updated 122:',
-        Core.showSideLayer,
-        type,
-        '| open:',
-        Core.showSideLayer === id,
-      )
-    }
-  })
 </script>
 
 {#if Core.showSideLayer === id && (type === 'side' || type === 'bottom')}

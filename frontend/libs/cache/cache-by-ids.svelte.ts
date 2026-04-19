@@ -26,6 +26,14 @@ const inFlightRecordsBatchPromiseByTable: Map<
 	Map<number, Promise<Map<number, IMinimalRecord>>>
 > = new Map()
 
+// Static records (e.g. catalog rows that don't need version/update checks) live in a parallel cache.
+// Same memory+IDB layout, but lookups are cache-first by ID with no freshness revalidation.
+const staticCacheRecordIdTable: Map<string, Map<number, { ID: number }>> = new Map()
+const inFlightStaticBatchPromiseByTable: Map<
+	string,
+	Map<number, Promise<Map<number, { ID: number }>>>
+> = new Map()
+
 const LOG_PREFIX = "[cache-by-ids]"
 const DEBUG_CACHE_RECORD_IDS = new Set<number>([26])
 
@@ -578,9 +586,11 @@ const resetPendingBufferState = (
 
 export const clearCacheByIDs = async (): Promise<{ databaseName: string; clearedMemoryTables: number }> => {
 	// Memory maps are global in this module, so clear them before dropping persisted IndexedDB state.
-	const clearedMemoryTables = cacheRecordIdTable.size
+	const clearedMemoryTables = cacheRecordIdTable.size + staticCacheRecordIdTable.size
 	cacheRecordIdTable.clear()
 	inFlightRecordsBatchPromiseByTable.clear()
+	staticCacheRecordIdTable.clear()
+	inFlightStaticBatchPromiseByTable.clear()
 
 	resetPendingBufferState(
 		bufferedResolversByTableAndID,
@@ -858,6 +868,149 @@ export const getRecordByIDUpdated = async <T extends IMinimalRecord>(
 	const fetchedRecord = returnedRecord
 	if (!fetchedRecord || fetchedRecord.ss === 0) return undefined
 	return fetchedRecord
+}
+
+const getOrCreateStaticTableCache = <T extends { ID: number }>(apiRoute: string): Map<number, T> => {
+	const existing = staticCacheRecordIdTable.get(apiRoute)
+	if (existing) return existing as Map<number, T>
+	const created = new Map<number, T>()
+	staticCacheRecordIdTable.set(apiRoute, created)
+	return created
+}
+
+const getOrCreateStaticInFlightTable = <T extends { ID: number }>(
+	apiRoute: string,
+): Map<number, Promise<Map<number, T>>> => {
+	const existing = inFlightStaticBatchPromiseByTable.get(apiRoute)
+	if (existing) return existing as Map<number, Promise<Map<number, T>>>
+	const created = new Map<number, Promise<Map<number, T>>>()
+	inFlightStaticBatchPromiseByTable.set(apiRoute, created)
+	return created
+}
+
+const fetchStaticRecordsFromServer = async <T extends { ID: number }>(
+	apiRoute: string,
+	ids: number[],
+): Promise<T[]> => {
+	if (ids.length === 0) return []
+	// Reuse the compact encoder so the backend's ExtractCacheVersionValues parses this the same as other routes.
+	const uriParams = buildFetchUriParams(ids, [], [])
+	try {
+		const responsePayload = await GET({
+			route: `${apiRoute}?${uriParams}&cmp=${Env.getEmpresaID()}`,
+		})
+		if (Array.isArray(responsePayload)) return responsePayload as T[]
+		if (Array.isArray(responsePayload?.records)) return responsePayload.records as T[]
+		console.warn(`${LOG_PREFIX} ${apiRoute} unexpected static response shape; returning empty list`, responsePayload)
+		return []
+	} catch (serverFetchError) {
+		console.warn(`${LOG_PREFIX} ${apiRoute} static fetch failed; returning empty list`, serverFetchError)
+		return []
+	}
+}
+
+/**
+ * Resolve records by ID from a "static" endpoint that doesn't use the cache-version protocol:
+ * lookups are cache-first (memory → IndexedDB) and the server is only asked for IDs that aren't
+ * present locally. Once fetched, a record is assumed immutable for its ID — there's no `upd`/`ccv`
+ * revalidation and no staleness timer. Use for catalog-like tables (e.g. product-stock-lots).
+ */
+export const getStaticRecordsByID = async <T extends { ID: number }>(
+	apiRoute: string,
+	ids: number[],
+): Promise<Map<number, T>> => {
+	const normalizedIDs = normalizePositiveIDs(ids)
+	if (normalizedIDs.length === 0) return new Map<number, T>()
+
+	const tableCache = getOrCreateStaticTableCache<T>(apiRoute)
+	const inFlightTable = getOrCreateStaticInFlightTable<T>(apiRoute)
+	const resolvedRecordsByID = new Map<number, T>()
+
+	// 1) Memory hits resolve immediately.
+	const idsMissingFromMemory: number[] = []
+	for (const id of normalizedIDs) {
+		const memRecord = tableCache.get(id)
+		if (memRecord) {
+			resolvedRecordsByID.set(id, memRecord)
+			continue
+		}
+		idsMissingFromMemory.push(id)
+	}
+	if (idsMissingFromMemory.length === 0) return resolvedRecordsByID
+
+	// 2) Reuse in-flight batches for IDs that another caller is already fetching.
+	const existingPromisesByID = new Map<number, Promise<Map<number, T>>>()
+	const idsNotInFlight: number[] = []
+	for (const id of idsMissingFromMemory) {
+		const pendingPromise = inFlightTable.get(id)
+		if (pendingPromise) {
+			existingPromisesByID.set(id, pendingPromise)
+			continue
+		}
+		idsNotInFlight.push(id)
+	}
+
+	// 3) For fresh IDs, resolve from IDB first.
+	let idsMissingFromIDB: number[] = []
+	if (idsNotInFlight.length > 0) {
+		const idbRecordsByID = await readRecordsFromIDBByIDs<T>(apiRoute, idsNotInFlight)
+		for (const id of idsNotInFlight) {
+			const idbRecord = idbRecordsByID.get(id)
+			if (idbRecord) {
+				tableCache.set(id, idbRecord)
+				resolvedRecordsByID.set(id, idbRecord)
+				continue
+			}
+			idsMissingFromIDB.push(id)
+		}
+	}
+
+	// 4) Only hit the server for IDs that aren't in any cache layer.
+	if (idsMissingFromIDB.length > 0) {
+		const fetchPromise: Promise<Map<number, T>> = (async () => {
+			const fetchedRecords = await fetchStaticRecordsFromServer<T>(apiRoute, idsMissingFromIDB)
+			const fetchedByID = new Map<number, T>()
+			for (const fetchedRecord of fetchedRecords) {
+				if (!fetchedRecord || typeof fetchedRecord.ID !== 'number') continue
+				tableCache.set(fetchedRecord.ID, fetchedRecord)
+				fetchedByID.set(fetchedRecord.ID, fetchedRecord)
+			}
+			if (fetchedByID.size > 0) {
+				await upsertRecordsIntoIDB<T>(apiRoute, Array.from(fetchedByID.values()))
+			}
+			return fetchedByID
+		})()
+
+		for (const id of idsMissingFromIDB) {
+			inFlightTable.set(id, fetchPromise)
+			existingPromisesByID.set(id, fetchPromise)
+		}
+		void fetchPromise.finally(() => {
+			const currentInFlight = inFlightStaticBatchPromiseByTable.get(apiRoute)
+			if (!currentInFlight) return
+			for (const id of idsMissingFromIDB) {
+				if (currentInFlight.get(id) === (fetchPromise as unknown as Promise<Map<number, { ID: number }>>)) {
+					currentInFlight.delete(id)
+				}
+			}
+			if (currentInFlight.size === 0) inFlightStaticBatchPromiseByTable.delete(apiRoute)
+		})
+	}
+
+	// 5) Drain all in-flight / freshly-dispatched batches and merge into the return map.
+	const resolvedEntries = await Promise.all(
+		Array.from(existingPromisesByID.entries()).map(async ([id, pendingPromise]) => {
+			const batchResultsByID = await pendingPromise
+			const record = batchResultsByID.get(id)
+			return record ? [id, record] as const : null
+		}),
+	)
+	for (const resolvedEntry of resolvedEntries) {
+		if (!resolvedEntry) continue
+		resolvedRecordsByID.set(resolvedEntry[0], resolvedEntry[1])
+	}
+
+	return resolvedRecordsByID
 }
 
 const isRecordStale = (record: IMinimalRecord, nowTimeSeconds: number): boolean => {

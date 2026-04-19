@@ -148,9 +148,10 @@ type ProductStockV2Table struct {
 
 func (e ProductStockV2Table) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:      "warehouse_product_stock",
-		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID},
+		Name:                 "warehouse_product_stock",
+		Partition:            e.CompanyID,
+		Keys:                 []db.Coln{e.ID},
+		DisableUpdateCounter: true,
 		// ID packs (WarehouseID, ProductID, PresentationID) into the single int64 key.
 		KeyIntPacking: []db.Coln{
 			e.WarehouseID.DecimalSize(5),
@@ -160,7 +161,7 @@ func (e ProductStockV2Table) GetSchema() db.TableSchema {
 		Indexes: []db.Index{
 			{
 				Type:     db.TypeView,
-				Keys:     []db.Coln{e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(9)},
+				Keys:     []db.Coln{e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)},
 				KeepPart: true,
 			},
 		},
@@ -209,10 +210,19 @@ type ProductStockDetailTable struct {
 
 func (e ProductStockDetailTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:      "warehouse_product_stock_detail",
-		Partition: e.CompanyID,
+		Name:                 "warehouse_product_stock_detail",
+		Partition:            e.CompanyID,
+		DisableUpdateCounter: true,
 		// One detail row per stock-record + lot + serial.
 		Keys: []db.Coln{e.ProductStockID, e.LotID, e.SerialNumber},
+		Indexes: []db.Index{
+			// Hash index for dedup lookups when resolving LotID from (Date, SupplierID, Name).
+			{
+				Type:     db.TypeView,
+				Keys:     []db.Coln{e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)},
+				KeepPart: true,
+			},
+		},
 	}
 }
 
@@ -259,7 +269,7 @@ func (e ProductStockLotTable) GetSchema() db.TableSchema {
 		Keys:      []db.Coln{e.ID.Autoincrement(0)},
 		Indexes: []db.Index{
 			// Hash index for dedup lookups when resolving LotID from (Date, SupplierID, Name).
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.Hash}},
+			{Type: db.TypeGlobalIndex, Keys: []db.Coln{e.Hash}},
 		},
 	}
 }

@@ -7,6 +7,7 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.almacen-movimientos":         GetAlmacenMovimientos,
 	"GET.almacen-movimientos-grouped": GetAlmacenMovimientosGrouped,
 	"GET.productos-stock":             GetProductosStock,
+	"GET.product-stock-lots-by-ids":   GetProductStockLotsByIDs,
 	"GET.product-supply":              GetProductSupply,
 	"POST.product-supply":             PostProductSupply,
 }
