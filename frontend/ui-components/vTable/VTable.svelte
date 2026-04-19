@@ -143,6 +143,7 @@
         ...column,
         source: column,
         itemCss: column.mobile?.css || 'col-span-full',
+        contentCss: column.mobile?.contentCss,
         labelTop: column.mobile?.labelTop,
         labelLeft: column.mobile?.labelLeft,
         labelCss: 'color-label',
@@ -152,6 +153,9 @@
         elementRight: column.mobile?.elementRight,
         mobileRender: column.mobile?.render,
         if: column.mobile?.if,
+        onCellClick: column.onCellClick,
+        disableCellInteractions: column.disableCellInteractions,
+        showEditIcon: column.showEditIcon,
         useRenderer: Boolean(cellRenderer && column.id),
       }));
   });

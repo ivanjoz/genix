@@ -190,6 +190,23 @@ const getNewDetailRows = (productStockRecord: IProductoStock, panelType: 'serial
   return getNewDetailRowsMap(panelType).get(productStockRecord.ID) || []
 }
 
+// Keep editable rows grouped at the top of the layer so the user always sees
+// recently created entries first, then the empty draft row, and finally the locked server rows.
+const orderLayerDetailRows = (
+  stockDetails: IProductStockDetailRow[],
+  panelType: 'serial' | 'lot',
+) => {
+  const editableFilledRows = stockDetails.filter((stockDetail) =>
+    stockDetail._isNew && (panelType === 'serial' ? !!stockDetail.SerialNumber : hasLotAssignment(stockDetail)),
+  )
+  const editableEmptyRows = stockDetails.filter((stockDetail) =>
+    stockDetail._isNew && (panelType === 'serial' ? !stockDetail.SerialNumber : !hasLotAssignment(stockDetail)),
+  )
+  const persistedRows = stockDetails.filter((stockDetail) => !stockDetail._isNew)
+
+  return [...editableFilledRows, ...editableEmptyRows, ...persistedRows]
+}
+
 const touchPendingDetailRows = (reason: string, productStockID?: number) => {
   pendingDetailRowsVersion++
 }
@@ -248,7 +265,7 @@ const addPendingSerialNumberRow = () => {
   const pendingStockDetail = createPendingStockDetail(selectedSerialNumberGroup.base, 'serial')
   const newDetailRows = getNewDetailRows(selectedSerialNumberGroup.base, 'serial')
   newSerialNumberRowsByProductStockID.set(selectedSerialNumberGroup.base.ID, [...newDetailRows, pendingStockDetail])
-  selectedSerialNumbers = [...selectedSerialNumbers, pendingStockDetail]
+  selectedSerialNumbers = orderLayerDetailRows([...selectedSerialNumbers, pendingStockDetail], 'serial')
   selectedSerialNumberGroup.computed = false
   touchPendingDetailRows('add-pending-serial', selectedSerialNumberGroup.base.ID)
 }
@@ -260,7 +277,7 @@ const addPendingLotRow = () => {
   const pendingStockDetail = createPendingStockDetail(selectedLotGroup.base, 'lot')
   const newDetailRows = getNewDetailRows(selectedLotGroup.base, 'lot')
   newLotRowsByProductStockID.set(selectedLotGroup.base.ID, [...newDetailRows, pendingStockDetail])
-  selectedLots = [...selectedLots, pendingStockDetail]
+  selectedLots = orderLayerDetailRows([...selectedLots, pendingStockDetail], 'lot')
   selectedLotGroup.computed = false
   touchPendingDetailRows('add-pending-lot', selectedLotGroup.base.ID)
 }
@@ -274,10 +291,10 @@ const openDetailLayer = (
 
   if (panelType === 'serial') {
     selectedSerialNumberGroup = productStockDisplay
-    selectedSerialNumbers = [
+    selectedSerialNumbers = orderLayerDetailRows([
       ...(productStockDisplay.base.StockDetails as IProductStockDetailRow[]).filter((stockDetail) => !!stockDetail.SerialNumber),
       ...getNewDetailRows(productStockDisplay.base, 'serial'),
-    ]
+    ], 'serial')
     addPendingSerialNumberRow()
     void loadLotsForSerialNumberLayer(selectedSerialNumbers)
     Core.openSideLayer(2)
@@ -285,10 +302,10 @@ const openDetailLayer = (
   }
 
   selectedLotGroup = productStockDisplay
-  selectedLots = [
+  selectedLots = orderLayerDetailRows([
     ...(productStockDisplay.base.StockDetails as IProductStockDetailRow[]).filter((stockDetail) => !stockDetail.SerialNumber && hasLotAssignment(stockDetail)),
     ...getNewDetailRows(productStockDisplay.base, 'lot'),
-  ]
+  ], 'lot')
   addPendingLotRow()
   void loadLotsForLotLayer(selectedLots)
   Core.openSideLayer(3)
@@ -427,6 +444,7 @@ const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
     },
     render: (stockDetail) => {
       if (!stockDetail.SerialNumber) { return { css: 'text-xs c-red', text: 'NUEVO SERIAL...' } }
+      if (stockDetail._isNew) { return { css: 'text-blue-800', text: stockDetail.SerialNumber } }
       return stockDetail.SerialNumber
     },
   },
@@ -446,7 +464,11 @@ const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
         selectedSerialNumberGroup.computed = false
       }
     },
-    render: (stockDetail) => getLotDisplay(stockDetail),
+    render: (stockDetail) => {
+      const lotDisplay = getLotDisplay(stockDetail)
+      if (stockDetail._isNew && lotDisplay) { return { css: 'text-blue-800', text: lotDisplay } }
+      return lotDisplay
+    },
   },
   {
     header: 'Cant.', css: 'justify-end', inputCss: 'text-right pr-6',
@@ -469,7 +491,7 @@ const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
           ],
         }
       }
-      return { css: 'text-right', text: stockDetail.Quantity || '' }
+      return { css: `text-right ${stockDetail._isNew ? 'text-blue-800' : ''}`.trim(), text: stockDetail.Quantity || '' }
     },
   },
 ]
@@ -492,7 +514,9 @@ const lotColumns: ITableColumn<IProductStockDetailRow>[] = [
     },
     render: (stockDetail) => {
       if (!hasLotAssignment(stockDetail)) { return { css: 'text-xs c-red', text: 'NUEVO LOTE...' } }
-      return getLotDisplay(stockDetail)
+      const lotDisplay = getLotDisplay(stockDetail)
+      if (stockDetail._isNew) { return { css: 'text-blue-800', text: lotDisplay } }
+      return lotDisplay
     },
   },
   {
@@ -516,7 +540,7 @@ const lotColumns: ITableColumn<IProductStockDetailRow>[] = [
           ],
         }
       }
-      return { css: 'text-right', text: stockDetail.Quantity || '' }
+      return { css: `text-right ${stockDetail._isNew ? 'text-blue-800' : ''}`.trim(), text: stockDetail.Quantity || '' }
     },
   },
 ]
@@ -578,7 +602,12 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
       computeStockDisplay(productStockDisplay)
       return productStockDisplay.serialNumbersCountNew
     },
-    mobile: { order: 3, css: 'col-span-12' },
+    mobile: { 
+    	order: 3, 
+     	css: 'col-span-12', 
+     	labelLeft: "Seriales",
+      contentCss: "flex items-center justify-end pr-4 bg-purple-light",
+    },
     showEditIcon: true,
     onCellClick: (productStockDisplay, index, rerender) => openDetailLayer('serial', productStockDisplay, rerender),
     render: (productStockDisplay) => {
@@ -599,7 +628,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
   {
     header: 'Stock Simple', css: 'justify-end px-6', inputCss: 'text-right',
     headerCss: 'w-150',
-    mobile: { order: 4, css: 'col-span-12' },
+    mobile: { order: 4, css: 'col-span-12', labelLeft: "Simple" },
     showEditIcon: true,
     cellInputType: 'number',
     getValue: (productStockDisplay) => {
@@ -628,6 +657,12 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
   {
     header: 'Stock Loteado',
     showEditIcon: true,
+    mobile: { 
+    	order: 5, 
+     	css: 'col-span-12', 
+     	labelLeft: "Loteado",
+      contentCss: "flex items-center justify-end bg-purple-light pr-4",
+    },
     onCellClick: (productStockDisplay, index, rerender) => openDetailLayer('lot', productStockDisplay, rerender),
     getValue: (productStockDisplay) => {
       computeStockDisplay(productStockDisplay)
@@ -650,6 +685,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
   },
   {
     header: 'Stock Total', css: 'justify-end text-right',
+    mobile: { order: 6, css: 'col-span-12 pr-4', labelLeft: "Total" },
     getValue: (productStockDisplay) => {
       computeStockDisplay(productStockDisplay)
       return formatN(productStockDisplay.stockLoteadoNew + productStockDisplay.stockSimpleNew + productStockDisplay.stockSerialNumbersNew)

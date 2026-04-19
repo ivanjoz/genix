@@ -10,7 +10,7 @@ import CheckboxOptions from '$components/CheckboxOptions.svelte';
 import { Core } from '$core/store.svelte';
 import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
 import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
-import { getProductosStock, type IProductoStock } from '$routes/logistica/products-stock/stock-movement';
+import { getProductosStock, type IProductoStock, type IProductStockDetail } from '$routes/logistica/products-stock/stock-movement';
 import { ClientProviderService, ClientProviderType, type IClientProvider } from '$routes/negocio/clientes/clientes-proveedores.svelte';
 import { ProductosService } from '$routes/negocio/productos/productos.svelte';
 import { ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
@@ -123,35 +123,66 @@ import { SaleOrderState } from "./sale_order.svelte";
       const producto = productosService.recordsMap.get(e.ProductID)
       if(!producto){ continue }
 
-    	const key = [e.ProductID, e.PresentationID||0, e.SKU ? 1 : 0].join("_")
-     	if(!productStockGroups.has(key)){
-        const presentationID = e.PresentationID || 0
-        const presentationName = presentationID
-          ? producto.Presentaciones?.find((presentationOption) => presentationOption.id === presentationID)?.nm || `Presentación ${presentationID}`
-          : ""
-        const brandName = listasService.recordsMap.get(producto.MarcaID)?.Nombre || ""
-        const displayName = presentationName ? `${producto.Nombre} (${presentationName})` : producto.Nombre
+      // Generic stock is the base row quantity plus non-serialized details.
+      const serialNumbers = (e.StockDetails || []).filter((stockDetail) => !!stockDetail.SerialNumber?.trim())
+      const genericDetailQuantity = (e.StockDetails || []).reduce((detailQuantity, stockDetail) => {
+        return stockDetail.SerialNumber?.trim() ? detailQuantity : detailQuantity + stockDetail.Quantity
+      }, 0)
+      const stockBuckets: Array<{
+        key: string
+        quantity: number
+        serialNumbers?: IProductStockDetail[]
+      }> = [
+        {
+          key: [e.ProductID, e.PresentationID || 0, 0].join("_"),
+          quantity: e.Quantity + genericDetailQuantity,
+        },
+      ]
 
-        // Build the final sale row once and only mutate the aggregated fields while iterating stock.
-      	productStockGroups.set(key, {
-      	  key,
-      	  cant: 0,
-      	  presentationID,
-      	  presentationName,
-      	  displayName,
-      	  searchText: `${producto.Nombre} ${presentationName} ${brandName}`.toLowerCase(),
-      	  producto,
-       	  skus: [] as IProductoStock[],
-       } as ProductoVenta)
-      }
-      
-     	if(e.SKU){
-      	productStockGroups.get(key)?.skus?.push(e)
+      if (serialNumbers.length > 0) {
+        stockBuckets.push({
+          key: [e.ProductID, e.PresentationID || 0, 1].join("_"),
+          quantity: serialNumbers.reduce((detailQuantity, stockDetail) => detailQuantity + stockDetail.Quantity, 0),
+          serialNumbers,
+        })
       }
 
-      const productStockGroup = productStockGroups.get(key)
-      if(productStockGroup){
-        productStockGroup.cant += e.Quantity
+      for (const stockBucket of stockBuckets) {
+        if (stockBucket.quantity <= 0) { continue }
+
+        if(!productStockGroups.has(stockBucket.key)){
+          const presentationID = e.PresentationID || 0
+          const presentationName = presentationID
+            ? producto.Presentaciones?.find((presentationOption) => presentationOption.id === presentationID)?.nm || `Presentación ${presentationID}`
+            : ""
+          const brandName = listasService.recordsMap.get(producto.MarcaID)?.Nombre || ""
+          const displayName = presentationName ? `${producto.Nombre} (${presentationName})` : producto.Nombre
+
+          // Build the final sale row once and only mutate the aggregated fields while iterating stock.
+          productStockGroups.set(stockBucket.key, {
+            key: stockBucket.key,
+            cant: 0,
+            presentationID,
+            presentationName,
+            displayName,
+            searchText: `${producto.Nombre} ${presentationName} ${brandName}`.toLowerCase(),
+            producto,
+            serialNumbers: [] as IProductStockDetail[],
+          } as ProductoVenta)
+        }
+
+        const productStockGroup = productStockGroups.get(stockBucket.key)
+        if(productStockGroup){
+          productStockGroup.cant += stockBucket.quantity
+          if (stockBucket.serialNumbers?.length) {
+            // Keep serial numbers attached to the serialized row for filtering and selection.
+            productStockGroup.serialNumbers = [
+              ...(productStockGroup.serialNumbers || []),
+              ...stockBucket.serialNumbers,
+            ]
+            productStockGroup.searchText = `${productStockGroup.searchText} ${stockBucket.serialNumbers.map((stockDetail) => stockDetail.SerialNumber || "").join(" ")}`.trim()
+          }
+        }
       }
     }
 
@@ -177,117 +208,11 @@ import { SaleOrderState } from "./sale_order.svelte";
     filterProductos(ventasState.filterText)
   }
 
-  function parseProductosDeprecated() {
-    if (!productosService.records.length || !productosStock.length) return;
-
-    const stockGroupsByProductID = new Map<number, Map<number, {
-      presentationID: number
-      genericQuantity: number
-      skuQuantity: number
-      skus: IProductoStock[]
-    }>>();
-
-    // Group stock once so we avoid scanning the full stock list for every product.
-    for (const stockRecord of productosStock) {
-      const presentationID = stockRecord.PresentationID || 0;
-      let stockGroupsByPresentationID = stockGroupsByProductID.get(stockRecord.ProductID);
-
-      if (!stockGroupsByPresentationID) {
-        stockGroupsByPresentationID = new Map();
-        stockGroupsByProductID.set(stockRecord.ProductID, stockGroupsByPresentationID);
-      }
-
-      let stockGroup = stockGroupsByPresentationID.get(presentationID);
-      if (!stockGroup) {
-        stockGroup = {
-          presentationID,
-          genericQuantity: 0,
-          skuQuantity: 0,
-          skus: [],
-        };
-        stockGroupsByPresentationID.set(presentationID, stockGroup);
-      }
-
-      if (stockRecord.SKU) {
-        stockGroup.skus.push(stockRecord);
-        stockGroup.skuQuantity += stockRecord.Quantity;
-      } else {
-        stockGroup.genericQuantity += stockRecord.Quantity;
-      }
-    }
-
-    const newProductos: ProductoVenta[] = [];
-
-    for (const producto of productosService.records) {
-      const stockGroupsByPresentationID = stockGroupsByProductID.get(producto.ID);
-      if (!stockGroupsByPresentationID) continue;
-
-      const brandName = listasService.recordsMap.get(producto.MarcaID)?.Nombre || "";
-      const baseSearchText = `${producto.Nombre} ${brandName}`.toLowerCase();
-      const presentationNameByID = new Map(
-        (producto.Presentaciones || []).map((presentationOption) => [presentationOption.id, presentationOption.nm]),
-      );
-
-      for (const stockGroup of stockGroupsByPresentationID.values()) {
-        const presentationName = stockGroup.presentationID
-          ? presentationNameByID.get(stockGroup.presentationID) || `Presentación ${stockGroup.presentationID}`
-          : "";
-        const displayName = presentationName ? `${producto.Nombre} (${presentationName})` : producto.Nombre;
-        const searchText = presentationName
-          ? `${baseSearchText} ${presentationName}`.toLowerCase()
-          : baseSearchText;
-
-        if (stockGroup.skuQuantity > 0) {
-          // Reuse the aggregated stock group instead of creating intermediate rows first.
-          newProductos.push({
-            producto,
-            cant: stockGroup.skuQuantity,
-            key: `K${producto.ID}-${stockGroup.presentationID}`,
-            presentationID: stockGroup.presentationID,
-            presentationName,
-            displayName,
-            searchText,
-            skus: stockGroup.skus,
-          });
-        }
-
-        if (stockGroup.genericQuantity > 0) {
-          newProductos.push({
-            producto,
-            cant: stockGroup.genericQuantity,
-            key: `P${producto.ID}-${stockGroup.presentationID}`,
-            presentationID: stockGroup.presentationID,
-            presentationName,
-            displayName,
-            searchText,
-          });
-
-          if ((producto.SbnCantidad || 0) > 1) {
-            // Preserve the sub-unit sale flow only when the base presentation has stock.
-            newProductos.push({
-              producto,
-              cant: producto.SbnCantidad!,
-              key: `S${producto.ID}-${stockGroup.presentationID}`,
-              presentationID: stockGroup.presentationID,
-              presentationName,
-              displayName,
-              searchText,
-              isSubUnidad: true,
-            });
-          }
-        }
-      }
-    }
-
-    productosParsedAll = newProductos;
-    filterProductos(ventasState.filterText);
-  }
-
   function applyFilters() {
     const text = ventasState.filterText.toLowerCase();
-    const skuText = ventasState.filterSku.toLowerCase();
+    const serialNumberText = ventasState.filterSerialNumber.toLowerCase();
 
-    if (!text && !skuText) {
+    if (!text && !serialNumberText) {
       productosParsed = productosParsedAll;
       return;
     }
@@ -298,17 +223,19 @@ import { SaleOrderState } from "./sale_order.svelte";
         // Filter by Name
         const matchName = terms.length === 0 || wordInclude(e.searchText, terms);
 
-        // Filter by SKU
-        let matchSku = true;
-        if(skuText) {
-            matchSku = false;
-            if(e.skus && e.skus.length > 0) {
-                // Check if any stock SKU matches
-                matchSku = e.skus.some(s => s.SKU && s.SKU.toLowerCase().includes(skuText));
+        // Filter by serial number
+        let matchSerialNumber = true;
+        if(serialNumberText) {
+            matchSerialNumber = false;
+            if(e.serialNumbers && e.serialNumbers.length > 0) {
+                // Serialized rows stay searchable by partial serial number.
+                matchSerialNumber = e.serialNumbers.some((stockDetail) =>
+                  stockDetail.SerialNumber && stockDetail.SerialNumber.toLowerCase().includes(serialNumberText),
+                );
             }
         }
 
-        return matchName && matchSku;
+        return matchName && matchSerialNumber;
     });
 
     productoSelected = -1;
@@ -319,8 +246,8 @@ import { SaleOrderState } from "./sale_order.svelte";
     applyFilters();
   }
 
-  function filterSkus(text: string) {
-    ventasState.filterSku = text;
+  function filterSerialNumbers(text: string) {
+    ventasState.filterSerialNumber = text;
     applyFilters();
   }
 
@@ -339,8 +266,8 @@ import { SaleOrderState } from "./sale_order.svelte";
       ev.preventDefault();
       // Add 1 unit of selected
       const prod = productosParsed[productoSelected];
-      if (prod.skus?.length) {
-        ventasState.ventaErrorMessage = "Seleccione un SKU específico.";
+      if (prod.serialNumbers?.length) {
+        ventasState.ventaErrorMessage = "Seleccione una serie específica.";
         return;
       }
       ventasState.addProducto(prod, 1);
@@ -411,9 +338,9 @@ import { SaleOrderState } from "./sale_order.svelte";
                <input
                  type="text"
                  class="w-full px-12 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                 placeholder="SKU..."
-                 value={ventasState.filterSku}
-                 oninput={(e) => filterSkus(e.currentTarget.value)}
+                 placeholder="Serie..."
+                 value={ventasState.filterSerialNumber}
+                 oninput={(e) => filterSerialNumbers(e.currentTarget.value)}
                />
             </div>
           </div>
@@ -443,8 +370,8 @@ import { SaleOrderState } from "./sale_order.svelte";
                 filterText={ventasState.filterText}
                 onselect={(i) => (productoSelected = i)}
                 onmouseover={() => (productoSelected = -1)}
-                onadd={(n, sku) => {
-                  ventasState.addProducto(item, n, sku);
+                onadd={(n, serialNumber) => {
+                  ventasState.addProducto(item, n, serialNumber);
                   filterProductos("");
                 }}
               />
@@ -576,13 +503,13 @@ import { SaleOrderState } from "./sale_order.svelte";
                   >
                   {/if}
                 </div>
-                {#if item.skus && item.skus.size > 0}
+                {#if item.serialNumbers && item.serialNumbers.size > 0}
                   <div class="flex flex-wrap gap-4 mt-2">
-                    {#each item.skus.entries() as [sku, qty]}
+                    {#each item.serialNumbers.entries() as [serialNumber, qty]}
                       <span
                         class="text-[10px] bg-white border border-gray-200 px-6 rounded text-gray-600"
                       >
-                        {sku} <span class="font-bold text-gray-800">x{qty}</span>
+                        Serie {serialNumber} <span class="font-bold text-gray-800">x{qty}</span>
                       </span>
                     {/each}
                   </div>

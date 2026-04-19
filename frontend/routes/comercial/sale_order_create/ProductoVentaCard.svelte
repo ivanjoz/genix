@@ -9,7 +9,7 @@ import { formatN } from '$libs/helpers';
     isSelected: boolean
     ventaProducto?: VentaProducto
     filterText: string
-    onadd: (cant: number, sku?: string) => void
+    onadd: (cant: number, serialNumber?: string) => void
     onselect: (idx: number) => void
     onmouseover: () => void
   }
@@ -38,7 +38,7 @@ import { formatN } from '$libs/helpers';
     ).join('');
   };
 
-  const isSku = $derived((productoStock.skus?.length || 0) > 0);
+  const hasSerialNumbers = $derived((productoStock.serialNumbers?.length || 0) > 0);
   const mobileSelectedCount = $derived(ventaProducto?.cantidad || 0)
 
   const getCant = $derived.by(() => {
@@ -59,17 +59,17 @@ import { formatN } from '$libs/helpers';
 
   const hasCriticalStock = $derived(getCant <= 2)
 
-  // SKU Logic filtering
-  const firstSkus = $derived.by(() => {
-    let skus = productoStock.skus || []
+  // Serialized rows only expose available serial numbers that are not exhausted in cart.
+  const firstSerialNumbers = $derived.by(() => {
+    let serialNumbers = productoStock.serialNumbers || []
 
-    // Filter out SKUs that are fully in cart (no stock left)
-    skus = skus.filter(s => {
-        const inCart = ventaProducto?.skus?.get(s.SKU as string) || 0
-        return (s.Quantity - inCart) > 0
+    serialNumbers = serialNumbers.filter((stockDetail) => {
+        const serialNumber = stockDetail.SerialNumber || ""
+        const inCart = ventaProducto?.serialNumbers?.get(serialNumber) || 0
+        return serialNumber && (stockDetail.Quantity - inCart) > 0
     })
 
-    return skus.slice(0, 5)
+    return serialNumbers.slice(0, 5)
   })
 
   const price = $derived.by(() => {
@@ -140,8 +140,8 @@ import { formatN } from '$libs/helpers';
              <span class="text-gray-300">|</span>
              <span class="text-purple-600 font-bold text-xs">{productoStock.producto.SbnUnidad}</span>
           {/if}
-          {#if isSku}
-             <span class="text-xs font-bold text-purple-600 bg-purple-50 px-4 py-1 rounded">(SKU)</span>
+          {#if hasSerialNumbers}
+             <span class="text-xs font-bold text-purple-600 bg-purple-50 px-4 py-1 rounded">(Serie)</span>
           {/if}
        </div>
        <div class="h-[1px] bg-gray-200 grow group-hover:bg-gray-300 transition-colors"></div>
@@ -149,18 +149,18 @@ import { formatN } from '$libs/helpers';
 
     <!-- Body: Grid -->
     <div class="flex items-center gap-6">
-        <!-- Col 1: Quick Actions / SKUs -->
+        <!-- Col 1: Quick Actions / Serial Numbers -->
         <div class="flex items-center">
-            {#if isSku}
+            {#if hasSerialNumbers}
                <div class="flex flex-wrap gap-4">
-                  {#each firstSkus as sku}
-                      <button class="sku-button transition-colors"
+                  {#each firstSerialNumbers as stockDetail}
+                      <button class="serial-number-button transition-colors"
                         onclick={(e) => {
                             e.stopPropagation()
-                            onadd(1, sku.SKU)
+                            onadd(1, stockDetail.SerialNumber)
                         }}
                       >
-                       {sku.SKU}
+                       {stockDetail.SerialNumber}
                       </button>
                   {/each}
                </div>
@@ -189,7 +189,7 @@ import { formatN } from '$libs/helpers';
         <!-- In this design, we keep it simple. -->
 
         <!-- Col 3: Stock -->
-        {#if !isSku}
+        {#if !hasSerialNumbers}
           <div class={"absolute bottom-0 left-0 text-right text-sm text-gray-500 group-hover:invisible" + (hasCriticalStock ? " text-red-500 font-bold" : "")}>
             <div class="hidden w-50 font-mono md:block">
                 {getCant}
@@ -206,7 +206,7 @@ import { formatN } from '$libs/helpers';
 
 
 <style>
-  .sku-button {
+  .serial-number-button {
     color: #285bf1;
     border-radius: 7px;
     padding: 5px 8px 4px 8px;
@@ -216,7 +216,7 @@ import { formatN } from '$libs/helpers';
     font-size: 14px;
     font-family: mono;
   }
-  .sku-button:hover {
+  .serial-number-button:hover {
     background-color: #5e84f7;
     border-bottom: 1px solid #5e84f7;
     color: white;

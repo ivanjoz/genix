@@ -128,7 +128,7 @@
 
     resolvedContent.css = typeof cell.cellCss === 'string'
       ? cell.cellCss
-      : (cell.onCellEdit || cell.onCellSelect ? 'mobile-cards-value-host-interactive' : '');
+      : (isInteractiveCell(cell, record, index) ? 'mobile-cards-value-host-interactive' : '');
 
     const dynamicCellCss = cell.setCellCss?.(record);
     if (dynamicCellCss) {
@@ -169,8 +169,31 @@
     rowVersions.set(rowIndex, (rowVersions.get(rowIndex) || 0) + 1);
   }
 
-  function isInteractiveCell(cell: TCell): boolean {
-    return Boolean(cell.onCellEdit || cell.onCellSelect);
+  // Keep the same disabled-state contract as desktop tables so mobile cards do not open detail layers accidentally.
+  function isCellInteractionDisabled(cell: TCell, record: TRecord, index: number): boolean {
+    return Boolean(cell.disableCellInteractions?.(record, index));
+  }
+
+  // A mobile value host is interactive when any cell-level handler is active for the current record.
+  function isInteractiveCell(cell: TCell, record: TRecord, index: number): boolean {
+    if (isCellInteractionDisabled(cell, record, index)) {
+      return false;
+    }
+    return Boolean(cell.onCellEdit || cell.onCellSelect || cell.onCellClick);
+  }
+
+  // Route tap/keyboard activation to the same callback contract used by desktop table cells.
+  function handleCellClick(event: MouseEvent, cell: TCell, record: TRecord, index: number) {
+    if (!cell.onCellClick || isCellInteractionDisabled(cell, record, index)) {
+      return;
+    }
+    event.stopPropagation();
+    logInteraction('onCellClick', {
+      rowIndex: index,
+      cellId: cell.id,
+      field: cell.field,
+    });
+    cell.onCellClick(record, index, () => rerenderRow(index));
   }
 
   function logInteraction(eventName: string, payload: Record<string, unknown>) {
@@ -259,7 +282,10 @@
                         </span>
                       {/if}
 
-                      <div class="mobile-cards-value-host {cellData.css}" class:mobile-cards-value-host-interactive={isInteractiveCell(cell)}>
+                      <div class="mobile-cards-value-host {cellData.css}"
+                        class:mobile-cards-value-host-interactive={isInteractiveCell(cell, resolvedRecord, recordIndex)}
+                        onpointerup={(event) => handleCellClick(event, cell, resolvedRecord, recordIndex)}
+                      >
                         {#if cell.onCellEdit}
                           <div class="mobile-cards-editable-border"><div></div></div>
                           <CellEditable
@@ -356,7 +382,10 @@
                           {@html cellData.prefixHTML}
                         </span>
                       {/if}
-                      <div class="mobile-cards-compact-content {cell.contentCss || ''} {cellData.css}" class:mobile-cards-value-host-interactive={isInteractiveCell(cell)}>
+                      <div class="mobile-cards-compact-content {cell.contentCss || ''} {cellData.css}"
+                        class:mobile-cards-value-host-interactive={isInteractiveCell(cell, resolvedRecord, recordIndex)}
+                        onpointerup={(event) => handleCellClick(event, cell, resolvedRecord, recordIndex)}
+                      >
                         {#if cell.onCellEdit}
                           <div class="mobile-cards-editable-border"><div></div></div>
                           <CellEditable
@@ -470,7 +499,10 @@
                         {@html cellData.prefixHTML}
                       </span>
                     {/if}
-                    <div class="mobile-cards-compact-content {cell.contentCss || ''} {cellData.css}" class:mobile-cards-value-host-interactive={isInteractiveCell(cell)}>
+                    <div class="mobile-cards-compact-content {cell.contentCss || ''} {cellData.css}"
+                      class:mobile-cards-value-host-interactive={isInteractiveCell(cell, resolvedRecord, recordIndex)}
+                      onpointerup={(event) => handleCellClick(event, cell, resolvedRecord, recordIndex)}
+                    >
                       {#if cell.onCellEdit}
                         <div class="mobile-cards-editable-border"><div></div></div>
                         <CellEditable
@@ -707,6 +739,7 @@
   .mobile-cards-value-host-interactive {
     position: relative;
     min-height: 32px;
+    cursor: pointer;
   }
 
   .mobile-cards-highlight {

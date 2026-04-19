@@ -79,3 +79,5 @@ backend/genix_app
 backend/genix_app.zst
 scripts/app
 tmp/*
+.claude/skills/
+.claude/skills

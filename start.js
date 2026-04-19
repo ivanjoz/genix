@@ -24,6 +24,25 @@ if(!isConsole){
   return
 }
 
+// Verifica el symlink de skills (.claude/skills -> .agents/skills)
+const agentsSkillsPath = path.join(__dirname, '.agents', 'skills')
+const claudeSkillsPath = path.join(__dirname, '.claude', 'skills')
+const symlinkType = isWindows ? 'junction' : 'dir'
+const normPath = (p) => path.normalize(p).replace(/[/\\]+$/, '')
+fs.mkdirSync(agentsSkillsPath, { recursive: true })
+try {
+  const linkTarget = fs.readlinkSync(claudeSkillsPath)
+  if (normPath(linkTarget) !== normPath(agentsSkillsPath)) {
+    fs.rmSync(claudeSkillsPath, { recursive: true, force: true })
+    fs.symlinkSync(agentsSkillsPath, claudeSkillsPath, symlinkType)
+    console.log(`Symlink actualizado: .claude/skills -> .agents/skills`)
+  }
+} catch {
+  fs.rmSync(claudeSkillsPath, { recursive: true, force: true })
+  fs.symlinkSync(agentsSkillsPath, claudeSkillsPath, symlinkType)
+  console.log(`Symlink creado: .claude/skills -> .agents/skills`)
+}
+
 // Revisa si todo está instalado
 if (!fs.existsSync("node_modules")){
   console.log("Instalando dependiencias de Node.js...")

@@ -10,6 +10,7 @@ export interface ITableMobileCard<T> {
 	elementLeft?: string | ElementAST | ElementAST[] 
 	elementRight?: string | ElementAST | ElementAST[]
 	css?: string
+	contentCss?: string
 	icon?: string
 	iconCss?: string
 	render?: (e: T, idx: number) => string | ElementAST | ElementAST[]
@@ -35,8 +36,11 @@ export interface ICardCell<T> {
 	cellOptions?: any[]
 	cellOptionsKeyId?: string
 	cellOptionsKeyName?: string
+	disableCellInteractions?: (record: T, idx?: number) => boolean
 	onCellEdit?: (record: T, value: string | number, rerender: () => void) => void
 	onCellSelect?: (record: T, value: string | number, rerender: () => void) => void
+	onCellClick?: (record: T, idx: number, rerender: () => void) => void
+	showEditIcon?: boolean
   getValue?: (record: T, idx: number) => string | number
   renderPrefix?: (record: T, idx: number) => string | ElementAST | ElementAST[] | false
   render?: (record: T, idx: number) => string | ElementAST | ElementAST[]
@@ -68,8 +72,11 @@ export interface IMobileCardsListCell<T, TSource = unknown> {
   cellOptions?: any[]
   cellOptionsKeyId?: string
   cellOptionsKeyName?: string
+  disableCellInteractions?: (record: T, idx?: number) => boolean
   onCellEdit?: (record: T, value: string | number, rerender: () => void) => void
   onCellSelect?: (record: T, value: string | number, rerender: () => void) => void
+  onCellClick?: (record: T, idx: number, rerender: () => void) => void
+  showEditIcon?: boolean
   getValue?: (record: T, idx: number) => string | number
   renderPrefix?: (record: T, idx: number) => string | ElementAST | ElementAST[] | false
   render?: (record: T, idx: number) => string | ElementAST | ElementAST[]

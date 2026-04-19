@@ -128,6 +128,7 @@
       ...columnDefinition,
       source: columnDefinition,
       itemCss: columnDefinition.mobile?.css || 'col-span-full',
+      contentCss: columnDefinition.mobile?.contentCss || getAlignClassName(columnDefinition.align),
       labelTop: columnDefinition.mobile?.labelTop,
       labelLeft: columnDefinition.mobile?.labelLeft,
       icon: columnDefinition.mobile?.icon,
@@ -136,7 +137,9 @@
       elementRight: columnDefinition.mobile?.elementRight,
       mobileRender: columnDefinition.mobile?.render,
       if: columnDefinition.mobile?.if,
-      contentCss: getAlignClassName(columnDefinition.align),
+      onCellClick: columnDefinition.onCellClick,
+      disableCellInteractions: columnDefinition.disableCellInteractions,
+      showEditIcon: columnDefinition.showEditIcon,
       useRenderer: Boolean(cellRenderer && columnDefinition.useCellRenderer),
     }));
   });

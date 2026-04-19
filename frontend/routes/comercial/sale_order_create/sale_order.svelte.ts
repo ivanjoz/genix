@@ -1,6 +1,6 @@
 import { POST } from '$libs/http.svelte';
 import { type IProducto } from '$routes/negocio/productos/productos.svelte';
-import { type IProductoStock } from '$routes/logistica/products-stock/stock-movement';
+import { type IProductoStock, type IProductStockDetail } from '$routes/logistica/products-stock/stock-movement';
 import { Loading, Notify } from '$libs/helpers';
 
 export interface ProductoVenta {
@@ -12,7 +12,7 @@ export interface ProductoVenta {
   displayName: string
   searchText: string
   isSubUnidad?: boolean
-  skus?: IProductoStock[]
+  serialNumbers?: IProductStockDetail[]
 }
 
 export interface SkuCant {
@@ -25,7 +25,7 @@ export interface VentaProducto {
   presentationID: number
   presentationName: string
   displayName: string
-  skus?: Map<string,number>
+  serialNumbers?: Map<string,number>
   lote?: string
   cantidad: number
   isSubUnidad?: boolean
@@ -70,7 +70,7 @@ export class SaleOrderState {
   } as ISaleOrder)
   filterText = $state("")
   ventaErrorMessage = $state("")
-  filterSku = $state("")
+  filterSerialNumber = $state("")
 
   // Cart
   ventaProductos = $state([] as VentaProducto[])
@@ -83,7 +83,7 @@ export class SaleOrderState {
   constructor() {}
 
   // Methods
-  addProducto(e: ProductoVenta, cant: number, sku?: string) {
+  addProducto(e: ProductoVenta, cant: number, serialNumber?: string) {
     const ventaCant = this.ventaProductosMap.get(e.key)?.cantidad || 0
     const stock = e.cant - ventaCant
 
@@ -95,23 +95,24 @@ export class SaleOrderState {
     const ventaProducto = this.ventaProductos.find(x => x.key === e.key)
     if(ventaProducto){
       ventaProducto.cantidad += cant
-      if(sku){
-        const currentSkus = ventaProducto.skus || new Map<string, number>()
-        const skuAdded = currentSkus.get(sku)
+      if(serialNumber){
+        const currentSerialNumbers = ventaProducto.serialNumbers || new Map<string, number>()
+        const serialAdded = currentSerialNumbers.get(serialNumber)
 
-        if(skuAdded){
-          const stockCant = e.skus?.find(x => x.SKU === sku)?.Quantity || 0
-          if((skuAdded + 1) > stockCant){
-            this.ventaErrorMessage = `El SKU ${sku} del producto "${e.displayName}" sólo posee ${stockCant} unidad(es).`
+        if(serialAdded){
+          // Serialized stock must stay bounded by the detail row quantity.
+          const stockCant = e.serialNumbers?.find((detail) => detail.SerialNumber === serialNumber)?.Quantity || 0
+          if((serialAdded + 1) > stockCant){
+            this.ventaErrorMessage = `La serie ${serialNumber} del producto "${e.displayName}" sólo posee ${stockCant} unidad(es).`
             return
           }
-          const newSkus = new Map(currentSkus)
-          newSkus.set(sku, skuAdded + 1)
-          ventaProducto.skus = newSkus
+          const newSerialNumbers = new Map(currentSerialNumbers)
+          newSerialNumbers.set(serialNumber, serialAdded + 1)
+          ventaProducto.serialNumbers = newSerialNumbers
         } else {
-          const newSkus = new Map(currentSkus)
-          newSkus.set(sku, 1)
-          ventaProducto.skus = newSkus
+          const newSerialNumbers = new Map(currentSerialNumbers)
+          newSerialNumbers.set(serialNumber, 1)
+          ventaProducto.serialNumbers = newSerialNumbers
         }
       }
       this.ventaProductos = [...this.ventaProductos]
@@ -123,7 +124,7 @@ export class SaleOrderState {
         presentationID: e.presentationID,
         presentationName: e.presentationName,
         displayName: e.displayName,
-        skus: new Map(sku ? [[sku,1]] : []),
+        serialNumbers: new Map(serialNumber ? [[serialNumber,1]] : []),
         isSubUnidad: e.isSubUnidad || false,
         producto: e.producto
       })
@@ -185,28 +186,28 @@ export class SaleOrderState {
 		this.form.DetailProductSkus = []
     this.form.DetailProductPresentations = []
 
-    // Flatten cart into order details, splitting by SKU for inventory tracking
+    // Flatten cart into order details, keeping the backend's legacy field name for serial numbers.
     for (const vp of this.ventaProductos) {
       let precio = vp.producto?.PrecioFinal || 0
       if (vp.isSubUnidad && vp.producto?.SbnPreciFinal) {
         precio = vp.producto.SbnPreciFinal
       }
 
-      let totalSkuQty = 0
-      if (vp.skus && vp.skus.size > 0) {
-        // Create a separate line for each SKU group to allow precise stock deduction
-        for (const [sku, qty] of vp.skus.entries()) {
+      let totalSerialQty = 0
+      if (vp.serialNumbers && vp.serialNumbers.size > 0) {
+        // Serialized lines travel independently so backend can deduct the matching detail row.
+        for (const [serialNumber, qty] of vp.serialNumbers.entries()) {
           this.form.DetailProductsIDs.push(vp.productoID)
           this.form.DetailPrices.push(precio)
           this.form.DetailQuantities.push(qty)
-          this.form.DetailProductSkus.push(sku)
+          this.form.DetailProductSkus.push(serialNumber)
           this.form.DetailProductPresentations.push(vp.presentationID)
-          totalSkuQty += qty
+          totalSerialQty += qty
         }
       }
 
-      // Add a generic line for any quantity without a specific SKU
-      const remainingQty = vp.cantidad - totalSkuQty
+      // Remaining quantity belongs to the generic stock bucket with no serial number.
+      const remainingQty = vp.cantidad - totalSerialQty
       if (remainingQty > 0) {
         this.form.DetailProductsIDs.push(vp.productoID)
         this.form.DetailPrices.push(precio)
