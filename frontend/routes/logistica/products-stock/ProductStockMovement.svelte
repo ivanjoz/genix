@@ -17,13 +17,14 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
   type IProductoStockDisplay = {
   	base: IProductoStock
     groupKey: string
-  	lotes: IProductoStock[] 
-  	skus: IProductoStock[] 
-   	isSkuGroup: boolean
+  	lotes: IProductoStock[]
+  	skus: IProductoStock[]
     stockSimple: number
     stockLoteado: number
+    stockSkus: number
     stockSimpleNew: number
     stockLoteadoNew: number
+    stockSkusNew: number
     computed?: boolean
   }
 
@@ -37,7 +38,10 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
   let stockForm = $state({} as IProductoStock)
   let selectedSkuGroup = $state<IProductoStockDisplay | null>(null)
   let selectedSkus = $state<IProductoStock[]>([])
+  let selectedLoteGroup = $state<IProductoStockDisplay | null>(null)
+  let selectedLotes = $state<IProductoStock[]>([])
   const freshPendingSku = (): IProductoStock => ({ _isNew: true, SKU: '', Lote: '', Quantity: 0 } as IProductoStock)
+  const freshPendingLote = (): IProductoStock => ({ _isNew: true, Lote: '', Quantity: 0 } as IProductoStock)
 
   const stockFormProducto = $derived(productos?.recordsMap?.get(stockForm.ProductID || 0))
   const groupToNewStockRecords: Map<string,IProductoStock[]> = new Map()
@@ -54,39 +58,36 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
   	untrack(() => {
 		   const recordGroup = new Map<string, IProductoStockDisplay>()
 		   for (const record of almacenStock) {
-				 const isSku = record.SKU ? 1 : 0
-				 const groupKey = [record.ProductID, record.PresentationID||0, isSku].join('_')
-				
+				 const groupKey = [record.ProductID, record.PresentationID||0].join('_')
+
 				 if(!recordGroup.has(groupKey)){
 						recordGroup.set(groupKey, {
 							groupKey,
-						  isSkuGroup: !!record.SKU, 
-								lotes: [] as IProductoStock[], 
-								skus: [] as IProductoStock[] 
+								lotes: [] as IProductoStock[],
+								skus: [] as IProductoStock[]
 						} as IProductoStockDisplay)
 				 }
-				 
+
 				 const group = recordGroup.get(groupKey) as IProductoStockDisplay
-					
+
 		     if (record.SKU) {
-						group?.skus?.push(record)				 
+						group.skus.push(record)
 					} else if (record.Lote){
-						group.lotes?.push(record)
+						group.lotes.push(record)
 					}		else {
 						group.base = record
 					}
 		   }
-					
+
 			 for(const e of recordGroup.values()){
 					if(!e.base){
 						const record = e.lotes[0] || e.skus[0]
-
-						e.base = {
-							ID: makeStockID(record),
+						const baseSeed = {
 							WarehouseID: record.WarehouseID,
 							ProductID: record.ProductID,
 							PresentationID: record.PresentationID,
 						} as IProductoStock
+						e.base = { ...baseSeed, ID: makeStockID(baseSeed) } as IProductoStock
 					}
 
 					result.push(e)
@@ -102,6 +103,13 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
     return `${productName} — ${count} SKU${count !== 1 ? 's' : ''}`
   })
 
+  const selectedLoteGroupTitle = $derived.by(() => {
+    if (!selectedLoteGroup) { return 'Lotes' }
+    const productName = productos.recordsMap.get(selectedLoteGroup.base.ProductID)?.Nombre || ''
+    const count = selectedLotes.filter(s => s.Lote).length
+    return `${productName} — ${count} Lote${count !== 1 ? 's' : ''}`
+  })
+
   const validateLoteSkuUnique = (record: IProductoStock, checkSku: string, checkLote: string): boolean => {
     if (!checkSku) return true
     const isDuplicate = (r: IProductoStock) =>
@@ -111,11 +119,20 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
     return !duplicate
   }
 
+  const validateLoteUnique = (record: IProductoStock, checkLote: string): boolean => {
+    if (!checkLote) return true
+    const isDuplicate = (r: IProductoStock) =>
+      r !== record && (r.Lote || '') === checkLote
+    const duplicate = selectedLotes.some(isDuplicate)
+    if (duplicate) { Notify.warning('El Lote ya existe.') }
+    return !duplicate
+  }
+
   const skuColumns: ITableColumn<IProductoStock>[] = [
     {
       header: 'SKU', cellCss: 'ff-mono',
       getValue: (sku) => sku.SKU || '',
-      hideCellEdit: (sku) => !sku._isNew,
+      disableCellInteractions: (sku) => !sku._isNew,
       onBeforeCellChange: (sku, value) => validateLoteSkuUnique(sku, String(value || ''), sku.Lote || ''),
       onCellEdit: (sku, value) => {
         const newSku = String(value || '')
@@ -146,7 +163,7 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
     {
       header: 'Cant.', css: 'justify-end', inputCss: 'text-right pr-6',
       getValue: (sku) => sku.Quantity ?? '',
-      hideCellEdit: (sku) => !sku._isNew,
+      disableCellInteractions: (sku) => !sku._isNew,
       cellInputType: "number",
       onCellEdit: (sku, value) => {
         if (!sku._isNew) return
@@ -170,33 +187,71 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
     }
   ]
 
-  const computeStockDisplay = (e: IProductoStockDisplay) => {
-		
-    if (e.computed) return
-
-    if (e.isSkuGroup) {      
-      e.stockSimple = 0; e.stockSimpleNew = 0
-      e.stockLoteado = 0; e.stockLoteadoNew = 0
-
-      for (const r of [...e.skus, ...(groupToNewStockRecords.get(e.groupKey) || [])]) {
-        if (r.Lote) {
-          e.stockLoteado += getCantPrevia(r)
-          e.stockLoteadoNew += r.Quantity
-        } else {
-          e.stockSimple += getCantPrevia(r)
-          e.stockSimpleNew += r.Quantity
+  const loteColumns: ITableColumn<IProductoStock>[] = [
+    {
+      header: 'Lote',
+      getValue: (lote) => lote.Lote || '',
+      disableCellInteractions: (lote) => !lote._isNew,
+      onBeforeCellChange: (lote, value) => validateLoteUnique(lote, String(value || '')),
+      onCellEdit: (lote, value) => {
+        const newLote = String(value || '')
+        lote.Lote = newLote
+        if (lote._isNew && newLote && !selectedLotes.some(s => s._isNew && !s.Lote)) {
+          const pending = selectedLotes.filter(s => s._isNew)
+          const backend = selectedLotes.filter(s => !s._isNew)
+          selectedLotes = [...pending, freshPendingLote(), ...backend]
         }
+      },
+      render: e => {
+      	if(!e.Lote){ return { css: "text-xs c-red", text: "NUEVO LOTE..." } }
+     		return e.Lote as string
       }
-    } else {
-      e.stockSimple = getCantPrevia(e.base)
-      e.stockSimpleNew = e.base.Quantity || 0
-      e.stockLoteado = 0; e.stockLoteadoNew = 0
-      
-      for (const r of [...e.lotes, ...(groupToNewLoteRecords.get(e.groupKey) || [])]) {       
-        e.stockLoteado += getCantPrevia(r) || 0
-        e.stockLoteadoNew += r.Quantity || 0
+    },
+    {
+      header: 'Cant.', css: 'justify-end', inputCss: 'text-right pr-6',
+      getValue: (lote) => lote.Quantity ?? '',
+      disableCellInteractions: (lote) => !lote._isNew,
+      cellInputType: "number",
+      onCellEdit: (lote, value) => {
+        if (!lote._isNew) return
+        lote.WarehouseID = selectedLoteGroup!.base.WarehouseID
+        lote.ProductID = selectedLoteGroup!.base.ProductID
+        lote.PresentationID = selectedLoteGroup!.base.PresentationID || 0
+        lote.Quantity = parseInt(value as string || '0')
+        lote._cantidadPrev = -1
+        lote._hasUpdated = true
+      },
+      render: (lote) => {
+        if (lote._cantidadPrev && lote._cantidadPrev !== lote.Quantity) {
+          return { css: 'flex items-center', children: [
+            { text: String(lote._cantidadPrev > 0 ? lote._cantidadPrev : 0) },
+            { text: '→', css: 'ml-2 mr-2' },
+            { text: lote.Quantity, css: 'text-red-500' }
+          ]}
+        }
+        return { css: "text-right", text: lote.Quantity || '' }
       }
     }
+  ]
+
+  const computeStockDisplay = (e: IProductoStockDisplay) => {
+    if (e.computed) return
+
+    e.stockSimple = getCantPrevia(e.base)
+    e.stockSimpleNew = e.base.Quantity || 0
+
+    e.stockLoteado = 0; e.stockLoteadoNew = 0
+    for (const r of [...e.lotes, ...(groupToNewLoteRecords.get(e.groupKey) || [])]) {
+      e.stockLoteado += getCantPrevia(r) || 0
+      e.stockLoteadoNew += r.Quantity || 0
+    }
+
+    e.stockSkus = 0; e.stockSkusNew = 0
+    for (const r of [...e.skus, ...(groupToNewStockRecords.get(e.groupKey) || [])]) {
+      e.stockSkus += getCantPrevia(r) || 0
+      e.stockSkusNew += r.Quantity || 0
+    }
+
     e.computed = true
   }
 
@@ -213,7 +268,7 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
        	css: "flex",
         children: [
       		{ tagName: "SPAN", text: productRecord  },
-         	e.isSkuGroup && {tagName: "SPAN",  text: "(SKU)", css: "ff-bold c-red ml-6"  },
+         	e.skus.length > 0 && {tagName: "SPAN",  text: "(SKU)", css: "ff-bold c-red ml-6"  },
          ]
         } as ElementAST
       }
@@ -228,22 +283,24 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
       }
     },
     { header: 'SKU',
-      getValue: (e) => {
-        if (e.isSkuGroup) {
-          return `${e.skus.length} SKUs`
-        }
-        return e.base.SKU || ''
-      },
+      getValue: (e) => e.skus.length > 0 ? `${e.skus.length} SKUs` : '',
       mobile: { order: 3, css: "col-span-12" },
+      showEditIcon: true,
+ 	   	onCellClick: (record, index, rerender) => {
+	      rerenderHandler = rerender
+	      const cached = groupToNewStockRecords.get(record.groupKey) || []
+	      selectedSkuGroup = record
+	      selectedSkus = [...cached, freshPendingSku(), ...record.skus]
+	      Core.openSideLayer(2)
+	    },
     },
     { header: 'Stock Simple', css: 'justify-end px-6', inputCss: 'text-right',
    		headerCss: 'w-150',
     	mobile: { order: 4, css: "col-span-12" },
-     	hideCellEdit: (e) => e.isSkuGroup, 
+      showEditIcon: true,
       cellInputType: "number",
       getValue: (e) => { computeStockDisplay(e); return e.stockSimpleNew },
       onCellEdit: (e, value, rerender) => {
-        if (e.isSkuGroup) { return }
         e.computed = false
         updateStockQuantity(e.base, parseInt(value as string || '0'))
         rerender()
@@ -263,6 +320,14 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
       }
     },
     { header: 'Stock Loteado',
+      showEditIcon: true,
+	   	onCellClick: (record, index, rerender) => {
+	      rerenderHandler = rerender
+	      const cached = groupToNewLoteRecords.get(record.groupKey) || []
+	      selectedLoteGroup = record
+	      selectedLotes = [...cached, freshPendingLote(), ...record.lotes]
+	      Core.openSideLayer(3)
+	    },
       getValue: (e) => { computeStockDisplay(e); return e.stockLoteadoNew },
       render: (e) => {
       	computeStockDisplay(e)
@@ -280,7 +345,7 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
       }
     },
     { header: 'Stock Total', css: 'justify-end text-right',
-      getValue: e => formatN(e.stockLoteadoNew + e.stockSimpleNew)
+      getValue: e => { computeStockDisplay(e); return formatN(e.stockLoteadoNew + e.stockSimpleNew + e.stockSkusNew) }
     },
   ]
 
@@ -444,19 +509,9 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
   useFilterCache={true}
   getFilterContent={(e) => {
     const productRecord = productos.recordsMap.get(e.base.ProductID)
-    const skuText = e.isSkuGroup
-      ? e.skus.map(r => r.SKU).filter(Boolean).join(' ')
-      : e.base.SKU
-    return [productRecord?.Nombre, skuText, e.base.Lote].filter((value) => value).join(' ').toLowerCase()
-  }}
-  onRowClick={(record,index,rerender) => {
-  	rerenderHandler = rerender
-    if (record.isSkuGroup) {
-      const cached = groupToNewStockRecords.get(record.groupKey) || []
-      selectedSkuGroup = record
-      selectedSkus = [...cached, freshPendingSku(), ...record.skus]
-      Core.openSideLayer(2)
-    }
+    const skuText = e.skus.map(r => r.SKU).filter(Boolean).join(' ')
+    const loteText = e.lotes.map(r => r.Lote).filter(Boolean).join(' ')
+    return [productRecord?.Nombre, skuText, loteText].filter((value) => value).join(' ').toLowerCase()
   }}
 />
 
@@ -481,6 +536,29 @@ import { getProductosStock, makeStockID, postProductosStock, type IProductoStock
   <TableGrid columns={skuColumns} data={selectedSkus} height="calc(100vh - 14rem)"
  		cellCss="px-6" headerCss="px-6 flex items-center min-h-32" css="mt-6"
   	getRowId={e => `${e.SKU}_${e.Lote}`}
+  />
+</Layer>
+
+<Layer id={3} type="side" sideLayerSize={620} title={selectedLoteGroupTitle} titleCss="h2"
+  css="px-12 py-10"
+  onClose={() => {
+    if (selectedLoteGroup) {
+   		const selected = displayStock.find(x => x.base.ID === selectedLoteGroup?.base.ID) as IProductoStockDisplay
+
+      const newLotes = selectedLotes.filter(s => s._isNew && s.Lote)
+      if (newLotes.length > 0) {
+        groupToNewLoteRecords.set(selected.groupKey, newLotes)
+      }
+      selected.computed = false
+      rerenderHandler?.()
+    }
+    selectedLotes = []
+    selectedLoteGroup = null
+  }}
+>
+  <TableGrid columns={loteColumns} data={selectedLotes} height="calc(100vh - 14rem)"
+ 		cellCss="px-6" headerCss="px-6 flex items-center min-h-32" css="mt-6"
+  	getRowId={e => `${e.Lote}`}
   />
 </Layer>
 

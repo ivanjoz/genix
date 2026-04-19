@@ -27,8 +27,6 @@ const (
 	sampleWarehouseID       int32 = 1
 	saleOrdersProgressPath        = "/tmp/genix_generate_sale_orders_unixday.txt"
 	selectedProductsCount         = 100
-	skuHeavyProductsPercent       = 20
-	minSKUsPerHeavyProduct        = 50
 	stockSeedBatchSize            = 90
 	historicalDaysCount           = 30
 	dailyOrdersMin                = 300
@@ -48,12 +46,10 @@ const (
 )
 
 type stockLedgerRecord struct {
-	stockID        string
+	stockID        int64
 	productID      int32
 	productName    string
 	presentationID int16
-	sku            string
-	lote           string
 	price          int32
 	remaining      int32
 }
@@ -61,15 +57,14 @@ type stockLedgerRecord struct {
 type saleOrderGenerator struct {
 	random                *mrand.Rand
 	timeHelper            core.TimeHelper
-	userToken             core.UsuarioToken
-	selectedCajaID        int32
-	availableClientIDs    []int32
-	productNamesByID      map[int32]string
-	productPricesByID     map[int32]int32
-	selectedProductIDs    []int32
-	stockLedgerByProduct  map[int32][]*stockLedgerRecord
-	remainingByProductSKU map[string]int32
-	totalRemainingUnits   int32
+	userToken            core.UsuarioToken
+	selectedCajaID       int32
+	availableClientIDs   []int32
+	productNamesByID     map[int32]string
+	productPricesByID    map[int32]int32
+	selectedProductIDs   []int32
+	stockLedgerByProduct map[int32][]*stockLedgerRecord
+	totalRemainingUnits  int32
 }
 
 type saleOrderClientSeed struct {
@@ -86,10 +81,9 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 			EmpresaID: sampleCompanyID,
 			ID:        sampleUserID,
 		},
-		productNamesByID:      map[int32]string{},
-		productPricesByID:     map[int32]int32{},
-		stockLedgerByProduct:  map[int32][]*stockLedgerRecord{},
-		remainingByProductSKU: map[string]int32{},
+		productNamesByID:     map[int32]string{},
+		productPricesByID:    map[int32]int32{},
+		stockLedgerByProduct: map[int32][]*stockLedgerRecord{},
 	}
 
 	core.Log("GenerateSaleOrders:: validating context", "company", sampleCompanyID, "user", sampleUserID, "warehouse", sampleWarehouseID)
@@ -338,7 +332,9 @@ func (generator *saleOrderGenerator) loadAvailableClients() error {
 }
 
 // loadWarehouseStock uses the existing stock handler because the requested flow must start there after seeding.
-func (generator *saleOrderGenerator) loadWarehouseStock() ([]logisticaTypes.ProductStock, error) {
+// The generator only exercises the free bucket (no lot / no serial), so the detail and lot sections of the
+// response are discarded here; ProductStockV2.Quantity is the authoritative ledger input.
+func (generator *saleOrderGenerator) loadWarehouseStock() ([]logisticaTypes.ProductStockV2, error) {
 	query := map[string]string{
 		"almacen-id": strconv.Itoa(int(sampleWarehouseID)),
 		"updated":    "0",
@@ -348,15 +344,15 @@ func (generator *saleOrderGenerator) loadWarehouseStock() ([]logisticaTypes.Prod
 	if response.StatusCode != 200 {
 		return nil, core.Err(response.Error)
 	}
-	stocks := []logisticaTypes.ProductStock{}
-	if err := json.Unmarshal(*response.Body, &stocks); err != nil {
+	result := logistica.GetProductosStockResult{}
+	if err := json.Unmarshal(*response.Body, &result); err != nil {
 		return nil, err
 	}
-	return stocks, nil
+	return result.Stocks, nil
 }
 
 // selectProducts prioritizes products that already have stock and only complements from the catalog when needed.
-func (generator *saleOrderGenerator) selectProducts(stocks []logisticaTypes.ProductStock) ([]int32, error) {
+func (generator *saleOrderGenerator) selectProducts(stocks []logisticaTypes.ProductStockV2) ([]int32, error) {
 	selectedProductIDs := []int32{}
 	selectedProductSet := map[int32]bool{}
 
@@ -431,85 +427,18 @@ func (generator *saleOrderGenerator) loadProductCatalog() error {
 	return nil
 }
 
-// seedBaseStock resets the chosen product stock and ensures a subset reaches the required SKU depth.
-func (generator *saleOrderGenerator) seedBaseStock(currentStocks []logisticaTypes.ProductStock) error {
-	stockPayload := []logisticaTypes.ProductStock{}
-	existingSKUCountByProduct := map[int32]int{}
-	existingSKUSetByProduct := map[int32]map[string]bool{}
-	selectedProductSet := map[int32]bool{}
+// seedBaseStock resets the chosen product stock on the free bucket (no lot / no serial).
+// Each selected product receives a random quantity in the V2 row; detail tracking is out of scope
+// for this generator now that lot/serial seeding requires separate handler shape.
+func (generator *saleOrderGenerator) seedBaseStock(_ []logisticaTypes.ProductStockV2) error {
+	stockPayload := make([]logistica.PostStockAdjustItem, 0, len(generator.selectedProductIDs))
 
 	for _, productID := range generator.selectedProductIDs {
-		selectedProductSet[productID] = true
-	}
-
-	for _, currentStock := range currentStocks {
-		if !selectedProductSet[currentStock.ProductID] || currentStock.Status == 0 || currentStock.Quantity <= 0 || currentStock.SKU == "" {
-			continue
-		}
-		existingSKUSet := existingSKUSetByProduct[currentStock.ProductID]
-		if existingSKUSet == nil {
-			existingSKUSet = map[string]bool{}
-			existingSKUSetByProduct[currentStock.ProductID] = existingSKUSet
-		}
-		if existingSKUSet[currentStock.SKU] {
-			continue
-		}
-		existingSKUSet[currentStock.SKU] = true
-		existingSKUCountByProduct[currentStock.ProductID]++
-	}
-
-	heavySKUProductsCount := maxInt(1, len(generator.selectedProductIDs)*skuHeavyProductsPercent/100)
-	productIDsWithExistingSKUs := []int32{}
-	productIDsWithoutSKUs := []int32{}
-	for _, productID := range generator.selectedProductIDs {
-		if existingSKUCountByProduct[productID] > 0 {
-			productIDsWithExistingSKUs = append(productIDsWithExistingSKUs, productID)
-		} else {
-			productIDsWithoutSKUs = append(productIDsWithoutSKUs, productID)
-		}
-	}
-
-	generator.random.Shuffle(len(productIDsWithExistingSKUs), func(i, j int) {
-		productIDsWithExistingSKUs[i], productIDsWithExistingSKUs[j] = productIDsWithExistingSKUs[j], productIDsWithExistingSKUs[i]
-	})
-	generator.random.Shuffle(len(productIDsWithoutSKUs), func(i, j int) {
-		productIDsWithoutSKUs[i], productIDsWithoutSKUs[j] = productIDsWithoutSKUs[j], productIDsWithoutSKUs[i]
-	})
-
-	productIDsWithManySKUs := make([]int32, 0, heavySKUProductsCount)
-	if len(productIDsWithExistingSKUs) >= heavySKUProductsCount {
-		productIDsWithManySKUs = append(productIDsWithManySKUs, productIDsWithExistingSKUs[:heavySKUProductsCount]...)
-	} else {
-		productIDsWithManySKUs = append(productIDsWithManySKUs, productIDsWithExistingSKUs...)
-		missingHeavySKUProductsCount := heavySKUProductsCount - len(productIDsWithManySKUs)
-		productIDsWithManySKUs = append(productIDsWithManySKUs, productIDsWithoutSKUs[:missingHeavySKUProductsCount]...)
-	}
-
-	for _, productID := range generator.selectedProductIDs {
-		stockPayload = append(stockPayload, logisticaTypes.ProductStock{
+		stockPayload = append(stockPayload, logistica.PostStockAdjustItem{
 			WarehouseID: sampleWarehouseID,
 			ProductID:   productID,
 			Quantity:    generator.randomInt(100, 500),
 		})
-	}
-
-	for _, productID := range productIDsWithManySKUs {
-		skusMissingCount := maxInt(0, minSKUsPerHeavyProduct-existingSKUCountByProduct[productID])
-		usedSKUs := existingSKUSetByProduct[productID]
-		if usedSKUs == nil {
-			usedSKUs = map[string]bool{}
-			existingSKUSetByProduct[productID] = usedSKUs
-		}
-
-		for skuIndex := 0; skuIndex < skusMissingCount; skuIndex++ {
-			uniqueSKU := generator.randomUniqueSKU(usedSKUs)
-			stockPayload = append(stockPayload, logisticaTypes.ProductStock{
-				WarehouseID: sampleWarehouseID,
-				ProductID:   productID,
-				SKU:         uniqueSKU,
-				Quantity:    generator.randomInt(1, 10),
-			})
-		}
 	}
 
 	for batchStart := 0; batchStart < len(stockPayload); batchStart += stockSeedBatchSize {
@@ -529,14 +458,12 @@ func (generator *saleOrderGenerator) seedBaseStock(currentStocks []logisticaType
 
 		core.Log("GenerateSaleOrders:: seeded stock batch", "batchStart", batchStart, "batchEnd", batchEnd, "batchSize", len(currentBatch))
 	}
-	core.Log("GenerateSaleOrders:: seeded heavy sku products", "productsWith50SKUs", len(productIDsWithManySKUs), "minimumSKUsPerProduct", minSKUsPerHeavyProduct)
 	return nil
 }
 
 // rebuildLedger keeps an in-memory reservation view so total generated demand never exceeds seeded stock.
-func (generator *saleOrderGenerator) rebuildLedger(stocks []logisticaTypes.ProductStock) error {
+func (generator *saleOrderGenerator) rebuildLedger(stocks []logisticaTypes.ProductStockV2) error {
 	generator.stockLedgerByProduct = map[int32][]*stockLedgerRecord{}
-	generator.remainingByProductSKU = map[string]int32{}
 	generator.totalRemainingUnits = 0
 
 	selectedProductsMap := map[int32]bool{}
@@ -553,13 +480,10 @@ func (generator *saleOrderGenerator) rebuildLedger(stocks []logisticaTypes.Produ
 			productID:      stock.ProductID,
 			productName:    generator.productNamesByID[stock.ProductID],
 			presentationID: stock.PresentationID,
-			sku:            stock.SKU,
-			lote:           stock.Lote,
 			price:          generator.productPricesByID[stock.ProductID],
 			remaining:      stock.Quantity,
 		}
 		generator.stockLedgerByProduct[stock.ProductID] = append(generator.stockLedgerByProduct[stock.ProductID], record)
-		generator.remainingByProductSKU[generator.makeProductSKUKey(stock.ProductID, stock.SKU)] += stock.Quantity
 		generator.totalRemainingUnits += stock.Quantity
 	}
 
@@ -737,7 +661,6 @@ func (generator *saleOrderGenerator) makeSalePayload(status saleOrderStatusTarge
 		selectedStock := availableStocks[generator.random.Intn(len(availableStocks))]
 		linesRemainingAfterCurrent := len(selectedProductIDs) - lineIndex - 1
 		maxQuantity := minInt32(5, selectedStock.remaining)
-		maxQuantity = minInt32(maxQuantity, generator.remainingByProductSKU[generator.makeProductSKUKey(selectedStock.productID, selectedStock.sku)])
 		maxQuantity = minInt32(maxQuantity, remainingUnitsToAssign-int32(linesRemainingAfterCurrent))
 		if maxQuantity < 1 {
 			return comercialTypes.SaleOrder{}, core.Err("no se pudo asignar cantidad válida a la línea")
@@ -748,7 +671,6 @@ func (generator *saleOrderGenerator) makeSalePayload(status saleOrderStatusTarge
 			quantity = remainingUnitsToAssign
 		}
 		selectedStock.remaining -= quantity
-		generator.remainingByProductSKU[generator.makeProductSKUKey(selectedStock.productID, selectedStock.sku)] -= quantity
 		generator.totalRemainingUnits -= quantity
 		remainingUnitsToAssign -= quantity
 
@@ -763,8 +685,6 @@ func (generator *saleOrderGenerator) makeSalePayload(status saleOrderStatusTarge
 		DetailProductsIDs:          make([]int32, 0, len(selectedStocks)),
 		DetailPrices:               make([]int32, 0, len(selectedStocks)),
 		DetailQuantities:           make([]int32, 0, len(selectedStocks)),
-		DetailProductSkus:          make([]string, 0, len(selectedStocks)),
-		DetailProductLots:          make([]string, 0, len(selectedStocks)),
 		DetailProductPresentations: make([]int16, 0, len(selectedStocks)),
 	}
 
@@ -773,8 +693,6 @@ func (generator *saleOrderGenerator) makeSalePayload(status saleOrderStatusTarge
 		payload.DetailProductsIDs = append(payload.DetailProductsIDs, selectedStock.productID)
 		payload.DetailPrices = append(payload.DetailPrices, selectedStock.price)
 		payload.DetailQuantities = append(payload.DetailQuantities, lineQuantity)
-		payload.DetailProductSkus = append(payload.DetailProductSkus, selectedStock.sku)
-		payload.DetailProductLots = append(payload.DetailProductLots, selectedStock.lote)
 		payload.DetailProductPresentations = append(payload.DetailProductPresentations, selectedStock.presentationID)
 		totalAmount += selectedStock.price * lineQuantity
 	}
@@ -890,11 +808,6 @@ func (generator *saleOrderGenerator) availableStocksForProduct(productID int32) 
 	return availableStocks
 }
 
-// makeProductSKUKey tracks stock at the same granularity requested by the user: productID + sku.
-func (generator *saleOrderGenerator) makeProductSKUKey(productID int32, sku string) string {
-	return strconv.Itoa(int(productID)) + "|" + sku
-}
-
 func (generator *saleOrderGenerator) isStockShortageError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "Se posee en stock")
 }
@@ -964,28 +877,6 @@ func (generator *saleOrderGenerator) randomInt(minValue, maxValue int) int32 {
 	return int32(minValue + generator.random.Intn(maxValue-minValue+1))
 }
 
-// randomAlphaNumeric generates the requested 10-character SKU codes.
-func (generator *saleOrderGenerator) randomAlphaNumeric(length int) string {
-	const alphaNumericChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	buffer := make([]byte, length)
-	for index := range buffer {
-		buffer[index] = alphaNumericChars[generator.random.Intn(len(alphaNumericChars))]
-	}
-	return string(buffer)
-}
-
-// randomUniqueSKU avoids collisions with existing warehouse SKU rows for the same product.
-func (generator *saleOrderGenerator) randomUniqueSKU(usedSKUs map[string]bool) string {
-	for {
-		candidateSKU := generator.randomAlphaNumeric(10)
-		if usedSKUs[candidateSKU] {
-			continue
-		}
-		usedSKUs[candidateSKU] = true
-		return candidateSKU
-	}
-}
-
 func minInt32(valueA, valueB int32) int32 {
 	if valueA < valueB {
 		return valueA
@@ -1000,9 +891,3 @@ func minInt(valueA, valueB int) int {
 	return valueB
 }
 
-func maxInt(valueA, valueB int) int {
-	if valueA > valueB {
-		return valueA
-	}
-	return valueB
-}

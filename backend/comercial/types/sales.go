@@ -23,7 +23,7 @@ type SaleOrder struct {
 	DetailPrices               []int32  `json:",omitempty" db:",list"`
 	DetailQuantities           []int32  `json:",omitempty" db:",list"`
 	DetailProductSkus          []string `json:",omitempty" db:",list"`
-	DetailProductLots          []string `json:",omitempty" db:",list"`
+	DetailProductLotIDs        []int32  `json:",omitempty" db:",list"`
 	DetailProductPresentations []int16  `json:",omitempty" db:",list"`
 
 	TotalAmount    int32 `json:",omitempty"`
@@ -82,6 +82,7 @@ type SaleOrderTable struct {
 	DetailPrices               db.Col[SaleOrderTable, []int32]
 	DetailQuantities           db.Col[SaleOrderTable, []int32]
 	DetailProductSkus          db.Col[SaleOrderTable, []string]
+	DetailProductLotIDs        db.Col[SaleOrderTable, []int32]
 	DetailProductPresentations db.Col[SaleOrderTable, []int16]
 	TotalAmount                db.Col[SaleOrderTable, int32]
 	TaxAmount                  db.Col[SaleOrderTable, int32]

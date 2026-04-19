@@ -116,8 +116,10 @@ export interface ITableColumn<T> {
 	cellOptionsKeyName?: string
 	onBeforeCellChange?: (e: T, value: string|number) => boolean
 	onCellEdit?: (e: T, value: string|number, rerender: () => void) => void
-	hideCellEdit?: (e:T, idx?: number) => boolean
+	disableCellInteractions?: (e:T, idx?: number) => boolean
 	onCellSelect?: (e: T, value: string|number, rerender: () => void) => void
+	onCellClick?: (e: T, idx: number, rerender: () => void) => void
+	showEditIcon?: boolean
   cardRender?: (e: T, idx: number) => (any)
   getValue?: (e: T, idx: number) => (string|number)
   // Renders extra visual content before the main cell output without replacing it.

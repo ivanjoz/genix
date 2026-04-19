@@ -6,163 +6,162 @@ import (
 	logisticaTypes "app/logistica/types"
 )
 
-func RecalcProductStockByMovements(companyID int32, useFechaDelta bool) error {
+// RecalcProductStockByMovements rebuilds ProductStockV2 + ProductStockDetail
+// from the full WarehouseProductMovement ledger for one company.
+// A movement with LotID==0 AND SerialNumber=="" contributes to V2.Quantity;
+// any other movement contributes to the matching ProductStockDetail row, whose
+// sum is mirrored into V2.DetailQuantity.
+func RecalcProductStockByMovements(companyID int32) error {
 	companyLock := getApplyMovimientosCompanyLock(companyID)
 
-	core.Log("RecalcProductStockByMovements esperando lock de empresa:", companyID, "useFechaDelta:", useFechaDelta)
+	core.Log("RecalcProductStockByMovements esperando lock empresa:", companyID)
 	companyLock.Lock()
-	// Keep recalculation serialized with movement application for the same company.
 	defer companyLock.Unlock()
-	core.Log("RecalcProductStockByMovements lock adquirido para empresa:", companyID)
 
-	computedMovementsByKey := make(map[string]*logisticaTypes.ProductStock)
 	updatedTime := core.SUnixTime()
 
-	accumulateMovement := func(warehouseID int32, quantity int32, subQuantity int32, movementRecord *logisticaTypes.WarehouseProductMovement) {
-		key := db.MakeKeyConcat(warehouseID, movementRecord.ProductoID, movementRecord.PresentacionID, movementRecord.SKU, movementRecord.Lote)
+	// Start by loading the persisted rows. Excluding Created+CreatedBy (and Updated/UpdatedBy on
+	// details) means any in-memory row still carrying Created==0 at the end of the pass was
+	// loaded from DB and must be persisted as an UPDATE; Created>0 flags INSERT.
+	stockByID := map[int64]*logisticaTypes.ProductStockV2{}
+	detailByKey := map[string]*logisticaTypes.ProductStockDetail{}
+	detailKey := func(stockID int64, lotID int32, serial string) string {
+		return db.MakeKeyConcat(stockID, lotID, serial)
+	}
 
-		if computedMovementsByKey[key] == nil {
-			// Keep one accumulator per exact warehouse-product-lot key for the mutable stock row.
-			computedMovementsByKey[key] = &logisticaTypes.ProductStock{
-				CompanyID:      companyID,
-				ID:             key,
-				WarehouseID:    warehouseID,
-				ProductID:      movementRecord.ProductoID,
-				PresentationID: movementRecord.PresentacionID,
-				SKU:            movementRecord.SKU,
-				Lote:           movementRecord.Lote,
-				Updated:        updatedTime,
-			}
+	{
+		existing := []logisticaTypes.ProductStockV2{}
+		q := db.Query(&existing)
+		q.Exclude(q.Created, q.CreatedBy).CompanyID.Equals(companyID)
+		if err := q.Exec(); err != nil {
+			return core.Err("Error al obtener stock V2 previo:", err)
 		}
-
-		computedMovementsByKey[key].Quantity += quantity
-		computedMovementsByKey[key].SubQuantity += subQuantity
-
-		keyGroup := db.MakeKeyConcat(warehouseID, movementRecord.ProductoID, movementRecord.PresentacionID)
-
-		if computedMovementsByKey[keyGroup] == nil {
-			// Keep one accumulator for the warehouse-product aggregate used by WarehouseProductQuantity.
-			computedMovementsByKey[keyGroup] = &logisticaTypes.ProductStock{
-				CompanyID:      companyID,
-				ID:             keyGroup,
-				WarehouseID:    warehouseID,
-				ProductID:      movementRecord.ProductoID,
-				PresentationID: movementRecord.PresentacionID,
-				Updated:        updatedTime,
-			}
+		for i := range existing {
+			stock := &existing[i]
+			// Reset so movements recompute from scratch; untouched rows will blank out below.
+			stock.Quantity, stock.SubQuantity = 0, 0
+			stock.DetailQuantity, stock.DetailSubQuantity = 0, 0
+			stockByID[stock.ID] = stock
 		}
+	}
+	{
+		existing := []logisticaTypes.ProductStockDetail{}
+		q := db.Query(&existing)
+		q.Exclude(q.Created, q.CreatedBy, q.Updated, q.UpdatedBy).CompanyID.Equals(companyID)
+		if err := q.Exec(); err != nil {
+			return core.Err("Error al obtener detalle de stock previo:", err)
+		}
+		for i := range existing {
+			detail := &existing[i]
+			detail.Quantity, detail.SubQuantity = 0, 0
+			detailByKey[detailKey(detail.ProductStockID, detail.LotID, detail.SerialNumber)] = detail
+		}
+	}
 
-		computedMovementsByKey[keyGroup].WarehouseProductQuantity += quantity
+	accumulate := func(warehouseID int32, quantity int32, subQuantity int32, movement *logisticaTypes.WarehouseProductMovement) {
+		stockID := packProductStockID(warehouseID, movement.ProductoID, movement.PresentacionID)
+		stock := stockByID[stockID]
+		if stock == nil {
+			// Fresh V2 row (no historical record): Created stamps it as INSERT at write time.
+			stock = &logisticaTypes.ProductStockV2{
+				ID:             stockID,
+				CompanyID:      companyID,
+				WarehouseID:    warehouseID,
+				ProductID:      movement.ProductoID,
+				PresentationID: movement.PresentacionID,
+				Created:        updatedTime,
+			}
+			stockByID[stockID] = stock
+		}
+		if movement.LotID == 0 && movement.SerialNumber == "" {
+			stock.Quantity += quantity
+			stock.SubQuantity += subQuantity
+			return
+		}
+		key := detailKey(stockID, movement.LotID, movement.SerialNumber)
+		detail := detailByKey[key]
+		if detail == nil {
+			detail = &logisticaTypes.ProductStockDetail{
+				CompanyID:      companyID,
+				ProductStockID: stockID,
+				LotID:          movement.LotID,
+				SerialNumber:   movement.SerialNumber,
+				WarehouseID:    warehouseID,
+				ProductID:      movement.ProductoID,
+				Created:        updatedTime,
+			}
+			detailByKey[key] = detail
+		}
+		detail.Quantity += quantity
+		detail.SubQuantity += subQuantity
 	}
 
 	query := db.Query(&[]logisticaTypes.WarehouseProductMovement{})
 	query.CompanyID.Equals(companyID)
-
-	if err := query.ExecScan(func(movementRecord *logisticaTypes.WarehouseProductMovement) bool {
-		// Aggregate the row on its target warehouse.
-		accumulateMovement(movementRecord.WarehouseID, movementRecord.Quantity, movementRecord.SubQuantity, movementRecord)
-
-		if movementRecord.WarehouseRefID > 0 {
-			// A transfer creates the mirrored outbound movement on the source warehouse.
-			accumulateMovement(movementRecord.WarehouseRefID, -movementRecord.Quantity, -movementRecord.SubQuantity, movementRecord)
+	if err := query.ExecScan(func(movement *logisticaTypes.WarehouseProductMovement) bool {
+		accumulate(movement.WarehouseID, movement.Quantity, movement.SubQuantity, movement)
+		if movement.WarehouseRefID > 0 {
+			// Transfers mirror an outbound leg on the source warehouse.
+			accumulate(movement.WarehouseRefID, -movement.Quantity, -movement.SubQuantity, movement)
 		}
 		return true
 	}); err != nil {
-		return core.Err("Error al obtener movimientos:", err)
+		return core.Err("Error al escanear movimientos:", err)
 	}
 
-	stocksToUpdate := []logisticaTypes.ProductStock{}
-	stocksToInsert := []logisticaTypes.ProductStock{}
-
-	stockQuery := db.Query(&[]logisticaTypes.ProductStock{})
-	stockQuery.Select().CompanyID.Equals(companyID)
-
-	if err := stockQuery.ExecScan(func(existingStockRecord *logisticaTypes.ProductStock) bool {
-		computedStockRecord := computedMovementsByKey[existingStockRecord.ID]
-		if computedStockRecord == nil {
-			return true
+	// Roll up DetailQuantity onto each stock once every movement is accumulated.
+	for _, detail := range detailByKey {
+		if stock := stockByID[detail.ProductStockID]; stock != nil {
+			stock.DetailQuantity += detail.Quantity
+			stock.DetailSubQuantity += detail.SubQuantity
 		}
-
-		delete(computedMovementsByKey, existingStockRecord.ID)
-
-		shouldUpdate := existingStockRecord.Quantity != computedStockRecord.Quantity ||
-			existingStockRecord.SubQuantity != computedStockRecord.SubQuantity ||
-			existingStockRecord.WarehouseProductQuantity != computedStockRecord.WarehouseProductQuantity
-
-		if shouldUpdate {
-			stocksToUpdate = append(stocksToUpdate, *computedStockRecord)
-		}
-		return true
-	}); err != nil {
-		return core.Err("Error al obtener el stock actual:", err)
+		detail.Status = core.If(detail.Quantity == 0 && detail.SubQuantity == 0, int8(0), int8(1))
+		detail.Updated = updatedTime
+	}
+	for _, stock := range stockByID {
+		stock.Status = core.If(stock.Quantity == 0 && stock.DetailQuantity == 0, int8(0), int8(1))
+		stock.Updated = updatedTime
 	}
 
-	for _, computedStockRecord := range computedMovementsByKey {
-		stocksToInsert = append(stocksToInsert, *computedStockRecord)
+	// Flatten and let InsertUpdateInclude route by the Created>0 marker: fresh rows go to INSERT,
+	// preloaded rows go to UPDATE (touching only the listed columns).
+	stocks := make([]logisticaTypes.ProductStockV2, 0, len(stockByID))
+	for _, stock := range stockByID {
+		stocks = append(stocks, *stock)
+	}
+	details := make([]logisticaTypes.ProductStockDetail, 0, len(detailByKey))
+	for _, detail := range detailByKey {
+		details = append(details, *detail)
 	}
 
-	core.Log("stocksToInsert:", len(stocksToInsert), "| stocksToUpdate:", len(stocksToUpdate))
+	core.Log("RecalcProductStockByMovements writes:", "stocks", len(stocks), "details", len(details))
 
-	productStockTable := db.Table[logisticaTypes.ProductStock]()
-
-	if len(stocksToUpdate) > 0 {
-		if err := db.Update(&stocksToUpdate,
-			productStockTable.Quantity,
-			productStockTable.SubQuantity,
-			productStockTable.Updated,
-			productStockTable.Status,
-			productStockTable.WarehouseProductQuantity,
-			productStockTable.IsWarehouseProductStatus,
+	if len(stocks) > 0 {
+		stockTable := db.Table[logisticaTypes.ProductStockV2]()
+		if err := db.InsertUpdateInclude(&stocks,
+			func(e *logisticaTypes.ProductStockV2) bool { return e.Created > 0 },
+			[]db.Coln{
+				stockTable.Quantity, stockTable.SubQuantity,
+				stockTable.DetailQuantity, stockTable.DetailSubQuantity,
+				stockTable.Updated, stockTable.Status,
+			},
 		); err != nil {
-			return core.Err("Error al actualizar el stock recalculado:", err)
+			return core.Err("Error al guardar stock V2 recalculado:", err)
 		}
 	}
 
-	if len(stocksToInsert) > 0 {
-		if err := db.Insert(&stocksToInsert); err != nil {
-			return core.Err("Error al insertar el stock recalculado:", err)
+	if len(details) > 0 {
+		detailTable := db.Table[logisticaTypes.ProductStockDetail]()
+		if err := db.InsertUpdateInclude(&details,
+			func(e *logisticaTypes.ProductStockDetail) bool { return e.Created > 0 },
+			[]db.Coln{
+				detailTable.Quantity, detailTable.SubQuantity,
+				detailTable.Updated, detailTable.Status,
+			},
+		); err != nil {
+			return core.Err("Error al guardar detalle de stock recalculado:", err)
 		}
 	}
 
-	// 5. Update Producto.StockStatus and CategoriasConStock
-	/*
-		productos := []negocioTypes.Producto{}
-		qProd := db.Query(&productos)
-		q1 := db.Table[negocioTypes.Producto]()
-		qProd.Select(q1.ID, q1.EmpresaID, q1.CategoriasIDs, q1.StockStatus).
-			EmpresaID.Equals(empresaID)
-
-		if err := qProd.Exec(); err != nil {
-			return core.Err("Error al obtener productos:", err)
-		}
-
-		productosToUpdate := []negocioTypes.Producto{}
-		for _, p := range productos {
-			totalCantidad := productoTotalStock[p.ID]
-			oldStatus := p.StockStatus
-
-			if totalCantidad > 0 {
-				p.StockStatus = 1
-			} else {
-				p.StockStatus = 0
-			}
-
-			// Always update if we need to ensure consistency,
-			// or at least when status changed. We'll update all for safety.
-			p.FillCategoriasConStock()
-
-			// Only append if something logically changed, or just update all
-			if oldStatus != p.StockStatus || len(p.CategoriasConStock) > 0 || oldStatus > 0 {
-				productosToUpdate = append(productosToUpdate, p)
-			}
-		}
-
-		if len(productosToUpdate) > 0 {
-			qTable := db.Table[negocioTypes.Producto]()
-			if err := db.Update(&productosToUpdate, qTable.StockStatus, qTable.CategoriasConStock); err != nil {
-				return core.Err("Error al actualizar el stock y categorias en productos:", err)
-			}
-		}
-	*/
 	return nil
 }

@@ -361,7 +361,7 @@
                   role="cell"
                   title={`${defaultCellValue}`}
                 >
-                  {#if colDef.onCellEdit && !colDef.hideCellEdit?.(rowRecord, rowIndex)}
+                  {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(rowRecord, rowIndex)}
                     <CellEditable contentClass={"px-6 " + (colDef.css||"")}
                       inputClass={"px-6 " + (colDef.inputCss)}
                       type={colDef.cellInputType || cellInputType}
@@ -446,7 +446,7 @@
                     role="cell"
                     title={`${defaultCellValue}`}
                   >
-                    {#if colDef.onCellEdit && !colDef.hideCellEdit?.(rowRecord, rowIndex)}
+                    {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(rowRecord, rowIndex)}
 	                    <CellEditable contentClass={"px-6 " + (colDef.css||"")}
 	                      inputClass={"px-6 " + (colDef.inputCss)}
                         type={colDef.cellInputType || cellInputType}

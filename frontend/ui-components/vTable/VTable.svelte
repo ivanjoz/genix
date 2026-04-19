@@ -457,12 +457,19 @@
                 {@const cellData = getCellContent(column, resolvedRecord, row.index)}
                 
                 
-                <td class="{cellCss} {cellData.css}"
+                <td class="{cellCss} {cellData.css} {column.onCellClick && !column.disableCellInteractions?.(resolvedRecord, row.index) ? '_clickable-cell' : ''}"
                   style={column.cellStyle ? Object.entries(column.cellStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}
                   onclick={ev => {
                     if(column.onCellEdit){ ev.stopPropagation() }
+                    if(column.onCellClick){ 
+                    	ev.stopPropagation() 
+                      column.onCellClick(resolvedRecord, row.index, () => rerenderRow(row.index)) 
+                    }
                   }}
                 >
+                  {#if column.showEditIcon && !column.disableCellInteractions?.(resolvedRecord, row.index)}
+                    <i class="icon-pencil _edit-icon"></i>
+                  {/if}
                   {#if cellData.prefixAST}
                     <span class="vtable-cell-prefix">
                       <Renderer elements={cellData.prefixAST}/>
@@ -472,7 +479,7 @@
                       {@html cellData.prefixHTML}
                     </span>
                   {/if}
-                  {#if column.onCellEdit && !column.hideCellEdit?.(resolvedRecord, row.index)}
+                  {#if column.onCellEdit && !column.disableCellInteractions?.(resolvedRecord, row.index)}
                     <CellEditable contentClass={"px-6 "+(column.css||"")}
                       inputClass={"px-6 "+(column.inputCss)}
                       type={column.cellInputType || cellInputType}
@@ -500,7 +507,7 @@
                       id={`${String(column.id || column.field || j)}_${row.index}`}
                       saveOn={resolvedRecord}
                       save={column.field as keyof T}
-                      options={column.cellOptions as any[]}
+                      options={(column.cellOptions || []) as any[]}
                       keyId={(column.cellOptionsKeyId || 'ID') as never}
                       keyName={(column.cellOptionsKeyName || 'Name') as never}
                       contentClass={column.css}
@@ -708,6 +715,31 @@
 
   .vtable-cell:last-child {
     border-right: none;
+  }
+
+  ._edit-icon {
+    position: absolute;
+    left: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.75rem;
+    color: #4f6ef7;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .vtable-row:hover ._edit-icon {
+    opacity: 1;
+  }
+
+  ._clickable-cell {
+    cursor: pointer;
+    position: relative;
+  }
+
+  ._clickable-cell:hover {
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.596);
+    z-index: 1;
   }
 
   .vtable-empty {

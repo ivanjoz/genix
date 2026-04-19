@@ -12,7 +12,7 @@ func RecalcStock(args *core.ExecArgs) core.FuncResponse {
 		empresaID = 1
 	}
 
-	if err := logistica.RecalcProductStockByMovements(empresaID, false); err != nil {
+	if err := logistica.RecalcProductStockByMovements(empresaID); err != nil {
 		return core.FuncResponse{Error: err.Error()}
 	}
 

@@ -90,60 +90,11 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if !isUpdate || slices.Contains(sale.ActionsIncluded, 3) {
-		stockSolicitadoPorID := map[string]int32{}
-
-		// Agrupa por stock real para validar una sola vez por combinacion almacen-producto-presentacion-sku-lote.
-		for index, productID := range sale.DetailProductsIDs {
-			stockID := db.MakeKeyConcat(
-				sale.WarehouseID,
-				productID,
-				core.GetIndex(sale.DetailProductPresentations, index),
-				core.GetIndex(sale.DetailProductSkus, index),
-				core.GetIndex(sale.DetailProductLots, index),
-			)
-			stockSolicitadoPorID[stockID] += sale.DetailQuantities[index]
-		}
-
-		if len(stockSolicitadoPorID) > 0 {
-			productsCurrentStock := []logisticaTypes.ProductStock{}
-
-			query := db.Query(&productsCurrentStock)
-			err := query.Select(query.ID, query.Quantity, query.Status).
-				CompanyID.Equals(req.Usuario.EmpresaID).
-				ID.In(core.MapToKeys(stockSolicitadoPorID)...).
-				Exec()
-
-			if err != nil {
-				return req.MakeErr("Error al obtener el stock de productos:", err)
-			}
-
-			currentStockByID := core.SliceToMapE(productsCurrentStock,
-				func(e logisticaTypes.ProductStock) string { return e.ID })
-
-			for stockID, cantidadSolicitada := range stockSolicitadoPorID {
-				stockActual := currentStockByID[stockID]
-				if stockActual.Quantity < cantidadSolicitada {
-					keyParser := db.KeyParser{Key: stockID}
-					metadata := []string{
-						fmt.Sprintf(`Almacén: %v`, keyParser.GetNumber(0)),
-						fmt.Sprintf(`Producto: %v`, keyParser.GetNumber(1)),
-					}
-
-					if keyParser.GetNumber(2) > 0 {
-						metadata = append(metadata, fmt.Sprintf(`Presentación: %v`, keyParser.GetNumber(2)))
-					}
-					if keyParser.GetString(3) != "" {
-						metadata = append(metadata, fmt.Sprintf(`Sku: %v`, keyParser.GetString(3)))
-					}
-					if keyParser.GetString(4) != "" {
-						metadata = append(metadata, fmt.Sprintf(`Lote: %v`, keyParser.GetString(3)))
-					}
-
-					return req.MakeErr(strings.Join(metadata, " | ")+". ", fmt.Sprintf(`Se necesita %v. Se posee en stock: %v`, cantidadSolicitada, stockActual.Quantity))
-				}
-			}
-
-			core.Log("PostSaleOrder stock validado. Items:", len(stockSolicitadoPorID), "Stocks encontrados:", len(currentStockByID))
+		// Validate stock availability against the V2 split:
+		//  - line items without LotID AND without SerialNumber draw from ProductStockV2.Quantity
+		//  - items with a LotID/SerialNumber draw from the matching ProductStockDetail row
+		if err := validateSaleStock(req, sale); err != nil {
+			return req.MakeErr(err)
 		}
 	}
 
@@ -238,8 +189,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				WarehouseID:    sale.WarehouseID,
 				ProductoID:     productoID,
 				PresentacionID: core.GetIndex(sale.DetailProductPresentations, i),
-				SKU:            core.GetIndex(sale.DetailProductSkus, i),
-				Lote:           core.GetIndex(sale.DetailProductLots, i),
+				SerialNumber:   core.GetIndex(sale.DetailProductSkus, i),
+				LotID:          core.GetIndex(sale.DetailProductLotIDs, i),
 				DocumentID:     sale.ID,
 				Tipo:           8,         // Entrega a cliente final (Venta)
 				Cantidad:       -cantidad, // Salida de almacén
@@ -333,6 +284,126 @@ func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, empresaID i
 	}
 
 	return clientProviders[0].ID, nil
+}
+
+// validateSaleStock ensures each sale-order line has enough stock available.
+// Lines with no LotID and no SerialNumber draw from ProductStockV2.Quantity;
+// lines with either field draw from the matching ProductStockDetail row.
+func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
+	if sale.WarehouseID == 0 {
+		return core.Err("Se requiere WarehouseID para validar el stock.")
+	}
+
+	// Aggregate requested quantity by the physical storage bucket it hits.
+	type lineKey struct {
+		stockID      int64
+		lotID        int32
+		serialNumber string
+	}
+	requestedByKey := map[lineKey]int32{}
+	for index, productID := range sale.DetailProductsIDs {
+		quantity := core.GetIndex(sale.DetailQuantities, index)
+		if quantity == 0 {
+			continue
+		}
+		presentationID := core.GetIndex(sale.DetailProductPresentations, index)
+		key := lineKey{
+			stockID:      packProductStockIDForSale(sale.WarehouseID, productID, presentationID),
+			lotID:        core.GetIndex(sale.DetailProductLotIDs, index),
+			serialNumber: core.GetIndex(sale.DetailProductSkus, index),
+		}
+		requestedByKey[key] += quantity
+	}
+	if len(requestedByKey) == 0 {
+		return nil
+	}
+
+	// Collect the distinct stock IDs so we can preload V2 and detail rows in parallel.
+	stockIDSet := core.SliceSet[int64]{}
+	needsDetailFetch := false
+	for key := range requestedByKey {
+		stockIDSet.Add(key.stockID)
+		if key.lotID > 0 || key.serialNumber != "" {
+			needsDetailFetch = true
+		}
+	}
+
+	stockByID := map[int64]logisticaTypes.ProductStockV2{}
+	detailsByKey := map[lineKey]logisticaTypes.ProductStockDetail{}
+
+	eg := errgroup.Group{}
+	eg.Go(func() error {
+		stocks := []logisticaTypes.ProductStockV2{}
+		q := db.Query(&stocks)
+		q.Select(q.ID, q.Quantity, q.DetailQuantity).
+			CompanyID.Equals(req.Usuario.EmpresaID).
+			ID.In(stockIDSet.Values...)
+		if err := q.Exec(); err != nil {
+			return core.Err("Error al obtener el stock de productos:", err)
+		}
+		for _, stock := range stocks {
+			stockByID[stock.ID] = stock
+		}
+		return nil
+	})
+	if needsDetailFetch {
+		eg.Go(func() error {
+			details := []logisticaTypes.ProductStockDetail{}
+			q := db.Query(&details)
+			q.Select().
+				CompanyID.Equals(req.Usuario.EmpresaID).
+				ProductStockID.In(stockIDSet.Values...)
+			if err := q.Exec(); err != nil {
+				return core.Err("Error al obtener el detalle de stock:", err)
+			}
+			for _, detail := range details {
+				detailsByKey[lineKey{stockID: detail.ProductStockID, lotID: detail.LotID, serialNumber: detail.SerialNumber}] = detail
+			}
+			return nil
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+
+	for key, requested := range requestedByKey {
+		var available int32
+		if key.lotID == 0 && key.serialNumber == "" {
+			available = stockByID[key.stockID].Quantity
+		} else {
+			available = detailsByKey[key].Quantity
+		}
+		if available < requested {
+			// Decompose the packed stock ID for a human-readable error.
+			warehouseDigits := key.stockID / 1e14
+			productDigits := (key.stockID / 1e5) % 1e9
+			presentationDigits := (key.stockID / 10) % 1e4
+			metadata := []string{
+				fmt.Sprintf("Almacén: %v", warehouseDigits),
+				fmt.Sprintf("Producto: %v", productDigits),
+			}
+			if presentationDigits > 0 {
+				metadata = append(metadata, fmt.Sprintf("Presentación: %v", presentationDigits))
+			}
+			if key.serialNumber != "" {
+				metadata = append(metadata, fmt.Sprintf("SKU: %v", key.serialNumber))
+			}
+			if key.lotID > 0 {
+				metadata = append(metadata, fmt.Sprintf("Lote: %v", key.lotID))
+			}
+			return core.Err(strings.Join(metadata, " | ")+". ",
+				fmt.Sprintf("Se necesita %v. Se posee en stock: %v", requested, available))
+		}
+	}
+	return nil
+}
+
+// packProductStockIDForSale mirrors logistica.packProductStockID without importing the package
+// to avoid a circular dependency (logistica already depends on comercial via some paths).
+// Schema: WarehouseID.DecimalSize(5) + ProductID.DecimalSize(9) + PresentationID.DecimalSize(4),
+// 19-digit starting budget.
+func packProductStockIDForSale(warehouseID int32, productID int32, presentationID int16) int64 {
+	return int64(warehouseID)*1e14 + int64(productID)*1e5 + int64(presentationID)*10
 }
 
 func GetSaleOrderByIDs(req *core.HandlerArgs) core.HandlerResponse {

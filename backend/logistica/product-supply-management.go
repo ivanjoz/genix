@@ -215,11 +215,12 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 		movimientosAgrupados = append(movimientosAgrupados, *fechaAccumulator.record)
 	}
 
-	// Productos Stock
-	productosStock := []logisticaTypes.ProductStock{}
+	// Productos Stock (V2). "Quantity" on the response is the combined bucket
+	// so consumers stay compatible with the old shape without needing detail rows here.
+	productosStockV2 := []logisticaTypes.ProductStockV2{}
 
-	psQuery := db.Query(&productosStock).AllowFilter()
-	psQuery.Select(psQuery.ID, psQuery.Updated, psQuery.Quantity)
+	psQuery := db.Query(&productosStockV2).AllowFilter()
+	psQuery.Select(psQuery.ID, psQuery.Updated, psQuery.Quantity, psQuery.DetailQuantity)
 
 	if productosStockUpdated == 0 {
 		psQuery.Status.Equals(1)
@@ -232,7 +233,7 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	response := map[string]any{
-		"productosStock": &productosStock,
+		"productosStock": &productosStockV2,
 		"movimientos":    &movimientosAgrupados,
 	}
 

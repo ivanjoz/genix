@@ -4,13 +4,16 @@ import (
 	"app/db"
 )
 
+// WarehouseProductMovement is the append-only movement ledger.
+// LotID (0 = no lot) and SerialNumber (empty = no serial) together tell whether
+// the movement targets a ProductStockDetail row or the plain ProductStockV2.Quantity bucket.
 type WarehouseProductMovement struct {
 	db.TableStruct[WarehouseProductMovementTable, WarehouseProductMovement]
 	CompanyID int32 `json:",omitempty"`
-	// e.Fecha.DecimalSize(5), e.WarehouseID.DecimalSize(5), e.Autoincrement(3),
+	// ID packs Fecha(5)+WarehouseID(5)+Autoincrement(3) into an int64.
 	ID                   int64
-	SKU                  string `json:",omitempty"`
-	Lote                 string `json:",omitempty"`
+	SerialNumber         string `json:",omitempty"`
+	LotID                int32  `json:",omitempty"`
 	WarehouseID          int32  `json:",omitempty"`
 	WarehouseRefID       int32  `json:",omitempty"`
 	WarehouseRefQuantity int32  `json:",omitempty"`
@@ -31,8 +34,8 @@ type WarehouseProductMovementTable struct {
 	db.TableStruct[WarehouseProductMovementTable, WarehouseProductMovement]
 	CompanyID            db.Col[WarehouseProductMovementTable, int32]
 	ID                   db.Col[WarehouseProductMovementTable, int64]
-	SKU                  db.Col[WarehouseProductMovementTable, string]
-	Lote                 db.Col[WarehouseProductMovementTable, string]
+	SerialNumber         db.Col[WarehouseProductMovementTable, string]
+	LotID                db.Col[WarehouseProductMovementTable, int32]
 	WarehouseID          db.Col[WarehouseProductMovementTable, int32]
 	WarehouseRefID       db.Col[WarehouseProductMovementTable, int32]
 	WarehouseRefQuantity db.Col[WarehouseProductMovementTable, int32]
@@ -59,8 +62,8 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 		},
 		AutoincrementPart: e.Fecha,
 		Indexes: []db.Index{
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.SKU}},
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.Lote}},
+			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.SerialNumber}},
+			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.LotID}},
 			{Type: db.TypeView, Keys: []db.Coln{e.Created}, KeepPart: true},
 			{Type: db.TypeView, Keys: []db.Coln{e.WarehouseRefID, e.Created.DecimalSize(9)}, KeepPart: true},
 			{
@@ -69,41 +72,37 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 				Cols:     []db.Coln{e.Quantity},
 				KeepPart: true,
 			},
-			{
-				Type:     db.TypeView,
-				Keys:     []db.Coln{e.Fecha, e.WarehouseID, e.ProductoID, e.PresentacionID, e.SKU, e.Lote},
-				Cols:     []db.Coln{e.Quantity},
-				KeepPart: true,
-			},
-			{
-				Type:     db.TypeView,
-				Keys:     []db.Coln{e.Fecha, e.WarehouseID, e.ProductoID, e.PresentacionID, e.SKU, e.Lote},
-				Cols:     []db.Coln{e.Quantity},
-				KeepPart: true,
-			},
 		},
 	}
 }
 
+// MovimientoInterno is the ApplyMovimientos input unit. It targets a single
+// (Warehouse, Product, Presentation) bucket, optionally scoped to a Lot and/or SerialNumber.
+//
+// Lot resolution rules:
+//   - If LotID > 0: use it directly (required for outbound, Cantidad < 0).
+//   - If LotID == 0 and LotName != "" and Cantidad > 0 (inbound): lot is resolved or
+//     created from Hash(today, SupplierID, LotName). SupplierID is required.
+//   - If LotID == 0 and LotName == "" and SerialNumber == "": treated as "no-detail",
+//     mutating ProductStockV2.Quantity only.
 type MovimientoInterno struct {
-	ProductoID           int32
-	PresentacionID       int16
-	ReemplazarCantidad   bool
-	Tipo                 int8
-	SKU                  string
-	Lote                 string
-	WarehouseID          int32
-	AlmacenDestinoID     int32
-	Cantidad             int32
-	SubCantidad          int32
-	ModificarCantidad    int32
-	ModificarSubCantidad int32
-	DocumentID           int64
+	ProductoID         int32
+	PresentacionID     int16
+	ReemplazarCantidad bool
+	Tipo               int8
+	SerialNumber       string
+	LotName            string
+	LotID              int32
+	SupplierID         int32
+	WarehouseID        int32
+	AlmacenDestinoID   int32
+	Cantidad           int32
+	SubCantidad        int32
+	DocumentID         int64
 }
 
-func (e *MovimientoInterno) GetAlmacenProductoID() string {
-	return db.MakeKeyConcat(e.WarehouseID, e.ProductoID, e.PresentacionID, e.SKU, e.Lote)
-}
-func (e *MovimientoInterno) GetAlmacenProductoGrupoID() string {
-	return db.MakeKeyConcat(e.WarehouseID, e.ProductoID, e.PresentacionID)
+// HasDetail reports whether the movement targets a ProductStockDetail row
+// (i.e. the non-free bucket keyed by LotID and/or SerialNumber).
+func (e *MovimientoInterno) HasDetail() bool {
+	return e.SerialNumber != "" || e.LotID > 0 || e.LotName != ""
 }
