@@ -524,6 +524,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		case TypeLocalIndex:
 			registerSchemaLocalIndex(&dbTable, &idxCount, indexCfg)
 		case TypeViewTable:
+			dbTable.hasTableBackedViews = true
 			compileSchemaViewTable(&dbTable, indexCfg)
 		case TypeView:
 			compileSchemaView(&dbTable, indexCfg)

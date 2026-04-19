@@ -55,6 +55,9 @@ func TestViewTablesCompileAsTableBackedViews(t *testing.T) {
 	scyllaTable := MakeScyllaTable[fanoutViewRecord, fanoutViewRecordTable]()
 	view := getRequiredViewTable(t, scyllaTable, "fanout_view_record__product_ids_fecha_view")
 
+	if !scyllaTable.hasTableBackedViews {
+		t.Fatal("expected hasTableBackedViews to be precompiled for table-backed views")
+	}
 	if view.Type != 9 {
 		t.Fatalf("expected view table type 9, got %d", view.Type)
 	}

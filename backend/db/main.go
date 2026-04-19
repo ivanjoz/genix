@@ -48,6 +48,7 @@ type ScyllaTable[T any] struct {
 	columnsIdxMap            map[int16]IColInfo
 	indexes                  map[string]*viewInfo
 	views                    map[string]*viewInfo
+	hasTableBackedViews      bool
 	indexViews               []*viewInfo
 	ViewsExcluded            []string
 	useSequences             bool
@@ -67,7 +68,7 @@ type ScyllaTable[T any] struct {
 	indexGroups            []indexGroupInfo
 	// indexGroupIDs prevents per-table collisions when logical IndexGroup names hash to the same int16.
 	indexGroupIDs     map[int16]string
-	indexUpdatedTable      *indexUpdatedTableInfo
+	indexUpdatedTable *indexUpdatedTableInfo
 	// selectStatementCache is shared across copied ScyllaTable values, so it must stay behind a pointer.
 	selectStatementCache *selectPlanCache
 	_maxColIdx           int16

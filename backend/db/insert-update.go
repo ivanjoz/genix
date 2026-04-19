@@ -404,23 +404,7 @@ func MakeInsertStatement[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		panic(err)
 	}
 
-	columns := []IColInfo{}
-	if len(columnsToExclude) > 0 {
-		columsToExcludeNames := []string{}
-		for _, e := range columnsToExclude {
-			columsToExcludeNames = append(columsToExcludeNames, e.GetInfo().Name)
-		}
-		for _, col := range scyllaTable.columns {
-			mustIncludeManagedColumn := col.GetName() == managedCreatedColumnName ||
-				col.GetName() == managedUpdatedColumnName ||
-				col.GetName() == managedUpdateCounterColumnName
-			if mustIncludeManagedColumn || !slices.Contains(columsToExcludeNames, col.GetName()) {
-				columns = append(columns, col)
-			}
-		}
-	} else {
-		columns = scyllaTable.columns
-	}
+	columns := collectInsertColumns(&scyllaTable, columnsToExclude)
 
 	columnsNames := []string{}
 	for _, col := range columns {
@@ -497,27 +481,42 @@ func getNormalizedWriteLiteral(column IColInfo, ptr unsafe.Pointer) any {
 	return column.GetValue(ptr)
 }
 
+func getNormalizedWriteValue(column IColInfo, ptr unsafe.Pointer) any {
+	// Rationale: prepared statements must receive typed Go values instead of serialized CQL literals.
+	writeValue := column.GetStatementValue(ptr)
+	if writeValue == nil {
+		writeValue = column.GetRawValue(ptr)
+	}
+	return normalizeEmptyStringWriteValue(writeValue)
+}
+
+func collectInsertColumns(scyllaTable *ScyllaTable[any], columnsToExclude []Coln) []IColInfo {
+	if len(columnsToExclude) == 0 {
+		return scyllaTable.columns
+	}
+
+	columnNamesToExclude := []string{}
+	for _, columnToExclude := range columnsToExclude {
+		columnNamesToExclude = append(columnNamesToExclude, columnToExclude.GetInfo().Name)
+	}
+
+	columnsToInsert := []IColInfo{}
+	for _, column := range scyllaTable.columns {
+		mustIncludeManagedColumn := column.GetName() == managedCreatedColumnName ||
+			column.GetName() == managedUpdatedColumnName ||
+			column.GetName() == managedUpdateCounterColumnName
+		if mustIncludeManagedColumn || !slices.Contains(columnNamesToExclude, column.GetName()) {
+			columnsToInsert = append(columnsToInsert, column)
+		}
+	}
+
+	return columnsToInsert
+}
+
 func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T, scyllaTable ScyllaTable[any], managedValues managedWriteValues, columnsToExclude ...Coln,
 ) *gocql.Batch {
-
-	columns := []IColInfo{}
-	if len(columnsToExclude) > 0 {
-		columsToExcludeNames := []string{}
-		for _, e := range columnsToExclude {
-			columsToExcludeNames = append(columsToExcludeNames, e.GetInfo().Name)
-		}
-		for _, col := range scyllaTable.columns {
-			mustIncludeManagedColumn := col.GetName() == managedCreatedColumnName ||
-				col.GetName() == managedUpdatedColumnName ||
-				col.GetName() == managedUpdateCounterColumnName
-			if mustIncludeManagedColumn || !slices.Contains(columsToExcludeNames, col.GetName()) {
-				columns = append(columns, col)
-			}
-		}
-	} else {
-		columns = scyllaTable.columns
-	}
+	columns := collectInsertColumns(&scyllaTable, columnsToExclude)
 
 	columnsNames := []string{}
 	columnPlaceholders := []string{}
@@ -532,6 +531,13 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES (%v)`,
 		scyllaTable.GetFullName(), strings.Join(columnsNames, ", "), strings.Join(columnPlaceholders, ", "))
 
+	appendInsertQueriesToBatch(batch, queryStrInsert, records, columns, managedValues)
+	return batch
+}
+
+func appendInsertQueriesToBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	batch *gocql.Batch, queryStrInsert string, records *[]T, columns []IColInfo, managedValues managedWriteValues,
+) {
 	for i := range *records {
 		rec := &(*records)[i]
 		ptr := xunsafe.AsPointer(rec)
@@ -542,25 +548,29 @@ func makeInsertBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 			if managedValue, found := managedValues.getValueForColumn(i, col, true); found {
 				value = managedValue
 			} else {
-				value = col.GetStatementValue(ptr)
+				value = getNormalizedWriteValue(col, ptr)
 			}
-			if value == nil {
-				value = col.GetValue(ptr)
-			}
-			value = normalizeEmptyStringWriteValue(value)
 			values = append(values, value)
 		}
 
-		// fmt.Println("VALUES::")
-		// fmt.Println(values)
 		batch.Query(queryStrInsert, values...)
 	}
-	return batch
 }
 
 func collectAllWritableColumns(scyllaTable *ScyllaTable[any]) []IColInfo {
 	affectedColumns := []IColInfo{}
 	for _, column := range scyllaTable.columns {
+		if column.GetInfo().IsVirtual {
+			continue
+		}
+		affectedColumns = append(affectedColumns, column)
+	}
+	return affectedColumns
+}
+
+func collectAffectedColumnsForInsert(scyllaTable *ScyllaTable[any], columnsToExclude []Coln) []IColInfo {
+	affectedColumns := []IColInfo{}
+	for _, column := range collectInsertColumns(scyllaTable, columnsToExclude) {
 		if column.GetInfo().IsVirtual {
 			continue
 		}
@@ -644,7 +654,7 @@ func hasUsableIndexSourceValue(rawValue any) bool {
 func syncTableBackedViews[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T, scyllaTable *ScyllaTable[any], affectedColumns []IColInfo,
 ) error {
-	if len(*records) == 0 || len(scyllaTable.views) == 0 {
+	if len(*records) == 0 || !scyllaTable.hasTableBackedViews {
 		return nil
 	}
 
@@ -690,82 +700,8 @@ func syncTableBackedViews[T TableBaseInterface[E, T], E TableSchemaInterface[E]]
 func Insert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T, columnsToExclude ...Coln,
 ) error {
-	refTable := initStructTable[E, T](new(E))
-	scyllaTable := getOrCompileScyllaTable(refTable)
-
-	runSelfParseIfDefined(records)
-
-	prefetchedManagedCounters := prefetchedManagedCounterValues{}
-	autoincrementCounterStarts := map[string]int64{}
-	var fetchGroup errgroup.Group
-	if scyllaTable.updateCounterCol != nil {
-		fetchGroup.Go(func() error {
-			values, err := fetchManagedCounterValues(records, scyllaTable)
-			if err != nil {
-				return err
-			}
-			prefetchedManagedCounters = values
-			return nil
-		})
-	}
-	if scyllaTable.autoincrementCol != nil {
-		fetchGroup.Go(func() error {
-			values, err := fetchAutoincrementCounterStarts(records, scyllaTable)
-			if err != nil {
-				return err
-			}
-			autoincrementCounterStarts = values
-			return nil
-		})
-	}
-	if err := fetchGroup.Wait(); err != nil {
-		return err
-	}
-
-	managedValues, err := applyWriteManagedColumnsWithPrefetchedCounters(records, scyllaTable, true, &prefetchedManagedCounters)
-	if err != nil {
-		return err
-	}
-
-	if err := handlePreInsert(records, scyllaTable, autoincrementCounterStarts); err != nil {
-		return err
-	}
-
-	session := getScyllaConnection()
-	for start := 0; start < len(*records); start += maxInsertBatchRows {
-		end := start + maxInsertBatchRows
-		if end > len(*records) {
-			end = len(*records)
-		}
-
-		recordsChunk := (*records)[start:end]
-		// Keep unlogged batches small to reduce coordinator pressure and avoid write timeouts.
-		queryBatch := makeInsertBatch(&recordsChunk, scyllaTable, managedValues.slice(start, end), columnsToExclude...)
-		// fmt.Println(queryBatch)
-
-		if err := session.ExecuteBatch(queryBatch); err != nil {
-			fmt.Println("Error inserting records:", err)
-			return err
-		}
-	}
-
-	affectedColumns := collectAllWritableColumns(&scyllaTable)
-	if err := syncIndexGroupsAfterWrite(records, &scyllaTable, managedValues); err != nil {
-		fmt.Println("Error syncing index groups after insert:", err)
-		return err
-	}
-	if err := syncTableBackedViews(records, &scyllaTable, affectedColumns); err != nil {
-		fmt.Println("Error syncing view tables after insert:", err)
-		return err
-	}
-
-	// Cache-version is updated only after a successful write to keep counters consistent with persisted rows.
-	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
-		fmt.Println("Error updating cache versions after insert:", err)
-		return err
-	}
-
-	return nil
+	recordsForUpdate := []T{}
+	return InsertUpdateBase(records, &recordsForUpdate, nil, columnsToExclude...)
 }
 
 func InsertOne[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
@@ -777,7 +713,330 @@ func InsertOne[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T, managedValues managedWriteValues, columnsToInclude []Coln, columnsToExclude []Coln, onlyVirtual bool,
 ) []string {
+	scyllaTable, columnsToUpdate := resolveUpdateColumnsForWrite(records, columnsToInclude, columnsToExclude, onlyVirtual)
+	columnsWhere := collectUpdateWhereColumns(scyllaTable)
 
+	queryStatements := []string{}
+
+	for i := range *records {
+		rec := &(*records)[i]
+		ptr := xunsafe.AsPointer(rec)
+
+		setStatements := []string{}
+		for _, col := range columnsToUpdate {
+			v := any(nil)
+			if managedValue, found := managedValues.getValueForColumn(i, col, false); found {
+				v = normalizeEmptyStringWriteLiteral(managedValue)
+			} else {
+				v = getNormalizedWriteLiteral(col, ptr)
+			}
+			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, col.GetName(), v))
+		}
+
+		whereStatements := []string{}
+		for _, col := range columnsWhere {
+			v := col.GetValue(ptr)
+			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, col.GetName(), v))
+		}
+
+		queryStatement := fmt.Sprintf(
+			"UPDATE %v SET %v WHERE %v",
+			scyllaTable.GetFullName(), Concatx(", ", setStatements), Concatx(" and ", whereStatements),
+		)
+
+		queryStatements = append(queryStatements, queryStatement)
+	}
+
+	return queryStatements
+}
+
+func MakeUpdateStatements[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	records *[]T, columnsToInclude ...Coln,
+) []string {
+	scyllaTable := MakeScyllaTable[T, E]()
+	managedValues, err := applyWriteManagedColumns(records, scyllaTable, false)
+	if err != nil {
+		panic(err)
+	}
+	return makeUpdateStatementsBase(records, managedValues, columnsToInclude, nil, false)
+}
+
+func Update[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	records *[]T, columnsToInclude ...Coln,
+) error {
+	if len(columnsToInclude) == 0 {
+		panic("No se incluyeron columnas a actualizar.")
+	}
+
+	recordsForInsert := []T{}
+	return InsertUpdateBase(&recordsForInsert, records, columnsToInclude)
+}
+
+func UpdateOne[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	record T, columnsToInclude ...Coln,
+) error {
+	return Update(&[]T{record}, columnsToInclude...)
+}
+
+func UpdateExclude[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	records *[]T, columnsToExclude ...Coln,
+) error {
+
+	runSelfParseIfDefined(records)
+
+	refTable := initStructTable[E, T](new(E))
+	scyllaTable := getOrCompileScyllaTable(refTable)
+
+	managedValues, err := applyWriteManagedColumns(records, scyllaTable, false)
+	if err != nil {
+		return err
+	}
+
+	queryStatements := makeUpdateStatementsBase(records, managedValues, nil, columnsToExclude, false)
+	queryInsert := makeQueryStatement(queryStatements)
+
+	if err := QueryExec(queryInsert); err != nil {
+		fmt.Println(queryInsert)
+		fmt.Println("Error inserting records:", err)
+		return err
+	}
+
+	affectedColumns := collectAffectedColumnsForExclude(&scyllaTable, columnsToExclude)
+	if err := syncIndexGroupsAfterWrite(records, &scyllaTable, managedValues); err != nil {
+		fmt.Println("Error syncing index groups after update-exclude:", err)
+		return err
+	}
+	if err := syncTableBackedViews(records, &scyllaTable, affectedColumns); err != nil {
+		fmt.Println("Error syncing view tables after update-exclude:", err)
+		return err
+	}
+
+	// UpdateExclude still mutates records, so it participates in the same cache-version increment flow.
+	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
+		fmt.Println("Error updating cache versions after update-exclude:", err)
+		return err
+	}
+	return nil
+}
+
+func mergeManagedWriteValues(first managedWriteValues, second managedWriteValues) managedWriteValues {
+	return managedWriteValues{
+		createdValues:       append(append([]any{}, first.createdValues...), second.createdValues...),
+		updatedValues:       append(append([]any{}, first.updatedValues...), second.updatedValues...),
+		updateCounterValues: append(append([]any{}, first.updateCounterValues...), second.updateCounterValues...),
+	}
+}
+
+func InsertUpdateBase[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	recordsForInsert *[]T,
+	recordsForUpdate *[]T,
+	columnsToIncludeUpdate []Coln,
+	columnsToExcludeInsert ...Coln,
+) error {
+	return executeInsertUpdateBatch(recordsForInsert, recordsForUpdate, true, columnsToIncludeUpdate, columnsToExcludeInsert...)
+}
+
+func splitInsertAndUpdateRecords[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	records *[]T, isInsert func(e *T) bool,
+) ([]T, []T) {
+	if isInsert == nil {
+		panic("Se requiere la función isInsert para clasificar los registros.")
+	}
+
+	recordsForInsert := make([]T, 0, len(*records))
+	recordsForUpdate := make([]T, 0, len(*records))
+
+	// Classify the mixed payload once so the combined batch can reuse the shared insert/update flow.
+	for recordIndex := range *records {
+		record := &(*records)[recordIndex]
+		if isInsert(record) {
+			recordsForInsert = append(recordsForInsert, *record)
+		} else {
+			recordsForUpdate = append(recordsForUpdate, *record)
+		}
+	}
+
+	return recordsForInsert, recordsForUpdate
+}
+
+func executeInsertUpdateBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	recordsForInsert *[]T,
+	recordsForUpdate *[]T,
+	useIncludeUpdateColumns bool,
+	updateColumns []Coln,
+	columnsToExcludeInsert ...Coln,
+) error {
+	if recordsForInsert == nil {
+		recordsForInsert = &[]T{}
+	}
+	if recordsForUpdate == nil {
+		recordsForUpdate = &[]T{}
+	}
+	if len(*recordsForInsert) == 0 && len(*recordsForUpdate) == 0 {
+		return nil
+	}
+	if useIncludeUpdateColumns && len(*recordsForUpdate) > 0 && len(updateColumns) == 0 {
+		panic("No se incluyeron columnas a actualizar.")
+	}
+
+	refTable := initStructTable[E, T](new(E))
+	scyllaTable := getOrCompileScyllaTable(refTable)
+
+	runSelfParseIfDefined(recordsForInsert)
+	runSelfParseIfDefined(recordsForUpdate)
+
+	combinedRecords := slices.Concat(*recordsForInsert, *recordsForUpdate)
+	prefetchedManagedCounters := prefetchedManagedCounterValues{}
+	autoincrementCounterStarts := map[string]int64{}
+	var fetchGroup errgroup.Group
+
+	if scyllaTable.updateCounterCol != nil {
+		fetchGroup.Go(func() error {
+			values, err := fetchManagedCounterValues(&combinedRecords, scyllaTable)
+			if err != nil {
+				return err
+			}
+			prefetchedManagedCounters = values
+			return nil
+		})
+	}
+	if scyllaTable.autoincrementCol != nil && len(*recordsForInsert) > 0 {
+		fetchGroup.Go(func() error {
+			values, err := fetchAutoincrementCounterStarts(recordsForInsert, scyllaTable)
+			if err != nil {
+				return err
+			}
+			autoincrementCounterStarts = values
+			return nil
+		})
+	}
+
+	if err := fetchGroup.Wait(); err != nil {
+		return err
+	}
+
+	managedInsertValues, err := applyWriteManagedColumnsWithPrefetchedCounters(recordsForInsert, scyllaTable, true, &prefetchedManagedCounters)
+	if err != nil {
+		return err
+	}
+	managedUpdateValues, err := applyWriteManagedColumnsWithPrefetchedCounters(recordsForUpdate, scyllaTable, false, &prefetchedManagedCounters)
+	if err != nil {
+		return err
+	}
+
+	if len(*recordsForInsert) > 0 {
+		if err := handlePreInsert(recordsForInsert, scyllaTable, autoincrementCounterStarts); err != nil {
+			return err
+		}
+	}
+
+	session := getScyllaConnection()
+	queryBatch := session.NewBatch(gocql.UnloggedBatch)
+
+	if len(*recordsForInsert) > 0 {
+		insertColumns := collectInsertColumns(&scyllaTable, columnsToExcludeInsert)
+		insertColumnNames := []string{}
+		insertColumnPlaceholders := []string{}
+		for _, insertColumn := range insertColumns {
+			insertColumnNames = append(insertColumnNames, insertColumn.GetName())
+			insertColumnPlaceholders = append(insertColumnPlaceholders, "?")
+		}
+		insertQueryStatement := fmt.Sprintf(`INSERT INTO %v (%v) VALUES (%v)`,
+			scyllaTable.GetFullName(), strings.Join(insertColumnNames, ", "), strings.Join(insertColumnPlaceholders, ", "))
+		appendInsertQueriesToBatch(queryBatch, insertQueryStatement, recordsForInsert, insertColumns, managedInsertValues)
+	}
+
+	if len(*recordsForUpdate) > 0 {
+		updateColumnsToInclude := []Coln(nil)
+		updateColumnsToExclude := []Coln(nil)
+		if useIncludeUpdateColumns {
+			updateColumnsToInclude = updateColumns
+		} else {
+			updateColumnsToExclude = updateColumns
+		}
+		appendUpdateQueriesToBatch(queryBatch, recordsForUpdate, managedUpdateValues, updateColumnsToInclude, updateColumnsToExclude, false)
+	}
+
+	if DebugFull {
+		fmt.Printf("InsertUpdate batch write: table=%s inserts=%d updates=%d statements=%d\n",
+			scyllaTable.GetFullName(), len(*recordsForInsert), len(*recordsForUpdate), len(queryBatch.Entries))
+	}
+	if err := session.ExecuteBatch(queryBatch); err != nil {
+		fmt.Printf("Error executing insert-update batch: table=%s inserts=%d updates=%d err=%v\n",
+			scyllaTable.GetFullName(), len(*recordsForInsert), len(*recordsForUpdate), err)
+		return err
+	}
+
+	combinedManagedValues := mergeManagedWriteValues(managedInsertValues, managedUpdateValues)
+	combinedRecords = slices.Concat(*recordsForInsert, *recordsForUpdate)
+	if err := syncIndexGroupsAfterWrite(&combinedRecords, &scyllaTable, combinedManagedValues); err != nil {
+		fmt.Println("Error syncing index groups after insert-update:", err)
+		return err
+	}
+
+	if scyllaTable.hasTableBackedViews {
+		if len(*recordsForInsert) > 0 {
+			insertAffectedColumns := collectAffectedColumnsForInsert(&scyllaTable, columnsToExcludeInsert)
+			if err := syncTableBackedViews(recordsForInsert, &scyllaTable, insertAffectedColumns); err != nil {
+				fmt.Println("Error syncing view tables after insert-update insert phase:", err)
+				return err
+			}
+		}
+		if len(*recordsForUpdate) > 0 {
+			updateAffectedColumns := []IColInfo{}
+			if useIncludeUpdateColumns {
+				updateAffectedColumns = collectAffectedColumnsForInclude(&scyllaTable, updateColumns)
+			} else {
+				updateAffectedColumns = collectAffectedColumnsForExclude(&scyllaTable, updateColumns)
+			}
+			if err := syncTableBackedViews(recordsForUpdate, &scyllaTable, updateAffectedColumns); err != nil {
+				fmt.Println("Error syncing view tables after insert-update update phase:", err)
+				return err
+			}
+		}
+	}
+
+	// Combined insert/update writes increment cache-version groups once for the merged mutation set.
+	if err := updateCacheVersionsAfterWrite(&combinedRecords, scyllaTable); err != nil {
+		fmt.Println("Error updating cache versions after insert-update:", err)
+		return err
+	}
+
+	return nil
+}
+
+func InsertUpdate[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	recordsForInsert *[]T,
+	recordsForUpdate *[]T,
+	columnsToIncludeUpdate []Coln,
+	columnsToExcludeInsert ...Coln,
+) error {
+	return executeInsertUpdateBatch(recordsForInsert, recordsForUpdate, true, columnsToIncludeUpdate, columnsToExcludeInsert...)
+}
+
+func InsertUpdateInclude[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	records *[]T,
+	isInsert func(e *T) bool,
+	columnsToIncludeUpdate []Coln,
+	columnsToExcludeInsert ...Coln,
+) error {
+	recordsForInsert, recordsForUpdate := splitInsertAndUpdateRecords(records, isInsert)
+	return executeInsertUpdateBatch(&recordsForInsert, &recordsForUpdate, true, columnsToIncludeUpdate, columnsToExcludeInsert...)
+}
+
+func InsertUpdateExclude[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	records *[]T,
+	isInsert func(e *T) bool,
+	columnsToExcludeUpdate []Coln,
+	columnsToExcludeInsert ...Coln,
+) error {
+	recordsForInsert, recordsForUpdate := splitInsertAndUpdateRecords(records, isInsert)
+	return executeInsertUpdateBatch(&recordsForInsert, &recordsForUpdate, false, columnsToExcludeUpdate, columnsToExcludeInsert...)
+}
+
+func resolveUpdateColumnsForWrite[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	records *[]T, columnsToInclude []Coln, columnsToExclude []Coln, onlyVirtual bool,
+) (ScyllaTable[any], []IColInfo) {
 	refTable := initStructTable[E, T](new(E))
 	scyllaTable := getOrCompileScyllaTable(refTable)
 	columnsToUpdate := []IColInfo{}
@@ -835,7 +1094,7 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 		columnsIncluded = append(columnsIncluded, pk.GetInfo().Idx)
 	}
 
-	//Revisa si hay columnas que deben actualizarse juntas para los índices calculados
+	// Revisa si hay columnas que deben actualizarse juntas para los índices calculados.
 	for _, indexViews := range scyllaTable.indexViews {
 		if indexViews.column.GetInfo().IsVirtual {
 			if indexViews.Type == 3 {
@@ -969,149 +1228,58 @@ func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface
 		}
 	}
 
+	return scyllaTable, columnsToUpdate
+}
+
+func collectUpdateWhereColumns(scyllaTable ScyllaTable[any]) []IColInfo {
 	columnsWhere := scyllaTable.keys
+	if partitionKey := scyllaTable.GetPartKey(); partitionKey != nil && !partitionKey.IsNil() {
+		columnsWhere = append([]IColInfo{partitionKey}, columnsWhere...)
+	}
+	return columnsWhere
+}
 
-	pk = scyllaTable.GetPartKey()
-	if pk != nil && !pk.IsNil() {
-		columnsWhere = append([]IColInfo{pk}, columnsWhere...)
+func appendUpdateQueriesToBatch[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
+	batch *gocql.Batch, records *[]T, managedValues managedWriteValues, columnsToInclude []Coln, columnsToExclude []Coln, onlyVirtual bool,
+) {
+	scyllaTable, columnsToUpdate := resolveUpdateColumnsForWrite(records, columnsToInclude, columnsToExclude, onlyVirtual)
+	columnsWhere := collectUpdateWhereColumns(scyllaTable)
+
+	setStatements := []string{}
+	for _, columnToUpdate := range columnsToUpdate {
+		setStatements = append(setStatements, fmt.Sprintf(`%v = ?`, columnToUpdate.GetName()))
 	}
 
-	queryStatements := []string{}
+	whereStatements := []string{}
+	for _, whereColumn := range columnsWhere {
+		whereStatements = append(whereStatements, fmt.Sprintf(`%v = ?`, whereColumn.GetName()))
+	}
 
-	for i := range *records {
-		rec := &(*records)[i]
-		ptr := xunsafe.AsPointer(rec)
+	queryStatement := fmt.Sprintf(
+		"UPDATE %v SET %v WHERE %v",
+		scyllaTable.GetFullName(), Concatx(", ", setStatements), Concatx(" and ", whereStatements),
+	)
 
-		setStatements := []string{}
-		for _, col := range columnsToUpdate {
-			v := any(nil)
-			if managedValue, found := managedValues.getValueForColumn(i, col, false); found {
-				v = normalizeEmptyStringWriteLiteral(managedValue)
+	for recordIndex := range *records {
+		recordPointer := xunsafe.AsPointer(&(*records)[recordIndex])
+		values := []any{}
+
+		for _, columnToUpdate := range columnsToUpdate {
+			value := any(nil)
+			if managedValue, found := managedValues.getValueForColumn(recordIndex, columnToUpdate, false); found {
+				value = managedValue
 			} else {
-				v = getNormalizedWriteLiteral(col, ptr)
+				value = getNormalizedWriteValue(columnToUpdate, recordPointer)
 			}
-			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, col.GetName(), v))
+			values = append(values, value)
 		}
 
-		whereStatements := []string{}
-		for _, col := range columnsWhere {
-			v := col.GetValue(ptr)
-			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, col.GetName(), v))
+		for _, whereColumn := range columnsWhere {
+			values = append(values, whereColumn.GetStatementValue(recordPointer))
 		}
 
-		queryStatement := fmt.Sprintf(
-			"UPDATE %v SET %v WHERE %v",
-			scyllaTable.GetFullName(), Concatx(", ", setStatements), Concatx(" and ", whereStatements),
-		)
-
-		queryStatements = append(queryStatements, queryStatement)
+		batch.Query(queryStatement, values...)
 	}
-
-	return queryStatements
-}
-
-func MakeUpdateStatements[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
-	records *[]T, columnsToInclude ...Coln,
-) []string {
-	scyllaTable := MakeScyllaTable[T, E]()
-	managedValues, err := applyWriteManagedColumns(records, scyllaTable, false)
-	if err != nil {
-		panic(err)
-	}
-	return makeUpdateStatementsBase(records, managedValues, columnsToInclude, nil, false)
-}
-
-func Update[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
-	records *[]T, columnsToInclude ...Coln,
-) error {
-
-	if len(columnsToInclude) == 0 {
-		panic("No se incluyeron columnas a actualizar.")
-	}
-
-	refTable := initStructTable[E, T](new(E))
-	scyllaTable := getOrCompileScyllaTable(refTable)
-
-	runSelfParseIfDefined(records)
-
-	managedValues, err := applyWriteManagedColumns(records, scyllaTable, false)
-	if err != nil {
-		return err
-	}
-
-	queryStatements := makeUpdateStatementsBase(records, managedValues, columnsToInclude, nil, false)
-	queryUpdate := makeQueryStatement(queryStatements)
-
-	fmt.Println(queryUpdate)
-
-	if err := QueryExec(queryUpdate); err != nil {
-		fmt.Println("Error updating records:", err)
-		return err
-	}
-
-	affectedColumns := collectAffectedColumnsForInclude(&scyllaTable, columnsToInclude)
-	if err := syncIndexGroupsAfterWrite(records, &scyllaTable, managedValues); err != nil {
-		fmt.Println("Error syncing index groups after update:", err)
-		return err
-	}
-	if err := syncTableBackedViews(records, &scyllaTable, affectedColumns); err != nil {
-		fmt.Println("Error syncing view tables after update:", err)
-		return err
-	}
-
-	// Version groups are incremented after update commit using the same record IDs as the update payload.
-	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
-		fmt.Println("Error updating cache versions after update:", err)
-		return err
-	}
-	return nil
-}
-
-func UpdateOne[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
-	record T, columnsToInclude ...Coln,
-) error {
-	return Update(&[]T{record}, columnsToInclude...)
-}
-
-func UpdateExclude[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
-	records *[]T, columnsToExclude ...Coln,
-) error {
-
-	runSelfParseIfDefined(records)
-
-	refTable := initStructTable[E, T](new(E))
-	scyllaTable := getOrCompileScyllaTable(refTable)
-
-	managedValues, err := applyWriteManagedColumns(records, scyllaTable, false)
-	if err != nil {
-		return err
-	}
-
-	queryStatements := makeUpdateStatementsBase(records, managedValues, nil, columnsToExclude, false)
-	queryInsert := makeQueryStatement(queryStatements)
-
-	if err := QueryExec(queryInsert); err != nil {
-		fmt.Println(queryInsert)
-		fmt.Println("Error inserting records:", err)
-		return err
-	}
-
-	affectedColumns := collectAffectedColumnsForExclude(&scyllaTable, columnsToExclude)
-	if err := syncIndexGroupsAfterWrite(records, &scyllaTable, managedValues); err != nil {
-		fmt.Println("Error syncing index groups after update-exclude:", err)
-		return err
-	}
-	if err := syncTableBackedViews(records, &scyllaTable, affectedColumns); err != nil {
-		fmt.Println("Error syncing view tables after update-exclude:", err)
-		return err
-	}
-
-	// UpdateExclude still mutates records, so it participates in the same cache-version increment flow.
-	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
-		fmt.Println("Error updating cache versions after update-exclude:", err)
-		return err
-	}
-	return nil
 }
 
 func InsertOrUpdate[T TableBaseInterface[E, T], E TableSchemaInterface[E]](

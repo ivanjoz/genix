@@ -38,6 +38,7 @@ type ScyllaControllerInterface interface {
 	RecalcVirtualColumns(partValue int32) error
 	RecalcGroupIndexHashes(partValue int32) error
 	ResetCounter(partValue any) error
+	DeleteViewsAndIndexes() error
 }
 
 func (e *ScyllaController[T, E]) GetTable() ScyllaTable[any] {
@@ -522,6 +523,95 @@ func (e *ScyllaController[T, E]) ResetCounter(partValue any) error {
 	return nil
 }
 
+func (e *ScyllaController[T, E]) DeleteViewsAndIndexes() error {
+	scyllaTable := &e.Table
+
+	// Read the live catalog first so old DB artifacts are deleted even if the current schema no longer declares them.
+	session := getScyllaConnection()
+
+	liveMaterializedViewNames := []string{}
+	viewNamesSeen := map[string]bool{}
+	viewsQuery := fmt.Sprintf(
+		"SELECT keyspace_name, view_name, base_table_name FROM system_schema.views WHERE keyspace_name = '%s'",
+		scyllaTable.keyspace,
+	)
+	viewIterator := session.Query(viewsQuery).Iter()
+	var liveView ScyllaView
+	for viewIterator.Scan(&liveView.Keyspace, &liveView.Name, &liveView.BaseTable) {
+		if liveView.BaseTable != scyllaTable.name || viewNamesSeen[liveView.Name] {
+			continue
+		}
+		viewNamesSeen[liveView.Name] = true
+		liveMaterializedViewNames = append(liveMaterializedViewNames, liveView.Name)
+	}
+	if err := viewIterator.Close(); err != nil {
+		return Err("DeleteViewsAndIndexes failed reading views catalog for table", scyllaTable.name, ":", err)
+	}
+
+	indexQuery := fmt.Sprintf(
+		"SELECT keyspace_name, table_name, index_name, kind FROM system_schema.indexes WHERE keyspace_name = '%s'",
+		scyllaTable.keyspace,
+	)
+	indexIterator := session.Query(indexQuery).Iter()
+	liveIndexesByTable := map[string][]string{}
+	indexNamesSeenByTable := map[string]map[string]bool{}
+	var liveIndex ScyllaIndexes
+	for indexIterator.Scan(&liveIndex.Keyspace, &liveIndex.Table, &liveIndex.Name, &liveIndex.Kind) {
+		if _, exists := indexNamesSeenByTable[liveIndex.Table]; !exists {
+			indexNamesSeenByTable[liveIndex.Table] = map[string]bool{}
+		}
+		if indexNamesSeenByTable[liveIndex.Table][liveIndex.Name] {
+			continue
+		}
+		indexNamesSeenByTable[liveIndex.Table][liveIndex.Name] = true
+		liveIndexesByTable[liveIndex.Table] = append(liveIndexesByTable[liveIndex.Table], liveIndex.Name)
+	}
+	if err := indexIterator.Close(); err != nil {
+		return Err("DeleteViewsAndIndexes failed reading indexes catalog for table", scyllaTable.name, ":", err)
+	}
+
+	// Drop live base-table indexes directly from the catalog instead of trusting only the current ORM metadata.
+	for _, indexName := range liveIndexesByTable[scyllaTable.name] {
+		dropIndexStatement := fmt.Sprintf("DROP INDEX IF EXISTS %v.%v", scyllaTable.keyspace, indexName)
+		fmt.Println("DeleteViewsAndIndexes |", dropIndexStatement)
+		if err := QueryExec(dropIndexStatement); err != nil {
+			return Err("DeleteViewsAndIndexes failed dropping live index", indexName, "for table", scyllaTable.name, ":", err)
+		}
+	}
+
+	// Drop all live MVs that still depend on the base table so DROP TABLE is no longer blocked by stale dependencies.
+	for _, viewName := range liveMaterializedViewNames {
+		dropViewStatement := fmt.Sprintf("DROP MATERIALIZED VIEW IF EXISTS %v.%v", scyllaTable.keyspace, viewName)
+		fmt.Println("DeleteViewsAndIndexes |", dropViewStatement)
+		if err := QueryExec(dropViewStatement); err != nil {
+			return Err("DeleteViewsAndIndexes failed dropping live materialized view", viewName, "for table", scyllaTable.name, ":", err)
+		}
+	}
+
+	// View-table cleanup still uses ORM metadata to know which derived tables belong to this base table.
+	for _, view := range scyllaTable.views {
+		if view.Type != TypeViewTable {
+			continue
+		}
+
+		for _, indexName := range liveIndexesByTable[view.name] {
+			dropIndexStatement := fmt.Sprintf("DROP INDEX IF EXISTS %v.%v", scyllaTable.keyspace, indexName)
+			fmt.Println("DeleteViewsAndIndexes |", dropIndexStatement)
+			if err := QueryExec(dropIndexStatement); err != nil {
+				return Err("DeleteViewsAndIndexes failed dropping live index", indexName, "for view table", view.name, ":", err)
+			}
+		}
+
+		dropViewTableStatement := fmt.Sprintf("DROP TABLE IF EXISTS %v.%v", scyllaTable.keyspace, view.name)
+		fmt.Println("DeleteViewsAndIndexes |", dropViewTableStatement)
+		if err := QueryExec(dropViewTableStatement); err != nil {
+			return Err("DeleteViewsAndIndexes failed dropping view table", view.name, "for table", scyllaTable.name, ":", err)
+		}
+	}
+
+	return nil
+}
+
 func getSequenceCurrentValue(counterName string) (int64, error) {
 	result := []Increment{}
 	if err := Query(&result).Name.Equals(counterName).Exec(); err != nil {
@@ -593,6 +683,12 @@ type ScyllaIndexes struct {
 	Table    string
 	Keyspace string
 	Kind     string
+}
+
+type ScyllaView struct {
+	Keyspace  string
+	Name      string
+	BaseTable string
 }
 
 var cacheCodePrev int32
