@@ -1,5 +1,7 @@
 ---
-description: Run static validation checks on the backend Go codebase to catch structural inconsistencies in DB table definitions
+name: static-project-validation
+description: Run static validation checks on the backend Go codebase to catch structural inconsistencies in DB table definitions. Use when the user asks to "validate the project", "run static checks", "check tables", or after modifying Go structs that embed db.TableStruct.
+version: 0.1.0
 ---
 
 # Static Project Validation

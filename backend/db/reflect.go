@@ -405,6 +405,9 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		if len(indexCfg.Keys) == 0 {
 			panic(fmt.Sprintf(`Table "%v": Indexes entry must not be empty`, dbTable.name))
 		}
+		if indexCfg.Type == TypeInheritFromKey && !indexCfg.UseIndexGroup {
+			panic(fmt.Sprintf(`Table "%v": TypeInheritFromKey requires UseIndexGroup: true`, dbTable.name))
+		}
 		if indexCfg.UseIndexGroup {
 			registerIndexGroup(&dbTable, &idxCount, indexCfg)
 			continue

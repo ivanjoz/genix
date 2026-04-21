@@ -481,9 +481,33 @@ func buildIndexGroupFetchQuery(
 	}
 	queryValues := []any{queryPlan.partitionValue}
 
-	// Single-column groups already have a real secondary index on the source column,
-	// so grouped fetches can probe that column directly without a virtual hash column.
-	if queryPlan.indexGroup.virtualColumn == nil || queryPlan.indexGroup.virtualColumn.IsNil() {
+	// TypeInheritFromKey groups rewrite per-hash fetches to a packed primary-key range,
+	// so no secondary index is needed and ALLOW_FILTERING is avoided.
+	if queryPlan.indexGroup.inheritFromKey {
+		keyStatements := make([]ColumnStatement, 0, len(queryPlan.indexGroup.sourceColumns))
+		for columnIndex, sourceColumn := range queryPlan.indexGroup.sourceColumns {
+			keyStatements = append(keyStatements, ColumnStatement{
+				Col:      sourceColumn.column.GetName(),
+				Operator: "=",
+				Value:    fetchState.indexGroupValues[columnIndex],
+			})
+		}
+		rewrittenStatements, canRewrite := buildKeyIntPackingStatements(keyStatements, scyllaTable)
+		if !canRewrite || len(rewrittenStatements) == 0 {
+			panic(fmt.Sprintf(`QueryIndexGroup: TypeInheritFromKey fetch could not rewrite keys for table "%v"`, scyllaTable.name))
+		}
+		keyPredicate := rewrittenStatements[0]
+		keyColumnName := keyPredicate.Col
+		if keyPredicate.Operator == "BETWEEN" {
+			whereStatements = append(whereStatements, fmt.Sprintf("%v >= ? AND %v < ?", keyColumnName, keyColumnName))
+			queryValues = append(queryValues, keyPredicate.From[0].Value, keyPredicate.To[0].Value)
+		} else {
+			whereStatements = append(whereStatements, fmt.Sprintf("%v = ?", keyColumnName))
+			queryValues = append(queryValues, keyPredicate.Value)
+		}
+	} else if queryPlan.indexGroup.virtualColumn == nil || queryPlan.indexGroup.virtualColumn.IsNil() {
+		// Single-column groups already have a real secondary index on the source column,
+		// so grouped fetches can probe that column directly without a virtual hash column.
 		sourceColumn := queryPlan.indexGroup.sourceColumns[0].column
 		whereStatements = append(whereStatements, fmt.Sprintf("%v = ?", sourceColumn.GetName()))
 		queryValues = append(queryValues, fetchState.indexGroupValues[0])

@@ -12,6 +12,7 @@ var indexTypes = map[int8]string{
 	1: "Global Index",
 	2: "Local Index",
 	3: "Hash Index",
+	4: "Inherit From Key",
 	6: "View",
 	9: "View Table",
 }
@@ -91,6 +92,8 @@ type indexGroupInfo struct {
 	sourceColumns        []indexGroupSourceColumn
 	virtualColumn        IColInfo
 	usesCollectionValues bool
+	// inheritFromKey routes grouped fetches through KeyIntPacking primary-key ranges instead of a secondary index.
+	inheritFromKey bool
 }
 
 type indexUpdatedTableInfo struct {
@@ -217,10 +220,11 @@ func (q ColumnStatement) GetValue() any {
 }
 
 const (
-	TypeGlobalIndex int8 = 1
-	TypeLocalIndex  int8 = 2
-	TypeView        int8 = 6
-	TypeViewTable   int8 = 9
+	TypeGlobalIndex    int8 = 1
+	TypeLocalIndex     int8 = 2
+	TypeInheritFromKey int8 = 4
+	TypeView           int8 = 6
+	TypeViewTable      int8 = 9
 )
 
 type Index struct {

@@ -258,6 +258,11 @@ func registerIndexGroup(dbTable *ScyllaTable[any], idxCount *int8, indexCfg Inde
 	}
 	indexID := allocateIndexGroupID(dbTable, sourceColumnNames)
 
+	if indexCfg.Type == TypeInheritFromKey {
+		registerInheritFromKeyIndexGroup(dbTable, indexCfg, indexID, sourceColumnNames)
+		return
+	}
+
 	if len(indexCfg.Keys) == 1 {
 		singleKeyIndex := Index{Type: TypeLocalIndex, Keys: indexCfg.Keys}
 		registerSchemaLocalIndex(dbTable, idxCount, singleKeyIndex)
@@ -436,6 +441,51 @@ func registerIndexGroup(dbTable *ScyllaTable[any], idxCount *int8, indexCfg Inde
 	if hasStoreAsWeekColumn {
 		registerCompiledIndexGroup(weekSourceColumns, true)
 	}
+
+	if dbTable.indexUpdatedTable == nil {
+		dbTable.indexUpdatedTable = &indexUpdatedTableInfo{name: dbTable.name + "__index_updated"}
+	}
+}
+
+func registerInheritFromKeyIndexGroup(dbTable *ScyllaTable[any], indexCfg Index, indexID int16, sourceColumnNames []string) {
+	if len(dbTable.keyIntPacking) == 0 {
+		panic(fmt.Sprintf(`Table "%v": TypeInheritFromKey requires KeyIntPacking on the table`, dbTable.name))
+	}
+	if len(indexCfg.Keys) > len(dbTable.keyIntPacking) {
+		panic(fmt.Sprintf(`Table "%v": TypeInheritFromKey index has %d keys but KeyIntPacking only declares %d columns`,
+			dbTable.name, len(indexCfg.Keys), len(dbTable.keyIntPacking)))
+	}
+	for columnIndex, key := range indexCfg.Keys {
+		packedColumnName := dbTable.keyIntPacking[columnIndex].GetName()
+		if key.GetName() != packedColumnName {
+			panic(fmt.Sprintf(`Table "%v": TypeInheritFromKey keys must be a prefix of KeyIntPacking. Position %d expected "%v" but got "%v"`,
+				dbTable.name, columnIndex, packedColumnName, key.GetName()))
+		}
+		if key.GetInfo().storeAsWeek {
+			panic(fmt.Sprintf(`Table "%v": TypeInheritFromKey does not support storeAsWeek on "%v"`, dbTable.name, key.GetName()))
+		}
+		baseColumn := dbTable.columnsMap[key.GetName()]
+		if baseColumn == nil || baseColumn.IsNil() {
+			panic(fmt.Sprintf(`Table "%v": TypeInheritFromKey column "%v" was not found`, dbTable.name, key.GetName()))
+		}
+		if baseColumn.GetType().IsSlice {
+			panic(fmt.Sprintf(`Table "%v": TypeInheritFromKey does not support slice column "%v"`, dbTable.name, key.GetName()))
+		}
+	}
+
+	sourceColumns := make([]indexGroupSourceColumn, 0, len(indexCfg.Keys))
+	for _, key := range indexCfg.Keys {
+		sourceColumns = append(sourceColumns, indexGroupSourceColumn{
+			column: dbTable.columnsMap[key.GetName()],
+		})
+	}
+
+	dbTable.indexGroups = append(dbTable.indexGroups, indexGroupInfo{
+		name:           strings.Join(sourceColumnNames, "_"),
+		indexID:        indexID,
+		sourceColumns:  sourceColumns,
+		inheritFromKey: true,
+	})
 
 	if dbTable.indexUpdatedTable == nil {
 		dbTable.indexUpdatedTable = &indexUpdatedTableInfo{name: dbTable.name + "__index_updated"}

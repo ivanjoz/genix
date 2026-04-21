@@ -26,8 +26,9 @@ type WarehouseProductMovement struct {
 	SubQuantity          int32  `json:",omitempty"`
 	MonetaryValue        int32  `json:",omitempty"`
 	Tipo                 int8   `json:",omitempty"`
-	Created              int32  `json:",omitempty"`
+ 	Created              int32  `json:",omitempty"`
 	CreatedBy            int32  `json:",omitempty"`
+	UpdateCounter        int32  `json:",omitempty"`
 }
 
 type WarehouseProductMovementTable struct {
@@ -50,6 +51,7 @@ type WarehouseProductMovementTable struct {
 	MonetaryValue        db.Col[WarehouseProductMovementTable, int32]
 	CreatedBy            db.Col[WarehouseProductMovementTable, int32]
 	Fecha                db.Col[WarehouseProductMovementTable, int16]
+	UpdateCounter        db.Col[WarehouseProductMovementTable, int32]
 }
 
 func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
@@ -57,21 +59,34 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 		Name:                 "warehouse_product_movement",
 		Partition:            e.CompanyID,
 		Keys:                 []db.Coln{e.ID},
-		DisableUpdateCounter: true,
 		KeyIntPacking: []db.Coln{
 			e.Fecha.DecimalSize(5), e.WarehouseID.DecimalSize(5), e.Autoincrement(3),
 		},
 		AutoincrementPart: e.Fecha,
 		Indexes: []db.Index{
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.SerialNumber}},
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.LotID}},
-			{Type: db.TypeView, Keys: []db.Coln{e.Created}, KeepPart: true},
-			{Type: db.TypeView, Keys: []db.Coln{e.WarehouseRefID, e.Created.DecimalSize(9)}, KeepPart: true},
 			{
-				Type:     db.TypeView,
-				Keys:     []db.Coln{e.Fecha, e.ProductoID.DecimalSize(9), e.Tipo.DecimalSize(1)},
-				Cols:     []db.Coln{e.Quantity},
-				KeepPart: true,
+				Type: db.TypeInheritFromKey, Keys: []db.Coln{e.Fecha}, UseIndexGroup: true,
+			},
+			{
+				Type: db.TypeInheritFromKey, Keys: []db.Coln{e.Fecha, e.WarehouseID}, UseIndexGroup: true,
+			},
+			{ 
+				Type: db.TypeLocalIndex, Keys: []db.Coln{e.SerialNumber}, 
+			},
+			{
+				Type: db.TypeLocalIndex, Keys: []db.Coln{e.LotID}, UseIndexGroup: true,
+			},
+			{
+				Type: db.TypeLocalIndex, Keys: []db.Coln{e.DocumentID}, UseIndexGroup: true,
+			},
+			{
+				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Fecha, e.Tipo}, UseIndexGroup: true,
+			},
+			{
+				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Fecha, e.Tipo, e.WarehouseID}, UseIndexGroup: true,
+			},
+			{
+				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Fecha, e.ProductoID}, UseIndexGroup: true,
 			},
 		},
 	}

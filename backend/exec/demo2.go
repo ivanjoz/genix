@@ -276,10 +276,11 @@ func Test51(args *core.ExecArgs) core.FuncResponse {
 
 	controller := makeDBController[logisticaTypes.WarehouseProductMovement]()
 
-	controller.DeleteViewsAndIndexes()
+ //	controller.RecalcVirtualColumns(1)
+	controller.RecalcGroupIndexHashes(1)
 	
-	controller2 := makeDBController[logisticaTypes.ProductStockV2]()
-	controller2.DeleteViewsAndIndexes()
+//	controller2 := makeDBController[logisticaTypes.ProductStockV2]()
+	// controller2.DeleteViewsAndIndexes()
 
 	return core.FuncResponse{}
 }

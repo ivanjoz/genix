@@ -454,6 +454,15 @@ export const GETWithGroupCache = async <T = any>(
   const mergedGroups: IGroupCacheRecord<T>[] = []
 
   for(const responseGroup of responseGroups){
+    const responseRecords = Array.isArray(responseGroup.records) ? responseGroup.records : []
+
+    // ig === -1 marks direct-lookup results (e.g. SerialNumber/LotID/DocumentID) that do not belong
+    // to any grouped index, so they must pass through untouched instead of being dropped or cached.
+    if(responseGroup.ig === -1){
+      mergedGroups.push({ ...responseGroup, records: responseRecords })
+      continue
+    }
+
     const key = makeGroupCacheKey(responseGroup)
     if(!key){
       console.warn("[GETWithGroupCache] Ignoring grouped response without igVal.", responseGroup)
@@ -461,7 +470,6 @@ export const GETWithGroupCache = async <T = any>(
     }
 
     const cachedRow = cachedRowsByKey.get(key)
-    const responseRecords = Array.isArray(responseGroup.records) ? responseGroup.records : []
     const canUseCachedRecords = cachedRow && cachedRow.upc === responseGroup.upc && responseRecords.length === 0
 
     if(canUseCachedRecords){

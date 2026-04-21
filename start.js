@@ -24,24 +24,27 @@ if(!isConsole){
   return
 }
 
-// Verifica el symlink de skills (.claude/skills -> .agents/skills)
+// Copia los skills de .agents/skills -> .claude/skills (project-level, formato <name>/SKILL.md)
 const agentsSkillsPath = path.join(__dirname, '.agents', 'skills')
 const claudeSkillsPath = path.join(__dirname, '.claude', 'skills')
-const symlinkType = isWindows ? 'junction' : 'dir'
-const normPath = (p) => path.normalize(p).replace(/[/\\]+$/, '')
 fs.mkdirSync(agentsSkillsPath, { recursive: true })
-try {
-  const linkTarget = fs.readlinkSync(claudeSkillsPath)
-  if (normPath(linkTarget) !== normPath(agentsSkillsPath)) {
-    fs.rmSync(claudeSkillsPath, { recursive: true, force: true })
-    fs.symlinkSync(agentsSkillsPath, claudeSkillsPath, symlinkType)
-    console.log(`Symlink actualizado: .claude/skills -> .agents/skills`)
+fs.mkdirSync(claudeSkillsPath, { recursive: true })
+const copyDirSync = (src, dest) => {
+  fs.mkdirSync(dest, { recursive: true })
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const srcPath = path.join(src, entry.name)
+    const destPath = path.join(dest, entry.name)
+    if (entry.isDirectory()) copyDirSync(srcPath, destPath)
+    else fs.copyFileSync(srcPath, destPath)
   }
-} catch {
-  fs.rmSync(claudeSkillsPath, { recursive: true, force: true })
-  fs.symlinkSync(agentsSkillsPath, claudeSkillsPath, symlinkType)
-  console.log(`Symlink creado: .claude/skills -> .agents/skills`)
 }
+for (const entry of fs.readdirSync(agentsSkillsPath, { withFileTypes: true })) {
+  const src = path.join(agentsSkillsPath, entry.name)
+  const dest = path.join(claudeSkillsPath, entry.name)
+  if (entry.isDirectory()) copyDirSync(src, dest)
+  else fs.copyFileSync(src, dest)
+}
+console.log(`Skills copiados: .agents/skills -> .claude/skills`)
 
 // Revisa si todo está instalado
 if (!fs.existsSync("node_modules")){

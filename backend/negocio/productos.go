@@ -15,7 +15,7 @@ import (
 )
 
 func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
-	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
+	updated := req.GetQueryInt("updated")
 
 	productos := []negocioTypes.Producto{}
 	errGroup := errgroup.Group{}

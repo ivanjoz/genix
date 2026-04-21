@@ -534,7 +534,8 @@ func scanSelectQueryRows[E any](
 	queryNoticeTime time.Time,
 ) error {
 	usePostFilter := len(postFilterStatements) > 0
-
+	
+	
 	doScan := func() error {
 		if ShouldLog() {
 			// Log the executable statement with compact projection output to keep noisy SELECTs readable.
@@ -556,9 +557,14 @@ func scanSelectQueryRows[E any](
 			}
 			return err
 		}
+		
+		rowsScaned := 0
+		rowsFinal := 0
 
 		scanner := iter.Scanner()
 		for scanner.Next() {
+			rowsScaned++
+			
 			rowValues := rd.Values
 			if err := scanner.Scan(rowValues...); err != nil {
 				fmt.Println("Error on scan::", err)
@@ -629,9 +635,12 @@ func scanSelectQueryRows[E any](
 				continue
 			}
 
+			rowsFinal++
 			*refRecords = append(*refRecords, *record)
 		}
 
+		fmt.Printf(`Table %v | Rows Scanned %v | Final %v`+"\n",scyllaTable.name, rowsScaned, rowsFinal)
+		
 		return nil
 	}
 

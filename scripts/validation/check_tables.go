@@ -131,16 +131,12 @@ func CheckTables() {
 						}
 					}
 
-					if isPrimitive {
-						if !isColSlice {
-							fmt.Printf("Error: Field '%s.%s' is a primitive slice. Use db.ColSlice in table struct '%s', not db.Col.\n", base.Name(), fieldName, table.Name())
-							continue
-						}
+					if isPrimitive && isColSlice {
 						colSliceElementType := named.TypeArgs().At(1)
 						if !types.Identical(elem, colSliceElementType) {
 							fmt.Printf("Error: Inconsistent slice element type for '%s.%s'. Base is '%s', but ColSlice in '%s' has '%s'.\n", base.Name(), fieldName, elem.String(), table.Name(), colSliceElementType.String())
 						}
-					} else {
+					} else if !isPrimitive {
 						if !isCol {
 							fmt.Printf("Error: Field '%s.%s' is a complex slice. Use db.Col in table struct '%s', not db.ColSlice.\n", base.Name(), fieldName, table.Name())
 							continue

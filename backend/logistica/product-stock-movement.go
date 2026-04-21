@@ -2,10 +2,8 @@ package logistica
 
 import (
 	"app/core"
-	coretypes "app/core/types"
 	"app/db"
 	logisticaTypes "app/logistica/types"
-	negocioTypes "app/negocio/types"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -42,7 +40,7 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	if len(items) == 0 {
 		return req.MakeErr("No se enviaron registros.")
 	}
-	
+
 	movimientos := make([]logisticaTypes.MovimientoInterno, 0, len(items))
 	for _, item := range items {
 		if item.WarehouseID == 0 || item.ProductID == 0 {
@@ -93,77 +91,108 @@ func GetProductStockLotsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 
 func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
-	almacenID := req.GetQueryInt("almacen-id")
+	almacenID := int32(req.GetQueryInt("almacen-id"))
 	fechaInicio := req.GetQueryInt16("fecha-inicio")
 	fechaFin := req.GetQueryInt16("fecha-fin")
+	productoID := int32(req.GetQueryInt("producto-id"))
+	lotCode := req.GetQuery("lot-code")
+	documentID := req.GetQueryInt64("document-id")
+	serialNumber := req.GetQuery("serial-number")
+	tipo := int8(req.GetQueryInt("tipo"))
 
-	if almacenID == 0 || fechaInicio == 0 || fechaFin == 0 {
-		return req.MakeErr("Faltan parámetros.")
+	// Resolve lot-code → all matching lotIDs (same Name can exist across multiple entries).
+	var lotIDs []int32
+	
+	if lotCode != "" {
+		lots := []logisticaTypes.ProductStockLot{}
+		query := db.Query(&lots).CompanyID.Equals(req.Usuario.EmpresaID)
+		
+		if err := query.Select(query.ID).Name.Equals(lotCode).Exec(); err != nil {
+			return req.MakeErr("Error al buscar el lote:", err)
+		}
+		if len(lots) == 0 {
+			return req.MakeErr("No se encontró un lote con ese código.")
+		}
+		for _, lot := range lots {
+			lotIDs = append(lotIDs, lot.ID)
+		}
 	}
 
-	type Result struct {
-		Movimientos []logisticaTypes.WarehouseProductMovement
-		Usuarios    []coretypes.Usuario
-		Productos   []negocioTypes.Producto
+	movimientos := []db.RecordGroup[logisticaTypes.WarehouseProductMovement]{}
+
+	// Direct-lookup path: SerialNumber / lotIDs / DocumentID target non-grouped local indexes,
+	// so plain Query applies and the Fecha range is ignored.
+	if serialNumber != "" || len(lotIDs) > 0 || documentID > 0 {
+		flat := []logisticaTypes.WarehouseProductMovement{}
+		query := db.Query(&flat)
+		query.CompanyID.Equals(req.Usuario.EmpresaID)
+		switch {
+		case serialNumber != "":
+			query.SerialNumber.Equals(serialNumber)
+		case documentID > 0:
+			query.DocumentID.Equals(documentID)
+		case len(lotIDs) > 0:
+			query.LotID.In(lotIDs...).AllowFilter()
+		}
+		if err := query.Exec(); err != nil {
+			return req.MakeErr("Error al obtener los movimientos:", err)
+		}
+		if len(flat) > 0 {
+			movimientos = append(movimientos, db.RecordGroup[logisticaTypes.WarehouseProductMovement]{
+				IndexID:       -1,
+				Records:       flat,
+			})
+		}
+		return req.MakeResponse(movimientos)
 	}
 
-	result := Result{}
+	if fechaInicio <= 0 || fechaFin <= 0 {
+		return req.MakeErr("Debe especificar el rango de fechas.")
+	}
+	if fechaFin < fechaInicio {
+		return req.MakeErr("La fecha final no puede ser menor a la fecha inicial.")
+	}
+	if fechaFin-fechaInicio > 120 {
+		return req.MakeErr("Sólo se pueden consultar hasta 120 días a la vez.")
+	}
 
-	query := db.Query(&result.Movimientos)
+	cacheGroupHashes, err := core.ExtractGroupIndexCacheValues(req)
+	if err != nil {
+		return req.MakeErr(err)
+	}
 
-	query.CompanyID.Equals(req.Usuario.EmpresaID).
-		WarehouseID.Equals(almacenID).
-		Fecha.Between(fechaInicio, fechaFin).OrderDesc().Limit(1000)
+	query := db.QueryIndexGroup(&movimientos).
+		CompanyID.Equals(req.Usuario.EmpresaID)
+
+	for _, cacheGroup := range cacheGroupHashes {
+		query.IncludeCachedGroup(cacheGroup.GroupHash, cacheGroup.UpdateCounter)
+	}
+
+	// Fecha is the single BETWEEN required by QueryIndexGroup; the most specific
+	// compatible grouped index is picked from the remaining equality filters.
+	query.Fecha.Between(fechaInicio, fechaFin)
+
+	switch {
+	case tipo > 0 && almacenID > 0:
+		// Uses the raw group: Fecha + Tipo + WarehouseID.
+		query.Tipo.Equals(tipo).WarehouseID.Equals(almacenID)
+	case tipo > 0:
+		// Uses the raw group: Fecha + Tipo.
+		query.Tipo.Equals(tipo)
+	case almacenID > 0:
+		// Uses the raw group: Fecha + WarehouseID.
+		query.WarehouseID.Equals(almacenID)
+	case productoID > 0:
+		// Uses the raw group: Fecha + ProductoID.
+		query.ProductoID.Equals(productoID)
+	}
 
 	if err := query.Exec(); err != nil {
-		return req.MakeErr("Error al obtener los registros del almacén:", err)
+		core.Log("Error querying movement groups:", err)
+		return req.MakeErr("Error al obtener los movimientos del almacén.")
 	}
 
-	core.Log("movimientos encontrados:", len(result.Movimientos))
-
-	if len(result.Movimientos) == 0 {
-		return req.MakeResponse(result)
-	}
-
-	usuariosSet := core.SliceSet[int32]{}
-	productosSet := core.SliceSet[int32]{}
-
-	for _, e := range result.Movimientos {
-		usuariosSet.Add(e.CreatedBy)
-		productosSet.Add(e.ProductoID)
-	}
-
-	errGroup := errgroup.Group{}
-
-	errGroup.Go(func() error {
-		query := db.Query(&result.Productos)
-		query.Select(query.ID, query.Nombre, query.Precio).
-			EmpresaID.Equals(req.Usuario.EmpresaID).
-			ID.In(productosSet.Values...)
-		err := query.Exec()
-		if err != nil {
-			err = core.Err("Error al obtener los movimientos de almacén:", err)
-		}
-		return err
-	})
-
-	errGroup.Go(func() error {
-		query := db.Query(&result.Usuarios)
-		query.Select(query.ID, query.Usuario, query.Nombres, query.Apellidos).
-			EmpresaID.Equals(req.Usuario.EmpresaID).
-			ID.In(usuariosSet.Values...)
-		err := query.Exec()
-		if err != nil {
-			err = core.Err("Error al obtener los usuarios:", err)
-		}
-		return err
-	})
-
-	if err := errGroup.Wait(); err != nil {
-		return req.MakeErr(err.Error())
-	}
-
-	return req.MakeResponse(result)
+	return req.MakeResponse(movimientos)
 }
 
 type GetProductosStockResult struct {

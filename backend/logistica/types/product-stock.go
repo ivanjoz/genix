@@ -270,6 +270,7 @@ func (e ProductStockLotTable) GetSchema() db.TableSchema {
 		Indexes: []db.Index{
 			// Hash index for dedup lookups when resolving LotID from (Date, SupplierID, Name).
 			{Type: db.TypeGlobalIndex, Keys: []db.Coln{e.Hash}, KeepPart: true},
+			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.Name}},
 		},
 	}
 }
