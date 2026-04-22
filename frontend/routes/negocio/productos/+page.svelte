@@ -585,6 +585,7 @@ import {
               if (imagePath.includes("/")) {
                 imagePath = imagePath.split("/")[1];
               }
+              productoForm._imageSource = undefined;
               productoForm.Image = {
                 n: imagePath,
                 d: description,

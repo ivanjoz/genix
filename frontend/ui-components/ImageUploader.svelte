@@ -100,6 +100,7 @@ const makeImageSrc = (format?: string) => {
 }
 
 let imageFile: Blob
+let isConverting = $state(false)
 
 type IResulution = {
   i: number, r: number, fn: (c: string) => {}, promise?: Promise<any>
@@ -112,7 +113,7 @@ const uploadImage = async (): Promise<IImageResult> => {
     return Promise.resolve(result)
   }
 
-  progress = 0.001
+  isConverting = true
 
   const data = {
     Content: "", Content_x6: "",  Content_x4: "",  Content_x2: "",
@@ -129,7 +130,6 @@ const uploadImage = async (): Promise<IImageResult> => {
     for(const rs of resolutions){
       rs.promise = new Promise(resolve => {
         fileToImage(imageFile, rs.r, "avif").then(d => {
-          // console.log("image b64",d)
           rs.fn(d), resolve(0)
         })
       })
@@ -139,12 +139,22 @@ const uploadImage = async (): Promise<IImageResult> => {
       await Promise.all(resolutions.map(x => x.promise))
     } catch (error) {
       Notify.failure(`Error al convertir imagen: ${error}`)
+      isConverting = false
       return Promise.resolve(result)
     }
 
   } else {
-    data.Content = imageSrc.base64
+    try {
+      data.Content = await fileToImage(imageFile, 1200, 'avif')
+    } catch (error) {
+      Notify.failure(`Error al convertir imagen: ${error}`)
+      isConverting = false
+      return Promise.resolve(result)
+    }
   }
+
+  isConverting = false
+  progress = 0.001
 
   if (setDataToSend) { setDataToSend(data); }
 
@@ -194,11 +204,14 @@ const onFileChange = async (ev: Event) => {
   console.log('imagefile::', imageFile)
 
   try {
-    // Use web worker-based image conversion (1.2 MP resolution, WebP format)
-    const imageB64 = await fileToImage(imageFile, 1200, 'avif')
-    console.log("imageB64", imageB64)
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target?.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(imageFile)
+    })
     progress = -1
-    imageSrc = { src: "", base64: imageB64, types: [], description: imageSrc.description }
+    imageSrc = { src: "", base64: base64, types: [], description: imageSrc.description }
     onChange?.(imageSrc, uploadImage)
   } catch (error) {
     Notify.failure('Error procesando la imagen: ' + String(error))
@@ -304,15 +317,17 @@ $effect(() => {
     </div>
   {/if}
 
-  {#if progress > 0}
+  {#if isConverting || progress > 0}
     <div class="w-full h-full absolute flex flex-col items-center justify-center card_image_layer_loading">
-      <div class="c-white h3 ff-bold">Loading...</div>
-      <div class="flex relative items-center justify-center h-22 lh-10 w-[calc(100%-16px)] left-0 right-0 mt-8 _8 mr-8 ml-9 p-2">
-        <div class="absolute _9 left-2 h-18"
-          style="width: calc({Math.round(progress)}% - 4px);"
-        ></div>
-        <div class="absolute fs14 ff-bold text-white">{Math.round(progress)} %</div>
-      </div>
+      <div class="c-white h3 ff-bold">{isConverting ? 'Convirtiendo...' : 'Guardando...'}</div>
+      {#if progress > 0}
+        <div class="flex relative items-center justify-center h-22 lh-10 w-[calc(100%-16px)] left-0 right-0 mt-8 _8 mr-8 ml-9 p-2">
+          <div class="absolute _9 left-2 h-18"
+            style="width: calc({Math.round(progress)}% - 4px);"
+          ></div>
+          <div class="absolute fs14 ff-bold text-white">{Math.round(progress)} %</div>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>

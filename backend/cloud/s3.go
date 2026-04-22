@@ -12,6 +12,8 @@ import (
 	"os"
 	"strings"
 
+	"net/http"
+
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -307,6 +309,51 @@ func SaveConvertImage(args ImageArgs) ([]imageconv.Image, error) {
 	return images, nil
 }
 
+func SaveFileToR2(args SaveFileArgs) error {
+	key := args.Path + "/" + args.Name
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/r2/buckets/%s/objects/%s",
+		core.Env.CLOUDFLARE_ACCOUNT, args.Bucket, key)
+
+	core.Log("Enviando a R2:", args.Bucket, "| Folder:", args.Path, "|", args.Name)
+
+	var body io.Reader
+	if len(args.LocalFilePath) > 1 {
+		file, err := os.Open(args.LocalFilePath)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		body = file
+	} else if len(args.FileContent) > 0 {
+		body = bytes.NewReader(args.FileContent)
+	} else {
+		return errors.New("no hay acciones a realizar")
+	}
+
+	req, err := http.NewRequest("PUT", url, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+core.Env.CLOUDFLARE_TOKEN)
+	if len(args.ContentType) > 0 {
+		req.Header.Set("Content-Type", args.ContentType)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		respBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("R2 upload failed (HTTP %d): %s", resp.StatusCode, string(respBytes))
+	}
+
+	core.Log("R2 upload OK:", resp.StatusCode)
+	return nil
+}
+
 func SaveImage(image ImageArgs) (string, error) {
 
 	fmt.Println("args.Folder:", image.Folder)
@@ -315,15 +362,22 @@ func SaveImage(image ImageArgs) (string, error) {
 		image.Content = strings.Split(image.Content, "base64,")[1]
 	}
 
-	bytes := core.Base64ToBytes(image.Content)
+	imageBytes := core.Base64ToBytes(image.Content)
 
 	args := SaveFileArgs{
-		Bucket:      core.Env.S3_BUCKET,
 		Path:        image.Folder,
-		FileContent: bytes,
+		FileContent: imageBytes,
 		ContentType: fmt.Sprintf("image/%v", image.Type),
 		Name:        fmt.Sprintf("%v-x%v.%v", image.Name, image.Resolution, image.Type),
 	}
-	err := SaveFile(args)
+
+	var err error
+	if core.Env.CLOUD_PROVIDER == "cloudflare" {
+		args.Bucket = core.Env.STACK_NAME + "-files"
+		err = SaveFileToR2(args)
+	} else {
+		args.Bucket = core.Env.S3_BUCKET
+		err = SaveFile(args)
+	}
 	return args.Name, err
 }

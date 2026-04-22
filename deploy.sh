@@ -19,6 +19,8 @@ echo "Ejecutar Proceso ---------------"
 echo "[5] Recrear Tablas (Backend)"
 echo "[6] Poblar Datos Iniciales (Backend)"
 echo "[7] Inspeccionar/Compilar Backend"
+echo "Infraestructura ----------------"
+echo "[9] Desplegar Infraestructura"
 echo "Local Development --------------"
 echo "[8] Serve Local Build (docs/)"
 read ACCIONES
@@ -104,6 +106,15 @@ if [[ $ACCIONES == *"6"* ]]; then
     cd ./backend
     $GO_PATH run . fn-init
     cd ..
+fi
+
+# DESPLEGAR INFRAESTRUCTURA
+if [[ $ACCIONES == *"9"* ]]; then
+    echo "=== DESPLEGANDO INFRAESTRUCTURA ==="
+    cd ./cloud
+    $GO_PATH run . accion=3
+    cd ..
+    echo "✅ El deploy de infraestructura finalizó!"
 fi
 
 # INSPECCIONAR BACKEND

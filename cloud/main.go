@@ -14,14 +14,17 @@ import (
 )
 
 type DeployParams struct {
-	APP_NAME          string `json:"APP_NAME"`
-	AWS_PROFILE       string `json:"AWS_PROFILE"`
-	AWS_REGION        string `json:"AWS_REGION"`
-	STACK_NAME        string `json:"STACK_NAME"`
-	DEPLOYMENT_BUCKET string
-	FRONTEND_BUCKET   string
-	LAMBDA_IAM_ROLE   string
-	S3_COMPILED_PATH  string
+	APP_NAME            string `json:"APP_NAME"`
+	AWS_PROFILE         string `json:"AWS_PROFILE"`
+	AWS_REGION          string `json:"AWS_REGION"`
+	STACK_NAME          string `json:"STACK_NAME"`
+	DEPLOYMENT_BUCKET   string
+	FRONTEND_BUCKET     string
+	LAMBDA_IAM_ROLE     string
+	S3_COMPILED_PATH    string
+	CLOUD_PROVIDER      string `json:"CLOUD_PROVIDER"`
+	CLOUDFLARE_ACCOUNT  string `json:"CLOUDFLARE_ACCOUNT"`
+	CLOUDFLARE_TOKEN    string `json:"CLOUDFLARE_TOKEN"`
 }
 
 const s3CompiledPath = "gerp-artifacts/lambda-compiled.zip"
@@ -88,12 +91,14 @@ func main() {
 		return
 	}
 
-	missingParams := []string{params.STACK_NAME, params.DEPLOYMENT_BUCKET,
-		params.AWS_PROFILE, params.AWS_REGION, params.LAMBDA_IAM_ROLE}
+	if params.CLOUD_PROVIDER != "cloudflare" {
+		missingParams := []string{params.STACK_NAME, params.DEPLOYMENT_BUCKET,
+			params.AWS_PROFILE, params.AWS_REGION, params.LAMBDA_IAM_ROLE}
 
-	for _, e := range missingParams {
-		if len(e) == 0 {
-			panic("Los parámetros STACK_NAME, DEPLOYMENT_BUCKET, AWS_REGION, AWS_PROFILE y LAMBDA_IAM_ROLE son requeridos.")
+		for _, e := range missingParams {
+			if len(e) == 0 {
+				panic("Los parámetros STACK_NAME, DEPLOYMENT_BUCKET, AWS_REGION, AWS_PROFILE y LAMBDA_IAM_ROLE son requeridos.")
+			}
 		}
 	}
 
@@ -244,12 +249,15 @@ func UpdateEnviromentVariables(params DeployParams, lambdaNro uint8) {
 
 // Despliega la infraestructura
 func DeployIfraestructure(params DeployParams) {
+	if params.CLOUD_PROVIDER == "cloudflare" {
+		DeployCloudflareInfra(params)
+		return
+	}
+
 	CompileBackendToS3(params, true)
 
 	fmt.Println("Desplegando infraestructura con CDK...")
 
-	// Ejecuta CDK deploy
-	// Usamos cdk.json para definir el comando --app
 	command := fmt.Sprintf("npx --yes aws-cdk@latest deploy %v-stack --require-approval never --profile %v", params.STACK_NAME, params.AWS_PROFILE)
 
 	fmt.Println("Comando:: ", command)
