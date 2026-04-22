@@ -31,15 +31,27 @@ export interface ICacheRouteRow extends ILastSync {
   partitionValue: string
   cacheKey: string
   responseKeys: string[]
+  // Routes whose backend responses are bare arrays (normalized to `_default`) persist records
+  // in `cacheRecordsSingle` and skip the `_k` field. The flag is set on the first fetch.
+  isSingle?: boolean
 }
 
-export interface ICacheRecordRow {
-  cR: number
-  rK: string
+export interface ICacheRecordRowMulti {
+  _r: number
+  _k: number
   ID: CacheRecordID
-  E: any
   ss: number
+  [field: string]: any
 }
+
+export interface ICacheRecordRowSingle {
+  _r: number
+  ID: CacheRecordID
+  ss: number
+  [field: string]: any
+}
+
+export type ICacheRecordRow = ICacheRecordRowMulti | ICacheRecordRowSingle
 
 export interface IRequestLogRow {
   id: number /* unix milliseconds timestamp */

@@ -3,7 +3,7 @@ import { Env } from '$core/env'
 import type { ICacheDebugRow } from './cache-debug.types'
 import { makeCacheDatabaseName } from './delta-cache.idb'
 
-const GROUP_CACHE_DB_VERSION = 3
+const GROUP_CACHE_DB_VERSION = 4
 const LOG_PREFIX = '[group-cache:idb]'
 const groupCacheDatabasesByName = new Map<string, GroupCacheDatabase>()
 
@@ -37,7 +37,8 @@ export interface IGroupCacheMetadata {
 
 class GroupCacheDatabase extends Dexie {
 	cacheRoutes!: Dexie.Table<any, number>
-	cacheRecords!: Dexie.Table<any, [number, string, string | number]>
+	cacheRecords!: Dexie.Table<any, [number, number, string | number]>
+	cacheRecordsSingle!: Dexie.Table<any, [number, string | number]>
 	requestLogs!: Dexie.Table<any, number>
 	groupRows!: Dexie.Table<IGroupCacheRow<any>, [string, string]>
 
@@ -45,9 +46,11 @@ class GroupCacheDatabase extends Dexie {
 		super(databaseName)
 
 		// Indexed metadata lets GETWithGroupCache send freshness keys without loading record JSON.
+		// Schema must mirror DeltaCacheDatabase since both classes share the same underlying IDB.
 		this.version(GROUP_CACHE_DB_VERSION).stores({
 			cacheRoutes: '++id,&routeLookupKey,module',
-			cacheRecords: '[cR+rK+ID],[cR+ss]',
+			cacheRecords: '[_r+_k+ID],[_r+ss]',
+			cacheRecordsSingle: '[_r+ID],[_r+ss]',
 			requestLogs: '&id,route',
 			// Primary key fetches exact groups; secondary index streams all freshness pairs by shape.
 			groupRows: '[queryShape+key],[queryShape+id+upc],queryShape',

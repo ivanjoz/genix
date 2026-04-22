@@ -29,10 +29,15 @@ case "$1" in
     echo "Executing generate_sale_orders command..."
     (cd backend && go run . fn-generate-sale-orders)
     ;;
+  "sync_struct_interfaces")
+    # For "sync_struct_interfaces", align marked frontend interfaces with backend structs.
+    echo "Executing sync_struct_interfaces command..."
+    (cd scripts && go run . sync_struct_interfaces)
+    ;;
   *)
     # If the command is not recognized, show an error and usage instructions.
     echo "Unknown command: $1"
-    echo "Usage: $0 {check_tables|create|edit|configure_server|generate_sale_orders}"
+    echo "Usage: $0 {check_tables|create|edit|configure_server|generate_sale_orders|sync_struct_interfaces}"
     exit 1
     ;;
 esac

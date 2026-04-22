@@ -73,7 +73,7 @@ func GetProductsIndexDelta(req *core.HandlerArgs) core.HandlerResponse {
 		updated = cacheRecords[0].Updated
 	}
 
-	productosDelta := []negocioTypes.Producto{}
+	productosDelta := []negocioTypes.Product{}
 	q1 := db.Query(&productosDelta)
 	err := q1.Select(q1.Nombre, q1.MarcaID, q1.CategoriasIDs, q1.NameUpdated, q1.Status, q1.StockStatus).
 		NameUpdated.GreaterEqual(updated).AllowFilter().Exec()
@@ -349,7 +349,7 @@ func persistProductosIndexUpdatedCache(empresaID int32, updatedSunixTime int32) 
 }
 
 type ProductosData struct {
-	Productos  []negocioTypes.Producto
+	Productos  []negocioTypes.Product
 	Categorias []negocioTypes.ListaCompartidaRegistro
 	Marcas     []negocioTypes.ListaCompartidaRegistro
 }
@@ -363,7 +363,7 @@ func loadIndexerSourceDataWithCache(
 		return cachedPayload, nil
 	}
 
-	productos := []negocioTypes.Producto{}
+	productos := []negocioTypes.Product{}
 	query := db.Query(&productos)
 	query.Select(query.ID, query.Nombre, query.CategoriasIDs, query.MarcaID).
 		EmpresaID.Equals(empresaID).
@@ -424,7 +424,7 @@ func loadIndexerSourceDataWithCache(
 func loadIndexerSourceDataWithoutCache(
 	empresaID int32,
 ) (ProductosData, error) {
-	productos := []negocioTypes.Producto{}
+	productos := []negocioTypes.Product{}
 	query := db.Query(&productos)
 	query.Select(query.ID, query.Nombre, query.CategoriasIDs, query.MarcaID).
 		EmpresaID.Equals(empresaID).

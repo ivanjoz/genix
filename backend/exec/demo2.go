@@ -152,7 +152,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 
-	records := []negocioTypes.Producto{}
+	records := []negocioTypes.Product{}
 
 	query := db.Query(&records)
 	err := query.Select(query.ID).Exec()

@@ -236,7 +236,9 @@ export const makeRoute = (domain: string, ...segments: string[]) => {
 	}
 	let route = [domain, ...segments]
 		.filter(x => x).join("/").replaceAll(`//`, "/")
-	return prefix +"://"+ route
+	
+	console.debug("Route generated:", route)
+	return prefix + "://" + route
 }
 
 export const LocalStorage = typeof window !== 'undefined'

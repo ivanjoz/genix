@@ -17,24 +17,24 @@ import (
 func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt("updated")
 
-	productos := []negocioTypes.Producto{}
+	productos := []negocioTypes.Product{}
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		query := db.Query(&productos)
+		query := db.Query(&productos).EmpresaID.Equals(req.Usuario.EmpresaID)
 
-		query.Exclude(query.Stock, query.StockStatus).
-			EmpresaID.Equals(req.Usuario.EmpresaID)
+		query.Exclude(query.Stock, query.StockStatus, query.EmpresaID, query.Created, query.CreatedBy, query.NombreHash)
+		
 		if updated > 0 {
 			query.Updated.GreaterThan(updated)
 		} else {
 			query.Status.GreaterEqual(1)
 		}
-		err := query.Exec()
-		if err != nil {
-			err = fmt.Errorf("error al obtener los productos: %v", err)
+		
+		if err := query.Exec(); err != nil {
+			return fmt.Errorf("error al obtener los productos: %v", err)
 		}
-		return err
+		return nil
 	})
 
 	if err := errGroup.Wait(); err != nil {
@@ -53,7 +53,7 @@ func GetProductosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 
 	// core.Log("buscando ids::", len(cachedIDs), "|", cachedIDs)
 
-	productos := []negocioTypes.Producto{}
+	productos := []negocioTypes.Product{}
 	err := db.QueryCachedIDs(&productos, cachedIDs)
 	if err != nil {
 		return req.MakeErr("Error al obtener los productos.", err)
@@ -64,12 +64,12 @@ func GetProductosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 
 func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
-	productos := []negocioTypes.Producto{}
+	productos := []negocioTypes.Product{}
 	if err := json.Unmarshal([]byte(*req.Body), &productos); err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	nameHashToName := make(map[int32]*negocioTypes.Producto, len(productos))
+	nameHashToName := make(map[int32]*negocioTypes.Product, len(productos))
 	// SelfParse each producto to populate NombreHash and fail fast on duplicate names in this payload.
 	for i := range productos {
 		e := &productos[i]
@@ -87,13 +87,13 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Group existing records by NombreHash so we can check active collisions and reuse inactive IDs.
-	existingProductsByHash := make(map[int32][]negocioTypes.Producto, len(nameHashToName))
+	existingProductsByHash := make(map[int32][]negocioTypes.Product, len(nameHashToName))
 	nombreHashesToValidate := make([]int32, 0, len(nameHashToName))
 	for nombreHash := range nameHashToName {
 		nombreHashesToValidate = append(nombreHashesToValidate, nombreHash)
 	}
 
-	existingProducts := []negocioTypes.Producto{}
+	existingProducts := []negocioTypes.Product{}
 	query := db.Query(&existingProducts)
 	query.Select(query.NombreHash, query.ID, query.Status).
 		EmpresaID.Equals(req.Usuario.EmpresaID).
@@ -131,7 +131,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	nowTime := core.SUnixTime()
 	core.Log("PostProductos merge payload:", len(productos))
 
-	buildPresentaciones := func(current *negocioTypes.Producto, incoming *negocioTypes.Producto) {
+	buildPresentaciones := func(current *negocioTypes.Product, incoming *negocioTypes.Product) {
 		presentacionesMap := map[int16]negocioTypes.ProductoPesentacion{}
 		presentacionesNameMap := map[string]negocioTypes.ProductoPesentacion{}
 		presentacionMaxID := int16(0)
@@ -174,7 +174,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	// Merge resolves insert/update per primary key and applies only required writes.
 	err := db.Merge(&productos,
 		[]db.Coln{t.Stock, t.StockReservado, t.StockStatus, t.CategoriasConStock, t.Created, t.CreatedBy, t.Images},
-		func(prev, current *negocioTypes.Producto) bool {
+		func(prev, current *negocioTypes.Product) bool {
 			current.EmpresaID = req.Usuario.EmpresaID
 			current.Created = prev.Created
 			current.CreatedBy = prev.CreatedBy
@@ -200,7 +200,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 			current.UpdatedBy = req.Usuario.ID
 			return true
 		},
-		func(current *negocioTypes.Producto) {
+		func(current *negocioTypes.Product) {
 			current.EmpresaID = req.Usuario.EmpresaID
 			current.Created = nowTime
 			current.CreatedBy = req.Usuario.ID
@@ -243,7 +243,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	productos := []negocioTypes.Producto{}
+	productos := []negocioTypes.Product{}
 	query := db.Query(&productos)
 	query.Select().
 		EmpresaID.Equals(req.Usuario.EmpresaID).
@@ -315,7 +315,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Print(producto)
 
-	err = db.Insert(&[]negocioTypes.Producto{producto})
+	err = db.Insert(&[]negocioTypes.Product{producto})
 
 	if err != nil {
 		return req.MakeErr("Error al actualizar el producto:", err)
@@ -336,13 +336,13 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 
 	categoriaID := req.GetQueryInt("categoria-id")
 
-	productos := []negocioTypes.Producto{}
+	productos := []negocioTypes.Product{}
 	categorias := []negocioTypes.ListaCompartidaRegistro{}
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
 		query := db.Query(&productos)
-		q1 := db.Table[negocioTypes.Producto]()
+		q1 := db.Table[negocioTypes.Product]()
 		query.Select(q1.ID, q1.Nombre, q1.Descripcion, q1.Precio, q1.Descuento, q1.PrecioFinal, q1.Images, q1.Stock, q1.CategoriasIDs).
 			EmpresaID.Equals(empresaID).
 			StockStatus.Equals(1)

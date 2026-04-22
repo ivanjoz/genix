@@ -1,7 +1,8 @@
 import { unmarshall } from '$libs/funcs/unmarshall';
 import {
   addRequestLogRow,
-  bulkDeleteRouteRecordRows,
+  bulkDeleteRouteRecordRowsMulti,
+  bulkDeleteRouteRecordRowsSingle,
   bulkPutRouteRecordRows,
   clearEnvironmentCache,
   clearModuleCache,
@@ -18,9 +19,10 @@ import {
   resetCacheRouteRow,
   saveCacheRouteRow,
   setRouteForceNetwork,
+  stripRowMeta,
   verifyRouteMemoryState,
 } from './delta-cache.idb';
-import type { CacheRecordID, ICacheRecordRow, ICacheRouteRow, IDeltaCacheRouteRef, ILastSync } from './delta-cache.types';
+import type { CacheRecordID, ICacheRecordRow, ICacheRecordRowMulti, ICacheRecordRowSingle, ICacheRouteRow, IDeltaCacheRouteRef, ILastSync } from './delta-cache.types';
 import type { serviceHttpProps } from '$libs/workers/service-worker';
 import { parseObject } from '$libs/workers/service-worker-cache';
 
@@ -132,6 +134,10 @@ const makeCacheKey = (args: serviceHttpProps) => {
 const normalizeResponse = (response: CacheContent | any[]): CacheContent => {
   if(Array.isArray(response)){ return { _default: response } }
   return response as CacheContent
+}
+
+const wasArrayResponse = (response: any): boolean => {
+  return Array.isArray(response)
 }
 
 const isRecordsToRemoveFlagKey = (responseKey: string) => {
@@ -312,18 +318,49 @@ const getRequiredRecordID = (
   return `cmp:${JSON.stringify(keyParts)}`
 }
 
-const buildRecordRow = (
-  cacheRouteId: number,
+const getResponseKeyIndex = (routeRow: ICacheRouteRow, responseKey: string): number => {
+  // 1-based index into routeRow.responseKeys; caller must ensure the key has been registered first.
+  const index = (routeRow.responseKeys || []).indexOf(responseKey)
+  if(index === -1){
+    throw new Error(`Cache Error: responseKey "${responseKey}" no está registrado en routeRow.responseKeys`)
+  }
+  return index + 1
+}
+
+const buildMultiRecordRow = (
+  routeRow: ICacheRouteRow,
   responseKey: string,
   recordID: CacheRecordID,
   record: any,
-): ICacheRecordRow => ({
-  cR: cacheRouteId,
-  rK: responseKey,
+): ICacheRecordRowMulti => ({
+  ...record,
+  _r: routeRow.id as number,
+  _k: getResponseKeyIndex(routeRow, responseKey),
   ID: recordID,
-  E: record,
   ss: getRecordStatusValue(record),
 })
+
+const buildSingleRecordRow = (
+  routeRow: ICacheRouteRow,
+  recordID: CacheRecordID,
+  record: any,
+): ICacheRecordRowSingle => ({
+  ...record,
+  _r: routeRow.id as number,
+  ID: recordID,
+  ss: getRecordStatusValue(record),
+})
+
+const buildRecordRow = (
+  routeRow: ICacheRouteRow,
+  responseKey: string,
+  recordID: CacheRecordID,
+  record: any,
+): ICacheRecordRow => {
+  return routeRow.isSingle
+    ? buildSingleRecordRow(routeRow, recordID, record)
+    : buildMultiRecordRow(routeRow, responseKey, recordID, record)
+}
 
 const buildRouteRowsFromResponse = (
   args: serviceHttpProps, routeRow: ICacheRouteRow, response: CacheContent,
@@ -331,10 +368,17 @@ const buildRouteRowsFromResponse = (
   const rows: ICacheRecordRow[] = []
   const responseKeys = listRecordResponseEntries(response).map(([responseKey]) => responseKey)
 
+  // Register every incoming responseKey before any row reads its numeric index.
+  const nextResponseKeys = new Set(routeRow.responseKeys || [])
+  for(const responseKey of responseKeys){
+    nextResponseKeys.add(responseKey)
+  }
+  routeRow.responseKeys = [...nextResponseKeys]
+
   for(const [responseKey, records] of listRecordResponseEntries(response)){
     for(const record of records){
       rows.push(buildRecordRow(
-        routeRow.id as number,
+        routeRow,
         responseKey,
         getRequiredRecordID(args, record, args.route, responseKey),
         record,
@@ -562,9 +606,10 @@ const parseNetworkResponse = async (args: serviceHttpProps, preResponse: Respons
     response = (response as any).response as CacheContent
   }
 
+  const isArray = wasArrayResponse(response)
   response = normalizeResponse(response)
   response.__version__ = args.__version__
-  return response
+  return { response, isArray }
 }
 
 const handleFetchResponse = async (
@@ -572,8 +617,14 @@ const handleFetchResponse = async (
   routeRow: ICacheRouteRow,
   response: CacheContent,
   nowTime: number,
+  isArrayResponse?: boolean,
 ) => {
   response = normalizeResponse(response)
+
+  // Lock `isSingle` on the first delta that ever touches this route so the table choice stays stable.
+  if(routeRow.isSingle === undefined && isArrayResponse !== undefined){
+    routeRow.isSingle = isArrayResponse
+  }
 
   const updatedStatusDelta = extractUpdated(response)
   const updatedMinDelta = extractUpdated(response, true)
@@ -597,21 +648,38 @@ const handleFetchResponse = async (
   if(!hasChanged && args.cacheMode !== 'updateOnly'){
     response = (await readCachedContent(routeRow)) as CacheContent
   } else if(hasChanged){
-    const responseKeys = listRecordResponseEntries(response).map(([responseKey]) => responseKey)
-    await extendRouteResponseKeys(routeRow, responseKeys)
-    console.log("[DeltaCache] aplicando delta:", routeRow.cacheKey, responseKeys)
+    const incomingResponseKeys = listRecordResponseEntries(response).map(([responseKey]) => responseKey)
+    // Register any new responseKeys (including those referenced only via `_IDsToRemove` flags)
+    // so the numeric `_k` index is stable for every row we write or delete below.
+    const allResponseKeysToRegister = new Set<string>(incomingResponseKeys)
+    for(const responseKey of idsToRemoveByResponseKey.keys()){
+      allResponseKeysToRegister.add(responseKey)
+    }
+    await extendRouteResponseKeys(routeRow, [...allResponseKeysToRegister])
+    console.log("[DeltaCache] aplicando delta:", routeRow.cacheKey, incomingResponseKeys)
 
     const baseSnapshot = (await readCachedContent(routeRow)) || ({ __version__: routeRow.__version__ } as CacheContent)
     const nextSnapshot = { ...baseSnapshot } as CacheContent
-    const recordRowKeysToDelete: [number, string, CacheRecordID][] = []
-    for(const [responseKey, idsToRemove] of idsToRemoveByResponseKey.entries()){
-      for(const recordID of idsToRemove){
-        // Flags ending in `_IDsToRemove` delete persisted rows before applying incoming deltas.
-        recordRowKeysToDelete.push([routeRow.id as number, responseKey, recordID])
-      }
-    }
 
-    await bulkDeleteRouteRecordRows(routeRow.dbName, recordRowKeysToDelete)
+    if(routeRow.isSingle){
+      const recordRowKeysToDelete: [number, CacheRecordID][] = []
+      for(const idsToRemove of idsToRemoveByResponseKey.values()){
+        for(const recordID of idsToRemove){
+          recordRowKeysToDelete.push([routeRow.id as number, recordID])
+        }
+      }
+      await bulkDeleteRouteRecordRowsSingle(routeRow.dbName, recordRowKeysToDelete)
+    } else {
+      const recordRowKeysToDelete: [number, number, CacheRecordID][] = []
+      for(const [responseKey, idsToRemove] of idsToRemoveByResponseKey.entries()){
+        const keyIndex = getResponseKeyIndex(routeRow, responseKey)
+        for(const recordID of idsToRemove){
+          // Flags ending in `_IDsToRemove` delete persisted rows before applying incoming deltas.
+          recordRowKeysToDelete.push([routeRow.id as number, keyIndex, recordID])
+        }
+      }
+      await bulkDeleteRouteRecordRowsMulti(routeRow.dbName, recordRowKeysToDelete)
+    }
 
     const nextRecordRows: ICacheRecordRow[] = []
     const allowColumnarMerge = !!(args.columnarIDField && args.combineColumnarValuesOnFields?.length)
@@ -648,7 +716,7 @@ const handleFetchResponse = async (
 
         nextRecordsByID.set(recordID, nextRecord)
         nextRecordRows.push(buildRecordRow(
-          routeRow.id as number,
+          routeRow,
           responseKey,
           recordID,
           nextRecord,
@@ -662,7 +730,7 @@ const handleFetchResponse = async (
     }
 
     if(nextRecordRows.length > 0){
-      await bulkPutRouteRecordRows(routeRow.dbName, nextRecordRows)
+      await bulkPutRouteRecordRows(routeRow, nextRecordRows)
     }
 
     response = rememberRouteSnapshot(routeRow, nextSnapshot)
@@ -682,6 +750,7 @@ const saveInitialSnapshot = async (
   routeReference: IDeltaCacheRouteRef,
   response: CacheContent,
   fetchTime: number,
+  isArrayResponse: boolean,
 ) => {
   // First sync writes the full route snapshot as indexed rows.
   const routeRow = await ensureCacheRouteRow(routeReference)
@@ -690,6 +759,7 @@ const saveInitialSnapshot = async (
   accumulateRouteFetchStats(routeRow, response, args.contentLength)
   routeRow.__version__ = args.__version__ || 1
   routeRow.forceNetwork = false
+  routeRow.isSingle = isArrayResponse
 
   const nextRouteRows = buildRouteRowsFromResponse(args, routeRow, response)
   await replaceRouteRecordRows(routeRow, nextRouteRows.responseKeys, nextRouteRows.rows)
@@ -761,11 +831,11 @@ export const fetchDeltaCache = async (args: serviceHttpProps) => {
     }
 
     const networkResponse = await fetchNetworkResponse(args, route)
-    const response = await parseNetworkResponse(args, networkResponse.preResponse)
+    const { response, isArray } = await parseNetworkResponse(args, networkResponse.preResponse)
     console.log(`Fetch response recibida! (${route}) | Has-caché: ${hasCache}`)
     const content = routeRow && routeRow.fetchTime
-      ? await handleFetchResponse(args, routeRow, response, fetchTime)
-      : await saveInitialSnapshot(args, routeReference, response, fetchTime)
+      ? await handleFetchResponse(args, routeRow, response, fetchTime, isArray)
+      : await saveInitialSnapshot(args, routeReference, response, fetchTime, isArray)
     const responsePreparedAt = Date.now()
     const requestRouteInfo = parseRequestLogRoute(route)
 
@@ -800,10 +870,11 @@ export const applyExternalDeltaResponse = async (args: ICacheSyncUpdate) => {
   args.args.__enviroment__ = args.__enviroment__
   args.args.__companyID__ = args.__companyID__
   console.log("Guardando external fetch response en caché:", args.args.route)
+  const isArray = wasArrayResponse(args.response)
   args.args.contentLength = measureResponseBytes(normalizeResponse(args.response))
   const routeReference = makeRouteReference(args.args)
   const routeRow = await ensureCacheRouteRow(routeReference)
-  return await handleFetchResponse(args.args, routeRow, normalizeResponse(args.response), nowTime)
+  return await handleFetchResponse(args.args, routeRow, normalizeResponse(args.response), nowTime, isArray)
 }
 
 export const setDeltaRouteForceNetwork = async (args: serviceHttpProps) => {
@@ -826,7 +897,7 @@ export const readDeltaCacheSubObject = async (args: IGetCacheSubObject) => {
   if(!routeRow){ return [] }
 
   const responseKey = args.propInResponse || "_default"
-  const records = (await getRecordRowsByResponseKey(routeRow, responseKey)).map((recordRow) => recordRow.E)
+  const records = (await getRecordRowsByResponseKey(routeRow, responseKey)).map(stripRowMeta)
   if(!records.length && !(routeRow.responseKeys || []).includes(responseKey)){ return [] }
 
   if(!args.filter){

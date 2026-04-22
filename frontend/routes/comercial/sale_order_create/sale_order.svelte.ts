@@ -32,26 +32,37 @@ export interface VentaProducto {
   producto?: IProducto // Helper reference
 }
 
+//STRUCT:comercial.SaleOrder
 export interface ISaleOrder {
-  ID: number
-  EmpresaID: number
+  Fecha: number
   WarehouseID: number
-  LastPaymentCajaID: number
-  ClientID: number
-  TotalAmount: number
-  TaxAmount: number
-  DebtAmount: number
-  ActionsIncluded: number[]
+  ID: number
   DetailProductsIDs: number[]
   DetailPrices: number[]
   DetailQuantities: number[]
-	DetailProductSkus: string[]
+  DetailProductSkus: string[]
+  DetailProductLotIDs: number[]
   DetailProductPresentations: number[]
-  ClientInfo?: {
-    Name: string
-    RegistryNumber: string
-  }
-  
+  TotalAmount: number
+  TaxAmount: number
+  DebtAmount: number
+  ClientID: number
+  Created: number
+  upd: number
+  upc: number
+  UpdatedBy: number
+  ss: number
+  LastPaymentCajaID: number
+  ActionsIncluded: number[]
+  LastPaymentTime: number
+  LastPaymentUser: number
+  DeliveryTime: number
+  DeliveryUser: number
+  ClientInfo: any
+  /* extra fields */
+  EmpresaID: number
+  Name: string
+  RegistryNumber: string
   // UI Helpers (not sent or ignored by backend if not in struct)
   montoRecibido: number
   montoVuelto: number

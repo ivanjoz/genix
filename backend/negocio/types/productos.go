@@ -25,8 +25,8 @@ type ProductoPesentacion struct {
 	Status           int8   `ms:"s" json:"ss,omitempty" cbor:"s"`
 }
 
-type Producto struct {
-	db.TableStruct[ProductoTable, Producto]
+type Product struct {
+	db.TableStruct[ProductoTable, Product]
 	EmpresaID      int32   `json:",omitempty"`
 	ID             int32   `db:"id,pk"`
 	TempID         int32   `json:",omitempty"`
@@ -69,7 +69,7 @@ type Producto struct {
 }
 
 type ProductoTable struct {
-	db.TableStruct[ProductoTable, Producto]
+	db.TableStruct[ProductoTable, Product]
 	EmpresaID          db.Col[ProductoTable, int32]
 	ID                 db.Col[ProductoTable, int32]
 	Nombre             db.Col[ProductoTable, string]
@@ -106,7 +106,7 @@ type ProductoTable struct {
 	CategoriasConStock db.ColSlice[ProductoTable, int32]
 }
 
-func (e *Producto) FillCategoriasConStock() {
+func (e *Product) FillCategoriasConStock() {
 	e.CategoriasConStock = nil
 	if e.StockStatus > 0 {
 		for _, cid := range e.CategoriasIDs {
@@ -115,7 +115,7 @@ func (e *Producto) FillCategoriasConStock() {
 	}
 }
 
-func (e *Producto) SelfParse() {
+func (e *Product) SelfParse() {
 	e.NombreHash = core.BasicHashInt(core.NormalizeString(&e.Nombre))
 }
 

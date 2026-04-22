@@ -29,7 +29,6 @@ type SaleOrder struct {
 	TotalAmount    int32 `json:",omitempty"`
 	TaxAmount      int32 `json:",omitempty"`
 	DebtAmount     int32 `json:",omitempty"`
-	DeliveryStatus int8  `json:",omitempty"`
 	ClientID       int32 `json:",omitempty"`
 	Created        int32 `json:",omitempty"`
 	Updated        int32 `json:"upd,omitempty"`
@@ -37,9 +36,6 @@ type SaleOrder struct {
 	UpdatedBy      int32 `json:",omitempty"`
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
 	Status      int8 `json:"ss,omitempty"`
-	StatusTrace int8 `json:",omitempty"`
-	// Last payment caja used for payment action tracking.
-	// Keep db column mapped to legacy `caja_id_` to avoid data migration breaks.
 	LastPaymentCajaID int32 `json:",omitempty" db:"caja_id_"`
 	// If contains 2 = the payment is done
 	// If contains 3 = the delivery of the product is done

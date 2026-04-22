@@ -4,20 +4,23 @@ import type { IGroupCacheRow } from './group-cache.idb'
 import type {
   CacheRecordID,
   ICacheRecordRow,
+  ICacheRecordRowMulti,
+  ICacheRecordRowSingle,
   ICacheRouteRow,
   IDeltaCacheRouteRef,
   ILastSync,
   IRequestLogRow,
 } from './delta-cache.types'
 
-const CACHE_DB_VERSION = 3
+const CACHE_DB_VERSION = 4
 
 const deltaCacheDatabasesByName = new Map<string, DeltaCacheDatabase>()
 const routeMemoryByLookupKey = new Map<string, ICacheRouteRow>()
 
 class DeltaCacheDatabase extends Dexie {
   cacheRoutes!: EntityTable<ICacheRouteRow, 'id'>
-  cacheRecords!: Dexie.Table<ICacheRecordRow, [number, string, CacheRecordID]>
+  cacheRecords!: Dexie.Table<ICacheRecordRowMulti, [number, number, CacheRecordID]>
+  cacheRecordsSingle!: Dexie.Table<ICacheRecordRowSingle, [number, CacheRecordID]>
   requestLogs!: EntityTable<IRequestLogRow, 'id'>
   groupRows!: Dexie.Table<IGroupCacheRow<any>, [string, string]>
 
@@ -25,9 +28,12 @@ class DeltaCacheDatabase extends Dexie {
     super(databaseName)
 
     // The route table owns cache metadata, while records are persisted row-by-row by route ID.
+    // Multi-key routes live in `cacheRecords` keyed `[_r+_k+ID]`; array routes use
+    // `cacheRecordsSingle` keyed `[_r+ID]` since their responseKey is always `_default`.
     this.version(CACHE_DB_VERSION).stores({
       cacheRoutes: '++id,&routeLookupKey,module',
-      cacheRecords: '[cR+rK+ID],[cR+ss]',
+      cacheRecords: '[_r+_k+ID],[_r+ss]',
+      cacheRecordsSingle: '[_r+ID],[_r+ss]',
       requestLogs: '&id,route',
       groupRows: '[queryShape+key],[queryShape+id+upc],queryShape',
     })
@@ -74,17 +80,21 @@ const forgetRoutesByDatabaseName = (dbName: string) => {
   }
 }
 
+const getRecordsTable = (database: DeltaCacheDatabase, routeRow: Pick<ICacheRouteRow, 'isSingle'>) => {
+  return routeRow.isSingle ? database.cacheRecordsSingle : database.cacheRecords
+}
+
 const deleteRouteRecords = async (routeRow: ICacheRouteRow): Promise<void> => {
-  // Dexie exposes `cR` as a virtual prefix index from `[cR+ss]`.
-  await getDeltaCacheDatabase(routeRow.dbName).cacheRecords
-    .where('cR')
+  // Dexie exposes `_r` as a virtual prefix index from `[_r+ss]`.
+  await getRecordsTable(getDeltaCacheDatabase(routeRow.dbName), routeRow)
+    .where('_r')
     .equals(routeRow.id as number)
     .delete()
 }
 
 const countRouteRecords = async (routeRow: ICacheRouteRow): Promise<number> => {
-  return await getDeltaCacheDatabase(routeRow.dbName).cacheRecords
-    .where('cR')
+  return await getRecordsTable(getDeltaCacheDatabase(routeRow.dbName), routeRow)
+    .where('_r')
     .equals(routeRow.id as number)
     .count()
 }
@@ -151,10 +161,13 @@ export const resetCacheRouteRow = async (
 ): Promise<ICacheRouteRow> => {
   // A cache version bump discards every persisted row for that route in one transaction.
   const database = getDeltaCacheDatabase(routeRow.dbName)
-  await database.transaction('rw', database.cacheRoutes, database.cacheRecords, async () => {
+  const recordsTable = getRecordsTable(database, routeRow)
+  await database.transaction('rw', database.cacheRoutes, recordsTable, async () => {
     await deleteRouteRecords(routeRow)
+    const preservedIsSingle = routeRow.isSingle
     Object.assign(routeRow, makeEmptyLastSync(version), {
       responseKeys: [],
+      isSingle: preservedIsSingle,
     })
     await database.cacheRoutes.put(routeRow)
   })
@@ -164,31 +177,33 @@ export const resetCacheRouteRow = async (
 
 export const listRouteRecordRows = async (routeRow: ICacheRouteRow): Promise<ICacheRecordRow[]> => {
   // Full snapshot reads are rebuilt from row storage only when the caller explicitly asks for them.
-  return await getDeltaCacheDatabase(routeRow.dbName).cacheRecords
-    .where('cR')
+  return await getRecordsTable(getDeltaCacheDatabase(routeRow.dbName), routeRow)
+    .where('_r')
     .equals(routeRow.id as number)
     .toArray()
 }
 
-export const bulkGetRouteRecordRows = async (
-  dbName: string,
-  rowKeys: [number, string, CacheRecordID][]
-): Promise<(ICacheRecordRow | undefined)[]> => {
-  if (rowKeys.length === 0) { return [] }
-  return await getDeltaCacheDatabase(dbName).cacheRecords.bulkGet(rowKeys)
-}
-
-export const bulkPutRouteRecordRows = async (dbName: string, rows: ICacheRecordRow[]): Promise<void> => {
+export const bulkPutRouteRecordRows = async (
+  routeRow: Pick<ICacheRouteRow, 'dbName' | 'isSingle'>, rows: ICacheRecordRow[]
+): Promise<void> => {
   if (rows.length === 0) { return }
-  await getDeltaCacheDatabase(dbName).cacheRecords.bulkPut(rows)
+  await getRecordsTable(getDeltaCacheDatabase(routeRow.dbName), routeRow).bulkPut(rows as any)
 }
 
-export const bulkDeleteRouteRecordRows = async (
+export const bulkDeleteRouteRecordRowsMulti = async (
   dbName: string,
-  rowKeys: [number, string, CacheRecordID][]
+  rowKeys: [number, number, CacheRecordID][]
 ): Promise<void> => {
   if (rowKeys.length === 0) { return }
   await getDeltaCacheDatabase(dbName).cacheRecords.bulkDelete(rowKeys)
+}
+
+export const bulkDeleteRouteRecordRowsSingle = async (
+  dbName: string,
+  rowKeys: [number, CacheRecordID][]
+): Promise<void> => {
+  if (rowKeys.length === 0) { return }
+  await getDeltaCacheDatabase(dbName).cacheRecordsSingle.bulkDelete(rowKeys)
 }
 
 export const replaceRouteRecordRows = async (
@@ -196,10 +211,11 @@ export const replaceRouteRecordRows = async (
 ): Promise<void> => {
   // Initial syncs replace the entire logical snapshot for the route in one transaction.
   const database = getDeltaCacheDatabase(routeRow.dbName)
-  await database.transaction('rw', database.cacheRoutes, database.cacheRecords, async () => {
+  const recordsTable = getRecordsTable(database, routeRow)
+  await database.transaction('rw', database.cacheRoutes, recordsTable, async () => {
     await deleteRouteRecords(routeRow)
     if (rows.length > 0) {
-      await database.cacheRecords.bulkPut(rows)
+      await recordsTable.bulkPut(rows as any)
     }
     routeRow.responseKeys = [...responseKeys]
     await database.cacheRoutes.put(routeRow)
@@ -240,6 +256,13 @@ export const extendRouteResponseKeys = async (
   return await saveCacheRouteRow(routeRow)
 }
 
+export const stripRowMeta = (row: ICacheRecordRow): any => {
+  // Flatten-back: the row *is* the record, minus internal indexing fields.
+  const { _r, _k, ...record } = row as ICacheRecordRowMulti
+  void _r; void _k
+  return record
+}
+
 export const readCachedRouteResponse = async (routeRow: ICacheRouteRow): Promise<any | undefined> => {
   // The public worker contract still expects grouped arrays by response key.
   const recordRows = await listRouteRecordRows(routeRow)
@@ -252,11 +275,23 @@ export const readCachedRouteResponse = async (routeRow: ICacheRouteRow): Promise
     responseContent[responseKey] = []
   }
 
-  for (const recordRow of recordRows) {
-    if (!responseContent[recordRow.rK]) {
-      responseContent[recordRow.rK] = []
+  if (routeRow.isSingle) {
+    // Single routes always resolve to `_default`; the stored rows have no `_k`.
+    const bucket = responseContent._default || (responseContent._default = [])
+    for (const recordRow of recordRows) {
+      bucket.push(stripRowMeta(recordRow))
     }
-    responseContent[recordRow.rK].push(recordRow.E)
+  } else {
+    const responseKeys = routeRow.responseKeys || []
+    for (const recordRow of recordRows) {
+      const keyIndex = (recordRow as ICacheRecordRowMulti)._k
+      const responseKey = responseKeys[keyIndex - 1]
+      if (!responseKey) { continue }
+      if (!responseContent[responseKey]) {
+        responseContent[responseKey] = []
+      }
+      responseContent[responseKey].push(stripRowMeta(recordRow))
+    }
   }
 
   responseContent.__version__ = routeRow.__version__
@@ -266,12 +301,27 @@ export const readCachedRouteResponse = async (routeRow: ICacheRouteRow): Promise
 export const getRecordRowsByResponseKey = async (
   routeRow: ICacheRouteRow, responseKey: string
 ): Promise<ICacheRecordRow[]> => {
-  // Sub-object reads use the primary key prefix `(cR, rK, *)`.
-  return await getDeltaCacheDatabase(routeRow.dbName).cacheRecords
-    .where('[cR+rK+ID]')
+  const database = getDeltaCacheDatabase(routeRow.dbName)
+
+  if (routeRow.isSingle) {
+    // Single routes only ever expose `_default`; scan the whole route partition.
+    if (responseKey !== '_default') { return [] }
+    return await database.cacheRecordsSingle
+      .where('[_r+ID]')
+      .between(
+        [routeRow.id as number, Dexie.minKey],
+        [routeRow.id as number, Dexie.maxKey]
+      )
+      .toArray()
+  }
+
+  const keyIndex = (routeRow.responseKeys || []).indexOf(responseKey)
+  if (keyIndex === -1) { return [] }
+  return await database.cacheRecords
+    .where('[_r+_k+ID]')
     .between(
-      [routeRow.id as number, responseKey, Dexie.minKey],
-      [routeRow.id as number, responseKey, Dexie.maxKey]
+      [routeRow.id as number, keyIndex + 1, Dexie.minKey],
+      [routeRow.id as number, keyIndex + 1, Dexie.maxKey]
     )
     .toArray()
 }
@@ -336,13 +386,18 @@ export const clearEnvironmentCache = async (dbName: string): Promise<number> => 
   const database = getDeltaCacheDatabase(dbName)
   const routeRows = await database.cacheRoutes.toArray()
 
-  await database.transaction('rw', database.cacheRoutes, database.cacheRecords, database.requestLogs, database.groupRows, async () => {
-    // Clearing both stores also removes orphan record rows that no longer have route metadata.
-    await database.cacheRecords.clear()
-    await database.cacheRoutes.clear()
-    await database.requestLogs.clear()
-    await database.groupRows.clear()
-  })
+  await database.transaction(
+    'rw',
+    [database.cacheRoutes, database.cacheRecords, database.cacheRecordsSingle, database.requestLogs, database.groupRows],
+    async () => {
+      // Clearing both record stores also removes orphan record rows that no longer have route metadata.
+      await database.cacheRecords.clear()
+      await database.cacheRecordsSingle.clear()
+      await database.cacheRoutes.clear()
+      await database.requestLogs.clear()
+      await database.groupRows.clear()
+    }
+  )
 
   for (const routeRow of routeRows) {
     forgetRouteRow(routeRow)
@@ -363,7 +418,7 @@ export const clearModuleCache = async (dbName: string, module: string): Promise<
   if (routeRows.length === 0) { return 0 }
 
   const routeIDs = routeRows.map((routeRow) => routeRow.id as number)
-  await database.transaction('rw', database.cacheRoutes, database.cacheRecords, async () => {
+  await database.transaction('rw', database.cacheRoutes, database.cacheRecords, database.cacheRecordsSingle, async () => {
     for (const routeRow of routeRows) {
       await deleteRouteRecords(routeRow)
     }

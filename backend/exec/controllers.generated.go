@@ -16,7 +16,7 @@ import (
 func MakeScyllaControllers() []db.ScyllaControllerInterface {
 	return []db.ScyllaControllerInterface{
 
-		makeDBController[negocioTypes.Producto](),
+		makeDBController[negocioTypes.Product](),
 		makeDBController[negocioTypes.Almacen](),
 		makeDBController[negocioTypes.Sede](),
 		makeDBController[logisticaTypes.ProductStock](),

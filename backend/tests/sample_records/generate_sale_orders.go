@@ -371,7 +371,7 @@ func (generator *saleOrderGenerator) selectProducts(stocks []logisticaTypes.Prod
 		return slices.Clone(selectedProductIDs[:selectedProductsCount]), nil
 	}
 
-	products := []negocioTypes.Producto{}
+	products := []negocioTypes.Product{}
 	productQuery := db.Query(&products)
 	productQuery.Select(productQuery.ID, productQuery.Status).
 		EmpresaID.Equals(sampleCompanyID).
@@ -402,7 +402,7 @@ func (generator *saleOrderGenerator) selectProducts(stocks []logisticaTypes.Prod
 
 // loadProductCatalog resolves names and prices once so every generated line uses the persisted product price.
 func (generator *saleOrderGenerator) loadProductCatalog() error {
-	products := []negocioTypes.Producto{}
+	products := []negocioTypes.Product{}
 	query := db.Query(&products)
 	query.Select(query.ID, query.Nombre, query.Precio, query.PrecioFinal, query.Status).
 		EmpresaID.Equals(sampleCompanyID).
@@ -890,4 +890,3 @@ func minInt(valueA, valueB int) int {
 	}
 	return valueB
 }
-

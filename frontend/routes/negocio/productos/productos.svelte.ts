@@ -24,35 +24,47 @@ export interface IProductoImage {
   d: string /* descripcion de la imagen */
 }
 
+//STRUCT:negocio.Product
 export interface IProducto {
   ID: number,
-  TempID?: number,
+  TempID: number,
   Nombre: string
   Descripcion: string
+  ContentHTML: string
+  CategoriasIDs: number[]
+  MarcaID: number
+  Params: number[]
   Precio: number
-  Descuento: number
   MonedaID: number
+  UnidadID: number
+  Descuento: number
   PrecioFinal: number
-  ContentHTML?: string
+  Peso: number
+  Volumen: number
+  SbnCantidad: number
+  SbnUnidad: string
+  SbnPrecio: number
+  SbnDescuento: number
+  SbnPrecioFinal: number
+  NombreHash: number
   Propiedades: IProductoPropiedades[]
   Presentaciones: IProductoPresentacion[]
-  Peso?: number
-  Volumen?: number
-  SbnCantidad?: number
-  SbnUnidad?: string
-  SbnPrecio?: number
-  SbnDescuento?: number
-  SbnPreciFinal?: number
-  Images?: IProductoImage[]
-  Image?: IProductoImage
-  CategoriasIDs: number[]
-  AtributosIDs?: number[]
-  MarcaID: number
-  UnidadID: number
-  Stock?: {a /* almacen */: number, c /* cantidad */: number}[]
-  Params: number[]
+  Images: IProductoImage[]
+  Stock: any
+  StockReservado: any
+  StockStatus: number
+  NameUpdated: number
   ss: number
   upd: number
+  UpdatedBy: number
+  Created: number
+  CreatedBy: number
+  CategoriasConStock: number[]
+  ccv: number
+  /* extra fields */
+  SbnPreciFinal?: number
+  Image?: IProductoImage
+  AtributosIDs?: number[]
   _stock?: number
   _moneda?: string
   _imageSource?: ImageSource

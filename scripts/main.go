@@ -18,6 +18,9 @@ func main() {
 	case "check_tables":
 		runSubpackage("./validation")
 
+	case "sync_struct_interfaces":
+		runSubpackage("./generators")
+
 	case "deploy_vps":
 		DeployVPS()
 
