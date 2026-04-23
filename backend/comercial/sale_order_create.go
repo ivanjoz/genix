@@ -227,7 +227,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			saleTable.Updated,
 			saleTable.UpdatedBy,
 			saleTable.Status,
-			saleTable.StatusTrace,
 			saleTable.LastPaymentTime,
 			saleTable.LastPaymentUser,
 			saleTable.DeliveryTime,
@@ -328,12 +327,12 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 		}
 	}
 
-	stockByID := map[int64]logisticaTypes.ProductStockV2{}
+	stockByID := map[int64]logisticaTypes.ProductStock{}
 	detailsByKey := map[lineKey]logisticaTypes.ProductStockDetail{}
 
 	eg := errgroup.Group{}
 	eg.Go(func() error {
-		stocks := []logisticaTypes.ProductStockV2{}
+		stocks := []logisticaTypes.ProductStock{}
 		q := db.Query(&stocks)
 		q.Select(q.ID, q.Quantity, q.DetailQuantity).
 			CompanyID.Equals(req.Usuario.EmpresaID).

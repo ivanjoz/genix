@@ -14,7 +14,7 @@ import { untrack } from 'svelte'
 import { ProductosService } from '../../negocio/productos/productos.svelte'
 import { AlmacenesService } from '../../negocio/sedes-almacenes/sedes-almacenes.svelte'
 import {
-  getProductosStock,
+  getWarehouseProductStock,
   makeStockID,
   postProductosStock,
   type IPostProductoStockItem,
@@ -698,7 +698,7 @@ const onChangeAlmacen = async () => {
 
   Loading.standard()
   try {
-    const result = await getProductosStock(stockFilters.warehouseID)
+    const result = await getWarehouseProductStock(stockFilters.warehouseID)
     newSerialNumberRowsByProductStockID.clear()
     newLotRowsByProductStockID.clear()
     touchPendingDetailRows('warehouse-change-clear')

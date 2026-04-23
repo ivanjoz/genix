@@ -88,6 +88,11 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 			{
 				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Fecha, e.ProductoID}, UseIndexGroup: true,
 			},
+			{
+				Type: db.TypeView, 
+				Keys: []db.Coln{e.Fecha, e.ProductoID.DecimalSize(9), e.Tipo.DecimalSize(1)},
+				Cols: []db.Coln{e.Quantity},
+			},
 		},
 	}
 }

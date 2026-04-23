@@ -334,13 +334,13 @@ func (generator *saleOrderGenerator) loadAvailableClients() error {
 // loadWarehouseStock uses the existing stock handler because the requested flow must start there after seeding.
 // The generator only exercises the free bucket (no lot / no serial), so the detail and lot sections of the
 // response are discarded here; ProductStockV2.Quantity is the authoritative ledger input.
-func (generator *saleOrderGenerator) loadWarehouseStock() ([]logisticaTypes.ProductStockV2, error) {
+func (generator *saleOrderGenerator) loadWarehouseStock() ([]logisticaTypes.ProductStock, error) {
 	query := map[string]string{
 		"almacen-id": strconv.Itoa(int(sampleWarehouseID)),
 		"updated":    "0",
 	}
 	request := generator.makeRequest("GET.productos-stock", query, "", 0)
-	response := logistica.GetProductosStock(&request)
+	response := logistica.GetWarehouseProductStock(&request)
 	if response.StatusCode != 200 {
 		return nil, core.Err(response.Error)
 	}
@@ -352,7 +352,7 @@ func (generator *saleOrderGenerator) loadWarehouseStock() ([]logisticaTypes.Prod
 }
 
 // selectProducts prioritizes products that already have stock and only complements from the catalog when needed.
-func (generator *saleOrderGenerator) selectProducts(stocks []logisticaTypes.ProductStockV2) ([]int32, error) {
+func (generator *saleOrderGenerator) selectProducts(stocks []logisticaTypes.ProductStock) ([]int32, error) {
 	selectedProductIDs := []int32{}
 	selectedProductSet := map[int32]bool{}
 
@@ -430,7 +430,7 @@ func (generator *saleOrderGenerator) loadProductCatalog() error {
 // seedBaseStock resets the chosen product stock on the free bucket (no lot / no serial).
 // Each selected product receives a random quantity in the V2 row; detail tracking is out of scope
 // for this generator now that lot/serial seeding requires separate handler shape.
-func (generator *saleOrderGenerator) seedBaseStock(_ []logisticaTypes.ProductStockV2) error {
+func (generator *saleOrderGenerator) seedBaseStock(_ []logisticaTypes.ProductStock) error {
 	stockPayload := make([]logistica.PostStockAdjustItem, 0, len(generator.selectedProductIDs))
 
 	for _, productID := range generator.selectedProductIDs {
@@ -462,7 +462,7 @@ func (generator *saleOrderGenerator) seedBaseStock(_ []logisticaTypes.ProductSto
 }
 
 // rebuildLedger keeps an in-memory reservation view so total generated demand never exceeds seeded stock.
-func (generator *saleOrderGenerator) rebuildLedger(stocks []logisticaTypes.ProductStockV2) error {
+func (generator *saleOrderGenerator) rebuildLedger(stocks []logisticaTypes.ProductStock) error {
 	generator.stockLedgerByProduct = map[int32][]*stockLedgerRecord{}
 	generator.totalRemainingUnits = 0
 

@@ -692,6 +692,12 @@ import {
         </div>
         <Input
           saveOn={productoForm}
+          save="SKU"
+          css="col-span-12 md:col-span-10"
+          label="SKU"
+        />
+        <Input
+          saveOn={productoForm}
           save="Descripcion"
           css="col-span-24 mb-4"
           label="Descripción Corta"

@@ -85,13 +85,16 @@ export const AdminModule: IModule = {
 		},
 		{ name: "Logística", minName: "LOG",  id: 4, icon: "icon-tasks",
       options: [
-	      { name: "Gestión de Stock", route: "/logistica/products-stock",
+	      { name: "Cambios Stock", route: "/logistica/products-stock",
 	        icon: "icon-chart-bar"
+	      },
+	      { name: "Gestión de Compras", route: "/logistica/gestion-compras",
+	        icon: "icon-basket"
 	      },
 	      { name: "Rep. Movimientos", route: "/logistica/almacen-movimientos",
 	        icon: "icon-truck"
 				},
-		    { name: "Órdenes Compra", route: "/logistica/ordenes-de-compra",
+		    { name: "Órdenes Compra", route: "/logistica/purchase-orders",
 		      icon: "icon-truck"
 		    },
       ]

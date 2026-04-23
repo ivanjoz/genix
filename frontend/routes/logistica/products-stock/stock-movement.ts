@@ -1,5 +1,5 @@
 import { Notify } from '$libs/helpers';
-import { GET, POST } from '$libs/http.svelte';
+import { GET, GetHandler, POST } from '$libs/http.svelte';
 
 export const makeStockID = (e: Pick<IProductoStock, 'WarehouseID' | 'ProductID' | 'PresentationID'>): number =>
   // Mirrors backend/logistica/product-stock-movement.go::packProductStockID.
@@ -77,11 +77,11 @@ export interface IPostProductoStockItem {
   LotCode?: string
 }
 
-export const getProductosStock = async (almacenID: number): Promise<IProductoStock[]> => {
+export const getWarehouseProductStock = async (almacenID: number): Promise<IProductoStock[]> => {
   let records: IProductoStock[] = []
   try {
     const response = await GET({ 
-      route: `productos-stock?almacen-id=${almacenID}`,
+      route: `warehouse-product-stock?almacen-id=${almacenID}`,
       errorMessage: 'Hubo un error al obtener el stock.',
 			useCache: { min: 0.2, ver: 8 },
 			keysIDs: { ProductStockDetail: ["ProductStockID","LotID","SerialNumber"] }
@@ -118,6 +118,26 @@ export const getProductosStock = async (almacenID: number): Promise<IProductoSto
   }
   return records
 }
+
+export class ProductStockSimpleService extends GetHandler<IProductoStock> {
+  route = "products-stock"
+  useCache = { min: 0.2, ver: 8 }
+  inferRemoveFromStatus = true
+
+  constructor(init: boolean = false) {
+    super()
+    if (init) this.fetch()
+  }
+
+	handler(result: IProductoStock[]): void {
+		console.log("ProductStockSimpleService", result)
+		
+    this.records = []
+    this.recordsMap = new Map()
+    this.addSavedRecords(...result)
+  }
+}
+
 
 export const postProductosStock = (data: IPostProductoStockItem[]) => {
   return POST({

@@ -23,14 +23,14 @@ func RecalcProductStockByMovements(companyID int32) error {
 	// Start by loading the persisted rows. Excluding Created+CreatedBy (and Updated/UpdatedBy on
 	// details) means any in-memory row still carrying Created==0 at the end of the pass was
 	// loaded from DB and must be persisted as an UPDATE; Created>0 flags INSERT.
-	stockByID := map[int64]*logisticaTypes.ProductStockV2{}
+	stockByID := map[int64]*logisticaTypes.ProductStock{}
 	detailByKey := map[string]*logisticaTypes.ProductStockDetail{}
 	detailKey := func(stockID int64, lotID int32, serial string) string {
 		return db.MakeKeyConcat(stockID, lotID, serial)
 	}
 
 	{
-		existing := []logisticaTypes.ProductStockV2{}
+		existing := []logisticaTypes.ProductStock{}
 		q := db.Query(&existing)
 		q.Exclude(q.Created, q.CreatedBy).CompanyID.Equals(companyID)
 		if err := q.Exec(); err != nil {
@@ -63,7 +63,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 		stock := stockByID[stockID]
 		if stock == nil {
 			// Fresh V2 row (no historical record): Created stamps it as INSERT at write time.
-			stock = &logisticaTypes.ProductStockV2{
+			stock = &logisticaTypes.ProductStock{
 				ID:             stockID,
 				CompanyID:      companyID,
 				WarehouseID:    warehouseID,
@@ -125,7 +125,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 
 	// Flatten and let InsertUpdateInclude route by the Created>0 marker: fresh rows go to INSERT,
 	// preloaded rows go to UPDATE (touching only the listed columns).
-	stocks := make([]logisticaTypes.ProductStockV2, 0, len(stockByID))
+	stocks := make([]logisticaTypes.ProductStock, 0, len(stockByID))
 	for _, stock := range stockByID {
 		stocks = append(stocks, *stock)
 	}
@@ -137,9 +137,9 @@ func RecalcProductStockByMovements(companyID int32) error {
 	core.Log("RecalcProductStockByMovements writes:", "stocks", len(stocks), "details", len(details))
 
 	if len(stocks) > 0 {
-		stockTable := db.Table[logisticaTypes.ProductStockV2]()
+		stockTable := db.Table[logisticaTypes.ProductStock]()
 		if err := db.InsertUpdateInclude(&stocks,
-			func(e *logisticaTypes.ProductStockV2) bool { return e.Created > 0 },
+			func(e *logisticaTypes.ProductStock) bool { return e.Created > 0 },
 			[]db.Coln{
 				stockTable.Quantity, stockTable.SubQuantity,
 				stockTable.DetailQuantity, stockTable.DetailSubQuantity,

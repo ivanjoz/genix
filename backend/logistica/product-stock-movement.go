@@ -196,11 +196,11 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 type GetProductosStockResult struct {
-	ProductStock       []logisticaTypes.ProductStockV2
+	ProductStock       []logisticaTypes.ProductStock
 	ProductStockDetail []logisticaTypes.ProductStockDetail
 }
 
-func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
+func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
 	// Returns V2 stock rows + their detail rows + the lot catalog.
 	// `updated` enables delta-cache fetches via the `upd` field on stocks/details.
 	almacenID := int32(req.GetQueryInt("almacen-id"))
@@ -219,9 +219,9 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 
 	eg.Go(func() error {
 		// Query each status bucket explicitly to stay on the WarehouseID+Status+Updated view.
-		records := make([]logisticaTypes.ProductStockV2, 0)
+		records := make([]logisticaTypes.ProductStock, 0)
 		for _, status := range statuses {
-			statusRecords := []logisticaTypes.ProductStockV2{}
+			statusRecords := []logisticaTypes.ProductStock{}
 			query := db.Query(&statusRecords)
 			query.Select().
 				CompanyID.Equals(req.Usuario.EmpresaID).
@@ -264,6 +264,33 @@ func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	return req.MakeResponse(result)
+}
+
+
+func GetProductsStock(req *core.HandlerArgs) core.HandlerResponse {
+	updated := req.GetQueryInt("updated")
+
+	statuses := []int8{1}
+	if updated > 0 {
+		// Delta fetches must include deactivated rows so clients can evict them from cache.
+		statuses = []int8{0, 1}
+	}
+
+	productsStock := []logisticaTypes.ProductStock{}
+
+	for _, status := range statuses {
+		query := db.Query(&productsStock)
+		query.Select().
+			CompanyID.Equals(req.Usuario.EmpresaID).
+			Status.Equals(status).
+			Updated.GreaterEqual(updated)
+
+		if err := query.Exec(); err != nil {
+			return req.MakeErr("Arror al obtener los productos stock::", err)
+		}
+	}
+	
+	return req.MakeResponse(productsStock)
 }
 
 var applyMovimientosLockByCompany = map[int32]*sync.Mutex{}
@@ -345,7 +372,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 	// - V2 preload excludes Created/CreatedBy so loaded rows carry them as 0, flagging UPDATE at write time.
 	// - Detail preload also excludes Updated/UpdatedBy so untouched preloaded details stay at Updated==0
 	//   and get skipped by the write step.
-	stockByID := map[int64]*logisticaTypes.ProductStockV2{}
+	stockByID := map[int64]*logisticaTypes.ProductStock{}
 	detailByKey := map[string]*logisticaTypes.ProductStockDetail{}
 	detailKey := func(stockID int64, lotID int32, serial string) string {
 		return db.MakeKeyConcat(stockID, lotID, serial)
@@ -353,7 +380,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 
 	preloadGroup := errgroup.Group{}
 	preloadGroup.Go(func() error {
-		existing := []logisticaTypes.ProductStockV2{}
+		existing := []logisticaTypes.ProductStock{}
 		q := db.Query(&existing)
 		q.Exclude(q.Created, q.CreatedBy).
 			CompanyID.Equals(companyID).
@@ -397,7 +424,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 		stock := stockByID[stockID]
 		if stock == nil {
 			// New V2 row: stamp Created/CreatedBy so the partition step can flag it for insert.
-			stock = &logisticaTypes.ProductStockV2{
+			stock = &logisticaTypes.ProductStock{
 				ID:             stockID,
 				CompanyID:      companyID,
 				WarehouseID:    mov.WarehouseID,
@@ -507,7 +534,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 
 	// Flatten to value slices. Validate non-negative balances at the same time.
 	// Untouched preloaded details (Updated==0) are skipped so InsertUpdateInclude only sees dirty rows.
-	stocks := make([]logisticaTypes.ProductStockV2, 0, len(stockByID))
+	stocks := make([]logisticaTypes.ProductStock, 0, len(stockByID))
 	for _, stock := range stockByID {
 		if stock.Quantity < 0 || stock.DetailQuantity < 0 {
 			return core.Err(fmt.Sprintf(
@@ -538,9 +565,9 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 	writeGroup := errgroup.Group{}
 	if len(stocks) > 0 {
 		writeGroup.Go(func() error {
-			stockTable := db.Table[logisticaTypes.ProductStockV2]()
+			stockTable := db.Table[logisticaTypes.ProductStock]()
 			if err := db.InsertUpdateInclude(&stocks,
-				func(e *logisticaTypes.ProductStockV2) bool { return e.Created > 0 },
+				func(e *logisticaTypes.ProductStock) bool { return e.Created > 0 },
 				[]db.Coln{
 					// Keep the materialized view tuple consistent on updates.
 					stockTable.WarehouseID,

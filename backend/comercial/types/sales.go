@@ -93,7 +93,6 @@ type SaleOrderTable struct {
 	LastPaymentUser            db.Col[SaleOrderTable, int32]
 	DeliveryTime               db.Col[SaleOrderTable, int32]
 	DeliveryUser               db.Col[SaleOrderTable, int32]
-	StatusTrace                db.Col[SaleOrderTable, int8]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
@@ -129,11 +128,6 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			{
 				Type:     db.TypeView,
 				Keys:     []db.Coln{e.Status.Int32(), e.UpdateCounter.DecimalSize(8)},
-				KeepPart: true,
-			},
-			{
-				Type:     db.TypeView,
-				Keys:     []db.Coln{e.StatusTrace.Int32(), e.UpdateCounter.DecimalSize(8)},
 				KeepPart: true,
 			},
 		},

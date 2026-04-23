@@ -250,13 +250,13 @@ interface IAlmacenMovimientosGroupedResponse {
 	productosStock: IProductoStock[]
 }
 
-const extractProductIDFromStockID = (productStockID: string) => {
-	return decodeFromBase62(productStockID.split("_")[1])
+const extractProductIDFromStockID = (productStockID: number) => {
+	return Math.floor(productStockID / 10000) % 1000000000
 }
 
 export class AlmacenMovimientosGroupedService extends GetHandler {
   route = 'almacen-movimientos-grouped'
-  keyID = 'Fecha'
+  keysIDs = { movimientos: "Fecha" }
   useCache = { min: 5, ver: 8 }
 
   records: IFechaProductoMovimientos[] = $state([])

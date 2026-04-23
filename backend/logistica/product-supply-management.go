@@ -217,7 +217,7 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Productos Stock (V2). "Quantity" on the response is the combined bucket
 	// so consumers stay compatible with the old shape without needing detail rows here.
-	productosStockV2 := []logisticaTypes.ProductStockV2{}
+	productosStockV2 := []logisticaTypes.ProductStock{}
 
 	psQuery := db.Query(&productosStockV2).AllowFilter()
 	psQuery.Select(psQuery.ID, psQuery.Updated, psQuery.Quantity, psQuery.DetailQuantity)

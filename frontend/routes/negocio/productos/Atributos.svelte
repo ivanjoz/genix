@@ -31,6 +31,9 @@ import { productoAtributos, type IProducto, type IProductoPresentacion } from ".
     { header: "Diff. Precio",
       getValue: e => e.pd ? formatN(e.pd / 100,2) : ""
     },
+    { header: "SKU",
+      getValue: e => e.sk || ""
+    },
     { header: "Color", id: "color",
       getValue: e => e.cl
     },
@@ -116,6 +119,9 @@ import { productoAtributos, type IProducto, type IProductoPresentacion } from ".
     />
     <Input label="Diferencia Precio" saveOn={presentacionForm} css="col-span-12"
       save="pd" type="number" baseDecimals={2}
+    />
+    <Input label="SKU" saveOn={presentacionForm} css="col-span-12"
+      save="sk"
     />
     <div class="col-span-12">
       <ColorPicker label="Color" saveOn={presentacionForm} save="cl"/>

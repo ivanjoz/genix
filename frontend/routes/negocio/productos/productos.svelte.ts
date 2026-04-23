@@ -10,12 +10,13 @@ export interface IProductoPropiedades {
 }
 
 export interface IProductoPresentacion {
-  id: number, 
+  id: number,
   at: number, /* atributo */
   nm: string, /* nombre */
   cl: string, /* color */
   pc: number, /* precio */
   pd: number, /* precio diferencial */
+  sk?: string, /* sku */
   ss: number  /* estado */
 }
 
@@ -46,6 +47,7 @@ export interface IProducto {
   SbnPrecio: number
   SbnDescuento: number
   SbnPrecioFinal: number
+  SKU: string
   NombreHash: number
   Propiedades: IProductoPropiedades[]
   Presentaciones: IProductoPresentacion[]

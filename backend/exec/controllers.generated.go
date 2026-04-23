@@ -20,7 +20,6 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[negocioTypes.Almacen](),
 		makeDBController[negocioTypes.Sede](),
 		makeDBController[logisticaTypes.ProductStock](),
-		makeDBController[logisticaTypes.ProductStockV2](),
 		makeDBController[logisticaTypes.ProductStockDetail](),
 		makeDBController[logisticaTypes.ProductStockLot](),
 		makeDBController[logisticaTypes.DeliveryOrderNote](),

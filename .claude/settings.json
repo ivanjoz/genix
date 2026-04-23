@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__symdex__search_symbols",
+      "mcp__symdex__search_text",
+      "mcp__symdex__semantic_search",
+      "mcp__symdex__get_file_outline",
+      "mcp__symdex__get_callers",
+      "mcp__symdex__get_callees",
+      "mcp__symdex__get_symbol",
+      "mcp__symdex__get_symbols",
+      "mcp__symdex__get_repo_outline",
+      "mcp__symdex__get_repo_stats",
+      "mcp__symdex__get_file_tree",
+      "mcp__symdex__get_graph_diagram",
+      "mcp__symdex__search_routes",
+      "mcp__symdex__list_repos",
+      "mcp__symdex__get_index_status",
+      "mcp__symdex__find_circular_deps"
+    ]
+  }
+}

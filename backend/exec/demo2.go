@@ -271,13 +271,11 @@ func Test46(args *core.ExecArgs) core.FuncResponse {
 
 func Test51(args *core.ExecArgs) core.FuncResponse {
 
-	orders := []comercialTypes.SaleOrder{}
-	db.Query(&orders).CompanyID.Equals(1)
 
-	controller := makeDBController[logisticaTypes.WarehouseProductMovement]()
+	controller := makeDBController[logisticaTypes.ProductStock]()
 
  //	controller.RecalcVirtualColumns(1)
-	controller.RecalcGroupIndexHashes(1)
+	controller.RecalcVirtualColumns(1)
 	
 //	controller2 := makeDBController[logisticaTypes.ProductStockV2]()
 	// controller2.DeleteViewsAndIndexes()

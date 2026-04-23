@@ -10,7 +10,7 @@ import CheckboxOptions from '$components/CheckboxOptions.svelte';
 import { Core } from '$core/store.svelte';
 import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
 import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
-import { getProductosStock, type IProductoStock, type IProductStockDetail } from '$routes/logistica/products-stock/stock-movement';
+import { getWarehouseProductStock, type IProductoStock, type IProductStockDetail } from '$routes/logistica/products-stock/stock-movement';
 import { ClientProviderService, ClientProviderType, type IClientProvider } from '$routes/negocio/clientes/clientes-proveedores.svelte';
 import { ProductosService } from '$routes/negocio/productos/productos.svelte';
 import { ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
@@ -108,7 +108,7 @@ import { SaleOrderState } from "./sale_order.svelte";
 
   async function loadStock(almacenID: number) {
     Loading.standard("Cargando stock...");
-    productosStock = await getProductosStock(almacenID);
+    productosStock = await getWarehouseProductStock(almacenID);
     console.log("productosStock:", productosStock)
     parseProductos();
     Loading.remove();

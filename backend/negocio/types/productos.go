@@ -22,6 +22,7 @@ type ProductoPesentacion struct {
 	Color            string `ms:"c" json:"cl,omitempty" cbor:"c"`
 	Precio           int32  `ms:"p" json:"pc,omitempty" cbor:"p"`
 	DiferenciaPrecio int32  `ms:"d" json:"pd,omitempty" cbor:"d"`
+	SKU              string `ms:"sk" json:"sk,omitempty" cbor:"sk"`
 	Status           int8   `ms:"s" json:"ss,omitempty" cbor:"s"`
 }
 
@@ -48,6 +49,7 @@ type Product struct {
 	SbnPrecio      int32   `json:",omitempty"`
 	SbnDescuento   float32 `json:",omitempty"`
 	SbnPrecioFinal int32   `json:",omitempty"`
+	SKU            string  `json:",omitempty"`
 	NombreHash     int32   `json:",omitempty"`
 
 	Propiedades    []ProductoPropiedades `json:",omitempty"`
@@ -90,6 +92,7 @@ type ProductoTable struct {
 	SbnPrecio          db.Col[ProductoTable, int32]
 	SbnDescuento       db.Col[ProductoTable, float32]
 	SbnPrecioFinal     db.Col[ProductoTable, int32]
+	SKU                db.Col[ProductoTable, string]
 	NombreHash         db.Col[ProductoTable, int32]
 	Propiedades        db.Col[ProductoTable, []ProductoPropiedades]
 	Presentaciones     db.Col[ProductoTable, []ProductoPesentacion]
