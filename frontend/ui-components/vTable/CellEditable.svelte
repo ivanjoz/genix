@@ -86,7 +86,15 @@ import Renderer from '$components/Renderer.svelte';
 	
 </script>
 
-<div class="_2">{currentValue}</div>
+<div class="_2 {contentClass}">
+	{#if typeof renderedContent === 'string'}
+		{renderedContent}
+	{:else if renderedContent}
+		<Renderer elements={renderedContent}/>
+	{:else}
+		{currentValue}
+	{/if}
+</div>
 <div class="_1 {css}">
 	<div class="{contentClass}"
 		style:visibility={isEditing ? 'hidden' : 'visible'}

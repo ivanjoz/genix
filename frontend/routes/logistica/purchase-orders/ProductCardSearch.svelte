@@ -244,13 +244,13 @@ import { formatN, wordInclude } from '$libs/helpers'
               <div class="h-[1px] bg-gray-200 grow group-hover:bg-gray-300 transition-colors"></div>
             </div>
 
-            <div class="flex items-center gap-8">
+            <div class="flex items-center gap-8 mt-2">
               <div class="flex items-center gap-6 leading-none">
-                <span class={'font-mono text-[12px] ' + (stock > 0 ? 'text-gray-700' : 'text-red-500')}>
+                <span class={'font-mono min-w-36 text-xs ' + (stock > 0 ? 'text-gray-700' : 'text-red-500')}>
                   {stock}
                 </span>
                 {#if card.sku}
-                  <span class="text-[11px] font-mono text-gray-400">{@html highlightHtml(card.sku, filterText)}</span>
+                  <span class="text-xs font-mono text-gray-400">{@html highlightHtml(card.sku, filterText)}</span>
                 {/if}
               </div>
               <div class="font-mono ml-auto text-sm font-medium text-gray-700 text-right whitespace-nowrap">

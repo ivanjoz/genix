@@ -63,7 +63,7 @@ import { PurchaseOrderState, type PurchaseOrderItem } from './purchase_order.sve
       width: '80px',
       align: 'right',
       cellInputType: 'number',
-      cellCss: 'text-right',
+      css: "justify-end",
       inputCss: 'text-right',
       getValue: (item) => item.cantidad,
       onCellEdit: (item, value) => {
@@ -77,9 +77,10 @@ import { PurchaseOrderState, type PurchaseOrderItem } from './purchase_order.sve
       width: '100px',
       align: 'right',
       cellInputType: 'number',
-      cellCss: 'text-right',
+      css: "justify-end",
+      cellCss: 'px-6',
       inputCss: 'text-right',
-      getValue: (item) => formatN((item.precio || 0) / 100, 2),
+      getValue: (item) => (item.precio || 0) / 100,
       render: (item) => formatN((item.precio || 0) / 100, 2),
       onCellEdit: (item, value) => {
         const parsed = parseFloat(String(value || '0'))
@@ -90,15 +91,14 @@ import { PurchaseOrderState, type PurchaseOrderItem } from './purchase_order.sve
       id: 'subtotal',
       header: 'Subtotal',
       width: '100px',
-      align: 'right',
-      cellCss: 'text-right font-mono',
+      cellCss: 'font-mono px-6 text-right',
       getValue: (item) => formatN(((item.precio || 0) * (item.cantidad || 0)) / 100, 2),
     },
     {
       id: 'actions',
       header: '',
       width: '36px',
-      cellCss: 'text-center',
+      cellCss: 'text-center px-4',
       buttonDeleteHandler: (item) => orderState.removeItem(item.key),
     },
   ]
@@ -139,10 +139,10 @@ import { PurchaseOrderState, type PurchaseOrderItem } from './purchase_order.sve
       <div class="px-10 py-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
         <div class="grow mr-16">
           <div class="hidden font-bold mb-2 -mt-2 text-gray-800 mb-4 items-center justify-between md:flex">
-            <span>Detalle de Compra</span>
+            <span>Nueva Órden de Compra</span>
           </div>
           <div class="flex items-center gap-6">
-            <div class="bg-gray-50 flex flex-1 p-6 rounded-md items-center gap-6 border border-gray-100 shadow-sm">
+            <div class="bg-gray-100 flex flex-1 p-6 rounded-md items-center gap-6 max-w-200">
               <div class="text-[10px] leading-[1] text-gray-500 font-bold tracking-wider uppercase">
                 <div>Sub</div>
                 <div>Total</div>
@@ -152,7 +152,7 @@ import { PurchaseOrderState, type PurchaseOrderItem } from './purchase_order.sve
               </div>
             </div>
 
-            <div class="bg-blue-50 items-center flex flex-1 p-6 rounded-md gap-6 border border-blue-100 shadow-sm">
+            <div class="bg-blue-50 items-center flex flex-1 p-6 rounded-md gap-6 max-w-200">
               <div class="text-[10px] text-blue-600 uppercase font-bold tracking-wider">Total</div>
               <div class="leading-[1] text-blue-700 font-bold text-[22px] ml-auto">
                 {formatMo(orderState.form.TotalAmount)}
@@ -203,7 +203,7 @@ import { PurchaseOrderState, type PurchaseOrderItem } from './purchase_order.sve
         />
       </div>
 
-      <div class="flex-1 min-h-0 px-8 pb-8">
+      <div class="flex-1 min-h-0 px-12 pb-8 mt-4">
         {#if orderState.items.length === 0}
           <div class="flex flex-col items-center justify-center h-192 text-gray-300 gap-8">
             <i class="icon-basket text-4xl"></i>
