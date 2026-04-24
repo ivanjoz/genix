@@ -1,141 +1,121 @@
+import { GetHandler, GETWithGroupCache } from '$libs/http.svelte'
 import { Notify } from '$libs/helpers'
-import type { IProducto } from '$routes/negocio/productos/productos.svelte'
-import type { IProductCard } from './ProductCardSearch.svelte'
 
-export interface PurchaseOrderItem {
-  key: string
-  productID: number
-  presentationID: number
-  presentationName: string
-  productName: string
-  displayName: string
-  sku: string
-  cantidad: number
-  precio: number
-  producto: IProducto
-}
+// Backend status codes for purchase orders.
+export const PurchaseOrderStatus = {
+  CANCELED: 0,
+  PENDING: 1,
+  FULFILLED: 2,
+} as const
 
+// Status selector options shared by the report filter and its summary strip.
+// Using 0 as "all" keeps the URL query clean: the backend ignores status when it's 0.
+export const purchaseOrderStatusOptions = [
+  { ID: PurchaseOrderStatus.PENDING, Nombre: 'Pendiente' },
+  { ID: PurchaseOrderStatus.FULFILLED, Nombre: 'Completada' },
+  { ID: PurchaseOrderStatus.CANCELED, Nombre: 'Cancelada' },
+]
+
+// Minimal shape read by the report; full record lives on the backend.
 export interface IPurchaseOrder {
   ID: number
+  Date: number
+  DateOfDelivery: number
   ProviderID: number
-  WarehouseID: number
   TotalAmount: number
-  TaxAmount: number
-  DetailProductsIDs: number[]
-  DetailPrices: number[]
-  DetailQuantities: number[]
-  DetailProductSkus: string[]
-  DetailProductPresentations: number[]
   Notes: string
+  DetailProductIDs?: number[]
+  DetailQuantities?: number[]
+  DetailPrices?: number[]
+  DetailPresentationIDs?: number[]
+  ss: number
+  upd: number
 }
 
-export class PurchaseOrderState {
-  form = $state({
-    ID: 0,
-    ProviderID: 0,
-    WarehouseID: 0,
-    TotalAmount: 0,
-    TaxAmount: 0,
-    DetailProductsIDs: [],
-    DetailPrices: [],
-    DetailQuantities: [],
-    DetailProductSkus: [],
-    DetailProductPresentations: [],
-    Notes: '',
-  } as IPurchaseOrder)
+export interface IPurchaseOrderGroupRecord {
+  id: number
+  igVal: number[]
+  records: IPurchaseOrder[]
+  upc: number
+}
 
-  items = $state([] as PurchaseOrderItem[])
-  errorMessage = $state('')
+export interface IPurchaseOrderReportForm {
+  fechaInicio: number
+  fechaFin: number
+  status: number
+  productID: number
+  providerID: number
+}
 
-  itemsMap = $derived.by(() => new Map(this.items.map((item) => [item.key, item])))
-  itemsCantMap = $derived.by(() => new Map(this.items.map((item) => [item.key, item.cantidad])))
+// Cached fetch of purchase orders filtered by status; ss>0 = active (soft-delete aware).
+export class PurchaseOrdersService extends GetHandler<IPurchaseOrder> {
+  route = ''
+  useCache = { min: 0.2, ver: 1 }
 
-  addItem(card: IProductCard, cant: number = 1) {
-    if (cant <= 0) { return }
+  records: IPurchaseOrder[] = $state([])
+  recordsMap: Map<number, IPurchaseOrder> = $state(new Map())
 
-    const existing = this.items.find((item) => item.key === card.key)
-    if (existing) {
-      existing.cantidad += cant
-      this.items = [...this.items]
-    } else {
-      this.items.push({
-        key: card.key,
-        productID: card.productID,
-        presentationID: card.presentationID,
-        presentationName: card.presentationName,
-        productName: card.productName,
-        displayName: card.displayName,
-        sku: card.sku,
-        cantidad: cant,
-        precio: card.price || 0,
-        producto: card.producto,
-      })
-    }
-
-    this.recalcTotals()
-    this.errorMessage = ''
+  constructor(status: number = PurchaseOrderStatus.PENDING, init: boolean = false) {
+    super()
+    this.route = `purchase-orders?status=${status}`
+    if (init) { this.fetch() }
   }
 
-  removeItem(key: string) {
-    this.items = this.items.filter((item) => item.key !== key)
-    this.recalcTotals()
+  handler(result: IPurchaseOrder[]): void {
+    const active = (result || []).filter((r) => (r.ss || 0) > 0)
+    this.records = active
+    this.recordsMap = new Map(active.map((r) => [r.ID, r]))
+    // Newest first by ID (IDs are monotonically assigned on creation).
+    this.records.sort((a, b) => b.ID - a.ID)
+  }
+}
+
+// Hard client cap so extreme ranges never freeze the UI; sorted by most recent first.
+const MAX_REPORT_RECORDS = 2000
+
+// Report-mode query: backend indexes are grouped by Week, so the frontend still trims to
+// the exact [fechaInicio, fechaFin] range (week boundaries may spill ±6 days outside it)
+// and post-filters by status when the backend cannot (no Week+Status grouped index).
+export const queryPurchaseOrders = async (filters: IPurchaseOrderReportForm): Promise<IPurchaseOrder[]> => {
+  if (!filters.fechaInicio || !filters.fechaFin) {
+    throw new Error('Debe especificar la fecha inicial y final.')
   }
 
-  updateQuantity(key: string, cantidad: number) {
-    const item = this.items.find((i) => i.key === key)
-    if (!item) { return }
-    if (cantidad <= 0) {
-      this.removeItem(key)
-      return
-    }
-    item.cantidad = cantidad
-    this.items = [...this.items]
-    this.recalcTotals()
+  const queryParams = new URLSearchParams()
+  queryParams.set('fecha-start', String(filters.fechaInicio))
+  queryParams.set('fecha-end', String(filters.fechaFin))
+  if ((filters.status || 0) > 0) { queryParams.set('status', String(filters.status)) }
+  if ((filters.productID || 0) > 0) { queryParams.set('product-id', String(filters.productID)) }
+  if ((filters.providerID || 0) > 0) { queryParams.set('provider-id', String(filters.providerID)) }
+
+  const route = 'purchase-orders-query'
+  const uriParams = Object.fromEntries(queryParams.entries())
+
+  let result: IPurchaseOrderGroupRecord[]
+  try {
+    result = await GETWithGroupCache<IPurchaseOrder>(route, uriParams)
+  } catch (error) {
+    Notify.failure(String(error || 'No se pudo consultar el reporte de órdenes de compra.'))
+    throw error
   }
 
-  updatePrice(key: string, precio: number) {
-    const item = this.items.find((i) => i.key === key)
-    if (!item) { return }
-    item.precio = Math.max(0, precio)
-    this.items = [...this.items]
-    this.recalcTotals()
-  }
+  // ss holds the business status (0=Canceled, 1=Pending, 2=Fulfilled) — do not filter by ss>0 here
+  // because status=0 (Canceled) is a legitimate filter target in report mode.
+  const purchaseOrders = (result || [])
+    .flatMap((groupRecord) => groupRecord.records || [])
+    .filter((r) => (r?.ID || 0) > 0)
+    // Trim to the exact day range because the backend uses Week-based grouped indexes.
+    .filter((r) => (r.Date || 0) >= filters.fechaInicio && (r.Date || 0) <= filters.fechaFin)
 
-  recalcTotals() {
-    let total = 0
-    for (const item of this.items) {
-      total += (item.precio || 0) * (item.cantidad || 0)
-    }
-    this.form.TotalAmount = total
-    const subtotal = Math.floor(total / 1.18)
-    this.form.TaxAmount = total - subtotal
-  }
+  const statusFilter = filters.status || 0
+  // Client-side status filter covers the status-only case where the backend cannot narrow
+  // (no Week+Status grouped index exists).
+  const finalRows = statusFilter > 0
+    ? purchaseOrders.filter((r) => (r.ss || 0) === statusFilter)
+    : purchaseOrders
 
-  reset() {
-    this.items = []
-    this.form.ProviderID = 0
-    this.form.Notes = ''
-    this.recalcTotals()
-  }
+  // Newest first by ID (IDs are monotonically assigned on creation).
+  finalRows.sort((a, b) => b.ID - a.ID)
 
-  async postPurchaseOrder(): Promise<boolean> {
-    if (this.items.length === 0) {
-      Notify.failure('Agregue al menos un producto a la orden.')
-      return false
-    }
-    if (!this.form.ProviderID) {
-      Notify.failure('Seleccione un proveedor.')
-      return false
-    }
-
-    this.form.DetailProductsIDs = this.items.map((item) => item.productID)
-    this.form.DetailPrices = this.items.map((item) => item.precio)
-    this.form.DetailQuantities = this.items.map((item) => item.cantidad)
-    this.form.DetailProductSkus = this.items.map((item) => item.sku)
-    this.form.DetailProductPresentations = this.items.map((item) => item.presentationID)
-
-    console.log('[purchase-order] payload (frontend-only stub)', $state.snapshot(this.form))
-    Notify.success('Orden generada (frontend stub).')
-    return true
-  }
+  return finalRows.slice(0, MAX_REPORT_RECORDS)
 }

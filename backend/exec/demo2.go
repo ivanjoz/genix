@@ -272,9 +272,10 @@ func Test46(args *core.ExecArgs) core.FuncResponse {
 func Test51(args *core.ExecArgs) core.FuncResponse {
 
 
-	controller := makeDBController[logisticaTypes.ProductStock]()
+	controller := makeDBController[logisticaTypes.PurchaseOrder]()
 
  //	controller.RecalcVirtualColumns(1)
+	controller.RecalcGroupIndexHashes(1)
 	controller.RecalcVirtualColumns(1)
 	
 //	controller2 := makeDBController[logisticaTypes.ProductStockV2]()
