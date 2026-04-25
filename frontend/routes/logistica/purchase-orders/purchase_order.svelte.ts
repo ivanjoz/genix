@@ -20,7 +20,9 @@ export const purchaseOrderStatusOptions = [
 export interface IPurchaseOrder {
   ID: number
   Date: number
-  DateOfDelivery: number
+  DeliveryDate: number
+  PaymentDate: number
+  InvoiceNumber: string
   ProviderID: number
   TotalAmount: number
   Notes: string

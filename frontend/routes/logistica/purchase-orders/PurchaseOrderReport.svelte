@@ -4,6 +4,7 @@ import DateInput from '$components/DateInput.svelte'
 import Layer from '$components/Layer.svelte'
 import SearchSelect from '$components/SearchSelect.svelte'
 import KeyValueStrip from '$components/micro/KeyValueStrip.svelte'
+import LabelText from '$components/micro/LabelText.svelte'
 import VTable from '$components/vTable/VTable.svelte'
 import type { ITableColumn } from '$components/vTable/types'
 import { Core } from '$core/store.svelte'
@@ -181,13 +182,23 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
   {
     header: 'Fecha Entrega',
     width: '130px',
-    getValue: (r) => (r.DateOfDelivery ? (formatTime(r.DateOfDelivery, 'd-m-Y') as string) : ''),
+    getValue: (r) => (r.DeliveryDate ? (formatTime(r.DeliveryDate, 'd-m-Y') as string) : ''),
+  },
+  {
+    header: 'Fecha Pago',
+    width: '130px',
+    getValue: (r) => (r.PaymentDate ? (formatTime(r.PaymentDate, 'd-m-Y') as string) : ''),
   },
   {
     header: 'Proveedor',
     width: 'minmax(160px, 1.5fr)',
     highlight: true,
     getValue: (r) => providerNameOf(r.ProviderID),
+  },
+  {
+    header: 'Factura',
+    width: 'minmax(110px, 0.8fr)',
+    getValue: (r) => r.InvoiceNumber || '',
   },
   {
     header: 'Monto Total',
@@ -206,45 +217,30 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
 const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
   {
     header: '#',
-    width: '44px',
     align: 'right',
-    cellCss: 'ff-mono text-right',
     getValue: (row) => row.detailPosition + 1,
   },
   {
-    header: 'Producto',
-    width: 'minmax(180px, 1.8fr)',
+    id: 'product',
+    header: 'Producto', css: "py-4 leading-[1]",
+    // The actual cell uses cellRenderer to stack productName + presentation/SKU on a second line.
     getValue: (row) => row.productName,
   },
   {
-    header: 'Presentación',
-    width: 'minmax(120px, 1fr)',
-    getValue: (row) => row.presentationName || '-',
-  },
-  {
-    header: 'SKU',
-    width: 'minmax(90px, 0.8fr)',
-    getValue: (row) => row.sku || '-',
-  },
-  {
     header: 'Cant.',
-    width: '80px',
     align: 'right',
-    cellCss: 'ff-mono text-right',
     getValue: (row) => row.quantity,
   },
   {
     header: 'Precio',
-    width: '100px',
     align: 'right',
-    cellCss: 'ff-mono text-right',
+    headerCss: "w-80",
     getValue: (row) => formatN((row.unitPrice || 0) / 100, 2),
   },
   {
     header: 'Subtotal',
-    width: '110px',
     align: 'right',
-    cellCss: 'ff-mono text-right',
+    headerCss: "w-80",
     getValue: (row) => formatN((row.subtotalAmount || 0) / 100, 2),
   },
 ]
@@ -395,22 +391,80 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
       detailRows = []
       isDetailLayerLoading = false
     }}
+    actionsButton={{ name: "Acciones", icon: "icon-menu", css: "" }}
+    actions={[
+    	{ id: 1, 
+     		name: "Confirmar", icon: "icon-ok text-green-500",
+       	handler: () => {
+        
+        }
+     	},
+     	{ id: 2, 
+    		name: "Pagar", icon: "icon-tag",
+       	handler: () => {
+        	
+        }
+     	},
+     	{ id: 3, 
+    		name: "Anular", icon: "icon-cancel",
+       	handler: () => {
+        	
+        }
+     	},
+     	{ id: 4, 
+    		name: "Generar Copia", icon: "text-xs icon-plus",
+       	handler: () => {
+        	
+        }
+     	},
+    ]}
   >
     {#if selectedPurchaseOrder}
       <div class="flex flex-col gap-10 mt-8">
         <div class="grid grid-cols-24 gap-8 text-13 md:text-14">
-          <div class="col-span-8">
-            <div class="text-gray-500">Proveedor</div>
-            <div>{providerNameOf(selectedPurchaseOrder.ProviderID)}</div>
-          </div>
-          <div class="col-span-8">
-            <div class="text-gray-500">Estado</div>
-            <div>{purchaseOrderStatusOptions.find((status) => status.ID === (selectedPurchaseOrder?.ss || 0))?.Nombre || 'Desconocido'}</div>
-          </div>
-          <div class="col-span-8">
-            <div class="text-gray-500">Total</div>
-            <div class="ff-mono">{formatN((selectedPurchaseOrder.TotalAmount || 0) / 100, 2)}</div>
-          </div>
+          <LabelText
+            css="col-span-8"
+            label="Proveedor"
+            text={providerNameOf(selectedPurchaseOrder.ProviderID)}
+          />
+          <LabelText
+            css="col-span-4"
+            label="Estado"
+            text={purchaseOrderStatusOptions.find((status) => status.ID === (selectedPurchaseOrder?.ss || 0))?.Nombre || 'Desconocido'}
+          />
+          <LabelText
+            css="col-span-6"
+            label="Fecha Entrega"
+            text={selectedPurchaseOrder.DeliveryDate ? (formatTime(selectedPurchaseOrder.DeliveryDate, 'd-m-Y') as string) : '—'}
+          />
+          <LabelText
+            css="col-span-6"
+            label="Fecha Pago"
+            text={selectedPurchaseOrder.PaymentDate ? (formatTime(selectedPurchaseOrder.PaymentDate, 'd-m-Y') as string) : '—'}
+          />
+          <LabelText
+            css="col-span-7"
+            label="Factura"
+            text={selectedPurchaseOrder.InvoiceNumber || '—'}
+          />
+          <LabelText
+            css="col-span-5"
+            label="Total"
+            contentCss="ff-mono"
+            text={formatN((selectedPurchaseOrder.TotalAmount || 0) / 100, 2)}
+          />
+          <LabelText
+            css="col-span-6"
+            label="Pagado"
+            contentCss="ff-mono"
+            text={""}
+          />
+          <LabelText
+            css="col-span-6"
+            label="Entregado"
+            contentCss="ff-mono"
+            text={""}
+          />
         </div>
 
         <div class="text-13 text-gray-600">
@@ -429,7 +483,25 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
           estimateSize={38}
           maxHeight="calc(100vh - var(--header-height) - 190px)"
           emptyMessage="Esta orden no tiene productos en el detalle."
-        />
+        >
+          {#snippet cellRenderer(detailRow: IPurchaseOrderDetailRow, col: ITableColumn<IPurchaseOrderDetailRow>)}
+            {#if col.id === 'product'}
+              <!-- Stack producto in the first line; presentation (blue) + SKU (gray mono) below when present. -->
+              <div class="leading-[1.2]">{detailRow.productName}</div>
+              {#if detailRow.presentationName || detailRow.sku}
+                <!-- items-baseline aligns the differently-sized texts on their text baseline (presentation is regular size, SKU is text-xs). -->
+                <div class="flex items-baseline gap-6">
+                  {#if detailRow.presentationName}
+                    <span class="text-blue-600 ff-bold text-sm">{detailRow.presentationName}</span>
+                  {/if}
+                  {#if detailRow.sku}
+                    <span class="text-gray-400 ff-mono text-xs">{detailRow.sku}</span>
+                  {/if}
+                </div>
+              {/if}
+            {/if}
+          {/snippet}
+        </VTable>
       </div>
     {/if}
   </Layer>

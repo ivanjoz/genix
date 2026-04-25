@@ -30,6 +30,8 @@ export interface ProductCardSearchProps {
   // Map of productID -> current total stock; missing keys render as 0.
   stockMap?: Map<number, number>
   onSelect: (productCard: IProductCard, cant?: number) => void
+  // Removes the card's product entirely from the cart; only invoked when card is already in the cart.
+  onRemove?: (productCard: IProductCard) => void
   height?: string
   maxColumns?: number
   estimatedRowHeight?: number
@@ -52,6 +54,7 @@ import { formatN, wordInclude } from '$libs/helpers'
     selectedKeys,
     stockMap,
     onSelect,
+    onRemove,
     height = 'calc(100vh - 76px - var(--header-height))',
     maxColumns = 2,
     estimatedRowHeight = 80,
@@ -229,9 +232,16 @@ import { formatN, wordInclude } from '$libs/helpers'
           onclick={() => onSelect(card, 1)}
         >
           {#if inCart > 0}
-            <div class="absolute -right-4 -top-4 z-20 flex h-22 min-w-22 items-center justify-center rounded-full bg-blue-600 px-6 text-[11px] font-bold text-white shadow">
+            <!-- Idle: blue count badge. Card hover swaps to the red cancel badge via group-hover (pure CSS). -->
+            <div class="absolute -right-4 -top-4 z-20 flex h-22 min-w-22 items-center justify-center rounded-full bg-blue-600 px-6 text-[11px] font-bold text-white shadow group-hover:hidden">
               {inCart}
             </div>
+            <button class="absolute -right-4 -top-4 z-20 hidden h-22 min-w-22 items-center justify-center rounded-full bg-red-600 text-white shadow group-hover:flex hover:bg-red-700"
+              title="Quitar del carrito"
+              onclick={(ev) => { ev.stopPropagation(); onRemove?.(card) }}
+            >
+              <i class="icon-cancel text-[12px] leading-none"></i>
+            </button>
           {/if}
           <div class="flex flex-col gap-2">
             <div class="flex items-center gap-8">

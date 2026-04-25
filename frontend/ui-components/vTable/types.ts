@@ -110,7 +110,7 @@ export interface ITableColumn<T> {
   cellStyle?: Record<string, string>
   css?: string
 	inputCss?: string
-	cellCss?: string
+	// cellCss?: string
 	cellInputType?: 'number'
 	// Allow columns to inject runtime cell classes per record
 	setCellCss?: (record: T) => string | undefined
@@ -135,6 +135,7 @@ export interface ITableColumn<T> {
   renderHTML?: (e: T, idx: number) => string
   _colspan?: number
 	highlight?: boolean
+	// alignRight?: boolean 
 	/* Buttons */
 	buttonEditHandler?: (e:T) => void
 	buttonDeleteHandler?: (e:T) => void

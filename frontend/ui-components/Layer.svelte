@@ -3,6 +3,7 @@
   import { tick, untrack } from 'svelte'
 import { Core } from '$core/store.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
+import ButtonList from '$components/ButtonList.svelte';
 
   // svelte-ignore non_reactive_update
   let divLayer: HTMLDivElement
@@ -29,6 +30,8 @@ import OptionsStrip from '$components/OptionsStrip.svelte';
     saveButtonIcon,
     contentOverflow,
     sideLayerSize,
+    actionsButton,
+    actions,
   }: {
     children: any
     css?: string
@@ -48,6 +51,8 @@ import OptionsStrip from '$components/OptionsStrip.svelte';
     sideLayerSize?: number
     type: 'side' | 'bottom' | 'content'
     id?: number
+    actionsButton?: { name: string; icon: string; css?: string }
+    actions?: { id: number; name: string; icon: string; handler: () => void }[]
   } = $props()
 
   // Track visibility to prevent flash before transition starts
@@ -175,6 +180,16 @@ import OptionsStrip from '$components/OptionsStrip.svelte';
         {/if}
       </div>
       <div class="shrink-0 flex items-center mb-2">
+        {#if actionsButton && (actions || []).length > 0}
+          <div class="mr-10">
+            <ButtonList
+              name={actionsButton.name}
+              icon={actionsButton.icon}
+              css={actionsButton.css}
+              items={actions || []}
+            />
+          </div>
+        {/if}
         {#if onDelete}
           <button
             class="bx-red mr-10 lh-10"

@@ -1,10 +1,13 @@
 <script lang="ts">
+import DateInput from '$components/DateInput.svelte'
 import Input from '$components/Input.svelte'
+import KeyValueStrip from '$components/micro/KeyValueStrip.svelte'
 import LayerStatic from '$components/LayerStatic.svelte'
+import OptionsStrip from '$components/OptionsStrip.svelte'
 import SearchSelect from '$components/SearchSelect.svelte'
 import VTable from '$components/vTable/VTable.svelte'
 import type { ITableColumn } from '$components/vTable/types'
-import { formatN, Notify } from '$libs/helpers'
+import { formatN, formatTime, Notify } from '$libs/helpers'
 import { POST } from '$libs/http.svelte'
 import { ProductSupplyService } from '$routes/logistica/products-stock/supply-management.svelte'
 import { ProductStockSimpleService } from '$routes/logistica/products-stock/stock-movement'
@@ -41,6 +44,10 @@ interface IPurchaseOrderForm {
   DetailQuantities: number[]
   DetailPresentationIDs: number[]
   Notes: string
+  // Dates stored as UnixDay int16 (days since unix-epoch).
+  DeliveryDate: number
+  PaymentDate: number
+  InvoiceNumber: string
 }
 
 // Holds the cart state and submits the order; amounts stored as cents (int).
@@ -56,6 +63,9 @@ class PurchaseOrderState {
     DetailQuantities: [],
     DetailPresentationIDs: [],
     Notes: '',
+    DeliveryDate: 0,
+    PaymentDate: 0,
+    InvoiceNumber: '',
   } as IPurchaseOrderForm)
 
   items = $state([] as PurchaseOrderItem[])
@@ -129,6 +139,9 @@ class PurchaseOrderState {
     this.items = []
     this.form.ProviderID = 0
     this.form.Notes = ''
+    this.form.DeliveryDate = 0
+    this.form.PaymentDate = 0
+    this.form.InvoiceNumber = ''
     this.recalcTotals()
   }
 
@@ -198,7 +211,7 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
     id: 'product',
     header: 'Producto',
     width: 'minmax(160px, 1.5fr)',
-    cellCss: 'px-8 py-4 leading-[1.15]',
+    css: 'py-4 leading-[1.15]',
     getValue: (item) => item.displayName,
     render: (item) => {
       const sku = item.sku ? `<span class="text-[11px] font-mono text-gray-400 ml-4">${item.sku}</span>` : ''
@@ -212,8 +225,6 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
     width: '80px',
     align: 'right',
     cellInputType: 'number',
-    css: "justify-end",
-    inputCss: 'text-right',
     getValue: (item) => item.cantidad,
     onCellEdit: (item, value) => {
       const next = parseInt(String(value || '0'))
@@ -226,9 +237,6 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
     width: '100px',
     align: 'right',
     cellInputType: 'number',
-    css: "justify-end",
-    cellCss: 'px-6',
-    inputCss: 'text-right',
     getValue: (item) => (item.precio || 0) / 100,
     render: (item) => formatN((item.precio || 0) / 100, 2),
     onCellEdit: (item, value) => {
@@ -240,14 +248,15 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
     id: 'subtotal',
     header: 'Subtotal',
     width: '100px',
-    cellCss: 'font-mono px-6 text-right',
+    align: 'right',
+    css: 'font-mono',
     getValue: (item) => formatN(((item.precio || 0) * (item.cantidad || 0)) / 100, 2),
   },
   {
     id: 'actions',
     header: '',
     width: '36px',
-    cellCss: 'text-center px-4',
+    css: 'text-center px-4',
     buttonDeleteHandler: (item) => orderState.removeItem(item.key),
   },
 ]
@@ -258,6 +267,26 @@ async function handleSave() {
     Notify.success(`La orden Nº ${orderID} ha sido generada`)
     orderState.reset()
   }
+}
+
+// Two-view detail layer; "info" holds the form fields, "products" the cart table.
+type DetailView = 1 | 2
+let detailView = $state<DetailView>(1)
+const detailViewOptions: [DetailView, string][] = [
+  [1, 'Información'],
+  [2, 'Productos'],
+]
+
+// Lookups used by KeyValueStrip to render IDs as human-readable names.
+const providerNameByID = $derived(
+  new Map(providersService.records.map((p) => [p.ID, p.Name])),
+)
+const almacenNameByID = $derived(
+  new Map(almacenesService.Almacenes.map((a) => [a.ID, a.Nombre])),
+)
+const formatDateOrDash = (value: string | number) => {
+  const day = Number(value)
+  return day ? (formatTime(day, 'd-m-Y') as string) : '—'
 }
 </script>
 
@@ -270,7 +299,11 @@ async function handleSave() {
       stockMap={stockByProductID}
       displayProviderFilter
       selectedKeys={orderState.itemsCantMap}
-      onSelect={(card, cant) => orderState.addItem(card, cant || 1)}
+      onSelect={(card, cant) => {
+      	orderState.addItem(card, cant || 1)
+       	if(detailView !== 2){ detailView = 2 }
+      }}
+      onRemove={(card) => orderState.removeItem(card.key)}
     />
   </div>
 
@@ -318,55 +351,101 @@ async function handleSave() {
       </button>
     </div>
 
-    <div class="grid grid-cols-2 gap-8 px-12 py-8">
-      <SearchSelect
-        label=""
-        keyId="ID"
-        keyName="Name"
-        options={providersService.records}
-        selected={orderState.form.ProviderID}
-        placeholder="PROVEEDOR"
-        onChange={(provider) => { orderState.form.ProviderID = provider?.ID || 0 }}
-      />
-      <SearchSelect
-        label=""
-        keyId="ID"
-        keyName="Nombre"
-        options={almacenesService.Almacenes}
-        selected={almacenSelected}
-        placeholder="ALMACÉN"
-        onChange={(almacen: IAlmacen) => {
-          if (!almacen) { return }
-          almacenSelected = almacen.ID
-          orderState.form.WarehouseID = almacen.ID
-        }}
+    <div class="px-12 pt-4 mb-4">
+      <OptionsStrip
+        options={detailViewOptions}
+        selected={detailView}
+        onSelect={(opt) => { detailView = opt[0] }}
       />
     </div>
 
-    <div class="px-12 pb-6">
-      <Input
-        label=""
-        saveOn={orderState.form}
-        save="Notes"
-        placeholder="Notas de la orden..."
-      />
-    </div>
+    {#if detailView === 1}
+      <!-- Información block: order header form (provider, warehouse, dates, invoice, notes). -->
+      <div class="grid grid-cols-2 gap-8 px-12 py-8">
+        <SearchSelect
+          label="Proveedor"
+          keyId="ID"
+          keyName="Name"
+          options={providersService.records}
+          selected={orderState.form.ProviderID}
+          onChange={(provider) => { orderState.form.ProviderID = provider?.ID || 0 }}
+        />
+        <SearchSelect
+          label="Almacén"
+          keyId="ID"
+          keyName="Nombre"
+          options={almacenesService.Almacenes}
+          selected={almacenSelected}
+          onChange={(almacen: IAlmacen) => {
+            if (!almacen) { return }
+            almacenSelected = almacen.ID
+            orderState.form.WarehouseID = almacen.ID
+          }}
+        />
+        <DateInput
+          saveOn={orderState.form}
+          save="DeliveryDate"
+          type="unix"
+          label="Fecha Entrega"
+        />
+        <DateInput
+          saveOn={orderState.form}
+          save="PaymentDate"
+          type="unix"
+          label="Fecha Pago"
+        />
+        <Input css="col-span-2"
+          saveOn={orderState.form}
+          save="Notes"
+          label="Notas"
+        />
+        <Input
+          saveOn={orderState.form}
+          save="InvoiceNumber"
+          label="Factura"
+        />
+      </div>
+    {:else}
+      <!-- Productos block: read-only summary of the form above the cart table. -->
+      <div class="px-12 py-8">
+        <KeyValueStrip
+          css="gap-x-12 gap-y-4"
+          label1="Proveedor"
+          value1={orderState.form.ProviderID}
+          getContent1={(id) => providerNameByID.get(Number(id)) || '—'}
+          label2="Almacén"
+          value2={orderState.form.WarehouseID}
+          getContent2={(id) => almacenNameByID.get(Number(id)) || '—'}
+          label3="Fec. Entrega"
+          value3={orderState.form.DeliveryDate}
+          getContent3={formatDateOrDash}
+          label4="Fec. Pago"
+          value4={orderState.form.PaymentDate}
+          getContent4={formatDateOrDash}
+          label5="Factura"
+          value5={orderState.form.InvoiceNumber}
+          getContent5={(v) => String(v) || '—'}
+          label6="Notas"
+          value6={orderState.form.Notes}
+          getContent6={(v) => String(v) || '—'}
+        />
+      </div>
 
-    <div class="flex-1 min-h-0 px-12 pb-8 mt-4">
-      {#if orderState.items.length === 0}
-        <div class="flex flex-col items-center justify-center h-192 text-gray-300 gap-8">
-          <i class="icon-basket text-4xl"></i>
-          <span class="text-sm">Carrito vacío</span>
-        </div>
-      {:else}
+      <div class="flex-1 min-h-0 px-12 pb-8 mt-4">
         <VTable
           columns={cartColumns}
           data={orderState.items}
           estimateSize={42}
-          maxHeight="calc(100vh - var(--header-height) - 280px)"
+          maxHeight="calc(100vh - var(--header-height) - 320px)"
           emptyMessage="Sin productos"
         />
-      {/if}
-    </div>
+        {#if orderState.items.length === 0}
+          <div class="flex flex-col items-center justify-center h-192 text-gray-300 gap-8">
+            <i class="icon-basket text-4xl"></i>
+            <span class="text-sm">Órden de Compra Vacía</span>
+          </div>
+        {/if}
+      </div>
+    {/if}
   </LayerStatic>
 </div>

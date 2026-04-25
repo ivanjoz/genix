@@ -328,9 +328,12 @@
     // Check if we should use snippet renderer (takes priority over function renderer)
     if (cellRenderer && column.id) { rec.useSnippet = true; }
 
+    /*
     rec.css = typeof column.cellCss === 'string'
       ? column.cellCss
       : (column.onCellEdit ? "relative" : "px-8 py-4")
+    */
+    rec.css = rec.css || ""
     // Append runtime classes returned by setCellCss for this row
     const dynamicCellCss = column.setCellCss?.(record)
     if (dynamicCellCss) {
@@ -462,9 +465,12 @@
               </td>
             {:else}
               {#each processedColumns.flatColumns as column, j (`${j}_${filterText||""}`)}
-                {@const cellData = getCellContent(column, resolvedRecord, row.index)}                
+                {@const cellData = getCellContent(column, resolvedRecord, row.index)}
+                {@const css = cellCss ? cellCss + " " + (cellData.css||"") : cellData.css || ""}
+                {@const cssFinal = [css, !/px-|pr-|pl-/.test(css) && "px-6", column.align === 'right' && 'text-right'].filter(Boolean).join(" ")}
                 
-                <td class="{cellCss} {cellData.css} {column.onCellClick && !column.disableCellInteractions?.(resolvedRecord, row.index) ? '_clickable-cell' : ''}"
+                <td class="{cssFinal}"
+                	class:clickable-cell={!!column.onCellClick && !column.disableCellInteractions?.(resolvedRecord, row.index)}
                   style={column.cellStyle ? Object.entries(column.cellStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}
                   onclick={ev => {
                     if(column.onCellEdit){ ev.stopPropagation() }
@@ -487,8 +493,11 @@
                     </span>
                   {/if}
                   {#if column.onCellEdit && !column.disableCellInteractions?.(resolvedRecord, row.index)}
-                    <CellEditable contentClass={"px-6 "+(column.css||"")}
-                      inputClass={"px-6 "+(column.inputCss)}
+                  	{@const paddingCss = /px-|pr-|pl-/.test(column.inputCss||"") ? "" : "px-6"}
+                   
+                    <CellEditable 
+                    	contentClass={cssFinal + (column.align === 'right' ? " justify-end" : "")}
+                      inputClass={paddingCss +" "+ (column.inputCss||"") + (column.align === 'right' ? " text-right" : "")}
                       type={column.cellInputType || cellInputType}
                       getValue={() => cellData.content}
                       render={
@@ -739,12 +748,12 @@
     opacity: 1;
   }
 
-  ._clickable-cell {
+  .clickable-cell {
     cursor: pointer;
     position: relative;
   }
 
-  ._clickable-cell:hover {
+  .clickable-cell:hover {
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.596);
     z-index: 1;
   }
@@ -781,6 +790,15 @@
   ._11._e:hover {
     outline: 1px solid #5243c2;
     background-color: #f5f4ff;
+  }
+  ._11._d {
+    color: #f04949;
+    background-color: #ffe7e7;
+    box-shadow: rgb(181 50 50 / 70%) 0px 1px 1px 0px;
+  }
+  ._11._d:hover {
+    background-color: #f04949;
+    color: #ffffff;
   }
 
   /* Mobile Card Styles */

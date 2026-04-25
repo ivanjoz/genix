@@ -16,13 +16,16 @@ type PurchaseOrder struct {
 	WarehouseID           int32   `json:",omitempty"`
 	Date                  int16   `json:",omitempty"`
 	Week                  int16   `json:",omitempty"`
-	DateOfDelivery        int16   `json:",omitempty"`
+	DeliveryDate          int16   `json:",omitempty"`
+	PaymentDate           int16   `json:",omitempty"`
 	DetailProductIDs      []int32 `json:",omitempty"`
 	DetailQuantities      []int32 `json:",omitempty"`
 	DetailPrices          []int32 `json:",omitempty"`
 	DetailPresentationIDs []int32 `json:",omitempty"`
 	TotalAmount           int32   `json:",omitempty"`
 	TaxAmount             int32   `json:",omitempty"`
+	DebtAmount            int32   `json:",omitempty"`
+	InvoiceNumber         string  `json:",omitempty"`
 	Notes                 string  `json:",omitempty"`
 
 	Created   int32 `json:",omitempty"`
@@ -40,13 +43,16 @@ type PurchaseOrderTable struct {
 	WarehouseID           db.Col[PurchaseOrderTable, int32]
 	Date                  db.Col[PurchaseOrderTable, int16]
 	Week                  db.Col[PurchaseOrderTable, int16]
-	DateOfDelivery        db.Col[PurchaseOrderTable, int16]
+	DeliveryDate          db.Col[PurchaseOrderTable, int16]
+	PaymentDate           db.Col[PurchaseOrderTable, int16]
 	DetailProductIDs      db.Col[PurchaseOrderTable, []int32]
 	DetailQuantities      db.Col[PurchaseOrderTable, []int32]
 	DetailPrices          db.Col[PurchaseOrderTable, []int32]
 	DetailPresentationIDs db.Col[PurchaseOrderTable, []int32]
 	TotalAmount           db.Col[PurchaseOrderTable, int32]
 	TaxAmount             db.Col[PurchaseOrderTable, int32]
+	DebtAmount            db.Col[PurchaseOrderTable, int32]
+	InvoiceNumber         db.Col[PurchaseOrderTable, string]
 	Notes                 db.Col[PurchaseOrderTable, string]
 	Created               db.Col[PurchaseOrderTable, int32]
 	CreatedBy             db.Col[PurchaseOrderTable, int32]
@@ -57,33 +63,33 @@ type PurchaseOrderTable struct {
 
 func (e PurchaseOrderTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:                 "purchase_order",
-		Partition:            e.CompanyID,
-		Keys:                 []db.Coln{e.ID.Autoincrement(0)},
+		Name:      "purchase_order",
+		Partition: e.CompanyID,
+		Keys:      []db.Coln{e.ID.Autoincrement(0)},
 		Indexes: []db.Index{
 			{
 				Type:     db.TypeView,
 				Keys:     []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)},
 				KeepPart: true,
-			},			
+			},
 			{
-				Keys: []db.Coln{e.Week}, 
+				Keys:          []db.Coln{e.Week},
 				UseIndexGroup: true,
 			},
 			{
-				Keys: []db.Coln{e.Week, e.DetailProductIDs}, 
+				Keys:          []db.Coln{e.Week, e.DetailProductIDs},
 				UseIndexGroup: true,
 			},
 			{
-				Keys: []db.Coln{e.Week, e.Status, e.DetailProductIDs}, 
+				Keys:          []db.Coln{e.Week, e.Status, e.DetailProductIDs},
 				UseIndexGroup: true,
 			},
 			{
-				Keys: []db.Coln{e.Week, e.ProviderID}, 
+				Keys:          []db.Coln{e.Week, e.ProviderID},
 				UseIndexGroup: true,
 			},
 			{
-				Keys: []db.Coln{e.Week, e.Status, e.ProviderID}, 
+				Keys:          []db.Coln{e.Week, e.Status, e.ProviderID},
 				UseIndexGroup: true,
 			},
 		},
