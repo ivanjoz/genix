@@ -1,18 +1,48 @@
-import { GetHandler, GETWithGroupCache } from '$libs/http.svelte'
+import { GetHandler, GETWithGroupCache, PUT } from '$libs/http.svelte'
 import { Notify } from '$libs/helpers'
 
 // Backend status codes for purchase orders.
 export const PurchaseOrderStatus = {
   CANCELED: 0,
   PENDING: 1,
-  FULFILLED: 2,
+	CONFIRMED: 2,
+  FULFILLED: 4,
 } as const
+
+// Mirrors backend action codes accepted by PUT /purchase-orders.
+// CONFIRM: Pendiente (1) -> Confirmada (2). EDIT: updates editable fields while status ∈ {1,2}.
+export const PurchaseOrderAction = {
+  CONFIRM: 1,
+  EDIT: 2,
+} as const
+
+// Statuses where the editable fields (warehouse, dates, invoice, notes) can still be changed.
+// Mirrors the backend allow-list used by PutPurchaseOrder action=2.
+export const PurchaseOrderEditableStatuses: number[] = [
+  PurchaseOrderStatus.PENDING,
+  PurchaseOrderStatus.CONFIRMED,
+]
+
+// Sends an action update for a single purchase order; backend validates the state transition.
+// `data` is forwarded as the JSON body — used by EDIT to carry the patched fields, ignored by CONFIRM.
+export const updatePurchaseOrder = async (
+  orderID: number,
+  action: number,
+  data: object = {},
+): Promise<IPurchaseOrder> => {
+  return await PUT({
+    data,
+    route: `purchase-orders?action=${action}&id=${orderID}`,
+    refreshRoutes: ['purchase-orders'],
+  })
+}
 
 // Status selector options shared by the report filter and its summary strip.
 // Using 0 as "all" keeps the URL query clean: the backend ignores status when it's 0.
 export const purchaseOrderStatusOptions = [
   { ID: PurchaseOrderStatus.PENDING, Nombre: 'Pendiente' },
   { ID: PurchaseOrderStatus.FULFILLED, Nombre: 'Completada' },
+	{ ID: PurchaseOrderStatus.CONFIRMED, Nombre: 'Confirmada' },
   { ID: PurchaseOrderStatus.CANCELED, Nombre: 'Cancelada' },
 ]
 
@@ -24,6 +54,7 @@ export interface IPurchaseOrder {
   PaymentDate: number
   InvoiceNumber: string
   ProviderID: number
+  WarehouseID: number
   TotalAmount: number
   Notes: string
   DetailProductIDs?: number[]

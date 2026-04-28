@@ -14,4 +14,5 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.purchase-orders":             GetPurchaseOrders,
 	"GET.purchase-orders-query":       GetPurchaseOrdersQuery,
 	"POST.purchase-orders":            PostPurchaseOrder,
+	"PUT.purchase-orders":             PutPurchaseOrder,
 }

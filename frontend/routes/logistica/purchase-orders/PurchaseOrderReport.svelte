@@ -2,27 +2,39 @@
 import ButtonLayer from '$components/ButtonLayer.svelte'
 import DateInput from '$components/DateInput.svelte'
 import Layer from '$components/Layer.svelte'
+import Modal from '$components/Modal.svelte'
 import SearchSelect from '$components/SearchSelect.svelte'
 import KeyValueStrip from '$components/micro/KeyValueStrip.svelte'
 import LabelText from '$components/micro/LabelText.svelte'
 import VTable from '$components/vTable/VTable.svelte'
 import type { ITableColumn } from '$components/vTable/types'
 import { Core } from '$core/store.svelte'
-import { formatN, formatTime, Loading, throttle } from '$libs/helpers'
+import { formatN, formatTime, Loading, Notify, throttle } from '$libs/helpers'
 import { ClientProviderService, ClientProviderType } from '$routes/negocio/clientes/clientes-proveedores.svelte'
 import { ProductosService, type IProducto } from '$routes/negocio/productos/productos.svelte'
+import { AlmacenesService } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
 import { onDestroy } from 'svelte'
+import PurchaseOrderForm from './PurchaseOrderForm.svelte'
 import {
+  PurchaseOrderAction,
+  PurchaseOrderEditableStatuses,
   PurchaseOrdersService,
   PurchaseOrderStatus,
   purchaseOrderStatusOptions,
   queryPurchaseOrders,
+  updatePurchaseOrder,
   type IPurchaseOrder,
 } from './purchase_order.svelte'
 
 const providersService = new ClientProviderService(ClientProviderType.PROVIDER, true)
 const productosService = new ProductosService(true)
 const purchaseOrdersService = new PurchaseOrdersService(PurchaseOrderStatus.PENDING, true)
+// Warehouses are loaded lazily because the report only needs them when the edit modal is opened.
+const almacenesService = new AlmacenesService()
+const EDIT_PURCHASE_ORDER_MODAL_ID = 31
+
+// Patch sent to PUT /purchase-orders?action=2; ProviderID is read-only in edit mode but kept for the form display.
+let editForm = $state<Partial<IPurchaseOrder>>({})
 
 const getCurrentUnixDay = (): number => Math.floor(Date.now() / (1000 * 60 * 60 * 24))
 
@@ -46,6 +58,7 @@ let filterText = $state('')
 let selectedPurchaseOrder = $state<IPurchaseOrder | null>(null)
 let isDetailLayerLoading = $state(false)
 let detailRows = $state([] as IPurchaseOrderDetailRow[])
+let rowRerender: (() => void) | undefined = undefined
 
 // Swap the table data source depending on whether the report layer is active.
 const visibleRecords = $derived(isReportMode ? reportRecords : purchaseOrdersService.records)
@@ -166,6 +179,66 @@ onDestroy(() => {
   }
 })
 
+// Opens the edit modal preloaded with the selected order's editable fields.
+// Editing is restricted to Pending/Confirmed orders (mirrors the backend allow-list).
+const openEditPurchaseOrderModal = () => {
+  if (!selectedPurchaseOrder) { return }
+  if (!PurchaseOrderEditableStatuses.includes(selectedPurchaseOrder.ss || 0)) {
+    Notify.failure('Solo se pueden editar órdenes en estado Pendiente o Confirmada.')
+    return
+  }
+  
+  editForm = {...selectedPurchaseOrder}
+  Core.openModal(EDIT_PURCHASE_ORDER_MODAL_ID)
+}
+
+// Persists the edited fields via PUT action=2; backend re-validates state and ignores protected fields.
+const saveEditPurchaseOrder = async () => {
+  if ((editForm.ID||0) <= 0) { return }
+  Loading.standard('Actualizando orden de compra...')
+  const selectedRecord = visibleRecords.find(x => x.ID === selectedPurchaseOrder?.ID)
+  if(!selectedRecord){
+ 		Notify.failure("No se encontró el registro seleccionado. (¿?)")
+  }
+  
+  try {
+    // Send only the fields the backend accepts to keep payloads minimal and intent explicit.
+    await updatePurchaseOrder(editForm.ID||0, PurchaseOrderAction.EDIT, editForm)
+    Object.assign(selectedRecord as IPurchaseOrder, editForm)
+    
+    Notify.success(`La orden Nº ${editForm.ID} fue actualizada.`)
+    Core.closeModal(EDIT_PURCHASE_ORDER_MODAL_ID)
+    rowRerender?.()
+  } catch (error) {
+    console.error('[purchase-orders-report] edit error', error)
+  } finally {
+    Loading.remove()
+  }
+}
+
+// Confirms the selected order (Pendiente -> Cumplida); backend rejects the call if the state is not Pending.
+const confirmSelectedPurchaseOrder = async () => {
+  if (!selectedPurchaseOrder) { return }
+  if (selectedPurchaseOrder.ss !== PurchaseOrderStatus.PENDING) {
+    Notify.failure('Solo se pueden confirmar órdenes en estado Pendiente.')
+    return
+  }
+  const orderID = selectedPurchaseOrder.ID
+  Loading.standard('Confirmando orden de compra...')
+  try {
+    await updatePurchaseOrder(orderID, PurchaseOrderAction.CONFIRM)
+    const selectedRecord = visibleRecords.find(x => x.ID === selectedPurchaseOrder?.ID)
+    if(selectedRecord){ selectedRecord.ss = PurchaseOrderStatus.CONFIRMED }
+    
+    rowRerender?.()
+    Notify.success(`La orden Nº ${orderID} fue confirmada.`)
+  } catch (error) {
+    console.error('[purchase-orders-report] confirm error', { orderID, error })
+  } finally {
+    Loading.remove()
+  }
+}
+
 const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
   {
     header: 'ID',
@@ -178,6 +251,22 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
     header: 'Fecha Generación',
     width: '130px',
     getValue: (r) => (r.Date ? (formatTime(r.Date, 'd-m-Y') as string) : ''),
+  },
+  {
+    header: 'Estado',
+    width: '110px',
+    align: 'center',
+    // ss=2 (Completada) → green, ss=1 (Pendiente) → amber, ss=0 (Cancelada) → red.
+    getValue: (r) => purchaseOrderStatusOptions.find((s) => s.ID === (r.ss || 0))?.Nombre || '',
+    render: (r) => {
+      const status = r.ss || 0
+      const name = purchaseOrderStatusOptions.find((s) => s.ID === status)?.Nombre || '—'
+      const palette =
+        status === PurchaseOrderStatus.FULFILLED ? 'bg-green-50 text-green-700 border-green-200' :
+        status === PurchaseOrderStatus.PENDING ? 'bg-amber-50 text-amber-700 border-amber-200' :
+        'bg-red-50 text-red-600 border-red-200'
+      return `<span class="inline-block px-8 py-2 rounded-md border ${palette} text-xs font-medium">${name}</span>`
+    },
   },
   {
     header: 'Fecha Entrega',
@@ -369,7 +458,8 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
     maxHeight="calc(100vh - var(--header-height) - 72px)"
     selected={selectedPurchaseOrder?.ID || 0}
     isSelected={(purchaseOrder, selectedID) => purchaseOrder.ID === selectedID}
-    onRowClick={(purchaseOrder) => {
+    onRowClick={(purchaseOrder,_,rerender) => {
+    	rowRerender = rerender
       void openPurchaseOrderDetailLayer(purchaseOrder)
     }}
     filterText={filterText}
@@ -393,28 +483,30 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
     }}
     actionsButton={{ name: "Acciones", icon: "icon-menu", css: "" }}
     actions={[
-    	{ id: 1, 
+    	{ id: 1,
      		name: "Confirmar", icon: "icon-ok text-green-500",
-       	handler: () => {
-        
-        }
+       	handler: () => { void confirmSelectedPurchaseOrder() }
      	},
-     	{ id: 2, 
+     	{ id: 5,
+    		name: "Editar", icon: "icon-pencil text-blue-500",
+       	handler: () => { openEditPurchaseOrderModal() }
+     	},
+     	{ id: 2,
     		name: "Pagar", icon: "icon-tag",
        	handler: () => {
-        	
+
         }
      	},
-     	{ id: 3, 
+     	{ id: 3,
     		name: "Anular", icon: "icon-cancel",
        	handler: () => {
-        	
+
         }
      	},
-     	{ id: 4, 
+     	{ id: 4,
     		name: "Generar Copia", icon: "text-xs icon-plus",
        	handler: () => {
-        	
+
         }
      	},
     ]}
@@ -505,4 +597,21 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
       </div>
     {/if}
   </Layer>
+
+  <!-- Edit modal: only the metadata fields are mutable; Proveedor is locked because changing it
+       on an existing order would invalidate the cart pricing assumptions. -->
+  <Modal id={EDIT_PURCHASE_ORDER_MODAL_ID}
+    size={5}
+    bodyCss="px-16 py-12"
+    isEdit={true}
+    title={`Editar Orden #${editForm.ID}`}
+    onSave={() => { void saveEditPurchaseOrder() }}
+  >
+    <PurchaseOrderForm
+      bind:form={editForm}
+      providers={providersService.records}
+      almacenes={almacenesService.Almacenes}
+      disableProvider={true}
+    />
+  </Modal>
 </div>

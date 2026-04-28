@@ -5,7 +5,8 @@ import "app/db"
 const (
 	PurchaseOrderStatusCanceled  int8 = 0
 	PurchaseOrderStatusPending   int8 = 1
-	PurchaseOrderStatusFulfilled int8 = 2
+	PurchaseOrderStatusConfirmed int8 = 2
+	PurchaseOrderStatusFulfilled int8 = 4
 )
 
 type PurchaseOrder struct {

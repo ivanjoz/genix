@@ -1,10 +1,7 @@
 <script lang="ts">
-import DateInput from '$components/DateInput.svelte'
-import Input from '$components/Input.svelte'
 import KeyValueStrip from '$components/micro/KeyValueStrip.svelte'
 import LayerStatic from '$components/LayerStatic.svelte'
 import OptionsStrip from '$components/OptionsStrip.svelte'
-import SearchSelect from '$components/SearchSelect.svelte'
 import VTable from '$components/vTable/VTable.svelte'
 import type { ITableColumn } from '$components/vTable/types'
 import { formatN, formatTime, Notify } from '$libs/helpers'
@@ -14,9 +11,10 @@ import { ProductStockSimpleService } from '$routes/logistica/products-stock/stoc
 import { ClientProviderService, ClientProviderType } from '$routes/negocio/clientes/clientes-proveedores.svelte'
 import type { IProducto } from '$routes/negocio/productos/productos.svelte'
 import { ProductosService } from '$routes/negocio/productos/productos.svelte'
-import { AlmacenesService, type IAlmacen } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
+import { AlmacenesService } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
 import { untrack } from 'svelte'
 import ProductCardSearch, { type IProductCard } from './ProductCardSearch.svelte'
+import PurchaseOrderForm from './PurchaseOrderForm.svelte'
 
 // Line item shown in the cart; keyed by productID+presentationID composite.
 interface PurchaseOrderItem {
@@ -194,15 +192,12 @@ const stockByProductID = $derived.by(() => {
   return stockMap
 })
 
-let almacenSelected = $state(0)
-
 // Auto-select first warehouse once loaded; untrack prevents feedback loops.
 $effect(() => {
   almacenesService.Almacenes
-  if (!almacenesService.Almacenes.length || almacenSelected > 0) { return }
+  if (!almacenesService.Almacenes.length || orderState.form.WarehouseID > 0) { return }
   untrack(() => {
-    almacenSelected = almacenesService.Almacenes[0].ID
-    orderState.form.WarehouseID = almacenSelected
+    orderState.form.WarehouseID = almacenesService.Almacenes[0].ID
   })
 })
 
@@ -361,48 +356,11 @@ const formatDateOrDash = (value: string | number) => {
 
     {#if detailView === 1}
       <!-- Información block: order header form (provider, warehouse, dates, invoice, notes). -->
-      <div class="grid grid-cols-2 gap-8 px-12 py-8">
-        <SearchSelect
-          label="Proveedor"
-          keyId="ID"
-          keyName="Name"
-          options={providersService.records}
-          selected={orderState.form.ProviderID}
-          onChange={(provider) => { orderState.form.ProviderID = provider?.ID || 0 }}
-        />
-        <SearchSelect
-          label="Almacén"
-          keyId="ID"
-          keyName="Nombre"
-          options={almacenesService.Almacenes}
-          selected={almacenSelected}
-          onChange={(almacen: IAlmacen) => {
-            if (!almacen) { return }
-            almacenSelected = almacen.ID
-            orderState.form.WarehouseID = almacen.ID
-          }}
-        />
-        <DateInput
-          saveOn={orderState.form}
-          save="DeliveryDate"
-          type="unix"
-          label="Fecha Entrega"
-        />
-        <DateInput
-          saveOn={orderState.form}
-          save="PaymentDate"
-          type="unix"
-          label="Fecha Pago"
-        />
-        <Input css="col-span-2"
-          saveOn={orderState.form}
-          save="Notes"
-          label="Notas"
-        />
-        <Input
-          saveOn={orderState.form}
-          save="InvoiceNumber"
-          label="Factura"
+      <div class="px-12 py-8">
+        <PurchaseOrderForm
+          bind:form={orderState.form}
+          providers={providersService.records}
+          almacenes={almacenesService.Almacenes}
         />
       </div>
     {:else}
