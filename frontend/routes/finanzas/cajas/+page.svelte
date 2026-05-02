@@ -1,17 +1,19 @@
 <script lang="ts">
 import Input from '$components/Input.svelte';
+import LayerStatic from '$components/LayerStatic.svelte';
 import Modal from '$components/Modal.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
 import Page from '$domain/Page.svelte';
 import SearchSelect from '$components/SearchSelect.svelte';
-import Checkbox from '$components/Checkbox.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
+import RecordByIDText from '$components/micro/RecordByIDText.svelte';
 import { Loading, Notify, formatTime } from '$libs/helpers';
 import { throttle } from '$libs/helpers';
 import { Core } from '$core/store.svelte';
 import { formatN } from '$libs/helpers';
   import { AlmacenesService } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte"
+  import CajaForm from "./CajaForm.svelte"
   import {
     CajasService,
     getCajaCuadres,
@@ -213,8 +215,8 @@ import { formatN } from '$libs/helpers';
 </script>
 
 <Page title="Cajas & Bancos">
-  <div class="flex flex-col md:flex-row justify-between mb-6 gap-10">
-    <div class="w-full md:w-[36%]">
+  <div class="flex h-full gap-20">
+    <div class="flex-1 flex flex-col min-w-0 relative">
       <div class="flex justify-between items-center w-full mb-10">
         <div class="i-search mr-16 w-256">
           <div><i class="icon-search"></i></div>
@@ -247,14 +249,20 @@ import { formatN } from '$libs/helpers';
         }}
       />
     </div>
-    <div class="w-full md:w-[calc(64%-22px)] bg-white rounded-md shadow-sm p-12">
-      <OptionsStrip selected={layerView}
-        options={[[1, 'Movimientos'], [2, 'Cuadres']]}
-        buttonCss="ff-bold"
-        onSelect={e => {
-          layerView = e[0] as number
-        }}
-      />
+    <LayerStatic
+      css="w-[64%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10 overflow-hidden"
+      mobileLayerTitle="Detalle de Caja"
+    >
+      <div class="px-12 pt-12">
+        <OptionsStrip selected={layerView}
+          options={[[1, 'Movimientos'], [3, 'Config.'], [2, 'Cuadres']]}
+          buttonCss="ff-bold"
+          onSelect={e => {
+            layerView = e[0] as number
+          }}
+        />
+      </div>
+      <div class="flex-1 min-h-0 flex flex-col px-12 pb-12">
       {#if layerView === 1}
         {#if isLoadingMovimientos}
           <div class="flex justify-center items-center py-40">
@@ -266,12 +274,6 @@ import { formatN } from '$libs/helpers';
           <div class="flex w-full justify-between mt-8">
             <div class="flex items-center">
               <div class="text-[1.1rem] ff-bold mr-8">{cajaForm?.Nombre || ""}</div>
-              <button class="bx-yellow" aria-label="edit" onclick={ev => {
-                ev.stopPropagation()
-                Core.openModal(1)
-              }}>
-                <i class="icon-pencil"></i>
-              </button>
             </div>
             <div class="flex items-center">
               <button class="bx-green" aria-label="add" onclick={ev => {
@@ -286,7 +288,7 @@ import { formatN } from '$libs/helpers';
             </div>
           </div>
           <VTable css="w-full mt-8"
-            maxHeight="calc(100vh - 8rem - 16px)"
+            maxHeight="calc(100vh - var(--header-height) - 140px)"
             data={cajaMovimientos}
             columns={[
               {
@@ -299,7 +301,7 @@ import { formatN } from '$libs/helpers';
               },
               {
                 header: "Monto",
-                cellCss: "ff-mono text-right px-6",
+                css: "ff-mono text-right px-6",
                 render: e => {
                   const monto = formatN(e.Monto / 100, 2)
                   const color = e.Monto < 0 ? "text-red-600" : ""
@@ -308,20 +310,29 @@ import { formatN } from '$libs/helpers';
               },
               {
                 header: "Saldo Final",
-                cellCss: "ff-mono text-right px-6",
+                css: "ff-mono text-right px-6",
                 getValue: e => formatN(e.SaldoFinal / 100, 2)
               },
               {
                 header: "Nº Documento",
-                getValue: e => ""
+                css: "text-right px-6",
+                getValue: e => e.DocumentoID ? String(e.DocumentoID) : ""
               },
               {
+                // id triggers cellRenderer snippet so we can mount RecordByIDText per row.
+                id: "movimientoUsuario",
                 header: "Usuario",
-                cellCss: "text-center px-6",
-                getValue: e => e.Usuario?.usuario || ""
+                css: "text-center px-6",
+                getValue: e => e.CreatedBy
               }
             ]}
-          />
+          >
+            {#snippet cellRenderer(record, column)}
+              {#if column.id === 'movimientoUsuario'}
+                <RecordByIDText apiRoute="usuarios-ids" recordID={record.CreatedBy} placeholder="" />
+              {/if}
+            {/snippet}
+          </VTable>
         {/if}
       {/if}
       {#if layerView === 2}
@@ -345,7 +356,7 @@ import { formatN } from '$libs/helpers';
             </div>
           </div>
           <VTable css="w-full mt-8"
-            maxHeight="calc(100vh - 8rem - 16px)"
+            maxHeight="calc(100vh - var(--header-height) - 140px)"
             data={cajaCuadres}
             columns={[
               {
@@ -354,29 +365,56 @@ import { formatN } from '$libs/helpers';
               },
               {
                 header: "Saldo Sistema",
-                cellCss: 'ff-mono text-right px-6',
+                css: 'ff-mono text-right px-6',
                 getValue: e => formatN((e.SaldoSistema || 0) / 100, 2)
               },
               {
                 header: "Diferencia",
-                cellCss: 'ff-mono text-right px-6',
+                css: 'ff-mono text-right px-6',
                 getValue: e => formatN((e.SaldoDiferencia || 0) / 100, 2)
               },
               {
                 header: "Saldo Real",
-                cellCss: 'ff-mono text-right px-6',
+                css: 'ff-mono text-right px-6',
                 getValue: e => formatN((e.SaldoReal || 0) / 100, 2)
               },
               {
+                // id triggers cellRenderer snippet so we can mount RecordByIDText per row.
+                id: "cuadreUsuario",
                 header: "Usuario",
-                cellCss: 'text-center px-6',
-                getValue: e => e.Usuario?.usuario || ""
+                css: 'text-center px-6',
+                getValue: e => e.CreatedBy
               }
             ]}
-          />
+          >
+            {#snippet cellRenderer(record, column)}
+              {#if column.id === 'cuadreUsuario'}
+                <RecordByIDText apiRoute="usuarios-ids" recordID={record.CreatedBy} placeholder="" />
+              {/if}
+            {/snippet}
+          </VTable>
         {/if}
       {/if}
-    </div>
+      {#if layerView === 3}
+        {#if !cajaForm.ID}
+          <div class="bg-red-100 text-red-700 p-8 mt-8 rounded">Seleccione una Caja</div>
+        {:else}
+          <div class="mt-8">
+            <CajaForm bind:form={cajaForm} sedes={almacenes.Sedes} />
+            <div class="flex justify-end mt-12">
+              <button class="bx-blue" onclick={ev => {
+                ev.stopPropagation()
+                saveCaja()
+              }}>
+                <span>Guardar</span>
+                <i class="icon-floppy"></i>
+              </button>
+            </div>
+          </div>
+        {/if}
+      {/if}
+      </div>
+    </LayerStatic>
   </div>
 
   <Modal id={1} title="Cajas" size={6} bodyCss="px-16 py-14"
@@ -387,26 +425,7 @@ import { formatN } from '$libs/helpers';
       // TODO: implement delete
     }}
   >
-    <div class="grid grid-cols-24 gap-10">
-      <SearchSelect bind:saveOn={cajaForm} save="Tipo" css="col-span-24 md:col-span-10"
-        label="Tipo" keyId="id" keyName="name" options={cajaTipos}
-        placeholder="" required={true}
-      />
-      <Input bind:saveOn={cajaForm} save="Nombre"
-        css="col-span-24 md:col-span-14" label="Nombre" required={true}
-      />
-      <Input bind:saveOn={cajaForm} save="Descripcion"
-        css="col-span-24" label="Descripcion"
-      />
-      <SearchSelect bind:saveOn={cajaForm} save="SedeID"
-        css="col-span-24 md:col-span-10" label="Sede" required={true} options={almacenes.Sedes}
-        keyId="ID" keyName="Nombre"
-      />
-      <div class="col-span-24 flex justify-between items-center">
-        <div></div>
-        <Checkbox label="Saldo Negativo" bind:saveOn={cajaForm} save="Nombre" />
-      </div>
-    </div>
+    <CajaForm bind:form={cajaForm} sedes={almacenes.Sedes} />
   </Modal>
 
   <Modal id={2} title="Cuadre de Caja" size={6}

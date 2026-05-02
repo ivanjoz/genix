@@ -4,7 +4,6 @@ import (
 	"app/core"
 	"app/db"
 	finanzasTypes "app/finanzas/types"
-	"app/seguridad"
 	"encoding/json"
 )
 
@@ -113,16 +112,9 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Log("Movimientos obtenidos::", len(movimientos))
 
-	usuarios, err := seguridad.GetUsuariosList(req.Usuario.EmpresaID,
-		core.Map(movimientos, func(e finanzasTypes.CajaMovimiento) int32 { return e.CreatedBy }))
-
-	if err != nil {
-		return req.MakeErr("Error al obtener los usuarios.", err)
-	}
-
+	// Usuarios resolved client-side via cache-by-ids (apiRoute "usuarios-ids") to keep payload small.
 	response := map[string]any{
 		"movimientos": movimientos,
-		"usuarios":    usuarios,
 	}
 
 	return core.MakeResponse(req, &response)
@@ -151,15 +143,9 @@ func GetCajaCuadres(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los movimientos de las cajas:", err)
 	}
 
-	usuarios, err := seguridad.GetUsuariosList(req.Usuario.EmpresaID,
-		core.Map(cuadres, func(e finanzasTypes.CajaCuadre) int32 { return e.CreatedBy }))
-
-	if err != nil {
-		return req.MakeErr("Error al obtener los usuarios.", err)
-	}
-
+	// Usuarios resolved client-side via cache-by-ids (apiRoute "usuarios-ids") to keep payload small.
 	response := map[string]any{
-		"usuarios": usuarios, "cuadres": cuadres,
+		"cuadres": cuadres,
 	}
 
 	return core.MakeResponse(req, &response)

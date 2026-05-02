@@ -52,11 +52,11 @@ storeProxy.on('error', (err, req, res) => {
 
 // Log proxy requests
 mainProxy.on('proxyReq', (proxyReq, req, res) => {
-  console.log(`[Proxy] Main: ${req.method} ${req.url}`);
+  // console.log(`[Proxy] Main: ${req.method} ${req.url}`);
 });
 
 storeProxy.on('proxyReq', (proxyReq, req, res) => {
-  console.log(`[Proxy] Store: ${req.method} ${req.url}`);
+  // console.log(`[Proxy] Store: ${req.method} ${req.url}`);
 });
 
 // Log WebSocket upgrades
@@ -85,15 +85,15 @@ const server = http.createServer((req, res) => {
   const isServiceWorkerComm = req.url.startsWith('/_sw_');
   
   if (isStore) {
-    console.log(`[HTTP] ${req.url} → Store`);
+    // console.log(`[HTTP] ${req.url} → Store`);
     storeProxy.web(req, res);
   } else if (isServiceWorkerComm) {
     // Handle Service Worker communication requests locally to avoid 404s in Main
-    console.log(`[HTTP] ${req.url} → Handled by Proxy (SW communication)`);
+    // console.log(`[HTTP] ${req.url} → Handled by Proxy (SW communication)`);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: 1 }));
   } else {
-    console.log(`[HTTP] ${req.url} → Main`);
+     // console.log(`[HTTP] ${req.url} → Main`);
     mainProxy.web(req, res);
   }
 });

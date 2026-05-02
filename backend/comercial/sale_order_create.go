@@ -61,6 +61,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		if saleRequest.WarehouseID > 0 {
 			sale.WarehouseID = saleRequest.WarehouseID
 		}
+		// PaymentDueDate is editable post-creation (e.g., reschedule a payment).
+		sale.PaymentDueDate = saleRequest.PaymentDueDate
 		if slices.Contains(saleRequest.ActionsIncluded, 2) {
 			sale.DebtAmount = saleRequest.DebtAmount
 		}
@@ -232,6 +234,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			saleTable.DeliveryTime,
 			saleTable.DeliveryUser,
 			saleTable.ClientID,
+			saleTable.PaymentDueDate,
 		); err != nil {
 			return req.MakeErr("Error al actualizar la venta:", err)
 		}

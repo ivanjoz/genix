@@ -3,6 +3,8 @@ package logistica
 import (
 	"app/core"
 	"app/db"
+	"app/finanzas"
+	finanzasTypes "app/finanzas/types"
 	logisticaTypes "app/logistica/types"
 	"encoding/json"
 	"time"
@@ -13,7 +15,18 @@ import (
 const (
 	PurchaseOrderActionConfirm = 1 // Cambia status de Pendiente (1) a Cumplido (2)
 	PurchaseOrderActionEdit    = 2 // Edita campos no críticos cuando la orden está Pendiente o Cumplida
+	PurchaseOrderActionPay     = 3 // Registra un pago: descuenta DebtAmount y crea movimiento de caja Tipo=6
+	PurchaseOrderActionAnnul   = 4 // Anula la orden: cambia status a Cancelada (0). Solo desde Pendiente o Confirmada.
 )
+
+// Tipo del movimiento de caja para pagos a proveedor (Pago Proveedor).
+const cajaMovimientoTipoPagoProveedor int8 = 6
+
+// Body esperado para PurchaseOrderActionPay.
+type purchaseOrderPayPayload struct {
+	CajaID int32
+	Monto  int32 // Monto a pagar en céntimos (positivo). Se enviará como negativo a la caja.
+}
 
 func GetPurchaseOrders(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt("updated")
@@ -96,6 +109,8 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		record.CreatedBy = req.Usuario.ID
 		record.Date = todayFecha
 		record.Week = currentSemana.Code
+		// La deuda inicial corresponde al monto total: cada Pago la reduce hasta llegar a 0.
+		record.DebtAmount = record.TotalAmount
 	}
 
 	records := []logisticaTypes.PurchaseOrder{record}
@@ -194,6 +209,63 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 			q.WarehouseID, q.DeliveryDate, q.PaymentDate, q.InvoiceNumber, q.Notes, q.Updated, q.UpdatedBy, q.Status,
 		); err != nil {
 			return req.MakeErr("Error al actualizar la orden de compra.", err)
+		}
+		return req.MakeResponse(orderCurrent)
+
+	case PurchaseOrderActionPay:
+		// Solo se registra pago cuando la orden está Confirmada: Pendiente debe pasar primero
+		// por Confirmar (acción 1) y los demás estados son inmutables.
+		if orderCurrent.Status != logisticaTypes.PurchaseOrderStatusConfirmed {
+			return req.MakeErr("La orden no está en estado Confirmada y no puede pagarse.")
+		}
+
+		payload := purchaseOrderPayPayload{}
+		if err := json.Unmarshal([]byte(*req.Body), &payload); err != nil {
+			return req.MakeErr("Error al deserializar el body.", err)
+		}
+		if payload.CajaID <= 0 {
+			return req.MakeErr("Debe seleccionar una caja para registrar el pago.")
+		}
+		if payload.Monto <= 0 {
+			return req.MakeErr("El monto del pago debe ser mayor a 0.")
+		}
+		if payload.Monto > orderCurrent.DebtAmount {
+			return req.MakeErr("El monto del pago excede la deuda pendiente de la orden.")
+		}
+
+		// El pago sale de la caja: Monto negativo para que ApplyCajaMovimientos descuente del saldo.
+		movimiento := finanzasTypes.CajaMovimientoInterno{
+			CajaID:     payload.CajaID,
+			DocumentID: int64(orderCurrent.ID),
+			Tipo:       cajaMovimientoTipoPagoProveedor,
+			Monto:      -payload.Monto,
+		}
+		if err := finanzas.ApplyCajaMovimientos(req, []finanzasTypes.CajaMovimientoInterno{movimiento}); err != nil {
+			return req.MakeErr("Error al registrar el movimiento de caja:", err)
+		}
+
+		orderCurrent.DebtAmount -= payload.Monto
+		orderCurrent.Updated = now
+		orderCurrent.UpdatedBy = req.Usuario.ID
+
+		if err := db.Update(&[]logisticaTypes.PurchaseOrder{orderCurrent}, q.Status, q.DebtAmount, q.Updated, q.UpdatedBy); err != nil {
+			return req.MakeErr("Error al actualizar la deuda de la orden de compra.", err)
+		}
+		return req.MakeResponse(orderCurrent)
+
+	case PurchaseOrderActionAnnul:
+		// Solo se permite anular órdenes en estado Pendiente o Confirmada; las ya Canceladas
+		// o Cumplidas son inmutables para preservar consistencia contable.
+		if orderCurrent.Status != logisticaTypes.PurchaseOrderStatusPending &&
+			orderCurrent.Status != logisticaTypes.PurchaseOrderStatusConfirmed {
+			return req.MakeErr("La orden no se puede anular en su estado actual.")
+		}
+		orderCurrent.Status = logisticaTypes.PurchaseOrderStatusCanceled
+		orderCurrent.Updated = now
+		orderCurrent.UpdatedBy = req.Usuario.ID
+
+		if err := db.Update(&[]logisticaTypes.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy); err != nil {
+			return req.MakeErr("Error al anular la orden de compra.", err)
 		}
 		return req.MakeResponse(orderCurrent)
 

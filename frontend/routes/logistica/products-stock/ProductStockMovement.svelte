@@ -1,28 +1,27 @@
 <script lang="ts">
-import Checkbox from '$components/Checkbox.svelte'
-import Layer from '$components/Layer.svelte'
-import SearchSelect from '$components/SearchSelect.svelte'
-import LoadingBar from '$components/micro/LoadingBar.svelte'
-import TableGrid from '$components/vTable/TableGrid.svelte'
-import VTable from '$components/vTable/VTable.svelte'
-import type { ITableColumn } from '$components/vTable/types'
-import { Core } from '$core/store.svelte'
-import { formatN, Loading, Notify, throttle } from '$libs/helpers'
-import { getStaticRecordsByID } from '$libs/cache/cache-by-ids.svelte'
-import { SvelteMap } from 'svelte/reactivity'
-import { untrack } from 'svelte'
-import { ProductosService } from '../../negocio/productos/productos.svelte'
-import { AlmacenesService } from '../../negocio/sedes-almacenes/sedes-almacenes.svelte'
+import Checkbox from '$components/Checkbox.svelte';
+import Layer from '$components/Layer.svelte';
+import SearchSelect from '$components/SearchSelect.svelte';
+import LoadingBar from '$components/micro/LoadingBar.svelte';
+import TableGrid from '$components/vTable/TableGrid.svelte';
+import VTable from '$components/vTable/VTable.svelte';
+import type { ITableColumn } from '$components/vTable/types';
+import { Core } from '$core/store.svelte';
+import { getStaticRecordsByID } from '$libs/cache/cache-by-ids.svelte';
+import { formatN, Loading, Notify, throttle } from '$libs/helpers';
+import { untrack } from 'svelte';
+import { SvelteMap } from 'svelte/reactivity';
+import { ProductosService } from '../../negocio/productos/productos.svelte';
+import { AlmacenesService } from '../../negocio/sedes-almacenes/sedes-almacenes.svelte';
 import {
-  getWarehouseProductStock,
-  makeStockID,
-  postProductosStock,
-  type IPostProductoStockItem,
-  type IProductStockDetail,
-  type IProductStockLot,
-  type IProductoStock,
-} from './stock-movement'
-import type { ElementAST } from '$components/Renderer.svelte'
+    getWarehouseProductStock,
+    makeStockID,
+    postProductosStock,
+    type IPostProductoStockItem,
+    type IProductoStock,
+    type IProductStockDetail,
+    type IProductStockLot,
+} from './stock-movement';
 
 type IProductStockDetailRow = IProductStockDetail & {
   _cantidadPrev?: number
@@ -420,7 +419,7 @@ const updateStockDetailQuantity = (stockDetailRecord: IProductStockDetailRow, qu
 
 const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
   {
-    header: 'Serial', cellCss: 'ff-mono',
+    header: 'Serial', css: 'ff-mono',
     getValue: (stockDetail) => stockDetail.SerialNumber || '',
     disableCellInteractions: (stockDetail) => !stockDetail._isNew,
     onBeforeCellChange: (stockDetail, value) => {

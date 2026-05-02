@@ -22,6 +22,7 @@ import { AlmacenesService } from "../../negocio/sedes-almacenes/sedes-almacenes.
 import ProductoVentaCard from './ProductoVentaCard.svelte';
 import type { ProductoVenta } from "./sale_order.svelte";
 import { SaleOrderState } from "./sale_order.svelte";
+    import DateInput from '$components/DateInput.svelte';
 
   // Helpers
   const formatMo = (n: number) => formatN(n / 100, 2);
@@ -396,13 +397,13 @@ import { SaleOrderState } from "./sale_order.svelte";
         <!-- Header -->
         <div class="px-10 py-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
         >
-       	<div class="grow mr-16">
+       	<div class="mr-16">
           <div class="hidden font-bold font-xl mb-2 -mt-2 text-gray-800 mb-4 items-center justify-between md:flex">
             <span>Detalle de Venta</span>
           </div>
           <div class="flex items-center gap-6">
-            <div class="bg-gray-50 flex flex-1 p-6 rounded-md items-center gap-6 border border-gray-100 shadow-sm">
-                <div class="text-[10px] leading-[1] text-gray-500 font-bold tracking-wider uppercase">
+            <div class="bg-gray-100 flex flex-1 p-6 rounded-md items-center gap-6 min-h-36 md:min-w-170">
+                <div class="text-[10px] leading-[1] text-gray-500 font-bold tracking-wider uppercase mr-8">
                   <div>Sub</div>
                   <div>Total</div>
                 </div>
@@ -411,8 +412,8 @@ import { SaleOrderState } from "./sale_order.svelte";
                 </div>
             </div>
 
-            <div class="bg-blue-50 items-center flex flex-1 p-6 rounded-md gap-6 border border-blue-100 shadow-sm">
-                <div class="text-[10px] text-blue-600 uppercase font-bold tracking-wider">Total</div>
+            <div class="bg-blue-50 items-center flex flex-1 p-6 rounded-md gap-6 min-h-36 md:min-w-170">
+                <div class="text-[10px] text-blue-600 uppercase font-bold tracking-wider mr-8">Total</div>
                 <div class="leading-[1] text-blue-700 font-bold text-[22px] ml-auto">
                     {formatMo(ventasState.form.TotalAmount)}
                 </div>
@@ -427,24 +428,30 @@ import { SaleOrderState } from "./sale_order.svelte";
             <i class="icon-floppy"></i>
           </button>
         </div>
+        <div class="w-full px-12 mt-6 mb-6">
+	        <div class="col-span-2">
+	      	  <CheckboxOptions type="multiple"
+	     			  options={[ { id: 2, name: "Pagado" }, { id: 3, name: "Recibido" } ]}
+	       		  keyId="id" keyName="name" save="ActionsIncluded"
+	       		  saveOn={ventasState.form}
+	       	  />
+	        </div>
+        </div>
         <div class="grid w-full grid-cols-2 gap-8 px-12 py-6 md:flex md:items-center">
-          <div class="col-span-2 md:col-span-1 md:order-2">
-        	  <CheckboxOptions type="multiple"
-       			  options={[ { id: 2, name: "Pagado" }, { id: 3, name: "Recibido" } ]}
-         		  keyId="id" keyName="name" save="ActionsIncluded"
-         		  saveOn={ventasState.form}
-         	  />
-          </div>
-          <div class="md:order-1 md:mr-16">
-	          <SearchSelect
-              css="w-full"
+        	<SearchSelect
+           css="w-[30%] md:order-1"
 	            label="" save="LastPaymentCajaID"
 	            keyId="ID"
 	            keyName="Nombre" saveOn={ventasState.form}
 	            options={cajas?.Cajas||[]}
 	            placeholder="CAJA"
 	          />
-          </div>
+          <DateInput
+            css="md:w-[30%] md:order-2"
+            label="" save="PaymentDueDate"
+            saveOn={ventasState.form}
+            placeholder="Fecha Pago"
+          />
           <div class="md:order-3 md:ml-auto md:max-w-168">
 	          <SearchSelect useStyle={1}
 	             label=""

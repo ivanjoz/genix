@@ -29,7 +29,7 @@ type Usuario struct { // DynamoDB + ScyllaDB
 	CompanyUserIndex   string   `json:"-" col:"company_usuario,index"`
 	CompanyStatusIndex string   `json:"-" col:"company_status_updated,index"`
 	// CacheVersion is returned in delta-by-IDs endpoints to let clients track per-record cache freshness.
-	CacheVersion uint8 `json:",omitempty" col:"-"`
+	CacheVersion uint8 `json:"ccv,omitempty" col:"-"`
 }
 
 func (usuario *Usuario) PrepareCloudSync() {

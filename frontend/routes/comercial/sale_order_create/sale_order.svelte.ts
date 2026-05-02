@@ -58,6 +58,7 @@ export interface ISaleOrder {
   LastPaymentUser: number
   DeliveryTime: number
   DeliveryUser: number
+  PaymentDueDate: number
   ClientInfo: any
   /* extra fields */
   EmpresaID: number

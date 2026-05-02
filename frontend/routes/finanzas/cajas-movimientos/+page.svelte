@@ -4,6 +4,7 @@ import SearchSelect from '$components/SearchSelect.svelte';
 import DateInput from '$components/DateInput.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
+import RecordByIDText from '$components/micro/RecordByIDText.svelte';
 import { Loading, formatTime, throttle, Notify } from '$libs/helpers';
 import { formatN } from '$libs/helpers';
   import { untrack } from "svelte"
@@ -12,7 +13,6 @@ import { formatN } from '$libs/helpers';
     getCajaMovimientos,
     cajaMovimientoTipos,
     type ICajaMovimiento,
-    type IUsuario
   } from "../cajas/cajas.svelte"
 
   const cajas = new CajasService()
@@ -64,19 +64,19 @@ import { formatN } from '$libs/helpers';
     {
       header: "Fecha Hora",
       headerCss: "w-140",
-      cellCss: "ff-mono px-6",
+      css: "ff-mono px-6",
       getValue: e => formatTime(e.Created, "d-M h:n") as string
     },
     {
       header: "Tipo Mov.",
       headerCss: "w-160",
-      cellCss: "px-6",
+      css: "px-6",
       getValue: e => cajaMovimientoTiposMap.get(e.Tipo)?.name || ""
     },
     {
       header: "Monto",
       headerCss: "w-120",
-      cellCss: "ff-mono text-right px-6",
+      css: "ff-mono text-right px-6",
       render: e => {
         const cssClass = e.Monto < 0 ? "text-red-500" : ""
         return `<span class="${cssClass}">${formatN(e.Monto / 100, 2)}</span>`
@@ -85,20 +85,22 @@ import { formatN } from '$libs/helpers';
     {
       header: "Saldo Final",
       headerCss: "w-120",
-      cellCss: "ff-mono text-right px-6",
+      css: "ff-mono text-right px-6",
       getValue: e => formatN(e.SaldoFinal / 100, 2) as string
     },
     {
       header: "Nº Documento",
       headerCss: "w-140",
-      cellCss: "text-center px-6",
-      getValue: e => ""
+      css: "text-center px-6",
+      getValue: e => e.DocumentoID ? String(e.DocumentoID) : ""
     },
     {
+      // id triggers cellRenderer snippet so we can mount RecordByIDText per row.
+      id: "movimientoUsuario",
       header: "Usuario",
       headerCss: "w-120",
-      cellCss: "text-center px-6",
-      getValue: e => e.Usuario?.usuario || ""
+      css: "text-center px-6",
+      getValue: e => e.CreatedBy
     }
   ]
 </script>
@@ -166,9 +168,14 @@ import { formatN } from '$libs/helpers';
     filterText={filterText}
     getFilterContent={e => {
       const movTipo = cajaMovimientoTiposMap.get(e.Tipo)?.name || ""
-      const usuario = e.Usuario?.usuario || ""
-      return [movTipo, usuario].join(" ").toLowerCase()
+      return movTipo.toLowerCase()
     }}
     useFilterCache={true}
-  />
+  >
+    {#snippet cellRenderer(record, column)}
+      {#if column.id === 'movimientoUsuario'}
+        <RecordByIDText apiRoute="usuarios-ids" recordID={record.CreatedBy} placeholder="" />
+      {/if}
+    {/snippet}
+  </VTable>
 </Page>

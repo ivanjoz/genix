@@ -1,15 +1,19 @@
 <script lang="ts">
 import ButtonLayer from '$components/ButtonLayer.svelte'
 import DateInput from '$components/DateInput.svelte'
+import Input from '$components/Input.svelte'
 import Layer from '$components/Layer.svelte'
 import Modal from '$components/Modal.svelte'
 import SearchSelect from '$components/SearchSelect.svelte'
+import FilterInput from '$components/micro/FilterInput.svelte'
 import KeyValueStrip from '$components/micro/KeyValueStrip.svelte'
 import LabelText from '$components/micro/LabelText.svelte'
 import VTable from '$components/vTable/VTable.svelte'
 import type { ITableColumn } from '$components/vTable/types'
 import { Core } from '$core/store.svelte'
-import { formatN, formatTime, Loading, Notify, throttle } from '$libs/helpers'
+import { ConfirmWarn, formatN, formatTime, Loading, Notify } from '$libs/helpers'
+import { saveRouteRecord, setRouteRecordQueryParam } from '$libs/cache/route-data'
+import { CajasService } from '$routes/finanzas/cajas/cajas.svelte'
 import { ClientProviderService, ClientProviderType } from '$routes/negocio/clientes/clientes-proveedores.svelte'
 import { ProductosService, type IProducto } from '$routes/negocio/productos/productos.svelte'
 import { AlmacenesService } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
@@ -31,10 +35,19 @@ const productosService = new ProductosService(true)
 const purchaseOrdersService = new PurchaseOrdersService(PurchaseOrderStatus.PENDING, true)
 // Warehouses are loaded lazily because the report only needs them when the edit modal is opened.
 const almacenesService = new AlmacenesService()
+// Cajas are needed only when the user opens the Pagar modal; the service auto-fetches on construction.
+const cajasService = new CajasService()
 const EDIT_PURCHASE_ORDER_MODAL_ID = 31
+const PAY_PURCHASE_ORDER_MODAL_ID = 32
 
 // Patch sent to PUT /purchase-orders?action=2; ProviderID is read-only in edit mode but kept for the form display.
 let editForm = $state<Partial<IPurchaseOrder>>({})
+// Payment form for PUT /purchase-orders?action=3. Monto is stored in cents (Input baseDecimals=2 handles the display).
+let payForm = $state({ CajaID: 0, Monto: 0 })
+// Live preview of the debt that will remain after the current Monto is applied; recalculates as the user types.
+const remainingDebtAfterPayment = $derived(
+  Math.max((selectedPurchaseOrder?.DebtAmount || 0) - (payForm.Monto || 0), 0),
+)
 
 const getCurrentUnixDay = (): number => Math.floor(Date.now() / (1000 * 60 * 60 * 24))
 
@@ -214,6 +227,136 @@ const saveEditPurchaseOrder = async () => {
   } finally {
     Loading.remove()
   }
+}
+
+// Opens the payment modal pre-filled with the remaining DebtAmount and the first available caja.
+// Backend only accepts payments while the order is Confirmada; mirror that constraint here for fast feedback.
+const openPayPurchaseOrderModal = () => {
+  if (!selectedPurchaseOrder) { return }
+  if (selectedPurchaseOrder.ss !== PurchaseOrderStatus.CONFIRMED) {
+    Notify.failure('Solo se pueden pagar órdenes en estado Confirmada.')
+    return
+  }
+  const remainingDebt = selectedPurchaseOrder.DebtAmount || 0
+  if (remainingDebt <= 0) {
+    Notify.failure('La orden no tiene deuda pendiente.')
+    return
+  }
+
+  // Monto starts at 0 so the user explicitly types the amount; "Deuda pendiente" reflects the order's full debt.
+  payForm = {
+    CajaID: cajasService.Cajas[0]?.ID || 0,
+    Monto: 0,
+  }
+  Core.openModal(PAY_PURCHASE_ORDER_MODAL_ID)
+}
+
+// Submits the payment: backend creates the caja movimiento (Tipo=6) and decrements DebtAmount atomically.
+const submitPurchaseOrderPayment = async () => {
+  if (!selectedPurchaseOrder) { return }
+  if (payForm.CajaID <= 0) {
+    Notify.failure('Seleccione una caja.')
+    return
+  }
+  const remainingDebt = selectedPurchaseOrder.DebtAmount || 0
+  if (payForm.Monto <= 0) {
+    Notify.failure('Ingrese un monto mayor a 0.')
+    return
+  }
+  if (payForm.Monto > remainingDebt) {
+    Notify.failure('El monto excede la deuda pendiente.')
+    return
+  }
+
+  const orderID = selectedPurchaseOrder.ID
+  Loading.standard('Registrando pago...')
+  try {
+    const updated = await updatePurchaseOrder(orderID, PurchaseOrderAction.PAY, {
+      CajaID: payForm.CajaID,
+      Monto: payForm.Monto,
+    })
+    // Sync the in-memory record so the layer/table reflect the new debt without a round-trip.
+    const newDebt = updated?.DebtAmount ?? (remainingDebt - payForm.Monto)
+    selectedPurchaseOrder.DebtAmount = newDebt
+    const selectedRecord = visibleRecords.find((r) => r.ID === orderID)
+    if (selectedRecord) { selectedRecord.DebtAmount = newDebt }
+
+    rowRerender?.()
+    Notify.success(`Pago de ${formatN(payForm.Monto / 100, 2)} registrado en la orden Nº ${orderID}.`)
+    Core.closeModal(PAY_PURCHASE_ORDER_MODAL_ID)
+  } catch (error) {
+    console.error('[purchase-orders-report] pay error', { orderID, error })
+  } finally {
+    Loading.remove()
+  }
+}
+
+// Stashes the selected order in the routeData KV store and navigates to the create tab
+// with `?rec=oc_<ID>`; PurchaseOrderCreate reads the param on mount and populates a copy.
+// Order matters: IDB write -> URL update -> tab switch. Switching the tab last guarantees
+// PurchaseOrderCreate's onMount sees the `?rec=` param already on the URL.
+const generarCopiaPurchaseOrder = async () => {
+  if (!selectedPurchaseOrder) {
+    console.warn('[generar-copia] no purchase order selected')
+    return
+  }
+  const orderID = selectedPurchaseOrder.ID
+  const routeDataKey = `oc_${orderID}`
+  console.debug('[generar-copia] start', { orderID, routeDataKey })
+  try {
+    const snapshot = $state.snapshot(selectedPurchaseOrder)
+    await saveRouteRecord(routeDataKey, snapshot)
+    console.debug('[generar-copia] saved to IDB', {
+      routeDataKey,
+      detailCount: snapshot.DetailProductIDs?.length || 0,
+    })
+
+    Core.hideSideLayer()
+    selectedPurchaseOrder = null
+    detailRows = []
+
+    // Push the URL param BEFORE flipping the tab so the create view's onMount sees `?rec=` on first read.
+    await setRouteRecordQueryParam('rec', routeDataKey)
+    console.debug('[generar-copia] URL updated', { href: window.location.href })
+
+    Core.pageOptionSelected = 1
+    console.debug('[generar-copia] switched to "Órdenes" tab')
+  } catch (error) {
+    console.error('[generar-copia] error', { orderID, error })
+    Notify.failure('No se pudo generar la copia de la orden.')
+  }
+}
+
+// Annuls the selected order (Pendiente/Confirmada -> Cancelada). Asks for confirmation first
+// because the operation flips the order to status=0 (CANCELED) and is not reversible from the UI.
+const annulSelectedPurchaseOrder = () => {
+  if (!selectedPurchaseOrder) { return }
+  if (!PurchaseOrderEditableStatuses.includes(selectedPurchaseOrder.ss || 0)) {
+    Notify.failure('Solo se pueden anular órdenes en estado Pendiente o Confirmada.')
+    return
+  }
+  const orderID = selectedPurchaseOrder.ID
+  ConfirmWarn(
+    'Anular Órden de Compra',
+    `¿Desea anular la órden de compra Nº ${orderID}?`,
+    'SI',
+    'NO',
+    async () => {
+      Loading.standard('Anulando orden de compra...')
+      try {
+        await updatePurchaseOrder(orderID, PurchaseOrderAction.ANNUL)
+        const selectedRecord = visibleRecords.find((r) => r.ID === orderID)
+        if (selectedRecord) { selectedRecord.ss = PurchaseOrderStatus.CANCELED }
+        if (selectedPurchaseOrder) { selectedPurchaseOrder.ss = PurchaseOrderStatus.CANCELED }
+        rowRerender?.()
+        Notify.success(`La orden Nº ${orderID} fue anulada.`)
+      } catch (error) {
+        console.error('[purchase-orders-report] annul error', { orderID, error })
+      } finally {
+        Loading.remove()
+      }
+    },
+  )
 }
 
 // Confirms the selected order (Pendiente -> Cumplida); backend rejects the call if the state is not Pending.
@@ -432,23 +575,13 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
         />
       {/if}
     </div>
-    <div class="relative col-start-2 row-start-1 flex items-start self-start w-full max-w-224 ml-auto md:mr-16 md:w-224">
-      <div class="absolute left-12 text-gray-400">
-        <i class="icon-search"></i>
-      </div>
-      <input
-        class="w-full pl-36 bg-white pr-12 py-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        autocomplete="off"
-        type="text"
-        placeholder="Buscar proveedor..."
-        onkeyup={(ev) => {
-          ev.stopPropagation()
-          throttle(() => {
-            filterText = ((ev.target as HTMLInputElement).value || '').toLowerCase().trim()
-          }, 150)
-        }}
-      />
-    </div>
+    <FilterInput
+      css="col-start-2 row-start-1 self-start w-full max-w-224 ml-auto md:mr-16 md:w-224"
+      placeholder="Buscar proveedor..."
+      throttle={150}
+      icon="icon-search"
+      bind:value={filterText}
+    />
   </div>
 
   <VTable
@@ -493,21 +626,15 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
      	},
      	{ id: 2,
     		name: "Pagar", icon: "icon-tag",
-       	handler: () => {
-
-        }
+       	handler: () => { openPayPurchaseOrderModal() }
      	},
      	{ id: 3,
     		name: "Anular", icon: "icon-cancel",
-       	handler: () => {
-
-        }
+       	handler: () => { annulSelectedPurchaseOrder() }
      	},
      	{ id: 4,
     		name: "Generar Copia", icon: "text-xs icon-plus",
-       	handler: () => {
-
-        }
+       	handler: () => { void generarCopiaPurchaseOrder() }
      	},
     ]}
   >
@@ -549,7 +676,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
             css="col-span-6"
             label="Pagado"
             contentCss="ff-mono"
-            text={""}
+            text={formatN(((selectedPurchaseOrder.TotalAmount || 0) - (selectedPurchaseOrder.DebtAmount || 0)) / 100, 2)}
           />
           <LabelText
             css="col-span-6"
@@ -613,5 +740,45 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
       almacenes={almacenesService.Almacenes}
       disableProvider={true}
     />
+  </Modal>
+
+  <!-- Payment modal: registers a Pago Proveedor (movimiento Tipo=6) and decrements DebtAmount.
+       Monto is bound in cents (baseDecimals=2 displays the value divided by 100). -->
+  <Modal id={PAY_PURCHASE_ORDER_MODAL_ID}
+    size={3}
+    bodyCss="px-16 py-12"
+    isEdit={true}
+    saveButtonLabel="Registrar Pago"
+    title={`Pagar Orden #${selectedPurchaseOrder?.ID || ''}`}
+    onSave={() => { void submitPurchaseOrderPayment() }}
+  >
+    <div class="grid grid-cols-2 gap-8">
+      <SearchSelect
+        css="col-span-2"
+        label="Caja"
+        keyId="ID"
+        keyName="Nombre"
+        options={cajasService.Cajas}
+        selected={payForm.CajaID}
+        onChange={(caja) => { payForm.CajaID = caja?.ID || 0 }}
+      />
+      <Input
+        css="col-span-1"
+        inputCss="text-center ff-mono"
+        label="Monto"
+        type="number"
+        baseDecimals={2}
+        bind:saveOn={payForm}
+        save="Monto"
+      />
+      <!-- Gray box mirrors the visual weight of the Input next to it; recalculates as the user types Monto.
+           The remaining amount turns red while it is still > 0 to highlight that the debt is not fully covered. -->
+      <div class="col-span-1 flex items-center justify-between gap-8 px-12 py-8 bg-gray-100 border border-gray-200 rounded-md text-13 text-gray-700">
+        <span>Deuda pendiente</span>
+        <span class={`ff-mono ff-bold ${remainingDebtAfterPayment > 0 ? 'text-red-600' : 'text-gray-700'}`}>
+          {formatN(remainingDebtAfterPayment / 100, 2)}
+        </span>
+      </div>
+    </div>
   </Modal>
 </div>

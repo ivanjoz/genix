@@ -90,6 +90,7 @@ func (e CajaMovimientoTable) GetSchema() db.TableSchema {
 		Partition: e.EmpresaID,
 		Keys:      []db.Coln{e.ID},
 		KeyIntPacking: []db.Coln{
+			//TODO: decrease to e.Autoincrement(2) in the future
 			e.CajaID.DecimalSize(5), e.Fecha.DecimalSize(5), e.Autoincrement(3),
 		},
 		AutoincrementPart: e.Fecha,

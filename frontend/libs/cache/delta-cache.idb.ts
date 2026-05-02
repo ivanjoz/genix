@@ -12,10 +12,19 @@ import type {
   IRequestLogRow,
 } from './delta-cache.types'
 
-const CACHE_DB_VERSION = 4
+const CACHE_DB_VERSION = 5
 
 const deltaCacheDatabasesByName = new Map<string, DeltaCacheDatabase>()
 const routeMemoryByLookupKey = new Map<string, ICacheRouteRow>()
+
+// Generic key-value store used to hand off records across navigations
+// (e.g. "Generar Copia" stashes a purchase order under `oc_<ID>` so the
+// create view can reconstitute it from the URL `?rec=` param).
+export interface IRouteDataRow {
+  key: string
+  value: any
+  ts: number
+}
 
 class DeltaCacheDatabase extends Dexie {
   cacheRoutes!: EntityTable<ICacheRouteRow, 'id'>
@@ -23,6 +32,7 @@ class DeltaCacheDatabase extends Dexie {
   cacheRecordsSingle!: Dexie.Table<ICacheRecordRowSingle, [number, CacheRecordID]>
   requestLogs!: EntityTable<IRequestLogRow, 'id'>
   groupRows!: Dexie.Table<IGroupCacheRow<any>, [string, string]>
+  routeData!: EntityTable<IRouteDataRow, 'key'>
 
   constructor(databaseName: string) {
     super(databaseName)
@@ -30,12 +40,14 @@ class DeltaCacheDatabase extends Dexie {
     // The route table owns cache metadata, while records are persisted row-by-row by route ID.
     // Multi-key routes live in `cacheRecords` keyed `[_r+_k+ID]`; array routes use
     // `cacheRecordsSingle` keyed `[_r+ID]` since their responseKey is always `_default`.
+    // `routeData` is a simple key-value store for cross-navigation handoffs.
     this.version(CACHE_DB_VERSION).stores({
       cacheRoutes: '++id,&routeLookupKey,module',
       cacheRecords: '[_r+_k+ID],[_r+ss]',
       cacheRecordsSingle: '[_r+ID],[_r+ss]',
       requestLogs: '&id,route',
       groupRows: '[queryShape+key],[queryShape+id+upc],queryShape',
+      routeData: '&key',
     })
   }
 }
@@ -224,6 +236,21 @@ export const replaceRouteRecordRows = async (
   rememberRouteRow(routeRow)
 }
 
+// Persist arbitrary record under `key` (used by cross-route handoffs like "Generar Copia").
+// The entry is kept until explicitly overwritten — callers manage their own keying scheme.
+export const putRouteData = async (dbName: string, key: string, value: any): Promise<void> => {
+  await getDeltaCacheDatabase(dbName).routeData.put({ key, value, ts: Date.now() })
+}
+
+export const getRouteData = async <T = any>(dbName: string, key: string): Promise<T | undefined> => {
+  const row = await getDeltaCacheDatabase(dbName).routeData.get(key)
+  return row?.value as T | undefined
+}
+
+export const deleteRouteData = async (dbName: string, key: string): Promise<void> => {
+  await getDeltaCacheDatabase(dbName).routeData.delete(key)
+}
+
 export const addRequestLogRow = async (dbName: string, requestLogRow: Omit<IRequestLogRow, 'id'>): Promise<IRequestLogRow> => {
   const database = getDeltaCacheDatabase(dbName)
   let nextRequestLogRow = {} as IRequestLogRow
@@ -388,7 +415,7 @@ export const clearEnvironmentCache = async (dbName: string): Promise<number> => 
 
   await database.transaction(
     'rw',
-    [database.cacheRoutes, database.cacheRecords, database.cacheRecordsSingle, database.requestLogs, database.groupRows],
+    [database.cacheRoutes, database.cacheRecords, database.cacheRecordsSingle, database.requestLogs, database.groupRows, database.routeData],
     async () => {
       // Clearing both record stores also removes orphan record rows that no longer have route metadata.
       await database.cacheRecords.clear()
@@ -396,6 +423,7 @@ export const clearEnvironmentCache = async (dbName: string): Promise<number> => 
       await database.cacheRoutes.clear()
       await database.requestLogs.clear()
       await database.groupRows.clear()
+      await database.routeData.clear()
     }
   )
 

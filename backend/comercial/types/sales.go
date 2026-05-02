@@ -26,16 +26,16 @@ type SaleOrder struct {
 	DetailProductLotIDs        []int32  `json:",omitempty" db:",list"`
 	DetailProductPresentations []int16  `json:",omitempty" db:",list"`
 
-	TotalAmount    int32 `json:",omitempty"`
-	TaxAmount      int32 `json:",omitempty"`
-	DebtAmount     int32 `json:",omitempty"`
-	ClientID       int32 `json:",omitempty"`
-	Created        int32 `json:",omitempty"`
-	Updated        int32 `json:"upd,omitempty"`
-	UpdateCounter  int32 `json:"upc,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
+	TotalAmount   int32 `json:",omitempty"`
+	TaxAmount     int32 `json:",omitempty"`
+	DebtAmount    int32 `json:",omitempty"`
+	ClientID      int32 `json:",omitempty"`
+	Created       int32 `json:",omitempty"`
+	Updated       int32 `json:"upd,omitempty"`
+	UpdateCounter int32 `json:"upc,omitempty"`
+	UpdatedBy     int32 `json:",omitempty"`
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
-	Status      int8 `json:"ss,omitempty"`
+	Status            int8  `json:"ss,omitempty"`
 	LastPaymentCajaID int32 `json:",omitempty" db:"caja_id_"`
 	// If contains 2 = the payment is done
 	// If contains 3 = the delivery of the product is done
@@ -46,6 +46,7 @@ type SaleOrder struct {
 	DeliveryTime    int32                `json:",omitempty"`
 	DeliveryUser    int32                `json:",omitempty"`
 	ClientInfo      *SaleOrderClientInfo `json:",omitempty"`
+	PaymentDueDate  int16                `json:",omitempty" db:"payment_due_date"`
 }
 
 func (e *SaleOrder) AddStatus(orderState int8) error {
@@ -86,13 +87,14 @@ type SaleOrderTable struct {
 	Created                    db.Col[SaleOrderTable, int32]
 	ClientID                   db.Col[SaleOrderTable, int32]
 	Updated                    db.Col[SaleOrderTable, int32]
-	UpdateCounter	             db.Col[SaleOrderTable, int32]
+	UpdateCounter              db.Col[SaleOrderTable, int32]
 	UpdatedBy                  db.Col[SaleOrderTable, int32]
 	Status                     db.Col[SaleOrderTable, int8]
 	LastPaymentTime            db.Col[SaleOrderTable, int32]
 	LastPaymentUser            db.Col[SaleOrderTable, int32]
 	DeliveryTime               db.Col[SaleOrderTable, int32]
 	DeliveryUser               db.Col[SaleOrderTable, int32]
+	PaymentDueDate             db.Col[SaleOrderTable, int16]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
@@ -206,9 +208,9 @@ func (e ProductSaleSummaryTable) GetSchema() db.TableSchema {
 }
 
 const (
-	OrderStatusPending = int8(1)
-	OrderStatusPaid = int8(2)
+	OrderStatusPending   = int8(1)
+	OrderStatusPaid      = int8(2)
 	OrderStatusDelivered = int8(3)
 	OrderStatusCompleted = int8(4)
-	OrderStatusAnnulled = int8(0)
+	OrderStatusAnnulled  = int8(0)
 )

@@ -21,21 +21,16 @@ export interface ICajaResult {
   CajasMap: Map<number, ICaja>
 }
 
-export interface IUsuario {
-  id: number
-  usuario: string
-}
-
 export interface ICajaMovimiento {
   CajaID: number
   CajaRefID: number
   VentaID: number
+  DocumentoID: number
   Tipo: number
   Monto: number
   SaldoFinal: number
   Created: number
   CreatedBy: number
-  Usuario?: IUsuario
 }
 
 export interface ICajaCuadre {
@@ -47,7 +42,6 @@ export interface ICajaCuadre {
   SaldoReal: number
   Created: number
   CreatedBy: number
-  Usuario?: IUsuario
   _error?: string
 }
 
@@ -90,13 +84,6 @@ export interface IGetCajaMovimientos {
 
 export interface ICajaMovimientosResult {
   movimientos: ICajaMovimiento[]
-  usuarios: IUsuario[]
-}
-
-const arrayToMapN = <T extends { [key: string]: any }>(
-  arr: T[], key: string
-): Map<number, T> => {
-  return new Map(arr.map(x => [x[key] as number, x]))
 }
 
 export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICajaMovimiento[]> => {
@@ -124,12 +111,7 @@ export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICa
     throw error
   }
 
-  const usuariosMap = arrayToMapN(result.usuarios, 'id')
-  for (let e of result.movimientos) {
-    e.Usuario = usuariosMap.get(e.CreatedBy)
-  }
-
-  return result.movimientos
+  return result.movimientos || []
 }
 
 export const postCajaMovimiento = (data: ICajaMovimiento) => {
@@ -150,7 +132,6 @@ export const postCajaCuadre = (data: ICajaCuadre) => {
 
 export interface ICajaCuadresResult {
   cuadres: ICajaCuadre[]
-  usuarios: IUsuario[]
 }
 
 export const getCajaCuadres = async (args: IGetCajaMovimientos): Promise<ICajaCuadre[]> => {
@@ -178,14 +159,7 @@ export const getCajaCuadres = async (args: IGetCajaMovimientos): Promise<ICajaCu
     throw error
   }
 
-  console.log("Result Cajas::", result)
-
-  const usuariosMap = arrayToMapN(result.usuarios, 'id')
-  for (const e of result.cuadres || []) {
-    e.Usuario = usuariosMap.get(e.CreatedBy)
-  }
-
-  return result.cuadres
+  return result.cuadres || []
 }
 
 // Constantes compartidas
@@ -200,7 +174,7 @@ export const cajaMovimientoTipos = [
   { id: 3, name: "Transferencia", group: 2, isNegative: true },
   { id: 4, name: "Retiro", group: 2, isNegative: true },
   { id: 5, name: "Pérdida", group: 2, isNegative: true },
-  { id: 6, name: "Pago", group: 2, isNegative: true },
+  { id: 6, name: "Pago Proveedor", group: 2, isNegative: true },
 	{ id: 7, name: "Cobro", group: 2 },
   { id: 8, name: "Cobro (Venta)", group: 2 }
 ]

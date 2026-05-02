@@ -32,7 +32,7 @@
   }: VirtualCardsProps<TItem> = $props()
 
   // DEBUG: toggle with window.__VC_DEBUG__ = true in the browser console (or leave on for now).
-  const DEBUG = true
+  const DEBUG = false
   const instanceTag = Math.random().toString(36).slice(2, 6)
   const dlog = (tag: string, payload?: unknown) => {
     if (!DEBUG) { return }

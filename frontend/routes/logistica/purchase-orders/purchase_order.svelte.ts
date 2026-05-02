@@ -11,9 +11,12 @@ export const PurchaseOrderStatus = {
 
 // Mirrors backend action codes accepted by PUT /purchase-orders.
 // CONFIRM: Pendiente (1) -> Confirmada (2). EDIT: updates editable fields while status ∈ {1,2}.
+// PAY: registra un pago, descuenta DebtAmount y crea movimiento de caja Tipo=6 (solo en Confirmada).
 export const PurchaseOrderAction = {
   CONFIRM: 1,
   EDIT: 2,
+  PAY: 3,
+  ANNUL: 4,
 } as const
 
 // Statuses where the editable fields (warehouse, dates, invoice, notes) can still be changed.
@@ -56,6 +59,7 @@ export interface IPurchaseOrder {
   ProviderID: number
   WarehouseID: number
   TotalAmount: number
+  DebtAmount: number
   Notes: string
   DetailProductIDs?: number[]
   DetailQuantities?: number[]

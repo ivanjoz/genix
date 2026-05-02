@@ -1,7 +1,7 @@
 import { Params } from '$core/security'
 import { decodeFromBase62 } from '$libs/helpers'
 import { GetHandler, POST } from '$libs/http.svelte'
-import type { IProductoStock } from './stock-movement'
+import type { IProductoStock } from '../products-stock/stock-movement'
 
 export interface IProductSupplyProviderRow {
   ProviderID: number

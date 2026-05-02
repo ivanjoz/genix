@@ -356,13 +356,7 @@
   </div>
 {:else}
   <div class={`${s1.input} no-label relative date-input-container` + (css ? " " + css : "")}>
-    <div class={s1.input_shadow_layer}>
-      <div></div>
-    </div>
     <div class={`${s1.input_div} flex w-full`}>
-      <div class={s1.input_div_1}>
-        <div></div>
-      </div>
       {#if !isMobile}
         <input
           bind:this={inputElement}

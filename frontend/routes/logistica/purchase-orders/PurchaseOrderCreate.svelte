@@ -6,28 +6,29 @@ import VTable from '$components/vTable/VTable.svelte'
 import type { ITableColumn } from '$components/vTable/types'
 import { formatN, formatTime, Notify } from '$libs/helpers'
 import { POST } from '$libs/http.svelte'
-import { ProductSupplyService } from '$routes/logistica/products-stock/supply-management.svelte'
 import { ProductStockSimpleService } from '$routes/logistica/products-stock/stock-movement'
 import { ClientProviderService, ClientProviderType } from '$routes/negocio/clientes/clientes-proveedores.svelte'
-import type { IProducto } from '$routes/negocio/productos/productos.svelte'
+import type { IProducto, IProductoPresentacion } from '$routes/negocio/productos/productos.svelte'
 import { ProductosService } from '$routes/negocio/productos/productos.svelte'
 import { AlmacenesService } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
-import { untrack } from 'svelte'
+import { clearRouteRecordQueryParam, loadRouteRecordFromQueryParam } from '$libs/cache/route-data'
+import { onMount, untrack } from 'svelte'
 import ProductCardSearch, { type IProductCard } from './ProductCardSearch.svelte'
 import PurchaseOrderForm from './PurchaseOrderForm.svelte'
+    import { ProductSupplyService } from '../gestion-compras/supply-management.svelte';
+import type { IPurchaseOrder } from './purchase_order.svelte';
 
 // Line item shown in the cart; keyed by productID+presentationID composite.
+// Composes the product + (optional) presentation refs instead of cloning their fields,
+// so renaming a product/presentation in the catalog reflects in the open cart for free.
 interface PurchaseOrderItem {
   key: string
   productID: number
   presentationID: number
-  presentationName: string
-  productName: string
-  displayName: string
-  sku: string
-  cantidad: number
-  precio: number
-  producto: IProducto
+  quantity: number
+  price: number
+  product: IProducto
+  presentation?: IProductoPresentacion
 }
 
 // Payload shape sent to POST /purchase-orders.
@@ -70,26 +71,23 @@ class PurchaseOrderState {
   errorMessage = $state('')
 
   // Exposed to ProductCardSearch so cards can show current cart quantity.
-  itemsCantMap = $derived.by(() => new Map(this.items.map((item) => [item.key, item.cantidad])))
+  itemsQuantityMap = $derived.by(() => new Map(this.items.map((item) => [item.key, item.quantity])))
 
-  addItem(card: IProductCard, cant: number = 1) {
-    if (cant <= 0) { return }
+  addItem(card: IProductCard, quantity: number = 1) {
+    if (quantity <= 0) { return }
     const existing = this.items.find((item) => item.key === card.key)
     if (existing) {
-      existing.cantidad += cant
+      existing.quantity += quantity
       this.items = [...this.items]
     } else {
       this.items.push({
         key: card.key,
         productID: card.productID,
         presentationID: card.presentationID,
-        presentationName: card.presentationName,
-        productName: card.productName,
-        displayName: card.displayName,
-        sku: card.sku,
-        cantidad: cant,
-        precio: card.price || 0,
-        producto: card.producto,
+        quantity,
+        price: card.price || 0,
+        product: card.producto,
+        presentation: card.presentation,
       })
     }
     this.recalcTotals()
@@ -101,23 +99,23 @@ class PurchaseOrderState {
     this.recalcTotals()
   }
 
-  updateQuantity(key: string, cantidad: number) {
+  updateQuantity(key: string, quantity: number) {
     const item = this.items.find((i) => i.key === key)
     if (!item) { return }
     // Treat zero/negative as removal so the row disappears from the cart.
-    if (cantidad <= 0) {
+    if (quantity <= 0) {
       this.removeItem(key)
       return
     }
-    item.cantidad = cantidad
+    item.quantity = quantity
     this.items = [...this.items]
     this.recalcTotals()
   }
 
-  updatePrice(key: string, precio: number) {
+  updatePrice(key: string, price: number) {
     const item = this.items.find((i) => i.key === key)
     if (!item) { return }
-    item.precio = Math.max(0, precio)
+    item.price = Math.max(0, price)
     this.items = [...this.items]
     this.recalcTotals()
   }
@@ -126,7 +124,7 @@ class PurchaseOrderState {
   recalcTotals() {
     let total = 0
     for (const item of this.items) {
-      total += (item.precio || 0) * (item.cantidad || 0)
+      total += (item.price || 0) * (item.quantity || 0)
     }
     this.form.TotalAmount = total
     const subtotal = Math.floor(total / 1.18)
@@ -152,16 +150,19 @@ class PurchaseOrderState {
       Notify.failure('Seleccione un proveedor.')
       return false
     }
-    const unpricedItem = this.items.find((item) => !item.precio)
+    const unpricedItem = this.items.find((item) => !item.price)
     if (unpricedItem) {
-      Notify.failure(`El producto "${unpricedItem.displayName}" no tiene precio.`)
+      const unpricedName = unpricedItem.presentation
+        ? `${unpricedItem.product.Nombre} (${unpricedItem.presentation.nm})`
+        : unpricedItem.product.Nombre
+      Notify.failure(`El producto "${unpricedName}" no tiene precio.`)
       return false
     }
 
     // Flatten cart items into parallel arrays matching the backend schema.
     this.form.DetailProductIDs = this.items.map((item) => item.productID)
-    this.form.DetailPrices = this.items.map((item) => item.precio)
-    this.form.DetailQuantities = this.items.map((item) => item.cantidad)
+    this.form.DetailPrices = this.items.map((item) => item.price)
+    this.form.DetailQuantities = this.items.map((item) => item.quantity)
     this.form.DetailPresentationIDs = this.items.map((item) => item.presentationID)
 
     const result = await POST({
@@ -207,33 +208,37 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
     header: 'Producto',
     width: 'minmax(160px, 1.5fr)',
     css: 'py-4 leading-[1.15]',
-    getValue: (item) => item.displayName,
+    getValue: (item) => item.presentation
+      ? `${item.product.Nombre} (${item.presentation.nm})`
+      : item.product.Nombre,
     render: (item) => {
-      const sku = item.sku ? `<span class="text-[11px] font-mono text-gray-400 ml-4">${item.sku}</span>` : ''
-      if (!item.presentationName) { return `${item.productName}${sku}` }
-      return `${item.productName} <span class="text-blue-600 font-bold">(${item.presentationName})</span>${sku}`
+      // Resolve sku/name from the presentation ref when available, otherwise fall back to the product.
+      const sku = ((item.presentation?.sk || item.product.SKU) || '').trim()
+      const skuHtml = sku ? `<span class="text-[11px] font-mono text-gray-400 ml-4">${sku}</span>` : ''
+      if (!item.presentation) { return `${item.product.Nombre}${skuHtml}` }
+      return `${item.product.Nombre} <span class="text-blue-600 font-bold">(${item.presentation.nm})</span>${skuHtml}`
     },
   },
   {
-    id: 'cantidad',
+    id: 'quantity',
     header: 'Cant.',
     width: '80px',
     align: 'right',
     cellInputType: 'number',
-    getValue: (item) => item.cantidad,
+    getValue: (item) => item.quantity,
     onCellEdit: (item, value) => {
       const next = parseInt(String(value || '0'))
       orderState.updateQuantity(item.key, isNaN(next) ? 0 : next)
     },
   },
   {
-    id: 'precio',
+    id: 'price',
     header: 'Precio',
     width: '100px',
     align: 'right',
     cellInputType: 'number',
-    getValue: (item) => (item.precio || 0) / 100,
-    render: (item) => formatN((item.precio || 0) / 100, 2),
+    getValue: (item) => (item.price || 0) / 100,
+    render: (item) => formatN((item.price || 0) / 100, 2),
     onCellEdit: (item, value) => {
       const parsed = parseFloat(String(value || '0'))
       orderState.updatePrice(item.key, Math.round((isNaN(parsed) ? 0 : parsed) * 100))
@@ -245,7 +250,7 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
     width: '100px',
     align: 'right',
     css: 'font-mono',
-    getValue: (item) => formatN(((item.precio || 0) * (item.cantidad || 0)) / 100, 2),
+    getValue: (item) => formatN(((item.price || 0) * (item.quantity || 0)) / 100, 2),
   },
   {
     id: 'actions',
@@ -263,6 +268,111 @@ async function handleSave() {
     orderState.reset()
   }
 }
+
+// Reconstructs cart items from a source IPurchaseOrder by joining its parallel detail
+// arrays against the products cache; products missing from cache are pulled via syncIDs.
+async function applyPurchaseOrderCopy(source: IPurchaseOrder) {
+  const detailProductIDs = (source.DetailProductIDs || []).map((id) => Number(id || 0))
+  const detailQuantities = source.DetailQuantities || []
+  const detailPrices = source.DetailPrices || []
+  const detailPresentationIDs = source.DetailPresentationIDs || []
+  /* 
+  console.debug('[purchase-orders-create] applyCopy:start', {
+    sourceID: source.ID,
+    detailCount: detailProductIDs.length,
+    productsCacheSize: productosService.records.length,
+  })
+  */
+
+  // Make sure every product in the copy is resolved before mapping cart rows.
+  const uniqueProductIDs = [...new Set(detailProductIDs.filter((id) => id > 0))]
+  if (uniqueProductIDs.length > 0) {
+    // console.debug('[purchase-orders-create] applyCopy:syncIDs', { uniqueProductIDs })
+    await productosService.syncIDs(uniqueProductIDs)
+    /* 
+    console.debug('[purchase-orders-create] applyCopy:syncIDs done', {
+      productsCacheSize: productosService.records.length,
+      mapHas: uniqueProductIDs.map((id) => [id, productosService.recordsMap.has(id)]),
+    })
+    */
+  }
+
+  // Header fields are copied verbatim except ID (the copy is a brand-new order).
+  orderState.form.ProviderID = source.ProviderID || 0
+  if (source.WarehouseID) { orderState.form.WarehouseID = source.WarehouseID }
+
+  const reconstructedItems: PurchaseOrderItem[] = []
+  const skippedProductIDs: number[] = []
+  const skippedPresentations: Array<{ productID: number, presentationID: number }> = []
+  
+  for (let detailIndex = 0; detailIndex < detailProductIDs.length; detailIndex++) {
+    const productID = detailProductIDs[detailIndex]
+    const presentationID = Number(detailPresentationIDs[detailIndex] || 0)
+    const product = productosService.recordsMap.get(productID)
+    if (!product) {
+      skippedProductIDs.push(productID)
+      continue // Skip products that disappeared after the original order was placed.
+    }
+
+    // When the original line targeted a specific presentation, require it to still exist;
+    // an inactive/deleted presentation would render the row with empty name + wrong key.
+    const presentation = (product.Presentaciones || []).find((p) => p.id === presentationID)
+    if (presentationID > 0 && !presentation) {
+      skippedPresentations.push({ productID, presentationID })
+      continue
+    }
+
+    reconstructedItems.push({
+      // Match the same `productID_presentationID` key format used by ProductCardSearch.
+      key: `${productID}_${presentationID}`,
+      productID,
+      presentationID,
+      quantity: Number(detailQuantities[detailIndex] || 0),
+      price: Number(detailPrices[detailIndex] || 0),
+      product,
+      presentation,
+    })
+  }
+
+  orderState.items = reconstructedItems
+  orderState.recalcTotals()
+  /* 
+  console.debug('[purchase-orders-create] applyCopy:done', {
+    itemsBuilt: reconstructedItems.length,
+    skippedCount: skippedProductIDs.length,
+    skippedProductIDs,
+    skippedPresentationsCount: skippedPresentations.length,
+    skippedPresentations,
+    total: orderState.form.TotalAmount,
+  })
+  */
+}
+
+// On mount, look for `?rec=` in the URL — if it points to a stashed purchase order,
+// hydrate the form/cart as a copy and clean up the URL so refreshes don't re-trigger.
+onMount(async () => {
+  console.debug('[purchase-orders-create] onMount', { href: window.location.href })
+  try {
+    const { record, err } = await loadRouteRecordFromQueryParam<IPurchaseOrder>('rec')
+    console.debug('[purchase-orders-create] loadRouteRecord result', {
+      hasRecord: !!record,
+      err,
+      recordID: record?.ID,
+    })
+    if (err) {
+      Notify.failure('No se encontró la orden de compra a copiar.')
+      return
+    }
+    if (!record) { return }
+    await applyPurchaseOrderCopy(record)
+    // Default the visible tab to the products view since the cart is now non-empty.
+    detailView = 2
+    await clearRouteRecordQueryParam('rec')
+    console.debug('[purchase-orders-create] copy applied & url cleared')
+  } catch (loadCopyError) {
+    console.error('[purchase-orders-create] load copy error', loadCopyError)
+  }
+})
 
 // Two-view detail layer; "info" holds the form fields, "products" the cart table.
 type DetailView = 1 | 2
@@ -293,9 +403,9 @@ const formatDateOrDash = (value: string | number) => {
       productSupplyService={productSupplyService}
       stockMap={stockByProductID}
       displayProviderFilter
-      selectedKeys={orderState.itemsCantMap}
-      onSelect={(card, cant) => {
-      	orderState.addItem(card, cant || 1)
+      selectedKeys={orderState.itemsQuantityMap}
+      onSelect={(card, quantity) => {
+      	orderState.addItem(card, quantity || 1)
        	if(detailView !== 2){ detailView = 2 }
       }}
       onRemove={(card) => orderState.removeItem(card.key)}
