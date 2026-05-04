@@ -1,0 +1,445 @@
+<script lang="ts">
+import DateInput from '$components/DateInput.svelte'
+import Input from '$components/Input.svelte'
+import Layer from '$components/Layer.svelte'
+import LayerStatic from '$components/LayerStatic.svelte'
+import SearchSelect from '$components/SearchSelect.svelte'
+import FilterInput from '$components/micro/FilterInput.svelte'
+import TableGrid from '$components/vTable/TableGrid.svelte'
+import type { ITableColumn } from '$components/vTable/types'
+import { Core } from '$core/store.svelte'
+import { formatTime, Notify } from '$libs/helpers'
+import { ProductosService } from '../../negocio/productos/productos.svelte'
+import { AlmacenesService } from '../../negocio/sedes-almacenes/sedes-almacenes.svelte'
+import {
+  PurchaseOrdersService,
+  PurchaseOrderStatus,
+  type IPurchaseOrder,
+} from '../purchase-orders/purchase_order.svelte'
+
+// Flat row mixing two shapes; the TableGrid uses `useRowRenderer` to switch render mode per row.
+type EntryRow = {
+  kind: 'entry'
+  productID: number
+  lotCode: string          // '' = SIN LOTE bucket
+  expirationDate: number   // UnixDay (project convention); 0 = unset
+  quantity: number
+  serialNumbers: { serial: string, quantity: number }[]
+}
+
+type LotHeaderRow = {
+  kind: 'lot-header'
+  lotCode: string          // '' renders as "SIN LOTE"
+}
+
+type Row = LotHeaderRow | EntryRow
+
+// Confirmed purchase orders are the only ones that can be received; pending/fulfilled/canceled are excluded.
+const purchaseOrders = new PurchaseOrdersService(PurchaseOrderStatus.CONFIRMED, true)
+const productos = new ProductosService(true)
+const almacenes = new AlmacenesService()
+
+let selectedOrderID = $state(0)
+// Wrapped in an object so the project's `Input` component can bind via `saveOn`/`save`.
+let lotState = $state({ lotCode: '' })
+let warehouseID = $state(0)
+let cardFilterText = $state('')      // FilterInput already lower-cases + trims
+let entries = $state<EntryRow[]>([])
+// Bumped whenever an entry's quantity changes via the TableGrid editable cell so derived totals refresh.
+let entriesVersion = $state(0)
+
+// Modal state — Layer id=4 hosts the serial-number editor.
+let editingSerialEntry = $state<EntryRow | null>(null)
+let serialDraft = $state<{ serial: string, quantity: number }[]>([])
+
+const selectedOrder = $derived<IPurchaseOrder | undefined>(
+  purchaseOrders.records.find(o => o.ID === selectedOrderID),
+)
+
+// Map a purchase-order line to a card; one card per (productID, presentationID) pair from the order detail.
+const orderProductCards = $derived.by(() => {
+  if (!selectedOrder) return [] as { productID: number, ordered: number, name: string, sku: string, haystack: string }[]
+  const productIDs = selectedOrder.DetailProductIDs || []
+  const quantities = selectedOrder.DetailQuantities || []
+  const cards = productIDs.map((pid, idx) => {
+    const product = productos.recordsMap.get(pid)
+    const name = product?.Nombre || `Producto-${pid}`
+    const sku = product?.SKU || ''
+    // Pre-build a lower-cased haystack so substring filtering is allocation-free per keystroke.
+    const presentationSkus = (product?.Presentaciones || [])
+      .map(p => p.sk || '')
+      .filter(Boolean)
+      .join(' ')
+    const haystack = `${name} ${sku} ${presentationSkus}`.toLowerCase()
+    return { productID: pid, ordered: quantities[idx] || 0, name, sku, haystack }
+  })
+  return cards
+})
+
+// Sum already-added units per product across all lots — used by the card progress badge.
+const addedQuantityByProductID = $derived.by(() => {
+  entriesVersion // re-run on edits
+  const totals = new Map<number, number>()
+  for (const entry of entries) {
+    totals.set(entry.productID, (totals.get(entry.productID) || 0) + (entry.quantity || 0))
+  }
+  return totals
+})
+
+// Drop cards whose ordered quantity has been fully received — list shows only pending products.
+// `ordered <= 0` cards stay (no target to satisfy, e.g. ad-hoc lines).
+const filteredOrderProductCards = $derived.by(() => {
+  const totals = addedQuantityByProductID
+  return orderProductCards.filter(card => {
+    if (card.ordered > 0 && (totals.get(card.productID) || 0) >= card.ordered) return false
+    if (cardFilterText && !card.haystack.includes(cardFilterText)) return false
+    return true
+  })
+})
+
+// Group entries by lotCode preserving first-seen order; emit a LotHeaderRow before each group.
+const tableRows = $derived.by((): Row[] => {
+  entriesVersion
+  const groups = new Map<string, EntryRow[]>()
+  for (const entry of entries) {
+    const bucket = groups.get(entry.lotCode)
+    if (bucket) { bucket.push(entry) } else { groups.set(entry.lotCode, [entry]) }
+  }
+  const rows: Row[] = []
+  for (const [lotCode, groupEntries] of groups) {
+    rows.push({ kind: 'lot-header', lotCode })
+    for (const entry of groupEntries) { rows.push(entry) }
+  }
+  return rows
+})
+
+const handleProductCardClick = (productID: number) => {
+  // Match = same product + same current lot input value. Match → +1; no match → push new row with quantity=1.
+  const currentLot = lotState.lotCode
+  const matching = entries.find(e => e.productID === productID && e.lotCode === currentLot)
+  if (matching) {
+    matching.quantity += 1
+  } else {
+    entries.push({
+      kind: 'entry',
+      productID,
+      lotCode: currentLot,
+      expirationDate: 0,
+      quantity: 1,
+      serialNumbers: [],
+    })
+  }
+  entriesVersion++
+}
+
+const removeEntry = (entry: EntryRow) => {
+  const idx = entries.indexOf(entry)
+  if (idx >= 0) {
+    entries.splice(idx, 1)
+    entriesVersion++
+  }
+}
+
+const openSerialModal = (entry: EntryRow) => {
+  editingSerialEntry = entry
+  // Clone so cancelling (just closing) leaves the row's serialNumbers untouched until apply.
+  serialDraft = entry.serialNumbers.map(s => ({ ...s }))
+  // Always keep one trailing blank row so the user can append without an explicit "+" click.
+  if (serialDraft.length === 0 || serialDraft[serialDraft.length - 1].serial) {
+    serialDraft.push({ serial: '', quantity: 0 })
+  }
+  Core.openSideLayer(4)
+}
+
+const applySerialDraft = () => {
+  if (!editingSerialEntry) return
+  // Cleanup: drop empties + dedupe by serial (keep first occurrence — matches the user's typing order).
+  const seen = new Set<string>()
+  const cleaned: { serial: string, quantity: number }[] = []
+  for (const s of serialDraft) {
+    const serial = s.serial.trim()
+    if (!serial || seen.has(serial)) continue
+    seen.add(serial)
+    cleaned.push({ serial, quantity: s.quantity || 0 })
+  }
+  editingSerialEntry.serialNumbers = cleaned
+  // If serial total exceeds the entry quantity, raise quantity to match — sum of serials is authoritative.
+  const serialTotal = cleaned.reduce((acc, s) => acc + (s.quantity || 0), 0)
+  if (serialTotal > editingSerialEntry.quantity) {
+    editingSerialEntry.quantity = serialTotal
+  }
+  editingSerialEntry = null
+  serialDraft = []
+  entriesVersion++
+}
+
+// Reset entry state and default the warehouse selector when the user picks a new OC.
+const onChangePurchaseOrder = () => {
+  entries = []
+  entriesVersion++
+  warehouseID = selectedOrder?.WarehouseID || 0
+  cardFilterText = ''
+}
+
+const formatOrderLabel = (order: IPurchaseOrder): string => {
+  // formatTime layout uses single-letter tokens: Y=year, m=month, d=day.
+  const dateLabel = order.Date ? (formatTime(order.Date, 'Y-m-d') as string) || '' : ''
+  return `OC #${order.ID}${dateLabel ? ` — ${dateLabel}` : ''}`
+}
+
+// Columns operate on Row but lot-header rows skip column rendering via useRowRenderer.
+const entryColumns: ITableColumn<Row>[] = [
+  {
+    id: 'producto',
+    header: 'Producto',
+    width: 'minmax(0, 1fr)',
+    useLineClamp: true,
+    getValue: (row) => {
+      if (row.kind !== 'entry') return ''
+      return productos.recordsMap.get(row.productID)?.Nombre || `Producto-${row.productID}`
+    },
+  },
+  {
+    id: 'vencimiento',
+    header: 'Vencimiento',
+    width: '130px',
+    css: "px-0",
+    useCellRenderer: true,
+    showHoverEffect: true,
+  },
+  {
+    id: 'cantidad',
+    header: 'Cant.',
+    width: '90px',
+    align: 'right',
+    cellInputType: 'number',
+    inputCss: 'text-right pr-6',    
+    getValue: (row) => row.kind === 'entry' ? row.quantity : '',
+    onCellEdit: (row, value) => {
+      if (row.kind !== 'entry') return
+      row.quantity = parseInt(String(value || '0')) || 0
+      entriesVersion++
+    },
+  },
+  {
+    id: 'serial',
+    header: 'S/N',
+    width: '110px',
+    align: 'right',
+    useCellRenderer: true,
+  },
+  {
+    header: '...',
+    width: '34px',
+    css: "px-2",
+    // Lot-header rows are not column-rendered (useRowRenderer short-circuits),
+    // so the handler only ever sees EntryRow despite the union type on Row.
+    buttonDeleteHandler: (row) => {
+      if (row.kind !== 'entry') return
+      removeEntry(row)
+    },
+  },
+]
+
+// Column set for the Serial Number modal table.
+const serialColumns: ITableColumn<{ serial: string, quantity: number }>[] = [
+  {
+    id: 'serial',
+    header: 'Serial',
+    width: 'minmax(0, 1fr)',
+    css: 'ff-mono',
+    getValue: (row) => row.serial,
+    onCellEdit: (row, value) => {
+      const next = String(value || '').trim()
+      const wasEmpty = !row.serial
+      // Reject duplicates: another row in the draft already owns this serial. Clear and warn.
+      if (next && serialDraft.some(s => s !== row && s.serial.trim() === next)) {
+        Notify.failure(`El serial "${next}" ya fue ingresado.`)
+        row.serial = ''
+        serialDraft = [...serialDraft]
+        return
+      }
+      row.serial = next
+      // Auto-default qty=1 the first time the user names a serial so they don't have to dual-edit.
+      if (wasEmpty && next && (!row.quantity || row.quantity <= 0)) {
+        row.quantity = 1
+      }
+      // Auto-append a fresh empty row so the user can keep typing without manually adding rows.
+      if (next && serialDraft[serialDraft.length - 1].serial) {
+        serialDraft = [...serialDraft, { serial: '', quantity: 0 }]
+      } else {
+        serialDraft = [...serialDraft]
+      }
+    },
+  },
+  {
+    id: 'quantity',
+    header: 'Cant.',
+    width: '110px',
+    align: 'right',
+    cellInputType: 'number',
+    inputCss: 'text-right pr-6',
+    getValue: (row) => row.quantity || '',
+    onCellEdit: (row, value) => {
+      row.quantity = parseInt(String(value || '0')) || 0
+      serialDraft = [...serialDraft]
+    },
+  },
+]
+
+const purchaseOrderOptions = $derived(
+  purchaseOrders.records.map(o => ({ ID: o.ID, Nombre: formatOrderLabel(o) })),
+)
+
+const totalSerialCountForEntry = (entry: EntryRow): number => {
+  return entry.serialNumbers.reduce((acc, s) => acc + (s.quantity || 0), 0)
+}
+</script>
+
+<div class="flex h-full gap-20">
+  <!-- Left column: OC picker + lot input + filter, then product cards. -->
+  <div class="flex-1 flex flex-col min-w-0 relative">
+    <div class="flex items-center gap-8 mb-12">
+      <div class="w-260">
+        <SearchSelect options={purchaseOrderOptions} keyId="ID" keyName="Nombre"
+          selected={selectedOrderID}
+          placeholder="ÓRDEN DE COMPRA ::"
+          onChange={(option) => {
+            selectedOrderID = Number(option?.ID || 0)
+            onChangePurchaseOrder()
+          }}
+        />
+      </div>
+      <div class="w-160">
+        <Input bind:saveOn={lotState} save="lotCode" placeholder="Lote (opcional)" />
+      </div>
+      <div class="ml-auto w-220">
+        <FilterInput placeholder="Filtrar Nombre o SKU…" bind:value={cardFilterText} />
+      </div>
+    </div>
+
+    {#if !selectedOrderID}
+      <!-- Empty state: nothing selected yet. -->
+      <div class="bg-red-50 text-red-600 text-center font-medium py-16 px-12 rounded-md border border-red-100">
+        Seleccione una Órden de Compra
+      </div>
+    {:else}
+      <!-- Product cards from the selected purchase order, filtered by name/SKU. -->
+      <div class="flex flex-col gap-6 overflow-y-auto pr-4" style="max-height: calc(100vh - var(--header-height) - 160px);">
+        {#each filteredOrderProductCards as card (card.productID)}
+          {@const added = addedQuantityByProductID.get(card.productID) || 0}
+          <button type="button" class="text-left bg-gray-50 hover:bg-blue-50 border border-gray-200 rounded-md px-12 py-8 flex items-center gap-12 transition-colors"
+            onclick={() => handleProductCardClick(card.productID)}
+          >
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-semibold text-gray-800 truncate">{card.name}</div>
+              {#if card.sku}
+                <div class="text-xs text-gray-500 mt-2">SKU: {card.sku}</div>
+              {/if}
+            </div>
+            <div class="text-xs text-gray-500 shrink-0 text-right leading-[1.2]">
+              <div>Ingresado:</div>
+              <div class="text-gray-800 font-semibold">{added} / {card.ordered}</div>
+            </div>
+          </button>
+        {:else}
+          <div class="text-sm text-gray-400 text-center py-12">
+            {orderProductCards.length === 0 ? 'La órden no tiene productos.' : 'Sin coincidencias.'}
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
+  <!-- Right column: order header + warehouse selector + grouped entries table. -->
+  <LayerStatic
+    css="w-[50%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
+    mobileLayerTitle="Ingreso de OC"
+    useMobileLayerVertical={124}
+  >
+    <div class="px-12 py-10 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 gap-12">
+      <div class="font-bold text-gray-800 text-lg">
+        {selectedOrder ? `Orden #${selectedOrder.ID}` : '—'}
+      </div>
+      <div class="w-200">
+        <SearchSelect options={almacenes?.Almacenes || []} keyId="ID" keyName="Nombre"
+          selected={warehouseID}
+          placeholder="ALMACÉN ::"
+          id={12}
+          onChange={(option) => {
+            warehouseID = Number(option?.ID || 0)
+          }}
+        />
+      </div>
+    </div>
+
+    <div class="flex-1 min-h-0 px-12 py-8">
+      {#if !selectedOrderID}
+        <div class="text-sm text-gray-400 text-center py-24">Seleccione una órden para iniciar el ingreso.</div>
+      {:else}
+        <TableGrid columns={entryColumns} data={tableRows}
+          height="calc(100vh - var(--header-height) - 160px)"
+          rowHeight={42}
+          headerCss="px-6 flex items-center min-h-32"
+          cellCss="px-6"
+          getRowId={(row, idx) => row.kind === 'lot-header' ? `lot:${row.lotCode}` : `entry:${idx}`}
+          useRowRenderer={(row) => row.kind === 'lot-header'}
+          getRowHeight={e => e.kind === 'lot-header' ? 30 : 0}
+        >
+          {#snippet rowRenderer(row, _rowIndex)}
+            {#if row.kind === 'lot-header'}
+              <div class="px-12 w-full h-full flex items-center text-blue-600 bg-blue-50 font-semibold text-sm border-b-1 pt-2 border-b-blue-200">
+                {row.lotCode ? `LOTE ${row.lotCode}` : 'SIN LOTE'}
+              </div>
+            {/if}
+          {/snippet}
+
+          {#snippet cellRenderer(row, colDef, _rowIndex)}
+            {#if row.kind === 'entry'}
+              {#if colDef.id === 'vencimiento'}
+                <!-- usePopover: calendar escapes table-cell overflow. useInlineStyle: the cell already owns the visuals. -->
+                <DateInput saveOn={row} save="expirationDate" type="unix" usePopover useInlineStyle
+                  onChange={() => { entriesVersion++ }}
+                />
+              {:else if colDef.id === 'serial'}
+                {@const total = totalSerialCountForEntry(row)}
+                <div class="w-full flex items-center justify-end gap-6">
+                  <span class={total === 0 ? 'text-gray-400' : 'text-gray-800 font-semibold'}>
+                    {total === 0 ? '-' : total}
+                  </span>
+                  <button type="button"
+                    class="w-26 h-26 rounded-full b-color-green flex items-center justify-center text-xs"
+                    onclick={() => openSerialModal(row)}
+                    title="Editar seriales"
+                  >
+                    <i class={total === 0 ? 'icon-plus' : 'icon-pencil'}></i>
+                  </button>
+                </div>
+              {/if}
+            {/if}
+          {/snippet}
+        </TableGrid>
+      {/if}
+    </div>
+  </LayerStatic>
+</div>
+
+<!-- Serial Number editor modal — mirrors the table-only pattern from ProductStockMovement.svelte. -->
+<Layer id={4} type="side" sideLayerSize={520}
+  title={editingSerialEntry ? `Seriales — ${productos.recordsMap.get(editingSerialEntry.productID)?.Nombre || ''}` : 'Seriales'}
+  titleCss="h2"
+  css="px-12 py-10"
+  onClose={() => {
+    applySerialDraft()
+  }}
+>
+  {#if editingSerialEntry}
+    <TableGrid columns={serialColumns} data={serialDraft}
+      height="calc(100vh - 14rem)"
+      cellCss="px-6"
+      headerCss="px-6 flex items-center min-h-32"
+      css="mt-6"
+      getRowId={(row, idx) => `${row.serial || 'pending'}_${idx}`}
+    />
+  {/if}
+</Layer>

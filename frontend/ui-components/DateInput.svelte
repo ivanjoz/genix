@@ -10,12 +10,17 @@
     disabled?: boolean
     onChange?: () => void
     type?: "unix" | "sunix"
+    // Render the calendar through Popover2 (Portal-to-body) so it can escape clipped/overflow ancestors like table cells.
+    usePopover?: boolean
+    // Strip chrome (background/border/outline/shadow); fills parent with w-full h-full. For table-cell embedding.
+    useInlineStyle?: boolean
   }
 </script>
 
 <script lang="ts" generics="T">
   import { Core } from "$core/store.svelte";
   import { untrack } from "svelte";
+  import Popover2 from "$components/popover2/Popover2.svelte";
   import {
     buildCalendarWeeks,
     createDateInputContext,
@@ -38,7 +43,9 @@
     required = false,
     disabled = false,
     onChange,
-    type = "unix"
+    type = "unix",
+    usePopover = false,
+    useInlineStyle = false,
   }: IDateInputProps<T> = $props()
 
   const {
@@ -207,9 +214,96 @@
   })
 
   let cN = $derived(`${s1.input} relative date-input-container` + (css ? " " + css : ""))
+
+  // Shared close-on-mouseleave: keep open while the input still owns focus (user is typing); otherwise dismiss.
+  const handleCalendarMouseLeave = (ev: MouseEvent) => {
+    ev.stopPropagation()
+    if (inputElement !== document.activeElement) {
+      avoidCloseOnBlur = false
+      showCalendar = false
+      fechaFocus = 0
+    }
+  }
 </script>
 
-{#if label}
+{#snippet calendarInner()}
+  <div class="flex justify-between items-center mb-[2px]">
+    <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
+      type="button"
+      onmousedown={(ev) => { ev.stopPropagation(); avoidCloseOnBlur = true }}
+      onclick={(ev) => { ev.stopPropagation(); changeMonth(-12) }}>«</button>
+    <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
+      type="button"
+      onmousedown={(ev) => { ev.stopPropagation(); avoidCloseOnBlur = true }}
+      onclick={(ev) => { ev.stopPropagation(); changeMonth(-1) }}>‹</button>
+    <div class="bn-d2 flex items-center justify-center font-semibold">
+      <div class="mr-[4px]">{monthName.name}</div>
+      <div>{monthName.year}</div>
+    </div>
+    <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
+      type="button"
+      onmousedown={(ev) => { ev.stopPropagation(); avoidCloseOnBlur = true }}
+      onclick={(ev) => { ev.stopPropagation(); changeMonth(1) }}>›</button>
+    <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
+      type="button"
+      onmousedown={(ev) => { ev.stopPropagation(); avoidCloseOnBlur = true }}
+      onclick={(ev) => { ev.stopPropagation(); changeMonth(12) }}>»</button>
+  </div>
+  <div class="flex">
+    <div class="dp-week base text-[13px] ff-bold c-purple"></div>
+    {#each weekDaysNames as dayName}
+      <div class="dp-col text-center flex items-center justify-center text-[13px] ff-bold">{dayName.name}</div>
+    {/each}
+  </div>
+  {#each semanasDias as week}
+    <div class="flex">
+      <div class="dp-week text-[13px] ff-bold text-center flex items-center justify-center c-purple">{week.week}</div>
+      {#each week.weekDays as day}
+        {@const isOutMonth = day.monthKey !== monthSelected}
+        {@const isSelected = day.unixDay === fechaSelected}
+        {@const isFocused = day.unixDay === fechaFocus}
+        {@const isToday = fechaTodayUnix === day.unixDay}
+        <button
+          class="relative dp-day text-[14px] text-center flex items-center justify-center p-0 bg-transparent border-0 {isOutMonth ? 'is-out' : ''} {isSelected ? 'selected' : ''} {isFocused ? 'focused' : ''}"
+          type="button"
+          onclick={(ev) => {
+            ev.stopPropagation()
+            changeFechaSelected(day.unixDay)
+            showCalendar = false
+            fechaFocus = 0
+            avoidCloseOnBlur = false
+            if (onChange) onChange()
+          }}
+          onmousedown={(ev) => { avoidCloseOnBlur = true; ev.stopPropagation() }}
+        >
+          {day.day}
+          {#if isToday}
+            <div class="ln-today"></div>
+          {/if}
+        </button>
+      {/each}
+    </div>
+  {/each}
+{/snippet}
+
+{#snippet calendarBlock()}
+  {#if showCalendar && !isMobile}
+    {#if usePopover}
+      <!-- Portal-rendered: positioning handled by Popover2; .in-popover strips the inline-mode absolute positioning. -->
+      <Popover2 referenceElement={inputElement ?? null} open={showCalendar} placement="bottom-start" offset={4}>
+        <div class="date-picker-c in-popover" role="presentation" onmouseleave={handleCalendarMouseLeave}>
+          {@render calendarInner()}
+        </div>
+      </Popover2>
+    {:else}
+      <div class="date-picker-c" role="presentation" onmouseleave={handleCalendarMouseLeave}>
+        {@render calendarInner()}
+      </div>
+    {/if}
+  {/if}
+{/snippet}
+
+{#if label && !useInlineStyle}
   <div class={cN}>
     <div class={s1.input_lab_cell_left}><div></div></div>
     <div class={s1.input_lab}>{label}</div>
@@ -258,110 +352,17 @@
       {/if}
     </div>
 
-    {#if showCalendar && !isMobile}
-      <div class="date-picker-c" role="presentation" onmouseleave={(ev) => {
-        ev.stopPropagation()
-        if (inputElement !== document.activeElement) {
-          avoidCloseOnBlur = false
-          showCalendar = false
-          fechaFocus = 0
-        }
-      }}>
-        <div class="flex justify-between items-center mb-[2px]">
-          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
-            type="button"
-            onmousedown={(ev) => {
-              ev.stopPropagation()
-              avoidCloseOnBlur = true
-            }}
-            onclick={(ev) => {
-              ev.stopPropagation()
-              changeMonth(-12)
-            }}>«</button>
-          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
-            type="button"
-            onmousedown={(ev) => {
-              ev.stopPropagation()
-              avoidCloseOnBlur = true
-            }}
-            onclick={(ev) => {
-              ev.stopPropagation()
-              changeMonth(-1)
-            }}>‹</button>
-          <div class="bn-d2 flex items-center justify-center font-semibold">
-            <div class="mr-[4px]">{monthName.name}</div>
-            <div>{monthName.year}</div>
-          </div>
-          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
-            type="button"
-            onmousedown={(ev) => {
-              ev.stopPropagation()
-              avoidCloseOnBlur = true
-            }}
-            onclick={(ev) => {
-              ev.stopPropagation()
-              changeMonth(1)
-            }}>›</button>
-          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
-            type="button"
-            onmousedown={(ev) => {
-              ev.stopPropagation()
-              avoidCloseOnBlur = true
-            }}
-            onclick={(ev) => {
-              ev.stopPropagation()
-              changeMonth(12)
-            }}>»</button>
-        </div>
-        <div class="flex">
-          <div class="dp-week base text-[13px] ff-bold c-purple"></div>
-          {#each weekDaysNames as dayName}
-            <div class="dp-col text-center flex items-center justify-center text-[13px] ff-bold">{dayName.name}</div>
-          {/each}
-        </div>
-        {#each semanasDias as week}
-          <div class="flex">
-            <div class="dp-week text-[13px] ff-bold text-center flex items-center justify-center c-purple">{week.week}</div>
-            {#each week.weekDays as day}
-              {@const isOutMonth = day.monthKey !== monthSelected}
-              {@const isSelected = day.unixDay === fechaSelected}
-              {@const isFocused = day.unixDay === fechaFocus}
-              {@const isToday = fechaTodayUnix === day.unixDay}
-              <button
-                class="relative dp-day text-[14px] text-center flex items-center justify-center p-0 bg-transparent border-0 {isOutMonth ? 'is-out' : ''} {isSelected ? 'selected' : ''} {isFocused ? 'focused' : ''}"
-                type="button"
-                onclick={(ev) => {
-                  ev.stopPropagation()
-                  changeFechaSelected(day.unixDay)
-                  showCalendar = false
-                  fechaFocus = 0
-                  avoidCloseOnBlur = false
-                  if (onChange) onChange()
-                }}
-                onmousedown={(ev) => {
-                  avoidCloseOnBlur = true
-                  ev.stopPropagation()
-                }}
-              >
-                {day.day}
-                {#if isToday}
-                  <div class="ln-today"></div>
-                {/if}
-              </button>
-            {/each}
-          </div>
-        {/each}
-      </div>
-    {/if}
+    {@render calendarBlock()}
   </div>
 {:else}
-  <div class={`${s1.input} no-label relative date-input-container` + (css ? " " + css : "")}>
-    <div class={`${s1.input_div} flex w-full`}>
+  <!-- useInlineStyle swaps the chrome (s1.input/input_div/input_inp) for bare classes that fill the parent cell. -->
+  <div class={(useInlineStyle ? "di-bare relative w-full h-full date-input-container" : `${s1.input} no-label relative date-input-container`) + (css ? " " + css : "")}>
+    <div class={useInlineStyle ? "flex w-full h-full" : `${s1.input_div} flex w-full`}>
       {#if !isMobile}
         <input
           bind:this={inputElement}
           type="text"
-          class="w-full {s1.input_inp} ff-mono {inputCss || ""}"
+          class={(useInlineStyle ? "di-bare-input ff-mono w-full h-full" : `w-full ${s1.input_inp} ff-mono`) + (inputCss ? " " + inputCss : "")}
           value={inputValue}
           placeholder={placeholder}
           disabled={disabled}
@@ -372,7 +373,7 @@
         />
       {:else}
         <div
-          class={`w-full flex items-center ${s1.input_inp} ff-mono ${inputCss || ""} ${disabled ? "opacity-60" : ""}`}
+          class={`w-full flex items-center ${useInlineStyle ? "di-bare-input h-full" : s1.input_inp} ff-mono ${inputCss || ""} ${disabled ? "opacity-60" : ""}`}
           role="button"
           tabindex={disabled ? -1 : 0}
           aria-disabled={disabled}
@@ -394,101 +395,7 @@
       {/if}
     </div>
 
-    {#if showCalendar && !isMobile}
-      <div class="date-picker-c" role="presentation" onmouseleave={(ev) => {
-        ev.stopPropagation()
-        if (inputElement !== document.activeElement) {
-          avoidCloseOnBlur = false
-          showCalendar = false
-          fechaFocus = 0
-        }
-      }}>
-        <div class="flex justify-between items-center mb-[2px]">
-          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
-            type="button"
-            onmousedown={(ev) => {
-              ev.stopPropagation()
-              avoidCloseOnBlur = true
-            }}
-            onclick={(ev) => {
-              ev.stopPropagation()
-              changeMonth(-12)
-            }}>«</button>
-          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
-            type="button"
-            onmousedown={(ev) => {
-              ev.stopPropagation()
-              avoidCloseOnBlur = true
-            }}
-            onclick={(ev) => {
-              ev.stopPropagation()
-              changeMonth(-1)
-            }}>‹</button>
-          <div class="bn-d2 flex items-center justify-center font-semibold">
-            <div class="mr-[4px]">{monthName.name}</div>
-            <div>{monthName.year}</div>
-          </div>
-          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
-            type="button"
-            onmousedown={(ev) => {
-              ev.stopPropagation()
-              avoidCloseOnBlur = true
-            }}
-            onclick={(ev) => {
-              ev.stopPropagation()
-              changeMonth(1)
-            }}>›</button>
-          <button class="h2 bn-d1 flex items-center justify-center p-0 bg-transparent border-0"
-            type="button"
-            onmousedown={(ev) => {
-              ev.stopPropagation()
-              avoidCloseOnBlur = true
-            }}
-            onclick={(ev) => {
-              ev.stopPropagation()
-              changeMonth(12)
-            }}>»</button>
-        </div>
-        <div class="flex">
-          <div class="dp-week base text-[13px] ff-bold c-purple"></div>
-          {#each weekDaysNames as dayName}
-            <div class="dp-col text-center flex items-center justify-center text-[13px] ff-bold">{dayName.name}</div>
-          {/each}
-        </div>
-        {#each semanasDias as week}
-          <div class="flex">
-            <div class="dp-week text-[13px] ff-bold text-center flex items-center justify-center c-purple">{week.week}</div>
-            {#each week.weekDays as day}
-              {@const isOutMonth = day.monthKey !== monthSelected}
-              {@const isSelected = day.unixDay === fechaSelected}
-              {@const isFocused = day.unixDay === fechaFocus}
-              {@const isToday = fechaTodayUnix === day.unixDay}
-              <button
-                class="relative dp-day text-[14px] text-center flex items-center justify-center p-0 bg-transparent border-0 {isOutMonth ? 'is-out' : ''} {isSelected ? 'selected' : ''} {isFocused ? 'focused' : ''}"
-                type="button"
-                onclick={(ev) => {
-                  ev.stopPropagation()
-                  changeFechaSelected(day.unixDay)
-                  showCalendar = false
-                  fechaFocus = 0
-                  avoidCloseOnBlur = false
-                  if (onChange) onChange()
-                }}
-                onmousedown={(ev) => {
-                  avoidCloseOnBlur = true
-                  ev.stopPropagation()
-                }}
-              >
-                {day.day}
-                {#if isToday}
-                  <div class="ln-today"></div>
-                {/if}
-              </button>
-            {/each}
-          </div>
-        {/each}
-      </div>
-    {/if}
+    {@render calendarBlock()}
   </div>
 {/if}
 
@@ -499,6 +406,19 @@
 
   ._mobile-placeholder {
     color: #6d5dad;
+  }
+
+  /* Bare/inline mode: strip chrome so the parent cell owns the visuals. */
+  .di-bare-input {
+    background: transparent;
+    border: 0;
+    outline: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+  .di-bare-input:focus {
+    outline: 0;
+    box-shadow: none;
   }
 
   .date-picker-c {
@@ -513,6 +433,14 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     z-index: 1000;
     min-width: 280px;
+  }
+
+  /* In popover mode the Popover2 wrapper handles absolute positioning; reset our inline-mode offsets. */
+  .date-picker-c.in-popover {
+    position: static;
+    top: auto;
+    left: auto;
+    margin-top: 0;
   }
 
   .dp-week {

@@ -127,6 +127,10 @@ export interface ITableColumn<T> {
 	onCellSelect?: (e: T, value: string|number, rerender: () => void) => void
 	onCellClick?: (e: T, idx: number, rerender: () => void) => void
 	showEditIcon?: boolean
+	// Render a black outline around the cell when the user hovers it.
+	showHoverEffect?: boolean
+	// Wrap cell text up to 2 lines and ellipsis on overflow (overrides the default `white-space: nowrap`).
+	useLineClamp?: boolean
   cardRender?: (e: T, idx: number) => (any)
   getValue?: (e: T, idx: number) => (string|number)
   // Renders extra visual content before the main cell output without replacing it.
@@ -185,6 +189,13 @@ export type TableGridCellRendererSnippet<T> = Snippet<[
 export type TableGridHeaderRendererSnippet<T> = Snippet<[
   columnDefinition: ITableColumn<T>,
   columnIndex: number,
+]>;
+
+// Snippet rendered in place of a row's per-column cells when `useRowRenderer(record, idx)` returns true.
+// Caller receives a single full-row container that spans every column (grid-column: 1 / -1).
+export type TableGridRowRendererSnippet<T> = Snippet<[
+  record: T,
+  rowIndex: number,
 ]>;
 
 export type MobileCardsListRendererSnippet<T, TCell> = Snippet<[

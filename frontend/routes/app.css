@@ -535,3 +535,21 @@ input[type='number'] {
 		overflow: auto;
 	}
 }
+
+
+.b-color-red {
+  color: #f04949;
+  background-color: #ffe7e7;
+  box-shadow: rgb(169, 28, 28) 0px 1px 4px -1px;
+}
+
+.b-color-green {
+  color: #149b78;
+  background-color: #c9fff1;
+  box-shadow: #007646 0px 1px 4px -1px;
+}
+
+.b-color-green:hover {
+ color: #ffffff;
+ background-color: #21b28d;
+}
