@@ -2,6 +2,7 @@
 import { highlString, persistFieldValue, readFieldValue, wordInclude } from '$libs/helpers';
 import { throttle } from '$libs/helpers';
 import { Core } from '$core/store.svelte';
+import type { Snippet } from 'svelte';
   import s1 from "./components.module.css";
   import SvelteVirtualList from "@humanspeak/svelte-virtual-list";
 
@@ -29,6 +30,9 @@ import { Core } from '$core/store.svelte';
     showLoading?: boolean;
     id?: number;
     useCache?: boolean;
+    optionRenderer?: Snippet<[E, string[]]>;
+    getSearchText?: (e: E) => string;
+    useDividingLine?: boolean;
   }
 
   const {
@@ -54,7 +58,10 @@ import { Core } from '$core/store.svelte';
     optionsCss,
     keyName,
     id,
-    useCache = false
+    useCache = false,
+    optionRenderer,
+    getSearchText,
+    useDividingLine = false,
   }: SearchSelectProps<T,E> = $props();
 
   let show = $state(false);
@@ -301,10 +308,11 @@ import { Core } from '$core/store.svelte';
     for (const option of options) {
       const optionId = getOptionId(option);
       const optionLabel = String(option[keyName] ?? "");
+      const searchText = getSearchText ? String(getSearchText(option) ?? "") : optionLabel;
       nextPreparedOptions.push({
         id: optionId,
         label: optionLabel,
-        normalizedLabel: optionLabel.toLowerCase(),
+        normalizedLabel: searchText.toLowerCase(),
         option,
       });
     }
@@ -449,7 +457,9 @@ import { Core } from '$core/store.svelte';
   {/if}
   {#if show && !useLayerPicker}
     <div class="_1 p-4 left-0 z-320 {arrowSelected >= 0 ? ' on-arrow' : ''} {optionsCss || "w-full"}"
-      style:height={Math.min(filteredOptions.length * 36 + 10, 300) + 'px'}
+      style:height={useVirtualizedOptions ? '300px' : 'auto'}
+      style:max-height={'300px'}
+      style:overflow-y={useVirtualizedOptions ? 'hidden' : 'auto'}
       class:open-up={openUp}
       role="button" tabindex="0"
       onmousedown={(ev) => {
@@ -470,10 +480,9 @@ import { Core } from '$core/store.svelte';
     >
       {#snippet optionRow(e: E, i: number)}
         {@const name = String(e[keyName])}
-        {@const highlighted = highlString(name, words)}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
-          class="flex ai-center _highlight{arrowSelected === i ? ' _selected' : ''}"
+          class="flex ai-center _highlight{arrowSelected === i ? ' _selected' : ''}{useDividingLine ? ' _with_divider' : ''}"
           role="option"
           aria-selected={arrowSelected === i}
           tabindex="0"
@@ -485,11 +494,16 @@ import { Core } from '$core/store.svelte';
             onOptionClick(e);
           }}
         >
-          <div class="_option_text">
-            {#each highlighted as w}
-              <span class={w.highl ? "_8" : ""} class:mr-4={w.isEnd}>{w.text}</span>
-            {/each}
-          </div>
+          {#if optionRenderer}
+            {@render optionRenderer(e, words)}
+          {:else}
+            {@const highlighted = highlString(name, words)}
+            <div class="_option_text">
+              {#each highlighted as w}
+                <span class={w.highl ? "_8" : ""} class:mr-4={w.isEnd}>{w.text}</span>
+              {/each}
+            </div>
+          {/if}
         </div>
       {/snippet}
 
@@ -529,10 +543,19 @@ import { Core } from '$core/store.svelte';
   ._highlight {
     display: flex;
     align-items: center;
-    height: 36px;
+    min-height: 36px;
     cursor: pointer;
     padding: 0 6px 0 6px;
     border-radius: 4px;
+  }
+
+  ._highlight._with_divider {
+    border-bottom: 1px solid #ececec;
+    border-radius: 0;
+  }
+
+  ._highlight._with_divider:last-child {
+    border-bottom: none;
   }
 
   ._highlight:hover {

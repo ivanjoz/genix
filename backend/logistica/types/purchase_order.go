@@ -26,6 +26,8 @@ type PurchaseOrder struct {
 	TotalAmount           int32   `json:",omitempty"`
 	TaxAmount             int32   `json:",omitempty"`
 	DebtAmount            int32   `json:",omitempty"`
+	DifferenceQuantity    int32   `json:",omitempty"`
+	DifferenceValue       int32   `json:",omitempty"`
 	InvoiceNumber         string  `json:",omitempty"`
 	Notes                 string  `json:",omitempty"`
 
@@ -53,6 +55,8 @@ type PurchaseOrderTable struct {
 	TotalAmount           db.Col[PurchaseOrderTable, int32]
 	TaxAmount             db.Col[PurchaseOrderTable, int32]
 	DebtAmount            db.Col[PurchaseOrderTable, int32]
+	DifferenceQuantity    db.Col[PurchaseOrderTable, int32]
+	DifferenceValue       db.Col[PurchaseOrderTable, int32]
 	InvoiceNumber         db.Col[PurchaseOrderTable, string]
 	Notes                 db.Col[PurchaseOrderTable, string]
 	Created               db.Col[PurchaseOrderTable, int32]
@@ -64,9 +68,10 @@ type PurchaseOrderTable struct {
 
 func (e PurchaseOrderTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:      "purchase_order",
-		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID.Autoincrement(0)},
+		Name:             "purchase_order",
+		Partition:        e.CompanyID,
+		UseListAsDefault: true,
+		Keys:             []db.Coln{e.ID.Autoincrement(0)},
 		Indexes: []db.Index{
 			{
 				Type:     db.TypeView,

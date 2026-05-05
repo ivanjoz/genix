@@ -275,8 +275,8 @@ func Test51(args *core.ExecArgs) core.FuncResponse {
 	controller := makeDBController[logisticaTypes.PurchaseOrder]()
 
  //	controller.RecalcVirtualColumns(1)
-	controller.RecalcGroupIndexHashes(1)
-	controller.RecalcVirtualColumns(1)
+	controller.DeleteViewsAndIndexes()
+	// controller.RecalcVirtualColumns(1)
 	
 //	controller2 := makeDBController[logisticaTypes.ProductStockV2]()
 	// controller2.DeleteViewsAndIndexes()

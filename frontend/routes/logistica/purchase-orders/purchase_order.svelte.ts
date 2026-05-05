@@ -1,4 +1,4 @@
-import { GetHandler, GETWithGroupCache, PUT } from '$libs/http.svelte'
+import { GetHandler, GETWithGroupCache, POST, PUT } from '$libs/http.svelte'
 import { Notify } from '$libs/helpers'
 
 // Backend status codes for purchase orders.
@@ -25,6 +25,37 @@ export const PurchaseOrderEditableStatuses: number[] = [
   PurchaseOrderStatus.PENDING,
   PurchaseOrderStatus.CONFIRMED,
 ]
+
+// Item recibido en el ingreso de una OC. Coincide con el body PostStockAdjustItem del backend
+// (logistica/product-stock-movement.go) y agrega PresentationID, requerido para que el backend
+// compare por (ProductID, PresentationID) frente al detalle de la OC.
+export interface IPurchaseOrderEntryItem {
+  ProductID: number
+  PresentationID: number
+  Quantity: number
+  SubQuantity?: number
+  SerialNumber?: string
+  LotID?: number
+  LotCode?: string
+}
+
+export interface IPurchaseOrderEntryPayload {
+  PurchaseOrderID: number
+  WarehouseID: number
+  Items: IPurchaseOrderEntryItem[]
+}
+
+// Aplica el ingreso de mercadería de una OC Confirmada: el backend calcula las diferencias,
+// inserta los movimientos en el almacén y marca la OC como Cumplida.
+export const postPurchaseOrderEntry = async (
+  payload: IPurchaseOrderEntryPayload,
+): Promise<IPurchaseOrder> => {
+  return await POST({
+    data: payload,
+    route: 'purchase-order-entry',
+    refreshRoutes: ['purchase-orders'],
+  })
+}
 
 // Sends an action update for a single purchase order; backend validates the state transition.
 // `data` is forwarded as the JSON body — used by EDIT to carry the patched fields, ignored by CONFIRM.

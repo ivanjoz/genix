@@ -199,6 +199,9 @@ type TableSchema struct {
 	SaveCacheVersion     bool
 	UseUpdateCounter     Coln
 	DisableUpdateCounter bool
+	// UseListAsDefault makes slice columns map to list<...> instead of set<...> when no explicit
+	// ",list" / ",set" db tag is set. Per-field tags still override this default.
+	UseListAsDefault bool
 }
 
 func (q ColumnStatement) GetValue() any {
@@ -713,6 +716,9 @@ func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 	structValue := reflect.ValueOf(schemaStruct).Elem()
 	structType := structValue.Type()
 
+	// Read schema-level flags once so the slice-default swap can be applied per column below.
+	useListAsDefault := (*schemaStruct).GetSchema().UseListAsDefault
+
 	// fmt.Println("fieldNameIdxMap...", len(fieldNameIdxMap), "| nf:", structValue.NumField())
 
 	for i := 0; i < structValue.NumField(); i++ {
@@ -752,6 +758,11 @@ func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 			*colInfo = colBase
 			colInfo.Name = columnName
 			if colInfo.IsSlice && !colInfo.hasCollectionTagOptions {
+				// Honor schema-level UseListAsDefault by swapping the inferred set<...> to list<...>
+				// before frozen wrapping, so per-field db tags ",set"/",list" still take precedence.
+				if useListAsDefault {
+					colInfo.ColType = swapCollectionKind(unwrapFrozenCollectionType(colInfo.ColType), "list")
+				}
 				shouldApplyFrozenDefault, shouldBeFrozen := getCollectionFrozenDefaultForTableField(fieldType.Type)
 				if shouldApplyFrozenDefault {
 					// Apply Col vs ColSlice default frozen behavior only when record tags did not force collection options.

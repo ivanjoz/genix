@@ -150,12 +150,12 @@ class PurchaseOrderState {
       Notify.failure('Seleccione un proveedor.')
       return false
     }
-    const unpricedItem = this.items.find((item) => !item.price)
-    if (unpricedItem) {
-      const unpricedName = unpricedItem.presentation
-        ? `${unpricedItem.product.Nombre} (${unpricedItem.presentation.nm})`
-        : unpricedItem.product.Nombre
-      Notify.failure(`El producto "${unpricedName}" no tiene precio.`)
+    const zeroQuantityItem = this.items.find((item) => !item.quantity)
+    if (zeroQuantityItem) {
+      const zeroQuantityName = zeroQuantityItem.presentation
+        ? `${zeroQuantityItem.product.Nombre} (${zeroQuantityItem.presentation.nm})`
+        : zeroQuantityItem.product.Nombre
+      Notify.failure(`El producto "${zeroQuantityName}" no tiene cantidad.`)
       return false
     }
 

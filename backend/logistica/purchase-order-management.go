@@ -7,6 +7,7 @@ import (
 	finanzasTypes "app/finanzas/types"
 	logisticaTypes "app/logistica/types"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -26,6 +27,152 @@ const cajaMovimientoTipoPagoProveedor int8 = 6
 type purchaseOrderPayPayload struct {
 	CajaID int32
 	Monto  int32 // Monto a pagar en céntimos (positivo). Se enviará como negativo a la caja.
+}
+
+// Body esperado para PostPurchaseOrderEntry.
+// Items reutiliza PostStockAdjustItem por simetría con POST.productos-stock; aquí
+// la cantidad es siempre un ingreso (suma a stock), no un reemplazo.
+type purchaseOrderEntryPayload struct {
+	PurchaseOrderID int32
+	WarehouseID     int32
+	Items           []PostStockAdjustItem
+}
+
+// PostPurchaseOrderEntry recibe la mercadería de una orden de compra Confirmada:
+//  1. compara los productos recibidos vs. los pedidos en la OC y calcula
+//     DifferenceQuantity (Σ recibido - pedido) y DifferenceValue (Σ (recibido - pedido) * precio),
+//     ambos firmados (negativo = subentrega, positivo = sobreentrega);
+//  2. llama a ApplyMovimientos para insertar el stock en el almacén;
+//  3. actualiza la OC: Status=Fulfilled + diferencias calculadas.
+//
+// La diferencia se registra pero NO se rechaza: la OC se cumple aunque haya
+// mismatches, y los valores quedan asentados para reportería.
+func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
+	payload := purchaseOrderEntryPayload{}
+	if err := json.Unmarshal([]byte(*req.Body), &payload); err != nil {
+		return req.MakeErr("Error al deserializar el body.", err)
+	}
+	if payload.PurchaseOrderID <= 0 {
+		return req.MakeErr("Debe especificar PurchaseOrderID.")
+	}
+	if payload.WarehouseID <= 0 {
+		return req.MakeErr("Debe especificar el Almacén destino.")
+	}
+	if len(payload.Items) == 0 {
+		return req.MakeErr("No se enviaron registros para ingresar.")
+	}
+
+	// Obtener la OC para validar estado y mapear precios pedidos.
+	existing := []logisticaTypes.PurchaseOrder{}
+	if err := db.Query(&existing).
+		CompanyID.Equals(req.Usuario.EmpresaID).
+		ID.Equals(payload.PurchaseOrderID).Limit(1).Exec(); err != nil {
+		return req.MakeErr("Error al obtener la orden de compra.", err)
+	}
+	if len(existing) == 0 {
+		return req.MakeErr("Orden de compra no encontrada.")
+	}
+	order := existing[0]
+	if order.Status != logisticaTypes.PurchaseOrderStatusConfirmed {
+		return req.MakeErr("La orden no está en estado Confirmada y no puede recibirse.")
+	}
+
+	// Indexar el detalle pedido por (ProductID, PresentationID). El ORM almacena la
+	// presentación como int32 pero MovimientoInterno la maneja como int16; usamos int32
+	// para la clave a fin de no perder información si una OC contiene presentaciones > int16.
+	type orderKey struct {
+		ProductID      int32
+		PresentationID int32
+	}
+
+	// Un único stats por clave: ordered/received se suman, price se conserva en su primera
+	// aparición (la diferencia se pondera por el delta total, no línea a línea).
+	type orderStats struct {
+		ordered  int32
+		received int32
+		price    int32
+	}
+
+	statsByKey := map[orderKey]*orderStats{}
+	
+	getStats := func(key orderKey) *orderStats {
+		if statsByKey[key] == nil {
+			statsByKey[key] = &orderStats{}
+		}
+		return statsByKey[key]
+	}
+
+	for i, productID := range order.DetailProductIDs {
+		key := orderKey{ProductID: productID}
+		if i < len(order.DetailPresentationIDs) {
+			key.PresentationID = order.DetailPresentationIDs[i]
+		}
+		s := getStats(key)
+		s.ordered += core.GetIndex(order.DetailQuantities, i)
+		if s.price == 0 {
+			s.price = core.GetIndex(order.DetailPrices, i)
+		}
+	}
+
+	for _, item := range payload.Items {
+		if item.ProductID == 0 {
+			return req.MakeErr("Hay un item sin ProductID.")
+		}
+		if item.Quantity <= 0 {
+			return req.MakeErr("Hay un item con Cantidad inválida (debe ser > 0).")
+		}
+		getStats(orderKey{ProductID: item.ProductID, PresentationID: int32(item.PresentationID)}).received += item.Quantity
+	}
+
+	// Diferencia firmada: positiva = sobreentrega, negativa = subentrega, cero = exacto.
+	// price=0 cubre productos recibidos que no están en la OC (suman a quantity, no a value).
+	var diffQuantity, diffValue int32
+	for _, s := range statsByKey {
+		diff := s.received - s.ordered
+		if diff == 0 {
+			continue
+		}
+		diffQuantity += diff
+		diffValue += diff * s.price
+	}
+
+	// Construir movimientos: ReemplazarCantidad=false (suma a stock), DocumentID enlaza
+	// el ledger con la OC, SupplierID se completa con el ProviderID de la OC para
+	// que la resolución de lotes use el hash (fecha, proveedor, nombre).
+	movimientos := make([]logisticaTypes.MovimientoInterno, 0, len(payload.Items))
+	for _, item := range payload.Items {
+		movimientos = append(movimientos, logisticaTypes.MovimientoInterno{
+			DocumentID:     int64(order.ID),
+			WarehouseID:    payload.WarehouseID,
+			ProductoID:     item.ProductID,
+			PresentacionID: item.PresentationID,
+			SerialNumber:   item.SerialNumber,
+			LotID:          item.LotID,
+			LotName:        item.LotCode,
+			SupplierID:     order.ProviderID,
+			Cantidad:       item.Quantity,
+			SubCantidad:    item.SubQuantity,
+		})
+	}
+	if err := ApplyMovimientos(req, movimientos); err != nil {
+		return req.MakeErr(err)
+	}
+
+	// Cumplir la OC: Status=Fulfilled + diferencias calculadas.
+	now := core.SUnixTime()
+	order.Status = logisticaTypes.PurchaseOrderStatusFulfilled
+	order.DifferenceQuantity = diffQuantity
+	order.DifferenceValue = diffValue
+	order.Updated = now
+	order.UpdatedBy = req.Usuario.ID
+
+	q := db.Table[logisticaTypes.PurchaseOrder]()
+	if err := db.Update(&[]logisticaTypes.PurchaseOrder{order},
+		q.Status, q.DifferenceQuantity, q.DifferenceValue, q.Updated, q.UpdatedBy,
+	); err != nil {
+		return req.MakeErr("Error al actualizar la orden de compra.", err)
+	}
+	return req.MakeResponse(order)
 }
 
 func GetPurchaseOrders(req *core.HandlerArgs) core.HandlerResponse {
@@ -96,6 +243,18 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Los detalles de la orden son inconsistentes.")
 	}
 
+	if len(record.DetailPresentationIDs) > 0 && len(record.DetailPresentationIDs) != n {
+		return req.MakeErr("Inconsistencia en el detalle de Presentaciones IDs.")
+	}
+
+	if slices.Contains(record.DetailProductIDs,0){
+		return req.MakeErr("Hay un producto con ID = 0")
+	}
+
+	if slices.Contains(record.DetailQuantities,0){
+		return req.MakeErr("Hay un producto con cantidad = 0")
+	}
+	
 	now := core.SUnixTime()
 	todayFecha := core.TimeToFechaUnix(time.Now())
 	currentSemana := core.MakeSemanaFromFechaUnix(todayFecha, false)

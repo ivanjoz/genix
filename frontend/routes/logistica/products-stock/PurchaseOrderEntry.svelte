@@ -8,24 +8,34 @@ import FilterInput from '$components/micro/FilterInput.svelte'
 import TableGrid from '$components/vTable/TableGrid.svelte'
 import type { ITableColumn } from '$components/vTable/types'
 import { Core } from '$core/store.svelte'
-import { formatTime, Notify } from '$libs/helpers'
+import { formatN, formatTime, Notify } from '$libs/helpers'
+import { ClientProviderService, ClientProviderType } from '../../negocio/clientes/clientes-proveedores.svelte'
 import { ProductosService } from '../../negocio/productos/productos.svelte'
 import { AlmacenesService } from '../../negocio/sedes-almacenes/sedes-almacenes.svelte'
 import {
+  postPurchaseOrderEntry,
   PurchaseOrdersService,
   PurchaseOrderStatus,
   type IPurchaseOrder,
+  type IPurchaseOrderEntryItem,
 } from '../purchase-orders/purchase_order.svelte'
 
 // Flat row mixing two shapes; the TableGrid uses `useRowRenderer` to switch render mode per row.
 type EntryRow = {
   kind: 'entry'
   productID: number
+  // PresentationID is required by the backend so it can compare received vs. ordered
+  // by (ProductID, PresentationID); 0 = "sin presentación" line.
+  presentationID: number
   lotCode: string          // '' = SIN LOTE bucket
   expirationDate: number   // UnixDay (project convention); 0 = unset
   quantity: number
   serialNumbers: { serial: string, quantity: number }[]
 }
+
+// Composite key for matching entry rows / cards against OC detail lines.
+const cardKey = (productID: number, presentationID: number) =>
+  `${productID}_${presentationID}`
 
 type LotHeaderRow = {
   kind: 'lot-header'
@@ -38,6 +48,7 @@ type Row = LotHeaderRow | EntryRow
 const purchaseOrders = new PurchaseOrdersService(PurchaseOrderStatus.CONFIRMED, true)
 const productos = new ProductosService(true)
 const almacenes = new AlmacenesService()
+const providersService = new ClientProviderService(ClientProviderType.PROVIDER, true)
 
 let selectedOrderID = $state(0)
 // Wrapped in an object so the project's `Input` component can bind via `saveOn`/`save`.
@@ -57,11 +68,23 @@ const selectedOrder = $derived<IPurchaseOrder | undefined>(
 )
 
 // Map a purchase-order line to a card; one card per (productID, presentationID) pair from the order detail.
+// Lines with the same key are merged so the badge counts the total ordered for that pair.
 const orderProductCards = $derived.by(() => {
-  if (!selectedOrder) return [] as { productID: number, ordered: number, name: string, sku: string, haystack: string }[]
+  type Card = { key: string, productID: number, presentationID: number, ordered: number, name: string, sku: string, haystack: string }
+  if (!selectedOrder) return [] as Card[]
   const productIDs = selectedOrder.DetailProductIDs || []
   const quantities = selectedOrder.DetailQuantities || []
-  const cards = productIDs.map((pid, idx) => {
+  const presentations = selectedOrder.DetailPresentationIDs || []
+  const byKey = new Map<string, Card>()
+  for (let i = 0; i < productIDs.length; i++) {
+    const pid = productIDs[i]
+    const presID = presentations[i] || 0
+    const key = cardKey(pid, presID)
+    const existing = byKey.get(key)
+    if (existing) {
+      existing.ordered += quantities[i] || 0
+      continue
+    }
     const product = productos.recordsMap.get(pid)
     const name = product?.Nombre || `Producto-${pid}`
     const sku = product?.SKU || ''
@@ -71,17 +94,18 @@ const orderProductCards = $derived.by(() => {
       .filter(Boolean)
       .join(' ')
     const haystack = `${name} ${sku} ${presentationSkus}`.toLowerCase()
-    return { productID: pid, ordered: quantities[idx] || 0, name, sku, haystack }
-  })
-  return cards
+    byKey.set(key, { key, productID: pid, presentationID: presID, ordered: quantities[i] || 0, name, sku, haystack })
+  }
+  return Array.from(byKey.values())
 })
 
-// Sum already-added units per product across all lots — used by the card progress badge.
-const addedQuantityByProductID = $derived.by(() => {
+// Sum already-added units per (productID, presentationID) across all lots — used by the card progress badge.
+const addedQuantityByCardKey = $derived.by(() => {
   entriesVersion // re-run on edits
-  const totals = new Map<number, number>()
+  const totals = new Map<string, number>()
   for (const entry of entries) {
-    totals.set(entry.productID, (totals.get(entry.productID) || 0) + (entry.quantity || 0))
+    const key = cardKey(entry.productID, entry.presentationID)
+    totals.set(key, (totals.get(key) || 0) + (entry.quantity || 0))
   }
   return totals
 })
@@ -89,9 +113,9 @@ const addedQuantityByProductID = $derived.by(() => {
 // Drop cards whose ordered quantity has been fully received — list shows only pending products.
 // `ordered <= 0` cards stay (no target to satisfy, e.g. ad-hoc lines).
 const filteredOrderProductCards = $derived.by(() => {
-  const totals = addedQuantityByProductID
+  const totals = addedQuantityByCardKey
   return orderProductCards.filter(card => {
-    if (card.ordered > 0 && (totals.get(card.productID) || 0) >= card.ordered) return false
+    if (card.ordered > 0 && (totals.get(card.key) || 0) >= card.ordered) return false
     if (cardFilterText && !card.haystack.includes(cardFilterText)) return false
     return true
   })
@@ -113,16 +137,19 @@ const tableRows = $derived.by((): Row[] => {
   return rows
 })
 
-const handleProductCardClick = (productID: number) => {
-  // Match = same product + same current lot input value. Match → +1; no match → push new row with quantity=1.
+const handleProductCardClick = (productID: number, presentationID: number) => {
+  // Match = same (product, presentation) + same current lot input value. Match → +1; no match → push new row with quantity=1.
   const currentLot = lotState.lotCode
-  const matching = entries.find(e => e.productID === productID && e.lotCode === currentLot)
+  const matching = entries.find(e =>
+    e.productID === productID && e.presentationID === presentationID && e.lotCode === currentLot,
+  )
   if (matching) {
     matching.quantity += 1
   } else {
     entries.push({
       kind: 'entry',
       productID,
+      presentationID,
       lotCode: currentLot,
       expirationDate: 0,
       quantity: 1,
@@ -179,6 +206,72 @@ const onChangePurchaseOrder = () => {
   entriesVersion++
   warehouseID = selectedOrder?.WarehouseID || 0
   cardFilterText = ''
+}
+
+let isSaving = $state(false)
+
+// Send the entry to the backend: it computes diferences, applies stock movements, and marks the OC as Cumplida.
+const handleSave = async () => {
+  if (isSaving) return
+  if (!selectedOrderID) {
+    Notify.failure('Seleccione una Órden de Compra.')
+    return
+  }
+  if (!warehouseID) {
+    Notify.failure('Seleccione el Almacén destino.')
+    return
+  }
+  if (entries.length === 0) {
+    Notify.failure('No hay productos para ingresar.')
+    return
+  }
+
+  // Cada entry de cantidad N se serializa como un único item con esa cantidad, salvo
+  // que tenga seriales: cada serial se envía como un item independiente con su propia
+  // cantidad y SerialNumber para que el backend los individualice en el detalle de stock.
+  const items: IPurchaseOrderEntryItem[] = []
+  for (const entry of entries) {
+    if (!entry.productID) continue
+    const baseFields = {
+      ProductID: entry.productID,
+      PresentationID: entry.presentationID,
+      LotCode: entry.lotCode || undefined,
+    }
+    if (entry.serialNumbers.length > 0) {
+      for (const sn of entry.serialNumbers) {
+        if (!sn.serial || sn.quantity <= 0) continue
+        items.push({ ...baseFields, Quantity: sn.quantity, SerialNumber: sn.serial })
+      }
+      continue
+    }
+    if ((entry.quantity || 0) <= 0) continue
+    items.push({ ...baseFields, Quantity: entry.quantity })
+  }
+
+  if (items.length === 0) {
+    Notify.failure('No hay items válidos para ingresar.')
+    return
+  }
+
+  isSaving = true
+  try {
+    await postPurchaseOrderEntry({
+      PurchaseOrderID: selectedOrderID,
+      WarehouseID: warehouseID,
+      Items: items,
+    })
+    Notify.success('Órden de compra ingresada correctamente.')
+    // Reset local state — the saved OC is no longer Confirmada, so it disappears from the picker.
+    selectedOrderID = 0
+    entries = []
+    entriesVersion++
+    warehouseID = 0
+    cardFilterText = ''
+  } catch (error) {
+    Notify.failure(String(error || 'Error al guardar el ingreso.'))
+  } finally {
+    isSaving = false
+  }
 }
 
 const formatOrderLabel = (order: IPurchaseOrder): string => {
@@ -288,7 +381,13 @@ const serialColumns: ITableColumn<{ serial: string, quantity: number }>[] = [
 ]
 
 const purchaseOrderOptions = $derived(
-  purchaseOrders.records.map(o => ({ ID: o.ID, Nombre: formatOrderLabel(o) })),
+  purchaseOrders.records.map(o => ({
+    ID: o.ID,
+    Nombre: formatOrderLabel(o),
+    ProviderName: providersService.recordsMap.get(o.ProviderID)?.Name || `Proveedor #${o.ProviderID}`,
+    Date: o.Date,
+    TotalAmount: o.TotalAmount,
+  })),
 )
 
 const totalSerialCountForEntry = (entry: EntryRow): number => {
@@ -304,11 +403,23 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
         <SearchSelect options={purchaseOrderOptions} keyId="ID" keyName="Nombre"
           selected={selectedOrderID}
           placeholder="ÓRDEN DE COMPRA ::"
+          optionsCss="w-380"
+          useDividingLine
           onChange={(option) => {
             selectedOrderID = Number(option?.ID || 0)
             onChangePurchaseOrder()
           }}
+          getSearchText={(o) => `OC ${o.ID} ${o.ProviderName}`}
+          {optionRenderer}
         />
+        {#snippet optionRenderer(o: typeof purchaseOrderOptions[number], _words: string[])}
+          <div class="flex flex-col min-w-0 w-full">
+            <div class="truncate"><b>OC #{o.ID}</b> — {o.ProviderName}</div>
+            <div class="text-xs text-gray-500 truncate">
+              {o.Date ? formatTime(o.Date, 'Y-m-d') : ''} — S/. {formatN((o.TotalAmount || 0) / 100, 2)}
+            </div>
+          </div>
+        {/snippet}
       </div>
       <div class="w-160">
         <Input bind:saveOn={lotState} save="lotCode" placeholder="Lote (opcional)" />
@@ -326,10 +437,10 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
     {:else}
       <!-- Product cards from the selected purchase order, filtered by name/SKU. -->
       <div class="flex flex-col gap-6 overflow-y-auto pr-4" style="max-height: calc(100vh - var(--header-height) - 160px);">
-        {#each filteredOrderProductCards as card (card.productID)}
-          {@const added = addedQuantityByProductID.get(card.productID) || 0}
+        {#each filteredOrderProductCards as card (card.key)}
+          {@const added = addedQuantityByCardKey.get(card.key) || 0}
           <button type="button" class="text-left bg-gray-50 hover:bg-blue-50 border border-gray-200 rounded-md px-12 py-8 flex items-center gap-12 transition-colors"
-            onclick={() => handleProductCardClick(card.productID)}
+            onclick={() => handleProductCardClick(card.productID, card.presentationID)}
           >
             <div class="flex-1 min-w-0">
               <div class="text-sm font-semibold text-gray-800 truncate">{card.name}</div>
@@ -371,6 +482,14 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
           }}
         />
       </div>
+      <button type="button" class="bx-blue shrink-0"
+        disabled={isSaving || !selectedOrderID || entries.length === 0}
+        onclick={handleSave}
+        title="Guardar ingreso de mercadería"
+      >
+        <span class="hidden md:inline">{isSaving ? 'Guardando…' : 'Guardar'}</span>
+        <i class="icon-floppy"></i>
+      </button>
     </div>
 
     <div class="flex-1 min-h-0 px-12 py-8">
