@@ -1,1 +1,0 @@
-magick input.jpg -resize 16x16 -blur 0x8 -quality 10 -strip placeholder.avif
