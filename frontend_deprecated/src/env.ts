@@ -149,12 +149,8 @@ export const Env = {
   loadEmpresaConfig: () => {
     if(Env.empresa.id){ return }
     const empresaID = Env.getEmpresaID()
-    if(empresaID){
-      fetch(Env.S3_URL +`empresas/e-${empresaID}.json`)
-      .then(res => res.json())
-      .then(res => {
-        Env.empresa = res
-      })
+		if (empresaID) {
+			Env.empresa = { id: 1 } as IEmpresaParams 
     } else {
       console.warn("No se encontró la empresa-id:", empresaID)
     }
@@ -176,6 +172,3 @@ export const LocalStorage = typeof window !== 'undefined'
       setItem: (k: string, v: string) => { return "" },
       removeItem: (k: string) => { return "" }
     }
-
-
-    

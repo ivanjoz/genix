@@ -702,6 +702,10 @@ func compileSelectStatement(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) 
 				if selectedView.Type == 9 {
 					compiledStatement.requiresDeduplication = true
 				}
+				// The view's first clustering column drives ORDER BY in the view table, not the base ID.
+				if selectedView.column != nil && !selectedView.column.IsNil() {
+					compiledStatement.orderColumnName = selectedView.column.GetName()
+				}
 			}
 
 			if (isProjectedView && selectedView.getStatementPrepared != nil) || isIndexGroupView {
@@ -735,9 +739,6 @@ func compileSelectStatement(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) 
 				compiledStatement.sourceView = selectedView
 				compiledStatement.selectedStatementIndexes = selectedStatementIndexes
 				compiledStatement.remainingStatementIndexes = remainingStatementIndexes
-				if selectedView.column != nil && !selectedView.column.IsNil() {
-					compiledStatement.orderColumnName = selectedView.column.GetName()
-				}
 				if selectedView.RequiresPostFilter || isIndexGroupView {
 					// Index group views: always post-filter to guard against hash collisions.
 					compiledStatement.postFilterStatementIndexes = slices.Clone(selectedStatementIndexes)

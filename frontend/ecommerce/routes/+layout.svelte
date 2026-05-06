@@ -7,6 +7,7 @@
 
   import { preloadProductSearch } from "$core/product-search/product-search-runtime";
   import { productosServiceState } from '$services/services/productos.svelte';
+  import FloatingCart from "$ecommerce/components/FloatingCart.svelte";
   let { children, data } = $props();
 
   productosServiceState.categorias = data.productos.categorias
@@ -25,3 +26,4 @@
 </svelte:head>
 
 {@render children()}
+<FloatingCart />

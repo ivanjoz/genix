@@ -10,49 +10,107 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
-func GetProductsIndex(req *core.HandlerArgs) core.HandlerResponse {
-	clientUpdated := core.Coalesce(req.GetQueryInt64("upd"), req.GetQueryInt64("updated"))
-	empresaID := core.Coalesce(req.GetQueryInt("empresa_id"), req.Usuario.EmpresaID)
+// PRODUCTO_INDEX_VERSION is baked into the uploaded file name. Bumping this constant invalidates
+// any cached file-name pointer so the next GetProductsIndex call rebuilds and re-uploads the .idx.
+const PRODUCTO_INDEX_VERSION = 1
 
+func GetProductsIndex(req *core.HandlerArgs) core.HandlerResponse {
+	empresaID := core.Coalesce(
+		core.Coalesce(req.GetQueryInt("empresa-id"), req.GetQueryInt("empresa_id")),
+		req.Usuario.EmpresaID,
+	)
 	if empresaID <= 0 {
 		return req.MakeErr("Empresa inválida para obtener índice de productos.")
 	}
 
+	// Fetch the freshest productos.Updated using the Updated view; this is the change-detection watermark.
+	productsLatestRows := []negocioTypes.Product{}
+	latestQuery := db.Query(&productsLatestRows)
+	latestQuery.Select(latestQuery.ID, latestQuery.Updated).
+		EmpresaID.Equals(empresaID).
+		Updated.GreaterThan(0).
+		OrderDesc().
+		Limit(1)
+	if latestErr := latestQuery.Exec(); latestErr != nil {
+		return req.MakeErr("Error al obtener el último producto actualizado.", latestErr)
+	}
+	productsWatermark := int32(0)
+	if len(productsLatestRows) > 0 {
+		productsWatermark = productsLatestRows[0].Updated
+	}
+
+	// Read last build state: cache.Updated holds the watermark observed when the file was uploaded,
+	// cache.Content holds the bucket-derived file name of that upload.
 	currentCacheKey := productSortedIDsCacheKey + "_current"
 	cacheRows, cacheQueryErr := core.GetCacheByKeys(empresaID, currentCacheKey)
 	if cacheQueryErr != nil {
 		return req.MakeErr("Error al obtener metadata actual del índice de productos.", cacheQueryErr)
 	}
-	currentUpdated := int32(0)
+	cachedWatermark := int32(0)
+	cachedFileName := ""
 	if len(cacheRows) > 0 {
-		currentUpdated = cacheRows[0].Updated
+		cachedWatermark = cacheRows[0].Updated
+		cachedFileName = cacheRows[0].Content
 	}
 
-	const staleWindowSunix = int32((20 * 60) / 2) // 20 minutes converted to SUnix units.
-	nowSunixTime := core.SUnixTime()
-	shouldRebuild := currentUpdated <= 0 || (nowSunixTime-currentUpdated) >= staleWindowSunix
-	if shouldRebuild {
-		buildOutput, buildErr := BuildProductosSearchIndex(empresaID)
-		if buildErr != nil {
-			return req.MakeErr("Error al reconstruir el índice de productos.", buildErr)
-		}
-		currentUpdated = buildOutput.IndexBuild.BuildSunixTime
+	// Skip the rebuild only when the watermark matches, we have a cached file name, AND that file
+	// carries the current PRODUCTO_INDEX_VERSION marker — a version bump invalidates older uploads.
+	versionPrefix := productsBucketFileNameVersionPrefix(empresaID)
+	if cachedFileName != "" &&
+		cachedWatermark == productsWatermark &&
+		strings.HasPrefix(cachedFileName, versionPrefix) {
+		core.Log("GetProductsIndex:: cache hit, no rebuild",
+			"| empresaID:", empresaID,
+			"| name:", cachedFileName,
+			"| watermark:", productsWatermark)
+		return req.MakeResponse(map[string]any{
+			"name":    cachedFileName,
+			"updated": productsWatermark,
+		})
 	}
 
-	indexS3Path := core.Concatn("public/c", empresaID, "_productos.idx")
-	core.Log("GetProductsIndex:: returning idx path and version",
+	// Build with a fresh 5-minute-bucket file name; bucket guarantees a new URL each window so CDN/edge caches don't serve stale bytes.
+	bucketFileName := buildProductsBucketFileName(empresaID)
+	if _, buildErr := BuildProductosSearchIndex(BuildProductosSearchIndexArgs{
+		EmpresaID:         empresaID,
+		FileName:          bucketFileName,
+		ProductsWatermark: productsWatermark,
+	}); buildErr != nil {
+		return req.MakeErr("Error al reconstruir el índice de productos.", buildErr)
+	}
+
+	core.Log("GetProductsIndex:: rebuilt",
 		"| empresaID:", empresaID,
-		"| clientUpdated:", clientUpdated,
-		"| currentUpdated:", currentUpdated,
-		"| rebuilt:", shouldRebuild,
-		"| path:", indexS3Path)
+		"| name:", bucketFileName,
+		"| watermark:", productsWatermark,
+		"| previousWatermark:", cachedWatermark)
 	return req.MakeResponse(map[string]any{
-		"path":    indexS3Path,
-		"updated": currentUpdated,
+		"name":    bucketFileName,
+		"updated": productsWatermark,
 	})
+}
+
+// buildProductsBucketFileName returns "c<empresa>_products_v<ver>_<bucket>.idx" where
+// bucket = ceil(secondsOfDayUTC / 300). The bucket changes every 5 minutes so a freshly built
+// index always lands at a never-before-cached URL, and the embedded version lets the cache
+// shortcut detect stale entries when PRODUCTO_INDEX_VERSION bumps.
+func buildProductsBucketFileName(empresaID int32) string {
+	now := time.Now().UTC()
+	secondsOfDay := now.Hour()*3600 + now.Minute()*60 + now.Second()
+	const secondsPerBucket = 5 * 60
+	// Ceil division: 0→0, 1..300→1, 301..600→2, etc.
+	bucket := (secondsOfDay + secondsPerBucket - 1) / secondsPerBucket
+	return fmt.Sprintf("%s%d.idx", productsBucketFileNameVersionPrefix(empresaID), bucket)
+}
+
+// productsBucketFileNameVersionPrefix is the leading "c<empresa>_products_v<ver>_" segment.
+// It's the hook the cache check uses to detect a version mismatch on the cached file name.
+func productsBucketFileNameVersionPrefix(empresaID int32) string {
+	return fmt.Sprintf("c%d_products_v%d_", empresaID, PRODUCTO_INDEX_VERSION)
 }
 
 func GetProductsIndexDelta(req *core.HandlerArgs) core.HandlerResponse {
@@ -247,15 +305,29 @@ func BuildProductosSearchIndexNoPersist(empresaID int32) (*ProductosIndexBuildOu
 	}, nil
 }
 
+// BuildProductosSearchIndexArgs configures a persisted index build:
+//   - FileName is the S3 object name to upload under "live/" (e.g. "c1_products_142.idx").
+//   - ProductsWatermark is the max productos.Updated observed before the build; persisted in the cache
+//     row so subsequent GetProductsIndex calls can skip rebuilding when productos hasn't changed.
+type BuildProductosSearchIndexArgs struct {
+	EmpresaID         int32
+	FileName          string
+	ProductsWatermark int32
+}
+
 // BuildProductosSearchIndex builds both index passes from productos:
 // 1) generic text index by product ID + Nombre
 // 2) taxonomy pass by querying brand/category names from shared lists.
-func BuildProductosSearchIndex(empresaID int32) (*ProductosIndexBuildOutput, error) {
-	if empresaID <= 0 {
+// The result is uploaded under args.FileName and the cache row is stamped with args.ProductsWatermark + args.FileName.
+func BuildProductosSearchIndex(args BuildProductosSearchIndexArgs) (*ProductosIndexBuildOutput, error) {
+	if args.EmpresaID <= 0 {
 		return nil, fmt.Errorf("empresa ID inválido para construir el índice")
 	}
+	if args.FileName == "" {
+		return nil, fmt.Errorf("nombre de archivo inválido para construir el índice")
+	}
 
-	productosData, loadErr := loadIndexerSourceDataWithCache(empresaID)
+	productosData, loadErr := loadIndexerSourceDataWithCache(args.EmpresaID)
 	if loadErr != nil {
 		return nil, loadErr
 	}
@@ -301,42 +373,56 @@ func BuildProductosSearchIndex(empresaID int32) (*ProductosIndexBuildOutput, err
 	}
 	core.Log("BuildIndex:: final.total_bytes_stage1_plus_stage2:", len(combinedIndexBytes))
 
-	indexFileName := "c" + fmt.Sprintf("%v", empresaID) + "_products.idx"
-
-	if uploadErr := cloud.SaveFile(cloud.SaveFileArgs{
-		Bucket:      core.Env.S3_BUCKET,
+	// Bucket is left empty so cloud.SaveFile picks the right one for the configured CLOUD_PROVIDER
+	// (S3 vs R2). The previous hardcoded S3_BUCKET caused the file to land in S3 even when the
+	// frontend was reading from Cloudflare R2.
+	uploadArgs := cloud.SaveFileArgs{
 		Path:        "live",
-		Name:        indexFileName,
+		Name:        args.FileName,
 		FileContent: combinedIndexBytes,
 		ContentType: "application/octet-stream",
-	}); uploadErr != nil {
-		return nil, fmt.Errorf("error al guardar índice productos en S3 (public/%s): %w", indexFileName, uploadErr)
+	}
+	if uploadErr := cloud.SaveFile(uploadArgs); uploadErr != nil {
+		return nil, fmt.Errorf("error al guardar índice productos (live/%s): %w", args.FileName, uploadErr)
 	}
 
-	if persistUpdatedCacheErr := persistProductosIndexUpdatedCache(empresaID, buildSunixTime); persistUpdatedCacheErr != nil {
+	// Verify the upload landed: HEAD the same key so we don't stamp the cache with a file the
+	// frontend cannot fetch. Any not-found / transport error here aborts before persisting the cache row.
+	exists, headErr := cloud.FileExists(uploadArgs)
+	if headErr != nil {
+		return nil, fmt.Errorf("error al verificar índice productos (live/%s): %w", args.FileName, headErr)
+	}
+	if !exists {
+		return nil, fmt.Errorf("índice productos no se encontró tras subida (live/%s)", args.FileName)
+	}
+	core.Log("BuildIndex:: upload verificado | live/" + args.FileName)
+
+	if persistUpdatedCacheErr := persistProductosIndexUpdatedCache(args.EmpresaID, args.ProductsWatermark, args.FileName); persistUpdatedCacheErr != nil {
 		return nil, persistUpdatedCacheErr
 	}
-	core.Log("BuildIndex:: archivo índice actualizado:", "| s3:", "public/"+indexFileName)
+	core.Log("BuildIndex:: archivo índice actualizado:", "| key:", "live/"+args.FileName)
 
 	return &ProductosIndexBuildOutput{
 		IndexBuild: stageOneIndexResult,
 	}, nil
 }
 
-func persistProductosIndexUpdatedCache(empresaID int32, updatedSunixTime int32) error {
+// persistProductosIndexUpdatedCache stamps the cache row used by GetProductsIndex to short-circuit rebuilds.
+// Updated holds the productos watermark observed at build time; Content holds the uploaded file name.
+func persistProductosIndexUpdatedCache(empresaID int32, productsWatermark int32, fileName string) error {
 	if empresaID <= 0 {
 		return fmt.Errorf("empresa ID inválido para guardar updated de índice de productos")
 	}
-	if updatedSunixTime <= 0 {
-		return fmt.Errorf("updated sunix inválido para guardar updated de índice de productos")
+	if fileName == "" {
+		return fmt.Errorf("nombre de archivo inválido para guardar updated de índice de productos")
 	}
 
 	cacheRowCurrent := core.Cache{
 		EmpresaID: empresaID,
 		ID:        core.BasicHashInt(productSortedIDsCacheKey + "_current"),
 		Key:       productSortedIDsCacheKey + "_current",
-		// Keep cache metadata timestamp equal to index header build timestamp.
-		Updated: updatedSunixTime,
+		Updated:   productsWatermark,
+		Content:   fileName,
 	}
 
 	if insertErr := db.Insert(&[]core.Cache{cacheRowCurrent}); insertErr != nil {
@@ -344,7 +430,10 @@ func persistProductosIndexUpdatedCache(empresaID int32, updatedSunixTime int32) 
 		return fmt.Errorf("error al guardar updated de índice de productos en cache (empresa=%d): %w", empresaID, insertErr)
 	}
 
-	core.Log("BuildIndex:: updated cache actualizado", "| key:", cacheRowCurrent.Key, "| updated:", cacheRowCurrent.Updated)
+	core.Log("BuildIndex:: updated cache actualizado",
+		"| key:", cacheRowCurrent.Key,
+		"| updated:", cacheRowCurrent.Updated,
+		"| name:", cacheRowCurrent.Content)
 	return nil
 }
 

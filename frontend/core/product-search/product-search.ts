@@ -197,15 +197,28 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private async tryLoadBinaryIndex(): Promise<boolean> {
-		// Keep source url centralized so all callers/diagnostics use the same route.
-		const productsIndexUrl = Env.makeCDNRoute(
-			"live",
-			`c${ProductSearch.INDEX_COMPANY_ID}_products.idx`
-		);
-		console.log("[ProductSearch] trying to load idx", { productsIndexUrl });
+		// First ask the backend which idx file to fetch; the server rebuilds the file lazily when
+		// productos has changed since the last build and returns a bucket-derived name otherwise.
 		try {
-			// A non-200 response is treated as "no idx available" rather than hard-failing startup.
-			const indexResponse = await fetch(productsIndexUrl+"?use-cache=60");
+			const indexMetaUrl = Env.makeRoute("p-productos-index");
+			const metaResponse = await fetch(indexMetaUrl);
+			if (!metaResponse.ok) {
+				console.warn("[ProductSearch] idx meta response not ok", {
+					status: metaResponse.status,
+					statusText: metaResponse.statusText
+				});
+				return false;
+			}
+			const indexMeta = (await metaResponse.json()) as { name?: string; updated?: number };
+			if (!indexMeta?.name) {
+				console.warn("[ProductSearch] idx meta missing name", { indexMeta });
+				return false;
+			}
+
+			// Bucket-named files are immutable for their 5-minute window, so a long edge cache is safe.
+			const productsIndexUrl = Env.makeCDNRoute("live", indexMeta.name);
+			console.log("[ProductSearch] trying to load idx", { productsIndexUrl, updated: indexMeta.updated });
+			const indexResponse = await fetch(productsIndexUrl);
 			if (!indexResponse.ok) {
 				console.warn("[ProductSearch] idx response not ok", {
 					status: indexResponse.status,

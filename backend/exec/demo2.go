@@ -176,7 +176,11 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test43(args *core.ExecArgs) core.FuncResponse {
-	indexOutput, indexErr := negocio.BuildProductosSearchIndex(1)
+	indexOutput, indexErr := negocio.BuildProductosSearchIndex(negocio.BuildProductosSearchIndexArgs{
+		EmpresaID:         1,
+		FileName:          "c1_products.idx",
+		ProductsWatermark: 0,
+	})
 	if indexErr != nil {
 		return core.FuncResponse{Error: indexErr.Error()}
 	}

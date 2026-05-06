@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @source "../../pkg-components/**/*.svelte";
+@source "../../ui-components/**/*.svelte";
 @source "../**/*.svelte";
 
 @theme {

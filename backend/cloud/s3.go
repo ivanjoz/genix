@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	smithy "github.com/aws/smithy-go"
 	"github.com/ivanjoz/avif-webp-encoder/imageconv"
 	"golang.org/x/sync/errgroup"
 )
@@ -34,7 +35,23 @@ type SaveFileArgs struct {
 	MaxKeys       int32
 }
 
+// SaveFile uploads to the configured cloud provider, mirroring SaveImage's dispatch:
+// CLOUD_PROVIDER == "cloudflare" routes to R2 (bucket = "<STACK_NAME>-files" when unset
+// or set to S3_BUCKET); otherwise routes to S3 (bucket defaults to S3_BUCKET).
 func SaveFile(args SaveFileArgs) error {
+	if core.Env.CLOUD_PROVIDER == "cloudflare" {
+		if args.Bucket == "" || args.Bucket == core.Env.S3_BUCKET {
+			args.Bucket = core.Env.STACK_NAME + "-files"
+		}
+		return SaveFileToR2(args)
+	}
+	if args.Bucket == "" {
+		args.Bucket = core.Env.S3_BUCKET
+	}
+	return saveFileToS3(args)
+}
+
+func saveFileToS3(args SaveFileArgs) error {
 	core.Log("Enviando a s3:", args.Bucket, "| Folder:", args.Path, "|", args.Name, "|", args.ContentType)
 
 	client := s3.NewFromConfig(core.GetAwsConfig())
@@ -352,6 +369,73 @@ func SaveFileToR2(args SaveFileArgs) error {
 
 	core.Log("R2 upload OK:", resp.StatusCode)
 	return nil
+}
+
+// FileExists checks whether an object exists in the configured cloud provider.
+// Routes to R2 HEAD when CLOUD_PROVIDER == "cloudflare", else to S3 HeadObject.
+// Returns (false, nil) for a confirmed not-found; (false, err) for transport errors.
+func FileExists(args SaveFileArgs) (bool, error) {
+	if core.Env.CLOUD_PROVIDER == "cloudflare" {
+		if args.Bucket == "" || args.Bucket == core.Env.S3_BUCKET {
+			args.Bucket = core.Env.STACK_NAME + "-files"
+		}
+		return fileExistsR2(args)
+	}
+	if args.Bucket == "" {
+		args.Bucket = core.Env.S3_BUCKET
+	}
+	return fileExistsS3(args)
+}
+
+func fileExistsS3(args SaveFileArgs) (bool, error) {
+	client := s3.NewFromConfig(core.GetAwsConfig())
+	key := args.Path + "/" + args.Name
+	_, err := client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+		Bucket: &args.Bucket,
+		Key:    &key,
+	})
+	if err == nil {
+		return true, nil
+	}
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		case "NotFound", "NoSuchKey", "404":
+			return false, nil
+		}
+	}
+	return false, err
+}
+
+func fileExistsR2(args SaveFileArgs) (bool, error) {
+	key := args.Path + "/" + args.Name
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/r2/buckets/%s/objects/%s",
+		core.Env.CLOUDFLARE_ACCOUNT, args.Bucket, key)
+
+	// The R2 management API only exposes GET/PUT/DELETE for objects (HEAD returns 405).
+	// Use GET with a 1-byte Range so we confirm the object without paying the full download.
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Authorization", "Bearer "+core.Env.CLOUDFLARE_TOKEN)
+	req.Header.Set("Range", "bytes=0-0")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusPartialContent:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	}
+	respBytes, _ := io.ReadAll(resp.Body)
+	return false, fmt.Errorf("R2 verify failed (HTTP %d): %s", resp.StatusCode, string(respBytes))
 }
 
 func SaveImage(image ImageArgs) (string, error) {

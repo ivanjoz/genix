@@ -127,30 +127,31 @@ func BuildTaxonomySecondPass(indexBuild *ProductosIndexBuild, input BuildInput) 
 		return leftRow.categoryID < rightRow.categoryID
 	})
 
-	topCategoriesCount := len(rankedCategories)
-	if topCategoriesCount > maxTopCategories {
-		topCategoriesCount = maxTopCategories
-	}
-
 	// Keep a fixed 244-slot dictionary where slot 243 is always "Otros".
 	categoryIDs := make([]uint16, maxTopCategories+1)
 	categoryNames := make([]string, maxTopCategories+1)
 	categoryIDs[othersCategoryIndex] = 0
 	categoryNames[othersCategoryIndex] = "Otros"
 
-	categoryIndexByOriginalID := make(map[int32]uint8, topCategoriesCount)
-	for rowIndex := 0; rowIndex < topCategoriesCount; rowIndex++ {
-		categoryID := rankedCategories[rowIndex].categoryID
+	categoryIndexByOriginalID := make(map[int32]uint8, maxTopCategories)
+	dictionarySlot := 0
+	for _, rankedRow := range rankedCategories {
+		if dictionarySlot >= maxTopCategories {
+			break
+		}
+		categoryID := rankedRow.categoryID
 		if categoryID < 0 || categoryID > 65535 {
 			return fmt.Errorf("category ID=%d overflows uint16", categoryID)
 		}
 		categoryName, hasCategoryName := categoryNameByID[categoryID]
 		if !hasCategoryName {
-			return fmt.Errorf("missing category name for category ID=%d", categoryID)
+			// Skip categories without a name; their products fall through to "Otros".
+			continue
 		}
-		categoryIDs[rowIndex] = uint16(categoryID)
-		categoryNames[rowIndex] = categoryName
-		categoryIndexByOriginalID[categoryID] = uint8(rowIndex)
+		categoryIDs[dictionarySlot] = uint16(categoryID)
+		categoryNames[dictionarySlot] = categoryName
+		categoryIndexByOriginalID[categoryID] = uint8(dictionarySlot)
+		dictionarySlot++
 	}
 
 	productCategoryCountMinusOne := make([]uint8, 0, len(productsInSortedOrder))
