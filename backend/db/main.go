@@ -858,14 +858,22 @@ func GetCounter(keyspace string, name string, increment int) (int64, error) {
 		return 0, Err("Error al obtener el counter: ", err)
 	}
 
-	currentValue := int64(1)
+	storedCounterValue := int64(0)
 	if len(result) > 0 {
-		currentValue = result[0].CurrentValue + 1
+		storedCounterValue = result[0].CurrentValue
+	}
+
+	recoveredCounter := storedCounterValue+1 <= 0
+	currentValue, counterIncrement := nextCounterRange(storedCounterValue, increment)
+	if recoveredCounter {
+		// Counters can be moved below zero by repair/reset operations; generated IDs must stay positive.
+		fmt.Printf("GetCounter recovered non-positive sequence | keyspace=%s | name=%s | stored=%d | increment=%d\n",
+			keyspace, name, storedCounterValue, increment)
 	}
 
 	queryUpdateStr := fmt.Sprintf(
 		"UPDATE %v.sequences SET current_value = current_value + %v WHERE name = '%v'",
-		keyspace, increment, name,
+		keyspace, counterIncrement, name,
 	)
 
 	if err := QueryExec(queryUpdateStr); err != nil {
@@ -874,6 +882,17 @@ func GetCounter(keyspace string, name string, increment int) (int64, error) {
 	}
 
 	return currentValue, nil
+}
+
+func nextCounterRange(storedCounterValue int64, increment int) (int64, int64) {
+	nextCounterValue := storedCounterValue + 1
+	if nextCounterValue <= 0 {
+		// Damaged counters must reserve from 1 and repair the stored value in the same update.
+		nextCounterValue = 1
+	}
+
+	targetCounterValue := nextCounterValue + int64(increment) - 1
+	return nextCounterValue, targetCounterValue - storedCounterValue
 }
 
 type SeqValue struct {

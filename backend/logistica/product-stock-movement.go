@@ -102,11 +102,11 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Resolve lot-code → all matching lotIDs (same Name can exist across multiple entries).
 	var lotIDs []int32
-	
+
 	if lotCode != "" {
 		lots := []logisticaTypes.ProductStockLot{}
 		query := db.Query(&lots).CompanyID.Equals(req.Usuario.EmpresaID)
-		
+
 		if err := query.Select(query.ID).Name.Equals(lotCode).Exec(); err != nil {
 			return req.MakeErr("Error al buscar el lote:", err)
 		}
@@ -139,8 +139,8 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		if len(flat) > 0 {
 			movimientos = append(movimientos, db.RecordGroup[logisticaTypes.WarehouseProductMovement]{
-				IndexID:       -1,
-				Records:       flat,
+				IndexID: -1,
+				Records: flat,
 			})
 		}
 		return req.MakeResponse(movimientos)
@@ -266,7 +266,6 @@ func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(result)
 }
 
-
 func GetProductsStock(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt("updated")
 
@@ -289,7 +288,7 @@ func GetProductsStock(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("Arror al obtener los productos stock::", err)
 		}
 	}
-	
+
 	return req.MakeResponse(productsStock)
 }
 
@@ -315,6 +314,30 @@ func getApplyMovimientosCompanyLock(companyID int32) *sync.Mutex {
 // Starting budget is 19 digits (see db/insert-update.go).
 func packProductStockID(warehouseID int32, productID int32, presentationID int16) int64 {
 	return int64(warehouseID)*1e14 + int64(productID)*1e5 + int64(presentationID)*10
+}
+
+const maxProductStockLastPrices = 8
+
+func appendProductStockLastPrice(stock *logisticaTypes.ProductStock, movementQuantity int32, price int32) {
+	if movementQuantity <= 0 || price <= 0 {
+		return
+	}
+
+	// Normalize old rows defensively so both slices keep one-to-one positions.
+	pairCount := min(len(stock.LastPricesPrice), len(stock.LastPricesQuantity))
+	if pairCount != len(stock.LastPricesPrice) || pairCount != len(stock.LastPricesQuantity) {
+		stock.LastPricesPrice = core.TrimSliceLeft(stock.LastPricesPrice, pairCount)
+		stock.LastPricesQuantity = core.TrimSliceLeft(stock.LastPricesQuantity, pairCount)
+	}
+
+	// Keep price and quantity aligned as a compact chronological history.
+	stock.LastPricesPrice = append(stock.LastPricesPrice, price)
+	stock.LastPricesQuantity = append(stock.LastPricesQuantity, movementQuantity)
+
+	stock.LastPricesPrice = core.TrimSliceLeft(stock.LastPricesPrice, maxProductStockLastPrices)
+	stock.LastPricesQuantity = core.TrimSliceLeft(stock.LastPricesQuantity, maxProductStockLastPrices)
+	core.Log("ApplyMovimientos actualizó historial de precios:",
+		"stockID", stock.ID, "quantity", movementQuantity, "price", price, "entries", len(stock.LastPricesPrice))
 }
 
 func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.MovimientoInterno) error {
@@ -499,6 +522,11 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 			}
 		}
 
+		appendProductStockLastPrice(stock, movement.Quantity, mov.Price)
+		if mov.Price > 0 {
+			// Persist the unit price on the ledger as total line value for later reports.
+			movement.MonetaryValue = movement.Quantity * mov.Price
+		}
 		stock.Updated = updatedTime
 		stock.UpdatedBy = userID
 		// WarehouseQuantity on the ledger row uses the post-mutation total (free + detail).
@@ -573,6 +601,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticaTypes.Movimi
 					stockTable.WarehouseID,
 					stockTable.Quantity, stockTable.SubQuantity,
 					stockTable.DetailQuantity, stockTable.DetailSubQuantity,
+					stockTable.LastPricesPrice, stockTable.LastPricesQuantity,
 					stockTable.Updated, stockTable.UpdatedBy, stockTable.Status,
 				},
 			); err != nil {

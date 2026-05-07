@@ -94,7 +94,7 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	statsByKey := map[orderKey]*orderStats{}
-	
+
 	getStats := func(key orderKey) *orderStats {
 		if statsByKey[key] == nil {
 			statsByKey[key] = &orderStats{}
@@ -141,6 +141,7 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 	// que la resolución de lotes use el hash (fecha, proveedor, nombre).
 	movimientos := make([]logisticaTypes.MovimientoInterno, 0, len(payload.Items))
 	for _, item := range payload.Items {
+		key := orderKey{ProductID: item.ProductID, PresentationID: int32(item.PresentationID)}
 		movimientos = append(movimientos, logisticaTypes.MovimientoInterno{
 			DocumentID:     int64(order.ID),
 			WarehouseID:    payload.WarehouseID,
@@ -152,6 +153,7 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 			SupplierID:     order.ProviderID,
 			Cantidad:       item.Quantity,
 			SubCantidad:    item.SubQuantity,
+			Price:          getStats(key).price,
 		})
 	}
 	if err := ApplyMovimientos(req, movimientos); err != nil {
@@ -192,7 +194,7 @@ func GetPurchaseOrders(req *core.HandlerArgs) core.HandlerResponse {
 	group := errgroup.Group{}
 
 	for index, currentStatus := range status {
-		
+
 		group.Go(func() error {
 			recordsForStatus := []logisticaTypes.PurchaseOrder{}
 			query := db.Query(&recordsForStatus)
@@ -247,14 +249,14 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Inconsistencia en el detalle de Presentaciones IDs.")
 	}
 
-	if slices.Contains(record.DetailProductIDs,0){
+	if slices.Contains(record.DetailProductIDs, 0) {
 		return req.MakeErr("Hay un producto con ID = 0")
 	}
 
-	if slices.Contains(record.DetailQuantities,0){
+	if slices.Contains(record.DetailQuantities, 0) {
 		return req.MakeErr("Hay un producto con cantidad = 0")
 	}
-	
+
 	now := core.SUnixTime()
 	todayFecha := core.TimeToFechaUnix(time.Now())
 	currentSemana := core.MakeSemanaFromFechaUnix(todayFecha, false)

@@ -1730,3 +1730,17 @@ func HashInt32(values ...any) int32 {
 	h.Write(buf.Bytes())
 	return int32(h.Sum32())
 }
+
+func TrimSlice[T any](values []T, maxLen int) []T {
+	if len(values) > maxLen {
+		values = values[0:maxLen]
+	}
+	return values
+}
+
+func TrimSliceLeft[T any](values []T, maxLen int) []T {
+	if len(values) > maxLen {
+		values = values[len(values)-maxLen:]
+	}
+	return values
+}

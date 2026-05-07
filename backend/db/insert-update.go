@@ -277,11 +277,12 @@ func fetchAutoincrementCounterStarts[T TableBaseInterface[E, T], E TableSchemaIn
 
 		counterName := fmt.Sprintf("x%v_%v_%v", partValues[0], scyllaTable.name, partValues[1])
 		keyspace := strings.Split(scyllaTable.GetFullName(), ".")[0]
-		counterValue, err := GetCounter(keyspace, counterName, recordsNeedingAutoincrement)
+		counterStartValue, err := GetCounter(keyspace, counterName, recordsNeedingAutoincrement)
 		if err != nil {
 			return nil, err
 		}
-		counterStartByGroup[groupKey] = counterValue - int64(recordsNeedingAutoincrement) + 1
+		// GetCounter reserves the whole batch and returns the first ID in that reserved range.
+		counterStartByGroup[groupKey] = counterStartValue
 	}
 
 	return counterStartByGroup, nil

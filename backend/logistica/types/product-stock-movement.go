@@ -26,7 +26,7 @@ type WarehouseProductMovement struct {
 	SubQuantity          int32  `json:",omitempty"`
 	MonetaryValue        int32  `json:",omitempty"`
 	Tipo                 int8   `json:",omitempty"`
- 	Created              int32  `json:",omitempty"`
+	Created              int32  `json:",omitempty"`
 	CreatedBy            int32  `json:",omitempty"`
 	UpdateCounter        int32  `json:",omitempty"`
 }
@@ -56,9 +56,9 @@ type WarehouseProductMovementTable struct {
 
 func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:                 "warehouse_product_movement",
-		Partition:            e.CompanyID,
-		Keys:                 []db.Coln{e.ID},
+		Name:      "warehouse_product_movement",
+		Partition: e.CompanyID,
+		Keys:      []db.Coln{e.ID},
 		KeyIntPacking: []db.Coln{
 			e.Fecha.DecimalSize(5), e.WarehouseID.DecimalSize(5), e.Autoincrement(3),
 		},
@@ -70,8 +70,8 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 			{
 				Type: db.TypeInheritFromKey, Keys: []db.Coln{e.Fecha, e.WarehouseID}, UseIndexGroup: true,
 			},
-			{ 
-				Type: db.TypeLocalIndex, Keys: []db.Coln{e.SerialNumber}, 
+			{
+				Type: db.TypeLocalIndex, Keys: []db.Coln{e.SerialNumber},
 			},
 			{
 				Type: db.TypeLocalIndex, Keys: []db.Coln{e.LotID}, UseIndexGroup: true,
@@ -89,7 +89,7 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Fecha, e.ProductoID}, UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeView, 
+				Type: db.TypeView,
 				Keys: []db.Coln{e.Fecha, e.ProductoID.DecimalSize(9), e.Tipo.DecimalSize(1)},
 				Cols: []db.Coln{e.Quantity},
 			},
@@ -119,6 +119,7 @@ type MovimientoInterno struct {
 	AlmacenDestinoID   int32
 	Cantidad           int32
 	SubCantidad        int32
+	Price              int32
 	DocumentID         int64
 }
 
