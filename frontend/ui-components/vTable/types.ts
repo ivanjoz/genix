@@ -114,6 +114,7 @@ export interface ITableColumn<T> {
 	cellInputType?: 'number'
 	// Allow columns to inject runtime cell classes per record
 	setCellCss?: (record: T) => string | undefined
+	formatInputValue?: (value: number | string) => string
   cardCss?: string
   field?: string
   subcols?: ITableColumn<T>[]

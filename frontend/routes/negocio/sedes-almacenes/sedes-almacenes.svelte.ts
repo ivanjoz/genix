@@ -85,9 +85,10 @@ export const postAlmacen = (data: IAlmacen) => {
 
 export interface IPaisCiudad {
   PaisID: number
-  ID: string
+	ID: number
+  CiudadID: number
   Nombre: string
-  PadreID: string
+  PadreID: number
   Jerarquia: number
   Departamento?: IPaisCiudad
   Provincia?: IPaisCiudad
@@ -98,28 +99,43 @@ export interface IPaisCiudad {
 export interface PaisCiudadResult {
   ciudades: IPaisCiudad[]
   distritos: IPaisCiudad[]
-  ciudadesMap: Map<string,IPaisCiudad>
+  ciudadesMap: Map<number,IPaisCiudad>
 }
 
 export class PaisCiudadesService extends GetHandler {
   route = "pais-ciudades?pais-id=604"
   useCache = { min: 600, ver: 1 }
 
-  ciudades: IPaisCiudad[] = $state([])
-  distritos: IPaisCiudad[] = $state([])
-  ciudadesMap: Map<string,IPaisCiudad> = $state(new Map())
+	ciudades: IPaisCiudad[] = $state([]) // Departamentos + Provincias + Distritos
+	ciudadesMap: Map<number, IPaisCiudad> = $state(new Map())
+	
+	distritos: IPaisCiudad[] = $state([])
+	provincias: IPaisCiudad[] = $state([])
+  departamentos: IPaisCiudad[] = $state([])
 
   handler(result: IPaisCiudad[]): void {
-    const ciudades = result?.filter(x => !(x as any)._IS_META) || []
-    const distritos: IPaisCiudad[] = []
-    const ciudadesMap = new Map(ciudades.map(e => [e.ID, e]))
+		const ciudades = result?.filter(x => !(x as any)._IS_META) || []
+		const ciudadesMap = new Map(ciudades.map(e => [e.ID, e]))
+		
+		const distritos: IPaisCiudad[] = []
+		const provincias: IPaisCiudad[] = []
+		const departamentos: IPaisCiudad[] = []
 
-    for(const e of ciudades){
+		console.log("ciudades", ciudades)
+		
+		for (const e of ciudades) {			
+			e.PadreID = parseInt(e.PadreID as unknown as string)
+			
       const padre = ciudadesMap.get(e.PadreID)
-      if(e.Jerarquia === 3){ distritos.push(e) }
-      if(padre){
+			if (e.Jerarquia === 3) { distritos.push(e) }
+			else if (e.Jerarquia === 2) { provincias.push(e) }
+			else if(e.Jerarquia === 1){ departamentos.push(e) }
+			
+			if (padre) {
         if(padre.Jerarquia === 2){ e.Provincia = padre }
-        else if(padre.Jerarquia === 1){ e.Departamento = padre }
+				else if (padre.Jerarquia === 1) {
+					e.Departamento = padre
+				}
         if(padre.PadreID && ciudadesMap.has(padre.PadreID)){
           const padre2 = ciudadesMap.get(padre.PadreID)
           if(padre2?.Jerarquia === 2){ e.Provincia = padre2 }
@@ -136,12 +152,14 @@ export class PaisCiudadesService extends GetHandler {
     // console.log("distritos:", distritos)
 
     this.ciudades = ciudades
-    this.distritos = distritos
+		this.distritos = distritos
+		this.provincias = provincias
+    this.departamentos = departamentos
     this.ciudadesMap = ciudadesMap
   }
 
-  constructor(){
-    super()
-    this.fetch()
+  constructor(init?: boolean){
+		super()
+    if(init){ this.fetch() }
   }
 }

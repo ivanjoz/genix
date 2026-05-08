@@ -19,7 +19,7 @@
   const { clientProviderType, pageTitle, layerTitleSingular }: IClientProvidersViewProps = $props()
 
   let clientProviderService = $state<ClientProviderService | null>(null)
-  const paisCiudadesService = new PaisCiudadesService()
+  const paisCiudadesService = new PaisCiudadesService(true)
 
   let filterText = $state('')
   let clientProviderForm = $state<IClientProvider>(createEmptyClientProviderForm())

@@ -39,6 +39,7 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[core.Cache](),
 		makeDBController[comercial.SaleOrder](),
 		makeDBController[comercial.SaleSummary](),
+		makeDBController[comercial.ShippingCost](),
 		makeDBController[db.CacheVersion](),
 		makeDBController[negocio.ClientProvider](),
 		makeDBController[core.CronAction](),

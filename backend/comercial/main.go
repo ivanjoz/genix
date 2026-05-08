@@ -10,6 +10,8 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.sale-order-query":  SaleOrderQuery,
 	"GET.sale-summary":      GetSaleSummary,
 	"GET.sale-order-by-ids": GetSaleOrderByIDs,
+	"GET.shipping-costs":    GetShippingCosts,
+	"POST.shipping-costs":   PostShippingCosts,
 }
 
 func init() {

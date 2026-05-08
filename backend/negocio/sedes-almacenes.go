@@ -160,6 +160,11 @@ func GetPaisCiudades(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
+	for i := range  paisCiudades {
+		e := &paisCiudades[i]
+		e.ID = core.StrToInt(e.CiudadID)
+	}
+
 	core.Log("registros obtenidos:: ", len(paisCiudades))
 
 	return core.MakeResponse(req, &paisCiudades)

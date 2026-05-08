@@ -22,7 +22,7 @@ import {
   } from "./sedes-almacenes.svelte"
 
   const almacenesService = new AlmacenesService()
-  const paisCiudadesService = new PaisCiudadesService()
+  const paisCiudadesService = new PaisCiudadesService(true)
 
   const pageOptions = [{ id: 1, name: "Sedes" }, { id: 2, name: "Almacenes" }]
 

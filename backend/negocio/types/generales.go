@@ -7,12 +7,13 @@ import (
 
 type PaisCiudad struct {
 	db.TableStruct[PaisCiudadTable, PaisCiudad]
-	PaisID       int32       `json:",omitempty" db:"pais_id,pk"`
-	CiudadID     string      `json:"ID" db:"ciudad_id,pk"`
-	Nombre       string      `db:"nombre"`
-	PadreID      string      `db:"padre_id"`
-	Jerarquia    int8        `json:",omitempty" db:"jerarquia"`
-	Updated      int32       `json:"upd,omitempty" db:"updated,view"`
+	ID           int32       `json:",omitempty"`
+	PaisID       int32       `json:",omitempty"`
+	CiudadID     string      `json:",omitempty"`
+	Nombre       string      ``
+	PadreID      string      ``
+	Jerarquia    int8        `json:",omitempty"`
+	Updated      int32       `json:"upd,omitempty"`
 	Departamento *PaisCiudad `json:"-"`
 	Provincia    *PaisCiudad `json:"-"`
 }
