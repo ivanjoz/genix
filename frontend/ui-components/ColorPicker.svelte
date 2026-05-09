@@ -4,6 +4,8 @@ import ColorPicker from 'svelte-awesome-color-picker';
 import s1 from './components.module.css';
 
     import { untrack } from 'svelte';
+    import { Env } from '$core/env';
+    import { Agent } from '$core/agent/registry';
 
 	let {
 		saveOn = $bindable(),
@@ -46,9 +48,24 @@ import s1 from './components.module.css';
     }
   })
 
+  const componentID = Env.getComponentID()
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "ColorPicker",
+      label: label || "",
+      setValue: (value: string | number) => {
+        const hex = String(value || "")
+        if (!hex) { return }
+        setColor(hex)
+        if (onChange) { onChange(hex) }
+      },
+    })
+  })
 </script>
 
-<div class={cN}>
+<div data-id="ColorPicker:{componentID}" data-value={currentColor} class={cN}>
   {#if label}
   <div class={s1.input_lab_cell_left}><div></div></div>
     <div class={s1.input_lab}>

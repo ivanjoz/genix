@@ -2,6 +2,8 @@
     import { untrack } from "svelte";
 import SearchSelect from '$components/SearchSelect.svelte';
 import { WeakSearchRef } from '$core/store.svelte';
+import { Env } from '$core/env';
+import { Agent } from '$core/agent/registry';
 
   interface SearchSelectProps<T> {
     saveOn?: T;
@@ -79,9 +81,35 @@ import { WeakSearchRef } from '$core/store.svelte';
     return idToRecord.get(id) as E || {[keyName]: `ID-${id}`, [keyId]: id } as E
   }
 
+  const componentID = Env.getComponentID()
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "SearchCard",
+      label: label || "",
+      select: (...ids) => {
+        let changed = false
+        for (const rawId of ids) {
+          const opt = getOption(rawId)
+          const id = opt[keyId] as number | string
+          if (!selectedIDs.includes(id)) {
+            selectedIDs.push(id)
+            changed = true
+          }
+        }
+        if (changed) { doOnChange() }
+      },
+      remove: (id) => {
+        const before = selectedIDs.length
+        selectedIDs = selectedIDs.filter((x) => String(x) !== String(id))
+        if (selectedIDs.length !== before) { doOnChange() }
+      },
+    })
+  })
 </script>
 
-<div class={css}>
+<div data-id="SearchCard:{componentID}" class={css}>
   <SearchSelect options={options} keyId={keyId} keyName={keyName}
     clearOnSelect={true} avoidIDs={selectedIDs} placeholder={label}
     css={"s1 "+inputCss} optionsCss={optionsCss}
@@ -97,7 +125,8 @@ import { WeakSearchRef } from '$core/store.svelte';
   <div class="p-4 min-h-40 _2 flex flex-wrap {cardCss}">
     {#each selectedIDs as id }
       {@const el = getOption(id)}
-      <div class="m-2 px-8 min-w-56 h-32 lh-10 flex _3">
+      <div data-id="Option:{id}" data-selected="true"
+        class="m-2 px-8 min-w-56 h-32 lh-10 flex _3">
         { el[keyName] as string }
         <button class="_4 absolute w-28 h-28 rounded right-2" aria-label="eliminar"
           onclick={ev => {

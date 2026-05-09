@@ -3,6 +3,8 @@
     import s1 from "./components.module.css";
 import type { ElementAST } from '$components/Renderer.svelte';
 import { persistFieldValue } from '$libs/helpers';
+    import { Env } from "$core/env";
+    import { Agent } from "$core/agent/registry";
 
     export interface IInput<T> {
         id?: number;
@@ -181,9 +183,39 @@ import { persistFieldValue } from '$libs/helpers';
     let cN = $derived(
         `${s1.input} p-rel${css ? ` ${css}` : ""}${!label ? " no-label" : ""}`,
     );
+
+    const componentID = Env.getComponentID()
+
+    $effect(() => {
+        return Agent.register({
+            id: componentID,
+            type: "Input",
+            label: label || placeholder || "",
+            setValue: (value: string | number) => {
+                // Reuse the blur path so parse / transform / validate / persist all run.
+                const fakeEvent = { stopPropagation: () => {}, target: { value: String(value) } } as unknown as KeyboardEvent;
+                onKeyUp(fakeEvent, true);
+                if (onChange) { onChange(); }
+                if (typeof id === "number" && id > 0) {
+                    persistFieldValue(id, (saveOn?.[save] ?? null) as number | string | null);
+                }
+            },
+        });
+    });
+
+    // data-value mirrors the current value so the agent can read it from the DOM snapshot.
+    const agentDataValue = $derived(
+        inputValue === undefined || inputValue === null || inputValue === "" ? "" : String(inputValue),
+    );
+    const agentDataLabel = $derived(label || placeholder || "");
+    const agentDataType = $derived(
+        type === "number" ? "number"
+            : (!type || type === "text" || type === "search") ? "text"
+            : "other",
+    );
 </script>
 
-<div class={cN}>
+<div data-id="Input:{componentID}" data-value={agentDataValue} data-label={agentDataLabel} data-type={agentDataType} class={cN}>
     {#if label}
         <div class={s1.input_lab_cell_left}><div></div></div>
         <div class={s1.input_lab}>

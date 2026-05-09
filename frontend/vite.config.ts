@@ -8,6 +8,7 @@ import mime from 'mime-types'
 import path from 'path'
 import { fileURLToPath } from 'url';
 import type { IncomingMessage, ServerResponse } from 'http'
+import { createHash } from 'node:crypto';
 import { type RolldownOptions } from 'rolldown'
 import { svelteClassHasher, getCounter, getCounterFomFile } from './plugins.js';
 
@@ -26,6 +27,13 @@ const cssModuleMap = new Map<string, string>();
 if (isBuild) {
   getCounterFomFile();
 }
+
+const makeDevCssModuleClass = (name: string, filename: string) => {
+  // Keep CSS module classes stable in dev so repeated selectors export one class name.
+  const stableInput = path.relative(projectDir, filename) + ':' + name;
+  const stableHash = createHash('sha256').update(stableInput).digest('base64url').slice(0, 6);
+  return `m-${name}_${stableHash}`;
+};
 
 // Custom plugin to build the service worker
 const publicDir = path.resolve(projectDir, 'static');
@@ -194,7 +202,7 @@ export default defineConfig({
           }
           return cssModuleMap.get(key)!;
         }
-        return `m-${name}_${Math.random().toString(36).substring(2, 6)}`;
+        return makeDevCssModuleClass(name, filename);
       }
     }
   },

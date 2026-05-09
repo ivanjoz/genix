@@ -6,6 +6,7 @@ import { Env } from '$core/env';
 import { imagesToUpload } from '$core/store.svelte';
 import type { IImageResult } from '$core/types/common';
 import Page from '$domain/Page.svelte';
+import { Agent } from '$core/agent/registry';
 
 export interface IImageInput {
   content: string;
@@ -236,15 +237,35 @@ $effect(() => {
   console.log("progress (2)::", $state.snapshot(progress))
 })
 
+const componentID = Env.getComponentID()
+let fileInputElement = $state<HTMLInputElement | undefined>(undefined)
 
+const removeImage = () => {
+  if (onDelete) { onDelete(src); return }
+  imageSrc = { src: '', base64: '', types: [], description: '' }
+  onChange?.(imageSrc)
+  progress = 0
+}
+
+$effect(() => {
+  return Agent.register({
+    id: componentID,
+    type: "ImageUploader",
+    label: description || "",
+    click: () => { fileInputElement?.click() },
+    deleted: () => { removeImage() },
+  })
+})
 </script>
 
-<div class="relative {cardCss} card_image_1 {imageSrc?.src ? '' : 'card_input'}"
+<div data-id="ImageUploader:{componentID}"
+  data-value={imageSrc?.src || imageSrc?.base64 ? "uploaded" : "empty"}
+  class="relative {cardCss} card_image_1 {imageSrc?.src ? '' : 'card_input'}"
   style={cardStyle}
 >
   {#if (imageSrc?.src || '').length === 0}
     <div class="w-full h-full relative flex flex-col items-center justify-center card_input_layer">
-      <input onchange={onFileChange} type="file" accept="image/png, image/jpeg, image/webp" />
+      <input bind:this={fileInputElement} onchange={onFileChange} type="file" accept="image/png, image/jpeg, image/webp" />
       <div style="font-size: 2.4rem">
         <i class="icon-upload"></i>
       </div>

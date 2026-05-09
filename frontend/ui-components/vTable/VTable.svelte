@@ -9,6 +9,8 @@
   import { highlString, wordInclude } from '$libs/helpers';
   import Renderer, { type ElementAST } from '$components/Renderer.svelte';
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
+  import { Env } from '$core/env';
+  import { Agent } from '$core/agent/registry';
 
   interface ICellContent {
     content: string;
@@ -40,6 +42,8 @@
     mobileCardCss?: string
     getRowObject?: (row: Partial<T>) => Promise<T>
     cellInputType?: 'number';
+    /** Stable id for the row, used by the agent registry as TableRow:<id>. */
+    getRowId?: (row: T, index: number) => number | string;
   }
 
   let {
@@ -62,6 +66,7 @@
     mobileCardCss = '',
     getRowObject,
     cellInputType,
+    getRowId,
   }: VTableProps<T> = $props();
 
   // State
@@ -361,9 +366,39 @@
       onRowClick(record, index, rerender);
     }
   }
+
+  // Default row id: explicit getRowId > record.ID > index
+  function resolveRowId(record: T, index: number): number | string {
+    if (getRowId) { return getRowId(record, index); }
+    const fallback = (record as any)?.ID;
+    return fallback === undefined ? index : (fallback as number | string);
+  }
+
+  const componentID = Env.getComponentID();
+
+  $effect(() => {
+    if (!onRowClick) { return; }
+    return Agent.register({
+      id: componentID,
+      type: "Table",
+      label: "",
+      select: (...ids) => {
+        const targets = new Set(ids.map(String));
+        for (let i = 0; i < filteredData.length; i++) {
+          const record = filteredData[i];
+          if (!record) { continue; }
+          if (targets.has(String(resolveRowId(record, i)))) {
+            const resolved = getResolvedRow(record, i) || record;
+            handleRowClick(resolved, i, () => rerenderRow(i));
+          }
+        }
+      },
+    });
+  });
 </script>
 
 <div bind:this={containerRef}
+  data-id={onRowClick ? `Table:${componentID}` : undefined}
   class="vtable-container {css}" class:_14={isMobileView}
   style="max-height: {maxHeight}; overflow: {isMobileView ? 'hidden' : 'auto'};"
 >
@@ -448,8 +483,11 @@
 
           {#if record}
             {@const selected = resolvedRecord ? isRowSelected(resolvedRecord, row.index) : false}
+            {@const rowId = resolveRowId(resolvedRecord || record, row.index)}
 
           <tr class="vtable-row"
+            data-id={onRowClick ? `TableRow:${rowId}` : undefined}
+            data-selected={selected ? "true" : undefined}
             class:vtable-row-even={row.index % 2 === 0}
             class:vtable-row-odd={row.index % 2 !== 0}
             class:vtable-row-selected={selected}

@@ -218,7 +218,12 @@ export const Env = {
 	},
 	makeCDNRoute: (...segments: string[]) => {
 		return makeRoute(Env.CDN_URL, ...segments)
-  },
+	},
+	componentIDCounter: 0,
+	getComponentID: () => {
+		Env.componentIDCounter++
+		return Env.componentIDCounter
+  }
 }
 
 Env.setSelectedApiEndpoint(Env.selectedApiEndpointRoute)

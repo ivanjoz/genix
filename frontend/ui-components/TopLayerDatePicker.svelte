@@ -4,6 +4,7 @@ import { untrack } from 'svelte';
 import {
   buildCalendarWeeks,
   createDateInputContext,
+  dateFromUnixDay,
   formatUnixDay,
   getMonthKey,
   monthsNames,
@@ -12,6 +13,8 @@ import {
   resolvePreservedUnixDay,
   weekDaysNames,
 } from './date-input.helpers';
+import { Env } from '$core/env';
+import { Agent } from '$core/agent/registry';
 
 const {
   todayDate,
@@ -178,10 +181,45 @@ $effect(() => {
 
   inputElement?.blur()
 })
+
+const componentID = Env.getComponentID()
+
+const agentDataValue = $derived.by(() => {
+  if (!localSelectedUnixDay) { return "" }
+  const d = dateFromUnixDay(localSelectedUnixDay, timezoneOffsetSeconds)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+})
+
+$effect(() => {
+  return Agent.register({
+    id: componentID,
+    type: "TopLayerDatePicker",
+    label: "",
+    setValue: (value) => {
+      if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+        selectDay(value)
+        return
+      }
+      const text = String(value || "")
+      const parsed = parseTypedDate(text, todayDate, timezoneOffsetSeconds)
+      if (parsed.isCompleted && parsed.autoCompletedUnixDay) {
+        selectDay(parsed.autoCompletedUnixDay)
+      } else if (text === "") {
+        clearSelectedDate()
+      }
+    },
+    close: () => { closeLayer() },
+  })
+})
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="_1" class:_2={isOpen} data-button-layer-protected="true">
+<div data-id="TopLayerDatePicker:{componentID}" data-value={agentDataValue}
+  class="_1" class:_2={isOpen} data-button-layer-protected="true">
+  {#if isOpen}
   <div class="p-6 pb-4">
     <div class="flex items-center">
       <i class="icon-calendar _3"></i>
@@ -331,6 +369,7 @@ $effect(() => {
       {/each}
     </div>
   </div>
+  {/if}
 </div>
 
 <style>

@@ -10,6 +10,8 @@
 <script lang="ts" generics="TRecord">
   import CellEditable from '$components/vTable/CellEditable.svelte'
   import Renderer, { type ElementAST } from '$components/Renderer.svelte'
+  import { Env } from '$core/env'
+  import { Agent } from '$core/agent/registry'
   import type { ITableColumn } from './types'
 
   interface TableTreeProps<TRecord> {
@@ -82,9 +84,37 @@
   function rerenderNoop() {
     // Caller-owned state drives the row refresh; CellEditable only needs the callback signature.
   }
+
+  const componentID = Env.getComponentID()
+
+  $effect(() => {
+    if (!onNodeClick && !onChildClick) { return }
+    return Agent.register({
+      id: componentID,
+      type: "Table",
+      label: "",
+      select: (...ids) => {
+        const targets = new Set(ids.map(String))
+        for (let i = 0; i < data.length; i++) {
+          const node = data[i]
+          if (targets.has(String(node.id))) {
+            toggleNode(node, i)
+            continue
+          }
+          if (!onChildClick || !node.isOpen) { continue }
+          for (let j = 0; j < node.children.length; j++) {
+            const childRecord = node.children[j]
+            if (targets.has(String(resolveChildId(childRecord, j, node)))) {
+              onChildClick(childRecord, j, node)
+            }
+          }
+        }
+      },
+    })
+  })
 </script>
 
-<div class="table-tree-shell {css}">
+<div data-id="Table:{componentID}" class="table-tree-shell {css}">
   <div class="table-tree-plain-scroll">
     <div class="table-tree-header table-tree-header-sticky">
       <div class="table-tree-header-row" role="row" style:grid-template-columns={gridTemplateColumns}>
@@ -105,7 +135,9 @@
     {:else}
       <div class="table-tree-body">
         {#each data as node, nodeIndex(node.id)}
-          <div class="table-tree-row-shell">
+          <div class="table-tree-row-shell"
+            data-id="TableRow:{node.id}"
+            data-selected={selectedId === node.id ? "true" : undefined}>
             <div
               class="table-tree-row {rowCss}"
               class:table-tree-row-selected={selectedId === node.id}
@@ -161,7 +193,9 @@
           {#if node.isOpen}
             {#each node.children as childRecord, childIndex (resolveChildId(childRecord, childIndex, node))}
               {@const childId = resolveChildId(childRecord, childIndex, node)}
-              <div class="table-tree-row-shell table-tree-child-row-shell">
+              <div class="table-tree-row-shell table-tree-child-row-shell"
+                data-id="TableRow:{childId}"
+                data-selected={selectedChildId === childId ? "true" : undefined}>
                 <div
                   class="table-tree-row table-tree-child-row {rowCss}"
                   class:table-tree-row-selected={selectedChildId === childId}

@@ -1,6 +1,8 @@
 <script lang="ts" generics="T">
   import { SvelteMap } from 'svelte/reactivity';
   import Renderer, { type ElementAST } from '$components/Renderer.svelte';
+  import { Env } from '$core/env';
+  import { Agent } from '$core/agent/registry';
   import type { ITableColumn } from './types';
 
   interface TableStreamProps<T> {
@@ -94,9 +96,35 @@
 
   // Expose imperative handlers so streaming modules can append records without array cloning in parents.
   export { appendTop, replaceRecords, clearRecords };
+
+  const resolveStreamRowId = (rowRecord: T, rowIndex: number): string | number => {
+    const fallback = (rowRecord as any)?.ID;
+    return fallback === undefined ? rowIndex : (fallback as number | string);
+  };
+
+  const componentID = Env.getComponentID();
+
+  $effect(() => {
+    if (!onRowClick) { return; }
+    return Agent.register({
+      id: componentID,
+      type: "Table",
+      label: "",
+      select: (...ids) => {
+        const targets = new Set(ids.map(String));
+        for (let i = 0; i < streamRecords.length; i++) {
+          const record = streamRecords[i];
+          if (targets.has(String(resolveStreamRowId(record, i)))) {
+            onRowClick(record, i, () => rerenderRow(i));
+          }
+        }
+      },
+    });
+  });
 </script>
 
-<div class="stream-table-card {css}">
+<div data-id={onRowClick ? `Table:${componentID}` : undefined}
+  class="stream-table-card {css}">
   <div class="stream-table-scroll" style="max-height: {maxHeight};">
     <table class="stream-table {tableCss}">
       <thead>
@@ -116,6 +144,8 @@
         {:else}
           {#each streamRecords as rowRecord, rowIndex (`${rowIndex}_${rowVersions.get(rowIndex) || 0}`)}
             <tr
+              data-id={onRowClick ? `TableRow:${resolveStreamRowId(rowRecord, rowIndex)}` : undefined}
+              data-selected={getRowSelected(rowRecord) ? "true" : undefined}
               class:stream-row-selected={getRowSelected(rowRecord)}
               class:stream-row-even={rowIndex % 2 === 0}
               class:stream-row-odd={rowIndex % 2 !== 0}

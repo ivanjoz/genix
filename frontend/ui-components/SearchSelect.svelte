@@ -5,6 +5,8 @@ import { Core } from '$core/store.svelte';
 import type { Snippet } from 'svelte';
   import s1 from "./components.module.css";
   import SvelteVirtualList from "@humanspeak/svelte-virtual-list";
+    import { Env } from '$core/env';
+    import { Agent, type AgentOption } from "$core/agent/registry";
 
   interface SearchSelectProps<T,E> {
     saveOn?: T;
@@ -226,15 +228,20 @@ import type { Snippet } from 'svelte';
     return filtered;
   }
 
+  function applySearch(text: string, openList = false) {
+    const searchWords = splitSearchWords(text);
+    if (inputRef) { inputRef.value = text; }
+    words = searchWords;
+    filteredOptions = filter(text, searchWords);
+    arrowSelected = -1;
+    if (openList) { show = true; }
+  }
+
   function onKeyUp(ev: KeyboardEvent) {
     ev.stopPropagation();
     throttle(() => {
-      if(!inputRef){ return }
-      const currentInputValue = String(inputRef.value || "");
-      const currentSearchWords = splitSearchWords(currentInputValue);
-      words = currentSearchWords;
-      filteredOptions = filter(currentInputValue, currentSearchWords);
-      arrowSelected = -1;
+      if (!inputRef) { return; }
+      applySearch(String(inputRef.value || ""));
     }, 120);
   }
 
@@ -355,9 +362,41 @@ import type { Snippet } from 'svelte';
     }
   }
 
+  const componentID = Env.getComponentID()
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "SearchSelect",
+      label: label || placeholder || "",
+      search: (text: string) => { applySearch(text, true); },
+      select: (...ids) => {
+        if (ids.length === 0) { return; }
+        const targetId = String(ids[0]);
+        const matched = options.find((opt) => String(getOptionId(opt)) === targetId);
+        if (matched) { onOptionClick(matched); }
+      },
+      getOptions: (maxOptions = 50) => {
+        const out: AgentOption[] = [];
+        for (const prepared of preparedOptions) {
+          if (out.length >= maxOptions) { break; }
+          out.push({ id: prepared.id, value: prepared.label });
+        }
+        return out;
+      },
+    });
+  });
+
+  // data-value carries the selected id + label so the agent can read it from the DOM.
+  const agentDataValue = $derived.by(() => {
+    const item = getSelectedFromProps();
+    if (!item) { return ""; }
+    return `[${getOptionId(item)}] ${item[keyName as keyof E] as string}`;
+  });
+  const agentDataLabel = $derived(label || placeholder || "");
 </script>
 
-<div class={cN}>
+<div data-id="SearchSelect:{componentID}" data-value={agentDataValue} data-label={agentDataLabel} data-type="other" class={cN}>
   {#if label}
     <div class={s1.input_lab_cell_left}><div></div></div>
     <div class={s1.input_lab}>

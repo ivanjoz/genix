@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Core } from '$core/store.svelte'
   import MobileLayerVertical from '$components/MobileLayerVertical.svelte'
+  import { Env } from '$core/env'
+  import { Agent } from '$core/agent/registry'
 
   interface Props {
     css?: string
@@ -26,6 +28,18 @@
 
   // Mobile keeps the drawer collapsed until the user expands it from the title bar.
   let mobileLayerIsOpen = $state(false)
+
+  const componentID = Env.getComponentID()
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "LayerStatic",
+      label: mobileLayerTitle || "",
+      open: () => { mobileLayerIsOpen = true },
+      close: () => { mobileLayerIsOpen = false },
+    })
+  })
 </script>
 
 {#if useVerticalMobileLayer}
@@ -40,7 +54,8 @@
     {@render children?.()}
   </MobileLayerVertical>
 {:else}
-  <div
+  <div data-id="LayerStatic:{componentID}"
+    data-value={isOpen ? "open" : "closed"}
     class="layer-static {css || ''}"
     class:layer-static-open={isOpen}
     aria-hidden={!isOpen}

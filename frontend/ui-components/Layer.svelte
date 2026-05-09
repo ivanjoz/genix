@@ -4,6 +4,8 @@
 import { Core } from '$core/store.svelte';
 import OptionsStrip from '$components/OptionsStrip.svelte';
 import ButtonList from '$components/ButtonList.svelte';
+import { Env } from '$core/env';
+import { Agent } from '$core/agent/registry';
 
   // svelte-ignore non_reactive_update
   let divLayer: HTMLDivElement
@@ -156,10 +158,33 @@ import ButtonList from '$components/ButtonList.svelte';
     }
   })
 
+  const componentID = Env.getComponentID()
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "Layer",
+      label: title || "",
+      open: () => {
+        if (typeof id === "number" && Core.showSideLayer !== id) {
+          Core.openSideLayer(id)
+        }
+      },
+      close: () => { closeLayer() },
+      ...((options || []).length > 0 ? {
+        select: (...ids) => {
+          if (ids.length === 0) { return }
+          const targetId = String(ids[0])
+          const matched = (options || []).find((opt) => String(opt[0]) === targetId)
+          if (matched) { selected = matched[0] }
+        },
+      } : {}),
+    })
+  })
 </script>
 
 {#if Core.showSideLayer === id && (type === 'side' || type === 'bottom')}
-  <div
+  <div data-id="Layer:{componentID}"
     class="flex flex-col w-800 {css || ''}"
     bind:this={divLayer}
     data-layer-id={id}
@@ -246,7 +271,7 @@ import ButtonList from '$components/ButtonList.svelte';
 {/if}
 
 {#if type == 'content'}
-  <div class="w-page" style:width={contentWidth}>
+  <div data-id="Layer:{componentID}" class="w-page" style:width={contentWidth}>
     {@render children()}
   </div>
 {/if}

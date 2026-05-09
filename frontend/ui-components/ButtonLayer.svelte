@@ -2,6 +2,8 @@
   import { tick, type Snippet } from 'svelte';
 import { parseSVG } from '$libs/helpers';
 import angleSvg from '$domain/assets/angle.svg?raw';
+import { Env } from '$core/env';
+import { Agent } from '$core/agent/registry';
 
   interface Props {
     /** Button text or content */
@@ -222,6 +224,24 @@ import angleSvg from '$domain/assets/angle.svg?raw';
     };
   });
 
+  const componentID = Env.getComponentID();
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "ButtonLayer",
+      label: buttonText || "",
+      open: () => {
+        if (!isOpen) {
+          isOpen = true;
+          onOpen?.();
+        }
+      },
+      close: () => { closeLayer(); },
+      click: () => { toggleLayer(); },
+    });
+  });
+
   // Recalculate position on scroll and resize
   $effect(() => {
     if (!isOpen) return;
@@ -242,7 +262,8 @@ import angleSvg from '$domain/assets/angle.svg?raw';
   });
 </script>
 
-<div class="button-layer-wrapper {wrapperClass}">
+<div data-id="ButtonLayer:{componentID}" data-value={isOpen ? "open" : "closed"}
+  class="button-layer-wrapper {wrapperClass}">
   {#if button}
     <div
       bind:this={buttonElement}

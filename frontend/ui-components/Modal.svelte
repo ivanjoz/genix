@@ -4,6 +4,8 @@
 	import OptionsStrip from "$components/OptionsStrip.svelte";
 	import FileUploadSelector from "$components/files/FileUploadSelector.svelte";
 	import { closeModal, openModals } from "$core/store.svelte";
+	import { Env } from "$core/env";
+	import { Agent } from "$core/agent/registry";
 
 	interface Props {
 		children?: import("svelte").Snippet;
@@ -149,11 +151,26 @@
 			selectedImportView = 2;
 		}
 	});
+
+	const componentID = Env.getComponentID();
+	const titleLabel = $derived.by(() => (typeof title === "string" ? title : ""));
+
+	$effect(() => {
+		return Agent.register({
+			id: componentID,
+			type: "Modal",
+			label: titleLabel,
+			close: () => {
+				if (onClose) onClose();
+				closeModal(id);
+			},
+		});
+	});
 </script>
 
 {#if isOpen}
 	<Portal>
-		<div
+		<div data-id="Modal:{componentID}"
 			class="_1 fixed top-0 left-0 flex items-center justify-center"
 			bind:this={modalDiv}
 		>

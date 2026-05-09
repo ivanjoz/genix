@@ -3,6 +3,8 @@
   import { untrack } from "svelte";
   import SearchSelect from "$components/SearchSelect.svelte";
   import { WeakSearchRef } from "$core/store.svelte";
+  import { Env } from "$core/env";
+  import { Agent } from "$core/agent/registry";
 
   type SearchOptionID = string | number;
   type SearchDualCardSource = "left" | "right";
@@ -228,9 +230,47 @@
   $effect(() => {
     syncSelectedIDsFromProps();
   });
+
+  const componentID = Env.getComponentID();
+
+  // Resolve which side an id belongs to so the agent's select() doesn't need to specify.
+  function findSourceForId(rawId: SearchOptionID): SearchDualCardSource | undefined {
+    const target = String(rawId);
+    if (leftOptions.some((opt) => String(opt[leftKeyId]) === target)) { return "left"; }
+    if (rightOptions.some((opt) => String(opt[rightKeyId]) === target)) { return "right"; }
+    return undefined;
+  }
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "SearchDualCard",
+      label: sharedLabel || "",
+      select: (...ids) => {
+        for (const rawId of ids) {
+          const source = findSourceForId(rawId);
+          if (source === "left") {
+            const matched = leftOptions.find((opt) => String(opt[leftKeyId]) === String(rawId));
+            if (matched) { addLeftSelectedID(matched); }
+          } else if (source === "right") {
+            const matched = rightOptions.find((opt) => String(opt[rightKeyId]) === String(rawId));
+            if (matched) { addRightSelectedID(matched); }
+          }
+        }
+      },
+      remove: (id) => {
+        const source = findSourceForId(id);
+        if (!source) { return; }
+        // The actual id type may be number; recover it from the matching list.
+        const list = source === "left" ? leftSelectedIDs : rightSelectedIDs;
+        const matched = list.find((current) => String(current) === String(id));
+        if (matched !== undefined) { removeSelectedID(source, matched); }
+      },
+    });
+  });
 </script>
 
-<div class={css}>
+<div data-id="SearchDualCard:{componentID}" class={css}>
   <div class="grid grid-cols-24 gap-10">
     <SearchSelect
       options={leftOptions}
@@ -265,7 +305,8 @@
       {#each selectedItems as currentSelectedItem (`${currentSelectedItem.source}-${currentSelectedItem.id}`)}
         {@const removeSelected = () => removeSelectedID(currentSelectedItem.source, currentSelectedItem.id)}
         {#if selectedItem}
-          <div class={`m-2 px-8 py-6 min-w-56 lh-10 flex _chip ${currentSelectedItem.source === "right" ? "_chip-right" : "_chip-left"}`}>
+          <div data-id="Option:{currentSelectedItem.id}" data-selected="true"
+            class={`m-2 px-8 py-6 min-w-56 lh-10 flex _chip ${currentSelectedItem.source === "right" ? "_chip-right" : "_chip-left"}`}>
             <span class="_chip-text">
               {@render selectedItem(currentSelectedItem)}
             </span>
@@ -281,7 +322,8 @@
             </button>
           </div>
         {:else}
-          <div class={`m-2 px-8 py-6 min-w-56 lh-10 flex _chip ${currentSelectedItem.source === "right" ? "_chip-right" : "_chip-left"}`}>
+          <div data-id="Option:{currentSelectedItem.id}" data-selected="true"
+            class={`m-2 px-8 py-6 min-w-56 lh-10 flex _chip ${currentSelectedItem.source === "right" ? "_chip-right" : "_chip-left"}`}>
             <span class="_chip-text">{getSelectedItemName(currentSelectedItem)}</span>
             <button
               class="_chip-remove absolute w-28 h-28 rounded right-2 top-2"

@@ -4,6 +4,7 @@ import { defineConfig } from 'vite';
 import path from 'path';
 import { svelteClassHasher, getCounter, getCounterFomFile } from '../plugins.js';
 import { fileURLToPath } from 'url';
+import { createHash } from 'node:crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,6 +17,13 @@ const cssModuleMap = new Map();
 if (isBuild) {
   getCounterFomFile();
 }
+
+const makeDevCssModuleClass = (name: string, filename: string) => {
+  // Keep CSS module classes stable in dev so repeated selectors export one class name.
+  const stableInput = path.relative(__dirname, filename) + ':' + name;
+  const stableHash = createHash('sha256').update(stableInput).digest('base64url').slice(0, 6);
+  return `m-${name}_${stableHash}`;
+};
 
 export default defineConfig({
   root: path.resolve(__dirname),
@@ -37,7 +45,7 @@ export default defineConfig({
           }
           return cssModuleMap.get(key)!;
         }
-        return `m-${name}_${Math.random().toString(36).substring(2, 6)}`;
+        return makeDevCssModuleClass(name, filename);
       }
     }
   },

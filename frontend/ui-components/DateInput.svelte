@@ -32,6 +32,8 @@
     weekDaysNames,
   } from "./date-input.helpers";
   import s1 from "./components.module.css";
+  import { Env } from "$core/env";
+  import { Agent } from "$core/agent/registry";
 
   let {
     saveOn = $bindable(),
@@ -215,6 +217,43 @@
 
   let cN = $derived(`${s1.input} relative date-input-container` + (css ? " " + css : ""))
 
+  // YYYY-MM-DD mirror of the selected day, exposed as data-value for the agent.
+  const agentDataValue = $derived.by(() => {
+    if (!fechaSelected) { return "" }
+    const d = dateFromUnixDay(fechaSelected, timezoneOffsetSeconds)
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  })
+  const agentDataLabel = $derived(label || placeholder || "")
+
+  const componentID = Env.getComponentID()
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "DateInput",
+      label: label || placeholder || "",
+      setValue: (value: string | number) => {
+        if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+          changeFechaSelected(value)
+          if (onChange) onChange()
+          return
+        }
+        const text = String(value || "")
+        const parsed = parseTypedDate(text, todayDate, timezoneOffsetSeconds)
+        if (parsed.isCompleted && parsed.autoCompletedUnixDay) {
+          changeFechaSelected(parsed.autoCompletedUnixDay)
+          if (onChange) onChange()
+        } else if (text === "") {
+          changeFechaSelected(0)
+          if (onChange) onChange()
+        }
+      },
+    })
+  })
+
   // Shared close-on-mouseleave: keep open while the input still owns focus (user is typing); otherwise dismiss.
   const handleCalendarMouseLeave = (ev: MouseEvent) => {
     ev.stopPropagation()
@@ -304,7 +343,7 @@
 {/snippet}
 
 {#if label && !useInlineStyle}
-  <div class={cN}>
+  <div data-id="DateInput:{componentID}" data-value={agentDataValue} data-label={agentDataLabel} data-type="other" class={cN}>
     <div class={s1.input_lab_cell_left}><div></div></div>
     <div class={s1.input_lab}>{label}</div>
     <div class={s1.input_lab_cell_right}><div></div></div>
@@ -356,7 +395,8 @@
   </div>
 {:else}
   <!-- useInlineStyle swaps the chrome (s1.input/input_div/input_inp) for bare classes that fill the parent cell. -->
-  <div class={(useInlineStyle ? "di-bare relative w-full h-full date-input-container" : `${s1.input} no-label relative date-input-container`) + (css ? " " + css : "")}>
+  <div data-id="DateInput:{componentID}" data-value={agentDataValue} data-label={agentDataLabel} data-type="other"
+    class={(useInlineStyle ? "di-bare relative w-full h-full date-input-container" : `${s1.input} no-label relative date-input-container`) + (css ? " " + css : "")}>
     <div class={useInlineStyle ? "flex w-full h-full" : `${s1.input_div} flex w-full`}>
       {#if !isMobile}
         <input

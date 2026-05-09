@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { Env } from '$core/env'
+  import { Agent } from '$core/agent/registry'
+
   interface Props {
     title?: string
     show?: boolean
@@ -19,9 +22,23 @@
   const toggleLayer = () => {
     onToggle?.(!show)
   }
+
+  const componentID = Env.getComponentID()
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "MobileLayerVertical",
+      label: title || "",
+      open: () => { if (!show) { onToggle?.(true) } },
+      close: () => { if (show) { onToggle?.(false) } },
+    })
+  })
 </script>
 
-<div class="mobile-layer-shell" aria-hidden={!show}>
+<div data-id="MobileLayerVertical:{componentID}"
+  data-value={show ? "open" : "closed"}
+  class="mobile-layer-shell" aria-hidden={!show}>
   <button
     class="mobile-layer-backdrop"
     class:is-visible={show}

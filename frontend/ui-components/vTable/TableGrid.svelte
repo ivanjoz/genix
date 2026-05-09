@@ -6,6 +6,8 @@
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import { splitTwoStrings } from '$libs/helpers';
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
+  import { Env } from '$core/env';
+  import { Agent } from '$core/agent/registry';
   import type {
     IMobileCardsListCell,
     ITableColumn,
@@ -305,9 +307,36 @@
       syncHeaderScrollbarCompensation();
     });
   });
+
+  const resolveAgentRowId = (rowRecord: TRecord, rowIndex: number): string | number => {
+    if (getRowId) { return getRowId(rowRecord, rowIndex); }
+    const fallback = (rowRecord as any)?.ID;
+    return fallback === undefined ? rowIndex : (fallback as number | string);
+  };
+
+  const componentID = Env.getComponentID();
+
+  $effect(() => {
+    if (!onRowClick) { return; }
+    return Agent.register({
+      id: componentID,
+      type: "Table",
+      label: "",
+      select: (...ids) => {
+        const targets = new Set(ids.map(String));
+        for (let i = 0; i < data.length; i++) {
+          const record = data[i];
+          if (targets.has(String(resolveAgentRowId(record, i)))) {
+            handleRowClick(record, i);
+          }
+        }
+      },
+    });
+  });
 </script>
 
-<div class="table-grid-shell {css}"
+<div data-id={onRowClick ? `Table:${componentID}` : undefined}
+  class="table-grid-shell {css}"
   class:table-grid-shell-mobile={isMobileView}
   bind:this={shellElement}
   style="height: {isMobileView || useVirtualScroll ? height : 'auto'}; max-height: {height}; --table-grid-template-columns: {gridTemplateColumns}; --table-grid-row-height: {normalizedRowHeight}px; --table-grid-scrollbar-width: {verticalScrollbarWidth}px;"
@@ -360,7 +389,10 @@
       {:else}
         {#each data as rowRecord, rowIndex (getRowId ? getRowId(rowRecord, rowIndex) : rowIndex)}
           {@const selected = isSelectedRow(rowRecord, rowIndex)}
-          <div class="table-grid-row-shell" style={resolveRowShellStyle(rowRecord, rowIndex)}>
+          <div class="table-grid-row-shell"
+            data-id={onRowClick ? `TableRow:${resolveAgentRowId(rowRecord, rowIndex)}` : undefined}
+            data-selected={selected ? "true" : undefined}
+            style={resolveRowShellStyle(rowRecord, rowIndex)}>
             <div class="table-grid-row {rowCss}"
               class:table-grid-row-even={rowIndex % 2 === 0}
               class:table-grid-row-odd={rowIndex % 2 !== 0}
@@ -478,7 +510,10 @@
         >
           {#snippet renderItem(rowRecord, rowIndex)}
             {@const selected = isSelectedRow(rowRecord, rowIndex)}
-            <div class="table-grid-row-shell" style={resolveRowShellStyle(rowRecord, rowIndex)}>
+            <div class="table-grid-row-shell"
+              data-id={onRowClick ? `TableRow:${resolveAgentRowId(rowRecord, rowIndex)}` : undefined}
+              data-selected={selected ? "true" : undefined}
+              style={resolveRowShellStyle(rowRecord, rowIndex)}>
               <div class="table-grid-row {rowCss}"
                 class:table-grid-row-even={rowIndex % 2 === 0}
                 class:table-grid-row-odd={rowIndex % 2 !== 0}

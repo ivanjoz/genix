@@ -1,5 +1,7 @@
 <script lang="ts" generics="T,E">
     import { untrack } from 'svelte';
+    import { Env } from "$core/env";
+    import { Agent } from "$core/agent/registry";
 
   const {
 		 saveOn = $bindable(), save, css, label, useNumber
@@ -36,10 +38,23 @@
     })
   })
 
+  const componentID = Env.getComponentID()
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "Checkbox",
+      label: label || "",
+      click: () => { onSelect() },
+    })
+  })
 </script>
 
-<div class="flex items-center {css}">
-  <button class="flex mr-4 pt-1 items-center p-0 lh-10 justify-center rounded-[4px] shrink-0 w-28 h-26 _1" 
+<div data-id="Checkbox:{componentID}"
+  data-value={isSelected ? "1" : "0"}
+  data-selected={isSelected ? "true" : undefined}
+  class="flex items-center {css}">
+  <button class="flex mr-4 pt-1 items-center p-0 lh-10 justify-center rounded-[4px] shrink-0 w-28 h-26 _1"
     class:_2={isSelected}
     aria-label="{label as string}"
     onclick={ev => {

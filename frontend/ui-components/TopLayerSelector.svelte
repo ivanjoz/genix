@@ -3,6 +3,8 @@ import { Core } from '$core/store.svelte';
 import { highlString, wordInclude, throttle } from '$libs/helpers';
 import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 import { untrack } from 'svelte';
+import { Env } from '$core/env';
+import { Agent } from '$core/agent/registry';
 
 // Local state for this modal instance
 const isOpen = $derived(!!Core.showMobileSearchLayer);
@@ -63,15 +65,40 @@ $effect(() => {
   }
 })
 
+const componentID = Env.getComponentID()
+
+$effect(() => {
+  return Agent.register({
+    id: componentID,
+    type: "TopLayerSelector",
+    label: "",
+    search: (text) => {
+      searchText = String(text || "").toLowerCase()
+      if (htmlTextarea) { htmlTextarea.value = String(text || "") }
+    },
+    select: (...ids) => {
+      if (ids.length === 0) { return }
+      const targetId = String(ids[0])
+      const matched = (Core.showMobileSearchLayer?.options || []).find((opt: any) => String(opt[keyId]) === targetId)
+      if (matched) {
+        Core.showMobileSearchLayer?.onSelect(matched)
+        Core.showMobileSearchLayer = null
+      }
+    },
+    close: () => { Core.showMobileSearchLayer = null },
+  })
+})
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="_1" class:_2={isOpen} data-button-layer-protected="true"
+<div data-id="TopLayerSelector:{componentID}"
+  class="_1" class:_2={isOpen} data-button-layer-protected="true"
   onmousedown={ev => {
     if((ev.target as HTMLDivElement).tagName === "textarea"){ return }
     avoidClose = true
   }}
 >
+  {#if isOpen}
   <div class="flex items-center p-6">
     <i class="icon-search _3"></i>
     <textarea rows={1} class="h-38 _4" bind:this={htmlTextarea}
@@ -123,7 +150,7 @@ $effect(() => {
           {#each optionRow as opt, columnIndex (`${rowIndex}-${columnIndex}`)}
             {#if opt}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <div class="_7" onclick={() => {
+              <div data-id="Option:{opt[keyId]}" class="_7" onclick={() => {
                 Core.showMobileSearchLayer?.onSelect(opt)
                 Core.showMobileSearchLayer = null
               }}>
@@ -141,6 +168,7 @@ $effect(() => {
       {/snippet}
     </SvelteVirtualList>
   </div>
+  {/if}
 </div>
 
 <style>

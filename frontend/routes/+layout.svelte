@@ -16,6 +16,7 @@
 	import { doInitServiceWorker } from '$libs/sw-cache';
 	import ImageWorker from '$libs/workers/image-worker?worker';
 	import { onMount } from 'svelte';
+	import { startAgentBridge } from '$core/agent/ws';
 	import './app.css';
 	import { getAccessEntriesForRoute } from './seguridad/perfiles-accesos/access-list-catalog';
 	import './tailwind.css';
@@ -31,6 +32,8 @@
 		} catch (error) {
 			console.error('❌ Failed to initialize image worker:', error)
 		}
+		// Local-only: open a websocket so the Go backend can drive the page as an agent.
+		startAgentBridge()
 	}
 
 	const redirectsToLogin = $derived.by(() => {

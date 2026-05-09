@@ -1,5 +1,7 @@
 <script lang="ts" generics="T">
 import { Core } from '$core/store.svelte';
+import { Env } from '$core/env';
+import { Agent } from '$core/agent/registry';
 
 
   let {
@@ -48,9 +50,31 @@ import { Core } from '$core/store.svelte';
     }
   }
 
+  const getOptionId = (e: T): string | number => {
+    if (Array.isArray(e)) { return e[0] as string | number }
+    if (keyId) { return e[keyId] as string | number }
+    return e as unknown as string | number
+  }
+
+  const componentID = Env.getComponentID()
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "OptionsStrip",
+      label: "",
+      select: (...ids) => {
+        if (ids.length === 0) { return }
+        const targetId = String(ids[0])
+        const matched = options.find((opt) => String(getOptionId(opt)) === targetId)
+        if (matched) { onSelect(matched) }
+      },
+    })
+  })
 </script>
 
-<div class="{containerCss} pb-4 md:pb-0 flex items-center shrink-0 max-w-[100%] overflow-x-auto overflow-y-hidden {css}"
+<div data-id="OptionsStrip:{componentID}"
+  class="{containerCss} pb-4 md:pb-0 flex items-center shrink-0 max-w-[100%] overflow-x-auto overflow-y-hidden {css}"
   class:_5={useMobileGrid}
   class:grid-cols-2={useMobileGrid && options.length === 2}
   class:grid-cols-3={useMobileGrid && options.length === 3}
@@ -59,7 +83,11 @@ import { Core } from '$core/store.svelte';
 >
   {#each options as opt }
     {@const words = getValue(opt)}
-    <button class="flex items-center ff-bold _2 {getClass(opt)}" onclick={ev => {
+    {@const optId = getOptionId(opt)}
+    {@const isSelected = optId === selected}
+    <button data-id="Option:{optId}"
+      data-selected={isSelected ? "true" : undefined}
+      class="flex items-center ff-bold _2 {getClass(opt)}" onclick={ev => {
       ev.stopPropagation()
       onSelect(opt)
     }}>

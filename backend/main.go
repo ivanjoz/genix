@@ -1,6 +1,7 @@
 package main
 
 import (
+	"app/agent"
 	"app/core"
 	"app/db"
 	"app/exec"
@@ -227,10 +228,17 @@ func main() {
 			ExposedHeaders:   []string{"X-Metadata"},
 			AllowCredentials: false,
 		})
+
+		// Local-only websocket bridge so the backend can drive the browser as an agent.
+		// Mounted before CORS because the websocket library handles its own origin checks.
+		mux := http.NewServeMux()
+		mux.HandleFunc("/ws/agent", agent.HandleWebSocket)
+		mux.Handle("/", corsMiddleware.Handler(http.HandlerFunc(LocalHandler)))
+
 		// Inicia el servidor con timeouts (previene slowloris y mejora resiliencia).
 		srv := &http.Server{
 			Addr:              serverPort,
-			Handler:           corsMiddleware.Handler(http.HandlerFunc(LocalHandler)),
+			Handler:           mux,
 			ReadHeaderTimeout: 5 * time.Second,
 			ReadTimeout:       30 * time.Second,
 			// Keep disabled to allow long-lived SSE streams (metrics and future real-time endpoints).

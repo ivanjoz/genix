@@ -10,6 +10,8 @@ import arrow1Svg from '$domain/assets/flecha_inicio.svg?raw';
 import { cn, parseSVG } from '$libs/helpers';
 import { Core } from '$core/store.svelte'
 import s1 from './styles.module.css';
+import { Env } from '$core/env';
+import { Agent } from '$core/agent/registry';
 
   let {
     options,
@@ -37,13 +39,31 @@ import s1 from './styles.module.css';
   const gridTemplateColumns = $derived(
     columnsTemplate || options.map(() => "1fr").join(" "),
   );
+
+  const componentID = Env.getComponentID()
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "ArrowSteps",
+      label: "",
+      select: (...ids) => {
+        if (ids.length === 0) { return }
+        const targetId = String(ids[0])
+        const matched = options.find((opt) => String(opt.id) === targetId)
+        if (matched) { handleSelect(matched) }
+      },
+    })
+  })
 </script>
 
-<div class="grid mr-8" style:grid-template-columns={gridTemplateColumns}>
+<div data-id="ArrowSteps:{componentID}" class="grid mr-8" style:grid-template-columns={gridTemplateColumns}>
   {#each options as option (option.id)}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div onclick={() => handleSelect(option)}
+    <div data-id="Option:{option.id}"
+      data-selected={option.id === selected ? "true" : undefined}
+      onclick={() => handleSelect(option)}
       class={cn(
         "flex relative items-center",
         s1.card_arrow_ctn,

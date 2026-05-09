@@ -1,5 +1,7 @@
 <script lang="ts" generics="T,E">
     import { untrack } from 'svelte';
+    import { Env } from '$core/env';
+    import { Agent } from '$core/agent/registry';
 
   const {
 		options, saveOn = $bindable(), save, keyId, keyName, css, type, useButtons = false
@@ -52,18 +54,46 @@
       if(type === 'multiple'){
         optionsSelected = (saveOn[save] || []) as (number|string)[]
       } else {
-        optionsSelected = [(saveOn[save] || []) as (number|string)]        
+        optionsSelected = [(saveOn[save] || []) as (number|string)]
       }
     })
   })
 
+  const componentID = Env.getComponentID()
+
+  $effect(() => {
+    return Agent.register({
+      id: componentID,
+      type: "CheckboxOptions",
+      label: "",
+      select: (...ids) => {
+        const targetSet = new Set(ids.map(String))
+        for (const opt of options || []) {
+          const optId = opt[keyId] as number | string
+          if (!targetSet.has(String(optId))) { continue }
+          if (!optionsSelected.includes(optId)) { onSelect(opt) }
+          else if (type !== 'multiple') { /* already selected single, skip */ }
+        }
+      },
+      remove: (id) => {
+        const target = String(id)
+        const matched = (options || []).find((opt) => String(opt[keyId]) === target)
+        if (matched && optionsSelected.includes(matched[keyId] as number | string)) {
+          onSelect(matched)
+        }
+      },
+    })
+  })
 </script>
 
-<div class="flex {css}">
+<div data-id="CheckboxOptions:{componentID}" class="flex {css}">
   {#each options as opt }
-  {@const isSelected = optionsSelected.includes(opt[keyId] as (number|string))}
+  {@const optId = opt[keyId] as (number|string)}
+  {@const isSelected = optionsSelected.includes(optId)}
     {#if useButtons}
-      <button class="_button ff-semibold mr-10"
+      <button data-id="Option:{optId}"
+        data-selected={isSelected ? "true" : undefined}
+        class="_button ff-semibold mr-10"
         class:_buttonSelected={isSelected}
         aria-label={opt[keyName] as string}
         onclick={ev => {
@@ -74,15 +104,17 @@
         {opt[keyName] as string}
       </button>
     {:else}
-      <div class="flex items-center mr-10">
-        <button class="flex mr-4 pt-1 items-center p-0 lh-10 justify-center rounded-[4px] shrink-0 w-28 h-26 _1" 
+      <div data-id="Option:{optId}"
+        data-selected={isSelected ? "true" : undefined}
+        class="flex items-center mr-10">
+        <button class="flex mr-4 pt-1 items-center p-0 lh-10 justify-center rounded-[4px] shrink-0 w-28 h-26 _1"
           class:_2={isSelected}
           aria-label={opt[keyName] as string}
           onclick={ev => {
             ev.stopPropagation()
             onSelect(opt)
           }}
-        >        
+        >
           {#if isSelected}
             <i class="icon-ok"></i>
           {/if}

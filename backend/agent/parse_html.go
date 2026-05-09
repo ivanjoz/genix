@@ -1,0 +1,570 @@
+package agent
+
+import (
+	"bytes"
+	"fmt"
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
+)
+
+var voidElements = map[string]bool{
+	"area": true, "base": true, "br": true, "col": true,
+	"embed": true, "hr": true, "img": true, "input": true,
+	"link": true, "meta": true, "source": true, "track": true,
+	"wbr": true,
+}
+
+var droppedElements = map[string]bool{
+	"script": true, "style": true, "noscript": true, "template": true,
+}
+
+// ParsePageHTML parses an HTML string and returns a cleaned, indented copy.
+// It removes every attribute except aria-* and role, drops non-content tags
+// (script/style/comments), deletes element subtrees that hold no text, and
+// collapses chains of text-less wrappers so at most one wrapper sits between
+// any two text-bearing layers.
+// Elements with a data-id matching a known component (e.g. "Input:4",
+// "SearchSelect:4") are replaced with a compact self-closing tag using the
+// metadata from the supplied components slice.
+func ParsePageHTML(input string, components []AgentComponentInfo) (string, error) {
+	cm := make(map[string]AgentComponentInfo, len(components))
+	for _, c := range components {
+		cm[fmt.Sprintf("%s:%d", c.Type, c.ID)] = c
+	}
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(input))
+	if err != nil {
+		return "", err
+	}
+	root := doc.Get(0)
+	if root == nil {
+		return "", nil
+	}
+
+	dropNoise(root)
+	cleanAttributes(root)
+	for {
+		removed := removeEmptyElements(root, cm)
+		collapsed := collapseWrappers(root, cm)
+		if !removed && !collapsed {
+			break
+		}
+	}
+
+	start := findElement(root, "body")
+	if start == nil {
+		start = root
+	}
+
+	var buf bytes.Buffer
+	for c := start.FirstChild; c != nil; c = c.NextSibling {
+		renderIndented(&buf, c, 0, cm)
+	}
+	return strings.TrimRight(buf.String(), "\n"), nil
+}
+
+func findElement(n *html.Node, tag string) *html.Node {
+	if n.Type == html.ElementNode && n.Data == tag {
+		return n
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if got := findElement(c, tag); got != nil {
+			return got
+		}
+	}
+	return nil
+}
+
+func dropNoise(n *html.Node) {
+	c := n.FirstChild
+	for c != nil {
+		next := c.NextSibling
+		switch {
+		case c.Type == html.CommentNode, c.Type == html.DoctypeNode:
+			n.RemoveChild(c)
+		case c.Type == html.ElementNode && droppedElements[c.Data]:
+			n.RemoveChild(c)
+		default:
+			dropNoise(c)
+		}
+		c = next
+	}
+}
+
+func cleanAttributes(n *html.Node) {
+	if n.Type == html.ElementNode {
+		kept := n.Attr[:0]
+		for _, attr := range n.Attr {
+			key := strings.ToLower(attr.Key)
+			if key == "role" || key == "data-id" || key == "data-value" || key == "data-label" || key == "data-type" || key == "data-selected" || strings.HasPrefix(key, "aria-") {
+				kept = append(kept, attr)
+			}
+		}
+		n.Attr = kept
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		cleanAttributes(c)
+	}
+}
+
+// nodeAttr returns the value of the named attribute on an element node, or "".
+func nodeAttr(n *html.Node, key string) string {
+	if n.Type != html.ElementNode {
+		return ""
+	}
+	for _, attr := range n.Attr {
+		if attr.Key == key {
+			return attr.Val
+		}
+	}
+	return ""
+}
+
+// nodeDataID returns the data-id attribute value for an element node, or "".
+func nodeDataID(n *html.Node) string {
+	if n.Type != html.ElementNode {
+		return ""
+	}
+	for _, attr := range n.Attr {
+		if attr.Key == "data-id" {
+			return attr.Val
+		}
+	}
+	return ""
+}
+
+// componentDataID returns dataID if the element matches a known component in
+// cm, or "" otherwise. cm is keyed by "<Type>:<id>".
+func componentDataID(n *html.Node, cm map[string]AgentComponentInfo) string {
+	dataID := nodeDataID(n)
+	if dataID == "" {
+		return ""
+	}
+	if _, ok := cm[dataID]; !ok {
+		return ""
+	}
+	return dataID
+}
+
+// markerComponentTypes lists data-id prefixes that don't have a registry
+// handle of their own but should still be rendered as compact tags inside
+// their parent (e.g. options inside a SearchCard, rows inside a Table).
+var markerComponentTypes = map[string]bool{
+	"Option":   true,
+	"TableRow": true,
+	"Button":   true,
+}
+
+// markerComponentType returns the marker type ("Option", "TableRow", "Button")
+// for an element whose data-id uses a marker prefix, or "" otherwise.
+func markerComponentType(n *html.Node) string {
+	dataID := nodeDataID(n)
+	if dataID == "" {
+		return ""
+	}
+	colon := strings.IndexByte(dataID, ':')
+	if colon < 0 {
+		return ""
+	}
+	typ := dataID[:colon]
+	if markerComponentTypes[typ] {
+		return typ
+	}
+	return ""
+}
+
+// isAgentElement reports whether the element should be preserved in the
+// rendered output (either a registered component or a marker like Option /
+// TableRow / Button).
+func isAgentElement(n *html.Node, cm map[string]AgentComponentInfo) bool {
+	return componentDataID(n, cm) != "" || markerComponentType(n) != ""
+}
+
+// inlineText flattens n's subtree into a single normalised text string when
+// it is pure chrome around text — no agent elements, no void elements, just
+// nested wrappers and text nodes. Returns ok=false if any descendant carries
+// meaning beyond text, signaling that the caller must render the children
+// recursively. Used to compress `<th><div>ID</div></th>` into `<th>ID</th>`
+// and `<Option><span>foo</span></Option>` into `<Option>foo</Option>`.
+func inlineText(n *html.Node, cm map[string]AgentComponentInfo) (string, bool) {
+	var out strings.Builder
+	if !appendInlineText(n, &out, cm) {
+		return "", false
+	}
+	return collapseWhitespace(out.String()), true
+}
+
+func appendInlineText(n *html.Node, out *strings.Builder, cm map[string]AgentComponentInfo) bool {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		switch c.Type {
+		case html.TextNode:
+			out.WriteString(c.Data)
+		case html.ElementNode:
+			if voidElements[c.Data] || isAgentElement(c, cm) {
+				return false
+			}
+			if !appendInlineText(c, out, cm) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isProtectedShell(n *html.Node) bool {
+	return n.Type == html.ElementNode && (n.Data == "html" || n.Data == "body")
+}
+
+func hasTextDescendant(n *html.Node, cm map[string]AgentComponentInfo) bool {
+	if n.Type == html.TextNode {
+		return strings.TrimSpace(n.Data) != ""
+	}
+	if n.Type == html.ElementNode {
+		if voidElements[n.Data] || isAgentElement(n, cm) {
+			return true
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if hasTextDescendant(c, cm) {
+			return true
+		}
+	}
+	return false
+}
+
+func removeEmptyElements(n *html.Node, cm map[string]AgentComponentInfo) bool {
+	changed := false
+	c := n.FirstChild
+	for c != nil {
+		next := c.NextSibling
+		if c.Type == html.ElementNode && !voidElements[c.Data] {
+			if removeEmptyElements(c, cm) {
+				changed = true
+			}
+			if !isProtectedShell(c) && !hasTextDescendant(c, cm) {
+				n.RemoveChild(c)
+				changed = true
+			}
+		}
+		c = next
+	}
+	return changed
+}
+
+func hasOwnText(n *html.Node) bool {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.TextNode && strings.TrimSpace(c.Data) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func onlyElementChild(n *html.Node) *html.Node {
+	var only *html.Node
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode {
+			continue
+		}
+		if only != nil {
+			return nil
+		}
+		only = c
+	}
+	return only
+}
+
+func isWrapper(n *html.Node, cm map[string]AgentComponentInfo) bool {
+	if n == nil || n.Type != html.ElementNode {
+		return false
+	}
+	if voidElements[n.Data] || isProtectedShell(n) || isAgentElement(n, cm) {
+		return false
+	}
+	if hasOwnText(n) {
+		return false
+	}
+	return onlyElementChild(n) != nil
+}
+
+func collapseWrappers(n *html.Node, cm map[string]AgentComponentInfo) bool {
+	changed := false
+	c := n.FirstChild
+	for c != nil {
+		next := c.NextSibling
+		if collapseWrappers(c, cm) {
+			changed = true
+		}
+		c = next
+	}
+	if !isWrapper(n, cm) {
+		return changed
+	}
+	for {
+		child := onlyElementChild(n)
+		if !isWrapper(child, cm) {
+			return changed
+		}
+		grand := onlyElementChild(child)
+		if grand == nil {
+			return changed
+		}
+		child.RemoveChild(grand)
+		n.InsertBefore(grand, child)
+		n.RemoveChild(child)
+		changed = true
+	}
+}
+
+func renderIndented(buf *bytes.Buffer, n *html.Node, depth int, cm map[string]AgentComponentInfo) {
+	indent := strings.Repeat("  ", depth)
+	switch n.Type {
+	case html.TextNode:
+		text := collapseWhitespace(n.Data)
+		if text == "" {
+			return
+		}
+		buf.WriteString(indent)
+		buf.WriteString(html.EscapeString(text))
+		buf.WriteByte('\n')
+	case html.ElementNode:
+		// Replace known component elements with a compact tag. Container components
+		// (those that hold further registered components inside) are rendered with
+		// their children so the agent still sees the nested handles. Markers
+		// (Option/TableRow/Button) follow the same shape but use the marker type
+		// from the data-id directly since they have no registry entry.
+		if dataID := nodeDataID(n); dataID != "" {
+			if c, ok := cm[dataID]; ok {
+				renderComponent(buf, indent, dataID, c, n, depth, cm)
+				return
+			}
+			if markerComponentType(n) != "" {
+				renderMarker(buf, indent, n, depth, cm)
+				return
+			}
+		}
+
+		hasElementChild := false
+		var directText strings.Builder
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode {
+				hasElementChild = true
+			} else if c.Type == html.TextNode {
+				directText.WriteString(c.Data)
+			}
+		}
+		buf.WriteString(indent)
+		buf.WriteByte('<')
+		buf.WriteString(n.Data)
+		for _, attr := range n.Attr {
+			buf.WriteByte(' ')
+			buf.WriteString(attr.Key)
+			buf.WriteString(`="`)
+			buf.WriteString(html.EscapeString(attr.Val))
+			buf.WriteByte('"')
+		}
+		if voidElements[n.Data] {
+			buf.WriteString(" />\n")
+			return
+		}
+		buf.WriteByte('>')
+		if !hasElementChild {
+			text := collapseWhitespace(directText.String())
+			buf.WriteString(html.EscapeString(text))
+			buf.WriteString("</")
+			buf.WriteString(n.Data)
+			buf.WriteString(">\n")
+			return
+		}
+		// Table cells (<th>/<td>) are commonly wrapped in a chrome <div> for
+		// styling. When there's nothing meaningful inside beyond that wrapped
+		// text, fold it onto one line for a cleaner agent view.
+		if n.Data == "th" || n.Data == "td" {
+			if text, ok := inlineText(n, cm); ok {
+				buf.WriteString(html.EscapeString(text))
+				buf.WriteString("</")
+				buf.WriteString(n.Data)
+				buf.WriteString(">\n")
+				return
+			}
+		}
+		buf.WriteByte('\n')
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			renderIndented(buf, c, depth+1, cm)
+		}
+		buf.WriteString(indent)
+		buf.WriteString("</")
+		buf.WriteString(n.Data)
+		buf.WriteString(">\n")
+	}
+}
+
+func renderComponent(buf *bytes.Buffer, indent, dataID string, c AgentComponentInfo, n *html.Node, depth int, cm map[string]AgentComponentInfo) {
+	colon := strings.IndexByte(dataID, ':')
+	typ := dataID[:colon]
+	id := dataID[colon+1:]
+	value := nodeAttr(n, "data-value")
+
+	buf.WriteString(indent)
+	buf.WriteByte('<')
+	buf.WriteString(html.EscapeString(typ))
+	buf.WriteString(` id="`)
+	buf.WriteString(html.EscapeString(id))
+	buf.WriteByte('"')
+	if c.Label != "" {
+		buf.WriteString(` label="`)
+		buf.WriteString(html.EscapeString(c.Label))
+		buf.WriteByte('"')
+	}
+	if value != "" {
+		buf.WriteString(` value="`)
+		buf.WriteString(html.EscapeString(value))
+		buf.WriteByte('"')
+	}
+
+	// Recurse when there are registered components or markers nested inside —
+	// Layer/Modal/ButtonLayer hold further handles, Table holds TableRow markers,
+	// SearchCard holds Option markers, etc. Leaf components self-close.
+	if !hasAgentDescendant(n, cm) {
+		buf.WriteString("/>\n")
+		return
+	}
+	buf.WriteString(">\n")
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		renderIndented(buf, child, depth+1, cm)
+	}
+	buf.WriteString(indent)
+	buf.WriteString("</")
+	buf.WriteString(html.EscapeString(typ))
+	buf.WriteString(">\n")
+}
+
+// renderMarker emits a compact tag for an Option / TableRow / Button element.
+// Markers don't have a registry handle, but they carry id, optional value and
+// optional selected state on the DOM node, plus the inner text/children that
+// the agent uses to identify the row or option.
+func renderMarker(buf *bytes.Buffer, indent string, n *html.Node, depth int, cm map[string]AgentComponentInfo) {
+	dataID := nodeDataID(n)
+	colon := strings.IndexByte(dataID, ':')
+	typ := dataID[:colon]
+	id := dataID[colon+1:]
+	value := nodeAttr(n, "data-value")
+	selected := nodeAttr(n, "data-selected") == "true"
+	ariaLabel := nodeAttr(n, "aria-label")
+
+	buf.WriteString(indent)
+	buf.WriteByte('<')
+	buf.WriteString(html.EscapeString(typ))
+	buf.WriteString(` id="`)
+	buf.WriteString(html.EscapeString(id))
+	buf.WriteByte('"')
+	if value != "" {
+		buf.WriteString(` value="`)
+		buf.WriteString(html.EscapeString(value))
+		buf.WriteByte('"')
+	}
+	if ariaLabel != "" {
+		buf.WriteString(` aria-label="`)
+		buf.WriteString(html.EscapeString(ariaLabel))
+		buf.WriteByte('"')
+	}
+	if selected {
+		buf.WriteString(` selected`)
+	}
+
+	// Inspect children: when the marker only contains text we can keep it on
+	// one line; element children get a recursive render so nested markers /
+	// components stay visible.
+	hasElementChild := false
+	var directText strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode {
+			hasElementChild = true
+		} else if c.Type == html.TextNode {
+			directText.WriteString(c.Data)
+		}
+	}
+
+	if !hasElementChild {
+		text := collapseWhitespace(directText.String())
+		if text == "" {
+			buf.WriteString("/>\n")
+			return
+		}
+		buf.WriteByte('>')
+		buf.WriteString(html.EscapeString(text))
+		buf.WriteString("</")
+		buf.WriteString(html.EscapeString(typ))
+		buf.WriteString(">\n")
+		return
+	}
+
+	// Chrome around plain text — fold children into a single inline text run
+	// (e.g. <Option><span>foo</span></Option> -> <Option>foo</Option>). Skip
+	// TableRow: rows preserve their cell structure so the agent can read each
+	// column.
+	if typ != "TableRow" {
+		if text, ok := inlineText(n, cm); ok {
+			if text == "" {
+				buf.WriteString("/>\n")
+				return
+			}
+			buf.WriteByte('>')
+			buf.WriteString(html.EscapeString(text))
+			buf.WriteString("</")
+			buf.WriteString(html.EscapeString(typ))
+			buf.WriteString(">\n")
+			return
+		}
+	}
+
+	buf.WriteString(">\n")
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		renderIndented(buf, child, depth+1, cm)
+	}
+	buf.WriteString(indent)
+	buf.WriteString("</")
+	buf.WriteString(html.EscapeString(typ))
+	buf.WriteString(">\n")
+}
+
+func hasAgentDescendant(n *html.Node, cm map[string]AgentComponentInfo) bool {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode {
+			continue
+		}
+		if isAgentElement(c, cm) {
+			return true
+		}
+		if hasAgentDescendant(c, cm) {
+			return true
+		}
+	}
+	return false
+}
+
+func collapseWhitespace(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	prevSpace := false
+	leading := true
+	for _, r := range s {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			if leading {
+				continue
+			}
+			if !prevSpace {
+				b.WriteByte(' ')
+				prevSpace = true
+			}
+			continue
+		}
+		leading = false
+		prevSpace = false
+		b.WriteRune(r)
+	}
+	out := b.String()
+	return strings.TrimRight(out, " ")
+}

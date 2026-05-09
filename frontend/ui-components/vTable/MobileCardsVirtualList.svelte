@@ -224,7 +224,10 @@
       {@const recordIndex = getRecordListIndex(sourceRecord, sourceIndex)}
       {@const resolvedRecord = getResolvedRecord(sourceRecord, recordIndex)}
       {@const selectedCard = resolvedRecord ? isRowSelected(resolvedRecord) : false}
+      {@const cardId = (resolvedRecord as any)?.ID ?? recordIndex}
       <div
+        data-id={onRowClick ? `TableRow:${cardId}` : undefined}
+        data-selected={selectedCard ? "true" : undefined}
         class="mobile-cards-card mobile-cards-card-{variant} {cardCss}"
         class:mobile-cards-card-selected={showSelectedCard && selectedCard}
         role="button"

@@ -26,6 +26,7 @@ require (
 
 require (
 	github.com/amenzhinsky/go-memexec v0.7.1 // indirect
+	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.1 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.4 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.2 // indirect
@@ -58,15 +59,17 @@ require (
 	github.com/viant/xreflect v0.0.0-20230303201326-f50afb0feb0d // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
-	golang.org/x/sys v0.22.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )
 
 require (
 	github.com/DmitriyVTitov/size v1.5.0
+	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.53.1
 	github.com/aws/smithy-go v1.20.1
 	github.com/bytedance/sonic v1.15.0
+	github.com/coder/websocket v1.8.14
 	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
 	github.com/kr/pretty v0.3.1
@@ -76,7 +79,8 @@ require (
 	github.com/x448/float16 v0.8.4
 	github.com/xhit/go-simple-mail/v2 v2.16.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
-	golang.org/x/sync v0.8.0
+	golang.org/x/net v0.52.0
+	golang.org/x/sync v0.10.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
