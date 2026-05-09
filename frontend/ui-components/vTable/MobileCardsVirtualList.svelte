@@ -2,6 +2,7 @@
   import Renderer, { type ElementAST } from '$components/Renderer.svelte';
   import CellEditable from '$components/vTable/CellEditable.svelte';
   import CellSelector from '$components/vTable/CellSelector.svelte';
+  import { buildCellID } from '$components/vTable/agentContext';
   import { highlString, splitTwoStrings } from '$libs/helpers';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import { SvelteMap } from 'svelte/reactivity';
@@ -295,6 +296,7 @@
                             contentClass={cell.contentCss || cell.css}
                             inputClass={cell.inputCss}
                             type={cell.type || 'text'}
+                            cellID={buildCellID(recordIndex, cellIndex)}
                             getValue={() => {
                               // Always use raw values inside edit mode so formatting stays display-only.
                               return cell.getValue
@@ -325,6 +327,7 @@
                             options={cell.cellOptions as any[]}
                             keyId={(cell.cellOptionsKeyId || 'ID') as never}
                             keyName={(cell.cellOptionsKeyName || 'Name') as never}
+                            cellID={buildCellID(recordIndex, cellIndex)}
                             contentClass={cell.contentCss}
                             onChange={(value) => {
                               logInteraction('onCellSelect', {
@@ -395,6 +398,7 @@
                             contentClass={cell.contentCss || cell.css}
                             inputClass={cell.inputCss}
                             type={cell.type || 'text'}
+                            cellID={buildCellID(recordIndex, cellIndex)}
                             getValue={() => {
                               return cell.getValue
                                 ? cell.getValue(resolvedRecord, recordIndex)
@@ -424,6 +428,7 @@
                             options={cell.cellOptions as any[]}
                             keyId={(cell.cellOptionsKeyId || 'ID') as never}
                             keyName={(cell.cellOptionsKeyName || 'Name') as never}
+                            cellID={buildCellID(recordIndex, cellIndex)}
                             contentClass={cell.contentCss}
                             onChange={(value) => {
                               logInteraction('onCellSelect', {
@@ -512,6 +517,7 @@
                           contentClass={cell.contentCss || cell.css}
                           inputClass={cell.inputCss}
                           type={cell.type || 'text'}
+                          cellID={buildCellID(recordIndex, cellIndex)}
                           getValue={() => {
                             return cell.getValue
                               ? cell.getValue(resolvedRecord, recordIndex)
@@ -541,6 +547,7 @@
                           options={cell.cellOptions as any[]}
                           keyId={(cell.cellOptionsKeyId || 'ID') as never}
                           keyName={(cell.cellOptionsKeyName || 'Name') as never}
+                          cellID={buildCellID(recordIndex, cellIndex)}
                           contentClass={cell.contentCss}
                           onChange={(value) => {
                             logInteraction('onCellSelect', {

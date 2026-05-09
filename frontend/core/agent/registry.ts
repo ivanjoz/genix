@@ -17,6 +17,12 @@ export interface AgentOption {
 
 // Methods are typed structurally; adding a new component type does not require
 // touching this file. Only methods listed here are recognised by the bridge.
+//
+// `*Child` variants exist on container handles (currently `Table`) that route
+// the call to a registered child by id rather than acting on themselves. They
+// share the verb of the leaf method but live under a distinct name so callers
+// always know whether they are addressing the container or one of its
+// children.
 export interface AgentMethodMap {
   search?: (text: string) => void;
   select?: (...ids: (number | string)[]) => void;
@@ -28,6 +34,12 @@ export interface AgentMethodMap {
   deleted?: () => void;
   getOptions?: (max?: number) => AgentOption[];
   getValue?: () => AgentOption | AgentOption[] | undefined;
+  // Child-routing variants (Table → cell). The first argument is the child id
+  // (`<tableID>:<cellID>` resolves to its `<cellID>`); remaining args mirror
+  // the leaf method.
+  setValueChild?: (childID: number | string, value: string | number) => void;
+  searchChild?: (childID: number | string, text: string) => void;
+  getOptionsChild?: (childID: number | string, max?: number) => AgentOption[];
 }
 
 export type AgentMethodName = keyof AgentMethodMap;
@@ -43,6 +55,9 @@ const AGENT_METHOD_NAMES: AgentMethodName[] = [
   "deleted",
   "getOptions",
   "getValue",
+  "setValueChild",
+  "searchChild",
+  "getOptionsChild",
 ];
 
 export interface AgentHandle extends AgentMethodMap {

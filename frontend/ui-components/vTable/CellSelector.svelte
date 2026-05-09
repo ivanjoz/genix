@@ -4,6 +4,8 @@
 import { throttle } from '$libs/helpers';
 import { Core, WeakSearchRef } from '$core/store.svelte';
 import Popover2 from '$components/popover2/Popover2.svelte';
+import { type AgentOption } from '$core/agent/registry';
+import { getVTableAgentContext } from '$components/vTable/agentContext';
 
 	export interface ICellSelector<T,E> {
     id?: number | string;
@@ -20,10 +22,12 @@ import Popover2 from '$components/popover2/Popover2.svelte';
     keyName: keyof E,
 		required?: boolean;
 		type?: string;
+		// Cell coordinate within its parent table; assigned by the table.
+		cellID?: number;
 	}
 
   let {
-		id, options, saveOn, save, keyId, keyName, contentClass, required, render, onChange
+		id, options, saveOn, save, keyId, keyName, contentClass, required, render, onChange, cellID,
 	}: ICellSelector<T,E> = $props();
 
   let show = $derived(Core.popoverShowID === id);
@@ -118,8 +122,68 @@ import Popover2 from '$components/popover2/Popover2.svelte';
     }
   })
 
+  // Resolve an agent-supplied id back to the option record and apply it
+  // through the same path the click handler uses, so onChange / saveOn fire.
+  const selectByAgentId = (rawId: number | string) => {
+    buildMap()
+    const idToRecord = WeakSearchRef.get(options)?.idToRecord || new Map()
+    const match = idToRecord.get(rawId) as E | undefined
+      || idToRecord.get(String(rawId)) as E | undefined
+      || idToRecord.get(Number(rawId)) as E | undefined
+    if (match) { onSelect(match) }
+  }
+
+  // The cell hands its methods to the parent table via context; the table is
+  // the lone Agent handle and dispatches by cellID.
+  const tableAgentCtx = getVTableAgentContext();
+
+  $effect(() => {
+    if (!tableAgentCtx || cellID === undefined) { return }
+    return tableAgentCtx.registerCell(cellID, {
+      search: (text: string) => { filterValue = String(text || '').toLowerCase() },
+      select: (...ids) => {
+        if (ids.length === 0) { return }
+        selectByAgentId(ids[0])
+      },
+      // The dropdown only renders its options while open; expose the full list
+      // (filtered by current search) so the agent can pick without opening it.
+      getOptions: (max = 50): AgentOption[] => {
+        const out: AgentOption[] = []
+        const limit = Math.max(0, max | 0) || optionsFiltered.length
+        for (let i = 0; i < optionsFiltered.length && out.length < limit; i++) {
+          const opt = optionsFiltered[i]
+          out.push({
+            id: opt[keyId] as number | string,
+            value: String(opt[keyName] ?? ''),
+          })
+        }
+        return out
+      },
+    })
+  })
+
+  // Mirror the selected option into the DOM as "[id] name" so the agent can
+  // read the value without invoking getValue. Empty when nothing is selected.
+  const agentDataValue = $derived.by(() => {
+    if (!selected) { return '' }
+    const sid = selected[keyId] as number | string
+    const name = String(selected[keyName] ?? '')
+    return `[${sid}] ${name}`
+  })
+  // Composite addressing: "<tableID>:<cellID>". Skipped when there's no
+  // parent table context (component used standalone).
+  const agentDataID = $derived(
+    tableAgentCtx && cellID !== undefined ? `${tableAgentCtx.tableID}:${cellID}` : undefined,
+  );
 </script>
 
+<div class="_root"
+  data-id={agentDataID}
+  data-cell-type={agentDataID ? 'CellSelector' : undefined}
+  data-value={agentDataValue}
+  data-label={String(save || '')}
+  data-type="other"
+>
 <div class="_2">{renderContent}</div>
 <div class="_1" bind:this={refElement}
   role="button"
@@ -211,8 +275,12 @@ import Popover2 from '$components/popover2/Popover2.svelte';
     </div>
   </Popover2>
 </div>
+</div>
 
 <style>
+  ._root {
+    display: contents;
+  }
   ._1 {
 		position: absolute;
 		top: 0;

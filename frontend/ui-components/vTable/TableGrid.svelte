@@ -8,6 +8,12 @@
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
   import { Env } from '$core/env';
   import { Agent } from '$core/agent/registry';
+  import {
+    setVTableAgentContext,
+    buildCellID,
+    buildRowID,
+    type CellAgentMethods,
+  } from '$components/vTable/agentContext';
   import type {
     IMobileCardsListCell,
     ITableColumn,
@@ -308,34 +314,70 @@
     });
   });
 
-  const resolveAgentRowId = (rowRecord: TRecord, rowIndex: number): string | number => {
-    if (getRowId) { return getRowId(rowRecord, rowIndex); }
-    const fallback = (rowRecord as any)?.ID;
-    return fallback === undefined ? rowIndex : (fallback as number | string);
-  };
-
   const componentID = Env.getComponentID();
 
-  $effect(() => {
+  // Cells (CellEditable / CellSelector) hand their methods here keyed by cellID.
+  // The table is the only agent handle; methods route by id.
+  const cellRegistry = new Map<number, CellAgentMethods>();
+
+  setVTableAgentContext({
+    tableID: componentID,
+    registerCell: (cellID, methods) => {
+      cellRegistry.set(cellID, methods);
+      return () => {
+        if (cellRegistry.get(cellID) === methods) { cellRegistry.delete(cellID); }
+      };
+    },
+  });
+
+  // Register when there is any row interaction OR any column with cell editing
+  // / selection. Without one of those there's nothing for the agent to drive.
+  const hasInteractiveCell = $derived(
+    columns.some((column) => column.onCellEdit || column.onCellSelect),
+  );
+  const shouldRegisterTable = $derived(Boolean(onRowClick) || hasInteractiveCell);
+
+  // Row select drives the existing onRowClick. Row IDs are rowIndex*100 by
+  // convention; cells live above 100 within each row.
+  const dispatchRowSelect = (rowID: number) => {
     if (!onRowClick) { return; }
+    const rowIndex = Math.floor(rowID / 100);
+    if (rowIndex < 0 || rowIndex >= data.length) { return; }
+    handleRowClick(data[rowIndex], rowIndex);
+  };
+
+  $effect(() => {
+    if (!shouldRegisterTable) { return; }
     return Agent.register({
       id: componentID,
       type: "Table",
       label: "",
+      // ids that are exact multiples of 100 are row ids; everything else is a
+      // cell id, in which case the remaining args are forwarded to the cell's
+      // own select() (e.g. CellSelector option ids).
       select: (...ids) => {
-        const targets = new Set(ids.map(String));
-        for (let i = 0; i < data.length; i++) {
-          const record = data[i];
-          if (targets.has(String(resolveAgentRowId(record, i)))) {
-            handleRowClick(record, i);
-          }
+        if (ids.length === 0) { return; }
+        const first = Number(ids[0]);
+        if (Number.isFinite(first) && first % 100 === 0) {
+          for (const rid of ids) { dispatchRowSelect(Number(rid)); }
+          return;
         }
+        cellRegistry.get(first)?.select?.(...ids.slice(1));
+      },
+      setValueChild: (cellID, value) => {
+        cellRegistry.get(Number(cellID))?.setValue?.(value);
+      },
+      searchChild: (cellID, text) => {
+        cellRegistry.get(Number(cellID))?.search?.(String(text ?? ''));
+      },
+      getOptionsChild: (cellID, max) => {
+        return cellRegistry.get(Number(cellID))?.getOptions?.(Number(max ?? 50)) ?? [];
       },
     });
   });
 </script>
 
-<div data-id={onRowClick ? `Table:${componentID}` : undefined}
+<div data-id={shouldRegisterTable ? `Table:${componentID}` : undefined}
   class="table-grid-shell {css}"
   class:table-grid-shell-mobile={isMobileView}
   bind:this={shellElement}
@@ -390,7 +432,7 @@
         {#each data as rowRecord, rowIndex (getRowId ? getRowId(rowRecord, rowIndex) : rowIndex)}
           {@const selected = isSelectedRow(rowRecord, rowIndex)}
           <div class="table-grid-row-shell"
-            data-id={onRowClick ? `TableRow:${resolveAgentRowId(rowRecord, rowIndex)}` : undefined}
+            data-id={shouldRegisterTable ? `TableRow:${buildRowID(rowIndex)}` : undefined}
             data-selected={selected ? "true" : undefined}
             style={resolveRowShellStyle(rowRecord, rowIndex)}>
             <div class="table-grid-row {rowCss}"
@@ -429,6 +471,7 @@
                     <CellEditable contentClass={`${contentPaddingCss} ${colDef.css || ""}${colDef.align === 'right' ? ' justify-end' : ''}`}
                       inputClass={`${inputPaddingCss} ${colDef.inputCss || ""}${colDef.align === 'right' ? ' text-right' : ''}`}
                       type={colDef.cellInputType || cellInputType}
+                      cellID={buildCellID(rowIndex, columnIndex)}
                       getValue={() => String(defaultCellValue)}
                       render={colDef.render ? () => colDef.render?.(rowRecord, rowIndex) : undefined}
                       onBeforeCellChange={colDef.onBeforeCellChange ? (value) => colDef.onBeforeCellChange!(rowRecord, value) : undefined}
@@ -511,7 +554,7 @@
           {#snippet renderItem(rowRecord, rowIndex)}
             {@const selected = isSelectedRow(rowRecord, rowIndex)}
             <div class="table-grid-row-shell"
-              data-id={onRowClick ? `TableRow:${resolveAgentRowId(rowRecord, rowIndex)}` : undefined}
+              data-id={shouldRegisterTable ? `TableRow:${buildRowID(rowIndex)}` : undefined}
               data-selected={selected ? "true" : undefined}
               style={resolveRowShellStyle(rowRecord, rowIndex)}>
               <div class="table-grid-row {rowCss}"
@@ -549,6 +592,7 @@
 	                    <CellEditable contentClass={`${contentPaddingCss} ${colDef.css || ""}${colDef.align === 'right' ? ' justify-end' : ''}`}
 	                      inputClass={`${inputPaddingCss} ${colDef.inputCss || ""}${colDef.align === 'right' ? ' text-right' : ''}`}
                         type={colDef.cellInputType || cellInputType}
+                        cellID={buildCellID(rowIndex, columnIndex)}
                         getValue={() => String(defaultCellValue)}
                         render={colDef.render ? () => colDef.render?.(rowRecord, rowIndex) : undefined}
                         onBeforeCellChange={colDef.onBeforeCellChange ? (value) => colDef.onBeforeCellChange!(rowRecord, value) : undefined}

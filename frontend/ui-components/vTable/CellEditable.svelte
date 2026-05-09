@@ -1,6 +1,7 @@
 <script lang="ts" module>
 import type { ElementAST } from '$components/Renderer.svelte';
 import Renderer from '$components/Renderer.svelte';
+import { getVTableAgentContext } from '$components/vTable/agentContext';
 
 	export interface ICellEditableProps<T> {
 		saveOn?: T;
@@ -14,6 +15,9 @@ import Renderer from '$components/Renderer.svelte';
 		getValue?: (e: T) => number | string;
 		required?: boolean;
 		type?: string;
+		// Cell coordinate within its parent table; the table assigns it as
+		// rowIndex*100 + (columnIndex + 1) so cells never collide with row IDs.
+		cellID?: number;
 	}
 </script>
 
@@ -29,7 +33,8 @@ import Renderer from '$components/Renderer.svelte';
 		render,
 		getValue,
 		required = false,
-		type = 'text'
+		type = 'text',
+		cellID,
 	}: ICellEditableProps<T> = $props();
 
 	let isEditing = $state(false);
@@ -83,9 +88,48 @@ import Renderer from '$components/Renderer.svelte';
 		}
 		isEditing = false;
 	}
-	
+
+	// Apply a value the same way blur does: parse, run the guard, fire onChange.
+	const applyAgentValue = (value: string | number) => {
+		const next = extractValue(value);
+		if (currentValue === next) { return; }
+		if (onBeforeCellChange && onBeforeCellChange(next) === false) { return; }
+		if (onChange) { onChange(next); }
+		currentValue = next;
+	}
+
+	// Hand setValue to the parent table; the table is the only Agent handle.
+	const tableAgentCtx = getVTableAgentContext();
+
+	$effect(() => {
+		if (!tableAgentCtx || cellID === undefined) { return; }
+		return tableAgentCtx.registerCell(cellID, {
+			setValue: (value) => { applyAgentValue(value); },
+		});
+	});
+
+	// data-value mirrors the visible cell value so the agent can read it from
+	// the DOM snapshot without an extra round trip.
+	const agentDataValue = $derived(
+		currentValue === undefined || currentValue === null || currentValue === ''
+			? ''
+			: String(currentValue),
+	);
+	const agentDataType = $derived(type === 'number' ? 'number' : (type === 'text' ? 'text' : 'other'));
+	// Composite addressing: "<tableID>:<cellID>". Skipped when there's no
+	// parent table context (component used standalone).
+	const agentDataID = $derived(
+		tableAgentCtx && cellID !== undefined ? `${tableAgentCtx.tableID}:${cellID}` : undefined,
+	);
 </script>
 
+<div class="_root"
+	data-id={agentDataID}
+	data-cell-type={agentDataID ? 'CellEditable' : undefined}
+	data-value={agentDataValue}
+	data-label={String(save || '')}
+	data-type={agentDataType}
+>
 <div class="_2 {contentClass}">
 	{#if typeof renderedContent === 'string'}
 		{renderedContent}
@@ -127,8 +171,12 @@ import Renderer from '$components/Renderer.svelte';
 		/>
 	{/if}
 </div>
+</div>
 
 <style>
+	._root {
+		display: contents;
+	}
 	._2 {
 		opacity: 0;
 		pointer-events: none;

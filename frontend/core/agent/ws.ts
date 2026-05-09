@@ -90,7 +90,9 @@ const invokeMethod = (payload: { HandleID: number; Method: AgentMethodName; Args
   const args = Array.isArray(payload.Args) ? payload.Args : [];
   const result = fn.apply(handle, args);
   if (result === undefined) { return null; }
-  if (payload.Method === "getOptions") { return remapOptions(result as AgentOption[]); }
+  if (payload.Method === "getOptions" || payload.Method === "getOptionsChild") {
+    return remapOptions(result as AgentOption[]);
+  }
   return result;
 };
 

@@ -3,6 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { Core } from '$core/store.svelte';
 	import { canUserAccessRoute } from '$core/security';
+	import { Env } from '$core/env';
+	import { Agent } from '$core/agent/registry';
 	import type { IMenuRecord, IModule } from '$core/types/modules';
 
 	// State
@@ -134,6 +136,38 @@
 	$effect(() => {
 		Core.toggleMobileMenu = toggleMobileMenu;
 	});
+
+	// Stable agent componentID per option route, so desktop + mobile renders
+	// share one handle and the id survives re-renders.
+	const optionAgentIDs = new Map<string, number>();
+	function getOptionAgentID(route: string): number {
+		let id = optionAgentIDs.get(route);
+		if (!id) {
+			id = Env.getComponentID();
+			optionAgentIDs.set(route, id);
+		}
+		return id;
+	}
+
+	// Register every currently-visible menu option as an agent handle. The
+	// handle's click() runs the same navigateTo the user would trigger.
+	$effect(() => {
+		const cleanups: Array<() => void> = [];
+		for (const menu of filteredMenus) {
+			for (const option of menu.options || []) {
+				const route = option.route || '';
+				if (!route) { continue; }
+				const handleID = getOptionAgentID(route);
+				cleanups.push(Agent.register({
+					id: handleID,
+					type: 'MenuOption',
+					label: option.name,
+					click: () => navigateTo(route, menu.id || 0),
+				}));
+			}
+		}
+		return () => { for (const fn of cleanups) { fn(); } };
+	});
 </script>
 
 <!-- Desktop Menu -->
@@ -181,6 +215,8 @@
 						{isOpen ? 'bg-gray-800 border-indigo-500' : ''}"
 					onclick={() => toggleMenu(menu.id || 0)}
 					aria-expanded={isOpen}
+					data-id="MenuHeader:{menu.id || 0}"
+					data-label={menu.name}
 				>
 					<div class="flex items-center flex-1 min-w-0 whitespace-nowrap">
 						<!-- Minimized view - show only minName -->
@@ -214,6 +250,9 @@
 								border-l-2 border-transparent
 								{isActive ? 'bg-indigo-600/30 border-indigo-400 text-white' : 'text-gray-300'}"
 								onclick={() => navigateTo(option.route || '/', menu.id || 0)}
+								data-id="MenuOption:{getOptionAgentID(option.route || '')}"
+								data-label={option.name}
+								data-value={option.route || ''}
 							>
 								<!-- Minimized: show icon only centered -->
 								<div class="option-minimized flex w-full">
@@ -280,6 +319,8 @@
 					<button
 						class="mobile-menu-group-button {isOpen ? 'is-open' : ''}"
 						onclick={() => toggleMenu(menu.id || 0)}
+						data-id="MenuHeader:{menu.id || 0}"
+						data-label={menu.name}
 					>
 						<span class="menu-group-title">{menu.name.toUpperCase()}</span>
 						{#if menu.options && menu.options.length > 0}
@@ -301,6 +342,9 @@
 									onmouseleave={(e) => e.currentTarget.classList.remove('is-pressed')}
 									ontouchstart={(e) => e.currentTarget.classList.add('is-pressed')}
 									ontouchend={(e) => e.currentTarget.classList.remove('is-pressed')}
+									data-id="MenuOption:{getOptionAgentID(option.route || '')}"
+									data-label={option.name}
+									data-value={option.route || ''}
 								>
 									{#if option.icon}
 										<i class="{option.icon} option-icon"></i>

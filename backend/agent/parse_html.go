@@ -98,7 +98,7 @@ func cleanAttributes(n *html.Node) {
 		kept := n.Attr[:0]
 		for _, attr := range n.Attr {
 			key := strings.ToLower(attr.Key)
-			if key == "role" || key == "data-id" || key == "data-value" || key == "data-label" || key == "data-type" || key == "data-selected" || strings.HasPrefix(key, "aria-") {
+			if key == "role" || key == "data-id" || key == "data-value" || key == "data-label" || key == "data-type" || key == "data-cell-type" || key == "data-selected" || strings.HasPrefix(key, "aria-") {
 				kept = append(kept, attr)
 			}
 		}
@@ -152,9 +152,10 @@ func componentDataID(n *html.Node, cm map[string]AgentComponentInfo) string {
 // handle of their own but should still be rendered as compact tags inside
 // their parent (e.g. options inside a SearchCard, rows inside a Table).
 var markerComponentTypes = map[string]bool{
-	"Option":   true,
-	"TableRow": true,
-	"Button":   true,
+	"Option":     true,
+	"TableRow":   true,
+	"Button":     true,
+	"MenuHeader": true,
 }
 
 // markerComponentType returns the marker type ("Option", "TableRow", "Button")
@@ -175,11 +176,32 @@ func markerComponentType(n *html.Node) string {
 	return ""
 }
 
+// cellComponentType returns the cell type ("CellEditable" / "CellSelector")
+// for an element whose data-id is "<tableID>:<cellID>" pointing to a
+// registered Table component. Cells don't have a registry handle of their
+// own; the parent Table is the agent handle and dispatches by cellID. The
+// type is read from the `data-cell-type` attribute the cell stamps on its
+// root.
+func cellComponentType(n *html.Node, cm map[string]AgentComponentInfo) string {
+	dataID := nodeDataID(n)
+	if dataID == "" {
+		return ""
+	}
+	colon := strings.IndexByte(dataID, ':')
+	if colon < 0 {
+		return ""
+	}
+	tablePart := dataID[:colon]
+	if _, ok := cm["Table:"+tablePart]; !ok {
+		return ""
+	}
+	return nodeAttr(n, "data-cell-type")
+}
+
 // isAgentElement reports whether the element should be preserved in the
-// rendered output (either a registered component or a marker like Option /
-// TableRow / Button).
+// rendered output (registered component, marker, or cell-of-Table).
 func isAgentElement(n *html.Node, cm map[string]AgentComponentInfo) bool {
-	return componentDataID(n, cm) != "" || markerComponentType(n) != ""
+	return componentDataID(n, cm) != "" || markerComponentType(n) != "" || cellComponentType(n, cm) != ""
 }
 
 // inlineText flattens n's subtree into a single normalised text string when
@@ -344,6 +366,10 @@ func renderIndented(buf *bytes.Buffer, n *html.Node, depth int, cm map[string]Ag
 				renderMarker(buf, indent, n, depth, cm)
 				return
 			}
+			if cellType := cellComponentType(n, cm); cellType != "" {
+				renderCell(buf, indent, cellType, dataID, n)
+				return
+			}
 		}
 
 		hasElementChild := false
@@ -378,12 +404,28 @@ func renderIndented(buf *bytes.Buffer, n *html.Node, depth int, cm map[string]Ag
 			buf.WriteString(">\n")
 			return
 		}
-		// Table cells (<th>/<td>) are commonly wrapped in a chrome <div> for
-		// styling. When there's nothing meaningful inside beyond that wrapped
-		// text, fold it onto one line for a cleaner agent view.
-		if n.Data == "th" || n.Data == "td" {
+		// Table cells (<th>/<td>, plus the ARIA-equivalent <div role="cell">
+		// / role="columnheader" used by grid-style tables) are commonly
+		// wrapped in a chrome element for styling. When there's nothing
+		// meaningful inside beyond that wrapped text, fold it onto one line
+		// for a cleaner agent view.
+		if isCellElement(n) {
 			if text, ok := inlineText(n, cm); ok {
 				buf.WriteString(html.EscapeString(text))
+				buf.WriteString("</")
+				buf.WriteString(n.Data)
+				buf.WriteString(">\n")
+				return
+			}
+			// When the cell holds a single agent element (e.g. a CellEditable
+			// or CellSelector inside a <td>), keep open tag + agent + close tag
+			// on one line so the agent view stays compact:
+			//   <td><CellEditable id="46" value="1"/></td>
+			if child := singleAgentChild(n, cm); child != nil {
+				var tmp bytes.Buffer
+				renderIndented(&tmp, child, 0, cm)
+				inner := strings.TrimRight(tmp.String(), "\n")
+				buf.WriteString(inner)
 				buf.WriteString("</")
 				buf.WriteString(n.Data)
 				buf.WriteString(">\n")
@@ -528,6 +570,83 @@ func renderMarker(buf *bytes.Buffer, indent string, n *html.Node, depth int, cm 
 	buf.WriteString("</")
 	buf.WriteString(html.EscapeString(typ))
 	buf.WriteString(">\n")
+}
+
+// isCellElement reports whether n is treated as a table cell for the
+// inline-fold logic: a native <td>/<th> or any element carrying the
+// equivalent ARIA role ("cell", "columnheader", "rowheader", "gridcell").
+// Grid tables built from <div>s rely on the role to be addressable.
+func isCellElement(n *html.Node) bool {
+	if n == nil || n.Type != html.ElementNode {
+		return false
+	}
+	if n.Data == "td" || n.Data == "th" {
+		return true
+	}
+	switch nodeAttr(n, "role") {
+	case "cell", "gridcell", "columnheader", "rowheader":
+		return true
+	}
+	return false
+}
+
+// singleAgentChild returns the lone agent-element child of n (registered
+// component or marker) iff n has exactly one element child, that child is an
+// agent element, and there is no non-whitespace text directly under n.
+// Returns nil otherwise. Used by the table-cell renderer to keep
+// <td><CellEditable .../></td> on a single line.
+func singleAgentChild(n *html.Node, cm map[string]AgentComponentInfo) *html.Node {
+	var only *html.Node
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		switch c.Type {
+		case html.TextNode:
+			if strings.TrimSpace(c.Data) != "" {
+				return nil
+			}
+		case html.ElementNode:
+			if !isAgentElement(c, cm) {
+				return nil
+			}
+			if only != nil {
+				return nil
+			}
+			only = c
+		}
+	}
+	return only
+}
+
+// renderCell emits a compact, self-closing tag for a CellEditable /
+// CellSelector under a registered Table. The cell carries the composite
+// "<tableID>:<cellID>" id verbatim so the agent can reuse it when invoking
+// the Table's setValueChild / select / searchChild / getOptionsChild.
+func renderCell(buf *bytes.Buffer, indent, typ, dataID string, n *html.Node) {
+	value := nodeAttr(n, "data-value")
+	label := nodeAttr(n, "data-label")
+	dataType := nodeAttr(n, "data-type")
+
+	buf.WriteString(indent)
+	buf.WriteByte('<')
+	buf.WriteString(html.EscapeString(typ))
+	buf.WriteString(` id="`)
+	buf.WriteString(html.EscapeString(dataID))
+	buf.WriteByte('"')
+	if label != "" {
+		buf.WriteString(` label="`)
+		buf.WriteString(html.EscapeString(label))
+		buf.WriteByte('"')
+	}
+	if value != "" {
+		buf.WriteString(` value="`)
+		buf.WriteString(html.EscapeString(value))
+		buf.WriteByte('"')
+	}
+	if dataType != "" && dataType != "other" {
+		buf.WriteString(` type="`)
+		buf.WriteString(html.EscapeString(dataType))
+		buf.WriteByte('"')
+	}
+	buf.WriteString("/>\n")
 }
 
 func hasAgentDescendant(n *html.Node, cm map[string]AgentComponentInfo) bool {

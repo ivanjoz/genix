@@ -71,6 +71,7 @@ on its children:
 | `data-id="Option:<id>"` | a selectable option / chip / step inside a component |
 | `data-id="TableRow:<id>"` | a selectable table row (no handle of its own — owned by the parent `Table`) |
 | `data-id="Button:<id>"` | a clickable command button (auto-registered with a `click` method) |
+| `data-id="MenuHeader:<menuId>"` | a side-menu group header (collapses/expands its options — no handle, the agent reads the open state from `aria-expanded`) |
 | `data-value="…"` | current value of the component (always present on inputs/selects, even when the value is also rendered visibly — keeps the agent's read path uniform) |
 | `data-label="…"` | label or placeholder for input-style components (`Input`, `SearchSelect`, `DateInput`) — `label || placeholder || ""`. Saves the agent walking to the inner `<label>` / `placeholder`. |
 | `data-type="text\|number\|other"` | input kind for input-style components: `"number"` for numeric inputs, `"text"` for free-text inputs, `"other"` for everything else (selects, dates, colors, …). |
@@ -119,8 +120,7 @@ the agent doesn't learn a new verb per component.
 
 Pure-display, infrastructural, or trivially composed components don't register:
 `Virtualizer`, `LoginForm`, `Charts`, `ChartCanvas`, `Imagehash`, `charts/*`,
-`popover2/*`, `micro/*`, `files/*`, and the inner cells of `vTable/`
-(`CellEditable`, `CellSelector`, `CardsList`).
+`popover2/*`, `micro/*`, `files/*`, and `vTable/CardsList`.
 
 ## Component spec
 
@@ -150,7 +150,31 @@ Pure-display, infrastructural, or trivially composed components don't register:
 | `vTable/TableTree` | `Table` | same | `select(...ids)` |
 | `vTable/TableStream` | `Table` | same | `select(...ids)` |
 | `vTable/MobileCardsVirtualList` | `Table` | same | `select(...ids)` |
+| `vTable/CellEditable` | (no own handle) | rendered inside its parent `Table`. Root has `data-id="<tableID>:<cellID>"`, `data-cell-type="CellEditable"`, `data-value`, `data-label`, `data-type`. Methods are reached on the parent `Table` handle. | `setValueChild` (via Table) |
+| `vTable/CellSelector` | (no own handle) | rendered inside its parent `Table`. Root has `data-id="<tableID>:<cellID>"`, `data-cell-type="CellSelector"`, `data-value="[id] text"`. | `searchChild`, `select`, `getOptionsChild` (via Table) |
+
+### Table-level cell routing
+
+`Table` is the only registered handle for the table; cells (`CellEditable`,
+`CellSelector`) live underneath as `<tableID>:<cellID>` composite ids. The
+table exposes distinct method names for cell-routed calls (`*Child`) so the
+caller never has to guess whether a verb is acting on the table or on one of
+its cells. `select` is the one shared verb because the id alone disambiguates
+rows (multiples of 100) from cells (anything else):
+
+| Call | Routing |
+|---|---|
+| `select(rowID, …)` | every arg is a row id (`rowIndex * 100`); each one selects/toggles its row. |
+| `select(cellID, …optionIds)` | first arg is a cell id; remaining args go to that cell's `select`. |
+| `setValueChild(cellID, value)` | forwarded to the cell's `setValue`. |
+| `searchChild(cellID, text)` | forwarded to the cell's `search`. |
+| `getOptionsChild(cellID, max?)` | forwarded to the cell's `getOptions`. |
+
+Row ids are `rowIndex * 100`; cell ids are `rowID + columnIndex + 1` (column
+position is 1-based so cells never collide with rows). Cap of ~99 cells per
+row.
 | `Renderer` | `Renderer` | each rendered button as `Button:<id>` | — (buttons register their own `click`) |
+| `domain-components/SideMenu` | `MenuOption` (per leaf option) | menu group toggles as `MenuHeader:<menuId>` markers; each option as its own `MenuOption:<id>` registered handle with `data-label="<option name>"` and `data-value="<route>"` | `click` |
 
 `TableRow` is markup only — it doesn't register a handle. All row interaction
 goes through the parent `Table`'s `select(...ids)`. All five table variants

@@ -11,6 +11,12 @@
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
   import { Env } from '$core/env';
   import { Agent } from '$core/agent/registry';
+  import {
+    setVTableAgentContext,
+    buildCellID,
+    buildRowID,
+    type CellAgentMethods,
+  } from '$components/vTable/agentContext';
 
   interface ICellContent {
     content: string;
@@ -42,8 +48,6 @@
     mobileCardCss?: string
     getRowObject?: (row: Partial<T>) => Promise<T>
     cellInputType?: 'number';
-    /** Stable id for the row, used by the agent registry as TableRow:<id>. */
-    getRowId?: (row: T, index: number) => number | string;
   }
 
   let {
@@ -66,7 +70,6 @@
     mobileCardCss = '',
     getRowObject,
     cellInputType,
-    getRowId,
   }: VTableProps<T> = $props();
 
   // State
@@ -367,38 +370,69 @@
     }
   }
 
-  // Default row id: explicit getRowId > record.ID > index
-  function resolveRowId(record: T, index: number): number | string {
-    if (getRowId) { return getRowId(record, index); }
-    const fallback = (record as any)?.ID;
-    return fallback === undefined ? index : (fallback as number | string);
-  }
-
   const componentID = Env.getComponentID();
 
-  $effect(() => {
+  // Cells (CellEditable / CellSelector) hand their methods here keyed by cellID.
+  // The table is the only agent handle; methods route by id.
+  const cellRegistry = new Map<number, CellAgentMethods>();
+
+  setVTableAgentContext({
+    tableID: componentID,
+    registerCell: (cellID, methods) => {
+      cellRegistry.set(cellID, methods);
+      return () => {
+        if (cellRegistry.get(cellID) === methods) { cellRegistry.delete(cellID); }
+      };
+    },
+  });
+
+  const hasInteractiveCell = $derived(
+    columns.some((column) => column.onCellEdit || column.onCellSelect),
+  );
+  const shouldRegisterTable = $derived(Boolean(onRowClick) || hasInteractiveCell);
+
+  // ids that are exact multiples of 100 are row ids; everything else is a cell
+  // id, and remaining args go to the cell's own select() (option ids).
+  const dispatchRowSelect = (rowID: number) => {
     if (!onRowClick) { return; }
+    const rowIndex = Math.floor(rowID / 100);
+    if (rowIndex < 0 || rowIndex >= filteredData.length) { return; }
+    const record = filteredData[rowIndex];
+    if (!record) { return; }
+    const resolved = getResolvedRow(record, rowIndex) || record;
+    handleRowClick(resolved, rowIndex, () => rerenderRow(rowIndex));
+  };
+
+  $effect(() => {
+    if (!shouldRegisterTable) { return; }
     return Agent.register({
       id: componentID,
       type: "Table",
       label: "",
       select: (...ids) => {
-        const targets = new Set(ids.map(String));
-        for (let i = 0; i < filteredData.length; i++) {
-          const record = filteredData[i];
-          if (!record) { continue; }
-          if (targets.has(String(resolveRowId(record, i)))) {
-            const resolved = getResolvedRow(record, i) || record;
-            handleRowClick(resolved, i, () => rerenderRow(i));
-          }
+        if (ids.length === 0) { return; }
+        const first = Number(ids[0]);
+        if (Number.isFinite(first) && first % 100 === 0) {
+          for (const rid of ids) { dispatchRowSelect(Number(rid)); }
+          return;
         }
+        cellRegistry.get(first)?.select?.(...ids.slice(1));
+      },
+      setValueChild: (cellID, value) => {
+        cellRegistry.get(Number(cellID))?.setValue?.(value);
+      },
+      searchChild: (cellID, text) => {
+        cellRegistry.get(Number(cellID))?.search?.(String(text ?? ''));
+      },
+      getOptionsChild: (cellID, max) => {
+        return cellRegistry.get(Number(cellID))?.getOptions?.(Number(max ?? 50)) ?? [];
       },
     });
   });
 </script>
 
 <div bind:this={containerRef}
-  data-id={onRowClick ? `Table:${componentID}` : undefined}
+  data-id={shouldRegisterTable ? `Table:${componentID}` : undefined}
   class="vtable-container {css}" class:_14={isMobileView}
   style="max-height: {maxHeight}; overflow: {isMobileView ? 'hidden' : 'auto'};"
 >
@@ -483,10 +517,9 @@
 
           {#if record}
             {@const selected = resolvedRecord ? isRowSelected(resolvedRecord, row.index) : false}
-            {@const rowId = resolveRowId(resolvedRecord || record, row.index)}
 
           <tr class="vtable-row"
-            data-id={onRowClick ? `TableRow:${rowId}` : undefined}
+            data-id={shouldRegisterTable ? `TableRow:${buildRowID(row.index)}` : undefined}
             data-selected={selected ? "true" : undefined}
             class:vtable-row-even={row.index % 2 === 0}
             class:vtable-row-odd={row.index % 2 !== 0}
@@ -533,10 +566,11 @@
                   {#if column.onCellEdit && !column.disableCellInteractions?.(resolvedRecord, row.index)}
                   	{@const paddingCss = /px-|pr-|pl-/.test(column.inputCss||"") ? "" : "px-6"}
                    
-                    <CellEditable 
+                    <CellEditable
                     	contentClass={cssFinal + (column.align === 'right' ? " justify-end" : "")}
                       inputClass={paddingCss +" "+ (column.inputCss||"") + (column.align === 'right' ? " text-right" : "")}
                       type={column.cellInputType || cellInputType}
+                      cellID={buildCellID(row.index, j)}
                       getValue={() => cellData.content}
                       render={
                         (column.render
@@ -564,6 +598,7 @@
                       options={(column.cellOptions || []) as any[]}
                       keyId={(column.cellOptionsKeyId || 'ID') as never}
                       keyName={(column.cellOptionsKeyName || 'Name') as never}
+                      cellID={buildCellID(row.index, j)}
                       contentClass={column.css}
                       onChange={(value: string | number) => {
                         column.onCellSelect?.(resolvedRecord, value, () => rerenderRow(row.index))

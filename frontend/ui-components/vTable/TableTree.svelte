@@ -12,6 +12,12 @@
   import Renderer, { type ElementAST } from '$components/Renderer.svelte'
   import { Env } from '$core/env'
   import { Agent } from '$core/agent/registry'
+  import {
+    setVTableAgentContext,
+    buildCellID,
+    buildRowID,
+    type CellAgentMethods,
+  } from '$components/vTable/agentContext'
   import type { ITableColumn } from './types'
 
   interface TableTreeProps<TRecord> {
@@ -87,34 +93,100 @@
 
   const componentID = Env.getComponentID()
 
+  // Flat visible-row indices: node row, then child rows (when node.isOpen).
+  // Row i in the flattened list has rowID = i * 100; cells inside use
+  // i*100 + columnIndex + 1 so the agent can address either via the same
+  // composite scheme.
+  const nodeFlatIndices = $derived.by(() => {
+    const out: number[] = []
+    let counter = 0
+    for (let i = 0; i < data.length; i++) {
+      out.push(counter)
+      counter += 1
+      if (data[i].isOpen) { counter += data[i].children.length }
+    }
+    return out
+  })
+
+  function flatChildIndex(nodeIndex: number, childIndex: number) {
+    return (nodeFlatIndices[nodeIndex] ?? 0) + 1 + childIndex
+  }
+
+  // Cells (CellEditable) hand their methods here keyed by cellID.
+  const cellRegistry = new Map<number, CellAgentMethods>()
+
+  setVTableAgentContext({
+    tableID: componentID,
+    registerCell: (cellID, methods) => {
+      cellRegistry.set(cellID, methods)
+      return () => {
+        if (cellRegistry.get(cellID) === methods) { cellRegistry.delete(cellID) }
+      }
+    },
+  })
+
+  const hasInteractiveCell = $derived(
+    columns.some((column) => column.onCellEdit || column.onCellSelect),
+  )
+  const shouldRegisterTable = $derived(
+    Boolean(onNodeClick) || Boolean(onChildClick) || hasInteractiveCell,
+  )
+
+  // rowID → (nodeIndex, childIndex?) for select dispatch.
+  function resolveFlatRow(rowID: number): { nodeIndex: number; childIndex?: number } | undefined {
+    const rowIndex = Math.floor(rowID / 100)
+    if (rowIndex < 0) { return undefined }
+    for (let i = 0; i < data.length; i++) {
+      const flat = nodeFlatIndices[i] ?? 0
+      if (flat === rowIndex) { return { nodeIndex: i } }
+      const childCount = data[i].isOpen ? data[i].children.length : 0
+      if (rowIndex > flat && rowIndex <= flat + childCount) {
+        return { nodeIndex: i, childIndex: rowIndex - flat - 1 }
+      }
+    }
+    return undefined
+  }
+
+  const dispatchRowSelect = (rowID: number) => {
+    const target = resolveFlatRow(rowID)
+    if (!target) { return }
+    const node = data[target.nodeIndex]
+    if (target.childIndex === undefined) {
+      toggleNode(node, target.nodeIndex)
+      return
+    }
+    onChildClick?.(node.children[target.childIndex], target.childIndex, node)
+  }
+
   $effect(() => {
-    if (!onNodeClick && !onChildClick) { return }
+    if (!shouldRegisterTable) { return }
     return Agent.register({
       id: componentID,
       type: "Table",
       label: "",
       select: (...ids) => {
-        const targets = new Set(ids.map(String))
-        for (let i = 0; i < data.length; i++) {
-          const node = data[i]
-          if (targets.has(String(node.id))) {
-            toggleNode(node, i)
-            continue
-          }
-          if (!onChildClick || !node.isOpen) { continue }
-          for (let j = 0; j < node.children.length; j++) {
-            const childRecord = node.children[j]
-            if (targets.has(String(resolveChildId(childRecord, j, node)))) {
-              onChildClick(childRecord, j, node)
-            }
-          }
+        if (ids.length === 0) { return }
+        const first = Number(ids[0])
+        if (Number.isFinite(first) && first % 100 === 0) {
+          for (const rid of ids) { dispatchRowSelect(Number(rid)) }
+          return
         }
+        cellRegistry.get(first)?.select?.(...ids.slice(1))
+      },
+      setValueChild: (cellID, value) => {
+        cellRegistry.get(Number(cellID))?.setValue?.(value)
+      },
+      searchChild: (cellID, text) => {
+        cellRegistry.get(Number(cellID))?.search?.(String(text ?? ''))
+      },
+      getOptionsChild: (cellID, max) => {
+        return cellRegistry.get(Number(cellID))?.getOptions?.(Number(max ?? 50)) ?? []
       },
     })
   })
 </script>
 
-<div data-id="Table:{componentID}" class="table-tree-shell {css}">
+<div data-id={shouldRegisterTable ? `Table:${componentID}` : undefined} class="table-tree-shell {css}">
   <div class="table-tree-plain-scroll">
     <div class="table-tree-header table-tree-header-sticky">
       <div class="table-tree-header-row" role="row" style:grid-template-columns={gridTemplateColumns}>
@@ -135,8 +207,9 @@
     {:else}
       <div class="table-tree-body">
         {#each data as node, nodeIndex(node.id)}
+          {@const nodeFlatIdx = nodeFlatIndices[nodeIndex] ?? 0}
           <div class="table-tree-row-shell"
-            data-id="TableRow:{node.id}"
+            data-id={shouldRegisterTable ? `TableRow:${buildRowID(nodeFlatIdx)}` : undefined}
             data-selected={selectedId === node.id ? "true" : undefined}>
             <div
               class="table-tree-row {rowCss}"
@@ -166,6 +239,7 @@
                   {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(node.record, nodeIndex)}
                     <CellEditable
                       saveOn={node.record}
+                      cellID={buildCellID(nodeFlatIdx, columnIndex)}
                       getValue={() => defaultCellValue}
                       render={colDef.formatInputValue}
                       type={colDef.cellInputType || 'text'}
@@ -193,8 +267,9 @@
           {#if node.isOpen}
             {#each node.children as childRecord, childIndex (resolveChildId(childRecord, childIndex, node))}
               {@const childId = resolveChildId(childRecord, childIndex, node)}
+              {@const childFlatIdx = flatChildIndex(nodeIndex, childIndex)}
               <div class="table-tree-row-shell table-tree-child-row-shell"
-                data-id="TableRow:{childId}"
+                data-id={shouldRegisterTable ? `TableRow:${buildRowID(childFlatIdx)}` : undefined}
                 data-selected={selectedChildId === childId ? "true" : undefined}>
                 <div
                   class="table-tree-row table-tree-child-row {rowCss}"
@@ -231,6 +306,7 @@
                       {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(childRecord, childIndex)}
                         <CellEditable
                           saveOn={childRecord}
+                          cellID={buildCellID(childFlatIdx, columnIndex)}
                           getValue={() => defaultCellValue}
                           render={colDef.formatInputValue}                          type={colDef.cellInputType || 'text'}
                           inputClass={`${inputPaddingCss} ${colDef.inputCss || ''}${colDef.align === 'right' ? ' text-right' : ''}`}
