@@ -150,13 +150,13 @@ Pure-display, infrastructural, or trivially composed components don't register:
 | `vTable/TableTree` | `Table` | same | `select(...ids)` |
 | `vTable/TableStream` | `Table` | same | `select(...ids)` |
 | `vTable/MobileCardsVirtualList` | `Table` | same | `select(...ids)` |
-| `vTable/CellEditable` | (no own handle) | rendered inside its parent `Table`. Root has `data-id="<tableID>:<cellID>"`, `data-cell-type="CellEditable"`, `data-value`, `data-label`, `data-type`. Methods are reached on the parent `Table` handle. | `setValueChild` (via Table) |
-| `vTable/CellSelector` | (no own handle) | rendered inside its parent `Table`. Root has `data-id="<tableID>:<cellID>"`, `data-cell-type="CellSelector"`, `data-value="[id] text"`. | `searchChild`, `select`, `getOptionsChild` (via Table) |
+| `vTable/CellInput` | (no own handle) | rendered inside its parent `Table`. Root has `data-id="<tableID>:<cellID>"`, `data-cell-type="CellInput"`, `data-value`, `data-label`, `data-type`. Methods are reached on the parent `Table` handle. | `setValueChild` (via Table) |
+| `vTable/CellSelect` | (no own handle) | rendered inside its parent `Table`. Root has `data-id="<tableID>:<cellID>"`, `data-cell-type="CellSelect"`, `data-value="[id] text"`. | `searchChild`, `select`, `getOptionsChild` (via Table) |
 
 ### Table-level cell routing
 
-`Table` is the only registered handle for the table; cells (`CellEditable`,
-`CellSelector`) live underneath as `<tableID>:<cellID>` composite ids. The
+`Table` is the only registered handle for the table; cells (`CellInput`,
+`CellSelect`) live underneath as `<tableID>:<cellID>` composite ids. The
 table exposes distinct method names for cell-routed calls (`*Child`) so the
 caller never has to guess whether a verb is acting on the table or on one of
 its cells. `select` is the one shared verb because the id alone disambiguates

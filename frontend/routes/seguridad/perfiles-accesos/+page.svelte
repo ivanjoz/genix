@@ -1,6 +1,6 @@
 <script lang="ts">
-import Input from '$components/Input.svelte';
-import Modal from '$components/Modal.svelte';
+import Input from '$components/form/Input.svelte';
+import Modal from '$components/layers/Modal.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import Modules from '$core/modules';

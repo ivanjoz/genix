@@ -1,9 +1,9 @@
 <script lang="ts" module>
-import type { ElementAST } from '$components/Renderer.svelte';
-import Renderer from '$components/Renderer.svelte';
+import type { ElementAST } from '$components/misc/Renderer.svelte';
+import Renderer from '$components/misc/Renderer.svelte';
 import { getVTableAgentContext } from '$components/vTable/agentContext';
 
-	export interface ICellEditableProps<T> {
+	export interface ICellInputProps<T> {
 		saveOn?: T;
 		save?: string;
 		css?: string;
@@ -35,7 +35,7 @@ import { getVTableAgentContext } from '$components/vTable/agentContext';
 		required = false,
 		type = 'text',
 		cellID,
-	}: ICellEditableProps<T> = $props();
+	}: ICellInputProps<T> = $props();
 
 	let isEditing = $state(false);
 	let inputRef = $state<HTMLInputElement>();
@@ -125,7 +125,7 @@ import { getVTableAgentContext } from '$components/vTable/agentContext';
 
 <div class="_root"
 	data-id={agentDataID}
-	data-cell-type={agentDataID ? 'CellEditable' : undefined}
+	data-cell-type={agentDataID ? 'CellInput' : undefined}
 	data-value={agentDataValue}
 	data-label={String(save || '')}
 	data-type={agentDataType}

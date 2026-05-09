@@ -7,7 +7,7 @@
 	} from "$libs/cache/cache-by-ids.svelte";
 	import { untrack } from "svelte";
 	import type { IProducto } from "$services/services/productos.svelte";
-	import ImageHash from "$components/Imagehash.svelte";
+	import ImageHash from "$components/files/Imagehash.svelte";
 	import { addProductoCant, ProductsSelectedMap } from "./store.svelte";
 
 	type ProductCardMode = "vertical" | "horizontal";

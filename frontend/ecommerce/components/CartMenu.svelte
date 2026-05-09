@@ -11,15 +11,15 @@
 	import angleSvg from "$domain/assets/angle.svg?raw";
 import { parseSVG } from '$libs/helpers';
 	import s1 from "./styles.module.css";
-	import ArrowSteps from "$components/ArrowSteps.svelte";
+	import ArrowSteps from "$components/navigation/ArrowSteps.svelte";
 	import { Globals } from "$ecommerce/stores/globals.svelte";
-	import Input from "$components/Input.svelte";
+	import Input from "$components/form/Input.svelte";
 	import CiudadesSelector from "$ecommerce/components/CiudadesSelector.svelte";
 	import ProductCard from "$ecommerce/components/ProductCard.svelte";
 	import { Core } from "$core/store.svelte";
 	import { Ecommerce } from "$ecommerce/stores/globals.svelte";
 
-	import ButtonLayer from "$components/ButtonLayer.svelte";
+	import ButtonLayer from "$components/buttons/ButtonLayer.svelte";
 
 	import { Env } from "$core/env";
 

@@ -1,6 +1,6 @@
 <script lang="ts" generics="T,E">
     import { untrack } from "svelte";
-import SearchSelect from '$components/SearchSelect.svelte';
+import SearchSelect from '$components/form/SearchSelect.svelte';
 import { WeakSearchRef } from '$core/store.svelte';
 import { Env } from '$core/env';
 import { Agent } from '$core/agent/registry';

@@ -4,10 +4,10 @@
   import { createVirtualizer } from './index.svelte';
   import type { ITableColumn, CellRendererSnippet, IMobileCardsListCell } from "./types";
   import type { VirtualItem } from './index.svelte';
-  import CellEditable from '$components/vTable/CellEditable.svelte';
-  import CellSelector from '$components/vTable/CellSelector.svelte';
+  import CellInput from '$components/vTable/CellInput.svelte';
+  import CellSelect from '$components/vTable/CellSelect.svelte';
   import { highlString, wordInclude } from '$libs/helpers';
-  import Renderer, { type ElementAST } from '$components/Renderer.svelte';
+  import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte';
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
   import { Env } from '$core/env';
   import { Agent } from '$core/agent/registry';
@@ -372,7 +372,7 @@
 
   const componentID = Env.getComponentID();
 
-  // Cells (CellEditable / CellSelector) hand their methods here keyed by cellID.
+  // Cells (CellInput / CellSelect) hand their methods here keyed by cellID.
   // The table is the only agent handle; methods route by id.
   const cellRegistry = new Map<number, CellAgentMethods>();
 
@@ -566,7 +566,7 @@
                   {#if column.onCellEdit && !column.disableCellInteractions?.(resolvedRecord, row.index)}
                   	{@const paddingCss = /px-|pr-|pl-/.test(column.inputCss||"") ? "" : "px-6"}
                    
-                    <CellEditable
+                    <CellInput
                     	contentClass={cssFinal + (column.align === 'right' ? " justify-end" : "")}
                       inputClass={paddingCss +" "+ (column.inputCss||"") + (column.align === 'right' ? " text-right" : "")}
                       type={column.cellInputType || cellInputType}
@@ -582,7 +582,7 @@
                       }}
                     />
                   {:else if column.onCellSelect}
-                    {console.log('[VTable] CellSelector props', {
+                    {console.log('[VTable] CellSelect props', {
                       selectorId: `${String(column.id || column.field || j)}_${row.index}`,
                       rowIndex: row.index,
                       columnField: column.field,
@@ -591,7 +591,7 @@
                       firstOption: column.cellOptions?.[0] || null,
                       currentFieldValue: column.field ? (resolvedRecord as any)?.[column.field] : undefined,
                     })}
-                    <CellSelector
+                    <CellSelect
                       id={`${String(column.id || column.field || j)}_${row.index}`}
                       saveOn={resolvedRecord}
                       save={column.field as keyof T}

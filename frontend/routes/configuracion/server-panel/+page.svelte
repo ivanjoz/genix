@@ -1,6 +1,6 @@
 <script lang="ts">
 import Page from '$domain/Page.svelte';
-import OptionsStrip from '$components/OptionsStrip.svelte';
+import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import DashboardView from './DashboardView.svelte';
 import MemoryView from './MemoryView.svelte';
 

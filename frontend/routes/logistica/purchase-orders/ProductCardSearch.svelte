@@ -41,8 +41,8 @@ export interface ProductCardSearchProps {
 </script>
 
 <script lang="ts">
-import SearchSelect from '$components/SearchSelect.svelte'
-import VirtualCards from '$components/VirtualCards.svelte'
+import SearchSelect from '$components/form/SearchSelect.svelte'
+import VirtualCards from '$components/misc/VirtualCards.svelte'
 import { formatN, wordInclude } from '$libs/helpers'
     import { ProductSupplyService } from '../gestion-compras/supply-management.svelte';
 

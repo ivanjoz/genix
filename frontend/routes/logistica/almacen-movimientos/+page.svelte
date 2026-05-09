@@ -1,13 +1,13 @@
 <script lang="ts">
 import Page from '$domain/Page.svelte';
-import SearchSelect from '$components/SearchSelect.svelte';
-import DateInput from '$components/DateInput.svelte';
+import SearchSelect from '$components/form/SearchSelect.svelte';
+import DateInput from '$components/form/DateInput.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import { Loading, formatTime, throttle, highlString } from '$libs/helpers';
-import ButtonLayer from '$components/ButtonLayer.svelte';
-import KeyValueStrip from '$components/micro/KeyValueStrip.svelte';
-import Input from '$components/Input.svelte';
+import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
+import KeyValueStrip from '$components/misc/KeyValueStrip.svelte';
+import Input from '$components/form/Input.svelte';
 import { getStaticRecordsByID } from '$libs/cache/cache-by-ids.svelte';
 import { SvelteMap } from 'svelte/reactivity';
   import { AlmacenesService } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte"

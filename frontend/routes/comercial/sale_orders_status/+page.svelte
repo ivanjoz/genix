@@ -1,9 +1,9 @@
 <script lang="ts">
-  import Layer from '$components/Layer.svelte';
-  import OptionsStrip from '$components/OptionsStrip.svelte';
-  import SearchSelect from '$components/SearchSelect.svelte';
-  import LoadingBar from '$components/micro/LoadingBar.svelte';
-  import RecordByIDText from '$components/micro/RecordByIDText.svelte';
+  import Layer from '$components/layers/Layer.svelte';
+  import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
+  import SearchSelect from '$components/form/SearchSelect.svelte';
+  import LoadingBar from '$components/misc/LoadingBar.svelte';
+  import RecordByIDText from '$components/misc/RecordByIDText.svelte';
   import VTable from '$components/vTable/VTable.svelte';
   import type { ITableColumn } from '$components/vTable/types';
   import { Core } from '$core/store.svelte';

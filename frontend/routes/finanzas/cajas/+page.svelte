@@ -1,13 +1,13 @@
 <script lang="ts">
-import Input from '$components/Input.svelte';
-import LayerStatic from '$components/LayerStatic.svelte';
-import Modal from '$components/Modal.svelte';
-import OptionsStrip from '$components/OptionsStrip.svelte';
+import Input from '$components/form/Input.svelte';
+import LayerStatic from '$components/layers/LayerStatic.svelte';
+import Modal from '$components/layers/Modal.svelte';
+import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import Page from '$domain/Page.svelte';
-import SearchSelect from '$components/SearchSelect.svelte';
+import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import RecordByIDText from '$components/micro/RecordByIDText.svelte';
+import RecordByIDText from '$components/misc/RecordByIDText.svelte';
 import { Loading, Notify, formatTime } from '$libs/helpers';
 import { throttle } from '$libs/helpers';
 import { Core } from '$core/store.svelte';

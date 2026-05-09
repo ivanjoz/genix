@@ -1,7 +1,7 @@
 <script lang="ts">
   import { layerOpenedState } from "./store.svelte";
-  import ButtonLayer from '$components/ButtonLayer.svelte';
-  import OptionsStrip from '$components/OptionsStrip.svelte';
+  import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
+  import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
   import s1 from "./styles.module.css"
   import { Env } from '$core/env';
 import { accessHelper } from '$core/security';

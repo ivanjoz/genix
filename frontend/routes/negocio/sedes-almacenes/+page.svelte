@@ -1,9 +1,9 @@
 <script lang="ts">
-import Input from '$components/Input.svelte';
-import Modal from '$components/Modal.svelte';
-import Layer from '$components/Layer.svelte';
+import Input from '$components/form/Input.svelte';
+import Modal from '$components/layers/Modal.svelte';
+import Layer from '$components/layers/Layer.svelte';
 import Page from '$domain/Page.svelte';
-import SearchSelect from '$components/SearchSelect.svelte';
+import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import { Loading, Notify, formatTime } from '$libs/helpers';

@@ -1,8 +1,8 @@
 <script lang="ts" generics="TRecord">
   import { onMount } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
-  import Renderer from '$components/Renderer.svelte';
-  import CellEditable from '$components/vTable/CellEditable.svelte';
+  import Renderer from '$components/misc/Renderer.svelte';
+  import CellInput from '$components/vTable/CellInput.svelte';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import { splitTwoStrings } from '$libs/helpers';
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
@@ -316,7 +316,7 @@
 
   const componentID = Env.getComponentID();
 
-  // Cells (CellEditable / CellSelector) hand their methods here keyed by cellID.
+  // Cells (CellInput / CellSelect) hand their methods here keyed by cellID.
   // The table is the only agent handle; methods route by id.
   const cellRegistry = new Map<number, CellAgentMethods>();
 
@@ -354,7 +354,7 @@
       label: "",
       // ids that are exact multiples of 100 are row ids; everything else is a
       // cell id, in which case the remaining args are forwarded to the cell's
-      // own select() (e.g. CellSelector option ids).
+      // own select() (e.g. CellSelect option ids).
       select: (...ids) => {
         if (ids.length === 0) { return; }
         const first = Number(ids[0]);
@@ -468,7 +468,7 @@
                   title={`${defaultCellValue}`}
                 >
                   {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(rowRecord, rowIndex)}
-                    <CellEditable contentClass={`${contentPaddingCss} ${colDef.css || ""}${colDef.align === 'right' ? ' justify-end' : ''}`}
+                    <CellInput contentClass={`${contentPaddingCss} ${colDef.css || ""}${colDef.align === 'right' ? ' justify-end' : ''}`}
                       inputClass={`${inputPaddingCss} ${colDef.inputCss || ""}${colDef.align === 'right' ? ' text-right' : ''}`}
                       type={colDef.cellInputType || cellInputType}
                       cellID={buildCellID(rowIndex, columnIndex)}
@@ -589,7 +589,7 @@
                     title={`${defaultCellValue}`}
                   >
                     {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(rowRecord, rowIndex)}
-	                    <CellEditable contentClass={`${contentPaddingCss} ${colDef.css || ""}${colDef.align === 'right' ? ' justify-end' : ''}`}
+	                    <CellInput contentClass={`${contentPaddingCss} ${colDef.css || ""}${colDef.align === 'right' ? ' justify-end' : ''}`}
 	                      inputClass={`${inputPaddingCss} ${colDef.inputCss || ""}${colDef.align === 'right' ? ' text-right' : ''}`}
                         type={colDef.cellInputType || cellInputType}
                         cellID={buildCellID(rowIndex, columnIndex)}

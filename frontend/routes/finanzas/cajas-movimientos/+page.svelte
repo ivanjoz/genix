@@ -1,10 +1,10 @@
 <script lang="ts">
 import Page from '$domain/Page.svelte';
-import SearchSelect from '$components/SearchSelect.svelte';
-import DateInput from '$components/DateInput.svelte';
+import SearchSelect from '$components/form/SearchSelect.svelte';
+import DateInput from '$components/form/DateInput.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import RecordByIDText from '$components/micro/RecordByIDText.svelte';
+import RecordByIDText from '$components/misc/RecordByIDText.svelte';
 import { Loading, formatTime, throttle, Notify } from '$libs/helpers';
 import { formatN } from '$libs/helpers';
   import { untrack } from "svelte"

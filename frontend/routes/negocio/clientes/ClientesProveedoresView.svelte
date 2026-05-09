@@ -1,7 +1,7 @@
 <script lang="ts">
-  import Layer from '$components/Layer.svelte'
-  import Input from '$components/Input.svelte'
-  import SearchSelect from '$components/SearchSelect.svelte'
+  import Layer from '$components/layers/Layer.svelte'
+  import Input from '$components/form/Input.svelte'
+  import SearchSelect from '$components/form/SearchSelect.svelte'
   import VTable from '$components/vTable/VTable.svelte'
   import type { ITableColumn } from '$components/vTable/types'
   import { Core } from '$core/store.svelte'

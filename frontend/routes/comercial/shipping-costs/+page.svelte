@@ -1,8 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import Input from '$components/Input.svelte'
-  import LayerStatic from '$components/LayerStatic.svelte'
-  import FilterInput from '$components/micro/FilterInput.svelte'
+  import Input from '$components/form/Input.svelte'
+  import LayerStatic from '$components/layers/LayerStatic.svelte'
+  import FilterInput from '$components/form/FilterInput.svelte'
   import TableTree, { type TableTreeNode } from '$components/vTable/TableTree.svelte'
   import type { ITableColumn } from '$components/vTable/types'
   import Page from '$domain/Page.svelte'

@@ -1,7 +1,7 @@
 <script lang="ts">
-import ImageUploader, { type ImageSource } from '$components/ImageUploader.svelte';
-import Input from '$components/Input.svelte';
-import Modal from '$components/Modal.svelte';
+import ImageUploader, { type ImageSource } from '$components/files/ImageUploader.svelte';
+import Input from '$components/form/Input.svelte';
+import Modal from '$components/layers/Modal.svelte';
 import { closeAllModals, closeModal, imagesToUpload, openModal } from '$core/store.svelte';
 import { Loading, Notify } from '$libs/helpers';
 import { type IListaRegistro, type ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";

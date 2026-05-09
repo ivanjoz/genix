@@ -38,8 +38,8 @@ const SYMBOL_MIGRATIONS: Record<string, { package: string; path: string }> = {
 const IMPORT_REPLACEMENTS: Record<string, string> = {
   // pkg-ecommerce should not import from $components
   // Instead, components should be passed as props or use a different pattern
-  '$components/Input.svelte': '$components/Input.svelte', // Keep for now, will warn
-  '$components/SearchSelect.svelte': '$components/SearchSelect.svelte', // Keep for now, will warn
+  '$components/form/Input.svelte': '$components/form/Input.svelte', // Keep for now, will warn
+  '$components/form/SearchSelect.svelte': '$components/form/SearchSelect.svelte', // Keep for now, will warn
 
   // Ensure all $core imports use proper paths
   '../pkg-core/core': '$core',

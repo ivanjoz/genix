@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
-	import TopLayerDatePicker from '$components/TopLayerDatePicker.svelte';
-	import TopLayerSelector from '$components/TopLayerSelector.svelte';
+	import TopLayerDatePicker from '$components/layers/TopLayerDatePicker.svelte';
+	import TopLayerSelector from '$components/layers/TopLayerSelector.svelte';
 	import { Env } from '$core/env';
 	import Modules from '$core/modules';
 	import { canUserAccessRoute, checkIsLogin } from '$core/security';

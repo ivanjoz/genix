@@ -6,7 +6,7 @@ export const HEADER_REQUEST_LOGS_MODAL_ID = 9201
 <script lang="ts">
 import { browser } from '$app/environment';
 import { onMount } from 'svelte';
-import Modal from '$components/Modal.svelte';
+import Modal from '$components/layers/Modal.svelte';
 import TableGrid from '$components/vTable/TableGrid.svelte';
 import { Env } from '$core/env';
 import { openModals } from '$core/store.svelte';

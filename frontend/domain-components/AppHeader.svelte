@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Core, fetchOnCourse } from '$core/store.svelte';
-import ButtonLayer from '$components/ButtonLayer.svelte';
+import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
 import HeaderConfig from '$domain/HeaderConfig.svelte';
 import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-import Input from '$components/Input.svelte';
-import Layer from '$components/Layer.svelte';
+import Input from '$components/form/Input.svelte';
+import Layer from '$components/layers/Layer.svelte';
 import Page from '$domain/Page.svelte';
 import UserProfilesAccessSelector from './UserProfilesAccessSelector.svelte';
 import VTable from '$components/vTable/VTable.svelte';

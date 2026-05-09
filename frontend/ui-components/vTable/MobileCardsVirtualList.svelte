@@ -1,7 +1,7 @@
 <script lang="ts" generics="TRecord, TCell extends IMobileCardsListCell<TRecord>">
-  import Renderer, { type ElementAST } from '$components/Renderer.svelte';
-  import CellEditable from '$components/vTable/CellEditable.svelte';
-  import CellSelector from '$components/vTable/CellSelector.svelte';
+  import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte';
+  import CellInput from '$components/vTable/CellInput.svelte';
+  import CellSelect from '$components/vTable/CellSelect.svelte';
   import { buildCellID } from '$components/vTable/agentContext';
   import { highlString, splitTwoStrings } from '$libs/helpers';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
@@ -292,7 +292,7 @@
                       >
                         {#if cell.onCellEdit}
                           <div class="mobile-cards-editable-border"><div></div></div>
-                          <CellEditable
+                          <CellInput
                             contentClass={cell.contentCss || cell.css}
                             inputClass={cell.inputCss}
                             type={cell.type || 'text'}
@@ -320,7 +320,7 @@
                           />
                         {:else if cell.onCellSelect}
                           <div class="mobile-cards-editable-border"><div></div></div>
-                          <CellSelector
+                          <CellSelect
                             id={buildSelectorId(cell, recordIndex, cellIndex)}
                             saveOn={resolvedRecord}
                             save={cell.field as keyof TRecord}
@@ -394,7 +394,7 @@
                       >
                         {#if cell.onCellEdit}
                           <div class="mobile-cards-editable-border"><div></div></div>
-                          <CellEditable
+                          <CellInput
                             contentClass={cell.contentCss || cell.css}
                             inputClass={cell.inputCss}
                             type={cell.type || 'text'}
@@ -421,7 +421,7 @@
                           />
                         {:else if cell.onCellSelect}
                           <div class="mobile-cards-editable-border"><div></div></div>
-                          <CellSelector
+                          <CellSelect
                             id={buildSelectorId(cell, recordIndex, cellIndex)}
                             saveOn={resolvedRecord}
                             save={cell.field as keyof TRecord}
@@ -513,7 +513,7 @@
                     >
                       {#if cell.onCellEdit}
                         <div class="mobile-cards-editable-border"><div></div></div>
-                        <CellEditable
+                        <CellInput
                           contentClass={cell.contentCss || cell.css}
                           inputClass={cell.inputCss}
                           type={cell.type || 'text'}
@@ -540,7 +540,7 @@
                         />
                       {:else if cell.onCellSelect}
                         <div class="mobile-cards-editable-border"><div></div></div>
-                        <CellSelector
+                        <CellSelect
                           id={buildSelectorId(cell, recordIndex, cellIndex)}
                           saveOn={resolvedRecord}
                           save={cell.field as keyof TRecord}

@@ -3,7 +3,7 @@ import { highlString, persistFieldValue, readFieldValue, wordInclude } from '$li
 import { throttle } from '$libs/helpers';
 import { Core } from '$core/store.svelte';
 import type { Snippet } from 'svelte';
-  import s1 from "./components.module.css";
+  import s1 from "../components.module.css";
   import SvelteVirtualList from "@humanspeak/svelte-virtual-list";
     import { Env } from '$core/env';
     import { Agent, type AgentOption } from "$core/agent/registry";

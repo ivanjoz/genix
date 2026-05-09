@@ -1,5 +1,5 @@
 <script lang="ts">
-import SearchSelect from '$components/SearchSelect.svelte';
+import SearchSelect from '$components/form/SearchSelect.svelte';
 import { useCiudadesAPI, type ICiudad } from '$services/services/ciudades.svelte';
 
   export interface ICiudades {

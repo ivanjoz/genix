@@ -1,5 +1,5 @@
 <script lang="ts">
-import ImageUploader from '$components/ImageUploader.svelte';
+import ImageUploader from '$components/files/ImageUploader.svelte';
 import Page from '$domain/Page.svelte';
     import { DemoService } from "./demo-service.svelte";
 

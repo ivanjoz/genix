@@ -176,7 +176,7 @@ func markerComponentType(n *html.Node) string {
 	return ""
 }
 
-// cellComponentType returns the cell type ("CellEditable" / "CellSelector")
+// cellComponentType returns the cell type ("CellInput" / "CellSelect")
 // for an element whose data-id is "<tableID>:<cellID>" pointing to a
 // registered Table component. Cells don't have a registry handle of their
 // own; the parent Table is the agent handle and dispatches by cellID. The
@@ -417,10 +417,10 @@ func renderIndented(buf *bytes.Buffer, n *html.Node, depth int, cm map[string]Ag
 				buf.WriteString(">\n")
 				return
 			}
-			// When the cell holds a single agent element (e.g. a CellEditable
-			// or CellSelector inside a <td>), keep open tag + agent + close tag
+			// When the cell holds a single agent element (e.g. a CellInput
+			// or CellSelect inside a <td>), keep open tag + agent + close tag
 			// on one line so the agent view stays compact:
-			//   <td><CellEditable id="46" value="1"/></td>
+			//   <td><CellInput id="46" value="1"/></td>
 			if child := singleAgentChild(n, cm); child != nil {
 				var tmp bytes.Buffer
 				renderIndented(&tmp, child, 0, cm)
@@ -594,7 +594,7 @@ func isCellElement(n *html.Node) bool {
 // component or marker) iff n has exactly one element child, that child is an
 // agent element, and there is no non-whitespace text directly under n.
 // Returns nil otherwise. Used by the table-cell renderer to keep
-// <td><CellEditable .../></td> on a single line.
+// <td><CellInput .../></td> on a single line.
 func singleAgentChild(n *html.Node, cm map[string]AgentComponentInfo) *html.Node {
 	var only *html.Node
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -616,8 +616,8 @@ func singleAgentChild(n *html.Node, cm map[string]AgentComponentInfo) *html.Node
 	return only
 }
 
-// renderCell emits a compact, self-closing tag for a CellEditable /
-// CellSelector under a registered Table. The cell carries the composite
+// renderCell emits a compact, self-closing tag for a CellInput /
+// CellSelect under a registered Table. The cell carries the composite
 // "<tableID>:<cellID>" id verbatim so the agent can reuse it when invoking
 // the Table's setValueChild / select / searchChild / getOptionsChild.
 func renderCell(buf *bytes.Buffer, indent, typ, dataID string, n *html.Node) {

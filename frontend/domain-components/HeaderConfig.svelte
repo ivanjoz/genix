@@ -1,8 +1,8 @@
 <script lang="ts">
 import { browser } from '$app/environment';
 import { onMount } from 'svelte';
-import Input from '$components/Input.svelte';
-import OptionsStrip from '$components/OptionsStrip.svelte';
+import Input from '$components/form/Input.svelte';
+import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import TableGrid from '$components/vTable/TableGrid.svelte';
 import { accessHelper } from '$core/security';
 import { Core } from '$core/store.svelte';

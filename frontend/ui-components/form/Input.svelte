@@ -1,7 +1,7 @@
 <script lang="ts" generics="T">
     import { untrack } from "svelte";
-    import s1 from "./components.module.css";
-import type { ElementAST } from '$components/Renderer.svelte';
+    import s1 from "../components.module.css";
+import type { ElementAST } from '$components/misc/Renderer.svelte';
 import { persistFieldValue } from '$libs/helpers';
     import { Env } from "$core/env";
     import { Agent } from "$core/agent/registry";

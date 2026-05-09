@@ -1,6 +1,6 @@
 <script lang="ts" generics="T extends ISaleOrderTableRecord">
-  import HighlightText from '$components/micro/HighlightText.svelte';
-  import InlineButton from '$components/micro/InlineButton.svelte';
+  import HighlightText from '$components/misc/HighlightText.svelte';
+  import InlineButton from '$components/buttons/InlineButton.svelte';
   import VTable from '$components/vTable/VTable.svelte';
   import type { ITableColumn } from '$components/vTable/types';
   import { formatN, formatTime, wordInclude } from '$libs/helpers';

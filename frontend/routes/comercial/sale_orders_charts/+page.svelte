@@ -1,5 +1,5 @@
 <script lang="ts">
-	import OptionsStrip from '$components/OptionsStrip.svelte';
+	import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 	import Page from '$domain/Page.svelte';
 	import { ProductosService } from '$routes/negocio/productos/productos.svelte';
 	import SaleOrdersChartsDailySummary from './SaleOrdersChartsDailySummary.svelte';

@@ -2,8 +2,8 @@
   import type { Snippet } from 'svelte'
   import { tick, untrack } from 'svelte'
 import { Core } from '$core/store.svelte';
-import OptionsStrip from '$components/OptionsStrip.svelte';
-import ButtonList from '$components/ButtonList.svelte';
+import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
+import ButtonList from '$components/buttons/ButtonList.svelte';
 import { Env } from '$core/env';
 import { Agent } from '$core/agent/registry';
 

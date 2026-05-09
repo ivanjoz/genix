@@ -8,8 +8,8 @@
 </script>
 
 <script lang="ts" generics="TRecord">
-  import CellEditable from '$components/vTable/CellEditable.svelte'
-  import Renderer, { type ElementAST } from '$components/Renderer.svelte'
+  import CellInput from '$components/vTable/CellInput.svelte'
+  import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte'
   import { Env } from '$core/env'
   import { Agent } from '$core/agent/registry'
   import {
@@ -88,7 +88,7 @@
   }
 
   function rerenderNoop() {
-    // Caller-owned state drives the row refresh; CellEditable only needs the callback signature.
+    // Caller-owned state drives the row refresh; CellInput only needs the callback signature.
   }
 
   const componentID = Env.getComponentID()
@@ -112,7 +112,7 @@
     return (nodeFlatIndices[nodeIndex] ?? 0) + 1 + childIndex
   }
 
-  // Cells (CellEditable) hand their methods here keyed by cellID.
+  // Cells (CellInput) hand their methods here keyed by cellID.
   const cellRegistry = new Map<number, CellAgentMethods>()
 
   setVTableAgentContext({
@@ -237,7 +237,7 @@
                   role="cell"
                 >
                   {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(node.record, nodeIndex)}
-                    <CellEditable
+                    <CellInput
                       saveOn={node.record}
                       cellID={buildCellID(nodeFlatIdx, columnIndex)}
                       getValue={() => defaultCellValue}
@@ -304,7 +304,7 @@
                         <i class="table-tree-child-indent icon-level-down"></i>
                       {/if}
                       {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(childRecord, childIndex)}
-                        <CellEditable
+                        <CellInput
                           saveOn={childRecord}
                           cellID={buildCellID(childFlatIdx, columnIndex)}
                           getValue={() => defaultCellValue}

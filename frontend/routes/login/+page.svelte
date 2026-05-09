@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import Input from '$components/Input.svelte';
-  import SearchSelect from '$components/SearchSelect.svelte';
+  import Input from '$components/form/Input.svelte';
+  import SearchSelect from '$components/form/SearchSelect.svelte';
   import { Notify } from '$libs/helpers';
   import { sendUserLogin, type ILogin } from '$services/login';
   import { checkIsLogin } from '$core/security';

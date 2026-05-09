@@ -1,12 +1,12 @@
 <script lang="ts">
-import CheckboxOptions from '$components/CheckboxOptions.svelte';
-import ImageUploader from '$components/ImageUploader.svelte';
-import Input from '$components/Input.svelte';
-import Layer from '$components/Layer.svelte';
-import Modal from '$components/Modal.svelte';
-import OptionsStrip from '$components/OptionsStrip.svelte';
-import SearchCard from '$components/SearchCard.svelte'; 
-import SearchSelect from '$components/SearchSelect.svelte';
+import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
+import ImageUploader from '$components/files/ImageUploader.svelte';
+import Input from '$components/form/Input.svelte';
+import Layer from '$components/layers/Layer.svelte';
+import Modal from '$components/layers/Modal.svelte';
+import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
+import SearchCard from '$components/cards/SearchCard.svelte'; 
+import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import { Core } from '$core/store.svelte';
 import HTMLEditor from '$domain/HTMLEditor/HTMLEditor.svelte';

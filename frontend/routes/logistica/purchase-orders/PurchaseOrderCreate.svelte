@@ -1,7 +1,7 @@
 <script lang="ts">
-import KeyValueStrip from '$components/micro/KeyValueStrip.svelte'
-import LayerStatic from '$components/LayerStatic.svelte'
-import OptionsStrip from '$components/OptionsStrip.svelte'
+import KeyValueStrip from '$components/misc/KeyValueStrip.svelte'
+import LayerStatic from '$components/layers/LayerStatic.svelte'
+import OptionsStrip from '$components/navigation/OptionsStrip.svelte'
 import VTable from '$components/vTable/VTable.svelte'
 import type { ITableColumn } from '$components/vTable/types'
 import { formatN, formatTime, Notify } from '$libs/helpers'

@@ -1,8 +1,8 @@
 <script lang="ts">
-import Checkbox from '$components/Checkbox.svelte';
-import Layer from '$components/Layer.svelte';
-import SearchSelect from '$components/SearchSelect.svelte';
-import LoadingBar from '$components/micro/LoadingBar.svelte';
+import Checkbox from '$components/form/Checkbox.svelte';
+import Layer from '$components/layers/Layer.svelte';
+import SearchSelect from '$components/form/SearchSelect.svelte';
+import LoadingBar from '$components/misc/LoadingBar.svelte';
 import TableGrid from '$components/vTable/TableGrid.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';

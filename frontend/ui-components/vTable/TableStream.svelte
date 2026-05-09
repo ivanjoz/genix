@@ -1,6 +1,6 @@
 <script lang="ts" generics="T">
   import { SvelteMap } from 'svelte/reactivity';
-  import Renderer, { type ElementAST } from '$components/Renderer.svelte';
+  import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte';
   import { Env } from '$core/env';
   import { Agent } from '$core/agent/registry';
   import type { ITableColumn } from './types';

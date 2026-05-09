@@ -7,7 +7,7 @@ import Popover2 from '$components/popover2/Popover2.svelte';
 import { type AgentOption } from '$core/agent/registry';
 import { getVTableAgentContext } from '$components/vTable/agentContext';
 
-	export interface ICellSelector<T,E> {
+	export interface ICellSelect<T,E> {
     id?: number | string;
 		saveOn?: T;
 		save?: keyof T;
@@ -28,7 +28,7 @@ import { getVTableAgentContext } from '$components/vTable/agentContext';
 
   let {
 		id, options, saveOn, save, keyId, keyName, contentClass, required, render, onChange, cellID,
-	}: ICellSelector<T,E> = $props();
+	}: ICellSelect<T,E> = $props();
 
   let show = $derived(Core.popoverShowID === id);
   let refElement: HTMLDivElement | null = $state(null);
@@ -179,7 +179,7 @@ import { getVTableAgentContext } from '$components/vTable/agentContext';
 
 <div class="_root"
   data-id={agentDataID}
-  data-cell-type={agentDataID ? 'CellSelector' : undefined}
+  data-cell-type={agentDataID ? 'CellSelect' : undefined}
   data-value={agentDataValue}
   data-label={String(save || '')}
   data-type="other"

@@ -1,5 +1,5 @@
 import { GetHandler } from '$libs/http.svelte';
-import type { ImageSource } from '$components/ImageUploader.svelte';
+import type { ImageSource } from '$components/files/ImageUploader.svelte';
 
 export interface IProductoPropiedad {
   id: number, nm: string, ss: number

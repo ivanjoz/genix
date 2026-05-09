@@ -1,5 +1,5 @@
 // Svelte context shared between every vTable variant and its inner cells.
-// Cells (CellEditable / CellSelector) don't register themselves with the
+// Cells (CellInput / CellSelect) don't register themselves with the
 // global Agent registry: they hand their methods to the parent table through
 // `registerCell`, and the table is the sole agent handle. The agent addresses
 // individual cells via the composite data-id `<tableID>:<cellID>`; the table

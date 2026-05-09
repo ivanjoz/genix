@@ -3,10 +3,10 @@ import { systemParameters } from '$services/system-paremeters';
 import { SystemParametersService, saveSystemParameters, type ISystemParameter } from '$services/services/system-parameters.svelte';
 
 import { Loading } from '$libs/helpers';
-    import SearchCard from '$components/SearchCard.svelte';
-    import Checkbox from '$components/Checkbox.svelte';
+    import SearchCard from '$components/cards/SearchCard.svelte';
+    import Checkbox from '$components/form/Checkbox.svelte';
     import { untrack } from 'svelte';
-    import CheckboxOptions from '$components/CheckboxOptions.svelte';
+    import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
 import { Params } from '$core/security';
 
 	const service = new SystemParametersService();

@@ -1,7 +1,7 @@
 <script lang="ts">
-import Input from '$components/Input.svelte'
-import Layer from '$components/Layer.svelte'
-import ChartCanvas from '$components/ChartCanvas.svelte'
+import Input from '$components/form/Input.svelte'
+import Layer from '$components/layers/Layer.svelte'
+import ChartCanvas from '$components/charts/ChartCanvas.svelte'
 import CardsList from '$components/vTable/CardsList.svelte'
 import TableGrid from '$components/vTable/TableGrid.svelte'
 import type { ICardCell, ITableColumn } from '$components/vTable/types'

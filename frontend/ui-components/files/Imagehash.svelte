@@ -1,6 +1,5 @@
 <script lang="ts">
     import { onMount } from "svelte";
-import s1 from './styles.module.css';
 
 import { Env } from '$core/env';
     import { derived } from "svelte/store";
@@ -53,7 +52,7 @@ import { Env } from '$core/env';
 	})
 </script>
 
-<div class={[s1.image_hash_ctn, css || ""].join(" ")}>
+<div class={["image_hash_ctn", css || ""].join(" ")}>
 	{#if !!placeholderSrc}
 		<img role={`0/0/${src}`} class="image_hash" loading="lazy" alt="" />
 	{/if}
@@ -70,6 +69,23 @@ import { Env } from '$core/env';
 </div>
 
 <style>
+	.image_hash_ctn {
+		position: relative;
+		background-color: white;
+	}
+	.image_hash_ctn img {
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 100%;
+		width: 100%;
+		object-fit: contain;
+		border: none;
+		outline: none;
+	}
+	.image_hash_ctn img:last-of-type {
+		z-index: 2;
+	}
 	.image_hash {
 		width: 100%;
 		height: 100%;

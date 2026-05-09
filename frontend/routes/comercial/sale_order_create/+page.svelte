@@ -1,12 +1,12 @@
 <script lang="ts">
-import Input from '$components/Input.svelte';
-import LayerStatic from '$components/LayerStatic.svelte';
-import SearchSelect from '$components/SearchSelect.svelte';
-import VirtualCards from '$components/VirtualCards.svelte';
+import Input from '$components/form/Input.svelte';
+import LayerStatic from '$components/layers/LayerStatic.svelte';
+import SearchSelect from '$components/form/SearchSelect.svelte';
+import VirtualCards from '$components/misc/VirtualCards.svelte';
 import Page from '$domain/Page.svelte';
 import { Loading, formatN, wordInclude } from '$libs/helpers';
 
-import CheckboxOptions from '$components/CheckboxOptions.svelte';
+import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
 import { Core } from '$core/store.svelte';
 import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
 import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
@@ -22,7 +22,7 @@ import { AlmacenesService } from "../../negocio/sedes-almacenes/sedes-almacenes.
 import ProductoVentaCard from './ProductoVentaCard.svelte';
 import type { ProductoVenta } from "./sale_order.svelte";
 import { SaleOrderState } from "./sale_order.svelte";
-    import DateInput from '$components/DateInput.svelte';
+    import DateInput from '$components/form/DateInput.svelte';
 
   // Helpers
   const formatMo = (n: number) => formatN(n / 100, 2);

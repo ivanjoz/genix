@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from "svelte";
 	import Portal from "$components/popover2/Portal.svelte";
-	import OptionsStrip from "$components/OptionsStrip.svelte";
+	import OptionsStrip from "$components/navigation/OptionsStrip.svelte";
 	import FileUploadSelector from "$components/files/FileUploadSelector.svelte";
 	import { closeModal, openModals } from "$core/store.svelte";
 	import { Env } from "$core/env";

@@ -31,7 +31,7 @@
     parseTypedDate,
     weekDaysNames,
   } from "./date-input.helpers";
-  import s1 from "./components.module.css";
+  import s1 from "../components.module.css";
   import { Env } from "$core/env";
   import { Agent } from "$core/agent/registry";
 

@@ -9,7 +9,6 @@ import arrow2Svg from '$domain/assets/flecha_fin.svg?raw';
 import arrow1Svg from '$domain/assets/flecha_inicio.svg?raw';
 import { cn, parseSVG } from '$libs/helpers';
 import { Core } from '$core/store.svelte'
-import s1 from './styles.module.css';
 import { Env } from '$core/env';
 import { Agent } from '$core/agent/registry';
 
@@ -66,20 +65,86 @@ import { Agent } from '$core/agent/registry';
       onclick={() => handleSelect(option)}
       class={cn(
         "flex relative items-center",
-        s1.card_arrow_ctn,
-        option.id === selected && s1.card_arrow_ctn_selected,
+        "card_arrow_ctn",
+        option.id === selected && "card_arrow_ctn_selected",
       )}
     >
-      <img class="h-full {s1.card_arrow_svg}" src={parseSVG(arrow1Svg)} alt="" />
-      <div class="h-full flex items-center justify-center {s1.card_arrow_name}">
+      <img class="h-full card_arrow_svg" src={parseSVG(arrow1Svg)} alt="" />
+      <div class="h-full flex items-center justify-center card_arrow_name">
         {#if optionRender}
           {@render optionRender(option)}
         {:else}
           <div class="ff-semibold">{option.name}</div>
         {/if}
       </div>
-      <img class="h-full {s1.card_arrow_svg}" src={parseSVG(arrow2Svg)} alt="" />
-      <div class={s1.card_arrow_line}></div>
+      <img class="h-full card_arrow_svg" src={parseSVG(arrow2Svg)} alt="" />
+      <div class="card_arrow_line"></div>
     </div>
   {/each}
 </div>
+
+<style>
+  .card_arrow_ctn {
+    height: 2.8rem;
+    margin-right: -4px;
+    width: calc(100% + 4px);
+    cursor: pointer;
+  }
+  .card_arrow_name {
+    background-color: #dfdfdf;
+    min-width: 5rem;
+    text-align: center;
+    overflow: visible;
+    z-index: 5;
+    padding: 0 6px;
+    flex-grow: 1;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  .card_arrow_ctn > img:last-of-type {
+    margin-right: -4px;
+  }
+  .card_arrow_line {
+    height: 4px;
+    width: calc(100% - 9px);
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    background-color: #0cad66;
+    visibility: hidden;
+  }
+  .card_arrow_svg {
+    filter: invert(100%) sepia(0%) saturate(5883%) hue-rotate(164deg) brightness(120%) contrast(75%);
+  }
+
+  .card_arrow_ctn:hover .card_arrow_line {
+   visibility: visible;
+  }
+  .card_arrow_ctn:hover .card_arrow_svg {
+    filter: invert(91%) sepia(5%) saturate(633%) hue-rotate(100deg) brightness(102%) contrast(95%);
+  }
+  .card_arrow_ctn:hover .card_arrow_name {
+    background-color: #d5efe3;
+    color: #147e50;
+  }
+  .card_arrow_ctn_selected .card_arrow_line {
+    background-color: #14945c;
+  }
+  .card_arrow_ctn.card_arrow_ctn_selected .card_arrow_svg {
+    filter: invert(49%) sepia(53%) saturate(3777%) hue-rotate(125deg) brightness(95%) contrast(91%);
+  }
+  .card_arrow_ctn.card_arrow_ctn_selected .card_arrow_name {
+    background-color: #0cad66;
+    color: white;
+  }
+
+  /* Use a literal breakpoint so Lightning CSS can minify this scoped block safely. */
+  @media only screen and (max-width: 740px) {
+    .card_arrow_name {
+      padding: 0;
+      font-size: var(--fs2);
+      word-break: break-all;
+      min-width: unset;
+    }
+  }
+</style>

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import CheckboxOptions from '$components/CheckboxOptions.svelte'
-  import SquareBarSized from '$components/micro/SquareBarSized.svelte'
-  import VirtualCards from '$components/VirtualCards.svelte'
+  import CheckboxOptions from '$components/form/CheckboxOptions.svelte'
+  import SquareBarSized from '$components/misc/SquareBarSized.svelte'
+  import VirtualCards from '$components/misc/VirtualCards.svelte'
   import { FechaHelper } from '$libs/fecha'
   import { formatN, formatTime } from '$libs/helpers'
   import type { IProducto } from '$routes/negocio/productos/productos.svelte'

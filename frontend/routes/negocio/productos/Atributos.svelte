@@ -1,8 +1,8 @@
 <script lang="ts">
-import Input from '$components/Input.svelte';
-import ColorPicker from '$components/ColorPicker.svelte';
-import Modal from '$components/Modal.svelte';
-import SearchSelect from '$components/SearchSelect.svelte';
+import Input from '$components/form/Input.svelte';
+import ColorPicker from '$components/form/ColorPicker.svelte';
+import Modal from '$components/layers/Modal.svelte';
+import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import { closeAllModals, openModal } from '$core/store.svelte';
 import { formatN } from '$libs/helpers';

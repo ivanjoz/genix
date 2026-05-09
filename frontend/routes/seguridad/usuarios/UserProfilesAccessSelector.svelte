@@ -1,5 +1,5 @@
 <script lang="ts">
-  import SearchDualCard from '$components/SearchDualCard.svelte';
+  import SearchDualCard from '$components/cards/SearchDualCard.svelte';
   import { accesoAcciones } from '../perfiles-accesos/perfiles-accesos.svelte';
   import type {
     IAccessGroupCatalogEntry,

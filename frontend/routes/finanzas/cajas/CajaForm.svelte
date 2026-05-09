@@ -1,7 +1,7 @@
 <script lang="ts">
-import Input from '$components/Input.svelte'
-import SearchSelect from '$components/SearchSelect.svelte'
-import Checkbox from '$components/Checkbox.svelte'
+import Input from '$components/form/Input.svelte'
+import SearchSelect from '$components/form/SearchSelect.svelte'
+import Checkbox from '$components/form/Checkbox.svelte'
 import type { ISede } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
 import { cajaTipos, type ICaja } from './cajas.svelte'
 

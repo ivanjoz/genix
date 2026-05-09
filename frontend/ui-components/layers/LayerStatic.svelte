@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Core } from '$core/store.svelte'
-  import MobileLayerVertical from '$components/MobileLayerVertical.svelte'
+  import MobileLayerVertical from '$components/layers/MobileLayerVertical.svelte'
   import { Env } from '$core/env'
   import { Agent } from '$core/agent/registry'
 

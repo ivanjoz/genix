@@ -1,8 +1,8 @@
 <script lang="ts">
-  import ChartCanvas, { type ChartCanvasSeries } from '$components/ChartCanvas.svelte'
-  import CheckboxOptions from '$components/CheckboxOptions.svelte'
-  import HighlightText from '$components/micro/HighlightText.svelte'
-  import VirtualCards from '$components/VirtualCards.svelte'
+  import ChartCanvas, { type ChartCanvasSeries } from '$components/charts/ChartCanvas.svelte'
+  import CheckboxOptions from '$components/form/CheckboxOptions.svelte'
+  import HighlightText from '$components/misc/HighlightText.svelte'
+  import VirtualCards from '$components/misc/VirtualCards.svelte'
   import { FechaHelper } from '$libs/fecha'
   import { formatN, formatTime, wordInclude, throttle } from '$libs/helpers'
   import type { IProducto } from '$routes/negocio/productos/productos.svelte'

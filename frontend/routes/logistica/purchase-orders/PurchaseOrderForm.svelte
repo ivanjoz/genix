@@ -1,7 +1,7 @@
 <script lang="ts">
-import DateInput from '$components/DateInput.svelte'
-import Input from '$components/Input.svelte'
-import SearchSelect from '$components/SearchSelect.svelte'
+import DateInput from '$components/form/DateInput.svelte'
+import Input from '$components/form/Input.svelte'
+import SearchSelect from '$components/form/SearchSelect.svelte'
 import type { IClientProvider } from '$routes/negocio/clientes/clientes-proveedores.svelte'
 import type { IAlmacen } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
 import type { IPurchaseOrder } from './purchase_order.svelte'

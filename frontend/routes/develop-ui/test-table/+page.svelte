@@ -1,5 +1,5 @@
 <script lang="ts">
-import CellSelector from '$components/vTable/CellSelector.svelte';
+import CellSelect from '$components/vTable/CellSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import Page from '$domain/Page.svelte';
 import { type ITableColumn } from '$components/vTable/types';
