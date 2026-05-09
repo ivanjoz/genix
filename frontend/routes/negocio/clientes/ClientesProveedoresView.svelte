@@ -165,18 +165,17 @@
     {
       header: 'ID',
       headerCss: 'w-64',
-      cellCss: 'px-6 text-center text-purple-600',
+      css: 'text-center text-purple-600',
       getValue: (clientProviderRecord) => clientProviderRecord.ID,
     },
     {
       header: 'Nombre',
-      cellCss: 'px-6',
       getValue: (clientProviderRecord) => clientProviderRecord.Name,
     },
     {
       header: 'Tipo Persona',
       headerCss: 'w-144',
-      cellCss: 'px-6 text-center',
+      css: 'text-center',
       getValue: (clientProviderRecord) => {
         if (clientProviderRecord.PersonType === PersonType.COMPANY) {
           return 'Empresa'
@@ -186,18 +185,16 @@
     },
     {
       header: 'RUC / Registro',
-      cellCss: 'px-6',
       getValue: (clientProviderRecord) => clientProviderRecord.RegistryNumber || '-',
     },
     {
       header: 'Email',
-      cellCss: 'px-6',
       getValue: (clientProviderRecord) => clientProviderRecord.Email || '-',
     },
     {
       header: 'Ubicación',
       headerCss: 'w-144',
-      cellCss: 'px-6 text-center',
+      css: 'text-center',
       getValue: (clientProviderRecord) => {
         const selectedCity = paisCiudadesService.ciudadesMap.get(clientProviderRecord.CityID || '')
         if (!selectedCity) {
@@ -210,7 +207,7 @@
     {
       header: 'Actualizado',
       headerCss: 'w-160',
-      cellCss: 'px-6 whitespace-nowrap',
+      css: 'whitespace-nowrap',
       getValue: (clientProviderRecord) => formatTime(clientProviderRecord.upd, 'Y-m-d h:n') as string,
     },
   ]

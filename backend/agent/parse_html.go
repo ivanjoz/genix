@@ -158,6 +158,13 @@ var markerComponentTypes = map[string]bool{
 	"MenuHeader": true,
 }
 
+// markerMethods lists the comma-separated method names available on each
+// marker type, so the agent knows how to interact with them.
+var markerMethods = map[string]string{
+	"Option": "remove",
+	"Button": "click",
+}
+
 // markerComponentType returns the marker type ("Option", "TableRow", "Button")
 // for an element whose data-id uses a marker prefix, or "" otherwise.
 func markerComponentType(n *html.Node) string {
@@ -465,6 +472,11 @@ func renderComponent(buf *bytes.Buffer, indent, dataID string, c AgentComponentI
 		buf.WriteString(html.EscapeString(value))
 		buf.WriteByte('"')
 	}
+	if len(c.Methods) > 0 {
+		buf.WriteString(` methods="`)
+		buf.WriteString(html.EscapeString(strings.Join(c.Methods, ",")))
+		buf.WriteByte('"')
+	}
 
 	// Recurse when there are registered components or markers nested inside —
 	// Layer/Modal/ButtonLayer hold further handles, Table holds TableRow markers,
@@ -514,6 +526,11 @@ func renderMarker(buf *bytes.Buffer, indent string, n *html.Node, depth int, cm 
 	}
 	if selected {
 		buf.WriteString(` selected`)
+	}
+	if methods := markerMethods[typ]; methods != "" {
+		buf.WriteString(` methods="`)
+		buf.WriteString(methods)
+		buf.WriteByte('"')
 	}
 
 	// Inspect children: when the marker only contains text we can keep it on

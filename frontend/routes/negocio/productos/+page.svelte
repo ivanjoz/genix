@@ -1,4 +1,6 @@
 <script lang="ts">
+import Button from '$components/buttons/Button.svelte';
+import FilterInput from '$components/form/FilterInput.svelte';
 import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
 import ImageUploader from '$components/files/ImageUploader.svelte';
 import Input from '$components/form/Input.svelte';
@@ -11,7 +13,7 @@ import VTable from '$components/vTable/VTable.svelte';
 import { Core } from '$core/store.svelte';
 import HTMLEditor from '$domain/HTMLEditor/HTMLEditor.svelte';
 import Page from '$domain/Page.svelte';
-import { ConfirmWarn, formatN, Loading, Notify, throttle } from '$libs/helpers';
+import { ConfirmWarn, formatN, Loading, Notify } from '$libs/helpers';
 import { POST } from '$libs/http.svelte';
 import type { ExcelTableColumn } from '$libs/excel/excelBuilder';
 import Atributos from './Atributos.svelte';
@@ -445,44 +447,33 @@ import {
         view = e[0] as number;
       }}
     />
-    <div class="i-search w-full md:w-200 md:ml-12 col-span-5">
-      <div><i class="icon-search"></i></div>
-      <input
-        type="text"
-        onkeyup={(ev) => {
-          const value = String((ev.target as any).value || "");
-          throttle(() => {
-            filterText = value;
-          }, 150);
-        }}
-      />
-    </div>
+    <FilterInput label="Filtrar productos"
+      css="w-full md:w-200 md:ml-12 col-span-5"
+      icon="icon-search"
+      bind:value={filterText}
+    />
 
     {#if view === 1}
-      <button aria-label="Importar"
-        class="bx-blue ml-auto mr-8 col-span-3"
-        onclick={(ev) => {
-          ev.stopPropagation();
-          openImportProductosModal();
-        }}
-      >
-        <i class="icon-upload"></i>
-      </button>
-      <button  aria-label="Descargar"
-        class="bx-purple mr-8 col-span-3"
-        onclick={(ev) => {
-          ev.stopPropagation();
-          exportProductosExcel();
-        }}
-      >
-        <i class="icon-download"></i>
-      </button>
+      <Button label="Importar"
+        color="blue"
+        icon="icon-upload"
+        css="ml-auto mr-8 col-span-3"
+        onClick={openImportProductosModal}
+      />
+      <Button label="Descargar"
+        color="purple"
+        icon="icon-download"
+        css="mr-8 col-span-3"
+        onClick={exportProductosExcel}
+      />
     {/if}
 
-    <button
-      class={`bx-green col-span-7 ${view === 1 ? "" : "ml-auto"}`}
-      onclick={(ev) => {
-        ev.stopPropagation();
+    <Button name="Nuevo" label="Nuevo Producto"
+      color="green"
+      icon="icon-plus"
+      hideNameOnMobile
+      css={`col-span-7 ${view === 1 ? "" : "ml-auto"}`}
+      onClick={() => {
         if (view === 2) {
           CategoriasLayer?.newRecord();
         } else if (view === 3) {
@@ -492,9 +483,7 @@ import {
           Core.openSideLayer(1);
         }
       }}
-    >
-      <i class="icon-plus"></i><span class="hidden md:block">Nuevo</span>
-    </button>
+    />
   </div>
 
   {#if view === 1}

@@ -101,8 +101,10 @@ import { Agent } from '$core/agent/registry';
         if (changed) { doOnChange() }
       },
       remove: (id) => {
+        // id arrives as "parentID:optionID" — extract just the option part
+        const optID = String(id).includes(':') ? String(id).split(':').pop()! : String(id)
         const before = selectedIDs.length
-        selectedIDs = selectedIDs.filter((x) => String(x) !== String(id))
+        selectedIDs = selectedIDs.filter((x) => String(x) !== optID)
         if (selectedIDs.length !== before) { doOnChange() }
       },
     })
@@ -125,7 +127,7 @@ import { Agent } from '$core/agent/registry';
   <div class="p-4 min-h-40 _2 flex flex-wrap {cardCss}">
     {#each selectedIDs as id }
       {@const el = getOption(id)}
-      <div data-id="Option:{id}" data-selected="true"
+      <div data-id="Option:{componentID}:{id}" data-selected="true"
         class="m-2 px-8 min-w-56 h-32 lh-10 flex _3">
         { el[keyName] as string }
         <button class="_4 absolute w-28 h-28 rounded right-2" aria-label="eliminar"
