@@ -3,8 +3,6 @@
 	import { goto } from '$app/navigation';
 	import { Core } from '$core/store.svelte';
 	import { canUserAccessRoute } from '$core/security';
-	import { Env } from '$core/env';
-	import { Agent } from '$core/agent/registry';
 	import type { IMenuRecord, IModule } from '$core/types/modules';
 
 	// State
@@ -137,37 +135,10 @@
 		Core.toggleMobileMenu = toggleMobileMenu;
 	});
 
-	// Stable agent componentID per option route, so desktop + mobile renders
-	// share one handle and the id survives re-renders.
-	const optionAgentIDs = new Map<string, number>();
-	function getOptionAgentID(route: string): number {
-		let id = optionAgentIDs.get(route);
-		if (!id) {
-			id = Env.getComponentID();
-			optionAgentIDs.set(route, id);
-		}
-		return id;
-	}
-
-	// Register every currently-visible menu option as an agent handle. The
-	// handle's click() runs the same navigateTo the user would trigger.
-	$effect(() => {
-		const cleanups: Array<() => void> = [];
-		for (const menu of filteredMenus) {
-			for (const option of menu.options || []) {
-				const route = option.route || '';
-				if (!route) { continue; }
-				const handleID = getOptionAgentID(route);
-				cleanups.push(Agent.register({
-					id: handleID,
-					type: 'MenuOption',
-					label: option.name,
-					click: () => navigateTo(route, menu.id || 0),
-				}));
-			}
-		}
-		return () => { for (const fn of cleanups) { fn(); } };
-	});
+	// The menu DOM is hidden from the agent's HTML snapshot via `data-menu-root`
+	// (see backend/agent/parse_html.go::dropMenu). Agents fetch the menu
+	// structure from GET /agent?get=menu and call the `navigate` action with a
+	// route, instead of clicking individual MenuOption handles.
 </script>
 
 <!-- Desktop Menu -->
@@ -180,6 +151,7 @@
 	class:duration-200={!Core.useTopMinimalMenu}
 	role="navigation"
 	aria-label="Main navigation"
+	data-menu-root="true"
 >
 	<div class="flex items-center h-48 border-b border-gray-800/30 w-full overflow-hidden"
 		class:minimal-menu={Core.useTopMinimalMenu}
@@ -215,8 +187,6 @@
 						{isOpen ? 'bg-gray-800 border-indigo-500' : ''}"
 					onclick={() => toggleMenu(menu.id || 0)}
 					aria-expanded={isOpen}
-					data-id="MenuHeader:{menu.id || 0}"
-					data-label={menu.name}
 				>
 					<div class="flex items-center flex-1 min-w-0 whitespace-nowrap">
 						<!-- Minimized view - show only minName -->
@@ -250,9 +220,6 @@
 								border-l-2 border-transparent
 								{isActive ? 'bg-indigo-600/30 border-indigo-400 text-white' : 'text-gray-300'}"
 								onclick={() => navigateTo(option.route || '/', menu.id || 0)}
-								data-id="MenuOption:{getOptionAgentID(option.route || '')}"
-								data-label={option.name}
-								data-value={option.route || ''}
 							>
 								<!-- Minimized: show icon only centered -->
 								<div class="option-minimized flex w-full">
@@ -288,7 +255,7 @@
 </div>
 
 <!-- Mobile Menu -->
-<div class="mobile-menu-wrapper md:hidden {Core.mobileMenuOpen ? 'is-open' : ''}" role="dialog" aria-modal="true">
+<div class="mobile-menu-wrapper md:hidden {Core.mobileMenuOpen ? 'is-open' : ''}" role="dialog" aria-modal="true" data-menu-root="true">
 	<!-- Backdrop -->
 	<button type="button" class="mobile-menu-backdrop" aria-label="Close menu"
 		onclick={() => toggleMobileMenu(true)} bind:this={mobileMenuBackdrop}></button>
@@ -319,8 +286,6 @@
 					<button
 						class="mobile-menu-group-button {isOpen ? 'is-open' : ''}"
 						onclick={() => toggleMenu(menu.id || 0)}
-						data-id="MenuHeader:{menu.id || 0}"
-						data-label={menu.name}
 					>
 						<span class="menu-group-title">{menu.name.toUpperCase()}</span>
 						{#if menu.options && menu.options.length > 0}
@@ -342,9 +307,6 @@
 									onmouseleave={(e) => e.currentTarget.classList.remove('is-pressed')}
 									ontouchstart={(e) => e.currentTarget.classList.add('is-pressed')}
 									ontouchend={(e) => e.currentTarget.classList.remove('is-pressed')}
-									data-id="MenuOption:{getOptionAgentID(option.route || '')}"
-									data-label={option.name}
-									data-value={option.route || ''}
 								>
 									{#if option.icon}
 										<i class="{option.icon} option-icon"></i>

@@ -1,5 +1,6 @@
 <script lang="ts">
 import KeyValueStrip from '$components/misc/KeyValueStrip.svelte'
+import Button from '$components/buttons/Button.svelte'
 import LayerStatic from '$components/layers/LayerStatic.svelte'
 import OptionsStrip from '$components/navigation/OptionsStrip.svelte'
 import VTable from '$components/vTable/VTable.svelte'
@@ -447,13 +448,8 @@ const formatDateOrDash = (value: string | number) => {
           </div>
         </div>
       </div>
-      <button class="bx-blue shrink-0"
-        onclick={handleSave}
-        title="Generar orden de compra"
-      >
-        <span class="hidden md:inline">Generar</span>
-        <i class="icon-floppy"></i>
-      </button>
+      <Button color="blue" icon="icon-floppy" name="Generar" hideNameOnMobile
+        css="shrink-0" label="Generar orden de compra" onClick={handleSave} />
     </div>
 
     <div class="px-12 pt-4 mb-4">

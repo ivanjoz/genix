@@ -1,5 +1,6 @@
 <script lang="ts">
   import Page from '$domain/Page.svelte';
+  import Button from '$components/buttons/Button.svelte';
   import TableGrid from '$components/vTable/TableGrid.svelte';
   import type { ITableColumn } from '$components/vTable/types';
 
@@ -130,7 +131,7 @@
 
 <Page title="TableGrid Demo">
   <div class="mb-10 flex flex-wrap items-center gap-8">
-    <button class="bx-red" onclick={removeFirstRow}>Remove First Row</button>
+    <Button color="red" name="Remove First Row" onClick={removeFirstRow} />
     <div class="text-[13px] text-slate-600">
       Records: <strong>{demoRows.length.toLocaleString()}</strong>
     </div>
@@ -155,14 +156,8 @@
       {#if columnDefinition.id === 'status'}
         <span class="status-pill status-{rowRecord.status}">{rowRecord.status}</span>
       {:else if columnDefinition.id === 'actions'}
-        <button class="bx-blue py-4 px-6 text-[11px]"
-          onclick={(eventInfo) => {
-            eventInfo.stopPropagation();
-            alert(`Open profile for ${rowRecord.fullName}`);
-          }}
-        >
-          Open
-        </button>
+        <Button color="blue" name="Open" css="py-4 px-6 text-[11px]"
+          onClick={() => alert(`Open profile for ${rowRecord.fullName}`)} />
       {/if}
     {/snippet}
   </TableGrid>

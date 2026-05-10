@@ -12,6 +12,8 @@
     setVTableAgentContext,
     buildCellID,
     buildRowID,
+    parseChildID,
+    rowIndexFromRowID,
     type CellAgentMethods,
   } from '$components/vTable/agentContext';
   import type {
@@ -335,13 +337,16 @@
   const hasInteractiveCell = $derived(
     columns.some((column) => column.onCellEdit || column.onCellSelect),
   );
-  const shouldRegisterTable = $derived(Boolean(onRowClick) || hasInteractiveCell);
+  // Mobile branch hands the agent over to MobileCardsVirtualList (CardList type),
+  // so skip registering a Table here to avoid a ghost handle with no rows.
+  const shouldRegisterTable = $derived(!isMobileView && (Boolean(onRowClick) || hasInteractiveCell));
 
-  // Row select drives the existing onRowClick. Row IDs are rowIndex*100 by
-  // convention; cells live above 100 within each row.
+  // Row select drives the existing onRowClick. Row IDs are buildRowID(rowIndex)
+  // = (rowIndex+1)*100 by convention; cells live in the same row above the row
+  // id and below the next one.
   const dispatchRowSelect = (rowID: number) => {
     if (!onRowClick) { return; }
-    const rowIndex = Math.floor(rowID / 100);
+    const rowIndex = rowIndexFromRowID(rowID);
     if (rowIndex < 0 || rowIndex >= data.length) { return; }
     handleRowClick(data[rowIndex], rowIndex);
   };
@@ -354,24 +359,25 @@
       label: "",
       // ids that are exact multiples of 100 are row ids; everything else is a
       // cell id, in which case the remaining args are forwarded to the cell's
-      // own select() (e.g. CellSelect option ids).
+      // own select() (e.g. CellSelect option ids). The first arg may arrive as
+      // composite "<tableID>:<childID>" — parseChildID strips the prefix.
       select: (...ids) => {
         if (ids.length === 0) { return; }
-        const first = Number(ids[0]);
+        const first = parseChildID(ids[0]);
         if (Number.isFinite(first) && first % 100 === 0) {
-          for (const rid of ids) { dispatchRowSelect(Number(rid)); }
+          for (const rid of ids) { dispatchRowSelect(parseChildID(rid)); }
           return;
         }
         cellRegistry.get(first)?.select?.(...ids.slice(1));
       },
       setValueChild: (cellID, value) => {
-        cellRegistry.get(Number(cellID))?.setValue?.(value);
+        cellRegistry.get(parseChildID(cellID))?.setValue?.(value);
       },
       searchChild: (cellID, text) => {
-        cellRegistry.get(Number(cellID))?.search?.(String(text ?? ''));
+        cellRegistry.get(parseChildID(cellID))?.search?.(String(text ?? ''));
       },
       getOptionsChild: (cellID, max) => {
-        return cellRegistry.get(Number(cellID))?.getOptions?.(Number(max ?? 50)) ?? [];
+        return cellRegistry.get(parseChildID(cellID))?.getOptions?.(Number(max ?? 50)) ?? [];
       },
     });
   });
@@ -409,36 +415,153 @@
     </div>
   {:else if !useVirtualScroll}
     <div class="table-grid-plain-scroll">
-      <div class="table-grid-header table-grid-header-sticky {headerCss}">
-        <div class="table-grid-header-row" role="row">
-          {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id || columnIndex)}
-            {@const headerPaddingCss = /px-|pr-|pl-/.test(columnDefinition.headerCss || "") ? "" : "px-6"}
-            <div class="table-grid-header-cell {headerPaddingCss} {getAlignClassName(columnDefinition.align)} {columnDefinition.headerCss || ''}"
-              role="columnheader"
-            >
-              {#if headerRenderer}
-                {@render headerRenderer(columnDefinition, columnIndex)}
-              {:else}
-                {getHeaderContent(columnDefinition)}
-              {/if}
-            </div>
-          {/each}
-        </div>
+      <div class="table-grid-header table-grid-header-sticky {headerCss}" role="row">
+        {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id || columnIndex)}
+          {@const headerPaddingCss = /px-|pr-|pl-/.test(columnDefinition.headerCss || "") ? "" : "px-6"}
+          <div class="table-grid-header-cell {headerPaddingCss} {getAlignClassName(columnDefinition.align)} {columnDefinition.headerCss || ''}"
+            role="columnheader"
+          >
+            {#if headerRenderer}
+              {@render headerRenderer(columnDefinition, columnIndex)}
+            {:else}
+              {getHeaderContent(columnDefinition)}
+            {/if}
+          </div>
+        {/each}
       </div>
 
       {#if data.length === 0}
         <div class="table-grid-empty">{emptyMessage}</div>
       {:else}
+        <div class="table-grid-edge-spacer" aria-hidden="true"></div>
         {#each data as rowRecord, rowIndex (getRowId ? getRowId(rowRecord, rowIndex) : rowIndex)}
           {@const selected = isSelectedRow(rowRecord, rowIndex)}
-          <div class="table-grid-row-shell"
-            data-id={shouldRegisterTable ? `TableRow:${buildRowID(rowIndex)}` : undefined}
+          <div class="table-grid-row {rowCss}"
+            class:table-grid-row-even={rowIndex % 2 === 0}
+            class:table-grid-row-odd={rowIndex % 2 !== 0}
+            class:table-grid-row-selected={selected}
+            data-id={onRowClick ? `TableRow:${componentID}:${buildRowID(rowIndex)}` : undefined}
             data-selected={selected ? "true" : undefined}
-            style={resolveRowShellStyle(rowRecord, rowIndex)}>
+            style={resolveRowShellStyle(rowRecord, rowIndex)}
+            role="row"
+            tabindex="0"
+            onclick={() => handleRowClick(rowRecord, rowIndex)}
+            onkeydown={(eventInfo) => {
+              if (eventInfo.key === 'Enter' || eventInfo.key === ' ') {
+                handleRowClick(rowRecord, rowIndex);
+              }
+            }}
+          >
+            {#if useRowRenderer?.(rowRecord, rowIndex) && rowRenderer}
+              <div class="table-grid-cell tg-row-custom" style="grid-column: 1 / -1;" role="cell">
+                {@render rowRenderer(rowRecord, rowIndex)}
+              </div>
+            {:else}
+            {#each visibleColumns as colDef, columnIndex (`${colDef.id || columnIndex}_${rowVersions.get(rowIndex) || 0}`)}
+              {@const defaultCellValue = getCellValue(rowRecord, colDef, rowIndex)}
+              {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, colDef)}
+              {@const combinedCellCss = `${cellCss || ""} ${colDef.css || ""} ${colDef.setCellCss?.(rowRecord) || ""} ${colDef.css || ""}`}
+              {@const cellPaddingCss = /px-|pr-|pl-/.test(combinedCellCss) ? "" : "px-6"}
+              {@const contentPaddingCss = /px-|pr-|pl-/.test(colDef.css || "") ? "" : "px-6"}
+              {@const inputPaddingCss = /px-|pr-|pl-/.test(colDef.inputCss || "") ? "" : "px-6"}
+
+              <div class="table-grid-cell [&:last-child]:border-r-0 {cellPaddingCss} {getAlignClassName(colDef.align)} {combinedCellCss}"
+                  class:tg-cell-hover-effect={colDef.showHoverEffect}
+                  class:tg-cell-line-clamp={colDef.useLineClamp}
+                role="cell"
+                title={`${defaultCellValue}`}
+              >
+                {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(rowRecord, rowIndex)}
+                  <CellInput contentClass={`${contentPaddingCss} ${colDef.css || ""}${colDef.align === 'right' ? ' justify-end' : ''}`}
+                    inputClass={`${inputPaddingCss} ${colDef.inputCss || ""}${colDef.align === 'right' ? ' text-right' : ''}`}
+                    type={colDef.cellInputType || cellInputType}
+                    cellID={buildCellID(rowIndex, columnIndex)}
+                    getValue={() => String(defaultCellValue)}
+                    render={colDef.render ? () => colDef.render?.(rowRecord, rowIndex) : undefined}
+                    onBeforeCellChange={colDef.onBeforeCellChange ? (value) => colDef.onBeforeCellChange!(rowRecord, value) : undefined}
+                    onChange={(value) => colDef.onCellEdit?.(rowRecord, value, () => rerenderRow(rowIndex))}
+                  />
+                {:else if cellRenderer && colDef.useCellRenderer}
+                  {@render cellRenderer(rowRecord, colDef, rowIndex)}
+                {:else if colDef.buttonEditHandler || colDef.buttonDeleteHandler}
+                  <div class="flex gap-4 items-center justify-center w-full">
+                    {#if colDef.buttonEditHandler && (!colDef.buttonEditIf || colDef.buttonEditIf(rowRecord))}
+                      <button class="_11 _e" title="edit" onclick={(ev) => {
+                        ev.stopPropagation();
+                        colDef.buttonEditHandler?.(rowRecord);
+                      }}>
+                        <i class="icon-pencil"></i>
+                      </button>
+                    {/if}
+                    {#if colDef.buttonDeleteHandler && (!colDef.buttonDeleteIf || colDef.buttonDeleteIf(rowRecord))}
+                      <button class="_11 _d" title="delete" onclick={(ev) => {
+                        ev.stopPropagation();
+                        colDef.buttonDeleteHandler?.(rowRecord);
+                      }}>
+                        <i class="icon-trash"></i>
+                      </button>
+                    {/if}
+                  </div>
+                {:else if colDef.render}
+                  {@const renderedContent = colDef.render(rowRecord, rowIndex)}
+                  {#if isHtmlContent(renderedContent)}
+                    {@html renderedContent}
+                  {:else}
+                    <Renderer elements={renderedContent}/>
+                  {/if}
+                {:else if splitCellSecondLine}
+                  <div class="flex flex-col leading-[1.1]">
+                    <div>{splitCellFirstLine}</div>
+                    <div>{splitCellSecondLine}</div>
+                  </div>
+                {:else}
+                  {defaultCellValue}
+                {/if}
+              </div>
+            {/each}
+            {/if}
+          </div>
+        {/each}
+        <div class="table-grid-edge-spacer" aria-hidden="true"></div>
+      {/if}
+    </div>
+  {:else}
+    <div class="table-grid-scroll-host use-virtual-scroll">
+      <div class="table-grid-header {headerCss}" role="row">
+        {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id || columnIndex)}
+          {@const headerPaddingCss = /px-|pr-|pl-/.test(columnDefinition.headerCss || "") ? "" : "px-6"}
+          <div class="table-grid-header-cell {headerPaddingCss} {getAlignClassName(columnDefinition.align)} {columnDefinition.headerCss || ''}"
+            role="columnheader"
+          >
+            {#if headerRenderer}
+              {@render headerRenderer(columnDefinition, columnIndex)}
+            {:else}
+              {getHeaderContent(columnDefinition)}
+            {/if}
+          </div>
+        {/each}
+      </div>
+
+      <div class="table-grid-body use-virtual-scroll">
+        <SvelteVirtualList items={data}
+          bufferSize={bufferSize}
+          defaultEstimatedItemHeight={normalizedRowHeight}
+          debug={debug}
+          debugFunction={debugVirtualListInfo}
+          containerClass="table-grid-virtual-container h-full"
+          viewportClass="table-grid-virtual-viewport"
+          contentClass="table-grid-virtual-content w-full"
+          itemsClass="table-grid-virtual-items w-full [&>div]:w-full"
+        >
+          {#snippet renderItem(rowRecord, rowIndex)}
+            {@const selected = isSelectedRow(rowRecord, rowIndex)}
             <div class="table-grid-row {rowCss}"
               class:table-grid-row-even={rowIndex % 2 === 0}
               class:table-grid-row-odd={rowIndex % 2 !== 0}
               class:table-grid-row-selected={selected}
+              data-id={onRowClick ? `TableRow:${componentID}:${buildRowID(rowIndex)}` : undefined}
+              data-selected={selected ? "true" : undefined}
+              style={resolveRowShellStyle(rowRecord, rowIndex)}
               role="row"
               tabindex="0"
               onclick={() => handleRowClick(rowRecord, rowIndex)}
@@ -456,14 +579,13 @@
               {#each visibleColumns as colDef, columnIndex (`${colDef.id || columnIndex}_${rowVersions.get(rowIndex) || 0}`)}
                 {@const defaultCellValue = getCellValue(rowRecord, colDef, rowIndex)}
                 {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, colDef)}
-                {@const combinedCellCss = `${cellCss || ""} ${colDef.cellCss || ""} ${colDef.setCellCss?.(rowRecord) || ""} ${colDef.css || ""}`}
+                {@const combinedCellCss = `${cellCss || ""} ${colDef.css || ""} ${colDef.setCellCss?.(rowRecord) || ""} ${colDef.css || ""}`}
                 {@const cellPaddingCss = /px-|pr-|pl-/.test(combinedCellCss) ? "" : "px-6"}
                 {@const contentPaddingCss = /px-|pr-|pl-/.test(colDef.css || "") ? "" : "px-6"}
                 {@const inputPaddingCss = /px-|pr-|pl-/.test(colDef.inputCss || "") ? "" : "px-6"}
-
                 <div class="table-grid-cell [&:last-child]:border-r-0 {cellPaddingCss} {getAlignClassName(colDef.align)} {combinedCellCss}"
-                    class:tg-cell-hover-effect={colDef.showHoverEffect}
-                    class:tg-cell-line-clamp={colDef.useLineClamp}
+                  class:tg-cell-hover-effect={colDef.showHoverEffect}
+                  class:tg-cell-line-clamp={colDef.useLineClamp}
                   role="cell"
                   title={`${defaultCellValue}`}
                 >
@@ -517,128 +639,6 @@
               {/each}
               {/if}
             </div>
-          </div>
-        {/each}
-      {/if}
-    </div>
-  {:else}
-    <div class="table-grid-scroll-host use-virtual-scroll">
-      <div class="table-grid-header {headerCss}">
-        <div class="table-grid-header-row" role="row">
-          {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id || columnIndex)}
-            {@const headerPaddingCss = /px-|pr-|pl-/.test(columnDefinition.headerCss || "") ? "" : "px-6"}
-            <div class="table-grid-header-cell {headerPaddingCss} {getAlignClassName(columnDefinition.align)} {columnDefinition.headerCss || ''}"
-              role="columnheader"
-            >
-              {#if headerRenderer}
-                {@render headerRenderer(columnDefinition, columnIndex)}
-              {:else}
-                {getHeaderContent(columnDefinition)}
-              {/if}
-            </div>
-          {/each}
-        </div>
-      </div>
-
-      <div class="table-grid-body use-virtual-scroll">
-        <SvelteVirtualList items={data}
-          bufferSize={bufferSize}
-          defaultEstimatedItemHeight={normalizedRowHeight}
-          debug={debug}
-          debugFunction={debugVirtualListInfo}
-          containerClass="table-grid-virtual-container h-full"
-          viewportClass="table-grid-virtual-viewport"
-          contentClass="table-grid-virtual-content w-full"
-          itemsClass="table-grid-virtual-items w-full [&>div]:w-full"
-        >
-          {#snippet renderItem(rowRecord, rowIndex)}
-            {@const selected = isSelectedRow(rowRecord, rowIndex)}
-            <div class="table-grid-row-shell"
-              data-id={shouldRegisterTable ? `TableRow:${buildRowID(rowIndex)}` : undefined}
-              data-selected={selected ? "true" : undefined}
-              style={resolveRowShellStyle(rowRecord, rowIndex)}>
-              <div class="table-grid-row {rowCss}"
-                class:table-grid-row-even={rowIndex % 2 === 0}
-                class:table-grid-row-odd={rowIndex % 2 !== 0}
-                class:table-grid-row-selected={selected}
-                role="row"
-                tabindex="0"
-                onclick={() => handleRowClick(rowRecord, rowIndex)}
-                onkeydown={(eventInfo) => {
-                  if (eventInfo.key === 'Enter' || eventInfo.key === ' ') {
-                    handleRowClick(rowRecord, rowIndex);
-                  }
-                }}
-              >
-                {#if useRowRenderer?.(rowRecord, rowIndex) && rowRenderer}
-                  <div class="table-grid-cell tg-row-custom" style="grid-column: 1 / -1;" role="cell">
-                    {@render rowRenderer(rowRecord, rowIndex)}
-                  </div>
-                {:else}
-                {#each visibleColumns as colDef, columnIndex (`${colDef.id || columnIndex}_${rowVersions.get(rowIndex) || 0}`)}
-                  {@const defaultCellValue = getCellValue(rowRecord, colDef, rowIndex)}
-                  {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, colDef)}
-                  {@const combinedCellCss = `${cellCss || ""} ${colDef.cellCss || ""} ${colDef.setCellCss?.(rowRecord) || ""} ${colDef.css || ""}`}
-                  {@const cellPaddingCss = /px-|pr-|pl-/.test(combinedCellCss) ? "" : "px-6"}
-                  {@const contentPaddingCss = /px-|pr-|pl-/.test(colDef.css || "") ? "" : "px-6"}
-                  {@const inputPaddingCss = /px-|pr-|pl-/.test(colDef.inputCss || "") ? "" : "px-6"}
-                  <div class="table-grid-cell [&:last-child]:border-r-0 {cellPaddingCss} {getAlignClassName(colDef.align)} {combinedCellCss}"
-                    class:tg-cell-hover-effect={colDef.showHoverEffect}
-                    class:tg-cell-line-clamp={colDef.useLineClamp}
-                    role="cell"
-                    title={`${defaultCellValue}`}
-                  >
-                    {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(rowRecord, rowIndex)}
-	                    <CellInput contentClass={`${contentPaddingCss} ${colDef.css || ""}${colDef.align === 'right' ? ' justify-end' : ''}`}
-	                      inputClass={`${inputPaddingCss} ${colDef.inputCss || ""}${colDef.align === 'right' ? ' text-right' : ''}`}
-                        type={colDef.cellInputType || cellInputType}
-                        cellID={buildCellID(rowIndex, columnIndex)}
-                        getValue={() => String(defaultCellValue)}
-                        render={colDef.render ? () => colDef.render?.(rowRecord, rowIndex) : undefined}
-                        onBeforeCellChange={colDef.onBeforeCellChange ? (value) => colDef.onBeforeCellChange!(rowRecord, value) : undefined}
-                        onChange={(value) => colDef.onCellEdit?.(rowRecord, value, () => rerenderRow(rowIndex))}
-                      />
-                    {:else if cellRenderer && colDef.useCellRenderer}
-                      {@render cellRenderer(rowRecord, colDef, rowIndex)}
-                    {:else if colDef.buttonEditHandler || colDef.buttonDeleteHandler}
-                      <div class="flex gap-4 items-center justify-center w-full">
-                        {#if colDef.buttonEditHandler && (!colDef.buttonEditIf || colDef.buttonEditIf(rowRecord))}
-                          <button class="_11 _e" title="edit" onclick={(ev) => {
-                            ev.stopPropagation();
-                            colDef.buttonEditHandler?.(rowRecord);
-                          }}>
-                            <i class="icon-pencil"></i>
-                          </button>
-                        {/if}
-                        {#if colDef.buttonDeleteHandler && (!colDef.buttonDeleteIf || colDef.buttonDeleteIf(rowRecord))}
-                          <button class="_11 _d" title="delete" onclick={(ev) => {
-                            ev.stopPropagation();
-                            colDef.buttonDeleteHandler?.(rowRecord);
-                          }}>
-                            <i class="icon-trash"></i>
-                          </button>
-                        {/if}
-                      </div>
-                    {:else if colDef.render}
-                      {@const renderedContent = colDef.render(rowRecord, rowIndex)}
-                      {#if isHtmlContent(renderedContent)}
-                        {@html renderedContent}
-                      {:else}
-                        <Renderer elements={renderedContent}/>
-                      {/if}
-                    {:else if splitCellSecondLine}
-                      <div class="flex flex-col leading-[1.1]">
-                        <div>{splitCellFirstLine}</div>
-                        <div>{splitCellSecondLine}</div>
-                      </div>
-                    {:else}
-                      {defaultCellValue}
-                    {/if}
-                  </div>
-                {/each}
-                {/if}
-              </div>
-            </div>
           {/snippet}
         </SvelteVirtualList>
       </div>
@@ -680,19 +680,34 @@
     max-height: inherit;
     overflow-y: auto;
     overflow-x: hidden;
+    padding: 0 2px;
     /*
     scrollbar-gutter: stable;
     scrollbar-width: auto;
     scrollbar-color: #94a3b8 #f1f5f9;
     */
   }
+
+  .table-grid-edge-spacer {
+    height: 2px;
+  }
   
+  .table-grid-header,
+  .table-grid-row {
+    display: grid;
+    grid-template-columns: var(--table-grid-template-columns);
+    width: 100%;
+    /* Let fractional columns shrink inside the viewport so cell ellipsis can work. */
+    min-width: 0;
+  }
+
   .table-grid-header {
     border-bottom: 1px solid #e9ecef;
     background: #f8f9fa;
     position: relative;
     z-index: 2;
-    padding-right: var(--table-grid-scrollbar-width);
+    padding-left: 2px;
+    padding-right: calc(2px + var(--table-grid-scrollbar-width));
     box-sizing: border-box;
   }
 
@@ -700,16 +715,8 @@
     position: sticky;
     top: 0;
     z-index: 4;
+    padding-left: 0;
     padding-right: 0;
-  }
-
-  .table-grid-header-row,
-  .table-grid-row {
-    display: grid;
-    grid-template-columns: var(--table-grid-template-columns);
-    width: 100%;
-    /* Let fractional columns shrink inside the viewport so cell ellipsis can work. */
-    min-width: 0;
   }
 
   .table-grid-header-cell {
@@ -874,18 +881,13 @@
     word-break: break-word;
   }
 
-  .table-grid-row-shell {
-    width: 100%;
-    padding: 0 2px;
-    box-sizing: border-box;
-  }
-
   .table-grid-row {
     height: var(--table-grid-row-height);
     cursor: pointer;
     border-bottom: 1px solid #edf2f7;
     transition: background-color 0.15s ease;
     position: relative;
+    box-sizing: border-box;
   }
 
   .table-grid-row:focus-visible {
@@ -949,6 +951,8 @@
     height: 100% !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
+    padding: 2px !important;
+    box-sizing: border-box !important;
     /*
     scrollbar-gutter: stable;
     scrollbar-width: auto;

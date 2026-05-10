@@ -7,7 +7,8 @@ import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import { Loading, Notify, formatTime } from '$libs/helpers';
-import { throttle } from '$libs/helpers';
+import FilterInput from '$components/form/FilterInput.svelte';
+import Button from '$components/buttons/Button.svelte';
 import { Core } from '$core/store.svelte';
 import AlmacenLayoutEditor from './AlmacenLayoutEditor.svelte';
 
@@ -242,23 +243,12 @@ import {
 <Page title="Sedes & Almacenes" options={pageOptions}>
   {#if Core.pageOptionSelected === 1 /* Sedes */}
     <div class="flex items-center justify-between mb-6">
-      <div class="i-search mr-16 w-256">
-        <div><i class="icon-search"></i></div>
-        <input class="w-full" autocomplete="off" type="text" onkeyup={ev => {
-          ev.stopPropagation()
-          throttle(() => {
-            filterText = ((ev.target as any).value || "").toLowerCase().trim()
-          }, 150)
-        }} />
-      </div>
+      <FilterInput bind:value={filterText} css="mr-16 w-256" />
       <div class="flex items-center">
-        <button class="bx-green" aria-label="Agregar Sede" onclick={ev => {
-          ev.stopPropagation()
+        <Button color="green" icon="icon-plus" label="Agregar Sede" onClick={() => {
           sedeForm = { ss: 1 } as ISede
           Core.openModal(1)
-        }}>
-          <i class="icon-plus"></i>
-        </button>
+        }} />
       </div>
     </div>
     <VTable css="w-full"
@@ -271,23 +261,12 @@ import {
   {#if Core.pageOptionSelected === 2 /* Almacenes */}
     <div class="w-full">
       <div class="flex items-center justify-between mb-6">
-        <div class="i-search mr-16 w-256">
-          <div><i class="icon-search"></i></div>
-          <input class="w-full" autocomplete="off" type="text" onkeyup={ev => {
-            ev.stopPropagation()
-            throttle(() => {
-              filterText = ((ev.target as any).value || "").toLowerCase().trim()
-            }, 150)
-          }} />
-        </div>
+        <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
-          <button class="bx-green" aria-label="Agregar Almacén" onclick={ev => {
-            ev.stopPropagation()
+          <Button color="green" icon="icon-plus" label="Agregar Almacén" onClick={() => {
             almacenForm = { ID: 0, SedeID: 0, Nombre: "", Descripcion: "", ss: 1, upd: 0, Layout: [] }
             Core.openModal(2)
-          }}>
-            <i class="icon-plus"></i>
-          </button>
+          }} />
         </div>
       </div>
       <VTable

@@ -3,6 +3,7 @@ import Page from '$domain/Page.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import VTable from '$components/vTable/VTable.svelte';
 import { ConfirmWarn, formatTime } from '$libs/helpers';
+import Button from '$components/buttons/Button.svelte';
 import { formatN } from '$libs/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg;
@@ -75,21 +76,11 @@ import { Env } from '$core/env';
       <div class="flex items-center justify-between mb-6">
         <div class="h2 ff-bold">Backups</div>
         <div class="flex items-center">
-          <button class="bx-green mr-8" onclick={ev => {
-            ev.stopPropagation()
-            ConfirmWarn(
-              "Generar Backup",
-              "¿Desea generar el backup ahora?",
-              "SI",
-              "NO",
-              () => { generarBackup() }
-            )
-          }} aria-label="Generar backup">
-            <i class="icon-plus"></i>
-          </button>
-          <button class="bx-blue" aria-label="Subir backup">
-            <i class="icon-upload"></i>
-          </button>
+          <Button color="green" icon="icon-plus" label="Generar backup" css="mr-8" onClick={() => {
+            ConfirmWarn("Generar Backup", "¿Desea generar el backup ahora?", "SI", "NO",
+              () => { generarBackup() })
+          }} />
+          <Button color="blue" icon="icon-upload" label="Subir backup" />
         </div>
       </div>
       <VTable
@@ -125,28 +116,15 @@ import { Env } from '$core/env';
               <div class="w-full flex-wrap ff-semibold">{backupSelected.Name}</div>
               <div class="text-gray-600 mt-4">{formatN(backupSelected.Size / 1000 / 1000, 2)} mb</div>
             </div>
-            <button class="bx-purple" onclick={ev => {
-              ev.stopPropagation()
-              downloadBackup(backupSelected!)
-            }} aria-label="Descargar backup">
-              <i class="icon-download"></i>
-            </button>
+            <Button color="purple" icon="icon-download" label="Descargar backup"
+              onClick={() => downloadBackup(backupSelected!)} />
           </div>
           <div class="flex justify-center w-full mt-16">
-            <button class="bx-blue" onclick={ev => {
-              ev.stopPropagation()
-              ConfirmWarn(
-                "Restaurar Backup",
+            <Button color="blue" name="Restaurar" icon="icon-database" onClick={() => {
+              ConfirmWarn("Restaurar Backup",
                 `Restaurar el backup realizado el ${formatTime(backupSelected!.upd, "Y-m-d h:n")}`,
-                "SI",
-                "NO",
-                () => {
-                  restaurar(backupSelected!.Name)
-                }
-              )
-            }}>
-              Restaurar <i class="icon-database"></i>
-            </button>
+                "SI", "NO", () => { restaurar(backupSelected!.Name) })
+            }} />
           </div>
         {/if}
       </div>

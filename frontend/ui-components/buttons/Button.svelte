@@ -13,6 +13,7 @@
     useCircle?: boolean;
     hideNameOnMobile?: boolean;
     css?: string;
+    disabled?: boolean;
     // Semantic role for the agent (e.g. "save" | "delete" | "close" | custom).
     role?: string;
   }
@@ -22,10 +23,11 @@
     onClick,
     name,
     label,
-    color = 'blue',
+    color,
     useCircle = false,
     hideNameOnMobile = false,
     css = '',
+    disabled = false,
     role,
   }: Props = $props();
 
@@ -52,6 +54,7 @@
   aria-label={label}
   data-value={role}
   class={`bx-${color}${useCircle ? ' round' : ''} ${css}`.trim()}
+  {disabled}
   onclick={triggerClick}
 >
   {#if icon}<i class={icon}></i>{/if}

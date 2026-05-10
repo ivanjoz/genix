@@ -90,3 +90,187 @@ func TestParsePageHTML_IndentsNestedContent(t *testing.T) {
 		t.Fatalf("expected indented children, got:\n%s", out)
 	}
 }
+
+func TestParsePageHTML_TableSuppressesRoutingMethods(t *testing.T) {
+	in := `
+<div data-id="Table:38">
+  <table>
+    <tbody>
+      <tr data-id="TableRow:38:100"><td>Sara Quintana</td></tr>
+    </tbody>
+  </table>
+</div>`
+	components := []AgentComponentInfo{{
+		ID:      38,
+		Type:    "Table",
+		Methods: []string{"select", "setValueChild", "searchChild", "getOptionsChild"},
+	}}
+	out, err := ParsePageHTML(in, components)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `<Table id="38"`) {
+		t.Fatalf("expected Table tag, got:\n%s", out)
+	}
+	// Methods belong on the row, not the table.
+	if strings.Contains(out, `<Table id="38" methods=`) {
+		t.Fatalf("expected no methods= on Table, got:\n%s", out)
+	}
+	if !strings.Contains(out, `<TableRow id="38:100"`) {
+		t.Fatalf("expected composite TableRow id, got:\n%s", out)
+	}
+	if !strings.Contains(out, `methods="select"`) {
+		t.Fatalf("expected TableRow methods=\"select\", got:\n%s", out)
+	}
+}
+
+func TestParsePageHTML_KeepsEmptyCellsForColumnAlignment(t *testing.T) {
+	// A row with one missing column — the empty <td> must be preserved so the
+	// agent can still tell which column the populated cells belong to.
+	in := `
+<table>
+  <thead>
+    <tr><th>A</th><th>B</th><th>C</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>row1-a</td><td></td><td>row1-c</td></tr>
+  </tbody>
+</table>`
+	out, err := ParsePageHTML(in, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(out, "<td>") != 3 {
+		t.Fatalf("expected 3 <td> tags preserved, got:\n%s", out)
+	}
+	if !strings.Contains(out, "<td></td>") {
+		t.Fatalf("expected empty <td></td> retained, got:\n%s", out)
+	}
+}
+
+func TestParsePageHTML_DropsFullyEmptyRows(t *testing.T) {
+	// A row whose every cell is empty has no text descendants at all and
+	// gets pruned, taking its cells with it. Only the populated row's content
+	// survives — everything else is wrapper chrome the collapser flattens.
+	in := `
+<table>
+  <thead><tr><th>A</th><th>B</th></tr></thead>
+  <tbody>
+    <tr><td>kept</td><td>val</td></tr>
+    <tr><td></td><td></td></tr>
+  </tbody>
+</table>`
+	out, err := ParsePageHTML(in, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "<td></td>") {
+		t.Fatalf("expected empty cells from the dropped row to be gone, got:\n%s", out)
+	}
+	// Two cells from the populated row + two header cells = 4 cell tags total.
+	cellCount := strings.Count(out, "<td>") + strings.Count(out, "<th>")
+	if cellCount != 4 {
+		t.Fatalf("expected 4 cell tags (2 header + 2 populated row), got %d:\n%s", cellCount, out)
+	}
+}
+
+func TestParsePageHTML_CellClickStaysOnTd(t *testing.T) {
+	// onCellClick puts the agent handle on the <td> itself so the column slot
+	// stays visible in the row. id/methods replace the raw data-* attrs.
+	in := `
+<div data-id="Table:11">
+  <table>
+    <tbody>
+      <tr data-id="TableRow:11:100">
+        <td>Producto</td>
+        <td data-id="11:201" data-cell-type="CellClick">5</td>
+        <td>6</td>
+      </tr>
+    </tbody>
+  </table>
+</div>`
+	components := []AgentComponentInfo{{
+		ID:      11,
+		Type:    "Table",
+		Methods: []string{"select", "clickChild"},
+	}}
+	out, err := ParsePageHTML(in, components)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `<td id="11:201" methods="click">5</td>`) {
+		t.Fatalf("expected <td id=\"11:201\" methods=\"click\">5</td>, got:\n%s", out)
+	}
+	// Plain cells should NOT pick up agent attrs.
+	if strings.Contains(out, `<td id=`) && !strings.Contains(out, `<td id="11:201"`) {
+		t.Fatalf("plain cells should not have id, got:\n%s", out)
+	}
+	// Raw data-* form is replaced.
+	if strings.Contains(out, "data-cell-type") || strings.Contains(out, `data-id="11:201"`) {
+		t.Fatalf("expected data-* attrs replaced by id/methods, got:\n%s", out)
+	}
+	// Table itself must not advertise clickChild.
+	if strings.Contains(out, "clickChild") {
+		t.Fatalf("expected clickChild suppressed on Table, got:\n%s", out)
+	}
+}
+
+func TestParsePageHTML_DropsMenuRoots(t *testing.T) {
+	in := `
+<div data-menu-root="true" role="navigation" aria-label="Main navigation">
+  <button data-id="MenuHeader:1">CONFIG</button>
+  <button data-id="MenuOption:5" data-label="Cambios" data-value="/x">Cambios</button>
+</div>
+<div data-menu-root="true" role="dialog" aria-modal="true">
+  <button data-id="MenuOption:6" data-label="Compras" data-value="/y">Compras</button>
+</div>
+<main>kept content</main>`
+	out, err := ParsePageHTML(in, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "kept content") {
+		t.Fatalf("expected non-menu content preserved, got:\n%s", out)
+	}
+	for _, banned := range []string{"MenuHeader", "MenuOption", "Main navigation", "Cambios", "Compras"} {
+		if strings.Contains(out, banned) {
+			t.Fatalf("expected %q stripped from menu drop, got:\n%s", banned, out)
+		}
+	}
+}
+
+func TestParsePageHTML_CellMethodsOnCellTags(t *testing.T) {
+	in := `
+<div data-id="Table:38">
+  <table>
+    <tbody>
+      <tr data-id="TableRow:38:100">
+        <td>
+          <div data-id="38:101" data-cell-type="CellInput" data-value="Sara" data-type="text"></div>
+        </td>
+        <td>
+          <div data-id="38:102" data-cell-type="CellSelect" data-value="[1] Persona"></div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>`
+	components := []AgentComponentInfo{{
+		ID:      38,
+		Type:    "Table",
+		Methods: []string{"select", "setValueChild", "searchChild", "getOptionsChild"},
+	}}
+	out, err := ParsePageHTML(in, components)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `<CellInput id="38:101"`) {
+		t.Fatalf("expected CellInput tag, got:\n%s", out)
+	}
+	if !strings.Contains(out, `<CellInput id="38:101" value="Sara" type="text" methods="setValue"/>`) {
+		t.Fatalf("expected CellInput with methods=\"setValue\", got:\n%s", out)
+	}
+	if !strings.Contains(out, `<CellSelect id="38:102" value="[1] Persona" methods="search,select,getOptions"/>`) {
+		t.Fatalf("expected CellSelect with methods=\"search,select,getOptions\", got:\n%s", out)
+	}
+}

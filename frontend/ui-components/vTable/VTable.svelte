@@ -15,6 +15,8 @@
     setVTableAgentContext,
     buildCellID,
     buildRowID,
+    parseChildID,
+    rowIndexFromRowID,
     type CellAgentMethods,
   } from '$components/vTable/agentContext';
 
@@ -387,15 +389,36 @@
   });
 
   const hasInteractiveCell = $derived(
-    columns.some((column) => column.onCellEdit || column.onCellSelect),
+    columns.some((column) => column.onCellEdit || column.onCellSelect || column.onCellClick),
   );
-  const shouldRegisterTable = $derived(Boolean(onRowClick) || hasInteractiveCell);
+  // When the table flips to mobile view, MobileCardsVirtualList registers its
+  // own CardList agent handle, so VTable steps back to avoid a ghost Table
+  // handle that owns no visible rows.
+  const shouldRegisterTable = $derived(!isMobileView && (Boolean(onRowClick) || hasInteractiveCell));
+
+  // Cells with a column-level onCellClick aren't backed by a child component,
+  // so they don't go through cellRegistry. We resolve the column from the
+  // cellID's column slot directly when the agent clicks.
+  const dispatchCellClick = (cellIDArg: number | string) => {
+    const cellID = parseChildID(cellIDArg);
+    if (!Number.isFinite(cellID) || cellID <= 0 || cellID % 100 === 0) { return; }
+    const rowIndex = Math.floor((cellID - 1) / 100) - 1;
+    const columnIndex = (cellID - 1) % 100;
+    if (rowIndex < 0 || rowIndex >= filteredData.length) { return; }
+    const column = processedColumns.flatColumns[columnIndex];
+    if (!column?.onCellClick) { return; }
+    const record = filteredData[rowIndex];
+    if (!record) { return; }
+    const resolved = getResolvedRow(record, rowIndex) || record;
+    if (column.disableCellInteractions?.(resolved, rowIndex)) { return; }
+    column.onCellClick(resolved, rowIndex, () => rerenderRow(rowIndex));
+  };
 
   // ids that are exact multiples of 100 are row ids; everything else is a cell
   // id, and remaining args go to the cell's own select() (option ids).
   const dispatchRowSelect = (rowID: number) => {
     if (!onRowClick) { return; }
-    const rowIndex = Math.floor(rowID / 100);
+    const rowIndex = rowIndexFromRowID(rowID);
     if (rowIndex < 0 || rowIndex >= filteredData.length) { return; }
     const record = filteredData[rowIndex];
     if (!record) { return; }
@@ -409,23 +432,31 @@
       id: componentID,
       type: "Table",
       label: "",
+      // The agent calls Table methods with the composite id stripped down by
+      // the backend bridge (http.go::resolveTarget): "setValue('38:101', v)"
+      // arrives here as setValueChild(101, v). select() still receives the
+      // composite first arg because the table needs to disambiguate row vs
+      // cell from the id alone.
       select: (...ids) => {
         if (ids.length === 0) { return; }
-        const first = Number(ids[0]);
+        const first = parseChildID(ids[0]);
         if (Number.isFinite(first) && first % 100 === 0) {
-          for (const rid of ids) { dispatchRowSelect(Number(rid)); }
+          for (const rid of ids) { dispatchRowSelect(parseChildID(rid)); }
           return;
         }
         cellRegistry.get(first)?.select?.(...ids.slice(1));
       },
       setValueChild: (cellID, value) => {
-        cellRegistry.get(Number(cellID))?.setValue?.(value);
+        cellRegistry.get(parseChildID(cellID))?.setValue?.(value);
       },
       searchChild: (cellID, text) => {
-        cellRegistry.get(Number(cellID))?.search?.(String(text ?? ''));
+        cellRegistry.get(parseChildID(cellID))?.search?.(String(text ?? ''));
       },
       getOptionsChild: (cellID, max) => {
-        return cellRegistry.get(Number(cellID))?.getOptions?.(Number(max ?? 50)) ?? [];
+        return cellRegistry.get(parseChildID(cellID))?.getOptions?.(Number(max ?? 50)) ?? [];
+      },
+      clickChild: (cellID) => {
+        dispatchCellClick(cellID);
       },
     });
   });
@@ -519,7 +550,7 @@
             {@const selected = resolvedRecord ? isRowSelected(resolvedRecord, row.index) : false}
 
           <tr class="vtable-row"
-            data-id={shouldRegisterTable ? `TableRow:${buildRowID(row.index)}` : undefined}
+            data-id={onRowClick ? `TableRow:${componentID}:${buildRowID(row.index)}` : undefined}
             data-selected={selected ? "true" : undefined}
             class:vtable-row-even={row.index % 2 === 0}
             class:vtable-row-odd={row.index % 2 !== 0}
@@ -539,9 +570,13 @@
                 {@const cellData = getCellContent(column, resolvedRecord, row.index)}
                 {@const css = cellCss ? cellCss + " " + (cellData.css||"") : cellData.css || ""}
                 {@const cssFinal = [css, !/px-|pr-|pl-/.test(css) && "px-6", column.align === 'right' && 'text-right'].filter(Boolean).join(" ")}
-                
+                {@const cellInteractionsDisabled = column.disableCellInteractions?.(resolvedRecord, row.index)}
+                {@const isAgentClickCell = !!column.onCellClick && !cellInteractionsDisabled && !column.onCellEdit && !column.onCellSelect}
+
                 <td class="{cssFinal}"
-                	class:clickable-cell={!!column.onCellClick && !column.disableCellInteractions?.(resolvedRecord, row.index)}
+                	class:clickable-cell={!!column.onCellClick && !cellInteractionsDisabled}
+                  data-id={isAgentClickCell ? `${componentID}:${buildCellID(row.index, j)}` : undefined}
+                  data-cell-type={isAgentClickCell ? 'CellClick' : undefined}
                   style={column.cellStyle ? Object.entries(column.cellStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}
                   onclick={ev => {
                     if(column.onCellEdit){ ev.stopPropagation() }

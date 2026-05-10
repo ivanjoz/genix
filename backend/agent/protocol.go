@@ -21,6 +21,14 @@ const (
 	// to handle[Method](...Args). See frontend/ui-components/AGENTIC_COMPONENTS.md
 	// for the supported method names per component type.
 	CmdAgentInvoke = "agent.invoke"
+	// CmdGetMenu returns the side-menu structure (groups + options with route)
+	// the user has access to. Replaces the per-option agent handles that used
+	// to appear in the HTML snapshot.
+	CmdGetMenu = "getMenu"
+	// CmdNavigate triggers a client-side route change in the browser. Used by
+	// the `navigate` action so the agent can move between pages without
+	// addressing a specific menu handle.
+	CmdNavigate = "navigate"
 )
 
 // Reply types sent by the frontend.
@@ -69,4 +77,24 @@ type InvokePayload struct {
 type AgentListFilter struct {
 	Type  string
 	Label string
+}
+
+// AgentMenuOption is one entry inside a side-menu group. Route is the SPA
+// path the agent passes to the `navigate` action.
+type AgentMenuOption struct {
+	Name  string
+	Route string
+}
+
+// AgentMenuGroup is a side-menu section (CONFIGURACIÓN, NEGOCIO, …) with the
+// options the user has access to.
+type AgentMenuGroup struct {
+	ID      int
+	Name    string
+	Options []AgentMenuOption
+}
+
+// NavigatePayload is the body sent to the browser for CmdNavigate.
+type NavigatePayload struct {
+	Route string
 }

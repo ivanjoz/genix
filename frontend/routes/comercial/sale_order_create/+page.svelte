@@ -5,6 +5,7 @@ import SearchSelect from '$components/form/SearchSelect.svelte';
 import VirtualCards from '$components/misc/VirtualCards.svelte';
 import Page from '$domain/Page.svelte';
 import { Loading, formatN, wordInclude } from '$libs/helpers';
+import Button from '$components/buttons/Button.svelte';
 
 import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
 import { Core } from '$core/store.svelte';
@@ -420,13 +421,8 @@ import { SaleOrderState } from "./sale_order.svelte";
             </div>
           </div>
         </div>
-          <button class="bx-blue shrink-0"
-            onclick={handlePostSaleOrder}
-            title="Guardar venta"
-          >
-            <span class="hidden md:inline">Generar</span>
-            <i class="icon-floppy"></i>
-          </button>
+          <Button color="blue" icon="icon-floppy" name="Generar" hideNameOnMobile
+            css="shrink-0" label="Guardar venta" onClick={handlePostSaleOrder} />
         </div>
         <div class="w-full px-12 mt-6 mb-6">
 	        <div class="col-span-2">
@@ -527,13 +523,11 @@ import { SaleOrderState } from "./sale_order.svelte";
                 <div class="font-mono text-sm font-bold text-gray-700">
                   {formatMo((item.isSubUnidad && item.producto?.SbnPreciFinal ? item.producto.SbnPreciFinal : (item.producto?.PrecioFinal || 0)) * item.cantidad)}
                 </div>
-                <button
-                  class="p-4 text-red-400 transition-opacity hover:text-red-600 md:opacity-0 md:group-hover:opacity-100"
-                  onclick={() => ventasState.removeProducto(item.key)}
-                  title="Eliminar"
-                >
-                  <i class="icon-trash"></i>
-                </button>
+                <Button icon="icon-trash"
+                  css="p-4 text-red-400 transition-opacity hover:text-red-600 md:opacity-0 md:group-hover:opacity-100"
+                  onClick={() => ventasState.removeProducto(item.key)}
+                  label="Eliminar"
+                />
               </div>
             </div>
           {/each}

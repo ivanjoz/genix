@@ -32,13 +32,32 @@ export function getVTableAgentContext(): VTableAgentContext | undefined {
   return getContext<VTableAgentContext | undefined>(VTABLE_AGENT_KEY);
 }
 
-// Conventional cellID = rowIndex * 100 + (columnIndex + 1). Column index is
-// shifted by one so cell ids never collide with row ids (which are exact
-// multiples of 100). A row of 99 columns therefore caps at *N100..*N99.
-export function buildCellID(rowIndex: number, columnIndex: number): number {
-  return rowIndex * 100 + columnIndex + 1;
+// Row id = (rowIndex + 1) * 100 — shifted by one so the lowest visible row id
+// is 100, never 0 (an id of 0 reads as "missing" to many code paths). Cell id
+// = rowID + columnIndex + 1, so the column slot is 1-based and cell ids never
+// collide with row ids (which are exact multiples of 100). Cap of 99 cells
+// per row.
+export function buildRowID(rowIndex: number): number {
+  return (rowIndex + 1) * 100;
 }
 
-export function buildRowID(rowIndex: number): number {
-  return rowIndex * 100;
+export function buildCellID(rowIndex: number, columnIndex: number): number {
+  return buildRowID(rowIndex) + columnIndex + 1;
+}
+
+// Inverse of buildRowID. Returns -1 when the id is not a valid row id.
+export function rowIndexFromRowID(rowID: number): number {
+  if (!Number.isFinite(rowID) || rowID <= 0 || rowID % 100 !== 0) { return -1; }
+  return rowID / 100 - 1;
+}
+
+// Extract the numeric child portion from either a composite id ("38:101") or
+// a bare child id ("101" / 101). Used by the Table's agent methods so the
+// agent can address cells/rows with the same composite id it sees in the
+// HTML snapshot.
+export function parseChildID(raw: number | string): number {
+  if (typeof raw === 'number') { return raw; }
+  const s = String(raw);
+  const colon = s.indexOf(':');
+  return Number(colon >= 0 ? s.slice(colon + 1) : s);
 }

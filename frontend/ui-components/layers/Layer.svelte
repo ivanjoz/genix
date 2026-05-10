@@ -4,6 +4,7 @@
 import { Core } from '$core/store.svelte';
 import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import ButtonList from '$components/buttons/ButtonList.svelte';
+import Button from '$components/buttons/Button.svelte';
 import { Env } from '$core/env';
 import { Agent } from '$core/agent/registry';
 
@@ -216,43 +217,24 @@ import { Agent } from '$core/agent/registry';
           </div>
         {/if}
         {#if onDelete}
-          <button
-            class="bx-red mr-10 lh-10"
-            onclick={onDelete}
-            aria-label="Eliminar"
-          >
-            <i class="icon-trash"></i>
-          </button>
+          <Button color="red" icon="icon-trash" label="Eliminar" css="mr-10 lh-10"
+            onClick={onDelete} />
         {/if}
         {#if onSave}
-          <button
-            class="bx-blue mr-10 lh-10"
-            onclick={onSave}
-            aria-label="Guardar"
-          >
-            <i class={saveButtonIcon || 'icon-floppy'}></i>
-            <span class="_11">{saveButtonName || 'Guardar'}</span>
-          </button>
+          <Button color="blue" icon={saveButtonIcon || 'icon-floppy'}
+            name={saveButtonName || 'Guardar'} css="mr-10 lh-10"
+            label="Guardar" onClick={onSave} />
         {/if}
-        <button
-          class="bx-yellow"
-          title="close"
-          onclick={(ev) => {
-            ev.stopPropagation()
-            closeLayer()
-            if (onClose) {
-              if (Core.deviceType === 3) {
-                setTimeout(() => {
-                  onClose()
-                }, 300)
-              } else {
-                onClose()
-              }
+        <Button color="yellow" icon="icon-cancel" label="close" onClick={() => {
+          closeLayer()
+          if (onClose) {
+            if (Core.deviceType === 3) {
+              setTimeout(() => { onClose() }, 300)
+            } else {
+              onClose()
             }
-          }}
-        >
-          <i class="icon-cancel"></i>
-        </button>
+          }
+        }} />
       </div>
     </div>
     {#if (options || []).length > 0}

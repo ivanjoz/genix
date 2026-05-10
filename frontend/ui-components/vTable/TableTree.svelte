@@ -16,6 +16,8 @@
     setVTableAgentContext,
     buildCellID,
     buildRowID,
+    parseChildID,
+    rowIndexFromRowID,
     type CellAgentMethods,
   } from '$components/vTable/agentContext'
   import type { ITableColumn } from './types'
@@ -94,8 +96,8 @@
   const componentID = Env.getComponentID()
 
   // Flat visible-row indices: node row, then child rows (when node.isOpen).
-  // Row i in the flattened list has rowID = i * 100; cells inside use
-  // i*100 + columnIndex + 1 so the agent can address either via the same
+  // Row i in the flattened list has rowID = (i+1) * 100; cells inside use
+  // rowID + columnIndex + 1 so the agent can address either via the same
   // composite scheme.
   const nodeFlatIndices = $derived.by(() => {
     const out: number[] = []
@@ -111,6 +113,8 @@
   function flatChildIndex(nodeIndex: number, childIndex: number) {
     return (nodeFlatIndices[nodeIndex] ?? 0) + 1 + childIndex
   }
+
+  const hasRowClick = $derived(Boolean(onNodeClick) || Boolean(onChildClick))
 
   // Cells (CellInput) hand their methods here keyed by cellID.
   const cellRegistry = new Map<number, CellAgentMethods>()
@@ -134,7 +138,7 @@
 
   // rowID → (nodeIndex, childIndex?) for select dispatch.
   function resolveFlatRow(rowID: number): { nodeIndex: number; childIndex?: number } | undefined {
-    const rowIndex = Math.floor(rowID / 100)
+    const rowIndex = rowIndexFromRowID(rowID)
     if (rowIndex < 0) { return undefined }
     for (let i = 0; i < data.length; i++) {
       const flat = nodeFlatIndices[i] ?? 0
@@ -166,21 +170,21 @@
       label: "",
       select: (...ids) => {
         if (ids.length === 0) { return }
-        const first = Number(ids[0])
+        const first = parseChildID(ids[0])
         if (Number.isFinite(first) && first % 100 === 0) {
-          for (const rid of ids) { dispatchRowSelect(Number(rid)) }
+          for (const rid of ids) { dispatchRowSelect(parseChildID(rid)) }
           return
         }
         cellRegistry.get(first)?.select?.(...ids.slice(1))
       },
       setValueChild: (cellID, value) => {
-        cellRegistry.get(Number(cellID))?.setValue?.(value)
+        cellRegistry.get(parseChildID(cellID))?.setValue?.(value)
       },
       searchChild: (cellID, text) => {
-        cellRegistry.get(Number(cellID))?.search?.(String(text ?? ''))
+        cellRegistry.get(parseChildID(cellID))?.search?.(String(text ?? ''))
       },
       getOptionsChild: (cellID, max) => {
-        return cellRegistry.get(Number(cellID))?.getOptions?.(Number(max ?? 50)) ?? []
+        return cellRegistry.get(parseChildID(cellID))?.getOptions?.(Number(max ?? 50)) ?? []
       },
     })
   })
@@ -209,7 +213,7 @@
         {#each data as node, nodeIndex(node.id)}
           {@const nodeFlatIdx = nodeFlatIndices[nodeIndex] ?? 0}
           <div class="table-tree-row-shell"
-            data-id={shouldRegisterTable ? `TableRow:${buildRowID(nodeFlatIdx)}` : undefined}
+            data-id={hasRowClick ? `TableRow:${componentID}:${buildRowID(nodeFlatIdx)}` : undefined}
             data-selected={selectedId === node.id ? "true" : undefined}>
             <div
               class="table-tree-row {rowCss}"
@@ -269,7 +273,7 @@
               {@const childId = resolveChildId(childRecord, childIndex, node)}
               {@const childFlatIdx = flatChildIndex(nodeIndex, childIndex)}
               <div class="table-tree-row-shell table-tree-child-row-shell"
-                data-id={shouldRegisterTable ? `TableRow:${buildRowID(childFlatIdx)}` : undefined}
+                data-id={hasRowClick ? `TableRow:${componentID}:${buildRowID(childFlatIdx)}` : undefined}
                 data-selected={selectedChildId === childId ? "true" : undefined}>
                 <div
                   class="table-tree-row table-tree-child-row {rowCss}"

@@ -1,5 +1,6 @@
 <script lang="ts">
 import Input from '$components/form/Input.svelte';
+import Button from '$components/buttons/Button.svelte';
 import ColorPicker from '$components/form/ColorPicker.svelte';
 import Modal from '$components/layers/Modal.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
@@ -51,8 +52,7 @@ import { productoAtributos, type IProducto, type IProductoPresentacion } from ".
 
 <div class="flex justify-between mt-4">
   <div></div>
-  <!-- svelte-ignore a11y_consider_explicit_label -->
-  <button class="bx-green s1" onclick={() => {
+  <Button color="green" icon="icon-plus" css="s1" onClick={() => {
     presentacionForm = {
       at: producto.AtributosIDs?.[0] as number,
       id: tempCounter,
@@ -61,9 +61,7 @@ import { productoAtributos, type IProducto, type IProductoPresentacion } from ".
     tempCounter--
     console.log("presentacionForm", presentacionForm)
     openModal(3)
-  }}>
-    <i class="icon-plus"></i>
-  </button>
+  }} />
 </div>
 
 <VTable columns={columns} css="mt-6"

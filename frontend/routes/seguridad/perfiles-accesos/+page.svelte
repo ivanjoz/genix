@@ -6,7 +6,9 @@ import type { ITableColumn } from '$components/vTable/types';
 import Modules from '$core/modules';
 import { closeModal, Core } from '$core/store.svelte';
 import Page from '$domain/Page.svelte';
-import { arrayToMapN, Loading, Notify, throttle } from '$libs/helpers';
+import { arrayToMapN, Loading, Notify } from '$libs/helpers';
+import FilterInput from '$components/form/FilterInput.svelte';
+import Button from '$components/buttons/Button.svelte';
 import { onMount } from 'svelte';
 import AccesoCard from './AccesoCard.svelte';
 import {
@@ -237,23 +239,12 @@ import {
     <!-- Left side: Profiles table -->
     <div class="w-full md:w-[32%]">
       <div class="flex justify-between items-center w-full mb-10">
-        <div class="i-search mr-16 w-256">
-          <div><i class="icon-search"></i></div>
-          <input class="w-full" autocomplete="off" type="text" onkeyup={ev => {
-            ev.stopPropagation()
-            throttle(() => {
-              filterText = ((ev.target as HTMLInputElement).value || "").toLowerCase().trim()
-            }, 150)
-          }}>
-        </div>
+        <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
-          <button class="bx-green" onclick={ev => {
-            ev.stopPropagation()
+          <Button color="green" icon="icon-plus" label="Agregar perfil" onClick={() => {
             perfilForm = { ss: 1, accesosMap: new Map() } as IPerfil
             Core.openModal(2)
-          }} aria-label="Agregar perfil">
-            <i class="icon-plus"></i>
-          </button>
+          }} />
         </div>
       </div>
       <VTable
@@ -288,13 +279,8 @@ import {
 	        </div>
 	        <div class="flex items-center max-md:absolute max-md:top-0 max-md:right-0">
 	          {#if perfilForm.ID > 0}
-	            <button class="bx-blue mr-8" onclick={ev => {
-	              ev.stopPropagation()
-	              savePerfil(false, true)
-	            }} aria-label="Guardar">
-	              <i class="icon-floppy"></i>
-	              <span class="max-md:hidden">Guardar</span>
-	            </button>
+	            <Button color="blue" icon="icon-floppy" name="Guardar" css="mr-8"
+	              hideNameOnMobile label="Guardar" onClick={() => savePerfil(false, true)} />
 	          {/if}
 	        </div>
 	      </div>

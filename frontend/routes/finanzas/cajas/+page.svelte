@@ -9,7 +9,8 @@ import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import RecordByIDText from '$components/misc/RecordByIDText.svelte';
 import { Loading, Notify, formatTime } from '$libs/helpers';
-import { throttle } from '$libs/helpers';
+import FilterInput from '$components/form/FilterInput.svelte';
+import Button from '$components/buttons/Button.svelte';
 import { Core } from '$core/store.svelte';
 import { formatN } from '$libs/helpers';
   import { AlmacenesService } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte"
@@ -218,23 +219,12 @@ import { formatN } from '$libs/helpers';
   <div class="flex h-full gap-20">
     <div class="flex-1 flex flex-col min-w-0 relative">
       <div class="flex justify-between items-center w-full mb-10">
-        <div class="i-search mr-16 w-256">
-          <div><i class="icon-search"></i></div>
-          <input class="w-full" autocomplete="off" type="text" onkeyup={ev => {
-            ev.stopPropagation()
-            throttle(() => {
-              filterText = ((ev.target as any).value || "").toLowerCase().trim()
-            }, 150)
-          }} />
-        </div>
+        <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
-          <button class="bx-green" aria-label="agregar"  onclick={ev => {
-            ev.stopPropagation()
+          <Button color="green" icon="icon-plus" label="agregar" onClick={ev => {
             cajaForm = { ID: -1, ss: 1 } as ICaja
             Core.openModal(1)
-          }}>
-            <i class="icon-plus"></i>
-          </button>
+          }} />
         </div>
       </div>
       <VTable css="w-full" columns={columns}
@@ -276,15 +266,12 @@ import { formatN } from '$libs/helpers';
               <div class="text-[1.1rem] ff-bold mr-8">{cajaForm?.Nombre || ""}</div>
             </div>
             <div class="flex items-center">
-              <button class="bx-green" aria-label="add" onclick={ev => {
-                ev.stopPropagation()
+              <Button color="green" icon="icon-plus" label="add" onClick={() => {
                 Core.openModal(3)
                 cajaMovimientoForm = {
                   CajaID: cajaForm.ID, SaldoFinal: cajaForm.SaldoCurrent,
                 } as ICajaMovimiento
-              }}>
-                <i class="icon-plus"></i>
-              </button>
+              }} />
             </div>
           </div>
           <VTable css="w-full mt-8"
@@ -346,13 +333,10 @@ import { formatN } from '$libs/helpers';
           <div class="flex w-full justify-between mt-8">
             <div></div>
             <div class="flex items-center">
-              <button class="bx-green" aria-label="add" onclick={ev => {
-                ev.stopPropagation()
+              <Button color="green" icon="icon-plus" label="add" onClick={() => {
                 Core.openModal(2)
                 cajaCuadreForm = { CajaID: cajaForm.ID } as ICajaCuadre
-              }}>
-                <i class="icon-plus"></i>
-              </button>
+              }} />
             </div>
           </div>
           <VTable css="w-full mt-8"
@@ -402,13 +386,7 @@ import { formatN } from '$libs/helpers';
           <div class="mt-8">
             <CajaForm bind:form={cajaForm} sedes={almacenes.Sedes} />
             <div class="flex justify-end mt-12">
-              <button class="bx-blue" onclick={ev => {
-                ev.stopPropagation()
-                saveCaja()
-              }}>
-                <span>Guardar</span>
-                <i class="icon-floppy"></i>
-              </button>
+              <Button color="blue" name="Guardar" icon="icon-floppy" onClick={saveCaja} />
             </div>
           </div>
         {/if}
@@ -466,10 +444,7 @@ import { formatN } from '$libs/helpers';
       </div>
 
       <div class="flex items-end">
-        <button class="bx-purple w-full mt-24">
-          <i class="text-[0.875rem] icon-arrows-cw"></i>
-          Recalcular
-        </button>
+        <Button color="purple" icon="icon-arrows-cw" name="Recalcular" css="w-full mt-24" />
       </div>
       {#if cajaCuadreForm._error}
         <div class="col-span-24 text-red-600 ff-bold">

@@ -16,7 +16,9 @@ import { getVTableAgentContext } from '$components/vTable/agentContext';
 		required?: boolean;
 		type?: string;
 		// Cell coordinate within its parent table; the table assigns it as
-		// rowIndex*100 + (columnIndex + 1) so cells never collide with row IDs.
+		// (rowIndex+1)*100 + (columnIndex + 1) so cells never collide with row
+		// IDs (multiples of 100) and the lowest cell id is 101 — ids of 0 read
+		// as "missing" through too many code paths.
 		cellID?: number;
 	}
 </script>

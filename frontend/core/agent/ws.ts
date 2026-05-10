@@ -2,6 +2,9 @@
 // Connects to the local Go backend so it can drive the page as an agent
 // (list components, invoke methods, capture HTML, screenshots).
 
+import { goto } from "$app/navigation";
+import { Core } from "$core/store.svelte";
+import { canUserAccessRoute } from "$core/security";
 import { Agent, agentHandles, isAgentEnabled, type AgentMethodName, type AgentOption } from "./registry";
 
 // Wire envelope shared with the Go backend (capitalized field names since the
@@ -96,12 +99,42 @@ const invokeMethod = (payload: { HandleID: number; Method: AgentMethodName; Args
   return result;
 };
 
+// getMenu mirrors the side-menu the user sees: the same access filter as
+// SideMenu.svelte, dropping options the user can't reach. Returned in the
+// Go-friendly capitalized shape (Name/Route) the backend decodes into
+// AgentMenuGroup.
+const getMenu = () => {
+  const menus = Core.module?.menus || [];
+  return menus
+    .map((menu) => ({
+      ID: menu.id || 0,
+      Name: menu.name,
+      Options: (menu.options || [])
+        .filter((option) => {
+          const route = String(option.route || "").trim();
+          if (!route) { return false; }
+          return canUserAccessRoute(option.route);
+        })
+        .map((option) => ({ Name: option.name, Route: option.route || "" })),
+    }))
+    .filter((group) => group.Options.length > 0);
+};
+
+const navigate = async (payload: { Route?: string; route?: string } | undefined) => {
+  const route = payload?.Route || payload?.route || "";
+  if (!route) { throw new Error("navigate: missing route"); }
+  await goto(route);
+  return null;
+};
+
 const commandHandlers: Record<string, (payload: any) => Promise<any> | any> = {
   getPageContent: () => Agent.getPageContent(),
   agentList: (payload) => remapAgentList(Agent.list(payload || undefined)),
   agentDescribe: () => remapAgentDescribe(Agent.describe()),
   screenshot: () => captureScreenshot(),
   "agent.invoke": invokeMethod,
+  getMenu,
+  navigate,
 };
 
 const releaseScreenStream = () => {

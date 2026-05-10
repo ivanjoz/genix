@@ -7,7 +7,9 @@ import TableGrid from '$components/vTable/TableGrid.svelte'
 import type { ICardCell, ITableColumn } from '$components/vTable/types'
 import { Core } from '$core/store.svelte'
 import { FechaHelper } from '$libs/fecha'
-import { formatN, formatTime, Loading, Notify, throttle } from '$libs/helpers'
+import { formatN, formatTime, Loading, Notify } from '$libs/helpers'
+import FilterInput from '$components/form/FilterInput.svelte'
+import Button from '$components/buttons/Button.svelte'
 import { onDestroy, onMount, untrack } from 'svelte'
 import { ClientProviderService, ClientProviderType } from '../../negocio/clientes/clientes-proveedores.svelte'
 import { ProductosService } from '../../negocio/productos/productos.svelte'
@@ -375,17 +377,8 @@ import {
 <div class="flex w-full" bind:this={pageContentElement}>
   <Layer type="content">
 	  <div class="mb-6 flex items-center justify-between">
-	    <div class="i-search mr-16 w-320 max-w-full">
-	      <div><i class="icon-search"></i></div>
-	      <input class="w-full" autocomplete="off" type="text" placeholder="Buscar producto o proveedor"
-	        onkeyup={(event) => {
-	          event.stopPropagation()
-	          throttle(() => {
-	            supplyFilterText = ((event.target as HTMLInputElement).value || '').trim()
-	          }, 150)
-	        }}
-	      />
-	    </div>
+	    <FilterInput bind:value={supplyFilterText} placeholder="Buscar producto o proveedor"
+	      css="mr-16 w-320 max-w-full" />
 	    <div class="flex items-center">
 	      <div class="h6 ff-bold pr-8 text-slate-500">
 	        {filteredProductSupplyRows.length} registros
@@ -553,13 +546,8 @@ import {
   <div class="mt-16">
     <div class="mb-8 flex items-center justify-between">
       <div class="h4 ff-bold">Proveedores</div>
-      <button class="bx-green h-32 px-10" type="button" aria-label="Agregar proveedor" title="Agregar proveedor"
-        onclick={() => {
-          addProviderSupplyRow()
-        }}
-      >
-        <i class="icon-plus"></i>
-      </button>
+      <Button color="green" icon="icon-plus" label="Agregar proveedor" css="h-32 px-10"
+        onClick={addProviderSupplyRow} />
     </div>
 
     <CardsList

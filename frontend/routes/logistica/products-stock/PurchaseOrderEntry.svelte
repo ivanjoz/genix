@@ -5,6 +5,7 @@ import Layer from '$components/layers/Layer.svelte'
 import LayerStatic from '$components/layers/LayerStatic.svelte'
 import SearchSelect from '$components/form/SearchSelect.svelte'
 import FilterInput from '$components/form/FilterInput.svelte'
+import Button from '$components/buttons/Button.svelte'
 import TableGrid from '$components/vTable/TableGrid.svelte'
 import type { ITableColumn } from '$components/vTable/types'
 import { Core } from '$core/store.svelte'
@@ -482,14 +483,10 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
           }}
         />
       </div>
-      <button type="button" class="bx-blue shrink-0"
+      <Button color="blue" icon="icon-floppy" css="shrink-0"
         disabled={isSaving || !selectedOrderID || entries.length === 0}
-        onclick={handleSave}
-        title="Guardar ingreso de mercadería"
-      >
-        <span class="hidden md:inline">{isSaving ? 'Guardando…' : 'Guardar'}</span>
-        <i class="icon-floppy"></i>
-      </button>
+        label="Guardar ingreso de mercadería" onClick={handleSave}
+        name={isSaving ? 'Guardando…' : 'Guardar'} hideNameOnMobile />
     </div>
 
     <div class="flex-1 min-h-0 px-12 py-8">

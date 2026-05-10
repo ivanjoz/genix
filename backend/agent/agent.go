@@ -76,3 +76,22 @@ func InvokeRaw(ctx context.Context, handleID int, method string, args []any) (js
 	err := request(ctx, CmdAgentInvoke, InvokePayload{HandleID: handleID, Method: method, Args: args}, &raw)
 	return raw, err
 }
+
+// GetMenu returns the side-menu structure (groups + accessible options) from
+// the connected browser. Used by GET /agent?get=menu to surface routes
+// without leaking the menu DOM into the page snapshot.
+func GetMenu(ctx context.Context) ([]AgentMenuGroup, error) {
+	ctx, cancel := ctxWithDefault(ctx)
+	defer cancel()
+	var out []AgentMenuGroup
+	err := request(ctx, CmdGetMenu, nil, &out)
+	return out, err
+}
+
+// Navigate asks the browser to change the SPA route. Used by the `navigate`
+// action so agents can move between pages by passing a route from GetMenu.
+func Navigate(ctx context.Context, route string) error {
+	ctx, cancel := ctxWithDefault(ctx)
+	defer cancel()
+	return request(ctx, CmdNavigate, NavigatePayload{Route: route}, nil)
+}

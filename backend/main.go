@@ -236,6 +236,8 @@ func main() {
 		// HTTP entrypoint for external LLM agents (Claude Code / Gemini): batch
 		// actions in, post-action page snapshot out. Local-only.
 		mux.HandleFunc("POST /agent", agent.HandleAgentHTTP)
+		// GET /agent serves read-only side-channel queries (currently `?get=menu`).
+		mux.HandleFunc("GET /agent", agent.HandleAgentGet)
 		mux.Handle("/", corsMiddleware.Handler(http.HandlerFunc(LocalHandler)))
 
 		// Inicia el servidor con timeouts (previene slowloris y mejora resiliencia).

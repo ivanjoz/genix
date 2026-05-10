@@ -8,7 +8,9 @@ import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import { Core } from '$core/store.svelte';
 import { getStaticRecordsByID } from '$libs/cache/cache-by-ids.svelte';
-import { formatN, Loading, Notify, throttle } from '$libs/helpers';
+import { formatN, Loading, Notify } from '$libs/helpers';
+import FilterInput from '$components/form/FilterInput.svelte';
+import Button from '$components/buttons/Button.svelte';
 import { untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import { ProductosService } from '../../negocio/productos/productos.svelte';
@@ -889,24 +891,16 @@ let rerenderHandler: ((() => void) | undefined) = undefined
 
   <div class="col-span-10 md:col-span-5 md:order-3 min-w-0 flex justify-end gap-8 md:ml-auto">
     {#if stockFilters.warehouseID > 0}
-      <button class="bx-blue shrink-0" onclick={() => {
-        guardarRegistros()
-      }}>
-        <i class="icon-floppy"></i>Guardar
-      </button>
+      <Button color="blue" icon="icon-floppy" name="Guardar" css="shrink-0"
+        onClick={guardarRegistros} />
     {/if}
   </div>
 
   {#if !stockFilters.warehouseID}
     <div class="col-span-24 text-red-500"><i class="icon-attention"></i>Debe seleccionar un almacén.</div>
   {:else}
-    <div class="col-span-12 md:col-span-4 md:order-1 min-w-0 i-search w-full md:w-180">
-      <div><i class="icon-search"></i></div>
-      <input type="text" onkeyup={(event) => {
-        const value = String((event.target as HTMLInputElement).value || '')
-        throttle(() => { stockFilterText = value }, 150)
-      }}>
-    </div>
+    <FilterInput bind:value={stockFilterText}
+      css="col-span-12 md:col-span-4 md:order-1 min-w-0 w-full md:w-180" />
     <Checkbox label="Todos los Productos" bind:saveOn={stockFilters} save="showTodosProductos"
       css="col-span-12 md:col-span-5 md:order-2 min-w-0 self-center" />
   {/if}

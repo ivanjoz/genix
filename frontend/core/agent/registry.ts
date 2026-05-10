@@ -40,6 +40,7 @@ export interface AgentMethodMap {
   setValueChild?: (childID: number | string, value: string | number) => void;
   searchChild?: (childID: number | string, text: string) => void;
   getOptionsChild?: (childID: number | string, max?: number) => AgentOption[];
+  clickChild?: (childID: number | string) => void;
 }
 
 export type AgentMethodName = keyof AgentMethodMap;
@@ -58,6 +59,7 @@ const AGENT_METHOD_NAMES: AgentMethodName[] = [
   "setValueChild",
   "searchChild",
   "getOptionsChild",
+  "clickChild",
 ];
 
 export interface AgentHandle extends AgentMethodMap {

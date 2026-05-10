@@ -6,7 +6,9 @@
   import type { ITableColumn } from '$components/vTable/types'
   import { Core } from '$core/store.svelte'
   import Page from '$domain/Page.svelte'
-  import { Loading, Notify, formatTime, throttle } from '$libs/helpers'
+  import { Loading, Notify, formatTime } from '$libs/helpers'
+  import FilterInput from '$components/form/FilterInput.svelte'
+  import Button from '$components/buttons/Button.svelte'
   import { PaisCiudadesService } from '../sedes-almacenes/sedes-almacenes.svelte'
   import { ClientProviderService, PersonType, postClientProviders, type IClientProvider } from './clientes-proveedores.svelte'
 
@@ -217,30 +219,15 @@
   <Layer type="content">
     <div class="w-full">
       <div class="mb-6 flex items-center justify-between">
-        <div class="i-search mr-16 w-320 max-w-full">
-          <div><i class="icon-search"></i></div>
-          <input class="w-full" autocomplete="off" type="text" placeholder="Buscar por nombre, email o registro"
-            onkeyup={(event) => {
-              event.stopPropagation()
-              throttle(() => {
-                filterText = ((event.target as HTMLInputElement).value || '').toLowerCase().trim()
-              }, 150)
-            }}
-          />
-        </div>
+        <FilterInput bind:value={filterText} placeholder="Buscar por nombre, email o registro"
+          css="mr-16 w-320 max-w-full" />
         <div class="flex items-center">
           <div class="h6 ff-bold pr-8 text-slate-500">
             {filteredClientProviders.length} registros
           </div>
-          <button class="bx-green"
-            aria-label={`Crear ${layerTitleSingular.toLowerCase()}`}
-            onclick={(event) => {
-              event.stopPropagation()
-              openCreateClientProviderLayer()
-            }}
-          >
-            <i class="icon-plus"></i><span class="hidden md:block">Nuevo</span>
-          </button>
+          <Button color="green" icon="icon-plus" name="Nuevo" hideNameOnMobile
+            label={`Crear ${layerTitleSingular.toLowerCase()}`}
+            onClick={openCreateClientProviderLayer} />
         </div>
       </div>
 

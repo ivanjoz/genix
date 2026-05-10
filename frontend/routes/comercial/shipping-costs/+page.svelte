@@ -3,6 +3,7 @@
   import Input from '$components/form/Input.svelte'
   import LayerStatic from '$components/layers/LayerStatic.svelte'
   import FilterInput from '$components/form/FilterInput.svelte'
+  import Button from '$components/buttons/Button.svelte'
   import TableTree, { type TableTreeNode } from '$components/vTable/TableTree.svelte'
   import type { ITableColumn } from '$components/vTable/types'
   import Page from '$domain/Page.svelte'
@@ -360,14 +361,8 @@
           icon="icon-search"
           css="w-240"
         />
-        <button
-          type="button"
-          class="bx-purple"
-          onclick={saveDeliveryCosts}
-        >
-       		<i class="icon-floppy"></i>
-          Guardar
-        </button>
+        <Button color="purple" icon="icon-floppy" name="Guardar"
+          onClick={saveDeliveryCosts} />
       </div>
       <div class="flex-1 min-h-0 overflow-auto">
         <div class="grid grid-cols-2 gap-8">

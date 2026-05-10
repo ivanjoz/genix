@@ -69,9 +69,9 @@ on its children:
 |---|---|
 | `data-id="<Type>:<id>"` | identifies a registered handle |
 | `data-id="Option:<id>"` | a selectable option / chip / step inside a component |
-| `data-id="TableRow:<id>"` | a selectable table row (no handle of its own — owned by the parent `Table`) |
+| `data-id="TableRow:<tableID>:<rowID>"` | a selectable table row (no handle of its own — owned by the parent `Table`); the composite id is what the agent passes back to `Table.select` |
 | `data-id="Button:<id>"` | a clickable command button (auto-registered with a `click` method) |
-| `data-id="MenuHeader:<menuId>"` | a side-menu group header (collapses/expands its options — no handle, the agent reads the open state from `aria-expanded`) |
+| `data-menu-root="true"` | marks the side-menu DOM (desktop nav + mobile drawer); the backend parser drops these subtrees from the agent snapshot — agents read the menu via `GET /agent?get=menu` and move via the `navigate` action |
 | `data-value="…"` | current value of the component (always present on inputs/selects, even when the value is also rendered visibly — keeps the agent's read path uniform) |
 | `data-label="…"` | label or placeholder for input-style components (`Input`, `SearchSelect`, `DateInput`) — `label || placeholder || ""`. Saves the agent walking to the inner `<label>` / `placeholder`. |
 | `data-type="text\|number\|other"` | input kind for input-style components: `"number"` for numeric inputs, `"text"` for free-text inputs, `"other"` for everything else (selects, dates, colors, …). |
@@ -145,38 +145,40 @@ Pure-display, infrastructural, or trivially composed components don't register:
 | `Modal` | `Modal` | header save/delete/close as `Button:<id>` with `data-value="save"\|"delete"\|"close"` | `close` |
 | `TopLayerSelector` | `TopLayerSelector` | each option as `Option:<id>` | `search`, `select`, `close` |
 | `TopLayerDatePicker` | `TopLayerDatePicker` | root has `data-value="YYYY-MM-DD"` | `setValue`, `close` |
-| `vTable/VTable` | `Table` | each selectable row as `TableRow:<id>`, with `data-selected="true"` on the active one | `select(...ids)` |
-| `vTable/TableGrid` | `Table` | same as `VTable` | `select(...ids)` |
-| `vTable/TableTree` | `Table` | same | `select(...ids)` |
-| `vTable/TableStream` | `Table` | same | `select(...ids)` |
-| `vTable/MobileCardsVirtualList` | `Table` | same | `select(...ids)` |
-| `vTable/CellInput` | (no own handle) | rendered inside its parent `Table`. Root has `data-id="<tableID>:<cellID>"`, `data-cell-type="CellInput"`, `data-value`, `data-label`, `data-type`. Methods are reached on the parent `Table` handle. | `setValueChild` (via Table) |
-| `vTable/CellSelect` | (no own handle) | rendered inside its parent `Table`. Root has `data-id="<tableID>:<cellID>"`, `data-cell-type="CellSelect"`, `data-value="[id] text"`. | `searchChild`, `select`, `getOptionsChild` (via Table) |
+| `vTable/VTable` | `Table` | each selectable row as `TableRow:<tableID>:<rowID>`, with `data-selected="true"` on the active one. Rows expose `methods="select"`. | (none on the Table tag — methods live on the rows/cells) |
+| `vTable/TableGrid` | `Table` | same as `VTable` | (same) |
+| `vTable/TableTree` | `Table` | same | (same) |
+| `vTable/TableStream` | `Table` | same | (same) |
+| `vTable/MobileCardsVirtualList` | `CardList` | same row/cell shape as `VTable`, with the parent type `CardList` instead of `Table`. Container root has `data-id="CardList:<componentID>"`. | (none on the CardList tag — methods live on the rows/cells) |
+| `vTable/CellInput` | (no own handle) | rendered inside its parent `Table` or `CardList`. Root has `data-id="<parentID>:<cellID>"`, `data-cell-type="CellInput"`, `data-value`, `data-label`, `data-type`, `methods="setValue"`. The agent calls `setValue` on the cell id; the bridge rewrites it to the parent's `setValueChild`. | `setValue` (via parent) |
+| `vTable/CellSelect` | (no own handle) | rendered inside its parent `Table` or `CardList`. Root has `data-id="<parentID>:<cellID>"`, `data-cell-type="CellSelect"`, `data-value="[id] text"`, `methods="search,select,getOptions"`. | `search`, `select`, `getOptions` (via parent) |
 
 ### Table-level cell routing
 
-`Table` is the only registered handle for the table; cells (`CellInput`,
-`CellSelect`) live underneath as `<tableID>:<cellID>` composite ids. The
-table exposes distinct method names for cell-routed calls (`*Child`) so the
-caller never has to guess whether a verb is acting on the table or on one of
-its cells. `select` is the one shared verb because the id alone disambiguates
-rows (multiples of 100) from cells (anything else):
+`Table` (and `CardList`) is the only registered handle for the container;
+rows and cells (`CellInput`, `CellSelect`, `CellClick`) live underneath
+with composite ids `<parentID>:<rowID>` and `<parentID>:<cellID>`. The
+container itself doesn't advertise any methods — the agent reads them off
+the row/cell tags and calls them with the composite id. The bridge handles
+the rest:
 
-| Call | Routing |
+| Call (from the agent) | Routing |
 |---|---|
-| `select(rowID, …)` | every arg is a row id (`rowIndex * 100`); each one selects/toggles its row. |
-| `select(cellID, …optionIds)` | first arg is a cell id; remaining args go to that cell's `select`. |
-| `setValueChild(cellID, value)` | forwarded to the cell's `setValue`. |
-| `searchChild(cellID, text)` | forwarded to the cell's `search`. |
-| `getOptionsChild(cellID, max?)` | forwarded to the cell's `getOptions`. |
+| `select("<table>:<rowID>")` | row id (multiple of 100) → toggles/selects that row. |
+| `select("<table>:<cellID>", …optionIds)` | non-multiple-of-100 → forwarded to that cell's `select`. |
+| `setValue("<table>:<cellID>", value)` | bridge rewrites to `Table.setValueChild(cellID, value)` → cell's `setValue`. |
+| `search("<table>:<cellID>", text)` | bridge → `Table.searchChild` → cell's `search`. |
+| `getOptions("<table>:<cellID>", max?)` | bridge → `Table.getOptionsChild` → cell's `getOptions`. |
 
-Row ids are `rowIndex * 100`; cell ids are `rowID + columnIndex + 1` (column
-position is 1-based so cells never collide with rows). Cap of ~99 cells per
-row.
+Row ids are `(rowIndex + 1) * 100` (the lowest row id is `100`, never `0`).
+Cell ids are `rowID + columnIndex + 1` so the column slot is 1-based and
+cells never collide with rows. Cap of ~99 cells per row.
 | `Renderer` | `Renderer` | each rendered button as `Button:<id>` | — (buttons register their own `click`) |
-| `domain-components/SideMenu` | `MenuOption` (per leaf option) | menu group toggles as `MenuHeader:<menuId>` markers; each option as its own `MenuOption:<id>` registered handle with `data-label="<option name>"` and `data-value="<route>"` | `click` |
+| `domain-components/SideMenu` | — (DOM only) | side-menu wrappers carry `data-menu-root="true"` so the parser drops them; agents fetch the menu via `GET /agent?get=menu` and move with the `navigate` action | `navigate` (global, not on a handle) |
 
 `TableRow` is markup only — it doesn't register a handle. All row interaction
-goes through the parent `Table`'s `select(...ids)`. All five table variants
-collapse to the single `type: "Table"` so the agent doesn't need to know the
-difference.
+goes through the parent's `select(...ids)`. The four desktop table variants
+(`VTable`, `TableGrid`, `TableTree`, `TableStream`) register as `type: "Table"`;
+`MobileCardsVirtualList` (and the cards rendered through `CardsList`) registers
+as `type: "CardList"`. The cell-routing semantics are identical between the
+two.

@@ -2,7 +2,9 @@
 import Page from '$domain/Page.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { formatTime, throttle } from '$libs/helpers';
+import { formatTime } from '$libs/helpers';
+import FilterInput from '$components/form/FilterInput.svelte';
+import Button from '$components/buttons/Button.svelte';
 import {
   CronActionsService,
   type ICronActionTableRow,
@@ -105,19 +107,9 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
 <Page title="Cron Actions">
   <div class="h-full">
     <div class="flex items-center justify-between mb-6 gap-12">
-      <div class="i-search w-320">
-        <div><i class="icon-search"></i></div>
-        <input class="w-full" autocomplete="off" type="text" onkeyup={(event) => {
-          event.stopPropagation()
-          throttle(() => {
-            filterText = ((event.target as HTMLInputElement).value || "").toLowerCase().trim()
-          }, 150)
-        }}>
-      </div>
-
-      <button class="bx-blue" onclick={() => { cronActionsService.fetchOnline() }}>
-        Recargar <i class="icon-rotate-right"></i>
-      </button>
+      <FilterInput bind:value={filterText} css="w-320" />
+      <Button color="blue" name="Recargar" icon="icon-rotate-right"
+        onClick={() => cronActionsService.fetchOnline()} />
     </div>
 
     <VTable

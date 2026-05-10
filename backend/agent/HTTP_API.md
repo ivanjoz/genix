@@ -8,10 +8,11 @@ internally, then returns a fresh page snapshot in the same response.
 For the in-page registry / DOM contract, see
 [`frontend/ui-components/AGENTIC_COMPONENTS.md`](../../frontend/ui-components/AGENTIC_COMPONENTS.md).
 
-## Endpoint
+## Endpoints
 
 ```
-POST http://localhost:3589/agent
+POST http://localhost:3589/agent          # run actions, return post-action snapshot
+GET  http://localhost:3589/agent?get=menu # read-only menu structure
 Content-Type: application/json
 ```
 
@@ -23,9 +24,11 @@ browser tab (the dev page that opens a WebSocket to `/ws/agent`).
 ```json
 {
   "Actions": [
-    { "ID": "58",      "Method": "select",   "Args": [235] },
-    { "ID": "58:235",  "Method": "remove",   "Args": [] },
-    { "ID": "60",      "Method": "setValue", "Args": ["Hello"] }
+    { "ID": "58",       "Method": "select",   "Args": [235] },
+    { "ID": "58:235",   "Method": "remove",   "Args": [] },
+    { "ID": "60",       "Method": "setValue", "Args": ["Hello"] },
+    { "ID": "38:101",   "Method": "setValue", "Args": ["3"] },
+    { "ID": "38:100",   "Method": "select",   "Args": [] }
   ]
 }
 ```
@@ -49,17 +52,24 @@ The HTML snapshot tags every component with an `id` attribute:
   <Option id="58:235" selected methods="remove">Zumos</Option>
 </SearchCard>
 <Input id="60" label="Nombre" methods="setValue"/>
-<CellInput id="7:12" value="3" type="number"/>
+<Table id="38">
+  <TableRow id="38:100" methods="select"> … </TableRow>
+  <CellInput id="38:101" value="3" type="number" methods="setValue"/>
+</Table>
 ```
 
 - **Plain** (`"58"`): the action targets handle 58 directly.
-- **Composite** (`"58:235"`, `"7:12"`): the first segment is the parent handle.
-  The server splits the id, calls the parent's method, and **prepends the full
-  composite id as `Args[0]`** so the handle's implementation can route by
-  child. Examples:
-  - `{ID:"58:235", Method:"remove"}` → `SearchCard(58).remove("58:235")`
-  - `{ID:"7:12", Method:"setValueChild", Args:["Hello"]}` →
-    `Table(7).setValueChild("7:12", "Hello")`
+- **Composite** (`"58:235"`, `"38:101"`): the first segment is the parent
+  handle. The server splits the id and routes the call to the parent. Two
+  forms exist:
+  - **Cell routing** — for `setValue` / `search` / `getOptions` the server
+    rewrites the call to the parent's `*Child` variant and passes the bare
+    child id (no prefix). Example: `{ID:"38:101", Method:"setValue",
+    Args:["Hello"]}` → `Table(38).setValueChild(101, "Hello")`.
+  - **Pass-through** — every other method receives the full composite id as
+    `Args[0]` so the handle can split it itself. Examples:
+    `{ID:"58:235", Method:"remove"}` → `SearchCard(58).remove("58:235")`,
+    `{ID:"38:100", Method:"select"}` → `Table(38).select("38:100")`.
 
 ## Response
 
@@ -108,21 +118,74 @@ The available methods come from `frontend/core/agent/registry.ts` —
 `AgentMethodMap`. Each component advertises only the subset it implements via
 its `methods="..."` HTML attribute. Common ones:
 
-| Method            | Args                       | Used by                        |
-| ----------------- | -------------------------- | ------------------------------ |
-| `setValue`        | `(value)`                  | `Input`                        |
-| `search`          | `(text)`                   | `SearchSelect`, `SearchBox`    |
-| `select`          | `(...ids)`                 | `SearchSelect`, `SearchCard`   |
-| `remove`          | `(id)` (composite ok)      | `SearchCard` (Option marker)   |
-| `getOptions`      | `(max?)` → `AgentOption[]` | `SearchSelect`, `SearchCard`   |
-| `click`           | `()`                       | `Button` markers, `ButtonLayer`|
-| `open` / `close`  | `()`                       | `Layer`, `Modal`               |
-| `setValueChild`   | `(childID, value)`         | `Table` → cell                 |
-| `searchChild`     | `(childID, text)`          | `Table` → cell                 |
-| `getOptionsChild` | `(childID, max?)`          | `Table` → cell                 |
+| Method           | Args                       | Used by                                         |
+| ---------------- | -------------------------- | ----------------------------------------------- |
+| `setValue`       | `(value)`                  | `Input`, `CellInput` (composite id)             |
+| `search`         | `(text)`                   | `SearchSelect`, `SearchBox`, `CellSelect`       |
+| `select`         | `(...ids)`                 | `SearchSelect`, `SearchCard`, `Table`/row/cell  |
+| `remove`         | `(id)` (composite ok)      | `SearchCard` (Option marker)                    |
+| `getOptions`     | `(max?)` → `AgentOption[]` | `SearchSelect`, `SearchCard`, `CellSelect`      |
+| `click`          | `()`                       | `Button` markers, `ButtonLayer`                 |
+| `open` / `close` | `()`                       | `Layer`, `Modal`                                |
+| `navigate`       | `(route)`                  | global (no `ID`); calls `goto(route)` in the SPA — see "Navigate action" below |
 
-When the server splits a composite id, the `childID` arg is supplied
-automatically — you only pass the trailing args.
+For cell calls (composite id, `setValue`/`search`/`getOptions`) the server
+strips the parent prefix and rewrites the method to the table's `*Child`
+variant — callers always use the bare verb that appears in the cell's
+`methods="..."` attribute.
+
+### Navigate action
+
+The side-menu DOM is hidden from the page snapshot — agents read the menu via
+`GET /agent?get=menu` (below) and move between pages with a global `navigate`
+action that takes a route. There is no `ID` because the action is page-level,
+not bound to a handle:
+
+```json
+{
+  "Actions": [
+    { "Method": "navigate", "Args": ["/comercial/sale_order_create"] }
+  ]
+}
+```
+
+After the route change the same response shape applies: the post-action
+`Page` snapshot reflects the new page.
+
+### GET /agent?get=menu
+
+Returns the current user's accessible side-menu (same access filter as the
+visual menu). Use it to discover routes before issuing a `navigate` action.
+
+```bash
+curl -s 'http://localhost:3589/agent?get=menu' | jq
+```
+
+```json
+{
+  "Menu": [
+    {
+      "ID": 1,
+      "Name": "CONFIGURACIÓN",
+      "Options": [
+        { "Name": "Mi Empresa",  "Route": "/configuracion/parametros" },
+        { "Name": "Usuarios",    "Route": "/seguridad/usuarios" }
+      ]
+    },
+    {
+      "ID": 4,
+      "Name": "Logística",
+      "Options": [
+        { "Name": "Cambios Stock",     "Route": "/logistica/products-stock" },
+        { "Name": "Gestión de Compras","Route": "/logistica/gestion-compras" }
+      ]
+    }
+  ]
+}
+```
+
+Groups with no accessible options are omitted. Status codes mirror POST
+(`503` if no browser is connected, `502` if the browser RPC fails).
 
 ## Example workflow
 
@@ -148,6 +211,12 @@ curl -s -X POST http://localhost:3589/agent \
 curl -s -X POST http://localhost:3589/agent \
   -H 'Content-Type: application/json' \
   -d '{ "Actions": [ { "ID": "58:235", "Method": "remove" } ] }' | jq .
+
+# 4. Discover the menu, then navigate to a page from it
+curl -s 'http://localhost:3589/agent?get=menu' | jq '.Menu[].Options'
+curl -s -X POST http://localhost:3589/agent \
+  -H 'Content-Type: application/json' \
+  -d '{ "Actions": [ { "Method": "navigate", "Args": ["/comercial/sale_order_create"] } ] }' | jq .Results
 ```
 
 ## Implementation pointers

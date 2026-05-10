@@ -4,7 +4,8 @@
   import HighlightText from '$components/misc/HighlightText.svelte'
   import VirtualCards from '$components/misc/VirtualCards.svelte'
   import { FechaHelper } from '$libs/fecha'
-  import { formatN, formatTime, wordInclude, throttle } from '$libs/helpers'
+  import { formatN, formatTime, wordInclude } from '$libs/helpers'
+  import FilterInput from '$components/form/FilterInput.svelte'
   import type { IProducto } from '$routes/negocio/productos/productos.svelte'
   import type { ISaleSummaryRecord } from './sale_orders_charts.svelte'
 
@@ -206,15 +207,7 @@
     keyName={'Nombre'}
     type="single"
   />
-  <div class="i-search mr-auto w-200">
-    <div><i class="icon-search"></i></div>
-    <input class="w-full" autocomplete="off" type="text" onkeyup={ev => {
-      ev.stopPropagation()
-      throttle(() => {
-        filterText = ((ev.target as HTMLInputElement).value || '').toLowerCase().trim()
-      }, 150)
-    }}>
-  </div>
+  <FilterInput bind:value={filterText} css="mr-auto w-200" />
   <div class="flex items-center gap-12 text-[13px] text-slate-600">
     <div>{filteredProductChartCards.length} productos</div>
     <div>{TOTAL_DAYS_TO_RENDER} días</div>

@@ -44,6 +44,7 @@ func ParsePageHTML(input string, components []AgentComponentInfo) (string, error
 	}
 
 	dropNoise(root)
+	dropMenu(root)
 	cleanAttributes(root)
 	for {
 		removed := removeEmptyElements(root, cm)
@@ -75,6 +76,24 @@ func findElement(n *html.Node, tag string) *html.Node {
 		}
 	}
 	return nil
+}
+
+// dropMenu removes the side-menu DOM (desktop nav + mobile drawer) from the
+// snapshot. The menu structure is exposed separately via GET /agent?get=menu
+// so leaving it in the HTML would only repeat the same routes the agent
+// already has access to via that endpoint. The frontend marks both root
+// elements with `data-menu-root`.
+func dropMenu(n *html.Node) {
+	c := n.FirstChild
+	for c != nil {
+		next := c.NextSibling
+		if c.Type == html.ElementNode && nodeAttr(c, "data-menu-root") != "" {
+			n.RemoveChild(c)
+		} else {
+			dropMenu(c)
+		}
+		c = next
+	}
 }
 
 func dropNoise(n *html.Node) {
@@ -152,17 +171,46 @@ func componentDataID(n *html.Node, cm map[string]AgentComponentInfo) string {
 // handle of their own but should still be rendered as compact tags inside
 // their parent (e.g. options inside a SearchCard, rows inside a Table).
 var markerComponentTypes = map[string]bool{
-	"Option":     true,
-	"TableRow":   true,
-	"Button":     true,
-	"MenuHeader": true,
+	"Option":   true,
+	"TableRow": true,
+	"Button":   true,
 }
 
 // markerMethods lists the comma-separated method names available on each
 // marker type, so the agent knows how to interact with them.
+//
+// TableRow's "select" surfaces the parent Table's row-click handler — the
+// table is the only registered handle, but the agent addresses individual
+// rows by their composite "<tableID>:<rowID>" id.
 var markerMethods = map[string]string{
-	"Option": "remove",
-	"Button": "click",
+	"Option":   "remove",
+	"Button":   "click",
+	"TableRow": "select",
+}
+
+// cellMethods lists the methods exposed on each cell type. The Table is the
+// sole registered handle and routes these calls to the cell via its own
+// setValueChild / searchChild / getOptionsChild internals; the bridge in
+// http.go::resolveTarget rewrites setValue/search/getOptions on a composite
+// id back to the *Child variant before invoking the table.
+var cellMethods = map[string]string{
+	"CellInput":  "setValue",
+	"CellSelect": "search,select,getOptions",
+	// CellClick lives on a <td>/<th> directly (not on an inner div), so the
+	// rendering path keeps the cell tag and stamps id/methods on it. The
+	// column position the cell occupies is preserved.
+	"CellClick": "click",
+}
+
+// suppressedTableMethods are emitted on the cells/rows of a Table instead of
+// on the Table element itself — surfacing them on the parent would mislead
+// the agent into calling them with a child-relative id and no parent prefix.
+var suppressedTableMethods = map[string]bool{
+	"select":          true,
+	"setValueChild":   true,
+	"searchChild":     true,
+	"getOptionsChild": true,
+	"clickChild":      true,
 }
 
 // markerComponentType returns the marker type ("Option", "TableRow", "Button")
@@ -185,10 +233,10 @@ func markerComponentType(n *html.Node) string {
 
 // cellComponentType returns the cell type ("CellInput" / "CellSelect")
 // for an element whose data-id is "<tableID>:<cellID>" pointing to a
-// registered Table component. Cells don't have a registry handle of their
-// own; the parent Table is the agent handle and dispatches by cellID. The
-// type is read from the `data-cell-type` attribute the cell stamps on its
-// root.
+// registered Table or CardList component. Cells don't have a registry
+// handle of their own; the parent container is the agent handle and
+// dispatches by cellID. The type is read from the `data-cell-type`
+// attribute the cell stamps on its root.
 func cellComponentType(n *html.Node, cm map[string]AgentComponentInfo) string {
 	dataID := nodeDataID(n)
 	if dataID == "" {
@@ -200,7 +248,9 @@ func cellComponentType(n *html.Node, cm map[string]AgentComponentInfo) string {
 	}
 	tablePart := dataID[:colon]
 	if _, ok := cm["Table:"+tablePart]; !ok {
-		return ""
+		if _, ok := cm["CardList:"+tablePart]; !ok {
+			return ""
+		}
 	}
 	return nodeAttr(n, "data-cell-type")
 }
@@ -272,7 +322,12 @@ func removeEmptyElements(n *html.Node, cm map[string]AgentComponentInfo) bool {
 			if removeEmptyElements(c, cm) {
 				changed = true
 			}
-			if !isProtectedShell(c) && !hasTextDescendant(c, cm) {
+			// Table cells (<td>/<th>, plus ARIA gridcell/columnheader) are
+			// structural: their position in the row defines the column, so an
+			// empty cell still carries meaning when its siblings are populated.
+			// Whole-empty rows are still pruned because the parent <tr> then
+			// has no text descendants and gets dropped on its own pass.
+			if !isProtectedShell(c) && !isCellElement(c) && !hasTextDescendant(c, cm) {
 				n.RemoveChild(c)
 				changed = true
 			}
@@ -373,7 +428,11 @@ func renderIndented(buf *bytes.Buffer, n *html.Node, depth int, cm map[string]Ag
 				renderMarker(buf, indent, n, depth, cm)
 				return
 			}
-			if cellType := cellComponentType(n, cm); cellType != "" {
+			// Inner-div cells (CellInput / CellSelect) collapse to a self-
+			// closing tag. Cells whose hit-target is the <td>/<th> itself
+			// (CellClick) keep the cell tag and pick up id/methods further
+			// below so the column position stays visible.
+			if cellType := cellComponentType(n, cm); cellType != "" && !isCellElement(n) {
 				renderCell(buf, indent, cellType, dataID, n)
 				return
 			}
@@ -388,10 +447,27 @@ func renderIndented(buf *bytes.Buffer, n *html.Node, depth int, cm map[string]Ag
 				directText.WriteString(c.Data)
 			}
 		}
+		agentCellID, agentCellMethods := agentCellAttrsForElement(n, cm)
 		buf.WriteString(indent)
 		buf.WriteByte('<')
 		buf.WriteString(n.Data)
+		if agentCellID != "" {
+			buf.WriteString(` id="`)
+			buf.WriteString(html.EscapeString(agentCellID))
+			buf.WriteByte('"')
+			if agentCellMethods != "" {
+				buf.WriteString(` methods="`)
+				buf.WriteString(agentCellMethods)
+				buf.WriteByte('"')
+			}
+		}
 		for _, attr := range n.Attr {
+			// data-id / data-cell-type are emitted as the agent-facing id /
+			// methods on cell-on-td elements; skip the raw form so we don't
+			// print both.
+			if agentCellID != "" && (attr.Key == "data-id" || attr.Key == "data-cell-type") {
+				continue
+			}
 			buf.WriteByte(' ')
 			buf.WriteString(attr.Key)
 			buf.WriteString(`="`)
@@ -472,9 +548,21 @@ func renderComponent(buf *bytes.Buffer, indent, dataID string, c AgentComponentI
 		buf.WriteString(html.EscapeString(value))
 		buf.WriteByte('"')
 	}
-	if len(c.Methods) > 0 {
+	methods := c.Methods
+	if typ == "Table" || typ == "CardList" {
+		// Table/CardList row/cell-routing methods belong on the inner TableRow /
+		// cell tags, not on the container itself. Drop them here.
+		filtered := methods[:0:0]
+		for _, m := range methods {
+			if !suppressedTableMethods[m] {
+				filtered = append(filtered, m)
+			}
+		}
+		methods = filtered
+	}
+	if len(methods) > 0 {
 		buf.WriteString(` methods="`)
-		buf.WriteString(html.EscapeString(strings.Join(c.Methods, ",")))
+		buf.WriteString(html.EscapeString(strings.Join(methods, ",")))
 		buf.WriteByte('"')
 	}
 
@@ -589,6 +677,25 @@ func renderMarker(buf *bytes.Buffer, indent string, n *html.Node, depth int, cm 
 	buf.WriteString(">\n")
 }
 
+// agentCellAttrsForElement returns the id/methods attrs to print for a
+// cell-on-td (CellClick): a <td>/<th> whose `data-cell-type` matches an
+// entry in cellMethods and whose parent Table is registered. Returns empty
+// strings for any other element.
+func agentCellAttrsForElement(n *html.Node, cm map[string]AgentComponentInfo) (id, methods string) {
+	if !isCellElement(n) {
+		return "", ""
+	}
+	cellType := cellComponentType(n, cm)
+	if cellType == "" {
+		return "", ""
+	}
+	m, ok := cellMethods[cellType]
+	if !ok {
+		return "", ""
+	}
+	return nodeDataID(n), m
+}
+
 // isCellElement reports whether n is treated as a table cell for the
 // inline-fold logic: a native <td>/<th> or any element carrying the
 // equivalent ARIA role ("cell", "columnheader", "rowheader", "gridcell").
@@ -661,6 +768,11 @@ func renderCell(buf *bytes.Buffer, indent, typ, dataID string, n *html.Node) {
 	if dataType != "" && dataType != "other" {
 		buf.WriteString(` type="`)
 		buf.WriteString(html.EscapeString(dataType))
+		buf.WriteByte('"')
+	}
+	if methods := cellMethods[typ]; methods != "" {
+		buf.WriteString(` methods="`)
+		buf.WriteString(methods)
 		buf.WriteByte('"')
 	}
 	buf.WriteString("/>\n")

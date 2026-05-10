@@ -2,7 +2,16 @@
   import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte';
   import CellInput from '$components/vTable/CellInput.svelte';
   import CellSelect from '$components/vTable/CellSelect.svelte';
-  import { buildCellID } from '$components/vTable/agentContext';
+  import {
+    buildCellID,
+    buildRowID,
+    parseChildID,
+    rowIndexFromRowID,
+    setVTableAgentContext,
+    type CellAgentMethods,
+  } from '$components/vTable/agentContext';
+  import { Agent } from '$core/agent/registry';
+  import { Env } from '$core/env';
   import { highlString, splitTwoStrings } from '$libs/helpers';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import { SvelteMap } from 'svelte/reactivity';
@@ -154,8 +163,8 @@
     return isSelected(record, selected);
   }
 
-  function handleRowClick(record: TRecord, index: number) {
-    onRowClick?.(record, index, () => rerenderRow(index));
+  function handleRowClick(record: TRecord, recordIndex: number, sourceIndex: number) {
+    onRowClick?.(record, recordIndex, () => rerenderRow(sourceIndex));
   }
 
   function buildSelectorId(cell: TCell, rowIndex: number, cellIndex: number): string {
@@ -184,17 +193,17 @@
   }
 
   // Route tap/keyboard activation to the same callback contract used by desktop table cells.
-  function handleCellClick(event: MouseEvent, cell: TCell, record: TRecord, index: number) {
-    if (!cell.onCellClick || isCellInteractionDisabled(cell, record, index)) {
+  function handleCellClick(event: MouseEvent, cell: TCell, record: TRecord, recordIndex: number, sourceIndex: number) {
+    if (!cell.onCellClick || isCellInteractionDisabled(cell, record, recordIndex)) {
       return;
     }
     event.stopPropagation();
     logInteraction('onCellClick', {
-      rowIndex: index,
+      rowIndex: recordIndex,
       cellId: cell.id,
       field: cell.field,
     });
-    cell.onCellClick(record, index, () => rerenderRow(index));
+    cell.onCellClick(record, recordIndex, () => rerenderRow(sourceIndex));
   }
 
   function logInteraction(eventName: string, payload: Record<string, unknown>) {
@@ -207,8 +216,99 @@
     }
     return splitTwoStrings(content, splitString);
   }
+
+  const componentID = Env.getComponentID();
+
+  // Cells (CellInput / CellSelect) hand their methods here keyed by cellID.
+  // The CardList is the only agent handle; methods route by id.
+  const cellRegistry = new Map<number, CellAgentMethods>();
+
+  setVTableAgentContext({
+    tableID: componentID,
+    registerCell: (cellID, methods) => {
+      cellRegistry.set(cellID, methods);
+      return () => {
+        if (cellRegistry.get(cellID) === methods) { cellRegistry.delete(cellID); }
+      };
+    },
+  });
+
+  const hasInteractiveCell = $derived(
+    cells.some((cell) => cell.onCellEdit || cell.onCellSelect || cell.onCellClick),
+  );
+  const shouldRegisterCardList = $derived(Boolean(onRowClick) || hasInteractiveCell);
+
+  // Cells with a cell-level onCellClick aren't backed by a child component,
+  // so they don't go through cellRegistry. We resolve the cell from the
+  // cellID's column slot directly when the agent clicks.
+  const dispatchCellClick = (cellIDArg: number | string) => {
+    const cellID = parseChildID(cellIDArg);
+    if (!Number.isFinite(cellID) || cellID <= 0 || cellID % 100 === 0) { return; }
+    const sourceIndex = Math.floor((cellID - 1) / 100) - 1;
+    const cellIndex = (cellID - 1) % 100;
+    if (sourceIndex < 0 || sourceIndex >= data.length) { return; }
+    const cell = visibleCells[cellIndex];
+    if (!cell?.onCellClick) { return; }
+    const sourceRecord = data[sourceIndex];
+    if (!sourceRecord) { return; }
+    const recordIndex = getRecordListIndex(sourceRecord, sourceIndex);
+    const resolved = getResolvedRecord(sourceRecord, recordIndex) || sourceRecord;
+    if (cell.disableCellInteractions?.(resolved, recordIndex)) { return; }
+    cell.onCellClick(resolved, recordIndex, () => rerenderRow(sourceIndex));
+  };
+
+  // ids that are exact multiples of 100 are row ids; everything else is a cell
+  // id, and remaining args go to the cell's own select() (option ids).
+  const dispatchRowSelect = (rowID: number) => {
+    if (!onRowClick) { return; }
+    const sourceIndex = rowIndexFromRowID(rowID);
+    if (sourceIndex < 0 || sourceIndex >= data.length) { return; }
+    const sourceRecord = data[sourceIndex];
+    if (!sourceRecord) { return; }
+    const recordIndex = getRecordListIndex(sourceRecord, sourceIndex);
+    const resolved = getResolvedRecord(sourceRecord, recordIndex) || sourceRecord;
+    onRowClick(resolved, recordIndex, () => rerenderRow(sourceIndex));
+  };
+
+  $effect(() => {
+    if (!shouldRegisterCardList) { return; }
+    return Agent.register({
+      id: componentID,
+      type: "CardList",
+      label: "",
+      // The agent calls CardList methods with the composite id stripped down
+      // by the backend bridge (http.go::resolveTarget): "setValue('38:101', v)"
+      // arrives here as setValueChild(101, v). select() still receives the
+      // composite first arg because we need to disambiguate row vs cell from
+      // the id alone.
+      select: (...ids) => {
+        if (ids.length === 0) { return; }
+        const first = parseChildID(ids[0]);
+        if (Number.isFinite(first) && first % 100 === 0) {
+          for (const rid of ids) { dispatchRowSelect(parseChildID(rid)); }
+          return;
+        }
+        cellRegistry.get(first)?.select?.(...ids.slice(1));
+      },
+      setValueChild: (cellID, value) => {
+        cellRegistry.get(parseChildID(cellID))?.setValue?.(value);
+      },
+      searchChild: (cellID, text) => {
+        cellRegistry.get(parseChildID(cellID))?.search?.(String(text ?? ''));
+      },
+      getOptionsChild: (cellID, max) => {
+        return cellRegistry.get(parseChildID(cellID))?.getOptions?.(Number(max ?? 50)) ?? [];
+      },
+      clickChild: (cellID) => {
+        dispatchCellClick(cellID);
+      },
+    });
+  });
 </script>
 
+<div class="card-list-root"
+  data-id={shouldRegisterCardList ? `CardList:${componentID}` : undefined}
+>
 {#if data.length === 0}
   <div class="mobile-cards-empty-message">
     {emptyMessage}
@@ -225,22 +325,21 @@
       {@const recordIndex = getRecordListIndex(sourceRecord, sourceIndex)}
       {@const resolvedRecord = getResolvedRecord(sourceRecord, recordIndex)}
       {@const selectedCard = resolvedRecord ? isRowSelected(resolvedRecord) : false}
-      {@const cardId = (resolvedRecord as any)?.ID ?? recordIndex}
       <div
-        data-id={onRowClick ? `TableRow:${cardId}` : undefined}
+        data-id={onRowClick ? `TableRow:${componentID}:${buildRowID(sourceIndex)}` : undefined}
         data-selected={selectedCard ? "true" : undefined}
         class="mobile-cards-card mobile-cards-card-{variant} {cardCss}"
         class:mobile-cards-card-selected={showSelectedCard && selectedCard}
         role="button"
         tabindex="0"
-        onclick={() => resolvedRecord && handleRowClick(resolvedRecord, recordIndex)}
+        onclick={() => resolvedRecord && handleRowClick(resolvedRecord, recordIndex, sourceIndex)}
         onkeydown={(event) => {
           if (event.target !== event.currentTarget) {
             return;
           }
           if (resolvedRecord && (event.key === 'Enter' || event.key === ' ')) {
             event.preventDefault();
-            handleRowClick(resolvedRecord, recordIndex);
+            handleRowClick(resolvedRecord, recordIndex, sourceIndex);
           }
         }}
       >
@@ -264,12 +363,15 @@
             </button>
           {/if}
 
-          {@const rowVersion = rowVersions.get(recordIndex) || 0}
+          {@const rowVersion = rowVersions.get(sourceIndex) || 0}
           <div class="mobile-cards-grid mobile-cards-grid-{variant}">
             {#each visibleCells as cell, cellIndex (`${String(cell.id || cell.field || cellIndex)}_${filterText || ''}_${rowVersion}`)}
               {@const shouldRender = !cell.if || cell.if(resolvedRecord, recordIndex)}
               {#if shouldRender}
                 {@const cellData = getCellContent(cell, resolvedRecord, recordIndex)}
+                {@const cellInteractionsDisabled = isCellInteractionDisabled(cell, resolvedRecord, recordIndex)}
+                {@const isAgentClickCell = !!cell.onCellClick && !cellInteractionsDisabled && !cell.onCellEdit && !cell.onCellSelect}
+                {@const cellAgentDataID = isAgentClickCell ? `${componentID}:${buildCellID(sourceIndex, cellIndex)}` : undefined}
                 {#if variant === 'cards'}
                   <div class="mobile-cards-item mobile-cards-item-cards {cell.itemCss || 'col-span-full'}">
                     <div class="mobile-cards-label {cell.labelCss || ''}">
@@ -288,7 +390,9 @@
 
                       <div class="mobile-cards-value-host {cellData.css}"
                         class:mobile-cards-value-host-interactive={isInteractiveCell(cell, resolvedRecord, recordIndex)}
-                        onpointerup={(event) => handleCellClick(event, cell, resolvedRecord, recordIndex)}
+                        data-id={cellAgentDataID}
+                        data-cell-type={isAgentClickCell ? 'CellClick' : undefined}
+                        onpointerup={(event) => handleCellClick(event, cell, resolvedRecord, recordIndex, sourceIndex)}
                       >
                         {#if cell.onCellEdit}
                           <div class="mobile-cards-editable-border"><div></div></div>
@@ -296,7 +400,7 @@
                             contentClass={cell.contentCss || cell.css}
                             inputClass={cell.inputCss}
                             type={cell.type || 'text'}
-                            cellID={buildCellID(recordIndex, cellIndex)}
+                            cellID={buildCellID(sourceIndex, cellIndex)}
                             getValue={() => {
                               // Always use raw values inside edit mode so formatting stays display-only.
                               return cell.getValue
@@ -315,7 +419,7 @@
                                 field: cell.field,
                                 value,
                               });
-                              cell.onCellEdit?.(resolvedRecord, value, () => rerenderRow(recordIndex));
+                              cell.onCellEdit?.(resolvedRecord, value, () => rerenderRow(sourceIndex));
                             }}
                           />
                         {:else if cell.onCellSelect}
@@ -327,7 +431,7 @@
                             options={cell.cellOptions as any[]}
                             keyId={(cell.cellOptionsKeyId || 'ID') as never}
                             keyName={(cell.cellOptionsKeyName || 'Name') as never}
-                            cellID={buildCellID(recordIndex, cellIndex)}
+                            cellID={buildCellID(sourceIndex, cellIndex)}
                             contentClass={cell.contentCss}
                             onChange={(value) => {
                               logInteraction('onCellSelect', {
@@ -337,7 +441,7 @@
                                 value,
                                 optionsLength: cell.cellOptions?.length || 0,
                               });
-                              cell.onCellSelect?.(resolvedRecord, value, () => rerenderRow(recordIndex));
+                              cell.onCellSelect?.(resolvedRecord, value, () => rerenderRow(sourceIndex));
                             }}
                           />
                         {:else if cell.useRenderer && cardCellRenderer}
@@ -390,7 +494,9 @@
                       {/if}
                       <div class="mobile-cards-compact-content {cell.contentCss || ''} {cellData.css}"
                         class:mobile-cards-value-host-interactive={isInteractiveCell(cell, resolvedRecord, recordIndex)}
-                        onpointerup={(event) => handleCellClick(event, cell, resolvedRecord, recordIndex)}
+                        data-id={cellAgentDataID}
+                        data-cell-type={isAgentClickCell ? 'CellClick' : undefined}
+                        onpointerup={(event) => handleCellClick(event, cell, resolvedRecord, recordIndex, sourceIndex)}
                       >
                         {#if cell.onCellEdit}
                           <div class="mobile-cards-editable-border"><div></div></div>
@@ -398,7 +504,7 @@
                             contentClass={cell.contentCss || cell.css}
                             inputClass={cell.inputCss}
                             type={cell.type || 'text'}
-                            cellID={buildCellID(recordIndex, cellIndex)}
+                            cellID={buildCellID(sourceIndex, cellIndex)}
                             getValue={() => {
                               return cell.getValue
                                 ? cell.getValue(resolvedRecord, recordIndex)
@@ -416,7 +522,7 @@
                                 field: cell.field,
                                 value,
                               });
-                              cell.onCellEdit?.(resolvedRecord, value, () => rerenderRow(recordIndex));
+                              cell.onCellEdit?.(resolvedRecord, value, () => rerenderRow(sourceIndex));
                             }}
                           />
                         {:else if cell.onCellSelect}
@@ -428,7 +534,7 @@
                             options={cell.cellOptions as any[]}
                             keyId={(cell.cellOptionsKeyId || 'ID') as never}
                             keyName={(cell.cellOptionsKeyName || 'Name') as never}
-                            cellID={buildCellID(recordIndex, cellIndex)}
+                            cellID={buildCellID(sourceIndex, cellIndex)}
                             contentClass={cell.contentCss}
                             onChange={(value) => {
                               logInteraction('onCellSelect', {
@@ -438,7 +544,7 @@
                                 value,
                                 optionsLength: cell.cellOptions?.length || 0,
                               });
-                              cell.onCellSelect?.(resolvedRecord, value, () => rerenderRow(recordIndex));
+                              cell.onCellSelect?.(resolvedRecord, value, () => rerenderRow(sourceIndex));
                             }}
                           />
                         {:else if cell.mobileRender}
@@ -509,7 +615,7 @@
                     {/if}
                     <div class="mobile-cards-compact-content {cell.contentCss || ''} {cellData.css}"
                       class:mobile-cards-value-host-interactive={isInteractiveCell(cell, resolvedRecord, recordIndex)}
-                      onpointerup={(event) => handleCellClick(event, cell, resolvedRecord, recordIndex)}
+                      onpointerup={(event) => handleCellClick(event, cell, resolvedRecord, recordIndex, sourceIndex)}
                     >
                       {#if cell.onCellEdit}
                         <div class="mobile-cards-editable-border"><div></div></div>
@@ -517,7 +623,7 @@
                           contentClass={cell.contentCss || cell.css}
                           inputClass={cell.inputCss}
                           type={cell.type || 'text'}
-                          cellID={buildCellID(recordIndex, cellIndex)}
+                          cellID={buildCellID(sourceIndex, cellIndex)}
                           getValue={() => {
                             return cell.getValue
                               ? cell.getValue(resolvedRecord, recordIndex)
@@ -535,7 +641,7 @@
                               field: cell.field,
                               value,
                             });
-                            cell.onCellEdit?.(resolvedRecord, value, () => rerenderRow(recordIndex));
+                            cell.onCellEdit?.(resolvedRecord, value, () => rerenderRow(sourceIndex));
                           }}
                         />
                       {:else if cell.onCellSelect}
@@ -547,7 +653,7 @@
                           options={cell.cellOptions as any[]}
                           keyId={(cell.cellOptionsKeyId || 'ID') as never}
                           keyName={(cell.cellOptionsKeyName || 'Name') as never}
-                          cellID={buildCellID(recordIndex, cellIndex)}
+                          cellID={buildCellID(sourceIndex, cellIndex)}
                           contentClass={cell.contentCss}
                           onChange={(value) => {
                             logInteraction('onCellSelect', {
@@ -557,7 +663,7 @@
                               value,
                               optionsLength: cell.cellOptions?.length || 0,
                             });
-                            cell.onCellSelect?.(resolvedRecord, value, () => rerenderRow(recordIndex));
+                            cell.onCellSelect?.(resolvedRecord, value, () => rerenderRow(sourceIndex));
                           }}
                         />
                       {:else if cell.mobileRender}
@@ -608,8 +714,13 @@
     {/snippet}
   </SvelteVirtualList>
 {/if}
+</div>
 
 <style>
+  .card-list-root {
+    display: contents;
+  }
+
   .mobile-cards-empty-message {
     color: #6c757d;
     text-align: center;

@@ -1,5 +1,6 @@
 <script lang="ts">
 import Input from '$components/form/Input.svelte';
+import Button from '$components/buttons/Button.svelte';
   import type { IAlmacen, IAlmacenLayout } from "./sedes-almacenes.svelte"
 
   interface Props {
@@ -31,9 +32,7 @@ import Input from '$components/form/Input.svelte';
   <div class="flex justify-between w-full mb-8 px-12 pt-12">
     <div></div>
     <div class="flex items-center">
-      <button class="bx-green" aria-label="Agregar Layout" onclick={addLayout}>
-        <i class="icon-plus"></i>
-      </button>
+      <Button color="green" icon="icon-plus" label="Agregar Layout" onClick={addLayout} />
     </div>
   </div>
 

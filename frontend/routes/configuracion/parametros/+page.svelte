@@ -2,6 +2,7 @@
 import Input from '$components/form/Input.svelte';
 import Page from '$domain/Page.svelte';
 import { Notify } from '$libs/helpers';
+import Button from '$components/buttons/Button.svelte';
     import pkg from 'notiflix'
 const { Loading } = pkg;
   import { EmpresaParametrosService, postEmpresaParametros } from "./empresas.svelte"
@@ -31,12 +32,7 @@ const { Loading } = pkg;
     <div class="flex justify-between items-center mb-8">
       <div><div class="h3 ff-bold">Parámetros de la Empresa</div></div>
       <div class="flex items-center">
-        <button class="bx-blue" onclick={ev => {
-          ev.stopPropagation()
-          saveEmpresa()
-        }}>
-          <i class="icon-floppy mr-2"></i>Guardar
-        </button>
+        <Button color="blue" icon="icon-floppy" name="Guardar" onClick={saveEmpresa} />
       </div>
     </div>
     <div class="w-full grid grid-cols-1 lg:grid-cols-[4fr_3fr] gap-4">

@@ -5,7 +5,9 @@ import Page from '$domain/Page.svelte';
 import UserProfilesAccessSelector from './UserProfilesAccessSelector.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { Notify, throttle } from '$libs/helpers';
+import { Notify } from '$libs/helpers';
+import FilterInput from '$components/form/FilterInput.svelte';
+import Button from '$components/buttons/Button.svelte';
 import { Core } from '$core/store.svelte';
 import { formatTime } from '$libs/helpers';
 import { onMount } from 'svelte';
@@ -269,22 +271,10 @@ const { Loading } = pkg
   <Layer type="content">
     <div class="h-full w-full">
       <div class="flex items-center justify-between mb-6">
-        <div class="i-search mr-16 w-256">
-          <div><i class="icon-search"></i></div>
-          <input class="w-full" autocomplete="off" type="text" onkeyup={ev => {
-            ev.stopPropagation()
-            throttle(() => {
-              filterText = ((ev.target as HTMLInputElement).value || "").toLowerCase().trim()
-            }, 150)
-          }}>
-        </div>
+        <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
-          <button class="bx-green" onclick={ev => {
-            ev.stopPropagation()
-            openCreateUsuarioLayer()
-          }} aria-label="Agregar usuario">
-            <i class="icon-plus"></i>
-          </button>
+          <Button color="green" icon="icon-plus" label="Agregar usuario"
+            onClick={openCreateUsuarioLayer} />
         </div>
       </div>
 

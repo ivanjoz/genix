@@ -241,7 +241,10 @@
           if (onChange) onChange()
           return
         }
-        const text = String(value || "")
+        let text = String(value || "")
+        // Accept ISO YYYY-MM-DD symmetrically with data-value; parseTypedDate expects DD-MM-YYYY.
+        const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+        if (iso) text = `${iso[3]}-${iso[2]}-${iso[1]}`
         const parsed = parseTypedDate(text, todayDate, timezoneOffsetSeconds)
         if (parsed.isCompleted && parsed.autoCompletedUnixDay) {
           changeFechaSelected(parsed.autoCompletedUnixDay)

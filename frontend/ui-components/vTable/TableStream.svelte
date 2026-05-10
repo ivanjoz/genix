@@ -111,7 +111,15 @@
       type: "Table",
       label: "",
       select: (...ids) => {
-        const targets = new Set(ids.map(String));
+        // Composite id ("<tableID>:<rowID>") is what the agent receives in the
+        // HTML snapshot; strip the parent prefix to compare against record ids.
+        const targets = new Set(
+          ids.map((raw) => {
+            const s = String(raw);
+            const colon = s.indexOf(':');
+            return colon >= 0 ? s.slice(colon + 1) : s;
+          }),
+        );
         for (let i = 0; i < streamRecords.length; i++) {
           const record = streamRecords[i];
           if (targets.has(String(resolveStreamRowId(record, i)))) {
@@ -144,7 +152,7 @@
         {:else}
           {#each streamRecords as rowRecord, rowIndex (`${rowIndex}_${rowVersions.get(rowIndex) || 0}`)}
             <tr
-              data-id={onRowClick ? `TableRow:${resolveStreamRowId(rowRecord, rowIndex)}` : undefined}
+              data-id={onRowClick ? `TableRow:${componentID}:${resolveStreamRowId(rowRecord, rowIndex)}` : undefined}
               data-selected={getRowSelected(rowRecord) ? "true" : undefined}
               class:stream-row-selected={getRowSelected(rowRecord)}
               class:stream-row-even={rowIndex % 2 === 0}
