@@ -225,7 +225,7 @@ curl -s -X POST http://localhost:3589/agent \
 | ----------------------------- | ---------------------------------------------------------- |
 | HTTP handler + id resolution  | [`http.go`](./http.go)                                     |
 | WS RPC to the browser         | [`ws.go`](./ws.go) (`request`, `IsConnected`)              |
-| Public Go API (`Invoke`, …)   | [`agent.go`](./agent.go)                                   |
-| Wire types                    | [`protocol.go`](./protocol.go) (`InvokePayload`, `PageContent`) |
+| Public Go API (`InvokeBatch`, `Navigate`, …) | [`agent.go`](./agent.go)                    |
+| Wire types                    | [`protocol.go`](./protocol.go) (`InvokePayload`, `InvocationResult`, `PageContent`) |
 | HTML cleaner / compact tags   | [`parse_html.go`](./parse_html.go)                         |
 | Route registration            | [`../main.go`](../main.go) (`mux.HandleFunc("POST /agent", …)`) |

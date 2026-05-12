@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 )
 
@@ -58,23 +57,30 @@ func ListComponents(ctx context.Context, filter *AgentListFilter) ([]AgentCompon
 	return out, err
 }
 
-// Invoke calls a method on a registered handle. Pass nil/empty Args for methods
-// that take no parameters. Result is JSON-decoded into out (pass nil if you
-// don't need the reply body, e.g. for void methods).
-func Invoke(ctx context.Context, handleID int, method string, args []any, out any) error {
-	ctx, cancel := ctxWithDefault(ctx)
-	defer cancel()
-	return request(ctx, CmdAgentInvoke, InvokePayload{HandleID: handleID, Method: method, Args: args}, out)
-}
-
-// InvokeRaw is like Invoke but returns the raw JSON of the result envelope so
-// the caller can decode dynamically-typed responses themselves.
-func InvokeRaw(ctx context.Context, handleID int, method string, args []any) (json.RawMessage, error) {
-	ctx, cancel := ctxWithDefault(ctx)
-	defer cancel()
-	var raw json.RawMessage
-	err := request(ctx, CmdAgentInvoke, InvokePayload{HandleID: handleID, Method: method, Args: args}, &raw)
-	return raw, err
+// InvokeBatch sends a list of invocations to the browser in a single WS
+// request. The browser runs them sequentially with a 250ms gap between each,
+// stops on the first failure, and returns one InvocationResult per invocation
+// that actually ran (so a 5-element batch failing at index 2 returns 3
+// results: two OK and one Error). Caller-side stop-on-error logic just
+// checks the last entry's OK flag.
+//
+// The context budget is widened past the default 30s to accommodate the
+// per-invocation gap: ~500ms of headroom is added per invocation.
+func InvokeBatch(ctx context.Context, invocations []InvokePayload) ([]InvocationResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		budget := defaultTimeout + time.Duration(len(invocations))*500*time.Millisecond
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, budget)
+		defer cancel()
+	}
+	var out []InvocationResult
+	if err := request(ctx, CmdAgentInvoke, invocations, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // GetMenu returns the side-menu structure (groups + accessible options) from

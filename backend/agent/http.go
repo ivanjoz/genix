@@ -24,18 +24,12 @@ type AgentAction struct {
 	Args   []any
 }
 
-type AgentActionResult struct {
-	OK    bool
-	Value json.RawMessage `json:",omitempty"`
-	Error string          `json:",omitempty"`
-}
-
 type AgentRequest struct {
 	Actions []AgentAction
 }
 
 type AgentResponse struct {
-	Results []AgentActionResult
+	Results []InvocationResult
 	Page    PageContent
 }
 
@@ -62,8 +56,11 @@ func HandleAgentGet(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleAgentHTTP runs a batch of actions sequentially against the connected
-// browser and returns a fresh page snapshot. Designed to be mounted at /agent.
+// HandleAgentHTTP groups the request's actions into invoke batches separated
+// by navigate calls (and pre-flight errors), dispatches each batch as a single
+// WS round-trip, and returns one InvocationResult per executed action plus a
+// fresh page snapshot. Stops on first error, same as before — only the
+// transport changed.
 func HandleAgentHTTP(w http.ResponseWriter, r *http.Request) {
 	if !IsConnected() {
 		writeJSONError(w, http.StatusServiceUnavailable, "no agent client connected")
@@ -79,15 +76,7 @@ func HandleAgentHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	results := make([]AgentActionResult, 0, len(req.Actions))
-	for _, action := range req.Actions {
-		raw, err := runAction(ctx, action)
-		if err != nil {
-			results = append(results, AgentActionResult{OK: false, Error: err.Error()})
-			break // stop on first error
-		}
-		results = append(results, AgentActionResult{OK: true, Value: raw})
-	}
+	results := runActions(ctx, req.Actions)
 
 	// Always include the post-action page snapshot so the caller can use
 	// `{actions: []}` as a "give me the current page" call too.
@@ -101,29 +90,71 @@ func HandleAgentHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(AgentResponse{Results: results, Page: page})
 }
 
-// runAction resolves the target handle from the action id and forwards the call
-// to the browser via the existing WS RPC. The `navigate` method is special-
-// cased: it is a global page action, not a method on a registered handle, so
-// it bypasses id resolution and goes straight to the SPA router.
-func runAction(ctx context.Context, a AgentAction) (json.RawMessage, error) {
-	if a.Method == "" {
-		return nil, errors.New("missing method")
-	}
-	if a.Method == "navigate" {
-		route, err := navigateRouteArg(a.Args)
+// runActions walks the request actions, buffering contiguous invokes into a
+// batch and flushing the batch around navigates and pre-flight errors.
+// Returns the result list, truncated at the first failure.
+func runActions(ctx context.Context, actions []AgentAction) []InvocationResult {
+	results := make([]InvocationResult, 0, len(actions))
+	pending := make([]InvokePayload, 0)
+
+	// flushPending dispatches the buffered batch (if any), appends its
+	// results, and reports whether the batch fully succeeded. A transport
+	// failure or any non-OK invocation result terminates the run.
+	flushPending := func() bool {
+		if len(pending) == 0 {
+			return true
+		}
+		batch, err := InvokeBatch(ctx, pending)
+		pending = pending[:0]
 		if err != nil {
-			return nil, err
+			results = append(results, InvocationResult{OK: false, Error: err.Error()})
+			return false
 		}
-		if err := Navigate(ctx, route); err != nil {
-			return nil, err
+		for _, r := range batch {
+			results = append(results, r)
+			if !r.OK {
+				return false
+			}
 		}
-		return json.RawMessage("null"), nil
+		return true
 	}
-	handleID, method, args, err := resolveTarget(a.ID, a.Method, a.Args)
-	if err != nil {
-		return nil, err
+
+	for _, action := range actions {
+		if action.Method == "" {
+			if !flushPending() {
+				return results
+			}
+			results = append(results, InvocationResult{OK: false, Error: "missing method"})
+			return results
+		}
+		if action.Method == "navigate" {
+			if !flushPending() {
+				return results
+			}
+			route, err := navigateRouteArg(action.Args)
+			if err != nil {
+				results = append(results, InvocationResult{OK: false, Error: err.Error()})
+				return results
+			}
+			if err := Navigate(ctx, route); err != nil {
+				results = append(results, InvocationResult{OK: false, Error: err.Error()})
+				return results
+			}
+			results = append(results, InvocationResult{OK: true, Value: json.RawMessage("null")})
+			continue
+		}
+		handleID, method, args, err := resolveTarget(action.ID, action.Method, action.Args)
+		if err != nil {
+			if !flushPending() {
+				return results
+			}
+			results = append(results, InvocationResult{OK: false, Error: err.Error()})
+			return results
+		}
+		pending = append(pending, InvokePayload{HandleID: handleID, Method: method, Args: args})
 	}
-	return InvokeRaw(ctx, handleID, method, args)
+	flushPending()
+	return results
 }
 
 // navigateRouteArg pulls the route string from a navigate action's args.

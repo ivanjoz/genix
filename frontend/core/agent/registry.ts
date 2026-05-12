@@ -10,9 +10,10 @@ declare global {
   }
 }
 
+// Wire shape matches Go's agent.AgentOption (capitalized fields, no json tags).
 export interface AgentOption {
-  id: number | string;
-  value: string | number;
+  ID: number | string;
+  Value: string | number;
 }
 
 // Methods are typed structurally; adding a new component type does not require
@@ -68,18 +69,28 @@ export interface AgentHandle extends AgentMethodMap {
   label: string;
 }
 
-export interface AgentPageComponent {
+// Summary entry returned by Agent.list — identity-only, no method surface.
+export interface AgentComponentSummary {
   ID: number;
   Type: string;
   Label: string;
+}
+
+// Full entry returned by Agent.describe and embedded in the page snapshot.
+export interface AgentPageComponent extends AgentComponentSummary {
   Methods: string[];
+}
+
+export interface AgentListFilter {
+  type?: string;
+  label?: string;
 }
 
 export interface AgentRegistry {
   register: (handle: AgentHandle) => () => void;
-  list: (filter?: { type?: string; label?: string }) => Array<{ id: number; type: string; label: string }>;
+  list: (filter?: AgentListFilter) => AgentComponentSummary[];
   get: (id: number) => AgentHandle | undefined;
-  describe: () => Array<{ id: number; type: string; label: string; methods: string[] }>;
+  describe: () => AgentPageComponent[];
 }
 
 export const isAgentEnabled = (): boolean => {
@@ -116,12 +127,12 @@ export const Agent: AgentRegistry & { getPageContent: () => Promise<{ Components
   },
 
   list(filter) {
-    const result: Array<{ id: number; type: string; label: string }> = [];
+    const result: AgentComponentSummary[] = [];
     const labelNeedle = filter?.label?.toLowerCase();
     for (const handle of agentHandles.values()) {
       if (filter?.type && handle.type !== filter.type) continue;
       if (labelNeedle && !handle.label.toLowerCase().includes(labelNeedle)) continue;
-      result.push({ id: handle.id, type: handle.type, label: handle.label });
+      result.push({ ID: handle.id, Type: handle.type, Label: handle.label });
     }
     return result;
   },
@@ -131,13 +142,13 @@ export const Agent: AgentRegistry & { getPageContent: () => Promise<{ Components
   },
 
   describe() {
-    const out: Array<{ id: number; type: string; label: string; methods: string[] }> = [];
+    const out: AgentPageComponent[] = [];
     for (const handle of agentHandles.values()) {
       out.push({
-        id: handle.id,
-        type: handle.type,
-        label: handle.label,
-        methods: methodsFor(handle),
+        ID: handle.id,
+        Type: handle.type,
+        Label: handle.label,
+        Methods: methodsFor(handle),
       });
     }
     return out;

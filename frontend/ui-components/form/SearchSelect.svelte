@@ -380,7 +380,7 @@ import type { Snippet } from 'svelte';
         const out: AgentOption[] = [];
         for (const prepared of preparedOptions) {
           if (out.length >= maxOptions) { break; }
-          out.push({ id: prepared.id, value: prepared.label });
+          out.push({ ID: prepared.id, Value: prepared.label });
         }
         return out;
       },

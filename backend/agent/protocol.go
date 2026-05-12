@@ -1,5 +1,7 @@
 package agent
 
+import "encoding/json"
+
 // JSON wire protocol shared with the local frontend client.
 // The backend acts as the agent: it issues commands; the browser executes them
 // and replies with a result keyed by the same id.
@@ -68,10 +70,22 @@ type ScreenshotResult struct {
 }
 
 // InvokePayload calls handle[Method] with the given Args on the browser side.
+// The WS `agent.invoke` command carries a `[]InvokePayload` so the browser can
+// execute the full batch sequentially (with its own 250ms gap between each)
+// and return one result per invocation in a single round-trip.
 type InvokePayload struct {
 	HandleID int
 	Method   string
 	Args     []any
+}
+
+// InvocationResult is one entry in the reply array for the batched
+// `agent.invoke` command. Also reused as the HTTP-level result element so
+// external callers see the same shape the WS protocol uses.
+type InvocationResult struct {
+	OK    bool
+	Value json.RawMessage `json:",omitempty"`
+	Error string          `json:",omitempty"`
 }
 
 type AgentListFilter struct {

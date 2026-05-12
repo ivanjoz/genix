@@ -153,8 +153,8 @@ import { getVTableAgentContext } from '$components/vTable/agentContext';
         for (let i = 0; i < optionsFiltered.length && out.length < limit; i++) {
           const opt = optionsFiltered[i]
           out.push({
-            id: opt[keyId] as number | string,
-            value: String(opt[keyName] ?? ''),
+            ID: opt[keyId] as number | string,
+            Value: String(opt[keyName] ?? ''),
           })
         }
         return out

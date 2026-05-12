@@ -1,146 +1,43 @@
 // WebSocket bridge: backend -> browser command channel.
-// Connects to the local Go backend so it can drive the page as an agent
-// (list components, invoke methods, capture HTML, screenshots).
+// Connects to the local Go backend so it can drive the page as an agent. All
+// command execution lives in commands.ts; this file just owns the socket
+// lifecycle and the message-to-reply plumbing.
 
-import { goto } from "$app/navigation";
-import { Core } from "$core/store.svelte";
-import { canUserAccessRoute } from "$core/security";
-import { Agent, agentHandles, isAgentEnabled, type AgentMethodName, type AgentOption } from "./registry";
+import { Agent, isAgentEnabled } from "./registry";
+import { releaseScreenStream, runCommand, type WsMessage } from "./commands";
 
-// Wire envelope shared with the Go backend (capitalized field names since the
-// Go side avoids json tags).
-type WsMessage = { ID: number; Type: string; Payload?: any };
+interface BridgeState {
+  socket: WebSocket | null;
+  reconnectDelayMs: number;
+  started: boolean;
+}
 
-const bridgeState = {
-  socket: null as WebSocket | null,
+const bridgeState: BridgeState = {
+  socket: null,
   reconnectDelayMs: 1000,
-  // getDisplayMedia stream + offscreen <video> reused across screenshot calls
-  // so the user is only prompted once per session.
-  screenStream: null as MediaStream | null,
-  videoEl: null as HTMLVideoElement | null,
   started: false,
 };
 
-const remapAgentList = (items: Array<{ id: number; type: string; label: string }>) =>
-  items.map((item) => ({ ID: item.id, Type: item.type, Label: item.label }));
-
-const remapAgentDescribe = (items: Array<{ id: number; type: string; label: string; methods: string[] }>) =>
-  items.map((item) => ({ ID: item.id, Type: item.type, Label: item.label, Methods: item.methods }));
-
-const remapOptions = (options: AgentOption[] | undefined) =>
-  (options || []).map((option) => ({ ID: option.id, Value: option.value }));
-
-// Captures a frame from the active screen-share. First invocation triggers
-// the user's "share screen" permission prompt; subsequent calls reuse the stream.
-const captureScreenshot = async () => {
-  let stream = bridgeState.screenStream;
-  if (!stream || !stream.active) {
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-    bridgeState.screenStream = stream;
-    // If the user clicks "Stop sharing" in the browser bar, drop the cached stream.
-    for (const track of stream.getVideoTracks()) {
-      track.addEventListener("ended", () => {
-        if (bridgeState.screenStream === stream) { bridgeState.screenStream = null; }
-      });
-    }
-  }
-  const track = stream.getVideoTracks()[0];
-  const settings = track.getSettings();
-
-  let video = bridgeState.videoEl;
-  if (!video) {
-    video = document.createElement("video");
-    video.muted = true;
-    (video as any).playsInline = true;
-    video.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none";
-    document.body.appendChild(video);
-    bridgeState.videoEl = video;
-  }
-  if (video.srcObject !== stream) {
-    video.srcObject = stream;
-    await video.play();
-  }
-  // Wait for the first frame to be ready when video metadata isn't loaded yet.
-  if (!video.videoWidth) {
-    await new Promise<void>((resolve) => {
-      const onLoaded = () => { video!.removeEventListener("loadedmetadata", onLoaded); resolve(); };
-      video!.addEventListener("loadedmetadata", onLoaded);
-    });
-  }
-
-  const width = settings.width || video.videoWidth;
-  const height = settings.height || video.videoHeight;
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) { throw new Error("2d context unavailable"); }
-  ctx.drawImage(video, 0, 0, width, height);
-  const dataUrl = canvas.toDataURL("image/png");
-  const base64 = dataUrl.split(",")[1] || "";
-  return { MIME: "image/png", Base64: base64, Width: width, Height: height };
+const sendReply = (socket: WebSocket, id: number, type: "result" | "error", payload: unknown) => {
+  socket.send(JSON.stringify({ ID: id, Type: type, Payload: payload }));
 };
 
-// Single generic dispatcher: backend sends { HandleID, Method, Args }, we look
-// up the handle, find the named method, call it.
-const invokeMethod = (payload: { HandleID: number; Method: AgentMethodName; Args?: unknown[] }) => {
-  const handle = agentHandles.get(payload.HandleID);
-  if (!handle) { throw new Error(`unknown handle id: ${payload.HandleID}`); }
-  const fn = handle[payload.Method] as ((...args: unknown[]) => unknown) | undefined;
-  if (typeof fn !== "function") {
-    throw new Error(`handle ${payload.HandleID} (${handle.type}) does not implement ${payload.Method}`);
+const handleMessage = async (socket: WebSocket, raw: unknown) => {
+  let message: WsMessage;
+  try {
+    message = JSON.parse(typeof raw === "string" ? raw : "");
+  } catch (parseError) {
+    console.warn("[Agent] bad message json:", parseError);
+    return;
   }
-  const args = Array.isArray(payload.Args) ? payload.Args : [];
-  const result = fn.apply(handle, args);
-  if (result === undefined) { return null; }
-  if (payload.Method === "getOptions" || payload.Method === "getOptionsChild") {
-    return remapOptions(result as AgentOption[]);
+  try {
+    const result = await runCommand(message.Type, message.Payload);
+    sendReply(socket, message.ID, "result", result);
+  } catch (commandError: any) {
+    const errorMessage = String(commandError?.message || commandError);
+    console.warn("[Agent] command error:", message.Type, errorMessage);
+    sendReply(socket, message.ID, "error", { Message: errorMessage });
   }
-  return result;
-};
-
-// getMenu mirrors the side-menu the user sees: the same access filter as
-// SideMenu.svelte, dropping options the user can't reach. Returned in the
-// Go-friendly capitalized shape (Name/Route) the backend decodes into
-// AgentMenuGroup.
-const getMenu = () => {
-  const menus = Core.module?.menus || [];
-  return menus
-    .map((menu) => ({
-      ID: menu.id || 0,
-      Name: menu.name,
-      Options: (menu.options || [])
-        .filter((option) => {
-          const route = String(option.route || "").trim();
-          if (!route) { return false; }
-          return canUserAccessRoute(option.route);
-        })
-        .map((option) => ({ Name: option.name, Route: option.route || "" })),
-    }))
-    .filter((group) => group.Options.length > 0);
-};
-
-const navigate = async (payload: { Route?: string; route?: string } | undefined) => {
-  const route = payload?.Route || payload?.route || "";
-  if (!route) { throw new Error("navigate: missing route"); }
-  await goto(route);
-  return null;
-};
-
-const commandHandlers: Record<string, (payload: any) => Promise<any> | any> = {
-  getPageContent: () => Agent.getPageContent(),
-  agentList: (payload) => remapAgentList(Agent.list(payload || undefined)),
-  agentDescribe: () => remapAgentDescribe(Agent.describe()),
-  screenshot: () => captureScreenshot(),
-  "agent.invoke": invokeMethod,
-  getMenu,
-  navigate,
-};
-
-const releaseScreenStream = () => {
-  if (!bridgeState.screenStream) { return; }
-  for (const track of bridgeState.screenStream.getTracks()) { track.stop(); }
-  bridgeState.screenStream = null;
 };
 
 const scheduleReconnect = () => {
@@ -173,36 +70,17 @@ const connectAgentSocket = () => {
     socket.send(JSON.stringify({ Type: "ready" }));
   });
 
-  socket.addEventListener("message", async (event) => {
-    let message: WsMessage;
-    try {
-      message = JSON.parse(typeof event.data === "string" ? event.data : "");
-    } catch (parseError) {
-      console.warn("[Agent] bad message json:", parseError);
-      return;
-    }
-    const handler = commandHandlers[message.Type];
-    if (!handler) {
-      socket.send(JSON.stringify({ ID: message.ID, Type: "error", Payload: { Message: `unknown command: ${message.Type}` } }));
-      return;
-    }
-    try {
-      const result = await handler(message.Payload);
-      socket.send(JSON.stringify({ ID: message.ID, Type: "result", Payload: result }));
-    } catch (commandError: any) {
-      const errorMessage = String(commandError?.message || commandError);
-      console.warn("[Agent] command error:", message.Type, errorMessage);
-      socket.send(JSON.stringify({ ID: message.ID, Type: "error", Payload: { Message: errorMessage } }));
-    }
+  socket.addEventListener("message", (event) => {
+    void handleMessage(socket, event.data);
   });
 
-  const onClose = () => {
+  socket.addEventListener("close", () => {
     if (bridgeState.socket !== socket) { return; }
     bridgeState.socket = null;
     releaseScreenStream();
     scheduleReconnect();
-  };
-  socket.addEventListener("close", onClose);
+  });
+
   socket.addEventListener("error", () => {
     try { socket.close(); } catch { /* ignore */ }
   });
@@ -225,7 +103,6 @@ export const sendPageContent = async () => {
     return;
   }
   const payload = await Agent.getPageContent();
-  console.log("payload", payload)
   socket.send(JSON.stringify({ Type: "pageContent", Payload: payload }));
   console.info("[Agent] sendPageContent: pushed", payload.HTML.length, "bytes");
 };
