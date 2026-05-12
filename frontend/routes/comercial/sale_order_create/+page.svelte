@@ -371,7 +371,6 @@ import { SaleOrderState } from "./sale_order.svelte";
                 ventaProducto={ventasState.ventaProductosMap.get(item.key)}
                 filterText={ventasState.filterText}
                 onselect={(i) => (productoSelected = i)}
-                onmouseover={() => (productoSelected = -1)}
                 onadd={(n, serialNumber) => {
                   ventasState.addProducto(item, n, serialNumber);
                   filterProductos("");
@@ -386,7 +385,6 @@ import { SaleOrderState } from "./sale_order.svelte";
         css="w-[40%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
         mobileLayerTitle="Detalle de Venta"
         useMobileLayerVertical={124}
-
       >
         <!-- Error Message -->
         {#if ventasState.ventaErrorMessage}

@@ -1,5 +1,7 @@
 <script lang="ts">
 import { Core, fetchOnCourse } from '$core/store.svelte';
+import { Env } from '$core/env';
+import { Agent } from '$core/agent/registry';
 import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
 import HeaderConfig from '$domain/HeaderConfig.svelte';
 import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
@@ -10,6 +12,27 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 	}: {
 		showMenuButton?: boolean;
 	} = $props();
+
+	const pageViewsID = Env.getComponentID();
+
+	$effect(() => {
+		if (!Core.pageOptions?.length) { return; }
+		return Agent.register({
+			id: pageViewsID,
+			type: 'PageViews',
+			label: '',
+			select: (...ids) => {
+				if (ids.length === 0) { return; }
+				// Options route through this handle with composite ids
+				// "<pageViewsID>:<optionID>" — strip the prefix to get the option id.
+				const raw = String(ids[0]);
+				const colon = raw.lastIndexOf(':');
+				const optID = Number(colon >= 0 ? raw.slice(colon + 1) : raw);
+				const match = Core.pageOptions.find((opt) => opt.id === optID);
+				if (match) { Core.pageOptionSelected = match.id; }
+			},
+		});
+	});
 
 	// State
 	let showSettings = $state(false);
@@ -72,11 +95,15 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 	{/if}
 
 	<!-- Title -->
-	<div class="flex-1 flex items-center">
+	<div class="flex-1 flex items-center"
+		data-id={Core.pageOptions?.length > 0 ? `PageViews:${pageViewsID}` : undefined}
+	>
 		{#if Core.pageOptions?.length > 0}
 			{#each Core.pageOptions as opt }
 			{@const selected = Core.pageOptionSelected == opt.id}
 				<button class="_2" class:_3={selected} aria-label={opt.name}
+					data-id="Option:{pageViewsID}:{opt.id}"
+					data-selected={selected ? "true" : undefined}
 					onclick={() => {
 						Core.pageOptionSelected = opt.id
 					}}>{opt.name}

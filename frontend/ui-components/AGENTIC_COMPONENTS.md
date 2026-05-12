@@ -130,9 +130,11 @@ Pure-display, infrastructural, or trivially composed components don't register:
 | `SearchSelect` | `SearchSelect` | root has `data-value="[id] text"` (id of the selected option followed by its display text; empty string when nothing is selected) | `search`, `select`, `getOptions` (options not in DOM until opened) |
 | `SearchCard` | `SearchCard` | wraps a child `SearchSelect`; renders selected chips as `Option:<id>` | `select(...ids)`, `remove(id)` |
 | `SearchDualCard` | `SearchDualCard` | wraps two child `SearchSelect`s; chips as `Option:<id>` | `select(...ids)`, `remove(id)` |
+| `Card` | `Card` | bare `<div>` wrapper. Only registers a handle when an `onClick` prop is set; otherwise it is invisible to the agent | `click` (only when `onClick` is set) |
 | `Checkbox` | `Checkbox` | root carries `data-selected="true"` when checked | `click` |
 | `CheckboxOptions` | `CheckboxOptions` | each option as `Option:<id>` with `data-selected="true"` when chosen | `select(...ids)`, `remove(id)` |
 | `OptionsStrip` | `OptionsStrip` | each button as `Option:<id>` with `data-selected="true"` on the active one | `select(id)` |
+| `PageViews` (in `AppHeader`) | `PageViews` | the header tab strip rendered when a `Page` declares `options`. The tag itself renders as a bare `<PageViews>` (no id/methods) — interaction lives on the children. Each tab is an `Option:<pageViewsID>:<optionID>` with `data-selected="true"` on the active one; routing goes through the PageViews handle's `select` method | `select(id)` (parent routing only; never called directly on `<PageViews>`) |
 | `ArrowSteps` | `ArrowSteps` | each step as `Option:<id>` with `data-selected="true"` on the current step | `select(id)` |
 | `DateInput` | `DateInput` | root has `data-value="YYYY-MM-DD"` | `setValue` |
 | `ColorPicker` | `ColorPicker` | root has `data-value="<hex>"` | `setValue` |

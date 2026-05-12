@@ -376,7 +376,7 @@ import {
 
 <div class="flex w-full" bind:this={pageContentElement}>
   <Layer type="content">
-	  <div class="mb-6 flex items-center justify-between">
+	  <div class="mb-6 flex items-center justify-between p-1">
 	    <FilterInput bind:value={supplyFilterText} placeholder="Buscar producto o proveedor"
 	      css="mr-16 w-320 max-w-full" />
 	    <div class="flex items-center">

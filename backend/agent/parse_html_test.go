@@ -239,6 +239,116 @@ func TestParsePageHTML_DropsMenuRoots(t *testing.T) {
 	}
 }
 
+func TestParsePageHTML_CardPreservesChildren(t *testing.T) {
+	in := `
+<div>
+  <div data-id="Card:19" aria-label="Zumo de naranja">
+    <div>
+      <span>Zumo de naranja</span>
+      <span>(Botella 75cl)</span>
+    </div>
+    <div class="empty-separator"></div>
+    <button>2</button>
+    <button>5</button>
+    <div>7.50</div>
+  </div>
+</div>`
+	components := []AgentComponentInfo{{
+		ID:      19,
+		Type:    "Card",
+		Label:   "Zumo de naranja",
+		Methods: []string{"click"},
+	}}
+	out, err := ParsePageHTML(in, components)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `<Card id="19"`) {
+		t.Fatalf("expected Card tag, got:\n%s", out)
+	}
+	if strings.Contains(out, `<Card id="19" label="Zumo de naranja" methods="click"/>`) {
+		t.Fatalf("expected Card NOT to self-close, got:\n%s", out)
+	}
+	// Structure preserved: <span> and <button> tags survive.
+	for _, needle := range []string{"<span>", "<button>"} {
+		if !strings.Contains(out, needle) {
+			t.Fatalf("expected %q inside Card, got:\n%s", needle, out)
+		}
+	}
+	// Text content preserved.
+	for _, needle := range []string{"Zumo de naranja", "Botella 75cl", "2", "5", "7.50"} {
+		if !strings.Contains(out, needle) {
+			t.Fatalf("expected %q in Card body, got:\n%s", needle, out)
+		}
+	}
+	// Empty separator div should be pruned by removeEmptyElements.
+	if strings.Contains(out, "<div></div>") {
+		t.Fatalf("expected empty <div></div> to be pruned, got:\n%s", out)
+	}
+	if !strings.Contains(out, "</Card>") {
+		t.Fatalf("expected closing </Card>, got:\n%s", out)
+	}
+}
+
+func TestParsePageHTML_PageViewsOptionsExposeSelect(t *testing.T) {
+	// PageViews renders as a structural wrapper (no id, no methods). Its
+	// option buttons use composite ids "<pageViewsID>:<optionID>" so the
+	// agent can address each option individually while routing flows
+	// through the PageViews handle's `select` method.
+	in := `
+<div data-id="PageViews:7">
+  <button data-id="Option:7:1" aria-label="Ventas" data-selected="true">Ventas</button>
+  <button data-id="Option:7:2" aria-label="Configuración">Configuración</button>
+</div>`
+	components := []AgentComponentInfo{{
+		ID:      7,
+		Type:    "PageViews",
+		Methods: []string{"select"},
+	}}
+	out, err := ParsePageHTML(in, components)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// PageViews tag carries no id/methods/label.
+	if strings.Contains(out, `<PageViews id=`) || strings.Contains(out, `<PageViews methods=`) {
+		t.Fatalf("expected bare <PageViews> tag, got:\n%s", out)
+	}
+	if !strings.Contains(out, "<PageViews>") {
+		t.Fatalf("expected <PageViews> opening tag, got:\n%s", out)
+	}
+	if !strings.Contains(out, "</PageViews>") {
+		t.Fatalf("expected closing </PageViews>, got:\n%s", out)
+	}
+	// Composite Option ids surface for routing.
+	if !strings.Contains(out, `<Option id="7:1" aria-label="Ventas" selected methods="select">Ventas</Option>`) {
+		t.Fatalf("expected selected Option with composite id and methods=\"select\", got:\n%s", out)
+	}
+	if !strings.Contains(out, `<Option id="7:2" aria-label="Configuración" methods="select">Configuración</Option>`) {
+		t.Fatalf("expected unselected Option with composite id and methods=\"select\", got:\n%s", out)
+	}
+}
+
+func TestParsePageHTML_OptionDefaultsToRemoveOutsideSelectParent(t *testing.T) {
+	// SearchCard chip is an Option marker whose parent exposes "remove" — the
+	// marker should keep its default "remove" verb.
+	in := `
+<div data-id="SearchCard:4">
+  <button data-id="Option:11">Foo</button>
+</div>`
+	components := []AgentComponentInfo{{
+		ID:      4,
+		Type:    "SearchCard",
+		Methods: []string{"remove"},
+	}}
+	out, err := ParsePageHTML(in, components)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `methods="remove"`) {
+		t.Fatalf("expected Option to keep methods=\"remove\", got:\n%s", out)
+	}
+}
+
 func TestParsePageHTML_CellMethodsOnCellTags(t *testing.T) {
 	in := `
 <div data-id="Table:38">

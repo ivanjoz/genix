@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Core } from '$core/store.svelte';
 import { formatN } from '$libs/helpers';
+import Card from '$components/cards/Card.svelte';
   import { type ProductoVenta, type VentaProducto } from "./sale_order.svelte";
 
   interface Props {
@@ -11,7 +12,6 @@ import { formatN } from '$libs/helpers';
     filterText: string
     onadd: (cant: number, serialNumber?: string) => void
     onselect: (idx: number) => void
-    onmouseover: () => void
   }
 
   let {
@@ -22,7 +22,6 @@ import { formatN } from '$libs/helpers';
     filterText,
     onadd,
     onselect,
-    onmouseover
   }: Props = $props();
 
   let inputRef: HTMLInputElement | undefined = $state();
@@ -115,22 +114,15 @@ import { formatN } from '$libs/helpers';
 
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- svelte-ignore a11y_mouse_events_have_key_events -->
-<div class={css}
-  onmouseover={(e) => {
-    e.stopPropagation()
-    onmouseover()
-  }}
->
+<div class={css}>
   {#if mobileSelectedCount > 0}
     <div class="absolute -right-4 -top-4 z-20 flex h-28 min-w-28 items-center justify-center rounded-full bg-red-600 px-6 text-[12px] font-bold text-white shadow-[0_6px_14px_rgba(220,38,38,0.35)] md:hidden">
       {mobileSelectedCount}
     </div>
   {/if}
-  <div class="flex relative flex-col gap-4 cursor-pointer group"
-    onclick={() => onselect(idx)}
+  <Card css="flex relative flex-col gap-4 cursor-pointer group"
+    label={productoStock.producto.Nombre}
+    onClick={() => onselect(idx)}
   >
     <!-- Header: Name + Line -->
     <div class="flex items-center gap-8">
@@ -201,7 +193,7 @@ import { formatN } from '$libs/helpers';
             {formatN(price/100, 2)}
         </div>
     </div>
-  </div>
+  </Card>
 </div>
 
 

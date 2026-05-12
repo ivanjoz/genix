@@ -182,10 +182,54 @@ var markerComponentTypes = map[string]bool{
 // TableRow's "select" surfaces the parent Table's row-click handler — the
 // table is the only registered handle, but the agent addresses individual
 // rows by their composite "<tableID>:<rowID>" id.
+//
+// Option's default is "remove" (SearchCard chips, CheckboxOptions); when the
+// nearest agent ancestor exposes a "select" verb (PageViews, OptionsStrip,
+// ArrowSteps) the marker is upgraded to "select" instead — see
+// markerMethodsFor.
 var markerMethods = map[string]string{
 	"Option":   "remove",
 	"Button":   "click",
 	"TableRow": "select",
+}
+
+// markerMethodsFor returns the method hint for a marker, taking the nearest
+// agent ancestor into account. Options live under different container styles
+// — selection-strips ("select") and chip-removers ("remove") — and the
+// marker should advertise the verb the agent will actually use.
+func markerMethodsFor(typ string, n *html.Node, cm map[string]AgentComponentInfo) string {
+	if typ != "Option" {
+		return markerMethods[typ]
+	}
+	parent := nearestAgentAncestor(n, cm)
+	if parent == nil {
+		return markerMethods[typ]
+	}
+	for _, m := range parent.Methods {
+		if m == "select" {
+			return "select"
+		}
+	}
+	return markerMethods[typ]
+}
+
+// nearestAgentAncestor walks up the DOM until it finds a registered agent
+// component (skipping markers and cells, which are not in the registry).
+// Returns nil when no registered ancestor exists in the path to the root.
+func nearestAgentAncestor(n *html.Node, cm map[string]AgentComponentInfo) *AgentComponentInfo {
+	for p := n.Parent; p != nil; p = p.Parent {
+		if p.Type != html.ElementNode {
+			continue
+		}
+		dataID := nodeDataID(p)
+		if dataID == "" {
+			continue
+		}
+		if info, ok := cm[dataID]; ok {
+			return &info
+		}
+	}
+	return nil
 }
 
 // cellMethods lists the methods exposed on each cell type. The Table is the
@@ -211,6 +255,25 @@ var suppressedTableMethods = map[string]bool{
 	"searchChild":     true,
 	"getOptionsChild": true,
 	"clickChild":      true,
+}
+
+// recurseContentTypes lists registered components whose inner HTML structure
+// is preserved in the snapshot instead of self-closing the tag. Card wraps
+// free-form user content (prices, stock counts, raw buttons, etc.) that the
+// agent needs to read alongside its label. Empty wrappers are still pruned
+// by the standard passes — only text-bearing children make it through.
+var recurseContentTypes = map[string]bool{
+	"Card":      true,
+	"PageViews": true,
+}
+
+// structuralComponentTypes are registered components rendered as bare tags —
+// no id, label, value, or methods on the parent — because the interactive
+// surface lives on the children (e.g. PageViews's Option markers). The
+// handle is still needed for routing, but the agent addresses the children
+// directly via composite ids.
+var structuralComponentTypes = map[string]bool{
+	"PageViews": true,
 }
 
 // markerComponentType returns the marker type ("Option", "TableRow", "Button")
@@ -535,41 +598,45 @@ func renderComponent(buf *bytes.Buffer, indent, dataID string, c AgentComponentI
 	buf.WriteString(indent)
 	buf.WriteByte('<')
 	buf.WriteString(html.EscapeString(typ))
-	buf.WriteString(` id="`)
-	buf.WriteString(html.EscapeString(id))
-	buf.WriteByte('"')
-	if c.Label != "" {
-		buf.WriteString(` label="`)
-		buf.WriteString(html.EscapeString(c.Label))
+	structural := structuralComponentTypes[typ]
+	if !structural {
+		buf.WriteString(` id="`)
+		buf.WriteString(html.EscapeString(id))
 		buf.WriteByte('"')
-	}
-	if value != "" {
-		buf.WriteString(` value="`)
-		buf.WriteString(html.EscapeString(value))
-		buf.WriteByte('"')
-	}
-	methods := c.Methods
-	if typ == "Table" || typ == "CardList" {
-		// Table/CardList row/cell-routing methods belong on the inner TableRow /
-		// cell tags, not on the container itself. Drop them here.
-		filtered := methods[:0:0]
-		for _, m := range methods {
-			if !suppressedTableMethods[m] {
-				filtered = append(filtered, m)
-			}
+		if c.Label != "" {
+			buf.WriteString(` label="`)
+			buf.WriteString(html.EscapeString(c.Label))
+			buf.WriteByte('"')
 		}
-		methods = filtered
-	}
-	if len(methods) > 0 {
-		buf.WriteString(` methods="`)
-		buf.WriteString(html.EscapeString(strings.Join(methods, ",")))
-		buf.WriteByte('"')
+		if value != "" {
+			buf.WriteString(` value="`)
+			buf.WriteString(html.EscapeString(value))
+			buf.WriteByte('"')
+		}
+		methods := c.Methods
+		if typ == "Table" || typ == "CardList" {
+			// Table/CardList row/cell-routing methods belong on the inner TableRow /
+			// cell tags, not on the container itself. Drop them here.
+			filtered := methods[:0:0]
+			for _, m := range methods {
+				if !suppressedTableMethods[m] {
+					filtered = append(filtered, m)
+				}
+			}
+			methods = filtered
+		}
+		if len(methods) > 0 {
+			buf.WriteString(` methods="`)
+			buf.WriteString(html.EscapeString(strings.Join(methods, ",")))
+			buf.WriteByte('"')
+		}
 	}
 
 	// Recurse when there are registered components or markers nested inside —
 	// Layer/Modal/ButtonLayer hold further handles, Table holds TableRow markers,
-	// SearchCard holds Option markers, etc. Leaf components self-close.
-	if !hasAgentDescendant(n, cm) {
+	// SearchCard holds Option markers, etc. Leaf components self-close, except
+	// for recurseContentTypes (e.g. Card) whose HTML body is preserved verbatim.
+	if !hasAgentDescendant(n, cm) && !recurseContentTypes[typ] {
 		buf.WriteString("/>\n")
 		return
 	}
@@ -615,7 +682,7 @@ func renderMarker(buf *bytes.Buffer, indent string, n *html.Node, depth int, cm 
 	if selected {
 		buf.WriteString(` selected`)
 	}
-	if methods := markerMethods[typ]; methods != "" {
+	if methods := markerMethodsFor(typ, n, cm); methods != "" {
 		buf.WriteString(` methods="`)
 		buf.WriteString(methods)
 		buf.WriteByte('"')
