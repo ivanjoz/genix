@@ -424,7 +424,7 @@ const formatDateOrDash = (value: string | number) => {
       </div>
     {/if}
 
-    <div class="px-10 py-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+    <div class="px-10 py-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/50" aria-label="Purchase order totals and save action bar">
       <div class="grow mr-16">
         <div class="hidden font-bold mb-2 -mt-2 text-gray-800 mb-4 items-center justify-between md:flex">
           <span>Nueva Órden de Compra</span>
@@ -449,7 +449,7 @@ const formatDateOrDash = (value: string | number) => {
         </div>
       </div>
       <Button color="blue" icon="icon-floppy" name="Generar" hideNameOnMobile
-        css="shrink-0" label="Generar orden de compra" onClick={handleSave} />
+        css="shrink-0" label="Saves and submits the current purchase order to the system." onClick={handleSave} />
     </div>
 
     <div class="px-12 pt-4 mb-4">
@@ -462,7 +462,7 @@ const formatDateOrDash = (value: string | number) => {
 
     {#if detailView === 1}
       <!-- Información block: order header form (provider, warehouse, dates, invoice, notes). -->
-      <div class="px-12 py-8">
+      <div class="px-12 py-8" aria-label="Purchase order information form with provider, warehouse, dates, and notes">
         <PurchaseOrderForm
           bind:form={orderState.form}
           providers={providersService.records}
@@ -471,7 +471,7 @@ const formatDateOrDash = (value: string | number) => {
       </div>
     {:else}
       <!-- Productos block: read-only summary of the form above the cart table. -->
-      <div class="px-12 py-8">
+      <div class="px-12 py-8" aria-label="Purchase order summary showing selected provider, warehouse, and dates">
         <KeyValueStrip
           css="gap-x-12 gap-y-4"
           label1="Proveedor"
@@ -495,7 +495,7 @@ const formatDateOrDash = (value: string | number) => {
         />
       </div>
 
-      <div class="flex-1 min-h-0 px-12 pb-8 mt-4">
+      <div class="flex-1 min-h-0 px-12 pb-8 mt-4" aria-label="Purchase order cart with product list, quantities, and prices">
         <VTable
           columns={cartColumns}
           data={orderState.items}

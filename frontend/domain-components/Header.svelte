@@ -103,6 +103,7 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 				buttonClass="w-40 h-40 rounded-full bg-white/10 hover:bg-white/20
 					flex items-center justify-center transition-colors shadow-sm"
 				contentCss="px-4 pb-8 md:px-8 md:py-8"
+				label="Opens application settings and configuration panel."
 			>
 				{#snippet button()}
 					<span class="text-white text-lg icon-cog"></span>

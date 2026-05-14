@@ -242,10 +242,10 @@ import {
 
 <Page title="Sedes & Almacenes" options={pageOptions}>
   {#if Core.pageOptionSelected === 1 /* Sedes */}
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-6" aria-label="Sedes list toolbar with search filter and create button">
       <FilterInput bind:value={filterText} css="mr-16 w-256" />
       <div class="flex items-center">
-        <Button color="green" icon="icon-plus" label="Agregar Sede" onClick={() => {
+        <Button color="green" icon="icon-plus" label="Opens the modal to create a new business location (sede)." onClick={() => {
           sedeForm = { ss: 1 } as ISede
           Core.openModal(1)
         }} />
@@ -260,10 +260,10 @@ import {
 
   {#if Core.pageOptionSelected === 2 /* Almacenes */}
     <div class="w-full">
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center justify-between mb-6" aria-label="Almacenes list toolbar with search filter and create button">
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
-          <Button color="green" icon="icon-plus" label="Agregar Almacén" onClick={() => {
+          <Button color="green" icon="icon-plus" label="Opens the modal to create a new warehouse linked to a sede." onClick={() => {
             almacenForm = { ID: 0, SedeID: 0, Nombre: "", Descripcion: "", ss: 1, upd: 0, Layout: [] }
             Core.openModal(2)
           }} />
@@ -313,7 +313,7 @@ import {
     onSave={() => { saveSede() }}
     onDelete={sedeForm?.ID > 0 ? () => { saveSede(true) } : undefined}
   >
-    <div class="grid grid-cols-24 gap-10">
+    <div class="grid grid-cols-24 gap-10" aria-label="Sede form with name, description, phone, address, and location">
       <Input bind:saveOn={sedeForm} save="Nombre"
         css="col-span-24 md:col-span-10" label="Nombre" required={true}
         disabled={sedeForm?.ID > 0}
@@ -342,7 +342,7 @@ import {
     onSave={() => { saveAlmacen() }}
     onDelete={almacenForm?.ID > 0 ? () => { saveAlmacen(true) } : undefined}
   >
-    <div class="grid grid-cols-24 gap-10">
+    <div class="grid grid-cols-24 gap-10" aria-label="Almacen form with sede, name, and description">
       <SearchSelect bind:saveOn={almacenForm} save="SedeID"
         css="col-span-24 md:col-span-12" label="Sede"
         keyId="ID" keyName="Nombre" options={almacenesService.Sedes}

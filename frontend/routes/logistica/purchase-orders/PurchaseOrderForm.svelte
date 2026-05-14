@@ -24,7 +24,7 @@ let {
 } = $props()
 </script>
 
-<div class="grid grid-cols-2 gap-8">
+<div class="grid grid-cols-2 gap-8" aria-label="Purchase order header form with provider, warehouse, dates, notes, and invoice number">
   <SearchSelect
     label="Proveedor"
     keyId="ID"

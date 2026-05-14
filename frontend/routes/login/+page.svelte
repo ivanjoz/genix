@@ -57,7 +57,7 @@
 <div class="relative">
   <img class="bg-image-1" src="/images/background-1.webp" alt="" />
   <div class="flex items-center h-screen login-bg-c1 relative">
-    <div class="login-bg-1 w-full">
+    <div class="login-bg-1 w-full" aria-label="Login form with username and password">
       <div class="login-tt flex items-center text-xl">
         Iniciar Sesión
       </div>
@@ -99,6 +99,7 @@
       <div class="flex w-full justify-center items-center mt-[1.4rem]">
         <button
           class="bn1 big d-blue"
+          aria-label="Submit login credentials"
           disabled={isLoading}
           onclick={ev => {
             ev.stopPropagation()

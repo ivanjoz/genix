@@ -399,7 +399,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
 <div class="flex h-full gap-20">
   <!-- Left column: OC picker + lot input + filter, then product cards. -->
   <div class="flex-1 flex flex-col min-w-0 relative">
-    <div class="flex items-center gap-8 mb-12">
+    <div class="flex items-center gap-8 mb-12" aria-label="Purchase order and lot selection toolbar">
       <div class="w-260">
         <SearchSelect options={purchaseOrderOptions} keyId="ID" keyName="Nombre"
           selected={selectedOrderID}
@@ -437,7 +437,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
       </div>
     {:else}
       <!-- Product cards from the selected purchase order, filtered by name/SKU. -->
-      <div class="flex flex-col gap-6 overflow-y-auto pr-4" style="max-height: calc(100vh - var(--header-height) - 160px);">
+      <div class="flex flex-col gap-6 overflow-y-auto pr-4" style="max-height: calc(100vh - var(--header-height) - 160px);" aria-label="Product cards from the selected purchase order">
         {#each filteredOrderProductCards as card (card.key)}
           {@const added = addedQuantityByCardKey.get(card.key) || 0}
           <button type="button" class="text-left bg-gray-50 hover:bg-blue-50 border border-gray-200 rounded-md px-12 py-8 flex items-center gap-12 transition-colors"
@@ -469,7 +469,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
     mobileLayerTitle="Ingreso de OC"
     useMobileLayerVertical={124}
   >
-    <div class="px-12 py-10 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 gap-12">
+    <div class="px-12 py-10 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 gap-12" aria-label="Purchase order entry header with warehouse selector and save button">
       <div class="font-bold text-gray-800 text-lg">
         {selectedOrder ? `Orden #${selectedOrder.ID}` : '—'}
       </div>
@@ -485,7 +485,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
       </div>
       <Button color="blue" icon="icon-floppy" css="shrink-0"
         disabled={isSaving || !selectedOrderID || entries.length === 0}
-        label="Guardar ingreso de mercadería" onClick={handleSave}
+        label="Submits the received items from the purchase order into the selected warehouse stock." onClick={handleSave}
         name={isSaving ? 'Guardando…' : 'Guardar'} hideNameOnMobile />
     </div>
 
@@ -527,6 +527,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
                     class="w-26 h-26 rounded-full b-color-green flex items-center justify-center text-xs"
                     onclick={() => openSerialModal(row)}
                     title="Editar seriales"
+                    aria-label="Edit serial numbers for this entry"
                   >
                     <i class={total === 0 ? 'icon-plus' : 'icon-pencil'}></i>
                   </button>

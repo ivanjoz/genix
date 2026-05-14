@@ -184,7 +184,7 @@ import { formatN, wordInclude } from '$libs/helpers'
   }
 </script>
 
-<div class="flex flex-col h-full min-h-0">
+<div class="flex flex-col h-full min-h-0" aria-label="Product search panel with text filter and product cards">
   <div class="mb-12 flex gap-6 md:gap-12">
     <div class={displayProviderFilter ? 'w-[60%] md:flex-1' : 'w-full md:flex-1'}>
       <input type="text"
@@ -238,6 +238,7 @@ import { formatN, wordInclude } from '$libs/helpers'
             </div>
             <button class="absolute -right-4 -top-4 z-20 hidden h-22 min-w-22 items-center justify-center rounded-full bg-red-600 text-white shadow group-hover:flex hover:bg-red-700"
               title="Quitar del carrito"
+              aria-label="Remove {card.displayName} from cart"
               onclick={(ev) => { ev.stopPropagation(); onRemove?.(card) }}
             >
               <i class="icon-cancel text-[12px] leading-none"></i>

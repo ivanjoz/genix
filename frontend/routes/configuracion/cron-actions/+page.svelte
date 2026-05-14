@@ -106,9 +106,9 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
 
 <Page title="Cron Actions">
   <div class="h-full">
-    <div class="flex items-center justify-between mb-6 gap-12">
+    <div class="flex items-center justify-between mb-6 gap-12" aria-label="Cron actions toolbar with filter and reload button">
       <FilterInput bind:value={filterText} css="w-320" />
-      <Button color="blue" name="Recargar" icon="icon-rotate-right"
+      <Button color="blue" name="Recargar" icon="icon-rotate-right" label="Reloads the cron actions list from the server."
         onClick={() => cronActionsService.fetchOnline()} />
     </div>
 

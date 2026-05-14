@@ -218,7 +218,7 @@
 <Page title={pageTitle}>
   <Layer type="content">
     <div class="w-full">
-      <div class="mb-6 flex items-center justify-between">
+      <div class="mb-6 flex items-center justify-between" aria-label="Records list toolbar with search filter and create button">
         <FilterInput bind:value={filterText} placeholder="Buscar por nombre, email o registro"
           css="mr-16 w-320 max-w-full" />
         <div class="flex items-center">
@@ -226,7 +226,7 @@
             {filteredClientProviders.length} registros
           </div>
           <Button color="green" icon="icon-plus" name="Nuevo" hideNameOnMobile
-            label={`Crear ${layerTitleSingular.toLowerCase()}`}
+            label={`Opens the side layer to create a new ${layerTitleSingular.toLowerCase()}.`}
             onClick={openCreateClientProviderLayer} />
         </div>
       </div>
@@ -258,7 +258,7 @@
       resetEntityForm()
     }}
   >
-    <div class="mt-8 grid grid-cols-24 gap-10">
+    <div class="mt-8 grid grid-cols-24 gap-10" aria-label="Client or supplier detail form">
       <Input
         label="Nombre"
         saveOn={clientProviderForm}

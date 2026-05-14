@@ -190,6 +190,7 @@ import { parseSVG } from '$libs/helpers';
 			horizontalOffset={-200}
 			edgeMargin={32}
 			layerClass="w-768! max-w-[82vw]! rounded-[11px]!"
+			label="Opens the shopping cart panel."
 			useBig
 		>
 			{#snippet button(open)}

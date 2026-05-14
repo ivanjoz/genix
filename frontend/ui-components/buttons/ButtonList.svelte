@@ -1,10 +1,12 @@
 <script lang="ts">
   import { parseSVG } from '$libs/helpers';
   import angleSvg from '$domain/assets/angle.svg?raw';
+  import Button from './Button.svelte';
 
   interface ActionItem {
     id: number;
     name: string;
+    label?: string;
     icon: string;
     handler: () => void;
   }
@@ -35,10 +37,7 @@
     </div>
     <div class="bl-content">
       {#each items as item (item.id)}
-        <button class="bl-item" type="button" onclick={item.handler}>
-          <i class={item.icon}></i>
-          <span>{item.name}</span>
-        </button>
+        <Button name={item.name} icon={item.icon} label={item.label} css="bl-item" onClick={item.handler} />
       {/each}
     </div>
   </div>

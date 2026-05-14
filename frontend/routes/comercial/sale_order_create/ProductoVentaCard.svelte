@@ -147,6 +147,7 @@ import Card from '$components/cards/Card.svelte';
                <div class="flex flex-wrap gap-4">
                   {#each firstSerialNumbers as stockDetail}
                       <button class="serial-number-button transition-colors"
+                        aria-label="Add serial number {stockDetail.SerialNumber} to cart"
                         onclick={(e) => {
                             e.stopPropagation()
                             onadd(1, stockDetail.SerialNumber)
@@ -165,6 +166,7 @@ import Card from '$components/cards/Card.svelte';
                   {#each quickQuantities as cantidad}
                      <button
                        class="flex h-30 w-[56px] min-w-[14%] items-center justify-center rounded bg-gray-100 text-xs font-bold text-gray-500 transition-colors hover:bg-blue-100 hover:text-blue-600 md:w-32 md:min-w-0"
+                       aria-label="Add {cantidad} units to cart"
                        onclick={(e) => {
                            e.stopPropagation()
                            onadd(cantidad)

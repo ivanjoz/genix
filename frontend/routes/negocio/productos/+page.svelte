@@ -454,13 +454,13 @@ import {
     />
 
     {#if view === 1}
-      <Button label="Importar"
+      <Button label="Opens the import modal to load products from an Excel file."
         color="blue"
         icon="icon-upload"
         css="ml-auto mr-8 col-span-3"
         onClick={openImportProductosModal}
       />
-      <Button label="Descargar"
+      <Button label="Exports the current product list to an Excel file for download."
         color="purple"
         icon="icon-download"
         css="mr-8 col-span-3"
@@ -756,7 +756,7 @@ import {
       <HTMLEditor saveOn={productoForm} save="ContentHTML" css="mt-12" />
     {/if}
     {#if layerView === 3}
-      <div class="mt-16 w-full">
+      <div class="mt-16 w-full" aria-label="Product attributes and presentations editor">
         <Atributos bind:producto={productoForm}></Atributos>
       </div>
     {/if}

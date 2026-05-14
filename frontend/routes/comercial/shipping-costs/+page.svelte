@@ -354,7 +354,7 @@
 <Page title="Costos de Delivery">
   <div class="flex h-full gap-20">
     <div class="flex-1 min-w-0 h-[calc(100vh-var(--header-height)-20px)] bg-gray-100 rounded-md border border-gray-200 p-8 flex flex-col min-h-0">
-      <div class="mb-8 flex items-center gap-8 w-full justify-between shrink-0">
+      <div class="mb-8 flex items-center gap-8 w-full justify-between shrink-0" aria-label="Shipping costs toolbar with filter and save">
         <FilterInput
           bind:value={filterText}
           placeholder="Filtrar"
@@ -362,6 +362,7 @@
           css="w-240"
         />
         <Button color="purple" icon="icon-floppy" name="Guardar"
+          label="Saves all edited shipping cost records to the server."
           onClick={saveDeliveryCosts} />
       </div>
       <div class="flex-1 min-h-0 overflow-auto">
@@ -409,7 +410,7 @@
             Costos de Delivery
           </div>
         </div>
-        <div class="mt-6 grid grid-cols-[minmax(160px,1fr)_110px_110px] gap-8">
+        <div class="mt-6 grid grid-cols-[minmax(160px,1fr)_110px_110px] gap-8" aria-label="Departamento delivery cost form with flat and per-kg rates">
           <div class="bg-gray-100 rounded-md p-8">
             <div class="text-[10px] uppercase text-gray-500">Departamento</div>
             <div class="text-[15px] text-gray-800 truncate">{selectedDepartamento?.Nombre || 'Seleccione'}</div>

@@ -77,6 +77,7 @@ import { Core } from '$core/store.svelte';
   onclick={handleCardClick}
   role="button"
   tabindex="0"
+  aria-label={`Access control card for ${acceso.nombre}`}
   onkeydown={(ev) => {
     if (ev.key === 'Enter' || ev.key === ' ') {
       ev.preventDefault()

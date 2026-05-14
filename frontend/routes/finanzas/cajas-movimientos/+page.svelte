@@ -106,7 +106,7 @@ import { formatN } from '$libs/helpers';
 </script>
 
 <Page title="Cajas Movimientos">
-  <div class="flex items-center justify-between mb-12">
+  <div class="flex items-center justify-between mb-12" aria-label="Cash movements search filter with cash register, date range, and search">
     <div class="flex items-center w-full" style="max-width: 64rem;">
       <SearchSelect
         bind:saveOn={form}

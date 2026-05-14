@@ -73,14 +73,14 @@ import { Env } from '$core/env';
 <Page title="Backups & Restore">
   <div class="w-full grid gap-20" style="grid-template-columns: 4fr 3fr;">
     <div>
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center justify-between mb-6" aria-label="Backups toolbar with generate and upload buttons">
         <div class="h2 ff-bold">Backups</div>
         <div class="flex items-center">
-          <Button color="green" icon="icon-plus" label="Generar backup" css="mr-8" onClick={() => {
+          <Button color="green" icon="icon-plus" label="Generates a new database backup snapshot." css="mr-8" onClick={() => {
             ConfirmWarn("Generar Backup", "¿Desea generar el backup ahora?", "SI", "NO",
               () => { generarBackup() })
           }} />
-          <Button color="blue" icon="icon-upload" label="Subir backup" />
+          <Button color="blue" icon="icon-upload" label="Opens dialog to upload an existing backup file." />
         </div>
       </div>
       <VTable
@@ -116,11 +116,11 @@ import { Env } from '$core/env';
               <div class="w-full flex-wrap ff-semibold">{backupSelected.Name}</div>
               <div class="text-gray-600 mt-4">{formatN(backupSelected.Size / 1000 / 1000, 2)} mb</div>
             </div>
-            <Button color="purple" icon="icon-download" label="Descargar backup"
+            <Button color="purple" icon="icon-download" label="Downloads the selected backup file."
               onClick={() => downloadBackup(backupSelected!)} />
           </div>
           <div class="flex justify-center w-full mt-16">
-            <Button color="blue" name="Restaurar" icon="icon-database" onClick={() => {
+            <Button color="blue" name="Restaurar" icon="icon-database" label="Restores the database from the selected backup." onClick={() => {
               ConfirmWarn("Restaurar Backup",
                 `Restaurar el backup realizado el ${formatTime(backupSelected!.upd, "Y-m-d h:n")}`,
                 "SI", "NO", () => { restaurar(backupSelected!.Name) })

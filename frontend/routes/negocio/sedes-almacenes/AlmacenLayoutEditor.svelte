@@ -28,11 +28,11 @@ import Button from '$components/buttons/Button.svelte';
   }
 </script>
 
-<div class="w-full h-full relative">
+<div class="w-full h-full relative" aria-label="Warehouse layout editor">
   <div class="flex justify-between w-full mb-8 px-12 pt-12">
     <div></div>
     <div class="flex items-center">
-      <Button color="green" icon="icon-plus" label="Agregar Layout" onClick={addLayout} />
+      <Button color="green" icon="icon-plus" label="Adds a new storage area layout section to the warehouse grid editor." onClick={addLayout} />
     </div>
   </div>
 
@@ -48,7 +48,7 @@ import Button from '$components/buttons/Button.svelte';
       {@const heads = Array.from({ length: layout.ColCant || 1 }, (_, i) => String(i + 1))}
       {@const rows = Array.from({ length: layout.RowCant || 1 }, (_, i) => String(i + 1))}
 
-      <div class="_1 bg-white rounded-lg shadow-sm p-8 mb-12">
+      <div class="_1 bg-white rounded-lg shadow-sm p-8 mb-12" aria-label="Storage area layout: {layout.Name || `Section ${idx + 1}`}">
         <div class="w-full flex items-center justify-between px-8 py-8">
           <div class="flex items-center">
             <Input bind:saveOn={layouts[idx]} save="Name"

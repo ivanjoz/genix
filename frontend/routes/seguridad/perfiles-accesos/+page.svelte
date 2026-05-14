@@ -238,10 +238,10 @@ import {
   <div class="flex justify-between h-full gap-8 max-md:flex-col">
     <!-- Left side: Profiles table -->
     <div class="w-full md:w-[32%]">
-      <div class="flex justify-between items-center w-full mb-10">
+      <div class="flex justify-between items-center w-full mb-10" aria-label="Profiles toolbar with filter and create button">
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
-          <Button color="green" icon="icon-plus" label="Agregar perfil" onClick={() => {
+          <Button color="green" icon="icon-plus" label="Opens the modal to create a new access profile." onClick={() => {
             perfilForm = { ss: 1, accesosMap: new Map() } as IPerfil
             Core.openModal(2)
           }} />
@@ -280,7 +280,7 @@ import {
 	        <div class="flex items-center max-md:absolute max-md:top-0 max-md:right-0">
 	          {#if perfilForm.ID > 0}
 	            <Button color="blue" icon="icon-floppy" name="Guardar" css="mr-8"
-	              hideNameOnMobile label="Guardar" onClick={() => savePerfil(false, true)} />
+	              hideNameOnMobile label="Saves the access permissions for this profile." onClick={() => savePerfil(false, true)} />
 	          {/if}
 	        </div>
 	      </div>
@@ -321,7 +321,7 @@ import {
     onSave={() => savePerfil()}
     onClose={() => { perfilForm = {} as IPerfil }}
   >
-    <div class="grid grid-cols-24 gap-10 p-6">
+    <div class="grid grid-cols-24 gap-10 p-6" aria-label="Profile form with name and description">
       <Input
         bind:saveOn={perfilForm}
         save="Nombre"

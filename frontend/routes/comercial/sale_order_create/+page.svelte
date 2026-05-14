@@ -306,7 +306,7 @@ import { SaleOrderState } from "./sale_order.svelte";
       <!-- Main Content -->
       <div class="flex-1 flex flex-col min-w-0 relative">
         <!-- Toolbar -->
-        <div class="mb-12 flex gap-6 md:gap-12">
+        <div class="mb-12 flex gap-6 md:gap-12" aria-label="Product search toolbar with warehouse selector and product filter">
           <div class="w-[40%] md:w-250 md:mr-12">
             <SearchSelect
               label=""
@@ -395,6 +395,7 @@ import { SaleOrderState } from "./sale_order.svelte";
         {/if}
         <!-- Header -->
         <div class="px-10 py-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
+          aria-label="Sale order totals and save action bar"
         >
        	<div class="mr-16">
           <div class="hidden font-bold font-xl mb-2 -mt-2 text-gray-800 mb-4 items-center justify-between md:flex">
@@ -420,7 +421,7 @@ import { SaleOrderState } from "./sale_order.svelte";
           </div>
         </div>
           <Button color="blue" icon="icon-floppy" name="Generar" hideNameOnMobile
-            css="shrink-0" label="Guardar venta" onClick={handlePostSaleOrder} />
+            css="shrink-0" label="Saves the current sale order and generates it in the system." onClick={handlePostSaleOrder} />
         </div>
         <div class="w-full px-12 mt-6 mb-6">
 	        <div class="col-span-2">
@@ -431,7 +432,7 @@ import { SaleOrderState } from "./sale_order.svelte";
 	       	  />
 	        </div>
         </div>
-        <div class="grid w-full grid-cols-2 gap-8 px-12 py-6 md:flex md:items-center">
+        <div class="grid w-full grid-cols-2 gap-8 px-12 py-6 md:flex md:items-center" aria-label="Sale order payment and client options">
         	<SearchSelect
            css="w-[30%] md:order-1"
 	            label="" save="LastPaymentCajaID"
@@ -458,7 +459,7 @@ import { SaleOrderState } from "./sale_order.svelte";
 	           />
           </div>
         </div>
-        <div class="px-12 pb-10 mt-6">
+        <div class="px-12 pb-10 mt-6" aria-label="Client selection or registration form">
           <div class="grid grid-cols-[170px,1fr] gap-8">
             {#if clientModeSelected === 1}
               <SearchSelect
@@ -489,7 +490,7 @@ import { SaleOrderState } from "./sale_order.svelte";
           </div>
         </div>
         <!-- List -->
-        <div class="flex-1 overflow-y-auto px-8 py-4 space-y-4">
+        <div class="flex-1 overflow-y-auto px-8 py-4 space-y-4" aria-label="Sale order cart items list">
           {#each ventasState.ventaProductos as item (item.key)}
             <div
               class="flex items-center gap-8 py-4 px-8 rounded-lg bg-gray-50 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 transition-all group"
@@ -524,7 +525,7 @@ import { SaleOrderState } from "./sale_order.svelte";
                 <Button icon="icon-trash"
                   css="p-4 text-red-400 transition-opacity hover:text-red-600 md:opacity-0 md:group-hover:opacity-100"
                   onClick={() => ventasState.removeProducto(item.key)}
-                  label="Eliminar"
+                  label="Removes this product from the current sale order cart."
                 />
               </div>
             </div>

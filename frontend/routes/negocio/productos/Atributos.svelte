@@ -50,9 +50,10 @@ import { productoAtributos, type IProducto, type IProductoPresentacion } from ".
 
 </script>
 
-<div class="flex justify-between mt-4">
+<div class="flex justify-between mt-4" aria-label="Product presentations toolbar">
   <div></div>
-  <Button color="green" icon="icon-plus" css="s1" onClick={() => {
+  <Button label="Opens the modal to add a new product presentation or variant."
+    color="green" icon="icon-plus" css="s1" onClick={() => {
     presentacionForm = {
       at: producto.AtributosIDs?.[0] as number,
       id: tempCounter,
@@ -104,7 +105,7 @@ import { productoAtributos, type IProducto, type IProductoPresentacion } from ".
     closeAllModals()
   }}
 >
-  <div class="grid grid-cols-24 gap-10 p-4">
+  <div class="grid grid-cols-24 gap-10 p-4" aria-label="Product presentation form with attribute, name, price, and color">
     <SearchSelect label="Atributo" saveOn={presentacionForm} css="col-span-12"
       save="at" keyId="id" keyName="name"
       options={productoAtributos}

@@ -878,7 +878,7 @@ $effect(() => {
 let rerenderHandler: ((() => void) | undefined) = undefined
 </script>
 
-<div class="grid grid-cols-24 gap-8 mb-8 items-center md:flex">
+<div class="grid grid-cols-24 gap-8 mb-8 items-center md:flex" aria-label="Stock movement toolbar with warehouse selector, filter, and save button">
   <div class="col-span-14 md:col-span-5 min-w-0 mr-8">
     <SearchSelect options={almacenes?.Almacenes || []} keyId="ID" keyName="Nombre"
       bind:saveOn={stockFilters} save="warehouseID" placeholder="ALMACÉN ::"
@@ -892,6 +892,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
   <div class="col-span-10 md:col-span-5 md:order-3 min-w-0 flex justify-end gap-8 md:ml-auto">
     {#if stockFilters.warehouseID > 0}
       <Button color="blue" icon="icon-floppy" name="Guardar" css="shrink-0"
+        label="Saves all pending stock changes for the selected warehouse."
         onClick={guardarRegistros} />
     {/if}
   </div>

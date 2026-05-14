@@ -39,6 +39,8 @@ import { Agent } from '$core/agent/registry';
     useOutline?: boolean;
     /** Button class to use instead of `buttonClass` while the layer is open */
     buttonClassOnShow?: string;
+    /** Descriptive label for the agent and aria-label (e.g. "Opens the search filter panel.") */
+    label?: string;
   }
 
   let {
@@ -60,7 +62,8 @@ import { Agent } from '$core/agent/registry';
     icon,
     iconOnShow,
     useOutline,
-    buttonClassOnShow
+    buttonClassOnShow,
+    label,
   }: Props = $props();
 
   // svelte-ignore state_referenced_locally
@@ -230,7 +233,7 @@ import { Agent } from '$core/agent/registry';
     return Agent.register({
       id: componentID,
       type: "ButtonLayer",
-      label: buttonText || "",
+      label: label || buttonText || "",
       open: () => {
         if (!isOpen) {
           isOpen = true;
@@ -285,6 +288,7 @@ import { Agent } from '$core/agent/registry';
       onclick={toggleLayer}
       class="{(isOpen ? buttonClassOnShow : buttonClass) || buttonClass || 'bx-purple min-w-40'}"
       type="button"
+      aria-label={label || buttonText || undefined}
     >
       {buttonText}
       {#if (isOpen ? iconOnShow : icon) || icon}

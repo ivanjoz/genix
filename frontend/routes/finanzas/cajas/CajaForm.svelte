@@ -14,7 +14,7 @@ let {
 } = $props()
 </script>
 
-<div class="grid grid-cols-24 gap-10">
+<div class="grid grid-cols-24 gap-10" aria-label="Cash register form with type, name, description, and sede">
   <SearchSelect bind:saveOn={form} save="Tipo" css="col-span-24 md:col-span-10"
     label="Tipo" keyId="id" keyName="name" options={cajaTipos}
     placeholder="" required={true}

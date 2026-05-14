@@ -270,10 +270,10 @@ const { Loading } = pkg
 <Page title="Usuarios">
   <Layer type="content">
     <div class="h-full w-full">
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center justify-between mb-6" aria-label="Users toolbar with filter and create button">
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
-          <Button color="green" icon="icon-plus" label="Agregar usuario"
+          <Button color="green" icon="icon-plus" label="Opens the side layer to create a new user."
             onClick={openCreateUsuarioLayer} />
         </div>
       </div>
@@ -335,7 +335,7 @@ const { Loading } = pkg
       resetUsuarioForm()
     }}
   >
-    <div class="grid grid-cols-24 gap-10 mt-8">
+    <div class="grid grid-cols-24 gap-10 mt-8" aria-label="User form with username, names, email, profiles, and password">
       <Input
         bind:saveOn={usuarioForm}
         save="Usuario"

@@ -56,6 +56,7 @@
     horizontalOffset={-240}
     edgeMargin={10}
     disableTriggerToggle={true}
+    label="Opens the product search panel."
     useBig
   >
     {#snippet button(_open)}

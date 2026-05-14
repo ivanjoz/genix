@@ -37,20 +37,22 @@ import { SectionList } from '$ecommerce/templates/registry';
 
 <div class="templates-tab">
   <div class="search-bar">
-    <input 
-      type="text" 
-      bind:value={searchQuery} 
+    <input
+      type="text"
+      bind:value={searchQuery}
       placeholder="Search templates..."
       class="search-input"
+      aria-label="Search section templates"
     />
   </div>
 
   <div class="categories-strip">
     {#each categories as category}
-      <button 
-        class="category-btn" 
+      <button
+        class="category-btn"
         class:active={selectedCategory === category}
         onclick={() => selectedCategory = category}
+        aria-label={`Filter by ${category} category`}
       >
         {category}
       </button>
@@ -59,12 +61,13 @@ import { SectionList } from '$ecommerce/templates/registry';
 
   <div class="templates-grid">
     {#each filteredTemplates() as template}
-      <button 
-        class="template-card" 
+      <button
+        class="template-card"
         onclick={() => onSelect(template)}
         draggable="true"
         ondragstart={(e) => handleDragStart(e, template)}
         ondragend={handleDragEnd}
+        aria-label={`Add ${template.name} section to store`}
       >
         <div class="template-icon">🧩</div>
         <div class="template-info">

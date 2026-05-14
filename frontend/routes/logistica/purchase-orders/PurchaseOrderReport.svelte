@@ -486,8 +486,9 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
         edgeMargin={0} buttonClassOnShow="bx-red"
         layerClass="w-600"
         icon="icon-search" iconOnShow="icon-cancel"
+        label="Opens the search filter for purchase orders."
       >
-        <div class="w-full grid grid-cols-24 gap-12 p-12">
+        <div class="w-full grid grid-cols-24 gap-12 p-12" aria-label="Purchase orders search filter with date range, provider, product, and status">
           <DateInput
             label="Fecha Inicio"
             css="col-span-12"
@@ -618,29 +619,34 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
     actions={[
     	{ id: 1,
      		name: "Confirmar", icon: "icon-ok text-green-500",
+       	label: "Confirms and approves the selected purchase order.",
        	handler: () => { void confirmSelectedPurchaseOrder() }
      	},
      	{ id: 5,
     		name: "Editar", icon: "icon-pencil text-blue-500",
+       	label: "Opens the modal to edit the selected purchase order.",
        	handler: () => { openEditPurchaseOrderModal() }
      	},
      	{ id: 2,
     		name: "Pagar", icon: "icon-tag",
+       	label: "Opens the payment form for the selected purchase order.",
        	handler: () => { openPayPurchaseOrderModal() }
      	},
      	{ id: 3,
     		name: "Anular", icon: "icon-cancel",
+       	label: "Cancels and annuls the selected purchase order.",
        	handler: () => { annulSelectedPurchaseOrder() }
      	},
      	{ id: 4,
     		name: "Generar Copia", icon: "text-xs icon-plus",
+       	label: "Creates a copy of the selected purchase order.",
        	handler: () => { void generarCopiaPurchaseOrder() }
      	},
     ]}
   >
     {#if selectedPurchaseOrder}
-      <div class="flex flex-col gap-10 mt-8">
-        <div class="grid grid-cols-24 gap-8 text-13 md:text-14">
+      <div class="flex flex-col gap-10 mt-8" aria-label="Purchase order detail with provider info, amounts, notes, and product list">
+        <div class="grid grid-cols-24 gap-8 text-13 md:text-14" aria-label="Purchase order summary fields">
           <LabelText
             css="col-span-8"
             label="Proveedor"
@@ -752,7 +758,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
     title={`Pagar Orden #${selectedPurchaseOrder?.ID || ''}`}
     onSave={() => { void submitPurchaseOrderPayment() }}
   >
-    <div class="grid grid-cols-2 gap-8">
+    <div class="grid grid-cols-2 gap-8" aria-label="Purchase order payment form with cash register and amount">
       <SearchSelect
         css="col-span-2"
         label="Caja"

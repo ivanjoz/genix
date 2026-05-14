@@ -41,6 +41,7 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   onclick={handleSelect}
   role="button"
   tabindex="0"
+  aria-label={`Edit ${Config?.schema.name || section.type} section`}
   onkeydown={(e) => e.key === 'Enter' && handleSelect()}
 >
   <div class="section-outline"></div>

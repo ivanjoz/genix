@@ -43,11 +43,12 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
     <div class="layer-header">
       <div class="tab-nav">
         {#each tabs as tab}
-          <button 
-            class="tab-btn" 
-            class:active={activeTabId === tab.id} 
+          <button
+            class="tab-btn"
+            class:active={activeTabId === tab.id}
             onclick={() => activeTabId = tab.id}
             title={tab.name}
+            aria-label={`Switch to ${tab.name} tab`}
           >
             <span class="tab-icon">{tab.icon}</span>
             <span class="tab-name">{tab.name}</span>
@@ -56,7 +57,7 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
       </div>
       
       {#if editorStore.selectedId}
-        <button class="close-btn" onclick={handleClose} title="Close Editor">
+        <button class="close-btn" onclick={handleClose} title="Close Editor" aria-label="Close the section editor">
           ✕
         </button>
       {/if}

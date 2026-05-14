@@ -116,6 +116,7 @@ import { accessHelper } from '$core/security';
       wrapperClass="w-full h-full"
       buttonClass="w-full h-full"
       edgeMargin={32}
+      label="Opens the user account menu."
       useBig layerClass="w-700 max-w-[90vw] rounded-[11px]">
       {#snippet button(open)}
         <button class={[s1.bn1, "w-full", open ? s1.button_menu_top : ""].join(" ")}>

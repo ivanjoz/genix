@@ -29,14 +29,14 @@ const { Loading } = pkg;
 </script>
 
 <Page title="Parámetros">
-    <div class="flex justify-between items-center mb-8">
+    <div class="flex justify-between items-center mb-8" aria-label="Company parameters header with save button">
       <div><div class="h3 ff-bold">Parámetros de la Empresa</div></div>
       <div class="flex items-center">
-        <Button color="blue" icon="icon-floppy" name="Guardar" onClick={saveEmpresa} />
+        <Button color="blue" icon="icon-floppy" name="Guardar" label="Saves all company parameter changes." onClick={saveEmpresa} />
       </div>
     </div>
     <div class="w-full grid grid-cols-1 lg:grid-cols-[4fr_3fr] gap-4">
-      <div class="grid grid-cols-24 gap-10 content-start">
+      <div class="grid grid-cols-24 gap-10 content-start" aria-label="Company parameters form with name, RUC, address, and ecommerce keys">
         <Input css="col-span-14" label="Nombre" save="Nombre" bind:saveOn={service.empresa}
           required={true} />
         <Input css="col-span-10" label="RUC" save="RUC" bind:saveOn={service.empresa}
@@ -66,7 +66,7 @@ const { Loading } = pkg;
           save="RsaKey" bind:saveOn={service.empresa.CulquiConfig} />
       </div>
       <div class="" style="margin-left: 16px">
-        <div class="w-full py-10 px-12 bg-white rounded shadow-sm">
+        <div class="w-full py-10 px-12 bg-white rounded shadow-sm" aria-label="SMTP configuration form for email notifications">
           <div class="w-full mb-8">Parámetros SMTP para notificaciones</div>
           <div class="grid grid-cols-24 gap-4">
             <Input css="col-span-12" label="Host" save="Host" bind:saveOn={service.empresa.SmtpConfig} />

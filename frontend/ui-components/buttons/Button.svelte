@@ -53,7 +53,7 @@
   data-id="Button:{componentID}"
   aria-label={label}
   data-value={role}
-  class={`bx-${color}${useCircle ? ' round' : ''} ${css}`.trim()}
+  class={`${color ? `bx-${color}` : ''}${useCircle ? ' round' : ''} ${css}`.trim()}
   {disabled}
   onclick={triggerClick}
 >

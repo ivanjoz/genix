@@ -116,7 +116,7 @@ import { type IListaRegistro, type ListasCompartidasService } from "$services/ne
 
 </script>
 
-<div class="w-full cards-scroll-container">
+<div class="w-full cards-scroll-container" aria-label="Categories and brands list">
   <div class="w-full flex flex-wrap gap-12 content-start">
     {#each filteredCategorias as e }
       <div class="_1 px-12 py-10 w-250 min-h-140" role="button" tabindex="0"
@@ -148,7 +148,7 @@ import { type IListaRegistro, type ListasCompartidasService } from "$services/ne
     onSave(true)
   } : undefined}
   >
-  <div class="grid grid-cols-12 gap-10 p-6">
+  <div class="grid grid-cols-12 gap-10 p-6" aria-label="Category or brand form with name, description, and images">
     <Input label="Nombre" css="col-span-12"
       saveOn={form} save="Nombre" required={true}
     />

@@ -55,7 +55,7 @@ import { Agent } from '$core/agent/registry';
     type: 'side' | 'bottom' | 'content'
     id?: number
     actionsButton?: { name: string; icon: string; css?: string }
-    actions?: { id: number; name: string; icon: string; handler: () => void }[]
+    actions?: { id: number; name: string; label?: string; icon: string; handler: () => void }[]
   } = $props()
 
   // Track visibility to prevent flash before transition starts

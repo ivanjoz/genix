@@ -592,6 +592,7 @@
 	         class="w-30 h-30 text-sm rounded-full bg-red-100 text-red-700 fx-c"
 	         type="button"
 	         title="Anular pedido"
+	         aria-label="Cancel this sale order"
 	         onclick={() => {
 	           onClickAnularSoloUI();
 	         }}
@@ -602,8 +603,8 @@
       {/if}
     {/snippet}
     {#if selectedSaleOrder}
-      <div class="flex flex-col gap-10 mt-8">
-        <div class="grid grid-cols-24 gap-x-8 gap-y-8 text-13 md:text-14">
+      <div class="flex flex-col gap-10 mt-8" aria-label="Sale order detail panel with status, amounts, products, and action buttons">
+        <div class="grid grid-cols-24 gap-x-8 gap-y-8 text-13 md:text-14" aria-label="Sale order summary: status, total, and debt">
           <div class="col-span-8">
             <div class="text-gray-500">Estado</div>
             <div>{getSaleOrderStatusName(selectedSaleOrder)}</div>
@@ -624,13 +625,13 @@
           emptyMessage="No hay productos en el detalle."
         />
 
-        <div class="grid grid-cols-2 gap-8 mt-4">
+        <div class="grid grid-cols-2 gap-8 mt-4" aria-label="Sale order actions: payment and delivery">
           {#if isPostingSaleOrderAction}
             <div class="col-span-2 p-12 bg-gray-100 min-h-64 w-full rounded-md fx-c">
               <LoadingBar label={getActionInProgressLabel(saleOrderActionInProgress)} />
             </div>
           {:else}
-            <div class="p-10 bg-gray-100 min-h-64 w-full rounded-md">
+            <div class="p-10 bg-gray-100 min-h-64 w-full rounded-md" aria-label="Payment action panel with cash register selector">
               {#if canPaySaleOrder(selectedSaleOrder)}
                 <SearchSelect
                   bind:saveOn={saleOrderPaymentForm}
@@ -644,6 +645,7 @@
                 />
                 <button class={`bx-green justify-center w-[50%] h-36 ${!canPaySaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
                   disabled={!canPaySaleOrder(selectedSaleOrder) || isPostingSaleOrderAction}
+                  aria-label="Process payment for this sale order"
                   onclick={() => {
                     onClickPagar();
                   }}
@@ -660,7 +662,7 @@
                 </div>
               {/if}
             </div>
-            <div class="p-10 bg-gray-100 min-h-64 w-full rounded-md flex flex-col justify-between">
+            <div class="p-10 bg-gray-100 min-h-64 w-full rounded-md flex flex-col justify-between" aria-label="Delivery action panel with warehouse selector">
               {#if canDeliverSaleOrder(selectedSaleOrder)}
                 <SearchSelect
                   bind:saveOn={saleOrderDeliveryForm}
@@ -676,6 +678,7 @@
                 <div class="flex items-center">
                   <button class={`w-[50%] justify-center bx-blue h-36 ${!canDeliverSaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
                     disabled={!canDeliverSaleOrder(selectedSaleOrder) || isPostingSaleOrderAction}
+                    aria-label="Mark this sale order as delivered from the selected warehouse"
                     onclick={() => {
                       onClickEntregar();
                     }}

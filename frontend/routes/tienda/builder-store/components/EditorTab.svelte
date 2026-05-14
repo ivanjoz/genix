@@ -42,7 +42,7 @@ import type { StandardContent } from '$ecommerce/renderer/section-types';
 </script>
 
 {#if section && schema}
-  <div class="editor-tab">
+  <div class="editor-tab" aria-label="Section content and styling editor">
     <div class="section-meta">
       <h3>{schema.name}</h3>
       <p>{schema.description}</p>
@@ -68,10 +68,10 @@ import type { StandardContent } from '$ecommerce/renderer/section-types';
                         value={line.text}
                         oninput={(e) => handleTextLineChange(i, e.currentTarget.value)}
                       />
-                      <button class="remove-btn" onclick={() => removeTextLine(i)}>✕</button>
+                      <button class="remove-btn" aria-label="Remove this text line" onclick={() => removeTextLine(i)}>✕</button>
                     </div>
                   {/each}
-                  <button class="add-btn" onclick={addTextLine}>+ Add Line</button>
+                  <button class="add-btn" aria-label="Add a new text line" onclick={addTextLine}>+ Add Line</button>
                 </div>
               {:else if field === 'description' || field.includes('text')}
                 <textarea

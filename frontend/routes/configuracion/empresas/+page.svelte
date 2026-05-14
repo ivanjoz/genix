@@ -106,10 +106,10 @@ const { Loading } = pkg
 
 <Page title="Empresas">
   <div class="h-full">
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-6" aria-label="Companies toolbar with filter and create button">
       <FilterInput bind:value={filterText} css="mr-16 w-256" />
       <div class="flex items-center">
-        <Button color="green" icon="icon-plus" label="Agregar empresa" onClick={() => {
+        <Button color="green" icon="icon-plus" label="Opens the modal to create a new company." onClick={() => {
           empresaForm = { ss: 1, SmtpConfig: {}, CulquiConfig: {} } as IEmpresa
           Core.openModal(1)
         }} />
@@ -135,7 +135,7 @@ const { Loading } = pkg
     onSave={() => saveEmpresa()}
     onDelete={empresaForm?.id > 0 ? () => saveEmpresa(true) : undefined}
   >
-    <div class="grid grid-cols-24 gap-10 p-6">
+    <div class="grid grid-cols-24 gap-10 p-6" aria-label="Company form with name, RUC, email, phone, representative, city, and address">
       <Input
         bind:saveOn={empresaForm}
         save="Nombre"

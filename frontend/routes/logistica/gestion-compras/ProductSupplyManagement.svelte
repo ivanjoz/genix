@@ -376,7 +376,7 @@ import {
 
 <div class="flex w-full" bind:this={pageContentElement}>
   <Layer type="content">
-	  <div class="mb-6 flex items-center justify-between p-1">
+	  <div class="mb-6 flex items-center justify-between p-1" aria-label="Product supply management toolbar with search filter">
 	    <FilterInput bind:value={supplyFilterText} placeholder="Buscar producto o proveedor"
 	      css="mr-16 w-320 max-w-full" />
 	    <div class="flex items-center">
@@ -519,7 +519,7 @@ import {
     }
   }}
 >
-  <div class="grid grid-cols-24 gap-10 mt-8">
+  <div class="grid grid-cols-24 gap-10 mt-8" aria-label="Product supply configuration form with minimum stock and estimated sales">
     <Input
       label="Producto"
       saveOn={{ Nombre: productos.recordsMap.get(productSupplyForm.ProductID)?.Nombre || '' }}
@@ -543,10 +543,10 @@ import {
     />
   </div>
 
-  <div class="mt-16">
+  <div class="mt-16" aria-label="Product suppliers configuration list">
     <div class="mb-8 flex items-center justify-between">
       <div class="h4 ff-bold">Proveedores</div>
-      <Button color="green" icon="icon-plus" label="Agregar proveedor" css="h-32 px-10"
+      <Button color="green" icon="icon-plus" label="Adds a new provider row to the supply configuration for this product." css="h-32 px-10"
         onClick={addProviderSupplyRow} />
     </div>
 

@@ -218,10 +218,10 @@ import { formatN } from '$libs/helpers';
 <Page title="Cajas & Bancos">
   <div class="flex h-full gap-20">
     <div class="flex-1 flex flex-col min-w-0 relative">
-      <div class="flex justify-between items-center w-full mb-10">
+      <div class="flex justify-between items-center w-full mb-10" aria-label="Cash registers toolbar with filter and create button">
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
-          <Button color="green" icon="icon-plus" label="agregar" onClick={ev => {
+          <Button color="green" icon="icon-plus" label="Opens the modal to create a new cash register (caja)." onClick={ev => {
             cajaForm = { ID: -1, ss: 1 } as ICaja
             Core.openModal(1)
           }} />
@@ -266,7 +266,7 @@ import { formatN } from '$libs/helpers';
               <div class="text-[1.1rem] ff-bold mr-8">{cajaForm?.Nombre || ""}</div>
             </div>
             <div class="flex items-center">
-              <Button color="green" icon="icon-plus" label="add" onClick={() => {
+              <Button color="green" icon="icon-plus" label="Opens the modal to add a new cash movement." onClick={() => {
                 Core.openModal(3)
                 cajaMovimientoForm = {
                   CajaID: cajaForm.ID, SaldoFinal: cajaForm.SaldoCurrent,
@@ -333,7 +333,7 @@ import { formatN } from '$libs/helpers';
           <div class="flex w-full justify-between mt-8">
             <div></div>
             <div class="flex items-center">
-              <Button color="green" icon="icon-plus" label="add" onClick={() => {
+              <Button color="green" icon="icon-plus" label="Opens the modal to add a new cash balance reconciliation." onClick={() => {
                 Core.openModal(2)
                 cajaCuadreForm = { CajaID: cajaForm.ID } as ICajaCuadre
               }} />
@@ -386,7 +386,7 @@ import { formatN } from '$libs/helpers';
           <div class="mt-8">
             <CajaForm bind:form={cajaForm} sedes={almacenes.Sedes} />
             <div class="flex justify-end mt-12">
-              <Button color="blue" name="Guardar" icon="icon-floppy" onClick={saveCaja} />
+              <Button color="blue" name="Guardar" icon="icon-floppy" label="Saves the cash register configuration changes." onClick={saveCaja} />
             </div>
           </div>
         {/if}
@@ -411,7 +411,7 @@ import { formatN } from '$libs/helpers';
       saveCajaCuadre()
     }}
   >
-    <div class="flex items-start w-full p-16">
+    <div class="flex items-start w-full p-16" aria-label="Cash balance reconciliation form with system balance, found balance, and difference">
       <div class="w-260 mr-16">
         <div class="w-full mb-12">
           <div class="text-sm mb-4 text-slate-600">Saldo Sistema</div>
@@ -444,7 +444,7 @@ import { formatN } from '$libs/helpers';
       </div>
 
       <div class="flex items-end">
-        <Button color="purple" icon="icon-arrows-cw" name="Recalcular" css="w-full mt-24" />
+        <Button color="purple" icon="icon-arrows-cw" name="Recalcular" label="Recalculates the balance difference using the latest system saldo." css="w-full mt-24" />
       </div>
       {#if cajaCuadreForm._error}
         <div class="col-span-24 text-red-600 ff-bold">
@@ -459,7 +459,7 @@ import { formatN } from '$libs/helpers';
       saveCajaMovimiento()
     }}
   >
-    <div class="grid grid-cols-24 gap-10">
+    <div class="grid grid-cols-24 gap-10" aria-label="Cash movement form with type, destination cash register, and amount">
       <SearchSelect bind:saveOn={cajaMovimientoForm} save="Tipo" css="col-span-24 md:col-span-12"
         label="Tipo" keyId="id" keyName="name"
         options={cajaMovimientoTipos.filter(x => x.group === 2)}
