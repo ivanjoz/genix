@@ -6,10 +6,7 @@ Genix Frontend is a modular monorepo using SvelteKit 2 (Svelte 5). It consists o
 ### Tech Stack
 - **Framework**: SvelteKit 2.x (Svelte 5.x)
 - **Runtime**: Bun (Development & Scripts)
-- **Build Tool**: Vite with Rolldown (Optimized builds)
 - **Styling**: TailwindCSS v4 with CSS Modules
-- **Deployment**: Static Site Generation (SSG) targeted at GitHub Pages
-
 ---
 
 ## Architecture & Development Workflow
@@ -58,6 +55,47 @@ The build process merges both applications into a single static directory struct
 
 ---
 
+### Directory structure
+Each page is a folder, for example  frontend/routes/logistica/purchase-orders
+
+In the case of page with multiple views (The view options are rendered in the top menu) each view must be a component like this
+
+```svelte
+<Page title="Órdenes de Compra" options={pageOptions}>
+  {#if Core.pageOptionSelected === 1}
+    <PurchaseOrderCreate />
+  {/if}
+  {#if Core.pageOptionSelected === 2}
+    <PurchaseOrderReport />
+  {/if}
+</Page>
+```
+
+Example of directory files:
+ - +page.svelte
+ - PurchaseOrderCreate.svelte
+ - PurchaseOrderReport.svelte
+ - Component.svelte
+ - Component2.svelte
+ - purchase_order.svelte.ts (where the service is declared for fetching)
+ - purchase_order.md
+
+ The .md file must start with a 2 - 4 line description of what you can do in the page, including the views. This will serve as an index for the Agent to determine if is necesary to navigate to this page.
+
+### Agentic Componentes
+
+The resulting HTML MUST help the Agent to navigate, so using aria-label for example in form container to describe the form content, or ussing label property on Button element to describe the action is mandatory, example:
+
+```svelte
+<Button name="Nuevo" label="Shows the create a product form in a side layer."
+  color="green" icon="icon-plus"
+/>
+<div aria-label="Product Form">
+	...
+</div>
+```
+
+
 ## Dependency Hierarchy (DAG) Rules
 Strict rules prevent circular dependencies and ensure the `ecommerce` app remains lightweight.
 
@@ -98,6 +136,4 @@ Aliases are configured in `svelte.config.js` and `tsconfig.json`.
 
 ### Best Practices
 - **Atomic UI**: Keep `ui-components` generic and reusable.
-- **Type Safety**: Define interfaces in `core/types/` for shared entities.
-- **Logic Placement**: API calls belong in `services/`, not directly in Svelte components.
 - **Hydration**: Use `browser` checks from `$app/environment` when accessing `localStorage` or `window`.

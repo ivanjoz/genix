@@ -54,6 +54,10 @@ type EnvStruct struct {
 	CLOUDFLARE_ACCOUNT     string
 	CLOUDFLARE_TOKEN       string
 	CLOUDFLARE_DATABASE_ID string
+	// OpenRouter — used by the in-app agent (backend/agent/llm). Model is
+	// optional; the llm package defaults to tencent/hy3-preview when blank.
+	OPENROUTER_KEY   string
+	OPENROUTER_MODEL string
 }
 
 var Env *EnvStruct

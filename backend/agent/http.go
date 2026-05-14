@@ -10,10 +10,13 @@ package agent
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -38,21 +41,26 @@ type AgentResponse struct {
 // this one exists so the menu structure can be fetched without dumping it
 // into the HTML snapshot every action call returns.
 func HandleAgentGet(w http.ResponseWriter, r *http.Request) {
-	if !IsConnected() {
-		writeJSONError(w, http.StatusServiceUnavailable, "no agent client connected")
+	tab, err := ResolveTab(r.URL.Query().Get("tab"))
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 	switch r.URL.Query().Get("get") {
 	case "menu":
-		menu, err := GetMenu(r.Context())
+		menu, err := GetMenu(r.Context(), tab)
 		if err != nil {
 			writeJSONError(w, http.StatusBadGateway, "menu fetch failed: "+err.Error())
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(struct{ Menu []AgentMenuGroup }{menu})
+	case "screenshot":
+		writeScreenshot(w, r, tab, Screenshot, "genix-agent-screenshot.png")
+	case "screenshot-real":
+		writeScreenshot(w, r, tab, ScreenshotReal, "genix-agent-screenshot-real.png")
 	default:
-		writeJSONError(w, http.StatusBadRequest, "missing or unsupported `get` query (expected ?get=menu)")
+		writeJSONError(w, http.StatusBadRequest, "missing or unsupported `get` query (expected ?get=menu|screenshot|screenshot-real)")
 	}
 }
 
@@ -62,8 +70,9 @@ func HandleAgentGet(w http.ResponseWriter, r *http.Request) {
 // fresh page snapshot. Stops on first error, same as before — only the
 // transport changed.
 func HandleAgentHTTP(w http.ResponseWriter, r *http.Request) {
-	if !IsConnected() {
-		writeJSONError(w, http.StatusServiceUnavailable, "no agent client connected")
+	tab, err := ResolveTab(r.URL.Query().Get("tab"))
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 
@@ -76,11 +85,11 @@ func HandleAgentHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	results := runActions(ctx, req.Actions)
+	results := runActions(ctx, tab, req.Actions)
 
 	// Always include the post-action page snapshot so the caller can use
 	// `{actions: []}` as a "give me the current page" call too.
-	page, err := GetPageContent(ctx)
+	page, err := GetPageContent(ctx, tab)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, "page fetch failed: "+err.Error())
 		return
@@ -93,7 +102,7 @@ func HandleAgentHTTP(w http.ResponseWriter, r *http.Request) {
 // runActions walks the request actions, buffering contiguous invokes into a
 // batch and flushing the batch around navigates and pre-flight errors.
 // Returns the result list, truncated at the first failure.
-func runActions(ctx context.Context, actions []AgentAction) []InvocationResult {
+func runActions(ctx context.Context, tab string, actions []AgentAction) []InvocationResult {
 	results := make([]InvocationResult, 0, len(actions))
 	pending := make([]InvokePayload, 0)
 
@@ -104,7 +113,7 @@ func runActions(ctx context.Context, actions []AgentAction) []InvocationResult {
 		if len(pending) == 0 {
 			return true
 		}
-		batch, err := InvokeBatch(ctx, pending)
+		batch, err := InvokeBatch(ctx, tab, pending)
 		pending = pending[:0]
 		if err != nil {
 			results = append(results, InvocationResult{OK: false, Error: err.Error()})
@@ -136,7 +145,7 @@ func runActions(ctx context.Context, actions []AgentAction) []InvocationResult {
 				results = append(results, InvocationResult{OK: false, Error: err.Error()})
 				return results
 			}
-			if err := Navigate(ctx, route); err != nil {
+			if err := Navigate(ctx, tab, route); err != nil {
 				results = append(results, InvocationResult{OK: false, Error: err.Error()})
 				return results
 			}
@@ -232,6 +241,43 @@ func resolveTarget(id, method string, args []any) (int, string, []any, error) {
 		return 0, "", nil, fmt.Errorf("invalid id %q: %w", id, err)
 	}
 	return handleID, method, args, nil
+}
+
+// writeScreenshot runs `capture` (Screenshot or ScreenshotReal), decodes the
+// base64 result to a stable PNG file under the OS temp dir, and returns the
+// path + dimensions. The two screenshot variants write to distinct filenames
+// so an agent can hold both captures side-by-side without one overwriting the
+// other. LLM agents read the path to view the image, since base64 strings in
+// JSON aren't natively viewable.
+func writeScreenshot(
+	w http.ResponseWriter,
+	r *http.Request,
+	tab string,
+	capture func(context.Context, string) (ScreenshotResult, error),
+	filename string,
+) {
+	shot, err := capture(r.Context(), tab)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "screenshot fetch failed: "+err.Error())
+		return
+	}
+	raw, err := base64.StdEncoding.DecodeString(shot.Base64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "screenshot decode failed: "+err.Error())
+		return
+	}
+	path := filepath.Join(os.TempDir(), filename)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "screenshot write failed: "+err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(struct {
+		Path   string
+		MIME   string
+		Width  int
+		Height int
+	}{path, shot.MIME, shot.Width, shot.Height})
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {

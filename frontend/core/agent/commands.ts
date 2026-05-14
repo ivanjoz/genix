@@ -8,6 +8,9 @@ import { goto } from "$app/navigation";
 import { Core } from "$core/store.svelte";
 import { canUserAccessRoute } from "$core/security";
 import { Agent, agentHandles, type AgentHandle, type AgentListFilter, type AgentMethodName } from "./registry";
+import { captureDomScreenshot, captureScreenshot, releaseScreenStream } from "./screenshot";
+
+export { releaseScreenStream };
 
 // --- Wire envelopes -----------------------------------------------------------
 
@@ -26,13 +29,6 @@ interface MenuGroup {
   ID: number;
   Name: string;
   Options: MenuOption[];
-}
-
-interface ScreenshotResult {
-  MIME: string;
-  Base64: string;
-  Width: number;
-  Height: number;
 }
 
 interface InvokePayload {
@@ -78,81 +74,13 @@ const pacedRun = async <T>(fn: () => Promise<T> | T): Promise<T> => {
   }
 };
 
-// --- Screenshot ---------------------------------------------------------------
-
-interface ScreenshotState {
-  stream: MediaStream | null;
-  videoEl: HTMLVideoElement | null;
-}
-
-// getDisplayMedia stream + offscreen <video> reused across screenshot calls
-// so the user is only prompted once per session.
-const screenshotState: ScreenshotState = { stream: null, videoEl: null };
-
-// Captures a frame from the active screen-share. First invocation triggers
-// the user's "share screen" permission prompt; subsequent calls reuse the stream.
-const captureScreenshot = async (): Promise<ScreenshotResult> => {
-  let stream = screenshotState.stream;
-  if (!stream || !stream.active) {
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-    screenshotState.stream = stream;
-    // If the user clicks "Stop sharing" in the browser bar, drop the cached stream.
-    for (const track of stream.getVideoTracks()) {
-      track.addEventListener("ended", () => {
-        if (screenshotState.stream === stream) { screenshotState.stream = null; }
-      });
-    }
-  }
-  const track = stream.getVideoTracks()[0];
-  const settings = track.getSettings();
-
-  let video = screenshotState.videoEl;
-  if (!video) {
-    video = document.createElement("video");
-    video.muted = true;
-    (video as any).playsInline = true;
-    video.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none";
-    document.body.appendChild(video);
-    screenshotState.videoEl = video;
-  }
-  if (video.srcObject !== stream) {
-    video.srcObject = stream;
-    await video.play();
-  }
-  // Wait for the first frame to be ready when video metadata isn't loaded yet.
-  if (!video.videoWidth) {
-    await new Promise<void>((resolve) => {
-      const onLoaded = () => { video!.removeEventListener("loadedmetadata", onLoaded); resolve(); };
-      video!.addEventListener("loadedmetadata", onLoaded);
-    });
-  }
-
-  const width = settings.width || video.videoWidth;
-  const height = settings.height || video.videoHeight;
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) { throw new Error("2d context unavailable"); }
-  ctx.drawImage(video, 0, 0, width, height);
-  const dataUrl = canvas.toDataURL("image/png");
-  const base64 = dataUrl.split(",")[1] || "";
-  return { MIME: "image/png", Base64: base64, Width: width, Height: height };
-};
-
-export const releaseScreenStream = () => {
-  if (!screenshotState.stream) { return; }
-  for (const track of screenshotState.stream.getTracks()) { track.stop(); }
-  screenshotState.stream = null;
-};
-
 // --- Pulse overlay ------------------------------------------------------------
 
 // Visual radar-style ping anchored at the center of the targeted component
 // every time the agent invokes a write method. Purely cosmetic: helps the
-// human watching the page see which element the agent is acting on.
+// human watching the page see which element the agent is acting on. The CSS
+// for `.__agent-pulse` and its keyframes lives in routes/tailwind.css.
 
-const PULSE_STYLE_ID = "__agent_pulse_style";
 const PULSE_CLASS = "__agent-pulse";
 const PULSE_LIFETIME_MS = 900;
 
@@ -163,49 +91,6 @@ const PULSE_SKIP_METHODS = new Set<AgentMethodName>([
   "getOptionsChild",
   "getValue",
 ]);
-
-const ensurePulseStyle = () => {
-  if (document.getElementById(PULSE_STYLE_ID)) { return; }
-  const style = document.createElement("style");
-  style.id = PULSE_STYLE_ID;
-  style.textContent = `
-.${PULSE_CLASS} {
-  position: fixed;
-  pointer-events: none;
-  width: 56px;
-  height: 56px;
-  margin: -28px 0 0 -28px;
-  border: 2px solid #ff3b30;
-  border-radius: 50%;
-  box-sizing: border-box;
-  z-index: 2147483647;
-  opacity: 0;
-  animation: __agent-pulse-fade 800ms ease-out forwards;
-}
-.${PULSE_CLASS}::before,
-.${PULSE_CLASS}::after {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border: 2px solid #ff3b30;
-  border-radius: 50%;
-  box-sizing: border-box;
-  opacity: 0;
-}
-.${PULSE_CLASS}::before { animation: __agent-pulse-wave 800ms ease-out forwards; }
-.${PULSE_CLASS}::after  { animation: __agent-pulse-wave 800ms ease-out 180ms forwards; }
-@keyframes __agent-pulse-fade {
-  0%, 70% { opacity: 1; }
-  100%    { opacity: 0; }
-}
-@keyframes __agent-pulse-wave {
-  0%   { transform: scale(1);   opacity: 1; }
-  70%  { opacity: 0.2; }
-  100% { transform: scale(2);   opacity: 0; }
-}
-`;
-  document.head.appendChild(style);
-};
 
 // findActionElement picks the most specific DOM target for the invocation:
 // cell methods (`*Child`) point at the cell, `remove` on a SearchCard points
@@ -244,7 +129,6 @@ const pulseInvocation = (handle: AgentHandle, method: AgentMethodName, args: unk
   if (!el) { return; }
   const rect = el.getBoundingClientRect();
   if (!rect.width || !rect.height) { return; }
-  ensurePulseStyle();
   const overlay = document.createElement("div");
   overlay.className = PULSE_CLASS;
   overlay.style.left = `${rect.left + rect.width / 2}px`;
@@ -320,7 +204,8 @@ const commandHandlers: Record<string, CommandHandler> = {
   getPageContent: () => Agent.getPageContent(),
   agentList: (payload: AgentListFilter | undefined) => Agent.list(payload),
   agentDescribe: () => Agent.describe(),
-  screenshot: () => captureScreenshot(),
+  screenshot: () => captureDomScreenshot(),
+  screenshotReal: () => captureScreenshot(),
   "agent.invoke": invokeBatch,
   getMenu,
   navigate,

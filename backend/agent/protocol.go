@@ -16,7 +16,12 @@ type Message struct {
 // Command types issued by the backend.
 const (
 	CmdGetPageContent = "getPageContent"
-	CmdScreenshot     = "screenshot"
+	// CmdScreenshot renders the page DOM via modern-screenshot — no permission
+	// prompt, default capture for public users.
+	CmdScreenshot = "screenshot"
+	// CmdScreenshotReal captures pixel-real screen via getDisplayMedia. Needs
+	// user permission and shows the browser's "is sharing your screen" banner.
+	CmdScreenshotReal = "screenshotReal"
 	CmdAgentList      = "agentList"
 	CmdAgentDescribe  = "agentDescribe"
 	// CmdAgentInvoke calls a method on a registered handle. The browser dispatches

@@ -3,8 +3,52 @@
 // command execution lives in commands.ts; this file just owns the socket
 // lifecycle and the message-to-reply plumbing.
 
+import { Env } from "$core/env";
 import { Agent, isAgentEnabled } from "./registry";
 import { releaseScreenStream, runCommand, type WsMessage } from "./commands";
+
+// agentWsBase derives the WS scheme + host from the selected API endpoint.
+// Env.API_ROUTES.MAIN ends with `/api/` (it's the HTTP API root) — the
+// `/ws/agent` and `/ws/agent-chat` handlers are mounted at the server root,
+// not under `/api`, so we strip that suffix before swapping http→ws.
+export const agentWsBase = (): string => {
+  const main = Env.API_ROUTES.MAIN || "";
+  // Drop trailing slash, then the optional `/api` segment.
+  const root = main.replace(/\/+$/, "").replace(/\/api$/, "");
+  return root.replace(/^http/, "ws");
+};
+
+// getAgentTabID returns the per-tab id sent on the WS upgrade so the backend
+// can route page commands to the correct tab. Stored in sessionStorage so it
+// survives navigations within the tab but is unique per tab (sessionStorage
+// is naturally tab-scoped). The chat widget (in step 4+) reads the same id so
+// chat and page connections share it.
+export const getAgentTabID = (): string => {
+  if (typeof window === "undefined") { return ""; }
+  const key = "__agent_tab_id";
+  let id = sessionStorage.getItem(key);
+  if (!id) {
+    id = (window.crypto?.randomUUID?.() as string | undefined)
+      || `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    sessionStorage.setItem(key, id);
+  }
+  return id;
+};
+
+// Reads the cached user id from localStorage so the backend can stamp it on
+// the page connection. Best-effort: missing/invalid → 0 (backend treats this
+// as anonymous).
+const getAgentUserID = (): number => {
+  if (typeof window === "undefined") { return 0; }
+  try {
+    const raw = localStorage.getItem(Env.appId + "UserInfo");
+    if (!raw) { return 0; }
+    const info = JSON.parse(raw) as { ID?: number };
+    return Number(info?.ID) || 0;
+  } catch {
+    return 0;
+  }
+};
 
 interface BridgeState {
   socket: WebSocket | null;
@@ -51,8 +95,14 @@ const connectAgentSocket = () => {
   if (typeof window === "undefined") { return; }
   if (bridgeState.socket && bridgeState.socket.readyState <= WebSocket.OPEN) { return; }
 
-  // Local-only: the backend always listens on this port during dev.
-  const url = "ws://localhost:3589/ws/agent";
+  // Backend address comes from the selected API endpoint so dev/prod/VPS
+  // targets all work without hardcoding a port. The backend routes commands
+  // by TabID — include it plus company/user for bookkeeping on the upgrade
+  // URL.
+  const tab = getAgentTabID();
+  const company = Env.getEmpresaID() || 0;
+  const user = getAgentUserID();
+  const url = `${agentWsBase()}/ws/agent?tab=${encodeURIComponent(tab)}&company=${company}&user=${user}`;
   console.info("[Agent] connecting", url);
   let socket: WebSocket;
   try {

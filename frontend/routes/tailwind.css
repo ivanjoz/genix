@@ -136,3 +136,40 @@ h6 {
 .h2 {
 	font-size: 20px;
 }
+
+/* Agent pulse overlay: radar-style ping rendered over the element an agent
+   invocation is targeting. Injected from frontend/core/agent/commands.ts. */
+.__agent-pulse {
+	position: fixed;
+	pointer-events: none;
+	width: 56px;
+	height: 56px;
+	margin: -28px 0 0 -28px;
+	border: 2px solid #ff3b30;
+	border-radius: 50%;
+	box-sizing: border-box;
+	z-index: 2147483647;
+	opacity: 0;
+	animation: __agent-pulse-fade 800ms ease-out forwards;
+}
+.__agent-pulse::before,
+.__agent-pulse::after {
+	content: "";
+	position: absolute;
+	inset: -2px;
+	border: 2px solid #ff3b30;
+	border-radius: 50%;
+	box-sizing: border-box;
+	opacity: 0;
+}
+.__agent-pulse::before { animation: __agent-pulse-wave 800ms ease-out forwards; }
+.__agent-pulse::after  { animation: __agent-pulse-wave 800ms ease-out 180ms forwards; }
+@keyframes __agent-pulse-fade {
+	0%, 70% { opacity: 1; }
+	100%    { opacity: 0; }
+}
+@keyframes __agent-pulse-wave {
+	0%   { transform: scale(1); opacity: 1; }
+	70%  { opacity: 0.2; }
+	100% { transform: scale(2); opacity: 0; }
+}

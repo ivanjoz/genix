@@ -11,6 +11,7 @@ import (
 	negocio "app/negocio/types"
 	negocioTypes "app/negocio/types"
 	seguridadTypes "app/seguridad/types"
+	appTypes "app/types"
 )
 
 func MakeScyllaControllers() []db.ScyllaControllerInterface {
@@ -46,6 +47,7 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[coreTypes.UsageLog](),
 		makeDBController[comercial.ProductSaleSummary](),
 		makeDBController[logisticaTypes.PurchaseOrder](),
+		makeDBController[appTypes.AgentMessage](),
 		makeDBController[DemoStruct](),
 	}
 }

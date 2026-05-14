@@ -233,6 +233,9 @@ func main() {
 		// Mounted before CORS because the websocket library handles its own origin checks.
 		mux := http.NewServeMux()
 		mux.HandleFunc("/ws/agent", agent.HandleWebSocket)
+		// /ws/agent-chat is the user↔agent chat channel for the in-app widget.
+		// Local-only — auth lives on the upgrade handler.
+		mux.HandleFunc("/ws/agent-chat", agent.HandleChatWebSocket)
 		// HTTP entrypoint for external LLM agents (Claude Code / Gemini): batch
 		// actions in, post-action page snapshot out. Local-only.
 		mux.HandleFunc("POST /agent", agent.HandleAgentHTTP)

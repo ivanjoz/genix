@@ -2,6 +2,8 @@
 import { Core, fetchOnCourse } from '$core/store.svelte';
 import { Env } from '$core/env';
 import { Agent } from '$core/agent/registry';
+import AgentChat from '$core/agent/AgentChat.svelte';
+import { isLogged } from '$core/security';
 import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
 import HeaderConfig from '$domain/HeaderConfig.svelte';
 import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
@@ -95,7 +97,7 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 	{/if}
 
 	<!-- Title -->
-	<div class="flex-1 flex items-center"
+	<div class="flex items-center min-w-0 shrink"
 		data-id={Core.pageOptions?.length > 0 ? `PageViews:${pageViewsID}` : undefined}
 	>
 		{#if Core.pageOptions?.length > 0}
@@ -110,11 +112,22 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 				</button>
 			{/each}
 		{:else}
-			<div class="h1 text-white text-lg font-semibold tracking-wide">
+			<div class="h1 text-white text-lg font-semibold tracking-wide truncate">
 				{Core.pageTitle}
 			</div>
 		{/if}
 	</div>
+
+	<!-- Agent Chat Widget — pill input centered in the header. Only rendered
+	     while the user is logged in; mount triggers nothing (WS opens lazily
+	     on first user interaction inside the widget). -->
+	{#if isLogged()}
+		<div class="flex-1 flex justify-center px-16 min-w-0">
+			<AgentChat />
+		</div>
+	{:else}
+		<div class="flex-1"></div>
+	{/if}
 
 	<!-- Right Actions -->
 	<div class="flex items-center gap-8 h-full relative">

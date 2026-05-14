@@ -468,7 +468,7 @@ import {
       />
     {/if}
 
-    <Button name="Nuevo" label="Nuevo Producto"
+    <Button name="Nuevo" label="Shows the form to create a new product in a side layer."
       color="green"
       icon="icon-plus"
       hideNameOnMobile
@@ -543,6 +543,7 @@ import {
     {#if layerView === 1}
       <div
         class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-6 md:mt-16"
+        aria-label="Product Form"
       >
         <Input
           label="Nombre"
