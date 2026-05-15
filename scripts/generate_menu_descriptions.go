@@ -173,14 +173,13 @@ func findRepoRoot() (string, error) {
 
 	for {
 		routesDir := filepath.Join(currentDir, "frontend", "routes")
-		tmpDir := filepath.Join(currentDir, "tmp")
-		if isDir(routesDir) && isDir(tmpDir) {
+		if isDir(routesDir) {
 			return currentDir, nil
 		}
 
 		parentDir := filepath.Dir(currentDir)
 		if parentDir == currentDir {
-			return "", fmt.Errorf("could not find repo root containing frontend/routes and tmp")
+			return "", fmt.Errorf("could not find repo root containing frontend/routes")
 		}
 		currentDir = parentDir
 	}
