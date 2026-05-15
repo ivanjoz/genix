@@ -12,7 +12,7 @@ For the in-page registry / DOM contract, see
 
 ```
 POST http://localhost:3589/agent          # run actions, return post-action snapshot
-GET  http://localhost:3589/agent?get=menu # read-only menu structure
+GET  http://localhost:3589/agent?get=menu # read-only TSV menu structure
 Content-Type: application/json
 ```
 
@@ -28,7 +28,7 @@ browser tab (the dev page that opens a WebSocket to `/ws/agent`).
     { "ID": "58:235",   "Method": "remove",   "Args": [] },
     { "ID": "60",       "Method": "setValue", "Args": ["Hello"] },
     { "ID": "38:101",   "Method": "setValue", "Args": ["3"] },
-    { "ID": "38:100",   "Method": "select",   "Args": [] }
+    { "ID": "38:100",   "Method": "select",   "Args": [], "ReturnPageContent": true }
   ]
 }
 ```
@@ -38,6 +38,7 @@ browser tab (the dev page that opens a WebSocket to `/ws/agent`).
 | `ID`     | string | Component id from the HTML snapshot. Plain (`"58"`) or composite (`"58:235"`, `"7:12"`). |
 | `Method` | string | One of the names in the tag's `methods="..."` attribute.              |
 | `Args`   | array  | Method arguments. Omit / pass `[]` for void methods.                  |
+| `ReturnPageContent` | bool | Optional. When true on `navigate` or an invocation action, the browser waits for route/DOM updates and returns the fresh page snapshot in that action result. |
 
 Actions run **sequentially, stop on first error**. An empty array
 (`{"Actions": []}`) is valid and returns the current page snapshot — useful as
@@ -121,10 +122,10 @@ its `methods="..."` HTML attribute. Common ones:
 | Method           | Args                       | Used by                                         |
 | ---------------- | -------------------------- | ----------------------------------------------- |
 | `setValue`       | `(value)`                  | `Input`, `CellInput` (composite id)             |
-| `search`         | `(text)`                   | `SearchSelect`, `SearchBox`, `CellSelect`       |
-| `select`         | `(...ids)`                 | `SearchSelect`, `SearchCard`, `Table`/row/cell  |
+| `search`         | `(text)`                   | `Select`, `SearchBox`, `CellSelect`       |
+| `select`         | `(...ids)`                 | `Select`, `SearchCard`, `Table`/row/cell  |
 | `remove`         | `(id)` (composite ok)      | `SearchCard` (Option marker)                    |
-| `getOptions`     | `(max?)` → `AgentOption[]` | `SearchSelect`, `SearchCard`, `CellSelect`      |
+| `getOptions`     | `(max?)` → `AgentOption[]` | `Select`, `SearchCard`, `CellSelect`      |
 | `click`          | `()`                       | `Button` markers, `ButtonLayer`                 |
 | `open` / `close` | `()`                       | `Layer`, `Modal`                                |
 | `navigate`       | `(route)`                  | global (no `ID`); calls `goto(route)` in the SPA — see "Navigate action" below |
@@ -144,7 +145,7 @@ not bound to a handle:
 ```json
 {
   "Actions": [
-    { "Method": "navigate", "Args": ["/comercial/sale_order_create"] }
+    { "Method": "navigate", "Args": ["/comercial/sale_order_create"], "ReturnPageContent": true }
   ]
 }
 ```
@@ -154,34 +155,19 @@ After the route change the same response shape applies: the post-action
 
 ### GET /agent?get=menu
 
-Returns the current user's accessible side-menu (same access filter as the
-visual menu). Use it to discover routes before issuing a `navigate` action.
+Returns the current user's accessible side-menu as TSV (same access filter as
+the visual menu). Use it to discover routes before issuing a `navigate` action.
 
 ```bash
-curl -s 'http://localhost:3589/agent?get=menu' | jq
+curl -s 'http://localhost:3589/agent?get=menu'
 ```
 
-```json
-{
-  "Menu": [
-    {
-      "ID": 1,
-      "Name": "CONFIGURACIÓN",
-      "Options": [
-        { "Name": "Mi Empresa",  "Route": "/configuracion/parametros" },
-        { "Name": "Usuarios",    "Route": "/seguridad/usuarios" }
-      ]
-    },
-    {
-      "ID": 4,
-      "Name": "Logística",
-      "Options": [
-        { "Name": "Cambios Stock",     "Route": "/logistica/products-stock" },
-        { "Name": "Gestión de Compras","Route": "/logistica/gestion-compras" }
-      ]
-    }
-  ]
-}
+```tsv
+group_id	group_name	option_name	route	description
+1	CONFIGURACIÓN	Mi Empresa	/configuracion/parametros	Company settings. Edit general data...
+1	CONFIGURACIÓN	Usuarios	/seguridad/usuarios	System user management...
+4	Logística	Cambios Stock	/logistica/products-stock	Warehouse stock management...
+4	Logística	Gestión de Compras	/logistica/gestion-compras	Supply management...
 ```
 
 Groups with no accessible options are omitted. Status codes mirror POST
@@ -213,7 +199,7 @@ curl -s -X POST http://localhost:3589/agent \
   -d '{ "Actions": [ { "ID": "58:235", "Method": "remove" } ] }' | jq .
 
 # 4. Discover the menu, then navigate to a page from it
-curl -s 'http://localhost:3589/agent?get=menu' | jq '.Menu[].Options'
+curl -s 'http://localhost:3589/agent?get=menu'
 curl -s -X POST http://localhost:3589/agent \
   -H 'Content-Type: application/json' \
   -d '{ "Actions": [ { "Method": "navigate", "Args": ["/comercial/sale_order_create"] } ] }' | jq .Results

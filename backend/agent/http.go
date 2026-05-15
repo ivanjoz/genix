@@ -22,9 +22,10 @@ import (
 )
 
 type AgentAction struct {
-	ID     string
-	Method string
-	Args   []any
+	ID                string
+	Method            string
+	Args              []any
+	ReturnPageContent bool
 }
 
 type AgentRequest struct {
@@ -53,8 +54,8 @@ func HandleAgentGet(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadGateway, "menu fetch failed: "+err.Error())
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(struct{ Menu []AgentMenuGroup }{menu})
+		w.Header().Set("Content-Type", "text/tab-separated-values; charset=utf-8")
+		_, _ = w.Write([]byte(FormatMenuTSV(menu)))
 	case "screenshot":
 		writeScreenshot(w, r, tab, Screenshot, "genix-agent-screenshot.png")
 	case "screenshot-real":
@@ -105,6 +106,7 @@ func HandleAgentHTTP(w http.ResponseWriter, r *http.Request) {
 func runActions(ctx context.Context, tab string, actions []AgentAction) []InvocationResult {
 	results := make([]InvocationResult, 0, len(actions))
 	pending := make([]InvokePayload, 0)
+	pendingReturnPageContent := false
 
 	// flushPending dispatches the buffered batch (if any), appends its
 	// results, and reports whether the batch fully succeeded. A transport
@@ -113,17 +115,24 @@ func runActions(ctx context.Context, tab string, actions []AgentAction) []Invoca
 		if len(pending) == 0 {
 			return true
 		}
-		batch, err := InvokeBatch(ctx, tab, pending)
+		batch, err := InvokeBatch(ctx, tab, pending, pendingReturnPageContent)
 		pending = pending[:0]
+		pendingReturnPageContent = false
 		if err != nil {
 			results = append(results, InvocationResult{OK: false, Error: err.Error()})
 			return false
 		}
-		for _, r := range batch {
+		for _, r := range batch.Results {
 			results = append(results, r)
 			if !r.OK {
 				return false
 			}
+		}
+		if batch.Page != nil && len(results) > 0 && results[len(results)-1].OK {
+			results[len(results)-1].Value = mustRawJSON(map[string]any{
+				"result": json.RawMessage(results[len(results)-1].Value),
+				"page":   batch.Page,
+			})
 		}
 		return true
 	}
@@ -145,11 +154,12 @@ func runActions(ctx context.Context, tab string, actions []AgentAction) []Invoca
 				results = append(results, InvocationResult{OK: false, Error: err.Error()})
 				return results
 			}
-			if err := Navigate(ctx, tab, route); err != nil {
+			navigateResult, err := NavigateWithPage(ctx, tab, route, action.ReturnPageContent)
+			if err != nil {
 				results = append(results, InvocationResult{OK: false, Error: err.Error()})
 				return results
 			}
-			results = append(results, InvocationResult{OK: true, Value: json.RawMessage("null")})
+			results = append(results, InvocationResult{OK: true, Value: mustRawJSON(navigateResult)})
 			continue
 		}
 		handleID, method, args, err := resolveTarget(action.ID, action.Method, action.Args)
@@ -161,9 +171,21 @@ func runActions(ctx context.Context, tab string, actions []AgentAction) []Invoca
 			return results
 		}
 		pending = append(pending, InvokePayload{HandleID: handleID, Method: method, Args: args})
+		pendingReturnPageContent = pendingReturnPageContent || action.ReturnPageContent
+		if action.ReturnPageContent && !flushPending() {
+			return results
+		}
 	}
 	flushPending()
 	return results
+}
+
+func mustRawJSON(value any) json.RawMessage {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return json.RawMessage("null")
+	}
+	return raw
 }
 
 // navigateRouteArg pulls the route string from a navigate action's args.

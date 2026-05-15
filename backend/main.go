@@ -187,6 +187,10 @@ func main() {
 	// Mirror runtime logging flags into db so query debug logs follow the resolved environment.
 	db.SetDebugLogging(core.Env.LOGS_FULL || core.Env.IS_LOCAL)
 
+	// Create /tmp/promps once so the chat loop's per-call writes can skip the
+	// parent-dir check. Local-only; no-op in serverless/prod.
+	agent.InitPromptLog()
+
 	// Revisa si lo que se requiere es ejecutar una función
 	if len(invokeFun) != 0 {
 		fmt.Println("Invocando función...")

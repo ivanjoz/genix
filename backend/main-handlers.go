@@ -1,6 +1,7 @@
 package main
 
 import (
+	"app/agent"
 	"app/comercial"
 	"app/configuracion"
 	"app/core"
@@ -22,6 +23,7 @@ import (
 
 // Agrupa los handlers de los módulos en uns solo map
 var appHandlersModules = []core.AppRouterType{
+	agent.ModuleHandlers,
 	exec.ModuleHandlers,
 	comercial.ModuleHandlers,
 	configuracion.ModuleHandlers,

@@ -44,6 +44,7 @@ const (
 
 type ChatUserMessage struct {
 	Message   string
+	ModelHash string
 	Timestamp int64
 }
 
@@ -136,12 +137,12 @@ func HandleChatWebSocket(w http.ResponseWriter, r *http.Request) {
 		currentRoute: initialPath,
 	}
 	registerChatSession(s)
-	core.Log("agent.chat-ws connected tab::", tab, " company::", companyID, " user::", userID, " path::", initialPath)
+	core.Log("agent.chat-ws connected tab::", shortTabID(tab), " company::", companyID, " user::", userID, " path::", initialPath)
 
 	defer func() {
 		unregisterChatSession(s)
 		_ = conn.Close(websocket.StatusNormalClosure, "bye")
-		core.Log("agent.chat-ws disconnected tab::", tab)
+		core.Log("agent.chat-ws disconnected tab::", shortTabID(tab))
 	}()
 
 	ctx := r.Context()
@@ -149,7 +150,7 @@ func HandleChatWebSocket(w http.ResponseWriter, r *http.Request) {
 		mt, data, err := conn.Read(ctx)
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
-				core.Log("agent.chat-ws read end tab::", tab, " err::", err)
+				core.Log("agent.chat-ws read end tab::", shortTabID(tab), " err::", err)
 			}
 			return
 		}
@@ -189,7 +190,7 @@ func LookupChatSession(tab string) *AgentSession {
 func (s *AgentSession) handleIncoming(ctx context.Context, raw []byte) {
 	var env chatEnvelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		core.Log("agent.chat-ws bad json tab::", s.TabID, " err::", err)
+		core.Log("agent.chat-ws bad json tab::", shortTabID(s.TabID), " err::", err)
 		return
 	}
 	switch env.Type {
@@ -201,7 +202,7 @@ func (s *AgentSession) handleIncoming(ctx context.Context, raw []byte) {
 		}
 		s.onUserMessage(ctx, msg)
 	default:
-		core.Log("agent.chat-ws unknown type tab::", s.TabID, " type::", env.Type)
+		core.Log("agent.chat-ws unknown type tab::", shortTabID(s.TabID), " type::", env.Type)
 	}
 }
 
@@ -219,7 +220,7 @@ func (s *AgentSession) onUserMessage(_ context.Context, msg ChatUserMessage) {
 		s.sendError("a previous turn is still running")
 		return
 	}
-	core.Log("agent.chat-ws userMessage tab::", s.TabID, " bytes::", len(text))
+	core.Log("agent.chat-ws userMessage tab::", shortTabID(s.TabID), " bytes::", len(text), " model_hash::", msg.ModelHash)
 
 	go func() {
 		defer s.inFlight.Store(false)
@@ -229,8 +230,8 @@ func (s *AgentSession) onUserMessage(_ context.Context, msg ChatUserMessage) {
 		// the reply if they walked away. 5 min hard cap as a safety net.
 		runCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		if err := s.RunTurn(runCtx, text); err != nil {
-			core.Log("agent.chat-ws RunTurn error tab::", s.TabID, " err::", err)
+		if err := s.RunTurn(runCtx, text, msg.ModelHash); err != nil {
+			core.Log("agent.chat-ws RunTurn error tab::", shortTabID(s.TabID), " err::", err)
 			s.sendError(err.Error())
 		}
 	}()
@@ -239,12 +240,12 @@ func (s *AgentSession) onUserMessage(_ context.Context, msg ChatUserMessage) {
 func (s *AgentSession) sendJSON(kind string, payload any) {
 	body, err := json.Marshal(payload)
 	if err != nil {
-		core.Log("agent.chat-ws marshal payload tab::", s.TabID, " err::", err)
+		core.Log("agent.chat-ws marshal payload tab::", shortTabID(s.TabID), " err::", err)
 		return
 	}
 	env, err := json.Marshal(chatEnvelope{Type: kind, Payload: body})
 	if err != nil {
-		core.Log("agent.chat-ws marshal envelope tab::", s.TabID, " err::", err)
+		core.Log("agent.chat-ws marshal envelope tab::", shortTabID(s.TabID), " err::", err)
 		return
 	}
 	s.writeM.Lock()
@@ -252,10 +253,20 @@ func (s *AgentSession) sendJSON(kind string, payload any) {
 	writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := s.chatConn.Write(writeCtx, websocket.MessageText, env); err != nil {
-		core.Log("agent.chat-ws write error tab::", s.TabID, " err::", err)
+		core.Log("agent.chat-ws write error tab::", shortTabID(s.TabID), " err::", err)
 	}
 }
 
 func (s *AgentSession) sendError(msg string) {
 	s.sendJSON(ChatTypeAgentError, ChatAgentError{Message: msg})
+}
+
+func shortTabID(tabID string) string {
+	const visibleTail = 6
+	tabID = strings.TrimSpace(tabID)
+	if len(tabID) <= visibleTail {
+		return tabID
+	}
+	// Keep only the tail so concurrent tab logs stay distinguishable without noisy UUIDs.
+	return tabID[len(tabID)-visibleTail:]
 }

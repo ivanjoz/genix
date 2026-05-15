@@ -2,6 +2,7 @@
 import { browser } from '$app/environment';
 import { onMount } from 'svelte';
 import Input from '$components/form/Input.svelte';
+import SearchSelect from '$components/form/SearchSelect.svelte';
 import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import TableGrid from '$components/vTable/TableGrid.svelte';
 import { accessHelper } from '$core/security';
@@ -22,11 +23,18 @@ import { postUsuarioPropio } from '$services/services/usuarios.svelte';
 import type { IUsuario } from '$core/types/common';
 import { HEADER_REQUEST_LOGS_MODAL_ID } from '$domain/HeaderRequestLogsModal.svelte';
 import { formatN } from '$libs/helpers';
+import {
+  AgentModelsService,
+  getSelectedAgentModelHash,
+  setSelectedAgentModelHash,
+} from '$core/agent/models.svelte';
 
   const options = [
     { id: 1, name: "Usuario" }, { id: 2, name: "Config." }, { id: 3, name: "Data" }
   ]
   let selected = $state(1)
+  const agentModelsService = new AgentModelsService()
+  let agentModelForm = $state({ ModelHash: getSelectedAgentModelHash() })
   let cacheRows: ICacheDebugRow[] = $state([])
   type IGroupedCacheRow = {
     baseRoute: string
@@ -49,6 +57,13 @@ import { formatN } from '$libs/helpers';
   let userInfo = $state(accessHelper.getUserInfo())
   $effect(() => {
     if(selected === 1){ userInfo = userInfo = accessHelper.getUserInfo()}
+  })
+
+  $effect(() => {
+    if (agentModelsService.records.length === 0) { return }
+    if (agentModelForm.ModelHash && agentModelsService.modelHashMap.has(agentModelForm.ModelHash)) { return }
+    agentModelForm.ModelHash = agentModelsService.records[0].Hash
+    setSelectedAgentModelHash(agentModelForm.ModelHash)
   })
 
   const getCurrentDeltaDatabaseName = () => {
@@ -299,6 +314,19 @@ import { formatN } from '$libs/helpers';
 {/if}
 {#if selected === 2}
   <div class="w-full flex mb-12 mt-[-2px]">
+    <SearchSelect
+      label="Modelo"
+      css="w-full max-w-[460px]"
+      inputCss="h-32 text-[15px]"
+      options={agentModelsService.records}
+      keyId="Hash"
+      keyName="ID"
+      bind:saveOn={agentModelForm}
+      save="ModelHash"
+      notEmpty={true}
+      showLoading={agentModelsService.isReady === 0}
+      onChange={(modelOption) => setSelectedAgentModelHash(modelOption.Hash)}
+    />
     <div class="mr-auto"></div>
     <button class="bx-blue min-w-120 px-12" aria-label="Ver logs de requests"
       onclick={() => { 

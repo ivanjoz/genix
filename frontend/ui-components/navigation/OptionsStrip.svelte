@@ -65,7 +65,13 @@ import { Agent } from '$core/agent/registry';
       label: "",
       select: (...ids) => {
         if (ids.length === 0) { return }
-        const targetId = String(ids[0])
+        // Options carry composite ids "<stripID>:<optID>" so the agent
+        // addresses them directly via select on each Option. Strip the
+        // prefix to recover the option id; bare ids still work for any
+        // legacy caller.
+        const raw = String(ids[0])
+        const colon = raw.lastIndexOf(":")
+        const targetId = colon >= 0 ? raw.slice(colon + 1) : raw
         const matched = options.find((opt) => String(getOptionId(opt)) === targetId)
         if (matched) { onSelect(matched) }
       },
@@ -85,7 +91,7 @@ import { Agent } from '$core/agent/registry';
     {@const words = getValue(opt)}
     {@const optId = getOptionId(opt)}
     {@const isSelected = optId === selected}
-    <button data-id="Option:{optId}"
+    <button data-id="Option:{componentID}:{optId}"
       data-selected={isSelected ? "true" : undefined}
       class="flex items-center ff-bold _2 {getClass(opt)}" onclick={ev => {
       ev.stopPropagation()

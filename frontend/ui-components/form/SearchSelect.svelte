@@ -367,9 +367,17 @@ import type { Snippet } from 'svelte';
   $effect(() => {
     return Agent.register({
       id: componentID,
-      type: "SearchSelect",
+      type: "Select",
       label: label || placeholder || "",
-      search: (text: string) => { applySearch(text, true); },
+      search: (text: string) => {
+        applySearch(text, true);
+        const out: AgentOption[] = [];
+        for (const opt of filteredOptions) {
+          if (out.length >= 50) { break; }
+          out.push({ ID: getOptionId(opt), Value: String(opt[keyName] ?? "") });
+        }
+        return out;
+      },
       select: (...ids) => {
         if (ids.length === 0) { return; }
         const targetId = String(ids[0]);
@@ -396,7 +404,7 @@ import type { Snippet } from 'svelte';
   const agentDataLabel = $derived(label || placeholder || "");
 </script>
 
-<div data-id="SearchSelect:{componentID}" data-value={agentDataValue} data-label={agentDataLabel} data-type="other" class={cN}>
+<div data-id="Select:{componentID}" data-value={agentDataValue} data-label={agentDataLabel} data-type="other" data-options-count={options.length} class={cN}>
   {#if label}
     <div class={s1.input_lab_cell_left}><div></div></div>
     <div class={s1.input_lab}>

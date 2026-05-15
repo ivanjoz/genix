@@ -55,10 +55,15 @@ type AgentComponentInfo struct {
 	Type    string
 	Label   string
 	Methods []string
+	// Options is the inline option list for a Select handle whose total option
+	// count is small enough to embed directly in the HTML snapshot (currently
+	// ≤12). Frontend probes via getOptions(13) and only attaches when the
+	// list is exhaustive. nil/empty for every other handle type.
+	Options []AgentOption `json:",omitempty"`
 }
 
 type PageContent struct {
-	Components []AgentComponentInfo
+	Components []AgentComponentInfo `json:",omitempty"`
 	HTML       string
 }
 
@@ -84,6 +89,16 @@ type InvokePayload struct {
 	Args     []any
 }
 
+type InvokeBatchPayload struct {
+	Invocations       []InvokePayload
+	ReturnPageContent bool
+}
+
+type InvokeBatchResult struct {
+	Results []InvocationResult
+	Page    *PageContent `json:",omitempty"`
+}
+
 // InvocationResult is one entry in the reply array for the batched
 // `agent.invoke` command. Also reused as the HTTP-level result element so
 // external callers see the same shape the WS protocol uses.
@@ -101,8 +116,9 @@ type AgentListFilter struct {
 // AgentMenuOption is one entry inside a side-menu group. Route is the SPA
 // path the agent passes to the `navigate` action.
 type AgentMenuOption struct {
-	Name  string
-	Route string
+	Name        string
+	Route       string
+	Description string `json:",omitempty"`
 }
 
 // AgentMenuGroup is a side-menu section (CONFIGURACIÓN, NEGOCIO, …) with the
@@ -115,5 +131,11 @@ type AgentMenuGroup struct {
 
 // NavigatePayload is the body sent to the browser for CmdNavigate.
 type NavigatePayload struct {
+	Route             string
+	ReturnPageContent bool
+}
+
+type NavigateResult struct {
 	Route string
+	Page  *PageContent `json:",omitempty"`
 }

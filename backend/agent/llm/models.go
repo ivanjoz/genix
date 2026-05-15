@@ -1,5 +1,11 @@
 package llm
 
+import (
+	"hash/fnv"
+	"sort"
+	"strconv"
+)
+
 // Registry of OpenRouter models we've validated for the in-app agent loop,
 // with their per-model defaults. Switching the active model is one of:
 //
@@ -27,6 +33,8 @@ type ModelConfig struct {
 	Provider *ProviderOptions
 	// Notes is free-form documentation for humans reading the registry.
 	Notes string
+	// Hash is the short base36 ID the frontend sends instead of the full model slug.
+	Hash string
 }
 
 // pinnedProvider builds a Provider config that pins routing to exactly one
@@ -66,11 +74,51 @@ var Models = map[string]ModelConfig{
 	},
 }
 
+// ModelIDHash keeps the UI payload compact while preserving a deterministic
+// mapping back to the validated registry IDs.
+func ModelIDHash(id string) string {
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(id))
+	hashValue := int32(hash.Sum32() & 0x7fffffff)
+	if hashValue == 0 {
+		hashValue = 1
+	}
+	return strconv.FormatInt(int64(hashValue), 36)
+}
+
+// ListModels returns a stable, hash-hydrated view for API responses.
+func ListModels() []ModelConfig {
+	ids := make([]string, 0, len(Models))
+	for id := range Models {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	models := make([]ModelConfig, 0, len(ids))
+	for _, id := range ids {
+		cfg := Models[id]
+		cfg.Hash = ModelIDHash(cfg.ID)
+		models = append(models, cfg)
+	}
+	return models
+}
+
+// LookupModelHash resolves the frontend's short model key back to an ID.
+func LookupModelHash(hash string) (ModelConfig, bool) {
+	for _, cfg := range ListModels() {
+		if cfg.Hash == hash {
+			return cfg, true
+		}
+	}
+	return ModelConfig{}, false
+}
+
 // LookupModel returns the registry entry for id, or a zero-value config if
 // the id isn't known. Zero-value means "no per-model defaults applied" —
 // the request goes to OpenRouter exactly as the caller built it.
 func LookupModel(id string) ModelConfig {
 	if cfg, ok := Models[id]; ok {
+		cfg.Hash = ModelIDHash(cfg.ID)
 		return cfg
 	}
 	return ModelConfig{ID: id}

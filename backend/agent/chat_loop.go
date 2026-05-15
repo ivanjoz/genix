@@ -27,7 +27,7 @@ const (
 	// maxLoopIterations is the safety cap on tool-call/result round-trips per
 	// user turn. Tuned for the typical "get_page → navigate → invoke_batch →
 	// finish" arc with a few retries; bump if real usage shows it bites.
-	maxLoopIterations = 8
+	maxLoopIterations = 12
 	// toolResultMaxBytes truncates a tool result before it goes back into the
 	// conversation. Page HTML can be tens of KB and we don't want one call to
 	// blow the model's context window. The truncation marker tells the model
@@ -61,11 +61,26 @@ func getLLMClient() (*llm.Client, error) {
 // RunTurn persists the user's message, drives the LLM loop until `finish` is
 // called (or the cap is hit), persists the agent's reply, and pushes the
 // reply over the chat WS. Caller is responsible for the InFlight guard.
-func (s *AgentSession) RunTurn(ctx context.Context, userText string) error {
+func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash string) error {
 	client, err := getLLMClient()
 	if err != nil {
 		return fmt.Errorf("llm client unavailable: %w", err)
 	}
+	modelID := ""
+	modelHash = strings.TrimSpace(modelHash)
+	if modelHash != "" {
+		modelConfig, ok := llm.LookupModelHash(modelHash)
+		if !ok {
+			return fmt.Errorf("modelo de agente no válido: %s", modelHash)
+		}
+		modelID = modelConfig.ID
+	}
+	activeModelID := modelID
+	if activeModelID == "" {
+		activeModelID = client.Model
+	}
+	core.Log("Starting agentic loop with model", activeModelID)
+	core.Log("Promp:", userText)
 
 	if _, err := saveMessage(s, RoleUser, userText, "", 0); err != nil {
 		return fmt.Errorf("persist user message: %w", err)
@@ -86,14 +101,29 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string) error {
 
 	s.pushStatus("thinking", "Pensando…", 1, maxLoopIterations)
 
+	// latestFullToolResult holds the FULL (with page snapshot) form of the
+	// most recently dispatched tool result. `messages` stores the STRIPPED
+	// form permanently; we swap the full back in for just the current LLM
+	// call. Once we dispatch the next tool, the previous one stays stripped
+	// in history and this slot is overwritten with the new full payload.
+	var latestFullToolResult string
+
 	for iter := 0; iter < maxLoopIterations; iter++ {
 		messages = pruneToolRounds(messages, baseLen, keepRecentToolRounds)
+		// Build the per-iteration LLM payload: the last tool message gets its
+		// full snapshot swapped in; everything else stays as the compact
+		// stripped form already in `messages`.
+		llmMessages := withLatestFullToolResult(messages, baseLen, latestFullToolResult)
+		// Local-dev: persist the exact messages array we're about to send for
+		// post-hoc inspection. No-op in any other environment.
+		LogPrompt(s.UserID, llmMessages)
 		// Reasoning defaults (effort/exclude) come from the per-model registry
 		// in llm/models.go — Client.Chat fills them in if we leave them nil.
 		// That way switching models via OPENROUTER_MODEL just works without
 		// touching the loop body.
 		resp, err := client.Chat(ctx, llm.ChatRequest{
-			Messages:   messages,
+			Model:      modelID,
+			Messages:   llmMessages,
 			Tools:      llm.ChatTools,
 			ToolChoice: "auto",
 		})
@@ -119,11 +149,14 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string) error {
 			// model decides what to do next on the following iteration.
 			s.pushStatus("acting", s.statusLabelFor(call), iter+1, maxLoopIterations)
 			toolResult := s.dispatchTool(ctx, call)
+			fullClipped := clipForLLM(toolResult)
+			strippedClipped := clipForLLM(stripPageSnapshotFromToolResult(toolResult))
 			messages = append(messages, choice.Message, llm.Message{
 				Role:       "tool",
 				ToolCallID: call.ID,
-				Content:    clipForLLM(toolResult),
+				Content:    strippedClipped,
 			})
+			latestFullToolResult = fullClipped
 			// Brief "thinking" status between tool result and the next LLM call
 			// so the widget doesn't show a stale label while we wait.
 			s.pushStatus("thinking", "Pensando…", iter+2, maxLoopIterations)
@@ -137,7 +170,7 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string) error {
 		if text == "" {
 			return errors.New("openrouter returned empty assistant message and no tool call")
 		}
-		core.Log("agent.chat-ws plain-text reply (no finish call) tab::", s.TabID)
+		core.Log("agent.chat-ws plain-text reply (no finish call) tab::", shortTabID(s.TabID))
 		return s.completeTurn(text, "", totalTokens)
 	}
 
@@ -149,34 +182,32 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string) error {
 // JSON `{"error":"..."}` so the model can recover rather than seeing a raw
 // Go error string — same shape as the success case, just an extra key.
 func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) string {
-	core.Log("agent.chat-ws dispatchTool tab::", s.TabID, " name::", call.Function.Name, " args::", core.StrCut(call.Function.Arguments, 200))
+	core.Log("agent.chat-ws dispatchTool tab::", shortTabID(s.TabID), " name::", call.Function.Name, " args::", core.StrCut(call.Function.Arguments, 200))
 	switch call.Function.Name {
 	case llm.GetPageToolName:
 		page, err := GetPageContent(ctx, s.TabID)
 		if err != nil {
 			return toolErrorJSON(err)
 		}
-		// Parsed HTML is far smaller and easier for the model to read than the
-		// raw DOM snapshot the browser sent.
-		parsedHTML, perr := ParsePageHTML(page.HTML, page.Components)
-		if perr != nil {
-			parsedHTML = page.HTML
-		}
-		return toolJSON(map[string]any{
-			"components": page.Components,
-			"html":       parsedHTML,
-		})
+		// Parsed HTML is far smaller and easier for the model to read than
+		// the raw DOM snapshot the browser sent; same parse runs on the Page
+		// returned by navigate/invoke_batch via compactPage. Components are
+		// dropped because every field (id/type/label/methods/options) is
+		// already encoded in the rewritten tags.
+		compactPage(&page)
+		return withSnapshotGrammar(toolJSON(map[string]any{"html": page.HTML}))
 
 	case llm.GetMenuToolName:
 		menu, err := GetMenu(ctx, s.TabID)
 		if err != nil {
 			return toolErrorJSON(err)
 		}
-		return toolJSON(map[string]any{"groups": menu})
+		return FormatMenuTSV(menu)
 
 	case llm.NavigateToolName:
 		var args struct {
-			Route string `json:"route"`
+			Route             string `json:"route"`
+			ReturnPageContent bool   `json:"returnPageContent"`
 		}
 		if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
 			return toolErrorJSON(fmt.Errorf("decode args: %w", err))
@@ -184,16 +215,32 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 		if args.Route == "" {
 			return toolErrorJSON(errors.New("route is required"))
 		}
-		if err := Navigate(ctx, s.TabID, args.Route); err != nil {
+		navigateResult, err := NavigateWithPage(ctx, s.TabID, args.Route, args.ReturnPageContent)
+		if err != nil {
 			return toolErrorJSON(err)
 		}
 		// Track the route so later get_page status labels can name it.
 		s.setCurrentRoute(args.Route)
-		return toolJSON(map[string]any{"ok": true, "route": args.Route})
+		compactPage(navigateResult.Page)
+		body := toolJSON(map[string]any{"ok": true, "route": args.Route, "page": navigateResult.Page})
+		if args.ReturnPageContent {
+			body = withSnapshotGrammar(body)
+		}
+		return body
 
 	case llm.InvokeBatchToolName:
+		// The LLM-facing shape uses a string `ID` so the model can pass the id
+		// straight from the snapshot — plain ("38") or composite ("38:100").
+		// resolveTarget mirrors what the HTTP /agent endpoint does: split the
+		// composite into parent HandleID + child arg, and rewrite
+		// setValue/search/getOptions/click to their *Child variant for cells.
 		var args struct {
-			Invocations []InvokePayload `json:"invocations"`
+			Invocations []struct {
+				ID     string `json:"ID"`
+				Method string `json:"Method"`
+				Args   []any  `json:"Args"`
+			} `json:"invocations"`
+			ReturnPageContent bool `json:"returnPageContent"`
 		}
 		if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
 			return toolErrorJSON(fmt.Errorf("decode args: %w", err))
@@ -201,14 +248,31 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 		if len(args.Invocations) == 0 {
 			return toolErrorJSON(errors.New("invocations must not be empty"))
 		}
-		results, err := InvokeBatch(ctx, s.TabID, args.Invocations)
+		resolved := make([]InvokePayload, 0, len(args.Invocations))
+		for i, inv := range args.Invocations {
+			if inv.Method == "" {
+				return toolErrorJSON(fmt.Errorf("invocation[%d]: missing Method", i))
+			}
+			handleID, method, callArgs, err := resolveTarget(inv.ID, inv.Method, inv.Args)
+			if err != nil {
+				return toolErrorJSON(fmt.Errorf("invocation[%d]: %w", i, err))
+			}
+			resolved = append(resolved, InvokePayload{HandleID: handleID, Method: method, Args: callArgs})
+		}
+		result, err := InvokeBatch(ctx, s.TabID, resolved, args.ReturnPageContent)
 		if err != nil {
 			return toolErrorJSON(err)
 		}
-		return toolJSON(map[string]any{"results": results})
+		compactPage(result.Page)
+		tsvifyOptionValues(&result)
+		body := toolJSON(result)
+		if args.ReturnPageContent {
+			body = withSnapshotGrammar(body)
+		}
+		return body
 
 	default:
-		core.Log("agent.chat-ws unknown tool tab::", s.TabID, " name::", call.Function.Name)
+		core.Log("agent.chat-ws unknown tool tab::", shortTabID(s.TabID), " name::", call.Function.Name)
 		return toolErrorJSON(fmt.Errorf("unknown tool %q — only get_page/get_menu/navigate/invoke_batch/finish are available", call.Function.Name))
 	}
 }
@@ -411,6 +475,52 @@ func pruneToolRounds(messages []llm.Message, baseLen, keep int) []llm.Message {
 	return pruned
 }
 
+// withLatestFullToolResult returns a copy of `messages` whose final tool
+// message (looking back from the tail) has its Content replaced with
+// `fullLatest`. The originals stay stripped — only this single iteration's
+// payload sees the heavy snapshot. Returns the input slice unchanged when
+// fullLatest is empty (first iteration before any dispatch) or no tool
+// message exists in the appended tail.
+func withLatestFullToolResult(messages []llm.Message, baseLen int, fullLatest string) []llm.Message {
+	if fullLatest == "" {
+		return messages
+	}
+	for i := len(messages) - 1; i >= baseLen; i-- {
+		if messages[i].Role != "tool" {
+			continue
+		}
+		out := make([]llm.Message, len(messages))
+		copy(out, messages)
+		out[i].Content = fullLatest
+		return out
+	}
+	return messages
+}
+
+// stripPageSnapshotFromToolResult rewrites a tool result so it loses its
+// page snapshot — both the SNAPSHOT GRAMMAR prefix and the heavy HTML /
+// Components payload — while keeping the lightweight Results array intact.
+// This is the form we persist in the messages slice for past tool calls;
+// the current iteration's call uses the full form via withLatestFullToolResult.
+// Tool results without a snapshot are returned unchanged.
+func stripPageSnapshotFromToolResult(content string) string {
+	if !strings.HasPrefix(content, llm.PageSnapshotGrammar) {
+		return content
+	}
+	body := content[len(llm.PageSnapshotGrammar):]
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(body), &decoded); err != nil {
+		return body
+	}
+	delete(decoded, "Page")
+	delete(decoded, "html")
+	encoded, err := json.Marshal(decoded)
+	if err != nil {
+		return body
+	}
+	return string(encoded)
+}
+
 // toolJSON marshals a tool result for the LLM. Falls back to a stable error
 // shape if marshal fails — the loop should never wedge over an encoding bug.
 func toolJSON(v any) string {
@@ -424,6 +534,86 @@ func toolJSON(v any) string {
 func toolErrorJSON(err error) string {
 	body, _ := json.Marshal(map[string]string{"error": err.Error()})
 	return string(body)
+}
+
+// tsvifyOptionValues rewrites InvocationResult values that decode as
+// []AgentOption into a compact TSV string ("ID\tValue\n<id>\t<label>\n..."),
+// so the LLM sees option lists from Select.search / Select.getOptions as a
+// table instead of a JSON array (much cheaper in tokens and easier for small
+// models to scan). Values that don't match the shape are left untouched.
+// Mutates result in place.
+func tsvifyOptionValues(result *InvokeBatchResult) {
+	if result == nil {
+		return
+	}
+	for i := range result.Results {
+		r := &result.Results[i]
+		if !r.OK || len(r.Value) == 0 {
+			continue
+		}
+		var opts []AgentOption
+		if err := json.Unmarshal(r.Value, &opts); err != nil || len(opts) == 0 {
+			continue
+		}
+		// Guard against false positives — every entry must look like an
+		// option record (both ID and Value populated).
+		looksLikeOptions := true
+		for _, o := range opts {
+			if o.ID == nil || o.Value == nil {
+				looksLikeOptions = false
+				break
+			}
+		}
+		if !looksLikeOptions {
+			continue
+		}
+		var b strings.Builder
+		b.WriteString("ID\tValue")
+		for _, o := range opts {
+			b.WriteByte('\n')
+			fmt.Fprintf(&b, "%v\t%v", o.ID, o.Value)
+		}
+		encoded, err := json.Marshal(b.String())
+		if err != nil {
+			continue
+		}
+		r.Value = encoded
+	}
+}
+
+// compactPage runs ParsePageHTML in-place on a Page snapshot returned by
+// navigate / invoke_batch when returnPageContent is set. Without this the
+// LLM receives the raw browser-sanitised DOM (every CSS class intact, the
+// chat widget unfiltered, etc.) — get_page's branch already parses; this
+// brings the other two paths to parity. nil-safe so callers don't need to
+// guard. Parse errors leave the original HTML untouched, matching the
+// fallback shape get_page uses.
+func compactPage(page *PageContent) {
+	if page == nil {
+		return
+	}
+	parsed, err := ParsePageHTML(page.HTML, page.Components)
+	if err != nil {
+		return
+	}
+	page.HTML = parsed
+	// Components is redundant once parsed: id / type / label / methods / inline
+	// options all live on the rewritten HTML tags. Drop it from the LLM-facing
+	// envelope to save tokens. HTTP / external callers skip compactPage and
+	// still receive the full Components array.
+	page.Components = nil
+}
+
+// withSnapshotGrammar prepends the snapshot grammar block to a tool result
+// that carries parsed page HTML. Called from the three result-bearing
+// branches (get_page; navigate / invoke_batch when returnPageContent is set);
+// skipped on errors and on tool results that don't include a snapshot. The
+// grammar is duplicated when multiple page-bearing tools run in the same
+// turn — that's intentional. The pruneToolRounds cap of 2 bounds the worst-
+// case duplication, and treating the grammar as part of the snapshot keeps
+// the model from losing it after a round drops out of the prompt.
+func withSnapshotGrammar(body string) string {
+	return llm.PageSnapshotGrammar + body
 }
 
 // clipForLLM truncates oversized tool results so a giant page snapshot can't

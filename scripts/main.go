@@ -21,6 +21,9 @@ func main() {
 	case "sync_struct_interfaces":
 		runSubpackage("./generators")
 
+	case "generate_menu_descriptions":
+		GenerateMenuDescriptions()
+
 	case "deploy_vps":
 		DeployVPS()
 

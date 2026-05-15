@@ -7,6 +7,7 @@
 import { goto } from "$app/navigation";
 import { Core } from "$core/store.svelte";
 import { canUserAccessRoute } from "$core/security";
+import { tick } from "svelte";
 import { Agent, agentHandles, type AgentHandle, type AgentListFilter, type AgentMethodName } from "./registry";
 import { captureDomScreenshot, captureScreenshot, releaseScreenStream } from "./screenshot";
 
@@ -37,8 +38,14 @@ interface InvokePayload {
   Args?: unknown[];
 }
 
+interface InvokeBatchPayload {
+  Invocations?: InvokePayload[];
+  ReturnPageContent?: boolean;
+}
+
 interface NavigatePayload {
   Route: string;
+  ReturnPageContent?: boolean;
 }
 
 // Mirrors the Go agent.InvocationResult: one entry per executed invocation in
@@ -48,6 +55,11 @@ interface InvocationResult {
   OK: boolean;
   Value?: unknown;
   Error?: string;
+}
+
+interface InvokeBatchResult {
+  Results: InvocationResult[];
+  Page?: Awaited<ReturnType<typeof Agent.getPageContent>>;
 }
 
 type CommandHandler = (payload: any) => Promise<unknown> | unknown;
@@ -72,6 +84,12 @@ const pacedRun = async <T>(fn: () => Promise<T> | T): Promise<T> => {
   } finally {
     lastActionAt = Date.now();
   }
+};
+
+const waitForPageContentReady = async () => {
+  // Capture only after Svelte state and route DOM updates have reached the document.
+  await tick();
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 };
 
 // --- Pulse overlay ------------------------------------------------------------
@@ -158,8 +176,9 @@ const runInvocation = async (invocation: InvokePayload): Promise<unknown> => {
 // Executes a batch of invocations sequentially, pacing each by ACTION_GAP_MS.
 // Stops on the first failure, returning the truncated result list — the
 // caller (backend HTTP layer) checks the last entry's OK flag.
-const invokeBatch = async (payload: InvokePayload[] | undefined): Promise<InvocationResult[]> => {
-  const invocations = Array.isArray(payload) ? payload : [];
+const invokeBatch = async (payload: InvokeBatchPayload | InvokePayload[] | undefined): Promise<InvokeBatchResult> => {
+  const invocations = Array.isArray(payload) ? payload : Array.isArray(payload?.Invocations) ? payload.Invocations : [];
+  const returnPageContent = !Array.isArray(payload) && payload?.ReturnPageContent === true;
   const results: InvocationResult[] = [];
   for (const invocation of invocations) {
     try {
@@ -170,7 +189,9 @@ const invokeBatch = async (payload: InvokePayload[] | undefined): Promise<Invoca
       break;
     }
   }
-  return results;
+  if (!returnPageContent) { return { Results: results }; }
+  await waitForPageContentReady();
+  return { Results: results, Page: await Agent.getPageContent() };
 };
 
 // getMenu mirrors the side-menu the user sees: the same access filter as
@@ -192,12 +213,16 @@ const getMenu = (): MenuGroup[] => {
     .filter((group) => group.Options.length > 0);
 };
 
-const navigate = (payload: NavigatePayload | undefined): Promise<null> =>
+const navigate = (payload: NavigatePayload | undefined): Promise<{ Route: string; Page?: Awaited<ReturnType<typeof Agent.getPageContent>> }> =>
   pacedRun(async () => {
     const route = payload?.Route || "";
     if (!route) { throw new Error("navigate: missing route"); }
     await goto(route);
-    return null;
+    await waitForPageContentReady();
+    return {
+      Route: route,
+      Page: payload?.ReturnPageContent ? await Agent.getPageContent() : undefined,
+    };
   });
 
 const commandHandlers: Record<string, CommandHandler> = {

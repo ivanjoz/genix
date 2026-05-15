@@ -26,7 +26,7 @@ var droppedElements = map[string]bool{
 // collapses chains of text-less wrappers so at most one wrapper sits between
 // any two text-bearing layers.
 // Elements with a data-id matching a known component (e.g. "Input:4",
-// "SearchSelect:4") are replaced with a compact self-closing tag using the
+// "Select:4") are replaced with a compact self-closing tag using the
 // metadata from the supplied components slice.
 func ParsePageHTML(input string, components []AgentComponentInfo) (string, error) {
 	cm := make(map[string]AgentComponentInfo, len(components))
@@ -117,7 +117,7 @@ func cleanAttributes(n *html.Node) {
 		kept := n.Attr[:0]
 		for _, attr := range n.Attr {
 			key := strings.ToLower(attr.Key)
-			if key == "role" || key == "data-id" || key == "data-value" || key == "data-label" || key == "data-type" || key == "data-cell-type" || key == "data-selected" || strings.HasPrefix(key, "aria-") {
+			if key == "role" || key == "data-id" || key == "data-value" || key == "data-label" || key == "data-type" || key == "data-cell-type" || key == "data-selected" || key == "data-options-count" || strings.HasPrefix(key, "aria-") {
 				kept = append(kept, attr)
 			}
 		}
@@ -270,10 +270,12 @@ var recurseContentTypes = map[string]bool{
 // structuralComponentTypes are registered components rendered as bare tags —
 // no id, label, value, or methods on the parent — because the interactive
 // surface lives on the children (e.g. PageViews's Option markers). The
-// handle is still needed for routing, but the agent addresses the children
-// directly via composite ids.
+// handle is still needed for routing (the agent calls select on a composite
+// "<parentID>:<optionID>" and resolveTarget dispatches to the parent), but
+// the agent addresses the children directly via those composite ids.
 var structuralComponentTypes = map[string]bool{
-	"PageViews": true,
+	"PageViews":    true,
+	"OptionsStrip": true,
 }
 
 // markerComponentType returns the marker type ("Option", "TableRow", "Button")
@@ -630,6 +632,21 @@ func renderComponent(buf *bytes.Buffer, indent, dataID string, c AgentComponentI
 			buf.WriteString(html.EscapeString(strings.Join(methods, ",")))
 			buf.WriteByte('"')
 		}
+		// Select carries the total option count + the inline option list (when
+		// the list is short enough to embed). The agent uses `options-count`
+		// to decide whether to call `search`/`getOptions` for longer lists.
+		if typ == "Select" {
+			if count := nodeAttr(n, "data-options-count"); count != "" {
+				buf.WriteString(` options-count="`)
+				buf.WriteString(html.EscapeString(count))
+				buf.WriteByte('"')
+			}
+			if len(c.Options) > 0 {
+				buf.WriteString(` options="`)
+				buf.WriteString(html.EscapeString(formatInlineOptions(c.Options)))
+				buf.WriteByte('"')
+			}
+		}
 	}
 
 	// Recurse when there are registered components or markers nested inside —
@@ -843,6 +860,27 @@ func renderCell(buf *bytes.Buffer, indent, typ, dataID string, n *html.Node) {
 		buf.WriteByte('"')
 	}
 	buf.WriteString("/>\n")
+}
+
+// formatInlineOptions serialises a Select handle's options into a single
+// `options="[id] label|[id] label|…"` attribute. Mirrors the `[id] text`
+// shape already used by `data-value`/`value=` so the agent reads both
+// surfaces with the same mental model. Bars in labels are escaped to keep
+// the separator unambiguous; brackets and other characters pass through the
+// outer HTML escape pass on the caller side.
+func formatInlineOptions(options []AgentOption) string {
+	var b strings.Builder
+	for i, opt := range options {
+		if i > 0 {
+			b.WriteByte('|')
+		}
+		b.WriteByte('[')
+		fmt.Fprint(&b, opt.ID)
+		b.WriteString("] ")
+		label := fmt.Sprint(opt.Value)
+		b.WriteString(strings.ReplaceAll(label, "|", "/"))
+	}
+	return b.String()
 }
 
 func hasAgentDescendant(n *html.Node, cm map[string]AgentComponentInfo) bool {

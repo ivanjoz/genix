@@ -384,3 +384,113 @@ func TestParsePageHTML_CellMethodsOnCellTags(t *testing.T) {
 		t.Fatalf("expected CellSelect with methods=\"search,select,getOptions\", got:\n%s", out)
 	}
 }
+
+func TestParsePageHTML_SelectRendersOptionsCountWithoutInlineOptions(t *testing.T) {
+	// Long option lists: the handle carries options-count but no inline
+	// options. The agent uses search / getOptions to drill down.
+	in := `
+<div data-id="Select:9" data-value="[3] PEN" data-label="Moneda" data-type="other" data-options-count="120">
+  <input />
+</div>`
+	components := []AgentComponentInfo{{
+		ID:      9,
+		Type:    "Select",
+		Label:   "Moneda",
+		Methods: []string{"search", "select", "getOptions"},
+	}}
+	out, err := ParsePageHTML(in, components)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `options-count="120"`) {
+		t.Fatalf("expected options-count attribute, got:\n%s", out)
+	}
+	if strings.Contains(out, `options="`) {
+		t.Fatalf("expected no inline options for long list, got:\n%s", out)
+	}
+}
+
+func TestParsePageHTML_SelectRendersInlineOptionsWhenAttached(t *testing.T) {
+	// Short option lists: the frontend probe attaches Options to the
+	// AgentComponentInfo and the renderer inlines them with [id] label|… .
+	in := `
+<div data-id="Select:9" data-value="" data-label="Moneda" data-type="other" data-options-count="3">
+  <input />
+</div>`
+	components := []AgentComponentInfo{{
+		ID:      9,
+		Type:    "Select",
+		Label:   "Moneda",
+		Methods: []string{"search", "select", "getOptions"},
+		Options: []AgentOption{
+			{ID: 1, Value: "PEN"},
+			{ID: 2, Value: "USD"},
+			{ID: 3, Value: "EUR"},
+		},
+	}}
+	out, err := ParsePageHTML(in, components)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `options-count="3"`) {
+		t.Fatalf("expected options-count=3, got:\n%s", out)
+	}
+	if !strings.Contains(out, `options="[1] PEN|[2] USD|[3] EUR"`) {
+		t.Fatalf("expected inline options attribute, got:\n%s", out)
+	}
+}
+
+func TestParsePageHTML_OptionsStripIsStructural(t *testing.T) {
+	// OptionsStrip is structural: the parent tag carries no id/methods/label —
+	// the agent addresses each Option by its composite "<stripID>:<optID>" id
+	// and the strip's select method strips the parent prefix.
+	in := `
+<div data-id="OptionsStrip:30">
+  <button data-id="Option:30:1" data-selected="true">Productos</button>
+  <button data-id="Option:30:2">Categorías</button>
+  <button data-id="Option:30:3">Marcas</button>
+</div>`
+	components := []AgentComponentInfo{{
+		ID:      30,
+		Type:    "OptionsStrip",
+		Methods: []string{"select"},
+	}}
+	out, err := ParsePageHTML(in, components)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, `<OptionsStrip id=`) || strings.Contains(out, `<OptionsStrip methods=`) {
+		t.Fatalf("expected bare <OptionsStrip> tag without id/methods, got:\n%s", out)
+	}
+	if !strings.Contains(out, "<OptionsStrip>") || !strings.Contains(out, "</OptionsStrip>") {
+		t.Fatalf("expected open/close <OptionsStrip> tags, got:\n%s", out)
+	}
+	if !strings.Contains(out, `<Option id="30:1" selected methods="select">Productos</Option>`) {
+		t.Fatalf("expected selected Option with composite id and methods=\"select\", got:\n%s", out)
+	}
+	if !strings.Contains(out, `<Option id="30:2" methods="select">Categorías</Option>`) {
+		t.Fatalf("expected unselected Option with composite id and methods=\"select\", got:\n%s", out)
+	}
+}
+
+func TestParsePageHTML_SelectInlineOptionsEscapeSeparator(t *testing.T) {
+	// Pipes in labels collide with the option separator — they get rewritten
+	// to "/" so the inline list stays unambiguous for the agent parser.
+	in := `<div data-id="Select:9" data-options-count="2"><input /></div>`
+	components := []AgentComponentInfo{{
+		ID:      9,
+		Type:    "Select",
+		Methods: []string{"select"},
+		Options: []AgentOption{
+			{ID: 1, Value: "Foo|Bar"},
+			{ID: 2, Value: "Baz"},
+		},
+	}}
+	out, err := ParsePageHTML(in, components)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `options="[1] Foo/Bar|[2] Baz"`) {
+		t.Fatalf("expected pipe in label escaped to /, got:\n%s", out)
+	}
+}

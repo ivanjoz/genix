@@ -17,6 +17,7 @@
   import { onDestroy, tick } from 'svelte';
   import { Env } from '$core/env';
   import { agentWsBase, getAgentTabID } from './ws';
+  import { getSelectedAgentModelHash } from './models.svelte';
   import {
     AGENT_ROLE_AGENT,
     AGENT_ROLE_STATUS,
@@ -65,10 +66,12 @@
   let wsReady = $state(false);
   let isBusy = $state(false);
   let statusLabel = $state(''); // transient progress text shown while a turn is in flight
+  let headerStatusItems = $state<{ id: number; label: string }[]>([]);
   let hostElement: HTMLElement | undefined = $state();
   let textareaElement: HTMLTextAreaElement | undefined = $state();
   let scrollElement: HTMLDivElement | undefined = $state();
   let historyLoaded = false;
+  let nextHeaderStatusID = 1;
 
   // --- Helpers ----------------------------------------------------------------
 
@@ -90,6 +93,15 @@
       scrollElement.scrollTop = scrollElement.scrollHeight;
     }
   };
+
+  const pushHeaderStatus = (label: string) => {
+    if (!label) { return; }
+    // Keep the previous trace only long enough to animate it out when the next
+    // status takes the fixed header slot.
+    headerStatusItems = [...headerStatusItems, { id: nextHeaderStatusID++, label }].slice(-2);
+  };
+
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const ensureHistoryLoaded = async () => {
     if (historyLoaded) { return; }
@@ -146,6 +158,8 @@
     }
     switch (env.Type) {
       case CHAT_TYPE_AGENT_REPLY: {
+        pushHeaderStatus('Respondiendo...');
+        await wait(350);
         const payload = env.Payload as AgentReplyPayload;
         const row: AgentChatRow = {
           tabID: getAgentTabID(),
@@ -165,6 +179,7 @@
         messages = [...messages, row];
         isBusy = false;
         statusLabel = '';
+        headerStatusItems = [];
         await scrollToBottom();
         break;
       }
@@ -181,6 +196,7 @@
         messages = [...messages, row];
         isBusy = false;
         statusLabel = '';
+        headerStatusItems = [];
         await scrollToBottom();
         break;
       }
@@ -195,6 +211,7 @@
         const payload = env.Payload as AgentStatusPayload;
         const label = payload?.Label || '';
         if (payload?.State === 'acting' && label) {
+          pushHeaderStatus(label);
           const row: AgentChatRow = {
             tabID: getAgentTabID(),
             role: AGENT_ROLE_STATUS,
@@ -233,6 +250,7 @@
     messages = [...messages, optimistic];
     inputText = '';
     isBusy = true;
+    pushHeaderStatus('Pensando...');
     await scrollToBottom();
 
     const waitOpen = async () => {
@@ -244,6 +262,7 @@
     await waitOpen();
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       isBusy = false;
+      headerStatusItems = [];
       if (optimistic.id) { await updateAgentChatMessage(optimistic.id, { pending: false }); }
       optimistic.pending = false;
       messages = [...messages, {
@@ -256,7 +275,11 @@
     }
     socket.send(JSON.stringify({
       Type: CHAT_TYPE_USER_MESSAGE,
-      Payload: { Message: text, Timestamp: optimistic.timestamp },
+      Payload: {
+        Message: text,
+        ModelHash: getSelectedAgentModelHash(),
+        Timestamp: optimistic.timestamp,
+      },
     } satisfies ChatEnvelope));
   };
 
@@ -312,7 +335,7 @@
   };
 </script>
 
-<div bind:this={hostElement} class="_host relative w-full max-w-2xl">
+<div bind:this={hostElement} data-agent-hidden="true" class="_host relative w-full max-w-2xl">
   <div class="_pill flex items-start gap-6 px-10 py-6 bg-white/15 hover:bg-white/20 focus-within:bg-white/25
     border border-white/20 rounded-2xl transition-colors cursor-text"
     onclick={() => textareaElement?.focus()}
@@ -324,10 +347,22 @@
     <textarea bind:this={textareaElement} bind:value={inputText}
       rows={2}
       placeholder="Pregúntale a Genix…"
-      class="_input flex-1 bg-transparent text-white placeholder-white/60 outline-none resize-none text-sm leading-tight"
+      class="_input p-4 flex-1 bg-transparent text-white placeholder-white/60 outline-none resize-none text-sm leading-tight"
+      class:_inputStatus={isBusy && headerStatusItems.length > 0}
       onfocus={openPanel}
       onkeydown={onTextareaKey}
     ></textarea>
+    {#if isBusy && headerStatusItems.length > 0}
+      <div class="_statusLane" aria-live="polite">
+        {#each headerStatusItems as item, index (item.id)}
+          <div class="_statusItem text-xs italic leading-tight"
+            class:_statusLeaving={index < headerStatusItems.length - 1}
+          >
+            {item.label}
+          </div>
+        {/each}
+      </div>
+    {/if}
     <button type="button"
       class="_send shrink-0 self-stretch px-10 rounded-xl bg-white/15 hover:bg-white/25 disabled:opacity-40
         text-white text-sm font-medium transition-colors"
@@ -335,12 +370,16 @@
       disabled={isBusy || !inputText.trim()}
       aria-label="Enviar mensaje"
     >
-      {isBusy ? '…' : '➤'}
+      {#if isBusy}
+        <span class="_spinner"></span>
+      {:else}
+        ➤
+      {/if}
     </button>
   </div>
 
   {#if isOpen}
-    <div class="_panel absolute left-0 right-0 top-full mt-6 z-300
+    <div class="_panel absolute left-0 right-0 top-full mt-2 z-300
       bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden"
     >
       <div bind:this={scrollElement}
@@ -387,10 +426,100 @@
   ._host {
     color-scheme: light;
   }
+  ._pill {
+	  background-color: #00000030;
+	  padding: 0;
+	  border: 0;
+	  height: calc(var(--header-height) - 9px);
+	  box-shadow: rgb(255 255 255 / 8%) 0px 1px 7px 0px, rgb(255 255 255 / 14%) 0px 1px 14px 0px;
+		margin-bottom: 1px;
+  }
   ._input {
     /* Prevent the browser-supplied min-height from forcing the pill taller
        than rows=2 needs. */
     min-height: 0;
     line-height: 1.3;
+    padding-right: 54px;
+  }
+  ._inputStatus {
+    padding-right: 360px;
+  }
+  ._statusLane {
+    position: absolute;
+    right: 44px;
+    top: 0;
+    bottom: 0;
+    width: 340px;
+    overflow: hidden;
+    pointer-events: none;
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 28%, #000 72%, transparent 100%);
+  }
+  ._statusItem {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    color: rgb(255 255 255 / 70%);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+    animation: status-enter 240ms ease-out both;
+  }
+  ._statusLeaving {
+    animation: status-leave 520ms ease-out both;
+  }
+  ._send {
+	  position: absolute;
+	  right: 4px;
+	  height: calc(100% - 8px);
+	  top: 3px;
+	  width: 32px;
+	  border-radius: 6px 14px 14px 6px;
+	  font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  ._spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgb(255 255 255 / 30%);
+    border-top-color: rgb(255 255 255 / 90%);
+    border-radius: 999px;
+    animation: spin 700ms linear infinite;
+  }
+  @keyframes status-enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(-50%);
+    }
+  }
+  @keyframes status-leave {
+    from {
+      opacity: 0.75;
+      transform: translateY(-50%);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(calc(-50% - 18px));
+    }
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (max-width: 900px) {
+    ._inputStatus {
+      padding-right: 54px;
+    }
+    ._statusLane {
+      display: none;
+    }
   }
 </style>

@@ -25,7 +25,7 @@ export interface AgentOption {
 // always know whether they are addressing the container or one of its
 // children.
 export interface AgentMethodMap {
-  search?: (text: string) => void;
+  search?: (text: string) => AgentOption[] | void;
   select?: (...ids: (number | string)[]) => void;
   remove?: (id: number | string) => void;
   setValue?: (value: string | number) => void;
@@ -39,7 +39,7 @@ export interface AgentMethodMap {
   // (`<tableID>:<cellID>` resolves to its `<cellID>`); remaining args mirror
   // the leaf method.
   setValueChild?: (childID: number | string, value: string | number) => void;
-  searchChild?: (childID: number | string, text: string) => void;
+  searchChild?: (childID: number | string, text: string) => AgentOption[] | void;
   getOptionsChild?: (childID: number | string, max?: number) => AgentOption[];
   clickChild?: (childID: number | string) => void;
 }
@@ -79,6 +79,10 @@ export interface AgentComponentSummary {
 // Full entry returned by Agent.describe and embedded in the page snapshot.
 export interface AgentPageComponent extends AgentComponentSummary {
   Methods: string[];
+  // Options is inlined for Select handles whose total option count is small
+  // enough that listing the entries in the HTML snapshot is cheaper than a
+  // separate getOptions round-trip. Only populated by getPageContent.
+  Options?: AgentOption[];
 }
 
 export interface AgentListFilter {
@@ -102,6 +106,10 @@ export const isAgentEnabled = (): boolean => {
 // Shared map of registered handles. Exported so the WS bridge can resolve
 // handle ids without going back through the public `Agent` facade.
 export const agentHandles = new Map<number, AgentHandle>();
+
+// Max number of Select options to inline in the page snapshot. Past this we
+// rely on options-count + the search/getOptions methods instead.
+const INLINE_SELECT_OPTIONS_MAX = 12;
 
 const methodsFor = (handle: AgentHandle): string[] => {
   const out: string[] = [];
@@ -164,19 +172,37 @@ export const Agent: AgentRegistry & { getPageContent: () => Promise<{ Components
       import("normalize-html-whitespace"),
     ]);
 
-    const HTML = normalize(DOMPurify.sanitize(document.body.outerHTML, {
+    // Clone first so we can prune opt-out subtrees without mutating the live
+    // DOM. Anything carrying `data-agent-hidden="true"` (the chat widget
+    // itself, dev overlays, etc.) gets stripped before sanitisation — that
+    // way it never reaches the backend snapshot and can't bloat tokens or
+    // tempt the agent into interacting with its own UI.
+    const cloned = document.body.cloneNode(true) as HTMLElement;
+    cloned.querySelectorAll<HTMLElement>("[data-agent-hidden]").forEach((el) => el.remove());
+
+    const HTML = normalize(DOMPurify.sanitize(cloned.outerHTML, {
       FORBID_TAGS: ["script", "style"],
       ALLOW_DATA_ATTR: true,
     }));
 
     const Components: AgentPageComponent[] = [];
     for (const handle of agentHandles.values()) {
-      Components.push({
+      const entry: AgentPageComponent = {
         ID: handle.id,
         Type: handle.type,
         Label: handle.label,
         Methods: methodsFor(handle),
-      });
+      };
+      // Select options aren't in the DOM until the dropdown opens; inline
+      // them when the full list is short enough to fit (probe with N+1 to
+      // distinguish "exactly N" from "more than N").
+      if (handle.type === "Select" && typeof handle.getOptions === "function") {
+        const probed = handle.getOptions(INLINE_SELECT_OPTIONS_MAX + 1);
+        if (Array.isArray(probed) && probed.length > 0 && probed.length <= INLINE_SELECT_OPTIONS_MAX) {
+          entry.Options = probed;
+        }
+      }
+      Components.push(entry);
     }
 
     return { Components, HTML };

@@ -81,7 +81,7 @@ func ListComponents(ctx context.Context, tab string, filter *AgentListFilter) ([
 //
 // The context budget is widened past the default 30s to accommodate the
 // per-invocation gap: ~500ms of headroom is added per invocation.
-func InvokeBatch(ctx context.Context, tab string, invocations []InvokePayload) ([]InvocationResult, error) {
+func InvokeBatch(ctx context.Context, tab string, invocations []InvokePayload, returnPageContent bool) (InvokeBatchResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -91,9 +91,10 @@ func InvokeBatch(ctx context.Context, tab string, invocations []InvokePayload) (
 		ctx, cancel = context.WithTimeout(ctx, budget)
 		defer cancel()
 	}
-	var out []InvocationResult
-	if err := request(ctx, tab, CmdAgentInvoke, invocations, &out); err != nil {
-		return nil, err
+	var out InvokeBatchResult
+	payload := InvokeBatchPayload{Invocations: invocations, ReturnPageContent: returnPageContent}
+	if err := request(ctx, tab, CmdAgentInvoke, payload, &out); err != nil {
+		return out, err
 	}
 	return out, nil
 }
@@ -106,13 +107,26 @@ func GetMenu(ctx context.Context, tab string) ([]AgentMenuGroup, error) {
 	defer cancel()
 	var out []AgentMenuGroup
 	err := request(ctx, tab, CmdGetMenu, nil, &out)
-	return out, err
+	if err != nil {
+		return out, err
+	}
+	if err := AttachMenuDescriptions(out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // Navigate asks the browser to change the SPA route. Used by the `navigate`
 // action so agents can move between pages by passing a route from GetMenu.
 func Navigate(ctx context.Context, tab, route string) error {
+	_, err := NavigateWithPage(ctx, tab, route, false)
+	return err
+}
+
+func NavigateWithPage(ctx context.Context, tab, route string, returnPageContent bool) (NavigateResult, error) {
 	ctx, cancel := ctxWithDefault(ctx)
 	defer cancel()
-	return request(ctx, tab, CmdNavigate, NavigatePayload{Route: route}, nil)
+	var out NavigateResult
+	err := request(ctx, tab, CmdNavigate, NavigatePayload{Route: route, ReturnPageContent: returnPageContent}, &out)
+	return out, err
 }
