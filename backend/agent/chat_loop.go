@@ -79,7 +79,7 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash s
 	if activeModelID == "" {
 		activeModelID = client.Model
 	}
-	core.Log("Starting agentic loop with model", activeModelID)
+	core.Log("Starting agentic loop with model", activeModelID, " tab::", shortTabID(s.TabID), " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
 	core.Log("Promp:", userText)
 
 	if _, err := saveMessage(s, RoleUser, userText, "", 0); err != nil {
@@ -133,30 +133,37 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash s
 		totalTokens += resp.Usage.TotalTokens
 
 		choice := resp.Choices[0]
+		core.Log("agent.chat-loop iteration tab::", shortTabID(s.TabID), " iter::", iter+1, " finish::", choice.FinishReason, " tool_calls::", len(choice.Message.ToolCalls), " text_bytes::", len(choice.Message.Content), " tokens_total::", totalTokens)
 
 		// Branch 1: model called a tool.
 		if len(choice.Message.ToolCalls) > 0 {
-			call := choice.Message.ToolCalls[0]
-			if call.Function.Name == llm.FinishToolName {
-				message, summary, parseErr := parseFinishArgs(call.Function.Arguments)
-				if parseErr != nil {
-					return fmt.Errorf("parse finish args: %w (raw=%s)", parseErr, call.Function.Arguments)
+			toolMessages := make([]llm.Message, 0, len(choice.Message.ToolCalls))
+			for callIndex, call := range choice.Message.ToolCalls {
+				if call.Function.Name == llm.FinishToolName {
+					message, summary, parseErr := parseFinishArgs(call.Function.Arguments)
+					if parseErr != nil {
+						return fmt.Errorf("parse finish args: %w (raw=%s)", parseErr, call.Function.Arguments)
+					}
+					return s.completeTurn(message, summary, totalTokens)
 				}
-				return s.completeTurn(message, summary, totalTokens)
+				// OpenAI/OpenRouter requires one tool response for every
+				// assistant tool_call_id. DeepSeek often emits multiple calls
+				// in one assistant message, so dispatch them sequentially and
+				// append every result before the next model request.
+				s.pushStatus("acting", s.statusLabelFor(call), iter+1, maxLoopIterations)
+				toolResult := s.dispatchTool(ctx, call)
+				core.Log("agent.chat-loop tool result tab::", shortTabID(s.TabID), " iter::", iter+1, " call::", callIndex+1, "/", len(choice.Message.ToolCalls), " id::", call.ID, " name::", call.Function.Name, " bytes::", len(toolResult), " has_error::", toolResultHasError(toolResult), " preview::", core.StrCut(toolResult, 500))
+				fullClipped := clipForLLM(toolResult)
+				strippedClipped := clipForLLM(stripPageSnapshotFromToolResult(toolResult))
+				toolMessages = append(toolMessages, llm.Message{
+					Role:       "tool",
+					ToolCallID: call.ID,
+					Content:    strippedClipped,
+				})
+				latestFullToolResult = fullClipped
 			}
-			// Page tool — emit a friendly progress label, run it via /ws/agent,
-			// and feed the JSON-encoded result back as a `tool` message. The
-			// model decides what to do next on the following iteration.
-			s.pushStatus("acting", s.statusLabelFor(call), iter+1, maxLoopIterations)
-			toolResult := s.dispatchTool(ctx, call)
-			fullClipped := clipForLLM(toolResult)
-			strippedClipped := clipForLLM(stripPageSnapshotFromToolResult(toolResult))
-			messages = append(messages, choice.Message, llm.Message{
-				Role:       "tool",
-				ToolCallID: call.ID,
-				Content:    strippedClipped,
-			})
-			latestFullToolResult = fullClipped
+			messages = append(messages, choice.Message)
+			messages = append(messages, toolMessages...)
 			// Brief "thinking" status between tool result and the next LLM call
 			// so the widget doesn't show a stale label while we wait.
 			s.pushStatus("thinking", "Pensando…", iter+2, maxLoopIterations)
@@ -182,11 +189,12 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash s
 // JSON `{"error":"..."}` so the model can recover rather than seeing a raw
 // Go error string — same shape as the success case, just an extra key.
 func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) string {
-	core.Log("agent.chat-ws dispatchTool tab::", shortTabID(s.TabID), " name::", call.Function.Name, " args::", core.StrCut(call.Function.Arguments, 200))
+	core.Log("agent.chat-ws dispatchTool tab::", shortTabID(s.TabID), " name::", call.Function.Name, " args::", core.StrCut(call.Function.Arguments, 200), " page_connected::", IsConnected(s.TabID))
 	switch call.Function.Name {
 	case llm.GetPageToolName:
 		page, err := GetPageContent(ctx, s.TabID)
 		if err != nil {
+			core.Log("agent.chat-ws get_page error tab::", shortTabID(s.TabID), " err::", err)
 			return toolErrorJSON(err)
 		}
 		// Parsed HTML is far smaller and easier for the model to read than
@@ -195,13 +203,16 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 		// dropped because every field (id/type/label/methods/options) is
 		// already encoded in the rewritten tags.
 		compactPage(&page)
+		core.Log("agent.chat-ws get_page ok tab::", shortTabID(s.TabID), " html_bytes::", len(page.HTML))
 		return withSnapshotGrammar(toolJSON(map[string]any{"html": page.HTML}))
 
 	case llm.GetMenuToolName:
 		menu, err := GetMenu(ctx, s.TabID)
 		if err != nil {
+			core.Log("agent.chat-ws get_menu error tab::", shortTabID(s.TabID), " err::", err)
 			return toolErrorJSON(err)
 		}
+		core.Log("agent.chat-ws get_menu ok tab::", shortTabID(s.TabID), " groups::", len(menu))
 		return FormatMenuTSV(menu)
 
 	case llm.NavigateToolName:
@@ -217,6 +228,7 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 		}
 		navigateResult, err := NavigateWithPage(ctx, s.TabID, args.Route, args.ReturnPageContent)
 		if err != nil {
+			core.Log("agent.chat-ws navigate error tab::", shortTabID(s.TabID), " route::", args.Route, " err::", err)
 			return toolErrorJSON(err)
 		}
 		// Track the route so later get_page status labels can name it.
@@ -226,6 +238,7 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 		if args.ReturnPageContent {
 			body = withSnapshotGrammar(body)
 		}
+		core.Log("agent.chat-ws navigate ok tab::", shortTabID(s.TabID), " route::", args.Route, " return_page::", args.ReturnPageContent)
 		return body
 
 	case llm.InvokeBatchToolName:
@@ -261,6 +274,7 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 		}
 		result, err := InvokeBatch(ctx, s.TabID, resolved, args.ReturnPageContent)
 		if err != nil {
+			core.Log("agent.chat-ws invoke_batch error tab::", shortTabID(s.TabID), " invocations::", len(resolved), " err::", err)
 			return toolErrorJSON(err)
 		}
 		compactPage(result.Page)
@@ -269,6 +283,7 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 		if args.ReturnPageContent {
 			body = withSnapshotGrammar(body)
 		}
+		core.Log("agent.chat-ws invoke_batch ok tab::", shortTabID(s.TabID), " invocations::", len(resolved), " results::", len(result.Results), " return_page::", args.ReturnPageContent)
 		return body
 
 	default:
@@ -534,6 +549,15 @@ func toolJSON(v any) string {
 func toolErrorJSON(err error) string {
 	body, _ := json.Marshal(map[string]string{"error": err.Error()})
 	return string(body)
+}
+
+func toolResultHasError(content string) bool {
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(content, llm.PageSnapshotGrammar)), &decoded); err != nil {
+		return false
+	}
+	_, ok := decoded["error"]
+	return ok
 }
 
 // tsvifyOptionValues rewrites InvocationResult values that decode as

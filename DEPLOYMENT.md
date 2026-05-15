@@ -82,6 +82,12 @@ map $ssl_early_data $is_early_data {
     default 0;
 }
 
+# WebSocket upstreams require HTTP/1.1 plus an explicit Upgrade tunnel.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    "" close;
+}
+
 server {
     # 1. Standard TCP and HTTP/3 UDP listeners
     listen 443 quic reuseport;
@@ -125,6 +131,9 @@ server {
         
         # Passes 0-RTT status so Go can see it
         proxy_set_header Early-Data $ssl_early_data;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
 
         # 7. Reverse Proxy to Go
         proxy_pass http://127.0.0.1:3589;
@@ -132,7 +141,8 @@ server {
         # 8. Timeouts optimized for trans-continental connections
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
+        # Agent WebSockets can sit idle while the user thinks between messages.
+        proxy_read_timeout 3600s;
         
         # Buffer settings for performance
         proxy_buffering on;

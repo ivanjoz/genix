@@ -3,6 +3,7 @@
 import json
 import os
 import pwd
+import re
 import shutil
 import stat
 import subprocess
@@ -19,6 +20,13 @@ RESTART_PATH_NAME = "genix-restart.path"
 NGINX_CONFIGURATION_DIRECTORY = Path("/etc/nginx/conf.d")
 LETSENCRYPT_DIRECTORY = Path("/etc/letsencrypt/live")
 BACKEND_PROXY_URL = "http://127.0.0.1:3589"
+
+CERTBOT_TLS_DIRECTIVES = {
+    "ssl_certificate",
+    "ssl_certificate_key",
+    "ssl_trusted_certificate",
+    "ssl_dhparam",
+}
 
 
 def print_debug(message_text):
@@ -223,17 +231,89 @@ def ensure_nginx_is_installed():
     print_debug(f"Detected Nginx binary at {nginx_binary_path}")
 
 
-def build_http3_nginx_configuration(endpoint_hostname):
+def extract_existing_certbot_tls_lines(existing_nginx_configuration_contents):
+    preserved_tls_lines = []
+    seen_directives = set()
+
+    if not existing_nginx_configuration_contents:
+        return preserved_tls_lines
+
+    for raw_line in existing_nginx_configuration_contents.splitlines():
+        stripped_line = raw_line.strip()
+        if not stripped_line or stripped_line.startswith("#"):
+            continue
+
+        directive_match = re.match(r"^([A-Za-z0-9_]+)\s+(.+?);(?:\s*#.*)?$", stripped_line)
+        if not directive_match:
+            continue
+
+        directive_name = directive_match.group(1)
+        directive_value = directive_match.group(2)
+        is_certbot_include = (
+            directive_name == "include"
+            and (
+                "letsencrypt" in directive_value
+                or "certbot" in directive_value.lower()
+            )
+        )
+        should_preserve_directive = directive_name in CERTBOT_TLS_DIRECTIVES or is_certbot_include
+        if not should_preserve_directive:
+            continue
+
+        # Keep the first value per directive so repeated stale lines do not multiply.
+        directive_key = f"{directive_name}:{directive_value}"
+        if directive_key in seen_directives:
+            continue
+        seen_directives.add(directive_key)
+        preserved_tls_lines.append(f"    {stripped_line}")
+
+    if preserved_tls_lines:
+        print_debug("Preserving TLS directives from existing Nginx config:")
+        for preserved_tls_line in preserved_tls_lines:
+            print_debug(preserved_tls_line.strip())
+
+    return preserved_tls_lines
+
+
+def build_tls_directive_lines(endpoint_hostname, existing_nginx_configuration_contents):
     certificate_directory = LETSENCRYPT_DIRECTORY / endpoint_hostname
     certificate_fullchain_path = certificate_directory / "fullchain.pem"
     certificate_private_key_path = certificate_directory / "privkey.pem"
 
+    preserved_tls_lines = extract_existing_certbot_tls_lines(existing_nginx_configuration_contents)
+    has_preserved_certificate = any(line.strip().startswith("ssl_certificate ") for line in preserved_tls_lines)
+    has_preserved_certificate_key = any(line.strip().startswith("ssl_certificate_key ") for line in preserved_tls_lines)
+    if has_preserved_certificate and has_preserved_certificate_key:
+        return preserved_tls_lines
+
     if certificate_fullchain_path.exists() and certificate_private_key_path.exists():
         print_debug(f"Detected TLS certificates for {endpoint_hostname} at {certificate_directory}")
+        return [
+            f"    ssl_certificate {certificate_fullchain_path};",
+            f"    ssl_certificate_key {certificate_private_key_path};",
+        ]
+
+    return []
+
+
+def build_http3_nginx_configuration(endpoint_hostname, existing_nginx_configuration_contents=""):
+    tls_directive_lines = build_tls_directive_lines(
+        endpoint_hostname,
+        existing_nginx_configuration_contents,
+    )
+
+    if tls_directive_lines:
+        tls_directives = "\n".join(tls_directive_lines)
         return f"""# Map block to handle 0-RTT security (prevents replay attacks on POST/PUT)
 map $ssl_early_data $is_early_data {{
     "~on" 1;
     default 0;
+}}
+
+# WebSocket upstreams require HTTP/1.1 plus an explicit Upgrade tunnel.
+map $http_upgrade $connection_upgrade {{
+    default upgrade;
+    "" close;
 }}
 
 server {{
@@ -245,8 +325,7 @@ server {{
 
     server_name {endpoint_hostname};
 
-    ssl_certificate {certificate_fullchain_path};
-    ssl_certificate_key {certificate_private_key_path};
+{tls_directives}
 
     ssl_protocols TLSv1.3;
     ssl_early_data on;
@@ -280,6 +359,9 @@ server {{
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Early-Data $ssl_early_data;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
 
         proxy_pass {BACKEND_PROXY_URL};
 
@@ -288,7 +370,8 @@ server {{
 
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
+        # Agent WebSockets can sit idle while the user thinks between messages.
+        proxy_read_timeout 3600s;
         proxy_buffering on;
         proxy_buffer_size 16k;
         proxy_buffers 4 16k;
@@ -299,7 +382,13 @@ server {{
     print_debug(
         f"No TLS certificates found for {endpoint_hostname}. Writing HTTP-only reverse proxy config."
     )
-    return f"""server {{
+    return f"""# WebSocket upstreams require HTTP/1.1 plus an explicit Upgrade tunnel.
+map $http_upgrade $connection_upgrade {{
+    default upgrade;
+    "" close;
+}}
+
+server {{
     # Fallback HTTP config used until TLS certificates are provisioned for this hostname.
     listen 80;
     listen [::]:80;
@@ -322,6 +411,9 @@ server {{
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
 
         proxy_pass {BACKEND_PROXY_URL};
 
@@ -330,7 +422,8 @@ server {{
 
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
+        # Agent WebSockets can sit idle while the user thinks between messages.
+        proxy_read_timeout 3600s;
         proxy_buffering on;
         proxy_buffer_size 16k;
         proxy_buffers 4 16k;
@@ -344,11 +437,15 @@ def configure_nginx_reverse_proxy(selected_endpoint_option):
 
     endpoint_hostname = selected_endpoint_option["hostname"]
     nginx_configuration_path = NGINX_CONFIGURATION_DIRECTORY / f"{endpoint_hostname}.conf"
-    nginx_configuration_contents = build_http3_nginx_configuration(endpoint_hostname)
 
     existing_nginx_configuration_contents = None
     if nginx_configuration_path.exists():
         existing_nginx_configuration_contents = nginx_configuration_path.read_text(encoding="utf-8")
+
+    nginx_configuration_contents = build_http3_nginx_configuration(
+        endpoint_hostname,
+        existing_nginx_configuration_contents or "",
+    )
 
     if existing_nginx_configuration_contents == nginx_configuration_contents:
         print_debug(f"Nginx configuration unchanged: {nginx_configuration_path}")
@@ -365,6 +462,7 @@ def configure_nginx_reverse_proxy(selected_endpoint_option):
 
 
 def build_main_service_contents(runtime_username, repository_credentials_path):
+    repository_root_path = repository_credentials_path.parent
     return f"""[Unit]
 Description=Genix Backend Service
 After=network.target
@@ -375,6 +473,7 @@ User={runtime_username}
 Group={runtime_username}
 WorkingDirectory={SERVICE_INSTALL_DIRECTORY}
 Environment=GENIX_CREDENTIALS_FILE={repository_credentials_path}
+Environment=GENIX_REPOSITORY_ROOT={repository_root_path}
 ExecStart={SERVICE_BINARY_PATH}
 Restart=always
 RestartSec=5

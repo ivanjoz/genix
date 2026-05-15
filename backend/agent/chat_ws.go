@@ -137,7 +137,7 @@ func HandleChatWebSocket(w http.ResponseWriter, r *http.Request) {
 		currentRoute: initialPath,
 	}
 	registerChatSession(s)
-	core.Log("agent.chat-ws connected tab::", shortTabID(tab), " company::", companyID, " user::", userID, " path::", initialPath)
+	core.Log("agent.chat-ws connected tab::", shortTabID(tab), " company::", companyID, " user::", userID, " path::", initialPath, " page_connected::", IsConnected(tab), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
 
 	defer func() {
 		unregisterChatSession(s)
@@ -217,10 +217,11 @@ func (s *AgentSession) onUserMessage(_ context.Context, msg ChatUserMessage) {
 		return
 	}
 	if !s.inFlight.CompareAndSwap(false, true) {
+		core.Log("agent.chat-ws busy tab::", shortTabID(s.TabID), " incoming_bytes::", len(text))
 		s.sendError("a previous turn is still running")
 		return
 	}
-	core.Log("agent.chat-ws userMessage tab::", shortTabID(s.TabID), " bytes::", len(text), " model_hash::", msg.ModelHash)
+	core.Log("agent.chat-ws userMessage tab::", shortTabID(s.TabID), " bytes::", len(text), " model_hash::", msg.ModelHash, " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
 
 	go func() {
 		defer s.inFlight.Store(false)
@@ -254,7 +255,9 @@ func (s *AgentSession) sendJSON(kind string, payload any) {
 	defer cancel()
 	if err := s.chatConn.Write(writeCtx, websocket.MessageText, env); err != nil {
 		core.Log("agent.chat-ws write error tab::", shortTabID(s.TabID), " err::", err)
+		return
 	}
+	core.Log("agent.chat-ws send tab::", shortTabID(s.TabID), " type::", kind, " payload_bytes::", len(body))
 }
 
 func (s *AgentSession) sendError(msg string) {

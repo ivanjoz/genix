@@ -7,6 +7,29 @@ import { Env } from "$core/env";
 import { Agent, isAgentEnabled } from "./registry";
 import { releaseScreenStream, runCommand, type WsMessage } from "./commands";
 
+const AGENT_LOG_KEY = "__agent_debug_log";
+const AGENT_LOG_LIMIT = 120;
+
+const agentLog = (level: "info" | "warn", message: string, detail?: unknown) => {
+  const entry = {
+    at: new Date().toISOString(),
+    level,
+    message,
+    detail,
+  };
+  // Keep a small browser-side ring buffer because production console output is
+  // often lost after reloads; __agent.debugLog exposes the same trail.
+  try {
+    const previous = JSON.parse(localStorage.getItem(AGENT_LOG_KEY) || "[]");
+    const next = Array.isArray(previous) ? [...previous, entry].slice(-AGENT_LOG_LIMIT) : [entry];
+    localStorage.setItem(AGENT_LOG_KEY, JSON.stringify(next));
+  } catch {
+    // Logging must never break the agent bridge.
+  }
+  const logger = level === "warn" ? console.warn : console.info;
+  logger(`[Agent] ${message}`, detail || "");
+};
+
 // agentWsBase derives the WS scheme + host from the selected API endpoint.
 // Env.API_ROUTES.MAIN ends with `/api/` (it's the HTTP API root) — the
 // `/ws/agent` and `/ws/agent-chat` handlers are mounted at the server root,
@@ -63,6 +86,7 @@ const bridgeState: BridgeState = {
 };
 
 const sendReply = (socket: WebSocket, id: number, type: "result" | "error", payload: unknown) => {
+  agentLog(type === "error" ? "warn" : "info", "sending reply", { id, type, payloadBytes: JSON.stringify(payload ?? null).length });
   socket.send(JSON.stringify({ ID: id, Type: type, Payload: payload }));
 };
 
@@ -71,15 +95,16 @@ const handleMessage = async (socket: WebSocket, raw: unknown) => {
   try {
     message = JSON.parse(typeof raw === "string" ? raw : "");
   } catch (parseError) {
-    console.warn("[Agent] bad message json:", parseError);
+    agentLog("warn", "bad message json", { error: String(parseError), rawType: typeof raw });
     return;
   }
+  agentLog("info", "command received", { id: message.ID, type: message.Type, payloadBytes: JSON.stringify(message.Payload ?? null).length });
   try {
     const result = await runCommand(message.Type, message.Payload);
     sendReply(socket, message.ID, "result", result);
   } catch (commandError: any) {
     const errorMessage = String(commandError?.message || commandError);
-    console.warn("[Agent] command error:", message.Type, errorMessage);
+    agentLog("warn", "command error", { id: message.ID, type: message.Type, error: errorMessage });
     sendReply(socket, message.ID, "error", { Message: errorMessage });
   }
 };
@@ -87,7 +112,7 @@ const handleMessage = async (socket: WebSocket, raw: unknown) => {
 const scheduleReconnect = () => {
   const delay = Math.min(bridgeState.reconnectDelayMs, 10_000);
   bridgeState.reconnectDelayMs = Math.min(delay * 2, 10_000);
-  console.info("[Agent] retry in", delay, "ms");
+  agentLog("info", "retry scheduled", { delayMs: delay });
   setTimeout(connectAgentSocket, delay);
 };
 
@@ -103,21 +128,30 @@ const connectAgentSocket = () => {
   const company = Env.getEmpresaID() || 0;
   const user = getAgentUserID();
   const url = `${agentWsBase()}/ws/agent?tab=${encodeURIComponent(tab)}&company=${company}&user=${user}`;
-  console.info("[Agent] connecting", url);
+  agentLog("info", "connecting page bridge", { url, tab, company, user, apiMain: Env.API_ROUTES.MAIN, local: globalThis._isLocal, enabled: isAgentEnabled() });
   let socket: WebSocket;
   try {
     socket = new WebSocket(url);
   } catch (error) {
-    console.warn("[Agent] socket constructor failed:", error);
+    agentLog("warn", "socket constructor failed", { error: String(error), url });
     scheduleReconnect();
     return;
   }
   bridgeState.socket = socket;
 
   socket.addEventListener("open", () => {
-    console.info("[Agent] connected");
+    agentLog("info", "page bridge connected", { url, tab });
     bridgeState.reconnectDelayMs = 1000;
-    socket.send(JSON.stringify({ Type: "ready" }));
+    socket.send(JSON.stringify({
+      Type: "ready",
+      Payload: {
+        URL: window.location.href,
+        Path: window.location.pathname,
+        AgentEnabled: isAgentEnabled(),
+        Handles: Agent.describe().length,
+        UserAgent: navigator.userAgent,
+      },
+    }));
   });
 
   socket.addEventListener("message", (event) => {
@@ -126,20 +160,30 @@ const connectAgentSocket = () => {
 
   socket.addEventListener("close", () => {
     if (bridgeState.socket !== socket) { return; }
+    agentLog("warn", "page bridge closed", { url, tab });
     bridgeState.socket = null;
     releaseScreenStream();
     scheduleReconnect();
   });
 
-  socket.addEventListener("error", () => {
+  socket.addEventListener("error", (error) => {
+    agentLog("warn", "page bridge socket error", { url, error: String(error) });
     try { socket.close(); } catch { /* ignore */ }
   });
 };
 
 export const startAgentBridge = () => {
-  if (bridgeState.started) { return; }
+  if (bridgeState.started) {
+    agentLog("info", "start skipped: already started");
+    return;
+  }
   if (typeof window === "undefined") { return; }
-  if (!isAgentEnabled()) { return; }
+  if (!isAgentEnabled()) {
+    // Production needs the page-driving bridge for the in-app chat agent; log
+    // the disabled condition but still connect so backend diagnostics can tell
+    // whether the route/proxy/websocket path is alive.
+    agentLog("warn", "agent registry disabled; starting bridge for diagnostics", { local: globalThis._isLocal, enableFlag: window.ENABLE_UI_AGENT });
+  }
   bridgeState.started = true;
   connectAgentSocket();
 };
@@ -149,15 +193,18 @@ export const startAgentBridge = () => {
 export const sendPageContent = async () => {
   const socket = bridgeState.socket;
   if (!socket || socket.readyState !== WebSocket.OPEN) {
-    console.warn("[Agent] sendPageContent: socket not open");
+    agentLog("warn", "sendPageContent skipped: socket not open", { readyState: socket?.readyState });
     return;
   }
   const payload = await Agent.getPageContent();
   socket.send(JSON.stringify({ Type: "pageContent", Payload: payload }));
-  console.info("[Agent] sendPageContent: pushed", payload.HTML.length, "bytes");
+  agentLog("info", "sendPageContent pushed", { htmlBytes: payload.HTML.length, components: payload.Components.length });
 };
 
 if (typeof window !== "undefined") {
   // Expose on the existing devtools handle so you can call __agent.sendPageContent().
-  (window as any).__agent = Object.assign((window as any).__agent || {}, { sendPageContent });
+  (window as any).__agent = Object.assign((window as any).__agent || {}, {
+    sendPageContent,
+    debugLog: () => JSON.parse(localStorage.getItem(AGENT_LOG_KEY) || "[]"),
+  });
 }

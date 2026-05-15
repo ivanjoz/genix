@@ -56,6 +56,8 @@
   const CHAT_TYPE_AGENT_REPLY = 'agentReply';
   const CHAT_TYPE_AGENT_ERROR = 'agentError';
   const CHAT_TYPE_AGENT_STATUS = 'agentStatus';
+  const CHAT_LOG_KEY = '__agent_chat_debug_log';
+  const CHAT_LOG_LIMIT = 120;
 
   // --- State ------------------------------------------------------------------
 
@@ -74,6 +76,21 @@
   let nextHeaderStatusID = 1;
 
   // --- Helpers ----------------------------------------------------------------
+
+  const chatLog = (level: 'info' | 'warn', message: string, detail?: unknown) => {
+    const entry = { at: new Date().toISOString(), level, message, detail };
+    // Store the recent trail because production reloads can erase console-only
+    // clues before we inspect a websocket failure.
+    try {
+      const previous = JSON.parse(localStorage.getItem(CHAT_LOG_KEY) || '[]');
+      const next = Array.isArray(previous) ? [...previous, entry].slice(-CHAT_LOG_LIMIT) : [entry];
+      localStorage.setItem(CHAT_LOG_KEY, JSON.stringify(next));
+    } catch {
+      // Logging must never affect the chat widget.
+    }
+    const logger = level === 'warn' ? console.warn : console.info;
+    logger(`[AgentChat] ${message}`, detail || '');
+  };
 
   const readUserID = (): number => {
     if (typeof window === 'undefined') { return 0; }
@@ -124,6 +141,7 @@
     const path = encodeURIComponent(window.location.pathname || '');
     const url = `${agentWsBase()}/ws/agent-chat?tab=${encodeURIComponent(tab)}&company=${company}&user=${user}&path=${path}`;
 
+    chatLog('info', 'connecting chat ws', { url, tab, company, user, apiMain: Env.API_ROUTES.MAIN });
     const ws = new WebSocket(url);
     socket = ws;
     wsReady = false;
@@ -131,7 +149,7 @@
     ws.addEventListener('open', () => {
       if (socket !== ws) { return; }
       wsReady = true;
-      console.info('[AgentChat] ws open');
+      chatLog('info', 'chat ws open', { url, tab });
     });
     ws.addEventListener('message', (event) => {
       void handleWsMessage(event.data);
@@ -141,10 +159,10 @@
       socket = null;
       wsReady = false;
       isBusy = false;
-      console.info('[AgentChat] ws closed');
+      chatLog('warn', 'chat ws closed', { url, tab });
     });
     ws.addEventListener('error', (err) => {
-      console.warn('[AgentChat] ws error', err);
+      chatLog('warn', 'chat ws error', { url, error: String(err) });
       try { ws.close(); } catch { /* ignore */ }
     });
   };
@@ -154,8 +172,10 @@
     try {
       env = JSON.parse(typeof raw === 'string' ? raw : '');
     } catch {
+      chatLog('warn', 'bad chat message json', { rawType: typeof raw });
       return;
     }
+    chatLog('info', 'chat message received', { type: env.Type });
     switch (env.Type) {
       case CHAT_TYPE_AGENT_REPLY: {
         pushHeaderStatus('Respondiendo...');
@@ -185,6 +205,7 @@
       }
       case CHAT_TYPE_AGENT_ERROR: {
         const payload = env.Payload as AgentErrorPayload;
+        chatLog('warn', 'agent error received', { message: payload?.Message });
         const row: AgentChatRow = {
           tabID: getAgentTabID(),
           role: AGENT_ROLE_AGENT,
@@ -210,6 +231,7 @@
         //     (would just clutter history with duplicates).
         const payload = env.Payload as AgentStatusPayload;
         const label = payload?.Label || '';
+        chatLog('info', 'agent status received', { state: payload?.State, label, step: payload?.Step, maxSteps: payload?.MaxSteps });
         if (payload?.State === 'acting' && label) {
           pushHeaderStatus(label);
           const row: AgentChatRow = {
@@ -261,6 +283,7 @@
     };
     await waitOpen();
     if (!socket || socket.readyState !== WebSocket.OPEN) {
+      chatLog('warn', 'send failed: chat ws not open', { readyState: socket?.readyState });
       isBusy = false;
       headerStatusItems = [];
       if (optimistic.id) { await updateAgentChatMessage(optimistic.id, { pending: false }); }
@@ -273,6 +296,7 @@
       }];
       return;
     }
+    chatLog('info', 'sending user message', { tab, bytes: text.length, modelHash: getSelectedAgentModelHash() });
     socket.send(JSON.stringify({
       Type: CHAT_TYPE_USER_MESSAGE,
       Payload: {
@@ -333,6 +357,12 @@
       void sendMessage();
     }
   };
+
+  if (typeof window !== 'undefined') {
+    (window as any).__agentChat = Object.assign((window as any).__agentChat || {}, {
+      debugLog: () => JSON.parse(localStorage.getItem(CHAT_LOG_KEY) || '[]'),
+    });
+  }
 </script>
 
 <div bind:this={hostElement} data-agent-hidden="true" class="_host relative w-full max-w-2xl">

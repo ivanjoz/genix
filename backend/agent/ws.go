@@ -168,7 +168,9 @@ func handleIncoming(cc *clientConn, raw []byte) {
 	}
 
 	if env.Type == TypeReady {
-		core.Log("agent.ws client signaled ready tab::", cc.tab)
+		// Ready is the first browser-side proof that the production bundle
+		// opened /ws/agent and registered its page diagnostics.
+		core.Log("agent.ws client signaled ready tab::", cc.tab, " payload::", core.StrCut(string(env.Payload), 500))
 		return
 	}
 
@@ -304,6 +306,7 @@ func WaitForClient(ctx context.Context, tab string) error {
 func request(ctx context.Context, tab, cmdType string, payload any, out any) error {
 	cc := lookupClient(tab)
 	if cc == nil {
+		core.Log("agent.ws request no-client tab::", shortTabID(tab), " cmd::", cmdType, " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
 		return fmt.Errorf("no agent client connected for tab %q", tab)
 	}
 
@@ -313,6 +316,7 @@ func request(ctx context.Context, tab, cmdType string, payload any, out any) err
 	if err != nil {
 		return fmt.Errorf("marshal command: %w", err)
 	}
+	core.Log("agent.ws request send tab::", shortTabID(tab), " cmd::", cmdType, " id::", id, " payload_bytes::", len(data), " company::", cc.companyID, " user::", cc.userID)
 
 	p := &pendingReply{ch: make(chan replyEnvelope, 1)}
 	cc.pendMu.Lock()
@@ -332,12 +336,14 @@ func request(ctx context.Context, tab, cmdType string, payload any, out any) err
 	cc.writeM.Unlock()
 	if err != nil {
 		cleanup()
+		core.Log("agent.ws request write-error tab::", shortTabID(tab), " cmd::", cmdType, " id::", id, " err::", err)
 		return fmt.Errorf("ws write: %w", err)
 	}
 
 	select {
 	case <-ctx.Done():
 		cleanup()
+		core.Log("agent.ws request timeout tab::", shortTabID(tab), " cmd::", cmdType, " id::", id, " err::", ctx.Err())
 		return ctx.Err()
 	case env := <-p.ch:
 		if env.kind == TypeError {
@@ -348,15 +354,27 @@ func request(ctx context.Context, tab, cmdType string, payload any, out any) err
 			if e.Message == "" {
 				e.Message = "agent error"
 			}
+			core.Log("agent.ws request browser-error tab::", shortTabID(tab), " cmd::", cmdType, " id::", id, " err::", e.Message, " payload::", core.StrCut(string(env.payload), 500))
 			return errors.New(e.Message)
 		}
+		core.Log("agent.ws request ok tab::", shortTabID(tab), " cmd::", cmdType, " id::", id, " payload_bytes::", len(env.payload))
 		if out != nil && len(env.payload) > 0 {
 			if err := json.Unmarshal(env.payload, out); err != nil {
+				core.Log("agent.ws request decode-error tab::", shortTabID(tab), " cmd::", cmdType, " id::", id, " err::", err, " payload::", core.StrCut(string(env.payload), 500))
 				return fmt.Errorf("decode payload: %w", err)
 			}
 		}
 		return nil
 	}
+}
+
+func shortConnectedTabs() []string {
+	tabs := ConnectedTabs()
+	out := make([]string, 0, len(tabs))
+	for _, tab := range tabs {
+		out = append(out, shortTabID(tab))
+	}
+	return out
 }
 
 // atoi32 parses a base-10 int32 from s, returning 0 on any error. Used for

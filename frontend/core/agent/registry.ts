@@ -99,8 +99,11 @@ export interface AgentRegistry {
 
 export const isAgentEnabled = (): boolean => {
   if (typeof window === "undefined") { return false; }
+  // The in-app chat agent is a production feature now: the backend can only
+  // inspect and act on the page if components register outside localhost too.
+  if (window.ENABLE_UI_AGENT === 0) { return false; }
   if (window.ENABLE_UI_AGENT === 1 || globalThis._isLocal) { return true; }
-  return false;
+  return true;
 };
 
 // Shared map of registered handles. Exported so the WS bridge can resolve

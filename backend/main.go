@@ -148,6 +148,9 @@ func OnPanic(panicMessage interface{}) {
 func main() {
 	serverPort := ":3589"
 	core.PopulateVariables()
+	// Print deployment path early so systemd logs show which cloned repo the
+	// binary will scan for route markdown and generated menu descriptions.
+	fmt.Println("GENIX_REPOSITORY_ROOT=", os.Getenv("GENIX_REPOSITORY_ROOT"))
 	makeAppHandlers()
 	fmt.Println("Setting full logs...")
 	// os.Setenv("LOGS_FULL", "1")
