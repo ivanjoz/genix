@@ -121,7 +121,7 @@ import {
       header: 'API',
       width: 'minmax(0, 1fr)',
       getValue: (cacheRow) => cacheRow.baseRoute,
-      cellCss: 'px-6 text-[15px] text-slate-700',
+      css: 'px-6 text-[15px] text-slate-700',
       headerCss: 'px-6 py-6 text-[15px]',
     },
     {
@@ -130,7 +130,7 @@ import {
       width: '78px',
       align: 'right',
       getValue: (cacheRow) => formatN(cacheRow.recordsCount),
-      cellCss: 'px-6 text-[15px] text-slate-600',
+      css: 'px-6 text-[15px] text-slate-600',
       headerCss: 'px-6 py-6 text-[15px]',
     },
     {
@@ -139,7 +139,7 @@ import {
       width: '66px',
       align: 'right',
       getValue: (cacheRow) => formatN(cacheRow.sizeLabel,2),
-      cellCss: 'px-6 text-[15px] text-slate-600',
+      css: 'px-6 text-[15px] text-slate-600',
       headerCss: 'px-6 py-6 text-[15px]',
     },
   ]

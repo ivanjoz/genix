@@ -97,6 +97,9 @@ export const AdminModule: IModule = {
 		    { name: "Órdenes Compra", route: "/logistica/purchase-orders",
 		      icon: "icon-truck"
 		    },
+		    { name: "Suministros", route: "/logistica/supplies-materials",
+		      icon: "icon-cube"
+		    },
       ]
     },
 		{ name: "Finanzas", minName: "FIN",  id: 5, icon: "icon-tasks",

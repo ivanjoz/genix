@@ -20,6 +20,7 @@ IMPORTANT: If you have any questions, ask. NEVER have long trains of thought wit
 - **Extensive Logging**: Always implement and use debug logs extensively to diagnose errors and trace execution flow.
 
 ## 4. RULES
+- **IMPORTANT — ALWAYS CHECK SKILLS FIRST:** At the start of every task, review the available skills list (shown in the system-reminder block at conversation start). Skills contain authoritative documentation and project conventions for common operations. If any skill matches the task, invoke it via the Skill tool BEFORE doing manual exploration or writing code. The skills list may change — never rely on memory, always re-check.
 - This project in is pre-alpha, you can remove deprecated stuff. DO NOT implemente backwards compatibility.
 - NEVER write more code than necesary. ALWAYS TRY to reduce code size to the minimun posible.
 - Search for the correct .md documentation before proceed
@@ -73,3 +74,4 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 
 ### Backend Rules
 - NEVER trust the client. ALWAYS validate the required field and consistency of the data, and return a descriptive error if any validation fails.
+- Naming for parallel-array `Detail*` columns: use SINGULAR words for the field name; the only exception is the `IDs` suffix, which stays plural. Examples: `DetailProductIDs`, `DetailProductQuantity` (not `DetailProductQuantities`), `DetailProductPrice` (not `DetailProductPrices`), `DetailProductPresentationIDs`, `DetailSupplyIDs`, `DetailSupplyQuantity`, `DetailSupplyPrice`. Applies to both the Go struct fields and the frontend interface mirrors.

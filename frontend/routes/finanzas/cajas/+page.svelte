@@ -48,11 +48,11 @@ import { formatN } from '$libs/helpers';
     {
       header: "ID",
       headerCss: "w-32",
-      cellCss: "text-center text-purple-600 px-6",
+      css: "text-center text-purple-600 px-6",
       getValue: e => e.ID
     },
     {
-      header: "Nombre", cellCss: "px-6 py-2",
+      header: "Nombre", css: "px-6 py-2",
       getValue: e => e.Nombre,
       render: e => {
         const tipoName = cajaTipos.find(x => x.id === e.Tipo)?.name || "-"
@@ -77,7 +77,7 @@ import { formatN } from '$libs/helpers';
     },
     {
       header: "Saldo",
-      cellCss: "text-right ff-mono px-6",
+      css: "text-right ff-mono px-6",
       getValue: e => formatN(e.SaldoCurrent / 100, 2)
     },
   ]

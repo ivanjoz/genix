@@ -60,13 +60,13 @@ const { Loading } = pkg
     {
       header: "ID",
       headerCss: "w-54",
-      cellCss: "text-center ff-bold",
+      css: "text-center ff-bold",
       getValue: e => e.id
     },
     {
       header: "Nombre",
       highlight: true,
-      cellCss: "px-6 c-blue",
+      css: "px-6 c-blue",
       getValue: e => e.Nombre
     },
     {
@@ -76,25 +76,25 @@ const { Loading } = pkg
     {
       header: "RUC",
       headerCss: "w-120",
-      cellCss: "px-6",
+      css: "px-6",
       getValue: e => e.RUC
     },
     {
       header: "Estado",
       headerCss: "w-80",
-      cellCss: "text-center",
+      css: "text-center",
       getValue: e => e.ss
     },
     {
       header: "Actualizado",
       headerCss: "w-144",
-      cellCss: "px-6 nowrap",
+      css: "px-6 nowrap",
       getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
     },
     {
       header: "...",
       headerCss: "w-42",
-      cellCss: "t-c",
+      css: "t-c",
       id: "actions",
       buttonEditHandler: (rec) => {
         empresaForm = { ...rec }

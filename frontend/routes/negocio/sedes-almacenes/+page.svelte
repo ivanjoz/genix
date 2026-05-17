@@ -122,17 +122,17 @@ import {
     {
       header: "ID",
       headerCss: "w-32",
-      cellCss: "text-center text-purple-600 px-6",
+      css: "text-center text-purple-600 px-6",
       getValue: e => e.ID
     },
     {
       header: "Nombre",
-      cellCss: "px-6",
+      css: "px-6",
       getValue: e => e.Nombre
     },
     {
       header: "Dirección",
-      cellCss: "px-6",
+      css: "px-6",
       getValue: e => e.Direccion
     },
     {
@@ -146,13 +146,13 @@ import {
     {
       header: "Actualizado",
       headerCss: "w-144",
-      cellCss: "whitespace-nowrap px-6",
+      css: "whitespace-nowrap px-6",
       getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
     },
     {
       header: "...",
       headerCss: "w-32",
-      cellCss: "text-center px-6",
+      css: "text-center px-6",
       buttonEditHandler: (e) => {
         sedeForm = {...e}
         Core.openModal(1)
@@ -164,12 +164,12 @@ import {
     {
       header: "ID",
       headerCss: "w-32",
-      cellCss: "text-center text-purple-600 px-6",
+      css: "text-center text-purple-600 px-6",
       getValue: e => e.ID
     },
     {
       header: "Sede",
-      cellCss: "px-6",
+      css: "px-6",
       getValue: e => {
         const sede = almacenesService.SedesMap.get(e.SedeID)
         return sede?.Nombre || `Sede-${e.SedeID}`
@@ -177,13 +177,13 @@ import {
     },
     {
       header: "Nombre",
-      cellCss: "px-6",
+      css: "px-6",
       getValue: e => e.Nombre
     },
     {
       header: "Layout",
       id: "layout",
-      cellCss: "px-6",
+      css: "px-6",
       getValue: e => ""
     },
     {
@@ -193,13 +193,13 @@ import {
     {
       header: "Actualizado",
       headerCss: "w-144",
-      cellCss: "whitespace-nowrap px-6",
+      css: "whitespace-nowrap px-6",
       getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
     },
     {
       header: "...",
       headerCss: "w-32",
-      cellCss: "text-center px-6",
+      css: "text-center px-6",
       buttonEditHandler: (e) => {
         almacenForm = JSON.parse(JSON.stringify(e))
         Core.openModal(2)

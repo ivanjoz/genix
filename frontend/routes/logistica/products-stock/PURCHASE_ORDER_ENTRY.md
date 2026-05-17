@@ -63,7 +63,7 @@ Two-column flex layout, mirroring `frontend/routes/logistica/purchase-orders/Pur
    - Style: red text on light-red background, centered, padded.
 5. **Product cards** — once an order is selected, render one card per line in `DetailProductIDs[]` (filtered by `cardFilterText`). Each card shows:
    - Product name (from `ProductosService.recordsMap.get(productID).Nombre`).
-   - Progress badge in muted text: `Ingresado: {addedSoFar} / {ordered}` where `ordered = DetailQuantities[i]` and `addedSoFar = sum of entries.quantity for that productID across all lots`.
+   - Progress badge in muted text: `Ingresado: {addedSoFar} / {ordered}` where `ordered = DetailProductQuantity[i]` and `addedSoFar = sum of entries.quantity for that productID across all lots`.
    - Whole card is clickable.
 6. **Click behavior** — clicking a card adds **+1** to the matching entry row, where "matching" is defined as same `productID` AND same current `lotCodeInput` value:
    - If a matching row already exists → `row.quantity += 1`.
@@ -180,7 +180,7 @@ const orderProducts = $derived.by(() => {
   if (!selectedOrder) return []
   return selectedOrder.DetailProductIDs.map((pid, idx) => ({
     productID: pid,
-    quantity: selectedOrder.DetailQuantities?.[idx] || 0,
+    quantity: selectedOrder.DetailProductQuantity?.[idx] || 0,
   }))
 })
 const tableRows = $derived.by((): Row[] => {

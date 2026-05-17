@@ -38,7 +38,7 @@ import { productoAtributos, type IProducto, type IProductoPresentacion } from ".
     { header: "Color", id: "color",
       getValue: e => e.cl
     },
-    { header: "...", cellCss: "px-6 py-1", headerCss: "w-42",
+    { header: "...", css: "px-6 py-1", headerCss: "w-42",
       buttonEditHandler(e) {
         presentacionForm = {...e}
         openModal(3)

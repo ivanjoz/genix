@@ -92,10 +92,15 @@ export interface IPurchaseOrder {
   TotalAmount: number
   DebtAmount: number
   Notes: string
+  // Producto: parallel arrays in the same order — one row per product line.
   DetailProductIDs?: number[]
-  DetailQuantities?: number[]
-  DetailPrices?: number[]
-  DetailPresentationIDs?: number[]
+  DetailProductQuantity?: number[]
+  DetailProductPrice?: number[]
+  DetailProductPresentationIDs?: number[]
+  // Insumo (supply_material): independent parallel arrays; an order may have products, supplies, or both.
+  DetailSupplyIDs?: number[]
+  DetailSupplyQuantity?: number[]
+  DetailSupplyPrice?: number[]
   ss: number
   upd: number
 }

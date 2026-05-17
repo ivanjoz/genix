@@ -248,7 +248,7 @@
         getValue: saleOrder => formatTime(saleOrder.Created, 'd-M h:n') as string,
         css: 'text-right',
         headerCss: 'w-100',
-        cellCss: 'px-6 whitespace-nowrap',
+        css: 'px-6 whitespace-nowrap',
         mobile: { order: 1, css: 'col-span-8' }
       },
       {
@@ -281,7 +281,7 @@
         header: 'Cliente',
         getValue: saleOrder => getSaleOrderClientName(saleOrder),
         headerCss: 'w-220',
-        cellCss: 'px-6 line-clamp-2 whitespace-nowrap',
+        css: 'px-6 line-clamp-2 whitespace-nowrap',
         mobile: { order: 6, css: 'col-span-9', labelTop: 'Cliente' }
       });
     }
@@ -290,7 +290,7 @@
       header: 'Top Productos',
       headerCss: 'w-[60%]',
       css: 'px-0 py-0',
-      cellCss: 'px-0 py-0 align-top',
+      css: 'px-0 py-0 align-top',
       id: 'top-products',
       mobile: {
         order: 7,

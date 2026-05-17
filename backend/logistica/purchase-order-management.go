@@ -104,13 +104,13 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 
 	for i, productID := range order.DetailProductIDs {
 		key := orderKey{ProductID: productID}
-		if i < len(order.DetailPresentationIDs) {
-			key.PresentationID = order.DetailPresentationIDs[i]
+		if i < len(order.DetailProductPresentationIDs) {
+			key.PresentationID = order.DetailProductPresentationIDs[i]
 		}
 		s := getStats(key)
-		s.ordered += core.GetIndex(order.DetailQuantities, i)
+		s.ordered += core.GetIndex(order.DetailProductQuantity, i)
 		if s.price == 0 {
-			s.price = core.GetIndex(order.DetailPrices, i)
+			s.price = core.GetIndex(order.DetailProductPrice, i)
 		}
 	}
 
@@ -237,24 +237,42 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	if record.ProviderID <= 0 {
 		return req.MakeErr("Debe seleccionar un proveedor.")
 	}
-	if len(record.DetailProductIDs) == 0 {
-		return req.MakeErr("Debe agregar al menos un producto.")
-	}
-	n := len(record.DetailProductIDs)
-	if len(record.DetailQuantities) != n || len(record.DetailPrices) != n {
-		return req.MakeErr("Los detalles de la orden son inconsistentes.")
+
+	productLineCount := len(record.DetailProductIDs)
+	supplyLineCount := len(record.DetailSupplyIDs)
+
+	// Productos e insumos son listas independientes; la orden necesita al menos una línea entre ambas.
+	if productLineCount == 0 && supplyLineCount == 0 {
+		return req.MakeErr("Debe agregar al menos un producto o insumo.")
 	}
 
-	if len(record.DetailPresentationIDs) > 0 && len(record.DetailPresentationIDs) != n {
-		return req.MakeErr("Inconsistencia en el detalle de Presentaciones IDs.")
+	// Validar la lista de productos (si tiene contenido).
+	if productLineCount > 0 {
+		if len(record.DetailProductQuantity) != productLineCount || len(record.DetailProductPrice) != productLineCount {
+			return req.MakeErr("Los detalles de productos de la orden son inconsistentes.")
+		}
+		if len(record.DetailProductPresentationIDs) > 0 && len(record.DetailProductPresentationIDs) != productLineCount {
+			return req.MakeErr("Inconsistencia en el detalle de Presentaciones IDs.")
+		}
+		if slices.Contains(record.DetailProductIDs, 0) {
+			return req.MakeErr("Hay un producto con ID = 0")
+		}
+		if slices.Contains(record.DetailProductQuantity, 0) {
+			return req.MakeErr("Hay un producto con cantidad = 0")
+		}
 	}
 
-	if slices.Contains(record.DetailProductIDs, 0) {
-		return req.MakeErr("Hay un producto con ID = 0")
-	}
-
-	if slices.Contains(record.DetailQuantities, 0) {
-		return req.MakeErr("Hay un producto con cantidad = 0")
+	// Validar la lista de insumos (si tiene contenido).
+	if supplyLineCount > 0 {
+		if len(record.DetailSupplyQuantity) != supplyLineCount || len(record.DetailSupplyPrice) != supplyLineCount {
+			return req.MakeErr("Los detalles de insumos de la orden son inconsistentes.")
+		}
+		if slices.Contains(record.DetailSupplyIDs, 0) {
+			return req.MakeErr("Hay un insumo con ID = 0")
+		}
+		if slices.Contains(record.DetailSupplyQuantity, 0) {
+			return req.MakeErr("Hay un insumo con cantidad = 0")
+		}
 	}
 
 	now := core.SUnixTime()

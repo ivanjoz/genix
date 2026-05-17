@@ -129,9 +129,9 @@ const resolveSku = (productRecord: IProducto | undefined, presentationID: number
 
 const buildDetailRows = (purchaseOrder: IPurchaseOrder): IPurchaseOrderDetailRow[] => {
   const productIDs = purchaseOrder.DetailProductIDs || []
-  const quantities = purchaseOrder.DetailQuantities || []
-  const prices = purchaseOrder.DetailPrices || []
-  const presentationIDs = purchaseOrder.DetailPresentationIDs || []
+  const quantities = purchaseOrder.DetailProductQuantity || []
+  const prices = purchaseOrder.DetailProductPrice || []
+  const presentationIDs = purchaseOrder.DetailProductPresentationIDs || []
 
   return productIDs.map((rawProductID, detailPosition) => {
     const productID = Number(rawProductID || 0)
@@ -387,7 +387,7 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
     header: 'ID',
     width: '70px',
     align: 'right',
-    cellCss: 'ff-mono text-right',
+    css: 'ff-mono text-right',
     getValue: (r) => r.ID,
   },
   {
@@ -436,7 +436,7 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
     header: 'Monto Total',
     width: '120px',
     align: 'right',
-    cellCss: 'ff-mono text-right',
+    css: 'ff-mono text-right',
     getValue: (r) => formatN((r.TotalAmount || 0) / 100, 2),
   },
   {

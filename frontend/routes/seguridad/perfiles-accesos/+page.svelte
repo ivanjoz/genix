@@ -214,7 +214,7 @@ import {
     {
       header: "ID",
       headerCss: "w-54",
-      cellCss: "text-center c-purple",
+      css: "text-center c-purple",
       getValue: e => e.ID
     },
     {
@@ -224,7 +224,7 @@ import {
     {
       header: "...",
       headerCss: "w-42",
-      cellCss: "text-center",
+      css: "text-center",
       id: "actions",
       buttonEditHandler: (rec) => {
         perfilForm = { ...rec, accesosMap: new Map(rec.accesosMap) }

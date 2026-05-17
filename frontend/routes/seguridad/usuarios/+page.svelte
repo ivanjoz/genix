@@ -232,36 +232,36 @@ const { Loading } = pkg
     {
       header: "ID",
       headerCss: "w-54",
-      cellCss: "text-center ff-bold",
+      css: "text-center ff-bold",
       getValue: e => e.ID
     },
     {
       id: "usuario_info",
       header: "Usuario", highlight: true,
-      cellCss: "px-8 py-6 align-top",
+      css: "px-8 py-6 align-top",
       getValue: e => e.Usuario
     },
     {
       id: "usuario_accesos", headerCss: "w-[47%]",
       header: "Accesos", highlight: true,
-      cellCss: "px-8 py-6 align-top _usuario-access-td",
+      css: "px-8 py-6 align-top _usuario-access-td",
       getValue: e => `${e.Nombres} ${e.Apellidos || ""}`
     },
     {
       header: "Email",
-      cellCss: "px-6",
+      css: "px-6",
       getValue: e => e.Email
     },
     {
       header: "Estado",
       headerCss: "w-80",
-      cellCss: "text-center",
+      css: "text-center",
       getValue: e => e.Status
     },
     {
       header: "Actualizado",
       headerCss: "w-144",
-      cellCss: "px-6 nowrap",
+      css: "px-6 nowrap",
       getValue: e => formatTime(e.Updated, "Y-m-d h:n") as string
     }
   ]

@@ -50,37 +50,37 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
   {
     header: "Franja Horaria",
     headerCss: "w-140",
-    cellCss: "px-6 nowrap",
+    css: "px-6 nowrap",
     getValue: (row) => formatUnixMinutesFrame(row.UnixMinutesFrame),
   },
   {
     header: "A-ID",
     headerCss: "w-60",
-    cellCss: "text-center ff-mono",
+    css: "text-center ff-mono",
     getValue: (row) => row.ActionID,
   },
   {
     header: "Acción",
     highlight: true,
-    cellCss: "px-6",
+    css: "px-6",
     getValue: (row) => row.ActionName,
   },
   {
     header: "Empresa",
     headerCss: "w-96",
-    cellCss: "text-center ff-mono",
+    css: "text-center ff-mono",
     getValue: (row) => row.CompanyID,
   },
   {
     header: "Parámetros",
     headerCss: "w-320",
-    cellCss: "px-6 nowrap",
+    css: "px-6 nowrap",
     getValue: (row) => formatParams(row),
   },
   {
     header: "Invocaciones",
     headerCss: "w-240",
-    cellCss: "px-6",
+    css: "px-6",
     getValue: (row) => `${row.InvocationCount}`,
     render: (row) => `
       <div class="leading-tight py-4">
@@ -92,13 +92,13 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
   {
     header: "Status",
     headerCss: "w-120",
-    cellCss: "text-center",
+    css: "text-center",
     getValue: (row) => getStatusLabel(row.ss||0),
   },
   {
     header: "Updated",
     headerCss: "w-160",
-    cellCss: "px-6 nowrap",
+    css: "px-6 nowrap",
     getValue: (row) => formatUpdatedSunix(row.upd),
   },
 ]

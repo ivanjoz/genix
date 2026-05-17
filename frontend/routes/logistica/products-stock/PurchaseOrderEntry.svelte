@@ -74,8 +74,8 @@ const orderProductCards = $derived.by(() => {
   type Card = { key: string, productID: number, presentationID: number, ordered: number, name: string, sku: string, haystack: string }
   if (!selectedOrder) return [] as Card[]
   const productIDs = selectedOrder.DetailProductIDs || []
-  const quantities = selectedOrder.DetailQuantities || []
-  const presentations = selectedOrder.DetailPresentationIDs || []
+  const quantities = selectedOrder.DetailProductQuantity || []
+  const presentations = selectedOrder.DetailProductPresentationIDs || []
   const byKey = new Map<string, Card>()
   for (let i = 0; i < productIDs.length; i++) {
     const pid = productIDs[i]

@@ -39,10 +39,16 @@ interface IPurchaseOrderForm {
   WarehouseID: number
   TotalAmount: number
   TaxAmount: number
+  // Producto: parallel arrays in the same order — one row per product line.
   DetailProductIDs: number[]
-  DetailPrices: number[]
-  DetailQuantities: number[]
-  DetailPresentationIDs: number[]
+  DetailProductPrice: number[]
+  DetailProductQuantity: number[]
+  DetailProductPresentationIDs: number[]
+  // Insumo (supply_material): independent parallel arrays; this UI does not yet edit supplies,
+  // so the fields are sent empty for forward compatibility with the backend contract.
+  DetailSupplyIDs: number[]
+  DetailSupplyQuantity: number[]
+  DetailSupplyPrice: number[]
   Notes: string
   // Dates stored as UnixDay int16 (days since unix-epoch).
   DeliveryDate: number
@@ -59,9 +65,12 @@ class PurchaseOrderState {
     TotalAmount: 0,
     TaxAmount: 0,
     DetailProductIDs: [],
-    DetailPrices: [],
-    DetailQuantities: [],
-    DetailPresentationIDs: [],
+    DetailProductPrice: [],
+    DetailProductQuantity: [],
+    DetailProductPresentationIDs: [],
+    DetailSupplyIDs: [],
+    DetailSupplyQuantity: [],
+    DetailSupplyPrice: [],
     Notes: '',
     DeliveryDate: 0,
     PaymentDate: 0,
@@ -162,9 +171,9 @@ class PurchaseOrderState {
 
     // Flatten cart items into parallel arrays matching the backend schema.
     this.form.DetailProductIDs = this.items.map((item) => item.productID)
-    this.form.DetailPrices = this.items.map((item) => item.price)
-    this.form.DetailQuantities = this.items.map((item) => item.quantity)
-    this.form.DetailPresentationIDs = this.items.map((item) => item.presentationID)
+    this.form.DetailProductPrice = this.items.map((item) => item.price)
+    this.form.DetailProductQuantity = this.items.map((item) => item.quantity)
+    this.form.DetailProductPresentationIDs = this.items.map((item) => item.presentationID)
 
     const result = await POST({
       data: $state.snapshot(this.form), route: 'purchase-orders',
@@ -274,9 +283,9 @@ async function handleSave() {
 // arrays against the products cache; products missing from cache are pulled via syncIDs.
 async function applyPurchaseOrderCopy(source: IPurchaseOrder) {
   const detailProductIDs = (source.DetailProductIDs || []).map((id) => Number(id || 0))
-  const detailQuantities = source.DetailQuantities || []
-  const detailPrices = source.DetailPrices || []
-  const detailPresentationIDs = source.DetailPresentationIDs || []
+  const detailQuantities = source.DetailProductQuantity || []
+  const detailPrices = source.DetailProductPrice || []
+  const detailPresentationIDs = source.DetailProductPresentationIDs || []
   /* 
   console.debug('[purchase-orders-create] applyCopy:start', {
     sourceID: source.ID,

@@ -52,19 +52,19 @@ import { Env } from '$core/env';
     {
       header: "Created",
       headerCss: "w-176",
-      cellCss: "px-6 nowrap",
+      css: "px-6 nowrap",
       getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
     },
     {
       header: "Nombre",
       highlight: true,
-      cellCss: "px-6",
+      css: "px-6",
       getValue: e => e.Name
     },
     {
       header: "Tamaño",
       headerCss: "w-120",
-      cellCss: "text-center",
+      css: "text-center",
       getValue: e => `${formatN(e.Size / 1000 / 1000, 2)} mb`
     }
   ]

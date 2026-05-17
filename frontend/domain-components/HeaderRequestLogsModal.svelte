@@ -58,7 +58,7 @@ const requestLogColumns: ITableColumn<IRequestLogRow>[] = [
     header: 'Hora',
     width: '76px',
     getValue: (requestLogRow) => formatTime(requestLogRow.id, 'h:n') as string,
-    cellCss: 'ff-mono text-sm text-slate-700',
+    css: 'ff-mono text-sm text-slate-700',
     headerCss: 'px-6 py-6 text-[15px]',
     mobile: { order: 2, css: "px-0 col-span-6" }
   },
@@ -67,7 +67,7 @@ const requestLogColumns: ITableColumn<IRequestLogRow>[] = [
     header: 'Route',
     width: '340px',
     getValue: (requestLogRow) => requestLogRow.route || '',
-    cellCss: 'ff-semibold text-sm text-slate-700',
+    css: 'ff-semibold text-sm text-slate-700',
     headerCss: 'px-6 py-6 text-[15px]',
     mobile: { order: 1, css: "px-0 col-span-18"  }
   },
@@ -76,7 +76,7 @@ const requestLogColumns: ITableColumn<IRequestLogRow>[] = [
     header: 'Req. Params',
     width: 'minmax(0, 1fr)',
     getValue: (requestLogRow) => formatRequestParamsLabel(requestLogRow),
-    cellCss: 'text-xs text-slate-600 overflow-hidden whitespace-nowrap text-ellipsis',
+    css: 'text-xs text-slate-600 overflow-hidden whitespace-nowrap text-ellipsis',
     headerCss: 'px-6 py-6 text-[15px]',
     mobile: { order: 3, css: "px-0 col-span-10 overflow-hidden whitespace-nowrap text-ellipsis" }
   },
@@ -92,7 +92,7 @@ const requestLogColumns: ITableColumn<IRequestLogRow>[] = [
       const extraServerMilliseconds = Math.max(0, finalMilliseconds - preSerializeMilliseconds)
       return `${preSerializeMilliseconds} +${extraServerMilliseconds}`
     },
-    cellCss: 'px-6 ff-mono text-sm text-slate-700',
+    css: 'px-6 ff-mono text-sm text-slate-700',
     headerCss: 'px-6 py-6 text-[15px]',
     mobile: { order: 3, css: "px-0 overflow-hidden whitespace-nowrap col-span-7" }
   },
@@ -105,7 +105,7 @@ const requestLogColumns: ITableColumn<IRequestLogRow>[] = [
       return `${requestLogRow.req} +${requestLogRow.spc}`
     },
     mobile: { order: 3, css: "px-0 overflow-hidden whitespace-nowrap col-span-7", labelLeft: "Cl:" },
-    cellCss: 'px-6 ff-mono text-sm text-slate-700',
+    css: 'px-6 ff-mono text-sm text-slate-700',
     headerCss: 'px-6 py-6 text-[15px]',
   },
 ]

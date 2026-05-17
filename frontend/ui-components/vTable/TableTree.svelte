@@ -232,7 +232,7 @@
               {#each visibleColumns as colDef, columnIndex (`${node.id}_${colDef.id || columnIndex}`)}
                 {@const defaultCellValue = getCellValue(node.record, colDef, nodeIndex)}
                 {@const renderedCellContent = renderCell(node.record, colDef, nodeIndex)}
-                {@const combinedCellCss = `${cellCss || ''} ${(colDef as any).cellCss || ''} ${colDef.setCellCss?.(node.record) || ''} ${colDef.css || ''}`}
+                {@const combinedCellCss = `${cellCss || ''} ${colDef.css || ''} ${colDef.setCellCss?.(node.record) || ''}`}
                 {@const cellPaddingCss = /px-|pr-|pl-/.test(combinedCellCss) ? '' : 'px-6'}
                 {@const contentPaddingCss = /px-|pr-|pl-/.test(colDef.css || '') ? '' : 'px-6'}
                 {@const inputPaddingCss = /px-|pr-|pl-/.test(colDef.inputCss || '') ? '' : 'px-6'}
@@ -296,7 +296,7 @@
                   {#each visibleColumns as colDef, columnIndex (`${childId}_${colDef.id || columnIndex}`)}
                     {@const defaultCellValue = getCellValue(childRecord, colDef, childIndex)}
                     {@const renderedCellContent = renderCell(childRecord, colDef, childIndex)}
-                    {@const combinedCellCss = `${cellCss || ''} ${(colDef as any).cellCss || ''} ${colDef.setCellCss?.(childRecord) || ''} ${colDef.css || ''}`}
+                    {@const combinedCellCss = `${cellCss || ''} ${colDef.css || ''} ${colDef.setCellCss?.(childRecord) || ''}`}
                     {@const cellPaddingCss = /px-|pr-|pl-/.test(combinedCellCss) ? '' : 'px-6'}
                     {@const contentPaddingCss = /px-|pr-|pl-/.test(colDef.css || '') ? '' : 'px-6'}
                     {@const inputPaddingCss = /px-|pr-|pl-/.test(colDef.inputCss || '') ? '' : 'px-6'}

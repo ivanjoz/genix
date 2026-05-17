@@ -105,7 +105,7 @@ import { SvelteMap } from 'svelte/reactivity';
     {
       header: "Fecha Hora",
       headerCss: "w-120",
-      cellCss: "ff-mono px-6",
+      css: "ff-mono px-6",
       getValue: e => formatTime(e.Created, "d-M h:n") as string
     },
     {
@@ -130,19 +130,19 @@ import { SvelteMap } from 'svelte/reactivity';
     {
       header: "Lote",
       headerCss: "w-100",
-      cellCss: "text-purple-600 text-center px-6",
+      css: "text-purple-600 text-center px-6",
       getValue: e => getLotName(e.LotID)
     },
     {
       header: "SKU",
       headerCss: "w-100",
-      cellCss: "text-purple-600 text-center px-6",
+      css: "text-purple-600 text-center px-6",
       getValue: e => e.SerialNumber || "-"
     },
     {
       header: "Movimiento",
       headerCss: "w-120",
-      cellCss: "text-center px-6",
+      css: "text-center px-6",
       render: e => {
         const mov = movimientoTiposMap.get(e.Tipo)
         return mov?.name || "-"
@@ -151,7 +151,7 @@ import { SvelteMap } from 'svelte/reactivity';
     {
       header: "Cantidad",
       headerCss: "w-100",
-      cellCss: "text-right ff-mono px-6",
+      css: "text-right ff-mono px-6",
       render: e => {
         return `<div class="flex justify-end ${(e.Quantity || 0) < 0 ? 'text-red-500' : 'text-blue-600'}">
           ${e.Quantity || 0}
@@ -173,7 +173,7 @@ import { SvelteMap } from 'svelte/reactivity';
     {
       header: "Usuario",
       headerCss: "w-120",
-      cellCss: "text-center px-6",
+      css: "text-center px-6",
       render: e => {
         const usuario = usuariosService.usuariosMap.get(e.CreatedBy || 1)?.Usuario || `Usuario-${e.CreatedBy}`
         const words = filterText.toLowerCase().trim().split(" ").filter(x => x)

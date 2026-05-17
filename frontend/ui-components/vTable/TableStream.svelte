@@ -161,7 +161,7 @@
             >
               {#each getVisibleColumns() as columnDefinition}
                 {@const renderedCellContent = getCellRenderedContent(columnDefinition, rowRecord, rowIndex)}
-                <td class={columnDefinition.cellCss || columnDefinition.css || ''}>
+                <td class={columnDefinition.css || ''}>
                   {#if typeof renderedCellContent === 'string'}
                     {@html renderedCellContent}
                   {:else if renderedCellContent}
