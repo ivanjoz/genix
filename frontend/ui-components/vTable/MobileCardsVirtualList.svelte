@@ -44,6 +44,7 @@
     itemsClass?: string;
     estimateSize?: number;
     overscan?: number;
+    nonVirtual?: boolean;
     emptyMessage?: string;
     loadingMessage?: string;
     filterText?: string;
@@ -72,6 +73,7 @@
     itemsClass = '',
     estimateSize = 180,
     overscan = 6,
+    nonVirtual = false,
     emptyMessage = 'No se encontraron registros.',
     loadingMessage = 'Loading...',
     filterText = '',
@@ -314,18 +316,11 @@
     {emptyMessage}
   </div>
 {:else}
-  <SvelteVirtualList
-    viewportClass={virtualViewportClass}
-    itemsClass={virtualItemsClass}
-    items={data}
-    defaultEstimatedItemHeight={estimateSize}
-    bufferSize={overscan}
-  >
-    {#snippet renderItem(sourceRecord, sourceIndex)}
-      {@const recordIndex = getRecordListIndex(sourceRecord, sourceIndex)}
-      {@const resolvedRecord = getResolvedRecord(sourceRecord, recordIndex)}
-      {@const selectedCard = resolvedRecord ? isRowSelected(resolvedRecord) : false}
-      <div
+  {#snippet cardItem(sourceRecord: TRecord, sourceIndex: number)}
+    {@const recordIndex = getRecordListIndex(sourceRecord, sourceIndex)}
+    {@const resolvedRecord = getResolvedRecord(sourceRecord, recordIndex)}
+    {@const selectedCard = resolvedRecord ? isRowSelected(resolvedRecord) : false}
+    <div
         data-id={onRowClick ? `TableRow:${componentID}:${buildRowID(sourceIndex)}` : undefined}
         data-selected={selectedCard ? "true" : undefined}
         class="mobile-cards-card mobile-cards-card-{variant} {cardCss}"
@@ -711,8 +706,27 @@
           </div>
         {/if}
       </div>
-    {/snippet}
-  </SvelteVirtualList>
+  {/snippet}
+
+  {#if nonVirtual}
+    <div class={virtualItemsClass}>
+      {#each data as sourceRecord, sourceIndex (sourceIndex)}
+        {@render cardItem(sourceRecord, sourceIndex)}
+      {/each}
+    </div>
+  {:else}
+    <SvelteVirtualList
+      viewportClass={virtualViewportClass}
+      itemsClass={virtualItemsClass}
+      items={data}
+      defaultEstimatedItemHeight={estimateSize}
+      bufferSize={overscan}
+    >
+      {#snippet renderItem(sourceRecord, sourceIndex)}
+        {@render cardItem(sourceRecord, sourceIndex)}
+      {/snippet}
+    </SvelteVirtualList>
+  {/if}
 {/if}
 </div>
 

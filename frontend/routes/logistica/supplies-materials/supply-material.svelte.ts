@@ -1,12 +1,5 @@
 import { GetHandler } from '$libs/http.svelte';
-
-// Provider row attached to a supply — mirrors backend types.ProductSupplyProviderRow.
-export interface ISupplyMaterialProviderRow {
-  ProviderID: number
-  Capacity: number
-  DeliveryTime: number
-  Price: number
-}
+import type { IProductSupplyProviderRow } from '../gestion-compras/supply-management.svelte';
 
 // Mirror of backend logisticaTypes.SupplyMaterial. Field names/casing must match
 // the Go struct so the JSON round-trips cleanly through GetHandler.
@@ -19,7 +12,7 @@ export interface ISupplyMaterial {
   Price: number
   CurrencyID: number
   SKU: string
-  ProviderSupply: ISupplyMaterialProviderRow[]
+  ProviderSupply: IProductSupplyProviderRow[]
   ss: number
   upd: number
   UpdatedBy: number

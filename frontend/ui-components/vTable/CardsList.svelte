@@ -18,6 +18,7 @@
     itemsClass?: string;
     estimateSize?: number;
     overscan?: number;
+    nonVirtual?: boolean;
     onRowClick?: (row: T, index: number, rerender: () => void) => void;
     selected?: T | number;
     isSelected?: (row: T, selected: T | number) => boolean;
@@ -28,18 +29,21 @@
     useFilterCache?: boolean;
     buttonDeleteHandler?: ICardButtonDeleteHandler<T>;
     buttonDeleteIf?: (row: T, index: number) => boolean;
+    disableOverflow?: boolean
   }
 
   let {
     cells,
     data,
-    height = 'calc(100vh - 8rem)',
+    height,
     css = '',
     cardCss = '',
     viewportClass = '',
     itemsClass = '',
     estimateSize = 180,
     overscan = 6,
+    nonVirtual = false,
+    disableOverflow = false,
     onRowClick,
     selected,
     isSelected,
@@ -51,6 +55,8 @@
     buttonDeleteHandler,
     buttonDeleteIf
   }: CardsListProps<T> = $props();
+
+  const resolvedHeight = $derived(height ?? (nonVirtual ? 'auto' : 'calc(100vh - 8rem)'));
 
   const filterCache = new WeakMap<T & object, string>();
   // Keep the virtualizer base classes and append custom classes without breaking layout internals.
@@ -107,7 +113,8 @@
 </script>
 
 <div class="cards-list-container {css}"
-  style="height: {height};"
+  style="height: {resolvedHeight};"
+  class:overflow-auto={!disableOverflow}
 >
   {#if filteredData.length === 0}
     <div class="cards-list-empty-message">
@@ -124,6 +131,7 @@
       itemsClass={virtualItemsClass}
       estimateSize={estimateSize}
       overscan={overscan}
+      nonVirtual={nonVirtual}
       emptyMessage={emptyMessage}
       filterText={filterText}
       highlightPlainText={true}
@@ -141,7 +149,6 @@
 
 <style>
   .cards-list-container {
-    overflow: hidden;
     background-color: white;
     border: none;
     border-radius: 0;

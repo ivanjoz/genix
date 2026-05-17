@@ -304,13 +304,14 @@ import { Agent } from '$core/agent/registry';
     visibility: visible;
   }
   ._4 {
-    overflow-y: auto;
-    overflow-x: hidden;
-    width: calc(100% + 10px);
-    margin-right: -6px;
-    padding-right: 6px;
-    margin-left: -4px;
-    padding-left: 4px;
+	  overflow-y: auto;
+	  overflow-x: hidden;
+	  width: calc(100% + 18px);
+	  margin-right: -14px;
+	  padding-right: 4px;
+	  margin-left: -4px;
+	  padding-left: 4px;
+	  scrollbar-gutter: stable;
   }
   ._1._8 ._4,
   ._1._8,
