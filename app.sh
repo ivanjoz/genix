@@ -34,6 +34,12 @@ case "$1" in
     echo "Executing sync_struct_interfaces command..."
     (cd scripts && go run . sync_struct_interfaces)
     ;;
+  "generate_controllers")
+    # For "generate_controllers", scan backend for db.TableStruct base structs and
+    # rewrite backend/exec/controllers.generated.go.
+    echo "Executing generate_controllers command..."
+    (cd scripts && go run . generate_controllers)
+    ;;
   "generate_menu_descriptions")
     # For "generate_menu_descriptions", export route markdown descriptions to tmp/menu_description.json.
     echo "Executing generate_menu_descriptions command..."
@@ -42,7 +48,7 @@ case "$1" in
   *)
     # If the command is not recognized, show an error and usage instructions.
     echo "Unknown command: $1"
-    echo "Usage: $0 {check_tables|create|edit|configure_server|generate_sale_orders|sync_struct_interfaces|generate_menu_descriptions}"
+    echo "Usage: $0 {check_tables|create|edit|configure_server|generate_sale_orders|sync_struct_interfaces|generate_controllers|generate_menu_descriptions}"
     exit 1
     ;;
 esac

@@ -5,11 +5,11 @@ import (
 
 	"app/core"
 	"app/db"
-	"app/types"
+	"app/agent/types"
 )
 
 // Persistence for the in-app agent chat. Backed by the agent_messages table
-// (see backend/types/agent_messages.go). The partition key (CompanyUserID)
+// (see backend/agent/types/agent_messages.go). The partition key (CompanyUserID)
 // is filled by PrepareCloudSync so callers only set CompanyID/UserID.
 
 // Role values for AgentMessage.Role.

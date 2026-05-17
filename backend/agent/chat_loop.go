@@ -10,7 +10,7 @@ import (
 
 	"app/agent/llm"
 	"app/core"
-	"app/types"
+	"app/agent/types"
 )
 
 // RunTurn is the per-user-message entry point of the agentic loop. The model

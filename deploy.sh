@@ -95,6 +95,9 @@ fi
 # RECREAR TABLAS
 if [[ $ACCIONES == *"5"* ]]; then
     echo "=== RECREANDO TABLAS ==="
+    # Refresh controllers.generated.go so fn-homologate sees every table struct currently in the codebase.
+    echo "--- Regenerando controllers.generated.go ---"
+    (cd scripts && $GO_PATH run . generate_controllers)
     cd ./backend
     $GO_PATH run . fn-homologate
     cd ..

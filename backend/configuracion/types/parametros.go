@@ -38,23 +38,3 @@ func (e ParametrosTable) GetSchema() db.TableSchema {
 		Indexes:      []db.Index{},
 	}
 }
-
-type Increment struct {
-	db.TableStruct[IncrementTable, Increment]
-	Name         string
-	CurrentValue int64
-}
-
-type IncrementTable struct {
-	db.TableStruct[IncrementTable, Increment]
-	Name         db.Col[IncrementTable, string]
-	CurrentValue db.Col[IncrementTable, int64]
-}
-
-func (e IncrementTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
-		Name:           "sequences",
-		Keys:           []db.Coln{e.Name},
-		SequenceColumn: &e.CurrentValue,
-	}
-}
