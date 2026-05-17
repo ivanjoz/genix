@@ -276,7 +276,7 @@ func Test46(args *core.ExecArgs) core.FuncResponse {
 func Test51(args *core.ExecArgs) core.FuncResponse {
 
 
-	controller := makeDBController[logisticaTypes.ProductStock]()
+	controller := makeDBController[logisticaTypes.SupplyMaterial]()
 
  //	controller.RecalcVirtualColumns(1)
 	controller.DeleteViewsAndIndexes()

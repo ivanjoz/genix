@@ -15,6 +15,7 @@ type SupplyMaterial struct {
 	Price          int32                      `json:",omitempty"`
 	CurrencyID     int16                      `json:",omitempty"`
 	SKU            string                     `json:",omitempty"`
+	MinimunStock   int32                      `json:",omitempty"`
 	ProviderSupply []ProductSupplyProviderRow `json:",omitempty"`
 	Status         int8                       `json:"ss,omitempty"`
 	Updated        int32                      `json:"upd,omitempty"`
@@ -33,6 +34,7 @@ type SupplyMaterialTable struct {
 	Price          db.Col[SupplyMaterialTable, int32]
 	CurrencyID     db.Col[SupplyMaterialTable, int16]
 	SKU            db.Col[SupplyMaterialTable, string]
+	MinimunStock   db.Col[SupplyMaterialTable, int32]
 	ProviderSupply db.Col[SupplyMaterialTable, []ProductSupplyProviderRow]
 	Status         db.Col[SupplyMaterialTable, int8]
 	Updated        db.Col[SupplyMaterialTable, int32]

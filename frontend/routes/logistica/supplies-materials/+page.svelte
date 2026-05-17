@@ -258,9 +258,15 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
         keyName="v"
         options={productoMonedaOptions}
       />
+      <Input label="Stock Mínimo"
+        saveOn={supplyForm}
+        css="col-span-12 md:col-span-6"
+        save="MinimunStock"
+        type="number"
+      />
       <SearchSelect label="Marca"
         saveOn={supplyForm}
-        css="col-span-24 md:col-span-12"
+        css="col-span-24 md:col-span-6"
         save="BrandID"
         keyId="ID"
         keyName="Nombre"

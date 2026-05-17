@@ -12,6 +12,7 @@ export interface ISupplyMaterial {
   Price: number
   CurrencyID: number
   SKU: string
+  MinimunStock: number
   ProviderSupply: IProductSupplyProviderRow[]
   ss: number
   upd: number
@@ -23,7 +24,7 @@ export interface ISupplyMaterial {
 export class SupplyMaterialService extends GetHandler<ISupplyMaterial> {
   route = "supply-material"
   // Bump `ver` whenever the ISupplyMaterial shape changes so clients drop their stale snapshot.
-  useCache = { min: 5, ver: 1 }
+  useCache = { min: 5, ver: 2 }
   inferRemoveFromStatus = true
   prependOnSave = true
 

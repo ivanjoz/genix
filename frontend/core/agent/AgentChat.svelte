@@ -365,7 +365,7 @@
   }
 </script>
 
-<div bind:this={hostElement} data-agent-hidden="true" class="_host relative w-full max-w-2xl">
+<div bind:this={hostElement} data-agent-hidden="true" class="_host relative w-full max-w-[36rem]">
   <div class="_pill flex items-start gap-6 px-10 py-6 bg-white/15 hover:bg-white/20 focus-within:bg-white/25
     border border-white/20 rounded-2xl transition-colors cursor-text"
     onclick={() => textareaElement?.focus()}

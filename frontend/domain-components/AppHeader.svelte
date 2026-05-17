@@ -96,8 +96,9 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 		</button>
 	{/if}
 
-	<!-- Title -->
-	<div class="flex items-center min-w-0 shrink"
+	<!-- Title — reserve a stable slot so the agent pill's position doesn't
+	     jump as tabs come and go. -->
+	<div class="flex items-center min-w-[200px] shrink-0"
 		data-id={Core.pageOptions?.length > 0 ? `PageViews:${pageViewsID}` : undefined}
 	>
 		{#if Core.pageOptions?.length > 0}
@@ -131,8 +132,9 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 
 	<!-- Right Actions -->
 	<div class="flex items-center gap-8 h-full relative">
+		<!-- Loading indicator: absolute so it never displaces the settings/reload buttons -->
 		{#if fetchOnCourse.size > 0}
-			<div class="pm-loading mr-06">
+			<div class="pm-loading">
 				<div class="bg"></div>
 				<span>{"Cargando..."}</span>
 			</div>
@@ -207,13 +209,17 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 		animation: spin 1s linear infinite;
 	}
 
-	/* LOADING */
+	/* LOADING: absolute so it sits in the reserved gap to the left of the
+	   right-actions cluster and never shifts the settings/reload buttons. */
 	.pm-loading {
 		height: calc(100% - 7px);
-		margin-bottom: 1px;
 		width: 10rem;
 		text-align: left;
-		position: relative;
+		position: absolute;
+		right: 100%;
+		top: 50%;
+		transform: translateY(-50%);
+		margin-right: 8px;
 		line-height: 1;
 		display: flex;
 		z-index: 210;
@@ -222,6 +228,7 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 		overflow: hidden;
 		align-items: center;
 		border-radius: 7px;
+		pointer-events: none;
 	}
 	/*
 	.pm-loading > .pm-counter {
