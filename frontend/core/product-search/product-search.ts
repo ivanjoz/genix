@@ -9,8 +9,8 @@ import {
 import { Env } from "$core/env";
 import type { IndexedProduct, ProductSearchHit } from "./types";
 import { ProductosDeltaService } from "./productos-delta-service";
-import type { IListaRegistro } from "$services/negocio/listas-compartidas.svelte";
-import type { IProducto } from "$services/services/productos.svelte";
+import type { ISharedListRecord } from "$services/negocio/listas-compartidas.svelte";
+import type { IProduct } from "$services/services/productos.svelte";
 
 export interface ProductQueryWordDebugInfo {
 	queryWord: string;
@@ -349,8 +349,8 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	}
 
 	private applyTaxonomyDeltas(
-		brandRows: readonly IListaRegistro[],
-		categoryRows: readonly IListaRegistro[]
+		brandRows: readonly ISharedListRecord[],
+		categoryRows: readonly ISharedListRecord[]
 	): void {
 		// Keep normalized brand words precomputed so brand scoring stays O(words) per brand.
 		for (const brandRow of brandRows) {
@@ -364,7 +364,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 		}
 	}
 
-	private applyProductDeltas(deltaProducts: readonly IProducto[]): void {
+	private applyProductDeltas(deltaProducts: readonly IProduct[]): void {
 		// Delta payload can contain upserts and logical deletes (ss=0).
 		for (const deltaProduct of deltaProducts) {
 			if (!deltaProduct || deltaProduct.ID <= 0) {

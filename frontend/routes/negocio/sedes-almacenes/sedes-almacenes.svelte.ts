@@ -1,6 +1,6 @@
 import { GetHandler, POST } from '$libs/http.svelte';
 
-export interface ISede {
+export interface ISite {
   ID: number,
   Nombre: string
   Direccion: string
@@ -12,48 +12,48 @@ export interface ISede {
   upd: number
 }
 
-export interface IAlmacenLayoutBloque {
+export interface IWarehouseLayoutBlock {
   rw: number
   co: number
   nm: string
 }
 
-export interface IAlmacenLayout {
+export interface IWarehouseLayout {
   ID: number
   Name: string
   RowCant: number
   ColCant: number
-  Bloques?: IAlmacenLayoutBloque[]
+  Bloques?: IWarehouseLayoutBlock[]
   [key: string]: any // For dynamic xy_ properties
 }
 
-export interface IAlmacen {
+export interface IWarehouse {
   ID: number,
   SedeID: number
   Nombre: string
   Descripcion: string
-  Layout: IAlmacenLayout[]
+  Layout: IWarehouseLayout[]
   ss: number
   upd: number
 }
 
-export interface IAlmacenes {
-  Almacenes: IAlmacen[]
-  AlmacenesMap: Map<number,IAlmacen>
-  Sedes: ISede[]
-  SedesMap: Map<number,ISede>
+export interface IWarehouses {
+  Almacenes: IWarehouse[]
+  AlmacenesMap: Map<number,IWarehouse>
+  Sedes: ISite[]
+  SedesMap: Map<number,ISite>
 }
 
 export class AlmacenesService extends GetHandler {
   route = "sedes-almacenes"
   useCache = { min: 5, ver: 3 }
 
-  Almacenes: IAlmacen[] = $state([])
-  AlmacenesMap: Map<number,IAlmacen> = $state(new Map())
-  Sedes: ISede[] = $state([])
-  SedesMap: Map<number,ISede> = $state(new Map())
+  Almacenes: IWarehouse[] = $state([])
+  AlmacenesMap: Map<number,IWarehouse> = $state(new Map())
+  Sedes: ISite[] = $state([])
+  SedesMap: Map<number,ISite> = $state(new Map())
 
-  handler(result: IAlmacenes): void {
+  handler(result: IWarehouses): void {
     console.log("sedes almacenes::", result)
     this.Almacenes = result.Almacenes || []
     this.Sedes = result.Sedes || []
@@ -67,7 +67,7 @@ export class AlmacenesService extends GetHandler {
   }
 }
 
-export const postSede = (data: ISede) => {
+export const postSede = (data: ISite) => {
   return POST({
     data,
     route: "sedes",
@@ -75,7 +75,7 @@ export const postSede = (data: ISede) => {
   })
 }
 
-export const postAlmacen = (data: IAlmacen) => {
+export const postAlmacen = (data: IWarehouse) => {
   return POST({
     data,
     route: "almacenes",
@@ -83,43 +83,43 @@ export const postAlmacen = (data: IAlmacen) => {
   })
 }
 
-export interface IPaisCiudad {
+export interface ICityLocation {
   PaisID: number
 	ID: number
   CiudadID: number
   Nombre: string
   PadreID: number
   Jerarquia: number
-  Departamento?: IPaisCiudad
-  Provincia?: IPaisCiudad
+  Departamento?: ICityLocation
+  Provincia?: ICityLocation
   upd: number
   _nombre?: string
 }
 
 export interface PaisCiudadResult {
-  ciudades: IPaisCiudad[]
-  distritos: IPaisCiudad[]
-  ciudadesMap: Map<number,IPaisCiudad>
+  ciudades: ICityLocation[]
+  distritos: ICityLocation[]
+  ciudadesMap: Map<number,ICityLocation>
 }
 
 export class PaisCiudadesService extends GetHandler {
   route = "pais-ciudades?pais-id=604"
   useCache = { min: 600, ver: 1 }
 
-	ciudades: IPaisCiudad[] = $state([]) // Departamentos + Provincias + Distritos
-	ciudadesMap: Map<number, IPaisCiudad> = $state(new Map())
+	ciudades: ICityLocation[] = $state([]) // Departamentos + Provincias + Distritos
+	ciudadesMap: Map<number, ICityLocation> = $state(new Map())
 	
-	distritos: IPaisCiudad[] = $state([])
-	provincias: IPaisCiudad[] = $state([])
-  departamentos: IPaisCiudad[] = $state([])
+	distritos: ICityLocation[] = $state([])
+	provincias: ICityLocation[] = $state([])
+  departamentos: ICityLocation[] = $state([])
 
-  handler(result: IPaisCiudad[]): void {
+  handler(result: ICityLocation[]): void {
 		const ciudades = result?.filter(x => !(x as any)._IS_META) || []
 		const ciudadesMap = new Map(ciudades.map(e => [e.ID, e]))
 		
-		const distritos: IPaisCiudad[] = []
-		const provincias: IPaisCiudad[] = []
-		const departamentos: IPaisCiudad[] = []
+		const distritos: ICityLocation[] = []
+		const provincias: ICityLocation[] = []
+		const departamentos: ICityLocation[] = []
 
 		console.log("ciudades", ciudades)
 		

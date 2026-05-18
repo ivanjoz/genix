@@ -175,7 +175,7 @@ func scoreIndexGroupCandidate(indexGroup indexGroupInfo, statementByColumn map[s
 
 	for _, sourceColumn := range indexGroup.sourceColumns {
 		if sourceColumn.weekOnly {
-			// TODO: Future version should probe fecha hashes first and only then decide whether week hashes help fetch records.
+			// TODO: Future version should probe date hashes first and only then decide whether week hashes help fetch records.
 			return 0, false
 		}
 

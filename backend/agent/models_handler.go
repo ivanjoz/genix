@@ -7,6 +7,6 @@ import (
 
 func GetAgentModels(req *core.HandlerArgs) core.HandlerResponse {
 	models := llm.ListModels()
-	core.Log("agent.models list requested user::", req.Usuario.ID, " count::", len(models))
+	core.Log("agent.models list requested user::", req.User.ID, " count::", len(models))
 	return req.MakeResponse(models)
 }

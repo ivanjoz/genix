@@ -7,19 +7,19 @@ import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import { closeAllModals, openModal } from '$core/store.svelte';
 import { formatN } from '$libs/helpers';
-import { productoAtributos, type IProducto, type IProductoPresentacion } from "./productos.svelte";
+import { productoAtributos, type IProduct, type IProductPresentation } from "./productos.svelte";
     import type { ITableColumn } from '$components/vTable/types';
 
   const produtcoAtributosMap = new Map(productoAtributos.map(e => [e.id, e]))
 
   let {
     producto = $bindable()
-  }: { producto: IProducto } = $props()
+  }: { producto: IProduct } = $props()
 
-  let presentacionForm = $state({} as IProductoPresentacion)
+  let presentacionForm = $state({} as IProductPresentation)
   let tempCounter = -1
 
-  const columns: ITableColumn<IProductoPresentacion>[] = [
+  const columns: ITableColumn<IProductPresentation>[] = [
     { header: "Atributo",
       getValue: e => produtcoAtributosMap.get(e.at)?.name || ""
     },
@@ -58,7 +58,7 @@ import { productoAtributos, type IProducto, type IProductoPresentacion } from ".
       at: producto.AtributosIDs?.[0] as number,
       id: tempCounter,
       ss: 1
-    } as IProductoPresentacion
+    } as IProductPresentation
     tempCounter--
     console.log("presentacionForm", presentacionForm)
     openModal(3)
@@ -71,7 +71,7 @@ import { productoAtributos, type IProducto, type IProductoPresentacion } from ".
     presentacionForm = {...e}
   }}
 >
-  {#snippet cellRenderer(record: IProductoPresentacion, col: ITableColumn<IProductoPresentacion>)}
+  {#snippet cellRenderer(record: IProductPresentation, col: ITableColumn<IProductPresentation>)}
     {#if col.id === "color" && record.cl}
       <div class="flex justify-center w-full">
         <div class="_1 h-24 w-36" style="background-color:{record.cl}">

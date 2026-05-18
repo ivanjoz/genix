@@ -1,6 +1,6 @@
 import { Env, IsClient, LocalStorage } from '$core/env';
 import { decrypt, Notify, throttle } from '$libs/helpers';
-import type { IUsuario, ILoginResult } from '$core/types/common';
+import type { IUser, ILoginResult } from '$core/types/common';
 import { base64ToUInt16, checksum } from '$libs/funcs/parsers';
 import { getAccessEntriesForRoute } from '../routes/seguridad/perfiles-accesos/access-list-catalog';
 
@@ -54,14 +54,14 @@ export const getToken = (noError?: boolean) => {
 }
 
 export const checkIsLogin = () => {
-  // if(Env.getEmpresaID() > 0){ return 1 }
+  // if(Env.getCompanyID() > 0){ return 1 }
   if(!IsClient()){ return 0 }
   else if(IsClient() && !!getToken(true)){ return 2 }
   else { return 3 }
 }
 
 export const isLogged = (): boolean => {
-  return Env.getEmpresaID() > 0 && getToken(true)?.length > 0
+  return Env.getCompanyID() > 0 && getToken(true)?.length > 0
 }
 
 export const getShowStore = (pathname?: string): number => {
@@ -70,7 +70,7 @@ export const getShowStore = (pathname?: string): number => {
   if(pathname === "/login"){
     return -1
   } else if(pathname === "/" || pathname.substring(0,5) === "/page"){
-    return Env.getEmpresaID() || -1
+    return Env.getCompanyID() || -1
   }
   return 0
 }
@@ -194,7 +194,7 @@ export class AccessHelper {
   #storedAccesos = ''
   #accesosComputed = new Uint16Array()
   #cachedResults: Map<number,boolean> = new Map()
-  #userInfo: IUsuario = null as unknown as IUsuario
+  #userInfo: IUser = null as unknown as IUser
 
   #loadAccesosComputedFromStorage() {
     const storedAccesosComputed = LocalStorage.getItem(Env.appId + "Accesos") || ""
@@ -210,7 +210,7 @@ export class AccessHelper {
   #setUserInfo(){
     const userInfoJson = LocalStorage?.getItem(Env.appId+ "UserInfo")
     if(!userInfoJson){
-      this.#userInfo = null as unknown as IUsuario
+      this.#userInfo = null as unknown as IUser
       return
     }
     this.#userInfo = JSON.parse(userInfoJson)
@@ -223,20 +223,20 @@ export class AccessHelper {
   clearAccesos = Env.clearAccesos
   getUserInfo(){ return this.#userInfo }
   isTokenValid() {
-    const empresaID = parseInt(LocalStorage.getItem(Env.appId + "EmpresaID") || "0")
+    const companyID = parseInt(LocalStorage.getItem(Env.appId + "CompanyID") || "0")
     const tokenValue = getToken(true)
 		const accesosComputed = decodeStoredAccesosComputed(LocalStorage.getItem(Env.appId + "Accesos") || "")
 		debugger
-    return empresaID > 0 && tokenValue.length > 0 && accesosComputed.length > 0
+    return companyID > 0 && tokenValue.length > 0 && accesosComputed.length > 0
   }
-  setUserInfo(userInfo: IUsuario){
+  setUserInfo(userInfo: IUser){
     this.#userInfo = userInfo
     LocalStorage.setItem(Env.appId + "UserInfo", JSON.stringify(userInfo))
   }
 
   async parseAccesos(login: ILoginResult, cipherKey?: string) {
     const userInfoStr = await decrypt(login.UserInfo, cipherKey as string)
-    const userInfo = JSON.parse(userInfoStr) as IUsuario
+    const userInfo = JSON.parse(userInfoStr) as IUser
 
     const UnixTime = Math.floor(Date.now()/1000)
     LocalStorage.setItem(Env.appId + "TokenCreated", String(UnixTime))
@@ -244,7 +244,7 @@ export class AccessHelper {
     LocalStorage.setItem(Env.appId + "UserToken", login.UserToken)
     // unix time un seconds expiration
     LocalStorage.setItem(Env.appId + "TokenExpTime", String(login.TokenExpTime))
-    LocalStorage.setItem(Env.appId + "EmpresaID", String(login.EmpresaID))
+    LocalStorage.setItem(Env.appId + "CompanyID", String(login.CompanyID))
     LocalStorage.setItem(Env.appId + "Accesos", wrapAccesosComputed(login.AccesosComputed || ""))
     this.#setUserInfo()
     this.#loadAccesosComputedFromStorage()
@@ -376,11 +376,11 @@ export const Params = {
   getFechaUnix(){
     return Math.floor(((Date.now()/1000) - Env.zoneOffset) / 86400)
   },
-  toSunix(fechaHoraUnix: number){
-    return Math.floor((fechaHoraUnix - (10**9)) / 2)
+  toSunix(dateTimeUnix: number){
+    return Math.floor((dateTimeUnix - (10**9)) / 2)
   },
   sunixTime(){
-    const fechaHora = Math.floor(Date.now()/1000)
-    return Params.toSunix(fechaHora)
+    const dateTime = Math.floor(Date.now()/1000)
+    return Params.toSunix(dateTime)
   }
 }

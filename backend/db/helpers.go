@@ -164,7 +164,7 @@ func makeWeekIndexFromWeekCode(weekCode int64) (int64, bool) {
 }
 
 func normalizeCompositeRange(from, to int64, isWeek bool) (int64, int64) {
-	// Range planning needs contiguous numbers; week-coded values use Monday-fecha conversion.
+	// Range planning needs contiguous numbers; week-coded values use Monday-date conversion.
 	if isWeek {
 		fromWeekIndex, fromOk := makeWeekIndexFromWeekCode(from)
 		toWeekIndex, toOk := makeWeekIndexFromWeekCode(to)
@@ -182,7 +182,7 @@ func normalizeCompositeRange(from, to int64, isWeek bool) (int64, int64) {
 }
 
 func makeCompositeBucketID(value int64, bucketSize int8, isWeek bool) int64 {
-	// Bucket IDs are computed on a contiguous domain using fecha-derived week indexes when needed.
+	// Bucket IDs are computed on a contiguous domain using date-derived week indexes when needed.
 	basisValue := value
 	if isWeek {
 		if weekIndex, ok := makeWeekIndexFromWeekCode(value); ok {

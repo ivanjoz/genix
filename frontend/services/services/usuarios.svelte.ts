@@ -1,7 +1,7 @@
 import { POST } from '$libs/http.svelte';
-import type { IUsuario } from '$core/types/common';
+import type { IUser } from '$core/types/common';
 
-export const postUsuario = (data: IUsuario) => {
+export const postUsuario = (data: IUser) => {
   return POST({
     data,
     route: "usuarios",
@@ -9,7 +9,7 @@ export const postUsuario = (data: IUsuario) => {
   })
 }
 
-export const postUsuarioPropio = (data: IUsuario) => {
+export const postUsuarioPropio = (data: IUser) => {
   return POST({
     data,
     route: "usuario-propio",

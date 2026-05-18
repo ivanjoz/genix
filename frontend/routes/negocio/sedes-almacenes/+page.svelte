@@ -17,9 +17,9 @@ import {
     PaisCiudadesService,
     postSede,
     postAlmacen,
-    type ISede,
-    type IAlmacen,
-    type IAlmacenLayout
+    type ISite,
+    type IWarehouse,
+    type IWarehouseLayout
   } from "./sedes-almacenes.svelte"
 
   const almacenesService = new AlmacenesService()
@@ -28,8 +28,8 @@ import {
   const pageOptions = [{ id: 1, name: "Sedes" }, { id: 2, name: "Almacenes" }]
 
   let filterText = $state("")
-  let sedeForm = $state({} as ISede)
-  let almacenForm = $state({} as IAlmacen)
+  let sedeForm = $state({} as ISite)
+  let almacenForm = $state({} as IWarehouse)
 
   const saveSede = async (isDelete?: boolean) => {
     const form = sedeForm
@@ -118,7 +118,7 @@ import {
     Loading.remove()
   }
 
-  const sedesColumns: ITableColumn<ISede>[] = [
+  const sedesColumns: ITableColumn<ISite>[] = [
     {
       header: "ID",
       headerCss: "w-32",
@@ -160,7 +160,7 @@ import {
     }
   ]
 
-  const almacenesColumns: ITableColumn<IAlmacen>[] = [
+  const almacenesColumns: ITableColumn<IWarehouse>[] = [
     {
       header: "ID",
       headerCss: "w-32",
@@ -227,7 +227,7 @@ import {
     })
   })
 
-  const handleLayoutEdit = (almacen: IAlmacen) => {
+  const handleLayoutEdit = (almacen: IWarehouse) => {
     almacenForm = JSON.parse(JSON.stringify(almacen))
     // Process layout to convert Bloques to xy_ properties
     for(let layout of almacenForm.Layout||[]){
@@ -246,7 +246,7 @@ import {
       <FilterInput bind:value={filterText} css="mr-16 w-256" />
       <div class="flex items-center">
         <Button color="green" icon="icon-plus" label="Opens the modal to create a new business location (sede)." onClick={() => {
-          sedeForm = { ss: 1 } as ISede
+          sedeForm = { ss: 1 } as ISite
           Core.openModal(1)
         }} />
       </div>
@@ -275,7 +275,7 @@ import {
         columns={almacenesColumns}
         data={filteredAlmacenes}
       >
-        {#snippet cellRenderer(record: IAlmacen, col: ITableColumn<IAlmacen>)}
+        {#snippet cellRenderer(record: IWarehouse, col: ITableColumn<IWarehouse>)}
           {#if col.id === "layout"}
             <div class="w-full flex items-center justify-between">
               {#if record.Layout && record.Layout.length > 0}

@@ -16,15 +16,15 @@ func TestSelectStatementCacheReusesSameShape(t *testing.T) {
 
 	recordsFirst := []int32PackedViewRecord{}
 	queryFirst := Query[int32PackedViewRecord, int32PackedViewSchema](&recordsFirst)
-	queryFirst.Select(queryFirst.EmpresaID, queryFirst.ID, queryFirst.StatusTrace, queryFirst.Updated)
-	queryFirst.EmpresaID.Equals(7)
+	queryFirst.Select(queryFirst.CompanyID, queryFirst.ID, queryFirst.StatusTrace, queryFirst.Updated)
+	queryFirst.CompanyID.Equals(7)
 	queryFirst.StatusTrace.Equals(int8(2))
 	queryFirst.Updated.GreaterEqual(int32(15))
 
 	recordsSecond := []int32PackedViewRecord{}
 	querySecond := Query[int32PackedViewRecord, int32PackedViewSchema](&recordsSecond)
-	querySecond.Select(querySecond.EmpresaID, querySecond.ID, querySecond.StatusTrace, querySecond.Updated)
-	querySecond.EmpresaID.Equals(9)
+	querySecond.Select(querySecond.CompanyID, querySecond.ID, querySecond.StatusTrace, querySecond.Updated)
+	querySecond.CompanyID.Equals(9)
 	querySecond.StatusTrace.Equals(int8(4))
 	querySecond.Updated.GreaterEqual(int32(21))
 
@@ -64,8 +64,8 @@ func TestCompiledSelectStatementBindsPackedViewFanout(t *testing.T) {
 
 	records := []int32PackedViewRecord{}
 	query := Query[int32PackedViewRecord, int32PackedViewSchema](&records)
-	query.Select(query.EmpresaID, query.ID, query.StatusTrace, query.Updated)
-	query.EmpresaID.Equals(7)
+	query.Select(query.CompanyID, query.ID, query.StatusTrace, query.Updated)
+	query.CompanyID.Equals(7)
 	query.StatusTrace.In(int8(2), int8(4))
 	query.Updated.GreaterEqual(int32(15))
 

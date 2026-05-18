@@ -1,12 +1,12 @@
 import { POST } from '$libs/http.svelte';
-import { type IProducto } from '$routes/negocio/productos/productos.svelte';
-import { type IProductoStock, type IProductStockDetail } from '$routes/logistica/products-stock/stock-movement';
+import { type IProduct } from '$routes/negocio/productos/productos.svelte';
+import { type IProductStock, type IProductStockDetail } from '$routes/logistica/products-stock/stock-movement';
 import { Loading, Notify } from '$libs/helpers';
 
 export interface ProductoVenta {
   key: string
   cant: number
-  producto: IProducto
+  producto: IProduct
   presentationID: number
   presentationName: string
   displayName: string
@@ -29,12 +29,12 @@ export interface VentaProducto {
   lote?: string
   cantidad: number
   isSubUnidad?: boolean
-  producto?: IProducto // Helper reference
+  producto?: IProduct // Helper reference
 }
 
 //STRUCT:comercial.SaleOrder
 export interface ISaleOrder {
-  Fecha: number
+  Date: number
   WarehouseID: number
   ID: number
   DetailProductsIDs: number[]
@@ -61,7 +61,7 @@ export interface ISaleOrder {
   PaymentDueDate: number
   ClientInfo: any
   /* extra fields */
-  EmpresaID: number
+  CompanyID: number
   Name: string
   RegistryNumber: string
   // UI Helpers (not sent or ignored by backend if not in struct)
@@ -71,9 +71,9 @@ export interface ISaleOrder {
 
 export class SaleOrderState {
   // State
-  productosStock = $state([] as IProductoStock[])
+  productosStock = $state([] as IProductStock[])
   form = $state({
-    ID: 0, EmpresaID: 0, WarehouseID: 0, LastPaymentCajaID: 1, ClientID: 0, // Default payment caja; UI can overwrite.
+    ID: 0, CompanyID: 0, WarehouseID: 0, LastPaymentCajaID: 1, ClientID: 0, // Default payment caja; UI can overwrite.
     TotalAmount: 0, TaxAmount: 0, DebtAmount: 0,
     ActionsIncluded: [2, 3],
     DetailProductsIDs: [], DetailPrices: [], DetailQuantities: [],

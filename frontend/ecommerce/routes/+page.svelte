@@ -3,9 +3,9 @@ import MobileMenu from '$domain/MobileMenu.svelte';
 import MainCarrusel from '$ecommerce/components/MainCarrusel.svelte';
 import Header from '$ecommerce/components/Header.svelte';
 import ProductCards from '$ecommerce/components/ProductCards.svelte';
-import type { ICategoriaProducto } from '$ecommerce/components/store.svelte';
+import type { IProductCategory } from '$ecommerce/components/store.svelte';
 
-  let categorias: ICategoriaProducto[] = [
+  let categorias: IProductCategory[] = [
     { Name: "Perfumes", Image: "images/categoria_11.webp" },
     { Name: "Casacas", Image: "images/uwgGHwD2aYl3.webp" },
     { Name: "Zapatos", Image: "images/MqcNHwj3iKeK.webp" },

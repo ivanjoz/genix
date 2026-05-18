@@ -7,32 +7,32 @@ var (
 	mondayUnixDayByWeekCode = map[int16]int16{}
 )
 
-func makeWeekCodeFromUnixDay(fechaUnix int16) int16 {
-	if weekCode, ok := weekCodeByUnixDay[fechaUnix]; ok {
+func makeWeekCodeFromUnixDay(dateUnix int16) int16 {
+	if weekCode, ok := weekCodeByUnixDay[dateUnix]; ok {
 		return weekCode
 	}
-	if fechaUnix == 0 {
-		fechaUnix = int16(time.Now().Unix() / 60 / 60 / 24)
+	if dateUnix == 0 {
+		dateUnix = int16(time.Now().Unix() / 60 / 60 / 24)
 	}
 
-	fechaUnixTime := int64(fechaUnix)*int64(24*60*60) + int64(8*60*60)
-	fecha := time.Unix(fechaUnixTime, 0)
-	fechaUnixBase := fechaUnix
+	dateUnixTime := int64(dateUnix)*int64(24*60*60) + int64(8*60*60)
+	date := time.Unix(dateUnixTime, 0)
+	dateUnixBase := dateUnix
 
-	weekday := int(fecha.Weekday())
+	weekday := int(date.Weekday())
 	if weekday == 0 {
-		fecha = fecha.AddDate(0, 0, -6)
-		fechaUnix -= 6
+		date = date.AddDate(0, 0, -6)
+		dateUnix -= 6
 	} else if weekday != 1 {
-		fecha = fecha.AddDate(0, 0, 1-weekday)
-		fechaUnix += 1 - int16(weekday)
+		date = date.AddDate(0, 0, 1-weekday)
+		dateUnix += 1 - int16(weekday)
 	}
 
-	year, week := fecha.ISOWeek()
+	year, week := date.ISOWeek()
 	weekCode := int16(year*100 + week - 200000)
-	weekCodeByUnixDay[fechaUnixBase] = weekCode
+	weekCodeByUnixDay[dateUnixBase] = weekCode
 	if _, ok := mondayUnixDayByWeekCode[weekCode]; !ok {
-		mondayUnixDayByWeekCode[weekCode] = fechaUnix
+		mondayUnixDayByWeekCode[weekCode] = dateUnix
 	}
 	return weekCode
 }

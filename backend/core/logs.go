@@ -115,7 +115,7 @@ func MakeReqLog() ReqLog {
 	ua := useragent.Parse(userAgent)
 
 	reqLog := ReqLog{
-		UserID:      Usuario.ID,
+		UserID:      User.ID,
 		IP:          Env.REQ_IP,
 		Accion:      0,
 		Logs:        SessionLogs,

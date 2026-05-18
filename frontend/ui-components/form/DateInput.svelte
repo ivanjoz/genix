@@ -53,13 +53,13 @@
   const {
     todayDate,
     timezoneOffsetSeconds,
-    todayUnixDay: fechaTodayUnix,
+    todayUnixDay: dateTodayUnix,
     currentMonthKey,
   } = createDateInputContext()
 
   let monthSelected = $state(currentMonthKey)
-  let fechaSelected = $state(0)
-  let fechaFocus = $state(0)
+  let dateSelected = $state(0)
+  let dateFocus = $state(0)
   let showCalendar = $state(false)
   let inputValue = $state("")
   let avoidCloseOnBlur = false
@@ -71,9 +71,9 @@
 
   const changeMonth = (count: number) => {
     const mn = monthName
-    const fecha = new Date(mn.year, mn.month - 1, 1, 0, 0, 0)
-    fecha.setMonth(fecha.getMonth() + count)
-    const month = fecha.getFullYear() * 100 + (fecha.getMonth() + 1)
+    const date = new Date(mn.year, mn.month - 1, 1, 0, 0, 0)
+    date.setMonth(date.getMonth() + count)
+    const month = date.getFullYear() * 100 + (date.getMonth() + 1)
     monthSelected = month
     inputElement?.focus()
   }
@@ -82,31 +82,31 @@
     const parsedDate = parseTypedDate(value, todayDate, timezoneOffsetSeconds)
     if (parsedDate.autoCompletedDate && parsedDate.autoCompletedUnixDay) {
       monthSelected = getMonthKey(parsedDate.autoCompletedDate)
-      fechaFocus = parsedDate.autoCompletedUnixDay
+      dateFocus = parsedDate.autoCompletedUnixDay
     } else {
-      fechaFocus = 0
+      dateFocus = 0
     }
   }
 
-  const changeFechaSelected = (fechaUnix: number) => {
+  const changeFechaSelected = (dateUnix: number) => {
     untrack(() => {
       if (save && saveOn) {
-        if (!fechaUnix) {
+        if (!dateUnix) {
           delete saveOn[save]
           return
         }
-        saveOn[save] = fechaUnix as NonNullable<T>[keyof T]
+        saveOn[save] = dateUnix as NonNullable<T>[keyof T]
       }
     })
-    fechaSelected = fechaUnix || 0
-    inputValue = formatUnixDay(fechaUnix, timezoneOffsetSeconds)
+    dateSelected = dateUnix || 0
+    inputValue = formatUnixDay(dateUnix, timezoneOffsetSeconds)
 
     if (inputElement) {
       inputElement.value = inputValue
     }
 
-    if (fechaUnix) {
-      monthSelected = getMonthKey(dateFromUnixDay(fechaUnix, timezoneOffsetSeconds))
+    if (dateUnix) {
+      monthSelected = getMonthKey(dateFromUnixDay(dateUnix, timezoneOffsetSeconds))
     } else {
       monthSelected = currentMonthKey
     }
@@ -153,7 +153,7 @@
       return
     }
     showCalendar = false
-    if (fechaFocus !== 0) {
+    if (dateFocus !== 0) {
       const value = ((ev.target as HTMLInputElement).value || "").trim()
       const parsedDate = parseTypedDate(value, todayDate, timezoneOffsetSeconds)
       if (value.length === 10 && parsedDate.isCompleted && parsedDate.autoCompletedUnixDay) {
@@ -163,21 +163,21 @@
         (ev.target as HTMLInputElement).value = ""
         changeFechaSelected(0)
       }
-      fechaFocus = 0
+      dateFocus = 0
     }
   }
 
   const openMobileLayer = () => {
     if (disabled) { return }
 
-    const selectedMonthKey = fechaSelected
-      ? getMonthKey(dateFromUnixDay(fechaSelected, timezoneOffsetSeconds))
+    const selectedMonthKey = dateSelected
+      ? getMonthKey(dateFromUnixDay(dateSelected, timezoneOffsetSeconds))
       : monthSelected || currentMonthKey
 
     // Delegate the mobile picker to the shared top layer so it can escape clipped form containers.
     Core.showMobileDateLayer = {
-      selectedUnixDay: fechaSelected || 0,
-      focusedUnixDay: fechaFocus || fechaSelected || 0,
+      selectedUnixDay: dateSelected || 0,
+      focusedUnixDay: dateFocus || dateSelected || 0,
       selectedMonthKey,
       label: label || undefined,
       placeholder,
@@ -186,7 +186,7 @@
         if (onChange) onChange()
       },
       onClose: () => {
-        fechaFocus = 0
+        dateFocus = 0
       }
     }
   }
@@ -194,9 +194,9 @@
   // Effect to sync with external changes
   $effect(() => {
     if (saveOn && save) {
-      const fechaUnix = saveOn[save] as number
-      if (fechaUnix) {
-        const value = formatUnixDay(fechaUnix, timezoneOffsetSeconds)
+      const dateUnix = saveOn[save] as number
+      if (dateUnix) {
+        const value = formatUnixDay(dateUnix, timezoneOffsetSeconds)
         setAutocompletedValue(value)
         inputValue = value
         if (inputElement) inputElement.value = value
@@ -205,7 +205,7 @@
         if (inputElement) inputElement.value = ""
         monthSelected = currentMonthKey
       }
-      fechaSelected = fechaUnix || 0
+      dateSelected = dateUnix || 0
     }
   })
 
@@ -219,8 +219,8 @@
 
   // YYYY-MM-DD mirror of the selected day, exposed as data-value for the agent.
   const agentDataValue = $derived.by(() => {
-    if (!fechaSelected) { return "" }
-    const d = dateFromUnixDay(fechaSelected, timezoneOffsetSeconds)
+    if (!dateSelected) { return "" }
+    const d = dateFromUnixDay(dateSelected, timezoneOffsetSeconds)
     const y = d.getFullYear()
     const m = String(d.getMonth() + 1).padStart(2, '0')
     const day = String(d.getDate()).padStart(2, '0')
@@ -263,7 +263,7 @@
     if (inputElement !== document.activeElement) {
       avoidCloseOnBlur = false
       showCalendar = false
-      fechaFocus = 0
+      dateFocus = 0
     }
   }
 </script>
@@ -302,9 +302,9 @@
       <div class="dp-week text-[13px] ff-bold text-center flex items-center justify-center c-purple">{week.week}</div>
       {#each week.weekDays as day}
         {@const isOutMonth = day.monthKey !== monthSelected}
-        {@const isSelected = day.unixDay === fechaSelected}
-        {@const isFocused = day.unixDay === fechaFocus}
-        {@const isToday = fechaTodayUnix === day.unixDay}
+        {@const isSelected = day.unixDay === dateSelected}
+        {@const isFocused = day.unixDay === dateFocus}
+        {@const isToday = dateTodayUnix === day.unixDay}
         <button
           class="relative dp-day text-[14px] text-center flex items-center justify-center p-0 bg-transparent border-0 {isOutMonth ? 'is-out' : ''} {isSelected ? 'selected' : ''} {isFocused ? 'focused' : ''}"
           type="button"
@@ -312,7 +312,7 @@
             ev.stopPropagation()
             changeFechaSelected(day.unixDay)
             showCalendar = false
-            fechaFocus = 0
+            dateFocus = 0
             avoidCloseOnBlur = false
             if (onChange) onChange()
           }}

@@ -1,23 +1,23 @@
 // Product delta service: fetches product/brand/category deltas used by ProductSearch incremental updates.
 import { GetHandler } from "$libs/http.svelte";
-import type { IListaRegistro } from "$services/negocio/listas-compartidas.svelte";
-import type { IProducto } from "$services/services/productos.svelte";
+import type { ISharedListRecord } from "$services/negocio/listas-compartidas.svelte";
+import type { IProduct } from "$services/services/productos.svelte";
 
 interface ProductDeltaResult {
-	productos: IProducto[];
-	marcasCategorias: IListaRegistro[];
+	productos: IProduct[];
+	marcasCategorias: ISharedListRecord[];
 }
 
-export class ProductosDeltaService extends GetHandler<IProducto> {
+export class ProductosDeltaService extends GetHandler<IProduct> {
 	route = "p-productos-index-delta";
 	useCache = { min: 1, ver: 1 };
 	inferRemoveFromStatus = true;
 	prependOnSave = true;
-	productos: IProducto[] = [];
-	categorias: IListaRegistro[] = [];
-	marcas: IListaRegistro[] = [];
+	productos: IProduct[] = [];
+	categorias: ISharedListRecord[] = [];
+	marcas: ISharedListRecord[] = [];
 
-	makeName(record: Partial<IProducto>) {
+	makeName(record: Partial<IProduct>) {
 		return record.Nombre || "";
 	}
 

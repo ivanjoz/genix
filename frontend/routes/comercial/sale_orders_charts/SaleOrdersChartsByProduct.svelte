@@ -3,10 +3,10 @@
   import CheckboxOptions from '$components/form/CheckboxOptions.svelte'
   import HighlightText from '$components/misc/HighlightText.svelte'
   import VirtualCards from '$components/misc/VirtualCards.svelte'
-  import { FechaHelper } from '$libs/fecha'
+  import { DateHelper } from '$libs/date'
   import { formatN, formatTime, wordInclude } from '$libs/helpers'
   import FilterInput from '$components/form/FilterInput.svelte'
-  import type { IProducto } from '$routes/negocio/productos/productos.svelte'
+  import type { IProduct } from '$routes/negocio/productos/productos.svelte'
   import type { ISaleSummaryRecord } from './sale_orders_charts.svelte'
 
   type TChartMetricMode = 'amount' | 'quantity'
@@ -32,10 +32,10 @@
   interface SaleOrdersChartsByProductProps {
     chartMetricForm: IChartMetricForm
     saleSummaryRecords: ISaleSummaryRecord[]
-    productsByIdMap: Map<number, IProducto>
+    productsByIdMap: Map<number, IProduct>
   }
 
-  const fechaHelper = new FechaHelper()
+  const dateHelper = new DateHelper()
   const TOTAL_DAYS_TO_RENDER = 45
   const CARD_ROW_HEIGHT_PX = 206
   const chartMetricSelectionOptions: Array<{ ID: TChartMetricMode; Nombre: string }> = [
@@ -76,7 +76,7 @@
     }
   }
 
-  // Normalize mixed backend date formats to internal "fecha unix" day units.
+  // Normalize mixed backend date formats to internal "date unix" day units.
   const toFechaUnix = (rawFechaValue: number): number => {
     if (!rawFechaValue) return 0
 
@@ -88,14 +88,14 @@
       ? Math.floor(rawFechaValue / 1000)
       : rawFechaValue
 
-    return fechaHelper.toFechaUnix(normalizedFechaValue)
+    return dateHelper.toFechaUnix(normalizedFechaValue)
   }
 
   const last45FechaUnix = $derived.by(() => {
     const latestFechaUnixInSummary = saleSummaryRecords.reduce((latestFechaUnix, summaryRecord) => {
-      return Math.max(latestFechaUnix, toFechaUnix(summaryRecord.Fecha || 0))
+      return Math.max(latestFechaUnix, toFechaUnix(summaryRecord.Date || 0))
     }, 0)
-    const anchorFechaUnix = latestFechaUnixInSummary || fechaHelper.fechaUnixCurrent()
+    const anchorFechaUnix = latestFechaUnixInSummary || dateHelper.dateUnixCurrent()
 
     return Array.from({ length: TOTAL_DAYS_TO_RENDER }, (_, dayIndex) => {
       return anchorFechaUnix - (TOTAL_DAYS_TO_RENDER - 1) + dayIndex
@@ -104,15 +104,15 @@
 
   const productChartCards = $derived.by((): IProductChartCard[] => {
     const productChartsByID = new Map<number, IProductChartCard>()
-    const fechaIndexByUnix = new Map<number, number>()
+    const dateIndexByUnix = new Map<number, number>()
 
     for (let dayIndex = 0; dayIndex < last45FechaUnix.length; dayIndex += 1) {
-      fechaIndexByUnix.set(last45FechaUnix[dayIndex], dayIndex)
+      dateIndexByUnix.set(last45FechaUnix[dayIndex], dayIndex)
     }
 
     for (const summaryRecord of saleSummaryRecords) {
-      const recordFechaUnix = toFechaUnix(summaryRecord.Fecha || 0)
-      const recordDayIndex = fechaIndexByUnix.get(recordFechaUnix)
+      const recordFechaUnix = toFechaUnix(summaryRecord.Date || 0)
+      const recordDayIndex = dateIndexByUnix.get(recordFechaUnix)
       if (recordDayIndex === undefined) {
         continue
       }
@@ -279,7 +279,7 @@
             className="h-full w-full"
             dateLabels={last45FechaUnix}
             dateLabelEvery={6}
-            dateLabelFormatter={(fechaUnix) => String(formatTime(Number(fechaUnix || 0), 'd-M') || '')}
+            dateLabelFormatter={(dateUnix) => String(formatTime(Number(dateUnix || 0), 'd-M') || '')}
             useHtmlRendered={true}
             data={[
               { name: 'Ventas no pagadas', type: 'bar', values: productChartCard.unpaidValues, color: '#ef4444' },

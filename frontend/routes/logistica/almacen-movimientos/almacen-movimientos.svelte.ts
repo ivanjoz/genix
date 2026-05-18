@@ -4,8 +4,8 @@ import type { IProductStockLot } from '../products-stock/stock-movement';
 
 interface IQueryAlmacenMovimientos {
   almacenID: number
-  fechaInicio: number
-  fechaFin: number
+  dateInicio: number
+  dateFin: number
   productoID?: number
   lotCode?: string
   documentID?: number
@@ -24,7 +24,7 @@ export interface IWarehouseProductMovement {
   WarehouseID?: number
   WarehouseRefID?: number
   WarehouseRefQuantity?: number
-  Fecha?: number
+  Date?: number
   DocumentID?: number
   ProductoID?: number
   PresentacionID?: number
@@ -52,13 +52,13 @@ export const movimientoTipos = [
 
 export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): Promise<IWarehouseProductMovement[]> => {
   const isDirectLookup = !!(args.serialNumber?.trim() || args.lotCode?.trim() || (args.documentID || 0) > 0)
-  if (!isDirectLookup && (!args.fechaInicio || !args.fechaFin)) {
-    throw new Error('No se encontró una fecha de inicio o fin.')
+  if (!isDirectLookup && (!args.dateInicio || !args.dateFin)) {
+    throw new Error('No se encontró una date de inicio o fin.')
   }
 
   const queryParams = new URLSearchParams()
-  queryParams.set('fecha-inicio', String(args.fechaInicio))
-  queryParams.set('fecha-fin', String(args.fechaFin))
+  queryParams.set('date-inicio', String(args.dateInicio))
+  queryParams.set('date-fin', String(args.dateFin))
   if (args.almacenID > 0) { queryParams.set('almacen-id', String(args.almacenID)) }
   if (args.productoID > 0) { queryParams.set('producto-id', String(args.productoID)) }
   if (args.tipo > 0) { queryParams.set('tipo', String(args.tipo)) }

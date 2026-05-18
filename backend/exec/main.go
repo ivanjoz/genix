@@ -17,7 +17,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-importar-ciudades":    ImportCiudades,
 	"fn-exportar-ciudades":    ExportCiudades,
 	"fn-backup":               DoSaveBackup,
-	"fn-homologate":           Homologate,
+	"fn-homologate":           DeployDatabaseSchemas,
 	"fn-recalc":               RecalcVirtualColumnsValues,
 	"fn-recalc-stock":         RecalcStock,
 	"fn-generate-sale-orders": GenerateSampleSaleOrders,

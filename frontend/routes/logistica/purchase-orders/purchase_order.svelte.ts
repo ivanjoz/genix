@@ -113,8 +113,8 @@ export interface IPurchaseOrderGroupRecord {
 }
 
 export interface IPurchaseOrderReportForm {
-  fechaInicio: number
-  fechaFin: number
+  dateInicio: number
+  dateFin: number
   status: number
   productID: number
   providerID: number
@@ -147,16 +147,16 @@ export class PurchaseOrdersService extends GetHandler<IPurchaseOrder> {
 const MAX_REPORT_RECORDS = 2000
 
 // Report-mode query: backend indexes are grouped by Week, so the frontend still trims to
-// the exact [fechaInicio, fechaFin] range (week boundaries may spill ±6 days outside it)
+// the exact [dateInicio, dateFin] range (week boundaries may spill ±6 days outside it)
 // and post-filters by status when the backend cannot (no Week+Status grouped index).
 export const queryPurchaseOrders = async (filters: IPurchaseOrderReportForm): Promise<IPurchaseOrder[]> => {
-  if (!filters.fechaInicio || !filters.fechaFin) {
-    throw new Error('Debe especificar la fecha inicial y final.')
+  if (!filters.dateInicio || !filters.dateFin) {
+    throw new Error('Debe especificar la date inicial y final.')
   }
 
   const queryParams = new URLSearchParams()
-  queryParams.set('fecha-start', String(filters.fechaInicio))
-  queryParams.set('fecha-end', String(filters.fechaFin))
+  queryParams.set('date-start', String(filters.dateInicio))
+  queryParams.set('date-end', String(filters.dateFin))
   if ((filters.status || 0) > 0) { queryParams.set('status', String(filters.status)) }
   if ((filters.productID || 0) > 0) { queryParams.set('product-id', String(filters.productID)) }
   if ((filters.providerID || 0) > 0) { queryParams.set('provider-id', String(filters.providerID)) }
@@ -178,7 +178,7 @@ export const queryPurchaseOrders = async (filters: IPurchaseOrderReportForm): Pr
     .flatMap((groupRecord) => groupRecord.records || [])
     .filter((r) => (r?.ID || 0) > 0)
     // Trim to the exact day range because the backend uses Week-based grouped indexes.
-    .filter((r) => (r.Date || 0) >= filters.fechaInicio && (r.Date || 0) <= filters.fechaFin)
+    .filter((r) => (r.Date || 0) >= filters.dateInicio && (r.Date || 0) <= filters.dateFin)
 
   const statusFilter = filters.status || 0
   // Client-side status filter covers the status-only case where the backend cannot narrow

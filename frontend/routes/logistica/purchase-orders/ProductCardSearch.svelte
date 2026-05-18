@@ -1,5 +1,5 @@
 <script lang="ts" module>
-import type { ProductosService, IProducto, IProductoPresentacion } from '$routes/negocio/productos/productos.svelte'
+import type { ProductosService, IProduct, IProductPresentation } from '$routes/negocio/productos/productos.svelte'
 import type { ClientProviderService } from '$routes/negocio/clientes/clientes-proveedores.svelte'
 
 export interface IProductCard {
@@ -16,8 +16,8 @@ export interface IProductCard {
   priceMax: number
   priceLabel: string
   searchText: string
-  producto: IProducto
-  presentation?: IProductoPresentacion
+  producto: IProduct
+  presentation?: IProductPresentation
 }
 
 export interface ProductCardSearchProps {

@@ -25,7 +25,7 @@ let viewportWidth = $state(browser ? window.innerWidth : 1280)
 
 const getCurrentDeltaDatabaseName = () => {
   // The modal reads the same environment/company scoped database where the worker stores request logs.
-  return makeDeltaCacheDatabaseName(Env.getEmpresaID(), Env.enviroment || 'main')
+  return makeDeltaCacheDatabaseName(Env.getCompanyID(), Env.enviroment || 'main')
 }
 
 const requestLogsGridHeight = $derived(
@@ -122,7 +122,7 @@ const loadRecentRequestLogs = async (forceReload = false) => {
   console.debug('[HeaderRequestLogsModal] Loading request logs.', {
     forceReload,
     enviroment: Env.enviroment,
-    companyID: Env.getEmpresaID(),
+    companyID: Env.getCompanyID(),
   })
 
   try {

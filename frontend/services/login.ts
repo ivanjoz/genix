@@ -1,11 +1,11 @@
 import { GET, POST } from '$libs/http.svelte';
 import { accessHelper, checkIsLogin, registerReloadLogin } from '$core/security';
-import type { IUsuario, ILoginResult } from '$core/types/common';
+import type { IUser, ILoginResult } from '$core/types/common';
 import { Env } from '$core/env';
 
 export interface ILogin {
-  EmpresaID: number
-  Usuario: string
+  CompanyID: number
+  User: string
   Password: string
   CipherKey: string
 }
@@ -18,6 +18,8 @@ export const sendUserLogin = async (data: ILogin): Promise<any> => {
   let loginInfo: ILoginResult
   data.CipherKey = makeRamdomString(32)
 
+  console.log(data)
+  
   try {
     loginInfo = await POST({
       data,

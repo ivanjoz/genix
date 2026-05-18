@@ -24,9 +24,9 @@ import { formatN } from '$libs/helpers';
     postCajaMovimiento,
     cajaTipos,
     cajaMovimientoTipos,
-    type ICaja,
-    type ICajaCuadre,
-    type ICajaMovimiento,
+    type ICashBank,
+    type ICashReconciliation,
+    type ICashBankMovement,
   } from "./cajas.svelte"
 
   const cajaMovimientoTiposMap = new Map(cajaMovimientoTipos.map(x => [x.id, x]))
@@ -36,15 +36,15 @@ import { formatN } from '$libs/helpers';
 
   let filterText = $state("")
   let layerView = $state(1)
-  let cajaForm = $state({} as ICaja)
-  let cajaCuadreForm = $state({} as ICajaCuadre)
-  let cajaMovimientoForm = $state({} as ICajaMovimiento)
-  let cajaMovimientos = $state([] as ICajaMovimiento[])
-  let cajaCuadres = $state([] as ICajaCuadre[])
+  let cajaForm = $state({} as ICashBank)
+  let cajaCuadreForm = $state({} as ICashReconciliation)
+  let cajaMovimientoForm = $state({} as ICashBankMovement)
+  let cajaMovimientos = $state([] as ICashBankMovement[])
+  let cajaCuadres = $state([] as ICashReconciliation[])
   let isLoadingMovimientos = $state(false)
   let isLoadingCuadres = $state(false)
 
-  const columns: ITableColumn<ICaja>[] = [
+  const columns: ITableColumn<ICashBank>[] = [
     {
       header: "ID",
       headerCss: "w-32",
@@ -68,10 +68,10 @@ import { formatN } from '$libs/helpers';
       render: e => {
         if (!e.CuadreFecha) { return "" }
         const saldo = formatN(e.CuadreSaldo / 100, 2)
-        const fecha = formatTime(e.CuadreFecha, "d-M h:n")
+        const date = formatTime(e.CuadreFecha, "d-M h:n")
         return `<div class="leading-tight text-right">
           <div class="ff-mono text-[0.875rem]">${saldo}</div>
-          <div class="text-[0.875rem] text-slate-500">${fecha}</div>
+          <div class="text-[0.875rem] text-slate-500">${date}</div>
         </div>`
       }
     },
@@ -115,7 +115,7 @@ import { formatN } from '$libs/helpers';
     form.SaldoSistema = cajaForm.SaldoCurrent
 
     Loading.standard("Guardando caja...")
-    let recordSaved: ICajaCuadre & { NeedUpdateSaldo: number }
+    let recordSaved: ICashReconciliation & { NeedUpdateSaldo: number }
     try {
       recordSaved = await postCajaCuadre(form)
     } catch (error) {
@@ -149,7 +149,7 @@ import { formatN } from '$libs/helpers';
       return
     }
     Loading.standard("Guardando Movimiento...")
-    let movimientoSaved: ICajaMovimiento
+    let movimientoSaved: ICashBankMovement
     try {
       movimientoSaved = await postCajaMovimiento(form)
     } catch (error) {
@@ -222,7 +222,7 @@ import { formatN } from '$libs/helpers';
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
           <Button color="green" icon="icon-plus" label="Opens the modal to create a new cash register (caja)." onClick={ev => {
-            cajaForm = { ID: -1, ss: 1 } as ICaja
+            cajaForm = { ID: -1, ss: 1 } as ICashBank
             Core.openModal(1)
           }} />
         </div>
@@ -234,7 +234,7 @@ import { formatN } from '$libs/helpers';
         isSelected={(e, id) => e?.ID === id as number}
         tableCss="cursor-pointer"
         onRowClick={(record) => {
-          const el = cajaForm.ID === record.ID ? {} as ICaja : { ...record }
+          const el = cajaForm.ID === record.ID ? {} as ICashBank : { ...record }
           cajaForm = el
         }}
       />
@@ -270,7 +270,7 @@ import { formatN } from '$libs/helpers';
                 Core.openModal(3)
                 cajaMovimientoForm = {
                   CajaID: cajaForm.ID, SaldoFinal: cajaForm.SaldoCurrent,
-                } as ICajaMovimiento
+                } as ICashBankMovement
               }} />
             </div>
           </div>
@@ -279,7 +279,7 @@ import { formatN } from '$libs/helpers';
             data={cajaMovimientos}
             columns={[
               {
-                header: "Fecha Hora",
+                header: "Date Hora",
                 getValue: e => formatTime(e.Created, "d-M h:n") as string
               },
               {
@@ -335,7 +335,7 @@ import { formatN } from '$libs/helpers';
             <div class="flex items-center">
               <Button color="green" icon="icon-plus" label="Opens the modal to add a new cash balance reconciliation." onClick={() => {
                 Core.openModal(2)
-                cajaCuadreForm = { CajaID: cajaForm.ID } as ICajaCuadre
+                cajaCuadreForm = { CajaID: cajaForm.ID } as ICashReconciliation
               }} />
             </div>
           </div>
@@ -344,7 +344,7 @@ import { formatN } from '$libs/helpers';
             data={cajaCuadres}
             columns={[
               {
-                header: "Fecha Hora",
+                header: "Date Hora",
                 getValue: e => formatTime(e.Created, "d-M h:n") as string
               },
               {

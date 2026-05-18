@@ -252,7 +252,7 @@ $effect(() => {
       <div class="ml-8 flex shrink-0 items-center gap-8">
         <button
           class="h-40 w-40 shrink-0 _5 _5b"
-          aria-label="Limpiar fecha"
+          aria-label="Limpiar date"
           onclick={() => {
             clearSelectedDate()
           }}
@@ -261,7 +261,7 @@ $effect(() => {
         </button>
         <button
           class="h-40 w-40 shrink-0 _5"
-          aria-label="Cerrar selector de fecha"
+          aria-label="Cerrar selector de date"
           onclick={() => {
             commitTypedDate()
             closeLayer()

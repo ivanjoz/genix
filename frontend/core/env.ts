@@ -110,7 +110,7 @@ export const getWindow = () => {
   } as Window
 }
 
-export interface IEmpresaParams {
+export interface ICompanyParams {
   CulqiLlave: string
   Nombre: string
   id: number
@@ -142,8 +142,8 @@ export const Env = {
   throttleTimer: null as NodeJS.Timeout | null,
   hostname: "",
   pathname: "",
-  empresaID: 0,
-  empresa: {} as IEmpresaParams,
+  companyID: 0,
+  empresa: {} as ICompanyParams,
   imageCounter: 10000,
   // Product-search debug and telemetry logs are centralized here.
   PRODUCT_SEARCH_FULL_DEBUG_LOG_ENABLED: false,
@@ -171,12 +171,12 @@ export const Env = {
     if(browser){ return window.location.pathname }
     return Env.pathname || ""
   },
-  getEmpresaID: (): number => {
-    if(!Env.empresaID){
-      const localEmpresaID = browser ? localStorage.getItem(Env.appId + "EmpresaID") : null
-      if(localEmpresaID){
-        Env.empresaID = parseInt(localEmpresaID)
-        return Env.empresaID
+  getCompanyID: (): number => {
+    if(!Env.companyID){
+      const localCompanyID = browser ? localStorage.getItem(Env.appId + "CompanyID") : null
+      if(localCompanyID){
+        Env.companyID = parseInt(localCompanyID)
+        return Env.companyID
       }
 
       let pathname = ""
@@ -187,34 +187,34 @@ export const Env = {
       pathname = pathname.replace(".html","")
       const paths = pathname.split("/").filter(x => x)
       if(paths[1] && paths[1].includes("-")){
-        let empresaID = paths[1].split("-")[0]
-        if(!isNaN(empresaID as unknown as number)){
-          Env.empresaID = parseInt(empresaID)
+        let companyID = paths[1].split("-")[0]
+        if(!isNaN(companyID as unknown as number)){
+          Env.companyID = parseInt(companyID)
         }
       } else if(!isNaN(paths[1] as unknown as number)){
-        return Env.empresaID = parseInt(paths[1])
+        return Env.companyID = parseInt(paths[1])
       }
     }
-    return Env.empresaID
+    return Env.companyID
   },
   loadEmpresaConfig: () => {
     if(Env.empresa.id){ return }
-    const empresaID = Env.getEmpresaID()
-    if(empresaID){
-      fetch(Env.CDN_URL +`empresas/e-${empresaID}.json`)
+    const companyID = Env.getCompanyID()
+    if(companyID){
+      fetch(Env.CDN_URL +`empresas/e-${companyID}.json`)
       .then(res => res.json())
       .then(res => {
         Env.empresa = res
       })
     } else {
-      console.warn("No se encontró la empresa-id:", empresaID)
+      console.warn("No se encontró la empresa-id:", companyID)
     }
   },
   makeRoute: (route: string) => {
     const api = Env.API_ROUTES.MAIN
     if(route[0] === "/"){ route = route.substring(1) }
     const sep = route.includes("?") ? "&" : "?"
-    return api + route + sep + `empresa-id=${Env.getEmpresaID()}`
+    return api + route + sep + `company-id=${Env.getCompanyID()}`
 	},
 	makeCDNRoute: (...segments: string[]) => {
 		return makeRoute(Env.CDN_URL, ...segments)

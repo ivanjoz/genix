@@ -1,6 +1,6 @@
-export interface IUsuario {
+export interface IUser {
   ID: number;
-  EmpresaID: number;
+  CompanyID: number;
   Nombres: string;
   Apellidos: string;
   Email: string;
@@ -20,9 +20,9 @@ export interface IUsuario {
   PasswordHash: string;
 }
 
-export interface IPerfil {
+export interface IProfile {
   ID: number;
-  EmpresaID: number;
+  CompanyID: number;
   Nombre: string;
   Descripcion?: string;
   Accesos: number[];
@@ -46,5 +46,5 @@ export interface ILoginResult {
   UserInfo: string;
   AccesosComputed: string;
   TokenExpTime: number;
-  EmpresaID: number;
+  CompanyID: number;
 }

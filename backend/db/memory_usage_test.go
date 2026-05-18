@@ -33,7 +33,7 @@ func formatBytes(b uint64) string {
 // SimpleTable - minimal table with 5 columns
 type simpleRecord struct {
 	TableStruct[simpleSchema, simpleRecord]
-	EmpresaID int32  `db:"empresa_id"`
+	CompanyID int32  `db:"empresa_id"`
 	ID        string `db:"id"`
 	Name      string `db:"name"`
 	Updated   int64  `db:"updated"`
@@ -42,7 +42,7 @@ type simpleRecord struct {
 
 type simpleSchema struct {
 	TableStruct[simpleSchema, simpleRecord]
-	EmpresaID Col[simpleSchema, int32]
+	CompanyID Col[simpleSchema, int32]
 	ID        Col[simpleSchema, string]
 	Name      Col[simpleSchema, string]
 	Updated   Col[simpleSchema, int64]
@@ -52,7 +52,7 @@ type simpleSchema struct {
 func (e simpleSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Name:      "simple_table",
-		Partition: e.EmpresaID,
+		Partition: e.CompanyID,
 		Keys:      []Coln{e.ID},
 	}
 }
@@ -60,7 +60,7 @@ func (e simpleSchema) GetSchema() TableSchema {
 // MediumTable - medium complexity with 15 columns and 2 indexes
 type mediumRecord struct {
 	TableStruct[mediumSchema, mediumRecord]
-	EmpresaID     int32   `db:"empresa_id"`
+	CompanyID     int32   `db:"empresa_id"`
 	ID            string  `db:"id"`
 	SKU           string  `db:"sku"`
 	Name          string  `db:"name"`
@@ -79,7 +79,7 @@ type mediumRecord struct {
 
 type mediumSchema struct {
 	TableStruct[mediumSchema, mediumRecord]
-	EmpresaID     Col[mediumSchema, int32]
+	CompanyID     Col[mediumSchema, int32]
 	ID            Col[mediumSchema, string]
 	SKU           Col[mediumSchema, string]
 	Name          Col[mediumSchema, string]
@@ -99,7 +99,7 @@ type mediumSchema struct {
 func (e mediumSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Name:      "medium_table",
-		Partition: e.EmpresaID,
+		Partition: e.CompanyID,
 		Keys:      []Coln{e.ID},
 		Indexes: []Index{
 			{Type: TypeLocalIndex, Keys: []Coln{e.SKU}},
@@ -116,7 +116,7 @@ func (e mediumSchema) GetSchema() TableSchema {
 // ComplexTable - complex table with 25 columns, multiple indexes, and views
 type complexRecord struct {
 	TableStruct[complexSchema, complexRecord]
-	EmpresaID       int32    `db:"empresa_id"`
+	CompanyID       int32    `db:"empresa_id"`
 	ID              string   `db:"id"`
 	Code            string   `db:"code"`
 	Reference       string   `db:"reference"`
@@ -146,7 +146,7 @@ type complexRecord struct {
 
 type complexSchema struct {
 	TableStruct[complexSchema, complexRecord]
-	EmpresaID       Col[complexSchema, int32]
+	CompanyID       Col[complexSchema, int32]
 	ID              Col[complexSchema, string]
 	Code            Col[complexSchema, string]
 	Reference       Col[complexSchema, string]
@@ -177,7 +177,7 @@ type complexSchema struct {
 func (e complexSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Name:      "complex_table",
-		Partition: e.EmpresaID,
+		Partition: e.CompanyID,
 		Keys:      []Coln{e.ID},
 		Indexes: []Index{
 			{Type: TypeLocalIndex, Keys: []Coln{e.Code}},
@@ -208,7 +208,7 @@ func (e complexSchema) GetSchema() TableSchema {
 // VeryComplexTable - very complex table with 40 columns, many indexes, views, and KeyConcatenated
 type veryComplexRecord struct {
 	TableStruct[veryComplexSchema, veryComplexRecord]
-	EmpresaID         int32    `db:"empresa_id"`
+	CompanyID         int32    `db:"empresa_id"`
 	ID                string   `db:"id"`
 	Code              string   `db:"code"`
 	Reference         string   `db:"reference"`
@@ -252,7 +252,7 @@ type veryComplexRecord struct {
 
 type veryComplexSchema struct {
 	TableStruct[veryComplexSchema, veryComplexRecord]
-	EmpresaID         Col[veryComplexSchema, int32]
+	CompanyID         Col[veryComplexSchema, int32]
 	ID                Col[veryComplexSchema, string]
 	Code              Col[veryComplexSchema, string]
 	Reference         Col[veryComplexSchema, string]
@@ -297,7 +297,7 @@ type veryComplexSchema struct {
 func (e veryComplexSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Name:            "very_complex_table",
-		Partition:       e.EmpresaID,
+		Partition:       e.CompanyID,
 		Keys:            []Coln{e.ID},
 		KeyConcatenated: []Coln{e.WarehouseID, e.CategoryID, e.SupplierID},
 		Indexes: []Index{

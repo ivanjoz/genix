@@ -20,7 +20,7 @@ import {
     makeStockID,
     postProductosStock,
     type IPostProductoStockItem,
-    type IProductoStock,
+    type IProductStock,
     type IProductStockDetail,
     type IProductStockLot,
 } from './stock-movement';
@@ -33,7 +33,7 @@ type IProductStockDetailRow = IProductStockDetail & {
 }
 
 type IProductoStockDisplay = {
-  base: IProductoStock
+  base: IProductStock
   groupKey: string
   lots: IProductStockDetailRow[]
   serialNumbers: IProductStockDetailRow[]
@@ -53,8 +53,8 @@ const productos = new ProductosService(true)
 
 let stockFilters = $state({ warehouseID: 0, showTodosProductos: false })
 let stockFilterText = $state('')
-let almacenStock = $state([] as IProductoStock[])
-let almacenStockGetted = [] as IProductoStock[]
+let almacenStock = $state([] as IProductStock[])
+let almacenStockGetted = [] as IProductStock[]
 let selectedSerialNumberGroup = $state<IProductoStockDisplay | null>(null)
 let selectedSerialNumbers = $state<IProductStockDetailRow[]>([])
 let selectedLotGroup = $state<IProductoStockDisplay | null>(null)
@@ -187,7 +187,7 @@ const getNewDetailRowsMap = (panelType: 'serial' | 'lot') => {
   return panelType === 'serial' ? newSerialNumberRowsByProductStockID : newLotRowsByProductStockID
 }
 
-const getNewDetailRows = (productStockRecord: IProductoStock, panelType: 'serial' | 'lot') => {
+const getNewDetailRows = (productStockRecord: IProductStock, panelType: 'serial' | 'lot') => {
   return getNewDetailRowsMap(panelType).get(productStockRecord.ID) || []
 }
 
@@ -212,7 +212,7 @@ const touchPendingDetailRows = (reason: string, productStockID?: number) => {
   pendingDetailRowsVersion++
 }
 
-const persistNewDetailRows = (productStockRecord: IProductoStock, panelType: 'serial' | 'lot') => {
+const persistNewDetailRows = (productStockRecord: IProductStock, panelType: 'serial' | 'lot') => {
   const stockDetails = (panelType === 'serial' ? selectedSerialNumbers : selectedLots)
     .filter((stockDetail) => stockDetail._isNew && shouldPersistNewDetailRow(stockDetail))
 
@@ -225,7 +225,7 @@ const persistNewDetailRows = (productStockRecord: IProductoStock, panelType: 'se
   touchPendingDetailRows(`persist-${panelType}`, productStockRecord.ID)
 }
 
-const getSerialNumberRows = (productStockRecord: IProductoStock) => {
+const getSerialNumberRows = (productStockRecord: IProductStock) => {
   return [
     ...(productStockRecord.StockDetails as IProductStockDetailRow[])
       .filter((stockDetail) => !!stockDetail.SerialNumber),
@@ -234,7 +234,7 @@ const getSerialNumberRows = (productStockRecord: IProductoStock) => {
   ]
 }
 
-const getLotRows = (productStockRecord: IProductoStock) => {
+const getLotRows = (productStockRecord: IProductStock) => {
   return [
     ...(productStockRecord.StockDetails as IProductStockDetailRow[])
       .filter((stockDetail) => !stockDetail.SerialNumber && hasLotAssignment(stockDetail)),
@@ -244,7 +244,7 @@ const getLotRows = (productStockRecord: IProductoStock) => {
 }
 
 const createPendingStockDetail = (
-  productStockRecord: IProductoStock,
+  productStockRecord: IProductStock,
   panelType: 'serial' | 'lot',
 ): IProductStockDetailRow => ({
   ProductStockID: productStockRecord.ID,
@@ -810,7 +810,7 @@ const guardarRegistros = async () => {
 }
 
 const fillAllProductos = () => {
-  const productStockMap = new Map<number, IProductoStock>(
+  const productStockMap = new Map<number, IProductStock>(
     almacenStockGetted.map((productStockRecord) => [productStockRecord.ID, productStockRecord]),
   )
 
@@ -827,7 +827,7 @@ const fillAllProductos = () => {
       })
 
       if (productStockMap.has(stockID)) {
-        const existingProductStock = productStockMap.get(stockID) as IProductoStock
+        const existingProductStock = productStockMap.get(stockID) as IProductStock
         existingProductStock.PresentationID = presentationID
         continue
       }
@@ -847,7 +847,7 @@ const fillAllProductos = () => {
   almacenStock = [...productStockMap.values()]
 }
 
-const updateStockQuantity = (productStockRecord: IProductoStock, quantity: number) => {
+const updateStockQuantity = (productStockRecord: IProductStock, quantity: number) => {
   const existingProductStock = almacenStock.find((rowRecord) => rowRecord.ID === productStockRecord.ID)
     || almacenStockGetted.find((rowRecord) => rowRecord.ID === productStockRecord.ID)
 

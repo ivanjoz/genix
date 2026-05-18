@@ -120,7 +120,7 @@ let fetchFromServer: CacheByIDsFetchFromServer = async <T extends IMinimalRecord
 	try {
 		// `apiRoute` is treated as the backend route (example: `p-productos-ids`).
 		const responsePayload = await GET({
-			route: `${apiRoute}?${uriParams}&cmp=${Env.getEmpresaID()}`
+			route: `${apiRoute}?${uriParams}&cmp=${Env.getCompanyID()}`
 		})
 
 		// Support both raw array responses and wrapped `{ records: [...] }` payloads.
@@ -616,7 +616,7 @@ export const clearCacheByIDs = async (): Promise<{ databaseName: string; cleared
 	updatedBufferStarTime = 0
 
 	const clearedDatabase = await clearCacheByIDsDatabase(
-		Env.getEmpresaID(),
+		Env.getCompanyID(),
 		Env.enviroment || 'main',
 	)
 	console.debug(`${LOG_PREFIX} Cache cleared.`, {
@@ -897,7 +897,7 @@ const fetchStaticRecordsFromServer = async <T extends { ID: number }>(
 	const uriParams = buildFetchUriParams(ids, [], [])
 	try {
 		const responsePayload = await GET({
-			route: `${apiRoute}?${uriParams}&cmp=${Env.getEmpresaID()}`,
+			route: `${apiRoute}?${uriParams}&cmp=${Env.getCompanyID()}`,
 		})
 		if (Array.isArray(responsePayload)) return responsePayload as T[]
 		if (Array.isArray(responsePayload?.records)) return responsePayload.records as T[]

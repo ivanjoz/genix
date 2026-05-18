@@ -12,7 +12,7 @@ import { formatN } from '$libs/helpers';
     CajasService,
     getCajaMovimientos,
     cajaMovimientoTipos,
-    type ICajaMovimiento,
+    type ICashBankMovement,
   } from "../cajas/cajas.svelte"
 
   const cajas = new CajasService()
@@ -23,11 +23,11 @@ import { formatN } from '$libs/helpers';
     return Math.floor(Date.now() / (1000 * 60 * 60 * 24))
   }
 
-  const fechaFin = getFechaUnix()
-  const fechaInicio = fechaFin - 7
+  const dateFin = getFechaUnix()
+  const dateInicio = dateFin - 7
 
-  let form = $state({ fechaFin, fechaInicio, CajaID: 0 })
-  let cajaMovimientos = $state([] as ICajaMovimiento[])
+  let form = $state({ dateFin, dateInicio, CajaID: 0 })
+  let cajaMovimientos = $state([] as ICashBankMovement[])
   let filterText = $state("")
 
   // Set default caja when cajas are loaded
@@ -41,13 +41,13 @@ import { formatN } from '$libs/helpers';
   })
 
   const consultarRegistros = async () => {
-    if (!form.CajaID || !form.fechaInicio || !form.fechaFin) {
-      Notify.failure("Debe seleccionar una caja y un rango de fechas.")
+    if (!form.CajaID || !form.dateInicio || !form.dateFin) {
+      Notify.failure("Debe seleccionar una caja y un rango de dates.")
       return
     }
 
     Loading.standard("Consultando registros...")
-    let result: ICajaMovimiento[]
+    let result: ICashBankMovement[]
     try {
       result = await getCajaMovimientos(form)
     } catch (error) {
@@ -60,9 +60,9 @@ import { formatN } from '$libs/helpers';
     console.log("movimientos obtenidos: ", result)
   }
 
-  const columns: ITableColumn<ICajaMovimiento>[] = [
+  const columns: ITableColumn<ICashBankMovement>[] = [
     {
-      header: "Fecha Hora",
+      header: "Date Hora",
       headerCss: "w-140",
       css: "ff-mono px-6",
       getValue: e => formatTime(e.Created, "d-M h:n") as string
@@ -120,15 +120,15 @@ import { formatN } from '$libs/helpers';
         required={true}
       />
       <DateInput
-        label="Fecha Inicio"
+        label="Date Inicio"
         css="w-140 mr-12"
-        save="fechaInicio"
+        save="dateInicio"
         bind:saveOn={form}
       />
       <DateInput
-        label="Fecha Fin"
+        label="Date Fin"
         css="w-140 mr-12"
-        save="fechaFin"
+        save="dateFin"
         bind:saveOn={form}
       />
       <button class="px-16 py-8 bx-blue mt-8 h-44"

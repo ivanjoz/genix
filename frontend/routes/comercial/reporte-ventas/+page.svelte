@@ -15,12 +15,12 @@
 
   const getCurrentUnixDay = (): number => Math.floor(Date.now() / (1000 * 60 * 60 * 24));
 
-  const fechaFin = getCurrentUnixDay();
-  const fechaInicio = fechaFin - 7;
+  const dateFin = getCurrentUnixDay();
+  const dateInicio = dateFin - 7;
 
   let reportForm = $state({
-    fechaInicio,
-    fechaFin,
+    dateInicio,
+    dateFin,
     status: 0,
     productID: 0,
     clientID: 0,
@@ -81,15 +81,15 @@
 			>
 				<div class="w-full grid grid-cols-24 gap-12 p-12" aria-label="Sales report filter with date range, client, product, and status">
 			    <DateInput
-			      label="Fecha Inicio"
+			      label="Date Inicio"
 			      css="col-span-12"
-			      save="fechaInicio"
+			      save="dateInicio"
 			      bind:saveOn={reportForm}
 			    />
 			    <DateInput
-			      label="Fecha Fin"
+			      label="Date Fin"
 			      css="col-span-12"
-			      save="fechaFin"
+			      save="dateFin"
 			      bind:saveOn={reportForm}
 			    />
 		      <SearchSelect
@@ -139,10 +139,10 @@
 			<KeyValueStrip
 				css="col-span-2 row-start-2 w-full md:w-auto"
 				label1="Fec. Inicio"
-				value1={reportForm.fechaInicio}
+				value1={reportForm.dateInicio}
 				getContent1={v => formatTime(v,"d-m-Y") as string}
 				label2="Fec. Fin"
-				value2={reportForm.fechaFin}
+				value2={reportForm.dateFin}
 				getContent2={v => formatTime(v,"d-m-Y") as string}
 				label3="Cliente"
 				value3={reportForm.clientID}

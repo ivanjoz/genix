@@ -12,7 +12,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-func SaveBackup(empresaID int32) error {
+func SaveBackup(companyID int32) error {
 
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
@@ -23,11 +23,11 @@ func SaveBackup(empresaID int32) error {
 	// Scylla Tables - Controllers
 	for _, controller := range MakeScyllaControllers() {
 		scyllaTable := controller.GetTable()
-		name := fmt.Sprintf("%v.%v.csv.zstd", scyllaTable.GetName(), empresaID)
+		name := fmt.Sprintf("%v.%v.csv.zstd", scyllaTable.GetName(), companyID)
 
 		core.Log("Obteniendo registros de: ", name, "...")
 
-		csv, err := controller.GetRecordsCSV(empresaID)
+		csv, err := controller.GetRecordsCSV(companyID)
 		if err != nil {
 			return core.Err(err)
 		}
@@ -62,7 +62,7 @@ func SaveBackup(empresaID int32) error {
 
 	err = cloud.SaveFile(cloud.SaveFileArgs{
 		Bucket:      core.Env.S3_BUCKET,
-		Path:        fmt.Sprintf("backups/%v", empresaID),
+		Path:        fmt.Sprintf("backups/%v", companyID),
 		FileContent: buf.Bytes(),
 		ContentType: "application/x-tar",
 		Name:        fileName,
@@ -93,7 +93,7 @@ type BackupFile struct {
 
 func GetBackups(args *core.HandlerArgs) core.HandlerResponse {
 
-	prefix := fmt.Sprintf("backups/%v/", args.Usuario.EmpresaID)
+	prefix := fmt.Sprintf("backups/%v/", args.User.CompanyID)
 
 	s3Files, err := cloud.S3ListFiles(cloud.SaveFileArgs{
 		Bucket:  core.Env.S3_BUCKET,

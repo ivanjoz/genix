@@ -1,7 +1,7 @@
 <script lang="ts">
 import { arrayToMapN } from '$libs/helpers';
 import { Core } from '$core/store.svelte';
-  import { accesoAcciones, type IAcceso, type IPerfil } from "./perfiles-accesos.svelte"
+  import { accesoAcciones, type IAccess, type IProfile } from "./perfiles-accesos.svelte"
 
   const accesoAccionesMap = arrayToMapN(accesoAcciones, 'id')
 
@@ -9,8 +9,8 @@ import { Core } from '$core/store.svelte';
     acceso,
     perfilForm = $bindable()
   }: {
-    acceso: IAcceso
-    perfilForm?: IPerfil
+    acceso: IAccess
+    perfilForm?: IProfile
   } = $props()
 
   const acciones = $derived(perfilForm?.accesosMap?.get(acceso.id) || [])

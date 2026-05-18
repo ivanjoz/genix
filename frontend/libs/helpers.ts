@@ -311,7 +311,7 @@ export const formatTime = (date: Date | number | string, layout?: string): (Date
     d = new Date()
   }
   else if (typeof date === "number") {
-    // Valida las fechas por dia, segundo o ms
+    // Valida las dates por dia, segundo o ms
     if (date < 30000) {
       // Si es por día, le agrega 10 horas por desfase GTM Perú
       date = date * 1000 * 86400 + 36000000
@@ -359,7 +359,7 @@ export const formatTime = (date: Date | number | string, layout?: string): (Date
     }
   }
 
-  // Revisa si es una fecha válida
+  // Revisa si es una date válida
   if (!d || !(d instanceof Date) || !d.getTime) return layout ? "" : null
 
   const _dia = d.getDate()
@@ -373,42 +373,42 @@ export const formatTime = (date: Date | number | string, layout?: string): (Date
 
   if (!layout) { return d }
 
-  let fechaStr = ""
+  let dateStr = ""
   for (const sec of layout) {
     switch (sec) {
       case "y":
-        fechaStr += year.substring(2, 4)
+        dateStr += year.substring(2, 4)
         break
       case "Y":
-        fechaStr += year
+        dateStr += year
         break
       case "m":
-        fechaStr += mes
+        dateStr += mes
         break
       case "M":
-        fechaStr += mesesMap.get(mes)?.es || "?"
+        dateStr += mesesMap.get(mes)?.es || "?"
         break
       case "d":
-        fechaStr += dia
+        dateStr += dia
         break
       case "h": {
         let hora: string | number = d.getHours()
         if (hora < 10) hora = "0" + hora
-        fechaStr += hora
+        dateStr += hora
         break
       }
       case "n": {
         let min: string | number = d.getMinutes()
         if (min < 10) min = "0" + min
-        fechaStr += min
+        dateStr += min
         break
       }
       default:
-        fechaStr += sec
+        dateStr += sec
     }
   }
 
-  return fechaStr
+  return dateStr
 }
 
 export const arrayToMapN = <T>(array: T[], keys?: keyof T | (keyof T)[]):
@@ -600,12 +600,12 @@ const FIELD_PERSIST_GROUP_SIZE = 20;
 export function persistFieldValue(componentId: number, value: number | string | null | undefined) {
   if (typeof window === "undefined") { return; }
   if (typeof componentId !== "number" || componentId <= 0) { return; }
-  const empresaID = Env.getEmpresaID();
+  const companyID = Env.getCompanyID();
   const enviroment = Env.enviroment;
-  if (!empresaID || !enviroment) { return; }
+  if (!companyID || !enviroment) { return; }
 
   const groupKey = Math.ceil(componentId / FIELD_PERSIST_GROUP_SIZE) * FIELD_PERSIST_GROUP_SIZE;
-  const storageKey = `${enviroment}_${empresaID}_${groupKey}`;
+  const storageKey = `${enviroment}_${companyID}_${groupKey}`;
   const idKey = String(componentId);
 
   const entries = new Map<string, string>();
@@ -639,12 +639,12 @@ export function persistFieldValue(componentId: number, value: number | string | 
 export function readFieldValue(componentId: number): string | null {
   if (typeof window === "undefined") { return null; }
   if (typeof componentId !== "number" || componentId <= 0) { return null; }
-  const empresaID = Env.getEmpresaID();
+  const companyID = Env.getCompanyID();
   const enviroment = Env.enviroment;
-  if (!empresaID || !enviroment) { return null; }
+  if (!companyID || !enviroment) { return null; }
 
   const groupKey = Math.ceil(componentId / FIELD_PERSIST_GROUP_SIZE) * FIELD_PERSIST_GROUP_SIZE;
-  const storageKey = `${enviroment}_${empresaID}_${groupKey}`;
+  const storageKey = `${enviroment}_${companyID}_${groupKey}`;
   const idKey = String(componentId);
 
   const raw = localStorage.getItem(storageKey) || "";

@@ -5,11 +5,11 @@ import (
 	"fmt"
 )
 
-type Usuario struct { // DynamoDB + ScyllaDB
-	db.TableStruct[UsuarioTable, Usuario]
-	EmpresaID   int32   `json:",omitempty" col:"empresa_id,pk"`
+type User struct { // DynamoDB + ScyllaDB
+	db.TableStruct[UserTable, User]
+	CompanyID   int32   `json:",omitempty" col:"empresa_id,pk"`
 	ID          int32   `json:",omitempty" col:"id,pk,sk"`
-	Usuario     string  `json:",omitempty" col:"usuario,index"`
+	User     string  `json:",omitempty" col:"user,index"`
 	Apellidos   string  `json:",omitempty" col:"apellidos"`
 	Nombres     string  `json:",omitempty" col:"nombres"`
 	PerfilesIDs []int32 `json:",omitempty" col:"perfiles_ids"`
@@ -32,36 +32,36 @@ type Usuario struct { // DynamoDB + ScyllaDB
 	CacheVersion uint8 `json:"ccv,omitempty" col:"-"`
 }
 
-func (usuario *Usuario) PrepareCloudSync() {
+func (user *User) PrepareCloudSync() {
 	// Company + status + padded updated keeps delta queries lexicographically sortable across providers.
-	usuario.CompanyUserIndex = fmt.Sprintf("%d_%s", usuario.EmpresaID, usuario.Usuario)
-	usuario.CompanyStatusIndex = fmt.Sprintf("%d_%d_%020d", usuario.EmpresaID, usuario.Status, usuario.Updated)
+	user.CompanyUserIndex = fmt.Sprintf("%d_%s", user.CompanyID, user.User)
+	user.CompanyStatusIndex = fmt.Sprintf("%d_%d_%020d", user.CompanyID, user.Status, user.Updated)
 }
 
-type UsuarioTable struct {
-	db.TableStruct[UsuarioTable, Usuario]
-	ID              db.Col[UsuarioTable, int32]
-	EmpresaID       db.Col[UsuarioTable, int32]
-	Usuario         db.Col[UsuarioTable, string]
-	Apellidos       db.Col[UsuarioTable, string]
-	Nombres         db.Col[UsuarioTable, string]
-	PerfilesIDs     db.ColSlice[UsuarioTable, int32] `db:"perfiles_ids"`
-	AccesosNivelIDs db.Col[UsuarioTable, []int32]    `db:"accesos_nivel_ids"`
-	AccesosComputed db.Col[UsuarioTable, []uint16]
-	Email           db.Col[UsuarioTable, string]
-	Cargo           db.Col[UsuarioTable, string]
-	DocumentoNro    db.Col[UsuarioTable, string]
-	Created         db.Col[UsuarioTable, int32]
-	CreatedBy       db.Col[UsuarioTable, int32]
-	Updated         db.Col[UsuarioTable, int32]
-	UpdatedBy       db.Col[UsuarioTable, int32]
-	Status          db.Col[UsuarioTable, int8]
+type UserTable struct {
+	db.TableStruct[UserTable, User]
+	ID              db.Col[UserTable, int32]
+	CompanyID       db.Col[UserTable, int32]
+	User         db.Col[UserTable, string]
+	Apellidos       db.Col[UserTable, string]
+	Nombres         db.Col[UserTable, string]
+	PerfilesIDs     db.ColSlice[UserTable, int32] `db:"perfiles_ids"`
+	AccesosNivelIDs db.Col[UserTable, []int32]    `db:"accesos_nivel_ids"`
+	AccesosComputed db.Col[UserTable, []uint16]
+	Email           db.Col[UserTable, string]
+	Cargo           db.Col[UserTable, string]
+	DocumentoNro    db.Col[UserTable, string]
+	Created         db.Col[UserTable, int32]
+	CreatedBy       db.Col[UserTable, int32]
+	Updated         db.Col[UserTable, int32]
+	UpdatedBy       db.Col[UserTable, int32]
+	Status          db.Col[UserTable, int8]
 }
 
-func (usuarioTable UsuarioTable) GetSchema() db.TableSchema {
+func (usuarioTable UserTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:             "usuarios",
-		Partition:        usuarioTable.EmpresaID,
+		Partition:        usuarioTable.CompanyID,
 		UseSequences:     true,
 		SaveCacheVersion: true,
 		Keys:             []db.Coln{usuarioTable.ID.Autoincrement(0)},

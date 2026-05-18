@@ -40,7 +40,7 @@ type HandlerArgs struct {
 	ResponseError  string
 	ReqParams      string
 	Encoding       string
-	Usuario        *UsuarioToken
+	User        *UsuarioToken
 	// HistoricalUnix overrides the effective write timestamp for sample/seed flows.
 	HistoricalUnix int64
 	StartTime      int64
@@ -338,7 +338,7 @@ func MakeErrRespFinal(statusCode int32, body string) *events.APIGatewayV2HTTPRes
 }
 
 func (e HandlerArgs) HasAcceso(accesosIDs ...int32) bool {
-	if e.Usuario == nil || e.Usuario.ID == 0 || len(e.accesosNivel) == 0 {
+	if e.User == nil || e.User.ID == 0 || len(e.accesosNivel) == 0 {
 		return false
 	}
 
@@ -352,7 +352,7 @@ func (e HandlerArgs) HasAcceso(accesosIDs ...int32) bool {
 }
 
 func (e HandlerArgs) HasAccesoNivel(accesoID int32, nivel uint8) bool {
-	if e.Usuario == nil || e.Usuario.ID == 0 || len(e.accesosNivel) == 0 || accesoID <= 0 {
+	if e.User == nil || e.User.ID == 0 || len(e.accesosNivel) == 0 || accesoID <= 0 {
 		return false
 	}
 
@@ -362,7 +362,7 @@ func (e HandlerArgs) HasAccesoNivel(accesoID int32, nivel uint8) bool {
 
 func (e HandlerArgs) IsUser(usuarioIDs ...int32) bool {
 	usuariosIDsInclude := MakeSliceInclude(usuarioIDs)
-	return usuariosIDsInclude.Include(e.Usuario.ID)
+	return usuariosIDsInclude.Include(e.User.ID)
 }
 
 func (e HandlerArgs) GetQueryInt64(key string) int64 {

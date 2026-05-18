@@ -9,63 +9,63 @@ import (
 
 type updateCounterRecord struct {
 	TableStruct[updateCounterSchema, updateCounterRecord]
-	EmpresaID int32  `db:"empresa_id"`
+	CompanyID int32  `db:"empresa_id"`
 	ID        int64  `db:"id"`
 	Nombre    string `db:"nombre"`
 }
 
 type updateCounterSchema struct {
 	TableStruct[updateCounterSchema, updateCounterRecord]
-	EmpresaID Col[updateCounterSchema, int32]
+	CompanyID Col[updateCounterSchema, int32]
 	ID        Col[updateCounterSchema, int64]
 	Nombre    Col[updateCounterSchema, string]
 }
 
 type updateCounterDisabledRecord struct {
 	TableStruct[updateCounterDisabledSchema, updateCounterDisabledRecord]
-	EmpresaID int32  `db:"empresa_id"`
+	CompanyID int32  `db:"empresa_id"`
 	ID        int64  `db:"id"`
 	Nombre    string `db:"nombre"`
 }
 
 type updateCounterDisabledSchema struct {
 	TableStruct[updateCounterDisabledSchema, updateCounterDisabledRecord]
-	EmpresaID Col[updateCounterDisabledSchema, int32]
+	CompanyID Col[updateCounterDisabledSchema, int32]
 	ID        Col[updateCounterDisabledSchema, int64]
 	Nombre    Col[updateCounterDisabledSchema, string]
 }
 
 type indexGroupRecord struct {
 	TableStruct[indexGroupSchema, indexGroupRecord]
-	EmpresaID  int32   `db:"empresa_id"`
+	CompanyID  int32   `db:"empresa_id"`
 	ID         int64   `db:"id"`
-	Fecha      int16   `db:"fecha"`
+	Date      int16   `db:"date"`
 	ClientID   int32   `db:"client_id"`
 	ProductIDs []int32 `db:"product_ids,list"`
 }
 
 type indexGroupSchema struct {
 	TableStruct[indexGroupSchema, indexGroupRecord]
-	EmpresaID  Col[indexGroupSchema, int32]
+	CompanyID  Col[indexGroupSchema, int32]
 	ID         Col[indexGroupSchema, int64]
-	Fecha      Col[indexGroupSchema, int16]
+	Date      Col[indexGroupSchema, int16]
 	ClientID   Col[indexGroupSchema, int32]
 	ProductIDs Col[indexGroupSchema, []int32]
 }
 
 type weekIndexGroupRecord struct {
 	TableStruct[weekIndexGroupSchema, weekIndexGroupRecord]
-	EmpresaID int32 `db:"empresa_id"`
+	CompanyID int32 `db:"empresa_id"`
 	ID        int64 `db:"id"`
-	Fecha     int16 `db:"fecha"`
+	Date     int16 `db:"date"`
 	Status    int8  `db:"status"`
 }
 
 type weekIndexGroupSchema struct {
 	TableStruct[weekIndexGroupSchema, weekIndexGroupRecord]
-	EmpresaID Col[weekIndexGroupSchema, int32]
+	CompanyID Col[weekIndexGroupSchema, int32]
 	ID        Col[weekIndexGroupSchema, int64]
-	Fecha     Col[weekIndexGroupSchema, int16]
+	Date     Col[weekIndexGroupSchema, int16]
 	Status    Col[weekIndexGroupSchema, int8]
 }
 
@@ -73,7 +73,7 @@ func (e updateCounterSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Keyspace:  "test_keyspace",
 		Name:      "update_counter_records",
-		Partition: e.EmpresaID,
+		Partition: e.CompanyID,
 		Keys:      []Coln{e.ID},
 	}
 }
@@ -82,7 +82,7 @@ func (e updateCounterDisabledSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Keyspace:             "test_keyspace",
 		Name:                 "update_counter_records_disabled",
-		Partition:            e.EmpresaID,
+		Partition:            e.CompanyID,
 		Keys:                 []Coln{e.ID},
 		DisableUpdateCounter: true,
 	}
@@ -92,15 +92,15 @@ func (e indexGroupSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Keyspace:  "test_keyspace",
 		Name:      "index_group_records",
-		Partition: e.EmpresaID,
+		Partition: e.CompanyID,
 		Keys:      []Coln{e.ID},
 		Indexes: []Index{
 			{
-				Keys:          []Coln{e.Fecha},
+				Keys:          []Coln{e.Date},
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          []Coln{e.Fecha.StoreAsWeek(), e.ClientID, e.ProductIDs},
+				Keys:          []Coln{e.Date.StoreAsWeek(), e.ClientID, e.ProductIDs},
 				UseIndexGroup: true,
 			},
 		},
@@ -111,11 +111,11 @@ func (e weekIndexGroupSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Keyspace:  "test_keyspace",
 		Name:      "week_index_group_records",
-		Partition: e.EmpresaID,
+		Partition: e.CompanyID,
 		Keys:      []Coln{e.ID},
 		Indexes: []Index{
 			{
-				Keys:          []Coln{e.Fecha.StoreAsWeek(), e.Status},
+				Keys:          []Coln{e.Date.StoreAsWeek(), e.Status},
 				UseIndexGroup: true,
 			},
 		},
@@ -149,9 +149,9 @@ func TestMakeScyllaTableSkipsManagedUpdateCounterWhenDisabled(t *testing.T) {
 func TestApplyWriteManagedColumnsUsesPartitionScopedUpdatedCounter(t *testing.T) {
 	scyllaTable := MakeScyllaTable[updateCounterRecord, updateCounterSchema]()
 	records := []updateCounterRecord{
-		{EmpresaID: 7, ID: 1, Nombre: "uno"},
-		{EmpresaID: 7, ID: 2, Nombre: "dos"},
-		{EmpresaID: 8, ID: 3, Nombre: "tres"},
+		{CompanyID: 7, ID: 1, Nombre: "uno"},
+		{CompanyID: 7, ID: 2, Nombre: "dos"},
+		{CompanyID: 8, ID: 3, Nombre: "tres"},
 	}
 
 	originalCounterFetcher := getWriteCounterValue
@@ -212,7 +212,7 @@ func TestApplyWriteManagedColumnsUsesPartitionScopedUpdatedCounter(t *testing.T)
 
 func TestMakeUpdateStatementsAlwaysPersistsManagedUpdatedColumns(t *testing.T) {
 	records := []updateCounterRecord{
-		{EmpresaID: 7, ID: 1, Nombre: "nuevo"},
+		{CompanyID: 7, ID: 1, Nombre: "nuevo"},
 	}
 	table := Table[updateCounterRecord, updateCounterSchema]()
 
@@ -246,7 +246,7 @@ func TestMakeUpdateStatementsAlwaysPersistsManagedUpdatedColumns(t *testing.T) {
 
 func TestMakeInsertStatementIncludesManagedAuditColumnsWithoutStructFields(t *testing.T) {
 	records := []updateCounterRecord{
-		{EmpresaID: 7, ID: 1, Nombre: "nuevo"},
+		{CompanyID: 7, ID: 1, Nombre: "nuevo"},
 	}
 
 	originalCounterFetcher := getWriteCounterValue
@@ -298,7 +298,7 @@ func TestGetIndexUpdatedTableCreateScriptUsesExpectedPrimaryKey(t *testing.T) {
 
 func TestMakeUpdateStatementsAllowsIndexGroupUpdateWhenOmittedValuesExistInStruct(t *testing.T) {
 	records := []indexGroupRecord{
-		{EmpresaID: 7, ID: 1, Fecha: 18754, ClientID: 5, ProductIDs: []int32{11, 17}},
+		{CompanyID: 7, ID: 1, Date: 18754, ClientID: 5, ProductIDs: []int32{11, 17}},
 	}
 	table := Table[indexGroupRecord, indexGroupSchema]()
 
@@ -331,7 +331,7 @@ func TestMakeUpdateStatementsAllowsIndexGroupUpdateWhenOmittedValuesExistInStruc
 
 func TestMakeUpdateStatementsRejectsIndexGroupUpdateWhenOmittedValuesMissingInStruct(t *testing.T) {
 	records := []indexGroupRecord{
-		{EmpresaID: 7, ID: 1, Fecha: 0, ClientID: 5, ProductIDs: nil},
+		{CompanyID: 7, ID: 1, Date: 0, ClientID: 5, ProductIDs: nil},
 	}
 	table := Table[indexGroupRecord, indexGroupSchema]()
 
@@ -353,7 +353,7 @@ func TestMakeUpdateStatementsRejectsIndexGroupUpdateWhenOmittedValuesMissingInSt
 			t.Fatal("expected partial IndexGroup update to panic")
 		}
 		recoveredMessage := recoveredValue.(string)
-		if !strings.Contains(recoveredMessage, `IndexGroup "fecha_client_id_product_ids" needs struct values for omitted source columns`) {
+		if !strings.Contains(recoveredMessage, `IndexGroup "date_client_id_product_ids" needs struct values for omitted source columns`) {
 			t.Fatalf("unexpected panic message: %s", recoveredMessage)
 		}
 	}()
@@ -364,7 +364,7 @@ func TestMakeUpdateStatementsRejectsIndexGroupUpdateWhenOmittedValuesMissingInSt
 func TestSyncIndexGroupsAfterWritePersistsDedupedRows(t *testing.T) {
 	scyllaTable := MakeScyllaTable[indexGroupRecord, indexGroupSchema]()
 	records := []indexGroupRecord{
-		{EmpresaID: 7, ID: 1, Fecha: 18754, ClientID: 5, ProductIDs: []int32{11, 11, 17}},
+		{CompanyID: 7, ID: 1, Date: 18754, ClientID: 5, ProductIDs: []int32{11, 11, 17}},
 	}
 
 	originalPersistIndexUpdatedRows := persistIndexUpdatedRows
@@ -456,8 +456,8 @@ func TestShouldPersistIndexUpdatedGroupSkipsWeekOnlyHashes(t *testing.T) {
 func TestAllocateIndexGroupIDAvoidsHashCollisions(t *testing.T) {
 	scyllaTable := &ScyllaTable[any]{}
 
-	firstID := allocateIndexGroupID(scyllaTable, []string{"fecha", "client_id"})
-	reusedID := allocateIndexGroupID(scyllaTable, []string{"fecha", "client_id"})
+	firstID := allocateIndexGroupID(scyllaTable, []string{"date", "client_id"})
+	reusedID := allocateIndexGroupID(scyllaTable, []string{"date", "client_id"})
 	if firstID != reusedID {
 		t.Fatalf("expected the same logical index group to reuse its id, got %d and %d", firstID, reusedID)
 	}
@@ -483,9 +483,9 @@ func TestAllocateIndexGroupIDAvoidsHashCollisions(t *testing.T) {
 func TestAppendIndexUpdatedRowsForRecordKeepsMaxUpdateCounterPerHash(t *testing.T) {
 	scyllaTable := MakeScyllaTable[indexGroupRecord, indexGroupSchema]()
 	record := indexGroupRecord{
-		EmpresaID:  7,
+		CompanyID:  7,
 		ID:         1,
-		Fecha:      18754,
+		Date:      18754,
 		ClientID:   5,
 		ProductIDs: []int32{11, 17},
 	}
@@ -531,9 +531,9 @@ func TestStoreAsWeekIndexGroupUsesCollectionHashes(t *testing.T) {
 	}
 
 	record := weekIndexGroupRecord{
-		EmpresaID: 7,
+		CompanyID: 7,
 		ID:        1,
-		Fecha:     18754,
+		Date:     18754,
 		Status:    3,
 	}
 

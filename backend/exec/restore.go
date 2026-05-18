@@ -33,7 +33,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 
 	fileBytes, err := cloud.GetFileFromS3(cloud.SaveFileArgs{
 		Bucket: core.Env.S3_BUCKET,
-		Path:   fmt.Sprintf("backups/%v", req.Usuario.EmpresaID),
+		Path:   fmt.Sprintf("backups/%v", req.User.CompanyID),
 		Name:   body.Name,
 	})
 
@@ -51,7 +51,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	core.Log(
-		"RestoreBackup start | company:", req.Usuario.EmpresaID,
+		"RestoreBackup start | company:", req.User.CompanyID,
 		"| backup:", body.Name,
 		"| tar_bytes:", len(fileBytes),
 		"| registered_tables:", len(registeredTableNames),
@@ -96,7 +96,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		tableName := nameSlice[0]
 
-		if tableName == "empresa" || tableName == "accesos" || tableName == "perfiles" {
+		if tableName == "company" || tableName == "accesos" || tableName == "perfiles" {
 			skippedEntriesCount++
 			core.Log(`RestoreBackup skip | dynamodb table not configured | table:`, tableName)
 			continue
@@ -141,18 +141,18 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 		)
 
 		core.Log("Restaurando registros:", header.Name, "| table:", tableName)
-		if err = controller.RestoreCSVRecords(req.Usuario.EmpresaID, &content); err != nil {
+		if err = controller.RestoreCSVRecords(req.User.CompanyID, &content); err != nil {
 			core.Log(err)
 			continue
 		}
 
 		restoredEntriesCount++
-		if err = controller.ResetCounter(req.Usuario.EmpresaID); err != nil {
+		if err = controller.ResetCounter(req.User.CompanyID); err != nil {
 			core.Log("RestoreBackup reset counter error | table:", tableName, "| err:", err)
 			continue
 		}
 
-		core.Log("RestoreBackup entry restored | table:", tableName, "| company:", req.Usuario.EmpresaID)
+		core.Log("RestoreBackup entry restored | table:", tableName, "| company:", req.User.CompanyID)
 	}
 
 	core.Log(
@@ -167,7 +167,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 
 func CreateBackup(req *core.HandlerArgs) core.HandlerResponse {
 
-	err := SaveBackup(req.Usuario.EmpresaID)
+	err := SaveBackup(req.User.CompanyID)
 	if err != nil {
 		req.MakeErr("Error al crear el backup:", err)
 	}

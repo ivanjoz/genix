@@ -11,14 +11,14 @@ import {
   PRODUCT_SHARED_LIST_CATEGORIA_ID,
   PRODUCT_SHARED_LIST_MARCA_ID,
 } from '$core/products-lists';
-import type { IListaRegistro, ListasCompartidasService } from '$services/negocio/listas-compartidas.svelte';
+import type { ISharedListRecord, ListasCompartidasService } from '$services/negocio/listas-compartidas.svelte';
 import { normalizeComparableValue, normalizeStringN } from '$libs/helpers';
-import type { IProducto, ProductosService } from './productos.svelte';
+import type { IProduct, ProductosService } from './productos.svelte';
 
 // Centralizes Productos Excel export so the page only triggers the action.
 export const exportProductosToExcel = async (
-  columns: ExcelTableColumn<IProducto>[],
-  records: IProducto[],
+  columns: ExcelTableColumn<IProduct>[],
+  records: IProduct[],
 ): Promise<void> => {
   await downloadExcel({
     fileName: 'productos.xlsx',
@@ -37,9 +37,9 @@ export const exportProductosToExcel = async (
 
 // Step 1: load file and return a ready ExcelBuilder instance.
 export const importProductosFromExcel = async (
-  columns: ExcelTableColumn<IProducto>[], source: File,
-): Promise<ExcelBuilder<IProducto>> => {
-  const builder = new ExcelBuilder<IProducto>()
+  columns: ExcelTableColumn<IProduct>[], source: File,
+): Promise<ExcelBuilder<IProduct>> => {
+  const builder = new ExcelBuilder<IProduct>()
     .setColumns(columns)
     .setHeaderRows([2]);
 
@@ -48,13 +48,13 @@ export const importProductosFromExcel = async (
 };
 
 interface ProductoImportProcessResult {
-  rows: IProducto[];
+  rows: IProduct[];
   errors: string[];
   mappedColumns: string[];
   ignoredHeaders: string[];
 }
 
-const IMPORT_FIELD_TO_PRODUCT_FIELD: Record<string, keyof IProducto> = {
+const IMPORT_FIELD_TO_PRODUCT_FIELD: Record<string, keyof IProduct> = {
   _categoriasNames: 'CategoriasIDs',
   _marcaNombre: 'MarcaID',
   _unidadNombre: 'UnidadID',
@@ -62,7 +62,7 @@ const IMPORT_FIELD_TO_PRODUCT_FIELD: Record<string, keyof IProducto> = {
 };
 
 const collectComparableFieldKeys = (
-  mappedLeafColumns: ResolvedLeafColumn<IProducto>[],
+  mappedLeafColumns: ResolvedLeafColumn<IProduct>[],
 ): string[] => {
   const collectedKeys: string[] = [];
   const usedKeys = new Set<string>();
@@ -83,7 +83,7 @@ const collectComparableFieldKeys = (
 
 // Executes the complete import flow (parse + resolve + error shaping) for the Productos page.
 export const processProductosImportFile = async (
-  columns: ExcelTableColumn<IProducto>[],
+  columns: ExcelTableColumn<IProduct>[],
   source: File,
   listasService: ListasCompartidasService,
   productosService: ProductosService,
@@ -91,7 +91,7 @@ export const processProductosImportFile = async (
 	const builder = await importProductosFromExcel(columns, source);
   
   const importResult = builder.extractRecords((row) => {
-    const currentRow = row as IProducto;
+    const currentRow = row as IProduct;
     const validationErrors: string[] = [];
 
     if ((currentRow._categoriasNames || '').length > 0) {
@@ -105,7 +105,7 @@ export const processProductosImportFile = async (
           continue;
         }
 
-        const categoriaTemporal: IListaRegistro = {
+        const categoriaTemporal: ISharedListRecord = {
           ID: 0,
           ListaID: PRODUCT_SHARED_LIST_CATEGORIA_ID,
           Nombre: categoriaName,
@@ -125,7 +125,7 @@ export const processProductosImportFile = async (
         if (marcaExistente?.ID) {
           currentRow.MarcaID = marcaExistente.ID;
         } else {
-          const marcaTemporal: IListaRegistro = {
+          const marcaTemporal: ISharedListRecord = {
             ID: 0,
             ListaID: PRODUCT_SHARED_LIST_MARCA_ID,
             Nombre: marcaNombre,
@@ -171,9 +171,9 @@ export const processProductosImportFile = async (
   const comparableFieldKeys = collectComparableFieldKeys(importResult.mappedLeafColumns);
   console.log('[productos-import] comparable fields for diff:', comparableFieldKeys);
 
-	const rowsWithUpdatedFields: IProducto[] = [];
+	const rowsWithUpdatedFields: IProduct[] = [];
   
-  for (const importedProducto of (importResult.rowsWithoutErrors as IProducto[])) {
+  for (const importedProducto of (importResult.rowsWithoutErrors as IProduct[])) {
     const existingProducto = productosService.recordsMap.get(importedProducto.ID)
     if (!existingProducto) {
       importedProducto._updatedFields = ['ID'];

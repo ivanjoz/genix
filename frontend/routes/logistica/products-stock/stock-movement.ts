@@ -1,7 +1,7 @@
 import { Notify } from '$libs/helpers';
 import { GET, GetHandler, POST } from '$libs/http.svelte';
 
-export const makeStockID = (e: Pick<IProductoStock, 'WarehouseID' | 'ProductID' | 'PresentationID'>): number =>
+export const makeStockID = (e: Pick<IProductStock, 'WarehouseID' | 'ProductID' | 'PresentationID'>): number =>
   // Mirrors backend/logistica/product-stock-movement.go::packProductStockID.
   e.WarehouseID * 1e14 + e.ProductID * 1e5 + (e.PresentationID || 0) * 10
 
@@ -35,7 +35,7 @@ export interface IProductStockLot {
   ss?: number
 }
 
-export interface IProductoStock {
+export interface IProductStock {
   ID: number
   WarehouseID: number
   ProductID: number
@@ -62,7 +62,7 @@ export interface IProductoStock {
 }
 
 interface IGetProductosStockResponse {
-  ProductStock?: IProductoStock[]
+  ProductStock?: IProductStock[]
   ProductStockDetail?: IProductStockDetail[]
 }
 
@@ -77,8 +77,8 @@ export interface IPostProductoStockItem {
   LotCode?: string
 }
 
-export const getWarehouseProductStock = async (almacenID: number): Promise<IProductoStock[]> => {
-  let records: IProductoStock[] = []
+export const getWarehouseProductStock = async (almacenID: number): Promise<IProductStock[]> => {
+  let records: IProductStock[] = []
   try {
     const response = await GET({ 
       route: `warehouse-product-stock?almacen-id=${almacenID}`,
@@ -119,7 +119,7 @@ export const getWarehouseProductStock = async (almacenID: number): Promise<IProd
   return records
 }
 
-export class ProductStockSimpleService extends GetHandler<IProductoStock> {
+export class ProductStockSimpleService extends GetHandler<IProductStock> {
   route = "products-stock"
   useCache = { min: 0.2, ver: 8 }
   inferRemoveFromStatus = true
@@ -129,7 +129,7 @@ export class ProductStockSimpleService extends GetHandler<IProductoStock> {
     if (init) this.fetch()
   }
 
-	handler(result: IProductoStock[]): void {
+	handler(result: IProductStock[]): void {
 		console.log("ProductStockSimpleService", result)
 		
     this.records = []

@@ -4,12 +4,12 @@ import { GET } from '$libs/http.svelte';
 const maxCacheTime = 60 * 5 // 2 segundos
 const productosPromiseMap: Map<string, Promise<any>> = new Map()
 
-export interface IProductoPropiedad {
+export interface IProductProperty {
   id: number, nm: string, ss: number
 }
 
-export interface IProductoPropiedades {
-  ID: number, Nombre: string, Options: IProductoPropiedad[], Status: number
+export interface IProductProperties {
+  ID: number, Nombre: string, Options: IProductProperty[], Status: number
 }
 
 export interface IProductoImage {
@@ -17,7 +17,7 @@ export interface IProductoImage {
   d: string /* descripcion de la imagen */
 }
 
-export interface IProducto {
+export interface IProduct {
   ID: number,
   Nombre: string
   Descripcion: string
@@ -25,7 +25,7 @@ export interface IProducto {
   Descuento?: number
   PrecioFinal?: number
   ContentHTML?: string
-  Propiedades?: IProductoPropiedades[]
+  Propiedades?: IProductProperties[]
   Peso?: number
   Volumen?: number
   SbnCantidad?: number
@@ -44,7 +44,7 @@ export interface IProducto {
   _moneda?: string
 }
 
-export interface IProductoCategoria {
+export interface IProductCategory {
   ID: number,
   Descripcion: string,
   Nombre: string,
@@ -56,21 +56,21 @@ export const productosServiceState = $state({
   categorias: [],
   categoriasMap: new Map(),
   productosByCategoryMap: new Map(),
-} as IProductosResult)
+} as IProductsResult)
 
 export type IFetch = (
   input: string | URL | Request, init?: RequestInit
 ) => Promise<Response>
 
-export interface IProductosResult {
-  productos: IProducto[]
-  productosMap: Map<number, IProducto>
-  categorias: IProductoCategoria[]
-  categoriasMap: Map<number, IProductoCategoria>
-  productosByCategoryMap: Map<number, IProducto[]>
+export interface IProductsResult {
+  productos: IProduct[]
+  productosMap: Map<number, IProduct>
+  categorias: IProductCategory[]
+  categoriasMap: Map<number, IProductCategory>
+  productosByCategoryMap: Map<number, IProduct[]>
 }
 
-export const getProductos = async (categoriasIDs?: number[]): Promise<IProductosResult> => {
+export const getProductos = async (categoriasIDs?: number[]): Promise<IProductsResult> => {
   const apiRoute = `p-productos-cms?categorias=${(categoriasIDs || [0]).join(".")}`
 
   if(!productosPromiseMap.has(apiRoute)) {
@@ -84,7 +84,7 @@ export const getProductos = async (categoriasIDs?: number[]): Promise<IProductos
 				console.log("Productos response:", Object.keys(res))
 				console.log(res)
 
-        for(const e of (res.productos||[]) as IProducto[]){
+        for(const e of (res.productos||[]) as IProduct[]){
           e.Image = (e.Images||[])[0] || { n: "" } as IProductoImage
         }
 
@@ -99,7 +99,7 @@ export const getProductos = async (categoriasIDs?: number[]): Promise<IProductos
         productosServiceState.categoriasMap = res.categoriasMap
 
         // Construir el mapa de productos por categoría
-        const productosByCategoryMap = new Map<number, IProducto[]>()
+        const productosByCategoryMap = new Map<number, IProduct[]>()
         for (const producto of res.productos || []) {
           if (producto.CategoriasIDs) {
             for (const categoriaId of producto.CategoriasIDs) {
@@ -123,9 +123,9 @@ export const getProductos = async (categoriasIDs?: number[]): Promise<IProductos
   return await productosPromiseMap.get(apiRoute)
 }
 
-let loadingPromise: Promise<IProductosResult> | null = null;
+let loadingPromise: Promise<IProductsResult> | null = null;
 
-export const getProductsByCategoryID = async (id: number): Promise<IProducto[]> => {
+export const getProductsByCategoryID = async (id: number): Promise<IProduct[]> => {
 	// 1. Si ya lo tenemos en el mapa, lo retornamos inmediatamente
 	const products = productosServiceState.productosByCategoryMap.get(id);
 	if (products) return products;
@@ -149,7 +149,7 @@ export const getProductsByCategoryID = async (id: number): Promise<IProducto[]> 
 	return productosServiceState.productosByCategoryMap.get(id) || [];
 }
 
-export const getCategoryByID = async (id: number): Promise<IProductoCategoria | undefined> => {
+export const getCategoryByID = async (id: number): Promise<IProductCategory | undefined> => {
 	// 1. Si ya lo tenemos en el mapa, lo retornamos inmediatamente
 	const category = productosServiceState.categoriasMap.get(id);
 	if (category) return category;

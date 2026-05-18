@@ -6,7 +6,7 @@
 		type IRecordRef,
 	} from "$libs/cache/cache-by-ids.svelte";
 	import { untrack } from "svelte";
-	import type { IProducto } from "$services/services/productos.svelte";
+	import type { IProduct } from "$services/services/productos.svelte";
 	import ImageHash from "$components/files/Imagehash.svelte";
 	import { addProductoCant, ProductsSelectedMap } from "./store.svelte";
 
@@ -23,7 +23,7 @@
 	export interface IProductCard {
 		css?: string;
 		productoID?: number;
-		producto?: IProducto;
+		producto?: IProduct;
 		mode?: ProductCardMode;
 		hideCloseButton?: boolean;
 		useQuantityControls?: boolean;
@@ -43,14 +43,14 @@
 
 	const resolvedProductID = $derived.by(() => productoID || producto?.ID || 0);
 	const fetchedProductRecord = $derived(productRecordReference?.record || null);
-	const resolvedProduct = $derived.by<IProducto>(() => {
-		const fallbackProductRecord = producto || ({ ID: resolvedProductID } as IProducto);
+	const resolvedProduct = $derived.by<IProduct>(() => {
+		const fallbackProductRecord = producto || ({ ID: resolvedProductID } as IProduct);
 		if (!fetchedProductRecord) return fallbackProductRecord;
 		return {
 			...fallbackProductRecord,
-			...(fetchedProductRecord as Partial<IProducto>),
+			...(fetchedProductRecord as Partial<IProduct>),
 			ID: fetchedProductRecord.ID,
-		} as IProducto;
+		} as IProduct;
 	});
 	const selectedProductQuantity = $derived.by(() => {
 		return ProductsSelectedMap.get(resolvedProduct?.ID)?.cant || 0;

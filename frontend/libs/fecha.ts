@@ -1,8 +1,8 @@
 import { addWeeks, getISOWeek, getISOWeekYear, startOfISOWeekYear } from "date-fns";
 
 export interface IFecSemana {
-  fechaUnix: number,
-  fechaInicio: Date,
+  dateUnix: number,
+  dateInicio: Date,
   year: number,
   anio: number,
   nro: number,
@@ -28,10 +28,10 @@ export const weekdaysMap: Map<number,IDayOfWeek> = new Map([
 
 export const zoneOffset = (new Date()).getTimezoneOffset()
 
-export const dateToFechaUnix = (fecha: Date) => {
+export const dateToFechaUnix = (date: Date) => {
   // window._zoneOffset es la cantidad de minutos que difieren de UTC, por ejemplo Perú es UTC-5 y posee un offset de 300 (5 * 60), es decir 300 min antes del UTC+0
-  const fechaT = (fecha.getTime() / 1000 / 60 - zoneOffset) / 60 / 24
-  return Math.floor(fechaT)
+  const dateT = (date.getTime() / 1000 / 60 - zoneOffset) / 60 / 24
+  return Math.floor(dateT)
 }
 
 export const semanaFromCode = (semanaCode: number): IFecSemana => {
@@ -40,167 +40,167 @@ export const semanaFromCode = (semanaCode: number): IFecSemana => {
   const year = parseInt(yearString)
   // Le coloqué 10 días porque lo importante es que coincida con el año, si le coloco día 1 puede tomarlo como semana del año anterior.
   const yearDay1 = new Date(year,0,10,0,0,0)
-  // Calcula el inicio del ISO week del año (no importa la fecha)
+  // Calcula el inicio del ISO week del año (no importa la date)
   const yearStartOfISOWeek = startOfISOWeekYear(yearDay1)
   const nroString = sem.substring(4,6)
   const nro = parseInt(nroString)
   // Se le resta una semana porque se le está agregando a la semana 1
-  const fechaInicioT = addWeeks(yearStartOfISOWeek,nro - 1)
-  // Agrega 12 horas para que la fecha sea el lunes a las 10:00
-  const fechaInicio = new Date(fechaInicioT.getTime() + (10*60*60*1000))
-  const fechaUnix = dateToFechaUnix(fechaInicio)
+  const dateInicioT = addWeeks(yearStartOfISOWeek,nro - 1)
+  // Agrega 12 horas para que la date sea el lunes a las 10:00
+  const dateInicio = new Date(dateInicioT.getTime() + (10*60*60*1000))
+  const dateUnix = dateToFechaUnix(dateInicio)
   const nro1 = (nro < 10 ? ('0'+String(nro)) : String(nro))
   const name = year +"-"+ nro1
-  return { fechaUnix, fechaInicio, year, anio: year, nro, code: semanaCode, name } as IFecSemana
+  return { dateUnix, dateInicio, year, anio: year, nro, code: semanaCode, name } as IFecSemana
 }
 
-export class FechaHelper {
-  fechaToSemanaMap: Map<number,IFecSemana> = new Map()
+export class DateHelper {
+  dateToSemanaMap: Map<number,IFecSemana> = new Map()
   semanaToFechaInicioMap: Map<number,any> = new Map()
-  fechaToUnixMap: Map<string|number,number> = new Map()
-  fechaUnixToIntMap: Map<number,any> = new Map()
-  fechaUnixToStringMap: Map<number,any> = new Map()
-  fechaUnixToYearMap: Map<number,number> = new Map()
+  dateToUnixMap: Map<string|number,number> = new Map()
+  dateUnixToIntMap: Map<number,any> = new Map()
+  dateUnixToStringMap: Map<number,any> = new Map()
+  dateUnixToYearMap: Map<number,number> = new Map()
   semanasMap: Map<number,IFecSemana> = new Map()
   anioMesToFechaUnixMap: Map<number,number> = new Map()
-  fechaUnixToDayOfMonth: Map<number,number> = new Map()
-  fechaUnixToDayOfWeek: Map<number,number> = new Map()
-  fechaUnixToDate: Map<number,Date> = new Map()
+  dateUnixToDayOfMonth: Map<number,number> = new Map()
+  dateUnixToDayOfWeek: Map<number,number> = new Map()
+  dateUnixToDate: Map<number,Date> = new Map()
 
 	constructor() { }
   
-	fechaUnixCurrent() {
+	dateUnixCurrent() {
 		return this.dateToFechaUnix(new Date())
 	}
 	
 	weekCurrent() {
-		const fechaUnix = this.fechaUnixCurrent()
-		return this.toWeek(fechaUnix)
+		const dateUnix = this.dateUnixCurrent()
+		return this.toWeek(dateUnix)
 	}
 
-  toDate(fechaUnix: number): Date { // a las 12 del medio día
-    if(!this.fechaUnixToDate.has(fechaUnix)){
-      const fechaHoraUnix = (fechaUnix*24*60*60 + zoneOffset * 60) + (12*60*60)
-      this.fechaUnixToDate.set(fechaUnix, new Date(fechaHoraUnix * 1000))
+  toDate(dateUnix: number): Date { // a las 12 del medio día
+    if(!this.dateUnixToDate.has(dateUnix)){
+      const dateTimeUnix = (dateUnix*24*60*60 + zoneOffset * 60) + (12*60*60)
+      this.dateUnixToDate.set(dateUnix, new Date(dateTimeUnix * 1000))
     }
-    return this.fechaUnixToDate.get(fechaUnix) as Date
+    return this.dateUnixToDate.get(dateUnix) as Date
   }
   
   // Año de semana ISO
-  toAnio(fechaUnix: number) {
-    return getISOWeekYear(this.toDate(fechaUnix))
+  toAnio(dateUnix: number) {
+    return getISOWeekYear(this.toDate(dateUnix))
   }
 
-  toYear(fechaUnix: number){
-    if(!this.fechaUnixToYearMap.has(fechaUnix)){
-      this.fechaUnixToYearMap.set(fechaUnix,  this.toDate(fechaUnix).getFullYear())
+  toYear(dateUnix: number){
+    if(!this.dateUnixToYearMap.has(dateUnix)){
+      this.dateUnixToYearMap.set(dateUnix,  this.toDate(dateUnix).getFullYear())
     }
-    return this.fechaUnixToYearMap.get(fechaUnix)
+    return this.dateUnixToYearMap.get(dateUnix)
   }
 
-  toDayOfWeek(fechaUnix: number): IDayOfWeek {
-    if(!this.fechaUnixToDayOfMonth.has(fechaUnix)){
-      const day = this.toDate(fechaUnix).getDay()
-      this.fechaUnixToDayOfMonth.set(fechaUnix, day)
+  toDayOfWeek(dateUnix: number): IDayOfWeek {
+    if(!this.dateUnixToDayOfMonth.has(dateUnix)){
+      const day = this.toDate(dateUnix).getDay()
+      this.dateUnixToDayOfMonth.set(dateUnix, day)
     }
-    const dayOfWeekID = this.fechaUnixToDayOfMonth.get(fechaUnix) as number
+    const dayOfWeekID = this.dateUnixToDayOfMonth.get(dateUnix) as number
     return weekdaysMap.get(dayOfWeekID) || { short: String(dayOfWeekID), code: String(dayOfWeekID) } as IDayOfWeek
   }
 
-  toDayOfMonth(fechaUnix: number): number {
-    if(!this.fechaUnixToDayOfMonth.has(fechaUnix)){
-      this.fechaUnixToDayOfMonth.set(fechaUnix, this.toDate(fechaUnix).getDate())
+  toDayOfMonth(dateUnix: number): number {
+    if(!this.dateUnixToDayOfMonth.has(dateUnix)){
+      this.dateUnixToDayOfMonth.set(dateUnix, this.toDate(dateUnix).getDate())
     }
-    return this.fechaUnixToDayOfMonth.get(fechaUnix) as number
+    return this.dateUnixToDayOfMonth.get(dateUnix) as number
   }
 
-  toFechaExcel(fechaUnix: number | Date): number{
+  toFechaExcel(dateUnix: number | Date): number{
     let dateX = 0
-    if(fechaUnix instanceof Date){
-      dateX = this.toFechaUnix(fechaUnix) || 0
+    if(dateUnix instanceof Date){
+      dateX = this.toFechaUnix(dateUnix) || 0
     } else {
-      dateX = fechaUnix
+      dateX = dateUnix
     }
     return dateX + 25569
   }
 
-  dateToFechaUnix(fecha: Date){
+  dateToFechaUnix(date: Date){
     // window._zoneOffset es la cantidad de minutos que difieren de UTC, por ejemplo Perú es UTC-5 y posee un offset de 300 (5 * 60), es decir 300 min antes del UTC+0
-    const fechaT = (fecha.getTime()/1000/60 - zoneOffset) /60/24
-    return Math.floor(fechaT)
+    const dateT = (date.getTime()/1000/60 - zoneOffset) /60/24
+    return Math.floor(dateT)
   }
 
-  toFechaUnix(fecha: string | number | Date): number{
-    if(typeof fecha === 'string'){
-      fecha = fecha.substring(0,10)
-			if (!this.fechaToUnixMap.has(fecha)) {
+  toFechaUnix(date: string | number | Date): number{
+    if(typeof date === 'string'){
+      date = date.substring(0,10)
+			if (!this.dateToUnixMap.has(date)) {
 		
 		    const regex1 = /[0-9]{1,2}(\.|-|\/)[0-9]{1,2}(\.|-|\/)[0-9]{4}/g
 		    const regex2 = /[0-9]{4}(\.|-|\/)[0-9]{1,2}(\.|-|\/)[0-9]{1,2}/g
-		    const r1 = regex1.test(fecha)
-		    const r2 = r1 ? undefined : regex2.test(fecha)
+		    const r1 = regex1.test(date)
+		    const r2 = r1 ? undefined : regex2.test(date)
 
-				let fechaObject: Date | undefined = undefined
+				let dateObject: Date | undefined = undefined
 				
 		    if (r1 || r2) {
 		      let parsed
 		      for (const s of ['/', '-', '.']) {
-		        if (fecha.includes(s)) {
-		          parsed = fecha.split(s)
+		        if (date.includes(s)) {
+		          parsed = date.split(s)
 		          if (r1) parsed.reverse()
 							parsed = parsed.join('-') + 'T12:00:00'	
 							// debugger
-		          fechaObject = new Date(parsed)
-		          if (!fechaObject.getTime) return 0
+		          dateObject = new Date(parsed)
+		          if (!dateObject.getTime) return 0
 		        }
 		      }
 		    }
-        // Si termina en "Z" entonces lo asume como una fecha UTC. Sin "Z" es fecha local
+        // Si termina en "Z" entonces lo asume como una date UTC. Sin "Z" es date local
         // debugger
-        if(!fechaObject){ fechaObject = new Date(`${fecha}T12:00:00`) }
-        const fechaUnix = this.dateToFechaUnix(fechaObject)
-        this.fechaToUnixMap.set(fecha,fechaUnix)
+        if(!dateObject){ dateObject = new Date(`${date}T12:00:00`) }
+        const dateUnix = this.dateToFechaUnix(dateObject)
+        this.dateToUnixMap.set(date,dateUnix)
       }
-      return this.fechaToUnixMap.get(fecha) as number
-    } else if(fecha instanceof Date){
-      return this.dateToFechaUnix(fecha)
-    } else if(typeof fecha === 'number' && fecha > 20000000 && fecha < 30000000) {
-      if(!this.fechaToUnixMap.has(fecha)){
-        let f = String(fecha)
-        const fechaObject = new Date(`${f.substring(0,4)}-${f.substring(4,6)}-${f.substring(6,8)}T12:00:00`)
-        const fechaUnix = this.dateToFechaUnix(fechaObject)
-        this.fechaToUnixMap.set(fecha,fechaUnix)
+      return this.dateToUnixMap.get(date) as number
+    } else if(date instanceof Date){
+      return this.dateToFechaUnix(date)
+    } else if(typeof date === 'number' && date > 20000000 && date < 30000000) {
+      if(!this.dateToUnixMap.has(date)){
+        let f = String(date)
+        const dateObject = new Date(`${f.substring(0,4)}-${f.substring(4,6)}-${f.substring(6,8)}T12:00:00`)
+        const dateUnix = this.dateToFechaUnix(dateObject)
+        this.dateToUnixMap.set(date,dateUnix)
       }
-      return this.fechaToUnixMap.get(fecha)  as number
-    } else if(typeof fecha === 'number' && fecha > 30000000) {
+      return this.dateToUnixMap.get(date)  as number
+    } else if(typeof date === 'number' && date > 30000000) {
       // window._zoneOffset es la cantidad de minutos que difieren de UTC, por ejemplo Perú es UTC-5 y posee un offset de 300 (5 * 60), es decir 300 min antes del UTC+0
-      const fechaT = (fecha / 60 / 60 / 24) - (zoneOffset / 60 / 24)
-      return Math.floor(fechaT)
+      const dateT = (date / 60 / 60 / 24) - (zoneOffset / 60 / 24)
+      return Math.floor(dateT)
     } else  {
       return 0
     }
   }
 
-  toWeek(fechaUnix_: number): IFecSemana {
-    if(!this.fechaToSemanaMap.has(fechaUnix_)){
-      const fechaInicio = this.toDate(fechaUnix_)
-      const anio = getISOWeekYear(fechaInicio)
-      const nro = getISOWeek(fechaInicio)
+  toWeek(dateUnix_: number): IFecSemana {
+    if(!this.dateToSemanaMap.has(dateUnix_)){
+      const dateInicio = this.toDate(dateUnix_)
+      const anio = getISOWeekYear(dateInicio)
+      const nro = getISOWeek(dateInicio)
       const semana = anio * 100 + nro
       const code = semana - 200000
-      // Calcula la fecha de inicio
+      // Calcula la date de inicio
       const yearDay1 = new Date(anio,0,10,0,0,0)
       const yearStartOfISOWeek = startOfISOWeekYear(yearDay1)
-      const fechaInicioDate = addWeeks(yearStartOfISOWeek,nro - 1)
-      const fechaUnix = this.dateToFechaUnix(fechaInicioDate)
+      const dateInicioDate = addWeeks(yearStartOfISOWeek,nro - 1)
+      const dateUnix = this.dateToFechaUnix(dateInicioDate)
       
       const reg = { 
-        id: semana, semana, anio, year: anio, nro, fechaUnix, fechaInicio, code,
+        id: semana, semana, anio, year: anio, nro, dateUnix, dateInicio, code,
         name: ""
       } as any
-      this.fechaToSemanaMap.set(fechaUnix_, reg)
+      this.dateToSemanaMap.set(dateUnix_, reg)
     }
-    return this.fechaToSemanaMap.get(fechaUnix_) as IFecSemana
+    return this.dateToSemanaMap.get(dateUnix_) as IFecSemana
   }
 
   semanaFromCode(semana: number): IFecSemana | undefined {
@@ -212,15 +212,15 @@ export class FechaHelper {
 
   addToSemana(semanaCode: number, cant: number): IFecSemana {
     const semanaInicio = this.semanaFromCode(semanaCode)
-    const fechaUnix = (semanaInicio as any).fechaUnix + (cant * 7)
-    const semanaFin = this.toWeek(fechaUnix)
+    const dateUnix = (semanaInicio as any).dateUnix + (cant * 7)
+    const semanaFin = this.toWeek(dateUnix)
     return semanaFin
   }
 
   semanaDiference(semanaInicio: number, semanaFin: number): number{
     const inicio = this.semanaFromCode(semanaInicio)
     const fin = this.semanaFromCode(semanaFin)
-    return Math.round(((fin as any).fechaUnix - (inicio as any).fechaUnix)/7)
+    return Math.round(((fin as any).dateUnix - (inicio as any).dateUnix)/7)
   }
 
   makeWeekRange(semanaInicioCode: number, semanaFinCode: number): IFecSemana[]{
@@ -231,9 +231,9 @@ export class FechaHelper {
     const semanaFin = this.semanaFromCode(semanaFinCode)
     const semanas = [semanaInicio] as IFecSemana[]
 
-    const count = Math.floor(((semanaFin as any).fechaUnix - (semanaInicio as any).fechaUnix)/7)
+    const count = Math.floor(((semanaFin as any).dateUnix - (semanaInicio as any).dateUnix)/7)
     for(let i = 1; i < count; i++){
-      const semanaFechaUnix = (semanaInicio as any).fechaUnix + (i * 7)
+      const semanaFechaUnix = (semanaInicio as any).dateUnix + (i * 7)
       semanas.push(this.toWeek(semanaFechaUnix))
     }
     semanas.push(semanaFin as any)
@@ -259,9 +259,9 @@ export class FechaHelper {
       }
     }
 
-    semanas.sort((a,b) => (a as any).fechaUnix > (b as any).fechaUnix ? 1 : -1)
+    semanas.sort((a,b) => (a as any).dateUnix > (b as any).dateUnix ? 1 : -1)
     return semanas
   }
 }
 
-export const fechaHelper = new FechaHelper()
+export const dateHelper = new DateHelper()

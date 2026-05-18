@@ -1,15 +1,15 @@
 import { GetHandler } from '$libs/http.svelte';
 import type { ImageSource } from '$components/files/ImageUploader.svelte';
 
-export interface IProductoPropiedad {
+export interface IProductProperty {
   id: number, nm: string, ss: number
 }
 
-export interface IProductoPropiedades {
-  ID: number, Nombre: string, Options: IProductoPropiedad[], Status: number
+export interface IProductProperties {
+  ID: number, Nombre: string, Options: IProductProperty[], Status: number
 }
 
-export interface IProductoPresentacion {
+export interface IProductPresentation {
   id: number,
   at: number, /* atributo */
   nm: string, /* nombre */
@@ -26,7 +26,7 @@ export interface IProductoImage {
 }
 
 //STRUCT:negocio.Product
-export interface IProducto {
+export interface IProduct {
   ID: number,
   TempID: number,
   Nombre: string
@@ -49,8 +49,8 @@ export interface IProducto {
   SbnPrecioFinal: number
   SKU: string
   NombreHash: number
-  Propiedades: IProductoPropiedades[]
-  Presentaciones: IProductoPresentacion[]
+  Propiedades: IProductProperties[]
+  Presentaciones: IProductPresentation[]
   Images: IProductoImage[]
   Stock: any
   StockReservado: any
@@ -81,24 +81,24 @@ export interface IProducto {
   _updatedFields?: string[]
 }
 
-export interface IProductoResult {
-  Records?: IProducto[]
-  records: IProducto[]
-  recordsMap: Map<number,IProducto>
+export interface IProductResult {
+  Records?: IProduct[]
+  records: IProduct[]
+  recordsMap: Map<number,IProduct>
 }
 
-export class ProductosService extends GetHandler<IProducto> {
+export class ProductosService extends GetHandler<IProduct> {
   route = "productos"
   routeByID = "p-productos-ids"
   useCache = { min: 5, ver: 9 }
 	inferRemoveFromStatus = true
   prependOnSave = true
 	
-	makeName(record: Partial<IProducto>) {
+	makeName(record: Partial<IProduct>) {
 		return record.Nombre || ""
 	}
 
-  handler(result: IProducto[]): void {
+  handler(result: IProduct[]): void {
     for(const e of result){
       e.Image = e.Images?.[0]
       e.CategoriasIDs = e.CategoriasIDs || []

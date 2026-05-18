@@ -1,12 +1,12 @@
 package exec
 
 import (
-	comercial "app/comercial/types"
+	sales "app/sales/types"
 	"app/core"
 	"app/db"
-	finanzasTypes "app/finanzas/types"
-	logisticaTypes "app/logistica/types"
-	negocioTypes "app/negocio/types"
+	financeTypes "app/finance/types"
+	logisticsTypes "app/logistics/types"
+	businessTypes "app/business/types"
 	"fmt"
 )
 
@@ -14,13 +14,13 @@ import (
 func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	var err error
 	
-	traceSales := []db.RecordGroup[comercial.SaleOrder]{}
+	traceSales := []db.RecordGroup[sales.SaleOrder]{}
 	query := db.QueryIndexGroup(&traceSales)
 	
 	query.IncludeCachedGroup(12340001, 1001)
 	query.IncludeCachedGroup(12340002, 1002)
 	
-	query.CompanyID.Equals(1).DetailProductsIDs.Contains(3372).Fecha.Between(20500, 20558)
+	query.CompanyID.Equals(1).DetailProductsIDs.Contains(3372).Date.Between(20500, 20558)
 
 	
 	if err := query.Exec(); err != nil {
@@ -35,11 +35,11 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 		
 	// 6. Test bucket query CONTAINS + "RANGE" with hash index
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
-	recordSalesOrders := []comercial.SaleOrder{}
+	recordSalesOrders := []sales.SaleOrder{}
 	q6 := db.Query(&recordSalesOrders)
 	err = q6.CompanyID.Equals(1).
 		DetailProductsIDs.Contains(3372).
-		Fecha.Between(20530, 20540). //.AllowFilter().
+		Date.Between(20530, 20540). //.AllowFilter().
 		Exec()
 
 	if err != nil {
@@ -51,7 +51,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	// return core.FuncResponse{}
 	
 	fmt.Println("\n--- Test 7: Range query in int packet column local index ---")
-	recordSalesOrders2 := []comercial.SaleOrder{}
+	recordSalesOrders2 := []sales.SaleOrder{}
 	q7 := db.Query(&recordSalesOrders2)
 	err = q7.CompanyID.Equals(1).
 		Status.Equals(1).
@@ -67,7 +67,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	// 1. Test AlmacenProducto with KeyConcatenated Smart Logic
 	// This should trigger a range query on the 'id' column because it's the first column of KeyConcatenated.
 	fmt.Println("\n--- Test 1: AlmacenProducto (Smart ORM for KeyConcatenated) ---")
-	productos := []logisticaTypes.ProductStock{}
+	productos := []logisticsTypes.ProductStock{}
 	q1 := db.Query(&productos)
 	err = q1.CompanyID.Equals(1).
 		WarehouseID.Equals(1). // This is the first column in KeyConcatenated for AlmacenProducto
@@ -81,7 +81,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// 2. Test AlmacenProducto with multiple prefix columns
 	fmt.Println("\n--- Test 2: AlmacenProducto (Multiple prefix columns) ---")
-	productos2 := []logisticaTypes.ProductStock{}
+	productos2 := []logisticsTypes.ProductStock{}
 	q2 := db.Query(&productos2)
 	err = q2.CompanyID.Equals(1).
 		WarehouseID.Equals(1).
@@ -96,7 +96,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// New test
 	fmt.Println("\n--- Test 21: AlmacenProducto. Using view: []db.Coln{e.WarehouseID, e.Status, e.Updated} ---")
-	productos21 := []logisticaTypes.ProductStock{}
+	productos21 := []logisticsTypes.ProductStock{}
 	q21 := db.Query(&productos21)
 	err = q21.CompanyID.Equals(1).
 		WarehouseID.Equals(1).Status.Equals(1).Updated.GreaterEqual(1000).
@@ -108,12 +108,12 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 		fmt.Printf("Found %d products\n", len(productos2))
 	}
 
-	// 3. Test ListaCompartidaRegistro with complex view concatenation
-	fmt.Println("\n--- Test 3: ListaCompartidaRegistro (Complex View/Concatenation) ---")
-	registros := []negocioTypes.ListaCompartidaRegistro{}
+	// 3. Test SharedListRecord with complex view concatenation
+	fmt.Println("\n--- Test 3: SharedListRecord (Complex View/Concatenation) ---")
+	registros := []businessTypes.SharedListRecord{}
 	q3 := db.Query(&registros)
 	// This query should use a view that concatenates ListaID and Status or Updated
-	err = q3.EmpresaID.Equals(1).
+	err = q3.CompanyID.Equals(1).
 		ListaID.Equals(1).
 		Status.Equals(1).
 		Exec()
@@ -124,12 +124,12 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 		fmt.Printf("Found %d records\n", len(registros))
 	}
 
-	// 4. Test CajaMovimiento with View
-	fmt.Println("\n--- Test 4: CajaMovimiento (Query using View) ---")
-	movimientos := []finanzasTypes.CajaMovimiento{}
+	// 4. Test CashBankMovement with View
+	fmt.Println("\n--- Test 4: CashBankMovement (Query using View) ---")
+	movimientos := []financeTypes.CashBankMovement{}
 	q4 := db.Query(&movimientos)
-	err = q4.EmpresaID.Equals(1).
-		DocumentoID.Equals(12345). // This uses a view defined in CajaMovimientoTable
+	err = q4.CompanyID.Equals(1).
+		DocumentoID.Equals(12345). // This uses a view defined in CashBankMovementTable
 		Exec()
 
 	if err != nil {
@@ -140,9 +140,9 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// 5. Test with range query (Between)
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
-	recordRegistrosListas := []negocioTypes.ListaCompartidaRegistro{}
+	recordRegistrosListas := []businessTypes.SharedListRecord{}
 	q5 := db.Query(&recordRegistrosListas)
-	err = q5.EmpresaID.Equals(1).
+	err = q5.CompanyID.Equals(1).
 		ListaID.Equals(1).
 		Updated.Between(1000000000, 2000000000).
 		Exec()
@@ -161,22 +161,22 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 	var err error
 
-	movimientos := []logisticaTypes.WarehouseProductMovement{}
+	movimientos := []logisticsTypes.WarehouseProductMovement{}
 
 	query := db.Query(&movimientos).
 		CompanyID.Equals(1).
-		Fecha.GreaterEqual(1827)
+		Date.GreaterEqual(1827)
 
-	if err := query.GroupBy(query.Fecha, query.ProductoID, query.Tipo, query.Quantity.Sum()).Exec(); err != nil {
+	if err := query.GroupBy(query.Date, query.ProductID, query.Tipo, query.Quantity.Sum()).Exec(); err != nil {
 		panic(err)
 	}
 	
-	// 3. Test ListaCompartidaRegistro with complex view concatenation
-	fmt.Println("\n--- Test 3: ListaCompartidaRegistro (Complex View/Concatenation) ---")
-	registros := []negocioTypes.ListaCompartidaRegistro{}
+	// 3. Test SharedListRecord with complex view concatenation
+	fmt.Println("\n--- Test 3: SharedListRecord (Complex View/Concatenation) ---")
+	registros := []businessTypes.SharedListRecord{}
 	q3 := db.Query(&registros)
 	// This query should use a view that concatenates ListaID and Status or Updated
-	err = q3.EmpresaID.Equals(1).
+	err = q3.CompanyID.Equals(1).
 		ListaID.Equals(1).
 		Status.Equals(1).
 		Exec()
@@ -189,9 +189,9 @@ func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 
 	// 5. Test with range query (Between)
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
-	recordRegistrosListas := []negocioTypes.ListaCompartidaRegistro{}
+	recordRegistrosListas := []businessTypes.SharedListRecord{}
 	q5 := db.Query(&recordRegistrosListas)
-	err = q5.EmpresaID.Equals(1).
+	err = q5.CompanyID.Equals(1).
 		ListaID.Equals(1).
 		Updated.Between(1000000000, 2000000000).
 		Exec()

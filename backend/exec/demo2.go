@@ -2,15 +2,15 @@ package exec
 
 import (
 
-	// comercial "app/comercial/types"
-	"app/comercial"
-	comercialTypes "app/comercial/types"
+	// sales "app/sales/types"
+	"app/sales"
+	salesTypes "app/sales/types"
 	"app/core"
 	"app/db"
 	"app/libs"
-	logisticaTypes "app/logistica/types"
-	"app/negocio"
-	negocioTypes "app/negocio/types"
+	logisticsTypes "app/logistics/types"
+	"app/business"
+	businessTypes "app/business/types"
 	"fmt"
 )
 
@@ -22,7 +22,7 @@ type InnerStruct struct {
 
 type DemoStruct struct {
 	db.TableStruct[DemoStructTable, DemoStruct]
-	EmpresaID   int32    `db:"empresa_id,pk"`
+	CompanyID   int32    `db:"empresa_id,pk"`
 	ID          int32    `db:"id,pk"`
 	ListaID     int32    `db:"lista_id,view,view.1,view.2"`
 	Nombre      string   `json:",omitempty" db:"nombre"`
@@ -37,7 +37,7 @@ type DemoStruct struct {
 
 type DemoStructTable struct {
 	db.TableStruct[DemoStructTable, DemoStruct]
-	EmpresaID   db.Col[DemoStructTable, int32]
+	CompanyID   db.Col[DemoStructTable, int32]
 	ID          db.Col[DemoStructTable, int32]
 	ListaID     db.Col[DemoStructTable, int32]
 	Nombre      db.Col[DemoStructTable, string]
@@ -52,7 +52,7 @@ type DemoStructTable struct {
 func (e DemoStructTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "zz_demo_struct",
-		Partition: e.EmpresaID,
+		Partition: e.CompanyID,
 		Keys:      []db.Coln{e.ID},
 		Indexes: []db.Index{
 			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
@@ -67,7 +67,7 @@ func Test38(args *core.ExecArgs) core.FuncResponse {
 	var err error
 	/*
 		record := DemoStruct{
-			EmpresaID:   4,
+			CompanyID:   4,
 			ID:          1,
 			ListaID:     11,
 			Nombre:      "Jhon",
@@ -112,10 +112,10 @@ func Test39(args *core.ExecArgs) core.FuncResponse {
 
 func Test41(args *core.ExecArgs) core.FuncResponse {
 	/*
-		records := []negocioTypes.ListaCompartidaRegistro{}
+		records := []businessTypes.SharedListRecord{}
 
 		query := db.Query(&records)
-		err := query.EmpresaID.Equals(1).Exec()
+		err := query.CompanyID.Equals(1).Exec()
 		if err != nil {
 			panic(err)
 		}
@@ -132,7 +132,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 	/*
-		records := []negocioTypes.PaisCiudad{}
+		records := []businessTypes.CityLocation{}
 
 		query := db.Query(&records)
 		err := query.Exec()
@@ -152,7 +152,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 
-	records := []negocioTypes.Product{}
+	records := []businessTypes.Product{}
 
 	query := db.Query(&records)
 	err := query.Select(query.ID).Exec()
@@ -176,8 +176,8 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test43(args *core.ExecArgs) core.FuncResponse {
-	indexOutput, indexErr := negocio.BuildProductosSearchIndex(negocio.BuildProductosSearchIndexArgs{
-		EmpresaID:         1,
+	indexOutput, indexErr := business.BuildProductosSearchIndex(business.BuildProductosSearchIndexArgs{
+		CompanyID:         1,
 		FileName:          "c1_products.idx",
 		ProductsWatermark: 0,
 	})
@@ -234,7 +234,7 @@ func Test43(args *core.ExecArgs) core.FuncResponse {
 
 func Test44(args *core.ExecArgs) core.FuncResponse {
 
-	s1 := comercialTypes.SaleOrderProductStats{
+	s1 := salesTypes.SaleOrderProductStats{
 		Quantity:                123,
 		QuantityPendingDelivery: 12332,
 		TotalAmount:             338829,
@@ -246,7 +246,7 @@ func Test44(args *core.ExecArgs) core.FuncResponse {
 	bytes1 := libs.SerializeInt30Struct(s1)
 	core.Log("struct bytes:", bytes1)
 
-	decodedStruct := comercialTypes.SaleOrderProductStats{}
+	decodedStruct := salesTypes.SaleOrderProductStats{}
 	libs.DeserializeInt30Struct(bytes1, &decodedStruct)
 
 	core.Print(decodedStruct)
@@ -256,14 +256,14 @@ func Test44(args *core.ExecArgs) core.FuncResponse {
 
 func Test45(args *core.ExecArgs) core.FuncResponse {
 
-	comercial.SaleOrderReprocess(1, 0)
+	sales.SaleOrderReprocess(1, 0)
 
 	return core.FuncResponse{}
 }
 
 func Test46(args *core.ExecArgs) core.FuncResponse {
 
-	controller := makeDBController[comercialTypes.SaleOrder]()
+	controller := makeDBController[salesTypes.SaleOrder]()
 
 	err := controller.RecalcVirtualColumns(1)
 	if err != nil {
@@ -276,13 +276,13 @@ func Test46(args *core.ExecArgs) core.FuncResponse {
 func Test51(args *core.ExecArgs) core.FuncResponse {
 
 
-	controller := makeDBController[logisticaTypes.SupplyMaterial]()
+	controller := makeDBController[logisticsTypes.SupplyMaterial]()
 
  //	controller.RecalcVirtualColumns(1)
 	controller.DeleteViewsAndIndexes()
 	// controller.RecalcVirtualColumns(1)
 	
-//	controller2 := makeDBController[logisticaTypes.ProductStockV2]()
+//	controller2 := makeDBController[logisticsTypes.ProductStockV2]()
 	// controller2.DeleteViewsAndIndexes()
 
 	return core.FuncResponse{}

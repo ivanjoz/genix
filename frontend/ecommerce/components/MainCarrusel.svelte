@@ -1,9 +1,9 @@
 <script lang="ts">
-  export let categorias: ICategoriaProducto[] = [];
+  export let categorias: IProductCategory[] = [];
 
   import emblaCarouselSvelte from "embla-carousel-svelte";
   import s1 from "./styles.module.css";
-  import type { ICategoriaProducto } from "./store.svelte";
+  import type { IProductCategory } from "./store.svelte";
 
   let emblaApi;
   let options = { loop: false };

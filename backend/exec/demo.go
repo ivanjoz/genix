@@ -1,13 +1,13 @@
 package exec
 
 import (
-	configuracionTypes "app/configuracion/types"
+	configTypes "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	"app/facturacion"
-	logisticaTypes "app/logistica/types"
-	negocioTypes "app/negocio/types"
+	"app/billing"
+	logisticsTypes "app/logistics/types"
+	businessTypes "app/business/types"
 	"app/serialize"
 	"bufio"
 	"bytes"
@@ -27,7 +27,7 @@ import (
 
 /*
 func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
-	usuarios := []coreTypes.Usuario{}
+	usuarios := []coreTypes.User{}
 	if err := core.DBSelect(&usuarios); err != nil {
 		panic(err)
 	}
@@ -41,10 +41,10 @@ func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
 
 func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 	// Autoincrement is handled automatically by the ORM via handlePreInsert
-	usuarios := []coreTypes.Usuario{
+	usuarios := []coreTypes.User{
 		{
 			ID:          0, // Set to 0 to trigger autoincrement
-			EmpresaID:   1,
+			CompanyID:   1,
 			Nombres:     "Hola 2",
 			Apellidos:   "Mundo 2",
 			PerfilesIDs: []int32{2, 3, 4},
@@ -54,11 +54,11 @@ func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	if err := db.Insert(&usuarios); err != nil {
-		core.Log("Error inserting usuario:", err)
+		core.Log("Error inserting user:", err)
 		panic(err)
 	}
 
-	core.Log("Usuario insertado con ID:", usuarios[0].ID)
+	core.Log("User insertado con ID:", usuarios[0].ID)
 
 	return core.FuncResponse{}
 }
@@ -129,7 +129,7 @@ func Test15(args *core.ExecArgs) core.FuncResponse {
 
 	core.Log(buffer.String())
 
-	invoice := facturacion.NewInvoice()
+	invoice := billing.NewInvoice()
 
 	var buffer2 bytes.Buffer
 	enc = xml.NewEncoder(&buffer2)
@@ -145,7 +145,7 @@ func Test15(args *core.ExecArgs) core.FuncResponse {
 
 func Test16(args *core.ExecArgs) core.FuncResponse {
 
-	signatureArgs := facturacion.MakeSignatureArgs{
+	signatureArgs := billing.MakeSignatureArgs{
 		SignatureID:     "signatureKG",
 		DigestValue:     "ld6X+TvM42Fe+F1KM/OB jiKpnko=",
 		SignatureValue:  "W6DbMHJEFmU7GuiU0O+HRUqVzQZZW3QndYtUyeL0VxXuTafHu2vBC+OXvnnali43VXRGQ+/E0tPlZAssqI/PEPfzIU79Wufq6saxYGHKvzdnBi6hnaMuCSG5THHNFppx4aT1KNg7p/koBB3U8PT9C6m6		UnkJJNUquHkFc9BCqI8=",
@@ -153,7 +153,7 @@ func Test16(args *core.ExecArgs) core.FuncResponse {
 		X509Certificate: "MIIESTCCAz		GgAwIBAgIKWOCRzgAAAAAAIjANBgkqhkiG9w0BAQUFADAnMRUwEwYKCZImiZPyLGQB		GRYFU1VOQVQxDjAMBgNVBAMTBVNVTkFUMB4XDTEwMTIyODE5NTExMFoXDTExMTIyODIwMDExMFowgZUxCzAJBgNVBAYTAlBFMQ0wCwYDVQQIEwRMSU1BMQ0wCwYDVQQHEwRMSU1BMREwDwYDVQQKEwhT",
 	}
 
-	signature := facturacion.MakeSignature(signatureArgs)
+	signature := billing.MakeSignature(signatureArgs)
 
 	var buffer bytes.Buffer
 	enc := xml.NewEncoder(&buffer)
@@ -169,7 +169,7 @@ func Test16(args *core.ExecArgs) core.FuncResponse {
 
 func Test17(args *core.ExecArgs) core.FuncResponse {
 
-	usuarios := []coreTypes.Usuario{}
+	usuarios := []coreTypes.User{}
 	// core.DBSelect(&usuarios)
 
 	core.Print(usuarios)
@@ -195,7 +195,7 @@ type DemoStruct3 struct {
 }
 
 type DemoStruct5 struct {
-	configuracionTypes.TAGS `table:"demo_structs"`
+	configTypes.TAGS `table:"demo_structs"`
 	CompanyID               int32         `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
 	ID                      int32         `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
 	Edad                    int32         `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
@@ -211,7 +211,7 @@ type DemoStruct5 struct {
 }
 
 type DemoStruct4 struct {
-	configuracionTypes.TAGS `table:"demo_structs"`
+	configTypes.TAGS `table:"demo_structs"`
 	CompanyID               int32    `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
 	ID                      int32    `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
 	Edad                    int32    `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
@@ -628,7 +628,7 @@ func Test28(args *core.ExecArgs) core.FuncResponse {
 func Test29(args *core.ExecArgs) core.FuncResponse {
 
 	// Migrated to db2 - db.RecalcVirtualColumns not needed anymore
-	// db.RecalcVirtualColumns[negocioTypes.ListaCompartidaRegistro]()
+	// db.RecalcVirtualColumns[businessTypes.SharedListRecord]()
 
 	return core.FuncResponse{}
 }
@@ -639,17 +639,17 @@ func Test30(args *core.ExecArgs) core.FuncResponse {
 	updated := int32(789456123)
 	errGroup := errgroup.Group{}
 
-	listasRegistrosMap := map[int32]*[]negocioTypes.ListaCompartidaRegistro{}
+	listasRegistrosMap := map[int32]*[]businessTypes.SharedListRecord{}
 	for _, listaID := range listasIDs {
-		listasRegistrosMap[listaID] = &[]negocioTypes.ListaCompartidaRegistro{}
+		listasRegistrosMap[listaID] = &[]businessTypes.SharedListRecord{}
 	}
 
 	// Migrated to db2
 	errGroup.Go(func() error {
-		registros := []negocioTypes.ListaCompartidaRegistro{}
+		registros := []businessTypes.SharedListRecord{}
 		query := db.Query(&registros)
 		query.Select().
-			EmpresaID.Equals(1).
+			CompanyID.Equals(1).
 			ListaID.In(listasIDs...)
 		if updated > 0 {
 			query.Updated.GreaterThan(updated)
@@ -671,7 +671,7 @@ func Test30(args *core.ExecArgs) core.FuncResponse {
 		panic(err)
 	}
 
-	listasRegistros := []negocioTypes.ListaCompartidaRegistro{}
+	listasRegistros := []businessTypes.SharedListRecord{}
 	for _, registros := range listasRegistrosMap {
 		listasRegistros = append(listasRegistros, *registros...)
 	}
@@ -689,8 +689,8 @@ func Test32(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 	// Migrated to db2 - use makeDBController and db.DeployScylla
-	// db.DeployScylla(0, negocioTypes.ListaCompartidaRegistro{})
-	controller := makeDBController[negocioTypes.ListaCompartidaRegistro]()
+	// db.DeployScylla(0, businessTypes.SharedListRecord{})
+	controller := makeDBController[businessTypes.SharedListRecord]()
 	db.DeployScylla(0, controller)
 	return core.FuncResponse{}
 }
@@ -760,7 +760,7 @@ func (e TableHelper[T]) Query2() []int32 {
 		core.Log(records)
 	*/
 	// Migrated to db2 - db.RecalcVirtualColumns not needed anymore
-	// db.RecalcVirtualColumns[negocioTypes.ListaCompartidaRegistro]()
+	// db.RecalcVirtualColumns[businessTypes.SharedListRecord]()
 
 	return []int32{}
 }
@@ -798,11 +798,11 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 		Password: core.Env.DB_PASSWORD,
 		Keyspace: core.Env.DB_NAME,
 	})
-	registros := []negocioTypes.ListaCompartidaRegistro{}
+	registros := []businessTypes.SharedListRecord{}
 
-	recordToInsert := negocioTypes.ListaCompartidaRegistro{
+	recordToInsert := businessTypes.SharedListRecord{
 		ID:          2,
-		EmpresaID:   1,
+		CompanyID:   1,
 		ListaID:     3,
 		Nombre:      "Demo 1",
 		Images:      []string{"value 1", "value2"},
@@ -814,7 +814,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Insertando registro...")
 
-	err := db.Insert(&[]negocioTypes.ListaCompartidaRegistro{recordToInsert})
+	err := db.Insert(&[]businessTypes.SharedListRecord{recordToInsert})
 	if err != nil {
 		fmt.Println("Error al insertar::", err)
 		panic(err)
@@ -822,9 +822,9 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Registros insertado!")
 
-	recordToUpdate := negocioTypes.ListaCompartidaRegistro{
+	recordToUpdate := businessTypes.SharedListRecord{
 		ID:          1,
-		EmpresaID:   1,
+		CompanyID:   1,
 		ListaID:     3,
 		Nombre:      "Demo Update 1",
 		Images:      []string{"Updated xx", "Updated yyy"},
@@ -836,8 +836,8 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Actualizando registros....")
 
-	q1 := db.Table[negocioTypes.ListaCompartidaRegistro]()
-	err = db.Update(&[]negocioTypes.ListaCompartidaRegistro{recordToUpdate},
+	q1 := db.Table[businessTypes.SharedListRecord]()
+	err = db.Update(&[]businessTypes.SharedListRecord{recordToUpdate},
 		q1.Status, q1.ListaID, q1.Nombre, q1.Images, q1.Descripcion, q1.Updated)
 	if err != nil {
 		fmt.Println("Error al actualizar::", err)
@@ -849,7 +849,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 	// Example 1: Simple query with chaining
 	query := db.Query(&registros)
 	query.Select().
-		EmpresaID.Equals(1).ListaID.Equals(2).Status.Equals(1).
+		CompanyID.Equals(1).ListaID.Equals(2).Status.Equals(1).
 		AllowFilter()
 
 	// Execute and get all results
@@ -880,8 +880,8 @@ func Test40(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 	// Migrated to db2 - use makeDBController and db.DeployScylla
-	// db.DeployScylla(0, negocioTypes.ListaCompartidaRegistro{})
-	controller := makeDBController[logisticaTypes.ProductStock]()
+	// db.DeployScylla(0, businessTypes.SharedListRecord{})
+	controller := makeDBController[logisticsTypes.ProductStock]()
 	controller.RecalcVirtualColumns(1)
 	return core.FuncResponse{}
 }

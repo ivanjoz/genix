@@ -19,7 +19,7 @@ type InnerStruct10 struct {
 
 type TestUsuario struct {
 	ID        int32   `col:",sk"`    // Sort key for DynamoDB
-	EmpresaID int32   `col:",pk"`    // Partition key for DynamoDB / Primary key for D1
+	CompanyID int32   `col:",pk"`    // Partition key for DynamoDB / Primary key for D1
 	Email     string  `col:",index"` // GSI Index
 	Nombre    string  `col:""`
 	Valores1  []int32 `col:""`
@@ -48,7 +48,7 @@ func RunCloudORMTest() {
 
 	newUser := TestUsuario{
 		ID:        randomID,
-		EmpresaID: 2,
+		CompanyID: 2,
 		Email:     randomEmail,
 		Nombre:    "Test Name",
 	}
@@ -76,7 +76,7 @@ func RunCloudORMTest() {
 	fmt.Println("\n--- Testing GetByID() ---")
 	// The GetByID function expects an instance of the struct populated with the primary keys.
 	searchUser := TestUsuario{
-		EmpresaID: 2,
+		CompanyID: 2,
 		ID:        randomID,
 	}
 

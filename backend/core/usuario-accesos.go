@@ -16,15 +16,15 @@ import (
 )
 
 type UsuarioToken struct {
-	EmpresaID int32  `json:"c" cbor:"1,keyasint"`
+	CompanyID int32  `json:"c" cbor:"1,keyasint"`
 	ID        int32  `json:"i" cbor:"2,keyasint"`
 	Created   int32  `json:"e" cbor:"3,keyasint"`
 	Hash      uint64 `json:"h" cbor:"4,keyasint"`
-	Usuario   string `json:"u" cbor:"5,keyasint"`
+	User   string `json:"u" cbor:"5,keyasint"`
 	Error     string `json:"-" cbor:"-"`
 }
 
-var Usuario UsuarioToken
+var User UsuarioToken
 
 type UsuarioAccesos struct {
 	updated              int32 // SUnixTime()
@@ -144,17 +144,17 @@ func ComputeUsuarioTokenHash(usuarioToken UsuarioToken) uint64 {
 	// Bind the token payload to the server secret so the uint64 hash can be recomputed during auth.
 	hashMac := hmac.New(sha256.New, []byte(Env.SECRET_PHRASE))
 	tokenPayloadBuffer := make([]byte, 12)
-	binary.BigEndian.PutUint32(tokenPayloadBuffer[0:4], uint32(usuarioToken.EmpresaID))
+	binary.BigEndian.PutUint32(tokenPayloadBuffer[0:4], uint32(usuarioToken.CompanyID))
 	binary.BigEndian.PutUint32(tokenPayloadBuffer[4:8], uint32(usuarioToken.ID))
 	binary.BigEndian.PutUint32(tokenPayloadBuffer[8:12], uint32(usuarioToken.Created))
 	hashMac.Write([]byte("usrToken:v1"))
 	hashMac.Write(tokenPayloadBuffer)
-	hashMac.Write([]byte(usuarioToken.Usuario))
+	hashMac.Write([]byte(usuarioToken.User))
 	return binary.BigEndian.Uint64(hashMac.Sum(nil)[:8])
 }
 
-func makeCompanyUsuarioAccesosKey(empresaID, usuarioID int32) uint64 {
-	return uint64(uint32(empresaID))<<32 | uint64(uint32(usuarioID))
+func makeCompanyUsuarioAccesosKey(companyID, userID int32) uint64 {
+	return uint64(uint32(companyID))<<32 | uint64(uint32(userID))
 }
 
 func formatAccesosNivelForLog(accesosNivel []uint16) string {
@@ -173,9 +173,9 @@ func formatAccesosNivelForLog(accesosNivel []uint16) string {
 	return strings.Join(formattedAccesos, ",")
 }
 
-func loadUsuarioAccesosComputed(empresaID, usuarioID int32) ([]uint16, error) {
+func loadUsuarioAccesosComputed(companyID, userID int32) ([]uint16, error) {
 	nowTime := SUnixTime()
-	cacheKey := makeCompanyUsuarioAccesosKey(empresaID, usuarioID)
+	cacheKey := makeCompanyUsuarioAccesosKey(companyID, userID)
 
 	companyUsuarioAccesosMu.RLock()
 	cachedUsuarioAccesos, cacheFound := companyUsuarioAccesos[cacheKey]
@@ -184,23 +184,23 @@ func loadUsuarioAccesosComputed(empresaID, usuarioID int32) ([]uint16, error) {
 	cacheIsFresh := nowTime >= cachedUsuarioAccesos.updated && (nowTime-cachedUsuarioAccesos.updated) <= usuarioAccesosCacheTTL
 
 	if !cacheFound {
-		Log("CheckUser:: cache miss", "empresaID", empresaID, "usuarioID", usuarioID)
+		Log("CheckUser:: cache miss", "companyID", companyID, "userID", userID)
 	} else if !cacheIsFresh {
-		Log("CheckUser:: cache stale", "empresaID", empresaID, "usuarioID", usuarioID, "cacheAge", nowTime-cachedUsuarioAccesos.updated)
+		Log("CheckUser:: cache stale", "companyID", companyID, "userID", userID, "cacheAge", nowTime-cachedUsuarioAccesos.updated)
 	}
 
 	if !cacheIsFresh {
-		usuarios := []coretypes.Usuario{}
+		usuarios := []coretypes.User{}
 		usuarioQuery := db.Query(&usuarios)
-		usuarioQuery.Select(usuarioQuery.EmpresaID, usuarioQuery.ID, usuarioQuery.AccesosComputed).
-			EmpresaID.Equals(empresaID).ID.Equals(usuarioID).Limit(1)
+		usuarioQuery.Select(usuarioQuery.CompanyID, usuarioQuery.ID, usuarioQuery.AccesosComputed).
+			CompanyID.Equals(companyID).ID.Equals(userID).Limit(1)
 
-		Log("CheckUser:: querying usuario accesos", "empresaID", empresaID, "usuarioID", usuarioID)
+		Log("CheckUser:: querying user accesos", "companyID", companyID, "userID", userID)
 		if err := usuarioQuery.Exec(); err != nil {
-			return nil, Err("Error al obtener los accesos computados del usuario en ScyllaDB:", err)
+			return nil, Err("Error al obtener los accesos computados del user en ScyllaDB:", err)
 		}
 		if len(usuarios) == 0 {
-			return nil, Err(fmt.Sprintf("No se encontró el usuario %d de la empresa %d en ScyllaDB.", usuarioID, empresaID))
+			return nil, Err(fmt.Sprintf("No se encontró el user %d de la company %d en ScyllaDB.", userID, companyID))
 		}
 		slices.Sort(usuarios[0].AccesosComputed)
 
@@ -212,9 +212,9 @@ func loadUsuarioAccesosComputed(empresaID, usuarioID int32) ([]uint16, error) {
 		cachedUsuarioAccesos = companyUsuarioAccesos[cacheKey]
 		companyUsuarioAccesosMu.Unlock()
 
-		Log("CheckUser:: cache updated", "empresaID", empresaID, "usuarioID", usuarioID, "accesosComputed", len(cachedUsuarioAccesos.accesosNivelComputed), "accesosDetalle", formatAccesosNivelForLog(cachedUsuarioAccesos.accesosNivelComputed), "updated", nowTime)
+		Log("CheckUser:: cache updated", "companyID", companyID, "userID", userID, "accesosComputed", len(cachedUsuarioAccesos.accesosNivelComputed), "accesosDetalle", formatAccesosNivelForLog(cachedUsuarioAccesos.accesosNivelComputed), "updated", nowTime)
 	} else {
-		Log("CheckUser:: cache hit", "empresaID", empresaID, "usuarioID", usuarioID, "accesosComputed", len(cachedUsuarioAccesos.accesosNivelComputed), "accesosDetalle", formatAccesosNivelForLog(cachedUsuarioAccesos.accesosNivelComputed))
+		Log("CheckUser:: cache hit", "companyID", companyID, "userID", userID, "accesosComputed", len(cachedUsuarioAccesos.accesosNivelComputed), "accesosDetalle", formatAccesosNivelForLog(cachedUsuarioAccesos.accesosNivelComputed))
 	}
 
 	return cachedUsuarioAccesos.accesosNivelComputed, nil
@@ -226,55 +226,55 @@ func CheckUser(req *HandlerArgs, access int) *UsuarioToken {
 		userToken = req.Headers["Authorization"]
 	}
 
-	usuario := UsuarioToken{}
+	user := UsuarioToken{}
 
 	if len(userToken) < 8 {
-		usuario.Error = "No se suministró un Token de usuario"
-		return &usuario
+		user.Error = "No se suministró un Token de user"
+		return &user
 	}
 
 	tokenBase64 := strings.TrimSpace(strings.TrimPrefix(userToken, "Bearer "))
 	if len(tokenBase64) < 8 {
-		usuario.Error = "No se encontró la información del usuario."
-		return &usuario
+		user.Error = "No se encontró la información del user."
+		return &user
 	}
 
 	tokenBytes := Base64ToBytes(MakeB64UrlDecode(tokenBase64))
 	if len(tokenBytes) < 8 {
-		usuario.Error = "El token de inicio de sesión es inválido."
-		return &usuario
+		user.Error = "El token de inicio de sesión es inválido."
+		return &user
 	}
 
-	if err := cbor.Unmarshal(tokenBytes, &usuario); err != nil {
+	if err := cbor.Unmarshal(tokenBytes, &user); err != nil {
 		Log("CheckUser:: error decodificando CBOR", err)
-		usuario.Error = "Error al recuperar la información del usuario."
+		user.Error = "Error al recuperar la información del user."
 	}
 
-	if usuario.Error == "" {
-		expectedTokenHash := ComputeUsuarioTokenHash(usuario)
-		if usuario.Hash != expectedTokenHash {
-			Log("CheckUser:: hash inválido", "empresaID", usuario.EmpresaID, "usuarioID", usuario.ID, "receivedHash", usuario.Hash, "expectedHash", expectedTokenHash)
-			usuario.Error = "El token de inicio de sesión no es válido."
+	if user.Error == "" {
+		expectedTokenHash := ComputeUsuarioTokenHash(user)
+		if user.Hash != expectedTokenHash {
+			Log("CheckUser:: hash inválido", "companyID", user.CompanyID, "userID", user.ID, "receivedHash", user.Hash, "expectedHash", expectedTokenHash)
+			user.Error = "El token de inicio de sesión no es válido."
 		}
 	}
 
 	var accesosErr error
 
-	if usuario.Error == "" && usuario.EmpresaID > 0 && usuario.ID > 0 {
-		req.accesosNivel, accesosErr = loadUsuarioAccesosComputed(usuario.EmpresaID, usuario.ID)
+	if user.Error == "" && user.CompanyID > 0 && user.ID > 0 {
+		req.accesosNivel, accesosErr = loadUsuarioAccesosComputed(user.CompanyID, user.ID)
 		if accesosErr != nil {
 			Log("CheckUser:: error cargar accesos", accesosErr)
-			usuario.Error = accesosErr.Error()
+			user.Error = accesosErr.Error()
 		} else {
-			Log("CheckUser:: accesos computados cargados", "empresaID", usuario.EmpresaID, "usuarioID", usuario.ID, "accesosComputed", len(req.accesosNivel), "requiredAccess", access)
+			Log("CheckUser:: accesos computados cargados", "companyID", user.CompanyID, "userID", user.ID, "accesosComputed", len(req.accesosNivel), "requiredAccess", access)
 		}
 	}
 
 	// NOTE: In local/VPS HTTP mode requests are concurrent; avoid mutating global user state.
 	if Env.IS_SERVERLESS {
-		Usuario = usuario
-		Env.USUARIO_ID = usuario.ID
+		User = user
+		Env.USUARIO_ID = user.ID
 	}
 
-	return &usuario
+	return &user
 }

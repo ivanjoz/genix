@@ -22,7 +22,7 @@ func TestBuildIndexGroupSelectPlanPrefersMostSpecificRawGroup(t *testing.T) {
 	tableInfo := &TableInfo{
 		statements: []ColumnStatement{
 			{Col: "empresa_id", Operator: "=", Value: int32(7)},
-			{Col: "fecha", Operator: "BETWEEN", From: []ColumnStatement{{Col: "fecha", Value: int16(18754)}}, To: []ColumnStatement{{Col: "fecha", Value: int16(18756)}}},
+			{Col: "date", Operator: "BETWEEN", From: []ColumnStatement{{Col: "date", Value: int16(18754)}}, To: []ColumnStatement{{Col: "date", Value: int16(18756)}}},
 			{Col: "client_id", Operator: "=", Value: int32(5)},
 			{Col: "product_ids", Operator: "CONTAINS", Value: int32(11)},
 		},
@@ -33,7 +33,7 @@ func TestBuildIndexGroupSelectPlanPrefersMostSpecificRawGroup(t *testing.T) {
 		t.Fatalf("buildIndexGroupSelectPlan returned error: %v", err)
 	}
 
-	if queryPlan.indexGroup.name != "fecha_client_id_product_ids" {
+	if queryPlan.indexGroup.name != "date_client_id_product_ids" {
 		t.Fatalf("expected the most specific raw index group, got %q", queryPlan.indexGroup.name)
 	}
 	if queryPlan.indexGroup.indexID == 0 {
@@ -76,7 +76,7 @@ func TestBuildIndexGroupSelectPlanAllowsSingleColumnRawGroup(t *testing.T) {
 	tableInfo := &TableInfo{
 		statements: []ColumnStatement{
 			{Col: "empresa_id", Operator: "=", Value: int32(7)},
-			{Col: "fecha", Operator: "BETWEEN", From: []ColumnStatement{{Col: "fecha", Value: int16(18754)}}, To: []ColumnStatement{{Col: "fecha", Value: int16(18756)}}},
+			{Col: "date", Operator: "BETWEEN", From: []ColumnStatement{{Col: "date", Value: int16(18754)}}, To: []ColumnStatement{{Col: "date", Value: int16(18756)}}},
 		},
 	}
 
@@ -85,7 +85,7 @@ func TestBuildIndexGroupSelectPlanAllowsSingleColumnRawGroup(t *testing.T) {
 		t.Fatalf("buildIndexGroupSelectPlan returned error: %v", err)
 	}
 
-	if queryPlan.indexGroup.name != "fecha" {
+	if queryPlan.indexGroup.name != "date" {
 		t.Fatalf("expected single-column index group, got %q", queryPlan.indexGroup.name)
 	}
 	if queryPlan.indexGroup.virtualColumn != nil && !queryPlan.indexGroup.virtualColumn.IsNil() {
@@ -103,15 +103,15 @@ func TestBuildIndexGroupSelectPlanAllowsSingleColumnRawGroup(t *testing.T) {
 		if len(hashGroup.indexGroupValues) != 1 {
 			t.Fatalf("unexpected single-column values: %+v", hashGroup)
 		}
-		fechaValue := hashGroup.indexGroupValues[0]
-		if _, exists := expectedFechas[fechaValue]; !exists {
+		dateValue := hashGroup.indexGroupValues[0]
+		if _, exists := expectedFechas[dateValue]; !exists {
 			t.Fatalf("unexpected single-column value: %+v", hashGroup)
 		}
-		expectedFechas[fechaValue] = true
+		expectedFechas[dateValue] = true
 	}
-	for fechaValue, wasSeen := range expectedFechas {
+	for dateValue, wasSeen := range expectedFechas {
 		if !wasSeen {
-			t.Fatalf("missing expected fecha value %d in %+v", fechaValue, queryPlan.hashGroups)
+			t.Fatalf("missing expected date value %d in %+v", dateValue, queryPlan.hashGroups)
 		}
 	}
 }
@@ -128,7 +128,7 @@ func TestBuildIndexGroupFetchQueryUsesSourceColumnForSingleColumnGroup(t *testin
 	}
 
 	queryStr, queryValues := buildIndexGroupFetchQuery(scyllaTable, queryPlan, fetchState, []string{"*"})
-	expectedQuery := "SELECT * FROM test_keyspace.index_group_records WHERE empresa_id = ? AND fecha = ?"
+	expectedQuery := "SELECT * FROM test_keyspace.index_group_records WHERE empresa_id = ? AND date = ?"
 	if queryStr != expectedQuery {
 		t.Fatalf("unexpected query: %s", queryStr)
 	}

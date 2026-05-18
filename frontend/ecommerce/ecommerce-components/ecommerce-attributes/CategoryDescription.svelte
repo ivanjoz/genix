@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getCategoryByID, type IProductoCategoria } from '$services/services/productos.svelte';
+	import { getCategoryByID, type IProductCategory } from '$services/services/productos.svelte';
 
 	export interface ICategoryDescription {
 		css?: string;
@@ -8,7 +8,7 @@
 
 	const { css = "", categoriasIDs = [] }: ICategoryDescription = $props();
 
-	let categoria: IProductoCategoria | undefined = $state(undefined);
+	let categoria: IProductCategory | undefined = $state(undefined);
 
 	// Load data when component mounts
 	$effect(() => {

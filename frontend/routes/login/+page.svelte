@@ -7,7 +7,7 @@
   import { checkIsLogin } from '$core/security';
   import { Env, type IApiEndpointOption } from '$core/env';
 
-  let form = $state({ Usuario: "", Password: "", EmpresaID: 1, CipherKey: "" } as ILogin)
+  let form = $state({ User: "", Password: "", CompanyID: 1, CipherKey: "" } as ILogin)
   let selectorForm = $state({ selectedApiEndpointRoute: "" })
   let isLoading = $state(false)
   let apiEndpointOptions = $state<IApiEndpointOption[]>([])
@@ -28,7 +28,7 @@
   }
 
   const sendLogin = async () => {
-    if(form.Usuario.length < 4 || form.Password.length < 4){
+    if(form.User.length < 4 || form.Password.length < 4){
       Notify.failure('Debe proporcionar un usuario y una contraseña válidos');
       return
     }
@@ -72,7 +72,7 @@
         css="mb-12 w-full text-lg"
         label="Usuario"
         saveOn={form}
-        save="Usuario"
+        save="User"
         type="text"
       />
       <Input

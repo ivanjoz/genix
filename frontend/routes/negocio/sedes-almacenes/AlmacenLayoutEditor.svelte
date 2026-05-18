@@ -1,10 +1,10 @@
 <script lang="ts">
 import Input from '$components/form/Input.svelte';
 import Button from '$components/buttons/Button.svelte';
-  import type { IAlmacen, IAlmacenLayout } from "./sedes-almacenes.svelte"
+  import type { IWarehouse, IWarehouseLayout } from "./sedes-almacenes.svelte"
 
   interface Props {
-    almacen: IAlmacen
+    almacen: IWarehouse
   }
 
   let { almacen = $bindable() }: Props = $props()

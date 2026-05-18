@@ -1,7 +1,7 @@
 import { Params } from '$core/security'
 import { decodeFromBase62 } from '$libs/helpers'
 import { GetHandler, POST } from '$libs/http.svelte'
-import type { IProductoStock } from '../products-stock/stock-movement'
+import type { IProductStock } from '../products-stock/stock-movement'
 
 export interface IProductSupplyProviderRow {
   ProviderID: number
@@ -83,8 +83,8 @@ export const postProductSupply = (productSupplyRecord: IProductSupplyRow) => {
   })
 }
 
-export interface IFechaProductoMovimientos {
-  Fecha: number
+export interface IDateProductMovements {
+  Date: number
   DetailProductsIDs: number[]
   DetailInflows: number[]
   DetailOutflows: number[]
@@ -102,61 +102,61 @@ export class ProductStockMovementsDay {
 
   setDateRange(minimumFecha: number, maximumFecha: number) {
     // Keep the date axis explicit so each index maps to one calendar day without sparse gaps.
-    for (let fecha = minimumFecha; fecha <= maximumFecha; fecha++) {
-      this.DetailFecha.push(fecha)
+    for (let date = minimumFecha; date <= maximumFecha; date++) {
+      this.DetailFecha.push(date)
       this.DetailInflows.push(0)
       this.DetailOutflows.push(0)
       this.DetailFinalStock.push(0)
     }
   }
 
-  addDataFrame(fecha: number, outflow: number, inflow: number) {
-    const fechaIndex = this.getFechaIndex(fecha)
-    if (fechaIndex < 0) { return }
+  addDataFrame(date: number, outflow: number, inflow: number) {
+    const dateIndex = this.getFechaIndex(date)
+    if (dateIndex < 0) { return }
 
-    this.DetailOutflows[fechaIndex] = outflow
-    this.DetailInflows[fechaIndex] = inflow
+    this.DetailOutflows[dateIndex] = outflow
+    this.DetailInflows[dateIndex] = inflow
   }
 
-  getFechaIndex(fecha: number) {
+  getFechaIndex(date: number) {
     const minimumFecha = this.DetailFecha[0]
     if (minimumFecha === undefined) { return -1 }
 
-    const fechaIndex = fecha - minimumFecha
-    return fechaIndex >= 0 && fechaIndex < this.DetailFecha.length ? fechaIndex : -1
+    const dateIndex = date - minimumFecha
+    return dateIndex >= 0 && dateIndex < this.DetailFecha.length ? dateIndex : -1
   }
 
-  getOutflows(fecha: number) {
-    const fechaIndex = this.getFechaIndex(fecha)
-    return fechaIndex >= 0 ? this.DetailOutflows[fechaIndex] || 0 : 0
+  getOutflows(date: number) {
+    const dateIndex = this.getFechaIndex(date)
+    return dateIndex >= 0 ? this.DetailOutflows[dateIndex] || 0 : 0
   }
 
-  getInflows(fecha: number) {
-    const fechaIndex = this.getFechaIndex(fecha)
-    return fechaIndex >= 0 ? this.DetailInflows[fechaIndex] || 0 : 0
+  getInflows(date: number) {
+    const dateIndex = this.getFechaIndex(date)
+    return dateIndex >= 0 ? this.DetailInflows[dateIndex] || 0 : 0
   }
 
-  getFinalStock(fecha: number) {
+  getFinalStock(date: number) {
     if (!this.DetailFecha.length) { return 0 }
 
     const minimumFecha = this.DetailFecha[0]
     const maximumFecha = this.DetailFecha[this.DetailFecha.length - 1]
-    if (fecha < minimumFecha) { return 0 }
-    if (fecha > maximumFecha) {
+    if (date < minimumFecha) { return 0 }
+    if (date > maximumFecha) {
       // Stock stays unchanged after the last movement until a newer movement exists.
       return this.DetailFinalStock[this.DetailFinalStock.length - 1] || 0
     }
 
-    const fechaIndex = this.getFechaIndex(fecha)
-    return fechaIndex >= 0 ? this.DetailFinalStock[fechaIndex] || 0 : 0
+    const dateIndex = this.getFechaIndex(date)
+    return dateIndex >= 0 ? this.DetailFinalStock[dateIndex] || 0 : 0
   }
 
-  calculateFinalStock(fechaCurrent: number) {
+  calculateFinalStock(dateCurrent: number) {
     if (!this.DetailFecha.length) { return }
 
     const minimumFecha = this.DetailFecha[0]
     const maximumFecha = this.DetailFecha[this.DetailFecha.length - 1]
-    const baseFecha = maximumFecha <= fechaCurrent ? maximumFecha : fechaCurrent
+    const baseFecha = maximumFecha <= dateCurrent ? maximumFecha : dateCurrent
     const baseFechaIndex = this.getFechaIndex(baseFecha)
     const shouldDebugFinalStock = this.ProductID === 20003
 
@@ -169,7 +169,7 @@ export class ProductStockMovementsDay {
       console.group(`ProductStockMovementsDay::calculateFinalStock:${this.ProductID}`)
       console.log('initialState', {
         currentStock: this.CurrentStock,
-        fechaCurrent,
+        dateCurrent,
         maximumFecha,
         minimumFecha,
         baseFecha,
@@ -181,48 +181,48 @@ export class ProductStockMovementsDay {
     }
 
     let moreRecentDayFinalStock = this.CurrentStock
-    for (let fechaIndex = this.DetailFecha.length - 1; fechaIndex >= 0; fechaIndex--) {
-      const fecha = this.DetailFecha[fechaIndex]
+    for (let dateIndex = this.DetailFecha.length - 1; dateIndex >= 0; dateIndex--) {
+      const date = this.DetailFecha[dateIndex]
 
       // Future days keep the current snapshot because there is no later baseline to reverse from.
-      if (fecha > fechaCurrent) {
-        this.DetailFinalStock[fechaIndex] = this.CurrentStock
+      if (date > dateCurrent) {
+        this.DetailFinalStock[dateIndex] = this.CurrentStock
         moreRecentDayFinalStock = this.CurrentStock
         if (shouldDebugFinalStock) {
           console.log('futureDayPinnedToCurrentStock', {
-            fecha,
-            fechaIndex,
-            finalStock: this.DetailFinalStock[fechaIndex],
+            date,
+            dateIndex,
+            finalStock: this.DetailFinalStock[dateIndex],
           })
         }
         continue
       }
 
-      if (fecha === baseFecha) {
-        moreRecentDayFinalStock = this.DetailFinalStock[fechaIndex]
+      if (date === baseFecha) {
+        moreRecentDayFinalStock = this.DetailFinalStock[dateIndex]
         if (shouldDebugFinalStock) {
           console.log('baseDayAssigned', {
-            fecha,
-            fechaIndex,
-            outflows: this.DetailOutflows[fechaIndex] || 0,
-            inflows: this.DetailInflows[fechaIndex] || 0,
-            finalStock: this.DetailFinalStock[fechaIndex],
+            date,
+            dateIndex,
+            outflows: this.DetailOutflows[dateIndex] || 0,
+            inflows: this.DetailInflows[dateIndex] || 0,
+            finalStock: this.DetailFinalStock[dateIndex],
           })
         }
         continue
       }
 
-      const moreRecentFechaIndex = fechaIndex + 1
+      const moreRecentFechaIndex = dateIndex + 1
       const outflows = moreRecentFechaIndex < this.DetailFecha.length ? this.DetailOutflows[moreRecentFechaIndex] || 0 : 0
       const inflows = moreRecentFechaIndex < this.DetailFecha.length ? this.DetailInflows[moreRecentFechaIndex] || 0 : 0
       // Reverse the next day's net movement to reconstruct this day's ending stock.
       const previousDayFinalStock = moreRecentDayFinalStock - inflows + outflows
-      this.DetailFinalStock[fechaIndex] = previousDayFinalStock
+      this.DetailFinalStock[dateIndex] = previousDayFinalStock
       if (shouldDebugFinalStock) {
         console.log('previousDayCalculated', {
-          fecha,
-          fechaIndex,
-          moreRecentFecha: fecha + 1,
+          date,
+          dateIndex,
+          moreRecentFecha: date + 1,
           moreRecentFechaIndex,
           outflows,
           inflows,
@@ -246,8 +246,8 @@ export class ProductStockMovementsDay {
 }
 
 interface IAlmacenMovimientosGroupedResponse {
-	movimientos: IFechaProductoMovimientos[]
-	productosStock: IProductoStock[]
+	movimientos: IDateProductMovements[]
+	productosStock: IProductStock[]
 }
 
 const extractProductIDFromStockID = (productStockID: number) => {
@@ -256,11 +256,11 @@ const extractProductIDFromStockID = (productStockID: number) => {
 
 export class AlmacenMovimientosGroupedService extends GetHandler {
   route = 'almacen-movimientos-grouped'
-  keysIDs = { movimientos: "Fecha" }
+  keysIDs = { movimientos: "Date" }
   useCache = { min: 5, ver: 8 }
 
-  records: IFechaProductoMovimientos[] = $state([])
-  recordsMap: Map<number, IFechaProductoMovimientos> = $state(new Map())
+  records: IDateProductMovements[] = $state([])
+  recordsMap: Map<number, IDateProductMovements> = $state(new Map())
   productMovements: ProductStockMovementsDay[] = $state([])
 	productMovementsMap: Map<number, ProductStockMovementsDay> = $state(new Map())
   productoCurrentStock: Map<number,number> = new Map()
@@ -276,28 +276,28 @@ export class AlmacenMovimientosGroupedService extends GetHandler {
 			this.productoCurrentStock.set(productoID, (e.Quantity||0) + currentStock)
 		}
 		
-		const fechaCurrent = Params.getFechaUnix()
+		const dateCurrent = Params.getFechaUnix()
 		const productoFechaRangeMap: Map<number, [number, number]> = new Map()
 		
     const groupedMovementRecords = (response.movimientos || []).map((groupedMovementRecord) => ({
-      Fecha: groupedMovementRecord.Fecha || 0,
+      Date: groupedMovementRecord.Date || 0,
       DetailProductsIDs: groupedMovementRecord.DetailProductsIDs || [],
       DetailInflows: groupedMovementRecord.DetailInflows || [],
       DetailOutflows: groupedMovementRecord.DetailOutflows || [],
       DetailFinalStock: [],
-      upd: groupedMovementRecord.upd || groupedMovementRecord.Fecha || 0,
+      upd: groupedMovementRecord.upd || groupedMovementRecord.Date || 0,
     }))
 
     for (const groupedMovementRecord of groupedMovementRecords) {
       for (const productID of groupedMovementRecord.DetailProductsIDs) {
         const productoFechaRange = productoFechaRangeMap.get(productID)
         if (!productoFechaRange) {
-          productoFechaRangeMap.set(productID, [groupedMovementRecord.Fecha, groupedMovementRecord.Fecha])
+          productoFechaRangeMap.set(productID, [groupedMovementRecord.Date, groupedMovementRecord.Date])
           continue
         }
 
-        if (groupedMovementRecord.Fecha < productoFechaRange[0]) { productoFechaRange[0] = groupedMovementRecord.Fecha }
-        if (groupedMovementRecord.Fecha > productoFechaRange[1]) { productoFechaRange[1] = groupedMovementRecord.Fecha }
+        if (groupedMovementRecord.Date < productoFechaRange[0]) { productoFechaRange[0] = groupedMovementRecord.Date }
+        if (groupedMovementRecord.Date > productoFechaRange[1]) { productoFechaRange[1] = groupedMovementRecord.Date }
       }
     }
 
@@ -313,7 +313,7 @@ export class AlmacenMovimientosGroupedService extends GetHandler {
     for (const groupedMovementRecord of groupedMovementRecords) {
       for (const [detailIndex, productID] of groupedMovementRecord.DetailProductsIDs.entries()) {
         productMovementsMap.get(productID)?.addDataFrame(
-          groupedMovementRecord.Fecha,
+          groupedMovementRecord.Date,
           groupedMovementRecord.DetailOutflows[detailIndex] || 0,
           groupedMovementRecord.DetailInflows[detailIndex] || 0,
         )
@@ -322,14 +322,14 @@ export class AlmacenMovimientosGroupedService extends GetHandler {
 
 		for (const pg of productMovementsMap.values()) {
 			pg.CurrentStock = this.productoCurrentStock.get(pg.ProductID) || 0
-      pg.calculateFinalStock(fechaCurrent)
+      pg.calculateFinalStock(dateCurrent)
 		}
     
 		console.log("productMovementsMap", [...productMovementsMap.values()])
 		
 		this.records = groupedMovementRecords
     this.recordsMap = new Map(
-      groupedMovementRecords.map((groupedMovementRecord) => [groupedMovementRecord.Fecha, groupedMovementRecord]),
+      groupedMovementRecords.map((groupedMovementRecord) => [groupedMovementRecord.Date, groupedMovementRecord]),
     )
 		this.productMovements = Array.from(productMovementsMap.values())
 		this.productMovementsMap = productMovementsMap

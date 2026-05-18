@@ -2,12 +2,12 @@ package exec
 
 import (
 	"app/cloud"
-	configuracionTypes "app/configuracion/types"
+	configTypes "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	negocioTypes "app/negocio/types"
-	seguridadTypes "app/seguridad/types"
+	businessTypes "app/business/types"
+	securityTypes "app/security/types"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -20,25 +20,28 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	if len(core.Env.ADMIN_PASSWORD) == 0 || len(core.Env.SECRET_PHRASE) == 0 {
 		panic("No se especificado el ADMIN_PASSWORD y el SECRET_PHRASE en credentials.json")
 	}
-
+	
 	// Bootstrap ORM internal tables before any ScyllaDB seed writes depend on them.
 	if err := db.Init(); err != nil {
 		panic("Error al inicializar las tablas internas del ORM. " + err.Error())
 	}
-	if err := cloud.Init[configuracionTypes.Empresa](); err != nil {
+
+	DeployDatabaseSchemas(args)
+	
+	if err := cloud.Init[configTypes.Company](); err != nil {
 		panic("Error al inicializar la tabla cloud de empresas. " + err.Error())
 	}
-	if err := cloud.Init[coreTypes.Usuario](); err != nil {
+	if err := cloud.Init[coreTypes.User](); err != nil {
 		panic("Error al inicializar la tabla cloud de usuarios. " + err.Error())
 	}
-	if err := cloud.Init[seguridadTypes.Perfil](); err != nil {
+	if err := cloud.Init[securityTypes.Profile](); err != nil {
 		panic("Error al inicializar la tabla cloud de perfiles. " + err.Error())
 	}
 
 	seedTimestamp := core.SUnixTime()
 	password := core.Env.SECRET_PHRASE + core.Env.ADMIN_PASSWORD
 	passwordHash := core.FnvHashString64(password, -1, 20)
-	empresas := []configuracionTypes.Empresa{
+	empresas := []configTypes.Company{
 		{
 			ID:          1,
 			Nombre:      "Principal",
@@ -54,11 +57,11 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 			Updated:     seedTimestamp,
 		},
 	}
-	usuarios := []coreTypes.Usuario{
+	usuarios := []coreTypes.User{
 		{
 			ID:           1,
-			EmpresaID:    1,
-			Usuario:      "admin",
+			CompanyID:    1,
+			User:      "admin",
 			Nombres:      "admin",
 			Apellidos:    "root",
 			PasswordHash: passwordHash,
@@ -68,8 +71,8 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 		},
 		{
 			ID:           1,
-			EmpresaID:    2,
-			Usuario:      "system",
+			CompanyID:    2,
+			User:      "system",
 			Nombres:      "system",
 			Apellidos:    "demo",
 			PasswordHash: passwordHash,
@@ -126,11 +129,11 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 		panic(err)
 	}
 
-	recordsMap := map[string]negocioTypes.PaisCiudad{}
+	recordsMap := map[string]businessTypes.CityLocation{}
 
 	addRecords := func(id, padreID, nombre string, jerarquia int8) {
 		if _, ok := recordsMap[id]; !ok {
-			recordsMap[id] = negocioTypes.PaisCiudad{
+			recordsMap[id] = businessTypes.CityLocation{
 				PaisID:    604,
 				CiudadID:  id,
 				PadreID:   padreID,
@@ -176,7 +179,7 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	// ciudades de Peru
-	ciudades := []negocioTypes.PaisCiudad{}
+	ciudades := []businessTypes.CityLocation{}
 	q1 := db.Query(&ciudades)
 	err := q1.Select(q1.Nombre, q1.CiudadID, q1.PadreID).
 		PaisID.Equals(604).Exec()
@@ -208,26 +211,11 @@ func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 }
 
 // fn-homologate
-func Homologate(args *core.ExecArgs) core.FuncResponse {
-	/*
-		// Conexión a la base de datos
-		db.MakeScyllaConnection(db.ConnParams{
-			Host:     core.Env.DB_HOST,
-			Port:     int(core.Env.DB_PORT),
-			User:     core.Env.DB_USER,
-			Password: core.Env.DB_PASSWORD,
-			Keyspace: core.Env.DB_NAME,
-		})
+func DeployDatabaseSchemas(args *core.ExecArgs) core.FuncResponse {
 
-		fmt.Println("----------")
-
-		structTypes := []any{}
-		for _, cn := range MakeScyllaControllers() {
-			structTypes = append(structTypes, cn.StructType)
-		}
-
-		db.DeployScylla(0, structTypes...)
-	*/
+	if len(core.Env.DB_NAME) == 0 {
+		panic("No se ha especificado el DB_NAME en credentials.json")
+	}
 
 	db.MakeScyllaConnection(db.ConnParams{
 		Host:     core.Env.DB_HOST,
@@ -237,6 +225,10 @@ func Homologate(args *core.ExecArgs) core.FuncResponse {
 		Keyspace: core.Env.DB_NAME,
 	})
 
+	if err := db.CreateKeyspaceIfNotExists(); err != nil {
+		panic(fmt.Sprintf("Error al crear el keyspace '%v': %v", core.Env.DB_NAME, err))
+	}
+
 	db.DeployScylla(0, MakeScyllaControllers()...)
 
 	return core.FuncResponse{}
@@ -244,14 +236,6 @@ func Homologate(args *core.ExecArgs) core.FuncResponse {
 
 // fn-recalc
 func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
-	/*
-		for _, cn := range MakeScyllaControllers() {
-			cn.RecalcVirtualColumns()
-		}
-	*/
-	/*
-		db.RecalcVirtualColumns[types.AlmacenProducto]()
-	*/
 
 	db.MakeScyllaConnection(db.ConnParams{
 		Host:     core.Env.DB_HOST,

@@ -10,31 +10,31 @@ import (
 
 type fanoutViewRecord struct {
 	TableStruct[fanoutViewRecordTable, fanoutViewRecord]
-	EmpresaID  int32
+	CompanyID  int32
 	ID         int64
 	ProductIDs []int32 `db:",list"`
-	Fecha      int16
+	Date      int16
 	Updated    int32
 }
 
 type fanoutViewRecordTable struct {
 	TableStruct[fanoutViewRecordTable, fanoutViewRecord]
-	EmpresaID  Col[fanoutViewRecordTable, int32]
+	CompanyID  Col[fanoutViewRecordTable, int32]
 	ID         Col[fanoutViewRecordTable, int64]
 	ProductIDs Col[fanoutViewRecordTable, []int32]
-	Fecha      Col[fanoutViewRecordTable, int16]
+	Date      Col[fanoutViewRecordTable, int16]
 	Updated    Col[fanoutViewRecordTable, int32]
 }
 
 func (e fanoutViewRecordTable) GetSchema() TableSchema {
 	return TableSchema{
 		Name:      "fanout_view_record",
-		Partition: e.EmpresaID,
+		Partition: e.CompanyID,
 		Keys:      []Coln{e.ID},
 		Indexes: []Index{
 			{
 				Type:     TypeViewTable,
-				Keys:     []Coln{e.ProductIDs, e.Fecha},
+				Keys:     []Coln{e.ProductIDs, e.Date},
 				Cols:     []Coln{e.Updated},
 				KeepPart: true,
 			},
@@ -75,7 +75,7 @@ func TestViewTablesCompileAsTableBackedViews(t *testing.T) {
 	if !strings.Contains(createScript, "CREATE TABLE") {
 		t.Fatalf("expected CREATE TABLE script, got %q", createScript)
 	}
-	if !strings.Contains(createScript, "PRIMARY KEY ((empresa_id), product_ids, fecha, id)") {
+	if !strings.Contains(createScript, "PRIMARY KEY ((empresa_id), product_ids, date, id)") {
 		t.Fatalf("unexpected primary key for view table: %q", createScript)
 	}
 
@@ -87,7 +87,7 @@ func TestViewTablesCompileAsTableBackedViews(t *testing.T) {
 	bestCapability := MatchQueryCapability([]ColumnStatement{
 		{Col: "empresa_id", Operator: "=", Value: int32(7)},
 		{Col: "product_ids", Operator: "CONTAINS", Value: int64(9)},
-		{Col: "fecha", Operator: ">=", Value: int16(3)},
+		{Col: "date", Operator: ">=", Value: int16(3)},
 	}, scyllaTable.capabilities)
 	if bestCapability == nil || bestCapability.Source != view {
 		t.Fatalf("expected view table capability match, got %+v", bestCapability)
@@ -96,9 +96,9 @@ func TestViewTablesCompileAsTableBackedViews(t *testing.T) {
 	whereStatements := view.getStatementPrepared(
 		ColumnStatement{Col: "empresa_id", Operator: "=", Value: int32(7)},
 		ColumnStatement{Col: "product_ids", Operator: "CONTAINS", Value: int64(9)},
-		ColumnStatement{Col: "fecha", Operator: ">=", Value: int16(3)},
+		ColumnStatement{Col: "date", Operator: ">=", Value: int16(3)},
 	)
-	if len(whereStatements) != 1 || whereStatements[0].Clause != "empresa_id = ? AND product_ids = ? AND fecha >= ?" {
+	if len(whereStatements) != 1 || whereStatements[0].Clause != "empresa_id = ? AND product_ids = ? AND date >= ?" {
 		t.Fatalf("unexpected translated where clause: %v", whereStatements)
 	}
 	if got := whereStatements[0].Values; len(got) != 3 || convertToInt64(got[0]) != 7 || convertToInt64(got[1]) != 9 || convertToInt64(got[2]) != 3 {
@@ -111,10 +111,10 @@ func TestViewTablesFanOutSliceValues(t *testing.T) {
 	view := getRequiredViewTable(t, scyllaTable, "fanout_view_record__product_ids_fecha_view")
 
 	record := fanoutViewRecord{
-		EmpresaID:  3,
+		CompanyID:  3,
 		ID:         91,
 		ProductIDs: []int32{11, 17, 17},
-		Fecha:      5,
+		Date:      5,
 		Updated:    42,
 	}
 

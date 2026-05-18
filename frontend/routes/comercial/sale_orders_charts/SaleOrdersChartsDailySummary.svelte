@@ -2,9 +2,9 @@
   import CheckboxOptions from '$components/form/CheckboxOptions.svelte'
   import SquareBarSized from '$components/misc/SquareBarSized.svelte'
   import VirtualCards from '$components/misc/VirtualCards.svelte'
-  import { FechaHelper } from '$libs/fecha'
+  import { DateHelper } from '$libs/date'
   import { formatN, formatTime } from '$libs/helpers'
-  import type { IProducto } from '$routes/negocio/productos/productos.svelte'
+  import type { IProduct } from '$routes/negocio/productos/productos.svelte'
   import type { ISaleSummaryRecord } from './sale_orders_charts.svelte'
 
   type TChartMetricMode = 'amount' | 'quantity'
@@ -20,7 +20,7 @@
   }
 
   interface IDailySummaryCard {
-    fechaUnix: number
+    dateUnix: number
     totalSalesMetricValue: number
     paidMetricValue: number
     unpaidMetricValue: number
@@ -38,10 +38,10 @@
   interface SaleOrdersChartsDailySummaryProps {
     chartMetricForm: IChartMetricForm
     saleSummaryRecords: ISaleSummaryRecord[]
-    productsByIdMap: Map<number, IProducto>
+    productsByIdMap: Map<number, IProduct>
   }
 
-  const fechaHelper = new FechaHelper()
+  const dateHelper = new DateHelper()
   const CARD_ROW_HEIGHT_PX = 332
   const chartMetricSelectionOptions: Array<{ ID: TChartMetricMode; Nombre: string }> = [
     { ID: 'amount', Nombre: 'Por Monto Facturado' },
@@ -56,11 +56,11 @@
 
   const selectedMetricMode = $derived<TChartMetricMode>(chartMetricForm.metricMode || 'amount')
 
-  const fechaUnixRangeToRender = $derived.by(() => {
-    const currentFechaUnix = fechaHelper.fechaUnixCurrent()
+  const dateUnixRangeToRender = $derived.by(() => {
+    const currentFechaUnix = dateHelper.dateUnixCurrent()
     const oldestFechaUnixInSummary = saleSummaryRecords.reduce((oldestFechaUnix, summaryRecord) => {
-      if (!oldestFechaUnix) { return summaryRecord.Fecha }
-      return Math.min(oldestFechaUnix, summaryRecord.Fecha)
+      if (!oldestFechaUnix) { return summaryRecord.Date }
+      return Math.min(oldestFechaUnix, summaryRecord.Date)
     }, 0)
     const firstFechaUnix = oldestFechaUnixInSummary || currentFechaUnix
     const totalDaysToRender = Math.max(1, currentFechaUnix - firstFechaUnix + 1)
@@ -74,16 +74,16 @@
     const summaryRecordByFechaUnix = new Map<number, ISaleSummaryRecord>()
 
     for (const summaryRecord of saleSummaryRecords) {
-      summaryRecordByFechaUnix.set(summaryRecord.Fecha, summaryRecord)
+      summaryRecordByFechaUnix.set(summaryRecord.Date, summaryRecord)
     }
 
     const dailyCards: IDailySummaryCard[] = []
 
-    for (const fechaUnix of fechaUnixRangeToRender) {
-      const summaryRecord = summaryRecordByFechaUnix.get(fechaUnix)
+    for (const dateUnix of dateUnixRangeToRender) {
+      const summaryRecord = summaryRecordByFechaUnix.get(dateUnix)
       if (!summaryRecord) {
         dailyCards.push({
-          fechaUnix,
+          dateUnix,
           totalSalesMetricValue: 0,
           paidMetricValue: 0,
           unpaidMetricValue: 0,
@@ -157,7 +157,7 @@
       const deliveredRatio = totalQuantity > 0 ? deliveredQuantity / totalQuantity : 0
 
       dailyCards.push({
-        fechaUnix,
+        dateUnix,
         totalSalesMetricValue,
         paidMetricValue,
         unpaidMetricValue,
@@ -175,12 +175,12 @@
 
     const dailyCardByFechaUnix = new Map<number, IDailySummaryCard>()
     for (const dailyCard of dailyCards) {
-      dailyCardByFechaUnix.set(dailyCard.fechaUnix, dailyCard)
+      dailyCardByFechaUnix.set(dailyCard.dateUnix, dailyCard)
     }
 
     for (const dailyCard of dailyCards) {
       const previous7DaysCards = Array.from({ length: 7 }, (_, dayOffset) => {
-        return dailyCardByFechaUnix.get(dailyCard.fechaUnix - (dayOffset + 1))
+        return dailyCardByFechaUnix.get(dailyCard.dateUnix - (dayOffset + 1))
       }).filter((record): record is IDailySummaryCard => Boolean(record))
 
       const previous7DaysAverage = previous7DaysCards.length > 0
@@ -189,7 +189,7 @@
         }, 0) / previous7DaysCards.length
         : 0
 
-      const previousWeekdayCard = dailyCardByFechaUnix.get(dailyCard.fechaUnix - 7)
+      const previousWeekdayCard = dailyCardByFechaUnix.get(dailyCard.dateUnix - 7)
 
       dailyCard.variationAgainstLast7DaysAvg = previous7DaysAverage > 0
         ? dailyCard.totalSalesMetricValue - previous7DaysAverage
@@ -266,7 +266,7 @@
             <div class="flex w-90 md:w-110 shrink-0">
               <div class="flex flex-col gap-10">
                 <div class="text-[20px] ff-bold leading-none text-slate-900">
-                  {String(formatTime(dailySummaryCard.fechaUnix, 'M-d') || '')}
+                  {String(formatTime(dailySummaryCard.dateUnix, 'M-d') || '')}
                 </div>
                 <div class={`flex ff-mono items-center text-[15px] leading-none ${getVariationColorClass(dailySummaryCard.variationAgainstLast7DaysAvg)}`}>
                   <i class={getVariationIconClass(dailySummaryCard.variationAgainstLast7DaysAvg)}></i>

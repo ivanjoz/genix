@@ -9,8 +9,8 @@ export interface ISaleOrderTopProduct {
 
 export interface ISaleOrder {
     ID: number;
-    EmpresaID: number;
-    Fecha: number;
+    CompanyID: number;
+    Date: number;
     WarehouseID: number;
     DetailProductsIDs: number[];
     DetailPrices: number[];

@@ -11,10 +11,10 @@ import (
 type FecSemana struct {
 	Id          int
 	Code        int16
-	FechaUnix   int16
+	DateUnix   int16
 	Nro         uint8
 	Year        int16
-	FechaString string
+	DateString string
 	Idx         int16
 }
 
@@ -26,98 +26,98 @@ func (e *FecSemana) MakeName() string {
 	return Concat("-", e.Year, s2)
 }
 
-var fechaToSemana = map[int16]*FecSemana{}
+var dateToSemana = map[int16]*FecSemana{}
 
-// Si fechaUnix = 0 entonces se obtiene la semana actual
-func MakeSemanaFromFechaUnix(fechaUnix int16, isMonday bool) *FecSemana {
-	if fecSemana, ok := fechaToSemana[fechaUnix]; ok {
+// Si dateUnix = 0 entonces se obtiene la semana actual
+func MakeSemanaFromFechaUnix(dateUnix int16, isMonday bool) *FecSemana {
+	if fecSemana, ok := dateToSemana[dateUnix]; ok {
 		return fecSemana
 	}
-	if fechaUnix == 0 {
-		fechaUnix = TimeToFechaUnix(time.Now())
+	if dateUnix == 0 {
+		dateUnix = TimeToFechaUnix(time.Now())
 	}
 
-	// convierte la fechaUnix en TimeStamp
-	fechaUnixTime := int64(fechaUnix)*int64(24*60*60) + int64(8*60*60)
-	fecha := time.Unix(fechaUnixTime, 0)
+	// convierte la dateUnix en TimeStamp
+	dateUnixTime := int64(dateUnix)*int64(24*60*60) + int64(8*60*60)
+	date := time.Unix(dateUnixTime, 0)
 
-	fechaUnixBase := fechaUnix
+	dateUnixBase := dateUnix
 
 	if !isMonday {
-		weekday := int(fecha.Weekday())
+		weekday := int(date.Weekday())
 		// Log("weekday:: ", weekday)
 		if weekday == 0 {
-			fecha = fecha.AddDate(0, 0, -6)
-			fechaUnix = fechaUnix - 6
+			date = date.AddDate(0, 0, -6)
+			dateUnix = dateUnix - 6
 		} else if weekday != 1 {
-			fecha = fecha.AddDate(0, 0, (1 - weekday))
-			fechaUnix = fechaUnix + 1 - int16(weekday)
+			date = date.AddDate(0, 0, (1 - weekday))
+			dateUnix = dateUnix + 1 - int16(weekday)
 		}
 	}
 
-	year, week := fecha.ISOWeek()
+	year, week := date.ISOWeek()
 
 	fechSemana := FecSemana{
 		Year: int16(year), Nro: uint8(week), Id: year*100 + week,
-		FechaUnix:   fechaUnix,
-		FechaString: fecha.Format("2006-01-02"),
+		DateUnix:   dateUnix,
+		DateString: date.Format("2006-01-02"),
 	}
 	fechSemana.Code = int16(fechSemana.Id - 200000)
 
-	fechaToSemana[fechaUnixBase] = &fechSemana
+	dateToSemana[dateUnixBase] = &fechSemana
 	return &fechSemana
 }
 
-// Crea un array de semanas basados en una fecha unix
-func GetSemanasFromFecha(fechaUnix int16, incremento uint8, decremento uint8) []*FecSemana {
+// Crea un array de semanas basados en una date unix
+func GetSemanasFromFecha(dateUnix int16, incremento uint8, decremento uint8) []*FecSemana {
 
-	if fechaUnix == 0 {
-		fechaUnix = int16(time.Now().Unix() / 60 / 60 / 24)
+	if dateUnix == 0 {
+		dateUnix = int16(time.Now().Unix() / 60 / 60 / 24)
 	}
 
-	// convierte la fechaUnix en TimeStamp
-	fechaUnixTime := int64(fechaUnix)*int64(24*60*60) + int64(8*60*60)
-	fecha := time.Unix(fechaUnixTime, 0)
+	// convierte la dateUnix en TimeStamp
+	dateUnixTime := int64(dateUnix)*int64(24*60*60) + int64(8*60*60)
+	date := time.Unix(dateUnixTime, 0)
 
-	weekday := int(fecha.Weekday())
+	weekday := int(date.Weekday())
 	if weekday == 0 {
-		// fecha = fecha.AddDate(0, 0, -6)
-		fechaUnix = fechaUnix - 6
+		// date = date.AddDate(0, 0, -6)
+		dateUnix = dateUnix - 6
 	} else if weekday != 1 {
-		// fecha = fecha.AddDate(0, 0, (weekday - 1))
-		fechaUnix = fechaUnix - (int16(weekday) - 1)
+		// date = date.AddDate(0, 0, (weekday - 1))
+		dateUnix = dateUnix - (int16(weekday) - 1)
 	}
 
-	fechasSemana := []*FecSemana{
-		MakeSemanaFromFechaUnix(fechaUnix, true),
+	datesSemana := []*FecSemana{
+		MakeSemanaFromFechaUnix(dateUnix, true),
 	}
 
 	// Obtiene las semanas del incremento
 	for i := 1; i <= int(incremento); i++ {
-		fechaUnix2 := fechaUnix + int16(i*7)
-		semana := MakeSemanaFromFechaUnix(fechaUnix2, true)
-		fechasSemana = append(fechasSemana, semana)
+		dateUnix2 := dateUnix + int16(i*7)
+		semana := MakeSemanaFromFechaUnix(dateUnix2, true)
+		datesSemana = append(datesSemana, semana)
 	}
 
 	// Obtiene las semanas del decremento
 	for i := 1; i <= int(decremento); i++ {
-		fechaUnix2 := fechaUnix - int16(i*7)
-		semana := MakeSemanaFromFechaUnix(fechaUnix2, true)
-		fechasSemana = append(fechasSemana, semana)
+		dateUnix2 := dateUnix - int16(i*7)
+		semana := MakeSemanaFromFechaUnix(dateUnix2, true)
+		datesSemana = append(datesSemana, semana)
 	}
 
-	sort.Slice(fechasSemana, func(i, j int) bool {
-		return fechasSemana[i].Id < fechasSemana[j].Id
+	sort.Slice(datesSemana, func(i, j int) bool {
+		return datesSemana[i].Id < datesSemana[j].Id
 	})
 
-	return fechasSemana
+	return datesSemana
 }
 
 type TimeHelper struct {
 	init          bool
-	fechaToSemana map[int16]*FecSemana
+	dateToSemana map[int16]*FecSemana
 	codeToSemana  map[int16]*FecSemana
-	fechaToString map[int16]string
+	dateToString map[int16]string
 	semanas       []*FecSemana
 	idxToSemana   map[int16]*FecSemana
 	semanaToIdx   map[int16]int16
@@ -127,9 +127,9 @@ type TimeHelper struct {
 
 func (e *TimeHelper) Init() {
 	if !e.init {
-		e.fechaToSemana = map[int16]*FecSemana{}
+		e.dateToSemana = map[int16]*FecSemana{}
 		e.codeToSemana = map[int16]*FecSemana{}
-		e.fechaToString = map[int16]string{}
+		e.dateToString = map[int16]string{}
 		e.semanas = []*FecSemana{}
 		e.idxToSemana = map[int16]*FecSemana{}
 		e.semanaToIdx = map[int16]int16{}
@@ -155,8 +155,8 @@ func (e *TimeHelper) GetFechaUnix() int16 {
 	nowTime := time.Now()
 	_, offset := nowTime.Zone()
 	// core.Log("offset zone:", offset, " |  now Time", nowTime.Unix())
-	fechaUnix := int16((nowTime.Unix() + int64(offset)) / 60 / 60 / 24)
-	return fechaUnix
+	dateUnix := int16((nowTime.Unix() + int64(offset)) / 60 / 60 / 24)
+	return dateUnix
 }
 
 func (e *TimeHelper) ExtendRangeToSemana(semanaCode, offset int16) {
@@ -168,7 +168,7 @@ func (e *TimeHelper) ExtendRangeToSemana(semanaCode, offset int16) {
 	}
 
 	semanaFrom := e.SemanaFromCode(semanaCode)
-	semanaTo := e.SemanaFromFecha(semanaFrom.FechaUnix + (offset * 7))
+	semanaTo := e.SemanaFromFecha(semanaFrom.DateUnix + (offset * 7))
 	semanaToIdx := int16(0)
 	semanaFromIdx := int16(0)
 
@@ -203,7 +203,7 @@ func (e *TimeHelper) ExtendRangeToSemana(semanaCode, offset int16) {
 	}
 
 	for currentSemana <= semanaTo.Code {
-		semana := e.SemanaFromFecha(semanaFrom.FechaUnix + (it * 7))
+		semana := e.SemanaFromFecha(semanaFrom.DateUnix + (it * 7))
 		newSemanas = append(newSemanas, semana)
 		currentSemana = semana.Code
 		if semanaFromIdx != 0 {
@@ -269,7 +269,7 @@ func (e *TimeHelper) SemanaDiference(semanaInicioCode, semanaFinCode int16) int3
 	semanaInicio := e.SemanaFromCode(semanaInicioCode)
 	semanaFin := e.SemanaFromCode(semanaFinCode)
 
-	return Round(float32(semanaInicio.FechaUnix-semanaFin.FechaUnix) / 7)
+	return Round(float32(semanaInicio.DateUnix-semanaFin.DateUnix) / 7)
 }
 
 func (e *TimeHelper) GetFechaUnixP() int16 {
@@ -279,8 +279,8 @@ func (e *TimeHelper) GetFechaUnixP() int16 {
 	if zone == "UTC" {
 		nowUnix -= 18000
 	}
-	fechaUnix := int16((nowUnix + int64(offset)) / 60 / 60 / 24)
-	return fechaUnix
+	dateUnix := int16((nowUnix + int64(offset)) / 60 / 60 / 24)
+	return dateUnix
 }
 
 func (e *TimeHelper) GetFechaUnixI() int16 {
@@ -290,16 +290,16 @@ func (e *TimeHelper) GetFechaUnixI() int16 {
 	if zone == "UTC" {
 		nowUnix += 19800
 	}
-	fechaUnix := int16((nowUnix + int64(offset)) / 60 / 60 / 24)
-	return fechaUnix
+	dateUnix := int16((nowUnix + int64(offset)) / 60 / 60 / 24)
+	return dateUnix
 }
 
-func (e *TimeHelper) TimeToFechaUnix(fechaT time.Time) int16 {
-	return TimeToFechaUnix(fechaT)
+func (e *TimeHelper) TimeToFechaUnix(dateT time.Time) int16 {
+	return TimeToFechaUnix(dateT)
 }
 
-func (e *TimeHelper) FechaToTime(fechaUnix int16) time.Time {
-	return time.Unix(int64(fechaUnix)*24*60*60, 0)
+func (e *TimeHelper) DateToTime(dateUnix int16) time.Time {
+	return time.Unix(int64(dateUnix)*24*60*60, 0)
 }
 
 func (e *TimeHelper) SemanaFromCode(semanaCode int16) *FecSemana {
@@ -312,72 +312,72 @@ func (e *TimeHelper) SemanaFromCode(semanaCode int16) *FecSemana {
 	semanaNro := int(semanaCode) - year1*100
 	// Log("year:: ", year1, "  |  semana:: ", semanaNro)
 	year := year1 + 2000
-	fechaLunes := WeekStartDate(year, semanaNro)
-	// Log(fechaLunes)
+	dateLunes := WeekStartDate(year, semanaNro)
+	// Log(dateLunes)
 
 	fecSemana := FecSemana{
 		Id:          (year)*100 + semanaNro,
 		Code:        semanaCode,
-		FechaUnix:   TimeToFechaUnix(fechaLunes),
+		DateUnix:   TimeToFechaUnix(dateLunes),
 		Nro:         uint8(semanaNro),
 		Year:        int16(year),
-		FechaString: fechaLunes.Local().UTC().Format("2006-01-02"),
+		DateString: dateLunes.Local().UTC().Format("2006-01-02"),
 	}
 	e.codeToSemana[semanaCode] = &fecSemana
 	return &fecSemana
 }
 
-func (e *TimeHelper) FechaToTimeUTC(fechaUnix int16) time.Time {
+func (e *TimeHelper) DateToTimeUTC(dateUnix int16) time.Time {
 	_, offset := (time.Now()).Zone()
-	var unixTime int64 = int64(fechaUnix)*24*60*60 - int64(offset)
+	var unixTime int64 = int64(dateUnix)*24*60*60 - int64(offset)
 	return time.Unix(unixTime, 0)
 }
 
-func (e *TimeHelper) FechaUnixToStringU(fechaUnix int16, format ...int8) string {
-	if fechaUnix == 0 {
+func (e *TimeHelper) DateUnixToStringU(dateUnix int16, format ...int8) string {
+	if dateUnix == 0 {
 		return ""
 	}
-	if e.fechaToString == nil {
-		e.fechaToString = map[int16]string{}
-	} else if _, ok := e.fechaToString[fechaUnix]; ok {
-		return e.fechaToString[fechaUnix]
+	if e.dateToString == nil {
+		e.dateToString = map[int16]string{}
+	} else if _, ok := e.dateToString[dateUnix]; ok {
+		return e.dateToString[dateUnix]
 	}
-	fechaTime := time.Unix(int64(fechaUnix)*24*60*60, 0)
+	dateTime := time.Unix(int64(dateUnix)*24*60*60, 0)
 	parseFormat := "2006-01-02"
 	if len(format) > 0 && format[0] == 2 {
 		parseFormat = "02-01-2006"
 	}
 
-	fechaString := fechaTime.Local().UTC().Format(parseFormat)
-	e.fechaToString[fechaUnix] = fechaString
-	return fechaString
+	dateString := dateTime.Local().UTC().Format(parseFormat)
+	e.dateToString[dateUnix] = dateString
+	return dateString
 }
 
-func (e *TimeHelper) FechaUnixToString(fechaUnix int16, format ...int8) string {
-	return e.FechaUnixToStringU(int16(fechaUnix), format...)
+func (e *TimeHelper) DateUnixToString(dateUnix int16, format ...int8) string {
+	return e.DateUnixToStringU(int16(dateUnix), format...)
 }
 
-func (e *TimeHelper) FechaUnixToStringP(fechaUnix int16) string {
+func (e *TimeHelper) DateUnixToStringP(dateUnix int16) string {
 	e.Init()
-	if _, ok := e.fechaToString[fechaUnix]; ok {
-		return e.fechaToString[fechaUnix]
+	if _, ok := e.dateToString[dateUnix]; ok {
+		return e.dateToString[dateUnix]
 	}
-	fechaTime := time.Unix(int64(fechaUnix)*24*60*60, 0)
-	fechaString := fechaTime.Local().UTC().Format("2006-01-02")
-	e.fechaToString[fechaUnix] = fechaString
-	return fechaString
+	dateTime := time.Unix(int64(dateUnix)*24*60*60, 0)
+	dateString := dateTime.Local().UTC().Format("2006-01-02")
+	e.dateToString[dateUnix] = dateString
+	return dateString
 }
 
-func (e *TimeHelper) SemanaFromFecha(fecha int16) *FecSemana {
+func (e *TimeHelper) SemanaFromFecha(date int16) *FecSemana {
 	e.Init()
-	if _, ok := e.fechaToSemana[fecha]; ok {
-		return e.fechaToSemana[fecha]
+	if _, ok := e.dateToSemana[date]; ok {
+		return e.dateToSemana[date]
 	}
 
-	semana := MakeSemanaFromFechaUnix(fecha, false)
-	e.fechaToSemana[fecha] = semana
+	semana := MakeSemanaFromFechaUnix(date, false)
+	e.dateToSemana[date] = semana
 
-	return e.fechaToSemana[fecha]
+	return e.dateToSemana[date]
 }
 
 func UnixTimeToFechaZone(unixTime int64, utcTimeZone int8) int16 {
@@ -385,51 +385,51 @@ func UnixTimeToFechaZone(unixTime int64, utcTimeZone int8) int16 {
 	return int16(math.Floor(float64(zoneTime) / 60 / 60 / 24))
 }
 
-func TimeToFechaUnix(fechaT time.Time) int16 {
-	_, offset := fechaT.Zone()
-	fechaUnix := int16((fechaT.Unix() + int64(offset)) / 24 / 60 / 60)
-	return fechaUnix
+func TimeToFechaUnix(dateT time.Time) int16 {
+	_, offset := dateT.Zone()
+	dateUnix := int16((dateT.Unix() + int64(offset)) / 24 / 60 / 60)
+	return dateUnix
 }
 
 // Ejemplo: 2023-01-01
-func FechaStringToUnix(h string) int16 {
+func DateStringToUnix(h string) int16 {
 	if len(h) > 10 {
 		h = h[0:10]
 	}
-	fechaT, error := time.Parse("2006-01-02", h)
+	dateT, error := time.Parse("2006-01-02", h)
 	if error != nil {
 		Log(error)
 		return 0
 	}
-	return TimeToFechaUnix(fechaT)
+	return TimeToFechaUnix(dateT)
 }
 
-func FechaHoraUnixToFecha(fechaHora int64) int16 {
-	tm := time.Unix(fechaHora, 0)
-	fechaT, error := time.Parse("2006-01-02", tm.Format(TimeLayouts["D"]))
+func DateTimeUnixToFecha(dateTime int64) int16 {
+	tm := time.Unix(dateTime, 0)
+	dateT, error := time.Parse("2006-01-02", tm.Format(TimeLayouts["D"]))
 
 	if error != nil {
 		Log(error)
 		return 0
 	}
-	_, offset := fechaT.Zone()
-	fechaUnix := int16((fechaT.Unix() + int64(offset)) / 24 / 60 / 60)
-	return fechaUnix
+	_, offset := dateT.Zone()
+	dateUnix := int16((dateT.Unix() + int64(offset)) / 24 / 60 / 60)
+	return dateUnix
 }
 
-func FechaHoraUnixToFechaP(fechaHora int64) int16 {
-	fechaT := FechaUnixToTime(fechaHora)
+func DateTimeUnixToFechaP(dateTime int64) int16 {
+	dateT := DateUnixToTime(dateTime)
 	// zona, _ := time.Now().Zone()
 	// if zona == "UTC" {
 	// }
-	fechaT = fechaT.Add(-5 * time.Hour)
-	fechaUnix := int16((fechaT.Unix()) / 24 / 60 / 60)
-	return fechaUnix
+	dateT = dateT.Add(-5 * time.Hour)
+	dateUnix := int16((dateT.Unix()) / 24 / 60 / 60)
+	return dateUnix
 }
 
-func FechaHoraUnixToFechaX(fechaHora int64) int16 {
-	fechaUnix := int16((fechaHora) / 24 / 60 / 60)
-	return fechaUnix
+func DateTimeUnixToFechaX(dateTime int64) int16 {
+	dateUnix := int16((dateTime) / 24 / 60 / 60)
+	return dateUnix
 }
 
 func UnixTimeToFormat(unixTime int64, layout string) string {
@@ -455,7 +455,7 @@ var TimeLayouts map[string]string = map[string]string{
 	"I": "15:04:05",
 }
 
-func FechaHoraStringToUnix(layout, h string) int64 {
+func DateTimeStringToUnix(layout, h string) int64 {
 	if h == "" {
 		return 0
 	}
@@ -466,13 +466,13 @@ func FechaHoraStringToUnix(layout, h string) int64 {
 	date, error := time.Parse(layout, h)
 	if error != nil {
 		Log(error)
-		Log("fecha a parsear::", h, " | layout: ", layout)
+		Log("date a parsear::", h, " | layout: ", layout)
 		return 0
 	}
 	return date.Unix()
 }
 
-func FechaHoraStringToUnixP(layout, h string) int64 {
+func DateTimeStringToUnixP(layout, h string) int64 {
 	if h == "" {
 		return 0
 	}
@@ -483,7 +483,7 @@ func FechaHoraStringToUnixP(layout, h string) int64 {
 	date, error := time.ParseInLocation(layout, h, time.Now().Location())
 	if error != nil {
 		Log(error)
-		Log("fecha a parsear::", h, " | layout: ", layout)
+		Log("date a parsear::", h, " | layout: ", layout)
 		return 0
 	}
 
@@ -494,7 +494,7 @@ func FechaHoraStringToUnixP(layout, h string) int64 {
 	return dUnix
 }
 
-func FechaHoraStringToUnixI(layout, h string) int64 {
+func DateTimeStringToUnixI(layout, h string) int64 {
 	if h == "" {
 		return 0
 	}
@@ -505,7 +505,7 @@ func FechaHoraStringToUnixI(layout, h string) int64 {
 	date, error := time.Parse(layout, h)
 	if error != nil {
 		Log(error)
-		Log("fecha a parsear::", h, " | layout: ", layout)
+		Log("date a parsear::", h, " | layout: ", layout)
 		return 0
 	}
 
@@ -518,37 +518,37 @@ func FechaHoraStringToUnixI(layout, h string) int64 {
 	return date.Unix()
 }
 
-func FechaUnixToTime(fUnix int64) time.Time {
+func DateUnixToTime(fUnix int64) time.Time {
 	tm := time.Unix(fUnix, 0)
 	return tm
 }
 
-func FechaUnixToTimeP(fUnix int64) time.Time {
+func DateUnixToTimeP(fUnix int64) time.Time {
 	tm := time.Unix(fUnix, 0)
 
 	return tm
 }
 
-func FechaTimeToFormat(layout string, fechaHora time.Time) string {
+func DateTimeToFormat(layout string, dateTime time.Time) string {
 	if newLayout, ok := TimeLayouts[layout]; ok {
 		layout = newLayout
 	}
-	return fechaHora.Format(layout)
+	return dateTime.Format(layout)
 }
 
-func FechaTimeToFormatP(layout string, fechaHora time.Time) string {
+func DateTimeToFormatP(layout string, dateTime time.Time) string {
 	zona, _ := time.Now().Zone()
 	if newLayout, ok := TimeLayouts[layout]; ok {
 		layout = newLayout
 	}
 	if zona == "UTC" {
-		fechaHora = fechaHora.Add(-5 * time.Hour)
+		dateTime = dateTime.Add(-5 * time.Hour)
 	}
 
-	return fechaHora.Format(layout)
+	return dateTime.Format(layout)
 }
 
-func FechaHoraStringToUnixUTCAdd05_30(layout, h string) int64 {
+func DateTimeStringToUnixUTCAdd05_30(layout, h string) int64 {
 	if h == "" {
 		return 0
 	}
@@ -558,7 +558,7 @@ func FechaHoraStringToUnixUTCAdd05_30(layout, h string) int64 {
 	date, error := time.Parse(layout, h)
 	if error != nil {
 		Log(error)
-		Log("fecha a parsear::", h, " | layout: ", layout)
+		Log("date a parsear::", h, " | layout: ", layout)
 		return 0
 	}
 	return date.Unix()
@@ -569,7 +569,7 @@ func HoraToUnix(h string) int {
 	if h == "" {
 		return 0
 	}
-	return int(FechaHoraStringToUnix("A", "1970-01-01 "+h))
+	return int(DateTimeStringToUnix("A", "1970-01-01 "+h))
 }
 
 func HoraToUnixTime(h string) int64 {

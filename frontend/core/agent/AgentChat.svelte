@@ -133,7 +133,7 @@
   const ensureWsOpen = () => {
     if (socket && socket.readyState <= WebSocket.OPEN) { return; }
     const tab = getAgentTabID();
-    const company = Env.getEmpresaID() || 0;
+    const company = Env.getCompanyID() || 0;
     const user = readUserID();
     // Seed the backend with the current SPA path so the first get_page
     // status label can name the route. Subsequent navigations the agent

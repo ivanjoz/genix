@@ -1,6 +1,6 @@
 import { GetHandler, POST } from '$libs/http.svelte';
 
-export interface IEmpresaSmtp {
+export interface ICompanySmtp {
   Host: string
   Port: string
   User: string
@@ -8,7 +8,7 @@ export interface IEmpresaSmtp {
   Email: string
 }
 
-export interface IEmpresaCulqui {
+export interface ICompanyCulqui {
   RsaKey: string
   RsaKeyID: string
   LlaveLive: string
@@ -17,7 +17,7 @@ export interface IEmpresaCulqui {
   LlavePubDev: string
 }
 
-export interface IEmpresa {
+export interface ICompany {
   id: number
   Email: string
   Nombre: string
@@ -27,8 +27,8 @@ export interface IEmpresa {
   Representante: string
   Direccion: string
   Ciudad: string
-  SmtpConfig: IEmpresaSmtp
-  CulquiConfig: IEmpresaCulqui
+  SmtpConfig: ICompanySmtp
+  CulquiConfig: ICompanyCulqui
   ss: number
   upd: number
 }
@@ -37,16 +37,16 @@ export class EmpresasService extends GetHandler {
   route = "empresas"
   useCache = { min: 5, ver: 1 }
 
-  empresas: IEmpresa[] = $state([])
-  empresasMap: Map<number, IEmpresa> = $state(new Map())
+  empresas: ICompany[] = $state([])
+  empresasMap: Map<number, ICompany> = $state(new Map())
 
   handler(response: any) {
     // Following the original structure: response.Records contains the array
-    const empresas = (response?.Records || response || []) as IEmpresa[]
+    const empresas = (response?.Records || response || []) as ICompany[]
     
     this.empresas = empresas.map(empresa => {
-      empresa.SmtpConfig = empresa.SmtpConfig || {} as IEmpresaSmtp
-      empresa.CulquiConfig = empresa.CulquiConfig || {} as IEmpresaCulqui
+      empresa.SmtpConfig = empresa.SmtpConfig || {} as ICompanySmtp
+      empresa.CulquiConfig = empresa.CulquiConfig || {} as ICompanyCulqui
       return empresa
     })
     
@@ -58,7 +58,7 @@ export class EmpresasService extends GetHandler {
     this.fetch()
   }
 
-  updateEmpresa(empresa: IEmpresa) {
+  updateEmpresa(empresa: ICompany) {
     const existing = this.empresas.find(x => x.id === empresa.id)
     if (existing) {
       Object.assign(existing, empresa)
@@ -74,7 +74,7 @@ export class EmpresasService extends GetHandler {
   }
 }
 
-export const postEmpresa = (data: IEmpresa) => {
+export const postEmpresa = (data: ICompany) => {
   return POST({
     data,
     route: "empresas",

@@ -10,7 +10,7 @@ import {
 // Resolves the active company+environment-scoped IndexedDB name once per call;
 // keeping it small avoids stale captures when the user switches company at runtime.
 const getActiveDbName = (): string => {
-  return makeDeltaCacheDatabaseName(Env.getEmpresaID(), Env.enviroment || 'main')
+  return makeDeltaCacheDatabaseName(Env.getCompanyID(), Env.enviroment || 'main')
 }
 
 export interface IRouteRecordResult<T> {

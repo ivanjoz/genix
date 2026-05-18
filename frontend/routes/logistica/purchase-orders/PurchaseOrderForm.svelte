@@ -3,7 +3,7 @@ import DateInput from '$components/form/DateInput.svelte'
 import Input from '$components/form/Input.svelte'
 import SearchSelect from '$components/form/SearchSelect.svelte'
 import type { IClientProvider } from '$routes/negocio/clientes/clientes-proveedores.svelte'
-import type { IAlmacen } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
+import type { IWarehouse } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
 import type { IPurchaseOrder } from './purchase_order.svelte'
 
 // Reusable header form for a purchase order. Used by both the creation flow (Información tab)
@@ -18,7 +18,7 @@ let {
 }: {
   form: Partial<IPurchaseOrder>
   providers: IClientProvider[]
-  almacenes: IAlmacen[]
+  almacenes: IWarehouse[]
   // Edit flow forbids changing the provider; create flow keeps it editable.
   disableProvider?: boolean
 } = $props()
@@ -40,19 +40,19 @@ let {
     keyName="Nombre"
     options={almacenes}
     selected={form.WarehouseID}
-    onChange={(almacen: IAlmacen) => { form.WarehouseID = almacen?.ID || 0 }}
+    onChange={(almacen: IWarehouse) => { form.WarehouseID = almacen?.ID || 0 }}
   />
   <DateInput
     bind:saveOn={form}
     save="DeliveryDate"
     type="unix"
-    label="Fecha Entrega"
+    label="Date Entrega"
   />
   <DateInput
     bind:saveOn={form}
     save="PaymentDate"
     type="unix"
-    label="Fecha Pago"
+    label="Date Pago"
   />
   <Input css="col-span-2"
     bind:saveOn={form}

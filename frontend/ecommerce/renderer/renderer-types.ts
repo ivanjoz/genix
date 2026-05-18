@@ -1,4 +1,4 @@
-import type { IProducto } from '$services/services/productos.svelte';
+import type { IProduct } from '$services/services/productos.svelte';
 
 export type AriaRole = 
     | 'button' | 'link' | 'navigation' | 'main' | 'banner'

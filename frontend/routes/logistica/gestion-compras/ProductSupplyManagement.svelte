@@ -6,7 +6,7 @@ import CardsList from '$components/vTable/CardsList.svelte'
 import TableGrid from '$components/vTable/TableGrid.svelte'
 import type { ICardCell, ITableColumn } from '$components/vTable/types'
 import { Core } from '$core/store.svelte'
-import { FechaHelper } from '$libs/fecha'
+import { DateHelper } from '$libs/date'
 import { formatN, formatTime, Loading, Notify } from '$libs/helpers'
 import FilterInput from '$components/form/FilterInput.svelte'
 import Button from '$components/buttons/Button.svelte'
@@ -27,15 +27,15 @@ import {
   const providers = new ClientProviderService(ClientProviderType.PROVIDER, true)
   const productSupplyService = new ProductSupplyService(true)
   const groupedMovementsService = new AlmacenMovimientosGroupedService()
-  const fechaHelper = new FechaHelper()
+  const dateHelper = new DateHelper()
   const salesWindowDays = 30
   const debugProductID = 10034
   const yAxisWidthPx = 28
   const ventasWidthRatio = 0.30
 
-  // Freeze the 30-day window in fechaUnix units so every row uses the same oldest->newest categories.
+  // Freeze the 30-day window in dateUnix units so every row uses the same oldest->newest categories.
   const last30FechaUnix = Array.from({ length: salesWindowDays }, (_, dayOffset) => { 
-    return fechaHelper.fechaUnixCurrent() - (salesWindowDays - 1) + dayOffset
+    return dateHelper.dateUnixCurrent() - (salesWindowDays - 1) + dayOffset
   })
 
   let pageContentElement = $state<HTMLDivElement | undefined>(undefined)
@@ -67,11 +67,11 @@ import {
 
     // Use every third day so the header axis stays readable and matches the 30-point chart width.
     for (let groupStartIndex = 0; groupStartIndex < last30FechaUnix.length; groupStartIndex += labelsPerGroup) {
-      const fechaUnix = last30FechaUnix[groupStartIndex] + 2
+      const dateUnix = last30FechaUnix[groupStartIndex] + 2
       groupedLabels.push({
-        fechaUnix,
-        day: String(formatTime(fechaUnix, 'd') || ''),
-        month: String(formatTime(fechaUnix, 'M') || ''),
+        dateUnix,
+        day: String(formatTime(dateUnix, 'd') || ''),
+        month: String(formatTime(dateUnix, 'M') || ''),
       })
     }
 
@@ -115,9 +115,9 @@ import {
       return
     }
 
-    const debugOutflowsValues = last30FechaUnix.map((fechaUnix) => debugProductMovements.getOutflows(fechaUnix) || 0)
-    const debugInflowsValues = last30FechaUnix.map((fechaUnix) => debugProductMovements.getInflows(fechaUnix) || 0)
-    const debugFinalStockValues = last30FechaUnix.map((fechaUnix) => debugProductMovements.getFinalStock(fechaUnix) || 0)
+    const debugOutflowsValues = last30FechaUnix.map((dateUnix) => debugProductMovements.getOutflows(dateUnix) || 0)
+    const debugInflowsValues = last30FechaUnix.map((dateUnix) => debugProductMovements.getInflows(dateUnix) || 0)
+    const debugFinalStockValues = last30FechaUnix.map((dateUnix) => debugProductMovements.getFinalStock(dateUnix) || 0)
     const debugFinalStockLineValues = trimLeadingAndTrailingZeroStocks(debugFinalStockValues)
 
     // Keep the chart diagnostics grouped so the stored columnar series and rendered values are easy to compare.
@@ -129,10 +129,10 @@ import {
         detailInflows: debugProductMovements.DetailInflows,
         detailFinalStock: debugProductMovements.DetailFinalStock,
       })
-      console.table(last30FechaUnix.map((fechaUnix, dayIndex) => ({
+      console.table(last30FechaUnix.map((dateUnix, dayIndex) => ({
         dayIndex,
-        fechaUnix,
-        dateLabel: String(formatTime(fechaUnix, 'Y-m-d') || ''),
+        dateUnix,
+        dateLabel: String(formatTime(dateUnix, 'Y-m-d') || ''),
         outflows: debugOutflowsValues[dayIndex],
         inflows: debugInflowsValues[dayIndex],
         finalStock: debugFinalStockValues[dayIndex],
@@ -404,7 +404,7 @@ import {
               <div class="px-10">{columnDefinition.header}</div>
               <div class="min-w-0" style={`width:${ventasPixelMetrics.ventasColumnWidthPx}px`}>
                 <div class="grid items-center text-[11px] text-slate-500" style={`padding-left:${yAxisWidthPx - 4}px;grid-template-columns:repeat(${salesHeaderLabels.length}, ${ventasPixelMetrics.ventasBarWidthPx * 3}px)`}>
-                  {#each salesHeaderLabels as salesHeaderLabel (salesHeaderLabel.fechaUnix)}
+                  {#each salesHeaderLabels as salesHeaderLabel (salesHeaderLabel.dateUnix)}
                     <div class="overflow-hidden text-right text-ellipsis whitespace-nowrap leading-[1.1]">
 	                    <div>{salesHeaderLabel.day}</div>
 	                    <div>{salesHeaderLabel.month}</div>
@@ -423,9 +423,9 @@ import {
           {#if columnDefinition.id === 'sales-last-30-days'}
             <!-- Keep the sales chart inline with TableGrid so virtualization owns the full row render path. -->
             {@const productMovements = groupedMovementsService.productMovementsMap.get(record.ProductID)}
-            {@const outflowsValues = last30FechaUnix.map((fechaUnix) => productMovements?.getOutflows(fechaUnix) || 0)}
-            {@const inflowsValues = last30FechaUnix.map((fechaUnix) => productMovements?.getInflows(fechaUnix) || 0)}
-            {@const finalStockValues = last30FechaUnix.map((fechaUnix) => productMovements?.getFinalStock(fechaUnix) || 0)}
+            {@const outflowsValues = last30FechaUnix.map((dateUnix) => productMovements?.getOutflows(dateUnix) || 0)}
+            {@const inflowsValues = last30FechaUnix.map((dateUnix) => productMovements?.getInflows(dateUnix) || 0)}
+            {@const finalStockValues = last30FechaUnix.map((dateUnix) => productMovements?.getFinalStock(dateUnix) || 0)}
             {@const finalStockLineValues = trimLeadingAndTrailingZeroStocks(finalStockValues)}
             <div class="h-50 min-w-0" style={`width:${ventasPixelMetrics.ventasColumnWidthPx}px`}>
               <ChartCanvas useHtmlRendered

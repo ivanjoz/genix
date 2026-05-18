@@ -11,7 +11,7 @@
   import { formatN, Loading } from '$libs/helpers'
   import {
     PaisCiudadesService,
-    type IPaisCiudad,
+    type ICityLocation,
   } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
 
   type DeliveryCostField = 'Fijo' | 'PorKg'
@@ -48,8 +48,8 @@
   const paisCiudadesService = new PaisCiudadesService(true)
   const shippingCostsService = new ShippingCostsService(true)
 
-  let selectedDepartamento = $state<IPaisCiudad | null>(null)
-  let selectedProvincia = $state<IPaisCiudad | null>(null)
+  let selectedDepartamento = $state<ICityLocation | null>(null)
+  let selectedProvincia = $state<ICityLocation | null>(null)
   let departamentoCostForm = $state<DeliveryCost>(makeEmptyDeliveryCost(0))
   let deliveryCostByCiudadID = $state<Record<string, DeliveryCost>>({})
   let filterText = $state('')
@@ -58,7 +58,7 @@
   const normalizedFilterText = $derived(normalizeSearchText(filterText))
 
   const distritosByProvinciaID = $derived.by(() => {
-    const groupedDistritos = new Map<number, IPaisCiudad[]>()
+    const groupedDistritos = new Map<number, ICityLocation[]>()
 
     for (const distrito of paisCiudadesService.distritos) {
       // District rows are attached to their province through PadreID.
@@ -71,7 +71,7 @@
   })
 
   const provinciasByDepartamentoID = $derived.by(() => {
-    const groupedProvincias = new Map<number, IPaisCiudad[]>()
+    const groupedProvincias = new Map<number, ICityLocation[]>()
 
     for (const provincia of paisCiudadesService.provincias) {
       // Province summaries are grouped once so every departamento card can read the same source.
@@ -83,7 +83,7 @@
     return groupedProvincias
   })
 
-  const ciudadColumns: ITableColumn<IPaisCiudad>[] = [
+  const ciudadColumns: ITableColumn<ICityLocation>[] = [
     {
       id: 'name',
       header: 'Nombre',
@@ -121,7 +121,7 @@
     },
   ]
 
-  const provinciaTree = $derived.by<TableTreeNode<IPaisCiudad>[]>(() => {
+  const provinciaTree = $derived.by<TableTreeNode<ICityLocation>[]>(() => {
     const departamento = selectedDepartamento
     if (!departamento) { return [] }
 
@@ -181,7 +181,7 @@
     }
   })
 
-  function selectDepartamento(departamento: IPaisCiudad) {
+  function selectDepartamento(departamento: ICityLocation) {
     // Departamento click controls the right-side province/district table.
     selectedDepartamento = departamento
     selectedProvincia = null
@@ -191,7 +191,7 @@
     })
   }
 
-  function toggleProvincia(node: TableTreeNode<IPaisCiudad>) {
+  function toggleProvincia(node: TableTreeNode<ICityLocation>) {
     // The clicked province opens its district rows as the second table level.
     selectedProvincia = node.isOpen ? node.record : null
     console.debug('[delivery-costs] provincia selected', {
@@ -219,7 +219,7 @@
     })
   }
 
-  function updateCiudadCost(ciudad: IPaisCiudad, field: DeliveryCostField, value: string | number) {
+  function updateCiudadCost(ciudad: ICityLocation, field: DeliveryCostField, value: string | number) {
     // Editing one column preserves the other cost field for the same city row.
     const nextCost = Number(value || 0)
     const currentCost = getDeliveryCostRecord(ciudad.ID)
@@ -243,12 +243,12 @@
       .replace(/\p{Diacritic}/gu, '')
   }
 
-  function cityMatchesFilter(ciudad: IPaisCiudad) {
+  function cityMatchesFilter(ciudad: ICityLocation) {
     // Every filter target uses the same normalized comparison to avoid inconsistent results.
     return normalizeSearchText(ciudad.Nombre).includes(normalizedFilterText)
   }
 
-  function makeProvinciaTreeNode(provincia: IPaisCiudad): TableTreeNode<IPaisCiudad> {
+  function makeProvinciaTreeNode(provincia: ICityLocation): TableTreeNode<ICityLocation> {
     const provinciaMatches = cityMatchesFilter(provincia)
     const allDistritos = distritosByProvinciaID.get(provincia.ID) || []
     const visibleDistritos = !normalizedFilterText || provinciaMatches
@@ -325,7 +325,7 @@
     return cost > 0 ? formatN(cost, 2) as string : '-'
   }
 
-  function formatCostRange(ciudades: IPaisCiudad[], field: DeliveryCostField) {
+  function formatCostRange(ciudades: ICityLocation[], field: DeliveryCostField) {
     // Range summaries only compare configured costs, so empty cities do not collapse the minimum to zero.
     const configuredCosts = ciudades
       .map((ciudad) => getDeliveryCost(ciudad.ID, field))
@@ -338,12 +338,12 @@
     return `${formatDeliveryCost(lowestCost)} - ${formatDeliveryCost(highestCost)}`
   }
 
-  function getProvinciaCostRange(departamento: IPaisCiudad, field: DeliveryCostField) {
+  function getProvinciaCostRange(departamento: ICityLocation, field: DeliveryCostField) {
     // Provincia range summarizes direct province-level shipping costs for this departamento.
     return formatCostRange(provinciasByDepartamentoID.get(departamento.ID) || [], field)
   }
 
-  function getDistritoCostRange(departamento: IPaisCiudad, field: DeliveryCostField) {
+  function getDistritoCostRange(departamento: ICityLocation, field: DeliveryCostField) {
     // Distrito range summarizes every district under the departamento's provinces.
     const departamentoDistritos = (provinciasByDepartamentoID.get(departamento.ID) || [])
       .flatMap((provincia) => distritosByProvinciaID.get(provincia.ID) || [])

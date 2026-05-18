@@ -20,7 +20,7 @@ import { sendServiceMessage } from '$libs/sw-cache';
 import pkg from 'notiflix'
 const { Loading, Notify } = pkg;
 import { postUsuarioPropio } from '$services/services/usuarios.svelte';
-import type { IUsuario } from '$core/types/common';
+import type { IUser } from '$core/types/common';
 import { HEADER_REQUEST_LOGS_MODAL_ID } from '$domain/HeaderRequestLogsModal.svelte';
 import { formatN } from '$libs/helpers';
 import {
@@ -68,7 +68,7 @@ import {
 
   const getCurrentDeltaDatabaseName = () => {
     // Inspector reads the same scoped database used by cached services in the current company/environment.
-    return makeDeltaCacheDatabaseName(Env.getEmpresaID(), Env.enviroment || 'main')
+    return makeDeltaCacheDatabaseName(Env.getCompanyID(), Env.enviroment || 'main')
   }
 
   const sortCacheRows = (rows: ICacheDebugRow[]) => {
@@ -163,7 +163,7 @@ import {
     console.debug('[HeaderConfig] Loading local cache inspector data.', {
       forceReload,
       enviroment: Env.enviroment,
-      companyID: Env.getEmpresaID(),
+      companyID: Env.getCompanyID(),
     })
 
     try {
@@ -195,7 +195,7 @@ import {
     Loading.standard('Eliminando cache local...')
     console.debug('[HeaderConfig] Clearing local cache.', {
       enviroment: Env.enviroment,
-      companyID: Env.getEmpresaID(),
+      companyID: Env.getCompanyID(),
     })
 
     try {

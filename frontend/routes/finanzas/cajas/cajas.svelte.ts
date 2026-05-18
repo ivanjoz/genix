@@ -2,7 +2,7 @@ import { GetHandler, POST, GET } from '$libs/http.svelte';
 import { formatTime } from '$libs/helpers';
 import { Notify } from '$libs/helpers';
 
-export interface ICaja {
+export interface ICashBank {
   ID: number
   SedeID: number
   Nombre: string
@@ -17,11 +17,11 @@ export interface ICaja {
 }
 
 export interface ICajaResult {
-  Cajas: ICaja[]
-  CajasMap: Map<number, ICaja>
+  Cajas: ICashBank[]
+  CajasMap: Map<number, ICashBank>
 }
 
-export interface ICajaMovimiento {
+export interface ICashBankMovement {
   CajaID: number
   CajaRefID: number
   VentaID: number
@@ -33,7 +33,7 @@ export interface ICajaMovimiento {
   CreatedBy: number
 }
 
-export interface ICajaCuadre {
+export interface ICashReconciliation {
   ID: number
   Tipo: number
   CajaID: number
@@ -49,8 +49,8 @@ export class CajasService extends GetHandler {
   route = "cajas"
   useCache = { min: 1, ver: 1 }
 
-  Cajas: ICaja[] = $state([])
-  CajasMap: Map<number, ICaja> = $state(new Map())
+  Cajas: ICashBank[] = $state([])
+  CajasMap: Map<number, ICashBank> = $state(new Map())
 
   handler(result: ICajaResult): void {
     console.log("result cajas::", result)
@@ -67,7 +67,7 @@ export class CajasService extends GetHandler {
   }
 }
 
-export const postCaja = (data: ICaja) => {
+export const postCaja = (data: ICashBank) => {
   return POST({
     data,
     route: "cajas",
@@ -77,25 +77,25 @@ export const postCaja = (data: ICaja) => {
 
 export interface IGetCajaMovimientos {
   CajaID: number
-  fechaInicio?: number
-  fechaFin?: number
+  dateInicio?: number
+  dateFin?: number
   lastRegistros?: number
 }
 
 export interface ICajaMovimientosResult {
-  movimientos: ICajaMovimiento[]
+  movimientos: ICashBankMovement[]
 }
 
-export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICajaMovimiento[]> => {
+export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICashBankMovement[]> => {
   let route = `caja-movimientos?caja-id=${args.CajaID}`
 
-  if ((!args.fechaInicio || !args.fechaFin) && !args.lastRegistros) {
-    throw ("No se encontró una fecha de inicio o fin.")
+  if ((!args.dateInicio || !args.dateFin) && !args.lastRegistros) {
+    throw ("No se encontró una date de inicio o fin.")
   }
 
-  if (args.fechaInicio && args.fechaFin) {
-    route += `&fecha-inicio=${args.fechaInicio}`
-    route += `&fecha-fin=${args.fechaFin}`
+  if (args.dateInicio && args.dateFin) {
+    route += `&date-inicio=${args.dateInicio}`
+    route += `&date-fin=${args.dateFin}`
   }
   if (args.lastRegistros) {
     route += `&last-registros=${args.lastRegistros}`
@@ -114,7 +114,7 @@ export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICa
   return result.movimientos || []
 }
 
-export const postCajaMovimiento = (data: ICajaMovimiento) => {
+export const postCajaMovimiento = (data: ICashBankMovement) => {
   return POST({
     data,
     route: "caja-movimiento",
@@ -122,7 +122,7 @@ export const postCajaMovimiento = (data: ICajaMovimiento) => {
   })
 }
 
-export const postCajaCuadre = (data: ICajaCuadre) => {
+export const postCajaCuadre = (data: ICashReconciliation) => {
   return POST({
     data,
     route: "caja-cuadre",
@@ -131,19 +131,19 @@ export const postCajaCuadre = (data: ICajaCuadre) => {
 }
 
 export interface ICajaCuadresResult {
-  cuadres: ICajaCuadre[]
+  cuadres: ICashReconciliation[]
 }
 
-export const getCajaCuadres = async (args: IGetCajaMovimientos): Promise<ICajaCuadre[]> => {
+export const getCajaCuadres = async (args: IGetCajaMovimientos): Promise<ICashReconciliation[]> => {
   let route = `caja-cuadres?caja-id=${args.CajaID}`
 
-  if ((!args.fechaInicio || !args.fechaFin) && !args.lastRegistros) {
-    throw ("No se encontró una fecha de inicio o fin.")
+  if ((!args.dateInicio || !args.dateFin) && !args.lastRegistros) {
+    throw ("No se encontró una date de inicio o fin.")
   }
 
-  if (args.fechaInicio && args.fechaFin) {
-    route += `&fecha-hora-inicio=${args.fechaInicio * 24 * 60 * 60}`
-    route += `&fecha-hora-fin=${(args.fechaFin + 1) * 24 * 60 * 60}`
+  if (args.dateInicio && args.dateFin) {
+    route += `&date-hora-inicio=${args.dateInicio * 24 * 60 * 60}`
+    route += `&date-hora-fin=${(args.dateFin + 1) * 24 * 60 * 60}`
   }
   if (args.lastRegistros) {
     route += `&last-registros=${args.lastRegistros}`

@@ -1,6 +1,6 @@
 import { GetHandler, POST } from '$libs/http.svelte';
 
-export interface IEmpresaSmtp {
+export interface ICompanySmtp {
   Host: string
   Port: string
   User: string
@@ -8,7 +8,7 @@ export interface IEmpresaSmtp {
   Email: string
 }
 
-export interface IEmpresaCulqui {
+export interface ICompanyCulqui {
   RsaKey: string
   RsaKeyID: string
   LlaveLive: string
@@ -17,7 +17,7 @@ export interface IEmpresaCulqui {
   LlavePubDev: string
 }
 
-export interface IEmpresa {
+export interface ICompany {
   id: number
   Email: string
   Nombre: string
@@ -27,8 +27,8 @@ export interface IEmpresa {
   Representante: string
   Direccion: string
   Ciudad: string
-  SmtpConfig: IEmpresaSmtp
-  CulquiConfig: IEmpresaCulqui
+  SmtpConfig: ICompanySmtp
+  CulquiConfig: ICompanyCulqui
   ss: number
   upd: number
 }
@@ -40,14 +40,14 @@ export class EmpresaParametrosService extends GetHandler {
     empresa = $state({
         SmtpConfig: {},
         CulquiConfig: {}
-    } as IEmpresa)
+    } as ICompany)
 
     handler(response: any) {
-      const record = (response[0] || {}) as IEmpresa
+      const record = (response[0] || {}) as ICompany
       console.log("empresa response::", record)
 
-      record.SmtpConfig = record.SmtpConfig || {} as IEmpresaSmtp
-      record.CulquiConfig = record.CulquiConfig || {} as IEmpresaCulqui
+      record.SmtpConfig = record.SmtpConfig || {} as ICompanySmtp
+      record.CulquiConfig = record.CulquiConfig || {} as ICompanyCulqui
       this.empresa = record
     }
 
@@ -57,7 +57,7 @@ export class EmpresaParametrosService extends GetHandler {
     }
 }
 
-export const postEmpresaParametros = (data: IEmpresa) => {
+export const postEmpresaParametros = (data: ICompany) => {
   return POST({
     data,
     route: "empresa-parametros",

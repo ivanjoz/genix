@@ -244,7 +244,7 @@
         mobile: { order: 3, css: 'col-span-10 ff-semibold text-sm justify-self-end' }
       },
       {
-        header: 'Fecha Hora',
+        header: 'Date Hora',
         getValue: saleOrder => formatTime(saleOrder.Created, 'd-M h:n') as string,
         css: 'text-right',
         headerCss: 'w-100',

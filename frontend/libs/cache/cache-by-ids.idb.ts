@@ -58,7 +58,7 @@ const forgetCacheByIDsDatabase = (databaseName: string) => {
 }
 
 const getCurrentDatabaseName = (): string => {
-	return makeCacheByIDsDatabaseName(Env.getEmpresaID(), Env.enviroment || 'main')
+	return makeCacheByIDsDatabaseName(Env.getCompanyID(), Env.enviroment || 'main')
 }
 
 import { Env } from '$core/env'

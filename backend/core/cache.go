@@ -10,7 +10,7 @@ import (
 
 type Cache struct {
 	db.TableStruct[CacheTable, Cache]
-	EmpresaID    int32
+	CompanyID    int32
 	ID           int32
 	Key          string
 	ContentBytes []byte
@@ -20,7 +20,7 @@ type Cache struct {
 
 type CacheTable struct {
 	db.TableStruct[CacheTable, Cache]
-	EmpresaID    db.Col[CacheTable, int32]
+	CompanyID    db.Col[CacheTable, int32]
 	ID           db.Col[CacheTable, int32]
 	Key          db.Col[CacheTable, string]
 	ContentBytes db.Col[CacheTable, []byte]
@@ -31,14 +31,14 @@ type CacheTable struct {
 func (e CacheTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "cache",
-		Partition: e.EmpresaID,
+		Partition: e.CompanyID,
 		Keys:      []db.Coln{e.ID},
 	}
 }
 
-func GetCacheByKeys(empresaID int32, cacheKeys ...string) ([]Cache, error) {
-	if empresaID <= 0 {
-		return nil, fmt.Errorf("empresa ID inválido para obtener cache")
+func GetCacheByKeys(companyID int32, cacheKeys ...string) ([]Cache, error) {
+	if companyID <= 0 {
+		return nil, fmt.Errorf("company ID inválido para obtener cache")
 	}
 	if len(cacheKeys) == 0 {
 		return []Cache{}, nil
@@ -57,7 +57,7 @@ func GetCacheByKeys(empresaID int32, cacheKeys ...string) ([]Cache, error) {
 
 	cacheRows := []Cache{}
 	cacheQuery := db.Query(&cacheRows)
-	cacheQuery.EmpresaID.Equals(empresaID)
+	cacheQuery.CompanyID.Equals(companyID)
 
 	if len(cacheIDs) == 1 {
 		cacheQuery.ID.Equals(cacheIDs[0])
@@ -103,11 +103,11 @@ func (req *HandlerArgs) ExtractCacheVersionValues() []db.IDCacheVersion {
 	// New cache delta protocol keys: cc-ids for cached IDs and cc-ver for aligned cache versions.
 	cachedIDsStr := req.GetQuery("cc-ids")
 	cacheVersionsFromIDsStr := req.GetQuery("cc-ver")
-	empresaID := Coalesce(req.GetQueryInt("cmp"), req.Usuario.EmpresaID)
+	companyID := Coalesce(req.GetQueryInt("cmp"), req.User.CompanyID)
 
-	if empresaID == 0 {
+	if companyID == 0 {
 		// Invalid company scope means the cache query cannot be resolved safely.
-		Log("error al extraer versiones de cache: no se envio Empresa-ID")
+		Log("error al extraer versiones de cache: no se envio Company-ID")
 		return []db.IDCacheVersion{}
 	}
 
@@ -118,7 +118,7 @@ func (req *HandlerArgs) ExtractCacheVersionValues() []db.IDCacheVersion {
 	records := []db.IDCacheVersion{}
 
 	for _, id := range ids {
-		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: 0, PartitionID: empresaID})
+		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: 0, PartitionID: companyID})
 	}
 
 	for i, id := range cachedIDs {
@@ -126,7 +126,7 @@ func (req *HandlerArgs) ExtractCacheVersionValues() []db.IDCacheVersion {
 		if i < len(cacheVersionsFromIDs) {
 			version = uint8(cacheVersionsFromIDs[i])
 		}
-		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: version, PartitionID: empresaID})
+		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: version, PartitionID: companyID})
 	}
 
 	Log("records extracted:", len(records))

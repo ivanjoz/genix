@@ -7,7 +7,10 @@ import (
 
 // Init creates the ORM internal tables required before sequence or cache-version features are used.
 func Init() error {
-	if err := initSequencesTable(); err != nil {
+	if err := CreateKeyspaceIfNotExists(); err != nil {
+		return err
+	}
+	if err := InitSequencesTable(); err != nil {
 		return err
 	}
 	if err := InitCacheVersionTable(); err != nil {
@@ -16,8 +19,22 @@ func Init() error {
 	return nil
 }
 
-// initSequencesTable ensures the shared autoincrement counter table exists before sequence-backed inserts run.
-func initSequencesTable() error {
+// CreateKeyspaceIfNotExists ensures the configured keyspace exists in ScyllaDB,
+// creating it with SimpleStrategy / replication_factor=1 when missing.
+func CreateKeyspaceIfNotExists() error {
+	keyspace := connParams.Keyspace
+	if keyspace == "" {
+		return errors.New("CreateKeyspaceIfNotExists: no keyspace configured")
+	}
+	stmt := fmt.Sprintf(
+		"CREATE KEYSPACE IF NOT EXISTS %v WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}",
+		keyspace,
+	)
+	return QueryExec(stmt)
+}
+
+// InitSequencesTable ensures the shared autoincrement counter table exists before sequence-backed inserts run.
+func InitSequencesTable() error {
 	keyspace := connParams.Keyspace
 	if keyspace == "" {
 		return errors.New("Init: no keyspace configured")

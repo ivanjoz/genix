@@ -60,7 +60,7 @@ const makeDatabaseName = (companyID: number, env: string): string => {
 }
 
 const getDatabase = (): AgentChatDatabase => {
-  const name = makeDatabaseName(Env.getEmpresaID(), Env.enviroment || 'main')
+  const name = makeDatabaseName(Env.getCompanyID(), Env.enviroment || 'main')
   const existing = databasesByName.get(name)
   if (existing) return existing
   const created = new AgentChatDatabase(name)

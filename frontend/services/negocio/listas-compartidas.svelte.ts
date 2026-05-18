@@ -1,6 +1,6 @@
 import { GetHandler, POST, type INewIDToID as IBaseNewIDToID } from '$libs/http.svelte';
 
-export interface IListaRegistro {
+export interface ISharedListRecord {
   ID: number;
   ListaID: number;
   Nombre: string;
@@ -11,9 +11,9 @@ export interface IListaRegistro {
   upd: number;
 }
 
-export interface IListas {
-  records: IListaRegistro[];
-  recordsMap: Map<number, IListaRegistro>;
+export interface ISharedLists {
+  records: ISharedListRecord[];
+  recordsMap: Map<number, ISharedListRecord>;
 }
 
 export const listasCompartidas = [
@@ -21,25 +21,25 @@ export const listasCompartidas = [
   { id: 2, name: 'Marca' },
 ];
 
-export class ListasCompartidasService extends GetHandler<IListaRegistro> {
+export class ListasCompartidasService extends GetHandler<ISharedListRecord> {
   route = 'listas-compartidas';
   useCache = { min: 5, ver: 6 };
   inferRemoveFromStatus = true
 
-  ListaRecordsMap: Map<number, IListaRegistro[]> = $state(new Map());
+  ListaRecordsMap: Map<number, ISharedListRecord[]> = $state(new Map());
 	
-	makeName(e: Partial<IListaRegistro>) {
+	makeName(e: Partial<ISharedListRecord>) {
 		return [e.ListaID, e.Nombre].join("_")
 	}
   
-  handler(result: { [k: string]: IListaRegistro[] }): void {
+  handler(result: { [k: string]: ISharedListRecord[] }): void {
     console.log('result getted::', result);
 
     this.records = [];
     this.recordsMap = new Map();
     this.ListaRecordsMap = new Map();
     this.nameToRecordMap = new Map();
-    const savedRecords: IListaRegistro[] = []
+    const savedRecords: ISharedListRecord[] = []
 
     for (const [key, recordGroups] of Object.entries(result)) {
       const listaID = parseInt(key.split('_')[1]);
@@ -67,7 +67,7 @@ export class ListasCompartidasService extends GetHandler<IListaRegistro> {
     this.afterSaveRecords(...savedRecords)
   }
 
-	afterSaveRecords(...records: IListaRegistro[]) {
+	afterSaveRecords(...records: ISharedListRecord[]) {
     for (const record of records) {
       const currentListaRecords = this.ListaRecordsMap.get(record.ListaID) || [];
       const existingRecordPosition = currentListaRecords.findIndex((existingRecord) => existingRecord.ID === record.ID)
@@ -95,7 +95,7 @@ export class ListasCompartidasService extends GetHandler<IListaRegistro> {
 
 export type INewIDToID = IBaseNewIDToID
 
-export const postListaRegistros = (data: IListaRegistro[]): Promise<INewIDToID[]> => {
+export const postListaRegistros = (data: ISharedListRecord[]): Promise<INewIDToID[]> => {
   return POST({
     data,
     route: 'listas-compartidas',

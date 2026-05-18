@@ -125,7 +125,7 @@ const connectAgentSocket = () => {
   // by TabID — include it plus company/user for bookkeeping on the upgrade
   // URL.
   const tab = getAgentTabID();
-  const company = Env.getEmpresaID() || 0;
+  const company = Env.getCompanyID() || 0;
   const user = getAgentUserID();
   const url = `${agentWsBase()}/ws/agent?tab=${encodeURIComponent(tab)}&company=${company}&user=${user}`;
   agentLog("info", "connecting page bridge", { url, tab, company, user, apiMain: Env.API_ROUTES.MAIN, local: globalThis._isLocal, enabled: isAgentEnabled() });

@@ -1,7 +1,7 @@
-import type { IProducto } from '$services/services/productos.svelte';
+import type { IProduct } from '$services/services/productos.svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
-export interface ICategoriaProducto {
+export interface IProductCategory {
   Name: string;
   Description?: string;
   Image: string;
@@ -13,15 +13,15 @@ export function setLayerOpenedState(id: number) {
   layerOpenedState.id = id;
 }
 
-export interface ICartProducto {
-  producto: IProducto
+export interface ICartProduct {
+  producto: IProduct
   cant: number
 }
 
-export const ProductsSelectedMap = $state<Map<number,ICartProducto>>(new SvelteMap())
+export const ProductsSelectedMap = $state<Map<number,ICartProduct>>(new SvelteMap())
 
 export const addProductoCant = (
-  producto: IProducto, fixedCant: number | null, incrementOrDecrement?: number
+  producto: IProduct, fixedCant: number | null, incrementOrDecrement?: number
 ) => {
   if(typeof fixedCant === 'number'){
     if(fixedCant === 0){

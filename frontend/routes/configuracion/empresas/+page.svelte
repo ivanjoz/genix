@@ -11,12 +11,12 @@ import { Core, closeModal } from '$core/store.svelte';
 import { formatTime } from '$libs/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg
-  import { EmpresasService, postEmpresa, type IEmpresa } from "./empresas.svelte"
+  import { EmpresasService, postEmpresa, type ICompany } from "./empresas.svelte"
 
   const empresasService = new EmpresasService()
 
   let filterText = $state("")
-  let empresaForm = $state({} as IEmpresa)
+  let empresaForm = $state({} as ICompany)
 
   async function saveEmpresa(isDelete?: boolean) {
     const form = empresaForm
@@ -56,7 +56,7 @@ const { Loading } = pkg
     Loading.remove()
   }
 
-  const columns: ITableColumn<IEmpresa>[] = [
+  const columns: ITableColumn<ICompany>[] = [
     {
       header: "ID",
       headerCss: "w-54",
@@ -110,7 +110,7 @@ const { Loading } = pkg
       <FilterInput bind:value={filterText} css="mr-16 w-256" />
       <div class="flex items-center">
         <Button color="green" icon="icon-plus" label="Opens the modal to create a new company." onClick={() => {
-          empresaForm = { ss: 1, SmtpConfig: {}, CulquiConfig: {} } as IEmpresa
+          empresaForm = { ss: 1, SmtpConfig: {}, CulquiConfig: {} } as ICompany
           Core.openModal(1)
         }} />
       </div>

@@ -5,7 +5,7 @@
     IAccessGroupCatalogEntry,
     IAccessListCatalogEntry
   } from '../perfiles-accesos/access-list-catalog';
-  import type { IPerfil, IUsuario } from './usuarios.svelte';
+  import type { IProfile, IUser } from './usuarios.svelte';
 
   interface IProfileAccessSummary {
     readableAccessNames: string[]
@@ -20,8 +20,8 @@
   }
 
   interface IUserProfilesAccessSelectorProps {
-    saveOn: IUsuario
-    perfiles: IPerfil[]
+    saveOn: IUser
+    perfiles: IProfile[]
     accessGroupEntries: IAccessGroupCatalogEntry[]
     accessCatalogEntries: IAccessListCatalogEntry[]
     accessLevelOptions: { ID: number; Nombre: string }[]
@@ -70,7 +70,7 @@
     return groupNameByID;
   });
 
-  function summarizeProfileAccesses(profileRecord?: IPerfil): IProfileAccessSummary {
+  function summarizeProfileAccesses(profileRecord?: IProfile): IProfileAccessSummary {
     const readableAccessNames = new Set<string>();
     const editableAccessNames = new Set<string>();
 
@@ -98,7 +98,7 @@
     };
   }
 
-  function getProfileRecord(profileID: number): IPerfil | undefined {
+  function getProfileRecord(profileID: number): IProfile | undefined {
     return perfiles.find((profileRecord) => profileRecord.ID === profileID);
   }
 

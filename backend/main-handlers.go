@@ -2,14 +2,14 @@ package main
 
 import (
 	"app/agent"
-	"app/comercial"
-	"app/configuracion"
+	"app/sales"
+	"app/config"
 	"app/core"
 	"app/exec"
-	"app/finanzas"
-	"app/logistica"
-	"app/negocio"
-	"app/seguridad"
+	"app/finance"
+	"app/logistics"
+	"app/business"
+	"app/security"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -25,12 +25,12 @@ import (
 var appHandlersModules = []core.AppRouterType{
 	agent.ModuleHandlers,
 	exec.ModuleHandlers,
-	comercial.ModuleHandlers,
-	configuracion.ModuleHandlers,
-	finanzas.ModuleHandlers,
-	logistica.ModuleHandlers,
-	negocio.ModuleHandlers,
-	seguridad.ModuleHandlers,
+	sales.ModuleHandlers,
+	config.ModuleHandlers,
+	finance.ModuleHandlers,
+	logistics.ModuleHandlers,
+	business.ModuleHandlers,
+	security.ModuleHandlers,
 }
 
 var appHandlers = core.AppRouterType{}
@@ -122,12 +122,12 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	funcPath := args.Method + "." + args.Route
 
 	if !isPublicPath {
-		args.Usuario = core.CheckUser(args, 0)
+		args.User = core.CheckUser(args, 0)
 
-		// Si no es público, valida el usuario
-		if len(args.Usuario.Error) > 0 {
-			core.Log("Usuario Error::", args.Usuario.Error)
-			handlerResponse.Error = args.Usuario.Error
+		// Si no es público, valida el user
+		if len(args.User.Error) > 0 {
+			core.Log("User Error::", args.User.Error)
+			handlerResponse.Error = args.User.Error
 			setResponseMetadata(&handlerResponse)
 			return prepareResponse(args, &handlerResponse)
 		}
@@ -152,18 +152,18 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 			}
 		}
 
-		if !hasAllowedAccess && args.Usuario.ID != 1 {
+		if !hasAllowedAccess && args.User.ID != 1 {
 			accessNames := []string{}
 			for _, accessInfo := range accessInfos {
 				accessNames = append(accessNames, accessInfo.Name)
 			}
 
-			handlerResponse.Error = fmt.Sprintf("El usuario no posee alguno de los accesos: %s", strings.Join(accessNames, ", "))
+			handlerResponse.Error = fmt.Sprintf("El user no posee alguno de los accesos: %s", strings.Join(accessNames, ", "))
 			setResponseMetadata(&handlerResponse)
 			return prepareResponse(args, &handlerResponse)
 		}
 	} else {
-		args.Usuario = &core.UsuarioToken{}
+		args.User = &core.UsuarioToken{}
 	}
 
 	// Request header log is only meaningful in Lambda mode (it uses REQ_ID / REQ_LAMBDA_ID).
@@ -175,7 +175,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		}
 
 		logHeader := core.Concat("|", "$Req", core.Env.REQ_ID, core.Env.REQ_LAMBDA_ID,
-			args.Usuario.ID, args.Usuario.Usuario, strings.Join(reqPathsParsed, "&"))
+			args.User.ID, args.User.User, strings.Join(reqPathsParsed, "&"))
 		fmt.Println(logHeader)
 	}
 
@@ -202,12 +202,12 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 }
 
 func registerLocalRequestUsage(args *core.HandlerArgs, handlerResponse *core.HandlerResponse, requestStartedAt int64) {
-	companyID, usuarioID := int32(0), int32(0)
+	companyID, userID := int32(0), int32(0)
 
-	if args.Usuario != nil {
-		companyID, usuarioID = args.Usuario.EmpresaID, args.Usuario.ID
+	if args.User != nil {
+		companyID, userID = args.User.CompanyID, args.User.ID
 	}
-	if args.Usuario.EmpresaID <= 0 {
+	if args.User.CompanyID <= 0 {
 		return
 	}
 
@@ -226,11 +226,11 @@ func registerLocalRequestUsage(args *core.HandlerArgs, handlerResponse *core.Han
 	elapsedMilliseconds := time.Now().UnixMilli() - requestStartedAt
 	usageTimeUnits := int32((elapsedMilliseconds + 3) / 4)
 
-	core.AddRequestUsage(companyID, usuarioID, bandwidthUnits, usageTimeUnits, requestType)
+	core.AddRequestUsage(companyID, userID, bandwidthUnits, usageTimeUnits, requestType)
 }
 
 func clearEnvVariables() {
-	core.Usuario = core.UsuarioToken{}
+	core.User = core.UsuarioToken{}
 	core.LogsSaved = []string{}
 	core.REQ_PATHS = []string{}
 	core.Env.USUARIO_ID = 0

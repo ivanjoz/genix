@@ -666,13 +666,13 @@ func RemoveSpaces(input string) string {
 	return noSpaces
 }
 
-func GetFechaHoraGrupo(fechaHora int64) int32 {
-	return int32(math.Floor(float64(fechaHora) / float64(1800)))
+func GetFechaHoraGrupo(dateTime int64) int32 {
+	return int32(math.Floor(float64(dateTime) / float64(1800)))
 }
 
-func GetFechaHoraUsuarioGrupo(fechaHora int64, usuarioID int32) int32 {
-	fechaHoraGrupo := int32(math.Floor(float64(fechaHora) / float64(1800)))
-	return fechaHoraGrupo*1000 + usuarioID
+func GetFechaHoraUsuarioGrupo(dateTime int64, userID int32) int32 {
+	dateTimeGrupo := int32(math.Floor(float64(dateTime) / float64(1800)))
+	return dateTimeGrupo*1000 + userID
 }
 
 func GetBase36Time(idx int64) string {

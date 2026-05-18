@@ -47,7 +47,7 @@ func parseLogsResults(cloudWachRecords [][]types.ResultField) []CloudLogRecord {
 			if field == "@timestamp" {
 				date, err := time.Parse("2006-01-02 15:04:05.000", *value.Value)
 				if err != nil {
-					core.Log("No se reconoció el la fecha::", err)
+					core.Log("No se reconoció el la date::", err)
 				}
 				logRecord.Time = date.Unix()
 			} else if field == "@message" {

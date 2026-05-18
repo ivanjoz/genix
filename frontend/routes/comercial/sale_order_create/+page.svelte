@@ -11,14 +11,14 @@ import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
 import { Core } from '$core/store.svelte';
 import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
 import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
-import { getWarehouseProductStock, type IProductoStock, type IProductStockDetail } from '$routes/logistica/products-stock/stock-movement';
+import { getWarehouseProductStock, type IProductStock, type IProductStockDetail } from '$routes/logistica/products-stock/stock-movement';
 import { ClientProviderService, ClientProviderType, type IClientProvider } from '$routes/negocio/clientes/clientes-proveedores.svelte';
 import { ProductosService } from '$routes/negocio/productos/productos.svelte';
 import { ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
 import { SystemParametersService } from '$services/services/system-parameters.svelte';
 import { untrack } from 'svelte';
 import { EmpresaParametrosService } from '../../configuracion/parametros/empresas.svelte';
-import type { IAlmacen } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte";
+import type { IWarehouse } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte";
 import { AlmacenesService } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte";
 import ProductoVentaCard from './ProductoVentaCard.svelte';
 import type { ProductoVenta } from "./sale_order.svelte";
@@ -63,7 +63,7 @@ import { SaleOrderState } from "./sale_order.svelte";
   });
 
   // Data
-  let productosStock = $state([] as IProductoStock[]);
+  let productosStock = $state([] as IProductStock[]);
   let productosParsed = $state([] as ProductoVenta[]);
   let productosParsedAll = $state([] as ProductoVenta[]); // cache for filtering
 
@@ -315,7 +315,7 @@ import { SaleOrderState } from "./sale_order.svelte";
               options={almacenesService.Almacenes}
               placeholder="ALMACÉN"
               selected={almacenSelected}
-              onChange={(e: IAlmacen) => {
+              onChange={(e: IWarehouse) => {
                 if (e) {
                   almacenSelected = e.ID;
                   ventasState.form.WarehouseID = e.ID;
@@ -445,7 +445,7 @@ import { SaleOrderState } from "./sale_order.svelte";
             css="md:w-[30%] md:order-2"
             label="" save="PaymentDueDate"
             saveOn={ventasState.form}
-            placeholder="Fecha Pago"
+            placeholder="Date Pago"
           />
           <div class="md:order-3 md:ml-auto md:max-w-168">
 	          <SearchSelect useStyle={1}

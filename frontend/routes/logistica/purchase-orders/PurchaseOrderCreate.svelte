@@ -9,7 +9,7 @@ import { formatN, formatTime, Notify } from '$libs/helpers'
 import { POST } from '$libs/http.svelte'
 import { ProductStockSimpleService } from '$routes/logistica/products-stock/stock-movement'
 import { ClientProviderService, ClientProviderType } from '$routes/negocio/clientes/clientes-proveedores.svelte'
-import type { IProducto, IProductoPresentacion } from '$routes/negocio/productos/productos.svelte'
+import type { IProduct, IProductPresentation } from '$routes/negocio/productos/productos.svelte'
 import { ProductosService } from '$routes/negocio/productos/productos.svelte'
 import { AlmacenesService } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
 import { clearRouteRecordQueryParam, loadRouteRecordFromQueryParam } from '$libs/cache/route-data'
@@ -28,8 +28,8 @@ interface PurchaseOrderItem {
   presentationID: number
   quantity: number
   price: number
-  product: IProducto
-  presentation?: IProductoPresentacion
+  product: IProduct
+  presentation?: IProductPresentation
 }
 
 // Payload shape sent to POST /purchase-orders.

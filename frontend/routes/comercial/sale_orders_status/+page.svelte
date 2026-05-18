@@ -16,8 +16,8 @@
   } from '$routes/negocio/clientes/clientes-proveedores.svelte';
   import {
       ProductosService,
-      type IProducto,
-      type IProductoPresentacion,
+      type IProduct,
+      type IProductPresentation,
   } from '$routes/negocio/productos/productos.svelte';
   import { AlmacenesService } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte';
   import { onMount, untrack } from 'svelte';
@@ -63,7 +63,7 @@
   let saleOrderDeliveryForm = $state({ WarehouseID: 0 });
   let saleOrderFilterForm = $state<ISaleOrderFilterForm>({ clientID: 0, productID: 0 });
   let clientOptions = $state<ISaleOrderClientOption[]>([]);
-  let productOptions = $state<IProducto[]>([]);
+  let productOptions = $state<IProduct[]>([]);
   let saleOrdersQueryRequestID = 0;
 
   const cajasService = new CajasService();
@@ -167,7 +167,7 @@
       // Reuse the synced records map but expose only the products present in the loaded sale orders.
       productOptions = productIDs
         .map((productID) => productosService.recordsMap.get(productID))
-        .filter((productRecord): productRecord is IProducto => Boolean(productRecord))
+        .filter((productRecord): productRecord is IProduct => Boolean(productRecord))
         .sort((leftProduct, rightProduct) => leftProduct.Nombre.localeCompare(rightProduct.Nombre));
 
       console.debug('[sale_orders_status] sale orders ready', {
@@ -222,7 +222,7 @@
     if (!presentationID) { return ''; }
 
     const productRecord = productosService.recordsMap.get(productID);
-    const presentationRecord = productRecord?.Presentaciones?.find((presentationOption: IProductoPresentacion) => presentationOption.id === presentationID);
+    const presentationRecord = productRecord?.Presentaciones?.find((presentationOption: IProductPresentation) => presentationOption.id === presentationID);
     return presentationRecord?.nm || `Presentación ${presentationID}`;
   }
 

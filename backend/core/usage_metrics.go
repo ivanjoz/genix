@@ -35,7 +35,7 @@ const usageLogWindowTicks int32 = 150 // 5 minutes with 2-second SUnixTime ticks
 
 // requestType = 1: GET | requestType = 2: POST
 // bandwith uses 4 KB increments and usageTime uses 4 ms increments.
-func AddRequestUsage(companyID, usuarioID, bandwith, usageTime int32, requestType int8) {
+func AddRequestUsage(companyID, userID, bandwith, usageTime int32, requestType int8) {
 	companyUsageBucket := getOrCreateCompanyUsageBucket(companyID)
 	currentUsageLogID := GetCurrentUsageLogID()
 
@@ -71,7 +71,7 @@ func AddRequestUsage(companyID, usuarioID, bandwith, usageTime int32, requestTyp
 	}
 
 	// Update both the specific user and the company aggregate entry (`-1`).
-	updateUsageCounter(usuarioID)
+	updateUsageCounter(userID)
 	updateUsageCounter(-1)
 	companyUsageBucket.IsDirty = true
 }
@@ -162,11 +162,11 @@ func buildUsageLog(companyID, usageLogID int32, usageMap map[int32]*UsageCounter
 		usageLog.PostCpuTimeUsage = totalUsageCounter.PostCpuTimeUsage
 	}
 
-	for usuarioID, usageCounter := range usageMap {
-		if usuarioID == -1 || usageCounter == nil {
+	for userID, usageCounter := range usageMap {
+		if userID == -1 || usageCounter == nil {
 			continue
 		}
-		usageLog.DetailUserID = append(usageLog.DetailUserID, usuarioID)
+		usageLog.DetailUserID = append(usageLog.DetailUserID, userID)
 		usageLog.DetailGetBandwith = append(usageLog.DetailGetBandwith, usageCounter.GetBandwith)
 		usageLog.DetailPostBandwith = append(usageLog.DetailPostBandwith, usageCounter.PostBandwith)
 		usageLog.DetailGetCpuTimeUsage = append(usageLog.DetailGetCpuTimeUsage, usageCounter.GetCpuTimeUsage)

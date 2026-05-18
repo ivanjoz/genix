@@ -127,8 +127,8 @@ func Test3() {
 
 	data := map[string]any{
 		"Sedes": []DemoStruct2{
-			{Property1: "Sede 1", Count: 10},
-			{Property1: "Sede 2", Count: 20},
+			{Property1: "Site 1", Count: 10},
+			{Property1: "Site 2", Count: 20},
 		},
 		"Almacenes": []DemoStruct2{
 			{Property1: "Alm 1", Count: 5},

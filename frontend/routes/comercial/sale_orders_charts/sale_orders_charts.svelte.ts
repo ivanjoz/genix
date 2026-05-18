@@ -1,8 +1,8 @@
 import { GetHandler } from '$libs/http.svelte';
 
 export interface ISaleSummaryRecord {
-	EmpresaID: number;
-	Fecha: number;
+	CompanyID: number;
+	Date: number;
 	ProductIDs: number[];
 	Quantity: number[];
 	QuantityPendingDelivery: number[];
@@ -16,7 +16,7 @@ export class SaleOrdersChartsService extends GetHandler {
 	// Keep cache short for chart pages while preserving delta behavior.
 	useCache = { min: 0.2, ver: 2 };
 	// Backend key for delta merge when records don't expose `ID`.
-	keyID = 'Fecha';
+	keyID = 'Date';
 	columnarIDField = "ProductIDs";
 	combineColumnarValuesOnFields = [
 		"Quantity", "QuantityPendingDelivery", "TotalAmount", "TotalDebtAmount"
@@ -29,8 +29,8 @@ export class SaleOrdersChartsService extends GetHandler {
 		
 		// Keep charts stable by always rendering records in date order.
 		this.records = result
-			.filter((summaryRecord) => (summaryRecord?.Fecha || 0) > 0)
-			.sort((leftRecord, rightRecord) => leftRecord.Fecha - rightRecord.Fecha);
+			.filter((summaryRecord) => (summaryRecord?.Date || 0) > 0)
+			.sort((leftRecord, rightRecord) => leftRecord.Date - rightRecord.Date);
 
 		console.debug('[SaleOrdersChartsService] records:', this.records.length);
 	}

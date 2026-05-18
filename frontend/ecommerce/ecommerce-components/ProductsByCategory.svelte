@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getProductsByCategoryID, type IProducto } from '$services/services/productos.svelte';
+	import { getProductsByCategoryID, type IProduct } from '$services/services/productos.svelte';
 	import ProductCard from "$ecommerce/components/ProductCard.svelte";
 
 	export interface IProductsByCategory {
@@ -10,7 +10,7 @@
 
 	const { css = "", categoryID, limit = 8 }: IProductsByCategory = $props();
 
-	let productos: IProducto[] = $state([]);
+	let productos: IProduct[] = $state([]);
 
 	// Load data when component mounts
 	$effect(() => {

@@ -23,7 +23,7 @@ import { productoMonedaOptions, productoUnidadOptions } from '$core/products-lis
 import { ListasCompartidasService } from '$services/negocio/listas-compartidas.svelte';
 import {
     ProductosService,
-    type IProducto,
+    type IProduct,
     type IProductoImage
 } from "./productos.svelte";
 
@@ -33,13 +33,13 @@ import {
 
   let view = $state(1);
   let layerView = $state(1);
-  let productoForm = $state({} as IProducto);
+  let productoForm = $state({} as IProduct);
   // svelte-ignore non_reactive_update
   let CategoriasLayer: CategoriasMarcas | null = null;
   // svelte-ignore non_reactive_update
   let MarcasLayer: CategoriasMarcas | null = null;
   let imageUploaderHandler: (() => void) | undefined;
-  let importExcelRowsPreview = $state<IProducto[]>([]);
+  let importExcelRowsPreview = $state<IProduct[]>([]);
   let importExcelErrors = $state<string[]>([]);
   let isImportExcelProcessing = $state(false);
 
@@ -48,13 +48,13 @@ import {
   // Reuse option lists as the single source for labels in UI and Excel export.
   const monedaLabelById = new Map(productoMonedaOptions.map((option) => [option.i, option.v]));
   const unidadLabelById = new Map(productoUnidadOptions.map((option) => [option.i, option.v]));
-  const getUpdatedFieldCellCss = (record: IProducto, fieldKey: string): string | undefined => {
+  const getUpdatedFieldCellCss = (record: IProduct, fieldKey: string): string | undefined => {
     // Highlight imported cells that differ from the current persisted product value.
     if (!record._updatedFields?.includes(fieldKey)) return undefined;
     return "bg-purple-100";
   };
 
-  const makeProductColumns = (isImport = false): ExcelTableColumn<IProducto>[] => [
+  const makeProductColumns = (isImport = false): ExcelTableColumn<IProduct>[] => [
     {
       header: "ID", 
       field: 'ID',
@@ -82,7 +82,7 @@ import {
     {
       header: "Categorías",
       highlight: true,
-      renderPrefix: e => (e.CategoriasIDs||[]).some(x => x <= 0) && `<i class="icon-arrows-cw text-purple-400"></i>`,
+      renderPrefix: e => (e.CategoriasIDs||[]).some(x => x <= 0) && `<i class="icon-arrows-cw -ml-4 text-purple-400"></i>`,
       getValue: (e) => {
         // Keep import preview readable by showing original labels from Excel.
         if (isImport && (e._categoriasNames || "").trim().length > 0) {
@@ -324,7 +324,7 @@ import {
         const existingProducto = productos.recordsMap.get(importedProducto.ID);
         if (existingProducto) {
           for (const fieldKey in existingProducto) {
-            const typedFieldKey = fieldKey as keyof IProducto;
+            const typedFieldKey = fieldKey as keyof IProduct;
             if (importEditableProductKeys.has(typedFieldKey)) { continue; }
             (importedProducto as any)[typedFieldKey] = existingProducto[typedFieldKey];
           }
@@ -356,7 +356,7 @@ import {
       Notify.success("Importación completada correctamente.");
       importExcelRowsPreview = [];
       Core.closeModal(IMPORT_PRODUCTOS_MODAL_ID);
-      productoForm = {} as IProducto
+      productoForm = {} as IProduct
     } catch (error) {
       console.error("[productos-import] save import failed:", error);
       Notify.failure(`No se pudo completar la importación: ${error}`);
@@ -364,7 +364,7 @@ import {
     }
   };
 
-  const doPostProductos = async (payload: IProducto[]): Promise<Map<number, number>> => {
+  const doPostProductos = async (payload: IProduct[]): Promise<Map<number, number>> => {
     for (const producto of payload) {
       // Keep local shape consistent even when backend omits optional fields in responses.
       producto.Image = producto.Images?.[0];
@@ -373,7 +373,7 @@ import {
     return await productos.postAndSync(payload);
   };
 
-  const importEditableProductKeys = new Set<keyof IProducto>([
+  const importEditableProductKeys = new Set<keyof IProduct>([
     "ID", "Nombre", "CategoriasIDs", "Precio", "Descuento", "PrecioFinal",
     "MarcaID", "UnidadID", "Volumen", "Peso", "MonedaID",
   ]);
@@ -402,7 +402,7 @@ import {
       return;
     }
     Loading.remove();
-    productoForm = {} as IProducto
+    productoForm = {} as IProduct
     Core.openSideLayer(0);
   };
 
@@ -443,7 +443,7 @@ import {
       useMobileGrid={true}
       onSelect={(e) => {
         Core.openSideLayer(0);
-        productoForm = { ID: 0 } as IProducto;
+        productoForm = { ID: 0 } as IProduct;
         view = e[0] as number;
       }}
     />
@@ -479,7 +479,7 @@ import {
         } else if (view === 3) {
           MarcasLayer?.newRecord();
         } else {
-       		productoForm = { ss: 1 } as IProducto
+       		productoForm = { ss: 1 } as IProduct
           Core.openSideLayer(1);
         }
       }}
@@ -517,7 +517,7 @@ import {
     id={1}
     bind:selected={layerView}
     onClose={() => {
-      productoForm = {} as IProducto;
+      productoForm = {} as IProduct;
     }}
     onSave={() => {
       onSave();

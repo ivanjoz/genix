@@ -2,15 +2,15 @@
 import Input from '$components/form/Input.svelte'
 import SearchSelect from '$components/form/SearchSelect.svelte'
 import Checkbox from '$components/form/Checkbox.svelte'
-import type { ISede } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
-import { cajaTipos, type ICaja } from './cajas.svelte'
+import type { ISite } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
+import { cajaTipos, type ICashBank } from './cajas.svelte'
 
 let {
   form = $bindable(),
   sedes,
 }: {
-  form: ICaja
-  sedes: ISede[]
+  form: ICashBank
+  sedes: ISite[]
 } = $props()
 </script>
 

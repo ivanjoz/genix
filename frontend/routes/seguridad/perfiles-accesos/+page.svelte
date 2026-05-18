@@ -20,8 +20,8 @@ import {
 import {
     PerfilesService,
     postPerfil,
-    type IAcceso,
-    type IPerfil
+    type IAccess,
+    type IProfile
 } from "./perfiles-accesos.svelte";
 
   const perfilesService = new PerfilesService()
@@ -49,7 +49,7 @@ import {
     }
   }
 
-  let perfilForm = $state({} as IPerfil)
+  let perfilForm = $state({} as IProfile)
   let moduleSelected = $state(0)
   let filterText = $state("")
   let accessGroups = $state([] as IAccessGroupCatalogEntry[])
@@ -79,7 +79,7 @@ import {
   }
 
   const accesosCatalog = $derived.by(() => {
-    if (accessListEntries.length === 0) { return [] as IAcceso[] }
+    if (accessListEntries.length === 0) { return [] as IAccess[] }
 
     const catalogAccesos = accessListEntries.map((accessListEntry) => {
       // Resolve the primary frontend route from the shared catalog normalizer so arrays and strings behave the same.
@@ -104,7 +104,7 @@ import {
   })
 
   const accesosGrouped = $derived.by(() => {
-    const gruposMap: Map<string, IAcceso[]> = new Map()
+    const gruposMap: Map<string, IAccess[]> = new Map()
     const moduleSelectedID = moduleSelected
 
     for (const accessRecord of accesosCatalog) {
@@ -126,7 +126,7 @@ import {
     const accesosGrouped_: {
       moduleID: number
       group: number
-      accesos: IAcceso[]
+      accesos: IAccess[]
       groupName: string
       moduleName: string
     }[] = []
@@ -201,7 +201,7 @@ import {
       form._open = false
       perfilesService.updatePerfil(form)
 
-      perfilForm = {} as IPerfil
+      perfilForm = {} as IProfile
       closeModal(2)
       Notify.success("Perfil guardado correctamente")
     } catch (error) {
@@ -210,7 +210,7 @@ import {
     Loading.remove()
   }
 
-  const columns: ITableColumn<IPerfil>[] = [
+  const columns: ITableColumn<IProfile>[] = [
     {
       header: "ID",
       headerCss: "w-54",
@@ -242,7 +242,7 @@ import {
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
           <Button color="green" icon="icon-plus" label="Opens the modal to create a new access profile." onClick={() => {
-            perfilForm = { ss: 1, accesosMap: new Map() } as IPerfil
+            perfilForm = { ss: 1, accesosMap: new Map() } as IProfile
             Core.openModal(2)
           }} />
         </div>
@@ -258,7 +258,7 @@ import {
         isSelected={(e, id) => e.ID === id}
         onRowClick={e => {
           if (e.ID === perfilForm.ID) {
-            perfilForm = {} as IPerfil
+            perfilForm = {} as IProfile
           } else {
             perfilForm = { ...e, _open: true, accesosMap: new Map(e.accesosMap) }
           }
@@ -319,7 +319,7 @@ import {
     title={(perfilForm?.ID > 0 ? "Editando" : "Creando") + " Perfil"}
     isEdit={!!perfilForm?.ID}
     onSave={() => savePerfil()}
-    onClose={() => { perfilForm = {} as IPerfil }}
+    onClose={() => { perfilForm = {} as IProfile }}
   >
     <div class="grid grid-cols-24 gap-10 p-6" aria-label="Profile form with name and description">
       <Input

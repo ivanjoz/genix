@@ -1,0 +1,36 @@
+package types
+
+import "app/db"
+
+type SystemParameters struct {
+	db.TableStruct[SystemParametersTable, SystemParameters]
+	ID        int32   `json:",omitempty" db:"parameter_id,pk"`
+	ValueText string  `json:",omitempty" db:"value_text"`
+	ValueInts []int32 `json:",omitempty" db:"value_ints"`
+	Value     int32   `json:",omitempty" db:"value"`
+	CompanyID int32   `json:",omitempty" db:"empresa_id"`
+	Updated   int32   `json:"upd," db:"updated"`
+	UpdatedBy int32   `json:",omitempty" db:"updated_by"`
+}
+
+type SystemParametersTable struct {
+	db.TableStruct[SystemParametersTable, SystemParameters]
+	CompanyID db.Col[SystemParametersTable, int32]
+	ID        db.Col[SystemParametersTable, int32]
+	ValueText db.Col[SystemParametersTable, string]
+	ValueInts db.ColSlice[SystemParametersTable, int32]
+	Value     db.Col[SystemParametersTable, int32]
+	Updated   db.Col[SystemParametersTable, int32]
+	UpdatedBy db.Col[SystemParametersTable, int32]
+}
+
+func (e SystemParametersTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "system_parameters",
+		Partition: e.CompanyID,
+		Keys:      []db.Coln{e.ID},
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
+		},
+	}
+}

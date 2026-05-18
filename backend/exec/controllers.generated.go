@@ -3,50 +3,50 @@ package exec
 
 import (
 	agentTypes "app/agent/types"
-	comercialTypes "app/comercial/types"
-	configuracionTypes "app/configuracion/types"
+	salesTypes "app/sales/types"
+	configTypes "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	finanzasTypes "app/finanzas/types"
-	logisticaTypes "app/logistica/types"
-	negocioTypes "app/negocio/types"
-	seguridadTypes "app/seguridad/types"
+	financeTypes "app/finance/types"
+	logisticsTypes "app/logistics/types"
+	businessTypes "app/business/types"
+	securityTypes "app/security/types"
 )
 
 func MakeScyllaControllers() []db.ScyllaControllerInterface {
 	return []db.ScyllaControllerInterface{
 		makeDBController[DemoStruct](),
 		makeDBController[agentTypes.AgentMessage](),
-		makeDBController[comercialTypes.ProductSaleSummary](),
-		makeDBController[comercialTypes.SaleOrder](),
-		makeDBController[comercialTypes.SaleSummary](),
-		makeDBController[comercialTypes.ShippingCost](),
-		makeDBController[configuracionTypes.Empresa](),
-		makeDBController[configuracionTypes.Parametros](),
-		makeDBController[configuracionTypes.SystemParameters](),
+		makeDBController[salesTypes.ProductSaleSummary](),
+		makeDBController[salesTypes.SaleOrder](),
+		makeDBController[salesTypes.SaleSummary](),
+		makeDBController[salesTypes.ShippingCost](),
+		makeDBController[configTypes.Company](),
+		makeDBController[configTypes.Parametros](),
+		makeDBController[configTypes.SystemParameters](),
 		makeDBController[core.Cache](),
 		makeDBController[core.CronAction](),
 		makeDBController[coreTypes.UsageLog](),
-		makeDBController[coreTypes.Usuario](),
-		makeDBController[finanzasTypes.Caja](),
-		makeDBController[finanzasTypes.CajaCuadre](),
-		makeDBController[finanzasTypes.CajaMovimiento](),
-		makeDBController[logisticaTypes.DeliveryOrderNote](),
-		makeDBController[logisticaTypes.ProductStock](),
-		makeDBController[logisticaTypes.ProductStockDetail](),
-		makeDBController[logisticaTypes.ProductStockLot](),
-		makeDBController[logisticaTypes.ProductSupply](),
-		makeDBController[logisticaTypes.PurchaseOrder](),
-		makeDBController[logisticaTypes.SupplyMaterial](),
-		makeDBController[logisticaTypes.WarehouseProductMovement](),
-		makeDBController[negocioTypes.Almacen](),
-		makeDBController[negocioTypes.ClientProvider](),
-		makeDBController[negocioTypes.GaleriaImagen](),
-		makeDBController[negocioTypes.ListaCompartidaRegistro](),
-		makeDBController[negocioTypes.PaisCiudad](),
-		makeDBController[negocioTypes.Product](),
-		makeDBController[negocioTypes.Sede](),
-		makeDBController[seguridadTypes.Perfil](),
+		makeDBController[coreTypes.User](),
+		makeDBController[financeTypes.CashBank](),
+		makeDBController[financeTypes.CashReconciliation](),
+		makeDBController[financeTypes.CashBankMovement](),
+		makeDBController[logisticsTypes.DeliveryOrderNote](),
+		makeDBController[logisticsTypes.ProductStock](),
+		makeDBController[logisticsTypes.ProductStockDetail](),
+		makeDBController[logisticsTypes.ProductStockLot](),
+		makeDBController[logisticsTypes.ProductSupply](),
+		makeDBController[logisticsTypes.PurchaseOrder](),
+		makeDBController[logisticsTypes.SupplyMaterial](),
+		makeDBController[logisticsTypes.WarehouseProductMovement](),
+		makeDBController[businessTypes.Warehouse](),
+		makeDBController[businessTypes.ClientProvider](),
+		makeDBController[businessTypes.GalleryImage](),
+		makeDBController[businessTypes.SharedListRecord](),
+		makeDBController[businessTypes.CityLocation](),
+		makeDBController[businessTypes.Product](),
+		makeDBController[businessTypes.Site](),
+		makeDBController[securityTypes.Profile](),
 	}
 }

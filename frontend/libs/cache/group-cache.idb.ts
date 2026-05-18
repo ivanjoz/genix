@@ -59,7 +59,7 @@ class GroupCacheDatabase extends Dexie {
 }
 
 const makeGroupCacheDatabaseName = (): string => {
-	return makeCacheDatabaseName(Env.getEmpresaID(), Env.enviroment || 'main')
+	return makeCacheDatabaseName(Env.getCompanyID(), Env.enviroment || 'main')
 }
 
 const getGroupCacheDatabase = (): GroupCacheDatabase => {

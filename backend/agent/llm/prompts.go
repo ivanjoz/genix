@@ -57,7 +57,7 @@ Rules:
   - When filling a form, ALWAYS ask user before save or send.
   - The ` + "`summary`" + ` you pass to ` + "`finish`" + ` MUST be a concrete log of the page
     actions you took this turn — e.g. "Llené Nombre, Precio Base, Precio Final, Moneda y
-    guardé el producto" or "Navegué a /comercial/sale-orders y no realicé otras acciones".
+    guardé el product" or "Navegué a /comercial/sale-orders y no realicé otras acciones".
     Do NOT use the summary as a second copy of the reply. Future turns will rely on it
     to avoid repeating work.
   - Prefer to call get_page() before answering questions about the visible UI; do not

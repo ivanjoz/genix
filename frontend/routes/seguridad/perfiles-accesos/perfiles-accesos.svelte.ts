@@ -1,6 +1,6 @@
 import { GetHandler, POST } from '$libs/http.svelte';
 
-export interface IAcceso {
+export interface IAccess {
   id: number
   nombre: string
   descripcion?: string
@@ -12,9 +12,9 @@ export interface IAcceso {
   upd: number
 }
 
-export interface IPerfil {
+export interface IProfile {
   ID: number
-  EmpresaID: number
+  CompanyID: number
   Nombre: string
   Descripcion?: string
   Accesos: number[]
@@ -41,10 +41,10 @@ export class PerfilesService extends GetHandler {
   // Bump cache version because perfiles now arrive with Go field names instead of lowercase aliases.
   useCache = { min: 5, ver: 2 }
 
-  perfiles: IPerfil[] = $state([])
-  perfilesMap: Map<number, IPerfil> = $state(new Map())
+  perfiles: IProfile[] = $state([])
+  perfilesMap: Map<number, IProfile> = $state(new Map())
 
-  handler(response: IPerfil[]) {
+  handler(response: IProfile[]) {
     const perfiles = (response || []).filter(x => x.ss > 0)
     for (const pr of perfiles) {
       pr.Accesos = pr.Accesos || []
@@ -67,7 +67,7 @@ export class PerfilesService extends GetHandler {
     this.fetch()
   }
 
-  updatePerfil(perfil: IPerfil) {
+  updatePerfil(perfil: IProfile) {
     const existing = this.perfiles.find(profileRecord => profileRecord.ID === perfil.ID)
     if (existing) {
       Object.assign(existing, perfil)
@@ -83,7 +83,7 @@ export class PerfilesService extends GetHandler {
   }
 }
 
-export const postPerfil = (data: IPerfil) => {
+export const postPerfil = (data: IProfile) => {
   // Convert accesosMap to accesos array before sending
   const dataToSend = { ...data }
   delete (dataToSend as any).accesosMap

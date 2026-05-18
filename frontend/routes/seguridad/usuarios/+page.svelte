@@ -15,14 +15,14 @@ import { onMount } from 'svelte';
 const { Loading } = pkg
   import { fetchAccessListCatalog, type IAccessGroupCatalogEntry, type IAccessListCatalogEntry } from "../perfiles-accesos/access-list-catalog"
   import { accesoAcciones } from "../perfiles-accesos/perfiles-accesos.svelte"
-  import { UsuariosService, PerfilesService, postUsuario, type IUsuario } from "./usuarios.svelte"
+  import { UsuariosService, PerfilesService, postUsuario, type IUser } from "./usuarios.svelte"
 
   const usuariosService = new UsuariosService()
   const perfilesService = new PerfilesService()
   const accessActionShortNameByID = new Map(accesoAcciones.map((accessActionRecord) => [accessActionRecord.id, accessActionRecord.short]))
 
   let filterText = $state("")
-  let usuarioForm = $state({} as IUsuario)
+  let usuarioForm = $state({} as IUser)
   let accessGroupEntries = $state([] as IAccessGroupCatalogEntry[])
   let accessCatalogEntries = $state([] as IAccessListCatalogEntry[])
   let accessCatalogLoadError = $state("")
@@ -93,7 +93,7 @@ const { Loading } = pkg
     return accessNameByID
   })
 
-  function summarizeUsuarioAccesses(usuarioRecord: IUsuario): IUsuarioAccessSummary {
+  function summarizeUsuarioAccesses(usuarioRecord: IUser): IUsuarioAccessSummary {
     const accessLevelsByAccessID = new Map<number, Set<number>>()
 
     // Merge profile-derived and user-specific access levels so the table shows the effective access summary.
@@ -144,7 +144,7 @@ const { Loading } = pkg
 
   const resetUsuarioForm = () => {
     // Initialize the create form with an active status so the layer always opens in a valid default state.
-    usuarioForm = { Status: 1, PerfilesIDs: [], AccesosNivelIDs: [] } as unknown as IUsuario
+    usuarioForm = { Status: 1, PerfilesIDs: [], AccesosNivelIDs: [] } as unknown as IUser
   }
 
   const openCreateUsuarioLayer = () => {
@@ -153,7 +153,7 @@ const { Loading } = pkg
     Core.openSideLayer(1)
   }
 
-  const openEditUsuarioLayer = (selectedUsuario: IUsuario) => {
+  const openEditUsuarioLayer = (selectedUsuario: IUser) => {
     // Clone the selected record so the table does not update optimistically while the user edits the layer.
     usuarioForm = {
       ...selectedUsuario,
@@ -228,7 +228,7 @@ const { Loading } = pkg
     Loading.remove()
   }
 
-  const columns: ITableColumn<IUsuario>[] = [
+  const columns: ITableColumn<IUser>[] = [
     {
       header: "ID",
       headerCss: "w-54",
@@ -299,7 +299,7 @@ const { Loading } = pkg
           openEditUsuarioLayer(selectedUsuario)
         }}
       >
-        {#snippet cellRenderer(usuarioRecord: IUsuario, columnDefinition: ITableColumn<IUsuario>)}
+        {#snippet cellRenderer(usuarioRecord: IUser, columnDefinition: ITableColumn<IUser>)}
           {#if columnDefinition.id === "usuario_info"}
             <div class="_usuario-info-cell">
               <div class="_usuario-info-name ff-semibold">{usuarioRecord.Nombres} {usuarioRecord.Apellidos || ""}</div>

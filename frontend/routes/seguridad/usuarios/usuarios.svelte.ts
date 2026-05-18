@@ -1,17 +1,17 @@
 import { GetHandler } from '$libs/http.svelte';
-import type { IUsuario, IPerfil } from '$core/types/common';
+import type { IUser, IProfile } from '$core/types/common';
 export { postUsuario, postUsuarioPropio } from '$services/services/usuarios.svelte';
 
-export type { IUsuario, IPerfil };
+export type { IUser, IProfile };
 
 export class UsuariosService extends GetHandler {
   route = "usuarios"
   useCache = { min: 0.1, ver: 1 }
 
-  usuarios: IUsuario[] = $state([])
-  usuariosMap: Map<number, IUsuario> = $state(new Map())
+  usuarios: IUser[] = $state([])
+  usuariosMap: Map<number, IUser> = $state(new Map())
 
-  handler(response: IUsuario[]) {
+  handler(response: IUser[]) {
     this.usuarios = response || []
     this.usuariosMap = new Map(this.usuarios.map((usuarioRecord) => [usuarioRecord.ID, usuarioRecord]))
   }
@@ -21,7 +21,7 @@ export class UsuariosService extends GetHandler {
     this.fetch()
   }
 
-  updateUsuario(usuario: IUsuario) {
+  updateUsuario(usuario: IUser) {
     const existing = this.usuarios.find((usuarioRecord) => usuarioRecord.ID === usuario.ID)
     if (existing) {
       Object.assign(existing, usuario)
@@ -42,9 +42,9 @@ export class PerfilesService extends GetHandler {
   // Bump cache version because perfiles now arrive with Go field names instead of lowercase aliases.
   useCache = { min: 5, ver: 2 }
 
-  perfiles: IPerfil[] = $state([])
+  perfiles: IProfile[] = $state([])
 
-  handler(response: IPerfil[]) {
+  handler(response: IProfile[]) {
     const perfiles = (response || []).filter(x => x.ss > 0)
     for (const pr of perfiles) {
       pr.Accesos = pr.Accesos || []

@@ -237,7 +237,7 @@ func (o *SqliteORM[T]) BuildInitQueries() []string {
 	}
 
 	if len(primaryKeyColumns) == 0 && sortKeyColumn != "" {
-		// Global entities like Empresa still need a stable D1 primary key even if they only declare a Dynamo sort key.
+		// Global entities like Company still need a stable D1 primary key even if they only declare a Dynamo sort key.
 		primaryKeyColumns = append(primaryKeyColumns, sortKeyColumn)
 	}
 
@@ -250,7 +250,7 @@ func (o *SqliteORM[T]) BuildInitQueries() []string {
 			}
 		}
 	} else if len(primaryKeyColumns) > 1 {
-		// Composite keys are required for entities like Usuario where id is scoped by empresa_id.
+		// Composite keys are required for entities like User where id is scoped by empresa_id.
 		colDefs = append(colDefs, fmt.Sprintf("PRIMARY KEY (%s)", strings.Join(primaryKeyColumns, ", ")))
 	}
 

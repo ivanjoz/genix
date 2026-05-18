@@ -4,7 +4,7 @@ import { Notify } from '$libs/helpers';
 export interface ISaleOrder {
 	ID: number;
 	ClientID: number;
-	Fecha: number;
+	Date: number;
 	Created: number;
 	DetailProductsIDs: number[];
 	DetailPrices: number[];
@@ -22,8 +22,8 @@ export interface ISaleOrderGroupRecord {
 }
 
 export interface ISaleOrderReportForm {
-	fechaInicio: number;
-	fechaFin: number;
+	dateInicio: number;
+	dateFin: number;
 	status: number;
 	productID: number;
 	clientID: number;
@@ -38,13 +38,13 @@ export const saleOrderStatusOptions = [
 ];
 
 export const querySaleOrderReport = async (filters: ISaleOrderReportForm): Promise<ISaleOrder[]> => {
-	if (!filters.fechaInicio || !filters.fechaFin) {
-		throw new Error('Debe especificar la fecha inicial y final.');
+	if (!filters.dateInicio || !filters.dateFin) {
+		throw new Error('Debe especificar la date inicial y final.');
 	}
 
 	const queryParams = new URLSearchParams();
-	queryParams.set('fecha-start', String(filters.fechaInicio));
-	queryParams.set('fecha-end', String(filters.fechaFin));
+	queryParams.set('date-start', String(filters.dateInicio));
+	queryParams.set('date-end', String(filters.dateFin));
 
 	if (filters.status > 0) {
 		queryParams.set('status', String(filters.status));

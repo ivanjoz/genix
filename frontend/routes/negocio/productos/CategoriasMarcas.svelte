@@ -4,7 +4,7 @@ import Input from '$components/form/Input.svelte';
 import Modal from '$components/layers/Modal.svelte';
 import { closeAllModals, closeModal, imagesToUpload, openModal } from '$core/store.svelte';
 import { Loading, Notify } from '$libs/helpers';
-import { type IListaRegistro, type ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
+import { type ISharedListRecord, type ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
 
   const {
     listas, origin, filterText = ""
@@ -30,7 +30,7 @@ import { type IListaRegistro, type ListasCompartidasService } from "$services/ne
     })
   })
 
-  let form = $state({} as IListaRegistro)
+  let form = $state({} as ISharedListRecord)
   const imagesIDs = [151,152,153]
   let images = $state([{ _id: 151 },{ _id: 152 },{ _id: 153 }] as ImageSource[])
 
@@ -95,7 +95,7 @@ import { type IListaRegistro, type ListasCompartidasService } from "$services/ne
   }
 
   export const newRecord = () => {
-    form = { ListaID: origin as number } as IListaRegistro
+    form = { ListaID: origin as number } as ISharedListRecord
     openModal(2)
   }
 
@@ -103,7 +103,7 @@ import { type IListaRegistro, type ListasCompartidasService } from "$services/ne
     console.log("form a enviar::",$state.snapshot(form))
   })
 
-  const selectCategoria = (e: IListaRegistro) => {
+  const selectCategoria = (e: ISharedListRecord) => {
     // console.log("form a enviar::",$state.snapshot(e))
     // return
     form = {...e}
@@ -140,7 +140,7 @@ import { type IListaRegistro, type ListasCompartidasService } from "$services/ne
 </div>
 <Modal title="CATEGORÍA" id={2} size={6}
   onClose={() => {
-    // form = {} as IListaRegistro
+    // form = {} as ISharedListRecord
     closeModal(2)
   }}
   onSave={() => { onSave()  }}

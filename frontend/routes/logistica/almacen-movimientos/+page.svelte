@@ -28,10 +28,10 @@ import { SvelteMap } from 'svelte/reactivity';
     return Math.floor(Date.now() / (1000 * 60 * 60 * 24))
   }
 
-  const fechaFin = getFechaUnix()
-  const fechaInicio = fechaFin - 7
+  const dateFin = getFechaUnix()
+  const dateInicio = dateFin - 7
 
-  let form = $state({ fechaFin, fechaInicio, almacenID: 0, productoID: 0, tipo: 0, lotCode: "", documentID: 0, serialNumber: "" })
+  let form = $state({ dateFin, dateInicio, almacenID: 0, productoID: 0, tipo: 0, lotCode: "", documentID: 0, serialNumber: "" })
   let almacenMovimientos = $state([] as IWarehouseProductMovement[])
   let filterText = $state("")
   let isSearchOpen = $state(false)
@@ -103,7 +103,7 @@ import { SvelteMap } from 'svelte/reactivity';
 
   const columns: ITableColumn<IWarehouseProductMovement>[] = [
     {
-      header: "Fecha Hora",
+      header: "Date Hora",
       headerCss: "w-120",
       css: "ff-mono px-6",
       getValue: e => formatTime(e.Created, "d-M h:n") as string
@@ -215,15 +215,15 @@ import { SvelteMap } from 'svelte/reactivity';
             placeholder=""
           />
           <DateInput
-            label="Fecha Inicio"
+            label="Date Inicio"
             css="col-span-12"
-            save="fechaInicio"
+            save="dateInicio"
             bind:saveOn={form}
           />
           <DateInput
-            label="Fecha Fin"
+            label="Date Fin"
             css="col-span-12"
-            save="fechaFin"
+            save="dateFin"
             bind:saveOn={form}
           />
           <SearchSelect
@@ -282,10 +282,10 @@ import { SvelteMap } from 'svelte/reactivity';
       <KeyValueStrip
         css="col-span-2 row-start-2 w-full md:w-auto"
         label1="Fec. Inicio"
-        value1={form.fechaInicio}
+        value1={form.dateInicio}
         getContent1={v => formatTime(v, "d-m-Y") as string}
         label2="Fec. Fin"
-        value2={form.fechaFin}
+        value2={form.dateFin}
         getContent2={v => formatTime(v, "d-m-Y") as string}
         label3="Almacén"
         value3={form.almacenID}

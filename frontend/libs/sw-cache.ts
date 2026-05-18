@@ -264,7 +264,7 @@ export const sendServiceMessage = async (accion: number, content: any): Promise<
 
   try {
     if (content && typeof content === 'object') {
-      content.__companyID__ = Env.getEmpresaID()
+      content.__companyID__ = Env.getCompanyID()
     }
 
     // Action 3 stays on MessageChannel only so the hot path avoids JSON round-trips entirely.
@@ -308,7 +308,7 @@ export const getCacheSubObject = async (args: IGetCacheSubObject): Promise<any[]
 export const fetchCache = async (args: serviceHttpProps): Promise<FetchCacheResponse> => {
   args.routeParsed = Env.makeRoute(args.route)
   args.__version__ = args.useCache?.ver || 1
-  args.__companyID__ = Env.getEmpresaID()
+  args.__companyID__ = Env.getCompanyID()
   args.verifyRouteMemoryState = args.verifyRouteMemoryState ?? Env.DELTA_CACHE_VERIFY_ROUTE_MEMORY
   console.log("fetching cache...", args)
 
