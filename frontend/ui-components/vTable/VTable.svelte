@@ -1,9 +1,8 @@
 <script lang="ts" generics="T">
   import { untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
-  import { createVirtualizer } from './index.svelte';
+  import { createTableVirtualizer } from './vtable-virtual.svelte';
   import type { ITableColumn, CellRendererSnippet, IMobileCardsListCell } from "./types";
-  import type { VirtualItem } from './index.svelte';
   import CellInput from '$components/vTable/CellInput.svelte';
   import CellSelect from '$components/vTable/CellSelect.svelte';
   import { highlString, wordInclude } from '$libs/helpers';
@@ -76,26 +75,23 @@
 
   // State
   let containerRef = $state<HTMLDivElement>();
-  let virtualItems = $state<VirtualItem[]>([]);
-  let totalSize = $state(0);
-  let virtualizerStore: ReturnType<typeof createVirtualizer> | null = null;
-  let isInitialized = false;
-  let dataVersion = $state(0);
-  let rowObjectVersion = $state(0);
   const filterCache = new WeakMap<T & object, string>();
-  const resolvedRowByKey = new Map<object | string, T>();
+  // Reactive cache of hydrated rows. SvelteMap reads are tracked per-key, so
+  // resolving one row only re-evaluates templates that already read that key —
+  // avoiding the full-table re-render storm that bumping a global version caused.
+  const resolvedRowByKey = new SvelteMap<object | string, T>();
+  // Internal bookkeeping (non-reactive): which keys have been queued/are loading
+  // so the kickoff path stays idempotent without driving extra renders.
   const loadingRowKeys = new Set<object | string>();
   const queuedRowKeys = new Set<object | string>();
   // Per-row version counters used to force a specific row to unmount/remount
-  // when handlers invoke the `rerender` callback.
+  // when handlers invoke the `rerender` callback. SvelteMap reactivity is keyed,
+  // so bumping one entry only invalidates the matching row's keyed block.
   const rowVersions = new SvelteMap<number, number>();
 
   function rerenderRow(rowIndex: number) {
     const nextRowVersion = (rowVersions.get(rowIndex) || 0) + 1;
     rowVersions.set(rowIndex, nextRowVersion);
-    // SvelteMap updates alone have not been enough to invalidate the keyed row
-    // in all call paths, so also bump the table version to force reconciliation.
-    dataVersion++;
   }
 
   // Mobile view state
@@ -203,13 +199,15 @@
     return typeof record === 'object' && record !== null ? record : `row_${index}`;
   }
 
-  // Resolve row objects lazily so tables can start from partial rows and hydrate details on demand.
+  // Resolve row objects lazily so tables can start from partial rows and hydrate
+  // details on demand. The template-side read of resolvedRowByKey is what makes
+  // this reactive — when the async hydration completes and we call .set(...) on
+  // the SvelteMap, only the row(s) that consulted that key re-evaluate.
   function getResolvedRow(record: T, index: number): T | null {
     if (!getRowObject) {
       return record;
     }
 
-    rowObjectVersion;
     const rowKey = getRowKey(record, index);
     const cachedRow = resolvedRowByKey.get(rowKey);
     if (cachedRow) {
@@ -225,9 +223,7 @@
         if (loadingRowKeys.has(rowKey) || resolvedRowByKey.has(rowKey)) {
           return;
         }
-
         loadingRowKeys.add(rowKey);
-        rowObjectVersion++;
 
         void getRowObject(record as Partial<T>)
           .then((resolvedRow) => {
@@ -241,7 +237,6 @@
           })
           .finally(() => {
             loadingRowKeys.delete(rowKey);
-            rowObjectVersion++;
           });
       });
     }
@@ -249,62 +244,40 @@
     return null;
   }
 
-  // Initialize virtualizer
-  $effect(() => {
-    if (isMobileView) return;
-    if (containerRef && !virtualizerStore) {
-      virtualizerStore = createVirtualizer({
-        count: 0,
-        getScrollElement: () => containerRef!,
-        estimateSize: () => estimateSize,
-        overscan: overscan,
-        getCount: () => filteredData.length
-      });
-
-      const updateVirtualItems = () => {
-        if(!virtualizerStore){ return }
-        const items = virtualizerStore!.getVirtualItems();
-        const size = virtualizerStore!.getTotalSize();
-
-        virtualItems = [...items];
-        totalSize = size;
-      };
-
-      const unsubscribe = virtualizerStore.subscribe(updateVirtualItems);
-
-      requestAnimationFrame(() => {
-        updateVirtualItems();
-        isInitialized = true;
-      });
-
-      return () => {
-        isInitialized = false;
-        virtualizerStore = null;
-        unsubscribe();
-      };
-    }
+  // Virtualizer instance: shared between attach lifecycle and template reads.
+  // Heights/offsets/ranges live inside it; the host only feeds it row count and
+  // hands each rendered <tr> to `observeRow` for ResizeObserver-based measurement.
+  const virtualizer = createTableVirtualizer({
+    getScrollElement: () => containerRef ?? null,
+    estimateSize: () => estimateSize,
+    overscan: () => overscan,
   });
 
-  // Watch for data changes
+  // Bind the virtualizer to the scroll container once it's mounted (desktop view).
   $effect(() => {
-    // Track both filteredData and its length to ensure changes are detected
-    const currentData = filteredData;
-    const currentLength = filteredData.length;
+    if (isMobileView) { return; }
+    if (!containerRef) { return; }
+    const ok = virtualizer.attach();
+    if (!ok) { return; }
+    return () => virtualizer.detach();
+  });
 
-    if (isInitialized && virtualizerStore) {
-      untrack(() => {
-        dataVersion++;
+  // Keep the virtualizer's row count in sync with the filtered dataset. Stored
+  // heights are dropped on each change because the row at index `i` may now be
+  // a different record.
+  $effect(() => {
+    const nextCount = filteredData.length;
+    untrack(() => virtualizer.setCount(nextCount));
+  });
 
-        // Notify virtualizer of the change
-        virtualizerStore!.refresh();
-
-        const items = virtualizerStore!.getVirtualItems();
-        const size = virtualizerStore!.getTotalSize();
-
-        virtualItems = [...items];
-        totalSize = size;
-      });
-    }
+  // Indices of rows inside the current visible window (with overscan). Driven by
+  // the virtualizer's reactive range; scrolling updates this without bumping any
+  // global table version.
+  const visibleRowIndices = $derived.by(() => {
+    const { start, end } = virtualizer.range;
+    const indices: number[] = [];
+    for (let i = start; i < end; i++) { indices.push(i); }
+    return indices;
   });
 
   // Helper to get cell content
@@ -534,29 +507,31 @@
           </td>
         </tr>
       {:else}
-        <!-- Spacer row to keep selected outline visible under sticky header -->
-        <tr class="vtable-edge-spacer" aria-hidden="true">
+        {@const range = virtualizer.range}
+        {@const topSpacerHeight = Math.max(2, range.offsetAtStart)}
+        {@const bottomSpacerHeight = Math.max(2, virtualizer.totalSize - range.offsetAtEnd)}
+
+        <!-- Top spacer pushes the first rendered row to its real Y offset and
+             preserves the 2px breathing room previously held by .vtable-edge-spacer. -->
+        <tr class="vtable-virtual-spacer" aria-hidden="true" style="height: {topSpacerHeight}px;">
           <td colspan={processedColumns.flatColumns.length}></td>
         </tr>
 
-        {#each virtualItems as row, i (`${row.index}-${dataVersion}-${rowVersions.get(row.index) || 0}`)}
-          {@const firstItemStart = virtualItems[0]?.start || 0}
-          {@const isFinal = i === virtualItems.length - 1}
-          {@const remainingSize = totalSize - (virtualItems[0]?.size || estimateSize) * virtualItems.length}
-          {@const record = filteredData[row.index]}
-          {@const resolvedRecord = record ? getResolvedRow(record, row.index) : null}
+        {#each visibleRowIndices as rowIndex (`${rowIndex}-${rowVersions.get(rowIndex) || 0}`)}
+          {@const record = filteredData[rowIndex]}
+          {@const resolvedRecord = record ? getResolvedRow(record, rowIndex) : null}
 
           {#if record}
-            {@const selected = resolvedRecord ? isRowSelected(resolvedRecord, row.index) : false}
+            {@const selected = resolvedRecord ? isRowSelected(resolvedRecord, rowIndex) : false}
 
           <tr class="vtable-row"
-            data-id={onRowClick ? `TableRow:${componentID}:${buildRowID(row.index)}` : undefined}
+            use:virtualizer.observeRow={rowIndex}
+            data-id={onRowClick ? `TableRow:${componentID}:${buildRowID(rowIndex)}` : undefined}
             data-selected={selected ? "true" : undefined}
-            class:vtable-row-even={row.index % 2 === 0}
-            class:vtable-row-odd={row.index % 2 !== 0}
+            class:vtable-row-even={rowIndex % 2 === 0}
+            class:vtable-row-odd={rowIndex % 2 !== 0}
             class:vtable-row-selected={selected}
-            style="transform: translateY({firstItemStart}px); height: {estimateSize}px;"
-            onclick={() => resolvedRecord && handleRowClick(resolvedRecord, row.index, () => rerenderRow(row.index))}
+            onclick={() => resolvedRecord && handleRowClick(resolvedRecord, rowIndex, () => rerenderRow(rowIndex))}
           >
             {#if !resolvedRecord}
               <td colspan={processedColumns.flatColumns.length}
@@ -566,27 +541,27 @@
                 Loading...
               </td>
             {:else}
-              {#each processedColumns.flatColumns as column, j (`${j}_${filterText||""}`)}
-                {@const cellData = getCellContent(column, resolvedRecord, row.index)}
+              {#each processedColumns.flatColumns as column, j (j)}
+                {@const cellData = getCellContent(column, resolvedRecord, rowIndex)}
                 {@const css = cellCss ? cellCss + " " + (cellData.css||"") : cellData.css || ""}
                 {@const cssFinal = [css, !/px-|pr-|pl-/.test(css) && "px-6", column.align === 'right' && 'text-right'].filter(Boolean).join(" ")}
-                {@const cellInteractionsDisabled = column.disableCellInteractions?.(resolvedRecord, row.index)}
+                {@const cellInteractionsDisabled = column.disableCellInteractions?.(resolvedRecord, rowIndex)}
                 {@const isAgentClickCell = !!column.onCellClick && !cellInteractionsDisabled && !column.onCellEdit && !column.onCellSelect}
 
                 <td class="{cssFinal}"
                 	class:clickable-cell={!!column.onCellClick && !cellInteractionsDisabled}
-                  data-id={isAgentClickCell ? `${componentID}:${buildCellID(row.index, j)}` : undefined}
+                  data-id={isAgentClickCell ? `${componentID}:${buildCellID(rowIndex, j)}` : undefined}
                   data-cell-type={isAgentClickCell ? 'CellClick' : undefined}
                   style={column.cellStyle ? Object.entries(column.cellStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}
                   onclick={ev => {
                     if(column.onCellEdit){ ev.stopPropagation() }
                     if(column.onCellClick){ 
                     	ev.stopPropagation() 
-                      column.onCellClick(resolvedRecord, row.index, () => rerenderRow(row.index)) 
+                      column.onCellClick(resolvedRecord, rowIndex, () => rerenderRow(rowIndex)) 
                     }
                   }}
                 >
-                  {#if column.showEditIcon && !column.disableCellInteractions?.(resolvedRecord, row.index)}
+                  {#if column.showEditIcon && !column.disableCellInteractions?.(resolvedRecord, rowIndex)}
                     <i class="icon-pencil _edit-icon"></i>
                   {/if}
                   {#if cellData.prefixAST}
@@ -598,49 +573,40 @@
                       {@html cellData.prefixHTML}
                     </span>
                   {/if}
-                  {#if column.onCellEdit && !column.disableCellInteractions?.(resolvedRecord, row.index)}
+                  {#if column.onCellEdit && !column.disableCellInteractions?.(resolvedRecord, rowIndex)}
                   	{@const paddingCss = /px-|pr-|pl-/.test(column.inputCss||"") ? "" : "px-6"}
                    
                     <CellInput
                     	contentClass={cssFinal + (column.align === 'right' ? " justify-end" : "")}
                       inputClass={paddingCss +" "+ (column.inputCss||"") + (column.align === 'right' ? " text-right" : "")}
                       type={column.cellInputType || cellInputType}
-                      cellID={buildCellID(row.index, j)}
+                      cellID={buildCellID(rowIndex, j)}
                       getValue={() => cellData.content}
                       render={
                         (column.render
-                        ? () => column.render?.(resolvedRecord, row.index)
+                        ? () => column.render?.(resolvedRecord, rowIndex)
                         : undefined) as (value: number | string) => ElementAST[]
                       }
                       onChange={(value: string | number) => {
-                        column.onCellEdit?.(resolvedRecord, value, () => rerenderRow(row.index))
+                        column.onCellEdit?.(resolvedRecord, value, () => rerenderRow(rowIndex))
                       }}
                     />
                   {:else if column.onCellSelect}
-                    {console.log('[VTable] CellSelect props', {
-                      selectorId: `${String(column.id || column.field || j)}_${row.index}`,
-                      rowIndex: row.index,
-                      columnField: column.field,
-                      columnId: column.id,
-                      optionsLength: column.cellOptions?.length || 0,
-                      firstOption: column.cellOptions?.[0] || null,
-                      currentFieldValue: column.field ? (resolvedRecord as any)?.[column.field] : undefined,
-                    })}
                     <CellSelect
-                      id={`${String(column.id || column.field || j)}_${row.index}`}
+                      id={`${String(column.id || column.field || j)}_${rowIndex}`}
                       saveOn={resolvedRecord}
                       save={column.field as keyof T}
                       options={(column.cellOptions || []) as any[]}
                       keyId={(column.cellOptionsKeyId || 'ID') as never}
                       keyName={(column.cellOptionsKeyName || 'Name') as never}
-                      cellID={buildCellID(row.index, j)}
+                      cellID={buildCellID(rowIndex, j)}
                       contentClass={column.css}
                       onChange={(value: string | number) => {
-                        column.onCellSelect?.(resolvedRecord, value, () => rerenderRow(row.index))
+                        column.onCellSelect?.(resolvedRecord, value, () => rerenderRow(rowIndex))
                       }}
                     />
                   {:else if cellData.useSnippet && cellRenderer}
-                    {@render cellRenderer(resolvedRecord, column, cellData.content, row.index, false)}
+                    {@render cellRenderer(resolvedRecord, column, cellData.content, rowIndex, false)}
                   {:else if cellData.contentAST}
                     <Renderer elements={cellData.contentAST}/>
                   {:else if cellData.contentHTML}
@@ -678,17 +644,12 @@
               {/each}
             {/if}
           </tr>
-
-          {#if isFinal}
-            <tr style="height: {remainingSize}px; visibility: hidden;">
-              <td style="border: none;"></td>
-            </tr>
-          {/if}
           {/if}
         {/each}
 
-        <!-- Spacer row to keep selected outline visible at table bottom -->
-        <tr class="vtable-edge-spacer" aria-hidden="true">
+        <!-- Bottom spacer extends the table to totalSize so scrollHeight reflects
+             the entire dataset, not just the rendered window. -->
+        <tr class="vtable-virtual-spacer" aria-hidden="true" style="height: {bottomSpacerHeight}px;">
           <td colspan={processedColumns.flatColumns.length}></td>
         </tr>
       {/if}
@@ -821,8 +782,10 @@
     z-index: 12;
   }
 
-  .vtable-edge-spacer td {
-    height: 2px;
+  /* Spacer rows used by the virtualizer to extend tbody to the dataset's full
+     height while only rendering the visible window. They must not paint a
+     background or border or they'd show through under the rendered rows. */
+  .vtable-virtual-spacer td {
     padding: 0;
     border: none !important;
     background: transparent;
