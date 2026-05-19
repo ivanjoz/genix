@@ -123,13 +123,13 @@ func MakeUsuarioResponse(user coretypes.User, cipherKey string) (map[string]any,
 
 	// Crea la informacion del user encriptada
 	userInfo := map[string]any{
-		"User":      user.User,
-		"PerfilesIDs":  user.PerfilesIDs,
-		"Nombres":      user.Nombres,
-		"Apellidos":    user.Apellidos,
-		"Email":        user.Email,
-		"DocumentoNro": user.DocumentoNro,
-		"Cargo":        user.Cargo,
+		"User":           user.User,
+		"ProfileIDs":     user.ProfileIDs,
+		"FirstName":      user.FirstName,
+		"LastName":       user.LastName,
+		"Email":          user.Email,
+		"DocumentNumber": user.DocumentNumber,
+		"JobTitle":       user.JobTitle,
 	}
 
 	userInfoJson := core.ToJsonNoErr(userInfo)

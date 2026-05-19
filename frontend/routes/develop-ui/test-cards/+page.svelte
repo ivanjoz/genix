@@ -14,7 +14,7 @@ import Page from '$domain/Page.svelte';
 		clearOnUpload={true}
 		cardCss="w-200 h-200 p-4"
 		setDataToSend={e => {
-			e.ProductoID = 8
+			e.ProductID = 8
 		}}
 		onUploaded={src => {
 			console.log("imagen subida::", src)

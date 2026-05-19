@@ -18,7 +18,7 @@ export class ProductosDeltaService extends GetHandler<IProduct> {
 	marcas: ISharedListRecord[] = [];
 
 	makeName(record: Partial<IProduct>) {
-		return record.Nombre || "";
+		return record.Name || "";
 	}
 
 	handler(result: ProductDeltaResult): void {
@@ -33,10 +33,10 @@ export class ProductosDeltaService extends GetHandler<IProduct> {
 		}
 
 		for (const producto of result.productos || []) {
-			if (producto.MarcaID) {
-				marcasIDs.add(producto.MarcaID);
+			if (producto.BrandID) {
+				marcasIDs.add(producto.BrandID);
 			}
-			for (const categoryID of producto.CategoriasIDs || []) {
+			for (const categoryID of producto.CategoryIDs || []) {
 				categoriasIDs.add(categoryID);
 			}
 			this.productos.push(producto);

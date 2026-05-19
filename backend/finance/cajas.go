@@ -46,9 +46,9 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	if body.ID == 0 || len(body.Nombre) == 0 || body.Tipo == 0 || body.SedeID == 0 {
+	if body.ID == 0 || len(body.Name) == 0 || body.Type == 0 || body.SiteID == 0 {
 		core.Print(body)
-		return req.MakeErr("Faltan parámetros a enviar: (ID, Nombre, Tipo o SedeID)")
+		return req.MakeErr("Faltan parámetros a enviar: (ID, Name, Type o SiteID)")
 	}
 
 	nowTime := core.SUnixTime()
@@ -66,9 +66,9 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 		// New record - insert
 		err = db.Insert(cajas)
 	} else {
-		// Existing record - update excluding specific fields
+		// Existing record - update excluding reconciliation fields
 		q1 := db.Table[financeTypes.CashBank]()
-		err = db.UpdateExclude(cajas, q1.CuadreFecha, q1.CuadreSaldo, q1.SaldoCurrent)
+		err = db.UpdateExclude(cajas, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount)
 	}
 
 	if err != nil {
@@ -89,10 +89,10 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	movimientos := []financeTypes.CashBankMovement{}
 	query := db.Query(&movimientos)
-	query.Select().CompanyID.Equals(req.User.CompanyID).CajaID.Equals(cashBankID)
+	query.Select().CompanyID.Equals(req.User.CompanyID).CashBankID.Equals(cashBankID)
 
-	// KeyIntPacking: CajaID (5) + Date (5) + Autoincrement (9)
-	// Base formula: CajaID * 10^14 + Date * 10^9 + Autoincrement
+	// KeyIntPacking: CashBankID (5) + Date (5) + Autoincrement (9)
+	// Base formula: CashBankID * 10^14 + Date * 10^9 + Autoincrement
 	if lastRegistrosLimit > 0 {
 		query.Limit(lastRegistrosLimit)
 	} else {
@@ -160,44 +160,44 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	if record.CajaID == 0 {
+	if record.CashBankID == 0 {
 		return req.MakeErr("Faltan Parámetros: [CashBank-ID]")
 	}
 
-	cashBank, err := GetCaja(req.User.CompanyID, record.CajaID)
+	cashBank, err := GetCaja(req.User.CompanyID, record.CashBankID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
 
-	if record.SaldoSistema != cashBank.SaldoCurrent {
-		re := map[string]any{"NeedUpdateSaldo": cashBank.SaldoCurrent}
+	if record.SystemAmount != cashBank.CurrentAmount {
+		re := map[string]any{"NeedUpdateSaldo": cashBank.CurrentAmount}
 		return req.MakeResponse(&re)
 	}
 
-	// Guarda el cuadre
+	// Save the reconciliation record
 	record.CompanyID = req.User.CompanyID
-	record.ID = core.SUnixTimeUUIDConcatID(record.CajaID)
+	record.ID = core.SUnixTimeUUIDConcatID(record.CashBankID)
 	record.Created = nowTime
 	record.CreatedBy = req.User.ID
-	record.SaldoDiferencia = record.SaldoReal - cashBank.SaldoCurrent
+	record.DifferenceAmount = record.ActualAmount - cashBank.CurrentAmount
 
-	// Guarda la cashBank
-	cashBank.CuadreSaldo = record.SaldoReal
-	cashBank.CuadreFecha = nowTime
-	cashBank.SaldoCurrent = record.SaldoReal
+	// Update the cash bank
+	cashBank.ReconciliationAmount = record.ActualAmount
+	cashBank.ReconciliationDate = nowTime
+	cashBank.CurrentAmount = record.ActualAmount
 	cashBank.Updated = nowTime
 	cashBank.UpdatedBy = req.User.ID
 
-	// Guarda el movimiento
+	// Record the reconciliation movement
 	movimiento := financeTypes.CashBankMovement{
-		ID:         core.SUnixTimeUUIDConcatID(record.CajaID),
-		CompanyID:  req.User.CompanyID,
-		CajaID:     record.CajaID,
-		Tipo:       2, // Cuadre de cashBank
-		SaldoFinal: record.SaldoReal,
-		Monto:      record.SaldoDiferencia,
-		Created:    nowTime,
-		CreatedBy:  req.User.ID,
+		ID:          core.SUnixTimeUUIDConcatID(record.CashBankID),
+		CompanyID:   req.User.CompanyID,
+		CashBankID:  record.CashBankID,
+		Type:        2, // Cash bank reconciliation
+		FinalAmount: record.ActualAmount,
+		Amount:      record.DifferenceAmount,
+		Created:     nowTime,
+		CreatedBy:   req.User.ID,
 	}
 
 	// Insert records using db2
@@ -207,7 +207,7 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	q1 := db.Table[financeTypes.CashBank]()
-	if err := db.Update(&[]financeTypes.CashBank{cashBank}, q1.CuadreFecha, q1.CuadreSaldo, q1.SaldoCurrent, q1.Updated, q1.UpdatedBy); err != nil {
+	if err := db.Update(&[]financeTypes.CashBank{cashBank}, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount, q1.Updated, q1.UpdatedBy); err != nil {
 		core.Log("Error ScyllaDB updating cashBank: ", err)
 		return req.MakeErr("Error al actualizar la cashBank:", err)
 	}
@@ -228,33 +228,33 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body:", err)
 	}
 
-	if record.Tipo == 0 || record.Monto == 0 || record.CajaID == 0 {
-		return req.MakeErr("Hay parámetros faltantes (Tipo, Monto o CashBank-ID)")
+	if record.Type == 0 || record.Amount == 0 || record.CashBankID == 0 {
+		return req.MakeErr("Hay parámetros faltantes (Type, Amount o CashBank-ID)")
 	}
 
-	if record.Tipo == 3 && record.CajaRefID == 0 {
+	if record.Type == 3 && record.CashBankRefID == 0 {
 		return req.MakeErr("Las trasferencias necesitan especificar una cashBank de destino.")
 	}
 
-	cashBank, err := GetCaja(req.User.CompanyID, record.CajaID)
+	cashBank, err := GetCaja(req.User.CompanyID, record.CashBankID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
 
-	saldoSistema := record.SaldoFinal - record.Monto
+	saldoSistema := record.FinalAmount - record.Amount
 
-	if saldoSistema != cashBank.SaldoCurrent {
-		re := map[string]any{"NeedUpdateSaldo": cashBank.SaldoCurrent}
-		core.Log("El saldo de la cashBank no coincide con el del movimiento:", saldoSistema, cashBank.SaldoCurrent)
+	if saldoSistema != cashBank.CurrentAmount {
+		re := map[string]any{"NeedUpdateSaldo": cashBank.CurrentAmount}
+		core.Log("El saldo de la cashBank no coincide con el del movimiento:", saldoSistema, cashBank.CurrentAmount)
 		return req.MakeResponse(&re)
 	}
 
 	movimientoInterno := financeTypes.InternalCashMovement{
-		CajaID:     record.CajaID,
-		CajaRefID:  record.CajaRefID,
-		Tipo:       record.Tipo,
-		Monto:      record.Monto,
-		SaldoFinal: record.SaldoFinal,
+		CashBankID:    record.CashBankID,
+		CashBankRefID: record.CashBankRefID,
+		Type:          record.Type,
+		Amount:        record.Amount,
+		FinalAmount:   record.FinalAmount,
 	}
 
 	if err := ApplyCajaMovimientos(req, []financeTypes.InternalCashMovement{movimientoInterno}); err != nil {

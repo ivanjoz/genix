@@ -24,7 +24,7 @@
     perfiles: IProfile[]
     accessGroupEntries: IAccessGroupCatalogEntry[]
     accessCatalogEntries: IAccessListCatalogEntry[]
-    accessLevelOptions: { ID: number; Nombre: string }[]
+    accessLevelOptions: { ID: number; Name: string }[]
     accessCatalogLoadError?: string
     css?: string
   }
@@ -122,17 +122,17 @@
 <div class={css}>
   <SearchDualCard
     bind:saveOn
-    saveLeft="PerfilesIDs"
-    saveRight="AccesosNivelIDs"
+    saveLeft="ProfileIDs"
+    saveRight="AccessLevelIDs"
     css="col-span-24"
     cardCss="mt-8"
     leftOptions={perfiles}
     leftKeyId="ID"
-    leftKeyName="Nombre"
+    leftKeyName="Name"
     leftLabel="PERFILES ::"
     rightOptions={accessLevelOptions}
     rightKeyId="ID"
-    rightKeyName="Nombre"
+    rightKeyName="Name"
     rightLabel="ACCESOS ::"
   >
     {#snippet selectedItem(selectedAccessOrProfile)}
@@ -141,7 +141,7 @@
         {@const selectedProfileAccessSummary = summarizeProfileAccesses(selectedProfileRecord)}
         <div class="_selected-profile-card">
           <div class="_selected-profile-name ff-semibold text-sky-700">
-            {String(selectedAccessOrProfile.option.Nombre || '')}
+            {String(selectedAccessOrProfile.option.Name || '')}
           </div>
           {#if selectedProfileAccessSummary.readableAccessNames.length > 0}
             <div class="_selected-profile-row">

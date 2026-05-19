@@ -163,8 +163,8 @@ class PurchaseOrderState {
     const zeroQuantityItem = this.items.find((item) => !item.quantity)
     if (zeroQuantityItem) {
       const zeroQuantityName = zeroQuantityItem.presentation
-        ? `${zeroQuantityItem.product.Nombre} (${zeroQuantityItem.presentation.nm})`
-        : zeroQuantityItem.product.Nombre
+        ? `${zeroQuantityItem.product.Name} (${zeroQuantityItem.presentation.nm})`
+        : zeroQuantityItem.product.Name
       Notify.failure(`El producto "${zeroQuantityName}" no tiene cantidad.`)
       return false
     }
@@ -219,14 +219,14 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
     width: 'minmax(160px, 1.5fr)',
     css: 'py-4 leading-[1.15]',
     getValue: (item) => item.presentation
-      ? `${item.product.Nombre} (${item.presentation.nm})`
-      : item.product.Nombre,
+      ? `${item.product.Name} (${item.presentation.nm})`
+      : item.product.Name,
     render: (item) => {
       // Resolve sku/name from the presentation ref when available, otherwise fall back to the product.
       const sku = ((item.presentation?.sk || item.product.SKU) || '').trim()
       const skuHtml = sku ? `<span class="text-[11px] font-mono text-gray-400 ml-4">${sku}</span>` : ''
-      if (!item.presentation) { return `${item.product.Nombre}${skuHtml}` }
-      return `${item.product.Nombre} <span class="text-blue-600 font-bold">(${item.presentation.nm})</span>${skuHtml}`
+      if (!item.presentation) { return `${item.product.Name}${skuHtml}` }
+      return `${item.product.Name} <span class="text-blue-600 font-bold">(${item.presentation.nm})</span>${skuHtml}`
     },
   },
   {
@@ -326,7 +326,7 @@ async function applyPurchaseOrderCopy(source: IPurchaseOrder) {
 
     // When the original line targeted a specific presentation, require it to still exist;
     // an inactive/deleted presentation would render the row with empty name + wrong key.
-    const presentation = (product.Presentaciones || []).find((p) => p.id === presentationID)
+    const presentation = (product.Presentations || []).find((p) => p.id === presentationID)
     if (presentationID > 0 && !presentation) {
       skippedPresentations.push({ productID, presentationID })
       continue
@@ -397,7 +397,7 @@ const providerNameByID = $derived(
   new Map(providersService.records.map((p) => [p.ID, p.Name])),
 )
 const almacenNameByID = $derived(
-  new Map(almacenesService.Almacenes.map((a) => [a.ID, a.Nombre])),
+  new Map(almacenesService.Almacenes.map((a) => [a.ID, a.Name])),
 )
 const formatDateOrDash = (value: string | number) => {
   const day = Number(value)

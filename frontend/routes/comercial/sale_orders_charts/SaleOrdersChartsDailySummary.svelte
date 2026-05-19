@@ -43,9 +43,9 @@
 
   const dateHelper = new DateHelper()
   const CARD_ROW_HEIGHT_PX = 332
-  const chartMetricSelectionOptions: Array<{ ID: TChartMetricMode; Nombre: string }> = [
-    { ID: 'amount', Nombre: 'Por Monto Facturado' },
-    { ID: 'quantity', Nombre: 'Por Cantidad' }
+  const chartMetricSelectionOptions: Array<{ ID: TChartMetricMode; Name: string }> = [
+    { ID: 'amount', Name: 'Por Monto Facturado' },
+    { ID: 'quantity', Name: 'Por Cantidad' }
   ]
 
   let {
@@ -116,7 +116,7 @@
         const productID = productIDs[recordIndex] || 0
         if (!productID) { continue }
 
-        const productName = productsByIdMap.get(productID)?.Nombre || `Producto #${productID}`
+        const productName = productsByIdMap.get(productID)?.Name || `Producto #${productID}`
         const totalQuantityForProduct = soldQuantities[recordIndex] || 0
         const pendingQuantityForProduct = pendingQuantities[recordIndex] || 0
         const deliveredQuantityForProduct = Math.max(0, totalQuantityForProduct - pendingQuantityForProduct)
@@ -238,7 +238,7 @@
     saveOn={chartMetricForm}
     save={'metricMode'}
     keyId={'ID'}
-    keyName={'Nombre'}
+    keyName={'Name'}
     type="single"
   />
   <div class="ml-auto flex items-center gap-12 text-[13px] text-slate-600">

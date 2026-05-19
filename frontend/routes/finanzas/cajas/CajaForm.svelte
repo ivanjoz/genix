@@ -15,22 +15,22 @@ let {
 </script>
 
 <div class="grid grid-cols-24 gap-10" aria-label="Cash register form with type, name, description, and sede">
-  <SearchSelect bind:saveOn={form} save="Tipo" css="col-span-24 md:col-span-10"
+  <SearchSelect bind:saveOn={form} save="Type" css="col-span-24 md:col-span-10"
     label="Tipo" keyId="id" keyName="name" options={cajaTipos}
     placeholder="" required={true}
   />
-  <Input bind:saveOn={form} save="Nombre"
+  <Input bind:saveOn={form} save="Name"
     css="col-span-24 md:col-span-14" label="Nombre" required={true}
   />
-  <Input bind:saveOn={form} save="Descripcion"
+  <Input bind:saveOn={form} save="Description"
     css="col-span-24" label="Descripcion"
   />
-  <SearchSelect bind:saveOn={form} save="SedeID"
+  <SearchSelect bind:saveOn={form} save="SiteID"
     css="col-span-24 md:col-span-10" label="Sede" required={true} options={sedes}
-    keyId="ID" keyName="Nombre"
+    keyId="ID" keyName="Name"
   />
   <div class="col-span-24 flex justify-between items-center">
     <div></div>
-    <Checkbox label="Saldo Negativo" bind:saveOn={form} save="Nombre" />
+    <Checkbox label="Saldo Negativo" bind:saveOn={form} save="Name" />
   </div>
 </div>

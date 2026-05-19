@@ -37,7 +37,7 @@ let {
   <SearchSelect
     label="Almacén"
     keyId="ID"
-    keyName="Nombre"
+    keyName="Name"
     options={almacenes}
     selected={form.WarehouseID}
     onChange={(almacen: IWarehouse) => { form.WarehouseID = almacen?.ID || 0 }}

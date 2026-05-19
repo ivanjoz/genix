@@ -171,7 +171,7 @@ import {
 
   async function savePerfil(onDelete?: boolean, isAccesos?: boolean) {
     const form = perfilForm
-    if (!form.Nombre) {
+    if (!form.Name) {
       Notify.failure("Faltan propiedades para agregar el perfil.")
       return
     }
@@ -219,7 +219,7 @@ import {
     },
     {
       header: "Perfil", highlight: true,
-      getValue: e => e.Nombre
+      getValue: e => e.Name
     },
     {
       header: "...",
@@ -254,7 +254,7 @@ import {
         data={perfilesService.perfiles}
         selected={perfilForm.ID}
         filterText={filterText}
-        getFilterContent={e => [e.Nombre].filter(x => x).join(" ").toLowerCase()}
+        getFilterContent={e => [e.Name].filter(x => x).join(" ").toLowerCase()}
         isSelected={(e, id) => e.ID === id}
         onRowClick={e => {
           if (e.ID === perfilForm.ID) {
@@ -274,7 +274,7 @@ import {
 	          <span>Accesos</span>
 	          {#if perfilForm.ID > 0}
 	            <span class="mr-2">de</span>
-	            <span class="c-purple ml-4">{perfilForm.Nombre}</span>
+	            <span class="c-purple ml-4">{perfilForm.Name}</span>
 	          {/if}
 	        </div>
 	        <div class="flex items-center max-md:absolute max-md:top-0 max-md:right-0">
@@ -324,14 +324,14 @@ import {
     <div class="grid grid-cols-24 gap-10 p-6" aria-label="Profile form with name and description">
       <Input
         bind:saveOn={perfilForm}
-        save="Nombre"
+        save="Name"
         css="col-span-24"
         label="Nombre"
         required={true}
       />
       <Input
         bind:saveOn={perfilForm}
-        save="Descripcion"
+        save="Description"
         css="col-span-24"
         label="Descripción"
       />

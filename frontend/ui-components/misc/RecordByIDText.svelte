@@ -8,10 +8,9 @@
 
   interface ITextRecord extends IMinimalRecord {
     Usuario?: string;
-    Nombre?: string;
-    Nombres?: string;
-    Apellidos?: string;
     Name?: string;
+    FirstName?: string;
+    LastName?: string;
   }
 
   let {
@@ -35,9 +34,8 @@
 
     // Prefer common display keys used across modules before fallback to placeholder.
     if (resolvedRecord.Usuario) { return resolvedRecord.Usuario; }
-    if (resolvedRecord.Nombre) { return resolvedRecord.Nombre; }
     if (resolvedRecord.Name) { return resolvedRecord.Name; }
-    const fullName = [resolvedRecord.Nombres, resolvedRecord.Apellidos].filter(Boolean).join(' ').trim();
+    const fullName = [resolvedRecord.FirstName, resolvedRecord.LastName].filter(Boolean).join(' ').trim();
     if (fullName.length > 0) { return fullName; }
     return placeholder;
   });

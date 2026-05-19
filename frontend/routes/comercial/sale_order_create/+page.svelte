@@ -49,8 +49,8 @@ import { SaleOrderState } from "./sale_order.svelte";
   const separarProcesoVenta = $derived(systemParamsService.recordsMap.get(1)?.ValueInts || []);
   const isSeparadoProceso = $derived(separarProcesoVenta.includes(2));
   const clientModeOptions = [
-    { ID: 1, Nombre: "Selecionar Cliente" },
-    { ID: 2, Nombre: "Registrar Cliente" },
+    { ID: 1, Name: "Selecionar Cliente" },
+    { ID: 2, Name: "Registrar Cliente" },
   ];
   const clientOptions = $derived.by(() => {
     // Build a combined label so the selector matches by name and registry number with the shared SearchSelect component.
@@ -155,10 +155,10 @@ import { SaleOrderState } from "./sale_order.svelte";
         if(!productStockGroups.has(stockBucket.key)){
           const presentationID = e.PresentationID || 0
           const presentationName = presentationID
-            ? producto.Presentaciones?.find((presentationOption) => presentationOption.id === presentationID)?.nm || `Presentación ${presentationID}`
+            ? producto.Presentations?.find((presentationOption) => presentationOption.id === presentationID)?.nm || `Presentación ${presentationID}`
             : ""
-          const brandName = listasService.recordsMap.get(producto.MarcaID)?.Nombre || ""
-          const displayName = presentationName ? `${producto.Nombre} (${presentationName})` : producto.Nombre
+          const brandName = listasService.recordsMap.get(producto.BrandID)?.Name || ""
+          const displayName = presentationName ? `${producto.Name} (${presentationName})` : producto.Name
 
           // Build the final sale row once and only mutate the aggregated fields while iterating stock.
           productStockGroups.set(stockBucket.key, {
@@ -167,7 +167,7 @@ import { SaleOrderState } from "./sale_order.svelte";
             presentationID,
             presentationName,
             displayName,
-            searchText: `${producto.Nombre} ${presentationName} ${brandName}`.toLowerCase(),
+            searchText: `${producto.Name} ${presentationName} ${brandName}`.toLowerCase(),
             producto,
             serialNumbers: [] as IProductStockDetail[],
           } as ProductoVenta)
@@ -191,12 +191,12 @@ import { SaleOrderState } from "./sale_order.svelte";
     const productosParsedNew = [...productStockGroups.values()]
 
     for (const productoVenta of [...productStockGroups.values()]) {
-      if (productoVenta.key.endsWith("_1") || (productoVenta.producto.SbnCantidad || 0) <= 1) { continue }
+      if (productoVenta.key.endsWith("_1") || (productoVenta.producto.SbuQuantity || 0) <= 1) { continue }
 
       // Only create sub-unit rows for generic stock groups so the UI preserves the existing sale flow.
       productosParsedNew.push({
         key: `${productoVenta.key}_s`,
-        cant: productoVenta.producto.SbnCantidad!,
+        cant: productoVenta.producto.SbuQuantity!,
         producto: productoVenta.producto,
         presentationID: productoVenta.presentationID,
         presentationName: productoVenta.presentationName,
@@ -311,7 +311,7 @@ import { SaleOrderState } from "./sale_order.svelte";
             <SearchSelect
               label=""
               keyId="ID"
-              keyName="Nombre"
+              keyName="Name"
               options={almacenesService.Almacenes}
               placeholder="ALMACÉN"
               selected={almacenSelected}
@@ -437,7 +437,7 @@ import { SaleOrderState } from "./sale_order.svelte";
            css="w-[30%] md:order-1"
 	            label="" save="LastPaymentCajaID"
 	            keyId="ID"
-	            keyName="Nombre" saveOn={ventasState.form}
+	            keyName="Name" saveOn={ventasState.form}
 	            options={cajas?.Cajas||[]}
 	            placeholder="CAJA"
 	          />
@@ -451,7 +451,7 @@ import { SaleOrderState } from "./sale_order.svelte";
 	          <SearchSelect useStyle={1}
 	             label=""
 	             keyId="ID" css="w-full text-sm"
-	             keyName="Nombre"
+	             keyName="Name"
 	             options={clientModeOptions}
 	             selected={clientModeSelected}
 	             onChange={handleClientModeChange}
@@ -501,7 +501,7 @@ import { SaleOrderState } from "./sale_order.svelte";
                   {item.displayName}
                   {#if item.isSubUnidad}
                     <span class="text-purple-600 text-[10px] ml-4 font-normal"
-                      >({item.producto?.SbnUnidad})</span
+                      >({item.producto?.SbuUnit})</span
                   >
                   {/if}
                 </div>
@@ -520,7 +520,7 @@ import { SaleOrderState } from "./sale_order.svelte";
 
               <div class="flex items-center gap-8">
                 <div class="font-mono text-sm font-bold text-gray-700">
-                  {formatMo((item.isSubUnidad && item.producto?.SbnPreciFinal ? item.producto.SbnPreciFinal : (item.producto?.PrecioFinal || 0)) * item.cantidad)}
+                  {formatMo((item.isSubUnidad && item.producto?.SbuFinalPrice ? item.producto.SbuFinalPrice : (item.producto?.FinalPrice || 0)) * item.cantidad)}
                 </div>
                 <Button icon="icon-trash"
                   css="p-4 text-red-400 transition-opacity hover:text-red-600 md:opacity-0 md:group-hover:opacity-100"

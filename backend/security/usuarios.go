@@ -31,16 +31,16 @@ func getPerfilesMapByIDs(companyID int32, profileIDs []int32) (map[int32]types.P
 		return map[int32]types.Profile{}, nil
 	}
 
-	uniquePerfilesIDs := core.MakeUnique(profileIDs)
+	uniqueProfileIDs := core.MakeUnique(profileIDs)
 	perfiles := []types.Profile{}
 	query := db.Query(&perfiles)
-	query.CompanyID.Equals(companyID).ID.In(uniquePerfilesIDs...)
+	query.CompanyID.Equals(companyID).ID.In(uniqueProfileIDs...)
 
 	if err := query.Exec(); err != nil {
 		return nil, err
 	}
 
-	core.Log("getPerfilesMapByIDs:: perfiles encontrados", len(perfiles), "de", len(uniquePerfilesIDs))
+	core.Log("getPerfilesMapByIDs:: perfiles encontrados", len(perfiles), "de", len(uniqueProfileIDs))
 
 	perfilesByID := make(map[int32]types.Profile, len(perfiles))
 	for _, profile := range perfiles {
@@ -150,10 +150,10 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.ID = req.User.ID
 	}
 
-	if body.ID != 1 && len(body.PerfilesIDs) == 0 && !isUsuarioPropio {
+	if body.ID != 1 && len(body.ProfileIDs) == 0 && !isUsuarioPropio {
 		return req.MakeErr("El user debe tener al menos 1 permiso")
 	}
-	if (len(body.User) < 5 && !isUsuarioPropio) || len(body.Nombres) < 5 {
+	if (len(body.User) < 5 && !isUsuarioPropio) || len(body.FirstName) < 5 {
 		return req.MakeErr("El user nombre debe tener al menos 5 caracteres")
 	}
 	if body.ID == 0 && len(body.Password) < 6 {
@@ -185,7 +185,7 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.Created = usuarioActual.Created
 		body.CreatedBy = usuarioActual.CreatedBy
 		if isUsuarioPropio {
-			body.PerfilesIDs = usuarioActual.PerfilesIDs
+			body.ProfileIDs = usuarioActual.ProfileIDs
 			body.User = usuarioActual.User
 		}
 	}
@@ -195,16 +195,16 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.PasswordHash = core.FnvHashString64(passwordConcat, -1, 20)
 	}
 
-	perfilesByID, err := getPerfilesMapByIDs(body.CompanyID, body.PerfilesIDs)
+	perfilesByID, err := getPerfilesMapByIDs(body.CompanyID, body.ProfileIDs)
 	if err != nil {
 		return req.MakeErr("Error al obtener los perfiles del user.", err)
 	}
 
-	accesosComputed, err := buildAccesosComputedFromPerfiles(perfilesByID, body.PerfilesIDs)
+	accesosComputed, err := buildAccesosComputedFromPerfiles(perfilesByID, body.ProfileIDs)
 	if err != nil {
 		return req.MakeErr("Error al obtener los accesos del profile.", err)
 	}
-	for _, accesoNivelID := range body.AccesosNivelIDs {
+	for _, accesoNivelID := range body.AccessLevelIDs {
 		accesosComputed = append(accesosComputed, makeAccesoNivelPacked(accesoNivelID))
 	}
 	accesosComputed = core.MakeUnique(accesosComputed)
@@ -213,7 +213,7 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	body.AccesosComputed = accesosComputed
 	body.Updated = now
 	body.UpdatedBy = req.User.ID
-	core.Log("PostUsuarios:: user", body.ID, "perfiles", body.PerfilesIDs, "accesosComputed", len(body.AccesosComputed))
+	core.Log("PostUsuarios:: user", body.ID, "perfiles", body.ProfileIDs, "accesosComputed", len(body.AccesosComputed))
 	body.PrepareCloudSync()
 	core.Print(body)
 

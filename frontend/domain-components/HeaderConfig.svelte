@@ -287,19 +287,19 @@ import {
   </div>
   <div class="grid grid-cols-24 w-full gap-10">
     <Input label="Nombres" css="col-span-12"
-      saveOn={userInfo} save="Nombres"
+      saveOn={userInfo} save="FirstName"
     />
     <Input label="Apellidos" css="col-span-12"
-      saveOn={userInfo} save="Apellidos"
+      saveOn={userInfo} save="LastName"
     />
     <Input label="Email" css="col-span-12"
       saveOn={userInfo} save="Email"
     />
     <Input label="Cargo" css="col-span-12"
-      saveOn={userInfo} save="Cargo"
+      saveOn={userInfo} save="JobTitle"
     />
     <Input label="Nº Documento" css="col-span-12"
-      saveOn={userInfo} save="DocumentoNro"
+      saveOn={userInfo} save="DocumentNumber"
     />
     <div class="col-span-24">
       <div class="ff-bold mb-[-4px] mt-2">Cambiar Password</div>

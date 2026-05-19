@@ -153,10 +153,10 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		montoPago := sale.TotalAmount - sale.DebtAmount
 		if montoPago != 0 {
 			movimiento := financeTypes.InternalCashMovement{
-				CajaID:     sale.LastPaymentCajaID,
+				CashBankID: sale.LastPaymentCajaID,
 				DocumentID: sale.ID,
-				Tipo:       8, // Cobro (Venta)
-				Monto:      montoPago,
+				Type:       8, // Cobro (Venta)
+				Amount:     montoPago,
 			}
 
 			eg.Go(func() error {
@@ -177,7 +177,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	if slices.Contains(sale.ActionsIncluded, 3) {
 		core.Log("Incluyendo movimientos internos...", len(sale.DetailProductsIDs))
 
-		movimientosInternos := []logisticsTypes.MovimientoInterno{}
+		movimientosInternos := []logisticsTypes.InternalMovement{}
 		for i, productID := range sale.DetailProductsIDs {
 			if i >= len(sale.DetailQuantities) {
 				break
@@ -187,15 +187,15 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				continue
 			}
 
-			movimientosInternos = append(movimientosInternos, logisticsTypes.MovimientoInterno{
+			movimientosInternos = append(movimientosInternos, logisticsTypes.InternalMovement{
 				WarehouseID:    sale.WarehouseID,
-				ProductID:     productID,
-				PresentacionID: core.GetIndex(sale.DetailProductPresentations, i),
+				ProductID:      productID,
+				PresentationID: core.GetIndex(sale.DetailProductPresentations, i),
 				SerialNumber:   core.GetIndex(sale.DetailProductSkus, i),
 				LotID:          core.GetIndex(sale.DetailProductLotIDs, i),
 				DocumentID:     sale.ID,
-				Tipo:           8,         // Entrega a cliente final (Venta)
-				Cantidad:       -cantidad, // Salida de almacén
+				Type:           8,         // Entrega a cliente final (Venta)
+				Quantity:       -cantidad, // Salida de almacén
 			})
 		}
 

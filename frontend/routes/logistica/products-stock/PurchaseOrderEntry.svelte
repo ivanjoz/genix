@@ -87,10 +87,10 @@ const orderProductCards = $derived.by(() => {
       continue
     }
     const product = productos.recordsMap.get(pid)
-    const name = product?.Nombre || `Producto-${pid}`
+    const name = product?.Name || `Producto-${pid}`
     const sku = product?.SKU || ''
     // Pre-build a lower-cased haystack so substring filtering is allocation-free per keystroke.
-    const presentationSkus = (product?.Presentaciones || [])
+    const presentationSkus = (product?.Presentations || [])
       .map(p => p.sk || '')
       .filter(Boolean)
       .join(' ')
@@ -290,7 +290,7 @@ const entryColumns: ITableColumn<Row>[] = [
     useLineClamp: true,
     getValue: (row) => {
       if (row.kind !== 'entry') return ''
-      return productos.recordsMap.get(row.productID)?.Nombre || `Producto-${row.productID}`
+      return productos.recordsMap.get(row.productID)?.Name || `Producto-${row.productID}`
     },
   },
   {
@@ -384,7 +384,7 @@ const serialColumns: ITableColumn<{ serial: string, quantity: number }>[] = [
 const purchaseOrderOptions = $derived(
   purchaseOrders.records.map(o => ({
     ID: o.ID,
-    Nombre: formatOrderLabel(o),
+    Name: formatOrderLabel(o),
     ProviderName: providersService.recordsMap.get(o.ProviderID)?.Name || `Proveedor #${o.ProviderID}`,
     Date: o.Date,
     TotalAmount: o.TotalAmount,
@@ -401,7 +401,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
   <div class="flex-1 flex flex-col min-w-0 relative">
     <div class="flex items-center gap-8 mb-12" aria-label="Purchase order and lot selection toolbar">
       <div class="w-260">
-        <SearchSelect options={purchaseOrderOptions} keyId="ID" keyName="Nombre"
+        <SearchSelect options={purchaseOrderOptions} keyId="ID" keyName="Name"
           selected={selectedOrderID}
           placeholder="ÓRDEN DE COMPRA ::"
           optionsCss="w-380"
@@ -474,7 +474,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
         {selectedOrder ? `Orden #${selectedOrder.ID}` : '—'}
       </div>
       <div class="w-200">
-        <SearchSelect options={almacenes?.Almacenes || []} keyId="ID" keyName="Nombre"
+        <SearchSelect options={almacenes?.Almacenes || []} keyId="ID" keyName="Name"
           selected={warehouseID}
           placeholder="ALMACÉN ::"
           id={12}
@@ -543,7 +543,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
 
 <!-- Serial Number editor modal — mirrors the table-only pattern from ProductStockMovement.svelte. -->
 <Layer id={4} type="side" sideLayerSize={520}
-  title={editingSerialEntry ? `Seriales — ${productos.recordsMap.get(editingSerialEntry.productID)?.Nombre || ''}` : 'Seriales'}
+  title={editingSerialEntry ? `Seriales — ${productos.recordsMap.get(editingSerialEntry.productID)?.Name || ''}` : 'Seriales'}
   titleCss="h2"
   css="px-12 py-10"
   onClose={() => {

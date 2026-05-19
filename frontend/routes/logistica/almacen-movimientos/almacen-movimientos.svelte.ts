@@ -26,13 +26,13 @@ export interface IWarehouseProductMovement {
   WarehouseRefQuantity?: number
   Date?: number
   DocumentID?: number
-  ProductoID?: number
-  PresentacionID?: number
+  ProductID?: number
+  PresentationID?: number
   Quantity?: number
   WarehouseQuantity?: number
   SubQuantity?: number
   MonetaryValue?: number
-  Tipo?: number
+  Type?: number
   Created?: number
   CreatedBy?: number
   upc?: number

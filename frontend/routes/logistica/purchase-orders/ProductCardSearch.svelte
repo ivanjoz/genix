@@ -95,7 +95,7 @@ import { formatN, wordInclude } from '$libs/helpers'
     for (const producto of productosService.records) {
       if ((producto.ss || 0) <= 0) { continue }
       const productSku = (producto.SKU || '').trim()
-      const activePresentations = (producto.Presentaciones || []).filter((presentation) => (presentation.ss || 0) > 0)
+      const activePresentations = (producto.Presentations || []).filter((presentation) => (presentation.ss || 0) > 0)
       const priceInfo = productPriceMap.get(producto.ID)
       const priceMin = priceInfo?.min || 0
       const priceMax = priceInfo?.max || 0
@@ -106,15 +106,15 @@ import { formatN, wordInclude } from '$libs/helpers'
           key: `${producto.ID}_0`,
           productID: producto.ID,
           presentationID: 0,
-          productName: producto.Nombre,
+          productName: producto.Name,
           presentationName: '',
-          displayName: producto.Nombre,
+          displayName: producto.Name,
           sku: productSku,
           price: priceMin,
           priceMin,
           priceMax,
           priceLabel,
-          searchText: `${producto.Nombre} ${productSku}`.toLowerCase(),
+          searchText: `${producto.Name} ${productSku}`.toLowerCase(),
           producto,
         })
         continue
@@ -123,13 +123,13 @@ import { formatN, wordInclude } from '$libs/helpers'
       for (const presentation of activePresentations) {
         const presentationSku = (presentation.sk || '').trim()
         const displayName = presentation.nm
-          ? `${producto.Nombre} (${presentation.nm})`
-          : producto.Nombre
+          ? `${producto.Name} (${presentation.nm})`
+          : producto.Name
         cards.push({
           key: `${producto.ID}_${presentation.id}`,
           productID: producto.ID,
           presentationID: presentation.id,
-          productName: producto.Nombre,
+          productName: producto.Name,
           presentationName: presentation.nm || '',
           displayName,
           sku: presentationSku || productSku,
@@ -137,7 +137,7 @@ import { formatN, wordInclude } from '$libs/helpers'
           priceMin,
           priceMax,
           priceLabel,
-          searchText: `${producto.Nombre} ${presentation.nm || ''} ${presentationSku} ${productSku}`.toLowerCase(),
+          searchText: `${producto.Name} ${presentation.nm || ''} ${presentationSku} ${productSku}`.toLowerCase(),
           producto,
           presentation,
         })

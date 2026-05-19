@@ -33,7 +33,7 @@ import {
 
   const saveSede = async (isDelete?: boolean) => {
     const form = sedeForm
-    if((form.Nombre?.length||0) < 4 || (form.Direccion?.length||0) < 4){
+    if((form.Name?.length||0) < 4 || (form.Direccion?.length||0) < 4){
       Notify.failure("El nombre y la dirección deben tener al menos 4 caracteres.")
       return
     }
@@ -67,10 +67,10 @@ import {
 
   const saveAlmacen = async (isDelete?: boolean) => {
     const form = almacenForm
-    if((form.Nombre?.length||0) < 4){
+    if((form.Name?.length||0) < 4){
       Notify.failure("El nombre debe tener al menos 4 caracteres.")
       return
-    } else if(!form.SedeID){
+    } else if(!form.SiteID){
       Notify.failure("Debe seleccionar una sede.")
       return
     }
@@ -128,7 +128,7 @@ import {
     {
       header: "Nombre",
       css: "px-6",
-      getValue: e => e.Nombre
+      getValue: e => e.Name
     },
     {
       header: "Dirección",
@@ -171,14 +171,14 @@ import {
       header: "Sede",
       css: "px-6",
       getValue: e => {
-        const sede = almacenesService.SedesMap.get(e.SedeID)
-        return sede?.Nombre || `Sede-${e.SedeID}`
+        const sede = almacenesService.SedesMap.get(e.SiteID)
+        return sede?.Name || `Sede-${e.SiteID}`
       }
     },
     {
       header: "Nombre",
       css: "px-6",
-      getValue: e => e.Nombre
+      getValue: e => e.Name
     },
     {
       header: "Layout",
@@ -211,7 +211,7 @@ import {
     if (!filterText) return almacenesService.Sedes
     const text = filterText.toLowerCase()
     return almacenesService.Sedes.filter(e => {
-      return e.Nombre?.toLowerCase().includes(text) ||
+      return e.Name?.toLowerCase().includes(text) ||
              e.Direccion?.toLowerCase().includes(text) ||
              e.Ciudad?.toLowerCase().includes(text)
     })
@@ -221,9 +221,9 @@ import {
     if (!filterText) return almacenesService.Almacenes
     const text = filterText.toLowerCase()
     return almacenesService.Almacenes.filter(e => {
-      const sede = almacenesService.SedesMap.get(e.SedeID)
-      return e.Nombre?.toLowerCase().includes(text) ||
-             sede?.Nombre?.toLowerCase().includes(text)
+      const sede = almacenesService.SedesMap.get(e.SiteID)
+      return e.Name?.toLowerCase().includes(text) ||
+             sede?.Name?.toLowerCase().includes(text)
     })
   })
 
@@ -264,7 +264,7 @@ import {
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
           <Button color="green" icon="icon-plus" label="Opens the modal to create a new warehouse linked to a sede." onClick={() => {
-            almacenForm = { ID: 0, SedeID: 0, Nombre: "", Descripcion: "", ss: 1, upd: 0, Layout: [] }
+            almacenForm = { ID: 0, SiteID: 0, Name: "", Description: "", ss: 1, upd: 0, Layout: [] }
             Core.openModal(2)
           }} />
         </div>
@@ -314,11 +314,11 @@ import {
     onDelete={sedeForm?.ID > 0 ? () => { saveSede(true) } : undefined}
   >
     <div class="grid grid-cols-24 gap-10" aria-label="Sede form with name, description, phone, address, and location">
-      <Input bind:saveOn={sedeForm} save="Nombre"
+      <Input bind:saveOn={sedeForm} save="Name"
         css="col-span-24 md:col-span-10" label="Nombre" required={true}
         disabled={sedeForm?.ID > 0}
       />
-      <Input bind:saveOn={sedeForm} save="Descripcion"
+      <Input bind:saveOn={sedeForm} save="Description"
         css="col-span-24 md:col-span-14" label="Descripción"
       />
       <Input bind:saveOn={sedeForm} save="Telefono"
@@ -328,7 +328,7 @@ import {
       <Input bind:saveOn={sedeForm} save="Direccion"
         css="col-span-24 md:col-span-14" label="Dirección" required={true}
       />
-      <SearchSelect bind:saveOn={sedeForm} save="CiudadID"
+      <SearchSelect bind:saveOn={sedeForm} save="CityID"
         css="col-span-24" label="Departamento | Provincia | Distrito"
         keyId="ID" keyName="_nombre" options={paisCiudadesService.distritos}
         required={true}
@@ -343,22 +343,22 @@ import {
     onDelete={almacenForm?.ID > 0 ? () => { saveAlmacen(true) } : undefined}
   >
     <div class="grid grid-cols-24 gap-10" aria-label="Almacen form with sede, name, and description">
-      <SearchSelect bind:saveOn={almacenForm} save="SedeID"
+      <SearchSelect bind:saveOn={almacenForm} save="SiteID"
         css="col-span-24 md:col-span-12" label="Sede"
-        keyId="ID" keyName="Nombre" options={almacenesService.Sedes}
+        keyId="ID" keyName="Name" options={almacenesService.Sedes}
         required={true}
       />
-      <Input bind:saveOn={almacenForm} save="Nombre"
+      <Input bind:saveOn={almacenForm} save="Name"
         css="col-span-24 md:col-span-12" label="Nombre" required={true}
       />
-      <Input bind:saveOn={almacenForm} save="Descripcion"
+      <Input bind:saveOn={almacenForm} save="Description"
         css="col-span-24" label="Descripción"
       />
     </div>
   </Modal>
 
   <!-- Layout Side Layer -->
-  <Layer id={1} type="side" title={"Layout " + (almacenForm?.Nombre || "-")}
+  <Layer id={1} type="side" title={"Layout " + (almacenForm?.Name || "-")}
     contentCss="p-0" css="px-8 py-8 md:px-14 md:py-10"
     titleCss="h2 ff-bold"
     onClose={() => {}}

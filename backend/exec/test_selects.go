@@ -114,7 +114,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	q3 := db.Query(&registros)
 	// This query should use a view that concatenates ListaID and Status or Updated
 	err = q3.CompanyID.Equals(1).
-		ListaID.Equals(1).
+		ListID.Equals(1).
 		Status.Equals(1).
 		Exec()
 
@@ -129,7 +129,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	movimientos := []financeTypes.CashBankMovement{}
 	q4 := db.Query(&movimientos)
 	err = q4.CompanyID.Equals(1).
-		DocumentoID.Equals(12345). // This uses a view defined in CashBankMovementTable
+		DocumentID.Equals(12345). // This uses a view defined in CashBankMovementTable
 		Exec()
 
 	if err != nil {
@@ -143,7 +143,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	recordRegistrosListas := []businessTypes.SharedListRecord{}
 	q5 := db.Query(&recordRegistrosListas)
 	err = q5.CompanyID.Equals(1).
-		ListaID.Equals(1).
+		ListID.Equals(1).
 		Updated.Between(1000000000, 2000000000).
 		Exec()
 
@@ -167,7 +167,7 @@ func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 		CompanyID.Equals(1).
 		Date.GreaterEqual(1827)
 
-	if err := query.GroupBy(query.Date, query.ProductID, query.Tipo, query.Quantity.Sum()).Exec(); err != nil {
+	if err := query.GroupBy(query.Date, query.ProductID, query.Type, query.Quantity.Sum()).Exec(); err != nil {
 		panic(err)
 	}
 	
@@ -177,7 +177,7 @@ func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 	q3 := db.Query(&registros)
 	// This query should use a view that concatenates ListaID and Status or Updated
 	err = q3.CompanyID.Equals(1).
-		ListaID.Equals(1).
+		ListID.Equals(1).
 		Status.Equals(1).
 		Exec()
 
@@ -192,7 +192,7 @@ func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 	recordRegistrosListas := []businessTypes.SharedListRecord{}
 	q5 := db.Query(&recordRegistrosListas)
 	err = q5.CompanyID.Equals(1).
-		ListaID.Equals(1).
+		ListID.Equals(1).
 		Updated.Between(1000000000, 2000000000).
 		Exec()
 

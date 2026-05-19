@@ -15,8 +15,8 @@ export interface IAccess {
 export interface IProfile {
   ID: number
   CompanyID: number
-  Nombre: string
-  Descripcion?: string
+  Name: string
+  Description?: string
   Accesos: number[]
   Modulos: number[]
   accesosMap: Map<number, number[]>

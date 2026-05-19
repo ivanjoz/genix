@@ -354,13 +354,13 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 	): void {
 		// Keep normalized brand words precomputed so brand scoring stays O(words) per brand.
 		for (const brandRow of brandRows) {
-			const normalizedBrandName = normalizeSearchToken(brandRow.Nombre);
+			const normalizedBrandName = normalizeSearchToken(brandRow.Name);
 			this.brandNameByID.set(brandRow.ID, normalizedBrandName);
 			this.normalizedBrandWordsByBrandID.set(brandRow.ID, splitNormalizedWords(normalizedBrandName));
 		}
 		for (const categoryRow of categoryRows) {
 			// Category names are only used for hydrated product views.
-			this.categoryNameByID.set(categoryRow.ID, normalizeSearchToken(categoryRow.Nombre));
+			this.categoryNameByID.set(categoryRow.ID, normalizeSearchToken(categoryRow.Name));
 		}
 	}
 
@@ -380,7 +380,7 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 				this.removeProduct(deltaProduct.ID);
 				continue;
 			}
-			const encodedNameBytes = this.encodeProductNameToByteRow(deltaProduct.Nombre || "");
+			const encodedNameBytes = this.encodeProductNameToByteRow(deltaProduct.Name || "");
 			if (encodedNameBytes.length === 0) {
 				continue;
 			}
@@ -388,8 +388,8 @@ export class ProductSearch implements ProductSearchBootstrapSource {
 				productID: deltaProduct.ID,
 				productBytes: encodedNameBytes,
 				brandDictionaryIndex: 0,
-				brandID: deltaProduct.MarcaID ?? 0,
-				categoryIDs: deltaProduct.CategoriasIDs ?? []
+				brandID: deltaProduct.BrandID ?? 0,
+				categoryIDs: deltaProduct.CategoryIDs ?? []
 			});
 		}
 	}

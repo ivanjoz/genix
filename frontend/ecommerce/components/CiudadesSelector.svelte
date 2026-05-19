@@ -15,9 +15,9 @@ import { useCiudadesAPI, type ICiudad } from '$services/services/ciudades.svelte
 
   // svelte-ignore state_referenced_locally
   let form = $state({
-    departamentoID: (saveOn?.departamentoID || "") as string,
-    provinciaID: (saveOn?.provinciaID || "") as string,
-    distritoID: (saveOn?.distritoID || "") as string
+    departamentoID: Number(saveOn?.departamentoID || 0),
+    provinciaID: Number(saveOn?.provinciaID || 0),
+    distritoID: Number(saveOn?.distritoID || 0)
   })
 
   const ciudades = useCiudadesAPI()
@@ -27,19 +27,20 @@ import { useCiudadesAPI, type ICiudad } from '$services/services/ciudades.svelte
 $effect(() => {
   if(!saveOn || !save || !ciudades.ciudadesMap){ return }
 
-  const ciudad = ciudades.ciudadesMap.get(saveOn[save] as string)
+  const ciudad = ciudades.ciudadesMap.get(Number(saveOn[save] || 0))
 
   if(ciudad){
-    if(ciudad.ID.length === 2){
+    // Hierarchy defines the selected level now that ubigeos are stored as numbers.
+    if(ciudad.Hierarchy === 1){
       form.departamentoID = ciudad.ID
-    } else if(ciudad.ID.length === 4){
-      form.departamentoID = ciudad.PadreID
+    } else if(ciudad.Hierarchy === 2){
+      form.departamentoID = ciudad.ParentID
       form.provinciaID = ciudad.ID
     } else {
-      const provincia = ciudades.ciudadesMap.get(ciudad.PadreID)
+      const provincia = ciudades.ciudadesMap.get(ciudad.ParentID)
       if(provincia){
-        form.departamentoID = provincia.PadreID
-        form.provinciaID = ciudad.PadreID
+        form.departamentoID = provincia.ParentID
+        form.provinciaID = ciudad.ParentID
       }
     }
   }
@@ -59,7 +60,7 @@ $effect(() => {
 
   const doSave = () => {
     if(!saveOn || !save){ return }
-    const ciudadID = form.distritoID || form.provinciaID || form.departamentoID || ""
+    const ciudadID = form.distritoID || form.provinciaID || form.departamentoID || 0
     saveOn[save] = ciudadID as never
     if(onChange){ onChange() }
   }
@@ -67,28 +68,28 @@ $effect(() => {
 </script>
 
 <SearchSelect saveOn={form} save="departamentoID" css={css}
-  label={"Departamento"} keyId="ID" keyName="Nombre" required={true}
+  label={"Departamento"} keyId="ID" keyName="Name" required={true}
   options={ciudades.departamentos}
   onChange={e => {
     console.log("departamento::", e)
-    form.distritoID = ""
-    form.provinciaID = ""
+    form.distritoID = 0
+    form.provinciaID = 0
     provincias = ciudades.ciudadHijosMap.get(e?.ID) || []
     distritos = []
     doSave()
   }}
 />
 <SearchSelect saveOn={form} save="provinciaID" css={css}
-  label="Provincia" keyId="ID" keyName="Nombre" required={true}
+  label="Provincia" keyId="ID" keyName="Name" required={true}
   options={provincias}
   onChange={e => {
-    form.distritoID = ""
+    form.distritoID = 0
     distritos = ciudades.ciudadHijosMap.get(e?.ID) || []
     doSave()
   }}
 />
 <SearchSelect saveOn={form} save="distritoID" css={css}
-  label="Distrito" keyId="ID" keyName="Nombre" required={true}
+  label="Distrito" keyId="ID" keyName="Name" required={true}
   options={distritos}
   onChange={() => { doSave() }}
 />

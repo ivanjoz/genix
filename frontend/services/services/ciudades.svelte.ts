@@ -1,16 +1,16 @@
 export interface ICiudad {
-  ID: string
-  Nombre: string
-  PadreID: string
-  Nivel?: number
+  ID: number
+  Name: string
+  ParentID: number
+  Hierarchy: number
 }
 
 export interface ICiudadesResult {
   departamentos: ICiudad[]
   provincias: ICiudad[]
   distritos: ICiudad[]
-  ciudadHijosMap: Map<string,ICiudad[]>
-  ciudadesMap: Map<string,ICiudad>
+  ciudadHijosMap: Map<number,ICiudad[]>
+  ciudadesMap: Map<number,ICiudad>
 }
 
 export const ciudadesService = $state({
@@ -32,17 +32,18 @@ const parseCiudades = (ciudades: ICiudad[]): ICiudadesResult => {
 
   for(const cd of ciudades){
     res.ciudadesMap.set(cd.ID, cd)
-    if(cd.ID.length === 6){ res.distritos.push(cd) }
-    else if(cd.ID.length === 4){ res.provincias.push(cd) }
-    else if(cd.ID.length === 2){ res.departamentos.push(cd) }
-    if(!cd.PadreID){ continue }
+    // Numeric ubigeo IDs keep their hierarchy in Hierarchy instead of padded string length.
+    if(cd.Hierarchy === 3){ res.distritos.push(cd) }
+    else if(cd.Hierarchy === 2){ res.provincias.push(cd) }
+    else if(cd.Hierarchy === 1){ res.departamentos.push(cd) }
+    if(!cd.ParentID){ continue }
 
-    if(!cd.PadreID){ continue }
-    const hijos = res.ciudadHijosMap.get(cd.PadreID)
+    if(!cd.ParentID){ continue }
+    const hijos = res.ciudadHijosMap.get(cd.ParentID)
     if(hijos){
       hijos.push(cd)
     } else {
-      res.ciudadHijosMap.set(cd.PadreID, [cd])
+      res.ciudadHijosMap.set(cd.ParentID, [cd])
     }
   }
   return res

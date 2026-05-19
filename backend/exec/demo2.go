@@ -15,21 +15,21 @@ import (
 )
 
 type InnerStruct struct {
-	Hola  string  `json:"a,omitempty" ms:"h"`
-	Value float32 `json:"b,omitempty" ms:"v"`
-	Hola2 int     `json:"c,omitempty" ms:"c"`
+	Greeting  string  `json:"a,omitempty" ms:"h"`
+	Value     float32 `json:"b,omitempty" ms:"v"`
+	Greeting2 int     `json:"c,omitempty" ms:"c"`
 }
 
 type DemoStruct struct {
 	db.TableStruct[DemoStructTable, DemoStruct]
 	CompanyID   int32    `db:"empresa_id,pk"`
 	ID          int32    `db:"id,pk"`
-	ListaID     int32    `db:"lista_id,view,view.1,view.2"`
-	Nombre      string   `json:",omitempty" db:"nombre"`
+	ListID      int32    `db:"lista_id,view,view.1,view.2"`
+	Name        string   `json:",omitempty" db:"nombre"`
 	Images      []string `json:",omitempty" db:"images"`
-	Descripcion string   `json:",omitempty" db:"descripcion"`
+	Description string   `json:",omitempty" db:"descripcion"`
 	DemoColumn  InnerStruct
-	// Propiedades generales
+	// General properties
 	Status    int8  `json:"ss,omitempty" db:"status,view.1"`
 	Updated   int64 `json:"upd,omitempty" db:"updated,view.2"`
 	UpdatedBy int32 `json:",omitempty" db:"updated_by"`
@@ -39,10 +39,10 @@ type DemoStructTable struct {
 	db.TableStruct[DemoStructTable, DemoStruct]
 	CompanyID   db.Col[DemoStructTable, int32]
 	ID          db.Col[DemoStructTable, int32]
-	ListaID     db.Col[DemoStructTable, int32]
-	Nombre      db.Col[DemoStructTable, string]
+	ListID      db.Col[DemoStructTable, int32]
+	Name        db.Col[DemoStructTable, string]
 	Images      db.ColSlice[DemoStructTable, string]
-	Descripcion db.Col[DemoStructTable, string]
+	Description db.Col[DemoStructTable, string]
 	DemoColumn  db.Col[DemoStructTable, InnerStruct]
 	Status      db.Col[DemoStructTable, int8]
 	Updated     db.Col[DemoStructTable, int64]
@@ -55,9 +55,8 @@ func (e DemoStructTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      []db.Coln{e.ID},
 		Indexes: []db.Index{
-			//{Cols: []db.Coln{e.ListaID_(), e.Status_()}, KeepPart: true},
-			{Type: db.TypeView, Keys: []db.Coln{e.ListaID.Int32(), e.Status.DecimalSize(2)}},
-			{Type: db.TypeView, Keys: []db.Coln{e.ListaID, e.Updated.DecimalSize(10)}},
+			{Type: db.TypeView, Keys: []db.Coln{e.ListID.Int32(), e.Status.DecimalSize(2)}},
+			{Type: db.TypeView, Keys: []db.Coln{e.ListID, e.Updated.DecimalSize(10)}},
 		},
 	}
 }
@@ -69,14 +68,14 @@ func Test38(args *core.ExecArgs) core.FuncResponse {
 		record := DemoStruct{
 			CompanyID:   4,
 			ID:          1,
-			ListaID:     11,
-			Nombre:      "Jhon",
+			ListID:      11,
+			Name:        "Jhon",
 			Images:      []string{"image1", "image2"},
-			Descripcion: "ddd",
+			Description: "ddd",
 			Status:      2,
 			Updated:     123456789,
 			UpdatedBy:   99,
-			DemoColumn:  InnerStruct{Hola: "mundo", Value: 0.11, Hola2: 5555},
+			DemoColumn:  InnerStruct{Greeting: "mundo", Value: 0.11, Greeting2: 5555},
 		}
 
 		// Insertarndo registros
@@ -91,7 +90,7 @@ func Test38(args *core.ExecArgs) core.FuncResponse {
 	fmt.Println("Obteniendo Registros...")
 	recordsGetted := []DemoStruct{}
 	query := db.Query(&recordsGetted)
-	err = query.Exclude(query.ListaID).ID.Equals(1).Exec()
+	err = query.Exclude(query.ListID).ID.Equals(1).Exec()
 	if err != nil {
 		panic(err)
 	}

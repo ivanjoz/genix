@@ -112,7 +112,7 @@ export const getWindow = () => {
 
 export interface ICompanyParams {
   CulqiLlave: string
-  Nombre: string
+  Name: string
   id: number
 }
 

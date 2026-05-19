@@ -7,18 +7,18 @@ import (
 
 type User struct { // DynamoDB + ScyllaDB
 	db.TableStruct[UserTable, User]
-	CompanyID   int32   `json:",omitempty" col:"empresa_id,pk"`
-	ID          int32   `json:",omitempty" col:"id,pk,sk"`
-	User     string  `json:",omitempty" col:"user,index"`
-	Apellidos   string  `json:",omitempty" col:"apellidos"`
-	Nombres     string  `json:",omitempty" col:"nombres"`
-	PerfilesIDs []int32 `json:",omitempty" col:"perfiles_ids"`
+	CompanyID          int32    `json:",omitempty" col:"empresa_id,pk"`
+	ID                 int32    `json:",omitempty" col:"id,pk,sk"`
+	User               string   `json:",omitempty" col:"user,index"`
+	LastName           string   `json:",omitempty" col:"last_name"`
+	FirstName          string   `json:",omitempty" col:"first_name"`
+	ProfileIDs         []int32  `json:",omitempty" col:"profile_ids"`
 	// AccesoID * 10 + Nivel
-	AccesosNivelIDs    []int32  `json:",omitempty" col:"accesos_nivel_ids"`
+	AccessLevelIDs     []int32  `json:",omitempty" col:"access_level_ids"`
 	AccesosComputed    []uint16 `json:",omitempty" col:"accesos_computed"`
 	Email              string   `json:",omitempty" col:"email,index"`
-	Cargo              string   `json:",omitempty" col:"cargo"`
-	DocumentoNro       string   `json:",omitempty" col:"documento_nro"`
+	JobTitle           string   `json:",omitempty" col:"job_title"`
+	DocumentNumber     string   `json:",omitempty" col:"document_number"`
 	PasswordHash       string   `json:",omitempty" col:"password_hash"`
 	Password           string   `json:",omitempty" col:"-"`
 	Created            int32    `json:",omitempty" col:"created"`
@@ -42,15 +42,15 @@ type UserTable struct {
 	db.TableStruct[UserTable, User]
 	ID              db.Col[UserTable, int32]
 	CompanyID       db.Col[UserTable, int32]
-	User         db.Col[UserTable, string]
-	Apellidos       db.Col[UserTable, string]
-	Nombres         db.Col[UserTable, string]
-	PerfilesIDs     db.ColSlice[UserTable, int32] `db:"perfiles_ids"`
-	AccesosNivelIDs db.Col[UserTable, []int32]    `db:"accesos_nivel_ids"`
+	User            db.Col[UserTable, string]
+	LastName        db.Col[UserTable, string]
+	FirstName       db.Col[UserTable, string]
+	ProfileIDs      db.ColSlice[UserTable, int32] `db:"profile_ids"`
+	AccessLevelIDs  db.Col[UserTable, []int32]    `db:"access_level_ids"`
 	AccesosComputed db.Col[UserTable, []uint16]
 	Email           db.Col[UserTable, string]
-	Cargo           db.Col[UserTable, string]
-	DocumentoNro    db.Col[UserTable, string]
+	JobTitle        db.Col[UserTable, string]
+	DocumentNumber  db.Col[UserTable, string]
 	Created         db.Col[UserTable, int32]
 	CreatedBy       db.Col[UserTable, int32]
 	Updated         db.Col[UserTable, int32]
@@ -60,7 +60,7 @@ type UserTable struct {
 
 func (usuarioTable UserTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:             "usuarios",
+		Name:             "users",
 		Partition:        usuarioTable.CompanyID,
 		UseSequences:     true,
 		SaveCacheVersion: true,

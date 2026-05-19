@@ -14,7 +14,7 @@ func GetParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se envió el ID del grupo.")
 	}
 
-	records := []configTypes.Parametros{}
+	records := []configTypes.Parameters{}
 	q := db.Query(&records)
 	err := q.Exclude(q.UpdatedBy).Exec()
 	if err != nil {
@@ -26,7 +26,7 @@ func GetParametros(req *core.HandlerArgs) core.HandlerResponse {
 
 func PostParametros(req *core.HandlerArgs) core.HandlerResponse {
 
-	records := []configTypes.Parametros{}
+	records := []configTypes.Parameters{}
 	err := json.Unmarshal([]byte(*req.Body), &records)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -34,7 +34,7 @@ func PostParametros(req *core.HandlerArgs) core.HandlerResponse {
 
 	groupIDs := core.SliceSet[int32]{}
 	for _, e := range records {
-		groupIDs.AddIf(e.Grupo)
+		groupIDs.AddIf(e.Group)
 	}
 
 	if len(groupIDs.Values) != 1 {

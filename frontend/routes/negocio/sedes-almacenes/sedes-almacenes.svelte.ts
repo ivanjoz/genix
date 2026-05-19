@@ -2,11 +2,11 @@ import { GetHandler, POST } from '$libs/http.svelte';
 
 export interface ISite {
   ID: number,
-  Nombre: string
+  Name: string
   Direccion: string
   Telefono: string
-  Descripcion: string
-  CiudadID: string
+  Description: string
+  CityID: number
   Ciudad: string
   ss: number
   upd: number
@@ -29,9 +29,9 @@ export interface IWarehouseLayout {
 
 export interface IWarehouse {
   ID: number,
-  SedeID: number
-  Nombre: string
-  Descripcion: string
+  SiteID: number
+  Name: string
+  Description: string
   Layout: IWarehouseLayout[]
   ss: number
   upd: number
@@ -84,12 +84,11 @@ export const postAlmacen = (data: IWarehouse) => {
 }
 
 export interface ICityLocation {
-  PaisID: number
+  CountryID: number
 	ID: number
-  CiudadID: number
-  Nombre: string
-  PadreID: number
-  Jerarquia: number
+  Name: string
+  ParentID: number
+  Hierarchy: number
   Departamento?: ICityLocation
   Provincia?: ICityLocation
   upd: number
@@ -124,29 +123,27 @@ export class PaisCiudadesService extends GetHandler {
 		console.log("ciudades", ciudades)
 		
 		for (const e of ciudades) {			
-			e.PadreID = parseInt(e.PadreID as unknown as string)
-			
-      const padre = ciudadesMap.get(e.PadreID)
-			if (e.Jerarquia === 3) { distritos.push(e) }
-			else if (e.Jerarquia === 2) { provincias.push(e) }
-			else if(e.Jerarquia === 1){ departamentos.push(e) }
-			
+      const padre = ciudadesMap.get(e.ParentID)
+			if (e.Hierarchy === 3) { distritos.push(e) }
+			else if (e.Hierarchy === 2) { provincias.push(e) }
+			else if(e.Hierarchy === 1){ departamentos.push(e) }
+
 			if (padre) {
-        if(padre.Jerarquia === 2){ e.Provincia = padre }
-				else if (padre.Jerarquia === 1) {
+        if(padre.Hierarchy === 2){ e.Provincia = padre }
+				else if (padre.Hierarchy === 1) {
 					e.Departamento = padre
 				}
-        if(padre.PadreID && ciudadesMap.has(padre.PadreID)){
-          const padre2 = ciudadesMap.get(padre.PadreID)
-          if(padre2?.Jerarquia === 2){ e.Provincia = padre2 }
-          else if(padre2?.Jerarquia === 1){ e.Departamento = padre2 }
+        if(padre.ParentID && ciudadesMap.has(padre.ParentID)){
+          const padre2 = ciudadesMap.get(padre.ParentID)
+          if(padre2?.Hierarchy === 2){ e.Provincia = padre2 }
+          else if(padre2?.Hierarchy === 1){ e.Departamento = padre2 }
         }
       }
     }
 
     // Build display names
     for(const e of distritos){
-      e._nombre = `${e.Departamento?.Nombre||"-"} ► ${e.Provincia?.Nombre||""} ► ${e.Nombre}`
+      e._nombre = `${e.Departamento?.Name||"-"} ► ${e.Provincia?.Name||""} ► ${e.Name}`
     }
 
     // console.log("distritos:", distritos)

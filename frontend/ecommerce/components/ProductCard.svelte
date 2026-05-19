@@ -13,9 +13,9 @@
 	type ProductCardMode = "vertical" | "horizontal";
 
 	interface IProductoByIDRecord extends IMinimalRecord {
-		Nombre?: string;
-		Precio?: number;
-		PrecioFinal?: number;
+		Name?: string;
+		Price?: number;
+		FinalPrice?: number;
 		Image?: { n?: string; d?: string };
 		Images?: Array<{ n?: string; d?: string }>;
 	}
@@ -56,7 +56,7 @@
 		return ProductsSelectedMap.get(resolvedProduct?.ID)?.cant || 0;
 	});
 	const resolvedProductPriceCents = $derived.by(() => {
-		return resolvedProduct?.PrecioFinal || resolvedProduct?.Precio || 0;
+		return resolvedProduct?.FinalPrice || resolvedProduct?.Price || 0;
 	});
 	const resolvedProductImageName = $derived.by(() => {
 		return resolvedProduct?.Image?.n || resolvedProduct?.Images?.[0]?.n || "";
@@ -136,8 +136,8 @@
 			{/if}
 		</div>
 		<div class="horizontal-body">
-			<div class="horizontal-name" title={resolvedProduct.Nombre || `Producto #${resolvedProductID}`}>
-				{resolvedProduct.Nombre || `Producto #${resolvedProductID}`}
+			<div class="horizontal-name" title={resolvedProduct.Name || `Producto #${resolvedProductID}`}>
+				{resolvedProduct.Name || `Producto #${resolvedProductID}`}
 			</div>
 				<div class="horizontal-footer">
 					{#if useQuantityControls}
@@ -183,7 +183,7 @@
 			/>
 			<div class="vertical-content pb-2">
 				<div class="vertical-name mt-6 mb-4 min-h-26 md:min-h-32 fx-c">
-					{resolvedProduct.Nombre || "???"}
+					{resolvedProduct.Name || "???"}
 				</div>
 				<div class="px-4 ff-bold fs17">s/. {formatN(resolvedProductPriceCents / 100, 2)}</div>
 				<div class="vertical-icon fx-c h-30 w-32">

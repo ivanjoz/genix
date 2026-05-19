@@ -32,7 +32,7 @@ type PostStockAdjustItem struct {
 }
 
 func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
-	// Handler takes absolute target quantities; each item maps to one MovimientoInterno{ReemplazarCantidad:true}.
+	// Handler takes absolute target quantities; each item maps to one InternalMovement{ReemplazarCantidad:true}.
 	items := []PostStockAdjustItem{}
 	if err := json.Unmarshal([]byte(*req.Body), &items); err != nil {
 		return req.MakeErr("Error al deserializar el body:", err)
@@ -41,23 +41,23 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se enviaron registros.")
 	}
 
-	movimientos := make([]logisticsTypes.MovimientoInterno, 0, len(items))
+	movimientos := make([]logisticsTypes.InternalMovement, 0, len(items))
 	for _, item := range items {
 		if item.WarehouseID == 0 || item.ProductID == 0 {
 			return req.MakeErr("Hay un registro sin Almacén-ID o Producto-ID.")
 		}
-		movimientos = append(movimientos, logisticsTypes.MovimientoInterno{
-			ReemplazarCantidad: true,
-			WarehouseID:        item.WarehouseID,
-			ProductID:         item.ProductID,
-			PresentacionID:     item.PresentationID,
-			SerialNumber:       item.SerialNumber,
-			LotID:              item.LotID,
+		movimientos = append(movimientos, logisticsTypes.InternalMovement{
+			ReplaceQuantity: true,
+			WarehouseID:     item.WarehouseID,
+			ProductID:       item.ProductID,
+			PresentationID:  item.PresentationID,
+			SerialNumber:    item.SerialNumber,
+			LotID:           item.LotID,
 			// LotName is the internal field; PostStockAdjustItem exposes it as LotCode on the wire.
 			LotName:     item.LotCode,
 			SupplierID:  item.SupplierID,
-			Cantidad:    item.Quantity,
-			SubCantidad: item.SubQuantity,
+			Quantity:    item.Quantity,
+			SubQuantity: item.SubQuantity,
 		})
 	}
 
@@ -174,11 +174,11 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	switch {
 	case tipo > 0 && warehouseID > 0:
-		// Uses the raw group: Date + Tipo + WarehouseID.
-		query.Tipo.Equals(tipo).WarehouseID.Equals(warehouseID)
+		// Uses the raw group: Date + Type + WarehouseID.
+		query.Type.Equals(tipo).WarehouseID.Equals(warehouseID)
 	case tipo > 0:
-		// Uses the raw group: Date + Tipo.
-		query.Tipo.Equals(tipo)
+		// Uses the raw group: Date + Type.
+		query.Type.Equals(tipo)
 	case warehouseID > 0:
 		// Uses the raw group: Date + WarehouseID.
 		query.WarehouseID.Equals(warehouseID)
@@ -340,7 +340,7 @@ func appendProductStockLastPrice(stock *logisticsTypes.ProductStock, movementQua
 		"stockID", stock.ID, "quantity", movementQuantity, "price", price, "entries", len(stock.LastPricesPrice))
 }
 
-func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.MovimientoInterno) error {
+func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.InternalMovement) error {
 	companyID := req.User.CompanyID
 	userID := req.User.ID
 
@@ -350,17 +350,17 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Movimi
 	defer companyLock.Unlock()
 
 	// Filter out no-ops and validate lot/supplier prerequisites in one pass.
-	activeMovements := make([]*logisticsTypes.MovimientoInterno, 0, len(movimientos))
+	activeMovements := make([]*logisticsTypes.InternalMovement, 0, len(movimientos))
 	for i := range movimientos {
 		mov := &movimientos[i]
-		if mov.Cantidad == 0 && mov.SubCantidad == 0 {
+		if mov.Quantity == 0 && mov.SubQuantity == 0 {
 			continue
 		}
 		if mov.WarehouseID == 0 || mov.ProductID == 0 {
 			return core.Err("Movimiento inválido: falta WarehouseID o ProductID.")
 		}
-		// Outbound (Cantidad < 0) must ship a resolved LotID; name-based lookup is inbound-only.
-		if mov.LotID == 0 && mov.LotName != "" && mov.Cantidad < 0 {
+		// Outbound (Quantity < 0) must ship a resolved LotID; name-based lookup is inbound-only.
+		if mov.LotID == 0 && mov.LotName != "" && mov.Quantity < 0 {
 			return core.Err(fmt.Sprintf("Movimiento con Lote %q sin LotID para salida (product %v, almacén %v).",
 				mov.LotName, mov.ProductID, mov.WarehouseID))
 		}
@@ -382,7 +382,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Movimi
 	stockIDSet := core.SliceSet[int64]{}
 	stockIDsWithDetails := core.SliceSet[int64]{}
 	for i, mov := range activeMovements {
-		id := packProductStockID(mov.WarehouseID, mov.ProductID, mov.PresentacionID)
+		id := packProductStockID(mov.WarehouseID, mov.ProductID, mov.PresentationID)
 		stockIDByMovement[i] = id
 		stockIDSet.Add(id)
 		if mov.HasDetail() {
@@ -452,7 +452,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Movimi
 				CompanyID:      companyID,
 				WarehouseID:    mov.WarehouseID,
 				ProductID:      mov.ProductID,
-				PresentationID: mov.PresentacionID,
+				PresentationID: mov.PresentationID,
 				Created:        updatedTime,
 				CreatedBy:      userID,
 			}
@@ -463,12 +463,12 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Movimi
 			DocumentID:     mov.DocumentID,
 			CompanyID:      companyID,
 			WarehouseID:    mov.WarehouseID,
-			ProductID:     mov.ProductID,
-			PresentacionID: mov.PresentacionID,
+			ProductID:      mov.ProductID,
+			PresentationID: mov.PresentationID,
 			SerialNumber:   mov.SerialNumber,
 			LotID:          mov.LotID,
-			Tipo:           core.Coalesce(mov.Tipo, core.If(mov.Cantidad > 0, int8(1), int8(2))),
-			Date:          dateUnix,
+			Type:           core.Coalesce(mov.Type, core.If(mov.Quantity > 0, int8(1), int8(2))),
+			Date:           dateUnix,
 			Created:        updatedTime,
 			CreatedBy:      userID,
 		}
@@ -491,16 +491,16 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Movimi
 			}
 
 			prevQuantity, prevSubQuantity := detail.Quantity, detail.SubQuantity
-			if mov.ReemplazarCantidad {
-				movement.Quantity = mov.Cantidad - prevQuantity
-				movement.SubQuantity = mov.SubCantidad - prevSubQuantity
-				detail.Quantity = mov.Cantidad
-				detail.SubQuantity = mov.SubCantidad
+			if mov.ReplaceQuantity {
+				movement.Quantity = mov.Quantity - prevQuantity
+				movement.SubQuantity = mov.SubQuantity - prevSubQuantity
+				detail.Quantity = mov.Quantity
+				detail.SubQuantity = mov.SubQuantity
 			} else {
-				movement.Quantity = mov.Cantidad
-				movement.SubQuantity = mov.SubCantidad
-				detail.Quantity = prevQuantity + mov.Cantidad
-				detail.SubQuantity = prevSubQuantity + mov.SubCantidad
+				movement.Quantity = mov.Quantity
+				movement.SubQuantity = mov.SubQuantity
+				detail.Quantity = prevQuantity + mov.Quantity
+				detail.SubQuantity = prevSubQuantity + mov.SubQuantity
 			}
 			// Stamp Updated/UpdatedBy so the partition step recognises this detail as dirty.
 			detail.Updated = updatedTime
@@ -509,16 +509,16 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Movimi
 		} else {
 			// Free bucket: mutate V2.Quantity only, leave DetailQuantity for the final re-sum pass.
 			prevQuantity, prevSubQuantity := stock.Quantity, stock.SubQuantity
-			if mov.ReemplazarCantidad {
-				movement.Quantity = mov.Cantidad - prevQuantity
-				movement.SubQuantity = mov.SubCantidad - prevSubQuantity
-				stock.Quantity = mov.Cantidad
-				stock.SubQuantity = mov.SubCantidad
+			if mov.ReplaceQuantity {
+				movement.Quantity = mov.Quantity - prevQuantity
+				movement.SubQuantity = mov.SubQuantity - prevSubQuantity
+				stock.Quantity = mov.Quantity
+				stock.SubQuantity = mov.SubQuantity
 			} else {
-				movement.Quantity = mov.Cantidad
-				movement.SubQuantity = mov.SubCantidad
-				stock.Quantity = prevQuantity + mov.Cantidad
-				stock.SubQuantity = prevSubQuantity + mov.SubCantidad
+				movement.Quantity = mov.Quantity
+				movement.SubQuantity = mov.SubQuantity
+				stock.Quantity = prevQuantity + mov.Quantity
+				stock.SubQuantity = prevSubQuantity + mov.SubQuantity
 			}
 		}
 
@@ -636,17 +636,17 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Movimi
 	return writeGroup.Wait()
 }
 
-// resolveLotIDsForMovements fills in MovimientoInterno.LotID for inbound movements
+// resolveLotIDsForMovements fills in InternalMovement.LotID for inbound movements
 // that only carry a LotName. It dedups by Hash(today, SupplierID, Name) against
 // ProductStockLot and creates any missing lot rows in one batch.
-func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*logisticsTypes.MovimientoInterno, lotDate int16) error {
+func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*logisticsTypes.InternalMovement, lotDate int16) error {
 	// Group movements by hash so we only touch each unique (date, supplier, name) lot once.
 	type lotLookupKey struct {
 		hash       string
 		supplierID int32
 		name       string
 	}
-	movementsByHash := map[string][]*logisticsTypes.MovimientoInterno{}
+	movementsByHash := map[string][]*logisticsTypes.InternalMovement{}
 	hashToKey := map[string]lotLookupKey{}
 
 	for _, mov := range movements {

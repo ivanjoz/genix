@@ -6,7 +6,7 @@
   import { formatN, formatTime, wordInclude } from '$libs/helpers';
 
   interface IProductLookupRecord {
-    Nombre?: string;
+    Name?: string;
   }
 
   interface IClientLookupRecord {
@@ -70,7 +70,7 @@
 
   function getProductName(productID: number): string {
     // Resolve product labels from the shared records map so both pages use the same lookup source.
-    return productsMap.get(productID)?.Nombre || `Producto #${productID}`;
+    return productsMap.get(productID)?.Name || `Producto #${productID}`;
   }
 
   function getClientName(clientID: number): string {

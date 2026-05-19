@@ -30,11 +30,11 @@ export interface ISaleOrderReportForm {
 }
 
 export const saleOrderStatusOptions = [
-	{ ID: 0, Nombre: 'Todos' },
-	{ ID: 1, Nombre: 'Generado' },
-	{ ID: 2, Nombre: 'Pagado' },
-	{ ID: 3, Nombre: 'Entregado' },
-	{ ID: 4, Nombre: 'Finalizado' },
+	{ ID: 0, Name: 'Todos' },
+	{ ID: 1, Name: 'Generado' },
+	{ ID: 2, Name: 'Pagado' },
+	{ ID: 3, Name: 'Entregado' },
+	{ ID: 4, Name: 'Finalizado' },
 ];
 
 export const querySaleOrderReport = async (filters: ISaleOrderReportForm): Promise<ISaleOrder[]> => {

@@ -2,39 +2,38 @@ package types
 
 import "app/db"
 
-type Parametros struct {
-	db.TableStruct[ParametrosTable, Parametros]
+type Parameters struct {
+	db.TableStruct[ParametersTable, Parameters]
 	CompanyID int32
-	Grupo     int32
+	Group     int32
 	Key       string
-	Valor     string
-	ValorInt  int32
-	Valores   []int32
-	// Propiedades generales
+	Value     string
+	ValueInt  int32
+	Values    []int32
 	Status    int8
 	Updated   int32
 	UpdatedBy int32
 }
 
-type ParametrosTable struct {
-	db.TableStruct[ParametrosTable, Parametros]
-	CompanyID db.Col[ParametrosTable, int32]
-	Grupo     db.Col[ParametrosTable, int32]
-	Key       db.Col[ParametrosTable, string]
-	Valor     db.Col[ParametrosTable, string]
-	ValorInt  db.Col[ParametrosTable, int32]
-	Valores   db.ColSlice[ParametrosTable, int32]
-	Status    db.Col[ParametrosTable, int8]
-	Updated   db.Col[ParametrosTable, int32]
-	UpdatedBy db.Col[ParametrosTable, int32]
+type ParametersTable struct {
+	db.TableStruct[ParametersTable, Parameters]
+	CompanyID db.Col[ParametersTable, int32]
+	Group     db.Col[ParametersTable, int32]
+	Key       db.Col[ParametersTable, string]
+	Value     db.Col[ParametersTable, string]
+	ValueInt  db.Col[ParametersTable, int32]
+	Values    db.ColSlice[ParametersTable, int32]
+	Status    db.Col[ParametersTable, int8]
+	Updated   db.Col[ParametersTable, int32]
+	UpdatedBy db.Col[ParametersTable, int32]
 }
 
-func (e ParametrosTable) GetSchema() db.TableSchema {
+func (e ParametersTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:         "parametros",
+		Name:         "parameters",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         []db.Coln{e.Grupo, e.Key},
+		Keys:         []db.Coln{e.Group, e.Key},
 		Indexes:      []db.Index{},
 	}
 }

@@ -23,7 +23,7 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup.Go(func() error {
 		query := db.Query(&productos).CompanyID.Equals(req.User.CompanyID)
 
-		query.Exclude(query.Stock, query.StockStatus, query.CompanyID, query.Created, query.CreatedBy, query.NombreHash)
+		query.Exclude(query.Stock, query.StockStatus, query.CompanyID, query.Created, query.CreatedBy, query.NameHash)
 		
 		if updated > 0 {
 			query.Updated.GreaterThan(updated)
@@ -73,48 +73,48 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	// SelfParse each product to populate NombreHash and fail fast on duplicate names in this payload.
 	for i := range productos {
 		e := &productos[i]
-		if len(e.Nombre) < 4 {
+		if len(e.Name) < 4 {
 			return req.MakeErr("Faltan propiedades de en el product.")
 		}
 		// Preserve incoming ID so frontend can map TempID -> ID after merge/upsert.
 		e.TempID = e.ID
 		e.CompanyID = req.User.CompanyID
 		e.SelfParse()
-		if previousProduct, duplicate := nameHashToName[e.NombreHash]; duplicate {
-			return req.MakeErr(fmt.Sprintf("Hay nombres duplicados en la solicitud: %s y %s", previousProduct.Nombre, e.Nombre))
+		if previousProduct, duplicate := nameHashToName[e.NameHash]; duplicate {
+			return req.MakeErr(fmt.Sprintf("Hay nombres duplicados en la solicitud: %s y %s", previousProduct.Name, e.Name))
 		}
-		nameHashToName[e.NombreHash] = e
+		nameHashToName[e.NameHash] = e
 	}
 
-	// Group existing records by NombreHash so we can check active collisions and reuse inactive IDs.
+	// Group existing records by NameHash so we can check active collisions and reuse inactive IDs.
 	existingProductsByHash := make(map[int32][]businessTypes.Product, len(nameHashToName))
-	nombreHashesToValidate := make([]int32, 0, len(nameHashToName))
-	for nombreHash := range nameHashToName {
-		nombreHashesToValidate = append(nombreHashesToValidate, nombreHash)
+	nameHashesToValidate := make([]int32, 0, len(nameHashToName))
+	for nameHash := range nameHashToName {
+		nameHashesToValidate = append(nameHashesToValidate, nameHash)
 	}
 
 	existingProducts := []businessTypes.Product{}
 	query := db.Query(&existingProducts)
-	query.Select(query.NombreHash, query.ID, query.Status).
+	query.Select(query.NameHash, query.ID, query.Status).
 		CompanyID.Equals(req.User.CompanyID).
-		NombreHash.In(nombreHashesToValidate...).AllowFilter()
+		NameHash.In(nameHashesToValidate...).AllowFilter()
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr(fmt.Sprintf("Error al validar los nombres de productos: %v", err))
 	}
 
 	for _, existingProduct := range existingProducts {
-		existingProductsByHash[existingProduct.NombreHash] = append(
-			existingProductsByHash[existingProduct.NombreHash], existingProduct)
+		existingProductsByHash[existingProduct.NameHash] = append(
+			existingProductsByHash[existingProduct.NameHash], existingProduct)
 	}
 
 	// Enforce name uniqueness across the database and reassign inactive IDs when needed.
 	for i := range productos {
 		currentProduct := &productos[i]
-		if existingProducts, found := existingProductsByHash[currentProduct.NombreHash]; found {
+		if existingProducts, found := existingProductsByHash[currentProduct.NameHash]; found {
 			for _, candidate := range existingProducts {
 				if candidate.Status > 0 && candidate.ID != currentProduct.ID {
-					return req.MakeErr(fmt.Sprintf(`Ya existe un product activo con el nombre "%s". ID=%v`, currentProduct.Nombre, candidate.ID))
+					return req.MakeErr(fmt.Sprintf(`Ya existe un product activo con el nombre "%s". ID=%v`, currentProduct.Name, candidate.ID))
 				}
 			}
 			if currentProduct.ID == 0 {
@@ -137,7 +137,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 		presentacionMaxID := int16(0)
 
 		if current != nil {
-			for _, presentacionActual := range current.Presentaciones {
+			for _, presentacionActual := range current.Presentations {
 				presentacionesNameMap[core.Concatn(presentacionActual.AtributoID, strings.ToLower(presentacionActual.Name))] = presentacionActual
 				if presentacionActual.ID > presentacionMaxID {
 					presentacionMaxID = presentacionActual.ID
@@ -145,7 +145,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 			}
 		}
 
-		for _, presentacionNueva := range incoming.Presentaciones {
+		for _, presentacionNueva := range incoming.Presentations {
 			presentacionName := core.Concatn(presentacionNueva.AtributoID, strings.ToLower(presentacionNueva.Name))
 			if current, ok := presentacionesNameMap[presentacionName]; ok && presentacionNueva.ID != 0 {
 				presentacionNueva.ID = current.ID
@@ -165,7 +165,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 			}
 		}
 
-		incoming.Presentaciones = core.MapToSliceT(presentacionesMap)
+		incoming.Presentations = core.MapToSliceT(presentacionesMap)
 	}
 
 	t := businessTypes.ProductTable{}
@@ -173,15 +173,15 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Merge resolves insert/update per primary key and applies only required writes.
 	err := db.Merge(&productos,
-		[]db.Coln{t.Stock, t.StockReservado, t.StockStatus, t.CategoriasConStock, t.Created, t.CreatedBy, t.Images},
+		[]db.Coln{t.Stock, t.ReservedStock, t.StockStatus, t.CategoriesWithStock, t.Created, t.CreatedBy, t.Images},
 		func(prev, current *businessTypes.Product) bool {
 			current.CompanyID = req.User.CompanyID
 			current.Created = prev.Created
 			current.CreatedBy = prev.CreatedBy
 			current.Stock = prev.Stock
-			current.StockReservado = prev.StockReservado
+			current.ReservedStock = prev.ReservedStock
 			current.StockStatus = prev.StockStatus
-			current.CategoriasConStock = prev.CategoriasConStock
+			current.CategoriesWithStock = prev.CategoriesWithStock
 			current.Images = prev.Images
 			current.NameUpdated = prev.NameUpdated
 			buildPresentaciones(prev, current)
@@ -192,7 +192,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 			comparableCurrent.UpdatedBy = prev.UpdatedBy
 
 			// NameUpdated es para el delta si se han actualizado los nombres
-			if current.Nombre != prev.Nombre || current.MarcaID != prev.MarcaID || !slices.Equal(current.CategoriasIDs, prev.CategoriasIDs) {
+			if current.Name != prev.Name || current.BrandID != prev.BrandID || !slices.Equal(current.CategoryIDs, prev.CategoryIDs) {
 				current.NameUpdated = sunixTime
 			}
 
@@ -269,7 +269,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 	addImage := func() {
 		response["imageName"] = "img-productos/" + name
 
-		pi := businessTypes.ProductImage{Name: name, Descripcion: image.Description}
+		pi := businessTypes.ProductImage{Name: name, Description: image.Description}
 		product.Images = append([]businessTypes.ProductImage{pi}, product.Images...)
 	}
 
@@ -343,11 +343,11 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup.Go(func() error {
 		query := db.Query(&productos)
 		q1 := db.Table[businessTypes.Product]()
-		query.Select(q1.ID, q1.Nombre, q1.Descripcion, q1.Precio, q1.Descuento, q1.PrecioFinal, q1.Images, q1.Stock, q1.CategoriasIDs).
+		query.Select(q1.ID, q1.Name, q1.Description, q1.Price, q1.Discount, q1.FinalPrice, q1.Images, q1.Stock, q1.CategoryIDs).
 			CompanyID.Equals(companyID).
 			StockStatus.Equals(1)
 		if categoriaID > 0 {
-			query.CategoriasIDs.Contains(categoriaID)
+			query.CategoryIDs.Contains(categoriaID)
 		}
 		err := query.Exec()
 		if err != nil {
@@ -359,9 +359,9 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup.Go(func() error {
 		query := db.Query(&categorias)
 		q1 := db.Table[businessTypes.SharedListRecord]()
-		query.Select(q1.ID, q1.Nombre, q1.Descripcion).
+		query.Select(q1.ID, q1.Name, q1.Description).
 			CompanyID.Equals(companyID).
-			ListaID.Equals(1).
+			ListID.Equals(1).
 			Status.Equals(1)
 		err := query.Exec()
 		if err != nil {

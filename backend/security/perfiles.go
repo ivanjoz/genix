@@ -59,7 +59,7 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	if isExistingPerfil {
 		affectedUsers := []coretypes.User{}
 		affectedUsersQuery := db.Query(&affectedUsers)
-		affectedUsersQuery.CompanyID.Equals(req.User.CompanyID).PerfilesIDs.Contains(body.ID)
+		affectedUsersQuery.CompanyID.Equals(req.User.CompanyID).ProfileIDs.Contains(body.ID)
 		if err = affectedUsersQuery.AllowFilter().Exec(); err != nil {
 			return req.MakeErr("Error al obtener los usuarios afectados por el profile.", err)
 		}
@@ -67,12 +67,12 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 		core.Log("PostPerfiles:: usuarios afectados", len(affectedUsers), "profile", body.ID)
 
 		if len(affectedUsers) > 0 {
-			allAffectedPerfilesIDs := make([]int32, 0, len(affectedUsers)*2)
+			allAffectedProfileIDs := make([]int32, 0, len(affectedUsers)*2)
 			for _, affectedUser := range affectedUsers {
-				allAffectedPerfilesIDs = append(allAffectedPerfilesIDs, affectedUser.PerfilesIDs...)
+				allAffectedProfileIDs = append(allAffectedProfileIDs, affectedUser.ProfileIDs...)
 			}
 
-			perfilesByID, perfilesErr := getPerfilesMapByIDs(req.User.CompanyID, allAffectedPerfilesIDs)
+			perfilesByID, perfilesErr := getPerfilesMapByIDs(req.User.CompanyID, allAffectedProfileIDs)
 			if perfilesErr != nil {
 				return req.MakeErr("Error al obtener los perfiles de los usuarios afectados.", perfilesErr)
 			}
@@ -84,7 +84,7 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 
 			for userIndex := range affectedUsers {
 				affectedUser := &affectedUsers[userIndex]
-				accesosComputed, accessErr := buildAccesosComputedFromPerfiles(perfilesByID, affectedUser.PerfilesIDs)
+				accesosComputed, accessErr := buildAccesosComputedFromPerfiles(perfilesByID, affectedUser.ProfileIDs)
 				if accessErr != nil {
 					return req.MakeErr("Error al recomputar los accesos del user afectado.", accessErr)
 				}

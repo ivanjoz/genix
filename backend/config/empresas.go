@@ -16,7 +16,7 @@ func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	if len(body.Email) < 4 || len(body.Nombre) < 5 {
+	if len(body.Email) < 4 || len(body.Name) < 5 {
 		return req.MakeErr("Faltan parámetros para la company a crear/actualizar.")
 	}
 
@@ -74,8 +74,8 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	if len(record.Nombre) == 0 || len(record.RUC) == 0 ||
-		len(record.RazonSocial) == 0 || len(record.Email) == 0 {
+	if len(record.Name) == 0 || len(record.RUC) == 0 ||
+		len(record.LegalName) == 0 || len(record.Email) == 0 {
 		return req.MakeErr("Falta alguno de los siguiente parámetros: Nombre, Razon-Social, RUC, Email.")
 	}
 
@@ -102,8 +102,8 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 	// Save the public company file used by ecommerce/public clients.
 	empresaPublic := types.CompanyPub{
 		ID:            record.ID,
-		Nombre:        record.Nombre,
-		CulqiLlave:    record.CulqiConfig.LlavePubDev,
+		Name:          record.Name,
+		CulqiLlave:    record.CulqiConfig.PubKeyDev,
 		CulqiRsaKey:   record.CulqiConfig.RsaKey,
 		CulqiRsaKeyID: record.CulqiConfig.RsaKeyID,
 	}

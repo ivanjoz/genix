@@ -21,7 +21,7 @@ const { Loading } = pkg
   async function saveEmpresa(isDelete?: boolean) {
     const form = empresaForm
 
-    if ((form.Nombre?.length || 0) < 3) {
+    if ((form.Name?.length || 0) < 3) {
       Notify.failure("El nombre de la empresa debe tener al menos 3 caracteres.")
       return
     }
@@ -67,11 +67,11 @@ const { Loading } = pkg
       header: "Nombre",
       highlight: true,
       css: "px-6 c-blue",
-      getValue: e => e.Nombre
+      getValue: e => e.Name
     },
     {
       header: "Razón Social",
-      getValue: e => e.RazonSocial
+      getValue: e => e.LegalName
     },
     {
       header: "RUC",
@@ -122,7 +122,7 @@ const { Loading } = pkg
       css="w-full"
       maxHeight="calc(80vh - 13rem)"
       filterText={filterText}
-      getFilterContent={e => [e.Nombre, e.RazonSocial, e.RUC, e.Email].filter(x => x).join(" ").toLowerCase()}
+      getFilterContent={e => [e.Name, e.LegalName, e.RUC, e.Email].filter(x => x).join(" ").toLowerCase()}
     >
     </VTable>
   </div>
@@ -138,14 +138,14 @@ const { Loading } = pkg
     <div class="grid grid-cols-24 gap-10 p-6" aria-label="Company form with name, RUC, email, phone, representative, city, and address">
       <Input
         bind:saveOn={empresaForm}
-        save="Nombre"
+        save="Name"
         css="col-span-24 md:col-span-12"
         label="Nombre"
         required={true}
       />
       <Input
         bind:saveOn={empresaForm}
-        save="RazonSocial"
+        save="LegalName"
         css="col-span-24 md:col-span-12"
         label="Razón Social"
       />

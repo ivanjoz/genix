@@ -9,7 +9,7 @@ export interface IProductProperty {
 }
 
 export interface IProductProperties {
-  ID: number, Nombre: string, Options: IProductProperty[], Status: number
+  ID: number, Name: string, Options: IProductProperty[], Status: number
 }
 
 export interface IProductoImage {
@@ -19,24 +19,24 @@ export interface IProductoImage {
 
 export interface IProduct {
   ID: number,
-  Nombre: string
-  Descripcion: string
-  Precio?: number
-  Descuento?: number
-  PrecioFinal?: number
+  Name: string
+  Description: string
+  Price?: number
+  Discount?: number
+  FinalPrice?: number
   ContentHTML?: string
-  Propiedades?: IProductProperties[]
+  Properties?: IProductProperties[]
   Peso?: number
   Volumen?: number
-  SbnCantidad?: number
-  SbnUnidad?: string
-  SbnPrecio?: number
-  SbnDescuento?: number
-  SbnPreciFinal?: number
+  SbuQuantity?: number
+  SbuUnit?: string
+  SbuPrice?: number
+  SbuDiscount?: number
+  SbuFinalPrice?: number
   Images?: IProductoImage[]
 	Image?: IProductoImage
-  MarcaID?: number
-  CategoriasIDs?: number[]
+  BrandID?: number
+  CategoryIDs?: number[]
   Stock?: { a /* almacen */: number, c /* cantidad */: number }[]
   ss: number
   upd: number
@@ -46,8 +46,8 @@ export interface IProduct {
 
 export interface IProductCategory {
   ID: number,
-  Descripcion: string,
-  Nombre: string,
+  Description: string,
+  Name: string,
 }
 
 export const productosServiceState = $state({
@@ -101,8 +101,8 @@ export const getProductos = async (categoriasIDs?: number[]): Promise<IProductsR
         // Construir el mapa de productos por categoría
         const productosByCategoryMap = new Map<number, IProduct[]>()
         for (const producto of res.productos || []) {
-          if (producto.CategoriasIDs) {
-            for (const categoriaId of producto.CategoriasIDs) {
+          if (producto.CategoryIDs) {
+            for (const categoriaId of producto.CategoryIDs) {
               if (!productosByCategoryMap.has(categoriaId)) {
                 productosByCategoryMap.set(categoriaId, [])
               }

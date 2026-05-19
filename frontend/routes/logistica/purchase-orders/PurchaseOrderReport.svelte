@@ -42,11 +42,11 @@ const PAY_PURCHASE_ORDER_MODAL_ID = 32
 
 // Patch sent to PUT /purchase-orders?action=2; ProviderID is read-only in edit mode but kept for the form display.
 let editForm = $state<Partial<IPurchaseOrder>>({})
-// Payment form for PUT /purchase-orders?action=3. Monto is stored in cents (Input baseDecimals=2 handles the display).
-let payForm = $state({ CajaID: 0, Monto: 0 })
-// Live preview of the debt that will remain after the current Monto is applied; recalculates as the user types.
+// Payment form for PUT /purchase-orders?action=3. Amount is stored in cents (Input baseDecimals=2 handles the display).
+let payForm = $state({ CashBankID: 0, Amount: 0 })
+// Live preview of the debt that will remain after the current Amount is applied; recalculates as the user types.
 const remainingDebtAfterPayment = $derived(
-  Math.max((selectedPurchaseOrder?.DebtAmount || 0) - (payForm.Monto || 0), 0),
+  Math.max((selectedPurchaseOrder?.DebtAmount || 0) - (payForm.Amount || 0), 0),
 )
 
 const getCurrentUnixDay = (): number => Math.floor(Date.now() / (1000 * 60 * 60 * 24))
@@ -118,12 +118,12 @@ const getOrderLayerTitle = (purchaseOrder: IPurchaseOrder | null): string => {
 
 const resolvePresentationName = (productRecord: IProduct | undefined, presentationID: number): string => {
   if (!productRecord || !presentationID) { return '' }
-  return productRecord.Presentaciones?.find((presentation) => presentation.id === presentationID)?.nm || ''
+  return productRecord.Presentations?.find((presentation) => presentation.id === presentationID)?.nm || ''
 }
 
 const resolveSku = (productRecord: IProduct | undefined, presentationID: number): string => {
   if (!productRecord) { return '' }
-  const presentationSku = productRecord.Presentaciones?.find((presentation) => presentation.id === presentationID)?.sk || ''
+  const presentationSku = productRecord.Presentations?.find((presentation) => presentation.id === presentationID)?.sk || ''
   return presentationSku || productRecord.SKU || ''
 }
 
@@ -139,7 +139,7 @@ const buildDetailRows = (purchaseOrder: IPurchaseOrder): IPurchaseOrderDetailRow
     const quantity = Number(quantities[detailPosition] || 0)
     const unitPrice = Number(prices[detailPosition] || 0)
     const productRecord = productosService.recordsMap.get(productID)
-    const productName = productRecord?.Nombre || `Producto #${productID}`
+    const productName = productRecord?.Name || `Producto #${productID}`
 
     // The report can be opened from partially synced caches, so each row must survive unresolved products.
     return {
@@ -245,8 +245,8 @@ const openPayPurchaseOrderModal = () => {
 
   // Monto starts at 0 so the user explicitly types the amount; "Deuda pendiente" reflects the order's full debt.
   payForm = {
-    CajaID: cajasService.Cajas[0]?.ID || 0,
-    Monto: 0,
+    CashBankID: cajasService.Cajas[0]?.ID || 0,
+    Amount: 0,
   }
   Core.openModal(PAY_PURCHASE_ORDER_MODAL_ID)
 }
@@ -254,16 +254,16 @@ const openPayPurchaseOrderModal = () => {
 // Submits the payment: backend creates the caja movimiento (Tipo=6) and decrements DebtAmount atomically.
 const submitPurchaseOrderPayment = async () => {
   if (!selectedPurchaseOrder) { return }
-  if (payForm.CajaID <= 0) {
+  if (payForm.CashBankID <= 0) {
     Notify.failure('Seleccione una caja.')
     return
   }
   const remainingDebt = selectedPurchaseOrder.DebtAmount || 0
-  if (payForm.Monto <= 0) {
+  if (payForm.Amount <= 0) {
     Notify.failure('Ingrese un monto mayor a 0.')
     return
   }
-  if (payForm.Monto > remainingDebt) {
+  if (payForm.Amount > remainingDebt) {
     Notify.failure('El monto excede la deuda pendiente.')
     return
   }
@@ -272,17 +272,17 @@ const submitPurchaseOrderPayment = async () => {
   Loading.standard('Registrando pago...')
   try {
     const updated = await updatePurchaseOrder(orderID, PurchaseOrderAction.PAY, {
-      CajaID: payForm.CajaID,
-      Monto: payForm.Monto,
+      CashBankID: payForm.CashBankID,
+      Amount: payForm.Amount,
     })
     // Sync the in-memory record so the layer/table reflect the new debt without a round-trip.
-    const newDebt = updated?.DebtAmount ?? (remainingDebt - payForm.Monto)
+    const newDebt = updated?.DebtAmount ?? (remainingDebt - payForm.Amount)
     selectedPurchaseOrder.DebtAmount = newDebt
     const selectedRecord = visibleRecords.find((r) => r.ID === orderID)
     if (selectedRecord) { selectedRecord.DebtAmount = newDebt }
 
     rowRerender?.()
-    Notify.success(`Pago de ${formatN(payForm.Monto / 100, 2)} registrado en la orden Nº ${orderID}.`)
+    Notify.success(`Pago de ${formatN(payForm.Amount / 100, 2)} registrado en la orden Nº ${orderID}.`)
     Core.closeModal(PAY_PURCHASE_ORDER_MODAL_ID)
   } catch (error) {
     console.error('[purchase-orders-report] pay error', { orderID, error })
@@ -400,10 +400,10 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
     width: '110px',
     align: 'center',
     // ss=2 (Completada) → green, ss=1 (Pendiente) → amber, ss=0 (Cancelada) → red.
-    getValue: (r) => purchaseOrderStatusOptions.find((s) => s.ID === (r.ss || 0))?.Nombre || '',
+    getValue: (r) => purchaseOrderStatusOptions.find((s) => s.ID === (r.ss || 0))?.Name || '',
     render: (r) => {
       const status = r.ss || 0
-      const name = purchaseOrderStatusOptions.find((s) => s.ID === status)?.Nombre || '—'
+      const name = purchaseOrderStatusOptions.find((s) => s.ID === status)?.Name || '—'
       const palette =
         status === PurchaseOrderStatus.FULFILLED ? 'bg-green-50 text-green-700 border-green-200' :
         status === PurchaseOrderStatus.PENDING ? 'bg-amber-50 text-amber-700 border-amber-200' :
@@ -518,7 +518,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
             label="Producto"
             optionsCss="w-480"
             keyId="ID"
-            keyName="Nombre"
+            keyName="Name"
             options={productosService.records}
             placeholder=""
           />
@@ -528,7 +528,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
             css="col-span-12"
             label="Estado"
             keyId="ID"
-            keyName="Nombre"
+            keyName="Name"
             options={purchaseOrderStatusOptions}
             placeholder=""
           />
@@ -567,12 +567,12 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
           value4={reportForm.productID}
           getContent4={(productID) =>
             productID
-              ? productosService.recordsMap.get(Number(productID))?.Nombre || `Producto #${productID}`
+              ? productosService.recordsMap.get(Number(productID))?.Name || `Producto #${productID}`
               : 'Todos'}
           label5="Estado"
           value5={reportForm.status}
           getContent5={(statusID) =>
-            purchaseOrderStatusOptions.find((s) => s.ID === Number(statusID))?.Nombre || 'Todos'}
+            purchaseOrderStatusOptions.find((s) => s.ID === Number(statusID))?.Name || 'Todos'}
         />
       {/if}
     </div>
@@ -655,7 +655,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
           <LabelText
             css="col-span-4"
             label="Estado"
-            text={purchaseOrderStatusOptions.find((status) => status.ID === (selectedPurchaseOrder?.ss || 0))?.Nombre || 'Desconocido'}
+            text={purchaseOrderStatusOptions.find((s) => s.ID === (selectedPurchaseOrder?.ss || 0))?.Name || 'Desconocido'}
           />
           <LabelText
             css="col-span-6"
@@ -763,10 +763,10 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
         css="col-span-2"
         label="Caja"
         keyId="ID"
-        keyName="Nombre"
+        keyName="Name"
         options={cajasService.Cajas}
-        selected={payForm.CajaID}
-        onChange={(caja) => { payForm.CajaID = caja?.ID || 0 }}
+        selected={payForm.CashBankID}
+        onChange={(caja) => { payForm.CashBankID = caja?.ID || 0 }}
       />
       <Input
         css="col-span-1"
@@ -775,7 +775,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
         type="number"
         baseDecimals={2}
         bind:saveOn={payForm}
-        save="Monto"
+        save="Amount"
       />
       <!-- Gray box mirrors the visual weight of the Input next to it; recalculates as the user types Monto.
            The remaining amount turns red while it is still > 0 to highlight that the debt is not fully covered. -->

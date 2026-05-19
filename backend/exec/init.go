@@ -1,18 +1,19 @@
 package exec
 
 import (
+	businessTypes "app/business/types"
 	"app/cloud"
 	configTypes "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	businessTypes "app/business/types"
 	securityTypes "app/security/types"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 func ConfigInit(args *core.ExecArgs) core.FuncResponse {
@@ -20,14 +21,14 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	if len(core.Env.ADMIN_PASSWORD) == 0 || len(core.Env.SECRET_PHRASE) == 0 {
 		panic("No se especificado el ADMIN_PASSWORD y el SECRET_PHRASE en credentials.json")
 	}
-	
+
 	// Bootstrap ORM internal tables before any ScyllaDB seed writes depend on them.
 	if err := db.Init(); err != nil {
 		panic("Error al inicializar las tablas internas del ORM. " + err.Error())
 	}
 
 	DeployDatabaseSchemas(args)
-	
+
 	if err := cloud.Init[configTypes.Company](); err != nil {
 		panic("Error al inicializar la tabla cloud de empresas. " + err.Error())
 	}
@@ -43,27 +44,27 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	passwordHash := core.FnvHashString64(password, -1, 20)
 	empresas := []configTypes.Company{
 		{
-			ID:          1,
-			Nombre:      "Principal",
-			RazonSocial: "Principal",
-			RUC:         "11000000000",
-			Updated:     seedTimestamp,
+			ID:        1,
+			Name:      "Principal",
+			LegalName: "Principal",
+			RUC:       "11000000000",
+			Updated:   seedTimestamp,
 		},
 		{
-			ID:          2,
-			Nombre:      "Test",
-			RazonSocial: "Test",
-			RUC:         "12000000000",
-			Updated:     seedTimestamp,
+			ID:        2,
+			Name:      "Test",
+			LegalName: "Test",
+			RUC:       "12000000000",
+			Updated:   seedTimestamp,
 		},
 	}
 	usuarios := []coreTypes.User{
 		{
 			ID:           1,
 			CompanyID:    1,
-			User:      "admin",
-			Nombres:      "admin",
-			Apellidos:    "root",
+			User:         "admin",
+			FirstName:    "admin",
+			LastName:     "root",
 			PasswordHash: passwordHash,
 			Status:       1,
 			Created:      seedTimestamp,
@@ -72,9 +73,9 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 		{
 			ID:           1,
 			CompanyID:    2,
-			User:      "system",
-			Nombres:      "system",
-			Apellidos:    "demo",
+			User:         "system",
+			FirstName:    "system",
+			LastName:     "demo",
 			PasswordHash: passwordHash,
 			Status:       1,
 			Created:      seedTimestamp,
@@ -129,16 +130,28 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 		panic(err)
 	}
 
-	recordsMap := map[string]businessTypes.CityLocation{}
+	recordsMap := map[int32]businessTypes.CityLocation{}
 
 	addRecords := func(id, padreID, nombre string, jerarquia int8) {
-		if _, ok := recordsMap[id]; !ok {
-			recordsMap[id] = businessTypes.CityLocation{
-				PaisID:    604,
-				CiudadID:  id,
-				PadreID:   padreID,
-				Nombre:    nombre,
-				Jerarquia: jerarquia,
+		cityID, err := strconv.ParseInt(id, 10, 32)
+		if err != nil {
+			panic("ubigeo inválido: " + id)
+		}
+		parentID := int64(0)
+		if padreID != "" {
+			parentID, err = strconv.ParseInt(padreID, 10, 32)
+			if err != nil {
+				panic("ubigeo padre inválido: " + padreID)
+			}
+		}
+		cityID32 := int32(cityID)
+		if _, ok := recordsMap[cityID32]; !ok {
+			recordsMap[cityID32] = businessTypes.CityLocation{
+				ID:        cityID32,
+				CountryID: 604,
+				ParentID:  int32(parentID),
+				Name:      nombre,
+				Hierarchy: jerarquia,
 				Updated:   core.SUnixTime(),
 			}
 		}
@@ -181,8 +194,8 @@ func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 	// ciudades de Peru
 	ciudades := []businessTypes.CityLocation{}
 	q1 := db.Query(&ciudades)
-	err := q1.Select(q1.Nombre, q1.CiudadID, q1.PadreID).
-		PaisID.Equals(604).Exec()
+	err := q1.Select(q1.ID, q1.Name, q1.ParentID, q1.Hierarchy).
+		CountryID.Equals(604).Exec()
 
 	if err != nil {
 		panic(err)

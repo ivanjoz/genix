@@ -168,7 +168,7 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 		CompanyID.Equals(req.User.CompanyID).
 		Date.GreaterEqual(movimientosFecha)
 
-	if err := query.GroupBy(query.Date, query.ProductID, query.Tipo, query.Quantity.Sum()).Exec(); err != nil {
+	if err := query.GroupBy(query.Date, query.ProductID, query.Type, query.Quantity.Sum()).Exec(); err != nil {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)
 	}
 

@@ -71,28 +71,28 @@ import { formatN } from '$libs/helpers';
       header: "Tipo Mov.",
       headerCss: "w-160",
       css: "px-6",
-      getValue: e => cajaMovimientoTiposMap.get(e.Tipo)?.name || ""
+      getValue: e => cajaMovimientoTiposMap.get(e.Type)?.name || ""
     },
     {
       header: "Monto",
       headerCss: "w-120",
       css: "ff-mono text-right px-6",
       render: e => {
-        const cssClass = e.Monto < 0 ? "text-red-500" : ""
-        return `<span class="${cssClass}">${formatN(e.Monto / 100, 2)}</span>`
+        const cssClass = e.Amount < 0 ? "text-red-500" : ""
+        return `<span class="${cssClass}">${formatN(e.Amount / 100, 2)}</span>`
       }
     },
     {
       header: "Saldo Final",
       headerCss: "w-120",
       css: "ff-mono text-right px-6",
-      getValue: e => formatN(e.SaldoFinal / 100, 2) as string
+      getValue: e => formatN(e.FinalAmount / 100, 2) as string
     },
     {
       header: "Nº Documento",
       headerCss: "w-140",
       css: "text-center px-6",
-      getValue: e => e.DocumentoID ? String(e.DocumentoID) : ""
+      getValue: e => e.DocumentID ? String(e.DocumentID) : ""
     },
     {
       // id triggers cellRenderer snippet so we can mount RecordByIDText per row.
@@ -114,7 +114,7 @@ import { formatN } from '$libs/helpers';
         css="w-240 mr-12"
         label="Cajas & Bancos"
         keyId="ID"
-        keyName="Nombre"
+        keyName="Name"
         options={cajas?.Cajas || []}
         placeholder=""
         required={true}
@@ -167,7 +167,7 @@ import { formatN } from '$libs/helpers';
     maxHeight="calc(100vh - 8rem - 12px)"
     filterText={filterText}
     getFilterContent={e => {
-      const movTipo = cajaMovimientoTiposMap.get(e.Tipo)?.name || ""
+      const movTipo = cajaMovimientoTiposMap.get(e.Type)?.name || ""
       return movTipo.toLowerCase()
     }}
     useFilterCache={true}

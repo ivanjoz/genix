@@ -168,7 +168,7 @@
       productOptions = productIDs
         .map((productID) => productosService.recordsMap.get(productID))
         .filter((productRecord): productRecord is IProduct => Boolean(productRecord))
-        .sort((leftProduct, rightProduct) => leftProduct.Nombre.localeCompare(rightProduct.Nombre));
+        .sort((leftProduct, rightProduct) => leftProduct.Name.localeCompare(rightProduct.Name));
 
       console.debug('[sale_orders_status] sale orders ready', {
         saleOrdersCount: fetchedSaleOrders.length,
@@ -222,13 +222,13 @@
     if (!presentationID) { return ''; }
 
     const productRecord = productosService.recordsMap.get(productID);
-    const presentationRecord = productRecord?.Presentaciones?.find((presentationOption: IProductPresentation) => presentationOption.id === presentationID);
+    const presentationRecord = productRecord?.Presentations?.find((presentationOption: IProductPresentation) => presentationOption.id === presentationID);
     return presentationRecord?.nm || `Presentación ${presentationID}`;
   }
 
   function getSaleOrderDetailProductName(productID: number, presentationID: number): string {
     const productRecord = productosService.recordsMap.get(productID);
-    const productName = productRecord?.Nombre || `Producto #${productID}`;
+    const productName = productRecord?.Name || `Producto #${productID}`;
     const presentationName = getProductPresentationName(productID, presentationID);
 
     if (!presentationName) { return productName; }
@@ -261,7 +261,7 @@
       saleOrderDetailLines.push({
         detailPosition,
         productID,
-        productBaseName: productosService.recordsMap.get(productID)?.Nombre || `Producto #${productID}`,
+        productBaseName: productosService.recordsMap.get(productID)?.Name || `Producto #${productID}`,
         productName: getSaleOrderDetailProductName(productID, presentationID),
         presentationName: getProductPresentationName(productID, presentationID),
         sku,
@@ -284,12 +284,12 @@
 
   function getCajaName(cajaID: number): string {
     if (!cajaID) { return '-'; }
-    return cajasService.CajasMap.get(cajaID)?.Nombre || `Caja #${cajaID}`;
+    return cajasService.CajasMap.get(cajaID)?.Name || `Caja #${cajaID}`;
   }
 
   function getAlmacenName(almacenID: number): string {
     if (!almacenID) { return '-'; }
-    return almacenesService.AlmacenesMap.get(almacenID)?.Nombre || `Almacén #${almacenID}`;
+    return almacenesService.AlmacenesMap.get(almacenID)?.Name || `Almacén #${almacenID}`;
   }
 
   function formatActionTime(unixTime: number): string {
@@ -545,7 +545,7 @@
           css="col-span-14 md:col-span-9"
           label=""
           keyId="ID"
-          keyName="Nombre" placeholder="PRODUCTO ::"
+          keyName="Name" placeholder="PRODUCTO ::"
           options={productOptions}
         />
       </div>
@@ -639,7 +639,7 @@
                   css="mb-8"
                   options={(cajasService.Cajas || []).filter((cajaRecord) => (cajaRecord?.ss || 0) > 0)}
                   keyId="ID"
-                  keyName="Nombre"
+                  keyName="Name"
                   label="Caja para Pago"
                   placeholder=":: seleccione ::"
                 />
@@ -671,7 +671,7 @@
                   inputCss="w-full"
                   options={(almacenesService.Almacenes || []).filter((almacenRecord) => (almacenRecord?.ss || 0) > 0)}
                   keyId="ID"
-                  keyName="Nombre"
+                  keyName="Name"
                   label="Almacén para Entrega"
                   placeholder=":: seleccione ::"
                 />

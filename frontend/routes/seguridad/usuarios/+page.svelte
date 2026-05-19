@@ -53,13 +53,13 @@ const { Loading } = pkg
   const sortedPerfiles = $derived.by(() => {
     // Keep profile ordering stable for the selector without re-sorting inside the child component.
     return [...perfilesService.perfiles].sort((leftProfile, rightProfile) => {
-      const nameComparison = leftProfile.Nombre.localeCompare(rightProfile.Nombre)
+      const nameComparison = leftProfile.Name.localeCompare(rightProfile.Name)
       return nameComparison !== 0 ? nameComparison : leftProfile.ID - rightProfile.ID
     })
   })
 
   const accessLevelOptions = $derived.by(() => {
-    const flattenedAccessLevelOptions: { ID: number, Nombre: string }[] = []
+    const flattenedAccessLevelOptions: { ID: number, Name: string }[] = []
 
     // Build and sort access options once per catalog refresh so the child component stays render-only.
     for (const accessCatalogEntry of accessCatalogEntries) {
@@ -68,13 +68,13 @@ const { Loading } = pkg
         const accessActionShortName = accessActionShortNameByID.get(accessLevel) || `N${accessLevel}`
         flattenedAccessLevelOptions.push({
           ID: accessCatalogEntry.id * 10 + accessLevel,
-          Nombre: `${accessCatalogEntry.name} (${accessActionShortName})`
+          Name: `${accessCatalogEntry.name} (${accessActionShortName})`
         })
       }
     }
 
     return flattenedAccessLevelOptions.sort((leftOption, rightOption) => {
-      const nameComparison = leftOption.Nombre.localeCompare(rightOption.Nombre)
+      const nameComparison = leftOption.Name.localeCompare(rightOption.Name)
       return nameComparison !== 0 ? nameComparison : leftOption.ID - rightOption.ID
     })
   })
@@ -97,7 +97,7 @@ const { Loading } = pkg
     const accessLevelsByAccessID = new Map<number, Set<number>>()
 
     // Merge profile-derived and user-specific access levels so the table shows the effective access summary.
-    for (const profileID of usuarioRecord.PerfilesIDs || []) {
+    for (const profileID of usuarioRecord.ProfileIDs || []) {
       const profileRecord = perfilesByID.get(profileID)
       if (!profileRecord?.accesosMap) { continue }
 
@@ -111,7 +111,7 @@ const { Loading } = pkg
       }
     }
 
-    for (const encodedAccessLevelID of usuarioRecord.AccesosNivelIDs || []) {
+    for (const encodedAccessLevelID of usuarioRecord.AccessLevelIDs || []) {
       const accessID = Math.floor(encodedAccessLevelID / 10)
       const accessLevel = encodedAccessLevelID % 10
       if (!accessLevelsByAccessID.has(accessID)) {
@@ -144,7 +144,7 @@ const { Loading } = pkg
 
   const resetUsuarioForm = () => {
     // Initialize the create form with an active status so the layer always opens in a valid default state.
-    usuarioForm = { Status: 1, PerfilesIDs: [], AccesosNivelIDs: [] } as unknown as IUser
+    usuarioForm = { Status: 1, ProfileIDs: [], AccessLevelIDs: [] } as unknown as IUser
   }
 
   const openCreateUsuarioLayer = () => {
@@ -157,8 +157,8 @@ const { Loading } = pkg
     // Clone the selected record so the table does not update optimistically while the user edits the layer.
     usuarioForm = {
       ...selectedUsuario,
-      PerfilesIDs: [...(selectedUsuario.PerfilesIDs || [])],
-      AccesosNivelIDs: [...(selectedUsuario.AccesosNivelIDs || [])]
+      ProfileIDs: [...(selectedUsuario.ProfileIDs || [])],
+      AccessLevelIDs: [...(selectedUsuario.AccessLevelIDs || [])]
     }
     console.log("openEditUsuarioLayer::", $state.snapshot(usuarioForm))
     Core.openSideLayer(1)
@@ -182,7 +182,7 @@ const { Loading } = pkg
   async function saveUsuario(isDelete?: boolean) {
     const form = usuarioForm
 
-    if ((form.Usuario?.length || 0) < 4 || (form.Nombres?.length || 0) < 4) {
+    if ((form.Usuario?.length || 0) < 4 || (form.FirstName?.length || 0) < 4) {
       Notify.failure("El usuario y el nombre deben tener al menos 4 caracteres.")
       return
     }
@@ -245,7 +245,7 @@ const { Loading } = pkg
       id: "usuario_accesos", headerCss: "w-[47%]",
       header: "Accesos", highlight: true,
       css: "px-8 py-6 align-top _usuario-access-td",
-      getValue: e => `${e.Nombres} ${e.Apellidos || ""}`
+      getValue: e => `${e.FirstName} ${e.LastName || ""}`
     },
     {
       header: "Email",
@@ -292,7 +292,7 @@ const { Loading } = pkg
         maxHeight="calc(80vh - 13rem)"
         estimateSize={72}
         filterText={filterText}
-        getFilterContent={e => [e.Usuario, e.Nombres, e.Apellidos, e.Email].filter(x => x).join(" ").toLowerCase()}
+        getFilterContent={e => [e.Usuario, e.FirstName, e.LastName, e.Email].filter(x => x).join(" ").toLowerCase()}
         selected={usuarioForm?.ID}
         isSelected={(usuarioRecord, selectedUsuarioID) => usuarioRecord.ID === selectedUsuarioID}
         onRowClick={(selectedUsuario) => {
@@ -302,7 +302,7 @@ const { Loading } = pkg
         {#snippet cellRenderer(usuarioRecord: IUser, columnDefinition: ITableColumn<IUser>)}
           {#if columnDefinition.id === "usuario_info"}
             <div class="_usuario-info-cell">
-              <div class="_usuario-info-name ff-semibold">{usuarioRecord.Nombres} {usuarioRecord.Apellidos || ""}</div>
+              <div class="_usuario-info-name ff-semibold">{usuarioRecord.FirstName} {usuarioRecord.LastName || ""}</div>
               <div class="_usuario-info-login">{usuarioRecord.Usuario}</div>
             </div>
           {:else if columnDefinition.id === "usuario_accesos"}
@@ -346,26 +346,26 @@ const { Loading } = pkg
       />
       <Input
         bind:saveOn={usuarioForm}
-        save="Nombres"
+        save="FirstName"
         css="col-span-24 md:col-span-12"
         label="Nombres"
         required={true}
       />
       <Input
         bind:saveOn={usuarioForm}
-        save="Apellidos"
+        save="LastName"
         css="col-span-24 md:col-span-12"
         label="Apellidos"
       />
       <Input
         bind:saveOn={usuarioForm}
-        save="DocumentoNro"
+        save="DocumentNumber"
         css="col-span-24 md:col-span-12"
         label="Nº Documento"
       />
       <Input
         bind:saveOn={usuarioForm}
-        save="Cargo"
+        save="JobTitle"
         css="col-span-24 md:col-span-12"
         label="Cargo"
       />

@@ -4,14 +4,14 @@ import { Notify } from '$libs/helpers';
 
 export interface ICashBank {
   ID: number
-  SedeID: number
-  Nombre: string
-  Descripcion: string
+  SiteID: number
+  Name: string
+  Description: string
   MonedaTipo: number
-  CuadreFecha: number
-  SaldoCurrent: number
-  CuadreSaldo: number
-  Tipo: number
+  ReconciliationDate: number
+  CurrentAmount: number
+  ReconciliationAmount: number
+  Type: number
   ss: number
   upd: number
 }
@@ -22,24 +22,24 @@ export interface ICajaResult {
 }
 
 export interface ICashBankMovement {
-  CajaID: number
+  CashBankID: number
   CajaRefID: number
   VentaID: number
-  DocumentoID: number
-  Tipo: number
-  Monto: number
-  SaldoFinal: number
+  DocumentID: number
+  Type: number
+  Amount: number
+  FinalAmount: number
   Created: number
   CreatedBy: number
 }
 
 export interface ICashReconciliation {
   ID: number
-  Tipo: number
-  CajaID: number
+  Type: number
+  CashBankID: number
   SaldoSistema: number
-  SaldoDiferencia: number
-  SaldoReal: number
+  DifferenceAmount: number
+  ActualAmount: number
   Created: number
   CreatedBy: number
   _error?: string
@@ -56,7 +56,7 @@ export class CajasService extends GetHandler {
     console.log("result cajas::", result)
     this.Cajas = result.Cajas || []
     for (let e of this.Cajas) {
-      e.SaldoCurrent = e.SaldoCurrent || 0
+      e.CurrentAmount = e.CurrentAmount || 0
     }
     this.CajasMap = new Map(this.Cajas.map(x => [x.ID, x]))
   }

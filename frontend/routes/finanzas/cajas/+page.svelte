@@ -53,22 +53,22 @@ import { formatN } from '$libs/helpers';
     },
     {
       header: "Nombre", css: "px-6 py-2",
-      getValue: e => e.Nombre,
+      getValue: e => e.Name,
       render: e => {
-        const tipoName = cajaTipos.find(x => x.id === e.Tipo)?.name || "-"
+        const tipoName = cajaTipos.find(x => x.id === e.Type)?.name || "-"
         return `<div class="leading-tight">
-          <div class="ff-bold leading-[1.1] h3">${e.Nombre}</div>
+          <div class="ff-bold leading-[1.1] h3">${e.Name}</div>
           <div class="fs15 text-slate-500">${tipoName}</div>
         </div>`
       }
     },
     {
       header: "Cuadre",
-      getValue: e => e.CuadreFecha ? String(e.CuadreFecha) : "",
+      getValue: e => e.ReconciliationDate ? String(e.ReconciliationDate) : "",
       render: e => {
-        if (!e.CuadreFecha) { return "" }
-        const saldo = formatN(e.CuadreSaldo / 100, 2)
-        const date = formatTime(e.CuadreFecha, "d-M h:n")
+        if (!e.ReconciliationDate) { return "" }
+        const saldo = formatN(e.ReconciliationAmount / 100, 2)
+        const date = formatTime(e.ReconciliationDate, "d-M h:n")
         return `<div class="leading-tight text-right">
           <div class="ff-mono text-[0.875rem]">${saldo}</div>
           <div class="text-[0.875rem] text-slate-500">${date}</div>
@@ -78,13 +78,13 @@ import { formatN } from '$libs/helpers';
     {
       header: "Saldo",
       css: "text-right ff-mono px-6",
-      getValue: e => formatN(e.SaldoCurrent / 100, 2)
+      getValue: e => formatN(e.CurrentAmount / 100, 2)
     },
   ]
 
   const saveCaja = async () => {
     const caja = cajaForm
-    if (!caja.Nombre || !caja.Tipo || !caja.SedeID) {
+    if (!caja.Name || !caja.Type || !caja.SiteID) {
       Notify.failure("Los inputs Nombre, Tipo y Sede son obligatorios")
       return
     }
@@ -97,7 +97,7 @@ import { formatN } from '$libs/helpers';
     }
     Loading.remove()
 
-    caja.SaldoCurrent = caja.SaldoCurrent || 0
+    caja.CurrentAmount = caja.CurrentAmount || 0
 
     const selected = cajas.CajasMap.get(caja.ID)
     if (selected) {
@@ -112,7 +112,7 @@ import { formatN } from '$libs/helpers';
 
   const saveCajaCuadre = async () => {
     const form = cajaCuadreForm
-    form.SaldoSistema = cajaForm.SaldoCurrent
+    form.SaldoSistema = cajaForm.CurrentAmount
 
     Loading.standard("Guardando caja...")
     let recordSaved: ICashReconciliation & { NeedUpdateSaldo: number }
@@ -123,18 +123,18 @@ import { formatN } from '$libs/helpers';
       return
     }
     Loading.remove()
-    const caja = cajas.CajasMap.get(form.CajaID)
+    const caja = cajas.CajasMap.get(form.CashBankID)
     if (!caja) return
 
     if (typeof recordSaved?.NeedUpdateSaldo === 'number') {
-      caja.SaldoCurrent = recordSaved.NeedUpdateSaldo
+      caja.CurrentAmount = recordSaved.NeedUpdateSaldo
       cajaForm = { ...caja }
       const newForm = { ...cajaCuadreForm }
-      newForm._error = `Hubo una actualización en el saldo de la caja. El saldo actual es "${formatN(caja.SaldoCurrent / 100, 2)}". Intente nuevamente con el cálculo actualizado.`
-      newForm.SaldoDiferencia = newForm.SaldoReal - caja.SaldoCurrent
+      newForm._error = `Hubo una actualización en el saldo de la caja. El saldo actual es "${formatN(caja.CurrentAmount / 100, 2)}". Intente nuevamente con el cálculo actualizado.`
+      newForm.DifferenceAmount = newForm.ActualAmount - caja.CurrentAmount
       cajaCuadreForm = newForm
     } else {
-      caja.SaldoCurrent = form.SaldoReal
+      caja.CurrentAmount = form.ActualAmount
       cajas.Cajas = [...cajas.Cajas]
       Object.assign(cajaForm, caja)
       Core.closeModal(2)
@@ -144,7 +144,7 @@ import { formatN } from '$libs/helpers';
 
   const saveCajaMovimiento = async () => {
     const form = cajaMovimientoForm
-    if (!form.Tipo || !form.Monto) {
+    if (!form.Type || !form.Amount) {
       Notify.failure("Se necesita seleccionar un monto y un tipo.")
       return
     }
@@ -158,10 +158,10 @@ import { formatN } from '$libs/helpers';
     }
     Loading.remove()
 
-    const caja = cajas.CajasMap.get(form.CajaID)
+    const caja = cajas.CajasMap.get(form.CashBankID)
     if (!caja) return
 
-    caja.SaldoCurrent = form.SaldoFinal
+    caja.CurrentAmount = form.FinalAmount
     cajas.Cajas = [...cajas.Cajas]
     Object.assign(cajaForm, caja)
 
@@ -169,7 +169,7 @@ import { formatN } from '$libs/helpers';
     Core.closeModal(3)
   }
 
-  const isCajaMovimiento = $derived([3].includes(cajaMovimientoForm.Tipo))
+  const isCajaMovimiento = $derived([3].includes(cajaMovimientoForm.Type))
 
   // Load cajaMovimientos when cajaForm changes
   $effect(() => {
@@ -210,7 +210,7 @@ import { formatN } from '$libs/helpers';
     if (!filterText) return cajas.Cajas
     const text = filterText.toLowerCase()
     return cajas.Cajas.filter(e => {
-      return e.Nombre?.toLowerCase().includes(text)
+      return e.Name?.toLowerCase().includes(text)
     })
   })
 </script>
@@ -263,13 +263,13 @@ import { formatN } from '$libs/helpers';
         {:else}
           <div class="flex w-full justify-between mt-8">
             <div class="flex items-center">
-              <div class="text-[1.1rem] ff-bold mr-8">{cajaForm?.Nombre || ""}</div>
+              <div class="text-[1.1rem] ff-bold mr-8">{cajaForm?.Name || ""}</div>
             </div>
             <div class="flex items-center">
               <Button color="green" icon="icon-plus" label="Opens the modal to add a new cash movement." onClick={() => {
                 Core.openModal(3)
                 cajaMovimientoForm = {
-                  CajaID: cajaForm.ID, SaldoFinal: cajaForm.SaldoCurrent,
+                  CashBankID: cajaForm.ID, FinalAmount: cajaForm.CurrentAmount,
                 } as ICashBankMovement
               }} />
             </div>
@@ -284,26 +284,26 @@ import { formatN } from '$libs/helpers';
               },
               {
                 header: "Tipo Mov.",
-                getValue: e => cajaMovimientoTiposMap.get(e.Tipo)?.name || ""
+                getValue: e => cajaMovimientoTiposMap.get(e.Type)?.name || ""
               },
               {
                 header: "Monto",
                 css: "ff-mono text-right px-6",
                 render: e => {
-                  const monto = formatN(e.Monto / 100, 2)
-                  const color = e.Monto < 0 ? "text-red-600" : ""
+                  const monto = formatN(e.Amount / 100, 2)
+                  const color = e.Amount < 0 ? "text-red-600" : ""
                   return `<span class="${color}">${monto}</span>`
                 }
               },
               {
                 header: "Saldo Final",
                 css: "ff-mono text-right px-6",
-                getValue: e => formatN(e.SaldoFinal / 100, 2)
+                getValue: e => formatN(e.FinalAmount / 100, 2)
               },
               {
                 header: "Nº Documento",
                 css: "text-right px-6",
-                getValue: e => e.DocumentoID ? String(e.DocumentoID) : ""
+                getValue: e => e.DocumentID ? String(e.DocumentID) : ""
               },
               {
                 // id triggers cellRenderer snippet so we can mount RecordByIDText per row.
@@ -335,7 +335,7 @@ import { formatN } from '$libs/helpers';
             <div class="flex items-center">
               <Button color="green" icon="icon-plus" label="Opens the modal to add a new cash balance reconciliation." onClick={() => {
                 Core.openModal(2)
-                cajaCuadreForm = { CajaID: cajaForm.ID } as ICashReconciliation
+                cajaCuadreForm = { CashBankID: cajaForm.ID } as ICashReconciliation
               }} />
             </div>
           </div>
@@ -355,12 +355,12 @@ import { formatN } from '$libs/helpers';
               {
                 header: "Diferencia",
                 css: 'ff-mono text-right px-6',
-                getValue: e => formatN((e.SaldoDiferencia || 0) / 100, 2)
+                getValue: e => formatN((e.DifferenceAmount || 0) / 100, 2)
               },
               {
                 header: "Saldo Real",
                 css: 'ff-mono text-right px-6',
-                getValue: e => formatN((e.SaldoReal || 0) / 100, 2)
+                getValue: e => formatN((e.ActualAmount || 0) / 100, 2)
               },
               {
                 // id triggers cellRenderer snippet so we can mount RecordByIDText per row.
@@ -416,10 +416,10 @@ import { formatN } from '$libs/helpers';
         <div class="w-full mb-12">
           <div class="text-sm mb-4 text-slate-600">Saldo Sistema</div>
           <div class="text-[1.1rem] ff-mono text-center bg-slate-100 py-8 rounded">
-            {formatN((cajaForm.SaldoCurrent||0) / 100, 2)}
+            {formatN((cajaForm.CurrentAmount||0) / 100, 2)}
           </div>
         </div>
-        <Input bind:saveOn={cajaCuadreForm} save="SaldoReal" type="number"
+        <Input bind:saveOn={cajaCuadreForm} save="ActualAmount" type="number"
           inputCss="text-[1.1rem] ff-mono text-center" baseDecimals={2}
           css="w-full mb-12" label="Saldo Encontrado" required={true}
           onChange={() => {
@@ -431,8 +431,8 @@ import { formatN } from '$libs/helpers';
         <div class="w-full">
           <div class="text-sm mb-4 text-slate-600">Diferencia</div>
           <div class="text-[1.1rem] min-h-32 ff-mono text-center bg-slate-100 py-8 rounded">
-            {#if cajaCuadreForm.SaldoReal}
-              {@const diff = (cajaCuadreForm.SaldoReal || 0) - cajaForm.SaldoCurrent}
+            {#if cajaCuadreForm.ActualAmount}
+              {@const diff = (cajaCuadreForm.ActualAmount || 0) - cajaForm.CurrentAmount}
               {#if diff}
                 <span class="{diff > 0 ? 'text-blue-600' : 'text-red-600'}">
                   {formatN(diff / 100, 2)}
@@ -460,7 +460,7 @@ import { formatN } from '$libs/helpers';
     }}
   >
     <div class="grid grid-cols-24 gap-10" aria-label="Cash movement form with type, destination cash register, and amount">
-      <SearchSelect bind:saveOn={cajaMovimientoForm} save="Tipo" css="col-span-24 md:col-span-12"
+      <SearchSelect bind:saveOn={cajaMovimientoForm} save="Type" css="col-span-24 md:col-span-12"
         label="Tipo" keyId="id" keyName="name"
         options={cajaMovimientoTipos.filter(x => x.group === 2)}
         placeholder="" required={true}
@@ -475,18 +475,18 @@ import { formatN } from '$libs/helpers';
         placeholder={isCajaMovimiento ? "seleccione" : "no aplica"}
         required={true}
       />
-      <Input bind:saveOn={cajaMovimientoForm} save="Monto" inputCss="ff-mono text-[1.1rem] text-center"
+      <Input bind:saveOn={cajaMovimientoForm} save="Amount" inputCss="ff-mono text-[1.1rem] text-center"
         css="col-span-24 md:col-span-12" label="Monto" baseDecimals={2}
         required={true} type="number"
         transform={v => {
-          const movTipo = cajaMovimientoTiposMap.get(cajaMovimientoForm.Tipo)
+          const movTipo = cajaMovimientoTiposMap.get(cajaMovimientoForm.Type)
           console.log("movimiento tipo::", movTipo)
           if (movTipo?.isNegative && typeof v === 'number' && v > 0) { v = v * -1 }
           return v
         }}
         onChange={() => {
           const form = { ...cajaMovimientoForm }
-          form.SaldoFinal = cajaForm.SaldoCurrent + (form.Monto || 0)
+          form.FinalAmount = cajaForm.CurrentAmount + (form.Amount || 0)
           cajaMovimientoForm = form
         }}
       />
@@ -494,14 +494,14 @@ import { formatN } from '$libs/helpers';
       <div class="col-span-24 md:col-span-12">
         <div class="text-sm mb-4 text-slate-600">Saldo Inicial</div>
         <div class="text-[1.1rem] ff-mono text-center bg-slate-100 py-8 rounded">
-          {formatN(cajaForm.SaldoCurrent / 100, 2)}
+          {formatN(cajaForm.CurrentAmount / 100, 2)}
         </div>
       </div>
       <div class="col-span-24 md:col-span-12">
         <div class="text-sm mb-4 text-slate-600">Saldo Final</div>
         <div class="text-[1.1rem] ff-mono text-center bg-slate-100 py-8 rounded">
-          {#if cajaMovimientoForm.SaldoFinal !== undefined}
-            {@const saldo = cajaMovimientoForm.SaldoFinal}
+          {#if cajaMovimientoForm.FinalAmount !== undefined}
+            {@const saldo = cajaMovimientoForm.FinalAmount}
             <span class="{saldo >= 0 ? '' : 'text-red-600'}">
               {formatN(saldo / 100, 2)}
             </span>

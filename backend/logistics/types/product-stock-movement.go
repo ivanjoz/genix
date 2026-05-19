@@ -17,15 +17,15 @@ type WarehouseProductMovement struct {
 	WarehouseID          int32  `json:",omitempty"`
 	WarehouseRefID       int32  `json:",omitempty"`
 	WarehouseRefQuantity int32  `json:",omitempty"`
-	Date                int16  `json:",omitempty"`
+	Date                 int16  `json:",omitempty"`
 	DocumentID           int64  `json:",omitempty"`
-	ProductID           int32  `json:",omitempty"`
-	PresentacionID       int16  `json:",omitempty"`
+	ProductID            int32  `json:",omitempty"`
+	PresentationID       int16  `json:",omitempty"`
 	Quantity             int32  `json:",omitempty"`
 	WarehouseQuantity    int32  `json:",omitempty"`
 	SubQuantity          int32  `json:",omitempty"`
 	MonetaryValue        int32  `json:",omitempty"`
-	Tipo                 int8   `json:",omitempty"`
+	Type                 int8   `json:",omitempty"`
 	Created              int32  `json:",omitempty"`
 	CreatedBy            int32  `json:",omitempty"`
 	UpdateCounter        int32  `json:",omitempty"`
@@ -41,16 +41,16 @@ type WarehouseProductMovementTable struct {
 	WarehouseRefID       db.Col[WarehouseProductMovementTable, int32]
 	WarehouseRefQuantity db.Col[WarehouseProductMovementTable, int32]
 	DocumentID           db.Col[WarehouseProductMovementTable, int64]
-	ProductID           db.Col[WarehouseProductMovementTable, int32]
-	PresentacionID       db.Col[WarehouseProductMovementTable, int16]
+	ProductID            db.Col[WarehouseProductMovementTable, int32]
+	PresentationID       db.Col[WarehouseProductMovementTable, int16]
 	Quantity             db.Col[WarehouseProductMovementTable, int32]
 	WarehouseQuantity    db.Col[WarehouseProductMovementTable, int32]
 	SubQuantity          db.Col[WarehouseProductMovementTable, int32]
-	Tipo                 db.Col[WarehouseProductMovementTable, int8]
+	Type                 db.Col[WarehouseProductMovementTable, int8]
 	Created              db.Col[WarehouseProductMovementTable, int32]
 	MonetaryValue        db.Col[WarehouseProductMovementTable, int32]
 	CreatedBy            db.Col[WarehouseProductMovementTable, int32]
-	Date                db.Col[WarehouseProductMovementTable, int16]
+	Date                 db.Col[WarehouseProductMovementTable, int16]
 	UpdateCounter        db.Col[WarehouseProductMovementTable, int32]
 }
 
@@ -80,51 +80,51 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 				Type: db.TypeLocalIndex, Keys: []db.Coln{e.DocumentID}, UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Date, e.Tipo}, UseIndexGroup: true,
+				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Date, e.Type}, UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Date, e.Tipo, e.WarehouseID}, UseIndexGroup: true,
+				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Date, e.Type, e.WarehouseID}, UseIndexGroup: true,
 			},
 			{
 				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Date, e.ProductID}, UseIndexGroup: true,
 			},
 			{
 				Type: db.TypeView,
-				Keys: []db.Coln{e.Date, e.ProductID.DecimalSize(9), e.Tipo.DecimalSize(1)},
+				Keys: []db.Coln{e.Date, e.ProductID.DecimalSize(9), e.Type.DecimalSize(1)},
 				Cols: []db.Coln{e.Quantity},
 			},
 		},
 	}
 }
 
-// MovimientoInterno is the ApplyMovimientos input unit. It targets a single
+// InternalMovement is the ApplyMovements input unit. It targets a single
 // (Warehouse, Product, Presentation) bucket, optionally scoped to a Lot and/or SerialNumber.
 //
 // Lot resolution rules:
-//   - If LotID > 0: use it directly (required for outbound, Cantidad < 0).
-//   - If LotID == 0 and LotName != "" and Cantidad > 0 (inbound): lot is resolved or
+//   - If LotID > 0: use it directly (required for outbound, Quantity < 0).
+//   - If LotID == 0 and LotName != "" and Quantity > 0 (inbound): lot is resolved or
 //     created from Hash(today, SupplierID, LotName). SupplierID is required.
 //   - If LotID == 0 and LotName == "" and SerialNumber == "": treated as "no-detail",
 //     mutating ProductStockV2.Quantity only.
-type MovimientoInterno struct {
-	ProductID         int32
-	PresentacionID     int16
-	ReemplazarCantidad bool
-	Tipo               int8
-	SerialNumber       string
-	LotName            string
-	LotID              int32
-	SupplierID         int32
-	WarehouseID        int32
-	AlmacenDestinoID   int32
-	Cantidad           int32
-	SubCantidad        int32
-	Price              int32
-	DocumentID         int64
+type InternalMovement struct {
+	ProductID      int32
+	PresentationID int16
+	ReplaceQuantity bool
+	Type           int8
+	SerialNumber   string
+	LotName        string
+	LotID          int32
+	SupplierID     int32
+	WarehouseID    int32
+	DestWarehouseID int32
+	Quantity       int32
+	SubQuantity    int32
+	Price          int32
+	DocumentID     int64
 }
 
 // HasDetail reports whether the movement targets a ProductStockDetail row
 // (i.e. the non-free bucket keyed by LotID and/or SerialNumber).
-func (e *MovimientoInterno) HasDetail() bool {
+func (e *InternalMovement) HasDetail() bool {
 	return e.SerialNumber != "" || e.LotID > 0 || e.LotName != ""
 }

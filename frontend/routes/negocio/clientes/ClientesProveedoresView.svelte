@@ -198,12 +198,13 @@
       headerCss: 'w-144',
       css: 'text-center',
       getValue: (clientProviderRecord) => {
-        const selectedCity = paisCiudadesService.ciudadesMap.get(clientProviderRecord.CityID || '')
+        // Client/provider records still persist CityID as string, so map lookup normalizes to numeric ubigeo.
+        const selectedCity = paisCiudadesService.ciudadesMap.get(Number(clientProviderRecord.CityID || 0))
         if (!selectedCity) {
           return clientProviderRecord.CityID || '-'
         }
-        const provinceName = selectedCity.Provincia?.Nombre || '-'
-        return `${provinceName} | ${selectedCity.Nombre}`
+        const provinceName = selectedCity.Provincia?.Name || '-'
+        return `${provinceName} | ${selectedCity.Name}`
       },
     },
     {

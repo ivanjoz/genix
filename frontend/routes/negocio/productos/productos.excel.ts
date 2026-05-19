@@ -55,8 +55,8 @@ interface ProductoImportProcessResult {
 }
 
 const IMPORT_FIELD_TO_PRODUCT_FIELD: Record<string, keyof IProduct> = {
-  _categoriasNames: 'CategoriasIDs',
-  _marcaNombre: 'MarcaID',
+  _categoriasNames: 'CategoryIDs',
+  _marcaNombre: 'BrandID',
   _unidadNombre: 'UnidadID',
   _monedaNombre: 'MonedaID',
 };
@@ -99,7 +99,7 @@ export const processProductosImportFile = async (
       for (const categoriaNameRaw of (currentRow._categoriasNames || '').split(',')) {
         const categoriaName = categoriaNameRaw.trim();
         if (!categoriaName) continue;
-        const categoriaExistente = listasService.getByName({ ListaID: PRODUCT_SHARED_LIST_CATEGORIA_ID, Nombre: categoriaName });
+        const categoriaExistente = listasService.getByName({ ListID: PRODUCT_SHARED_LIST_CATEGORIA_ID, Name: categoriaName });
         if (categoriaExistente?.ID) {
           categoriasIDs.push(categoriaExistente.ID);
           continue;
@@ -107,33 +107,33 @@ export const processProductosImportFile = async (
 
         const categoriaTemporal: ISharedListRecord = {
           ID: 0,
-          ListaID: PRODUCT_SHARED_LIST_CATEGORIA_ID,
-          Nombre: categoriaName,
+          ListID: PRODUCT_SHARED_LIST_CATEGORIA_ID,
+          Name: categoriaName,
           ss: 1,
           upd: 0,
         };
         listasService.addTempRecord(categoriaTemporal);
         categoriasIDs.push(categoriaTemporal.ID);
       }
-      currentRow.CategoriasIDs = categoriasIDs;
+      currentRow.CategoryIDs = categoriasIDs;
     }
 
     if ((currentRow._marcaNombre || '').length > 0) {
       const marcaNombre = (currentRow._marcaNombre || '').trim();
       if (marcaNombre.length > 0) {
-        const marcaExistente = listasService.getByName({ ListaID: PRODUCT_SHARED_LIST_MARCA_ID, Nombre: marcaNombre });
+        const marcaExistente = listasService.getByName({ ListID: PRODUCT_SHARED_LIST_MARCA_ID, Name: marcaNombre });
         if (marcaExistente?.ID) {
-          currentRow.MarcaID = marcaExistente.ID;
+          currentRow.BrandID = marcaExistente.ID;
         } else {
           const marcaTemporal: ISharedListRecord = {
             ID: 0,
-            ListaID: PRODUCT_SHARED_LIST_MARCA_ID,
-            Nombre: marcaNombre,
+            ListID: PRODUCT_SHARED_LIST_MARCA_ID,
+            Name: marcaNombre,
             ss: 1,
             upd: 0,
           };
           listasService.addTempRecord(marcaTemporal);
-          currentRow.MarcaID = marcaTemporal.ID;
+          currentRow.BrandID = marcaTemporal.ID;
         }
       }
     }
@@ -162,7 +162,7 @@ export const processProductosImportFile = async (
     } else if (isValidPositiveID(currentRow.ID)) {
       validationErrors.push(`ID de producto no encontrado "${currentRow.ID}"`);
     } else {
-      currentRow.ID = productosService.getByName({ Nombre: currentRow.Nombre })?.ID || 0;
+      currentRow.ID = productosService.getByName({ Name: currentRow.Name })?.ID || 0;
     }
 
     return validationErrors.length > 0 ? validationErrors : undefined;

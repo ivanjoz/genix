@@ -1,9 +1,9 @@
 <script lang="ts" generics="TRecord">
   import { onMount } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
-  import Renderer from '$components/misc/Renderer.svelte';
+  import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte';
   import CellInput from '$components/vTable/CellInput.svelte';
-  import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
+  import { createFixedTableVirtualizer } from './vtable-virtual-fixed.svelte';
   import { splitTwoStrings } from '$libs/helpers';
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
   import { Env } from '$core/env';
@@ -54,6 +54,11 @@
     cellInputType?: 'number';
   }
 
+  interface TableGridPrefixContent {
+    prefixHTML?: string;
+    prefixAST?: ElementAST | ElementAST[];
+  }
+
   let {
     columns,
     data,
@@ -93,7 +98,7 @@
   });
   const gridTemplateColumns = $derived(
     visibleColumns
-      .map((columnDefinition) => columnDefinition.width || 'minmax(0, 1fr)')
+      .map((columnDefinition) => columnDefinition.width || 'minmax(80px, 1fr)')
       .join(' '),
   );
   const normalizedRowHeight = $derived(Math.max(24, Math.round(rowHeight)));
@@ -116,11 +121,6 @@
     if (!selectedRecord || !getRowId) return undefined;
     return getRowId(selectedRecord, -1);
   });
-
-  const debugVirtualListInfo = (virtualInfo: unknown) => {
-    if (!debug) return;
-    console.debug('[TableGrid] virtual-list debug info', virtualInfo);
-  };
 
   const getCellValue = (
     rowRecord: TRecord,
@@ -174,6 +174,24 @@
 
   const isHtmlContent = (contentValue: unknown): contentValue is string => {
     return typeof contentValue === 'string';
+  };
+
+  const getPrefixContent = (
+    rowRecord: TRecord,
+    columnDefinition: ITableColumn<TRecord>,
+    rowIndex: number,
+  ): TableGridPrefixContent => {
+    const resolvedPrefix: TableGridPrefixContent = {};
+    const renderedPrefix = columnDefinition.renderPrefix?.(rowRecord, rowIndex);
+
+    // Match VTable's contract: strings are trusted HTML, AST values go through Renderer.
+    if (typeof renderedPrefix === 'string') {
+      resolvedPrefix.prefixHTML = renderedPrefix;
+    } else if (renderedPrefix) {
+      resolvedPrefix.prefixAST = renderedPrefix;
+    }
+
+    return resolvedPrefix;
   };
 
   const getHeaderContent = (columnDefinition: ITableColumn<TRecord>): string => {
@@ -257,63 +275,49 @@
     onRowClick?.(rowRecord, rowIndex, () => rerenderRow(rowIndex));
   };
 
-  const syncHeaderScrollbarCompensation = () => {
-    if (!shellElement) return;
+  // Custom virtualizer that drives the OUTER shell's scroll (vs. SvelteVirtualList's
+  // internal viewport). The shell owns overflow: auto, so the scrollbar appears on
+  // the rounded outer container instead of a nested div. Fixed-height variant —
+  // rows are pinned via `.table-grid-row { height/max-height: var(--table-grid-row-height); overflow: hidden }`,
+  // so no per-row measurement is needed.
+  const virtualizer = createFixedTableVirtualizer({
+    getScrollElement: () => shellElement ?? null,
+    rowHeight: () => normalizedRowHeight,
+    overscan: () => bufferSize,
+  });
 
-    if (isMobileView || !useVirtualScroll) {
-      // Plain mode uses one sticky-scroll container, so the header aligns naturally without compensation.
-      verticalScrollbarWidth = 0;
-      return;
-    }
+  // Attach the virtualizer once the shell mounts and we're in the virtual branch.
+  // Re-runs if useVirtualScroll or isMobileView flips (e.g. row count crosses 30).
+  $effect(() => {
+    if (isMobileView || !useVirtualScroll) { return; }
+    if (!shellElement) { return; }
+    const ok = virtualizer.attach();
+    if (!ok) { return; }
+    return () => virtualizer.detach();
+  });
 
-    const viewportElement = shellElement.querySelector('.table-grid-virtual-viewport') as HTMLDivElement | null;
-    if (!viewportElement) {
-      verticalScrollbarWidth = 0;
-      return;
-    }
+  // Keep the virtualizer's row count in sync with the dataset.
+  $effect(() => {
+    if (isMobileView || !useVirtualScroll) { return; }
+    virtualizer.setCount(data.length);
+  });
 
-    // Match header width to the scrollable body viewport when the vertical scrollbar consumes space.
-    verticalScrollbarWidth = Math.max(0, viewportElement.offsetWidth - viewportElement.clientWidth);
-  };
+  // Indices of rows inside the current visible window (with overscan).
+  const visibleRowIndices = $derived.by(() => {
+    const { start, end } = virtualizer.range;
+    const indices: number[] = [];
+    for (let i = start; i < end; i++) { indices.push(i); }
+    return indices;
+  });
 
   onMount(() => {
-    if (!shellElement) return;
-
     const handleResize = () => {
       windowWidth = window.innerWidth;
     };
     window.addEventListener('resize', handleResize);
-
-    const resizeObserver = new ResizeObserver(() => {
-      syncHeaderScrollbarCompensation();
-    });
-
-    resizeObserver.observe(shellElement);
-
-    const viewportElement = shellElement.querySelector('.table-grid-virtual-viewport') as HTMLDivElement | null;
-    if (viewportElement) {
-      resizeObserver.observe(viewportElement);
-    }
-
-    queueMicrotask(() => {
-      syncHeaderScrollbarCompensation();
-    });
-
     return () => {
       window.removeEventListener('resize', handleResize);
-      resizeObserver.disconnect();
     };
-  });
-
-  $effect(() => {
-    data.length;
-    normalizedRowHeight;
-    bufferSize;
-    isMobileView;
-
-    queueMicrotask(() => {
-      syncHeaderScrollbarCompensation();
-    });
   });
 
   const componentID = Env.getComponentID();
@@ -460,6 +464,7 @@
             {#each visibleColumns as colDef, columnIndex (`${colDef.id || columnIndex}_${rowVersions.get(rowIndex) || 0}`)}
               {@const defaultCellValue = getCellValue(rowRecord, colDef, rowIndex)}
               {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, colDef)}
+              {@const prefixContent = getPrefixContent(rowRecord, colDef, rowIndex)}
               {@const combinedCellCss = `${cellCss || ""} ${colDef.css || ""} ${colDef.setCellCss?.(rowRecord) || ""} ${colDef.css || ""}`}
               {@const cellPaddingCss = /px-|pr-|pl-/.test(combinedCellCss) ? "" : "px-6"}
               {@const contentPaddingCss = /px-|pr-|pl-/.test(colDef.css || "") ? "" : "px-6"}
@@ -467,135 +472,26 @@
 
               <div class="table-grid-cell [&:last-child]:border-r-0 {cellPaddingCss} {getAlignClassName(colDef.align)} {combinedCellCss}"
                   class:tg-cell-hover-effect={colDef.showHoverEffect}
-                  class:tg-cell-line-clamp={colDef.useLineClamp}
                 role="cell"
                 title={`${defaultCellValue}`}
               >
-                {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(rowRecord, rowIndex)}
-                  <CellInput contentClass={`${contentPaddingCss} ${colDef.css || ""}${colDef.align === 'right' ? ' justify-end' : ''}`}
-                    inputClass={`${inputPaddingCss} ${colDef.inputCss || ""}${colDef.align === 'right' ? ' text-right' : ''}`}
-                    type={colDef.cellInputType || cellInputType}
-                    cellID={buildCellID(rowIndex, columnIndex)}
-                    getValue={() => String(defaultCellValue)}
-                    render={colDef.render ? () => colDef.render?.(rowRecord, rowIndex) : undefined}
-                    onBeforeCellChange={colDef.onBeforeCellChange ? (value) => colDef.onBeforeCellChange!(rowRecord, value) : undefined}
-                    onChange={(value) => colDef.onCellEdit?.(rowRecord, value, () => rerenderRow(rowIndex))}
-                  />
-                {:else if cellRenderer && colDef.useCellRenderer}
-                  {@render cellRenderer(rowRecord, colDef, rowIndex)}
-                {:else if colDef.buttonEditHandler || colDef.buttonDeleteHandler}
-                  <div class="flex gap-4 items-center justify-center w-full">
-                    {#if colDef.buttonEditHandler && (!colDef.buttonEditIf || colDef.buttonEditIf(rowRecord))}
-                      <button class="_11 _e" title="edit" onclick={(ev) => {
-                        ev.stopPropagation();
-                        colDef.buttonEditHandler?.(rowRecord);
-                      }}>
-                        <i class="icon-pencil"></i>
-                      </button>
-                    {/if}
-                    {#if colDef.buttonDeleteHandler && (!colDef.buttonDeleteIf || colDef.buttonDeleteIf(rowRecord))}
-                      <button class="_11 _d" title="delete" onclick={(ev) => {
-                        ev.stopPropagation();
-                        colDef.buttonDeleteHandler?.(rowRecord);
-                      }}>
-                        <i class="icon-trash"></i>
-                      </button>
-                    {/if}
-                  </div>
-                {:else if colDef.render}
-                  {@const renderedContent = colDef.render(rowRecord, rowIndex)}
-                  {#if isHtmlContent(renderedContent)}
-                    {@html renderedContent}
-                  {:else}
-                    <Renderer elements={renderedContent}/>
+                <div class="tg-cell-layout">
+                  {#if prefixContent.prefixAST}
+                    <span class="table-grid-cell-prefix">
+                      <Renderer elements={prefixContent.prefixAST}/>
+                    </span>
+                  {:else if prefixContent.prefixHTML}
+                    <span class="table-grid-cell-prefix">
+                      {@html prefixContent.prefixHTML}
+                    </span>
                   {/if}
-                {:else if splitCellSecondLine}
-                  <div class="flex flex-col leading-[1.1]">
-                    <div>{splitCellFirstLine}</div>
-                    <div>{splitCellSecondLine}</div>
-                  </div>
-                {:else}
-                  {defaultCellValue}
-                {/if}
-              </div>
-            {/each}
-            {/if}
-          </div>
-        {/each}
-        <div class="table-grid-edge-spacer" aria-hidden="true"></div>
-      {/if}
-    </div>
-  {:else}
-    <div class="table-grid-scroll-host use-virtual-scroll">
-      <div class="table-grid-header {headerCss}" role="row">
-        {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id || columnIndex)}
-          {@const headerPaddingCss = /px-|pr-|pl-/.test(columnDefinition.headerCss || "") ? "" : "px-6"}
-          <div class="table-grid-header-cell {headerPaddingCss} {getAlignClassName(columnDefinition.align)} {columnDefinition.headerCss || ''}"
-            role="columnheader"
-          >
-            {#if headerRenderer}
-              {@render headerRenderer(columnDefinition, columnIndex)}
-            {:else}
-              {getHeaderContent(columnDefinition)}
-            {/if}
-          </div>
-        {/each}
-      </div>
-
-      <div class="table-grid-body use-virtual-scroll">
-        <SvelteVirtualList items={data}
-          bufferSize={bufferSize}
-          defaultEstimatedItemHeight={normalizedRowHeight}
-          debug={debug}
-          debugFunction={debugVirtualListInfo}
-          containerClass="table-grid-virtual-container h-full"
-          viewportClass="table-grid-virtual-viewport"
-          contentClass="table-grid-virtual-content w-full"
-          itemsClass="table-grid-virtual-items w-full [&>div]:w-full"
-        >
-          {#snippet renderItem(rowRecord, rowIndex)}
-            {@const selected = isSelectedRow(rowRecord, rowIndex)}
-            <div class="table-grid-row {rowCss}"
-              class:table-grid-row-even={rowIndex % 2 === 0}
-              class:table-grid-row-odd={rowIndex % 2 !== 0}
-              class:table-grid-row-selected={selected}
-              data-id={onRowClick ? `TableRow:${componentID}:${buildRowID(rowIndex)}` : undefined}
-              data-selected={selected ? "true" : undefined}
-              style={resolveRowShellStyle(rowRecord, rowIndex)}
-              role="row"
-              tabindex="0"
-              onclick={() => handleRowClick(rowRecord, rowIndex)}
-              onkeydown={(eventInfo) => {
-                if (eventInfo.key === 'Enter' || eventInfo.key === ' ') {
-                  handleRowClick(rowRecord, rowIndex);
-                }
-              }}
-            >
-              {#if useRowRenderer?.(rowRecord, rowIndex) && rowRenderer}
-                <div class="table-grid-cell tg-row-custom" style="grid-column: 1 / -1;" role="cell">
-                  {@render rowRenderer(rowRecord, rowIndex)}
-                </div>
-              {:else}
-              {#each visibleColumns as colDef, columnIndex (`${colDef.id || columnIndex}_${rowVersions.get(rowIndex) || 0}`)}
-                {@const defaultCellValue = getCellValue(rowRecord, colDef, rowIndex)}
-                {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, colDef)}
-                {@const combinedCellCss = `${cellCss || ""} ${colDef.css || ""} ${colDef.setCellCss?.(rowRecord) || ""} ${colDef.css || ""}`}
-                {@const cellPaddingCss = /px-|pr-|pl-/.test(combinedCellCss) ? "" : "px-6"}
-                {@const contentPaddingCss = /px-|pr-|pl-/.test(colDef.css || "") ? "" : "px-6"}
-                {@const inputPaddingCss = /px-|pr-|pl-/.test(colDef.inputCss || "") ? "" : "px-6"}
-                <div class="table-grid-cell [&:last-child]:border-r-0 {cellPaddingCss} {getAlignClassName(colDef.align)} {combinedCellCss}"
-                  class:tg-cell-hover-effect={colDef.showHoverEffect}
-                  class:tg-cell-line-clamp={colDef.useLineClamp}
-                  role="cell"
-                  title={`${defaultCellValue}`}
-                >
                   {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(rowRecord, rowIndex)}
                     <CellInput contentClass={`${contentPaddingCss} ${colDef.css || ""}${colDef.align === 'right' ? ' justify-end' : ''}`}
                       inputClass={`${inputPaddingCss} ${colDef.inputCss || ""}${colDef.align === 'right' ? ' text-right' : ''}`}
                       type={colDef.cellInputType || cellInputType}
                       cellID={buildCellID(rowIndex, columnIndex)}
                       getValue={() => String(defaultCellValue)}
-                      render={colDef.render ? () => colDef.render?.(rowRecord, rowIndex) : undefined}
+                      render={colDef.render ? () => colDef.render!(rowRecord, rowIndex) : undefined}
                       onBeforeCellChange={colDef.onBeforeCellChange ? (value) => colDef.onBeforeCellChange!(rowRecord, value) : undefined}
                       onChange={(value) => colDef.onCellEdit?.(rowRecord, value, () => rerenderRow(rowIndex))}
                     />
@@ -622,25 +518,159 @@
                     </div>
                   {:else if colDef.render}
                     {@const renderedContent = colDef.render(rowRecord, rowIndex)}
-                    {#if isHtmlContent(renderedContent)}
-                      {@html renderedContent}
-                    {:else}
-                      <Renderer elements={renderedContent}/>
-                    {/if}
+                    <div class="tg-cell-content" class:tg-cell-line-clamp={colDef.useLineClamp}>
+                      {#if isHtmlContent(renderedContent)}
+                        {@html renderedContent}
+                      {:else}
+                        <Renderer elements={renderedContent}/>
+                      {/if}
+                    </div>
                   {:else if splitCellSecondLine}
-                    <div class="flex flex-col leading-[1.1]">
+                    <div class="tg-cell-content" class:tg-cell-line-clamp={colDef.useLineClamp}>
                       <div>{splitCellFirstLine}</div>
                       <div>{splitCellSecondLine}</div>
                     </div>
                   {:else}
-                    {defaultCellValue}
+                    <span class="tg-cell-content" class:tg-cell-line-clamp={colDef.useLineClamp}>{defaultCellValue}</span>
                   {/if}
+                </div>
+              </div>
+            {/each}
+            {/if}
+          </div>
+        {/each}
+        <div class="table-grid-edge-spacer" aria-hidden="true"></div>
+      {/if}
+    </div>
+  {:else}
+    {@const range = virtualizer.range}
+    {@const topSpacerHeight = range.offsetAtStart}
+    {@const bottomSpacerHeight = Math.max(0, virtualizer.totalSize - range.offsetAtEnd)}
+    <div class="table-grid-scroll-host use-virtual-scroll">
+      <div class="table-grid-header table-grid-header-sticky {headerCss}" role="row">
+        {#each visibleColumns as columnDefinition, columnIndex (columnDefinition.id || columnIndex)}
+          {@const headerPaddingCss = /px-|pr-|pl-/.test(columnDefinition.headerCss || "") ? "" : "px-6"}
+          <div class="table-grid-header-cell {headerPaddingCss} {getAlignClassName(columnDefinition.align)} {columnDefinition.headerCss || ''}"
+            role="columnheader"
+          >
+            {#if headerRenderer}
+              {@render headerRenderer(columnDefinition, columnIndex)}
+            {:else}
+              {getHeaderContent(columnDefinition)}
+            {/if}
+          </div>
+        {/each}
+      </div>
+
+      <div class="table-grid-body">
+        <div class="table-grid-virtual-spacer" aria-hidden="true" style="height: {topSpacerHeight}px;"></div>
+
+        {#each visibleRowIndices as rowIndex (`${getRowId ? getRowId(data[rowIndex], rowIndex) : rowIndex}_${rowVersions.get(rowIndex) || 0}`)}
+          {@const rowRecord = data[rowIndex]}
+          {#if rowRecord}
+            {@const selected = isSelectedRow(rowRecord, rowIndex)}
+            <div class="table-grid-row {rowCss}"
+              use:virtualizer.observeRow={rowIndex}
+              class:table-grid-row-even={rowIndex % 2 === 0}
+              class:table-grid-row-odd={rowIndex % 2 !== 0}
+              class:table-grid-row-selected={selected}
+              data-id={onRowClick ? `TableRow:${componentID}:${buildRowID(rowIndex)}` : undefined}
+              data-selected={selected ? "true" : undefined}
+              style={resolveRowShellStyle(rowRecord, rowIndex)}
+              role="row"
+              tabindex="0"
+              onclick={() => handleRowClick(rowRecord, rowIndex)}
+              onkeydown={(eventInfo) => {
+                if (eventInfo.key === 'Enter' || eventInfo.key === ' ') {
+                  handleRowClick(rowRecord, rowIndex);
+                }
+              }}
+            >
+              {#if useRowRenderer?.(rowRecord, rowIndex) && rowRenderer}
+                <div class="table-grid-cell tg-row-custom" style="grid-column: 1 / -1;" role="cell">
+                  {@render rowRenderer(rowRecord, rowIndex)}
+                </div>
+              {:else}
+              {#each visibleColumns as colDef, columnIndex (`${colDef.id || columnIndex}_${rowVersions.get(rowIndex) || 0}`)}
+                {@const defaultCellValue = getCellValue(rowRecord, colDef, rowIndex)}
+                {@const [splitCellFirstLine, splitCellSecondLine] = getSplitCellValue(defaultCellValue, colDef)}
+                {@const prefixContent = getPrefixContent(rowRecord, colDef, rowIndex)}
+                {@const combinedCellCss = `${cellCss || ""} ${colDef.css || ""} ${colDef.setCellCss?.(rowRecord) || ""} ${colDef.css || ""}`}
+                {@const cellPaddingCss = /px-|pr-|pl-/.test(combinedCellCss) ? "" : "px-6"}
+                {@const contentPaddingCss = /px-|pr-|pl-/.test(colDef.css || "") ? "" : "px-6"}
+                {@const inputPaddingCss = /px-|pr-|pl-/.test(colDef.inputCss || "") ? "" : "px-6"}
+                <div class="table-grid-cell [&:last-child]:border-r-0 {cellPaddingCss} {getAlignClassName(colDef.align)} {combinedCellCss}"
+                  class:tg-cell-hover-effect={colDef.showHoverEffect}
+                  role="cell"
+                  title={`${defaultCellValue}`}
+                >
+                  <div class="tg-cell-layout">
+                    {#if prefixContent.prefixAST}
+                      <span class="table-grid-cell-prefix">
+                        <Renderer elements={prefixContent.prefixAST}/>
+                      </span>
+                    {:else if prefixContent.prefixHTML}
+                      <span class="table-grid-cell-prefix">
+                        {@html prefixContent.prefixHTML}
+                      </span>
+                    {/if}
+                    {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(rowRecord, rowIndex)}
+                      <CellInput contentClass={`${contentPaddingCss} ${colDef.css || ""}${colDef.align === 'right' ? ' justify-end' : ''}`}
+                        inputClass={`${inputPaddingCss} ${colDef.inputCss || ""}${colDef.align === 'right' ? ' text-right' : ''}`}
+                        type={colDef.cellInputType || cellInputType}
+                        cellID={buildCellID(rowIndex, columnIndex)}
+                        getValue={() => String(defaultCellValue)}
+                        render={colDef.render ? () => colDef.render!(rowRecord, rowIndex) : undefined}
+                        onBeforeCellChange={colDef.onBeforeCellChange ? (value) => colDef.onBeforeCellChange!(rowRecord, value) : undefined}
+                        onChange={(value) => colDef.onCellEdit?.(rowRecord, value, () => rerenderRow(rowIndex))}
+                      />
+                    {:else if cellRenderer && colDef.useCellRenderer}
+                      {@render cellRenderer(rowRecord, colDef, rowIndex)}
+                    {:else if colDef.buttonEditHandler || colDef.buttonDeleteHandler}
+                      <div class="flex gap-4 items-center justify-center w-full">
+                        {#if colDef.buttonEditHandler && (!colDef.buttonEditIf || colDef.buttonEditIf(rowRecord))}
+                          <button class="_11 _e" title="edit" onclick={(ev) => {
+                            ev.stopPropagation();
+                            colDef.buttonEditHandler?.(rowRecord);
+                          }}>
+                            <i class="icon-pencil"></i>
+                          </button>
+                        {/if}
+                        {#if colDef.buttonDeleteHandler && (!colDef.buttonDeleteIf || colDef.buttonDeleteIf(rowRecord))}
+                          <button class="_11 _d" title="delete" onclick={(ev) => {
+                            ev.stopPropagation();
+                            colDef.buttonDeleteHandler?.(rowRecord);
+                          }}>
+                            <i class="icon-trash"></i>
+                          </button>
+                        {/if}
+                      </div>
+                    {:else if colDef.render}
+                      {@const renderedContent = colDef.render(rowRecord, rowIndex)}
+                      <div class="tg-cell-content" class:tg-cell-line-clamp={colDef.useLineClamp}>
+                        {#if isHtmlContent(renderedContent)}
+                          {@html renderedContent}
+                        {:else}
+                          <Renderer elements={renderedContent}/>
+                        {/if}
+                      </div>
+                    {:else if splitCellSecondLine}
+                      <div class="tg-cell-content" class:tg-cell-line-clamp={colDef.useLineClamp}>
+                        <div>{splitCellFirstLine}</div>
+                        <div>{splitCellSecondLine}</div>
+                      </div>
+                    {:else}
+                      <span class="tg-cell-content" class:tg-cell-line-clamp={colDef.useLineClamp}>{defaultCellValue}</span>
+                      {/if}
+                  </div>
                 </div>
               {/each}
               {/if}
             </div>
-          {/snippet}
-        </SvelteVirtualList>
+          {/if}
+        {/each}
+
+        <div class="table-grid-virtual-spacer" aria-hidden="true" style="height: {bottomSpacerHeight}px;"></div>
       </div>
     </div>
   {/if}
@@ -651,7 +681,7 @@
     border: 1px solid #dee2e6;
     border-radius: 8px;
     background-color: #ffffff;
-    overflow: hidden;
+    overflow: auto;
     min-height: 0;
     box-sizing: border-box;
   }
@@ -664,23 +694,14 @@
   }
 
   .table-grid-scroll-host {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    height: auto;
+    /* Passive wrapper — the shell owns scrolling now, so this just needs to
+       grow with its content (sticky header + spacers + visible rows). */
     min-height: 0;
-    overflow: hidden;
     border-radius: inherit;
-  }
-
-  .table-grid-scroll-host.use-virtual-scroll {
-    height: 100%;
   }
 
   .table-grid-plain-scroll {
     max-height: inherit;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 0 2px;
     /*
     scrollbar-gutter: stable;
     scrollbar-width: auto;
@@ -697,8 +718,9 @@
     display: grid;
     grid-template-columns: var(--table-grid-template-columns);
     width: 100%;
-    /* Let fractional columns shrink inside the viewport so cell ellipsis can work. */
-    min-width: 0;
+    /* Grow to fit fixed column tracks so the scroll container can scroll horizontally
+       when the viewport is narrower than the sum of fixed widths. */
+    min-width: min-content;
   }
 
   .table-grid-header {
@@ -724,6 +746,9 @@
     color: #495057;
     border-right: 1px solid #edf2f7;
     line-height: 1.1;
+    display: grid;
+    align-content: center;
+    min-width: 0;
   }
 
   .table-grid-header-cell:last-child {
@@ -731,15 +756,15 @@
   }
 
   .table-grid-body {
-    height: auto;
     min-height: 0;
     position: relative;
     box-sizing: border-box;
   }
 
-  .table-grid-body.use-virtual-scroll {
-    height: 100%;
-    overflow: hidden;
+  /* Spacers above/below the rendered window; inline `height` extends the body
+     to the dataset's full virtual height so the shell's scrollbar reflects it. */
+  .table-grid-virtual-spacer {
+    width: 100%;
   }
 
   .table-grid-empty {
@@ -883,6 +908,8 @@
 
   .table-grid-row {
     height: var(--table-grid-row-height);
+    max-height: var(--table-grid-row-height);
+    overflow: hidden;
     cursor: pointer;
     border-bottom: 1px solid #edf2f7;
     transition: background-color 0.15s ease;
@@ -926,9 +953,37 @@
     position: relative;
   }
 
-  /* Opt-in 2-line clamp; overrides the cell's default `white-space: nowrap` ellipsis. */
+  .table-grid-cell-prefix {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+  }
+
+  .tg-cell-layout {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .tg-cell-content {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .text-right .tg-cell-content {
+    text-align: right;
+  }
+
+  .text-center .tg-cell-content {
+    text-align: center;
+  }
+
+  /* Clamp only the text wrapper; the cell shell keeps sizing, borders, and alignment stable. */
   .tg-cell-line-clamp {
     white-space: normal;
+    overflow: hidden;
     text-overflow: clip;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -947,67 +1002,9 @@
     background-color: #f9f4ff;
   }
   
-  :global(.table-grid-virtual-viewport) {
-    height: 100% !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    padding: 2px !important;
-    box-sizing: border-box !important;
-    /*
-    scrollbar-gutter: stable;
-    scrollbar-width: auto;
-    scrollbar-color: #94a3b8 #f1f5f9;
-    */
-  }
-  
-  .table-grid-plain-scroll::-webkit-scrollbar {
+  .table-grid-shell::-webkit-scrollbar {
     width: 12px;
-  }
-
-  :global(.table-grid-virtual-viewport::-webkit-scrollbar) {
-    width: 12px;
-  }
-  
-   /*
-
-
-  :global(.table-grid-virtual-viewport::-webkit-scrollbar-track) {
-    background: #f1f5f9;
-  }
-
-  :global(.table-grid-virtual-viewport::-webkit-scrollbar-thumb) {
-    background: #94a3b8;
-    border-radius: 999px;
-    border: 2px solid #f1f5f9;
-  }
-
-  :global(.table-grid-virtual-viewport::-webkit-scrollbar-thumb:hover) {
-    background: #64748b;
-  }
-
-
-  .table-grid-plain-scroll::-webkit-scrollbar-track {
-    background: #f1f5f9;
-  }
-
-  .table-grid-plain-scroll::-webkit-scrollbar-thumb {
-    background: #94a3b8;
-    border-radius: 999px;
-    border: 2px solid #f1f5f9;
-  }
-
-  .table-grid-plain-scroll::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
-  }
-  */
-  
-  :global(.table-grid-virtual-container) {
-    height: 100% !important;
-    min-height: 0 !important;
-  }
-
-  :global(.table-grid-virtual-content) {
-    min-height: 100%;
+    height: 12px;
   }
 
 </style>

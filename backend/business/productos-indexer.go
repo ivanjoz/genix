@@ -133,7 +133,7 @@ func GetProductsIndexDelta(req *core.HandlerArgs) core.HandlerResponse {
 
 	productosDelta := []businessTypes.Product{}
 	q1 := db.Query(&productosDelta)
-	err := q1.Select(q1.Nombre, q1.MarcaID, q1.CategoriasIDs, q1.NameUpdated, q1.Status, q1.StockStatus).
+	err := q1.Select(q1.Name, q1.BrandID, q1.CategoryIDs, q1.NameUpdated, q1.Status, q1.StockStatus).
 		NameUpdated.GreaterEqual(updated).AllowFilter().Exec()
 
 	if err != nil {
@@ -147,15 +147,15 @@ func GetProductsIndexDelta(req *core.HandlerArgs) core.HandlerResponse {
 	marcasCategoriasIDs := core.SliceSet[int32]{}
 	for index := range productosDelta {
 		e := &productosDelta[index]
-		marcasCategoriasIDs.AddIf(e.MarcaID)
-		marcasCategoriasIDs.AddIfBulk(e.CategoriasIDs...)
+		marcasCategoriasIDs.AddIf(e.BrandID)
+		marcasCategoriasIDs.AddIfBulk(e.CategoryIDs...)
 		e.Updated = e.NameUpdated
 		e.NameUpdated = 0
 	}
 
 	marcasCategorias := []businessTypes.SharedListRecord{}
 	q2 := db.Query(&marcasCategorias)
-	err = q2.Select(q2.ID, q2.Nombre, q2.Updated).
+	err = q2.Select(q2.ID, q2.Name, q2.Updated).
 		ID.In(marcasCategoriasIDs.Values...).Exec()
 
 	if err != nil {
@@ -164,7 +164,7 @@ func GetProductsIndexDelta(req *core.HandlerArgs) core.HandlerResponse {
 
 	normalizedBrandNameByID := make(map[int32]string, len(marcasCategorias)+1)
 	for _, sharedRecord := range marcasCategorias {
-		normalizedBrandNameByID[sharedRecord.ID] = index_builder.NormalizeTextForIndex(sharedRecord.Nombre)
+		normalizedBrandNameByID[sharedRecord.ID] = index_builder.NormalizeTextForIndex(sharedRecord.Name)
 	}
 	// Fallback for products without explicit brand assignment.
 	if _, hasSentinelBrand := normalizedBrandNameByID[0]; !hasSentinelBrand {
@@ -174,9 +174,9 @@ func GetProductsIndexDelta(req *core.HandlerArgs) core.HandlerResponse {
 	// Normalize product names and remove brand terms/connectors/single-letter words.
 	for productIndex := range productosDelta {
 		currentProduct := &productosDelta[productIndex]
-		normalizedBrandName := normalizedBrandNameByID[currentProduct.MarcaID]
-		currentProduct.Nombre = index_builder.CleanProductTextByBrand(currentProduct.Nombre, normalizedBrandName)
-		core.Log("currentProduct.Nombre", currentProduct.Nombre)
+		normalizedBrandName := normalizedBrandNameByID[currentProduct.BrandID]
+		currentProduct.Name = index_builder.CleanProductTextByBrand(currentProduct.Name, normalizedBrandName)
+		core.Log("currentProduct.Name", currentProduct.Name)
 	}
 
 	response := map[string]any{
@@ -212,9 +212,9 @@ func buildInputFromProductosData(productsData ProductosData) (index_builder.Buil
 		}
 		productIndexRecords = append(productIndexRecords, index_builder.RecordInput{
 			ID:            currentProduct.ID,
-			Text:          currentProduct.Nombre,
-			BrandID:       currentProduct.MarcaID,
-			CategoriesIDs: append([]int32(nil), currentProduct.CategoriasIDs...),
+			Text:          currentProduct.Name,
+			BrandID:       currentProduct.BrandID,
+			CategoriesIDs: append([]int32(nil), currentProduct.CategoryIDs...),
 		})
 	}
 
@@ -225,7 +225,7 @@ func buildInputFromProductosData(productsData ProductosData) (index_builder.Buil
 			hasSentinelBrandIDZero = true
 		}
 		brandIndexRecords = append(brandIndexRecords, index_builder.RecordInput{
-			ID: currentBrand.ID, Text: currentBrand.Nombre,
+			ID: currentBrand.ID, Text: currentBrand.Name,
 		})
 	}
 	// Keep MarcaID=0 as a valid sentinel so stage 2 can index products without explicit brand.
@@ -238,7 +238,7 @@ func buildInputFromProductosData(productsData ProductosData) (index_builder.Buil
 	categoryIndexRecords := make([]index_builder.RecordInput, 0, len(productsData.Categorias))
 	for _, currentCategory := range productsData.Categorias {
 		categoryIndexRecords = append(categoryIndexRecords, index_builder.RecordInput{
-			ID: currentCategory.ID, Text: currentCategory.Nombre,
+			ID: currentCategory.ID, Text: currentCategory.Name,
 		})
 	}
 
@@ -454,7 +454,7 @@ func loadIndexerSourceDataWithCache(
 
 	productos := []businessTypes.Product{}
 	query := db.Query(&productos)
-	query.Select(query.ID, query.Nombre, query.CategoriasIDs, query.MarcaID).
+	query.Select(query.ID, query.Name, query.CategoryIDs, query.BrandID).
 		CompanyID.Equals(companyID).
 		Status.GreaterThan(0)
 	if queryErr := query.Exec(); queryErr != nil {
@@ -466,9 +466,9 @@ func loadIndexerSourceDataWithCache(
 	// Query all active categories and brands to avoid large clustering-key IN cartesian products.
 	listRows := []businessTypes.SharedListRecord{}
 	listQuery := db.Query(&listRows)
-	listQuery.Select(listQuery.ID, listQuery.Nombre, listQuery.ListaID).
+	listQuery.Select(listQuery.ID, listQuery.Name, listQuery.ListID).
 		CompanyID.Equals(companyID).
-		ListaID.In(productSharedListCategoriaID, productSharedListMarcaID).
+		ListID.In(productSharedListCategoriaID, productSharedListMarcaID).
 		Status.GreaterThan(0).
 		AllowFilter()
 	if queryErr := listQuery.Exec(); queryErr != nil {
@@ -476,9 +476,9 @@ func loadIndexerSourceDataWithCache(
 	}
 
 	for _, listRow := range listRows {
-		if listRow.ListaID == productSharedListMarcaID {
+		if listRow.ListID == productSharedListMarcaID {
 			marcas = append(marcas, listRow)
-		} else if listRow.ListaID == productSharedListCategoriaID {
+		} else if listRow.ListID == productSharedListCategoriaID {
 			categorias = append(categorias, listRow)
 		}
 	}
@@ -515,7 +515,7 @@ func loadIndexerSourceDataWithoutCache(
 ) (ProductosData, error) {
 	productos := []businessTypes.Product{}
 	query := db.Query(&productos)
-	query.Select(query.ID, query.Nombre, query.CategoriasIDs, query.MarcaID).
+	query.Select(query.ID, query.Name, query.CategoryIDs, query.BrandID).
 		CompanyID.Equals(companyID).
 		Status.GreaterThan(0)
 	if queryErr := query.Exec(); queryErr != nil {
@@ -527,9 +527,9 @@ func loadIndexerSourceDataWithoutCache(
 	// Query all active categories and brands to avoid large clustering-key IN cartesian products.
 	listRows := []businessTypes.SharedListRecord{}
 	listQuery := db.Query(&listRows)
-	listQuery.Select(listQuery.ID, listQuery.Nombre, listQuery.ListaID).
+	listQuery.Select(listQuery.ID, listQuery.Name, listQuery.ListID).
 		CompanyID.Equals(companyID).
-		ListaID.In(productSharedListCategoriaID, productSharedListMarcaID).
+		ListID.In(productSharedListCategoriaID, productSharedListMarcaID).
 		Status.GreaterThan(0).
 		AllowFilter()
 	if queryErr := listQuery.Exec(); queryErr != nil {
@@ -537,9 +537,9 @@ func loadIndexerSourceDataWithoutCache(
 	}
 
 	for _, listRow := range listRows {
-		if listRow.ListaID == productSharedListMarcaID {
+		if listRow.ListID == productSharedListMarcaID {
 			marcas = append(marcas, listRow)
-		} else if listRow.ListaID == productSharedListCategoriaID {
+		} else if listRow.ListID == productSharedListCategoriaID {
 			categorias = append(categorias, listRow)
 		}
 	}

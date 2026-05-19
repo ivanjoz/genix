@@ -157,10 +157,10 @@ export class SaleOrderState {
     for(let vp of this.ventaProductos){
       const producto = vp.producto
       if(producto){
-        let precio = producto.PrecioFinal
+        let precio = producto.FinalPrice
 
-        if (vp.isSubUnidad && producto.SbnPreciFinal) {
-           precio = producto.SbnPreciFinal
+        if (vp.isSubUnidad && producto.SbuFinalPrice) {
+           precio = producto.SbuFinalPrice
         }
 
         total += precio * vp.cantidad
@@ -200,9 +200,9 @@ export class SaleOrderState {
 
     // Flatten cart into order details, keeping the backend's legacy field name for serial numbers.
     for (const vp of this.ventaProductos) {
-      let precio = vp.producto?.PrecioFinal || 0
-      if (vp.isSubUnidad && vp.producto?.SbnPreciFinal) {
-        precio = vp.producto.SbnPreciFinal
+      let precio = vp.producto?.FinalPrice || 0
+      if (vp.isSubUnidad && vp.producto?.SbuFinalPrice) {
+        precio = vp.producto.SbuFinalPrice
       }
 
       let totalSerialQty = 0

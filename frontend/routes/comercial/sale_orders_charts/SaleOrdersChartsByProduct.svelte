@@ -38,9 +38,9 @@
   const dateHelper = new DateHelper()
   const TOTAL_DAYS_TO_RENDER = 45
   const CARD_ROW_HEIGHT_PX = 206
-  const chartMetricSelectionOptions: Array<{ ID: TChartMetricMode; Nombre: string }> = [
-    { ID: 'amount', Nombre: 'Por Monto Facturado' },
-    { ID: 'quantity', Nombre: 'Por Cantidad' }
+  const chartMetricSelectionOptions: Array<{ ID: TChartMetricMode; Name: string }> = [
+    { ID: 'amount', Name: 'Por Monto Facturado' },
+    { ID: 'quantity', Name: 'Por Cantidad' }
   ]
 
   let {
@@ -138,12 +138,12 @@
 
         let productChartCard = productChartsByID.get(productID)
         if (!productChartCard) {
-          const productPrice = (productRecord?.PrecioFinal || productRecord?.Precio || 0) / 100
+          const productPrice = (productRecord?.FinalPrice || productRecord?.Price || 0) / 100
           const priceValues = Array.from({ length: TOTAL_DAYS_TO_RENDER }, () => productPrice > 0 ? productPrice : null)
           const priceAxisRange = getLineAxisRangeWithMargin(priceValues)
           productChartCard = {
             productID,
-            productName: productRecord?.Nombre || `Producto #${productID}`,
+            productName: productRecord?.Name || `Producto #${productID}`,
             paidValues: Array.from({ length: TOTAL_DAYS_TO_RENDER }, () => 0),
             unpaidValues: Array.from({ length: TOTAL_DAYS_TO_RENDER }, () => 0),
             priceValues,
@@ -204,7 +204,7 @@
     saveOn={chartMetricForm}
     save={'metricMode'}
     keyId={'ID'}
-    keyName={'Nombre'}
+    keyName={'Name'}
     type="single"
   />
   <FilterInput bind:value={filterText} css="mr-auto w-200" />

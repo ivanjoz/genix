@@ -108,7 +108,7 @@
 		        css="col-span-12"
 		        label="Producto" optionsCss="w-480"
 		        keyId="ID"
-		        keyName="Nombre"
+		        keyName="Name"
 		        options={productosService.records}
 		        placeholder=""
 		      />
@@ -118,7 +118,7 @@
 		        css="col-span-12"
 		        label="Estado"
 		        keyId="ID"
-		        keyName="Nombre"
+		        keyName="Name"
 		        options={saleOrderStatusOptions}
 		        placeholder=""
 		      />
@@ -157,14 +157,14 @@
 				getContent4={(productID) => {
 					// Resolve the selected product id to the visible product name in the filter summary.
 					return productID
-						? (productosService.recordsMap.get(Number(productID))?.Nombre || `Producto #${productID}`)
+						? (productosService.recordsMap.get(Number(productID))?.Name || `Producto #${productID}`)
 						: 'Todos';
 				}}
 				label5="Estado"
 				value5={reportForm.status}
 				getContent5={(statusID) => {
 					// Keep the summary aligned with the same option labels used by the status selector.
-					return saleOrderStatusOptions.find((statusOption) => statusOption.ID === Number(statusID))?.Nombre || 'Todos';
+					return saleOrderStatusOptions.find((statusOption) => statusOption.ID === Number(statusID))?.Name || 'Todos';
 				}}
 			/>
     </div>

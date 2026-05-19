@@ -184,7 +184,7 @@ import {
 
       // Keep the filter inline with the virtualized grid so we only render matching rows.
       const filterableContent = [
-        productRecord?.Nombre || '',
+        productRecord?.Name || '',
         String(productSupplyRecord.MinimunStock || 0),
         String(productSupplyRecord.SalesPerDayEstimated || 0),
         ...providerNames,
@@ -202,7 +202,7 @@ import {
         width: '30%',
         css: 'px-6 py-4 leading-[1.1] whitespace-normal',
         splitString: 64,
-        getValue: (productSupplyRecord) => productos.recordsMap.get(productSupplyRecord.ProductID)?.Nombre || `Producto-${productSupplyRecord.ProductID}`,
+        getValue: (productSupplyRecord) => productos.recordsMap.get(productSupplyRecord.ProductID)?.Name || `Producto-${productSupplyRecord.ProductID}`,
       },
       {
         id: 'stock-min-actual',
@@ -505,7 +505,7 @@ import {
 </div>
 
 <Layer id={2} type="side" sideLayerSize={720}
-  title={`Abastecimiento ${productos.recordsMap.get(productSupplyForm.ProductID)?.Nombre || ''}`}
+  title={`Abastecimiento ${productos.recordsMap.get(productSupplyForm.ProductID)?.Name || ''}`}
   titleCss="h2 mb-6"
   css="px-12 py-10"
   contentCss="px-0"
@@ -522,8 +522,8 @@ import {
   <div class="grid grid-cols-24 gap-10 mt-8" aria-label="Product supply configuration form with minimum stock and estimated sales">
     <Input
       label="Producto"
-      saveOn={{ Nombre: productos.recordsMap.get(productSupplyForm.ProductID)?.Nombre || '' }}
-      save="Nombre"
+      saveOn={{ Name: productos.recordsMap.get(productSupplyForm.ProductID)?.Name || '' }}
+      save="Name"
       css="col-span-24"
       disabled={true}
     />

@@ -45,9 +45,9 @@ func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 		{
 			ID:          0, // Set to 0 to trigger autoincrement
 			CompanyID:   1,
-			Nombres:     "Hola 2",
-			Apellidos:   "Mundo 2",
-			PerfilesIDs: []int32{2, 3, 4},
+			FirstName:  "Hola 2",
+			LastName:   "Mundo 2",
+			ProfileIDs: []int32{2, 3, 4},
 			Updated:     core.SUnixTime(),
 			Created:     core.SUnixTime(),
 		},
@@ -650,7 +650,7 @@ func Test30(args *core.ExecArgs) core.FuncResponse {
 		query := db.Query(&registros)
 		query.Select().
 			CompanyID.Equals(1).
-			ListaID.In(listasIDs...)
+			ListID.In(listasIDs...)
 		if updated > 0 {
 			query.Updated.GreaterThan(updated)
 		} else {
@@ -803,10 +803,10 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 	recordToInsert := businessTypes.SharedListRecord{
 		ID:          2,
 		CompanyID:   1,
-		ListaID:     3,
-		Nombre:      "Demo 1",
+		ListID:      3,
+		Name:        "Demo 1",
 		Images:      []string{"value 1", "value2"},
-		Descripcion: "Descripcion 1",
+		Description: "Descripcion 1",
 		Status:      1,
 		Updated:     1111,
 		UpdatedBy:   2222,
@@ -825,10 +825,10 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 	recordToUpdate := businessTypes.SharedListRecord{
 		ID:          1,
 		CompanyID:   1,
-		ListaID:     3,
-		Nombre:      "Demo Update 1",
+		ListID:      3,
+		Name:        "Demo Update 1",
 		Images:      []string{"Updated xx", "Updated yyy"},
-		Descripcion: "Descripcion Updated 1",
+		Description: "Descripcion Updated 1",
 		Status:      1,
 		Updated:     9999,
 		UpdatedBy:   8888,
@@ -838,7 +838,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	q1 := db.Table[businessTypes.SharedListRecord]()
 	err = db.Update(&[]businessTypes.SharedListRecord{recordToUpdate},
-		q1.Status, q1.ListaID, q1.Nombre, q1.Images, q1.Descripcion, q1.Updated)
+		q1.Status, q1.ListID, q1.Name, q1.Images, q1.Description, q1.Updated)
 	if err != nil {
 		fmt.Println("Error al actualizar::", err)
 		panic(err)
@@ -849,7 +849,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 	// Example 1: Simple query with chaining
 	query := db.Query(&registros)
 	query.Select().
-		CompanyID.Equals(1).ListaID.Equals(2).Status.Equals(1).
+		CompanyID.Equals(1).ListID.Equals(2).Status.Equals(1).
 		AllowFilter()
 
 	// Execute and get all results
@@ -859,7 +859,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Found records:", len(registros), "|", len(registros))
 	for _, e := range registros {
-		fmt.Println("Records:", e.Nombre, "|", e.ID)
+		fmt.Println("Records:", e.Name, "|", e.ID)
 	}
 	return core.FuncResponse{}
 }

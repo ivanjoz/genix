@@ -24,8 +24,8 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
     if (!normalizedFilterText) return categorias
     return categorias.filter((record) => {
       return (
-        String(record.Nombre || "").toLowerCase().includes(normalizedFilterText) ||
-        String(record.Descripcion || "").toLowerCase().includes(normalizedFilterText)
+        String(record.Name || "").toLowerCase().includes(normalizedFilterText) ||
+        String(record.Description || "").toLowerCase().includes(normalizedFilterText)
       )
     })
   })
@@ -37,7 +37,7 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
   const onSave = async (isDelete?: boolean) => {
     console.log("form a enviar 1::",$state.snapshot(form), isDelete)
 
-    if((form.Nombre||"").length < 4 || !form.ListaID){
+    if((form.Name||"").length < 4 || !form.ListID){
       Notify.failure("Debe colocar un nombre de al menos 4 caracteres.")
       return
     }
@@ -95,7 +95,7 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
   }
 
   export const newRecord = () => {
-    form = { ListaID: origin as number } as ISharedListRecord
+    form = { ListID: origin as number } as ISharedListRecord
     openModal(2)
   }
 
@@ -132,8 +132,8 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
           selectCategoria(e)
         }}>
         <div class="min-h-70 _2 mb-2"></div>
-        <div class="fs17 ff-semibold">{e.Nombre}</div>
-        <div class="fs15">{e.Descripcion}</div>
+        <div class="fs17 ff-semibold">{e.Name}</div>
+        <div class="fs15">{e.Description}</div>
       </div>
     {/each}
   </div>
@@ -150,10 +150,10 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
   >
   <div class="grid grid-cols-12 gap-10 p-6" aria-label="Category or brand form with name, description, and images">
     <Input label="Nombre" css="col-span-12"
-      saveOn={form} save="Nombre" required={true}
+      saveOn={form} save="Name" required={true}
     />
     <Input label="Descripción" css="col-span-12 mb-16"
-      saveOn={form} save="Descripcion"
+      saveOn={form} save="Description"
     />
     {#each images as image, index }
       <ImageUploader clearOnUpload={true} id={image._id}

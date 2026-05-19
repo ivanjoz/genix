@@ -20,8 +20,8 @@ export interface ICompanyCulqui {
 export interface ICompany {
   id: number
   Email: string
-  Nombre: string
-  RazonSocial: string
+  Name: string
+  LegalName: string
   RUC: string
   Telefono: string
   Representante: string

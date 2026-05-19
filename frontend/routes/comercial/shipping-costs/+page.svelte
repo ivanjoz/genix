@@ -62,9 +62,9 @@
 
     for (const distrito of paisCiudadesService.distritos) {
       // District rows are attached to their province through PadreID.
-      const currentList = groupedDistritos.get(distrito.PadreID) || []
+      const currentList = groupedDistritos.get(distrito.ParentID) || []
       currentList.push(distrito)
-      groupedDistritos.set(distrito.PadreID, currentList)
+      groupedDistritos.set(distrito.ParentID, currentList)
     }
 
     return groupedDistritos
@@ -75,9 +75,9 @@
 
     for (const provincia of paisCiudadesService.provincias) {
       // Province summaries are grouped once so every departamento card can read the same source.
-      const currentList = groupedProvincias.get(provincia.PadreID) || []
+      const currentList = groupedProvincias.get(provincia.ParentID) || []
       currentList.push(provincia)
-      groupedProvincias.set(provincia.PadreID, currentList)
+      groupedProvincias.set(provincia.ParentID, currentList)
     }
 
     return groupedProvincias
@@ -89,7 +89,7 @@
       header: 'Nombre',
       width: 'minmax(180px, 1fr)',
       css: 'text-[14px] leading-[1.1] pl-10 pr-24',
-      getValue: (ciudad) => ciudad.Nombre,
+      getValue: (ciudad) => ciudad.Name,
     },
     {
       id: 'fixed-cost',
@@ -187,7 +187,7 @@
     selectedProvincia = null
     console.debug('[delivery-costs] departamento selected', {
       id: departamento.ID,
-      nombre: departamento.Nombre,
+      nombre: departamento.Name,
     })
   }
 
@@ -196,7 +196,7 @@
     selectedProvincia = node.isOpen ? node.record : null
     console.debug('[delivery-costs] provincia selected', {
       id: node.record.ID,
-      nombre: node.record.Nombre,
+      nombre: node.record.Name,
       isOpen: node.isOpen,
       distritos: node.children.length,
     })
@@ -214,7 +214,7 @@
     deliveryCostByCiudadID = { ...deliveryCostByCiudadID, [selectedDepartamento.ID]: cost }
     console.debug('[delivery-costs] departamento cost edited', {
       id: selectedDepartamento.ID,
-      nombre: selectedDepartamento.Nombre,
+      nombre: selectedDepartamento.Name,
       cost,
     })
   }
@@ -231,7 +231,7 @@
       hasUpdated: true,
     }
     deliveryCostByCiudadID = { ...deliveryCostByCiudadID, [ciudad.ID]: cost }
-    console.debug('[delivery-costs] cost edited', { id: ciudad.ID, nombre: ciudad.Nombre, field, cost })
+    console.debug('[delivery-costs] cost edited', { id: ciudad.ID, nombre: ciudad.Name, field, cost })
   }
 
   function normalizeSearchText(value: string) {
@@ -245,7 +245,7 @@
 
   function cityMatchesFilter(ciudad: ICityLocation) {
     // Every filter target uses the same normalized comparison to avoid inconsistent results.
-    return normalizeSearchText(ciudad.Nombre).includes(normalizedFilterText)
+    return normalizeSearchText(ciudad.Name).includes(normalizedFilterText)
   }
 
   function makeProvinciaTreeNode(provincia: ICityLocation): TableTreeNode<ICityLocation> {
@@ -374,7 +374,7 @@
               onclick={() => selectDepartamento(departamento)}
             >
               <div class="flex items-center gap-8">
-                <div class="ff-semibold leading-[1.1] truncate">{departamento.Nombre}</div>
+                <div class="ff-semibold leading-[1.1] truncate">{departamento.Name}</div>
                 <div class="rounded bg-blue-50 px-8 py-3 text-xs leading-[1.0] text-blue-700 font-mono">
                   {formatDeliveryCost(getDeliveryCost(departamento.ID, 'Fijo'))}
                 </div>
@@ -413,7 +413,7 @@
         <div class="mt-6 grid grid-cols-[minmax(160px,1fr)_110px_110px] gap-8" aria-label="Departamento delivery cost form with flat and per-kg rates">
           <div class="bg-gray-100 rounded-md p-8">
             <div class="text-[10px] uppercase text-gray-500">Departamento</div>
-            <div class="text-[15px] text-gray-800 truncate">{selectedDepartamento?.Nombre || 'Seleccione'}</div>
+            <div class="text-[15px] text-gray-800 truncate">{selectedDepartamento?.Name || 'Seleccione'}</div>
           </div>
           <Input
             bind:saveOn={departamentoCostForm}
@@ -446,7 +446,7 @@
             selectedId={selectedProvincia?.ID}
             getChildId={(distrito) => distrito.ID}
             onNodeClick={toggleProvincia}
-            onChildClick={(distrito) => console.debug('[delivery-costs] distrito click', { id: distrito.ID, nombre: distrito.Nombre })}
+            onChildClick={(distrito) => console.debug('[delivery-costs] distrito click', { id: distrito.ID, nombre: distrito.Name })}
             emptyMessage="Sin provincias"
             css=""
             rowCss="text-[14px]"

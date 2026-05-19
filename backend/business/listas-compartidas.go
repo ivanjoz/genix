@@ -30,7 +30,7 @@ func GetListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 			query := db.Query(listaRegistrosMap[listaID])
 			query.Select().
 				CompanyID.Equals(req.User.CompanyID).
-				ListaID.Equals(listaID)
+				ListID.Equals(listaID)
 			if updated > 0 {
 				query.Updated.GreaterThan(updated)
 			} else {
@@ -54,11 +54,11 @@ func GetListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &response)
 }
 
-// PostListasCompartidas performs batch upsert by (ListaID + normalized name hash).
+// PostListasCompartidas performs batch upsert by (ListID + normalized name hash).
 // Behavior summary:
-//  1. Validates required fields and computes NombreHash using SelfParse.
-//  2. Rejects duplicate names in the same payload for the same ListaID.
-//  3. Loads existing rows by incoming (ListaID, hash) scope for the tenant.
+//  1. Validates required fields and computes NameHash using SelfParse.
+//  2. Rejects duplicate names in the same payload for the same ListID.
+//  3. Loads existing rows by incoming (ListID, hash) scope for the tenant.
 //  4. If a colliding row is active (Status > 0) and is not the same ID, it rejects the request.
 //  5. For incoming inserts (ID <= 0), if collision is only with deleted rows (Status = 0),
 //     it reuses that historical ID so the operation becomes an update instead of a new insert.
@@ -79,8 +79,8 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	uniqueIncomingRecordKeyToIndex := map[string]int{}
 	uniqueIncomingHashes := []int32{}
 	seenIncomingHashes := map[int32]bool{}
-	uniqueIncomingListaIDs := []int32{}
-	seenIncomingListaIDs := map[int32]bool{}
+	uniqueIncomingListIDs := []int32{}
+	seenIncomingListIDs := map[int32]bool{}
 
 	// Preserve client IDs as TempID for response mapping.
 	newIDs := []businessTypes.NewIDToID{}
@@ -88,34 +88,34 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	for index := range records {
 		e := &records[index]
 		// Enforce minimum validation rules for business consistency.
-		if len(e.Nombre) < 2 || e.ListaID == 0 {
-			return req.MakeErr("Faltan propiedades de en un registro. | Nombre:", e.Nombre, "| LID:", e.ListaID)
+		if len(e.Name) < 2 || e.ListID == 0 {
+			return req.MakeErr("Faltan propiedades de en un registro. | Nombre:", e.Name, "| LID:", e.ListID)
 		}
 
 		// Save original incoming ID before potential ID reuse/autoincrement.
 		newIDs = append(newIDs, businessTypes.NewIDToID{TempID: e.ID})
 
-		// Keep NombreHash consistent with model SelfParse logic.
+		// Keep NameHash consistent with model SelfParse logic.
 		e.SelfParse()
-		recordKey := fmt.Sprintf("%v_%v", e.ListaID, e.NombreHash)
+		recordKey := fmt.Sprintf("%v_%v", e.ListID, e.NameHash)
 		// Prevent repeated names in the same request payload for the same list.
 		if previousIndex, duplicateHashExists := uniqueIncomingRecordKeyToIndex[recordKey]; duplicateHashExists {
-			previousRecordName := records[previousIndex].Nombre
+			previousRecordName := records[previousIndex].Name
 			return req.MakeErr(fmt.Sprintf(
 				"Hay registros repetidos por nombre en el mismo envío para la lista %v: \"%s\" y \"%s\".",
-				e.ListaID, previousRecordName, e.Nombre,
+				e.ListID, previousRecordName, e.Name,
 			))
 		}
 
 		// Keep a unique list of hash/lista keys for the DB collision query.
 		uniqueIncomingRecordKeyToIndex[recordKey] = index
-		if !seenIncomingHashes[e.NombreHash] {
-			uniqueIncomingHashes = append(uniqueIncomingHashes, e.NombreHash)
-			seenIncomingHashes[e.NombreHash] = true
+		if !seenIncomingHashes[e.NameHash] {
+			uniqueIncomingHashes = append(uniqueIncomingHashes, e.NameHash)
+			seenIncomingHashes[e.NameHash] = true
 		}
-		if !seenIncomingListaIDs[e.ListaID] {
-			uniqueIncomingListaIDs = append(uniqueIncomingListaIDs, e.ListaID)
-			seenIncomingListaIDs[e.ListaID] = true
+		if !seenIncomingListIDs[e.ListID] {
+			uniqueIncomingListIDs = append(uniqueIncomingListIDs, e.ListID)
+			seenIncomingListIDs[e.ListID] = true
 		}
 	}
 
@@ -124,8 +124,8 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 	existingRecordsQuery := db.Query(&existingRecordsByHash)
 	existingRecordsQuery.Select().
 		CompanyID.Equals(req.User.CompanyID).
-		NombreHash.In(uniqueIncomingHashes...).
-		ListaID.In(uniqueIncomingListaIDs...).
+		NameHash.In(uniqueIncomingHashes...).
+		ListID.In(uniqueIncomingListIDs...).
 		AllowFilter()
 
 	if err = existingRecordsQuery.Exec(); err != nil {
@@ -134,7 +134,7 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 
 	existingRecordsGroupedByRecordKey := core.SliceToMapP(existingRecordsByHash,
 		func(e businessTypes.SharedListRecord) string {
-			return fmt.Sprintf("%v_%v", e.ListaID, e.NombreHash)
+			return fmt.Sprintf("%v_%v", e.ListID, e.NameHash)
 		})
 
 	nowTime := core.SUnixTime()
@@ -146,7 +146,7 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 		incomingRecord.Updated = nowTime
 		incomingRecord.UpdatedBy = req.User.ID
 
-		recordKey := fmt.Sprintf("%v_%v", incomingRecord.ListaID, incomingRecord.NombreHash)
+		recordKey := fmt.Sprintf("%v_%v", incomingRecord.ListID, incomingRecord.NameHash)
 		collidingExistingRecords := existingRecordsGroupedByRecordKey[recordKey]
 		reusableDeletedRecordID := int32(0)
 
@@ -160,8 +160,8 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 			if existingRecord.Status > 0 {
 				return req.MakeErr(fmt.Sprintf(
 					"El nombre \"%s\" ya existe en la lista %v.",
-					incomingRecord.Nombre,
-					incomingRecord.ListaID,
+					incomingRecord.Name,
+					incomingRecord.ListID,
 				))
 			}
 			// Keep one deleted-row candidate to convert insert into update.
@@ -172,7 +172,7 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 
 		// Reuse a deleted row ID so client inserts become upserts by historical name.
 		if incomingRecord.ID <= 0 && reusableDeletedRecordID > 0 {
-			core.Log("PostListasCompartidas:: reutilizando ID por NombreHash", incomingRecord.ListaID, incomingRecord.NombreHash, reusableDeletedRecordID)
+			core.Log("PostListasCompartidas:: reutilizando ID por NameHash", incomingRecord.ListID, incomingRecord.NameHash, reusableDeletedRecordID)
 			incomingRecord.ID = reusableDeletedRecordID
 		}
 	}

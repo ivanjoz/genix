@@ -34,7 +34,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
   // Lookup brand name by ID for the table cell — reuses the same shared list as productos.
   const brandLabelById = $derived.by(() => {
     const records = listas.ListaRecordsMap.get(2) || [];
-    return new Map(records.map((brandRecord) => [brandRecord.ID, brandRecord.Nombre]));
+    return new Map(records.map((brandRecord) => [brandRecord.ID, brandRecord.Name]));
   });
 
   const supplyColumns: ExcelTableColumn<ISupplyMaterial>[] = [
@@ -269,7 +269,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
         css="col-span-24 md:col-span-6"
         save="BrandID"
         keyId="ID"
-        keyName="Nombre"
+        keyName="Name"
         options={listas.ListaRecordsMap.get(2) || []}
       />
       <Input label="Descripción"

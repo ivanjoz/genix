@@ -404,7 +404,7 @@ func (generator *saleOrderGenerator) selectProducts(stocks []logisticsTypes.Prod
 func (generator *saleOrderGenerator) loadProductCatalog() error {
 	products := []businessTypes.Product{}
 	query := db.Query(&products)
-	query.Select(query.ID, query.Nombre, query.Precio, query.PrecioFinal, query.Status).
+	query.Select(query.ID, query.Name, query.Price, query.FinalPrice, query.Status).
 		CompanyID.Equals(sampleCompanyID).
 		ID.In(generator.selectedProductIDs...)
 	if err := query.Exec(); err != nil {
@@ -414,14 +414,14 @@ func (generator *saleOrderGenerator) loadProductCatalog() error {
 		return core.Err("no se pudieron resolver todos los productos seleccionados")
 	}
 	for _, product := range products {
-		resolvedPrice := product.PrecioFinal
+		resolvedPrice := product.FinalPrice
 		if resolvedPrice <= 0 {
-			resolvedPrice = product.Precio
+			resolvedPrice = product.Price
 		}
 		if resolvedPrice <= 0 {
 			resolvedPrice = 1
 		}
-		generator.productNamesByID[product.ID] = product.Nombre
+		generator.productNamesByID[product.ID] = product.Name
 		generator.productPricesByID[product.ID] = resolvedPrice
 	}
 	return nil

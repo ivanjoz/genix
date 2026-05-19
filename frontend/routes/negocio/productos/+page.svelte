@@ -26,6 +26,7 @@ import {
     type IProduct,
     type IProductoImage
 } from "./productos.svelte";
+    import TableGrid from '$components/vTable/TableGrid.svelte';
 
   let filterText = $state("");
   const productos = new ProductosService(true);
@@ -57,7 +58,7 @@ import {
   const makeProductColumns = (isImport = false): ExcelTableColumn<IProduct>[] => [
     {
       header: "ID", 
-      field: 'ID',
+      field: 'ID', width: "40px",
       css: "c-blue text-center",
       headerCss: "w-48", headerInnerCss: "min-w-42",
       getValue: (e) => e.ID || "",
@@ -67,35 +68,35 @@ import {
       mobile: { order: 1, css: "col-span-6 ff-bold", icon: "tag" },
     },
     {
-      header: "Producto",
-      highlight: true,
-      getValue: (e) => e.Nombre,
-      field: "Nombre",
-      setCellCss: (record) => getUpdatedFieldCellCss(record, "Nombre"),
+      header: "Producto", useLineClamp: true,
+      highlight: true, width: "300px",
+      getValue: (e) => e.Name,
+      field: "Name",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Name"),
       excel: { type: "string" },
       mobile: {
         order: 2,
         css: "col-span-18",
-        render: (e) => `<strong>${e.Nombre}</strong>`,
+        render: (e) => `<strong>${e.Name}</strong>`,
       },
     },
     {
-      header: "Categorías",
-      highlight: true,
-      renderPrefix: e => (e.CategoriasIDs||[]).some(x => x <= 0) && `<i class="icon-arrows-cw -ml-4 text-purple-400"></i>`,
+      header: "Categorías", useLineClamp: true,
+      highlight: true, width: "160px",
+      renderPrefix: e => (e.CategoryIDs||[]).some(x => x <= 0) && `<i class="icon-arrows-cw -ml-4 text-purple-400"></i>`,
       getValue: (e) => {
         // Keep import preview readable by showing original labels from Excel.
         if (isImport && (e._categoriasNames || "").trim().length > 0) {
           return e._categoriasNames || "";
         }
         const nombres = [];
-        for (const id of e.CategoriasIDs || []) {
-          const nombre = listas.get(id)?.Nombre || `Categoría-${id}`;
+        for (const id of e.CategoryIDs || []) {
+          const nombre = listas.get(id)?.Name || `Categoría-${id}`;
           nombres.push(nombre);
         }
         return nombres.join(", ");
       },
-      setCellCss: (record) => getUpdatedFieldCellCss(record, "CategoriasIDs"),
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "CategoryIDs"),
       // Record the raw category names on import so another step can resolve the IDs.
       excel: { type: "string", importField: "_categoriasNames" },
       mobile: {
@@ -103,8 +104,8 @@ import {
         css: "col-span-24",
         render: (e) => {
           const nombres = [];
-          for (const id of e.CategoriasIDs || []) {
-            const nombre = listas.get(id)?.Nombre || `Categoría-${id}`;
+          for (const id of e.CategoryIDs || []) {
+            const nombre = listas.get(id)?.Name || `Categoría-${id}`;
             nombres.push(nombre);
           }
           return `<div style="font-size: 0.85rem; color: #666;">${nombres.join(", ") || "Sin categorías"}</div>`;
@@ -112,56 +113,56 @@ import {
       },
     },
     {
-      header: "Precio",
+      header: "Precio", width: "100px",
       css: "text-right",
-      getValue: (e) => formatN(e.Precio / 100, 2),
-      field: "Precio",
-      setCellCss: (record) => getUpdatedFieldCellCss(record, "Precio"),
+      getValue: (e) => formatN(e.Price / 100, 2),
+      field: "Price",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Price"),
       excel: {
         type: "number",
         format: "#,##0.00",
-        exportValue: (e) => e.Precio / 100,
+        exportValue: (e) => e.Price / 100,
         // Converts imported decimal price into backend cents model.
         setValue: (rowDraft, parsedValue) => {
           if (typeof parsedValue !== "number" || !Number.isFinite(parsedValue)) return;
-          rowDraft.Precio = Math.round(parsedValue * 100);
+          rowDraft.Price = Math.round(parsedValue * 100);
         },
       },
       mobile: {
         order: 4,
         css: "col-span-8",
         labelLeft: "Precio:",
-        render: (e) => formatN(e.Precio / 100, 2),
+        render: (e) => formatN(e.Price / 100, 2),
       },
     },
     {
-      header: "Descuento",
+      header: "Descuento", width: "100px",
       css: "text-right",
-      getValue: (e) => (e.Descuento ? String(e.Descuento) + "%" : ""),
-      field: "Descuento",
-      setCellCss: (record) => getUpdatedFieldCellCss(record, "Descuento"),
+      getValue: (e) => (e.Discount ? String(e.Discount) + "%" : ""),
+      field: "Discount",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Discount"),
       excel: { type: "number" },
       mobile: {
         order: 5,
         css: "col-span-8",
         labelLeft: "Desc:",
-        render: (e) => (e.Descuento ? `${e.Descuento}%` : "-"),
+        render: (e) => (e.Discount ? `${e.Discount}%` : "-"),
       },
     },
     {
-      header: "Precio Final",
+      header: "Precio Final", width: "100px",
       css: "text-right",
-      getValue: (e) => formatN(e.PrecioFinal / 100, 2),
-      field: "PrecioFinal",
-      setCellCss: (record) => getUpdatedFieldCellCss(record, "PrecioFinal"),
+      getValue: (e) => formatN(e.FinalPrice / 100, 2),
+      field: "FinalPrice",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "FinalPrice"),
       excel: {
         type: "number",
         format: "#,##0.00",
-        exportValue: (e) => e.PrecioFinal / 100,
+        exportValue: (e) => e.FinalPrice / 100,
         // Keeps imported final price aligned with backend cents model.
         setValue: (rowDraft, parsedValue) => {
           if (typeof parsedValue !== "number" || !Number.isFinite(parsedValue)) return;
-          rowDraft.PrecioFinal = Math.round(parsedValue * 100);
+          rowDraft.FinalPrice = Math.round(parsedValue * 100);
         },
       },
       mobile: {
@@ -169,15 +170,15 @@ import {
         css: "col-span-8",
         labelLeft: "Final:",
         icon: "ok",
-        render: (e) => `<strong>${formatN(e.PrecioFinal / 100, 2)}</strong>`,
+        render: (e) => `<strong>${formatN(e.FinalPrice / 100, 2)}</strong>`,
       },
     },
     {
-      header: "Sub Unidades",
+      header: "Sub Unidades", width: "120px",
       css: "text-right",
       getValue: (e) => {
-        if (!e.SbnUnidad) return "";
-        return `${e.SbnCantidad} x ${e.SbnUnidad}`;
+        if (!e.SbuUnit) return "";
+        return `${e.SbuQuantity} x ${e.SbuUnit}`;
       },
       excel: { type: "string" },
       mobile: {
@@ -185,17 +186,17 @@ import {
         css: "col-span-24",
         labelTop: "Sub-unidades",
         render: (e) => {
-          if (!e.SbnUnidad) return "<span style='color: #999;'>-</span>";
-          return `<div style="font-size: 0.9rem;">${e.SbnCantidad} x ${e.SbnUnidad}</div>`;
+          if (!e.SbuUnit) return "<span style='color: #999;'>-</span>";
+          return `<div style="font-size: 0.9rem;">${e.SbuQuantity} x ${e.SbuUnit}</div>`;
         },
       },
     },
     {
-      header: "Marca",
+      header: "Marca", width: "160px",
       hidden: !isImport,
-      renderPrefix: e => !(e.MarcaID > 0) && `<i class="icon-arrows-cw text-purple-500"></i>`,
-      getValue: (e) => e._marcaNombre || listas.get(e.MarcaID)?.Nombre || "",
-      setCellCss: (record) => getUpdatedFieldCellCss(record, "MarcaID"),
+      renderPrefix: e => !(e.BrandID > 0) && `<i class="-ml-4 icon-arrows-cw text-purple-500"></i>`,
+      getValue: (e) => e._marcaNombre || listas.get(e.BrandID)?.Name || "",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "BrandID"),
       excel: { type: "string", importField: "_marcaNombre" },
     },
     {
@@ -206,7 +207,7 @@ import {
       excel: { type: "string", importField: "_unidadNombre" },
     },
     {
-      header: "Volumen",
+      header: "Volumen", width: "100px",
       hidden: !isImport,
       getValue: (e) => e.Volumen || "",
       field: "Volumen",
@@ -316,8 +317,8 @@ import {
       }
 
       const productosToSave = importExcelRowsPreview.map((importedProducto) => {
-        importedProducto.MarcaID = tempIDToNewID.get(importedProducto.MarcaID) || importedProducto.MarcaID;
-        importedProducto.CategoriasIDs = (importedProducto.CategoriasIDs || []).map((categoriaID) => {
+        importedProducto.BrandID = tempIDToNewID.get(importedProducto.BrandID) || importedProducto.BrandID;
+        importedProducto.CategoryIDs = (importedProducto.CategoryIDs || []).map((categoriaID) => {
           return tempIDToNewID.get(categoriaID) || categoriaID;
         });
 
@@ -334,12 +335,12 @@ import {
       });
 
       const unresolvedIDProducto = productosToSave.find((productoDraft) => {
-        const hasInvalidCategoriaID = (productoDraft.CategoriasIDs || []).some((categoriaID) => categoriaID <= 0);
-        return hasInvalidCategoriaID || productoDraft.MarcaID <= 0;
+        const hasInvalidCategoriaID = (productoDraft.CategoryIDs || []).some((categoriaID) => categoriaID <= 0);
+        return hasInvalidCategoriaID || productoDraft.BrandID <= 0;
       });
       if (unresolvedIDProducto) {
         throw new Error(
-          `No se pudieron resolver IDs temporales para el producto "${unresolvedIDProducto.Nombre || unresolvedIDProducto.ID}".`,
+          `No se pudieron resolver IDs temporales para el producto "${unresolvedIDProducto.Name || unresolvedIDProducto.ID}".`,
         );
       }
 
@@ -368,18 +369,18 @@ import {
     for (const producto of payload) {
       // Keep local shape consistent even when backend omits optional fields in responses.
       producto.Image = producto.Images?.[0];
-      producto.CategoriasIDs = producto.CategoriasIDs || [];
+      producto.CategoryIDs = producto.CategoryIDs || [];
     }
     return await productos.postAndSync(payload);
   };
 
   const importEditableProductKeys = new Set<keyof IProduct>([
-    "ID", "Nombre", "CategoriasIDs", "Precio", "Descuento", "PrecioFinal",
-    "MarcaID", "UnidadID", "Volumen", "Peso", "MonedaID",
+    "ID", "Name", "CategoryIDs", "Price", "Discount", "FinalPrice",
+    "BrandID", "UnidadID", "Volumen", "Peso", "MonedaID",
   ]);
 
   const onSave = async (isDelete?: boolean) => {
-    if ((productoForm.Nombre?.length || 0) < 4) {
+    if ((productoForm.Name?.length || 0) < 4) {
       Notify.failure("El nombre debe tener al menos 4 caracteres.");
       return;
     }
@@ -414,7 +415,7 @@ import {
     Loading.standard("Eliminando Imagen...");
     try {
       await POST({
-        data: { ProductoID: productoForm.ID, ImageToDelete },
+        data: { ProductID: productoForm.ID, ImageToDelete },
         route: "producto-image",
         refreshRoutes: ["productos"],
       });
@@ -495,12 +496,12 @@ import {
         selected={productoForm?.ID}
         isSelected={(e, id) => e.ID === id}
         getFilterContent={(e) => {
-          return e.Nombre;
+          return e.Name;
         }}
         onRowClick={(e) => {
           productoForm = { ...e };
-          productoForm.CategoriasIDs = [...(e.CategoriasIDs || [])];
-          productoForm.Propiedades = [...(e.Propiedades || [])];
+          productoForm.CategoryIDs = [...(e.CategoryIDs || [])];
+          productoForm.Properties = [...(e.Properties || [])];
           Core.openSideLayer(1);
         }}
         mobileCardCss="mb-2"
@@ -511,7 +512,7 @@ import {
     type="side"
     sideLayerSize={780}
     css="px-8 py-8 md:px-16 md:py-10"
-    title={productoForm?.Nombre || ""}
+    title={productoForm?.Name || ""}
     titleCss="h2 mb-6"
     contentCss="px-0 md:px-0"
     id={1}
@@ -525,7 +526,7 @@ import {
     onDelete={() => {
       ConfirmWarn(
         "Eliminar Producto",
-        `¿Está seguro que desea eliminar "${productoForm.Nombre}"?`,
+        `¿Está seguro que desea eliminar "${productoForm.Name}"?`,
         "SI",
         "NO",
         () => {
@@ -550,7 +551,7 @@ import {
           saveOn={productoForm}
           css="col-span-24"
           required={true}
-          save="Nombre"
+          save="Name"
         />
         <div class="col-span-24 md:col-span-9 md:row-span-4">
           <ImageUploader
@@ -564,7 +565,7 @@ import {
             cardCss="w-full h-180 p-4"
             imageSource={productoForm._imageSource}
             setDataToSend={(e) => {
-              e.ProductoID = productoForm.ID;
+              e.ProductID = productoForm.ID;
             }}
             onChange={(e, uploadHandler) => {
               imageUploaderHandler = uploadHandler;
@@ -589,14 +590,14 @@ import {
           label="Precio Base"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
-          save="Precio"
+          save="Price"
           type="number"
           baseDecimals={2}
-          dependencyValue={productoForm.Precio}
+          dependencyValue={productoForm.Price}
           onChange={() => {
             console.log("productoForm", $state.snapshot(productoForm));
-            productoForm.PrecioFinal = Math.round(
-              (productoForm.Precio * (100 - (productoForm.Descuento || 0))) /
+            productoForm.FinalPrice = Math.round(
+              (productoForm.Price * (100 - (productoForm.Discount || 0))) /
                 100,
             );
           }}
@@ -605,7 +606,7 @@ import {
           label="Descuento"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
-          save="Descuento"
+          save="Discount"
           postValue="%"
           type="number"
           validator={(v) => {
@@ -616,15 +617,15 @@ import {
           label="Precio Final"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
-          dependencyValue={productoForm.PrecioFinal}
-          save="PrecioFinal"
+          dependencyValue={productoForm.FinalPrice}
+          save="FinalPrice"
           type="number"
           baseDecimals={2}
           onChange={() => {
             console.log("productoForm", $state.snapshot(productoForm));
-            productoForm.Precio = Math.round(
-              (productoForm.PrecioFinal /
-                (100 - (productoForm.Descuento || 0))) *
+            productoForm.Price = Math.round(
+              (productoForm.FinalPrice /
+                (100 - (productoForm.Discount || 0))) *
                 100,
             );
           }}
@@ -665,9 +666,9 @@ import {
           label="Marca"
           saveOn={productoForm}
           css="col-span-12 md:col-span-10 mb-2"
-          save="MarcaID"
+          save="BrandID"
           keyId="ID"
-          keyName="Nombre"
+          keyName="Name"
           options={listas.ListaRecordsMap.get(2) || []}
         />
         <div class="col-span-24 md:col-span-14">
@@ -688,7 +689,7 @@ import {
         />
         <Input
           saveOn={productoForm}
-          save="Descripcion"
+          save="Description"
           css="col-span-24 mb-4"
           label="Descripción Corta"
         />
@@ -697,31 +698,31 @@ import {
           label="CATEGORÍAS ::"
           options={categorias}
           keyId="ID"
-          keyName="Nombre"
+          keyName="Name"
           cardCss="grow"
           inputCss="w-[35%] md:w-180"
           bind:saveOn={productoForm}
-          save="CategoriasIDs"
+          save="CategoryIDs"
           optionsCss="w-280"
         />
         <div class="ff-bold h3 col-span-24 ml-8">Sub-Unidades</div>
         <Input
           saveOn={productoForm}
-          save="SbnUnidad"
+          save="SbuUnit"
           css="col-span-12 md:col-span-6"
           label="Nombre"
         />
         <Input
           bind:saveOn={productoForm}
-          save="SbnPrecio"
+          save="SbuPrice"
           baseDecimals={2}
           css="col-span-12 md:col-span-6"
           label="Precio Base"
           type="number"
           onChange={() => {
             console.log();
-            productoForm.PrecioFinal = Math.round(
-              (productoForm.Precio * (100 - (productoForm.Descuento || 0))) /
+            productoForm.FinalPrice = Math.round(
+              (productoForm.Price * (100 - (productoForm.Discount || 0))) /
                 100,
             );
             productoForm = { ...productoForm };
@@ -729,7 +730,7 @@ import {
         />
         <Input
           saveOn={productoForm}
-          save="SbnDescuento"
+          save="SbuDiscount"
           postValue="%"
           css="col-span-12 md:col-span-6"
           label="Descuento"
@@ -737,7 +738,7 @@ import {
         />
         <Input
           saveOn={productoForm}
-          save="SbnPreciFinal"
+          save="SbuFinalPrice"
           baseDecimals={2}
           css="col-span-12 md:col-span-6"
           label="Precio Final"
@@ -745,7 +746,7 @@ import {
         />
         <Input
           saveOn={productoForm}
-          save="SbnCantidad"
+          save="SbuQuantity"
           css="col-span-12 md:col-span-6"
           label="Cantidad"
           type="number"
@@ -772,7 +773,7 @@ import {
           folder="img-productos"
           cardCss="w-full h-170 p-4"
           setDataToSend={(e) => {
-            e.ProductoID = productoForm.ID;
+            e.ProductID = productoForm.ID;
           }}
           onUploaded={(imagePath, description) => {
             if (imagePath.includes("/")) {
@@ -832,10 +833,8 @@ import {
     <div class="">
       <div class="border border-slate-200 rounded-md overflow-hidden h-[58vh] min-h-[260px]">
         <!-- VTable virtualizes against its own scroll container, so it needs a concrete height -->
-        <VTable
-          columns={productoImportColumns}
-          data={importExcelRowsPreview}
-          maxHeight="100%"
+        <TableGrid columns={productoImportColumns} css="h-full" height="100%"
+          data={importExcelRowsPreview} rowHeight={46}
           emptyMessage={isImportExcelProcessing
             ? "Procesando archivo Excel..."
             : "Selecciona un archivo para visualizar las filas procesadas."}

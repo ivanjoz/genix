@@ -3,14 +3,14 @@ package exec
 
 import (
 	agentTypes "app/agent/types"
-	salesTypes "app/sales/types"
+	businessTypes "app/business/types"
 	configTypes "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
 	financeTypes "app/finance/types"
 	logisticsTypes "app/logistics/types"
-	businessTypes "app/business/types"
+	salesTypes "app/sales/types"
 	securityTypes "app/security/types"
 )
 
@@ -18,20 +18,23 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 	return []db.ScyllaControllerInterface{
 		makeDBController[DemoStruct](),
 		makeDBController[agentTypes.AgentMessage](),
-		makeDBController[salesTypes.ProductSaleSummary](),
-		makeDBController[salesTypes.SaleOrder](),
-		makeDBController[salesTypes.SaleSummary](),
-		makeDBController[salesTypes.ShippingCost](),
+		makeDBController[businessTypes.CityLocation](),
+		makeDBController[businessTypes.ClientProvider](),
+		makeDBController[businessTypes.GalleryImage](),
+		makeDBController[businessTypes.Product](),
+		makeDBController[businessTypes.SharedListRecord](),
+		makeDBController[businessTypes.Site](),
+		makeDBController[businessTypes.Warehouse](),
 		makeDBController[configTypes.Company](),
-		makeDBController[configTypes.Parametros](),
+		makeDBController[configTypes.Parameters](),
 		makeDBController[configTypes.SystemParameters](),
 		makeDBController[core.Cache](),
 		makeDBController[core.CronAction](),
 		makeDBController[coreTypes.UsageLog](),
 		makeDBController[coreTypes.User](),
 		makeDBController[financeTypes.CashBank](),
-		makeDBController[financeTypes.CashReconciliation](),
 		makeDBController[financeTypes.CashBankMovement](),
+		makeDBController[financeTypes.CashReconciliation](),
 		makeDBController[logisticsTypes.DeliveryOrderNote](),
 		makeDBController[logisticsTypes.ProductStock](),
 		makeDBController[logisticsTypes.ProductStockDetail](),
@@ -40,13 +43,10 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[logisticsTypes.PurchaseOrder](),
 		makeDBController[logisticsTypes.SupplyMaterial](),
 		makeDBController[logisticsTypes.WarehouseProductMovement](),
-		makeDBController[businessTypes.Warehouse](),
-		makeDBController[businessTypes.ClientProvider](),
-		makeDBController[businessTypes.GalleryImage](),
-		makeDBController[businessTypes.SharedListRecord](),
-		makeDBController[businessTypes.CityLocation](),
-		makeDBController[businessTypes.Product](),
-		makeDBController[businessTypes.Site](),
+		makeDBController[salesTypes.ProductSaleSummary](),
+		makeDBController[salesTypes.SaleOrder](),
+		makeDBController[salesTypes.SaleSummary](),
+		makeDBController[salesTypes.ShippingCost](),
 		makeDBController[securityTypes.Profile](),
 	}
 }

@@ -25,8 +25,8 @@ const cajaMovimientoTipoPagoProveedor int8 = 6
 
 // Body esperado para PurchaseOrderActionPay.
 type purchaseOrderPayPayload struct {
-	CajaID int32
-	Monto  int32 // Monto a pagar en céntimos (positivo). Se enviará como negativo a la cashBank.
+	CashBankID int32
+	Amount     int32 // Amount to pay in cents (positive). Sent as negative to the cashBank.
 }
 
 // Body esperado para PostPurchaseOrderEntry.
@@ -139,20 +139,20 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 	// Construir movimientos: ReemplazarCantidad=false (suma a stock), DocumentID enlaza
 	// el ledger con la OC, SupplierID se completa con el ProviderID de la OC para
 	// que la resolución de lotes use el hash (date, proveedor, nombre).
-	movimientos := make([]logisticsTypes.MovimientoInterno, 0, len(payload.Items))
+	movimientos := make([]logisticsTypes.InternalMovement, 0, len(payload.Items))
 	for _, item := range payload.Items {
 		key := orderKey{ProductID: item.ProductID, PresentationID: int32(item.PresentationID)}
-		movimientos = append(movimientos, logisticsTypes.MovimientoInterno{
+		movimientos = append(movimientos, logisticsTypes.InternalMovement{
 			DocumentID:     int64(order.ID),
 			WarehouseID:    payload.WarehouseID,
-			ProductID:     item.ProductID,
-			PresentacionID: item.PresentationID,
+			ProductID:      item.ProductID,
+			PresentationID: item.PresentationID,
 			SerialNumber:   item.SerialNumber,
 			LotID:          item.LotID,
 			LotName:        item.LotCode,
 			SupplierID:     order.ProviderID,
-			Cantidad:       item.Quantity,
-			SubCantidad:    item.SubQuantity,
+			Quantity:       item.Quantity,
+			SubQuantity:    item.SubQuantity,
 			Price:          getStats(key).price,
 		})
 	}
@@ -402,28 +402,28 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		if err := json.Unmarshal([]byte(*req.Body), &payload); err != nil {
 			return req.MakeErr("Error al deserializar el body.", err)
 		}
-		if payload.CajaID <= 0 {
+		if payload.CashBankID <= 0 {
 			return req.MakeErr("Debe seleccionar una cashBank para registrar el pago.")
 		}
-		if payload.Monto <= 0 {
+		if payload.Amount <= 0 {
 			return req.MakeErr("El monto del pago debe ser mayor a 0.")
 		}
-		if payload.Monto > orderCurrent.DebtAmount {
+		if payload.Amount > orderCurrent.DebtAmount {
 			return req.MakeErr("El monto del pago excede la deuda pendiente de la orden.")
 		}
 
-		// El pago sale de la cashBank: Monto negativo para que ApplyCajaMovimientos descuente del saldo.
+		// El pago sale de la cashBank: Amount negativo para que ApplyCajaMovimientos descuente del saldo.
 		movimiento := financeTypes.InternalCashMovement{
-			CajaID:     payload.CajaID,
+			CashBankID: payload.CashBankID,
 			DocumentID: int64(orderCurrent.ID),
-			Tipo:       cajaMovimientoTipoPagoProveedor,
-			Monto:      -payload.Monto,
+			Type:       cajaMovimientoTipoPagoProveedor,
+			Amount:     -payload.Amount,
 		}
 		if err := finance.ApplyCajaMovimientos(req, []financeTypes.InternalCashMovement{movimiento}); err != nil {
 			return req.MakeErr("Error al registrar el movimiento de cashBank:", err)
 		}
 
-		orderCurrent.DebtAmount -= payload.Monto
+		orderCurrent.DebtAmount -= payload.Amount
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 

@@ -1,14 +1,14 @@
 export interface IUser {
   ID: number;
   CompanyID: number;
-  Nombres: string;
-  Apellidos: string;
+  FirstName: string;
+  LastName: string;
   Email: string;
   Usuario: string;
-  DocumentoNro: string;
-  Cargo: string;
-  PerfilesIDs: number[];
-  AccesosNivelIDs: number[];
+  DocumentNumber: string;
+  JobTitle: string;
+  ProfileIDs: number[];
+  AccessLevelIDs: number[];
   Status: number;
   Updated: number;
   Created: number;
@@ -23,8 +23,8 @@ export interface IUser {
 export interface IProfile {
   ID: number;
   CompanyID: number;
-  Nombre: string;
-  Descripcion?: string;
+  Name: string;
+  Description?: string;
   Accesos: number[];
   Modulos: number[];
   accesosMap: Map<number, number[]>;

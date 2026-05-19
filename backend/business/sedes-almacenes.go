@@ -1,9 +1,9 @@
 package business
 
 import (
+	businessTypes "app/business/types"
 	"app/core"
 	"app/db"
-	businessTypes "app/business/types"
 	"encoding/json"
 	"fmt"
 
@@ -53,25 +53,24 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
-	// Mapea las Sedes con las ciudades
-	ubigeosSlice := core.SliceSet[string]{}
+	// Load the selected district plus its province and department from numeric ubigeo IDs.
+	ubigeosSlice := core.SliceSet[int32]{}
 
 	for _, e := range sedes {
-		if len(e.CiudadID) == 6 {
-			ubigeosSlice.Add(e.CiudadID)
-			ubigeosSlice.Add(e.CiudadID[:4])
-			ubigeosSlice.Add(e.CiudadID[:2])
+		if e.CityID >= 10000 {
+			ubigeosSlice.Add(e.CityID)
+			ubigeosSlice.Add(e.CityID / 100)
+			ubigeosSlice.Add(e.CityID / 10000)
 		}
 	}
 
 	paisCiudades := []businessTypes.CityLocation{}
 
 	if !ubigeosSlice.IsEmpty() {
-		// Note: CityLocation still uses old db ORM - this will need to be migrated separately
 		query := db.Query(&paisCiudades)
 		query.Select().
-			PaisID.Equals(604).
-			CiudadID.In(ubigeosSlice.Values...)
+			CountryID.Equals(604).
+			ID.In(ubigeosSlice.Values...)
 
 		err := query.Exec()
 		if err != nil {
@@ -79,27 +78,27 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		paisCiudadesMap := core.SliceToMapK(paisCiudades,
-			func(e businessTypes.CityLocation) string { return e.CiudadID })
+			func(e businessTypes.CityLocation) int32 { return e.ID })
 
 		for _, pc := range paisCiudadesMap {
-			if pc.Jerarquia != 3 {
+			if pc.Hierarchy != 3 {
 				continue
 			}
-			provincia := paisCiudadesMap[pc.PadreID]
+			provincia := paisCiudadesMap[pc.ParentID]
 			if provincia != nil {
-				pc.Provincia = provincia
-				departamento := paisCiudadesMap[provincia.PadreID]
+				pc.Province = provincia
+				departamento := paisCiudadesMap[provincia.ParentID]
 				if departamento != nil {
-					pc.Departamento = departamento
+					pc.Department = departamento
 				}
 			}
 		}
 
 		for i := range sedes {
 			site := &sedes[i]
-			if pc, ok := paisCiudadesMap[site.CiudadID]; ok {
-				if pc.Departamento != nil {
-					site.CiudadID = core.Concat("|", pc.Nombre, pc.Provincia.Nombre, pc.Departamento.Nombre)
+			if pc, ok := paisCiudadesMap[site.CityID]; ok {
+				if pc.Department != nil {
+					site.City = core.Concat("|", pc.Name, pc.Province.Name, pc.Department.Name)
 				}
 			}
 		}
@@ -121,8 +120,11 @@ func PostSedes(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	if len(body.Nombre) < 4 || len(body.Descripcion) < 4 {
+	if len(body.Name) < 4 || len(body.Description) < 4 {
 		return req.MakeErr("Faltan propiedades de la site")
+	}
+	if body.CityID <= 0 {
+		return req.MakeErr("Debe seleccionar una ciudad válida para la sede.")
 	}
 
 	// Autoincrement is handled automatically by the ORM via handlePreInsert
@@ -145,7 +147,7 @@ func GetPaisCiudades(req *core.HandlerArgs) core.HandlerResponse {
 	paisCiudades := []businessTypes.CityLocation{}
 	query := db.Query(&paisCiudades)
 	query.Select().
-		PaisID.Equals(int32(paisID))
+		CountryID.Equals(int32(paisID))
 
 	if updated > 0 {
 		query.Updated.GreaterEqual(updated)
@@ -158,11 +160,6 @@ func GetPaisCiudades(req *core.HandlerArgs) core.HandlerResponse {
 		err := fmt.Errorf("error al obtener los paises - ciudades: %v", err)
 		core.Print(err)
 		return req.MakeErr(err)
-	}
-
-	for i := range  paisCiudades {
-		e := &paisCiudades[i]
-		e.ID = core.StrToInt(e.CiudadID)
 	}
 
 	core.Log("registros obtenidos:: ", len(paisCiudades))
@@ -178,7 +175,7 @@ func PostAlmacen(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	if len(body.Nombre) < 4 || body.SedeID == 0 {
+	if len(body.Name) < 4 || body.SiteID == 0 {
 		return req.MakeErr("Faltan propiedades del almacén")
 	}
 

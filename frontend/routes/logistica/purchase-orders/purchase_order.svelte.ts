@@ -74,10 +74,10 @@ export const updatePurchaseOrder = async (
 // Status selector options shared by the report filter and its summary strip.
 // Using 0 as "all" keeps the URL query clean: the backend ignores status when it's 0.
 export const purchaseOrderStatusOptions = [
-  { ID: PurchaseOrderStatus.PENDING, Nombre: 'Pendiente' },
-  { ID: PurchaseOrderStatus.FULFILLED, Nombre: 'Completada' },
-	{ ID: PurchaseOrderStatus.CONFIRMED, Nombre: 'Confirmada' },
-  { ID: PurchaseOrderStatus.CANCELED, Nombre: 'Cancelada' },
+  { ID: PurchaseOrderStatus.PENDING, Name: 'Pendiente' },
+  { ID: PurchaseOrderStatus.FULFILLED, Name: 'Completada' },
+	{ ID: PurchaseOrderStatus.CONFIRMED, Name: 'Confirmada' },
+  { ID: PurchaseOrderStatus.CANCELED, Name: 'Cancelada' },
 ]
 
 // Minimal shape read by the report; full record lives on the backend.

@@ -2,10 +2,10 @@ import { GetHandler, POST, type INewIDToID as IBaseNewIDToID } from '$libs/http.
 
 export interface ISharedListRecord {
   ID: number;
-  ListaID: number;
-  Nombre: string;
+  ListID: number;
+  Name: string;
   Images?: string[];
-  Descripcion?: string;
+  Description?: string;
   UpdatedBy?: number;
   ss: number;
   upd: number;
@@ -29,7 +29,7 @@ export class ListasCompartidasService extends GetHandler<ISharedListRecord> {
   ListaRecordsMap: Map<number, ISharedListRecord[]> = $state(new Map());
 	
 	makeName(e: Partial<ISharedListRecord>) {
-		return [e.ListaID, e.Nombre].join("_")
+		return [e.ListID, e.Name].join("_")
 	}
   
   handler(result: { [k: string]: ISharedListRecord[] }): void {
@@ -42,12 +42,12 @@ export class ListasCompartidasService extends GetHandler<ISharedListRecord> {
     const savedRecords: ISharedListRecord[] = []
 
     for (const [key, recordGroups] of Object.entries(result)) {
-      const listaID = parseInt(key.split('_')[1]);
+      const listID = parseInt(key.split('_')[1]);
 
       for (const record of recordGroups) {
         if (!record.ss) continue;
 
-        if ([1, 2].includes(listaID)) {
+        if ([1, 2].includes(listID)) {
           // Preserve category/brand image ordering by numeric suffix.
           const imagesMap = new Map(
             (record.Images || []).filter((imageName) => imageName).map((imageName) => [parseInt(imageName.split('-')[1]), imageName]),
@@ -69,14 +69,14 @@ export class ListasCompartidasService extends GetHandler<ISharedListRecord> {
 
 	afterSaveRecords(...records: ISharedListRecord[]) {
     for (const record of records) {
-      const currentListaRecords = this.ListaRecordsMap.get(record.ListaID) || [];
+      const currentListaRecords = this.ListaRecordsMap.get(record.ListID) || [];
       const existingRecordPosition = currentListaRecords.findIndex((existingRecord) => existingRecord.ID === record.ID)
       if (existingRecordPosition >= 0) {
         currentListaRecords[existingRecordPosition] = record
       } else {
         currentListaRecords.push(record)
       }
-      this.ListaRecordsMap.set(record.ListaID, currentListaRecords);
+      this.ListaRecordsMap.set(record.ListID, currentListaRecords);
     }
     
     this.ListaRecordsMap = new Map(this.ListaRecordsMap);

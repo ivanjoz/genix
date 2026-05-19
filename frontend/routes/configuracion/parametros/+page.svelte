@@ -11,8 +11,8 @@ const { Loading } = pkg;
 
   async function saveEmpresa() {
     const form = service.empresa
-    if((form.RUC||"").length === 0 || (form.Nombre||"").length === 0 ||
-      (form.RazonSocial||"").length === 0 || (form.Email||"").length === 0 ){
+    if((form.RUC||"").length === 0 || (form.Name||"").length === 0 ||
+      (form.LegalName||"").length === 0 || (form.Email||"").length === 0 ){
       Notify.failure("Faltan datos a guardar.")
       return
     }
@@ -37,11 +37,11 @@ const { Loading } = pkg;
     </div>
     <div class="w-full grid grid-cols-1 lg:grid-cols-[4fr_3fr] gap-4">
       <div class="grid grid-cols-24 gap-10 content-start" aria-label="Company parameters form with name, RUC, address, and ecommerce keys">
-        <Input css="col-span-14" label="Nombre" save="Nombre" bind:saveOn={service.empresa}
+        <Input css="col-span-14" label="Nombre" save="Name" bind:saveOn={service.empresa}
           required={true} />
         <Input css="col-span-10" label="RUC" save="RUC" bind:saveOn={service.empresa}
           required={true} />
-        <Input css="col-span-14" label="Razón Social" save="RazonSocial"
+        <Input css="col-span-14" label="Razón Social" save="LegalName"
           bind:saveOn={service.empresa} required={true} />
         <Input css="col-span-10" label="Teléfono" save="Telefono" bind:saveOn={service.empresa} />
         <Input css="col-span-14" label="Correo Electrónico" save="Email"

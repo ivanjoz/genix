@@ -46,7 +46,7 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
     }
   ]
 
-  const presentacionesFiltered = $derived((producto.Presentaciones||[]).filter(x => x.ss))
+  const presentacionesFiltered = $derived((producto.Presentations||[]).filter(x => x.ss))
 
 </script>
 
@@ -84,24 +84,24 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
 <Modal title="Producto Presentación" id={3} size={4}
   saveButtonLabel="Agregar" saveIcon="icon-ok"
   onSave={() => {
-    producto.Presentaciones = producto.Presentaciones || []
-    const current = producto.Presentaciones.find(x => x.id === presentacionForm.id)
+    producto.Presentations = producto.Presentations || []
+    const current = producto.Presentations.find(x => x.id === presentacionForm.id)
     if(current){
       Object.assign(current, presentacionForm)
     } else {
-      producto.Presentaciones.push(presentacionForm)
+      producto.Presentations.push(presentacionForm)
     }
-    producto.Presentaciones = [...producto.Presentaciones]
+    producto.Presentations = [...producto.Presentations]
     closeAllModals()
   }}
   onDelete={() => {
-    const current = producto.Presentaciones.find(x => x.id === presentacionForm.id)
+    const current = producto.Presentations.find(x => x.id === presentacionForm.id)
     if(current && presentacionForm.id > 0){
       current.ss = 0
     } else {
-      producto.Presentaciones = producto.Presentaciones.filter(x => x.id !== presentacionForm.id)
+      producto.Presentations = producto.Presentations.filter(x => x.id !== presentacionForm.id)
     }
-    producto.Presentaciones = [...producto.Presentaciones]
+    producto.Presentations = [...producto.Presentations]
     closeAllModals()
   }}
 >

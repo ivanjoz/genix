@@ -6,7 +6,7 @@ export interface IProductProperty {
 }
 
 export interface IProductProperties {
-  ID: number, Nombre: string, Options: IProductProperty[], Status: number
+  ID: number, Name: string, Options: IProductProperty[], Status: number
 }
 
 export interface IProductPresentation {
@@ -29,31 +29,31 @@ export interface IProductoImage {
 export interface IProduct {
   ID: number,
   TempID: number,
-  Nombre: string
-  Descripcion: string
+  Name: string
+  Description: string
   ContentHTML: string
-  CategoriasIDs: number[]
-  MarcaID: number
+  CategoryIDs: number[]
+  BrandID: number
   Params: number[]
-  Precio: number
+  Price: number
   MonedaID: number
   UnidadID: number
-  Descuento: number
-  PrecioFinal: number
+  Discount: number
+  FinalPrice: number
   Peso: number
   Volumen: number
-  SbnCantidad: number
-  SbnUnidad: string
-  SbnPrecio: number
-  SbnDescuento: number
-  SbnPrecioFinal: number
+  SbuQuantity: number
+  SbuUnit: string
+  SbuPrice: number
+  SbuDiscount: number
+  SbuFinalPrice: number
   SKU: string
-  NombreHash: number
-  Propiedades: IProductProperties[]
-  Presentaciones: IProductPresentation[]
+  NameHash: number
+  Properties: IProductProperties[]
+  Presentations: IProductPresentation[]
   Images: IProductoImage[]
   Stock: any
-  StockReservado: any
+  ReservedStock: any
   StockStatus: number
   NameUpdated: number
   ss: number
@@ -61,10 +61,9 @@ export interface IProduct {
   UpdatedBy: number
   Created: number
   CreatedBy: number
-  CategoriasConStock: number[]
+  CategoriesWithStock: number[]
   ccv: number
   /* extra fields */
-  SbnPreciFinal?: number
   Image?: IProductoImage
   AtributosIDs?: number[]
   _stock?: number
@@ -95,13 +94,13 @@ export class ProductosService extends GetHandler<IProduct> {
   prependOnSave = true
 	
 	makeName(record: Partial<IProduct>) {
-		return record.Nombre || ""
+		return record.Name || ""
 	}
 
   handler(result: IProduct[]): void {
     for(const e of result){
       e.Image = e.Images?.[0]
-      e.CategoriasIDs = e.CategoriasIDs || []
+      e.CategoryIDs = e.CategoryIDs || []
     }
     this.records = []
     this.recordsMap = new Map()

@@ -37,7 +37,7 @@
           const CulqiCheckout = await loadCulqi();
           
           const settings: any = {
-            title: Env.empresa.Nombre || 'Genix Store',
+            title: Env.empresa.Name || 'Genix Store',
             currency: 'PEN',
             amount: Math.round(amount),
           };

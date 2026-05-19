@@ -92,7 +92,7 @@ import { SvelteMap } from 'svelte/reactivity';
 
   const almacenRender = (almacenID: number, cant: number) => {
     if (!almacenID) { return "" }
-    const name = almacenes.AlmacenesMap.get(almacenID)?.Nombre || `Almacen-${almacenID}`
+    const name = almacenes.AlmacenesMap.get(almacenID)?.Name || `Almacen-${almacenID}`
     return `<div class="flex items-center">
       <div class="mr-8">${name}</div>
       <div class="ff-mono text-blue-600">(</div>
@@ -106,12 +106,12 @@ import { SvelteMap } from 'svelte/reactivity';
       header: "Date Hora",
       headerCss: "w-120",
       css: "ff-mono px-6",
-      getValue: e => formatTime(e.Created, "d-M h:n") as string
+      getValue: e => formatTime(e.Created || 0, "d-M h:n") as string
     },
     {
       header: "Producto",
       render: e => {
-        const nombre = productos.recordsMap.get(e.ProductoID)?.Nombre || `Producto-${e.ProductoID}`
+        const nombre = productos.recordsMap.get(e.ProductID || 0)?.Name || `Producto-${e.ProductID}`
 
         const words = filterText.toLowerCase().trim().split(" ").filter(x => x)
         const segments = highlString(nombre, words)
@@ -144,7 +144,7 @@ import { SvelteMap } from 'svelte/reactivity';
       headerCss: "w-120",
       css: "text-center px-6",
       render: e => {
-        const mov = movimientoTiposMap.get(e.Tipo)
+        const mov = movimientoTiposMap.get(e.Type || 0)
         return mov?.name || "-"
       }
     },
@@ -160,11 +160,11 @@ import { SvelteMap } from 'svelte/reactivity';
     },
     {
       header: "Almacén Origen",
-      render: e => almacenRender(e.WarehouseRefID, e.WarehouseRefQuantity)
+      render: e => almacenRender(e.WarehouseRefID || 0, e.WarehouseRefQuantity || 0)
     },
     {
       header: "Almacén Destino",
-      render: e => almacenRender(e.WarehouseID, e.WarehouseQuantity)
+      render: e => almacenRender(e.WarehouseID || 0, e.WarehouseQuantity || 0)
     },
     {
       header: "Documento",
@@ -210,7 +210,7 @@ import { SvelteMap } from 'svelte/reactivity';
             css="col-span-24"
             label="Almacén"
             keyId="ID"
-            keyName="Nombre"
+            keyName="Name"
             options={almacenes?.Almacenes || []}
             placeholder=""
           />
@@ -232,7 +232,7 @@ import { SvelteMap } from 'svelte/reactivity';
             css="col-span-12"
             label="Producto"
             keyId="ID"
-            keyName="Nombre"
+            keyName="Name"
             options={productos.records}
             placeholder=""
           />
@@ -289,10 +289,10 @@ import { SvelteMap } from 'svelte/reactivity';
         getContent2={v => formatTime(v, "d-m-Y") as string}
         label3="Almacén"
         value3={form.almacenID}
-        getContent3={id => almacenes.AlmacenesMap.get(Number(id))?.Nombre || "Todos"}
+        getContent3={id => almacenes.AlmacenesMap.get(Number(id))?.Name || "Todos"}
         label4="Producto"
         value4={form.productoID}
-        getContent4={id => id ? (productos.recordsMap.get(Number(id))?.Nombre || `Producto-${id}`) : "Todos"}
+        getContent4={id => id ? (productos.recordsMap.get(Number(id))?.Name || `Producto-${id}`) : "Todos"}
         label5="Tipo"
         value5={form.tipo}
         getContent5={id => movimientoTipos.find(t => t.id === Number(id))?.name || "Todos"}
@@ -324,7 +324,7 @@ import { SvelteMap } from 'svelte/reactivity';
     maxHeight="calc(100vh - 8rem - 12px)"
     filterText={filterText}
     getFilterContent={e => {
-      const producto = productos.recordsMap.get(e.ProductoID)?.Nombre || ""
+      const producto = productos.recordsMap.get(e.ProductID || 0)?.Name || ""
       const usuario = usuariosService.usuariosMap.get(e.CreatedBy || 1)?.Usuario || ""
       return [producto, usuario].join(" ").toLowerCase()
     }}

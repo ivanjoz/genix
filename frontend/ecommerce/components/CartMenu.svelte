@@ -31,7 +31,7 @@ import { parseSVG } from '$libs/helpers';
 
 	const total = $derived(
 		Array.from(ProductsSelectedMap.values()).reduce((acc, curr) => {
-			const price = curr.producto.PrecioFinal || curr.producto.Precio || 0;
+			const price = curr.producto.FinalPrice || curr.producto.Price || 0;
 
 			return acc + price * curr.cant;
 		}, 0),

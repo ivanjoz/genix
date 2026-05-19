@@ -72,14 +72,14 @@ import Card from '$components/cards/Card.svelte';
   })
 
   const price = $derived.by(() => {
-      if(productoStock.isSubUnidad && productoStock.producto.SbnPreciFinal){
-          return productoStock.producto.SbnPreciFinal
+      if(productoStock.isSubUnidad && productoStock.producto.SbuFinalPrice){
+          return productoStock.producto.SbuFinalPrice
       }
-      return productoStock.producto.PrecioFinal
+      return productoStock.producto.FinalPrice
   })
 
   const highlightedDisplayName = $derived.by(() => {
-    const productName = highlightText(productoStock.producto.Nombre, filterText)
+    const productName = highlightText(productoStock.producto.Name, filterText)
     if (!productoStock.presentationName) return productName
 
     const highlightedPresentationName = highlightText(productoStock.presentationName, filterText)
@@ -121,7 +121,7 @@ import Card from '$components/cards/Card.svelte';
     </div>
   {/if}
   <Card css="flex relative flex-col gap-4 cursor-pointer group"
-    label={productoStock.producto.Nombre}
+    label={productoStock.producto.Name}
     onClick={() => onselect(idx)}
   >
     <!-- Header: Name + Line -->
@@ -130,7 +130,7 @@ import Card from '$components/cards/Card.svelte';
           <span>{@html highlightedDisplayName}</span>
           {#if productoStock.isSubUnidad}
              <span class="text-gray-300">|</span>
-             <span class="text-purple-600 font-bold text-xs">{productoStock.producto.SbnUnidad}</span>
+             <span class="text-purple-600 font-bold text-xs">{productoStock.producto.SbuUnit}</span>
           {/if}
           {#if hasSerialNumbers}
              <span class="text-xs font-bold text-purple-600 bg-purple-50 px-4 py-1 rounded">(Serie)</span>

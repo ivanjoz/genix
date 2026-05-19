@@ -372,14 +372,14 @@ const displayStock = $derived.by((): IProductoStockDisplay[] => {
 
 const selectedSerialNumberGroupTitle = $derived.by(() => {
   if (!selectedSerialNumberGroup) { return 'Seriales' }
-  const productName = productos.recordsMap.get(selectedSerialNumberGroup.base.ProductID)?.Nombre || ''
+  const productName = productos.recordsMap.get(selectedSerialNumberGroup.base.ProductID)?.Name || ''
   const count = selectedSerialNumbers.filter((stockDetail) => stockDetail.SerialNumber).length
   return `${productName} — ${count} Serial${count !== 1 ? 'es' : ''}`
 })
 
 const selectedLotGroupTitle = $derived.by(() => {
   if (!selectedLotGroup) { return 'Lotes' }
-  const productName = productos.recordsMap.get(selectedLotGroup.base.ProductID)?.Nombre || ''
+  const productName = productos.recordsMap.get(selectedLotGroup.base.ProductID)?.Name || ''
   const count = selectedLots.filter(hasLotAssignment).length
   return `${productName} — ${count} Lote${count !== 1 ? 's' : ''}`
 })
@@ -579,11 +579,11 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
     header: 'Producto', highlight: true,
     mobile: { order: 1, css: 'col-span-24' },
     getValue: (productStockDisplay) => {
-      const productRecord = productos.recordsMap.get(productStockDisplay.base.ProductID)?.Nombre
+      const productRecord = productos.recordsMap.get(productStockDisplay.base.ProductID)?.Name
       return productRecord || `Producto-${productStockDisplay.base.ProductID}`
     },
     render: (productStockDisplay) => {
-      const productRecord = productos.recordsMap.get(productStockDisplay.base.ProductID)?.Nombre || `Producto-${productStockDisplay.base.ProductID}`
+      const productRecord = productos.recordsMap.get(productStockDisplay.base.ProductID)?.Name || `Producto-${productStockDisplay.base.ProductID}`
       return productRecord
     },
   },
@@ -593,7 +593,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
     getValue: (productStockDisplay) => {
       if (!productStockDisplay.base.PresentationID) { return '' }
       const productRecord = productos.recordsMap.get(productStockDisplay.base.ProductID)
-      const presentationRecord = productRecord?.Presentaciones?.find((presentationOption) => presentationOption.id === productStockDisplay.base.PresentationID)
+      const presentationRecord = productRecord?.Presentations?.find((presentationOption) => presentationOption.id === productStockDisplay.base.PresentationID)
       return presentationRecord?.nm || `Tipo-${productStockDisplay.base.PresentationID}`
     },
   },
@@ -815,8 +815,8 @@ const fillAllProductos = () => {
   )
 
   for (const productRecord of productos.records) {
-    const presentationIDs = productRecord.Presentaciones?.length > 0
-      ? productRecord.Presentaciones.map((presentationOption) => presentationOption.id)
+    const presentationIDs = productRecord.Presentations?.length > 0
+      ? productRecord.Presentations.map((presentationOption) => presentationOption.id)
       : [0]
 
     for (const presentationID of presentationIDs) {
@@ -880,7 +880,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
 
 <div class="grid grid-cols-24 gap-8 mb-8 items-center md:flex" aria-label="Stock movement toolbar with warehouse selector, filter, and save button">
   <div class="col-span-14 md:col-span-5 min-w-0 mr-8">
-    <SearchSelect options={almacenes?.Almacenes || []} keyId="ID" keyName="Nombre"
+    <SearchSelect options={almacenes?.Almacenes || []} keyId="ID" keyName="Name"
       bind:saveOn={stockFilters} save="warehouseID" placeholder="ALMACÉN ::"
       css="w-full md:w-240" id={1} useCache
       onChange={() => {
@@ -914,7 +914,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
     const productRecord = productos.recordsMap.get(productStockDisplay.base.ProductID)
     const serialText = productStockDisplay.serialNumbers.map((stockDetail) => stockDetail.SerialNumber).filter(Boolean).join(' ')
     const lotText = productStockDisplay.lots.map(getLotDisplay).filter(Boolean).join(' ')
-    return [productRecord?.Nombre, serialText, lotText].filter((value) => value).join(' ').toLowerCase()
+    return [productRecord?.Name, serialText, lotText].filter((value) => value).join(' ').toLowerCase()
   }}
 />
 

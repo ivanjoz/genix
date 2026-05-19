@@ -59,7 +59,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 	}
 
 	accumulate := func(warehouseID int32, quantity int32, subQuantity int32, movement *logisticsTypes.WarehouseProductMovement) {
-		stockID := packProductStockID(warehouseID, movement.ProductID, movement.PresentacionID)
+		stockID := packProductStockID(warehouseID, movement.ProductID, movement.PresentationID)
 		stock := stockByID[stockID]
 		if stock == nil {
 			// Fresh V2 row (no historical record): Created stamps it as INSERT at write time.
@@ -68,7 +68,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 				CompanyID:      companyID,
 				WarehouseID:    warehouseID,
 				ProductID:      movement.ProductID,
-				PresentationID: movement.PresentacionID,
+				PresentationID: movement.PresentationID,
 				Created:        updatedTime,
 			}
 			stockByID[stockID] = stock
