@@ -1000,6 +1000,35 @@ func executeInsertUpdateBatch[T TableBaseInterface[E, T], E TableSchemaInterface
 		}
 	}
 
+	if scyllaTable.textSearchIndex != nil {
+		if len(*recordsForInsert) > 0 {
+			if err := syncTextSearchIndexAfterWrite(recordsForInsert, &scyllaTable, false); err != nil {
+				fmt.Println("Error syncing text search index after insert phase:", err)
+				return err
+			}
+		}
+		if len(*recordsForUpdate) > 0 {
+			updateAffectedColumns := []IColInfo{}
+			if useIncludeUpdateColumns {
+				updateAffectedColumns = collectAffectedColumnsForInclude(&scyllaTable, updateColumns)
+			} else {
+				updateAffectedColumns = collectAffectedColumnsForExclude(&scyllaTable, updateColumns)
+			}
+			textChanged, statusChanged := textSearchAffectedColumns(&scyllaTable, updateAffectedColumns)
+			if textChanged {
+				if err := syncTextSearchIndexAfterWrite(recordsForUpdate, &scyllaTable, !statusChanged); err != nil {
+					fmt.Println("Error syncing text search index after update phase:", err)
+					return err
+				}
+			} else if statusChanged {
+				if err := syncTextSearchStatusAfterWrite(recordsForUpdate, &scyllaTable); err != nil {
+					fmt.Println("Error syncing text search status after update phase:", err)
+					return err
+				}
+			}
+		}
+	}
+
 	// Combined insert/update writes increment cache-version groups once for the merged mutation set.
 	if err := updateCacheVersionsAfterWrite(&combinedRecords, scyllaTable); err != nil {
 		fmt.Println("Error updating cache versions after insert-update:", err)

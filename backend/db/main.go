@@ -70,6 +70,7 @@ type ScyllaTable[T any] struct {
 	// indexGroupIDs prevents per-table collisions when logical IndexGroup names hash to the same int16.
 	indexGroupIDs     map[int16]string
 	indexUpdatedTable *indexUpdatedTableInfo
+	textSearchIndex   *textSearchIndexInfo
 	// selectStatementCache is shared across copied ScyllaTable values, so it must stay behind a pointer.
 	selectStatementCache *selectPlanCache
 	_maxColIdx           int16
@@ -98,6 +99,14 @@ type indexGroupInfo struct {
 
 type indexUpdatedTableInfo struct {
 	name string
+}
+
+type textSearchIndexInfo struct {
+	tableName       string
+	sourceColumn    IColInfo
+	partitionColumn IColInfo
+	idColumn        IColInfo
+	statusColumn    IColInfo
 }
 
 type indexGroupSourceColumn struct {
@@ -188,6 +197,7 @@ type TableSchema struct {
 	Name                 string
 	Keys                 []Coln
 	Partition            Coln
+	TextSearchColumn     Coln
 	Indexes              []Index
 	SequenceColumn       Coln
 	CounterColumn        Coln

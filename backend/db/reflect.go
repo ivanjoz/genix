@@ -309,6 +309,8 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		dbTable.autoincrementPart = dbTable.columnsMap[schema.AutoincrementPart.GetInfo().Name]
 	}
 
+	configureTextSearchIndex(&dbTable, schema)
+
 	// Identify autoincrement column from direct column definitions (backward compatibility)
 	// Only set if not already set during Keys processing
 	for _, col := range dbTable.columnsMap {
