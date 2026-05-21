@@ -109,6 +109,10 @@ type textSearchIndexInfo struct {
 	statusColumn    IColInfo
 }
 
+type textSearchIndexProvider interface {
+	GetTextSearchIndex() string
+}
+
 type indexGroupSourceColumn struct {
 	column      IColInfo
 	storeAsWeek bool

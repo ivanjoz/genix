@@ -1,10 +1,10 @@
 package business
 
 import (
+	businessTypes "app/business/types"
 	"app/cloud"
 	"app/core"
 	"app/db"
-	businessTypes "app/business/types"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -24,13 +24,13 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 		query := db.Query(&productos).CompanyID.Equals(req.User.CompanyID)
 
 		query.Exclude(query.Stock, query.StockStatus, query.CompanyID, query.Created, query.CreatedBy, query.NameHash)
-		
+
 		if updated > 0 {
 			query.Updated.GreaterThan(updated)
 		} else {
 			query.Status.GreaterEqual(1)
 		}
-		
+
 		if err := query.Exec(); err != nil {
 			return fmt.Errorf("error al obtener los productos: %v", err)
 		}
@@ -62,7 +62,7 @@ func GetProductosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &productos)
 }
 
-func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
+func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 
 	productos := []businessTypes.Product{}
 	if err := json.Unmarshal([]byte(*req.Body), &productos); err != nil {
@@ -84,6 +84,14 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr(fmt.Sprintf("Hay nombres duplicados en la solicitud: %s y %s", previousProduct.Name, e.Name))
 		}
 		nameHashToName[e.NameHash] = e
+	}
+
+	brandNamesByID, err := getProductBrandNames(req.User.CompanyID, productos)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	for i := range productos {
+		productos[i].BrandName_ = brandNamesByID[productos[i].BrandID]
 	}
 
 	// Group existing records by NameHash so we can check active collisions and reuse inactive IDs.
@@ -172,7 +180,7 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	sunixTime := core.SUnixTime()
 
 	// Merge resolves insert/update per primary key and applies only required writes.
-	err := db.Merge(&productos,
+	err = db.Merge(&productos,
 		[]db.Coln{t.Stock, t.ReservedStock, t.StockStatus, t.CategoriesWithStock, t.Created, t.CreatedBy, t.Images},
 		func(prev, current *businessTypes.Product) bool {
 			current.CompanyID = req.User.CompanyID
@@ -217,6 +225,31 @@ func PostProductos(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(productos)
 }
 
+func getProductBrandNames(companyID int32, productos []businessTypes.Product) (map[int32]string, error) {
+	brandIDs := core.SliceSet[int32]{}
+	for _, product := range productos {
+		brandIDs.AddIf(product.BrandID)
+	}
+	if brandIDs.IsEmpty() {
+		return map[int32]string{}, nil
+	}
+
+	brands := []businessTypes.SharedListRecord{}
+	query := db.Query(&brands)
+	query.Select(query.ID, query.Name).
+		CompanyID.Equals(companyID).ID.In(brandIDs.Values...)
+	
+	if err := query.Exec(); err != nil {
+		return nil, fmt.Errorf("error al obtener las marcas de productos: %w", err)
+	}
+
+	brandNamesByID := make(map[int32]string, len(brands))
+	for _, brand := range brands {
+		brandNamesByID[brand.ID] = brand.Name
+	}
+	return brandNamesByID, nil
+}
+
 type productoImage struct {
 	Content       string
 	Content_x6    string
@@ -224,7 +257,7 @@ type productoImage struct {
 	Content_x2    string
 	Folder        string
 	Description   string
-	ProductID    int32
+	ProductID     int32
 	ImageToDelete string
 }
 

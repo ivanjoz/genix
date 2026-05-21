@@ -3,14 +3,13 @@ package exec
 import (
 
 	// sales "app/sales/types"
-	"app/sales"
-	salesTypes "app/sales/types"
+	"app/business"
+	businessTypes "app/business/types"
 	"app/core"
 	"app/db"
 	"app/libs"
-	logisticsTypes "app/logistics/types"
-	"app/business"
-	businessTypes "app/business/types"
+	"app/sales"
+	salesTypes "app/sales/types"
 	"fmt"
 )
 
@@ -275,7 +274,7 @@ func Test46(args *core.ExecArgs) core.FuncResponse {
 func Test51(args *core.ExecArgs) core.FuncResponse {
 
 
-	controller := makeDBController[logisticsTypes.SupplyMaterial]()
+	controller := makeDBController[businessTypes.Product]()
 
  //	controller.RecalcVirtualColumns(1)
 	controller.DeleteViewsAndIndexes()

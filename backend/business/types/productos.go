@@ -68,6 +68,16 @@ type Product struct {
 	/* concatenated with CompanyID to be indexed */
 	CategoriesWithStock []int32 `json:",omitempty"`
 	CacheVersion        uint8   `json:"ccv,omitempty"`
+	/* extra */
+	BrandName_ string `json:",omitempty"`
+}
+
+func (e *Product) GetTextSearchIndex() string {
+	name := e.Name
+	if len(e.BrandName_) > 0 {
+		name += " " + e.BrandName_
+	}
+	return name
 }
 
 type ProductTable struct {

@@ -34,9 +34,9 @@ export interface ICompany {
 }
 
 export class EmpresaParametrosService extends GetHandler {
-    route = "empresa-parametros"
+    route = "company-parametros"
     useCache = { min: 10, ver: 1 }
-    
+
     empresa = $state({
         SmtpConfig: {},
         CulquiConfig: {}
@@ -60,7 +60,7 @@ export class EmpresaParametrosService extends GetHandler {
 export const postEmpresaParametros = (data: ICompany) => {
   return POST({
     data,
-    route: "empresa-parametros",
-    refreshRoutes: ["empresa-parametros"]
+    route: "company-parametros",
+    refreshRoutes: ["company-parametros"]
   })
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 	"unsafe"
 
 	"github.com/gocql/gocql"
@@ -94,7 +95,7 @@ func getTextSearchIndexMaintenanceIndexCreateScript(keyspace string, tableInfo *
 	)
 }
 
-func getTextSearchRecordRows(recordPointer unsafe.Pointer, textSearchIndex *textSearchIndexInfo) []textSearchIndexRow {
+func getTextSearchRecordRows(record any, recordPointer unsafe.Pointer, textSearchIndex *textSearchIndexInfo) []textSearchIndexRow {
 	partitionID := convertToInt64(textSearchIndex.partitionColumn.GetRawValue(recordPointer))
 	baseID := convertToInt64(textSearchIndex.idColumn.GetRawValue(recordPointer))
 	status := int8(0)
@@ -102,8 +103,18 @@ func getTextSearchRecordRows(recordPointer unsafe.Pointer, textSearchIndex *text
 		status = int8(convertToInt64(textSearchIndex.statusColumn.GetRawValue(recordPointer)))
 	}
 
-	rawText, _ := textSearchIndex.sourceColumn.GetRawValue(recordPointer).(string)
+	rawText := getTextSearchRecordText(record, recordPointer, textSearchIndex)
 	return buildTextSearchRows(partitionID, baseID, status, rawText)
+}
+
+func getTextSearchRecordText(record any, recordPointer unsafe.Pointer, textSearchIndex *textSearchIndexInfo) string {
+	if textSearchProvider, hasTextSearchProvider := record.(textSearchIndexProvider); hasTextSearchProvider {
+		// Custom providers can combine denormalized fields that are not stored in the indexed column.
+		return textSearchProvider.GetTextSearchIndex()
+	}
+
+	rawText, _ := textSearchIndex.sourceColumn.GetRawValue(recordPointer).(string)
+	return rawText
 }
 
 func makeTextSearchRowKey(partitionID int64, baseID int64, hashValue int32) string {
@@ -152,6 +163,7 @@ func fetchExistingTextSearchRows(
 		maxIDsPerQuery = 100
 	}
 	slices.Sort(idValues)
+	session := getScyllaConnection()
 
 	for startIndex := 0; startIndex < len(idValues); startIndex += maxIDsPerQuery {
 		endIndex := startIndex + maxIDsPerQuery
@@ -168,18 +180,23 @@ func fetchExistingTextSearchRows(
 			queryArguments = append(queryArguments, makeNumericQueryValue(tableInfo.idColumn, idValue))
 		}
 
-		query := fmt.Sprintf(`SELECT hash, id, bigrams, status FROM %v.%v WHERE partition_id = ? AND id IN (%v)`,
+		// The index table's PRIMARY KEY is ((partition_id), hash, id), so `id` cannot be restricted
+		// without `hash`. The local secondary index on ((partition_id), id) is used to resolve the
+		// `IN` predicate; `ALLOW FILTERING` is required for the planner to accept it.
+		query := fmt.Sprintf(`SELECT hash, id, bigrams, status FROM %v.%v WHERE partition_id = ? AND id IN (%v) ALLOW FILTERING`,
 			keyspace,
 			tableInfo.tableName,
 			strings.Join(placeholders, ", "),
 		)
 
-		iter := getScyllaConnection().Query(query, queryArguments...).Iter()
+		chunkStart := time.Now()
+		iter := session.Query(query, queryArguments...).Iter()
 		rowData, err := iter.RowData()
 		if err != nil {
 			return nil, err
 		}
 
+		chunkRows := 0
 		scanner := iter.Scanner()
 		for scanner.Next() {
 			rowValues := rowData.Values
@@ -191,6 +208,7 @@ func fetchExistingTextSearchRows(
 			baseID := convertToInt64(normalizeScannedValue(rowValues[1]))
 			bigrams, _ := normalizeScannedValue(rowValues[2]).([]int8)
 			status := int8(convertToInt64(normalizeScannedValue(rowValues[3])))
+			chunkRows++
 			row := textSearchIndexRow{
 				partitionID: partitionID,
 				id:          baseID,
@@ -203,6 +221,8 @@ func fetchExistingTextSearchRows(
 		if err := iter.Close(); err != nil {
 			return nil, err
 		}
+		fmt.Printf("TextSearchIndex fetch chunk: index=%s partition=%d ids=%d-%d (of %d) rows=%d elapsed=%s\n",
+			tableInfo.tableName, partitionID, startIndex, endIndex, len(idValues), chunkRows, time.Since(chunkStart))
 	}
 
 	return existingRows, nil
@@ -213,9 +233,13 @@ func syncTextSearchIndexAfterWrite[T any](records *[]T, scyllaTable *ScyllaTable
 		return nil
 	}
 
+	fmt.Printf("TextSearchIndex sync start: index=%s records=%d\n",
+		scyllaTable.textSearchIndex.tableName, len(*records))
+
 	newRowsByKey := map[string]textSearchIndexRow{}
 	idValuesByPartition := map[int64]map[int64]struct{}{}
 
+	buildStart := time.Now()
 	for recordIndex := range *records {
 		recordPointer := xunsafe.AsPointer(&(*records)[recordIndex])
 		partitionID := scyllaTable.GetPartValue(recordPointer)
@@ -225,26 +249,34 @@ func syncTextSearchIndexAfterWrite[T any](records *[]T, scyllaTable *ScyllaTable
 		}
 		idValuesByPartition[partitionID][baseID] = struct{}{}
 
-		for _, row := range getTextSearchRecordRows(recordPointer, scyllaTable.textSearchIndex) {
+		for _, row := range getTextSearchRecordRows(&(*records)[recordIndex], recordPointer, scyllaTable.textSearchIndex) {
 			newRowsByKey[makeTextSearchRowKey(row.partitionID, row.id, row.hash)] = row
 		}
 	}
+	fmt.Printf("TextSearchIndex built new rows: index=%s partitions=%d new_rows=%d elapsed=%s\n",
+		scyllaTable.textSearchIndex.tableName, len(idValuesByPartition), len(newRowsByKey), time.Since(buildStart))
 
 	existingRowsByKey := map[string]textSearchIndexRow{}
+	fetchStart := time.Now()
 	for partitionID, idSet := range idValuesByPartition {
 		idValues := make([]int64, 0, len(idSet))
 		for idValue := range idSet {
 			idValues = append(idValues, idValue)
 		}
 
+		partitionFetchStart := time.Now()
 		existingRows, err := fetchExistingTextSearchRows(scyllaTable.keyspace, scyllaTable.textSearchIndex, partitionID, idValues)
 		if err != nil {
 			return fmt.Errorf("text search fetch existing rows %s: %w", scyllaTable.textSearchIndex.tableName, err)
 		}
+		fmt.Printf("TextSearchIndex fetched existing rows: index=%s partition=%d ids=%d rows=%d elapsed=%s\n",
+			scyllaTable.textSearchIndex.tableName, partitionID, len(idValues), len(existingRows), time.Since(partitionFetchStart))
 		for rowKey, row := range existingRows {
 			existingRowsByKey[rowKey] = row
 		}
 	}
+	fmt.Printf("TextSearchIndex fetched all existing rows: index=%s total_rows=%d elapsed=%s\n",
+		scyllaTable.textSearchIndex.tableName, len(existingRowsByKey), time.Since(fetchStart))
 
 	if preserveExistingStatus {
 		statusByRecordKey := map[string]int8{}
@@ -260,7 +292,7 @@ func syncTextSearchIndexAfterWrite[T any](records *[]T, scyllaTable *ScyllaTable
 	}
 
 	session := getScyllaConnection()
-	batch := session.NewBatch(gocql.UnloggedBatch)
+	statements := make([]textSearchBatchStatement, 0, len(existingRowsByKey)+len(newRowsByKey))
 	deleteStatementsCount := 0
 	insertStatementsCount := 0
 	updateStatementsCount := 0
@@ -273,7 +305,10 @@ func syncTextSearchIndexAfterWrite[T any](records *[]T, scyllaTable *ScyllaTable
 		if _, shouldKeepRow := newRowsByKey[rowKey]; shouldKeepRow {
 			continue
 		}
-		batch.Query(deleteQuery, int32(existingRow.partitionID), existingRow.hash, makeNumericQueryValue(scyllaTable.textSearchIndex.idColumn, existingRow.id))
+		statements = append(statements, textSearchBatchStatement{
+			query: deleteQuery,
+			args:  []any{int32(existingRow.partitionID), existingRow.hash, makeNumericQueryValue(scyllaTable.textSearchIndex.idColumn, existingRow.id)},
+		})
 		deleteStatementsCount++
 	}
 
@@ -286,7 +321,10 @@ func syncTextSearchIndexAfterWrite[T any](records *[]T, scyllaTable *ScyllaTable
 		if rowExists && existingRow.status == newRow.status && slices.Equal(existingRow.bigrams, newRow.bigrams) {
 			continue
 		}
-		batch.Query(insertQuery, int32(newRow.partitionID), newRow.hash, newRow.bigrams, newRow.status, makeNumericQueryValue(scyllaTable.textSearchIndex.idColumn, newRow.id))
+		statements = append(statements, textSearchBatchStatement{
+			query: insertQuery,
+			args:  []any{int32(newRow.partitionID), newRow.hash, newRow.bigrams, newRow.status, makeNumericQueryValue(scyllaTable.textSearchIndex.idColumn, newRow.id)},
+		})
 		if rowExists {
 			updateStatementsCount++
 		} else {
@@ -294,19 +332,55 @@ func syncTextSearchIndexAfterWrite[T any](records *[]T, scyllaTable *ScyllaTable
 		}
 	}
 
-	if deleteStatementsCount == 0 && insertStatementsCount == 0 && updateStatementsCount == 0 {
+	if len(statements) == 0 {
+		fmt.Printf("TextSearchIndex sync no-op: index=%s records=%d\n",
+			scyllaTable.textSearchIndex.tableName, len(*records))
 		return nil
 	}
 
-	if DebugFull {
-		fmt.Printf("TextSearchIndex sync batch: base_table=%s index=%s deletes=%d inserts=%d updates=%d records=%d\n",
-			scyllaTable.name, scyllaTable.textSearchIndex.tableName, deleteStatementsCount, insertStatementsCount, updateStatementsCount, len(*records))
-	}
+	fmt.Printf("TextSearchIndex sync batch: base_table=%s index=%s deletes=%d inserts=%d updates=%d records=%d total_statements=%d\n",
+		scyllaTable.name, scyllaTable.textSearchIndex.tableName, deleteStatementsCount, insertStatementsCount, updateStatementsCount, len(*records), len(statements))
 
-	if err := session.ExecuteBatch(batch); err != nil {
+	execStart := time.Now()
+	if err := executeTextSearchBatches(session, statements); err != nil {
 		return fmt.Errorf("text search index sync %s: %w", scyllaTable.textSearchIndex.tableName, err)
 	}
+	fmt.Printf("TextSearchIndex sync finished: index=%s statements=%d elapsed=%s\n",
+		scyllaTable.textSearchIndex.tableName, len(statements), time.Since(execStart))
 
+	return nil
+}
+
+// textSearchBatchStatement holds a single prepared write that will be appended to one of the
+// chunked UnloggedBatch executions used to bypass Scylla's per-batch statement limit.
+type textSearchBatchStatement struct {
+	query string
+	args  []any
+}
+
+// executeTextSearchBatches splits derived-row writes across multiple UnloggedBatch executions so
+// records that produce hundreds of hash combinations never exceed Scylla's per-batch cap.
+func executeTextSearchBatches(session *gocql.Session, statements []textSearchBatchStatement) error {
+	if len(statements) == 0 {
+		return nil
+	}
+	const maxStatementsPerBatch = 2000
+	for startIndex := 0; startIndex < len(statements); startIndex += maxStatementsPerBatch {
+		endIndex := startIndex + maxStatementsPerBatch
+		if endIndex > len(statements) {
+			endIndex = len(statements)
+		}
+		batch := session.NewBatch(gocql.UnloggedBatch)
+		for _, statement := range statements[startIndex:endIndex] {
+			batch.Query(statement.query, statement.args...)
+		}
+		fmt.Printf("TextSearchIndex sending batch: %d / %d\n", endIndex, len(statements))
+		batchStart := time.Now()
+		if err := session.ExecuteBatch(batch); err != nil {
+			return err
+		}
+		fmt.Printf("TextSearchIndex batch sent: %d / %d elapsed=%s\n", endIndex, len(statements), time.Since(batchStart))
+	}
 	return nil
 }
 
@@ -345,8 +419,7 @@ func syncTextSearchStatusAfterWrite[T any](records *[]T, scyllaTable *ScyllaTabl
 	}
 
 	session := getScyllaConnection()
-	batch := session.NewBatch(gocql.UnloggedBatch)
-	updateStatementsCount := 0
+	statements := make([]textSearchBatchStatement, 0, len(existingRowsByKey))
 	updateQuery := fmt.Sprintf(`UPDATE %v.%v SET status = ? WHERE partition_id = ? AND hash = ? AND id = ?`,
 		scyllaTable.keyspace,
 		scyllaTable.textSearchIndex.tableName,
@@ -357,20 +430,22 @@ func syncTextSearchStatusAfterWrite[T any](records *[]T, scyllaTable *ScyllaTabl
 		if !exists || existingRow.status == nextStatus {
 			continue
 		}
-		batch.Query(updateQuery, nextStatus, int32(existingRow.partitionID), existingRow.hash, makeNumericQueryValue(scyllaTable.textSearchIndex.idColumn, existingRow.id))
-		updateStatementsCount++
+		statements = append(statements, textSearchBatchStatement{
+			query: updateQuery,
+			args:  []any{nextStatus, int32(existingRow.partitionID), existingRow.hash, makeNumericQueryValue(scyllaTable.textSearchIndex.idColumn, existingRow.id)},
+		})
 	}
 
-	if updateStatementsCount == 0 {
+	if len(statements) == 0 {
 		return nil
 	}
 
 	if DebugFull {
 		fmt.Printf("TextSearchIndex status sync batch: base_table=%s index=%s updates=%d records=%d\n",
-			scyllaTable.name, scyllaTable.textSearchIndex.tableName, updateStatementsCount, len(*records))
+			scyllaTable.name, scyllaTable.textSearchIndex.tableName, len(statements), len(*records))
 	}
 
-	if err := session.ExecuteBatch(batch); err != nil {
+	if err := executeTextSearchBatches(session, statements); err != nil {
 		return fmt.Errorf("text search status sync %s: %w", scyllaTable.textSearchIndex.tableName, err)
 	}
 

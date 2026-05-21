@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unsafe"
 )
 
 type textSearchRecord struct {
@@ -12,6 +13,10 @@ type textSearchRecord struct {
 	ID        int32  `db:"id"`
 	Name      string `db:"nombre"`
 	Status    int8   `db:"status"`
+}
+
+func (e *textSearchRecord) GetTextSearchIndex() string {
+	return e.Name + " marca"
 }
 
 type textSearchRecordTable struct {
@@ -76,6 +81,25 @@ func TestBuildTextSearchRowsUsesAllOrderedCombinations(t *testing.T) {
 	}
 	if !foundExpectedPair {
 		t.Fatalf("expected non-consecutive pair hash %d in rows %+v", expectedHash, rows)
+	}
+}
+
+func TestGetTextSearchRecordRowsUsesProviderOverride(t *testing.T) {
+	scyllaTable := MakeScyllaTable[textSearchRecord, textSearchRecordTable]()
+	record := textSearchRecord{CompanyID: 7, ID: 99, Name: "aceite", Status: 1}
+
+	rows := getTextSearchRecordRows(&record, unsafe.Pointer(&record), scyllaTable.textSearchIndex)
+	expectedHash := BasicHashInt(strings.Join([]string{"aceite", "marca"}, textSearchHashWordBoundary))
+
+	foundExpectedHash := false
+	for _, row := range rows {
+		if row.hash == expectedHash {
+			foundExpectedHash = true
+			break
+		}
+	}
+	if !foundExpectedHash {
+		t.Fatalf("expected provider override hash %d in rows %+v", expectedHash, rows)
 	}
 }
 
