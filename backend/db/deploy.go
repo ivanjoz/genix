@@ -881,42 +881,10 @@ func DeployScylla(cacheCode int32, controllers ...ScyllaControllerInterface) {
 			}
 		}
 
-		if table.textSearchIndex != nil {
-			textSearchTableName := fmt.Sprintf("%v.%v", table.keyspace, table.textSearchIndex.tableName)
-			if _, exists := tableColumnsMap[textSearchTableName]; !exists {
-				Logx(5, fmt.Sprintf(`No se encontró la tabla de text search "%v". Creando...`+"\n", textSearchTableName))
-
-				createScript := getTextSearchIndexCreateScript(table.keyspace, table.textSearchIndex)
-				fmt.Println(createScript)
-				if err := QueryExec(createScript); err != nil {
-					fmt.Println(err)
-					panic(fmt.Sprintf(`Error creando la tabla de text search "%v" en %v`, table.textSearchIndex.tableName, tableName))
-				}
-
-				tableColumnsMap[textSearchTableName] = []ScyllaColumns{
-					{Name: "partition_id", Type: "int", Keyspace: table.keyspace, Table: table.textSearchIndex.tableName},
-					{Name: "hash", Type: "int", Keyspace: table.keyspace, Table: table.textSearchIndex.tableName},
-					{Name: "bigrams", Type: "list<tinyint>", Keyspace: table.keyspace, Table: table.textSearchIndex.tableName},
-					{Name: "status", Type: "tinyint", Keyspace: table.keyspace, Table: table.textSearchIndex.tableName},
-					{Name: "id", Type: getTextSearchIndexIDColumnType(table.textSearchIndex), Keyspace: table.keyspace, Table: table.textSearchIndex.tableName},
-				}
-				Logx(2, fmt.Sprintf(`Text search table created "%v"`+"\n", table.textSearchIndex.tableName))
-			}
-
-			textSearchIndexes := tableIndexesMap[textSearchTableName]
-			maintenanceIndexName := getTextSearchIndexMaintenanceIndexName(table.textSearchIndex)
-			if !slices.Contains(textSearchIndexes, maintenanceIndexName) {
-				Logx(5, fmt.Sprintf(`No se encontró el índice de text search "%v". Creando...`+"\n", maintenanceIndexName))
-				createScript := getTextSearchIndexMaintenanceIndexCreateScript(table.keyspace, table.textSearchIndex)
-				fmt.Println(createScript)
-				if err := QueryExec(createScript); err != nil {
-					fmt.Println(err)
-					panic(fmt.Sprintf(`Error creando el índice de text search "%v" en %v`, maintenanceIndexName, textSearchTableName))
-				}
-				tableIndexesMap[textSearchTableName] = append(tableIndexesMap[textSearchTableName], maintenanceIndexName)
-				Logx(2, fmt.Sprintf(`Text search maintenance index created "%v"`+"\n", maintenanceIndexName))
-			}
-		}
+		// TextSearchColumn-backed indexes used to live in Scylla as a
+		// {table}_{column}_search_idx companion table. They've moved to
+		// Sonic (backend/db/text_search) — collections and buckets are
+		// created lazily on first write, so deploy does nothing here.
 
 		for _, index := range table.indexes {
 			if slices.Contains(tableIndexes, index.name) {

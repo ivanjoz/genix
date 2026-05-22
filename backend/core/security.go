@@ -58,12 +58,13 @@ type EnvStruct struct {
 	// optional; the llm package defaults to tencent/hy3-preview when blank.
 	OPENROUTER_KEY   string
 	OPENROUTER_MODEL string
-	// SeekStorm — lexical search backend (one index per client). The URL
-	// points at the private HTTP server (typically 127.0.0.1:8080), the API
-	// key is the limited service key created in step §5 of
-	// cloud/text-searh/seekstorm_product_search_setup.md.
-	SEEKSTORM_URL     string
-	SEEKSTORM_API_KEY string
+	// Sonic — lexical search backend reached over TCP. The daemon is
+	// installed by cloud/text-searh/install_sonic.py, which also writes
+	// SONIC_PASSWORD into credentials.json. Host defaults to 127.0.0.1
+	// and port to 14446 when empty.
+	SONIC_HOST     string
+	SONIC_PORT     int32
+	SONIC_PASSWORD string
 }
 
 var Env *EnvStruct

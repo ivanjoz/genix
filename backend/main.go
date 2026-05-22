@@ -4,6 +4,7 @@ import (
 	"app/agent"
 	"app/core"
 	"app/db"
+	"app/db/text_search"
 	"app/exec"
 	"context"
 	"fmt"
@@ -145,9 +146,34 @@ func OnPanic(panicMessage interface{}) {
 	core.Log(string(debug.Stack()))
 }
 
+// configureTextSearchSonic resolves the Sonic endpoint from credentials
+// (falling back to 127.0.0.1:14446) and pushes it into the text_search
+// package. SONIC_PASSWORD must be set in prod or writes will fail at
+// handshake; we log a warning when it's missing.
+func configureTextSearchSonic() {
+	host := strings.TrimSpace(core.Env.SONIC_HOST)
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := int(core.Env.SONIC_PORT)
+	if port == 0 {
+		port = 14446
+	}
+	password := strings.TrimSpace(core.Env.SONIC_PASSWORD)
+	if password == "" && core.Env.IS_PROD {
+		core.Log("text_search: SONIC_PASSWORD empty in prod; Sonic writes will fail at handshake")
+	}
+	text_search.Configure(host, port, password)
+}
+
 func main() {
 	serverPort := ":3589"
 	core.PopulateVariables()
+	// Wire the Sonic endpoint before any DB write that might touch a
+	// TextSearchColumn-backed table. The text_search package can't import
+	// core (cycle: core -> core/types -> db -> text_search), so the
+	// resolved config is pushed in from here.
+	configureTextSearchSonic()
 	// Print deployment path early so systemd logs show which cloned repo the
 	// binary will scan for route markdown and generated menu descriptions.
 	fmt.Println("GENIX_REPOSITORY_ROOT=", os.Getenv("GENIX_REPOSITORY_ROOT"))

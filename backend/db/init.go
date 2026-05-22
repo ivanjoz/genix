@@ -6,6 +6,13 @@ import (
 )
 
 // Init creates the ORM internal tables required before sequence or cache-version features are used.
+//
+// Sonic text-search backend: callers wire the Sonic endpoint via
+// text_search.Configure(host, port, password) before the first write.
+// The db package can't do it here without creating a core ->
+// core/types -> db -> core import cycle, so the application entry
+// points (main.go, exec/init.go) call Configure themselves after
+// core.PopulateVariables.
 func Init() error {
 	if err := CreateKeyspaceIfNotExists(); err != nil {
 		return err

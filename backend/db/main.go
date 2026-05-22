@@ -102,7 +102,6 @@ type indexUpdatedTableInfo struct {
 }
 
 type textSearchIndexInfo struct {
-	tableName       string
 	sourceColumn    IColInfo
 	partitionColumn IColInfo
 	idColumn        IColInfo

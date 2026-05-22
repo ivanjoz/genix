@@ -7,6 +7,7 @@ import (
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
+	"app/db/text_search"
 	securityTypes "app/security/types"
 	"encoding/csv"
 	"encoding/json"
@@ -14,13 +15,40 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
+
+// configureTextSearchSonic resolves the Sonic endpoint from credentials
+// (falling back to 127.0.0.1:14446) and pushes it into the text_search
+// package. SONIC_PASSWORD must be set in prod or writes will fail at
+// handshake; we log a warning when it's missing.
+func configureTextSearchSonic() {
+	host := strings.TrimSpace(core.Env.SONIC_HOST)
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := int(core.Env.SONIC_PORT)
+	if port == 0 {
+		port = 14446
+	}
+	password := strings.TrimSpace(core.Env.SONIC_PASSWORD)
+	if password == "" && core.Env.IS_PROD {
+		core.Log("text_search: SONIC_PASSWORD empty in prod; Sonic writes will fail at handshake")
+	}
+	text_search.Configure(host, port, password)
+}
 
 func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 
 	if len(core.Env.ADMIN_PASSWORD) == 0 || len(core.Env.SECRET_PHRASE) == 0 {
 		panic("No se especificado el ADMIN_PASSWORD y el SECRET_PHRASE en credentials.json")
 	}
+
+	// Wire the Sonic endpoint before any seed write hits a
+	// TextSearchColumn-backed table. The text_search package can't
+	// import core (cycle: core -> core/types -> db -> text_search), so
+	// the resolved config is pushed in here.
+	configureTextSearchSonic()
 
 	// Bootstrap ORM internal tables before any ScyllaDB seed writes depend on them.
 	if err := db.Init(); err != nil {
