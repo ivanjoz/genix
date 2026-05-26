@@ -819,17 +819,6 @@ func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 	return schemaStruct
 }
 
-func makeQueryStatement(statements []string) string {
-	queryStr := ""
-	if len(statements) == 1 {
-		queryStr = statements[0]
-	} else {
-		statements := strings.Join(statements, ";\n") + ";"
-		queryStr = fmt.Sprintf("BEGIN BATCH\n%v\nAPPLY BATCH;", statements)
-	}
-	return queryStr
-}
-
 // execQuery executes a query based on TableInfo and optionally lets callers skip storing decoded rows.
 func execQuery[T TableSchemaInterface[T], E any](
 	schemaStruct *T,

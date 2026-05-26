@@ -397,7 +397,18 @@ func handlePreInsert[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	return nil
 }
 
-func MakeInsertStatement[T TableBaseInterface[E, T], E TableSchemaInterface[E]](records *[]T, columnsToExclude ...Coln) []string {
+// PreparedStatement is the (template, bound-values) pair that gocql consumes for one query.
+// Returned by MakeInsertStatement and MakeUpdateStatements so tests can inspect the exact
+// statement shape and arguments that the production write path produces.
+type PreparedStatement struct {
+	Stmt string
+	Args []any
+}
+
+// MakeInsertStatement returns the prepared INSERT statement and bound values that the
+// production batch path would emit for each record. Intended for tests and debugging — the
+// production path builds the same shape directly into a gocql.Batch via appendInsertQueriesToBatch.
+func MakeInsertStatement[T TableBaseInterface[E, T], E TableSchemaInterface[E]](records *[]T, columnsToExclude ...Coln) []PreparedStatement {
 	refTable := initStructTable[E, T](new(E))
 	scyllaTable := getOrCompileScyllaTable(refTable)
 	managedValues, err := applyWriteManagedColumns(records, scyllaTable, true)
@@ -407,36 +418,36 @@ func MakeInsertStatement[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 
 	columns := collectInsertColumns(&scyllaTable, columnsToExclude)
 
-	columnsNames := []string{}
+	columnNames := make([]string, 0, len(columns))
+	placeholders := make([]string, 0, len(columns))
 	for _, col := range columns {
-		columnsNames = append(columnsNames, col.GetName())
+		columnNames = append(columnNames, col.GetName())
+		placeholders = append(placeholders, "?")
 	}
 
-	queryStrInsert := fmt.Sprintf(`INSERT INTO %v (%v) VALUES `,
-		scyllaTable.GetFullName(), strings.Join(columnsNames, ", "))
+	stmt := fmt.Sprintf(`INSERT INTO %v (%v) VALUES (%v)`,
+		scyllaTable.GetFullName(), strings.Join(columnNames, ", "), strings.Join(placeholders, ", "))
 
-	queryStatements := []string{}
-
+	entries := make([]PreparedStatement, 0, len(*records))
 	for i := range *records {
 		rec := &(*records)[i]
 		ptr := xunsafe.AsPointer(rec)
 
-		recordInsertValues := []string{}
-
+		args := make([]any, 0, len(columns))
 		for _, col := range columns {
-			value := any(nil)
+			var value any
 			if managedValue, found := managedValues.getValueForColumn(i, col, true); found {
-				value = normalizeEmptyStringWriteLiteral(managedValue)
+				value = managedValue
+			} else if slices.Contains(scyllaTable.keysIdx, col.GetInfo().Idx) {
+				value = col.GetStatementValue(ptr)
 			} else {
-				value = getNormalizedWriteLiteral(col, ptr)
+				value = getNormalizedWriteValue(col, ptr)
 			}
-			recordInsertValues = append(recordInsertValues, fmt.Sprintf("%v", value))
+			args = append(args, value)
 		}
-
-		statement := /*" " +*/ queryStrInsert + "(" + strings.Join(recordInsertValues, ", ") + ")"
-		queryStatements = append(queryStatements, statement)
+		entries = append(entries, PreparedStatement{Stmt: stmt, Args: args})
 	}
-	return queryStatements
+	return entries
 }
 
 func Table[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() *E {
@@ -457,29 +468,6 @@ func normalizeEmptyStringWriteValue(value any) any {
 	}
 
 	return value
-}
-
-func normalizeEmptyStringWriteLiteral(value any) any {
-	// Rationale: UPDATE/statement helpers use raw CQL literals, so NULL must be emitted as the keyword instead of a Go nil.
-	if normalizedValue := normalizeEmptyStringWriteValue(value); normalizedValue == nil {
-		return "null"
-	}
-
-	return value
-}
-
-func getNormalizedWriteLiteral(column IColInfo, ptr unsafe.Pointer) any {
-	// Rationale: virtual columns may not have a backing field, so updates must normalize the computed statement value
-	// instead of treating a missing raw field as NULL before the virtual accessor runs.
-	writeValue := column.GetStatementValue(ptr)
-	if writeValue == nil {
-		writeValue = column.GetRawValue(ptr)
-	}
-	if normalizedValue := normalizeEmptyStringWriteLiteral(writeValue); normalizedValue == "null" {
-		return normalizedValue
-	}
-
-	return column.GetValue(ptr)
 }
 
 func getNormalizedWriteValue(column IColInfo, ptr unsafe.Pointer) any {
@@ -714,55 +702,57 @@ func InsertOne[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	return Insert(&[]T{record}, columnsToExclude...)
 }
 
-func makeUpdateStatementsBase[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
-	records *[]T, managedValues managedWriteValues, columnsToInclude []Coln, columnsToExclude []Coln, onlyVirtual bool,
-) []string {
-	scyllaTable, columnsToUpdate := resolveUpdateColumnsForWrite(records, columnsToInclude, columnsToExclude, onlyVirtual)
-	columnsWhere := collectUpdateWhereColumns(scyllaTable)
-
-	queryStatements := []string{}
-
-	for i := range *records {
-		rec := &(*records)[i]
-		ptr := xunsafe.AsPointer(rec)
-
-		setStatements := []string{}
-		for _, col := range columnsToUpdate {
-			v := any(nil)
-			if managedValue, found := managedValues.getValueForColumn(i, col, false); found {
-				v = normalizeEmptyStringWriteLiteral(managedValue)
-			} else {
-				v = getNormalizedWriteLiteral(col, ptr)
-			}
-			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, col.GetName(), v))
-		}
-
-		whereStatements := []string{}
-		for _, col := range columnsWhere {
-			v := col.GetValue(ptr)
-			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, col.GetName(), v))
-		}
-
-		queryStatement := fmt.Sprintf(
-			"UPDATE %v SET %v WHERE %v",
-			scyllaTable.GetFullName(), Concatx(", ", setStatements), Concatx(" and ", whereStatements),
-		)
-
-		queryStatements = append(queryStatements, queryStatement)
-	}
-
-	return queryStatements
-}
-
+// MakeUpdateStatements returns the prepared UPDATE statement and bound values that the
+// production batch path would emit for each record. Intended for tests and debugging — the
+// production path builds the same shape directly into a gocql.Batch via appendUpdateQueriesToBatch.
 func MakeUpdateStatements[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T, columnsToInclude ...Coln,
-) []string {
+) []PreparedStatement {
 	scyllaTable := MakeScyllaTable[T, E]()
 	managedValues, err := applyWriteManagedColumns(records, scyllaTable, false)
 	if err != nil {
 		panic(err)
 	}
-	return makeUpdateStatementsBase(records, managedValues, columnsToInclude, nil, false)
+
+	resolvedTable, columnsToUpdate := resolveUpdateColumnsForWrite(records, columnsToInclude, nil, false)
+	columnsWhere := collectUpdateWhereColumns(resolvedTable)
+
+	setParts := make([]string, 0, len(columnsToUpdate))
+	for _, col := range columnsToUpdate {
+		setParts = append(setParts, fmt.Sprintf("%v = ?", col.GetName()))
+	}
+	whereParts := make([]string, 0, len(columnsWhere))
+	for _, whereCol := range columnsWhere {
+		whereParts = append(whereParts, fmt.Sprintf("%v = ?", whereCol.GetName()))
+	}
+
+	stmt := fmt.Sprintf("UPDATE %v SET %v WHERE %v",
+		resolvedTable.GetFullName(),
+		strings.Join(setParts, ", "),
+		strings.Join(whereParts, " and "),
+	)
+
+	entries := make([]PreparedStatement, 0, len(*records))
+	for i := range *records {
+		rec := &(*records)[i]
+		ptr := xunsafe.AsPointer(rec)
+
+		args := make([]any, 0, len(columnsToUpdate)+len(columnsWhere))
+		for _, col := range columnsToUpdate {
+			var value any
+			if managedValue, found := managedValues.getValueForColumn(i, col, false); found {
+				value = managedValue
+			} else {
+				value = getNormalizedWriteValue(col, ptr)
+			}
+			args = append(args, value)
+		}
+		for _, whereCol := range columnsWhere {
+			args = append(args, whereCol.GetStatementValue(ptr))
+		}
+		entries = append(entries, PreparedStatement{Stmt: stmt, Args: args})
+	}
+	return entries
 }
 
 func Update[T TableBaseInterface[E, T], E TableSchemaInterface[E]](

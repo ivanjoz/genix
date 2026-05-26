@@ -104,11 +104,6 @@ func getScyllaConnection() *gocql.Session {
 	return scyllaSession
 }
 
-func QueryExecStatements(queryStatements []string) error {
-	queryToExec := makeQueryStatement(queryStatements)
-	return QueryExec(queryToExec)
-}
-
 func QueryExec(queryStr string, values ...any) error {
 
 	query := getScyllaConnection().Query(queryStr, values...)

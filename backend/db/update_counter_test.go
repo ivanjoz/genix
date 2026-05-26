@@ -7,6 +7,18 @@ import (
 	"unsafe"
 )
 
+// containsAny reports whether values holds an entry equal to needle.
+// slices.Contains can't be used on []any because any is not a comparable
+// type parameter, so the prepared-statement assertions walk Args manually.
+func containsAny(values []any, needle any) bool {
+	for _, value := range values {
+		if value == needle {
+			return true
+		}
+	}
+	return false
+}
+
 type updateCounterRecord struct {
 	TableStruct[updateCounterSchema, updateCounterRecord]
 	CompanyID int32  `db:"empresa_id"`
@@ -228,19 +240,23 @@ func TestMakeUpdateStatementsAlwaysPersistsManagedUpdatedColumns(t *testing.T) {
 		return 41, nil
 	}
 
-	updateStatements := MakeUpdateStatements(&records, table.Nombre)
-	if len(updateStatements) != 1 {
-		t.Fatalf("expected one update statement, got %d", len(updateStatements))
+	preparedStatements := MakeUpdateStatements(&records, table.Nombre)
+	if len(preparedStatements) != 1 {
+		t.Fatalf("expected one update statement, got %d", len(preparedStatements))
+	}
+	preparedStatement := preparedStatements[0]
+
+	for _, expectedSetClause := range []string{"nombre = ?", "updated = ?", "update_counter = ?"} {
+		if !strings.Contains(preparedStatement.Stmt, expectedSetClause) {
+			t.Fatalf("expected SET clause %q in statement: %s", expectedSetClause, preparedStatement.Stmt)
+		}
 	}
 
-	if !strings.Contains(updateStatements[0], "nombre = 'nuevo'") {
-		t.Fatalf("expected explicit column update in statement: %s", updateStatements[0])
-	}
-	if !strings.Contains(updateStatements[0], "updated = 77") {
-		t.Fatalf("expected managed updated column in statement: %s", updateStatements[0])
-	}
-	if !strings.Contains(updateStatements[0], "update_counter = 41") {
-		t.Fatalf("expected managed update counter in statement: %s", updateStatements[0])
+	expectedBoundValues := []any{"nuevo", int32(77), int32(41)}
+	for _, expectedValue := range expectedBoundValues {
+		if !containsAny(preparedStatement.Args, expectedValue) {
+			t.Fatalf("expected bound value %v in args %v", expectedValue, preparedStatement.Args)
+		}
 	}
 }
 
@@ -265,16 +281,17 @@ func TestMakeInsertStatementIncludesManagedAuditColumnsWithoutStructFields(t *te
 	if len(insertStatements) != 1 {
 		t.Fatalf("expected one insert statement, got %d", len(insertStatements))
 	}
+	preparedStatement := insertStatements[0]
 
 	for _, expectedColumn := range []string{"created", "updated", "update_counter"} {
-		if !strings.Contains(insertStatements[0], expectedColumn) {
-			t.Fatalf("expected managed column %q in insert statement: %s", expectedColumn, insertStatements[0])
+		if !strings.Contains(preparedStatement.Stmt, expectedColumn) {
+			t.Fatalf("expected managed column %q in insert statement: %s", expectedColumn, preparedStatement.Stmt)
 		}
 	}
 
-	for _, expectedValue := range []string{"77", "41"} {
-		if !strings.Contains(insertStatements[0], expectedValue) {
-			t.Fatalf("expected managed value %q in insert statement: %s", expectedValue, insertStatements[0])
+	for _, expectedValue := range []any{int32(77), int32(41)} {
+		if !containsAny(preparedStatement.Args, expectedValue) {
+			t.Fatalf("expected managed value %v in args %v", expectedValue, preparedStatement.Args)
 		}
 	}
 }
@@ -314,18 +331,23 @@ func TestMakeUpdateStatementsAllowsIndexGroupUpdateWhenOmittedValuesExistInStruc
 		return 41, nil
 	}
 
-	updateStatements := MakeUpdateStatements(&records, table.ClientID)
-	if len(updateStatements) != 1 {
-		t.Fatalf("expected one update statement, got %d", len(updateStatements))
+	preparedStatements := MakeUpdateStatements(&records, table.ClientID)
+	if len(preparedStatements) != 1 {
+		t.Fatalf("expected one update statement, got %d", len(preparedStatements))
 	}
-	if !strings.Contains(updateStatements[0], "client_id = 5") {
-		t.Fatalf("expected client_id update in statement: %s", updateStatements[0])
+	preparedStatement := preparedStatements[0]
+
+	if !strings.Contains(preparedStatement.Stmt, "client_id = ?") {
+		t.Fatalf("expected client_id SET clause in statement: %s", preparedStatement.Stmt)
 	}
-	if !strings.Contains(updateStatements[0], "zz_igs_fecha_client_id_product_ids") {
-		t.Fatalf("expected raw+slice index-group virtual column update in statement: %s", updateStatements[0])
+	if !strings.Contains(preparedStatement.Stmt, "zz_igs_date_client_id_product_ids = ?") {
+		t.Fatalf("expected raw+slice index-group virtual column SET in statement: %s", preparedStatement.Stmt)
 	}
-	if !strings.Contains(updateStatements[0], "zz_iwks_fecha_client_id_product_ids") {
-		t.Fatalf("expected week+slice index-group virtual column update in statement: %s", updateStatements[0])
+	if !strings.Contains(preparedStatement.Stmt, "zz_iwks_date_client_id_product_ids = ?") {
+		t.Fatalf("expected week+slice index-group virtual column SET in statement: %s", preparedStatement.Stmt)
+	}
+	if !containsAny(preparedStatement.Args, int32(5)) {
+		t.Fatalf("expected client_id bound value 5 in args %v", preparedStatement.Args)
 	}
 }
 
