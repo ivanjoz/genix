@@ -152,9 +152,16 @@ func commandBudget(c *searchConn) int {
 	return bs - 1
 }
 
-// popIPipeline writes one POPI command per id on the same connection,
-// flushes once, then reads N replies in order. This collapses N
-// single-key removes into a single network round trip.
+// popIPipelineChunkSize bounds the pipelined POPI window so the server's
+// pending-command and pending-reply queues don't overflow on large batches
+// (e.g. a 10k-record write would otherwise push ~400KB onto the wire
+// before reading a single reply, which Sonic-style servers reset).
+const popIPipelineChunkSize = 500
+
+// popIPipeline writes POPI commands for ids in chunks of popIPipelineChunkSize,
+// flushing and reading replies between chunks. Each chunk is one network
+// round trip; the chunk size keeps the in-flight command/reply window within
+// the server's per-connection limits.
 //
 // Each reply must be RESULT 1 (existed) or RESULT 0 (missing); both
 // are valid. A ProtocolError reply from the server is non-fatal for
@@ -167,47 +174,59 @@ func popIPipeline(ctx context.Context, c *searchConn, collection, bucket string,
 	if c.broken {
 		return fmt.Errorf("%w: connection already broken", ErrProtocol)
 	}
-	if deadline, ok := ctx.Deadline(); ok {
-		_ = c.netConn.SetDeadline(deadline)
-	} else {
-		_ = c.netConn.SetDeadline(time.Now().Add(commandTimeout))
-	}
-	for _, id := range ids {
-		line := "POPI " + collection + " " + bucket + " " + strconv.FormatInt(int64(id), 10)
-		if _, err := c.writer.WriteString(line); err != nil {
-			c.broken = true
-			return err
-		}
-		if err := c.writer.WriteByte('\n'); err != nil {
-			c.broken = true
-			return err
-		}
-	}
-	if err := c.writer.Flush(); err != nil {
-		c.broken = true
-		return err
-	}
+
 	var firstProtoErr error
-	for range ids {
-		line, err := readLine(c.reader)
-		if err != nil {
+	for chunkStart := 0; chunkStart < len(ids); chunkStart += popIPipelineChunkSize {
+		chunkEnd := chunkStart + popIPipelineChunkSize
+		if chunkEnd > len(ids) {
+			chunkEnd = len(ids)
+		}
+		chunkIDs := ids[chunkStart:chunkEnd]
+
+		// Reset the deadline per chunk so a slow remote link doesn't accumulate
+		// the full 10k-record budget against the single 10s commandTimeout.
+		if deadline, ok := ctx.Deadline(); ok {
+			_ = c.netConn.SetDeadline(deadline)
+		} else {
+			_ = c.netConn.SetDeadline(time.Now().Add(commandTimeout))
+		}
+
+		for _, id := range chunkIDs {
+			line := "POPI " + collection + " " + bucket + " " + strconv.FormatInt(int64(id), 10)
+			if _, err := c.writer.WriteString(line); err != nil {
+				c.broken = true
+				return err
+			}
+			if err := c.writer.WriteByte('\n'); err != nil {
+				c.broken = true
+				return err
+			}
+		}
+		if err := c.writer.Flush(); err != nil {
 			c.broken = true
 			return err
 		}
-		res, perr := parseResult(line)
-		if perr != nil {
-			if _, ok := perr.(*ProtocolError); ok {
-				if firstProtoErr == nil {
-					firstProtoErr = perr
-				}
-				continue
+		for range chunkIDs {
+			line, err := readLine(c.reader)
+			if err != nil {
+				c.broken = true
+				return err
 			}
-			c.broken = true
-			return perr
-		}
-		if res.kind != kindResult {
-			c.broken = true
-			return fmt.Errorf("%w: expected RESULT for POPI, got %v", ErrProtocol, res.kind)
+			res, perr := parseResult(line)
+			if perr != nil {
+				if _, ok := perr.(*ProtocolError); ok {
+					if firstProtoErr == nil {
+						firstProtoErr = perr
+					}
+					continue
+				}
+				c.broken = true
+				return perr
+			}
+			if res.kind != kindResult {
+				c.broken = true
+				return fmt.Errorf("%w: expected RESULT for POPI, got %v", ErrProtocol, res.kind)
+			}
 		}
 	}
 	return firstProtoErr
