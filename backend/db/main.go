@@ -883,13 +883,10 @@ func GetCounter(keyspace string, name string, increment int) (int64, error) {
 			keyspace, name, storedCounterValue, increment)
 	}
 
-	queryUpdateStr := fmt.Sprintf(
-		"UPDATE %v.sequences SET current_value = current_value + %v WHERE name = '%v'",
-		keyspace, counterIncrement, name,
-	)
+	queryUpdateStr := fmt.Sprintf("UPDATE %v.sequences SET current_value = current_value + ? WHERE name = ?", keyspace)
 
-	if err := QueryExec(queryUpdateStr); err != nil {
-		fmt.Println(queryUpdateStr)
+	if err := QueryExec(queryUpdateStr, counterIncrement, name); err != nil {
+		fmt.Println(queryUpdateStr, counterIncrement, name)
 		panic(err)
 	}
 

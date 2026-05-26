@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gocql/gocql"
 	"github.com/viant/xunsafe"
 )
 
@@ -206,50 +207,52 @@ func (e *ScyllaController[T, E]) RecalcVirtualColumns(partValue int32) error {
 		return nil
 	}
 
-	updateStatements := make([]string, 0, len(updatesToApply))
-	for _, updateToApply := range updatesToApply {
-		recordPointer := xunsafe.AsPointer(&updateToApply.record)
-		setStatements := make([]string, 0, len(updateToApply.changedVirtualColumns))
-		for _, column := range updateToApply.changedVirtualColumns {
-			setStatements = append(setStatements, fmt.Sprintf(`%v = %v`, column.GetName(), column.GetValue(recordPointer)))
-		}
-
-		whereColumns := scyllaTable.keys
-		if partitionColumn != nil && !partitionColumn.IsNil() {
-			whereColumns = append([]IColInfo{partitionColumn}, whereColumns...)
-		}
-
-		whereStatements := make([]string, 0, len(whereColumns))
-		for _, whereColumn := range whereColumns {
-			whereStatements = append(whereStatements, fmt.Sprintf(`%v = %v`, whereColumn.GetName(), whereColumn.GetValue(recordPointer)))
-		}
-
-		updateStatements = append(updateStatements, fmt.Sprintf(
-			"UPDATE %v SET %v WHERE %v",
-			scyllaTable.GetFullName(),
-			Concatx(", ", setStatements),
-			Concatx(" and ", whereStatements),
-		))
+	whereColumns := scyllaTable.keys
+	if partitionColumn != nil && !partitionColumn.IsNil() {
+		whereColumns = append([]IColInfo{partitionColumn}, whereColumns...)
 	}
-
-	if len(updateStatements) == 0 {
-		return nil
+	whereParts := make([]string, 0, len(whereColumns))
+	for _, whereColumn := range whereColumns {
+		whereParts = append(whereParts, fmt.Sprintf("%v = ?", whereColumn.GetName()))
 	}
+	whereClause := strings.Join(whereParts, " and ")
 
 	const maxRecalcUpdatesPerBatch = 200
-	totalChunks := (len(updateStatements) + maxRecalcUpdatesPerBatch - 1) / maxRecalcUpdatesPerBatch
+	totalChunks := (len(updatesToApply) + maxRecalcUpdatesPerBatch - 1) / maxRecalcUpdatesPerBatch
+	session := getScyllaConnection()
 	for chunkIndex := 0; chunkIndex < totalChunks; chunkIndex++ {
 		fromIndex := chunkIndex * maxRecalcUpdatesPerBatch
 		toIndex := fromIndex + maxRecalcUpdatesPerBatch
-		if toIndex > len(updateStatements) {
-			toIndex = len(updateStatements)
+		if toIndex > len(updatesToApply) {
+			toIndex = len(updatesToApply)
+		}
+		chunk := updatesToApply[fromIndex:toIndex]
+
+		batch := session.NewBatch(gocql.UnloggedBatch)
+		for chunkRowIndex := range chunk {
+			updateToApply := &chunk[chunkRowIndex]
+			recordPointer := xunsafe.AsPointer(&updateToApply.record)
+
+			setParts := make([]string, 0, len(updateToApply.changedVirtualColumns))
+			boundValues := make([]any, 0, len(updateToApply.changedVirtualColumns)+len(whereColumns))
+			for _, column := range updateToApply.changedVirtualColumns {
+				setParts = append(setParts, fmt.Sprintf("%v = ?", column.GetName()))
+				boundValues = append(boundValues, getNormalizedWriteValue(column, recordPointer))
+			}
+			for _, whereColumn := range whereColumns {
+				boundValues = append(boundValues, whereColumn.GetStatementValue(recordPointer))
+			}
+
+			stmt := fmt.Sprintf("UPDATE %v SET %v WHERE %v",
+				scyllaTable.GetFullName(), strings.Join(setParts, ", "), whereClause,
+			)
+			batch.Query(stmt, boundValues...)
 		}
 
-		updateStatementsChunk := updateStatements[fromIndex:toIndex]
 		fmt.Printf("RecalcVirtualColumns | table=%s | chunk=%d/%d | rows_in_chunk=%d\n",
-			scyllaTable.name, chunkIndex+1, totalChunks, len(updateStatementsChunk))
+			scyllaTable.name, chunkIndex+1, totalChunks, len(chunk))
 
-		if err := QueryExecStatements(updateStatementsChunk); err != nil {
+		if err := session.ExecuteBatch(batch); err != nil {
 			return Err("RecalcVirtualColumns update failed for table", scyllaTable.name, "chunk", chunkIndex+1, "of", totalChunks, ":", err)
 		}
 	}
@@ -321,13 +324,11 @@ func (e *ScyllaController[T, E]) RecalcGroupIndexHashes(partValue int32) error {
 		selectColumnNames = append(selectColumnNames, selectedColumn.GetName())
 	}
 
-	deleteStatement := fmt.Sprintf(
-		"DELETE FROM %v.%v WHERE partition_id = %v",
+	deleteStatement := fmt.Sprintf("DELETE FROM %v.%v WHERE partition_id = ?",
 		scyllaTable.keyspace,
 		scyllaTable.indexUpdatedTable.name,
-		partValue,
 	)
-	if err := QueryExec(deleteStatement); err != nil {
+	if err := QueryExec(deleteStatement, partValue); err != nil {
 		return Err("RecalcGroupIndexHashes delete failed for table", scyllaTable.name, ":", err)
 	}
 

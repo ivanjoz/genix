@@ -109,9 +109,9 @@ func QueryExecStatements(queryStatements []string) error {
 	return QueryExec(queryToExec)
 }
 
-func QueryExec(queryStr string) error {
+func QueryExec(queryStr string, values ...any) error {
 
-	query := getScyllaConnection().Query(queryStr)
+	query := getScyllaConnection().Query(queryStr, values...)
 
 	if err := query.Exec(); err != nil {
 		if strings.Contains(err.Error(), "no hosts available") {
