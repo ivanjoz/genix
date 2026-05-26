@@ -1,18 +1,22 @@
-// Package text_search talks to a Sonic search daemon over TCP. It
-// preserves the ORM-facing API from the previous FTS5 backend so call
-// sites in backend/db do not change.
+// Package text_search talks to a GenixSearch daemon over TCP. It
+// preserves the ORM-facing API from the previous FTS5 / Sonic backends
+// so call sites in backend/db do not change.
 //
 // Granularity: one logical index per (table, partition, statusGroup).
 // On the wire: collection = {tableName}, bucket = "p{partition}_s{group}".
 // Group 0 holds records with status == 0 (soft-deleted / inactive);
 // group 1 holds everything else.
 //
-// The forked Sonic exposes BULKPUSH / BULKFLUSHO and PUSH replaces
-// (rather than appends) per-object tokens, so an upsert batch issues at
-// most two frames: one BULKFLUSHO on the opposite-status bucket (Sonic
-// can't detect a status flip on its own) and one BULKPUSH on the current
-// bucket. Records with empty SearchText get a BULKFLUSHO on the current
-// bucket instead of a PUSH.
+// GenixSearch exposes only PUSHI (multi-key, replace semantics) and
+// single-key POPI; there is no bulk POPI. UpsertBatch issues:
+//
+//  1. A pipelined POPI run on the opposite-status bucket for every
+//     record ID — guards against status flips (the server can't detect
+//     a flip on its own).
+//  2. A pipelined POPI run on the current-status bucket for records
+//     whose SearchText is empty (PUSHI rejects empty payloads).
+//  3. One or more PUSHI lines on the current-status bucket batching
+//     the non-empty records, chunked to fit the channel buffer.
 package text_search
 
 import (
@@ -26,12 +30,11 @@ import (
 	"time"
 )
 
-// ErrNotImplemented is returned by the Search / Suggest stubs until the
-// read path lands.
+// ErrNotImplemented is returned by Search until the read path lands.
 var ErrNotImplemented = errors.New("text_search: search path not implemented")
 
-// Config holds the Sonic endpoint and credentials.
-type sonicConfig struct {
+// searchConfig holds the GenixSearch endpoint and credentials.
+type searchConfig struct {
 	host     string
 	port     int
 	password string
@@ -39,19 +42,19 @@ type sonicConfig struct {
 
 var (
 	configMu  sync.Mutex
-	cfg       sonicConfig
+	cfg       searchConfig
 	ingestMgr *connPool
 	searchMgr *connPool
 )
 
-// Configure sets the Sonic endpoint and credentials. The first call
+// Configure sets the search endpoint and credentials. The first call
 // wins for the lifetime of the process — subsequent calls before any
 // shard is opened replace the previous values; afterwards they are
 // ignored because the pools have already captured the config.
 func Configure(host string, port int, password string) {
 	configMu.Lock()
 	defer configMu.Unlock()
-	cfg = sonicConfig{
+	cfg = searchConfig{
 		host:     strings.TrimSpace(host),
 		port:     port,
 		password: strings.TrimSpace(password),
@@ -60,11 +63,11 @@ func Configure(host string, port int, password string) {
 
 // getConfig returns a copy of the active config or an error if
 // Configure was never called.
-func getConfig() (sonicConfig, error) {
+func getConfig() (searchConfig, error) {
 	configMu.Lock()
 	defer configMu.Unlock()
 	if cfg.host == "" || cfg.port == 0 {
-		return sonicConfig{}, errors.New("text_search: Configure(host, port, password) was not called")
+		return searchConfig{}, errors.New("text_search: Configure(host, port, password) was not called")
 	}
 	return cfg, nil
 }
@@ -104,10 +107,10 @@ func Close() error {
 	return firstErr
 }
 
-// sonicConn is one open TCP connection to the Sonic daemon, bound to
-// a channel mode at handshake time. Not safe for concurrent use — the
-// pool checks one out per call site.
-type sonicConn struct {
+// searchConn is one open TCP connection to the GenixSearch daemon,
+// bound to a channel mode at handshake time. Not safe for concurrent
+// use — the pool checks one out per call site.
+type searchConn struct {
 	mode       string
 	netConn    net.Conn
 	reader     *bufio.Reader
@@ -120,9 +123,9 @@ type sonicConn struct {
 // exec writes one command line and reads the reply. Single-shot
 // commands (OK / RESULT / PONG) consume one line; PENDING-style
 // commands are handled by execPending below.
-func (c *sonicConn) exec(ctx context.Context, line string) (sonicResult, error) {
+func (c *searchConn) exec(ctx context.Context, line string) (searchResult, error) {
 	if c.broken {
-		return sonicResult{}, fmt.Errorf("%w: connection already broken", ErrProtocol)
+		return searchResult{}, fmt.Errorf("%w: connection already broken", ErrProtocol)
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = c.netConn.SetDeadline(deadline)
@@ -131,43 +134,43 @@ func (c *sonicConn) exec(ctx context.Context, line string) (sonicResult, error) 
 	}
 	if err := writeLine(c.writer, line); err != nil {
 		c.broken = true
-		return sonicResult{}, err
+		return searchResult{}, err
 	}
 	reply, err := readLine(c.reader)
 	if err != nil {
 		c.broken = true
-		return sonicResult{}, err
+		return searchResult{}, err
 	}
 	res, err := parseResult(reply)
 	if err != nil {
-		// ERR carries a SonicError but isn't a transport failure; the
-		// connection stays usable. Only mark broken on framing problems.
-		if _, ok := err.(*SonicError); !ok {
+		// ERR carries a ProtocolError but isn't a transport failure;
+		// the connection stays usable. Only mark broken on framing problems.
+		if _, ok := err.(*ProtocolError); !ok {
 			c.broken = true
 		}
 	}
 	return res, err
 }
 
-// execPending issues a command that produces PENDING + EVENT
-// (QUERY / SUGGEST). Returns the EVENT result.
-func (c *sonicConn) execPending(ctx context.Context, line string) (sonicResult, error) {
+// execPending issues a command that produces PENDING + EVENT (QUERY).
+// Returns the EVENT result.
+func (c *searchConn) execPending(ctx context.Context, line string) (searchResult, error) {
 	pending, err := c.exec(ctx, line)
 	if err != nil {
-		return sonicResult{}, err
+		return searchResult{}, err
 	}
 	if pending.kind != kindPending {
 		c.broken = true
-		return sonicResult{}, fmt.Errorf("%w: expected PENDING, got %v", ErrProtocol, pending.kind)
+		return searchResult{}, fmt.Errorf("%w: expected PENDING, got %v", ErrProtocol, pending.kind)
 	}
 	event, err := readLine(c.reader)
 	if err != nil {
 		c.broken = true
-		return sonicResult{}, err
+		return searchResult{}, err
 	}
 	res, err := parseResult(event)
 	if err != nil {
-		if _, ok := err.(*SonicError); !ok {
+		if _, ok := err.(*ProtocolError); !ok {
 			c.broken = true
 		}
 		return res, err
@@ -179,10 +182,10 @@ func (c *sonicConn) execPending(ctx context.Context, line string) (sonicResult, 
 	return res, nil
 }
 
-// dialAndHandshake opens a TCP connection to Sonic, performs the
+// dialAndHandshake opens a TCP connection to the daemon, performs the
 // CONNECTED -> START -> STARTED handshake, and returns a ready-to-use
 // connection bound to the requested mode ("ingest" / "search").
-func dialAndHandshake(ctx context.Context, mode string) (*sonicConn, error) {
+func dialAndHandshake(ctx context.Context, mode string) (*searchConn, error) {
 	conf, err := getConfig()
 	if err != nil {
 		return nil, err
@@ -193,7 +196,7 @@ func dialAndHandshake(ctx context.Context, mode string) (*sonicConn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("text_search: dial %s: %w", addr, err)
 	}
-	c := &sonicConn{
+	c := &searchConn{
 		mode:    mode,
 		netConn: netConn,
 		reader:  bufio.NewReaderSize(netConn, 8192),
@@ -239,7 +242,7 @@ func dialAndHandshake(ctx context.Context, mode string) (*sonicConn, error) {
 }
 
 // ping verifies a pooled connection is still alive. Used at checkout.
-func (c *sonicConn) ping(ctx context.Context) error {
+func (c *searchConn) ping(ctx context.Context) error {
 	res, err := c.exec(ctx, "PING")
 	if err != nil {
 		return err
@@ -252,7 +255,7 @@ func (c *sonicConn) ping(ctx context.Context) error {
 }
 
 // close sends QUIT (best-effort) and closes the underlying socket.
-func (c *sonicConn) close() error {
+func (c *searchConn) close() error {
 	_ = c.netConn.SetDeadline(time.Now().Add(quitTimeout))
 	_ = writeLine(c.writer, "QUIT")
 	return c.netConn.Close()

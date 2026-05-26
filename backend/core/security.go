@@ -5,12 +5,52 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 
 	aws_sdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 )
+
+// ParseGenixSearchURL accepts the GENIXSEARCH_URL credential in any of:
+//   - "host:port"
+//   - "scheme://host:port"     (scheme is ignored)
+//   - "scheme://host:port/path" (path is ignored)
+//   - ""                       → 127.0.0.1:14446
+//
+// The scheme is informational only; the text_search client always opens
+// a raw TCP socket. A bare host with no port keeps the default port.
+func ParseGenixSearchURL(raw string) (string, int) {
+	const (
+		defaultHost = "127.0.0.1"
+		defaultPort = 14446
+	)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return defaultHost, defaultPort
+	}
+	if i := strings.Index(raw, "://"); i >= 0 {
+		raw = raw[i+3:]
+	}
+	if i := strings.IndexAny(raw, "/?"); i >= 0 {
+		raw = raw[:i]
+	}
+	host, portStr, splitErr := net.SplitHostPort(raw)
+	if splitErr != nil {
+		// No port component — keep the raw token as host.
+		return raw, defaultPort
+	}
+	port := defaultPort
+	if n, err := strconv.Atoi(portStr); err == nil && n > 0 {
+		port = n
+	}
+	if host == "" {
+		host = defaultHost
+	}
+	return host, port
+}
 
 type EnvStruct struct {
 	IS_PROD        bool
@@ -58,13 +98,14 @@ type EnvStruct struct {
 	// optional; the llm package defaults to tencent/hy3-preview when blank.
 	OPENROUTER_KEY   string
 	OPENROUTER_MODEL string
-	// Sonic — lexical search backend reached over TCP. The daemon is
-	// installed by cloud/text-searh/install_sonic.py, which also writes
-	// SONIC_PASSWORD into credentials.json. Host defaults to 127.0.0.1
-	// and port to 14446 when empty.
-	SONIC_HOST     string
-	SONIC_PORT     int32
-	SONIC_PASSWORD string
+	// GenixSearch — lexical search backend reached over TCP. The
+	// daemon is installed by cloud/text-searh/install_search.py, which
+	// writes GENIXSEARCH_PASSWORD into credentials.json. GENIXSEARCH_URL
+	// is the full endpoint (e.g. "https://host:14446" or "host:14446")
+	// — only the host and port are used; the scheme is ignored. Falls
+	// back to 127.0.0.1:14446 when empty.
+	GENIXSEARCH_URL      string
+	GENIXSEARCH_PASSWORD string
 }
 
 var Env *EnvStruct

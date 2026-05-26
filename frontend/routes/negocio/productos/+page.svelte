@@ -276,6 +276,10 @@ import {
     try {
       const importResult = await processProductosImportFile(productoImportColumns, file, listas, productos);
 
+      if(!importResult.rows){
+     		Notify.warning("No se detectaron registros nuevos a guardar.")
+      }
+      
       importExcelRowsPreview = importResult.rows;
       importExcelErrors = importResult.errors;
 

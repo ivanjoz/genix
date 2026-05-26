@@ -8,16 +8,17 @@ import (
 	"time"
 )
 
-// connPool is a bounded pool of Sonic connections in one channel mode.
-// At most `max` connections are open at any time; `min` of them are
-// kept warm by re-dialing eagerly when the pool drops below that floor.
+// connPool is a bounded pool of search connections in one channel
+// mode. At most `max` connections are open at any time; `min` of them
+// are kept warm by re-dialing eagerly when the pool drops below that
+// floor.
 type connPool struct {
 	mode string
 	min  int
 	max  int
 
 	mu         sync.Mutex
-	idle       []*sonicConn
+	idle       []*searchConn
 	open       int
 	closed     bool
 	pendingCh  chan struct{} // signaled when a connection returns to the pool
@@ -38,7 +39,7 @@ func newConnPool(mode string, min, max int) *connPool {
 		mode:      mode,
 		min:       min,
 		max:       max,
-		idle:      make([]*sonicConn, 0, max),
+		idle:      make([]*searchConn, 0, max),
 		pendingCh: make(chan struct{}, max),
 	}
 }
@@ -46,7 +47,7 @@ func newConnPool(mode string, min, max int) *connPool {
 // acquire returns a ready-to-use connection. It dials a new one if the
 // pool is below capacity, otherwise waits for a returned connection.
 // Honors ctx for both dial and wait.
-func (p *connPool) acquire(ctx context.Context) (*sonicConn, error) {
+func (p *connPool) acquire(ctx context.Context) (*searchConn, error) {
 	for {
 		p.mu.Lock()
 		if p.closed {
@@ -106,7 +107,7 @@ func (p *connPool) acquire(ctx context.Context) (*sonicConn, error) {
 
 // release returns a healthy connection to the pool. Broken connections
 // are discarded.
-func (p *connPool) release(c *sonicConn) {
+func (p *connPool) release(c *searchConn) {
 	if c == nil {
 		return
 	}
@@ -131,7 +132,7 @@ func (p *connPool) release(c *sonicConn) {
 // discard force-closes a connection and removes it from accounting.
 // Used when a command fails in a way that leaves the connection in an
 // ambiguous protocol state.
-func (p *connPool) discard(c *sonicConn) {
+func (p *connPool) discard(c *searchConn) {
 	if c == nil {
 		return
 	}

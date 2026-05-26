@@ -108,7 +108,7 @@ func TestParseResultRecognizesAllFrameTypes(t *testing.T) {
 	if err != nil || res.kind != kindPending || res.marker != "abc123" {
 		t.Fatalf("PENDING frame: %v %+v", err, res)
 	}
-	res, err = parseResult("EVENT QUERY abc123 7 99 1234")
+	res, err = parseResult("EVENT QUERY abc123 7|50 99|30 1234|10")
 	if err != nil || res.kind != kindEvent || res.eventKind != "QUERY" ||
 		res.marker != "abc123" || len(res.payload) != 3 {
 		t.Fatalf("EVENT frame: %v %+v", err, res)
@@ -121,7 +121,7 @@ func TestParseResultRecognizesAllFrameTypes(t *testing.T) {
 	if err != nil || res.kind != kindEnded {
 		t.Fatalf("ENDED frame: %v %+v", err, res)
 	}
-	res, err = parseResult("CONNECTED <sonic-server v1.4.0>")
+	res, err = parseResult("CONNECTED <genixsearch v0.1.0>")
 	if err != nil || res.kind != kindConnected {
 		t.Fatalf("CONNECTED frame: %v %+v", err, res)
 	}
@@ -129,19 +129,19 @@ func TestParseResultRecognizesAllFrameTypes(t *testing.T) {
 	if err != nil || res.kind != kindStarted || res.bufferSize != 20000 {
 		t.Fatalf("STARTED frame: %v %+v", err, res)
 	}
-	res, err = parseResult("ERR command_not_found")
-	var sonicErr *SonicError
-	if !errors.As(err, &sonicErr) || res.kind != kindErr || sonicErr.Reason != "command_not_found" {
+	res, err = parseResult("ERR unknown_command")
+	var pErr *ProtocolError
+	if !errors.As(err, &pErr) || res.kind != kindErr || pErr.Reason != "unknown_command" {
 		t.Fatalf("ERR frame: %v %+v", err, res)
 	}
 }
 
-func TestDecodeIDs(t *testing.T) {
-	ids, err := decodeIDs([]string{"1", "42", "9999999999"})
+func TestDecodeIDsParsesKeyScoreTokens(t *testing.T) {
+	ids, err := decodeIDs([]string{"1|50", "42|30", "9999|10"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []int64{1, 42, 9999999999}
+	want := []int32{1, 42, 9999}
 	if len(ids) != len(want) {
 		t.Fatalf("len=%d, want %d", len(ids), len(want))
 	}
@@ -150,8 +150,12 @@ func TestDecodeIDs(t *testing.T) {
 			t.Errorf("ids[%d] = %d, want %d", i, ids[i], v)
 		}
 	}
-	if _, err := decodeIDs([]string{"abc"}); err == nil {
-		t.Errorf("expected error for non-numeric token")
+	// Bare-key token (no '|') still accepted for forward-compat.
+	if ids, err := decodeIDs([]string{"7"}); err != nil || len(ids) != 1 || ids[0] != 7 {
+		t.Errorf("bare key decode: ids=%v err=%v", ids, err)
+	}
+	if _, err := decodeIDs([]string{"abc|10"}); err == nil {
+		t.Errorf("expected error for non-numeric key")
 	}
 }
 
@@ -169,15 +173,14 @@ func TestBuildQueryLine(t *testing.T) {
 	}
 }
 
+// --- Integration tests with a net.Pipe-based fake daemon -------------
 
-// --- Integration tests with a net.Pipe-based fake Sonic --------------
-
-// fakeSonic is a deterministic in-process Sonic replacement reachable
-// over a single net.Pipe. The test installs the server side as a
-// dial target by swapping out the global pool. We don't go through
-// dialAndHandshake (which would expect a real TCP listener); instead
-// the test wires a conn directly into a private pool and exercises
-// the ingest functions.
+// fakeServer is a deterministic in-process replacement for the search
+// daemon, reachable over a single net.Pipe. The test installs the
+// server side as a dial target by swapping out the global pool. We
+// don't go through dialAndHandshake (which would expect a real TCP
+// listener); instead the test wires a conn directly into a private
+// pool and exercises the ingest functions.
 
 type fakeServer struct {
 	t       *testing.T
@@ -208,8 +211,8 @@ func (f *fakeServer) queueReply(line string) {
 }
 
 // run loops reading commands and replying with canned scripts. Returns
-// the list of commands it saw (without CRLF) when the client closes
-// the connection or the test signals done.
+// the list of commands it saw (without trailing CR/LF) when the client
+// closes the connection or the test signals done.
 func (f *fakeServer) run(stop <-chan struct{}) []string {
 	var got []string
 	for {
@@ -229,6 +232,8 @@ func (f *fakeServer) run(stop <-chan struct{}) []string {
 		}
 		f.mu.Unlock()
 		if reply != "" {
+			// Real server writes \r\n; mirror that here so the client's
+			// readLine exercises its CR-stripping path.
 			_, _ = f.w.WriteString(reply + "\r\n")
 			_ = f.w.Flush()
 		}
@@ -240,11 +245,11 @@ func (f *fakeServer) run(stop <-chan struct{}) []string {
 	}
 }
 
-// makePooledConn returns a sonicConn backed by a client net.Conn,
+// makePooledConn returns a searchConn backed by a client net.Conn,
 // bypassing dialAndHandshake. We pre-set bufferSize as if STARTED
 // already happened.
-func makePooledConn(client net.Conn, bufSize int) *sonicConn {
-	return &sonicConn{
+func makePooledConn(client net.Conn, bufSize int) *searchConn {
+	return &searchConn{
 		mode:       "ingest",
 		netConn:    client,
 		reader:     bufio.NewReader(client),
@@ -255,15 +260,15 @@ func makePooledConn(client net.Conn, bufSize int) *sonicConn {
 }
 
 // installFakeIngestPool replaces the global ingest pool with one whose
-// only connection is the supplied sonicConn. initPools() preserves
+// only connection is the supplied searchConn. initPools() preserves
 // non-nil pools, so subsequent UpsertBatch calls reuse this one.
-func installFakeIngestPool(c *sonicConn) (restore func()) {
+func installFakeIngestPool(c *searchConn) (restore func()) {
 	prev := ingestMgr
 	p := &connPool{
 		mode:      "ingest",
 		min:       1,
 		max:       1,
-		idle:      []*sonicConn{c},
+		idle:      []*searchConn{c},
 		open:      1,
 		pendingCh: make(chan struct{}, 1),
 	}
@@ -273,15 +278,17 @@ func installFakeIngestPool(c *sonicConn) (restore func()) {
 	}
 }
 
-func TestUpsertBatchSendsBulkCommands(t *testing.T) {
+func TestUpsertBatchSendsPopIThenPushI(t *testing.T) {
 	fake, client := newFakeServer(t)
 	defer client.Close()
 	defer fake.conn.Close()
 
-	// PING at pool checkout, then BULKFLUSHO (other bucket) + BULKPUSH (current bucket).
+	// PING at pool checkout, then POPI×2 on the other bucket (s0),
+	// then one PUSHI multi-key on the current bucket (s1).
 	fake.queueReply("PONG")
-	fake.queueReply("RESULT 0") // BULKFLUSHO p7_s0
-	fake.queueReply("RESULT 2") // BULKPUSH   p7_s1
+	fake.queueReply("RESULT 0") // POPI fruits p7_s0 1
+	fake.queueReply("RESULT 0") // POPI fruits p7_s0 2
+	fake.queueReply("RESULT 2") // PUSHI fruits p7_s1 1 "apple" 2 "banana"
 
 	stop := make(chan struct{})
 	defer close(stop)
@@ -308,8 +315,9 @@ func TestUpsertBatchSendsBulkCommands(t *testing.T) {
 
 	want := []string{
 		"PING",
-		"BULKFLUSHO fruits p7_s0 1 2",
-		`BULKPUSH fruits p7_s1 1 "apple" 2 "banana"`,
+		"POPI fruits p7_s0 1",
+		"POPI fruits p7_s0 2",
+		`PUSHI fruits p7_s1 1 "apple" 2 "banana"`,
 	}
 	if len(got) < len(want) {
 		t.Fatalf("got %d frames, want at least %d: %q", len(got), len(want), got)
@@ -321,14 +329,14 @@ func TestUpsertBatchSendsBulkCommands(t *testing.T) {
 	}
 }
 
-func TestUpsertBatchEmptyTextOnlyFlushesBothBuckets(t *testing.T) {
+func TestUpsertBatchEmptyTextOnlyPopsBothBuckets(t *testing.T) {
 	fake, client := newFakeServer(t)
 	defer client.Close()
 	defer fake.conn.Close()
 
 	fake.queueReply("PONG")
-	fake.queueReply("RESULT 0") // BULKFLUSHO other
-	fake.queueReply("RESULT 1") // BULKFLUSHO current
+	fake.queueReply("RESULT 0") // POPI x p1_s1 9 (other)
+	fake.queueReply("RESULT 1") // POPI x p1_s0 9 (current)
 
 	stop := make(chan struct{})
 	defer close(stop)
@@ -351,8 +359,8 @@ func TestUpsertBatchEmptyTextOnlyFlushesBothBuckets(t *testing.T) {
 
 	want := []string{
 		"PING",
-		"BULKFLUSHO x p1_s1 9",
-		"BULKFLUSHO x p1_s0 9",
+		"POPI x p1_s1 9",
+		"POPI x p1_s0 9",
 	}
 	if len(got) < len(want) {
 		t.Fatalf("got %d frames, want %d: %q", len(got), len(want), got)
@@ -363,8 +371,8 @@ func TestUpsertBatchEmptyTextOnlyFlushesBothBuckets(t *testing.T) {
 		}
 	}
 	for _, frame := range got {
-		if strings.HasPrefix(frame, "BULKPUSH ") || strings.HasPrefix(frame, "PUSH ") {
-			t.Errorf("unexpected push frame for empty SearchText: %q", frame)
+		if strings.HasPrefix(frame, "PUSHI ") {
+			t.Errorf("unexpected PUSHI for empty SearchText: %q", frame)
 		}
 	}
 }
@@ -375,9 +383,14 @@ func TestUpsertBatchMixedEmptyAndText(t *testing.T) {
 	defer fake.conn.Close()
 
 	fake.queueReply("PONG")
-	fake.queueReply("RESULT 0") // BULKFLUSHO p1_s0 (other) — all three IDs
-	fake.queueReply("RESULT 1") // BULKFLUSHO p1_s1 (current) — empty IDs only
-	fake.queueReply("RESULT 2") // BULKPUSH   p1_s1 — non-empty records
+	// POPI p1_s0 sweep (other bucket) for all three IDs.
+	fake.queueReply("RESULT 0")
+	fake.queueReply("RESULT 0")
+	fake.queueReply("RESULT 0")
+	// POPI p1_s1 sweep (current bucket) for the empty-text ID only.
+	fake.queueReply("RESULT 1")
+	// PUSHI for the two non-empty.
+	fake.queueReply("RESULT 2")
 
 	stop := make(chan struct{})
 	defer close(stop)
@@ -405,9 +418,11 @@ func TestUpsertBatchMixedEmptyAndText(t *testing.T) {
 
 	want := []string{
 		"PING",
-		"BULKFLUSHO x p1_s0 10 11 12",
-		"BULKFLUSHO x p1_s1 11",
-		`BULKPUSH x p1_s1 10 "alpha" 12 "beta"`,
+		"POPI x p1_s0 10",
+		"POPI x p1_s0 11",
+		"POPI x p1_s0 12",
+		"POPI x p1_s1 11",
+		`PUSHI x p1_s1 10 "alpha" 12 "beta"`,
 	}
 	if len(got) < len(want) {
 		t.Fatalf("got %d frames, want %d: %q", len(got), len(want), got)
@@ -419,14 +434,14 @@ func TestUpsertBatchMixedEmptyAndText(t *testing.T) {
 	}
 }
 
-func TestDeleteRecordUsesBulkFlushO(t *testing.T) {
+func TestDeleteRecordUsesPopI(t *testing.T) {
 	fake, client := newFakeServer(t)
 	defer client.Close()
 	defer fake.conn.Close()
 
 	fake.queueReply("PONG")
-	fake.queueReply("RESULT 1") // BULKFLUSHO s0
-	fake.queueReply("RESULT 0") // BULKFLUSHO s1
+	fake.queueReply("RESULT 1") // POPI items p4_s0 42
+	fake.queueReply("RESULT 0") // POPI items p4_s1 42
 
 	stop := make(chan struct{})
 	defer close(stop)
@@ -449,8 +464,8 @@ func TestDeleteRecordUsesBulkFlushO(t *testing.T) {
 
 	want := []string{
 		"PING",
-		"BULKFLUSHO items p4_s0 42",
-		"BULKFLUSHO items p4_s1 42",
+		"POPI items p4_s0 42",
+		"POPI items p4_s1 42",
 	}
 	if len(got) < len(want) {
 		t.Fatalf("got %d frames, want %d: %q", len(got), len(want), got)
@@ -462,17 +477,16 @@ func TestDeleteRecordUsesBulkFlushO(t *testing.T) {
 	}
 }
 
-func TestDeleteBatchSplitsWhenLineWouldOverflow(t *testing.T) {
+func TestDeleteBatchSweepsBothBuckets(t *testing.T) {
 	fake, client := newFakeServer(t)
 	defer client.Close()
 	defer fake.conn.Close()
 
-	// Tiny buffer forces at least one split per bucket.
 	fake.queueReply("PONG")
-	fake.queueReply("RESULT 1") // s0 chunk 1
-	fake.queueReply("RESULT 1") // s0 chunk 2
-	fake.queueReply("RESULT 1") // s1 chunk 1
-	fake.queueReply("RESULT 1") // s1 chunk 2
+	fake.queueReply("RESULT 1") // s0 / 1
+	fake.queueReply("RESULT 1") // s0 / 2
+	fake.queueReply("RESULT 0") // s1 / 1
+	fake.queueReply("RESULT 0") // s1 / 2
 
 	stop := make(chan struct{})
 	defer close(stop)
@@ -483,14 +497,11 @@ func TestDeleteBatchSplitsWhenLineWouldOverflow(t *testing.T) {
 		close(done)
 	}()
 
-	// Buffer so small only one ID fits per BULKFLUSHO frame after the header.
-	// "BULKFLUSHO t p1_s0" = 18 chars; budget = bufferSize - 2.
-	// With bufferSize=22 -> budget=20, header=18, one " <id>" of 2-3 bytes fits.
-	conn := makePooledConn(client, 22)
+	conn := makePooledConn(client, 20000)
 	restore := installFakeIngestPool(conn)
 	defer restore()
 
-	if err := DeleteBatch(context.Background(), "t", 1, []int64{1, 2}); err != nil {
+	if err := DeleteBatch(context.Background(), "t", 1, []int32{1, 2}); err != nil {
 		t.Fatalf("DeleteBatch: %v", err)
 	}
 	_ = client.Close()
@@ -498,10 +509,10 @@ func TestDeleteBatchSplitsWhenLineWouldOverflow(t *testing.T) {
 
 	want := []string{
 		"PING",
-		"BULKFLUSHO t p1_s0 1",
-		"BULKFLUSHO t p1_s0 2",
-		"BULKFLUSHO t p1_s1 1",
-		"BULKFLUSHO t p1_s1 2",
+		"POPI t p1_s0 1",
+		"POPI t p1_s0 2",
+		"POPI t p1_s1 1",
+		"POPI t p1_s1 2",
 	}
 	if len(got) < len(want) {
 		t.Fatalf("got %d frames, want %d: %q", len(got), len(want), got)
@@ -513,15 +524,16 @@ func TestDeleteBatchSplitsWhenLineWouldOverflow(t *testing.T) {
 	}
 }
 
-func TestBulkPushSplitsWhenLineWouldOverflow(t *testing.T) {
+func TestPushISplitsWhenLineWouldOverflow(t *testing.T) {
 	fake, client := newFakeServer(t)
 	defer client.Close()
 	defer fake.conn.Close()
 
 	fake.queueReply("PONG")
-	fake.queueReply("RESULT 0") // BULKFLUSHO other (no IDs would normally skip, but called once for both)
-	fake.queueReply("RESULT 1") // BULKPUSH chunk 1
-	fake.queueReply("RESULT 1") // BULKPUSH chunk 2
+	fake.queueReply("RESULT 0") // POPI t p1_s1 1 (other bucket)
+	fake.queueReply("RESULT 0") // POPI t p1_s1 2
+	fake.queueReply("RESULT 1") // PUSHI chunk 1
+	fake.queueReply("RESULT 1") // PUSHI chunk 2
 
 	stop := make(chan struct{})
 	defer close(stop)
@@ -532,11 +544,10 @@ func TestBulkPushSplitsWhenLineWouldOverflow(t *testing.T) {
 		close(done)
 	}()
 
-	// Buffer sized so two records cannot fit on one BULKPUSH line.
-	// "BULKPUSH t p1_s0" = 16 chars; entry ` 1 "ab"` = 7 chars.
-	// budget=20 -> one entry fits (16+7=23 > 20? Actually 16+7=23.)
-	// Let's set bufferSize=26 -> budget=24. 16+7=23 fits; +7 more = 30 doesn't.
-	conn := makePooledConn(client, 26)
+	// Buffer sized so two records cannot fit on one PUSHI line.
+	// "PUSHI t p1_s0" header = 13 chars; entry ` 1 "ab"` = 7 chars.
+	// bufferSize=22 -> budget=21. 13+7=20 fits; +7 more = 27 doesn't.
+	conn := makePooledConn(client, 22)
 	restore := installFakeIngestPool(conn)
 	defer restore()
 
@@ -552,9 +563,10 @@ func TestBulkPushSplitsWhenLineWouldOverflow(t *testing.T) {
 
 	want := []string{
 		"PING",
-		"BULKFLUSHO t p1_s1 1 2",
-		`BULKPUSH t p1_s0 1 "ab"`,
-		`BULKPUSH t p1_s0 2 "cd"`,
+		"POPI t p1_s1 1",
+		"POPI t p1_s1 2",
+		`PUSHI t p1_s0 1 "ab"`,
+		`PUSHI t p1_s0 2 "cd"`,
 	}
 	if len(got) < len(want) {
 		t.Fatalf("got %d frames, want %d: %q", len(got), len(want), got)
@@ -566,14 +578,14 @@ func TestBulkPushSplitsWhenLineWouldOverflow(t *testing.T) {
 	}
 }
 
-func TestBulkPushTruncatesOversizeText(t *testing.T) {
+func TestPushITruncatesOversizeText(t *testing.T) {
 	fake, client := newFakeServer(t)
 	defer client.Close()
 	defer fake.conn.Close()
 
 	fake.queueReply("PONG")
-	fake.queueReply("RESULT 0") // BULKFLUSHO other
-	fake.queueReply("RESULT 1") // BULKPUSH (trimmed)
+	fake.queueReply("RESULT 0") // POPI other bucket
+	fake.queueReply("RESULT 1") // PUSHI (trimmed)
 
 	stop := make(chan struct{})
 	defer close(stop)
@@ -584,10 +596,10 @@ func TestBulkPushTruncatesOversizeText(t *testing.T) {
 		close(done)
 	}()
 
-	// bufferSize 36 -> budget 34. Header `BULKPUSH t p1_s0` = 16.
+	// bufferSize 34 -> budget 33. Header `PUSHI t p1_s0` = 13.
 	// Entry prefix ` 1 "` = 4, trailing `"` = 1, so per-entry overhead = 5.
-	// Remaining text budget = 34 - 16 - 5 = 13.
-	conn := makePooledConn(client, 36)
+	// Remaining text budget = 33 - 13 - 5 = 15.
+	conn := makePooledConn(client, 34)
 	restore := installFakeIngestPool(conn)
 	defer restore()
 
@@ -601,21 +613,21 @@ func TestBulkPushTruncatesOversizeText(t *testing.T) {
 	if len(got) < 3 {
 		t.Fatalf("expected >=3 frames, got %d: %q", len(got), got)
 	}
-	bulkPushLine := got[2]
-	if !strings.HasPrefix(bulkPushLine, `BULKPUSH t p1_s0 1 "`) || !strings.HasSuffix(bulkPushLine, `"`) {
-		t.Fatalf("unexpected BULKPUSH frame: %q", bulkPushLine)
+	pushLine := got[2]
+	if !strings.HasPrefix(pushLine, `PUSHI t p1_s0 1 "`) || !strings.HasSuffix(pushLine, `"`) {
+		t.Fatalf("unexpected PUSHI frame: %q", pushLine)
 	}
-	if len(bulkPushLine) > 34 {
-		t.Errorf("BULKPUSH frame exceeds budget: len=%d frame=%q", len(bulkPushLine), bulkPushLine)
+	if len(pushLine) > 33 {
+		t.Errorf("PUSHI frame exceeds budget: len=%d frame=%q", len(pushLine), pushLine)
 	}
 	// The trimmed text must be a word-boundary prefix of the original.
-	quoted := strings.TrimSuffix(strings.TrimPrefix(bulkPushLine, `BULKPUSH t p1_s0 1 "`), `"`)
+	quoted := strings.TrimSuffix(strings.TrimPrefix(pushLine, `PUSHI t p1_s0 1 "`), `"`)
 	if !strings.HasPrefix(text, quoted) || strings.HasSuffix(quoted, " ") {
 		t.Errorf("trimmed text not a clean prefix: %q (orig %q)", quoted, text)
 	}
 }
 
-func TestUpsertBatchRecoversFromSonicError(t *testing.T) {
+func TestUpsertBatchRecoversFromProtocolError(t *testing.T) {
 	fake, client := newFakeServer(t)
 	defer client.Close()
 	defer fake.conn.Close()
@@ -639,12 +651,12 @@ func TestUpsertBatchRecoversFromSonicError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	var serr *SonicError
-	if !errors.As(err, &serr) {
-		t.Fatalf("expected SonicError, got %T: %v", err, err)
+	var pErr *ProtocolError
+	if !errors.As(err, &pErr) {
+		t.Fatalf("expected ProtocolError, got %T: %v", err, err)
 	}
-	if serr.Reason != "something_broken" {
-		t.Errorf("unexpected reason: %q", serr.Reason)
+	if pErr.Reason != "something_broken" {
+		t.Errorf("unexpected reason: %q", pErr.Reason)
 	}
 	_ = client.Close()
 	<-done
@@ -653,7 +665,7 @@ func TestUpsertBatchRecoversFromSonicError(t *testing.T) {
 func TestPoolDiscardsBrokenConnection(t *testing.T) {
 	// A connection that fails the PING at acquire-time is discarded.
 	p := newConnPool("ingest", 0, 1)
-	broken := &sonicConn{
+	broken := &searchConn{
 		mode:    "ingest",
 		netConn: brokenConn{},
 		reader:  bufio.NewReader(brokenConn{}),

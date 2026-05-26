@@ -160,7 +160,7 @@ func groupRecordsForTextSearch[T any](records *[]T, scyllaTable *ScyllaTable[any
 	for i := range *records {
 		recordPointer := xunsafe.AsPointer(&(*records)[i])
 		partition := int32(scyllaTable.GetPartValue(recordPointer))
-		recordID := convertToInt64(info.idColumn.GetRawValue(recordPointer))
+		recordID := convertToInt32(info.idColumn.GetRawValue(recordPointer))
 		status := int8(0)
 		if info.statusColumn != nil {
 			status = int8(convertToInt64(info.statusColumn.GetRawValue(recordPointer)))

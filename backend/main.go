@@ -146,22 +146,16 @@ func OnPanic(panicMessage interface{}) {
 	core.Log(string(debug.Stack()))
 }
 
-// configureTextSearchSonic resolves the Sonic endpoint from credentials
-// (falling back to 127.0.0.1:14446) and pushes it into the text_search
-// package. SONIC_PASSWORD must be set in prod or writes will fail at
-// handshake; we log a warning when it's missing.
-func configureTextSearchSonic() {
-	host := strings.TrimSpace(core.Env.SONIC_HOST)
-	if host == "" {
-		host = "127.0.0.1"
-	}
-	port := int(core.Env.SONIC_PORT)
-	if port == 0 {
-		port = 14446
-	}
-	password := strings.TrimSpace(core.Env.SONIC_PASSWORD)
+// configureTextSearchGenixSearch resolves the GenixSearch endpoint
+// from credentials (falling back to 127.0.0.1:14446) and pushes it
+// into the text_search package. GENIXSEARCH_PASSWORD must be set in
+// prod or writes will fail at handshake; we log a warning when it's
+// missing.
+func configureTextSearchGenixSearch() {
+	host, port := core.ParseGenixSearchURL(core.Env.GENIXSEARCH_URL)
+	password := strings.TrimSpace(core.Env.GENIXSEARCH_PASSWORD)
 	if password == "" && core.Env.IS_PROD {
-		core.Log("text_search: SONIC_PASSWORD empty in prod; Sonic writes will fail at handshake")
+		core.Log("text_search: GENIXSEARCH_PASSWORD empty in prod; writes will fail at handshake")
 	}
 	text_search.Configure(host, port, password)
 }
@@ -169,11 +163,11 @@ func configureTextSearchSonic() {
 func main() {
 	serverPort := ":3589"
 	core.PopulateVariables()
-	// Wire the Sonic endpoint before any DB write that might touch a
-	// TextSearchColumn-backed table. The text_search package can't import
-	// core (cycle: core -> core/types -> db -> text_search), so the
-	// resolved config is pushed in from here.
-	configureTextSearchSonic()
+	// Wire the GenixSearch endpoint before any DB write that might
+	// touch a TextSearchColumn-backed table. The text_search package
+	// can't import core (cycle: core -> core/types -> db ->
+	// text_search), so the resolved config is pushed in from here.
+	configureTextSearchGenixSearch()
 	// Print deployment path early so systemd logs show which cloned repo the
 	// binary will scan for route markdown and generated menu descriptions.
 	fmt.Println("GENIX_REPOSITORY_ROOT=", os.Getenv("GENIX_REPOSITORY_ROOT"))
@@ -213,8 +207,17 @@ func main() {
 		core.Env.LOGS_FULL = true
 	}
 
-	// Mirror runtime logging flags into db so query debug logs follow the resolved environment.
-	db.SetDebugLogging(core.Env.LOGS_FULL || core.Env.IS_LOCAL)
+	// Mirror runtime logging flags into db so query debug logs follow the
+	// resolved environment: LOGS_FULL → level 2 (verbose), IS_LOCAL → level
+	// 1 (basic), otherwise silent.
+	dbLogLevel := 0
+	if core.Env.IS_LOCAL {
+		dbLogLevel = 1
+	}
+	if core.Env.LOGS_FULL {
+		dbLogLevel = 2
+	}
+	db.SetDebugLogging(dbLogLevel)
 
 	// Create /tmp/promps once so the chat loop's per-call writes can skip the
 	// parent-dir check. Local-only; no-op in serverless/prod.

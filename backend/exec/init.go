@@ -18,22 +18,16 @@ import (
 	"strings"
 )
 
-// configureTextSearchSonic resolves the Sonic endpoint from credentials
-// (falling back to 127.0.0.1:14446) and pushes it into the text_search
-// package. SONIC_PASSWORD must be set in prod or writes will fail at
-// handshake; we log a warning when it's missing.
-func configureTextSearchSonic() {
-	host := strings.TrimSpace(core.Env.SONIC_HOST)
-	if host == "" {
-		host = "127.0.0.1"
-	}
-	port := int(core.Env.SONIC_PORT)
-	if port == 0 {
-		port = 14446
-	}
-	password := strings.TrimSpace(core.Env.SONIC_PASSWORD)
+// configureTextSearchGenixSearch resolves the GenixSearch endpoint
+// from credentials (falling back to 127.0.0.1:14446) and pushes it
+// into the text_search package. GENIXSEARCH_PASSWORD must be set in
+// prod or writes will fail at handshake; we log a warning when it's
+// missing.
+func configureTextSearchGenixSearch() {
+	host, port := core.ParseGenixSearchURL(core.Env.GENIXSEARCH_URL)
+	password := strings.TrimSpace(core.Env.GENIXSEARCH_PASSWORD)
 	if password == "" && core.Env.IS_PROD {
-		core.Log("text_search: SONIC_PASSWORD empty in prod; Sonic writes will fail at handshake")
+		core.Log("text_search: GENIXSEARCH_PASSWORD empty in prod; writes will fail at handshake")
 	}
 	text_search.Configure(host, port, password)
 }
@@ -44,11 +38,11 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 		panic("No se especificado el ADMIN_PASSWORD y el SECRET_PHRASE en credentials.json")
 	}
 
-	// Wire the Sonic endpoint before any seed write hits a
+	// Wire the GenixSearch endpoint before any seed write hits a
 	// TextSearchColumn-backed table. The text_search package can't
 	// import core (cycle: core -> core/types -> db -> text_search), so
 	// the resolved config is pushed in here.
-	configureTextSearchSonic()
+	configureTextSearchGenixSearch()
 
 	// Bootstrap ORM internal tables before any ScyllaDB seed writes depend on them.
 	if err := db.Init(); err != nil {

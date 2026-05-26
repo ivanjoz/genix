@@ -22,9 +22,14 @@ var (
 	DebugNormal 					 bool
 )
 
-func SetDebugLogging(enabled bool) {
-	// Allow the runtime bootstrap to control DB debug logs without importing core into db.
-	DebugNormal = enabled
+// SetDebugLogging maps a verbosity level to the DB debug flags. Level
+// semantics: 0 = silent, 1 = DebugNormal only (per-query elapsed,
+// table-write summaries), 2 = DebugNormal + DebugFull (adds verbose
+// internal traces like TextSearchIndex sync lines). Called from the
+// runtime bootstrap so the db package doesn't need to import core.
+func SetDebugLogging(level int) {
+	DebugNormal = level >= 1
+	DebugFull = level >= 2
 }
 
 func ShouldLogFull() bool {

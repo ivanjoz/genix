@@ -194,7 +194,7 @@ export const processProductosImportFile = async (
       }
 		}
     
-    if (updatedFieldKeys.length === 0) continue;
+    // if (updatedFieldKeys.length === 0) continue;
     importedProducto._updatedFields = updatedFieldKeys;
     rowsWithUpdatedFields.push(importedProducto);
   }

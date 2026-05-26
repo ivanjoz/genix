@@ -840,14 +840,14 @@ func (e *SelectStatement) Compute(tableInfo *TableInfo, scyllaTable ScyllaTable[
 
 func tryGetOrCompileSelectStatement(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) (*SelectStatement, error) {
 	selectShapeHash := computeSelectShapeHash(tableInfo, scyllaTable)
-	fmt.Printf("Select cache lookup: table=%s hash=%d\n", scyllaTable.name, selectShapeHash)
+	// fmt.Printf("Select cache lookup: table=%s hash=%d\n", scyllaTable.name, selectShapeHash)
 
 	if cachedPlan, cacheHit := scyllaTable.selectStatementCache.Load(selectShapeHash); cacheHit {
-		fmt.Printf("Select cache hit: table=%s hash=%d\n", scyllaTable.name, selectShapeHash)
+		// fmt.Printf("Select cache hit: table=%s hash=%d\n", scyllaTable.name, selectShapeHash)
 		return cachedPlan, nil
 	}
 
-	fmt.Printf("Select cache miss: table=%s hash=%d\n", scyllaTable.name, selectShapeHash)
+	// fmt.Printf("Select cache miss: table=%s hash=%d\n", scyllaTable.name, selectShapeHash)
 	compiledStatement, err := compileSelectStatement(tableInfo, scyllaTable)
 	if err != nil {
 		return nil, err

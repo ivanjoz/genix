@@ -798,9 +798,8 @@ func initStructTable[T TableInterface[T], E any](schemaStruct *T) *T {
 				}
 			}
 
-			// fmt.Printf("DEBUG: initStructTable: field=%s, colName=%s, colInfo.Name=%s, ptr=%p\n", fieldType.Name, columnName, colInfo.Name, colInfo)
 			if DebugFull {
-				fmt.Printf("Init Col: %s, Field: %s, Offset: %d\n", colInfo.Name, colInfo.FieldName, colInfo.Field.Offset)
+				// fmt.Printf("Init Col: %s, Field: %s, Offset: %d\n", colInfo.Name, colInfo.FieldName, colInfo.Field.Offset)
 			}
 		} else if fieldType.Name != "TableStruct" {
 			err := fmt.Sprintf(`No se encontró el field "%v" en el struct "%v"`, fieldType.Name, structRefType.Name())

@@ -6,11 +6,11 @@ import (
 	"strings"
 )
 
-// Record is one row to push into a Sonic index. ID becomes the Sonic
-// object_id (formatted as decimal). SearchText should already be
-// normalized via NormalizeSearchText.
+// Record is one row to push into a GenixSearch index. ID is the
+// signed 32-bit key the server stores directly (no string interning).
+// SearchText should already be normalized via NormalizeSearchText.
 type Record struct {
-	ID         int64
+	ID         int32
 	SearchText string
 }
 
@@ -23,15 +23,16 @@ func PickStatusGroup(status int8) int8 {
 	return 1
 }
 
-// CollectionAndBucket maps an ORM (table, partition, statusGroup) triple
-// to the Sonic collection/bucket pair. Format:
+// CollectionAndBucket maps an ORM (table, partition, statusGroup)
+// triple to the GenixSearch collection/bucket pair. Format:
 //
 //	collection = {tableName}
 //	bucket     = p{partitionID}_s{statusGroup}
 //
-// The "p" prefix keeps the bucket valid when partition_id is 0 (Sonic
-// identifiers must start with a non-digit). Negative partition values
-// are not expected; abs() defensively avoids producing a leading "-".
+// The "p" prefix keeps the bucket valid when partition_id is 0
+// (identifiers must start with a non-digit). Negative partition
+// values are not expected; abs() defensively avoids producing a
+// leading "-".
 func CollectionAndBucket(tableName string, partitionID int32, statusGroup int8) (string, string) {
 	id := partitionID
 	if id < 0 {
@@ -40,9 +41,9 @@ func CollectionAndBucket(tableName string, partitionID int32, statusGroup int8) 
 	return tableName, fmt.Sprintf("p%d_s%d", id, statusGroup)
 }
 
-// validIdentifier matches the subset of bytes Sonic accepts for
+// validIdentifier matches the subset of bytes the daemon accepts for
 // collection / bucket names. Pre-flight check so a malformed name
-// can't slip into a PUSH/FLUSHO command line.
+// can't slip into a PUSHI/POPI command line.
 var validIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func validateIdentifier(name string) error {
@@ -52,10 +53,12 @@ func validateIdentifier(name string) error {
 	return nil
 }
 
-// NormalizeSearchText lowercases and strips everything outside [a-z0-9 ],
-// then collapses runs of whitespace to a single space. This matches the
-// pre-tokenization the FTS5 backend used to do and keeps PUSH payloads
-// free of bytes that would need protocol escaping.
+// NormalizeSearchText lowercases and strips everything outside
+// [a-z0-9 ], then collapses runs of whitespace to a single space.
+// GenixSearch's own normalizer already lowercases ASCII and folds
+// Spanish accents; doing it client-side keeps PUSHI payloads free of
+// bytes that would need protocol escaping and matches the
+// pre-tokenization the FTS5 backend used to do.
 func NormalizeSearchText(s string) string {
 	if s == "" {
 		return ""

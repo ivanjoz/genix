@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
-"""Install and configure Sonic search backend from a precompiled binary.
+"""Install and configure the GenixSearch backend from a precompiled binary.
 
-Sonic is a fast, lightweight, schema-less search backend:
-https://github.com/valeriansaliou/sonic
+GenixSearch is a compact, lossy, ranked search backend optimised for
+Spanish product names and short commercial text. See
+https://gitea.local/genix-search for protocol and configuration docs.
 
-Looks for any file matching ``sonic*`` in the binary directory (defaults to
-this script's directory), then:
+Looks for any file matching ``genixsearch*`` in the binary directory
+(defaults to this script's directory), then:
 
-  1. Copies it to /usr/local/bin/sonic (chmod 0755)
-  2. Creates a dedicated system user 'sonic'
-  3. Creates the data directories /var/lib/sonic/{kv,fst}
-  4. Reads ``./credentials.json`` (in the invoking shell's working directory).
-     If it already contains ``SONIC_PASSWORD``, that value is used.
-     Otherwise a new lowercase+digit password is generated and written to
-     ``credentials.json`` under ``SONIC_PASSWORD``.
-  5. Writes /etc/sonic/config.cfg with that password and the bind address/port
-  6. Writes a systemd unit, starts and enables the service.
+  1. Copies it to /usr/local/bin/genixsearch (chmod 0755)
+  2. Creates a dedicated system user 'genix-search'
+  3. Creates the data directory /var/lib/genix-search/kv
+  4. Reads ``./credentials.json`` (in the invoking shell's working
+     directory). If it already contains ``GENIXSEARCH_PASSWORD``, that
+     value is reused. Otherwise a new lowercase+digit password is
+     generated and written back under ``GENIXSEARCH_PASSWORD``. The Go
+     backend reads it as ``core.Env.GENIXSEARCH_PASSWORD`` (alongside
+     ``GENIXSEARCH_HOST`` / ``GENIXSEARCH_PORT``).
+  5. Writes /etc/genix-search/config.cfg with that password and the
+     bind address/port.
+  6. Writes a systemd unit named ``genix-search.service``, starts and
+     enables the service.
 
 Run as root:
 
-    sudo python3 install_sonic.py [--binary-dir DIR] [--bind 127.0.0.1] [--port 1491]
+    sudo python3 install_search.py [--binary-dir DIR] [--bind 0.0.0.0] [--port 14446]
 """
 from __future__ import annotations
 
@@ -33,18 +38,21 @@ import subprocess
 import sys
 from pathlib import Path
 
-BINARY_NAME = "sonic"
-INSTALL_PATH = Path("/usr/local/bin/sonic")
-DATA_DIR = Path("/var/lib/sonic")
+SERVICE_NAME = "genix-search"
+BINARY_NAME = "genixsearch"
+INSTALL_PATH = Path("/usr/local/bin") / BINARY_NAME
+DATA_DIR = Path("/var/lib") / SERVICE_NAME
 KV_DIR = DATA_DIR / "kv"
-FST_DIR = DATA_DIR / "fst"
-CONFIG_DIR = Path("/etc/sonic")
+CONFIG_DIR = Path("/etc") / SERVICE_NAME
 CONFIG_FILE = CONFIG_DIR / "config.cfg"
-SERVICE_FILE = Path("/etc/systemd/system/sonic.service")
-SERVICE_USER = "sonic"
+SERVICE_FILE = Path("/etc/systemd/system") / f"{SERVICE_NAME}.service"
+SERVICE_USER = SERVICE_NAME
 
 CREDENTIALS_FILENAME = "credentials.json"
-CREDENTIALS_KEY = "SONIC_PASSWORD"
+# Matches the Go backend's core.Env.GENIXSEARCH_PASSWORD field; the
+# struct is populated from credentials.json via json.Unmarshal, which
+# uses the field name as the JSON key.
+CREDENTIALS_KEY = "GENIXSEARCH_PASSWORD"
 
 _SECRET_ALPHABET = string.ascii_lowercase + string.digits
 
@@ -69,11 +77,11 @@ def require_root() -> None:
 
 def find_binary(search_dir: Path) -> Path:
     candidates = [
-        p for p in sorted(search_dir.glob("sonic*"))
+        p for p in sorted(search_dir.glob(f"{BINARY_NAME}*"))
         if p.is_file() and p.suffix not in {".py", ".md", ".txt", ".sha256", ".asc", ".cfg"}
     ]
     if not candidates:
-        die(f"no sonic* binary found in {search_dir}")
+        die(f"no {BINARY_NAME}* binary found in {search_dir}")
     if len(candidates) > 1:
         info(f"multiple binaries found: {[c.name for c in candidates]}")
         info(f"using: {candidates[0].name}")
@@ -103,7 +111,7 @@ def install_binary(binary: Path) -> None:
 
 
 def ensure_data_dir() -> None:
-    for d in (DATA_DIR, KV_DIR, FST_DIR):
+    for d in (DATA_DIR, KV_DIR):
         d.mkdir(parents=True, exist_ok=True)
         shutil.chown(d, user=SERVICE_USER, group=SERVICE_USER)
         d.chmod(0o750)
@@ -141,7 +149,7 @@ def save_credentials(path: Path, data: dict) -> None:
 def resolve_password() -> tuple[str, Path, str]:
     """Return (password, credentials_path, source-label).
 
-    Uses an existing SONIC_PASSWORD from credentials.json if present,
+    Uses an existing GENIXSEARCH_PASSWORD from credentials.json if present,
     otherwise generates one and writes it back.
     """
     path = credentials_path()
@@ -159,8 +167,8 @@ def resolve_password() -> tuple[str, Path, str]:
 
 def write_config(password: str, bind_addr: str, port: int) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    content = f"""# Sonic configuration file
-# Reference: https://github.com/valeriansaliou/sonic/blob/master/config.cfg
+    content = f"""# GenixSearch configuration file
+# Reference: CONFIGURATION.md in the genix-search repository.
 
 [server]
 log_level = "info"
@@ -173,39 +181,20 @@ auth_password = "{password}"
 [channel.search]
 query_limit_default = 10
 query_limit_maximum = 100
-query_alternates_try = 4
-suggest_limit_default = 5
-suggest_limit_maximum = 20
-
-[store]
 
 [store.kv]
-path = "{KV_DIR}"
-retain_word_objects = 1000
+path = "{KV_DIR}/"
 
-[store.kv.pool]
-inactive_after = 1800
+pool.inactive_after = 1800
 
-[store.kv.database]
-flush_after = 900
-compress = true
-parallelism = 2
-max_files = 100
-max_compactions = 1
-max_flushes = 1
-write_buffer = 16384
-write_ahead_log = true
-
-[store.fst]
-path = "{FST_DIR}"
-
-[store.fst.pool]
-inactive_after = 300
-
-[store.fst.graph]
-consolidate_after = 180
-max_size = 2048
-max_words = 250000
+database.flush_after = 900
+database.compress = true
+database.parallelism = 2
+database.max_files = 100
+database.max_compactions = 1
+database.max_flushes = 1
+database.write_buffer = 16384
+database.write_ahead_log = true
 """
     CONFIG_FILE.write_text(content)
     CONFIG_FILE.chmod(0o640)
@@ -214,7 +203,7 @@ max_words = 250000
 
 def write_service() -> None:
     unit = f"""[Unit]
-Description=Sonic search backend
+Description=GenixSearch backend
 After=network-online.target
 Wants=network-online.target
 
@@ -250,16 +239,16 @@ def systemctl(*args: str) -> None:
 
 def reload_and_start() -> None:
     systemctl("daemon-reload")
-    systemctl("enable", "sonic.service")
-    systemctl("restart", "sonic.service")
+    systemctl("enable", f"{SERVICE_NAME}.service")
+    systemctl("restart", f"{SERVICE_NAME}.service")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Install Sonic search backend from a precompiled binary.")
+    parser = argparse.ArgumentParser(description="Install GenixSearch backend from a precompiled binary.")
     parser.add_argument(
         "--binary-dir",
         default=str(Path(__file__).resolve().parent),
-        help="directory containing sonic* (default: script directory)",
+        help=f"directory containing {BINARY_NAME}* (default: script directory)",
     )
     parser.add_argument("--bind", default="0.0.0.0", help="bind address (default 0.0.0.0 — listens on all interfaces)")
     parser.add_argument("--port", type=int, default=14446, help="bind port (default 14446)")
@@ -296,15 +285,16 @@ def main() -> None:
     info(f"unit:      {SERVICE_FILE}")
 
     reload_and_start()
-    info("service started and enabled at boot")
+    info(f"{SERVICE_NAME}.service started and enabled at boot")
 
     print()
-    print("====================== Sonic ======================")
+    print("==================== GenixSearch ====================")
     print(f"  Channel:            {args.bind}:{args.port}")
     print(f"  {CREDENTIALS_KEY}:     {password}")
     print(f"  config file:        {CONFIG_FILE}")
     print(f"  credentials file:   {creds_path}")
-    print("===================================================")
+    print(f"  service:            systemctl status {SERVICE_NAME}")
+    print("=====================================================")
 
 
 if __name__ == "__main__":
