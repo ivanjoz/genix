@@ -8,7 +8,7 @@ import { goto } from "$app/navigation";
 import { Core } from "$core/store.svelte";
 import { canUserAccessRoute } from "$core/security";
 import { tick } from "svelte";
-import { Agent, agentHandles, type AgentHandle, type AgentListFilter, type AgentMethodName } from "./registry";
+import { Agent, agentHandles, type AgentHandle, type AgentListFilter, type AgentMethodName } from "$components/agent/registry";
 import { captureDomScreenshot, captureScreenshot, releaseScreenStream } from "./screenshot";
 
 export { releaseScreenStream };

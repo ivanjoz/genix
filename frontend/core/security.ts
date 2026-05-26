@@ -357,6 +357,10 @@ export const accessHelper = new AccessHelper()
 export const canUserAccessRoute = (routeValue?: string | null) => accessHelper.canUserAccessRoute(routeValue)
 export const isTokenValid = () => accessHelper.isTokenValid()
 
+// Expose app security through Env so reusable libs do not import this module.
+Env.getToken = () => getToken()
+Env.canUserAccessRoute = (routeValue?: string | null) => canUserAccessRoute(routeValue)
+
 // Params
 export const Params = {
   checkAcceso: (accesoID: number, nivel?: number) => accessHelper.checkAcceso(accesoID,nivel),

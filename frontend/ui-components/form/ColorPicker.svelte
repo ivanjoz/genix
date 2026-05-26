@@ -5,7 +5,7 @@ import s1 from '../components.module.css';
 
     import { untrack } from 'svelte';
     import { Env } from '$core/env';
-    import { Agent } from '$core/agent/registry';
+    import { Agent } from '$components/agent/registry';
 
 	let {
 		saveOn = $bindable(),

@@ -1,7 +1,7 @@
 <script lang="ts" generics="T,E">
     import { untrack } from 'svelte';
     import { Env } from '$core/env';
-    import { Agent } from '$core/agent/registry';
+    import { Agent } from '$components/agent/registry';
 
   const {
 		options, saveOn = $bindable(), save, keyId, keyName, css, type, useButtons = false

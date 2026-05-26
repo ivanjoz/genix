@@ -1,7 +1,8 @@
 # Agentic Components
 
-This document describes how UI components expose themselves to the automation agent
-defined in `frontend/core/agent/`.
+This document describes how UI components expose themselves to the automation agent.
+The reusable registry lives in `frontend/ui-components/agent/`; the Genix
+backend bridge stays in `frontend/core/agent/`.
 
 ## Core principle
 

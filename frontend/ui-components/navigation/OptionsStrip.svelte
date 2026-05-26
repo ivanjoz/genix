@@ -1,7 +1,7 @@
 <script lang="ts" generics="T">
 import { Core } from '$core/store.svelte';
 import { Env } from '$core/env';
-import { Agent } from '$core/agent/registry';
+import { Agent } from '$components/agent/registry';
 
 
   let {

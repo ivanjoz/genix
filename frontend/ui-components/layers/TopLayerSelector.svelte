@@ -4,7 +4,7 @@ import { highlString, wordInclude, throttle } from '$libs/helpers';
 import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 import { untrack } from 'svelte';
 import { Env } from '$core/env';
-import { Agent } from '$core/agent/registry';
+import { Agent } from '$components/agent/registry';
 
 // Local state for this modal instance
 const isOpen = $derived(!!Core.showMobileSearchLayer);

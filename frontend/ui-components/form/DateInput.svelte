@@ -33,7 +33,7 @@
   } from "./date-input.helpers";
   import s1 from "../components.module.css";
   import { Env } from "$core/env";
-  import { Agent } from "$core/agent/registry";
+  import { Agent } from "$components/agent/registry";
 
   let {
     saveOn = $bindable(),

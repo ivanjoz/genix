@@ -1,7 +1,7 @@
 <script lang="ts">
   // Reusable filter text input with leading icon and per-instance debounce.
   import { Env } from '$core/env'
-  import { Agent } from '$core/agent/registry'
+  import { Agent } from '$components/agent/registry'
 
   let {
     css = '',

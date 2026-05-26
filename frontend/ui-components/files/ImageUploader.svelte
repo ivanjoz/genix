@@ -4,14 +4,18 @@ import { onDestroy, untrack } from 'svelte';
 import { Notify, fileToImage } from '$libs/helpers';
 import { Env } from '$core/env';
 import { imagesToUpload } from '$core/store.svelte';
-import type { IImageResult } from '$core/types/common';
-import Page from '$domain/Page.svelte';
-import { Agent } from '$core/agent/registry';
+import { Agent } from '$components/agent/registry';
 
 export interface IImageInput {
   content: string;
   name: string;
   folder: string;
+}
+
+export interface IImageResult {
+  id: number;
+  imageName: string;
+  description?: string;
 }
 
 export interface ImageData {

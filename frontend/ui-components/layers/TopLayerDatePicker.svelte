@@ -14,7 +14,7 @@ import {
   weekDaysNames,
 } from '../form/date-input.helpers';
 import { Env } from '$core/env';
-import { Agent } from '$core/agent/registry';
+import { Agent } from '$components/agent/registry';
 
 const {
   todayDate,

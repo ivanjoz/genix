@@ -6,7 +6,7 @@ import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import ButtonList from '$components/buttons/ButtonList.svelte';
 import Button from '$components/buttons/Button.svelte';
 import { Env } from '$core/env';
-import { Agent } from '$core/agent/registry';
+import { Agent } from '$components/agent/registry';
 
   // svelte-ignore non_reactive_update
   let divLayer: HTMLDivElement

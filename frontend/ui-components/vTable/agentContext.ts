@@ -6,7 +6,7 @@
 // dispatches by cellID against the map of registered cells.
 
 import { getContext, setContext } from 'svelte';
-import type { AgentOption } from '$core/agent/registry';
+import type { AgentOption } from '$components/agent/registry';
 
 const VTABLE_AGENT_KEY = Symbol.for('vTable.agentContext');
 

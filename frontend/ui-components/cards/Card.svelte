@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { Env } from '$core/env';
-  import { Agent } from '$core/agent/registry';
+  import { Agent } from '$components/agent/registry';
 
   interface Props {
     id?: number;

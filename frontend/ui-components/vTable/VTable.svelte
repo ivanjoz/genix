@@ -9,7 +9,7 @@
   import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte';
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
   import { Env } from '$core/env';
-  import { Agent } from '$core/agent/registry';
+  import { Agent } from '$components/agent/registry';
   import {
     setVTableAgentContext,
     buildCellID,

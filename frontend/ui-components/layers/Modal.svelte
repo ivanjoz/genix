@@ -5,7 +5,7 @@
 	import FileUploadSelector from "$components/files/FileUploadSelector.svelte";
 	import { closeModal, openModals } from "$core/store.svelte";
 	import { Env } from "$core/env";
-	import { Agent } from "$core/agent/registry";
+	import { Agent } from "$components/agent/registry";
 
 	interface Props {
 		children?: import("svelte").Snippet;

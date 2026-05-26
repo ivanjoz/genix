@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Env } from '$core/env';
-  import { Agent } from '$core/agent/registry';
+  import { Agent } from '$components/agent/registry';
 
   type ButtonColor = 'blue' | 'green' | 'red' | 'orange' | 'yellow' | 'purple';
 

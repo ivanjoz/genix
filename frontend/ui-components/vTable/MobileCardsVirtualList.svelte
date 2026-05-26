@@ -10,7 +10,7 @@
     setVTableAgentContext,
     type CellAgentMethods,
   } from '$components/vTable/agentContext';
-  import { Agent } from '$core/agent/registry';
+  import { Agent } from '$components/agent/registry';
   import { Env } from '$core/env';
   import { highlString, splitTwoStrings } from '$libs/helpers';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { tick, type Snippet } from 'svelte';
 import { parseSVG } from '$libs/helpers';
-import angleSvg from '$domain/assets/angle.svg?raw';
+import angleSvg from '$components/assets/angle.svg?raw';
 import { Env } from '$core/env';
-import { Agent } from '$core/agent/registry';
+import { Agent } from '$components/agent/registry';
 
   interface Props {
     /** Button text or content */

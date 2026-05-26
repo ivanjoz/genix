@@ -150,6 +150,8 @@ export const Env = {
   // Route-cache verification is expensive on mobile, so keep it opt-in from the client.
   DELTA_CACHE_VERIFY_ROUTE_MEMORY: false,
   clearAccesos: null as (() => void) | null,
+  getToken: () => "",
+  canUserAccessRoute: (_routeValue?: string | null) => true,
   navigate: goto,
   setSelectedApiEndpoint: (selectedRoute: string) => {
     const selectedEndpointOption = getSelectedApiEndpoint(selectedRoute)

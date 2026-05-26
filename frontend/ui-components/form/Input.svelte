@@ -4,7 +4,7 @@
 import type { ElementAST } from '$components/misc/Renderer.svelte';
 import { persistFieldValue } from '$libs/helpers';
     import { Env } from "$core/env";
-    import { Agent } from "$core/agent/registry";
+    import { Agent } from "$components/agent/registry";
 
     export interface IInput<T> {
         id?: number;

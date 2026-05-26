@@ -11,7 +11,7 @@
   import CellInput from '$components/vTable/CellInput.svelte'
   import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte'
   import { Env } from '$core/env'
-  import { Agent } from '$core/agent/registry'
+  import { Agent } from '$components/agent/registry'
   import {
     setVTableAgentContext,
     buildCellID,

@@ -1,7 +1,7 @@
 <script lang="ts">
 import { Core, fetchOnCourse } from '$core/store.svelte';
 import { Env } from '$core/env';
-import { Agent } from '$core/agent/registry';
+import { Agent } from '$components/agent/registry';
 import AgentChat from '$core/agent/AgentChat.svelte';
 import { isLogged } from '$core/security';
 import ButtonLayer from '$components/buttons/ButtonLayer.svelte';

@@ -4,7 +4,7 @@
 import { throttle } from '$libs/helpers';
 import { Core, WeakSearchRef } from '$core/store.svelte';
 import Popover2 from '$components/popover2/Popover2.svelte';
-import { type AgentOption } from '$core/agent/registry';
+import { type AgentOption } from '$components/agent/registry';
 import { getVTableAgentContext } from '$components/vTable/agentContext';
 
 	export interface ICellSelect<T,E> {

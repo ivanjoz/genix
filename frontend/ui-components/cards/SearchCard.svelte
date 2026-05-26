@@ -3,7 +3,7 @@
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import { WeakSearchRef } from '$core/store.svelte';
 import { Env } from '$core/env';
-import { Agent } from '$core/agent/registry';
+import { Agent } from '$components/agent/registry';
 
   interface SearchSelectProps<T> {
     saveOn?: T;

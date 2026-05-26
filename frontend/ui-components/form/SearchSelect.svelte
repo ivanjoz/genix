@@ -6,7 +6,7 @@ import type { Snippet } from 'svelte';
   import s1 from "../components.module.css";
   import SvelteVirtualList from "@humanspeak/svelte-virtual-list";
     import { Env } from '$core/env';
-    import { Agent, type AgentOption } from "$core/agent/registry";
+    import { Agent, type AgentOption } from "$components/agent/registry";
 
   interface SearchSelectProps<T,E> {
     saveOn?: T;

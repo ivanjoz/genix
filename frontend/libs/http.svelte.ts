@@ -1,6 +1,5 @@
 import { browser } from "$app/environment";
 import { Env } from '$core/env';
-import { accessHelper, canUserAccessRoute, getToken } from '$core/security';
 import { fetchEvent } from '$core/store.svelte';
 import { unmarshall } from '$libs/funcs/unmarshall';
 import { formatN, normalizeStringN, Notify } from '$libs/helpers';
@@ -71,7 +70,7 @@ export const buildHeaders = (contentType?: string) => {
   if (contentType && cTs[contentType]) {
     headers['Content-Type'] = cTs[contentType]
   }
-  headers['Authorization'] = `Bearer ${getToken()}`
+  headers['Authorization'] = `Bearer ${Env.getToken()}`
   // headers.append('x-api-key', fromHeader)
   return headers
 }
@@ -135,7 +134,7 @@ const parsePreResponse = (res: any, status: IHttpStatus): Promise<any> => {
   setResponseMetadata(res.headers, status)
   if (res.status === 200) { return res.json() }
   else if (res.status === 401) {
-    accessHelper.clearAccesos?.()
+    Env.clearAccesos?.()
     console.warn('Error 401, la sesión ha expirado.')
     Notify.failure('La sesión ha expirado, vuelva a iniciar sesión.')
   }
@@ -234,7 +233,7 @@ const apiRoute = Env.makeRoute(props.route)
   return new Promise((resolve, reject) => {
     axios.post(apiRoute, data, {
       onUploadProgress: props.onUploadProgress,
-      headers: { 'authorization': `Bearer ${getToken()}` },
+      headers: { 'authorization': `Bearer ${Env.getToken()}` },
     })
     .then(result => {
       const data = unmarshall(result.data)
@@ -550,7 +549,7 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
       return
 		}
 
-		if (!canUserAccessRoute(Env.getPathname())) {
+		if (!Env.canUserAccessRoute(Env.getPathname())) {
    		console.error(`Servicio "${this.route}" no cargado debido a acceso.`)
       return
     }
@@ -611,7 +610,7 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
       return
     }
 
-    if (!canUserAccessRoute(Env.getPathname())) {
+    if (!Env.canUserAccessRoute(Env.getPathname())) {
    		console.error(`Servicio "${this.route}" no cargado debido a acceso.`)
       return
     }

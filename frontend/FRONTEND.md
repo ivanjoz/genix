@@ -43,7 +43,7 @@ The build process merges both applications into a single static directory struct
     - `unmarshall.ts`: JSON-to-class/type mapping logic.
 - `ui-components/`: (Level 1) "Dumb" UI atoms.
     - Inputs, Buttons, Tables, Virtualized Lists, Modals.
-    - Must NOT import from `core`, `services`, or `domain-components`.
+    - Reusable outside Genix; only `$core/env`, `$core/store.svelte`, `$libs`, and its own `$components/agent/registry` are allowed.
 - `core/`: (Level 2) Infrastructure and global state.
     - `store.svelte.ts`: Shared reactive state.
     - `env.ts`: Runtime environment variables.
@@ -131,7 +131,7 @@ Aliases are configured in `svelte.config.js` and `tsconfig.json`.
 
 ### Common Issues
 - **CORS/Proxy Errors**: Ensure both dev servers are running before starting the proxy.
-- **Circular Dependencies**: Occurs when `ui-components` imports from `core`. Move shared logic to `libs`.
+- **Circular Dependencies**: Occur when reusable packages import app infrastructure (`services`, `domain-components`, security, route modules). Move pure shared logic to `libs`; keep UI automation registration in `ui-components/agent`.
 - **Build Mismatch**: If the store doesn't reflect changes, rebuild specifically using `bun run build:store`.
 
 ### Best Practices

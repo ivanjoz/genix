@@ -4,7 +4,7 @@
 // lifecycle and the message-to-reply plumbing.
 
 import { Env } from "$core/env";
-import { Agent, isAgentEnabled } from "./registry";
+import { Agent, isAgentEnabled } from "$components/agent/registry";
 import { releaseScreenStream, runCommand, type WsMessage } from "./commands";
 
 const AGENT_LOG_KEY = "__agent_debug_log";
