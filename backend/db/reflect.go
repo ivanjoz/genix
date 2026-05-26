@@ -267,7 +267,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 			column.GetInfo().Idx = int16(column.GetInfo().FieldIdx) + 1
 			dbTable.columnsMap[column.GetName()] = &column
 			if DebugFull {
-				fmt.Printf("Mapped Col: %s, Field: %s, Offset: %d\n", column.GetName(), column.GetInfo().FieldName, column.GetInfo().Field.Offset)
+				// fmt.Printf("Mapped Col: %s, Field: %s, Offset: %d\n", column.GetName(), column.GetInfo().FieldName, column.GetInfo().Field.Offset)
 			}
 		}
 	}
@@ -391,7 +391,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		}
 
 		keyCol.getValue = func(ptr unsafe.Pointer) any {
-			return "'" + keyCol.getRawValue(ptr).(string) + "'"
+			return "'" + strings.ReplaceAll(keyCol.getRawValue(ptr).(string), "'", "''") + "'"
 		}
 	}
 

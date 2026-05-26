@@ -573,7 +573,7 @@ func scanSelectQueryRows[E any](
 
 			record := new(E)
 			recordPtr := xunsafe.AsPointer(record)
-			shouldLog := ShouldLogFull()
+			// shouldLog := ShouldLogFull()
 
 			/* 
 			if shouldLog {
@@ -586,7 +586,7 @@ func scanSelectQueryRows[E any](
 				columnName := scanColumn.ColumnName
 				column := scyllaTable.columnsMap[columnName]
 				value := rowValues[columnIndex]
-
+				/* 
 				if shouldLog {
 					valueText := "nil"
 					if value != nil {
@@ -598,7 +598,7 @@ func scanSelectQueryRows[E any](
 					}
 					fmt.Printf("Col: %-20s (Field: %-20s) | Offset: %-4d | DB Value: %s\n", columnName, column.GetInfo().FieldName, offset, valueText)
 				}
-
+				*/
 				if value == nil {
 					continue
 				}
@@ -612,9 +612,6 @@ func scanSelectQueryRows[E any](
 						sourceColumn.SetValue(recordPtr, decomposedValues[valueIndex])
 					}
 					continue
-				}
-				if shouldLog {
-					fmt.Printf("Calling SetValue for Col: %s\n", columnName)
 				}
 				column.SetValue(recordPtr, value)
 			}
@@ -675,6 +672,8 @@ func executeBoundSelectQueries[E any](
 	}
 
 	eg := errgroup.Group{}
+	// Cap fanout so a chunked IN query (often 100+ statements) can't flood a single coordinator and trigger read timeouts.
+	eg.SetLimit(8)
 	for statementIndex, boundStatement := range boundStatements {
 		records := recordsMap[statementIndex]
 		recordsTarget := records

@@ -785,42 +785,13 @@ func UpdateOne[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 func UpdateExclude[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T, columnsToExclude ...Coln,
 ) error {
-
-	runSelfParseIfDefined(records)
-
-	refTable := initStructTable[E, T](new(E))
-	scyllaTable := getOrCompileScyllaTable(refTable)
-
-	managedValues, err := applyWriteManagedColumns(records, scyllaTable, false)
-	if err != nil {
-		return err
+	if records == nil || len(*records) == 0 {
+		return nil
 	}
-
-	queryStatements := makeUpdateStatementsBase(records, managedValues, nil, columnsToExclude, false)
-	queryInsert := makeQueryStatement(queryStatements)
-
-	if err := QueryExec(queryInsert); err != nil {
-		fmt.Println(queryInsert)
-		fmt.Println("Error inserting records:", err)
-		return err
-	}
-
-	affectedColumns := collectAffectedColumnsForExclude(&scyllaTable, columnsToExclude)
-	if err := syncIndexGroupsAfterWrite(records, &scyllaTable, managedValues); err != nil {
-		fmt.Println("Error syncing index groups after update-exclude:", err)
-		return err
-	}
-	if err := syncTableBackedViews(records, &scyllaTable, affectedColumns); err != nil {
-		fmt.Println("Error syncing view tables after update-exclude:", err)
-		return err
-	}
-
-	// UpdateExclude still mutates records, so it participates in the same cache-version increment flow.
-	if err := updateCacheVersionsAfterWrite(records, scyllaTable); err != nil {
-		fmt.Println("Error updating cache versions after update-exclude:", err)
-		return err
-	}
-	return nil
+	// Route through the shared insert/update batch path so writes go out as prepared statements,
+	// avoiding the raw-CQL string concatenation that previously broke on values containing single quotes.
+	recordsForInsert := []T{}
+	return executeInsertUpdateBatch(&recordsForInsert, records, false, columnsToExclude)
 }
 
 func mergeManagedWriteValues(first managedWriteValues, second managedWriteValues) managedWriteValues {

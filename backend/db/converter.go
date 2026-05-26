@@ -843,7 +843,7 @@ func makeScyllaValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, colType
 
 	switch colType {
 	case 1, 21: // string, *string
-		return "'" + f.String(ptr) + "'"
+		return "'" + strings.ReplaceAll(f.String(ptr), "'", "''") + "'"
 	case 11, 31: // []string, *[]string
 		var values []string
 		if colType == 11 {
@@ -857,7 +857,7 @@ func makeScyllaValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, colType
 		}
 		strValues := make([]string, len(values))
 		for i, v := range values {
-			strValues[i] = "'" + v + "'"
+			strValues[i] = "'" + strings.ReplaceAll(v, "'", "''") + "'"
 		}
 		openBracket, closeBracket := getCollectionLiteralBrackets(colTypeName)
 		return openBracket + strings.Join(strValues, ",") + closeBracket

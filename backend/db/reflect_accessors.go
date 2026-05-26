@@ -636,7 +636,7 @@ func makeStringCollectionLiteral(collectionColType string, values []string) stri
 	openBracket, closeBracket := getCollectionLiteralBrackets(collectionColType)
 	stringValuesQuoted := make([]string, len(values))
 	for valueIndex, currentValue := range values {
-		stringValuesQuoted[valueIndex] = "'" + currentValue + "'"
+		stringValuesQuoted[valueIndex] = "'" + strings.ReplaceAll(currentValue, "'", "''") + "'"
 	}
 	return openBracket + strings.Join(stringValuesQuoted, ",") + closeBracket
 }
