@@ -38,7 +38,7 @@ func isSupportedPackedIndexNumericFieldType(fieldType string) bool {
 }
 
 func registerPackedIndex(
-	dbTable *ScyllaTable[any],
+	dbTable *ScyllaTable,
 	idxCount *int8,
 	indexColumns []Coln,
 	cfg packedIndexBuildConfig,

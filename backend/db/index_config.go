@@ -24,7 +24,7 @@ func resolveSchemaIndexType(indexCfg Index) int8 {
 	return TypeLocalIndex
 }
 
-func registerSchemaLocalIndex(dbTable *ScyllaTable[any], idxCount *int8, indexCfg Index) {
+func registerSchemaLocalIndex(dbTable *ScyllaTable, idxCount *int8, indexCfg Index) {
 	if len(indexCfg.Keys) == 1 {
 		colCfg := indexCfg.Keys[0]
 		colInfo := colCfg.GetInfo()
@@ -68,7 +68,7 @@ func registerSchemaLocalIndex(dbTable *ScyllaTable[any], idxCount *int8, indexCf
 	})
 }
 
-func registerSchemaGlobalIndex(dbTable *ScyllaTable[any], idxCount *int8, indexCfg Index) {
+func registerSchemaGlobalIndex(dbTable *ScyllaTable, idxCount *int8, indexCfg Index) {
 	if len(indexCfg.Keys) == 1 {
 		colCfg := indexCfg.Keys[0]
 		colInfo := colCfg.GetInfo()

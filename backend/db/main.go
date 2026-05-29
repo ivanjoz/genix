@@ -22,6 +22,10 @@ type IColInfo interface {
 	GetValue(ptr unsafe.Pointer) any
 	GetRawValue(ptr unsafe.Pointer) any
 	GetStatementValue(ptr unsafe.Pointer) any
+	// GetValueString returns the field value as a stable string token (no boxing/fmt for scalars).
+	GetValueString(ptr unsafe.Pointer) string
+	// FieldsEqual reports whether the column holds the same value in two records (zero-alloc for scalars).
+	FieldsEqual(a, b unsafe.Pointer) bool
 	SetValue(ptr unsafe.Pointer, v any)
 	GetInfo() *colInfo
 	GetType() *colType
@@ -32,7 +36,7 @@ type IColInfo interface {
 	SetDecimalSize(size int8)
 }
 
-type ScyllaTable[T any] struct {
+type ScyllaTable struct {
 	name     string
 	keyspace string
 	keys     []IColInfo
@@ -102,10 +106,10 @@ type indexUpdatedTableInfo struct {
 }
 
 type textSearchIndexInfo struct {
-	sourceColumn    IColInfo
-	partitionColumn IColInfo
-	idColumn        IColInfo
-	statusColumn    IColInfo
+	sourceColumn IColInfo
+	statusColumn IColInfo
+	// The record-ID column is always the table's single key (keys[0]) and the partition is
+	// always partKey, so both are read from the ScyllaTable directly rather than cached here.
 }
 
 type textSearchIndexProvider interface {
@@ -118,28 +122,28 @@ type indexGroupSourceColumn struct {
 	weekOnly    bool
 }
 
-func (e ScyllaTable[T]) GetFullName() string {
+func (e ScyllaTable) GetFullName() string {
 	return fmt.Sprintf("%v.%v", e.keyspace, e.name)
 }
-func (e ScyllaTable[T]) GetName() string {
+func (e ScyllaTable) GetName() string {
 	return e.name
 }
-func (e ScyllaTable[T]) GetColumns() map[string]IColInfo {
+func (e ScyllaTable) GetColumns() map[string]IColInfo {
 	return e.columnsMap
 }
-func (e ScyllaTable[T]) GetKeys() []IColInfo {
+func (e ScyllaTable) GetKeys() []IColInfo {
 	return e.keys
 }
-func (e ScyllaTable[T]) GetPartKey() IColInfo {
+func (e ScyllaTable) GetPartKey() IColInfo {
 	return e.partKey
 }
-func (e ScyllaTable[T]) GetPartValue(ptr unsafe.Pointer) int64 {
+func (e ScyllaTable) GetPartValue(ptr unsafe.Pointer) int64 {
 	if e.partKey == nil || e.partKey.IsNil() {
 		return 0
 	}
 	return convertToInt64(e.partKey.GetRawValue(ptr))
 }
-func (e ScyllaTable[T]) GetKeyValues(ptr unsafe.Pointer) []any {
+func (e ScyllaTable) GetKeyValues(ptr unsafe.Pointer) []any {
 	if len(e.keys) == 0 {
 		return nil
 	}
@@ -325,7 +329,7 @@ type TableQueryInterface[T any] interface {
 
 type TableDeployInterface interface {
 	MakeTableSchema() TableSchema
-	MakeScyllaTable() ScyllaTable[any]
+	MakeScyllaTable() ScyllaTable
 }
 
 // TableStruct
@@ -362,7 +366,7 @@ func (e *TableStruct[T, E]) MakeTableSchema() TableSchema {
 	return MakeSchema[E]()
 }
 
-func (e *TableStruct[T, E]) MakeScyllaTable() ScyllaTable[any] {
+func (e *TableStruct[T, E]) MakeScyllaTable() ScyllaTable {
 	return getOrCompileScyllaTable(initStructTable[T, E](new(T)))
 }
 
@@ -694,7 +698,7 @@ func (e *TableStruct[T, E]) IncludeCachedGroup(indexGroupHash int32, updateCount
 	return e.schemaStruct
 }
 
-func MakeScyllaTable[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() ScyllaTable[any] {
+func MakeScyllaTable[T TableBaseInterface[E, T], E TableSchemaInterface[E]]() ScyllaTable {
 	refTable := initStructTable[E, T](new(E))
 	return getOrCompileScyllaTable(refTable)
 }

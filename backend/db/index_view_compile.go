@@ -7,7 +7,7 @@ import (
 	"unsafe"
 )
 
-func compileSchemaViewTable(dbTable *ScyllaTable[any], viewCfg Index) {
+func compileSchemaViewTable(dbTable *ScyllaTable, viewCfg Index) {
 	if !viewCfg.KeepPart {
 		panic(fmt.Sprintf(`Table "%v": ViewTables requires KeepPart = true to preserve the base partition`, dbTable.name))
 	}
@@ -220,7 +220,7 @@ func compileSchemaViewTable(dbTable *ScyllaTable[any], viewCfg Index) {
 	dbTable.views[view.name] = view
 }
 
-func compileSchemaView(dbTable *ScyllaTable[any], viewCfg Index) {
+func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 	appendUniqueColumn := func(target []IColInfo, column IColInfo) []IColInfo {
 		if column == nil || column.IsNil() {
 			return target

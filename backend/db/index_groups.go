@@ -27,7 +27,7 @@ func makeIndexGroupCacheKey(indexID int16, indexHash int32) int64 {
 	return (int64(indexID) << 32) | int64(uint32(indexHash))
 }
 
-func allocateIndexGroupID(scyllaTable *ScyllaTable[any], sourceColumnNames []string) int16 {
+func allocateIndexGroupID(scyllaTable *ScyllaTable, sourceColumnNames []string) int16 {
 	logicalName := strings.Join(sourceColumnNames, "_")
 	if scyllaTable.indexGroupIDs == nil {
 		scyllaTable.indexGroupIDs = map[int16]string{}
@@ -63,7 +63,7 @@ func shouldPersistIndexUpdatedGroup(indexGroup indexGroupInfo) bool {
 
 func appendIndexUpdatedRowsForRecord(
 	recordPointer unsafe.Pointer,
-	scyllaTable *ScyllaTable[any],
+	scyllaTable *ScyllaTable,
 	partitionValue int32,
 	updateCounterValue int64,
 	rowsByPartitionAndHash map[string]indexUpdatedRow,
@@ -251,7 +251,7 @@ func buildIndexGroupHashValues(sourceColumns []indexGroupSourceColumn, statement
 	return hashValues
 }
 
-func registerIndexGroup(dbTable *ScyllaTable[any], idxCount *int8, indexCfg Index) {
+func registerIndexGroup(dbTable *ScyllaTable, idxCount *int8, indexCfg Index) {
 	sourceColumnNames := make([]string, 0, len(indexCfg.Keys))
 	for _, key := range indexCfg.Keys {
 		sourceColumnNames = append(sourceColumnNames, key.GetName())
@@ -447,7 +447,7 @@ func registerIndexGroup(dbTable *ScyllaTable[any], idxCount *int8, indexCfg Inde
 	}
 }
 
-func registerInheritFromKeyIndexGroup(dbTable *ScyllaTable[any], indexCfg Index, indexID int16, sourceColumnNames []string) {
+func registerInheritFromKeyIndexGroup(dbTable *ScyllaTable, indexCfg Index, indexID int16, sourceColumnNames []string) {
 	if len(dbTable.keyIntPacking) == 0 {
 		panic(fmt.Sprintf(`Table "%v": TypeInheritFromKey requires KeyIntPacking on the table`, dbTable.name))
 	}
@@ -493,7 +493,7 @@ func registerInheritFromKeyIndexGroup(dbTable *ScyllaTable[any], indexCfg Index,
 }
 
 func syncIndexGroupsAfterWrite[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
-	records *[]T, scyllaTable *ScyllaTable[any], managedValues managedWriteValues,
+	records *[]T, scyllaTable *ScyllaTable, managedValues managedWriteValues,
 ) error {
 	if len(*records) == 0 || len(scyllaTable.indexGroups) == 0 || scyllaTable.indexUpdatedTable == nil {
 		return nil

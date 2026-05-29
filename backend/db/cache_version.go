@@ -26,7 +26,7 @@ type tableStructCacheMetaGetter interface {
 }
 
 // Feature is opt-in per schema and skipped for the cache-version table itself to avoid recursive writes.
-func shouldUseCacheVersionFeature(scyllaTable ScyllaTable[any]) bool {
+func shouldUseCacheVersionFeature(scyllaTable ScyllaTable) bool {
 	// Prevent recursive writes when the cache-version table itself is written.
 	return scyllaTable.saveCacheVersion && scyllaTable.name != "cache_version"
 }
@@ -64,7 +64,7 @@ func findCacheVersionFieldIndexInRecordType(recordType reflect.Type) []int {
 }
 
 // Precomputes and validates all table-level metadata needed by runtime cache-version updates/assignment.
-func configureCacheVersionFields[T TableSchemaInterface[T]](schemaStruct *T, scyllaTable *ScyllaTable[any]) {
+func configureCacheVersionFields[T TableSchemaInterface[T]](schemaStruct *T, scyllaTable *ScyllaTable) {
 	if !shouldUseCacheVersionFeature(*scyllaTable) {
 		return
 	}
@@ -199,7 +199,7 @@ func setRecordCacheVersion(recordPtr reflect.Value, cacheVersionFieldIndex []int
 // Applies already-loaded versions to each record by reading partition and key directly from mapped columns.
 func assignCacheVersionsToRecords[T any](
 	records *[]T,
-	scyllaTable ScyllaTable[any],
+	scyllaTable ScyllaTable,
 	cacheVersionByPackedID map[int64]map[uint8]uint8,
 ) {
 	tableID := BasicHashInt(scyllaTable.name)
@@ -225,7 +225,7 @@ func assignCacheVersionsToRecords[T any](
 }
 
 // Write path: increments touched groups per partition and stores the updated compact state back to cache_version.
-func updateCacheVersionsAfterWrite[T any](records *[]T, scyllaTable ScyllaTable[any]) error {
+func updateCacheVersionsAfterWrite[T any](records *[]T, scyllaTable ScyllaTable) error {
 	if !shouldUseCacheVersionFeature(scyllaTable) || len(*records) == 0 {
 		return nil
 	}
@@ -272,7 +272,7 @@ func updateCacheVersionsAfterWrite[T any](records *[]T, scyllaTable ScyllaTable[
 }
 
 // Read path: loads current group versions and assigns ccv to every selected record.
-func assignCacheVersionsAfterSelect[T any](records *[]T, scyllaTable ScyllaTable[any]) error {
+func assignCacheVersionsAfterSelect[T any](records *[]T, scyllaTable ScyllaTable) error {
 	if !shouldUseCacheVersionFeature(scyllaTable) || len(*records) == 0 {
 		return nil
 	}
@@ -311,7 +311,7 @@ func appendColumnIfMissing(columnNames []string, columnName string) []string {
 	return append(columnNames, columnName)
 }
 
-func ensureCacheVersionColumnsForSelect(columnNames []string, scyllaTable ScyllaTable[any]) []string {
+func ensureCacheVersionColumnsForSelect(columnNames []string, scyllaTable ScyllaTable) []string {
 	if !shouldUseCacheVersionFeature(scyllaTable) {
 		return columnNames
 	}

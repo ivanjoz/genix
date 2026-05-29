@@ -67,7 +67,7 @@ func isUpdateCounterFieldType(fieldType string) bool {
 	return false
 }
 
-func ensureManagedIntColumn(dbTable *ScyllaTable[any], columnName string) IColInfo {
+func ensureManagedIntColumn(dbTable *ScyllaTable, columnName string) IColInfo {
 	if currentColumn := dbTable.columnsMap[columnName]; currentColumn != nil {
 		if currentColumn.GetType().IsSlice || !isUpdateCounterFieldType(currentColumn.GetType().FieldType) {
 			panic(fmt.Sprintf(`Table "%v": managed column "%v" must be an integer scalar. Found: %v`,
@@ -94,7 +94,7 @@ func ensureManagedIntColumn(dbTable *ScyllaTable[any], columnName string) IColIn
 	return managedColumn
 }
 
-func bindManagedAuditColumns(dbTable *ScyllaTable[any], schema TableSchema) {
+func bindManagedAuditColumns(dbTable *ScyllaTable, schema TableSchema) {
 	dbTable.createdCol = ensureManagedIntColumn(dbTable, managedCreatedColumnName)
 	dbTable.updatedCol = ensureManagedIntColumn(dbTable, managedUpdatedColumnName)
 	if !schema.DisableUpdateCounter {
@@ -182,7 +182,7 @@ func computeCompositeHashSet(ptr unsafe.Pointer, sourceColumns []IColInfo, bucke
 	return hashValues
 }
 
-func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
+func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable {
 
 	schema := (*structType).GetSchema()
 	structRefValue := reflect.ValueOf(structType).Elem()
@@ -191,7 +191,7 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable[any] {
 		panic("No se ha especificado una PrimaryKey")
 	}
 
-	dbTable := ScyllaTable[any]{
+	dbTable := ScyllaTable{
 		keyspace:             schema.Keyspace,
 		name:                 schema.Name,
 		saveCacheVersion:     schema.SaveCacheVersion,

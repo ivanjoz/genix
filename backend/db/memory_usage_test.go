@@ -360,23 +360,23 @@ func TestMemoryUsagePerTable(t *testing.T) {
 	// Define mock table types with varying complexity
 	tableTests := []struct {
 		name string
-		fn   func() ScyllaTable[any]
+		fn   func() ScyllaTable
 	}{
 		{
 			name: "SimpleTable (5 columns)",
-			fn:   func() ScyllaTable[any] { return MakeScyllaTable[simpleRecord, simpleSchema]() },
+			fn:   func() ScyllaTable { return MakeScyllaTable[simpleRecord, simpleSchema]() },
 		},
 		{
 			name: "MediumTable (15 columns, 2 indexes)",
-			fn:   func() ScyllaTable[any] { return MakeScyllaTable[mediumRecord, mediumSchema]() },
+			fn:   func() ScyllaTable { return MakeScyllaTable[mediumRecord, mediumSchema]() },
 		},
 		{
 			name: "ComplexTable (26 columns, 4 local indexes, 2 global indexes, 3 views)",
-			fn:   func() ScyllaTable[any] { return MakeScyllaTable[complexRecord, complexSchema]() },
+			fn:   func() ScyllaTable { return MakeScyllaTable[complexRecord, complexSchema]() },
 		},
 		{
 			name: "VeryComplexTable (40 columns, 6 local indexes, 3 global indexes, 5 views, KeyConcatenated)",
-			fn:   func() ScyllaTable[any] { return MakeScyllaTable[veryComplexRecord, veryComplexSchema]() },
+			fn:   func() ScyllaTable { return MakeScyllaTable[veryComplexRecord, veryComplexSchema]() },
 		},
 	}
 
@@ -599,12 +599,12 @@ func TestDetailedTableMemoryBreakdown(t *testing.T) {
 	// Test each table type in detail
 	tables := []struct {
 		name string
-		fn   func() ScyllaTable[any]
+		fn   func() ScyllaTable
 	}{
-		{"SimpleTable", func() ScyllaTable[any] { return MakeScyllaTable[simpleRecord, simpleSchema]() }},
-		{"MediumTable", func() ScyllaTable[any] { return MakeScyllaTable[mediumRecord, mediumSchema]() }},
-		{"ComplexTable", func() ScyllaTable[any] { return MakeScyllaTable[complexRecord, complexSchema]() }},
-		{"VeryComplexTable", func() ScyllaTable[any] { return MakeScyllaTable[veryComplexRecord, veryComplexSchema]() }},
+		{"SimpleTable", func() ScyllaTable { return MakeScyllaTable[simpleRecord, simpleSchema]() }},
+		{"MediumTable", func() ScyllaTable { return MakeScyllaTable[mediumRecord, mediumSchema]() }},
+		{"ComplexTable", func() ScyllaTable { return MakeScyllaTable[complexRecord, complexSchema]() }},
+		{"VeryComplexTable", func() ScyllaTable { return MakeScyllaTable[veryComplexRecord, veryComplexSchema]() }},
 	}
 
 	for _, tt := range tables {

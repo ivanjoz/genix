@@ -24,7 +24,7 @@ func makeDBController[T db.TableBaseInterface[E, T], E db.TableSchemaInterface[E
 
 	contoller := db.ScyllaController[T, E]{
 		TableName: fullTableName,
-		Table:     db.ScyllaTable[T](scyllaTable),
+		Table:     scyllaTable,
 		Schema:    schema,
 	}
 	return &contoller

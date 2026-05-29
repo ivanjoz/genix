@@ -34,6 +34,11 @@ type columnInfo struct {
 	getRawValue             func(ptr unsafe.Pointer) any
 	getStatementValue       func(ptr unsafe.Pointer) any
 	setValue                func(ptr unsafe.Pointer, v any)
+	// getValueString stringifies the typed field directly (no interface boxing, no fmt reflection);
+	// used for stable lookup tokens. fieldsEqual compares the same field across two records without
+	// allocating a string. Both are precomputed per column type in compileFastAccessors.
+	getValueString func(ptr unsafe.Pointer) string
+	fieldsEqual    func(a, b unsafe.Pointer) bool
 	decimalSize             int8
 	autoincrementRandSize   int8
 	compositeBucketing      []int8
@@ -104,6 +109,25 @@ func (c *columnInfo) GetStatementValue(ptr unsafe.Pointer) any {
 		return recordBytes
 	}
 	return c.Field.Interface(ptr)
+}
+
+// GetValueString returns the field value as a string for use as a lookup/equality token.
+// Scalar columns hit precompiled type-specific formatters; everything else falls back to fmt.
+func (c *columnInfo) GetValueString(ptr unsafe.Pointer) string {
+	if c.getValueString != nil {
+		return c.getValueString(ptr)
+	}
+	return fmt.Sprintf("%v", c.GetRawValue(ptr))
+}
+
+// FieldsEqual reports whether this column holds the same value in records a and b.
+// Scalar columns compare typed values with zero allocation; other types fall back to
+// comparing their string tokens.
+func (c *columnInfo) FieldsEqual(a, b unsafe.Pointer) bool {
+	if c.fieldsEqual != nil {
+		return c.fieldsEqual(a, b)
+	}
+	return c.GetValueString(a) == c.GetValueString(b)
 }
 
 func (c *columnInfo) SetValue(ptr unsafe.Pointer, v any) {
@@ -605,6 +629,33 @@ func (c *columnInfo) compileFastAccessors() {
 			return c.Field.Interface(ptr)
 		}
 		c.getStatementValue = c.getRawValue
+	}
+
+	// Precompute string-token and equality accessors for scalar columns so hot merge/index
+	// token paths avoid interface boxing and fmt reflection. Non-scalar and pointer types fall
+	// back to the GetValueString/FieldsEqual methods, preserving their existing semantics.
+	switch c.Type {
+	case 1: // string
+		c.getValueString = func(ptr unsafe.Pointer) string { return c.Field.String(ptr) }
+		c.fieldsEqual = func(a, b unsafe.Pointer) bool { return c.Field.String(a) == c.Field.String(b) }
+	case 2: // int64
+		c.getValueString = func(ptr unsafe.Pointer) string { return strconv.FormatInt(c.Field.Int64(ptr), 10) }
+		c.fieldsEqual = func(a, b unsafe.Pointer) bool { return c.Field.Int64(a) == c.Field.Int64(b) }
+	case 3: // int32
+		c.getValueString = func(ptr unsafe.Pointer) string { return strconv.FormatInt(int64(c.Field.Int32(ptr)), 10) }
+		c.fieldsEqual = func(a, b unsafe.Pointer) bool { return c.Field.Int32(a) == c.Field.Int32(b) }
+	case 4: // int16
+		c.getValueString = func(ptr unsafe.Pointer) string { return strconv.FormatInt(int64(c.Field.Int16(ptr)), 10) }
+		c.fieldsEqual = func(a, b unsafe.Pointer) bool { return c.Field.Int16(a) == c.Field.Int16(b) }
+	case 5: // int8
+		c.getValueString = func(ptr unsafe.Pointer) string { return strconv.FormatInt(int64(c.Field.Int8(ptr)), 10) }
+		c.fieldsEqual = func(a, b unsafe.Pointer) bool { return c.Field.Int8(a) == c.Field.Int8(b) }
+	case 8: // bool
+		c.getValueString = func(ptr unsafe.Pointer) string { return strconv.FormatBool(c.Field.Bool(ptr)) }
+		c.fieldsEqual = func(a, b unsafe.Pointer) bool { return c.Field.Bool(a) == c.Field.Bool(b) }
+	case 10: // int
+		c.getValueString = func(ptr unsafe.Pointer) string { return strconv.FormatInt(int64(c.Field.Int(ptr)), 10) }
+		c.fieldsEqual = func(a, b unsafe.Pointer) bool { return c.Field.Int(a) == c.Field.Int(b) }
 	}
 }
 

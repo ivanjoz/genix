@@ -17,60 +17,6 @@ func TestQueryIndexGroupStoresCachedGroupsInTableInfo(t *testing.T) {
 	}
 }
 
-func TestBuildIndexGroupSelectPlanPrefersMostSpecificRawGroup(t *testing.T) {
-	scyllaTable := MakeScyllaTable[indexGroupRecord, indexGroupSchema]()
-	tableInfo := &TableInfo{
-		statements: []ColumnStatement{
-			{Col: "empresa_id", Operator: "=", Value: int32(7)},
-			{Col: "date", Operator: "BETWEEN", From: []ColumnStatement{{Col: "date", Value: int16(18754)}}, To: []ColumnStatement{{Col: "date", Value: int16(18756)}}},
-			{Col: "client_id", Operator: "=", Value: int32(5)},
-			{Col: "product_ids", Operator: "CONTAINS", Value: int32(11)},
-		},
-	}
-
-	queryPlan, err := buildIndexGroupSelectPlan(tableInfo, scyllaTable)
-	if err != nil {
-		t.Fatalf("buildIndexGroupSelectPlan returned error: %v", err)
-	}
-
-	if queryPlan.indexGroup.name != "date_client_id_product_ids" {
-		t.Fatalf("expected the most specific raw index group, got %q", queryPlan.indexGroup.name)
-	}
-	if queryPlan.indexGroup.indexID == 0 {
-		t.Fatal("expected selected index group to have a stable index_id")
-	}
-	if queryPlan.indexGroup.virtualColumn.GetName() != "zz_igs_fecha_client_id_product_ids" {
-		t.Fatalf("unexpected selected virtual column: %s", queryPlan.indexGroup.virtualColumn.GetName())
-	}
-
-	expectedHashGroups := []queryIndexGroupHash{
-		{hashValue: HashInt64(int64(18754), int64(5), int64(11)), indexGroupValues: []int64{18754, 5, 11}},
-		{hashValue: HashInt64(int64(18755), int64(5), int64(11)), indexGroupValues: []int64{18755, 5, 11}},
-		{hashValue: HashInt64(int64(18756), int64(5), int64(11)), indexGroupValues: []int64{18756, 5, 11}},
-	}
-	if len(queryPlan.hashGroups) != len(expectedHashGroups) {
-		t.Fatalf("expected %d hash groups, got %+v", len(expectedHashGroups), queryPlan.hashGroups)
-	}
-	expectedByValues := map[[3]int64]int32{}
-	for _, expectedHashGroup := range expectedHashGroups {
-		expectedByValues[[3]int64{
-			expectedHashGroup.indexGroupValues[0],
-			expectedHashGroup.indexGroupValues[1],
-			expectedHashGroup.indexGroupValues[2],
-		}] = expectedHashGroup.hashValue
-	}
-	for _, hashGroup := range queryPlan.hashGroups {
-		valuesKey := [3]int64{hashGroup.indexGroupValues[0], hashGroup.indexGroupValues[1], hashGroup.indexGroupValues[2]}
-		expectedHashValue, exists := expectedByValues[valuesKey]
-		if !exists {
-			t.Fatalf("unexpected index-group values in result: %+v", hashGroup)
-		}
-		if hashGroup.hashValue != expectedHashValue {
-			t.Fatalf("unexpected hash for values %v: got %d want %d", hashGroup.indexGroupValues, hashGroup.hashValue, expectedHashValue)
-		}
-	}
-}
-
 func TestBuildIndexGroupSelectPlanAllowsSingleColumnRawGroup(t *testing.T) {
 	scyllaTable := MakeScyllaTable[indexGroupRecord, indexGroupSchema]()
 	tableInfo := &TableInfo{

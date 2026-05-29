@@ -17,7 +17,7 @@ import (
 // source column, and an optional int8 status column. Schema mistakes
 // panic at compile time of the table — they're never recoverable at
 // runtime.
-func configureTextSearchIndex(scyllaTable *ScyllaTable[any], schema TableSchema) {
+func configureTextSearchIndex(scyllaTable *ScyllaTable, schema TableSchema) {
 	if schema.TextSearchColumn == nil {
 		return
 	}
@@ -56,10 +56,8 @@ func configureTextSearchIndex(scyllaTable *ScyllaTable[any], schema TableSchema)
 	}
 
 	scyllaTable.textSearchIndex = &textSearchIndexInfo{
-		sourceColumn:    sourceColumn,
-		partitionColumn: scyllaTable.partKey,
-		idColumn:        idColumn,
-		statusColumn:    statusColumn,
+		sourceColumn: sourceColumn,
+		statusColumn: statusColumn,
 	}
 }
 
@@ -80,7 +78,7 @@ func buildSearchText(record any, recordPointer unsafe.Pointer, info *textSearchI
 // textSearchAffectedColumns reports whether the columns touched by an
 // update overlap with the indexed text column or the status column.
 // Both flags drive different sync paths in insert-update.go.
-func textSearchAffectedColumns(scyllaTable *ScyllaTable[any], affectedColumns []IColInfo) (bool, bool) {
+func textSearchAffectedColumns(scyllaTable *ScyllaTable, affectedColumns []IColInfo) (bool, bool) {
 	if scyllaTable.textSearchIndex == nil {
 		return false, false
 	}
@@ -115,11 +113,11 @@ type ftsBucket struct {
 // but ignored here: status is encoded in the bucket name, and the
 // Sonic upsert path already clears the opposite-status bucket on every
 // write, so stale rows from a previous status group cannot linger.
-func syncTextSearchIndexAfterWrite[T any](records *[]T, scyllaTable *ScyllaTable[any], _ bool) error {
+func syncTextSearchIndexAfterWrite[T any](records *[]T, scyllaTable *ScyllaTable, _ bool, skipRecordIDs map[int64]bool) error {
 	if scyllaTable.textSearchIndex == nil || records == nil || len(*records) == 0 {
 		return nil
 	}
-	buckets := groupRecordsForTextSearch(records, scyllaTable)
+	buckets := groupRecordsForTextSearch(records, scyllaTable, skipRecordIDs)
 	if len(buckets) == 0 {
 		return nil
 	}
@@ -144,15 +142,16 @@ func syncTextSearchIndexAfterWrite[T any](records *[]T, scyllaTable *ScyllaTable
 // into the Sonic bucket implied by the new status. Same upsert path as
 // the general sync — the opposite-bucket FLUSHO inside UpsertBatch
 // guarantees the stale row in the previous bucket is gone.
-func syncTextSearchStatusAfterWrite[T any](records *[]T, scyllaTable *ScyllaTable[any]) error {
-	return syncTextSearchIndexAfterWrite(records, scyllaTable, false)
+func syncTextSearchStatusAfterWrite[T any](records *[]T, scyllaTable *ScyllaTable) error {
+	// Status-only changes must always reroute every record into its new bucket, so no skip set here.
+	return syncTextSearchIndexAfterWrite(records, scyllaTable, false, nil)
 }
 
 // groupRecordsForTextSearch walks the record slice once and assembles
 // the per-bucket Record lists used by UpsertBatch. Iteration order is
 // not preserved across buckets, but it is preserved within each bucket,
 // which matches the SQLite WAL writer's single-threaded commit order.
-func groupRecordsForTextSearch[T any](records *[]T, scyllaTable *ScyllaTable[any]) []ftsBucket {
+func groupRecordsForTextSearch[T any](records *[]T, scyllaTable *ScyllaTable, skipRecordIDs map[int64]bool) []ftsBucket {
 	info := scyllaTable.textSearchIndex
 	indexByKey := map[uint32]int{}
 	buckets := make([]ftsBucket, 0, 4)
@@ -160,7 +159,12 @@ func groupRecordsForTextSearch[T any](records *[]T, scyllaTable *ScyllaTable[any
 	for i := range *records {
 		recordPointer := xunsafe.AsPointer(&(*records)[i])
 		partition := int32(scyllaTable.GetPartValue(recordPointer))
-		recordID := convertToInt32(info.idColumn.GetRawValue(recordPointer))
+		recordID := convertToInt32(scyllaTable.keys[0].GetRawValue(recordPointer))
+		// Records whose searchable content and status are unchanged were flagged by the caller
+		// (e.g. Merge) so we avoid a redundant GenixSearch re-upsert.
+		if skipRecordIDs != nil && skipRecordIDs[int64(recordID)] {
+			continue
+		}
 		status := int8(0)
 		if info.statusColumn != nil {
 			status = int8(convertToInt64(info.statusColumn.GetRawValue(recordPointer)))

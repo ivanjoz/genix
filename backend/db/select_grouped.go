@@ -111,7 +111,7 @@ func execIndexGroupQuery[T TableSchemaInterface[T], E any](schemaStruct *T, tabl
 	return nil
 }
 
-func buildIndexGroupSelectPlan(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) (*indexGroupSelectPlan, error) {
+func buildIndexGroupSelectPlan(tableInfo *TableInfo, scyllaTable ScyllaTable) (*indexGroupSelectPlan, error) {
 	statements := collectSelectStatements(tableInfo)
 	partitionColumn := scyllaTable.GetPartKey()
 	if partitionColumn == nil || partitionColumn.IsNil() {
@@ -323,7 +323,7 @@ func resolveIndexGroupQueryValues(sourceColumn indexGroupSourceColumn, statement
 }
 
 func loadIndexGroupFreshnessRowsFromScylla(
-	scyllaTable ScyllaTable[any],
+	scyllaTable ScyllaTable,
 	indexGroup indexGroupInfo,
 	partitionValue int32,
 	hashValues []int32,
@@ -422,7 +422,7 @@ func splitIndexGroupFetches(
 }
 
 func fetchIndexGroupRecordGroups[E any](
-	scyllaTable ScyllaTable[any],
+	scyllaTable ScyllaTable,
 	queryPlan *indexGroupSelectPlan,
 	fetchStates []indexGroupFetchState,
 	postFilterStatements []ColumnStatement,
@@ -471,7 +471,7 @@ func fetchIndexGroupRecordGroups[E any](
 }
 
 func buildIndexGroupFetchQuery(
-	scyllaTable ScyllaTable[any],
+	scyllaTable ScyllaTable,
 	queryPlan *indexGroupSelectPlan,
 	fetchState indexGroupFetchState,
 	selectExpressions []string,

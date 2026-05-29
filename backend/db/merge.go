@@ -18,10 +18,6 @@ type bulkLookupGroup struct {
 	recordsToResolve []bulkLookupRecord
 }
 
-func makeLookupToken(value any) string {
-	return fmt.Sprintf("%v", value)
-}
-
 func isNonPositiveNumericValue(value any) bool {
 	switch typedValue := value.(type) {
 	case int:
@@ -40,7 +36,7 @@ func isNonPositiveNumericValue(value any) bool {
 
 func preloadExistingRecordsBySingleKey[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	records *[]T,
-	scyllaTable ScyllaTable[any],
+	scyllaTable ScyllaTable,
 ) (map[string]*T, error) {
 	existingByRecordKey := map[string]*T{}
 
@@ -64,7 +60,7 @@ func preloadExistingRecordsBySingleKey[T TableBaseInterface[E, T], E TableSchema
 		partitionToken := "__no_partition__"
 		if partitionColumn != nil {
 			partitionValue = partitionColumn.GetRawValue(recordPointer)
-			partitionToken = makeLookupToken(partitionValue)
+			partitionToken = partitionColumn.GetValueString(recordPointer)
 		}
 		group, groupExists := groupsByPartition[partitionToken]
 		if !groupExists {
@@ -77,7 +73,7 @@ func preloadExistingRecordsBySingleKey[T TableBaseInterface[E, T], E TableSchema
 			groupsByPartition[partitionToken] = group
 		}
 
-		keyToken := makeLookupToken(keyValue)
+		keyToken := keyColumn.GetValueString(recordPointer)
 		if !group.seenKeyValues[keyToken] {
 			group.keyValues = append(group.keyValues, keyValue)
 			group.seenKeyValues[keyToken] = true
@@ -117,7 +113,7 @@ func preloadExistingRecordsBySingleKey[T TableBaseInterface[E, T], E TableSchema
 		for resultIndex := range queryResult {
 			foundRecord := &queryResult[resultIndex]
 			foundPointer := xunsafe.AsPointer(foundRecord)
-			foundKeyToken := makeLookupToken(keyColumn.GetRawValue(foundPointer))
+			foundKeyToken := keyColumn.GetValueString(foundPointer)
 			if _, alreadyMapped := foundByKeyToken[foundKeyToken]; !alreadyMapped {
 				foundByKeyToken[foundKeyToken] = foundRecord
 			}
@@ -131,6 +127,23 @@ func preloadExistingRecordsBySingleKey[T TableBaseInterface[E, T], E TableSchema
 	}
 
 	return existingByRecordKey, nil
+}
+
+// textSearchRecordChanged reports whether a record's searchable content or status group
+// differs between the previously-stored record and the incoming one. When neither changed,
+// the update-phase GenixSearch re-index for that record is redundant and can be skipped.
+func textSearchRecordChanged[T any](info *textSearchIndexInfo, previous, current *T) bool {
+	previousPointer := xunsafe.AsPointer(previous)
+	currentPointer := xunsafe.AsPointer(current)
+
+	if !info.sourceColumn.FieldsEqual(previousPointer, currentPointer) {
+		return true
+	}
+	if info.statusColumn != nil &&
+		!info.statusColumn.FieldsEqual(previousPointer, currentPointer) {
+		return true
+	}
+	return false
 }
 
 func Merge[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
@@ -160,6 +173,8 @@ func Merge[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 	recordsToInsert := []T{}
 	recordsToUpdate := []T{}
 	insertRecordIndexes := []int{}
+	skipTextSearchRecordsIDs := []int64{}
+	textSearchInfo := scyllaTable.textSearchIndex
 	existingByRecordKey, err := preloadExistingRecordsBySingleKey(records, scyllaTable)
 	if err != nil {
 		return Err("merge bulk lookup failed:", err)
@@ -173,6 +188,12 @@ func Merge[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		if previousRecord, wasFound := existingByRecordKey[recordKey]; wasFound {
 			if recordNeedsUpdate := onUpdateHandler(previousRecord, currentRecord); recordNeedsUpdate {
 				recordsToUpdate = append(recordsToUpdate, *currentRecord)
+				// We already hold the previous record, so decide here whether the searchable
+				// content actually changed and let the write path skip unchanged re-indexes.
+				if textSearchInfo != nil && !textSearchRecordChanged(textSearchInfo, previousRecord, currentRecord) {
+					recordID := convertToInt64(scyllaTable.keys[0].GetRawValue(currentRecordPointer))
+					skipTextSearchRecordsIDs = append(skipTextSearchRecordsIDs, recordID)
+				}
 			}
 			continue
 		}
@@ -182,23 +203,26 @@ func Merge[T TableBaseInterface[E, T], E TableSchemaInterface[E]](
 		insertRecordIndexes = append(insertRecordIndexes, recordIndex)
 	}
 
-	if len(recordsToUpdate) > 0 {
-		fmt.Println("Merge | records to update:", len(recordsToUpdate))
-		if err := UpdateExclude(&recordsToUpdate, columnsToExcludeUpdate...); err != nil {
-			return err
-		}
+	if len(recordsToInsert) == 0 && len(recordsToUpdate) == 0 {
+		return nil
 	}
 
-	if len(recordsToInsert) > 0 {
-		fmt.Println("Merge | records to insert:", len(recordsToInsert))
-		if err := Insert(&recordsToInsert); err != nil {
-			return err
-		}
+	// Combine inserts and updates into a single batch so the merge issues one Scylla round-trip,
+	// one managed-counter prefetch, one cache-version bump, and one text-search sync.
+	fmt.Println("Merge | records to Insert:", len(recordsToInsert), "Update:", len(recordsToUpdate),"| Text skip:", len(skipTextSearchRecordsIDs))
+	
+	if err := executeInsertUpdateBatch(insertUpdateBatchParams[T, E]{
+		recordsForInsert:         &recordsToInsert,
+		recordsForUpdate:         &recordsToUpdate,
+		columnsToUpdate:            columnsToExcludeUpdate,
+		skipTextSearchRecordsIDs: skipTextSearchRecordsIDs,
+	}); err != nil {
+		return err
+	}
 
-		// Insert may mutate records (e.g. autoincrement IDs), so propagate persisted values back.
-		for insertIndex, originalRecordIndex := range insertRecordIndexes {
-			(*records)[originalRecordIndex] = recordsToInsert[insertIndex]
-		}
+	// Insert may mutate records (e.g. autoincrement IDs), so propagate persisted values back.
+	for insertIndex, originalRecordIndex := range insertRecordIndexes {
+		(*records)[originalRecordIndex] = recordsToInsert[insertIndex]
 	}
 
 	return nil

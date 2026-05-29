@@ -14,7 +14,7 @@ import (
 
 type ScyllaController[T TableBaseInterface[E, T], E TableSchemaInterface[E]] struct {
 	TableName string
-	Table     ScyllaTable[T]
+	Table     ScyllaTable
 	Schema    TableSchema
 }
 
@@ -29,7 +29,7 @@ type virtualColumnsRecalcUpdate[T any] struct {
 }
 
 type ScyllaControllerInterface interface {
-	GetTable() ScyllaTable[any]
+	GetTable() ScyllaTable
 	GetTableName() string
 	GetRecords(partValue, limit int32, lastKey any) []any
 	GetRecordsGob(partValue, limit int32, lastKey any) ([]byte, error)
@@ -42,8 +42,8 @@ type ScyllaControllerInterface interface {
 	DeleteViewsAndIndexes() error
 }
 
-func (e *ScyllaController[T, E]) GetTable() ScyllaTable[any] {
-	return ScyllaTable[any](e.Table)
+func (e *ScyllaController[T, E]) GetTable() ScyllaTable {
+	return e.Table
 }
 
 func (e *ScyllaController[T, E]) GetTableName() string {
@@ -644,7 +644,7 @@ func (e *ScyllaController[T, E]) GetRecordsGob(partValue, limit int32, lastKey a
 
 func (e *ScyllaController[T, E]) RestoreCSVRecords(partValue int32, content *[]byte) error {
 	scyllaTable := &e.Table
-	records, err := CsvToRecords(scyllaTable, content, partValue)
+	records, err := CsvToRecords[T](scyllaTable, content, partValue)
 
 	if err != nil {
 		return err

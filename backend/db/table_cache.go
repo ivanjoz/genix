@@ -16,7 +16,7 @@ type structFieldMetadataCacheEntry struct {
 
 type scyllaTableCacheEntry struct {
 	once  sync.Once
-	table ScyllaTable[any]
+	table ScyllaTable
 }
 
 var (
@@ -68,7 +68,7 @@ func getOrBuildStructFieldMetadata(recordType reflect.Type) *structFieldMetadata
 	return actualEntry.(*structFieldMetadataCacheEntry)
 }
 
-func getOrCompileScyllaTable[T TableInterface[T]](schemaStruct *T) ScyllaTable[any] {
+func getOrCompileScyllaTable[T TableInterface[T]](schemaStruct *T) ScyllaTable {
 	cacheKey := reflect.TypeOf(schemaStruct).Elem().PkgPath() + "." + reflect.TypeOf(schemaStruct).Elem().Name()
 
 	cacheEntryAny, _ := scyllaTableCache.LoadOrStore(cacheKey, &scyllaTableCacheEntry{})

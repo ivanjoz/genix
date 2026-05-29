@@ -132,7 +132,7 @@ func (e int32PackedViewSchema) GetSchema() TableSchema {
 	}
 }
 
-func findPackedGroupView(t *testing.T, scyllaTable ScyllaTable[any]) *viewInfo {
+func findPackedGroupView(t *testing.T, scyllaTable ScyllaTable) *viewInfo {
 	t.Helper()
 	for _, view := range scyllaTable.indexViews {
 		if view.Type == 8 && slices.Equal(view.columnsNoPart, []string{"date", "producto_id"}) {

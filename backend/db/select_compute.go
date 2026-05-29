@@ -89,7 +89,7 @@ func computePackedBound(slotDigits []int64, prefixValues []int64, rangeIndex int
 	return computePackedInt64ValueNonNegative(componentValues, slotDigits)
 }
 
-func buildPackedPrefixRangeClauses(view *viewInfo, statements []ColumnStatement, scyllaTable ScyllaTable[any]) ([]boundWhereClause, error) {
+func buildPackedPrefixRangeClauses(view *viewInfo, statements []ColumnStatement, scyllaTable ScyllaTable) ([]boundWhereClause, error) {
 	if view == nil || len(view.packedSourceColumns) == 0 || len(view.packedSlotDigitsPerColumn) == 0 {
 		return nil, fmt.Errorf("packed GroupBy requires a packed view")
 	}
@@ -268,7 +268,7 @@ func buildPackedPrefixRangeClauses(view *viewInfo, statements []ColumnStatement,
 func buildNativeGroupByPlan(
 	tableInfo *TableInfo,
 	statements []ColumnStatement,
-	scyllaTable ScyllaTable[any],
+	scyllaTable ScyllaTable,
 ) (*nativeGroupByPlan, error) {
 	if len(tableInfo.groupByColumns) == 0 {
 		return nil, nil
@@ -401,7 +401,7 @@ func GetQuerySignature(statements []ColumnStatement) string {
 	return "" // Will be used differently
 }
 
-func (dbTable *ScyllaTable[T]) ComputeCapabilities() []QueryCapability {
+func (dbTable *ScyllaTable) ComputeCapabilities() []QueryCapability {
 	caps := []QueryCapability{}
 
 	// 1. Main Table Primary Key

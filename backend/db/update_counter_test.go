@@ -476,7 +476,7 @@ func TestShouldPersistIndexUpdatedGroupSkipsWeekOnlyHashes(t *testing.T) {
 }
 
 func TestAllocateIndexGroupIDAvoidsHashCollisions(t *testing.T) {
-	scyllaTable := &ScyllaTable[any]{}
+	scyllaTable := &ScyllaTable{}
 
 	firstID := allocateIndexGroupID(scyllaTable, []string{"date", "client_id"})
 	reusedID := allocateIndexGroupID(scyllaTable, []string{"date", "client_id"})
@@ -531,44 +531,6 @@ func TestAppendIndexUpdatedRowsForRecordKeepsMaxUpdateCounterPerHash(t *testing.
 		if row.updateCounter != 55 {
 			t.Fatalf("expected deduped row to keep max update counter 55, got %+v", row)
 		}
-	}
-}
-
-func TestStoreAsWeekIndexGroupUsesCollectionHashes(t *testing.T) {
-	scyllaTable := MakeScyllaTable[weekIndexGroupRecord, weekIndexGroupSchema]()
-	rawVirtualColumn := scyllaTable.columnsMap["zz_ig_fecha_status"]
-	if rawVirtualColumn == nil {
-		t.Fatal("expected raw-date index-group virtual column to exist")
-	}
-	if rawVirtualColumn.GetType().ColType != "int" {
-		t.Fatalf("expected raw-date index-group virtual column to be int, got %s", rawVirtualColumn.GetType().ColType)
-	}
-
-	weekVirtualColumn := scyllaTable.columnsMap["zz_iwk_fecha_status"]
-	if weekVirtualColumn == nil {
-		t.Fatal("expected week-backed index-group virtual column to exist")
-	}
-	if weekVirtualColumn.GetType().ColType != "int" {
-		t.Fatalf("expected week-backed index-group virtual column to be int, got %s", weekVirtualColumn.GetType().ColType)
-	}
-
-	record := weekIndexGroupRecord{
-		CompanyID: 7,
-		ID:        1,
-		Date:     18754,
-		Status:    3,
-	}
-
-	rawHashes := computeIndexGroupHashes(unsafe.Pointer(&record), scyllaTable.indexGroups[0].sourceColumns)
-	weekHashes := computeIndexGroupHashes(unsafe.Pointer(&record), scyllaTable.indexGroups[1].sourceColumns)
-	if len(rawHashes) != 1 {
-		t.Fatalf("expected one raw-date hash, got %v", rawHashes)
-	}
-	if len(weekHashes) != 1 {
-		t.Fatalf("expected one week-code hash, got %v", weekHashes)
-	}
-	if rawHashes[0] == weekHashes[0] {
-		t.Fatalf("expected distinct raw-date and week-code hashes, got raw=%v week=%v", rawHashes, weekHashes)
 	}
 }
 

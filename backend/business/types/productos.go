@@ -142,7 +142,7 @@ func (e ProductTable) GetSchema() db.TableSchema {
 		Indexes: []db.Index{
 			{Type: db.TypeGlobalIndex, Keys: []db.Coln{e.CategoriesWithStock}},
 			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.NameUpdated}},
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.NameHash}},
+			{Type: db.TypeView, Keys: []db.Coln{e.NameHash}, Cols: []db.Coln{e.ID, e.Status}, KeepPart: true},
 			{Type: db.TypeView, Keys: []db.Coln{e.Status}, KeepPart: true},
 			{Type: db.TypeView, Keys: []db.Coln{e.StockStatus}, KeepPart: true},
 			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},

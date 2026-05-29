@@ -114,7 +114,7 @@ func shouldAutoSelectColumn(column IColInfo) bool {
 	return column.GetInfo().Field != nil
 }
 
-func buildSelectProjection(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) ([]string, []selectScanColumn, []string) {
+func buildSelectProjection(tableInfo *TableInfo, scyllaTable ScyllaTable) ([]string, []selectScanColumn, []string) {
 	columnNames := []string{}
 	scanColumns := []selectScanColumn{}
 	selectExpressions := []string{}
@@ -154,7 +154,7 @@ func buildSelectProjection(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) (
 	return columnNames, scanColumns, selectExpressions
 }
 
-func computeSelectShapeHash(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) uint64 {
+func computeSelectShapeHash(tableInfo *TableInfo, scyllaTable ScyllaTable) uint64 {
 	// Hash only the query shape so the same logical select can reuse the compiled plan for different values.
 	hashBuilder := fnv.New64a()
 
@@ -388,12 +388,12 @@ func buildRemainingStatementsForCompositePlan(statements []ColumnStatement, comp
 	return remainingStatements
 }
 
-func canRewriteKeyConcatenated(statements []ColumnStatement, scyllaTable ScyllaTable[any]) bool {
+func canRewriteKeyConcatenated(statements []ColumnStatement, scyllaTable ScyllaTable) bool {
 	_, canRewrite := buildKeyConcatenatedStatements(statements, scyllaTable)
 	return canRewrite
 }
 
-func buildKeyConcatenatedStatements(statements []ColumnStatement, scyllaTable ScyllaTable[any]) ([]ColumnStatement, bool) {
+func buildKeyConcatenatedStatements(statements []ColumnStatement, scyllaTable ScyllaTable) ([]ColumnStatement, bool) {
 	// Convert equality/range prefixes on smart concatenated keys into one physical PK predicate plus residual filters.
 	keyCol := scyllaTable.keys[0]
 	hasKeyColQuery := false
@@ -496,12 +496,12 @@ func buildKeyConcatenatedStatements(statements []ColumnStatement, scyllaTable Sc
 	return rewrittenStatements, true
 }
 
-func canRewriteKeyIntPacking(statements []ColumnStatement, scyllaTable ScyllaTable[any]) bool {
+func canRewriteKeyIntPacking(statements []ColumnStatement, scyllaTable ScyllaTable) bool {
 	_, canRewrite := buildKeyIntPackingStatements(statements, scyllaTable)
 	return canRewrite
 }
 
-func buildKeyIntPackingStatements(statements []ColumnStatement, scyllaTable ScyllaTable[any]) ([]ColumnStatement, bool) {
+func buildKeyIntPackingStatements(statements []ColumnStatement, scyllaTable ScyllaTable) ([]ColumnStatement, bool) {
 	// Convert equality/range prefixes on packed numeric keys into one physical PK predicate plus residual filters.
 	keyCol := scyllaTable.keys[0]
 	hasKeyColQuery := false
@@ -619,7 +619,7 @@ func buildKeyIntPackingStatements(statements []ColumnStatement, scyllaTable Scyl
 	return rewrittenStatements, true
 }
 
-func compileSelectStatement(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) (*SelectStatement, error) {
+func compileSelectStatement(tableInfo *TableInfo, scyllaTable ScyllaTable) (*SelectStatement, error) {
 	statements := collectSelectStatements(tableInfo)
 	selectShapeHash := computeSelectShapeHash(tableInfo, scyllaTable)
 
@@ -763,7 +763,7 @@ func compileSelectStatement(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) 
 	return compiledStatement, nil
 }
 
-func (e *SelectStatement) Compute(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) (*BoundSelectPlan, error) {
+func (e *SelectStatement) Compute(tableInfo *TableInfo, scyllaTable ScyllaTable) (*BoundSelectPlan, error) {
 	// Bind current values into the cached query shape without rerunning planner selection in selectExec.
 	statements := collectSelectStatements(tableInfo)
 	whereStatements := []boundWhereClause{{}}
@@ -838,7 +838,7 @@ func (e *SelectStatement) Compute(tableInfo *TableInfo, scyllaTable ScyllaTable[
 	), nil
 }
 
-func tryGetOrCompileSelectStatement(tableInfo *TableInfo, scyllaTable ScyllaTable[any]) (*SelectStatement, error) {
+func tryGetOrCompileSelectStatement(tableInfo *TableInfo, scyllaTable ScyllaTable) (*SelectStatement, error) {
 	selectShapeHash := computeSelectShapeHash(tableInfo, scyllaTable)
 	// fmt.Printf("Select cache lookup: table=%s hash=%d\n", scyllaTable.name, selectShapeHash)
 

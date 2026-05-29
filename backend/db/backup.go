@@ -7,7 +7,7 @@ import (
 	"unsafe"
 )
 
-func exportToCSV[T any](scyllaTable *ScyllaTable[T], partValue int32) (CSVResult, error) {
+func exportToCSV(scyllaTable *ScyllaTable, partValue int32) (CSVResult, error) {
 
 	columnsOrder := map[string]int{}
 
@@ -100,7 +100,7 @@ func isPointer(v any) bool {
 }
 
 func CsvToRecords[T any](
-	scyllaTable *ScyllaTable[T], content *[]byte, partValue any,
+	scyllaTable *ScyllaTable, content *[]byte, partValue any,
 ) ([]T, error) {
 
 	if content == nil {

@@ -106,7 +106,7 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	query := db.Query(&existingProducts)
 	query.Select(query.NameHash, query.ID, query.Status).
 		CompanyID.Equals(req.User.CompanyID).
-		NameHash.In(nameHashesToValidate...).AllowFilter()
+		NameHash.In(nameHashesToValidate...)
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr(fmt.Sprintf("Error al validar los nombres de productos: %v", err))

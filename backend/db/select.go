@@ -72,7 +72,7 @@ func canUseProjectedView(selectedColumnNames []string, view *viewInfo) bool {
 	return true
 }
 
-func deduplicateRecordsByPrimaryKey[E any](records *[]E, scyllaTable ScyllaTable[any]) {
+func deduplicateRecordsByPrimaryKey[E any](records *[]E, scyllaTable ScyllaTable) {
 	if records == nil || len(*records) <= 1 {
 		return
 	}
@@ -299,7 +299,7 @@ func planCompositeBuckets(from, to int64, bucketSizes []int8) []compositeBucketS
 	return plan.selections
 }
 
-func makePrimaryKeyRecordKey(ptr unsafe.Pointer, scyllaTable ScyllaTable[any]) string {
+func makePrimaryKeyRecordKey(ptr unsafe.Pointer, scyllaTable ScyllaTable) string {
 	// Dedupe key always includes partition key plus clustering keys to preserve table key semantics.
 	parts := []string{}
 	partKey := scyllaTable.GetPartKey()
@@ -313,7 +313,7 @@ func makePrimaryKeyRecordKey(ptr unsafe.Pointer, scyllaTable ScyllaTable[any]) s
 	return strings.Join(parts, "|")
 }
 
-func recordMatchesPostFilter(ptr unsafe.Pointer, statements []ColumnStatement, scyllaTable ScyllaTable[any]) bool {
+func recordMatchesPostFilter(ptr unsafe.Pointer, statements []ColumnStatement, scyllaTable ScyllaTable) bool {
 	// Final in-memory filtering guarantees exact semantics after overfetch (e.g. packed indexes with DecimalSize truncation).
 	for _, statement := range statements {
 		column := scyllaTable.columnsMap[statement.Col]
@@ -527,7 +527,7 @@ func scanSelectQueryRows[E any](
 	queryStr string,
 	queryValues []any,
 	scanColumns []selectScanColumn,
-	scyllaTable ScyllaTable[any],
+	scyllaTable ScyllaTable,
 	refRecords *[]E,
 	postFilterStatements []ColumnStatement,
 	scanHandler func(record *E) bool,
@@ -658,7 +658,7 @@ func executeBoundSelectQueries[E any](
 	scanColumns []selectScanColumn,
 	requiresDeduplication bool,
 	scanHandler func(record *E) bool,
-	scyllaTable ScyllaTable[any],
+	scyllaTable ScyllaTable,
 	queryNoticeTime time.Time,
 ) error {
 	// Keep query execution shared so cached and legacy planning paths use the same scan, merge, and dedup behavior.
@@ -727,7 +727,7 @@ func executeBoundSelectQueries[E any](
 	return nil
 }
 
-func tryBuildCompositeBucketPlan(statements []ColumnStatement, scyllaTable ScyllaTable[any]) *compositeBucketQueryPlan {
+func tryBuildCompositeBucketPlan(statements []ColumnStatement, scyllaTable ScyllaTable) *compositeBucketQueryPlan {
 	// Build a specialized plan for composite-bucket indexes before generic capability matching.
 	partitionColumn := scyllaTable.GetPartKey()
 	if partitionColumn == nil || partitionColumn.IsNil() {
@@ -867,7 +867,7 @@ func tryBuildCompositeBucketPlan(statements []ColumnStatement, scyllaTable Scyll
 func selectExec[E any](
 	recordsGetted *[]E,
 	tableInfo *TableInfo,
-	scyllaTable ScyllaTable[any],
+	scyllaTable ScyllaTable,
 	scanHandler func(record *E) bool,
 	selectStartTime time.Time,
 ) error {

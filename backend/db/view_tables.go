@@ -155,7 +155,7 @@ func getViewTableMaintenanceIndexName(view *viewInfo) string {
 	return fmt.Sprintf(`%v__%v_index_0`, view.name, view.maintenanceIDColumn.GetName())
 }
 
-func getViewTableMaintenanceIndexCreateScript(view *viewInfo, scyllaTable ScyllaTable[any]) string {
+func getViewTableMaintenanceIndexCreateScript(view *viewInfo, scyllaTable ScyllaTable) string {
 	// Maintenance reads are always scoped by partition + base ID, so the helper derives the one required local index.
 	partKey := scyllaTable.GetPartKey()
 	return fmt.Sprintf(`CREATE INDEX %v ON %v.%v ((%v), %v)`,
@@ -179,7 +179,7 @@ func makeNumericQueryValue(column IColInfo, value int64) any {
 }
 
 func fetchExistingViewTableDeleteRows(
-	view *viewInfo, scyllaTable ScyllaTable[any], partValue int64, idValues []int64,
+	view *viewInfo, scyllaTable ScyllaTable, partValue int64, idValues []int64,
 ) ([]viewTableDeleteRow, error) {
 	if len(idValues) == 0 {
 		return nil, nil
@@ -240,7 +240,7 @@ func fetchExistingViewTableDeleteRows(
 }
 
 func executeViewTableSyncChunk[T any](
-	view *viewInfo, recordsChunk *[]T, session *gocql.Session, scyllaTable *ScyllaTable[any],
+	view *viewInfo, recordsChunk *[]T, session *gocql.Session, scyllaTable *ScyllaTable,
 ) error {
 	batch := session.NewBatch(gocql.UnloggedBatch)
 	deleteStatementsCount := 0
