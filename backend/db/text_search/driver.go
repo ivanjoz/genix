@@ -30,9 +30,6 @@ import (
 	"time"
 )
 
-// ErrNotImplemented is returned by Search until the read path lands.
-var ErrNotImplemented = errors.New("text_search: search path not implemented")
-
 // searchConfig holds the GenixSearch endpoint and credentials.
 type searchConfig struct {
 	host     string

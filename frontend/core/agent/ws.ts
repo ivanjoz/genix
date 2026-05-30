@@ -46,15 +46,30 @@ export const agentWsBase = (): string => {
 // survives navigations within the tab but is unique per tab (sessionStorage
 // is naturally tab-scoped). The chat widget (in step 4+) reads the same id so
 // chat and page connections share it.
+const AGENT_TAB_KEY = "__agent_tab_id";
+
+const mintTabID = (): string =>
+  (window.crypto?.randomUUID?.() as string | undefined)
+    || `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
 export const getAgentTabID = (): string => {
   if (typeof window === "undefined") { return ""; }
-  const key = "__agent_tab_id";
-  let id = sessionStorage.getItem(key);
+  let id = sessionStorage.getItem(AGENT_TAB_KEY);
   if (!id) {
-    id = (window.crypto?.randomUUID?.() as string | undefined)
-      || `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    sessionStorage.setItem(key, id);
+    id = mintTabID();
+    sessionStorage.setItem(AGENT_TAB_KEY, id);
   }
+  return id;
+};
+
+// rotateAgentTabID forces a brand-new tab id. Used when the backend closes us
+// with "replaced": within a live page there is only ever one socket, so a
+// replace can only mean another browsing context (e.g. a duplicated tab, which
+// clones sessionStorage) grabbed our id. Minting a fresh id lets both tabs
+// coexist instead of endlessly kicking each other off the shared id.
+const rotateAgentTabID = (): string => {
+  const id = mintTabID();
+  sessionStorage.setItem(AGENT_TAB_KEY, id);
   return id;
 };
 
@@ -158,11 +173,18 @@ const connectAgentSocket = () => {
     void handleMessage(socket, event.data);
   });
 
-  socket.addEventListener("close", () => {
+  socket.addEventListener("close", (event) => {
     if (bridgeState.socket !== socket) { return; }
-    agentLog("warn", "page bridge closed", { url, tab });
+    agentLog("warn", "page bridge closed", { url, tab, code: event.code, reason: event.reason });
     bridgeState.socket = null;
     releaseScreenStream();
+    // A "replaced" close means another browsing context took over our tab id
+    // (almost always a duplicated tab cloning sessionStorage). Mint a fresh id
+    // so we stop ping-ponging the shared id and both tabs can stay connected.
+    if (event.reason === "replaced") {
+      const next = rotateAgentTabID();
+      agentLog("warn", "tab id replaced by another context; rotated", { previous: tab, next });
+    }
     scheduleReconnect();
   });
 

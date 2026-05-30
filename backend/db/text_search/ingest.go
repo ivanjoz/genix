@@ -117,6 +117,28 @@ func DeleteBatch(ctx context.Context, table string, partition int32, ids []int32
 	return nil
 }
 
+// FlushCollection erases the whole GenixSearch collection for a table —
+// every bucket (all partitions and status groups) in one FLUSHC command.
+// The daemon closes the KV handle and deletes the on-disk directory; the
+// collection is re-created lazily on the next PUSHI. Exposed for the
+// reindex / cleanup tooling; not used on the hot write path.
+func FlushCollection(ctx context.Context, table string) error {
+	if err := validateIdentifier(table); err != nil {
+		return err
+	}
+	initPools()
+	conn, err := ingestMgr.acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer ingestMgr.release(conn)
+	line := fmt.Sprintf("FLUSHC %s", table)
+	if _, err := conn.exec(ctx, line); err != nil {
+		return fmt.Errorf("text_search: flushC %s: %w", table, err)
+	}
+	return nil
+}
+
 // FlushBucket clears an entire (table, partition, statusGroup) index.
 // Exposed for the deferred backfill / cleanup tooling; not used on the
 // hot write path.

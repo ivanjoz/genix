@@ -44,6 +44,26 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &productos)
 }
 
+func GetProductTextSearch(req *core.HandlerArgs) core.HandlerResponse {
+	query := req.GetQuery("q")
+	if len(query) < 2 {
+		return req.MakeErr("La búsqueda debe tener al menos 2 caracteres.")
+	}
+	limit := int(req.GetQueryInt("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+
+	// Active products live in status group 1. Return only ids + weights (no
+	// record bodies) — the client resolves names from its by-id cache.
+	matches, err := db.SearchTextIDs[businessTypes.Product](req.User.CompanyID, query, 1, limit)
+	if err != nil {
+		return req.MakeErr("Error en la búsqueda de texto de productos:", err)
+	}
+
+	return core.MakeResponse(req, &matches)
+}
+
 func GetProductosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	cachedIDs := req.ExtractCacheVersionValues()
 

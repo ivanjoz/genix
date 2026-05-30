@@ -53,12 +53,17 @@ func validateIdentifier(name string) error {
 	return nil
 }
 
-// NormalizeSearchText lowercases and strips everything outside
-// [a-z0-9 ], then collapses runs of whitespace to a single space.
-// GenixSearch's own normalizer already lowercases ASCII and folds
-// Spanish accents; doing it client-side keeps PUSHI payloads free of
-// bytes that would need protocol escaping and matches the
-// pre-tokenization the FTS5 backend used to do.
+// NormalizeSearchText lowercases ASCII, folds Spanish accents to their
+// base letter (á→a, ñ→n, ...) and keeps [a-z0-9]. Whitespace is the only
+// word separator: runs collapse to a single space. Any other character
+// (punctuation, symbols like '&', '-', '.') is DROPPED, not turned into a
+// space, so "Marca Za&Co" → "marca zaco" rather than "marca za co".
+//
+// This must fold accents the same way the daemon's normalizer does
+// (genix-search src/pair/mod.rs normalize_char). Folding client-side keeps
+// PUSHI payloads free of bytes that would need protocol escaping; the key
+// point is that the accent becomes its base letter — never a separator —
+// so "Jamón" and "Jamon" both tokenize to "jamon" on write and on query.
 func NormalizeSearchText(s string) string {
 	if s == "" {
 		return ""
@@ -74,11 +79,18 @@ func NormalizeSearchText(s string) string {
 		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
 			b.WriteRune(r)
 			prevSpace = false
-		default:
+		case isWhitespace(r):
 			if !prevSpace {
 				b.WriteByte(' ')
 				prevSpace = true
 			}
+		default:
+			if folded := foldAccent(r); folded != 0 {
+				b.WriteByte(folded)
+				prevSpace = false
+			}
+			// Any other rune (punctuation, symbols) is dropped entirely so
+			// it merges the surrounding letters instead of splitting them.
 		}
 	}
 	out := b.String()
@@ -86,4 +98,36 @@ func NormalizeSearchText(s string) string {
 		out = out[:len(out)-1]
 	}
 	return out
+}
+
+// isWhitespace reports whether r should act as a word separator. Limited to
+// the common ASCII/Unicode spacing runes; everything else is handled by the
+// accent-fold / drop path in NormalizeSearchText.
+func isWhitespace(r rune) bool {
+	switch r {
+	case ' ', '\t', '\n', '\r', '\f', '\v', ' ':
+		return true
+	}
+	return false
+}
+
+// foldAccent maps a Spanish accented letter to its base ASCII letter,
+// mirroring the daemon's normalize_char so both sides tokenize identically.
+// Returns 0 for runes that are not accented Latin letters.
+func foldAccent(r rune) byte {
+	switch r {
+	case 'á', 'à', 'ä', 'â', 'Á', 'À', 'Ä', 'Â':
+		return 'a'
+	case 'é', 'è', 'ë', 'ê', 'É', 'È', 'Ë', 'Ê':
+		return 'e'
+	case 'í', 'ì', 'ï', 'î', 'Í', 'Ì', 'Ï', 'Î':
+		return 'i'
+	case 'ó', 'ò', 'ö', 'ô', 'Ó', 'Ò', 'Ö', 'Ô':
+		return 'o'
+	case 'ú', 'ù', 'ü', 'û', 'Ú', 'Ù', 'Ü', 'Û':
+		return 'u'
+	case 'ñ', 'Ñ':
+		return 'n'
+	}
+	return 0
 }

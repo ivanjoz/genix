@@ -71,7 +71,7 @@
     <!-- Quick Links -->
     <div class="flex flex-wrap justify-center gap-4">
       <a
-        href="/configuracion/empresas"
+        href="/system/empresas"
         class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700
 				text-white font-semibold rounded-lg shadow-md transition-colors"
       >

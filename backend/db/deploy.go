@@ -2,11 +2,14 @@ package db
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"fmt"
 	"reflect"
 	"slices"
 	"strings"
+
+	"app/db/text_search"
 
 	"github.com/gocql/gocql"
 	"github.com/viant/xunsafe"
@@ -40,6 +43,7 @@ type ScyllaControllerInterface interface {
 	RecalcGroupIndexHashes(partValue int32) error
 	ResetCounter(partValue any) error
 	DeleteViewsAndIndexes() error
+	FlushTextSearchIndex(partValue int32) error
 }
 
 func (e *ScyllaController[T, E]) GetTable() ScyllaTable {
@@ -521,6 +525,26 @@ func (e *ScyllaController[T, E]) ResetCounter(partValue any) error {
 	fmt.Printf("ResetCounter | table=%s | partition=%v | counter=%s | previous=%d | maxKey=%d | delta=%d\n",
 		scyllaTable.name, partValue, counterName, currentCounterValue, maxKeyValue, delta)
 
+	return nil
+}
+
+// FlushTextSearchIndex erases this table's GenixSearch buckets for one
+// partition — both status groups (s0 inactive, s1 active) — via FLUSHB.
+// No-op for tables that don't declare a TextSearchColumn. Buckets are
+// re-created lazily on the next indexed write, so this is the clean-slate
+// step before reindexing a single partition.
+func (e *ScyllaController[T, E]) FlushTextSearchIndex(partValue int32) error {
+	scyllaTable := &e.Table
+	if scyllaTable.textSearchIndex == nil {
+		return nil
+	}
+	ctx := context.Background()
+	for _, statusGroup := range []int8{0, 1} {
+		if err := text_search.FlushBucket(ctx, scyllaTable.name, partValue, statusGroup); err != nil {
+			return Err("FlushTextSearchIndex failed for table", scyllaTable.name, "partition", partValue, "group", statusGroup, ":", err)
+		}
+	}
+	fmt.Printf("FlushTextSearchIndex | table=%s | partition=%d | groups=[0 1] flushed\n", scyllaTable.name, partValue)
 	return nil
 }
 

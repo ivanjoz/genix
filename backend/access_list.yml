@@ -42,13 +42,13 @@ access_list:
     name: "Empresas"
     group: 1
     levels: 14
-    frontend_routes: "configuracion/empresas"
+    frontend_routes: "system/empresas"
     backend_apis: ""
   - id: 6
     name: "Server Panel"
     group: 1
     levels: 14
-    frontend_routes: "configuracion/server-panel"
+    frontend_routes: "system/server-panel"
     backend_apis: ""
   - id: 7
     name: "Almacenes"

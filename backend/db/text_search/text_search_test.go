@@ -52,10 +52,19 @@ func TestNormalizeSearchText(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"", ""},
 		{"Hello World", "hello world"},
-		{"  Foo--Bar  baz!!  ", "foo bar baz"},
-		{"123-abc.DEF", "123 abc def"},
+		// Symbols are dropped (not spaced), so they merge the surrounding
+		// letters instead of splitting the word.
+		{"  Foo--Bar  baz!!  ", "foobar baz"},
+		{"123-abc.DEF", "123abcdef"},
 		{"   ", ""},
-		{"only_letters", "only letters"},
+		{"only_letters", "onlyletters"},
+		{"Marca Za&Co", "marca zaco"},
+		// Spanish accents fold to their base letter; "Jamón" and "Jamon"
+		// must tokenize identically.
+		{"Jamón", "jamon"},
+		{"Jamon", "jamon"},
+		{"CAÑA 100LTS", "cana 100lts"},
+		{"Pingüino Ñandú", "pinguino nandu"},
 	}
 	for _, tc := range cases {
 		if got := NormalizeSearchText(tc.in); got != tc.want {
