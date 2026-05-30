@@ -9,6 +9,7 @@
   import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte';
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
   import { Env } from '$core/env';
+  import { tr } from '$core/store.svelte';
   import { Agent } from '$components/agent/registry';
   import {
     setVTableAgentContext,
@@ -63,7 +64,7 @@
     onRowClick,
     selected,
     isSelected,
-    emptyMessage = 'No se encontraron registros.',
+    emptyMessage = 'No records found.|No se encontraron registros.',
     cellRenderer,
     filterText,
     getFilterContent,
@@ -329,7 +330,7 @@
 
   // Helper to get header content
   function getHeaderContent(column: ITableColumn<T>): string {
-    return typeof column.header === 'function' ? column.header() : column.header;
+    return tr(typeof column.header === 'function' ? column.header() : column.header);
   }
 
   // Check if row is selected
@@ -502,7 +503,7 @@
         <tr>
           <td colspan={processedColumns.flatColumns.length} class="vtable-empty">
             <div class="vtable-empty-message">
-              {emptyMessage}
+              {tr(emptyMessage)}
             </div>
           </td>
         </tr>

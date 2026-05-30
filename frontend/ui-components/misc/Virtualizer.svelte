@@ -1,5 +1,6 @@
 <script lang="ts" generics="TItem">
   import { onDestroy, onMount, tick, untrack, type Snippet } from 'svelte'
+  import { tr } from '$core/store.svelte'
 
   interface VirtualizerProps<TItem> {
     items: TItem[]
@@ -317,7 +318,7 @@
 >
   {#if items.length === 0}
     {#if emptyMessage}
-      <div class="virtualizer-empty-message">{emptyMessage}</div>
+      <div class="virtualizer-empty-message">{tr(emptyMessage)}</div>
     {/if}
   {:else}
     <div

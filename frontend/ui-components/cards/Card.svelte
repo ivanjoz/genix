@@ -2,6 +2,7 @@
   import type { Snippet } from 'svelte';
   import { Env } from '$core/env';
   import { Agent } from '$components/agent/registry';
+  import { tr } from '$core/store.svelte';
 
   interface Props {
     id?: number;
@@ -33,7 +34,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
   data-id="Card:{componentID}"
-  aria-label={label}
+  aria-label={tr(label)}
   class={css}
   onclick={onClick ? triggerClick : undefined}
   onkeydown={onClick ? (ev) => { if (ev.key === 'Enter' || ev.key === ' ') triggerClick(); } : undefined}

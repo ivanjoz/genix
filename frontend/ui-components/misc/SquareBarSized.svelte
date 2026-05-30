@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { tr } from '$core/store.svelte'
+
   interface SquareBarSizedProps {
     label: string
     value: string
@@ -74,10 +76,10 @@
         class="absolute inset-x-0 z-[2] flex flex-col items-center justify-center gap-2 px-8 text-center"
         style={`top:0;height:${remainingHeightPercent}%`}
       >
-        <div class="text-[12px] leading-none text-slate-700">{label}</div>
+        <div class="text-[12px] leading-none text-slate-700">{tr(label)}</div>
         <div class="text-[18px] leading-[1.1] ff-bold text-slate-900">{value}</div>
         {#if sublabel}
-          <div class="text-[12px] leading-none text-slate-700">{sublabel}</div>
+          <div class="text-[12px] leading-none text-slate-700">{tr(sublabel)}</div>
         {/if}
       </div>
     {:else}
@@ -85,10 +87,10 @@
         class="absolute inset-x-0 bottom-0 z-[2] flex flex-col items-center justify-center gap-6 px-10 py-8 text-center"
         style={`height:${filledHeightPercent}%`}
       >
-        <div class="text-[12px] leading-none text-slate-700">{label}</div>
+        <div class="text-[12px] leading-none text-slate-700">{tr(label)}</div>
         <div class="text-[18px] leading-[1.1] ff-bold text-slate-900">{value}</div>
         {#if sublabel}
-          <div class="text-[12px] leading-none text-slate-700">{sublabel}</div>
+          <div class="text-[12px] leading-none text-slate-700">{tr(sublabel)}</div>
         {/if}
       </div>
     {/if}

@@ -3,7 +3,7 @@ import { POST_XMLHR } from '$libs/http.svelte';
 import { onDestroy, untrack } from 'svelte';
 import { Notify, fileToImage } from '$libs/helpers';
 import { Env } from '$core/env';
-import { imagesToUpload } from '$core/store.svelte';
+import { imagesToUpload, tr } from '$core/store.svelte';
 import { Agent } from '$components/agent/registry';
 
 export interface IImageInput {
@@ -273,7 +273,7 @@ $effect(() => {
       <div style="font-size: 2.4rem">
         <i class="icon-upload"></i>
       </div>
-      <div class="h5">Subir Imagen</div>
+      <div class="h5">{tr("Upload Image|Subir Imagen")}</div>
     </div>
   {/if}
 
@@ -296,7 +296,7 @@ $effect(() => {
     <div class="w-full h-full absolute card_image_layer{imageSrc.base64 ? ' s1' : ''}">
       {#if imageSrc.base64 && !hideFormUseMessage && !hideForm}
         <textarea class="w-full card_image_textarea"
-          rows={3} placeholder="Nombre..."
+          rows={3} placeholder={tr("Name...|Nombre...")}
           onblur={(ev) => {
             ev.stopPropagation();
             imageSrc.description = ev.currentTarget.value || '';
@@ -313,7 +313,7 @@ $effect(() => {
         <button class="bnr-1 _4 mr-12 {imageSrc.base64
             ? ''
             : 'card_image_layer_bn_close2'} card_image_btn"
-          aria-label="Eliminar imagen"
+          aria-label={tr("Delete image|Eliminar imagen")}
           onclick={(ev) => {
             ev.stopPropagation();
             if (onDelete) {
@@ -329,7 +329,7 @@ $effect(() => {
         </button>
         {#if imageSrc.base64 && !hideUploadButton}
           <button class="bnr-1 _5 card_image_btn"
-            aria-label="Subir imagen"
+            aria-label={tr("Upload image|Subir imagen")}
             onclick={(ev) => {
               ev.stopPropagation();
               uploadImage();
@@ -344,7 +344,7 @@ $effect(() => {
 
   {#if isConverting || progress > 0}
     <div class="w-full h-full absolute flex flex-col items-center justify-center card_image_layer_loading">
-      <div class="c-white h3 ff-bold">{isConverting ? 'Convirtiendo...' : 'Guardando...'}</div>
+      <div class="c-white h3 ff-bold">{isConverting ? tr('Converting...|Convirtiendo...') : tr('Saving...|Guardando...')}</div>
       {#if progress > 0}
         <div class="flex relative items-center justify-center h-22 lh-10 w-[calc(100%-16px)] left-0 right-0 mt-8 _8 mr-8 ml-9 p-2">
           <div class="absolute _9 left-2 h-18"

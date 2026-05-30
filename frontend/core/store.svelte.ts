@@ -1,8 +1,8 @@
-import { SvelteMap } from 'svelte/reactivity';
-import type { IMenuRecord, IModule } from '$core/types/modules';
-import { LocalStorage, Env, browser } from './env';
-import type { IImageResult } from './types/common';
 import { goto } from '$app/navigation';
+import type { IMenuRecord, IModule } from '$core/types/modules';
+import { SvelteMap } from 'svelte/reactivity';
+import { Env, browser } from './env';
+import type { IImageResult } from './types/common';
 
 export const getDeviceType = () => {
   let view = 1 // Desktop
@@ -11,6 +11,32 @@ export const getDeviceType = () => {
     view = 3 /* Mobile */
   } else if (window.innerWidth < 1140) { view = 2 /* Tablet */ }
   return view
+}
+
+// 1 = Spanish, 2 = English
+export type ILanguaje = 1 | 2
+const LANGUAJE_STORAGE_KEY = "genix_languaje"
+
+const getStoredLanguaje = (): ILanguaje => {
+  if(!browser){ return 1 }
+  return localStorage.getItem(LANGUAJE_STORAGE_KEY) === "2" ? 2 : 1
+}
+
+// Resolves a "english|spanish" string for the active languaje.
+// parts[0] = English, parts[1] = Spanish. Text without a pipe is returned as-is.
+// Non-string values (numbers, undefined, etc.) are returned untouched so the
+// helper is safe to wrap around any rendered value (e.g. table headers).
+export function tr<V>(text: V, languaje?: ILanguaje): V {
+  const lang = languaje ?? Core.languaje
+  if(typeof text !== "string" || !text.includes("|")){ return text }
+  const parts = text.split("|")
+  const idx = lang === 2 ? 0 : 1
+  return ((parts[idx] ?? parts[0]).trim() as V)
+}
+
+export const setLanguaje = (languaje: ILanguaje) => {
+  Core.languaje = languaje
+  if(browser){ localStorage.setItem(LANGUAJE_STORAGE_KEY, String(languaje)) }
 }
 
 export interface ITopSearchLayer {
@@ -36,7 +62,9 @@ export const Core = $state({
   module: { menus: [] as IMenuRecord[] } as IModule,
   openSearchLayer: 0 as number,
   deviceType: getDeviceType() as number,
-  mobileMenuOpen: 0 as number,
+	mobileMenuOpen: 0 as number,
+	// 1 = Spanish, 2 = English
+  languaje: getStoredLanguaje() as ILanguaje,
   // Keep layout-critical layer width in reactive global state so UI runes can subscribe to it.
   sideLayerSize: 0 as number,
   useTopMinimalMenu: false as boolean,

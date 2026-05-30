@@ -4,6 +4,7 @@ import { parseSVG } from '$libs/helpers';
 import angleSvg from '$components/assets/angle.svg?raw';
 import { Env } from '$core/env';
 import { Agent } from '$components/agent/registry';
+import { tr } from '$core/store.svelte';
 
   interface Props {
     /** Button text or content */
@@ -288,9 +289,9 @@ import { Agent } from '$components/agent/registry';
       onclick={toggleLayer}
       class="{(isOpen ? buttonClassOnShow : buttonClass) || buttonClass || 'bx-purple min-w-40'}"
       type="button"
-      aria-label={label || buttonText || undefined}
+      aria-label={tr(label || buttonText) || undefined}
     >
-      {buttonText}
+      {tr(buttonText)}
       {#if (isOpen ? iconOnShow : icon) || icon}
         <i class={isOpen ? (iconOnShow || icon) : icon}></i>
       {/if}

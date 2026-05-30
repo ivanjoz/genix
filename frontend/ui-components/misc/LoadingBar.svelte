@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { tr } from '$core/store.svelte';
+
   let {
     css = '',
     label = '',
@@ -10,7 +12,7 @@
 
 <div class={`loading-bar-wrapper ${css}`.trim()}>
   {#if label}
-    <span class="loading-bar-label ff-semibold">{label}</span>
+    <span class="loading-bar-label ff-semibold">{tr(label)}</span>
   {/if}
   <span class="loader"></span>
 </div>

@@ -12,7 +12,7 @@ import Input from '$components/form/Input.svelte';
 
 <div class="grid grid-cols-1 gap-8 p-2 md:grid-cols-2">
   <div class="mt-4"></div>
-  <Input saveOn={form} css="mb-2" save="usuario" label="Usuario"/>
-  <Input saveOn={form} css="mb-2" type="password" save="password" label="Password"/>
+  <Input saveOn={form} css="mb-2" save="usuario" label="User|Usuario"/>
+  <Input saveOn={form} css="mb-2" type="password" save="password" label="Password|Password"/>
 
 </div>

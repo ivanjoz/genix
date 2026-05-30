@@ -1,5 +1,5 @@
 <script lang="ts" generics="T">
-import { Core } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
 import { Env } from '$core/env';
 import { Agent } from '$components/agent/registry';
 
@@ -101,9 +101,9 @@ import { Agent } from '$components/agent/registry';
         <span class="mr-2">{opt.icon}</span>
       {/if}
       {#if words.length === 1}
-        <span>{words[0]}</span>
+        <span>{tr(words[0])}</span>
       {:else}
-        <span>{words[0]}<br/>{words[1]}</span>
+        <span>{tr(words[0])}<br/>{tr(words[1])}</span>
       {/if}
     </button>
   {/each}

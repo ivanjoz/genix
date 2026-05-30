@@ -1,5 +1,6 @@
 <script lang="ts" generics="TItem">
   import { onDestroy, onMount, tick, untrack, type Snippet } from 'svelte'
+  import { tr } from '$core/store.svelte'
 
   interface VirtualCardsProps<TItem> {
     items: TItem[]
@@ -27,7 +28,7 @@
     rowGapPx = 12,
     columnGapPx = 12,
     useInnerPadding = false,
-    emptyMessage = 'No se encontraron registros.',
+    emptyMessage = 'No records found.|No se encontraron registros.',
     children,
   }: VirtualCardsProps<TItem> = $props()
 
@@ -453,7 +454,7 @@
 >
   {#if items.length === 0}
     <div class="virtual-cards-empty-message">
-      {emptyMessage}
+      {tr(emptyMessage)}
     </div>
   {:else}
     <div

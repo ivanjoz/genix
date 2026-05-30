@@ -2,6 +2,7 @@
     import { untrack } from 'svelte';
     import { Env } from "$core/env";
     import { Agent } from "$components/agent/registry";
+    import { tr } from "$core/store.svelte";
 
   const {
 		 saveOn = $bindable(), save, css, label, useNumber
@@ -56,7 +57,7 @@
   class="flex items-center {css}">
   <button class="flex mr-4 pt-1 items-center p-0 lh-10 justify-center rounded-[4px] shrink-0 w-28 h-26 _1"
     class:_2={isSelected}
-    aria-label="{label as string}"
+    aria-label="{tr(label as string)}"
     onclick={ev => {
       onSelect()
     }}
@@ -66,7 +67,7 @@
     {/if}
   </button>
   <!-- svelte-ignore a11y_label_has_associated_control -->
-  <label>{label as string}</label>
+  <label>{tr(label as string)}</label>
 </div>
 
 <style>

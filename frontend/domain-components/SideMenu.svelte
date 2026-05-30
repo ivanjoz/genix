@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { Core } from '$core/store.svelte';
+	import { Core, tr } from '$core/store.svelte';
 	import { canUserAccessRoute } from '$core/security';
 	import type { IMenuRecord, IModule } from '$core/types/modules';
 
@@ -176,6 +176,7 @@
 			{@const isOpen = menuOpen[0] === menu.id}
 			{@const optionsCount = menu.options?.length || 0}
 			{@const menuHeight = isOpen ? `${optionsCount * 38 + 48}px` : '48px'}
+			{@const menuName = tr(menu.name, Core.languaje)}
 
 			<div class="overflow-hidden transition-all duration-400 mb-1"
 				style="height: {menuHeight}"
@@ -191,11 +192,11 @@
 					<div class="flex items-center flex-1 min-w-0 whitespace-nowrap">
 						<!-- Minimized view - show only minName -->
 						<span class="menu-minimized font-mono font-semibold ml-1">
-							{(menu.minName || menu.name.substring(0, 3)).toUpperCase()}
+							{(menu.minName || menuName.substring(0, 3)).toUpperCase()}
 						</span>
 						<!-- Expanded view - show full name -->
 						<span class="menu-expanded font-mono font-semibold ml-1 tracking-wider">
-							{menu.name.toUpperCase()}
+							{menuName.toUpperCase()}
 						</span>
 					</div>
 
@@ -215,6 +216,7 @@
 					<div class="transition-all duration-200">
 						{#each menu.options as option}
 							{@const isActive = option.route === currentPathname}
+							{@const optionName = tr(option.name, Core.languaje)}
 							<button class="submenu-option w-full flex items-center px-0 py-10 relative
 								hover:bg-indigo-600/20 transition-all duration-150
 								border-l-2 border-transparent
@@ -225,7 +227,7 @@
 								<div class="option-minimized flex w-full">
 									<i class="{option.icon || "icon-box"} mr-2"></i>
 									<div class="font-mono">
-										{option.minName || option.name.substring(0, 2)}
+										{option.minName || optionName.substring(0, 2)}
 									</div>
 								</div>
 
@@ -233,7 +235,7 @@
 								<div class="option-expanded flex w-full">
 									<i class="{option.icon || "icon-box"} mr-2"></i>
 									<div class="font-mono">
-										{#each option.name.split(' ') as word}
+										{#each optionName.split(' ') as word}
 											<span class="mr-4">{word}</span>
 										{/each}
 									</div>
@@ -281,13 +283,14 @@
 		<div class="mobile-menu-content">
 			{#each filteredMenus as menu}
 				{@const isOpen = menuOpen[0] === menu.id}
+				{@const menuName = tr(menu.name, Core.languaje)}
 
 				<div class="mobile-menu-group">
 					<button
 						class="mobile-menu-group-button {isOpen ? 'is-open' : ''}"
 						onclick={() => toggleMenu(menu.id || 0)}
 					>
-						<span class="menu-group-title">{menu.name.toUpperCase()}</span>
+						<span class="menu-group-title">{menuName.toUpperCase()}</span>
 						{#if menu.options && menu.options.length > 0}
 							<span class="menu-group-chevron" class:rotated={isOpen}>
 								<i class="icon-down-open-1"></i>
@@ -299,6 +302,7 @@
 						<div class="mobile-menu-options-grid">
 							{#each menu.options as option}
 								{@const isActive = option.route === currentPathname}
+								{@const optionName = tr(option.name, Core.languaje)}
 								<button
 									class="mobile-menu-option {isActive ? 'is-active' : ''}"
 									onclick={(e) => navigateTo(option.route || '/', menu.id || 0, e.currentTarget)}
@@ -311,7 +315,7 @@
 									{#if option.icon}
 										<i class="{option.icon} option-icon"></i>
 									{/if}
-									<span class="option-text">{option.name}</span>
+									<span class="option-text">{optionName}</span>
 								</button>
 							{/each}
 						</div>

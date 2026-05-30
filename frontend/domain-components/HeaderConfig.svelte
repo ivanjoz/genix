@@ -3,10 +3,11 @@ import { browser } from '$app/environment';
 import { onMount } from 'svelte';
 import Input from '$components/form/Input.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
+import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
 import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import TableGrid from '$components/vTable/TableGrid.svelte';
 import { accessHelper } from '$core/security';
-import { Core } from '$core/store.svelte';
+import { Core, setLanguaje, type ILanguaje } from '$core/store.svelte';
 import { Env } from '$core/env';
 import type { ICacheDebugRow } from '$libs/cache/cache-debug.types';
 import type { ITableColumn } from '$components/vTable/types';
@@ -31,6 +32,10 @@ import {
 
   const options = [
     { id: 1, name: "Usuario" }, { id: 2, name: "Config." }, { id: 3, name: "Data" }
+  ]
+  // 1 = Spanish, 2 = English (see Core.languaje)
+  const languajeOptions = [
+    { id: 1, name: "Español" }, { id: 2, name: "English" }
   ]
   let selected = $state(1)
   const agentModelsService = new AgentModelsService()
@@ -339,6 +344,19 @@ import {
       <i class="icon-list"></i>
       <span>Reqs. Logs</span>
     </button>
+  </div>
+  <div class="w-full mt-2">
+    <div class="ff-semibold text-[15px] text-slate-600 mb-6">Idioma / Language</div>
+    <CheckboxOptions
+      options={languajeOptions}
+      keyId="id"
+      keyName="name"
+      type="single"
+      useButtons={true}
+      saveOn={Core}
+      save="languaje"
+      onChange={(ids) => setLanguaje((Number(ids[0]) === 2 ? 2 : 1) as ILanguaje)}
+    />
   </div>
 {/if}
 {#if selected === 3}

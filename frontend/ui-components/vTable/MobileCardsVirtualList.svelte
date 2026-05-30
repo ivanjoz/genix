@@ -12,6 +12,7 @@
   } from '$components/vTable/agentContext';
   import { Agent } from '$components/agent/registry';
   import { Env } from '$core/env';
+  import { tr } from '$core/store.svelte';
   import { highlString, splitTwoStrings } from '$libs/helpers';
   import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
   import { SvelteMap } from 'svelte/reactivity';
@@ -74,7 +75,7 @@
     estimateSize = 180,
     overscan = 6,
     nonVirtual = false,
-    emptyMessage = 'No se encontraron registros.',
+    emptyMessage = 'No records found.|No se encontraron registros.',
     loadingMessage = 'Loading...',
     filterText = '',
     highlightPlainText = false,
@@ -155,9 +156,9 @@
 
   function getLabelContent(cell: TCell): string {
     if (typeof cell.label === 'function') {
-      return cell.label();
+      return tr(cell.label());
     }
-    return cell.label || '';
+    return tr(cell.label || '');
   }
 
   function isRowSelected(record: TRecord): boolean {
@@ -313,7 +314,7 @@
 >
 {#if data.length === 0}
   <div class="mobile-cards-empty-message">
-    {emptyMessage}
+    {tr(emptyMessage)}
   </div>
 {:else}
   {#snippet cardItem(sourceRecord: TRecord, sourceIndex: number)}
@@ -340,14 +341,14 @@
       >
         {#if !resolvedRecord}
           <div class="mobile-cards-loading-message" style="height: {estimateSize}px;">
-            {loadingMessage}
+            {tr(loadingMessage)}
           </div>
         {:else}
           {#if buttonDeleteHandler && (!buttonDeleteIf || buttonDeleteIf(resolvedRecord, recordIndex))}
             <button
               type="button"
               class="mobile-cards-delete-button"
-              aria-label="eliminar"
+              aria-label={tr("delete|eliminar")}
               onclick={(event) => {
                 event.stopPropagation();
                 logInteraction('buttonDeleteHandler', { rowIndex: recordIndex, record: resolvedRecord });
@@ -461,13 +462,13 @@
                   </div>
                 {:else if cell.labelTop}
                   <div class="mobile-cards-item mobile-cards-item-compact mobile-cards-item-vertical {cell.itemCss || 'col-span-full'}">
-                    <div class="mobile-cards-label-top {cell.labelCss || ''}">{cell.labelTop}</div>
+                    <div class="mobile-cards-label-top {cell.labelCss || ''}">{tr(cell.labelTop)}</div>
                     <div class="mobile-cards-content-wrapper">
                       {#if cell.icon}
                         <i class="icon-{cell.icon} {cell.iconCss || ''}"></i>
                       {/if}
                       {#if cell.labelLeft}
-                        <span class="mobile-cards-label-left {cell.labelCss || ''}">{cell.labelLeft}</span>
+                        <span class="mobile-cards-label-left {cell.labelCss || ''}">{tr(cell.labelLeft)}</span>
                       {/if}
                       {#if cell.elementLeft}
                         <div class="mobile-cards-side">
@@ -588,7 +589,7 @@
                       <i class="icon-{cell.icon} {cell.iconCss || ''}"></i>
                     {/if}
                     {#if cell.labelLeft}
-                      <span class="mobile-cards-label-left {cell.labelCss || ''}">{cell.labelLeft}</span>
+                      <span class="mobile-cards-label-left {cell.labelCss || ''}">{tr(cell.labelLeft)}</span>
                     {/if}
                     {#if cell.elementLeft}
                       <div class="mobile-cards-side">

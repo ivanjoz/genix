@@ -1,7 +1,7 @@
 <script lang="ts" generics="T,E">
     import { untrack } from "svelte";
 import SearchSelect from '$components/form/SearchSelect.svelte';
-import { WeakSearchRef } from '$core/store.svelte';
+import { WeakSearchRef, tr } from '$core/store.svelte';
 import { Env } from '$core/env';
 import { Agent } from '$components/agent/registry';
 
@@ -113,7 +113,7 @@ import { Agent } from '$components/agent/registry';
 
 <div data-id="SearchCard:{componentID}" class={css}>
   <SearchSelect options={options} keyId={keyId} keyName={keyName}
-    clearOnSelect={true} avoidIDs={selectedIDs} placeholder={label}
+    clearOnSelect={true} avoidIDs={selectedIDs} placeholder={tr(label)}
     css={"s1 "+inputCss} optionsCss={optionsCss}
     onChange={e => {
       if(!e){ return }
@@ -130,7 +130,7 @@ import { Agent } from '$components/agent/registry';
       <div data-id="Option:{componentID}:{id}" data-selected="true"
         class="m-2 px-8 min-w-56 h-32 lh-10 flex _3">
         { el[keyName] as string }
-        <button class="_4 absolute w-28 h-28 rounded right-2" aria-label="eliminar"
+        <button class="_4 absolute w-28 h-28 rounded right-2" aria-label={tr("delete|eliminar")}
           onclick={ev => {
             ev.stopPropagation()
             selectedIDs = selectedIDs.filter(x => x !== id)

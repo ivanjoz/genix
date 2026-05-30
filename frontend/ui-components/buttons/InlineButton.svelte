@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { tr } from '$core/store.svelte';
+
   type InlineButtonMode = 'default' | 'checked';
   type InlineButtonColor = 'blue' | 'green';
 
@@ -29,7 +31,7 @@
 </script>
 
 <span class={`${baseCss} ${colorCssByName[color][mode]} ${css}`.trim()}>
-  {label}
+  {tr(label)}
   {#if mode === 'checked'}
     <i class="icon-ok absolute -bottom-6 -right-6 text-12 leading-none"></i>
   {/if}

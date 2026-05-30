@@ -5,6 +5,7 @@ import type { ElementAST } from '$components/misc/Renderer.svelte';
 import { persistFieldValue } from '$libs/helpers';
     import { Env } from "$core/env";
     import { Agent } from "$components/agent/registry";
+    import { tr } from "$core/store.svelte";
 
     export interface IInput<T> {
         id?: number;
@@ -219,7 +220,7 @@ import { persistFieldValue } from '$libs/helpers';
     {#if label}
         <div class={s1.input_lab_cell_left}><div></div></div>
         <div class={s1.input_lab}>
-            {label}{@html iconValid() || ""}
+            {tr(label)}{@html iconValid() || ""}
         </div>
         <div class={s1.input_lab_cell_right}><div></div></div>
         <div class={s1.input_shadow_layer}><div></div></div>
@@ -232,7 +233,7 @@ import { persistFieldValue } from '$libs/helpers';
             <textarea
                 class={`w-full ${s1.input_inp} ${inputCss || ""}`}
                 bind:value={inputValue}
-                placeholder={placeholder || ""}
+                placeholder={tr(placeholder || "")}
                 {disabled}
                 {rows}
                 onkeyup={(ev) => {
@@ -256,7 +257,7 @@ import { persistFieldValue } from '$libs/helpers';
                 class="w-full {s1.input_inp} {inputCss || ''}"
                 bind:value={inputValue}
                 type={type || "search"}
-                placeholder={placeholder || ""}
+                placeholder={tr(placeholder || "")}
                 {disabled}
                 onkeyup={(ev) => {
                     onKeyUp(ev);

@@ -2,6 +2,7 @@
 import pdfFileIconRaw from '$components/svg/pdf-icon.svg?raw';
 import excelFileIconRaw from '$components/svg/excel-icon.svg?raw';
 import { Notify, parseSVG } from '$libs/helpers';
+import { tr } from '$core/store.svelte';
 
 interface IFileUploadSelectorProps {
   onChange?: (file?: File, isRemoved?: boolean) => void;
@@ -18,7 +19,7 @@ let {
   accept = '',
   extensions = [],
   disabled = false,
-  buttonLabel = 'Subir Archivo'
+  buttonLabel = 'Upload File|Subir Archivo'
 }: IFileUploadSelectorProps = $props();
 
 let hiddenFileInputElement: HTMLInputElement | undefined;
@@ -130,14 +131,14 @@ const clearSelectedFile = () => {
     {#if selectedFile}
       {@const selectedFileTypeIcon = resolveFileTypeIcon(selectedFileExtension)}
       {#if selectedFileTypeIcon}
-        <img src={selectedFileTypeIcon} alt="Tipo de archivo" class="h-16 w-16 shrink-0 object-contain" />
+        <img src={selectedFileTypeIcon} alt={tr("File type|Tipo de archivo")} class="h-16 w-16 shrink-0 object-contain" />
       {:else}
         <i class="icon-upload text-[#3c4650]"></i>
       {/if}
       <span class="truncate fs13 leading-[1] text-[#2f3a44]">{selectedFile.name}</span>
     {:else}
       <i class="icon-upload text-[#3c4650]"></i>
-      <span class="fs13 leading-[1] text-[#2f3a44]">{buttonLabel}</span>
+      <span class="fs13 leading-[1] text-[#2f3a44]">{tr(buttonLabel)}</span>
     {/if}
   </button>
 
@@ -145,7 +146,7 @@ const clearSelectedFile = () => {
     <button
       type="button"
       class="flex h-30 w-30 shrink-0 items-center justify-center rounded-[50%] border border-[#ffcfcf] bg-[#fff3f3] text-[#d72828] transition-colors duration-200 hover:border-[#d63232] hover:bg-[#e54545] hover:text-white"
-      aria-label="Quitar archivo"
+      aria-label={tr("Remove file|Quitar archivo")}
       onclick={clearSelectedFile}
     >
       <i class="icon-cancel text-[15px]"></i>

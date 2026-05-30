@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Core } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
 import { untrack } from 'svelte';
 import {
   buildCalendarWeeks,
@@ -228,7 +228,7 @@ $effect(() => {
         bind:value={typedValue}
         type="text"
         class="h-38 min-w-0 grow ff-mono _4"
-        placeholder={Core.showMobileDateLayer?.placeholder || "DD-MM-YYYY"}
+        placeholder={tr(Core.showMobileDateLayer?.placeholder || "DD-MM-YYYY")}
         onkeydown={(ev) => {
           if (!allowedDateInputKeys.has(ev.key)) {
             ev.preventDefault()
@@ -252,7 +252,7 @@ $effect(() => {
       <div class="ml-8 flex shrink-0 items-center gap-8">
         <button
           class="h-40 w-40 shrink-0 _5 _5b"
-          aria-label="Limpiar date"
+          aria-label={tr("Clear date|Limpiar fecha")}
           onclick={() => {
             clearSelectedDate()
           }}
@@ -261,7 +261,7 @@ $effect(() => {
         </button>
         <button
           class="h-40 w-40 shrink-0 _5"
-          aria-label="Cerrar selector de date"
+          aria-label={tr("Close date selector|Cerrar selector de fecha")}
           onclick={() => {
             commitTypedDate()
             closeLayer()
@@ -283,7 +283,7 @@ $effect(() => {
         <button
           class="_7 h-38 w-38"
           type="button"
-          aria-label="Año anterior"
+          aria-label={tr("Previous year|Año anterior")}
           onclick={() => {
             changeVisibleYear(-1)
           }}
@@ -301,7 +301,7 @@ $effect(() => {
         <button
           class="_7 h-38 w-38"
           type="button"
-          aria-label="Año siguiente"
+          aria-label={tr("Next year|Año siguiente")}
           onclick={() => {
             changeVisibleYear(1)
           }}

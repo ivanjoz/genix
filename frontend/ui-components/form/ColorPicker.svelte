@@ -1,5 +1,5 @@
 <script lang="ts" generics="T">
-import { Core } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
 import ColorPicker from 'svelte-awesome-color-picker';
 import s1 from '../components.module.css';
 
@@ -69,7 +69,7 @@ import s1 from '../components.module.css';
   {#if label}
   <div class={s1.input_lab_cell_left}><div></div></div>
     <div class={s1.input_lab}>
-      {label}
+      {tr(label)}
     </div>
     <div class={s1.input_lab_cell_right}><div></div></div>
   {/if}

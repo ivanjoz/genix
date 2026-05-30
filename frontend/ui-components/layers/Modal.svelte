@@ -3,7 +3,7 @@
 	import Portal from "$components/popover2/Portal.svelte";
 	import OptionsStrip from "$components/navigation/OptionsStrip.svelte";
 	import FileUploadSelector from "$components/files/FileUploadSelector.svelte";
-	import { closeModal, openModals } from "$core/store.svelte";
+	import { closeModal, openModals, tr } from "$core/store.svelte";
 	import { Env } from "$core/env";
 	import { Agent } from "$components/agent/registry";
 
@@ -50,7 +50,7 @@
 	let modalDiv: HTMLDivElement | undefined = $state();
 	let selectedImportFile = $state<File | undefined>(undefined);
 	let selectedImportView = $state(1);
-	const importViewOptions = [[1, "Registros"], [2, "Errores"]] as [number, string][];
+	const importViewOptions = [[1, "Records|Registros"], [2, "Errors|Errores"]] as [number, string][];
 
 	// Watch for changes in openModals array
 	$effect(() => {
@@ -124,7 +124,7 @@
 		if (saveButtonLabel) {
 			return saveButtonLabel;
 		}
-		return isEdit ? "Actualizar" : "Guardar";
+		return isEdit ? "Update|Actualizar" : "Save|Guardar";
 	});
 
 	const handleImportFileChange = (file?: File, isRemoved?: boolean) => {
@@ -188,7 +188,7 @@
 						{#if isSnippet(title)}
 							{@render title()}
 						{:else}
-							{title}
+							{tr(title)}
 						{/if}
 					</div>
 					<div class="flex items-center">
@@ -196,7 +196,7 @@
 							<button
 								class="bx-red mr-10 lh-10"
 								onclick={handleDelete}
-								aria-label="Eliminar"
+								aria-label={tr("Delete|Eliminar")}
 							>
 								<i class="icon-trash"></i>
 							</button>
@@ -205,16 +205,16 @@
 							<button
 								class="bx-blue mr-10 lh-10"
 								onclick={handleSave}
-								aria-label={saveLabel}
+								aria-label={tr(saveLabel)}
 							>
 								<i class={saveIcon || "icon-floppy"}></i>
-								<span class="_5">{saveLabel}</span>
+								<span class="_5">{tr(saveLabel)}</span>
 							</button>
 						{/if}
 						<button
 							class="bx-yellow h3 lh-10 -mr-2"
 							onclick={handleClose}
-							aria-label="Cerrar"
+							aria-label={tr("Close|Cerrar")}
 						>
 							<i class="icon-cancel"></i>
 						</button>
@@ -250,12 +250,12 @@
 								<button
 									class="bx-red absolute right-6 top-6 lh-10"
 									onclick={closeErrorsView}
-									aria-label="Cerrar errores"
+									aria-label={tr("Close errors|Cerrar errores")}
 								>
 									<i class="icon-cancel"></i>
 								</button>
 								<div class="ff-bold text-red-700 mb-2">
-									Validaciones de importación
+									{tr("Import validations|Validaciones de importación")}
 								</div>
 								{#if fileErrors.length > 0}
 									<div class="text-red-700 text-sm max-h-200 overflow-y-auto">
@@ -265,7 +265,7 @@
 									</div>
 								{:else}
 									<div class="text-red-700 text-sm">
-										No hay errores para mostrar.
+										{tr("No errors to display.|No hay errores para mostrar.")}
 									</div>
 								{/if}
 							</div>

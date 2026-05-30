@@ -18,7 +18,7 @@
 </script>
 
 <script lang="ts" generics="T">
-  import { Core } from "$core/store.svelte";
+  import { Core, tr } from "$core/store.svelte";
   import { untrack } from "svelte";
   import Popover2 from "$components/popover2/Popover2.svelte";
   import {
@@ -348,7 +348,7 @@
 {#if label && !useInlineStyle}
   <div data-id="DateInput:{componentID}" data-value={agentDataValue} data-label={agentDataLabel} data-type="other" class={cN}>
     <div class={s1.input_lab_cell_left}><div></div></div>
-    <div class={s1.input_lab}>{label}</div>
+    <div class={s1.input_lab}>{tr(label)}</div>
     <div class={s1.input_lab_cell_right}><div></div></div>
     <div class={s1.input_shadow_layer}>
       <div></div>
@@ -363,7 +363,7 @@
           type="text"
           class="w-full {s1.input_inp} ff-mono {inputCss || ""}"
           value={inputValue}
-          placeholder={placeholder}
+          placeholder={tr(placeholder)}
           disabled={disabled}
           onfocus={handleFocus}
           onblur={handleBlur}
@@ -388,7 +388,7 @@
           }}
         >
           <div class={`w-full ${inputValue ? "" : "_mobile-placeholder"}`}>
-            {inputValue || placeholder}
+            {inputValue || tr(placeholder)}
           </div>
         </div>
       {/if}
@@ -407,7 +407,7 @@
           type="text"
           class={(useInlineStyle ? "di-bare-input ff-mono w-full h-full" : `w-full ${s1.input_inp} ff-mono`) + (inputCss ? " " + inputCss : "")}
           value={inputValue}
-          placeholder={placeholder}
+          placeholder={tr(placeholder)}
           disabled={disabled}
           onfocus={handleFocus}
           onblur={handleBlur}
@@ -432,7 +432,7 @@
           }}
         >
           <div class={`w-full ${inputValue ? "" : "_mobile-placeholder"}`}>
-            {inputValue || placeholder}
+            {inputValue || tr(placeholder)}
           </div>
         </div>
       {/if}

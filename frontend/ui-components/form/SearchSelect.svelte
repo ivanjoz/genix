@@ -1,7 +1,7 @@
 <script lang="ts" generics="T,E">
 import { highlString, persistFieldValue, readFieldValue, wordInclude } from '$libs/helpers';
 import { throttle } from '$libs/helpers';
-import { Core } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
 import type { Snippet } from 'svelte';
   import s1 from "../components.module.css";
   import SvelteVirtualList from "@humanspeak/svelte-virtual-list";
@@ -408,7 +408,7 @@ import type { Snippet } from 'svelte';
   {#if label}
     <div class={s1.input_lab_cell_left}><div></div></div>
     <div class={s1.input_lab}>
-      {label}{@html iconValid() || ""}
+      {tr(label)}{@html iconValid() || ""}
     </div>
     <div class={s1.input_lab_cell_right}><div></div></div>
     <div class={s1.input_shadow_layer}><div></div></div>
@@ -427,7 +427,7 @@ import type { Snippet } from 'svelte';
           ev.stopPropagation();
           onKeyDown(ev);
         }}
-        placeholder={showLoading ? "" : placeholder || ":: seleccione ::"}
+        placeholder={showLoading ? "" : tr(placeholder || ":: seleccione ::")}
         disabled={isDisabled || isMobile}
         onfocus={(ev) => {
           ev.stopPropagation();
@@ -485,7 +485,7 @@ import type { Snippet } from 'svelte';
             </div>
           {:else}
             <!-- Apply the same single-line constraint to placeholder text. -->
-            <div class="fs15 mt-2 w-full truncate _10">{placeholder||""}</div>
+            <div class="fs15 mt-2 w-full truncate _10">{tr(placeholder||"")}</div>
           {/if}
         </div>
       </div>
@@ -495,7 +495,7 @@ import type { Snippet } from 'svelte';
     {/if}
   </div>
   {#if showLoading}
-    <div>Cargando...</div>
+    <div>{tr("Loading...|Cargando...")}</div>
   {/if}
   {#if !isDisabled}
     <div class={`absolute bottom-8 right-6 pointer-events-none select-arrow ${arrowDirectionClass}`}>

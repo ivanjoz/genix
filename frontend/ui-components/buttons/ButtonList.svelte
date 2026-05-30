@@ -2,6 +2,7 @@
   import { parseSVG } from '$libs/helpers';
   import angleSvg from '$components/assets/angle.svg?raw';
   import Button from './Button.svelte';
+  import { tr } from '$core/store.svelte';
 
   interface ActionItem {
     id: number;
@@ -27,7 +28,7 @@
 <div class="bl-wrapper">
   <button class="bx-purple {css}" type="button">
     {#if icon}<i class={icon}></i>{/if}
-    {#if name}<span>{name}</span>{/if}
+    {#if name}<span>{tr(name)}</span>{/if}
   </button>
 
   <!-- Dropdown: hidden by default, shown on parent hover via CSS -->

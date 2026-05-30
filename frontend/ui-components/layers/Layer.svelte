@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import { tick, untrack } from 'svelte'
-import { Core } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
 import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import ButtonList from '$components/buttons/ButtonList.svelte';
 import Button from '$components/buttons/Button.svelte';
@@ -198,7 +198,7 @@ import { Agent } from '$components/agent/registry';
   >
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-8 overflow-hidden mr-8">
-        <div class="overflow-hidden text-nowrap {titleCss}">{title}</div>
+        <div class="overflow-hidden text-nowrap {titleCss}">{tr(title)}</div>
         {#if titleSide}
           <div class="shrink-0">
             {@render titleSide()}
@@ -217,15 +217,15 @@ import { Agent } from '$components/agent/registry';
           </div>
         {/if}
         {#if onDelete}
-          <Button color="red" icon="icon-trash" label="Eliminar" css="mr-10 lh-10"
+          <Button color="red" icon="icon-trash" label={tr("Delete|Eliminar")} css="mr-10 lh-10"
             onClick={onDelete} />
         {/if}
         {#if onSave}
           <Button color="blue" icon={saveButtonIcon || 'icon-floppy'}
-            name={saveButtonName || 'Guardar'} css="mr-10 lh-10"
-            label="Guardar" onClick={onSave} />
+            name={tr(saveButtonName || 'Guardar')} css="mr-10 lh-10"
+            label={tr("Save|Guardar")} onClick={onSave} />
         {/if}
-        <Button color="yellow" icon="icon-cancel" label="close" onClick={() => {
+        <Button color="yellow" icon="icon-cancel" label={tr("Close|Cerrar")} onClick={() => {
           closeLayer()
           if (onClose) {
             if (Core.deviceType === 3) {

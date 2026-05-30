@@ -7,6 +7,7 @@
   import { splitTwoStrings } from '$libs/helpers';
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
   import { Env } from '$core/env';
+  import { tr } from '$core/store.svelte';
   import { Agent } from '$components/agent/registry';
   import {
     setVTableAgentContext,
@@ -73,7 +74,7 @@
     rowCss = '',
     cellCss = '',
     mobileCardCss = '',
-    emptyMessage = 'No se encontraron registros.',
+    emptyMessage = 'No records found.|No se encontraron registros.',
     debug = false,
     onRowClick,
     selectedRowId,
@@ -195,9 +196,9 @@
   };
 
   const getHeaderContent = (columnDefinition: ITableColumn<TRecord>): string => {
-    return typeof columnDefinition.header === 'function'
+    return tr(typeof columnDefinition.header === 'function'
       ? columnDefinition.header()
-      : columnDefinition.header;
+      : columnDefinition.header);
   };
 
   const isSelectedRow = (rowRecord: TRecord, rowIndex: number): boolean => {
@@ -435,7 +436,7 @@
       </div>
 
       {#if data.length === 0}
-        <div class="table-grid-empty">{emptyMessage}</div>
+        <div class="table-grid-empty">{tr(emptyMessage)}</div>
       {:else}
         <div class="table-grid-edge-spacer" aria-hidden="true"></div>
         {#each data as rowRecord, rowIndex (getRowId ? getRowId(rowRecord, rowIndex) : rowIndex)}

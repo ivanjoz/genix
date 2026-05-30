@@ -2,6 +2,7 @@
   // Reusable filter text input with leading icon and per-instance debounce.
   import { Env } from '$core/env'
   import { Agent } from '$components/agent/registry'
+  import { tr } from '$core/store.svelte'
 
   let {
     css = '',
@@ -69,8 +70,8 @@
     class="w-full pl-34 pr-12 py-7 bg-transparent text-sm leading-none focus:outline-none placeholder:text-sm"
     autocomplete="off"
     type="text"
-    aria-label={label || placeholder || undefined}
-    {placeholder}
+    aria-label={tr(label || placeholder || undefined)}
+    placeholder={tr(placeholder)}
     bind:value={inputValue}
     onkeyup={handleKeyUp}
   />

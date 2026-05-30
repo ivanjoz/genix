@@ -8,7 +8,7 @@
 import arrow2Svg from '$components/assets/flecha_fin.svg?raw';
 import arrow1Svg from '$components/assets/flecha_inicio.svg?raw';
 import { cn, parseSVG } from '$libs/helpers';
-import { Core } from '$core/store.svelte'
+import { Core, tr } from '$core/store.svelte'
 import { Env } from '$core/env';
 import { Agent } from '$components/agent/registry';
 
@@ -74,7 +74,7 @@ import { Agent } from '$components/agent/registry';
         {#if optionRender}
           {@render optionRender(option)}
         {:else}
-          <div class="ff-semibold">{option.name}</div>
+          <div class="ff-semibold">{tr(option.name)}</div>
         {/if}
       </div>
       <img class="h-full card_arrow_svg" src={parseSVG(arrow2Svg)} alt="" />

@@ -2,7 +2,7 @@
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
   import SearchSelect from "$components/form/SearchSelect.svelte";
-  import { WeakSearchRef } from "$core/store.svelte";
+  import { WeakSearchRef, tr } from "$core/store.svelte";
   import { Env } from "$core/env";
   import { Agent } from "$components/agent/registry";
 
@@ -278,7 +278,7 @@
       keyName={leftKeyName}
       clearOnSelect={true}
       avoidIDs={leftSelectedIDs}
-      placeholder={leftLabel}
+      placeholder={tr(leftLabel)}
       css={`col-span-24 md:col-span-12 s1 ${leftInputCss || ""}`}
       optionsCss={leftOptionsCss}
       onChange={addLeftSelectedID}
@@ -289,7 +289,7 @@
       keyName={rightKeyName}
       clearOnSelect={true}
       avoidIDs={rightSelectedIDs}
-      placeholder={rightLabel}
+      placeholder={tr(rightLabel)}
       css={`col-span-24 md:col-span-12 s1 ${rightInputCss || ""}`}
       optionsCss={rightOptionsCss}
       onChange={addRightSelectedID}
@@ -298,7 +298,7 @@
 
   <div class={`p-4 min-h-40 _container ${cardCss}`}>
     {#if sharedLabel}
-      <div class="_shared-label">{sharedLabel}</div>
+      <div class="_shared-label">{tr(sharedLabel)}</div>
     {/if}
 
     <div class="flex flex-wrap">
@@ -312,7 +312,7 @@
             </span>
             <button
               class="_chip-remove absolute w-28 h-28 rounded right-2 top-2"
-              aria-label="eliminar"
+              aria-label={tr("delete|eliminar")}
               onclick={(event) => {
                 event.stopPropagation();
                 removeSelected();
@@ -327,7 +327,7 @@
             <span class="_chip-text">{getSelectedItemName(currentSelectedItem)}</span>
             <button
               class="_chip-remove absolute w-28 h-28 rounded right-2 top-2"
-              aria-label="eliminar"
+              aria-label={tr("delete|eliminar")}
               onclick={(event) => {
                 event.stopPropagation();
                 removeSelected();

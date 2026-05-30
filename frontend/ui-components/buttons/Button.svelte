@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Env } from '$core/env';
   import { Agent } from '$components/agent/registry';
+  import { tr } from '$core/store.svelte';
 
   type ButtonColor = 'blue' | 'green' | 'red' | 'orange' | 'yellow' | 'purple';
 
@@ -51,12 +52,12 @@
 
 <button
   data-id="Button:{componentID}"
-  aria-label={label}
+  aria-label={tr(label)}
   data-value={role}
   class={`${color ? `bx-${color}` : ''}${useCircle ? ' round' : ''} ${css}`.trim()}
   {disabled}
   onclick={triggerClick}
 >
   {#if icon}<i class={icon}></i>{/if}
-  {#if name}<span class={hideNameOnMobile ? 'hidden md:block' : ''}>{name}</span>{/if}
+  {#if name}<span class={hideNameOnMobile ? 'hidden md:block' : ''}>{tr(name)}</span>{/if}
 </button>

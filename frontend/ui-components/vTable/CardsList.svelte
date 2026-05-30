@@ -1,5 +1,6 @@
 <script lang="ts" generics="T">
   import { wordInclude } from '$libs/helpers';
+  import { tr } from '$core/store.svelte';
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
   import type {
     CardRendererSnippet,
@@ -47,7 +48,7 @@
     onRowClick,
     selected,
     isSelected,
-    emptyMessage = 'No se encontraron registros.',
+    emptyMessage = 'No records found.|No se encontraron registros.',
     cellRenderer,
     filterText,
     getFilterContent,
@@ -118,7 +119,7 @@
 >
   {#if filteredData.length === 0}
     <div class="cards-list-empty-message">
-      {emptyMessage}
+      {tr(emptyMessage)}
     </div>
   {:else}
     <MobileCardsVirtualList

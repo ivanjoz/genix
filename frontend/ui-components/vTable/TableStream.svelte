@@ -2,6 +2,7 @@
   import { SvelteMap } from 'svelte/reactivity';
   import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte';
   import { Env } from '$core/env';
+  import { tr } from '$core/store.svelte';
   import { Agent } from '$components/agent/registry';
   import type { ITableColumn } from './types';
 
@@ -28,7 +29,7 @@
     onRowClick,
     selected,
     isSelected,
-    emptyMessage = 'No se encontraron registros.'
+    emptyMessage = 'No records found.|No se encontraron registros.'
   }: TableStreamProps<T> = $props();
 
   let streamRecords = $state<T[]>([]);
@@ -55,9 +56,9 @@
   const getVisibleColumns = () => columns.filter((columnDefinition) => !columnDefinition.hidden);
 
   const getHeaderContent = (columnDefinition: ITableColumn<T>) => {
-    return typeof columnDefinition.header === 'function'
+    return tr(typeof columnDefinition.header === 'function'
       ? columnDefinition.header()
-      : columnDefinition.header;
+      : columnDefinition.header);
   };
 
   const getCellValue = (columnDefinition: ITableColumn<T>, rowRecord: T, rowIndex: number) => {
@@ -147,7 +148,7 @@
       <tbody>
         {#if streamRecords.length === 0}
           <tr>
-            <td colspan={Math.max(1, getVisibleColumns().length)} class="stream-empty">{emptyMessage}</td>
+            <td colspan={Math.max(1, getVisibleColumns().length)} class="stream-empty">{tr(emptyMessage)}</td>
           </tr>
         {:else}
           {#each streamRecords as rowRecord, rowIndex (`${rowIndex}_${rowVersions.get(rowIndex) || 0}`)}

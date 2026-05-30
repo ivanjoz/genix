@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tr } from '$core/store.svelte'
   import { Env } from '$core/env'
   import { Agent } from '$components/agent/registry'
 
@@ -42,7 +43,7 @@
   <button
     class="mobile-layer-backdrop"
     class:is-visible={show}
-    aria-label="Cerrar panel"
+    aria-label={tr("Close panel|Cerrar panel")}
     onclick={toggleLayer}
   ></button>
 
@@ -54,12 +55,12 @@
     <button
       class="mobile-layer-header"
       aria-expanded={show}
-      aria-label={show ? 'Ocultar panel' : 'Mostrar panel'}
+      aria-label={show ? tr('Hide panel|Ocultar panel') : tr('Show panel|Mostrar panel')}
       onclick={toggleLayer}
     >
       <div class="mobile-layer-handle"></div>
       <div class="mobile-layer-title-row">
-        <span class="mobile-layer-title">{title}</span>
+        <span class="mobile-layer-title">{tr(title)}</span>
         <i class={`icon-${show ? 'down-open' : 'up-open'} mobile-layer-icon`}></i>
       </div>
     </button>

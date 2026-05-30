@@ -4,7 +4,7 @@
     import { Agent } from '$components/agent/registry';
 
   const {
-		options, saveOn = $bindable(), save, keyId, keyName, css, type, useButtons = false
+		options, saveOn = $bindable(), save, keyId, keyName, css, type, useButtons = false, onChange
 	}: {
     saveOn?: T
 		save?: keyof T
@@ -14,6 +14,7 @@
     css?: string
     type?: "single" | "multiple"
     useButtons?: boolean
+    onChange?: (selected: (number|string)[]) => void
   } = $props();
 
   let optionsSelected: (number|string)[] = $state([])
@@ -41,6 +42,8 @@
         saveOn[save] = (optionsSelected[0] || undefined) as NonNullable<T>[keyof T]
       }
     }
+
+    onChange?.(optionsSelected)
   }
 
   let lastSaveOn: T | undefined

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Core } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
 import { highlString, wordInclude, throttle } from '$libs/helpers';
 import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 import { untrack } from 'svelte';
@@ -119,7 +119,7 @@ $effect(() => {
     </textarea>
     <div class="ml-8 flex shrink-0 items-center gap-8">
       {#if canClearSelection}
-        <button class="h-40 w-40 shrink-0 _5 _5b" aria-label="Limpiar selección"
+        <button class="h-40 w-40 shrink-0 _5 _5b" aria-label={tr("Clear selection|Limpiar selección")}
           onclick={() => {
             Core.showMobileSearchLayer?.onClear?.()
             Core.showMobileSearchLayer = null
@@ -128,7 +128,7 @@ $effect(() => {
           <i class="icon-ccw h1 _5c"></i>
         </button>
       {/if}
-      <button class="h-40 w-40 shrink-0 _5" aria-label="Cerrar selector"
+      <button class="h-40 w-40 shrink-0 _5" aria-label={tr("Close selector|Cerrar selector")}
         onclick={() => {
           Core.showMobileSearchLayer = null
         }}

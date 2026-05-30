@@ -11,6 +11,7 @@
   import CellInput from '$components/vTable/CellInput.svelte'
   import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte'
   import { Env } from '$core/env'
+  import { tr } from '$core/store.svelte'
   import { Agent } from '$components/agent/registry'
   import {
     setVTableAgentContext,
@@ -42,7 +43,7 @@
     css = '',
     rowCss = '',
     cellCss = '',
-    emptyMessage = 'No se encontraron registros.',
+    emptyMessage = 'No records found.|No se encontraron registros.',
     selectedId,
     selectedChildId,
     getChildId,
@@ -200,14 +201,14 @@
             class="table-tree-header-cell {headerPaddingCss} {getAlignClassName(columnDefinition.align)} {columnDefinition.headerCss || ''}"
             role="columnheader"
           >
-            {typeof columnDefinition.header === 'function' ? columnDefinition.header() : columnDefinition.header}
+            {tr(typeof columnDefinition.header === 'function' ? columnDefinition.header() : columnDefinition.header)}
           </div>
         {/each}
       </div>
     </div>
 
     {#if data.length === 0}
-      <div class="table-tree-empty">{emptyMessage}</div>
+      <div class="table-tree-empty">{tr(emptyMessage)}</div>
     {:else}
       <div class="table-tree-body">
         {#each data as node, nodeIndex(node.id)}

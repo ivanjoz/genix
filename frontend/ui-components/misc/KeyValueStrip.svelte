@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { tr } from '$core/store.svelte';
+
   type KeyValuePrimitive = string | number;
   type KeyValueFormatter = (value: KeyValuePrimitive) => string;
 
@@ -99,7 +101,7 @@
   {#each keyValueRows as keyValueRow}
     <div class="flex flex-col items-center min-w-0">
       <div class={"strip-label " + (labelCss || 'text-xs color-label leading-[1.1] w-full ff-semibold')}>
-        {keyValueRow.label}
+        {tr(keyValueRow.label)}
       </div>
       <div class={lineCss || 'h-1 w-24 bg-slate-200 rounded-full'}></div>
       <div class={textCss || 'text-sm'}>
