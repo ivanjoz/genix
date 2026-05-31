@@ -7,7 +7,7 @@ import type { ITableColumn } from '$components/vTable/types';
 import { Notify } from '$libs/helpers';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
-import { Core, closeModal } from '$core/store.svelte';
+import { Core, closeModal, tr } from '$core/store.svelte';
 import { formatTime } from '$libs/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg
@@ -22,12 +22,12 @@ const { Loading } = pkg
     const form = empresaForm
 
     if ((form.Name?.length || 0) < 3) {
-      Notify.failure("El nombre de la empresa debe tener al menos 3 caracteres.")
+      Notify.failure(tr("Company name must be at least 3 characters.|El nombre de la empresa debe tener al menos 3 caracteres."))
       return
     }
 
     if ((form.RUC?.length || 0) < 8) {
-      Notify.failure("El RUC debe tener al menos 8 caracteres.")
+      Notify.failure(tr("RUC must be at least 8 characters.|El RUC debe tener al menos 8 caracteres."))
       return
     }
 
@@ -35,7 +35,7 @@ const { Loading } = pkg
       form.ss = 0
     }
 
-    Loading.standard("Guardando Empresa...")
+    Loading.standard(tr("Saving Company...|Guardando Empresa..."))
     try {
       const result = await postEmpresa(form)
 
@@ -49,7 +49,7 @@ const { Loading } = pkg
       }
 
       closeModal(1)
-      Notify.success("Empresa guardada correctamente")
+      Notify.success(tr("Company saved successfully|Empresa guardada correctamente"))
     } catch (error) {
       Notify.failure(error as string)
     }
@@ -64,13 +64,13 @@ const { Loading } = pkg
       getValue: e => e.id
     },
     {
-      header: "Nombre",
+      header: "Name|Nombre",
       highlight: true,
       css: "px-6 c-blue",
       getValue: e => e.Name
     },
     {
-      header: "Razón Social",
+      header: "Legal Name|Razón Social",
       getValue: e => e.LegalName
     },
     {
@@ -80,13 +80,13 @@ const { Loading } = pkg
       getValue: e => e.RUC
     },
     {
-      header: "Estado",
+      header: "Status|Estado",
       headerCss: "w-80",
       css: "text-center",
       getValue: e => e.ss
     },
     {
-      header: "Actualizado",
+      header: "Updated|Actualizado",
       headerCss: "w-144",
       css: "px-6 nowrap",
       getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
@@ -104,7 +104,7 @@ const { Loading } = pkg
   ]
 </script>
 
-<Page title="Empresas">
+<Page title="Companies|Empresas">
   <div class="h-full">
     <div class="flex items-center justify-between mb-6" aria-label="Companies toolbar with filter and create button">
       <FilterInput bind:value={filterText} css="mr-16 w-256" />
@@ -130,7 +130,7 @@ const { Loading } = pkg
   <Modal
     id={1}
     size={6}
-    title={(empresaForm?.id > 0 ? "Actualizar" : "Guardar") + " Empresa"}
+    title={(empresaForm?.id > 0 ? tr("Update|Actualizar") : tr("Save|Guardar")) + " " + tr("Company|Empresa")}
     isEdit={empresaForm?.id > 0}
     onSave={() => saveEmpresa()}
     onDelete={empresaForm?.id > 0 ? () => saveEmpresa(true) : undefined}
@@ -140,14 +140,14 @@ const { Loading } = pkg
         bind:saveOn={empresaForm}
         save="Name"
         css="col-span-24 md:col-span-12"
-        label="Nombre"
+        label="Name|Nombre"
         required={true}
       />
       <Input
         bind:saveOn={empresaForm}
         save="LegalName"
         css="col-span-24 md:col-span-12"
-        label="Razón Social"
+        label="Legal Name|Razón Social"
       />
       <Input
         bind:saveOn={empresaForm}
@@ -167,25 +167,25 @@ const { Loading } = pkg
         bind:saveOn={empresaForm}
         save="Telefono"
         css="col-span-24 md:col-span-8"
-        label="Teléfono"
+        label="Phone|Teléfono"
       />
       <Input
         bind:saveOn={empresaForm}
         save="Representante"
         css="col-span-24 md:col-span-12"
-        label="Representante"
+        label="Representative|Representante"
       />
       <Input
         bind:saveOn={empresaForm}
         save="Ciudad"
         css="col-span-24 md:col-span-12"
-        label="Ciudad"
+        label="City|Ciudad"
       />
       <Input
         bind:saveOn={empresaForm}
         save="Direccion"
         css="col-span-24"
-        label="Dirección"
+        label="Address|Dirección"
         useTextArea={true}
         rows={2}
       />

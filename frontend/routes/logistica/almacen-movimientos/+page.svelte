@@ -1,5 +1,7 @@
 <script lang="ts">
 import Page from '$domain/Page.svelte';
+import { tr } from '$core/store.svelte';
+import T from '$components/misc/T.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import DateInput from '$components/form/DateInput.svelte';
 import VTable from '$components/vTable/VTable.svelte';
@@ -61,7 +63,7 @@ import { SvelteMap } from 'svelte/reactivity';
       return
     }
 
-    Loading.standard("Consultando registros...")
+    Loading.standard(tr("Querying records...|Consultando registros..."))
     try {
       const movimientos = await queryAlmacenMovimientos(form)
 
@@ -103,13 +105,13 @@ import { SvelteMap } from 'svelte/reactivity';
 
   const columns: ITableColumn<IWarehouseProductMovement>[] = [
     {
-      header: "Date Hora",
+      header: "Date & Time|Fecha Hora",
       headerCss: "w-120",
       css: "ff-mono px-6",
       getValue: e => formatTime(e.Created || 0, "d-M h:n") as string
     },
     {
-      header: "Producto",
+      header: "Product|Producto",
       render: e => {
         const nombre = productos.recordsMap.get(e.ProductID || 0)?.Name || `Producto-${e.ProductID}`
 
@@ -128,7 +130,7 @@ import { SvelteMap } from 'svelte/reactivity';
       }
     },
     {
-      header: "Lote",
+      header: "Batch|Lote",
       headerCss: "w-100",
       css: "text-purple-600 text-center px-6",
       getValue: e => getLotName(e.LotID)
@@ -140,7 +142,7 @@ import { SvelteMap } from 'svelte/reactivity';
       getValue: e => e.SerialNumber || "-"
     },
     {
-      header: "Movimiento",
+      header: "Movement|Movimiento",
       headerCss: "w-120",
       css: "text-center px-6",
       render: e => {
@@ -149,7 +151,7 @@ import { SvelteMap } from 'svelte/reactivity';
       }
     },
     {
-      header: "Cantidad",
+      header: "Quantity|Cantidad",
       headerCss: "w-100",
       css: "text-right ff-mono px-6",
       render: e => {
@@ -159,19 +161,19 @@ import { SvelteMap } from 'svelte/reactivity';
       }
     },
     {
-      header: "Almacén Origen",
+      header: "Source Warehouse|Almacén Origen",
       render: e => almacenRender(e.WarehouseRefID || 0, e.WarehouseRefQuantity || 0)
     },
     {
-      header: "Almacén Destino",
+      header: "Destination Warehouse|Almacén Destino",
       render: e => almacenRender(e.WarehouseID || 0, e.WarehouseQuantity || 0)
     },
     {
-      header: "Documento",
+      header: "Document|Documento",
       render: e => String(e.DocumentID || "")
     },
     {
-      header: "Usuario",
+      header: "User|Usuario",
       headerCss: "w-120",
       css: "text-center px-6",
       render: e => {
@@ -193,7 +195,7 @@ import { SvelteMap } from 'svelte/reactivity';
   ]
 </script>
 
-<Page title="Almacén Movimientos">
+<Page title="Warehouse Movements|Almacén Movimientos">
   <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start mb-12 gap-12 md:flex md:items-center md:justify-between">
     <div class="contents md:flex md:items-center md:w-full md:gap-12">
       <ButtonLayer buttonClass="bx-purple" bind:isOpen={isSearchOpen}
@@ -208,20 +210,20 @@ import { SvelteMap } from 'svelte/reactivity';
             bind:saveOn={form}
             save="almacenID"
             css="col-span-24"
-            label="Almacén"
+            label="Warehouse|Almacén"
             keyId="ID"
             keyName="Name"
             options={almacenes?.Almacenes || []}
             placeholder=""
           />
           <DateInput
-            label="Date Inicio"
+            label="Start Date|Fecha Inicio"
             css="col-span-12"
             save="dateInicio"
             bind:saveOn={form}
           />
           <DateInput
-            label="Date Fin"
+            label="End Date|Fecha Fin"
             css="col-span-12"
             save="dateFin"
             bind:saveOn={form}
@@ -230,7 +232,7 @@ import { SvelteMap } from 'svelte/reactivity';
             bind:saveOn={form}
             save="productoID"
             css="col-span-12"
-            label="Producto"
+            label="Product|Producto"
             keyId="ID"
             keyName="Name"
             options={productos.records}
@@ -240,27 +242,27 @@ import { SvelteMap } from 'svelte/reactivity';
             bind:saveOn={form}
             save="tipo"
             css="col-span-12"
-            label="Tipo Movimiento"
+            label="Movement Type|Tipo Movimiento"
             keyId="id"
             keyName="name"
             options={movimientoTipos}
             placeholder=""
           />
           <Input
-            label="Código Lote"
+            label="Batch Code|Código Lote"
             css="col-span-8"
             save="lotCode"
             bind:saveOn={form}
           />
           <Input
-            label="N° Documento"
+            label="Document #|N° Documento"
             css="col-span-8"
             save="documentID"
             type="number"
             bind:saveOn={form}
           />
           <Input
-            label="N° Serie"
+            label="Serial #|N° Serie"
             css="col-span-8"
             save="serialNumber"
             bind:saveOn={form}

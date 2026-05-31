@@ -5,7 +5,8 @@ import ChartCanvas from '$components/charts/ChartCanvas.svelte'
 import CardsList from '$components/vTable/CardsList.svelte'
 import TableGrid from '$components/vTable/TableGrid.svelte'
 import type { ICardCell, ITableColumn } from '$components/vTable/types'
-import { Core } from '$core/store.svelte'
+import { Core, tr } from '$core/store.svelte'
+import T from '$components/misc/T.svelte'
 import { DateHelper } from '$libs/date'
 import { formatN, formatTime, Loading, Notify } from '$libs/helpers'
 import FilterInput from '$components/form/FilterInput.svelte'
@@ -198,7 +199,7 @@ import {
     return [
       {
         id: 'product-name',
-        header: 'Producto',
+        header: 'Product|Producto',
         width: '30%',
         css: 'px-6 py-4 leading-[1.1] whitespace-normal',
         splitString: 64,
@@ -206,7 +207,7 @@ import {
       },
       {
         id: 'stock-min-actual',
-        header: 'Stock Actual /Min',
+        header: 'Current/Min Stock|Stock Actual /Min',
         width: '6%',
         align: 'right',
         css: 'px-6 text-right',
@@ -215,14 +216,14 @@ import {
       },
       {
         id: 'sales-last-30-days',
-        header: 'Movimientos Stock',
+        header: 'Stock Movements|Movimientos Stock',
         width: `${ventasPixelMetrics.ventasColumnWidthPx}px`,
         useCellRenderer: true,
         css: 'px-0',
       },
       {
         id: 'sales-per-day',
-        header: 'Ventas / Día',
+        header: 'Sales / Day|Ventas / Día',
         width: '6%',
         align: 'right',
         css: 'px-6 text-right',
@@ -230,7 +231,7 @@ import {
       },
       {
         id: 'providers',
-        header: 'Proveedores',
+        header: 'Suppliers|Proveedores',
         width: 'auto',
         css: 'px-6 whitespace-normal',
         useCellRenderer: true,
@@ -323,11 +324,11 @@ import {
 
   async function saveProductSupply() {
     if (!productSupplyForm.ProductID) {
-      Notify.failure('Debe seleccionar un producto válido.')
+      Notify.failure(tr('Please select a valid product.|Debe seleccionar un producto válido.'))
       return
     }
 
-    Loading.standard('Guardando abastecimiento...')
+    Loading.standard(tr('Saving supply configuration...|Guardando abastecimiento...'))
 
     try {
       const savedProductSupply = await postProductSupply(productSupplyForm)
@@ -349,7 +350,7 @@ import {
       productSupplyService.fetchOnline()
 
       Core.hideSideLayer()
-      Notify.success('Configuración de abastecimiento guardada correctamente.')
+      Notify.success(tr('Supply configuration saved successfully.|Configuración de abastecimiento guardada correctamente.'))
     } catch (saveError) {
       Notify.failure(String(saveError))
     } finally {
@@ -521,21 +522,21 @@ import {
 >
   <div class="grid grid-cols-24 gap-10 mt-8" aria-label="Product supply configuration form with minimum stock and estimated sales">
     <Input
-      label="Producto"
+      label="Product|Producto"
       saveOn={{ Name: productos.recordsMap.get(productSupplyForm.ProductID)?.Name || '' }}
       save="Name"
       css="col-span-24"
       disabled={true}
     />
     <Input
-      label="Stock mínimo"
+      label="Minimum Stock|Stock mínimo"
       saveOn={productSupplyForm}
       save="MinimunStock"
       css="col-span-24 md:col-span-12"
       type="number"
     />
     <Input
-      label="Ventas / Día estimadas"
+      label="Estimated Sales / Day|Ventas / Día estimadas"
       saveOn={productSupplyForm}
       save="SalesPerDayEstimated"
       css="col-span-24 md:col-span-12"

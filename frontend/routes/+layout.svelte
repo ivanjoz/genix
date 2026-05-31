@@ -6,7 +6,8 @@
 	import { Env } from '$core/env';
 	import Modules from '$core/modules';
 	import { canUserAccessRoute, checkIsLogin } from '$core/security';
-	import { Core, getDeviceType } from '$core/store.svelte';
+	import { Core, getDeviceType, tr } from '$core/store.svelte';
+	import T from '$components/misc/T.svelte';
 	import AppHeader from '$domain/AppHeader.svelte';
 	import favicon from '$domain/assets/favicon.svg?raw';
 	import '$domain/libs/fontello-embedded.css';
@@ -83,7 +84,7 @@
 		const accessNames = getAccessEntriesForRoute(currentPath)
 			.map((accessEntry) => accessEntry.name)
 			.join(', ')
-		Notify.failure(`No posee el acceso "${accessNames}" para acceder a ${currentPath}`)
+		Notify.failure(tr(`You don't have access "${accessNames}" to visit ${currentPath}|No posee el acceso "${accessNames}" para acceder a ${currentPath}`))
 		Env.navigate('/')
 	})
 
@@ -108,7 +109,7 @@
 	<SideMenu />
 	{#if Core.isLoading > 0}
 		<Page title="...">
-			<div class="p-12"><h2>Cargando...</h2></div>
+			<div class="p-12"><h2><T text="Loading...|Cargando..." /></h2></div>
 		</Page>
 	{/if}
 {/if}

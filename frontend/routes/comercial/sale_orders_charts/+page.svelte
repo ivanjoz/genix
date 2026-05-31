@@ -1,6 +1,7 @@
 <script lang="ts">
 	import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 	import Page from '$domain/Page.svelte';
+	import T from '$components/misc/T.svelte';
 	import { ProductosService } from '$routes/negocio/productos/productos.svelte';
 	import SaleOrdersChartsDailySummary from './SaleOrdersChartsDailySummary.svelte';
 	import SaleOrdersChartsByProduct from './SaleOrdersChartsByProduct.svelte';
@@ -16,16 +17,16 @@
 	const saleOrdersChartsService = new SaleOrdersChartsService();
 	const productosService = new ProductosService(true);
 	const chartViewOptions: TChartViewOption[] = [
-		[1, 'Por Producto'],
-		[2, 'Resumen Diario'],
-		[3, 'Resumen Semanal']
+		[1, 'By Product|Por Producto'],
+		[2, 'Daily Summary|Resumen Diario'],
+		[3, 'Weekly Summary|Resumen Semanal']
 	];
 
 	let chartMetricForm = $state<IChartMetricForm>({ metricMode: 'amount' });
 	let view = $state<TChartsView>(1);
 </script>
 
-<Page title="Gráficos de Ventas" fixedFullHeight={true}>
+<Page title="Sales Charts|Gráficos de Ventas" fixedFullHeight={true}>
 	<div class="flex h-full min-h-0 flex-col">
 		<div class="flex">
 			<OptionsStrip
@@ -54,7 +55,7 @@
 				productsByIdMap={productosService.recordsMap}
 			/>
 		{:else if view === 3}
-			<div class="text-gray-500">Resumen Semanal pendiente.</div>
+			<div class="text-gray-500"><T text="Weekly summary pending.|Resumen Semanal pendiente." /></div>
 		{/if}
 		</div>
 	</div>

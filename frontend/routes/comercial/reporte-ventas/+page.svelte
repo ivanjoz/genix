@@ -8,7 +8,9 @@
   import SaleOrdersTable from '../SaleOrdersTable.svelte';
   import { querySaleOrderReport, saleOrderStatusOptions, type ISaleOrder } from './sale_order_report.svelte';
     import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
-  import KeyValueStrip from '$components/misc/KeyValueStrip.svelte'
+  import KeyValueStrip from '$components/misc/KeyValueStrip.svelte';
+  import { tr } from '$core/store.svelte';
+  import T from '$components/misc/T.svelte';
 
   const productosService = new ProductosService(true);
   const clientesService = new ClientProviderService(ClientProviderType.CLIENT, true);
@@ -43,7 +45,7 @@
   async function consultarReporteVentas() {
     console.debug('[reporte_ventas] querying report with filters', $state.snapshot(reportForm));
 
-    Loading.standard('Consultando ventas...');
+    Loading.standard(tr('Querying sales...|Consultando ventas...'));
     try {
       saleOrders = await querySaleOrderReport(reportForm);
     } catch (error) {
@@ -69,7 +71,7 @@
   }
 </script>
 
-<Page title="Reporte Ventas">
+<Page title="Sales Report|Reporte Ventas">
   <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start mb-12 gap-12 md:flex md:items-center md:justify-between">
     <div class="contents md:flex md:items-center md:w-full md:gap-12">
   		<ButtonLayer buttonClass="bx-purple" bind:isOpen={isSearchOpen}
@@ -81,13 +83,13 @@
 			>
 				<div class="w-full grid grid-cols-24 gap-12 p-12" aria-label="Sales report filter with date range, client, product, and status">
 			    <DateInput
-			      label="Date Inicio"
+			      label="Start Date|Fecha Inicio"
 			      css="col-span-12"
 			      save="dateInicio"
 			      bind:saveOn={reportForm}
 			    />
 			    <DateInput
-			      label="Date Fin"
+			      label="End Date|Fecha Fin"
 			      css="col-span-12"
 			      save="dateFin"
 			      bind:saveOn={reportForm}
@@ -96,7 +98,7 @@
 		        bind:saveOn={reportForm}
 		        save="clientID"
 		        css="col-span-12"
-		        label="Cliente"
+		        label="Client|Cliente"
 		        keyId="ID"
 		        keyName="DisplayName"
 		        options={clientOptions}
@@ -106,7 +108,7 @@
 		        bind:saveOn={reportForm}
 		        save="productID"
 		        css="col-span-12"
-		        label="Producto" optionsCss="w-480"
+		        label="Product|Producto" optionsCss="w-480"
 		        keyId="ID"
 		        keyName="Name"
 		        options={productosService.records}
@@ -116,7 +118,7 @@
 		        bind:saveOn={reportForm}
 		        save="status"
 		        css="col-span-12"
-		        label="Estado"
+		        label="Status|Estado"
 		        keyId="ID"
 		        keyName="Name"
 		        options={saleOrderStatusOptions}
@@ -124,47 +126,47 @@
 		      />
 					<div class="col-span-12 flex items-center justify-center">
 			      <button class="px-16 py-8 bx-purple mt-8 h-44"
-			        aria-label="Consultar reporte"
+			        aria-label="Search report"
 			        onclick={(event) => {
 			          event.stopPropagation();
 			          consultarReporteVentas();
-								isSearchOpen = false
+							isSearchOpen = false
 			        }}
 			      >
-			        Buscar <i class="icon-search"></i>
+			        <T text="Search|Buscar" /> <i class="icon-search"></i>
 			      </button>
 					</div>
 				</div>
 			</ButtonLayer>
 			<KeyValueStrip
 				css="col-span-2 row-start-2 w-full md:w-auto"
-				label1="Fec. Inicio"
+				label1="Start Date|Fec. Inicio"
 				value1={reportForm.dateInicio}
 				getContent1={v => formatTime(v,"d-m-Y") as string}
-				label2="Fec. Fin"
+				label2="End Date|Fec. Fin"
 				value2={reportForm.dateFin}
 				getContent2={v => formatTime(v,"d-m-Y") as string}
-				label3="Cliente"
+				label3="Client|Cliente"
 				value3={reportForm.clientID}
 				getContent3={(clientID) => {
 					// Resolve the selected client id to the visible customer name in the filter summary.
 					return clientID
 						? (clientesService.recordsMap.get(Number(clientID))?.Name || `Cliente #${clientID}`)
-						: 'Todos';
+						: tr('All|Todos');
 				}}
-				label4="Producto"
+				label4="Product|Producto"
 				value4={reportForm.productID}
 				getContent4={(productID) => {
 					// Resolve the selected product id to the visible product name in the filter summary.
 					return productID
 						? (productosService.recordsMap.get(Number(productID))?.Name || `Producto #${productID}`)
-						: 'Todos';
+						: tr('All|Todos');
 				}}
-				label5="Estado"
+				label5="Status|Estado"
 				value5={reportForm.status}
 				getContent5={(statusID) => {
 					// Keep the summary aligned with the same option labels used by the status selector.
-					return saleOrderStatusOptions.find((statusOption) => statusOption.ID === Number(statusID))?.Name || 'Todos';
+					return saleOrderStatusOptions.find((statusOption) => statusOption.ID === Number(statusID))?.Name || tr('All|Todos');
 				}}
 			/>
     </div>
@@ -177,7 +179,7 @@
         class="w-full pl-36 bg-white pr-12 py-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
         autocomplete="off"
         type="text"
-        placeholder="Buscar..."
+        placeholder={tr("Search...|Buscar...")}
         oninput={onSearchInput}
       />
     </div>

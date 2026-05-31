@@ -4,6 +4,6 @@ import ProductSupplyManagement from './ProductSupplyManagement.svelte';
 
 </script>
 
-<Page title="gestion-compras">
+<Page title="Purchase Management|Gestión de Compras">
   <ProductSupplyManagement />
 </Page>

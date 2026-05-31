@@ -8,7 +8,8 @@ import type { ITableColumn } from '$components/vTable/types';
 import { Notify } from '$libs/helpers';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
-import { Core } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
+import T from '$components/misc/T.svelte';
 import { formatTime } from '$libs/helpers';
 import { onMount } from 'svelte';
   import pkg from 'notiflix'
@@ -183,7 +184,7 @@ const { Loading } = pkg
     const form = usuarioForm
 
     if ((form.Usuario?.length || 0) < 4 || (form.FirstName?.length || 0) < 4) {
-      Notify.failure("El usuario y el nombre deben tener al menos 4 caracteres.")
+      Notify.failure(tr("Username and first name must be at least 4 characters.|El usuario y el nombre deben tener al menos 4 caracteres."))
       return
     }
 
@@ -193,9 +194,9 @@ const { Loading } = pkg
     if (!form.ID || form.Password) {
       let err = ""
       if ((form.Password?.length || 0) < 6) {
-        err = "El password tiene menos de 6 caracteres."
+        err = tr("Password must be at least 6 characters.|El password tiene menos de 6 caracteres.")
       } else if (form.Password !== form.Password2) {
-        err = "Los password no coinciden."
+        err = tr("Passwords do not match.|Los password no coinciden.")
       }
       if (err) {
         Notify.failure(err)
@@ -203,7 +204,7 @@ const { Loading } = pkg
       }
     }
 
-    Loading.standard("Creando/Actualizando Usuario...")
+    Loading.standard(tr("Creating/Updating User...|Creando/Actualizando Usuario..."))
     console.log("saveUsuario payload::", { isDelete: !!isDelete, form: $state.snapshot(form) })
     try {
       const result = await postUsuario(form)
@@ -237,13 +238,13 @@ const { Loading } = pkg
     },
     {
       id: "usuario_info",
-      header: "Usuario", highlight: true,
+      header: "Username|Usuario", highlight: true,
       css: "px-8 py-6 align-top",
       getValue: e => e.Usuario
     },
     {
       id: "usuario_accesos", headerCss: "w-[47%]",
-      header: "Accesos", highlight: true,
+      header: "Access|Accesos", highlight: true,
       css: "px-8 py-6 align-top _usuario-access-td",
       getValue: e => `${e.FirstName} ${e.LastName || ""}`
     },
@@ -253,13 +254,13 @@ const { Loading } = pkg
       getValue: e => e.Email
     },
     {
-      header: "Estado",
+      header: "Status|Estado",
       headerCss: "w-80",
       css: "text-center",
       getValue: e => e.Status
     },
     {
-      header: "Actualizado",
+      header: "Updated|Actualizado",
       headerCss: "w-144",
       css: "px-6 nowrap",
       getValue: e => formatTime(e.Updated, "Y-m-d h:n") as string
@@ -267,7 +268,7 @@ const { Loading } = pkg
   ]
 </script>
 
-<Page title="Usuarios">
+<Page title="Users|Usuarios">
   <Layer type="content">
     <div class="h-full w-full">
       <div class="flex items-center justify-between mb-6" aria-label="Users toolbar with filter and create button">
@@ -325,7 +326,7 @@ const { Loading } = pkg
     id={1}
     type="side"
     sideLayerSize={760}
-    title={(usuarioForm?.ID > 0 ? "Actualizar" : "Guardar") + " Usuario"}
+    title={(usuarioForm?.ID > 0 ? tr("Update|Actualizar") : tr("Save|Guardar")) + " " + tr("User|Usuario")}
     titleCss="h2 mb-6"
     css="px-12 py-10"
     contentCss="px-0"
@@ -340,7 +341,7 @@ const { Loading } = pkg
         bind:saveOn={usuarioForm}
         save="Usuario"
         css="col-span-24 md:col-span-12"
-        label="Usuario"
+        label="Username|Usuario"
         required={true}
         disabled={usuarioForm?.ID > 0}
       />
@@ -348,26 +349,26 @@ const { Loading } = pkg
         bind:saveOn={usuarioForm}
         save="FirstName"
         css="col-span-24 md:col-span-12"
-        label="Nombres"
+        label="First Name|Nombres"
         required={true}
       />
       <Input
         bind:saveOn={usuarioForm}
         save="LastName"
         css="col-span-24 md:col-span-12"
-        label="Apellidos"
+        label="Last Name|Apellidos"
       />
       <Input
         bind:saveOn={usuarioForm}
         save="DocumentNumber"
         css="col-span-24 md:col-span-12"
-        label="Nº Documento"
+        label="Document #|Nº Documento"
       />
       <Input
         bind:saveOn={usuarioForm}
         save="JobTitle"
         css="col-span-24 md:col-span-12"
-        label="Cargo"
+        label="Job Title|Cargo"
       />
       <Input
         bind:saveOn={usuarioForm}
@@ -391,13 +392,13 @@ const { Loading } = pkg
         label="Password"
         type="password"
         required={!usuarioForm.ID}
-        placeholder={usuarioForm.ID > 0 ? "SIN CAMBIAR" : ""}
+        placeholder={usuarioForm.ID > 0 ? tr("UNCHANGED|SIN CAMBIAR") : ""}
       />
       <Input
         bind:saveOn={usuarioForm}
         save="Password2"
         css="col-span-24 md:col-span-12"
-        label="Password (Repetir)"
+        label="Confirm Password|Password (Repetir)"
         type="password"
         required={!usuarioForm.ID}
       />

@@ -2,6 +2,7 @@
   import { Env } from '$core/env';
   import { Agent } from '$components/agent/registry';
   import { tr } from '$core/store.svelte';
+  import T from '$components/misc/T.svelte';
 
   type ButtonColor = 'blue' | 'green' | 'red' | 'orange' | 'yellow' | 'purple';
 
@@ -59,5 +60,5 @@
   onclick={triggerClick}
 >
   {#if icon}<i class={icon}></i>{/if}
-  {#if name}<span class={hideNameOnMobile ? 'hidden md:block' : ''}>{tr(name)}</span>{/if}
+  {#if name}<span class={hideNameOnMobile ? 'hidden md:block' : ''}><T text={name} /></span>{/if}
 </button>

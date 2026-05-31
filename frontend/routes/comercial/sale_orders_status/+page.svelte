@@ -6,7 +6,8 @@
   import RecordByIDText from '$components/misc/RecordByIDText.svelte';
   import VTable from '$components/vTable/VTable.svelte';
   import type { ITableColumn } from '$components/vTable/types';
-  import { Core } from '$core/store.svelte';
+  import { Core, tr } from '$core/store.svelte';
+  import T from '$components/misc/T.svelte';
   import Page from '$domain/Page.svelte';
   import { Notify, formatN, formatTime } from '$libs/helpers';
   import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
@@ -198,18 +199,18 @@
 
   // Render tabs mapped to backend status filters.
   const options = [
-    [SaleOrderGroup.PENDIENTE_DE_PAGO, 'Pend. Pago'],
-    [SaleOrderGroup.PENDIENTE_DE_ENTREGA, 'Pend. Entrega'],
-    [SaleOrderGroup.FINALIZADO, 'Finalizadas']
+    [SaleOrderGroup.PENDIENTE_DE_PAGO, 'Pend. Payment|Pend. Pago'],
+    [SaleOrderGroup.PENDIENTE_DE_ENTREGA, 'Pend. Delivery|Pend. Entrega'],
+    [SaleOrderGroup.FINALIZADO, 'Completed|Finalizadas']
   ];
 
   function getSaleOrderStatusName(saleOrder: ISaleOrder): string {
     switch(saleOrder.ss) {
-      case 1: return 'Generado';
-      case 2: return 'Pagado';
-      case 3: return 'Entregado';
-      case 4: return 'Finalizado';
-      default: return 'Desconocido';
+      case 1: return tr('Generated|Generado');
+      case 2: return tr('Paid|Pagado');
+      case 3: return tr('Delivered|Entregado');
+      case 4: return tr('Completed|Finalizado');
+      default: return tr('Unknown|Desconocido');
     }
   }
 
@@ -299,9 +300,9 @@
 
   function getActionInProgressLabel(actionInProgress: 'pago' | 'entrega' | null): string {
     // Keep message explicit so operators know the exact transition being processed.
-    if (actionInProgress === 'pago') { return 'Realizando Pago...'; }
-    if (actionInProgress === 'entrega') { return 'Realizando Entrega...'; }
-    return 'Procesando';
+    if (actionInProgress === 'pago') { return tr('Processing Payment...|Realizando Pago...'); }
+    if (actionInProgress === 'entrega') { return tr('Processing Delivery...|Realizando Entrega...'); }
+    return tr('Processing...|Procesando...');
   }
 
   function resetSaleOrderActionForms(saleOrder: ISaleOrder): void {
@@ -344,7 +345,7 @@
   const detailTableColumns: ISaleOrderDetailColumn[] = [
     {
       id: 'productName',
-      header: 'Producto',
+      header: 'Product|Producto',
       width: 'minmax(280px, 1.7fr)',
       getValue: (detailLineRecord) => detailLineRecord.productName,
       render: (detailLineRecord) => {
@@ -364,14 +365,14 @@
     },
     {
       id: 'quantity',
-      header: 'Cant.',
+      header: 'Qty.|Cant.',
       width: '90px',
       align: 'right',
       getValue: (detailLineRecord) => detailLineRecord.quantity,
     },
     {
       id: 'unitPrice',
-      header: 'Precio',
+      header: 'Price|Precio',
       width: '120px',
       align: 'right',
       getValue: (detailLineRecord) => `S/ ${formatN(detailLineRecord.unitPrice / 100, 2)}`,
@@ -408,17 +409,17 @@
 
   function onClickPagar() {
     if (!selectedSaleOrder) {
-      Notify.failure('No hay una orden seleccionada.');
+      Notify.failure(tr('No order selected.|No hay una orden seleccionada.'));
       return;
     }
     if (isPostingSaleOrderAction) {
-      Notify.failure('Ya se está procesando una acción para esta orden.');
+      Notify.failure(tr('An action is already in progress for this order.|Ya se está procesando una acción para esta orden.'));
       return;
     }
     // Payment caja priority: order caja first, otherwise use the user-selected caja.
     const paymentCajaID = selectedSaleOrder.LastPaymentCajaID || saleOrderPaymentForm.LastPaymentCajaID;
     if (!paymentCajaID) {
-      Notify.failure('La orden no posee Caja ID para registrar el pago.');
+      Notify.failure(tr('Order has no Cash Register ID for payment.|La orden no posee Caja ID para registrar el pago.'));
       return;
     }
 
@@ -433,17 +434,17 @@
 
   function onClickEntregar() {
     if (!selectedSaleOrder) {
-      Notify.failure('No hay una orden seleccionada.');
+      Notify.failure(tr('No order selected.|No hay una orden seleccionada.'));
       return;
     }
     if (isPostingSaleOrderAction) {
-      Notify.failure('Ya se está procesando una acción para esta orden.');
+      Notify.failure(tr('An action is already in progress for this order.|Ya se está procesando una acción para esta orden.'));
       return;
     }
     // Delivery uses the selector value so the operator can choose a different almacén.
     const selectedAlmacenID = saleOrderDeliveryForm.WarehouseID || selectedSaleOrder.WarehouseID;
     if (!selectedAlmacenID) {
-      Notify.failure('La orden no posee Almacén ID para registrar la entrega.');
+      Notify.failure(tr('Order has no Warehouse ID for delivery.|La orden no posee Almacén ID para registrar la entrega.'));
       return;
     }
 
@@ -457,13 +458,13 @@
 
   function onClickAnularSoloUI() {
     // This button is intentionally UI-only until backend supports cancel action.
-    Notify.failure('Anulación disponible próximamente.');
+    Notify.failure(tr('Cancellation coming soon.|Anulación disponible próximamente.'));
   }
 
   function getSaleOrderLayerTitle(saleOrder: ISaleOrder | null): string {
-    if (!saleOrder) { return 'Detalle de Pedido'; }
+    if (!saleOrder) { return tr('Order Detail|Detalle de Pedido'); }
     // Keep ID and date in the same title line as requested.
-    return `Pedido #${saleOrder.ID} · ${formatTime(saleOrder.Created, 'd-M-Y h:n')}`;
+    return tr(`Order #${saleOrder.ID} · ${formatTime(saleOrder.Created, 'd-M-Y h:n')}|Pedido #${saleOrder.ID} · ${formatTime(saleOrder.Created, 'd-M-Y h:n')}`);
   }
 
   async function processSaleOrderAction(actionLabel: 'pago' | 'entrega', updatePayload: {
@@ -487,7 +488,7 @@
       const updatedSaleOrder = await postSaleOrderUpdate(updatePayload) as ISaleOrder;
       applyUpdatedSaleOrderLocally(updatedSaleOrder);
       
-      Notify.success(`Pedido actualizado (${actionLabel}).`);
+      Notify.success(tr(`Order updated (${actionLabel}).|Pedido actualizado (${actionLabel}).`));
       console.debug('[sale_orders_status] action success', {
         actionLabel,
         saleOrderID: updatePayload.ID,
@@ -498,7 +499,7 @@
         updatePayload,
         error,
       });
-      Notify.failure(`No se pudo procesar la ${actionLabel}.`);
+      Notify.failure(tr(`Could not process: ${actionLabel}.|No se pudo procesar la ${actionLabel}.`));
     } finally {
       isPostingSaleOrderAction = false;
       saleOrderActionInProgress = null;
@@ -511,7 +512,7 @@
 
 </script>
 
-<Page title="Gestión de Pedidos">
+<Page title="Order Management|Gestión de Pedidos">
   <div class="">
     <div class="flex flex-col gap-10 mb-10 xl:flex-row xl:items-center">
       <div class="h-46 flex items-center">
@@ -537,7 +538,7 @@
           keyId="ID"
           keyName="DisplayName"
           options={clientOptions}
-          placeholder="CLIENTE ::"
+          placeholder="CLIENT|CLIENTE ::"
         />
         <SearchSelect
           bind:saveOn={saleOrderFilterForm}
@@ -545,7 +546,7 @@
           css="col-span-14 md:col-span-9"
           label=""
           keyId="ID"
-          keyName="Name" placeholder="PRODUCTO ::"
+          keyName="Name" placeholder="PRODUCT|PRODUCTO ::"
           options={productOptions}
         />
       </div>
@@ -553,7 +554,7 @@
      <Layer type="content">
        {#if isQueryingSaleOrders}
          <div class="p-8 min-h-240 w-full fx-c rounded-md bg-gray-50">
-           <LoadingBar label="Cargando pedidos..." />
+           <LoadingBar label={tr("Loading orders...|Cargando pedidos...")} />
          </div>
        {:else}
 	       <SaleOrdersTable maxHeight="calc(100vh - var(--header-height) - 84px)"
@@ -591,7 +592,7 @@
 	       <button
 	         class="w-30 h-30 text-sm rounded-full bg-red-100 text-red-700 fx-c"
 	         type="button"
-	         title="Anular pedido"
+	         title={tr("Cancel order|Anular pedido")}
 	         aria-label="Cancel this sale order"
 	         onclick={() => {
 	           onClickAnularSoloUI();
@@ -606,7 +607,7 @@
       <div class="flex flex-col gap-10 mt-8" aria-label="Sale order detail panel with status, amounts, products, and action buttons">
         <div class="grid grid-cols-24 gap-x-8 gap-y-8 text-13 md:text-14" aria-label="Sale order summary: status, total, and debt">
           <div class="col-span-8">
-            <div class="text-gray-500">Estado</div>
+            <div class="text-gray-500"><T text="Status|Estado" /></div>
             <div>{getSaleOrderStatusName(selectedSaleOrder)}</div>
           </div>
           <div class="col-span-8">
@@ -614,7 +615,7 @@
             <div class="ff-mono">S/ {formatN(selectedSaleOrder.TotalAmount / 100, 2)}</div>
           </div>
           <div class="col-span-8">
-            <div class="text-gray-500">Deuda</div>
+            <div class="text-gray-500"><T text="Debt|Deuda" /></div>
             <div class="ff-mono">S/ {formatN((selectedSaleOrder.DebtAmount || 0) / 100, 2)}</div>
           </div>
         </div>
@@ -622,7 +623,7 @@
         <VTable
           columns={detailTableColumns}
           data={selectedSaleOrderDetailLines}
-          emptyMessage="No hay productos en el detalle."
+          emptyMessage="No products in this order.|No hay productos en el detalle."
         />
 
         <div class="grid grid-cols-2 gap-8 mt-4" aria-label="Sale order actions: payment and delivery">
@@ -640,7 +641,7 @@
                   options={(cajasService.Cajas || []).filter((cajaRecord) => (cajaRecord?.ss || 0) > 0)}
                   keyId="ID"
                   keyName="Name"
-                  label="Caja para Pago"
+                  label="Cash Register for Payment|Caja para Pago"
                   placeholder=":: seleccione ::"
                 />
                 <button class={`bx-green justify-center w-[50%] h-36 ${!canPaySaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
@@ -651,13 +652,13 @@
                   }}
                 >
                   <i class="icon-ok"></i>
-                  <span class="mr-12">Pagar</span>
+                  <span class="mr-12"><T text="Pay|Pagar" /></span>
                 </button>
               {:else}
                 <div class="text-13 leading-20 text-gray-700">
-                  <span class="ff-bold text-xs color-label mr-2">Pagado el:</span> {formatActionTime(selectedSaleOrder.LastPaymentTime)}.<br>
-                  <span class="ff-bold text-xs color-label mr-2">En:</span> {getCajaName(selectedSaleOrder.LastPaymentCajaID)}.<br>
-                  <span class="ff-bold text-xs color-label mr-2">Usuario:</span>
+                  <span class="ff-bold text-xs color-label mr-2"><T text="Paid on:|Pagado el:" /></span> {formatActionTime(selectedSaleOrder.LastPaymentTime)}.<br>
+                  <span class="ff-bold text-xs color-label mr-2"><T text="At:|En:" /></span> {getCajaName(selectedSaleOrder.LastPaymentCajaID)}.<br>
+                  <span class="ff-bold text-xs color-label mr-2"><T text="User:|Usuario:" /></span>
                   <RecordByIDText apiRoute="usuarios-ids" recordID={selectedSaleOrder.LastPaymentUser} placeholder="-" />.
                 </div>
               {/if}
@@ -672,7 +673,7 @@
                   options={(almacenesService.Almacenes || []).filter((almacenRecord) => (almacenRecord?.ss || 0) > 0)}
                   keyId="ID"
                   keyName="Name"
-                  label="Almacén para Entrega"
+                  label="Warehouse for Delivery|Almacén para Entrega"
                   placeholder=":: seleccione ::"
                 />
                 <div class="flex items-center">
@@ -684,13 +685,13 @@
                     }}
                   >
                     <i class="icon-truck"></i>
-                    <span>Entregar</span>
+                    <span><T text="Deliver|Entregar" /></span>
                   </button>
                 </div>
               {:else}
                 <div class="text-13 leading-20 text-gray-700">
-                  <span class="ff-bold text-xs color-label">Entregado el</span> {formatActionTime(selectedSaleOrder.DeliveryTime)}.<br>
-                  <span class="ff-bold text-xs color-label">En</span> {getAlmacenName(selectedSaleOrder.WarehouseID)}.<br>
+                  <span class="ff-bold text-xs color-label"><T text="Delivered on|Entregado el" /></span> {formatActionTime(selectedSaleOrder.DeliveryTime)}.<br>
+                  <span class="ff-bold text-xs color-label"><T text="At|En" /></span> {getAlmacenName(selectedSaleOrder.WarehouseID)}.<br>
                   <RecordByIDText apiRoute="usuarios-ids" recordID={selectedSaleOrder.DeliveryUser} placeholder="-" />.
                 </div>
               {/if}

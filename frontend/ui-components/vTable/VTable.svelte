@@ -8,6 +8,7 @@
   import { highlString, wordInclude } from '$libs/helpers';
   import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte';
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
+  import T from '$components/misc/T.svelte';
   import { Env } from '$core/env';
   import { tr } from '$core/store.svelte';
   import { Agent } from '$components/agent/registry';
@@ -328,9 +329,9 @@
     return rec
   }
 
-  // Helper to get header content
-  function getHeaderContent(column: ITableColumn<T>): string {
-    return tr(typeof column.header === 'function' ? column.header() : column.header);
+  // Resolve header string for use with <T> component
+  function resolveHeader(column: ITableColumn<T>): string {
+    return typeof column.header === 'function' ? column.header() : column.header;
   }
 
   // Check if row is selected
@@ -474,7 +475,7 @@
             rowspan={column._colspan ? 1 : (processedColumns.hasSubcols ? 2 : 1)}
           >
             <div class={column.headerInnerCss || ''}>
-              {getHeaderContent(column)}
+              <T text={resolveHeader(column)} />
             </div>
           </th>
         {/each}
@@ -489,7 +490,7 @@
               style={column.headerStyle ? Object.entries(column.headerStyle).map(([k, v]) => `${k}: ${v}`).join('; ') : ''}
             >
               <div class={column.headerInnerCss || ''}>
-                {getHeaderContent(column)}
+                <T text={resolveHeader(column)} />
               </div>
             </th>
           {/each}
@@ -503,7 +504,7 @@
         <tr>
           <td colspan={processedColumns.flatColumns.length} class="vtable-empty">
             <div class="vtable-empty-message">
-              {tr(emptyMessage)}
+              <T text={emptyMessage} />
             </div>
           </td>
         </tr>

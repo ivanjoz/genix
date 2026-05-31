@@ -20,6 +20,7 @@
 <script lang="ts" generics="T">
   import { Core, tr } from "$core/store.svelte";
   import { untrack } from "svelte";
+  import T from '$components/misc/T.svelte';
   import Popover2 from "$components/popover2/Popover2.svelte";
   import {
     buildCalendarWeeks,
@@ -348,7 +349,7 @@
 {#if label && !useInlineStyle}
   <div data-id="DateInput:{componentID}" data-value={agentDataValue} data-label={agentDataLabel} data-type="other" class={cN}>
     <div class={s1.input_lab_cell_left}><div></div></div>
-    <div class={s1.input_lab}>{tr(label)}</div>
+    <div class={s1.input_lab}><T text={label} /></div>
     <div class={s1.input_lab_cell_right}><div></div></div>
     <div class={s1.input_shadow_layer}>
       <div></div>

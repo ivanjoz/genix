@@ -5,8 +5,8 @@ import ProductStockMovement from './ProductStockMovement.svelte'
 import PurchaseOrderEntry from './PurchaseOrderEntry.svelte'
 </script>
 
-<Page title="productos-stock"
-	options={[{ id: 1, name: "Movimiento" }, { id: 2, name: "Ingreso OC" }]}
+<Page title="Product Stock|Inventario de Productos"
+	options={[{ id: 1, name: "Movement|Movimiento" }, { id: 2, name: "PO Entry|Ingreso OC" }]}
 >
   {#if Core.pageOptionSelected === 2}
     <PurchaseOrderEntry />

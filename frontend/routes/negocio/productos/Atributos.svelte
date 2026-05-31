@@ -5,7 +5,7 @@ import ColorPicker from '$components/form/ColorPicker.svelte';
 import Modal from '$components/layers/Modal.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
-import { closeAllModals, openModal } from '$core/store.svelte';
+import { closeAllModals, openModal, tr } from '$core/store.svelte';
 import { formatN } from '$libs/helpers';
 import { productoAtributos, type IProduct, type IProductPresentation } from "./productos.svelte";
     import type { ITableColumn } from '$components/vTable/types';
@@ -20,16 +20,16 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
   let tempCounter = -1
 
   const columns: ITableColumn<IProductPresentation>[] = [
-    { header: "Atributo",
+    { header: "Attribute|Atributo",
       getValue: e => produtcoAtributosMap.get(e.at)?.name || ""
     },
-    { header: "Nombre",
+    { header: "Name|Nombre",
       getValue: e => e.nm
     },
-    { header: "Precio",
+    { header: "Price|Precio",
       getValue: e => e.pc ? formatN(e.pc / 100,2) : ""
     },
-    { header: "Diff. Precio",
+    { header: "Price Diff.|Diff. Precio",
       getValue: e => e.pd ? formatN(e.pd / 100,2) : ""
     },
     { header: "SKU",
@@ -81,7 +81,7 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
   {/snippet}
 </VTable>
 
-<Modal title="Producto Presentación" id={3} size={4}
+<Modal title="Product Presentation|Producto Presentación" id={3} size={4}
   saveButtonLabel="Agregar" saveIcon="icon-ok"
   onSave={() => {
     producto.Presentations = producto.Presentations || []
@@ -106,24 +106,24 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
   }}
 >
   <div class="grid grid-cols-24 gap-10 p-4" aria-label="Product presentation form with attribute, name, price, and color">
-    <SearchSelect label="Atributo" saveOn={presentacionForm} css="col-span-12"
+    <SearchSelect label="Attribute|Atributo" saveOn={presentacionForm} css="col-span-12"
       save="at" keyId="id" keyName="name"
       options={productoAtributos}
     />
-    <Input label="Nombre" saveOn={presentacionForm} css="col-span-12"
+    <Input label="Name|Nombre" saveOn={presentacionForm} css="col-span-12"
       save="nm"
     />
-    <Input label="Precio" saveOn={presentacionForm} css="col-span-12"
+    <Input label="Price|Precio" saveOn={presentacionForm} css="col-span-12"
       save="pc" type="number" baseDecimals={2}
     />
-    <Input label="Diferencia Precio" saveOn={presentacionForm} css="col-span-12"
+    <Input label="Price Difference|Diferencia Precio" saveOn={presentacionForm} css="col-span-12"
       save="pd" type="number" baseDecimals={2}
     />
     <Input label="SKU" saveOn={presentacionForm} css="col-span-12"
       save="sk"
     />
     <div class="col-span-12">
-      <ColorPicker label="Color" saveOn={presentacionForm} save="cl"/>
+      <ColorPicker label="Color|Color" saveOn={presentacionForm} save="cl"/>
     </div>
     <div class="mt-12 col-span-24 fs15">
       <i class="icon-attention"></i> La información se guardará cuando se guarde el producto.

@@ -112,19 +112,19 @@ export const AdminModule: IModule = {
     },
 		{ name: "Finances|Finanzas", minName: "FIN",  id: 5, icon: "icon-tasks",
       options: [
-	      { name: "Cash & Banks|Cajas & Bancos", route: "/finanzas/cajas",
+	      { name: "Cash & Banks|Cajas & Bancos", route: "/finance/cajas",
 	        icon: "icon-suitcase"
 	      },
-	      { name: "Cash Movements|Cajas Movimientos", route: "/finanzas/cajas-movimientos",
+	      { name: "Cash Movements|Cajas Movimientos", route: "/finance/cajas-movimientos",
 	        icon: "icon-exchange"
 				},
-		    { name: "Expenses|Gastos", route: "/finanzas/gastos",
+		    { name: "Expenses|Gastos", route: "/finance/gastos",
 		      icon: "icon-exchange"
 				},
-		    { name: "Accounts Management|Gestión de Cuentas", route: "/finanzas/gestion-cuentas",
+		    { name: "Accounts Management|Gestión de Cuentas", route: "/finance/gestion-cuentas",
 		      icon: "icon-exchange"
 		    },
-		    { name: "Cash Flow|Flujo de Caja", route: "/finanzas/flujo-de-caja",
+		    { name: "Cash Flow|Flujo de Caja", route: "/finance/flujo-de-caja",
 		      icon: "icon-exchange"
 				},
       ]

@@ -1,5 +1,6 @@
 <script lang="ts">
 import { Core, fetchOnCourse } from '$core/store.svelte';
+import T from '$components/misc/T.svelte';
 import { Env } from '$core/env';
 import { Agent } from '$components/agent/registry';
 import AgentChat from '$core/agent/AgentChat.svelte';
@@ -109,12 +110,12 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 					data-selected={selected ? "true" : undefined}
 					onclick={() => {
 						Core.pageOptionSelected = opt.id
-					}}>{opt.name}
+					}}><T text={opt.name} />
 				</button>
 			{/each}
 		{:else}
 			<div class="h1 text-white text-lg font-semibold tracking-wide truncate">
-				{Core.pageTitle}
+				<T text={Core.pageTitle} />
 			</div>
 		{/if}
 	</div>

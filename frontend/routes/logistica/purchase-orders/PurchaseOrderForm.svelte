@@ -26,7 +26,7 @@ let {
 
 <div class="grid grid-cols-2 gap-8" aria-label="Purchase order header form with provider, warehouse, dates, notes, and invoice number">
   <SearchSelect
-    label="Proveedor"
+    label="Supplier|Proveedor"
     keyId="ID"
     keyName="Name"
     options={providers}
@@ -35,7 +35,7 @@ let {
     onChange={(provider) => { if (!disableProvider) { form.ProviderID = provider?.ID || 0 } }}
   />
   <SearchSelect
-    label="Almacén"
+    label="Warehouse|Almacén"
     keyId="ID"
     keyName="Name"
     options={almacenes}
@@ -46,22 +46,22 @@ let {
     bind:saveOn={form}
     save="DeliveryDate"
     type="unix"
-    label="Date Entrega"
+    label="Delivery Date|Fecha Entrega"
   />
   <DateInput
     bind:saveOn={form}
     save="PaymentDate"
     type="unix"
-    label="Date Pago"
+    label="Payment Date|Fecha Pago"
   />
   <Input css="col-span-2"
     bind:saveOn={form}
     save="Notes"
-    label="Notas"
+    label="Notes|Notas"
   />
   <Input
     bind:saveOn={form}
     save="InvoiceNumber"
-    label="Factura"
+    label="Invoice|Factura"
   />
 </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import T from '$components/misc/T.svelte';
   // Welcome/Home page
 </script>
 
@@ -16,24 +17,22 @@
 
     <!-- Title -->
     <h1 class="text-5xl font-bold text-gray-900 dark:text-white mb-4">
-      Bienvenido a Genix
+      <T text="Welcome to Genix|Bienvenido a Genix" />
     </h1>
 
     <!-- Subtitle -->
     <p class="text-xl text-gray-600 dark:text-gray-400 mb-8">
-      Sistema de Gestión Empresarial Integral
+      <T text="Comprehensive Business Management System|Sistema de Gestión Empresarial Integral" />
     </p>
 
     <!-- Description -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
       <p class="text-gray-700 dark:text-gray-300 leading-relaxed">
-        Esta es la nueva versión del frontend desarrollada con
+        <T text="This is the new frontend version built with|Esta es la nueva versión del frontend desarrollada con" />
         <strong class="text-indigo-600 dark:text-indigo-400">Svelte 5</strong>
-        y
-        <strong class="text-indigo-600 dark:text-indigo-400"
-          >Tailwind CSS</strong
-        >. El menú lateral ha sido migrado desde Solid.js con un diseño moderno
-        y responsive.
+        <T text="and|y" />
+        <strong class="text-indigo-600 dark:text-indigo-400">Tailwind CSS</strong>.
+        <T text="The side menu has been migrated from Solid.js with a modern, responsive design.|El menú lateral ha sido migrado desde Solid.js con un diseño moderno y responsive." />
       </p>
     </div>
 
@@ -41,9 +40,9 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
         <div class="text-3xl mb-3">⚡</div>
-        <h3 class="font-semibold text-gray-900 dark:text-white mb-2">Rápido</h3>
+        <h3 class="font-semibold text-gray-900 dark:text-white mb-2"><T text="Fast|Rápido" /></h3>
         <p class="text-sm text-gray-600 dark:text-gray-400">
-          Construido con Svelte 5 para máximo rendimiento
+          <T text="Built with Svelte 5 for maximum performance|Construido con Svelte 5 para máximo rendimiento" />
         </p>
       </div>
 
@@ -53,17 +52,17 @@
           Responsive
         </h3>
         <p class="text-sm text-gray-600 dark:text-gray-400">
-          Funciona perfectamente en desktop, tablet y móvil
+          <T text="Works perfectly on desktop, tablet, and mobile|Funciona perfectamente en desktop, tablet y móvil" />
         </p>
       </div>
 
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
         <div class="text-3xl mb-3">🎨</div>
         <h3 class="font-semibold text-gray-900 dark:text-white mb-2">
-          Moderno
+          <T text="Modern|Moderno" />
         </h3>
         <p class="text-sm text-gray-600 dark:text-gray-400">
-          Diseño actualizado con Tailwind CSS
+          <T text="Updated design with Tailwind CSS|Diseño actualizado con Tailwind CSS" />
         </p>
       </div>
     </div>
@@ -76,7 +75,7 @@
 				text-white font-semibold rounded-lg shadow-md transition-colors"
       >
         <span class="mr-2">🏢</span>
-        Ver Empresas
+        <T text="View Companies|Ver Empresas" />
       </a>
 
       <a
@@ -87,21 +86,17 @@
 				transition-colors"
       >
         <span class="mr-2">📦</span>
-        Productos
+        <T text="Products|Productos" />
       </a>
     </div>
 
     <!-- Footer Info -->
     <div class="mt-12 text-sm text-gray-500 dark:text-gray-500">
-      <p>Usa el menú lateral para navegar por las diferentes secciones</p>
+      <p><T text="Use the side menu to navigate the different sections|Usa el menú lateral para navegar por las diferentes secciones" /></p>
       <p class="mt-2">
-        Presiona
-        <kbd
-          class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs font-mono"
-        >
-          ⚙️
-        </kbd>
-        en el header para cambiar el tema
+        <T text="Press|Presiona" />
+        <kbd class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs font-mono">⚙️</kbd>
+        <T text="in the header to change the theme|en el header para cambiar el tema" />
       </p>
     </div>
   </div>

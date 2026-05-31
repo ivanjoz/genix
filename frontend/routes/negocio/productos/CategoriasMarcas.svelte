@@ -2,7 +2,8 @@
 import ImageUploader, { type ImageSource } from '$components/files/ImageUploader.svelte';
 import Input from '$components/form/Input.svelte';
 import Modal from '$components/layers/Modal.svelte';
-import { closeAllModals, closeModal, imagesToUpload, openModal } from '$core/store.svelte';
+import { closeAllModals, closeModal, imagesToUpload, openModal, tr } from '$core/store.svelte';
+import T from '$components/misc/T.svelte';
 import { Loading, Notify } from '$libs/helpers';
 import { type ISharedListRecord, type ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
 
@@ -38,11 +39,11 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
     console.log("form a enviar 1::",$state.snapshot(form), isDelete)
 
     if((form.Name||"").length < 4 || !form.ListID){
-      Notify.failure("Debe colocar un nombre de al menos 4 caracteres.")
+      Notify.failure(tr("Name must be at least 4 characters.|Debe colocar un nombre de al menos 4 caracteres."))
       return
     }
 
-    Loading.standard("Guardando categoría...")
+    Loading.standard(tr("Saving category...|Guardando categoría..."))
     form.Images = form.Images || []
     form.ss = isDelete ? 0 : 1
 
@@ -50,7 +51,7 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
       const imageID = imagesIDs[i]
       // debugger
       if(imagesToUpload.has(imageID)){
-        Loading.change(`Guardando Imagen ${i+1}`)
+        Loading.change(tr(`Saving Image ${i+1}|Guardando Imagen ${i+1}`))
         const result = await imagesToUpload.get(imageID)?.()
 
         let imageName = result?.imageName || ""
@@ -63,7 +64,7 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
     }
 
     console.log("form a enviar 2::",$state.snapshot(form))
-    Loading.change("Guardando categoría...")
+    Loading.change(tr("Saving category...|Guardando categoría..."))
 
     try {
       await listas.postAndSync([form])
@@ -74,7 +75,7 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
     }
     
     if(!(form.ID > 0)){
-   		Notify.failure("No se asignó el ID")
+   		Notify.failure(tr("ID was not assigned|No se asignó el ID"))
      	return
     }
 
@@ -138,7 +139,7 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
     {/each}
   </div>
 </div>
-<Modal title="CATEGORÍA" id={2} size={6}
+<Modal title="CATEGORY|CATEGORÍA" id={2} size={6}
   onClose={() => {
     // form = {} as ISharedListRecord
     closeModal(2)
@@ -149,10 +150,10 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
   } : undefined}
   >
   <div class="grid grid-cols-12 gap-10 p-6" aria-label="Category or brand form with name, description, and images">
-    <Input label="Nombre" css="col-span-12"
+    <Input label="Name|Nombre" css="col-span-12"
       saveOn={form} save="Name" required={true}
     />
-    <Input label="Descripción" css="col-span-12 mb-16"
+    <Input label="Description|Descripción" css="col-span-12 mb-16"
       saveOn={form} save="Description"
     />
     {#each images as image, index }

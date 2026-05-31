@@ -4,7 +4,8 @@ import Modal from '$components/layers/Modal.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import Modules from '$core/modules';
-import { closeModal, Core } from '$core/store.svelte';
+import { closeModal, Core, tr } from '$core/store.svelte';
+import T from '$components/misc/T.svelte';
 import Page from '$domain/Page.svelte';
 import { arrayToMapN, Loading, Notify } from '$libs/helpers';
 import FilterInput from '$components/form/FilterInput.svelte';
@@ -139,9 +140,9 @@ import {
         accesos: accesosGroup,
         groupName: accessGroupNameByID.get(group)
           || routeCatalogIndex.get((accesosGroup[0]?.descripcion || "").replace(/^\//, ""))?.groupName
-          || "Sin grupo",
+          || tr("No group|Sin grupo"),
         moduleName: moduleSelectedID ? "" : routeCatalogIndex.get((accesosGroup[0]?.descripcion || "").replace(/^\//, ""))?.moduleName
-          || modulesMap.get(moduleID)?.name || "Sin módulo"
+          || modulesMap.get(moduleID)?.name || tr("No module|Sin módulo")
       })
     }
 
@@ -172,7 +173,7 @@ import {
   async function savePerfil(onDelete?: boolean, isAccesos?: boolean) {
     const form = perfilForm
     if (!form.Name) {
-      Notify.failure("Faltan propiedades para agregar el perfil.")
+      Notify.failure(tr("Missing required properties to add the profile.|Faltan propiedades para agregar el perfil."))
       return
     }
 
@@ -192,7 +193,7 @@ import {
       form.Modulos = [...modulosIDSet]
     }
 
-    Loading.standard("Actualizando Perfil...")
+    Loading.standard(tr("Updating Profile...|Actualizando Perfil..."))
 
     try {
       const result = await postPerfil(form)
@@ -203,7 +204,7 @@ import {
 
       perfilForm = {} as IProfile
       closeModal(2)
-      Notify.success("Perfil guardado correctamente")
+      Notify.success(tr("Profile saved successfully|Perfil guardado correctamente"))
     } catch (error) {
       Notify.failure(error as string)
     }
@@ -218,7 +219,7 @@ import {
       getValue: e => e.ID
     },
     {
-      header: "Perfil", highlight: true,
+      header: "Profile|Perfil", highlight: true,
       getValue: e => e.Name
     },
     {
@@ -234,7 +235,7 @@ import {
   ]
 </script>
 
-<Page title="Perfiles & Accesos">
+<Page title="Profiles & Access|Perfiles & Accesos">
   <div class="flex justify-between h-full gap-8 max-md:flex-col">
     <!-- Left side: Profiles table -->
     <div class="w-full md:w-[32%]">
@@ -271,22 +272,22 @@ import {
       {#if perfilForm.ID}
 	      <div class="flex justify-between w-full mb-6">
 	        <div class="ff-bold text-xl">
-	          <span>Accesos</span>
+	          <span><T text="Access|Accesos" /></span>
 	          {#if perfilForm.ID > 0}
-	            <span class="mr-2">de</span>
+	            <span class="mr-2"><T text="of|de" /></span>
 	            <span class="c-purple ml-4">{perfilForm.Name}</span>
 	          {/if}
 	        </div>
 	        <div class="flex items-center max-md:absolute max-md:top-0 max-md:right-0">
 	          {#if perfilForm.ID > 0}
-	            <Button color="blue" icon="icon-floppy" name="Guardar" css="mr-8"
+	            <Button color="blue" icon="icon-floppy" name="Save|Guardar" css="mr-8"
 	              hideNameOnMobile label="Saves the access permissions for this profile." onClick={() => savePerfil(false, true)} />
 	          {/if}
 	        </div>
 	      </div>
       {:else}
 	      <div class="mb-8 px-12 py-8 bg-red-100 border border-red-400 text-red-700 rounded w-fit">
-	        Debe seleccionar un perfil para editar sus accesos.
+	        <T text="Select a profile to edit its access permissions.|Debe seleccionar un perfil para editar sus accesos." />
 	      </div>
       {/if}
       {#if accessListLoadError}
@@ -316,7 +317,7 @@ import {
   <Modal
     id={2}
     size={5}
-    title={(perfilForm?.ID > 0 ? "Editando" : "Creando") + " Perfil"}
+    title={(perfilForm?.ID > 0 ? tr("Editing|Editando") : tr("Creating|Creando")) + " " + tr("Profile|Perfil")}
     isEdit={!!perfilForm?.ID}
     onSave={() => savePerfil()}
     onClose={() => { perfilForm = {} as IProfile }}
@@ -326,14 +327,14 @@ import {
         bind:saveOn={perfilForm}
         save="Name"
         css="col-span-24"
-        label="Nombre"
+        label="Name|Nombre"
         required={true}
       />
       <Input
         bind:saveOn={perfilForm}
         save="Description"
         css="col-span-24"
-        label="Descripción"
+        label="Description|Descripción"
       />
     </div>
   </Modal>

@@ -5,6 +5,8 @@ import VTable from '$components/vTable/VTable.svelte';
 import { ConfirmWarn, formatTime } from '$libs/helpers';
 import Button from '$components/buttons/Button.svelte';
 import { formatN } from '$libs/helpers';
+import { tr } from '$core/store.svelte';
+import T from '$components/misc/T.svelte';
   import pkg from 'notiflix'
 const { Loading } = pkg;
   import { BackupsService, createBackup, restoreBackup, type IBackup } from "./backups.svelte";
@@ -16,10 +18,9 @@ import { Env } from '$core/env';
   let backupSelected = $state(null as IBackup | null)
 
   const generarBackup = async () => {
-    Loading.standard("Generando Backup...")
+    Loading.standard(tr("Generating Backup...|Generando Backup..."))
     try {
       await createBackup()
-      // Refresh backups list after creating a new backup
       backupsService.refreshBackups()
     } catch (error) {
       // Error already handled by POST function
@@ -28,7 +29,7 @@ import { Env } from '$core/env';
   }
 
   const restaurar = async (name: string) => {
-    Loading.standard("Restaurando Backup...")
+    Loading.standard(tr("Restoring Backup...|Restaurando Backup..."))
     try {
       await restoreBackup(name)
       await sendServiceMessage(26, {})
@@ -56,13 +57,13 @@ import { Env } from '$core/env';
       getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
     },
     {
-      header: "Nombre",
+      header: "Name|Nombre",
       highlight: true,
       css: "px-6",
       getValue: e => e.Name
     },
     {
-      header: "Tamaño",
+      header: "Size|Tamaño",
       headerCss: "w-120",
       css: "text-center",
       getValue: e => `${formatN(e.Size / 1000 / 1000, 2)} mb`
@@ -77,7 +78,7 @@ import { Env } from '$core/env';
         <div class="h2 ff-bold">Backups</div>
         <div class="flex items-center">
           <Button color="green" icon="icon-plus" label="Generates a new database backup snapshot." css="mr-8" onClick={() => {
-            ConfirmWarn("Generar Backup", "¿Desea generar el backup ahora?", "SI", "NO",
+            ConfirmWarn(tr("Generate Backup|Generar Backup"), tr("Do you want to generate the backup now?|¿Desea generar el backup ahora?"), "YES|SI", "NO",
               () => { generarBackup() })
           }} />
           <Button color="blue" icon="icon-upload" label="Opens dialog to upload an existing backup file." />
@@ -108,7 +109,7 @@ import { Env } from '$core/env';
       <div class="_1 w-full rounded-[8px] min-h-160 py-12 px-16">
         {#if !backupSelected}
           <div class="w-full text-red-500 ff-bold flex-wrap box-error-ms mt-16">
-            Seleccione un Backup
+            <T text="Select a Backup|Seleccione un Backup" />
           </div>
         {:else}
           <div class="flex w-full justify-between">
@@ -120,10 +121,10 @@ import { Env } from '$core/env';
               onClick={() => downloadBackup(backupSelected!)} />
           </div>
           <div class="flex justify-center w-full mt-16">
-            <Button color="blue" name="Restaurar" icon="icon-database" label="Restores the database from the selected backup." onClick={() => {
-              ConfirmWarn("Restaurar Backup",
-                `Restaurar el backup realizado el ${formatTime(backupSelected!.upd, "Y-m-d h:n")}`,
-                "SI", "NO", () => { restaurar(backupSelected!.Name) })
+            <Button color="blue" name="Restore|Restaurar" icon="icon-database" label="Restores the database from the selected backup." onClick={() => {
+              ConfirmWarn(tr("Restore Backup|Restaurar Backup"),
+                tr(`Restore the backup from ${formatTime(backupSelected!.upd, "Y-m-d h:n")}|Restaurar el backup realizado el ${formatTime(backupSelected!.upd, "Y-m-d h:n")}`),
+                "YES|SI", "NO", () => { restaurar(backupSelected!.Name) })
             }} />
           </div>
         {/if}

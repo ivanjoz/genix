@@ -10,7 +10,8 @@ import KeyValueStrip from '$components/misc/KeyValueStrip.svelte'
 import LabelText from '$components/form/LabelText.svelte'
 import VTable from '$components/vTable/VTable.svelte'
 import type { ITableColumn } from '$components/vTable/types'
-import { Core } from '$core/store.svelte'
+import { Core, tr } from '$core/store.svelte'
+import T from '$components/misc/T.svelte'
 import { ConfirmWarn, formatN, formatTime, Loading, Notify } from '$libs/helpers'
 import { saveRouteRecord, setRouteRecordQueryParam } from '$libs/cache/route-data'
 import { CajasService } from '$routes/finanzas/cajas/cajas.svelte'
@@ -88,7 +89,7 @@ interface IPurchaseOrderDetailRow {
 }
 
 const consultarReporte = async () => {
-  Loading.standard('Consultando órdenes de compra...')
+  Loading.standard(tr('Querying purchase orders...|Consultando órdenes de compra...'))
   try {
     reportRecords = await queryPurchaseOrders(reportForm)
     isReportMode = true
@@ -197,7 +198,7 @@ onDestroy(() => {
 const openEditPurchaseOrderModal = () => {
   if (!selectedPurchaseOrder) { return }
   if (!PurchaseOrderEditableStatuses.includes(selectedPurchaseOrder.ss || 0)) {
-    Notify.failure('Solo se pueden editar órdenes en estado Pendiente o Confirmada.')
+    Notify.failure(tr('Only Pending or Confirmed orders can be edited.|Solo se pueden editar órdenes en estado Pendiente o Confirmada.'))
     return
   }
   
@@ -208,7 +209,7 @@ const openEditPurchaseOrderModal = () => {
 // Persists the edited fields via PUT action=2; backend re-validates state and ignores protected fields.
 const saveEditPurchaseOrder = async () => {
   if ((editForm.ID||0) <= 0) { return }
-  Loading.standard('Actualizando orden de compra...')
+  Loading.standard(tr('Updating purchase order...|Actualizando orden de compra...'))
   const selectedRecord = visibleRecords.find(x => x.ID === selectedPurchaseOrder?.ID)
   if(!selectedRecord){
  		Notify.failure("No se encontró el registro seleccionado. (¿?)")
@@ -234,12 +235,12 @@ const saveEditPurchaseOrder = async () => {
 const openPayPurchaseOrderModal = () => {
   if (!selectedPurchaseOrder) { return }
   if (selectedPurchaseOrder.ss !== PurchaseOrderStatus.CONFIRMED) {
-    Notify.failure('Solo se pueden pagar órdenes en estado Confirmada.')
+    Notify.failure(tr('Only Confirmed orders can be paid.|Solo se pueden pagar órdenes en estado Confirmada.'))
     return
   }
   const remainingDebt = selectedPurchaseOrder.DebtAmount || 0
   if (remainingDebt <= 0) {
-    Notify.failure('La orden no tiene deuda pendiente.')
+    Notify.failure(tr('The order has no pending debt.|La orden no tiene deuda pendiente.'))
     return
   }
 
@@ -255,21 +256,21 @@ const openPayPurchaseOrderModal = () => {
 const submitPurchaseOrderPayment = async () => {
   if (!selectedPurchaseOrder) { return }
   if (payForm.CashBankID <= 0) {
-    Notify.failure('Seleccione una caja.')
+    Notify.failure(tr('Please select a cash register.|Seleccione una caja.'))
     return
   }
   const remainingDebt = selectedPurchaseOrder.DebtAmount || 0
   if (payForm.Amount <= 0) {
-    Notify.failure('Ingrese un monto mayor a 0.')
+    Notify.failure(tr('Please enter an amount greater than 0.|Ingrese un monto mayor a 0.'))
     return
   }
   if (payForm.Amount > remainingDebt) {
-    Notify.failure('El monto excede la deuda pendiente.')
+    Notify.failure(tr('Amount exceeds the pending debt.|El monto excede la deuda pendiente.'))
     return
   }
 
   const orderID = selectedPurchaseOrder.ID
-  Loading.standard('Registrando pago...')
+  Loading.standard(tr('Registering payment...|Registrando pago...'))
   try {
     const updated = await updatePurchaseOrder(orderID, PurchaseOrderAction.PAY, {
       CashBankID: payForm.CashBankID,
@@ -332,7 +333,7 @@ const generarCopiaPurchaseOrder = async () => {
 const annulSelectedPurchaseOrder = () => {
   if (!selectedPurchaseOrder) { return }
   if (!PurchaseOrderEditableStatuses.includes(selectedPurchaseOrder.ss || 0)) {
-    Notify.failure('Solo se pueden anular órdenes en estado Pendiente o Confirmada.')
+    Notify.failure(tr('Only Pending or Confirmed orders can be cancelled.|Solo se pueden anular órdenes en estado Pendiente o Confirmada.'))
     return
   }
   const orderID = selectedPurchaseOrder.ID
@@ -342,7 +343,7 @@ const annulSelectedPurchaseOrder = () => {
     'SI',
     'NO',
     async () => {
-      Loading.standard('Anulando orden de compra...')
+      Loading.standard(tr('Cancelling purchase order...|Anulando orden de compra...'))
       try {
         await updatePurchaseOrder(orderID, PurchaseOrderAction.ANNUL)
         const selectedRecord = visibleRecords.find((r) => r.ID === orderID)
@@ -363,11 +364,11 @@ const annulSelectedPurchaseOrder = () => {
 const confirmSelectedPurchaseOrder = async () => {
   if (!selectedPurchaseOrder) { return }
   if (selectedPurchaseOrder.ss !== PurchaseOrderStatus.PENDING) {
-    Notify.failure('Solo se pueden confirmar órdenes en estado Pendiente.')
+    Notify.failure(tr('Only Pending orders can be confirmed.|Solo se pueden confirmar órdenes en estado Pendiente.'))
     return
   }
   const orderID = selectedPurchaseOrder.ID
-  Loading.standard('Confirmando orden de compra...')
+  Loading.standard(tr('Confirming purchase order...|Confirmando orden de compra...'))
   try {
     await updatePurchaseOrder(orderID, PurchaseOrderAction.CONFIRM)
     const selectedRecord = visibleRecords.find(x => x.ID === selectedPurchaseOrder?.ID)
@@ -391,12 +392,12 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
     getValue: (r) => r.ID,
   },
   {
-    header: 'Date Generación',
+    header: 'Generation Date|Fecha Generación',
     width: '130px',
     getValue: (r) => (r.Date ? (formatTime(r.Date, 'd-m-Y') as string) : ''),
   },
   {
-    header: 'Estado',
+    header: 'Status|Estado',
     width: '110px',
     align: 'center',
     // ss=2 (Completada) → green, ss=1 (Pendiente) → amber, ss=0 (Cancelada) → red.
@@ -412,35 +413,35 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
     },
   },
   {
-    header: 'Date Entrega',
+    header: 'Delivery Date|Fecha Entrega',
     width: '130px',
     getValue: (r) => (r.DeliveryDate ? (formatTime(r.DeliveryDate, 'd-m-Y') as string) : ''),
   },
   {
-    header: 'Date Pago',
+    header: 'Payment Date|Fecha Pago',
     width: '130px',
     getValue: (r) => (r.PaymentDate ? (formatTime(r.PaymentDate, 'd-m-Y') as string) : ''),
   },
   {
-    header: 'Proveedor',
+    header: 'Supplier|Proveedor',
     width: 'minmax(160px, 1.5fr)',
     highlight: true,
     getValue: (r) => providerNameOf(r.ProviderID),
   },
   {
-    header: 'Factura',
+    header: 'Invoice|Factura',
     width: 'minmax(110px, 0.8fr)',
     getValue: (r) => r.InvoiceNumber || '',
   },
   {
-    header: 'Monto Total',
+    header: 'Total Amount|Monto Total',
     width: '120px',
     align: 'right',
     css: 'ff-mono text-right',
     getValue: (r) => formatN((r.TotalAmount || 0) / 100, 2),
   },
   {
-    header: 'Nota',
+    header: 'Notes|Nota',
     width: 'minmax(180px, 2fr)',
     getValue: (r) => r.Notes || '',
   },
@@ -454,23 +455,23 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
   },
   {
     id: 'product',
-    header: 'Producto', css: "py-4 leading-[1]",
+    header: 'Product|Producto', css: "py-4 leading-[1]",
     // The actual cell uses cellRenderer to stack productName + presentation/SKU on a second line.
     getValue: (row) => row.productName,
   },
   {
-    header: 'Cant.',
+    header: 'Qty.|Cant.',
     align: 'right',
     getValue: (row) => row.quantity,
   },
   {
-    header: 'Precio',
+    header: 'Price|Precio',
     align: 'right',
     headerCss: "w-80",
     getValue: (row) => formatN((row.unitPrice || 0) / 100, 2),
   },
   {
-    header: 'Subtotal',
+    header: 'Subtotal',  // same in both languages
     align: 'right',
     headerCss: "w-80",
     getValue: (row) => formatN((row.subtotalAmount || 0) / 100, 2),
@@ -490,13 +491,13 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
       >
         <div class="w-full grid grid-cols-24 gap-12 p-12" aria-label="Purchase orders search filter with date range, provider, product, and status">
           <DateInput
-            label="Date Inicio"
+            label="Start Date|Fecha Inicio"
             css="col-span-12"
             save="dateInicio"
             bind:saveOn={reportForm}
           />
           <DateInput
-            label="Date Fin"
+            label="End Date|Fecha Fin"
             css="col-span-12"
             save="dateFin"
             bind:saveOn={reportForm}
@@ -505,7 +506,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
             bind:saveOn={reportForm}
             save="providerID"
             css="col-span-12"
-            label="Proveedor"
+            label="Supplier|Proveedor"
             keyId="ID"
             keyName="Name"
             options={providersService.records}
@@ -515,7 +516,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
             bind:saveOn={reportForm}
             save="productID"
             css="col-span-12"
-            label="Producto"
+            label="Product|Producto"
             optionsCss="w-480"
             keyId="ID"
             keyName="Name"
@@ -526,7 +527,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
             bind:saveOn={reportForm}
             save="status"
             css="col-span-12"
-            label="Estado"
+            label="Status|Estado"
             keyId="ID"
             keyName="Name"
             options={purchaseOrderStatusOptions}
@@ -649,27 +650,27 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
         <div class="grid grid-cols-24 gap-8 text-13 md:text-14" aria-label="Purchase order summary fields">
           <LabelText
             css="col-span-8"
-            label="Proveedor"
+            label="Supplier|Proveedor"
             text={providerNameOf(selectedPurchaseOrder.ProviderID)}
           />
           <LabelText
             css="col-span-4"
-            label="Estado"
+            label="Status|Estado"
             text={purchaseOrderStatusOptions.find((s) => s.ID === (selectedPurchaseOrder?.ss || 0))?.Name || 'Desconocido'}
           />
           <LabelText
             css="col-span-6"
-            label="Date Entrega"
+            label="Delivery Date|Fecha Entrega"
             text={selectedPurchaseOrder.DeliveryDate ? (formatTime(selectedPurchaseOrder.DeliveryDate, 'd-m-Y') as string) : '—'}
           />
           <LabelText
             css="col-span-6"
-            label="Date Pago"
+            label="Payment Date|Fecha Pago"
             text={selectedPurchaseOrder.PaymentDate ? (formatTime(selectedPurchaseOrder.PaymentDate, 'd-m-Y') as string) : '—'}
           />
           <LabelText
             css="col-span-7"
-            label="Factura"
+            label="Invoice|Factura"
             text={selectedPurchaseOrder.InvoiceNumber || '—'}
           />
           <LabelText
@@ -680,13 +681,13 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
           />
           <LabelText
             css="col-span-6"
-            label="Pagado"
+            label="Paid|Pagado"
             contentCss="ff-mono"
             text={formatN(((selectedPurchaseOrder.TotalAmount || 0) - (selectedPurchaseOrder.DebtAmount || 0)) / 100, 2)}
           />
           <LabelText
             css="col-span-6"
-            label="Entregado"
+            label="Delivered|Entregado"
             contentCss="ff-mono"
             text={""}
           />
@@ -737,7 +738,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
     size={5}
     bodyCss="px-16 py-12"
     isEdit={true}
-    title={`Editar Orden #${editForm.ID}`}
+    title={tr(`Edit Order #${editForm.ID}|Editar Orden #${editForm.ID}`)}
     onSave={() => { void saveEditPurchaseOrder() }}
   >
     <PurchaseOrderForm
@@ -755,13 +756,13 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
     bodyCss="px-16 py-12"
     isEdit={true}
     saveButtonLabel="Registrar Pago"
-    title={`Pagar Orden #${selectedPurchaseOrder?.ID || ''}`}
+    title={tr(`Pay Order #${selectedPurchaseOrder?.ID || ''}|Pagar Orden #${selectedPurchaseOrder?.ID || ''}`)}
     onSave={() => { void submitPurchaseOrderPayment() }}
   >
     <div class="grid grid-cols-2 gap-8" aria-label="Purchase order payment form with cash register and amount">
       <SearchSelect
         css="col-span-2"
-        label="Caja"
+        label="Cash Register|Caja"
         keyId="ID"
         keyName="Name"
         options={cajasService.Cajas}
@@ -771,7 +772,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
       <Input
         css="col-span-1"
         inputCss="text-center ff-mono"
-        label="Monto"
+        label="Amount|Monto"
         type="number"
         baseDecimals={2}
         bind:saveOn={payForm}

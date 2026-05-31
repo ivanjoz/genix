@@ -281,7 +281,7 @@
 
             <div class="grid h-94 w-full grid-cols-3 items-end gap-10">
               <SquareBarSized useStripedLines="#F0F0F0"
-                label="Ingresado"
+                label="Received|Ingresado"
                 value={formatMetricValue(dailySummaryCard.paidMetricValue)}
                 size={dailySummaryCard.paidRatio}
                 backgroundColor="#93c5fd"
@@ -289,7 +289,7 @@
               />
 
               <SquareBarSized
-                label="Por Cobrar"
+                label="Receivable|Por Cobrar"
                 value={formatMetricValue(dailySummaryCard.unpaidMetricValue)}
                 size={dailySummaryCard.unpaidRatio}
                 backgroundColor="#fdd1cd"
@@ -297,7 +297,7 @@
               />
 
               <SquareBarSized useStripedLines="#F0F0F0"
-                label="Entregado"
+                label="Delivered|Entregado"
                 value={`${formatN(dailySummaryCard.deliveredRatio * 100, 0)}%`}
                 sublabel={`${formatN(dailySummaryCard.deliveredQuantity, 0)} / ${formatN(dailySummaryCard.totalQuantity, 0)}`}
                 size={dailySummaryCard.deliveredRatio}

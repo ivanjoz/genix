@@ -8,7 +8,8 @@ import CardsList from '$components/vTable/CardsList.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ICardCell } from '$components/vTable/types';
 import { productoMonedaOptions } from '$core/products-lists';
-import { Core } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
+import T from '$components/misc/T.svelte';
 import Page from '$domain/Page.svelte';
 import type { ExcelTableColumn } from '$libs/excel/excelBuilder';
 import { ConfirmWarn, formatN, Loading, Notify } from '$libs/helpers';
@@ -48,7 +49,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
       mobile: { order: 1, css: "col-span-6 ff-bold", icon: "tag" },
     },
     {
-      header: "Insumo",
+      header: "Supply|Insumo",
       highlight: true,
       field: "Name",
       getValue: (record) => record.Name,
@@ -61,12 +62,12 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
       mobile: { order: 3, css: "col-span-12", labelLeft: "SKU:" },
     },
     {
-      header: "Marca",
+      header: "Brand|Marca",
       getValue: (record) => brandLabelById.get(record.BrandID) || "",
       mobile: { order: 4, css: "col-span-12", labelLeft: "Marca:" },
     },
     {
-      header: "Precio",
+      header: "Price|Precio",
       css: "text-right",
       // Backend stores Price in cents; UI shows two-decimal currency.
       getValue: (record) => formatN(record.Price / 100, 2),
@@ -150,7 +151,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
 
   const onSave = async (isDelete?: boolean) => {
     if ((supplyForm.Name?.length || 0) < 2) {
-      Notify.failure("El nombre debe tener al menos 2 caracteres.");
+      Notify.failure(tr("Name must be at least 2 characters.|El nombre debe tener al menos 2 caracteres."));
       return;
     }
     // Soft-delete: backend evicts records with ss=0 from the active list on next sync.
@@ -158,7 +159,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
     // Strip empty rows so the backend only persists meaningful provider entries.
     supplyForm.ProviderSupply = normalizeProviderSupplyRows(supplyForm.ProviderSupply || []);
 
-    Loading.standard("Guardando insumo...");
+    Loading.standard(tr("Saving supply...|Guardando insumo..."));
     try {
       await doPostSupplies([supplyForm]);
     } catch (error) {
@@ -172,14 +173,14 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
   };
 </script>
 
-<Page title="Insumos">
+<Page title="Supplies & Materials|Insumos">
   <div class="grid grid-cols-12 md:flex md:flex-row items-center mb-8">
-    <FilterInput label="Filtrar insumos"
+    <FilterInput label="Filter supplies|Filtrar insumos"
       css="w-full md:w-200 col-span-9"
       icon="icon-search"
       bind:value={filterText}
     />
-    <Button name="Nuevo" label="Shows the form to create a new supply in a side layer."
+    <Button name="New|Nuevo" label="Shows the form to create a new supply in a side layer."
       color="green"
       icon="icon-plus"
       hideNameOnMobile
@@ -232,7 +233,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
     } : undefined}
   >
     <div class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-6 md:mt-16" aria-label="Supply Material Form">
-      <Input label="Nombre"
+      <Input label="Name|Nombre"
         saveOn={supplyForm}
         css="col-span-24 md:col-span-16"
         required={true}
@@ -243,14 +244,14 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
         css="col-span-24 md:col-span-8"
         save="SKU"
       />
-      <Input label="Precio Base"
+      <Input label="Base Price|Precio Base"
         saveOn={supplyForm}
         css="col-span-12 md:col-span-6"
         save="Price"
         type="number"
         baseDecimals={2}
       />
-      <SearchSelect label="Moneda"
+      <SearchSelect label="Currency|Moneda"
         saveOn={supplyForm}
         css="col-span-12 md:col-span-6"
         save="CurrencyID"
@@ -258,13 +259,13 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
         keyName="v"
         options={productoMonedaOptions}
       />
-      <Input label="Stock Mínimo"
+      <Input label="Minimum Stock|Stock Mínimo"
         saveOn={supplyForm}
         css="col-span-12 md:col-span-6"
         save="MinimunStock"
         type="number"
       />
-      <SearchSelect label="Marca"
+      <SearchSelect label="Brand|Marca"
         saveOn={supplyForm}
         css="col-span-24 md:col-span-6"
         save="BrandID"
@@ -272,7 +273,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
         keyName="Name"
         options={listas.ListaRecordsMap.get(2) || []}
       />
-      <Input label="Descripción"
+      <Input label="Description|Descripción"
         saveOn={supplyForm}
         css="col-span-24"
         save="Description"

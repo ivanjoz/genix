@@ -244,7 +244,7 @@
         mobile: { order: 3, css: 'col-span-10 ff-semibold text-sm justify-self-end' }
       },
       {
-        header: 'Date Hora',
+        header: 'Date & Time|Fecha Hora',
         getValue: saleOrder => formatTime(saleOrder.Created, 'd-M h:n') as string,
         css: 'text-right',
         headerCss: 'w-100',
@@ -252,7 +252,7 @@
         mobile: { order: 1, css: 'col-span-8' }
       },
       {
-        header: 'Entregado /Pagado',
+        header: 'Delivered/Paid|Entregado/Pagado',
         id: 'delivery-payment-status',
         headerCss: 'w-82',
         css: 'text-center',
@@ -268,26 +268,26 @@
         mobile: { order: 4, css: 'col-span-7', labelTop: 'Total' }
       },
       {
-        header: 'Deuda',
+        header: 'Debt|Deuda',
         css: 'ff-mono text-right',
         getValue: saleOrder => formatN((saleOrder.DebtAmount || 0) / 100, 2),
-        mobile: { order: 5, css: 'col-span-7', labelTop: 'Deuda' }
+        mobile: { order: 5, css: 'col-span-7', labelTop: 'Debt|Deuda' }
       },
     ];
 
     if (showClientColumn) {
       saleOrderColumns.push({
         id: 'client-name',
-        header: 'Cliente',
+        header: 'Client|Cliente',
         getValue: saleOrder => getSaleOrderClientName(saleOrder),
         headerCss: 'w-220',
         css: 'px-6 line-clamp-2 whitespace-nowrap',
-        mobile: { order: 6, css: 'col-span-9', labelTop: 'Cliente' }
+        mobile: { order: 6, css: 'col-span-9', labelTop: 'Client|Cliente' }
       });
     }
 
     saleOrderColumns.push({
-      header: 'Top Productos',
+      header: 'Top Products|Top Productos',
       headerCss: 'w-[60%]',
       css: 'px-0 py-0',
       css: 'px-0 py-0 align-top',

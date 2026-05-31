@@ -1,6 +1,7 @@
 <script lang="ts">
 import Input from '$components/form/Input.svelte';
 import Button from '$components/buttons/Button.svelte';
+import T from '$components/misc/T.svelte';
   import type { IWarehouse, IWarehouseLayout } from "./sedes-almacenes.svelte"
 
   interface Props {
@@ -39,7 +40,7 @@ import Button from '$components/buttons/Button.svelte';
   <div class="overflow-auto px-4" style="max-height: calc(100% - 60px)">
     {#if layouts.length === 0}
       <div class="bg-red-100 text-red-700 p-8 rounded">
-        No hay espacios en al almacén. Agregue uno pulsando en (+)
+        <T text="No storage sections in this warehouse. Add one by pressing (+)|No hay espacios en al almacén. Agregue uno pulsando en (+)" />
       </div>
     {/if}
 
@@ -54,12 +55,12 @@ import Button from '$components/buttons/Button.svelte';
             <Input bind:saveOn={layouts[idx]} save="Name"
               css="shadow-small bg-solid no-border w-220 mr-12" inputCss="text-sm" required={true}
             />
-            <span class="ff-bold text-slate-600">Filas</span>
+            <span class="ff-bold text-slate-600"><T text="Rows|Filas" /></span>
             <Input bind:saveOn={layouts[idx]} save="RowCant"
               css="shadow-small bg-solid no-border w-60 mx-4" inputCss="text-sm" type="number"
               onChange={updateLayout}
             />
-            <span class="ff-bold text-slate-600">Niveles</span>
+            <span class="ff-bold text-slate-600"><T text="Levels|Niveles" /></span>
             <Input bind:saveOn={layouts[idx]} save="ColCant"
               css="shadow-small bg-solid no-border w-60 mx-4" inputCss="text-sm" type="number"
               onChange={updateLayout}

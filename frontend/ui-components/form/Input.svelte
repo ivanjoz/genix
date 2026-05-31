@@ -6,6 +6,7 @@ import { persistFieldValue } from '$libs/helpers';
     import { Env } from "$core/env";
     import { Agent } from "$components/agent/registry";
     import { tr } from "$core/store.svelte";
+    import T from "$components/misc/T.svelte";
 
     export interface IInput<T> {
         id?: number;
@@ -220,7 +221,7 @@ import { persistFieldValue } from '$libs/helpers';
     {#if label}
         <div class={s1.input_lab_cell_left}><div></div></div>
         <div class={s1.input_lab}>
-            {tr(label)}{@html iconValid() || ""}
+            <T text={label} />{@html iconValid() || ""}
         </div>
         <div class={s1.input_lab_cell_right}><div></div></div>
         <div class={s1.input_shadow_layer}><div></div></div>

@@ -8,7 +8,8 @@ import FilterInput from '$components/form/FilterInput.svelte'
 import Button from '$components/buttons/Button.svelte'
 import TableGrid from '$components/vTable/TableGrid.svelte'
 import type { ITableColumn } from '$components/vTable/types'
-import { Core } from '$core/store.svelte'
+import { Core, tr } from '$core/store.svelte'
+import T from '$components/misc/T.svelte'
 import { formatN, formatTime, Notify } from '$libs/helpers'
 import { ClientProviderService, ClientProviderType } from '../../negocio/clientes/clientes-proveedores.svelte'
 import { ProductosService } from '../../negocio/productos/productos.svelte'
@@ -215,15 +216,15 @@ let isSaving = $state(false)
 const handleSave = async () => {
   if (isSaving) return
   if (!selectedOrderID) {
-    Notify.failure('Seleccione una Órden de Compra.')
+    Notify.failure(tr('Please select a Purchase Order.|Seleccione una Órden de Compra.'))
     return
   }
   if (!warehouseID) {
-    Notify.failure('Seleccione el Almacén destino.')
+    Notify.failure(tr('Please select the destination Warehouse.|Seleccione el Almacén destino.'))
     return
   }
   if (entries.length === 0) {
-    Notify.failure('No hay productos para ingresar.')
+    Notify.failure(tr('No products to enter.|No hay productos para ingresar.'))
     return
   }
 
@@ -250,7 +251,7 @@ const handleSave = async () => {
   }
 
   if (items.length === 0) {
-    Notify.failure('No hay items válidos para ingresar.')
+    Notify.failure(tr('No valid items to enter.|No hay items válidos para ingresar.'))
     return
   }
 
@@ -261,7 +262,7 @@ const handleSave = async () => {
       WarehouseID: warehouseID,
       Items: items,
     })
-    Notify.success('Órden de compra ingresada correctamente.')
+    Notify.success(tr('Purchase order entered successfully.|Órden de compra ingresada correctamente.'))
     // Reset local state — the saved OC is no longer Confirmada, so it disappears from the picker.
     selectedOrderID = 0
     entries = []
@@ -285,7 +286,7 @@ const formatOrderLabel = (order: IPurchaseOrder): string => {
 const entryColumns: ITableColumn<Row>[] = [
   {
     id: 'producto',
-    header: 'Producto',
+    header: 'Product|Producto',
     width: 'minmax(0, 1fr)',
     useLineClamp: true,
     getValue: (row) => {
@@ -295,7 +296,7 @@ const entryColumns: ITableColumn<Row>[] = [
   },
   {
     id: 'vencimiento',
-    header: 'Vencimiento',
+    header: 'Expiry|Vencimiento',
     width: '130px',
     css: "px-0",
     useCellRenderer: true,
@@ -303,7 +304,7 @@ const entryColumns: ITableColumn<Row>[] = [
   },
   {
     id: 'cantidad',
-    header: 'Cant.',
+    header: 'Qty.|Cant.',
     width: '90px',
     align: 'right',
     cellInputType: 'number',
@@ -317,7 +318,7 @@ const entryColumns: ITableColumn<Row>[] = [
   },
   {
     id: 'serial',
-    header: 'S/N',
+    header: 'Serial #|S/N',
     width: '110px',
     align: 'right',
     useCellRenderer: true,
@@ -339,7 +340,7 @@ const entryColumns: ITableColumn<Row>[] = [
 const serialColumns: ITableColumn<{ serial: string, quantity: number }>[] = [
   {
     id: 'serial',
-    header: 'Serial',
+    header: 'Serial',  // same in both languages
     width: 'minmax(0, 1fr)',
     css: 'ff-mono',
     getValue: (row) => row.serial,
@@ -368,7 +369,7 @@ const serialColumns: ITableColumn<{ serial: string, quantity: number }>[] = [
   },
   {
     id: 'quantity',
-    header: 'Cant.',
+    header: 'Qty.|Cant.',
     width: '110px',
     align: 'right',
     cellInputType: 'number',
@@ -486,7 +487,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
       <Button color="blue" icon="icon-floppy" css="shrink-0"
         disabled={isSaving || !selectedOrderID || entries.length === 0}
         label="Submits the received items from the purchase order into the selected warehouse stock." onClick={handleSave}
-        name={isSaving ? 'Guardando…' : 'Guardar'} hideNameOnMobile />
+        name={isSaving ? tr('Saving…|Guardando…') : tr('Save|Guardar')} hideNameOnMobile />
     </div>
 
     <div class="flex-1 min-h-0 px-12 py-8">

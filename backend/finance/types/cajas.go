@@ -4,16 +4,16 @@ import "app/db"
 
 type CashBank struct {
 	db.TableStruct[CashBankTable, CashBank]
-	CompanyID           int32
-	ID                  int32
-	Type                int32
-	SiteID              int32
-	Name                string
-	Description         string
-	CurrencyType        int8
-	ReconciliationDate  int32
+	CompanyID            int32
+	ID                   int32
+	Type                 int32
+	SiteID               int32
+	Name                 string
+	Description          string
+	CurrencyType         int8
+	ReconciliationDate   int32
 	ReconciliationAmount int32
-	CurrentAmount       int32
+	CurrentAmount        int32
 	// General properties
 	Status    int8  `json:"ss,omitempty"`
 	Updated   int32 `json:"upd,omitempty"`
@@ -60,9 +60,10 @@ type CashBankMovement struct {
 	ID            int64
 	CashBankID    int32
 	CashBankRefID int32
-	DocumentID    int64 `json:",omitempty"`
+	DocumentID    int64 `json:",omitempty"` // Sale Order ID / ExpenseID
+	ReferenceID   int32 `json:",omitempty"` // 
 	Date          int16
-	Type          int8  `json:",omitempty"`
+	Type          int8 `json:",omitempty"`
 	FinalAmount   int32
 	Amount        int32
 	Created       int32 `json:",omitempty"`
@@ -76,6 +77,7 @@ type CashBankMovementTable struct {
 	CashBankID    db.Col[CashBankMovementTable, int32]
 	CashBankRefID db.Col[CashBankMovementTable, int32]
 	DocumentID    db.Col[CashBankMovementTable, int64]
+	ReferenceID   db.Col[CashBankMovementTable, int32]
 	Date          db.Col[CashBankMovementTable, int16]
 	Type          db.Col[CashBankMovementTable, int8]
 	FinalAmount   db.Col[CashBankMovementTable, int32]
@@ -96,6 +98,7 @@ func (e CashBankMovementTable) GetSchema() db.TableSchema {
 		AutoincrementPart: e.Date,
 		Indexes: []db.Index{
 			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.DocumentID}},
+			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.ReferenceID}},
 			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.CreatedBy}},
 		},
 	}

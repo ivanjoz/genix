@@ -12,6 +12,7 @@
   import Renderer, { type ElementAST } from '$components/misc/Renderer.svelte'
   import { Env } from '$core/env'
   import { tr } from '$core/store.svelte'
+  import T from '$components/misc/T.svelte'
   import { Agent } from '$components/agent/registry'
   import {
     setVTableAgentContext,
@@ -201,14 +202,14 @@
             class="table-tree-header-cell {headerPaddingCss} {getAlignClassName(columnDefinition.align)} {columnDefinition.headerCss || ''}"
             role="columnheader"
           >
-            {tr(typeof columnDefinition.header === 'function' ? columnDefinition.header() : columnDefinition.header)}
+            <T text={typeof columnDefinition.header === 'function' ? columnDefinition.header() : columnDefinition.header} />
           </div>
         {/each}
       </div>
     </div>
 
     {#if data.length === 0}
-      <div class="table-tree-empty">{tr(emptyMessage)}</div>
+      <div class="table-tree-empty"><T text={emptyMessage} /></div>
     {:else}
       <div class="table-tree-body">
         {#each data as node, nodeIndex(node.id)}

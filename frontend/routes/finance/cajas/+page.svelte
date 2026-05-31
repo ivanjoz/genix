@@ -11,7 +11,8 @@ import RecordByIDText from '$components/misc/RecordByIDText.svelte';
 import { Loading, Notify, formatTime } from '$libs/helpers';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
-import { Core } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
+import T from '$components/misc/T.svelte';
 import { formatN } from '$libs/helpers';
   import { AlmacenesService } from "../../negocio/sedes-almacenes/sedes-almacenes.svelte"
   import CajaForm from "./CajaForm.svelte"
@@ -52,7 +53,7 @@ import { formatN } from '$libs/helpers';
       getValue: e => e.ID
     },
     {
-      header: "Nombre", css: "px-6 py-2",
+      header: "Name|Nombre", css: "px-6 py-2",
       getValue: e => e.Name,
       render: e => {
         const tipoName = cajaTipos.find(x => x.id === e.Type)?.name || "-"
@@ -63,7 +64,7 @@ import { formatN } from '$libs/helpers';
       }
     },
     {
-      header: "Cuadre",
+      header: "Reconciliation|Cuadre",
       getValue: e => e.ReconciliationDate ? String(e.ReconciliationDate) : "",
       render: e => {
         if (!e.ReconciliationDate) { return "" }
@@ -76,7 +77,7 @@ import { formatN } from '$libs/helpers';
       }
     },
     {
-      header: "Saldo",
+      header: "Balance|Saldo",
       css: "text-right ff-mono px-6",
       getValue: e => formatN(e.CurrentAmount / 100, 2)
     },
@@ -85,10 +86,10 @@ import { formatN } from '$libs/helpers';
   const saveCaja = async () => {
     const caja = cajaForm
     if (!caja.Name || !caja.Type || !caja.SiteID) {
-      Notify.failure("Los inputs Nombre, Tipo y Sede son obligatorios")
+      Notify.failure(tr("Name, Type, and Branch are required.|Los inputs Nombre, Tipo y Sede son obligatorios"))
       return
     }
-    Loading.standard("Guardando caja...")
+    Loading.standard(tr("Saving cash register...|Guardando caja..."))
     try {
       var result = await postCaja(caja)
     } catch (error) {
@@ -114,7 +115,7 @@ import { formatN } from '$libs/helpers';
     const form = cajaCuadreForm
     form.SaldoSistema = cajaForm.CurrentAmount
 
-    Loading.standard("Guardando caja...")
+    Loading.standard(tr("Saving cash register...|Guardando caja..."))
     let recordSaved: ICashReconciliation & { NeedUpdateSaldo: number }
     try {
       recordSaved = await postCajaCuadre(form)
@@ -145,10 +146,10 @@ import { formatN } from '$libs/helpers';
   const saveCajaMovimiento = async () => {
     const form = cajaMovimientoForm
     if (!form.Type || !form.Amount) {
-      Notify.failure("Se necesita seleccionar un monto y un tipo.")
+      Notify.failure(tr("Please select an amount and a type.|Se necesita seleccionar un monto y un tipo."))
       return
     }
-    Loading.standard("Guardando Movimiento...")
+    Loading.standard(tr("Saving Movement...|Guardando Movimiento..."))
     let movimientoSaved: ICashBankMovement
     try {
       movimientoSaved = await postCajaMovimiento(form)
@@ -215,7 +216,7 @@ import { formatN } from '$libs/helpers';
   })
 </script>
 
-<Page title="Cajas & Bancos">
+<Page title="Cash & Banks|Cajas & Bancos">
   <div class="flex h-full gap-20">
     <div class="flex-1 flex flex-col min-w-0 relative">
       <div class="flex justify-between items-center w-full mb-10" aria-label="Cash registers toolbar with filter and create button">
@@ -241,11 +242,11 @@ import { formatN } from '$libs/helpers';
     </div>
     <LayerStatic
       css="w-[64%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10 overflow-hidden"
-      mobileLayerTitle="Detalle de Caja"
+      mobileLayerTitle="Cash Register Detail|Detalle de Caja"
     >
       <div class="px-12 pt-12">
         <OptionsStrip selected={layerView}
-          options={[[1, 'Movimientos'], [3, 'Config.'], [2, 'Cuadres']]}
+          options={[[1, 'Movements|Movimientos'], [3, 'Config.'], [2, 'Reconciliations|Cuadres']]}
           buttonCss="ff-bold"
           onSelect={e => {
             layerView = e[0] as number
@@ -256,10 +257,10 @@ import { formatN } from '$libs/helpers';
       {#if layerView === 1}
         {#if isLoadingMovimientos}
           <div class="flex justify-center items-center py-40">
-            <div class="text-slate-400">Cargando...</div>
+            <div class="text-slate-400"><T text="Loading...|Cargando..." /></div>
           </div>
         {:else if !cajaForm.ID}
-          <div class="bg-red-100 text-red-700 p-8 mt-8 rounded">Seleccione una Caja</div>
+          <div class="bg-red-100 text-red-700 p-8 mt-8 rounded"><T text="Select a Cash Register|Seleccione una Caja" /></div>
         {:else}
           <div class="flex w-full justify-between mt-8">
             <div class="flex items-center">
@@ -279,15 +280,15 @@ import { formatN } from '$libs/helpers';
             data={cajaMovimientos}
             columns={[
               {
-                header: "Date Hora",
+                header: "Date & Time|Fecha Hora",
                 getValue: e => formatTime(e.Created, "d-M h:n") as string
               },
               {
-                header: "Tipo Mov.",
+                header: "Movement Type|Tipo Mov.",
                 getValue: e => cajaMovimientoTiposMap.get(e.Type)?.name || ""
               },
               {
-                header: "Monto",
+                header: "Amount|Monto",
                 css: "ff-mono text-right px-6",
                 render: e => {
                   const monto = formatN(e.Amount / 100, 2)
@@ -296,19 +297,19 @@ import { formatN } from '$libs/helpers';
                 }
               },
               {
-                header: "Saldo Final",
+                header: "Final Balance|Saldo Final",
                 css: "ff-mono text-right px-6",
                 getValue: e => formatN(e.FinalAmount / 100, 2)
               },
               {
-                header: "Nº Documento",
+                header: "Document #|Nº Documento",
                 css: "text-right px-6",
                 getValue: e => e.DocumentID ? String(e.DocumentID) : ""
               },
               {
                 // id triggers cellRenderer snippet so we can mount RecordByIDText per row.
                 id: "movimientoUsuario",
-                header: "Usuario",
+                header: "User|Usuario",
                 css: "text-center px-6",
                 getValue: e => e.CreatedBy
               }
@@ -325,10 +326,10 @@ import { formatN } from '$libs/helpers';
       {#if layerView === 2}
         {#if isLoadingCuadres}
           <div class="flex justify-center items-center py-40">
-            <div class="text-slate-400">Cargando...</div>
+            <div class="text-slate-400"><T text="Loading...|Cargando..." /></div>
           </div>
         {:else if !cajaForm.ID}
-          <div class="bg-red-100 text-red-700 p-8 mt-8 rounded">Seleccione una Caja</div>
+          <div class="bg-red-100 text-red-700 p-8 mt-8 rounded"><T text="Select a Cash Register|Seleccione una Caja" /></div>
         {:else}
           <div class="flex w-full justify-between mt-8">
             <div></div>
@@ -344,7 +345,7 @@ import { formatN } from '$libs/helpers';
             data={cajaCuadres}
             columns={[
               {
-                header: "Date Hora",
+                header: "Date & Time|Fecha Hora",
                 getValue: e => formatTime(e.Created, "d-M h:n") as string
               },
               {
@@ -365,7 +366,7 @@ import { formatN } from '$libs/helpers';
               {
                 // id triggers cellRenderer snippet so we can mount RecordByIDText per row.
                 id: "cuadreUsuario",
-                header: "Usuario",
+                header: "User|Usuario",
                 css: 'text-center px-6',
                 getValue: e => e.CreatedBy
               }
@@ -381,7 +382,7 @@ import { formatN } from '$libs/helpers';
       {/if}
       {#if layerView === 3}
         {#if !cajaForm.ID}
-          <div class="bg-red-100 text-red-700 p-8 mt-8 rounded">Seleccione una Caja</div>
+          <div class="bg-red-100 text-red-700 p-8 mt-8 rounded"><T text="Select a Cash Register|Seleccione una Caja" /></div>
         {:else}
           <div class="mt-8">
             <CajaForm bind:form={cajaForm} sedes={almacenes.Sedes} />
@@ -395,7 +396,7 @@ import { formatN } from '$libs/helpers';
     </LayerStatic>
   </div>
 
-  <Modal id={1} title="Cajas" size={6} bodyCss="px-16 py-14"
+  <Modal id={1} title="Cash Registers|Cajas" size={6} bodyCss="px-16 py-14"
     onSave={() => {
       saveCaja()
     }}
@@ -406,7 +407,7 @@ import { formatN } from '$libs/helpers';
     <CajaForm bind:form={cajaForm} sedes={almacenes.Sedes} />
   </Modal>
 
-  <Modal id={2} title="Cuadre de Caja" size={6}
+  <Modal id={2} title="Cash Reconciliation|Cuadre de Caja" size={6}
     onSave={() => {
       saveCajaCuadre()
     }}
@@ -414,14 +415,14 @@ import { formatN } from '$libs/helpers';
     <div class="flex items-start w-full p-16" aria-label="Cash balance reconciliation form with system balance, found balance, and difference">
       <div class="w-260 mr-16">
         <div class="w-full mb-12">
-          <div class="text-sm mb-4 text-slate-600">Saldo Sistema</div>
+          <div class="text-sm mb-4 text-slate-600"><T text="System Balance|Saldo Sistema" /></div>
           <div class="text-[1.1rem] ff-mono text-center bg-slate-100 py-8 rounded">
             {formatN((cajaForm.CurrentAmount||0) / 100, 2)}
           </div>
         </div>
         <Input bind:saveOn={cajaCuadreForm} save="ActualAmount" type="number"
           inputCss="text-[1.1rem] ff-mono text-center" baseDecimals={2}
-          css="w-full mb-12" label="Saldo Encontrado" required={true}
+          css="w-full mb-12" label="Found Balance|Saldo Encontrado" required={true}
           onChange={() => {
             console.log("caja cuadre::", cajaCuadreForm)
             cajaCuadreForm = { ...cajaCuadreForm }
@@ -444,7 +445,7 @@ import { formatN } from '$libs/helpers';
       </div>
 
       <div class="flex items-end">
-        <Button color="purple" icon="icon-arrows-cw" name="Recalcular" label="Recalculates the balance difference using the latest system saldo." css="w-full mt-24" />
+        <Button color="purple" icon="icon-arrows-cw" name="Recalculate|Recalcular" label="Recalculates the balance difference using the latest system saldo." css="w-full mt-24" />
       </div>
       {#if cajaCuadreForm._error}
         <div class="col-span-24 text-red-600 ff-bold">
@@ -454,14 +455,14 @@ import { formatN } from '$libs/helpers';
     </div>
   </Modal>
 
-  <Modal id={3} title="Movimiento de Caja" size={6}
+  <Modal id={3} title="Cash Movement|Movimiento de Caja" size={6}
     onSave={() => {
       saveCajaMovimiento()
     }}
   >
     <div class="grid grid-cols-24 gap-10" aria-label="Cash movement form with type, destination cash register, and amount">
       <SearchSelect bind:saveOn={cajaMovimientoForm} save="Type" css="col-span-24 md:col-span-12"
-        label="Tipo" keyId="id" keyName="name"
+        label="Type|Tipo" keyId="id" keyName="name"
         options={cajaMovimientoTipos.filter(x => x.group === 2)}
         placeholder="" required={true}
         onChange={() => {
@@ -470,13 +471,13 @@ import { formatN } from '$libs/helpers';
         }}
       />
       <SearchSelect bind:saveOn={cajaMovimientoForm} save="CajaRefID" css="col-span-24 md:col-span-12"
-        label="Caja Destino" keyId="id" keyName="name" options={cajaTipos}
+        label="Destination Register|Caja Destino" keyId="id" keyName="name" options={cajaTipos}
         disabled={!isCajaMovimiento}
         placeholder={isCajaMovimiento ? "seleccione" : "no aplica"}
         required={true}
       />
       <Input bind:saveOn={cajaMovimientoForm} save="Amount" inputCss="ff-mono text-[1.1rem] text-center"
-        css="col-span-24 md:col-span-12" label="Monto" baseDecimals={2}
+        css="col-span-24 md:col-span-12" label="Amount|Monto" baseDecimals={2}
         required={true} type="number"
         transform={v => {
           const movTipo = cajaMovimientoTiposMap.get(cajaMovimientoForm.Type)

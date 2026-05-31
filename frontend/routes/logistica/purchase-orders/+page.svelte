@@ -4,10 +4,10 @@ import Page from '$domain/Page.svelte'
 import PurchaseOrderCreate from './PurchaseOrderCreate.svelte'
 import PurchaseOrderReport from './PurchaseOrderReport.svelte'
 
-const pageOptions = [{ id: 1, name: 'Órdenes' }, { id: 2, name: 'Reporte' }]
+const pageOptions = [{ id: 1, name: 'Orders|Órdenes' }, { id: 2, name: 'Report|Reporte' }]
 </script>
 
-<Page title="Órdenes de Compra" options={pageOptions}>
+<Page title="Purchase Orders|Órdenes de Compra" options={pageOptions}>
   {#if Core.pageOptionSelected === 1}
     <PurchaseOrderCreate />
   {/if}

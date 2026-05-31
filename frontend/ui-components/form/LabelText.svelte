@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tr } from '$core/store.svelte'
+  import T from '$components/misc/T.svelte'
 
   interface LabelTextProps {
     label: string
@@ -17,6 +17,6 @@
 </script>
 
 <div class={css}>
-  <div class="text-gray-500 text-sm leading-[1.15]">{tr(label)}</div>
+  <div class="text-gray-500 text-sm leading-[1.15]"><T text={label} /></div>
   <div class={contentCss}>{text}</div>
 </div>

@@ -5,6 +5,6 @@
 
 <ClientesProveedoresView
   clientProviderType={ClientProviderType.PROVIDER}
-  pageTitle="Proveedores"
-  layerTitleSingular="Proveedor"
+  pageTitle="Suppliers|Proveedores"
+  layerTitleSingular="Supplier|Proveedor"
 />

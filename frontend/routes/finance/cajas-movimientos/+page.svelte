@@ -7,6 +7,7 @@ import type { ITableColumn } from '$components/vTable/types';
 import RecordByIDText from '$components/misc/RecordByIDText.svelte';
 import { Loading, formatTime, throttle, Notify } from '$libs/helpers';
 import { formatN } from '$libs/helpers';
+import { tr } from '$core/store.svelte';
   import { untrack } from "svelte"
   import {
     CajasService,
@@ -18,7 +19,6 @@ import { formatN } from '$libs/helpers';
   const cajas = new CajasService()
   const cajaMovimientoTiposMap = new Map(cajaMovimientoTipos.map(x => [x.id, x]))
 
-  // Get current date and 7 days ago as Unix days
   const getFechaUnix = (): number => {
     return Math.floor(Date.now() / (1000 * 60 * 60 * 24))
   }
@@ -30,7 +30,6 @@ import { formatN } from '$libs/helpers';
   let cajaMovimientos = $state([] as ICashBankMovement[])
   let filterText = $state("")
 
-  // Set default caja when cajas are loaded
   $effect(() => {
     if(cajas?.Cajas?.length > 0){
       untrack(() => {
@@ -42,11 +41,11 @@ import { formatN } from '$libs/helpers';
 
   const consultarRegistros = async () => {
     if (!form.CajaID || !form.dateInicio || !form.dateFin) {
-      Notify.failure("Debe seleccionar una caja y un rango de dates.")
+      Notify.failure(tr("Please select a cash register and a date range.|Debe seleccionar una caja y un rango de dates."))
       return
     }
 
-    Loading.standard("Consultando registros...")
+    Loading.standard(tr("Querying records...|Consultando registros..."))
     let result: ICashBankMovement[]
     try {
       result = await getCajaMovimientos(form)
@@ -62,19 +61,19 @@ import { formatN } from '$libs/helpers';
 
   const columns: ITableColumn<ICashBankMovement>[] = [
     {
-      header: "Date Hora",
+      header: "Date & Time|Fecha Hora",
       headerCss: "w-140",
       css: "ff-mono px-6",
       getValue: e => formatTime(e.Created, "d-M h:n") as string
     },
     {
-      header: "Tipo Mov.",
+      header: "Movement Type|Tipo Mov.",
       headerCss: "w-160",
       css: "px-6",
       getValue: e => cajaMovimientoTiposMap.get(e.Type)?.name || ""
     },
     {
-      header: "Monto",
+      header: "Amount|Monto",
       headerCss: "w-120",
       css: "ff-mono text-right px-6",
       render: e => {
@@ -83,13 +82,13 @@ import { formatN } from '$libs/helpers';
       }
     },
     {
-      header: "Saldo Final",
+      header: "Final Balance|Saldo Final",
       headerCss: "w-120",
       css: "ff-mono text-right px-6",
       getValue: e => formatN(e.FinalAmount / 100, 2) as string
     },
     {
-      header: "Nº Documento",
+      header: "Document #|Nº Documento",
       headerCss: "w-140",
       css: "text-center px-6",
       getValue: e => e.DocumentID ? String(e.DocumentID) : ""
@@ -97,7 +96,7 @@ import { formatN } from '$libs/helpers';
     {
       // id triggers cellRenderer snippet so we can mount RecordByIDText per row.
       id: "movimientoUsuario",
-      header: "Usuario",
+      header: "User|Usuario",
       headerCss: "w-120",
       css: "text-center px-6",
       getValue: e => e.CreatedBy
@@ -105,14 +104,14 @@ import { formatN } from '$libs/helpers';
   ]
 </script>
 
-<Page title="Cajas Movimientos">
+<Page title="Cash Movements|Cajas Movimientos">
   <div class="flex items-center justify-between mb-12" aria-label="Cash movements search filter with cash register, date range, and search">
     <div class="flex items-center w-full" style="max-width: 64rem;">
       <SearchSelect
         bind:saveOn={form}
         save="CajaID"
         css="w-240 mr-12"
-        label="Cajas & Bancos"
+        label="Cash & Banks|Cajas & Bancos"
         keyId="ID"
         keyName="Name"
         options={cajas?.Cajas || []}
@@ -120,19 +119,19 @@ import { formatN } from '$libs/helpers';
         required={true}
       />
       <DateInput
-        label="Date Inicio"
+        label="Start Date|Fecha Inicio"
         css="w-140 mr-12"
         save="dateInicio"
         bind:saveOn={form}
       />
       <DateInput
-        label="Date Fin"
+        label="End Date|Fecha Fin"
         css="w-140 mr-12"
         save="dateFin"
         bind:saveOn={form}
       />
       <button class="px-16 py-8 bx-blue mt-8 h-44"
-        aria-label="Consultar registros"
+        aria-label="Query records"
         onclick={ev => {
           ev.stopPropagation()
           consultarRegistros()
@@ -149,7 +148,7 @@ import { formatN } from '$libs/helpers';
         class="w-full pl-36 pr-12 py-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
         autocomplete="off"
         type="text"
-        placeholder="Buscar..."
+        placeholder={tr("Search...|Buscar...")}
         onkeyup={ev => {
           ev.stopPropagation()
           throttle(() => {

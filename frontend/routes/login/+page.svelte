@@ -6,6 +6,8 @@
   import { sendUserLogin, type ILogin } from '$services/login';
   import { checkIsLogin } from '$core/security';
   import { Env, type IApiEndpointOption } from '$core/env';
+  import { tr } from '$core/store.svelte';
+  import T from '$components/misc/T.svelte';
 
   let form = $state({ User: "", Password: "", CompanyID: 1, CipherKey: "" } as ILogin)
   let selectorForm = $state({ selectedApiEndpointRoute: "" })
@@ -29,12 +31,12 @@
 
   const sendLogin = async () => {
     if(form.User.length < 4 || form.Password.length < 4){
-      Notify.failure('Debe proporcionar un usuario y una contraseña válidos');
+      Notify.failure(tr('Please provide a valid username and password.|Debe proporcionar un usuario y una contraseña válidos.'));
       return
     }
 
     isLoading = true
-    Notify.info('Enviando Credenciales...')
+    Notify.info(tr('Sending credentials...|Enviando Credenciales...'))
 
     const result = await sendUserLogin(form)
     console.log(result)
@@ -42,7 +44,7 @@
     isLoading = false
 
     if(result.error){
-      Notify.failure('Error al iniciar sesión')
+      Notify.failure(tr('Login error|Error al iniciar sesión'))
     }
   }
 
@@ -59,18 +61,18 @@
   <div class="flex items-center h-screen login-bg-c1 relative">
     <div class="login-bg-1 w-full" aria-label="Login form with username and password">
       <div class="login-tt flex items-center text-xl">
-        Iniciar Sesión
+        <T text="Sign In|Iniciar Sesión" />
       </div>
       <div class="login-logo-c relative mb-2">
         <img class="w-full h-full" src="/images/genix_logo.svg" alt="Genix Logo" />
       </div>
       <div class="flex justify-center items-center text-xl font-semibold text-[#686caa] mb-4">
-        Gestor Empresarial en la Nube para MyPes
+        <T text="Cloud Business Manager for SMEs|Gestor Empresarial en la Nube para MyPes" />
       </div>
       <Input
         required={true}
         css="mb-12 w-full text-lg"
-        label="Usuario"
+        label="Username|Usuario"
         saveOn={form}
         save="User"
         type="text"
@@ -78,7 +80,7 @@
       <Input
         required={true}
         css="mb-12 w-full text-lg"
-        label="Contraseña"
+        label="Password|Contraseña"
         saveOn={form}
         save="Password"
         type="password"
@@ -87,7 +89,7 @@
         <SearchSelect
           css="mb-8 w-full text-lg login-server-selector"
           inputCss="text-base"
-          label="Servidor"
+          label="Server|Servidor"
           saveOn={selectorForm}
           save="selectedApiEndpointRoute"
           options={apiEndpointOptions}
@@ -106,7 +108,7 @@
             sendLogin()
           }}
         >
-          <i class="icon-login"></i> Ingresar
+          <i class="icon-login"></i> <T text="Sign In|Ingresar" />
         </button>
       </div>
     </div>

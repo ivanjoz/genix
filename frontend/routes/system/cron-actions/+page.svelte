@@ -5,6 +5,7 @@ import type { ITableColumn } from '$components/vTable/types';
 import { formatTime } from '$libs/helpers';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
+import { tr } from '$core/store.svelte';
 import {
   CronActionsService,
   type ICronActionTableRow,
@@ -24,7 +25,7 @@ const formatUpdatedSunix = (updatedSunix: number) => {
 
 const getStatusLabel = (status: number) => {
   // Status 0 is known as pending from the scheduler flow; other values stay explicit.
-  if (status === 0) return 'Pendiente (0)'
+  if (status === 0) return tr('Pending (0)|Pendiente (0)')
   return String(status)
 }
 
@@ -48,7 +49,7 @@ const formatParams = (row: ICronActionTableRow) => {
 
 const columns: ITableColumn<ICronActionTableRow>[] = [
   {
-    header: "Franja Horaria",
+    header: "Time Slot|Franja Horaria",
     headerCss: "w-140",
     css: "px-6 nowrap",
     getValue: (row) => formatUnixMinutesFrame(row.UnixMinutesFrame),
@@ -60,25 +61,25 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
     getValue: (row) => row.ActionID,
   },
   {
-    header: "Acción",
+    header: "Action|Acción",
     highlight: true,
     css: "px-6",
     getValue: (row) => row.ActionName,
   },
   {
-    header: "Empresa",
+    header: "Company|Empresa",
     headerCss: "w-96",
     css: "text-center ff-mono",
     getValue: (row) => row.CompanyID,
   },
   {
-    header: "Parámetros",
+    header: "Parameters|Parámetros",
     headerCss: "w-320",
     css: "px-6 nowrap",
     getValue: (row) => formatParams(row),
   },
   {
-    header: "Invocaciones",
+    header: "Invocations|Invocaciones",
     headerCss: "w-240",
     css: "px-6",
     getValue: (row) => `${row.InvocationCount}`,
@@ -108,7 +109,7 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
   <div class="h-full">
     <div class="flex items-center justify-between mb-6 gap-12" aria-label="Cron actions toolbar with filter and reload button">
       <FilterInput bind:value={filterText} css="w-320" />
-      <Button color="blue" name="Recargar" icon="icon-rotate-right" label="Reloads the cron actions list from the server."
+      <Button color="blue" name="Reload|Recargar" icon="icon-rotate-right" label="Reloads the cron actions list from the server."
         onClick={() => cronActionsService.fetchOnline()} />
     </div>
 

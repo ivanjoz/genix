@@ -6,7 +6,8 @@ import LoadingBar from '$components/misc/LoadingBar.svelte';
 import TableGrid from '$components/vTable/TableGrid.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { Core } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
+import T from '$components/misc/T.svelte';
 import { getStaticRecordsByID } from '$libs/cache/cache-by-ids.svelte';
 import { formatN, Loading, Notify } from '$libs/helpers';
 import FilterInput from '$components/form/FilterInput.svelte';
@@ -396,7 +397,7 @@ const validateSerialNumberUnique = (
     && (stockDetail.SerialNumber || '') === checkSerialNumber
     && getLotIdentity(stockDetail) === checkLotIdentity,
   )
-  if (duplicate) { Notify.warning('La combinación Lote + Serial ya existe.') }
+  if (duplicate) { Notify.warning(tr('The Batch + Serial combination already exists.|La combinación Lote + Serial ya existe.')) }
   return !duplicate
 }
 
@@ -407,7 +408,7 @@ const validateLotUnique = (stockDetailRecord: IProductStockDetailRow, checkLotCo
     stockDetail !== stockDetailRecord
     && (stockDetail.LotCode || '') === checkLotCode,
   )
-  if (duplicate) { Notify.warning('El Lote ya existe.') }
+  if (duplicate) { Notify.warning(tr('The Batch already exists.|El Lote ya existe.')) }
   return !duplicate
 }
 
@@ -421,7 +422,8 @@ const updateStockDetailQuantity = (stockDetailRecord: IProductStockDetailRow, qu
 
 const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
   {
-    header: 'Serial', css: 'ff-mono',
+    header: 'Serial',  // same in both languages
+      css: 'ff-mono',
     getValue: (stockDetail) => stockDetail.SerialNumber || '',
     disableCellInteractions: (stockDetail) => !stockDetail._isNew,
     onBeforeCellChange: (stockDetail, value) => {
@@ -450,7 +452,7 @@ const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
     },
   },
   {
-    header: 'Lote',
+    header: 'Batch|Lote',
     getValue: (stockDetail) => getLotDisplay(stockDetail),
     disableCellInteractions: (stockDetail) => !stockDetail._isNew,
     onBeforeCellChange: (stockDetail, value) => {
@@ -472,7 +474,7 @@ const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
     },
   },
   {
-    header: 'Cant.', css: 'justify-end', inputCss: 'text-right pr-6',
+    header: 'Qty.|Cant.', css: 'justify-end', inputCss: 'text-right pr-6',
     getValue: (stockDetail) => stockDetail.Quantity ?? '',
     cellInputType: 'number',
     onCellEdit: (stockDetail, value) => {
@@ -499,7 +501,7 @@ const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
 
 const lotColumns: ITableColumn<IProductStockDetailRow>[] = [
   {
-    header: 'Lote',
+    header: 'Batch|Lote',
     getValue: (stockDetail) => getLotDisplay(stockDetail),
     disableCellInteractions: (stockDetail) => !stockDetail._isNew,
     onBeforeCellChange: (stockDetail, value) => validateLotUnique(stockDetail, String(value || '').trim()),
@@ -521,7 +523,7 @@ const lotColumns: ITableColumn<IProductStockDetailRow>[] = [
     },
   },
   {
-    header: 'Cant.', css: 'justify-end', inputCss: 'text-right pr-6',
+    header: 'Qty.|Cant.', css: 'justify-end', inputCss: 'text-right pr-6',
     getValue: (stockDetail) => stockDetail.Quantity ?? '',
     cellInputType: 'number',
     onCellEdit: (stockDetail, value) => {
@@ -576,7 +578,7 @@ const computeStockDisplay = (productStockDisplay: IProductoStockDisplay) => {
 
 const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
   {
-    header: 'Producto', highlight: true,
+    header: 'Product|Producto', highlight: true,
     mobile: { order: 1, css: 'col-span-24' },
     getValue: (productStockDisplay) => {
       const productRecord = productos.recordsMap.get(productStockDisplay.base.ProductID)?.Name
@@ -588,7 +590,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
     },
   },
   {
-    header: 'Presentación',
+    header: 'Presentation|Presentación',
     mobile: { order: 2, css: 'col-span-24' },
     getValue: (productStockDisplay) => {
       if (!productStockDisplay.base.PresentationID) { return '' }
@@ -598,7 +600,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
     },
   },
   {
-    header: 'Seriales',
+    header: 'Serials|Seriales',
     getValue: (productStockDisplay) => {
       computeStockDisplay(productStockDisplay)
       return productStockDisplay.serialNumbersCountNew
@@ -627,7 +629,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
     },
   },
   {
-    header: 'Stock Simple', css: 'justify-end px-6', inputCss: 'text-right',
+    header: 'Simple Stock|Stock Simple', css: 'justify-end px-6', inputCss: 'text-right',
     headerCss: 'w-150',
     mobile: { order: 4, css: 'col-span-12', labelLeft: "Simple" },
     showEditIcon: true,
@@ -656,7 +658,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
     },
   },
   {
-    header: 'Stock Loteado',
+    header: 'Batch Stock|Stock Loteado',
     showEditIcon: true,
     mobile: { 
     	order: 5, 
@@ -685,7 +687,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
     },
   },
   {
-    header: 'Stock Total', css: 'justify-end text-right',
+    header: 'Total Stock|Stock Total', css: 'justify-end text-right',
     mobile: { order: 6, css: 'col-span-12 pr-4', labelLeft: "Total" },
     getValue: (productStockDisplay) => {
       computeStockDisplay(productStockDisplay)
@@ -724,7 +726,7 @@ const guardarRegistros = async () => {
 
       const detailKey = [productStockRecord.ID, getLotIdentity(stockDetail), stockDetail.SerialNumber || ''].join('_')
       if (seenDetailKeys.has(detailKey)) {
-        Notify.failure('Hay detalles duplicados (mismo Lote + Serial). Verifica antes de guardar.')
+        Notify.failure(tr('There are duplicate entries (same Batch + Serial). Please review before saving.|Hay detalles duplicados (mismo Lote + Serial). Verifica antes de guardar.'))
         return
       }
       seenDetailKeys.add(detailKey)
@@ -768,7 +770,7 @@ const guardarRegistros = async () => {
   }
 
   if (recordsForUpdate.length === 0) {
-    Notify.failure('No hay registros a actualizar.')
+    Notify.failure(tr('No records to update.|No hay registros a actualizar.'))
     return
   }
 
@@ -881,7 +883,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
 <div class="grid grid-cols-24 gap-8 mb-8 items-center md:flex" aria-label="Stock movement toolbar with warehouse selector, filter, and save button">
   <div class="col-span-14 md:col-span-5 min-w-0 mr-8">
     <SearchSelect options={almacenes?.Almacenes || []} keyId="ID" keyName="Name"
-      bind:saveOn={stockFilters} save="warehouseID" placeholder="ALMACÉN ::"
+      bind:saveOn={stockFilters} save="warehouseID" placeholder="WAREHOUSE|ALMACÉN ::"
       css="w-full md:w-240" id={1} useCache
       onChange={() => {
         onChangeAlmacen()
@@ -891,7 +893,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
 
   <div class="col-span-10 md:col-span-5 md:order-3 min-w-0 flex justify-end gap-8 md:ml-auto">
     {#if stockFilters.warehouseID > 0}
-      <Button color="blue" icon="icon-floppy" name="Guardar" css="shrink-0"
+      <Button color="blue" icon="icon-floppy" name="Save|Guardar" css="shrink-0"
         label="Saves all pending stock changes for the selected warehouse."
         onClick={guardarRegistros} />
     {/if}
@@ -902,7 +904,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
   {:else}
     <FilterInput bind:value={stockFilterText}
       css="col-span-12 md:col-span-4 md:order-1 min-w-0 w-full md:w-180" />
-    <Checkbox label="Todos los Productos" bind:saveOn={stockFilters} save="showTodosProductos"
+    <Checkbox label="All Products|Todos los Productos" bind:saveOn={stockFilters} save="showTodosProductos"
       css="col-span-12 md:col-span-5 md:order-2 min-w-0 self-center" />
   {/if}
 </div>
@@ -926,7 +928,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
 >
   {#if isSerialNumberLayerLoadingLots}
     <div class="mt-6 p-8 min-h-240 w-full fx-c rounded-md bg-gray-50">
-      <LoadingBar label="Cargando Lotes..." />
+      <LoadingBar label={tr("Loading Batches...|Cargando Lotes...")} />
     </div>
   {:else}
     <TableGrid columns={serialNumberColumns} data={selectedSerialNumbers} height="calc(100vh - 14rem)"
@@ -944,7 +946,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
 >
   {#if isLotLayerLoadingLots}
     <div class="mt-6 p-8 min-h-240 w-full fx-c rounded-md bg-gray-50">
-      <LoadingBar label="Cargando Lotes..." />
+      <LoadingBar label={tr("Loading Batches...|Cargando Lotes...")} />
     </div>
   {:else}
     <TableGrid columns={lotColumns} data={selectedLots} height="calc(100vh - 14rem)"

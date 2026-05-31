@@ -6,6 +6,8 @@ import OptionsStrip from '$components/navigation/OptionsStrip.svelte'
 import VTable from '$components/vTable/VTable.svelte'
 import type { ITableColumn } from '$components/vTable/types'
 import { formatN, formatTime, Notify } from '$libs/helpers'
+import { tr } from '$core/store.svelte'
+import T from '$components/misc/T.svelte'
 import { POST } from '$libs/http.svelte'
 import { ProductStockSimpleService } from '$routes/logistica/products-stock/stock-movement'
 import { ClientProviderService, ClientProviderType } from '$routes/negocio/clientes/clientes-proveedores.svelte'
@@ -153,11 +155,11 @@ class PurchaseOrderState {
 
   async postPurchaseOrder(): Promise<boolean> {
     if (this.items.length === 0) {
-      Notify.failure('Agregue al menos un producto a la orden.')
+      Notify.failure(tr('Add at least one product to the order.|Agregue al menos un producto a la orden.'))
       return false
     }
     if (!this.form.ProviderID) {
-      Notify.failure('Seleccione un proveedor.')
+      Notify.failure(tr('Please select a supplier.|Seleccione un proveedor.'))
       return false
     }
     const zeroQuantityItem = this.items.find((item) => !item.quantity)
@@ -215,7 +217,7 @@ $effect(() => {
 const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
   {
     id: 'product',
-    header: 'Producto',
+    header: 'Product|Producto',
     width: 'minmax(160px, 1.5fr)',
     css: 'py-4 leading-[1.15]',
     getValue: (item) => item.presentation
@@ -231,7 +233,7 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
   },
   {
     id: 'quantity',
-    header: 'Cant.',
+    header: 'Qty.|Cant.',
     width: '80px',
     align: 'right',
     cellInputType: 'number',
@@ -243,7 +245,7 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
   },
   {
     id: 'price',
-    header: 'Precio',
+    header: 'Price|Precio',
     width: '100px',
     align: 'right',
     cellInputType: 'number',
@@ -256,7 +258,7 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
   },
   {
     id: 'subtotal',
-    header: 'Subtotal',
+    header: 'Subtotal',  // same in both languages
     width: '100px',
     align: 'right',
     css: 'font-mono',
@@ -457,7 +459,7 @@ const formatDateOrDash = (value: string | number) => {
           </div>
         </div>
       </div>
-      <Button color="blue" icon="icon-floppy" name="Generar" hideNameOnMobile
+      <Button color="blue" icon="icon-floppy" name="Generate|Generar" hideNameOnMobile
         css="shrink-0" label="Saves and submits the current purchase order to the system." onClick={handleSave} />
     </div>
 

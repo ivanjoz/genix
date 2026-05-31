@@ -9,7 +9,8 @@ import type { ITableColumn } from '$components/vTable/types';
 import { Loading, Notify, formatTime } from '$libs/helpers';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
-import { Core } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
+import T from '$components/misc/T.svelte';
 import AlmacenLayoutEditor from './AlmacenLayoutEditor.svelte';
 
 import {
@@ -25,7 +26,7 @@ import {
   const almacenesService = new AlmacenesService()
   const paisCiudadesService = new PaisCiudadesService(true)
 
-  const pageOptions = [{ id: 1, name: "Sedes" }, { id: 2, name: "Almacenes" }]
+  const pageOptions = [{ id: 1, name: "Branches|Sedes" }, { id: 2, name: "Warehouses|Almacenes" }]
 
   let filterText = $state("")
   let sedeForm = $state({} as ISite)
@@ -34,13 +35,13 @@ import {
   const saveSede = async (isDelete?: boolean) => {
     const form = sedeForm
     if((form.Name?.length||0) < 4 || (form.Direccion?.length||0) < 4){
-      Notify.failure("El nombre y la dirección deben tener al menos 4 caracteres.")
+      Notify.failure(tr("Name and address must be at least 4 characters.|El nombre y la dirección deben tener al menos 4 caracteres."))
       return
     }
 
     console.log("guardando sede::", form)
 
-    Loading.standard("Creando /Actualizando Sede...")
+    Loading.standard(tr("Creating/Updating Branch...|Creando /Actualizando Sede..."))
     try {
       var result = await postSede(form)
     } catch (error) {
@@ -68,10 +69,10 @@ import {
   const saveAlmacen = async (isDelete?: boolean) => {
     const form = almacenForm
     if((form.Name?.length||0) < 4){
-      Notify.failure("El nombre debe tener al menos 4 caracteres.")
+      Notify.failure(tr("Name must be at least 4 characters.|El nombre debe tener al menos 4 caracteres."))
       return
     } else if(!form.SiteID){
-      Notify.failure("Debe seleccionar una sede.")
+      Notify.failure(tr("Please select a branch.|Debe seleccionar una sede."))
       return
     }
 
@@ -92,7 +93,7 @@ import {
 
     console.log("guardando almacen::", form)
 
-    Loading.standard("Creando /Actualizando Almacén...")
+    Loading.standard(tr("Creating/Updating Warehouse...|Creando /Actualizando Almacén..."))
     try {
       var result = await postAlmacen(form)
     } catch (error) {
@@ -126,17 +127,17 @@ import {
       getValue: e => e.ID
     },
     {
-      header: "Nombre",
+      header: "Name|Nombre",
       css: "px-6",
       getValue: e => e.Name
     },
     {
-      header: "Dirección",
+      header: "Address|Dirección",
       css: "px-6",
       getValue: e => e.Direccion
     },
     {
-      header: "Ciudad",
+      header: "City|Ciudad",
       getValue: e => {
         if(!e.Ciudad){ return "" }
         const arr = e.Ciudad.split("|")
@@ -144,7 +145,7 @@ import {
       }
     },
     {
-      header: "Actualizado",
+      header: "Updated|Actualizado",
       headerCss: "w-144",
       css: "whitespace-nowrap px-6",
       getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
@@ -168,7 +169,7 @@ import {
       getValue: e => e.ID
     },
     {
-      header: "Sede",
+      header: "Branch|Sede",
       css: "px-6",
       getValue: e => {
         const sede = almacenesService.SedesMap.get(e.SiteID)
@@ -176,7 +177,7 @@ import {
       }
     },
     {
-      header: "Nombre",
+      header: "Name|Nombre",
       css: "px-6",
       getValue: e => e.Name
     },
@@ -187,11 +188,11 @@ import {
       getValue: e => ""
     },
     {
-      header: "Estado",
+      header: "Status|Estado",
       getValue: e => e.ss
     },
     {
-      header: "Actualizado",
+      header: "Updated|Actualizado",
       headerCss: "w-144",
       css: "whitespace-nowrap px-6",
       getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
@@ -240,7 +241,7 @@ import {
   }
 </script>
 
-<Page title="Sedes & Almacenes" options={pageOptions}>
+<Page title="Branches & Warehouses|Sedes & Almacenes" options={pageOptions}>
   {#if Core.pageOptionSelected === 1 /* Sedes */}
     <div class="flex items-center justify-between mb-6" aria-label="Sedes list toolbar with search filter and create button">
       <FilterInput bind:value={filterText} css="mr-16 w-256" />
@@ -308,28 +309,28 @@ import {
   {/if}
 
   <!-- Sede Modal -->
-  <Modal id={1} title={(sedeForm?.ID > 0 ? "Actualizar" : "Crear") + " Sede"}
+  <Modal id={1} title={(sedeForm?.ID > 0 ? tr("Update|Actualizar") : tr("Create|Crear")) + " " + tr("Branch|Sede")}
     size={7} bodyCss="px-16 py-14"
     onSave={() => { saveSede() }}
     onDelete={sedeForm?.ID > 0 ? () => { saveSede(true) } : undefined}
   >
     <div class="grid grid-cols-24 gap-10" aria-label="Sede form with name, description, phone, address, and location">
       <Input bind:saveOn={sedeForm} save="Name"
-        css="col-span-24 md:col-span-10" label="Nombre" required={true}
+        css="col-span-24 md:col-span-10" label="Name|Nombre" required={true}
         disabled={sedeForm?.ID > 0}
       />
       <Input bind:saveOn={sedeForm} save="Description"
-        css="col-span-24 md:col-span-14" label="Descripción"
+        css="col-span-24 md:col-span-14" label="Description|Descripción"
       />
       <Input bind:saveOn={sedeForm} save="Telefono"
-        css="col-span-24 md:col-span-10" label="Teléfono"
+        css="col-span-24 md:col-span-10" label="Phone|Teléfono"
         disabled={sedeForm?.ID > 0}
       />
       <Input bind:saveOn={sedeForm} save="Direccion"
-        css="col-span-24 md:col-span-14" label="Dirección" required={true}
+        css="col-span-24 md:col-span-14" label="Address|Dirección" required={true}
       />
       <SearchSelect bind:saveOn={sedeForm} save="CityID"
-        css="col-span-24" label="Departamento | Provincia | Distrito"
+        css="col-span-24" label="Department | Province | District|Departamento | Provincia | Distrito"
         keyId="ID" keyName="_nombre" options={paisCiudadesService.distritos}
         required={true}
       />
@@ -337,22 +338,22 @@ import {
   </Modal>
 
   <!-- Almacen Modal -->
-  <Modal id={2} title={(almacenForm?.ID > 0 ? "Actualizar" : "Crear") + " Almacén"}
+  <Modal id={2} title={(almacenForm?.ID > 0 ? tr("Update|Actualizar") : tr("Create|Crear")) + " " + tr("Warehouse|Almacén")}
     size={7} bodyCss="px-16 py-14"
     onSave={() => { saveAlmacen() }}
     onDelete={almacenForm?.ID > 0 ? () => { saveAlmacen(true) } : undefined}
   >
     <div class="grid grid-cols-24 gap-10" aria-label="Almacen form with sede, name, and description">
       <SearchSelect bind:saveOn={almacenForm} save="SiteID"
-        css="col-span-24 md:col-span-12" label="Sede"
+        css="col-span-24 md:col-span-12" label="Branch|Sede"
         keyId="ID" keyName="Name" options={almacenesService.Sedes}
         required={true}
       />
       <Input bind:saveOn={almacenForm} save="Name"
-        css="col-span-24 md:col-span-12" label="Nombre" required={true}
+        css="col-span-24 md:col-span-12" label="Name|Nombre" required={true}
       />
       <Input bind:saveOn={almacenForm} save="Description"
-        css="col-span-24" label="Descripción"
+        css="col-span-24" label="Description|Descripción"
       />
     </div>
   </Modal>

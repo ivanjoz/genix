@@ -10,7 +10,8 @@ import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import SearchCard from '$components/cards/SearchCard.svelte'; 
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
-import { Core } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
+import T from '$components/misc/T.svelte';
 import HTMLEditor from '$domain/HTMLEditor/HTMLEditor.svelte';
 import Page from '$domain/Page.svelte';
 import { ConfirmWarn, formatN, Loading, Notify } from '$libs/helpers';
@@ -68,7 +69,7 @@ import {
       mobile: { order: 1, css: "col-span-6 ff-bold", icon: "tag" },
     },
     {
-      header: "Producto", useLineClamp: true,
+      header: "Product|Producto", useLineClamp: true,
       highlight: true, width: "300px",
       getValue: (e) => e.Name,
       field: "Name",
@@ -81,7 +82,7 @@ import {
       },
     },
     {
-      header: "Categorías", useLineClamp: true,
+      header: "Categories|Categorías", useLineClamp: true,
       highlight: true, width: "160px",
       renderPrefix: e => (e.CategoryIDs||[]).some(x => x <= 0) && `<i class="icon-arrows-cw -ml-4 text-purple-400"></i>`,
       getValue: (e) => {
@@ -113,7 +114,7 @@ import {
       },
     },
     {
-      header: "Precio", width: "100px",
+      header: "Price|Precio", width: "100px",
       css: "text-right",
       getValue: (e) => formatN(e.Price / 100, 2),
       field: "Price",
@@ -136,7 +137,7 @@ import {
       },
     },
     {
-      header: "Descuento", width: "100px",
+      header: "Discount|Descuento", width: "100px",
       css: "text-right",
       getValue: (e) => (e.Discount ? String(e.Discount) + "%" : ""),
       field: "Discount",
@@ -150,7 +151,7 @@ import {
       },
     },
     {
-      header: "Precio Final", width: "100px",
+      header: "Final Price|Precio Final", width: "100px",
       css: "text-right",
       getValue: (e) => formatN(e.FinalPrice / 100, 2),
       field: "FinalPrice",
@@ -174,7 +175,7 @@ import {
       },
     },
     {
-      header: "Sub Unidades", width: "120px",
+      header: "Sub-units|Sub Unidades", width: "120px",
       css: "text-right",
       getValue: (e) => {
         if (!e.SbuUnit) return "";
@@ -192,7 +193,7 @@ import {
       },
     },
     {
-      header: "Marca", width: "160px",
+      header: "Brand|Marca", width: "160px",
       hidden: !isImport,
       renderPrefix: e => !(e.BrandID > 0) && `<i class="-ml-4 icon-arrows-cw text-purple-500"></i>`,
       getValue: (e) => e._marcaNombre || listas.get(e.BrandID)?.Name || "",
@@ -200,14 +201,14 @@ import {
       excel: { type: "string", importField: "_marcaNombre" },
     },
     {
-      header: "Unidad",
+      header: "Unit|Unidad",
       hidden: !isImport,
       getValue: (e) => e._unidadNombre || unidadLabelById.get(e.UnidadID) || "",
       setCellCss: (record) => getUpdatedFieldCellCss(record, "UnidadID"),
       excel: { type: "string", importField: "_unidadNombre" },
     },
     {
-      header: "Volumen", width: "100px",
+      header: "Volume|Volumen", width: "100px",
       hidden: !isImport,
       getValue: (e) => e.Volumen || "",
       field: "Volumen",
@@ -215,7 +216,7 @@ import {
       excel: { type: "number", format: "#,##0.00" },
     },
     {
-      header: "Peso",
+      header: "Weight|Peso",
       hidden: !isImport,
       getValue: (e) => e.Peso || "",
       field: "Peso",
@@ -223,7 +224,7 @@ import {
       excel: { type: "number", format: "#,##0.00" },
     },
     {
-      header: "Moneda",
+      header: "Currency|Moneda",
       hidden: !isImport,
       getValue: (e) => e._monedaNombre || monedaLabelById.get(e.MonedaID) || "",
       setCellCss: (record) => getUpdatedFieldCellCss(record, "MonedaID"),
@@ -239,11 +240,11 @@ import {
   });
 
   const exportProductosExcel = async () => {
-    Loading.standard("Generando archivo Excel...");
+    Loading.standard(tr("Generating Excel file...|Generando archivo Excel..."));
     try {
       await exportProductosToExcel(productoColumns, productos.records);
       Loading.remove();
-      Notify.success("Excel generado correctamente.");
+      Notify.success(tr("Excel generated successfully.|Excel generado correctamente."));
     } catch (error) {
       console.error("Error exportando productos:", error);
       Loading.remove();
@@ -277,7 +278,7 @@ import {
       const importResult = await processProductosImportFile(productoImportColumns, file, listas, productos);
 
       if(!importResult.rows){
-     		Notify.warning("No se detectaron registros nuevos a guardar.")
+     		Notify.warning(tr("No new records detected to save.|No se detectaron registros nuevos a guardar."))
       }
       
       importExcelRowsPreview = importResult.rows;
@@ -301,16 +302,16 @@ import {
 
   const saveImportProductos = async () => {
     if (importExcelErrors.length > 0) {
-      Notify.failure("Corrige los errores de importación antes de guardar.");
+      Notify.failure(tr("Fix import errors before saving.|Corrige los errores de importación antes de guardar."));
       return;
     }
     if (importExcelRowsPreview.length === 0) {
-      Notify.failure("No hay filas válidas para importar.");
+      Notify.failure(tr("No valid rows to import.|No hay filas válidas para importar."));
       return;
     }
 
     try {
-      Loading.standard("Guardando importación de productos...");
+      Loading.standard(tr("Saving product import...|Guardando importación de productos..."));
       const pendingSharedListRecords = listas.getTempRecords().length;
       let tempIDToNewID = new Map<number, number>();
 
@@ -358,7 +359,7 @@ import {
       for(const e of productos.records){ delete e._updatedFields }
       Loading.remove();
       
-      Notify.success("Importación completada correctamente.");
+      Notify.success(tr("Import completed successfully.|Importación completada correctamente."));
       importExcelRowsPreview = [];
       Core.closeModal(IMPORT_PRODUCTOS_MODAL_ID);
       productoForm = {} as IProduct
@@ -385,20 +386,20 @@ import {
 
   const onSave = async (isDelete?: boolean) => {
     if ((productoForm.Name?.length || 0) < 4) {
-      Notify.failure("El nombre debe tener al menos 4 caracteres.");
+      Notify.failure(tr("Name must be at least 4 characters.|El nombre debe tener al menos 4 caracteres."));
       return;
     }
     if(imageUploaderHandler){
-      Loading.standard("Guardando imagen...");
+      Loading.standard(tr("Saving image...|Guardando imagen..."));
     	await imageUploaderHandler()
      	productoForm._imageSource = undefined
-      Loading.change("Guardando producto...")
+      Loading.change(tr("Saving product...|Guardando producto..."))
     }
 
     console.log("productor a enviar:", $state.snapshot(productoForm));    
     if (isDelete) {  productoForm.ss = 0; }
 
-    Loading.standard("Guardando producto...");
+    Loading.standard(tr("Saving product...|Guardando producto..."));
     try {
     	await doPostProductos([productoForm]);
     } catch (error) {
@@ -416,7 +417,7 @@ import {
   });
 
   const deleteProductoImage = async (ImageToDelete: string) => {
-    Loading.standard("Eliminando Imagen...");
+    Loading.standard(tr("Deleting image...|Eliminando Imagen..."));
     try {
       await POST({
         data: { ProductID: productoForm.ID, ImageToDelete },
@@ -435,15 +436,15 @@ import {
   };
 </script>
 
-<Page title="Productos">
+<Page title="Products|Productos">
   <div class="grid grid-cols-12 md:flex md:flex-row items-center mb-8">
     <OptionsStrip
       selected={view}
       css="col-span-12 mb-6 md:mb-0"
       options={[
-        [1, "Productos"],
-        [2, "Categorías"],
-        [3, "Marcas"],
+        [1, "Products|Productos"],
+        [2, "Categories|Categorías"],
+        [3, "Brands|Marcas"],
       ]}
       useMobileGrid={true}
       onSelect={(e) => {
@@ -452,7 +453,7 @@ import {
         view = e[0] as number;
       }}
     />
-    <FilterInput label="Filtrar productos"
+    <FilterInput label="Filter products|Filtrar productos"
       css="w-full md:w-200 md:ml-12 col-span-5"
       icon="icon-search"
       bind:value={filterText}
@@ -473,7 +474,7 @@ import {
       />
     {/if}
 
-    <Button name="Nuevo" label="Shows the form to create a new product in a side layer."
+    <Button name="New|Nuevo" label="Shows the form to create a new product in a side layer."
       color="green"
       icon="icon-plus"
       hideNameOnMobile
@@ -539,10 +540,10 @@ import {
       );
     }}
     options={[
-      [1, "Información", ["Informa-", "ción"]],
-      [2, "Ficha"],
-      [3, "Presentaciones", ["Presenta-", "ciones"]],
-      [4, "Fotos"],
+      [1, "Info|Información", ["Info", ""]],
+      [2, "Sheet|Ficha"],
+      [3, "Presentations|Presentaciones", ["Presenta-", "tions"]],
+      [4, "Photos|Fotos"],
     ]}
   >
     {#if layerView === 1}
@@ -551,7 +552,7 @@ import {
         aria-label="Product Form"
       >
         <Input
-          label="Nombre"
+          label="Name|Nombre"
           saveOn={productoForm}
           css="col-span-24"
           required={true}
@@ -591,7 +592,7 @@ import {
           />
         </div>
         <Input
-          label="Precio Base"
+          label="Base Price|Precio Base"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
           save="Price"
@@ -607,7 +608,7 @@ import {
           }}
         />
         <Input
-          label="Descuento"
+          label="Discount|Descuento"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
           save="Discount"
@@ -618,7 +619,7 @@ import {
           }}
         />
         <Input
-          label="Precio Final"
+          label="Final Price|Precio Final"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
           dependencyValue={productoForm.FinalPrice}
@@ -635,7 +636,7 @@ import {
           }}
         />
         <SearchSelect
-          label="Moneda"
+          label="Currency|Moneda"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
           save="MonedaID"
@@ -644,14 +645,14 @@ import {
           options={productoMonedaOptions}
         />
         <Input
-          label="Peso"
+          label="Weight|Peso"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
           save="Peso"
           type="number"
         />
         <SearchSelect
-          label="Unidad"
+          label="Unit|Unidad"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
           save="UnidadID"
@@ -660,14 +661,14 @@ import {
           options={productoUnidadOptions}
         />
         <Input
-          label="Volumen"
+          label="Volume|Volumen"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
           save="Volumen"
           type="number"
         />
         <SearchSelect
-          label="Marca"
+          label="Brand|Marca"
           saveOn={productoForm}
           css="col-span-12 md:col-span-10 mb-2"
           save="BrandID"
@@ -695,11 +696,11 @@ import {
           saveOn={productoForm}
           save="Description"
           css="col-span-24 mb-4"
-          label="Descripción Corta"
+          label="Short Description|Descripción Corta"
         />
         <SearchCard
           css="col-span-24 flex items-start"
-          label="CATEGORÍAS ::"
+          label="CATEGORIES|CATEGORÍAS ::"
           options={categorias}
           keyId="ID"
           keyName="Name"
@@ -714,14 +715,14 @@ import {
           saveOn={productoForm}
           save="SbuUnit"
           css="col-span-12 md:col-span-6"
-          label="Nombre"
+          label="Name|Nombre"
         />
         <Input
           bind:saveOn={productoForm}
           save="SbuPrice"
           baseDecimals={2}
           css="col-span-12 md:col-span-6"
-          label="Precio Base"
+          label="Base Price|Precio Base"
           type="number"
           onChange={() => {
             console.log();
@@ -737,7 +738,7 @@ import {
           save="SbuDiscount"
           postValue="%"
           css="col-span-12 md:col-span-6"
-          label="Descuento"
+          label="Discount|Descuento"
           type="number"
         />
         <Input
@@ -745,14 +746,14 @@ import {
           save="SbuFinalPrice"
           baseDecimals={2}
           css="col-span-12 md:col-span-6"
-          label="Precio Final"
+          label="Final Price|Precio Final"
           type="number"
         />
         <Input
           saveOn={productoForm}
           save="SbuQuantity"
           css="col-span-12 md:col-span-6"
-          label="Cantidad"
+          label="Quantity|Cantidad"
           type="number"
         />
       </div>
@@ -825,7 +826,7 @@ import {
   {/if}
 
   <Modal id={IMPORT_PRODUCTOS_MODAL_ID}
-    title="Importar Productos desde Excel"
+    title="Import Products from Excel|Importar Productos desde Excel"
     size={9} css="px-4"
     useFileImportWithErrors={true}
     fileErrors={importExcelErrors}

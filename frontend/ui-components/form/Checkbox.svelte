@@ -3,6 +3,7 @@
     import { Env } from "$core/env";
     import { Agent } from "$components/agent/registry";
     import { tr } from "$core/store.svelte";
+    import T from "$components/misc/T.svelte";
 
   const {
 		 saveOn = $bindable(), save, css, label, useNumber
@@ -67,7 +68,7 @@
     {/if}
   </button>
   <!-- svelte-ignore a11y_label_has_associated_control -->
-  <label>{tr(label as string)}</label>
+  <label><T text={label as string} /></label>
 </div>
 
 <style>

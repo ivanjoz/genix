@@ -9,6 +9,8 @@
   import Page from '$domain/Page.svelte'
   import { GetHandler, POST } from '$libs/http.svelte'
   import { formatN, Loading } from '$libs/helpers'
+  import { tr } from '$core/store.svelte'
+  import T from '$components/misc/T.svelte'
   import {
     PaisCiudadesService,
     type ICityLocation,
@@ -86,14 +88,14 @@
   const ciudadColumns: ITableColumn<ICityLocation>[] = [
     {
       id: 'name',
-      header: 'Nombre',
+      header: 'Name|Nombre',
       width: 'minmax(180px, 1fr)',
       css: 'text-[14px] leading-[1.1] pl-10 pr-24',
       getValue: (ciudad) => ciudad.Name,
     },
     {
       id: 'fixed-cost',
-      header: 'Fijo',
+      header: 'Fixed|Fijo',
       width: '110px',
       align: 'right',
       cellInputType: 'number',
@@ -107,7 +109,7 @@
     },
     {
       id: 'weight-cost',
-      header: 'Por Kg',
+      header: 'Per Kg|Por Kg',
       width: '110px',
       align: 'right',
       cellInputType: 'number',
@@ -271,7 +273,7 @@
     console.debug('[delivery-costs] save requested', { changedCount: changedCosts.length, changedCosts })
     if (changedCosts.length === 0) { return }
 
-    Loading.standard("Guardando Registros...")
+    Loading.standard(tr("Saving records...|Guardando Registros..."))
     try {
       const savedCosts = await POST({
         route: 'shipping-costs',
@@ -351,17 +353,17 @@
   }
 </script>
 
-<Page title="Costos de Delivery">
+<Page title="Delivery Costs|Costos de Delivery">
   <div class="flex h-full gap-20">
     <div class="flex-1 min-w-0 h-[calc(100vh-var(--header-height)-20px)] bg-gray-100 rounded-md border border-gray-200 p-8 flex flex-col min-h-0">
       <div class="mb-8 flex items-center gap-8 w-full justify-between shrink-0" aria-label="Shipping costs toolbar with filter and save">
         <FilterInput
           bind:value={filterText}
-          placeholder="Filtrar"
+          placeholder="Filter|Filtrar"
           icon="icon-search"
           css="w-240"
         />
-        <Button color="purple" icon="icon-floppy" name="Guardar"
+        <Button color="purple" icon="icon-floppy" name="Save|Guardar"
           label="Saves all edited shipping cost records to the server."
           onClick={saveDeliveryCosts} />
       </div>
@@ -381,18 +383,18 @@
               </div>
               <div class="mt-8 grid grid-cols-2 gap-12 leading-[1.1]">
                 <div>
-                  <div class="uppercase text-[12px] text-gray-500">Provincia</div>
+                  <div class="uppercase text-[12px] text-gray-500"><T text="Province|Provincia" /></div>
                   <div class="text-[13px] mt-2 font-mono text-gray-800">{getProvinciaCostRange(departamento, 'Fijo')}</div>
                 </div>
                 <div>
-                  <div class="uppercase text-[12px] text-gray-500">Distrito</div>
+                  <div class="uppercase text-[12px] text-gray-500"><T text="District|Distrito" /></div>
                   <div class="text-[13px] mt-2 font-mono text-gray-800">{getDistritoCostRange(departamento, 'Fijo')}</div>
                 </div>
               </div>
             </button>
           {:else}
             <div class="col-span-2 rounded-md border border-gray-200 bg-white p-12 text-[14px] text-gray-400">
-              Sin departamentos
+              <T text="No departments|Sin departamentos" />
             </div>
           {/each}
         </div>
@@ -401,24 +403,24 @@
 
     <LayerStatic
       css="w-[50%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
-      mobileLayerTitle="Detalle de Zona"
+      mobileLayerTitle="Zone Details|Detalle de Zona"
       useMobileLayerVertical={120}
     >
       <div class="px-12 py-10 border-b border-gray-100 bg-gray-50/50">
         <div class="hidden md:block">
           <div class="text-[15px] font-bold text-gray-800">
-            Costos de Delivery
+            <T text="Delivery Costs|Costos de Delivery" />
           </div>
         </div>
         <div class="mt-6 grid grid-cols-[minmax(160px,1fr)_110px_110px] gap-8" aria-label="Departamento delivery cost form with flat and per-kg rates">
           <div class="bg-gray-100 rounded-md p-8">
-            <div class="text-[10px] uppercase text-gray-500">Departamento</div>
-            <div class="text-[15px] text-gray-800 truncate">{selectedDepartamento?.Name || 'Seleccione'}</div>
+            <div class="text-[10px] uppercase text-gray-500"><T text="Department|Departamento" /></div>
+            <div class="text-[15px] text-gray-800 truncate">{selectedDepartamento?.Name || tr('Select|Seleccione')}</div>
           </div>
           <Input
             bind:saveOn={departamentoCostForm}
             save="FlatCost"
-            label="Fijo"
+            label="Fixed|Fijo"
             type="number"
             disabled={!selectedDepartamento}
             css="bg-blue-50 rounded-md"
@@ -428,7 +430,7 @@
           <Input
             bind:saveOn={departamentoCostForm}
             save="CostPerKg"
-            label="Por Kg"
+            label="Per Kg|Por Kg"
             type="number"
             disabled={!selectedDepartamento}
             css="bg-cyan-50 rounded-md"
@@ -447,14 +449,14 @@
             getChildId={(distrito) => distrito.ID}
             onNodeClick={toggleProvincia}
             onChildClick={(distrito) => console.debug('[delivery-costs] distrito click', { id: distrito.ID, nombre: distrito.Name })}
-            emptyMessage="Sin provincias"
+            emptyMessage="No provinces|Sin provincias"
             css=""
             rowCss="text-[14px]"
           />
         {:else}
           <div class="h-full flex flex-col items-center justify-center text-gray-300 gap-8">
             <i class="icon-location text-4xl"></i>
-            <span class="text-[14px]">Seleccione un departamento</span>
+            <span class="text-[14px]"><T text="Select a department|Seleccione un departamento" /></span>
           </div>
         {/if}
       </div>
