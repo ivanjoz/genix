@@ -35,6 +35,8 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[financeTypes.CashBank](),
 		makeDBController[financeTypes.CashBankMovement](),
 		makeDBController[financeTypes.CashReconciliation](),
+		makeDBController[financeTypes.Expense](),
+		makeDBController[financeTypes.ExpenseScheduled](),
 		makeDBController[logisticsTypes.DeliveryOrderNote](),
 		makeDBController[logisticsTypes.ProductStock](),
 		makeDBController[logisticsTypes.ProductStockDetail](),

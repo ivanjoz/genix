@@ -549,6 +549,7 @@ func scanSelectQueryRows[E any](
 		rd, err := iter.RowData()
 		if err != nil {
 			fmt.Println("Error on RowData::", err)
+			fmt.Println("Query::", formatDebugQuery(queryStr, queryValues))
 			if strings.Contains(err.Error(), "use ALLOW FILTERING") {
 				fmt.Println("Posible Indexes or Views::")
 				for _, capability := range scyllaTable.capabilities {

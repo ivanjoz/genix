@@ -561,7 +561,30 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 		}
 		this.isReady++
 	}
-	
+
+	// Like fetchOnline but honors the useCache.min TTL (normal mode): returns cached
+	// content while fresh and only delta-syncs once it expires. Awaitable; calls handler
+	// once. Writes that set forceNetwork (POST refreshRoutes) still bypass the TTL.
+	async fetchCached() {
+		if(!browser){ return }
+		if(this.route.length === 0){
+			Notify.failure("No se especificó el route.")
+			return
+		}
+
+		if (!Env.canUserAccessRoute(Env.getPathname())) {
+			console.error(`Servicio "${this.route}" no cargado debido a acceso.`)
+			return
+		}
+
+		const response = await fetchCacheParsed(this.makeProps())
+		if(response){
+			delete response.__version__
+			this.handler(response)
+		}
+		this.isReady++
+	}
+
 	async syncIDs(ids: number[]) {
 		if (!this.routeByID) {
 			Notify.failure("[syncIDs] Missing routeByID in: " + this.route)

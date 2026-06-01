@@ -87,7 +87,7 @@ export interface ICajaMovimientosResult {
 }
 
 export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICashBankMovement[]> => {
-  let route = `caja-movimientos?caja-id=${args.CajaID}`
+  let route = `cash-banks-movements?caja-id=${args.CajaID}`
 
   if ((!args.dateInicio || !args.dateFin) && !args.lastRegistros) {
     throw ("No se encontró una date de inicio o fin.")
@@ -117,7 +117,7 @@ export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICa
 export const postCajaMovimiento = (data: ICashBankMovement) => {
   return POST({
     data,
-    route: "caja-movimiento",
+    route: "cash-banks-movement",
     refreshRoutes: ["cajas"]
   })
 }
@@ -125,7 +125,7 @@ export const postCajaMovimiento = (data: ICashBankMovement) => {
 export const postCajaCuadre = (data: ICashReconciliation) => {
   return POST({
     data,
-    route: "caja-cuadre",
+    route: "cash-bank-reconciliation",
     refreshRoutes: ["cajas"]
   })
 }
@@ -135,7 +135,7 @@ export interface ICajaCuadresResult {
 }
 
 export const getCajaCuadres = async (args: IGetCajaMovimientos): Promise<ICashReconciliation[]> => {
-  let route = `caja-cuadres?caja-id=${args.CajaID}`
+  let route = `cash-bank-reconciliations?caja-id=${args.CajaID}`
 
   if ((!args.dateInicio || !args.dateFin) && !args.lastRegistros) {
     throw ("No se encontró una date de inicio o fin.")
@@ -176,5 +176,6 @@ export const cajaMovimientoTipos = [
   { id: 5, name: "Pérdida", group: 2, isNegative: true },
   { id: 6, name: "Pago Proveedor", group: 2, isNegative: true },
 	{ id: 7, name: "Cobro", group: 2 },
-  { id: 8, name: "Cobro (Venta)", group: 2 }
+  { id: 8, name: "Cobro (Venta)", group: 2 },
+  { id: 9, name: "Pago Gasto", group: 2, isNegative: true }
 ]

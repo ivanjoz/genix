@@ -52,13 +52,20 @@ func ApplyCajaMovimientos(req *core.HandlerArgs, movimientos []financeTypes.Inte
 			m.FinalAmount = previousAmount + m.Amount
 		}
 
+		// Honor a caller-supplied movement date (e.g. an expense payment date); else use the request date.
+		movementDate := dateUnix
+		if m.Date != 0 {
+			movementDate = m.Date
+		}
+
 		record := financeTypes.CashBankMovement{
 			ID:            core.SUnixTimeUUIDConcatID(m.CashBankID, req.EffectiveSUnixTimeUUID()),
 			CompanyID:     req.User.CompanyID,
 			CashBankID:    m.CashBankID,
 			CashBankRefID: m.CashBankRefID,
 			DocumentID:    m.DocumentID,
-			Date:          dateUnix,
+			ReferenceID:   m.ReferenceID,
+			Date:          movementDate,
 			Type:          m.Type,
 			Amount:        m.Amount,
 			FinalAmount:   m.FinalAmount,

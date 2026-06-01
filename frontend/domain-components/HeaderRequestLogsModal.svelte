@@ -1,4 +1,4 @@
-<script context="module" lang="ts">
+<script module lang="ts">
 // Keep the modal id next to the modal implementation so callers share one source of truth.
 export const HEADER_REQUEST_LOGS_MODAL_ID = 9201
 </script>

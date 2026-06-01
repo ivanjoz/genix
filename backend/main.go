@@ -211,12 +211,14 @@ func main() {
 	// resolved environment: LOGS_FULL → level 2 (verbose), IS_LOCAL → level
 	// 1 (basic), otherwise silent.
 	dbLogLevel := 0
+	/* 
 	if core.Env.IS_LOCAL {
 		dbLogLevel = 1
 	}
 	if core.Env.LOGS_FULL {
 		dbLogLevel = 2
 	}
+	*/
 	db.SetDebugLogging(dbLogLevel)
 
 	// Create /tmp/promps once so the chat loop's per-call writes can skip the

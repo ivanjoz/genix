@@ -113,7 +113,6 @@ export const agentHandles = new Map<number, AgentHandle>();
 // Max number of Select options to inline in the page snapshot. Past this we
 // rely on options-count + the search/getOptions methods instead.
 const INLINE_SELECT_OPTIONS_MAX = 12;
-const WHITESPACE_NORMALIZER_MODULE = "normalize-html-whitespace";
 
 const methodsFor = (handle: AgentHandle): string[] => {
   const out: string[] = [];
@@ -173,7 +172,7 @@ export const Agent: AgentRegistry & { getPageContent: () => Promise<{ Components
   async getPageContent() {
     const [{ default: DOMPurify }, { default: normalize }] = await Promise.all([
       import("dompurify"),
-      import(WHITESPACE_NORMALIZER_MODULE) as Promise<{ default: (html: string) => string }>,
+      import("normalize-html-whitespace") as Promise<{ default: (html: string) => string }>,
     ]);
 
     // Clone first so we can prune opt-out subtrees without mutating the live

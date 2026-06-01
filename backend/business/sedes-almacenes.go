@@ -133,11 +133,12 @@ func PostSedes(req *core.HandlerArgs) core.HandlerResponse {
 	body.Created = core.SUnixTime()
 	body.CreatedBy = req.User.ID
 
-	if err = db.Insert(&[]businessTypes.Site{body}); err != nil {
+	records := []businessTypes.Site{body}
+	if err = db.Insert(&records); err != nil {
 		return req.MakeErr("Error al actualizar / insertar la site: " + err.Error())
 	}
 
-	return req.MakeResponse(body)
+	return req.MakeResponse(records[0])
 }
 
 func GetPaisCiudades(req *core.HandlerArgs) core.HandlerResponse {
@@ -192,9 +193,10 @@ func PostAlmacen(req *core.HandlerArgs) core.HandlerResponse {
 	body.Created = core.SUnixTime()
 	body.CreatedBy = req.User.ID
 
-	if err := db.Insert(&[]businessTypes.Warehouse{body}); err != nil {
+	almacenes := []businessTypes.Warehouse{body}
+	if err := db.Insert(&almacenes); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el almacén: " + err.Error())
 	}
 
-	return req.MakeResponse(body)
+	return req.MakeResponse(almacenes[0])
 }

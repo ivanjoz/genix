@@ -118,7 +118,7 @@ export const AdminModule: IModule = {
 	      { name: "Cash Movements|Cajas Movimientos", route: "/finance/cajas-movimientos",
 	        icon: "icon-exchange"
 				},
-		    { name: "Expenses|Gastos", route: "/finance/gastos",
+		    { name: "Expenses|Gastos", route: "/finance/expenses",
 		      icon: "icon-exchange"
 				},
 		    { name: "Accounts Management|Gestión de Cuentas", route: "/finance/gestion-cuentas",

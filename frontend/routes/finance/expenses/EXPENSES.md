@@ -143,18 +143,18 @@ amount for that period plus its payment state.
 | `DueDate`           | `int16`  | UnixDay payment is due. |
 | `Amount`            | `int32`  | Total owed for this expense/period, in cents (the per-period adjusted value). |
 | `PaidAmount`        | `int32`  | Sum of payments applied so far, in cents. Maintained server-side when payments are recorded. |
-| `PaymentStatus`     | `int8`   | `0` unpaid · `1` partial · `2` fully paid. Set by `PostExpensePayment`. The UI "Is Fully Paid" checkbox forces `2` even when `PaidAmount < Amount` (write-off). |
-| `Status`            | `int8`   | `json:"ss"`. |
+| `Status`            | `int8`   | `json:"ss"` — **payment lifecycle**: `0` removed · `1` created/pending · `2` fully paid. Drives the status tabs (§5/§6). Set by `PostExpensePayment`; the UI "Is Fully Paid" checkbox forces `2` even when `PaidAmount < Amount` (write-off). The list chip (Unpaid/Partial/Paid) is **derived** from `ss` + `PaidAmount` — there is no separate `PaymentStatus` field. |
 | `Updated`           | `int32`  | `json:"upd"`. |
 | `UpdatedBy`         | `int32`  | |
 | `Created`           | `int32`  | |
 | `CreatedBy`         | `int32`  | |
 
-**Payment status:** `PaymentStatus` is **not** derived in `SelfParse` — the write-off
-case (`PaidAmount < Amount` but closed) can't be inferred from amounts alone. Instead
-`PostExpensePayment` sets it after recomputing `PaidAmount`: force `2` if the "Is Fully
-Paid" flag was sent, else `2` when `PaidAmount >= Amount`, else `1` when
-`PaidAmount > 0`, else `0`.
+**Payment lifecycle (`Status`/`ss`):** `PostExpensePayment` sets `ss` after recomputing
+`PaidAmount`: `2` (fully paid) when the "Is Fully Paid" flag was sent or
+`PaidAmount >= Amount`, else `1` (pending). New rows are created with `ss = 1`; `0` means
+removed. Detail edits (`PostExpenses`) never touch `ss`/`PaidAmount` (excluded from the
+update) so the lifecycle is server-authoritative. The list chip distinguishes
+Unpaid/Partial purely from `PaidAmount` for `ss = 1` rows.
 
 **Schema:**
 
@@ -195,14 +195,31 @@ cheap query.
 
 ## 4. Payment flow
 
-1. User opens an `Expense` and enters a payment (amount, date, source `CashBankID`).
-2. Backend creates a `CashBankMovement` (outflow) via the existing
-   `ApplyCajaMovimientos` path with `DocumentID = Expense.ID`,
-   `ReferenceID = Expense.ExpenseScheduledID`.
-3. Backend recomputes `Expense.PaidAmount` = Σ of its movements, sets `PaymentStatus`
-   (honoring the "Is Fully Paid" flag for the write-off case), and saves the `Expense`.
+1. User opens an `Expense` and enters a payment (positive amount, date, source
+   `CashBankID`, optional "Is Fully Paid" flag).
+2. Backend creates a `CashBankMovement` of the new outflow type **`9` =
+   `Expense Payment|Pago Gasto`** (added to `cajaMovimientoTipos`; `group: 2`,
+   `isNegative: true`) via the existing `ApplyCajaMovimientos` path with
+   `DocumentID = Expense.ID`, `ReferenceID = Expense.ExpenseScheduledID`. The movement
+   `Amount` is stored **negative** (outflow): `Amount = -payment`.
+3. Backend recomputes `Expense.PaidAmount` = Σ of the **absolute** values of its
+   movements (queried via the `DocumentID` local index); `PaidAmount` is kept positive.
+   It then sets `Status`/`ss` (`2` when fully paid / "Is Fully Paid", else `1`) and saves
+   the `Expense` — moving the row between the status tabs (§5).
 4. The cash/bank balance is adjusted by the existing movement logic — no new balance
    code needed here.
+
+**Sign convention:** the user enters a positive payment; the ledger movement is
+negative (`FinalAmount = previousBalance + Amount`); `Expense.PaidAmount` is the
+positive running sum.
+
+**Balance-drift guard:** like `PostMovimientoCaja`, the client sends the expected
+`FinalAmount` and the server returns `{NeedUpdateSaldo: <currentAmount>}` when the
+system balance disagrees, so the UI can re-sync before retrying.
+
+**Currency match (validation):** `PostExpensePayment` rejects the payment unless
+`Expense.CurrencyType == CashBank.CurrencyType` (cannot pay a USD expense from a PEN
+register, or vice-versa).
 
 Reusing `CashBankMovement` means expense payments automatically show up in
 Cash Movements and Cash Flow reports.
@@ -216,7 +233,7 @@ Following `backend/docs/CREATE_API_HANDLERS.md`. Register in
 
 | Router key                     | Handler                | Purpose |
 | ------------------------------ | ---------------------- | ------- |
-| `GET.expenses`                 | `GetExpenses`          | Delta-cache list of `Expense` (uses `updated`). |
+| `GET.expenses`                 | `GetExpenses`          | Per-status delta-cache list of `Expense`. One status tab per request via `?status=` (`0` Todos / `1` Pend. Pago / `2` Pagados) + `updated` watermark. Mirrors `GetSaleOrders`: rows that change status are evicted client-side via `records_IDsToRemove`. Todos/Pagados capped at 2000; Pend. Pago uncapped. |
 | `POST.expenses`                | `PostExpenses`         | Create/update one-time or per-period expenses. |
 | `GET.expenses-scheduled`       | `GetExpensesScheduled` | Delta-cache list of `ExpenseScheduled`. |
 | `POST.expenses-scheduled`      | `PostExpensesScheduled`| Create/update a schedule. Does **not** pre-generate periods. |
@@ -228,6 +245,13 @@ by a cron job. When the user opens a schedule, `GET.expense-schedule-periods` wa
 cadence from `StartDate` to today, creating one `Expense` per period that doesn't yet
 exist (matched on `ExpenseScheduledID` + `PeriodDate`). Already-existing periods (and
 their payment state) are untouched.
+
+- **"Today" boundary:** generation emits periods with `PeriodDate <= req.EffectiveFechaUnix()`
+  (the server's effective date), stopping early at `EndDate` when it is set (> 0).
+- **Weekly anchor (`C=1`):** `DD` is the weekday (1=Mon…7=Sun). The first period is the
+  first occurrence of weekday `DD` on/after `StartDate`; subsequent periods step +7 days.
+- **Monthly / N-monthly / yearly anchor (`C=2..6`):** `StartDate` anchors which month(s)
+  the cadence lands on; `DD` is the day-of-month, clamped to the real month length.
 
 Validation (server, never trust client): positive `Amount`, valid `CurrencyType`
 (1/2), valid `CategoryID` (in the static list), well-formed `Frequency` (`C` 1–6,
@@ -254,7 +278,10 @@ body to the two sub-views:
 
 ### `ExpensesRegister.svelte`
 - `VTable` of `Expense` rows (columns: name, due date, amount, paid, status chip).
-- `FilterInput` + status filter (unpaid / partial / paid).
+- `FilterInput` (client-side name filter) + 3 status tabs (Todos / Pend. Pago /
+  Pagados). Each tab spins up a fresh `ExpensesService(status)` (route `?status=<code>`)
+  and re-queries on tab switch — mirrors `sale_orders_status`. The chip (Sin pagar /
+  Parcial / Pagado) is derived from `ss` + `PaidAmount`.
 - A `Button` "New|Nuevo" opens a side `Layer` (`Core.openSideLayer(1)`) to create a
   one-time expense.
 - Row click opens the same side `Layer` to edit and to **record a payment** (amount +

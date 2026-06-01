@@ -5,8 +5,15 @@ import "app/core"
 var ModuleHandlers = core.AppRouterType{
 	"GET.cajas":            GetCajas,
 	"POST.cajas":           PostCajas,
-	"GET.cashBank-movimientos": GetCajaMovimientos,
-	"GET.cashBank-cuadres":     GetCajaCuadres,
-	"POST.cashBank-cuadre":     PostCajaCuadre,
-	"POST.cashBank-movimiento": PostMovimientoCaja,
+	"GET.cash-banks-movements": GetCajaMovimientos,
+	"GET.cash-banks-reconciliations":     GetCajaCuadres,
+	"POST.cash-banks-reconciliation":     PostCajaCuadre,
+	"POST.cash-banks-movement": PostMovimientoCaja,
+	// Expenses module
+	"GET.expenses":                 GetExpenses,
+	"POST.expenses":                PostExpenses,
+	"GET.expenses-scheduled":       GetExpensesScheduled,
+	"POST.expenses-scheduled":      PostExpensesScheduled,
+	"GET.expense-schedule-periods": GetExpenseSchedulePeriods,
+	"POST.expense-payment":         PostExpensePayment,
 }

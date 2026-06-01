@@ -147,6 +147,8 @@ type InternalCashMovement struct {
 	CashBankID    int32
 	CashBankRefID int32
 	DocumentID    int64
+	ReferenceID   int32 // Optional: e.g. the originating ExpenseScheduled.ID for expense payments.
+	Date          int16 // Optional: movement date; falls back to the request's effective date if 0.
 	Type          int8
 	Amount        int32
 	FinalAmount   int32 // Optional: calculated if 0

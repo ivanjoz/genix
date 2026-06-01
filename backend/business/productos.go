@@ -83,7 +83,7 @@ func GetProductosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
-	db.SetDebugLogging(2)
+	// db.SetDebugLogging(2)
 	
 	productos := []businessTypes.Product{}
 	if err := json.Unmarshal([]byte(*req.Body), &productos); err != nil {

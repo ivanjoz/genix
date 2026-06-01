@@ -10,7 +10,7 @@
   import T from '$components/misc/T.svelte';
   import Page from '$domain/Page.svelte';
   import { Notify, formatN, formatTime } from '$libs/helpers';
-  import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
+  import { CajasService } from '$routes/finance/cajas/cajas.svelte';
   import {
       ClientProviderService,
       type IClientProvider

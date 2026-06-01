@@ -10,7 +10,7 @@ import Button from '$components/buttons/Button.svelte';
 import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
 import { Core } from '$core/store.svelte';
 import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
-import { CajasService } from '$routes/finanzas/cajas/cajas.svelte';
+import { CajasService } from '$routes/finance/cajas/cajas.svelte';
 import { getWarehouseProductStock, type IProductStock, type IProductStockDetail } from '$routes/logistica/products-stock/stock-movement';
 import { ClientProviderService, ClientProviderType, type IClientProvider } from '$routes/negocio/clientes/clientes-proveedores.svelte';
 import { ProductosService } from '$routes/negocio/productos/productos.svelte';
