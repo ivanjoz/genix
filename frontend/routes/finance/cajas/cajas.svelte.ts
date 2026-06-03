@@ -1,4 +1,5 @@
 import { GetHandler, POST, GET } from '$libs/http.svelte';
+import { GETCached } from '$libs/cache/cache-query-by-id';
 import { formatTime } from '$libs/helpers';
 import { Notify } from '$libs/helpers';
 
@@ -7,7 +8,7 @@ export interface ICashBank {
   SiteID: number
   Name: string
   Description: string
-  MonedaTipo: number
+  CurrencyType: number
   ReconciliationDate: number
   CurrentAmount: number
   ReconciliationAmount: number
@@ -22,12 +23,15 @@ export interface ICajaResult {
 }
 
 export interface ICashBankMovement {
+  ID: number
   CashBankID: number
   CajaRefID: number
   VentaID: number
   DocumentID: number
+  ReferenceID: number
+  Date: number          // UnixDay the movement occurred.
   Type: number
-  Amount: number
+  Amount: number        // Outflows are negative.
   FinalAmount: number
   Created: number
   CreatedBy: number
@@ -114,6 +118,37 @@ export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICa
   return result.movimientos || []
 }
 
+// Fetch the cash-bank movements tied to a document (e.g. an Expense) or a reference (e.g. an
+// ExpenseScheduled), via the DocumentID / ReferenceID local indexes (GET.cash-bank-movement-by-id).
+export const getCashBankMovementByID = async (
+  args: { documentID?: number, referenceID?: number, updated?: number },
+): Promise<ICashBankMovement[]> => {
+  let route = "cash-bank-movement-by-id?"
+  if (args.documentID) route += `document-id=${args.documentID}`
+  else if (args.referenceID) route += `reference-id=${args.referenceID}`
+  else throw ("Debe enviar un documentID o un referenceID.")
+
+  // When the caller provides the parent's `updated` watermark, serve from the route-keyed
+  // cache: it returns the stored movements until `updated` changes, then re-fetches.
+  if (typeof args.updated === 'number') {
+    try {
+      return await GETCached<ICashBankMovement>(route, args.updated, p => p?.movimientos || [])
+    } catch (error) {
+      Notify.failure(error as string)
+      throw error
+    }
+  }
+
+  let result: ICajaMovimientosResult
+  try {
+    result = await GET({ route })
+  } catch (error) {
+    Notify.failure(error as string)
+    throw error
+  }
+  return result.movimientos || []
+}
+
 export const postCajaMovimiento = (data: ICashBankMovement) => {
   return POST({
     data,
@@ -166,6 +201,12 @@ export const getCajaCuadres = async (args: IGetCajaMovimientos): Promise<ICashRe
 export const cajaTipos = [
   { id: 1, name: "Caja" },
   { id: 2, name: "Cuenta Bancaria" }
+]
+
+// Currency enum, must match CashBank.CurrencyType / Expense.CurrencyType on the backend.
+export const cajaMonedaTipos = [
+  { id: 1, name: "PEN" },
+  { id: 2, name: "USD" }
 ]
 
 export const cajaMovimientoTipos = [

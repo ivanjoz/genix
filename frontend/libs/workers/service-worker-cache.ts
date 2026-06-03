@@ -270,7 +270,7 @@ self.addEventListener('fetch', (event) => {
 		return;
 	}
 	
-	console.log("service worker url:", url.href,"|",url.searchParams.get("use-cache"))
+	// console.log("service worker url:", url.href,"|",url.searchParams.get("use-cache"))
 	
 	if (url.pathname === "/_sw_") {
 		event.respondWith((async () => {

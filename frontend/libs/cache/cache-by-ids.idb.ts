@@ -6,7 +6,7 @@ import Dexie from 'dexie'
 
 const LOG_PREFIX = '[cache-by-ids:idb]'
 const CACHE_BY_IDS_DB_PREFIX = 'cached_ids'
-const CACHE_BY_IDS_DB_VERSION = 1
+const CACHE_BY_IDS_DB_VERSION = 2
 
 export interface DatabaseInformation {
 	name: string
@@ -20,15 +20,27 @@ interface ICacheByIDsRow<T = any> {
 	record: T
 }
 
+// Whole-response cache keyed by route, invalidated by a parent `updated` watermark.
+// One route -> one stored blob -> one `updated` stamp (see cache-query-by-id.ts).
+export interface ICacheQueryByIdRow<T = any> {
+	route: string
+	updated: number
+	records: T[]
+	_fch?: number
+}
+
 class CacheByIDsDatabase extends Dexie {
 	cacheByIDs!: Dexie.Table<ICacheByIDsRow<any>, [string, number]>
+	cacheQueryById!: Dexie.Table<ICacheQueryByIdRow<any>, string>
 
 	constructor(databaseName: string) {
 		super(databaseName)
 
 		// One compound-key table avoids schema upgrades per route and keeps reads partitioned by storeName.
+		// v2 adds `cacheQueryById`, a route-keyed whole-response cache sharing this database.
 		this.version(CACHE_BY_IDS_DB_VERSION).stores({
 			cacheByIDs: '[storeName+ID],storeName',
+			cacheQueryById: 'route',
 		})
 	}
 }
@@ -123,6 +135,37 @@ export const clearCacheByIDsDatabase = async (
 	await Dexie.delete(databaseName)
 	console.debug(`${LOG_PREFIX} clear db=${databaseName}`)
 	return { databaseName }
+}
+
+export const readQueryCacheRow = async <T = any>(
+	route: string,
+): Promise<ICacheQueryByIdRow<T> | undefined> => {
+	try {
+		return await getCacheByIDsDatabase(getCurrentDatabaseName()).cacheQueryById.get(route) as
+			| ICacheQueryByIdRow<T>
+			| undefined
+	} catch (error) {
+		console.warn(`${LOG_PREFIX} Failed to read query cache row.`, { route }, error)
+		return undefined
+	}
+}
+
+export const upsertQueryCacheRow = async <T = any>(
+	row: ICacheQueryByIdRow<T>,
+): Promise<void> => {
+	try {
+		await getCacheByIDsDatabase(getCurrentDatabaseName()).cacheQueryById.put(row)
+	} catch (error) {
+		console.warn(`${LOG_PREFIX} Failed to upsert query cache row.`, { route: row.route }, error)
+	}
+}
+
+export const deleteQueryCacheRow = async (route: string): Promise<void> => {
+	try {
+		await getCacheByIDsDatabase(getCurrentDatabaseName()).cacheQueryById.delete(route)
+	} catch (error) {
+		console.warn(`${LOG_PREFIX} Failed to delete query cache row.`, { route }, error)
+	}
 }
 
 export const getCacheByIDsDatabaseInfo = async (

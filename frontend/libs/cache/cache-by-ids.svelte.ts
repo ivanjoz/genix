@@ -8,6 +8,7 @@ import { GET } from '../http.svelte'
  */
 import { concatenateInts } from "../funcs/parsers"
 import { clearCacheByIDsDatabase, readRecordsFromIDBByIDs, upsertRecordsIntoIDB } from "./cache-by-ids.idb"
+import { clearQueryByIdMemoryCache } from "./cache-query-by-id"
 import { Env } from '$core/env'
 
 const CACHE_TIME = 5
@@ -591,6 +592,8 @@ export const clearCacheByIDs = async (): Promise<{ databaseName: string; cleared
 	inFlightRecordsBatchPromiseByTable.clear()
 	staticCacheRecordIdTable.clear()
 	inFlightStaticBatchPromiseByTable.clear()
+	// The route-keyed query cache shares this database; drop its memory layer too.
+	clearQueryByIdMemoryCache()
 
 	resetPendingBufferState(
 		bufferedResolversByTableAndID,

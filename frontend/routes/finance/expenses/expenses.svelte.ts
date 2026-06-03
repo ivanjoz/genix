@@ -171,16 +171,15 @@ export interface IExpensePayment {
   ExpenseID: number
   CashBankID: number
   Amount: number       // positive payment amount, in cents
-  FinalAmount: number  // expected resulting cash-bank balance (drift guard)
   Date: number         // payment date (UnixDay)
   IsFullyPaid: boolean
 }
 
-// postExpensePayment returns the updated IExpense, or { NeedUpdateSaldo } when the
-// client's expected balance drifted from the server's.
+// postExpensePayment returns the updated IExpense. The resulting cash-bank balance is computed
+// server-side; the only balance rule is that it can't go negative (rejected as a plain error).
 export const postExpensePayment = (
   data: IExpensePayment,
-): Promise<IExpense & { NeedUpdateSaldo?: number }> => {
+): Promise<IExpense> => {
   // Refresh expenses (paid amount/status) and cajas (balance) caches after the payment.
   return POST({ data, route: "expense-payment", refreshRoutes: ["expenses", "cajas"] })
 }

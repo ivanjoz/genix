@@ -213,9 +213,10 @@ cheap query.
 negative (`FinalAmount = previousBalance + Amount`); `Expense.PaidAmount` is the
 positive running sum.
 
-**Balance-drift guard:** like `PostMovimientoCaja`, the client sends the expected
-`FinalAmount` and the server returns `{NeedUpdateSaldo: <currentAmount>}` when the
-system balance disagrees, so the UI can re-sync before retrying.
+**Balance rule:** the resulting cash-bank balance is computed server-side
+(`ApplyCajaMovimientos`); the client no longer sends an expected `FinalAmount`. The
+only balance constraint is that it can't go negative — `PostExpensePayment` rejects
+the payment with a plain error when `CurrentAmount - Amount < 0`.
 
 **Currency match (validation):** `PostExpensePayment` rejects the payment unless
 `Expense.CurrencyType == CashBank.CurrencyType` (cannot pay a USD expense from a PEN

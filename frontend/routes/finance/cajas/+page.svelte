@@ -244,7 +244,7 @@
 						icon="icon-plus"
 						label="Opens the modal to create a new cash register (caja)."
 						onClick={(ev) => {
-							cajaForm = { ID: -1, ss: 1 } as ICashBank;
+							cajaForm = { ID: -1, ss: 1, CurrencyType: 1 } as ICashBank;
 							Core.openModal(1);
 						}}
 					/>

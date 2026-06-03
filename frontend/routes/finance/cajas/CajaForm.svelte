@@ -3,7 +3,7 @@ import Input from '$components/form/Input.svelte'
 import SearchSelect from '$components/form/SearchSelect.svelte'
 import Checkbox from '$components/form/Checkbox.svelte'
 import type { ISite } from '$routes/negocio/sedes-almacenes/sedes-almacenes.svelte'
-import { cajaTipos, type ICashBank } from './cajas.svelte'
+import { cajaTipos, cajaMonedaTipos, type ICashBank } from './cajas.svelte'
 
 let {
   form = $bindable(),
@@ -28,6 +28,10 @@ let {
   <SearchSelect bind:saveOn={form} save="SiteID"
     css="col-span-24 md:col-span-10" label="Branch|Sede" required={true} options={sedes}
     keyId="ID" keyName="Name"
+  />
+  <SearchSelect bind:saveOn={form} save="CurrencyType" css="col-span-24 md:col-span-10"
+    label="Currency|Moneda" keyId="id" keyName="name" options={cajaMonedaTipos}
+    placeholder="" required={true}
   />
   <div class="col-span-24 flex justify-between items-center">
     <div></div>

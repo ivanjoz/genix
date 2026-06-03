@@ -79,7 +79,8 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
-	cashBankID := req.GetQueryInt("cashBank-id")
+	// El frontend envía el parámetro como "caja-id" (ver convención en CREATE_API_HANDLERS.md)
+	cashBankID := req.GetQueryInt("caja-id")
 
 	if cashBankID == 0 {
 		return req.MakeErr("No se envió la CashBank-ID")
@@ -120,8 +121,38 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &response)
 }
 
+// GetCashBankMovementByID lists cash-bank movements tied to a document or reference, using the
+// CashBankMovement local indexes on DocumentID / ReferenceID. Used e.g. by the expenses payment
+// view to show the payments that settled an expense (document-id = Expense.ID), or all payments
+// across a schedule's periods (reference-id = ExpenseScheduled.ID).
+func GetCashBankMovementByID(req *core.HandlerArgs) core.HandlerResponse {
+	documentID := req.GetQueryInt64("document-id")
+	referenceID := req.GetQueryInt("reference-id")
+	if documentID == 0 && referenceID == 0 {
+		return req.MakeErr("Debe enviar un document-id o un reference-id.")
+	}
+
+	movimientos := []financeTypes.CashBankMovement{}
+	query := db.Query(&movimientos)
+	query.Select().CompanyID.Equals(req.User.CompanyID)
+	// DocumentID and ReferenceID are separate local indexes; prefer the more specific DocumentID.
+	if documentID != 0 {
+		query.DocumentID.Equals(documentID)
+	} else {
+		query.ReferenceID.Equals(referenceID)
+	}
+
+	if err := query.Exec(); err != nil {
+		return req.MakeErr("Error al obtener los movimientos:", err)
+	}
+
+	response := map[string]any{"movimientos": movimientos}
+	return core.MakeResponse(req, &response)
+}
+
 func GetCajaCuadres(req *core.HandlerArgs) core.HandlerResponse {
-	cashBankID := req.GetQueryInt("cashBank-id")
+	// El frontend envía el parámetro como "caja-id" (ver convención en CREATE_API_HANDLERS.md)
+	cashBankID := req.GetQueryInt("caja-id")
 	if cashBankID == 0 {
 		return req.MakeErr("No se envió la CashBank-ID")
 	}

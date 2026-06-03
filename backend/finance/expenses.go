@@ -185,10 +185,26 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 		(*records)[0] = body
 		err = db.Insert(records)
 	} else {
-		// Edit: never let the client overwrite server-maintained payment state (PaidAmount,
-		// Status) — Status now carries the payment lifecycle, set only by PostExpensePayment.
+		// Lock rule (server-authoritative, never trust the client): a fully-paid expense
+		// (Status == 2) cannot be edited. Load the current Status to enforce it.
+		existing := []financeTypes.Expense{}
+		eq := db.Query(&existing)
+		eq.Select(eq.Status).CompanyID.Equals(req.User.CompanyID).ID.Equals(body.ID)
+		if err := eq.Exec(); err != nil {
+			return req.MakeErr("Error al obtener el gasto:", err)
+		}
+		if len(existing) == 0 {
+			return req.MakeErr("No se encontró el gasto.")
+		}
+		if existing[0].Status == 2 {
+			return req.MakeErr("No se puede editar un gasto que ya fue pagado.")
+		}
+		// Keep payment state server-authoritative: write back the stored Status (set only by
+		// PostExpensePayment) instead of the client's. Status shares a composite view index with
+		// Updated, so it must be written together — only PaidAmount/Created/CreatedBy are excluded.
+		(*records)[0].Status = existing[0].Status
 		q := db.Table[financeTypes.Expense]()
-		err = db.UpdateExclude(records, q.PaidAmount, q.Status, q.Created, q.CreatedBy)
+		err = db.UpdateExclude(records, q.PaidAmount, q.Created, q.CreatedBy)
 	}
 	if err != nil {
 		return req.MakeErr("Error al guardar el gasto:", err)
@@ -404,7 +420,6 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 		ExpenseID   int32 `json:"ExpenseID"`
 		CashBankID  int32 `json:"CashBankID"`
 		Amount      int32 `json:"Amount"`      // positive payment amount, in cents
-		FinalAmount int32 `json:"FinalAmount"` // expected resulting cash-bank balance (drift guard)
 		Date        int16 `json:"Date"`        // payment date (UnixDay)
 		IsFullyPaid bool  `json:"IsFullyPaid"` // forces full-paid status (write-off case)
 	}{}
@@ -431,6 +446,13 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	expense := expenses[0]
 
+	// Reject a payment larger than the outstanding balance (server-authoritative). This also
+	// blocks any payment on an already fully-paid expense, whose pending balance is 0.
+	pendingAmount := expense.Amount - expense.PaidAmount
+	if body.Amount > pendingAmount {
+		return req.MakeErr("El monto del pago no puede ser mayor al monto pendiente.")
+	}
+
 	// 2. Load the source cash bank and enforce a matching currency.
 	cashBank, err := GetCaja(req.User.CompanyID, body.CashBankID)
 	if err != nil {
@@ -440,16 +462,16 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("La moneda de la caja no coincide con la del gasto.")
 	}
 
-	// 3. Balance-drift guard (mirrors PostMovimientoCaja). The movement is an outflow, so
-	//    its amount is negative; the prior balance = FinalAmount - movementAmount.
+	// 3. The movement is an outflow, so its amount is negative. We don't validate the client's
+	//    expected balance; we only reject a payment that would drive the cash-bank balance
+	//    negative. The resulting balance is computed server-side by ApplyCajaMovimientos.
 	movementAmount := -body.Amount
-	saldoSistema := body.FinalAmount - movementAmount
-	if saldoSistema != cashBank.CurrentAmount {
-		core.Log("El saldo de la caja no coincide:", saldoSistema, cashBank.CurrentAmount)
-		return req.MakeResponse(map[string]any{"NeedUpdateSaldo": cashBank.CurrentAmount})
+	if cashBank.CurrentAmount+movementAmount < 0 {
+		return req.MakeErr("El saldo de la caja no puede quedar negativo.")
 	}
 
-	// 4. Record the outflow movement (auto-updates the cash-bank balance).
+	// 4. Record the outflow movement (auto-updates the cash-bank balance). FinalAmount is left
+	//    at 0 so ApplyCajaMovimientos computes it from the current balance authoritatively.
 	movement := financeTypes.InternalCashMovement{
 		CashBankID:  body.CashBankID,
 		DocumentID:  int64(expense.ID),
@@ -457,7 +479,7 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 		Date:        body.Date,
 		Type:        movementTypeExpensePayment,
 		Amount:      movementAmount,
-		FinalAmount: body.FinalAmount,
+		FinalAmount: 0,
 	}
 	if err := ApplyCajaMovimientos(req, []financeTypes.InternalCashMovement{movement}); err != nil {
 		return req.MakeErr(err)
