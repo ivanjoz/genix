@@ -781,6 +781,10 @@ export const fetchDeltaCache = async (args: serviceHttpProps) => {
   const routeReference = makeRouteReference(args)
   let routeRow = await getCacheRouteRow(routeReference)
 
+  // [REFRESH-DBG] On reload the page runs offline + updateOnly passes; only the updateOnly pass
+  // should fetch. This shows whether forceNetwork survived the reload for each pass.
+  console.log("[REFRESH-DBG] fetchDeltaCache:", args.route, "| mode:", args.cacheMode, "| forceNetwork:", routeRow?.forceNetwork, "| fetchTime:", routeRow?.fetchTime)
+
   if(routeRow?.fetchTime && routeRow.__version__ !== args.__version__){
     forgetRouteSnapshot(routeReference)
     routeRow = await resetCacheRouteRow(routeRow, routeReference.version)

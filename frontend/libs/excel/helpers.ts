@@ -7,6 +7,7 @@ import type {
   ResolvedLeafColumn,
   ResolvedTreeColumn,
 } from './types';
+import { tr } from '$core/store.svelte';
 
 const XLSX_BLOB_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const EXCELIZE_WASM_VENDOR_URL = `${base}/vendor/excelize.wasm.bin`;
@@ -34,8 +35,10 @@ export function normalizeHeader(value: string): string {
 }
 
 export function resolveHeaderText<T>(column: ExcelTableColumn<T>): string {
-  if (column.excel?.header) return column.excel.header;
-  return typeof column.header === 'function' ? column.header() : column.header;
+	const header = column.excel?.header
+		? column.excel.header
+		: typeof column.header === 'function' ? column.header() : column.header
+	return tr(header)
 }
 
 export function isColumnCandidate<T>(column: ExcelTableColumn<T>): boolean {

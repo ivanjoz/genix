@@ -1,19 +1,19 @@
 import type { IProduct } from '$services/services/productos.svelte';
 
-export type AriaRole = 
-    | 'button' | 'link' | 'navigation' | 'main' | 'banner'
-    | 'contentinfo' | 'complementary' | 'region' | 'list'
-    | 'listitem' | 'img' | 'dialog' | 'alert';
+export type AriaRole =
+	| 'button' | 'link' | 'navigation' | 'main' | 'banner'
+	| 'contentinfo' | 'complementary' | 'region' | 'list'
+	| 'listitem' | 'img' | 'dialog' | 'alert';
 
 export interface AriaAttributes {
-    label?: string;
-    labelledBy?: string;
-    describedBy?: string;
-    role?: AriaRole;
-    hidden?: boolean;
-    live?: 'polite' | 'assertive' | 'off';
-    expanded?: boolean;
-    controls?: string;
+	label?: string;
+	labelledBy?: string;
+	describedBy?: string;
+	role?: AriaRole;
+	hidden?: boolean;
+	live?: 'polite' | 'assertive' | 'off';
+	expanded?: boolean;
+	controls?: string;
 }
 
 export type SemanticTag = 'header' | 'main' | 'footer' | 'nav' | 'article' | 'aside' | 'section' | 'div' | 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'a' | 'button' | 'img';
@@ -21,37 +21,37 @@ export type SemanticTag = 'header' | 'main' | 'footer' | 'nav' | 'article' | 'as
 export type TextTag = 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'strong' | 'em';
 
 export interface ITextLine {
-    text: string;
-    css: string;
-    tag?: TextTag;
+	text: string;
+	css: string;
+	tag?: TextTag;
 }
 
 export interface ComponentVariable {
-    key: string;
-    defaultValue: string;
-    type: string;
-    units?: string[];
-    min?: number;
-    max?: number;
-    step?: number;
-    label?: string;
-    group?: string;
-    description?: string;
+	key: string;
+	defaultValue: string;
+	type: string;
+	units?: string[];
+	min?: number;
+	max?: number;
+	step?: number;
+	label?: string;
+	group?: string;
+	description?: string;
 }
 
-export type StructuredDataType = 
-    | 'Product'
-    | 'ProductList'
-    | 'BreadcrumbList'
-    | 'Organization'
-    | 'FAQPage'
-    | 'Review';
+export type StructuredDataType =
+	| 'Product'
+	| 'ProductList'
+	| 'BreadcrumbList'
+	| 'Organization'
+	| 'FAQPage'
+	| 'Review';
 
 export interface SectionSEO {
-    headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
-    structuredData?: StructuredDataType;
-    priority?: number;
-    indexable?: boolean;
+	headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
+	structuredData?: StructuredDataType;
+	priority?: number;
+	indexable?: boolean;
 }
 
 export interface IGalleryImagen {
@@ -62,7 +62,7 @@ export interface IGalleryImagen {
 
 export interface ComponentProps {
 	title?: string
- 	productosIDs?: number[];
+	productosIDs?: number[];
 	categoriasIDs?: number[];
 	marcasIDs?: number[];
 	secondaryImagen?: string
@@ -73,55 +73,62 @@ export interface ComponentProps {
 }
 
 export interface ComponentAST extends ComponentProps {
-    id?: string | number;
-    tagName: string;
-    css?: string;
-    style?: string;
-    text?: string;
-    textLines?: ITextLine[];
-    backgroudImage?: string; // Typo preserved for compatibility if needed, or check EcommerceRenderer.svelte
-    children?: ComponentAST[];
-    slot?: string;
-    variables?: ComponentVariable[];
-    description?: string;
-    onClick?: (id: number | string) => void;
-    attributes?: Record<string, string>;
-    marcaID?: number;
-    aria?: AriaAttributes;
-    semanticTag?: SemanticTag;
-    seo?: SectionSEO;    
+	id?: string | number;
+	tagName: string;
+	css?: string;
+	style?: string;
+	text?: string;
+	textLines?: ITextLine[];
+	backgroudImage?: string; // Typo preserved for compatibility if needed, or check EcommerceRenderer.svelte
+	children?: ComponentAST[];
+	/** Coerced props for custom components (tagName starting uppercase). */
+	props?: Record<string, any>;
+	/** Editable role for the builder (from `data-role`), e.g. 'title' | 'content' | 'button'. */
+	role?: string;
+	slot?: string;
+	variables?: ComponentVariable[];
+	description?: string;
+	onClick?: (id: number | string) => void;
+	attributes?: Record<string, string>;
+	marcaID?: number;
+	aria?: AriaAttributes;
+	semanticTag?: SemanticTag;
+	seo?: SectionSEO;
 }
 
 export interface ColorPalette {
-    id: string;
-    name: string;
-    colors: [string, string, string, string, string, string, string, string, string, string];
+	id: string;
+	name: string;
+	colors: [string, string, string, string, string, string, string, string, string, string];
 }
 
-export type SectionCategory = 
-    | 'hero'
-    | 'products'
-    | 'categories'
-    | 'testimonials'
-    | 'features'
-    | 'cta'
-    | 'footer'
-    | 'header'
-    | 'gallery'
-    | 'text';
+export type SectionCategory =
+	| 'hero'
+	| 'products'
+	| 'categories'
+	| 'testimonials'
+	| 'features'
+	| 'cta'
+	| 'footer'
+	| 'header'
+	| 'gallery'
+	| 'text';
 
 export interface SectionPreset {
-    id: string;
-    name: string;
-    variables: Record<string, string>;
+	id: string;
+	name: string;
+	variables: Record<string, string>;
 }
 
 export interface SectionTemplate {
-    id: string;
-    name: string;
-    category: SectionCategory;
-    description: string;
-    thumbnail?: string;
-    ast: ComponentAST;
-    presets?: SectionPreset[];
+	id: string;
+	name: string;
+	/** Source of truth: raw HTML (with custom component tags), parsed to AST at render. */
+	HTML?: string;
+	category: SectionCategory;
+	description: string;
+	thumbnail?: string;
+	/** Optional pre-parsed AST. Legacy templates author this directly; HTML-based ones omit it. */
+	ast?: ComponentAST;
+	presets?: SectionPreset[];
 }

@@ -354,8 +354,13 @@ import {
         tempIDMappings: Array.from(tempIDToNewID.entries()),
       });
 
-      Loading.change(`Guardando productos (${productosToSave.length})...`);
-      await doPostProductos(productosToSave);
+      const BATCH_SIZE = 500;
+      const totalBatches = Math.ceil(productosToSave.length / BATCH_SIZE);
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const batch = productosToSave.slice(batchIndex * BATCH_SIZE, (batchIndex + 1) * BATCH_SIZE);
+        Loading.change(`Enviando ${batchIndex + 1}/${totalBatches}...`);
+        await doPostProductos(batch);
+      }
       for(const e of productos.records){ delete e._updatedFields }
       Loading.remove();
       
@@ -417,11 +422,13 @@ import {
   });
 
   const deleteProductoImage = async (ImageToDelete: string) => {
+ 		console.debug("Eliminando imagen::", ImageToDelete)
+  
     Loading.standard(tr("Deleting image...|Eliminando Imagen..."));
     try {
       await POST({
         data: { ProductID: productoForm.ID, ImageToDelete },
-        route: "producto-image",
+        route: "product-image",
         refreshRoutes: ["productos"],
       });
     } catch (error) {
@@ -560,7 +567,8 @@ import {
         />
         <div class="col-span-24 md:col-span-9 md:row-span-4">
           <ImageUploader
-            saveAPI="producto-image"
+            saveAPI="product-image"
+            refreshRoutes={["productos"]}
             useConvertAvif={true}
             clearOnUpload={true}
             types={["avif", "webp"]}
@@ -771,7 +779,8 @@ import {
         class="grid grid-cols-2 md:grid-cols-4 items-start gap-x-10 gap-y-10 mt-16"
       >
         <ImageUploader
-          saveAPI="producto-image"
+          saveAPI="product-image"
+          refreshRoutes={["productos"]}
           useConvertAvif={true}
           clearOnUpload={true}
           types={["avif", "webp"]}
@@ -794,7 +803,8 @@ import {
         />
         {#each productoForm.Images || [] as image}
           <ImageUploader
-            saveAPI="producto-image"
+            saveAPI="product-image"
+            refreshRoutes={["productos"]}
             size={2}
             clearOnUpload={true}
             types={["avif", "webp"]}

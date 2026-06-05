@@ -168,6 +168,8 @@ export const processProductosImportFile = async (
     return validationErrors.length > 0 ? validationErrors : undefined;
 	});
 
+  console.log("importResult",importResult)
+
   const comparableFieldKeys = collectComparableFieldKeys(importResult.mappedLeafColumns);
   console.log('[productos-import] comparable fields for diff:', comparableFieldKeys);
 

@@ -10,7 +10,7 @@ import Page from '$domain/Page.svelte';
 <Page title="demo">
 	<div>hola</div>
 	<div>{demoService.message}</div>
-	<ImageUploader saveAPI="producto-image"
+	<ImageUploader saveAPI="product-image"
 		clearOnUpload={true}
 		cardCss="w-200 h-200 p-4"
 		setDataToSend={e => {

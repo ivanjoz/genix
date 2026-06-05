@@ -69,7 +69,8 @@ function formatImportError(row: number, message: string): string {
 export async function parseExcelFile<T>(options: ExcelImportOptions<T>): Promise<ExcelImportResult<T>> {
   const { columns, source, sheetName } = options;
   const headerRows = sanitizeHeaderRows(options.headerRows);
-
+	console.log("headerRows::", headerRows)
+  
   const excelize = await getExcelize();
   const buffer = await readSourceBuffer(source);
   const file = excelize.OpenReader(buffer);

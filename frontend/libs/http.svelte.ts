@@ -172,7 +172,12 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
   const apiRoute = Env.makeRoute(props.route)
 
   if((props.refreshRoutes||[]).length > 0){
+    // [REFRESH-DBG] Action 24's result is otherwise discarded; await+log it so the PAGE console
+    // shows how many cached routes were actually marked (SW-side logs live in the SW context).
+    console.log("[REFRESH-DBG] sending refreshRoutes (accion 24):", props.refreshRoutes)
     sendServiceMessage(24, { routes: props.refreshRoutes })
+      .then((result) => console.log("[REFRESH-DBG] refreshRoutes result:", result))
+      .catch((error) => console.warn("[REFRESH-DBG] refreshRoutes failed:", error))
 	}
 	const status: IHttpStatus = props.status || { code: 200, message: "" }
   const requestFetchID = browser ? (fetchEvent(0, 0) as number) : 0
@@ -229,6 +234,14 @@ export const POST_XMLHR = (props: httpProps): Promise<any> => {
   }
   props.status = { code: 200, message: "" }
 const apiRoute = Env.makeRoute(props.route)
+
+  // Mirror POST_PUT: image uploads also need to mark cached routes stale (forceNetwork) via the SW.
+  if((props.refreshRoutes||[]).length > 0){
+    console.log("[REFRESH-DBG] (XMLHR) sending refreshRoutes (accion 24):", props.refreshRoutes)
+    sendServiceMessage(24, { routes: props.refreshRoutes })
+      .then((result) => console.log("[REFRESH-DBG] (XMLHR) refreshRoutes result:", result))
+      .catch((error) => console.warn("[REFRESH-DBG] (XMLHR) refreshRoutes failed:", error))
+  }
 
   return new Promise((resolve, reject) => {
     axios.post(apiRoute, data, {

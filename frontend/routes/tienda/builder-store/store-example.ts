@@ -1,4 +1,6 @@
 import type { SectionData } from '$ecommerce/renderer/section-types';
+import { HtmlHeroBanner } from '$ecommerce/ecommerce-templates/templates/html-hero-banner';
+import { HtmlCategoryShowcase } from '$ecommerce/ecommerce-templates/templates/html-category-showcase';
 
 export const storeExample: SectionData[] = [
   {
@@ -44,5 +46,19 @@ export const storeExample: SectionData[] = [
     css: {
 
     }
+  },
+  {
+    id: 'html-hero-1',
+    type: 'HtmlSection',
+    category: HtmlHeroBanner.category,
+    content: { html: HtmlHeroBanner.HTML },
+    css: {}
+  },
+  {
+    id: 'html-showcase-1',
+    type: 'HtmlSection',
+    category: HtmlCategoryShowcase.category,
+    content: { html: HtmlCategoryShowcase.HTML },
+    css: {}
   }
 ];

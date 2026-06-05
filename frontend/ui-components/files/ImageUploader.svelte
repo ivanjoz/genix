@@ -33,7 +33,7 @@ export interface IImageUploaderProps {
   src?: string;
   types?: string[];
   saveAPI?: string;
-  refreshIndexDBCache?: string;
+  refreshRoutes?: string[];
   onUploaded?: (imagePath: string, description?: string) => void;
   setDataToSend?: (e: any) => void;
   clearOnUpload?: boolean;
@@ -56,6 +56,7 @@ let {
   src = "",
   types = [],
   saveAPI = "images",
+  refreshRoutes = [],
   onChange,
   onUploaded = undefined,
   setDataToSend = undefined,
@@ -169,6 +170,7 @@ const uploadImage = async (): Promise<IImageResult> => {
     result = await POST_XMLHR({
       data,
       route: saveAPI || "images",
+      refreshRoutes,
       onUploadProgress: e => {
         if(e.total){
           progress = Math.round((e.loaded * 100) / e.total)

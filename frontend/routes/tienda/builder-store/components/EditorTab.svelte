@@ -1,9 +1,35 @@
 <script lang="ts">
 import { editorStore } from '$ecommerce/stores/editor.svelte';
 import type { StandardContent } from '$ecommerce/renderer/section-types';
+import type { ComponentAST } from '$ecommerce/renderer/renderer-types';
+import { parseHTML } from '$ecommerce/html-ast/parse-html';
+import { collectRoleNodes, isLinkNode } from '$ecommerce/html-ast/editable';
 
   const section = $derived(editorStore.selectedSection);
   const schema = $derived(editorStore.activeSchema);
+
+  const isHtmlSection = $derived(section?.type === 'HtmlSection');
+
+  // Ensure an HTML section has a parsed AST to edit (parsed once from the HTML seed).
+  $effect(() => {
+    if (section && isHtmlSection && !section.content.ast) {
+      editorStore.updateContent(section.id, 'ast', parseHTML(section.content.html ?? ''));
+    }
+  });
+
+  // Live references to the role-tagged nodes inside the section's AST.
+  const roleNodes = $derived(
+    isHtmlSection ? collectRoleNodes(section?.content.ast as ComponentAST[] | undefined) : []
+  );
+
+  function setNodeText(node: ComponentAST, value: string) {
+    node.text = value;
+  }
+
+  function setNodeHref(node: ComponentAST, value: string) {
+    if (!node.attributes) node.attributes = {};
+    node.attributes.href = value;
+  }
 
   function handleContentInput(key: keyof StandardContent, value: any) {
     if (section) {
@@ -49,6 +75,48 @@ import type { StandardContent } from '$ecommerce/renderer/section-types';
     </div>
 
     <div class="editor-groups">
+      {#if isHtmlSection}
+        <!-- HTML SECTION: editable role-tagged nodes from the parsed AST -->
+        <div class="editor-group">
+          <h4 class="group-title">Content</h4>
+          <div class="fields-list">
+            {#if roleNodes.length === 0}
+              <p class="empty-hint">No editable parts. Add <code>data-role="title"</code> etc. to the template HTML.</p>
+            {/if}
+            {#each roleNodes as { role, node }, i (i)}
+              <div class="field-item">
+                <label class="field-label" for={`role-${i}`}>{role}</label>
+                {#if role === 'content' || (node.text && node.text.length > 60)}
+                  <textarea
+                    id={`role-${i}`}
+                    class="field-input textarea"
+                    value={node.text || ''}
+                    oninput={(e) => setNodeText(node, e.currentTarget.value)}
+                    rows="3"
+                  ></textarea>
+                {:else}
+                  <input
+                    id={`role-${i}`}
+                    type="text"
+                    class="field-input"
+                    value={node.text || ''}
+                    oninput={(e) => setNodeText(node, e.currentTarget.value)}
+                  />
+                {/if}
+                {#if isLinkNode(node)}
+                  <input
+                    type="text"
+                    class="field-input link-input"
+                    value={node.attributes?.href || ''}
+                    oninput={(e) => setNodeHref(node, e.currentTarget.value)}
+                    placeholder="Link URL (href)"
+                  />
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </div>
+      {:else}
       <!-- CONTENT GROUP -->
       <div class="editor-group">
         <h4 class="group-title">Content</h4>
@@ -106,6 +174,7 @@ import type { StandardContent } from '$ecommerce/renderer/section-types';
           {/each}
         </div>
       </div>
+      {/if}
 
       <!-- STYLING GROUP -->
       <div class="editor-group">
@@ -249,5 +318,23 @@ import type { StandardContent } from '$ecommerce/renderer/section-types';
   .add-btn:hover {
     background: #334155;
     color: white;
+  }
+
+  .link-input {
+    font-size: 12px;
+    color: #94a3b8;
+  }
+
+  .empty-hint {
+    font-size: 12px;
+    color: #94a3b8;
+    line-height: 1.5;
+  }
+
+  .empty-hint code {
+    background: #1e293b;
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #cbd5e1;
   }
 </style>

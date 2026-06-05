@@ -394,6 +394,10 @@ export const refreshRoutesByPrefix = async (
     .equals(module)
     .toArray()
 
+  // [REFRESH-DBG] If `storedRoutes` doesn't contain the requested prefix, the route was never cached
+  // under this module/db yet, so nothing gets marked (the silent 0-match case).
+  console.log("[REFRESH-DBG] refreshRoutesByPrefix:", { dbName, module, requested: routes, storedRoutes: routeRows.map((r) => r.route) })
+
   let updatedRoutesCount = 0
   for (const routeRow of routeRows) {
     if (!routes.some((routePrefix) => routeRow.route.startsWith(routePrefix))) {
@@ -403,6 +407,7 @@ export const refreshRoutesByPrefix = async (
     await database.cacheRoutes.put(routeRow)
     rememberRouteRow(routeRow)
     updatedRoutesCount++
+    console.log("[REFRESH-DBG] marked forceNetwork=true:", routeRow.route, "| cacheKey:", routeRow.cacheKey)
   }
 
   return updatedRoutesCount
