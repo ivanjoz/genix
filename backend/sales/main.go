@@ -12,6 +12,10 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.sale-order-by-ids": GetSaleOrderByIDs,
 	"GET.shipping-costs":    GetShippingCosts,
 	"POST.shipping-costs":   PostShippingCosts,
+	"GET.sales-planning":     GetSalesPlanning,
+	"POST.sales-planning":    PostSalesPlanning,
+	"GET.seasonality-curve":  GetSeasonalityCurve,
+	"POST.seasonality-curve": PostSeasonalityCurve,
 }
 
 func init() {

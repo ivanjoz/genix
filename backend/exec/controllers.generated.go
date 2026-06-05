@@ -48,6 +48,8 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[salesTypes.ProductSaleSummary](),
 		makeDBController[salesTypes.SaleOrder](),
 		makeDBController[salesTypes.SaleSummary](),
+		makeDBController[salesTypes.SalesPlanning](),
+		makeDBController[salesTypes.SeasonalityCurve](),
 		makeDBController[salesTypes.ShippingCost](),
 		makeDBController[securityTypes.Profile](),
 	}

@@ -89,6 +89,9 @@ export const AdminModule: IModule = {
 				{ name: "Shipping Costs|Costos de Envio", route: "/comercial/shipping-costs",
           icon: "icon-flash"
         },
+				{ name: "Sales Planning|Proyección Ventas", route: "/comercial/sale_planning",
+          icon: "icon-chart-bar"
+        },
       ]
 		},
 		{ name: "Logistics|Logística", minName: "LOG",  id: 4, icon: "icon-tasks",
