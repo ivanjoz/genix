@@ -6,7 +6,7 @@
     category: 'products',
     content: [
       'title',
-      'productosIDs',
+      'productIDs',
       'limit'
     ],
     css: ['container', 'title', 'grid']
@@ -24,7 +24,7 @@
 
   let { content, css }: Props = $props();
 
-  const products = $derived((content.productosIDs || []).slice(0, content.limit || 8));
+  const products = $derived((content.productIDs || []).slice(0, content.limit || 8));
 </script>
 
 <section class="py-16 px-6 max-w-7xl mx-auto {css.container || ''}">

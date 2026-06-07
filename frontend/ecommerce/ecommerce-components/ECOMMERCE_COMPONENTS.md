@@ -38,7 +38,7 @@ Each component handles its own complexity internally:
 // In ComponentAST - simple usage
 {
     tagName: 'ProductGrid',
-    productosIDs: [1, 2, 3, 4, 5, 6]
+    productIDs: [1, 2, 3, 4, 5, 6]
 }
 
 // The ProductGrid component internally:
@@ -57,7 +57,7 @@ Components accept a `css` prop for **wrapper/container styling**, but internal s
 {
     tagName: 'ProductCarousel',
     css: 'my-8 px-4',              // Wrapper styles (margins, padding)
-    productosIDs: [1, 2, 3, 4]
+    productIDs: [1, 2, 3, 4]
     // Internal card styles are handled by the component
 }
 ```
@@ -131,7 +131,7 @@ Grid layout of multiple products.
 
 | Prop | Type | Required | Description |
 |:-----|:-----|:---------|:------------|
-| `productosIDs` | `number[]` | No* | Specific product IDs |
+| `productIDs` | `number[]` | No* | Specific product IDs |
 | `categoriaID` | `number` | No* | Filter by category |
 | `marcaID` | `number` | No* | Filter by brand |
 | `columns` | `number` | No | Number of columns (default: 4, responsive) |
@@ -149,7 +149,7 @@ Horizontal scrolling product slider.
 
 | Prop | Type | Required | Description |
 |:-----|:-----|:---------|:------------|
-| `productosIDs` | `number[]` | No* | Specific product IDs |
+| `productIDs` | `number[]` | No* | Specific product IDs |
 | `categoriaID` | `number` | No* | Filter by category |
 | `marcaID` | `number` | No* | Filter by brand |
 | `autoplay` | `boolean` | No | Auto-scroll (default: false) |
@@ -166,7 +166,7 @@ Featured 2x2 grid for highlighting products.
 
 | Prop | Type | Required | Description |
 |:-----|:-----|:---------|:------------|
-| `productosIDs` | `[number, number, number, number]` | Yes | Exactly 4 product IDs |
+| `productIDs` | `[number, number, number, number]` | Yes | Exactly 4 product IDs |
 | `variant` | `'equal' \| 'featured'` | No | Layout style (default: 'equal') |
 
 **Variants:**
@@ -181,7 +181,7 @@ Vertical list of products (compact view).
 
 | Prop | Type | Required | Description |
 |:-----|:-----|:---------|:------------|
-| `productosIDs` | `number[]` | No* | Specific product IDs |
+| `productIDs` | `number[]` | No* | Specific product IDs |
 | `categoriaID` | `number` | No* | Filter by category |
 | `limit` | `number` | No | Max products (default: 5) |
 | `showImage` | `boolean` | No | Show thumbnail (default: true) |
@@ -223,7 +223,7 @@ Grid of category cards.
 
 | Prop | Type | Required | Description |
 |:-----|:-----|:---------|:------------|
-| `categoriasIDs` | `number[]` | No | Specific category IDs (all if empty) |
+| `categoryIDs` | `number[]` | No | Specific category IDs (all if empty) |
 | `columns` | `number` | No | Grid columns (default: 4) |
 | `limit` | `number` | No | Max categories (default: 8) |
 | `showCount` | `boolean` | No | Show product counts (default: false) |
@@ -236,7 +236,7 @@ Vertical list of categories (for sidebar).
 
 | Prop | Type | Required | Description |
 |:-----|:-----|:---------|:------------|
-| `categoriasIDs` | `number[]` | No | Specific IDs (all if empty) |
+| `categoryIDs` | `number[]` | No | Specific IDs (all if empty) |
 | `showIcon` | `boolean` | No | Show category icon (default: true) |
 | `showCount` | `boolean` | No | Show product count (default: true) |
 | `collapsible` | `boolean` | No | Collapsible subcategories (default: true) |
@@ -249,7 +249,7 @@ Horizontal scrolling category slider.
 
 | Prop | Type | Required | Description |
 |:-----|:-----|:---------|:------------|
-| `categoriasIDs` | `number[]` | No | Specific IDs (all if empty) |
+| `categoryIDs` | `number[]` | No | Specific IDs (all if empty) |
 | `showArrows` | `boolean` | No | Show navigation (default: true) |
 
 ---
@@ -274,7 +274,7 @@ Grid of brand logos.
 
 | Prop | Type | Required | Description |
 |:-----|:-----|:---------|:------------|
-| `marcasIDs` | `number[]` | No | Specific brand IDs (all if empty) |
+| `brandIDs` | `number[]` | No | Specific brand IDs (all if empty) |
 | `columns` | `number` | No | Grid columns (default: 6) |
 | `limit` | `number` | No | Max brands (default: 12) |
 
@@ -286,7 +286,7 @@ Horizontal scrolling brand logos.
 
 | Prop | Type | Required | Description |
 |:-----|:-----|:---------|:------------|
-| `marcasIDs` | `number[]` | No | Specific brand IDs |
+| `brandIDs` | `number[]` | No | Specific brand IDs |
 | `autoplay` | `boolean` | No | Auto-scroll (default: true) |
 
 ---
@@ -702,7 +702,7 @@ const heroSection: ComponentAST = {
                 },
                 {
                     tagName: 'ProductCarousel',
-                    productosIDs: [1, 2, 3, 4, 5, 6, 7, 8],
+                    productIDs: [1, 2, 3, 4, 5, 6, 7, 8],
                     showArrows: true,
                     autoplay: true
                 }

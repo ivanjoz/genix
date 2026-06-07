@@ -1,23 +1,3 @@
-import type { IProduct } from '$services/services/productos.svelte';
-
-export type AriaRole =
-	| 'button' | 'link' | 'navigation' | 'main' | 'banner'
-	| 'contentinfo' | 'complementary' | 'region' | 'list'
-	| 'listitem' | 'img' | 'dialog' | 'alert';
-
-export interface AriaAttributes {
-	label?: string;
-	labelledBy?: string;
-	describedBy?: string;
-	role?: AriaRole;
-	hidden?: boolean;
-	live?: 'polite' | 'assertive' | 'off';
-	expanded?: boolean;
-	controls?: string;
-}
-
-export type SemanticTag = 'header' | 'main' | 'footer' | 'nav' | 'article' | 'aside' | 'section' | 'div' | 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'a' | 'button' | 'img';
-
 export type TextTag = 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'strong' | 'em';
 
 export interface ITextLine {
@@ -39,61 +19,28 @@ export interface ComponentVariable {
 	description?: string;
 }
 
-export type StructuredDataType =
-	| 'Product'
-	| 'ProductList'
-	| 'BreadcrumbList'
-	| 'Organization'
-	| 'FAQPage'
-	| 'Review';
-
-export interface SectionSEO {
-	headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
-	structuredData?: StructuredDataType;
-	priority?: number;
-	indexable?: boolean;
-}
-
 export interface IGalleryImagen {
 	image: string
 	title: string
 	description: string
 }
 
-export interface ComponentProps {
-	title?: string
-	productosIDs?: number[];
-	categoriasIDs?: number[];
-	marcasIDs?: number[];
-	secondaryImagen?: string
-	iconImagen?: string
-	gallery?: IGalleryImagen[]
-	limit?: number, /* limit of elements to show (example: products) */
-	elementsCss?: { [selector: string]: string }
-}
-
-export interface ComponentAST extends ComponentProps {
-	id?: string | number;
+/**
+ * A node in the parsed HTML section AST. Structural only — section content
+ * fields (products, titles, etc.) live on `StandardContent` in section-types.ts.
+ */
+export interface ComponentAST {
 	tagName: string;
 	css?: string;
+	/** Inline style compiled from color attributes (palette tokens -> var(--color-N)). */
 	style?: string;
 	text?: string;
-	textLines?: ITextLine[];
-	backgroudImage?: string; // Typo preserved for compatibility if needed, or check EcommerceRenderer.svelte
 	children?: ComponentAST[];
-	/** Coerced props for custom components (tagName starting uppercase). */
-	props?: Record<string, any>;
 	/** Editable role for the builder (from `data-role`), e.g. 'title' | 'content' | 'button'. */
 	role?: string;
-	slot?: string;
-	variables?: ComponentVariable[];
-	description?: string;
-	onClick?: (id: number | string) => void;
+	/** Coerced props for custom components (tagName starting uppercase). */
+	props?: Record<string, any>;
 	attributes?: Record<string, string>;
-	marcaID?: number;
-	aria?: AriaAttributes;
-	semanticTag?: SemanticTag;
-	seo?: SectionSEO;
 }
 
 export interface ColorPalette {

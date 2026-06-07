@@ -33,3 +33,8 @@ export function collectRoleNodes(
 export function isLinkNode(node: ComponentAST): boolean {
 	return node.tagName === 'a';
 }
+
+/** A role node is image-like (edited via the ImageBlockEditor) if it is an ImageEffect. */
+export function isImageNode(node: ComponentAST): boolean {
+	return node.tagName === 'ImageEffect';
+}

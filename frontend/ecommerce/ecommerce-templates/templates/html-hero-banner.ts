@@ -26,4 +26,4 @@ export const HtmlHeroBanner: SectionTemplate = {
 			</div>
 		</section>
 	`,
-};
+}

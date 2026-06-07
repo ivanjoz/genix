@@ -22,7 +22,30 @@ export const componentSchemas: Record<string, ComponentSchema> = {
 		tagName: 'CategoryDescription',
 		description: 'Renders the description text of a category.',
 		props: {
-			categoriasIDs: { type: 'number[]' },
+			categoryIDs: { type: 'number[]' },
+		},
+	},
+
+	ImageEffect: {
+		tagName: 'ImageEffect',
+		description:
+			'Image with a layout (composition/clip shape) and a visual effect (duotone, glass, vignette...). Overlay markup goes inside as children.',
+		props: {
+			src: { type: 'string' },
+			layout: { type: 'string' },
+			effect: { type: 'string' },
+			// `color`/`color2` props drive the duotone/overlay tints. We expose them as
+			// `tint`/`tint2` because the bare `color` attribute is already consumed by the
+			// style-attribute compiler (text color), so it never reaches props.
+			tint: { type: 'string', prop: 'color' },
+			tint2: { type: 'string', prop: 'color2' },
+			intensity: { type: 'number' },
+			blur: { type: 'number' },
+			aspectRatio: { type: 'string' },
+			// `fill` turns the image into an absolute background layer of its parent
+			// (which must be positioned); `fit` controls object-fit/position.
+			fill: { type: 'boolean' },
+			fit: { type: 'string', enum: ['cover', 'contain', 'contain-left', 'contain-right'] },
 		},
 	},
 

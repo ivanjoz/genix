@@ -81,7 +81,7 @@ interface IGalleryImagen {
 
 export interface ComponentProps {
     title: string;                        // Component title or heading text
-    productosIDs?: number[];              // Specific product IDs to display
+    productIDs?: number[];              // Specific product IDs to display
     categoriaID?: number;                 // Category ID for filtering products
     marcaID?: number;                     // Brand ID for filtering products
     secondaryImagen?: string;             // Secondary image URL (banners, backgrounds)
@@ -313,10 +313,10 @@ These are pre-built Svelte components that handle their own internal logic (butt
 
 | TagName | Description | Data Props |
 |:--------|:------------|:-----------|
-| `ProductCard` | Product card with image, price, and add-to-cart button | `productosIDs` |
-| `ProductCardHorizontal` | Horizontal product card with description | `productosIDs` |
-| `ProductGrid` | Grid of products with optional pagination | `productosIDs`, `categoriaID`, `marcaID`, `limit` |
-| `ProductCarousel` | Horizontal scrolling product slider | `productosIDs`, `limit` |
+| `ProductCard` | Product card with image, price, and add-to-cart button | `productIDs` |
+| `ProductCardHorizontal` | Horizontal product card with description | `productIDs` |
+| `ProductGrid` | Grid of products with optional pagination | `productIDs`, `categoriaID`, `marcaID`, `limit` |
+| `ProductCarousel` | Horizontal scrolling product slider | `productIDs`, `limit` |
 | `CategoryCard` | Category card with image and product count | `categoriaID`, `title` |
 | `CategoryGrid` | Grid of category cards | `categoriaID`, `title` |
 | `SearchBar` | Product search with autocomplete | - |
@@ -340,7 +340,7 @@ Specialized components are self-contained. They:
     tagName: 'ProductGrid',
     title: 'Featured Products',     // Section heading
     css: 'my-8',                    // Additional wrapper styles
-    productosIDs: [101, 102, 103, 104, 105, 106],
+    productIDs: [101, 102, 103, 104, 105, 106],
     limit: 8                        // Limit to 8 products
 }
 
@@ -580,7 +580,7 @@ type AriaRole =
         {
             tagName: 'ProductGrid',
             aria: { role: 'list' },
-            productosIDs: [1, 2, 3, 4]
+            productIDs: [1, 2, 3, 4]
         }
     ]
 }
@@ -871,7 +871,7 @@ const featuredProductsSection: ComponentAST = {
                     tagName: 'ProductGrid',
                     title: 'Featured Products',  // Using title from ComponentProps
                     css: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6',
-                    productosIDs: [101, 102, 103, 104, 105, 106, 107, 108],
+                    productIDs: [101, 102, 103, 104, 105, 106, 107, 108],
                     limit: 8                      // Limit displayed products
                 },
                 {

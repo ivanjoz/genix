@@ -7,11 +7,13 @@ import type { Component } from 'svelte';
 import ProductsByCategory from '$ecommerce/ecommerce-components/ProductsByCategory.svelte';
 import CategoryDescription from '$ecommerce/ecommerce-components/ecommerce-attributes/CategoryDescription.svelte';
 import ProductCard from '$ecommerce/components/ProductCard.svelte';
+import ImageEffect from '$ecommerce/components/ImageEffect.svelte';
 
 export const astComponentRegistry: Record<string, Component<any>> = {
 	ProductsByCategory,
 	CategoryDescription,
 	ProductCard,
+	ImageEffect,
 };
 
 export function isCustomComponentTag(tagName: string): boolean {

@@ -29,11 +29,10 @@ import type { SectionData } from '$ecommerce/renderer/section-types';
     }
   });
 
-  // Live Tailwind compilation
+  // Live Tailwind compilation. update() reads editorStore.sections synchronously
+  // (slot CSS + HTML section AST + text lines) before awaiting, so this effect
+  // tracks those reads as dependencies and re-runs on any change.
   $effect(() => {
-    // Track changes to any CSS property in any section
-    // We stringify the CSS objects to ensure the effect re-runs on any deep change
-    const cssData = JSON.stringify(editorStore.sections.map((s: SectionData) => s.css));
     liveCSS.update();
   });
 

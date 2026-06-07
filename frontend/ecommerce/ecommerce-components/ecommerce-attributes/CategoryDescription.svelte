@@ -3,18 +3,18 @@
 
 	export interface ICategoryDescription {
 		css?: string;
-		categoriasIDs?: number[];
+		categoryIDs?: number[];
 	}
 
-	const { css = "", categoriasIDs = [] }: ICategoryDescription = $props();
+	const { css = "", categoryIDs = [] }: ICategoryDescription = $props();
 
 	let categoria: IProductCategory | undefined = $state(undefined);
 
 	// Load data when component mounts
 	$effect(() => {
 		
-		if (categoriasIDs && categoriasIDs.length > 0) {
-			const categoryID = categoriasIDs[0];
+		if (categoryIDs && categoryIDs.length > 0) {
+			const categoryID = categoryIDs[0];
 			console.log("obteniendo categoría con ID::", categoryID);
 
 			getCategoryByID(categoryID).then((categoria_) => {

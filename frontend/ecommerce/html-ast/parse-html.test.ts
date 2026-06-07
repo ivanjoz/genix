@@ -121,7 +121,7 @@ describe('ecommerce templates parse cleanly', () => {
 		const inner = section.children?.[0].children ?? [];
 		const desc = inner.find((n) => n.tagName === 'CategoryDescription');
 		const grid = inner.find((n) => n.tagName === 'ProductsByCategory');
-		expect(desc?.props?.categoriasIDs).toEqual([13]);
+		expect(desc?.props?.categoryIDs).toEqual([13]);
 		expect(grid?.props).toEqual({ categoryID: 13, limit: 8 });
 	});
 });

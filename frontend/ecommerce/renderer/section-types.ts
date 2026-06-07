@@ -25,9 +25,9 @@ export interface StandardContent {
   videoUrl?: string;
   
   // E-commerce & Lists
-  productosIDs?: number[];
-  categoriasIDs?: number[];
-  marcasIDs?: number[];
+  productIDs?: number[];
+  categoryIDs?: number[];
+  brandIDs?: number[];
   gallery?: IGalleryImagen[];
   limit?: number;
   

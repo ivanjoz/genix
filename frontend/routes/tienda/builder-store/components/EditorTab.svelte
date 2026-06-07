@@ -1,9 +1,15 @@
 <script lang="ts">
 import { editorStore } from '$ecommerce/stores/editor.svelte';
 import type { StandardContent } from '$ecommerce/renderer/section-types';
-import type { ComponentAST } from '$ecommerce/renderer/renderer-types';
+import type { ComponentAST, ColorPalette } from '$ecommerce/renderer/renderer-types';
 import { parseHTML } from '$ecommerce/html-ast/parse-html';
-import { collectRoleNodes, isLinkNode } from '$ecommerce/html-ast/editable';
+import { collectRoleNodes, isLinkNode, isImageNode } from '$ecommerce/html-ast/editable';
+import TextBlockEditor from './TextBlockEditor.svelte';
+import ImageBlockEditor from './ImageBlockEditor.svelte';
+
+  // Active palette drives the color swatches inside TextBlockEditor.
+  interface Props { palette?: ColorPalette }
+  let { palette }: Props = $props();
 
   const section = $derived(editorStore.selectedSection);
   const schema = $derived(editorStore.activeSchema);
@@ -21,10 +27,6 @@ import { collectRoleNodes, isLinkNode } from '$ecommerce/html-ast/editable';
   const roleNodes = $derived(
     isHtmlSection ? collectRoleNodes(section?.content.ast as ComponentAST[] | undefined) : []
   );
-
-  function setNodeText(node: ComponentAST, value: string) {
-    node.text = value;
-  }
 
   function setNodeHref(node: ComponentAST, value: string) {
     if (!node.attributes) node.attributes = {};
@@ -85,32 +87,20 @@ import { collectRoleNodes, isLinkNode } from '$ecommerce/html-ast/editable';
             {/if}
             {#each roleNodes as { role, node }, i (i)}
               <div class="field-item">
-                <label class="field-label" for={`role-${i}`}>{role}</label>
-                {#if role === 'content' || (node.text && node.text.length > 60)}
-                  <textarea
-                    id={`role-${i}`}
-                    class="field-input textarea"
-                    value={node.text || ''}
-                    oninput={(e) => setNodeText(node, e.currentTarget.value)}
-                    rows="3"
-                  ></textarea>
+                <span class="field-label">{role}</span>
+                {#if isImageNode(node)}
+                  <ImageBlockEditor {node} {palette} />
                 {:else}
-                  <input
-                    id={`role-${i}`}
-                    type="text"
-                    class="field-input"
-                    value={node.text || ''}
-                    oninput={(e) => setNodeText(node, e.currentTarget.value)}
-                  />
-                {/if}
-                {#if isLinkNode(node)}
-                  <input
-                    type="text"
-                    class="field-input link-input"
-                    value={node.attributes?.href || ''}
-                    oninput={(e) => setNodeHref(node, e.currentTarget.value)}
-                    placeholder="Link URL (href)"
-                  />
+                  <TextBlockEditor {node} {palette} rows={role === 'content' ? 3 : 2} />
+                  {#if isLinkNode(node)}
+                    <input
+                      type="text"
+                      class="field-input link-input"
+                      value={node.attributes?.href || ''}
+                      oninput={(e) => setNodeHref(node, e.currentTarget.value)}
+                      placeholder="Link URL (href)"
+                    />
+                  {/if}
                 {/if}
               </div>
             {/each}

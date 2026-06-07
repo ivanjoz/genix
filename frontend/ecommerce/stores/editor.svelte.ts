@@ -62,7 +62,7 @@ class EditorStore {
           { text: 'Feature Two: User-friendly interface and experience', css: '' },
           { text: 'Feature Three: 24/7 dedicated support team', css: '' }
         ];
-        else if (key === 'productosIDs') dummyContent[key] = [1, 2, 3, 4];
+        else if (key === 'productIDs') dummyContent[key] = [1, 2, 3, 4];
       });
     }
 

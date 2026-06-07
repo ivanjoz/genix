@@ -16,7 +16,7 @@ export const HtmlCategoryShowcase: SectionTemplate = {
 				<h2 data-role="title" color="9" class="text-3xl font-bold text-center mb-3">
 					Shop by Category
 				</h2>
-				<CategoryDescription categoriasIDs="[13]" class="text-center text-gray-600 max-w-2xl mx-auto mb-10" />
+				<CategoryDescription categoryIDs="[13]" class="text-center text-gray-600 max-w-2xl mx-auto mb-10" />
 				<ProductsByCategory categoryID="13" limit="8" />
 			</div>
 		</section>

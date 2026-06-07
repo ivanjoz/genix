@@ -39,7 +39,7 @@ All ComponentAST nodes inherit these e-commerce properties:
 ```typescript
 {
     title: string,              // Section/component heading
-    productosIDs?: number[],    // Specific products to display
+    productIDs?: number[],    // Specific products to display
     categoriaID?: number,       // Filter by category
     marcaID?: number,          // Filter by brand
     secondaryImagen?: string,   // Secondary image (banners)
@@ -55,7 +55,7 @@ All ComponentAST nodes inherit these e-commerce properties:
 {
     tagName: 'ProductGrid',
     title: 'Featured Products',
-    productosIDs: [1, 2, 3, 4],
+    productIDs: [1, 2, 3, 4],
     limit: 4,
     css: 'grid grid-cols-4 gap-6'
 }
@@ -81,9 +81,9 @@ All ComponentAST nodes inherit these e-commerce properties:
 
 | Component | Required Props | Optional Props |
 |-----------|---------------|----------------|
-| ProductCard | `productosIDs` | `title`, `limit` |
-| ProductGrid | `productosIDs` or `categoriaID` or `marcaID` | `title`, `limit`, `iconImagen` |
-| ProductCarousel | `productosIDs` | `title`, `limit` |
+| ProductCard | `productIDs` | `title`, `limit` |
+| ProductGrid | `productIDs` or `categoriaID` or `marcaID` | `title`, `limit`, `iconImagen` |
+| ProductCarousel | `productIDs` | `title`, `limit` |
 
 ### Category Components
 
@@ -179,7 +179,7 @@ export const ProductShowcase: SectionTemplate = {
                     {
                         tagName: 'ProductGrid',
                         title: 'Featured Products',
-                        productosIDs: [1, 2, 3, 4, 5, 6, 7, 8],
+                        productIDs: [1, 2, 3, 4, 5, 6, 7, 8],
                         limit: 8,
                         iconImagen: '/icons/star.svg',
                         css: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'
@@ -254,7 +254,7 @@ export const ProductShowcase: SectionTemplate = {
 {
     tagName: 'ProductCarousel',
     title: 'New Arrivals',
-    productosIDs: [101, 102, 103, 104, 105],
+    productIDs: [101, 102, 103, 104, 105],
     limit: 5,
     iconImagen: '/icons/new.svg',
     css: 'overflow-x-auto'

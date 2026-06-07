@@ -1,9 +1,11 @@
 <script lang="ts">
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 import { editorStore } from '$ecommerce/stores/editor.svelte';
+  import { Core, tr } from '$core/store.svelte';
+  import T from '$components/misc/T.svelte';
   import EditorTab from './components/EditorTab.svelte';
   import TemplatesTab from './components/TemplatesTab.svelte';
-  import AIChatTab from './components/AIChatTab.svelte';
+  import GalleryTab from './components/GalleryTab.svelte';
   import ConfigTab from './components/ConfigTab.svelte';
 
   interface Props {
@@ -19,10 +21,10 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   let activeTabId = $state('editor');
 
   const tabs = [
-    { id: 'editor', name: 'Editor', icon: '✏️' },
-    { id: 'templates', name: 'Templates', icon: '🧩' },
-    { id: 'chat', name: 'AI Chat', icon: '🤖' },
-    { id: 'config', name: 'Config', icon: '⚙️' }
+    { id: 'editor', name: 'Editor|Editor', icon: '✏️' },
+    { id: 'templates', name: 'Templates|Plantillas', icon: '🧩' },
+    { id: 'gallery', name: 'Gallery|Galería', icon: '🖼️' },
+    { id: 'config', name: 'Config|Config', icon: '⚙️' }
   ];
 
   // Auto-switch to editor tab when a section is selected
@@ -38,7 +40,7 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   }
 </script>
 
-<div class="editor-layer" class:open={editorStore.selectedId !== null}>
+<div class="editor-layer">
   <div class="layer-inner">
     <div class="layer-header">
       <div class="tab-nav">
@@ -47,11 +49,11 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
             class="tab-btn"
             class:active={activeTabId === tab.id}
             onclick={() => activeTabId = tab.id}
-            title={tab.name}
-            aria-label={`Switch to ${tab.name} tab`}
+            title={tr(tab.name, Core.languaje)}
+            aria-label={tr(tab.name, Core.languaje)}
           >
             <span class="tab-icon">{tab.icon}</span>
-            <span class="tab-name">{tab.name}</span>
+            <span class="tab-name"><T text={tab.name} /></span>
           </button>
         {/each}
       </div>
@@ -66,17 +68,17 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
     <div class="layer-content">
       {#if activeTabId === 'editor'}
         {#if editorStore.selectedSection && editorStore.activeSchema}
-          <EditorTab />
+          <EditorTab {palette} />
         {:else}
           <div class="empty-state">
             <span class="empty-icon">👆</span>
-            <p>Select a section to edit</p>
+            <p><T text="Select a section to edit|Selecciona una sección para editar" /></p>
           </div>
         {/if}
       {:else if activeTabId === 'templates'}
         <TemplatesTab onSelect={(template) => editorStore.addSection(template.id)} />
-      {:else if activeTabId === 'chat'}
-        <AIChatTab />
+      {:else if activeTabId === 'gallery'}
+        <GalleryTab />
       {:else if activeTabId === 'config'}
         <ConfigTab {palette} />
       {/if}
@@ -99,13 +101,15 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
     color: #e2e8f0;
   }
 
-  .editor-layer:hover, .editor-layer.open {
-    width: 400px;
+  .editor-layer:hover, .layer-inner {
+    width: 410px;
+  }
+
+  .editor-layer:hover {
     box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
   }
 
   .layer-inner {
-    width: 400px;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -118,14 +122,13 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
     background: #1e293b;
     border-bottom: 1px solid #334155;
     flex-shrink: 0;
-    padding-top: 8px;
     display: flex;
     align-items: center;
   }
 
   .tab-nav {
     display: flex;
-    padding: 0 12px 12px;
+    padding: 6px;
     gap: 6px;
     flex: 1;
   }
@@ -135,8 +138,8 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 10px 4px;
+    gap: 8px;
+    padding: 5px 4px;
     background: transparent;
     border: none;
     border-radius: 8px;
@@ -157,14 +160,16 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   }
 
   .tab-icon {
-    font-size: 20px;
+    font-size: 17px;
+    line-height: 1;
   }
 
   .tab-name {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.8px;
+    line-height: 1;
   }
 
   .close-btn {
@@ -184,7 +189,10 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   .layer-content {
     flex: 1;
     overflow-y: auto;
-    padding: 24px;
+    padding-top: 12px;
+    padding-left: 16px;
+    padding-right: 12px;
+    padding-bottom: 12px;
   }
 
   .empty-state {

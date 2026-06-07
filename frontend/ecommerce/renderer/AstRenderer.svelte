@@ -44,10 +44,19 @@
 		{@render text(node.text ?? '')}
 	{:else if astComponentRegistry[node.tagName]}
 		{@const Comp = astComponentRegistry[node.tagName]}
-		{@const cls = resolveTokens(node.css, node.variables, values, palette)}
-		<Comp {...node.props} css={cls} style={node.style} />
+		{@const cls = resolveTokens(node.css, [], values, palette)}
+		<!-- Custom components may wrap overlay markup (e.g. ImageEffect's caption);
+		     pass nested AST nodes through as children. Components that ignore the
+		     children snippet (ProductsByCategory, etc.) are unaffected. -->
+		<Comp {...node.props} css={cls} style={node.style}>
+			{#if node.children}
+				{#each node.children as child, i (i)}
+					{@render renderNode(child)}
+				{/each}
+			{/if}
+		</Comp>
 	{:else if isNativeTag(node.tagName)}
-		{@const cls = resolveTokens(node.css, node.variables, values, palette)}
+		{@const cls = resolveTokens(node.css, [], values, palette)}
 		{#if VOID_TAGS.has(node.tagName)}
 			<svelte:element this={node.tagName} class={cls} style={node.style} {...node.attributes} />
 		{:else}

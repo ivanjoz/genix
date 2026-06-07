@@ -14,6 +14,10 @@
     css?: string;
     imgCss?: string;
     aspectRatio?: string;
+    /** Fill the parent as an absolute background layer (drops the aspect-ratio box). */
+    fill?: boolean;
+    /** How the photo sits in its box (ignored by clipped slash/curve layouts). */
+    fit?: 'cover' | 'contain' | 'contain-left' | 'contain-right' | string;
     children?: Snippet;
   }
 
@@ -28,6 +32,8 @@
     css = '',
     imgCss = '',
     aspectRatio = 'auto',
+    fill = false,
+    fit = 'cover',
     children
   }: Props = $props();
 
@@ -119,10 +125,20 @@
   });
 
   const isLeveraged = $derived(layout.includes('slash') || layout.includes('curve'));
+
+  /** object-fit / object-position for the plain (non-clipped) image. */
+  const fitStyle = $derived.by(() => {
+    switch (fit) {
+      case 'contain': return 'object-fit:contain;object-position:center;';
+      case 'contain-left': return 'object-fit:contain;object-position:left;';
+      case 'contain-right': return 'object-fit:contain;object-position:right;';
+      default: return 'object-fit:cover;object-position:center;';
+    }
+  });
 </script>
 
-<div class={["relative overflow-hidden", css].join(" ")} 
-     style="aspect-ratio: {aspectRatio}; isolation: isolate; {isLeveraged ? `background-color: ${color};` : ''}">
+<div class={[fill ? "absolute inset-0 w-full h-full overflow-hidden" : "relative overflow-hidden", css].join(" ")}
+     style="{fill ? '' : `aspect-ratio: ${aspectRatio};`} isolation: isolate; {isLeveraged ? `background-color: ${color};` : ''}">
   
   <svg style="position: absolute; width: 0; height: 0; pointer-events: none;">
     <defs>
@@ -180,11 +196,11 @@
         {/if}
       </div>
     {:else}
-      <img 
-        {src} 
-        alt="" 
-        class={["w-full h-full object-cover", imgCss].join(" ")}
-        style={imgStyle}
+      <img
+        {src}
+        alt=""
+        class={["w-full h-full", imgCss].join(" ")}
+        style="{fitStyle} {imgStyle}"
       />
     {/if}
     
@@ -215,7 +231,9 @@
 </div>
 
 <style>
+	/*
   .relative {
     min-height: 1px;
   }
+  */
 </style>

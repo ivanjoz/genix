@@ -6,7 +6,7 @@
   const examples = [
     {
       title: 'Curved Reflection (Standard Layout)',
-      src: 'modern-bookstore-interior_3-2_white-wood_light.avif',
+      src: 'https://ivanjoz.github.io/genix-assets/images/business-workspace/5.avif',
       layout: 'curve-right',
       color: '#ffffff',
       children: true,
@@ -16,7 +16,7 @@
     },
     {
       title: 'Curved Layout + Duotone Matrix Effect',
-      src: 'modern-bookstore-interior_3-2_white-wood_light.avif',
+      src: 'https://ivanjoz.github.io/genix-assets/images/business-workspace/5.avif',
       layout: 'curve-convex-right',
       effect: 'duotone-matrix',
       color: '#4c2d82',
@@ -28,7 +28,7 @@
     },
     {
       title: 'Slash Layout (Image on Right)',
-      src: 'industrial-mercantile-clothing-store_3-2_white-wood_light.avif',
+      src: 'https://ivanjoz.github.io/genix-assets/images/business-workspace/5.avif',
       layout: 'slash-right',
       color: '#f3f4f6',
       children: true,
@@ -38,7 +38,7 @@
     },
     {
       title: 'Fade Layout (Soft Space)',
-      src: 'shopping-online-payment_3-2_brown-black_light.avif',
+      src: 'https://ivanjoz.github.io/genix-assets/images/business-workspace/5.avif',
       layout: 'fade-right',
       color: '#ffffff',
       intensity: 1,
@@ -49,7 +49,7 @@
     },
     {
       title: 'Fade Layout + Glass Effect',
-      src: 'loccitane-skincare-products_4-5_green-white_light.avif',
+      src: 'https://ivanjoz.github.io/genix-assets/images/business-workspace/5.avif',
       layout: 'fade-left',
       effect: 'glass',
       color: '#ffffff',
@@ -62,7 +62,7 @@
     },
     {
       title: 'Vignette Effect (Full Image)',
-      src: 'minimalist-workspace-laptop-phone_1-1_white-black_light.avif',
+      src: 'https://ivanjoz.github.io/genix-assets/images/business-workspace/5.avif',
       effect: 'vignette',
       color: '#000000',
       intensity: 0.7,
@@ -70,7 +70,7 @@
     },
     {
       title: 'Duotone Effect (Standard)',
-      src: 'woman-yellow-armchair-smartphone_4-3_yellow-red_light.avif',
+      src: 'https://ivanjoz.github.io/genix-assets/images/business-workspace/5.avif',
       effect: 'duotone',
       color: '#4c55d5',
       color2: '#f5f6ff',
@@ -89,7 +89,7 @@
         <h2 class="text-2xl font-semibold mb-6 text-gray-800">{ex.title}</h2>
         <div class="rounded-2xl overflow-hidden shadow-2xl border border-gray-100">
           <ImageEffect 
-            src={baseUrl + ex.src} 
+            src={ex.src.startsWith('https://') || ex.src.startsWith('http://') ? ex.src : baseUrl + ex.src}
             layout={ex.layout}
             effect={ex.effect} 
             color={ex.color} 
