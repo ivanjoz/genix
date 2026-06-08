@@ -30,6 +30,11 @@ export type serviceHttpProps = {
   keysIDs?: { [key: string]: string | string[] }
   columnarIDField?: string
   combineColumnarValuesOnFields?: string[]
+  // CDN snapshot bootstrap: on first sync the cache fetches `fileRoute` (an absolute URL to a
+  // pipe-separated, ">>>"-section .db file) and parses it with `fileSchema` instead of pulling
+  // the full list from the API. See firstSyncFromSnapshotFile / parsePsvResponse.
+  fileRoute?: string
+  fileSchema?: Record<string, string[]>
   fields?: string[]
   keyFilterIfEmpty?: string
   keyForUpdated?: string

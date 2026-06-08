@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
   import { Env } from "$core/env";
+  import { GET } from "$libs/http.svelte";
   import { preloadProductSearch } from "$core/product-search/product-search-runtime";
   import type { ProductSearch } from "$core/product-search/product-search";
   import ProductCard from "./ProductCard.svelte";
   import type { ProductSearchHit } from "$core/product-search/types";
+  import type { IProduct } from "$services/services/productos.svelte";
 
   interface ProductSearchLayerProps {
     queryText?: string;
@@ -20,12 +22,19 @@
   }: ProductSearchLayerProps = $props();
   const SEARCH_QUERY_THROTTLE_MS = 120;
   const ENABLE_FULL_PRODUCT_SEARCH_DEBUG = Env.PRODUCT_SEARCH_FULL_DEBUG_LOG_ENABLED;
+  // Strategy switch: live = server text-search endpoint + by-id cards; otherwise in-memory catalog.
+  const useLiveProductSearch = Env.useLiveProductSearch;
 
   let productIndexInstance = $state<ProductSearch | null>(null);
   let isProductIndexLoading = $state(false);
   let productIndexLoadErrorMessage = $state("");
   let throttledQueryText = $state("");
   let pendingQueryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Live-mode state: ordered product IDs from p-product-text-search (cards hydrate by id).
+  let liveSearchProductIDs = $state<number[]>([]);
+  let isLiveSearchLoading = $state(false);
+  let liveSearchErrorMessage = $state("");
 
   const trimmedQueryText = $derived(queryText.trim());
   const shouldRenderLayer = $derived(trimmedQueryText.length > 0);
@@ -78,7 +87,7 @@
       visibleHits: rankedHits.map((searchHit) => ({
         productID: searchHit.product.productID,
         rank: searchHit.rank,
-        name: searchHit.product.productNameLossy,
+        name: searchHit.product.productName,
         brand: searchHit.product.brandName
       })),
       rankingDebugSnapshot
@@ -111,7 +120,54 @@
     return rankedHits;
   });
 
-  // Load and decode products.idx once so each keystroke only runs in-memory search.
+  // Live mode: query the server text-search endpoint on each throttled change. It returns only
+  // ranked ids ([{id,w}]); each card then hydrates itself by id via the p-productos-ids cache.
+  $effect(() => {
+    if (!useLiveProductSearch) return;
+    const requestedQueryText = throttledQueryText;
+    if (requestedQueryText.length === 0) {
+      untrack(() => {
+        liveSearchProductIDs = [];
+        liveSearchErrorMessage = "";
+      });
+      return;
+    }
+    untrack(() => {
+      isLiveSearchLoading = true;
+      liveSearchErrorMessage = "";
+    });
+    GET({ route: `p-product-text-search?q=${encodeURIComponent(requestedQueryText)}&limit=${maxResults}` })
+      .then((matches: Array<{ id: number; w: number }>) => {
+        // Drop stale responses if the query advanced while this request was in flight.
+        if (untrack(() => throttledQueryText) !== requestedQueryText) return;
+        liveSearchProductIDs = (matches ?? []).map((match) => match.id).filter((id) => id > 0);
+        isLiveSearchLoading = false;
+      })
+      .catch((searchError) => {
+        if (untrack(() => throttledQueryText) !== requestedQueryText) return;
+        liveSearchErrorMessage = searchError instanceof Error ? searchError.message : "Error en la búsqueda";
+        isLiveSearchLoading = false;
+        console.error("[ProductSearchLayer] live text-search error", searchError);
+      });
+  });
+
+  // Unified card list across both strategies. Live cards carry only the id (hydrated by ProductCard);
+  // in-memory cards carry the full product so no per-id fetch is needed.
+  interface ProductSearchCardItem { productID: number; producto?: IProduct }
+  const productSearchCardItems = $derived.by<ProductSearchCardItem[]>(() => {
+    if (useLiveProductSearch) {
+      return liveSearchProductIDs.slice(0, maxResults).map((productID) => ({ productID }));
+    }
+    return topProductSearchHits.map((searchHit) => ({
+      productID: searchHit.product.productID,
+      producto: productIndexInstance?.getProduct(searchHit.product.productID)
+    }));
+  });
+
+  const isResultsLoading = $derived(useLiveProductSearch ? isLiveSearchLoading : isProductIndexLoading);
+  const resultsErrorMessage = $derived(useLiveProductSearch ? liveSearchErrorMessage : productIndexLoadErrorMessage);
+
+  // Load and decode the catalog snapshot once so each keystroke only runs in-memory search.
   const loadProductIndexFromCDN = async () => {
     if (isProductIndexLoading || productIndexInstance) {
       return;
@@ -141,7 +197,10 @@
   };
 
   onMount(() => {
-    void loadProductIndexFromCDN();
+    // Live mode never touches the catalog snapshot/delta, so skip the download entirely.
+    if (!useLiveProductSearch) {
+      void loadProductIndexFromCDN();
+    }
   });
 
   onDestroy(() => {
@@ -153,48 +212,36 @@
   });
 </script>
 
-{#if shouldRenderLayer && !renderAsInnerContent}
-  <div class="search-layer" role="dialog" aria-label="Resultados de busqueda de productos">
-    {#if isProductIndexLoading}
-      <div class="status-row">Cargando indice de productos...</div>
-    {:else if productIndexLoadErrorMessage}
-      <div class="status-row error-state">No se pudo cargar el indice ({productIndexLoadErrorMessage}).</div>
-    {:else if topProductSearchHits.length === 0}
-      <div class="status-row">Sin resultados para "{trimmedQueryText}".</div>
-    {:else}
-      <div class="results-grid">
-        {#each topProductSearchHits as searchHit (searchHit.product.productID)}
-          <ProductCard
-            mode="horizontal"
-            productoID={searchHit.product.productID}
-            hideCloseButton={true}
-            useQuantityControls={false}
-          />
-        {/each}
-      </div>
-    {/if}
-  </div>
-{/if}
-
-{#if shouldRenderLayer && renderAsInnerContent}
-  {#if isProductIndexLoading}
-    <div class="status-row">Cargando indice de productos...</div>
-  {:else if productIndexLoadErrorMessage}
-    <div class="status-row error-state">No se pudo cargar el indice ({productIndexLoadErrorMessage}).</div>
-  {:else if topProductSearchHits.length === 0}
+{#snippet resultsList(gridCss: string)}
+  {#if isResultsLoading}
+    <div class="status-row">Buscando productos...</div>
+  {:else if resultsErrorMessage}
+    <div class="status-row error-state">No se pudo buscar ({resultsErrorMessage}).</div>
+  {:else if productSearchCardItems.length === 0}
     <div class="status-row">Sin resultados para "{trimmedQueryText}".</div>
   {:else}
-    <div class="results-grid p-4 overflow-auto">
-      {#each topProductSearchHits as searchHit (searchHit.product.productID)}
+    <div class={gridCss}>
+      {#each productSearchCardItems as cardItem (cardItem.productID)}
         <ProductCard
           mode="horizontal"
-          productoID={searchHit.product.productID}
+          productoID={cardItem.productID}
+          producto={cardItem.producto}
           hideCloseButton={true}
           useQuantityControls={false}
         />
       {/each}
     </div>
   {/if}
+{/snippet}
+
+{#if shouldRenderLayer && !renderAsInnerContent}
+  <div class="search-layer" role="dialog" aria-label="Resultados de busqueda de productos">
+    {@render resultsList("results-grid")}
+  </div>
+{/if}
+
+{#if shouldRenderLayer && renderAsInnerContent}
+  {@render resultsList("results-grid p-4 overflow-auto")}
 {/if}
 
 <style>

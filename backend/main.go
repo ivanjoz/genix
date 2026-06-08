@@ -2,6 +2,7 @@ package main
 
 import (
 	"app/agent"
+	"app/business"
 	"app/core"
 	"app/db"
 	"app/db/text_search"
@@ -255,6 +256,8 @@ func main() {
 		exec.StartUsageLogFlushWorker()
 		if !core.Env.IS_LOCAL {
 			core.StartCronWatcher()
+			// Seed the recurring 30-min products .db rebuild tick (self-reschedules thereafter).
+			business.ScheduleProductsDbRebuildCron()
 		}
 
 		core.Log("Ejecutando en local. http://localhost" + serverPort)

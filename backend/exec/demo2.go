@@ -3,7 +3,6 @@ package exec
 import (
 
 	// sales "app/sales/types"
-	"app/business"
 	businessTypes "app/business/types"
 	"app/core"
 	"app/db"
@@ -171,63 +170,6 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	return core.FuncResponse{}
-}
-
-func Test43(args *core.ExecArgs) core.FuncResponse {
-	indexOutput, indexErr := business.BuildProductosSearchIndex(business.BuildProductosSearchIndexArgs{
-		CompanyID:         1,
-		FileName:          "c1_products.idx",
-		ProductsWatermark: 0,
-	})
-	if indexErr != nil {
-		return core.FuncResponse{Error: indexErr.Error()}
-	}
-	indexBuild := indexOutput.IndexBuild
-
-	brandNamesBytes := 0
-	for _, brandName := range indexBuild.BrandNames {
-		// String column wire size uses 1-byte length prefix + UTF-8 bytes.
-		brandNamesBytes += 1 + len([]byte(brandName))
-	}
-	categoryNamesBytes := 0
-	for _, categoryName := range indexBuild.CategoryNames {
-		// String column wire size uses 1-byte length prefix + UTF-8 bytes.
-		categoryNamesBytes += 1 + len([]byte(categoryName))
-	}
-	brandIDsBytes := len(indexBuild.BrandIDs) * 2
-	categoryIDsBytes := len(indexBuild.CategoryIDs) * 2
-	brandIndexesBytes := indexBuild.ProductBrandIndexesBytes()
-	categoryCountBytes := len(indexBuild.ProductCategoryCount)
-	categoryIndexesBytes := len(indexBuild.ProductCategoryIndexes)
-	stage2TotalBytes := brandNamesBytes + categoryNamesBytes + brandIDsBytes + categoryIDsBytes +
-		brandIndexesBytes + categoryCountBytes + categoryIndexesBytes
-
-	return core.FuncResponse{
-		Message: "Índice de productos generado.",
-		Content: map[string]any{
-			"stage1_input_records":          indexBuild.Stats.InputRecords,
-			"stage1_encoded_records":        indexBuild.Stats.EncodedRecords,
-			"stage1_dictionary_count":       indexBuild.Stats.DictionaryCount,
-			"stage1_shapes_bytes":           indexBuild.Stats.ShapesBytes,
-			"stage1_content_bytes":          indexBuild.Stats.ContentBytes,
-			"stage1_total_bytes":            indexBuild.Stats.TotalBytes,
-			"stage2_brand_ids":              len(indexBuild.BrandIDs),
-			"stage2_category_ids":           len(indexBuild.CategoryIDs),
-			"stage2_brand_index_mode":       indexBuild.BrandIndexEncodingName(),
-			"stage2_brand_index_flag":       indexBuild.BrandIndexEncodingFlag,
-			"stage2_brand_indexes_count":    indexBuild.ProductBrandIndexesCount(),
-			"stage2_category_count":         len(indexBuild.ProductCategoryCount),
-			"stage2_category_indexes":       len(indexBuild.ProductCategoryIndexes),
-			"stage2_brand_ids_bytes":        brandIDsBytes,
-			"stage2_brand_names_bytes":      brandNamesBytes,
-			"stage2_category_ids_bytes":     categoryIDsBytes,
-			"stage2_category_names_bytes":   categoryNamesBytes,
-			"stage2_brand_indexes_bytes":    brandIndexesBytes,
-			"stage2_category_count_bytes":   categoryCountBytes,
-			"stage2_category_indexes_bytes": categoryIndexesBytes,
-			"stage2_total_bytes":            stage2TotalBytes,
-		},
-	}
 }
 
 func Test44(args *core.ExecArgs) core.FuncResponse {

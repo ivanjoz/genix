@@ -25,6 +25,7 @@ import {
 import type { CacheRecordID, ICacheRecordRow, ICacheRecordRowMulti, ICacheRecordRowSingle, ICacheRouteRow, IDeltaCacheRouteRef, ILastSync } from './delta-cache.types';
 import type { serviceHttpProps } from '$libs/workers/service-worker';
 import { parseObject } from '$libs/workers/service-worker-cache';
+import { parsePsvResponse } from './psv-parse';
 
 type CacheContent = { __version__?: number } & { [key: string]: any[] }
 
@@ -774,6 +775,47 @@ export const getDeltaUpdatedStatus = async (args: serviceHttpProps) => {
   return { updatedStatus: lastSync.updatedStatus || {}, updated: lastSync.fetchTime || 0 }
 }
 
+// firstSyncFromSnapshotFile bootstraps a route from a static CDN snapshot file (.db) instead of
+// pulling the full list from the API: it parses the file into the multi-table shape, persists it
+// as the initial cache snapshot, then immediately delta-syncs from the API to close the gap
+// between the file's build time (≤30 min stale via CDN cache) and now. Returns the merged content,
+// or null to fall back to a normal full server fetch (file missing / unparseable).
+const firstSyncFromSnapshotFile = async (
+  args: serviceHttpProps,
+  routeReference: IDeltaCacheRouteRef,
+  fetchTime: number,
+) => {
+  try {
+    const fileResponse = await self.fetch(args.fileRoute as string)
+    if(!fileResponse.ok){
+      console.warn("[DeltaCache] snapshot file not ok, falling back to API:", args.fileRoute, fileResponse.status)
+      return null
+    }
+    const parsed = parsePsvResponse(await fileResponse.text(), args.fileSchema as Record<string, string[]>) as CacheContent
+    parsed.__version__ = args.__version__
+    // The snapshot is a multi-table object, never a bare array.
+    await saveInitialSnapshot(args, routeReference, parsed, fetchTime, false)
+  } catch (fileError) {
+    console.warn("[DeltaCache] snapshot file seed failed, falling back to API:", args.fileRoute, fileError)
+    return null
+  }
+
+  // Seeded: run one server delta from the file-derived watermarks so the first load is fresh.
+  const routeRow = await getCacheRouteRow(routeReference)
+  try {
+    const { route } = getNextRouteURL(args, routeRow)
+    const networkResponse = await fetchNetworkResponse(args, route)
+    const { response, isArray } = await parseNetworkResponse(args, networkResponse.preResponse)
+    const content = await handleFetchResponse(args, routeRow as ICacheRouteRow, response, Math.floor(Date.now()/1000), isArray)
+    return { content }
+  } catch (deltaError) {
+    // The seed already persisted; serve it and let the next sync catch the delta.
+    console.warn("[DeltaCache] post-seed delta failed, serving snapshot:", args.route, deltaError)
+    const content = await readCachedContent(routeRow)
+    return { content: content?._default ? content._default : content }
+  }
+}
+
 export const fetchDeltaCache = async (args: serviceHttpProps) => {
   console.log("Obteniendo fetch service worker:", args.route, "|", args.cacheMode, "|", args.__req__, "|", args.__version__)
 
@@ -806,6 +848,13 @@ export const fetchDeltaCache = async (args: serviceHttpProps) => {
   args.status = args.status || { code: 200, message: "" }
 
   try {
+    // First-ever sync with a CDN snapshot configured: seed from the file, then delta. On any
+    // file problem this returns null and we continue to the normal full server fetch below.
+    if(!(routeRow && routeRow.fetchTime) && args.fileRoute && args.fileSchema){
+      const fileSync = await firstSyncFromSnapshotFile(args, routeReference, fetchTime)
+      if(fileSync){ return fileSync }
+    }
+
     let { route, lastSync } = getNextRouteURL(args, routeRow)
     const hasCache = !!(routeRow && routeRow.fetchTime)
     console.log("hasCache", args.route, lastSync)

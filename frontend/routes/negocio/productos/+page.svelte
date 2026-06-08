@@ -24,6 +24,8 @@ import { productoMonedaOptions, productoUnidadOptions } from '$core/products-lis
 import { ListasCompartidasService } from '$services/negocio/listas-compartidas.svelte';
 import {
     ProductosService,
+    productImageName,
+    mainProductImage,
     type IProduct,
     type IProductoImage
 } from "./productos.svelte";
@@ -44,6 +46,15 @@ import {
   let importExcelRowsPreview = $state<IProduct[]>([]);
   let importExcelErrors = $state<string[]>([]);
   let isImportExcelProcessing = $state(false);
+
+  // Gallery of the form product's images, derived from the parallel ImageIDs/ImageDescriptions arrays.
+  const productoImagenes = $derived(
+    (productoForm.ImageIDs || []).map((id, index): IProductoImage => ({
+      id,
+      n: productImageName(id),
+      d: productoForm.ImageDescriptions?.[index] || "",
+    })),
+  );
 
   const IMPORT_PRODUCTOS_MODAL_ID = 11;
 
@@ -378,7 +389,7 @@ import {
   const doPostProductos = async (payload: IProduct[]): Promise<Map<number, number>> => {
     for (const producto of payload) {
       // Keep local shape consistent even when backend omits optional fields in responses.
-      producto.Image = producto.Images?.[0];
+      producto.Image = mainProductImage(producto);
       producto.CategoryIDs = producto.CategoryIDs || [];
     }
     return await productos.postAndSync(payload);
@@ -421,9 +432,9 @@ import {
     console.log("productor form:", $state.snapshot(productoForm));
   });
 
-  const deleteProductoImage = async (ImageToDelete: string) => {
+  const deleteProductoImage = async (ImageToDelete: number) => {
  		console.debug("Eliminando imagen::", ImageToDelete)
-  
+
     Loading.standard(tr("Deleting image...|Eliminando Imagen..."));
     try {
       await POST({
@@ -437,9 +448,16 @@ import {
       return;
     }
     Loading.remove();
-    productoForm.Images = (productoForm.Images || []).filter(
-      (e) => e.n !== ImageToDelete,
-    );
+    // Drop the imageID from the parallel arrays and repoint the main image if needed.
+    const index = (productoForm.ImageIDs || []).indexOf(ImageToDelete);
+    if (index >= 0) {
+      productoForm.ImageIDs.splice(index, 1);
+      productoForm.ImageDescriptions?.splice(index, 1);
+    }
+    if (productoForm.ImageMain === ImageToDelete) {
+      productoForm.ImageMain = productoForm.ImageIDs?.[0] || 0;
+    }
+    productoForm.Image = mainProductImage(productoForm);
   };
 </script>
 
@@ -589,13 +607,17 @@ import {
               if (imagePath.includes("/")) {
                 imagePath = imagePath.split("/")[1];
               }
+              // imagePath is "<companyID>_<imageID>"; prepend the new imageID as the main image.
+              const imageID = parseInt(imagePath.split("_")[1]);
               productoForm._imageSource = undefined;
+              productoForm.ImageIDs = [imageID, ...(productoForm.ImageIDs || [])];
+              productoForm.ImageDescriptions = [description || "", ...(productoForm.ImageDescriptions || [])];
+              productoForm.ImageMain = imageID;
               productoForm.Image = {
+                id: imageID,
                 n: imagePath,
-                d: description,
+                d: description || "",
               } as IProductoImage;
-              productoForm.Images = productoForm.Images || [];
-              productoForm.Images.unshift(productoForm.Image);
             }}
           />
         </div>
@@ -793,15 +815,19 @@ import {
             if (imagePath.includes("/")) {
               imagePath = imagePath.split("/")[1];
             }
+            // imagePath is "<companyID>_<imageID>"; prepend the new imageID as the main image.
+            const imageID = parseInt(imagePath.split("_")[1]);
+            productoForm.ImageIDs = [imageID, ...(productoForm.ImageIDs || [])];
+            productoForm.ImageDescriptions = [description || "", ...(productoForm.ImageDescriptions || [])];
+            productoForm.ImageMain = imageID;
             productoForm.Image = {
+              id: imageID,
               n: imagePath,
-              d: description,
+              d: description || "",
             } as IProductoImage;
-            productoForm.Images = productoForm.Images || [];
-            productoForm.Images.unshift(productoForm.Image);
           }}
         />
-        {#each productoForm.Images || [] as image}
+        {#each productoImagenes as image}
           <ImageUploader
             saveAPI="product-image"
             refreshRoutes={["productos"]}
@@ -810,7 +836,7 @@ import {
             types={["avif", "webp"]}
             folder="img-productos"
             cardCss="w-full h-170 p-4"
-            src={image?.n}
+            src={image.n}
             useConvertAvif={true}
             onDelete={() => {
               ConfirmWarn(
@@ -819,7 +845,7 @@ import {
                 "SI",
                 "NO",
                 () => {
-                  deleteProductoImage(image.n);
+                  deleteProductoImage(image.id as number);
                 },
               );
             }}

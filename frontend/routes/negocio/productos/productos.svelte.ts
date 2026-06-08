@@ -1,4 +1,5 @@
 import { GetHandler } from '$libs/http.svelte';
+import { Env } from '$core/env';
 import type { ImageSource } from '$components/files/ImageUploader.svelte';
 
 export interface IProductProperty {
@@ -21,8 +22,19 @@ export interface IProductPresentation {
 }
 
 export interface IProductoImage {
-  n: string /* Nombre del imagen */
+  id?: number /* imageID (autoincrement*10 + configDigit) */
+  n: string /* Nombre base de la imagen: "<companyID>_<imageID>" (sin carpeta ni extensión) */
   d: string /* descripcion de la imagen */
+}
+
+/** Builds the CDN base name (without folder/extension) for a product imageID. */
+export const productImageName = (imageID: number) => `${Env.getCompanyID()}_${imageID}`
+
+/** Builds the display image ({id, n, d}) for the product's main image, or undefined when none. */
+export const mainProductImage = (e: IProduct): IProductoImage | undefined => {
+  if (!e.ImageMain) return undefined
+  const index = (e.ImageIDs || []).indexOf(e.ImageMain)
+  return { id: e.ImageMain, n: productImageName(e.ImageMain), d: e.ImageDescriptions?.[index] || "" }
 }
 
 //STRUCT:negocio.Product
@@ -51,7 +63,9 @@ export interface IProduct {
   NameHash: number
   Properties: IProductProperties[]
   Presentations: IProductPresentation[]
-  Images: IProductoImage[]
+  ImageMain: number          /* imageID of the primary image */
+  ImageIDs: number[]         /* every imageID */
+  ImageDescriptions: string[] /* parallel to ImageIDs */
   Stock: any
   ReservedStock: any
   StockStatus: number
@@ -99,7 +113,7 @@ export class ProductosService extends GetHandler<IProduct> {
 
   handler(result: IProduct[]): void {
     for(const e of result){
-      e.Image = e.Images?.[0]
+      e.Image = mainProductImage(e)
       e.CategoryIDs = e.CategoryIDs || []
     }
     this.records = []

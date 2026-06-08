@@ -147,6 +147,9 @@ export const Env = {
   imageCounter: 10000,
   // Product-search debug and telemetry logs are centralized here.
   PRODUCT_SEARCH_FULL_DEBUG_LOG_ENABLED: false,
+  // Top product search strategy: true → server text-search endpoint (p-product-text-search) + by-id
+  // hydration; false → download the catalog snapshot/delta once and filter in memory (no per-id fetch).
+  useLiveProductSearch: false,
   // Route-cache verification is expensive on mobile, so keep it opt-in from the client.
   DELTA_CACHE_VERIFY_ROUTE_MEMORY: false,
   clearAccesos: null as (() => void) | null,

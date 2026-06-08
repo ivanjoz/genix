@@ -30,6 +30,7 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[configTypes.SystemParameters](),
 		makeDBController[core.Cache](),
 		makeDBController[core.CronAction](),
+		makeDBController[core.GlobalCache](),
 		makeDBController[coreTypes.UsageLog](),
 		makeDBController[coreTypes.User](),
 		makeDBController[financeTypes.CashBank](),

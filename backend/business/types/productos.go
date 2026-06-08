@@ -5,11 +5,6 @@ import (
 	"app/db"
 )
 
-type ProductImage struct {
-	Name        string `ms:"n" json:"n" cbor:"n"`
-	Description string `ms:"d" json:"d" cbor:"d"`
-}
-
 type WarehouseStockMin struct {
 	WarehouseID int32 `cbor:"a" json:"a"`
 	Quantity    int32 `cbor:"c" json:"c"`
@@ -54,7 +49,12 @@ type Product struct {
 
 	Properties     []ProductProperties   `json:",omitempty"`
 	Presentations  []ProductPresentation `json:",omitempty"`
-	Images         []ProductImage        `json:",omitempty"`
+	// Image storage: ImageMain is the imageID of the primary image (defaults to the
+	// first uploaded). ImageIDs holds every imageID; ImageDescriptions is parallel to it.
+	// Each imageID encodes its own resolution config in the last digit (autoincrement*10 + configDigit).
+	ImageMain         int32    `json:",omitempty"`
+	ImageIDs          []int32  `json:",omitempty"`
+	ImageDescriptions []string `json:",omitempty"`
 	Stock          []WarehouseStockMin   `json:",omitempty"`
 	ReservedStock  []WarehouseStockMin   `json:",omitempty"`
 	StockStatus    int8                  `json:",omitempty"`
@@ -106,7 +106,9 @@ type ProductTable struct {
 	NameHash            db.Col[ProductTable, int32]
 	Properties          db.Col[ProductTable, []ProductProperties]
 	Presentations       db.Col[ProductTable, []ProductPresentation]
-	Images              db.Col[ProductTable, []ProductImage]
+	ImageMain           db.Col[ProductTable, int32]
+	ImageIDs            db.ColSlice[ProductTable, int32]
+	ImageDescriptions   db.ColSlice[ProductTable, string]
 	Stock               db.Col[ProductTable, []WarehouseStockMin]
 	ReservedStock       db.Col[ProductTable, []WarehouseStockMin]
 	StockStatus         db.Col[ProductTable, int8]

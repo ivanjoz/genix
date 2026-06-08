@@ -64,6 +64,15 @@
 	const isLoadingProductRecord = $derived(productRecordReference?.loading || false);
 
 	$effect(() => {
+		// When the caller already supplies the full product (in-memory search path), skip the by-id
+		// fetch entirely — name, price and image are all present on `producto`.
+		if (producto) {
+			untrack(() => {
+				productRecordReference = null;
+				lastResolvedProductID = 0;
+			});
+			return;
+		}
 		// Resolve by ID through the shared cache-by-id pipeline instead of deprecated service call.
 		const selectedProductID = resolvedProductID;
 		if (!(selectedProductID > 0)) {

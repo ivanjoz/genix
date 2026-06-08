@@ -530,7 +530,11 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 
   useCache: { min: number, ver: number  } | undefined = undefined
 	headers: { [k: string]: string } | undefined = undefined
-  
+  // CDN snapshot bootstrap (optional): absolute URL to a .db file + its per-section column schema.
+  // When set, the first sync seeds the cache from the file instead of the full API list.
+  fileRoute = ""
+  fileSchema: { [section: string]: string[] } | undefined = undefined
+
 
 	handler(e: any) { }
   isReady = $state(0)
@@ -551,6 +555,8 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
       keysIDs: this.keysIDs,
       columnarIDField: this.columnarIDField,
       combineColumnarValuesOnFields: this.combineColumnarValuesOnFields,
+      fileRoute: this.fileRoute || undefined,
+      fileSchema: this.fileSchema,
     } as serviceHttpProps
     return props
   }

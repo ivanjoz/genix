@@ -886,6 +886,17 @@ func GetCounter(keyspace string, name string, increment int) (int64, error) {
 	return currentValue, nil
 }
 
+// GetAutoincrementID reserves `recordsSize` consecutive autoincrement IDs for the
+// given counter key and returns the FIRST reserved raw value (1, 2, 3, …).
+// It uses the configured keyspace automatically. `key` is an arbitrary counter
+// name (e.g. "images_<companyID>"), so it is reusable for any per-key sequence.
+func GetAutoincrementID(key string, recordsSize int) (int64, error) {
+	if recordsSize < 1 {
+		recordsSize = 1
+	}
+	return GetCounter(connParams.Keyspace, key, recordsSize)
+}
+
 func nextCounterRange(storedCounterValue int64, increment int) (int64, int64) {
 	nextCounterValue := storedCounterValue + 1
 	if nextCounterValue <= 0 {

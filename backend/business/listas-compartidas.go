@@ -187,5 +187,21 @@ func PostListasCompartidas(req *core.HandlerArgs) core.HandlerResponse {
 		newIDs[i].ID = records[i].ID
 	}
 
+	// Register affected marcas/categorías lists for a products .db rebuild (ecommerce snapshot).
+	for _, listID := range uniqueIncomingListIDs {
+		cacheGroup := int16(0)
+		if listID == ecommerceSharedListMarcaID {
+			cacheGroup = cacheGroupMarcas
+		} else if listID == ecommerceSharedListCategoriaID {
+			cacheGroup = cacheGroupCategorias
+		}
+		if cacheGroup == 0 {
+			continue
+		}
+		if cacheErr := core.SaveCacheGlobal(cacheGroup, req.User.CompanyID, nil, nowTime); cacheErr != nil {
+			core.Log("PostListasCompartidas:: error registrando cambio de lista para ecommerce", cacheErr)
+		}
+	}
+
 	return req.MakeResponse(newIDs)
 }

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -45,6 +44,11 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetProductTextSearch(req *core.HandlerArgs) core.HandlerResponse {
+	// Public endpoint (p- prefix): no authenticated user, so the company comes from the query.
+	companyID := core.Coalesce(req.GetQueryInt("cid"), req.GetQueryInt("company-id"))
+	if companyID <= 0 {
+		return req.MakeErr("Company inválida para la búsqueda de productos.")
+	}
 	query := req.GetQuery("q")
 	if len(query) < 2 {
 		return req.MakeErr("La búsqueda debe tener al menos 2 caracteres.")
@@ -56,7 +60,7 @@ func GetProductTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Active products live in status group 1. Return only ids + weights (no
 	// record bodies) — the client resolves names from its by-id cache.
-	matches, err := db.SearchTextIDs[businessTypes.Product](req.User.CompanyID, query, 1, limit)
+	matches, err := db.SearchTextIDs[businessTypes.Product](companyID, query, 1, limit)
 	if err != nil {
 		return req.MakeErr("Error en la búsqueda de texto de productos:", err)
 	}
@@ -202,7 +206,7 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Merge resolves insert/update per primary key and applies only required writes.
 	err = db.Merge(&productos,
-		[]db.Coln{t.Stock, t.ReservedStock, t.StockStatus, t.CategoriesWithStock, t.Created, t.CreatedBy, t.Images},
+		[]db.Coln{t.Stock, t.ReservedStock, t.StockStatus, t.CategoriesWithStock, t.Created, t.CreatedBy, t.ImageMain, t.ImageIDs, t.ImageDescriptions},
 		func(prev, current *businessTypes.Product) bool {
 			current.CompanyID = req.User.CompanyID
 			current.Created = prev.Created
@@ -211,7 +215,9 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 			current.ReservedStock = prev.ReservedStock
 			current.StockStatus = prev.StockStatus
 			current.CategoriesWithStock = prev.CategoriesWithStock
-			current.Images = prev.Images
+			current.ImageMain = prev.ImageMain
+			current.ImageIDs = prev.ImageIDs
+			current.ImageDescriptions = prev.ImageDescriptions
 			current.NameUpdated = prev.NameUpdated
 			buildPresentaciones(prev, current)
 
@@ -241,6 +247,15 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	)
 	if err != nil {
 		return req.MakeErr("Error al actualizar / insertar la site: " + err.Error())
+	}
+
+	// Register the company for a products .db rebuild. Keyed on Updated (which advances on every
+	// product write, incl. price edits) so the snapshot self-heals on any change, matching the
+	// ecommerce delta watermark. NameUpdated is reserved for other purposes.
+	if len(productos) > 0 {
+		if cacheErr := core.SaveCacheGlobal(cacheGroupProductos, req.User.CompanyID, nil, nowTime); cacheErr != nil {
+			core.Log("PostProducts:: error registrando cambio de productos para ecommerce", cacheErr)
+		}
 	}
 
 	return req.MakeResponse(productos)
@@ -279,8 +294,12 @@ type productoImage struct {
 	Folder        string
 	Description   string
 	ProductID     int32
-	ImageToDelete string
+	ImageToDelete int32 // imageID to remove (autoincrement*10 + configDigit)
 }
+
+// imageConfigDigitFull is the last digit of the imageID for the standard product
+// upload (base x6 + x4 + x2). The digit→resolution-set dictionary is defined later.
+const imageConfigDigitFull = 7
 
 func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 	image := productoImage{}
@@ -291,7 +310,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Log("Image to delete 1:", image.ImageToDelete)
 
-	if len(image.ImageToDelete) == 0 {
+	if image.ImageToDelete == 0 {
 		if image.ProductID == 0 || (len(image.Content) == 0 && len(image.Content_x6) == 0) {
 			return req.MakeErr("NO se encontraron los parámetros: [ProductID] [Content]")
 		}
@@ -313,55 +332,69 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 	product := productos[0]
 	response := map[string]string{}
 
-	name := core.ToBase36(time.Now().UnixMilli())
-
-	imageArgs := cloud.ImageArgs{
-		Content: image.Content, Folder: "img-productos", Name: name, Type: "avif",
-		Resolutions: map[uint16]string{980: "x6", 570: "x4", 360: "x2"},
-	}
-
-	addImage := func() {
-		response["imageName"] = "img-productos/" + name
-
-		pi := businessTypes.ProductImage{Name: name, Description: image.Description}
-		product.Images = append([]businessTypes.ProductImage{pi}, product.Images...)
-	}
-
-	if len(image.ImageToDelete) > 0 {
-		images := []businessTypes.ProductImage{}
-		for _, e := range product.Images {
-			if e.Name != image.ImageToDelete {
-				images = append(images, e)
-			}
-		}
-		product.Images = images
-	} else if len(image.Content_x6) > 0 {
-
-		resolutionMap := map[int8]*string{
-			6: &image.Content_x6, 4: &image.Content_x4, 2: &image.Content_x2,
-		}
-
-		for resolution, content := range resolutionMap {
-			if len(*content) < 50 {
+	if image.ImageToDelete > 0 {
+		// Drop the imageID from the parallel ImageIDs/ImageDescriptions arrays.
+		imageIDs := []int32{}
+		imageDescriptions := []string{}
+		for index, id := range product.ImageIDs {
+			if id == image.ImageToDelete {
 				continue
 			}
-			cloned := imageArgs
-			cloned.Resolution = resolution
-			cloned.Content = *content
-			_, err = cloud.SaveImage(cloned)
-			if err != nil {
+			imageIDs = append(imageIDs, id)
+			if index < len(product.ImageDescriptions) {
+				imageDescriptions = append(imageDescriptions, product.ImageDescriptions[index])
+			}
+		}
+		product.ImageIDs = imageIDs
+		product.ImageDescriptions = imageDescriptions
+		// Repoint the main image if the deleted one was primary.
+		if product.ImageMain == image.ImageToDelete {
+			product.ImageMain = 0
+			if len(imageIDs) > 0 {
+				product.ImageMain = imageIDs[0]
+			}
+		}
+	} else {
+		// Reserve one per-company autoincrement and derive the imageID (autoincrement*10 + configDigit).
+		autoincrement, err := db.GetAutoincrementID(fmt.Sprintf("images_%v", req.User.CompanyID), 1)
+		if err != nil {
+			return req.MakeErr("Error al obtener el autoincrement de la imagen:", err)
+		}
+		imageID := int32(autoincrement*10) + imageConfigDigitFull
+		baseName := fmt.Sprintf("%v_%v", req.User.CompanyID, imageID)
+
+		imageArgs := cloud.ImageArgs{
+			Content: image.Content, Folder: "img-productos", Name: baseName, Type: "avif",
+			// Empty label = base resolution (bare filename); x4/x2 get the "-x4"/"-x2" suffix.
+			Resolutions: map[uint16]string{980: "", 570: "x4", 360: "x2"},
+		}
+
+		if len(image.Content_x6) > 0 {
+			resolutionMap := map[int8]*string{
+				6: &image.Content_x6, 4: &image.Content_x4, 2: &image.Content_x2,
+			}
+			for resolution, content := range resolutionMap {
+				if len(*content) < 50 {
+					continue
+				}
+				cloned := imageArgs
+				cloned.Resolution = resolution
+				cloned.Content = *content
+				if _, err = cloud.SaveImage(cloned); err != nil {
+					return req.MakeErr("Error al guardar la imagen:", err)
+				}
+			}
+		} else {
+			if _, err = cloud.SaveConvertImage(imageArgs); err != nil {
 				return req.MakeErr("Error al guardar la imagen:", err)
 			}
 		}
 
-		addImage()
-	} else {
-		_, err = cloud.SaveConvertImage(imageArgs)
-		if err != nil {
-			return req.MakeErr("Error al guardar la imagen:", err)
-		}
-
-		addImage()
+		// Prepend the new image; it becomes the main image.
+		product.ImageIDs = append([]int32{imageID}, product.ImageIDs...)
+		product.ImageDescriptions = append([]string{image.Description}, product.ImageDescriptions...)
+		product.ImageMain = imageID
+		response["imageName"] = "img-productos/" + baseName
 	}
 
 	product.Updated = core.SUnixTime()
@@ -397,7 +430,7 @@ func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup.Go(func() error {
 		query := db.Query(&productos)
 		q1 := db.Table[businessTypes.Product]()
-		query.Select(q1.ID, q1.Name, q1.Description, q1.Price, q1.Discount, q1.FinalPrice, q1.Images, q1.Stock, q1.CategoryIDs).
+		query.Select(q1.ID, q1.Name, q1.Description, q1.Price, q1.Discount, q1.FinalPrice, q1.ImageMain, q1.ImageIDs, q1.ImageDescriptions, q1.Stock, q1.CategoryIDs).
 			CompanyID.Equals(companyID).
 			StockStatus.Equals(1)
 		if categoriaID > 0 {

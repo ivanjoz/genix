@@ -32,6 +32,7 @@ type SaveFileArgs struct {
 	Prefix        string
 	StartAfter    string
 	ContentType   string
+	CacheControl  string
 	MaxKeys       int32
 }
 
@@ -65,6 +66,9 @@ func saveFileToS3(args SaveFileArgs) error {
 
 	if len(args.ContentType) > 0 {
 		input.ContentType = &args.ContentType
+	}
+	if len(args.CacheControl) > 0 {
+		input.CacheControl = &args.CacheControl
 	}
 
 	if len(args.LocalFilePath) > 1 {
@@ -233,13 +237,20 @@ func SaveConvertImage(args ImageArgs) ([]imageconv.Image, error) {
 	saveImage := func(image imageconv.Image) {
 		fmt.Println("args.Folder:", args.Folder)
 
+		// An empty resolution label marks the base image, which is stored without a
+		// suffix (e.g. "<companyID>_<imageID>.avif"); other resolutions get "-<label>".
+		resolutionLabel := args.Resolutions[uint16(image.Resolution)]
+		objectName := fmt.Sprintf("%v.%v", args.Name, image.Format)
+		if len(resolutionLabel) > 0 {
+			objectName = fmt.Sprintf("%v-%v.%v", args.Name, resolutionLabel, image.Format)
+		}
+
 		args := SaveFileArgs{
 			Bucket:      core.Env.S3_BUCKET,
 			Path:        args.Folder,
 			FileContent: image.Content,
 			ContentType: fmt.Sprintf("image/%v", image.Format),
-			Name: fmt.Sprintf("%v-%v.%v", args.Name,
-				args.Resolutions[uint16(image.Resolution)], image.Format),
+			Name:        objectName,
 		}
 		SaveFile(args)
 		image.Content = nil
@@ -355,6 +366,9 @@ func SaveFileToR2(args SaveFileArgs) error {
 	if len(args.ContentType) > 0 {
 		req.Header.Set("Content-Type", args.ContentType)
 	}
+	if len(args.CacheControl) > 0 {
+		req.Header.Set("Cache-Control", args.CacheControl)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -448,11 +462,18 @@ func SaveImage(image ImageArgs) (string, error) {
 
 	imageBytes := core.Base64ToBytes(image.Content)
 
+	// Resolution 6 (x6) is the base image, stored without a suffix; lower resolutions
+	// (x4, x2) keep the "-x<resolution>" suffix so the frontend can derive their names.
+	objectName := fmt.Sprintf("%v.%v", image.Name, image.Type)
+	if image.Resolution != 6 {
+		objectName = fmt.Sprintf("%v-x%v.%v", image.Name, image.Resolution, image.Type)
+	}
+
 	args := SaveFileArgs{
 		Path:        image.Folder,
 		FileContent: imageBytes,
 		ContentType: fmt.Sprintf("image/%v", image.Type),
-		Name:        fmt.Sprintf("%v-x%v.%v", image.Name, image.Resolution, image.Type),
+		Name:        objectName,
 	}
 
 	var err error

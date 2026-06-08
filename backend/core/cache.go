@@ -168,3 +168,62 @@ func parseConcatenatedInts(s string) []int64 {
 	}
 	return result
 }
+
+// GlobalCache is a tenant-agnostic key/value cache partitioned by GroupID (the logical cache kind)
+// and clustered by ID (here used as the CompanyID). It lets a single partition scan return every
+// company registered under a group — e.g. all companies whose products changed since the last build.
+type GlobalCache struct {
+	db.TableStruct[GlobalCacheTable, GlobalCache]
+	GroupID int16
+	ID      int32
+	Content []byte
+	Updated int32
+}
+
+type GlobalCacheTable struct {
+	db.TableStruct[GlobalCacheTable, GlobalCache]
+	GroupID db.Col[GlobalCacheTable, int16]
+	ID      db.Col[GlobalCacheTable, int32]
+	Content db.Col[GlobalCacheTable, []byte]
+	Updated db.Col[GlobalCacheTable, int32]
+}
+
+func (e GlobalCacheTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "cache_global",
+		Partition: e.GroupID,
+		Keys:      []db.Coln{e.ID},
+	}
+}
+
+// SaveCacheGlobal upserts one global-cache row. Content is reserved for future use; the meaningful
+// signal for most callers is Updated, the watermark observed when the row was written.
+func SaveCacheGlobal(groupID int16, companyID int32, content []byte, updated int32) error {
+	if groupID <= 0 || companyID <= 0 {
+		return fmt.Errorf("groupID y companyID son requeridos para SaveCacheGlobal")
+	}
+	row := GlobalCache{GroupID: groupID, ID: companyID, Content: content, Updated: updated}
+	if err := db.Insert(&[]GlobalCache{row}); err != nil {
+		return fmt.Errorf("error al guardar cache global (group=%d company=%d): %w", groupID, companyID, err)
+	}
+	return nil
+}
+
+// GetCacheGlobal reads rows for a group. With no companyIDs it scans the whole group partition
+// (all registered companies); otherwise it filters by the given company IDs.
+func GetCacheGlobal(groupID int16, companyIDs ...int32) ([]GlobalCache, error) {
+	if groupID <= 0 {
+		return nil, fmt.Errorf("groupID es requerido para GetCacheGlobal")
+	}
+	rows := []GlobalCache{}
+	query := db.Query(&rows).GroupID.Equals(groupID)
+	if len(companyIDs) == 1 {
+		query.ID.Equals(companyIDs[0])
+	} else if len(companyIDs) > 1 {
+		query.ID.In(companyIDs...)
+	}
+	if err := query.Exec(); err != nil {
+		return nil, fmt.Errorf("error al leer cache global (group=%d): %w", groupID, err)
+	}
+	return rows, nil
+}
