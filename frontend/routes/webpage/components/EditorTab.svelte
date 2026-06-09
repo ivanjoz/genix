@@ -15,11 +15,11 @@ import AstEditor from './AstEditor.svelte';
   const section = $derived(editorStore.selectedSection);
   const schema = $derived(editorStore.activeSchema);
 
-  const isHtmlSection = $derived(section?.type === 'HtmlSection');
+  const isHtmlSection = $derived(section?.Type === 'HtmlSection');
 
   // Category-bound custom components (ProductsByCategory / CategoryDescription) in the section's AST.
   const categoryNodes = $derived(
-    isHtmlSection ? collectCategoryNodes(section?.ast) : []
+    isHtmlSection ? collectCategoryNodes(section?.Ast) : []
   );
   // Current selection is taken from the first bound node; all bound nodes share one category.
   const selectedCategoryID = $derived(categoryNodes.length ? getNodeCategoryID(categoryNodes[0]) : undefined);
@@ -48,7 +48,7 @@ import AstEditor from './AstEditor.svelte';
 
   function handleTextLineChange(index: number, value: string) {
     if (!section) return;
-    const lines = [...(section.content?.textLines || [])];
+    const lines = [...(section.Content?.textLines || [])];
     if (!lines[index]) {
       lines[index] = { text: value, css: '' };
     } else {
@@ -59,13 +59,13 @@ import AstEditor from './AstEditor.svelte';
 
   function addTextLine() {
     if (!section) return;
-    const lines = [...(section.content?.textLines || []), { text: 'New Line', css: '' }];
+    const lines = [...(section.Content?.textLines || []), { text: 'New Line', css: '' }];
     editorStore.updateContent(section.id, 'textLines', lines);
   }
 
   function removeTextLine(index: number) {
     if (!section) return;
-    const lines = (section.content?.textLines || []).filter((_: any, i: number) => i !== index);
+    const lines = (section.Content?.textLines || []).filter((_: any, i: number) => i !== index);
     editorStore.updateContent(section.id, 'textLines', lines);
   }
 </script>
@@ -106,8 +106,8 @@ import AstEditor from './AstEditor.svelte';
         <div class="editor-group">
           <h4 class="group-title">Content</h4>
           <div class="fields-list">
-            {#if section.ast && section.ast.length}
-              <AstEditor nodes={section.ast} {palette} />
+            {#if section.Ast && section.Ast.length}
+              <AstEditor nodes={section.Ast} {palette} />
             {:else}
               <p class="empty-hint">No content. This section has no parsed HTML.</p>
             {/if}
@@ -125,7 +125,7 @@ import AstEditor from './AstEditor.svelte';
               
               {#if field === 'textLines'}
                 <div class="text-lines-editor">
-                  {#each section.content?.textLines || [] as line, i}
+                  {#each section.Content?.textLines || [] as line, i}
                     <div class="text-line-item">
                       <input 
                         type="text" 
@@ -142,7 +142,7 @@ import AstEditor from './AstEditor.svelte';
                 <textarea
                   id={`content-${fieldKey}`}
                   class="field-input textarea"
-                  value={section.content?.[fieldKey] || ''}
+                  value={section.Content?.[fieldKey] || ''}
                   oninput={(e) => handleContentInput(fieldKey, e.currentTarget.value)}
                   rows="3"
                 ></textarea>
@@ -151,7 +151,7 @@ import AstEditor from './AstEditor.svelte';
                   id={`content-${fieldKey}`}
                   type="text"
                   class="field-input"
-                  value={(section.content?.[fieldKey] || []).join(', ')}
+                  value={(section.Content?.[fieldKey] || []).join(', ')}
                   oninput={(e) => {
                     const ids = e.currentTarget.value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
                     handleContentInput(fieldKey, ids);
@@ -163,7 +163,7 @@ import AstEditor from './AstEditor.svelte';
                   id={`content-${fieldKey}`}
                   type="text"
                   class="field-input"
-                  value={section.content?.[fieldKey] || ''}
+                  value={section.Content?.[fieldKey] || ''}
                   oninput={(e) => handleContentInput(fieldKey, e.currentTarget.value)}
                 />
               {/if}
@@ -183,7 +183,7 @@ import AstEditor from './AstEditor.svelte';
               <textarea
                 id={`css-${slot}`}
                 class="field-input textarea css-textarea"
-                value={section.css?.[slot] || ''}
+                value={section.Css?.[slot] || ''}
                 oninput={(e) => handleCssInput(slot, e.currentTarget.value)}
                 rows="2"
                 placeholder="Enter tailwind classes..."

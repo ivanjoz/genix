@@ -1,14 +1,25 @@
 <script lang="ts">
-    import EcommerceBuilder from './EcommerceBuilder.svelte';
-    import { storeExample } from './store-example';
+    import EcommerceBuilder from './builder/EcommerceBuilder.svelte';
+    import { storeExample } from './builder/store-example';
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 import type { SectionData } from '$ecommerce/renderer/section-types';
+    import { getPageContent } from '$services/ecommerce/page-content.svelte';
+    import { onMount } from 'svelte';
     import "$domain/libs/fontello-prerender.css";
     import Header from '$ecommerce/components/Header.svelte';
     import Page from '$domain/Page.svelte';
 
-    let elements = $state<SectionData[]>(storeExample);
+    let elements = $state<SectionData[]>([]);
     let values = $state<Record<string, string>>({});
+
+    // Load the stored Inicio page; fall back to the demo layout when it is empty
+    // (e.g. a fresh store that has never been saved).
+    onMount(async () => {
+        // The builder regenerates CSS live, so only the sections are used here;
+        // the stored CSS is for the read-only storefront.
+        const stored = await getPageContent();
+        elements = stored.sections.length > 0 ? stored.sections : storeExample;
+    });
 
     const defaultPalette: ColorPalette = {
         id: 'default',

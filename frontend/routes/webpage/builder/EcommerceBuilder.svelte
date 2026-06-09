@@ -25,13 +25,13 @@ import type { SectionData } from '$ecommerce/renderer/section-types';
 
   // Initialize editorStore with elements if provided. HTML sections enter the store as
   // AST: their `html` authoring source is parsed once here and dropped, so render/edit/
-  // save all operate on `content.ast` (the canonical model) from this point on.
+  // save all operate on `Ast` (the canonical model) from this point on.
   $effect(() => {
     if (elements.length > 0 && editorStore.sections.length === 0) {
       editorStore.sections = elements.map(section => {
-        if (section.type === 'HtmlSection' && section.html && !section.ast) {
+        if (section.Type === 'HtmlSection' && section.html && !section.Ast) {
           const { html, ...rest } = section;
-          return { ...rest, ast: parseHTML(html) };
+          return { ...rest, Ast: parseHTML(html) };
         }
         return section;
       });

@@ -1,3 +1,13 @@
+/* Declare the cascade-layer order up front (a bare @layer statement is allowed
+   before @import per spec). `ec-runtime` holds the storefront's runtime-generated
+   UnoCSS (the <style id="store-runtime-css"> injected on load — see
+   ecommerce/stores/uno-generator.ts) and is ordered AFTER components but BEFORE
+   utilities, so build-time Tailwind utilities win ties over redundant runtime
+   duplicates (e.g. `.md:w-240` beats a runtime `.w-full`) while runtime-only
+   classes still apply. Without this, ec-runtime is first seen when that <style>
+   is appended at the end of <head>, ordering it AFTER utilities so it wrongly
+   wins. Mirrors routes/tailwind.css. */
+@layer theme, base, components, ec-runtime, utilities;
 @import "tailwindcss";
 
 @source "../../pkg-components/**/*.svelte";

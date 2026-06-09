@@ -1,13 +1,13 @@
 <script lang="ts">
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 import { editorStore } from '$ecommerce/stores/editor.svelte';
-  import { collectTokens, generateCss } from '$ecommerce/stores/uno-generator';
+  import { savePageContent } from '$services/ecommerce/page-content.svelte';
   import { Core, tr } from '$core/store.svelte';
   import T from '$components/misc/T.svelte';
-  import EditorTab from './components/EditorTab.svelte';
-  import TemplatesTab from './components/TemplatesTab.svelte';
-  import GalleryTab from './components/GalleryTab.svelte';
-  import ConfigTab from './components/ConfigTab.svelte';
+  import EditorTab from '../components/EditorTab.svelte';
+  import TemplatesTab from '../components/TemplatesTab.svelte';
+  import GalleryTab from '../components/GalleryTab.svelte';
+  import ConfigTab from '../components/ConfigTab.svelte';
 
   interface Props {
     palette?: ColorPalette;
@@ -41,15 +41,9 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   }
 
   async function handleSave() {
-    // Build the page AST: every section with its parsed HTML AST + slot CSS.
-    const pageAst = editorStore.sections;
-    // Generate the runtime Tailwind CSS from the same tokens the live preview uses
-    // (slot CSS + HTML section AST + text lines).
-    const css = await generateCss(collectTokens(pageAst));
-
-    // Print both as text for inspection.
-    console.log('=== PAGE AST ===\n', pageAst);
-    console.log('=== TAILWIND CSS ===\n' + css);
+    // Persist every section of the page. The backend assigns each section's
+    // position-based id, hashes its content, and writes only what changed.
+    await savePageContent(editorStore.sections);
   }
 
   function handleDelete() {

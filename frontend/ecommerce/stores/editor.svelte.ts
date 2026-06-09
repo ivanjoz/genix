@@ -18,11 +18,11 @@ class EditorStore {
   activeSchema = $derived.by(() => {
     if (!this.selectedId) return null;
     const section = this.sections.find(s => s.id === this.selectedId);
-    if (!section?.type) return null;
+    if (!section?.Type) return null;
 
     // We get the schema from the registry based on the section type
     // If the registry isn't generated yet or doesn't have it, we return a fallback
-    return SectionRegistry?.[section.type]?.schema || null;
+    return SectionRegistry?.[section.Type]?.schema || null;
   });
 
   // Helper to get the actual data of the selected section
@@ -37,14 +37,14 @@ class EditorStore {
   updateContent(id: string, key: string, value: any) {
     const section = this.sections.find(s => s.id === id);
     if (section) {
-      (section.content ??= {})[key] = value;
+      (section.Content ??= {})[key] = value;
     }
   }
 
   updateCss(id: string, slot: string, classes: string) {
     const section = this.sections.find(s => s.id === id);
     if (section) {
-      (section.css ??= {})[slot] = classes;
+      (section.Css ??= {})[slot] = classes;
     }
   }
 
@@ -54,10 +54,10 @@ class EditorStore {
     if (htmlTemplate) {
       const newSection: SectionData = {
         id: crypto.randomUUID(),
-        type: 'HtmlSection',
+        Type: 'HtmlSection',
         category: htmlTemplate.category,
-        ast: parseHTML(htmlTemplate.html ?? ''),
-        css: {}
+        Ast: parseHTML(htmlTemplate.html ?? ''),
+        Css: {}
       };
       if (typeof index === 'number') this.sections.splice(index, 0, newSection);
       else this.sections.push(newSection);
@@ -89,10 +89,10 @@ class EditorStore {
 
     const newSection: SectionData = {
       id: crypto.randomUUID(),
-      type: type,
+      Type: type,
       category: schema.category,
-      content: dummyContent,
-      css: {}
+      Content: dummyContent,
+      Css: {}
     };
 
     if (typeof index === 'number') {

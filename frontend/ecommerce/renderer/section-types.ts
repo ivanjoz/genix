@@ -47,26 +47,30 @@ export interface StandardContent {
  * Fields that apply to only one of those roles are optional.
  */
 export interface SectionData {
+  // Runtime-only identity (a fresh uuid is assigned on load); NOT persisted.
   id: string;
-  type?: string; // Component name, e.g. 'HeroStandard'. HTML templates resolve to 'HtmlSection' when added.
-  category?: SectionCategory;
+  // PascalCase fields below mirror the backend SectionContent struct
+  // (backend/ecommerce/types/page_content.go) and are persisted as-is.
+  Type?: string; // Component name, e.g. 'HeroStandard'. HTML templates resolve to 'HtmlSection' when added.
 
-  // Template metadata (authoring side).
+  // Authoring/builder-only metadata; NOT persisted (kept lowercase).
+  category?: SectionCategory;
   name?: string;
   description?: string;
   thumbnail?: string;
   presets?: SectionPreset[];
 
-  // HTML sections: `html` is the authoring source, parsed once at add/load time into
-  // `ast` (the canonical, editable model the renderer/editor/CSS all read).
+  // HTML sections: `html` is the authoring source (lowercase, not persisted),
+  // parsed once at add/load time into `Ast` (the canonical, editable model the
+  // renderer/editor/CSS all read). AST node fields stay frontend-owned/lowercase.
   html?: string;
-  ast?: ComponentAST[];
+  Ast?: ComponentAST[];
 
   // Component sections: flat content fields.
-  content?: StandardContent;
+  Content?: StandardContent;
 
-  css?: Record<string, string>; // Slot-based CSS, e.g., { container: "...", title: "..." }
-  attributes?: Record<string, any>;
+  Css?: Record<string, string>; // Slot-based CSS, e.g., { container: "...", title: "..." }
+  Attributes?: Record<string, any>;
 }
 
 /**

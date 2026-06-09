@@ -134,7 +134,7 @@ export const AdminModule: IModule = {
     },
     { name: "Store|Tienda", minName: "TIE",  id: 7, icon: "icon-buffer",
       options: [
-        { name: "Home|Inicio", route: "/tienda/builder-store"
+        { name: "Home|Inicio", route: "/webpage"
         },
         { name: "About Us|Nosotros", route: "/store-builder/page-2"
         },

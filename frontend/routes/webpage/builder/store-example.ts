@@ -7,9 +7,9 @@ import { HtmlImageFeature } from '$ecommerce/ecommerce-templates/templates/html-
 export const storeExample: SectionData[] = [
   {
     id: 'hero-1',
-    type: 'HeroStandard',
+    Type: 'HeroStandard',
     category: 'hero',
-    content: {
+    Content: {
       title: 'Welcome to Our Amazing Store',
       subTitle: 'Premium Quality Products',
       description: 'Discover the best products at unbeatable prices. Hand-picked for your lifestyle.',
@@ -17,14 +17,14 @@ export const storeExample: SectionData[] = [
       primaryActionHref: '/shop',
       bgImage: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=2070&auto=format&fit=crop'
     },
-    css: {
+    Css: {
     }
   },
   {
     id: 'features-1',
-    type: 'FeatureListSimple',
+    Type: 'FeatureListSimple',
     category: 'features',
-    content: {
+    Content: {
       title: 'Why Choose Us',
       subTitle: 'Our Benefits',
       description: 'We provide the best service in the industry with multiple benefits for our customers.',
@@ -32,49 +32,49 @@ export const storeExample: SectionData[] = [
       textCenter: '24/7 Support',
       textRight: 'Secure Payments'
     },
-    css: {
+    Css: {
 
     }
   },
   {
     id: 'products-1',
-    type: 'ProductGridSimple',
+    Type: 'ProductGridSimple',
     category: 'products',
-    content: {
+    Content: {
       title: 'Featured Products',
       subTitle: 'Best Sellers',
       limit: 4
     },
-    css: {
+    Css: {
 
     }
   },
   {
     id: 'html-hero-1',
-    type: 'HtmlSection',
+    Type: 'HtmlSection',
     category: HtmlHeroBanner.category,
     html: HtmlHeroBanner.html,
-    css: {}
+    Css: {}
   },
   {
     id: 'html-showcase-1',
-    type: 'HtmlSection',
+    Type: 'HtmlSection',
     category: HtmlCategoryShowcase.category,
     html: HtmlCategoryShowcase.html,
-    css: {}
+    Css: {}
   },
   {
     id: 'html-image-hero-1',
-    type: 'HtmlSection',
+    Type: 'HtmlSection',
     category: HtmlImageHero.category,
     html: HtmlImageHero.html,
-    css: {}
+    Css: {}
   },
   {
     id: 'html-image-feature-1',
-    type: 'HtmlSection',
+    Type: 'HtmlSection',
     category: HtmlImageFeature.category,
     html: HtmlImageFeature.html,
-    css: {}
+    Css: {}
   }
 ];

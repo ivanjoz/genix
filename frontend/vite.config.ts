@@ -219,7 +219,7 @@ export default defineConfig({
                   if (id.includes('/configuracion/') || id.includes('/seguridad/') || id.includes('/negocio/') || id.includes('/comercial/') || id.includes('/logistica/') || id.includes('/finanzas/') || id.includes('/contabilidad/') || id.includes('/cms/')) {
                     return 'admin';
                   }
-                  if (id.includes('/ecommerce/') || id.includes('/store/') || id.includes('/tienda/')) {
+                  if (id.includes('/ecommerce/') || id.includes('/store/') || id.includes('/webpage/')) {
                     return 'store';
                   }
                   // Shared code goes to common chunk

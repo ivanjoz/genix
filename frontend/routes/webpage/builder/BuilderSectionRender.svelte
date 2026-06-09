@@ -28,7 +28,7 @@ setContext(EC_BUILDER_MODE, true);
   }: Props = $props();
 
   const isSelected = $derived(editorStore.selectedId === section.id);
-  const Config = $derived(section.type ? SectionRegistry[section.type] : undefined);
+  const Config = $derived(section.Type ? SectionRegistry[section.Type] : undefined);
 
   function handleSelect() {
     editorStore.select(section.id);
@@ -73,7 +73,7 @@ setContext(EC_BUILDER_MODE, true);
   
   draggable="true"
   ondragstart={(e) => {
-    setReorderDragImage(e, Config?.schema.name || section.type || 'Section');
+    setReorderDragImage(e, Config?.schema.name || section.Type || 'Section');
     onDragStart(e, index);
   }}
   ondragend={onDragEnd}
@@ -82,7 +82,7 @@ setContext(EC_BUILDER_MODE, true);
   onclick={handleSelect}
   role="button"
   tabindex="0"
-  aria-label={`Edit ${Config?.schema.name || section.type} section`}
+  aria-label={`Edit ${Config?.schema.name || section.Type} section`}
   onkeydown={(e) => e.key === 'Enter' && handleSelect()}
 >
   <div class="section-outline"></div>
@@ -93,21 +93,21 @@ setContext(EC_BUILDER_MODE, true);
         <path d="M3 9h18M9 21V9"/>
       </svg>
     </span>
-    <span>{Config?.schema.name || section.type}</span>
+    <span>{Config?.schema.name || section.Type}</span>
     <span class="section-label-hint">Click to edit • Drag to move</span>
   </div>
   
   <div class="section-content" style={paletteStyles}>
     {#if Config}
       <Config.component
-        content={section.content}
-        ast={section.ast}
-        css={section.css}
-        {...section.attributes}
+        content={section.Content}
+        ast={section.Ast}
+        css={section.Css}
+        {...section.Attributes}
       />
     {:else}
       <div class="p-20 bg-slate-100 text-slate-400 text-center border-2 border-dashed border-slate-200">
-        Component "{section.type}" not found in registry.
+        Component "{section.Type}" not found in registry.
       </div>
     {/if}
   </div>

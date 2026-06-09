@@ -8,6 +8,7 @@ import (
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
+	ecommerceTypes "app/ecommerce/types"
 	financeTypes "app/finance/types"
 	logisticsTypes "app/logistics/types"
 	salesTypes "app/sales/types"
@@ -33,6 +34,7 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[core.GlobalCache](),
 		makeDBController[coreTypes.UsageLog](),
 		makeDBController[coreTypes.User](),
+		makeDBController[ecommerceTypes.EcommercePageContent](),
 		makeDBController[financeTypes.CashBank](),
 		makeDBController[financeTypes.CashBankMovement](),
 		makeDBController[financeTypes.CashReconciliation](),
