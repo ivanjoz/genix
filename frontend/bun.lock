@@ -50,7 +50,7 @@
         "vite": "^8.0.0",
       },
     },
-    "ecommerce": {
+    "webpage": {
       "name": "@genix/store",
       "version": "1.0.0",
       "dependencies": {
@@ -126,7 +126,7 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.25.12", "", { "os": "win32", "cpu": "x64" }, "sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA=="],
 
-    "@genix/store": ["@genix/store@workspace:ecommerce"],
+    "@genix/store": ["@genix/store@workspace:webpage"],
 
     "@humanspeak/svelte-virtual-list": ["@humanspeak/svelte-virtual-list@0.3.6", "", { "dependencies": { "esm-env": "^1.2.2" }, "peerDependencies": { "svelte": "^5.0.0" } }, "sha512-ls5FicD5b8nXi87GG7mj9nIoTkIl0M/JkmmE21KWnTabtDRnqEjZ7kOsU3ZEAWc0/HW8PlRwF50yqKwpaLeBMw=="],
 
