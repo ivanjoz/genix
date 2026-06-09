@@ -1,9 +1,11 @@
 # Agent HTTP API
 
 External-facing HTTP endpoint that lets an LLM agent (Claude Code, Gemini, …)
-drive the running browser page. Sits on top of the existing WebSocket bridge:
-the HTTP request fans out to the same `agent.invoke` RPC the Go backend uses
-internally, then returns a fresh page snapshot in the same response.
+drive the running browser page. Sits on top of the SSE+POST bridge: the HTTP
+request fans out to the same `agent.invoke` RPC the Go backend uses internally
+(commands pushed to the browser over the tab's `/agent/stream` SSE, replies
+POSTed back to `/agent/in`), then returns a fresh page snapshot in the same
+response.
 
 For the in-page registry / DOM contract, see
 [`frontend/ui-components/AGENTIC_COMPONENTS.md`](../../frontend/ui-components/AGENTIC_COMPONENTS.md).
@@ -17,7 +19,7 @@ Content-Type: application/json
 ```
 
 Local-only — bound to localhost, no auth, no CORS. Requires one connected
-browser tab (the dev page that opens a WebSocket to `/ws/agent`).
+browser tab (the dev page that opens an SSE stream to `/agent/stream`).
 
 ## Request
 
@@ -110,7 +112,7 @@ successful action (or the initial state if action 0 failed).
 | 200    | Request was processed; check `Results[i].OK` per action. |
 | 400    | Body is not valid JSON / wrong shape.                 |
 | 405    | Wrong method (only POST is mounted).                  |
-| 503    | No browser is currently connected to `/ws/agent`.     |
+| 503    | No browser is currently connected to `/agent/stream`. |
 | 502    | Action ran but the post-action page snapshot failed.  |
 
 ## Method reference
@@ -210,7 +212,7 @@ curl -s -X POST http://localhost:3589/agent \
 | Concern                       | File                                                       |
 | ----------------------------- | ---------------------------------------------------------- |
 | HTTP handler + id resolution  | [`http.go`](./http.go)                                     |
-| WS RPC to the browser         | [`ws.go`](./ws.go) (`request`, `IsConnected`)              |
+| SSE+POST bridge to the browser | [`ws.go`](./ws.go) (`request`, `HandleStream`, `HandleIn`, `IsConnected`) |
 | Public Go API (`InvokeBatch`, `Navigate`, …) | [`agent.go`](./agent.go)                    |
 | Wire types                    | [`protocol.go`](./protocol.go) (`InvokePayload`, `InvocationResult`, `PageContent`) |
 | HTML cleaner / compact tags   | [`parse_html.go`](./parse_html.go)                         |

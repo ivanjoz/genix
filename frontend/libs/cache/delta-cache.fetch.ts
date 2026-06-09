@@ -789,6 +789,7 @@ const firstSyncFromSnapshotFile = async (
     const fileResponse = await self.fetch(args.fileRoute as string)
     if(!fileResponse.ok){
       console.warn("[DeltaCache] snapshot file not ok, falling back to API:", args.fileRoute, fileResponse.status)
+      args.fileMissing = true
       return null
     }
     const parsed = parsePsvResponse(await fileResponse.text(), args.fileSchema as Record<string, string[]>) as CacheContent
@@ -797,6 +798,7 @@ const firstSyncFromSnapshotFile = async (
     await saveInitialSnapshot(args, routeReference, parsed, fetchTime, false)
   } catch (fileError) {
     console.warn("[DeltaCache] snapshot file seed failed, falling back to API:", args.fileRoute, fileError)
+    args.fileMissing = true
     return null
   }
 
@@ -856,6 +858,11 @@ export const fetchDeltaCache = async (args: serviceHttpProps) => {
     }
 
     let { route, lastSync } = getNextRouteURL(args, routeRow)
+    // Snapshot file was missing/unparseable: tell the backend so it can (re)build the .db file
+    // while serving this full fallback fetch.
+    if(args.fileMissing){
+      route = addToRoute(route, "missingFile", 1)
+    }
     const hasCache = !!(routeRow && routeRow.fetchTime)
     console.log("hasCache", args.route, lastSync)
 

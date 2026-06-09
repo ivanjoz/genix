@@ -38,3 +38,33 @@ export function isLinkNode(node: ComponentAST): boolean {
 export function isImageNode(node: ComponentAST): boolean {
 	return node.tagName === 'ImageEffect';
 }
+
+/** Custom components whose rendered category is editable via the category selector. */
+const CATEGORY_TAGS = new Set(['ProductsByCategory', 'CategoryDescription']);
+
+/** Collect every category-bound custom-component node in the AST (ProductsByCategory / CategoryDescription). */
+export function collectCategoryNodes(
+	nodes: ComponentAST | ComponentAST[] | undefined,
+): ComponentAST[] {
+	const out: ComponentAST[] = [];
+	const walk = (node: ComponentAST) => {
+		if (CATEGORY_TAGS.has(node.tagName)) out.push(node);
+		node.children?.forEach(walk);
+	};
+	if (Array.isArray(nodes)) nodes.forEach(walk);
+	else if (nodes) walk(nodes);
+	return out;
+}
+
+/** Read the category ID currently bound to a category node (CategoryDescription stores it as a list). */
+export function getNodeCategoryID(node: ComponentAST): number | undefined {
+	if (node.tagName === 'CategoryDescription') return node.props?.categoryIDs?.[0];
+	return node.props?.categoryID;
+}
+
+/** Set the category ID on a category node, writing the prop shape each component expects (mutation re-renders). */
+export function setNodeCategoryID(node: ComponentAST, id: number): void {
+	if (!node.props) node.props = {};
+	if (node.tagName === 'CategoryDescription') node.props.categoryIDs = [id];
+	else node.props.categoryID = id;
+}

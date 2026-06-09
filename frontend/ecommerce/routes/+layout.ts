@@ -1,5 +1,3 @@
-import { getProductos } from '$services/services/productos.svelte';
-
 export const csr = true;
 export const ssr = false;
 export const prerender = false;
@@ -13,9 +11,6 @@ export async function load({ url }) {
 
   console.log("Env is local? = ", (globalThis as any)._isLocal,"|", url.host)
 
-  console.log("obteniendo productos 1...");
-  const productos = await getProductos(undefined)
-  console.log("productos obtenidos:", productos.productos?.length)
-
-  return { productos }
+  // The catalog is loaded client-side from the single shared source (see +layout.svelte onMount).
+  return {}
 }

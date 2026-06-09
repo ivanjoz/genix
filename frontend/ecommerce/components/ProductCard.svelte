@@ -220,6 +220,11 @@
 		padding: 6px;
 		border-radius: 10px;
 		margin-bottom: 24px;
+		/* Clip the add button while it is tucked below the card so it can slide up into view. */
+		overflow: hidden;
+		/* Outline never participates in layout, so the hover highlight cannot cause reflow. */
+		outline: 2px solid transparent;
+		transition: outline-color 0.2s ease;
 	}
 
 	.vertical-add-button {
@@ -229,7 +234,7 @@
 		height: 36px;
 		align-items: center;
 		justify-content: center;
-		display: none;
+		display: flex;
 		width: 100%;
 		bottom: 0;
 		left: 0;
@@ -239,12 +244,23 @@
 		font-family: inherit;
 		font-size: inherit;
 		padding: 0;
+		/* Start tucked below the card; slides up to its hover position via translateY. */
+		transform: translateY(100%);
+		will-change: transform;
+		transition:
+			transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+			height 0.15s ease,
+			background-color 0.15s ease;
 	}
 
 	.vertical-content {
 		position: relative;
 		z-index: 10;
 		width: 100%;
+		/* Opaque so that when it slides up on hover it masks the bottom of the image,
+		   freeing the bottom strip for the add button without growing the card. */
+		background-color: white;
+		transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 	}
 
 	.vertical-name {
@@ -389,34 +405,28 @@
 		background-color: rgb(228, 94, 94);
 	}
 
-	@media (min-width: 739px) {
+	@media (min-width: 739px) {		
 		.vertical-card-shell:hover .vertical-card {
-			padding-bottom: 22px;
-			margin-bottom: -10px;
-			outline: 2px solid rgb(202, 173, 255);
+			outline-color: rgb(202, 173, 255);
+			margin-bottom: 12px;
+		}
+
+		/* Slide the name/price block up (over the image) to free the bottom strip.
+		   Using transform keeps the card height unchanged, so no neighbour reflow. */
+		.vertical-card-shell:hover .vertical-content {
+			transform: translateY(-30px);
+			margin-top: 12px;
 		}
 
 		.vertical-card-shell:hover .vertical-add-button {
-			display: flex;
+			transform: translateY(0);
 			background-color: rgb(228, 221, 248);
 			cursor: pointer;
-		}
-
-		.vertical-card-shell:hover .vertical-content {
-			background-color: white;
-			margin-top: -14px;
-			margin-bottom: 14px;
 		}
 
 		.vertical-add-button:hover,
 		.vertical-card-shell .vertical-add-button:hover {
 			background-color: rgb(111, 82, 179);
-			height: 38px;
-			padding-bottom: 2px;
-			margin-bottom: -2px;
-			margin-left: -2px;
-			margin-right: -2px;
-			width: calc(100% + 4px);
 			color: white;
 		}
 
@@ -427,11 +437,13 @@
 
 	@media (max-width: 740px) {
 		.vertical-card-shell .vertical-add-button {
-			display: flex;
+			transform: translateY(0);
 			background-color: rgb(228, 221, 248);
 			cursor: pointer;
 		}
 
+		/* No hover on touch: the button is always visible, so reserve the bottom strip
+		   permanently instead of sliding the content up. All cards stay uniform height. */
 		.vertical-card-shell .vertical-card {
 			padding-bottom: 38px;
 			border-bottom: 2px solid rgb(172, 153, 226);

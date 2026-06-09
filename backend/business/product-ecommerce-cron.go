@@ -33,7 +33,7 @@ func RebuildProductsDbHandler(args *core.ExecArgs) core.FuncResponse {
 	core.Log("RebuildProductsDbHandler:: dirty companies", len(dirtyCompanyIDs))
 
 	for _, companyID := range dirtyCompanyIDs {
-		if rebuildErr := maybeRebuildProductsDbFile(companyID); rebuildErr != nil {
+		if rebuildErr := maybeRebuildProductsDbFile(companyID, false); rebuildErr != nil {
 			core.Log("RebuildProductsDbHandler:: rebuild error", "| companyID:", companyID, "| err:", rebuildErr)
 		}
 	}

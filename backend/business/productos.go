@@ -411,65 +411,6 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(response)
 }
 
-func GetProductosCMS(req *core.HandlerArgs) core.HandlerResponse {
-	companyID := req.GetQueryInt("company-id")
-	// core.Log("user::")
-	// core.Print(req.User)
-	if companyID == 0 && req.User != nil {
-		companyID = req.User.CompanyID
-	} else if companyID == 0 {
-		companyID = 1
-	}
-
-	categoriaID := req.GetQueryInt("categoria-id")
-
-	productos := []businessTypes.Product{}
-	categorias := []businessTypes.SharedListRecord{}
-	errGroup := errgroup.Group{}
-
-	errGroup.Go(func() error {
-		query := db.Query(&productos)
-		q1 := db.Table[businessTypes.Product]()
-		query.Select(q1.ID, q1.Name, q1.Description, q1.Price, q1.Discount, q1.FinalPrice, q1.ImageMain, q1.ImageIDs, q1.ImageDescriptions, q1.Stock, q1.CategoryIDs).
-			CompanyID.Equals(companyID).
-			StockStatus.Equals(1)
-		if categoriaID > 0 {
-			query.CategoryIDs.Contains(categoriaID)
-		}
-		err := query.Exec()
-		if err != nil {
-			err = fmt.Errorf("error al obtener los productos (store): %v", err)
-		}
-		return err
-	})
-
-	errGroup.Go(func() error {
-		query := db.Query(&categorias)
-		q1 := db.Table[businessTypes.SharedListRecord]()
-		query.Select(q1.ID, q1.Name, q1.Description).
-			CompanyID.Equals(companyID).
-			ListID.Equals(1).
-			Status.Equals(1)
-		err := query.Exec()
-		if err != nil {
-			err = fmt.Errorf("error al obtener las categorías: %v", err)
-		}
-		return err
-	})
-
-	if err := errGroup.Wait(); err != nil {
-		return req.MakeErr(err)
-	}
-	core.Log("productos obtenidos::", len(productos))
-
-	response := map[string]any{
-		"productos":  productos,
-		"categorias": categorias,
-	}
-
-	return core.MakeResponse(req, &response)
-}
-
 func PostProductoCategoriaImage(req *core.HandlerArgs) core.HandlerResponse {
 	image := cloud.ImageArgs{}
 	err := json.Unmarshal([]byte(*req.Body), &image)

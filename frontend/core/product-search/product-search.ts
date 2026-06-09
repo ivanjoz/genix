@@ -1,7 +1,7 @@
 // ProductSearch: ranks products against a query over their plain-text names. Names (and brand
 // names) come from the CDN snapshot + server delta via ProductEcommerceDataService, so matching is
 // word/character-prefix based — no dictionary, syllables or binary encoding.
-import { ProductEcommerceDataService } from "./productos-delta-service";
+import { getProductEcommerceData, type ProductEcommerceDataService } from "./productos-delta-service";
 import type { IndexedProduct, ProductSearchHit } from "./types";
 import type { IProduct } from "$services/services/productos.svelte";
 
@@ -90,7 +90,7 @@ export class ProductSearch {
 	private updatedInt32 = 0;
 	private latestDebugSnapshot: ProductSearchDebugSnapshot | null = null;
 
-	private readonly data = new ProductEcommerceDataService();
+	private data: ProductEcommerceDataService | null = null;
 	readonly readyPromise: Promise<void>;
 	isLoading = false;
 	isReady = false;
@@ -105,7 +105,8 @@ export class ProductSearch {
 		this.isLoading = true;
 		this.loadError = null;
 		try {
-			await this.data.load();
+			// Consume the single shared catalog instance instead of loading our own.
+			this.data = await getProductEcommerceData();
 			this.buildIndex();
 			this.isReady = true;
 			console.info("[ProductSearch] ready", { products: this.products.length, updated: this.updatedInt32 });
@@ -121,14 +122,14 @@ export class ProductSearch {
 	private buildIndex(): void {
 		this.brandNameByID.clear();
 		this.brandWordsByID.clear();
-		for (const brand of this.data.marcas ?? []) {
+		for (const brand of this.data?.marcas ?? []) {
 			this.brandNameByID.set(brand.ID, brand.Name);
 			this.brandWordsByID.set(brand.ID, toWords(brand.Name));
 		}
 		this.products = [];
 		this.productByID.clear();
 		this.updatedInt32 = 0;
-		for (const product of this.data.productos ?? []) {
+		for (const product of this.data?.productos ?? []) {
 			if (!product || product.ID <= 0) continue;
 			this.updatedInt32 = Math.max(this.updatedInt32, product.upd ?? 0);
 			this.productByID.set(product.ID, product);

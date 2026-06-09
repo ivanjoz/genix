@@ -17,7 +17,7 @@
 	import { doInitServiceWorker } from '$libs/sw-cache';
 	import ImageWorker from '$libs/workers/image-worker?worker';
 	import { onMount } from 'svelte';
-	import { startAgentBridge } from '$core/agent/ws';
+	import { startAgentBridge } from '$core/agent/sse';
 	import './app.css';
 	import { getAccessEntriesForRoute } from './seguridad/perfiles-accesos/access-list-catalog';
 	import './tailwind.css';

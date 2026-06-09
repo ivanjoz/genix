@@ -1,8 +1,5 @@
 import { arrayToMapN } from '$libs/helpers';
-import { GET } from '$libs/http.svelte';
-
-const maxCacheTime = 60 * 5 // 2 segundos
-const productosPromiseMap: Map<string, Promise<any>> = new Map()
+import { getProductEcommerceData } from '$core/product-search/productos-delta-service';
 
 export interface IProductProperty {
   id: number, nm: string, ss: number
@@ -70,105 +67,69 @@ export interface IProductsResult {
   productosByCategoryMap: Map<number, IProduct[]>
 }
 
-export const getProductos = async (categoriasIDs?: number[]): Promise<IProductsResult> => {
-  const apiRoute = `p-productos-cms?categorias=${(categoriasIDs || [0]).join(".")}`
+// True once productosServiceState has been synced from the loaded catalog, so we only rebuild the
+// maps once per shared load (subsequent calls just await the resolved singleton).
+let serviceStateSynced = false;
 
-  if(!productosPromiseMap.has(apiRoute)) {
-    const headers = new Headers()
-    headers.append('Authorization', `Bearer 1`)
-    console.log("Consultando Productos | API:", apiRoute)
+// Populate productosServiceState (lists + lookup maps) from the loaded catalog. The category map is
+// built here from each product's CategoryIDs.
+const syncServiceStateFrom = (service: { productos: IProduct[]; categorias: IProductCategory[] }): void => {
+	productosServiceState.productos = service.productos;
+	productosServiceState.productosMap = arrayToMapN(service.productos || [], 'ID');
+	productosServiceState.categorias = service.categorias;
+	productosServiceState.categoriasMap = arrayToMapN(service.categorias || [], 'ID');
 
-		productosPromiseMap.set(apiRoute, new Promise((resolve, reject) => {
-			GET({ route: apiRoute })
-			.then(res => {
-				console.log("Productos response:", Object.keys(res))
-				console.log(res)
-
-        for(const e of (res.productos||[]) as IProduct[]){
-          e.Image = (e.Images||[])[0] || { n: "" } as IProductoImage
-        }
-
-        res.productosMap = arrayToMapN(res.productos || [], 'ID')
-        res.categoriasMap = arrayToMapN(res.categorias || [], 'ID')
-        res.updated = Math.floor(Date.now() / 1000)
-
-        // Actualizamos el estado global
-        productosServiceState.productos = res.productos
-        productosServiceState.productosMap = res.productosMap
-        productosServiceState.categorias = res.categorias
-        productosServiceState.categoriasMap = res.categoriasMap
-
-        // Construir el mapa de productos por categoría
-        const productosByCategoryMap = new Map<number, IProduct[]>()
-        for (const producto of res.productos || []) {
-          if (producto.CategoryIDs) {
-            for (const categoriaId of producto.CategoryIDs) {
-              if (!productosByCategoryMap.has(categoriaId)) {
-                productosByCategoryMap.set(categoriaId, [])
-              }
-              productosByCategoryMap.get(categoriaId)!.push(producto)
-            }
-          }
-        }
-        productosServiceState.productosByCategoryMap = productosByCategoryMap
-
-        resolve(res)
-      })
-      .catch(err => {
-        reject(err)
-      })
-    }))
-  }
-
-  return await productosPromiseMap.get(apiRoute)
-}
-
-let loadingPromise: Promise<IProductsResult> | null = null;
-
-export const getProductsByCategoryID = async (id: number): Promise<IProduct[]> => {
-	// 1. Si ya lo tenemos en el mapa, lo retornamos inmediatamente
-	const products = productosServiceState.productosByCategoryMap.get(id);
-	if (products) return products;
-
-	// 2. Si no hay productos cargados todavía, iniciamos o esperamos la carga inicial
-	if (productosServiceState.productos.length === 0) {
-		if (!loadingPromise) {
-			loadingPromise = getProductos();
-		}
-
-		try {
-			await loadingPromise;
-		} catch (err) {
-			console.error("Error cargando productos para getProductsByCategoryID:", err);
-			return [];
+	const productosByCategoryMap = new Map<number, IProduct[]>();
+	for (const producto of service.productos || []) {
+		for (const categoriaId of producto.CategoryIDs || []) {
+			let bucket = productosByCategoryMap.get(categoriaId);
+			if (!bucket) {
+				bucket = [];
+				productosByCategoryMap.set(categoriaId, bucket);
+			}
+			bucket.push(producto);
 		}
 	}
+	productosServiceState.productosByCategoryMap = productosByCategoryMap;
+	serviceStateSynced = true;
+};
 
-	// 3. Después de cargar (o si ya había productos pero no el que buscamos), 
-	// buscamos en el mapa actualizado. Si no está aquí, es que no existe.
+// Ensure the single shared catalog is loaded and productosServiceState is populated from it. Every
+// storefront catalog consumer goes through here, so the data is fetched exactly once.
+export const ensureProductosLoaded = async (): Promise<void> => {
+	const service = await getProductEcommerceData();
+	if (!serviceStateSynced) {
+		syncServiceStateFrom(service as unknown as { productos: IProduct[]; categorias: IProductCategory[] });
+	}
+};
+
+export const getProductsByCategoryID = async (id: number): Promise<IProduct[]> => {
+	//const products = productosServiceState.productosByCategoryMap.get(id);
+	//if (products) return products;
+
+	try {
+		await ensureProductosLoaded();
+	} catch (err) {
+		console.error("Error cargando productos para getProductsByCategoryID:", err);
+		return [];
+	}
+
+	console.log("productosServiceState", $state.snapshot(productosServiceState))
+
 	return productosServiceState.productosByCategoryMap.get(id) || [];
 }
 
 export const getCategoryByID = async (id: number): Promise<IProductCategory | undefined> => {
-	// 1. Si ya lo tenemos en el mapa, lo retornamos inmediatamente
 	const category = productosServiceState.categoriasMap.get(id);
 	if (category) return category;
 
-	// 2. Si no hay categorías cargadas todavía, iniciamos o esperamos la carga inicial
-	if (productosServiceState.categorias.length === 0) {
-		if (!loadingPromise) {
-			loadingPromise = getProductos();
-		}
-
-		try {
-			await loadingPromise;
-		} catch (err) {
-			console.error("Error cargando productos para getCategoryByID:", err);
-			return undefined;
-		}
+	try {
+		await ensureProductosLoaded();
+	} catch (err) {
+		console.error("Error cargando productos para getCategoryByID:", err);
+		return undefined;
 	}
 
-	// 3. Después de cargar (o si ya había categorías pero no la que buscamos), 
-	// buscamos en el mapa actualizado. Si no está aquí, es que no existe.
+	// Note: the delta snapshot carries category ID/Name only (no Description).
 	return productosServiceState.categoriasMap.get(id);
 }

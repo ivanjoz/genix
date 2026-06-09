@@ -270,13 +270,17 @@ func main() {
 			AllowCredentials: false,
 		})
 
-		// Local-only websocket bridge so the backend can drive the browser as an agent.
-		// Mounted before CORS because the websocket library handles its own origin checks.
+		// Local-only SSE+POST bridge so the backend can drive the browser as an
+		// agent. The stream carries every server→browser message (page commands
+		// and chat events); /agent/in carries every browser→backend message
+		// (command replies, unsolicited events, chat user messages).
 		mux := http.NewServeMux()
-		mux.HandleFunc("/ws/agent", agent.HandleWebSocket)
-		// /ws/agent-chat is the user↔agent chat channel for the in-app widget.
-		// Local-only — auth lives on the upgrade handler.
-		mux.HandleFunc("/ws/agent-chat", agent.HandleChatWebSocket)
+		// The browser connects to these cross-origin (app served from the dev
+		// proxy, backend on another port), so unlike the old WS upgrade they need
+		// CORS headers. No method prefix on the patterns: that lets the CORS
+		// middleware answer the JSON POST's preflight OPTIONS on /agent/in too.
+		mux.Handle("/agent/stream", corsMiddleware.Handler(http.HandlerFunc(agent.HandleStream)))
+		mux.Handle("/agent/in", corsMiddleware.Handler(http.HandlerFunc(agent.HandleIn)))
 		// HTTP entrypoint for external LLM agents (Claude Code / Gemini): batch
 		// actions in, post-action page snapshot out. Local-only.
 		mux.HandleFunc("POST /agent", agent.HandleAgentHTTP)

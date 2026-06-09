@@ -3,9 +3,12 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
 import type { StandardContent } from '$ecommerce/renderer/section-types';
 import type { ComponentAST, ColorPalette } from '$ecommerce/renderer/renderer-types';
 import { parseHTML } from '$ecommerce/html-ast/parse-html';
-import { collectRoleNodes, isLinkNode, isImageNode } from '$ecommerce/html-ast/editable';
+import { collectRoleNodes, isLinkNode, isImageNode, collectCategoryNodes, getNodeCategoryID, setNodeCategoryID } from '$ecommerce/html-ast/editable';
+import { ensureProductosLoaded, productosServiceState } from '$services/services/productos.svelte';
+import SearchSelect from '$components/form/SearchSelect.svelte';
 import TextBlockEditor from './TextBlockEditor.svelte';
 import ImageBlockEditor from './ImageBlockEditor.svelte';
+    import T from '$components/misc/T.svelte';
 
   // Active palette drives the color swatches inside TextBlockEditor.
   interface Props { palette?: ColorPalette }
@@ -31,6 +34,23 @@ import ImageBlockEditor from './ImageBlockEditor.svelte';
   function setNodeHref(node: ComponentAST, value: string) {
     if (!node.attributes) node.attributes = {};
     node.attributes.href = value;
+  }
+
+  // Category-bound custom components (ProductsByCategory / CategoryDescription) in the section's AST.
+  const categoryNodes = $derived(
+    isHtmlSection ? collectCategoryNodes(section?.content.ast as ComponentAST[] | undefined) : []
+  );
+  // Current selection is taken from the first bound node; all bound nodes share one category.
+  const selectedCategoryID = $derived(categoryNodes.length ? getNodeCategoryID(categoryNodes[0]) : undefined);
+
+  // Load the catalog once so the selector has the full category list to pick from.
+  $effect(() => {
+    if (categoryNodes.length) ensureProductosLoaded();
+  });
+
+  // Apply the picked category to every bound node so the description and product grid update together.
+  function handleCategoryChange(id: number) {
+    for (const node of categoryNodes) setNodeCategoryID(node, id);
   }
 
   function handleContentInput(key: keyof StandardContent, value: any) {
@@ -78,6 +98,27 @@ import ImageBlockEditor from './ImageBlockEditor.svelte';
 
     <div class="editor-groups">
       {#if isHtmlSection}
+        <!-- CATEGORY SELECTOR: shown when the section renders category-bound components -->
+        {#if categoryNodes.length}
+          <div class="editor-group">
+            <h4 class="group-title"><T text="Category|Categoría" /> </h4>
+            <div class="fields-list">
+              <div class="field-item">
+                <SearchSelect
+                  keyId="ID"
+                  keyName="Name"
+                  options={productosServiceState.categorias}
+                  selected={selectedCategoryID}
+                  onChange={(e) => e && handleCategoryChange(e.ID)}
+                  noStyle
+                  css="w-full bg-[#0000003b] rounded-[8px] border border-[#99a4ce5c]"
+                  inputCss="text-sm px-10 text-[#f1f5f9]"
+                  optionsCss="w-full text-sm text-[#1e293b]"
+                />
+              </div>
+            </div>
+          </div>
+        {/if}
         <!-- HTML SECTION: editable role-tagged nodes from the parsed AST -->
         <div class="editor-group">
           <h4 class="group-title">Content</h4>

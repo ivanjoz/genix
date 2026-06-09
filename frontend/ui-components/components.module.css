@@ -358,3 +358,10 @@ body:global(.dark) .card_image_1.card_input:hover {
 .input:global(.no-border) .input_div {
   border: none;
 }
+/* `noStyle`: drop all built-in input decoration so the consumer can fully restyle via css/inputCss. */
+.input:global(.no-style) .input_div {
+  background: none;
+  box-shadow: none;
+  outline: none;
+  border: none;
+}

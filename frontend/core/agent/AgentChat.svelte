@@ -4,19 +4,24 @@
   // message history. The textarea stays in the header at the top of the
   // visual chat layout; the floating panel only renders the history list.
   //
-  // WS connection (`/ws/agent-chat`) is opened lazily on first user
-  // interaction so the cost is paid only by users who actually engage. The
-  // page-driving WS (`/ws/agent` in ws.ts) is a separate connection that
-  // shares the same TabID — that's how the backend will (in step 5) route
-  // tool calls to the same tab the chat is mounted in.
+  // The widget has no connection of its own: it POSTs user messages to
+  // `/agent/in` and subscribes (via sse.ts `subscribeAgentChat`) to the shared
+  // per-tab SSE stream the page-driving bridge already owns. That shared TabID
+  // is how the backend routes both tool calls and chat replies to this tab.
   //
   // History persistence is local-only via Dexie (chat_history.idb.ts). The
   // backend persists its own copy in ScyllaDB; this cache exists so the
   // widget can re-render past messages instantly on open.
 
-  import { onDestroy, tick } from 'svelte';
-  import { Env } from '$core/env';
-  import { agentWsBase, getAgentTabID } from './ws';
+  import { tick } from 'svelte';
+  import {
+    getAgentTabID,
+    postChatMessage,
+    subscribeAgentChat,
+    isStreamConnected,
+    startAgentBridge,
+    type ChatStreamEvent,
+  } from './sse';
   import { getSelectedAgentModelHash } from './models.svelte';
   import {
     AGENT_ROLE_AGENT,
@@ -29,11 +34,6 @@
   } from './chat_history.idb';
 
   // --- Wire types (mirror backend/agent/chat_ws.go) ---------------------------
-
-  interface ChatEnvelope {
-    Type: string;
-    Payload?: unknown;
-  }
 
   interface AgentReplyPayload {
     Message: string;
@@ -52,7 +52,6 @@
     MaxSteps: number;
   }
 
-  const CHAT_TYPE_USER_MESSAGE = 'userMessage';
   const CHAT_TYPE_AGENT_REPLY = 'agentReply';
   const CHAT_TYPE_AGENT_ERROR = 'agentError';
   const CHAT_TYPE_AGENT_STATUS = 'agentStatus';
@@ -64,8 +63,6 @@
   let isOpen = $state(false);
   let inputText = $state('');
   let messages = $state<AgentChatRow[]>([]);
-  let socket = $state<WebSocket | null>(null);
-  let wsReady = $state(false);
   let isBusy = $state(false);
   let statusLabel = $state(''); // transient progress text shown while a turn is in flight
   let headerStatusItems = $state<{ id: number; label: string }[]>([]);
@@ -90,18 +87,6 @@
     }
     const logger = level === 'warn' ? console.warn : console.info;
     logger(`[AgentChat] ${message}`, detail || '');
-  };
-
-  const readUserID = (): number => {
-    if (typeof window === 'undefined') { return 0; }
-    try {
-      const raw = localStorage.getItem(Env.appId + 'UserInfo');
-      if (!raw) { return 0; }
-      const info = JSON.parse(raw) as { ID?: number };
-      return Number(info?.ID) || 0;
-    } catch {
-      return 0;
-    }
   };
 
   const scrollToBottom = async () => {
@@ -130,51 +115,10 @@
     }
   };
 
-  const ensureWsOpen = () => {
-    if (socket && socket.readyState <= WebSocket.OPEN) { return; }
-    const tab = getAgentTabID();
-    const company = Env.getCompanyID() || 0;
-    const user = readUserID();
-    // Seed the backend with the current SPA path so the first get_page
-    // status label can name the route. Subsequent navigations the agent
-    // performs update this server-side.
-    const path = encodeURIComponent(window.location.pathname || '');
-    const url = `${agentWsBase()}/ws/agent-chat?tab=${encodeURIComponent(tab)}&company=${company}&user=${user}&path=${path}`;
-
-    chatLog('info', 'connecting chat ws', { url, tab, company, user, apiMain: Env.API_ROUTES.MAIN });
-    const ws = new WebSocket(url);
-    socket = ws;
-    wsReady = false;
-
-    ws.addEventListener('open', () => {
-      if (socket !== ws) { return; }
-      wsReady = true;
-      chatLog('info', 'chat ws open', { url, tab });
-    });
-    ws.addEventListener('message', (event) => {
-      void handleWsMessage(event.data);
-    });
-    ws.addEventListener('close', () => {
-      if (socket !== ws) { return; }
-      socket = null;
-      wsReady = false;
-      isBusy = false;
-      chatLog('warn', 'chat ws closed', { url, tab });
-    });
-    ws.addEventListener('error', (err) => {
-      chatLog('warn', 'chat ws error', { url, error: String(err) });
-      try { ws.close(); } catch { /* ignore */ }
-    });
-  };
-
-  const handleWsMessage = async (raw: unknown) => {
-    let env: ChatEnvelope;
-    try {
-      env = JSON.parse(typeof raw === 'string' ? raw : '');
-    } catch {
-      chatLog('warn', 'bad chat message json', { rawType: typeof raw });
-      return;
-    }
+  // handleChatEvent processes one agent event pushed down the shared SSE
+  // stream (subscribed in the $effect below). The page-driving bridge in
+  // sse.ts owns the connection; the widget only consumes chat-typed events.
+  const handleChatEvent = async (env: ChatStreamEvent) => {
     chatLog('info', 'chat message received', { type: env.Type });
     switch (env.Type) {
       case CHAT_TYPE_AGENT_REPLY: {
@@ -256,9 +200,9 @@
   const sendMessage = async () => {
     const text = inputText.trim();
     if (!text || isBusy) { return; }
-    ensureWsOpen();
-    // The user can hit send before the socket finishes its open handshake;
-    // queue the optimistic row anyway and wait briefly for `wsReady`.
+    // The shared page bridge owns the stream; make sure it's started so the
+    // turn's reply has a return path back to this tab.
+    startAgentBridge();
     const tab = getAgentTabID();
     const optimistic: AgentChatRow = {
       tabID: tab,
@@ -275,15 +219,14 @@
     pushHeaderStatus('Pensando...');
     await scrollToBottom();
 
-    const waitOpen = async () => {
-      const start = Date.now();
-      while (!wsReady && Date.now() - start < 5_000) {
-        await new Promise((r) => setTimeout(r, 50));
-      }
-    };
-    await waitOpen();
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      chatLog('warn', 'send failed: chat ws not open', { readyState: socket?.readyState });
+    // The stream may still be connecting when the user hits send; wait briefly
+    // so the backend can stamp company/user/path from our live connection.
+    const start = Date.now();
+    while (!isStreamConnected() && Date.now() - start < 5_000) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    if (!isStreamConnected()) {
+      chatLog('warn', 'send failed: agent stream not connected');
       isBusy = false;
       headerStatusItems = [];
       if (optimistic.id) { await updateAgentChatMessage(optimistic.id, { pending: false }); }
@@ -297,14 +240,7 @@
       return;
     }
     chatLog('info', 'sending user message', { tab, bytes: text.length, modelHash: getSelectedAgentModelHash() });
-    socket.send(JSON.stringify({
-      Type: CHAT_TYPE_USER_MESSAGE,
-      Payload: {
-        Message: text,
-        ModelHash: getSelectedAgentModelHash(),
-        Timestamp: optimistic.timestamp,
-      },
-    } satisfies ChatEnvelope));
+    await postChatMessage(text, getSelectedAgentModelHash(), optimistic.timestamp ?? Date.now());
   };
 
   // --- Open / close lifecycle -------------------------------------------------
@@ -313,7 +249,7 @@
     if (isOpen) { return; }
     isOpen = true;
     void ensureHistoryLoaded();
-    ensureWsOpen();
+    startAgentBridge();
     void scrollToBottom();
   };
 
@@ -344,12 +280,8 @@
     };
   });
 
-  onDestroy(() => {
-    if (socket) {
-      try { socket.close(); } catch { /* ignore */ }
-      socket = null;
-    }
-  });
+  // Subscribe to chat events on the shared SSE stream for this component's life.
+  $effect(() => subscribeAgentChat((env) => { void handleChatEvent(env); }));
 
   const onTextareaKey = (event: KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {

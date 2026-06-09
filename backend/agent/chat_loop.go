@@ -16,7 +16,7 @@ import (
 // RunTurn is the per-user-message entry point of the agentic loop. The model
 // is offered the page-driving tools (`get_page`, `get_menu`, `navigate`,
 // `invoke_batch`) plus the terminator `finish`. Each iteration is one
-// OpenRouter call; tool calls dispatch through the existing /ws/agent bridge
+// OpenRouter call; tool calls dispatch through the SSE+POST page bridge
 // and feed their result back as a `tool` message on the next iteration. The
 // loop terminates when the model calls `finish` or hits the iteration cap.
 

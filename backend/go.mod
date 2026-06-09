@@ -69,7 +69,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.53.1
 	github.com/aws/smithy-go v1.20.1
 	github.com/bytedance/sonic v1.15.0
-	github.com/coder/websocket v1.8.14
 	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
 	github.com/kr/pretty v0.3.1

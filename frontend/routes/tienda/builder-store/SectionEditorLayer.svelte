@@ -38,6 +38,17 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
     editorStore.select(null);
     onClose();
   }
+
+  function handleSave() {
+    // TODO: persist section changes
+  }
+
+  function handleDelete() {
+    if (editorStore.selectedId) {
+      editorStore.removeSection(editorStore.selectedId);
+      onClose();
+    }
+  }
 </script>
 
 <div class="editor-layer">
@@ -57,13 +68,17 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
           </button>
         {/each}
       </div>
-      
-      {#if editorStore.selectedId}
-        <button class="close-btn" onclick={handleClose} title="Close Editor" aria-label="Close the section editor">
-          ✕
-        </button>
-      {/if}
     </div>
+
+    {#if editorStore.selectedId}
+      <div class="layer-actions">
+        <button class="action-btn save-btn" onclick={handleSave} title={tr('Save|Guardar', Core.languaje)}>
+          <T text="Save|Guardar" />
+        </button>
+        <button class="action-btn delete-btn" onclick={handleDelete} title={tr('Delete|Eliminar', Core.languaje)} aria-label="Delete the section"><i class="icon-trash"></i></button>
+        <button class="action-btn close-btn icon-btn" onclick={handleClose} title={tr('Close|Cerrar', Core.languaje)} aria-label="Close the section editor"><i class="icon-cancel"></i></button>
+      </div>
+    {/if}
 
     <div class="layer-content">
       {#if activeTabId === 'editor'}
@@ -172,18 +187,60 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
     line-height: 1;
   }
 
-  .close-btn {
-    background: transparent;
-    border: none;
-    color: #94a3b8;
-    font-size: 18px;
-    cursor: pointer;
+  .layer-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
     padding: 8px 16px;
-    align-self: flex-start;
+    flex-shrink: 0;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  .action-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .save-btn {
+    background: #3b82f6;
+    color: white;
+  }
+
+  .save-btn:hover {
+    background: #2563eb;
+  }
+
+  .delete-btn {
+    background: #7f1d1d;
+    color: #fecaca;
+  }
+
+  .delete-btn:hover {
+    background: #991b1b;
+    color: white;
+  }
+
+  .close-btn {
+    background: #334155;
+    color: #cbd5e1;
   }
 
   .close-btn:hover {
+    background: #475569;
     color: white;
+  }
+
+  .icon-btn {
+    padding: 6px 12px;
+    font-size: 15px;
+    line-height: 1;
   }
 
   .layer-content {

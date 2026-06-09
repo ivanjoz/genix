@@ -27,7 +27,7 @@
 
 <div class={css}>
 	{#if categoria}
-		{categoria.Descripcion}
+		{categoria.Description}
 	{:else}
 		Loading...
 	{/if}

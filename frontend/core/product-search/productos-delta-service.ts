@@ -56,3 +56,32 @@ export class ProductEcommerceDataService extends GetHandler {
 		await this.fetchOnline();
 	}
 }
+
+// Single shared catalog instance. The whole storefront (ProductSearch, category grids, the
+// product/category lookups in productos.svelte.ts) goes through getProductEcommerceData(), so the
+// catalog is fetched exactly once and every caller awaits the same promise.
+let sharedDataInstance: ProductEcommerceDataService | null = null;
+let sharedDataPromise: Promise<ProductEcommerceDataService> | null = null;
+
+// Lazily construct and load the shared instance, memoizing the promise. On failure the promise is
+// cleared so a later call can retry the load.
+export const getProductEcommerceData = (): Promise<ProductEcommerceDataService> => {
+	if (sharedDataPromise) return sharedDataPromise;
+
+	const instance = new ProductEcommerceDataService();
+	sharedDataPromise = instance
+		.load()
+		.then(() => {
+			sharedDataInstance = instance;
+			return instance;
+		})
+		.catch((loadError) => {
+			sharedDataPromise = null;
+			throw loadError;
+		});
+
+	return sharedDataPromise;
+};
+
+// Sync accessor for the already-loaded instance; null until getProductEcommerceData() resolves.
+export const getLoadedProductEcommerceData = (): ProductEcommerceDataService | null => sharedDataInstance;

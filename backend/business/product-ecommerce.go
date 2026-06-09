@@ -60,8 +60,11 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 	categoriasWatermark := req.GetQueryInt("categorias")
 
 	// Best-effort lazy rebuild: refresh the snapshot file when source data advanced past the last
-	// build. Never fail the delta response if the rebuild errors; the cron is the durable path.
-	if rebuildErr := maybeRebuildProductsDbFile(companyID); rebuildErr != nil {
+	// build. The client sets missingFile=1 when the CDN file was absent, which forces a rebuild
+	// even if the stamped watermarks say the build is current. Never fail the delta response if
+	// the rebuild errors; the cron is the durable path.
+	forceRebuild := req.GetQueryInt("missingFile") > 0
+	if rebuildErr := maybeRebuildProductsDbFile(companyID, forceRebuild); rebuildErr != nil {
 		core.Log("GetProductsEcommerce:: lazy rebuild skipped", "| companyID:", companyID, "| err:", rebuildErr)
 	}
 
@@ -75,7 +78,7 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 	// also means price-only edits reach already-synced clients.
 	errGroup.Go(func() error {
 		query := db.Query(&productos)
-		query.Select(query.Name, query.CategoryIDs, query.BrandID, query.Price, query.FinalPrice, query.ImageMain, query.Updated, query.Status).
+		query.Select(query.ID, query.Name, query.CategoryIDs, query.BrandID, query.Price, query.FinalPrice, query.ImageMain, query.Updated, query.Status).
 			CompanyID.Equals(companyID)
 		if productosWatermark > 0 {
 			query.Updated.GreaterThan(productosWatermark)
@@ -268,15 +271,17 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 
 // maybeRebuildProductsDbFile rebuilds + reuploads the snapshot only when any source group watermark
 // (productos/marcas/categorías) advanced beyond the watermarks stamped at the last build.
-func maybeRebuildProductsDbFile(companyID int32) error {
+func maybeRebuildProductsDbFile(companyID int32, force bool) error {
 	sourceProductos := latestGroupWatermark(cacheGroupProductos, companyID)
 	sourceMarcas := latestGroupWatermark(cacheGroupMarcas, companyID)
 	sourceCategorias := latestGroupWatermark(cacheGroupCategorias, companyID)
 
 	builtProductos, builtMarcas, builtCategorias, hasBuilt := loadBuiltWatermarks(companyID)
 
-	// Rebuild on first build, or whenever any source watermark moved forward.
-	needsRebuild := !hasBuilt ||
+	// Rebuild when forced (client reported the CDN file missing), on first build, or whenever any
+	// source watermark moved forward.
+	needsRebuild := force ||
+		!hasBuilt ||
 		sourceProductos > builtProductos ||
 		sourceMarcas > builtMarcas ||
 		sourceCategorias > builtCategorias

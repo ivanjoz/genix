@@ -2,7 +2,7 @@ package llm
 
 // System prompt + tool schemas for the in-app agent loop. The loop wires the
 // page-driving tools (`get_page`, `get_menu`, `navigate`, `invoke_batch`)
-// into the existing /ws/agent bridge so the model can both *see* the current
+// into the SSE+POST page bridge so the model can both *see* the current
 // page and *act* on it. The model still has to call `finish` to end a turn —
 // any other tool just collects more information or mutates the page and
 // then the loop re-asks the model what to do next.

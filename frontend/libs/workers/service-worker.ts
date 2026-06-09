@@ -35,6 +35,9 @@ export type serviceHttpProps = {
   // the full list from the API. See firstSyncFromSnapshotFile / parsePsvResponse.
   fileRoute?: string
   fileSchema?: Record<string, string[]>
+  // Set by the cache when the snapshot file fetch fails (missing/unparseable); the full API
+  // fallback then carries `missingFile=1` so the backend can (re)build the snapshot on demand.
+  fileMissing?: boolean
   fields?: string[]
   keyFilterIfEmpty?: string
   keyForUpdated?: string

@@ -3,6 +3,15 @@
 Status: **draft for review** — open questions at the bottom. Do not implement
 until the user signs off on each section.
 
+> **Transport note (superseded):** this doc describes the original WebSocket
+> design (`/ws/agent`, `/ws/agent-chat`). The transport has since been replaced
+> by SSE + POST — a single per-tab SSE stream (`GET /agent/stream`) carries all
+> server→browser traffic (page commands *and* chat events), and `POST /agent/in`
+> carries all browser→backend traffic (command replies, `ready`/`pageContent`,
+> and chat `userMessage`). See [`SSE_REFACTOR_PLAN.md`](./SSE_REFACTOR_PLAN.md).
+> The `AgentSession` / agentic-loop logic below is unchanged; only the wire
+> transport differs.
+
 ## 1. Goal
 
 Today `backend/agent/` is a transport bridge: external tools (Claude Code,

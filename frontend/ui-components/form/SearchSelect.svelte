@@ -29,6 +29,8 @@ import type { Snippet } from 'svelte';
     clearOnSelect?: boolean;
     avoidIDs?: (number|string)[];
     inputCss?: string;
+    /** Strip the built-in input decoration (bg/shadow/outline/border) so `css`/`inputCss` can fully restyle it. */
+    noStyle?: boolean;
     icon?: string;
     showLoading?: boolean;
     id?: number;
@@ -55,6 +57,7 @@ import type { Snippet } from 'svelte';
     clearOnSelect = false,
     avoidIDs = [],
     inputCss = "",
+    noStyle = false,
     icon,
     showLoading = false,
     keyId,
@@ -281,7 +284,7 @@ import type { Snippet } from 'svelte';
   }
 
   let cN = $derived(
-    `${s1.input} p-rel${css ? ` ${css}` : ""}${!label ? " no-label" : ""}${useStyle ? ` use-style-${useStyle}` : ""}`,
+    `${s1.input} p-rel${css ? ` ${css}` : ""}${!label ? " no-label" : ""}${noStyle ? " no-style" : ""}${useStyle ? ` use-style-${useStyle}` : ""}`,
   )
 
   const arrowDirectionClass = $derived(show ? "arrow-up is-open" : "arrow-down");
