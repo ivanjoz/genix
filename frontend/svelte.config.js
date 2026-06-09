@@ -63,8 +63,8 @@ const config = {
 		},
 		alias: {
 			$domain: path.resolve('./domain-components'),
-			$ecommerce: path.resolve('./ecommerce'),
-			$stores: path.resolve('./ecommerce/stores'),
+			$ecommerce: path.resolve('./webpage'),
+			$stores: path.resolve('./webpage/stores'),
 			$routes: path.resolve('./routes'),
 			$components: path.resolve('./ui-components'),
 			$core: path.resolve('./core'),

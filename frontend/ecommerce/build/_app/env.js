@@ -1,1 +1,0 @@
-export const env={"PUBLIC_ENDPOINTS":"[{\"name\":\"Principal (CO)\",\"route\":\"https://genix-dev-api-2.un.pe/\"},{\"name\":\"HomeLab (PE)\",\"route\":\"https://genix-home-api.un.pe/\"}]","PUBLIC_FRONTEND_CDN":"https://pub-57d23cc56c5a402aaa1957c87f87e3e2.r2.dev","PUBLIC_LAMBDA_URL":"https://genix-dev-api-1.un.pe/"}

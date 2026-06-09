@@ -58,7 +58,7 @@ const serviceWorkerConfig: BuildOptions = {
           const rest = parts.slice(1).join('/');
           const baseDir = {
     '$core': 'core',
-    '$ecommerce': 'ecommerce',
+    '$ecommerce': 'webpage',
     '$routes': 'routes',
     '$domain': 'domain-components',
     '$components': 'ui-components',
@@ -77,9 +77,8 @@ const serviceWorkerConfig: BuildOptions = {
             possiblePaths.push(path.join(baseDir, rest));
           } else if (alias === '$components') {
             possiblePaths.push(path.join(baseDir, rest));
-            // pkg-components/ecommerce was likely merged into ui-components or moved to ecommerce
-            // For now, check both possible locations if they still exist
-            possiblePaths.push(path.join('ecommerce', 'components', rest));
+            // $components also resolves the webpage app's local components dir.
+            possiblePaths.push(path.join('webpage', 'components', rest));
           } else {
             possiblePaths.push(path.join(baseDir, rest));
           }
@@ -219,7 +218,7 @@ export default defineConfig({
                   if (id.includes('/configuracion/') || id.includes('/seguridad/') || id.includes('/negocio/') || id.includes('/comercial/') || id.includes('/logistica/') || id.includes('/finanzas/') || id.includes('/contabilidad/') || id.includes('/cms/')) {
                     return 'admin';
                   }
-                  if (id.includes('/ecommerce/') || id.includes('/store/') || id.includes('/webpage/')) {
+                  if (id.includes('/ecommerce/') || id.includes('/store/') || id.includes('/webpage/') || id.includes('/webpage-builder/')) {
                     return 'store';
                   }
                   // Shared code goes to common chunk

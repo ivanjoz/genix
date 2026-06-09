@@ -5,7 +5,7 @@ const MAIN_PORT = 3570;
 const STORE_PORT = 3571;
 const PROXY_PORT = 3572;
 
-// Parse only the pathname so query strings like /store?p=... still route to Store.
+// Parse only the pathname so query strings like /webpage?p=... still route to Store.
 const getRequestPathname = (requestUrl = '/') => {
   try {
     return new URL(requestUrl, 'http://localhost').pathname;
@@ -14,10 +14,10 @@ const getRequestPathname = (requestUrl = '/') => {
   }
 };
 
-// Match all Store entry points: /store, /store/, and any nested path under /store.
+// Match all Store entry points: /webpage, /webpage/, and any nested path under /webpage.
 const isStoreRequest = (requestUrl = '/') => {
   const requestPathname = getRequestPathname(requestUrl);
-  return requestPathname === '/store' || requestPathname.startsWith('/store/');
+  return requestPathname === '/webpage' || requestPathname.startsWith('/webpage/');
 };
 
 // Create proxy instances for each target
@@ -117,7 +117,7 @@ server.listen(PROXY_PORT, () => {
   console.log('║           🚀 Development Proxy Server Running               ║');
   console.log('╚════════════════════════════════════════════════════════════╝');
   console.log(`\n  📦 Main (Admin):    http://localhost:${PROXY_PORT}/`);
-  console.log(`  🛒 Store:          http://localhost:${PROXY_PORT}/store`);
+  console.log(`  🛒 Store:          http://localhost:${PROXY_PORT}/webpage`);
   console.log(`\n  🔧 Main Target:    http://localhost:${MAIN_PORT}`);
   console.log(`  🔧 Store Target:   http://localhost:${STORE_PORT}`);
   console.log('\n  Proxying HTTP requests and WebSocket connections...\n');

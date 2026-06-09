@@ -33,7 +33,7 @@ const main = async () => {
 
   // Start store app
   console.log('🛒 Starting store app...');
-  const storeApp = await startApp('store', 'dev', 'ecommerce');
+  const storeApp = await startApp('store', 'dev', 'webpage');
 
   // Wait a bit
   await new Promise(resolve => setTimeout(resolve, 2000));
@@ -48,7 +48,7 @@ const main = async () => {
 
   console.log('✅ All services started successfully!');
   console.log('📋 Main (Admin): http://localhost:3572');
-  console.log('🛒 Store: http://localhost:3572/store');
+  console.log('🛒 Store: http://localhost:3572/webpage');
   console.log('\n💡 Tips:');
   console.log('   - Main app runs internally on port 3570');
   console.log('   - Store app runs internally on port 3571');

@@ -15,7 +15,7 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"build": "bun scripts/build-all.js",
 		"build:main": "vite build",
-		"build:store": "cd ecommerce && bun run build",
+		"build:store": "cd webpage && bun run build",
 		"publish": "bun run build && bun postbuild.js --publish",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",

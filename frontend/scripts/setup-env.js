@@ -22,7 +22,7 @@ export const setupEnv = () => {
       console.log(envContent)
 
       fs.writeFileSync('.env', envContent);
-      fs.writeFileSync(path.join('ecommerce', '.env'), envContent);
+      fs.writeFileSync(path.join('webpage', '.env'), envContent);
       console.log('✅ .env files created successfully');
       return true;
     } else {
