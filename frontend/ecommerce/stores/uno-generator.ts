@@ -54,7 +54,7 @@ function collectAstTokens(node: ComponentAST, out: Set<string>): void {
 
 /**
  * Collect the runtime class tokens for a set of sections: the slot-based
- * `section.css`, the parsed HTML section AST (`content.ast`, where agent classes
+ * `section.css`, the parsed HTML section AST (`section.ast`, where agent classes
  * live), and any `content.textLines`.
  */
 export function collectTokens(sections: SectionData[]): Set<string> {
@@ -69,10 +69,8 @@ export function collectTokens(sections: SectionData[]): Set<string> {
 		}
 
 		// HTML section AST — where agent-authored classes live.
-		const ast = section.content?.ast as ComponentAST[] | ComponentAST | undefined;
-		if (ast) {
-			const nodes = Array.isArray(ast) ? ast : [ast];
-			for (const node of nodes) collectAstTokens(node, tokens);
+		if (section.ast) {
+			for (const node of section.ast) collectAstTokens(node, tokens);
 		}
 
 		// Standalone text lines on the flat content schema.
@@ -98,5 +96,16 @@ export async function generateCss(tokens: Set<string> | string[]): Promise<strin
 	if (set.size === 0) return '';
 	const uno = await getGenerator();
 	const { css } = await uno.generate(set);
-	return css;
+	if (!css) return '';
+
+	// Scope every runtime utility under a dedicated cascade layer (`ec-runtime`,
+	// declared before `utilities` in routes/tailwind.css). Without this, the
+	// runtime <style> is injected at the END of <head>, so any base utility it
+	// re-emits (e.g. `grid`, `p-8`) would win a same-specificity tie against
+	// build-time Tailwind's `md:*` variants purely by source order — collapsing
+	// responsive layouts like ProductsByCategory's grid to their mobile form.
+	// With the layer, when a class is emitted by BOTH engines the build copy
+	// (correct base->variant ordering) governs, while runtime-only classes
+	// (agent/editor authored, absent from source) still apply normally.
+	return `@layer ec-runtime {\n${css}\n}`;
 }

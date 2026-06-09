@@ -1,16 +1,16 @@
-import type { SectionTemplate } from '../../renderer/renderer-types';
+import type { SectionData } from '../../renderer/section-types';
 
 /**
  * HTML-based category showcase. Demonstrates custom components inside the HTML
  * (CategoryDescription + ProductsByCategory) alongside native markup, with
  * attribute props coerced via the component schemas.
  */
-export const HtmlCategoryShowcase: SectionTemplate = {
+export const HtmlCategoryShowcase: SectionData = {
 	id: 'html-category-showcase-v1',
 	name: 'Category Showcase (HTML)',
 	category: 'products',
 	description: 'A category heading and description followed by a grid of its products.',
-	HTML: `
+	html: `
 		<section background-color="2" class="py-16 px-6">
 			<div class="max-w-7xl mx-auto">
 				<h2 data-role="title" color="9" class="text-3xl font-bold text-center mb-3">

@@ -15,14 +15,9 @@
 
 <script lang="ts">
   import ProductCard from '$ecommerce/components/ProductCard.svelte';
-    import type { SectionSchema, StandardContent } from '$ecommerce/renderer/section-types';
+    import type { SectionSchema, SectionProps } from '$ecommerce/renderer/section-types';
 
-  interface Props {
-    content: StandardContent;
-    css: Record<string, string>;
-  }
-
-  let { content, css }: Props = $props();
+  let { content = {}, css = {} }: SectionProps = $props();
 
   const products = $derived((content.productIDs || []).slice(0, content.limit || 8));
 </script>

@@ -21,14 +21,9 @@ import type { SectionSchema } from '$ecommerce/renderer/section-types';
 </script>
 
 <script lang="ts">
-import type { StandardContent } from '$ecommerce/renderer/section-types';
+import type { SectionProps } from '$ecommerce/renderer/section-types';
 
-  interface Props {
-    content: StandardContent;
-    css: Record<string, string>;
-  }
-
-  let { content, css }: Props = $props();
+  let { content = {}, css = {} }: SectionProps = $props();
 </script>
 
 <section class="relative py-24 px-6 overflow-hidden bg-slate-900 text-white min-h-[60vh] flex items-center {css.container || ''}">

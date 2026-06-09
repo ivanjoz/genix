@@ -1,5 +1,11 @@
 import { SectionRegistry } from '../templates/registry'; // Note: This will be generated in Step 3/4
 import type { SectionData, SectionSchema } from '../renderer/section-types';
+import { sectionTemplates } from '../ecommerce-templates/templates';
+import { parseHTML } from '../html-ast/parse-html';
+
+// id -> HTML plantilla lookup. HTML templates are an authoring source: their HTML is
+// parsed to an AST once at add time and stored as `content.ast` (the canonical model).
+const htmlTemplatesById = new Map(sectionTemplates.map(t => [t.id, t]));
 
 class EditorStore {
   // The current list of sections on the page
@@ -12,8 +18,8 @@ class EditorStore {
   activeSchema = $derived.by(() => {
     if (!this.selectedId) return null;
     const section = this.sections.find(s => s.id === this.selectedId);
-    if (!section) return null;
-    
+    if (!section?.type) return null;
+
     // We get the schema from the registry based on the section type
     // If the registry isn't generated yet or doesn't have it, we return a fallback
     return SectionRegistry?.[section.type]?.schema || null;
@@ -31,18 +37,33 @@ class EditorStore {
   updateContent(id: string, key: string, value: any) {
     const section = this.sections.find(s => s.id === id);
     if (section) {
-      section.content[key] = value;
+      (section.content ??= {})[key] = value;
     }
   }
 
   updateCss(id: string, slot: string, classes: string) {
     const section = this.sections.find(s => s.id === id);
     if (section) {
-      section.css[slot] = classes;
+      (section.css ??= {})[slot] = classes;
     }
   }
 
   addSection(type: string, index?: number) {
+    // HTML plantilla: parse its HTML to an AST once and store it as the editable model.
+    const htmlTemplate = htmlTemplatesById.get(type);
+    if (htmlTemplate) {
+      const newSection: SectionData = {
+        id: crypto.randomUUID(),
+        type: 'HtmlSection',
+        category: htmlTemplate.category,
+        ast: parseHTML(htmlTemplate.html ?? ''),
+        css: {}
+      };
+      if (typeof index === 'number') this.sections.splice(index, 0, newSection);
+      else this.sections.push(newSection);
+      return;
+    }
+
     const schema = SectionRegistry?.[type]?.schema;
     if (!schema) return;
 

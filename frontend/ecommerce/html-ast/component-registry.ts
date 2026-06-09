@@ -8,12 +8,16 @@ import ProductsByCategory from '$ecommerce/ecommerce-components/ProductsByCatego
 import CategoryDescription from '$ecommerce/ecommerce-components/ecommerce-attributes/CategoryDescription.svelte';
 import ProductCard from '$ecommerce/components/ProductCard.svelte';
 import ImageEffect from '$ecommerce/components/ImageEffect.svelte';
+import EcommerceSlider from '$ecommerce/components/EcommerceSlider.svelte';
+import EcommerceTabs from '$ecommerce/components/EcommerceTabs.svelte';
 
 export const astComponentRegistry: Record<string, Component<any>> = {
 	ProductsByCategory,
 	CategoryDescription,
 	ProductCard,
 	ImageEffect,
+	Slider: EcommerceSlider,
+	TabbedLayer: EcommerceTabs,
 };
 
 export function isCustomComponentTag(tagName: string): boolean {

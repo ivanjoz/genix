@@ -5,17 +5,22 @@
 A section template is a reusable component definition that combines structure, content, and e-commerce functionality.
 
 ```typescript
-import type { SectionTemplate } from './types';
+import type { SectionData } from '../../renderer/section-types';
 
-export const MySection: SectionTemplate = {
+export const MySection: SectionData = {
     id: 'my-section-v1',
     name: 'My Section',
     category: 'products',
     description: 'Description of what this section does',
-    ast: { /* ComponentAST structure */ },
+    html: `<!-- raw HTML with native tags + custom component tags -->`,
     presets: [ /* Optional presets */ ]
 };
 ```
+
+A template is just a `SectionData` (the single section interface) used in its authoring
+role. Author the markup as the `html` string — when the template is added it is parsed once
+into `ast` (a `ComponentAST[]`), which becomes the canonical, editable model the
+renderer/editor/CSS all read. Don't hand-author `ast`.
 
 ## Template Structure
 
@@ -25,7 +30,7 @@ export const MySection: SectionTemplate = {
 - **name**: Display name for the UI
 - **category**: One of: `hero`, `products`, `categories`, `testimonials`, `features`, `cta`, `footer`, `header`, `gallery`, `text`
 - **description**: Brief explanation of the section's purpose
-- **ast**: The ComponentAST structure defining the section
+- **html**: The raw HTML source defining the section (parsed to `ast` on add)
 
 ### Optional Properties
 
@@ -157,50 +162,26 @@ presets: [
 ## Complete Example
 
 ```typescript
-import type { SectionTemplate } from './types';
+import type { SectionData } from '../../renderer/section-types';
 
-export const ProductShowcase: SectionTemplate = {
+export const ProductShowcase: SectionData = {
     id: 'product-showcase-v1',
     name: 'Product Showcase',
     category: 'products',
     description: 'Featured products with title and optional category filter',
-    
-    ast: {
-        tagName: 'section',
-        css: 'py-[__v1__] px-4 bg-white',
-        variables: [
-            { key: '__v1__', type: 'padding', defaultValue: '80px', label: 'Padding', min: 40, max: 160 }
-        ],
-        children: [
-            {
-                tagName: 'div',
-                css: 'max-w-7xl mx-auto',
-                children: [
-                    {
-                        tagName: 'ProductGrid',
-                        title: 'Featured Products',
-                        productIDs: [1, 2, 3, 4, 5, 6, 7, 8],
-                        limit: 8,
-                        iconImagen: '/icons/star.svg',
-                        css: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'
-                    }
-                ]
-            }
-        ]
-    },
-    
-    presets: [
-        {
-            id: 'small',
-            name: 'Compact',
-            variables: { '__v1__': '48px' }
-        },
-        {
-            id: 'large',
-            name: 'Spacious',
-            variables: { '__v1__': '120px' }
-        }
-    ]
+    // Author the markup as HTML. `data-role` marks editable nodes for the builder;
+    // `color`/`background-color` attributes map to palette CSS vars; custom component
+    // tags (e.g. <ProductsByCategory>) coerce their attributes into props.
+    html: `
+        <section class="py-16 px-4 bg-white">
+            <div class="max-w-7xl mx-auto">
+                <h2 data-role="title" color="9" class="text-3xl font-bold text-center mb-10">
+                    Featured Products
+                </h2>
+                <ProductsByCategory categoryID="1" limit="8" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" />
+            </div>
+        </section>
+    `,
 };
 ```
 

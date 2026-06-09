@@ -7,9 +7,11 @@
     /** Active palette — its 10 colors back the color/background swatches. */
     palette?: ColorPalette;
     rows?: number;
+    /** Hide the styling toolbar — for raw text runs (#text nodes) that carry no css/style. */
+    textOnly?: boolean;
   }
 
-  let { node, palette, rows = 3 }: Props = $props();
+  let { node, palette, rows = 3, textOnly = false }: Props = $props();
 
   // Discrete spacing steps (px). `--spacing` is 1px in this project, so the px
   // value IS the Tailwind number (pt-8 = 8px). 2px steps up to 16, then 4px.
@@ -130,8 +132,9 @@
   }
 </script>
 
-<div class="tbe" bind:this={root}>
+<div class="tbe" class:text-only={textOnly} bind:this={root}>
   <!-- Toolbar (relative anchor for the absolute options panel below it). -->
+  {#if !textOnly}
   <div class="toolbar">
     {#each TOOLS as tool}
       <button
@@ -202,6 +205,7 @@
       </div>
     {/if}
   </div>
+  {/if}
 
   <textarea
     class="tbe-text"
@@ -350,6 +354,10 @@
   .tbe-text:focus {
     outline: none;
     background: #0f172a;
+  }
+  /* No toolbar (raw text run): round all corners of the textarea. */
+  .tbe.text-only .tbe-text {
+    border-radius: 6px;
   }
   /* Highlight the whole fused element (header + textarea) on focus. */
   .tbe:focus-within {

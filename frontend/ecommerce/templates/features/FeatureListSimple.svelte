@@ -14,14 +14,9 @@ import type { SectionSchema } from '$ecommerce/renderer/section-types';
 </script>
 
 <script lang="ts">
-import type { StandardContent } from '$ecommerce/renderer/section-types';
+import type { SectionProps } from '$ecommerce/renderer/section-types';
 
-  interface Props {
-    content: StandardContent;
-    css: Record<string, string>;
-  }
-
-  let { content, css }: Props = $props();
+  let { content = {}, css = {} }: SectionProps = $props();
 </script>
 
 <section class="py-16 px-6 bg-slate-50 {css.container || ''}">

@@ -26,6 +26,14 @@ export interface ComponentSchema {
 	tagName: string;
 	description?: string;
 	props: Record<string, PropSpec>;
+	/**
+	 * How the builder editor treats this component's direct children.
+	 * `'slides'` → each child is a slide in a carousel; `'tabs'` → each child is a
+	 * panel selected by an OptionsStrip. In both cases each child is a navigable unit:
+	 * the editor shows an OptionsStrip and edits one child at a time, synced with the
+	 * live preview. Absent → children edit inline.
+	 */
+	childrenAs?: 'slides' | 'tabs';
 }
 
 function parseList(raw: string): string[] {

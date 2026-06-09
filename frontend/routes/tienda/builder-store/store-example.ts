@@ -53,28 +53,28 @@ export const storeExample: SectionData[] = [
     id: 'html-hero-1',
     type: 'HtmlSection',
     category: HtmlHeroBanner.category,
-    content: { html: HtmlHeroBanner.HTML },
+    html: HtmlHeroBanner.html,
     css: {}
   },
   {
     id: 'html-showcase-1',
     type: 'HtmlSection',
     category: HtmlCategoryShowcase.category,
-    content: { html: HtmlCategoryShowcase.HTML },
+    html: HtmlCategoryShowcase.html,
     css: {}
   },
   {
     id: 'html-image-hero-1',
     type: 'HtmlSection',
     category: HtmlImageHero.category,
-    content: { html: HtmlImageHero.HTML },
+    html: HtmlImageHero.html,
     css: {}
   },
   {
     id: 'html-image-feature-1',
     type: 'HtmlSection',
     category: HtmlImageFeature.category,
-    content: { html: HtmlImageFeature.HTML },
+    html: HtmlImageFeature.html,
     css: {}
   }
 ];

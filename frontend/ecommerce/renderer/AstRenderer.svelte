@@ -45,10 +45,14 @@
 	{:else if astComponentRegistry[node.tagName]}
 		{@const Comp = astComponentRegistry[node.tagName]}
 		{@const cls = resolveTokens(node.css, [], values, palette)}
-		<!-- Custom components may wrap overlay markup (e.g. ImageEffect's caption);
-		     pass nested AST nodes through as children. Components that ignore the
-		     children snippet (ProductsByCategory, etc.) are unaffected. -->
-		<Comp {...node.props} css={cls} style={node.style}>
+		<!-- Custom components receive their nested AST three ways, and pick what they need:
+		     - the `children` snippet renders all child nodes inline (e.g. ImageEffect's overlay);
+		     - `childNodes` is the raw child AST array, for components that treat children
+		       individually (e.g. Slider, one slide per child);
+		     - `renderChild` is this renderer's node snippet, so such components can render an
+		       arbitrary subtree without importing AstRenderer (avoids a circular import).
+		     Components that ignore these props (ProductsByCategory, etc.) are unaffected. -->
+		<Comp {...node.props} css={cls} style={node.style} childNodes={node.children} renderChild={renderNode}>
 			{#if node.children}
 				{#each node.children as child, i (i)}
 					{@render renderNode(child)}

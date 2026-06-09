@@ -67,15 +67,3 @@ export interface SectionPreset {
 	variables: Record<string, string>;
 }
 
-export interface SectionTemplate {
-	id: string;
-	name: string;
-	/** Source of truth: raw HTML (with custom component tags), parsed to AST at render. */
-	HTML?: string;
-	category: SectionCategory;
-	description: string;
-	thumbnail?: string;
-	/** Optional pre-parsed AST. Legacy templates author this directly; HTML-based ones omit it. */
-	ast?: ComponentAST;
-	presets?: SectionPreset[];
-}

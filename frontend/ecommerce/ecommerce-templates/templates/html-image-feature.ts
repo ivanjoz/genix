@@ -1,16 +1,16 @@
-import type { SectionTemplate } from '../../renderer/renderer-types';
+import type { SectionData } from '../../renderer/section-types';
 
 /**
  * HTML-based image feature. Demonstrates a clipped curve layout combined with a
  * duotone-matrix effect: the photo curves in from the right while text sits on
  * the tinted left side. The `data-role="image"` node is edited via ImageBlockEditor.
  */
-export const HtmlImageFeature: SectionTemplate = {
+export const HtmlImageFeature: SectionData = {
 	id: 'html-image-feature-v1',
 	name: 'Image Feature (HTML)',
 	category: 'features',
 	description: 'Curved photo split with a duotone treatment and a text panel beside it.',
-	HTML: `
+	html: `
 		<section background-color="2" class="px-6 py-16">
 			<div class="max-w-6xl mx-auto">
 				<ImageEffect data-role="image"

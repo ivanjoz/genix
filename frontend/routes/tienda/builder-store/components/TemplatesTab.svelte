@@ -1,5 +1,5 @@
 <script lang="ts">
-import { SectionList } from '$ecommerce/templates/registry';
+import { sectionTemplates } from '$ecommerce/ecommerce-templates/templates';
 
   interface Props {
     onSelect: (template: { id: string }) => void;
@@ -10,11 +10,11 @@ import { SectionList } from '$ecommerce/templates/registry';
   let searchQuery = $state('');
   let selectedCategory = $state('all');
 
-  const categories = ['all', ...new Set(SectionList.map(t => t.category))];
+  const categories = ['all', ...new Set(sectionTemplates.flatMap(t => t.category ? [t.category] : []))];
 
   const filteredTemplates = $derived(() => {
-    return SectionList.filter(t => {
-      const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return sectionTemplates.filter(t => {
+      const matchesSearch = (t.name ?? '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = selectedCategory === 'all' || t.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });

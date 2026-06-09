@@ -25,12 +25,13 @@ import { SectionRegistry } from '$ecommerce/templates/registry';
 
 <div class="ecommerce-render" style={paletteStyles}>
   {#each elements as element (element.id)}
-    {@const Config = SectionRegistry[element.type]}
+    {@const Config = element.type ? SectionRegistry[element.type] : undefined}
     {#if Config}
-      <Config.component 
-        content={element.content} 
-        css={element.css} 
-        {...element.attributes} 
+      <Config.component
+        content={element.content}
+        ast={element.ast}
+        css={element.css}
+        {...element.attributes}
       />
     {:else}
       <div class="bg-red-50 p-4 border border-red-200 text-red-600 my-4 mx-auto max-w-4xl rounded">

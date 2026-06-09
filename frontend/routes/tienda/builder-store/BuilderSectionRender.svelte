@@ -1,7 +1,13 @@
 <script lang="ts">
+import { setContext } from 'svelte';
 import type { SectionData } from '$ecommerce/renderer/section-types';
 import { SectionRegistry } from '$ecommerce/templates/registry';
 import { editorStore } from '$ecommerce/stores/editor.svelte';
+import { EC_BUILDER_MODE } from '$ecommerce/renderer/builder-context';
+
+// Mark everything rendered below as builder-mode so AST components (e.g. EcommerceSlider)
+// can sync with the editor and disable production-only behaviour like autoplay.
+setContext(EC_BUILDER_MODE, true);
 
   interface Props {
     section: SectionData;
@@ -22,10 +28,42 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   }: Props = $props();
 
   const isSelected = $derived(editorStore.selectedId === section.id);
-  const Config = $derived(SectionRegistry[section.type]);
+  const Config = $derived(section.type ? SectionRegistry[section.type] : undefined);
 
   function handleSelect() {
     editorStore.select(section.id);
+  }
+
+  // The browser's default drag image is a raster snapshot of the dragged element. When
+  // a section is only partially in view (scrolled under the sticky store header), that
+  // snapshot captures the full element plus whatever overlaps it on screen — so the
+  // ghost shows content that isn't the section. Replace it with a small controlled chip.
+  function setReorderDragImage(e: DragEvent, label: string) {
+    if (!e.dataTransfer) return;
+    const chip = document.createElement('div');
+    chip.textContent = label;
+    Object.assign(chip.style, {
+      position: 'fixed',
+      top: '-1000px',
+      left: '-1000px',
+      padding: '6px 12px',
+      background: '#2563eb',
+      color: '#fff',
+      fontSize: '12px',
+      fontWeight: '700',
+      letterSpacing: '0.5px',
+      textTransform: 'uppercase',
+      borderRadius: '6px',
+      fontFamily: 'sans-serif',
+      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)',
+      whiteSpace: 'nowrap',
+      pointerEvents: 'none',
+      zIndex: '99999',
+    } satisfies Partial<CSSStyleDeclaration>);
+    document.body.appendChild(chip);
+    e.dataTransfer.setDragImage(chip, 12, 12);
+    // The browser snapshots the chip synchronously during dragstart; remove it after.
+    setTimeout(() => chip.remove(), 0);
   }
 </script>
 
@@ -34,7 +72,10 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   class:section-selected={isSelected}
   
   draggable="true"
-  ondragstart={(e) => onDragStart(e, index)}
+  ondragstart={(e) => {
+    setReorderDragImage(e, Config?.schema.name || section.type || 'Section');
+    onDragStart(e, index);
+  }}
   ondragend={onDragEnd}
   ondragover={(e) => onDragOver(e, index)}
   
@@ -58,10 +99,11 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   
   <div class="section-content" style={paletteStyles}>
     {#if Config}
-      <Config.component 
-        content={section.content} 
-        css={section.css} 
-        {...section.attributes} 
+      <Config.component
+        content={section.content}
+        ast={section.ast}
+        css={section.css}
+        {...section.attributes}
       />
     {:else}
       <div class="p-20 bg-slate-100 text-slate-400 text-center border-2 border-dashed border-slate-200">
@@ -76,6 +118,17 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
     position: relative;
     cursor: pointer;
     transition: all 0.2s ease;
+    /* Bound the section to the container width and clip inner overflow. Without this,
+       a section whose content is wider than the viewport (e.g. a Slider's 300%-wide
+       track) makes the wrapper's painted box that wide, so the native drag snapshot
+       captures the full inner content width instead of just the container. */
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .section-content {
+    overflow: hidden;
   }
 
   .section-outline {

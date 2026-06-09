@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 import { editorStore } from '$ecommerce/stores/editor.svelte';
+  import { collectTokens, generateCss } from '$ecommerce/stores/uno-generator';
   import { Core, tr } from '$core/store.svelte';
   import T from '$components/misc/T.svelte';
   import EditorTab from './components/EditorTab.svelte';
@@ -39,8 +40,16 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
     onClose();
   }
 
-  function handleSave() {
-    // TODO: persist section changes
+  async function handleSave() {
+    // Build the page AST: every section with its parsed HTML AST + slot CSS.
+    const pageAst = editorStore.sections;
+    // Generate the runtime Tailwind CSS from the same tokens the live preview uses
+    // (slot CSS + HTML section AST + text lines).
+    const css = await generateCss(collectTokens(pageAst));
+
+    // Print both as text for inspection.
+    console.log('=== PAGE AST ===\n', pageAst);
+    console.log('=== TAILWIND CSS ===\n' + css);
   }
 
   function handleDelete() {

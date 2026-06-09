@@ -49,6 +49,34 @@ export const componentSchemas: Record<string, ComponentSchema> = {
 		},
 	},
 
+	Slider: {
+		tagName: 'Slider',
+		description:
+			'Carousel whose direct child nodes each become one slide. Slides are passed as AST children, not attributes.',
+		// Each direct child is one slide: the builder edits one slide at a time via an OptionsStrip.
+		childrenAs: 'slides',
+		props: {
+			autoplay: { type: 'boolean' },
+			interval: { type: 'number', default: 5000 },
+			loop: { type: 'boolean', default: true },
+			arrows: { type: 'boolean', default: true },
+			dots: { type: 'boolean', default: true },
+		},
+	},
+
+	TabbedLayer: {
+		tagName: 'TabbedLayer',
+		description:
+			'Tabbed container: a strip of options selects which single child is shown. Each direct child is one tab panel, passed as AST children (not attributes).',
+		// Each direct child is one tab: the builder edits one panel at a time via an OptionsStrip.
+		childrenAs: 'tabs',
+		props: {
+			// Pipe-separated tab labels, e.g. "My Style|Option 2|Option 3". Falls back to
+			// "Tab N" for any panel without a matching label.
+			options: { type: 'string' },
+		},
+	},
+
 	ProductCard: {
 		tagName: 'ProductCard',
 		description: 'A single product card.',

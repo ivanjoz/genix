@@ -1,3 +1,9 @@
+/* Declare the cascade-layer order up front (a bare @layer statement is allowed
+   before @import per spec). `ec-runtime` holds the builder's runtime-generated
+   UnoCSS (see ecommerce/stores/uno-generator.ts) and is ordered AFTER components
+   but BEFORE utilities, so build-time Tailwind utilities win ties over redundant
+   runtime duplicates while runtime-only classes still apply. */
+@layer theme, base, components, ec-runtime, utilities;
 @import 'tailwindcss';
 
 /* Custom Tailwind Configuration */

@@ -3,6 +3,7 @@ import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 import { generatePaletteStyles } from '$ecommerce/renderer/token-resolver';
 import { editorStore } from '$ecommerce/stores/editor.svelte';
 import { liveCSS } from '$ecommerce/stores/live-css.svelte';
+import { parseHTML } from '$ecommerce/html-ast/parse-html';
   import SectionEditorLayer from './SectionEditorLayer.svelte';
   import BuilderSectionRender from './BuilderSectionRender.svelte';
 
@@ -22,10 +23,18 @@ import type { SectionData } from '$ecommerce/renderer/section-types';
     onUpdate
   }: Props = $props();
 
-  // Initialize editorStore with elements if provided
+  // Initialize editorStore with elements if provided. HTML sections enter the store as
+  // AST: their `html` authoring source is parsed once here and dropped, so render/edit/
+  // save all operate on `content.ast` (the canonical model) from this point on.
   $effect(() => {
     if (elements.length > 0 && editorStore.sections.length === 0) {
-      editorStore.sections = [...elements];
+      editorStore.sections = elements.map(section => {
+        if (section.type === 'HtmlSection' && section.html && !section.ast) {
+          const { html, ...rest } = section;
+          return { ...rest, ast: parseHTML(html) };
+        }
+        return section;
+      });
     }
   });
 

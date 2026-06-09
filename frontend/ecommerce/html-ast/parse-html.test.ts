@@ -98,7 +98,7 @@ describe('parseHTML', () => {
 
 describe('ecommerce templates parse cleanly', () => {
 	it('hero banner: native section with color vars and CTA link', () => {
-		const [section] = parseHTML(HtmlHeroBanner.HTML!);
+		const [section] = parseHTML(HtmlHeroBanner.html!);
 		expect(section.tagName).toBe('section');
 		expect(section.style).toBe('background-color: var(--color-9);');
 		const cta = section.children?.[0].children?.find((n) => n.tagName === 'a');
@@ -107,7 +107,7 @@ describe('ecommerce templates parse cleanly', () => {
 	});
 
 	it('hero banner: editable roles collected, role attr not emitted to DOM', () => {
-		const ast = parseHTML(HtmlHeroBanner.HTML!);
+		const ast = parseHTML(HtmlHeroBanner.html!);
 		const roles = collectRoleNodes(ast);
 		expect(roles.map((r) => r.role)).toEqual(['title', 'content', 'button']);
 		// data-role must not leak into rendered attributes
@@ -117,7 +117,7 @@ describe('ecommerce templates parse cleanly', () => {
 	});
 
 	it('category showcase: custom components with coerced props', () => {
-		const [section] = parseHTML(HtmlCategoryShowcase.HTML!);
+		const [section] = parseHTML(HtmlCategoryShowcase.html!);
 		const inner = section.children?.[0].children ?? [];
 		const desc = inner.find((n) => n.tagName === 'CategoryDescription');
 		const grid = inner.find((n) => n.tagName === 'ProductsByCategory');

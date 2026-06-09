@@ -1,13 +1,11 @@
 <script lang="ts">
 import { editorStore } from '$ecommerce/stores/editor.svelte';
 import type { StandardContent } from '$ecommerce/renderer/section-types';
-import type { ComponentAST, ColorPalette } from '$ecommerce/renderer/renderer-types';
-import { parseHTML } from '$ecommerce/html-ast/parse-html';
-import { collectRoleNodes, isLinkNode, isImageNode, collectCategoryNodes, getNodeCategoryID, setNodeCategoryID } from '$ecommerce/html-ast/editable';
+import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
+import { collectCategoryNodes, getNodeCategoryID, setNodeCategoryID } from '$ecommerce/html-ast/editable';
 import { ensureProductosLoaded, productosServiceState } from '$services/services/productos.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
-import TextBlockEditor from './TextBlockEditor.svelte';
-import ImageBlockEditor from './ImageBlockEditor.svelte';
+import AstEditor from './AstEditor.svelte';
     import T from '$components/misc/T.svelte';
 
   // Active palette drives the color swatches inside TextBlockEditor.
@@ -19,26 +17,9 @@ import ImageBlockEditor from './ImageBlockEditor.svelte';
 
   const isHtmlSection = $derived(section?.type === 'HtmlSection');
 
-  // Ensure an HTML section has a parsed AST to edit (parsed once from the HTML seed).
-  $effect(() => {
-    if (section && isHtmlSection && !section.content.ast) {
-      editorStore.updateContent(section.id, 'ast', parseHTML(section.content.html ?? ''));
-    }
-  });
-
-  // Live references to the role-tagged nodes inside the section's AST.
-  const roleNodes = $derived(
-    isHtmlSection ? collectRoleNodes(section?.content.ast as ComponentAST[] | undefined) : []
-  );
-
-  function setNodeHref(node: ComponentAST, value: string) {
-    if (!node.attributes) node.attributes = {};
-    node.attributes.href = value;
-  }
-
   // Category-bound custom components (ProductsByCategory / CategoryDescription) in the section's AST.
   const categoryNodes = $derived(
-    isHtmlSection ? collectCategoryNodes(section?.content.ast as ComponentAST[] | undefined) : []
+    isHtmlSection ? collectCategoryNodes(section?.ast) : []
   );
   // Current selection is taken from the first bound node; all bound nodes share one category.
   const selectedCategoryID = $derived(categoryNodes.length ? getNodeCategoryID(categoryNodes[0]) : undefined);
@@ -67,7 +48,7 @@ import ImageBlockEditor from './ImageBlockEditor.svelte';
 
   function handleTextLineChange(index: number, value: string) {
     if (!section) return;
-    const lines = [...(section.content.textLines || [])];
+    const lines = [...(section.content?.textLines || [])];
     if (!lines[index]) {
       lines[index] = { text: value, css: '' };
     } else {
@@ -78,13 +59,13 @@ import ImageBlockEditor from './ImageBlockEditor.svelte';
 
   function addTextLine() {
     if (!section) return;
-    const lines = [...(section.content.textLines || []), { text: 'New Line', css: '' }];
+    const lines = [...(section.content?.textLines || []), { text: 'New Line', css: '' }];
     editorStore.updateContent(section.id, 'textLines', lines);
   }
 
   function removeTextLine(index: number) {
     if (!section) return;
-    const lines = (section.content.textLines || []).filter((_: any, i: number) => i !== index);
+    const lines = (section.content?.textLines || []).filter((_: any, i: number) => i !== index);
     editorStore.updateContent(section.id, 'textLines', lines);
   }
 </script>
@@ -119,32 +100,17 @@ import ImageBlockEditor from './ImageBlockEditor.svelte';
             </div>
           </div>
         {/if}
-        <!-- HTML SECTION: editable role-tagged nodes from the parsed AST -->
+        <!-- HTML SECTION: every text/image/link node in the AST is editable (no role
+             required). Slide containers (Slider) render an OptionsStrip and edit one
+             slide at a time, synced with the live preview. -->
         <div class="editor-group">
           <h4 class="group-title">Content</h4>
           <div class="fields-list">
-            {#if roleNodes.length === 0}
-              <p class="empty-hint">No editable parts. Add <code>data-role="title"</code> etc. to the template HTML.</p>
+            {#if section.ast && section.ast.length}
+              <AstEditor nodes={section.ast} {palette} />
+            {:else}
+              <p class="empty-hint">No content. This section has no parsed HTML.</p>
             {/if}
-            {#each roleNodes as { role, node }, i (i)}
-              <div class="field-item">
-                <span class="field-label">{role}</span>
-                {#if isImageNode(node)}
-                  <ImageBlockEditor {node} {palette} />
-                {:else}
-                  <TextBlockEditor {node} {palette} rows={role === 'content' ? 3 : 2} />
-                  {#if isLinkNode(node)}
-                    <input
-                      type="text"
-                      class="field-input link-input"
-                      value={node.attributes?.href || ''}
-                      oninput={(e) => setNodeHref(node, e.currentTarget.value)}
-                      placeholder="Link URL (href)"
-                    />
-                  {/if}
-                {/if}
-              </div>
-            {/each}
           </div>
         </div>
       {:else}
@@ -159,7 +125,7 @@ import ImageBlockEditor from './ImageBlockEditor.svelte';
               
               {#if field === 'textLines'}
                 <div class="text-lines-editor">
-                  {#each section.content.textLines || [] as line, i}
+                  {#each section.content?.textLines || [] as line, i}
                     <div class="text-line-item">
                       <input 
                         type="text" 
@@ -176,7 +142,7 @@ import ImageBlockEditor from './ImageBlockEditor.svelte';
                 <textarea
                   id={`content-${fieldKey}`}
                   class="field-input textarea"
-                  value={section.content[fieldKey] || ''}
+                  value={section.content?.[fieldKey] || ''}
                   oninput={(e) => handleContentInput(fieldKey, e.currentTarget.value)}
                   rows="3"
                 ></textarea>
@@ -185,7 +151,7 @@ import ImageBlockEditor from './ImageBlockEditor.svelte';
                   id={`content-${fieldKey}`}
                   type="text"
                   class="field-input"
-                  value={(section.content[fieldKey] || []).join(', ')}
+                  value={(section.content?.[fieldKey] || []).join(', ')}
                   oninput={(e) => {
                     const ids = e.currentTarget.value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
                     handleContentInput(fieldKey, ids);
@@ -197,7 +163,7 @@ import ImageBlockEditor from './ImageBlockEditor.svelte';
                   id={`content-${fieldKey}`}
                   type="text"
                   class="field-input"
-                  value={section.content[fieldKey] || ''}
+                  value={section.content?.[fieldKey] || ''}
                   oninput={(e) => handleContentInput(fieldKey, e.currentTarget.value)}
                 />
               {/if}
@@ -217,7 +183,7 @@ import ImageBlockEditor from './ImageBlockEditor.svelte';
               <textarea
                 id={`css-${slot}`}
                 class="field-input textarea css-textarea"
-                value={section.css[slot] || ''}
+                value={section.css?.[slot] || ''}
                 oninput={(e) => handleCssInput(slot, e.currentTarget.value)}
                 rows="2"
                 placeholder="Enter tailwind classes..."
@@ -351,21 +317,9 @@ import ImageBlockEditor from './ImageBlockEditor.svelte';
     color: white;
   }
 
-  .link-input {
-    font-size: 12px;
-    color: #94a3b8;
-  }
-
   .empty-hint {
     font-size: 12px;
     color: #94a3b8;
     line-height: 1.5;
-  }
-
-  .empty-hint code {
-    background: #1e293b;
-    padding: 1px 4px;
-    border-radius: 3px;
-    color: #cbd5e1;
   }
 </style>
