@@ -132,7 +132,7 @@
 </script>
 
 {#if mode === "horizontal"}
-	<div class={["horizontal-card", css].join(" ")} aria-busy={isLoadingProductRecord}>
+	<div class="horizontal-card {css}" aria-busy={isLoadingProductRecord}>
 		<div class="horizontal-image-wrapper">
 			{#if resolvedProductImageName}
 				<ImageHash
@@ -184,7 +184,7 @@
 		</div>
 {:else}
 	<div class="vertical-card-shell">
-		<div class={["vertical-card", css].join(" ")} aria-busy={isLoadingProductRecord}>
+		<div class="vertical-card {css}" aria-busy={isLoadingProductRecord}>
 			<ImageHash
 				css="w-full h-[36vw] md:h-200"
 				src={resolvedProductImageName}

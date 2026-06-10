@@ -56,7 +56,7 @@
   });
 </script>
 
-<div class={["ec-tabs", css].join(" ")} {style}>
+<div class="ec-tabs {css}" {style}>
   {#if count > 1}
     <div class="ec-tabs-bar">
       <OptionsStrip

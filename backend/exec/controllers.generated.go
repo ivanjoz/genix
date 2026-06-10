@@ -8,11 +8,11 @@ import (
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	ecommerceTypes "app/ecommerce/types"
 	financeTypes "app/finance/types"
 	logisticsTypes "app/logistics/types"
 	salesTypes "app/sales/types"
 	securityTypes "app/security/types"
+	webpageTypes "app/webpage/types"
 )
 
 func MakeScyllaControllers() []db.ScyllaControllerInterface {
@@ -34,7 +34,6 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[core.GlobalCache](),
 		makeDBController[coreTypes.UsageLog](),
 		makeDBController[coreTypes.User](),
-		makeDBController[ecommerceTypes.EcommercePageContent](),
 		makeDBController[financeTypes.CashBank](),
 		makeDBController[financeTypes.CashBankMovement](),
 		makeDBController[financeTypes.CashReconciliation](),
@@ -55,5 +54,7 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[salesTypes.SeasonalityCurve](),
 		makeDBController[salesTypes.ShippingCost](),
 		makeDBController[securityTypes.Profile](),
+		makeDBController[webpageTypes.EcommercePageContent](),
+		makeDBController[webpageTypes.Webpage](),
 	}
 }

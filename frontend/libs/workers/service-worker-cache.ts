@@ -260,8 +260,8 @@ self.addEventListener('fetch', (event) => {
 	const request = event.request
 	const url = new URL(event.request.url)
 	//console.log("url recibida:",url, url.pathname)
-	// Skip /webpage routes (handled by store app service worker)
-	if (url.pathname.startsWith('/webpage/')) {
+	// Skip /webpage-app routes (handled by store app service worker)
+	if (url.pathname.startsWith('/webpage-app/')) {
 		return;
 	}
 	

@@ -77,10 +77,10 @@ export const getShowStore = (pathname?: string): number => {
 
 export const isPublicFrontendRoute = (routeValue?: string | null): boolean => {
   const normalizedRoute = String(routeValue || "").trim()
-  // Use the exact-or-trailing-slash form so the public storefront (/webpage, /webpage/*)
+  // Use the exact-or-trailing-slash form so the public storefront (/webpage-app, /webpage-app/*)
   // is public WITHOUT also matching the authed admin builder route (/webpage-builder).
   return normalizedRoute === '/' || normalizedRoute === '/login'
-    || normalizedRoute === '/webpage' || normalizedRoute.startsWith('/webpage/')
+    || normalizedRoute === '/webpage-app' || normalizedRoute.startsWith('/webpage-app/')
 }
 
 // TOKEN REFRESH MANAGEMENT

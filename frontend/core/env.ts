@@ -178,6 +178,12 @@ export const Env = {
   },
   getCompanyID: (): number => {
     if(!Env.companyID){
+      // Prerender/static build pins the tenant at build time (one build per company).
+      // Vite inlines VITE_COMPANY_ID, so it resolves both in Node (build/SSR) and in
+      // the deployed client bundle. Undefined in the admin app → falls through.
+      const buildCompanyID = Number(import.meta.env.VITE_COMPANY_ID || 0)
+      if(buildCompanyID){ return Env.companyID = buildCompanyID }
+
       const localCompanyID = browser ? localStorage.getItem(Env.appId + "CompanyID") : null
       if(localCompanyID){
         Env.companyID = parseInt(localCompanyID)

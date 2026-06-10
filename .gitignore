@@ -47,6 +47,7 @@ frontend/webpage/tmp/*
 ai/.venv/*
 frontend/webpage/.svelte-kit/*
 frontend/webpage/build/*
+frontend/webpage/dist-prerender/*
 frontend/static/sw.js
 frontend/static/sw.js.map
 scripts/scripts_bin

@@ -83,7 +83,7 @@
   of whether the build/runtime CSS engines emit a given utility. `css`/`style` from the
   HTML still flow onto the root for authored cosmetics.
 -->
-<div class={["ec-slider", css].join(" ")} {style}>
+<div class="ec-slider {css}" {style}>
   <div class="ec-slider-track" style="transform: translateX(-{current * 100}%);">
     {#each slides as slide, i (i)}
       <div class="ec-slide">

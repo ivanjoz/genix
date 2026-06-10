@@ -64,7 +64,7 @@ Treat as an internal package, not a single component.
 
 ### `svg/` — raw SVG assets
 Currently only icons used by tooling (`excel-icon.svg`, `pdf-icon.svg`).
-Most icons live with the consumer or under `domain-components/assets/`.
+Most icons live with the consumer or under `libs/assets/`.
 
 ### `vTable/` — virtualized table package (self-contained)
 Table, tree, grid, mobile cards-list, plus the per-cell components

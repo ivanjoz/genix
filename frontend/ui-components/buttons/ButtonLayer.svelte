@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick, type Snippet } from 'svelte';
 import { parseSVG } from '$libs/helpers';
-import angleSvg from '$components/assets/angle.svg?raw';
+import angleSvg from '$libs/assets/angle.svg?raw';
 import { Env } from '$core/env';
 import { Agent } from '$components/agent/registry';
 import { tr } from '$core/store.svelte';

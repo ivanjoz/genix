@@ -3,20 +3,27 @@ import { onMount } from 'svelte';
 import MobileMenu from '$domain/MobileMenu.svelte';
 import Header from '$ecommerce/components/Header.svelte';
 import EcommerceRenderer from '$ecommerce/renderer/EcommerceRenderer.svelte';
-import { getPageContent } from '$services/ecommerce/page-content.svelte';
+import { getStoreWebpage } from '$services/ecommerce/page-content.svelte';
 import type { SectionData } from '$ecommerce/renderer/section-types';
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 
-  // The storefront renders the content saved for the Inicio page (pageID 11) by
-  // the builder. getPageContent loads those sections (Type/Ast/Content/Css/...);
-  // EcommerceRenderer maps each to its registered section component.
-  let sections = $state<SectionData[]>([]);
+  let { data } = $props();
+
+  // The storefront renders the root/Inicio page content. It comes from +page.ts
+  // load() so it's baked into the prerendered HTML (SEO); the onMount refresh below
+  // then pulls the latest content for real users. EcommerceRenderer maps each
+  // section to its registered component.
+  let sections = $state<SectionData[]>(data?.sections ?? []);
+
+  // SEO metatags for this page (from the same p-webpage call). Baked into the
+  // prerendered <head> for crawlers; in dev (CSR) the load runs client-side.
+  const seo = $derived<Record<string, string>>(data?.seo ?? {});
 
   // Runtime utility CSS for the runtime-authored Tailwind classes (slot CSS, HTML
   // section AST, text lines). These classes don't exist in source, so build-time
   // Tailwind can't cover them. The builder pre-generates this on save and stores
   // it per section, so the storefront injects it as-is — no UnoCSS at view time.
-  let runtimeCss = $state('');
+  let runtimeCss = $state(data?.css ?? '');
 
   // Matches the builder's default palette so `--color-N` vars resolve identically.
   const defaultPalette: ColorPalette = {
@@ -29,13 +36,29 @@ import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
   };
 
   onMount(async () => {
-    const stored = await getPageContent();
-    sections = stored.sections;
-    runtimeCss = stored.css;
+    // Refresh to the latest content after the prerendered paint (and recover if the
+    // build-time fetch was empty). No hydration mismatch: the initial render uses
+    // `data` (exactly what SSR rendered); this runs only afterwards.
+    try {
+      const stored = await getStoreWebpage();
+      if (stored.sections.length > 0) {
+        sections = stored.sections;
+        runtimeCss = stored.css;
+      }
+    } catch (contentRefreshError) {
+      console.error('[StorePage] content refresh failed', contentRefreshError);
+    }
   });
 </script>
 
 <svelte:head>
+  {#if seo.title}<title>{seo.title}</title>{/if}
+  {#if seo.description}<meta name="description" content={seo.description} />{/if}
+  {#if seo.keywords}<meta name="keywords" content={seo.keywords} />{/if}
+  {#if seo.ogTitle}<meta property="og:title" content={seo.ogTitle} />{/if}
+  {#if seo.ogDescription}<meta property="og:description" content={seo.ogDescription} />{/if}
+  {#if seo.ogImage}<meta property="og:image" content={seo.ogImage} />{/if}
+  {#if seo.favicon}<link rel="icon" href={seo.favicon} />{/if}
   {#if runtimeCss}
     {@html `<style id="store-runtime-css">${runtimeCss}</style>`}
   {/if}

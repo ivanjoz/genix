@@ -1,13 +1,5 @@
 import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
-import { getCounter, getCounterFomFile } from '../plugins.js';
-
-const isBuild = process.argv.includes('build');
-const componentMap = new Map();
-
-if (isBuild) {
-	getCounterFomFile();
-}
 
 console.log('--- SVELTE CONFIG LOADED (pkg-store) ---');
 
@@ -17,14 +9,10 @@ const config = {
 	compilerOptions: {
 		hmr: false,
 		cssHash: ({ hash, css, name, filename }) => {
-			if (isBuild) {
-				const key = filename || hash(css);
-				if (!componentMap.has(key)) {
-					componentMap.set(key, getCounter());
-				}
-				return componentMap.get(key);
-			}
-
+			// MUST be deterministic: SSR/prerender runs two separate build passes
+			// (server + client). A stateful counter (getCounter) diverges between them,
+			// so the prerendered HTML's scope class wouldn't match the bundled CSS and
+			// all scoped styles vanish. Hash the css content (stable across passes).
 			if (!filename) {
 				return `svelte-${hash(css).substring(0, 8)}`;
 			}
@@ -45,12 +33,17 @@ const config = {
 		adapter: adapter({
 			pages: 'build',
 			assets: 'build',
-			fallback: 'index.html',
+			// In the prerender build the root is written to index.html (with content), so
+			// the SPA fallback must NOT be index.html or it would overwrite that. 404.html
+			// is what Cloudflare Pages serves for unmatched paths and still boots the SPA.
+			fallback: process.env.VITE_COMPANY_ID ? '404.html' : 'index.html',
 			precompress: false,
 			strict: true
 		}),
 		paths: {
-			base: '/webpage'
+			// The per-company prerender build (VITE_COMPANY_ID set) deploys at the
+			// subdomain root; dev/admin keep the /webpage-app base for the :3572 proxy.
+			base: process.env.VITE_COMPANY_ID ? '' : '/webpage-app'
 		},
 		files: {
 			assets: 'static',
@@ -71,6 +64,9 @@ const config = {
 		},
 		prerender: {
 			handleHttpError: 'warn'
+		},
+		output: {
+			bundleStrategy: 'single'
 		}
 	}
 };

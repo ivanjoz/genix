@@ -1,6 +1,6 @@
 <script lang="ts">
   import { parseSVG } from '$libs/helpers';
-  import angleSvg from '$components/assets/angle.svg?raw';
+  import angleSvg from '$libs/assets/angle.svg?raw';
   import Button from './Button.svelte';
   import T from '$components/misc/T.svelte';
 

@@ -3,8 +3,8 @@
   import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
   import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
   import s1 from "./styles.module.css"
-  import { Env } from '$core/env';
-import { accessHelper } from '$core/security';
+  import { Env, LocalStorage } from '$core/env';
+  import type { IUser } from '$core/types/common';
 
   export interface IProps {
     id?: number;
@@ -17,7 +17,15 @@ import { accessHelper } from '$core/security';
   let isOpen = $state(false);
   let selectedTab = $state(1);
 
-  const userInfo = $derived(accessHelper.getUserInfo());
+  // Read the logged-in user straight from storage instead of $core/security: that
+  // module statically embeds backend/access_list.yml (?raw), which would leak the
+  // whole admin access catalog into the public storefront bundle. Same storage key
+  // security.ts uses (genixUserInfo); SSR-safe via the LocalStorage shim.
+  const userInfo = $derived.by<IUser | null>(() => {
+    const userInfoJson = LocalStorage.getItem(Env.appId + 'UserInfo');
+    if (!userInfoJson) return null;
+    try { return JSON.parse(userInfoJson) as IUser; } catch { return null; }
+  });
 
   const options = [
     { id: 1, name: "Mi Cuenta" },

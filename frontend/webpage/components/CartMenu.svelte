@@ -8,7 +8,7 @@
 	const { id = 0, isMobile = false, css = "" }: IProps = $props();
 
 	import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
-	import angleSvg from "$domain/assets/angle.svg?raw";
+	import angleSvg from "$libs/assets/angle.svg?raw";
 import { parseSVG } from '$libs/helpers';
 	import s1 from "./styles.module.css";
 	import ArrowSteps from "$components/navigation/ArrowSteps.svelte";

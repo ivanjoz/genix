@@ -9,7 +9,7 @@
 	import { Core, getDeviceType, tr } from '$core/store.svelte';
 	import T from '$components/misc/T.svelte';
 	import AppHeader from '$domain/AppHeader.svelte';
-	import favicon from '$domain/assets/favicon.svg?raw';
+	import favicon from '$libs/assets/favicon.svg?raw';
 	import '$domain/libs/fontello-embedded.css';
 	import Page from '$domain/Page.svelte';
 	import SideMenu from '$domain/SideMenu.svelte';

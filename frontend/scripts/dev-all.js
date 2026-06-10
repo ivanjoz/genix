@@ -48,7 +48,7 @@ const main = async () => {
 
   console.log('✅ All services started successfully!');
   console.log('📋 Main (Admin): http://localhost:3572');
-  console.log('🛒 Store: http://localhost:3572/webpage');
+  console.log('🛒 Store: http://localhost:3572/webpage-app');
   console.log('\n💡 Tips:');
   console.log('   - Main app runs internally on port 3570');
   console.log('   - Store app runs internally on port 3571');

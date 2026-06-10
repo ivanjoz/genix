@@ -5,7 +5,7 @@ const MAIN_PORT = 3570;
 const STORE_PORT = 3571;
 const PROXY_PORT = 3572;
 
-// Parse only the pathname so query strings like /webpage?p=... still route to Store.
+// Parse only the pathname so query strings like /webpage-app?p=... still route to Store.
 const getRequestPathname = (requestUrl = '/') => {
   try {
     return new URL(requestUrl, 'http://localhost').pathname;
@@ -14,10 +14,13 @@ const getRequestPathname = (requestUrl = '/') => {
   }
 };
 
-// Match all Store entry points: /webpage, /webpage/, and any nested path under /webpage.
+// Match all Store entry points: /webpage-app, /webpage-app/, and any nested path under it.
+// NOTE: this MUST differ from the admin app's shared-source URL prefix (/webpage/*, which
+// Vite emits for the frontend/webpage/ folder), or the proxy misroutes the admin app's own
+// modules to the Store server and the page loads two Svelte instances (effect_orphan).
 const isStoreRequest = (requestUrl = '/') => {
   const requestPathname = getRequestPathname(requestUrl);
-  return requestPathname === '/webpage' || requestPathname.startsWith('/webpage/');
+  return requestPathname === '/webpage-app' || requestPathname.startsWith('/webpage-app/');
 };
 
 // Create proxy instances for each target
@@ -117,7 +120,7 @@ server.listen(PROXY_PORT, () => {
   console.log('║           🚀 Development Proxy Server Running               ║');
   console.log('╚════════════════════════════════════════════════════════════╝');
   console.log(`\n  📦 Main (Admin):    http://localhost:${PROXY_PORT}/`);
-  console.log(`  🛒 Store:          http://localhost:${PROXY_PORT}/webpage`);
+  console.log(`  🛒 Store:          http://localhost:${PROXY_PORT}/webpage-app`);
   console.log(`\n  🔧 Main Target:    http://localhost:${MAIN_PORT}`);
   console.log(`  🔧 Store Target:   http://localhost:${STORE_PORT}`);
   console.log('\n  Proxying HTTP requests and WebSocket connections...\n');

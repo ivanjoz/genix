@@ -19,7 +19,7 @@ execSync('bun run build:main', { stdio: 'inherit' });
 console.log('📦 Building store app...');
 execSync('bun run build:store', { stdio: 'inherit' });
 
-// 3. Copy store build to /webpage/ subdirectory in the main build
+// 3. Copy store build to /webpage-app/ subdirectory in the main build
 console.log('📋 Copying store build into main build...');
 const copyDirectory = (src, dest) => {
   if (!fs.existsSync(src)) {
@@ -42,7 +42,7 @@ const copyDirectory = (src, dest) => {
   }
 };
 
-copyDirectory('webpage/build', path.join(BUILD_DIR, 'webpage'));
+copyDirectory('webpage/build', path.join(BUILD_DIR, 'webpage-app'));
 
 
 // Create 404.html for SPA routing

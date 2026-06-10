@@ -1,18 +1,17 @@
-package ecommerce
+package webpage
 
 import (
 	"app/core"
 	"app/db"
-	s "app/ecommerce/types"
+	s "app/webpage/types"
 	"encoding/json"
 	"hash/fnv"
 )
 
-// defaultPageID is the "Inicio" page. IDs 1-10 are reserved for the menu and
-// other fixed structures, so user pages start at 11. Multi-page selection comes
-// later; for now every save/load targets page 11 unless an explicit page-id is
-// provided.
-const defaultPageID = int16(11)
+// defaultPageID is the "Inicio" page (ID 10 in the webpages table). It is used
+// when no explicit page-id query param is provided (the bare /webpage-builder
+// route). All other pages pass their PageID explicitly.
+const defaultPageID = int16(10)
 
 // sectionHash is the FNV-1a 64-bit hash of a section's JSON. It detects whether a
 // section's content changed since the last save and is computed server-side only
