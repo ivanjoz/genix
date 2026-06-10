@@ -40,7 +40,7 @@ type HandlerArgs struct {
 	ResponseError  string
 	ReqParams      string
 	Encoding       string
-	User        *UsuarioToken
+	User           *UsuarioToken
 	// HistoricalUnix overrides the effective write timestamp for sample/seed flows.
 	HistoricalUnix int64
 	StartTime      int64
@@ -270,7 +270,10 @@ func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTT
 	Log("Len del body:: ", len(body))
 
 	// revisa si la respuesta puede ser comprimida con brotli
-	if strings.Contains(handlerResponse.Encoding, "br") {
+	if handlerResponse.DisableCompression {
+		// Preserve raw payloads for endpoints that require an unencoded response.
+		response.Body = string(body)
+	} else if strings.Contains(handlerResponse.Encoding, "br") {
 		Log("Enviando respuesta comprimida con brotli")
 		// Log(body)
 		bodyBytes := body
@@ -559,17 +562,18 @@ func (e HandlerArgs) GetQuerySlice(key string) []string {
 }
 
 type HandlerResponse struct {
-	Body           *[]byte
-	BodyOnDisk     string
-	StatusCode     int
-	Error          string
-	Encoding       string
-	Headers        map[string]string
-	RequestStart   int64
-	PreSerializeMs int64
-	Route          string
-	MergeID        int32
-	StreamHandled  bool
+	Body               *[]byte
+	BodyOnDisk         string
+	StatusCode         int
+	Error              string
+	Encoding           string
+	Headers            map[string]string
+	RequestStart       int64
+	PreSerializeMs     int64
+	Route              string
+	MergeID            int32
+	StreamHandled      bool
+	DisableCompression bool
 }
 
 type MainResponse struct {
@@ -917,6 +921,9 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 	// Envía respuesta ok
 	if response.Body == nil {
 		Log("El body es nil!")
+	} else if response.DisableCompression {
+		// Write raw bytes without adding a Content-Encoding header.
+		bodyBytes = *response.Body
 	} else if strings.Contains(args.Encoding, "zstd") {
 		Log("Comprimiendo body con: zstd")
 		encoder, _ := zstd.NewWriter(nil)

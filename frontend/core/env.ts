@@ -15,6 +15,12 @@ const version = 1.11
 console.log(version)
 const selectedApiEndpointStorageKey = "genixSelectedApiEndpointRoute";
 
+// Per-company storefront builds (prerender) pin the tenant via VITE_COMPANY_ID. These
+// deploys have no login/endpoint selector: the API must always be PUBLIC_LAMBDA_URL,
+// never the localStorage selection or the "Local" (localhost) option that gets added
+// when the static build is previewed on localhost.
+const isPrerenderStorefront = !!Number(import.meta.env.VITE_COMPANY_ID || 0)
+
 if(browser){
   const host = window.location.host
   if((host.includes("localhost") || host.includes("127.0.0.1")) && host !== "localhost:8000"){
@@ -44,7 +50,9 @@ const parsePublicApiEndpoints = (serializedEndpoints: string): IApiEndpointOptio
       lambdaUrl: PUBLIC_LAMBDA_URL || ""
     })
 
-    if (globalThis._isLocal) {
+    // Never offer the localhost endpoint in a pinned storefront build, even when the
+    // static output is previewed on localhost.
+    if (globalThis._isLocal && !isPrerenderStorefront) {
       parsedEndpoints.unshift({ name: "Local", route: "http://localhost:3589/", hash: "" })
     }
 
@@ -85,13 +93,22 @@ const buildMainApiRoute = (baseRoute: string): string => {
 const ENPOINTS = parsePublicApiEndpoints(PUBLIC_ENDPOINTS || "")
 
 const getSelectedApiEndpointRoute = (): string => {
+  // Storefront build: always PUBLIC_LAMBDA_URL — ignore localStorage and any "Local" option.
+  if (isPrerenderStorefront) { return PUBLIC_LAMBDA_URL || (ENPOINTS[0]?.route || "") }
   const endpointRoute = browser ? localStorage.getItem(selectedApiEndpointStorageKey) || "" : ""
   const persistedEndpointExists = ENPOINTS.some((endpointOption) => endpointOption.route === endpointRoute)
   return persistedEndpointExists ? endpointRoute : (ENPOINTS[0]?.route || "")
 }
 
 const getSelectedApiEndpoint = (selectedRoute: string): IApiEndpointOption => {
-  return ENPOINTS.find((endpointOption) => endpointOption.route === selectedRoute) || ENPOINTS[0] || {
+  const matchedEndpoint = ENPOINTS.find((endpointOption) => endpointOption.route === selectedRoute)
+  if (matchedEndpoint) { return matchedEndpoint }
+  // Storefront build pins PUBLIC_LAMBDA_URL even if it isn't one of PUBLIC_ENDPOINTS,
+  // so synthesize an option for it rather than falling back to ENPOINTS[0].
+  if (isPrerenderStorefront && selectedRoute) {
+    return { name: "Lambda", route: selectedRoute, hash: "000000" }
+  }
+  return ENPOINTS[0] || {
     name: "",
     route: "",
     hash: "000000"

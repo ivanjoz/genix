@@ -35,13 +35,26 @@ import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
     ]
   };
 
+  // Content fingerprint used to decide whether the live refresh actually differs from
+  // the prerendered content. The runtime `id` is a fresh uuid on every load (see
+  // parsePageContentRows), so it MUST be excluded or every refresh would look changed.
+  // Everything else (Type/Ast/Content/Css/Attributes) is the real persisted content.
+  const contentKey = (secs: SectionData[], css: string) =>
+    JSON.stringify(secs.map(({ id, ...rest }) => rest)) + ' ' + css;
+
   onMount(async () => {
     // Refresh to the latest content after the prerendered paint (and recover if the
-    // build-time fetch was empty). No hydration mismatch: the initial render uses
-    // `data` (exactly what SSR rendered); this runs only afterwards.
+    // build-time fetch was empty). The initial render used `data` (exactly what SSR
+    // rendered), so hydration already matched; this runs strictly afterwards.
+    //
+    // We reassign ONLY when the live content differs from what was prerendered:
+    //   - identical content  → no reassignment → no re-render → no layout shift
+    //   - different content  → one reassignment → EcommerceRenderer re-renders
+    //                          (the accepted, content-changed layout shift)
     try {
       const stored = await getStoreWebpage();
-      if (stored.sections.length > 0) {
+      if (stored.sections.length === 0) return; // keep prerendered content on empty/failed refresh
+      if (contentKey(stored.sections, stored.css) !== contentKey(sections, runtimeCss)) {
         sections = stored.sections;
         runtimeCss = stored.css;
       }

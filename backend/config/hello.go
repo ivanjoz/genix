@@ -12,6 +12,8 @@ import (
 func HelloWorld(req *core.HandlerArgs) core.HandlerResponse {
 
 	body1 := `
+		GENIX VERSION 0.11
+		--------------------------------
 		Todo está funcionando bien!
 		BUILD_DATE = $1
 		ENVIROMENT = $2
@@ -26,20 +28,23 @@ func HelloWorld(req *core.HandlerArgs) core.HandlerResponse {
 	body1 = strings.Replace(body1, "$5", strings.Join(os.Args, " | "), -1)
 
 	bodyBytes := []byte(body1)
-	return req.MakeResponsePlain(&bodyBytes)
+	response := req.MakeResponsePlain(&bodyBytes)
+	// Keep this health response readable without compression support.
+	response.DisableCompression = true
+	return response
 }
 
 type DemoStruct4 struct {
 	configTypes.TAGS `table:"demo_structs"`
-	CompanyID               int32    `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
-	ID                      int32    `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
-	Edad                    int32    `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre                  string   `cbor:"4,keyasint,omitempty" json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras                []string `cbor:"5,keyasint,omitempty" json:"palabras,omitempty" db:"palabras"`
-	Rangos                  []int32  `cbor:"6,keyasint,omitempty" json:"rangos,omitempty" db:"rangos"`
-	Smallint                int16    `cbor:"7,keyasint,omitempty" json:"small_int,omitempty" db:"small_int,zx2"`
-	Peso                    float32  `cbor:"8,keyasint,omitempty" json:"peso,omitempty" db:"peso"`
-	Peso64                  float64  `cbor:"9,keyasint,omitempty" json:"peso64,omitempty" db:"peso_64"`
+	CompanyID        int32    `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
+	ID               int32    `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
+	Edad             int32    `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre           string   `cbor:"4,keyasint,omitempty" json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras         []string `cbor:"5,keyasint,omitempty" json:"palabras,omitempty" db:"palabras"`
+	Rangos           []int32  `cbor:"6,keyasint,omitempty" json:"rangos,omitempty" db:"rangos"`
+	Smallint         int16    `cbor:"7,keyasint,omitempty" json:"small_int,omitempty" db:"small_int,zx2"`
+	Peso             float32  `cbor:"8,keyasint,omitempty" json:"peso,omitempty" db:"peso"`
+	Peso64           float64  `cbor:"9,keyasint,omitempty" json:"peso64,omitempty" db:"peso_64"`
 }
 
 func Demo1(req *core.HandlerArgs) core.HandlerResponse {

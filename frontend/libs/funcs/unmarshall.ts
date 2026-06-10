@@ -68,25 +68,27 @@ export const unmarshall = (encoded: any): any => {
 
       if (Array.isArray(val[1])) {
         const sub = val[1];
-        let isSkipBlock = false;
-
-        if (sub.length > 0) {
-          const h = sub[0];
-          // If first element is not a valid header (0, 1, 2, 3), it's definitely a skip block
-          if (typeof h === 'number' && h !== 0 && h !== 1 && h !== 2 && h !== 3) {
-            isSkipBlock = true;
-          } else {
-            // If it is 0, 1, 2, or 3, it could be a skip block OR a value of the first field.
-            // Go's logic checks if the first field type is primitive.
-            // In TS, we don't have types, so we use the header rule as a heuristic.
-            isSkipBlock = typeof h === 'number' && h !== 0 && h !== 1 && h !== 2 && h !== 3;
-          }
-        }
+        // Disambiguate a skip block from a value that is itself an encoded array.
+        //
+        // The Go encoder (serialize/marshal.go) emits omitted fields as a skip
+        // block: a non-empty array of the skipped field-order indices, e.g. `[2]`
+        // or `[2, 6]`. The Go decoder tells this apart from a real value using the
+        // first field's *type* — info we don't have here.
+        //
+        // We rely on a structural invariant instead: a skip block is always a
+        // non-empty array of NON-NEGATIVE INTEGERS, whereas a value that happens to
+        // be an array is an encoded struct (`[1, [refBlock], …]` → contains a nested
+        // array), slice (`[2, …items]`), or map (`[3, "key", …]` → contains string
+        // keys). All of those carry a non-integer element right after the header, so
+        // "every element is a non-negative integer" cleanly identifies a skip block.
+        // (The old heuristic rejected leading 2/3 as headers, so common skip blocks
+        // like `[2]` (skip `children`) were misread as values and shifted every field.)
+        const isSkipBlock =
+          sub.length > 0 &&
+          sub.every((s: any) => typeof s === 'number' && Number.isInteger(s) && s >= 0);
 
         if (isSkipBlock) {
-          for (const s of sub) {
-            if (typeof s === 'number') skipIndices.add(s);
-          }
+          for (const s of sub) skipIndices.add(s);
           valueStartIdx = 2;
         }
       }

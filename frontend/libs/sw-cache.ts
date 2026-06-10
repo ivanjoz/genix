@@ -310,11 +310,9 @@ export const fetchCache = async (args: serviceHttpProps): Promise<FetchCacheResp
   args.__version__ = args.useCache?.ver || 1
   args.__companyID__ = Env.getCompanyID()
   args.verifyRouteMemoryState = args.verifyRouteMemoryState ?? Env.DELTA_CACHE_VERIFY_ROUTE_MEMORY
-  console.log("fetching cache...", args)
+  console.log("fetching Cache...", args)
 
   const response = await sendServiceMessage(3,args)
-  console.log("cache response::",response)
-
   return response as FetchCacheResponse
 }
 

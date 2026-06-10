@@ -138,10 +138,13 @@ export default defineConfig({
     reportCompressedSize: false,
     rollupOptions: {
       output: {
-        hashCharacters: 'base64'
-        // No manualChunks here: kit.output.bundleStrategy 'single' (svelte.config.js)
-        // sets codeSplitting:false, which rejects manualChunks outright. 'single' and a
-        // separate vendor chunk are mutually exclusive — SvelteKit owns the chunking.
+        hashCharacters: 'base64',
+        // bundleStrategy 'split' (svelte.config.js) enables code-splitting, so we can
+        // separate dependencies from app code: everything under node_modules goes into
+        // a single 'vendor' chunk, the rest stays in app/route chunks.
+        manualChunks(id) {
+          if (id.includes('node_modules')) return 'vendor';
+        }
       }
     }
   },

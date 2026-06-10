@@ -1,6 +1,7 @@
 <script lang="ts">
   // @render 'svelte';
   import { onMount } from "svelte";
+  import { browser } from "$app/environment";
   import "./store.css";
   import "./tailwind.css";
   import "$domain/libs/fontello-prerender.css";
@@ -27,4 +28,8 @@
 </svelte:head>
 
 {@render children()}
-<FloatingCart />
+<!-- Client-only: the floating cart depends on client cart state and must not be
+     baked into the prerendered HTML (it would flash empty/stale before hydration). -->
+{#if browser}
+  <FloatingCart />
+{/if}

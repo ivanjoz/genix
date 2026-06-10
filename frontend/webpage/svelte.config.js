@@ -66,7 +66,10 @@ const config = {
 			handleHttpError: 'warn'
 		},
 		output: {
-			bundleStrategy: 'single'
+			// 'split' enables code-splitting so vendor (node_modules) and app code land
+			// in separate chunks (see manualChunks in vite.config.ts). 'single' would
+			// reject manualChunks outright (codeSplitting:false).
+			bundleStrategy: 'split'
 		}
 	}
 };
