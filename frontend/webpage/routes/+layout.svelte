@@ -23,10 +23,6 @@
   });
 </script>
 
-<svelte:head>
-  <link rel="stylesheet" href="libs/fontello-embedded.css">
-</svelte:head>
-
 {@render children()}
 <!-- Client-only: the floating cart depends on client cart state and must not be
      baked into the prerendered HTML (it would flash empty/stale before hydration). -->

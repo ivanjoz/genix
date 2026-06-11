@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -78,17 +77,7 @@ func DeployCloudflareWorker() (int, error) {
 	fmt.Printf("[cloudflare-worker] dir=%s tenants=%d\n", workerDirectory, tenantCount)
 	fmt.Println("[cloudflare-worker] deploying Worker and Static Assets")
 
-	deployCommand := exec.Command("bunx", "wrangler", "deploy")
-	deployCommand.Dir = workerDirectory
-	deployCommand.Env = append(
-		os.Environ(),
-		"CLOUDFLARE_ACCOUNT_ID="+core.Env.CLOUDFLARE_ACCOUNT,
-		"CLOUDFLARE_API_TOKEN="+core.Env.CLOUDFLARE_TOKEN,
-	)
-	deployCommand.Stdout = os.Stdout
-	deployCommand.Stderr = os.Stderr
-
-	if deployError := deployCommand.Run(); deployError != nil {
+	if deployError := deployStorefrontWorker(workerDirectory); deployError != nil {
 		return 0, fmt.Errorf("error desplegando Cloudflare Worker: %w", deployError)
 	}
 
@@ -168,7 +157,7 @@ func findGenixProjectRoot() (string, error) {
 
 	for {
 		deployScript := filepath.Join(currentDirectory, "deploy.sh")
-		prerenderScript := filepath.Join(currentDirectory, "frontend", "webpage", "scripts", "prerender.mjs")
+		prerenderScript := filepath.Join(currentDirectory, "scripts", "prerender.mjs")
 		if fileExists(deployScript) && fileExists(prerenderScript) {
 			return currentDirectory, nil
 		}

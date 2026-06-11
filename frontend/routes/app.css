@@ -1,37 +1,37 @@
 @font-face {
 	font-family: 'main';
-	src: url("/fonts/open-sans-regular.woff2");
+	src: url("https://genix-dev.un.pe/fonts/open-sans-regular.woff2");
 }
 
 @font-face {
 	font-family: 'bold';
-	src: url("/fonts/open-sans-v40-latin-600.woff2");
+	src: url("https://genix-dev.un.pe/fonts/open-sans-v40-latin-600.woff2");
 }
 
 @font-face {
 	font-family: 'semibold';
-	src: url("/fonts/open-sans-v40-latin-500.woff2");
+	src: url("https://genix-dev.un.pe/fonts/open-sans-v40-latin-500.woff2");
 }
 
 @font-face {
 	font-family: 'mono';
-	src: url("/fonts/jetbrains-mono-regular.woff2");
+	src: url("https://genix-dev.un.pe/fonts/jetbrains-mono-regular.woff2");
 }
 
 /* Keep the mobile font switch centralized by exposing Inter through the same aliases. */
 @font-face {
 	font-family: 'main-mobile';
-	src: url("/fonts/inter-v20-latin-regular.woff2");
+	src: url("https://genix-dev.un.pe/fonts/inter-v20-latin-regular.woff2");
 }
 
 @font-face {
 	font-family: 'bold-mobile';
-	src: url("/fonts/inter-v20-latin-700.woff2");
+	src: url("https://genix-dev.un.pe/fonts/inter-v20-latin-700.woff2");
 }
 
 @font-face {
 	font-family: 'semibold-mobile';
-	src: url("/fonts/inter-v20-latin-600.woff2");
+	src: url("https://genix-dev.un.pe/fonts/inter-v20-latin-600.woff2");
 }
 
 /* Re-map the shared aliases on small screens so existing components inherit Inter automatically. */

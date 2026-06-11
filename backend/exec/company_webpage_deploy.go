@@ -57,6 +57,8 @@ func DeployCompanyWebpage(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr("error limpiando build temporal:", removeError)
 	}
 
+	// The script derives the asset base from credentials.json (FRONTEND_CDN +
+	// /websites/<company>, same as companyWebpageAssetBase), so no --asset-base is passed.
 	prerenderCommand := exec.Command(
 		"bun",
 		"scripts/prerender.mjs",
@@ -64,10 +66,8 @@ func DeployCompanyWebpage(args *core.ExecArgs) core.FuncResponse {
 		strconv.FormatInt(int64(companyID), 10),
 		"--out",
 		temporaryDirectory,
-		"--asset-base",
-		assetBase,
 	)
-	prerenderCommand.Dir = webpageDirectory
+	prerenderCommand.Dir = projectRoot
 	prerenderCommand.Stdout = os.Stdout
 	prerenderCommand.Stderr = os.Stderr
 	if prerenderError := prerenderCommand.Run(); prerenderError != nil {
@@ -97,47 +97,6 @@ func DeployCompanyWebpage(args *core.ExecArgs) core.FuncResponse {
 	return core.FuncResponse{
 		Message: fmt.Sprintf("Webpage de CompanyID %d desplegada en https://%s", companyID, hostname),
 	}
-}
-
-func ensureCompanyWebpageAssetCORS(projectRoot string) error {
-	// Browser ES modules need CORS because the HTML and JS use different hostnames.
-	bucketName := strings.TrimSpace(core.Env.STACK_NAME) + "-files"
-	if bucketName == "-files" {
-		return fmt.Errorf("STACK_NAME es requerido para configurar CORS de R2")
-	}
-
-	corsFile := filepath.Join(
-		projectRoot,
-		"frontend",
-		"webpage",
-		"cloudflare",
-		"r2-cors.json",
-	)
-	fmt.Printf("[company-webpage] configuring R2 CORS bucket=%s\n", bucketName)
-	corsCommand := exec.Command(
-		"bunx",
-		"wrangler",
-		"r2",
-		"bucket",
-		"cors",
-		"set",
-		bucketName,
-		"--file",
-		corsFile,
-		"--force",
-	)
-	corsCommand.Dir = filepath.Join(projectRoot, "frontend", "webpage", "cloudflare")
-	corsCommand.Env = append(
-		os.Environ(),
-		"CLOUDFLARE_ACCOUNT_ID="+core.Env.CLOUDFLARE_ACCOUNT,
-		"CLOUDFLARE_API_TOKEN="+core.Env.CLOUDFLARE_TOKEN,
-	)
-	corsCommand.Stdout = os.Stdout
-	corsCommand.Stderr = os.Stderr
-	if corsError := corsCommand.Run(); corsError != nil {
-		return fmt.Errorf("error configurando CORS de R2: %w", corsError)
-	}
-	return nil
 }
 
 func companyWebpageAssetBase(companyID int32) (string, error) {

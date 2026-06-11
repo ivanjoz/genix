@@ -1,13 +1,12 @@
-// Source of truth for `wrangler dev`. The deployed artifact is the hand-stripped
-// ../serve-worker.js (shipped by scripts/cloudflare_deploy.go) — keep them in sync.
-interface Env {
-  ASSETS: Fetcher;
-}
-
+// Pre-built deploy artifact: the hand-stripped JS of src/serve-worker.ts (no
+// imports, only TypeScript type annotations were removed, so behavior is
+// identical). Shipped as-is to Cloudflare by scripts/cloudflare_deploy.go — the
+// Go deployer reads this file verbatim, so no esbuild/wrangler/node step is
+// needed. Keep this in sync with src/serve-worker.ts (used for `wrangler dev`).
 const navigationAssetPath = '/index.html';
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request, env) {
     // Storefront artifacts are read-only.
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return new Response('Method Not Allowed', {
@@ -34,4 +33,4 @@ export default {
 
     return response;
   },
-} satisfies ExportedHandler<Env>;
+};

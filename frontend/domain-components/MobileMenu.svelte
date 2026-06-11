@@ -49,22 +49,22 @@ import { Core, mainMenuOptions, suscribeUrlFlag } from '$core/store.svelte';
   });
 </script>
 
-<div class={overlayCss} onclick={closeMenu}></div>
+<div class={overlayCss} role="button" tabindex="-1" onclick={closeMenu} onkeydown={e => e.key === 'Escape' && closeMenu()}></div>
 
 <div id="mob-menu" class={css} bind:this={divContainer}>
-  <button class="_3 absolute top-4 right-4 w-40 h-40" onclick={closeMenu}>
+  <button class="_3 absolute top-4 right-4 w-40 h-40" aria-label="Cerrar menú" onclick={closeMenu}>
     <i class="icon-cancel"></i>
   </button>
   <div class="grid gap-8 grid-cols-2 p-8 mt-54">
   {#each mainMenuOptions as opt}
-    <div class="_7" onclick={ev => {
+    <button class="_7" onclick={ev => {
       ev.stopPropagation()
       if(opt.onClick){ opt.onClick() }
     }}>
       <div class="_8"></div>
       <div class="h-24 fs20 mt-[-4px]"><i class={opt.icon}></i></div>
       <div class="flex items-center text-center grow-1">{opt.name}</div>
-    </div>
+    </button>
   {/each}
   </div>
 </div>
@@ -133,6 +133,10 @@ import { Core, mainMenuOptions, suscribeUrlFlag } from '$core/store.svelte';
     display: flex;
     align-items: center;
     flex-direction: column;
+    border: none;
+    cursor: pointer;
+    font-size: inherit;
+    width: 100%;
   }
   ._8 {
     background-color: rgb(243 242 249);

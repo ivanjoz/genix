@@ -7,7 +7,11 @@
 // build/), then copies the output to a per-company dist folder.
 //
 // Usage:
-//   bun scripts/prerender.mjs --company <id> --asset-base <url> [--out <dir>]
+//   bun scripts/prerender.mjs --company <id> [--asset-base <url>] [--out <dir>]
+//
+// The asset base defaults to `<FRONTEND_CDN>/websites/<company>` read from the repo's
+// credentials.json (matching backend/exec's companyWebpageAssetBase); pass --asset-base
+// only to override it (e.g. a manual/local run).
 //
 // The build-time content/SEO fetch targets the configured API (PUBLIC_ENDPOINTS in
 // .env → the dev API). The public GET.p-webpage endpoint must be deployed there for
@@ -27,6 +31,7 @@ import {
 } from 'node:fs';
 import { resolve, dirname, relative, basename, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const args = process.argv.slice(2);
 const getFlag = (name) => {
@@ -39,16 +44,40 @@ if (!company || Number.isNaN(Number(company)) || Number(company) <= 0) {
   console.error('Error: --company <id> is required (a positive number).');
   process.exit(1);
 }
-const assetBase = (getFlag('--asset-base') || '').replace(/\/+$/, '');
-if (!assetBase.startsWith('https://')) {
-  console.error('Error: --asset-base <https-url> is required.');
-  process.exit(1);
-}
-
-const here = dirname(fileURLToPath(import.meta.url));
-const appDir = resolve(here, '..');           // frontend/webpage
+// This script lives in <repo>/scripts; the SvelteKit app is at <repo>/frontend/webpage.
+const here = dirname(fileURLToPath(import.meta.url)); // <repo>/scripts
+const repoRoot = resolve(here, '..');                 // <repo>
+const appDir = resolve(repoRoot, 'frontend/webpage');
 const buildDir = resolve(appDir, 'build');
 const outDir = resolve(getFlag('--out') || resolve(appDir, 'dist-prerender', String(company)));
+
+// Asset base = the https origin the flattened JS/CSS get served from. By default it's
+// derived from credentials.json the same way backend/exec's companyWebpageAssetBase
+// does — <FRONTEND_CDN>/websites/<company> — so the deploy needs no --asset-base flag.
+// Passing --asset-base overrides it (handy for a manual/local run).
+const readFrontendCdn = () => {
+  const credentialsPath = resolve(repoRoot, 'credentials.json');
+  try {
+    const cdn = JSON.parse(readFileSync(credentialsPath, 'utf8')).FRONTEND_CDN;
+    return typeof cdn === 'string' ? cdn.trim().replace(/\/+$/, '') : '';
+  } catch (error) {
+    console.error(`[prerender] could not read FRONTEND_CDN from ${credentialsPath}: ${error.message}`);
+    return '';
+  }
+};
+const assetBaseOverride = getFlag('--asset-base');
+const frontendCdn = assetBaseOverride ? '' : readFrontendCdn();
+const assetBase = (
+  assetBaseOverride ||
+  (frontendCdn && `${frontendCdn}/websites/${company}`) ||
+  ''
+).replace(/\/+$/, '');
+if (!assetBase.startsWith('https://')) {
+  console.error(
+    'Error: asset base unresolved — set FRONTEND_CDN (https URL) in credentials.json or pass --asset-base.',
+  );
+  process.exit(1);
+}
 
 console.log(`[prerender] company=${company}`);
 console.log(`[prerender] out=${outDir}`);
@@ -72,6 +101,10 @@ inlineBootstrap(outDir, assetBase);
 flattenAssets(outDir);
 rewriteAssetUrls(outDir, assetBase);
 validateFlattenedAssetUrls(outDir, assetBase);
+mergeCss(outDir, assetBase);
+dropOrphanEnvChunk(outDir, assetBase);
+inlineDompurifyStubChunk(outDir, assetBase);
+inlineTrivialNodeChunks(outDir, assetBase);
 
 // --- Inline the SvelteKit bootstrap entries into the prerendered HTML -----------
 //
@@ -202,6 +235,230 @@ function validateFlattenedAssetUrls(dir, publicAssetBase) {
     }
   }
   console.log('[prerender] validated flat CDN asset URLs');
+}
+
+// --- Merge every stylesheet into a single file ---------------------------------
+//
+// SvelteKit (bundleStrategy 'split') emits one CSS file per route node and per
+// component (vendor, ProductCard, node 0/2/3, …), each linked eagerly in the
+// prerendered <head>. They all load on first paint anyway, so we concatenate them
+// into one app.<hash>.css and collapse the multiple <link>s into a single request.
+//
+// Cascade order is taken verbatim from the <link> order SvelteKit emitted in
+// index.html (Svelte scopes classes by hash, so cross-file order rarely matters, but
+// global styles like tailwind/store.css do — preserving the emitted order is safest).
+// The external fontello <link> (an https:// URL, not a local file) is left untouched.
+//
+// Beyond the <head> links, the only other CSS reference is SvelteKit's __vite_preload
+// dependency list in a route chunk (e.g. ["…/vendor.css"]); those are repointed at the
+// merged file so the preload hits the same cached bundle instead of a deleted file.
+function mergeCss(dir, publicAssetBase) {
+  const escapeRe = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const localCss = readdirSync(dir).filter((name) => name.endsWith('.css'));
+  if (localCss.length <= 1) {
+    console.log('[prerender] mergeCss: <=1 stylesheet, nothing to merge');
+    return;
+  }
+
+  // A <link> to one of our local CSS files: href points at publicAssetBase/<file>.css.
+  // The external fontello link uses a different host, so it never matches.
+  const localCssLinkRe = new RegExp(
+    `<link[^>]*href="${escapeRe(publicAssetBase)}/([A-Za-z0-9._-]+\\.css)"[^>]*>`,
+    'g',
+  );
+
+  // Cascade order = <link> order in index.html; any local CSS not linked there is
+  // appended (sorted) so nothing is silently dropped.
+  const indexPath = resolve(dir, 'index.html');
+  const orderedFromHtml = [];
+  if (existsSync(indexPath)) {
+    for (const m of readFileSync(indexPath, 'utf8').matchAll(localCssLinkRe)) {
+      if (localCss.includes(m[1]) && !orderedFromHtml.includes(m[1])) orderedFromHtml.push(m[1]);
+    }
+  }
+  const ordered = [
+    ...orderedFromHtml,
+    ...localCss.filter((f) => !orderedFromHtml.includes(f)).sort(),
+  ];
+
+  const merged = ordered.map((f) => readFileSync(resolve(dir, f), 'utf8')).join('\n');
+  const hash = createHash('sha256').update(merged).digest('base64url').slice(0, 8);
+  const mergedName = `app.${hash}.css`;
+  writeFileSync(resolve(dir, mergedName), merged);
+  const mergedUrl = `${publicAssetBase}/${mergedName}`;
+  const oldUrls = ordered.map((f) => `${publicAssetBase}/${f}`);
+
+  let rewrittenFiles = 0;
+  for (const name of readdirSync(dir)) {
+    if (!/\.(html|js|css)$/.test(name) || name === mergedName) continue;
+    const full = resolve(dir, name);
+    const before = readFileSync(full, 'utf8');
+    let content = before;
+    if (name.endsWith('.html')) {
+      // Collapse the <head> stylesheet links: the FIRST merged-file <link> becomes the
+      // single merged link, the rest are dropped. Done BEFORE the URL rewrite below so
+      // the old filenames are still present to match (and so the links don't all turn
+      // into duplicate merged links).
+      let replacedFirst = false;
+      content = content.replace(localCssLinkRe, (tag, file) => {
+        if (!ordered.includes(file)) return tag;
+        if (replacedFirst) return '';
+        replacedFirst = true;
+        return `<link href="${mergedUrl}" rel="stylesheet">`;
+      });
+    }
+    // Repoint every remaining reference to a merged file at the merged bundle, matching
+    // the bare URL regardless of quoting. This covers SvelteKit's __vite_preload
+    // dependency arrays — present both in route chunks (.js) and in the inlined
+    // bootstrap script inside each HTML file, where the quotes are backslash-escaped
+    // (\"…css\"). Without this those preloads would 404 on the now-deleted files.
+    for (const oldUrl of oldUrls) {
+      if (content.includes(oldUrl)) content = content.split(oldUrl).join(mergedUrl);
+    }
+    if (content !== before) {
+      writeFileSync(full, content);
+      rewrittenFiles++;
+    }
+  }
+
+  for (const f of ordered) rmSync(resolve(dir, f), { force: true });
+
+  console.log(
+    `[prerender] merged ${ordered.length} stylesheet(s) into ${mergedName} ` +
+      `(refs rewritten in ${rewrittenFiles} file(s))`,
+  );
+}
+
+// --- Drop / inline tiny single-purpose chunks ----------------------------------
+//
+// bundleStrategy 'split' emits a few sub-100-byte chunks that each cost an HTTP
+// request on the critical path but carry almost no code. The three helpers below
+// remove them after the asset URLs have been flattened to absolute base/<file> form:
+//   • env.js              — SvelteKit always emits $env/dynamic/public even when the
+//                           storefront only uses inlined $env/static/public literals;
+//                           here it is orphaned, so it's deleted.
+//   • <dompurify-stub>.js — the DOMPurify stub (see vite.config.ts) reached only from
+//                           a dynamic import in getPageContent(); inlined to a resolved
+//                           module so the chunk + request vanish.
+//   • node re-export      — a SvelteKit route node whose body is just
+//                           `import{X}from"<chunk>";export{X as component}`; the loader
+//                           is repointed straight at <chunk> and the shim is removed.
+
+// Build-time helper: escape a string for use as a literal inside a RegExp.
+// (A function declaration so it's hoisted above the pipeline calls at module top.)
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Replace every dynamic `import("<url>")` (any quote style — ", ', backtick, or the
+// backslash-escaped \" that appears in the inlined-bootstrap script inside HTML) with
+// `replacement`. Used to swap a chunk import for an inline module expression.
+function replaceDynamicImport(source, url, replacement) {
+  // A quote is one of " ' ` optionally preceded by a backslash (HTML-escaped form).
+  const quote = '(?:\\\\?["\'\\x60])';
+  const re = new RegExp(`import\\(\\s*${quote}${escapeRegExp(url)}${quote}\\s*\\)`, 'g');
+  return source.replace(re, replacement);
+}
+
+function dropOrphanEnvChunk(dir, publicAssetBase) {
+  const envPath = resolve(dir, 'env.js');
+  if (!existsSync(envPath)) return;
+  const envUrl = `${publicAssetBase}/env.js`;
+  const referenced = readdirSync(dir).some((name) => {
+    if (name === 'env.js' || !/\.(html|js|css)$/.test(name)) return false;
+    return readFileSync(resolve(dir, name), 'utf8').includes(envUrl);
+  });
+  if (referenced) {
+    console.log('[prerender] env.js is referenced, keeping');
+    return;
+  }
+  rmSync(envPath, { force: true });
+  console.log('[prerender] removed orphan env.js');
+}
+
+function inlineDompurifyStubChunk(dir, publicAssetBase) {
+  // The stub minifies to `var e={sanitize:e=>e};export{e as default};` (any minified
+  // identifier). Discover it by shape, not name — the hash changes every build.
+  const stubRe = /^var (\w+)=\{sanitize:\w+=>\w+\};export\{\1 as default\};?\s*$/;
+  const stub = readdirSync(dir)
+    .filter((name) => name.endsWith('.js'))
+    .find((name) => stubRe.test(readFileSync(resolve(dir, name), 'utf8').trim()));
+  if (!stub) {
+    console.log('[prerender] inlineDompurifyStubChunk: no stub chunk found, skipping');
+    return;
+  }
+  const stubUrl = `${publicAssetBase}/${stub}`;
+  // The sole consumer destructures `{default:…}` and calls `.sanitize`; this path never
+  // runs in the public storefront, so an identity sanitizer is behaviourally exact.
+  const replacement = '(Promise.resolve({default:{sanitize:(s)=>s}}))';
+  let rewritten = 0;
+  for (const name of readdirSync(dir)) {
+    if (!/\.(html|js)$/.test(name)) continue;
+    const full = resolve(dir, name);
+    const before = readFileSync(full, 'utf8');
+    const after = replaceDynamicImport(before, stubUrl, replacement);
+    if (after !== before) {
+      writeFileSync(full, after);
+      rewritten++;
+    }
+  }
+  // Only delete once nothing references it (the stub has empty preload deps, so the
+  // import call is its only reference — but verify before removing to avoid a 404).
+  const stillReferenced = readdirSync(dir).some(
+    (name) => name !== stub && /\.(html|js)$/.test(name) &&
+      readFileSync(resolve(dir, name), 'utf8').includes(stubUrl),
+  );
+  if (stillReferenced) {
+    console.warn(`[prerender] inlineDompurifyStubChunk: ${stub} still referenced, keeping`);
+    return;
+  }
+  rmSync(resolve(dir, stub), { force: true });
+  console.log(`[prerender] inlined DOMPurify stub (${stub}) into ${rewritten} file(s) and removed it`);
+}
+
+function inlineTrivialNodeChunks(dir, publicAssetBase) {
+  // A SvelteKit route node that only re-exports a component:
+  //   import{<imported> as <local>}from"<target-url>";export{<local> as component};
+  // Its component is just <target>'s <imported> export, and <target> is already in the
+  // node's preload deps — so the indirection chunk is pure overhead.
+  const nodeRe = /^import\{(\w+) as (\w+)\}from"([^"]+)";export\{\2 as component\};?\s*$/;
+  let removed = 0;
+  for (const node of readdirSync(dir).filter((name) => name.endsWith('.js'))) {
+    const match = nodeRe.exec(readFileSync(resolve(dir, node), 'utf8').trim());
+    if (!match) continue;
+    const [, importedName, , targetUrl] = match;
+    const nodeUrl = `${publicAssetBase}/${node}`;
+    if (targetUrl === nodeUrl) continue; // self-reference guard
+    // Loader: pull `component` straight from the target chunk.
+    const loader = `import(\`${targetUrl}\`).then((m)=>({component:m.${importedName}}))`;
+    let rewritten = 0;
+    for (const name of readdirSync(dir)) {
+      if (!/\.(html|js)$/.test(name)) continue;
+      const full = resolve(dir, name);
+      const before = readFileSync(full, 'utf8');
+      // 1) Rewrite the node loader's dynamic import (now points at <target>, not <node>).
+      let content = replaceDynamicImport(before, nodeUrl, loader);
+      // 2) Repoint any remaining bare <node> URL (the __vite_preload dep arrays) at
+      //    <target>; it's already preloaded, so the duplicate modulepreload is deduped.
+      if (content.includes(nodeUrl)) content = content.split(nodeUrl).join(targetUrl);
+      if (content !== before) {
+        writeFileSync(full, content);
+        rewritten++;
+      }
+    }
+    const stillReferenced = readdirSync(dir).some(
+      (name) => name !== node && /\.(html|js)$/.test(name) &&
+        readFileSync(resolve(dir, name), 'utf8').includes(nodeUrl),
+    );
+    if (stillReferenced) {
+      console.warn(`[prerender] inlineTrivialNodeChunks: ${node} still referenced, keeping`);
+      continue;
+    }
+    rmSync(resolve(dir, node), { force: true });
+    removed++;
+    console.log(`[prerender] inlined trivial node chunk (${node}) into ${rewritten} file(s) and removed it`);
+  }
+  if (removed === 0) console.log('[prerender] inlineTrivialNodeChunks: no trivial node chunks');
 }
 
 // --- Flatten the deploy to a single folder of code -----------------------------

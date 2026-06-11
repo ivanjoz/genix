@@ -1,5 +1,5 @@
 <script lang="ts">
-import { onMount } from 'svelte';
+import { onMount, untrack } from 'svelte';
 import MobileMenu from '$domain/MobileMenu.svelte';
 import Header from '$ecommerce/components/Header.svelte';
 import EcommerceRenderer from '$ecommerce/renderer/EcommerceRenderer.svelte';
@@ -13,7 +13,7 @@ import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
   // load() so it's baked into the prerendered HTML (SEO); the onMount refresh below
   // then pulls the latest content for real users. EcommerceRenderer maps each
   // section to its registered component.
-  let sections = $state<SectionData[]>(data?.sections ?? []);
+  let sections = $state<SectionData[]>(untrack(() => data?.sections ?? []));
 
   // SEO metatags for this page (from the same p-webpage call). Baked into the
   // prerendered <head> for crawlers; in dev (CSR) the load runs client-side.
@@ -23,7 +23,7 @@ import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
   // section AST, text lines). These classes don't exist in source, so build-time
   // Tailwind can't cover them. The builder pre-generates this on save and stores
   // it per section, so the storefront injects it as-is — no UnoCSS at view time.
-  let runtimeCss = $state(data?.css ?? '');
+  let runtimeCss = $state(untrack(() => data?.css ?? ''));
 
   // Matches the builder's default palette so `--color-N` vars resolve identically.
   const defaultPalette: ColorPalette = {

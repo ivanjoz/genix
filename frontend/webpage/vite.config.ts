@@ -30,7 +30,9 @@ const serviceWorkerConfig: BuildOptions = {
   format: 'esm',
   outfile: path.resolve(publicDir, 'sw.js'),
   bundle: true,
-  sourcemap: true,
+  // Sourcemaps cost build time and aren't shipped/used by the prerender deploy; keep
+  // them only for `vite dev` (see configureServer, which omits this flag override).
+  sourcemap: !isBuild,
   splitting: false,
   platform: 'browser',
   packages: 'bundle',
@@ -112,9 +114,21 @@ const makeDevCssModuleClass = (name: string, filename: string) => {
   return `m-${name}_${stableHash}`;
 };
 
+// The per-company storefront prerender (scripts/prerender.mjs) sets VITE_COMPANY_ID.
+// In that build only, swap DOMPurify (~50 KB) for a tiny stub: it's reached solely from
+// the UI agent's getPageContent() (ui-components/agent/registry.ts), a code path the
+// public storefront never runs. Admin/dev builds keep the real library.
+const isStorefrontPrerender = !!process.env.VITE_COMPANY_ID;
+const storefrontAliases = isStorefrontPrerender
+  ? { dompurify: path.resolve(__dirname, 'lib/dompurify-stub.js') }
+  : {};
+
 export default defineConfig({
   root: path.resolve(__dirname),
   publicDir: './static',
+  resolve: {
+    alias: storefrontAliases,
+  },
   server: {
     port: 3571,
     fs: {
@@ -131,11 +145,14 @@ export default defineConfig({
     }
   },
   build: {
+    // The prerender ships hydration JS for modern browsers and is minified anyway, so
+    // skip Vite 8's default 'baseline-widely-available' downlevel transpilation pass.
+    target: 'esnext',
     minify: shouldMinifyBuildOutput,
     cssMinify: shouldMinifyBuildOutput,
     // Skip the gzip-size pass in the build reporter — it's pure CPU on every emitted
     // chunk and the prerender doesn't need it (our script prints raw sizes instead).
-    reportCompressedSize: false,
+		reportCompressedSize: false,
     rollupOptions: {
       output: {
         hashCharacters: 'base64',
@@ -150,7 +167,17 @@ export default defineConfig({
   },
   plugins: [
     serviceWorkerPlugin(),
-    sveltekit(),
+    // SvelteKit's `vite-plugin-sveltekit-guard` runs a `resolveId` hook on EVERY import
+    // edge to build an import-map, used only to print a nice chain if a server-only
+    // module ($lib/server, $env/*/private, *.server.*) leaks into client code. Under
+    // rolldown each edge crosses the JS↔Rust boundary and it dominates plugin time
+    // (PLUGIN_TIMINGS ~82%). This storefront prerender imports no server-only modules,
+    // so we drop the guard. If server-only code is ever added, restore it to catch leaks.
+    (async () => {
+      const sk = await sveltekit();
+      const arr = Array.isArray(sk) ? sk : [sk];
+      return arr.filter((p) => p && (p as any).name !== 'vite-plugin-sveltekit-guard');
+    })(),
     // NOTE: svelteClassHasher() is intentionally NOT used here. It rewrites style-block
     // class names via a stateful counter, which (a) diverges across the SSR + client
     // build passes prerender requires — breaking style matching — and (b) had an offset

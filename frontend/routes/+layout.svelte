@@ -10,7 +10,6 @@
 	import T from '$components/misc/T.svelte';
 	import AppHeader from '$domain/AppHeader.svelte';
 	import favicon from '$libs/assets/favicon.svg?raw';
-	import '$domain/libs/fontello-embedded.css';
 	import Page from '$domain/Page.svelte';
 	import SideMenu from '$domain/SideMenu.svelte';
 	import { Notify } from '$libs/helpers';

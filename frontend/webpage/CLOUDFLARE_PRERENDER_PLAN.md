@@ -262,9 +262,10 @@ The company deployment must run these steps in order:
 4. Require that the hostname belongs to `ZONE_NAME` for this demo.
 5. Configure R2 CORS for public `GET`/`HEAD` module requests.
 6. Build into a temporary directory by invoking the prerender command with
-   `exec.Command.Dir` set to `frontend/webpage`:
-   `bun scripts/prerender.mjs --company <CompanyID> --asset-base
-   <FRONTEND_CDN>/websites/<CompanyID> --out <temporary-directory>`.
+   `exec.Command.Dir` set to the project root:
+   `bun scripts/prerender.mjs --company <CompanyID> --out <temporary-directory>`.
+   The script derives the asset base (`<FRONTEND_CDN>/websites/<CompanyID>`) from
+   `credentials.json`, so no `--asset-base` is passed.
 7. Rewrite generated JS/CSS URLs to
    `FRONTEND_CDN/websites/<CompanyID>/<asset>`.
 8. Upload non-HTML assets except `sw.js` to R2 under `websites/<CompanyID>/`,

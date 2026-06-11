@@ -1,19 +1,19 @@
 @font-face {
   font-family: "main";
-  src: url("/libs/lato-v24-latin-regular.woff2") format("woff2");
+  src: url("https://genix-dev.un.pe/libs/lato-v24-latin-regular.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: 'bold'; src: url("/libs/lato-v24-latin-700.woff2");
+  font-family: 'bold'; src: url("https://genix-dev.un.pe/libs/lato-v24-latin-700.woff2");
 }
 @font-face {
-  font-family: 'semibold'; src: url("/libs/lato-v24-latin-700.woff2");
+  font-family: 'semibold'; src: url("https://genix-dev.un.pe/libs/lato-v24-latin-700.woff2");
 }
 @font-face {
-  font-family: 'bold-italic'; src: url("/libs/lato-v24-latin-italic.woff2");
+  font-family: 'bold-italic'; src: url("https://genix-dev.un.pe/libs/lato-v24-latin-italic.woff2");
   font-weight: 700;
   font-style: italic;
 }

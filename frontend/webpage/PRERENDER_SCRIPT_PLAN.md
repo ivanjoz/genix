@@ -66,7 +66,10 @@ Dev keeps `/webpage-app` (proxy on :3572); the prerender build serves at `/`.
 ### 6. Script — `scripts/prerender.mjs` (bun)
 `--company <id>` (required), `--out <dir>` (default `dist-prerender/<id>`):
 sets `VITE_COMPANY_ID` → `bun run build` (SvelteKit prerenders `/`, bakes HTML+CSS+JS
-into `build/`) → copies `build/` → `out/`. Prints `wrangler pages deploy <out>`.
+into `build/`) → copies `build/` → `out/`, then flattens to a single folder, rewrites
+JS/CSS asset URLs to the asset base (`<FRONTEND_CDN>/websites/<id>`, read from
+`credentials.json`; `--asset-base <url>` overrides), merges the stylesheets into one,
+and inlines a few tiny single-purpose chunks. Prints the upload + Worker-deploy steps.
 > The deployed **dev API** (`genix-dev-api-2.un.pe`, from `PUBLIC_ENDPOINTS`) is the
 > build-time fetch target — the public `p-` endpoints must be deployed there for the
 > build to bake real content. If the fetch fails the build still succeeds (empty
