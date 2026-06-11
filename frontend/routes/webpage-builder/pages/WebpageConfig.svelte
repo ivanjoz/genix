@@ -9,26 +9,38 @@ import {
   postWebsiteSeo,
   type IWebsiteConfig,
 } from '$services/webpage/pages.svelte';
+import { PUBLIC_ZONE_NAME } from '$env/static/public';
 import { onMount } from 'svelte';
 
   // All storefront config (domain + SEO metatags) lives in parameters group 10.
   let config = $state<IWebsiteConfig>({});
+  let domainForm = $state({ subdomain: '' });
+  const domainSuffix = `.${PUBLIC_ZONE_NAME}`;
 
   onMount(async () => {
     // Load the persisted domain + SEO so the form is pre-filled.
     config = (await getWebsiteConfig()) || {};
+    const savedSubdomain = config.domain?.endsWith(domainSuffix)
+      ? config.domain.slice(0, -domainSuffix.length)
+      : config.domain || '';
+    // Input reloads its value when the saveOn object reference changes.
+    domainForm = { subdomain: savedSubdomain };
   });
 
   const saveDomain = async () => {
-    if (!config.domain) {
+    const subdomain = domainForm.subdomain.trim().toLowerCase();
+    if (!subdomain) {
       Notify.failure(tr('Enter a domain.|Ingrese un dominio.'));
       return;
     }
     Loading.standard(tr('Saving domain...|Guardando dominio...'));
     try {
-      const result = await postWebsiteDomain(config.domain);
-      // Persist the server-normalized host (protocol/path stripped).
-      config.domain = result?.domain || config.domain;
+      const result = await postWebsiteDomain(`${subdomain}${domainSuffix}`);
+      // Keep the editable value limited to the tenant label.
+      config.domain = result?.domain;
+      domainForm = {
+        subdomain: result?.domain?.slice(0, -domainSuffix.length) || subdomain,
+      };
     } catch (error) {
       Notify.failure(error as string);
       Loading.remove();
@@ -56,9 +68,14 @@ import { onMount } from 'svelte';
   <!-- Domain -->
   <h3 class="h3 ff-bold mb-6">{tr('Domain|Dominio')}</h3>
   <div class="grid grid-cols-12 gap-10 items-end mb-16">
-    <Input label="Domain|Dominio" css="col-span-9"
-      saveOn={config} save="domain"
-    />
+    <div class="col-span-9 p-rel">
+      <Input label="Domain|Dominio" inputCss="pr-70"
+        saveOn={domainForm} save="subdomain" />
+      <!-- The zone is deployment configuration, not editable tenant data. -->
+      <div class="p-abs right-10 bottom-0 h-44 flex items-center pointer-events-none">
+        {domainSuffix}
+      </div>
+    </div>
     <Button name="Save|Guardar" label="Saves the storefront domain."
       color="green" icon="icon-floppy" css="col-span-3"
       onClick={saveDomain}

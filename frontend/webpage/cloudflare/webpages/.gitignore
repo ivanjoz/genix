@@ -1,0 +1,5 @@
+# Ignore generated pre-rendered content; only keep the folder itself
+*
+!.gitkeep
+!.gitignore
+!.assetsignore

@@ -15,6 +15,7 @@ export const setupEnv = () => {
       const envContent = [
         `PUBLIC_LAMBDA_URL=${credentials.LAMBDA_URL || ''}`,
         `PUBLIC_FRONTEND_CDN=${credentials.FRONTEND_CDN || ''}`,
+        `PUBLIC_ZONE_NAME=${credentials.ZONE_NAME || ''}`,
         `PUBLIC_ENDPOINTS=${serializedPublicEndpoints}`
       ].join('\n') + '\n';
       

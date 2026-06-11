@@ -197,10 +197,13 @@ func main() {
 	fmt.Println("DB connection started!")
 
 	invokeFun := ""
-	for _, value := range os.Args {
+	invokeFunIndex := -1
+	for argumentIndex, value := range os.Args {
 		if len(value) >= 2 && value[0:2] == "fn" {
 			core.Env.LOGS_FULL = true
 			invokeFun = value
+			invokeFunIndex = argumentIndex
+			break
 		}
 	}
 
@@ -235,12 +238,17 @@ func main() {
 		}
 		if !ok {
 			core.Log("No se encontró la función a ejecutar:: ", invokeFun)
-			return
+			os.Exit(1)
 		}
-		args := core.ExecArgs{Message: ""}
+		execMessage := ""
+		if invokeFunIndex >= 0 && invokeFunIndex+1 < len(os.Args) {
+			execMessage = strings.Join(os.Args[invokeFunIndex+1:], " ")
+		}
+		args := core.ExecArgs{Message: execMessage}
 		funcResponse := funcToInvoke(&args)
 		if len(funcResponse.Error) > 0 {
 			core.Log("Exec function error::", funcResponse.Error)
+			os.Exit(1)
 		}
 		if len(funcResponse.Message) > 0 {
 			core.Log("Exec function message::", funcResponse.Message)

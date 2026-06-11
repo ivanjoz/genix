@@ -381,7 +381,6 @@ func SaveFileToR2(args SaveFileArgs) error {
 		return fmt.Errorf("R2 upload failed (HTTP %d): %s", resp.StatusCode, string(respBytes))
 	}
 
-	core.Log("R2 upload OK:", resp.StatusCode)
 	return nil
 }
 

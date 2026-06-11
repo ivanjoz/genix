@@ -1,0 +1,16 @@
+{
+  // One Worker serves every company folder selected by request hostname.
+  "name": "genix-storefront",
+  "main": "src/serve-worker.ts",
+  "compatibility_date": "2026-06-10",
+  "assets": {
+    "directory": "./webpages",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

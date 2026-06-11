@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Per-company storefront prerender for Cloudflare Pages.
+// Per-company storefront prerender for the Cloudflare storefront Worker.
 //
 // Sets VITE_COMPANY_ID (which flips the app to SSR+prerender, scopes API calls via
 // Env.getCompanyID, and switches the base path to '' for a subdomain-root deploy),
@@ -7,7 +7,7 @@
 // build/), then copies the output to a per-company dist folder.
 //
 // Usage:
-//   bun scripts/prerender.mjs --company <id> [--out <dir>]
+//   bun scripts/prerender.mjs --company <id> --asset-base <url> [--out <dir>]
 //
 // The build-time content/SEO fetch targets the configured API (PUBLIC_ENDPOINTS in
 // .env → the dev API). The public GET.p-webpage endpoint must be deployed there for
@@ -39,6 +39,11 @@ if (!company || Number.isNaN(Number(company)) || Number(company) <= 0) {
   console.error('Error: --company <id> is required (a positive number).');
   process.exit(1);
 }
+const assetBase = (getFlag('--asset-base') || '').replace(/\/+$/, '');
+if (!assetBase.startsWith('https://')) {
+  console.error('Error: --asset-base <https-url> is required.');
+  process.exit(1);
+}
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = resolve(here, '..');           // frontend/webpage
@@ -47,6 +52,7 @@ const outDir = resolve(getFlag('--out') || resolve(appDir, 'dist-prerender', Str
 
 console.log(`[prerender] company=${company}`);
 console.log(`[prerender] out=${outDir}`);
+console.log(`[prerender] asset-base=${assetBase}`);
 
 const env = { ...process.env, VITE_COMPANY_ID: String(company) };
 const result = spawnSync('bun', ['run', 'build'], { cwd: appDir, env, stdio: 'inherit' });
@@ -62,8 +68,10 @@ if (!existsSync(buildDir)) {
 rmSync(outDir, { recursive: true, force: true });
 cpSync(buildDir, outDir, { recursive: true });
 
-inlineBootstrap(outDir);
+inlineBootstrap(outDir, assetBase);
 flattenAssets(outDir);
+rewriteAssetUrls(outDir, assetBase);
+validateFlattenedAssetUrls(outDir, assetBase);
 
 // --- Inline the SvelteKit bootstrap entries into the prerendered HTML -----------
 //
@@ -82,17 +90,13 @@ flattenAssets(outDir);
 //   import(URL.createObjectURL(new Blob([<src>], { type: "text/javascript" })))
 // The entries reference siblings relatively (../chunks, ../nodes, ../assets). A blob:
 // URL base is NOT hierarchical, so it can resolve neither those relative specifiers nor
-// a root-absolute /_app/... one ("base scheme isn't hierarchical"). Only a
-// FULLY-QUALIFIED url works from a blob module — but the deploy origin is unknown at
-// build time. So we rewrite specifiers to a __SK_ORIGIN__ placeholder and substitute
-// location.origin at runtime, just before the Blob is built. (Assumes the subdomain-
-// root deploy the prerender targets, base=''. A data: URL can't host this at all — it
-// has no origin — which is why we use a blob.)
+// a root-absolute /_app/... one. Only a fully-qualified URL works from a blob module,
+// so the prerender replaces those specifiers with the company's public R2 prefix.
 //
 // CSP note: importing a blob module needs `script-src blob:`. This app already ships
 // inline classic scripts without a nonce, so no strict CSP is in force; if one is ever
 // added, it must allow blob: (and keep allowing inline) or this step must be reverted.
-function inlineBootstrap(dir) {
+function inlineBootstrap(dir, publicAssetBase) {
   const entryDir = resolve(dir, '_app/immutable/entry');
   if (!existsSync(entryDir)) {
     console.warn('[prerender] inlineBootstrap: no entry dir, skipping');
@@ -102,13 +106,12 @@ function inlineBootstrap(dir) {
   // Make embedded source safe to sit inside <script>…</script> and a JS string literal.
   const toJsString = (src) =>
     JSON.stringify(src).replace(/<\//g, '<\\/').replace(/<!--/g, '<\\!--');
-  // __SK_ORIGIN__ is replaced with location.origin at runtime (see the blob expr below),
-  // yielding fully-qualified URLs the blob module can resolve.
+  // Blob modules need absolute imports because blob: URLs have no hierarchical base.
   const rewriteSpecifiers = (src) =>
     src
-      .replaceAll('../chunks/', '__SK_ORIGIN__/_app/immutable/chunks/')
-      .replaceAll('../nodes/', '__SK_ORIGIN__/_app/immutable/nodes/')
-      .replaceAll('../assets/', '__SK_ORIGIN__/_app/immutable/assets/');
+      .replaceAll('../chunks/', `${publicAssetBase}/`)
+      .replaceAll('../nodes/', `${publicAssetBase}/`)
+      .replaceAll('../assets/', `${publicAssetBase}/`);
 
   const entryFiles = readdirSync(entryDir).filter((f) => /^(app|start)\..*\.js$/.test(f));
   if (entryFiles.length === 0) {
@@ -132,7 +135,7 @@ function inlineBootstrap(dir) {
       // Swap the dynamic import of the entry file for a blob import of its source.
       const importRe = new RegExp(`import\\("[^"]*entry/${esc}"\\)`, 'g');
       if (importRe.test(html)) {
-        const blob = `import(URL.createObjectURL(new Blob([${toJsString(src)}.replaceAll("__SK_ORIGIN__",location.origin)],{type:"text/javascript"})))`;
+        const blob = `import(URL.createObjectURL(new Blob([${toJsString(src)}],{type:"text/javascript"})))`;
         // Replacement MUST be a function: a string replacement would interpret `$$`,
         // `$&`, `$1`… in the inlined source as special patterns (e.g. corrupting
         // `$$slots` → `$slots`). A function's return value is inserted verbatim.
@@ -154,6 +157,53 @@ function inlineBootstrap(dir) {
   console.log(`[prerender] inlined bootstrap entries into HTML: ${entryFiles.join(', ')}`);
 }
 
+// Point every generated JS/CSS dependency at the company's public R2 prefix.
+// sw.js remains same-origin because browsers reject cross-origin service workers.
+function rewriteAssetUrls(dir, publicAssetBase) {
+  const assetNames = readdirSync(dir).filter((name) => /\.(js|css)$/.test(name) && name !== 'sw.js');
+  const escapeRe = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let rewrittenFiles = 0;
+
+  for (const fileName of readdirSync(dir)) {
+    if (!/\.(html|js|css)$/.test(fileName) || fileName === 'sw.js') continue;
+
+    const filePath = resolve(dir, fileName);
+    let content = readFileSync(filePath, 'utf8');
+    const originalContent = content;
+    for (const assetName of assetNames) {
+      const escapedAssetName = escapeRe(assetName);
+      const absoluteAssetUrl = `${publicAssetBase}/${assetName}`;
+      content = content.replace(
+        new RegExp(`(["'\`])(?:\\./|/)?${escapedAssetName}\\1`, 'g'),
+        (_match, quote) => `${quote}${absoluteAssetUrl}${quote}`,
+      );
+    }
+    if (content !== originalContent) {
+      writeFileSync(filePath, content);
+      rewrittenFiles++;
+    }
+  }
+
+  console.log(
+    `[prerender] rewrote ${assetNames.length} asset URL(s) to ${publicAssetBase} ` +
+      `in ${rewrittenFiles} file(s)`,
+  );
+}
+
+function validateFlattenedAssetUrls(dir, publicAssetBase) {
+  const invalidAssetPrefix = `${publicAssetBase}/_app/immutable/`;
+  for (const fileName of readdirSync(dir)) {
+    if (!/\.(html|js|css)$/.test(fileName)) continue;
+    const fileContent = readFileSync(resolve(dir, fileName), 'utf8');
+    if (fileContent.includes(invalidAssetPrefix)) {
+      throw new Error(
+        `[prerender] unflattened CDN asset URL remains in ${fileName}: ${invalidAssetPrefix}`,
+      );
+    }
+  }
+  console.log('[prerender] validated flat CDN asset URLs');
+}
+
 // --- Flatten the deploy to a single folder of code -----------------------------
 //
 // Goal: ship ONLY .js / .css / .html, all in one flat directory, and discard
@@ -168,7 +218,6 @@ function inlineBootstrap(dir) {
 //   HTML:  ./_app/immutable/assets/X.css  → ./X.css
 //          /_app/immutable/chunks/X.js     → /X.js          (404.html uses absolute)
 //          libs/fontello-embedded.css      → fontello-embedded.css
-//          __SK_ORIGIN__/_app/immutable/.. → __SK_ORIGIN__/.. (inside the inlined blob)
 //   JS:    import "../chunks/X.js"          → import "./X.js" (chunk→chunk "./X" already ok)
 // CSS url() (fonts via /libs/…, fontello's legacy ../font/…) is left untouched: those
 // are the discarded "other assets" the deploy expects to serve from https elsewhere.
@@ -215,14 +264,13 @@ function flattenAssets(dir) {
   // moved files; CSS only references discarded assets (left for https).
   //
   // dirCollapse drops a `_app/immutable/<dir>/` or `libs/` directory prefix while
-  // preserving any leading ./  ../  /  or __SK_ORIGIN__/ token. The lookbehind anchors
+  // preserving any leading ./  ../  or / token. The lookbehind anchors
   // the match to a URL delimiter (quote/backtick/paren/space/=) so the short `libs`
-  // token can't match mid-identifier (e.g. `mylibs/`). Covers HTML href/src, the
-  // inlined blob's __SK_ORIGIN__/_app/... specifiers, and JS string refs such as the
-  // layout's `libs/fontello-embedded.css`.
+  // token can't match mid-identifier (e.g. `mylibs/`). Covers HTML href/src and JS
+  // string refs such as the layout's `libs/fontello-embedded.css`.
   const dirCollapse = (s) =>
     s.replace(
-      /(?<=["'`(\s=])((?:\.\.?\/|\/|__SK_ORIGIN__\/)?)(?:_app\/immutable\/(?:chunks|nodes|assets|entry)|libs)\//g,
+      /(?<=["'`(\s=])((?:\.\.?\/|\/)?)(?:_app\/immutable\/(?:chunks|nodes|assets|entry)|libs)\//g,
       (_m, lead) => lead || '',
     );
   // JS sibling imports use ../<dir>/ (e.g. a node importing ../chunks/X.js); flatten to
@@ -289,4 +337,4 @@ console.log(`  CSS (${cssCount} files): ${formatKB(totals.css)}`);
 console.log(`  Total          : ${formatKB(totals.all)}`);
 
 console.log('\n[prerender] done.');
-console.log(`\nDeploy with:\n  wrangler pages deploy ${outDir}`);
+console.log(`\n[prerender] upload assets to ${assetBase} and deploy HTML with the storefront Worker`);
