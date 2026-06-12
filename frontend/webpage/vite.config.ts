@@ -1,6 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
-import { defineConfig, type ViteDevServer } from 'vite';
+import { defineConfig, type AliasOptions, type ViteDevServer } from 'vite';
 import * as esbuild from 'esbuild';
 import type { BuildOptions } from 'esbuild';
 import fs from 'fs';
@@ -119,15 +119,14 @@ const makeDevCssModuleClass = (name: string, filename: string) => {
 // the UI agent's getPageContent() (ui-components/agent/registry.ts), a code path the
 // public storefront never runs. Admin/dev builds keep the real library.
 const isStorefrontPrerender = !!process.env.VITE_COMPANY_ID;
-const storefrontAliases = isStorefrontPrerender
-  ? { dompurify: path.resolve(__dirname, 'lib/dompurify-stub.js') }
-  : {};
 
 export default defineConfig({
   root: path.resolve(__dirname),
   publicDir: './static',
   resolve: {
-    alias: storefrontAliases,
+    alias: isStorefrontPrerender
+      ? { dompurify: path.resolve(__dirname, 'lib/dompurify-stub.js') }
+      : {} as AliasOptions
   },
   server: {
     port: 3571,

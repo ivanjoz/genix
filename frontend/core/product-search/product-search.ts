@@ -1,9 +1,9 @@
 // ProductSearch: ranks products against a query over their plain-text names. Names (and brand
-// names) come from the CDN snapshot + server delta via ProductEcommerceDataService, so matching is
+// names) come from the CDN snapshot + server delta via the shared ProductCatalog, so matching is
 // word/character-prefix based — no dictionary, syllables or binary encoding.
-import { getProductEcommerceData, type ProductEcommerceDataService } from "./productos-delta-service";
+import { getProductEcommerceData, type ProductCatalog } from "$ecommerce/services/productos.svelte";
 import type { IndexedProduct, ProductSearchHit } from "./types";
-import type { IProduct } from "$services/services/productos.svelte";
+import type { IProduct } from "$ecommerce/services/productos.svelte";
 
 // Spanish connector words carry no search signal and are dropped from both names and queries.
 const CONNECTOR_WORDS = new Set(["de", "del", "la", "el", "los", "las", "con", "para", "en", "al", "sin", "y"]);
@@ -90,7 +90,7 @@ export class ProductSearch {
 	private updatedInt32 = 0;
 	private latestDebugSnapshot: ProductSearchDebugSnapshot | null = null;
 
-	private data: ProductEcommerceDataService | null = null;
+	private data: ProductCatalog | null = null;
 	readonly readyPromise: Promise<void>;
 	isLoading = false;
 	isReady = false;
@@ -140,6 +140,12 @@ export class ProductSearch {
 				brandID: product.BrandID ?? 0
 			});
 		}
+	}
+
+	// Re-index from the shared catalog. Called when the Phase 2 delta re-publishes the catalog so
+	// search results reflect newly synced products without reconstructing the instance.
+	rebuild(): void {
+		if (this.data) this.buildIndex();
 	}
 
 	get size(): number {

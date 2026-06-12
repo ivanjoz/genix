@@ -35,6 +35,10 @@ export type serviceHttpProps = {
   // the full list from the API. See firstSyncFromSnapshotFile / parsePsvResponse.
   fileRoute?: string
   fileSchema?: Record<string, string[]>
+  // Pre-fetched snapshot file text. When the caller already downloaded the .db (e.g. the
+  // storefront fast-path fetches it on the main thread for an instant first paint), it passes
+  // the bytes here so the first sync seeds from them instead of fetching `fileRoute` again.
+  fileContent?: string
   // Set by the cache when the snapshot file fetch fails (missing/unparseable); the full API
   // fallback then carries `missingFile=1` so the backend can (re)build the snapshot on demand.
   fileMissing?: boolean

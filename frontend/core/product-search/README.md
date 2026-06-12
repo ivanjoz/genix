@@ -28,8 +28,13 @@ This decoder validates:
 - `helpers.ts`: shared helper/utility functions
 - `encoder.ts`: reusable query normalization + dictionary-syllable encoding helpers
 - `product-search.ts`: productID-keyed search/read model built on decoded payload + deltas
-- `productos-delta-service.ts`: cached delta service wrapper for `p-productos-index-delta`
 - `types.ts`: constants and TypeScript contracts
+
+The shared catalog (`getProductEcommerceData` returning the reactive `ProductCatalog`) lives in
+`webpage/services/productos.svelte.ts`, since it's storefront-only; `product-search.ts` consumes
+it from there. That module loads manually on the main thread (CDN `.db` snapshot for an instant
+first paint, then a background delta via the standard delta cache) — no service worker on the
+catalog path.
 
 ## Import Style (No Barrel)
 

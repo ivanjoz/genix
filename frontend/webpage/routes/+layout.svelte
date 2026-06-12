@@ -7,14 +7,14 @@
   import "$domain/libs/fontello-prerender.css";
 
   import { preloadProductSearch } from "$core/product-search/product-search-runtime";
-  import { ensureProductosLoaded } from '$services/services/productos.svelte';
+  import { getProductEcommerceData } from '$ecommerce/services/productos.svelte';
   import FloatingCart from "$ecommerce/components/FloatingCart.svelte";
   let { children } = $props();
 
   onMount(() => {
-    // Load the single shared catalog (lists + category maps) and warm up the search index. Both
-    // resolve to the same shared instance, so the catalog is fetched only once.
-    void ensureProductosLoaded().catch((catalogLoadError) => {
+    // Kick off the single shared catalog load (fast main-thread first paint, then background
+    // delta) and warm up the search index. Both share the same memoized catalog instance.
+    void getProductEcommerceData().catch((catalogLoadError) => {
       console.error("[StoreLayout] catalog load failed", catalogLoadError);
     });
     void preloadProductSearch().catch((productSearchPreloadError) => {

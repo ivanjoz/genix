@@ -3,7 +3,7 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
 import type { StandardContent } from '$ecommerce/renderer/section-types';
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 import { collectCategoryNodes, getNodeCategoryID, setNodeCategoryID } from '$ecommerce/html-ast/editable';
-import { ensureProductosLoaded, productosServiceState } from '$services/services/productos.svelte';
+import { getProductEcommerceData, type ProductCatalog } from '$ecommerce/services/productos.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import AstEditor from './AstEditor.svelte';
     import T from '$components/misc/T.svelte';
@@ -25,9 +25,13 @@ import AstEditor from './AstEditor.svelte';
   const selectedCategoryID = $derived(categoryNodes.length ? getNodeCategoryID(categoryNodes[0]) : undefined);
 
   // Load the catalog once so the selector has the full category list to pick from.
+  let catalog = $state<ProductCatalog | null>(null);
   $effect(() => {
-    if (categoryNodes.length) ensureProductosLoaded();
+    if (categoryNodes.length && !catalog) {
+      getProductEcommerceData().then((loaded) => { catalog = loaded; });
+    }
   });
+  const categorias = $derived(catalog?.categorias ?? []);
 
   // Apply the picked category to every bound node so the description and product grid update together.
   function handleCategoryChange(id: number) {
@@ -88,7 +92,7 @@ import AstEditor from './AstEditor.svelte';
                 <SearchSelect
                   keyId="ID"
                   keyName="Name"
-                  options={productosServiceState.categorias}
+                  options={categorias}
                   selected={selectedCategoryID}
                   onChange={(e) => e && handleCategoryChange(e.ID)}
                   noStyle

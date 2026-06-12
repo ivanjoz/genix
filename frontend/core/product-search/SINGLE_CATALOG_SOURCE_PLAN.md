@@ -15,7 +15,7 @@ that same promise instead of fetching again.
 
 ## Changes
 
-### 1. `core/product-search/productos-delta-service.ts` — shared singleton
+### 1. `webpage/services/productos-delta-service.ts` — shared singleton
 Add module-level accessors:
 - `getProductEcommerceData(): Promise<ProductEcommerceDataService>` — lazily constructs a
   single instance, calls `load()` once, memoizes the promise (clears it on failure so a
@@ -28,7 +28,7 @@ Add module-level accessors:
 - In `bootstrap()`: `this.data = await getProductEcommerceData()` (field becomes assigned,
   not constructed). `buildIndex()` reads `this.data` as before.
 
-### 3. `services/services/productos.svelte.ts` — back lookups with the singleton
+### 3. `webpage/services/productos.svelte.ts` — back lookups with the singleton
 - Add `ensureProductosLoaded()`: awaits `getProductEcommerceData()`, then syncs
   `productosServiceState` (productos, productosMap, categorias, categoriasMap,
   productosByCategoryMap) from the loaded service **once**.

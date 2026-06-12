@@ -6,7 +6,7 @@
   import type { ProductSearch } from "$core/product-search/product-search";
   import ProductCard from "./ProductCard.svelte";
   import type { ProductSearchHit } from "$core/product-search/types";
-  import type { IProduct } from "$services/services/productos.svelte";
+  import { getProductEcommerceData, type ProductCatalog, type IProduct } from "$ecommerce/services/productos.svelte";
 
   interface ProductSearchLayerProps {
     queryText?: string;
@@ -26,6 +26,9 @@
   const useLiveProductSearch = Env.useLiveProductSearch;
 
   let productIndexInstance = $state<ProductSearch | null>(null);
+  // Shared catalog, watched only for its `version` counter so the index re-builds after the
+  // background delta re-publishes the catalog.
+  let catalog = $state<ProductCatalog | null>(null);
   let isProductIndexLoading = $state(false);
   let productIndexLoadErrorMessage = $state("");
   let throttledQueryText = $state("");
@@ -67,7 +70,18 @@
     });
   });
 
+  // Re-index when the shared catalog re-publishes (Phase 2 delta), so results include newly
+  // synced products without rebuilding the ProductSearch instance.
+  $effect(() => {
+    const version = catalog?.version;
+    if (productIndexInstance && version !== undefined && version > 0) {
+      untrack(() => productIndexInstance?.rebuild());
+    }
+  });
+
   const topProductSearchHits = $derived.by<ProductSearchHit[]>(() => {
+    // Depend on the catalog version so results re-compute after a delta re-index.
+    void catalog?.version;
     if (!productIndexInstance || throttledQueryText.length === 0) {
       return [];
     }
@@ -181,6 +195,8 @@
         throw new Error("ProductSearch is only available in browser runtime");
       }
       productIndexInstance = nextProductSearch;
+      // Track the shared catalog so the index re-builds when the delta re-publishes it.
+      catalog = await getProductEcommerceData();
       if (ENABLE_FULL_PRODUCT_SEARCH_DEBUG) {
         console.info("[ProductSearchLayer] Product search loaded", {
           productsCount: productIndexInstance.size,

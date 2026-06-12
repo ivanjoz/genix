@@ -95,7 +95,7 @@ import { Core } from '$core/store.svelte';
   </div>
 
   {#if Core.deviceType > 1}
-    <div class="line-1 p-abs" style:background-color={accionColor}></div>
+    <div class="line-1 absolute" style:background-color={accionColor}></div>
   {/if}
 
   {#if perfilForm}

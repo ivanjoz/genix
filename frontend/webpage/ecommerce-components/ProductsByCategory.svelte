@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getProductsByCategoryID, type IProduct } from '$services/services/productos.svelte';
+	import { getProductEcommerceData, type ProductCatalog } from '$ecommerce/services/productos.svelte';
 	import ProductCard from "$ecommerce/components/ProductCard.svelte";
 
 	export interface IProductsByCategory {
@@ -10,20 +10,17 @@
 
 	const { css = "", categoryID, limit = 8 }: IProductsByCategory = $props();
 
-	let productos: IProduct[] = $state([]);
+	let catalog = $state<ProductCatalog | null>(null);
 
-	// Load data when component mounts
-	$effect(() => {
-		console.log("obteniendo producto con categoría ID::", categoryID);
+	getProductEcommerceData().then((loaded) => { catalog = loaded; });
 
-		getProductsByCategoryID(categoryID).then((productos_) => {
-			productos = productos_
-			if(limit && productos.length > limit){
-				productos = productos.splice(0,limit)
-			}
-		});
+	// Reactive: tracks the catalog state, so it fills in when the delta re-publishes.
+	const productos = $derived.by(() => {
+		if (!catalog) return [];
+		const list = catalog.getProductsByCategory(categoryID);
+		return limit && list.length > limit ? list.slice(0, limit) : list;
 	});
-	
+
 </script>
 
 <div class="w-full flex justify-center overflow-x-hidden pt-2">

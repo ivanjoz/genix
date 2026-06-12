@@ -786,13 +786,19 @@ const firstSyncFromSnapshotFile = async (
   fetchTime: number,
 ) => {
   try {
-    const fileResponse = await self.fetch(args.fileRoute as string)
-    if(!fileResponse.ok){
-      console.warn("[DeltaCache] snapshot file not ok, falling back to API:", args.fileRoute, fileResponse.status)
-      args.fileMissing = true
-      return null
+    // Reuse pre-fetched bytes when the caller already downloaded the file, so the snapshot is
+    // fetched at most once even on a cold first load.
+    let fileText = args.fileContent
+    if(!fileText){
+      const fileResponse = await self.fetch(args.fileRoute as string)
+      if(!fileResponse.ok){
+        console.warn("[DeltaCache] snapshot file not ok, falling back to API:", args.fileRoute, fileResponse.status)
+        args.fileMissing = true
+        return null
+      }
+      fileText = await fileResponse.text()
     }
-    const parsed = parsePsvResponse(await fileResponse.text(), args.fileSchema as Record<string, string[]>) as CacheContent
+    const parsed = parsePsvResponse(fileText, args.fileSchema as Record<string, string[]>) as CacheContent
     parsed.__version__ = args.__version__
     // The snapshot is a multi-table object, never a bare array.
     await saveInitialSnapshot(args, routeReference, parsed, fetchTime, false)

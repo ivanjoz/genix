@@ -81,7 +81,7 @@ export const getStoreWebpage = async (
 ): Promise<{ sections: SectionData[]; css: string; seo: Record<string, string> }> => {
   const route = pageID > 0 ? `p-webpage?id=${pageID}` : 'p-webpage';
 	const result: IWebpagePublicResult = await GET({ route });
-  console.log("Webpage result::", result,"|",route)
+
   const { sections, css } = parsePageContentRows(result?.Sections || []);
   return { sections, css, seo: result?.Config || {} };
 };

@@ -1,4 +1,4 @@
-import type { IProduct } from '$services/services/productos.svelte';
+import type { IProduct } from '$ecommerce/services/productos.svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
 export interface IProductCategory {

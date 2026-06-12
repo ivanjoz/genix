@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getCategoryByID, type IProductCategory } from '$services/services/productos.svelte';
+	import { getProductEcommerceData, type ProductCatalog, type IProductCategory } from '$ecommerce/services/productos.svelte';
 
 	export interface ICategoryDescription {
 		css?: string;
@@ -8,21 +8,14 @@
 
 	const { css = "", categoryIDs = [] }: ICategoryDescription = $props();
 
-	let categoria: IProductCategory | undefined = $state(undefined);
+	let catalog = $state<ProductCatalog | null>(null);
 
-	// Load data when component mounts
-	$effect(() => {
-		
-		if (categoryIDs && categoryIDs.length > 0) {
-			const categoryID = categoryIDs[0];
-			console.log("obteniendo categoría con ID::", categoryID);
+	getProductEcommerceData().then((loaded) => { catalog = loaded; });
 
-			getCategoryByID(categoryID).then((categoria_) => {
-				categoria = categoria_;
-				console.log("categoría obtenida::", categoria)
-			});
-		}
-	});
+	// Reactive: resolves once the catalog (and its delta) is available.
+	const categoria = $derived<IProductCategory | undefined>(
+		catalog && categoryIDs.length > 0 ? catalog.getCategory(categoryIDs[0]) : undefined
+	);
 </script>
 
 <div class={css}>

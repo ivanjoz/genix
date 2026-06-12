@@ -68,11 +68,11 @@ import { onMount } from 'svelte';
   <!-- Domain -->
   <h3 class="h3 ff-bold mb-6">{tr('Domain|Dominio')}</h3>
   <div class="grid grid-cols-12 gap-10 items-end mb-16">
-    <div class="col-span-9 p-rel">
+    <div class="relative col-span-9 p-rel">
       <Input label="Domain|Dominio" inputCss="pr-70"
         saveOn={domainForm} save="subdomain" />
       <!-- The zone is deployment configuration, not editable tenant data. -->
-      <div class="p-abs right-10 bottom-0 h-44 flex items-center pointer-events-none">
+      <div class="absolute right-10 bottom-0 z-20 h-44 flex items-center pointer-events-none">
         {domainSuffix}
       </div>
     </div>

@@ -229,7 +229,7 @@ export const Env = {
     if(Env.empresa.id){ return }
     const companyID = Env.getCompanyID()
     if(companyID){
-      fetch(Env.CDN_URL +`empresas/e-${companyID}.json`)
+      fetch(Env.makeCDNRoute("empresas", `e-${companyID}.json`))
       .then(res => res.json())
       .then(res => {
         Env.empresa = res
