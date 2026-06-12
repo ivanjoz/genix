@@ -12,6 +12,14 @@ import (
 	"github.com/viant/xunsafe"
 )
 
+// cborDecMode decodes CBOR maps that land in an `any` value as map[string]any instead of the
+// library default map[interface{}]interface{}. Columns typed map[string]any (e.g. AstNode.Props)
+// can hold nested objects; with the default mode those decode to interface-keyed maps, which
+// encoding/json cannot marshal — breaking re-serialization when the record is served back.
+var cborDecMode, _ = cbor.DecOptions{
+	DefaultMapType: reflect.TypeOf(map[string]any(nil)),
+}.DecMode()
+
 type colInfo struct {
 	Name         string
 	FieldName    string
@@ -170,7 +178,7 @@ func (c *columnInfo) SetValue(ptr unsafe.Pointer, v any) {
 		if len(vl) > 3 && c.Field != nil {
 			// Direct unmarshal into the field memory using xunsafe pointer
 			dest := reflect.NewAt(c.RefType, c.Field.Pointer(ptr)).Interface()
-			err := cbor.Unmarshal(vl, dest)
+			err := cborDecMode.Unmarshal(vl, dest)
 			if err != nil {
 				fmt.Printf("Error al convertir ComplexType for Col %s: %v\n", c.Name, err)
 			}

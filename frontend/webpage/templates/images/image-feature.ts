@@ -5,7 +5,7 @@ import type { SectionData } from '../../renderer/section-types';
  * duotone-matrix effect: the photo curves in from the right while text sits on
  * the tinted left side. The `data-role="image"` node is edited via ImageBlockEditor.
  */
-export const HtmlImageFeature: SectionData = {
+export const ImageFeature: SectionData = {
 	id: 'html-image-feature-v1',
 	name: 'Image Feature (HTML)',
 	category: 'features',

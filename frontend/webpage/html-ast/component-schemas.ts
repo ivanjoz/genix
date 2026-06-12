@@ -13,12 +13,25 @@ export const componentSchemas: Record<string, ComponentSchema> = {
 		tagName: 'ProductsByCategory',
 		description: 'Grid of products belonging to a single category.',
 		props: {
-			categoryID: { type: 'number' },
+			categoryID: { type: 'number', editor: 'category' },
 			// Layout knobs forwarded to the inner ProductGrid; card count = columns × rows.
-			maxWidth: { type: 'number' },
-			maxMargin: { type: 'number' },
-			rows: { type: 'number', default: 3 },
-			rowsMobile: { type: 'number' },
+			maxWidth: { type: 'number', editor: 'grid', label: "Max Width|Max Ancho" },
+			maxMargin: { type: 'number', editor: 'grid', label: "Max Margin|Max Márgen" },
+			rows: { type: 'number', default: 3, editor: 'grid', label: "Nº Rows|Nº Filas" },
+			rowsMobile: { type: 'number', editor: 'grid', label: "Nº Rows Mobile|Nº Filas Móvil" },
+		},
+	},
+
+	ProductGrid: {
+		tagName: 'ProductGrid',
+		description:
+			'Product grid used directly (self-fetches the catalog). With categoryID it shows one category; without it, every product. card count = columns × rows.',
+		props: {
+			categoryID: { type: 'number', editor: 'category' },
+			maxWidth: { type: 'number', editor: 'grid', label: "Max Width|Max Ancho" },
+			maxMargin: { type: 'number', editor: 'grid', label: "Max Margin|Max Márgen" },
+			rows: { type: 'number', default: 3, editor: 'grid', label: "Nº Rows|Nº Filas" },
+			rowsMobile: { type: 'number', editor: 'grid', label: "Nº Rows Mobile|Nº Filas Móvil" },
 		},
 	},
 
@@ -26,7 +39,7 @@ export const componentSchemas: Record<string, ComponentSchema> = {
 		tagName: 'CategoryDescription',
 		description: 'Renders the description text of a category.',
 		props: {
-			categoryIDs: { type: 'number[]' },
+			categoryIDs: { type: 'number[]', editor: 'category' },
 		},
 	},
 

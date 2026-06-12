@@ -5,7 +5,7 @@ import type { SectionData } from '../../renderer/section-types';
  * native tags only: color attributes become palette CSS variables, layout and
  * typography use Tailwind classes.
  */
-export const HtmlHeroBanner: SectionData = {
+export const HeroBanner: SectionData = {
 	id: 'html-hero-banner-v1',
 	name: 'Hero Banner (HTML)',
 	category: 'hero',

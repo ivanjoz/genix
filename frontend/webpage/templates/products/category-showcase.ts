@@ -5,7 +5,7 @@ import type { SectionData } from '../../renderer/section-types';
  * (CategoryDescription + ProductsByCategory) alongside native markup, with
  * attribute props coerced via the component schemas.
  */
-export const HtmlCategoryShowcase: SectionData = {
+export const CategoryShowcase: SectionData = {
 	id: 'html-category-showcase-v1',
 	name: 'Category Showcase (HTML)',
 	category: 'products',

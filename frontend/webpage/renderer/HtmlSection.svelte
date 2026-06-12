@@ -12,12 +12,32 @@
 <script lang="ts">
 		import type { SectionProps } from './section-types';
 		import AstRenderer from './AstRenderer.svelte';
+		import ImageEffect from '../components/ImageEffect.svelte';
 
 	// AST is the canonical model: parsed from the template HTML once at add/load time
 	// (see editor.svelte addSection / EcommerceBuilder seed). Render it directly.
-	const { ast = [], css = {} }: SectionProps = $props();
+	// Padding and colors live on the AST's root element node (edited in-place by the
+	// section editor); only the optional background image arrives via Attributes here.
+	const { ast = [], css = {}, background }: SectionProps = $props();
+
+	// Only paint the background-image layer when a source URL is actually set.
+	const hasBackgroundImage = $derived(!!background?.src);
 </script>
 
-<div class={css.container || ''}>
-	<AstRenderer nodes={ast} />
-</div>
+{#if hasBackgroundImage}
+	<!-- A positioned host so the image fills behind the content; content sits above via z-10. -->
+	<div class={['relative isolate', css.container].filter(Boolean).join(' ')}>
+		<!-- `fill` is forced last so a stray fill:false on the props can't disable it. -->
+		<ImageEffect {...background} fill />
+		<div class="relative z-10">
+			<AstRenderer nodes={ast} />
+		</div>
+	</div>
+{:else}
+	<!-- No background image: render the AST directly (its root element is the container). -->
+	{#if css.container}
+		<div class={css.container}><AstRenderer nodes={ast} /></div>
+	{:else}
+		<AstRenderer nodes={ast} />
+	{/if}
+{/if}

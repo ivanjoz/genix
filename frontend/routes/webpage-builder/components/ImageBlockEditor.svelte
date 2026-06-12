@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { ComponentAST, ColorPalette } from '$ecommerce/renderer/renderer-types';
 
+  import type { Snippet } from 'svelte';
+
   interface Props {
     /** The ImageEffect AST node being edited; its visual treatment lives on node.props. */
     node: ComponentAST;
@@ -8,9 +10,14 @@
     palette?: ColorPalette;
     /** Optional label shown inside the toolbar to save vertical space. */
     label?: string;
+    /** Extra toolbar tools (rendered before the image tools) whose option panels are
+        supplied by `extraOptions`. Lets a host merge its own controls into this one bar. */
+    extraTools?: { id: string; label: string; icon: string }[];
+    /** Renders the option panel for an extra tool; receives the open tool id. */
+    extraOptions?: Snippet<[string | null]>;
   }
 
-  let { node, palette, label }: Props = $props();
+  let { node, palette, label, extraTools, extraOptions }: Props = $props();
 
   // Composition presets: labels stay textual while the SVG previews show direction.
   const LAYOUTS = [
@@ -151,12 +158,21 @@
   const blur = $derived(prop('blur', 0));
   const fill = $derived(prop('fill', false));
   const fit = $derived(prop('fit', 'cover'));
+
+  // Host-provided tools come first, then this editor's image tools. Each carries its
+  // own icon html so the toolbar can render one unified row.
+  const allTools = $derived([
+    ...(extraTools ?? []),
+    ...TOOLS.map((t) => ({ ...t, icon: ICONS[t.id] })),
+  ]);
+  // True when the open tool belongs to the host (its panel is rendered via extraOptions).
+  const isExtraTool = $derived(!!openTool && (extraTools ?? []).some((t) => t.id === openTool));
 </script>
 
 <div class="ibe" bind:this={root}>
   <div class="toolbar">
     {#if label}<span class="toolbar-label">{label}</span>{/if}
-    {#each TOOLS as tool}
+    {#each allTools as tool}
       <button
         type="button"
         class="tool-btn"
@@ -165,7 +181,7 @@
         aria-label={tool.label}
         onclick={() => (openTool = openTool === tool.id ? null : tool.id)}
       >
-        {@html ICONS[tool.id]}
+        {@html tool.icon}
       </button>
     {/each}
 
@@ -223,7 +239,10 @@
               >{opt.label}</button>
             {/each}
           </div>
-        {:else}
+        {:else if isExtraTool}
+          <!-- Option panel for a host-provided tool. -->
+          {@render extraOptions?.(openTool)}
+        {:else if openTool === 'adjust'}
           <!-- adjust: intensity (0..1) and blur (px) -->
           <label class="slider-row">
             <span class="slider-label">Intensity</span>
@@ -248,15 +267,6 @@
 
   <!-- Preview strip: the source image rendered raw so edits read against the real photo. -->
   <div class="preview" style={`background-image:url('${prop('src', '')}')`}></div>
-
-  <!-- Image source URL (the raw photo the effects are applied to). -->
-  <input
-    class="ibe-src"
-    type="text"
-    value={prop('src', '')}
-    placeholder="Image URL (https://...)"
-    oninput={(e) => setProp('src', e.currentTarget.value)}
-  />
 </div>
 
 <style>
@@ -273,6 +283,7 @@
     background-size: cover;
     background-position: center;
     background-color: #0b1120;
+    border-radius: 0 0 6px 6px;
   }
 
   .toolbar {
@@ -476,21 +487,6 @@
     accent-color: #3b82f6;
   }
 
-  .ibe-src {
-    width: 100%;
-    padding: 8px 12px;
-    background: #1e293b;
-    border: none;
-    border-radius: 0 0 6px 6px;
-    color: #94a3b8;
-    font-size: 12px;
-    box-sizing: border-box;
-  }
-  .ibe-src:focus {
-    outline: none;
-    background: #0f172a;
-    color: #f1f5f9;
-  }
   .ibe:focus-within {
     border-color: #3b82f6;
   }

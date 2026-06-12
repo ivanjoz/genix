@@ -1,11 +1,14 @@
 <script lang="ts">
-	import type { IProduct } from '$ecommerce/services/productos.svelte';
+	import { getProductEcommerceData, type IProduct, type ProductCatalog } from '$ecommerce/services/productos.svelte';
 	import ProductCard from '$ecommerce/components/ProductCard.svelte';
 
 	export interface IProductGrid {
 		css?: string;
-		// Fully-fetched products to lay out — this component does no data fetching itself.
-		products: IProduct[];
+		// Pre-fetched products to lay out (e.g. passed down by ProductsByCategory). When omitted the
+		// grid self-fetches the catalog so it can be dropped straight into a template's AST.
+		products?: IProduct[];
+		// Self-fetch mode only: restrict to one category; absent shows every product.
+		categoryID?: number;
 		// Optional cap on the content area width (px). Without it the grid fills the whole parent.
 		maxWidth?: number;
 		// When the parent is wider than `maxWidth`, keep expanding the content area until the
@@ -20,13 +23,29 @@
 
 	const {
 		css = '',
-		products,
+		products: providedProducts,
+		categoryID,
 		maxWidth,
 		maxMargin,
 		rows = 3,
 		rowsMobile,
 		cardWidth = 240,
 	}: IProductGrid = $props();
+
+	// Self-fetch only when no products were handed in. The catalog is memoized/reactive, so this is
+	// cheap and re-fills when the delta publishes (same source ProductsByCategory uses).
+	let catalog = $state<ProductCatalog | null>(null);
+	$effect(() => {
+		if (!providedProducts) getProductEcommerceData().then((loaded) => { catalog = loaded; });
+	});
+
+	// Hand the grid the full list (it caps how many to show): provided products win; otherwise the
+	// self-fetched catalog, narrowed to `categoryID` when given.
+	const products = $derived.by(() => {
+		if (providedProducts) return providedProducts;
+		if (!catalog) return [];
+		return categoryID == null ? catalog.productos : catalog.getProductsByCategory(categoryID);
+	});
 
 	// Layout constants mirror the previous markup: 2-up phone grid below 740px,
 	// 20px column gap on desktop, 12px on mobile. Row spacing comes from the card's own margin.

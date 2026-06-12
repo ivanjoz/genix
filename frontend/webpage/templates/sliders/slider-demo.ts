@@ -7,7 +7,7 @@ import type { SectionData } from '../../renderer/section-types';
  * render each slide subtree independently. Slide 1 reuses ImageEffect in `fill` mode
  * with editable role nodes (title/content/button/image); slides 2-3 are plain blocks.
  */
-export const HtmlSliderDemo: SectionData = {
+export const SliderDemo: SectionData = {
 	id: 'html-slider-demo-v1',
 	name: 'Slider (HTML)',
 	category: 'hero',

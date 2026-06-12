@@ -7,6 +7,7 @@
  * mutating a node's `text`/`attributes` re-renders the section in place.
  */
 import type { ComponentAST } from '../renderer/renderer-types';
+import type { EditorControl } from './coerce';
 import { TEXT_TAG } from './parse-html';
 import { getComponentSchema } from './component-schemas';
 
@@ -115,16 +116,32 @@ export function humanizeLabel(node: ComponentAST): string {
 	return TAG_LABELS[node.tagName] ?? node.tagName;
 }
 
-/** Custom components whose rendered category is editable via the category selector. */
-const CATEGORY_TAGS = new Set(['ProductsByCategory', 'CategoryDescription']);
+// --- Schema-driven editable props (builder editor groups) ----------------------
+//
+// Which props a component surfaces in the section editor — and the control to use —
+// is declared per prop in component-schemas (`editor: 'category' | 'grid'`). The
+// editor reads it from here so adding a component/prop is a schema change only.
 
-/** Collect every category-bound custom-component node in the AST (ProductsByCategory / CategoryDescription). */
-export function collectCategoryNodes(
+/** Attribute names on a node's schema that use the given editor control, in declared order. */
+export function editorPropNames(node: ComponentAST, control: EditorControl): string[] {
+	const props = getComponentSchema(node.tagName)?.props;
+	if (!props) return [];
+	return Object.keys(props).filter((attr) => props[attr].editor === control);
+}
+
+/** Bilingual "EN|ES" label for an editor field, falling back to the attribute name. */
+export function editorPropLabel(node: ComponentAST, attr: string): string {
+	return getComponentSchema(node.tagName)?.props[attr]?.label ?? attr;
+}
+
+/** Collect every AST node whose schema declares at least one prop with the given editor control. */
+export function collectEditableNodes(
 	nodes: ComponentAST | ComponentAST[] | undefined,
+	control: EditorControl,
 ): ComponentAST[] {
 	const out: ComponentAST[] = [];
 	const walk = (node: ComponentAST) => {
-		if (CATEGORY_TAGS.has(node.tagName)) out.push(node);
+		if (editorPropNames(node, control).length) out.push(node);
 		node.children?.forEach(walk);
 	};
 	if (Array.isArray(nodes)) nodes.forEach(walk);
@@ -132,15 +149,19 @@ export function collectCategoryNodes(
 	return out;
 }
 
-/** Read the category ID currently bound to a category node (CategoryDescription stores it as a list). */
-export function getNodeCategoryID(node: ComponentAST): number | undefined {
-	if (node.tagName === 'CategoryDescription') return node.props?.categoryIDs?.[0];
-	return node.props?.categoryID;
+/** Read a numeric prop value; `number[]`-typed props (e.g. categoryIDs) expose their first entry. */
+export function getNodeProp(node: ComponentAST, attr: string): number | undefined {
+	const value = node.props?.[attr];
+	return Array.isArray(value) ? value[0] : value;
 }
 
-/** Set the category ID on a category node, writing the prop shape each component expects (mutation re-renders). */
-export function setNodeCategoryID(node: ComponentAST, id: number): void {
+/**
+ * Write (or clear, when empty) a numeric prop, honoring its schema type so a `number[]` prop
+ * stores the value as a single-element list. Mutation re-renders the live section.
+ */
+export function setNodeProp(node: ComponentAST, attr: string, value: number | undefined): void {
 	if (!node.props) node.props = {};
-	if (node.tagName === 'CategoryDescription') node.props.categoryIDs = [id];
-	else node.props.categoryID = id;
+	const isList = getComponentSchema(node.tagName)?.props[attr]?.type === 'number[]';
+	if (value == null || Number.isNaN(value)) delete node.props[attr];
+	else node.props[attr] = isList ? [value] : value;
 }

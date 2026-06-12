@@ -1,6 +1,6 @@
 import type { SectionData } from '../renderer/section-types';
 import { schema as htmlSectionSchema } from '../renderer/HtmlSection.svelte';
-import { sectionTemplates } from '../ecommerce-templates/templates';
+import { sectionTemplates } from '../templates';
 import { parseHTML } from '../html-ast/parse-html';
 
 // id -> HTML plantilla lookup. HTML templates are an authoring source: their HTML is

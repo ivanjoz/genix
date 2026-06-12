@@ -11,6 +11,13 @@ export type PropType =
 	| 'string[]'
 	| 'json';
 
+/**
+ * How the builder's section editor surfaces a prop:
+ * `'category'` → the SearchSelect category picker; `'grid'` → a numeric layout input.
+ * Absent → the prop is only authorable by hand as an HTML attribute.
+ */
+export type EditorControl = 'category' | 'grid';
+
 export interface PropSpec {
 	type: PropType;
 	/** target prop name on the component, if it differs from the attribute name */
@@ -19,6 +26,10 @@ export interface PropSpec {
 	default?: any;
 	/** allowed values for `string` props */
 	enum?: readonly string[];
+	/** which builder editor control surfaces this prop (absent → not shown in the panel) */
+	editor?: EditorControl;
+	/** bilingual "EN|ES" label for the editor field (absent → the attribute name is shown) */
+	label?: string;
 }
 
 /** schema for one custom component: attribute name -> spec */

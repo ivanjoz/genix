@@ -1,36 +1,36 @@
 import type { SectionData } from '$ecommerce/renderer/section-types';
-import { HtmlHeroBanner } from '$ecommerce/ecommerce-templates/templates/html-hero-banner';
-import { HtmlCategoryShowcase } from '$ecommerce/ecommerce-templates/templates/html-category-showcase';
-import { HtmlImageHero } from '$ecommerce/ecommerce-templates/templates/html-image-hero';
-import { HtmlImageFeature } from '$ecommerce/ecommerce-templates/templates/html-image-feature';
+import { HeroBanner } from '$ecommerce/templates/hero/hero-banner';
+import { CategoryShowcase } from '$ecommerce/templates/products/category-showcase';
+import { ImageHero } from '$ecommerce/templates/hero/image-hero';
+import { ImageFeature } from '$ecommerce/templates/images/image-feature';
 
 export const storeExample: SectionData[] = [
   {
     id: 'html-hero-1',
     Type: 'HtmlSection',
-    category: HtmlHeroBanner.category,
-    html: HtmlHeroBanner.html,
+    category: HeroBanner.category,
+    html: HeroBanner.html,
     Css: {}
   },
   {
     id: 'html-showcase-1',
     Type: 'HtmlSection',
-    category: HtmlCategoryShowcase.category,
-    html: HtmlCategoryShowcase.html,
+    category: CategoryShowcase.category,
+    html: CategoryShowcase.html,
     Css: {}
   },
   {
     id: 'html-image-hero-1',
     Type: 'HtmlSection',
-    category: HtmlImageHero.category,
-    html: HtmlImageHero.html,
+    category: ImageHero.category,
+    html: ImageHero.html,
     Css: {}
   },
   {
     id: 'html-image-feature-1',
     Type: 'HtmlSection',
-    category: HtmlImageFeature.category,
-    html: HtmlImageFeature.html,
+    category: ImageFeature.category,
+    html: ImageFeature.html,
     Css: {}
   }
 ];

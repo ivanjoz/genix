@@ -1,5 +1,5 @@
 <script lang="ts">
-import { sectionTemplates } from '$ecommerce/ecommerce-templates/templates';
+import { sectionTemplates } from '$ecommerce/templates';
 
   interface Props {
     onSelect: (template: { id: string }) => void;

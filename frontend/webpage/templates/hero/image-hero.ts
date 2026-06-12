@@ -6,7 +6,7 @@ import type { SectionData } from '../../renderer/section-types';
  * title/content/button sitting on top as siblings. The `data-role="image"` node is
  * edited via the builder's ImageBlockEditor (effect, tint, fit, etc.).
  */
-export const HtmlImageHero: SectionData = {
+export const ImageHero: SectionData = {
 	id: 'html-image-hero-v1',
 	name: 'Image Hero (HTML)',
 	category: 'hero',
