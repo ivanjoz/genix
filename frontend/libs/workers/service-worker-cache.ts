@@ -1,5 +1,6 @@
 /// <reference lib="WebWorker" />
 "use-strict"
+import { parseObject } from './parse-object'
 // Names of the two caches used in this version of the service worker.
 // Change to v2, etc. when you update any of the local resources, which will
 // in turn trigger the install event again.
@@ -533,18 +534,7 @@ self.addEventListener('fetch', (event) => {
 	)
 })
 
-export const parseObject = (rec: any) => {
-	const newObject = {} as any
-	for (const key in rec) {
-		const values = rec[key]
-		// console.log("v|", values)
-		if (typeof values === 'number' || typeof values === 'string') {
-			newObject[key] = values
-		} else if (Array.isArray(values)) {
-			newObject[key] = `[${values.length}]`
-		} else if (values && typeof values === 'object') {
-			newObject[key] = `{${Object.keys(values).join(", ")}}`
-		}
-	}
-	return newObject
-}
+// parseObject moved to ./parse-object (re-exported here for the SW's internal use);
+// app/SSR code imports it from there directly to avoid pulling in this file's
+// top-level service-worker side effects.
+export { parseObject }

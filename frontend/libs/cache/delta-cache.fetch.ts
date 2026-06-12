@@ -24,7 +24,7 @@ import {
 } from './delta-cache.idb';
 import type { CacheRecordID, ICacheRecordRow, ICacheRecordRowMulti, ICacheRecordRowSingle, ICacheRouteRow, IDeltaCacheRouteRef, ILastSync } from './delta-cache.types';
 import type { serviceHttpProps } from '$libs/workers/service-worker';
-import { parseObject } from '$libs/workers/service-worker-cache';
+import { parseObject } from '$libs/workers/parse-object';
 import { parsePsvResponse } from './psv-parse';
 
 type CacheContent = { __version__?: number } & { [key: string]: any[] }
