@@ -73,8 +73,11 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
       </div>
     </div>
 
-    {#if editorStore.selectedId}
+    {#if editorStore.selectedId && activeTabId === 'editor'}
       <div class="layer-actions">
+        {#if editorStore.activeSchema}
+          <span class="section-title" title={editorStore.activeSchema.name}>{editorStore.activeSchema.name}</span>
+        {/if}
         <button class="action-btn save-btn" onclick={handleSave} title={tr('Save|Guardar', Core.languaje)}>
           <T text="Save|Guardar" />
         </button>
@@ -192,17 +195,29 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
 
   .layer-actions {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     gap: 8px;
-    padding: 8px 16px;
+    padding: 8px 12px;
     flex-shrink: 0;
     border-bottom: 1px solid #1e293b;
+  }
+
+  .section-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .action-btn {
     border: none;
     border-radius: 6px;
-    padding: 6px 16px;
+    padding: 6px 12px;
     font-size: 13px;
     font-weight: 700;
     text-transform: uppercase;
@@ -241,7 +256,7 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   }
 
   .icon-btn {
-    padding: 6px 12px;
+    padding: 6px 14px;
     font-size: 15px;
     line-height: 1;
   }

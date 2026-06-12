@@ -35,11 +35,10 @@
 
 {#snippet field(label: string, node: ComponentAST)}
   <div class="field-item">
-    <span class="field-label">{label}</span>
     {#if isImageNode(node)}
-      <ImageBlockEditor {node} {palette} />
+      <ImageBlockEditor {node} {palette} {label} />
     {:else}
-      <TextBlockEditor {node} {palette} rows={node.role === 'content' ? 3 : 2} />
+      <TextBlockEditor {node} {palette} {label} rows={node.role === 'content' ? 3 : 2} />
       {#if isLinkNode(node)}
         <input
           type="text"
@@ -105,14 +104,7 @@
   .field-item {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-  }
-
-  .field-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: #cbd5e1;
-    text-transform: capitalize;
+    gap: 4px;
   }
 
   .field-input {
@@ -135,15 +127,11 @@
     color: #94a3b8;
   }
 
-  /* A slide container: its strip + the selected slide's fields, boxed together. */
+  /* A slide container: its strip + the selected slide's fields, stacked flat (no box). */
   .slides-group {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    padding: 12px;
-    border: 1px solid #1e293b;
-    border-radius: 8px;
-    background: rgba(30, 41, 59, 0.35);
   }
 
   /* OptionsStrip lives on a light store theme; restyle its buttons for the dark editor. */

@@ -9,9 +9,11 @@
     rows?: number;
     /** Hide the styling toolbar — for raw text runs (#text nodes) that carry no css/style. */
     textOnly?: boolean;
+    /** Optional label shown inside the toolbar to save vertical space. */
+    label?: string;
   }
 
-  let { node, palette, rows = 3, textOnly = false }: Props = $props();
+  let { node, palette, rows = 3, textOnly = false, label }: Props = $props();
 
   // Discrete spacing steps (px). `--spacing` is 1px in this project, so the px
   // value IS the Tailwind number (pt-8 = 8px). 2px steps up to 16, then 4px.
@@ -136,6 +138,7 @@
   <!-- Toolbar (relative anchor for the absolute options panel below it). -->
   {#if !textOnly}
   <div class="toolbar">
+    {#if label}<span class="toolbar-label">{label}</span>{/if}
     {#each TOOLS as tool}
       <button
         type="button"
@@ -227,12 +230,26 @@
   .toolbar {
     position: relative;
     display: flex;
+    align-items: center;
     gap: 4px;
-    padding: 5px;
-    background: #0b1120;
-    border-bottom: 1px solid #334155;
-    border-radius: 6px 6px 0 0;
+    padding: 4px 0;
+    background: transparent;
+    border-bottom: 1px solid #1e293b;
     transition: border-color 0.15s;
+  }
+
+  .toolbar-label {
+    width: 68px;
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    color: #e2e8f0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 8px;
   }
 
   /* While the popup is open, fade the host element's lines so they don't

@@ -60,9 +60,12 @@ export function isTextRun(node: ComponentAST): boolean {
 	return node.tagName === TEXT_TAG;
 }
 
-/** A leaf element that directly carries text (parse-html collapses it into `node.text`). */
+/**
+ * A leaf element that directly carries text (parse-html collapses it into `node.text`).
+ * An empty string still counts: clearing the field must not drop the node from the editor.
+ */
 export function isTextLeaf(node: ComponentAST): boolean {
-	return node.tagName !== TEXT_TAG && typeof node.text === 'string' && node.text.length > 0;
+	return node.tagName !== TEXT_TAG && typeof node.text === 'string';
 }
 
 /**

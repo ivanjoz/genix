@@ -6,9 +6,11 @@
     node: ComponentAST;
     /** Active palette — its 10 colors back the tint swatches. */
     palette?: ColorPalette;
+    /** Optional label shown inside the toolbar to save vertical space. */
+    label?: string;
   }
 
-  let { node, palette }: Props = $props();
+  let { node, palette, label }: Props = $props();
 
   // Composition presets: labels stay textual while the SVG previews show direction.
   const LAYOUTS = [
@@ -152,8 +154,8 @@
 </script>
 
 <div class="ibe" bind:this={root}>
-  <!-- Keep controls above the image, matching the text editor's visual order. -->
   <div class="toolbar">
+    {#if label}<span class="toolbar-label">{label}</span>{/if}
     {#each TOOLS as tool}
       <button
         type="button"
@@ -276,11 +278,25 @@
   .toolbar {
     position: relative;
     display: flex;
+    align-items: center;
     gap: 4px;
-    padding: 5px;
-    background: #0b1120;
-    border-bottom: 1px solid #334155;
-    border-radius: 6px 6px 0 0;
+    padding: 4px 0;
+    background: transparent;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  .toolbar-label {
+    width: 68px;
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    color: #e2e8f0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 8px;
   }
 
   /* While the popup is open, fade the host's lines so they don't compete

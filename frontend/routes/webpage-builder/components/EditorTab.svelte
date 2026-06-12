@@ -76,11 +76,6 @@ import AstEditor from './AstEditor.svelte';
 
 {#if section && schema}
   <div class="editor-tab" aria-label="Section content and styling editor">
-    <div class="section-meta">
-      <h3>{schema.name}</h3>
-      <p>{schema.description}</p>
-    </div>
-
     <div class="editor-groups">
       {#if isHtmlSection}
         <!-- CATEGORY SELECTOR: shown when the section renders category-bound components -->
@@ -205,19 +200,6 @@ import AstEditor from './AstEditor.svelte';
     display: flex;
     flex-direction: column;
     gap: 24px;
-  }
-
-  .section-meta h3 {
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 4px;
-    color: white;
-  }
-
-  .section-meta p {
-    font-size: 12px;
-    color: #94a3b8;
-    line-height: 1.4;
   }
 
   .editor-groups {
