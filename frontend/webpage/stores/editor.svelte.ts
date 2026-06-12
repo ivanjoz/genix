@@ -1,10 +1,10 @@
-import { SectionRegistry } from '../templates/registry'; // Note: This will be generated in Step 3/4
-import type { SectionData, SectionSchema } from '../renderer/section-types';
+import type { SectionData } from '../renderer/section-types';
+import { schema as htmlSectionSchema } from '../renderer/HtmlSection.svelte';
 import { sectionTemplates } from '../ecommerce-templates/templates';
 import { parseHTML } from '../html-ast/parse-html';
 
 // id -> HTML plantilla lookup. HTML templates are an authoring source: their HTML is
-// parsed to an AST once at add time and stored as `content.ast` (the canonical model).
+// parsed to an AST once at add time and stored as `Ast` (the canonical model).
 const htmlTemplatesById = new Map(sectionTemplates.map(t => [t.id, t]));
 
 class EditorStore {
@@ -18,11 +18,7 @@ class EditorStore {
   activeSchema = $derived.by(() => {
     if (!this.selectedId) return null;
     const section = this.sections.find(s => s.id === this.selectedId);
-    if (!section?.Type) return null;
-
-    // We get the schema from the registry based on the section type
-    // If the registry isn't generated yet or doesn't have it, we return a fallback
-    return SectionRegistry?.[section.Type]?.schema || null;
+    return section?.Type === 'HtmlSection' ? htmlSectionSchema : null;
   });
 
   // Helper to get the actual data of the selected section
@@ -34,13 +30,6 @@ class EditorStore {
     this.selectedId = id;
   }
 
-  updateContent(id: string, key: string, value: any) {
-    const section = this.sections.find(s => s.id === id);
-    if (section) {
-      (section.Content ??= {})[key] = value;
-    }
-  }
-
   updateCss(id: string, slot: string, classes: string) {
     const section = this.sections.find(s => s.id === id);
     if (section) {
@@ -48,50 +37,16 @@ class EditorStore {
     }
   }
 
-  addSection(type: string, index?: number) {
+  addSection(templateId: string, index?: number) {
     // HTML plantilla: parse its HTML to an AST once and store it as the editable model.
-    const htmlTemplate = htmlTemplatesById.get(type);
-    if (htmlTemplate) {
-      const newSection: SectionData = {
-        id: crypto.randomUUID(),
-        Type: 'HtmlSection',
-        category: htmlTemplate.category,
-        Ast: parseHTML(htmlTemplate.html ?? ''),
-        Css: {}
-      };
-      if (typeof index === 'number') this.sections.splice(index, 0, newSection);
-      else this.sections.push(newSection);
-      return;
-    }
-
-    const schema = SectionRegistry?.[type]?.schema;
-    if (!schema) return;
-
-    // Generate dummy content based on schema
-    const dummyContent: any = {};
-    if (schema.content) {
-      schema.content.forEach(key => {
-        if (key === 'title') dummyContent[key] = 'Example Title';
-        else if (key === 'subTitle') dummyContent[key] = 'Example Subtitle';
-        else if (key === 'description') dummyContent[key] = 'This is a description for your new section. You can edit this text in the editor tab.';
-        else if (key === 'primaryActionLabel') dummyContent[key] = 'Get Started';
-        else if (key === 'primaryActionHref') dummyContent[key] = '#';
-        else if (key === 'textLeft' || key === 'textCenter' || key === 'textRight') dummyContent[key] = 'Sample text for ' + key;
-        else if (key === 'image' || key === 'bgImage') dummyContent[key] = 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=2070&auto=format&fit=crop';
-        else if (key === 'textLines') dummyContent[key] = [
-          { text: 'Feature One: High performance and reliability', css: '' },
-          { text: 'Feature Two: User-friendly interface and experience', css: '' },
-          { text: 'Feature Three: 24/7 dedicated support team', css: '' }
-        ];
-        else if (key === 'productIDs') dummyContent[key] = [1, 2, 3, 4];
-      });
-    }
+    const htmlTemplate = htmlTemplatesById.get(templateId);
+    if (!htmlTemplate) return;
 
     const newSection: SectionData = {
       id: crypto.randomUUID(),
-      Type: type,
-      category: schema.category,
-      Content: dummyContent,
+      Type: 'HtmlSection',
+      category: htmlTemplate.category,
+      Ast: parseHTML(htmlTemplate.html ?? ''),
       Css: {}
     };
 

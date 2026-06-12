@@ -1,6 +1,5 @@
 <script lang="ts">
 import { editorStore } from '$ecommerce/stores/editor.svelte';
-import type { StandardContent } from '$ecommerce/renderer/section-types';
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 import { collectCategoryNodes, getNodeCategoryID, setNodeCategoryID } from '$ecommerce/html-ast/editable';
 import { getProductEcommerceData, type ProductCatalog } from '$ecommerce/services/productos.svelte';
@@ -15,11 +14,9 @@ import AstEditor from './AstEditor.svelte';
   const section = $derived(editorStore.selectedSection);
   const schema = $derived(editorStore.activeSchema);
 
-  const isHtmlSection = $derived(section?.Type === 'HtmlSection');
-
   // Category-bound custom components (ProductsByCategory / CategoryDescription) in the section's AST.
   const categoryNodes = $derived(
-    isHtmlSection ? collectCategoryNodes(section?.Ast) : []
+    section?.Type === 'HtmlSection' ? collectCategoryNodes(section.Ast) : []
   );
   // Current selection is taken from the first bound node; all bound nodes share one category.
   const selectedCategoryID = $derived(categoryNodes.length ? getNodeCategoryID(categoryNodes[0]) : undefined);
@@ -38,139 +35,49 @@ import AstEditor from './AstEditor.svelte';
     for (const node of categoryNodes) setNodeCategoryID(node, id);
   }
 
-  function handleContentInput(key: keyof StandardContent, value: any) {
-    if (section) {
-      editorStore.updateContent(section.id, key as string, value);
-    }
-  }
-
   function handleCssInput(slot: string, value: string) {
     if (section) {
       editorStore.updateCss(section.id, slot, value);
     }
   }
 
-  function handleTextLineChange(index: number, value: string) {
-    if (!section) return;
-    const lines = [...(section.Content?.textLines || [])];
-    if (!lines[index]) {
-      lines[index] = { text: value, css: '' };
-    } else {
-      lines[index] = { ...lines[index], text: value };
-    }
-    editorStore.updateContent(section.id, 'textLines', lines);
-  }
-
-  function addTextLine() {
-    if (!section) return;
-    const lines = [...(section.Content?.textLines || []), { text: 'New Line', css: '' }];
-    editorStore.updateContent(section.id, 'textLines', lines);
-  }
-
-  function removeTextLine(index: number) {
-    if (!section) return;
-    const lines = (section.Content?.textLines || []).filter((_: any, i: number) => i !== index);
-    editorStore.updateContent(section.id, 'textLines', lines);
-  }
 </script>
 
 {#if section && schema}
   <div class="editor-tab" aria-label="Section content and styling editor">
     <div class="editor-groups">
-      {#if isHtmlSection}
-        <!-- CATEGORY SELECTOR: shown when the section renders category-bound components -->
-        {#if categoryNodes.length}
-          <div class="editor-group">
-            <h4 class="group-title"><T text="Category|Categoría" /> </h4>
-            <div class="fields-list">
-              <div class="field-item">
-                <SearchSelect
-                  keyId="ID"
-                  keyName="Name"
-                  options={categorias}
-                  selected={selectedCategoryID}
-                  onChange={(e) => e && handleCategoryChange(e.ID)}
-                  noStyle
-                  css="w-full bg-[#0000003b] rounded-[8px] border border-[#99a4ce5c]"
-                  inputCss="text-sm px-10 text-[#f1f5f9]"
-                  optionsCss="w-full text-sm text-[#1e293b]"
-                />
-              </div>
+      <!-- Category selector for templates with category-bound components. -->
+      {#if categoryNodes.length}
+        <div class="editor-group">
+          <h4 class="group-title"><T text="Category|Categoría" /> </h4>
+          <div class="fields-list">
+            <div class="field-item">
+              <SearchSelect
+                keyId="ID"
+                keyName="Name"
+                options={categorias}
+                selected={selectedCategoryID}
+                onChange={(e) => e && handleCategoryChange(e.ID)}
+                noStyle
+                css="w-full bg-[#0000003b] rounded-[8px] border border-[#99a4ce5c]"
+                inputCss="text-sm px-10 text-[#f1f5f9]"
+                optionsCss="w-full text-sm text-[#1e293b]"
+              />
             </div>
           </div>
-        {/if}
-        <!-- HTML SECTION: every text/image/link node in the AST is editable (no role
-             required). Slide containers (Slider) render an OptionsStrip and edit one
-             slide at a time, synced with the live preview. -->
-        <div class="editor-group">
-          <h4 class="group-title">Content</h4>
-          <div class="fields-list">
-            {#if section.Ast && section.Ast.length}
-              <AstEditor nodes={section.Ast} {palette} />
-            {:else}
-              <p class="empty-hint">No content. This section has no parsed HTML.</p>
-            {/if}
-          </div>
         </div>
-      {:else}
-      <!-- CONTENT GROUP -->
+      {/if}
+      <!-- Every text, image, and link node in the AST is editable. -->
       <div class="editor-group">
         <h4 class="group-title">Content</h4>
         <div class="fields-list">
-          {#each schema.content as fieldKey}
-            {@const field = fieldKey as string}
-            <div class="field-item">
-              <label class="field-label" for={`content-${fieldKey}`}>{fieldKey}</label>
-              
-              {#if field === 'textLines'}
-                <div class="text-lines-editor">
-                  {#each section.Content?.textLines || [] as line, i}
-                    <div class="text-line-item">
-                      <input 
-                        type="text" 
-                        class="field-input" 
-                        value={line.text}
-                        oninput={(e) => handleTextLineChange(i, e.currentTarget.value)}
-                      />
-                      <button class="remove-btn" aria-label="Remove this text line" onclick={() => removeTextLine(i)}>✕</button>
-                    </div>
-                  {/each}
-                  <button class="add-btn" aria-label="Add a new text line" onclick={addTextLine}>+ Add Line</button>
-                </div>
-              {:else if field === 'description' || field.includes('text')}
-                <textarea
-                  id={`content-${fieldKey}`}
-                  class="field-input textarea"
-                  value={section.Content?.[fieldKey] || ''}
-                  oninput={(e) => handleContentInput(fieldKey, e.currentTarget.value)}
-                  rows="3"
-                ></textarea>
-              {:else if field.includes('IDs')}
-                 <input
-                  id={`content-${fieldKey}`}
-                  type="text"
-                  class="field-input"
-                  value={(section.Content?.[fieldKey] || []).join(', ')}
-                  oninput={(e) => {
-                    const ids = e.currentTarget.value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
-                    handleContentInput(fieldKey, ids);
-                  }}
-                  placeholder="e.g. 1, 2, 3"
-                />
-              {:else}
-                <input
-                  id={`content-${fieldKey}`}
-                  type="text"
-                  class="field-input"
-                  value={section.Content?.[fieldKey] || ''}
-                  oninput={(e) => handleContentInput(fieldKey, e.currentTarget.value)}
-                />
-              {/if}
-            </div>
-          {/each}
+          {#if section.Ast && section.Ast.length}
+            <AstEditor nodes={section.Ast} {palette} />
+          {:else}
+            <p class="empty-hint">No content. This section has no parsed HTML.</p>
+          {/if}
         </div>
       </div>
-      {/if}
 
       <!-- STYLING GROUP -->
       <div class="editor-group">
@@ -266,41 +173,6 @@ import AstEditor from './AstEditor.svelte';
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 12px;
     color: #94a3b8;
-  }
-
-  .text-lines-editor {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .text-line-item {
-    display: flex;
-    gap: 8px;
-  }
-
-  .remove-btn {
-    background: transparent;
-    border: none;
-    color: #ef4444;
-    cursor: pointer;
-    padding: 0 8px;
-  }
-
-  .add-btn {
-    background: #1e293b;
-    border: 1px dashed #334155;
-    color: #94a3b8;
-    padding: 8px;
-    border-radius: 6px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .add-btn:hover {
-    background: #334155;
-    color: white;
   }
 
   .empty-hint {

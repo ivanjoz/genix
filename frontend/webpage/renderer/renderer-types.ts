@@ -27,7 +27,7 @@ export interface IGalleryImagen {
 
 /**
  * A node in the parsed HTML section AST. Structural only — section content
- * fields (products, titles, etc.) live on `StandardContent` in section-types.ts.
+ * Section metadata and the persisted AST wrapper live in `section-types.ts`.
  */
 export interface ComponentAST {
 	tagName: string;
@@ -66,4 +66,3 @@ export interface SectionPreset {
 	name: string;
 	variables: Record<string, string>;
 }
-

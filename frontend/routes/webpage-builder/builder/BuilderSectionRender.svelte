@@ -1,7 +1,7 @@
 <script lang="ts">
 import { setContext } from 'svelte';
 import type { SectionData } from '$ecommerce/renderer/section-types';
-import { SectionRegistry } from '$ecommerce/templates/registry';
+import HtmlSection, { schema as htmlSectionSchema } from '$ecommerce/renderer/HtmlSection.svelte';
 import { editorStore } from '$ecommerce/stores/editor.svelte';
 import { EC_BUILDER_MODE } from '$ecommerce/renderer/builder-context';
 
@@ -28,7 +28,7 @@ setContext(EC_BUILDER_MODE, true);
   }: Props = $props();
 
   const isSelected = $derived(editorStore.selectedId === section.id);
-  const Config = $derived(section.Type ? SectionRegistry[section.Type] : undefined);
+  const isHtmlSection = $derived(section.Type === 'HtmlSection');
 
   function handleSelect() {
     editorStore.select(section.id);
@@ -73,7 +73,7 @@ setContext(EC_BUILDER_MODE, true);
   
   draggable="true"
   ondragstart={(e) => {
-    setReorderDragImage(e, Config?.schema.name || section.Type || 'Section');
+    setReorderDragImage(e, isHtmlSection ? htmlSectionSchema.name : section.Type || 'Section');
     onDragStart(e, index);
   }}
   ondragend={onDragEnd}
@@ -82,7 +82,7 @@ setContext(EC_BUILDER_MODE, true);
   onclick={handleSelect}
   role="button"
   tabindex="0"
-  aria-label={`Edit ${Config?.schema.name || section.Type} section`}
+  aria-label={`Edit ${isHtmlSection ? htmlSectionSchema.name : section.Type} section`}
   onkeydown={(e) => e.key === 'Enter' && handleSelect()}
 >
   <div class="section-outline"></div>
@@ -93,21 +93,20 @@ setContext(EC_BUILDER_MODE, true);
         <path d="M3 9h18M9 21V9"/>
       </svg>
     </span>
-    <span>{Config?.schema.name || section.Type}</span>
+    <span>{isHtmlSection ? htmlSectionSchema.name : section.Type}</span>
     <span class="section-label-hint">Click to edit • Drag to move</span>
   </div>
   
   <div class="section-content" style={paletteStyles}>
-    {#if Config}
-      <Config.component
-        content={section.Content}
+    {#if isHtmlSection}
+      <HtmlSection
         ast={section.Ast}
         css={section.Css}
         {...section.Attributes}
       />
     {:else}
       <div class="p-20 bg-slate-100 text-slate-400 text-center border-2 border-dashed border-slate-200">
-        Component "{section.Type}" not found in registry.
+        Unsupported section type "{section.Type}".
       </div>
     {/if}
   </div>

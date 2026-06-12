@@ -54,14 +54,14 @@ function collectAstTokens(node: ComponentAST, out: Set<string>): void {
 
 /**
  * Collect the runtime class tokens for a set of sections: the slot-based
- * `section.Css`, the parsed HTML section AST (`section.Ast`, where agent classes
- * live), and any `Content.textLines`.
+ * `section.Css` and the parsed HTML section AST (`section.Ast`, where agent
+ * classes live).
  */
 export function collectTokens(sections: SectionData[]): Set<string> {
 	const tokens = new Set<string>();
 
 	for (const section of sections) {
-		// Slot-based CSS (component sections + HTML section container).
+		// Slot-based CSS for the HTML section container.
 		if (section.Css) {
 			for (const val of Object.values(section.Css)) {
 				if (typeof val === 'string') for (const c of val.split(/\s+/)) if (c) tokens.add(c);
@@ -71,14 +71,6 @@ export function collectTokens(sections: SectionData[]): Set<string> {
 		// HTML section AST — where agent-authored classes live.
 		if (section.Ast) {
 			for (const node of section.Ast) collectAstTokens(node, tokens);
-		}
-
-		// Standalone text lines on the flat content schema.
-		const textLines = section.Content?.textLines;
-		if (Array.isArray(textLines)) {
-			for (const line of textLines) {
-				if (line?.css) for (const c of line.css.split(/\s+/)) if (c) tokens.add(c);
-			}
 		}
 	}
 
