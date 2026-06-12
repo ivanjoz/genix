@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 import type { IncomingMessage, ServerResponse } from 'http'
 import { createHash } from 'node:crypto';
 import { type RolldownOptions } from 'rolldown'
-import { svelteClassHasher, getCounter, getCounterFomFile } from './plugins.js';
+import { svelteClassHasher, getCounterForKey, makeClassKey } from './plugins.js';
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -22,11 +22,6 @@ const projectDir = process.cwd()
 const isBuild = process.argv.includes('build');
 // Keep all production build artifacts under the same minification rule.
 const shouldMinifyBuildOutput = isBuild;
-const cssModuleMap = new Map<string, string>();
-
-if (isBuild) {
-  getCounterFomFile();
-}
 
 const makeDevCssModuleClass = (name: string, filename: string) => {
   // Keep CSS module classes stable in dev so repeated selectors export one class name.
@@ -194,12 +189,10 @@ export default defineConfig({
   css: {
     modules: {
       generateScopedName: (name, filename, _css) => {
+        // Deterministic, persisted, keyed minified name (see plugins.js). Same
+        // file:name -> same class across runs, processes and the prerender's two passes.
         if (isBuild) {
-          const key = `${filename}:${name}`;
-          if (!cssModuleMap.has(key)) {
-            cssModuleMap.set(key, getCounter());
-          }
-          return cssModuleMap.get(key)!;
+          return getCounterForKey(makeClassKey('m', filename, name));
         }
         return makeDevCssModuleClass(name, filename);
       }
@@ -213,21 +206,7 @@ export default defineConfig({
       output: {
         // This tries to keep the IDs based on content rather than index
         hashCharacters: 'base64',
-                  manualChunks: (id) => {
-                  // Separate admin and store chunks to prevent loading admin code on store routes
-                  if (id.includes('/configuracion/') || id.includes('/seguridad/') || id.includes('/negocio/') || id.includes('/comercial/') || id.includes('/logistica/') || id.includes('/finanzas/') || id.includes('/contabilidad/') || id.includes('/cms/')) {
-                    return 'admin';
-                  }
-                  if (id.includes('/ecommerce/') || id.includes('/store/') || id.includes('/webpage/') || id.includes('/webpage-builder/')) {
-                    return 'store';
-                  }
-                  // Shared code goes to common chunk
-                  if (id.includes('/ui-components/') || id.includes('/domain-components/') || id.includes('/core/') || id.includes('/libs/') || id.includes('/services/')) {
-                    return 'shared';
-                  }
-                  // Everything else goes to vendor
-                  return 'vendor';
-                },      }
+      }
     } as RolldownOptions
   },
   optimizeDeps: {

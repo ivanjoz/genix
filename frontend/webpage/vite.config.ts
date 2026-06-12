@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createHash } from 'node:crypto';
+import { svelteClassHasher, getCounterForKey, makeClassKey } from '../plugins.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -137,10 +138,11 @@ export default defineConfig({
   },
   css: {
     modules: {
-      // Deterministic in every mode: SSR/prerender runs two build passes and a
-      // stateful counter would assign different names per pass, breaking CSS-module
-      // class matching between the prerendered HTML and the bundled CSS.
-      generateScopedName: (name, filename, _css) => makeDevCssModuleClass(name, filename)
+      // Build: deterministic, persisted, keyed counter (shared with the admin build via
+      // ../plugins.js). Same file:name -> same class across BOTH prerender passes, so the
+      // prerendered HTML and the bundled CSS agree. Dev keeps readable sha256 names.
+      generateScopedName: (name, filename, _css) =>
+        isBuild ? getCounterForKey(makeClassKey('m', filename, name)) : makeDevCssModuleClass(name, filename)
     }
   },
   build: {
@@ -166,6 +168,11 @@ export default defineConfig({
   },
   plugins: [
     serviceWorkerPlugin(),
+    // svelteClassHasher now uses the deterministic, persisted keyed counter in
+    // ../plugins.js, so it no longer diverges across the SSR + client build passes —
+    // the reason it was previously disabled here. (The old commented-`.relative`
+    // style-scan bug is fixed too: CSS comments are stripped before scanning.) Build only.
+    isBuild && svelteClassHasher(),
     // SvelteKit's `vite-plugin-sveltekit-guard` runs a `resolveId` hook on EVERY import
     // edge to build an import-map, used only to print a nice chain if a server-only
     // module ($lib/server, $env/*/private, *.server.*) leaks into client code. Under
@@ -177,11 +184,6 @@ export default defineConfig({
       const arr = Array.isArray(sk) ? sk : [sk];
       return arr.filter((p) => p && (p as any).name !== 'vite-plugin-sveltekit-guard');
     })(),
-    // NOTE: svelteClassHasher() is intentionally NOT used here. It rewrites style-block
-    // class names via a stateful counter, which (a) diverges across the SSR + client
-    // build passes prerender requires — breaking style matching — and (b) had an offset
-    // bug that corrupted `.join(...)` calls. Svelte's deterministic cssHash already
-    // scopes classes uniquely, so the extra minifier isn't needed for the storefront.
     tailwindcss()
   ].filter(x => x)
 });

@@ -1,23 +1,167 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-const nameMapping = new Map();
-const tmpDir = path.resolve(process.cwd(), 'tmp');
-const counterFilePath = path.join(tmpDir, 'counter.txt');
+// Anchor all counter state to the frontend root (this file's directory), NOT
+// process.cwd(): `build:store` runs from frontend/webpage/ while `build:main` runs
+// from frontend/. Anchoring here makes the admin and storefront builds share ONE
+// registry file, so a class common to both gets one stable name.
+const FRONTEND_ROOT = path.dirname(fileURLToPath(import.meta.url));
+const tmpDir = path.resolve(FRONTEND_ROOT, 'tmp');
+const registryFilePath = path.join(tmpDir, 'class-counter-map.txt');
 const lockDir = path.join(tmpDir, 'counter.lock');
 
+// ---------------------------------------------------------------------------
+// Deterministic, persisted key -> counter registry.
+//
+// A given stable key ALWAYS maps to the same minified name, regardless of call
+// order, build pass, or process. This is what the storefront's two-pass prerender
+// (server + client build) needs: both passes resolve identical keys to identical
+// names, so prerendered HTML class names stay in sync with the bundled CSS and
+// hydration doesn't break. The old blind counter assigned names by encounter order,
+// which diverged between passes.
+// ---------------------------------------------------------------------------
+let registry = null;   // Map<string key, number>
+let maxCounter = 55;   // preserve the previous starting base
+let dirty = false;
+
+// Block reservation. plugins.js is imported as SEPARATE module instances within a
+// single build — svelte.config.js (cssHash, 's:' keys) gets one, vite.config.ts
+// (CSS modules 'm:' + svelteClassHasher 'h:' keys) gets another. Module-level state
+// is NOT shared across ESM instances, so two instances counting from the same base
+// would hand DIFFERENT keys the SAME number (e.g. s:SideMenu|85 and h:close-button|85
+// both -> 'ax', producing a broken `.ax.ax` selector). The only shared medium is the
+// registry file, so each instance reserves a disjoint range of the number space under
+// the lock and writes a '#max' high-water sentinel; concurrent instances then always
+// claim ranges beyond it. Within its own block an instance allocates sequentially.
+const MAX_KEY = '#max';
+const BLOCK_SIZE = 128;
+let blockNext = 0;   // next number to hand out from our reserved block
+let blockEnd = 0;    // exclusive end of our reserved block (blockNext === blockEnd -> exhausted)
+
+// Read every `key|counter` line into `registry`, returning the highest counter seen
+// (including the '#max' sentinel). Unknown keys are merged in; known keys are kept so
+// a warm registry stays stable. Caller decides locking.
+function readRegistryFile() {
+    let fileMax = maxCounter;
+    if (fs.existsSync(registryFilePath)) {
+        for (const line of fs.readFileSync(registryFilePath, 'utf8').split('\n')) {
+            if (!line) continue;
+            const i = line.lastIndexOf('|');
+            if (i === -1) continue;
+            const key = line.slice(0, i);
+            const n = parseInt(line.slice(i + 1), 10);
+            if (Number.isNaN(n)) continue;
+            if (n > fileMax) fileMax = n;
+            if (key === MAX_KEY) continue;           // sentinel, not a real class key
+            if (!registry.has(key)) registry.set(key, n);
+        }
+    }
+    return fileMax;
+}
+
+// Write the full registry + the '#max' sentinel. Caller MUST hold the lock.
+function writeRegistryLocked() {
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    const lines = [...registry.entries()].map(([k, v]) => `${k}|${v}`);
+    lines.push(`${MAX_KEY}|${maxCounter}`);
+    fs.writeFileSync(registryFilePath, lines.join('\n') + '\n', 'utf8');
+}
+
+function loadRegistry() {
+    if (registry) return;
+    registry = new Map();
+    const fileMax = readRegistryFile();
+    if (fileMax > maxCounter) maxCounter = fileMax;
+}
+
+// Reserve a fresh, disjoint block of numbers from the shared file under the lock.
+function reserveBlock() {
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    acquireLock();
+    try {
+        // Re-read so we start beyond any range another instance/process reserved.
+        const fileMax = readRegistryFile();
+        if (fileMax > maxCounter) maxCounter = fileMax;
+        blockNext = maxCounter + 1;
+        blockEnd = blockNext + BLOCK_SIZE;
+        maxCounter = blockEnd - 1;   // claim the whole block via the sentinel
+        writeRegistryLocked();       // publish the reservation so peers skip past it
+        dirty = false;               // everything known is now on disk
+    } finally {
+        releaseLock();
+    }
+}
+
+function flushRegistry() {
+    if (!registry || !dirty) return;
+    acquireLock();
+    try {
+        // Adopt any keys another build process appended since we loaded, so sequential
+        // admin/store builds extend the file instead of clobbering each other.
+        const fileMax = readRegistryFile();
+        if (fileMax > maxCounter) maxCounter = fileMax;
+        writeRegistryLocked();
+        dirty = false;
+    } finally {
+        releaseLock();
+    }
+}
+
+// Flush once on process exit — covers the CSS-module / cssHash config callbacks,
+// which have no Vite build hook of their own. svelteClassHasher also flushes in
+// buildEnd so the file is durable before a sibling build process starts.
+process.on('exit', () => { try { flushRegistry(); } catch { /* best effort */ } });
+
 /**
- * replaceClassName - Converts a class name to a minified counter-based identifier.
- * 
+ * getCounterForKey - Deterministic minified name for a stable key.
+ * Same key -> same name, always. New keys are assigned the next sequential counter.
+ *
+ * @param {string} key - stable, namespaced key (see makeClassKey).
+ * @returns {string} The minified identifier.
+ */
+export function getCounterForKey(key) {
+    loadRegistry();
+    if (registry.has(key)) return counterMinify(registry.get(key));
+    // New key: take the next number from our reserved block, reserving a fresh one
+    // (disjoint from every other instance/process) when the current block is exhausted.
+    if (blockNext >= blockEnd) reserveBlock();
+    const n = blockNext++;
+    registry.set(key, n);
+    dirty = true;
+    return counterMinify(n);
+}
+
+/**
+ * makeClassKey - Build a stable, repo-relative, namespaced registry key.
+ * Filenames are normalized relative to the frontend root and to POSIX separators so
+ * the same source file yields the same key from the admin and storefront builds.
+ *
+ * @param {string} ns - consumer namespace: 'm' (CSS module), 's' (svelte cssHash), 'h' (class hasher).
+ * @param {string} [filename] - absolute file path (or empty when unknown).
+ * @param {string} [name] - class/local name (omit for file-only keys such as cssHash).
+ * @returns {string} The namespaced key.
+ */
+export function makeClassKey(ns, filename, name) {
+    let rel = filename ? path.relative(FRONTEND_ROOT, filename) : '';
+    rel = rel.split(path.sep).join('/');
+    return name != null ? `${ns}:${rel}:${name}` : `${ns}:${rel}`;
+}
+
+/** Force-persist the registry (called from build hooks). */
+export function flushClassRegistry() { flushRegistry(); }
+
+/**
+ * replaceClassName - Hashes a Svelte <style> local class name. Uses the global 'h:'
+ * namespace so the same class name maps to one hash across every component (the
+ * style hasher is intentionally file-agnostic).
+ *
  * @param {string} name - The original CSS class name.
  * @returns {string} The minified identifier (or original name if < 4 characters).
  */
 export function replaceClassName(name) {
     if (name.length < 4) return name;
-    if (nameMapping.has(name)) return nameMapping.get(name);
-    const counter = getCounter()
-    nameMapping.set(name, counter);
-    return counter;
+    return getCounterForKey('h:' + name);
 }
 
 /**
@@ -104,64 +248,6 @@ function releaseLock() {
 }
 
 /**
- * getCounter - Atomically increments the counter and returns its minified string representation.
- * Uses file locking to ensure process safety.
- * 
- * @returns {string} The minified counter string.
- */
-export function getCounter() {
-    if (!fs.existsSync(tmpDir)) {
-        fs.mkdirSync(tmpDir, { recursive: true });
-    }
-
-    let count = 0;
-
-    try {
-        acquireLock();
-
-        // Read current
-        if (fs.existsSync(counterFilePath)) {
-            const content = fs.readFileSync(counterFilePath, 'utf8').trim();
-            // Format is "lockedBy:count", splits to ['lockedBy', 'count']
-            const parts = content.split(':');
-            count = parseInt(parts.length > 1 ? parts[1] : parts[0], 10) || 0;
-        } else {
-            // Default starting value if file doesn't exist
-            count = 55;
-        }
-
-        // Increment
-        count++;
-
-        // Save (preserving the '0' for lockedBy for compatibility/simplicity, 
-        // essentially "0:count" means not logically locked by old mechanism)
-        fs.writeFileSync(counterFilePath, `0:${count}`, 'utf8');
-
-    } finally {
-        releaseLock();
-    }
-
-    return counterMinify(count);
-}
-
-/**
- * Deprecated: Kept for compatibility but effectively no-op or simple wrapper.
- * The new getCounter handles persistence automatically.
- */
-export function saveCounter(userID) {
-    // No-op in new atomic design, or could force a save if really needed, 
-    // but getCounter handles state.
-}
-
-/**
- * Deprecated: Kept for compatibility.
- */
-export function getCounterFomFile() {
-    // No-op, getCounter reads from file every time.
-}
-
-
-/**
  * svelteClassHasher - A Vite plugin designed for Svelte 5 to automatically hash local CSS classes.
  * 
  * PURPOSE:
@@ -179,6 +265,24 @@ export function getCounterFomFile() {
  * 4. LOGIC PROTECTION: It completely ignores <script> blocks to ensure your business 
  *    logic remains untouched.
  */
+/**
+ * maskHtmlComments - Replace the CONTENTS of every HTML comment with spaces of equal
+ * length, keeping the surrounding text length intact so every index in the returned
+ * string still lines up with the original source.
+ *
+ * Why: block detection locates `<style>`/`<script>` with a plain regex. A component
+ * that merely MENTIONS `<style>` inside a doc comment (e.g. "Layout lives in the scoped
+ * <style> below") would otherwise have that literal matched as a real opening tag, and
+ * the lazy `[\s\S]*?` would run to the next real `</style>` — swallowing all the markup
+ * in between. Every markup class then looks like it lives inside <style>, so it's never
+ * found as a usage; STEP 5's `clsOccs.every()` is then vacuously true and the class gets
+ * renamed in the stylesheet but NOT in the markup, breaking the scoped selector. Scanning
+ * a comment-masked copy (while applying replacements to the original) avoids this.
+ */
+function maskHtmlComments(code) {
+    return code.replace(/<!--[\s\S]*?-->/g, (m) => ' '.repeat(m.length));
+}
+
 export const svelteClassHasher = () => {
     const classMap = new Map();
     const srcDir = process.cwd();
@@ -204,10 +308,15 @@ export const svelteClassHasher = () => {
                         if (['node_modules', '.svelte-kit', 'tmp', 'static', 'build', '.git', 'ecommerce/build'].includes(entry.name)) continue;
                         scanDir(fullPath);
                     } else if (entry.isFile() && entry.name.endsWith('.svelte')) {
-                        const content = fs.readFileSync(fullPath, 'utf8');
+                        // Mask HTML comments so a `<style>` mentioned in a comment isn't
+                        // matched as a real block (see maskHtmlComments).
+                        const content = maskHtmlComments(fs.readFileSync(fullPath, 'utf8'));
                         const styleMatch = content.match(/<style[^>]*>([\s\S]*?)<\/style>/);
                         if (styleMatch) {
-                            const styleContent = styleMatch[1];
+                            // Strip CSS comments first: a commented-out selector like
+                            // `/* .relative {} */` must NOT be treated as a real local
+                            // class, or the hasher would rename the global utility.
+                            const styleContent = styleMatch[1].replace(/\/\*[\s\S]*?\*\//g, '');
                             const classSelectorRegex = /\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g;
                             let m;
                             while ((m = classSelectorRegex.exec(styleContent)) !== null) {
@@ -221,17 +330,17 @@ export const svelteClassHasher = () => {
                 }
             };
 
-            nameMapping.clear();
             classMap.clear();
             scanDir(srcDir);
             console.log(`[class-hasher] Global map ready: ${classMap.size} classes protected.`);
         },
 
         /*
-         * buildEnd hook:
+         * buildEnd hook: persist the registry so a sibling build process (e.g. the
+         * storefront build that runs after the admin build) starts from our names.
          */
         async buildEnd() {
-            // No cleanup needed
+            flushClassRegistry();
         },
 
         /**
@@ -242,14 +351,22 @@ export const svelteClassHasher = () => {
             if (!id.endsWith('.svelte')) return null;
             if (id.includes('node_modules')) return null;
 
+            // All block/markup DETECTION runs against a comment-masked copy so a literal
+            // `<style>`/`<script>` inside an HTML comment can't be mistaken for a real
+            // block (see maskHtmlComments). Indices are preserved, so every replacement
+            // below is still applied to the original `code` at the same offset.
+            const masked = maskHtmlComments(code);
+
             // STEP 1: Extract classes defined in the LOCAL <style> block.
             const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/g;
-            const styleMatch = [...code.matchAll(styleRegex)];
+            const styleMatch = [...masked.matchAll(styleRegex)];
             if (styleMatch.length === 0) return null;
 
             const localClasses = new Set();
             for (const m of styleMatch) {
-                const content = m[1];
+                // Strip CSS comments so a commented-out selector (e.g. `/* .relative {} */`)
+                // is never picked up as a local class and used to rename a global utility.
+                const content = m[1].replace(/\/\*[\s\S]*?\*\//g, '');
                 const classSelectorRegex = /\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g;
                 let sm;
                 while ((sm = classSelectorRegex.exec(content)) !== null) {
@@ -264,7 +381,7 @@ export const svelteClassHasher = () => {
             // and skip hashing it to be safe.
             const scriptCheckRegex = /<script[^>]*>([\s\S]*?)<\/script>/g;
             let scrMatch;
-            while ((scrMatch = scriptCheckRegex.exec(code)) !== null) {
+            while ((scrMatch = scriptCheckRegex.exec(masked)) !== null) {
                 const scriptContent = scrMatch[1];
                 for (const cls of Array.from(localClasses)) {
                     const pattern = new RegExp(`(?<![a-zA-Z0-9_-])${cls.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-zA-Z0-9_-])`);
@@ -278,7 +395,7 @@ export const svelteClassHasher = () => {
 
             // STEP 2: Map forbidden ranges (script or style blocks) to prevent accidental logic edits.
             const scriptRegex = /<script[^>]*>([\s\S]*?)<\/script>/g;
-            const scriptRanges = [...code.matchAll(scriptRegex)].map(m => ({ s: m.index, e: m.index + m[0].length }));
+            const scriptRanges = [...masked.matchAll(scriptRegex)].map(m => ({ s: m.index, e: m.index + m[0].length }));
             const styleRanges = styleMatch.map(m => ({ s: m.index, e: m.index + m[0].length }));
 
             const isScriptOrStyle = (i) =>
@@ -291,7 +408,7 @@ export const svelteClassHasher = () => {
 
             const markupOccurrences = [];
             let m;
-            while ((m = classRegex.exec(code)) !== null) {
+            while ((m = classRegex.exec(masked)) !== null) {
                 if (!isScriptOrStyle(m.index)) {
                     markupOccurrences.push({ index: m.index, word: m[1] });
                 }
@@ -306,7 +423,7 @@ export const svelteClassHasher = () => {
 
             const safeIndices = new Set();
             const tagRegex = /<([a-zA-Z0-9:-]+)([\s\S]*?)>/g;
-            while ((m = tagRegex.exec(code)) !== null) {
+            while ((m = tagRegex.exec(masked)) !== null) {
                 if (isScriptOrStyle(m.index)) continue;
 
                 const tagContent = m[2];

@@ -10,7 +10,7 @@ import { Agent } from '$components/agent/registry';
 const isOpen = $derived(!!Core.showMobileSearchLayer);
 const canClearSelection = $derived(!!Core.showMobileSearchLayer?.onClear)
 let avoidClose = false
-let htmlTextarea: HTMLTextAreaElement | undefined
+let htmlTextarea: HTMLTextAreaElement | undefined = $state()
 let searchText = $state("")
 const mobileColumns = 2
 const estimatedRowHeight = 60

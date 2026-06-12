@@ -229,11 +229,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-	/*
-  .relative {
-    min-height: 1px;
-  }
-  */
-</style>

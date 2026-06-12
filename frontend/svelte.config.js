@@ -1,14 +1,9 @@
 import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
-import { getCounter, getCounterFomFile } from './plugins.js';
+import { getCounterForKey, makeClassKey } from './plugins.js';
 import path from 'path';
 
 const isBuild = process.argv.includes('build');
-const componentMap = new Map();
-
-if (isBuild) {
-	getCounterFomFile();
-}
 
 console.log('--- SVELTE CONFIG LOADED ---');
 
@@ -21,11 +16,9 @@ const config = {
 		hmr: false,
 		cssHash: ({ hash, css, name, filename }) => {
 			if (isBuild) {
-				const key = filename || hash(css);
-				if (!componentMap.has(key)) {
-					componentMap.set(key, getCounter());
-				}
-				return componentMap.get(key);
+				// Deterministic keyed name; keyed by file (or css hash when filename
+				// is absent) so both prerender passes resolve the same scope class.
+				return getCounterForKey(makeClassKey('s', filename, filename ? undefined : '#' + hash(css)));
 			}
 
 			if (!filename) {

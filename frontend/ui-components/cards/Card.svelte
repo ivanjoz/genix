@@ -18,7 +18,8 @@
     onClick?.(ev as MouseEvent);
   };
 
-  const componentID = id ?? Env.getComponentID();
+  const fallbackID = Env.getComponentID();
+  const componentID = $derived(id ?? fallbackID);
 
   $effect(() => {
     if (!onClick) { return; }

@@ -18,7 +18,7 @@
 	import { onMount } from 'svelte';
 	import { startAgentBridge } from '$core/agent/sse';
 	import './app.css';
-	import { getAccessEntriesForRoute } from './seguridad/perfiles-accesos/access-list-catalog';
+	import { fetchAccessListCatalog, getAccessEntriesForRoute } from './seguridad/perfiles-accesos/access-list-catalog';
 	import './tailwind.css';
 
 	let { children } = $props();
@@ -48,9 +48,33 @@
 	})
 
 	let lastDeniedRoute = $state('')
+	let accessCatalogReady = $state(false)
+	let accessCatalogLoading = $state(false)
+	let accessCatalogFailed = $state(false)
+
+	const loadAccessCatalog = async () => {
+		if (accessCatalogReady || accessCatalogLoading || accessCatalogFailed) { return }
+		accessCatalogLoading = true
+		try {
+			await fetchAccessListCatalog()
+			accessCatalogReady = true
+		} catch (error) {
+			accessCatalogFailed = true
+			console.error('[access-list] Failed to load access catalog', error)
+			Notify.failure(tr('Unable to load access permissions.|No se pudieron cargar los permisos de acceso.'))
+		} finally {
+			accessCatalogLoading = false
+		}
+	}
 
 	onMount(() => {
 		if(redirectsToLogin){ Env.navigate("/login") }
+	})
+
+	$effect(() => {
+		if (browser && !redirectsToLogin && page.url.pathname !== '/login' && !accessCatalogReady && !accessCatalogFailed) {
+			void loadAccessCatalog()
+		}
 	})
 
 	$effect(() => {
@@ -69,7 +93,7 @@
 	})
 
 	$effect(() => {
-		if (!browser || redirectsToLogin) { return }
+		if (!browser || redirectsToLogin || !accessCatalogReady) { return }
 
 		const currentPath = page.url.pathname
 		if (canUserAccessRoute(currentPath)) {
@@ -99,7 +123,7 @@
 	<title>Genix - Sistema de Gestión</title>
 </svelte:head>
 
-{#if showLayout && !redirectsToLogin}
+{#if showLayout && !redirectsToLogin && accessCatalogReady}
 	<TopLayerSelector></TopLayerSelector>
 	<TopLayerDatePicker></TopLayerDatePicker>
 	<!-- Header with mobile menu toggle -->
@@ -114,6 +138,6 @@
 {/if}
 
 <!-- Main Content -->
-{#if (Core.isLoading === 0 || !showLayout /* ??? */) && !redirectsToLogin}
+{#if (Core.isLoading === 0 || !showLayout /* ??? */) && !redirectsToLogin && (accessCatalogReady || !showLayout)}
 	{@render children?.()}
 {/if}

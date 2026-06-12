@@ -1,5 +1,4 @@
-import { createGenerator, type UnoGenerator } from '@unocss/core';
-import presetWind4 from '@unocss/preset-wind4';
+import type { UnoGenerator } from '@unocss/core';
 import type { SectionData } from '../renderer/section-types';
 import type { ComponentAST } from '../renderer/renderer-types';
 
@@ -28,19 +27,20 @@ let generatorPromise: Promise<UnoGenerator> | null = null;
 
 function getGenerator(): Promise<UnoGenerator> {
 	if (!generatorPromise) {
-		generatorPromise = createGenerator({
-			// Disable the reset preflight (the page already ships Tailwind's
-			// preflight; a second reset would clash) but KEEP the theme layer, which
-			// emits the :root CSS vars that utilities like text-4xl / max-w-3xl /
-			// font-bold reference. UnoCSS namespaces these (--text-4xl-fontSize) so
-			// they don't collide with build-Tailwind's (--text-4xl).
-			presets: [presetWind4({ preflights: { reset: false } })],
-			theme: {
-				// Match routes/tailwind.css @theme exactly.
-				spacing: { DEFAULT: '1px' },
-				breakpoint: { md: '749px', lg: '1139px', xl: '1379px', '2xl': '1539px' },
-				colors: PALETTE_COLORS,
-			},
+		console.debug('[live-css] Loading UnoCSS runtime');
+		generatorPromise = Promise.all([
+			import('@unocss/core'),
+			import('@unocss/preset-wind4'),
+		]).then(([{ createGenerator }, { default: presetWind4 }]) => {
+			return createGenerator({
+				// Keep runtime utilities aligned with the build-time Tailwind theme.
+				presets: [presetWind4({ preflights: { reset: false } })],
+				theme: {
+					spacing: { DEFAULT: '1px' },
+					breakpoint: { md: '749px', lg: '1139px', xl: '1379px', '2xl': '1539px' },
+					colors: PALETTE_COLORS,
+				},
+			});
 		});
 	}
 	return generatorPromise;

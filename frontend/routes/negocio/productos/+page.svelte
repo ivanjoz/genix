@@ -12,11 +12,11 @@ import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import { Core, tr } from '$core/store.svelte';
 import T from '$components/misc/T.svelte';
-import HTMLEditor from '$domain/HTMLEditor/HTMLEditor.svelte';
 import Page from '$domain/Page.svelte';
 import { ConfirmWarn, formatN, Loading, Notify } from '$libs/helpers';
 import { POST } from '$libs/http.svelte';
 import type { ExcelTableColumn } from '$libs/excel/excelBuilder';
+import type { Component } from 'svelte';
 import Atributos from './Atributos.svelte';
 import CategoriasMarcas from './CategoriasMarcas.svelte';
 import { exportProductosToExcel, processProductosImportFile } from './productos.excel';
@@ -46,6 +46,23 @@ import {
   let importExcelRowsPreview = $state<IProduct[]>([]);
   let importExcelErrors = $state<string[]>([]);
   let isImportExcelProcessing = $state(false);
+  let HtmlEditorComponent = $state<Component<any> | null>(null);
+  let htmlEditorComponentPromise: Promise<Component<any>> | null = null;
+
+  const loadHtmlEditor = async () => {
+    if (!htmlEditorComponentPromise) {
+      console.debug('[products] Loading rich text editor runtime');
+      htmlEditorComponentPromise = import('$domain/HTMLEditor/HTMLEditor.svelte')
+        .then((module) => module.default);
+    }
+    HtmlEditorComponent = await htmlEditorComponentPromise;
+  };
+
+  $effect(() => {
+    if (layerView === 2 && !HtmlEditorComponent) {
+      void loadHtmlEditor();
+    }
+  });
 
   // Gallery of the form product's images, derived from the parallel ImageIDs/ImageDescriptions arrays.
   const productoImagenes = $derived(
@@ -789,7 +806,11 @@ import {
       </div>
     {/if}
     {#if layerView === 2}
-      <HTMLEditor saveOn={productoForm} save="ContentHTML" css="mt-12" />
+      {#if HtmlEditorComponent}
+        <HtmlEditorComponent saveOn={productoForm} save="ContentHTML" css="mt-12" />
+      {:else}
+        <div class="mt-12 p-12 text-sm text-slate-500">Cargando editor...</div>
+      {/if}
     {/if}
     {#if layerView === 3}
       <div class="mt-16 w-full" aria-label="Product attributes and presentations editor">

@@ -1,5 +1,8 @@
 import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { getCounterForKey, makeClassKey } from '../plugins.js';
+
+const isBuild = process.argv.includes('build');
 
 console.log('--- SVELTE CONFIG LOADED (pkg-store) ---');
 
@@ -10,9 +13,12 @@ const config = {
 		hmr: false,
 		cssHash: ({ hash, css, name, filename }) => {
 			// MUST be deterministic: SSR/prerender runs two separate build passes
-			// (server + client). A stateful counter (getCounter) diverges between them,
-			// so the prerendered HTML's scope class wouldn't match the bundled CSS and
-			// all scoped styles vanish. Hash the css content (stable across passes).
+			// (server + client). The persisted keyed counter (../plugins.js) resolves the
+			// same key to the same name in both passes, so the prerendered HTML's scope
+			// class matches the bundled CSS. Dev keeps readable component-name hashes.
+			if (isBuild) {
+				return getCounterForKey(makeClassKey('s', filename, filename ? undefined : '#' + hash(css)));
+			}
 			if (!filename) {
 				return `svelte-${hash(css).substring(0, 8)}`;
 			}

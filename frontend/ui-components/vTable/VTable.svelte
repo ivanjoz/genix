@@ -10,7 +10,6 @@
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
   import T from '$components/misc/T.svelte';
   import { Env } from '$core/env';
-  import { tr } from '$core/store.svelte';
   import { Agent } from '$components/agent/registry';
   import {
     setVTableAgentContext,
