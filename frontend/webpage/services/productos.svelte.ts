@@ -300,6 +300,9 @@ export const getProductEcommerceData = async (): Promise<ProductCatalog> => {
 	catalogPromise = (async () => {
 		if (!browser) return catalog;
 
+		// TODO: TESTING ONLY — artificial 5s delay to exercise the loading skeleton. Remove.
+		// await new Promise((resolve) => setTimeout(resolve, 5000));
+
 		const now = Math.floor(Date.now() / 1000);
 		const lastFetch = readLastFetchUnix();
 		const isWarm = lastFetch > 0 && now - lastFetch < FRESH_WINDOW_SECONDS;

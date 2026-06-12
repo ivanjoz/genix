@@ -17,7 +17,7 @@ export const HtmlCategoryShowcase: SectionData = {
 					Shop by Category
 				</h2>
 				<CategoryDescription categoryIDs="[22]" class="text-center text-gray-600 max-w-2xl mx-auto mb-10" />
-				<ProductsByCategory categoryID="22" limit="8" />
+				<ProductsByCategory categoryID="22" rows="2" rowsMobile="3" />
 			</div>
 		</section>
 	`,

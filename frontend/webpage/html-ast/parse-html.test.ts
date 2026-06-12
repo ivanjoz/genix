@@ -42,14 +42,14 @@ describe('coerceValue', () => {
 describe('coerceProps', () => {
 	it('renames and types via schema, passes unknown through', () => {
 		const props = coerceProps(
-			{ categoryID: '13', limit: '8', extra: 'raw' },
+			{ categoryID: '13', rows: '4', extra: 'raw' },
 			componentSchemas.ProductsByCategory,
 		);
-		expect(props).toEqual({ categoryID: 13, limit: 8, extra: 'raw' });
+		expect(props).toEqual({ categoryID: 13, rows: 4, extra: 'raw' });
 	});
 	it('applies defaults', () => {
 		const props = coerceProps({ categoryID: '5' }, componentSchemas.ProductsByCategory);
-		expect(props.limit).toBe(8);
+		expect(props.rows).toBe(3);
 	});
 });
 
@@ -63,9 +63,9 @@ describe('parseHTML', () => {
 	});
 
 	it('preserves custom component case and coerces props', () => {
-		const [node] = parseHTML('<ProductsByCategory categoryID="13" limit="8" />');
+		const [node] = parseHTML('<ProductsByCategory categoryID="13" rows="2" />');
 		expect(node.tagName).toBe('ProductsByCategory');
-		expect(node.props).toEqual({ categoryID: 13, limit: 8 });
+		expect(node.props).toEqual({ categoryID: 13, rows: 2 });
 	});
 
 	it('keeps native passthrough attributes', () => {
@@ -121,7 +121,7 @@ describe('ecommerce templates parse cleanly', () => {
 		const inner = section.children?.[0].children ?? [];
 		const desc = inner.find((n) => n.tagName === 'CategoryDescription');
 		const grid = inner.find((n) => n.tagName === 'ProductsByCategory');
-		expect(desc?.props?.categoryIDs).toEqual([13]);
-		expect(grid?.props).toEqual({ categoryID: 13, limit: 8 });
+		expect(desc?.props?.categoryIDs).toEqual([22]);
+		expect(grid?.props).toEqual({ categoryID: 22, rows: 2, rowsMobile: 3 });
 	});
 });

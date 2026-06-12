@@ -178,7 +178,7 @@ export const ProductShowcase: SectionData = {
                 <h2 data-role="title" color="9" class="text-3xl font-bold text-center mb-10">
                     Featured Products
                 </h2>
-                <ProductsByCategory categoryID="1" limit="8" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" />
+                <ProductsByCategory categoryID="1" maxWidth="1680" rows="2" rowsMobile="3" />
             </div>
         </section>
     `,

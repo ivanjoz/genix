@@ -27,6 +27,9 @@
 		mode?: ProductCardMode;
 		hideCloseButton?: boolean;
 		useQuantityControls?: boolean;
+		// When true, render a skeleton-loading card (Facebook-style shimmer strips) while there is
+		// no product yet (ID 0) or the by-id record is still loading. Used by grids to fill slots.
+		usePlaceHolder?: boolean;
 	}
 
 	const {
@@ -36,6 +39,7 @@
 		mode = "vertical",
 		hideCloseButton = false,
 		useQuantityControls = true,
+		usePlaceHolder = false,
 	}: IProductCard = $props();
 
 	let productRecordReference = $state<IRecordRef<IProductoByIDRecord> | null>(null);
@@ -61,7 +65,32 @@
 	const resolvedProductImageName = $derived.by(() => {
 		return resolvedProduct?.Image?.n || resolvedProduct?.Images?.[0]?.n || "";
 	});
+
+	// Fixed palette of 10 gradients used as a fallback "cover" when a product has no photo,
+	// so the card shows colour instead of a broken-image icon.
+	const PLACEHOLDER_GRADIENTS = [
+		"linear-gradient(135deg, #c9cdd6 0%, #e3e6ec 100%)",
+		"linear-gradient(135deg, #cdd3c8 0%, #e4e7df 100%)",
+		"linear-gradient(135deg, #d3ccd6 0%, #e6e2ea 100%)",
+		"linear-gradient(135deg, #c8d2d6 0%, #dfe6e9 100%)",
+		"linear-gradient(135deg, #d6cdc8 0%, #eae3df 100%)",
+		"linear-gradient(135deg, #ccd6d3 0%, #dfe9e6 100%)",
+		"linear-gradient(135deg, #d6d0c8 0%, #ebe6dd 100%)",
+		"linear-gradient(135deg, #cdd0d6 0%, #e2e4ea 100%)",
+		"linear-gradient(135deg, #d4ccd0 0%, #e8e1e5 100%)",
+		"linear-gradient(135deg, #c8d6d0 0%, #dde9e4 100%)",
+	];
+	// Pick deterministically by product ID; the ×7 spreads sequential IDs across the palette
+	// (7 is coprime with 10) so neighbouring products don't share the same gradient.
+	const productPlaceholderGradient = $derived(
+		PLACEHOLDER_GRADIENTS[((resolvedProduct?.ID || 0) * 7) % PLACEHOLDER_GRADIENTS.length],
+	);
 	const isLoadingProductRecord = $derived(productRecordReference?.loading || false);
+	// Show the shimmer skeleton while a placeholder card has nothing to render yet: either no
+	// product at all (ID 0) or an ID whose record is still being fetched.
+	const showLoadingSkeleton = $derived(
+		usePlaceHolder && (resolvedProductID === 0 || isLoadingProductRecord),
+	);
 
 	$effect(() => {
 		// When the caller already supplies the full product (in-memory search path), skip the by-id
@@ -132,19 +161,25 @@
 </script>
 
 {#if mode === "horizontal"}
-	<div class="horizontal-card {css}" aria-busy={isLoadingProductRecord}>
+	<div class="horizontal-card {css}" aria-busy={isLoadingProductRecord || showLoadingSkeleton}>
 		<div class="horizontal-image-wrapper">
-			{#if resolvedProductImageName}
+			{#if showLoadingSkeleton}
+				<div class="horizontal-image-placeholder skeleton-line"></div>
+			{:else if resolvedProductImageName}
 				<ImageHash
 					css="horizontal-image"
 					src={resolvedProductImageName}
 					folder="img-productos"
 				/>
 			{:else}
-				<div class="horizontal-image-placeholder"></div>
+				<div class="horizontal-image-placeholder" style:background={productPlaceholderGradient}></div>
 			{/if}
 		</div>
 		<div class="horizontal-body">
+			{#if showLoadingSkeleton}
+				<div class="skeleton-line w-4/5"></div>
+				<div class="skeleton-line w-2/5 mt-4"></div>
+			{:else}
 			<div class="horizontal-name" title={resolvedProduct.Name || `Producto #${resolvedProductID}`}>
 				{resolvedProduct.Name || `Producto #${resolvedProductID}`}
 			</div>
@@ -174,8 +209,9 @@
 						<div class="price-value">{formatN(resolvedProductPriceCents / 100, 2)}</div>
 					</div>
 				</div>
+				{/if}
 		</div>
-			{#if !hideCloseButton}
+			{#if !showLoadingSkeleton && !hideCloseButton}
 				<!-- Keep explicit remove action optional so search-card usage can hide destructive controls. -->
 				<button class="remove-button" onclick={removeProductFromSelection} aria-label="Remover">
 					<i class="icon-cancel"></i>
@@ -183,35 +219,147 @@
 			{/if}
 		</div>
 {:else}
-	<div class="vertical-card-shell">
-		<div class="vertical-card {css}" aria-busy={isLoadingProductRecord}>
-			<ImageHash
-				css="w-full h-[36vw] md:h-200"
-				src={resolvedProductImageName}
-				folder="img-productos"
-			/>
-			<div class="vertical-content pb-2">
-				<div class="vertical-name mt-6 mb-4 min-h-26 md:min-h-32 fx-c">
-					{resolvedProduct.Name || "???"}
+	<div class="vertical-card-shell" class:loading={showLoadingSkeleton}>
+		<div class="vertical-card {css}" aria-busy={isLoadingProductRecord || showLoadingSkeleton}>
+			{#if resolvedProductImageName}
+				<ImageHash
+					css="w-full h-[36vw] md:h-200"
+					src={resolvedProductImageName}
+					folder="img-productos"
+				/>
+			{:else}
+				<!-- No photo: deterministic gradient cover keyed off the product ID.
+				     While loading it also hosts the centered spinner. -->
+				<div
+					class="w-full h-[36vw] md:h-200 relative"
+					style:background={productPlaceholderGradient}
+					style:border-radius="7px"
+				>
+					{#if showLoadingSkeleton}
+						<span class="loader"></span>
+					{/if}
 				</div>
-				<div class="px-4 ff-bold fs17">s/. {formatN(resolvedProductPriceCents / 100, 2)}</div>
+			{/if}
+			<div class="vertical-content pb-2">
+				{#if showLoadingSkeleton}
+					<div class="vertical-name mt-10 mb-6 min-h-26 md:min-h-32 fx-c flex-col gap-8">
+						<div class="skeleton-line w-4/5"></div>
+						<div class="skeleton-line w-3/5"></div>
+					</div>
+					<div class="px-4 mb-4"><div class="skeleton-line skeleton-strong h-18 w-90"></div></div>
+				{:else}
+					<div class="vertical-name mt-6 mb-4 min-h-26 md:min-h-32 fx-c">
+						{resolvedProduct.Name || "???"}
+					</div>
+					<div class="px-4 ff-bold fs17">s/. {formatN(resolvedProductPriceCents / 100, 2)}</div>
+				{/if}
 				<div class="vertical-icon fx-c h-30 w-32">
 					<i class="icon1-basket"></i>
 				</div>
 			</div>
-			<button class="vertical-add-button" onclick={incrementSelectedQuantity} type="button">
-				{#if selectedProductQuantity === 0}
-					Agregar <i class="icon1-basket"></i>
-				{/if}
-				{#if selectedProductQuantity > 0}
-					Agregar mas ({selectedProductQuantity}) <i class="icon1-basket"></i>
-				{/if}
-			</button>
+			{#if !showLoadingSkeleton}
+				<button class="vertical-add-button" onclick={incrementSelectedQuantity} type="button">
+					{#if selectedProductQuantity === 0}
+						Agregar <i class="icon1-basket"></i>
+					{/if}
+					{#if selectedProductQuantity > 0}
+						Agregar mas ({selectedProductQuantity}) <i class="icon1-basket"></i>
+					{/if}
+				</button>
+			{/if}
 		</div>
 	</div>
 {/if}
 
 <style>
+	/* Facebook-style loading strip: a grey bar with a light band sweeping across it. */
+	.skeleton-line {
+		height: 14px;
+		border-radius: 6px;
+		background-color: #e3e5ea;
+		background-image: linear-gradient(
+			90deg,
+			rgba(255, 255, 255, 0) 0%,
+			rgba(255, 255, 255, 0.65) 50%,
+			rgba(255, 255, 255, 0) 100%
+		);
+		background-size: 200% 100%;
+		background-repeat: no-repeat;
+		background-position: -150% 0;
+		animation: skeleton-sweep 1.3s ease-in-out infinite;
+	}
+
+	/* Darker base for the price strip, since the real price is bold. */
+	.skeleton-strong {
+		background-color: #c6c9d2;
+	}
+
+	/* Centered orbiting spinner shown over the cover while a card loads.
+	   Two offset dots in muted gray-blue / gray-red orbit via the `spin` keyframe. */
+	.loader {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%) rotateZ(45deg);
+		perspective: 1000px;
+		border-radius: 50%;
+		width: 40px;
+		height: 40px;
+		color: #7e8aa6;
+	}
+	.loader:before,
+	.loader:after {
+		content: '';
+		display: block;
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: inherit;
+		height: inherit;
+		border-radius: 50%;
+		transform: rotateX(70deg);
+		animation: 1s spin linear infinite;
+	}
+	.loader:after {
+		color: #b07f86;
+		transform: rotateY(70deg);
+		animation-delay: 0.4s;
+	}
+
+	@keyframes spin {
+		0%,
+		100% {
+			box-shadow: 0.2em 0 0 0 currentcolor;
+		}
+		12% {
+			box-shadow: 0.2em 0.2em 0 0 currentcolor;
+		}
+		25% {
+			box-shadow: 0 0.2em 0 0 currentcolor;
+		}
+		37% {
+			box-shadow: -0.2em 0.2em 0 0 currentcolor;
+		}
+		50% {
+			box-shadow: -0.2em 0 0 0 currentcolor;
+		}
+		62% {
+			box-shadow: -0.2em -0.2em 0 0 currentcolor;
+		}
+		75% {
+			box-shadow: 0 -0.2em 0 0 currentcolor;
+		}
+		87% {
+			box-shadow: 0.2em -0.2em 0 0 currentcolor;
+		}
+	}
+
+	@keyframes skeleton-sweep {
+		to {
+			background-position: 250% 0;
+		}
+	}
+
 	.vertical-card {
 		position: relative;
 		background-color: white;
@@ -405,7 +553,12 @@
 		background-color: rgb(228, 94, 94);
 	}
 
-	@media (min-width: 739px) {		
+	/* While loading there is nothing to interact with; this also suppresses the hover lift/outline. */
+	.vertical-card-shell.loading {
+		pointer-events: none;
+	}
+
+	@media (min-width: 739px) {
 		.vertical-card-shell:hover .vertical-card {
 			outline-color: rgb(202, 173, 255);
 			margin-bottom: 12px;

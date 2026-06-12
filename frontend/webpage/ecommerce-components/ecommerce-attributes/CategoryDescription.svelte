@@ -21,7 +21,5 @@
 <div class={css}>
 	{#if categoria}
 		{categoria.Description}
-	{:else}
-		Loading...
 	{/if}
 </div>

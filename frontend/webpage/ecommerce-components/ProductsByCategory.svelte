@@ -1,33 +1,30 @@
 <script lang="ts">
 	import { getProductEcommerceData, type ProductCatalog } from '$ecommerce/services/productos.svelte';
-	import ProductCard from "$ecommerce/components/ProductCard.svelte";
+	import ProductGrid from './ProductGrid.svelte';
 
 	export interface IProductsByCategory {
 		css?: string;
 		categoryID: number;
-		limit?: number;
+		// Layout knobs forwarded to ProductGrid (see ProductGrid.svelte for semantics).
+		maxWidth?: number;
+		maxMargin?: number;
+		rows?: number;
+		rowsMobile?: number;
 	}
 
-	const { css = "", categoryID, limit = 8 }: IProductsByCategory = $props();
+	const { css = '', categoryID, maxWidth, maxMargin, rows, rowsMobile }: IProductsByCategory =
+		$props();
 
 	let catalog = $state<ProductCatalog | null>(null);
 
 	getProductEcommerceData().then((loaded) => { catalog = loaded; });
 
 	// Reactive: tracks the catalog state, so it fills in when the delta re-publishes.
+	// The grid decides how many of these to actually show, so we hand it the full category list.
 	const productos = $derived.by(() => {
 		if (!catalog) return [];
-		const list = catalog.getProductsByCategory(categoryID);
-		return limit && list.length > limit ? list.slice(0, limit) : list;
+		return catalog.getProductsByCategory(categoryID);
 	});
-
 </script>
 
-<div class="w-full flex justify-center overflow-x-hidden pt-2">
-	<div class={"grid grid-cols-2 gap-x-12 md:gap-x-20 md:flex md:flex-wrap md:justify-center max-w-1680 w100-p12 p-8 md:p-0"}
-	>
-		{#each productos as producto}
-			<ProductCard css="w-full md:w-240" producto={producto} />
-		{/each}
-	</div>
-</div>
+<ProductGrid {css} products={productos} {maxWidth} {maxMargin} {rows} {rowsMobile} />

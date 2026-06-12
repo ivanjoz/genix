@@ -31,6 +31,27 @@
 				}
 			})();
 		</script>
+		<script>
+			// Sticky-header on scroll for the production storefront, where the window itself scrolls.
+			// (The builder/editor case — a scrollable container toggling `s2` — lives in Header.svelte's
+			// onMount.) This used to live in lib/blurhash.js, which is not part of the build, so it is
+			// embedded inline here to guarantee it runs on every served page.
+			//
+			// The header (#sh-0) may not exist yet when this runs: prerendered pages ship it in the
+			// static HTML, but in dev (CSR) it only appears after hydration. So we attach the window
+			// scroll listener unconditionally and resolve the element lazily inside the handler.
+			(function () {
+				var threshold = null;
+				var onScroll = function () {
+					var node = document.getElementById('sh-0');
+					if (!node) return;
+					// offsetTop is independent of scroll position, so caching it on first sight is safe.
+					if (threshold === null) threshold = node.offsetTop;
+					node.classList.toggle('s1', window.scrollY > threshold);
+				};
+				window.addEventListener('scroll', onScroll, { passive: true });
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

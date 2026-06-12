@@ -14,7 +14,11 @@ export const componentSchemas: Record<string, ComponentSchema> = {
 		description: 'Grid of products belonging to a single category.',
 		props: {
 			categoryID: { type: 'number' },
-			limit: { type: 'number', default: 8 },
+			// Layout knobs forwarded to the inner ProductGrid; card count = columns × rows.
+			maxWidth: { type: 'number' },
+			maxMargin: { type: 'number' },
+			rows: { type: 'number', default: 3 },
+			rowsMobile: { type: 'number' },
 		},
 	},
 
