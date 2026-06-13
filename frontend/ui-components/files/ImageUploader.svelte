@@ -5,6 +5,7 @@ import { Notify, fileToImage } from '$libs/helpers';
 import { Env } from '$core/env';
 import { imagesToUpload, tr } from '$core/store.svelte';
 import { inMemoryImages, getInMemoryImageBase64, isImageInFlight, type InMemoryImage } from '$core/inMemoryImages.svelte';
+import { addProcess, updateProcess } from '$core/notifications.svelte';
 import { Agent } from '$components/agent/registry';
 
 export interface IImageInput {
@@ -263,6 +264,9 @@ const confirmOptimistic = async () => {
   entry.upload = async (override?: Record<string, any>) => {
     if(entry.status === 'uploading'){ return }
     entry.status = 'uploading'
+    // Track this background upload as a process in the header notifications layer.
+    const processName = imageDescription || finalName
+    const processID = addProcess(processName, tr('Uploading image...|Subiendo imagen...'), 1)
     const data = await convertPromise
     data.Description = imageDescription
     data.ImageID = finalId
@@ -271,14 +275,21 @@ const confirmOptimistic = async () => {
     try {
       await POST_XMLHR({
         data, route: saveAPI || "images", refreshRoutes,
-        onUploadProgress: e => { if(e.total){ entry.progress = Math.round((e.loaded * 100) / e.total) } },
+        onUploadProgress: e => {
+          if(e.total){
+            entry.progress = Math.round((e.loaded * 100) / e.total)
+            updateProcess(processID, '', tr(`Uploading|Subiendo`) + ` ${entry.progress}%`, 1)
+          }
+        },
       })
     } catch (error) {
       entry.status = 'error'; entry.error = String(error)
+      updateProcess(processID, '', tr('Upload failed|Error al subir') + `: ${String(error)}`, 0)
       console.error("image upload failed::", finalName, error)
       Notify.failure('Error guardando la imagen: ' + String(error))
       throw error
     }
+    updateProcess(processID, '', tr('Image uploaded|Imagen subida'), 2)
     inMemoryImages.delete(finalName) // free memory; renderers fall through to the CDN AVIF
   }
   // Mark "pending upload" once conversion finishes (unless the flush already started/failed).

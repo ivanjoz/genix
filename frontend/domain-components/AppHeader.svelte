@@ -8,8 +8,7 @@ import { isLogged } from '$core/security';
 import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
 import HeaderConfig from '$domain/HeaderConfig.svelte';
 import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
-import HeaderProcesses from '$domain/HeaderProcesses.svelte';
-import { inMemoryImages } from '$core/inMemoryImages.svelte';
+import NotificationsButton from '$domain/NotificationsButton.svelte';
 
 	// Props
 	const {
@@ -143,20 +142,8 @@ import { inMemoryImages } from '$core/inMemoryImages.svelte';
 			</div>
 		{/if}
 
-		<!-- Process / notification tray — only shown while background image jobs are in flight. -->
-		{#if inMemoryImages.size > 0}
-			<ButtonLayer layerClass="px-4 py-4"
-				buttonClass="relative w-40 h-40 rounded-full bg-white/10 hover:bg-white/20
-					flex items-center justify-center transition-colors shadow-sm"
-				label="Shows running background processes."
-			>
-				{#snippet button()}
-					<span class="text-white text-lg icon-cw animate-spin"></span>
-					<span class="proc-badge">{inMemoryImages.size}</span>
-				{/snippet}
-				<HeaderProcesses />
-			</ButtonLayer>
-		{/if}
+		<!-- Notifications & running processes — always present. -->
+		<NotificationsButton />
 
 		<!-- Settings Dropdown -->
 		<div class="relative">
@@ -225,22 +212,6 @@ import { inMemoryImages } from '$core/inMemoryImages.svelte';
 
 	.animate-spin {
 		animation: spin 1s linear infinite;
-	}
-
-	/* Count badge overlapping the process-tray button. */
-	.proc-badge {
-		position: absolute;
-		top: -2px;
-		right: -2px;
-		min-width: 16px;
-		height: 16px;
-		padding: 0 4px;
-		border-radius: 999px;
-		background-color: #e75c5c;
-		color: white;
-		font-size: 11px;
-		line-height: 16px;
-		text-align: center;
 	}
 
 	/* LOADING: absolute so it sits in the reserved gap to the left of the
