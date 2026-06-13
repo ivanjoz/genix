@@ -11,6 +11,7 @@ import SearchCard from '$components/cards/SearchCard.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import { Core, tr } from '$core/store.svelte';
+import { inMemoryImages } from '$core/inMemoryImages.svelte';
 import T from '$components/misc/T.svelte';
 import Page from '$domain/Page.svelte';
 import { ConfirmWarn, formatN, Loading, Notify } from '$libs/helpers';
@@ -42,7 +43,6 @@ import {
   let CategoriasLayer: CategoriasMarcas | null = null;
   // svelte-ignore non_reactive_update
   let MarcasLayer: CategoriasMarcas | null = null;
-  let imageUploaderHandler: (() => void) | undefined;
   let importExcelRowsPreview = $state<IProduct[]>([]);
   let importExcelErrors = $state<string[]>([]);
   let isImportExcelProcessing = $state(false);
@@ -72,6 +72,33 @@ import {
       d: productoForm.ImageDescriptions?.[index] || "",
     })),
   );
+
+  // Prepend a freshly-confirmed image as the product's main image (clears the unconfirmed preview).
+  const addProductImage = (image: { id: number; name: string; description?: string }) => {
+    productoForm._imageSource = undefined;
+    productoForm.ImageIDs = [image.id, ...(productoForm.ImageIDs || [])];
+    productoForm.ImageDescriptions = [image.description || "", ...(productoForm.ImageDescriptions || [])];
+    productoForm.ImageMain = image.id;
+    productoForm.Image = { id: image.id, n: image.name, d: image.description || "" } as IProductoImage;
+    // Persist optimistically into the cached record (same object the list/row-click reuses) so
+    // re-selecting the product carries the new ImageMain in `src` — the uploader then renders it
+    // from the in-memory map until the real CDN upload finishes. New products (ID 0) have no
+    // cached record yet; they get one from postAndSync on save, already carrying these ids.
+    // Mutate the record in the list array — the exact object VTable/onRowClick read from. (The
+    // recordsMap entry is a separate $state proxy, so mutating it wouldn't reach the row.)
+    const record = productos.records.find((r) => r.ID === productoForm.ID);
+    console.log("addProductImage (cache update)::", {
+      formID: productoForm.ID, newImageID: image.id, newName: image.name,
+      recordFound: !!record, recordImageMainBefore: record?.ImageMain,
+    });
+    if (record) {
+      record.ImageIDs = [...productoForm.ImageIDs];
+      record.ImageDescriptions = [...productoForm.ImageDescriptions];
+      record.ImageMain = productoForm.ImageMain;
+      record.Image = productoForm.Image;
+      console.log("addProductImage (after)::", { recordImageMainAfter: record.ImageMain, recordImageN: record.Image?.n });
+    }
+  };
 
   const IMPORT_PRODUCTOS_MODAL_ID = 11;
 
@@ -417,21 +444,30 @@ import {
     "BrandID", "UnidadID", "Volumen", "Peso", "MonedaID",
   ]);
 
+  // Flush optimistic product images held in memory. Runs AFTER the product is saved so the
+  // image upload (which needs the product's real ID via setDataToSend) can succeed; a new
+  // product gets its real ID assigned in place by postAndSync before we get here.
+  const flushPendingProductImages = async () => {
+    for (const imageID of productoForm.ImageIDs || []) {
+      const pendingImage = inMemoryImages.get(productImageName(imageID));
+      if (pendingImage?.upload) {
+        // Supply the now-known real ProductID (it was 0 at confirm time for a new product).
+        // On failure the header process tray keeps the entry with a retry; don't block the save.
+        try { await pendingImage.upload({ ProductID: productoForm.ID }); } catch { /* surfaced in the process tray */ }
+      }
+    }
+  };
+
   const onSave = async (isDelete?: boolean) => {
     if ((productoForm.Name?.length || 0) < 4) {
       Notify.failure(tr("Name must be at least 4 characters.|El nombre debe tener al menos 4 caracteres."));
       return;
     }
-    if(imageUploaderHandler){
-      Loading.standard(tr("Saving image...|Guardando imagen..."));
-    	await imageUploaderHandler()
-     	productoForm._imageSource = undefined
-      Loading.change(tr("Saving product...|Guardando producto..."))
-    }
 
-    console.log("productor a enviar:", $state.snapshot(productoForm));    
+    console.log("productor a enviar:", $state.snapshot(productoForm));
     if (isDelete) {  productoForm.ss = 0; }
 
+    // Save the product FIRST: it carries the optimistic ImageMain/ImageIDs and obtains its real ID.
     Loading.standard(tr("Saving product...|Guardando producto..."));
     try {
     	await doPostProductos([productoForm]);
@@ -439,6 +475,11 @@ import {
       Notify.failure(error as string);
       Loading.remove();
       return;
+    }
+    // Then upload the pending image bytes with the now-known product ID.
+    if (!isDelete) {
+      Loading.change(tr("Saving images...|Guardando imágenes..."));
+      await flushPendingProductImages();
     }
     Loading.remove();
     productoForm = {} as IProduct
@@ -546,6 +587,7 @@ import {
           return e.Name;
         }}
         onRowClick={(e) => {
+          console.log("onRowClick (product select)::", { ID: e.ID, ImageMain: e.ImageMain, imageN: e.Image?.n, ImageIDs: e.ImageIDs });
           productoForm = { ...e };
           productoForm.CategoryIDs = [...(e.CategoryIDs || [])];
           productoForm.Properties = [...(e.Properties || [])];
@@ -605,8 +647,9 @@ import {
             saveAPI="product-image"
             refreshRoutes={["productos"]}
             useConvertAvif={true}
+            useImageCounter={true}
             clearOnUpload={true}
-            types={["avif", "webp"]}
+            types={["avif"]}
             folder="img-productos"
             size={2}
             src={productoForm.Image?.n}
@@ -615,27 +658,11 @@ import {
             setDataToSend={(e) => {
               e.ProductID = productoForm.ID;
             }}
-            onChange={(e, uploadHandler) => {
-              imageUploaderHandler = uploadHandler;
+            onChange={(e) => {
               productoForm._imageSource = e;
               productoForm.Image = undefined
             }}
-            onUploaded={(imagePath, description) => {
-              if (imagePath.includes("/")) {
-                imagePath = imagePath.split("/")[1];
-              }
-              // imagePath is "<companyID>_<imageID>"; prepend the new imageID as the main image.
-              const imageID = parseInt(imagePath.split("_")[1]);
-              productoForm._imageSource = undefined;
-              productoForm.ImageIDs = [imageID, ...(productoForm.ImageIDs || [])];
-              productoForm.ImageDescriptions = [description || "", ...(productoForm.ImageDescriptions || [])];
-              productoForm.ImageMain = imageID;
-              productoForm.Image = {
-                id: imageID,
-                n: imagePath,
-                d: description || "",
-              } as IProductoImage;
-            }}
+            onUploaded={addProductImage}
           />
         </div>
         <Input
@@ -825,6 +852,7 @@ import {
           saveAPI="product-image"
           refreshRoutes={["productos"]}
           useConvertAvif={true}
+          useImageCounter={true}
           clearOnUpload={true}
           types={["avif", "webp"]}
           folder="img-productos"
@@ -832,21 +860,7 @@ import {
           setDataToSend={(e) => {
             e.ProductID = productoForm.ID;
           }}
-          onUploaded={(imagePath, description) => {
-            if (imagePath.includes("/")) {
-              imagePath = imagePath.split("/")[1];
-            }
-            // imagePath is "<companyID>_<imageID>"; prepend the new imageID as the main image.
-            const imageID = parseInt(imagePath.split("_")[1]);
-            productoForm.ImageIDs = [imageID, ...(productoForm.ImageIDs || [])];
-            productoForm.ImageDescriptions = [description || "", ...(productoForm.ImageDescriptions || [])];
-            productoForm.ImageMain = imageID;
-            productoForm.Image = {
-              id: imageID,
-              n: imagePath,
-              d: description || "",
-            } as IProductoImage;
-          }}
+          onUploaded={addProductImage}
         />
         {#each productoImagenes as image}
           <ImageUploader

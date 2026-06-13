@@ -294,6 +294,7 @@ type productoImage struct {
 	Folder        string
 	Description   string
 	ProductID     int32
+	ImageID       int32 // client-reserved imageID (from GET.image-id-counter)
 	ImageToDelete int32 // imageID to remove (autoincrement*10 + configDigit)
 }
 
@@ -311,8 +312,9 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 	core.Log("Image to delete 1:", image.ImageToDelete)
 
 	if image.ImageToDelete == 0 {
-		if image.ProductID == 0 || (len(image.Content) == 0 && len(image.Content_x6) == 0) {
-			return req.MakeErr("NO se encontraron los parámetros: [ProductID] [Content]")
+		// imageID is reserved client-side via GET.image-id-counter before uploading.
+		if image.ProductID == 0 || image.ImageID == 0 || (len(image.Content) == 0 && len(image.Content_x6) == 0) {
+			return req.MakeErr("NO se encontraron los parámetros: [ProductID] [ImageID] [Content]")
 		}
 	}
 
@@ -331,8 +333,10 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	product := productos[0]
 	response := map[string]string{}
+	productChanged := false
 
 	if image.ImageToDelete > 0 {
+		productChanged = true
 		// Drop the imageID from the parallel ImageIDs/ImageDescriptions arrays.
 		imageIDs := []int32{}
 		imageDescriptions := []string{}
@@ -355,12 +359,8 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 			}
 		}
 	} else {
-		// Reserve one per-company autoincrement and derive the imageID (autoincrement*10 + configDigit).
-		autoincrement, err := db.GetAutoincrementID(fmt.Sprintf("images_%v", req.User.CompanyID), 1)
-		if err != nil {
-			return req.MakeErr("Error al obtener el autoincrement de la imagen:", err)
-		}
-		imageID := int32(autoincrement*10) + imageConfigDigitFull
+		// imageID is reserved client-side (GET.image-id-counter); derive the base CDN name from it.
+		imageID := image.ImageID
 		baseName := fmt.Sprintf("%v_%v", req.User.CompanyID, imageID)
 
 		imageArgs := cloud.ImageArgs{
@@ -390,11 +390,22 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 			}
 		}
 
-		// Prepend the new image; it becomes the main image.
-		product.ImageIDs = append([]int32{imageID}, product.ImageIDs...)
-		product.ImageDescriptions = append([]string{image.Description}, product.ImageDescriptions...)
-		product.ImageMain = imageID
 		response["imageName"] = "img-productos/" + baseName
+		// Dedupe guard: the product may already reference this imageID (saved optimistically
+		// with the client-reserved ID before the bytes finished uploading). Only associate it
+		// when absent, so a retried upload can't double-append.
+		if !slices.Contains(product.ImageIDs, imageID) {
+			// Prepend the new image; it becomes the main image.
+			product.ImageIDs = append([]int32{imageID}, product.ImageIDs...)
+			product.ImageDescriptions = append([]string{image.Description}, product.ImageDescriptions...)
+			product.ImageMain = imageID
+			productChanged = true
+		}
+	}
+
+	// Skip the product write when only the image bytes were (re)uploaded with no association change.
+	if !productChanged {
+		return req.MakeResponse(response)
 	}
 
 	product.Updated = core.SUnixTime()

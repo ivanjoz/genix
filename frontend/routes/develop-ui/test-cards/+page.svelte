@@ -16,8 +16,8 @@ import Page from '$domain/Page.svelte';
 		setDataToSend={e => {
 			e.ProductID = 8
 		}}
-		onUploaded={src => {
-			console.log("imagen subida::", src)
+		onUploaded={image => {
+			console.log("imagen subida::", image)
 		}}
 	/>
 </Page>

@@ -1,9 +1,10 @@
 <script lang="ts">
-import { POST_XMLHR } from '$libs/http.svelte';
+import { POST_XMLHR, GET } from '$libs/http.svelte';
 import { onDestroy, untrack } from 'svelte';
 import { Notify, fileToImage } from '$libs/helpers';
 import { Env } from '$core/env';
 import { imagesToUpload, tr } from '$core/store.svelte';
+import { inMemoryImages, getInMemoryImageBase64, isImageInFlight, type InMemoryImage } from '$core/inMemoryImages.svelte';
 import { Agent } from '$components/agent/registry';
 
 export interface IImageInput {
@@ -34,7 +35,7 @@ export interface IImageUploaderProps {
   types?: string[];
   saveAPI?: string;
   refreshRoutes?: string[];
-  onUploaded?: (imagePath: string, description?: string) => void;
+  onUploaded?: (image: { id: number; name: string; description?: string }) => void;
   setDataToSend?: (e: any) => void;
   clearOnUpload?: boolean;
   description?: string;
@@ -50,6 +51,10 @@ export interface IImageUploaderProps {
   folder?: string
   useConvertAvif?: boolean
   imageSource?: ImageSource
+  // Opt-in optimistic flow: confirm (✓) reserves the final ID via GET.image-id-counter, shows
+  // the image as "saved" instantly from the in-memory map, and defers convert+upload to the
+  // background (the parent flushes it after saving its own record). Used for product images.
+  useImageCounter?: boolean
 }
 
 let {
@@ -70,7 +75,8 @@ let {
   hideUploadButton = false,
   size, folder, useConvertAvif,
   id = undefined,
-  imageSource
+  imageSource,
+  useImageCounter = false
 }: IImageUploaderProps = $props();
 
 // State
@@ -85,6 +91,8 @@ const imageID = id || Env.imageCounter
 // Update imageSrc when props change
 $effect(() => {
   src; imageSource;
+  console.log("ImageUploader (Changed)::", src, imageSource)
+  
   untrack(() => {
   	imageSrc = imageSource || { src, base64: "", types, description }
    	progress = (src || imageSource?.base64) ? -1 : 0
@@ -92,8 +100,17 @@ $effect(() => {
   })
 })
 
+// While the image is still converting/uploading, render its optimistic base64 from the shared
+// map (folder/suffix tolerant). The map is the single authority: ANY ImageUploader on ANY page
+// rendered with this image's name resolves the same in-flight entry — no parent wiring needed.
+const liveBase64 = $derived(getInMemoryImageBase64(imageSrc?.src || ""))
+// Drives the small corner loader so the user sees the background convert+upload is still running,
+// even after the component unmounts and remounts (e.g. switching records and coming back).
+const isInFlight = $derived(isImageInFlight(imageSrc?.src || ""))
+
 const makeImageSrc = (format?: string) => {
   if(imageSrc.base64){ return imageSrc.base64 }
+  if(liveBase64){ return liveBase64 }
   if(!imageSrc.src){ return "" }
 
   let srcUrl = imageSrc.src || ""
@@ -107,9 +124,31 @@ const makeImageSrc = (format?: string) => {
 
 let imageFile: Blob
 let isConverting = $state(false)
+// True only while the ✓ click awaits the (fast) GET.image-id-counter reservation, so the card
+// shows a dark overlay + spinner telling the user a request is in flight.
+let isReserving = $state(false)
 
-type IResulution = {
-  i: number, r: number, fn: (c: string) => {}, promise?: Promise<any>
+type IResulution = { i: number, r: number, fn: (c: string) => void }
+
+interface IImagePayload {
+  Content: string, Content_x6: string, Content_x4: string, Content_x2: string,
+  Description?: string, ImageID?: number
+}
+
+// Convert the picked file to AVIF: 3 resolutions when useConvertAvif, else a single 1200px image.
+const convertImageFile = async (file: Blob): Promise<IImagePayload> => {
+  const data: IImagePayload = { Content: "", Content_x6: "", Content_x4: "", Content_x2: "" }
+  if(useConvertAvif){
+    const resolutions = [
+      { i: 6, r: 980, fn: e => data.Content_x6 = e },
+      { i: 4, r: 670, fn: e => data.Content_x4 = e },
+      { i: 2, r: 360, fn: e => data.Content_x2 = e }
+    ] as IResulution[]
+    await Promise.all(resolutions.map(rs => fileToImage(file, rs.r, "avif").then(rs.fn)))
+  } else {
+    data.Content = await fileToImage(file, 1200, 'avif')
+  }
+  return data
 }
 
 const uploadImage = async (): Promise<IImageResult> => {
@@ -120,45 +159,15 @@ const uploadImage = async (): Promise<IImageResult> => {
   }
 
   isConverting = true
-
-  const data = {
-    Content: "", Content_x6: "",  Content_x4: "",  Content_x2: "",
-    Description: imageSrc.description
+  let data: IImagePayload
+  try {
+    data = await convertImageFile(imageFile)
+  } catch (error) {
+    Notify.failure(`Error al convertir imagen: ${error}`)
+    isConverting = false
+    return Promise.resolve(result)
   }
-
-  if(useConvertAvif){
-    const resolutions = [
-      { i: 6, r: 980, fn: e => data.Content_x6 = e },
-      { i: 4, r: 670, fn: e => data.Content_x4 = e },
-      { i: 2, r: 360, fn: e => data.Content_x2 = e }
-    ] as IResulution[]
-
-    for(const rs of resolutions){
-      rs.promise = new Promise(resolve => {
-        fileToImage(imageFile, rs.r, "avif").then(d => {
-          rs.fn(d), resolve(0)
-        })
-      })
-    }
-
-    try {
-      await Promise.all(resolutions.map(x => x.promise))
-    } catch (error) {
-      Notify.failure(`Error al convertir imagen: ${error}`)
-      isConverting = false
-      return Promise.resolve(result)
-    }
-
-  } else {
-    try {
-      data.Content = await fileToImage(imageFile, 1200, 'avif')
-    } catch (error) {
-      Notify.failure(`Error al convertir imagen: ${error}`)
-      isConverting = false
-      return Promise.resolve(result)
-    }
-  }
-
+  data.Description = imageSrc.description
   isConverting = false
   progress = 0.001
 
@@ -185,6 +194,8 @@ const uploadImage = async (): Promise<IImageResult> => {
 
   result.id = imageID as number;
   result.description = imageSrc.description;
+  // Base CDN name "<companyID>_<imageID>" (strip the folder prefix the backend returns).
+  const savedBaseName = (result.imageName || "").split("/").pop() || "";
 
   if (clearOnUpload) {
     imageSrc = { src: '', base64: '', types: [], description: '' };
@@ -194,13 +205,112 @@ const uploadImage = async (): Promise<IImageResult> => {
 
   console.log("image src 1::",$state.snapshot(progress), $state.snapshot(imageSrc),"clearOnUpload",clearOnUpload)
   if (onUploaded) {
-    onUploaded(result.imageName, result.description);
+    onUploaded({ id: Number(savedBaseName.split("_")[1]) || (imageID as number), name: savedBaseName, description: result.description });
   }
 
   progress = -1
   console.log("image src 2::",$state.snapshot(progress), $state.snapshot(imageSrc),"clearOnUpload",clearOnUpload)
   return result;
 };
+
+// Optimistic confirm (useImageCounter): reserve the final ID (fast), show the image as "saved"
+// immediately from the in-memory map, and convert in the background. The byte-upload is deferred
+// into entry.upload() so the parent can run it AFTER saving its own record (when ProductID exists).
+const confirmOptimistic = async () => {
+  if(!imageSrc.base64){
+    Notify.failure("No hay nada que enviar.")
+    return
+  }
+  const fileToUpload = imageFile
+  const imageDescription = imageSrc.description
+  const previewBase64 = imageSrc.base64
+
+  // 1) Reserve the final imageID + base name (the only step the user waits on — fast).
+  let reserved: { id: number, name: string }
+  isReserving = true
+  try {
+    reserved = await GET({ route: "image-id-counter" })
+    console.log("ImageUploader (Reserved ID)::", reserved)
+  } catch (error) {
+    isReserving = false
+    Notify.failure('Error al reservar el id de imagen: ' + String(error))
+    return
+  }
+  isReserving = false
+  console.log("image-id-counter reserved::", reserved)
+  const finalName = reserved.name
+  // Derive the id from the base name "<companyID>_<imageID>" so it never depends on how the
+  // numeric `id` field survives response (de)serialization.
+  const finalId = Number(reserved.id) || Number(String(finalName).split("_")[1])
+
+  // 2) Capture the parent's fields ONCE, synchronously, right here — while the correct record is
+  // still selected. This is the ONLY point setDataToSend is read: after it, convert+upload are
+  // fully opaque to the parent (no callback ever re-enters it, so a later record switch can't
+  // rebind this image's ProductID). For a NEW record the id isn't known yet (ProductID = 0); the
+  // parent's flush then supplies it via upload(override).
+  const parentData: Record<string, any> = {}
+  if (setDataToSend) { setDataToSend(parentData) }
+
+  // 3) Convert in the background (no ProductID needed); the upload step awaits this promise.
+  const convertPromise = convertImageFile(fileToUpload)
+
+  const entry: InMemoryImage = {
+    name: finalName, id: finalId, folder: folder || "", base64: previewBase64,
+    description: imageDescription, status: 'converting', progress: -1,
+  }
+  // Transparent background upload. `override` lets the parent inject fields unknown at confirm
+  // time (e.g. a NEW product's real ProductID, available only after the product is saved).
+  entry.upload = async (override?: Record<string, any>) => {
+    if(entry.status === 'uploading'){ return }
+    entry.status = 'uploading'
+    const data = await convertPromise
+    data.Description = imageDescription
+    data.ImageID = finalId
+    Object.assign(data, parentData, override) // override (real id from flush) wins over the snapshot
+    console.log("uploading image::", { name: finalName, ImageID: data.ImageID, ProductID: (data as any).ProductID, route: saveAPI })
+    try {
+      await POST_XMLHR({
+        data, route: saveAPI || "images", refreshRoutes,
+        onUploadProgress: e => { if(e.total){ entry.progress = Math.round((e.loaded * 100) / e.total) } },
+      })
+    } catch (error) {
+      entry.status = 'error'; entry.error = String(error)
+      console.error("image upload failed::", finalName, error)
+      Notify.failure('Error guardando la imagen: ' + String(error))
+      throw error
+    }
+    inMemoryImages.delete(finalName) // free memory; renderers fall through to the CDN AVIF
+  }
+  // Mark "pending upload" once conversion finishes (unless the flush already started/failed).
+  convertPromise
+    .then(() => { if(entry.status === 'converting'){ entry.status = 'pending' } })
+    .catch(err => { entry.status = 'error'; entry.error = String(err) })
+
+  inMemoryImages.set(finalName, entry)
+
+  // 4) Tell the parent the image is "saved" with its final id + name — its involvement ends here.
+  if (onUploaded) { onUploaded({ id: finalId, name: finalName, description: imageDescription }) }
+
+  // 5) Flip/reset the card exactly like a completed upload would. NOTE: do NOT call onChange
+  // here — the parent's onChange resets its optimistic Image/_imageSource, wiping what onUploaded
+  // just set. (The legacy uploadImage success path doesn't call onChange either.)
+  if (clearOnUpload) {
+    imageSrc = { src: '', base64: '', types: [], description: '' }
+    progress = 0
+  } else {
+    imageSrc = { src: size ? `${finalName}-x${size}` : finalName, base64: '', types: ['avif', 'webp'], description: imageDescription }
+    progress = -1
+  }
+
+  // 6) If the parent record already exists (editing: ProductID known), upload now in the background
+  // so the process finishes on its own. For a NEW record (id = 0) it stays pending until the parent
+  // saves its record and flushes it with the real id via upload({ ProductID }).
+  const parentRecordId = Number(parentData.ProductID || parentData.id || 0)
+  if (parentRecordId > 0) { entry.upload?.().catch(() => {}) }
+}
+
+// ✓ button / textarea-blur entry point: optimistic flow when useImageCounter, else legacy upload.
+const onConfirm = () => useImageCounter ? confirmOptimistic() : uploadImage()
 
 const onFileChange = async (ev: Event) => {
   const target = ev.target as HTMLInputElement
@@ -219,15 +329,17 @@ const onFileChange = async (ev: Event) => {
     })
     progress = -1
     imageSrc = { src: "", base64: base64, types: [], description: imageSrc.description }
-    onChange?.(imageSrc, uploadImage)
+    onChange?.(imageSrc, onConfirm as unknown as () => Promise<IImageResult>)
   } catch (error) {
     Notify.failure('Error procesando la imagen: ' + String(error))
     progress = 0
   }
 }
 
-// Effect to manage imagesToUpload map
+// Legacy deferred-upload registry (e.g. categoria images). The optimistic flow uses the
+// in-memory map instead, so it skips this registration.
 $effect(() => {
+  if (useImageCounter) { return }
   if (imageSrc.base64) {
     imagesToUpload.set(imageID as number, uploadImage);
   } else {
@@ -281,10 +393,11 @@ $effect(() => {
 
   {#if (imageSrc.src||imageSrc.base64||"").length > 0}
     <picture class="contents">
-      {#if imageSrc.types?.includes('avif')}
+      <!-- Skip the typed <source>s while showing optimistic base64: its bytes aren't avif/webp. -->
+      {#if !imageSrc.base64 && !liveBase64 && imageSrc.types?.includes('avif')}
         <source type="image/avif" srcset={makeImageSrc("avif")} />
       {/if}
-      {#if imageSrc.types?.includes('webp')}
+      {#if !imageSrc.base64 && !liveBase64 && imageSrc.types?.includes('webp')}
         <source type="image/webp" srcset={makeImageSrc("webp")} />
       {/if}
       <img class="w-full h-full absolute card_image_img1"
@@ -292,6 +405,12 @@ $effect(() => {
         alt="Upload preview"
       />
     </picture>
+  {/if}
+
+  {#if isInFlight}
+    <div class="absolute card_image_corner_loader" title={tr('Processing image...|Procesando imagen...')}>
+      <span class="loader"></span>
+    </div>
   {/if}
 
   {#if progress === -1}
@@ -302,7 +421,7 @@ $effect(() => {
           onblur={(ev) => {
             ev.stopPropagation();
             imageSrc.description = ev.currentTarget.value || '';
-            onChange?.(imageSrc, uploadImage);
+            onChange?.(imageSrc, onConfirm as unknown as () => Promise<IImageResult>);
           }}
         ></textarea>
       {/if}
@@ -334,7 +453,7 @@ $effect(() => {
             aria-label={tr("Upload image|Subir imagen")}
             onclick={(ev) => {
               ev.stopPropagation();
-              uploadImage();
+              onConfirm();
             }}
           >
             <i class="icon-ok"></i>
@@ -344,9 +463,12 @@ $effect(() => {
     </div>
   {/if}
 
-  {#if isConverting || progress > 0}
+  {#if isReserving || isConverting || progress > 0}
     <div class="w-full h-full absolute flex flex-col items-center justify-center card_image_layer_loading">
-      <div class="c-white h3 ff-bold">{isConverting ? tr('Converting...|Convirtiendo...') : tr('Saving...|Guardando...')}</div>
+      {#if isReserving}
+        <div class="card_image_spinner"></div>
+      {/if}
+      <div class="c-white h3 ff-bold">{isReserving ? tr('Loading...|Cargando...') : isConverting ? tr('Converting...|Convirtiendo...') : tr('Saving...|Guardando...')}</div>
       {#if progress > 0}
         <div class="flex relative items-center justify-center h-22 lh-10 w-[calc(100%-16px)] left-0 right-0 mt-8 _8 mr-8 ml-9 p-2">
           <div class="absolute _9 left-2 h-18"
@@ -440,6 +562,58 @@ $effect(() => {
     left: 0px;
     backdrop-filter: blur(4px);
     background-color: rgba(0, 0, 0, 0.34);
+  }
+
+  .card_image_spinner {
+    width: 38px;
+    height: 38px;
+    margin-bottom: 10px;
+    border: 4px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: card_image_spin 0.8s linear infinite;
+  }
+
+  @keyframes card_image_spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Small dual-ring loader pinned top-right while the image converts/uploads in the background. */
+  .card_image_corner_loader {
+    top: 9px;
+    right: 9px;
+    width: 20px;
+    height: 20px;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .card_image_corner_loader .loader {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    background: #FF3D00;
+    border-radius: 50%;
+    position: relative;
+    box-sizing: border-box;
+    animation: card_image_rotation 2s linear infinite;
+  }
+
+  .card_image_corner_loader .loader::after {
+    content: '';
+    box-sizing: border-box;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    border: 10px solid;
+    border-color: transparent #FFF;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  @keyframes card_image_rotation {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
 
   .card_image_upload_text {
