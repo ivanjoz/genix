@@ -1,4 +1,8 @@
 import { GET, GetHandler, POST } from '$libs/http.svelte';
+import { Env } from '$core/env';
+import { fileToImage } from '$libs/helpers';
+import { tr } from '$core/store.svelte';
+import { addProcess, updateProcess } from '$core/notifications.svelte';
 
 // One storefront page. ID is reused as the PageID of the builder content.
 // Status: 0 removed, 1 active, 2 published. IDs 10-14 are injected system pages
@@ -31,7 +35,7 @@ export const SYSTEM_PAGES: IWebpage[] = [
 export class WebpagesService extends GetHandler<IWebpage> {
   route = 'webpage-pages';
   routePost = 'webpage-page';
-  useCache = { min: 5, ver: 2 };
+  useCache = { min: 5, ver: 3 };
   inferRemoveFromStatus = true;
   prependOnSave = true;
 
@@ -43,8 +47,17 @@ export class WebpagesService extends GetHandler<IWebpage> {
   handler(result: IWebpage[]): void {
     this.records = [];
     this.recordsMap = new Map();
-    const userPages = (result || []).filter((page) => page.ID > LAST_SYSTEM_PAGE_ID);
-    this.addSavedRecords(...SYSTEM_PAGES, ...userPages);
+    const rows = result || [];
+    // Stored rows in the system range (<= 14) are not user pages — they exist only
+    // to hold a system page's showcase thumbnail (Image). Merge their Image/upd into
+    // the injected SYSTEM_PAGES instead of showing them as separate (duplicate) rows.
+    const systemRows = new Map(rows.filter((p) => p.ID <= LAST_SYSTEM_PAGE_ID).map((p) => [p.ID, p]));
+    const systemPages = SYSTEM_PAGES.map((page) => {
+      const stored = systemRows.get(page.ID);
+      return stored ? { ...page, Image: stored.Image, upd: stored.upd, UpdatedBy: stored.UpdatedBy } : page;
+    });
+    const userPages = rows.filter((page) => page.ID > LAST_SYSTEM_PAGE_ID);
+    this.addSavedRecords(...systemPages, ...userPages);
   }
 
   constructor(init: boolean = false) {
@@ -73,3 +86,33 @@ export const postWebsiteSeo = (metatags: Partial<Record<SeoMetatagKey, string>>)
 
 export const postWebsiteDomain = (Domain: string) =>
   POST({ data: { Domain }, route: 'website-domain', successMessage: 'Dominio guardado' });
+
+// CDN folder for page showcase thumbnails (mirrors the backend showcaseImageFolder).
+const SHOWCASE_FOLDER = 'img-webpage';
+
+// CDN URL of a page's showcase thumbnail, or '' if it has none. The imageID changes
+// on every save, so the URL is self-busting (no extra cache-buster query needed).
+export const showcaseImageSrc = (page: IWebpage): string =>
+  page.Image && page.Image > 0
+    ? Env.makeCDNRoute(SHOWCASE_FOLDER, `${Env.getCompanyID()}_${page.Image}`) + '.avif'
+    : '';
+
+// Background pipeline: convert the captured screenshot blob to a single ~0.4 Mpx AVIF
+// (632² ≈ 400 000 px) and upload it to POST.webpage-showcase-image. Shown as a header
+// process so the user isn't blocked. Errors are surfaced via the process, not thrown.
+export const uploadShowcaseImage = async (pageID: number, blob: Blob): Promise<void> => {
+  const processID = addProcess(tr('Page preview|Vista previa'), tr('Converting image|Convirtiendo imagen') + '...', 1);
+  try {
+    const avif = await fileToImage(blob, 632, 'avif');
+    updateProcess(processID, '', tr('Saving preview...|Guardando vista previa...'), 1);
+		await POST({
+			data: { Content: avif },
+			route: `webpage-showcase-image?page-id=${pageID}`,
+			refreshRoutes: ["webpage-page"]
+		});
+    updateProcess(processID, '', tr('Preview saved|Vista previa guardada'), 2);
+  } catch (error) {
+    updateProcess(processID, '', tr('Preview failed|Error en vista previa') + `: ${String(error)}`, 0);
+    console.error('showcase image upload failed::', pageID, error);
+  }
+};

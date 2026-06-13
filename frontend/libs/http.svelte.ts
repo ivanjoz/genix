@@ -171,14 +171,17 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
 
   const apiRoute = Env.makeRoute(props.route)
 
-  if((props.refreshRoutes||[]).length > 0){
-    // [REFRESH-DBG] Action 24's result is otherwise discarded; await+log it so the PAGE console
-    // shows how many cached routes were actually marked (SW-side logs live in the SW context).
+  // Marks the given cached routes as `forceNetwork=true` so the next read of them hits the
+  // backend. MUST run only after the write has committed: the flag is consumed (cleared) by
+  // the first fetch that reads the route, so firing it before the POST resolves lets a racing
+  // read (e.g. navigating to a list view) burn the flag on stale data, leaving the reload cached.
+  const markRefreshRoutes = () => {
+    if((props.refreshRoutes||[]).length === 0){ return }
     console.log("[REFRESH-DBG] sending refreshRoutes (accion 24):", props.refreshRoutes)
     sendServiceMessage(24, { routes: props.refreshRoutes })
       .then((result) => console.log("[REFRESH-DBG] refreshRoutes result:", result))
       .catch((error) => console.warn("[REFRESH-DBG] refreshRoutes failed:", error))
-	}
+  }
 	const status: IHttpStatus = props.status || { code: 200, message: "" }
   const requestFetchID = browser ? (fetchEvent(0, 0) as number) : 0
 
@@ -197,7 +200,12 @@ const POST_PUT = (props: httpProps, method: string): Promise<any> => {
     .then(res => parsePreResponse(res, status))
     .then(res => {
       res = unmarshall(res)
-      parseResponseBody(res, props, status) ? resolve(res) : reject(res)
+      if(parseResponseBody(res, props, status)){
+        markRefreshRoutes()
+        resolve(res)
+      } else {
+        reject(res)
+      }
     })
     .catch(error => {
       console.log('error::', error)

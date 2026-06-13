@@ -48,6 +48,10 @@ import {
   let isImportExcelProcessing = $state(false);
   let HtmlEditorComponent = $state<Component<any> | null>(null);
   let htmlEditorComponentPromise: Promise<Component<any>> | null = null;
+  // For NEW products the main-image ✓ (confirm) button is hidden — there's no ProductID yet to
+  // attach the upload to. We stash the uploader's confirm callback here and invoke it from onSave,
+  // AFTER the product is saved and has obtained its real ID.
+  let pendingMainImageConfirm: (() => Promise<unknown>) | undefined;
 
   const loadHtmlEditor = async () => {
     if (!htmlEditorComponentPromise) {
@@ -467,6 +471,10 @@ import {
     console.log("productor a enviar:", $state.snapshot(productoForm));
     if (isDelete) {  productoForm.ss = 0; }
 
+    // A new product has no ID yet, so the main-image ✓ was hidden and the picked image is still
+    // unconfirmed. Remember that here so we can confirm it once the product obtains its real ID.
+    const isNewProduct = !productoForm.ID;
+
     // Save the product FIRST: it carries the optimistic ImageMain/ImageIDs and obtains its real ID.
     Loading.standard(tr("Saving product...|Guardando producto..."));
     try {
@@ -476,11 +484,17 @@ import {
       Loading.remove();
       return;
     }
-    // Then upload the pending image bytes with the now-known product ID.
     if (!isDelete) {
       Loading.change(tr("Saving images...|Guardando imágenes..."));
+      // New product: confirm the picked main image now that ProductID exists (its ✓ was hidden).
+      // confirmOptimistic reserves the id, adds it to ImageIDs and uploads in the background.
+      if (isNewProduct && pendingMainImageConfirm && productoForm._imageSource?.base64) {
+        try { await pendingMainImageConfirm(); } catch { /* surfaced in the process tray */ }
+      }
+      // Then upload any remaining pending image bytes with the now-known product ID.
       await flushPendingProductImages();
     }
+    pendingMainImageConfirm = undefined;
     Loading.remove();
     productoForm = {} as IProduct
     Core.openSideLayer(0);
@@ -655,12 +669,16 @@ import {
             src={productoForm.Image?.n}
             cardCss="w-full h-180 p-4"
             imageSource={productoForm._imageSource}
+            processName={`Imagen Producto ${productoForm.Name || ""}`.trim()}
+            hideUploadButton={!productoForm.ID}
             setDataToSend={(e) => {
               e.ProductID = productoForm.ID;
             }}
-            onChange={(e) => {
+            onChange={(e, confirm) => {
               productoForm._imageSource = e;
               productoForm.Image = undefined
+              // NEW product: the ✓ is hidden, so keep the confirm fn to run on save (post-ID).
+              pendingMainImageConfirm = confirm;
             }}
             onUploaded={addProductImage}
           />
@@ -688,8 +706,15 @@ import {
           save="Discount"
           postValue="%"
           type="number"
+          dependencyValue={productoForm.Discount}
           validator={(v) => {
             return !v || (v as number) < 100;
+          }}
+          onChange={() => {
+            productoForm.FinalPrice = Math.round(
+              (productoForm.Price * (100 - (productoForm.Discount || 0))) /
+                100,
+            );
           }}
         />
         <Input
@@ -848,20 +873,27 @@ import {
       <div
         class="grid grid-cols-2 md:grid-cols-4 items-start gap-x-10 gap-y-10 mt-16"
       >
-        <ImageUploader
-          saveAPI="product-image"
-          refreshRoutes={["productos"]}
-          useConvertAvif={true}
-          useImageCounter={true}
-          clearOnUpload={true}
-          types={["avif", "webp"]}
-          folder="img-productos"
-          cardCss="w-full h-170 p-4"
-          setDataToSend={(e) => {
-            e.ProductID = productoForm.ID;
-          }}
-          onUploaded={addProductImage}
-        />
+        {#if productoForm.ID}
+          <ImageUploader
+            saveAPI="product-image"
+            refreshRoutes={["productos"]}
+            useConvertAvif={true}
+            useImageCounter={true}
+            clearOnUpload={true}
+            types={["avif", "webp"]}
+            folder="img-productos"
+            cardCss="w-full h-170 p-4"
+            processName={`Imagen Producto ${productoForm.Name || ""}`.trim()}
+            setDataToSend={(e) => {
+              e.ProductID = productoForm.ID;
+            }}
+            onUploaded={addProductImage}
+          />
+        {:else}
+          <div class="col-span-2 md:col-span-4 p-12 text-sm text-slate-500">
+            {tr("Save the product to be able to upload more images.|Guarde el producto para poder cargar más imágenes")}
+          </div>
+        {/if}
         {#each productoImagenes as image}
           <ImageUploader
             saveAPI="product-image"

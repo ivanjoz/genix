@@ -201,6 +201,13 @@ import type { SectionData } from '$ecommerce/renderer/section-types';
     pointer-events: none;
   }
 
+  /* While capturing the showcase thumbnail, hide builder-only chrome (the section
+     outline and the "click to edit" label) so the screenshot shows clean content. */
+  :global(.builder-canvas.capturing .section-outline),
+  :global(.builder-canvas.capturing .section-label) {
+    display: none !important;
+  }
+
   .empty-canvas {
     height: 60vh;
     display: flex;

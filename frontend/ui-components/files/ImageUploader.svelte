@@ -52,6 +52,9 @@ export interface IImageUploaderProps {
   folder?: string
   useConvertAvif?: boolean
   imageSource?: ImageSource
+  // Label shown as the process name in the header notifications layer (e.g.
+  // "Imagen Producto <name>"). Falls back to the image description / final name.
+  processName?: string
   // Opt-in optimistic flow: confirm (✓) reserves the final ID via GET.image-id-counter, shows
   // the image as "saved" instantly from the in-memory map, and defers convert+upload to the
   // background (the parent flushes it after saving its own record). Used for product images.
@@ -77,6 +80,7 @@ let {
   size, folder, useConvertAvif,
   id = undefined,
   imageSource,
+  processName = undefined,
   useImageCounter = false
 }: IImageUploaderProps = $props();
 
@@ -137,7 +141,11 @@ interface IImagePayload {
 }
 
 // Convert the picked file to AVIF: 3 resolutions when useConvertAvif, else a single 1200px image.
-const convertImageFile = async (file: Blob): Promise<IImagePayload> => {
+// onStep(done, total) is invoked once at the start (done = 0) and after each resolution finishes,
+// so callers can report conversion progress ("Convirtiendo Imagen 1 / 3...").
+const convertImageFile = async (
+  file: Blob, onStep?: (done: number, total: number) => void,
+): Promise<IImagePayload> => {
   const data: IImagePayload = { Content: "", Content_x6: "", Content_x4: "", Content_x2: "" }
   if(useConvertAvif){
     const resolutions = [
@@ -145,9 +153,17 @@ const convertImageFile = async (file: Blob): Promise<IImagePayload> => {
       { i: 4, r: 670, fn: e => data.Content_x4 = e },
       { i: 2, r: 360, fn: e => data.Content_x2 = e }
     ] as IResulution[]
-    await Promise.all(resolutions.map(rs => fileToImage(file, rs.r, "avif").then(rs.fn)))
+    const total = resolutions.length
+    let done = 0
+    onStep?.(0, total)
+    await Promise.all(resolutions.map(rs => fileToImage(file, rs.r, "avif").then(e => {
+      rs.fn(e)
+      onStep?.(++done, total)
+    })))
   } else {
+    onStep?.(0, 1)
     data.Content = await fileToImage(file, 1200, 'avif')
+    onStep?.(1, 1)
   }
   return data
 }
@@ -252,8 +268,16 @@ const confirmOptimistic = async () => {
   const parentData: Record<string, any> = {}
   if (setDataToSend) { setDataToSend(parentData) }
 
+  // Track the whole image pipeline (convert → upload) as one process in the header layer.
+  // The header row truncates long names with an ellipsis, so no length cap is needed here.
+  const processLabel = processName || imageDescription || finalName
+  const processID = addProcess(processLabel, tr('Converting image|Convirtiendo imagen') + '...', 1)
+
   // 3) Convert in the background (no ProductID needed); the upload step awaits this promise.
-  const convertPromise = convertImageFile(fileToUpload)
+  // Report each converted resolution as a step: "Convirtiendo Imagen 1 / 3...".
+  const convertPromise = convertImageFile(fileToUpload, (done, total) => {
+    updateProcess(processID, '', tr('Converting Image|Convirtiendo Imagen') + ` ${Math.max(done, 1)} / ${total}...`, 1)
+  })
 
   const entry: InMemoryImage = {
     name: finalName, id: finalId, folder: folder || "", base64: previewBase64,
@@ -264,21 +288,19 @@ const confirmOptimistic = async () => {
   entry.upload = async (override?: Record<string, any>) => {
     if(entry.status === 'uploading'){ return }
     entry.status = 'uploading'
-    // Track this background upload as a process in the header notifications layer.
-    const processName = imageDescription || finalName
-    const processID = addProcess(processName, tr('Uploading image...|Subiendo imagen...'), 1)
     const data = await convertPromise
     data.Description = imageDescription
     data.ImageID = finalId
     Object.assign(data, parentData, override) // override (real id from flush) wins over the snapshot
     console.log("uploading image::", { name: finalName, ImageID: data.ImageID, ProductID: (data as any).ProductID, route: saveAPI })
+    updateProcess(processID, '', tr('Sending converted images...|Enviando imágenes convertidas...'), 1)
     try {
       await POST_XMLHR({
         data, route: saveAPI || "images", refreshRoutes,
         onUploadProgress: e => {
           if(e.total){
             entry.progress = Math.round((e.loaded * 100) / e.total)
-            updateProcess(processID, '', tr(`Uploading|Subiendo`) + ` ${entry.progress}%`, 1)
+            updateProcess(processID, '', tr('Sending converted images...|Enviando imágenes convertidas...') + ` ${entry.progress}%`, 1)
           }
         },
       })

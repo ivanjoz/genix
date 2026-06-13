@@ -9,8 +9,9 @@ import { Core, closeModal, openModal, tr } from '$core/store.svelte';
 import Page from '$domain/Page.svelte';
 import { ConfirmWarn, formatTime, Loading, Notify } from '$libs/helpers';
 import { UsuariosService } from '../../seguridad/usuarios/usuarios.svelte';
-import { LAST_SYSTEM_PAGE_ID, WebpagesService, type IWebpage } from '$services/webpage/pages.svelte';
+import { LAST_SYSTEM_PAGE_ID, WebpagesService, showcaseImageSrc, type IWebpage } from '$services/webpage/pages.svelte';
 import WebpageConfig from './WebpageConfig.svelte';
+    import T from '$components/misc/T.svelte';
 
   // Header top tabs (rendered by the Page shell). Switch on Core.pageOptionSelected.
   const pageOptions = [{ id: 1, name: 'Pages|Páginas' }, { id: 2, name: 'Config' }];
@@ -117,9 +118,14 @@ import WebpageConfig from './WebpageConfig.svelte';
             }}
             onclick={() => selectPage(page)}
           >
-            <!-- Thumbnail area (image upload comes later; placeholder for now). -->
+            <!-- Thumbnail: the page's showcase screenshot (saved from the builder),
+                 or a placeholder icon when the page has none yet. -->
             <div class="_thumb flex items-center justify-center">
-              <i class="icon-picture fs28 c-steel op-50"></i>
+              {#if showcaseImageSrc(page)}
+                <img class="w-full h-full object-cover" src={showcaseImageSrc(page)} alt={page.Name} loading="lazy" />
+              {:else}
+                <i class="icon-picture fs28 c-steel op-50"></i>
+              {/if}
             </div>
 
             <!-- Pencil: opens the builder for this page's content (shown on hover). -->
@@ -132,14 +138,16 @@ import WebpageConfig from './WebpageConfig.svelte';
 
             <div class="px-12 py-10">
               <div class="flex items-center justify-between mb-4">
-                <div class="fs17 ff-semibold">{page.Name}</div>
+                <div class="fs17 ff-semibold"><T text={page.Name}/></div>
                 <span class="fs12 px-6 py-1 rounded-full {page.ss === 2 ? 'bg-green-100 c-green' : 'bg-blue-100 c-blue'}">
                   {statusLabel(page.ss)}
                 </span>
               </div>
               <div class="fs14 c-blue mb-6">{page.Route}</div>
-              <div class="fs13 c-steel">{tr('Updated|Actualizado')}: {page.upd ? formatTime(page.upd, 'dd/MM/yyyy HH:mm') : '—'}</div>
-              <div class="fs13 c-steel">{tr('By|Por')}: {updatedByName(page) || '—'}</div>
+              <div class="flex">
+	              <div class="fs13 c-steel">{updatedByName(page) || '—'}</div>
+								<div class="text-sm c-steel ml-auto">{page.upd ? formatTime(page.upd, 'M-d h:m') : '—'}</div>
+              </div>
             </div>
           </div>
         {/each}
@@ -196,9 +204,15 @@ import WebpageConfig from './WebpageConfig.svelte';
 
   /* Thumbnail placeholder until image upload lands. */
   ._thumb {
-    height: 96px;
+    height: 160px;
+    overflow: hidden;
     background: linear-gradient(135deg, #eef2f7, #e2e8f0);
     border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  }
+  /* Crop the showcase screenshot to the thumbnail box, anchored to the top so the
+     page's header/hero is what shows. */
+  ._thumb img {
+    object-position: top;
   }
 
   /* Pencil button: hidden until the card is hovered/focused. */

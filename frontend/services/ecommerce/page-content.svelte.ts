@@ -10,6 +10,8 @@ let currentPageID = 0;
 export const setCurrentPageID = (pageID: number) => {
   currentPageID = pageID > 0 ? pageID : 0;
 };
+// The PageID currently open in the builder, used by the showcase-thumbnail upload.
+export const getCurrentPageID = () => currentPageID;
 
 // Build the route, appending ?page-id only for an explicit (non-default) page.
 const pageContentRoute = (pageID: number) =>

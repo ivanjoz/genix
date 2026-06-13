@@ -1,7 +1,10 @@
 <script lang="ts">
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 import { editorStore } from '$ecommerce/stores/editor.svelte';
-  import { savePageContent } from '$services/ecommerce/page-content.svelte';
+  import { savePageContent, getCurrentPageID } from '$services/ecommerce/page-content.svelte';
+  import { uploadShowcaseImage } from '$services/webpage/pages.svelte';
+  import { captureShowcaseBlob } from './showcase-capture';
+  import { Loading } from '$libs/helpers';
   import { Core, tr } from '$core/store.svelte';
   import T from '$components/misc/T.svelte';
   import EditorTab from '../components/EditorTab.svelte';
@@ -41,9 +44,25 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   }
 
   async function handleSave() {
+    // Capture the showcase thumbnail first — the only step the user waits on (the
+    // DOM must be in its current, unmodified state). Conversion + upload run in the
+    // background afterwards so saving isn't blocked.
+    Loading.standard(tr('Generating preview...|Generando vista previa...', Core.languaje));
+    let thumbnail: Blob | null = null;
+    try {
+      thumbnail = await captureShowcaseBlob();
+    } finally {
+      Loading.remove();
+    }
+
     // Persist every section of the page. The backend assigns each section's
     // position-based id, hashes its content, and writes only what changed.
     await savePageContent(editorStore.sections);
+
+    // Fire-and-forget: convert to AVIF and upload as the page thumbnail. Skipped for
+    // the bare /webpage-builder route (pageID 0), which has no concrete page to attach to.
+    const pageID = getCurrentPageID();
+    if (thumbnail && pageID > 0) uploadShowcaseImage(pageID, thumbnail);
   }
 
   function handleDelete() {

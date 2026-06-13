@@ -43,8 +43,8 @@ const rowAccent = (row: NotificationRow): string => {
 }
 </script>
 
-<ButtonLayer layerClass="md:w-420 max-h-[70vh] overflow-y-auto"
-  contentCss="p-0"
+<ButtonLayer layerClass="md:w-560"
+  contentCss="p-8 max-h-[70vh] overflow-y-auto"
   label="Opens the notifications and running processes panel."
 >
   {#snippet button(isOpen)}
@@ -64,7 +64,7 @@ const rowAccent = (row: NotificationRow): string => {
   {:else}
     {#each items as row (row.id)}
       {@const accent = rowAccent(row)}
-      <div class="nf-row flex items-start gap-8 px-12 py-8" style="border-left-color: {accent}">
+      <div class="nf-row flex items-start gap-6 px-10 py-6">
         <div class="nf-icon flex items-center justify-center" style="color: {accent}">
           {#if row.kind === PROCESS_KIND && row.status === PROCESS_STATUS_IN_PROGRESS}
             <span class="nf-spinner"></span>
@@ -79,7 +79,7 @@ const rowAccent = (row: NotificationRow): string => {
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-8">
             <div class="h5 ff-bold truncate">{row.name}</div>
-            <div class="fs12 c-gray shrink-0">{formatTime(row.createdAt, 'h:n')}</div>
+            <div class="text-xs ff-mono c-gray shrink-0">{formatTime(row.createdAt, 'M-d h:n')}</div>
           </div>
           {#if row.text}
             <div class="fs13 c-gray nf-text">{row.text}</div>
@@ -137,12 +137,17 @@ const rowAccent = (row: NotificationRow): string => {
     text-align: center;
   }
 
+  /* Light gray card per row — no status border, the icon alone carries the state. */
   .nf-row {
-    border-left: 3px solid transparent;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    background-color: #f3f4f6;
+    border-radius: 8px;
+    margin-bottom: 6px;
+  }
+  .nf-row:last-child {
+    margin-bottom: 0;
   }
   :global(.dark) .nf-row {
-    border-bottom-color: rgba(255, 255, 255, 0.08);
+    background-color: rgba(255, 255, 255, 0.06);
   }
 
   .nf-icon {

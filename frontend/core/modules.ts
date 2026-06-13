@@ -136,15 +136,7 @@ export const AdminModule: IModule = {
       options: [
         { name: "Pages|Páginas", route: "/webpage-builder/pages"
         },
-        { name: "Home|Inicio", route: "/webpage-builder"
-        },
-        { name: "About Us|Nosotros", route: "/store-builder/page-2"
-        },
-        { name: "Store|Tienda", route: "/store-builder/page-3"
-        },
-        { name: "Product|Producto", route: "/store-builder/page-4"
-        },
-        { name: "Shopping Cart|Carrito Compra", route: "/store-builder/page-5"
+        { name: "Gallery|Galería", route: "/webpage-builder/gallery"
         },
       ]
     },

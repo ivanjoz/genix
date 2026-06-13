@@ -9,6 +9,7 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.ecommerce-page-content": PostPageContent,
 	"GET.webpage-pages":           GetWebpages,
 	"POST.webpage-page":           PostWebpage,
+	"POST.webpage-showcase-image": PostWebpageShowcaseImage,
 	"GET.website-config":          GetWebsiteConfig,
 	"POST.website-seo":            PostWebsiteSeo,
 	"POST.website-domain":         PostWebsiteDomain,
