@@ -7392,7 +7392,6 @@ var fetchDeltaCache = async (args) => {
       route = addToRoute(route, "missingFile", 1);
     }
     const hasCache = !!(routeRow && routeRow.fetchTime);
-    // console.log("hasCache", args.route, lastSync);
     if (hasCache && routeRow) {
       const networkDecision = await shouldUseNetwork(args, routeKey, routeRow, lastSync, fetchTime);
       if (!networkDecision.doFetch) {

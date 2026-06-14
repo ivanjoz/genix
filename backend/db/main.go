@@ -628,6 +628,11 @@ func (e Col[T, E]) Avg() Col[T, E] {
 	return e
 }
 
+func (e Col[T, E]) Max() Col[T, E] {
+	e.info.aggregateFn = "MAX"
+	return e
+}
+
 type ColSlice[T TableInterface[T], E any] struct {
 	info         columnInfo
 	schemaStruct *T

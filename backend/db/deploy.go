@@ -797,11 +797,8 @@ func DeployScylla(cacheCode int32, controllers ...ScyllaControllerInterface) {
 	for _, controller := range controllers {
 		table := controller.GetTable()
 		tableName := table.GetFullName()
-
-		fmt.Println("Struct Type:", controller.GetTableName())
-
 		originColumns := tableColumnsMap[tableName]
-		fmt.Println("current columns::", len(originColumns))
+		fmt.Println("Struct Type:", controller.GetTableName(),"| Columns:", len(originColumns))
 
 		// Si no existe la tabla entonces la crea...
 		if len(originColumns) == 0 {

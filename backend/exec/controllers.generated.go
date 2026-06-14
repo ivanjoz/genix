@@ -22,6 +22,8 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 		makeDBController[businessTypes.CityLocation](),
 		makeDBController[businessTypes.ClientProvider](),
 		makeDBController[businessTypes.GalleryImage](),
+		makeDBController[businessTypes.ImageAsset](),
+		makeDBController[businessTypes.ImageAssetCategory](),
 		makeDBController[businessTypes.Product](),
 		makeDBController[businessTypes.SharedListRecord](),
 		makeDBController[businessTypes.Site](),

@@ -216,6 +216,22 @@ func TestBuildNativeGroupByPlanRejectsAvgOnIntegerColumn(t *testing.T) {
 	}
 }
 
+func TestBuildNativeGroupByPlanSupportsMax(t *testing.T) {
+	scyllaTable := MakeScyllaTable[groupedMovementRecord, groupedMovementSchema]()
+	records := []groupedMovementRecord{}
+	query := Query[groupedMovementRecord, groupedMovementSchema](&records)
+
+	query.GroupBy(query.CompanyID, query.ID.Max())
+
+	plan, err := buildNativeGroupByPlan(query.GetTableInfo(), query.GetTableInfo().statements, scyllaTable)
+	if err != nil {
+		t.Fatalf("buildNativeGroupByPlan returned error: %v", err)
+	}
+	if len(plan.SelectExpressions) != 2 || plan.SelectExpressions[1] != "MAX(id) AS id" {
+		t.Fatalf("unexpected MAX projection: %v", plan.SelectExpressions)
+	}
+}
+
 func TestMatchQueryCapabilityReturnsSelectedCapability(t *testing.T) {
 	capabilities := []QueryCapability{
 		{Signature: "empresa_id|=", Priority: 10, IsKey: true},

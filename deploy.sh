@@ -21,6 +21,7 @@ echo "[6] Desplegar: Tablas, Datos Iniciales, Cloudflare Worker"
 echo "[7] Inspeccionar/Compilar Backend"
 echo "[10] Deploy Cloudflare Worker"
 echo "[11] Deploy Company Webpage"
+echo "[12] Sincronizar Catálogo de Imágenes"
 echo "Infraestructura ----------------"
 echo "[9] Desplegar Infraestructura"
 echo "Local Development --------------"
@@ -176,6 +177,12 @@ if has_action "11"; then
 
     echo "=== DESPLEGANDO WEBPAGE DE COMPANY ID $COMPANY_ID ==="
     (cd backend && "$GO_PATH" run . fn-deploy-company-webpage "$COMPANY_ID") || exit 1
+fi
+
+# SINCRONIZAR CATÁLOGO DE IMÁGENES
+if has_action "12"; then
+    echo "=== SINCRONIZANDO CATÁLOGO DE IMÁGENES ==="
+    (cd backend && "$GO_PATH" run . fn-sync-image-assets) || exit 1
 fi
 
 if [ "$INTERACTIVE" -eq 1 ]; then
