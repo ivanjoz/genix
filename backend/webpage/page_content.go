@@ -1,12 +1,49 @@
 package webpage
 
 import (
+	"app/cloud"
 	"app/core"
 	"app/db"
+	"app/serialize"
 	s "app/webpage/types"
 	"encoding/json"
+	"fmt"
 	"hash/fnv"
 )
+
+// livePageFolder is the R2/S3 prefix for published page snapshots. Each save
+// writes "<companyID>-<pageID>.json" here so the CDN can serve the page directly
+// (the same payload GetWebpagePublic returns) instead of hitting GET.p-webpage.
+const livePageFolder = "live/pages"
+
+// publishPagePublicSnapshot uploads the live CDN snapshot for a page: the exact
+// WebpagePublicResult payload (SEO Config + active Sections) that GetWebpagePublic
+// returns, serialized with serialize.Marshal (compact array format) so the file is
+// smaller. activeSections must already be the post-save active set, in position order.
+func publishPagePublicSnapshot(companyID int32, pageID int16, activeSections []s.EcommercePageContent) error {
+	seoConfig, err := publicSeoMetatags(companyID)
+	if err != nil {
+		return fmt.Errorf("error al obtener la configuración pública del sitio: %w", err)
+	}
+
+	result := WebpagePublicResult{
+		Config:   seoConfig,
+		Sections: activeSections,
+	}
+
+	content, err := serialize.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("error al serializar el snapshot de la página: %w", err)
+	}
+
+	return cloud.SaveFile(cloud.SaveFileArgs{
+		Path:         livePageFolder,
+		Name:         fmt.Sprintf("%v-%v.json", companyID, pageID),
+		FileContent:  content,
+		ContentType:  "application/json",
+		CacheControl: "public, max-age=60",
+	})
+}
 
 // defaultPageID is the "Inicio" page (ID 10 in the webpages table). It is used
 // when no explicit page-id query param is provided (the bare /webpage-builder
@@ -72,8 +109,8 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 	// Load current rows for this page to compare hashes and detect removed positions.
 	currentRows := []s.EcommercePageContent{}
 	currentQuery := db.Query(&currentRows)
-	currentQuery.Select().CompanyID.Equals(req.User.CompanyID)
-	currentQuery.PageID.Equals(pageID)
+	currentQuery.Select().CompanyID.Equals(req.User.CompanyID).PageID.Equals(pageID)
+	
 	if err := currentQuery.Exec(); err != nil {
 		return req.MakeErr("Error al leer el contenido actual:", err)
 	}
@@ -84,6 +121,11 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 
 	now := core.SUnixTime()
 	sectionsToWrite := []s.EcommercePageContent{}
+
+	// activeSections is the post-save active set in position order — built inline here
+	// (the loop already visits every section 1..N in order) so it can be published as
+	// the CDN snapshot without a re-query or a second pass over the rows.
+	activeSections := []s.EcommercePageContent{}
 
 	for index, content := range incomingSections {
 		sectionID := int16(index + 1)
@@ -100,12 +142,14 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 		// hash alone wouldn't catch it.
 		hash := sectionHash(content)
 
-		// Skip sections that are unchanged and still active — the dedup goal.
+		// Skip sections that are unchanged and still active — the dedup goal. The
+		// stored row stays as the section's contribution to the snapshot.
 		if prev, exists := currentBySection[sectionID]; exists && prev.Status == 1 && prev.Hash == hash && prev.Css == pageCss {
+			activeSections = append(activeSections, prev)
 			continue
 		}
 
-		sectionsToWrite = append(sectionsToWrite, s.EcommercePageContent{
+		row := s.EcommercePageContent{
 			CompanyID: req.User.CompanyID,
 			PageID:    pageID,
 			SectionID: sectionID,
@@ -115,7 +159,9 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 			Status:    1,
 			Updated:   now,
 			UpdatedBy: req.User.ID,
-		})
+		}
+		sectionsToWrite = append(sectionsToWrite, row)
+		activeSections = append(activeSections, row)
 	}
 
 	// Soft-delete positions beyond the new length that are still active
@@ -141,6 +187,13 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 		if err := db.Update(&sectionsToDelete, table.Status, table.Updated, table.UpdatedBy); err != nil {
 			return req.MakeErr("Error al eliminar las secciones removidas:", err)
 		}
+	}
+
+	// Publish the CDN snapshot from the active set assembled above. A failed snapshot
+	// must not fail the save — the sections are already persisted
+	// and the snapshot is a CDN cache that GET.p-webpage can always rebuild.
+	if err := publishPagePublicSnapshot(req.User.CompanyID, pageID, activeSections); err != nil {
+		core.Log("Error al publicar el snapshot de la página (no fatal)::", err)
 	}
 
 	core.Log("Secciones guardadas::", len(sectionsToWrite), "eliminadas::", len(sectionsToDelete))

@@ -166,7 +166,7 @@ setContext(EC_BUILDER_MODE, true);
     font-weight: 700;
     padding: 4px 10px;
     border-radius: 4px;
-    z-index: 10000;
+    z-index: 100;
     opacity: 0;
     transform: translateY(4px);
     transition: all 0.2s ease;

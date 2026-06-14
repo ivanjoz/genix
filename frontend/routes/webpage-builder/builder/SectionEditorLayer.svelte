@@ -4,7 +4,7 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   import { savePageContent, getCurrentPageID } from '$services/ecommerce/page-content.svelte';
   import { uploadShowcaseImage } from '$services/webpage/pages.svelte';
   import { captureShowcaseBlob } from './showcase-capture';
-  import { Loading } from '$libs/helpers';
+  import { Loading, Notify } from '$libs/helpers';
   import { Core, tr } from '$core/store.svelte';
   import T from '$components/misc/T.svelte';
   import EditorTab from '../components/EditorTab.svelte';
@@ -44,6 +44,13 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
   }
 
   async function handleSave() {
+    // Nothing to persist if no section was created, deleted, reordered, or edited
+    // since the last load/save — avoid a pointless round-trip and tell the user.
+    if (!editorStore.hasUnsavedChanges) {
+      Notify.info('No hay cambios a enviar.');
+      return;
+    }
+
     // Capture the showcase thumbnail first — the only step the user waits on (the
     // DOM must be in its current, unmodified state). Conversion + upload run in the
     // background afterwards so saving isn't blocked.
@@ -51,13 +58,15 @@ import { editorStore } from '$ecommerce/stores/editor.svelte';
     let thumbnail: Blob | null = null;
     try {
       thumbnail = await captureShowcaseBlob();
+      // Persist every section of the page. The backend assigns each section's
+      // position-based id, hashes its content, and writes only what changed.
+      await savePageContent(editorStore.sections);
+      // Re-snapshot the now-saved state so a subsequent Save with no further edits
+      // correctly reports "no changes".
+      editorStore.captureBaseline();
     } finally {
       Loading.remove();
     }
-
-    // Persist every section of the page. The backend assigns each section's
-    // position-based id, hashes its content, and writes only what changed.
-    await savePageContent(editorStore.sections);
 
     // Fire-and-forget: convert to AVIF and upload as the page thumbnail. Skipped for
     // the bare /webpage-builder route (pageID 0), which has no concrete page to attach to.

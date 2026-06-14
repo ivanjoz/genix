@@ -35,6 +35,9 @@ import type { SectionData } from '$ecommerce/renderer/section-types';
         }
         return section;
       });
+      // Snapshot the just-loaded sections as the saved baseline so Save can later
+      // detect whether anything actually changed.
+      editorStore.captureBaseline();
     }
   });
 

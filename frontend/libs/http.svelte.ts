@@ -406,8 +406,15 @@ export const GET = (props: httpProps): Promise<any> => {
       .catch(err => { reject(err) })
     })
   } else {
+    // The cached branch routes through the service worker, which already emits fetchEvent
+    // for the header loader; the direct-network branch must do it itself so the same
+    // top-right "Cargando..." bar shows for plain GETs (e.g. getPageContent).
+    const requestFetchID = browser ? (fetchEvent(0, 0) as number) : 0
     return new Promise((resolve, reject) => {
       console.log("realizando fetch::", props)
+      if (requestFetchID > 0) {
+        fetchEvent(requestFetchID, { url: props.route })
+      }
       fetch(routeParsed, { headers: buildHeaders() })
       .then(res => parsePreResponse(res, status))
       .then(res => {
@@ -418,6 +425,11 @@ export const GET = (props: httpProps): Promise<any> => {
         console.warn(error)
         if (props.errorMessage) { Notify.failure(props.errorMessage) }
         reject(error)
+      })
+      .finally(() => {
+        if (requestFetchID > 0) {
+          fetchEvent(requestFetchID, 0)
+        }
       })
     })
   }
