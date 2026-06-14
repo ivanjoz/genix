@@ -7,6 +7,79 @@ import (
 	"testing"
 )
 
+type partitionedRangeViewRecord struct {
+	TableStruct[partitionedRangeViewSchema, partitionedRangeViewRecord]
+	GroupID  int8   `db:"group_id"`
+	ID       int32  `db:"id"`
+	Category int16  `db:"category_id"`
+	Payload  string `db:"payload"`
+	Updated  int32  `db:"updated"`
+}
+
+type partitionedRangeViewSchema struct {
+	TableStruct[partitionedRangeViewSchema, partitionedRangeViewRecord]
+	GroupID  Col[partitionedRangeViewSchema, int8]
+	ID       Col[partitionedRangeViewSchema, int32]
+	Category Col[partitionedRangeViewSchema, int16]
+	Payload  Col[partitionedRangeViewSchema, string]
+	Updated  Col[partitionedRangeViewSchema, int32]
+}
+
+func (e partitionedRangeViewSchema) GetSchema() TableSchema {
+	return TableSchema{
+		Name:      "partitioned_range_records",
+		Partition: e.GroupID,
+		Keys:      []Coln{e.ID},
+		Indexes: []Index{
+			// Keep the fixed group partition and sort globally by the delta watermark.
+			{Type: TypeView, Keys: []Coln{e.Updated}, KeepPart: true},
+		},
+	}
+}
+
+func TestSingleColumnKeepPartViewRoutesRangeQueryToView(t *testing.T) {
+	resetORMTableCachesForTesting()
+
+	scyllaTable := MakeScyllaTable[partitionedRangeViewRecord, partitionedRangeViewSchema]()
+	scyllaTable.keyspace = "genix_test"
+
+	records := []partitionedRangeViewRecord{}
+	query := Query[partitionedRangeViewRecord, partitionedRangeViewSchema](&records)
+	query.Select(query.ID, query.Category, query.Payload, query.Updated)
+	query.GroupID.Equals(1)
+	query.Updated.GreaterThan(390698501)
+
+	compiledStatement, err := tryGetOrCompileSelectStatement(query.GetTableInfo(), scyllaTable)
+	if err != nil {
+		t.Fatalf("unexpected compile error: %v", err)
+	}
+	if compiledStatement.route != selectRouteViewStatements {
+		t.Fatalf("expected a view-backed route, got %d", compiledStatement.route)
+	}
+	if compiledStatement.sourceView == nil || compiledStatement.sourceView.Type != TypeView {
+		t.Fatalf("expected a simple materialized view, got %+v", compiledStatement.sourceView)
+	}
+	if !strings.Contains(compiledStatement.queryTemplate, "FROM genix_test.partitioned_range_records__pk_updated_view") {
+		t.Fatalf("expected query to target the updated view, got %q", compiledStatement.queryTemplate)
+	}
+
+	createScript := compiledStatement.sourceView.getCreateScript()
+	if !strings.Contains(createScript, "PRIMARY KEY ((group_id), updated,id)") {
+		t.Fatalf("expected group partition plus updated clustering key, got %q", createScript)
+	}
+
+	boundPlan, err := compiledStatement.Compute(query.GetTableInfo(), scyllaTable)
+	if err != nil {
+		t.Fatalf("unexpected bind error: %v", err)
+	}
+	if len(boundPlan.Statements) != 1 {
+		t.Fatalf("expected one bound statement, got %d", len(boundPlan.Statements))
+	}
+	if !strings.Contains(boundPlan.Statements[0].QueryStr, " WHERE group_id = ? AND updated > ?") {
+		t.Fatalf("expected partition and range predicates on the view, got %q", boundPlan.Statements[0].QueryStr)
+	}
+}
+
 func TestSelectStatementCacheReusesSameShape(t *testing.T) {
 	// Reset metadata caches so this test validates one deterministic compile+cache lifecycle.
 	resetORMTableCachesForTesting()

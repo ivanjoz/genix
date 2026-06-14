@@ -8,6 +8,7 @@ type ImageAssetCategory struct {
 	ID      int16  `json:",omitempty"`
 	Name    string `json:",omitempty"`
 	Updated int32  `json:"upd,omitempty"`
+	MaxID   int32  `json:"-" db:"max_id"`
 }
 
 type ImageAssetCategoryTable struct {
@@ -16,6 +17,7 @@ type ImageAssetCategoryTable struct {
 	ID      db.Col[ImageAssetCategoryTable, int16]
 	Name    db.Col[ImageAssetCategoryTable, string]
 	Updated db.Col[ImageAssetCategoryTable, int32]
+	MaxID   db.Col[ImageAssetCategoryTable, int32]
 }
 
 func (e ImageAssetCategoryTable) GetSchema() db.TableSchema {

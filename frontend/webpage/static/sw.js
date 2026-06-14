@@ -6754,6 +6754,66 @@ var parsePsvResponse = (content, schema) => {
   return result;
 };
 
+// ../libs/cache/delta-cache.conversion.ts
+var decodeBase64 = (encodedValue) => {
+  const binaryValue = atob(encodedValue);
+  return Uint8Array.from(binaryValue, (character) => character.charCodeAt(0));
+};
+var unpackWordBigrams = (encodedValue) => {
+  const packedBigrams = decodeBase64(encodedValue);
+  if (packedBigrams.length === 0) return packedBigrams;
+  const wordCount = packedBigrams[0];
+  const headerLength = Math.ceil(wordCount / 4);
+  const unitsOffset = 1 + headerLength;
+  if (wordCount === 0 || unitsOffset > packedBigrams.length) {
+    throw new Error(`Invalid packed bigrams header: words=${wordCount} bytes=${packedBigrams.length}`);
+  }
+  const wordLengths = [];
+  let unitsLength = 0;
+  for (let wordIndex = 0; wordIndex < wordCount; wordIndex++) {
+    const headerByte = packedBigrams[1 + Math.floor(wordIndex / 4)];
+    const shift = 6 - 2 * (wordIndex % 4);
+    const wordLength = (headerByte >> shift & 3) + 1;
+    wordLengths.push(wordLength);
+    unitsLength += wordLength;
+  }
+  if (unitsOffset + unitsLength !== packedBigrams.length) {
+    throw new Error(`Invalid packed bigrams body: expected=${unitsLength} actual=${packedBigrams.length - unitsOffset}`);
+  }
+  const unpackedBigrams = new Uint8Array(unitsLength + wordCount - 1);
+  let packedOffset = unitsOffset;
+  let unpackedOffset = 0;
+  for (let wordIndex = 0; wordIndex < wordLengths.length; wordIndex++) {
+    const wordLength = wordLengths[wordIndex];
+    unpackedBigrams.set(packedBigrams.subarray(packedOffset, packedOffset + wordLength), unpackedOffset);
+    packedOffset += wordLength;
+    unpackedOffset += wordLength;
+    if (wordIndex < wordLengths.length - 1) unpackedBigrams[unpackedOffset++] = 0;
+  }
+  return unpackedBigrams;
+};
+var applyCacheConversions = (response, conversions, route) => {
+  if (!conversions) return;
+  let convertedFields = 0;
+  for (const [responseKey, responseValue] of Object.entries(response)) {
+    if (!Array.isArray(responseValue)) continue;
+    for (const record of responseValue) {
+      if (!record || typeof record !== "object") continue;
+      for (const [fieldName, conversionType] of Object.entries(conversions)) {
+        const fieldValue = record[fieldName];
+        if (fieldValue === void 0 || fieldValue === null) continue;
+        if (fieldValue instanceof Uint8Array) continue;
+        if (typeof fieldValue !== "string") {
+          throw new Error(`Invalid ${conversionType} field: route=${route} key=${responseKey} field=${fieldName}`);
+        }
+        record[fieldName] = unpackWordBigrams(fieldValue);
+        convertedFields++;
+      }
+    }
+  }
+  console.debug(`[DeltaCache] conversions applied route=${route} fields=${convertedFields}`);
+};
+
 // ../libs/cache/delta-cache.fetch.ts
 var forceFetch = false;
 var forcedFetchRequests = /* @__PURE__ */ new Set();
@@ -7197,6 +7257,7 @@ var parseNetworkResponse = async (args, preResponse) => {
 };
 var handleFetchResponse = async (args, routeRow, response, nowTime, isArrayResponse) => {
   response = normalizeResponse(response);
+  applyCacheConversions(response, args.conversion, args.route);
   if (routeRow.isSingle === void 0 && isArrayResponse !== void 0) {
     routeRow.isSingle = isArrayResponse;
   }
@@ -7306,6 +7367,7 @@ var handleFetchResponse = async (args, routeRow, response, nowTime, isArrayRespo
   return response;
 };
 var saveInitialSnapshot = async (args, routeReference, response, fetchTime, isArrayResponse) => {
+  applyCacheConversions(response, args.conversion, args.route);
   const routeRow = await ensureCacheRouteRow(routeReference);
   routeRow.fetchTime = fetchTime;
   routeRow.updatedStatus = extractUpdated(response);

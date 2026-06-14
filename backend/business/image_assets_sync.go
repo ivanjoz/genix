@@ -71,26 +71,23 @@ func syncImageAssets(fetchText imageAssetTextFetcher) (ImageAssetSyncResult, err
 	if err != nil {
 		return result, err
 	}
-	categoryIDByName, categoriesInserted, err := syncImageAssetCategories(categorySummaries)
+	categoryByName, categoriesInserted, err := syncImageAssetCategories(categorySummaries)
 	if err != nil {
 		return result, err
 	}
 	result.CategoriesInserted = categoriesInserted
-	maxIDByCategory, err := queryImageAssetMaxIDs()
-	if err != nil {
-		return result, err
-	}
 
 	// Parse every changed list before writing image rows; category rows are intentionally created first.
 	recordsToInsert := []businessTypes.ImageAsset{}
+	categoriesToUpdate := []businessTypes.ImageAssetCategory{}
 	categoryByImageID := map[int32]string{}
 	updated := core.SUnixTime()
 	for _, categorySummary := range categorySummaries {
-		categoryID := categoryIDByName[categorySummary.Name]
-		if categoryID <= 0 {
+		category := categoryByName[categorySummary.Name]
+		if category.ID <= 0 {
 			return result, fmt.Errorf("category %q has no assigned database ID", categorySummary.Name)
 		}
-		storedMaxID := maxIDByCategory[categoryID]
+		storedMaxID := category.MaxID
 		if categorySummary.MaxID <= storedMaxID {
 			result.CategoriesSkipped++
 			continue
@@ -101,7 +98,7 @@ func syncImageAssets(fetchText imageAssetTextFetcher) (ImageAssetSyncResult, err
 		if fetchErr != nil {
 			return result, fetchErr
 		}
-		categoryRecords, parseErr := parseImageAssetList(categorySummary, categoryID, storedMaxID, updated, listContent)
+		categoryRecords, parseErr := parseImageAssetList(categorySummary, category.ID, storedMaxID, updated, listContent)
 		if parseErr != nil {
 			return result, parseErr
 		}
@@ -112,6 +109,9 @@ func syncImageAssets(fetchText imageAssetTextFetcher) (ImageAssetSyncResult, err
 			categoryByImageID[record.ID] = categorySummary.Name
 			recordsToInsert = append(recordsToInsert, record)
 		}
+		category.MaxID = categorySummary.MaxID
+		category.Updated = updated
+		categoriesToUpdate = append(categoriesToUpdate, category)
 		result.CategoriesFetched++
 		core.Log("SyncImageAssets parsed category:", categorySummary.Name, "| stored max:", storedMaxID, "| remote max:", categorySummary.MaxID, "| new records:", len(categoryRecords))
 	}
@@ -123,33 +123,37 @@ func syncImageAssets(fetchText imageAssetTextFetcher) (ImageAssetSyncResult, err
 	if err := db.Insert(&recordsToInsert); err != nil {
 		return result, fmt.Errorf("insert image assets: %w", err)
 	}
+	categoryTable := db.Table[businessTypes.ImageAssetCategory]()
+	if err := db.Update(&categoriesToUpdate, categoryTable.MaxID, categoryTable.Updated); err != nil {
+		return result, fmt.Errorf("update image asset category watermarks: %w", err)
+	}
 	result.RecordsInserted = len(recordsToInsert)
 	core.Log("SyncImageAssets completed:", "categories inserted", result.CategoriesInserted, "| categories fetched", result.CategoriesFetched, "| categories skipped:", result.CategoriesSkipped, "| records inserted:", result.RecordsInserted)
 	return result, nil
 }
 
-func syncImageAssetCategories(categorySummaries []imageAssetCategorySummary) (map[string]int16, int, error) {
+func syncImageAssetCategories(categorySummaries []imageAssetCategorySummary) (map[string]businessTypes.ImageAssetCategory, int, error) {
 	storedCategories := []businessTypes.ImageAssetCategory{}
 	query := db.Query(&storedCategories)
 	if err := query.GroupID.Equals(imageAssetCategoryGroupID).Exec(); err != nil {
 		return nil, 0, fmt.Errorf("query image asset categories: %w", err)
 	}
 
-	categoryIDByName := make(map[string]int16, len(categorySummaries))
+	categoryByName := make(map[string]businessTypes.ImageAssetCategory, len(categorySummaries))
 	for _, category := range storedCategories {
 		if category.ID <= 0 || !imageAssetCategoryPattern.MatchString(category.Name) {
 			return nil, 0, fmt.Errorf("invalid stored image asset category: ID=%d name=%q", category.ID, category.Name)
 		}
-		if _, duplicated := categoryIDByName[category.Name]; duplicated {
+		if _, duplicated := categoryByName[category.Name]; duplicated {
 			return nil, 0, fmt.Errorf("duplicated stored image asset category name %q", category.Name)
 		}
-		categoryIDByName[category.Name] = category.ID
+		categoryByName[category.Name] = category
 	}
 
 	updated := core.SUnixTime()
 	categoriesToInsert := []businessTypes.ImageAssetCategory{}
 	for _, categorySummary := range categorySummaries {
-		if categoryIDByName[categorySummary.Name] > 0 {
+		if categoryByName[categorySummary.Name].ID > 0 {
 			continue
 		}
 		categoriesToInsert = append(categoriesToInsert, businessTypes.ImageAssetCategory{
@@ -159,8 +163,8 @@ func syncImageAssetCategories(categorySummaries []imageAssetCategorySummary) (ma
 		})
 	}
 	if len(categoriesToInsert) == 0 {
-		core.Log("SyncImageAssets categories already synchronized:", len(categoryIDByName))
-		return categoryIDByName, 0, nil
+		core.Log("SyncImageAssets categories already synchronized:", len(categoryByName))
+		return categoryByName, 0, nil
 	}
 
 	core.Log("SyncImageAssets inserting categories:", len(categoriesToInsert))
@@ -172,25 +176,10 @@ func syncImageAssetCategories(categorySummaries []imageAssetCategorySummary) (ma
 		if category.ID <= 0 {
 			return nil, 0, fmt.Errorf("category %q received invalid autoincrement ID %d", category.Name, category.ID)
 		}
-		categoryIDByName[category.Name] = category.ID
+		categoryByName[category.Name] = category
 		core.Log("SyncImageAssets category inserted:", category.Name, "| ID:", category.ID)
 	}
-	return categoryIDByName, len(categoriesToInsert), nil
-}
-
-func queryImageAssetMaxIDs() (map[int16]int32, error) {
-	groupedRecords := []businessTypes.ImageAsset{}
-	query := db.Query(&groupedRecords)
-	if err := query.GroupBy(query.CategoryID, query.ID.Max()).Exec(); err != nil {
-		return nil, fmt.Errorf("query image asset category maxima: %w", err)
-	}
-
-	maxIDByCategory := make(map[int16]int32, len(groupedRecords))
-	for _, record := range groupedRecords {
-		maxIDByCategory[record.CategoryID] = record.ID
-	}
-	core.Log("SyncImageAssets loaded category watermarks:", len(maxIDByCategory))
-	return maxIDByCategory, nil
+	return categoryByName, len(categoriesToInsert), nil
 }
 
 func parseImageAssetSummary(content string) ([]imageAssetCategorySummary, error) {
@@ -276,6 +265,7 @@ func parseImageAssetList(
 		// Search signatures represent the concrete objects listed in Elementos.
 		searchText := strings.Join(objects, " ")
 		records = append(records, businessTypes.ImageAsset{
+			GroupID:     imageAssetCategoryGroupID,
 			ID:          imageID,
 			CategoryID:  categoryID,
 			Description: description,

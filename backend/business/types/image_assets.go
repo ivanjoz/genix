@@ -4,6 +4,7 @@ import "app/db"
 
 type ImageAsset struct {
 	db.TableStruct[ImageAssetTable, ImageAsset]
+	GroupID     int8     `json:"-"`
 	ID          int32    `json:",omitempty"`
 	CategoryID  int16    `json:",omitempty" db:"category_id"`
 	Description string   `json:",omitempty"`
@@ -14,6 +15,7 @@ type ImageAsset struct {
 
 type ImageAssetTable struct {
 	db.TableStruct[ImageAssetTable, ImageAsset]
+	GroupID     db.Col[ImageAssetTable, int8]
 	ID          db.Col[ImageAssetTable, int32]
 	CategoryID  db.Col[ImageAssetTable, int16]
 	Description db.Col[ImageAssetTable, string]
@@ -25,10 +27,10 @@ type ImageAssetTable struct {
 func (e ImageAssetTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "image_assets",
-		Partition: e.CategoryID,
+		Partition: e.GroupID,
 		Keys:      []db.Coln{e.ID},
 		Indexes: []db.Index{
-			// Serve global frontend deltas without scanning every category partition.
+			// Keep Updated as the first clustering column for global frontend deltas.
 			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
 		},
 	}

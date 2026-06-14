@@ -88,7 +88,7 @@ func GetProductosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 
 func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	// db.SetDebugLogging(2)
-	
+
 	productos := []businessTypes.Product{}
 	if err := json.Unmarshal([]byte(*req.Body), &productos); err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -274,7 +274,7 @@ func getProductBrandNames(companyID int32, productos []businessTypes.Product) (m
 	query := db.Query(&brands)
 	query.Select(query.ID, query.Name).
 		CompanyID.Equals(companyID).ID.In(brandIDs.Values...)
-	
+
 	if err := query.Exec(); err != nil {
 		return nil, fmt.Errorf("error al obtener las marcas de productos: %w", err)
 	}
@@ -423,23 +423,33 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostProductoCategoriaImage(req *core.HandlerArgs) core.HandlerResponse {
-	image := cloud.ImageArgs{}
+	image := productoImage{}
 	err := json.Unmarshal([]byte(*req.Body), &image)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	imageName := core.Concat("-", core.ToBase36s(req.User.CompanyID), image.Order, core.ToBase36(0))
-	image.Name = imageName
-	image.Folder = "img-public"
-	image.Resolutions = map[uint16]string{980: "x6", 540: "x4", 340: "x2"}
-
-	if _, err = cloud.SaveConvertImage(image); err != nil {
-		return req.MakeErr("Error al guardar la imagen: " + err.Error())
+	if image.ImageID <= 0 || image.ImageID%10 != imageConfigDigitFull {
+		return req.MakeErr("El ID reservado no corresponde a una imagen completa.")
+	}
+	if len(image.Content_x6) < 50 || len(image.Content_x4) < 50 || len(image.Content_x2) < 50 {
+		return req.MakeErr("La imagen debe incluir las resoluciones x6, x4 y x2.")
 	}
 
+	imageName := fmt.Sprintf("%v_%v", req.User.CompanyID, image.ImageID)
+	for resolution, content := range map[int8]string{
+		6: image.Content_x6, 4: image.Content_x4, 2: image.Content_x2,
+	} {
+		if _, err := cloud.SaveImage(cloud.ImageArgs{
+			Content: content, Folder: "img-public", Name: imageName, Type: "avif", Resolution: resolution,
+		}); err != nil {
+			return req.MakeErr("Error al guardar la imagen:", err)
+		}
+	}
+
+	core.Log("PostProductoCategoriaImage:", "company_id=", req.User.CompanyID, "image_id=", image.ImageID)
 	response := map[string]string{
-		"imageName": image.Folder + "/" + image.Name,
+		"imageName": "img-public/" + imageName,
 	}
 	return req.MakeResponse(response)
 }

@@ -3,6 +3,7 @@ import Button from '$components/buttons/Button.svelte';
 import FilterInput from '$components/form/FilterInput.svelte';
 import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
 import ImageUploader from '$components/files/ImageUploader.svelte';
+import Image from '$components/files/Image.svelte';
 import Input from '$components/form/Input.svelte';
 import Layer from '$components/layers/Layer.svelte';
 import Modal from '$components/layers/Modal.svelte';
@@ -487,7 +488,7 @@ import {
     if (!isDelete) {
       Loading.change(tr("Saving images...|Guardando imágenes..."));
       // New product: confirm the picked main image now that ProductID exists (its ✓ was hidden).
-      // confirmOptimistic reserves the id, adds it to ImageIDs and uploads in the background.
+      // ImageUploader reserves the id, adds it to ImageIDs and uploads in the background.
       if (isNewProduct && pendingMainImageConfirm && productoForm._imageSource?.base64) {
         try { await pendingMainImageConfirm(); } catch { /* surfaced in the process tray */ }
       }
@@ -661,7 +662,6 @@ import {
             saveAPI="product-image"
             refreshRoutes={["productos"]}
             useConvertAvif={true}
-            useImageCounter={true}
             clearOnUpload={true}
             types={["avif"]}
             folder="img-productos"
@@ -878,7 +878,6 @@ import {
             saveAPI="product-image"
             refreshRoutes={["productos"]}
             useConvertAvif={true}
-            useImageCounter={true}
             clearOnUpload={true}
             types={["avif", "webp"]}
             folder="img-productos"
@@ -895,17 +894,14 @@ import {
           </div>
         {/if}
         {#each productoImagenes as image}
-          <ImageUploader
-            saveAPI="product-image"
-            refreshRoutes={["productos"]}
+          <Image
             size={2}
-            clearOnUpload={true}
             types={["avif", "webp"]}
             folder="img-productos"
-            cardCss="w-full h-170 p-4"
+            css="w-full h-170"
             src={image.n}
-            useConvertAvif={true}
-            onDelete={() => {
+            alt={image.d || productoForm.Name}
+            onRemove={() => {
               ConfirmWarn(
                 "ELIMINAR IMAGEN",
                 `Eliminar la imagen ${image.d ? `"${image.d}"` : "seleccionada"}`,

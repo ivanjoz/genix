@@ -2,7 +2,6 @@ import { goto } from '$app/navigation';
 import type { IMenuRecord, IModule } from '$core/types/modules';
 import { SvelteMap } from 'svelte/reactivity';
 import { Env, browser } from './env';
-import type { IImageResult } from './types/common';
 
 export const getDeviceType = () => {
   let view = 1 // Desktop
@@ -141,9 +140,6 @@ export const closeModal = (id: number) => {
 export const closeAllModals = () => {
   openModals.length = 0;
 }
-
-// Map to store images to upload (global state)
-export const imagesToUpload = new Map<number, () => Promise<IImageResult>>();
 
 // Store-specific exports
 export const mainMenuOptions = [

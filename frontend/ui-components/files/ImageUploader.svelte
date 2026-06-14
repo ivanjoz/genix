@@ -1,30 +1,13 @@
 <script lang="ts">
 import { POST_XMLHR, GET } from '$libs/http.svelte';
-import { onDestroy, untrack } from 'svelte';
+import { untrack } from 'svelte';
 import { Notify, fileToImage } from '$libs/helpers';
 import { Env } from '$core/env';
-import { imagesToUpload, tr } from '$core/store.svelte';
+import { tr } from '$core/store.svelte';
 import { inMemoryImages, getInMemoryImageBase64, isImageInFlight, type InMemoryImage } from '$core/inMemoryImages.svelte';
 import { addProcess, updateProcess } from '$core/notifications.svelte';
 import { Agent } from '$components/agent/registry';
-
-export interface IImageInput {
-  content: string;
-  name: string;
-  folder: string;
-}
-
-export interface IImageResult {
-  id: number;
-  imageName: string;
-  description?: string;
-}
-
-export interface ImageData {
-  Content: string;
-  Folder?: string;
-  Description?: string;
-}
+import s1 from '../components.module.css';
 
 export interface ImageSource {
   src: string, base64: string, description?: string, types?: string[], name?: string,
@@ -42,29 +25,27 @@ export interface IImageUploaderProps {
   description?: string;
   cardStyle?: string;
   onDelete?: (src: string) => void;
-  onChange?: (e: ImageSource, uploadImage?: () => Promise<IImageResult>) => void
+  onChange?: (e: ImageSource, confirmImage?: () => Promise<void>) => void
   cardCss?: string;
   hideFormUseMessage?: string;
   hideUploadButton?: boolean;
   hideForm?: boolean;
-  id?: number;
   size?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
   folder?: string
   useConvertAvif?: boolean
+  convertResolutions?: Array<2 | 4 | 6 | 8>
   imageSource?: ImageSource
   // Label shown as the process name in the header notifications layer (e.g.
   // "Imagen Producto <name>"). Falls back to the image description / final name.
   processName?: string
-  // Opt-in optimistic flow: confirm (✓) reserves the final ID via GET.image-id-counter, shows
-  // the image as "saved" instantly from the in-memory map, and defers convert+upload to the
-  // background (the parent flushes it after saving its own record). Used for product images.
-  useImageCounter?: boolean
+  // Last image-ID digit identifying the resolution set; 0 uses the backend default.
+  imageCounterConfig?: number
 }
 
 let {
   src = "",
   types = [],
-  saveAPI = "images",
+  saveAPI = "",
   refreshRoutes = [],
   onChange,
   onUploaded = undefined,
@@ -77,21 +58,16 @@ let {
   hideFormUseMessage = "",
   hideForm = false,
   hideUploadButton = false,
-  size, folder, useConvertAvif,
-  id = undefined,
+  size, folder, useConvertAvif, convertResolutions = [8, 6, 4, 2],
   imageSource,
   processName = undefined,
-  useImageCounter = false
+  imageCounterConfig = 0
 }: IImageUploaderProps = $props();
 
 // State
 // svelte-ignore state_referenced_locally
 let imageSrc = $state(imageSource || { src, types, description } as ImageSource);
 let progress = $derived((src||imageSrc?.base64) ? -1 : 0);
-
-Env.imageCounter++
-// svelte-ignore state_referenced_locally
-const imageID = id || Env.imageCounter
 
 // Update imageSrc when props change
 $effect(() => {
@@ -128,7 +104,6 @@ const makeImageSrc = (format?: string) => {
 }
 
 let imageFile: Blob
-let isConverting = $state(false)
 // True only while the ✓ click awaits the (fast) GET.image-id-counter reservation, so the card
 // shows a dark overlay + spinner telling the user a request is in flight.
 let isReserving = $state(false)
@@ -136,7 +111,7 @@ let isReserving = $state(false)
 type IResulution = { i: number, r: number, fn: (c: string) => void }
 
 interface IImagePayload {
-  Content: string, Content_x6: string, Content_x4: string, Content_x2: string,
+  Content: string, Content_x6: string, Content_x4: string, Content_x2: string, Content_x8: string,
   Description?: string, ImageID?: number
 }
 
@@ -146,13 +121,16 @@ interface IImagePayload {
 const convertImageFile = async (
   file: Blob, onStep?: (done: number, total: number) => void,
 ): Promise<IImagePayload> => {
-  const data: IImagePayload = { Content: "", Content_x6: "", Content_x4: "", Content_x2: "" }
+  const data: IImagePayload = {
+    Content: "", Content_x8: "", Content_x6: "", Content_x4: "", Content_x2: "",
+  }
   if(useConvertAvif){
     const resolutions = [
-      { i: 6, r: 980, fn: e => data.Content_x6 = e },
-      { i: 4, r: 670, fn: e => data.Content_x4 = e },
-      { i: 2, r: 360, fn: e => data.Content_x2 = e }
-    ] as IResulution[]
+      { i: 8, r: 1200, fn: (content: string) => data.Content_x8 = content },
+      { i: 6, r: 980, fn: (content: string) => data.Content_x6 = content },
+      { i: 4, r: 670, fn: (content: string) => data.Content_x4 = content },
+      { i: 2, r: 360, fn: (content: string) => data.Content_x2 = content }
+    ].filter(resolution => convertResolutions.includes(resolution.i as 2 | 4 | 6 | 8)) as IResulution[]
     const total = resolutions.length
     let done = 0
     onStep?.(0, total)
@@ -168,74 +146,14 @@ const convertImageFile = async (
   return data
 }
 
-const uploadImage = async (): Promise<IImageResult> => {
-  let result = {} as IImageResult
+// Reserve the final ID, show the image immediately, then convert/upload in the background.
+const confirmImage = async () => {
   if(!imageSrc.base64){
     Notify.failure("No hay nada que enviar.")
-    return Promise.resolve(result)
+    return
   }
-
-  isConverting = true
-  let data: IImagePayload
-  try {
-    data = await convertImageFile(imageFile)
-  } catch (error) {
-    Notify.failure(`Error al convertir imagen: ${error}`)
-    isConverting = false
-    return Promise.resolve(result)
-  }
-  data.Description = imageSrc.description
-  isConverting = false
-  progress = 0.001
-
-  if (setDataToSend) { setDataToSend(data); }
-
-  console.log("data a enviar::", data)
-
-  try {
-    result = await POST_XMLHR({
-      data,
-      route: saveAPI || "images",
-      refreshRoutes,
-      onUploadProgress: e => {
-        if(e.total){
-          progress = Math.round((e.loaded * 100) / e.total)
-          console.log("progress:: ", progress)
-        }
-      }
-    })
-  } catch (error) {
-    Notify.failure('Error guardando la imagen: ' + String(error));
-    return result;
-  }
-
-  result.id = imageID as number;
-  result.description = imageSrc.description;
-  // Base CDN name "<companyID>_<imageID>" (strip the folder prefix the backend returns).
-  const savedBaseName = (result.imageName || "").split("/").pop() || "";
-
-  if (clearOnUpload) {
-    imageSrc = { src: '', base64: '', types: [], description: '' };
-  } else {
-    imageSrc = { src: `${result.imageName}-x2`, base64: '', types: ['webp', 'avif'], description: imageSrc.description };
-  }
-
-  console.log("image src 1::",$state.snapshot(progress), $state.snapshot(imageSrc),"clearOnUpload",clearOnUpload)
-  if (onUploaded) {
-    onUploaded({ id: Number(savedBaseName.split("_")[1]) || (imageID as number), name: savedBaseName, description: result.description });
-  }
-
-  progress = -1
-  console.log("image src 2::",$state.snapshot(progress), $state.snapshot(imageSrc),"clearOnUpload",clearOnUpload)
-  return result;
-};
-
-// Optimistic confirm (useImageCounter): reserve the final ID (fast), show the image as "saved"
-// immediately from the in-memory map, and convert in the background. The byte-upload is deferred
-// into entry.upload() so the parent can run it AFTER saving its own record (when ProductID exists).
-const confirmOptimistic = async () => {
-  if(!imageSrc.base64){
-    Notify.failure("No hay nada que enviar.")
+  if(!saveAPI){
+    Notify.failure("No se configuró el endpoint para guardar la imagen.")
     return
   }
   const fileToUpload = imageFile
@@ -246,7 +164,10 @@ const confirmOptimistic = async () => {
   let reserved: { id: number, name: string }
   isReserving = true
   try {
-    reserved = await GET({ route: "image-id-counter" })
+    const counterRoute = imageCounterConfig > 0
+      ? `image-id-counter?config=${imageCounterConfig}`
+      : "image-id-counter"
+    reserved = await GET({ route: counterRoute })
     console.log("ImageUploader (Reserved ID)::", reserved)
   } catch (error) {
     isReserving = false
@@ -296,7 +217,7 @@ const confirmOptimistic = async () => {
     updateProcess(processID, '', tr('Sending converted images...|Enviando imágenes convertidas...'), 1)
     try {
       await POST_XMLHR({
-        data, route: saveAPI || "images", refreshRoutes,
+        data, route: saveAPI, refreshRoutes,
         onUploadProgress: e => {
           if(e.total){
             entry.progress = Math.round((e.loaded * 100) / e.total)
@@ -326,7 +247,7 @@ const confirmOptimistic = async () => {
 
   // 5) Flip/reset the card exactly like a completed upload would. NOTE: do NOT call onChange
   // here — the parent's onChange resets its optimistic Image/_imageSource, wiping what onUploaded
-  // just set. (The legacy uploadImage success path doesn't call onChange either.)
+  // just set.
   if (clearOnUpload) {
     imageSrc = { src: '', base64: '', types: [], description: '' }
     progress = 0
@@ -339,11 +260,8 @@ const confirmOptimistic = async () => {
   // so the process finishes on its own. For a NEW record (id = 0) it stays pending until the parent
   // saves its record and flushes it with the real id via upload({ ProductID }).
   const parentRecordId = Number(parentData.ProductID || parentData.id || 0)
-  if (parentRecordId > 0) { entry.upload?.().catch(() => {}) }
+  if (!setDataToSend || parentRecordId > 0) { entry.upload?.().catch(() => {}) }
 }
-
-// ✓ button / textarea-blur entry point: optimistic flow when useImageCounter, else legacy upload.
-const onConfirm = () => useImageCounter ? confirmOptimistic() : uploadImage()
 
 const onFileChange = async (ev: Event) => {
   const target = ev.target as HTMLInputElement
@@ -362,27 +280,12 @@ const onFileChange = async (ev: Event) => {
     })
     progress = -1
     imageSrc = { src: "", base64: base64, types: [], description: imageSrc.description }
-    onChange?.(imageSrc, onConfirm as unknown as () => Promise<IImageResult>)
+    onChange?.(imageSrc, confirmImage)
   } catch (error) {
     Notify.failure('Error procesando la imagen: ' + String(error))
     progress = 0
   }
 }
-
-// Legacy deferred-upload registry (e.g. categoria images). The optimistic flow uses the
-// in-memory map instead, so it skips this registration.
-$effect(() => {
-  if (useImageCounter) { return }
-  if (imageSrc.base64) {
-    imagesToUpload.set(imageID as number, uploadImage);
-  } else {
-    imagesToUpload.delete(imageID as number);
-  }
-});
-
-onDestroy(() => {
-  imagesToUpload.delete(imageID as number);
-});
 
 $effect(() => {
   console.log("progress (2)::", $state.snapshot(progress))
@@ -411,13 +314,23 @@ $effect(() => {
 
 <div data-id="ImageUploader:{componentID}"
   data-value={imageSrc?.src || imageSrc?.base64 ? "uploaded" : "empty"}
-  class="relative {cardCss} card_image_1 {imageSrc?.src ? '' : 'card_input'}"
+  class="group relative overflow-hidden rounded-[10px] border border-gray-500 bg-white cursor-pointer
+    {imageSrc?.src
+      ? ''
+      : 'hover:border-[#6e697a] hover:outline hover:outline-1 hover:outline-[#302e33]'}
+    {cardCss}"
   style={cardStyle}
 >
   {#if (imageSrc?.src || '').length === 0}
-    <div class="w-full h-full relative flex flex-col items-center justify-center card_input_layer">
-      <input bind:this={fileInputElement} onchange={onFileChange} type="file" accept="image/png, image/jpeg, image/webp" />
-      <div style="font-size: 2.4rem">
+    <div class="relative flex flex-col items-center justify-center w-full h-full pointer-events-none">
+      <input
+        class="absolute inset-0 w-full h-full cursor-pointer opacity-0 pointer-events-auto"
+        bind:this={fileInputElement}
+        onchange={onFileChange}
+        type="file"
+        accept="image/png, image/jpeg, image/webp"
+      />
+      <div class="text-[2.4rem]">
         <i class="icon-upload"></i>
       </div>
       <div class="h5">{tr("Upload Image|Subir Imagen")}</div>
@@ -433,7 +346,7 @@ $effect(() => {
       {#if !imageSrc.base64 && !liveBase64 && imageSrc.types?.includes('webp')}
         <source type="image/webp" srcset={makeImageSrc("webp")} />
       {/if}
-      <img class="w-full h-full absolute card_image_img1"
+      <img class="absolute inset-0 w-full h-full object-contain"
         src={makeImageSrc(imageSrc?.types?.[0])}
         alt="Upload preview"
       />
@@ -441,32 +354,48 @@ $effect(() => {
   {/if}
 
   {#if isInFlight}
-    <div class="absolute card_image_corner_loader" title={tr('Processing image...|Procesando imagen...')}>
-      <span class="loader"></span>
+    <div
+      class="absolute top-9 right-9 z-4 w-20 h-20 pointer-events-none"
+      title={tr('Processing image...|Procesando imagen...')}
+    >
+      <span class={s1.card_image_corner_loader_ring}></span>
     </div>
   {/if}
 
   {#if progress === -1}
-    <div class="w-full h-full absolute card_image_layer{imageSrc.base64 ? ' s1' : ''}">
+    <div
+      class="absolute inset-0 w-full h-full p-6 hover:bg-[linear-gradient(0deg,rgba(0,0,0,0.4)_0%,rgba(255,255,255,0)_25%)]
+        {imageSrc.base64
+          ? 'bg-[linear-gradient(0deg,rgba(0,0,0,0.4)_0%,rgba(255,255,255,0)_25%)]'
+          : ''}"
+    >
       {#if imageSrc.base64 && !hideFormUseMessage && !hideForm}
-        <textarea class="w-full card_image_textarea"
+        <textarea
+          class="w-full h-auto overflow-hidden resize-none rounded-[7px] border-0 bg-[#0000005c] p-4 text-white
+            outline-2 outline-[#ffffffa3] backdrop-blur-[4px] focus:outline-1 focus:outline-[#7e4dbd]
+            placeholder:text-white [font-family:bold] [line-height:1.1]
+            [text-shadow:-1px_0_#000000b8,0_1px_#000000b8,1px_0_#000000b8,0_-1px_#000000b8]
+            [&::placeholder]:[text-shadow:none]"
           rows={3} placeholder={tr("Name...|Nombre...")}
           onblur={(ev) => {
             ev.stopPropagation();
             imageSrc.description = ev.currentTarget.value || '';
-            onChange?.(imageSrc, onConfirm as unknown as () => Promise<IImageResult>);
+            onChange?.(imageSrc, confirmImage);
           }}
         ></textarea>
       {/if}
       {#if imageSrc.base64 && hideFormUseMessage}
-        <div class="absolute w-full card_image_upload_text">
+        <div
+          class="absolute bottom-[3rem] left-0 w-full bg-black/20 px-8 text-center text-white
+            [font-family:bold] [line-height:1.2] [text-shadow:2px_2px_6px_#000]"
+        >
           {hideFormUseMessage}
         </div>
       {/if}
-      <div class="w-full absolute flex items-center justify-center card_image_layer_botton">
+      <div class="absolute bottom-0 flex items-center justify-center w-full p-6">
         <button class="bnr-1 _4 mr-12 {imageSrc.base64
             ? ''
-            : 'card_image_layer_bn_close2'} card_image_btn"
+            : 'hidden group-hover:block'} outline-2 outline-white/50 hover:outline-black/70"
           aria-label={tr("Delete image|Eliminar imagen")}
           onclick={(ev) => {
             ev.stopPropagation();
@@ -482,11 +411,11 @@ $effect(() => {
           <i class="icon-cancel"></i>
         </button>
         {#if imageSrc.base64 && !hideUploadButton}
-          <button class="bnr-1 _5 card_image_btn"
+          <button class="bnr-1 _5 outline-2 outline-white/50 hover:outline-black/70"
             aria-label={tr("Upload image|Subir imagen")}
             onclick={(ev) => {
               ev.stopPropagation();
-              onConfirm();
+              confirmImage();
             }}
           >
             <i class="icon-ok"></i>
@@ -496,15 +425,15 @@ $effect(() => {
     </div>
   {/if}
 
-  {#if isReserving || isConverting || progress > 0}
-    <div class="w-full h-full absolute flex flex-col items-center justify-center card_image_layer_loading">
+  {#if isReserving || progress > 0}
+    <div class="absolute inset-0 flex flex-col items-center justify-center w-full h-full bg-black/35 backdrop-blur-[4px]">
       {#if isReserving}
-        <div class="card_image_spinner"></div>
+        <div class={s1.card_image_spinner}></div>
       {/if}
-      <div class="c-white h3 ff-bold">{isReserving ? tr('Loading...|Cargando...') : isConverting ? tr('Converting...|Convirtiendo...') : tr('Saving...|Guardando...')}</div>
+      <div class="c-white h3 ff-bold">{isReserving ? tr('Loading...|Cargando...') : tr('Saving...|Guardando...')}</div>
       {#if progress > 0}
-        <div class="flex relative items-center justify-center h-22 lh-10 w-[calc(100%-16px)] left-0 right-0 mt-8 _8 mr-8 ml-9 p-2">
-          <div class="absolute _9 left-2 h-18"
+        <div class="relative left-0 right-0 flex items-center justify-center h-22 w-[calc(100%-16px)] mt-8 mr-8 ml-9 p-2 bg-black/35 lh-10">
+          <div class="absolute left-2 h-18 bg-[#29b15d]"
             style="width: calc({Math.round(progress)}% - 4px);"
           ></div>
           <div class="absolute fs14 ff-bold text-white">{Math.round(progress)} %</div>
@@ -530,213 +459,5 @@ $effect(() => {
   ._5:hover {
     background-color: #52a0ff;
   }
-  ._8 {
-    background-color: #00000054;
-  }
-  ._9 {
-    background-color: #29b15d;
-    width: 80px;
-  }
 
-  /* ImageUploader styles */
-  .card_image_1 {
-    overflow: hidden;
-    border-radius: 7px;
-    border: 1px solid gray;
-    background-color: white;
-    cursor: pointer;
-  }
-
-  :global(body.dark) .card_image_1 {
-    background-color: #474a57;
-  }
-
-  .card_image_1.card_input:hover {
-    border: 1px solid rgb(110, 105, 122);
-    outline: 1px solid rgb(48, 46, 51);
-  }
-
-  :global(body.dark) .card_image_1.card_input:hover {
-    border-color: white;
-    outline-color: white;
-  }
-
-  .card_image_img1 {
-    top: 0;
-    left: 0;
-    object-fit: contain;
-  }
-
-  .card_image_layer {
-    top: 0;
-    padding: 6px;
-    left: 0;
-  }
-
-  .card_image_layer:not(:hover) .card_image_layer_bn_close2 {
-    display: none;
-  }
-
-  .card_image_layer:hover,
-  .card_image_layer.s1 {
-    background: linear-gradient(0deg, rgba(0, 0, 0, 0.4) 0%, rgba(255, 255, 255, 0) 25%);
-  }
-
-  .card_image_btn {
-    outline: 2px solid rgba(255, 255, 255, 0.5);
-  }
-
-  .card_image_btn:hover {
-    outline: 2px solid rgba(0, 0, 0, 0.7) !important;
-  }
-
-  .card_image_layer_loading {
-    top: 0px;
-    left: 0px;
-    backdrop-filter: blur(4px);
-    background-color: rgba(0, 0, 0, 0.34);
-  }
-
-  .card_image_spinner {
-    width: 38px;
-    height: 38px;
-    margin-bottom: 10px;
-    border: 4px solid rgba(255, 255, 255, 0.35);
-    border-top-color: #ffffff;
-    border-radius: 50%;
-    animation: card_image_spin 0.8s linear infinite;
-  }
-
-  @keyframes card_image_spin {
-    to { transform: rotate(360deg); }
-  }
-
-  /* Small dual-ring loader pinned top-right while the image converts/uploads in the background. */
-  .card_image_corner_loader {
-    top: 9px;
-    right: 9px;
-    width: 20px;
-    height: 20px;
-    z-index: 2;
-    pointer-events: none;
-  }
-
-  .card_image_corner_loader .loader {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    background: #FF3D00;
-    border-radius: 50%;
-    position: relative;
-    box-sizing: border-box;
-    animation: card_image_rotation 2s linear infinite;
-  }
-
-  .card_image_corner_loader .loader::after {
-    content: '';
-    box-sizing: border-box;
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    border: 10px solid;
-    border-color: transparent #FFF;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-  }
-
-  @keyframes card_image_rotation {
-    0%   { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-
-  .card_image_upload_text {
-    font-family: 'bold';
-    color: white;
-    text-shadow: 2px 2px 6px #000000;
-    text-align: center;
-    bottom: 3rem;
-    background-color: rgba(0, 0, 0, 0.2);
-    left: 0;
-    line-height: 1.2;
-    padding: 0 8px;
-  }
-
-  .card_image_layer_botton {
-    bottom: 0;
-    padding: 6px;
-  }
-
-  .card_image_textarea {
-    background-color: #0000005c;
-    border: none;
-    border-radius: 7px;
-    color: white;
-    font-family: 'bold';
-    text-shadow: -1px 0 #000000b8, 0 1px #000000b8, 1px 0 #000000b8, 0 -1px #000000b8;
-    line-height: 1.1;
-    overflow: hidden;
-    height: auto;
-    backdrop-filter: blur(4px);
-    outline-offset: 0;
-    outline: 2px solid #ffffff60;
-    resize: none;
-    padding: 4px 4px;
-  }
-
-  .card_image_textarea:focus {
-    outline-color:rgb(189, 141, 253);
-    outline-offset: 0;
-  }
-
-  .card_image_textarea::placeholder {
-    text-shadow: none;
-    color: white;
-  }
-
-  .card_image_1 input {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: 100%;
-    cursor: pointer;
-    opacity: 0;
-  }
-
-  .card_input_layer {
-    pointer-events: none;
-  }
-
-  .card_image_1 input {
-    pointer-events: all;
-  }
-
-  .image_loading_layer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background-color: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
-  }
-
-  .image_card_default {
-    width: 10rem;
-    height: 10rem;
-    border-radius: 7px;
-    overflow: hidden;
-  }
-
-  .image_card_desc {
-    bottom: 0;
-    left: 0;
-    padding: 6px;
-    background: linear-gradient(0deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 100%);
-    color: white;
-  }
 </style>

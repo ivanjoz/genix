@@ -24,9 +24,6 @@ const PACKAGES = ['pkg-core', 'pkg-services', 'pkg-ui', 'pkg-ecommerce', 'pkg-st
 // Symbol to new location mapping
 // Format: { symbol: { package: 'pkg-name', path: 'path/to/file' } }
 const SYMBOL_MIGRATIONS: Record<string, { package: string; path: string }> = {
-  // Types that need to be in pkg-core
-  'IImageResult': { package: 'pkg-core', path: 'core/types.ts' },
-
   // UI components that pkg-ecommerce uses - these should be passed as props, not imported
   // We'll move them to pkg-core to allow pkg-ecommerce to import them
   'Input': { package: 'pkg-ui', path: 'components/Input.svelte' },

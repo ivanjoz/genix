@@ -11,6 +11,7 @@ import {
   triggerDeltaForceFetchWindow,
 } from '$libs/cache/delta-cache.fetch';
 import type { ICacheSyncUpdate, IGetCacheSubObject } from '$libs/cache/delta-cache.fetch';
+import type { CacheConversions } from '$libs/cache/delta-cache.conversion';
 import { HandlersMap } from './service-worker-cache';
 
 export type CacheMode = 'offline' | 'updateOnly' | 'refresh' | 'fetchOnly'
@@ -30,6 +31,7 @@ export type serviceHttpProps = {
   keysIDs?: { [key: string]: string | string[] }
   columnarIDField?: string
   combineColumnarValuesOnFields?: string[]
+  conversion?: CacheConversions
   // CDN snapshot bootstrap: on first sync the cache fetches `fileRoute` (an absolute URL to a
   // pipe-separated, ">>>"-section .db file) and parses it with `fileSchema` instead of pulling
   // the full list from the API. See firstSyncFromSnapshotFile / parsePsvResponse.

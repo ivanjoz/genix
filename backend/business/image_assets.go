@@ -41,7 +41,8 @@ func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
 	queryGroup.Go(func() error {
 		storedAssets := []businessTypes.ImageAsset{}
 		query := db.Query(&storedAssets)
-		query.Select(query.ID, query.CategoryID, query.Bigrams, query.Updated)
+		query.Select(query.ID, query.CategoryID, query.Bigrams, query.Updated).
+			GroupID.Equals(imageAssetCategoryGroupID)
 		if imagesUpdated > 0 {
 			query.Updated.GreaterThan(imagesUpdated)
 		}

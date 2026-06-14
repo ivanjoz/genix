@@ -26,6 +26,7 @@ import type { CacheRecordID, ICacheRecordRow, ICacheRecordRowMulti, ICacheRecord
 import type { serviceHttpProps } from '$libs/workers/service-worker';
 import { parseObject } from '$libs/workers/parse-object';
 import { parsePsvResponse } from './psv-parse';
+import { applyCacheConversions } from './delta-cache.conversion';
 
 type CacheContent = { __version__?: number } & { [key: string]: any[] }
 
@@ -621,6 +622,7 @@ const handleFetchResponse = async (
   isArrayResponse?: boolean,
 ) => {
   response = normalizeResponse(response)
+  applyCacheConversions(response, args.conversion, args.route)
 
   // Lock `isSingle` on the first delta that ever touches this route so the table choice stays stable.
   if(routeRow.isSingle === undefined && isArrayResponse !== undefined){
@@ -753,6 +755,7 @@ const saveInitialSnapshot = async (
   fetchTime: number,
   isArrayResponse: boolean,
 ) => {
+  applyCacheConversions(response, args.conversion, args.route)
   // First sync writes the full route snapshot as indexed rows.
   const routeRow = await ensureCacheRouteRow(routeReference)
   routeRow.fetchTime = fetchTime

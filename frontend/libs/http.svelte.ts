@@ -16,6 +16,7 @@ import {
   type IGroupCacheRecord,
 } from './cache/group-cache.idb';
 import { getRecordsByID, type IMinimalRecord } from './cache/cache-by-ids.svelte';
+import type { CacheConversions } from './cache/delta-cache.conversion';
 
 export interface IHttpStatus {
   code: number
@@ -538,6 +539,7 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
 
   useCache: { min: number, ver: number  } | undefined = undefined
 	headers: { [k: string]: string } | undefined = undefined
+	conversion: CacheConversions | undefined = undefined
   // CDN snapshot bootstrap (optional): absolute URL to a .db file + its per-section column schema.
   // When set, the first sync seeds the cache from the file instead of the full API list.
   fileRoute = ""
@@ -563,6 +565,7 @@ export class GetHandler<T extends { ID: number, ss?: number } = any> {
       keysIDs: this.keysIDs,
       columnarIDField: this.columnarIDField,
       combineColumnarValuesOnFields: this.combineColumnarValuesOnFields,
+      conversion: this.conversion,
       fileRoute: this.fileRoute || undefined,
       fileSchema: this.fileSchema,
     } as serviceHttpProps

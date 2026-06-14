@@ -2,7 +2,7 @@
 import ImageUploader, { type ImageSource } from '$components/files/ImageUploader.svelte';
 import Input from '$components/form/Input.svelte';
 import Modal from '$components/layers/Modal.svelte';
-import { closeAllModals, closeModal, imagesToUpload, openModal, tr } from '$core/store.svelte';
+import { closeAllModals, closeModal, openModal, tr } from '$core/store.svelte';
 import T from '$components/misc/T.svelte';
 import { Loading, Notify } from '$libs/helpers';
 import { type ISharedListRecord, type ListasCompartidasService } from "$services/negocio/listas-compartidas.svelte";
@@ -32,8 +32,9 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
   })
 
   let form = $state({} as ISharedListRecord)
-  const imagesIDs = [151,152,153]
-  let images = $state([{ _id: 151 },{ _id: 152 },{ _id: 153 }] as ImageSource[])
+  const imageSlots = [0, 1, 2]
+  let images = $state([{},{},{}] as ImageSource[])
+  const pendingImageConfirms = new Map<number, () => Promise<void>>()
 
   const onSave = async (isDelete?: boolean) => {
     console.log("form a enviar 1::",$state.snapshot(form), isDelete)
@@ -47,19 +48,13 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
     form.Images = form.Images || []
     form.ss = isDelete ? 0 : 1
 
-    for(let i = 0; i < imagesIDs.length; i++){
-      const imageID = imagesIDs[i]
-      // debugger
-      if(imagesToUpload.has(imageID)){
-        Loading.change(tr(`Saving Image ${i+1}|Guardando Imagen ${i+1}`))
-        const result = await imagesToUpload.get(imageID)?.()
-
-        let imageName = result?.imageName || ""
-        if(imageName.includes("/")){ imageName = imageName.split("/")[1] }
-
-        form.Images[i] = imageName
-      } else {
-        form.Images[i] = form.Images?.[i] || ""
+    if (!isDelete) {
+      for (const imageIndex of imageSlots) {
+        const confirmImage = pendingImageConfirms.get(imageIndex)
+        if (confirmImage) {
+          Loading.change(tr(`Saving Image ${imageIndex + 1}|Guardando Imagen ${imageIndex + 1}`))
+          await confirmImage()
+        }
       }
     }
 
@@ -91,12 +86,15 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
 
     listas.ListaRecordsMap.set(origin, [...newCategorias])
     listas.ListaRecordsMap = new Map(listas.ListaRecordsMap)
+    pendingImageConfirms.clear()
     closeAllModals()
     Loading.remove()
   }
 
   export const newRecord = () => {
     form = { ListID: origin as number } as ISharedListRecord
+    images = [{},{},{}] as ImageSource[]
+    pendingImageConfirms.clear()
     openModal(2)
   }
 
@@ -108,9 +106,10 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
     // console.log("form a enviar::",$state.snapshot(e))
     // return
     form = {...e}
-    images = imagesIDs.map((_id,i) => {
-      return { _id, src: (form.Images||[])[i] || "" } as ImageSource
+    images = imageSlots.map((imageIndex) => {
+      return { src: (form.Images||[])[imageIndex] || "" } as ImageSource
     })
+    pendingImageConfirms.clear()
     console.log("categoría getted:", $state.snapshot(form),$state.snapshot(images))
     openModal(2)
   }
@@ -157,16 +156,29 @@ import { type ISharedListRecord, type ListasCompartidasService } from "$services
       saveOn={form} save="Description"
     />
     {#each images as image, index }
-      <ImageUploader clearOnUpload={true} id={image._id}
+      <ImageUploader clearOnUpload={true}
         folder="img-public" src={image.src} size={2}
         cardCss="w-full h-180 p-4 col-span-4" types={["avif","webp"]}
-        saveAPI="producto-categoria-image"
+        saveAPI="product-categoria-image"
+        useConvertAvif={true}
+        convertResolutions={[6, 4, 2]}
         hideUploadButton={true} hideForm={true}
-        onChange={e => {
+        onChange={(e, confirmImage) => {
           Object.assign(image, e)
+          if (confirmImage) {
+            pendingImageConfirms.set(index, confirmImage)
+          } else if (!e.src && !e.base64) {
+            pendingImageConfirms.delete(index)
+            const formImages = form.Images ||= []
+            formImages[index] = ""
+          }
         }}
-        setDataToSend={e => {
-          e.Order = index + 1
+        onUploaded={uploadedImage => {
+          const formImages = form.Images ||= []
+          formImages[index] = uploadedImage.name
+          image.src = uploadedImage.name
+          image.base64 = ""
+          pendingImageConfirms.delete(index)
         }}
       />
     {/each }

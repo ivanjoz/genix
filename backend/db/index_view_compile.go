@@ -318,6 +318,19 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 		if !viewCfg.KeepPart {
 			view.columns = colNamesNoPart
 		}
+		view.getStatementPrepared = func(statements ...ColumnStatement) []boundWhereClause {
+			// Simple MVs keep their source columns, so predicates bind without key rewriting.
+			sourceClauses := buildRemainingWhereClauses(statements)
+			combinedClause := boundWhereClause{}
+			for _, sourceClause := range sourceClauses {
+				if combinedClause.Clause != "" {
+					combinedClause.Clause += " AND "
+				}
+				combinedClause.Clause += sourceClause.Clause
+				combinedClause.Values = append(combinedClause.Values, sourceClause.Values...)
+			}
+			return []boundWhereClause{combinedClause}
+		}
 	} else if len(columns) == 1 {
 		view.column = columns[0]
 	} else if isRangeView {
