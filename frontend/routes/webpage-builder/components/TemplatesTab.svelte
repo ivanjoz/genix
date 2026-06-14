@@ -1,37 +1,39 @@
 <script lang="ts">
-import { sectionTemplates } from '$ecommerce/templates';
+  import { sectionTemplates } from '$ecommerce/templates';
 
   interface Props {
     onSelect: (template: { id: string }) => void;
   }
+
+  type SectionTemplate = (typeof sectionTemplates)[number];
 
   let { onSelect }: Props = $props();
 
   let searchQuery = $state('');
   let selectedCategory = $state('all');
 
-  const categories = ['all', ...new Set(sectionTemplates.flatMap(t => t.category ? [t.category] : []))];
+  const categories = [
+    'all',
+    ...new Set(sectionTemplates.flatMap(template => template.category ? [template.category] : []))
+  ];
 
   const filteredTemplates = $derived(() => {
-    return sectionTemplates.filter(t => {
-      const matchesSearch = (t.name ?? '').toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = selectedCategory === 'all' || t.category === selectedCategory;
+    return sectionTemplates.filter(template => {
+      const matchesSearch = (template.name ?? '').toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = selectedCategory === 'all' || template.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
   });
 
-  function handleDragStart(e: DragEvent, template: any) {
-    if (!e.dataTransfer) return;
-    e.dataTransfer.setData('application/x-genix-template', JSON.stringify(template));
-    e.dataTransfer.effectAllowed = 'copy';
-    
-    const target = e.target as HTMLElement;
-    target.style.opacity = '0.5';
+  function handleDragStart(event: DragEvent, template: SectionTemplate) {
+    if (!event.dataTransfer) return;
+    event.dataTransfer.setData('application/x-genix-template', JSON.stringify(template));
+    event.dataTransfer.effectAllowed = 'copy';
+    (event.currentTarget as HTMLElement).style.opacity = '0.5';
   }
 
-  function handleDragEnd(e: DragEvent) {
-    const target = e.target as HTMLElement;
-    target.style.opacity = '1';
+  function handleDragEnd(event: DragEvent) {
+    (event.currentTarget as HTMLElement).style.opacity = '1';
   }
 </script>
 
@@ -69,10 +71,11 @@ import { sectionTemplates } from '$ecommerce/templates';
         ondragend={handleDragEnd}
         aria-label={`Add ${template.name} section to store`}
       >
-        <div class="template-icon">🧩</div>
-        <div class="template-info">
-          <div class="template-name">{template.name}</div>
-          <div class="template-tag">{template.category}</div>
+        <div class="template-preview">
+          {@html template.thumbnail ?? ''}
+        </div>
+        <div class="template-name">
+          {(template.name ?? 'Template').replace(' (HTML)', '')}
         </div>
       </button>
     {/each}
@@ -123,19 +126,20 @@ import { sectionTemplates } from '$ecommerce/templates';
   }
 
   .templates-grid {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
+    align-items: start;
   }
 
   .template-card {
-    display: flex;
-    gap: 12px;
-    padding: 12px;
+    display: block;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
     background: #1e293b;
     border: 1px solid #334155;
     border-radius: 8px;
-    text-align: left;
     cursor: pointer;
     transition: all 0.15s ease;
   }
@@ -146,34 +150,24 @@ import { sectionTemplates } from '$ecommerce/templates';
     background: #243146;
   }
 
-  .template-icon {
-    width: 40px;
-    height: 40px;
-    background: #0f172a;
-    border-radius: 6px;
+  .template-preview {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     justify-content: center;
-    font-size: 20px;
-  }
-
-  .template-info {
-    flex: 1;
+    height: 100px;
+    overflow: hidden;
+    border-bottom: 1px solid #334155;
+    pointer-events: none;
   }
 
   .template-name {
-    font-size: 14px;
-    font-weight: 600;
+    padding: 9px 8px;
+    overflow: hidden;
     color: #f1f5f9;
-    margin-bottom: 2px;
-  }
-
-  .template-tag {
-    display: inline-block;
-    font-size: 10px;
-    font-weight: 700;
-    color: #3b82f6;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>

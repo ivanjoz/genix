@@ -428,7 +428,7 @@ interface SectionTemplate {
     name: string;                     // Display name
     category: SectionCategory;        // For organization
     description: string;              // For library preview
-    thumbnail?: string;               // Preview image URL
+    thumbnail?: string;               // Trusted miniature HTML for the template picker
     
     // === Template ===
     ast: ComponentAST;                // The actual component tree

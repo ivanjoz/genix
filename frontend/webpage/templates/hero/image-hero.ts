@@ -11,6 +11,20 @@ export const ImageHero: SectionData = {
 	name: 'Image Hero (HTML)',
 	category: 'hero',
 	description: 'Full-bleed photo background with an overlaid headline, text and call-to-action.',
+	thumbnail: `
+		<div class="relative h-[80px] overflow-hidden bg-slate-900 text-white">
+			<img
+				src="https://ivanjoz.github.io/genix-assets/images/business-workspace/5.avif"
+				alt=""
+				class="absolute inset-0 h-full w-full object-cover opacity-50"
+			/>
+			<div class="relative flex h-full w-3/5 flex-col justify-center px-8">
+				<strong class="text-[8px] leading-tight">Style That Speaks</strong>
+				<span class="mt-4 text-[5px] text-slate-200">Curated collections for modern style.</span>
+				<span class="mt-6 w-fit rounded-full bg-white px-6 py-3 text-[5px] text-slate-900">Shop</span>
+			</div>
+		</div>
+	`,
 	html: `
 		<section class="relative overflow-hidden min-h-[420px] flex items-center px-6 py-12">
 			<ImageEffect data-role="image" fill fit="cover"

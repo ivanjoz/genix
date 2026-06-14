@@ -34,7 +34,7 @@ renderer/editor/CSS all read. Don't hand-author `ast`.
 
 ### Optional Properties
 
-- **thumbnail**: Preview image URL
+- **thumbnail**: Trusted miniature HTML rendered in the builder's template picker
 - **presets**: Pre-configured variations
 
 ## Using ComponentProps

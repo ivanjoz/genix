@@ -10,6 +10,13 @@ export const HeroBanner: SectionData = {
 	name: 'Hero Banner (HTML)',
 	category: 'hero',
 	description: 'Full-width hero with headline, supporting text and a call-to-action button.',
+	thumbnail: `
+		<div class="flex h-[82px] flex-col items-center justify-center bg-slate-900 px-8 text-center text-white">
+			<strong class="text-[8px] leading-tight">Fresh Picks, Delivered Fast</strong>
+			<span class="mt-4 text-[5px] text-slate-300">Seasonal favorites delivered to your door.</span>
+			<span class="mt-6 rounded-full bg-blue-500 px-7 py-3 text-[5px]">Shop Now</span>
+		</div>
+	`,
 	html: `
 		<section background-color="9" class="py-24 px-6 text-center">
 			<div class="max-w-3xl mx-auto">

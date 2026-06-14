@@ -10,6 +10,19 @@ export const ProductGridShowcase: SectionData = {
 	name: 'Product Grid (HTML)',
 	category: 'products',
 	description: 'A standalone product grid that self-fetches its products, with editable layout.',
+	thumbnail: `
+		<div class="h-[112px] bg-white px-6 py-7 text-slate-800">
+			<strong class="block text-center text-[7px]">Our Products</strong>
+			<div class="mt-7 grid grid-cols-3 gap-4">
+				<div><div class="aspect-square rounded-sm bg-slate-200"></div><div class="mt-2 h-2 rounded bg-slate-300"></div></div>
+				<div><div class="aspect-square rounded-sm bg-slate-200"></div><div class="mt-2 h-2 rounded bg-slate-300"></div></div>
+				<div><div class="aspect-square rounded-sm bg-slate-200"></div><div class="mt-2 h-2 rounded bg-slate-300"></div></div>
+				<div><div class="aspect-square rounded-sm bg-slate-200"></div><div class="mt-2 h-2 rounded bg-slate-300"></div></div>
+				<div><div class="aspect-square rounded-sm bg-slate-200"></div><div class="mt-2 h-2 rounded bg-slate-300"></div></div>
+				<div><div class="aspect-square rounded-sm bg-slate-200"></div><div class="mt-2 h-2 rounded bg-slate-300"></div></div>
+			</div>
+		</div>
+	`,
 	html: `
 		<section background-color="1" class="py-16 px-6">
 			<div class="max-w-7xl mx-auto">

@@ -16,6 +16,7 @@ export interface SectionData {
   category?: SectionCategory;
   name?: string;
   description?: string;
+  /** Trusted miniature HTML used by the builder's template picker. */
   thumbnail?: string;
   presets?: SectionPreset[];
 
