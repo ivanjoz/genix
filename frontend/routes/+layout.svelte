@@ -41,6 +41,10 @@
 		if(page.url.pathname.startsWith('/store')){
 			return false
 		}
+		// Chrome-less template preview used by the headless review agent — no login needed.
+		if(page.url.pathname.startsWith('/webpage-builder/template-preview')){
+			return false
+		}
 		if(["/login"].includes(page.url.pathname)){
 			return false
 		}
@@ -111,7 +115,7 @@
 		Env.navigate('/')
 	})
 
-	const routesWithoutLayout: string[] = ["/login","/store"]
+	const routesWithoutLayout: string[] = ["/login","/store","/webpage-builder/template-preview"]
 	// Check if current route should show Header and SideMenu
 	let showLayout = $derived(
 		!routesWithoutLayout.some(x => page.url.pathname.startsWith(x))
