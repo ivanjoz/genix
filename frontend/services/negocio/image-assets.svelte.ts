@@ -50,6 +50,13 @@ export class ImageAssetsService extends GetHandler<IImageAssetSearchRecord> {
 		return `https://ivanjoz.github.io/genix-assets/images/${encodeURIComponent(categoryName)}/${record.ID}.s.avif`;
 	}
 
+	getImageURL(record: IImageAssetSearchRecord): string {
+		// Full-resolution variant (the `.s` thumbnail suffix dropped) for use as the live image src.
+		const categoryName = this.categoriesMap.get(record.CategoryID)?.Name;
+		if (!categoryName) { return ''; }
+		return `https://ivanjoz.github.io/genix-assets/images/${encodeURIComponent(categoryName)}/${record.ID}.avif`;
+	}
+
 	constructor(init: boolean = false) {
 		super();
 		if (init) this.fetch();

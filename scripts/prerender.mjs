@@ -7,7 +7,16 @@
 // build/), then copies the output to a per-company dist folder.
 //
 // Usage:
-//   bun scripts/prerender.mjs --company <id> [--asset-base <url>] [--out <dir>]
+//   bun scripts/prerender.mjs --company <id> [--asset-base <url>] [--out <dir>] [--page-base]
+//
+// --page-base: build & flatten ONLY the runtime /base shell instead of the root page.
+//   This is a COMPANY-AGNOSTIC TEMPLATE (see routes/base/+page.ts): one HTML shell that
+//   downstream tooling copies, rewrites the cdn-url/page-id <head> metas on, and serves
+//   for any company/page. So it is NOT nested under a company id — it ships as
+//   `index.html` inside `dist-prerender/base` (assets default to <FRONTEND_CDN>/websites/base).
+//   --company is still required (it only flips SSR/prerender on); its value does not scope
+//   the output. The page loads its content from the CDN snapshot at view time, so nothing
+//   tenant-specific is baked in.
 //
 // The asset base defaults to `<FRONTEND_CDN>/websites/<company>` read from the repo's
 // credentials.json (matching backend/exec's companyWebpageAssetBase); pass --asset-base
@@ -44,12 +53,21 @@ if (!company || Number.isNaN(Number(company)) || Number(company) <= 0) {
   console.error('Error: --company <id> is required (a positive number).');
   process.exit(1);
 }
+// --page-base builds & flattens ONLY the runtime /base shell into a `base/` folder.
+const pageBase = args.includes('--page-base');
 // This script lives in <repo>/scripts; the SvelteKit app is at <repo>/frontend/webpage.
 const here = dirname(fileURLToPath(import.meta.url)); // <repo>/scripts
 const repoRoot = resolve(here, '..');                 // <repo>
 const appDir = resolve(repoRoot, 'frontend/webpage');
 const buildDir = resolve(appDir, 'build');
-const outDir = resolve(getFlag('--out') || resolve(appDir, 'dist-prerender', String(company)));
+// The live build lands in a dedicated `live/` subfolder so its flattened assets never
+// collide with the root build's output for the same company.
+// The template build is company-agnostic, so it lands in a shared `base/` folder — NOT
+// nested under the company id (which only enables the SSR/prerender build mechanism).
+const defaultOut = pageBase
+  ? resolve(appDir, 'dist-prerender', 'base')
+  : resolve(appDir, 'dist-prerender', String(company));
+const outDir = resolve(getFlag('--out') || defaultOut);
 
 // Asset base = the https origin the flattened JS/CSS get served from. By default it's
 // derived from credentials.json the same way backend/exec's companyWebpageAssetBase
@@ -67,9 +85,14 @@ const readFrontendCdn = () => {
 };
 const assetBaseOverride = getFlag('--asset-base');
 const frontendCdn = assetBaseOverride ? '' : readFrontendCdn();
+// Template assets are shared across companies → <FRONTEND_CDN>/websites/base (no company
+// segment). The per-company root build keeps its <FRONTEND_CDN>/websites/<company> base.
+const derivedAssetBase = pageBase
+  ? `${frontendCdn}/websites/base`
+  : `${frontendCdn}/websites/${company}`;
 const assetBase = (
   assetBaseOverride ||
-  (frontendCdn && `${frontendCdn}/websites/${company}`) ||
+  (frontendCdn && derivedAssetBase) ||
   ''
 ).replace(/\/+$/, '');
 if (!assetBase.startsWith('https://')) {
@@ -82,8 +105,11 @@ if (!assetBase.startsWith('https://')) {
 console.log(`[prerender] company=${company}`);
 console.log(`[prerender] out=${outDir}`);
 console.log(`[prerender] asset-base=${assetBase}`);
+if (pageBase) console.log('[prerender] mode=page-base (only the /base shell)');
 
 const env = { ...process.env, VITE_COMPANY_ID: String(company) };
+// Gate the build (svelte.config entries + the routes' prerender flags) to /base only.
+if (pageBase) env.VITE_PRERENDER_BASE = '1';
 const result = spawnSync('bun', ['run', 'build'], { cwd: appDir, env, stdio: 'inherit' });
 if (result.status !== 0) {
   console.error('[prerender] build failed');
@@ -97,6 +123,8 @@ if (!existsSync(buildDir)) {
 rmSync(outDir, { recursive: true, force: true });
 cpSync(buildDir, outDir, { recursive: true });
 
+if (pageBase) promoteBasePage(outDir);
+
 inlineBootstrap(outDir, assetBase);
 flattenAssets(outDir);
 rewriteAssetUrls(outDir, assetBase);
@@ -105,6 +133,23 @@ mergeCss(outDir, assetBase);
 dropOrphanEnvChunk(outDir, assetBase);
 inlineDompurifyStubChunk(outDir, assetBase);
 inlineTrivialNodeChunks(outDir, assetBase);
+
+// --- --page-base: promote the base shell to the folder root ---------------------
+//
+// The --page-base build prerenders only the /base route (→ base.html) plus the
+// SvelteKit SPA fallback (404.html). Rename base.html → index.html so the flattened
+// `base/` folder serves the page at its root, and drop the fallback — this deploy
+// ships ONLY the base page. Runs before the rewrite/flatten steps so they see index.html.
+function promoteBasePage(dir) {
+  const basePage = resolve(dir, 'base.html');
+  if (!existsSync(basePage)) {
+    console.error('[prerender] --page-base: expected base.html in build output, not found');
+    process.exit(1);
+  }
+  renameSync(basePage, resolve(dir, 'index.html'));
+  rmSync(resolve(dir, '404.html'), { force: true });
+  console.log('[prerender] --page-base: promoted base.html → index.html, dropped 404.html');
+}
 
 // --- Inline the SvelteKit bootstrap entries into the prerendered HTML -----------
 //

@@ -24,6 +24,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-reset-counters":           ResetCounterPart,
 	"fn-deploy-cloudflare-worker": DeployCloudflareWorkerHandler,
 	"fn-deploy-company-webpage":   DeployCompanyWebpage,
+	"fn-deploy-base-template":     DeployBaseTemplate,
 	"fn-sync-image-assets":        SyncImageAssetsHandler,
 	"compress-image":              CompressImage,
 }

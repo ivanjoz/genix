@@ -2,6 +2,9 @@
   import type { ComponentAST, ColorPalette } from '$ecommerce/renderer/renderer-types';
 
   import type { Snippet } from 'svelte';
+  import { Env } from '$core/env';
+  import { openModal, tr } from '$core/store.svelte';
+  import ImagePickerModal from './ImagePickerModal.svelte';
 
   interface Props {
     /** The ImageEffect AST node being edited; its visual treatment lives on node.props. */
@@ -159,6 +162,11 @@
   const fill = $derived(prop('fill', false));
   const fit = $derived(prop('fit', 'cover'));
 
+  // Current image source; drives the preview and toggles the remove/add overlay.
+  const src = $derived(prop('src', ''));
+  // Unique numeric id so each editor instance opens its own picker modal.
+  const pickerModalId = Env.getComponentID();
+
   // Host-provided tools come first, then this editor's image tools. Each carries its
   // own icon html so the toolbar can render one unified row.
   const allTools = $derived([
@@ -266,8 +274,29 @@
   </div>
 
   <!-- Preview strip: the source image rendered raw so edits read against the real photo. -->
-  <div class="preview" style={`background-image:url('${prop('src', '')}')`}></div>
+  <div class="preview" style={`background-image:url('${src}')`}>
+    {#if src}
+      <!-- Hover reveals a circular remove button centered at the bottom. -->
+      <button
+        type="button"
+        class="preview-remove"
+        title={tr('Remove image|Quitar imagen')}
+        aria-label={tr('Remove image|Quitar imagen')}
+        onclick={() => setProp('src', '')}
+      >
+        <i class="icon-cancel"></i>
+      </button>
+    {:else}
+      <!-- Empty: hover reveals an "Agregar" button that opens the image picker. -->
+      <button type="button" class="preview-add" onclick={() => openModal(pickerModalId)}>
+        <i class="icon-plus"></i><span>{tr('Add|Agregar')}</span>
+      </button>
+    {/if}
+  </div>
 </div>
+
+<!-- Picker modal: selecting an image writes its full-resolution url back to node.props.src. -->
+<ImagePickerModal modalId={pickerModalId} onSelect={(url) => setProp('src', url)} />
 
 <style>
   .ibe {
@@ -279,11 +308,66 @@
   }
 
   .preview {
+    position: relative;
     height: 64px;
     background-size: cover;
     background-position: center;
     background-color: #0b1120;
     border-radius: 0 0 6px 6px;
+  }
+
+  /* Circular remove button, centered at the bottom edge, revealed on hover. */
+  .preview-remove {
+    position: absolute;
+    bottom: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: #e75c5c;
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    opacity: 0;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.55);
+    transition: opacity 0.15s, background 0.15s;
+  }
+  .preview:hover .preview-remove {
+    opacity: 1;
+  }
+  .preview-remove:hover {
+    background: #f77d7d;
+  }
+
+  /* "Agregar" button shown over the empty placeholder on hover. */
+  .preview-add {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: none;
+    background: rgba(15, 23, 42, 0.55);
+    color: #e2e8f0;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .preview:hover .preview-add {
+    opacity: 1;
+  }
+  .preview-add:hover {
+    color: #fff;
+    background: rgba(15, 23, 42, 0.7);
   }
 
   .toolbar {

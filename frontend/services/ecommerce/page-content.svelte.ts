@@ -1,6 +1,13 @@
 import { GET, POST } from '$libs/http.svelte';
+import { Env } from '$core/env';
+import { unmarshall } from '$libs/funcs/unmarshall';
 import { collectTokens, generateCss } from '$ecommerce/stores/uno-generator';
 import type { SectionData } from '$ecommerce/renderer/section-types';
+
+// The "Inicio" page (ID 10 server-side). The storefront passes pageID 0 for the
+// root page; the published CDN snapshot is named with the resolved id (10), so
+// the reads below map 0 → this id to hit the right file.
+const DEFAULT_PAGE_ID = 10;
 
 // The PageID of the page currently open in the builder. The route sets it on
 // entry; getPageContent/savePageContent default to it so deeply-nested callers
@@ -74,16 +81,54 @@ interface IWebpagePublicResult {
   Sections: IPageContentRow[];
 }
 
+export interface IWebpageContent {
+	sections: SectionData[]; css: string; seo: Record<string, string>
+}
+
 // Storefront loader: ONE public call (GET.p-webpage) returns a page's SEO config +
 // content. No auth — makeRoute appends company-id from Env.getCompanyID()
 // (VITE_COMPANY_ID at build, window/path at runtime). pageID defaults to the root
 // page (resolved server-side). Used by the prerender build and live storefronts.
-export const getStoreWebpage = async (
-  pageID = 0,
-): Promise<{ sections: SectionData[]; css: string; seo: Record<string, string> }> => {
+export const getStoreWebpage = async (pageID = 0): Promise<IWebpageContent> => {
   const route = pageID > 0 ? `p-webpage?id=${pageID}` : 'p-webpage';
 	const result: IWebpagePublicResult = await GET({ route });
 
   const { sections, css } = parsePageContentRows(result?.Sections || []);
   return { sections, css, seo: result?.Config || {} };
+};
+
+// Resolve a CDN snapshot file name (<companyID>-<pageID>.json) for a page. pageID 0
+// → the root page id (10); companyID 0 → the build/runtime-resolved tenant. Exposed
+// so the live route's inline <head> fetch and the loaders agree on the same name.
+export const getStoreSnapshotName = (pageID = 0, companyID = 0): string => {
+	if (!companyID) { companyID = Env.getCompanyID(); }
+	const resolvedID = pageID > 0 ? pageID : DEFAULT_PAGE_ID;
+	return `${companyID}-${resolvedID}.json`;
+};
+
+// Turn a raw published-snapshot JSON (the compact-array serialization of
+// WebpagePublicResult) into the same {sections, css, seo} shape the storefront
+// renders. Used by both getStoreWebpageFromCDN (which fetches) and the live route
+// (which fetches early via an inline <head> script and passes the parsed JSON here).
+export const parseStoreWebpageSnapshot = (raw: unknown): IWebpageContent => {
+	const result: IWebpagePublicResult = unmarshall(raw);
+	const { sections, css } = parsePageContentRows(result?.Sections || []);
+	return { sections, css, seo: result?.Config || {} };
+};
+
+// Storefront loader, CDN-first variant: reads the published snapshot
+// (live/pages/<companyID>-<pageID>.json) the backend writes on every save in
+// PostPageContent. The file is the exact WebpagePublicResult (SEO Config + active
+// Sections) GET.p-webpage returns, serialized with the compact-array format —
+// so it is JSON-parsed, then unmarshall'd back into {Config, Sections} before the
+// shared parse. pageID 0 → the resolved root page id, matching the snapshot name.
+export const getStoreWebpageFromCDN = async (pageID = 0, companyID = 0): Promise<IWebpageContent> => {
+	const url = Env.makeCDNRoute('live', 'pages', getStoreSnapshotName(pageID, companyID));
+
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error(`No se pudo obtener el snapshot CDN de la página (${response.status})`);
+	}
+
+	return parseStoreWebpageSnapshot(await response.json());
 };

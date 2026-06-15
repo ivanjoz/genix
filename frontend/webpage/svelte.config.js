@@ -69,7 +69,10 @@ const config = {
 			$lib: './lib'
 		},
 		prerender: {
-			handleHttpError: 'warn'
+			handleHttpError: 'warn',
+			// Default ['*'] crawls every non-dynamic route. The --page-base build
+			// (VITE_PRERENDER_BASE) renders ONLY the /base shell, so restrict the crawl.
+			entries: process.env.VITE_PRERENDER_BASE ? ['/base'] : ['*']
 		},
 		output: {
 			// 'split' enables code-splitting so vendor (node_modules) and app code land

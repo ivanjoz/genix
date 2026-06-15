@@ -21,6 +21,10 @@ interface Window {
   PRD_HOSTS: strings[]
   QAS_HOSTS: strings[]
   _env: {};
+  // The live storefront route starts fetching its published CDN snapshot from an
+  // inline <head> script (before the JS bundle loads) and parks the response here;
+  // onMount awaits it instead of issuing a second fetch.
+  _pageContentPromise?: Promise<unknown>;
 }
 
 // Build-time constants injected via Vite

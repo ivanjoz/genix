@@ -22,6 +22,7 @@ echo "[7] Inspeccionar/Compilar Backend"
 echo "[10] Deploy Cloudflare Worker"
 echo "[11] Deploy Company Webpage"
 echo "[12] Sincronizar Catálogo de Imágenes"
+echo "[13] Deploy Template Base (CDN /websites/base)"
 echo "Infraestructura ----------------"
 echo "[9] Desplegar Infraestructura"
 echo "Local Development --------------"
@@ -183,6 +184,15 @@ fi
 if has_action "12"; then
     echo "=== SINCRONIZANDO CATÁLOGO DE IMÁGENES ==="
     (cd backend && "$GO_PATH" run . fn-sync-image-assets) || exit 1
+fi
+
+# DESPLEGAR TEMPLATE BASE (CDN /websites/base)
+# Company-agnostic storefront shell: built once (prerender --page-base) and uploaded to
+# /websites/base; downstream tooling copies it, rewrites the cdn-url/page-id metas, and
+# serves it for any tenant/page.
+if has_action "13"; then
+    echo "=== DESPLEGANDO TEMPLATE BASE (CDN /websites/base) ==="
+    (cd backend && "$GO_PATH" run . fn-deploy-base-template) || exit 1
 fi
 
 if [ "$INTERACTIVE" -eq 1 ]; then
