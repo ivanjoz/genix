@@ -38,7 +38,10 @@
 		"pkg-core/**/*",
 		"pkg-services/**/*",
 		"pkg-ui/**/*"
-, "core/products-lists.ts"	]
+, "core/products-lists.ts"	],
+	// Bun test files (`bun:test`) are run by `bun test`, not svelte-check; exclude
+	// them so the type checker doesn't choke on the missing `bun:test` module.
+	"exclude": ["**/*.test.ts"]
 	// Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
 	// except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
 	//

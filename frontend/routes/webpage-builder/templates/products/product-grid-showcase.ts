@@ -1,4 +1,4 @@
-import type { SectionData } from '../../renderer/section-types';
+import type { SectionData } from '$ecommerce/renderer/section-types';
 
 /**
  * Product grid used directly in the AST. Unlike CategoryShowcase (which wraps the grid in

@@ -1,7 +1,7 @@
 <script lang="ts">
-import { editorStore } from '$ecommerce/stores/editor.svelte';
+import { editorStore } from '../stores/editor.svelte';
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
-import { collectEditableNodes, editorPropNames, editorPropLabel, getNodeProp, setNodeProp } from '$ecommerce/html-ast/editable';
+import { collectEditableNodes, editorPropNames, editorPropLabel, getNodeProp, setNodeProp } from '../html-ast/editable';
 import { getProductEcommerceData, type ProductCatalog } from '$ecommerce/services/productos.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import AstEditor from './AstEditor.svelte';

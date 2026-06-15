@@ -1,8 +1,8 @@
 <script lang="ts">
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 import { generatePaletteStyles } from '$ecommerce/renderer/token-resolver';
-import { editorStore } from '$ecommerce/stores/editor.svelte';
-import { liveCSS } from '$ecommerce/stores/live-css.svelte';
+import { editorStore } from '../stores/editor.svelte';
+import { liveCSS } from '../stores/live-css.svelte';
 import { parseHTML } from '$ecommerce/html-ast/parse-html';
   import SectionEditorLayer from './SectionEditorLayer.svelte';
   import BuilderSectionRender from './BuilderSectionRender.svelte';

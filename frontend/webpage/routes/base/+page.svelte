@@ -64,7 +64,8 @@
 			var cdn = document.getElementById("cdn-url")?.getAttribute("content") || "";
 			var file = document.getElementById("page-id")?.getAttribute("content") || "";
 			if (cdn && file) {
-				cdn = cdn.replace(/^https?:\\/\\//, "").replace(/\\/+$/, "");
+				cdn = cdn.replace("https://", "").replace("http://", "");
+				while (cdn.charAt(cdn.length - 1) === "/") cdn = cdn.slice(0, -1);
 				window._pageContentPromise = fetch("https://" + cdn + "/live/pages/" + file)
 					.then(function(response){ return response.json(); });
 			}

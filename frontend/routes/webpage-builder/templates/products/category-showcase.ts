@@ -1,4 +1,4 @@
-import type { SectionData } from '../../renderer/section-types';
+import type { SectionData } from '$ecommerce/renderer/section-types';
 
 /**
  * HTML-based category showcase. Demonstrates custom components inside the HTML

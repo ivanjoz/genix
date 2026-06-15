@@ -3,7 +3,7 @@
   import {
     isNoEdit, isTextRun, isTextLeaf, isImageNode, isLinkNode,
     childrenAsUnits, unitChildren, unitLabel, unitNoun, humanizeLabel,
-  } from '$ecommerce/html-ast/editable';
+  } from '../html-ast/editable';
   import { slideSync } from '$ecommerce/stores/slide-sync.svelte';
   import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
   import TextBlockEditor from './TextBlockEditor.svelte';

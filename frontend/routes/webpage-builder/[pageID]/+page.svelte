@@ -7,7 +7,7 @@
   import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
   import type { SectionData } from '$ecommerce/renderer/section-types';
   import { getPageContent, setCurrentPageID } from '$services/ecommerce/page-content.svelte';
-  import { editorStore } from '$ecommerce/stores/editor.svelte';
+  import { editorStore } from '../stores/editor.svelte';
   import '$domain/libs/fontello-prerender.css';
   import Header from '$ecommerce/components/Header.svelte';
   import Page from '$domain/Page.svelte';

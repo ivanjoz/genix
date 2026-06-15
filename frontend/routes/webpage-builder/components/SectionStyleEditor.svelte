@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
-  import { editorStore } from '$ecommerce/stores/editor.svelte';
+  import { editorStore } from '../stores/editor.svelte';
   import { TEXT_TAG } from '$ecommerce/html-ast/parse-html';
   import ImageBlockEditor from './ImageBlockEditor.svelte';
 

@@ -6,10 +6,10 @@
  * inputs to them. Because the AST lives inside the reactive editor store,
  * mutating a node's `text`/`attributes` re-renders the section in place.
  */
-import type { ComponentAST } from '../renderer/renderer-types';
-import type { EditorControl } from './coerce';
-import { TEXT_TAG } from './parse-html';
-import { getComponentSchema } from './component-schemas';
+import type { ComponentAST } from '$ecommerce/renderer/renderer-types';
+import type { EditorControl } from '$ecommerce/html-ast/coerce';
+import { TEXT_TAG } from '$ecommerce/html-ast/parse-html';
+import { getComponentSchema } from '$ecommerce/html-ast/component-schemas';
 
 export interface EditableNode {
 	/** the role label, e.g. 'title' | 'content' | 'button' */

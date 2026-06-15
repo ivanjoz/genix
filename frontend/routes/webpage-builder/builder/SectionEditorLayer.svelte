@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
-import { editorStore } from '$ecommerce/stores/editor.svelte';
+import { editorStore } from '../stores/editor.svelte';
   import { savePageContent, getCurrentPageID } from '$services/ecommerce/page-content.svelte';
   import { uploadShowcaseImage } from '$services/webpage/pages.svelte';
   import { captureShowcaseBlob } from './showcase-capture';

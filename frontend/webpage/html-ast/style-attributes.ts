@@ -4,8 +4,8 @@
  * Only color attributes are compiled to inline `style`, because a bare palette
  * index must become a CSS variable (`var(--color-N)`). Everything else
  * (spacing, sizing, alignment, etc.) is expressed with Tailwind classes,
- * compiled at runtime by the UnoCSS generator (`stores/uno-generator.ts`, via
- * `stores/live-css.svelte.ts`) and at build time by Tailwind, so it stays out
+ * compiled at runtime by the UnoCSS generator (`stores/uno-generator.ts`, driven
+ * by the builder's live-css store) and at build time by Tailwind, so it stays out
  * of here.
  *
  *   - A bare integer 1..10 -> `var(--color-N)` (palette token, resolved by the

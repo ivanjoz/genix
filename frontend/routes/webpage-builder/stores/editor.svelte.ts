@@ -1,7 +1,7 @@
-import type { SectionData } from '../renderer/section-types';
-import { schema as htmlSectionSchema } from '../renderer/HtmlSection.svelte';
+import type { SectionData } from '$ecommerce/renderer/section-types';
+import { schema as htmlSectionSchema } from '$ecommerce/renderer/HtmlSection.svelte';
 import { sectionTemplates } from '../templates';
-import { parseHTML } from '../html-ast/parse-html';
+import { parseHTML } from '$ecommerce/html-ast/parse-html';
 
 // id -> HTML plantilla lookup. HTML templates are an authoring source: their HTML is
 // parsed to an AST once at add time and stored as `Ast` (the canonical model).

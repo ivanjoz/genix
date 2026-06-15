@@ -2,7 +2,7 @@
 import { setContext } from 'svelte';
 import type { SectionData } from '$ecommerce/renderer/section-types';
 import HtmlSection, { schema as htmlSectionSchema } from '$ecommerce/renderer/HtmlSection.svelte';
-import { editorStore } from '$ecommerce/stores/editor.svelte';
+import { editorStore } from '../stores/editor.svelte';
 import { EC_BUILDER_MODE } from '$ecommerce/renderer/builder-context';
 
 // Mark everything rendered below as builder-mode so AST components (e.g. EcommerceSlider)

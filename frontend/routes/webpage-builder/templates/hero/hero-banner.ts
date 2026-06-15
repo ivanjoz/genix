@@ -1,4 +1,4 @@
-import type { SectionData } from '../../renderer/section-types';
+import type { SectionData } from '$ecommerce/renderer/section-types';
 
 /**
  * HTML-based hero banner. Demonstrates the HTML -> AST -> Svelte pipeline with

@@ -1,5 +1,5 @@
 import { editorStore } from './editor.svelte';
-import { collectTokens, generateCss } from './uno-generator';
+import { collectTokens, generateCss } from '$ecommerce/stores/uno-generator';
 
 /**
  * Live CSS for runtime-authored Tailwind classes in the builder.
