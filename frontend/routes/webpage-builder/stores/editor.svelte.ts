@@ -29,6 +29,11 @@ class EditorStore {
 
   // The ID of the section currently being edited
   selectedId = $state<string | null>(null);
+
+  // Canvas preview mode. 'mobile' renders the sections inside a ~390px iframe so real
+  // Tailwind breakpoints (md/lg are min-width media queries) resolve against that
+  // narrow viewport. Mobile is a limited view: drag-reorder is off, click-select only.
+  viewMode = $state<'desktop' | 'mobile'>('desktop');
   
   // The UI-friendly schema for the currently selected section
   activeSchema = $derived.by(() => {

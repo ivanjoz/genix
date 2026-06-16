@@ -6,6 +6,7 @@ import { liveCSS } from '../stores/live-css.svelte';
 import { parseHTML } from '$ecommerce/html-ast/parse-html';
   import SectionEditorLayer from './SectionEditorLayer.svelte';
   import BuilderSectionRender from './BuilderSectionRender.svelte';
+  import MobilePreviewFrame from './MobilePreviewFrame.svelte';
 
 import type { SectionData } from '$ecommerce/renderer/section-types';
 
@@ -112,8 +113,13 @@ import type { SectionData } from '$ecommerce/renderer/section-types';
 {/snippet}
 
 <div class="ecommerce-builder">
-  <div 
-    class="builder-canvas" 
+  {#if editorStore.viewMode === 'mobile'}
+    <!-- Limited preview: sections render inside a ~390px iframe (real mobile media
+         queries), click-to-select only, no drag-reorder. -->
+    <MobilePreviewFrame {paletteStyles} />
+  {:else}
+  <div
+    class="builder-canvas"
     role="region"
     aria-label="Editor Canvas"
     class:is-dragging-over={isDraggingOver}
@@ -180,6 +186,7 @@ import type { SectionData } from '$ecommerce/renderer/section-types';
       </div>
     {/if}
   </div>
+  {/if}
 
   <SectionEditorLayer
     palette={palette}
@@ -191,7 +198,7 @@ import type { SectionData } from '$ecommerce/renderer/section-types';
   .ecommerce-builder {
     position: relative;
     display: flex;
-    min-height: 100vh;
+    min-height: calc(100vh - var(--header-height));
     background: #f8fafc;
   }
 

@@ -59,7 +59,12 @@
 </script>
 
 <Page title="Builder" containerCss="p-0! w-[calc(100%-280px)]!" useTopMinimalMenu fixedFullHeight>
-  <Header />
+  <!-- The storefront chrome is desktop-styled and lives outside the canvas. In mobile
+       preview it would sit, full-width, atop a 390px body — so hide it; the iframe shows
+       the page body on its own. -->
+  {#if editorStore.viewMode !== 'mobile'}
+    <Header />
+  {/if}
   {#if loading}
     <div class="builder-loader">
       <div class="loader-spinner"></div>

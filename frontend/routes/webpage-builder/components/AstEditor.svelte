@@ -49,7 +49,7 @@
 
 <!-- One special (non-grouped) node: image / link / navigable container / text run /
      plain container. Text leaves never reach here — they are grouped into a TextBlockEditor. -->
-{#snippet specialNode(node: ComponentAST, siblings: ComponentAST[])}
+{#snippet specialNode(node: ComponentAST, siblings: ComponentAST[], container: ComponentAST | undefined)}
   {#if isImageNode(node)}
     <div class="field-item">
       <ImageBlockEditor {node} {palette} label={humanizeLabel(node)} />
@@ -70,13 +70,13 @@
         />
       {/if}
       {#if units[active]}
-        {@render renderSiblings([units[active]])}
+        {@render renderSiblings([units[active]], node)}
       {/if}
     </div>
   {:else if isLinkNode(node)}
     <!-- anchor: edit its text as a single-line group, plus its href -->
     <div class="field-item">
-      <TextBlockEditor lines={[node]} {siblings} {palette} />
+      <TextBlockEditor lines={[node]} {siblings} {container} {palette} />
       <input
         type="text"
         class="field-input link-input"
@@ -97,24 +97,24 @@
       ></textarea>
     </div>
   {:else if node.children}
-    <!-- plain container: no input of its own, recurse into its children -->
-    {@render renderSiblings(node.children)}
+    <!-- plain container: no input of its own, recurse into its children (it IS their container) -->
+    {@render renderSiblings(node.children, node)}
   {/if}
 {/snippet}
 
 <!-- Render a sibling list: group runs of text leaves / container lines into TextBlockEditors,
      and render everything else via specialNode. -->
-{#snippet renderSiblings(siblings: ComponentAST[])}
+{#snippet renderSiblings(siblings: ComponentAST[], container: ComponentAST | undefined)}
   {#each groupSiblings(siblings) as item, i (i)}
     {#if item.kind === 'lines'}
-      <TextBlockEditor lines={item.lines} {siblings} {palette} />
+      <TextBlockEditor lines={item.lines} {siblings} {container} {palette} />
     {:else}
-      {@render specialNode(item.node, siblings)}
+      {@render specialNode(item.node, siblings, container)}
     {/if}
   {/each}
 {/snippet}
 
-{@render renderSiblings(list)}
+{@render renderSiblings(list, undefined)}
 
 <style>
   .field-item {

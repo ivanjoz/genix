@@ -13,19 +13,26 @@ setContext(EC_BUILDER_MODE, true);
     section: SectionData;
     index: number;
     paletteStyles: string;
-    onDragStart: (e: DragEvent, index: number) => void;
-    onDragEnd: (e: DragEvent) => void;
-    onDragOver: (e: DragEvent, index: number) => void;
+    // 'full' = desktop canvas (drag-reorder + click). 'selectOnly' = mobile preview
+    // inside the iframe: drag wiring omitted, click-to-select kept. Drag callbacks are
+    // optional because the mobile preview mounts this without them.
+    interaction?: 'full' | 'selectOnly';
+    onDragStart?: (e: DragEvent, index: number) => void;
+    onDragEnd?: (e: DragEvent) => void;
+    onDragOver?: (e: DragEvent, index: number) => void;
   }
 
   let {
     section,
     index,
     paletteStyles,
+    interaction = 'full',
     onDragStart,
     onDragEnd,
     onDragOver
   }: Props = $props();
+
+  const isDraggable = $derived(interaction === 'full');
 
   const isSelected = $derived(editorStore.selectedId === section.id);
   const isHtmlSection = $derived(section.Type === 'HtmlSection');
@@ -71,14 +78,14 @@ setContext(EC_BUILDER_MODE, true);
   class="section-wrapper"
   class:section-selected={isSelected}
   
-  draggable="true"
-  ondragstart={(e) => {
+  draggable={isDraggable}
+  ondragstart={isDraggable ? (e) => {
     setReorderDragImage(e, isHtmlSection ? htmlSectionSchema.name : section.Type || 'Section');
-    onDragStart(e, index);
-  }}
-  ondragend={onDragEnd}
-  ondragover={(e) => onDragOver(e, index)}
-  
+    onDragStart?.(e, index);
+  } : undefined}
+  ondragend={isDraggable ? onDragEnd : undefined}
+  ondragover={isDraggable ? (e) => onDragOver?.(e, index) : undefined}
+
   onclick={handleSelect}
   role="button"
   tabindex="0"
@@ -94,7 +101,7 @@ setContext(EC_BUILDER_MODE, true);
       </svg>
     </span>
     <span>{isHtmlSection ? htmlSectionSchema.name : section.Type}</span>
-    <span class="section-label-hint">Click to edit • Drag to move</span>
+    <span class="section-label-hint">{isDraggable ? 'Click to edit • Drag to move' : 'Click to edit'}</span>
   </div>
   
   <div class="section-content" style={paletteStyles}>

@@ -101,16 +101,30 @@ import { editorStore } from '../stores/editor.svelte';
       </div>
     </div>
 
-    {#if editorStore.selectedId && activeTabId === 'editor'}
+    {#if activeTabId === 'editor'}
       <div class="layer-actions">
-        {#if editorStore.activeSchema}
-          <span class="section-title" title={editorStore.activeSchema.name}>{editorStore.activeSchema.name}</span>
-        {/if}
-        <button class="action-btn save-btn" onclick={handleSave} title={tr('Save|Guardar', Core.languaje)}>
-          <T text="Save|Guardar" />
+        <!-- View toggle: always present (even with no selection) so the user can
+             return from mobile preview to desktop after deselecting. Replaces the
+             former section-title text. -->
+        <button
+          class="action-btn view-btn"
+          class:active={editorStore.viewMode === 'mobile'}
+          onclick={() => editorStore.viewMode = editorStore.viewMode === 'mobile' ? 'desktop' : 'mobile'}
+          title={tr('Toggle mobile view|Alternar vista móvil', Core.languaje)}
+          aria-label="Toggle mobile view"
+        >
+          <!-- icon-mobile/icon-desktop have no glyph in the bundled fontello set; use
+               the device glyph for "go mobile" and the expand glyph for "back to full". -->
+          <i class={editorStore.viewMode === 'mobile' ? 'icon-resize-full' : 'icon-tablet'}></i>
         </button>
-        <button class="action-btn delete-btn" onclick={handleDelete} title={tr('Delete|Eliminar', Core.languaje)} aria-label="Delete the section"><i class="icon-trash"></i></button>
-        <button class="action-btn close-btn icon-btn" onclick={handleClose} title={tr('Close|Cerrar', Core.languaje)} aria-label="Close the section editor"><i class="icon-cancel"></i></button>
+        <span class="spacer"></span>
+        {#if editorStore.selectedId}
+          <button class="action-btn save-btn" onclick={handleSave} title={tr('Save|Guardar', Core.languaje)}>
+            <T text="Save|Guardar" />
+          </button>
+          <button class="action-btn delete-btn" onclick={handleDelete} title={tr('Delete|Eliminar', Core.languaje)} aria-label="Delete the section"><i class="icon-trash"></i></button>
+          <button class="action-btn close-btn icon-btn" onclick={handleClose} title={tr('Close|Cerrar', Core.languaje)} aria-label="Close the section editor"><i class="icon-cancel"></i></button>
+        {/if}
       </div>
     {/if}
 
@@ -224,22 +238,43 @@ import { editorStore } from '../stores/editor.svelte';
   .layer-actions {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
     gap: 8px;
     padding: 8px 12px;
     flex-shrink: 0;
     border-bottom: 1px solid #1e293b;
   }
 
-  .section-title {
+  /* Pushes the selection actions (Save/Delete/Close) to the right, leaving the
+     view toggle on the left where the section title used to sit. */
+  .spacer {
     flex: 1;
-    min-width: 0;
-    font-size: 14px;
-    font-weight: 700;
-    color: #94a3b8;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  }
+
+  .view-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 32px;
+    padding: 0;
+    background: #334155;
+    color: #cbd5e1;
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .view-btn :global(i) {
+    line-height: 1;
+  }
+
+  .view-btn:hover {
+    background: #475569;
+    color: white;
+  }
+
+  .view-btn.active {
+    background: #3b82f6;
+    color: white;
   }
 
   .action-btn {

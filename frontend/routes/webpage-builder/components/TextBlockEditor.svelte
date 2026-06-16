@@ -56,23 +56,77 @@
     lines: ComponentAST[];
     /** The parent's children array — spliced when adding (+) or removing lines. */
     siblings: ComponentAST[];
+    /**
+     * The wrapping container node (the parent whose `children` is `siblings`), when one
+     * exists. Its box (width / height / max-* / margin / padding) is what the "Container"
+     * tool edits — shown only while no textarea is focused. Absent at the top level.
+     */
+    container?: ComponentAST;
     /** Active palette — its 10 colors back the color/background swatches. */
     palette?: ColorPalette;
   }
 
-  let { lines, siblings, palette }: Props = $props();
+  let { lines, siblings, container, palette }: Props = $props();
 
   // Discrete spacing steps (px). `--spacing` is 1px in this project, so the px
   // value IS the Tailwind number (pt-8 = 8px). 2px steps up to 16, then 4px.
   const STEPS = [0, 2, 4, 6, 8, 10, 12, 14, 16, 20, 24, 28, 32];
 
-  // Toolbar tools. Each opens an options row absolutely positioned below the bar.
+  // Discrete dimension steps for the container's width/height. The step grows as the
+  // value does, so the slider stays usable across a big range. Each segment boundary is
+  // always landed exactly (last gap may be short).
+  function buildSteps(start: number, segments: { to: number; step: number }[]): number[] {
+    const out = [start];
+    let v = start;
+    for (const seg of segments) {
+      while (v < seg.to) {
+        v = Math.min(v + seg.step, seg.to);
+        out.push(v);
+      }
+    }
+    return out;
+  }
+  // Height: 10→1000 — 10s up to 100, 20s to 300, 40s to 1000.
+  const HEIGHT_STEPS = buildSteps(10, [
+    { to: 100, step: 10 },
+    { to: 300, step: 20 },
+    { to: 1000, step: 40 },
+  ]);
+  // Width: 40→1400 — 10s up to 200, 20s to 600, 40s to 1400.
+  const WIDTH_STEPS = buildSteps(40, [
+    { to: 200, step: 10 },
+    { to: 600, step: 20 },
+    { to: 1400, step: 40 },
+  ]);
+
+  // The container's dimension controls — each a Tailwind arbitrary-value family. Grouped so
+  // the Width tool edits width + max-width, and the Height tool edits height + max-height.
+  const WIDTH_DIMS = [
+    { label: 'Width', prefix: 'w', table: WIDTH_STEPS },
+    { label: 'Max width', prefix: 'max-w', table: WIDTH_STEPS },
+  ];
+  const HEIGHT_DIMS = [
+    { label: 'Height', prefix: 'h', table: HEIGHT_STEPS },
+    { label: 'Max height', prefix: 'max-h', table: HEIGHT_STEPS },
+  ];
+
+  // Text-mode toolbar tools — act on the focused fragment. Each opens an options row.
   const TOOLS = [
     { id: 'padding', label: 'Padding' },
     { id: 'margin', label: 'Margin' },
     { id: 'fontSize', label: 'Font size' },
     { id: 'color', label: 'Text color' },
     { id: 'bgColor', label: 'Background color' },
+  ];
+
+  // Container-mode toolbar tools — act on the wrapping container box. Same separate-button
+  // pattern as TOOLS; ids are prefixed `c-` so they never collide with the text tools.
+  const CONTAINER_TOOLS = [
+    { id: 'c-padding', label: 'Padding', icon: 'padding' },
+    { id: 'c-margin', label: 'Margin', icon: 'margin' },
+    { id: 'c-width', label: 'Width', icon: 'width' },
+    { id: 'c-height', label: 'Height', icon: 'height' },
+    { id: 'c-bgColor', label: 'Background color', icon: 'bgColor' },
   ];
 
   // Compact inline SVG icons (currentColor) — one glyph per tool.
@@ -90,6 +144,11 @@
     // The new "add line" glyph (plus) — splits the block at the focused line.
     addLine:
       '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>',
+    // Container width / height glyphs — double-headed arrows along each axis.
+    width:
+      '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h12M2 8l2.5-2.5M2 8l2.5 2.5M14 8l-2.5-2.5M14 8l-2.5 2.5"/></svg>',
+    height:
+      '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v12M8 2L5.5 4.5M8 2l2.5 2.5M8 14l-2.5-2.5M8 14l2.5-2.5"/></svg>',
   };
 
   const SIDES = [
@@ -108,6 +167,12 @@
   // The fragment whose styling the toolbar edits — set on textarea focus, kept across
   // blur so clicking a toolbar button still targets the last-focused fragment.
   let focusedFragment = $state<ComponentAST | null>(null);
+
+  // Which toolbar the bar shows: the per-fragment TEXT tools while a textarea (or a
+  // toolbar control following one) holds focus, else the single CONTAINER tool. Set true
+  // on textarea focus; cleared only when focus leaves the editor entirely (so clicking a
+  // text tool, which blurs the textarea onto a button still inside `root`, keeps it true).
+  let isFocused = $state(false);
 
   // --- Fragments model -----------------------------------------------------------
 
@@ -185,6 +250,22 @@
     if (el) placeCaret(el, caret);
     else pendingFocus = { frag, caret };
   }
+
+  // Leaving the editor entirely (focus moves to an element outside `root`, or nowhere)
+  // switches the toolbar back to container mode and closes any open popup. Focus moving
+  // to a toolbar button inside `root` (a text-tool click) is NOT leaving — it stays.
+  $effect(() => {
+    if (!root) return;
+    const onFocusOut = (e: FocusEvent) => {
+      const next = e.relatedTarget as Node | null;
+      if (!next || !root!.contains(next)) {
+        isFocused = false;
+        openTool = null;
+      }
+    };
+    root.addEventListener('focusout', onFocusOut);
+    return () => root!.removeEventListener('focusout', onFocusOut);
+  });
 
   // Close the options popup when clicking anywhere outside this editor.
   $effect(() => {
@@ -284,11 +365,11 @@
   // --- Tailwind class helpers (padding / margin / font-size live on the fragment) ---
 
   const tokens = () => (target?.css || '').split(/\s+/).filter(Boolean);
+  const ctokens = () => (container?.css || '').split(/\s+/).filter(Boolean);
 
-  /** Effective px for one side, honoring shorthand (p / px / py) so sliders init right. */
-  function sidePx(prefix: string, side: string): number {
+  /** Effective px for one side of a spacing family in `list`, honoring p / px / py shorthand. */
+  function sidePxFrom(list: string[], prefix: string, side: string): number {
     const axis = side === 'l' || side === 'r' ? 'x' : 'y';
-    const list = tokens();
     const num = (p: string) => {
       const found = list.find((x) => x.startsWith(p + '-'));
       const n = found ? parseInt(found.slice(p.length + 1), 10) : NaN;
@@ -297,17 +378,57 @@
     return num(prefix + side) ?? num(prefix + axis) ?? num(prefix) ?? 0;
   }
 
-  /** Rebuild all four sides of a spacing family, dropping any prior shorthand/axis tokens. */
-  function setSide(prefix: string, side: string, px: number) {
+  /** Rebuild all four sides of a spacing family in `list`, dropping prior shorthand/axis tokens. */
+  function setSideIn(list: string[], prefix: string, side: string, px: number): string {
     const vals: Record<string, number> = {
-      t: sidePx(prefix, 't'), r: sidePx(prefix, 'r'),
-      b: sidePx(prefix, 'b'), l: sidePx(prefix, 'l'),
+      t: sidePxFrom(list, prefix, 't'), r: sidePxFrom(list, prefix, 'r'),
+      b: sidePxFrom(list, prefix, 'b'), l: sidePxFrom(list, prefix, 'l'),
     };
     vals[side] = px;
     const families = [prefix, prefix + 'x', prefix + 'y', prefix + 't', prefix + 'r', prefix + 'b', prefix + 'l'];
-    const kept = tokens().filter((x) => !families.some((f) => x.startsWith(f + '-')));
+    const kept = list.filter((x) => !families.some((f) => x.startsWith(f + '-')));
     for (const s of ['t', 'r', 'b', 'l']) if (vals[s] > 0) kept.push(`${prefix}${s}-${vals[s]}`);
-    if (target) target.css = kept.join(' ');
+    return kept.join(' ');
+  }
+
+  // Per-fragment spacing (toolbar text tools) — operates on `target.css`.
+  const sidePx = (prefix: string, side: string) => sidePxFrom(tokens(), prefix, side);
+  function setSide(prefix: string, side: string, px: number) {
+    if (target) target.css = setSideIn(tokens(), prefix, side, px);
+  }
+
+  // Container spacing (container tool) — operates on `container.css`.
+  const cSidePx = (prefix: string, side: string) => sidePxFrom(ctokens(), prefix, side);
+  function setCSide(prefix: string, side: string, px: number) {
+    if (container) container.css = setSideIn(ctokens(), prefix, side, px);
+  }
+
+  // --- Container dimensions (width / height / max-*) live as `w-[Npx]` etc. on container.css ---
+
+  // `--spacing` is 1px, so `w-40` = 40px (no need for the arbitrary `w-[40px]` form).
+  // Read our own numeric token; matching ANY token in the family (incl. variant prefixes
+  // and non-numeric utilities like w-full / w-3/4) so setting a value fully replaces them.
+  const dimValRe = (prefix: string) => new RegExp(`^${prefix}-(\\d+)$`);
+  const dimFamilyRe = (prefix: string) => new RegExp(`^(?:[\\w-]+:)*${prefix}-`);
+  /** Current px for a dimension family (0 = unset). */
+  function dimPx(prefix: string): number {
+    const m = ctokens().map((x) => x.match(dimValRe(prefix))).find(Boolean);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  /** Slider index for a dimension: 0 = Off, else nearest table entry + 1. */
+  function dimIndex(prefix: string, table: number[]): number {
+    const px = dimPx(prefix);
+    if (!px) return 0;
+    let best = 0;
+    for (let i = 1; i < table.length; i++)
+      if (Math.abs(table[i] - px) < Math.abs(table[best] - px)) best = i;
+    return best + 1;
+  }
+  /** Set/clear a dimension family on the container (px = 0 removes the whole family). */
+  function setDim(prefix: string, px: number) {
+    const kept = ctokens().filter((x) => !dimFamilyRe(prefix).test(x));
+    if (px > 0) kept.push(`${prefix}-${px}`);
+    if (container) container.css = kept.join(' ');
   }
 
   /** Nearest STEPS index for a px value (slider position). */
@@ -317,36 +438,67 @@
     return best;
   }
 
-  const FONT_RE = /^text-\[\d+px\]$/;
+  // Every font-size utility — named scale (text-lg), numeric (text-40), or arbitrary size
+  // (text-[18px]/rem/em) — with any variant prefix (md:text-xl). Matched so setting a size
+  // strips ALL of them. Deliberately NOT matching colors (text-slate-500, text-[#fff]) or
+  // keywords (text-center), which start differently / aren't sizes.
+  const FONT_SIZE_RE = /^(?:[\w-]+:)*text-(?:xs|sm|base|lg|xl|[2-9]xl|\[[\d.]+(?:px|rem|em)\]|\d+)$/;
+  const OUR_FONT_RE = /^text-\[(\d+)px\]$/;
   const fontPx = () => {
-    const t = tokens().find((x) => FONT_RE.test(x));
-    return t ? parseInt(t.slice(6, -3), 10) : 0; // text-[18px] -> 18; 0 = unset
+    const m = tokens().map((x) => x.match(OUR_FONT_RE)).find(Boolean);
+    return m ? parseInt(m[1], 10) : 0; // text-[18px] -> 18; 0 = unset
   };
   function setFontPx(px: number) {
-    const kept = tokens().filter((x) => !FONT_RE.test(x));
+    const kept = tokens().filter((x) => !FONT_SIZE_RE.test(x));
     if (px > 0) kept.push(`text-[${px}px]`);
     if (target) target.css = kept.join(' ');
   }
 
-  // --- Color helpers (palette tokens live on the fragment style as var(--color-N)) ---
+  // Named Tailwind font sizes — quick presets alongside the px slider. Picking one is
+  // mutually exclusive with a px value (both go through FONT_SIZE_RE on the way out).
+  const FONT_SIZES = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl'];
+  const NAMED_FONT_RE = /^text-(xs|sm|base|lg|xl|[2-9]xl)$/;
+  const fontNamed = () => {
+    const m = tokens().map((x) => x.match(NAMED_FONT_RE)).find(Boolean);
+    return m ? m[1] : null;
+  };
+  function setFontNamed(size: string) {
+    const toggleOff = fontNamed() === size;
+    const kept = tokens().filter((x) => !FONT_SIZE_RE.test(x));
+    if (!toggleOff) kept.push(`text-${size}`);
+    if (target) target.css = kept.join(' ');
+  }
 
-  function styleDecls(): Record<string, string> {
+  // --- Color helpers (palette tokens live on a node's style as var(--color-N)) ---
+
+  function parseStyle(style: string | undefined): Record<string, string> {
     const out: Record<string, string> = {};
-    for (const d of (target?.style || '').split(';')) {
+    for (const d of (style || '').split(';')) {
       const [k, v] = d.split(':');
       if (k && v) out[k.trim()] = v.trim();
     }
     return out;
   }
-  function colorIndex(prop: string): number | null {
-    const m = styleDecls()[prop]?.match(/^var\(--color-(\d+)\)$/);
+  function colorIdxOf(style: string | undefined, prop: string): number | null {
+    const m = parseStyle(style)[prop]?.match(/^var\(--color-(\d+)\)$/);
     return m ? parseInt(m[1], 10) : null;
   }
-  function setColor(prop: string, idx: number | null) {
-    const decls = styleDecls();
+  function applyColor(style: string | undefined, prop: string, idx: number | null): string {
+    const decls = parseStyle(style);
     if (idx) decls[prop] = `var(--color-${idx})`;
     else delete decls[prop];
-    if (target) target.style = Object.entries(decls).map(([k, v]) => `${k}: ${v};`).join(' ');
+    return Object.entries(decls).map(([k, v]) => `${k}: ${v};`).join(' ');
+  }
+
+  // Per-fragment colors (text tools) — on `target.style`.
+  const colorIndex = (prop: string) => colorIdxOf(target?.style, prop);
+  function setColor(prop: string, idx: number | null) {
+    if (target) target.style = applyColor(target.style, prop, idx);
+  }
+  // Container color (container tool) — on `container.style`.
+  const cColorIndex = (prop: string) => colorIdxOf(container?.style, prop);
+  function setCColor(prop: string, idx: number | null) {
+    if (container) container.style = applyColor(container.style, prop, idx);
   }
 </script>
 
@@ -354,24 +506,44 @@
   <!-- Toolbar (relative anchor for the absolute options panel below it). Acts on the
        focused fragment; the + button on the right adds a new line (block break). -->
   <div class="toolbar">
-    {#each TOOLS as tool}
-      <button
-        type="button"
-        class="tool-btn"
-        class:active={openTool === tool.id}
-        title={tool.label}
-        aria-label={tool.label}
-        onclick={() => (openTool = openTool === tool.id ? null : tool.id)}
-      >
-        {@html ICONS[tool.id]}
-      </button>
-    {/each}
+    {#if isFocused}
+      <!-- Text mode: per-fragment tools acting on the focused textarea. -->
+      {#each TOOLS as tool}
+        <button
+          type="button"
+          class="tool-btn"
+          class:active={openTool === tool.id}
+          title={tool.label}
+          aria-label={tool.label}
+          onmousedown={(e) => e.preventDefault()}
+          onclick={() => (openTool = openTool === tool.id ? null : tool.id)}
+        >
+          {@html ICONS[tool.id]}
+        </button>
+      {/each}
+    {:else if container}
+      <!-- Container mode (nothing focused): separate tools editing the wrapping container box. -->
+      {#each CONTAINER_TOOLS as tool}
+        <button
+          type="button"
+          class="tool-btn"
+          class:active={openTool === tool.id}
+          title={tool.label}
+          aria-label={tool.label}
+          onmousedown={(e) => e.preventDefault()}
+          onclick={() => (openTool = openTool === tool.id ? null : tool.id)}
+        >
+          {@html ICONS[tool.icon]}
+        </button>
+      {/each}
+    {/if}
 
     <button
       type="button"
       class="tool-btn add-line"
       title="Add line (block break)"
       aria-label="Add line"
+      onmousedown={(e) => e.preventDefault()}
       onclick={addLine}
     >
       {@html ICONS.addLine}
@@ -379,7 +551,71 @@
 
     {#if openTool}
       <div class="options">
-        {#if openTool === 'padding' || openTool === 'margin'}
+        {#if openTool === 'c-padding' || openTool === 'c-margin'}
+          {@const prefix = openTool === 'c-padding' ? 'p' : 'm'}
+          <!-- Container spacing (4 sides) — same widget as the text tools, on container.css. -->
+          <div class="sliders">
+            {#each SIDES as side}
+              {@const idx = stepIndex(cSidePx(prefix, side.key))}
+              <label class="slider-row">
+                <span class="slider-label">{side.label}</span>
+                <input
+                  type="range"
+                  min="0"
+                  max={STEPS.length - 1}
+                  step="1"
+                  value={idx}
+                  oninput={(e) => setCSide(prefix, side.key, STEPS[+e.currentTarget.value])}
+                />
+                <span class="slider-val">{STEPS[idx]}px</span>
+              </label>
+            {/each}
+          </div>
+        {:else if openTool === 'c-width' || openTool === 'c-height'}
+          {@const dims = openTool === 'c-width' ? WIDTH_DIMS : HEIGHT_DIMS}
+          <!-- Container size: the dimension + its max, on container.css as w-[Npx] etc. -->
+          <div class="sliders">
+            {#each dims as dim}
+              {@const di = dimIndex(dim.prefix, dim.table)}
+              <label class="slider-row">
+                <span class="slider-label">{dim.label}</span>
+                <input
+                  type="range"
+                  min="0"
+                  max={dim.table.length}
+                  step="1"
+                  value={di}
+                  oninput={(e) => setDim(dim.prefix, +e.currentTarget.value === 0 ? 0 : dim.table[+e.currentTarget.value - 1])}
+                />
+                <span class="slider-val">{di === 0 ? 'Off' : dim.table[di - 1] + 'px'}</span>
+              </label>
+            {/each}
+          </div>
+        {:else if openTool === 'c-bgColor'}
+          {@const current = cColorIndex('background-color')}
+          <!-- Container background color — palette swatches, on container.style. -->
+          <div class="swatches">
+            <button
+              type="button"
+              class="swatch none"
+              class:sel={current === null}
+              title="None"
+              aria-label="No color"
+              onclick={() => setCColor('background-color', null)}>✕</button
+            >
+            {#each palette?.colors ?? [] as hex, i}
+              <button
+                type="button"
+                class="swatch"
+                class:sel={current === i + 1}
+                style={`background:${hex}`}
+                title={`Color ${i + 1}`}
+                aria-label={`Color ${i + 1}`}
+                onclick={() => setCColor('background-color', i + 1)}
+              ></button>
+            {/each}
+          </div>
+        {:else if openTool === 'padding' || openTool === 'margin'}
           {@const prefix = openTool === 'padding' ? 'p' : 'm'}
           <div class="sliders">
             {#each SIDES as side}
@@ -400,11 +636,26 @@
           </div>
         {:else if openTool === 'fontSize'}
           {@const fp = fontPx()}
-          <label class="slider-row">
-            <span class="slider-label">Size</span>
-            <input type="range" min="0" max="72" step="2" value={fp} oninput={(e) => setFontPx(+e.currentTarget.value)} />
-            <span class="slider-val">{fp ? fp + 'px' : 'Off'}</span>
-          </label>
+          {@const named = fontNamed()}
+          <div class="sliders">
+            <div class="size-presets">
+              {#each FONT_SIZES as sz}
+                <button
+                  type="button"
+                  class="size-btn"
+                  class:sel={named === sz}
+                  title={`text-${sz}`}
+                  onmousedown={(e) => e.preventDefault()}
+                  onclick={() => setFontNamed(sz)}>{sz}</button
+                >
+              {/each}
+            </div>
+            <label class="slider-row">
+              <span class="slider-label">Size</span>
+              <input type="range" min="0" max="72" step="2" value={fp} oninput={(e) => setFontPx(+e.currentTarget.value)} />
+              <span class="slider-val">{fp ? fp + 'px' : 'Off'}</span>
+            </label>
+          </div>
         {:else}
           {@const prop = openTool === 'color' ? 'color' : 'background-color'}
           {@const current = colorIndex(prop)}
@@ -451,7 +702,7 @@
               use:registerEl={frag}
               value={frag.text ?? ''}
               oninput={(e) => (frag.text = e.currentTarget.value)}
-              onfocus={() => (focusedFragment = frag)}
+              onfocus={() => { focusedFragment = frag; isFocused = true; if (openTool?.startsWith('c-')) openTool = null; }}
               onkeydown={(e) => onKeydown(e, line, frag)}
             ></textarea>
           {/if}
@@ -535,6 +786,8 @@
     border: 1px solid #3b82f6;
     border-radius: 8px;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+    max-height: 60vh;
+    overflow-y: auto;
   }
 
   .sliders {
@@ -562,6 +815,32 @@
   .slider-row input[type='range'] {
     width: 100%;
     accent-color: #3b82f6;
+  }
+
+  /* Named font-size presets (xs … 5xl) above the px slider. */
+  .size-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .size-btn {
+    min-width: 30px;
+    padding: 3px 8px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 5px;
+    color: #cbd5e1;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .size-btn:hover {
+    background: #334155;
+    color: #f1f5f9;
+  }
+  .size-btn.sel {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
   }
 
   .swatches {
@@ -595,8 +874,10 @@
   .lines {
     display: flex;
     flex-direction: column;
-    padding: 6px;
-    gap: 4px;
+    /* Clip the flush textareas to the container's rounded bottom corners. */
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    overflow: hidden;
   }
 
   /* Fragments of one line: stacked tightly (no rule) — they are one visual line. */
@@ -628,10 +909,11 @@
 
   .tbe-text {
     width: 100%;
-    padding: 6px 10px;
+    padding: 5px 8px 5px 6px;
     background: #1e293b;
-    border: 1px solid transparent;
-    border-radius: 5px;
+    border: none;
+    /* Reserve the focus accent up-front so focusing doesn't shift the text. */
+    border-left: 4px solid transparent;
     color: #f1f5f9;
     font-size: 13px;
     line-height: 1.5;
@@ -643,8 +925,7 @@
   }
   .tbe-text:focus {
     outline: none;
-    background: #0f172a;
-    border-color: #3b82f6;
+    border-left-color: #3b82f6;
   }
   /* Highlight the whole editor on focus. */
   .tbe:focus-within {
