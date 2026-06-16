@@ -61,6 +61,87 @@ export function isTextRun(node: ComponentAST): boolean {
 	return node.tagName === TEXT_TAG;
 }
 
+// --- Multi-fragment text grouping (WYSIWYG TextBlockEditor) ---------------------
+//
+// One TextBlockEditor edits a GROUP of sibling "line" nodes. A line is a block-ish
+// node (p / h2 / li / span) whose inline children are its editable "fragments"
+// (spans / icon spans). Adjacent text leaves merge into one multi-line editor; a
+// container line (e.g. <li> holding an icon span + a text span) gets its own editor.
+
+/** Inline tags that may live INSIDE a line as fragments (a leaf each, no deeper nesting). */
+const INLINE_FRAGMENT_TAGS = new Set(['span', 'strong', 'em', 'small', 'b', 'i', TEXT_TAG]);
+
+/**
+ * A container whose children are ALL inline text/icon fragments (e.g. `<li>` with an
+ * icon span + a text span). It becomes a single one-line editor whose fragments are
+ * those children. Anything deeper (blocks, links, images, nested containers) disqualifies it.
+ */
+export function isContainerLine(node: ComponentAST): boolean {
+	const kids = node.children;
+	if (!kids?.length) return false;
+	return kids.every(
+		(k) =>
+			INLINE_FRAGMENT_TAGS.has(k.tagName) &&
+			(k.tagName === TEXT_TAG || typeof k.text === 'string') &&
+			!k.children?.length,
+	);
+}
+
+/**
+ * Tags that always get their OWN one-line editor instead of merging with neighbours —
+ * a list item is its own bullet. Everything else text-bearing (p, h1–h6, span, …) merges.
+ */
+const STANDALONE_LINE_TAGS = new Set(['li', 'dt', 'dd']);
+
+/** A node holds editable text directly (leaf) or as inline span/icon fragments (container line). */
+function isTextLine(node: ComponentAST): boolean {
+	return isTextLeaf(node) || isContainerLine(node);
+}
+
+/** One rendered item of an AST level: a grouped text editor, or a single special node. */
+export type EditorItem =
+	| { kind: 'lines'; lines: ComponentAST[] }
+	| { kind: 'node'; node: ComponentAST };
+
+/**
+ * Split a sibling list into editor items. Consecutive mergeable text lines (p, h2, span…)
+ * collapse into one `lines` group (each is a line); a standalone-tag line (`<li>`) gets its
+ * own one-line group; images, links, navigable containers, text runs, and plain containers
+ * stay standalone. Eligibility is by TAG so a `<p>` keeps merging after Enter materializes
+ * it into `<p><span>…</span></p>`.
+ */
+export function groupSiblings(siblings: ComponentAST[]): EditorItem[] {
+	const items: EditorItem[] = [];
+	let run: ComponentAST[] | null = null;
+	const flush = () => {
+		if (run) {
+			items.push({ kind: 'lines', lines: run });
+			run = null;
+		}
+	};
+	for (const node of siblings) {
+		if (isNoEdit(node)) {
+			flush();
+			continue; // opted out: render nothing
+		}
+		// A link / image / navigable container / text run breaks any open run, on its own.
+		if (isImageNode(node) || isLinkNode(node) || childrenAsUnits(node) || isTextRun(node)) {
+			flush();
+			items.push({ kind: 'node', node });
+		} else if (isTextLine(node) && STANDALONE_LINE_TAGS.has(node.tagName)) {
+			flush();
+			items.push({ kind: 'lines', lines: [node] }); // <li>: its own editor
+		} else if (isTextLine(node)) {
+			(run ??= []).push(node); // mergeable text line: accumulate
+		} else {
+			flush();
+			items.push({ kind: 'node', node }); // plain container: recurse in AstEditor
+		}
+	}
+	flush();
+	return items;
+}
+
 /**
  * A leaf element that directly carries text (parse-html collapses it into `node.text`).
  * An empty string still counts: clearing the field must not drop the node from the editor.

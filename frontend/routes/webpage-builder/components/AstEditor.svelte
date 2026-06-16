@@ -1,17 +1,31 @@
 <script lang="ts">
   import type { ComponentAST, ColorPalette } from '$ecommerce/renderer/renderer-types';
   import {
-    isNoEdit, isTextRun, isTextLeaf, isImageNode, isLinkNode,
+    isTextRun, isImageNode, isLinkNode,
     childrenAsUnits, unitChildren, unitLabel, unitNoun, humanizeLabel,
+    groupSiblings,
   } from '../html-ast/editable';
   import { slideSync } from '$ecommerce/stores/slide-sync.svelte';
   import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
   import TextBlockEditor from './TextBlockEditor.svelte';
   import ImageBlockEditor from './ImageBlockEditor.svelte';
 
-  // Recursive editor mirroring AstRenderer: it walks the SAME section AST and emits
-  // editor controls instead of DOM. Editability is derived from node shape (text / image /
-  // link / slide-container) — no `data-role` required; `data-role` only labels a field.
+  // AstEditor — the editing twin of AstRenderer.
+  //
+  // GOAL: walk the SAME reactive section AST that AstRenderer paints to the live preview,
+  // but emit editor controls instead of DOM. Because both sides share the one AST, every
+  // edit a control makes shows up in the preview instantly — there is no separate "model".
+  //
+  // HOW: per AST level, `groupSiblings(siblings)` partitions the children into items:
+  //   - { kind: 'lines' } — a run of mergeable text lines (e.g. <h2>+<p>) OR a single
+  //     standalone line (<li>); handed wholesale to ONE TextBlockEditor (which owns its
+  //     own line/fragment editing). This is what collapses many old per-leaf editors into
+  //     a few grouped ones.
+  //   - { kind: 'node' } — anything else (image / link / slider-or-tab container / mixed
+  //     text run / plain container), rendered by `specialNode`. Plain containers recurse
+  //     via `renderSiblings`, so grouping happens independently at each nesting level.
+  // `siblings` (the parent's children array) is passed down so TextBlockEditor can splice
+  // new/removed line nodes into the real, reactive array — never a copy.
   interface Props {
     nodes: ComponentAST | ComponentAST[];
     palette?: ColorPalette;
@@ -33,36 +47,13 @@
   }
 </script>
 
-{#snippet field(label: string, node: ComponentAST)}
-  <div class="field-item">
-    {#if isImageNode(node)}
-      <ImageBlockEditor {node} {palette} {label} />
-    {:else}
-      <TextBlockEditor {node} {palette} {label} rows={node.role === 'content' ? 3 : 2} />
-      {#if isLinkNode(node)}
-        <input
-          type="text"
-          class="field-input link-input"
-          value={node.attributes?.href || ''}
-          oninput={(e) => setNodeHref(node, e.currentTarget.value)}
-          placeholder="Link URL (href)"
-        />
-      {/if}
-    {/if}
-  </div>
-{/snippet}
-
-{#snippet renderNode(node: ComponentAST)}
-  {#if isNoEdit(node)}
-    <!-- opted out via data-noedit -->
-  {:else if isTextRun(node)}
-    <!-- standalone text run inside mixed content: text only, no styling toolbar -->
+<!-- One special (non-grouped) node: image / link / navigable container / text run /
+     plain container. Text leaves never reach here — they are grouped into a TextBlockEditor. -->
+{#snippet specialNode(node: ComponentAST, siblings: ComponentAST[])}
+  {#if isImageNode(node)}
     <div class="field-item">
-      <span class="field-label">Text</span>
-      <TextBlockEditor {node} {palette} textOnly rows={2} />
+      <ImageBlockEditor {node} {palette} label={humanizeLabel(node)} />
     </div>
-  {:else if isImageNode(node)}
-    {@render field(humanizeLabel(node), node)}
   {:else if childrenAsUnits(node)}
     {@const units = unitChildren(node)}
     {@const active = slideSync.get(node.children)}
@@ -79,32 +70,64 @@
         />
       {/if}
       {#if units[active]}
-        {@render renderNode(units[active])}
+        {@render renderSiblings([units[active]])}
       {/if}
     </div>
   {:else if isLinkNode(node)}
-    <!-- anchor: edit its text (if any) + href, then any nested children -->
-    {@render field(humanizeLabel(node), node)}
-    {#if node.children}
-      {#each node.children as child, i (i)}{@render renderNode(child)}{/each}
-    {/if}
-  {:else if isTextLeaf(node)}
-    {@render field(humanizeLabel(node), node)}
+    <!-- anchor: edit its text as a single-line group, plus its href -->
+    <div class="field-item">
+      <TextBlockEditor lines={[node]} {siblings} {palette} />
+      <input
+        type="text"
+        class="field-input link-input"
+        value={node.attributes?.href || ''}
+        oninput={(e) => setNodeHref(node, e.currentTarget.value)}
+        placeholder="Link URL (href)"
+      />
+    </div>
+  {:else if isTextRun(node)}
+    <!-- standalone mixed-content text run: plain text, no styling -->
+    <div class="field-item">
+      <span class="field-label">Text</span>
+      <textarea
+        class="field-input"
+        rows="2"
+        value={node.text || ''}
+        oninput={(e) => (node.text = e.currentTarget.value)}
+      ></textarea>
+    </div>
   {:else if node.children}
-    <!-- plain container: no input of its own, just recurse (flat) -->
-    {#each node.children as child, i (i)}{@render renderNode(child)}{/each}
+    <!-- plain container: no input of its own, recurse into its children -->
+    {@render renderSiblings(node.children)}
   {/if}
 {/snippet}
 
-{#each list as node, i (i)}
-  {@render renderNode(node)}
-{/each}
+<!-- Render a sibling list: group runs of text leaves / container lines into TextBlockEditors,
+     and render everything else via specialNode. -->
+{#snippet renderSiblings(siblings: ComponentAST[])}
+  {#each groupSiblings(siblings) as item, i (i)}
+    {#if item.kind === 'lines'}
+      <TextBlockEditor lines={item.lines} {siblings} {palette} />
+    {:else}
+      {@render specialNode(item.node, siblings)}
+    {/if}
+  {/each}
+{/snippet}
+
+{@render renderSiblings(list)}
 
 <style>
   .field-item {
     display: flex;
     flex-direction: column;
     gap: 4px;
+  }
+
+  .field-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #cbd5e1;
+    text-transform: capitalize;
   }
 
   .field-input {
