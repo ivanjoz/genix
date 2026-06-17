@@ -1,6 +1,7 @@
 <script lang="ts">
 import { editorStore } from '../stores/editor.svelte';
 import BuilderSectionRender from './BuilderSectionRender.svelte';
+import Header from '$ecommerce/components/Header.svelte';
 
   interface Props {
     // Palette CSS custom properties, forwarded reactively from the parent so a
@@ -16,6 +17,13 @@ import BuilderSectionRender from './BuilderSectionRender.svelte';
      selection state and the parent editor panel reacts unchanged. Limited view:
      each section renders in 'selectOnly' mode (no drag wiring). -->
 <div class="mobile-canvas">
+  <!-- The storefront chrome is desktop-styled at wide widths but ships a full
+       mobile layout via md: breakpoints. Rendered here inside the 390px iframe,
+       those breakpoints resolve against the real mobile viewport, so the header
+       paints in its mobile form (hamburger + mobile cart) — the desktop canvas
+       keeps rendering its own <Header /> outside, see [pageID]/+page.svelte. -->
+  <Header />
+
   {#each editorStore.sections as section, idx (section.id)}
     <BuilderSectionRender
       {section}

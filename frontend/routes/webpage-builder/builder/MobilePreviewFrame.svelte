@@ -2,6 +2,11 @@
 import { mount, unmount } from 'svelte';
 import { liveCSS } from '../stores/live-css.svelte';
 import MobileCanvas from './MobileCanvas.svelte';
+// The storefront's base stylesheet — its custom utilities (e.g. .fx-c, which centers
+// the mobile cart button in Header) live here. It's imported only by the storefront
+// +layout, never by the builder route, so the cloned sheets below don't include it.
+// `?inline` gives us the processed CSS text to inject straight into the iframe.
+import storeCss from '$ecommerce/routes/store.css?inline';
 
   interface Props {
     // Palette CSS vars, forwarded into the mounted iframe tree (kept reactive below).
@@ -32,6 +37,13 @@ import MobileCanvas from './MobileCanvas.svelte';
       if (node.id === 'live-tailwind-jit') continue;
       doc.head.appendChild(node.cloneNode(true));
     }
+    // Inject the storefront base stylesheet so chrome (Header etc.) renders with the
+    // same custom utilities/resets it gets on the live store — scoped to the iframe so
+    // the builder document's own body/font styles are untouched.
+    const storeStyle = doc.createElement('style');
+    storeStyle.textContent = storeCss;
+    doc.head.appendChild(storeStyle);
+
     // Drop the default body margin so the preview sits flush like the real storefront.
     doc.body.style.margin = '0';
 

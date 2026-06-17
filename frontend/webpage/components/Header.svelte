@@ -10,31 +10,49 @@
   // State for mobile menu
   let mobileMenuOpen = $state(false);
 
+  // Bound to #sh-0 so the scroll handlers below can resolve the document/window the
+  // header actually lives in — not the global one, which is wrong when this header
+  // is mounted inside the builder's mobile-preview iframe (the component code runs
+  // in the parent window, so global `document`/`window` point at the parent page).
+  let subheader0 = $state<HTMLDivElement>();
+
   const cartCant = $derived(ProductsSelectedMap.size)
 
   // Handle scroll effect
   onMount(() => {
+  	if(!browser) return;
+  	const node = subheader0
+  	if(!node) return;
 
-  	if(browser){
-			const subheader0 = document.getElementById("sh-0")
-			const container = subheader0?.offsetParent
+  	// Resolve the document/window this header is rendered in. In production it's the
+  	// top window; inside the mobile-preview iframe it's the iframe's own window.
+  	const doc = node.ownerDocument;
+  	const win = doc.defaultView ?? window;
 
-			if(container){
-			  const handleScroll = () => {
-			    if (container.scrollTop > 48) {
-			      subheader0?.classList.add("s2")
-			    } else {
-			      subheader0?.classList.remove("s2")
-			    }
-			  };
-			
-			  container.addEventListener("scroll", handleScroll);
-			
-			  return () => {
-			    container.removeEventListener("scroll", handleScroll);
-			  };	
-			}
-   	}
+  	// (1) Window-scroll case — production storefront AND the mobile-preview iframe,
+  	// where the viewport itself scrolls. Mirrors the inline safeguard in app.html
+  	// (toggle .s1 once scrolled past the header), but lives in the component so it
+  	// also runs inside the iframe, where app.html's top-window script never fires.
+  	let threshold: number | null = null;
+  	const onWindowScroll = () => {
+  	  // offsetTop is independent of scroll position, so caching it on first sight is safe.
+  	  if (threshold === null) threshold = node.offsetTop;
+  	  node.classList.toggle("s1", win.scrollY > threshold);
+  	};
+  	win.addEventListener("scroll", onWindowScroll, { passive: true });
+
+  	// (2) Scrollable-container case — the desktop editor canvas, where the window
+  	// doesn't scroll but an ancestor container does (toggles .s2 past 48px).
+  	const container = node.offsetParent;
+  	const onContainerScroll = () => {
+  	  node.classList.toggle("s2", (container as HTMLElement).scrollTop > 48);
+  	};
+  	if(container) container.addEventListener("scroll", onContainerScroll);
+
+  	return () => {
+  	  win.removeEventListener("scroll", onWindowScroll);
+  	  if(container) container.removeEventListener("scroll", onContainerScroll);
+  	};
   });
 
   // Toggle mobile menu
@@ -50,7 +68,7 @@
 </script>
 
 <div class="_2 flex justify-between text-white h-48"></div>
-<div id="sh-0" class="header-0 flex justify-between w-full h-68">
+<div bind:this={subheader0} id="sh-0" class="header-0 flex justify-between w-full h-68">
   header
 </div>
 <div id="sh-1" class="header-1 _1 h-58 md:h-68 top-48 absolute flex items-center md:justify-between w-full left-0 px-4 md:px-80"

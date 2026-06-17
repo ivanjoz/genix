@@ -10,8 +10,8 @@
 @layer theme, base, components, ec-runtime, utilities;
 @import "tailwindcss";
 
-@source "../../pkg-components/**/*.svelte";
 @source "../../ui-components/**/*.svelte";
+@source "../../domain-components/MobileMenu.svelte";
 @source "../**/*.svelte";
 
 @theme {
