@@ -419,7 +419,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 			Type:       cajaMovimientoTipoPagoProveedor,
 			Amount:     -payload.Amount,
 		}
-		if err := finance.ApplyCajaMovimientos(req, []financeTypes.InternalCashMovement{movimiento}); err != nil {
+		if err := finance.ApplyCashBankMovement(req, []financeTypes.InternalCashMovement{movimiento}); err != nil {
 			return req.MakeErr("Error al registrar el movimiento de cashBank:", err)
 		}
 

@@ -66,7 +66,7 @@ export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): P
   if (args.documentID > 0) { queryParams.set('document-id', String(args.documentID)) }
   if (args.serialNumber?.trim()) { queryParams.set('serial-number', args.serialNumber.trim()) }
 
-  const route = 'almacen-movimientos'
+  const route = 'warehouse-movements'
   const uriParams = Object.fromEntries(queryParams.entries())
 
   let result: IWarehouseProductMovementGroupRecord[]

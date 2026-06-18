@@ -6,7 +6,7 @@ import (
 	financeTypes "app/finance/types"
 )
 
-func ApplyCajaMovimientos(req *core.HandlerArgs, movimientos []financeTypes.InternalCashMovement) error {
+func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []financeTypes.InternalCashMovement) error {
 	if len(movimientos) == 0 {
 		return nil
 	}
@@ -15,31 +15,31 @@ func ApplyCajaMovimientos(req *core.HandlerArgs, movimientos []financeTypes.Inte
 	dateUnix := req.EffectiveFechaUnix()
 
 	// Group movements by CashBankID to track running balances.
-	cajasIDs := core.SliceSet[int32]{}
+	cashBankIDs := core.SliceSet[int32]{}
 	for _, m := range movimientos {
-		cajasIDs.Add(m.CashBankID)
+		cashBankIDs.Add(m.CashBankID)
 	}
 
-	cajasMap := make(map[int32]financeTypes.CashBank)
-	for _, id := range cajasIDs.Values {
+	cashBankMap := make(map[int32]financeTypes.CashBank)
+	for _, id := range cashBankIDs.Values {
 		cashBank, err := GetCaja(req.User.CompanyID, id)
 		if err != nil {
 			return core.Err("Error al obtener la cashBank:", id, err)
 		}
-		cajasMap[id] = cashBank
+		cashBankMap[id] = cashBank
 	}
 
 	records := []financeTypes.CashBankMovement{}
-	cajasToUpdate := []financeTypes.CashBank{}
+	cashBanksToUpdate := []financeTypes.CashBank{}
 
 	// Track current balance per cash bank across multiple movements in the same batch.
 	currentAmounts := make(map[int32]int32)
-	for id, cashBank := range cajasMap {
+	for id, cashBank := range cashBankMap {
 		currentAmounts[id] = cashBank.CurrentAmount
 	}
 
 	for _, m := range movimientos {
-		cashBank := cajasMap[m.CashBankID]
+		cashBank := cashBankMap[m.CashBankID]
 		previousAmount := currentAmounts[m.CashBankID]
 
 		// If FinalAmount is provided, validate it matches the calculated result.
@@ -79,19 +79,19 @@ func ApplyCajaMovimientos(req *core.HandlerArgs, movimientos []financeTypes.Inte
 		cashBank.CurrentAmount = m.FinalAmount
 		cashBank.Updated = nowTime
 		cashBank.UpdatedBy = req.User.ID
-		cajasMap[m.CashBankID] = cashBank
+		cashBankMap[m.CashBankID] = cashBank
 	}
 
 	if err := db.Insert(&records); err != nil {
 		return core.Err("Error al insertar movimientos de cashBank:", err)
 	}
 
-	for _, id := range cajasIDs.Values {
-		cajasToUpdate = append(cajasToUpdate, cajasMap[id])
+	for _, id := range cashBankIDs.Values {
+		cashBanksToUpdate = append(cashBanksToUpdate, cashBankMap[id])
 	}
 
-	qCaja := db.Table[financeTypes.CashBank]()
-	if err := db.Update(&cajasToUpdate, qCaja.CurrentAmount, qCaja.Updated, qCaja.UpdatedBy); err != nil {
+	q := db.Table[financeTypes.CashBank]()
+	if err := db.Update(&cashBanksToUpdate, q.CurrentAmount, q.Updated, q.UpdatedBy); err != nil {
 		return core.Err("Error al actualizar saldo de las cajas:", err)
 	}
 

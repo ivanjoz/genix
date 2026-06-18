@@ -160,7 +160,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			}
 
 			eg.Go(func() error {
-				if err := finance.ApplyCajaMovimientos(req, []financeTypes.InternalCashMovement{movimiento}); err != nil {
+				if err := finance.ApplyCashBankMovement(req, []financeTypes.InternalCashMovement{movimiento}); err != nil {
 					core.Log("Error al aplicar movimiento de cashBank:", err)
 					return core.Err("Error al registrar el movimiento de cashBank:", err)
 				}

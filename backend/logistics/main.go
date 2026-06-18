@@ -4,8 +4,8 @@ import "app/core"
 
 var ModuleHandlers = core.AppRouterType{
 	"POST.productos-stock":            PostAlmacenStock,
-	"GET.warehouse-movimientos":         GetAlmacenMovimientos,
-	"GET.warehouse-movimientos-grouped": GetAlmacenMovimientosGrouped,
+	"GET.warehouse-movements":         GetAlmacenMovimientos,
+	"GET.warehouse-movements-grouped": GetAlmacenMovimientosGrouped,
 	"GET.warehouse-product-stock":     GetWarehouseProductStock,
 	"GET.products-stock":              GetProductsStock,
 	"GET.product-stock-lots-by-ids":   GetProductStockLotsByIDs,

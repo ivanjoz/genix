@@ -50,7 +50,7 @@ export interface ICashReconciliation {
 }
 
 export class CajasService extends GetHandler {
-  route = "cajas"
+  route = "cash-banks"
   useCache = { min: 1, ver: 1 }
 
   Cajas: ICashBank[] = $state([])
@@ -74,8 +74,8 @@ export class CajasService extends GetHandler {
 export const postCaja = (data: ICashBank) => {
   return POST({
     data,
-    route: "cajas",
-    refreshRoutes: ["cajas"]
+    route: "cash-banks",
+    refreshRoutes: ["cash-banks"]
   })
 }
 
@@ -153,15 +153,15 @@ export const postCajaMovimiento = (data: ICashBankMovement) => {
   return POST({
     data,
     route: "cash-banks-movement",
-    refreshRoutes: ["cajas"]
+    refreshRoutes: ["cash-banks"]
   })
 }
 
 export const postCajaCuadre = (data: ICashReconciliation) => {
   return POST({
     data,
-    route: "cash-bank-reconciliation",
-    refreshRoutes: ["cajas"]
+    route: "cash-banks-reconciliation",
+    refreshRoutes: ["cash-banks"]
   })
 }
 

@@ -481,7 +481,7 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 		Amount:      movementAmount,
 		FinalAmount: 0,
 	}
-	if err := ApplyCajaMovimientos(req, []financeTypes.InternalCashMovement{movement}); err != nil {
+	if err := ApplyCashBankMovement(req, []financeTypes.InternalCashMovement{movement}); err != nil {
 		return req.MakeErr(err)
 	}
 

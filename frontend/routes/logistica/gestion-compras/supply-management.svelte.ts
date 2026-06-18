@@ -255,7 +255,7 @@ const extractProductIDFromStockID = (productStockID: number) => {
 }
 
 export class AlmacenMovimientosGroupedService extends GetHandler {
-  route = 'almacen-movimientos-grouped'
+  route = 'warehouse-movements-grouped'
   keysIDs = { movimientos: "Date" }
   useCache = { min: 5, ver: 8 }
 

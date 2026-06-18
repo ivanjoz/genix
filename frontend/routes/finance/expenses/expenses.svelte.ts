@@ -180,8 +180,8 @@ export interface IExpensePayment {
 export const postExpensePayment = (
   data: IExpensePayment,
 ): Promise<IExpense> => {
-  // Refresh expenses (paid amount/status) and cajas (balance) caches after the payment.
-  return POST({ data, route: "expense-payment", refreshRoutes: ["expenses", "cajas"] })
+  // Refresh expenses (paid amount/status) and cash-banks (balance) caches after the payment.
+  return POST({ data, route: "expense-payment", refreshRoutes: ["expenses", "cash-banks"] })
 }
 
 // getSchedulePeriods triggers lazy period materialization on the backend and returns

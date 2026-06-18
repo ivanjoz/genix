@@ -3,13 +3,13 @@ package finance
 import "app/core"
 
 var ModuleHandlers = core.AppRouterType{
-	"GET.cajas":                      GetCajas,
-	"POST.cajas":                     PostCajas,
-	"GET.cash-banks-movements":       GetCajaMovimientos,
+	"GET.cash-banks":                      GetCashBanks,
+	"POST.cash-banks":                     PostCashBanks,
+	"GET.cash-banks-movements":       GetCashBankMovements,
 	"GET.cash-bank-movement-by-id":   GetCashBankMovementByID,
-	"GET.cash-banks-reconciliations": GetCajaCuadres,
-	"POST.cash-banks-reconciliation": PostCajaCuadre,
-	"POST.cash-banks-movement":       PostMovimientoCaja,
+	"GET.cash-banks-reconciliations": GetCashReconciliation,
+	"POST.cash-banks-reconciliation": PostCashReconciliation,
+	"POST.cash-banks-movement":       PostCashBankMovement,
 	// Expenses module
 	"GET.expenses":                 GetExpenses,
 	"POST.expenses":                PostExpenses,

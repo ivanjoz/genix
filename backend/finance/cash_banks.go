@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 )
 
-func GetCajas(req *core.HandlerArgs) core.HandlerResponse {
+func GetCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 	updated := core.UnixToSunix(req.GetQueryInt64("upd"))
 
 	cajas := []financeTypes.CashBank{}
@@ -37,7 +37,7 @@ func GetCajas(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &response)
 }
 
-func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
+func PostCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 	core.Env.LOGS_DEBUG = true
 
 	body := financeTypes.CashBank{}
@@ -78,7 +78,7 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse((*cajas)[0])
 }
 
-func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
+func GetCashBankMovements(req *core.HandlerArgs) core.HandlerResponse {
 	// El frontend envía el parámetro como "caja-id" (ver convención en CREATE_API_HANDLERS.md)
 	cashBankID := req.GetQueryInt("caja-id")
 
@@ -150,7 +150,7 @@ func GetCashBankMovementByID(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &response)
 }
 
-func GetCajaCuadres(req *core.HandlerArgs) core.HandlerResponse {
+func GetCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	// El frontend envía el parámetro como "caja-id" (ver convención en CREATE_API_HANDLERS.md)
 	cashBankID := req.GetQueryInt("caja-id")
 	if cashBankID == 0 {
@@ -182,7 +182,7 @@ func GetCajaCuadres(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &response)
 }
 
-func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
+func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 
 	nowTime := core.SUnixTime()
 	record := financeTypes.CashReconciliation{}
@@ -251,7 +251,7 @@ func PostCajaCuadre(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(&record)
 }
 
-func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
+func PostCashBankMovement(req *core.HandlerArgs) core.HandlerResponse {
 
 	record := financeTypes.CashBankMovement{}
 	err := json.Unmarshal([]byte(*req.Body), &record)
@@ -288,7 +288,7 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
 		FinalAmount:   record.FinalAmount,
 	}
 
-	if err := ApplyCajaMovimientos(req, []financeTypes.InternalCashMovement{movimientoInterno}); err != nil {
+	if err := ApplyCashBankMovement(req, []financeTypes.InternalCashMovement{movimientoInterno}); err != nil {
 		return req.MakeErr(err)
 	}
 
