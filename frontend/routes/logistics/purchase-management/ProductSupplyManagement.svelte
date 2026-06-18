@@ -1,0 +1,567 @@
+<script lang="ts">
+import Input from '$components/form/Input.svelte'
+import Layer from '$components/layers/Layer.svelte'
+import ChartCanvas from '$components/charts/ChartCanvas.svelte'
+import CardsList from '$components/vTable/CardsList.svelte'
+import TableGrid from '$components/vTable/TableGrid.svelte'
+import type { ICardCell, ITableColumn } from '$components/vTable/types'
+import { Core, tr } from '$core/store.svelte'
+import T from '$components/misc/T.svelte'
+import { DateHelper } from '$libs/date'
+import { formatN, formatTime, Loading, Notify } from '$libs/helpers'
+import FilterInput from '$components/form/FilterInput.svelte'
+import Button from '$components/buttons/Button.svelte'
+import { onDestroy, onMount, untrack } from 'svelte'
+import { ClientProviderService, ClientProviderType } from '../../business/customers/customers.svelte'
+import { ProductsService } from '../../business/products/products.svelte'
+import {
+  AlmacenMovimientosGroupedService,
+  createEmptyProviderSupplyRow,
+  normalizeProviderSupplyRows,
+  postProductSupply,
+  ProductSupplyService,
+  type IProductSupplyProviderRow,
+  type IProductSupplyRow,
+} from './supply-management.svelte'
+
+  const productos = new ProductsService(true)
+  const providers = new ClientProviderService(ClientProviderType.PROVIDER, true)
+  const productSupplyService = new ProductSupplyService(true)
+  const groupedMovementsService = new AlmacenMovimientosGroupedService()
+  const dateHelper = new DateHelper()
+  const salesWindowDays = 30
+  const debugProductID = 10034
+  const yAxisWidthPx = 28
+  const ventasWidthRatio = 0.30
+
+  // Freeze the 30-day window in dateUnix units so every row uses the same oldest->newest categories.
+  const last30FechaUnix = Array.from({ length: salesWindowDays }, (_, dayOffset) => { 
+    return dateHelper.dateUnixCurrent() - (salesWindowDays - 1) + dayOffset
+  })
+
+  let pageContentElement = $state<HTMLDivElement | undefined>(undefined)
+  let pageContentWidthPx = $state(0)
+  let pageResizeObserver: ResizeObserver | undefined
+
+  const updatePageContentWidth = () => {
+    if (!pageContentElement) { return }
+    pageContentWidthPx = Math.max(0, Math.floor(pageContentElement.clientWidth))
+  }
+
+  const ventasPixelMetrics = $derived.by(() => {
+    const ventasBaseWidthPx = Math.max(120, Math.round(pageContentWidthPx * ventasWidthRatio))
+    const ventasBarWidthPx = Math.max(1, Math.round(ventasBaseWidthPx / salesWindowDays))
+    const ventasChartWidthPx = ventasBarWidthPx * salesWindowDays
+    const ventasColumnWidthPx = ventasChartWidthPx + yAxisWidthPx
+
+    return {
+      ventasBaseWidthPx,
+      ventasBarWidthPx,
+      ventasChartWidthPx,
+      ventasColumnWidthPx,
+    }
+  })
+
+  const salesHeaderLabels = $derived.by(() => {
+    const labelsPerGroup = 3
+    const groupedLabels = []
+
+    // Use every third day so the header axis stays readable and matches the 30-point chart width.
+    for (let groupStartIndex = 0; groupStartIndex < last30FechaUnix.length; groupStartIndex += labelsPerGroup) {
+      const dateUnix = last30FechaUnix[groupStartIndex] + 2
+      groupedLabels.push({
+        dateUnix,
+        day: String(formatTime(dateUnix, 'd') || ''),
+        month: String(formatTime(dateUnix, 'M') || ''),
+      })
+    }
+
+    return groupedLabels
+  })
+
+  const trimLeadingAndTrailingZeroStocks = (stockValues: number[]) => {
+    const trimmedStockValues = [...stockValues]
+    let firstNonZeroIndex = trimmedStockValues.findIndex((stockValue) => stockValue !== 0)
+    let lastNonZeroIndex = trimmedStockValues.findLastIndex((stockValue) => stockValue !== 0)
+
+    if (firstNonZeroIndex === -1 || lastNonZeroIndex === -1) {
+      return trimmedStockValues.map(() => null)
+    }
+
+    // Hide empty margins only; keep interior zero-stock runs visible as real stockouts.
+    for (let stockIndex = 0; stockIndex < firstNonZeroIndex; stockIndex += 1) {
+      trimmedStockValues[stockIndex] = null as unknown as number
+    }
+    for (let stockIndex = lastNonZeroIndex + 1; stockIndex < trimmedStockValues.length; stockIndex += 1) {
+      trimmedStockValues[stockIndex] = null as unknown as number
+    }
+
+    return trimmedStockValues as Array<number | null>
+  }
+
+  $effect(() => {
+    if (!groupedMovementsService.isReady) {
+      return
+    }
+
+    // Keep logging side-effects outside the tracked section so service updates do not create render loops.
+    untrack(() => {
+      console.log('AbastecimientoView::groupedMovementRecords', groupedMovementsService.records)
+    })
+  })
+
+  $effect(() => {
+    const debugProductMovements = groupedMovementsService.productMovementsMap.get(debugProductID)
+    if (!debugProductMovements) {
+      return
+    }
+
+    const debugOutflowsValues = last30FechaUnix.map((dateUnix) => debugProductMovements.getOutflows(dateUnix) || 0)
+    const debugInflowsValues = last30FechaUnix.map((dateUnix) => debugProductMovements.getInflows(dateUnix) || 0)
+    const debugFinalStockValues = last30FechaUnix.map((dateUnix) => debugProductMovements.getFinalStock(dateUnix) || 0)
+    const debugFinalStockLineValues = trimLeadingAndTrailingZeroStocks(debugFinalStockValues)
+
+    // Keep the chart diagnostics grouped so the stored columnar series and rendered values are easy to compare.
+    untrack(() => {
+      console.group(`AbastecimientoView::debugProduct:${debugProductID}`)
+      console.log('rawMovementColumns', {
+        detailFecha: debugProductMovements.DetailFecha,
+        detailOutflows: debugProductMovements.DetailOutflows,
+        detailInflows: debugProductMovements.DetailInflows,
+        detailFinalStock: debugProductMovements.DetailFinalStock,
+      })
+      console.table(last30FechaUnix.map((dateUnix, dayIndex) => ({
+        dayIndex,
+        dateUnix,
+        dateLabel: String(formatTime(dateUnix, 'Y-m-d') || ''),
+        outflows: debugOutflowsValues[dayIndex],
+        inflows: debugInflowsValues[dayIndex],
+        finalStock: debugFinalStockValues[dayIndex],
+        finalStockLineValue: debugFinalStockLineValues[dayIndex],
+      })))
+      console.log('chartSeries', {
+        outflowsValues: debugOutflowsValues,
+        inflowsValues: debugInflowsValues,
+        finalStockValues: debugFinalStockValues,
+        finalStockLineValues: debugFinalStockLineValues,
+      })
+      console.groupEnd()
+    })
+  })
+
+  let supplyFilterText = $state('')
+  let productSupplyForm = $state({
+    ProductID: 0,
+    MinimunStock: 0,
+    SalesPerDayEstimated: 0,
+    ProviderSupply: [],
+  } as IProductSupplyRow)
+
+  const productSupplyTableRows = $derived.by(() => {
+    return productos.records.map((productRecord) => {
+      const savedProductSupplyRecord = productSupplyService.recordsMap.get(productRecord.ID)
+      return {
+        ProductID: productRecord.ID,
+        MinimunStock: savedProductSupplyRecord?.MinimunStock || 0,
+        SalesPerDayEstimated: savedProductSupplyRecord?.SalesPerDayEstimated || 0,
+        ProviderSupply: normalizeProviderSupplyRows(savedProductSupplyRecord?.ProviderSupply || []).filter((providerSupplyRow) => {
+          return providerSupplyRow.ProviderID > 0
+        }),
+      } as IProductSupplyRow
+    })
+  })
+
+  const filteredProductSupplyRows = $derived.by(() => {
+    const normalizedFilterText = supplyFilterText.trim().toLowerCase()
+    if (!normalizedFilterText) {
+      return productSupplyTableRows
+    }
+
+    return productSupplyTableRows.filter((productSupplyRecord) => {
+      const productRecord = productos.recordsMap.get(productSupplyRecord.ProductID)
+      const providerNames = (productSupplyRecord.ProviderSupply || []).map((providerSupplyRow) => {
+        return providers.recordsMap.get(providerSupplyRow.ProviderID)?.Name || ''
+      })
+
+      // Keep the filter inline with the virtualized grid so we only render matching rows.
+      const filterableContent = [
+        productRecord?.Name || '',
+        String(productSupplyRecord.MinimunStock || 0),
+        String(productSupplyRecord.SalesPerDayEstimated || 0),
+        ...providerNames,
+      ].filter((value) => value).join(' ').toLowerCase()
+
+      return filterableContent.includes(normalizedFilterText)
+    })
+  })
+
+  const productSupplyColumns = $derived.by((): ITableColumn<IProductSupplyRow>[] => {
+    return [
+      {
+        id: 'product-name',
+        header: 'Product|Producto',
+        width: '30%',
+        css: 'px-6 py-4 leading-[1.1] whitespace-normal',
+        splitString: 64,
+        getValue: (productSupplyRecord) => productos.recordsMap.get(productSupplyRecord.ProductID)?.Name || `Producto-${productSupplyRecord.ProductID}`,
+      },
+      {
+        id: 'stock-min-actual',
+        header: 'Current/Min Stock|Stock Actual /Min',
+        width: '6%',
+        align: 'right',
+        css: 'px-6 text-right',
+        useCellRenderer: true,
+        getValue: (productSupplyRecord) => productSupplyRecord.MinimunStock || 0,
+      },
+      {
+        id: 'sales-last-30-days',
+        header: 'Stock Movements|Movimientos Stock',
+        width: `${ventasPixelMetrics.ventasColumnWidthPx}px`,
+        useCellRenderer: true,
+        css: 'px-0',
+      },
+      {
+        id: 'sales-per-day',
+        header: 'Sales / Day|Ventas / Día',
+        width: '6%',
+        align: 'right',
+        css: 'px-6 text-right',
+        getValue: (productSupplyRecord) => productSupplyRecord.SalesPerDayEstimated || 0,
+      },
+      {
+        id: 'providers',
+        header: 'Suppliers|Proveedores',
+        width: 'auto',
+        css: 'px-6 whitespace-normal',
+        useCellRenderer: true,
+        getValue: (productSupplyRecord) => {
+          return (productSupplyRecord.ProviderSupply || []).map((providerSupplyRow) => {
+            return providers.recordsMap.get(providerSupplyRow.ProviderID)?.Name || `Proveedor-${providerSupplyRow.ProviderID}`
+          }).join(', ')
+        },
+      },
+    ]
+  })
+
+  const providerSupplyCards = $derived.by((): ICardCell<IProductSupplyProviderRow>[] => {
+    // Keep provider options reactive so card selectors receive records loaded after the first render.
+    return [
+      {
+        label: 'Proveedor',
+        field: 'ProviderID',
+        itemCss: 'col-span-24 md:col-span-12',
+        cellOptions: providers.records || [],
+        cellOptionsKeyId: 'ID',
+        cellOptionsKeyName: 'Name',
+        onCellSelect: (providerSupplyRow, selectedValue) => {
+          providerSupplyRow.ProviderID = Number(selectedValue || 0)
+        },
+      },
+      {
+        label: 'Capacidad',
+        field: 'Capacity',
+        type: 'number',
+        itemCss: 'col-span-12 md:col-span-4',
+        contentCss: 'w-full justify-end text-right pr-6',
+        inputCss: 'text-right pr-6',
+        getValue: (providerSupplyRow) => providerSupplyRow.Capacity || 0,
+        onCellEdit: (providerSupplyRow, nextValue) => {
+          providerSupplyRow.Capacity = parseInt(String(nextValue || '0'))
+        },
+      },
+      {
+        label: 'Entrega',
+        field: 'DeliveryTime',
+        type: 'number',
+        itemCss: 'col-span-12 md:col-span-4',
+        contentCss: 'w-full justify-end text-right pr-6',
+        inputCss: 'text-right pr-6',
+        getValue: (providerSupplyRow) => providerSupplyRow.DeliveryTime || 0,
+        onCellEdit: (providerSupplyRow, nextValue) => {
+          providerSupplyRow.DeliveryTime = parseInt(String(nextValue || '0'))
+        },
+      },
+      {
+        label: 'Precio',
+        field: 'Price',
+        itemCss: 'col-span-12 md:col-span-4',
+        contentCss: 'w-full justify-end text-right pr-6',
+        inputCss: 'text-right pr-6',
+        getValue: (providerSupplyRow) => formatN((providerSupplyRow.Price || 0) / 100, 2),
+        render: e => e.Price ? formatN((e.Price||0)/100,2) : "",
+        onCellEdit: (providerSupplyRow, nextValue) => {
+          const parsedPrice = parseFloat(String(nextValue || '0'))
+          providerSupplyRow.Price = Math.round((parsedPrice||0) * 100)
+        },
+      },
+    ]
+  })
+
+  function openProductSupplyLayer(selectedProductSupplyRecord: IProductSupplyRow) {
+    // Clone the record and sanitize provider rows so the layer only renders real cards.
+    productSupplyForm = {
+      ...selectedProductSupplyRecord,
+      ProviderSupply: normalizeProviderSupplyRows(selectedProductSupplyRecord.ProviderSupply || []),
+    }
+    Core.openSideLayer(2)
+  }
+
+  function addProviderSupplyRow() {
+    console.debug('AbastecimientoView::addProviderSupplyRow')
+    productSupplyForm.ProviderSupply = [
+      ...(productSupplyForm.ProviderSupply || []),
+      createEmptyProviderSupplyRow(),
+    ]
+  }
+
+  function removeProviderSupplyRow(providerRowIndex: number) {
+    console.debug('AbastecimientoView::removeProviderSupplyRow', { providerRowIndex })
+    const currentProviderSupplyRows = [...(productSupplyForm.ProviderSupply || [])]
+    currentProviderSupplyRows.splice(providerRowIndex, 1)
+    productSupplyForm.ProviderSupply = currentProviderSupplyRows
+  }
+
+  async function saveProductSupply() {
+    if (!productSupplyForm.ProductID) {
+      Notify.failure(tr('Please select a valid product.|Debe seleccionar un producto válido.'))
+      return
+    }
+
+    Loading.standard(tr('Saving supply configuration...|Guardando abastecimiento...'))
+
+    try {
+      const savedProductSupply = await postProductSupply(productSupplyForm)
+      const normalizedSavedProductSupply = {
+        ...savedProductSupply,
+        ProviderSupply: (savedProductSupply.ProviderSupply || []).filter((providerSupplyRow: IProductSupplyProviderRow) => providerSupplyRow.ProviderID > 0),
+        ss: savedProductSupply.ss || 1,
+        upd: savedProductSupply.upd || 0,
+        UpdatedBy: savedProductSupply.UpdatedBy || 0,
+      } as IProductSupplyRow
+
+      // Keep the local table responsive while the delta refresh finishes in the background.
+      const nextProductSupplyRecordsByProductID = new Map<number, IProductSupplyRow>()
+      for (const existingProductSupplyRecord of productSupplyService.records) {
+        nextProductSupplyRecordsByProductID.set(existingProductSupplyRecord.ProductID, existingProductSupplyRecord)
+      }
+      nextProductSupplyRecordsByProductID.set(normalizedSavedProductSupply.ProductID, normalizedSavedProductSupply)
+      productSupplyService.handler([...nextProductSupplyRecordsByProductID.values()])
+      productSupplyService.fetchOnline()
+
+      Core.hideSideLayer()
+      Notify.success(tr('Supply configuration saved successfully.|Configuración de abastecimiento guardada correctamente.'))
+    } catch (saveError) {
+      Notify.failure(String(saveError))
+    } finally {
+      Loading.remove()
+    }
+  }
+
+  onMount(() => {
+    updatePageContentWidth()
+
+    if (!pageContentElement) { return }
+
+    pageResizeObserver = new ResizeObserver(() => {
+      updatePageContentWidth()
+    })
+    pageResizeObserver.observe(pageContentElement)
+  })
+
+  onDestroy(() => {
+    pageResizeObserver?.disconnect()
+  })
+
+</script>
+
+<div class="flex w-full" bind:this={pageContentElement}>
+  <Layer type="content">
+	  <div class="mb-6 flex items-center justify-between p-1" aria-label="Product supply management toolbar with search filter">
+	    <FilterInput bind:value={supplyFilterText} placeholder="Buscar producto o proveedor"
+	      css="mr-16 w-320 max-w-full" />
+	    <div class="flex items-center">
+	      <div class="h6 ff-bold pr-8 text-slate-500">
+	        {filteredProductSupplyRows.length} registros
+	      </div>
+	    </div>
+	  </div>
+	  	<TableGrid
+	      css="h-full w-full"
+        headerCss="text-[14px]"
+	      height="calc(100vh - var(--header-height) - 60px - 1rem)"
+        rowHeight={48}
+	      columns={productSupplyColumns}
+	      data={filteredProductSupplyRows}
+        selectedRowId={productSupplyForm?.ProductID || undefined}
+        getRowId={(productSupplyRecord) => productSupplyRecord.ProductID}
+	      onRowClick={(selectedProductSupplyRecord) => {
+	        openProductSupplyLayer(selectedProductSupplyRecord)
+	      }}
+	    >
+        {#snippet headerRenderer(columnDefinition, _columnIndex)}
+          {#if columnDefinition.id === 'sales-last-30-days'}
+            <div class="flex flex-col gap-2 py-2">
+              <div class="px-10">{columnDefinition.header}</div>
+              <div class="min-w-0" style={`width:${ventasPixelMetrics.ventasColumnWidthPx}px`}>
+                <div class="grid items-center text-[11px] text-slate-500" style={`padding-left:${yAxisWidthPx - 4}px;grid-template-columns:repeat(${salesHeaderLabels.length}, ${ventasPixelMetrics.ventasBarWidthPx * 3}px)`}>
+                  {#each salesHeaderLabels as salesHeaderLabel (salesHeaderLabel.dateUnix)}
+                    <div class="overflow-hidden text-right text-ellipsis whitespace-nowrap leading-[1.1]">
+	                    <div>{salesHeaderLabel.day}</div>
+	                    <div>{salesHeaderLabel.month}</div>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            </div>
+          {:else}
+            <div class="px-10 py-8">
+              {columnDefinition.header}
+            </div>
+          {/if}
+        {/snippet}
+        {#snippet cellRenderer(record, columnDefinition)}
+          {#if columnDefinition.id === 'sales-last-30-days'}
+            <!-- Keep the sales chart inline with TableGrid so virtualization owns the full row render path. -->
+            {@const productMovements = groupedMovementsService.productMovementsMap.get(record.ProductID)}
+            {@const outflowsValues = last30FechaUnix.map((dateUnix) => productMovements?.getOutflows(dateUnix) || 0)}
+            {@const inflowsValues = last30FechaUnix.map((dateUnix) => productMovements?.getInflows(dateUnix) || 0)}
+            {@const finalStockValues = last30FechaUnix.map((dateUnix) => productMovements?.getFinalStock(dateUnix) || 0)}
+            {@const finalStockLineValues = trimLeadingAndTrailingZeroStocks(finalStockValues)}
+            <div class="h-50 min-w-0" style={`width:${ventasPixelMetrics.ventasColumnWidthPx}px`}>
+              <ChartCanvas useHtmlRendered
+                id={record.ProductID}
+                height={48}
+                className="h-full w-full"
+                fixedPointWidthPx={ventasPixelMetrics.ventasBarWidthPx}
+                data={[
+                  // Keep the red outflow stack first so demand pressure remains visually dominant.
+                  { name: 'Salidas', type: 'bar', values: outflowsValues, color: '#ef4444' },
+                  { name: 'Entradas', type: 'bar', values: inflowsValues, color: '#3b82f6' },
+                  // Draw the reconstructed daily final stock so replenishment decisions use the latest stock history.
+                  {
+                    name: 'Stock Final',
+                    type: 'line',
+                    // Trim empty edges while keeping interior zero-stock runs connected.
+                    values: finalStockLineValues,
+                    color: '#000000',
+                    lineWidth: 1,
+                    renderPointOnlyOnChange: true,
+                    pointSize: 3
+                  },
+                ]}
+              />
+            </div>
+          {/if}
+          {#if columnDefinition.id === 'stock-min-actual'}
+          	{@const productMovements = groupedMovementsService.productMovementsMap.get(record.ProductID)}
+            {@const currentStock = Math.max(0, productMovements?.CurrentStock || 0)}
+            {@const minimunStock = Math.max(0, record.MinimunStock || 0)}
+            {@const maxComparableStock = Math.max(currentStock, minimunStock, 1)}
+            {@const currentStockBarWidth = (currentStock / maxComparableStock) * 100}
+            {@const minimunStockBarWidth = (minimunStock / maxComparableStock) * 100}
+            {@const minimunStockBarCss = minimunStock > currentStock ? 'bg-red-200' : 'bg-blue-200'}
+            <div class="flex flex-col gap-2 py-4">
+              <!-- Render each stock metric inside its own light bar so the value stays readable above the fill. -->
+              <div class="relative h-18 overflow-hidden rounded-sm">
+                <div class="absolute inset-y-1 left-0 rounded-sm bg-green-200" style={`width:${currentStockBarWidth}%`}></div>
+                <div class="relative z-1 flex h-full items-center justify-end pr-3">
+                  <div class="ff-mono text-sm leading-none">{currentStock || '-'}</div>
+                </div>
+              </div>
+              <div class="relative h-18 overflow-hidden rounded-sm">
+                <div class={`absolute inset-y-1 left-0 rounded-sm ${minimunStockBarCss}`} style={`width:${minimunStockBarWidth}%`}></div>
+                <div class="relative z-1 flex h-full items-center justify-end pr-3">
+                  <div class="ff-mono text-sm leading-none">{record.MinimunStock || '-'}</div>
+                </div>
+              </div>
+            </div>
+          {/if}
+          {#if columnDefinition.id === 'providers'}
+            <!-- Keep provider chips compact so long supplier lists stay readable inside the virtualized row. -->
+            {@const visibleProviderRows = (record.ProviderSupply || []).filter((providerSupplyRow) => providerSupplyRow.ProviderID > 0).slice(0, 2)}
+            <div class="flex flex-col text-sm">
+              {#each visibleProviderRows as providerSupplyRow (providerSupplyRow.ProviderID)}
+                {@const providerName = providers.recordsMap.get(providerSupplyRow.ProviderID)?.Name || `Proveedor-${providerSupplyRow.ProviderID}`}
+                <div class="flex min-w-0 items-center leading-[1.15] justify-between gap-8">
+                  <div class="min-w-0 flex-1 whitespace-normal break-words">
+                    {providerName}
+                  </div>
+                  <div class="flex shrink-0 items-center gap-8 whitespace-nowrap text-slate-600">
+                    <div class="flex items-center gap-4">
+                      <span>{providerSupplyRow.Price ? `s/ ${formatN((providerSupplyRow.Price || 0) / 100, 2)}` : '-'}</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                      <i class="icon-[fa--calendar]"></i>
+                      <span>{providerSupplyRow.DeliveryTime || 0}</span>
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {/snippet}
+      </TableGrid>
+  </Layer>
+</div>
+
+<Layer id={2} type="side" sideLayerSize={720}
+  title={`Abastecimiento ${productos.recordsMap.get(productSupplyForm.ProductID)?.Name || ''}`}
+  titleCss="h2 mb-6"
+  css="px-12 py-10"
+  contentCss="px-0"
+  onSave={saveProductSupply}
+  onClose={() => {
+    productSupplyForm = {
+      ProductID: 0,
+      MinimunStock: 0,
+      SalesPerDayEstimated: 0,
+      ProviderSupply: [],
+    }
+  }}
+>
+  <div class="grid grid-cols-24 gap-10 mt-8" aria-label="Product supply configuration form with minimum stock and estimated sales">
+    <Input
+      label="Product|Producto"
+      saveOn={{ Name: productos.recordsMap.get(productSupplyForm.ProductID)?.Name || '' }}
+      save="Name"
+      css="col-span-24"
+      disabled={true}
+    />
+    <Input
+      label="Minimum Stock|Stock mínimo"
+      saveOn={productSupplyForm}
+      save="MinimunStock"
+      css="col-span-24 md:col-span-12"
+      type="number"
+    />
+    <Input
+      label="Estimated Sales / Day|Ventas / Día estimadas"
+      saveOn={productSupplyForm}
+      save="SalesPerDayEstimated"
+      css="col-span-24 md:col-span-12"
+      type="number"
+    />
+  </div>
+
+  <div class="mt-16" aria-label="Product suppliers configuration list">
+    <div class="mb-8 flex items-center justify-between">
+      <div class="h4 ff-bold">Proveedores</div>
+      <Button color="green" icon="icon-[fa--plus]" label="Adds a new provider row to the supply configuration for this product." css="h-32 px-10"
+        onClick={addProviderSupplyRow} />
+    </div>
+
+    <CardsList
+      css="w-full"
+      height="calc(100vh - var(--header-height) - 260px)"
+      cardCss="p-14"
+      itemsClass="p-4"
+      cells={providerSupplyCards}
+      data={productSupplyForm.ProviderSupply || []}
+      emptyMessage="No hay proveedores agregados."
+      buttonDeleteHandler={(_, providerRowIndex) => {
+        removeProviderSupplyRow(providerRowIndex)
+      }}
+    />
+  </div>
+</Layer>

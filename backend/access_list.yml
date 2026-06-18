@@ -18,25 +18,25 @@ access_list:
     name: "Mi Empresa"
     group: 1
     levels: 14
-    frontend_routes: "configuracion/parametros"
+    frontend_routes: "configuration/parameters"
     backend_apis: ""
   - id: 2
     name: "Usuarios"
     group: 1
     levels: 14
-    frontend_routes: "configuracion/usuarios"
+    frontend_routes: "security/users"
     backend_apis: ""
   - id: 3
     name: "Perfiles & Accesos"
     group: 1
     levels: 14
-    frontend_routes: "configuracion/perfiles-accesos"
+    frontend_routes: "security/access-profiles"
     backend_apis: ""
   - id: 4
     name: "Backups"
     group: 1
     levels: 14
-    frontend_routes: "configuracion/backups"
+    frontend_routes: "configuration/backups"
     backend_apis: ""
   - id: 5
     name: "Empresas"
@@ -54,73 +54,73 @@ access_list:
     name: "Almacenes"
     group: 2
     levels: 14
-    frontend_routes: "negocio/sedes-almacenes"
+    frontend_routes: "business/branches-warehouses"
     backend_apis: "POST.almacenes"
   - id: 8
     name: "Productos"
     group: 2
     levels: 14
-    frontend_routes: "negocio/productos"
+    frontend_routes: "business/products"
     backend_apis: "POST.productos"
   - id: 9
     name: "Clientes & Proveedores"
     group: 2
     levels: 14
-    frontend_routes: "negocio/clientes"
+    frontend_routes: "business/customers"
     backend_apis: "POST.client-provider"
   - id: 10
     name: "Punto de Venta"
     group: 3
     levels: 14
-    frontend_routes: "comercial/sale_order_create"
+    frontend_routes: "sales/sale_order_create"
     backend_apis: ""
   - id: 11
     name: "Gestión Ventas"
     group: 3
     levels: 14
-    frontend_routes: "comercial/sale_orders_status"
+    frontend_routes: "sales/sale_orders_status"
     backend_apis: ""
   - id: 12
     name: "Gráficos Ventas"
     group: 3
     levels: 14
-    frontend_routes: "comercial/sale_orders_charts"
+    frontend_routes: "sales/sale_orders_charts"
     backend_apis: ""
   - id: 13
     name: "Costos de Envio"
     group: 3
     levels: 14
-    frontend_routes: "comercial/shipping-costs"
+    frontend_routes: "sales/shipping-costs"
     backend_apis: ""
   - id: 14
     name: "Gestión de Stock"
     group: 4
     levels: 14
-    frontend_routes: "logistica/products-stock"
+    frontend_routes: "logistics/products-stock"
     backend_apis: "POST.productos-stock,POST.product-supply"
   - id: 15
     name: "Rep. Movimientos"
     group: 4
     levels: 14
-    frontend_routes: "logistica/almacen-movimientos"
+    frontend_routes: "logistics/warehouse-movements"
     backend_apis: ""
   - id: 16
     name: "Órdenes Compra"
     group: 4
     levels: 14
-    frontend_routes: "logistica/ordenes-de-compra"
+    frontend_routes: "logistics/purchase-orders"
     backend_apis: ""
   - id: 17
     name: "Cajas & Bancos"
     group: 5
     levels: 14
-    frontend_routes: "finanzas/cajas"
+    frontend_routes: "finance/cash-banks"
     backend_apis: ""
   - id: 18
     name: "Cajas Movimientos"
     group: 5
     levels: 14
-    frontend_routes: "finanzas/cajas-movimientos"
+    frontend_routes: "finance/cash-banks-movements"
     backend_apis: ""
   - id: 19
     name: "Gastos"

@@ -6,7 +6,7 @@ export const testRecordsByIDs = () => {
 	const promises = []
 	
 	for (const id of ids) {
-		const promise = getRecordByID("p-productos-ids", id)
+		const promise = getRecordByID("p-products-ids", id)
 		promises.push(promise)
 	}
 	

@@ -47,7 +47,7 @@ func RebuildProductsDbHandler(args *core.ExecArgs) core.FuncResponse {
 func collectDirtyCompanyIDs() []int32 {
 	seenCompanyIDs := map[int32]bool{}
 	orderedCompanyIDs := []int32{}
-	for _, groupID := range []int16{cacheGroupProductos, cacheGroupMarcas, cacheGroupCategorias} {
+	for _, groupID := range []int16{cacheGroupProducts, cacheGroupBrands, cacheGroupCategories} {
 		rows, err := core.GetCacheGlobal(groupID)
 		if err != nil {
 			core.Log("collectDirtyCompanyIDs:: error leyendo grupo", "| group:", groupID, "| err:", err)

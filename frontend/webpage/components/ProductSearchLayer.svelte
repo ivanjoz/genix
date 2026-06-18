@@ -6,7 +6,7 @@
   import type { ProductSearch } from "$core/product-search/product-search";
   import ProductCard from "./ProductCard.svelte";
   import type { ProductSearchHit } from "$core/product-search/types";
-  import { getProductEcommerceData, type ProductCatalog, type IProduct } from "$ecommerce/services/productos.svelte";
+  import { getProductEcommerceData, type ProductCatalog, type IProduct } from "$ecommerce/services/products.svelte";
 
   interface ProductSearchLayerProps {
     queryText?: string;

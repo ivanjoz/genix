@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getProductEcommerceData, type ProductCatalog, type IProductCategory } from '$ecommerce/services/productos.svelte';
+	import { getProductEcommerceData, type ProductCatalog, type IProductCategory } from '$ecommerce/services/products.svelte';
 
 	export interface ICategoryDescription {
 		css?: string;

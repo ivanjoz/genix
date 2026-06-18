@@ -18,13 +18,13 @@ import (
 
 const (
 	// Shared-list IDs distinguish categorías from marcas inside the single shared-list table.
-	ecommerceSharedListCategoriaID = int32(1)
-	ecommerceSharedListMarcaID     = int32(2)
+	ecommerceSharedListCategoryID = int32(1)
+	ecommerceSharedListBrandID     = int32(2)
 
 	// cache_global group IDs registering, per company, the latest searchable change watermark.
-	cacheGroupProductos  = int16(1)
-	cacheGroupMarcas     = int16(2)
-	cacheGroupCategorias = int16(3)
+	cacheGroupProducts  = int16(1)
+	cacheGroupBrands     = int16(2)
+	cacheGroupCategories = int16(3)
 
 	// core.Cache key holding the watermarks observed the last time the .db file was built.
 	productsDbBuiltCacheKey = "products_db_built"
@@ -93,7 +93,7 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Marcas + categorías deltas: shared-list rows keyed by Updated, split by ListID.
 	errGroup.Go(func() error {
-		rows, err := querySharedListDelta(companyID, ecommerceSharedListMarcaID, marcasWatermark)
+		rows, err := querySharedListDelta(companyID, ecommerceSharedListBrandID, marcasWatermark)
 		if err != nil {
 			return err
 		}
@@ -101,7 +101,7 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 		return nil
 	})
 	errGroup.Go(func() error {
-		rows, err := querySharedListDelta(companyID, ecommerceSharedListCategoriaID, categoriasWatermark)
+		rows, err := querySharedListDelta(companyID, ecommerceSharedListCategoryID, categoriasWatermark)
 		if err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 		query := db.Query(&sharedRows)
 		query.Select(query.ID, query.Name, query.ListID, query.Updated, query.Status).
 			CompanyID.Equals(companyID).
-			ListID.In(ecommerceSharedListCategoriaID, ecommerceSharedListMarcaID).
+			ListID.In(ecommerceSharedListCategoryID, ecommerceSharedListBrandID).
 			Status.GreaterThan(0).
 			AllowFilter()
 		if execErr := query.Exec(); execErr != nil {
@@ -231,12 +231,12 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 	}
 	for index := range sharedRows {
 		row := &sharedRows[index]
-		if row.ListID == ecommerceSharedListMarcaID {
+		if row.ListID == ecommerceSharedListBrandID {
 			if row.Updated > marcasWm {
 				marcasWm = row.Updated
 			}
 			writeSharedRow(&marcasBuilder, row)
-		} else if row.ListID == ecommerceSharedListCategoriaID {
+		} else if row.ListID == ecommerceSharedListCategoryID {
 			if row.Updated > categoriasWm {
 				categoriasWm = row.Updated
 			}
@@ -272,9 +272,9 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 // maybeRebuildProductsDbFile rebuilds + reuploads the snapshot only when any source group watermark
 // (productos/marcas/categorías) advanced beyond the watermarks stamped at the last build.
 func maybeRebuildProductsDbFile(companyID int32, force bool) error {
-	sourceProductos := latestGroupWatermark(cacheGroupProductos, companyID)
-	sourceMarcas := latestGroupWatermark(cacheGroupMarcas, companyID)
-	sourceCategorias := latestGroupWatermark(cacheGroupCategorias, companyID)
+	sourceProductos := latestGroupWatermark(cacheGroupProducts, companyID)
+	sourceMarcas := latestGroupWatermark(cacheGroupBrands, companyID)
+	sourceCategorias := latestGroupWatermark(cacheGroupCategories, companyID)
 
 	builtProductos, builtMarcas, builtCategorias, hasBuilt := loadBuiltWatermarks(companyID)
 

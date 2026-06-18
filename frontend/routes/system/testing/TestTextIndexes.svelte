@@ -87,7 +87,7 @@ const columns: ITableColumn<ITextSearchHit>[] = [
   >
     {#snippet cellRenderer(record, column)}
       {#if column.id === 'nombre'}
-        <RecordByIDText apiRoute="p-productos-ids" recordID={record.id} placeholder="-" />
+        <RecordByIDText apiRoute="p-products-ids" recordID={record.id} placeholder="-" />
       {/if}
     {/snippet}
   </VTable>

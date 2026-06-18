@@ -79,7 +79,7 @@
       </a>
 
       <a
-        href="/negocio/productos"
+        href="/business/products"
         class="inline-flex items-center px-6 py-3 bg-white dark:bg-gray-800
 				hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-white
 				font-semibold rounded-lg shadow-md border border-gray-200 dark:border-gray-700

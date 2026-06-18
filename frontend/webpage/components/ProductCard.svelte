@@ -6,7 +6,7 @@
 		type IRecordRef,
 	} from "$libs/cache/cache-by-ids.svelte";
 	import { untrack } from "svelte";
-	import type { IProduct } from "$ecommerce/services/productos.svelte";
+	import type { IProduct } from "$ecommerce/services/products.svelte";
 	import ImageHash from "$components/files/Imagehash.svelte";
 	import { addProductoCant, ProductsSelectedMap } from "./store.svelte";
 
@@ -118,7 +118,7 @@
 		untrack(() => {
 			lastResolvedProductID = selectedProductID;
 			productRecordReference = getRecordWithCache<IProductoByIDRecord>(
-				"p-productos-ids",
+				"p-products-ids",
 				selectedProductID,
 			);
 		});

@@ -6,7 +6,7 @@
   import SearchSelect from '$components/form/SearchSelect.svelte';
   import { closeModal, openModals, tr } from '$core/store.svelte';
   import { GalleryImagesService } from '$services/webpage/gallery.svelte';
-  import { ImageAssetsService } from '$services/negocio/image-assets.svelte';
+  import { ImageAssetsService } from '$services/business/image-assets.svelte';
 
   interface Props {
     /** Numeric id the host opens via openModal() to show this picker. */

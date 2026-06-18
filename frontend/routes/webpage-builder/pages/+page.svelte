@@ -8,7 +8,7 @@ import { goto } from '$app/navigation';
 import { Core, closeModal, openModal, tr } from '$core/store.svelte';
 import Page from '$domain/Page.svelte';
 import { ConfirmWarn, formatTime, Loading, Notify } from '$libs/helpers';
-import { UsuariosService } from '../../seguridad/usuarios/usuarios.svelte';
+import { UsuariosService } from '../../security/users/users.svelte';
 import { LAST_SYSTEM_PAGE_ID, WebpagesService, showcaseImageSrc, type IWebpage } from '$services/webpage/pages.svelte';
 import WebpageConfig from './WebpageConfig.svelte';
     import T from '$components/misc/T.svelte';

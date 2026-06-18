@@ -9,7 +9,7 @@
   import "../../styles/fonts.css";
 
   import { preloadProductSearch } from "$core/product-search/product-search-runtime";
-  import { getProductEcommerceData } from '$ecommerce/services/productos.svelte';
+  import { getProductEcommerceData } from '$ecommerce/services/products.svelte';
   import FloatingCart from "$ecommerce/components/FloatingCart.svelte";
   let { children } = $props();
 

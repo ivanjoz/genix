@@ -18,7 +18,7 @@
 	import { onMount } from 'svelte';
 	import { startAgentBridge } from '$core/agent/sse';
 	import './app.css';
-	import { fetchAccessListCatalog, getAccessEntriesForRoute } from './seguridad/perfiles-accesos/access-list-catalog';
+	import { fetchAccessListCatalog, getAccessEntriesForRoute } from './security/access-profiles/access-list-catalog';
 	import './tailwind.css';
 	// Shared typography (Open Sans desktop / Inter mobile) — imported last so its
 	// ≤749px remap wins the cascade. Same file the storefront uses.

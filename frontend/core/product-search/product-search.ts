@@ -1,9 +1,9 @@
 // ProductSearch: ranks products against a query over their plain-text names. Names (and brand
 // names) come from the CDN snapshot + server delta via the shared ProductCatalog, so matching is
 // word/character-prefix based — no dictionary, syllables or binary encoding.
-import { getProductEcommerceData, type ProductCatalog } from "$ecommerce/services/productos.svelte";
+import { getProductEcommerceData, type ProductCatalog } from "$ecommerce/services/products.svelte";
 import type { IndexedProduct, ProductSearchHit } from "./types";
-import type { IProduct } from "$ecommerce/services/productos.svelte";
+import type { IProduct } from "$ecommerce/services/products.svelte";
 
 // Spanish connector words carry no search signal and are dropped from both names and queries.
 const CONNECTOR_WORDS = new Set(["de", "del", "la", "el", "los", "las", "con", "para", "en", "al", "sin", "y"]);

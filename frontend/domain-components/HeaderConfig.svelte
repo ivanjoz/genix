@@ -20,7 +20,7 @@ import { clearCacheByIDs } from '$libs/cache/cache-by-ids.svelte';
 import { sendServiceMessage } from '$libs/sw-cache';
 import pkg from 'notiflix'
 const { Loading, Notify } = pkg;
-import { postUsuarioPropio } from '$services/services/usuarios.svelte';
+import { postOwnUser } from '$services/services/users.svelte';
 import type { IUser } from '$core/types/common';
 import { HEADER_REQUEST_LOGS_MODAL_ID } from '$domain/HeaderRequestLogsModal.svelte';
 import { formatN } from '$libs/helpers';
@@ -257,7 +257,7 @@ import {
 
     Loading.standard("Creando/Actualizando Usuario...")
     try {
-      var result = await postUsuarioPropio(userInfo)
+      var result = await postOwnUser(userInfo)
     } catch (error) {
       Notify.failure(error as string)
       Loading.remove()

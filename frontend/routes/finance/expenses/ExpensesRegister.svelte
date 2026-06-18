@@ -14,7 +14,7 @@ import LoadingBar from '$components/misc/LoadingBar.svelte'
 import { onMount, untrack } from 'svelte'
 import { Core, tr } from '$core/store.svelte'
 import { Loading, Notify, formatN, formatTime } from '$libs/helpers'
-import { CajasService, getCashBankMovementByID, type ICashBankMovement } from '../cajas/cajas.svelte'
+import { CajasService, getCashBankMovementByID, type ICashBankMovement } from '../cash-banks/cajas.svelte'
 import {
   ExpensesService,
   postExpense,
