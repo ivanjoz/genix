@@ -222,8 +222,12 @@ input[type='number'] {
 .bx-yellow,
 .bc-blue {
 	height: 39px;
-	border-radius: 7px;
-	padding: 5px 12px 4px 12px;
+  border-radius: 7px;
+  min-width: 46px;
+  display: flex;
+  justify-content: center;
+  padding-right: 12px;
+  padding-left: 12px;
 }
 
 .bx-blue.round,

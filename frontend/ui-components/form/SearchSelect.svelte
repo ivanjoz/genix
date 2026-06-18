@@ -502,7 +502,7 @@ import type { Snippet } from 'svelte';
     <div><T text="Loading...|Cargando..." /></div>
   {/if}
   {#if !isDisabled}
-    <div class={`absolute top-1/2 right-8 -translate-y-1/2 pointer-events-none select-arrow ${arrowDirectionClass}`}>
+    <div class={`absolute bottom-11 right-8 pointer-events-none select-arrow ${arrowDirectionClass}`}>
       <i class={icon || "icon-[fa--angle-down]"} class:default-select-arrow={!icon}></i>
     </div>
   {/if}

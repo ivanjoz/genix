@@ -9,6 +9,7 @@
   import { querySaleOrderReport, saleOrderStatusOptions, type ISaleOrder } from './sale_order_report.svelte';
     import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
   import KeyValueStrip from '$components/misc/KeyValueStrip.svelte';
+  import FilterInput from '$components/form/FilterInput.svelte';
   import { tr } from '$core/store.svelte';
   import T from '$components/misc/T.svelte';
 
@@ -29,7 +30,6 @@
   });
   let saleOrders = $state([] as ISaleOrder[]);
   let searchText = $state('');
-  let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let isSearchOpen = $state(false)
 
   const clientOptions = $derived.by(() => {
@@ -55,20 +55,6 @@
     }
   }
 
-  function onSearchInput(event: Event): void {
-    event.stopPropagation();
-    const nextSearchText = ((event.target as HTMLInputElement).value || '').toLowerCase().trim();
-
-    // Debounce table filtering so large result sets do not recompute on every keystroke.
-    if (searchDebounceTimer) {
-      clearTimeout(searchDebounceTimer);
-    }
-
-    searchDebounceTimer = setTimeout(() => {
-      searchText = nextSearchText;
-      searchDebounceTimer = null;
-    }, 150);
-  }
 </script>
 
 <Page title="Sales Report|Reporte Ventas">
@@ -171,16 +157,12 @@
 			/>
     </div>
 
-    <div class="relative col-start-2 row-start-1 flex items-start self-start w-full max-w-224 ml-auto md:mr-16 md:w-224">
-      <div class="absolute left-12 text-gray-400">
-        <i class="icon-[fa--search]"></i>
-      </div>
-      <input
-        class="w-full pl-36 bg-white pr-12 py-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        autocomplete="off"
-        type="text"
-        placeholder={tr("Search...|Buscar...")}
-        oninput={onSearchInput}
+    <div class="col-start-2 row-start-1 flex items-start self-start w-full max-w-224 ml-auto md:mr-16 md:w-224">
+      <FilterInput
+        css="w-full"
+        icon="icon-[fa--search]"
+        placeholder="Search...|Buscar..."
+        bind:value={searchText}
       />
     </div>
   </div>

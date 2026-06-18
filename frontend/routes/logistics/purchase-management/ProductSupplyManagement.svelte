@@ -201,7 +201,7 @@ import {
         id: 'product-name',
         header: 'Product|Producto',
         width: '30%',
-        css: 'px-6 py-4 leading-[1.1] whitespace-normal',
+        css: 'leading-[1.1] whitespace-normal',
         splitString: 64,
         getValue: (productSupplyRecord) => productos.recordsMap.get(productSupplyRecord.ProductID)?.Name || `Producto-${productSupplyRecord.ProductID}`,
       },
@@ -210,7 +210,7 @@ import {
         header: 'Current/Min Stock|Stock Actual /Min',
         width: '6%',
         align: 'right',
-        css: 'px-6 text-right',
+        css: 'text-right',
         useCellRenderer: true,
         getValue: (productSupplyRecord) => productSupplyRecord.MinimunStock || 0,
       },
@@ -219,21 +219,21 @@ import {
         header: 'Stock Movements|Movimientos Stock',
         width: `${ventasPixelMetrics.ventasColumnWidthPx}px`,
         useCellRenderer: true,
-        css: 'px-0',
+        headerCss: 'px-0',
       },
       {
         id: 'sales-per-day',
         header: 'Sales / Day|Ventas / Día',
         width: '6%',
         align: 'right',
-        css: 'px-6 text-right',
+        css: 'text-right',
         getValue: (productSupplyRecord) => productSupplyRecord.SalesPerDayEstimated || 0,
       },
       {
         id: 'providers',
         header: 'Suppliers|Proveedores',
         width: 'auto',
-        css: 'px-6 whitespace-normal',
+        css: 'whitespace-normal',
         useCellRenderer: true,
         getValue: (productSupplyRecord) => {
           return (productSupplyRecord.ProviderSupply || []).map((providerSupplyRow) => {
@@ -401,8 +401,8 @@ import {
 	    >
         {#snippet headerRenderer(columnDefinition, _columnIndex)}
           {#if columnDefinition.id === 'sales-last-30-days'}
-            <div class="flex flex-col gap-2 py-2">
-              <div class="px-10">{columnDefinition.header}</div>
+            <div class="flex flex-col gap-2 py-4">
+              <div class="px-10"><T text={columnDefinition.header}/></div>
               <div class="min-w-0" style={`width:${ventasPixelMetrics.ventasColumnWidthPx}px`}>
                 <div class="grid items-center text-[11px] text-slate-500" style={`padding-left:${yAxisWidthPx - 4}px;grid-template-columns:repeat(${salesHeaderLabels.length}, ${ventasPixelMetrics.ventasBarWidthPx * 3}px)`}>
                   {#each salesHeaderLabels as salesHeaderLabel (salesHeaderLabel.dateUnix)}
@@ -415,8 +415,8 @@ import {
               </div>
             </div>
           {:else}
-            <div class="px-10 py-8">
-              {columnDefinition.header}
+            <div class="">
+              <T text={columnDefinition.header}/>
             </div>
           {/if}
         {/snippet}

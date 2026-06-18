@@ -6,6 +6,7 @@
   import { createFixedTableVirtualizer } from './vtable-virtual-fixed.svelte';
   import { splitTwoStrings } from '$libs/helpers';
   import MobileCardsVirtualList from '$components/vTable/MobileCardsVirtualList.svelte';
+  import T from '$components/misc/T.svelte';
   import { Env } from '$core/env';
   import { tr } from '$core/store.svelte';
   import { Agent } from '$components/agent/registry';
@@ -196,9 +197,9 @@
   };
 
   const getHeaderContent = (columnDefinition: ITableColumn<TRecord>): string => {
-    return tr(typeof columnDefinition.header === 'function'
+    return typeof columnDefinition.header === 'function'
       ? columnDefinition.header()
-      : columnDefinition.header);
+      : columnDefinition.header;
   };
 
   const isSelectedRow = (rowRecord: TRecord, rowIndex: number): boolean => {
@@ -429,7 +430,7 @@
             {#if headerRenderer}
               {@render headerRenderer(columnDefinition, columnIndex)}
             {:else}
-              {getHeaderContent(columnDefinition)}
+              <T text={getHeaderContent(columnDefinition)}/>
             {/if}
           </div>
         {/each}
@@ -557,7 +558,7 @@
             {#if headerRenderer}
               {@render headerRenderer(columnDefinition, columnIndex)}
             {:else}
-              {getHeaderContent(columnDefinition)}
+              <T text={getHeaderContent(columnDefinition)}/>
             {/if}
           </div>
         {/each}

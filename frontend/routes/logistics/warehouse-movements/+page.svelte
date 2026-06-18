@@ -6,8 +6,9 @@ import SearchSelect from '$components/form/SearchSelect.svelte';
 import DateInput from '$components/form/DateInput.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
-import { Loading, formatTime, throttle, highlString } from '$libs/helpers';
+import { Loading, formatTime, highlString } from '$libs/helpers';
 import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
+import FilterInput from '$components/form/FilterInput.svelte';
 import KeyValueStrip from '$components/misc/KeyValueStrip.svelte';
 import Input from '$components/form/Input.svelte';
 import { getStaticRecordsByID } from '$libs/cache/cache-by-ids.svelte';
@@ -300,21 +301,12 @@ import { SvelteMap } from 'svelte/reactivity';
         getContent5={id => movimientoTipos.find(t => t.id === Number(id))?.name || "Todos"}
       />
     </div>
-    <div class="relative col-start-2 row-start-1 flex items-start self-start w-full max-w-224 ml-auto md:mr-16 md:w-224">
-      <div class="absolute left-12 text-gray-400">
-        <i class="icon-[fa--search]"></i>
-      </div>
-      <input
-        class="w-full pl-36 bg-white pr-12 py-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        autocomplete="off"
-        type="text"
-        placeholder="Buscar..."
-        onkeyup={ev => {
-          ev.stopPropagation()
-          throttle(() => {
-            filterText = ((ev.target as any).value || "").toLowerCase().trim()
-          }, 150)
-        }}
+    <div class="col-start-2 row-start-1 flex items-start self-start w-full max-w-224 ml-auto md:mr-16 md:w-224">
+      <FilterInput
+        css="w-full"
+        icon="icon-[fa--search]"
+        placeholder="Search...|Buscar..."
+        bind:value={filterText}
       />
     </div>
   </div>
