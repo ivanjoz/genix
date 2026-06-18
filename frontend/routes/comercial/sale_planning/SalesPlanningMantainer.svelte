@@ -327,18 +327,18 @@
   {#if view === 1}
     <FilterInput label="Filter products|Filtrar productos"
       css="w-full md:w-220 md:ml-12 col-span-12"
-      icon="icon-search"
+      icon="icon-[fa--search]"
       bind:value={productFilter}
     />
   {:else}
     <FilterInput label="Filter curves|Filtrar curvas"
       css="w-full md:w-220 md:ml-12 col-span-7"
-      icon="icon-search"
+      icon="icon-[fa--search]"
       bind:value={curveFilter}
     />
     <Button name="New|Nueva"
       color="green"
-      icon="icon-plus"
+      icon="icon-[fa--plus]"
       css="ml-auto col-span-5"
       onClick={newCurve}
     />

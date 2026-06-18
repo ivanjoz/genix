@@ -228,7 +228,7 @@
           <div class="h6 ff-bold pr-8 text-slate-500">
             {filteredClientProviders.length} <T text="records|registros" />
           </div>
-          <Button color="green" icon="icon-plus" name="New|Nuevo" hideNameOnMobile
+          <Button color="green" icon="icon-[fa--plus]" name="New|Nuevo" hideNameOnMobile
             label={`Opens the side layer to create a new ${layerTitleSingular.toLowerCase()}.`}
             onClick={openCreateClientProviderLayer} />
         </div>

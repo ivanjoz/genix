@@ -165,7 +165,7 @@
 			<img class="w-42 h-42 shrink-0" src="/images/genix_logo4.svg" alt="">
 			<div class="_2 white ff-bold h2 -m-3 whitespace-nowrap">enix</div>
 			{#if Core.useTopMinimalMenu}
-				<i class="icon-down-open-1 ml-4 text-gray-400 text-xs hover-indicator shrink-0"></i>
+				<i class="icon-[fa--chevron-down] ml-4 text-gray-400 text-xs hover-indicator shrink-0"></i>
 			{/if}
 		</div>
 	</div>
@@ -203,10 +203,10 @@
 					<!-- Arrow icon (only visible when expanded) -->
 					{#if menu.options && menu.options.length > 0}
 						<span
-							class="menu-arrow absolute right-3 transition-all duration-300"
+							class="menu-arrow absolute right-8 transition-all duration-300"
 							class:rotate-180={isOpen}
 						>
-							<i class="icon-down-open-1"></i>
+							<i class="icon-[fa--angle-down]"></i>
 						</span>
 					{/if}
 				</button>
@@ -223,18 +223,13 @@
 								{isActive ? 'bg-indigo-600/30 border-indigo-400 text-white' : 'text-gray-300'}"
 								onclick={() => navigateTo(option.route || '/', menu.id || 0)}
 							>
-								<!-- Minimized: show icon only centered -->
-								<div class="option-minimized flex w-full">
-									<i class="{option.icon || "icon-box"} mr-2"></i>
-									<div class="font-mono">
+								<div class="option-content flex w-full">
+									<!-- Keep one stable icon node during menu expansion to avoid mask repaint flicker. -->
+									<i class="{option.icon || "icon-[fa--cube]"} desktop-option-icon mr-2 w-[1em] shrink-0 leading-none"></i>
+									<div class="option-minimized font-mono">
 										{option.minName || optionName.substring(0, 2)}
 									</div>
-								</div>
-
-								<!-- Expanded: show icon and full name -->
-								<div class="option-expanded flex w-full">
-									<i class="{option.icon || "icon-box"} mr-2"></i>
-									<div class="font-mono">
+									<div class="option-expanded font-mono">
 										{#each optionName.split(' ') as word}
 											<span class="mr-4">{word}</span>
 										{/each}
@@ -275,7 +270,7 @@
 				aria-label="Close menu"
 				onclick={() => toggleMobileMenu(true)}
 			>
-				<i class="icon-cancel"></i>
+				<i class="icon-[fa--close]"></i>
 			</button>
 		</div>
 
@@ -293,7 +288,7 @@
 						<span class="menu-group-title">{menuName.toUpperCase()}</span>
 						{#if menu.options && menu.options.length > 0}
 							<span class="menu-group-chevron" class:rotated={isOpen}>
-								<i class="icon-down-open-1"></i>
+								<i class="icon-[fa--chevron-down]"></i>
 							</span>
 						{/if}
 					</button>
@@ -386,30 +381,44 @@
 	/* Menu Arrow - Hidden by default, visible on hover */
 	.menu-arrow {
 		opacity: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 16px;
+		line-height: 1;
 	}
 
 	.d-menu:hover .menu-arrow {
 		opacity: 1;
 	}
 
-	/* Submenu Options - Show minimized by default, expanded on hover */
-	.option-minimized {
-		display: flex;
-	}
-
-	.option-expanded {
-		display: none;
-	}
-
-	.option-minimized, .option-expanded {
+	/* Submenu Options - Keep icon mounted; only swap the text label on hover. */
+	.option-content {
 		position: absolute;
 		left: 6px;
 		align-items: center;
 	}
 
-	.option-minimized > div, .option-expanded > div {
+	.desktop-option-icon {
+		color: rgb(156 163 175);
+	}
+
+	.submenu-option:hover .desktop-option-icon,
+	.submenu-option.text-white .desktop-option-icon {
+		color: currentColor;
+	}
+
+	.option-minimized, .option-expanded {
 		margin-bottom: -2px;
 		font-size: 15px;
+	}
+
+	.option-minimized {
+		display: block;
+	}
+
+	.option-expanded {
+		display: none;
 	}
 
 	.d-menu:hover .option-minimized {

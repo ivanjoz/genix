@@ -137,12 +137,12 @@ import { tr } from '$core/store.svelte';
           consultarRegistros()
         }}
       >
-        <i class="icon-search"></i>
+        <i class="icon-[fa--search]"></i>
       </button>
     </div>
     <div class="flex items-center mr-16 w-224 ml-auto relative">
       <div class="absolute left-12 text-gray-400">
-        <i class="icon-search"></i>
+        <i class="icon-[fa--search]"></i>
       </div>
       <input
         class="w-full pl-36 pr-12 py-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"

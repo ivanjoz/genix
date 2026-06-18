@@ -598,7 +598,7 @@
 	           onClickAnularSoloUI();
 	         }}
 	       >
-	         <i class="icon-trash"></i>
+	         <i class="icon-[fa--trash]"></i>
 	       </button>
       </div>
       {/if}
@@ -651,7 +651,7 @@
                     onClickPagar();
                   }}
                 >
-                  <i class="icon-ok"></i>
+                  <i class="icon-[fa--check]"></i>
                   <span class="mr-12"><T text="Pay|Pagar" /></span>
                 </button>
               {:else}
@@ -684,7 +684,7 @@
                       onClickEntregar();
                     }}
                   >
-                    <i class="icon-truck"></i>
+                    <i class="icon-[fa--truck]"></i>
                     <span><T text="Deliver|Entregar" /></span>
                   </button>
                 </div>

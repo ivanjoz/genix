@@ -292,9 +292,9 @@ import type { Snippet } from 'svelte';
   function iconValid() {
     if (!isValid) return null;
     if (isValid === 2) {
-      return `<i class="v-icon icon-ok text-green-600"></i>`;
+      return `<i class="v-icon icon-[fa--check] text-green-600"></i>`;
     } else if (isValid === 1) {
-      return `<i class="v-icon icon-attention text-red-600"></i>`;
+      return `<i class="v-icon icon-[fa--exclamation-triangle] text-red-600"></i>`;
     }
     return null;
   }
@@ -502,8 +502,8 @@ import type { Snippet } from 'svelte';
     <div><T text="Loading...|Cargando..." /></div>
   {/if}
   {#if !isDisabled}
-    <div class={`absolute bottom-8 right-6 pointer-events-none select-arrow ${arrowDirectionClass}`}>
-      <i class={icon || "icon-down-open-1"}></i>
+    <div class={`absolute top-1/2 right-8 -translate-y-1/2 pointer-events-none select-arrow ${arrowDirectionClass}`}>
+      <i class={icon || "icon-[fa--angle-down]"} class:default-select-arrow={!icon}></i>
     </div>
   {/if}
   {#if show && !useLayerPicker}
@@ -643,6 +643,15 @@ import type { Snippet } from 'svelte';
     transition: transform 0.18s ease, color 0.18s ease;
     transform-origin: center;
     transform-style: preserve-3d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #53516d
+  }
+
+  .default-select-arrow {
+    font-size: 18px;
+    line-height: 1;
   }
 
   .select-arrow.arrow-up {

@@ -98,10 +98,10 @@ import WebpageConfig from './WebpageConfig.svelte';
     <!-- Toolbar: filter + new (the view tabs live in the header, not here) -->
     <div class="flex items-center mb-10 gap-12">
       <FilterInput label="Filter pages|Filtrar páginas"
-        css="w-full md:w-260" icon="icon-search" bind:value={filterText}
+        css="w-full md:w-260" icon="icon-[fa--search]" bind:value={filterText}
       />
       <Button name="New|Nuevo" label="Shows the form to create a new page."
-        color="green" icon="icon-plus" hideNameOnMobile css="ml-auto"
+        color="green" icon="icon-[fa--plus]" hideNameOnMobile css="ml-auto"
         onClick={newPage}
       />
     </div>
@@ -124,7 +124,7 @@ import WebpageConfig from './WebpageConfig.svelte';
               {#if showcaseImageSrc(page)}
                 <img class="w-full h-full object-cover" src={showcaseImageSrc(page)} alt={page.Name} loading="lazy" />
               {:else}
-                <i class="icon-picture fs28 c-steel op-50"></i>
+                <i class="icon-[fa--image] fs28 c-steel op-50"></i>
               {/if}
             </div>
 
@@ -133,7 +133,7 @@ import WebpageConfig from './WebpageConfig.svelte';
               aria-label={tr('Edit page content|Editar contenido de la página')}
               onclick={(ev) => { ev.stopPropagation(); editPageContent(page); }}
             >
-              <i class="icon-pencil"></i>
+              <i class="icon-[fa--pencil]"></i>
             </button>
 
             <div class="px-12 py-10">

@@ -284,12 +284,12 @@
         aria-label={tr('Remove image|Quitar imagen')}
         onclick={() => setProp('src', '')}
       >
-        <i class="icon-cancel"></i>
+        <i class="icon-[fa--close]"></i>
       </button>
     {:else}
       <!-- Empty: hover reveals an "Agregar" button that opens the image picker. -->
       <button type="button" class="preview-add" onclick={() => openModal(pickerModalId)}>
-        <i class="icon-plus"></i><span>{tr('Add|Agregar')}</span>
+        <i class="icon-[fa--plus]"></i><span>{tr('Add|Agregar')}</span>
       </button>
     {/if}
   </div>

@@ -113,17 +113,16 @@ import { editorStore } from '../stores/editor.svelte';
           title={tr('Toggle mobile view|Alternar vista móvil', Core.languaje)}
           aria-label="Toggle mobile view"
         >
-          <!-- icon-mobile/icon-desktop have no glyph in the bundled fontello set; use
-               the device glyph for "go mobile" and the expand glyph for "back to full". -->
-          <i class={editorStore.viewMode === 'mobile' ? 'icon-resize-full' : 'icon-tablet'}></i>
+          <!-- Keep the preview mode icon compact because this toolbar is dense. -->
+          <i class={editorStore.viewMode === 'mobile' ? 'icon-[fa--arrows-alt]' : 'icon-[fa--tablet]'}></i>
         </button>
         <span class="spacer"></span>
         {#if editorStore.selectedId}
           <button class="action-btn save-btn" onclick={handleSave} title={tr('Save|Guardar', Core.languaje)}>
             <T text="Save|Guardar" />
           </button>
-          <button class="action-btn delete-btn" onclick={handleDelete} title={tr('Delete|Eliminar', Core.languaje)} aria-label="Delete the section"><i class="icon-trash"></i></button>
-          <button class="action-btn close-btn icon-btn" onclick={handleClose} title={tr('Close|Cerrar', Core.languaje)} aria-label="Close the section editor"><i class="icon-cancel"></i></button>
+          <button class="action-btn delete-btn" onclick={handleDelete} title={tr('Delete|Eliminar', Core.languaje)} aria-label="Delete the section"><i class="icon-[fa--trash]"></i></button>
+          <button class="action-btn close-btn icon-btn" onclick={handleClose} title={tr('Close|Cerrar', Core.languaje)} aria-label="Close the section editor"><i class="icon-[fa--close]"></i></button>
         {/if}
       </div>
     {/if}

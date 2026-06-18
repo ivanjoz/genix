@@ -33,6 +33,6 @@
 <span class={`${baseCss} ${colorCssByName[color][mode]} ${css}`.trim()}>
   {tr(label)}
   {#if mode === 'checked'}
-    <i class="icon-ok absolute -bottom-6 -right-6 text-12 leading-none"></i>
+    <i class="icon-[fa--check] absolute -bottom-6 -right-6 text-12 leading-none"></i>
   {/if}
 </span>

@@ -143,9 +143,9 @@ import { persistFieldValue } from '$libs/helpers';
     const iconValid = () => {
         if (!isInputValid) return null;
         else if (isInputValid === 2)
-            return `<i class="v-icon icon-ok c-green"></i>`;
+            return `<i class="v-icon icon-[fa--check] c-green"></i>`;
         else if (isInputValid === 1)
-            return `<i class="v-icon icon-attention text-red-500"></i>`;
+            return `<i class="v-icon icon-[fa--exclamation-triangle] text-red-500"></i>`;
         return null;
     };
 

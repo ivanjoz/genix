@@ -77,7 +77,7 @@ import { onMount } from 'svelte';
       </div>
     </div>
     <Button name="Save|Guardar" label="Saves the storefront domain."
-      color="green" icon="icon-floppy" css="col-span-3"
+      color="green" icon="icon-[fa--floppy-o]" css="col-span-3"
       onClick={saveDomain}
     />
   </div>
@@ -93,7 +93,7 @@ import { onMount } from 'svelte';
     <Input label="OG Image URL|URL Imagen OG" css="col-span-6" saveOn={config} save="ogImage" />
     <Input label="Favicon URL|URL Favicon" css="col-span-6" saveOn={config} save="favicon" />
     <Button name="Save SEO|Guardar SEO" label="Saves the SEO metatags for the whole site."
-      color="green" icon="icon-floppy" css="col-span-3 mt-4"
+      color="green" icon="icon-[fa--floppy-o]" css="col-span-3 mt-4"
       onClick={saveSeo}
     />
   </div>

@@ -78,7 +78,7 @@
 				horizontalOffset={0} useOutline={true}
 				edgeMargin={0} buttonClassOnShow="bx-red"
 				layerClass="w-600"
-				icon="icon-search" iconOnShow="icon-cancel"
+				icon="icon-[fa--search]" iconOnShow="icon-[fa--close]"
 				label="Opens the search filter for the sales report."
 			>
 				<div class="w-full grid grid-cols-24 gap-12 p-12" aria-label="Sales report filter with date range, client, product, and status">
@@ -133,7 +133,7 @@
 							isSearchOpen = false
 			        }}
 			      >
-			        <T text="Search|Buscar" /> <i class="icon-search"></i>
+			        <T text="Search|Buscar" /> <i class="icon-[fa--search]"></i>
 			      </button>
 					</div>
 				</div>
@@ -173,7 +173,7 @@
 
     <div class="relative col-start-2 row-start-1 flex items-start self-start w-full max-w-224 ml-auto md:mr-16 md:w-224">
       <div class="absolute left-12 text-gray-400">
-        <i class="icon-search"></i>
+        <i class="icon-[fa--search]"></i>
       </div>
       <input
         class="w-full pl-36 bg-white pr-12 py-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"

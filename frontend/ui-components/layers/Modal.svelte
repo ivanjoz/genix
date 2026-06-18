@@ -198,7 +198,7 @@
 								onclick={handleDelete}
 								aria-label={tr("Delete|Eliminar")}
 							>
-								<i class="icon-trash"></i>
+								<i class="icon-[fa--trash]"></i>
 							</button>
 						{/if}
 						{#if onSave}
@@ -207,7 +207,7 @@
 								onclick={handleSave}
 								aria-label={tr(saveLabel)}
 							>
-								<i class={saveIcon || "icon-floppy"}></i>
+								<i class={saveIcon || "icon-[fa--floppy-o]"}></i>
 								<span class="_5">{tr(saveLabel)}</span>
 							</button>
 						{/if}
@@ -216,7 +216,7 @@
 							onclick={handleClose}
 							aria-label={tr("Close|Cerrar")}
 						>
-							<i class="icon-cancel"></i>
+							<i class="icon-[fa--close]"></i>
 						</button>
 					</div>
 				</div>
@@ -252,7 +252,7 @@
 									onclick={closeErrorsView}
 									aria-label={tr("Close errors|Cerrar errores")}
 								>
-									<i class="icon-cancel"></i>
+									<i class="icon-[fa--close]"></i>
 								</button>
 								<div class="ff-bold text-red-700 mb-2">
 									{tr("Import validations|Validaciones de importación")}

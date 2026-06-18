@@ -109,7 +109,7 @@ const { Loading } = pkg
     <div class="flex items-center justify-between mb-6" aria-label="Companies toolbar with filter and create button">
       <FilterInput bind:value={filterText} css="mr-16 w-256" />
       <div class="flex items-center">
-        <Button color="green" icon="icon-plus" label="Opens the modal to create a new company." onClick={() => {
+        <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new company." onClick={() => {
           empresaForm = { ss: 1, SmtpConfig: {}, CulquiConfig: {} } as ICompany
           Core.openModal(1)
         }} />

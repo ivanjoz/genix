@@ -9,6 +9,15 @@
    wins. Mirrors routes/tailwind.css. */
 @layer theme, base, components, ec-runtime, utilities;
 @import "tailwindcss";
+@plugin "@iconify/tailwind4" {
+  prefix: "icon";
+  scale: 1;
+}
+@source not "../../.svelte-kit";
+@source not "../.svelte-kit";
+@source not "../dist-prerender";
+@source not "../build";
+@source not "../../**/*.md";
 
 @source "../../ui-components/**/*.svelte";
 @source "../../domain-components/MobileMenu.svelte";

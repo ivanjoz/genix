@@ -27,13 +27,13 @@ export interface IProfile {
 
 export const accesoAcciones = [
   { id: 1, name: "Visualizar", short: "VER",
-    icon: "icon-eye", color: "#00c07d", color2: "#49c99c" },
+    icon: "icon-[fa--eye]", color: "#00c07d", color2: "#49c99c" },
   { id: 2, name: "Crear", short: "CREAR",
-    icon: "icon-pencil", color: "#0080f9" },
+    icon: "icon-[fa--pencil]", color: "#0080f9" },
   { id: 3, name: "Editar", short: "EDITAR",
-    icon: "icon-pencil", color: "#0f6bff" },
+    icon: "icon-[fa--pencil]", color: "#0f6bff" },
   { id: 4, name: "Todo", short: "TODO",
-    icon: "icon-shield", color: "#af12eb", color2: "#d35eff" },
+    icon: "icon-[fa--shield]", color: "#af12eb", color2: "#d35eff" },
 ]
 
 export class PerfilesService extends GetHandler {

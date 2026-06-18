@@ -106,7 +106,7 @@
 
 <div id="culqi-container" class="grow-1 w-full min-h-[500px]">
   <div class="flex flex-col items-center justify-center h-full text-gray-400">
-    <i class="icon-spin5 animate-spin text-[32px] mb-2"></i>
+    <i class="icon-[fa--spinner] animate-spin text-[32px] mb-2"></i>
     <p>Cargando pasarela de pago...</p>
   </div>
 </div>

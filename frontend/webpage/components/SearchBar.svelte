@@ -71,7 +71,7 @@
           onblur={handleSearchInputBlur}
           placeholder="Buscar..."
         ></textarea>
-        <i class="icon1-search absolute top-8 md:top-9 right-7 md:right-10"></i>
+        <i class="icon-[fa--search] absolute top-8 md:top-9 right-7 md:right-10"></i>
       </div>
     {/snippet}
 

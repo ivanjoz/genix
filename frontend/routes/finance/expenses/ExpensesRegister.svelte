@@ -319,7 +319,7 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
       }}
     />
   </div>
-  <Button color="green" icon="icon-plus" name="New|Nuevo" onClick={newExpense} />
+  <Button color="green" icon="icon-[fa--plus]" name="New|Nuevo" onClick={newExpense} />
 </div>
 
 <Layer type="content">
@@ -406,7 +406,7 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
           <Checkbox bind:saveOn={paymentForm} save="IsFullyPaid" label="Is Fully Paid|Pagado Completo" />
         </div>
         <div class="col-span-24 mt-8">
-          <Button color="blue" icon="icon-ok" name="Register Payment|Registrar Pago" onClick={registerPayment} />
+          <Button color="blue" icon="icon-[fa--check]" name="Register Payment|Registrar Pago" onClick={registerPayment} />
         </div>
 
         {#if (form.PaidAmount || 0) > 0}

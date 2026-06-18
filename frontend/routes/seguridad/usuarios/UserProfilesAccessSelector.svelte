@@ -112,7 +112,7 @@
     return {
       accessName: accessCatalogNameByID.get(accessID) || `Acceso ${accessID}`,
       accessGroupName: accessGroupNameByID.get(accessCatalogEntry?.group || 0) || '',
-      actionIcon: accessActionPresentation?.actionIcon || 'icon-shield',
+      actionIcon: accessActionPresentation?.actionIcon || 'icon-[fa--shield]',
       actionColorClass: accessActionPresentation?.actionColorClass || 'text-red-600'
     };
   }
@@ -145,13 +145,13 @@
           </div>
           {#if selectedProfileAccessSummary.readableAccessNames.length > 0}
             <div class="_selected-profile-row">
-              <i class="icon-eye _selected-profile-icon pt-2 text-blue-600"></i>
+              <i class="icon-[fa--eye] _selected-profile-icon pt-2 text-blue-600"></i>
               <span class="text-sm">{selectedProfileAccessSummary.readableAccessNames.join(', ')}</span>
             </div>
           {/if}
           {#if selectedProfileAccessSummary.editableAccessNames.length > 0}
             <div class="_selected-profile-row">
-              <i class="icon-pencil _selected-profile-icon pt-2 text-red-600"></i>
+              <i class="icon-[fa--pencil] _selected-profile-icon pt-2 text-red-600"></i>
               <span class="text-sm">{selectedProfileAccessSummary.editableAccessNames.join(', ')}</span>
             </div>
           {/if}

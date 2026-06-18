@@ -11,6 +11,7 @@ import ProductCard from '$ecommerce/components/ProductCard.svelte';
 import ImageEffect from '$ecommerce/components/ImageEffect.svelte';
 import EcommerceSlider from '$ecommerce/components/EcommerceSlider.svelte';
 import EcommerceTabs from '$ecommerce/components/EcommerceTabs.svelte';
+import Icon from '$ecommerce/components/Icon.svelte';
 
 export const astComponentRegistry: Record<string, Component<any>> = {
 	ProductsByCategory,
@@ -20,6 +21,7 @@ export const astComponentRegistry: Record<string, Component<any>> = {
 	ImageEffect,
 	Slider: EcommerceSlider,
 	TabbedLayer: EcommerceTabs,
+	Icon,
 };
 
 export function isCustomComponentTag(tagName: string): boolean {

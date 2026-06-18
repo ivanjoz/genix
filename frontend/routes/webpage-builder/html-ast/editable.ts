@@ -72,19 +72,29 @@ export function isTextRun(node: ComponentAST): boolean {
 const INLINE_FRAGMENT_TAGS = new Set(['span', 'strong', 'em', 'small', 'b', 'i', TEXT_TAG]);
 
 /**
+ * One inline fragment of a line: a text-bearing inline leaf (`<span>…`), or a picked
+ * Iconify `Icon` node (inline SVG, no text). Both are edited inside the TextBlockEditor —
+ * the Icon as a read-only chip — so a line mixing them must NOT be split apart by grouping.
+ */
+function isInlineFragment(k: ComponentAST): boolean {
+	if (k.tagName === 'Icon') return true;
+	return (
+		INLINE_FRAGMENT_TAGS.has(k.tagName) &&
+		(k.tagName === TEXT_TAG || typeof k.text === 'string') &&
+		!k.children?.length
+	);
+}
+
+/**
  * A container whose children are ALL inline text/icon fragments (e.g. `<li>` with an
- * icon span + a text span). It becomes a single one-line editor whose fragments are
- * those children. Anything deeper (blocks, links, images, nested containers) disqualifies it.
+ * icon span + a text span, or an `<h1>` materialized into `<span>` + an `Icon`). It becomes
+ * a single one-line editor whose fragments are those children. Anything deeper (blocks,
+ * links, images, nested containers) disqualifies it.
  */
 export function isContainerLine(node: ComponentAST): boolean {
 	const kids = node.children;
 	if (!kids?.length) return false;
-	return kids.every(
-		(k) =>
-			INLINE_FRAGMENT_TAGS.has(k.tagName) &&
-			(k.tagName === TEXT_TAG || typeof k.text === 'string') &&
-			!k.children?.length,
-	);
+	return kids.every(isInlineFragment);
 }
 
 /**

@@ -146,7 +146,7 @@ const periodColumns: ITableColumn<IExpense>[] = [
 
 <div class="flex items-center justify-between mb-6">
   <FilterInput bind:value={filterText} css="w-256" />
-  <Button color="green" icon="icon-plus" name="New|Nuevo" onClick={newSchedule} />
+  <Button color="green" icon="icon-[fa--plus]" name="New|Nuevo" onClick={newSchedule} />
 </div>
 
 <Layer type="content">

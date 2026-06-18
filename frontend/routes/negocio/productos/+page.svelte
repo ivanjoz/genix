@@ -123,7 +123,7 @@ import {
       css: "c-blue text-center",
       headerCss: "w-48", headerInnerCss: "min-w-42",
       getValue: (e) => e.ID || "",
-      render: e => e.ID ? String(e.ID) : `<i class="icon-arrows-cw"></i>`,
+      render: e => e.ID ? String(e.ID) : `<i class="icon-[fa--refresh]"></i>`,
       setCellCss: (record) => getUpdatedFieldCellCss(record, "ID"),
       excel: { type: "number"  },
       mobile: { order: 1, css: "col-span-6 ff-bold", icon: "tag" },
@@ -144,7 +144,7 @@ import {
     {
       header: "Categories|Categorías", useLineClamp: true,
       highlight: true, width: "160px",
-      renderPrefix: e => (e.CategoryIDs||[]).some(x => x <= 0) && `<i class="icon-arrows-cw -ml-4 text-purple-400"></i>`,
+      renderPrefix: e => (e.CategoryIDs||[]).some(x => x <= 0) && `<i class="icon-[fa--refresh] -ml-4 text-purple-400"></i>`,
       getValue: (e) => {
         // Keep import preview readable by showing original labels from Excel.
         if (isImport && (e._categoriasNames || "").trim().length > 0) {
@@ -255,7 +255,7 @@ import {
     {
       header: "Brand|Marca", width: "160px",
       hidden: !isImport,
-      renderPrefix: e => !(e.BrandID > 0) && `<i class="-ml-4 icon-arrows-cw text-purple-500"></i>`,
+      renderPrefix: e => !(e.BrandID > 0) && `<i class="-ml-4 icon-[fa--refresh] text-purple-500"></i>`,
       getValue: (e) => e._marcaNombre || listas.get(e.BrandID)?.Name || "",
       setCellCss: (record) => getUpdatedFieldCellCss(record, "BrandID"),
       excel: { type: "string", importField: "_marcaNombre" },
@@ -553,20 +553,20 @@ import {
     />
     <FilterInput label="Filter products|Filtrar productos"
       css="w-full md:w-200 md:ml-12 col-span-5"
-      icon="icon-search"
+      icon="icon-[fa--search]"
       bind:value={filterText}
     />
 
     {#if view === 1}
       <Button label="Opens the import modal to load products from an Excel file."
         color="blue"
-        icon="icon-upload"
+        icon="icon-[fa--upload]"
         css="ml-auto mr-8 col-span-3"
         onClick={openImportProductosModal}
       />
       <Button label="Exports the current product list to an Excel file for download."
         color="purple"
-        icon="icon-download"
+        icon="icon-[fa--download]"
         css="mr-8 col-span-3"
         onClick={exportProductosExcel}
       />
@@ -574,7 +574,7 @@ import {
 
     <Button name="New|Nuevo" label="Shows the form to create a new product in a side layer."
       color="green"
-      icon="icon-plus"
+      icon="icon-[fa--plus]"
       hideNameOnMobile
       css={`col-span-7 ${view === 1 ? "" : "ml-auto"}`}
       onClick={() => {
@@ -932,7 +932,7 @@ import {
     onFileChange={onImportExcelFileChange}
     onSave={importExcelRowsPreview.length > 0 ? saveImportProductos : undefined}
     saveButtonLabel="Importar"
-    saveIcon="icon-upload"
+    saveIcon="icon-[fa--upload]"
   >
     <div class="">
       <div class="border border-slate-200 rounded-md overflow-hidden h-[58vh] min-h-[260px]">

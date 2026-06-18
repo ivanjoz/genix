@@ -137,7 +137,7 @@ import { Agent } from '$components/agent/registry';
             doOnChange()
           }}
         >
-          <i class="icon-trash"></i>
+          <i class="icon-[fa--trash]"></i>
         </button>
       </div>
     {/each}

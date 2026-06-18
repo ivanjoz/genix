@@ -4,7 +4,6 @@
   import { browser } from "$app/environment";
   import "./store.css";
   import "./tailwind.css";
-  import "$domain/libs/fontello-prerender.css";
 
   import { preloadProductSearch } from "$core/product-search/product-search-runtime";
   import { getProductEcommerceData } from '$ecommerce/services/productos.svelte';

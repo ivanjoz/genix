@@ -893,14 +893,14 @@ let rerenderHandler: ((() => void) | undefined) = undefined
 
   <div class="col-span-10 md:col-span-5 md:order-3 min-w-0 flex justify-end gap-8 md:ml-auto">
     {#if stockFilters.warehouseID > 0}
-      <Button color="blue" icon="icon-floppy" name="Save|Guardar" css="shrink-0"
+      <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" css="shrink-0"
         label="Saves all pending stock changes for the selected warehouse."
         onClick={guardarRegistros} />
     {/if}
   </div>
 
   {#if !stockFilters.warehouseID}
-    <div class="col-span-24 text-red-500"><i class="icon-attention"></i>Debe seleccionar un almacén.</div>
+    <div class="col-span-24 text-red-500"><i class="icon-[fa--exclamation-triangle]"></i>Debe seleccionar un almacén.</div>
   {:else}
     <FilterInput bind:value={stockFilterText}
       css="col-span-12 md:col-span-4 md:order-1 min-w-0 w-full md:w-180" />

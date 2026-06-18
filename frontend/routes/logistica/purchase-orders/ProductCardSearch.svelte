@@ -241,7 +241,7 @@ import { formatN, wordInclude } from '$libs/helpers'
               aria-label="Remove {card.displayName} from cart"
               onclick={(ev) => { ev.stopPropagation(); onRemove?.(card) }}
             >
-              <i class="icon-cancel text-[12px] leading-none"></i>
+              <i class="icon-[fa--close] text-[12px] leading-none"></i>
             </button>
           {/if}
           <div class="flex flex-col gap-2">

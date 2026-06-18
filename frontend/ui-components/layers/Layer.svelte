@@ -217,15 +217,15 @@ import { Agent } from '$components/agent/registry';
           </div>
         {/if}
         {#if onDelete}
-          <Button color="red" icon="icon-trash" label={tr("Delete|Eliminar")} css="mr-10 lh-10"
+          <Button color="red" icon="icon-[fa--trash]" label={tr("Delete|Eliminar")} css="mr-10 lh-10"
             onClick={onDelete} />
         {/if}
         {#if onSave}
-          <Button color="blue" icon={saveButtonIcon || 'icon-floppy'}
+          <Button color="blue" icon={saveButtonIcon || 'icon-[fa--floppy-o]'}
             name={tr(saveButtonName || 'Guardar')} css="mr-10 lh-10"
             label={tr("Save|Guardar")} onClick={onSave} />
         {/if}
-        <Button color="yellow" icon="icon-cancel" label={tr("Close|Cerrar")} onClick={() => {
+        <Button color="yellow" icon="icon-[fa--close]" label={tr("Close|Cerrar")} onClick={() => {
           closeLayer()
           if (onClose) {
             if (Core.deviceType === 3) {

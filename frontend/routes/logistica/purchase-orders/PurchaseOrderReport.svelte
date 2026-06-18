@@ -486,7 +486,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
         horizontalOffset={0} useOutline={true}
         edgeMargin={0} buttonClassOnShow="bx-red"
         layerClass="w-600"
-        icon="icon-search" iconOnShow="icon-cancel"
+        icon="icon-[fa--search]" iconOnShow="icon-[fa--close]"
         label="Opens the search filter for purchase orders."
       >
         <div class="w-full grid grid-cols-24 gap-12 p-12" aria-label="Purchase orders search filter with date range, provider, product, and status">
@@ -538,13 +538,13 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
               aria-label="Consultar reporte"
               onclick={(ev) => { ev.stopPropagation(); consultarReporte() }}
             >
-              Buscar <i class="icon-search"></i>
+              Buscar <i class="icon-[fa--search]"></i>
             </button>
             <button class="px-16 py-8 bx-gray mt-8 h-44"
               aria-label="Limpiar filtros"
               onclick={(ev) => { ev.stopPropagation(); limpiarFiltros() }}
             >
-              Limpiar <i class="icon-cancel"></i>
+              Limpiar <i class="icon-[fa--close]"></i>
             </button>
           </div>
         </div>
@@ -581,7 +581,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
       css="col-start-2 row-start-1 self-start w-full max-w-224 ml-auto md:mr-16 md:w-224"
       placeholder="Buscar proveedor..."
       throttle={150}
-      icon="icon-search"
+      icon="icon-[fa--search]"
       bind:value={filterText}
     />
   </div>
@@ -616,30 +616,30 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
       detailRows = []
       isDetailLayerLoading = false
     }}
-    actionsButton={{ name: "Acciones", icon: "icon-menu", css: "" }}
+    actionsButton={{ name: "Acciones", icon: "icon-[fa--bars]", css: "" }}
     actions={[
     	{ id: 1,
-     		name: "Confirmar", icon: "icon-ok text-green-500",
+     		name: "Confirmar", icon: "icon-[fa--check] text-green-500",
        	label: "Confirms and approves the selected purchase order.",
        	handler: () => { void confirmSelectedPurchaseOrder() }
      	},
      	{ id: 5,
-    		name: "Editar", icon: "icon-pencil text-blue-500",
+    		name: "Editar", icon: "icon-[fa--pencil] text-blue-500",
        	label: "Opens the modal to edit the selected purchase order.",
        	handler: () => { openEditPurchaseOrderModal() }
      	},
      	{ id: 2,
-    		name: "Pagar", icon: "icon-tag",
+    		name: "Pagar", icon: "icon-[fa--tag]",
        	label: "Opens the payment form for the selected purchase order.",
        	handler: () => { openPayPurchaseOrderModal() }
      	},
      	{ id: 3,
-    		name: "Anular", icon: "icon-cancel",
+    		name: "Anular", icon: "icon-[fa--close]",
        	label: "Cancels and annuls the selected purchase order.",
        	handler: () => { annulSelectedPurchaseOrder() }
      	},
      	{ id: 4,
-    		name: "Generar Copia", icon: "text-xs icon-plus",
+    		name: "Generar Copia", icon: "text-xs icon-[fa--plus]",
        	label: "Creates a copy of the selected purchase order.",
        	handler: () => { void generarCopiaPurchaseOrder() }
      	},

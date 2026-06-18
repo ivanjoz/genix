@@ -44,7 +44,7 @@
     <FilterInput
       bind:value={filterText}
       css="w-full max-w-220"
-      icon="icon-search"
+      icon="icon-[fa--search]"
       label="Search gallery images|Buscar imágenes de galería"
       placeholder="Search by name...|Buscar por nombre..."
     />

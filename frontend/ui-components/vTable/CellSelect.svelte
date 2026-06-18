@@ -221,7 +221,7 @@ import { getVTableAgentContext } from '$components/vTable/agentContext';
   >
     { renderContent }
     {#if !selected && required}
-      <i class="icon-attention text-red-500"></i>
+      <i class="icon-[fa--exclamation-triangle] text-red-500"></i>
     {/if}
   </div>
   {#if show}

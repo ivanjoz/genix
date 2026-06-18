@@ -100,7 +100,7 @@ $effect(() => {
 >
   {#if isOpen}
   <div class="flex items-center p-6">
-    <i class="icon-search _3"></i>
+    <i class="icon-[fa--search] _3"></i>
     <textarea rows={1} class="h-38 _4" bind:this={htmlTextarea}
       onkeyup={ev => {
         throttle(() => {
@@ -125,7 +125,7 @@ $effect(() => {
             Core.showMobileSearchLayer = null
           }}
         >
-          <i class="icon-ccw h1 _5c"></i>
+          <i class="icon-[fa--rotate-left] h1 _5c"></i>
         </button>
       {/if}
       <button class="h-40 w-40 shrink-0 _5" aria-label={tr("Close selector|Cerrar selector")}
@@ -133,7 +133,7 @@ $effect(() => {
           Core.showMobileSearchLayer = null
         }}
       >
-        <i class="icon-cancel h1"></i>
+        <i class="icon-[fa--close] h1"></i>
       </button>
     </div>
   </div>

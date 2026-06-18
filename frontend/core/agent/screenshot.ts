@@ -141,7 +141,7 @@ const loadDomToPng = async () => {
 // is never flagged as "used" and its @font-face rule gets stripped from the
 // SVG. The probe below puts each family on a real element so the detector
 // picks them up. Extend this list if a new icon font ever stops rendering.
-const PSEUDO_FONT_FAMILIES = ["fontello"];
+const PSEUDO_FONT_FAMILIES: string[] = [];
 
 const appendFontProbes = (): HTMLElement => {
   const probe = document.createElement("div");

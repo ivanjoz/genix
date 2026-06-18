@@ -64,7 +64,7 @@
     }}
   >        
     {#if isSelected}
-      <i class="icon-ok"></i>
+      <i class="icon-[fa--check]"></i>
     {/if}
   </button>
   <!-- svelte-ignore a11y_label_has_associated_control -->

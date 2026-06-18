@@ -360,10 +360,10 @@
         <FilterInput
           bind:value={filterText}
           placeholder="Filter|Filtrar"
-          icon="icon-search"
+          icon="icon-[fa--search]"
           css="w-240"
         />
-        <Button color="purple" icon="icon-floppy" name="Save|Guardar"
+        <Button color="purple" icon="icon-[fa--floppy-o]" name="Save|Guardar"
           label="Saves all edited shipping cost records to the server."
           onClick={saveDeliveryCosts} />
       </div>
@@ -455,7 +455,7 @@
           />
         {:else}
           <div class="h-full flex flex-col items-center justify-center text-gray-300 gap-8">
-            <i class="icon-location text-4xl"></i>
+            <i class="icon-[fa--map-marker] text-4xl"></i>
             <span class="text-[14px]"><T text="Select a department|Seleccione un departamento" /></span>
           </div>
         {/if}

@@ -133,11 +133,11 @@ const clearSelectedFile = () => {
       {#if selectedFileTypeIcon}
         <img src={selectedFileTypeIcon} alt={tr("File type|Tipo de archivo")} class="h-16 w-16 shrink-0 object-contain" />
       {:else}
-        <i class="icon-upload text-[#3c4650]"></i>
+        <i class="icon-[fa--upload] text-[#3c4650]"></i>
       {/if}
       <span class="truncate fs13 leading-[1] text-[#2f3a44]">{selectedFile.name}</span>
     {:else}
-      <i class="icon-upload text-[#3c4650]"></i>
+      <i class="icon-[fa--upload] text-[#3c4650]"></i>
       <span class="fs13 leading-[1] text-[#2f3a44]">{tr(buttonLabel)}</span>
     {/if}
   </button>
@@ -149,7 +149,7 @@ const clearSelectedFile = () => {
       aria-label={tr("Remove file|Quitar archivo")}
       onclick={clearSelectedFile}
     >
-      <i class="icon-cancel text-[15px]"></i>
+      <i class="icon-[fa--close] text-[15px]"></i>
     </button>
   {/if}
 </div>

@@ -11,6 +11,7 @@
   } = $props();
 
   let activeHoverIndex = $state(-1);
+  const colorTokenSeparator = ':';
 
   const toggleClass = (index: number, className: string, pattern?: RegExp) => {
     let currentCss = textLines[index].css || '';
@@ -41,8 +42,9 @@
     { label: 'R', class: 'text-red-500', color: 'red' },
     { label: 'G', class: 'text-green-500', color: 'green' },
     { label: 'B', class: 'text-blue-500', color: 'blue' },
-    { label: 'G1', class: 'text-[__COLOR:1__]' },
-    { label: 'G2', class: 'text-[__COLOR:2__]' }
+    // Build runtime palette tokens without exposing invalid Tailwind arbitrary values to the scanner.
+    { label: 'G1', class: `text-[__COLOR${colorTokenSeparator}1__]` },
+    { label: 'G2', class: `text-[__COLOR${colorTokenSeparator}2__]` }
   ];
 
 </script>

@@ -32,6 +32,7 @@
     updateAgentChatMessage,
     type AgentChatRow,
   } from './chat_history.idb';
+    import T from '$components/misc/T.svelte';
 
   // --- Wire types (mirror backend/agent/chat_ws.go) ---------------------------
 
@@ -298,18 +299,25 @@
 </script>
 
 <div bind:this={hostElement} data-agent-hidden="true" class="_host relative w-full max-w-[36rem]">
-  <div class="_pill flex items-start gap-6 px-10 py-6 bg-white/15 hover:bg-white/20 focus-within:bg-white/25
-    border border-white/20 rounded-2xl transition-colors cursor-text"
+  <div class="_pill absolute top-0 h-full w-full flex items-start gap-6 px-10 py-6 bg-white/15 hover:bg-white/20 focus-within:bg-white/25 border border-white/20 rounded-2xl transition-colors cursor-text"
     onclick={() => textareaElement?.focus()}
+    class:h-full={!isOpen}
+    class:rounded-b-none={isOpen}
+    class:h-44={isOpen}
     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { textareaElement?.focus(); } }}
     role="button"
     tabindex="-1"
   >
-    <span class="icon-message text-white/80 text-base mt-2"></span>
+    {#if !inputText}
+      <div class="_placeholder absolute left-12 top-16 -translate-y-1/2 flex items-center gap-6 text-white/60 text-sm pointer-events-none">
+        <span class="icon-[fa--commenting-o] text-[15px]"></span>
+        <T text="Search or Ask Genix...|Busca o Pregúntale a Genix..."/>
+      </div>
+    {/if}
     <textarea bind:this={textareaElement} bind:value={inputText}
       rows={2}
-      placeholder="Pregúntale a Genix…"
-      class="_input p-4 flex-1 bg-transparent text-white placeholder-white/60 outline-none resize-none text-sm leading-tight"
+      aria-label="Pregúntale a Genix"
+      class="_input p-4 pl-12 flex-1 bg-transparent text-white outline-none resize-none text-sm leading-tight"
       class:_inputStatus={isBusy && headerStatusItems.length > 0}
       onfocus={openPanel}
       onkeydown={onTextareaKey}
@@ -341,8 +349,8 @@
   </div>
 
   {#if isOpen}
-    <div class="_panel absolute left-0 right-0 top-full mt-2 z-300
-      bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden"
+    <div class="_panel absolute left-0 right-0 top-[calc(100%+4px)] z-300
+      bg-white rounded-b-2xl rounded-t-none shadow-2xl border border-gray-200 overflow-hidden"
     >
       <div bind:this={scrollElement}
         class="_scroll max-h-[60vh] min-h-[260px] overflow-y-auto px-12 py-10 flex flex-col gap-8"
@@ -387,13 +395,13 @@
 <style>
   ._host {
     color-scheme: light;
+    height: calc(var(--header-height) - 10px);
   }
   ._pill {
 	  background-color: #00000030;
 	  padding: 0;
 	  border: 0;
-	  height: calc(var(--header-height) - 9px);
-	  box-shadow: rgb(255 255 255 / 8%) 0px 1px 7px 0px, rgb(255 255 255 / 14%) 0px 1px 14px 0px;
+		box-shadow: rgb(255 255 255 / 8%) 0px 1px 4px 0px, rgb(255 255 255 / 12%) 0px 1px 10px 0px;
 		margin-bottom: 1px;
   }
   ._input {
@@ -402,6 +410,11 @@
     min-height: 0;
     line-height: 1.3;
     padding-right: 54px;
+  }
+  ._placeholder {
+    /* The icon and copy are one synthetic placeholder so they move together. */
+    display: flex;
+    align-items: center;
   }
   ._inputStatus {
     padding-right: 360px;
@@ -451,6 +464,10 @@
     border-radius: 999px;
     animation: spin 700ms linear infinite;
   }
+  ._panel {
+  	border: 1px solid #6868ea;
+  }
+  
   @keyframes status-enter {
     from {
       opacity: 0;

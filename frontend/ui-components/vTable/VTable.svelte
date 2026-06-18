@@ -563,7 +563,7 @@
                   }}
                 >
                   {#if column.showEditIcon && !column.disableCellInteractions?.(resolvedRecord, rowIndex)}
-                    <i class="icon-pencil _edit-icon"></i>
+                    <i class="icon-[fa--pencil] _edit-icon"></i>
                   {/if}
                   {#if cellData.prefixAST}
                     <span class="vtable-cell-prefix">
@@ -628,7 +628,7 @@
                           ev.stopPropagation()
                           column.buttonEditHandler?.(resolvedRecord)
                         }}>
-                          <i class="icon-pencil"></i>
+                          <i class="icon-[fa--pencil]"></i>
                         </button>
                       {/if}
                       {#if column.buttonDeleteHandler && (!column.buttonDeleteIf || column.buttonDeleteIf(resolvedRecord))}
@@ -636,7 +636,7 @@
                           ev.stopPropagation()
                           column.buttonDeleteHandler?.(resolvedRecord)
                         }}>
-                          <i class="icon-trash"></i>
+                          <i class="icon-[fa--trash]"></i>
                         </button>
                       {/if}
                     </div>

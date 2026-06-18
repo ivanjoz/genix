@@ -33,7 +33,7 @@ import T from '$components/misc/T.svelte';
   <div class="flex justify-between w-full mb-8 px-12 pt-12">
     <div></div>
     <div class="flex items-center">
-      <Button color="green" icon="icon-plus" label="Adds a new storage area layout section to the warehouse grid editor." onClick={addLayout} />
+      <Button color="green" icon="icon-[fa--plus]" label="Adds a new storage area layout section to the warehouse grid editor." onClick={addLayout} />
     </div>
   </div>
 
@@ -70,7 +70,7 @@ import T from '$components/misc/T.svelte';
             style="margin-top: -12px; margin-right: -4px"
             onclick={() => removeLayout(idx)}
           >
-            <i class="icon-trash"></i>
+            <i class="icon-[fa--trash]"></i>
           </button>
         </div>
 

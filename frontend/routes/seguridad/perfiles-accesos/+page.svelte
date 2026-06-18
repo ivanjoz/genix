@@ -242,7 +242,7 @@ import {
       <div class="flex justify-between items-center w-full mb-10" aria-label="Profiles toolbar with filter and create button">
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
-          <Button color="green" icon="icon-plus" label="Opens the modal to create a new access profile." onClick={() => {
+          <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new access profile." onClick={() => {
             perfilForm = { ss: 1, accesosMap: new Map() } as IProfile
             Core.openModal(2)
           }} />
@@ -280,7 +280,7 @@ import {
 	        </div>
 	        <div class="flex items-center max-md:absolute max-md:top-0 max-md:right-0">
 	          {#if perfilForm.ID > 0}
-	            <Button color="blue" icon="icon-floppy" name="Save|Guardar" css="mr-8"
+	            <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" css="mr-8"
 	              hideNameOnMobile label="Saves the access permissions for this profile." onClick={() => savePerfil(false, true)} />
 	          {/if}
 	        </div>

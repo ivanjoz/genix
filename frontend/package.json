@@ -22,6 +22,11 @@
 		"prebuild:store": "bun scripts/thumbhash-prebuild.js"
 	},
 	"devDependencies": {
+		"@iconify-json/emojione": "^1.2.3",
+		"@iconify-json/fa": "^1.2.2",
+		"@iconify-json/flat-color-icons": "^1.2.3",
+		"@iconify-json/mdi": "^1.2.3",
+		"@iconify/tailwind4": "^1.2.3",
 		"@sveltejs/adapter-auto": "^6.1.0",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.55.0",

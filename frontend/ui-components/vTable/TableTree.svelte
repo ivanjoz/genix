@@ -262,7 +262,7 @@
                   {/if}
                   {#if columnIndex === 0}
                     <span class="table-tree-chevron" class:table-tree-chevron-open={node.isOpen}>
-                      <i class="icon-down-open-1"></i>
+                      <i class="icon-[fa--chevron-down]"></i>
                     </span>
                   {/if}
                 </div>
@@ -307,7 +307,7 @@
                       role="cell"
                     >
                       {#if columnIndex === 0}
-                        <i class="table-tree-child-indent icon-level-down"></i>
+                        <i class="table-tree-child-indent icon-[fa--level-up]"></i>
                       {/if}
                       {#if colDef.onCellEdit && !colDef.disableCellInteractions?.(childRecord, childIndex)}
                         <CellInput

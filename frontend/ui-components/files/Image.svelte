@@ -82,7 +82,7 @@
         onRemove?.();
       }}
     >
-      <i class="icon-cancel"></i>
+      <i class="icon-[fa--close]"></i>
     </button>
   {/if}
 </div>

@@ -8,7 +8,7 @@
     css = '',
     placeholder = '',
     throttle: throttleMs = 150,
-    icon = 'icon-filter',
+    icon = 'icon-[fa--filter]',
     label = '',
     value = $bindable(''),
   }: {

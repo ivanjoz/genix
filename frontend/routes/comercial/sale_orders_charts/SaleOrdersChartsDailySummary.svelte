@@ -227,8 +227,8 @@
   }
 
   const getVariationIconClass = (variationValue: number | null) => {
-    if (variationValue === null || variationValue === undefined) { return 'icon-minus' }
-    return variationValue >= 0 ? 'icon-up-bold' : 'icon-down-bold'
+    if (variationValue === null || variationValue === undefined) { return 'icon-[fa--minus]' }
+    return variationValue >= 0 ? 'icon-[fa--long-arrow-up]' : 'icon-[fa--caret-down]'
   }
 </script>
 

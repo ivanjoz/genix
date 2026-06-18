@@ -246,7 +246,7 @@ import {
     <div class="flex items-center justify-between mb-6" aria-label="Sedes list toolbar with search filter and create button">
       <FilterInput bind:value={filterText} css="mr-16 w-256" />
       <div class="flex items-center">
-        <Button color="green" icon="icon-plus" label="Opens the modal to create a new business location (sede)." onClick={() => {
+        <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new business location (sede)." onClick={() => {
           sedeForm = { ss: 1 } as ISite
           Core.openModal(1)
         }} />
@@ -264,7 +264,7 @@ import {
       <div class="flex items-center justify-between mb-6" aria-label="Almacenes list toolbar with search filter and create button">
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
-          <Button color="green" icon="icon-plus" label="Opens the modal to create a new warehouse linked to a sede." onClick={() => {
+          <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new warehouse linked to a sede." onClick={() => {
             almacenForm = { ID: 0, SiteID: 0, Name: "", Description: "", ss: 1, upd: 0, Layout: [] }
             Core.openModal(2)
           }} />
@@ -284,13 +284,13 @@ import {
                 {@const avgRows = record.Layout.reduce((sum, x) => sum + (x.RowCant || 0), 0) / record.Layout.length}
                 <div class="flex items-center">
                   <div class="ff-bold h3">{record.Layout.length}</div>
-                  <i class="icon-folder-empty"></i>
+                  <i class="icon-[fa--folder]"></i>
                   <div class="mr-4 ml-4 h6 text-slate-500">X</div>
                   <div class="ff-bold h3">{avgCols.toFixed(0)}</div>
-                  <i class="icon-buffer"></i>
+                  <i class="icon-[fa--th-large]"></i>
                   <div class="mr-4 ml-4 h6 text-slate-500">X</div>
                   <div class="ff-bold h3">{avgRows.toFixed(0)}</div>
-                  <i class="icon-cube"></i>
+                  <i class="icon-[fa--cube]"></i>
                 </div>
               {:else}
                 <div></div>
@@ -299,7 +299,7 @@ import {
                 aria-label="Editar Layout"
                 onclick={() => handleLayoutEdit(record)}
               >
-                <i class="icon-pencil"></i>
+                <i class="icon-[fa--pencil]"></i>
               </button>
             </div>
           {/if}

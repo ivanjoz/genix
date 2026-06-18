@@ -50,7 +50,7 @@ const rowAccent = (row: NotificationRow): string => {
   {#snippet button(isOpen)}
     <!-- Circular trigger matching the gear/reload siblings; ring spins while active. -->
     <span class="nf-btn flex items-center justify-center" class:nf-active={activeCount > 0}>
-      <i class="icon-info text-white text-lg"></i>
+      <i class="icon-[fa--info-circle] text-white text-lg"></i>
       {#if activeCount > 0}
         <span class="nf-badge">{activeCount}</span>
       {/if}
@@ -69,11 +69,11 @@ const rowAccent = (row: NotificationRow): string => {
           {#if row.kind === PROCESS_KIND && row.status === PROCESS_STATUS_IN_PROGRESS}
             <span class="nf-spinner"></span>
           {:else if row.kind === PROCESS_KIND && row.status === PROCESS_STATUS_DONE}
-            <i class="icon-ok"></i>
+            <i class="icon-[fa--check]"></i>
           {:else if row.kind === PROCESS_KIND && row.status === PROCESS_STATUS_CANCELED}
-            <i class="icon-cancel"></i>
+            <i class="icon-[fa--close]"></i>
           {:else}
-            <i class="icon-info"></i>
+            <i class="icon-[fa--info-circle]"></i>
           {/if}
         </div>
         <div class="flex-1 min-w-0">

@@ -505,7 +505,7 @@
                           ev.stopPropagation();
                           colDef.buttonEditHandler?.(rowRecord);
                         }}>
-                          <i class="icon-pencil"></i>
+                          <i class="icon-[fa--pencil]"></i>
                         </button>
                       {/if}
                       {#if colDef.buttonDeleteHandler && (!colDef.buttonDeleteIf || colDef.buttonDeleteIf(rowRecord))}
@@ -513,7 +513,7 @@
                           ev.stopPropagation();
                           colDef.buttonDeleteHandler?.(rowRecord);
                         }}>
-                          <i class="icon-trash"></i>
+                          <i class="icon-[fa--trash]"></i>
                         </button>
                       {/if}
                     </div>
@@ -634,7 +634,7 @@
                             ev.stopPropagation();
                             colDef.buttonEditHandler?.(rowRecord);
                           }}>
-                            <i class="icon-pencil"></i>
+                            <i class="icon-[fa--pencil]"></i>
                           </button>
                         {/if}
                         {#if colDef.buttonDeleteHandler && (!colDef.buttonDeleteIf || colDef.buttonDeleteIf(rowRecord))}
@@ -642,7 +642,7 @@
                             ev.stopPropagation();
                             colDef.buttonDeleteHandler?.(rowRecord);
                           }}>
-                            <i class="icon-trash"></i>
+                            <i class="icon-[fa--trash]"></i>
                           </button>
                         {/if}
                       </div>

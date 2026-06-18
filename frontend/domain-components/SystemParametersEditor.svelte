@@ -61,7 +61,7 @@ import { Params } from '$core/security';
 		</div>
 		<button class="bx-blue py-10 px-20 flex items-center gap-8 shadow-sm hover:shadow-md transition-all" onclick={save}>
 			<span>Guardar</span>
-			<i class="icon-floppy"></i>
+			<i class="icon-[fa--floppy-o]"></i>
 		</button>
 	</div>
 

@@ -70,10 +70,10 @@ import { parseSVG } from '$libs/helpers';
 				Ecommerce.cartOption = e.id;
 			}}
 			options={[
-				{ id: 1, name: "Carrito", icon: "icon-basket" },
-				{ id: 2, name: "Datos Envío", icon: "icon-doc-inv-alt" },
-				{ id: 3, name: "Pago", icon: "icon-shield" },
-				{ id: 4, name: "Confirma ción", icon: "icon-ok" },
+				{ id: 1, name: "Carrito", icon: "icon--supermarket-cart" },
+				{ id: 2, name: "Datos Envío", icon: "icon-[fa--file-text]" },
+				{ id: 3, name: "Pago", icon: "icon-[fa--shield]" },
+				{ id: 4, name: "Confirma ción", icon: "icon-[fa--check]" },
 			]}
 		>
 			{#snippet optionRender(e)}
@@ -159,7 +159,7 @@ import { parseSVG } from '$libs/helpers';
 			{/if}
 			{#if Ecommerce.cartOption === 4}
 				<div class="mt-12 text-center">
-					<i class="icon-ok text-green-500 text-[64px] mb-4"></i>
+					<i class="icon-[fa--check] text-green-500 text-[64px] mb-4"></i>
 					<div class="fs24 ff-bold mb-2">¡Gracias por tu compra!</div>
 					<p class="text-gray-600 mb-8">
 						Tu pedido ha sido procesado exitosamente. Recibirás un correo de
@@ -197,7 +197,7 @@ import { parseSVG } from '$libs/helpers';
 				<button
 					class={[s1.bn1, "w-full", open ? s1.button_menu_top : ""].join(" ")}
 				>
-					<i class="icon1-basket"></i>
+					<i class="icon--supermarket-cart"></i>
 					<span>Carrito</span>
 				</button>
 			{/snippet}

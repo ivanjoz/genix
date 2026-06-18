@@ -82,7 +82,7 @@
       })
     }
   }}>
-    <i class="text-[22px] icon-menu"></i>
+    <i class="text-[22px] icon-[fa--bars]"></i>
   </button>
   <SearchBar />
   <div class="flex items-center h-42 ml-auto md:ml-0">
@@ -93,7 +93,7 @@
         ev.stopPropagation()
         layerOpenedState.id = layerOpenedState.id ? 0 : 2
       }}>
-        <i class={"icon1-basket mt-4 "+(cartCant > 0 ? "mb-[-2px] mr-2" : "mb-2")}></i>
+        <i class={"icon--supermarket-cart mt-4 "+(cartCant > 0 ? "mb-[-2px] mr-2" : "mb-2")}></i>
         {#if cartCant > 0}
           <div class="_4 fs14 fx-c w-22 h-22 mb-14 ml-26 absolute rounded-[50%]">{cartCant}</div>
         {/if}
@@ -102,7 +102,7 @@
         ev.stopPropagation()
         layerOpenedState.id = layerOpenedState.id ? 0 : 2
       }}>
-        <i class="icon-cancel"></i>
+        <i class="icon-[fa--close]"></i>
       </button>
     </div>
   </div>

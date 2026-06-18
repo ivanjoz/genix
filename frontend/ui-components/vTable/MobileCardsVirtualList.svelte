@@ -355,7 +355,7 @@
                 buttonDeleteHandler(resolvedRecord, recordIndex);
               }}
             >
-              <i class="icon-trash"></i>
+              <i class="icon-[fa--trash]"></i>
             </button>
           {/if}
 

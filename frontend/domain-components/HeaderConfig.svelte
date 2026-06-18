@@ -281,12 +281,12 @@ import {
     <button class="bx-blue mr-12" aria-label="Guardar Usuario"
       onclick={() => { saveUsuario() }}
     >
-      <i class="icon-floppy"></i>
+      <i class="icon-[fa--floppy-o]"></i>
     </button>
     <button class="bx-orange" aria-label="Salir"
       onclick={handleLogout}
     >
-      <i class="icon-logout-1"></i>
+      <i class="icon-[fa--sign-out]"></i>
       <span>Salir</span>
     </button>
   </div>
@@ -341,7 +341,7 @@ import {
 	      Core.openModal(HEADER_REQUEST_LOGS_MODAL_ID)
       }}
     >
-      <i class="icon-list"></i>
+      <i class="icon-[fa--list]"></i>
       <span>Reqs. Logs</span>
     </button>
   </div>
@@ -368,14 +368,14 @@ import {
       disabled={cacheDataLoading || cacheDataClearing}
       onclick={() => { loadCacheData(true) }}
     >
-      <i class="icon-arrows-cw"></i>
+      <i class="icon-[fa--refresh]"></i>
       <span class="hidden md:inline">Recargar</span>
     </button>
     <button class="bx-red min-w-44 px-10 md:px-14" aria-label="Eliminar cache local"
       disabled={cacheDataLoading || cacheDataClearing}
       onclick={() => { clearLocalCache() }}
     >
-      <i class="icon-trash"></i>
+      <i class="icon-[fa--trash]"></i>
       <span class="hidden md:inline">Eliminar cache</span>
     </button>
   </div>

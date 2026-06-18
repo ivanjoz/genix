@@ -222,7 +222,7 @@ $effect(() => {
   {#if isOpen}
   <div class="p-6 pb-4">
     <div class="flex items-center">
-      <i class="icon-calendar _3"></i>
+      <i class="icon-[fa--calendar] _3"></i>
       <input
         bind:this={inputElement}
         bind:value={typedValue}
@@ -257,7 +257,7 @@ $effect(() => {
             clearSelectedDate()
           }}
         >
-          <i class="icon-ccw h1"></i>
+          <i class="icon-[fa--rotate-left] h1"></i>
         </button>
         <button
           class="h-40 w-40 shrink-0 _5"
@@ -267,7 +267,7 @@ $effect(() => {
             closeLayer()
           }}
         >
-          <i class="icon-cancel h1"></i>
+          <i class="icon-[fa--close] h1"></i>
         </button>
       </div>
     </div>

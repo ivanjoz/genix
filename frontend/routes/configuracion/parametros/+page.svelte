@@ -34,7 +34,7 @@ const { Loading } = pkg;
     <div class="flex justify-between items-center mb-8" aria-label="Company parameters header with save button">
       <div><div class="h3 ff-bold"><T text="Company Parameters|Parámetros de la Empresa" /></div></div>
       <div class="flex items-center">
-        <Button color="blue" icon="icon-floppy" name="Save|Guardar" label="Saves all company parameter changes." onClick={saveEmpresa} />
+        <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" label="Saves all company parameter changes." onClick={saveEmpresa} />
       </div>
     </div>
     <div class="w-full grid grid-cols-1 lg:grid-cols-[4fr_3fr] gap-4">

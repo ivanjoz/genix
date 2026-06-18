@@ -70,7 +70,7 @@ import { type ITableColumn } from '$components/vTable/types';
                   css: 'flex items-center',
                   children: [
                     { text: `${e.edad}` },
-                    { css: 'icon-ok', text: '' },
+                    { css: 'icon-[fa--check]', text: '' },
                     { text: `${e.edadChanged}` },
                   ],
                 },

@@ -274,7 +274,7 @@ const { Loading } = pkg
       <div class="flex items-center justify-between mb-6" aria-label="Users toolbar with filter and create button">
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
-          <Button color="green" icon="icon-plus" label="Opens the side layer to create a new user."
+          <Button color="green" icon="icon-[fa--plus]" label="Opens the side layer to create a new user."
             onClick={openCreateUsuarioLayer} />
         </div>
       </div>
@@ -310,10 +310,10 @@ const { Loading } = pkg
             {@const usuarioAccessSummary = summarizeUsuarioAccesses(usuarioRecord)}
             <div class="_usuario-access-cell">
               {#if usuarioAccessSummary.readableAccessNames.length > 0}
-                {@render accessSummaryRow("icon-eye", "text-blue-600", usuarioAccessSummary.readableAccessNames)}
+                {@render accessSummaryRow("icon-[fa--eye]", "text-blue-600", usuarioAccessSummary.readableAccessNames)}
               {/if}
               {#if usuarioAccessSummary.editableAccessNames.length > 0}
-                {@render accessSummaryRow("icon-pencil", "text-red-600", usuarioAccessSummary.editableAccessNames)}
+                {@render accessSummaryRow("icon-[fa--pencil]", "text-red-600", usuarioAccessSummary.editableAccessNames)}
               {/if}
             </div>
           {/if}

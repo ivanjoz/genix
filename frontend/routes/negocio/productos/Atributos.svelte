@@ -53,7 +53,7 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
 <div class="flex justify-between mt-4" aria-label="Product presentations toolbar">
   <div></div>
   <Button label="Opens the modal to add a new product presentation or variant."
-    color="green" icon="icon-plus" css="s1" onClick={() => {
+    color="green" icon="icon-[fa--plus]" css="s1" onClick={() => {
     presentacionForm = {
       at: producto.AtributosIDs?.[0] as number,
       id: tempCounter,
@@ -82,7 +82,7 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
 </VTable>
 
 <Modal title="Product Presentation|Producto Presentación" id={3} size={4}
-  saveButtonLabel="Agregar" saveIcon="icon-ok"
+  saveButtonLabel="Agregar" saveIcon="icon-[fa--check]"
   onSave={() => {
     producto.Presentations = producto.Presentations || []
     const current = producto.Presentations.find(x => x.id === presentacionForm.id)
@@ -126,7 +126,7 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
       <ColorPicker label="Color|Color" saveOn={presentacionForm} save="cl"/>
     </div>
     <div class="mt-12 col-span-24 fs15">
-      <i class="icon-attention"></i> La información se guardará cuando se guarde el producto.
+      <i class="icon-[fa--exclamation-triangle]"></i> La información se guardará cuando se guarde el producto.
     </div>
   </div>
 </Modal>

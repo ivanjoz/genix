@@ -53,7 +53,7 @@ import { Core, mainMenuOptions, suscribeUrlFlag } from '$core/store.svelte';
 
 <div id="mob-menu" class={css} bind:this={divContainer}>
   <button class="_3 absolute top-4 right-4 w-40 h-40" aria-label="Cerrar menú" onclick={closeMenu}>
-    <i class="icon-cancel"></i>
+    <i class="icon-[fa--close]"></i>
   </button>
   <div class="grid gap-8 grid-cols-2 p-8 mt-54">
   {#each mainMenuOptions as opt}

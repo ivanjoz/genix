@@ -72,7 +72,7 @@
     </div>
     <div class="ml-8 relative">
       {#if activeSource === 1}
-        <FilterInput bind:value={gallerySearch} css="w-240" icon="icon-search" placeholder="Search by name...|Buscar por nombre..." />
+        <FilterInput bind:value={gallerySearch} css="w-240" icon="icon-[fa--search]" placeholder="Search by name...|Buscar por nombre..." />
       {:else}
         <SearchSelect css="w-280" 
           keyId="ID"

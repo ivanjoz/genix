@@ -214,7 +214,7 @@
 			{#if !showLoadingSkeleton && !hideCloseButton}
 				<!-- Keep explicit remove action optional so search-card usage can hide destructive controls. -->
 				<button class="remove-button" onclick={removeProductFromSelection} aria-label="Remover">
-					<i class="icon-cancel"></i>
+					<i class="icon-[fa--close]"></i>
 				</button>
 			{/if}
 		</div>
@@ -254,16 +254,16 @@
 					<div class="px-4 ff-bold fs17">s/. {formatN(resolvedProductPriceCents / 100, 2)}</div>
 				{/if}
 				<div class="vertical-icon fx-c h-30 w-32">
-					<i class="icon1-basket"></i>
+					<i class="icon--supermarket-cart"></i>
 				</div>
 			</div>
 			{#if !showLoadingSkeleton}
 				<button class="vertical-add-button" onclick={incrementSelectedQuantity} type="button">
 					{#if selectedProductQuantity === 0}
-						Agregar <i class="icon1-basket"></i>
+						Agregar <i class="icon--supermarket-cart"></i>
 					{/if}
 					{#if selectedProductQuantity > 0}
-						Agregar mas ({selectedProductQuantity}) <i class="icon1-basket"></i>
+						Agregar mas ({selectedProductQuantity}) <i class="icon--supermarket-cart"></i>
 					{/if}
 				</button>
 			{/if}

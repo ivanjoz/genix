@@ -45,7 +45,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
       css: "c-blue text-center",
       headerCss: "w-40", headerInnerCss: "min-w-36",
       getValue: (record) => record.ID || "",
-      render: (record) => record.ID ? String(record.ID) : `<i class="icon-arrows-cw"></i>`,
+      render: (record) => record.ID ? String(record.ID) : `<i class="icon-[fa--refresh]"></i>`,
       mobile: { order: 1, css: "col-span-6 ff-bold", icon: "tag" },
     },
     {
@@ -177,12 +177,12 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
   <div class="grid grid-cols-12 md:flex md:flex-row items-center mb-8">
     <FilterInput label="Filter supplies|Filtrar insumos"
       css="w-full md:w-200 col-span-9"
-      icon="icon-search"
+      icon="icon-[fa--search]"
       bind:value={filterText}
     />
     <Button name="New|Nuevo" label="Shows the form to create a new supply in a side layer."
       color="green"
-      icon="icon-plus"
+      icon="icon-[fa--plus]"
       hideNameOnMobile
       css="col-span-3 ml-auto"
       onClick={() => {
@@ -284,7 +284,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
     <div class="mt-16" aria-label="Supply providers configuration list">
       <div class="mb-8 flex items-center justify-between">
         <div class="h4 ff-bold">Proveedores</div>
-        <Button color="green" icon="icon-plus"
+        <Button color="green" icon="icon-[fa--plus]"
           label="Adds a new provider row to the supply configuration."
           css="h-32 px-10"
           onClick={addProviderSupplyRow}

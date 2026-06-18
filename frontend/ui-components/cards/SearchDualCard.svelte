@@ -318,7 +318,7 @@
                 removeSelected();
               }}
             >
-              <i class="icon-trash"></i>
+              <i class="icon-[fa--trash]"></i>
             </button>
           </div>
         {:else}
@@ -333,7 +333,7 @@
                 removeSelected();
               }}
             >
-              <i class="icon-trash"></i>
+              <i class="icon-[fa--trash]"></i>
             </button>
           </div>
         {/if}

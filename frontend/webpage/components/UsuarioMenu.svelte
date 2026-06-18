@@ -88,28 +88,28 @@
       {:else if selectedTab === 2}
         <div class="fs18 ff-bold mb-12">Historial de Pedidos</div>
         <div class="flex flex-col items-center justify-center py-12 text-gray-400">
-          <i class="icon-basket text-[48px] mb-4 opacity-20"></i>
+          <i class="icon--supermarket-cart text-[48px] mb-4 opacity-20"></i>
           <p>Aún no has realizado ningún pedido.</p>
         </div>
       {:else if selectedTab === 3}
         <div class="fs18 ff-bold mb-12">Productos Favoritos</div>
         <div class="flex flex-col items-center justify-center py-12 text-gray-400">
-          <i class="icon-heart text-[48px] mb-4 opacity-20"></i>
+          <i class="icon-[fa--heart] text-[48px] mb-4 opacity-20"></i>
           <p>No tienes productos en tu lista de deseos.</p>
         </div>
       {:else if selectedTab === 4}
         <div class="fs18 ff-bold mb-12">Configuración del Sitio</div>
         <div class="flex flex-col gap-4">
           <button class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left w-full">
-            <i class="icon-lock"></i>
+            <i class="icon-[fa--lock]"></i>
             <span>Cambiar Contraseña</span>
           </button>
           <button class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left w-full">
-            <i class="icon-bell"></i>
+            <i class="icon-[fa--bell]"></i>
             <span>Gestionar Notificaciones</span>
           </button>
           <button class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left w-full">
-            <i class="icon-cog"></i>
+            <i class="icon-[fa--cog]"></i>
             <span>Preferencias de Idioma</span>
           </button>
         </div>
@@ -128,7 +128,7 @@
       useBig layerClass="w-700 max-w-[90vw] rounded-[11px]">
       {#snippet button(open)}
         <button class={[s1.bn1, "w-full", open ? s1.button_menu_top : ""].join(" ")}>
-          <i class="icon1-user"></i>
+          <i class="icon-[fa--user]"></i>
           <span>Mi Usuario</span>
         </button>
       {/snippet}

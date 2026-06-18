@@ -420,7 +420,7 @@ import { SaleOrderState } from "./sale_order.svelte";
             </div>
           </div>
         </div>
-          <Button color="blue" icon="icon-floppy" name="Generar" hideNameOnMobile
+          <Button color="blue" icon="icon-[fa--floppy-o]" name="Generar" hideNameOnMobile
             css="shrink-0" label="Saves the current sale order and generates it in the system." onClick={handlePostSaleOrder} />
         </div>
         <div class="w-full px-12 mt-6 mb-6">
@@ -522,7 +522,7 @@ import { SaleOrderState } from "./sale_order.svelte";
                 <div class="font-mono text-sm font-bold text-gray-700">
                   {formatMo((item.isSubUnidad && item.producto?.SbuFinalPrice ? item.producto.SbuFinalPrice : (item.producto?.FinalPrice || 0)) * item.cantidad)}
                 </div>
-                <Button icon="icon-trash"
+                <Button icon="icon-[fa--trash]"
                   css="p-4 text-red-400 transition-opacity hover:text-red-600 md:opacity-0 md:group-hover:opacity-100"
                   onClick={() => ventasState.removeProducto(item.key)}
                   label="Removes this product from the current sale order cart."
@@ -535,7 +535,7 @@ import { SaleOrderState } from "./sale_order.svelte";
             <div
               class="flex flex-col items-center justify-center h-192 text-gray-300 gap-8"
             >
-              <i class="icon-cart text-4xl"></i>
+              <i class="icon--supermarket-cart text-4xl"></i>
               <span class="text-sm">Carrito vacío</span>
             </div>
           {/if}

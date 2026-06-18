@@ -2,7 +2,7 @@ import type { ComponentVariable, ColorPalette } from './renderer-types';
 
 /**
  * Resolves variables and color tokens in a CSS string.
- * Example: "w-[__v1__] bg-[__COLOR:1__]" -> "w-[500px] bg-[#0f172a]"
+ * Example: width and palette placeholders are replaced before rendered CSS is used.
  */
 export function resolveTokens(
     css: string | undefined,

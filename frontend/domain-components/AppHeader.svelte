@@ -156,7 +156,7 @@ import NotificationsButton from '$domain/NotificationsButton.svelte';
 				label="Opens application settings and configuration panel."
 			>
 				{#snippet button()}
-					<span class="text-white text-lg icon-cog"></span>
+					<span class="text-white text-lg icon-[fa--cog]"></span>
 				{/snippet}
 				<HeaderConfig />
 			</ButtonLayer>
@@ -171,7 +171,7 @@ import NotificationsButton from '$domain/NotificationsButton.svelte';
 			aria-label="Reload"
 			disabled={isReloading}
 		>
-			<span class="text-white text-lg icon-cw"></span>
+			<span class="text-white text-lg icon-[fa--refresh]"></span>
 		</button>
 	</div>
 </header>

@@ -492,7 +492,7 @@ import {
                       <span>{providerSupplyRow.Price ? `s/ ${formatN((providerSupplyRow.Price || 0) / 100, 2)}` : '-'}</span>
                     </div>
                     <div class="flex items-center gap-4">
-                      <i class="icon-calendar"></i>
+                      <i class="icon-[fa--calendar]"></i>
                       <span>{providerSupplyRow.DeliveryTime || 0}</span>
                     </div>
                   </div>
@@ -547,7 +547,7 @@ import {
   <div class="mt-16" aria-label="Product suppliers configuration list">
     <div class="mb-8 flex items-center justify-between">
       <div class="h4 ff-bold">Proveedores</div>
-      <Button color="green" icon="icon-plus" label="Adds a new provider row to the supply configuration for this product." css="h-32 px-10"
+      <Button color="green" icon="icon-[fa--plus]" label="Adds a new provider row to the supply configuration for this product." css="h-32 px-10"
         onClick={addProviderSupplyRow} />
     </div>
 

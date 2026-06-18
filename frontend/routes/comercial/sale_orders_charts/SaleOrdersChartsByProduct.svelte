@@ -224,7 +224,7 @@
       {#each chartLegendSeries as chartLegendItem (chartLegendItem.name)}
         <div class="flex items-center gap-8 text-[13px] text-slate-600">
           {#if chartLegendItem.type === 'line'}
-            <i class="icon-tag"></i>
+            <i class="icon-[fa--tag]"></i>
           {:else}
             <div class="h-10 w-18 rounded-[3px] bg-slate-900"
               style={`background:${chartLegendItem.color || '#000000'}`}
@@ -266,7 +266,7 @@
               </div>
             {/if}
             <div class="flex items-center gap-6 text-slate-800">
-              <i class="icon-tag text-slate-600"></i>
+              <i class="icon-[fa--tag] text-slate-600"></i>
               <div>
                 {productChartCard.priceReference ? `S/ ${formatN(productChartCard.priceReference, 2)}` : 'Sin precio'}
               </div>

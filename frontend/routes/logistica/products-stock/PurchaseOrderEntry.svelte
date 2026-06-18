@@ -484,7 +484,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
           }}
         />
       </div>
-      <Button color="blue" icon="icon-floppy" css="shrink-0"
+      <Button color="blue" icon="icon-[fa--floppy-o]" css="shrink-0"
         disabled={isSaving || !selectedOrderID || entries.length === 0}
         label="Submits the received items from the purchase order into the selected warehouse stock." onClick={handleSave}
         name={isSaving ? tr('Saving…|Guardando…') : tr('Save|Guardar')} hideNameOnMobile />
@@ -530,7 +530,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
                     title="Editar seriales"
                     aria-label="Edit serial numbers for this entry"
                   >
-                    <i class={total === 0 ? 'icon-plus' : 'icon-pencil'}></i>
+                    <i class={total === 0 ? 'icon-[fa--plus]' : 'icon-[fa--pencil]'}></i>
                   </button>
                 </div>
               {/if}

@@ -241,7 +241,7 @@
 				<div class="flex items-center">
 					<Button
 						color="green"
-						icon="icon-plus"
+						icon="icon-[fa--plus]"
 						label="Opens the modal to create a new cash register (caja)."
 						onClick={(ev) => {
 							cajaForm = { ID: -1, ss: 1, CurrencyType: 1 } as ICashBank;
@@ -305,7 +305,7 @@
 							<div class="flex items-center">
 								<Button
 									color="green"
-									icon="icon-plus"
+									icon="icon-[fa--plus]"
 									label="Opens the modal to add a new cash movement."
 									onClick={() => {
 										Core.openModal(3);
@@ -388,7 +388,7 @@
 							<div class="flex items-center">
 								<Button
 									color="green"
-									icon="icon-plus"
+									icon="icon-[fa--plus]"
 									label="Opens the modal to add a new cash balance reconciliation."
 									onClick={() => {
 										Core.openModal(2);
@@ -456,7 +456,7 @@
 								<Button
 									color="blue"
 									name="Guardar"
-									icon="icon-floppy"
+									icon="icon-[fa--floppy-o]"
 									label="Saves the cash register configuration changes."
 									onClick={saveCaja}
 								/>
@@ -542,7 +542,7 @@
 			<div class="flex items-end">
 				<Button
 					color="purple"
-					icon="icon-arrows-cw"
+					icon="icon-[fa--refresh]"
 					name="Recalculate|Recalcular"
 					label="Recalculates the balance difference using the latest system saldo."
 					css="w-full mt-24"
@@ -550,7 +550,7 @@
 			</div>
 			{#if cajaCuadreForm._error}
 				<div class="col-span-24 text-red-600 ff-bold">
-					<i class="icon-attention"></i>{cajaCuadreForm._error}
+					<i class="icon-[fa--exclamation-triangle]"></i>{cajaCuadreForm._error}
 				</div>
 			{/if}
 		</div>

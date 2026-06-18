@@ -46,6 +46,9 @@
 -->
 <script lang="ts">
   import type { ComponentAST, ColorPalette } from '$ecommerce/renderer/renderer-types';
+  import Icon from '$ecommerce/components/Icon.svelte';
+  import IconPicker from './IconPicker.svelte';
+  import type { IconSetId } from './icon-sets';
 
   interface Props {
     /**
@@ -117,7 +120,16 @@
     { id: 'fontSize', label: 'Font size' },
     { id: 'color', label: 'Text color' },
     { id: 'bgColor', label: 'Background color' },
+    { id: 'icons', label: 'Icon' },
+    { id: 'emojis', label: 'Emoji' },
   ];
+
+  // Each picker tool maps to the Iconify set(s) it shows (loaded lazily by IconPicker).
+  // The icon tool concatenates color icons first, then material icons, in one list.
+  const ICON_SET: Record<string, IconSetId[]> = {
+    icons: ['flat-color-icons', 'mdi'],
+    emojis: ['emojione'],
+  };
 
   // Container-mode toolbar tools — act on the wrapping container box. Same separate-button
   // pattern as TOOLS; ids are prefixed `c-` so they never collide with the text tools.
@@ -149,6 +161,12 @@
       '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h12M2 8l2.5-2.5M2 8l2.5 2.5M14 8l-2.5-2.5M14 8l-2.5 2.5"/></svg>',
     height:
       '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v12M8 2L5.5 4.5M8 2l2.5 2.5M8 14l-2.5-2.5M8 14l2.5-2.5"/></svg>',
+    // Icon picker (mdi) — a star glyph.
+    icons:
+      '<svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor"><path d="M8 1.5l1.8 3.9 4.2.5-3.1 2.9.8 4.2L8 11.4 4.3 13l.8-4.2L2 5.9l4.2-.5z"/></svg>',
+    // Emoji picker (emojione) — a smiley face.
+    emojis:
+      '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="8" cy="8" r="6.3"/><circle cx="5.8" cy="6.5" r=".8" fill="currentColor" stroke="none"/><circle cx="10.2" cy="6.5" r=".8" fill="currentColor" stroke="none"/><path d="M5.5 9.5c.7 1 1.5 1.5 2.5 1.5s1.8-.5 2.5-1.5" stroke-linecap="round"/></svg>',
   };
 
   const SIDES = [
@@ -176,8 +194,10 @@
 
   // --- Fragments model -----------------------------------------------------------
 
-  // An icon fragment carries no word characters (e.g. "✅"); shown as a read-only chip.
+  // An icon fragment is either a picked Iconify node (`Icon` tag, inline SVG) or a bare
+  // glyph run with no word characters (e.g. "✅"). Both render as read-only chips.
   function isIconFragment(frag: ComponentAST): boolean {
+    if (frag.tagName === 'Icon') return true;
     const t = (frag.text ?? '').trim();
     return t.length > 0 && !/[\p{L}\p{N}]/u.test(t);
   }
@@ -202,12 +222,30 @@
     return frags.find(isEditableFragment) ?? lines[0];
   });
 
+  // An icon fragment is selected (vs a textarea). When so, the toolbar shows only the styling
+  // tools that apply to the icon — the icon/emoji PICKERS are hidden (you style the current
+  // icon, you don't pick a new one). The pickers also insert icons, hence excluding them here.
+  const PICKER_TOOLS = new Set(['icons', 'emojis']);
+  const selectedIcon = $derived(isFocused && focusedFragment?.tagName === 'Icon');
+  const visibleTools = $derived(selectedIcon ? TOOLS.filter((t) => !PICKER_TOOLS.has(t.id)) : TOOLS);
+
   // --- Focus handoff: focus a node's textarea after the DOM updates --------------
 
   const els = new Map<ComponentAST, HTMLTextAreaElement>();
   // A fragment awaiting focus. A freshly-split fragment isn't mounted yet, so we record
   // the request and let its textarea grab focus when its `registerEl` action runs.
   let pendingFocus: { frag: ComponentAST; caret: 'start' | 'end' } | null = null;
+
+  // Same idea for icon chips (which are buttons, not textareas): a just-inserted icon focuses
+  // itself on mount so it becomes the selected toolbar target immediately.
+  let pendingIconFocus: ComponentAST | null = null;
+  function registerIconEl(el: HTMLButtonElement, frag: ComponentAST) {
+    if (pendingIconFocus === frag) {
+      pendingIconFocus = null;
+      el.focus();
+    }
+    return {};
+  }
 
   function placeCaret(el: HTMLTextAreaElement, caret: 'start' | 'end') {
     console.log('[TBE] placeCaret', { caret, value: el.value });
@@ -345,6 +383,42 @@
     if (prev) requestFocus(prev, 'end');
   }
 
+  /** Picker pick: add a NEW line after the focused one — the icon leads it, then an editable
+   * span to type beside it. The line renders as `[accent border] [icon] [textarea]`. */
+  function insertIcon(icon: { body: string; vb: string }) {
+    const current = focusedLine() ?? lines[lines.length - 1] ?? siblings[siblings.length - 1];
+    const iconNode: ComponentAST = { tagName: 'Icon', props: { body: icon.body, vb: icon.vb } };
+    const newLine: ComponentAST = {
+      tagName: current?.tagName ?? 'p',
+      css: current?.css,
+      style: current?.style,
+      // Icon first (leading), then an empty fragment: a caret target, and what Backspace
+      // removes the icon from (icons have no textarea of their own).
+      children: [iconNode, { tagName: 'span', text: '' }],
+    };
+    const insertAt = current ? siblings.indexOf(current) + 1 : siblings.length;
+    siblings.splice(insertAt, 0, newLine);
+    // Auto-select the icon so its size/color can be set right away. Read the proxied node back
+    // out of the array before using it as a key (the $state proxy-identity gotcha).
+    const inserted = siblings[insertAt].children![0];
+    focusedFragment = inserted;
+    isFocused = true;
+    pendingIconFocus = inserted; // its button focuses itself on mount (→ focus-within highlight)
+    openTool = null;
+  }
+
+  /** Backspace at the start of a fragment: if an Icon fragment precedes it, remove that icon. */
+  function removePrevIcon(line: ComponentAST, frag: ComponentAST): boolean {
+    const kids = line.children;
+    if (!kids?.length) return false;
+    const i = kids.indexOf(frag);
+    if (i > 0 && kids[i - 1].tagName === 'Icon') {
+      kids.splice(i - 1, 1);
+      return true;
+    }
+    return false;
+  }
+
   function focusedLine(): ComponentAST | undefined {
     if (!focusedFragment) return undefined;
     return lines.find((l) => fragmentsOf(l).includes(focusedFragment!));
@@ -356,9 +430,13 @@
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       splitFragment(line, frag, el);
-    } else if (e.key === 'Backspace' && el.value === '') {
-      e.preventDefault();
-      deleteFragment(line, frag);
+    } else if (e.key === 'Backspace' && el.selectionStart === 0 && el.selectionEnd === 0) {
+      // Caret at the very start: first try to eat a preceding icon, else drop an empty fragment.
+      if (removePrevIcon(line, frag)) e.preventDefault();
+      else if (el.value === '') {
+        e.preventDefault();
+        deleteFragment(line, frag);
+      }
     }
   }
 
@@ -507,8 +585,8 @@
        focused fragment; the + button on the right adds a new line (block break). -->
   <div class="toolbar">
     {#if isFocused}
-      <!-- Text mode: per-fragment tools acting on the focused textarea. -->
-      {#each TOOLS as tool}
+      <!-- Text mode: per-fragment tools. An icon selection shows only the styling tools. -->
+      {#each visibleTools as tool}
         <button
           type="button"
           class="tool-btn"
@@ -538,16 +616,18 @@
       {/each}
     {/if}
 
-    <button
-      type="button"
-      class="tool-btn add-line"
-      title="Add line (block break)"
-      aria-label="Add line"
-      onmousedown={(e) => e.preventDefault()}
-      onclick={addLine}
-    >
-      {@html ICONS.addLine}
-    </button>
+    {#if !selectedIcon}
+      <button
+        type="button"
+        class="tool-btn add-line"
+        title="Add line (block break)"
+        aria-label="Add line"
+        onmousedown={(e) => e.preventDefault()}
+        onclick={addLine}
+      >
+        {@html ICONS.addLine}
+      </button>
+    {/if}
 
     {#if openTool}
       <div class="options">
@@ -656,6 +736,9 @@
               <span class="slider-val">{fp ? fp + 'px' : 'Off'}</span>
             </label>
           </div>
+        {:else if openTool === 'icons' || openTool === 'emojis'}
+          <!-- Icon / emoji picker — inserts an inline Icon node on a new line. -->
+          <IconPicker sets={ICON_SET[openTool]} onpick={insertIcon} />
         {:else}
           {@const prop = openTool === 'color' ? 'color' : 'background-color'}
           {@const current = colorIndex(prop)}
@@ -693,7 +776,25 @@
       <div class="line">
         {#each fragmentsOf(line) as frag (frag)}
           {#if isIconFragment(frag)}
-            <span class="icon-chip" title="Icon">{frag.text}</span>
+            {#if frag.tagName === 'Icon'}
+              <!-- Selectable: focusing the icon makes it the toolbar `target`, so the Font size
+                   and Text color tools (which edit `target.css` / `target.style`) act on it. -->
+              <button
+                type="button"
+                class="readonly-fragment-chip icon-chip"
+                class:sel={isFocused && focusedFragment === frag}
+                title="Icon — click to set its size / color"
+                use:registerIconEl={frag}
+                onfocus={() => { focusedFragment = frag; isFocused = true; if (openTool?.startsWith('c-')) openTool = null; }}
+                onclick={() => { focusedFragment = frag; isFocused = true; }}
+              >
+                <!-- Chip is a constant 18px preview: NO css/style, so size/color set by the
+                     toolbar show only in the live render (AstRenderer reads node.css itself). -->
+                <Icon body={frag.props?.body} vb={frag.props?.vb} />
+              </button>
+            {:else}
+              <span class="readonly-fragment-chip" title="Icon">{frag.text}</span>
+            {/if}
           {:else}
             <textarea
               class="tbe-text"
@@ -880,11 +981,20 @@
     overflow: hidden;
   }
 
-  /* Fragments of one line: stacked tightly (no rule) — they are one visual line. */
+  /* One line is the editable container: it carries the focus accent (blue left border) and
+     background; its fragments flow inside as `[icon] [textarea]`. Text fragments grow to fill,
+     icon chips sit inline. Wraps when it overflows. */
   .line {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-flow: row wrap;
+    align-items: center;
+    gap: 2px 0;
+    background: #1e293b;
+    /* Reserve the accent up-front so focusing doesn't shift the content. */
+    border-left: 4px solid transparent;
+  }
+  .line:focus-within {
+    border-left-color: #3b82f6;
   }
 
   /* A horizontal rule between lines marks a real block break. */
@@ -895,7 +1005,7 @@
   }
 
   /* A read-only icon fragment (e.g. an emoji bullet). */
-  .icon-chip {
+  .readonly-fragment-chip {
     display: inline-flex;
     align-items: center;
     width: fit-content;
@@ -907,13 +1017,38 @@
     line-height: 1.4;
   }
 
-  .tbe-text {
-    width: 100%;
-    padding: 5px 8px 5px 6px;
-    background: #1e293b;
+  /* Picked Iconify icons preview at 18px in the editor (Icon.svelte renders at 1em); the
+     live storefront render inherits the surrounding text size instead. */
+  .icon-chip {
+    padding: 0;
+    font-size: 20px;
+    background: transparent;
     border: none;
-    /* Reserve the focus accent up-front so focusing doesn't shift the text. */
-    border-left: 4px solid transparent;
+    border-radius: 0;
+    color: inherit;
+    cursor: pointer;
+    width: 32px;
+    height: 26px;
+    justify-content: center;
+  }
+  .icon-chip:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+  /* Selected (its size/color is what the toolbar edits). */
+  .icon-chip.sel {
+    outline: 2px solid #3b82f6;
+    outline-offset: -1px;
+  }
+
+  .tbe-text {
+    /* Grow to fill the line (a normal line, or the text beside a leading icon); shrink as
+       needed. min-width keeps an empty textarea clickable. */
+    flex: 1 1 0;
+    width: auto;
+    min-width: 2.5rem;
+    padding: 5px 8px;
+    background: transparent;
+    border: none;
     color: #f1f5f9;
     font-size: 13px;
     line-height: 1.5;
@@ -921,11 +1056,9 @@
     overflow: hidden;
     min-height: 0;
     box-sizing: border-box;
-    display: block;
   }
   .tbe-text:focus {
     outline: none;
-    border-left-color: #3b82f6;
   }
   /* Highlight the whole editor on focus. */
   .tbe:focus-within {

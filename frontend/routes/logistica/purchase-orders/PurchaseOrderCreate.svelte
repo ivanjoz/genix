@@ -459,7 +459,7 @@ const formatDateOrDash = (value: string | number) => {
           </div>
         </div>
       </div>
-      <Button color="blue" icon="icon-floppy" name="Generate|Generar" hideNameOnMobile
+      <Button color="blue" icon="icon-[fa--floppy-o]" name="Generate|Generar" hideNameOnMobile
         css="shrink-0" label="Saves and submits the current purchase order to the system." onClick={handleSave} />
     </div>
 
@@ -516,7 +516,7 @@ const formatDateOrDash = (value: string | number) => {
         />
         {#if orderState.items.length === 0}
           <div class="flex flex-col items-center justify-center h-192 text-gray-300 gap-8">
-            <i class="icon-basket text-4xl"></i>
+            <i class="icon--supermarket-cart text-4xl"></i>
             <span class="text-sm">Órden de Compra Vacía</span>
           </div>
         {/if}

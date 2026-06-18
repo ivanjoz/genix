@@ -108,7 +108,7 @@
             sendLogin()
           }}
         >
-          <i class="icon-login"></i> <T text="Sign In|Ingresar" />
+          <i class="icon-[fa--sign-in]"></i> <T text="Sign In|Ingresar" />
         </button>
       </div>
     </div>

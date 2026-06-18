@@ -144,7 +144,7 @@ export const closeAllModals = () => {
 // Store-specific exports
 export const mainMenuOptions = [
   { name: "Iniciar Sesión",
-    icon: "icon-user",
+    icon: "icon-[fa--user]",
     onClick: () => {
       if(!Core.openLayers.includes(1)){
         Core.openLayers.push(1)
@@ -152,13 +152,13 @@ export const mainMenuOptions = [
     }
   },
   { name: "Regístrate",
-    icon: "icon-doc",
+    icon: "icon-[fa--file-text]",
   },
   { name: "Mis Pedidos",
-    icon: "icon-box",
+    icon: "icon-[fa--cube]",
   },
   { name: "Tienda",
-    icon: "icon-home",
+    icon: "icon-[fa--home]",
   }
 ]
 

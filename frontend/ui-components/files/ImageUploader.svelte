@@ -331,7 +331,7 @@ $effect(() => {
         accept="image/png, image/jpeg, image/webp"
       />
       <div class="text-[2.4rem]">
-        <i class="icon-upload"></i>
+        <i class="icon-[fa--upload]"></i>
       </div>
       <div class="h5">{tr("Upload Image|Subir Imagen")}</div>
     </div>
@@ -408,7 +408,7 @@ $effect(() => {
             progress = 0;
           }}
         >
-          <i class="icon-cancel"></i>
+          <i class="icon-[fa--close]"></i>
         </button>
         {#if imageSrc.base64 && !hideUploadButton}
           <button class="bnr-1 _5 outline-2 outline-white/50 hover:outline-black/70"
@@ -418,7 +418,7 @@ $effect(() => {
               confirmImage();
             }}
           >
-            <i class="icon-ok"></i>
+            <i class="icon-[fa--check]"></i>
           </button>
         {/if}
       </div>
