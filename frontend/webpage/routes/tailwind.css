@@ -1,13 +1,15 @@
 /* Declare the cascade-layer order up front (a bare @layer statement is allowed
-   before @import per spec). `ec-runtime` holds the storefront's runtime-generated
-   UnoCSS (the <style id="store-runtime-css"> injected on load — see
-   ecommerce/stores/uno-generator.ts) and is ordered AFTER components but BEFORE
-   utilities, so build-time Tailwind utilities win ties over redundant runtime
-   duplicates (e.g. `.md:w-240` beats a runtime `.w-full`) while runtime-only
-   classes still apply. Without this, ec-runtime is first seen when that <style>
-   is appended at the end of <head>, ordering it AFTER utilities so it wrongly
-   wins. Mirrors routes/tailwind.css. */
-@layer theme, base, components, ec-runtime, utilities;
+   before @import per spec). Runtime-generated UnoCSS (the
+   <style id="store-runtime-css"> injected on load — see
+   ecommerce/stores/uno-generator.ts) is split across two layers:
+     - `ec-runtime` (base/plain rules) sits BEFORE utilities, so build-time
+       Tailwind wins ties over redundant runtime base duplicates (e.g. a
+       build-time `.md:grid-cols-3` beats a runtime base `.grid`).
+     - `ec-runtime-media` (@media/responsive rules) sits AFTER utilities, so a
+       runtime-only responsive variant (e.g. `.md:text-6xl`, absent from source)
+       overrides a build-time base utility (e.g. `.text-4xl`) as authored.
+   Mirrors routes/tailwind.css. */
+@layer theme, base, components, ec-runtime, utilities, ec-runtime-media;
 @import "tailwindcss";
 @plugin "@iconify/tailwind4" {
   prefix: "icon";

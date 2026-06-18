@@ -78,6 +78,108 @@ export function collectTokens(sections: SectionData[]): Set<string> {
 }
 
 /**
+ * Split a CSS string into its top-level `@media` blocks and everything else.
+ *
+ * Brace-counting walk over top-level items (comments, statement at-rules,
+ * `selector{}` / `@media{}` / `@supports{}` / `@property{}` blocks). Only blocks
+ * whose prelude starts with `@media` go to `media`; the rest (plain utilities,
+ * `:root` theme vars, `@supports`/`@property` runtime-var init) go to `base`.
+ */
+function splitMediaRules(css: string): { base: string; media: string } {
+	const base: string[] = [];
+	const media: string[] = [];
+	const n = css.length;
+	let i = 0;
+
+	while (i < n) {
+		while (i < n && /\s/.test(css[i])) i++;
+		if (i >= n) break;
+		const start = i;
+
+		// Comments: keep with base (harmless, preserves the `/* layer: ... */` notes).
+		if (css[i] === '/' && css[i + 1] === '*') {
+			const end = css.indexOf('*/', i + 2);
+			i = end === -1 ? n : end + 2;
+			base.push(css.slice(start, i));
+			continue;
+		}
+
+		// Read the prelude up to the block open `{` or a statement terminator `;`.
+		let j = i;
+		while (j < n && css[j] !== '{' && css[j] !== ';') j++;
+		if (j >= n) {
+			base.push(css.slice(start));
+			break;
+		}
+		if (css[j] === ';') {
+			// Statement at-rule (e.g. `@import`/`@charset`) — no block.
+			i = j + 1;
+			base.push(css.slice(start, i));
+			continue;
+		}
+
+		// Balanced `{...}` block (handles the rule nested inside `@media`).
+		let depth = 0;
+		let k = j;
+		for (; k < n; k++) {
+			if (css[k] === '{') depth++;
+			else if (css[k] === '}' && --depth === 0) {
+				k++;
+				break;
+			}
+		}
+		const chunk = css.slice(start, k);
+		i = k;
+		(css.slice(start, j).trim().startsWith('@media') ? media : base).push(chunk);
+	}
+
+	return { base: base.join('\n'), media: media.join('\n') };
+}
+
+/**
+ * Wrap the split runtime CSS into its two cascade layers (declared in
+ * routes/tailwind.css as `... ec-runtime, utilities, ec-runtime-media`):
+ *
+ *   - `ec-runtime` (BEFORE utilities) holds plain/base rules. When a base utility
+ *     is re-emitted by BOTH engines (e.g. runtime `grid` vs build-time
+ *     `md:grid-cols-3`), the build copy in `utilities` wins, so build-time
+ *     responsive variants aren't collapsed to their mobile form by a runtime base
+ *     duplicate (the original ProductsByCategory grid fix).
+ *
+ *   - `ec-runtime-media` (AFTER utilities) holds the `@media` (responsive) rules.
+ *     Runtime-authored content owns responsive variants the storefront source
+ *     never sees (e.g. `md:text-6xl`), while build-time may emit only the base
+ *     (`text-4xl`, used elsewhere in source). Without this split the build-time
+ *     base in `utilities` would override the runtime variant regardless of
+ *     viewport; placing runtime media rules above `utilities` lets the responsive
+ *     override win as authored.
+ */
+function wrapRuntimeLayers(base: string, media: string): string {
+	let out = '';
+	if (base.trim()) out += `@layer ec-runtime {\n${base}\n}`;
+	if (media.trim()) out += `${out ? '\n' : ''}@layer ec-runtime-media {\n${media}\n}`;
+	return out;
+}
+
+/**
+ * Upgrade a stored runtime stylesheet to the two-layer format, idempotently.
+ *
+ * CSS persisted before the layer split is a single `@layer ec-runtime { … }`
+ * block with the `@media` rules trapped inside it (below `utilities`), so any
+ * runtime-only responsive variant loses to a build-time base utility. The
+ * storefront serves stored CSS verbatim (no UnoCSS at view time), so we re-split
+ * it here with the same pure string pass — no engine, cheap enough for prerender.
+ * Already-split CSS (new saves) is returned untouched.
+ */
+export function normalizeRuntimeCss(css: string): string {
+	if (!css || css.includes('@layer ec-runtime-media')) return css;
+	// Unwrap the legacy single `@layer ec-runtime { … }` wrapper, if present.
+	const wrapped = css.match(/^\s*@layer\s+ec-runtime\s*\{([\s\S]*)\}\s*$/);
+	const { base, media } = splitMediaRules(wrapped ? wrapped[1] : css);
+	return wrapRuntimeLayers(base, media) || css;
+}
+
+/**
  * Generate the utility CSS for the given tokens (plus the theme `:root` vars the
  * utilities reference — the reset preflight is disabled at the preset level).
  * The engine caches matched tokens internally, so repeated calls with
@@ -90,14 +192,6 @@ export async function generateCss(tokens: Set<string> | string[]): Promise<strin
 	const { css } = await uno.generate(set);
 	if (!css) return '';
 
-	// Scope every runtime utility under a dedicated cascade layer (`ec-runtime`,
-	// declared before `utilities` in routes/tailwind.css). Without this, the
-	// runtime <style> is injected at the END of <head>, so any base utility it
-	// re-emits (e.g. `grid`, `p-8`) would win a same-specificity tie against
-	// build-time Tailwind's `md:*` variants purely by source order — collapsing
-	// responsive layouts like ProductsByCategory's grid to their mobile form.
-	// With the layer, when a class is emitted by BOTH engines the build copy
-	// (correct base->variant ordering) governs, while runtime-only classes
-	// (agent/editor authored, absent from source) still apply normally.
-	return `@layer ec-runtime {\n${css}\n}`;
+	const { base, media } = splitMediaRules(css);
+	return wrapRuntimeLayers(base, media);
 }

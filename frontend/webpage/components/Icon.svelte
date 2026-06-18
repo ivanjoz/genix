@@ -2,8 +2,11 @@
   Icon — renders an Iconify icon stored inline in the section AST.
 
   Icons picked in the builder (TextBlockEditor) are saved as AST nodes
-  `{ tagName: 'Icon', props: { body, vb } }`, where `body` is the icon's raw SVG
-  inner markup (paths) and `vb` its viewBox. We render the SVG inline rather than
+  `{ tagName: 'Icon', props: { svg, vb } }`, where `svg` is the sprite id and `vb` the
+  viewBox. The body itself is deduplicated into `SectionData.Svgs` and emitted once as a
+  `<symbol>` (IconSprite); each icon references it via `<use href="#id">`. (Legacy nodes
+  / the editor chip may instead pass `body` — raw SVG inner markup — rendered inline.)
+  We render the SVG inline rather than
   via a Tailwind `icon-[set--name]` class because the picker chooses icons at
   runtime, while the Tailwind plugin only emits classes for icons seen statically
   at build time. Inlining also makes each saved page self-contained — no runtime
@@ -18,7 +21,11 @@
 -->
 <script lang="ts">
   interface Props {
-    /** SVG inner markup (paths) from the Iconify set. */
+    /** Sprite id `icon--<set>-<name>`; referenced via `<use href="#id">` against the
+     * section's IconSprite. When set, the body is NOT inlined (deduped in SectionData.Svgs). */
+    svg?: string;
+    /** SVG inner markup (paths). Fallback when there is no sprite id (legacy inline nodes,
+     * or the editor chip rendering standalone). */
     body?: string;
     /** viewBox, e.g. "0 0 24 24". */
     vb?: string;
@@ -26,7 +33,7 @@
     style?: string;
   }
 
-  let { body = '', vb = '0 0 24 24', css = '', style = '' }: Props = $props();
+  let { svg = '', body = '', vb = '0 0 24 24', css = '', style = '' }: Props = $props();
 </script>
 
 <svg
@@ -39,7 +46,7 @@
   aria-hidden="true"
   focusable="false"
 >
-  {@html body}
+  {#if svg}<use href="#{svg}" />{:else}{@html body}{/if}
 </svg>
 
 <style>

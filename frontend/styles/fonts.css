@@ -1,0 +1,70 @@
+/* Global typography — single source of truth shared by the admin app
+   (routes/+layout.svelte) and the storefront (webpage/routes/+layout.svelte).
+
+   Open Sans on desktop, Inter on mobile (≤749px). Components reference the
+   stable aliases `main` / `bold` / `semibold` (and the `.ff-*` classes); the
+   media query at the bottom swaps those aliases to the Inter `*-mobile` faces on
+   small screens, so the whole UI follows the desktop→mobile font switch with no
+   per-component work. Keep both apps importing THIS file so they never diverge
+   (the storefront previously shipped Lato, which mismatched the builder canvas). */
+
+/* Desktop — Open Sans */
+@font-face {
+	font-family: 'main';
+	src: url("https://genix-dev.un.pe/fonts/open-sans-regular.woff2") format("woff2");
+	font-display: swap;
+}
+@font-face {
+	font-family: 'bold';
+	src: url("https://genix-dev.un.pe/fonts/open-sans-v40-latin-600.woff2") format("woff2");
+	font-display: swap;
+}
+@font-face {
+	font-family: 'semibold';
+	src: url("https://genix-dev.un.pe/fonts/open-sans-v40-latin-500.woff2") format("woff2");
+	font-display: swap;
+}
+@font-face {
+	font-family: 'mono';
+	src: url("https://genix-dev.un.pe/fonts/jetbrains-mono-regular.woff2") format("woff2");
+	font-display: swap;
+}
+
+/* Mobile — Inter, exposed through parallel `*-mobile` aliases. */
+@font-face {
+	font-family: 'main-mobile';
+	src: url("https://genix-dev.un.pe/fonts/inter-v20-latin-regular.woff2") format("woff2");
+	font-display: swap;
+}
+@font-face {
+	font-family: 'bold-mobile';
+	src: url("https://genix-dev.un.pe/fonts/inter-v20-latin-700.woff2") format("woff2");
+	font-display: swap;
+}
+@font-face {
+	font-family: 'semibold-mobile';
+	src: url("https://genix-dev.un.pe/fonts/inter-v20-latin-600.woff2") format("woff2");
+	font-display: swap;
+}
+
+/* Desktop alias classes + heading default. */
+.ff-main { font-family: main; }
+.ff-bold { font-family: bold; }
+.ff-semibold { font-family: semibold; }
+.ff-mono, .ff-mono p { font-family: mono; }
+
+h1, h2, h3, h4, h5, h6 { font-family: bold; }
+
+/* Re-map the shared aliases on small screens so every component inheriting
+   `main`/`bold`/`semibold` (or the `.ff-*`/`.font-*` classes) picks up Inter. */
+@media only screen and (max-width: 749px) {
+	body { font-family: main-mobile, 'Inter', system-ui, -apple-system, sans-serif; }
+
+	.ff-main { font-family: main-mobile; }
+	.ff-bold { font-family: bold-mobile; }
+	.ff-semibold { font-family: semibold-mobile; }
+	.font-bold { font-family: 'bold-mobile'; }
+	.font-semibold { font-family: 'semibold-mobile'; }
+
+	h1, h2, h3, h4, h5, h6 { font-family: bold-mobile; }
+}

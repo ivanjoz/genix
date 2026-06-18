@@ -4,6 +4,9 @@
   import { browser } from "$app/environment";
   import "./store.css";
   import "./tailwind.css";
+  // Shared typography (Open Sans desktop / Inter mobile) — imported last so its
+  // ≤749px remap wins the cascade. Same file the admin/builder uses.
+  import "../../styles/fonts.css";
 
   import { preloadProductSearch } from "$core/product-search/product-search-runtime";
   import { getProductEcommerceData } from '$ecommerce/services/productos.svelte';

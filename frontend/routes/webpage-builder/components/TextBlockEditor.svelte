@@ -49,6 +49,7 @@
   import Icon from '$ecommerce/components/Icon.svelte';
   import IconPicker from './IconPicker.svelte';
   import type { IconSetId } from './icon-sets';
+  import { editorStore } from '../stores/editor.svelte';
 
   interface Props {
     /**
@@ -385,9 +386,14 @@
 
   /** Picker pick: add a NEW line after the focused one — the icon leads it, then an editable
    * span to type beside it. The line renders as `[accent border] [icon] [textarea]`. */
-  function insertIcon(icon: { body: string; vb: string }) {
+  function insertIcon(icon: { id: string; body: string; vb: string }) {
     const current = focusedLine() ?? lines[lines.length - 1] ?? siblings[siblings.length - 1];
-    const iconNode: ComponentAST = { tagName: 'Icon', props: { body: icon.body, vb: icon.vb } };
+    // Dedup the SVG body into the section's Svgs map (one entry per unique icon); the node
+    // only references it by sprite id. The IconSprite renders one <symbol> per map entry,
+    // and Icon.svelte points at it via <use href="#id">.
+    const section = editorStore.selectedSection;
+    if (section) (section.Svgs ??= {})[icon.id] = icon.body;
+    const iconNode: ComponentAST = { tagName: 'Icon', props: { svg: icon.id, vb: icon.vb } };
     const newLine: ComponentAST = {
       tagName: current?.tagName ?? 'p',
       css: current?.css,
@@ -789,8 +795,10 @@
                 onclick={() => { focusedFragment = frag; isFocused = true; }}
               >
                 <!-- Chip is a constant 18px preview: NO css/style, so size/color set by the
-                     toolbar show only in the live render (AstRenderer reads node.css itself). -->
-                <Icon body={frag.props?.body} vb={frag.props?.vb} />
+                     toolbar show only in the live render (AstRenderer reads node.css itself).
+                     `svg` references the section sprite (same document as the canvas, so <use>
+                     resolves); `body` is the legacy-inline fallback. -->
+                <Icon svg={frag.props?.svg} body={frag.props?.body} vb={frag.props?.vb} />
               </button>
             {:else}
               <span class="readonly-fragment-chip" title="Icon">{frag.text}</span>

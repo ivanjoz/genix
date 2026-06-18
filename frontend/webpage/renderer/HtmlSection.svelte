@@ -13,16 +13,20 @@
 		import type { SectionProps } from './section-types';
 		import AstRenderer from './AstRenderer.svelte';
 		import ImageEffect from '../components/ImageEffect.svelte';
+		import IconSprite from './IconSprite.svelte';
 
 	// AST is the canonical model: parsed from the template HTML once at add/load time
 	// (see editor.svelte addSection / EcommerceBuilder seed). Render it directly.
 	// Padding and colors live on the AST's root element node (edited in-place by the
 	// section editor); only the optional background image arrives via Attributes here.
-	const { ast = [], css = {}, background }: SectionProps = $props();
+	const { ast = [], css = {}, background, svgs }: SectionProps = $props();
 
 	// Only paint the background-image layer when a source URL is actually set.
 	const hasBackgroundImage = $derived(!!background?.src);
 </script>
+
+<!-- One hidden sprite per section; every Icon below references its symbols via `<use>`. -->
+<IconSprite {svgs} />
 
 {#if hasBackgroundImage}
 	<!-- A positioned host so the image fills behind the content; content sits above via z-10. -->

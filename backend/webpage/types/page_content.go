@@ -78,6 +78,10 @@ type SectionContent struct {
 	// running the UnoCSS engine at view time. It rides in the content blob so it is
 	// covered by the section hash.
 	PageCss string `json:",omitempty" cbor:"6,keyasint,omitempty"`
+	// Svgs deduplicates the inline SVG bodies of icons picked in the builder, keyed by
+	// sprite id `icon--<set>-<name>`. The frontend renders one <symbol> per entry and each
+	// Icon AST node references it via <use href="#id">, so each body is stored exactly once.
+	Svgs map[string]string `json:",omitempty" cbor:"7,keyasint,omitempty"`
 }
 
 // EcommercePageContent stores one builder section, addressed by its page and its

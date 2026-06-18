@@ -109,6 +109,7 @@ setContext(EC_BUILDER_MODE, true);
       <HtmlSection
         ast={section.Ast}
         css={section.Css}
+        svgs={section.Svgs}
         {...section.Attributes}
       />
     {:else}

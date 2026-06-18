@@ -17,6 +17,14 @@ export interface PickerIcon {
 	body: string;
 	/** viewBox string, e.g. "0 0 24 24" — per icon, since one picker can mix sets. */
 	vb: string;
+	/** Sprite id `icon--<set>-<name>` — the symbol id picked icons reference via `<use>`. */
+	id: string;
+}
+
+/** Sprite id for an icon: `icon--<set>-<name>`, sanitized to id-safe chars. The set prefix
+ * avoids collisions between sets that share a name (mdi & flat-color-icons both have `home`). */
+export function iconSpriteId(set: IconSetId, name: string): string {
+	return `icon--${set}-${name}`.replace(/[^a-zA-Z0-9_-]/g, '-');
 }
 
 interface IconifyJSON {
@@ -41,12 +49,13 @@ export function loadIconSet(set: IconSetId): Promise<PickerIcon[]> {
 			const data = mod.default;
 			const vb = `0 0 ${data.width ?? 24} ${data.height ?? 24}`;
 			const icons: PickerIcon[] = [];
-			for (const name in data.icons) icons.push({ name, body: data.icons[name].body, vb });
+			for (const name in data.icons)
+				icons.push({ name, body: data.icons[name].body, vb, id: iconSpriteId(set, name) });
 			// Resolve aliases to their parent's body so the search also finds alias names.
 			for (const name in data.aliases ?? {}) {
 				const parent = data.aliases![name].parent;
 				const body = data.icons[parent]?.body;
-				if (body) icons.push({ name, body, vb });
+				if (body) icons.push({ name, body, vb, id: iconSpriteId(set, name) });
 			}
 			icons.sort((a, b) => a.name.localeCompare(b.name));
 			return icons;

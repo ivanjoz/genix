@@ -19,8 +19,9 @@ export interface SectionData {
   /** Trusted miniature HTML used by the builder's template picker. */
   thumbnail?: string;
   presets?: SectionPreset[];
-  // Map of svgs icons / images
-  svgs: { [name: string]: string }
+  // Map of deduplicated inline SVG bodies, keyed by `icon--<set>-<name>` (see IconSprite).
+  // Persisted (PascalCase) so `<use href="#id">` references survive save/reload.
+  Svgs?: { [id: string]: string }
 
   // HTML sections: `html` is the authoring source (lowercase, not persisted),
   // parsed once at add/load time into `Ast` (the canonical, editable model the
@@ -38,6 +39,8 @@ export interface SectionData {
 export interface SectionProps {
   ast?: ComponentAST[];
   css?: Record<string, string>;
+  /** Deduplicated icon bodies for this section, rendered once as a `<symbol>` sprite. */
+  svgs?: { [id: string]: string };
   [key: string]: any; // attributes passthrough
 }
 

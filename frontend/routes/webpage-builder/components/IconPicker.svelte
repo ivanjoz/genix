@@ -13,7 +13,7 @@
   interface Props {
     /** One or more sets, shown concatenated in this order (e.g. color icons, then material). */
     sets: IconSetId[];
-    onpick: (icon: { body: string; vb: string }) => void;
+    onpick: (icon: { id: string; body: string; vb: string }) => void;
   }
 
   let { sets, onpick }: Props = $props();
@@ -70,7 +70,7 @@
                 type="button"
                 class="icon-cell"
                 title={icon.name}
-                onclick={() => onpick({ body: icon.body, vb: icon.vb })}
+                onclick={() => onpick({ id: icon.id, body: icon.body, vb: icon.vb })}
               >
                 <svg viewBox={icon.vb} width="18" height="18" aria-hidden="true">{@html icon.body}</svg>
               </button>

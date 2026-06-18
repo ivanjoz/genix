@@ -1,7 +1,7 @@
 import { GET, POST } from '$libs/http.svelte';
 import { Env } from '$core/env';
 import { unmarshall } from '$libs/funcs/unmarshall';
-import { collectTokens, generateCss } from '$ecommerce/stores/uno-generator';
+import { collectTokens, generateCss, normalizeRuntimeCss } from '$ecommerce/stores/uno-generator';
 import type { SectionData } from '$ecommerce/renderer/section-types';
 
 // The "Inicio" page (ID 10 server-side). The storefront passes pageID 0 for the
@@ -70,7 +70,9 @@ export const getPageContent = async (pageID: number = currentPageID): Promise<{ 
 // Css column) is extracted.
 const parsePageContentRows = (rows: IPageContentRow[] | null): { sections: SectionData[]; css: string } => {
   const sections = (rows || []).map((row) => ({ id: crypto.randomUUID(), ...row.Content }));
-  const css = (rows || []).map((row) => row.Css || '').filter(Boolean).join('\n');
+  // Upgrade legacy single-layer CSS (pre layer-split saves) to the two-layer
+  // format so runtime responsive variants win as authored, without re-saving.
+  const css = normalizeRuntimeCss((rows || []).map((row) => row.Css || '').filter(Boolean).join('\n'));
   return { sections, css };
 };
 

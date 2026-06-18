@@ -29,6 +29,7 @@
       <HtmlSection
         ast={element.Ast}
         css={element.Css}
+        svgs={element.Svgs}
         {...element.Attributes}
       />
     {:else}
