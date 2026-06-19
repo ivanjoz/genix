@@ -75,4 +75,32 @@ describe('groupSiblings: adjacent text grouping for the WYSIWYG editor', () => {
 		// the <li>'s two spans are its fragments (the ✅ icon + the text)
 		expect(firstLi.children?.map((c) => c.text)).toEqual(['✅', 'Free worldwide shipping & returns']);
 	});
+
+	// A picked Iconify icon (TextBlockEditor.insertIcon) leads its own line; saved icons may
+	// have lost / never had a text companion fragment, so the line must still be editable.
+	it('groups an icon line whose only/trailing fragment is an empty span', () => {
+		const items = groupSiblings([
+			{ tagName: 'h1', text: 'Style That Speaks' },
+			{ tagName: 'h1', children: [{ tagName: 'Icon', props: { svg: 'icon--mdi-account', vb: '0 0 24 24' } }, { tagName: 'span' }] },
+			{ tagName: 'p', text: 'Curated collections for the modern wardrobe.' },
+		]);
+		// All three merge into one text group — the icon line included.
+		expect(items).toHaveLength(1);
+		expect(items[0].kind).toBe('lines');
+		const lines = (items[0] as { lines: { tagName: string }[] }).lines;
+		expect(lines.map((l) => l.tagName)).toEqual(['h1', 'h1', 'p']);
+	});
+
+	it('gives a bare standalone Icon node its own editable line', () => {
+		const items = groupSiblings([
+			{ tagName: 'h1', text: 'Style That Speaks' },
+			{ tagName: 'Icon', props: { svg: 'icon--mdi-account', vb: '0 0 24 24' } },
+			{ tagName: 'p', text: 'Curated collections.' },
+		]);
+		// The bare Icon is a line too, so it merges into the surrounding text group (not dropped).
+		expect(items).toHaveLength(1);
+		expect(items[0].kind).toBe('lines');
+		const lines = (items[0] as { lines: { tagName: string }[] }).lines;
+		expect(lines.map((l) => l.tagName)).toEqual(['h1', 'Icon', 'p']);
+	});
 });

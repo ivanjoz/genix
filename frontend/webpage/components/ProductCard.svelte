@@ -425,6 +425,9 @@
 		right: -2px;
 		outline: 2px solid rgba(255, 255, 255);
 		user-select: none;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.horizontal-card {

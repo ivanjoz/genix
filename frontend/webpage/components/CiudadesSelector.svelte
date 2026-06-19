@@ -1,6 +1,6 @@
 <script lang="ts">
 import SearchSelect from '$components/form/SearchSelect.svelte';
-import { useCiudadesAPI, type ICiudad } from '$services/services/cities.svelte';
+import { useCitiesAPI, type ICity } from '$services/services/cities.svelte';
 
   export interface ICiudades {
     css: string
@@ -20,14 +20,14 @@ import { useCiudadesAPI, type ICiudad } from '$services/services/cities.svelte';
     distritoID: Number(saveOn?.distritoID || 0)
   })
 
-  const ciudades = useCiudadesAPI()
-  let provincias = $state([] as ICiudad[])
-  let distritos = $state([] as ICiudad[])
+  const cities = useCitiesAPI()
+  let provincias = $state([] as ICity[])
+  let distritos = $state([] as ICity[])
 
 $effect(() => {
-  if(!saveOn || !save || !ciudades.ciudadesMap){ return }
+  if(!saveOn || !save || !cities.citiesMap){ return }
 
-  const ciudad = ciudades.ciudadesMap.get(Number(saveOn[save] || 0))
+  const ciudad = cities.citiesMap.get(Number(saveOn[save] || 0))
 
   if(ciudad){
     // Hierarchy defines the selected level now that ubigeos are stored as numbers.
@@ -37,7 +37,7 @@ $effect(() => {
       form.departamentoID = ciudad.ParentID
       form.provinciaID = ciudad.ID
     } else {
-      const provincia = ciudades.ciudadesMap.get(ciudad.ParentID)
+      const provincia = cities.citiesMap.get(ciudad.ParentID)
       if(provincia){
         form.departamentoID = provincia.ParentID
         form.provinciaID = ciudad.ParentID
@@ -46,13 +46,13 @@ $effect(() => {
   }
 
   if(form.departamentoID){
-    provincias = ciudades.ciudadHijosMap.get(form.departamentoID) || []
+    provincias = cities.cityChildrenMap.get(form.departamentoID) || []
   } else {
     provincias = []
   }
 
   if(form.provinciaID){
-    distritos = ciudades.ciudadHijosMap.get(form.provinciaID) || []
+    distritos = cities.cityChildrenMap.get(form.provinciaID) || []
   } else {
     distritos = []
   }
@@ -69,12 +69,12 @@ $effect(() => {
 
 <SearchSelect saveOn={form} save="departamentoID" css={css}
   label={"Departamento"} keyId="ID" keyName="Name" required={true}
-  options={ciudades.departamentos}
+  options={cities.departments}
   onChange={e => {
     console.log("departamento::", e)
     form.distritoID = 0
     form.provinciaID = 0
-    provincias = ciudades.ciudadHijosMap.get(e?.ID) || []
+    provincias = cities.cityChildrenMap.get(e?.ID) || []
     distritos = []
     doSave()
   }}
@@ -84,7 +84,7 @@ $effect(() => {
   options={provincias}
   onChange={e => {
     form.distritoID = 0
-    distritos = ciudades.ciudadHijosMap.get(e?.ID) || []
+    distritos = cities.cityChildrenMap.get(e?.ID) || []
     doSave()
   }}
 />

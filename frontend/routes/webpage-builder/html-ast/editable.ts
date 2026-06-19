@@ -71,18 +71,20 @@ export function isTextRun(node: ComponentAST): boolean {
 /** Inline tags that may live INSIDE a line as fragments (a leaf each, no deeper nesting). */
 const INLINE_FRAGMENT_TAGS = new Set(['span', 'strong', 'em', 'small', 'b', 'i', TEXT_TAG]);
 
+/** A picked-icon node — an inline Iconify SVG with no text (rendered as a read-only chip). */
+export function isIconNode(node: ComponentAST): boolean {
+	return node.tagName === 'Icon';
+}
+
 /**
- * One inline fragment of a line: a text-bearing inline leaf (`<span>…`), or a picked
- * Iconify `Icon` node (inline SVG, no text). Both are edited inside the TextBlockEditor —
- * the Icon as a read-only chip — so a line mixing them must NOT be split apart by grouping.
+ * One inline fragment of a line: a picked Iconify `Icon` node (inline SVG, no text), or an
+ * inline-tag leaf (`<span>…`) — including an EMPTY one with no text yet (the caret target a
+ * freshly-inserted icon leaves beside it). Both are edited inside the TextBlockEditor — the
+ * Icon as a read-only chip — so a line mixing them must NOT be split apart by grouping.
  */
 function isInlineFragment(k: ComponentAST): boolean {
-	if (k.tagName === 'Icon') return true;
-	return (
-		INLINE_FRAGMENT_TAGS.has(k.tagName) &&
-		(k.tagName === TEXT_TAG || typeof k.text === 'string') &&
-		!k.children?.length
-	);
+	if (isIconNode(k)) return true;
+	return INLINE_FRAGMENT_TAGS.has(k.tagName) && !k.children?.length;
 }
 
 /**
@@ -103,9 +105,13 @@ export function isContainerLine(node: ComponentAST): boolean {
  */
 const STANDALONE_LINE_TAGS = new Set(['li', 'dt', 'dd']);
 
-/** A node holds editable text directly (leaf) or as inline span/icon fragments (container line). */
+/**
+ * A node the TextBlockEditor can own as a "line": text directly (leaf), text/icon fragments
+ * (container line), or a bare standalone `Icon` node (its own one-fragment chip line — this is
+ * what saved icons that lack a text companion fragment look like, so they still get an editor).
+ */
 function isTextLine(node: ComponentAST): boolean {
-	return isTextLeaf(node) || isContainerLine(node);
+	return isTextLeaf(node) || isContainerLine(node) || isIconNode(node);
 }
 
 /** One rendered item of an AST level: a grouped text editor, or a single special node. */
