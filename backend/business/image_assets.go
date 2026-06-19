@@ -92,6 +92,27 @@ func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &result)
 }
 
+// GetImageAssetTextSearch runs the Sonic GenixSearch index over image asset Keywords
+// (English) and returns the top ids + relevance weights ordered by score.
+func GetImageAssetTextSearch(req *core.HandlerArgs) core.HandlerResponse {
+	query := req.GetQuery("q")
+	if len(query) < 2 {
+		return req.MakeErr("La búsqueda debe tener al menos 2 caracteres.")
+	}
+	limit := int(req.GetQueryInt("limit"))
+	if limit <= 0 {
+		limit = 10
+	}
+
+	// Image assets share the single group partition and carry no Status column,
+	// so they index into status group 0.
+	matches, err := db.SearchTextIDs[businessTypes.ImageAsset](imageAssetCategoryGroupID, query, 0, limit)
+	if err != nil {
+		return req.MakeErr("Error en la búsqueda de imágenes:", err)
+	}
+	return core.MakeResponse(req, &matches)
+}
+
 func encodeImageAssetBigrams(bigrams []int8) string {
 	// Preserve each stored signed byte's original 8-bit representation.
 	bigramBytes := make([]byte, len(bigrams))

@@ -24,8 +24,8 @@ func TestParseImageAssetSummaryRejectsDuplicateCategory(t *testing.T) {
 	}
 }
 
-func TestParseImageAssetListBuildsDelta(t *testing.T) {
-	content := strings.Join([]string{
+func TestBuildImageAssetRecordsMergesLocalizedLists(t *testing.T) {
+	spanishContent := strings.Join([]string{
 		"# Lista",
 		"",
 		"| Nombre | Descripción | Elementos | Colores Dominantes | Fondo | Relación de Aspecto | Iluminación |",
@@ -33,16 +33,25 @@ func TestParseImageAssetListBuildsDelta(t *testing.T) {
 		"| 28 | Registro anterior | teléfono | negro | clean | 3:2 | light |",
 		"| 36 | Mano con teléfono \\| código visible | teléfono, código QR | negro | clean | 3:2 | light |",
 	}, "\n")
+	englishContent := strings.Join([]string{
+		"# List",
+		"",
+		"| Name | Description | Elements | Dominant Colors | Background | Aspect Ratio | Lighting |",
+		"|------|-------------|----------|-----------------|------------|--------------|----------|",
+		"| 28 | Previous record | phone | black | clean | 3:2 | light |",
+		"| 36 | Hand holding phone | phone, QR code phone | black | clean | 3:2 | light |",
+	}, "\n")
 
-	records, err := parseImageAssetList(
+	records, err := buildImageAssetRecords(
 		imageAssetCategorySummary{Name: "electronics-tech", MaxID: 36},
 		123,
 		28,
 		456,
-		content,
+		spanishContent,
+		englishContent,
 	)
 	if err != nil {
-		t.Fatalf("parseImageAssetList returned error: %v", err)
+		t.Fatalf("buildImageAssetRecords returned error: %v", err)
 	}
 	if len(records) != 1 {
 		t.Fatalf("expected one delta record, got %d", len(records))
@@ -51,29 +60,36 @@ func TestParseImageAssetListBuildsDelta(t *testing.T) {
 	if record.ID != 36 || record.CategoryID != 123 || record.Updated != 456 {
 		t.Fatalf("unexpected record identity: %+v", record)
 	}
-	if !reflect.DeepEqual(record.Objects, []string{"teléfono", "código QR"}) {
-		t.Fatalf("unexpected objects: %v", record.Objects)
+	if record.SpanishDescription != "Mano con teléfono | código visible" || record.Description != "Hand holding phone" {
+		t.Fatalf("unexpected descriptions: %+v", record)
 	}
-	if len(record.Bigrams) == 0 {
-		t.Fatal("expected encoded bigrams")
+	if !reflect.DeepEqual(record.SpanishKeywords, []string{"teléfono", "código QR"}) {
+		t.Fatalf("unexpected spanish keywords: %v", record.SpanishKeywords)
 	}
+	// English words are split and deduplicated case-insensitively, keeping first occurrence.
+	if record.Keywords != "phone QR code" {
+		t.Fatalf("unexpected deduplicated keywords: %q", record.Keywords)
+	}
+	// Bigrams must come only from the Spanish keywords (frontend local search).
 	expectedBigrams := imageAssetBigramsToInt8(textsearch.EncodeTextBigrams("teléfono código QR"))
 	if !reflect.DeepEqual(record.Bigrams, expectedBigrams) {
-		t.Fatalf("bigrams must be generated only from Elementos: got %v want %v", record.Bigrams, expectedBigrams)
+		t.Fatalf("bigrams must be generated only from Spanish Elementos: got %v want %v", record.Bigrams, expectedBigrams)
 	}
 }
 
-func TestParseImageAssetListRejectsSummaryMismatch(t *testing.T) {
-	content := "| Nombre | Descripción | Elementos | Colores Dominantes | Fondo | Relación de Aspecto | Iluminación |\n" +
-		"|--------|-------------|-----------|-------------------|-------|---------------------|-------------|\n" +
-		"| 35 | Descripción | objeto | negro | clean | 3:2 | light |\n"
+func TestBuildImageAssetRecordsRejectsSummaryMismatch(t *testing.T) {
+	header := "| Nombre | Descripción | Elementos | Colores Dominantes | Fondo | Relación de Aspecto | Iluminación |\n" +
+		"|--------|-------------|-----------|-------------------|-------|---------------------|-------------|\n"
+	spanishContent := header + "| 35 | Descripción | objeto | negro | clean | 3:2 | light |\n"
+	englishContent := header + "| 35 | Description | object | black | clean | 3:2 | light |\n"
 
-	_, err := parseImageAssetList(
+	_, err := buildImageAssetRecords(
 		imageAssetCategorySummary{Name: "electronics-tech", MaxID: 36},
 		123,
 		0,
 		456,
-		content,
+		spanishContent,
+		englishContent,
 	)
 	if err == nil || !strings.Contains(err.Error(), "maximum ID mismatch") {
 		t.Fatalf("expected maximum ID mismatch, got %v", err)

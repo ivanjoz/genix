@@ -4,7 +4,7 @@ import "app/db"
 
 type ImageAssetCategory struct {
 	db.TableStruct[ImageAssetCategoryTable, ImageAssetCategory]
-	GroupID int8   `json:"-"`
+	GroupID int32  `json:"-"`
 	ID      int16  `json:",omitempty"`
 	Name    string `json:",omitempty"`
 	Updated int32  `json:"upd,omitempty"`
@@ -13,7 +13,7 @@ type ImageAssetCategory struct {
 
 type ImageAssetCategoryTable struct {
 	db.TableStruct[ImageAssetCategoryTable, ImageAssetCategory]
-	GroupID db.Col[ImageAssetCategoryTable, int8]
+	GroupID db.Col[ImageAssetCategoryTable, int32]
 	ID      db.Col[ImageAssetCategoryTable, int16]
 	Name    db.Col[ImageAssetCategoryTable, string]
 	Updated db.Col[ImageAssetCategoryTable, int32]

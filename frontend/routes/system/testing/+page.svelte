@@ -2,9 +2,8 @@
 import Page from '$domain/Page.svelte';
 import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import TestTextIndexes from './TestTextIndexes.svelte';
+import TestStockImages from './TestStockImages.svelte';
 
-// Single sub-view for now; OptionsStrip is in place so more testing tools
-// can be added as extra options later.
 let view = $state(1)
 </script>
 
@@ -12,11 +11,13 @@ let view = $state(1)
   <OptionsStrip
     selected={view}
     useMobileGrid={true}
-    options={[[1, "Text Indexes"]]}
+    options={[[1, "Text Indexes"], [2, "Stock Images"]]}
     onSelect={(opt) => { view = opt[0] as number }}
   />
 
   {#if view === 1}
     <TestTextIndexes />
+  {:else if view === 2}
+    <TestStockImages />
   {/if}
 </Page>

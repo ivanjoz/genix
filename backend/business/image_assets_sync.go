@@ -17,7 +17,7 @@ import (
 )
 
 const imageAssetsRawBaseURL = "https://raw.githubusercontent.com/ivanjoz/genix-assets/main/docs/images"
-const imageAssetCategoryGroupID int8 = 1
+const imageAssetCategoryGroupID int32 = 1
 
 var imageAssetCategoryPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
@@ -93,12 +93,17 @@ func syncImageAssets(fetchText imageAssetTextFetcher) (ImageAssetSyncResult, err
 			continue
 		}
 
-		listURL := fmt.Sprintf("%s/%s/IMAGES_LIST.ES.md", imageAssetsRawBaseURL, categorySummary.Name)
-		listContent, fetchErr := fetchText(listURL)
+		spanishURL := fmt.Sprintf("%s/%s/IMAGES_LIST.ES.md", imageAssetsRawBaseURL, categorySummary.Name)
+		spanishContent, fetchErr := fetchText(spanishURL)
 		if fetchErr != nil {
 			return result, fetchErr
 		}
-		categoryRecords, parseErr := parseImageAssetList(categorySummary, category.ID, storedMaxID, updated, listContent)
+		englishURL := fmt.Sprintf("%s/%s/IMAGES_LIST.md", imageAssetsRawBaseURL, categorySummary.Name)
+		englishContent, fetchErr := fetchText(englishURL)
+		if fetchErr != nil {
+			return result, fetchErr
+		}
+		categoryRecords, parseErr := buildImageAssetRecords(categorySummary, category.ID, storedMaxID, updated, spanishContent, englishContent)
 		if parseErr != nil {
 			return result, parseErr
 		}
@@ -215,15 +220,16 @@ func parseImageAssetSummary(content string) ([]imageAssetCategorySummary, error)
 	return categorySummaries, nil
 }
 
-func parseImageAssetList(
-	categorySummary imageAssetCategorySummary,
-	categoryID int16,
-	storedMaxID int32,
-	updated int32,
-	content string,
-) ([]businessTypes.ImageAsset, error) {
-	records := []businessTypes.ImageAsset{}
-	seenIDs := map[int32]bool{}
+// imageAssetListRow is one parsed image entry from a localized IMAGES_LIST table.
+type imageAssetListRow struct {
+	description string
+	keywords    []string
+}
+
+// parseImageAssetList reads a localized IMAGES_LIST markdown table into rows keyed
+// by image ID. It handles both the Spanish ("Nombre") and English ("Name") headers.
+func parseImageAssetList(categoryName, content string) (map[int32]imageAssetListRow, int32, error) {
+	rows := map[int32]imageAssetListRow{}
 	parsedMaxID := int32(0)
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	scanner.Buffer(make([]byte, 1024), 1024*1024)
@@ -235,55 +241,107 @@ func parseImageAssetList(
 		}
 		cells, err := parseMarkdownTableRow(line)
 		if err != nil {
-			return nil, fmt.Errorf("%s line %d: %w", categorySummary.Name, lineNumber, err)
+			return nil, 0, fmt.Errorf("%s line %d: %w", categoryName, lineNumber, err)
 		}
-		if len(cells) == 0 || cells[0] == "Nombre" || isMarkdownSeparatorRow(cells) {
+		// Skip the localized header row and the markdown separator row.
+		if len(cells) == 0 || cells[0] == "Nombre" || cells[0] == "Name" || isMarkdownSeparatorRow(cells) {
 			continue
 		}
 		if len(cells) != 7 {
-			return nil, fmt.Errorf("%s line %d: expected 7 columns, found %d", categorySummary.Name, lineNumber, len(cells))
+			return nil, 0, fmt.Errorf("%s line %d: expected 7 columns, found %d", categoryName, lineNumber, len(cells))
 		}
 		imageIDValue, err := strconv.ParseInt(cells[0], 10, 32)
 		if err != nil || imageIDValue <= 0 {
-			return nil, fmt.Errorf("%s line %d: invalid image ID %q", categorySummary.Name, lineNumber, cells[0])
+			return nil, 0, fmt.Errorf("%s line %d: invalid image ID %q", categoryName, lineNumber, cells[0])
 		}
 		imageID := int32(imageIDValue)
-		if seenIDs[imageID] {
-			return nil, fmt.Errorf("%s line %d: duplicated image ID %d", categorySummary.Name, lineNumber, imageID)
+		if _, duplicated := rows[imageID]; duplicated {
+			return nil, 0, fmt.Errorf("%s line %d: duplicated image ID %d", categoryName, lineNumber, imageID)
 		}
-		seenIDs[imageID] = true
+		description := strings.TrimSpace(cells[1])
+		keywords := splitImageAssetObjects(cells[2])
+		if description == "" || len(keywords) == 0 {
+			return nil, 0, fmt.Errorf("%s line %d: description and objects are required", categoryName, lineNumber)
+		}
+		rows[imageID] = imageAssetListRow{description: description, keywords: keywords}
 		parsedMaxID = max(parsedMaxID, imageID)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, 0, fmt.Errorf("scan %s image list: %w", categoryName, err)
+	}
+	return rows, parsedMaxID, nil
+}
+
+// buildImageAssetRecords merges the Spanish and English localized lists into image rows
+// above storedMaxID. Spanish keywords feed the frontend bigram search; English keywords
+// feed the Sonic TextSearchColumn the AI agent searches against.
+func buildImageAssetRecords(
+	categorySummary imageAssetCategorySummary,
+	categoryID int16,
+	storedMaxID int32,
+	updated int32,
+	spanishContent string,
+	englishContent string,
+) ([]businessTypes.ImageAsset, error) {
+	spanishRows, spanishMaxID, err := parseImageAssetList(categorySummary.Name, spanishContent)
+	if err != nil {
+		return nil, err
+	}
+	englishRows, englishMaxID, err := parseImageAssetList(categorySummary.Name, englishContent)
+	if err != nil {
+		return nil, err
+	}
+	// Both localized lists must reach the maximum ID advertised by SUMMARY.md.
+	if spanishMaxID != categorySummary.MaxID || englishMaxID != categorySummary.MaxID {
+		return nil, fmt.Errorf("%s maximum ID mismatch: SUMMARY.md=%d spanish=%d english=%d", categorySummary.Name, categorySummary.MaxID, spanishMaxID, englishMaxID)
+	}
+
+	records := []businessTypes.ImageAsset{}
+	for imageID, spanishRow := range spanishRows {
 		if imageID <= storedMaxID {
 			continue
 		}
-
-		description := strings.TrimSpace(cells[1])
-		objects := splitImageAssetObjects(cells[2])
-		if description == "" || len(objects) == 0 {
-			return nil, fmt.Errorf("%s line %d: description and objects are required", categorySummary.Name, lineNumber)
+		englishRow, found := englishRows[imageID]
+		if !found {
+			return nil, fmt.Errorf("%s image ID %d missing from the English list", categorySummary.Name, imageID)
 		}
-		// Search signatures represent the concrete objects listed in Elementos.
-		searchText := strings.Join(objects, " ")
+		// Bigrams index the Spanish keywords for the frontend local search.
+		spanishSearchText := strings.Join(spanishRow.keywords, " ")
 		records = append(records, businessTypes.ImageAsset{
-			GroupID:     imageAssetCategoryGroupID,
-			ID:          imageID,
-			CategoryID:  categoryID,
-			Description: description,
-			Objects:     objects,
-			Bigrams:     imageAssetBigramsToInt8(textsearch.EncodeTextBigrams(searchText)),
-			Updated:     updated,
+			GroupID:            imageAssetCategoryGroupID,
+			ID:                 imageID,
+			CategoryID:         categoryID,
+			Description:        englishRow.description,
+			SpanishDescription: spanishRow.description,
+			Keywords:           joinUniqueWords(englishRow.keywords),
+			SpanishKeywords:    spanishRow.keywords,
+			Bigrams:            imageAssetBigramsToInt8(textsearch.EncodeTextBigrams(spanishSearchText)),
+			Updated:            updated,
 		})
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scan %s image list: %w", categorySummary.Name, err)
-	}
-	if parsedMaxID != categorySummary.MaxID {
-		return nil, fmt.Errorf("%s maximum ID mismatch: SUMMARY.md=%d list=%d", categorySummary.Name, categorySummary.MaxID, parsedMaxID)
 	}
 	slices.SortFunc(records, func(left, right businessTypes.ImageAsset) int {
 		return int(left.ID - right.ID)
 	})
 	return records, nil
+}
+
+// joinUniqueWords splits the English keyword phrases into individual words and joins
+// them back deduplicated (case-insensitive, first occurrence wins) so the search payload
+// carries each word only once.
+func joinUniqueWords(keywords []string) string {
+	seenWords := map[string]bool{}
+	uniqueWords := []string{}
+	for _, keyword := range keywords {
+		for _, word := range strings.Fields(keyword) {
+			lowerWord := strings.ToLower(word)
+			if seenWords[lowerWord] {
+				continue
+			}
+			seenWords[lowerWord] = true
+			uniqueWords = append(uniqueWords, word)
+		}
+	}
+	return strings.Join(uniqueWords, " ")
 }
 
 func parseMarkdownTableRow(line string) ([]string, error) {

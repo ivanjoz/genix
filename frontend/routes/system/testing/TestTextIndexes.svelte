@@ -31,7 +31,7 @@ const runSearch = async () => {
   try {
     // GET.product-text-search returns ids + weights ordered by relevance.
     const result = await GET({
-      route: `product-text-search?q=${encodeURIComponent(trimmedQuery)}&limit=100`,
+      route: `p-product-text-search?q=${encodeURIComponent(trimmedQuery)}&limit=100`,
       errorMessage: "Error en la búsqueda de texto.",
     })
     hits = Array.isArray(result) ? result : []
