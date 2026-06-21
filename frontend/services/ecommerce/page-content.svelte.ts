@@ -41,11 +41,19 @@ interface IPageContentRow {
 // assigns the 1-based SectionID, hashes each section, and writes only what changed
 // (soft-deleting removed positions) — and since the CSS lives in section 1, any
 // CSS-affecting change anywhere on the page flips section 1's hash and rewrites it.
-export const savePageContent = async (sections: SectionData[], pageID: number = currentPageID) => {
-  const pageCss = await generateCss(collectTokens(sections));
+export const savePageContent = async (sections: SectionData[], palette: string[] | undefined, pageID: number = currentPageID) => {
+  const utilityCss = await generateCss(collectTokens(sections));
+  // Fold the agent-authored custom CSS (already scoped to .x{n}) into the
+  // whole-page stylesheet so the storefront serves it verbatim. ec-custom is the
+  // last-declared layer, so it wins over utilities.
+  const customCss = sections.map((s) => s.CustomCss).filter(Boolean).join('\n');
+  const pageCss = customCss ? `${utilityCss}\n@layer ec-custom {\n${customCss}\n}` : utilityCss;
+  // The page-global palette rides on section 1 only (same convention as PageCss),
+  // so the storefront can restore the var(--color-N) definitions on load.
   const payload = sections.map((section, index) => ({
     ...section,
     PageCss: index === 0 ? pageCss : '',
+    Palette: index === 0 ? palette : undefined,
   }));
 
   return POST({
@@ -60,20 +68,21 @@ export const savePageContent = async (sections: SectionData[], pageID: number = 
 // since it is not persisted). `css` is the single pre-generated stylesheet (stored
 // in section 1's Css column) the storefront injects directly. Returns empty when
 // the page has no stored content yet.
-export const getPageContent = async (pageID: number = currentPageID): Promise<{ sections: SectionData[]; css: string }> => {
+export const getPageContent = async (pageID: number = currentPageID): Promise<{ sections: SectionData[]; css: string; palette?: string[] }> => {
   const rows: IPageContentRow[] = await GET({ route: pageContentRoute(pageID) });
   return parsePageContentRows(rows);
 };
 
 // Shared parsing for both the authed and public reads. A fresh runtime `id` is
-// assigned (it is not persisted) and the single whole-page stylesheet (section 1's
-// Css column) is extracted.
-const parsePageContentRows = (rows: IPageContentRow[] | null): { sections: SectionData[]; css: string } => {
+// assigned (it is not persisted), the single whole-page stylesheet (section 1's Css
+// column) is extracted, and the page palette (section 1's Content.Palette) surfaced.
+const parsePageContentRows = (rows: IPageContentRow[] | null): { sections: SectionData[]; css: string; palette?: string[] } => {
   const sections = (rows || []).map((row) => ({ id: crypto.randomUUID(), ...row.Content }));
   // Upgrade legacy single-layer CSS (pre layer-split saves) to the two-layer
   // format so runtime responsive variants win as authored, without re-saving.
   const css = normalizeRuntimeCss((rows || []).map((row) => row.Css || '').filter(Boolean).join('\n'));
-  return { sections, css };
+  const palette = sections[0]?.Palette;
+  return { sections, css, palette };
 };
 
 // The combined public payload from GET.p-webpage: a page's SEO metatags (Config)
@@ -84,7 +93,7 @@ interface IWebpagePublicResult {
 }
 
 export interface IWebpageContent {
-	sections: SectionData[]; css: string; seo: Record<string, string>
+	sections: SectionData[]; css: string; seo: Record<string, string>; palette?: string[]
 }
 
 // Storefront loader: ONE public call (GET.p-webpage) returns a page's SEO config +
@@ -95,8 +104,8 @@ export const getStoreWebpage = async (pageID = 0): Promise<IWebpageContent> => {
   const route = pageID > 0 ? `p-webpage?id=${pageID}` : 'p-webpage';
 	const result: IWebpagePublicResult = await GET({ route });
 
-  const { sections, css } = parsePageContentRows(result?.Sections || []);
-  return { sections, css, seo: result?.Config || {} };
+  const { sections, css, palette } = parsePageContentRows(result?.Sections || []);
+  return { sections, css, palette, seo: result?.Config || {} };
 };
 
 // Resolve a CDN snapshot file name (<companyID>-<pageID>.json) for a page. pageID 0
@@ -114,8 +123,8 @@ export const getStoreSnapshotName = (pageID = 0, companyID = 0): string => {
 // (which fetches early via an inline <head> script and passes the parsed JSON here).
 export const parseStoreWebpageSnapshot = (raw: unknown): IWebpageContent => {
 	const result: IWebpagePublicResult = unmarshall(raw);
-	const { sections, css } = parsePageContentRows(result?.Sections || []);
-	return { sections, css, seo: result?.Config || {} };
+	const { sections, css, palette } = parsePageContentRows(result?.Sections || []);
+	return { sections, css, palette, seo: result?.Config || {} };
 };
 
 // Storefront loader, CDN-first variant: reads the published snapshot

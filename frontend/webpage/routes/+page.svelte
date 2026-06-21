@@ -25,7 +25,8 @@ import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
   // it per section, so the storefront injects it as-is — no UnoCSS at view time.
   let runtimeCss = $state(untrack(() => data?.css ?? ''));
 
-  // Matches the builder's default palette so `--color-N` vars resolve identically.
+  // Matches the builder's default palette so `--color-N` vars resolve identically when
+  // a page has no saved palette of its own.
   const defaultPalette: ColorPalette = {
     id: 'default',
     name: 'Default Palette',
@@ -34,6 +35,12 @@ import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
       '#64748b', '#475569', '#334155', '#1e293b', '#0f172a'
     ]
   };
+
+  // The page's saved palette (the agent grows it in the builder); falls back to the
+  // default so var(--color-N) always resolves. Refreshed alongside content on mount.
+  const toPalette = (colors?: string[]): ColorPalette =>
+    colors?.length ? { ...defaultPalette, colors } : defaultPalette;
+  let palette = $state<ColorPalette>(untrack(() => toPalette(data?.palette)));
 
   // Content fingerprint used to decide whether the live refresh actually differs from
   // the prerendered content. The runtime `id` is a fresh uuid on every load (see
@@ -57,6 +64,7 @@ import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
       if (contentKey(stored.sections, stored.css) !== contentKey(sections, runtimeCss)) {
         sections = stored.sections;
         runtimeCss = stored.css;
+        palette = toPalette(stored.palette);
       }
     } catch (contentRefreshError) {
       console.error('[StorePage] content refresh failed', contentRefreshError);
@@ -79,4 +87,4 @@ import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 
 <Header />
 <MobileMenu />
-<EcommerceRenderer elements={sections} palette={defaultPalette} />
+<EcommerceRenderer elements={sections} {palette} />

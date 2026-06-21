@@ -60,7 +60,7 @@ import { editorStore } from '../stores/editor.svelte';
       thumbnail = await captureShowcaseBlob();
       // Persist every section of the page. The backend assigns each section's
       // position-based id, hashes its content, and writes only what changed.
-      await savePageContent(editorStore.sections);
+      await savePageContent(editorStore.sections, editorStore.palette.colors);
       // Re-snapshot the now-saved state so a subsequent Save with no further edits
       // correctly reports "no changes".
       editorStore.captureBaseline();

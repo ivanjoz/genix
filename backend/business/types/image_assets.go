@@ -12,6 +12,7 @@ type ImageAsset struct {
 	Keywords           string   `json:",omitempty"`            // Deduplicated English words; feeds the TextSearchColumn AI search.
 	SpanishKeywords    []string `json:",omitempty" db:",list"` // Spanish object list; feeds the bigram local search.
 	Bigrams            []int8   `json:",omitempty" db:",list"` // Encoded from the Spanish keywords for frontend local search.
+	Ratio              float32  `json:",omitempty"`            // Aspect ratio = width/height (1.0=1:1, 1.777=16:9, 0.75=3:4). 0 ⇒ unknown, treated as 1:1 by find_image.
 	Updated            int32    `json:"upd,omitempty"`
 }
 
@@ -25,6 +26,7 @@ type ImageAssetTable struct {
 	Keywords           db.Col[ImageAssetTable, string]
 	SpanishKeywords    db.ColSlice[ImageAssetTable, string]
 	Bigrams            db.ColSlice[ImageAssetTable, int8]
+	Ratio              db.Col[ImageAssetTable, float32]
 	Updated            db.Col[ImageAssetTable, int32]
 }
 

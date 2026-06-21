@@ -46,7 +46,9 @@ export interface ComponentAST {
 export interface ColorPalette {
 	id: string;
 	name: string;
-	colors: [string, string, string, string, string, string, string, string, string, string];
+	// A growable list of hex colors. Referenced 1-based as var(--color-N); the builder
+	// appends new colors the agent introduces (see absorbColors), so it is not fixed-length.
+	colors: string[];
 }
 
 export type SectionCategory =

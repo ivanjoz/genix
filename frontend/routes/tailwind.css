@@ -4,8 +4,10 @@
      - `ec-runtime` (base/plain rules) sits BEFORE utilities, so build-time
        Tailwind wins ties over redundant runtime base duplicates.
      - `ec-runtime-media` (@media/responsive rules) sits AFTER utilities, so a
-       runtime-only responsive variant overrides a build-time base utility. */
-@layer theme, base, components, ec-runtime, utilities, ec-runtime-media;
+       runtime-only responsive variant overrides a build-time base utility.
+     - `ec-custom` (agent-authored raw CSS, scoped to .x{n}) sits LAST, so its
+       declarations win over utilities on the same element. */
+@layer theme, base, components, ec-runtime, utilities, ec-runtime-media, ec-custom;
 @import 'tailwindcss';
 @plugin "@iconify/tailwind4" {
 	prefix: "icon";

@@ -68,9 +68,13 @@ var Models = map[string]ModelConfig{
 		Notes:     "Non-reasoning, fast model. Pinned to first-party StepFun provider.",
 	},
 	"tencent/hy3-preview": {
-		ID:        "tencent/hy3-preview",
-		Reasoning: nil,
-		Notes:     "Used during initial validation. Provider routing rejects tool_choice=\"required\"; stick to \"auto\".",
+		ID: "tencent/hy3-preview",
+		// Reasoning is configurable (disabled/low/high) and ACTUALLY honored —
+		// unlike DeepSeek V4, which ignores effort:low. Default to low+exclude so
+		// callers that don't override (e.g. the chat loop) stay snappy; the page
+		// builder pins this model and sets effort per call.
+		Reasoning: &ReasoningOptions{Effort: "low", Exclude: true},
+		Notes:     "Cheap ($0.063/$0.21), honors disabled/low/high reasoning. Used by the page builder. Provider routing rejects tool_choice=\"required\"; stick to \"auto\".",
 	},
 }
 

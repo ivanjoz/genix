@@ -135,9 +135,11 @@ const postIn = async (body: object): Promise<void> => {
 };
 
 // postChatMessage is the chat widget's send path: POST a userMessage; the
-// reply/status/error events come back via subscribeAgentChat.
-export const postChatMessage = (message: string, modelHash: string, timestamp: number): Promise<void> =>
-  postIn({ Type: "userMessage", Payload: { Message: message, ModelHash: modelHash, Timestamp: timestamp } });
+// reply/status/error events come back via subscribeAgentChat. `context` carries
+// mode-specific context (e.g. the builder's sections serialized to HTML); empty
+// when the active mode needs none.
+export const postChatMessage = (message: string, modelHash: string, timestamp: number, modeID: number, context: string): Promise<void> =>
+  postIn({ Type: "userMessage", Payload: { Message: message, ModelHash: modelHash, Timestamp: timestamp, ModeID: modeID, Context: context } });
 
 const handleStreamMessage = async (raw: unknown) => {
   let message: WsMessage & ChatStreamEvent;

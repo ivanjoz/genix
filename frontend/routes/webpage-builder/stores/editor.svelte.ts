@@ -1,7 +1,20 @@
 import type { SectionData } from '$ecommerce/renderer/section-types';
+import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 import { schema as htmlSectionSchema } from '$ecommerce/renderer/HtmlSection.svelte';
 import { sectionTemplates } from '../templates';
 import { parseHTML } from '$ecommerce/html-ast/parse-html';
+
+// The builder's neutral starting palette (a slate ramp). A page with no saved
+// palette starts from this; the agent grows it as it introduces new colors. Returns
+// a fresh object/array each call so the reactive store never shares the const.
+export const makeDefaultPalette = (): ColorPalette => ({
+  id: 'default',
+  name: 'Default Palette',
+  colors: [
+    '#f8fafc', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#94a3b8',
+    '#64748b', '#475569', '#334155', '#1e293b', '#0f172a',
+  ],
+});
 
 // id -> HTML plantilla lookup. HTML templates are an authoring source: their HTML is
 // parsed to an AST once at add time and stored as `Ast` (the canonical model).
@@ -21,6 +34,15 @@ function fnv1a(input: string): string {
 class EditorStore {
   // The current list of sections on the page
   sections = $state<SectionData[]>([]);
+
+  // The page's color palette: a growable list of hex colors referenced 1-based as
+  // var(--color-N). Page-global (drives the CSS vars on every section root). Loaded
+  // from / saved to section 1's content; grown by the agent (see absorbColors).
+  palette = $state<ColorPalette>(makeDefaultPalette());
+
+  // The palette's persisted fingerprint, captured alongside the section baseline.
+  // Compared in hasUnsavedChanges so growing the palette counts as an unsaved change.
+  private paletteBaseline = '';
 
   // Per-section content fingerprints captured at load and after each successful save,
   // keyed by the runtime `id`. Compared against the live sections to decide whether
@@ -100,6 +122,15 @@ class EditorStore {
   // a successful save so later edits are measured against the last persisted state.
   captureBaseline() {
     this.baselineHashes = new Map(this.sections.map(s => [s.id, this.sectionHash(s)]));
+    this.paletteBaseline = JSON.stringify(this.palette.colors);
+  }
+
+  // Replace the active palette (e.g. with a page's saved palette on load). Falls
+  // back to the default when there are no stored colors.
+  setPalette(colors: string[] | undefined) {
+    this.palette = colors?.length
+      ? { ...makeDefaultPalette(), colors: [...colors] }
+      : makeDefaultPalette();
   }
 
   // True when any section was created, deleted, reordered, or had its content edited
@@ -107,6 +138,7 @@ class EditorStore {
   // significant: we compare the sequences position-by-position (the Map preserves the
   // baseline insertion order), so a pure reorder is detected even though no hash changed.
   get hasUnsavedChanges(): boolean {
+    if (JSON.stringify(this.palette.colors) !== this.paletteBaseline) return true;
     if (this.sections.length !== this.baselineHashes.size) return true;
     const baseline = [...this.baselineHashes];
     return this.sections.some((s, i) =>

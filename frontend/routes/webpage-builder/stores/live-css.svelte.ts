@@ -19,15 +19,19 @@ class LiveCSSStore {
 	private seq = 0;
 
 	async update() {
-		// Synchronous read -> registers reactive dependencies for the caller's $effect.
-		const tokens = collectTokens(editorStore.sections);
+		// Synchronous reads -> register reactive dependencies for the caller's $effect.
+		const sections = editorStore.sections;
+		const tokens = collectTokens(sections);
+		// Agent-authored custom CSS (already scoped to .x{n}); wrapped in the
+		// ec-custom layer (declared last) so it wins over utilities.
+		const custom = sections.map((s) => s.CustomCss).filter(Boolean).join('\n');
 		const current = ++this.seq;
 
 		const css = await generateCss(tokens);
 
 		// Drop stale results from a run superseded by a newer edit.
 		if (current !== this.seq) return;
-		this.css = css;
+		this.css = custom ? `${css}\n@layer ec-custom {\n${custom}\n}` : css;
 	}
 }
 

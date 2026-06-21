@@ -16,12 +16,14 @@
 	let sections = $state<SectionData[]>([]);
 	let runtimeCss = $state('');
 	let seo = $state<Record<string, string>>({});
+	let palette = $state<ColorPalette>();
 
 	// The CDN snapshot file name + CDN host, baked into <head> metas so the early inline
 	// fetch and the onMount fallback resolve the exact same URL.
 	const snapshotName = getStoreSnapshotName();
 
-	// Matches the builder's default palette so `--color-N` vars resolve identically.
+	// Matches the builder's default palette so `--color-N` vars resolve identically when
+	// a page has no saved palette of its own.
 	const defaultPalette: ColorPalette = {
 		id: 'default',
 		name: 'Default Palette',
@@ -48,6 +50,7 @@
 			sections = content.sections;
 			runtimeCss = content.css;
 			seo = content.seo;
+			palette = content.palette?.length ? { ...defaultPalette, colors: content.palette } : defaultPalette;
 		} catch (contentLoadError) {
 			console.error('[LiveStorePage] content load failed', contentLoadError);
 		} finally {
@@ -92,7 +95,7 @@
 {:else}
 	<Header />
 	<MobileMenu />
-	<EcommerceRenderer elements={sections} palette={defaultPalette} />
+	<EcommerceRenderer elements={sections} palette={palette ?? defaultPalette} />
 {/if}
 
 <style>

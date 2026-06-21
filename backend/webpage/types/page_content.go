@@ -82,6 +82,15 @@ type SectionContent struct {
 	// sprite id `icon--<set>-<name>`. The frontend renders one <symbol> per entry and each
 	// Icon AST node references it via <use href="#id">, so each body is stored exactly once.
 	Svgs map[string]string `json:",omitempty" cbor:"7,keyasint,omitempty"`
+	// Palette is the page's growable color list (hex colors, referenced 1-based as
+	// var(--color-N)). Page-global, so it rides on section 1 only — same convention as
+	// the whole-page Css. The builder grows it as the agent introduces new colors.
+	Palette []string `json:",omitempty" cbor:"8,keyasint,omitempty"`
+	// CustomCss is the agent-authored raw CSS for this section, already scoped to
+	// page-unique `.x{n}` classes by the builder. It rides in the content blob (so
+	// it round-trips into the editor) and is also folded into the whole-page Css
+	// column on save so the storefront serves it without regenerating.
+	CustomCss string `json:",omitempty" cbor:"9,keyasint,omitempty"`
 }
 
 // EcommercePageContent stores one builder section, addressed by its page and its

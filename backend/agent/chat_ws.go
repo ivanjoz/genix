@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"app/agent/webpage"
 	"app/core"
 )
 
@@ -26,16 +27,22 @@ type chatEnvelope struct {
 
 // Chat message Types.
 const (
-	ChatTypeUserMessage = "userMessage"
-	ChatTypeAgentReply  = "agentReply"
-	ChatTypeAgentStatus = "agentStatus"
-	ChatTypeAgentError  = "agentError"
+	ChatTypeUserMessage   = "userMessage"
+	ChatTypeAgentReply    = "agentReply"
+	ChatTypeAgentStatus   = "agentStatus"
+	ChatTypeAgentError    = "agentError"
+	ChatTypeAgentSections = "agentSections" // page-builder edits to apply back into the builder
 )
 
 type ChatUserMessage struct {
 	Message   string
 	ModelHash string
 	Timestamp int64
+	// ModeID is the agent mode the user is in (1 ask, 2 build page, 3 edit
+	// section); Context carries mode-specific payload such as the builder's
+	// sections serialized to HTML (whole page for mode 2, selected section for 3).
+	ModeID  int
+	Context string
 }
 
 type ChatAgentReply struct {
@@ -53,6 +60,19 @@ type ChatAgentStatus struct {
 
 type ChatAgentError struct {
 	Message string
+}
+
+// ChatAgentSections carries the page-builder loop's edited sections back to the
+// builder. ModeID tells the frontend how to apply them (replace the selected
+// section vs. replace the whole page); Svgs holds the inline SVG bodies the
+// turn generated, keyed by sprite id, to merge into the target SectionData.
+type ChatAgentSections struct {
+	ModeID    int
+	Sections  []webpage.SectionEdit
+	Svgs      map[string]string
+	Message   string
+	Summary   string
+	Timestamp int64
 }
 
 // AgentSession is one chat conversation. There is at most one per browser tab —
@@ -135,7 +155,7 @@ func (s *AgentSession) onUserMessage(_ context.Context, msg ChatUserMessage) {
 		s.sendError("a previous turn is still running")
 		return
 	}
-	core.Log("agent.chat userMessage tab::", shortTabID(s.TabID), " bytes::", len(text), " model_hash::", msg.ModelHash, " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
+	core.Log("agent.chat userMessage tab::", shortTabID(s.TabID), " bytes::", len(text), " model_hash::", msg.ModelHash, " mode::", msg.ModeID, " context_bytes::", len(msg.Context), " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
 
 	go func() {
 		defer s.inFlight.Store(false)
@@ -144,7 +164,18 @@ func (s *AgentSession) onUserMessage(_ context.Context, msg ChatUserMessage) {
 		// the user just won't see the reply if they walked away. 5 min hard cap.
 		runCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		if err := s.RunTurn(runCtx, text, msg.ModelHash); err != nil {
+		// Route by mode: the builder's "build page" / "edit section" modes run
+		// the page-builder loop (which needs msg.Context — the sections as HTML);
+		// everything else (mode 1 "ask", and any unknown mode) runs the default
+		// chat loop.
+		var err error
+		switch msg.ModeID {
+		case webpage.ModeBuildPage, webpage.ModeEditSection:
+			err = webpage.RunTurn(runCtx, s, msg.ModeID, text, msg.ModelHash, msg.Context)
+		default:
+			err = s.RunTurn(runCtx, text, msg.ModelHash)
+		}
+		if err != nil {
 			core.Log("agent.chat RunTurn error tab::", shortTabID(s.TabID), " err::", err)
 			s.sendError(err.Error())
 		}
@@ -179,6 +210,23 @@ func (s *AgentSession) sendJSON(kind string, payload any) {
 
 func (s *AgentSession) sendError(msg string) {
 	s.sendJSON(ChatTypeAgentError, ChatAgentError{Message: msg})
+}
+
+// PushStatus and PushReply expose the session's event helpers to the webpage
+// agentic loop, which lives in a sub-package and can't reach the unexported
+// ones. Together they satisfy webpage.Sink.
+func (s *AgentSession) PushStatus(state, label string, step, maxSteps int) {
+	s.pushStatus(state, label, step, maxSteps)
+}
+
+func (s *AgentSession) PushReply(message, summary string, timestamp int64) {
+	s.sendJSON(ChatTypeAgentReply, ChatAgentReply{Message: message, Summary: summary, Timestamp: timestamp})
+}
+
+func (s *AgentSession) PushSections(modeID int, sections []webpage.SectionEdit, svgs map[string]string, message, summary string, timestamp int64) {
+	s.sendJSON(ChatTypeAgentSections, ChatAgentSections{
+		ModeID: modeID, Sections: sections, Svgs: svgs, Message: message, Summary: summary, Timestamp: timestamp,
+	})
 }
 
 func shortTabID(tabID string) string {

@@ -32,7 +32,8 @@
     updateAgentChatMessage,
     type AgentChatRow,
   } from './chat_history.idb';
-    import T from '$components/misc/T.svelte';
+  import { agentModes, type AgentSectionsPayload } from './agent.svelte';
+  import { Core, tr } from '$core/store.svelte';
 
   // --- Wire types (mirror backend/agent/chat_ws.go) ---------------------------
 
@@ -56,6 +57,7 @@
   const CHAT_TYPE_AGENT_REPLY = 'agentReply';
   const CHAT_TYPE_AGENT_ERROR = 'agentError';
   const CHAT_TYPE_AGENT_STATUS = 'agentStatus';
+  const CHAT_TYPE_AGENT_SECTIONS = 'agentSections';
   const CHAT_LOG_KEY = '__agent_chat_debug_log';
   const CHAT_LOG_LIMIT = 120;
 
@@ -136,6 +138,37 @@
         const id = await appendAgentChatMessage(row);
         if (id) { row.id = id; }
         // Clear the pending flag on the most recent user row.
+        const lastUser = [...messages].reverse().find((m) => m.role === AGENT_ROLE_USER && m.pending);
+        if (lastUser?.id) {
+          await updateAgentChatMessage(lastUser.id, { pending: false });
+          lastUser.pending = false;
+        }
+        messages = [...messages, row];
+        isBusy = false;
+        statusLabel = '';
+        headerStatusItems = [];
+        await scrollToBottom();
+        break;
+      }
+      case CHAT_TYPE_AGENT_SECTIONS: {
+        // Page-builder loop returned edited sections. Hand them to the page's
+        // applier (parses HTML back into the builder AST); the rest mirrors a
+        // normal agentReply so the chat shows the agent's message + clears busy.
+        const payload = env.Payload as AgentSectionsPayload;
+        try {
+          agentModes.applySections(payload);
+        } catch (applyError) {
+          chatLog('warn', 'applySections failed', { error: String(applyError) });
+        }
+        const row: AgentChatRow = {
+          tabID: getAgentTabID(),
+          role: AGENT_ROLE_AGENT,
+          message: payload.Message,
+          summary: payload.Summary,
+          timestamp: payload.Timestamp || Date.now(),
+        };
+        const id = await appendAgentChatMessage(row);
+        if (id) { row.id = id; }
         const lastUser = [...messages].reverse().find((m) => m.role === AGENT_ROLE_USER && m.pending);
         if (lastUser?.id) {
           await updateAgentChatMessage(lastUser.id, { pending: false });
@@ -240,8 +273,12 @@
       }];
       return;
     }
-    chatLog('info', 'sending user message', { tab, bytes: text.length, modelHash: getSelectedAgentModelHash() });
-    await postChatMessage(text, getSelectedAgentModelHash(), optimistic.timestamp ?? Date.now());
+    // Resolve any page-supplied context for the active mode (e.g. the builder
+    // serializes its sections to HTML); empty when the mode needs none.
+    const context = agentModes.getActiveContext();
+    chatLog('info', 'sending user message', { tab, bytes: text.length, modelHash: getSelectedAgentModelHash(), modeID: agentModes.active.ID, contextBytes: context.length });
+    // Send the active mode ID so the backend can answer in the right context.
+    await postChatMessage(text, getSelectedAgentModelHash(), optimistic.timestamp ?? Date.now(), agentModes.active.ID, context);
   };
 
   // --- Open / close lifecycle -------------------------------------------------
@@ -309,9 +346,10 @@
     tabindex="-1"
   >
     {#if !inputText}
+      <!-- Placeholder follows the active agent mode (search / build page / …). -->
       <div class="_placeholder absolute left-12 top-16 -translate-y-1/2 flex items-center gap-6 text-white/60 text-sm pointer-events-none">
-        <span class="icon-[fa--commenting-o] text-[15px]"></span>
-        <T text="Search or Ask Genix...|Busca o Pregúntale a Genix..."/>
+        <span class="{agentModes.active.Icon} text-[15px]"></span>
+        {tr(agentModes.active.Placeholder, Core.languaje)}
       </div>
     {/if}
     <textarea bind:this={textareaElement} bind:value={inputText}
@@ -352,6 +390,25 @@
     <div class="_panel absolute left-0 right-0 top-[calc(100%+4px)] z-300
       bg-white rounded-b-2xl rounded-t-none shadow-2xl border border-gray-200 overflow-hidden"
     >
+      {#if agentModes.all.length > 1}
+        <!-- Mode bar — only when the page registered extra modes. Uses the same
+             indigo as the header/textarea so it reads as a strip between the
+             pill above and the chat below. Active mode is opaque + tinted;
+             the rest are dimmed. -->
+        <div class="_modeBar flex items-center gap-8 px-12 py-8">
+          {#each agentModes.all as mode (mode.ID)}
+            {@const isActive = mode.ID === agentModes.activeID}
+            <button type="button"
+              class="_modeBtn flex items-center gap-4 px-10 py-4 text-xs text-black"
+              class:_modeActive={isActive}
+              onclick={() => agentModes.select(mode.ID)}
+            >
+              <span class="{mode.Icon} text-[13px]"></span>
+              {tr(mode.Name, Core.languaje)}
+            </button>
+          {/each}
+        </div>
+      {/if}
       <div bind:this={scrollElement}
         class="_scroll max-h-[60vh] min-h-[260px] overflow-y-auto px-12 py-10 flex flex-col gap-8"
       >
@@ -466,6 +523,29 @@
   }
   ._panel {
   	border: 1px solid #6868ea;
+  	/* No top border so the mode bar sits flush against the search pill, with no
+  	   light line between them. */
+  	border-top: 0;
+  }
+  /* Mode bar: a light lavender strip between the search pill and the white chat. */
+  ._modeBar {
+  	background: #e7e6f7;
+  }
+  /* Mode bar buttons: dimmed when inactive; the active one is an opaque tab with
+     a purple underline (margin-bottom pulls it onto the bar's bottom edge). */
+  ._modeBtn {
+    opacity: 0.55;
+    line-height: 1;
+  }
+  ._modeBtn:hover {
+    opacity: 0.85;
+  }
+  ._modeActive {
+    opacity: 1;
+    border-bottom: 2px solid #938ff8;
+    border-radius: 0;
+    padding-bottom: 6px;
+    margin-bottom: -2px;
   }
   
   @keyframes status-enter {

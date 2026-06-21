@@ -22,6 +22,9 @@ export interface SectionData {
   // Map of deduplicated inline SVG bodies, keyed by `icon--<set>-<name>` (see IconSprite).
   // Persisted (PascalCase) so `<use href="#id">` references survive save/reload.
   Svgs?: { [id: string]: string }
+  // The page's color palette (hex colors, var(--color-N) 1-based). Page-global, so it
+  // is persisted on section 1 only — mirrors how the whole-page Css rides on section 1.
+  Palette?: string[]
 
   // HTML sections: `html` is the authoring source (lowercase, not persisted),
   // parsed once at add/load time into `Ast` (the canonical, editable model the
@@ -30,6 +33,10 @@ export interface SectionData {
   Ast?: ComponentAST[];
 
   Css?: Record<string, string>; // Slot-based CSS, e.g., { container: "...", title: "..." }
+  // Agent-authored raw CSS for this section, already scoped to page-unique `.x{n}`
+  // classes (see scope-custom-css.ts). Persisted so the builder can re-inject it;
+  // also folded into the whole-page stylesheet on save for the storefront.
+  CustomCss?: string;
   Attributes?: Record<string, any>;
 }
 
