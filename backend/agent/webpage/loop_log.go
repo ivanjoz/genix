@@ -22,15 +22,13 @@ import (
 // the turn. Disabled (every method a no-op) in any non-local environment.
 //
 // Layout:
-//   /tmp/promps/webpage/                                  (created once, lazily)
-//   /tmp/promps/webpage/YYYY_MM_DD/<code>/                (one folder per turn)
-//   /tmp/promps/webpage/YYYY_MM_DD/<code>/00_meta.txt
-//   /tmp/promps/webpage/YYYY_MM_DD/<code>/01_main_iter1.txt
-//   /tmp/promps/webpage/YYYY_MM_DD/<code>/02_tool_find_image.txt
-//   /tmp/promps/webpage/YYYY_MM_DD/<code>/03_subagent_find_image_select.txt
+//   <project>/tmp/promps/webpage/                         (created once, lazily)
+//   <project>/tmp/promps/webpage/YYYY_MM_DD/<code>/       (one folder per turn)
+//   <project>/tmp/promps/webpage/YYYY_MM_DD/<code>/00_meta.txt
+//   <project>/tmp/promps/webpage/YYYY_MM_DD/<code>/01_main_iter1.txt
+//   <project>/tmp/promps/webpage/YYYY_MM_DD/<code>/02_tool_find_image.txt
+//   <project>/tmp/promps/webpage/YYYY_MM_DD/<code>/03_subagent_find_image_select.txt
 //   …
-
-const builderLogRoot = "/tmp/promps/webpage"
 
 var (
 	builderLogInitOnce sync.Once
@@ -44,6 +42,7 @@ func initBuilderLog() {
 		if !core.Env.IS_LOCAL {
 			return
 		}
+		builderLogRoot := builderPromptLogRoot()
 		if err := os.MkdirAll(builderLogRoot, 0o755); err != nil {
 			core.Log("agent.webpage loop-log mkdir root failed:: root::", builderLogRoot, " err::", err)
 			return
@@ -76,13 +75,17 @@ func newTurnLog(modeID int, activeModel string) *turnLog {
 	// code = HHMMSS_<mode>_<seq%1000>: short, sortable, unique within a second.
 	n := builderLogSeq.Add(1)
 	code := fmt.Sprintf("%s_%s_%03d", now.Format("150405"), modeName(modeID), n%1000)
-	dir := filepath.Join(builderLogRoot, now.Format("2006_01_02"), code)
+	dir := filepath.Join(builderPromptLogRoot(), now.Format("2006_01_02"), code)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		core.Log("agent.webpage loop-log mkdir failed:: dir::", dir, " err::", err)
 		return nil
 	}
 	core.Log("agent.webpage loop-log started code::", code, " dir::", dir)
 	return &turnLog{dir: dir, code: code, model: activeModel}
+}
+
+func builderPromptLogRoot() string {
+	return filepath.Join(core.ProjectTmpDir(), "promps", "webpage")
 }
 
 // meta writes the 00_meta.txt header describing the turn's inputs. Uses a fixed

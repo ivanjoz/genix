@@ -113,6 +113,10 @@ Two ways to use it:
 </section>
 ```
 
+Use `fill` only when the immediate parent has real dimensions (`min-h-*`,
+`h-*`, or equivalent). A `fill` ImageEffect inside a plain right/left flex or
+grid column with no height collapses visually. For a side image, use box mode.
+
 **Box mode** — photo in a clipped/aspect box; children render *inside* it:
 
 ```html
@@ -123,6 +127,18 @@ Two ways to use it:
   class="rounded-2xl overflow-hidden min-h-[420px] flex items-center p-12">
   <div class="max-w-sm">…text on the tinted side…</div>
 </ImageEffect>
+```
+
+Side-column image example:
+
+```html
+<div class="flex-1">
+  <ImageEffect
+    data-role="image"
+    src="https://ivanjoz.github.io/genix-assets/images/business-workspace/5.avif"
+    fit="cover" aspectRatio="4/3"
+    class="w-full min-h-[360px] rounded-2xl overflow-hidden" />
+</div>
 ```
 
 | Attribute | Type | Notes |

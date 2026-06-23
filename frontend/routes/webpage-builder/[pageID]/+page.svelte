@@ -59,7 +59,12 @@
       html = serializeAst(editorStore.selectedSection?.Ast ?? []);
       label = 'the selected section';
     } else if (modeID === MODE_BUILD_PAGE) {
-      html = editorStore.sections.map((s) => serializeAst(s.Ast ?? [])).join('\n');
+      // Prefix each section with a "=== SECTION N ===" marker so the backend's
+      // intent classifier/verifier can target sections by number and require the
+      // untargeted ones to come back unchanged. The agent echoes N as sourceId.
+      html = editorStore.sections
+        .map((s, i) => `=== SECTION ${i + 1} ===\n${serializeAst(s.Ast ?? [])}`)
+        .join('\n');
       label = "the page's current sections";
     } else {
       return '';

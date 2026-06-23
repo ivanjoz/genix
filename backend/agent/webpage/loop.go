@@ -42,6 +42,12 @@ const maxBuilderIterations = 12
 // ping-pong that eats the iteration budget.
 const maxAestheticRevisions = 1
 
+// maxContentRevisions caps how many times the deterministic content-preservation
+// gate can bounce a result back before we apply it anyway. It is higher than the
+// aesthetic budget because preserving the user's content is a hard correctness
+// requirement, not a quality nudge — give the model more chances to comply.
+const maxContentRevisions = 2
+
 // builderModel pins the model the page-builder loop uses, independent of the
 // shared chat model picker. The builder is tuned for tencent/hy3-preview: it
 // honors disabled/low/high reasoning (unlike DeepSeek V4 Flash, which ignored
@@ -76,6 +82,11 @@ type SectionEdit struct {
 	// clip-path, keyframes…), using its own class names applied in HTML. The
 	// frontend scopes it to page-unique `.x{n}` classes. Empty for most sections.
 	CSS string `json:"css"`
+	// SourceID maps a returned section back to its "=== SECTION N ===" number in
+	// the build-page context, so the content gate can require unchanged sections
+	// to come back verbatim. 0 = a brand-new section. Build-page only; the
+	// frontend applies sections positionally and ignores this field.
+	SourceID int `json:"sourceId"`
 }
 
 // Sink is the subset of the chat session the webpage loop needs to push events
@@ -105,6 +116,13 @@ type builderTurn struct {
 	svgs    map[string]string
 	svgSeq  int
 	log     *turnLog
+
+	// Content-preservation state, set by the classifier in RunTurn before the
+	// loop and read by the content gate (verifyContent) on apply_sections.
+	policy         ContentPolicy          // edit-section: per-dimension policy
+	sourceContent  SectionContent         // edit-section: the original section's content
+	pageOp         pageClassification     // build-page: which sections may change
+	sourceSections map[int]SectionContent // build-page: id → original content
 }
 
 // Package-level LLM client, cached so a missing OPENROUTER_KEY surfaces once.
@@ -142,8 +160,18 @@ func RunTurn(ctx context.Context, sink Sink, modeID int, userText, modelHash, pa
 
 	turn := &builderTurn{sink: sink, modeID: modeID, client: client, modelID: modelID, svgs: map[string]string{}, log: tlog}
 
+	// Intent classification (runs before the loop): decide what the user wants
+	// changed so we can both instruct the model and deterministically verify it
+	// preserved everything else. relevant=false aborts the turn.
+	sink.PushStatus("thinking", "Interpretando…", 1, maxBuilderIterations)
+	constraints, abort := turn.classifyTurn(ctx, userText, pageContext)
+	if abort {
+		sink.PushReply(notInterpretableReply, "", 0)
+		return nil
+	}
+
 	messages := []llm.Message{
-		{Role: "system", Content: systemPrompt(modeID)},
+		{Role: "system", Content: systemPrompt(modeID) + constraints},
 		{Role: "user", Content: buildUserMessage(modeID, userText, pageContext)},
 	}
 
@@ -154,6 +182,9 @@ func RunTurn(ctx context.Context, sink Sink, modeID int, userText, modelHash, pa
 	// next apply_sections verbatim — the critic is a quality nudge, not a gate
 	// that can wedge the turn.
 	revisionsDone := 0
+	// contentRevisionsDone counts content-preservation bounces (its own budget,
+	// see maxContentRevisions) so a stubborn model can't wedge the turn.
+	contentRevisionsDone := 0
 
 	for iter := 0; iter < maxBuilderIterations; iter++ {
 		req := llm.ChatRequest{
@@ -202,6 +233,20 @@ func RunTurn(ctx context.Context, sink Sink, modeID int, userText, modelHash, pa
 		}
 
 		if applyCall != nil {
+			// Content-preservation gate (hard, runs before the soft aesthetic
+			// critic so a violation bounces cheaply): reject edits that drop or
+			// change content the classifier said to preserve.
+			if contentRevisionsDone < maxContentRevisions {
+				if violations := turn.verifyContent(*applyCall); len(violations) > 0 {
+					contentRevisionsDone++
+					feedback := contentViolationFeedback(violations)
+					core.Log("agent.webpage apply_sections content gate veto mode::", modeID, " violations::", len(violations))
+					tlog.tool("apply_sections_content_rejected", applyCall.Function.Arguments, feedback)
+					messages = append(messages, llm.Message{Role: "tool", ToolCallID: applyCall.ID, Content: feedback})
+					sink.PushStatus("thinking", "Corrigiendo el contenido…", iter+2, maxBuilderIterations)
+					continue
+				}
+			}
 			// Run the aesthetic critic unless the revision budget is spent.
 			runCritic := revisionsDone < maxAestheticRevisions
 			applied, critique, err := turn.applySections(ctx, *applyCall, runCritic)

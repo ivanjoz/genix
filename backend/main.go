@@ -225,8 +225,8 @@ func main() {
 	*/
 	db.SetDebugLogging(dbLogLevel)
 
-	// Create /tmp/promps once so the chat loop's per-call writes can skip the
-	// parent-dir check. Local-only; no-op in serverless/prod.
+	// Create project-local tmp/promps once so per-call prompt writes can skip
+	// the parent-dir check. Local-only; no-op in serverless/prod.
 	agent.InitPromptLog()
 
 	// Revisa si lo que se requiere es ejecutar una función

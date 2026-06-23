@@ -17,28 +17,27 @@ import (
 // reached the model on each iteration. Disabled in any non-local environment.
 //
 // Layout:
-//   /tmp/promps/                          (created once at app startup)
-//   /tmp/promps/YYYY_MM_DD/               (created lazily the first write of the day)
-//   /tmp/promps/YYYY_MM_DD/<userID>_promp_<unixNano>.txt
+//   <project>/tmp/promps/                 (created once at app startup)
+//   <project>/tmp/promps/YYYY_MM_DD/      (created lazily the first write of the day)
+//   <project>/tmp/promps/YYYY_MM_DD/<userID>_promp_<unixNano>.txt
 //
-// The parent /tmp/promps directory is created in InitPromptLog so the per-
+// The parent tmp/promps directory is created in InitPromptLog so the per-
 // write path doesn't pay for that check. The daily subdirectory is cached
 // behind a mutex and only re-created when the date rolls over.
 
-const promptLogRoot = "/tmp/promps"
-
 var (
 	promptLogMu       sync.Mutex
-	promptLogTodayDir string // cached "/tmp/promps/YYYY_MM_DD" for the current date
+	promptLogTodayDir string // cached "<project>/tmp/promps/YYYY_MM_DD" for the current date
 )
 
-// InitPromptLog ensures /tmp/promps exists. Called once at app startup so
+// InitPromptLog ensures tmp/promps exists. Called once at app startup so
 // the per-write path can skip the parent-dir check. No-op outside local dev.
 func InitPromptLog() {
 	if !core.Env.IS_LOCAL {
 		core.Log("agent.prompt-log disabled (IS_LOCAL=false)")
 		return
 	}
+	promptLogRoot := promptLogRoot()
 	if err := os.MkdirAll(promptLogRoot, 0o755); err != nil {
 		core.Log("agent.prompt-log mkdir root failed::", " root::", promptLogRoot, " err::", err)
 		return
@@ -78,12 +77,16 @@ func ensurePromptLogDailyDir(now time.Time) (string, error) {
 	if promptLogTodayDir != "" && filepath.Base(promptLogTodayDir) == today {
 		return promptLogTodayDir, nil
 	}
-	dir := filepath.Join(promptLogRoot, today)
+	dir := filepath.Join(promptLogRoot(), today)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	promptLogTodayDir = dir
 	return dir, nil
+}
+
+func promptLogRoot() string {
+	return filepath.Join(core.ProjectTmpDir(), "promps")
 }
 
 // formatPromptMessages renders the messages array as a readable transcript:

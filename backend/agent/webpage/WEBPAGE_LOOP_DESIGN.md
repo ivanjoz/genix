@@ -1,194 +1,239 @@
-# Webpage Agent Loop — Design / Implementation Plan
+# Webpage Agent Loop — Design & Rationale (as-built)
 
-Status: **implemented** (steps 1–5). See "Implementation notes" at the bottom.
+A second agentic loop, parallel to the chat loop (`backend/agent/chat_loop.go`),
+dedicated to the page builder. It authors and edits HTML "sections" for a website,
+with two modes:
 
-A second agentic loop, parallel to the existing chat loop (`backend/agent/chat_loop.go`),
-that handles the page-builder's two modes:
-
-- **ModeID 2 — Build page** (`construir página`): the whole page's sections (each
-  serialized to HTML) arrive in `Context`. The agent (re)writes one or more sections.
+- **ModeID 2 — Build page** (`construir página`): the whole page's sections, each
+  serialized to HTML, arrive in `Context`. The agent returns the complete page.
 - **ModeID 3 — Edit section** (`editar sección`): only the selected section's HTML
-  arrives in `Context`. The agent rewrites that one section.
+  arrives. The agent returns that one section.
 
-Mode 1 (`ask`) is untouched — it keeps running the existing `chat_loop.go`.
+Mode 1 (`ask`) is untouched — it keeps running `chat_loop.go`.
 
-The loop reuses the existing primitives verbatim: `llm.Client.Chat`, the `Message`/
-`Tool`/`ToolCall` wire types, token accounting, `finish`-as-terminator, and the
-SSE push helpers on `AgentSession`. Only the toolset and system prompt differ.
+The loop reuses the existing primitives verbatim: `llm.Client.Chat`, the `Message` /
+`Tool` / `ToolCall` wire types, and the SSE push helpers on `*AgentSession`. What
+differs from the chat loop: a pinned model, a custom toolset, a terminator tool
+(`apply_sections` instead of `finish`), and — the substance of this loop — an
+**intent classifier**, a **deterministic content-preservation gate**, and an
+**aesthetic critic** wrapped around the model's output.
 
 ---
 
-## 1. Routing — get ModeID + Context to the loop
+## 1. Routing — `agent` → `webpage`, one-directional
 
-Today `ChatUserMessage.ModeID` / `Context` are decoded in `ws.go` but only logged;
-`RunTurn(ctx, text, modelHash)` never receives them (`chat_ws.go:161`).
-
-Change `onUserMessage` to branch on mode:
+`onUserMessage` (`chat_ws.go:173`) branches on mode:
 
 ```go
-// chat_ws.go onUserMessage goroutine
 switch msg.ModeID {
-case ModeBuildPage, ModeEditSection: // 2, 3
-    err = webpage.RunTurn(runCtx, s, msg) // new loop, full msg (needs Context + ModeID)
+case webpage.ModeBuildPage, webpage.ModeEditSection: // 2, 3
+    err = webpage.RunTurn(runCtx, s, msg.ModeID, text, msg.ModelHash, msg.Context)
 default: // 1 (ask) and anything unknown
-    err = s.RunTurn(runCtx, text, msg.ModelHash) // existing loop, unchanged
+    err = s.RunTurn(runCtx, text, msg.ModelHash) // existing chat loop, unchanged
 }
 ```
 
-- New package `app/agent/webpage`. It takes `*AgentSession` (or a small interface
-  exposing `sendJSON`/`pushStatus`/`CompanyID`/`UserID`/`TabID`) so it can push
-  status + the final reply down the same SSE stream.
-- Mode constants (`ModeAsk=1`, `ModeBuildPage=2`, `ModeEditSection=3`) move to a
-  shared spot so both `chat_ws.go` and the frontend's `+page.svelte` agree. (Frontend
-  already hardcodes 2/3.)
+The mode constants live in `webpage` (`loop.go`) as the single source of truth,
+shared with package `agent` (which imports `webpage` to route) and mirrored by the
+frontend builder route, which sends these IDs on the wire.
 
-Open import note: `webpage` importing `agent` and `agent` importing `webpage` would
-cycle. Resolve by having `webpage.RunTurn` accept a small **sink interface** defined
-in `webpage`, which `*AgentSession` satisfies — no back-import.
+**No import cycle:** `webpage` never imports `agent`. The session functionality the
+loop needs (push status / reply / sections) is declared as the `Sink` interface in
+`loop.go`, which `*AgentSession` satisfies structurally. Dependency is one-way:
+`agent → webpage`.
 
 ---
 
-## 2. The loop (`webpage/loop.go`)
+## 2. Model & reasoning budgets (rationale)
 
-Same shape as `chat_loop.go`: one `client.Chat` per iteration, dispatch tool calls,
-feed results back as `tool` messages, terminate on `apply_sections`.
+The builder **pins its own model** (`builderModel = "tencent/hy3-preview"`) rather
+than following the shared chat model picker — the `modelHash` from the wire is
+ignored on purpose. hy3-preview honors disabled/low/high reasoning effort (unlike
+DeepSeek V4 Flash, which ignored `effort:low` and reasoned to a huge default budget
+— a single `generate_svg` was once seen at ~68s). Its one caveat — provider routing
+rejects `tool_choice=required` — doesn't bite us; the loop uses `tool_choice:"auto"`
+and the system prompt disciplines the model into ending via `apply_sections`.
 
-System prompt (`webpage/prompts.go`) tells the model:
-- It is a section author for the Genix page builder. It receives the current
-  section(s) as HTML and must return modified section HTML.
-- The HTML vocabulary: native tags + the builder's custom components
-  (`<Icon>`, product/grid components, etc.). Keep `data-role` attributes.
-- It has the subagent tools below to obtain assets it should NOT hand-write.
-- It MUST end by calling `apply_sections` exactly once with the final HTML.
-
-History: build-page / edit-section turns are short-lived and asset-heavy; reuse the
-existing `pruneToolRounds` + clip helpers so a turn can't blow the context window.
-
----
-
-## 3. Tools
-
-### 3.1 `generate_svg` — LLM subagent (decision 3 + 4)
-
-- **Args:** `{ description: string, viewBox?: string }`.
-- **Dispatch:** a *fresh* `client.Chat` call with a dedicated system prompt
-  ("You output ONLY the inner markup of an SVG icon — `<path>`/`<g>`… — no `<svg>`
-  wrapper, no prose."), **no tools**, returning the raw inner markup. Uses the same
-  model as the turn.
-- **Storage (decision 4):** the inner markup is stored in `SectionData.Svgs[id]`,
-  keyed by a generated id (`genix-svg-1`, …). The tool returns that id + viewBox to
-  the main agent, which references it as an AST node `<Icon svg="genix-svg-1" vb="…"/>`
-  — exactly the dedup convention `Icon.svelte` / `IconSprite.svelte` already use
-  (`<use href="#id">` against the section sprite).
-- The main agent **trusts** the returned markup — no validation/round-trip.
-
-### 3.2 `find_image` — DB search + LLM-select subagent (decision 3)
-
-- **Args:** `{ keywords: string, intention?: string, ratio?: string }` (ratio e.g.
-  `"16:9"`, `"1:1"`, `"3:4"`).
-- **Dispatch:**
-  1. `db.SearchText[ImageAsset](&slice, partition, keywords, 0, N)` — ranked matches.
-     If empty, fall back to `db.Query(&slice).GroupID.Equals(partition).Limit(N).Exec()`
-     so we **always** have candidates.
-  2. A subagent `client.Chat` call is given the candidate list (id, description,
-     ratio) + the desired `intention`/`ratio`, and picks the single best id. (This is
-     the "subagent helps decide which image to pick" part.)
-  3. Resolve the chosen image's URL backend-side: look up `ImageAssetCategory.Name`
-     for `CategoryID`, build
-     `https://ivanjoz.github.io/genix-assets/images/{Name}/{ID}.avif`.
-- **Returns:** `{ ID, url, description, ratio }`. The main agent trusts it and embeds
-  `<img src="{url}">`.
-- **Ratio (decision 2):** new `Ratio` column on `image_assets` (see §4). When a
-  candidate's ratio is 0/unset, the subagent treats it as `1:1`. With no good ratio
-  match it still returns *some* image.
-- **Partition:** images live under `imageAssetCategoryGroupID` (see
-  `backend/business/image_assets.go`). The loop will reuse that constant / a small
-  exported accessor.
-
-### 3.3 `apply_sections` — terminator (replaces `finish` for these modes)
-
-- **Args:** `{ message: string, summary: string, sections: [{ id?: string, html: string }] }`.
-  - Edit-section (mode 3): exactly one section, `id` = the selected section's id.
-  - Build-page (mode 2): one entry per section the agent created/changed.
-- Ends the turn. Persists message/summary like `completeTurn`, and pushes a new
-  reply event carrying the sections + their `Svgs` (see §5).
+Reasoning budgets (`loop.go`):
+- `builderReasoning` — `effort:low, exclude:true`. The main loop plans (which asset,
+  what to edit) but doesn't need a deep trace; low keeps each iteration snappy and
+  `exclude` keeps the trace out of later prompts.
+- `subagentNoReasoning` — disabled outright. `generate_svg`, `find_image`-select and
+  the **intent classifier** are mechanical (emit markup / pick an index / emit a tiny
+  JSON verdict) — no chain-of-thought.
+- `criticReasoning` — `effort:low, exclude:true` for the aesthetic critic.
 
 ---
 
-## 4. `image_assets.Ratio` column (decision 2)
+## 3. Turn lifecycle (`RunTurn` in `loop.go`)
 
-- Add `Ratio float32` to `ImageAsset` + `ImageAssetTable` in
-  `backend/business/types/image_assets.go` (width/height, e.g. `1.0`=1:1,
-  `1.777`=16:9, `0.75`=3:4). Done via the `create-database-tables` skill /
-  `scripts/CREATE_EDIT_TABLE.md`, then `./app.sh check_tables`.
-- **Population gap (flagging):** existing rows will have `Ratio=0`. The ingestion
-  pipeline that builds `image_assets` from the asset repo would need to fill it
-  later. For now `0` ⇒ treat as `1:1`. Backfilling real ratios is **out of scope**
-  of this task unless you say otherwise.
+```
+RunTurn
+ ├─ classifyTurn ........... intent classification → policy + system-prompt constraints
+ │     └─ relevant=false? → reply "No se pudo interpretar la instrucción", stop
+ ├─ loop (≤ maxBuilderIterations = 12):
+ │     client.Chat(tools, auto)
+ │     ├─ no tool call  → treat plain text as the final reply, stop
+ │     ├─ generate_svg / find_image / get_component_docs → dispatch, feed result back
+ │     └─ apply_sections (terminator):
+ │           ├─ CONTENT GATE (hard, ≤ maxContentRevisions = 2)
+ │           │     verifyContent → violations? feed them back, model reworks, continue
+ │           └─ AESTHETIC CRITIC (soft, ≤ maxAestheticRevisions = 1)
+ │                 reviewAesthetics → REVISE? feed critique back, continue
+ │                 else → PushSections, stop
+```
+
+Per-turn state lives in `builderTurn`: the LLM client + pinned model (reused by
+subagents), the SVG bodies generated this turn (keyed by sprite id, shipped with the
+final payload), the turn log, and the content-preservation state set by the
+classifier (§4).
+
+The two gates run **content-first, aesthetics-second**: content is a hard
+correctness requirement and bounces more cheaply, aesthetics is a quality nudge.
+Each has its own revision budget so a stubborn model can't wedge the turn — once a
+budget is spent, that gate is skipped and the next `apply_sections` is applied
+verbatim. The aesthetic critic also **fails open**: any critic error approves the
+result rather than blocking the turn.
+
+There is no `pruneToolRounds`-style history clipping here (that's the chat loop):
+builder turns are short — a few asset calls then `apply_sections` — so
+`maxBuilderIterations` is the only bound needed.
 
 ---
 
-## 5. Apply-path: backend → builder (decision 1, in scope)
+## 4. Intent classification & content preservation
 
-New reply event so the builder can write sections back into `editorStore`:
+The core problem this loop solves: the model tended to change content the user did
+**not** ask to change — rewording text, dropping an `<Icon>`, swapping an image. The
+"make minimal edits" instruction alone didn't enforce it. Full design + decisions in
+**`CONTENT_PRESERVATION_PLAN.md`**; the moving parts:
 
-- **Backend** (`chat_ws.go`): add e.g. `ChatTypeAgentSections = "agentSections"` with
-  payload `{ ModeID, Sections: [{ id, html }], Svgs: {id: body}, Message, Summary, Timestamp }`.
-  `apply_sections` emits this instead of / in addition to `agentReply`.
-- **Frontend** (`AgentChat.svelte` + `sse.ts`): handle `agentSections` →
-  for each returned section, `parseHTML(html)` → `ComponentAST[]`, merge `Svgs` into
-  the target `SectionData`, and write into `editorStore` (the selected section for
-  mode 3; matched-by-id / appended for mode 2). The chat still shows `Message`.
-  `parseHTML`/`serializeAst` already round-trip (`frontend/webpage/html-ast/`).
+- **Classifier** (`classify.go`) — a cheap, reasoning-disabled subagent run *before*
+  the loop. It reads the request + section HTML and returns a structured verdict:
+  - Edit-section: per-dimension policy `{text, images, icons}` ∈
+    `keep | add | modify | replace`, plus a `scope` hint (`rewrite` relaxes all to
+    `replace`). Anything the request doesn't mention defaults to `keep`.
+  - Build-page: a section plan `{operation, modifySectionIds, removeSectionIds,
+    addSections}` over the `=== SECTION N ===`-numbered sections.
+  - **Relevance gate:** a nonsense / off-topic request yields `relevant=false`; the
+    turn aborts immediately with the reply **"No se pudo interpretar la instrucción"**.
+  - Has its own retry budget (`classifyMaxAttempts`); on unrecoverable failure it
+    falls back to the safest verdict — **lock everything to `keep`**.
+
+- **Prompt conditioning** (`verify.go`) — the verdict renders a "PRESERVATION
+  CONSTRAINTS THIS TURN" block appended to the system prompt, so the model
+  self-limits before it's ever checked.
+
+- **Deterministic gate** (`html_ast.go` + `verify.go`) — on `apply_sections`, old vs
+  new HTML are parsed to ASTs (`ParseHTMLToAST`) and reduced to a content
+  fingerprint `{Texts, Images, Icons}` (`ExtractSectionContent`). `VerifySectionContent`
+  enforces the policy: `keep` → multiset identical; `add` → old ⊆ new;
+  `modify`/`replace` → unverified. It compares *bags*, so the agent may freely
+  restyle and move content between tags — only the content set is gated. Violations
+  are fed back as a tool result naming the exact offending items; the model fixes
+  only those and re-applies.
+
+  Build-page mapping: the frontend prefixes each context section with
+  `=== SECTION N ===`; the agent echoes `N` as `SectionEdit.SourceID` on each returned
+  section. The verifier then requires untargeted sections back verbatim, removed
+  sections absent, and new sections only when `addSections` is true. (`SourceID` is
+  backend verification metadata only — the frontend applies sections positionally and
+  ignores it.)
 
 ---
 
-## 6. File layout
+## 5. Tools (`prompts.go` schemas, `tools.go` dispatch)
+
+The toolset registered every iteration: `generate_svg`, `find_image`,
+`get_component_docs`, `apply_sections`.
+
+### `generate_svg` — LLM subagent
+- **Args:** `{ description, viewBox? }`.
+- A fresh `client.Chat` with `svgSystemPrompt`, no tools, returns the bare inner SVG
+  markup (`cleanSVGBody` strips fences / an accidental `<svg>` wrapper). Stored in the
+  turn's `svgs` map under a fresh id (`genix-svg-N`); the tool returns just the id +
+  viewBox. The main agent references it as `<Icon svg="genix-svg-N" vb="…"/>` — the
+  same `<use href="#id">` dedup convention `Icon.svelte` / `IconSprite.svelte` use.
+- The main agent **trusts** the returned markup — no round-trip validation.
+
+### `find_image` — library search + LLM-select subagent
+- **Args:** `{ keywords, intention?, ratio? }`.
+- `business.FindImageCandidates(keywords, 10)` ranks matches (with a fallback so there
+  is always at least one candidate). When >1, the select subagent (`imageSelectSystemPrompt`,
+  no reasoning) picks the best index for the intention + ratio; on any failure it
+  falls back to index 0.
+- **Returns:** `{ ID, url, description, ratio, usage }`; the agent embeds
+  `<img src="{url}"/>`. Ratio is `width/height` (1.0 ≈ 1:1, 1.78 ≈ 16:9, 0.75 ≈ 3:4);
+  `0` ⇒ treated as 1:1.
+
+### `get_component_docs` — pure lookup
+- **Args:** `{ component }`. Returns the reference docs (attributes, defaults,
+  example) for a custom builder component (`ProductGrid`, `ImageEffect`, `Slider`…).
+  On a miss it returns the available names so the agent can self-correct. No LLM call.
+
+### `apply_sections` — terminator
+- **Args:** `{ message, summary, sections: [{ html, css?, sourceId? }] }`. Called
+  **exactly once** to end the turn.
+  - Edit-section (3): exactly one section.
+  - Build-page (2): the **complete ordered page** — unchanged sections included
+    verbatim, each tagged with its `sourceId`. Anything omitted is dropped.
+- `message` is the short chat reply; `summary` is a brief change log. `css` is
+  optional raw CSS for effects Tailwind can't express (gradients, clip-path,
+  keyframes…) using the agent's own class names; the frontend scopes it to
+  page-unique `.x{n}` classes and keeps only class selectors.
+
+---
+
+## 6. Apply-path: backend → builder
+
+On a clean `apply_sections`, `applySections` calls `Sink.PushSections`, which emits
+the `ChatTypeAgentSections = "agentSections"` event (`chat_ws.go`) with
+`{ ModeID, Sections, Svgs, Message, Summary, Timestamp }`.
+
+Frontend (`[pageID]/+page.svelte` `applyAgentSections`):
+- **Edit section (3):** `parseHTML(html)` → AST, replace the selected section's `Ast`
+  in place; scope its `css`; merge referenced SVGs.
+- **Build page (2):** replace **all** sections from the returned ordered list (one
+  custom-css id allocator threads across them).
+- Each section gets only the sprite ids its HTML references
+  (`pickReferencedSvgs`), so per-section `IconSprite`s stay self-contained and ids
+  don't collide. Arbitrary-hex colors the agent introduced are absorbed into the
+  palette (`absorbColors`) and rewritten to `var(--color-N)`.
+
+---
+
+## 7. File layout
 
 ```
 backend/agent/webpage/
-├── WEBPAGE_LOOP_DESIGN.md   (this file)
-├── loop.go                  RunTurn + dispatch + apply_sections
-├── tools.go                 generate_svg, find_image dispatch
-├── prompts.go               system prompt + tool schemas + subagent prompts
-backend/business/types/image_assets.go   (+ Ratio column)
-backend/agent/chat_ws.go     (mode routing + agentSections event + Mode consts)
-frontend/core/agent/sse.ts          (agentSections handler/types)
-frontend/core/agent/AgentChat.svelte (apply sections into editorStore)
+├── WEBPAGE_LOOP_DESIGN.md        this file — loop design & rationale
+├── CONTENT_PRESERVATION_PLAN.md  intent classifier + deterministic verifier
+├── loop.go         RunTurn, the iteration loop, both gates, apply_sections, subagent runner
+├── classify.go     intent classifier (edit + page prompts, retries, JSON parse, fallbacks)
+├── verify.go       classifyTurn dispatch, content gate, source/section parsing, constraint blocks
+├── html_ast.go     ParseHTMLToAST + content fingerprint (Extract/VerifySectionContent)
+├── tools.go        generate_svg, find_image, get_component_docs dispatch
+├── prompts.go      system prompt (base + per-mode tail), tool schemas, subagent/critic prompts
+├── components.go   custom-component registry + docs (get_component_docs source)
+├── loop_log.go     per-turn structured log (turnLog)
+└── *_test.go       html_ast / verify / components tests
+backend/agent/chat_ws.go   mode routing, ChatTypeAgentSections event, PushSections, Mode consts use
+frontend/routes/webpage-builder/[pageID]/+page.svelte
+                           buildAgentContext (palette + assets + section markers), applyAgentSections
 ```
 
 ---
 
-## 7. Build order (stop + review after each)
-
-1. **`Ratio` column** on `image_assets` (skill + check_tables). Smallest, isolated.
-2. **Routing**: mode-branch in `onUserMessage`; `webpage.RunTurn` stub that just
-   echoes (no tools) so modes 2/3 reach the new loop. Verifiable via logs.
-3. **Subagent tools**: `generate_svg` + `find_image` (with DB search + select
-   subagent + URL resolution). Verifiable via tool-result logs.
-4. **`apply_sections`** terminator + the `agentSections` backend event.
-5. **Frontend apply-path**: parse + write into `editorStore`; render preview.
-6. Polish: status labels, iteration cap, clipping.
-
----
-
-## Resolved decisions
-- Q1: `Ratio` is `float32` width/height (1.0=1:1, 1.777=16:9, 0.75=3:4). ✓
-- Q2: Build-page (mode 2) MAY add new sections — `apply_sections` entries without an
-  `id` create a new section (appended). ✓
-- Q3: Subagents (`generate_svg`, `find_image`-select) reuse the turn's model. ✓
-
-## Implementation notes (divergence from §3.3 / §5)
-- `SectionEdit` carries **only `html`** (no `id`). The builder's section ids are
-  runtime uuids absent from the serialized HTML context, so the agent can't
-  reference them. Apply semantics instead key off `ModeID`:
-  - **Edit section (3):** the agent returns exactly one section; the frontend
-    replaces the *selected* section's `Ast` in place.
-  - **Build page (2):** the agent returns the **complete ordered page**; the
-    frontend **replaces all sections**. This supports adding new sections (Q2)
-    and is why the system prompt insists the model include unchanged sections
-    verbatim — anything omitted is dropped.
-- Generated SVG bodies ship in the `agentSections` event's `Svgs` map; the
-  frontend attaches to each section only the sprite ids that section's HTML
-  references, so per-section `IconSprite`s stay self-contained and ids don't
-  collide across sections.
+## Historical decisions (still in force)
+- **Q1:** `image_assets.Ratio` is `float32` width/height (1.0=1:1, 1.78=16:9,
+  0.75=3:4); `0` ⇒ treated as 1:1. Backfilling real ratios for old rows is a separate
+  ingestion concern.
+- **Q2:** Build-page MAY add/remove sections — the agent returns the complete page;
+  new sections carry `sourceId:0`, omitted sections are dropped.
+- **Q3:** Subagents (`generate_svg`, `find_image`-select, classifier, critic) reuse
+  the turn's pinned model.
+- **SectionEdit** carries `html`, optional `css`, and (build-page) `sourceId`. There
+  is no runtime section uuid in the serialized context — apply semantics key off
+  `ModeID`: edit replaces the selected section in place; build-page replaces the whole
+  ordered list.
+```
