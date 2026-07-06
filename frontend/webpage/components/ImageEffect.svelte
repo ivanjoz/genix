@@ -18,6 +18,9 @@
     fill?: boolean;
     /** How the photo sits in its box (ignored by clipped slash/curve layouts). */
     fit?: 'cover' | 'contain' | 'contain-left' | 'contain-right' | string;
+    /** Raw child AST passed by AstRenderer — the real signal for "has overlay
+     *  content", since `children` is always a non-null snippet there. */
+    childNodes?: unknown[];
     children?: Snippet;
   }
 
@@ -34,6 +37,7 @@
     aspectRatio = 'auto',
     fill = false,
     fit = 'cover',
+    childNodes,
     children
   }: Props = $props();
 
@@ -135,10 +139,35 @@
       default: return 'object-fit:cover;object-position:center;';
     }
   });
+
+  /**
+   * Plain mode: no effect, no layout clip, no fill background, no overlay children.
+   * Then there is nothing to layer, so we render a single <img> as the root and let
+   * the caller's `css` classes apply to it directly — it behaves exactly like a
+   * regular <img> (w-*, h-*, rounded-*, object-*, aspect-* all work, height comes
+   * from the image/classes). The layered structure below is only for the rich modes.
+   */
+  // AstRenderer always supplies a `children` snippet (the conditional render lives
+  // inside the <Comp> tags), so `children` is truthy even with no real children.
+  // Use the raw childNodes array to detect actual overlay content; fall back to the
+  // snippet for any direct (non-AST) usage.
+  const hasOverlay = $derived(
+    Array.isArray(childNodes) ? childNodes.length > 0 : !!children
+  );
+  const isPlain = $derived(!fill && !layout && !effect && !hasOverlay);
 </script>
 
+{#if isPlain}
+  <img
+    {src}
+    alt=""
+    class={css}
+    style="{aspectRatio !== 'auto' ? `aspect-ratio: ${aspectRatio};` : ''} {fitStyle} {imgStyle}"
+  />
+{:else}
+
 <div class={[fill ? "absolute inset-0 w-full h-full overflow-hidden" : "relative overflow-hidden", css].join(" ")}
-     style="{fill ? '' : `aspect-ratio: ${aspectRatio};`} isolation: isolate; {isLeveraged ? `background-color: ${color};` : ''}">
+     style="{!fill && aspectRatio !== 'auto' ? `aspect-ratio: ${aspectRatio};` : ''} isolation: isolate; {isLeveraged ? `background-color: ${color};` : ''}">
   
   <svg style="position: absolute; width: 0; height: 0; pointer-events: none;">
     <defs>
@@ -223,9 +252,10 @@
   {/if}
   
   <!-- Content Layer -->
-  {#if children}
+  {#if hasOverlay && children}
     <div class="relative z-20 w-full h-full">
       {@render children()}
     </div>
   {/if}
 </div>
+{/if}

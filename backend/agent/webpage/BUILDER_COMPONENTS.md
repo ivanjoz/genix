@@ -99,7 +99,30 @@ Renders the description text of one or more categories.
 ## ImageEffect
 
 A photo with an optional clip/composition **layout** and a visual **effect**.
-Two ways to use it:
+
+**Plain mode (default)** — with NO `effect`, NO `layout`, NO `fill` and no child
+overlay, ImageEffect renders a single `<img>` and behaves **exactly like a regular
+`<img>`**: just put normal sizing/shaping classes on its `class` and it sizes itself.
+Use this for ordinary photos, side/column images, thumbnails, avatars, etc.
+
+```html
+<!-- responsive column image -->
+<ImageEffect src="…/5.avif" fit="cover" class="w-full rounded-2xl" />
+<!-- fixed circular avatar -->
+<ImageEffect src="…/5.avif" fit="cover" class="w-[120px] h-[120px] rounded-full" />
+```
+
+`fit` ("cover" | "contain" | …) sets `object-fit`; `aspectRatio` is optional (applied
+to the `<img>`). No `min-h`/`aspectRatio` is required in plain mode — height follows
+the image and your classes, like a normal `<img>`.
+
+The two modes below layer the photo absolutely (to composite effects/overlays/clips),
+so they have NO intrinsic height and need it supplied explicitly. **Important:** in
+these modes `class` styles the BOX (the wrapper), not the `<img>`, so image-fitting
+utilities behave differently than in plain mode — set image fit with the `fit` prop
+(`object-*` classes do NOT reach the image) and the ratio with the `aspectRatio` prop
+or an `aspect-*` class. Box-level classes (`w-*`, `h-*`, `min-h-*`, `rounded-*` with
+the built-in `overflow-hidden`, `border`, `shadow`, …) work as expected.
 
 **Fill mode** — full-bleed background; overlay text as *sibling* nodes after it
 (the parent must be `relative`):
@@ -117,7 +140,11 @@ Use `fill` only when the immediate parent has real dimensions (`min-h-*`,
 `h-*`, or equivalent). A `fill` ImageEffect inside a plain right/left flex or
 grid column with no height collapses visually. For a side image, use box mode.
 
-**Box mode** — photo in a clipped/aspect box; children render *inside* it:
+**Box mode** — photo with an `effect`/`layout`/clip and children rendered *inside*
+it. Here the photo is an absolute layer with no intrinsic height, so box mode REQUIRES
+`aspectRatio="W/H"` and/or a `min-h-*` token **on the ImageEffect's own `class`** —
+height on the parent div does NOT count and the box will collapse to 0px (invisible
+image, even though the editor still shows the image control):
 
 ```html
 <ImageEffect
@@ -127,18 +154,6 @@ grid column with no height collapses visually. For a side image, use box mode.
   class="rounded-2xl overflow-hidden min-h-[420px] flex items-center p-12">
   <div class="max-w-sm">…text on the tinted side…</div>
 </ImageEffect>
-```
-
-Side-column image example:
-
-```html
-<div class="flex-1">
-  <ImageEffect
-    data-role="image"
-    src="https://ivanjoz.github.io/genix-assets/images/business-workspace/5.avif"
-    fit="cover" aspectRatio="4/3"
-    class="w-full min-h-[360px] rounded-2xl overflow-hidden" />
-</div>
 ```
 
 | Attribute | Type | Notes |

@@ -333,6 +333,17 @@ func (t *builderTurn) reviewAesthetics(ctx context.Context, sections []SectionEd
 		b.WriteByte('\n')
 	}
 
+	// Deterministic structural checks the LLM tends to miss (ImageEffect height /
+	// fit contract). Surfaced as authoritative observations the critic must fold in.
+	if obs := staticLintSections(sections); len(obs) > 0 {
+		b.WriteString("----- STATIC LINTER OBSERVATIONS (STATIC CHECK NO-PASS) -----\n")
+		b.WriteString("A deterministic structural linter flagged the issues below. They are provably true from the markup — treat them as authoritative and INCLUDE each one in your REVISE verdict (you may add your own aesthetic notes too):\n")
+		for _, o := range obs {
+			fmt.Fprintf(&b, "  - %s\n", o)
+		}
+		b.WriteByte('\n')
+	}
+
 	out, err := t.runSubagent(ctx, "aesthetic_review", criticReasoning, aestheticReviewSystemPrompt, b.String())
 	if err != nil {
 		core.Log("agent.webpage aesthetic_review error::", err)

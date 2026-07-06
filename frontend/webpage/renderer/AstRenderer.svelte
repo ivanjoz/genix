@@ -52,7 +52,7 @@
 		     - `renderChild` is this renderer's node snippet, so such components can render an
 		       arbitrary subtree without importing AstRenderer (avoids a circular import).
 		     Components that ignore these props (ProductsByCategory, etc.) are unaffected. -->
-		<Comp {...node.props} css={cls} style={node.style} childNodes={node.children} renderChild={renderNode}>
+		<Comp {...node.props} css={cls} style={node.style} childNodes={node.children ?? []} renderChild={renderNode}>
 			{#if node.children}
 				{#each node.children as child, i (i)}
 					{@render renderNode(child)}
