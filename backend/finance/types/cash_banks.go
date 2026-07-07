@@ -61,7 +61,7 @@ type CashBankMovement struct {
 	CashBankID    int32
 	CashBankRefID int32
 	DocumentID    int64 `json:",omitempty"` // Sale Order ID / ExpenseID
-	ReferenceID   int32 `json:",omitempty"` // 
+	ReferenceID   int32 `json:",omitempty"` //
 	Date          int16
 	Type          int8 `json:",omitempty"`
 	FinalAmount   int32
@@ -155,7 +155,7 @@ type InternalCashMovement struct {
 }
 
 type SaleProduct struct {
-	ProductID int32 `cbor:"1,keyasint"`
-	Quantity  int32 `cbor:"2,keyasint"`
-	Amount    int32 `cbor:"3,keyasint"`
+	ProductID int32
+	Quantity  int32
+	Amount    int32
 }

@@ -3,10 +3,10 @@ package types
 import "app/db"
 
 type ProductSupplyProviderRow struct {
-	ProviderID   int32 `json:",omitempty" cbor:"1,keyasint,omitempty"`
-	Capacity     int32 `json:",omitempty" cbor:"2,keyasint,omitempty"`
-	DeliveryTime int16 `json:",omitempty" cbor:"3,keyasint,omitempty"`
-	Price        int32 `json:",omitempty" cbor:"4,keyasint,omitempty"`
+	ProviderID   int32 `json:",omitempty"`
+	Capacity     int32 `json:",omitempty"`
+	DeliveryTime int16 `json:",omitempty"`
+	Price        int32 `json:",omitempty"`
 }
 
 type ProductSupply struct {

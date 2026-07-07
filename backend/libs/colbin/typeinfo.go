@@ -37,6 +37,10 @@ type fieldMeta struct {
 	mapKey, mapVal         *fieldMeta
 	mapKeyType, mapValType reflect.Type
 	mapType                reflect.Type
+
+	// Interface (ftAny). The static interface type, needed to read/set the slot
+	// via reflect; the concrete value is self-describing on the wire (see any.go).
+	ifaceType reflect.Type
 }
 
 // typeInfo is the cached, ordered field layout for a struct type.
@@ -48,6 +52,17 @@ type typeInfo struct {
 }
 
 var typeInfoCache sync.Map // reflect.Type -> *typeInfo
+
+// topLevelIsRecords reports whether a top-level Marshal/Unmarshal type uses the
+// columnar records layout (a struct, or a slice of structs). Everything else —
+// maps, []*struct, scalars, [][]T — uses value mode. Both encoder and decoder
+// derive the mode from the type, so no wire marker is needed.
+func topLevelIsRecords(t reflect.Type) bool {
+	if t.Kind() == reflect.Struct {
+		return true
+	}
+	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Struct
+}
 
 // getTypeInfo returns cached field layout for a struct type, building it once.
 func getTypeInfo(t reflect.Type) (*typeInfo, error) {
@@ -215,6 +230,12 @@ func describeType(t reflect.Type) (fieldMeta, error) {
 		}
 		return fieldMeta{fType: ftMap, mapType: t, mapKeyType: t.Key(), mapValType: t.Elem(),
 			mapKey: &kd, mapVal: &vd}, nil
+	case reflect.Interface:
+		// Any interface value is encoded as a self-describing tagged value. The
+		// concrete type is resolved per value at encode time (see any.go), so all
+		// three sites — `any` field, `[]any` element, `map[K]any` value — collapse
+		// to this one descriptor.
+		return fieldMeta{fType: ftAny, goKind: k, ifaceType: t}, nil
 	default:
 		return fieldMeta{}, fmt.Errorf("unsupported type %s", t)
 	}

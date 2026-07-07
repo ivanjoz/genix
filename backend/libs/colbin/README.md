@@ -84,9 +84,11 @@ transmitting field names.
 | `[][]T`, deeper nesting | recursion |
 | `*T` (incl. `*struct`, `[]*T`) | nullable column (null bitmap, see below) |
 | `map[K]V` (K scalar/string, V any) | length column + flattened keys + values |
+| `interface{}` / `any` (incl. `map[string]any`, `[]any`) | self-describing tagged values (see below) |
 
-**Not yet supported** (error on encode): interfaces, `time.Time`, pointer-to-pointer
-(`**T`), non-scalar map keys. `uint64` values above `math.MaxInt64` are not
+**Not yet supported** (error on encode): `time.Time`, pointer-to-pointer
+(`**T`), non-scalar map keys, a struct/`chan`/`func` held inside an `interface{}`.
+`uint64` values above `math.MaxInt64` are not
 representable (the internal column type is `int64`). `nil` and empty slices/maps
 are indistinguishable — both decode to `nil`.
 
@@ -142,6 +144,12 @@ Payloads by `field_type`:
   keys column and a flattened values column.
 - **nullable** (pointer types): `[nullFlags:1] [presence bitmap IF has_nulls]` in
   front of the (dense) inner column.
+- **any** (`interface{}`): `N` self-describing tagged values. Unlike every other
+  column, `any` values can't be columnarized (concrete type is unknown at build
+  time and varies per value), so each is written row-style as `[tag:1] payload` —
+  a compact escape hatch inside the columnar frame. `nil`/`bool`/`int64`/`uint64`/
+  `float64`/`string`/`[]byte`/`[]any`/`map[string]any` (recursive). Decode
+  normalizes numbers to `int64`/`uint64`/`float64`, matching CBOR's dynamic decode.
 
 Each column is byte-aligned, and its byte span is deterministically recomputable
 from N and the flags, so the decoder advances column-to-column with a simple cursor.

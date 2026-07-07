@@ -1,13 +1,13 @@
 package exec
 
 import (
+	"app/billing"
+	businessTypes "app/business/types"
 	configTypes "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	"app/billing"
 	logisticsTypes "app/logistics/types"
-	businessTypes "app/business/types"
 	"app/serialize"
 	"bufio"
 	"bytes"
@@ -20,7 +20,8 @@ import (
 	"os/exec"
 	"runtime"
 
-	"github.com/fxamacker/cbor/v2"
+	"app/libs/colbin"
+
 	mail "github.com/xhit/go-simple-mail/v2"
 	"golang.org/x/sync/errgroup"
 )
@@ -43,13 +44,13 @@ func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 	// Autoincrement is handled automatically by the ORM via handlePreInsert
 	usuarios := []coreTypes.User{
 		{
-			ID:          0, // Set to 0 to trigger autoincrement
-			CompanyID:   1,
+			ID:         0, // Set to 0 to trigger autoincrement
+			CompanyID:  1,
 			FirstName:  "Hola 2",
 			LastName:   "Mundo 2",
 			ProfileIDs: []int32{2, 3, 4},
-			Updated:     core.SUnixTime(),
-			Created:     core.SUnixTime(),
+			Updated:    core.SUnixTime(),
+			Created:    core.SUnixTime(),
 		},
 	}
 
@@ -196,31 +197,31 @@ type DemoStruct3 struct {
 
 type DemoStruct5 struct {
 	configTypes.TAGS `table:"demo_structs"`
-	CompanyID               int32         `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
-	ID                      int32         `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
-	Edad                    int32         `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre                  string        `cbor:"4,keyasint,omitempty" json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras                []string      `cbor:"5,keyasint,omitempty" json:"palabras,omitempty" db:"palabras"`
-	Peso                    float32       `cbor:"6,keyasint,omitempty" json:"peso,omitempty" db:"peso"`
-	Peso64                  float64       `cbor:"7,keyasint,omitempty" json:"peso64,omitempty" db:"peso_64"`
-	Rangos                  []int32       `cbor:"8,keyasint,omitempty" json:"rangos,omitempty" db:"rangos"`
-	Smallint                int16         `cbor:"9,keyasint,omitempty" db:"small_int,zx2"`
-	Struct1                 DemoStruct1   `cbor:"10,keyasint,omitempty" json:"struct_1,omitempty" db:"struct_1"`
-	Struct2                 DemoStruct3   `cbor:"11,keyasint,omitempty" json:"struct_2,omitempty" db:"struct_2"`
-	Struct3                 []DemoStruct1 `cbor:"12,keyasint,omitempty" json:"struct_3,omitempty" db:"struct_3"`
+	CompanyID        int32         `json:"companyID,omitempty" db:"company_id,pk"`
+	ID               int32         `json:"id,omitempty" db:"id,pk"`
+	Edad             int32         `json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre           string        `json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras         []string      `json:"palabras,omitempty" db:"palabras"`
+	Peso             float32       `json:"peso,omitempty" db:"peso"`
+	Peso64           float64       `json:"peso64,omitempty" db:"peso_64"`
+	Rangos           []int32       `json:"rangos,omitempty" db:"rangos"`
+	Smallint         int16         `db:"small_int,zx2"`
+	Struct1          DemoStruct1   `json:"struct_1,omitempty" db:"struct_1"`
+	Struct2          DemoStruct3   `json:"struct_2,omitempty" db:"struct_2"`
+	Struct3          []DemoStruct1 `json:"struct_3,omitempty" db:"struct_3"`
 }
 
 type DemoStruct4 struct {
 	configTypes.TAGS `table:"demo_structs"`
-	CompanyID               int32    `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
-	ID                      int32    `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
-	Edad                    int32    `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre                  string   `cbor:"4,keyasint,omitempty" json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras                []string `cbor:"5,keyasint,omitempty" json:"palabras,omitempty" db:"palabras"`
-	Rangos                  []int32  `cbor:"6,keyasint,omitempty" json:"rangos,omitempty" db:"rangos"`
-	Smallint                int16    `cbor:"7,keyasint,omitempty" json:"small_int,omitempty" db:"small_int,zx2"`
-	Peso                    float32  `cbor:"8,keyasint,omitempty" json:"peso,omitempty" db:"peso"`
-	Peso64                  float64  `cbor:"9,keyasint,omitempty" json:"peso64,omitempty" db:"peso_64"`
+	CompanyID        int32    `json:"companyID,omitempty" db:"company_id,pk"`
+	ID               int32    `json:"id,omitempty" db:"id,pk"`
+	Edad             int32    `json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre           string   `json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras         []string `json:"palabras,omitempty" db:"palabras"`
+	Rangos           []int32  `json:"rangos,omitempty" db:"rangos"`
+	Smallint         int16    `json:"small_int,omitempty" db:"small_int,zx2"`
+	Peso             float32  `json:"peso,omitempty" db:"peso"`
+	Peso64           float64  `json:"peso64,omitempty" db:"peso_64"`
 }
 
 func Test18(args *core.ExecArgs) core.FuncResponse {
@@ -531,20 +532,6 @@ func Test26(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test27(args *core.ExecArgs) core.FuncResponse {
-	/*
-		dest := bytes.Buffer{}
-		encoder := cbor.new(&dest)
-	*/
-	/*
-		opts := cbor.CoreDetEncOptions()
-		tags := cbor.NewTagSet()
-		tags.Add(
-			cbor.TagOptions{EncTag: cbor.EncTagRequired, DecTag: cbor.DecTagRequired},
-			reflect.TypeOf(signedCWT{}),
-			18)
-		opts.EncModeWithTags()
-	*/
-
 	array1 := []DemoStruct4{
 		{Nombre: "ho1",
 			Edad:      1,
@@ -591,12 +578,12 @@ func Test27(args *core.ExecArgs) core.FuncResponse {
 		},
 	}
 
-	bytes1, err := cbor.Marshal(array1)
+	bytes1, err := colbin.Marshal(array1)
 	if err != nil {
 		panic(err)
 	}
 
-	bytes2, err := cbor.Marshal(array2)
+	bytes2, err := colbin.Marshal(array2)
 	if err != nil {
 		panic(err)
 	}

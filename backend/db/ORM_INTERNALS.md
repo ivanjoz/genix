@@ -118,9 +118,9 @@ Unsigned primitive/slice compatibility is handled via:
 
 This supports backward-compatible blob encoding for unsupported CQL unsigned native types.
 
-### 4.4 CBOR for Complex Types
+### 4.4 colbin for Complex Types
 
-Complex fields that do not map directly to CQL types are persisted as blob using `fxamacker/cbor`.
+Complex fields that do not map directly to CQL types are persisted as blob using `app/libs/colbin`.
 
 - write: marshal to bytes
 - read: in-place unmarshal into field memory

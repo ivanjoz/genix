@@ -6,18 +6,18 @@ import (
 )
 
 type ExecArgs struct {
-	LambdaName    string `json:"-" cbor:"-"`
-	FuncToExec    string `json:"fn,omitempty" cbor:"-"`
-	InvokeType    string `json:"invokeType,omitempty" cbor:"-"`
-	Param1        int64  `json:"p1,omitempty" cbor:"1,kayasint,omitempty"`
-	Param2        int64  `json:"p2,omitempty" cbor:"2,kayasint,omitempty"`
-	Param3        int64  `json:"p3,omitempty" cbor:"3,kayasint,omitempty"`
-	Param4        int64  `json:"p4,omitempty" cbor:"4,kayasint,omitempty"`
-	Param5        string `json:"p5,omitempty" cbor:"5,kayasint,omitempty"`
-	Param6        string `json:"p6,omitempty" cbor:"6,kayasint,omitempty"`
-	Message       string `json:"ms,omitempty"  cbor:"-"`
-	InvokeAsEvent bool   `json:"-" cbor:"-"`
-	ParseResponse bool   `json:"-" cbor:"-"`
+	LambdaName    string `json:"-" cb:"-"`
+	FuncToExec    string `json:"fn,omitempty" cb:"-"`
+	InvokeType    string `json:"invokeType,omitempty" cb:"-"`
+	Param1        int64  `json:"p1,omitempty"`
+	Param2        int64  `json:"p2,omitempty"`
+	Param3        int64  `json:"p3,omitempty"`
+	Param4        int64  `json:"p4,omitempty"`
+	Param5        string `json:"p5,omitempty"`
+	Param6        string `json:"p6,omitempty"`
+	Message       string `json:"ms,omitempty" cb:"-"`
+	InvokeAsEvent bool   `json:"-" cb:"-"`
+	ParseResponse bool   `json:"-" cb:"-"`
 }
 
 func (e *ExecArgs) MakeErr(msgs ...any) FuncResponse {

@@ -1,7 +1,7 @@
 package core
 
 import (
-	"app/libs/cbor"
+	"app/libs/colbin"
 	coretypes "app/core/types"
 	"app/db"
 	"crypto/hmac"
@@ -16,12 +16,12 @@ import (
 )
 
 type UsuarioToken struct {
-	CompanyID int32  `json:"c" cbor:"1,keyasint"`
-	ID        int32  `json:"i" cbor:"2,keyasint"`
-	Created   int32  `json:"e" cbor:"3,keyasint"`
-	Hash      uint64 `json:"h" cbor:"4,keyasint"`
-	User   string `json:"u" cbor:"5,keyasint"`
-	Error     string `json:"-" cbor:"-"`
+	CompanyID int32  `json:"c"`
+	ID        int32  `json:"i"`
+	Created   int32  `json:"e"`
+	Hash      uint64 `json:"h"`
+	User      string `json:"u"`
+	Error     string `json:"-" cb:"-"` // transient; never serialized into the token
 }
 
 var User UsuarioToken
@@ -245,8 +245,8 @@ func CheckUser(req *HandlerArgs, access int) *UsuarioToken {
 		return &user
 	}
 
-	if err := cbor.Unmarshal(tokenBytes, &user); err != nil {
-		Log("CheckUser:: error decodificando CBOR", err)
+	if err := colbin.Unmarshal(tokenBytes, &user); err != nil {
+		Log("CheckUser:: error decodificando token", err)
 		user.Error = "Error al recuperar la información del user."
 	}
 

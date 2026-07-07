@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"app/libs/cbor"
+	"app/libs/colbin"
 )
 
 func HelloWorld(req *core.HandlerArgs) core.HandlerResponse {
@@ -36,15 +36,15 @@ func HelloWorld(req *core.HandlerArgs) core.HandlerResponse {
 
 type DemoStruct4 struct {
 	configTypes.TAGS `table:"demo_structs"`
-	CompanyID        int32    `cbor:"1,keyasint,omitempty" json:"companyID,omitempty" db:"company_id,pk"`
-	ID               int32    `cbor:"2,keyasint,omitempty" json:"id,omitempty" db:"id,pk"`
-	Edad             int32    `cbor:"3,keyasint,omitempty" json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre           string   `cbor:"4,keyasint,omitempty" json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras         []string `cbor:"5,keyasint,omitempty" json:"palabras,omitempty" db:"palabras"`
-	Rangos           []int32  `cbor:"6,keyasint,omitempty" json:"rangos,omitempty" db:"rangos"`
-	Smallint         int16    `cbor:"7,keyasint,omitempty" json:"small_int,omitempty" db:"small_int,zx2"`
-	Peso             float32  `cbor:"8,keyasint,omitempty" json:"peso,omitempty" db:"peso"`
-	Peso64           float64  `cbor:"9,keyasint,omitempty" json:"peso64,omitempty" db:"peso_64"`
+	CompanyID        int32    `json:"companyID,omitempty" db:"company_id,pk"`
+	ID               int32    `json:"id,omitempty" db:"id,pk"`
+	Edad             int32    `json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre           string   `json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras         []string `json:"palabras,omitempty" db:"palabras"`
+	Rangos           []int32  `json:"rangos,omitempty" db:"rangos"`
+	Smallint         int16    `json:"small_int,omitempty" db:"small_int,zx2"`
+	Peso             float32  `json:"peso,omitempty" db:"peso"`
+	Peso64           float64  `json:"peso64,omitempty" db:"peso_64"`
 }
 
 func Demo1(req *core.HandlerArgs) core.HandlerResponse {
@@ -62,7 +62,7 @@ func Demo1(req *core.HandlerArgs) core.HandlerResponse {
 		},
 	}
 
-	bytes1, err := cbor.Marshal(array1)
+	bytes1, err := colbin.Marshal(array1)
 	if err != nil {
 		panic(err)
 	}

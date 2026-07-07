@@ -6,59 +6,59 @@ import (
 )
 
 type WarehouseStockMin struct {
-	WarehouseID int32 `cbor:"a" json:"a"`
-	Quantity    int32 `cbor:"c" json:"c"`
+	WarehouseID int32 `json:"a"`
+	Quantity    int32 `json:"c"`
 }
 
 type ProductPresentation struct {
-	ID             int16  `ms:"i" json:"id,omitempty" cbor:"i"`
-	AtributoID     int16  `ms:"a" json:"at,omitempty" cbor:"a"`
-	Name           string `ms:"n" json:"nm,omitempty" cbor:"n"`
-	Color          string `ms:"c" json:"cl,omitempty" cbor:"c"`
-	Price          int32  `ms:"p" json:"pc,omitempty" cbor:"p"`
-	PriceDifference int32 `ms:"d" json:"pd,omitempty" cbor:"d"`
-	SKU            string `ms:"sk" json:"sk,omitempty" cbor:"sk"`
-	Status         int8   `ms:"s" json:"ss,omitempty" cbor:"s"`
+	ID              int16  `ms:"i" json:"id,omitempty"`
+	AtributoID      int16  `ms:"a" json:"at,omitempty"`
+	Name            string `ms:"n" json:"nm,omitempty"`
+	Color           string `ms:"c" json:"cl,omitempty"`
+	Price           int32  `ms:"p" json:"pc,omitempty"`
+	PriceDifference int32  `ms:"d" json:"pd,omitempty"`
+	SKU             string `ms:"sk" json:"sk,omitempty"`
+	Status          int8   `ms:"s" json:"ss,omitempty"`
 }
 
 type Product struct {
 	db.TableStruct[ProductTable, Product]
-	CompanyID          int32   `json:",omitempty"`
-	ID                 int32   `db:"id,pk"`
-	TempID             int32   `json:",omitempty"`
-	Name               string  `db:"nombre"`
-	Description        string  `json:",omitempty"`
-	ContentHTML        string  `json:",omitempty"`
-	CategoryIDs        []int32 `json:",omitempty" db:"category_ids"`
-	BrandID            int32   `json:",omitempty"`
-	Params             []int8  `json:",omitempty"`
-	Price              int32   `json:",omitempty"`
-	CurrencyID         int16   `json:",omitempty"`
-	UnitID             int16   `json:",omitempty"`
-	Discount           float32 `json:",omitempty"`
-	FinalPrice         int32   `json:",omitempty"`
-	Weight             float32 `json:",omitempty"`
-	Volume             float32 `json:",omitempty"`
-	SbuQuantity        int32   `json:",omitempty"`
-	SbuUnit            string  `json:",omitempty"`
-	SbuPrice           int32   `json:",omitempty"`
-	SbuDiscount        float32 `json:",omitempty"`
-	SbuFinalPrice      int32   `json:",omitempty"`
-	SKU                string  `json:",omitempty"`
-	NameHash           int32   `json:",omitempty"`
+	CompanyID     int32   `json:",omitempty"`
+	ID            int32   `db:"id,pk"`
+	TempID        int32   `json:",omitempty"`
+	Name          string  `db:"nombre"`
+	Description   string  `json:",omitempty"`
+	ContentHTML   string  `json:",omitempty"`
+	CategoryIDs   []int32 `json:",omitempty" db:"category_ids"`
+	BrandID       int32   `json:",omitempty"`
+	Params        []int8  `json:",omitempty"`
+	Price         int32   `json:",omitempty"`
+	CurrencyID    int16   `json:",omitempty"`
+	UnitID        int16   `json:",omitempty"`
+	Discount      float32 `json:",omitempty"`
+	FinalPrice    int32   `json:",omitempty"`
+	Weight        float32 `json:",omitempty"`
+	Volume        float32 `json:",omitempty"`
+	SbuQuantity   int32   `json:",omitempty"`
+	SbuUnit       string  `json:",omitempty"`
+	SbuPrice      int32   `json:",omitempty"`
+	SbuDiscount   float32 `json:",omitempty"`
+	SbuFinalPrice int32   `json:",omitempty"`
+	SKU           string  `json:",omitempty"`
+	NameHash      int32   `json:",omitempty"`
 
-	Properties     []ProductProperties   `json:",omitempty"`
-	Presentations  []ProductPresentation `json:",omitempty"`
+	Properties    []ProductProperties   `json:",omitempty"`
+	Presentations []ProductPresentation `json:",omitempty"`
 	// Image storage: ImageMain is the imageID of the primary image (defaults to the
 	// first uploaded). ImageIDs holds every imageID; ImageDescriptions is parallel to it.
 	// Each imageID encodes its own resolution config in the last digit (autoincrement*10 + configDigit).
-	ImageMain         int32    `json:",omitempty"`
-	ImageIDs          []int32  `json:",omitempty"`
-	ImageDescriptions []string `json:",omitempty"`
-	Stock          []WarehouseStockMin   `json:",omitempty"`
-	ReservedStock  []WarehouseStockMin   `json:",omitempty"`
-	StockStatus    int8                  `json:",omitempty"`
-	NameUpdated    int32                 `json:",omitempty"`
+	ImageMain         int32               `json:",omitempty"`
+	ImageIDs          []int32             `json:",omitempty"`
+	ImageDescriptions []string            `json:",omitempty"`
+	Stock             []WarehouseStockMin `json:",omitempty"`
+	ReservedStock     []WarehouseStockMin `json:",omitempty"`
+	StockStatus       int8                `json:",omitempty"`
+	NameUpdated       int32               `json:",omitempty"`
 	// General properties
 	Status    int8  `json:"ss,omitempty"`
 	Updated   int32 `json:"upd,omitempty"`
@@ -87,9 +87,9 @@ type ProductTable struct {
 	Name                db.Col[ProductTable, string]
 	Description         db.Col[ProductTable, string]
 	ContentHTML         db.Col[ProductTable, string]
-	CategoryIDs         db.ColSlice[ProductTable, int32]  `db:"category_ids"`
+	CategoryIDs         db.ColSlice[ProductTable, int32] `db:"category_ids"`
 	BrandID             db.Col[ProductTable, int32]
-	Params              db.ColSlice[ProductTable, int8]   `db:"params_ids"`
+	Params              db.ColSlice[ProductTable, int8] `db:"params_ids"`
 	Price               db.Col[ProductTable, int32]
 	CurrencyID          db.Col[ProductTable, int16]
 	UnitID              db.Col[ProductTable, int16]
@@ -153,26 +153,26 @@ func (e ProductTable) GetSchema() db.TableSchema {
 }
 
 type ProductProperty struct {
-	ID     int16  `json:"id,omitempty" ms:"i" cbor:"i"`
-	Name   string `json:"nm,omitempty" ms:"n" cbor:"n"`
-	Status int8   `json:"ss,omitempty" ms:"s" cbor:"s"`
+	ID     int16  `json:"id,omitempty" ms:"i"`
+	Name   string `json:"nm,omitempty" ms:"n"`
+	Status int8   `json:"ss,omitempty" ms:"s"`
 }
 
 type ProductProperties struct {
-	ID         int16                       `ms:"i" cbor:"i"`
-	Name       string                      `ms:"n" cbor:"n"`
-	Options    []ProductProperty           `ms:"o" cbor:"o"`
-	Status     int8                        `ms:"s" cbor:"s"`
+	ID         int16                       `ms:"i"`
+	Name       string                      `ms:"n"`
+	Options    []ProductProperty           `ms:"o"`
+	Status     int8                        `ms:"s"`
 	OptionsMap map[string]*ProductProperty `json:"-" ms:"-"`
 }
 
 type Warehouse struct {
 	db.TableStruct[WarehouseTable, Warehouse]
-	CompanyID   int32           
-	ID          int32            
-	SiteID      int32           
-	Name        string           
-	Description string           
+	CompanyID   int32
+	ID          int32
+	SiteID      int32
+	Name        string
+	Description string
 	Layout      []WarehouseLayout
 	// General properties
 	Status    int8   `json:"ss,omitempty" db:"status,view"`
@@ -212,17 +212,17 @@ func (e WarehouseTable) GetSchema() db.TableSchema {
 }
 
 type WarehouseLayout struct {
-	ID      int16                  `ms:"i" cbor:"i" json:"id,omitempty"`
-	Name    string                 `ms:"n" cbor:"n" json:"nm,omitempty"`
-	RowCant int8                   `ms:"r" cbor:"r" json:"rc,omitempty"`
-	ColCant int8                   `ms:"c" cbor:"c" json:"cc,omitempty"`
-	Bloques []WarehouseLayoutBlock `ms:"b" cbor:"b" json:"bl,omitempty"`
+	ID      int16                  `ms:"i" json:"id,omitempty"`
+	Name    string                 `ms:"n" json:"nm,omitempty"`
+	RowCant int8                   `ms:"r" json:"rc,omitempty"`
+	ColCant int8                   `ms:"c" json:"cc,omitempty"`
+	Bloques []WarehouseLayoutBlock `ms:"b" json:"bl,omitempty"`
 }
 
 type WarehouseLayoutBlock struct {
-	Row    int8   `json:"rw" ms:"r" cbor:"r"`
-	Column int8   `json:"co" ms:"c" cbor:"c"`
-	Name   string `json:"nm" ms:"n" cbor:"n"`
+	Row    int8   `json:"rw" ms:"r"`
+	Column int8   `json:"co" ms:"c"`
+	Name   string `json:"nm" ms:"n"`
 }
 
 type Site struct {

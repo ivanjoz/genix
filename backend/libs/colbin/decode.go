@@ -26,6 +26,28 @@ func Unmarshal(data []byte, dst any) error {
 	if dec.readByte() != formatVersion {
 		return fmt.Errorf("colbin: bad version byte")
 	}
+
+	// Walk (and allocate) the destination pointer chain so we decode into the
+	// concrete value: e.g. **ContentFields -> alloc *ContentFields -> struct.
+	target := rv.Elem()
+	for target.Kind() == reflect.Ptr {
+		if target.IsNil() {
+			target.Set(reflect.New(target.Type().Elem()))
+		}
+		target = target.Elem()
+	}
+
+	// Non-record types use value mode: a single N=1 element column, no record count.
+	if !topLevelIsRecords(target.Type()) {
+		t := target.Type()
+		fm, err := describeType(t)
+		if err != nil {
+			return err
+		}
+		return dec.decodeElemColumn(&fm, t, t.Size(), 1,
+			[]unsafe.Pointer{target.Addr().UnsafePointer()})
+	}
+
 	n64, m := binary.Uvarint(dec.data[dec.pos:])
 	if m <= 0 {
 		return fmt.Errorf("colbin: bad record count")
@@ -33,7 +55,6 @@ func Unmarshal(data []byte, dst any) error {
 	dec.pos += m
 	n := int(n64)
 
-	target := rv.Elem()
 	var elemType reflect.Type
 	var recordPtrs []unsafe.Pointer
 	var backing reflect.Value // kept alive so the backing array survives
@@ -135,6 +156,8 @@ func (dec *decoder) decodeColumn(fm *fieldMeta, n int, ptrs []unsafe.Pointer) er
 		return dec.decodeArrayBody(fm.elem, fm.sliceType, fm.elemSize, shPtrs)
 	case ftMap:
 		return dec.decodeMapColumn(fm, n, offsetPtrs(ptrs, fm.offset))
+	case ftAny:
+		return dec.decodeAnyColumn(fm, n, offsetPtrs(ptrs, fm.offset))
 	}
 	return nil
 }
@@ -197,6 +220,8 @@ func (dec *decoder) decodeElemColumn(elem *fieldMeta, elemType reflect.Type, ele
 		return dec.decodeArrayBody(elem.elem, elemType, elem.elemSize, ptrs)
 	case ftMap:
 		return dec.decodeMapColumn(elem, n, ptrs)
+	case ftAny:
+		return dec.decodeAnyColumn(elem, n, ptrs)
 	}
 	return nil
 }

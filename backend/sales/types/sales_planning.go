@@ -6,8 +6,8 @@ import (
 
 // SalesPlanningWeek is one week of the planned quantity for a product.
 type SalesPlanningWeek struct {
-	Week     int16 `json:",omitempty" cbor:"1,keyasint,omitempty"`
-	Quantity int16 `json:",omitempty" cbor:"2,keyasint,omitempty"`
+	Week     int16 `json:",omitempty"`
+	Quantity int16 `json:",omitempty"`
 }
 
 // SalesPlanning holds the sales projection assumptions/output for a product:
@@ -59,8 +59,8 @@ func (e SalesPlanningTable) GetSchema() db.TableSchema {
 // Percent is stored as the multiplier * 1000 (3 decimal digits as an integer):
 // e.g. 0.500 -> 500, 1.000 -> 1000, 2.000 -> 2000.
 type SeasonalityCurveWeek struct {
-	Week    int16 `json:",omitempty" cbor:"1,keyasint,omitempty"`
-	Percent int16 `json:",omitempty" cbor:"2,keyasint,omitempty"`
+	Week    int16 `json:",omitempty"`
+	Percent int16 `json:",omitempty"`
 }
 
 // SeasonalityCurve is a reusable per-week multiplier table that can be

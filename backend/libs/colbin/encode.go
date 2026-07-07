@@ -11,13 +11,32 @@ import (
 // Marshal encodes a slice of structs (or a single struct, treated as N=1) into
 // the columnar delta format. Pointers are dereferenced. Decode with Unmarshal
 // into the same Go type.
-func Marshal(v any) ([]byte, error) {
+func Marshal(v any) (out []byte, err error) {
+	// The any encoder panics with encodeError for dynamic types it can't represent
+	// (interface{}-held struct/chan/func, non-string map keys); recover into an error.
+	defer func() {
+		if r := recover(); r != nil {
+			if ce, ok := r.(encodeError); ok {
+				out, err = nil, ce.err
+			} else {
+				panic(r)
+			}
+		}
+	}()
 	rv := reflect.ValueOf(v)
 	for rv.Kind() == reflect.Ptr {
 		if rv.IsNil() {
 			return nil, fmt.Errorf("colbin: Marshal nil pointer")
 		}
 		rv = rv.Elem()
+	}
+
+	// Non-record top-level types (maps, []*struct, scalars, …) use value mode: a
+	// single N=1 element column reusing the element machinery. struct / []struct
+	// keep the columnar records layout below.
+	if !topLevelIsRecords(rv.Type()) {
+		out = append(out, formatVersion)
+		return encodeValueMode(out, rv), nil
 	}
 
 	// Resolve record element type and a pointer to each record.
@@ -48,7 +67,7 @@ func Marshal(v any) ([]byte, error) {
 		return nil, err
 	}
 
-	out := make([]byte, 0, 16+len(recordPtrs)*len(ti.fields))
+	out = make([]byte, 0, 16+len(recordPtrs)*len(ti.fields))
 	out = append(out, formatVersion)
 	out = binary.AppendUvarint(out, uint64(len(recordPtrs)))
 	out = encodeSubTable(out, ti, recordPtrs)
@@ -126,6 +145,9 @@ func encodeColumn(out []byte, fm *fieldMeta, ptrs []unsafe.Pointer) []byte {
 	case ftMap:
 		out = append(out, ftMap)
 		return encodeMapColumn(out, fm, offsetPtrs(ptrs, fm.offset))
+	case ftAny:
+		out = append(out, ftAny)
+		return encodeAnyColumn(out, fm, offsetPtrs(ptrs, fm.offset))
 	}
 	return out
 }
@@ -215,6 +237,9 @@ func encodeElemColumn(out []byte, elem *fieldMeta, ptrs []unsafe.Pointer) []byte
 	case ftMap:
 		out = append(out, ftMap)
 		return encodeMapColumn(out, elem, ptrs) // ptrs already at map slots
+	case ftAny:
+		out = append(out, ftAny)
+		return encodeAnyColumn(out, elem, ptrs) // ptrs already at interface slots
 	}
 	return out
 }
@@ -261,6 +286,20 @@ func appendBlobColumn(out []byte, blobs [][]byte) []byte {
 		out = append(out, b...)
 	}
 	return out
+}
+
+// encodeValueMode encodes a single top-level value (map, []*struct, scalar, …) as
+// one element column with N=1. The value is copied into an addressable cell so the
+// element encoders can take its pointer. describeType errors surface as encodeError
+// (recovered by Marshal), matching the any encoder's panic contract.
+func encodeValueMode(out []byte, rv reflect.Value) []byte {
+	fm, err := describeType(rv.Type())
+	if err != nil {
+		panic(encodeError{err})
+	}
+	cell := reflect.New(rv.Type()) // addressable copy to take &value
+	cell.Elem().Set(rv)
+	return encodeElemColumn(out, &fm, []unsafe.Pointer{cell.UnsafePointer()})
 }
 
 // boolBit returns 1<<shift if set, else 0 — for packing flag bits.

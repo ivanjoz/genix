@@ -12,7 +12,7 @@ const formatVersion byte = 0x01
 const reservedFieldID uint8 = 255
 
 // field_type codes (3 bits). is_signed distinguishes signed/unsigned integers,
-// so a single ftInt covers both. Code 7 is reserved (no 8th slot in use).
+// so a single ftInt covers both.
 const (
 	ftInt    uint8 = 0 // integers (int8..int64, uint8..uint32); bool encoded here too
 	ftFloat  uint8 = 1 // IEEE-754, width from precision (float16/32/64)
@@ -21,6 +21,7 @@ const (
 	ftArray  uint8 = 4 // length column + flattened element sub-column
 	ftStruct uint8 = 5 // nested sub-table of columns
 	ftMap    uint8 = 6 // length column + flattened keys column + flattened values column
+	ftAny    uint8 = 7 // interface{}: N self-describing tagged values (see any.go)
 )
 
 // intWidths maps a 3-bit precision code -> packed bit width for integer deltas.

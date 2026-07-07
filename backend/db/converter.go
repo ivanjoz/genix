@@ -13,7 +13,8 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/fxamacker/cbor/v2"
+	"app/libs/colbin"
+
 	"github.com/viant/xunsafe"
 )
 
@@ -878,9 +879,9 @@ func makeScyllaValue(f *xunsafe.Field, ptr unsafe.Pointer, colType int8, colType
 		if f.Type.Kind() != reflect.Slice || f.Type.Elem().Kind() != reflect.Uint8 {
 			// Complex type
 			fieldValue := f.Interface(ptr)
-			recordBytes, err := cbor.Marshal(fieldValue)
+			recordBytes, err := colbin.Marshal(fieldValue)
 			if err != nil {
-				fmt.Println("Error al encodeding .cbor:: ", f.Name, err)
+				fmt.Println("Error al encodeding .colbin:: ", f.Name, err)
 				return ""
 			}
 			hexString := hex.EncodeToString(recordBytes)

@@ -8,17 +8,10 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/fxamacker/cbor/v2"
+	"app/libs/colbin"
+
 	"github.com/viant/xunsafe"
 )
-
-// cborDecMode decodes CBOR maps that land in an `any` value as map[string]any instead of the
-// library default map[interface{}]interface{}. Columns typed map[string]any (e.g. AstNode.Props)
-// can hold nested objects; with the default mode those decode to interface-keyed maps, which
-// encoding/json cannot marshal — breaking re-serialization when the record is served back.
-var cborDecMode, _ = cbor.DecOptions{
-	DefaultMapType: reflect.TypeOf(map[string]any(nil)),
-}.DecMode()
 
 type colInfo struct {
 	Name         string
@@ -109,9 +102,9 @@ func (c *columnInfo) GetStatementValue(ptr unsafe.Pointer) any {
 	}
 	if c.IsComplexType {
 		fieldValue := c.Field.Interface(ptr)
-		recordBytes, err := cbor.Marshal(fieldValue)
+		recordBytes, err := colbin.Marshal(fieldValue)
 		if err != nil {
-			fmt.Println("Error al encodeding .cbor:: ", c.FieldName, err)
+			fmt.Println("Error al encodeding .colbin:: ", c.FieldName, err)
 			return ""
 		}
 		return recordBytes
@@ -176,9 +169,11 @@ func (c *columnInfo) SetValue(ptr unsafe.Pointer, v any) {
 		}
 
 		if len(vl) > 3 && c.Field != nil {
-			// Direct unmarshal into the field memory using xunsafe pointer
+			// Direct unmarshal into the field memory using xunsafe pointer. colbin's
+			// any decode yields map[string]any for nested objects (what the old
+			// cborDecMode was configured for), so JSON re-serialization keeps working.
 			dest := reflect.NewAt(c.RefType, c.Field.Pointer(ptr)).Interface()
-			err := cborDecMode.Unmarshal(vl, dest)
+			err := colbin.Unmarshal(vl, dest)
 			if err != nil {
 				fmt.Printf("Error al convertir ComplexType for Col %s: %v\n", c.Name, err)
 			}

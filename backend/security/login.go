@@ -1,7 +1,7 @@
 package security
 
 import (
-	"app/libs/cbor"
+	"app/libs/colbin"
 	"app/cloud"
 	"app/core"
 	coretypes "app/core/types"
@@ -110,10 +110,10 @@ func MakeUsuarioResponse(user coretypes.User, cipherKey string) (map[string]any,
 	// Persist a deterministic keyed fingerprint in the token so auth can recompute and validate it.
 	usuarioToken.Hash = core.ComputeUsuarioTokenHash(usuarioToken)
 
-	// Encode the auth token as CBOR to keep the encrypted payload compact and schema-driven.
-	usuarioTokenCBOR, err := cbor.Marshal(usuarioToken)
+	// Encode the auth token with colbin to keep the encrypted payload compact and schema-driven.
+	usuarioTokenCBOR, err := colbin.Marshal(usuarioToken)
 	if err != nil {
-		return nil, core.Err("Error al serializar el Token de user en CBOR.", err)
+		return nil, core.Err("Error al serializar el Token de user.", err)
 	}
 	core.Log("MakeUsuarioResponse:: usuarioTokenCBOR bytes", len(usuarioTokenCBOR))
 	core.Log("MakeUsuarioResponse:: token hash", usuarioToken.Hash, "companyID", user.CompanyID, "userID", user.ID, "accesosComputed", len(sortedAccesosComputed))
