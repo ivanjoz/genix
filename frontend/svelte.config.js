@@ -59,7 +59,7 @@ const config = {
 			$ecommerce: path.resolve('./webpage'),
 			$stores: path.resolve('./webpage/stores'),
 			$routes: path.resolve('./routes'),
-			$components: path.resolve('./ui-components'),
+			$components: path.resolve('./packages/genix-ui'),
 			$core: path.resolve('./core'),
 			$services: path.resolve('./services'),
 			$libs: path.resolve('./libs')

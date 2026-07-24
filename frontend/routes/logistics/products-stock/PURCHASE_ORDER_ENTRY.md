@@ -8,10 +8,10 @@ A new sub-page that lets the user receive merchandise from a previously created 
 
 ## 2. Page wiring (`+page.svelte`)
 
-The Page already declares two tabs: `{ id: 1, name: "Movimiento" }` and `{ id: 2, name: "Ingreso OC" }`. Use `Core.pageOptionSelected` (from `$core/store.svelte`) to render conditionally:
+The Page already declares two tabs: `{ id: 1, name: "Movimiento" }` and `{ id: 2, name: "Ingreso OC" }`. Use `ui.state.pageOptionSelected` from `useUI()` to render conditionally:
 
-- `Core.pageOptionSelected === 1` → `<ProductStockMovement />` (existing)
-- `Core.pageOptionSelected === 2` → `<PurchaseOrderEntry />` (new file in this folder)
+- `ui.state.pageOptionSelected === 1` → `<ProductStockMovement />` (existing)
+- `ui.state.pageOptionSelected === 2` → `<PurchaseOrderEntry />` (new file in this folder)
 
 Both children mount lazily via `{#if}` so the inactive tab does not run its services.
 

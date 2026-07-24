@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
 import DateInput from '$components/form/DateInput.svelte'
 import Input from '$components/form/Input.svelte'
 import Layer from '$components/layers/Layer.svelte'
@@ -177,7 +179,7 @@ const openSerialModal = (entry: EntryRow) => {
   if (serialDraft.length === 0 || serialDraft[serialDraft.length - 1].serial) {
     serialDraft.push({ serial: '', quantity: 0 })
   }
-  Core.openSideLayer(4)
+  ui.openSideLayer(4)
 }
 
 const applySerialDraft = () => {

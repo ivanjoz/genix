@@ -8,7 +8,7 @@
 	const { id = 0, isMobile = false, css = "" }: IProps = $props();
 
 	import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
-	import angleSvg from "$libs/assets/angle.svg?raw";
+	import angleSvg from "$components/assets/angle.svg?raw";
 import { parseSVG } from '$libs/helpers';
 	import s1 from "./styles.module.css";
 	import ArrowSteps from "$components/navigation/ArrowSteps.svelte";
@@ -16,7 +16,7 @@ import { parseSVG } from '$libs/helpers';
 	import Input from "$components/form/Input.svelte";
 	import CiudadesSelector from "$ecommerce/components/CiudadesSelector.svelte";
 	import ProductCard from "$ecommerce/components/ProductCard.svelte";
-	import { Core } from "$core/store.svelte";
+	import { useUI } from '@genix/ui';
 	import { Ecommerce } from "$ecommerce/stores/globals.svelte";
 
 	import ButtonLayer from "$components/buttons/ButtonLayer.svelte";
@@ -24,6 +24,7 @@ import { parseSVG } from '$libs/helpers';
 	import { Env } from "$core/env";
 
 	import CulqiCheckout from "./CulqiCheckout.svelte";
+	const ui = useUI();
 
 	let userForm = {} as any;
 
@@ -63,7 +64,7 @@ import { parseSVG } from '$libs/helpers';
 	<div class="p-4 md:p-12 flex flex-col h-[calc(100vh-120px)]">
 		<ArrowSteps
 			selected={Ecommerce.cartOption}
-			columnsTemplate={!isMobileVersion && Core.deviceType === 3
+			columnsTemplate={!isMobileVersion && ui.state.deviceType === 3
 				? "1fr 1fr 1fr 0.7fr"
 				: ""}
 			onSelect={(e) => {

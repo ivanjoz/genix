@@ -34,7 +34,7 @@ const makeDevCssModuleClass = (name: string, filename: string) => {
 const publicDir = path.resolve(projectDir, 'static');
 
 const serviceWorkerConfig: BuildOptions = {
-  entryPoints: [path.resolve(projectDir, 'libs/workers/service-worker.ts')],
+  entryPoints: [path.resolve(projectDir, 'packages/genix-ui/service-worker/service-worker.ts')],
   format: 'esm', // Service workers typically use ES modules
   outfile: path.resolve(publicDir, 'sw.js'),
   bundle: true,
@@ -56,7 +56,7 @@ const serviceWorkerConfig: BuildOptions = {
     '$ecommerce': 'webpage',
     '$routes': 'routes',
     '$domain': 'domain-components',
-    '$components': 'ui-components',
+    '$components': 'packages/genix-ui',
     '$services': 'services',
     '$libs': 'libs'
   }[alias];
@@ -131,10 +131,12 @@ const serviceWorkerPlugin = () => ({
     // Initial build of SW when dev server starts
     buildSw();
 
-    // Watch for changes in the service worker source file
-    server.watcher.add(path.resolve(projectDir, 'pkg-core/workers/service-worker.ts'));
+    // Rebuild when the package worker shell or cache engine changes.
+    const serviceWorkerSourceDir = path.resolve(projectDir, 'packages/genix-ui/service-worker');
+    const cacheSourceDir = path.resolve(projectDir, 'packages/genix-ui/cache');
+    server.watcher.add([serviceWorkerSourceDir, cacheSourceDir]);
     server.watcher.on('change', async (filePath: string) => {
-      if (filePath === path.resolve(projectDir, 'pkg-core/workers/service-worker.ts')) {
+      if (filePath.startsWith(serviceWorkerSourceDir) || filePath.startsWith(cacheSourceDir)) {
         await buildSw();
         // server.hot.send({ type: 'full-reload' });
       }

@@ -19,9 +19,8 @@ import { browser } from '$app/environment';
 import { arrayToMapN } from '$libs/helpers';
 import { buildHeaders } from '$libs/http.svelte';
 import { Env } from '$core/env';
-import { parsePsvResponse } from '$libs/cache/psv-parse';
-import { fetchDeltaCache, readDeltaCacheSubObject } from '$libs/cache/delta-cache.fetch';
-import type { serviceHttpProps } from '$libs/workers/service-worker';
+import { parsePsvResponse, fetchDeltaCache, readDeltaCacheSubObject } from '@genix/ui/cache';
+import type { serviceHttpProps } from '@genix/ui/cache';
 import type { ISharedListRecord } from '$services/business/shared-lists.svelte';
 
 export interface IProductProperty {

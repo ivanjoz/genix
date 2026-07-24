@@ -21,7 +21,6 @@
 @source not "../build";
 @source not "../../**/*.md";
 
-@source "../../ui-components/**/*.svelte";
 @source "../../domain-components/MobileMenu.svelte";
 @source "../**/*.svelte";
 
@@ -32,3 +31,4 @@
   --breakpoint-md: 749px;
   --spacing: 1px;
 }
+@source "../../packages/genix-ui/{buttons,cards,charts,editor,files,form,layers,menu,misc,navigation,popover2,runtime,vTable}/**/*.svelte";

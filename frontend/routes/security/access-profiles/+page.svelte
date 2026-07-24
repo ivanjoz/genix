@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
 import Input from '$components/form/Input.svelte';
 import Modal from '$components/layers/Modal.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import Modules from '$core/modules';
-import { closeModal, Core, tr } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
 import T from '$components/misc/T.svelte';
 import Page from '$domain/Page.svelte';
 import { arrayToMapN, Loading, Notify } from '$libs/helpers';
@@ -203,7 +205,7 @@ import {
       perfilesService.updatePerfil(form)
 
       perfilForm = {} as IProfile
-      closeModal(2)
+      ui.closeModal(2)
       Notify.success(tr("Profile saved successfully|Perfil guardado correctamente"))
     } catch (error) {
       Notify.failure(error as string)
@@ -229,7 +231,7 @@ import {
       id: "actions",
       buttonEditHandler: (rec) => {
         perfilForm = { ...rec, accesosMap: new Map(rec.accesosMap) }
-        Core.openModal(2)
+        ui.openModal(2)
       }
     }
   ]
@@ -244,7 +246,7 @@ import {
         <div class="flex items-center">
           <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new access profile." onClick={() => {
             perfilForm = { ss: 1, accesosMap: new Map() } as IProfile
-            Core.openModal(2)
+            ui.openModal(2)
           }} />
         </div>
       </div>

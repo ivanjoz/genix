@@ -14,7 +14,7 @@ import { ClientProviderService, ClientProviderType } from '$routes/business/cust
 import type { IProduct, IProductPresentation } from '$routes/business/products/products.svelte'
 import { ProductsService } from '$routes/business/products/products.svelte'
 import { WarehousesService } from '$routes/business/branches-warehouses/branches-warehouses.svelte'
-import { clearRouteRecordQueryParam, loadRouteRecordFromQueryParam } from '$libs/cache/route-data'
+import { clearRouteRecordQueryParam, loadRouteRecordFromQueryParam } from '@genix/ui/cache'
 import { onMount, untrack } from 'svelte'
 import ProductCardSearch, { type IProductCard } from './ProductCardSearch.svelte'
 import PurchaseOrderForm from './PurchaseOrderForm.svelte'

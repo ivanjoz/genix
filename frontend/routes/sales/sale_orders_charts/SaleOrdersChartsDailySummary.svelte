@@ -2,7 +2,7 @@
   import CheckboxOptions from '$components/form/CheckboxOptions.svelte'
   import SquareBarSized from '$components/misc/SquareBarSized.svelte'
   import VirtualCards from '$components/misc/VirtualCards.svelte'
-  import { DateHelper } from '$libs/date'
+  import { DateHelper } from '@genix/ui/utilities'
   import { formatN, formatTime } from '$libs/helpers'
   import type { IProduct } from '$routes/business/products/products.svelte'
   import type { ISaleSummaryRecord } from './sale_orders_charts.svelte'

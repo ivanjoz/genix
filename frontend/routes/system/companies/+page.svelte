@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
 import Input from '$components/form/Input.svelte';
 import Modal from '$components/layers/Modal.svelte';
 import Page from '$domain/Page.svelte';
@@ -7,7 +9,7 @@ import type { ITableColumn } from '$components/vTable/types';
 import { Notify } from '$libs/helpers';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
-import { Core, closeModal, tr } from '$core/store.svelte';
+import { Core, tr } from '$core/store.svelte';
 import { formatTime } from '$libs/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg
@@ -48,7 +50,7 @@ const { Loading } = pkg
         empresasService.updateEmpresa(form)
       }
 
-      closeModal(1)
+      ui.closeModal(1)
       Notify.success(tr("Company saved successfully|Empresa guardada correctamente"))
     } catch (error) {
       Notify.failure(error as string)
@@ -98,7 +100,7 @@ const { Loading } = pkg
       id: "actions",
       buttonEditHandler: (rec) => {
         empresaForm = { ...rec }
-        Core.openModal(1)
+        ui.openModal(1)
       }
     }
   ]
@@ -111,7 +113,7 @@ const { Loading } = pkg
       <div class="flex items-center">
         <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new company." onClick={() => {
           empresaForm = { ss: 1, SmtpConfig: {}, CulquiConfig: {} } as ICompany
-          Core.openModal(1)
+          ui.openModal(1)
         }} />
       </div>
     </div>

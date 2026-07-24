@@ -1,9 +1,10 @@
 <script lang="ts">
 import { checkIsLogin } from '$core/security';
 import { onDestroy, onMount, untrack } from "svelte";
-import { closeAllModals, Core } from '$core/store.svelte';
+import { Core } from '$core/store.svelte';
 import { browser, Env, LocalStorage } from '$core/env';
-import { checksumBase64_6 } from '$libs/funcs/parsers';
+import { checksumBase64_6 } from '@genix/ui/utilities';
+import { useUI } from '@genix/ui';
 
   const headerMenuSelectedStorageKey = "headerMenuSelected"
 
@@ -17,6 +18,7 @@ import { checksumBase64_6 } from '$libs/funcs/parsers';
     fixedFullHeight?: boolean
     options?: TPageOption[]
   } = $props();
+  const ui = useUI()
 
   const isLogged = $derived(checkIsLogin() === 2)
   let hasRestoredPageOptionSelection = $state(false)
@@ -44,7 +46,7 @@ import { checksumBase64_6 } from '$libs/funcs/parsers';
   const restorePageOptionSelection = () => {
     if (!browser || !isLogged) { return }
 
-    Core.pageOptionSelected = pageOptions.length === 0
+    ui.state.pageOptionSelected = pageOptions.length === 0
       ? 1
       : getInitialSelectedOptionID(Env.getPathname(), pageOptions)
 
@@ -57,24 +59,24 @@ import { checksumBase64_6 } from '$libs/funcs/parsers';
   $effect(() => {
     untrack(() => {
       Env.useTopMinimalMenu = useTopMinimalMenu || false
-      Core.useTopMinimalMenu = useTopMinimalMenu || false
-      Core.pageTitle = title || ""
-      Core.pageOptions = pageOptions
+      ui.state.useTopMinimalMenu = useTopMinimalMenu || false
+      ui.state.pageTitle = title || ""
+      ui.state.pageOptions = pageOptions
     })
   })
 
   $effect(() => {
     if (!browser || !isLogged || pageOptions.length === 0 || !hasRestoredPageOptionSelection) { return }
 
-    if (!pageOptions.some((pageOption) => pageOption.id === Core.pageOptionSelected)) {
+    if (!pageOptions.some((pageOption) => pageOption.id === ui.state.pageOptionSelected)) {
       untrack(() => {
-        Core.pageOptionSelected = pageOptions[0].id
+        ui.state.pageOptionSelected = pageOptions[0].id
       })
       return
     }
 
     const pathnameHash = getRouteOptionHash(Env.getPathname())  
-    const hashSelected = `${pathnameHash}:${Core.pageOptionSelected}`
+    const hashSelected = `${pathnameHash}:${ui.state.pageOptionSelected}`
     
     const selectionsSaved = getSavedHeaderMenuSelections()
     const idx = selectionsSaved.findIndex(x => x.startsWith(pathnameHash + ":"))
@@ -90,13 +92,13 @@ import { checksumBase64_6 } from '$libs/funcs/parsers';
   })
 
   onDestroy(() => {
-    Core.openSideLayer(0)
-    closeAllModals()
+    ui.openSideLayer(0)
+    ui.closeAllModals()
   })
 
 </script>
 
-<div id="page-container" class="_1 px-10 pt-10 {containerCss}" class:useTopMinimalMenu={Core.useTopMinimalMenu}
+<div id="page-container" class="_1 px-10 pt-10 {containerCss}" class:useTopMinimalMenu={ui.state.useTopMinimalMenu}
 	class:fixed-full-height={fixedFullHeight}
 >
   {#if Core.isLoading === 0 && isLogged}

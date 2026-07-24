@@ -9,15 +9,15 @@ import TableGrid from '$components/vTable/TableGrid.svelte';
 import { accessHelper } from '$core/security';
 import { Core, setLanguaje, type ILanguaje } from '$core/store.svelte';
 import { Env } from '$core/env';
-import type { ICacheDebugRow } from '$libs/cache/cache-debug.types';
+import type { ICacheDebugRow } from '@genix/ui/cache';
 import type { ITableColumn } from '$components/vTable/types';
 import {
   listEnvironmentCacheRouteStats,
   makeDeltaCacheDatabaseName,
-} from '$libs/cache/delta-cache.idb';
-import { clearGroupCache, listGroupCacheStats } from '$libs/cache/group-cache.idb';
-import { clearCacheByIDs } from '$libs/cache/cache-by-ids.svelte';
-import { sendServiceMessage } from '$libs/sw-cache';
+} from '@genix/ui/cache';
+import { clearGroupCache, listGroupCacheStats } from '@genix/ui/cache';
+import { clearCacheByIDs } from '@genix/ui/cache';
+import { sendServiceMessage } from '@genix/ui/service-worker';
 import pkg from 'notiflix'
 const { Loading, Notify } = pkg;
 import { postOwnUser } from '$services/services/users.svelte';
@@ -29,6 +29,7 @@ import {
   getSelectedAgentModelHash,
   setSelectedAgentModelHash,
 } from '$core/agent/models.svelte';
+import { useUI } from '@genix/ui';
 
   const options = [
     { id: 1, name: "Usuario" }, { id: 2, name: "Config." }, { id: 3, name: "Data" }
@@ -38,6 +39,7 @@ import {
     { id: 1, name: "Español" }, { id: 2, name: "English" }
   ]
   let selected = $state(1)
+  const ui = useUI()
   const agentModelsService = new AgentModelsService()
   let agentModelForm = $state({ ModelHash: getSelectedAgentModelHash() })
   let cacheRows: ICacheDebugRow[] = $state([])
@@ -336,9 +338,9 @@ import {
     <button class="bx-blue min-w-120 px-12" aria-label="Ver logs de requests"
       onclick={() => { 
 	      // Close the global header dropdown first so the modal is the only visible overlay.
-	      Core.closeHeaderSettings()
+	      ui.state.headerSettingsOpen = false
 	      // Opening a globally mounted modal avoids losing it when the settings dropdown auto-closes.
-	      Core.openModal(HEADER_REQUEST_LOGS_MODAL_ID)
+	      ui.openModal(HEADER_REQUEST_LOGS_MODAL_ID)
       }}
     >
       <i class="icon-[fa--list]"></i>

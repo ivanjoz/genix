@@ -1,8 +1,9 @@
 <script lang="ts">
-import { Core, fetchOnCourse } from '$core/store.svelte';
+import { fetchOnCourse } from '$core/store.svelte';
 import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
 import HeaderConfig from '$domain/HeaderConfig.svelte';
 import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
+import { useUI } from '@genix/ui';
 
 	// Props
 	const {
@@ -10,6 +11,7 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 	}: {
 		showMenuButton?: boolean;
 	} = $props();
+	const ui = useUI();
 
 	// State
 	let showSettings = $state(false);
@@ -62,7 +64,7 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 		<button type="button"
 			class="md:hidden p-8 hover:bg-white/10 rounded-lg transition-colors mr-12 cursor-pointer"
 			aria-label="Toggle menu"
-			onclick={() => Core.toggleMobileMenu()}
+			onclick={() => { ui.state.mobileMenuOpen = !ui.state.mobileMenuOpen }}
 		>
 			<span class="text-white text-2xl">☰</span>
 		</button>
@@ -70,18 +72,18 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 
 	<!-- Title -->
 	<div class="flex-1 flex items-center">
-		{#if Core.pageOptions?.length > 0}
-			{#each Core.pageOptions as opt }
-			{@const selected = Core.pageOptionSelected == opt.id}
+		{#if ui.state.pageOptions?.length > 0}
+			{#each ui.state.pageOptions as opt }
+			{@const selected = ui.state.pageOptionSelected == opt.id}
 				<button class="_2" class:_3={selected} aria-label={opt.name}
 					onclick={() => {
-						Core.pageOptionSelected = opt.id
+						ui.state.pageOptionSelected = opt.id
 					}}>{opt.name}
 				</button>
 			{/each}
 		{:else}
 			<div class="h1 text-white text-lg font-semibold tracking-wide">
-				{Core.pageTitle}
+				{ui.state.pageTitle}
 			</div>
 		{/if}
 	</div>
@@ -99,7 +101,7 @@ import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 		<div class="relative">
 			<!-- Bind the floating settings layer state so nested actions can close it explicitly. -->
 			<ButtonLayer layerClass="md:w-640 md:h-460 px-8 py-6"
-				bind:isOpen={Core.headerSettingsOpen}
+				bind:isOpen={ui.state.headerSettingsOpen}
 				buttonClass="w-40 h-40 rounded-full bg-white/10 hover:bg-white/20
 					flex items-center justify-center transition-colors shadow-sm"
 				contentCss="px-4 pb-8 md:px-8 md:py-8"

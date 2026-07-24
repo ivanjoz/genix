@@ -1,11 +1,13 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
 import Input from '$components/form/Input.svelte';
 import Button from '$components/buttons/Button.svelte';
 import ColorPicker from '$components/form/ColorPicker.svelte';
 import Modal from '$components/layers/Modal.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
-import { closeAllModals, openModal, tr } from '$core/store.svelte';
+import { tr } from '$core/store.svelte';
 import { formatN } from '$libs/helpers';
 import { productoAtributos, type IProduct, type IProductPresentation } from "./products.svelte";
     import type { ITableColumn } from '$components/vTable/types';
@@ -41,7 +43,7 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
     { header: "...", css: "px-6 py-1", headerCss: "w-42",
       buttonEditHandler(e) {
         presentacionForm = {...e}
-        openModal(3)
+        ui.openModal(3)
       },
     }
   ]
@@ -61,7 +63,7 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
     } as IProductPresentation
     tempCounter--
     console.log("presentacionForm", presentacionForm)
-    openModal(3)
+    ui.openModal(3)
   }} />
 </div>
 
@@ -92,7 +94,7 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
       producto.Presentations.push(presentacionForm)
     }
     producto.Presentations = [...producto.Presentations]
-    closeAllModals()
+    ui.closeAllModals()
   }}
   onDelete={() => {
     const current = producto.Presentations.find(x => x.id === presentacionForm.id)
@@ -102,7 +104,7 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
       producto.Presentations = producto.Presentations.filter(x => x.id !== presentacionForm.id)
     }
     producto.Presentations = [...producto.Presentations]
-    closeAllModals()
+    ui.closeAllModals()
   }}
 >
   <div class="grid grid-cols-24 gap-10 p-4" aria-label="Product presentation form with attribute, name, price, and color">

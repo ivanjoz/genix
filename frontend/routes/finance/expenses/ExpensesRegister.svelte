@@ -14,6 +14,7 @@ import LoadingBar from '$components/misc/LoadingBar.svelte'
 import { onMount, untrack } from 'svelte'
 import { Core, tr } from '$core/store.svelte'
 import { Loading, Notify, formatN, formatTime } from '$libs/helpers'
+import { useUI } from '@genix/ui'
 import { CajasService, getCashBankMovementByID, type ICashBankMovement } from '../cash-banks/cajas.svelte'
 import {
   ExpensesService,
@@ -29,6 +30,7 @@ import {
 } from './expenses.svelte'
 
 const cajas = new CajasService()	
+const ui = useUI()
 
 // Localized option lists (re-resolve when the language switches).
 const categoryOptions = $derived(localizeOptions(expenseCategories))
@@ -143,7 +145,7 @@ const newExpense = () => {
   form = { ss: 1, ExpenseScheduledID: 0, CurrencyType: 1, CategoryID: 10, Date: todayUnixDay, DueDate: todayUnixDay } as IExpense
   paymentForm = {} as IExpensePayment
   layerView = 1
-  Core.openSideLayer(1)
+  ui.openSideLayer(1)
 }
 
 const openExpense = (expense: IExpense) => {
@@ -152,7 +154,7 @@ const openExpense = (expense: IExpense) => {
   paymentForm = { ExpenseID: expense.ID, IsFullyPaid: false, Date: todayUnixDay } as IExpensePayment
   // Keep the currently-selected tab (Detalle/Pago) when navigating between rows; both tabs
   // exist for any saved expense, so there's no invalid-tab case here.
-  Core.openSideLayer(1)
+  ui.openSideLayer(1)
 }
 
 // Save the expense detail fields (create or edit). Payment state (PaidAmount, ss) is server-maintained.
@@ -166,9 +168,9 @@ const saveExpense = async () => {
     const saved = await postExpense(form)
     // Merge the server-set fields (ID, ss, Created) onto the edited form for the row.
     const savedRow = { ...form, ...saved }
-    Core.openSideLayer(0)
+    ui.openSideLayer(0)
     // Clear the form so the list row deselects; defer on mobile so the slide-out isn't shown empty.
-    if (Core.deviceType === 3) setTimeout(() => { form = {} as IExpense }, 300)
+    if (ui.state.deviceType === 3) setTimeout(() => { form = {} as IExpense }, 300)
     else form = {} as IExpense
     // Patch the table locally from the result instead of refetching: update/insert the row
     // when it belongs to the active tab, or drop it if it doesn't.

@@ -1,7 +1,7 @@
 import { Env, IsClient, LocalStorage } from '$core/env';
 import { decrypt, Notify, throttle } from '$libs/helpers';
 import type { IUser, ILoginResult } from '$core/types/common';
-import { base64ToUInt16, checksum } from '$libs/funcs/parsers';
+import { base64ToUInt16, checksum } from '@genix/ui/utilities';
 import { getAccessEntriesForRoute } from '../routes/security/access-profiles/access-list-catalog';
 
 // Token refresh constants (all in seconds)
@@ -273,8 +273,6 @@ export class AccessHelper {
 
   canUserAccessRoute(routeValue?: string | null): boolean {
     const route = String(routeValue || '').trim() || '/'
-    const normalizedRoute = route.replace(/^\//, '')
-
     if (isPublicFrontendRoute(route)) { return true }
 
     const matchedAccessEntries = getAccessEntriesForRoute(route)

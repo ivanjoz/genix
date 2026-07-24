@@ -38,20 +38,20 @@ The build process merges both applications into a single static directory struct
     - `ecommerce/stores/`: Local Svelte state (cart, products).
 
 ### Shared Packages (Level-based Hierarchy)
-- `libs/`: (Level 0) Pure technical utilities. No business logic.
-    - `http.ts`: Axios-based client with interceptors.
-    - `unmarshall.ts`: JSON-to-class/type mapping logic.
-- `ui-components/`: (Level 1) "Dumb" UI atoms.
-    - Inputs, Buttons, Tables, Virtualized Lists, Modals.
-    - Reusable outside Genix; only `$core/env`, `$core/store.svelte`, `$libs`, and its own `$components/agent/registry` are allowed.
+- `libs/`: (Level 0) Thin Genix adapters and remaining technical utilities.
+    - `http.svelte.ts`: Binds `@genix/ui/http` to Genix auth, cache, and request reporting.
+    - `excel/excelBuilder.ts`: Binds `@genix/ui/excel` to the Genix WASM URL and translator.
+- `packages/genix-ui/`: (Level 1) reusable UI atoms in root-level source folders.
+    - Inputs, tables, modals, Excel, HTTP transport, caches, assets, and UI automation.
+    - Host capabilities are injected through `core/ui-runtime.ts`; package source must not import Genix aliases.
 - `core/`: (Level 2) Infrastructure and global state.
     - `store.svelte.ts`: Shared reactive state.
     - `env.ts`: Runtime environment variables.
 - `services/`: (Level 3) API communication layer.
     - Encapsulates backend endpoints into reusable functions.
 - `domain-components/`: (Level 4) Business-aware UI blocks for Admin.
-    - `AppHeader.svelte`, `SideMenu.svelte`, `HTMLEditor/`.
-    - Allowed to import from `libs`, `ui-components`, `core`, and `services`.
+    - `AppHeader.svelte` and thin host adapters for reusable package components.
+    - Allowed to import from `libs`, `@genix/ui`, `core`, and `services`.
 
 ---
 
@@ -61,11 +61,17 @@ Each page is a folder, for example  frontend/routes/logistica/purchase-orders
 In the case of page with multiple views (The view options are rendered in the top menu) each view must be a component like this
 
 ```svelte
+<script lang="ts">
+  import { useUI } from '@genix/ui'
+
+  const ui = useUI()
+</script>
+
 <Page title="Órdenes de Compra" options={pageOptions}>
-  {#if Core.pageOptionSelected === 1}
+  {#if ui.state.pageOptionSelected === 1}
     <PurchaseOrderCreate />
   {/if}
-  {#if Core.pageOptionSelected === 2}
+  {#if ui.state.pageOptionSelected === 2}
     <PurchaseOrderReport />
   {/if}
 </Page>
@@ -110,7 +116,7 @@ Strict rules prevent circular dependencies and ensure the `ecommerce` app remain
 Aliases are configured in `svelte.config.js` and `tsconfig.json`.
 - `$core`: `./core`
 - `$libs`: `./libs`
-- `$components`: `./ui-components`
+- `$components`: `./packages/genix-ui`
 - `$domain`: `./domain-components` (Admin Only)
 - `$services`: `./services`
 - `$ecommerce`: `./ecommerce`
@@ -131,9 +137,11 @@ Aliases are configured in `svelte.config.js` and `tsconfig.json`.
 
 ### Common Issues
 - **CORS/Proxy Errors**: Ensure both dev servers are running before starting the proxy.
-- **Circular Dependencies**: Occur when reusable packages import app infrastructure (`services`, `domain-components`, security, route modules). Move pure shared logic to `libs`; keep UI automation registration in `ui-components/agent`.
+- **Circular Dependencies**: Package source must not import app infrastructure
+  (`services`, `domain-components`, security, or route modules). Inject host capabilities
+  through `core/ui-runtime.ts`.
 - **Build Mismatch**: If the store doesn't reflect changes, rebuild specifically using `bun run build:store`.
 
 ### Best Practices
-- **Atomic UI**: Keep `ui-components` generic and reusable.
+- **Atomic UI**: Keep root-level source folders in `packages/genix-ui` generic and reusable.
 - **Hydration**: Use `browser` checks from `$app/environment` when accessing `localStorage` or `window`.

@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
   import type { ComponentAST, ColorPalette } from '$ecommerce/renderer/renderer-types';
 
   import type { Snippet } from 'svelte';
-  import { Env } from '$core/env';
-  import { openModal, tr } from '$core/store.svelte';
+  import { tr } from '$core/store.svelte';
   import ImagePickerModal from './ImagePickerModal.svelte';
 
   interface Props {
@@ -165,7 +166,7 @@
   // Current image source; drives the preview and toggles the remove/add overlay.
   const src = $derived(prop('src', ''));
   // Unique numeric id so each editor instance opens its own picker modal.
-  const pickerModalId = Env.getComponentID();
+  const pickerModalId = ui.nextComponentId();
 
   // Host-provided tools come first, then this editor's image tools. Each carries its
   // own icon html so the toolbar can render one unified row.
@@ -288,7 +289,7 @@
       </button>
     {:else}
       <!-- Empty: hover reveals an "Agregar" button that opens the image picker. -->
-      <button type="button" class="preview-add" onclick={() => openModal(pickerModalId)}>
+      <button type="button" class="preview-add" onclick={() => ui.openModal(pickerModalId)}>
         <i class="icon-[fa--plus]"></i><span>{tr('Add|Agregar')}</span>
       </button>
     {/if}

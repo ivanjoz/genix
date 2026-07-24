@@ -19,15 +19,15 @@ const isBuild = process.argv.includes('build');
 // Keep store chunks minified whenever Vite is running a build.
 const shouldMinifyBuildOutput = isBuild;
 
-// Build the FULL RPC service worker (libs/workers/service-worker.ts) into
+// Build the FULL package RPC service worker into
 // static/sw.js — the same worker the admin app uses. The storefront's data layer
-// (libs/sw-cache.ts) registers /sw.js at scope '/' and drives it over a
+// registers /sw.js at scope '/' and drives it over a
 // MessageChannel RPC ("Action 3" = delta-cache fetch); a worker without that
 // `message` handler makes every product fetch time out. SvelteKit's build copies
 // static/ verbatim, so emitting here covers both `vite dev` and the prerender.
 const publicDir = path.resolve(__dirname, 'static');
 const serviceWorkerConfig: BuildOptions = {
-  entryPoints: [path.resolve(frontendDir, 'libs/workers/service-worker.ts')],
+  entryPoints: [path.resolve(frontendDir, 'packages/genix-ui/service-worker/service-worker.ts')],
   format: 'esm',
   outfile: path.resolve(publicDir, 'sw.js'),
   bundle: true,
@@ -51,7 +51,7 @@ const serviceWorkerConfig: BuildOptions = {
             '$ecommerce': 'webpage',
             '$routes': 'routes',
             '$domain': 'domain-components',
-            '$components': 'ui-components',
+            '$components': 'packages/genix-ui',
             '$services': 'services',
             '$libs': 'libs',
           }[alias];
@@ -100,10 +100,11 @@ const serviceWorkerPlugin = () => ({
         .catch((err) => console.error('[Store SW] Build failed:', err));
     };
     buildSw();
-    const swSource = path.resolve(frontendDir, 'libs/workers/service-worker.ts');
-    server.watcher.add(swSource);
+    const swSourceDir = path.resolve(frontendDir, 'packages/genix-ui/service-worker');
+    const cacheSourceDir = path.resolve(frontendDir, 'packages/genix-ui/cache');
+    server.watcher.add([swSourceDir, cacheSourceDir]);
     server.watcher.on('change', async (filePath: string) => {
-      if (filePath === swSource) await buildSw();
+      if (filePath.startsWith(swSourceDir) || filePath.startsWith(cacheSourceDir)) await buildSw();
     });
   },
 });
@@ -117,7 +118,7 @@ const makeDevCssModuleClass = (name: string, filename: string) => {
 
 // The per-company storefront prerender (scripts/prerender.mjs) sets VITE_COMPANY_ID.
 // In that build only, swap DOMPurify (~50 KB) for a tiny stub: it's reached solely from
-// the UI agent's getPageContent() (ui-components/agent/registry.ts), a code path the
+// the UI agent's getPageContent() (genix-ui/agent/registry.ts), a code path the
 // public storefront never runs. Admin/dev builds keep the real library.
 const isStorefrontPrerender = !!process.env.VITE_COMPANY_ID;
 

@@ -9,6 +9,7 @@ import SearchSelect from '$components/form/SearchSelect.svelte'
 import DateInput from '$components/form/DateInput.svelte'
 import { Core, tr } from '$core/store.svelte'
 import { Loading, Notify, formatN, formatTime } from '$libs/helpers'
+import { useUI } from '@genix/ui'
 import {
   ExpensesScheduledService,
   postExpenseScheduled,
@@ -25,6 +26,7 @@ import {
 } from './expenses.svelte'
 
 const schedules = new ExpensesScheduledService(true)
+const ui = useUI()
 
 const categoryOptions = $derived(localizeOptions(expenseCategories))
 const currencyOptions = $derived(localizeOptions(currencyTypes))
@@ -50,7 +52,7 @@ const newSchedule = () => {
   cadenceForm = { cadence: 2, day: 1 }
   periods = []
   layerView = 1
-  Core.openSideLayer(1)
+  ui.openSideLayer(1)
 }
 
 const openSchedule = async (schedule: IExpenseScheduled) => {
@@ -59,7 +61,7 @@ const openSchedule = async (schedule: IExpenseScheduled) => {
   cadenceForm = { cadence: cadence || 2, day: day || 1 }
   periods = []
   layerView = 1
-  Core.openSideLayer(1)
+  ui.openSideLayer(1)
   // Lazily materialize and load this schedule's periods (see EXPENSES.md §5).
   try {
     periods = await getSchedulePeriods(schedule.ID)
@@ -88,9 +90,9 @@ const saveSchedule = async () => {
       form.ID = saved.ID
       schedules.addSavedRecords({ ...form })
     }
-    Core.openSideLayer(0)
+    ui.openSideLayer(0)
     // Clear the form so the list row deselects; defer on mobile so the slide-out isn't shown empty.
-    if (Core.deviceType === 3) setTimeout(() => { form = {} as IExpenseScheduled; periods = [] }, 300)
+    if (ui.state.deviceType === 3) setTimeout(() => { form = {} as IExpenseScheduled; periods = [] }, 300)
     else { form = {} as IExpenseScheduled; periods = [] }
   } catch (error) {
     Notify.failure(error as string)

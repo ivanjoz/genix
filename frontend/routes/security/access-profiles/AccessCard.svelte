@@ -1,7 +1,8 @@
 <script lang="ts">
 import { arrayToMapN } from '$libs/helpers';
-import { Core } from '$core/store.svelte';
+import { useUI } from '@genix/ui';
   import { accesoAcciones, type IAccess, type IProfile } from "./access-profiles.svelte"
+  const ui = useUI()
 
   const accesoAccionesMap = arrayToMapN(accesoAcciones, 'id')
 
@@ -25,7 +26,7 @@ import { Core } from '$core/store.svelte';
   const cardIsSelected = $derived((acciones?.length || 0) > 0)
 
   function handleCardClick(ev: MouseEvent) {
-    if (Core.deviceType === 1 || !perfilForm) { return }
+    if (ui.state.deviceType === 1 || !perfilForm) { return }
     ev.stopPropagation()
     const currentAcciones = perfilForm.accesosMap.get(acceso.id) || []
     if (currentAcciones.length > 0) {
@@ -65,7 +66,7 @@ import { Core } from '$core/store.svelte';
 
   const cN = $derived.by(() => {
     let className = "acceso-card"
-    if (Core.deviceType > 1) { className += " mobile" }
+    if (ui.state.deviceType > 1) { className += " mobile" }
     return className
   })
 </script>
@@ -94,7 +95,7 @@ import { Core } from '$core/store.svelte';
     {/if}
   </div>
 
-  {#if Core.deviceType > 1}
+  {#if ui.state.deviceType > 1}
     <div class="line-1 absolute" style:background-color={accionColor}></div>
   {/if}
 

@@ -4,7 +4,7 @@
 		getRecordWithCache,
 		type IMinimalRecord,
 		type IRecordRef,
-	} from "$libs/cache/cache-by-ids.svelte";
+	} from "@genix/ui/cache";
 	import { untrack } from "svelte";
 	import type { IProduct } from "$ecommerce/services/products.svelte";
 	import ImageHash from "$components/files/Imagehash.svelte";

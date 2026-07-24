@@ -12,6 +12,7 @@ import Button from '$components/buttons/Button.svelte';
 import { Core, tr } from '$core/store.svelte';
 import T from '$components/misc/T.svelte';
 import AlmacenLayoutEditor from './WarehouseLayoutEditor.svelte';
+import { useUI } from '@genix/ui';
 
 import {
     WarehousesService,
@@ -24,6 +25,7 @@ import {
   } from "./branches-warehouses.svelte"
 
   const almacenesService = new WarehousesService()
+  const ui = useUI()
   const paisCiudadesService = new CountryCitiesService(true)
 
   const pageOptions = [{ id: 1, name: "Branches|Sedes" }, { id: 2, name: "Warehouses|Almacenes" }]
@@ -62,7 +64,7 @@ import {
     }
 
     almacenesService.Sedes = sedes_
-    Core.closeModal(1)
+    ui.closeModal(1)
     Loading.remove()
   }
 
@@ -114,8 +116,8 @@ import {
     }
 
     almacenesService.Almacenes = almacenes_
-    Core.closeModal(2)
-    Core.hideSideLayer()
+    ui.closeModal(2)
+    ui.openSideLayer(0)
     Loading.remove()
   }
 
@@ -156,7 +158,7 @@ import {
       css: "text-center px-6",
       buttonEditHandler: (e) => {
         sedeForm = {...e}
-        Core.openModal(1)
+        ui.openModal(1)
       }
     }
   ]
@@ -203,7 +205,7 @@ import {
       css: "text-center px-6",
       buttonEditHandler: (e) => {
         almacenForm = JSON.parse(JSON.stringify(e))
-        Core.openModal(2)
+        ui.openModal(2)
       }
     }
   ]
@@ -237,18 +239,18 @@ import {
       }
     }
     console.log("ejecutando open side")
-    Core.openSideLayer(1)
+    ui.openSideLayer(1)
   }
 </script>
 
 <Page title="Branches & Warehouses|Sedes & Almacenes" options={pageOptions}>
-  {#if Core.pageOptionSelected === 1 /* Sedes */}
+  {#if ui.state.pageOptionSelected === 1 /* Sedes */}
     <div class="flex items-center justify-between mb-6" aria-label="Sedes list toolbar with search filter and create button">
       <FilterInput bind:value={filterText} css="mr-16 w-256" />
       <div class="flex items-center">
         <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new business location (sede)." onClick={() => {
           sedeForm = { ss: 1 } as ISite
-          Core.openModal(1)
+          ui.openModal(1)
         }} />
       </div>
     </div>
@@ -259,14 +261,14 @@ import {
     />
   {/if}
 
-  {#if Core.pageOptionSelected === 2 /* Almacenes */}
+  {#if ui.state.pageOptionSelected === 2 /* Almacenes */}
     <div class="w-full">
       <div class="flex items-center justify-between mb-6" aria-label="Almacenes list toolbar with search filter and create button">
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
           <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new warehouse linked to a sede." onClick={() => {
             almacenForm = { ID: 0, SiteID: 0, Name: "", Description: "", ss: 1, upd: 0, Layout: [] }
-            Core.openModal(2)
+            ui.openModal(2)
           }} />
         </div>
       </div>

@@ -2,7 +2,7 @@
 // prerender build (VITE_COMPANY_ID set) — see webpage/vite.config.ts.
 //
 // DOMPurify is reached exclusively from `getPageContent()` in
-// frontend/ui-components/agent/registry.ts, which runs only when the UI automation
+// packages/genix-ui/agent/registry.ts, which runs only when the UI automation
 // agent is active (window.ENABLE_UI_AGENT === 1 or a local dev host). The public
 // storefront never activates the agent, so this code path is unreachable there and
 // the real library is dead weight on the critical path. This stub keeps the dynamic

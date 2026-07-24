@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
 import ImageUploader, { type ImageSource } from '$components/files/ImageUploader.svelte';
 import Input from '$components/form/Input.svelte';
 import Modal from '$components/layers/Modal.svelte';
-import { closeAllModals, closeModal, openModal, tr } from '$core/store.svelte';
+import { tr } from '$core/store.svelte';
 import T from '$components/misc/T.svelte';
 import { Loading, Notify } from '$libs/helpers';
 import { type ISharedListRecord, type SharedListsService } from "$services/business/shared-lists.svelte";
@@ -87,7 +89,7 @@ import { type ISharedListRecord, type SharedListsService } from "$services/busin
     listas.ListaRecordsMap.set(origin, [...newCategorias])
     listas.ListaRecordsMap = new Map(listas.ListaRecordsMap)
     pendingImageConfirms.clear()
-    closeAllModals()
+    ui.closeAllModals()
     Loading.remove()
   }
 
@@ -95,7 +97,7 @@ import { type ISharedListRecord, type SharedListsService } from "$services/busin
     form = { ListID: origin as number } as ISharedListRecord
     images = [{},{},{}] as ImageSource[]
     pendingImageConfirms.clear()
-    openModal(2)
+    ui.openModal(2)
   }
 
   $effect(() => {
@@ -111,7 +113,7 @@ import { type ISharedListRecord, type SharedListsService } from "$services/busin
     })
     pendingImageConfirms.clear()
     console.log("categoría getted:", $state.snapshot(form),$state.snapshot(images))
-    openModal(2)
+    ui.openModal(2)
   }
 
 </script>
@@ -141,7 +143,7 @@ import { type ISharedListRecord, type SharedListsService } from "$services/busin
 <Modal title="CATEGORY|CATEGORÍA" id={2} size={6}
   onClose={() => {
     // form = {} as ISharedListRecord
-    closeModal(2)
+    ui.closeModal(2)
   }}
   onSave={() => { onSave()  }}
   onDelete={form.ID > 0 ? () => {

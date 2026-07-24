@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
 import Checkbox from '$components/form/Checkbox.svelte';
 import Layer from '$components/layers/Layer.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
@@ -8,7 +10,7 @@ import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import { Core, tr } from '$core/store.svelte';
 import T from '$components/misc/T.svelte';
-import { getStaticRecordsByID } from '$libs/cache/cache-by-ids.svelte';
+import { getStaticRecordsByID } from '@genix/ui/cache';
 import { formatN, Loading, Notify } from '$libs/helpers';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
@@ -299,7 +301,7 @@ const openDetailLayer = (
     ], 'serial')
     addPendingSerialNumberRow()
     void loadLotsForSerialNumberLayer(selectedSerialNumbers)
-    Core.openSideLayer(2)
+    ui.openSideLayer(2)
     return
   }
 
@@ -310,7 +312,7 @@ const openDetailLayer = (
   ], 'lot')
   addPendingLotRow()
   void loadLotsForLotLayer(selectedLots)
-  Core.openSideLayer(3)
+  ui.openSideLayer(3)
 }
 
 const closeSerialNumberLayer = () => {

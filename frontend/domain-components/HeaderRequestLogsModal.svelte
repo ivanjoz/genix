@@ -4,14 +4,15 @@ export const HEADER_REQUEST_LOGS_MODAL_ID = 9201
 </script>
 
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
 import { browser } from '$app/environment';
 import { onMount } from 'svelte';
 import Modal from '$components/layers/Modal.svelte';
 import TableGrid from '$components/vTable/TableGrid.svelte';
 import { Env } from '$core/env';
-import { openModals } from '$core/store.svelte';
-import { listRecentRequestLogRows, makeDeltaCacheDatabaseName } from '$libs/cache/delta-cache.idb';
-import type { IRequestLogRow } from '$libs/cache/delta-cache.types';
+import { listRecentRequestLogRows, makeDeltaCacheDatabaseName } from '@genix/ui/cache';
+import type { IRequestLogRow } from '@genix/ui/cache';
 import { formatN, formatTime } from '$libs/helpers';
 import type { ITableColumn } from '$components/vTable/types';
 import pkg from 'notiflix'
@@ -140,7 +141,7 @@ const loadRecentRequestLogs = async (forceReload = false) => {
 }
 
 $effect(() => {
-  if (!openModals.includes(HEADER_REQUEST_LOGS_MODAL_ID)) { return }
+  if (!ui.state.openModalIds.includes(HEADER_REQUEST_LOGS_MODAL_ID)) { return }
   loadRecentRequestLogs()
 })
 

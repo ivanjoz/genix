@@ -1,11 +1,12 @@
 <script lang="ts">
   import { browser } from "$app/environment";
-  import { Core } from '$core/store.svelte';
+  import { useUI } from '@genix/ui';
   import CartMenu from '$ecommerce/components/CartMenu.svelte';
   import SearchBar from '$ecommerce/components/SearchBar.svelte';
   import UsuarioMenu from '$ecommerce/components/UsuarioMenu.svelte';
   import { onMount } from "svelte";
   import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
+  const ui = useUI();
 
   // State for mobile menu
   let mobileMenuOpen = $state(false);
@@ -78,7 +79,7 @@
     ev.stopPropagation()
     if (document.startViewTransition) {
       document.startViewTransition(() => {
-        Core.mobileMenuOpen = 1
+        ui.state.mobileMenuOpen = true
       })
     }
   }}>

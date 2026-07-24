@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
   import Layer from '$components/layers/Layer.svelte'
   import Input from '$components/form/Input.svelte'
   import SearchSelect from '$components/form/SearchSelect.svelte'
@@ -75,7 +77,7 @@
 
   function openCreateClientProviderLayer() {
     resetEntityForm()
-    Core.openSideLayer(11)
+    ui.openSideLayer(11)
   }
 
   function openEditClientProviderLayer(selectedClientProvider: IClientProvider) {
@@ -84,7 +86,7 @@
       ...selectedClientProvider,
       Type: clientProviderType,
     }
-    Core.openSideLayer(11)
+    ui.openSideLayer(11)
   }
 
   async function saveClientProvider() {
@@ -151,7 +153,7 @@
 
       clientProviderService.recordsMap.set(savedClientProvider.ID, savedClientProvider)
 
-      Core.hideSideLayer()
+      ui.openSideLayer(0)
       resetEntityForm()
       Notify.success(tr(`${tr(layerTitleSingular)} saved successfully.|${tr(layerTitleSingular)} guardado correctamente.`))
     } catch (saveError) {

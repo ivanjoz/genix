@@ -11,7 +11,7 @@ import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
 import FilterInput from '$components/form/FilterInput.svelte';
 import KeyValueStrip from '$components/misc/KeyValueStrip.svelte';
 import Input from '$components/form/Input.svelte';
-import { getStaticRecordsByID } from '$libs/cache/cache-by-ids.svelte';
+import { getStaticRecordsByID } from '@genix/ui/cache';
 import { SvelteMap } from 'svelte/reactivity';
   import { WarehousesService } from "../../business/branches-warehouses/branches-warehouses.svelte"
   import { ProductsService } from "../../business/products/products.svelte"

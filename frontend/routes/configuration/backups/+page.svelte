@@ -10,7 +10,7 @@ import T from '$components/misc/T.svelte';
   import pkg from 'notiflix'
 const { Loading } = pkg;
   import { BackupsService, createBackup, restoreBackup, type IBackup } from "./backups.svelte";
-import { sendServiceMessage } from '$libs/sw-cache';
+import { sendServiceMessage } from '@genix/ui/service-worker';
 import { Env } from '$core/env';
 
   const backupsService = new BackupsService()

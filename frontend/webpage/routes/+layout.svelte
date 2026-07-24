@@ -11,7 +11,10 @@
   import { preloadProductSearch } from "$core/product-search/product-search-runtime";
   import { getProductEcommerceData } from '$ecommerce/services/products.svelte';
   import FloatingCart from "$ecommerce/components/FloatingCart.svelte";
+  import { provideUi } from '@genix/ui';
+  import { createGenixUiRuntime } from '$core/ui-runtime';
   let { children } = $props();
+  provideUi(createGenixUiRuntime());
 
   onMount(() => {
     // Kick off the single shared catalog load (fast main-thread first paint, then background

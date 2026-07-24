@@ -13,13 +13,14 @@ import type { ITableColumn } from '$components/vTable/types'
 import { Core, tr } from '$core/store.svelte'
 import T from '$components/misc/T.svelte'
 import { ConfirmWarn, formatN, formatTime, Loading, Notify } from '$libs/helpers'
-import { saveRouteRecord, setRouteRecordQueryParam } from '$libs/cache/route-data'
+import { saveRouteRecord, setRouteRecordQueryParam } from '@genix/ui/cache'
 import { CajasService } from '$routes/finance/cash-banks/cajas.svelte'
 import { ClientProviderService, ClientProviderType } from '$routes/business/customers/customers.svelte'
 import { ProductsService, type IProduct } from '$routes/business/products/products.svelte'
 import { WarehousesService } from '$routes/business/branches-warehouses/branches-warehouses.svelte'
 import { onDestroy } from 'svelte'
 import PurchaseOrderForm from './PurchaseOrderForm.svelte'
+import { useUI } from '@genix/ui'
 import {
   PurchaseOrderAction,
   PurchaseOrderEditableStatuses,
@@ -32,6 +33,7 @@ import {
 } from './purchase_order.svelte'
 
 const providersService = new ClientProviderService(ClientProviderType.PROVIDER, true)
+const ui = useUI()
 const productosService = new ProductsService(true)
 const purchaseOrdersService = new PurchaseOrdersService(PurchaseOrderStatus.PENDING, true)
 // Warehouses are loaded lazily because the report only needs them when the edit modal is opened.
@@ -160,7 +162,7 @@ const openPurchaseOrderDetailLayer = async (purchaseOrder: IPurchaseOrder) => {
   selectedPurchaseOrder = purchaseOrder
   detailRows = buildDetailRows(purchaseOrder)
   isDetailLayerLoading = true
-  Core.openSideLayer(21)
+  ui.openSideLayer(21)
 
   const productIDs = [...new Set((purchaseOrder.DetailProductIDs || []).map((productID) => Number(productID || 0)).filter((productID) => productID > 0))]
   console.debug('[purchase-orders-report] detail layer open', {
@@ -188,8 +190,8 @@ const openPurchaseOrderDetailLayer = async (purchaseOrder: IPurchaseOrder) => {
 
 onDestroy(() => {
   // The page swaps report/create views by unmounting this component, so its side layer must not survive the tab change.
-  if (Core.showSideLayer === 21) {
-    Core.hideSideLayer()
+  if (ui.state.sideLayerId === 21) {
+    ui.openSideLayer(0)
   }
 })
 
@@ -203,7 +205,7 @@ const openEditPurchaseOrderModal = () => {
   }
   
   editForm = {...selectedPurchaseOrder}
-  Core.openModal(EDIT_PURCHASE_ORDER_MODAL_ID)
+  ui.openModal(EDIT_PURCHASE_ORDER_MODAL_ID)
 }
 
 // Persists the edited fields via PUT action=2; backend re-validates state and ignores protected fields.
@@ -221,7 +223,7 @@ const saveEditPurchaseOrder = async () => {
     Object.assign(selectedRecord as IPurchaseOrder, editForm)
     
     Notify.success(`La orden Nº ${editForm.ID} fue actualizada.`)
-    Core.closeModal(EDIT_PURCHASE_ORDER_MODAL_ID)
+    ui.closeModal(EDIT_PURCHASE_ORDER_MODAL_ID)
     rowRerender?.()
   } catch (error) {
     console.error('[purchase-orders-report] edit error', error)
@@ -249,7 +251,7 @@ const openPayPurchaseOrderModal = () => {
     CashBankID: cajasService.Cajas[0]?.ID || 0,
     Amount: 0,
   }
-  Core.openModal(PAY_PURCHASE_ORDER_MODAL_ID)
+  ui.openModal(PAY_PURCHASE_ORDER_MODAL_ID)
 }
 
 // Submits the payment: backend creates the caja movimiento (Tipo=6) and decrements DebtAmount atomically.
@@ -284,7 +286,7 @@ const submitPurchaseOrderPayment = async () => {
 
     rowRerender?.()
     Notify.success(`Pago de ${formatN(payForm.Amount / 100, 2)} registrado en la orden Nº ${orderID}.`)
-    Core.closeModal(PAY_PURCHASE_ORDER_MODAL_ID)
+    ui.closeModal(PAY_PURCHASE_ORDER_MODAL_ID)
   } catch (error) {
     console.error('[purchase-orders-report] pay error', { orderID, error })
   } finally {
@@ -312,7 +314,7 @@ const generarCopiaPurchaseOrder = async () => {
       detailCount: snapshot.DetailProductIDs?.length || 0,
     })
 
-    Core.hideSideLayer()
+    ui.openSideLayer(0)
     selectedPurchaseOrder = null
     detailRows = []
 
@@ -320,7 +322,7 @@ const generarCopiaPurchaseOrder = async () => {
     await setRouteRecordQueryParam('rec', routeDataKey)
     console.debug('[generar-copia] URL updated', { href: window.location.href })
 
-    Core.pageOptionSelected = 1
+    ui.state.pageOptionSelected = 1
     console.debug('[generar-copia] switched to "Órdenes" tab')
   } catch (error) {
     console.error('[generar-copia] error', { orderID, error })

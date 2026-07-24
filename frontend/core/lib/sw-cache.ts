@@ -1,1 +1,0 @@
-$libs/workers/service-worker

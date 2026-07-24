@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
 import Button from '$components/buttons/Button.svelte';
 import FilterInput from '$components/form/FilterInput.svelte';
 import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
@@ -57,7 +59,7 @@ import {
   const loadHtmlEditor = async () => {
     if (!htmlEditorComponentPromise) {
       console.debug('[products] Loading rich text editor runtime');
-      htmlEditorComponentPromise = import('$domain/HTMLEditor/HTMLEditor.svelte')
+      htmlEditorComponentPromise = import('@genix/ui/editor')
         .then((module) => module.default);
     }
     HtmlEditorComponent = await htmlEditorComponentPromise;
@@ -317,7 +319,7 @@ import {
     importExcelErrors = [];
     isImportExcelProcessing = false;
     listas.clearTempRecords();
-    Core.openModal(IMPORT_PRODUCTOS_MODAL_ID);
+    ui.openModal(IMPORT_PRODUCTOS_MODAL_ID);
   };
 
   const onImportExcelFileChange = async (file?: File, isRemoved?: boolean) => {
@@ -426,7 +428,7 @@ import {
       
       Notify.success(tr("Import completed successfully.|Importación completada correctamente."));
       importExcelRowsPreview = [];
-      Core.closeModal(IMPORT_PRODUCTOS_MODAL_ID);
+      ui.closeModal(IMPORT_PRODUCTOS_MODAL_ID);
       productoForm = {} as IProduct
     } catch (error) {
       console.error("[productos-import] save import failed:", error);
@@ -498,7 +500,7 @@ import {
     pendingMainImageConfirm = undefined;
     Loading.remove();
     productoForm = {} as IProduct
-    Core.openSideLayer(0);
+    ui.openSideLayer(0);
   };
 
   $effect(() => {
@@ -546,7 +548,7 @@ import {
       ]}
       useMobileGrid={true}
       onSelect={(e) => {
-        Core.openSideLayer(0);
+        ui.openSideLayer(0);
         productoForm = { ID: 0 } as IProduct;
         view = e[0] as number;
       }}
@@ -584,7 +586,7 @@ import {
           MarcasLayer?.newRecord();
         } else {
        		productoForm = { ss: 1 } as IProduct
-          Core.openSideLayer(1);
+          ui.openSideLayer(1);
         }
       }}
     />
@@ -606,7 +608,7 @@ import {
           productoForm = { ...e };
           productoForm.CategoryIDs = [...(e.CategoryIDs || [])];
           productoForm.Properties = [...(e.Properties || [])];
-          Core.openSideLayer(1);
+          ui.openSideLayer(1);
         }}
         mobileCardCss="mb-2"
       />

@@ -62,7 +62,7 @@ const config = {
 			$ecommerce: './',
 			$stores: './stores',
 			$routes: './routes',
-			$components: '../ui-components',
+			$components: '../packages/genix-ui',
 			$core: '../core',
 			$services: '../services',
 			$libs: '../libs',

@@ -78,21 +78,21 @@
 - Ejecutar corte directo en una sola iteración, validar `empresa-parametros`, y limpiar legacy en el mismo PR.
 
 
-Implementado con **forma 1**: progreso por `ReadableStream` en cliente, sin listener `message`.
+Implementado con transporte híbrido:
 
 Qué quedó:
-- `sendServiceMessage` ahora hace request/response directo y parsea el body por chunks.
+- Acción 3 usa `MessageChannel` con `ack` inmediato y resultado estructurado.
+- Las demás acciones usan request/response directo y parsean el body por chunks.
 - En cada chunk recibido, si `accion === 3`, llama `setFetchProgress(value.length)`.
-- Se eliminó la dependencia del canal `postMessage` para resolver requests de cache.
 - El SW `/_sw_` devuelve el payload real en el `Response` JSON.
 
 Archivos:
-- [frontend/libs/sw-cache.ts](/home/ivanjoz/projects/genix/frontend/libs/sw-cache.ts:36)
-- [frontend/libs/workers/service-worker-cache.ts](/home/ivanjoz/projects/genix/frontend/libs/workers/service-worker-cache.ts:161)
-- [frontend/libs/workers/service-worker.ts](/home/ivanjoz/projects/genix/frontend/libs/workers/service-worker.ts:67)
+- `packages/genix-ui/service-worker/client.ts`
+- `packages/genix-ui/service-worker/service-worker-cache.ts`
+- `packages/genix-ui/service-worker/service-worker.ts`
 
 Cómo se emite progreso ahora:
-1. Cliente llama `fetch('/_sw_?...')`.
+1. Cliente llama `fetch('/_sw_?...')` para acciones distintas de 3.
 2. Cliente lee `response.body.getReader()`.
 3. Por cada chunk: `setFetchProgress(chunk.length)`.
 4. Al finalizar, parsea JSON y cierra `fetchEvent(reqID, 0)`.

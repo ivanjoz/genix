@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
   import Layer from '$components/layers/Layer.svelte';
   import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
   import SearchSelect from '$components/form/SearchSelect.svelte';
@@ -404,7 +406,7 @@
     // Keep selectors prefilled with the order values to reduce manual clicks.
     resetSaleOrderActionForms(saleOrder);
     saleOrderDetailsView = 1;
-    Core.openSideLayer(10);
+    ui.openSideLayer(10);
   }
 
   function onClickPagar() {

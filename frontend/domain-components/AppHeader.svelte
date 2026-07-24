@@ -1,7 +1,6 @@
 <script lang="ts">
-import { Core, fetchOnCourse } from '$core/store.svelte';
+import { fetchOnCourse } from '$core/store.svelte';
 import T from '$components/misc/T.svelte';
-import { Env } from '$core/env';
 import { Agent } from '$components/agent/registry';
 import AgentChat from '$core/agent/AgentChat.svelte';
 import { isLogged } from '$core/security';
@@ -9,6 +8,7 @@ import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
 import HeaderConfig from '$domain/HeaderConfig.svelte';
 import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 import NotificationsButton from '$domain/NotificationsButton.svelte';
+import { useUI } from '@genix/ui';
 
 	// Props
 	const {
@@ -16,11 +16,12 @@ import NotificationsButton from '$domain/NotificationsButton.svelte';
 	}: {
 		showMenuButton?: boolean;
 	} = $props();
+	const ui = useUI();
 
-	const pageViewsID = Env.getComponentID();
+	const pageViewsID = ui.nextComponentId();
 
 	$effect(() => {
-		if (!Core.pageOptions?.length) { return; }
+		if (!ui.state.pageOptions?.length) { return; }
 		return Agent.register({
 			id: pageViewsID,
 			type: 'PageViews',
@@ -32,8 +33,8 @@ import NotificationsButton from '$domain/NotificationsButton.svelte';
 				const raw = String(ids[0]);
 				const colon = raw.lastIndexOf(':');
 				const optID = Number(colon >= 0 ? raw.slice(colon + 1) : raw);
-				const match = Core.pageOptions.find((opt) => opt.id === optID);
-				if (match) { Core.pageOptionSelected = match.id; }
+				const match = ui.state.pageOptions.find((opt) => opt.id === optID);
+				if (match) { ui.state.pageOptionSelected = match.id; }
 			},
 		});
 	});
@@ -75,11 +76,11 @@ import NotificationsButton from '$domain/NotificationsButton.svelte';
 
 <header	class="_1 fixed top-0 left-0 right-0 bg-gradient-to-r from-indigo-600 to-indigo-700
 	shadow-md z-250 flex items-center px-6 md:px-16"
-	class:useTopMinimalMenu={Core.useTopMinimalMenu}
+	class:useTopMinimalMenu={ui.state.useTopMinimalMenu}
 >
 
 	<!-- Logo Section (Desktop) -->
-	{#if !Core.useTopMinimalMenu}
+	{#if !ui.state.useTopMinimalMenu}
 		<div class="hidden md:flex items-center justify-center h-full w-56 mr-12">
 			<div class="h-40 w-40 bg-black/20 rounded-lg flex items-center justify-center">
 				<img src="/images/genix_logo4.svg" alt="Genix Logo" class="w-full h-full p-1" />
@@ -92,7 +93,7 @@ import NotificationsButton from '$domain/NotificationsButton.svelte';
 		<button type="button"
 			class="md:hidden p-8 hover:bg-white/10 rounded-lg transition-colors mr-12 cursor-pointer"
 			aria-label="Toggle menu"
-			onclick={() => Core.toggleMobileMenu()}
+			onclick={() => { ui.state.mobileMenuOpen = !ui.state.mobileMenuOpen }}
 		>
 			<span class="text-white text-2xl">☰</span>
 		</button>
@@ -101,22 +102,22 @@ import NotificationsButton from '$domain/NotificationsButton.svelte';
 	<!-- Title — reserve a stable slot so the agent pill's position doesn't
 	     jump as tabs come and go. -->
 	<div class="flex items-center min-w-[200px] shrink-0"
-		data-id={Core.pageOptions?.length > 0 ? `PageViews:${pageViewsID}` : undefined}
+		data-id={ui.state.pageOptions?.length > 0 ? `PageViews:${pageViewsID}` : undefined}
 	>
-		{#if Core.pageOptions?.length > 0}
-			{#each Core.pageOptions as opt }
-			{@const selected = Core.pageOptionSelected == opt.id}
+		{#if ui.state.pageOptions?.length > 0}
+			{#each ui.state.pageOptions as opt }
+			{@const selected = ui.state.pageOptionSelected == opt.id}
 				<button class="_2" class:_3={selected} aria-label={opt.name}
 					data-id="Option:{pageViewsID}:{opt.id}"
 					data-selected={selected ? "true" : undefined}
 					onclick={() => {
-						Core.pageOptionSelected = opt.id
+						ui.state.pageOptionSelected = opt.id
 					}}><T text={opt.name} />
 				</button>
 			{/each}
 		{:else}
 			<div class="h1 text-white text-lg font-semibold tracking-wide truncate">
-				<T text={Core.pageTitle} />
+				<T text={ui.state.pageTitle} />
 			</div>
 		{/if}
 	</div>
@@ -149,7 +150,7 @@ import NotificationsButton from '$domain/NotificationsButton.svelte';
 		<div class="relative">
 			<!-- Bind the floating settings layer state so nested actions can close it explicitly. -->
 			<ButtonLayer layerClass="md:w-640 md:h-460 px-8 py-6"
-				bind:isOpen={Core.headerSettingsOpen}
+				bind:isOpen={ui.state.headerSettingsOpen}
 				buttonClass="w-40 h-40 rounded-full bg-white/10 hover:bg-white/20
 					flex items-center justify-center transition-colors shadow-sm"
 				contentCss="px-4 pb-8 md:px-8 md:py-8"

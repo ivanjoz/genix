@@ -8,7 +8,6 @@ import { Loading, formatN, wordInclude } from '$libs/helpers';
 import Button from '$components/buttons/Button.svelte';
 
 import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
-import { Core } from '$core/store.svelte';
 import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
 import { CajasService } from '$routes/finance/cash-banks/cajas.svelte';
 import { getWarehouseProductStock, type IProductStock, type IProductStockDetail } from '$routes/logistics/products-stock/stock-movement';
@@ -22,6 +21,7 @@ import type { IWarehouse } from "../../business/branches-warehouses/branches-war
 import { WarehousesService } from "../../business/branches-warehouses/branches-warehouses.svelte";
 import ProductoVentaCard from './SaleProductCard.svelte';
 import type { ProductoVenta } from "./sale_order.svelte";
+import { useUI } from '@genix/ui';
 import { SaleOrderState } from "./sale_order.svelte";
     import DateInput from '$components/form/DateInput.svelte';
 
@@ -39,6 +39,7 @@ import { SaleOrderState } from "./sale_order.svelte";
 
   // State
   const ventasState = new SaleOrderState();
+  const ui = useUI();
 
   let almacenSelected = $state(-1);
   let productoSelected = $state(-1);
@@ -301,7 +302,7 @@ import { SaleOrderState } from "./sale_order.svelte";
 <Page title="Ventas"
   options={[{ id: 1, name: "Ventas" }, { id: 2, name: "Configuración" }]}
 >
-  {#if Core.pageOptionSelected === 1}
+  {#if ui.state.pageOptionSelected === 1}
     <div class="flex h-full gap-20">
       <!-- Main Content -->
       <div class="flex-1 flex flex-col min-w-0 relative">
@@ -542,7 +543,7 @@ import { SaleOrderState } from "./sale_order.svelte";
         </div>
       </LayerStatic>
     </div>
-  {:else if Core.pageOptionSelected === 2}
+  {:else if ui.state.pageOptionSelected === 2}
     <div class="flex justify-center py-24">
       <SystemParametersEditor />
     </div>

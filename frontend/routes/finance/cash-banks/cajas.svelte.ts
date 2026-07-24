@@ -1,5 +1,5 @@
 import { GetHandler, POST, GET } from '$libs/http.svelte';
-import { GETCached } from '$libs/cache/cache-query-by-id';
+import { GETCached } from '@genix/ui/cache';
 import { formatTime } from '$libs/helpers';
 import { Notify } from '$libs/helpers';
 

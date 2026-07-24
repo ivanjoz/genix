@@ -1,8 +1,9 @@
 <script lang="ts">
-import { Core } from '$core/store.svelte';
+import { useUI } from '@genix/ui';
 import { formatN } from '$libs/helpers';
 import Card from '$components/cards/Card.svelte';
   import { type ProductoVenta, type VentaProducto } from "./sale_order.svelte";
+  const ui = useUI();
 
   interface Props {
     idx: number
@@ -90,7 +91,7 @@ import Card from '$components/cards/Card.svelte';
   const desktopQuickQuantities = [2,3,4,5,6,8,10,12]
   const mobileQuickQuantities = [1,2,5,10]
   const quickQuantities = $derived.by(() => {
-    const availableQuantities = Core.deviceType === 3 ? mobileQuickQuantities : desktopQuickQuantities
+    const availableQuantities = ui.state.deviceType === 3 ? mobileQuickQuantities : desktopQuickQuantities
     return availableQuantities.filter((cantidad) => cantidad <= getCant)
   })
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
 import Button from '$components/buttons/Button.svelte';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Input from '$components/form/Input.svelte';
@@ -169,7 +171,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
     }
     Loading.remove();
     supplyForm = {} as ISupplyMaterial;
-    Core.openSideLayer(0);
+    ui.openSideLayer(0);
   };
 </script>
 
@@ -187,7 +189,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
       css="col-span-3 ml-auto"
       onClick={() => {
         supplyForm = { ss: 1, ProviderSupply: [] } as ISupplyMaterial;
-        Core.openSideLayer(1);
+        ui.openSideLayer(1);
       }}
     />
   </div>
@@ -207,7 +209,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
           ...record,
           ProviderSupply: normalizeProviderSupplyRows(record.ProviderSupply || []),
         };
-        Core.openSideLayer(1);
+        ui.openSideLayer(1);
       }}
       mobileCardCss="mb-2"
     />

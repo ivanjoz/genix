@@ -1,15 +1,17 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
   import Modal from '$components/layers/Modal.svelte';
   import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
   import ImageUploader from '$components/files/ImageUploader.svelte';
   import FilterInput from '$components/form/FilterInput.svelte';
   import SearchSelect from '$components/form/SearchSelect.svelte';
-  import { closeModal, openModals, tr } from '$core/store.svelte';
+  import { tr } from '$core/store.svelte';
   import { GalleryImagesService } from '$services/webpage/gallery.svelte';
   import { ImageAssetsService } from '$services/business/image-assets.svelte';
 
   interface Props {
-    /** Numeric id the host opens via openModal() to show this picker. */
+    /** Numeric id the host opens via ui.openModal() to show this picker. */
     modalId: number;
     /** Receives the full-resolution CDN url of the chosen image. */
     onSelect: (url: string) => void;
@@ -27,7 +29,7 @@
   // Fetch each source once, lazily, the first time the modal opens (both are delta-cached).
   let hasLoaded = false;
   $effect(() => {
-    if (!openModals.includes(modalId) || hasLoaded) { return; }
+    if (!ui.state.openModalIds.includes(modalId) || hasLoaded) { return; }
     hasLoaded = true;
     galleryImages.fetchCached().catch((error) => console.error('[image-picker] gallery load failed', error));
     stockImages.fetchCached().catch((error) => console.error('[image-picker] stock load failed', error));
@@ -60,11 +62,11 @@
   const pickImage = (url: string) => {
     if (!url) { return; }
     onSelect(url);
-    closeModal(modalId);
+    ui.closeModal(modalId);
   };
 </script>
 
-<Modal id={modalId} title="Select image|Seleccionar imagen" size={6} onClose={() => closeModal(modalId)}>
+<Modal id={modalId} title="Select image|Seleccionar imagen" size={6} onClose={() => ui.closeModal(modalId)}>
   <!-- Tabs on the left; the per-source filter (search / category) sits on the right. -->
   <div class="mb-8 flex items-center gap-12 relative">
     <div class="min-w-240 relative shrink-0">

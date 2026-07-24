@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
   import OptionsStrip from '$components/navigation/OptionsStrip.svelte'
   import Layer from '$components/layers/Layer.svelte'
   import VTable from '$components/vTable/VTable.svelte'
@@ -7,7 +9,7 @@
   import FilterInput from '$components/form/FilterInput.svelte'
   import Input from '$components/form/Input.svelte'
   import SearchSelect from '$components/form/SearchSelect.svelte'
-  import CellSimpleChart from '$components/charts/CellSimpleChart.svelte'
+  import { CellSimpleChart } from '@genix/ui/charts'
   import T from '$components/misc/T.svelte'
   import { Core, tr } from '$core/store.svelte'
   import { Loading, Notify, ConfirmWarn } from '$libs/helpers'
@@ -74,7 +76,7 @@
     const byWeek = new Map<number, number>()
     for (const week of existing?.WeeklyQuantity || []) byWeek.set(week.Week, week.Quantity)
     planWeeks = Array.from({ length: WEEKS_PER_YEAR }, (_, i) => ({ Week: i + 1, value: byWeek.get(i + 1) }))
-    Core.openSideLayer(1)
+    ui.openSideLayer(1)
   }
 
   const savePlan = async () => {
@@ -90,7 +92,7 @@
     Loading.standard(tr('Saving|Guardando') + '...')
     await planning.postAndSync([planForm])
     Loading.remove()
-    Core.openSideLayer(0)
+    ui.openSideLayer(0)
   }
 
   /* ---------- Seasonality curve ---------- */
@@ -98,7 +100,7 @@
   const newCurve = () => {
     curveForm = { ID: 0, Name: '', Curve: [], ss: 1 } as ISeasonalityCurve
     curveWeeks = Array.from({ length: WEEKS_PER_YEAR }, (_, i) => ({ Week: i + 1 }))
-    Core.openSideLayer(2)
+    ui.openSideLayer(2)
   }
 
   const openCurve = (curve: ISeasonalityCurve) => {
@@ -106,7 +108,7 @@
     const byWeek = new Map<number, number>()
     for (const week of curve.Curve || []) byWeek.set(week.Week, week.Percent)
     curveWeeks = Array.from({ length: WEEKS_PER_YEAR }, (_, i) => ({ Week: i + 1, value: byWeek.get(i + 1) }))
-    Core.openSideLayer(2)
+    ui.openSideLayer(2)
   }
 
   const saveCurve = async () => {
@@ -127,7 +129,7 @@
     Loading.standard(tr('Saving|Guardando') + '...')
     await curves.postAndSync([curveForm])
     Loading.remove()
-    Core.openSideLayer(0)
+    ui.openSideLayer(0)
   }
 
   const deleteCurve = () => {
@@ -140,7 +142,7 @@
         Loading.standard(tr('Deleting|Eliminando') + '...')
         await curves.postAndSync([{ ...curveForm, ss: 0 }])
         Loading.remove()
-        Core.openSideLayer(0)
+        ui.openSideLayer(0)
       },
     )
   }
@@ -319,7 +321,7 @@
     ]}
     useMobileGrid={true}
     onSelect={(e) => {
-      Core.openSideLayer(0)
+      ui.openSideLayer(0)
       view = e[0] as number
     }}
   />

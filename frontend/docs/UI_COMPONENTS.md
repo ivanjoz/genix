@@ -14,7 +14,8 @@ Container for authenticated pages. All non-public pages must be wrapped in this 
 
 If the page is subdivided into sections, use the `options` prop. These options are rendered in the top main menu, so a maximum of 3 options is recommended because they are stacked horizontally.
 
-The `Page` component automatically manages the selection state in the global `Core.pageOptionSelected` reactive property (from `$core/store.svelte`). Use this property in your page logic to conditionally render sections.
+The host-owned `Page` component manages selection through the package UI runtime. Use
+`ui.state.pageOptionSelected` in page logic to conditionally render sections.
 
 **Props:**
 | Prop | Type | Required | Description |
@@ -26,15 +27,17 @@ The `Page` component automatically manages the selection state in the global `Co
 **Example:**
 ```svelte
 <script>
-  import { Core } from '$core/store.svelte'
+  import { useUI } from '@genix/ui'
+
+  const ui = useUI()
 </script>
 
 <Page title="New Page"
   options={[{id: 1, name: "Section 1"}, {id: 2, name: "Section 2"}]}
 >
-  {#if Core.pageOptionSelected === 1}
+  {#if ui.state.pageOptionSelected === 1}
     <div>Content 1</div>
-  {:else if Core.pageOptionSelected === 2}
+  {:else if ui.state.pageOptionSelected === 2}
     <div>Content 2</div>
   {/if}
 </Page>

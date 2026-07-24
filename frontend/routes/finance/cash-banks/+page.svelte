@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
 	import Input from "$components/form/Input.svelte";
 	import LayerStatic from "$components/layers/LayerStatic.svelte";
 	import Modal from "$components/layers/Modal.svelte";
@@ -118,7 +120,7 @@
 			cajas.Cajas.push(caja);
 		}
 		cajas.Cajas = [...cajas.Cajas];
-		Core.closeModal(1);
+		ui.closeModal(1);
 	};
 
 	const saveCajaCuadre = async () => {
@@ -148,7 +150,7 @@
 			caja.CurrentAmount = form.ActualAmount;
 			cajas.Cajas = [...cajas.Cajas];
 			Object.assign(cajaForm, caja);
-			Core.closeModal(2);
+			ui.closeModal(2);
 			cajaCuadres.unshift(recordSaved);
 		}
 	};
@@ -181,7 +183,7 @@
 		Object.assign(cajaForm, caja);
 
 		cajaMovimientos.unshift(movimientoSaved);
-		Core.closeModal(3);
+		ui.closeModal(3);
 	};
 
 	const isCajaMovimiento = $derived([3].includes(cajaMovimientoForm.Type));
@@ -245,7 +247,7 @@
 						label="Opens the modal to create a new cash register (caja)."
 						onClick={(ev) => {
 							cajaForm = { ID: -1, ss: 1, CurrencyType: 1 } as ICashBank;
-							Core.openModal(1);
+							ui.openModal(1);
 						}}
 					/>
 				</div>
@@ -308,7 +310,7 @@
 									icon="icon-[fa--plus]"
 									label="Opens the modal to add a new cash movement."
 									onClick={() => {
-										Core.openModal(3);
+										ui.openModal(3);
 										cajaMovimientoForm = {
 											CashBankID: cajaForm.ID,
 											FinalAmount: cajaForm.CurrentAmount,
@@ -391,7 +393,7 @@
 									icon="icon-[fa--plus]"
 									label="Opens the modal to add a new cash balance reconciliation."
 									onClick={() => {
-										Core.openModal(2);
+										ui.openModal(2);
 										cajaCuadreForm = {
 											CashBankID: cajaForm.ID,
 										} as ICashReconciliation;

@@ -14,11 +14,12 @@ Make `frontend/ui-components/DateInput.svelte` behave like `frontend/ui-componen
 
 ### How `SearchSelect.svelte` solves mobile
 
-`SearchSelect.svelte` avoids clipping on mobile because it does **not** open its dropdown inline when `Core.deviceType === 3`.
+`SearchSelect.svelte` avoids clipping on mobile because it does **not** open its dropdown
+inline when `ui.state.deviceType === 3`, where `ui` comes from `useUI()`.
 
 The current flow is:
 
-1. `SearchSelect.svelte` derives `isMobile` from `Core.deviceType === 3`.
+1. `SearchSelect.svelte` derives `isMobile` from `ui.state.deviceType === 3`.
 2. It switches to `useLayerPicker` on mobile.
 3. Instead of focusing a real text input, it renders a button-like container.
 4. On click, it writes a payload into `Core.showMobileSearchLayer`.
@@ -82,7 +83,7 @@ This keeps the search layer and date layer independent, which is simpler than fo
 
 In `DateInput.svelte`:
 
-- derive `isMobile` from `Core.deviceType === 3`
+- derive `isMobile` from `ui.state.deviceType === 3`
 - on mobile, render a button-like field instead of opening the inline popup
 - clicking that field should populate the new global date-layer state
 

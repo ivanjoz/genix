@@ -81,7 +81,7 @@ export const getWarehouseProductStock = async (almacenID: number): Promise<IProd
   let records: IProductStock[] = []
   try {
     const response = await GET({ 
-      route: `warehouse-product-stock?almacen-id=${almacenID}`,
+      route: `warehouse-product-stock?warehouse-id=${almacenID}`,
       errorMessage: 'Hubo un error al obtener el stock.',
 			useCache: { min: 0.2, ver: 8 },
 			keysIDs: { ProductStockDetail: ["ProductStockID","LotID","SerialNumber"] }
@@ -143,6 +143,8 @@ export const postProductosStock = (data: IPostProductoStockItem[]) => {
   return POST({
     data,
     route: "productos-stock",
-    refreshRoutes: ["productos-stock"]
+    // Invalidate the cached GET routes that read stock so the next read hits the backend.
+    // Prefix match covers query params (e.g. warehouse-product-stock?warehouse-id=1).
+    refreshRoutes: ["warehouse-product-stock", "products-stock"]
   })
 }

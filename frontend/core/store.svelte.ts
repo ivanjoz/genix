@@ -38,70 +38,18 @@ export const setLanguaje = (languaje: ILanguaje) => {
   if(browser){ localStorage.setItem(LANGUAJE_STORAGE_KEY, String(languaje)) }
 }
 
-export interface ITopSearchLayer {
-  options: any[]
-  keyName: string
-  keyID: string | number
-  onSelect: (e: any) => void
-  onClear?: () => void
-  onRemove?: (e: any) => void
-}
-
-export interface ITopDateLayer {
-  selectedUnixDay: number
-  focusedUnixDay?: number
-  selectedMonthKey: number
-  label?: string
-  placeholder?: string
-  onSelect: (unixDay: number) => void
-  onClose?: () => void
-}
-
 export const Core = $state({
   module: { menus: [] as IMenuRecord[] } as IModule,
   openSearchLayer: 0 as number,
-  deviceType: getDeviceType() as number,
-	mobileMenuOpen: 0 as number,
 	// 1 = Spanish, 2 = English
   languaje: getStoredLanguaje() as ILanguaje,
-  // Keep layout-critical layer width in reactive global state so UI runes can subscribe to it.
-  sideLayerSize: 0 as number,
-  useTopMinimalMenu: false as boolean,
-  popoverShowID: 0 as number | string,
-  showSideLayer: 0 as number,
-  headerSettingsOpen: false as boolean,
   isLoading: 1,
-  pageTitle: "" as string,
   openLayers: [] as number[],
-  pageOptions: [] as {id: number, name: string}[],
-  pageOptionSelected: 1,
-  showMobileSearchLayer: null as ITopSearchLayer | null,
-  showMobileDateLayer: null as ITopDateLayer | null,
-  toggleMobileMenu: (() => {}) as () => void,
-  openSideLayer: (layerId: number) => {
-    Core.showSideLayer = layerId
-  },
-  hideSideLayer: (() => { Core.showSideLayer = 0 }) as () => void,
-  openHeaderSettings: (() => { Core.headerSettingsOpen = true }) as () => void,
-  closeHeaderSettings: (() => { Core.headerSettingsOpen = false }) as () => void,
-  openModal: (id: number) => {
-    if (!openModals.includes(id)) { openModals.push(id); }
-  },
-  closeModal: (id: number) => {
-    const index = openModals.indexOf(id);
-    if (index > -1) { openModals.splice(index, 1); }
-  },
   // Ecommerce state moved from pkg-store
   ecommerce: {
     cartOption: 1
   }
 })
-
-export const WeakSearchRef: WeakMap<any,{
-  idToRecord: Map<string|number, any>
-  valueToRecord: Map<string,any>
-}> = new WeakMap()
-
 
 export interface IFetchEvent {
   url: string
@@ -121,24 +69,6 @@ export const fetchEvent = (fetchID: number, props: IFetchEvent | 0) => {
   else { // Para setear el proceso
     fetchOnCourse.set(fetchID, props)
   }
-}
-
-// Global state for managing open modals
-export const openModals = $state<number[]>([]);
-
-// Helper functions to manage modals
-export const openModal = (id: number) => {
-	console.log("abriendo modal::",id, $state.snapshot(openModals))
-  if (!openModals.includes(id)) { openModals.push(id); }
-}
-
-export const closeModal = (id: number) => {
-  const index = openModals.indexOf(id);
-  if (index > -1) { openModals.splice(index, 1); }
-}
-
-export const closeAllModals = () => {
-  openModals.length = 0;
 }
 
 // Store-specific exports

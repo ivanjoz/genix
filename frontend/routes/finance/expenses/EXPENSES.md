@@ -270,10 +270,16 @@ The draft calls this `Expenses.svelte`; in SvelteKit the route entry must be
 body to the two sub-views:
 
 ```svelte
+<script lang="ts">
+  import { useUI } from '@genix/ui'
+
+  const ui = useUI()
+</script>
+
 <Page title="Expenses|Gastos"
   options={[{ id: 1, name: "Register|Registro" }, { id: 2, name: "Scheduled|Programados" }]}>
-  {#if Core.pageOptionSelected === 1}<ExpensesRegister />{/if}
-  {#if Core.pageOptionSelected === 2}<ExpensesSchedule />{/if}
+  {#if ui.state.pageOptionSelected === 1}<ExpensesRegister />{/if}
+  {#if ui.state.pageOptionSelected === 2}<ExpensesSchedule />{/if}
 </Page>
 ```
 

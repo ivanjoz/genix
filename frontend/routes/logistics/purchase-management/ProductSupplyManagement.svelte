@@ -1,13 +1,15 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
 import Input from '$components/form/Input.svelte'
 import Layer from '$components/layers/Layer.svelte'
-import ChartCanvas from '$components/charts/ChartCanvas.svelte'
+import { ChartCanvas } from '@genix/ui/charts'
 import CardsList from '$components/vTable/CardsList.svelte'
 import TableGrid from '$components/vTable/TableGrid.svelte'
 import type { ICardCell, ITableColumn } from '$components/vTable/types'
 import { Core, tr } from '$core/store.svelte'
 import T from '$components/misc/T.svelte'
-import { DateHelper } from '$libs/date'
+import { DateHelper } from '@genix/ui/utilities'
 import { formatN, formatTime, Loading, Notify } from '$libs/helpers'
 import FilterInput from '$components/form/FilterInput.svelte'
 import Button from '$components/buttons/Button.svelte'
@@ -304,7 +306,7 @@ import {
       ...selectedProductSupplyRecord,
       ProviderSupply: normalizeProviderSupplyRows(selectedProductSupplyRecord.ProviderSupply || []),
     }
-    Core.openSideLayer(2)
+    ui.openSideLayer(2)
   }
 
   function addProviderSupplyRow() {
@@ -349,7 +351,7 @@ import {
       productSupplyService.handler([...nextProductSupplyRecordsByProductID.values()])
       productSupplyService.fetchOnline()
 
-      Core.hideSideLayer()
+      ui.openSideLayer(0)
       Notify.success(tr('Supply configuration saved successfully.|Configuración de abastecimiento guardada correctamente.'))
     } catch (saveError) {
       Notify.failure(String(saveError))

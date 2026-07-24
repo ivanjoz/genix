@@ -13,10 +13,12 @@
 	import Page from '$domain/Page.svelte';
 	import SideMenu from '$domain/SideMenu.svelte';
 	import { Notify } from '$libs/helpers';
-	import { doInitServiceWorker } from '$libs/sw-cache';
-	import ImageWorker from '$libs/workers/image-worker?worker';
+	import { doInitServiceWorker } from '@genix/ui/service-worker';
+	import ImageWorker from '@genix/ui/workers/image-worker?worker';
 	import { onMount } from 'svelte';
 	import { startAgentBridge } from '$core/agent/sse';
+	import { provideUi } from '@genix/ui';
+	import { createGenixUiRuntime } from '$core/ui-runtime';
 	import './app.css';
 	import { fetchAccessListCatalog, getAccessEntriesForRoute } from './security/access-profiles/access-list-catalog';
 	import './tailwind.css';
@@ -25,6 +27,8 @@
 	import '../styles/fonts.css';
 
 	let { children } = $props();
+	const ui = provideUi(createGenixUiRuntime());
+	ui.state.deviceType = getDeviceType();
 
 	if(browser){
 		console.log('🔧 Initializing image worker...')
@@ -90,7 +94,7 @@
 
 		window.addEventListener('resize', () => {
 			const newDeviceType = getDeviceType()
-			if (newDeviceType !== Core.deviceType) { Core.deviceType = newDeviceType }
+			if (newDeviceType !== ui.state.deviceType) { ui.state.deviceType = newDeviceType }
 		})
 
 		doInitServiceWorker().then(() => {

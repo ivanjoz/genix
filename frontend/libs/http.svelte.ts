@@ -1,12 +1,14 @@
 import { browser } from "$app/environment";
 import { Env } from '$core/env';
 import { fetchEvent } from '$core/store.svelte';
-import { unmarshall } from '$libs/funcs/unmarshall';
+import { unmarshall } from '@genix/ui/utilities';
 import { formatN, normalizeStringN, Notify } from '$libs/helpers';
-import { fetchCacheParsed, sendServiceMessage } from '$libs/sw-cache';
-import type { CacheMode, serviceHttpProps } from '$libs/workers/service-worker';
-import axios, { type AxiosProgressEvent } from 'axios';
-import { concatenateInts } from './funcs/parsers';
+import { fetchCacheParsed, sendServiceMessage } from '@genix/ui/service-worker';
+import {
+  createHttpClient,
+  type httpProps,
+} from '@genix/ui/http';
+import { concatenateInts } from '@genix/ui/utilities';
 import {
   makeGroupCacheKey,
   makeGroupQueryShape,
@@ -14,273 +16,58 @@ import {
   readGroupCacheRows,
   upsertGroupCacheRows,
   type IGroupCacheRecord,
-} from './cache/group-cache.idb';
-import { getRecordsByID, type IMinimalRecord } from './cache/cache-by-ids.svelte';
-import type { CacheConversions } from './cache/delta-cache.conversion';
+} from '@genix/ui/cache';
+import { getRecordsByID, type IMinimalRecord } from '@genix/ui/cache';
+import type {
+  CacheConversions,
+  CacheMode,
+  serviceHttpProps,
+} from '@genix/ui/cache';
 
-export interface IHttpStatus {
-  code: number
-  message: string
-  metadata?: {
-    preSerializeMs: number
-    finalMs: number
-  }
-}
+export type {
+  AxiosProgressEvent,
+  IHttpStatus,
+  httpProps,
+} from '@genix/ui/http';
 
-export interface httpProps {
-  data?: any
-  route: string
-  apiName?: string
-  headers?: {[key: string]: string}
-  successMessage?: string
-  errorMessage?: string
-  module?: string
-  onUploadProgress?: (e: AxiosProgressEvent) => void
-  status?: IHttpStatus
-  refreshRoutes?: string[]
-  keysIDs?: { [e: string]: string | string[] }
-  keyID?: string | string[]
-  columnarIDField?: string
-  combineColumnarValuesOnFields?: string[]
-  cacheMode?: CacheMode
-  useCache?: {
-    min: number, /* minutos del caché */
-    ver: number  /* versión del caché */
+const genixHttpClient = createHttpClient({
+  makeRoute: Env.makeRoute,
+  getToken: Env.getToken,
+  transformResponse: unmarshall,
+  notify: Notify,
+  onUnauthorized: () => {
+    Env.clearAccesos?.();
+    if (browser) {
+      document.dispatchEvent(new Event('userLogout'));
+    }
+    Notify.failure('La sesión ha expirado, vuelva a iniciar sesión.');
   },
-  useCacheStatic?: {
-    min: number, /* minutos del caché */
-    ver: number  /* versión del caché */
+  startRequest: (route) => {
+    if (!browser) { return 0; }
+    const requestId = fetchEvent(0, 0) as number;
+    if (requestId > 0) {
+      fetchEvent(requestId, { url: route });
+    }
+    return requestId;
   },
-  contentLength?: number
-}
+  finishRequest: (requestId) => {
+    fetchEvent(requestId, 0);
+  },
+  fetchCached: fetchCacheParsed,
+  refreshRoutes: (routes) => sendServiceMessage(24, { routes }),
+  verifyRouteMemoryState: () => Env.DELTA_CACHE_VERIFY_ROUTE_MEMORY,
+});
 
-export const buildHeaders = (contentType?: string) => {
-  const cTs: {[e: string]: string } = { "json": "application/json" }
-  /*
-  const fromHeader = [
-    location.pathname,
-    (new Date()).getTimezoneOffset(),
-    Env.language || "",
-    [`${Env.screen.height}x${Env.screen.width}`,
-    `ram:${Env.deviceMemory || 0}`,
-    ].join("_"),
-  ].join("|")
-  */
-  const headers = {} as {[k:string]: string}
+export const {
+  buildHeaders,
+  GET,
+  POST,
+  PUT,
+  POST_XMLHR,
+} = genixHttpClient;
 
-  if (contentType && cTs[contentType]) {
-    headers['Content-Type'] = cTs[contentType]
-  }
-  headers['Authorization'] = `Bearer ${Env.getToken()}`
-  // headers.append('x-api-key', fromHeader)
-  return headers
-}
-
-const extractError = (result: any): string => {
-  let errorJson
-  let errorString = ""
-
-  if(typeof result === 'string'){
-    errorString = result.trim()
-    if(errorString[0] === "{" || errorString[0] === "["){
-      try {
-        errorJson = JSON.parse(errorString)
-      } catch {}
-    }
-  } else {
-    errorJson = result
-  }
-  if(errorJson){
-    if(Array.isArray(errorJson)){
-      errorJson = errorJson[0]
-    }
-    if(errorJson.message || errorJson.error || errorJson.errorMessage){
-      errorJson = errorJson.message || errorJson.error || errorJson.errorMessage
-    }
-    errorString = typeof errorJson === 'string'
-      ?  errorJson
-      : JSON.stringify(errorJson)
-  }
-  return errorString
-}
-
-const checkErrorResponse = (result: any, status: IHttpStatus) => {
-  if (!status.code || status.code !== 200 || result.errorMessage) {
-    console.warn(result)
-    Notify.failure(extractError(result))
-    return false
-  } else {
-    return true
-  }
-}
-
-const setResponseMetadata = (headers: Headers, status: IHttpStatus) => {
-  const rawMetadata = headers.get("X-Metadata") || ""
-  if(!rawMetadata){ return }
-
-  const [preSerializeMsRaw, finalMsRaw] = rawMetadata.split(",")
-  status.metadata = {
-    preSerializeMs: parseInt(preSerializeMsRaw || "0"),
-    finalMs: parseInt(finalMsRaw || "0"),
-  }
-}
-
-// Parsea los headers de la respuesta antes parseado el body
-const parsePreResponse = (res: any, status: IHttpStatus): Promise<any> => {
-  const contentType = res.headers.get("content-type")
-  if (res.status) {
-    status.code = res.status
-    status.message = res.statusText
-  }
-  setResponseMetadata(res.headers, status)
-  if (res.status === 200) { return res.json() }
-  else if (res.status === 401) {
-    Env.clearAccesos?.()
-    console.warn('Error 401, la sesión ha expirado.')
-    Notify.failure('La sesión ha expirado, vuelva a iniciar sesión.')
-  }
-  else if (res.status !== 200) {
-    if (!contentType || contentType.indexOf("/json") === -1) {
-      return res.text()
-    } else {
-      return res.json()
-    }
-	}
-	return Promise.resolve()
-}
-
-// Parsea el body de la respuesta
-function parseResponseBody(res: any, props: httpProps, status: IHttpStatus) {
-  if (!res) { res = "Hubo un error desconocido en el servidor" }
-  // Revisa si es un objeto
-  else if (typeof res === 'string') { try { res = JSON.parse(res) } catch { } }
-
-  // Revisa el Status Code
-  if (!checkErrorResponse(res, status)) return false
-
-  if (props.successMessage) Notify.success(props.successMessage)
-  return true
-}
-
-const POST_PUT = (props: httpProps, method: string): Promise<any> => {
-  const data = props.data
-  if (typeof data !== 'object') {
-    const err = 'The data provided is not a JSON'
-    console.error(err)
-    return Promise.reject(err)
-  }
-
-  const apiRoute = Env.makeRoute(props.route)
-
-  // Marks the given cached routes as `forceNetwork=true` so the next read of them hits the
-  // backend. MUST run only after the write has committed: the flag is consumed (cleared) by
-  // the first fetch that reads the route, so firing it before the POST resolves lets a racing
-  // read (e.g. navigating to a list view) burn the flag on stale data, leaving the reload cached.
-  const markRefreshRoutes = () => {
-    if((props.refreshRoutes||[]).length === 0){ return }
-    console.log("[REFRESH-DBG] sending refreshRoutes (accion 24):", props.refreshRoutes)
-    sendServiceMessage(24, { routes: props.refreshRoutes })
-      .then((result) => console.log("[REFRESH-DBG] refreshRoutes result:", result))
-      .catch((error) => console.warn("[REFRESH-DBG] refreshRoutes failed:", error))
-  }
-	const status: IHttpStatus = props.status || { code: 200, message: "" }
-  const requestFetchID = browser ? (fetchEvent(0, 0) as number) : 0
-
-  return new Promise((resolve, reject) => {
-    console.log(`Fetching ${method} : ` + props.route)
-    // Reuse global fetch lifecycle so header shows the same top-right loader for POST/PUT.
-    if (requestFetchID > 0) {
-      fetchEvent(requestFetchID, { url: props.route })
-    }
-
-    fetch(apiRoute, {
-      method: method,
-      headers: buildHeaders('json'),
-      body: JSON.stringify(data)
-    })
-    .then(res => parsePreResponse(res, status))
-    .then(res => {
-      res = unmarshall(res)
-      if(parseResponseBody(res, props, status)){
-        markRefreshRoutes()
-        resolve(res)
-      } else {
-        reject(res)
-      }
-    })
-    .catch(error => {
-      console.log('error::', error)
-      if (props.errorMessage) {
-        Notify.failure(props.errorMessage)
-      } else {
-        Notify.failure(String(error))
-      }
-      reject(error)
-    })
-    .finally(() => {
-      if (requestFetchID > 0) {
-        fetchEvent(requestFetchID, 0)
-      }
-    })
-  })
-}
-
-export function POST(props: httpProps) {
-  return POST_PUT(props, 'POST')
-}
-
-export function PUT(props: httpProps) {
-  return POST_PUT(props, 'PUT')
-}
-
-// Crea una solicitud HTTP request
-export const POST_XMLHR = (props: httpProps): Promise<any> => {
-  const data = props.data
-  if (typeof data !== 'object') {
-    const err = 'The data provided is not a JSON'
-    console.error(err)
-    return Promise.reject(err)
-  }
-  props.status = { code: 200, message: "" }
-const apiRoute = Env.makeRoute(props.route)
-
-  // Mirror POST_PUT: image uploads also need to mark cached routes stale (forceNetwork) via the SW.
-  if((props.refreshRoutes||[]).length > 0){
-    console.log("[REFRESH-DBG] (XMLHR) sending refreshRoutes (accion 24):", props.refreshRoutes)
-    sendServiceMessage(24, { routes: props.refreshRoutes })
-      .then((result) => console.log("[REFRESH-DBG] (XMLHR) refreshRoutes result:", result))
-      .catch((error) => console.warn("[REFRESH-DBG] (XMLHR) refreshRoutes failed:", error))
-  }
-
-  return new Promise((resolve, reject) => {
-    axios.post(apiRoute, data, {
-      onUploadProgress: props.onUploadProgress,
-      headers: { 'authorization': `Bearer ${Env.getToken()}` },
-    })
-    .then(result => {
-      const data = unmarshall(result.data)
-      if (result.status !== 200) {
-        let message = data.message || data.error || data.errorMessage
-        if (!message) message = String(data)
-        Notify.failure(data)
-        reject(data)
-      } else {
-        resolve(data)
-      }
-    })
-    .catch(error => {
-      if (error.response && error.response.data) error = error.response.data
-      const message = error.message || error.error || error.errorMessage
-      Notify.failure(String(message || error))
-      reject(error)
-    })
-  })
-}
-
-let progressLastTime = 0
 let progressTimeStart = 0
 let progressBytes = 0
-let fetchOnCourseCount = 0
 
 export const setFetchProgress = (bytesLen: number) => {
   const nowTime = Date.now()
@@ -288,7 +75,6 @@ export const setFetchProgress = (bytesLen: number) => {
     progressTimeStart = nowTime
   }
 
-  progressLastTime = nowTime
   progressBytes += bytesLen
 
   let mbps = 0
@@ -319,121 +105,6 @@ export const setFetchProgress = (bytesLen: number) => {
   }
 }
 
-
-// Parsea los headers de la respuesta crear un reader
-const parseResponseAsStream = async (fetchResponse: Response, status: any, props?: httpProps) => {
-
-  const contentType = fetchResponse.headers.get("Content-Type")
-
-  if (fetchResponse.status) {
-    status.code = fetchResponse.status
-    status.message = fetchResponse.statusText
-  }
-  setResponseMetadata(fetchResponse.headers, status)
-
-  if (fetchResponse.status === 200 && fetchResponse.body) {
-    const reader = fetchResponse.body.getReader()
-    const stream = new ReadableStream({
-      start(controller) {
-        fetchOnCourseCount++
-        return pump()
-        function pump(): Promise<void> {
-          return reader.read().then(({ done, value }) => {
-            // When no more data needs to be consumed, close the stream
-            if (done) {
-              controller.close()
-              fetchOnCourseCount--
-              if(fetchOnCourseCount <= 0){ progressBytes = 0 }
-              return
-            }
-            // console.log("chunk obtenido:: ", value.length)
-            setFetchProgress(value.length)
-            // Enqueue the next data chunk into our target stream
-            controller.enqueue(value)
-            return pump()
-          })
-        }
-      },
-    })
-    const responseStream = new Response(stream)
-    const responseText = await responseStream.text()
-    if(props){ props.contentLength = responseText.length }
-    return Promise.resolve(JSON.parse(responseText))
-  }
-  else if (fetchResponse.status === 401) {
-    document.dispatchEvent(new Event('userLogout'))
-    console.warn('Error 401, la sesión ha expirado.')
-    Notify.failure('La sesión ha expirado, vuelva a iniciar sesión.')
-  }
-  else if (fetchResponse.status !== 200) {
-    console.log(fetchResponse)
-    if (!contentType || contentType.indexOf("/json") === -1) {
-      console.log('Parseando como texto')
-      return fetchResponse.text()
-    } else {
-      console.log('parseando como JSON')
-      return fetchResponse.json()
-    }
-  }
-}
-
-export const GET = (props: httpProps): Promise<any> => {
-  const status: IHttpStatus = props.status || { code: 200, message: "" }
-  const routeParsed = Env.makeRoute(props.route)
-
-  if(props.useCache){
-    const args = {
-      routeParsed,
-      route: props.route,
-      useCache: props.useCache,
-      module: props.module || "a",
-      headers: buildHeaders('json'),
-      cacheMode: props.cacheMode,
-      // Keep the integrity pass opt-in because it adds extra post-response IndexedDB work.
-      verifyRouteMemoryState: Env.DELTA_CACHE_VERIFY_ROUTE_MEMORY,
-      status,
-      keyID: props.keyID,
-      keysIDs: props.keysIDs,
-      columnarIDField: props.columnarIDField,
-      combineColumnarValuesOnFields: props.combineColumnarValuesOnFields,
-    } as serviceHttpProps
-
-    return new Promise((resolve, reject) => {
-      fetchCacheParsed(args)
-      .then(cachedResponse => {
-        resolve(cachedResponse)
-      })
-      .catch(err => { reject(err) })
-    })
-  } else {
-    // The cached branch routes through the service worker, which already emits fetchEvent
-    // for the header loader; the direct-network branch must do it itself so the same
-    // top-right "Cargando..." bar shows for plain GETs (e.g. getPageContent).
-    const requestFetchID = browser ? (fetchEvent(0, 0) as number) : 0
-    return new Promise((resolve, reject) => {
-      console.log("realizando fetch::", props)
-      if (requestFetchID > 0) {
-        fetchEvent(requestFetchID, { url: props.route })
-      }
-      fetch(routeParsed, { headers: buildHeaders() })
-      .then(res => parsePreResponse(res, status))
-      .then(res => {
-        res = unmarshall(res)
-        return parseResponseBody(res, props, status) ? resolve(res) : reject(res)
-      })
-      .catch(error => {
-        console.warn(error)
-        if (props.errorMessage) { Notify.failure(props.errorMessage) }
-        reject(error)
-      })
-      .finally(() => {
-        if (requestFetchID > 0) {
-          fetchEvent(requestFetchID, 0)
-        }
-      })
-    })
-  }
-}
 
 const normalizeGroupCacheResponse = <T>(responsePayload: any): IGroupCacheRecord<T>[] => {
   if(Array.isArray(responsePayload)){ return responsePayload as IGroupCacheRecord<T>[] }

@@ -5,15 +5,17 @@ import Input from '$components/form/Input.svelte';
 import Modal from '$components/layers/Modal.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import { goto } from '$app/navigation';
-import { Core, closeModal, openModal, tr } from '$core/store.svelte';
+import { tr } from '$core/store.svelte';
 import Page from '$domain/Page.svelte';
 import { ConfirmWarn, formatTime, Loading, Notify } from '$libs/helpers';
 import { UsuariosService } from '../../security/users/users.svelte';
 import { LAST_SYSTEM_PAGE_ID, WebpagesService, showcaseImageSrc, type IWebpage } from '$services/webpage/pages.svelte';
 import WebpageConfig from './WebpageConfig.svelte';
     import T from '$components/misc/T.svelte';
+import { useUI } from '@genix/ui';
 
-  // Header top tabs (rendered by the Page shell). Switch on Core.pageOptionSelected.
+  const ui = useUI();
+  // Header top tabs are rendered by the Page shell through package-owned UI state.
   const pageOptions = [{ id: 1, name: 'Pages|Páginas' }, { id: 2, name: 'Config' }];
   const PAGE_FORM_MODAL_ID = 2;
 
@@ -53,14 +55,14 @@ import WebpageConfig from './WebpageConfig.svelte';
 
   const newPage = () => {
     form = { ss: 1 } as IWebpage;
-    openModal(PAGE_FORM_MODAL_ID);
+    ui.openModal(PAGE_FORM_MODAL_ID);
   };
 
   const selectPage = (page: IWebpage) => {
     // System pages are read-only — clicking them does nothing.
     if (isSystemPage(page)) return;
     form = { ...page };
-    openModal(PAGE_FORM_MODAL_ID);
+    ui.openModal(PAGE_FORM_MODAL_ID);
   };
 
   // The pencil opens the builder for this page's content (distinct from the card
@@ -89,12 +91,12 @@ import WebpageConfig from './WebpageConfig.svelte';
     }
     Loading.remove();
     form = {} as IWebpage;
-    closeModal(PAGE_FORM_MODAL_ID);
+    ui.closeModal(PAGE_FORM_MODAL_ID);
   };
 </script>
 
 <Page title="Pages|Páginas" options={pageOptions}>
-  {#if Core.pageOptionSelected === 1}
+  {#if ui.state.pageOptionSelected === 1}
     <!-- Toolbar: filter + new (the view tabs live in the header, not here) -->
     <div class="flex items-center mb-10 gap-12">
       <FilterInput label="Filter pages|Filtrar páginas"
@@ -155,7 +157,7 @@ import WebpageConfig from './WebpageConfig.svelte';
     </div>
 
     <Modal title="PAGE|PÁGINA" id={PAGE_FORM_MODAL_ID} size={5}
-      onClose={() => { form = {} as IWebpage; closeModal(PAGE_FORM_MODAL_ID); }}
+      onClose={() => { form = {} as IWebpage; ui.closeModal(PAGE_FORM_MODAL_ID); }}
       onSave={() => savePage()}
       onDelete={form.ID > 0 ? () => {
         ConfirmWarn(
@@ -175,7 +177,7 @@ import WebpageConfig from './WebpageConfig.svelte';
     </Modal>
   {/if}
 
-  {#if Core.pageOptionSelected === 2}
+  {#if ui.state.pageOptionSelected === 2}
     <WebpageConfig />
   {/if}
 </Page>

@@ -173,7 +173,8 @@ El backend y frontend solo deben soportar estos campos:
 
 ## 8. Frontend de `Abastecimiento`
 
-Modificar `frontend/routes/logistica/productos-stock/+page.svelte` para que use `Core.pageOptionSelected`, igual que `sedes-almacenes`.
+Modificar `frontend/routes/logistica/productos-stock/+page.svelte` para que use
+`ui.state.pageOptionSelected` desde `useUI()`, igual que `sedes-almacenes`.
 
 ### Vista 1: `Gestion Stock`
 
@@ -364,7 +365,7 @@ Razón:
 2. Implementar `GET.product-supply` con cálculo de `SalesPerDay`.
 3. Implementar `POST.product-supply` limpiando filas vacías.
 4. Crear `abastecimiento.svelte.ts`.
-5. Separar `+page.svelte` por `Core.pageOptionSelected`.
+5. Separar `+page.svelte` por `ui.state.pageOptionSelected`.
 6. Renderizar tabla de `Abastecimiento`.
 7. Agregar `Side Layer` con tabla inline de proveedores.
 8. Probar guardado y recarga.

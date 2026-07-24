@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
 import Input from '$components/form/Input.svelte';
 import Layer from '$components/layers/Layer.svelte';
 import Page from '$domain/Page.svelte';
@@ -151,7 +153,7 @@ const { Loading } = pkg
   const openCreateUsuarioLayer = () => {
     resetUsuarioForm()
     console.log("openCreateUsuarioLayer::")
-    Core.openSideLayer(1)
+    ui.openSideLayer(1)
   }
 
   const openEditUsuarioLayer = (selectedUsuario: IUser) => {
@@ -162,7 +164,7 @@ const { Loading } = pkg
       AccessLevelIDs: [...(selectedUsuario.AccessLevelIDs || [])]
     }
     console.log("openEditUsuarioLayer::", $state.snapshot(usuarioForm))
-    Core.openSideLayer(1)
+    ui.openSideLayer(1)
   }
 
   onMount(async () => {
@@ -220,7 +222,7 @@ const { Loading } = pkg
       }
 
       console.log("saveUsuario result::", result)
-      Core.hideSideLayer()
+      ui.openSideLayer(0)
       resetUsuarioForm()
     } catch (error) {
       console.warn("saveUsuario error::", error)
