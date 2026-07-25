@@ -50,7 +50,7 @@ The data mirror only holds auth & tenant master tables (users, companies, profil
 Components developed in-house for Genix. Each is implemented (not a stub) unless noted.
 
 ### Custom ScyllaDB ORM
-A reflection-optimized ORM for ScyllaDB/Cassandra (`backend/db/`):
+A reflection-optimized ORM for ScyllaDB/Cassandra (`backend/genix-orm/scylla/`):
 - **Two-struct `TableStruct` pattern** — each entity is a `XRecord` (persisted fields) + `XRecordTable` (typed fluent query columns), giving a **compile-time-safe query API** (`Equals`, `In`, `Between`, `Contains`, `GroupBy`, `Select`, `ExecScan`, …). Schema is declared in Go via `GetSchema()`.
 - **Reflection elimination in hot paths** — per-column getter/setter function pointers compiled once (via `viant/xunsafe` + pointer arithmetic) instead of `reflect` in loops; cached per type.
 - **Capability-based query routing** — normalized predicate signatures are matched at compile time to the best base key / secondary index / materialized view, avoiding accidental `ALLOW FILTERING`.
@@ -84,7 +84,7 @@ A section-based website/storefront builder (`frontend/routes/webpage-builder/`) 
 See [below](#hybrid-architecture-lambda-or-single-binary).
 
 ### Text search
-A Spanish bigram word encoder ported to Go (`backend/libs/text-search/`) that produces byte-identical index keys to the external GenixSearch daemon, plus a TCP driver and ORM integration (`backend/db/text_search/`): a table with a `TextSearchColumn` gets relevance-ranked search that returns IDs without a Scylla read.
+A Spanish bigram word encoder ported to Go (`backend/libs/text-search/`) that produces byte-identical index keys to the external GenixSearch daemon, plus a TCP driver and ORM integration (`backend/genix-orm/scylla/text_search/`): a table with a `TextSearchColumn` gets relevance-ranked search that returns IDs without a Scylla read.
 
 ### P2P homelab bridge
 A WebRTC signaling bridge over AWS AppSync (`p2p/`) that connects a browser directly to a self-hosted "homelab" Genix server, supporting the self-host deployment model.
@@ -223,7 +223,7 @@ scripts/          Table-creation, validation & build utilities
 
 - [`AGENTS.md`](AGENTS.md) — operational protocol & project rules
 - [`DEPLOYMENT.md`](DEPLOYMENT.md) — Lambda & self-host (systemd + Nginx) deployment
-- [`backend/db/ORM_INTERNALS.md`](backend/db/ORM_INTERNALS.md) · [`backend/docs/ORM_DATABASE_QUERY.md`](backend/docs/ORM_DATABASE_QUERY.md) — ORM deep dive
+- [`backend/genix-orm/scylla/ORM_INTERNALS.md`](backend/genix-orm/scylla/ORM_INTERNALS.md) · [`backend/docs/ORM_DATABASE_QUERY.md`](backend/docs/ORM_DATABASE_QUERY.md) — ORM deep dive
 - [`backend/docs/CREATE_API_HANDLERS.md`](backend/docs/CREATE_API_HANDLERS.md) — API handler guide
 - [`backend/libs/colbin/README.md`](backend/libs/colbin/README.md) — colbin wire format
 - [`frontend/FRONTEND.md`](frontend/FRONTEND.md) — frontend architecture

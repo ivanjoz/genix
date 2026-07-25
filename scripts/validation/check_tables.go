@@ -62,7 +62,7 @@ func CheckTables() {
 
 							if field.Embedded() {
 								if named, ok := field.Type().(*types.Named); ok {
-									if named.Obj().Pkg().Path() == "app/db" && named.Obj().Name() == "TableStruct" {
+									if named.Obj().Pkg().Path() == "github.com/ivanjoz/genix-orm/scylla" && named.Obj().Name() == "TableStruct" {
 										if typeArgs := named.TypeArgs(); typeArgs.Len() == 2 {
 											tableType := typeArgs.At(0).(*types.Named).Obj()
 											baseType := typeArgs.At(1).(*types.Named).Obj()
@@ -80,6 +80,10 @@ func CheckTables() {
 			}, nil)
 		}
 	}
+
+	// Reported so that "no output" cannot be mistaken for success when the embedded-type match
+	// finds nothing at all (e.g. after the ORM's import path changes).
+	fmt.Printf("Found %d table struct pairs.\n", len(baseToTable))
 
 	for base, table := range baseToTable {
 		if table.Name() != base.Name()+"Table" {
@@ -138,7 +142,7 @@ func CheckTables() {
 						}
 					} else if !isPrimitive {
 						if !isCol {
-							fmt.Printf("Error: Field '%s.%s' is a complex slice. Use db.Col in table struct '%s', not db.ColSlice.\n", base.Name(), fieldName, table.Name())
+							fmt.Printf("Error: Field '%s.%s' is a complex slice. Use scylla.Col in table struct '%s', not scylla.ColSlice.\n", base.Name(), fieldName, table.Name())
 							continue
 						}
 						colType := named.TypeArgs().At(1)
@@ -148,7 +152,7 @@ func CheckTables() {
 					}
 				} else {
 					if isColSlice {
-						fmt.Printf("Error: Field '%s.%s' is not a slice, but table struct '%s' uses db.ColSlice. Use db.Col instead.\n", base.Name(), fieldName, table.Name())
+						fmt.Printf("Error: Field '%s.%s' is not a slice, but table struct '%s' uses scylla.ColSlice. Use scylla.Col instead.\n", base.Name(), fieldName, table.Name())
 						continue
 					}
 					colType := named.TypeArgs().At(1)

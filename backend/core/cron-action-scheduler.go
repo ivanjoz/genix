@@ -1,7 +1,7 @@
 package core
 
 import (
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"math"
 	"time"
 )
@@ -89,7 +89,7 @@ func ScheduleCronAction(action CronAction, frameLengthInMinutes int8) {
 	action.Updated = SUnixTime()
 
 	existingActions := []CronAction{}
-	existingActionQuery := db.Query(&existingActions)
+	existingActionQuery := scylla.Query(&existingActions)
 	existingActionQuery.Select(existingActionQuery.ID, existingActionQuery.Status).
 		UnixMinutesFrame.Equals(action.UnixMinutesFrame).
 		ID.Equals(action.ID)
@@ -102,7 +102,7 @@ func ScheduleCronAction(action CronAction, frameLengthInMinutes int8) {
 		return
 	}
 
-	if err := db.InsertOne(action); err != nil {
+	if err := scylla.InsertOne(action); err != nil {
 		panic(err)
 	}
 }
@@ -135,7 +135,7 @@ func runCronWatcherTick() {
 	
 	pendingActionsGetted := []CronAction{}
 	// Query the whole lookback window in one pass and keep one row per logical cron ID.
-	pendingActionsQuery := db.Query(&pendingActionsGetted).
+	pendingActionsQuery := scylla.Query(&pendingActionsGetted).
 		UnixMinutesFrame.Between(firstFrameToProcess, currentUnixMinutesFrame).
 		Status.Equals(0)
 
@@ -150,7 +150,7 @@ func runCronWatcherTick() {
 
 	for _, pendingActionsSameID := range pendingActionsByID {
 		pendingAction := pendingActionsSameID[0]
-		cronActionTable := db.Table[CronAction]()
+		cronActionTable := scylla.Table[CronAction]()
 		
 		actionHandler, exists := actionHandlerMap[pendingAction.ActionID]
 		if !exists {
@@ -166,7 +166,7 @@ func runCronWatcherTick() {
 				e.Status = status
 			}
 			
-			if err := db.Update(
+			if err := scylla.Update(
 				&pendingActionsSameID,
 				cronActionTable.Status,
 				cronActionTable.InvocationCount,

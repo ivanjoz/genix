@@ -1,12 +1,12 @@
 package types
 
-import "app/db"
+import "github.com/ivanjoz/genix-orm/scylla"
 
 // SupplyMaterial is a catalog item (raw material / consumable / packaging) that
 // can be purchased from one or more providers. Distinct from ProductSupply,
 // which describes a product's supplier relationships.
 type SupplyMaterial struct {
-	db.TableStruct[SupplyMaterialTable, SupplyMaterial]
+	scylla.TableStruct[SupplyMaterialTable, SupplyMaterial]
 	CompanyID      int32                      `json:",omitempty"`
 	ID             int32                      `json:",omitempty"`
 	Name           string                     `json:",omitempty"`
@@ -25,36 +25,36 @@ type SupplyMaterial struct {
 }
 
 type SupplyMaterialTable struct {
-	db.TableStruct[SupplyMaterialTable, SupplyMaterial]
-	CompanyID      db.Col[SupplyMaterialTable, int32]
-	ID             db.Col[SupplyMaterialTable, int32]
-	Name           db.Col[SupplyMaterialTable, string]
-	Description    db.Col[SupplyMaterialTable, string]
-	BrandID        db.Col[SupplyMaterialTable, int32]
-	Price          db.Col[SupplyMaterialTable, int32]
-	CurrencyID     db.Col[SupplyMaterialTable, int16]
-	SKU            db.Col[SupplyMaterialTable, string]
-	MinimunStock   db.Col[SupplyMaterialTable, int32]
-	ProviderSupply db.Col[SupplyMaterialTable, []ProductSupplyProviderRow]
-	Status         db.Col[SupplyMaterialTable, int8]
-	Updated        db.Col[SupplyMaterialTable, int32]
-	UpdatedBy      db.Col[SupplyMaterialTable, int32]
-	Created        db.Col[SupplyMaterialTable, int32]
-	CreatedBy      db.Col[SupplyMaterialTable, int32]
+	scylla.TableStruct[SupplyMaterialTable, SupplyMaterial]
+	CompanyID      scylla.Col[SupplyMaterialTable, int32]
+	ID             scylla.Col[SupplyMaterialTable, int32]
+	Name           scylla.Col[SupplyMaterialTable, string]
+	Description    scylla.Col[SupplyMaterialTable, string]
+	BrandID        scylla.Col[SupplyMaterialTable, int32]
+	Price          scylla.Col[SupplyMaterialTable, int32]
+	CurrencyID     scylla.Col[SupplyMaterialTable, int16]
+	SKU            scylla.Col[SupplyMaterialTable, string]
+	MinimunStock   scylla.Col[SupplyMaterialTable, int32]
+	ProviderSupply scylla.Col[SupplyMaterialTable, []ProductSupplyProviderRow]
+	Status         scylla.Col[SupplyMaterialTable, int8]
+	Updated        scylla.Col[SupplyMaterialTable, int32]
+	UpdatedBy      scylla.Col[SupplyMaterialTable, int32]
+	Created        scylla.Col[SupplyMaterialTable, int32]
+	CreatedBy      scylla.Col[SupplyMaterialTable, int32]
 }
 
-func (e SupplyMaterialTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e SupplyMaterialTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:      "supply_material",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.ID.Autoincrement(0)),
-		Indexes: []db.Index{
+		Keys:      scylla.Cols(e.ID.Autoincrement(0)),
+		Indexes: []scylla.Index{
 			// Status view → list active supplies cheaply.
-			{Type: db.TypeView, Keys: db.Cols(e.Status.DecimalSize(1))},
+			{Type: scylla.TypeView, Keys: scylla.Cols(e.Status.DecimalSize(1))},
 			// Updated view → delta-cache watermark sync from the frontend.
-			{Type: db.TypeView, Keys: db.Cols(e.Updated.DecimalSize(10))},
+			{Type: scylla.TypeView, Keys: scylla.Cols(e.Updated.DecimalSize(10))},
 			// SKU lookup within a company (e.g. dedup during create).
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.SKU)},
+			{Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.SKU)},
 		},
 	}
 }

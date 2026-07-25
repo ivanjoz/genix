@@ -1,6 +1,6 @@
 ---
 name: static-project-validation
-description: Run static validation checks on the backend Go codebase to catch structural inconsistencies in DB table definitions. Use when the user asks to "validate the project", "run static checks", "check tables", or after modifying Go structs that embed db.TableStruct.
+description: Run static validation checks on the backend Go codebase to catch structural inconsistencies in DB table definitions. Use when the user asks to "validate the project", "run static checks", "check tables", or after modifying Go structs that embed scylla.TableStruct.
 version: 0.1.0
 ---
 
@@ -16,10 +16,10 @@ Validates consistency between base structs and their corresponding `*Table` stru
 
 - Table struct name follows the convention `<BaseName>Table`
 - Every field in a `*Table` struct exists in the corresponding base struct
-- `db.Col` vs `db.ColSlice` usage is correct:
-  - Primitive slices (`[]string`, `[]int32`, etc.) must use `db.ColSlice`
-  - Complex/struct slices must use `db.Col`
-  - Non-slice fields must use `db.Col`, never `db.ColSlice`
+- `scylla.Col` vs `scylla.ColSlice` usage is correct:
+  - Primitive slices (`[]string`, `[]int32`, etc.) must use `scylla.ColSlice`
+  - Complex/struct slices must use `scylla.Col`
+  - Non-slice fields must use `scylla.Col`, never `scylla.ColSlice`
   - The type argument in `Col`/`ColSlice` must match the base struct field type
 
 ## How to run
@@ -39,7 +39,7 @@ cd scripts && go run ./validation
 ## When to run
 
 Run this validation after:
-- Adding or modifying any struct that embeds `db.TableStruct`
+- Adding or modifying any struct that embeds `scylla.TableStruct`
 - Changing field types in base structs or table structs
 - Creating new table definitions
 

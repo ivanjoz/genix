@@ -3,7 +3,7 @@ package security
 import (
 	"app/core"
 	coretypes "app/core/types"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 )
 
 func GetUsuariosList(companyID int32, userIDs []int32) ([]coretypes.User, error) {
@@ -14,7 +14,7 @@ func GetUsuariosList(companyID int32, userIDs []int32) ([]coretypes.User, error)
 	}
 
 	usuarios := []coretypes.User{}
-	query := db.Query(&usuarios)
+	query := scylla.Query(&usuarios)
 	query.Select().
 		CompanyID.Equals(companyID).
 		ID.In(ids.Values...)

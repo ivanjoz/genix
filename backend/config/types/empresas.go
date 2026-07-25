@@ -1,11 +1,11 @@
 package types
 
-import "app/db"
+import "github.com/ivanjoz/genix-orm/scylla"
 
 type TAGS struct{}
 
 type Company struct {
-	db.TableStruct[CompanyTable, Company]
+	scylla.TableStruct[CompanyTable, Company]
 	ID                int32       `db:"id,pk" col:",sk"`
 	Name              string      `json:",omitempty" col:""`
 	LegalName         string      `json:",omitempty" col:""`
@@ -26,31 +26,31 @@ type Company struct {
 }
 
 type CompanyTable struct {
-	db.TableStruct[CompanyTable, Company]
-	ID                db.Col[CompanyTable, int32]
-	Name              db.Col[CompanyTable, string]
-	LegalName         db.Col[CompanyTable, string]
-	RUC               db.Col[CompanyTable, string]
-	Email             db.Col[CompanyTable, string]
-	NotificationEmail db.Col[CompanyTable, string]
-	Phone             db.Col[CompanyTable, string]
-	Representative    db.Col[CompanyTable, string]
-	Address           db.Col[CompanyTable, string]
-	City              db.Col[CompanyTable, string]
-	FormApiKey        db.Col[CompanyTable, string]
-	EmailVerified     db.Col[CompanyTable, int8]
-	PhoneVerified     db.Col[CompanyTable, int8]
-	SmtpConfig        db.Col[CompanyTable, SmtpConfig]
-	CulqiConfig       db.Col[CompanyTable, CulqiConfig]
-	Updated           db.Col[CompanyTable, int32]
-	Status            db.Col[CompanyTable, int8]
+	scylla.TableStruct[CompanyTable, Company]
+	ID                scylla.Col[CompanyTable, int32]
+	Name              scylla.Col[CompanyTable, string]
+	LegalName         scylla.Col[CompanyTable, string]
+	RUC               scylla.Col[CompanyTable, string]
+	Email             scylla.Col[CompanyTable, string]
+	NotificationEmail scylla.Col[CompanyTable, string]
+	Phone             scylla.Col[CompanyTable, string]
+	Representative    scylla.Col[CompanyTable, string]
+	Address           scylla.Col[CompanyTable, string]
+	City              scylla.Col[CompanyTable, string]
+	FormApiKey        scylla.Col[CompanyTable, string]
+	EmailVerified     scylla.Col[CompanyTable, int8]
+	PhoneVerified     scylla.Col[CompanyTable, int8]
+	SmtpConfig        scylla.Col[CompanyTable, SmtpConfig]
+	CulqiConfig       scylla.Col[CompanyTable, CulqiConfig]
+	Updated           scylla.Col[CompanyTable, int32]
+	Status            scylla.Col[CompanyTable, int8]
 }
 
-func (e CompanyTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e CompanyTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:         "companies",
 		UseSequences: true,
-		Keys:         db.Cols(e.ID.Autoincrement(0)),
+		Keys:         scylla.Cols(e.ID.Autoincrement(0)),
 	}
 }
 

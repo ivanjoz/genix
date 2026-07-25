@@ -35,7 +35,7 @@ case "$1" in
     (cd scripts && go run . sync_struct_interfaces)
     ;;
   "generate_controllers")
-    # For "generate_controllers", scan backend for db.TableStruct base structs and
+    # For "generate_controllers", scan backend for scylla.TableStruct base structs and
     # rewrite backend/exec/controllers.generated.go.
     echo "Executing generate_controllers command..."
     (cd scripts && go run . generate_controllers)

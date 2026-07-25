@@ -1,7 +1,7 @@
 package exec
 
 import (
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"testing"
 )
 
@@ -22,7 +22,7 @@ func TestGenericRecordSchemasResolveThroughTheNameRegistry(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.tableName, func(t *testing.T) {
-			scyllaTable, err := db.ResolveTableByName(testCase.tableName)
+			scyllaTable, err := scylla.ResolveTableByName(testCase.tableName)
 			if err != nil {
 				t.Fatalf("table %q is not registered: %v", testCase.tableName, err)
 			}
@@ -37,7 +37,7 @@ func TestGenericRecordSchemasResolveThroughTheNameRegistry(t *testing.T) {
 // Tables that never declared GenericRecord must stay unexposed even though they are registered.
 func TestTablesWithoutGenericRecordAreNotExposed(t *testing.T) {
 	for _, tableName := range []string{"warehouses", "sale_order", "expenses"} {
-		scyllaTable, err := db.ResolveTableByName(tableName)
+		scyllaTable, err := scylla.ResolveTableByName(tableName)
 		if err != nil {
 			t.Fatalf("table %q is not registered: %v", tableName, err)
 		}

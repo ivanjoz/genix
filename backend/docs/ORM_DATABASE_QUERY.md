@@ -21,13 +21,13 @@ It also documents the cloud ORM used by `app/cloud`, which mirrors the same mode
 
 Each entity uses two structs:
 1. **Record/Base struct**: actual persisted fields
-2. **Table struct**: typed query columns (`db.Col`, `db.ColSlice`)
+2. **Table struct**: typed query columns (`scylla.Col`, `scylla.ColSlice`)
 
 ```go
 // Purpose: Record struct holds persisted data and JSON payload fields.
 // Rationale: Keep runtime data model separate from query builder fields.
 type Product struct {
-    db.TableStruct[ProductTable, Product]
+    scylla.TableStruct[ProductTable, Product]
     EmpresaID int32    `db:"empresa_id"`
     ID        int64    `db:"id"`
     Nombre    string   `db:"nombre"`
@@ -40,13 +40,13 @@ type Product struct {
 // Purpose: Table struct exposes typed fluent query fields.
 // Rationale: Compile-time safety for query operators and schema references.
 type ProductTable struct {
-    db.TableStruct[ProductTable, Product]
-    EmpresaID db.Col[ProductTable, int32]
-    ID        db.Col[ProductTable, int64]
-    Nombre    db.Col[ProductTable, string]
-    Status    db.Col[ProductTable, int8]
-    Updated   db.Col[ProductTable, int64]
-    Tags      db.ColSlice[ProductTable, string]
+    scylla.TableStruct[ProductTable, Product]
+    EmpresaID scylla.Col[ProductTable, int32]
+    ID        scylla.Col[ProductTable, int64]
+    Nombre    scylla.Col[ProductTable, string]
+    Status    scylla.Col[ProductTable, int8]
+    Updated   scylla.Col[ProductTable, int64]
+    Tags      scylla.ColSlice[ProductTable, string]
 }
 ```
 
@@ -64,11 +64,11 @@ type ProductTable struct {
 ```go
 // Purpose: Declare partitioning, keys, and optional acceleration structures.
 // Rationale: Query routing and write behavior are derived from this contract.
-func (e ProductTable) GetSchema() db.TableSchema {
-    return db.TableSchema{
+func (e ProductTable) GetSchema() scylla.TableSchema {
+    return scylla.TableSchema{
         Name:      "product",
         Partition: e.EmpresaID,
-        Keys:      db.Cols(e.ID),
+        Keys:      scylla.Cols(e.ID),
 
         // Optional: enable per-record cache-version support.
         SaveCacheVersion: true,
@@ -83,7 +83,7 @@ func (e ProductTable) GetSchema() db.TableSchema {
 ```go
 // Purpose: Configure one Scylla session used by ORM operations.
 // Rationale: Keyspace and credentials are shared by query/insert/update flows.
-db.MakeScyllaConnection(db.ConnParams{
+scylla.MakeScyllaConnection(scylla.ConnParams{
     Host:     "localhost",
     Port:     9042,
     User:     "cassandra",
@@ -105,20 +105,20 @@ rows := []Product{
     {EmpresaID: 1, ID: 101, Nombre: "A", Status: 1, Updated: time.Now().Unix()},
     {EmpresaID: 1, ID: 102, Nombre: "B", Status: 1, Updated: time.Now().Unix()},
 }
-err := db.Insert(&rows)
+err := scylla.Insert(&rows)
 ```
 
 ```go
 // Purpose: Skip selected columns during insert.
 // Rationale: Useful when server-managed fields should not be written from input.
-q := db.Table[Product]()
-err := db.Insert(&rows, q.Updated)
+q := scylla.Table[Product]()
+err := scylla.Insert(&rows, q.Updated)
 ```
 
 ```go
 // Purpose: Insert one row with the same validation/path as bulk insert.
 // Rationale: Single-row helper keeps API uniform.
-err := db.InsertOne(rows[0])
+err := scylla.InsertOne(rows[0])
 ```
 
 ### 5.2 Update
@@ -126,21 +126,21 @@ err := db.InsertOne(rows[0])
 ```go
 // Purpose: Update only explicit fields.
 // Rationale: Prevents accidental full-row overwrite.
-q := db.Table[Product]()
+q := scylla.Table[Product]()
 row := Product{EmpresaID: 1, ID: 101, Nombre: "A+", Status: 2, Updated: time.Now().Unix()}
-err := db.Update(&[]Product{row}, q.Nombre, q.Status, q.Updated)
+err := scylla.Update(&[]Product{row}, q.Nombre, q.Status, q.Updated)
 ```
 
 ```go
 // Purpose: Update all mutable fields except selected ones.
 // Rationale: Useful for broad updates while protecting audit/system columns.
-err := db.UpdateExclude(&[]Product{row}, q.Updated)
+err := scylla.UpdateExclude(&[]Product{row}, q.Updated)
 ```
 
 ```go
 // Purpose: Update one row with explicit include list.
 // Rationale: Keeps single-row path consistent with bulk update semantics.
-err := db.UpdateOne(row, q.Nombre, q.Status)
+err := scylla.UpdateOne(row, q.Nombre, q.Status)
 ```
 
 ### 5.3 Query / Select
@@ -149,7 +149,7 @@ err := db.UpdateOne(row, q.Nombre, q.Status)
 // Purpose: Build typed query and stream results into a slice.
 // Rationale: Fluent API keeps query intent readable and safe.
 results := []Product{}
-query := db.Query(&results)
+query := scylla.Query(&results)
 
 err := query.
     EmpresaID.Equals(1).
@@ -162,21 +162,21 @@ err := query.
 ```go
 // Purpose: Read only required fields.
 // Rationale: Reduces network and decode cost for list endpoints.
-q := db.Query(&results)
+q := scylla.Query(&results)
 err := q.Select(q.ID, q.Nombre, q.Updated).EmpresaID.Equals(1).Exec()
 ```
 
 ```go
 // Purpose: Exclude expensive/large fields.
 // Rationale: Useful when blobs/slices are not needed in current response.
-q := db.Query(&results)
+q := scylla.Query(&results)
 err := q.Exclude(q.Tags).EmpresaID.Equals(1).Exec()
 ```
 
 ```go
 // Purpose: Process decoded rows while scanning and optionally avoid storing them.
 // Rationale: Useful when callers need side effects or custom aggregation with lower memory usage.
-q := db.Query(&results)
+q := scylla.Query(&results)
 q.EmpresaID.Equals(1).Status.Equals(1)
 
 latestByID := map[int64]int32{}
@@ -198,7 +198,7 @@ Rules:
 ```go
 // Purpose: Execute a real Scylla GROUP BY when the schema exposes a compatible key/view path.
 // Rationale: Packed views let the ORM group multiple logical columns through one physical grouped key.
-q := db.Query(&results)
+q := scylla.Query(&results)
 
 err := q.
     EmpresaID.Equals(1).
@@ -296,12 +296,12 @@ Use when a single `int64` key should encode multiple components.
 ```go
 // Purpose: Compose one bigint key from multiple numeric components.
 // Rationale: Keeps key compact while preserving sortable structure.
-func (e MovementTable) GetSchema() db.TableSchema {
-    return db.TableSchema{
+func (e MovementTable) GetSchema() scylla.TableSchema {
+    return scylla.TableSchema{
         Name:      "movement",
         Partition: e.EmpresaID,
-        Keys:      db.Cols(e.ID),
-        KeyIntPacking: db.Cols(
+        Keys:      scylla.Cols(e.ID),
+        KeyIntPacking: scylla.Cols(
             e.StoreID.DecimalSize(5),
             e.DayCode.DecimalSize(5),
             e.Autoincrement(3),
@@ -324,12 +324,12 @@ Use when one string key should encode multiple fields.
 ```go
 // Purpose: Flatten multi-field key into a compact string key.
 // Rationale: Enables prefix/range-style key patterns with one PK column.
-func (e InvoiceTable) GetSchema() db.TableSchema {
-    return db.TableSchema{
+func (e InvoiceTable) GetSchema() scylla.TableSchema {
+    return scylla.TableSchema{
         Name:          "invoice",
         Partition:     e.EmpresaID,
-        Keys:          db.Cols(e.ID), // string key field
-        KeyConcatenated: db.Cols(e.CustomerID, e.Year, e.Serial),
+        Keys:          scylla.Cols(e.ID), // string key field
+        KeyConcatenated: scylla.Cols(e.CustomerID, e.Year, e.Serial),
     }
 }
 ```
@@ -341,14 +341,14 @@ Use for partition + composite predicate patterns.
 ```go
 // Purpose: Accelerate `partition + status + updated-range` style reads.
 // Rationale: Packs multiple numeric predicates into one indexed virtual column.
-func (e OrderTable) GetSchema() db.TableSchema {
-    return db.TableSchema{
+func (e OrderTable) GetSchema() scylla.TableSchema {
+    return scylla.TableSchema{
         Name:      "sale_order",
         Partition: e.EmpresaID,
-        Keys:      db.Cols(e.ID),
-        Indexes: []db.Index{
+        Keys:      scylla.Cols(e.ID),
+        Indexes: []scylla.Index{
             {
-                Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
+                Keys: scylla.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
             },
         },
     }
@@ -362,10 +362,10 @@ Use for cross-partition equality lookups.
 ```go
 // Purpose: Add a global secondary index for direct equality lookups.
 // Rationale: Useful for unique-like lookup fields such as email.
-Indexes: []db.Index{
+Indexes: []scylla.Index{
     {
-        Type: db.TypeGlobalIndex,
-        Keys: db.Cols(e.Email),
+        Type: scylla.TypeGlobalIndex,
+        Keys: scylla.Cols(e.Email),
     },
 }
 ```
@@ -373,10 +373,10 @@ Indexes: []db.Index{
 ```go
 // Purpose: Add packed global index for composite equality-oriented filters.
 // Rationale: Supports compact global lookup shape on multiple numeric fields.
-Indexes: []db.Index{
+Indexes: []scylla.Index{
     {
-        Type: db.TypeGlobalIndex,
-        Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
+        Type: scylla.TypeGlobalIndex,
+        Keys: scylla.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
     },
 }
 ```
@@ -390,20 +390,20 @@ Important:
 ```go
 // Purpose: Materialize alternative query paths.
 // Rationale: Duplicate data intentionally for read patterns you must optimize.
-Indexes: []db.Index{
+Indexes: []scylla.Index{
     {
-        Type: db.TypeView,
-        Keys: db.Cols(e.CustomerID, e.Status),
+        Type: scylla.TypeView,
+        Keys: scylla.Cols(e.CustomerID, e.Status),
     },
     {
-        Type: db.TypeView,
-        Keys: db.Cols(e.StoreID.Int32(), e.Updated.DecimalSize(10)),
+        Type: scylla.TypeView,
+        Keys: scylla.Cols(e.StoreID.Int32(), e.Updated.DecimalSize(10)),
     },
     // Partition overrides the view partition; without it the view keeps the
     // table partition (company_id) as its own, which is what you normally want.
     {
-        Type:      db.TypeView,
-        Keys:      db.Cols(e.ID),
+        Type:      scylla.TypeView,
+        Keys:      scylla.Cols(e.ID),
         Partition: e.ID,
     },
 }
@@ -416,10 +416,10 @@ Use for range + multi-field membership scenarios over numeric dimensions.
 ```go
 // Purpose: Create hash-set virtual indexes with bucketed range support.
 // Rationale: Efficient for tuple-style filters plus bounded time/week ranges.
-Indexes: []db.Index{
+Indexes: []scylla.Index{
     {
-        Type: db.TypeGlobalIndex,
-        Keys: db.Cols(
+        Type: scylla.TypeGlobalIndex,
+        Keys: scylla.Cols(
             e.ProductID,
             e.ChannelID,
             e.WeekCode.CompositeBucketing(1, 2, 4).StoreAsWeek(),
@@ -443,11 +443,11 @@ If `SaveCacheVersion` is enabled in schema, you can fetch only changed records.
 // Purpose: Return only rows whose server cache-version changed.
 // Rationale: Reduces payload for sync endpoints with client-side caches.
 changed := []Product{}
-cached := []db.IDCacheVersion{
+cached := []scylla.IDCacheVersion{
     {PartitionID: 1, ID: 101, CacheVersion: 5},
     {PartitionID: 1, ID: 102, CacheVersion: 2},
 }
-err := db.QueryCachedIDs(&changed, cached)
+err := scylla.QueryCachedIDs(&changed, cached)
 ```
 
 Requirements:
@@ -466,7 +466,7 @@ Declare the mapping in `GetSchema()`:
 ```go
 // Purpose: expose this table's label fields through the shared generic by-IDs endpoint.
 // Rationale: a product reference only needs name/SKU/price, not the full row.
-GenericRecord: db.GenericRecordSchema{
+GenericRecord: scylla.GenericRecordSchema{
     Name: e.Name, S1: e.SKU, N1: e.FinalPrice, N2: e.BrandID,
 },
 ```
@@ -481,8 +481,8 @@ GenericRecord: db.GenericRecordSchema{
 Query it by name:
 
 ```go
-records, err := db.QueryCachedGenericByIDs("products", cachedIDs)
-// -> []db.GenericRecord{{ID, Name, S1, S2, N1, N2, Status, CacheVersion}}
+records, err := scylla.QueryCachedGenericByIDs("products", cachedIDs)
+// -> []scylla.GenericRecord{{ID, Name, S1, S2, N1, N2, Status, CacheVersion}}
 ```
 
 Cache-version filtering is identical to `QueryCachedIDs`: IDs whose client `ccv` still matches the
@@ -505,11 +505,11 @@ Notes:
 ```go
 // Purpose: Split a batch into insert/update using a custom predicate.
 // Rationale: Reuse one API call for mixed write payloads.
-q := db.Table[Product]()
-err := db.InsertOrUpdate(
+q := scylla.Table[Product]()
+err := scylla.InsertOrUpdate(
     &rows,
     func(r *Product) bool { return r.ID <= 0 },
-    db.Cols(q.Updated),
+    scylla.Cols(q.Updated),
 )
 ```
 
@@ -518,10 +518,10 @@ err := db.InsertOrUpdate(
 ```go
 // Purpose: Compare incoming rows against DB and apply insert/update selectively.
 // Rationale: Reduces write churn when only changed rows should be updated.
-q := db.Table[Product]()
-err := db.Merge(
+q := scylla.Table[Product]()
+err := scylla.Merge(
     &rows,
-    db.Cols(q.Updated),
+    scylla.Cols(q.Updated),
     func(prev, cur *Product) bool { return prev.Nombre != cur.Nombre || prev.Status != cur.Status },
     func(r *Product) { r.Updated = time.Now().Unix() },
 )
@@ -548,8 +548,8 @@ err := db.Merge(
 - **Pointers**: pointer equivalents for nullable scalar values
 - **Slices / set-backed by default**: `[]string`, numeric slices, and pointer-to-slice variants
 - **Table-field default freeze policy**:
-  - `db.Col[..., []T]` defaults to `frozen<set<...>>`
-  - `db.ColSlice[..., T]` defaults to `set<...>` (not frozen)
+  - `scylla.Col[..., []T]` defaults to `frozen<set<...>>`
+  - `scylla.ColSlice[..., T]` defaults to `set<...>` (not frozen)
 - **Collection tag options**:
   - `db:",set"` forces `set<...>`
   - `db:",frozen"` forces `frozen<list<...>>`

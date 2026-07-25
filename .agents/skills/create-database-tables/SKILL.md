@@ -17,13 +17,13 @@ A scaffolding script at `scripts/table/create_edit_table.go` generates boilerpla
 | Struct          | Purpose                                                              |
 | --------------- | -------------------------------------------------------------------- |
 | `XRecord`       | Plain data — what gets serialized to JSON and stored in a row.       |
-| `XRecordTable`  | Column descriptors used by the query builder — `db.Col[Table, T]`.   |
+| `XRecordTable`  | Column descriptors used by the query builder — `scylla.Col[Table, T]`.   |
 
-Both embed `db.TableStruct[XRecordTable, XRecord]` so the ORM can resolve them generically.
+Both embed `scylla.TableStruct[XRecordTable, XRecord]` so the ORM can resolve them generically.
 
 ```go
 type Product struct {
-    db.TableStruct[ProductTable, Product]
+    scylla.TableStruct[ProductTable, Product]
     EmpresaID int32  `json:",omitempty"`
     ID        int32  `json:",omitempty"`
     Nombre    string `json:",omitempty"`
@@ -33,20 +33,20 @@ type Product struct {
 }
 
 type ProductTable struct {
-    db.TableStruct[ProductTable, Product]
-    EmpresaID db.Col[ProductTable, int32]
-    ID        db.Col[ProductTable, int32]
-    Nombre    db.Col[ProductTable, string]
-    Status    db.Col[ProductTable, int8]
-    Updated   db.Col[ProductTable, int32]
-    UpdatedBy db.Col[ProductTable, int32]
+    scylla.TableStruct[ProductTable, Product]
+    EmpresaID scylla.Col[ProductTable, int32]
+    ID        scylla.Col[ProductTable, int32]
+    Nombre    scylla.Col[ProductTable, string]
+    Status    scylla.Col[ProductTable, int8]
+    Updated   scylla.Col[ProductTable, int32]
+    UpdatedBy scylla.Col[ProductTable, int32]
 }
 ```
 
 **Rules:**
 - Field names in `*Table` must match the data struct exactly.
-- `int32` becomes `db.Col[XTable, int32]`.
-- **Slices of primitives** (`[]int32`, `[]string`) must use `db.ColSlice[XTable, ElemType]`. Slices of structs use `db.Col[XTable, []Struct]`. The static validator enforces this.
+- `int32` becomes `scylla.Col[XTable, int32]`.
+- **Slices of primitives** (`[]int32`, `[]string`) must use `scylla.ColSlice[XTable, ElemType]`. Slices of structs use `scylla.Col[XTable, []Struct]`. The static validator enforces this.
 
 ---
 
@@ -84,7 +84,7 @@ func (e *Product) SelfParse() {
 
 // Build a KeyConcatenated string — backend/logistica/types/product-stock.go:246
 func (e *ProductStockLot) SelfParse() {
-    e.Hash = db.MakeKeyConcat(e.Date, e.SupplierID, e.Name)
+    e.Hash = scylla.MakeKeyConcat(e.Date, e.SupplierID, e.Name)
 }
 ```
 
@@ -92,7 +92,7 @@ func (e *ProductStockLot) SelfParse() {
 
 ## 4. GetSchema()
 
-Value receiver on the `*Table` struct returning a `db.TableSchema`. The fields you actually use:
+Value receiver on the `*Table` struct returning a `scylla.TableSchema`. The fields you actually use:
 
 ```go
 type TableSchema struct {
@@ -110,11 +110,11 @@ type TableSchema struct {
 
 Minimum schema:
 ```go
-func (e ProductTable) GetSchema() db.TableSchema {
-    return db.TableSchema{
+func (e ProductTable) GetSchema() scylla.TableSchema {
+    return scylla.TableSchema{
         Name:      "products",
         Partition: e.EmpresaID,
-        Keys:      []db.Coln{e.ID.Autoincrement(0)},
+        Keys:      []scylla.Coln{e.ID.Autoincrement(0)},
     }
 }
 ```
@@ -128,7 +128,7 @@ Pick the pattern that matches your access shape.
 ### 5.1 Single autoincrement int ID (most common)
 
 ```go
-Keys: []db.Coln{e.ID.Autoincrement(0)},
+Keys: []scylla.Coln{e.ID.Autoincrement(0)},
 ```
 
 `Autoincrement(N)` adds an `N`-digit random suffix. `0` = clean sequence (1, 2, 3…). Use `Autoincrement(2)` etc. on highly concurrent writers to avoid collisions.
@@ -139,7 +139,7 @@ Multiple `Keys` form a clustering composite. Order matters — it's the on-disk 
 
 ```go
 // backend/logistica/types/product-stock.go:215
-Keys: []db.Coln{e.ProductStockID, e.LotID, e.SerialNumber},
+Keys: []scylla.Coln{e.ProductStockID, e.LotID, e.SerialNumber},
 ```
 
 ### 5.3 KeyIntPacking — pack multiple ints into one int64 ID
@@ -148,8 +148,8 @@ When natural identity is `(WarehouseID, ProductID, PresentationID)` but you want
 
 ```go
 // backend/logistica/types/product-stock.go:149
-Keys: []db.Coln{e.ID},
-KeyIntPacking: []db.Coln{
+Keys: []scylla.Coln{e.ID},
+KeyIntPacking: []scylla.Coln{
     e.WarehouseID.DecimalSize(5),     // 0..99,999
     e.ProductID.DecimalSize(9),       // 0..999,999,999
     e.PresentationID.DecimalSize(4),  // 0..9,999
@@ -164,8 +164,8 @@ Movement/ledger tables pack a date or bucket column with an autoincrement *withi
 
 ```go
 // backend/logistica/types/product-stock-movement.go:60
-Keys: []db.Coln{e.ID},
-KeyIntPacking: []db.Coln{
+Keys: []scylla.Coln{e.ID},
+KeyIntPacking: []scylla.Coln{
     e.Fecha.DecimalSize(5),
     e.WarehouseID.DecimalSize(5),
     e.Autoincrement(3),                // counter is the last 3 digits
@@ -175,12 +175,12 @@ AutoincrementPart: e.Fecha,            // counter scoped per Fecha
 
 ### 5.5 KeyConcatenated — virtual string lookup key
 
-When you want to look up rows by a tuple **without** packing it into the ID, declare `KeyConcatenated`. The ORM joins the values into a deterministic string for dedup lookups; you typically also store that string in a field (built by `SelfParse()` via `db.MakeKeyConcat(...)`).
+When you want to look up rows by a tuple **without** packing it into the ID, declare `KeyConcatenated`. The ORM joins the values into a deterministic string for dedup lookups; you typically also store that string in a field (built by `SelfParse()` via `scylla.MakeKeyConcat(...)`).
 
 ```go
 // backend/logistica/types/product-stock.go:71
-Keys:            []db.Coln{e.ID},
-KeyConcatenated: []db.Coln{e.WarehouseID, e.ProductID, e.PresentationID, e.SKU, e.Lote},
+Keys:            []scylla.Coln{e.ID},
+KeyConcatenated: []scylla.Coln{e.WarehouseID, e.ProductID, e.PresentationID, e.SKU, e.Lote},
 ```
 
 ### 5.6 String IDs
@@ -188,9 +188,9 @@ KeyConcatenated: []db.Coln{e.WarehouseID, e.ProductID, e.PresentationID, e.SKU, 
 Some tables use a string ID generated upstream (UUID, slug, external code). Declare the column as `string` and use it directly — no autoincrement.
 
 ```go
-ID db.Col[XTable, string]
+ID scylla.Col[XTable, string]
 // ...
-Keys: []db.Coln{e.ID},
+Keys: []scylla.Coln{e.ID},
 ```
 
 ### 5.7 No ID at all (partition + clustering only)
@@ -200,14 +200,14 @@ Summary tables sometimes use only the partition + a clustering column as the PK:
 ```go
 // backend/comercial/types/sales.go:171
 Partition: e.EmpresaID,
-Keys:      []db.Coln{e.Fecha},  // (EmpresaID, Fecha) is the PK
+Keys:      []scylla.Coln{e.Fecha},  // (EmpresaID, Fecha) is the PK
 ```
 
 ---
 
 ## 6. Indexes
 
-Each `db.Index` has:
+Each `scylla.Index` has:
 
 ```go
 type Index struct {
@@ -232,26 +232,26 @@ type Index struct {
 
 ```go
 // Lookup by SKU / hash within a company
-{Type: db.TypeLocalIndex, Keys: []db.Coln{e.SKU}},
+{Type: scylla.TypeLocalIndex, Keys: []scylla.Coln{e.SKU}},
 
 // Delta-cache view (status + updated). KeepPart keeps EmpresaID in the view PK.
 {
-    Type:     db.TypeView,
-    Keys:     []db.Coln{e.Status.DecimalSize(1), e.Updated.DecimalSize(10)},
+    Type:     scylla.TypeView,
+    Keys:     []scylla.Coln{e.Status.DecimalSize(1), e.Updated.DecimalSize(10)},
     KeepPart: true,
 },
 
 // View with column projection — only carry these payload columns
 {
-    Type:     db.TypeView,
-    Keys:     []db.Coln{e.IsWarehouseProductStatus, e.Updated.DecimalSize(10)},
-    Cols:     []db.Coln{e.WarehouseProductQuantity, e.PresentationID},
+    Type:     scylla.TypeView,
+    Keys:     []scylla.Coln{e.IsWarehouseProductStatus, e.Updated.DecimalSize(10)},
+    Cols:     []scylla.Coln{e.WarehouseProductQuantity, e.PresentationID},
     KeepPart: true,
 },
 
 // Range scans over packed-key prefixes — free, no MV
-{Type: db.TypeInheritFromKey, Keys: []db.Coln{e.Fecha}, UseIndexGroup: true},
-{Type: db.TypeInheritFromKey, Keys: []db.Coln{e.Fecha, e.WarehouseID}, UseIndexGroup: true},
+{Type: scylla.TypeInheritFromKey, Keys: []scylla.Coln{e.Fecha}, UseIndexGroup: true},
+{Type: scylla.TypeInheritFromKey, Keys: []scylla.Coln{e.Fecha, e.WarehouseID}, UseIndexGroup: true},
 ```
 
 ### Column packing methods (used inside `Keys`)
@@ -275,7 +275,7 @@ type Index struct {
 
 ```go
 type Almacen struct {
-    db.TableStruct[AlmacenTable, Almacen]
+    scylla.TableStruct[AlmacenTable, Almacen]
     EmpresaID int32  `json:",omitempty"`
     ID        int32  `json:",omitempty"`
     Nombre    string `json:",omitempty"`
@@ -285,22 +285,22 @@ type Almacen struct {
 }
 
 type AlmacenTable struct {
-    db.TableStruct[AlmacenTable, Almacen]
-    EmpresaID db.Col[AlmacenTable, int32]
-    ID        db.Col[AlmacenTable, int32]
-    Nombre    db.Col[AlmacenTable, string]
-    Status    db.Col[AlmacenTable, int8]
-    Updated   db.Col[AlmacenTable, int32]
-    UpdatedBy db.Col[AlmacenTable, int32]
+    scylla.TableStruct[AlmacenTable, Almacen]
+    EmpresaID scylla.Col[AlmacenTable, int32]
+    ID        scylla.Col[AlmacenTable, int32]
+    Nombre    scylla.Col[AlmacenTable, string]
+    Status    scylla.Col[AlmacenTable, int8]
+    Updated   scylla.Col[AlmacenTable, int32]
+    UpdatedBy scylla.Col[AlmacenTable, int32]
 }
 
-func (e AlmacenTable) GetSchema() db.TableSchema {
-    return db.TableSchema{
+func (e AlmacenTable) GetSchema() scylla.TableSchema {
+    return scylla.TableSchema{
         Name:      "almacenes",
         Partition: e.EmpresaID,
-        Keys:      []db.Coln{e.ID.Autoincrement(0)},
-        Indexes: []db.Index{
-            {Type: db.TypeView, Keys: []db.Coln{e.Status.DecimalSize(1), e.Updated.DecimalSize(10)}, KeepPart: true},
+        Keys:      []scylla.Coln{e.ID.Autoincrement(0)},
+        Indexes: []scylla.Index{
+            {Type: scylla.TypeView, Keys: []scylla.Coln{e.Status.DecimalSize(1), e.Updated.DecimalSize(10)}, KeepPart: true},
         },
     }
 }
@@ -313,21 +313,21 @@ func (e *ProductStockV2) SelfParse() {
     e.Status = core.If(e.Quantity == 0 && e.DetailQuantity == 0, int8(0), int8(1))
 }
 
-func (e ProductStockV2Table) GetSchema() db.TableSchema {
-    return db.TableSchema{
+func (e ProductStockV2Table) GetSchema() scylla.TableSchema {
+    return scylla.TableSchema{
         Name:                 "warehouse_product_stock",
         Partition:            e.CompanyID,
-        Keys:                 []db.Coln{e.ID},
+        Keys:                 []scylla.Coln{e.ID},
         DisableUpdateCounter: true,
-        KeyIntPacking: []db.Coln{
+        KeyIntPacking: []scylla.Coln{
             e.WarehouseID.DecimalSize(5),
             e.ProductID.DecimalSize(9),
             e.PresentationID.DecimalSize(4),
         },
-        Indexes: []db.Index{
+        Indexes: []scylla.Index{
             {
-                Type:     db.TypeView,
-                Keys:     []db.Coln{e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)},
+                Type:     scylla.TypeView,
+                Keys:     []scylla.Coln{e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)},
                 KeepPart: true,
             },
         },
@@ -338,21 +338,21 @@ func (e ProductStockV2Table) GetSchema() db.TableSchema {
 ### 7.3 Append-only ledger — packed key + autoincrement-per-bucket
 
 ```go
-func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
-    return db.TableSchema{
+func (e WarehouseProductMovementTable) GetSchema() scylla.TableSchema {
+    return scylla.TableSchema{
         Name:      "warehouse_product_movement",
         Partition: e.CompanyID,
-        Keys:      []db.Coln{e.ID},
-        KeyIntPacking: []db.Coln{
+        Keys:      []scylla.Coln{e.ID},
+        KeyIntPacking: []scylla.Coln{
             e.Fecha.DecimalSize(5),
             e.WarehouseID.DecimalSize(5),
             e.Autoincrement(3),
         },
         AutoincrementPart: e.Fecha,
-        Indexes: []db.Index{
-            {Type: db.TypeInheritFromKey, Keys: []db.Coln{e.Fecha}, UseIndexGroup: true},
-            {Type: db.TypeInheritFromKey, Keys: []db.Coln{e.Fecha, e.WarehouseID}, UseIndexGroup: true},
-            {Type: db.TypeLocalIndex, Keys: []db.Coln{e.SerialNumber}},
+        Indexes: []scylla.Index{
+            {Type: scylla.TypeInheritFromKey, Keys: []scylla.Coln{e.Fecha}, UseIndexGroup: true},
+            {Type: scylla.TypeInheritFromKey, Keys: []scylla.Coln{e.Fecha, e.WarehouseID}, UseIndexGroup: true},
+            {Type: scylla.TypeLocalIndex, Keys: []scylla.Coln{e.SerialNumber}},
         },
     }
 }
@@ -361,15 +361,15 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 ### 7.4 Legacy tuple-keyed table — KeyConcatenated for dedup lookup
 
 ```go
-func (e ProductStockTable) GetSchema() db.TableSchema {
-    return db.TableSchema{
+func (e ProductStockTable) GetSchema() scylla.TableSchema {
+    return scylla.TableSchema{
         Name:            "warehouse_product_stock_legacy",
         Partition:       e.CompanyID,
-        Keys:            []db.Coln{e.ID},
-        KeyConcatenated: []db.Coln{e.WarehouseID, e.ProductID, e.PresentationID, e.SKU, e.Lote},
-        Indexes: []db.Index{
-            {Type: db.TypeLocalIndex, Keys: []db.Coln{e.SKU}},
-            {Type: db.TypeLocalIndex, Keys: []db.Coln{e.Lote}},
+        Keys:            []scylla.Coln{e.ID},
+        KeyConcatenated: []scylla.Coln{e.WarehouseID, e.ProductID, e.PresentationID, e.SKU, e.Lote},
+        Indexes: []scylla.Index{
+            {Type: scylla.TypeLocalIndex, Keys: []scylla.Coln{e.SKU}},
+            {Type: scylla.TypeLocalIndex, Keys: []scylla.Coln{e.Lote}},
         },
     }
 }

@@ -7,16 +7,16 @@ import (
 	configTypes "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
-	"app/db"
 	financeTypes "app/finance/types"
 	logisticsTypes "app/logistics/types"
 	salesTypes "app/sales/types"
 	securityTypes "app/security/types"
 	webpageTypes "app/webpage/types"
+	"github.com/ivanjoz/genix-orm/scylla"
 )
 
-func MakeScyllaControllers() []db.ScyllaControllerInterface {
-	return []db.ScyllaControllerInterface{
+func MakeScyllaControllers() []scylla.ScyllaControllerInterface {
+	return []scylla.ScyllaControllerInterface{
 		makeDBController[DemoStruct](),
 		makeDBController[agentTypes.AgentMessage](),
 		makeDBController[businessTypes.CityLocation](),
@@ -61,47 +61,47 @@ func MakeScyllaControllers() []db.ScyllaControllerInterface {
 	}
 }
 
-// Resolves table names for db.QueryCachedGenericByIDs.
+// Resolves table names for scylla.QueryCachedGenericByIDs.
 func init() {
-	db.RegisterTableFactory("zz_demo_struct", func() db.ScyllaTable { return db.MakeScyllaTable[DemoStruct]() })
-	db.RegisterTableFactory("agent_messages", func() db.ScyllaTable { return db.MakeScyllaTable[agentTypes.AgentMessage]() })
-	db.RegisterTableFactory("city_locations", func() db.ScyllaTable { return db.MakeScyllaTable[businessTypes.CityLocation]() })
-	db.RegisterTableFactory("client_provider", func() db.ScyllaTable { return db.MakeScyllaTable[businessTypes.ClientProvider]() })
-	db.RegisterTableFactory("gallery_images", func() db.ScyllaTable { return db.MakeScyllaTable[businessTypes.GalleryImage]() })
-	db.RegisterTableFactory("image_assets", func() db.ScyllaTable { return db.MakeScyllaTable[businessTypes.ImageAsset]() })
-	db.RegisterTableFactory("image_assets_category", func() db.ScyllaTable { return db.MakeScyllaTable[businessTypes.ImageAssetCategory]() })
-	db.RegisterTableFactory("products", func() db.ScyllaTable { return db.MakeScyllaTable[businessTypes.Product]() })
-	db.RegisterTableFactory("shared_list_records", func() db.ScyllaTable { return db.MakeScyllaTable[businessTypes.SharedListRecord]() })
-	db.RegisterTableFactory("sites", func() db.ScyllaTable { return db.MakeScyllaTable[businessTypes.Site]() })
-	db.RegisterTableFactory("warehouses", func() db.ScyllaTable { return db.MakeScyllaTable[businessTypes.Warehouse]() })
-	db.RegisterTableFactory("companies", func() db.ScyllaTable { return db.MakeScyllaTable[configTypes.Company]() })
-	db.RegisterTableFactory("parameters", func() db.ScyllaTable { return db.MakeScyllaTable[configTypes.Parameters]() })
-	db.RegisterTableFactory("system_parameters", func() db.ScyllaTable { return db.MakeScyllaTable[configTypes.SystemParameters]() })
-	db.RegisterTableFactory("cache", func() db.ScyllaTable { return db.MakeScyllaTable[core.Cache]() })
-	db.RegisterTableFactory("cron_actions", func() db.ScyllaTable { return db.MakeScyllaTable[core.CronAction]() })
-	db.RegisterTableFactory("cache_global", func() db.ScyllaTable { return db.MakeScyllaTable[core.GlobalCache]() })
-	db.RegisterTableFactory("usage_log", func() db.ScyllaTable { return db.MakeScyllaTable[coreTypes.UsageLog]() })
-	db.RegisterTableFactory("users", func() db.ScyllaTable { return db.MakeScyllaTable[coreTypes.User]() })
-	db.RegisterTableFactory("cash_banks", func() db.ScyllaTable { return db.MakeScyllaTable[financeTypes.CashBank]() })
-	db.RegisterTableFactory("cash_bank_movements", func() db.ScyllaTable { return db.MakeScyllaTable[financeTypes.CashBankMovement]() })
-	db.RegisterTableFactory("cash_reconciliations", func() db.ScyllaTable { return db.MakeScyllaTable[financeTypes.CashReconciliation]() })
-	db.RegisterTableFactory("expenses", func() db.ScyllaTable { return db.MakeScyllaTable[financeTypes.Expense]() })
-	db.RegisterTableFactory("expenses_scheduled", func() db.ScyllaTable { return db.MakeScyllaTable[financeTypes.ExpenseScheduled]() })
-	db.RegisterTableFactory("delivery_order_note", func() db.ScyllaTable { return db.MakeScyllaTable[logisticsTypes.DeliveryOrderNote]() })
-	db.RegisterTableFactory("warehouse_product_stock", func() db.ScyllaTable { return db.MakeScyllaTable[logisticsTypes.ProductStock]() })
-	db.RegisterTableFactory("warehouse_product_stock_detail", func() db.ScyllaTable { return db.MakeScyllaTable[logisticsTypes.ProductStockDetail]() })
-	db.RegisterTableFactory("product_stock_lot", func() db.ScyllaTable { return db.MakeScyllaTable[logisticsTypes.ProductStockLot]() })
-	db.RegisterTableFactory("product_supply", func() db.ScyllaTable { return db.MakeScyllaTable[logisticsTypes.ProductSupply]() })
-	db.RegisterTableFactory("purchase_order", func() db.ScyllaTable { return db.MakeScyllaTable[logisticsTypes.PurchaseOrder]() })
-	db.RegisterTableFactory("supply_material", func() db.ScyllaTable { return db.MakeScyllaTable[logisticsTypes.SupplyMaterial]() })
-	db.RegisterTableFactory("warehouse_product_movement", func() db.ScyllaTable { return db.MakeScyllaTable[logisticsTypes.WarehouseProductMovement]() })
-	db.RegisterTableFactory("product_sale_summary", func() db.ScyllaTable { return db.MakeScyllaTable[salesTypes.ProductSaleSummary]() })
-	db.RegisterTableFactory("sale_order", func() db.ScyllaTable { return db.MakeScyllaTable[salesTypes.SaleOrder]() })
-	db.RegisterTableFactory("sale_summary", func() db.ScyllaTable { return db.MakeScyllaTable[salesTypes.SaleSummary]() })
-	db.RegisterTableFactory("sales_planning", func() db.ScyllaTable { return db.MakeScyllaTable[salesTypes.SalesPlanning]() })
-	db.RegisterTableFactory("seasonality_curve", func() db.ScyllaTable { return db.MakeScyllaTable[salesTypes.SeasonalityCurve]() })
-	db.RegisterTableFactory("shipping_costs", func() db.ScyllaTable { return db.MakeScyllaTable[salesTypes.ShippingCost]() })
-	db.RegisterTableFactory("profiles", func() db.ScyllaTable { return db.MakeScyllaTable[securityTypes.Profile]() })
-	db.RegisterTableFactory("ecommerce_page_content", func() db.ScyllaTable { return db.MakeScyllaTable[webpageTypes.EcommercePageContent]() })
-	db.RegisterTableFactory("webpages", func() db.ScyllaTable { return db.MakeScyllaTable[webpageTypes.Webpage]() })
+	scylla.RegisterTableFactory("zz_demo_struct", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[DemoStruct]() })
+	scylla.RegisterTableFactory("agent_messages", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[agentTypes.AgentMessage]() })
+	scylla.RegisterTableFactory("city_locations", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[businessTypes.CityLocation]() })
+	scylla.RegisterTableFactory("client_provider", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[businessTypes.ClientProvider]() })
+	scylla.RegisterTableFactory("gallery_images", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[businessTypes.GalleryImage]() })
+	scylla.RegisterTableFactory("image_assets", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[businessTypes.ImageAsset]() })
+	scylla.RegisterTableFactory("image_assets_category", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[businessTypes.ImageAssetCategory]() })
+	scylla.RegisterTableFactory("products", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[businessTypes.Product]() })
+	scylla.RegisterTableFactory("shared_list_records", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[businessTypes.SharedListRecord]() })
+	scylla.RegisterTableFactory("sites", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[businessTypes.Site]() })
+	scylla.RegisterTableFactory("warehouses", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[businessTypes.Warehouse]() })
+	scylla.RegisterTableFactory("companies", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[configTypes.Company]() })
+	scylla.RegisterTableFactory("parameters", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[configTypes.Parameters]() })
+	scylla.RegisterTableFactory("system_parameters", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[configTypes.SystemParameters]() })
+	scylla.RegisterTableFactory("cache", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[core.Cache]() })
+	scylla.RegisterTableFactory("cron_actions", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[core.CronAction]() })
+	scylla.RegisterTableFactory("cache_global", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[core.GlobalCache]() })
+	scylla.RegisterTableFactory("usage_log", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[coreTypes.UsageLog]() })
+	scylla.RegisterTableFactory("users", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[coreTypes.User]() })
+	scylla.RegisterTableFactory("cash_banks", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[financeTypes.CashBank]() })
+	scylla.RegisterTableFactory("cash_bank_movements", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[financeTypes.CashBankMovement]() })
+	scylla.RegisterTableFactory("cash_reconciliations", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[financeTypes.CashReconciliation]() })
+	scylla.RegisterTableFactory("expenses", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[financeTypes.Expense]() })
+	scylla.RegisterTableFactory("expenses_scheduled", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[financeTypes.ExpenseScheduled]() })
+	scylla.RegisterTableFactory("delivery_order_note", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[logisticsTypes.DeliveryOrderNote]() })
+	scylla.RegisterTableFactory("warehouse_product_stock", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[logisticsTypes.ProductStock]() })
+	scylla.RegisterTableFactory("warehouse_product_stock_detail", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[logisticsTypes.ProductStockDetail]() })
+	scylla.RegisterTableFactory("product_stock_lot", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[logisticsTypes.ProductStockLot]() })
+	scylla.RegisterTableFactory("product_supply", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[logisticsTypes.ProductSupply]() })
+	scylla.RegisterTableFactory("purchase_order", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[logisticsTypes.PurchaseOrder]() })
+	scylla.RegisterTableFactory("supply_material", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[logisticsTypes.SupplyMaterial]() })
+	scylla.RegisterTableFactory("warehouse_product_movement", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[logisticsTypes.WarehouseProductMovement]() })
+	scylla.RegisterTableFactory("product_sale_summary", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[salesTypes.ProductSaleSummary]() })
+	scylla.RegisterTableFactory("sale_order", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[salesTypes.SaleOrder]() })
+	scylla.RegisterTableFactory("sale_summary", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[salesTypes.SaleSummary]() })
+	scylla.RegisterTableFactory("sales_planning", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[salesTypes.SalesPlanning]() })
+	scylla.RegisterTableFactory("seasonality_curve", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[salesTypes.SeasonalityCurve]() })
+	scylla.RegisterTableFactory("shipping_costs", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[salesTypes.ShippingCost]() })
+	scylla.RegisterTableFactory("profiles", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[securityTypes.Profile]() })
+	scylla.RegisterTableFactory("ecommerce_page_content", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[webpageTypes.EcommercePageContent]() })
+	scylla.RegisterTableFactory("webpages", func() scylla.ScyllaTable { return scylla.MakeScyllaTable[webpageTypes.Webpage]() })
 }

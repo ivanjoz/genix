@@ -1,7 +1,7 @@
 package types
 
 import (
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 )
 
 // SalesPlanningWeek is one week of the planned quantity for a product.
@@ -14,7 +14,7 @@ type SalesPlanningWeek struct {
 // a base weekly volume, an optional seasonality curve, and the resolved
 // per-week planned quantities.
 type SalesPlanning struct {
-	db.TableStruct[SalesPlanningTable, SalesPlanning]
+	scylla.TableStruct[SalesPlanningTable, SalesPlanning]
 	CompanyID          int32               `json:",omitempty"`
 	ID                 int32               `json:",omitempty"`
 	TempID             int32               `json:",omitempty"`
@@ -29,28 +29,28 @@ type SalesPlanning struct {
 }
 
 type SalesPlanningTable struct {
-	db.TableStruct[SalesPlanningTable, SalesPlanning]
-	CompanyID          db.Col[SalesPlanningTable, int32]
-	ID                 db.Col[SalesPlanningTable, int32]
-	ProductID          db.Col[SalesPlanningTable, int32]
-	BaseQuantity       db.Col[SalesPlanningTable, int32]
-	SeasonalityCurveID db.Col[SalesPlanningTable, int32]
-	WeeklyQuantity     db.Col[SalesPlanningTable, []SalesPlanningWeek]
-	Status             db.Col[SalesPlanningTable, int8]
-	Updated            db.Col[SalesPlanningTable, int32]
-	UpdatedBy          db.Col[SalesPlanningTable, int32]
-	Created            db.Col[SalesPlanningTable, int32]
+	scylla.TableStruct[SalesPlanningTable, SalesPlanning]
+	CompanyID          scylla.Col[SalesPlanningTable, int32]
+	ID                 scylla.Col[SalesPlanningTable, int32]
+	ProductID          scylla.Col[SalesPlanningTable, int32]
+	BaseQuantity       scylla.Col[SalesPlanningTable, int32]
+	SeasonalityCurveID scylla.Col[SalesPlanningTable, int32]
+	WeeklyQuantity     scylla.Col[SalesPlanningTable, []SalesPlanningWeek]
+	Status             scylla.Col[SalesPlanningTable, int8]
+	Updated            scylla.Col[SalesPlanningTable, int32]
+	UpdatedBy          scylla.Col[SalesPlanningTable, int32]
+	Created            scylla.Col[SalesPlanningTable, int32]
 }
 
-func (e SalesPlanningTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e SalesPlanningTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:      "sales_planning",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.ID.Autoincrement(0)),
-		Indexes: []db.Index{
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.ProductID)},
+		Keys:      scylla.Cols(e.ID.Autoincrement(0)),
+		Indexes: []scylla.Index{
+			{Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.ProductID)},
 			// Delta-cache view: queried with Status equality + Updated range.
-			{Type: db.TypeView, Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
+			{Type: scylla.TypeView, Keys: scylla.Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
 		},
 	}
 }
@@ -66,7 +66,7 @@ type SeasonalityCurveWeek struct {
 // SeasonalityCurve is a reusable per-week multiplier table that can be
 // assigned to many products.
 type SeasonalityCurve struct {
-	db.TableStruct[SeasonalityCurveTable, SeasonalityCurve]
+	scylla.TableStruct[SeasonalityCurveTable, SeasonalityCurve]
 	CompanyID int32                  `json:",omitempty"`
 	ID        int32                  `json:",omitempty"`
 	TempID    int32                  `json:",omitempty"`
@@ -79,25 +79,25 @@ type SeasonalityCurve struct {
 }
 
 type SeasonalityCurveTable struct {
-	db.TableStruct[SeasonalityCurveTable, SeasonalityCurve]
-	CompanyID db.Col[SeasonalityCurveTable, int32]
-	ID        db.Col[SeasonalityCurveTable, int32]
-	Name      db.Col[SeasonalityCurveTable, string]
-	Curve     db.Col[SeasonalityCurveTable, []SeasonalityCurveWeek]
-	Status    db.Col[SeasonalityCurveTable, int8]
-	Updated   db.Col[SeasonalityCurveTable, int32]
-	UpdatedBy db.Col[SeasonalityCurveTable, int32]
-	Created   db.Col[SeasonalityCurveTable, int32]
+	scylla.TableStruct[SeasonalityCurveTable, SeasonalityCurve]
+	CompanyID scylla.Col[SeasonalityCurveTable, int32]
+	ID        scylla.Col[SeasonalityCurveTable, int32]
+	Name      scylla.Col[SeasonalityCurveTable, string]
+	Curve     scylla.Col[SeasonalityCurveTable, []SeasonalityCurveWeek]
+	Status    scylla.Col[SeasonalityCurveTable, int8]
+	Updated   scylla.Col[SeasonalityCurveTable, int32]
+	UpdatedBy scylla.Col[SeasonalityCurveTable, int32]
+	Created   scylla.Col[SeasonalityCurveTable, int32]
 }
 
-func (e SeasonalityCurveTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e SeasonalityCurveTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:      "seasonality_curve",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.ID.Autoincrement(0)),
-		Indexes: []db.Index{
+		Keys:      scylla.Cols(e.ID.Autoincrement(0)),
+		Indexes: []scylla.Index{
 			// Delta-cache view: queried with Status equality + Updated range.
-			{Type: db.TypeView, Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
+			{Type: scylla.TypeView, Keys: scylla.Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
 		},
 	}
 }

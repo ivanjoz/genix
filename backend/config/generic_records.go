@@ -2,7 +2,7 @@ package config
 
 import (
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 )
 
 // GetTableRecordsByIDs resolves IDs to a flat label shape for any table that opts in through
@@ -22,7 +22,7 @@ func GetTableRecordsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se enviaron ids a buscar.")
 	}
 
-	records, err := db.QueryCachedGenericByIDs(tableName, cachedIDs)
+	records, err := scylla.QueryCachedGenericByIDs(tableName, cachedIDs)
 	if err != nil {
 		return req.MakeErr("Error al obtener los registros genéricos.", err)
 	}

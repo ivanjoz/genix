@@ -2,11 +2,11 @@ package exec
 
 import (
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 )
 
-func makeConnParams() db.ConnParams {
-	return db.ConnParams{
+func makeConnParams() scylla.ConnParams {
+	return scylla.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,
@@ -18,28 +18,28 @@ func makeConnParams() db.ConnParams {
 /*
 func TestInsert(args *core.ExecArgs) core.FuncResponse {
 
-	db.TestInsert(makeConnParams())
+	scylla.TestInsert(makeConnParams())
 
 	return core.FuncResponse{}
 }
 
 func TestQuery(args *core.ExecArgs) core.FuncResponse {
 
-	db.TestQuery(makeConnParams())
+	scylla.TestQuery(makeConnParams())
 
 	return core.FuncResponse{}
 }
 
 func TestCBOR(args *core.ExecArgs) core.FuncResponse {
 
-	db.TestCBOR()
+	scylla.TestCBOR()
 
 	return core.FuncResponse{}
 }
 
 func TestDeploy(args *core.ExecArgs) core.FuncResponse {
 
-	db.TestDeploy(makeConnParams())
+	scylla.TestDeploy(makeConnParams())
 
 	return core.FuncResponse{}
 }

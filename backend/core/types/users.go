@@ -1,12 +1,12 @@
 package types
 
 import (
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"fmt"
 )
 
 type User struct { // DynamoDB + ScyllaDB
-	db.TableStruct[UserTable, User]
+	scylla.TableStruct[UserTable, User]
 	CompanyID  int32   `json:",omitempty" col:"empresa_id,pk"`
 	ID         int32   `json:",omitempty" col:"id,pk,sk"`
 	User       string  `json:",omitempty" col:"user,index"`
@@ -39,36 +39,36 @@ func (user *User) PrepareCloudSync() {
 }
 
 type UserTable struct {
-	db.TableStruct[UserTable, User]
-	ID              db.Col[UserTable, int32]
-	CompanyID       db.Col[UserTable, int32]
-	User            db.Col[UserTable, string]
-	LastName        db.Col[UserTable, string]
-	FirstName       db.Col[UserTable, string]
-	ProfileIDs      db.ColSlice[UserTable, int32] `db:"profile_ids"`
-	AccessLevelIDs  db.Col[UserTable, []int32]    `db:"access_level_ids"`
-	AccesosComputed db.Col[UserTable, []uint16]
-	Email           db.Col[UserTable, string]
-	JobTitle        db.Col[UserTable, string]
-	DocumentNumber  db.Col[UserTable, string]
-	Created         db.Col[UserTable, int32]
-	CreatedBy       db.Col[UserTable, int32]
-	Updated         db.Col[UserTable, int32]
-	UpdatedBy       db.Col[UserTable, int32]
-	Status          db.Col[UserTable, int8]
+	scylla.TableStruct[UserTable, User]
+	ID              scylla.Col[UserTable, int32]
+	CompanyID       scylla.Col[UserTable, int32]
+	User            scylla.Col[UserTable, string]
+	LastName        scylla.Col[UserTable, string]
+	FirstName       scylla.Col[UserTable, string]
+	ProfileIDs      scylla.ColSlice[UserTable, int32] `db:"profile_ids"`
+	AccessLevelIDs  scylla.Col[UserTable, []int32]    `db:"access_level_ids"`
+	AccesosComputed scylla.Col[UserTable, []uint16]
+	Email           scylla.Col[UserTable, string]
+	JobTitle        scylla.Col[UserTable, string]
+	DocumentNumber  scylla.Col[UserTable, string]
+	Created         scylla.Col[UserTable, int32]
+	CreatedBy       scylla.Col[UserTable, int32]
+	Updated         scylla.Col[UserTable, int32]
+	UpdatedBy       scylla.Col[UserTable, int32]
+	Status          scylla.Col[UserTable, int8]
 }
 
-func (usuarioTable UserTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (usuarioTable UserTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:             "users",
 		Partition:        usuarioTable.CompanyID,
 		UseSequences:     true,
 		SaveCacheVersion: true,
 		// Users have no single display column, so the login handle is the label and the client
 		// composes the full name from S1/S2. Email and DocumentNumber stay out: a label doesn't need them.
-		GenericRecord: db.GenericRecordSchema{
+		GenericRecord: scylla.GenericRecordSchema{
 			Name: usuarioTable.User, S1: usuarioTable.FirstName, S2: usuarioTable.LastName,
 		},
-		Keys: db.Cols(usuarioTable.ID.Autoincrement(0)),
+		Keys: scylla.Cols(usuarioTable.ID.Autoincrement(0)),
 	}
 }

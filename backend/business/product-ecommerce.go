@@ -4,7 +4,7 @@ import (
 	businessTypes "app/business/types"
 	"app/cloud"
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"fmt"
 	"strconv"
 	"strings"
@@ -77,7 +77,7 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 	// with full-column projection (NameUpdated is a local index → ALLOW FILTERING). Using Updated
 	// also means price-only edits reach already-synced clients.
 	errGroup.Go(func() error {
-		query := db.Query(&productos)
+		query := scylla.Query(&productos)
 		query.Select(query.ID, query.Name, query.CategoryIDs, query.BrandID, query.Price, query.FinalPrice, query.ImageMain, query.Updated, query.Status).
 			CompanyID.Equals(companyID)
 		if productosWatermark > 0 {
@@ -124,7 +124,7 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 // sync (watermark == 0) it returns active rows only; on delta it includes Status=0 evictions.
 func querySharedListDelta(companyID, listID, watermark int32) ([]businessTypes.SharedListRecord, error) {
 	records := []businessTypes.SharedListRecord{}
-	query := db.Query(&records)
+	query := scylla.Query(&records)
 	query.Select(query.ID, query.Name, query.Updated, query.Status).
 		CompanyID.Equals(companyID).
 		ListID.Equals(listID)
@@ -151,7 +151,7 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 	loadGroup := errgroup.Group{}
 
 	loadGroup.Go(func() error {
-		query := db.Query(&productos)
+		query := scylla.Query(&productos)
 		query.Select(query.ID, query.Name, query.CategoryIDs, query.BrandID, query.Price, query.FinalPrice, query.ImageMain, query.Updated, query.Status).
 			CompanyID.Equals(companyID).
 			Status.GreaterThan(0)
@@ -161,7 +161,7 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 		return nil
 	})
 	loadGroup.Go(func() error {
-		query := db.Query(&sharedRows)
+		query := scylla.Query(&sharedRows)
 		query.Select(query.ID, query.Name, query.ListID, query.Updated, query.Status).
 			CompanyID.Equals(companyID).
 			ListID.In(ecommerceSharedListCategoryID, ecommerceSharedListBrandID).
@@ -331,7 +331,7 @@ func saveBuiltWatermarks(companyID, productosWm, marcasWm, categoriasWm int32) e
 		Content:   fmt.Sprintf("%d,%d,%d", productosWm, marcasWm, categoriasWm),
 		Updated:   core.SUnixTime(),
 	}
-	if err := db.Insert(&[]core.Cache{row}); err != nil {
+	if err := scylla.Insert(&[]core.Cache{row}); err != nil {
 		return fmt.Errorf("error al guardar watermarks de archivo productos (company=%d): %w", companyID, err)
 	}
 	return nil

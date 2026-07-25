@@ -2,7 +2,7 @@ package types
 
 import (
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 )
 
 // ProductStock is the current stock row per (Warehouse, Product, Presentation).
@@ -10,7 +10,7 @@ import (
 // - DetailQuantity   : sum of ProductStockDetail.Quantity rows linked to this row.
 // - DetailComputed*  : async-precomputed snapshot (populated by a separate job).
 type ProductStock struct {
-	db.TableStruct[ProductStockTable, ProductStock]
+	scylla.TableStruct[ProductStockTable, ProductStock]
 	ID                        int64
 	CompanyID                 int32   `json:",omitempty"`
 	WarehouseID               int32   `json:",omitempty"`
@@ -40,49 +40,49 @@ func (e *ProductStock) SelfParse() {
 }
 
 type ProductStockTable struct {
-	db.TableStruct[ProductStockTable, ProductStock]
-	CompanyID                 db.Col[ProductStockTable, int32]
-	ID                        db.Col[ProductStockTable, int64]
-	WarehouseID               db.Col[ProductStockTable, int32]
-	ProductID                 db.Col[ProductStockTable, int32]
-	PresentationID            db.Col[ProductStockTable, int16]
-	Quantity                  db.Col[ProductStockTable, int32]
-	SubQuantity               db.Col[ProductStockTable, int32]
-	DetailQuantity            db.Col[ProductStockTable, int32]
-	DetailSubQuantity         db.Col[ProductStockTable, int32]
-	DetailComputedDate        db.Col[ProductStockTable, int16]
-	DetailComputedQuantity    db.Col[ProductStockTable, int32]
-	DetailComputedSubQuantity db.Col[ProductStockTable, int32]
-	LastPricesPrice           db.ColSlice[ProductStockTable, int32]
-	LastPricesQuantity        db.ColSlice[ProductStockTable, int32]
-	StockStatus               db.Col[ProductStockTable, int8]
-	Created                   db.Col[ProductStockTable, int32]
-	CreatedBy                 db.Col[ProductStockTable, int32]
-	Updated                   db.Col[ProductStockTable, int32]
-	UpdatedBy                 db.Col[ProductStockTable, int32]
-	Status                    db.Col[ProductStockTable, int8]
+	scylla.TableStruct[ProductStockTable, ProductStock]
+	CompanyID                 scylla.Col[ProductStockTable, int32]
+	ID                        scylla.Col[ProductStockTable, int64]
+	WarehouseID               scylla.Col[ProductStockTable, int32]
+	ProductID                 scylla.Col[ProductStockTable, int32]
+	PresentationID            scylla.Col[ProductStockTable, int16]
+	Quantity                  scylla.Col[ProductStockTable, int32]
+	SubQuantity               scylla.Col[ProductStockTable, int32]
+	DetailQuantity            scylla.Col[ProductStockTable, int32]
+	DetailSubQuantity         scylla.Col[ProductStockTable, int32]
+	DetailComputedDate        scylla.Col[ProductStockTable, int16]
+	DetailComputedQuantity    scylla.Col[ProductStockTable, int32]
+	DetailComputedSubQuantity scylla.Col[ProductStockTable, int32]
+	LastPricesPrice           scylla.ColSlice[ProductStockTable, int32]
+	LastPricesQuantity        scylla.ColSlice[ProductStockTable, int32]
+	StockStatus               scylla.Col[ProductStockTable, int8]
+	Created                   scylla.Col[ProductStockTable, int32]
+	CreatedBy                 scylla.Col[ProductStockTable, int32]
+	Updated                   scylla.Col[ProductStockTable, int32]
+	UpdatedBy                 scylla.Col[ProductStockTable, int32]
+	Status                    scylla.Col[ProductStockTable, int8]
 }
 
-func (e ProductStockTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e ProductStockTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:                 "warehouse_product_stock",
 		Partition:            e.CompanyID,
-		Keys:                 db.Cols(e.ID),
+		Keys:                 scylla.Cols(e.ID),
 		DisableUpdateCounter: true,
 		// ID packs (WarehouseID, ProductID, PresentationID) into the single int64 key.
-		KeyIntPacking: db.Cols(
+		KeyIntPacking: scylla.Cols(
 			e.WarehouseID.DecimalSize(5),
 			e.ProductID.DecimalSize(9),
 			e.PresentationID.DecimalSize(4),
 		),
-		Indexes: []db.Index{
+		Indexes: []scylla.Index{
 			{
-				Type: db.TypeView,
-				Keys: db.Cols(e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)),
+				Type: scylla.TypeView,
+				Keys: scylla.Cols(e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)),
 			},
 			{
-				Type: db.TypeView,
-				Keys: db.Cols(e.Status, e.Updated.DecimalSize(8)),
+				Type: scylla.TypeView,
+				Keys: scylla.Cols(e.Status, e.Updated.DecimalSize(8)),
 			},
 		},
 	}
@@ -92,7 +92,7 @@ func (e ProductStockTable) GetSchema() db.TableSchema {
 // Composite key is (ProductStockID, LotID, SerialNumber), so a row exists per
 // distinct (warehouse-product-presentation, lot, serial) combination.
 type ProductStockDetail struct {
-	db.TableStruct[ProductStockDetailTable, ProductStockDetail]
+	scylla.TableStruct[ProductStockDetailTable, ProductStockDetail]
 	CompanyID      int32  `json:",omitempty"`
 	ProductStockID int64  `json:",omitempty"`
 	LotID          int32  `json:",omitempty"`
@@ -111,35 +111,35 @@ type ProductStockDetail struct {
 }
 
 type ProductStockDetailTable struct {
-	db.TableStruct[ProductStockDetailTable, ProductStockDetail]
-	CompanyID      db.Col[ProductStockDetailTable, int32]
-	ProductStockID db.Col[ProductStockDetailTable, int64]
-	LotID          db.Col[ProductStockDetailTable, int32]
-	SerialNumber   db.Col[ProductStockDetailTable, string]
-	WarehouseID    db.Col[ProductStockDetailTable, int32]
-	ProductID      db.Col[ProductStockDetailTable, int32]
-	Quantity       db.Col[ProductStockDetailTable, int32]
-	SubQuantity    db.Col[ProductStockDetailTable, int32]
-	ExpirationDate db.Col[ProductStockDetailTable, int16]
-	Updated        db.Col[ProductStockDetailTable, int32]
-	UpdatedBy      db.Col[ProductStockDetailTable, int32]
-	Created        db.Col[ProductStockDetailTable, int32]
-	CreatedBy      db.Col[ProductStockDetailTable, int32]
-	Status         db.Col[ProductStockDetailTable, int8]
+	scylla.TableStruct[ProductStockDetailTable, ProductStockDetail]
+	CompanyID      scylla.Col[ProductStockDetailTable, int32]
+	ProductStockID scylla.Col[ProductStockDetailTable, int64]
+	LotID          scylla.Col[ProductStockDetailTable, int32]
+	SerialNumber   scylla.Col[ProductStockDetailTable, string]
+	WarehouseID    scylla.Col[ProductStockDetailTable, int32]
+	ProductID      scylla.Col[ProductStockDetailTable, int32]
+	Quantity       scylla.Col[ProductStockDetailTable, int32]
+	SubQuantity    scylla.Col[ProductStockDetailTable, int32]
+	ExpirationDate scylla.Col[ProductStockDetailTable, int16]
+	Updated        scylla.Col[ProductStockDetailTable, int32]
+	UpdatedBy      scylla.Col[ProductStockDetailTable, int32]
+	Created        scylla.Col[ProductStockDetailTable, int32]
+	CreatedBy      scylla.Col[ProductStockDetailTable, int32]
+	Status         scylla.Col[ProductStockDetailTable, int8]
 }
 
-func (e ProductStockDetailTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e ProductStockDetailTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:                 "warehouse_product_stock_detail",
 		Partition:            e.CompanyID,
 		DisableUpdateCounter: true,
 		// One detail row per stock-record + lot + serial.
-		Keys: db.Cols(e.ProductStockID, e.LotID, e.SerialNumber),
-		Indexes: []db.Index{
+		Keys: scylla.Cols(e.ProductStockID, e.LotID, e.SerialNumber),
+		Indexes: []scylla.Index{
 			// Hash index for dedup lookups when resolving LotID from (Date, SupplierID, Name).
 			{
-				Type: db.TypeView,
-				Keys: db.Cols(e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)),
+				Type: scylla.TypeView,
+				Keys: scylla.Cols(e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)),
 			},
 		},
 	}
@@ -147,7 +147,7 @@ func (e ProductStockDetailTable) GetSchema() db.TableSchema {
 
 // ProductStockLot is a dedupe-able lot catalog. Hash = (Date, SupplierID, Name).
 type ProductStockLot struct {
-	db.TableStruct[ProductStockLotTable, ProductStockLot]
+	scylla.TableStruct[ProductStockLotTable, ProductStockLot]
 	CompanyID        int32  `json:",omitempty"`
 	ID               int32  `json:",omitempty"`
 	Date             int16  `json:",omitempty"`
@@ -163,40 +163,40 @@ type ProductStockLot struct {
 }
 
 func (e *ProductStockLot) SelfParse() {
-	e.Hash = db.MakeKeyConcat(e.Date, e.SupplierID, e.Name)
+	e.Hash = scylla.MakeKeyConcat(e.Date, e.SupplierID, e.Name)
 }
 
 type ProductStockLotTable struct {
-	db.TableStruct[ProductStockLotTable, ProductStockLot]
-	CompanyID        db.Col[ProductStockLotTable, int32]
-	ID               db.Col[ProductStockLotTable, int32]
-	Date             db.Col[ProductStockLotTable, int16]
-	Name             db.Col[ProductStockLotTable, string]
-	SupplierID       db.Col[ProductStockLotTable, int32]
-	DeliveryNoteID   db.Col[ProductStockLotTable, int32]
-	DeliveryNoteCode db.Col[ProductStockLotTable, string]
-	Hash             db.Col[ProductStockLotTable, string]
-	Created          db.Col[ProductStockLotTable, int32]
-	CreatedBy        db.Col[ProductStockLotTable, int32]
-	Status           db.Col[ProductStockLotTable, int8]
+	scylla.TableStruct[ProductStockLotTable, ProductStockLot]
+	CompanyID        scylla.Col[ProductStockLotTable, int32]
+	ID               scylla.Col[ProductStockLotTable, int32]
+	Date             scylla.Col[ProductStockLotTable, int16]
+	Name             scylla.Col[ProductStockLotTable, string]
+	SupplierID       scylla.Col[ProductStockLotTable, int32]
+	DeliveryNoteID   scylla.Col[ProductStockLotTable, int32]
+	DeliveryNoteCode scylla.Col[ProductStockLotTable, string]
+	Hash             scylla.Col[ProductStockLotTable, string]
+	Created          scylla.Col[ProductStockLotTable, int32]
+	CreatedBy        scylla.Col[ProductStockLotTable, int32]
+	Status           scylla.Col[ProductStockLotTable, int8]
 }
 
-func (e ProductStockLotTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e ProductStockLotTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:      "product_stock_lot",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.ID.Autoincrement(0)),
-		Indexes: []db.Index{
+		Keys:      scylla.Cols(e.ID.Autoincrement(0)),
+		Indexes: []scylla.Index{
 			// Hash index for dedup lookups when resolving LotID from (Date, SupplierID, Name).
-			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.Hash)},
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.Name)},
+			{Type: scylla.TypeGlobalIndex, Keys: scylla.Cols(e.Hash)},
+			{Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.Name)},
 		},
 	}
 }
 
 // DeliveryOrderNote is modeled but not wired up yet.
 type DeliveryOrderNote struct {
-	db.TableStruct[DeliveryOrderNoteTable, DeliveryOrderNote]
+	scylla.TableStruct[DeliveryOrderNoteTable, DeliveryOrderNote]
 	CompanyID   int32  `json:",omitempty"`
 	ID          int32  `json:",omitempty"`
 	Date        int16  `json:",omitempty"`
@@ -213,32 +213,32 @@ type DeliveryOrderNote struct {
 }
 
 type DeliveryOrderNoteTable struct {
-	db.TableStruct[DeliveryOrderNoteTable, DeliveryOrderNote]
-	CompanyID   db.Col[DeliveryOrderNoteTable, int32]
-	ID          db.Col[DeliveryOrderNoteTable, int32]
-	Date        db.Col[DeliveryOrderNoteTable, int16]
-	Code        db.Col[DeliveryOrderNoteTable, string]
-	SupplierID  db.Col[DeliveryOrderNoteTable, int32]
-	Description db.Col[DeliveryOrderNoteTable, string]
-	Hash        db.Col[DeliveryOrderNoteTable, string]
-	Created     db.Col[DeliveryOrderNoteTable, int32]
-	CreatedBy   db.Col[DeliveryOrderNoteTable, int32]
-	Updated     db.Col[DeliveryOrderNoteTable, int32]
-	UpdatedBy   db.Col[DeliveryOrderNoteTable, int32]
-	Status      db.Col[DeliveryOrderNoteTable, int8]
+	scylla.TableStruct[DeliveryOrderNoteTable, DeliveryOrderNote]
+	CompanyID   scylla.Col[DeliveryOrderNoteTable, int32]
+	ID          scylla.Col[DeliveryOrderNoteTable, int32]
+	Date        scylla.Col[DeliveryOrderNoteTable, int16]
+	Code        scylla.Col[DeliveryOrderNoteTable, string]
+	SupplierID  scylla.Col[DeliveryOrderNoteTable, int32]
+	Description scylla.Col[DeliveryOrderNoteTable, string]
+	Hash        scylla.Col[DeliveryOrderNoteTable, string]
+	Created     scylla.Col[DeliveryOrderNoteTable, int32]
+	CreatedBy   scylla.Col[DeliveryOrderNoteTable, int32]
+	Updated     scylla.Col[DeliveryOrderNoteTable, int32]
+	UpdatedBy   scylla.Col[DeliveryOrderNoteTable, int32]
+	Status      scylla.Col[DeliveryOrderNoteTable, int8]
 }
 
-func (e DeliveryOrderNoteTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e DeliveryOrderNoteTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:      "delivery_order_note",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.ID.Autoincrement(0)),
-		Indexes: []db.Index{
-			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.Hash)},
+		Keys:      scylla.Cols(e.ID.Autoincrement(0)),
+		Indexes: []scylla.Index{
+			{Type: scylla.TypeGlobalIndex, Keys: scylla.Cols(e.Hash)},
 		},
 	}
 }
 
 func (e *DeliveryOrderNote) SelfParse() {
-	e.Hash = db.MakeKeyConcat(e.Date, e.SupplierID, e.Code)
+	e.Hash = scylla.MakeKeyConcat(e.Date, e.SupplierID, e.Code)
 }

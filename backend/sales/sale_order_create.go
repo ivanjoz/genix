@@ -3,7 +3,7 @@ package sales
 import (
 	"app/sales/types"
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"app/finance"
 	financeTypes "app/finance/types"
 	"app/logistics"
@@ -43,7 +43,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	if isUpdate {
 		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
 		existingSales := []types.SaleOrder{}
-		query := db.Query(&existingSales)
+		query := scylla.Query(&existingSales)
 		query.CompanyID.Equals(req.User.CompanyID).ID.Equals(saleRequest.ID).Limit(1)
 		if err := query.Exec(); err != nil {
 			return req.MakeErr("Error al obtener la venta a actualizar:", err)
@@ -136,7 +136,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		saleActions = append(saleActions, 1)
 
 		// Insertar el registro de venta para obtener el ID (autoincrement)
-		if err := db.Insert(&sales); err != nil {
+		if err := scylla.Insert(&sales); err != nil {
 			return req.MakeErr("Error al registrar la venta:", err)
 		}
 
@@ -219,9 +219,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if isUpdate {
-		saleTable := db.Table[types.SaleOrder]()
+		saleTable := scylla.Table[types.SaleOrder]()
 		salesToUpdate := []types.SaleOrder{sale}
-		if err := db.Update(&salesToUpdate,
+		if err := scylla.Update(&salesToUpdate,
 			// Keep composite view columns in sync: {Date, Updated} must be updated together.
 			saleTable.WarehouseID,
 			saleTable.LastPaymentCajaID,
@@ -336,7 +336,7 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 	eg := errgroup.Group{}
 	eg.Go(func() error {
 		stocks := []logisticsTypes.ProductStock{}
-		q := db.Query(&stocks)
+		q := scylla.Query(&stocks)
 		q.Select(q.ID, q.Quantity, q.DetailQuantity).
 			CompanyID.Equals(req.User.CompanyID).
 			ID.In(stockIDSet.Values...)
@@ -351,7 +351,7 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 	if needsDetailFetch {
 		eg.Go(func() error {
 			details := []logisticsTypes.ProductStockDetail{}
-			q := db.Query(&details)
+			q := scylla.Query(&details)
 			q.Select().
 				CompanyID.Equals(req.User.CompanyID).
 				ProductStockID.In(stockIDSet.Values...)
@@ -411,10 +411,10 @@ func packProductStockIDForSale(warehouseID int32, productID int32, presentationI
 func GetSaleOrderByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	saleOrderIDRecords := req.ExtractCacheVersionValues()
 
-	saleOrderIDs := core.Map(saleOrderIDRecords, func(e db.IDCacheVersion) int64 { return e.ID })
+	saleOrderIDs := core.Map(saleOrderIDRecords, func(e scylla.IDCacheVersion) int64 { return e.ID })
 
 	saleOrders := []types.SaleOrder{}
-	query := db.Query(&saleOrders).CompanyID.Equals(req.User.CompanyID)
+	query := scylla.Query(&saleOrders).CompanyID.Equals(req.User.CompanyID)
 
 	if err := query.ID.In(saleOrderIDs...).Exec(); err != nil {
 		return req.MakeErr("Error al obtener los productos.", err)

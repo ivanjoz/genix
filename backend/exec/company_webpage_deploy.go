@@ -4,7 +4,7 @@ import (
 	"app/cloud"
 	configTypes "app/config/types"
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"fmt"
 	"mime"
 	"os"
@@ -203,7 +203,7 @@ func parseCompanyIDArgument(rawArgument string) (int32, error) {
 
 func getCompanyWebpageDomain(companyID int32) (string, error) {
 	parameters := []configTypes.Parameters{}
-	query := db.Query(&parameters).CompanyID.Equals(companyID)
+	query := scylla.Query(&parameters).CompanyID.Equals(companyID)
 	query.Group.Equals(webpageConfigGroup)
 	query.Key.Equals("domain")
 	if queryError := query.Exec(); queryError != nil {

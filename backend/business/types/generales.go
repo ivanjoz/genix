@@ -2,11 +2,11 @@ package types
 
 import (
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 )
 
 type CityLocation struct {
-	db.TableStruct[CityLocationTable, CityLocation]
+	scylla.TableStruct[CityLocationTable, CityLocation]
 	ID         int32         `json:",omitempty"`
 	CountryID  int32         `json:",omitempty"`
 	Name       string        ``
@@ -19,28 +19,28 @@ type CityLocation struct {
 }
 
 type CityLocationTable struct {
-	db.TableStruct[CityLocationTable, CityLocation]
-	ID        db.Col[CityLocationTable, int32]
-	CountryID db.Col[CityLocationTable, int32]
-	Name      db.Col[CityLocationTable, string]
-	ParentID  db.Col[CityLocationTable, int32]
-	Hierarchy db.Col[CityLocationTable, int8]
-	Updated   db.Col[CityLocationTable, int32]
+	scylla.TableStruct[CityLocationTable, CityLocation]
+	ID        scylla.Col[CityLocationTable, int32]
+	CountryID scylla.Col[CityLocationTable, int32]
+	Name      scylla.Col[CityLocationTable, string]
+	ParentID  scylla.Col[CityLocationTable, int32]
+	Hierarchy scylla.Col[CityLocationTable, int8]
+	Updated   scylla.Col[CityLocationTable, int32]
 }
 
-func (e CityLocationTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e CityLocationTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:      "city_locations",
 		Partition: e.CountryID,
-		Keys:      db.Cols(e.ID),
-		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
+		Keys:      scylla.Cols(e.ID),
+		Indexes: []scylla.Index{
+			{Type: scylla.TypeView, Keys: scylla.Cols(e.Updated)},
 		},
 	}
 }
 
 type SharedListRecord struct {
-	db.TableStruct[SharedListRecordTable, SharedListRecord]
+	scylla.TableStruct[SharedListRecordTable, SharedListRecord]
 	CompanyID   int32 `json:",omitempty"`
 	ID          int32
 	ListID      int32    `json:",omitempty"`
@@ -55,29 +55,29 @@ type SharedListRecord struct {
 }
 
 type SharedListRecordTable struct {
-	db.TableStruct[SharedListRecordTable, SharedListRecord]
-	CompanyID   db.Col[SharedListRecordTable, int32]
-	ID          db.Col[SharedListRecordTable, int32]
-	ListID      db.Col[SharedListRecordTable, int32]
-	Name        db.Col[SharedListRecordTable, string]
-	Images      db.ColSlice[SharedListRecordTable, string]
-	Description db.Col[SharedListRecordTable, string]
-	NameHash    db.Col[SharedListRecordTable, int32]
-	Status      db.Col[SharedListRecordTable, int8]
-	Updated     db.Col[SharedListRecordTable, int32]
-	UpdatedBy   db.Col[SharedListRecordTable, int32]
+	scylla.TableStruct[SharedListRecordTable, SharedListRecord]
+	CompanyID   scylla.Col[SharedListRecordTable, int32]
+	ID          scylla.Col[SharedListRecordTable, int32]
+	ListID      scylla.Col[SharedListRecordTable, int32]
+	Name        scylla.Col[SharedListRecordTable, string]
+	Images      scylla.ColSlice[SharedListRecordTable, string]
+	Description scylla.Col[SharedListRecordTable, string]
+	NameHash    scylla.Col[SharedListRecordTable, int32]
+	Status      scylla.Col[SharedListRecordTable, int8]
+	Updated     scylla.Col[SharedListRecordTable, int32]
+	UpdatedBy   scylla.Col[SharedListRecordTable, int32]
 }
 
-func (e SharedListRecordTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e SharedListRecordTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:         "shared_list_records",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         db.Cols(e.ID.Autoincrement(0)),
-		Indexes: []db.Index{
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.NameHash)},
-			{Type: db.TypeView, Keys: db.Cols(e.ListID.Int32(), e.Status.DecimalSize(2))},
-			{Type: db.TypeView, Keys: db.Cols(e.ListID, e.Updated.DecimalSize(10))},
+		Keys:         scylla.Cols(e.ID.Autoincrement(0)),
+		Indexes: []scylla.Index{
+			{Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.NameHash)},
+			{Type: scylla.TypeView, Keys: scylla.Cols(e.ListID.Int32(), e.Status.DecimalSize(2))},
+			{Type: scylla.TypeView, Keys: scylla.Cols(e.ListID, e.Updated.DecimalSize(10))},
 		},
 	}
 }

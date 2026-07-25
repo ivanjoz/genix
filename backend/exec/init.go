@@ -6,8 +6,8 @@ import (
 	configTypes "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
-	"app/db"
-	"app/db/text_search"
+	"github.com/ivanjoz/genix-orm/scylla"
+	"github.com/ivanjoz/genix-orm/scylla/text_search"
 	securityTypes "app/security/types"
 	"encoding/csv"
 	"encoding/json"
@@ -45,7 +45,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	configureTextSearchGenixSearch()
 
 	// Bootstrap ORM internal tables before any ScyllaDB seed writes depend on them.
-	if err := db.Init(); err != nil {
+	if err := scylla.Init(); err != nil {
 		panic("Error al inicializar las tablas internas del ORM. " + err.Error())
 	}
 
@@ -106,7 +106,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	// Seed companies in ScyllaDB first so the relational source of truth is ready.
-	if err := db.Insert(&empresas); err != nil {
+	if err := scylla.Insert(&empresas); err != nil {
 		panic("Error al crear las empresas iniciales en ScyllaDB. " + err.Error())
 	}
 	if err := cloud.Insert(empresas); err != nil {
@@ -119,7 +119,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	// Seed admin/system users in ScyllaDB so delta-cache and ID-based reads stay consistent.
-	if err := db.Insert(&usuarios); err != nil {
+	if err := scylla.Insert(&usuarios); err != nil {
 		panic("Error al crear los usuarios iniciales en ScyllaDB. " + err.Error())
 	}
 	if err := cloud.Insert(usuarios); err != nil {
@@ -203,7 +203,7 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 	recordsImported := core.MapToSliceT(recordsMap)
 	// core.Log(recordsImported)
 
-	err = db.Insert(&recordsImported)
+	err = scylla.Insert(&recordsImported)
 	if err != nil {
 		panic(err)
 	}
@@ -215,7 +215,7 @@ func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	// ciudades de Peru
 	ciudades := []businessTypes.CityLocation{}
-	q1 := db.Query(&ciudades)
+	q1 := scylla.Query(&ciudades)
 	err := q1.Select(q1.ID, q1.Name, q1.ParentID, q1.Hierarchy).
 		CountryID.Equals(604).Exec()
 
@@ -252,7 +252,7 @@ func DeployDatabaseSchemas(args *core.ExecArgs) core.FuncResponse {
 		panic("No se ha especificado el DB_NAME en credentials.json")
 	}
 
-	db.MakeScyllaConnection(db.ConnParams{
+	scylla.MakeScyllaConnection(scylla.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,
@@ -260,11 +260,11 @@ func DeployDatabaseSchemas(args *core.ExecArgs) core.FuncResponse {
 		Keyspace: core.Env.DB_NAME,
 	})
 
-	if err := db.CreateKeyspaceIfNotExists(); err != nil {
+	if err := scylla.CreateKeyspaceIfNotExists(); err != nil {
 		panic(fmt.Sprintf("Error al crear el keyspace '%v': %v", core.Env.DB_NAME, err))
 	}
 
-	db.DeployScylla(0, MakeScyllaControllers()...)
+	scylla.DeployScylla(0, MakeScyllaControllers()...)
 
 	return core.FuncResponse{}
 }
@@ -272,7 +272,7 @@ func DeployDatabaseSchemas(args *core.ExecArgs) core.FuncResponse {
 // fn-recalc
 func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
 
-	db.MakeScyllaConnection(db.ConnParams{
+	scylla.MakeScyllaConnection(scylla.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,
@@ -280,8 +280,8 @@ func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
 		Keyspace: core.Env.DB_NAME,
 	})
 
-	db.QueryExec("DELETE FROM genix.almacen_producto where empresa_id = 1")
-	db.QueryExec("DELETE FROM genix.almacen_movimiento where empresa_id = 1")
+	scylla.QueryExec("DELETE FROM genix.almacen_producto where empresa_id = 1")
+	scylla.QueryExec("DELETE FROM genix.almacen_movimiento where empresa_id = 1")
 
 	return core.FuncResponse{}
 }

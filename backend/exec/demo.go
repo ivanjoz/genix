@@ -6,7 +6,7 @@ import (
 	configTypes "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	logisticsTypes "app/logistics/types"
 	"app/serialize"
 	"bufio"
@@ -20,7 +20,7 @@ import (
 	"os/exec"
 	"runtime"
 
-	"app/libs/colbin"
+	"github.com/ivanjoz/colbin"
 
 	mail "github.com/xhit/go-simple-mail/v2"
 	"golang.org/x/sync/errgroup"
@@ -54,7 +54,7 @@ func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 		},
 	}
 
-	if err := db.Insert(&usuarios); err != nil {
+	if err := scylla.Insert(&usuarios); err != nil {
 		core.Log("Error inserting user:", err)
 		panic(err)
 	}
@@ -614,8 +614,8 @@ func Test28(args *core.ExecArgs) core.FuncResponse {
 
 func Test29(args *core.ExecArgs) core.FuncResponse {
 
-	// Migrated to db2 - db.RecalcVirtualColumns not needed anymore
-	// db.RecalcVirtualColumns[businessTypes.SharedListRecord]()
+	// Migrated to db2 - scylla.RecalcVirtualColumns not needed anymore
+	// scylla.RecalcVirtualColumns[businessTypes.SharedListRecord]()
 
 	return core.FuncResponse{}
 }
@@ -634,7 +634,7 @@ func Test30(args *core.ExecArgs) core.FuncResponse {
 	// Migrated to db2
 	errGroup.Go(func() error {
 		registros := []businessTypes.SharedListRecord{}
-		query := db.Query(&registros)
+		query := scylla.Query(&registros)
 		query.Select().
 			CompanyID.Equals(1).
 			ListID.In(listasIDs...)
@@ -670,15 +670,15 @@ func Test30(args *core.ExecArgs) core.FuncResponse {
 
 func Test32(args *core.ExecArgs) core.FuncResponse {
 	/*
-		err1 := db.QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.lista_compartida_registros__lista_id_view`)
+		err1 := scylla.QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.lista_compartida_registros__lista_id_view`)
 		if err1 != nil {
 			fmt.Println("error:", err1)
 		}
 	*/
-	// Migrated to db2 - use makeDBController and db.DeployScylla
-	// db.DeployScylla(0, businessTypes.SharedListRecord{})
+	// Migrated to db2 - use makeDBController and scylla.DeployScylla
+	// scylla.DeployScylla(0, businessTypes.SharedListRecord{})
 	controller := makeDBController[businessTypes.SharedListRecord]()
-	db.DeployScylla(0, controller)
+	scylla.DeployScylla(0, controller)
 	return core.FuncResponse{}
 }
 
@@ -719,13 +719,13 @@ func Demo1(e HelloInterface) {
 type DemoTable5 struct {
 	DemoTable4[DemoStruct5]
 	/*
-		Nombre     db.Colx[DemoTable5, string]
-		Edad       db.Colx[DemoTable5, int32]
-		Cualquiera db.Colx[DemoTable5, int32]
+		Nombre     scylla.Colx[DemoTable5, string]
+		Edad       scylla.Colx[DemoTable5, int32]
+		Cualquiera scylla.Colx[DemoTable5, int32]
 	*/
 }
 
-func (e *DemoTable4[T]) Query(statements ...db.ColumnStatement) []T {
+func (e *DemoTable4[T]) Query(statements ...scylla.ColumnStatement) []T {
 
 	return []T{}
 }
@@ -746,8 +746,8 @@ func (e TableHelper[T]) Query2() []int32 {
 
 		core.Log(records)
 	*/
-	// Migrated to db2 - db.RecalcVirtualColumns not needed anymore
-	// db.RecalcVirtualColumns[businessTypes.SharedListRecord]()
+	// Migrated to db2 - scylla.RecalcVirtualColumns not needed anymore
+	// scylla.RecalcVirtualColumns[businessTypes.SharedListRecord]()
 
 	return []int32{}
 }
@@ -778,7 +778,7 @@ func Test35(args *core.ExecArgs) core.FuncResponse {
 
 func Test36(args *core.ExecArgs) core.FuncResponse {
 
-	db.MakeScyllaConnection(db.ConnParams{
+	scylla.MakeScyllaConnection(scylla.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,
@@ -801,7 +801,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Insertando registro...")
 
-	err := db.Insert(&[]businessTypes.SharedListRecord{recordToInsert})
+	err := scylla.Insert(&[]businessTypes.SharedListRecord{recordToInsert})
 	if err != nil {
 		fmt.Println("Error al insertar::", err)
 		panic(err)
@@ -823,8 +823,8 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Actualizando registros....")
 
-	q1 := db.Table[businessTypes.SharedListRecord]()
-	err = db.Update(&[]businessTypes.SharedListRecord{recordToUpdate},
+	q1 := scylla.Table[businessTypes.SharedListRecord]()
+	err = scylla.Update(&[]businessTypes.SharedListRecord{recordToUpdate},
 		q1.Status, q1.ListID, q1.Name, q1.Images, q1.Description, q1.Updated)
 	if err != nil {
 		fmt.Println("Error al actualizar::", err)
@@ -834,7 +834,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 	fmt.Println("registro actualizado!")
 
 	// Example 1: Simple query with chaining
-	query := db.Query(&registros)
+	query := scylla.Query(&registros)
 	query.Select().
 		CompanyID.Equals(1).ListID.Equals(2).Status.Equals(1).
 		AllowFilter()
@@ -861,13 +861,13 @@ func Test37(args *core.ExecArgs) core.FuncResponse {
 
 func Test40(args *core.ExecArgs) core.FuncResponse {
 	/*
-		err1 := db.QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.lista_compartida_registros__lista_id_view`)
+		err1 := scylla.QueryExec(`DROP MATERIALIZED VIEW IF EXISTS genix.lista_compartida_registros__lista_id_view`)
 		if err1 != nil {
 			fmt.Println("error:", err1)
 		}
 	*/
-	// Migrated to db2 - use makeDBController and db.DeployScylla
-	// db.DeployScylla(0, businessTypes.SharedListRecord{})
+	// Migrated to db2 - use makeDBController and scylla.DeployScylla
+	// scylla.DeployScylla(0, businessTypes.SharedListRecord{})
 	controller := makeDBController[logisticsTypes.ProductStock]()
 	controller.RecalcVirtualColumns(1)
 	return core.FuncResponse{}

@@ -3,7 +3,7 @@ package sales
 import (
 	"app/sales/types"
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"slices"
 	"time"
 )
@@ -37,7 +37,7 @@ func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
 	} else {
 		// Delta sync resolves changed dates from sentinel rows stored at date=-1.
 		metadataRows := []types.ProductSaleSummary{}
-		query := db.Query(&metadataRows)
+		query := scylla.Query(&metadataRows)
 		query.CompanyID.Equals(req.User.CompanyID).Date.Equals(-1).Updated.GreaterThan(updated)
 		if dateInicio > 0 && dateFin > 0 {
 			query.ProductID.Between(int32(dateInicio), int32(dateFin))
@@ -63,7 +63,7 @@ func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	productRows := []types.ProductSaleSummary{}
-	query := db.Query(&productRows)
+	query := scylla.Query(&productRows)
 	query.CompanyID.Equals(req.User.CompanyID).Date.In(datesToInclude...)
 	
 	if updated > 0 {

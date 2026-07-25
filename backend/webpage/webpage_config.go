@@ -3,7 +3,7 @@ package webpage
 import (
 	configTypes "app/config/types"
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -25,7 +25,7 @@ var seoMetatagKeys = []string{"title", "description", "keywords", "ogTitle", "og
 // company-scoped server-side so no tenant data leaks.
 func GetWebsiteConfig(req *core.HandlerArgs) core.HandlerResponse {
 	parameters := []configTypes.Parameters{}
-	query := db.Query(&parameters).CompanyID.Equals(req.User.CompanyID)
+	query := scylla.Query(&parameters).CompanyID.Equals(req.User.CompanyID)
 	query.Group.Equals(webpageConfigGroup)
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener la configuración del sitio:", err)
@@ -45,7 +45,7 @@ func GetWebsiteConfig(req *core.HandlerArgs) core.HandlerResponse {
 // webpage read.
 func publicSeoMetatags(companyID int32) (map[string]string, error) {
 	parameters := []configTypes.Parameters{}
-	query := db.Query(&parameters).CompanyID.Equals(companyID)
+	query := scylla.Query(&parameters).CompanyID.Equals(companyID)
 	query.Group.Equals(webpageConfigGroup)
 	if err := query.Exec(); err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func PostWebsiteSeo(req *core.HandlerArgs) core.HandlerResponse {
 		})
 	}
 
-	if err := db.Insert(&parameters); err != nil {
+	if err := scylla.Insert(&parameters); err != nil {
 		return req.MakeErr("Error al guardar los metatags SEO:", err)
 	}
 
@@ -147,7 +147,7 @@ func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 		Updated:   nowTime,
 		UpdatedBy: req.User.ID,
 	}}
-	if err := db.Insert(&domainParameter); err != nil {
+	if err := scylla.Insert(&domainParameter); err != nil {
 		return req.MakeErr("Error al guardar el dominio:", err)
 	}
 
@@ -158,7 +158,7 @@ func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 // getCompanyDomain returns the single upserted domain row and its last-change timestamp.
 func getCompanyDomain(companyID int32) (*configTypes.Parameters, error) {
 	parameters := []configTypes.Parameters{}
-	query := db.Query(&parameters).CompanyID.Equals(companyID)
+	query := scylla.Query(&parameters).CompanyID.Equals(companyID)
 	query.Group.Equals(webpageConfigGroup)
 	query.Key.Equals("domain")
 	if queryError := query.Exec(); queryError != nil {

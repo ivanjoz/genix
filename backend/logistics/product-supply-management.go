@@ -2,7 +2,7 @@ package logistics
 
 import (
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	logisticsTypes "app/logistics/types"
 	businessTypes "app/business/types"
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 
 func GetProductSupply(req *core.HandlerArgs) core.HandlerResponse {
 	productSupplyRecords := []logisticsTypes.ProductSupply{}
-	productSupplyQuery := db.Query(&productSupplyRecords)
+	productSupplyQuery := scylla.Query(&productSupplyRecords)
 	productSupplyQuery.Select().
 		CompanyID.Equals(req.User.CompanyID).
 		Status.Equals(1)
@@ -55,7 +55,7 @@ func PostProductSupply(req *core.HandlerArgs) core.HandlerResponse {
 	productSupplyRecord.UpdatedBy = req.User.ID
 
 	productSupplyRecords := []logisticsTypes.ProductSupply{productSupplyRecord}
-	if mergeError := db.Merge(&productSupplyRecords, nil,
+	if mergeError := scylla.Merge(&productSupplyRecords, nil,
 		func(previousProductSupply, currentProductSupply *logisticsTypes.ProductSupply) bool {
 			// Keep the product key immutable and refresh only mutable configuration fields.
 			currentProductSupply.CompanyID = req.User.CompanyID
@@ -120,8 +120,8 @@ func validateProviderSupplyRows(req *core.HandlerArgs, providerSupplyRows []logi
 	}
 
 	providers := []businessTypes.ClientProvider{}
-	providerQuery := db.Query(&providers)
-	providerTable := db.Table[businessTypes.ClientProvider]()
+	providerQuery := scylla.Query(&providers)
+	providerTable := scylla.Table[businessTypes.ClientProvider]()
 	providerQuery.Select(providerTable.ID, providerTable.Type, providerTable.Status).
 		CompanyID.Equals(req.User.CompanyID).
 		ID.In(providerIDs...)
@@ -164,7 +164,7 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 
 	movimientos := []logisticsTypes.WarehouseProductMovement{}
 
-	query := db.Query(&movimientos).
+	query := scylla.Query(&movimientos).
 		CompanyID.Equals(req.User.CompanyID).
 		Date.GreaterEqual(movimientosFecha)
 
@@ -219,7 +219,7 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 	// so consumers stay compatible with the old shape without needing detail rows here.
 	productosStockV2 := []logisticsTypes.ProductStock{}
 
-	psQuery := db.Query(&productosStockV2).AllowFilter()
+	psQuery := scylla.Query(&productosStockV2).AllowFilter()
 	psQuery.Select(psQuery.ID, psQuery.Updated, psQuery.Quantity, psQuery.DetailQuantity)
 
 	if productosStockUpdated == 0 {

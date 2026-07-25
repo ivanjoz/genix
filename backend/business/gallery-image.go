@@ -4,7 +4,7 @@ import (
 	businessTypes "app/business/types"
 	"app/cloud"
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"encoding/json"
 	"fmt"
 )
@@ -56,7 +56,7 @@ func PostGalleryImage(req *core.HandlerArgs) core.HandlerResponse {
 		Status:      1,
 		Updated:     core.SUnixTime(),
 	}
-	if err := db.Insert(&[]businessTypes.GalleryImage{galleryImage}); err != nil {
+	if err := scylla.Insert(&[]businessTypes.GalleryImage{galleryImage}); err != nil {
 		return req.MakeErr("Error al guardar la imagen en BD.", err)
 	}
 
@@ -72,7 +72,7 @@ func deleteGalleryImage(req *core.HandlerArgs, imageID int32) core.HandlerRespon
 	}
 
 	images := []businessTypes.GalleryImage{}
-	query := db.Query(&images)
+	query := scylla.Query(&images)
 	query.CompanyID.Equals(req.User.CompanyID).
 		Image.Equals(fmt.Sprintf("%v_%v", req.User.CompanyID, imageID))
 	if err := query.Exec(); err != nil {
@@ -85,7 +85,7 @@ func deleteGalleryImage(req *core.HandlerArgs, imageID int32) core.HandlerRespon
 	// Soft deletion keeps the delta cache able to evict the image on the next sync.
 	images[0].Status = 0
 	images[0].Updated = core.SUnixTime()
-	if err := db.Insert(&images); err != nil {
+	if err := scylla.Insert(&images); err != nil {
 		return req.MakeErr("Error al eliminar la imagen:", err)
 	}
 
@@ -96,8 +96,8 @@ func deleteGalleryImage(req *core.HandlerArgs, imageID int32) core.HandlerRespon
 func GetGalleryImages(req *core.HandlerArgs) core.HandlerResponse {
 	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
 	images := []businessTypes.GalleryImage{}
-	query := db.Query(&images)
-	table := db.Table[businessTypes.GalleryImage]()
+	query := scylla.Query(&images)
+	table := scylla.Table[businessTypes.GalleryImage]()
 
 	query.Exclude(table.CompanyID).
 		CompanyID.Equals(req.User.CompanyID)

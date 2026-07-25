@@ -2,7 +2,7 @@ package business
 
 import (
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	businessTypes "app/business/types"
 	"encoding/json"
 	"fmt"
@@ -27,7 +27,7 @@ func GetSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 		updated := req.GetQueryInt(fmt.Sprintf("id_%v", listaID))
 
 		eg.Go(func() error {
-			query := db.Query(listaRegistrosMap[listaID])
+			query := scylla.Query(listaRegistrosMap[listaID])
 			query.Select().
 				CompanyID.Equals(req.User.CompanyID).
 				ListID.Equals(listaID)
@@ -62,7 +62,7 @@ func GetSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 //  4. If a colliding row is active (Status > 0) and is not the same ID, it rejects the request.
 //  5. For incoming inserts (ID <= 0), if collision is only with deleted rows (Status = 0),
 //     it reuses that historical ID so the operation becomes an update instead of a new insert.
-//  6. Persists with db.Insert and returns TempID -> NewID mapping for all input rows.
+//  6. Persists with scylla.Insert and returns TempID -> NewID mapping for all input rows.
 func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Deserialize input payload into records to upsert.
@@ -121,7 +121,7 @@ func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Load all potentially colliding rows for this tenant by incoming hash set.
 	existingRecordsByHash := []businessTypes.SharedListRecord{}
-	existingRecordsQuery := db.Query(&existingRecordsByHash)
+	existingRecordsQuery := scylla.Query(&existingRecordsByHash)
 	existingRecordsQuery.Select().
 		CompanyID.Equals(req.User.CompanyID).
 		NameHash.In(uniqueIncomingHashes...).
@@ -178,7 +178,7 @@ func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Persist as batch upsert; ORM autoincrements IDs still <= 0.
-	if err = db.Insert(&records); err != nil {
+	if err = scylla.Insert(&records); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el registro de lista compartida: " + err.Error())
 	}
 

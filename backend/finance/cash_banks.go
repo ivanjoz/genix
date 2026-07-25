@@ -2,7 +2,7 @@ package finance
 
 import (
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	financeTypes "app/finance/types"
 	"encoding/json"
 )
@@ -11,7 +11,7 @@ func GetCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 	updated := core.UnixToSunix(req.GetQueryInt64("upd"))
 
 	cajas := []financeTypes.CashBank{}
-	query := db.Query(&cajas)
+	query := scylla.Query(&cajas)
 	query.Select().CompanyID.Equals(req.User.CompanyID)
 	if updated > 0 {
 		query.Updated.GreaterEqual(updated)
@@ -64,11 +64,11 @@ func PostCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 	// Insert or Update using db2
 	if body.Created == nowTime {
 		// New record - insert
-		err = db.Insert(cajas)
+		err = scylla.Insert(cajas)
 	} else {
 		// Existing record - update excluding reconciliation fields
-		q1 := db.Table[financeTypes.CashBank]()
-		err = db.UpdateExclude(cajas, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount)
+		q1 := scylla.Table[financeTypes.CashBank]()
+		err = scylla.UpdateExclude(cajas, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount)
 	}
 
 	if err != nil {
@@ -89,7 +89,7 @@ func GetCashBankMovements(req *core.HandlerArgs) core.HandlerResponse {
 	lastRegistrosLimit := req.GetQueryInt("last-registros")
 
 	movimientos := []financeTypes.CashBankMovement{}
-	query := db.Query(&movimientos)
+	query := scylla.Query(&movimientos)
 	query.Select().CompanyID.Equals(req.User.CompanyID).CashBankID.Equals(cashBankID)
 
 	// KeyIntPacking: CashBankID (5) + Date (5) + Autoincrement (9)
@@ -133,7 +133,7 @@ func GetCashBankMovementByID(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	movimientos := []financeTypes.CashBankMovement{}
-	query := db.Query(&movimientos)
+	query := scylla.Query(&movimientos)
 	query.Select().CompanyID.Equals(req.User.CompanyID)
 	// DocumentID and ReferenceID are separate local indexes; prefer the more specific DocumentID.
 	if documentID != 0 {
@@ -161,7 +161,7 @@ func GetCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	lastRegistros = core.If(lastRegistros > 1000, 1000, lastRegistros)
 
 	cuadres := []financeTypes.CashReconciliation{}
-	query := db.Query(&cuadres)
+	query := scylla.Query(&cuadres)
 	query.Select().CompanyID.Equals(req.User.CompanyID)
 	if lastRegistros > 0 {
 		query.ID.Between(core.SUnixTimeUUIDConcatID(cashBankID, 0), core.SUnixTimeUUIDConcatID(cashBankID+1, 0))
@@ -232,18 +232,18 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Insert records using db2
-	if err := db.Insert(&[]financeTypes.CashReconciliation{record}); err != nil {
+	if err := scylla.Insert(&[]financeTypes.CashReconciliation{record}); err != nil {
 		core.Log("Error ScyllaDB inserting cuadre: ", err)
 		return req.MakeErr("Error al registrar el cuadre:", err)
 	}
 
-	q1 := db.Table[financeTypes.CashBank]()
-	if err := db.Update(&[]financeTypes.CashBank{cashBank}, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount, q1.Updated, q1.UpdatedBy); err != nil {
+	q1 := scylla.Table[financeTypes.CashBank]()
+	if err := scylla.Update(&[]financeTypes.CashBank{cashBank}, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount, q1.Updated, q1.UpdatedBy); err != nil {
 		core.Log("Error ScyllaDB updating cashBank: ", err)
 		return req.MakeErr("Error al actualizar la cashBank:", err)
 	}
 
-	if err := db.Insert(&[]financeTypes.CashBankMovement{movimiento}); err != nil {
+	if err := scylla.Insert(&[]financeTypes.CashBankMovement{movimiento}); err != nil {
 		core.Log("Error ScyllaDB inserting movimiento: ", err)
 		return req.MakeErr("Error al registrar el movimiento:", err)
 	}

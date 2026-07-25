@@ -1,7 +1,7 @@
 package core
 
 import (
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
@@ -9,7 +9,7 @@ import (
 )
 
 type Cache struct {
-	db.TableStruct[CacheTable, Cache]
+	scylla.TableStruct[CacheTable, Cache]
 	CompanyID    int32
 	ID           int32
 	Key          string
@@ -19,20 +19,20 @@ type Cache struct {
 }
 
 type CacheTable struct {
-	db.TableStruct[CacheTable, Cache]
-	CompanyID    db.Col[CacheTable, int32]
-	ID           db.Col[CacheTable, int32]
-	Key          db.Col[CacheTable, string]
-	ContentBytes db.Col[CacheTable, []byte]
-	Content      db.Col[CacheTable, string]
-	Updated      db.Col[CacheTable, int32]
+	scylla.TableStruct[CacheTable, Cache]
+	CompanyID    scylla.Col[CacheTable, int32]
+	ID           scylla.Col[CacheTable, int32]
+	Key          scylla.Col[CacheTable, string]
+	ContentBytes scylla.Col[CacheTable, []byte]
+	Content      scylla.Col[CacheTable, string]
+	Updated      scylla.Col[CacheTable, int32]
 }
 
-func (e CacheTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e CacheTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:      "cache",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.ID),
+		Keys:      scylla.Cols(e.ID),
 	}
 }
 
@@ -56,7 +56,7 @@ func GetCacheByKeys(companyID int32, cacheKeys ...string) ([]Cache, error) {
 	}
 
 	cacheRows := []Cache{}
-	cacheQuery := db.Query(&cacheRows)
+	cacheQuery := scylla.Query(&cacheRows)
 	cacheQuery.CompanyID.Equals(companyID)
 
 	if len(cacheIDs) == 1 {
@@ -71,7 +71,7 @@ func GetCacheByKeys(companyID int32, cacheKeys ...string) ([]Cache, error) {
 	return cacheRows, nil
 }
 
-func ExtractGroupIndexCacheValues(req *HandlerArgs) ([]db.GroupIndexCache, error) {
+func ExtractGroupIndexCacheValues(req *HandlerArgs) ([]scylla.GroupIndexCache, error) {
 
 	groupHashes := parseConcatenatedInts(req.GetQuery("cc-gh"))
 	updateCounters := parseConcatenatedInts(req.GetQuery("cc-upc"))
@@ -82,15 +82,15 @@ func ExtractGroupIndexCacheValues(req *HandlerArgs) ([]db.GroupIndexCache, error
 	return records, nil
 }
 
-func makeGroupIndexCacheValues(groupHashes []int64, updateCounters []int64) []db.GroupIndexCache {
-	records := make([]db.GroupIndexCache, 0, len(groupHashes))
+func makeGroupIndexCacheValues(groupHashes []int64, updateCounters []int64) []scylla.GroupIndexCache {
+	records := make([]scylla.GroupIndexCache, 0, len(groupHashes))
 	for index, encodedGroupHash := range groupHashes {
 		if index >= len(updateCounters) {
 			continue
 		}
 
 		// Frontend sends signed int32 hashes through uint32 packing because the compact encoder is unsigned.
-		records = append(records, db.GroupIndexCache{
+		records = append(records, scylla.GroupIndexCache{
 			GroupHash:     int32(uint32(encodedGroupHash)),
 			UpdateCounter: int32(updateCounters[index]),
 		})
@@ -98,7 +98,7 @@ func makeGroupIndexCacheValues(groupHashes []int64, updateCounters []int64) []db
 	return records
 }
 
-func (req *HandlerArgs) ExtractCacheVersionValues() []db.IDCacheVersion {
+func (req *HandlerArgs) ExtractCacheVersionValues() []scylla.IDCacheVersion {
 	idsStr := req.GetQuery("ids")
 	// New cache delta protocol keys: cc-ids for cached IDs and cc-ver for aligned cache versions.
 	cachedIDsStr := req.GetQuery("cc-ids")
@@ -108,17 +108,17 @@ func (req *HandlerArgs) ExtractCacheVersionValues() []db.IDCacheVersion {
 	if companyID == 0 {
 		// Invalid company scope means the cache query cannot be resolved safely.
 		Log("error al extraer versiones de cache: no se envio Company-ID")
-		return []db.IDCacheVersion{}
+		return []scylla.IDCacheVersion{}
 	}
 
 	ids := parseConcatenatedInts(idsStr)
 	cachedIDs := parseConcatenatedInts(cachedIDsStr)
 	cacheVersionsFromIDs := parseConcatenatedInts(cacheVersionsFromIDsStr)
 
-	records := []db.IDCacheVersion{}
+	records := []scylla.IDCacheVersion{}
 
 	for _, id := range ids {
-		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: 0, PartitionID: companyID})
+		records = append(records, scylla.IDCacheVersion{ID: id, CacheVersion: 0, PartitionID: companyID})
 	}
 
 	for i, id := range cachedIDs {
@@ -126,7 +126,7 @@ func (req *HandlerArgs) ExtractCacheVersionValues() []db.IDCacheVersion {
 		if i < len(cacheVersionsFromIDs) {
 			version = uint8(cacheVersionsFromIDs[i])
 		}
-		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: version, PartitionID: companyID})
+		records = append(records, scylla.IDCacheVersion{ID: id, CacheVersion: version, PartitionID: companyID})
 	}
 
 	Log("records extracted:", len(records))
@@ -173,7 +173,7 @@ func parseConcatenatedInts(s string) []int64 {
 // and clustered by ID (here used as the CompanyID). It lets a single partition scan return every
 // company registered under a group — e.g. all companies whose products changed since the last build.
 type GlobalCache struct {
-	db.TableStruct[GlobalCacheTable, GlobalCache]
+	scylla.TableStruct[GlobalCacheTable, GlobalCache]
 	GroupID int16
 	ID      int32
 	Content []byte
@@ -181,18 +181,18 @@ type GlobalCache struct {
 }
 
 type GlobalCacheTable struct {
-	db.TableStruct[GlobalCacheTable, GlobalCache]
-	GroupID db.Col[GlobalCacheTable, int16]
-	ID      db.Col[GlobalCacheTable, int32]
-	Content db.Col[GlobalCacheTable, []byte]
-	Updated db.Col[GlobalCacheTable, int32]
+	scylla.TableStruct[GlobalCacheTable, GlobalCache]
+	GroupID scylla.Col[GlobalCacheTable, int16]
+	ID      scylla.Col[GlobalCacheTable, int32]
+	Content scylla.Col[GlobalCacheTable, []byte]
+	Updated scylla.Col[GlobalCacheTable, int32]
 }
 
-func (e GlobalCacheTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e GlobalCacheTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:      "cache_global",
 		Partition: e.GroupID,
-		Keys:      db.Cols(e.ID),
+		Keys:      scylla.Cols(e.ID),
 	}
 }
 
@@ -203,7 +203,7 @@ func SaveCacheGlobal(groupID int16, companyID int32, content []byte, updated int
 		return fmt.Errorf("groupID y companyID son requeridos para SaveCacheGlobal")
 	}
 	row := GlobalCache{GroupID: groupID, ID: companyID, Content: content, Updated: updated}
-	if err := db.Insert(&[]GlobalCache{row}); err != nil {
+	if err := scylla.Insert(&[]GlobalCache{row}); err != nil {
 		return fmt.Errorf("error al guardar cache global (group=%d company=%d): %w", groupID, companyID, err)
 	}
 	return nil
@@ -216,7 +216,7 @@ func GetCacheGlobal(groupID int16, companyIDs ...int32) ([]GlobalCache, error) {
 		return nil, fmt.Errorf("groupID es requerido para GetCacheGlobal")
 	}
 	rows := []GlobalCache{}
-	query := db.Query(&rows).GroupID.Equals(groupID)
+	query := scylla.Query(&rows).GroupID.Equals(groupID)
 	if len(companyIDs) == 1 {
 		query.ID.Equals(companyIDs[0])
 	} else if len(companyIDs) > 1 {

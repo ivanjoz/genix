@@ -1,9 +1,9 @@
 package types
 
-import "app/db"
+import "github.com/ivanjoz/genix-orm/scylla"
 
 type GalleryImage struct {
-	db.TableStruct[GalleryImageTable, GalleryImage]
+	scylla.TableStruct[GalleryImageTable, GalleryImage]
 	CompanyID   int32  `db:"empresa_id,pk"`
 	Image       string `db:"image,pk"`
 	ImageID     int32  `json:",omitempty" db:"image_id"`
@@ -13,23 +13,23 @@ type GalleryImage struct {
 }
 
 type GalleryImageTable struct {
-	db.TableStruct[GalleryImageTable, GalleryImage]
-	CompanyID   db.Col[GalleryImageTable, int32]
-	Image       db.Col[GalleryImageTable, string]
-	ImageID     db.Col[GalleryImageTable, int32]
-	Description db.Col[GalleryImageTable, string]
-	Status      db.Col[GalleryImageTable, int8]
-	Updated     db.Col[GalleryImageTable, int32]
+	scylla.TableStruct[GalleryImageTable, GalleryImage]
+	CompanyID   scylla.Col[GalleryImageTable, int32]
+	Image       scylla.Col[GalleryImageTable, string]
+	ImageID     scylla.Col[GalleryImageTable, int32]
+	Description scylla.Col[GalleryImageTable, string]
+	Status      scylla.Col[GalleryImageTable, int8]
+	Updated     scylla.Col[GalleryImageTable, int32]
 }
 
-func (e GalleryImageTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e GalleryImageTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:      "gallery_images",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.Image),
-		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.Status)},
-			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
+		Keys:      scylla.Cols(e.Image),
+		Indexes: []scylla.Index{
+			{Type: scylla.TypeView, Keys: scylla.Cols(e.Status)},
+			{Type: scylla.TypeView, Keys: scylla.Cols(e.Updated)},
 		},
 	}
 }

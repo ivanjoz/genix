@@ -24,7 +24,7 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
     updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
 
     records := []negocioTypes.Producto{}
-    query := db.Query(&records)
+    query := scylla.Query(&records)
     query.EmpresaID.Equals(req.Usuario.EmpresaID)
 
     if updated > 0 {
@@ -90,10 +90,10 @@ Query each status bucket separately so the `[Partition, Status, Updated]` view i
 | `Partition AND Status AND Updated > X` | `[PartitionCol, Status, Updated]` |
 
 ```go
-Indexes: []db.Index{
-    {Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
-    {Type: db.TypeView, Keys: []db.Coln{e.Type.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
-    {Type: db.TypeView, Keys: []db.Coln{e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)}, KeepPart: true},
+Indexes: []scylla.Index{
+    {Type: scylla.TypeView, Keys: []scylla.Coln{e.Updated}, KeepPart: true},
+    {Type: scylla.TypeView, Keys: []scylla.Coln{e.Type.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
+    {Type: scylla.TypeView, Keys: []scylla.Coln{e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)}, KeepPart: true},
 },
 ```
 

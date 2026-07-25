@@ -3,7 +3,7 @@ package business
 import (
 	businessTypes "app/business/types"
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"encoding/json"
 	"fmt"
 
@@ -17,7 +17,7 @@ func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		query := db.Query(&almacenes)
+		query := scylla.Query(&almacenes)
 		query.Select().CompanyID.Equals(req.User.CompanyID)
 
 		if updated > 0 {
@@ -34,7 +34,7 @@ func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
 
 	sedes := []businessTypes.Site{}
 	errGroup.Go(func() error {
-		query := db.Query(&sedes)
+		query := scylla.Query(&sedes)
 		query.Select().CompanyID.Equals(req.User.CompanyID)
 
 		if updated > 0 {
@@ -67,7 +67,7 @@ func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
 	paisCiudades := []businessTypes.CityLocation{}
 
 	if !ubigeosSlice.IsEmpty() {
-		query := db.Query(&paisCiudades)
+		query := scylla.Query(&paisCiudades)
 		query.Select().
 			CountryID.Equals(604).
 			ID.In(ubigeosSlice.Values...)
@@ -134,7 +134,7 @@ func PostSite(req *core.HandlerArgs) core.HandlerResponse {
 	body.CreatedBy = req.User.ID
 
 	records := []businessTypes.Site{body}
-	if err = db.Insert(&records); err != nil {
+	if err = scylla.Insert(&records); err != nil {
 		return req.MakeErr("Error al actualizar / insertar la site: " + err.Error())
 	}
 
@@ -146,7 +146,7 @@ func GetCountryCities(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt("upd")
 
 	paisCiudades := []businessTypes.CityLocation{}
-	query := db.Query(&paisCiudades)
+	query := scylla.Query(&paisCiudades)
 	query.Select().
 		CountryID.Equals(int32(paisID))
 
@@ -194,7 +194,7 @@ func PostWarehouse(req *core.HandlerArgs) core.HandlerResponse {
 	body.CreatedBy = req.User.ID
 
 	almacenes := []businessTypes.Warehouse{body}
-	if err := db.Insert(&almacenes); err != nil {
+	if err := scylla.Insert(&almacenes); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el almacén: " + err.Error())
 	}
 

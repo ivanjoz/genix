@@ -4,8 +4,8 @@ import (
 	"app/agent"
 	"app/business"
 	"app/core"
-	"app/db"
-	"app/db/text_search"
+	"github.com/ivanjoz/genix-orm/scylla"
+	"github.com/ivanjoz/genix-orm/scylla/text_search"
 	"app/exec"
 	"context"
 	"fmt"
@@ -186,7 +186,7 @@ func main() {
 
 	fmt.Println("Starting DB connection...")
 
-	db.SetScyllaConnection(db.ConnParams{
+	scylla.SetScyllaConnection(scylla.ConnParams{
 		Host:     core.Env.DB_HOST,
 		Port:     int(core.Env.DB_PORT),
 		User:     core.Env.DB_USER,
@@ -223,7 +223,7 @@ func main() {
 		dbLogLevel = 2
 	}
 	*/
-	db.SetDebugLogging(dbLogLevel)
+	scylla.SetDebugLogging(dbLogLevel)
 
 	// Create project-local tmp/promps once so per-call prompt writes can skip
 	// the parent-dir check. Local-only; no-op in serverless/prod.

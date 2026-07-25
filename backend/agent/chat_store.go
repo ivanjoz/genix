@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"app/agent/types"
 )
 
@@ -38,7 +38,7 @@ func saveMessage(s *AgentSession, role int8, message, summary string, tokensUsed
 	}
 	row.PrepareCloudSync()
 	rows := []types.AgentMessage{row}
-	if err := db.Insert(&rows); err != nil {
+	if err := scylla.Insert(&rows); err != nil {
 		return 0, err
 	}
 	return ts, nil
@@ -52,7 +52,7 @@ func loadLastN(s *AgentSession, n int) ([]types.AgentMessage, error) {
 		return nil, nil
 	}
 	rows := []types.AgentMessage{}
-	q := db.Query(&rows).Limit(int32(n)).OrderDesc()
+	q := scylla.Query(&rows).Limit(int32(n)).OrderDesc()
 	q.CompanyUserID.Equals(int64(s.CompanyID)*1_000_000 + int64(s.UserID)).
 		SessionID.Equals(s.SessionID)
 	if err := q.Exec(); err != nil {

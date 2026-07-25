@@ -4,7 +4,7 @@ import (
 	"app/cloud"
 	"app/core"
 	coretypes "app/core/types"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	securityTypes "app/security/types"
 	"encoding/json"
 	"fmt"
@@ -46,7 +46,7 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	body.Updated = core.SUnixTime()
 	body.PrepareCloudSync()
 	perfilesToSave := []securityTypes.Profile{body}
-	if err = db.Insert(&perfilesToSave); err != nil {
+	if err = scylla.Insert(&perfilesToSave); err != nil {
 		return req.MakeErr("Error al actualizar el profile en ScyllaDB: " + err.Error())
 	}
 
@@ -58,7 +58,7 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 
 	if isExistingPerfil {
 		affectedUsers := []coretypes.User{}
-		affectedUsersQuery := db.Query(&affectedUsers)
+		affectedUsersQuery := scylla.Query(&affectedUsers)
 		affectedUsersQuery.CompanyID.Equals(req.User.CompanyID).ProfileIDs.Contains(body.ID)
 		if err = affectedUsersQuery.AllowFilter().Exec(); err != nil {
 			return req.MakeErr("Error al obtener los usuarios afectados por el profile.", err)
@@ -103,8 +103,8 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 			}
 
 			if len(usersWithChangedAccesos) > 0 {
-				usuarioQuery := db.Query(&usersWithChangedAccesos)
-				if err = db.Update(&usersWithChangedAccesos, usuarioQuery.AccesosComputed); err != nil {
+				usuarioQuery := scylla.Query(&usersWithChangedAccesos)
+				if err = scylla.Update(&usersWithChangedAccesos, usuarioQuery.AccesosComputed); err != nil {
 					return req.MakeErr("Error al actualizar usuarios afectados en ScyllaDB: " + err.Error())
 				}
 			}

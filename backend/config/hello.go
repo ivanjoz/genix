@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"app/libs/colbin"
+	"github.com/ivanjoz/colbin"
 )
 
 func HelloWorld(req *core.HandlerArgs) core.HandlerResponse {

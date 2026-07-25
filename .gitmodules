@@ -1,3 +1,6 @@
 [submodule "frontend/packages/genix-ui"]
 	path = frontend/packages/genix-ui
 	url = git@github.com:ivanjoz/genix-ui.git
+[submodule "backend/genix-orm"]
+	path = backend/genix-orm
+	url = git@github.com:ivanjoz/genix-orm.git

@@ -4,7 +4,7 @@ import (
 	"app/cloud"
 	"app/core"
 	coretypes "app/core/types"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"app/security/types"
 	"encoding/json"
 	"fmt"
@@ -33,7 +33,7 @@ func getPerfilesMapByIDs(companyID int32, profileIDs []int32) (map[int32]types.P
 
 	uniqueProfileIDs := core.MakeUnique(profileIDs)
 	perfiles := []types.Profile{}
-	query := db.Query(&perfiles)
+	query := scylla.Query(&perfiles)
 	query.CompanyID.Equals(companyID).ID.In(uniqueProfileIDs...)
 
 	if err := query.Exec(); err != nil {
@@ -128,7 +128,7 @@ func GetUsuariosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 
 	usuarios := []coretypes.User{}
 	// QueryCachedIDs checks cache version and only fetches stale/missing records from ScyllaDB.
-	queryError := db.QueryCachedIDs(&usuarios, cachedIDs)
+	queryError := scylla.QueryCachedIDs(&usuarios, cachedIDs)
 	if queryError != nil {
 		return req.MakeErr("Error al obtener los usuarios.", queryError)
 	}
@@ -171,7 +171,7 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.Status = 1
 	} else {
 		usuariosExistentes := []coretypes.User{}
-		query := db.Query(&usuariosExistentes)
+		query := scylla.Query(&usuariosExistentes)
 		query.CompanyID.Equals(req.User.CompanyID).ID.Equals(body.ID).Limit(1)
 		if err = query.Exec(); err != nil {
 			return req.MakeErr("Error al obtener el user a actualizar.", err)
@@ -218,7 +218,7 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	core.Print(body)
 
 	usuariosToSave := []coretypes.User{body}
-	if err = db.Insert(&usuariosToSave); err != nil {
+	if err = scylla.Insert(&usuariosToSave); err != nil {
 		return req.MakeErr("Error al actualizar el user (SQL): " + err.Error())
 	}
 

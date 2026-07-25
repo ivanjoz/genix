@@ -5,7 +5,7 @@ import (
 	salesTypes "app/sales/types"
 	"app/core"
 	coreTypes "app/core/types"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	financeTypes "app/finance/types"
 	"app/logistics"
 	logisticsTypes "app/logistics/types"
@@ -194,7 +194,7 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 // validateContext ensures the fixed sample references already exist in DB before generating data.
 func (generator *saleOrderGenerator) validateContext() error {
 	users := []coreTypes.User{}
-	userQuery := db.Query(&users)
+	userQuery := scylla.Query(&users)
 	userQuery.Select(userQuery.ID, userQuery.Status).
 		CompanyID.Equals(sampleCompanyID).
 		ID.Equals(sampleUserID).
@@ -207,7 +207,7 @@ func (generator *saleOrderGenerator) validateContext() error {
 	}
 
 	warehouses := []businessTypes.Warehouse{}
-	warehouseQuery := db.Query(&warehouses)
+	warehouseQuery := scylla.Query(&warehouses)
 	warehouseQuery.Select(warehouseQuery.ID, warehouseQuery.Status).
 		CompanyID.Equals(sampleCompanyID).
 		ID.Equals(sampleWarehouseID).
@@ -231,7 +231,7 @@ func (generator *saleOrderGenerator) validateContext() error {
 // resolveActiveCajaID picks the lowest active cashBank ID so the sample generator can run in seeded environments without assuming ID=1.
 func (generator *saleOrderGenerator) resolveActiveCajaID() (int32, error) {
 	activeCajas := []financeTypes.CashBank{}
-	cajaQuery := db.Query(&activeCajas)
+	cajaQuery := scylla.Query(&activeCajas)
 	cajaQuery.Select(cajaQuery.ID, cajaQuery.Status).
 		CompanyID.Equals(sampleCompanyID).
 		Status.Equals(1)
@@ -372,7 +372,7 @@ func (generator *saleOrderGenerator) selectProducts(stocks []logisticsTypes.Prod
 	}
 
 	products := []businessTypes.Product{}
-	productQuery := db.Query(&products)
+	productQuery := scylla.Query(&products)
 	productQuery.Select(productQuery.ID, productQuery.Status).
 		CompanyID.Equals(sampleCompanyID).
 		Status.Equals(1)
@@ -403,7 +403,7 @@ func (generator *saleOrderGenerator) selectProducts(stocks []logisticsTypes.Prod
 // loadProductCatalog resolves names and prices once so every generated line uses the persisted product price.
 func (generator *saleOrderGenerator) loadProductCatalog() error {
 	products := []businessTypes.Product{}
-	query := db.Query(&products)
+	query := scylla.Query(&products)
 	query.Select(query.ID, query.Name, query.Price, query.FinalPrice, query.Status).
 		CompanyID.Equals(sampleCompanyID).
 		ID.In(generator.selectedProductIDs...)

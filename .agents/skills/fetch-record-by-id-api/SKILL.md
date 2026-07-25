@@ -1,6 +1,6 @@
 ---
 name: fetch-record-by-id-api
-description: Backend `*-ids` handlers + frontend callers that resolve records by ID through a 3-layer cache (memory → IndexedDB → server delta), using `db.QueryCachedIDs` and `cache-by-ids.svelte.ts`. Use for "give me records [12, 87, 412]". For list/watermark sync, use `delta-cache-api`.
+description: Backend `*-ids` handlers + frontend callers that resolve records by ID through a 3-layer cache (memory → IndexedDB → server delta), using `scylla.QueryCachedIDs` and `cache-by-ids.svelte.ts`. Use for "give me records [12, 87, 412]". For list/watermark sync, use `delta-cache-api`.
 version: 0.1.0
 ---
 
@@ -19,15 +19,15 @@ A table can expose both endpoints independently.
 
 ## 1. Backend schema (versioned)
 
-ORM enforces these at startup (`backend/db/cache_version.go:67`):
+ORM enforces these at startup (`backend/genix-orm/scylla/cache_version.go:67`):
 
 ```go
-func (t ClientProviderTable) GetSchema() db.TableSchema {
-    return db.TableSchema{
+func (t ClientProviderTable) GetSchema() scylla.TableSchema {
+    return scylla.TableSchema{
         Name:             "client_provider",
         Partition:        t.EmpresaID,                       // int32 or int64
         SaveCacheVersion: true,
-        Keys:             []db.Coln{t.ID.Autoincrement(0)},  // exactly ONE, int16/int32/int64
+        Keys:             []scylla.Coln{t.ID.Autoincrement(0)},  // exactly ONE, int16/int32/int64
     }
 }
 ```
@@ -36,7 +36,7 @@ Record struct must expose a `uint8 ccv` field (only on the record, not the Table
 
 ```go
 type ClientProvider struct {
-    db.TableStruct[ClientProviderTable, ClientProvider]
+    scylla.TableStruct[ClientProviderTable, ClientProvider]
     EmpresaID    int32 `json:",omitempty"`
     ID           int32 `json:",omitempty"`
     Status       int8  `json:"ss,omitempty"`
@@ -54,7 +54,7 @@ func GetClientProvidersByIDs(req *core.HandlerArgs) core.HandlerResponse {
         return req.MakeErr("No se enviaron ids a buscar.")
     }
     clientProviders := []s.ClientProvider{}
-    if err := db.QueryCachedIDs(&clientProviders, cachedIDs); err != nil {
+    if err := scylla.QueryCachedIDs(&clientProviders, cachedIDs); err != nil {
         return req.MakeErr("Error al obtener clientes/proveedores.", err)
     }
     return req.MakeResponse(clientProviders)
@@ -76,9 +76,9 @@ func GetProductStockLotsByIDs(req *core.HandlerArgs) core.HandlerResponse {
         return req.MakeErr("No se enviaron ids de lotes.")
     }
     // ExtractCacheVersionValues returns int64; convert to the table's key type.
-    lotIDs := core.Map(lotIDRecords, func(e db.IDCacheVersion) int32 { return int32(e.ID) })
+    lotIDs := core.Map(lotIDRecords, func(e scylla.IDCacheVersion) int32 { return int32(e.ID) })
     lots := []logisticaTypes.ProductStockLot{}
-    query := db.Query(&lots)
+    query := scylla.Query(&lots)
     if err := query.CompanyID.Equals(req.Usuario.EmpresaID).ID.In(lotIDs...).Exec(); err != nil {
         return req.MakeErr("Error al obtener los lotes.", err)
     }
@@ -211,7 +211,7 @@ caller → memory map → IDB (compound key [storeName+ID]) → server (only if 
 |---|---|
 | Server keeps returning the same rows | Response struct missing `CacheVersion uint8` / `ccv` tag |
 | `Error: invalid cc-ver for <id>` | Corrupt local `ccv > 255` → `clearCacheByIDs()` |
-| ORM panic on startup | Schema violates single-key / key-type / partition-type rule (`backend/db/cache_version.go:67`) |
+| ORM panic on startup | Schema violates single-key / key-type / partition-type rule (`backend/genix-orm/scylla/cache_version.go:67`) |
 | First response is full table | Cold start: no `cc-ids` to send → all requested `ids` fetched |
 
 ## Real examples

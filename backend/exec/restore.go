@@ -3,7 +3,7 @@ package exec
 import (
 	"app/cloud"
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"archive/tar"
 	"bytes"
 	"encoding/json"
@@ -42,7 +42,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Build the table registry once so restore logs can distinguish a bad TAR from a missing controller.
-	controllersMap := map[string]db.ScyllaControllerInterface{}
+	controllersMap := map[string]scylla.ScyllaControllerInterface{}
 	registeredTableNames := []string{}
 	for _, controller := range MakeScyllaControllers() {
 		tableName := controller.GetTableName()

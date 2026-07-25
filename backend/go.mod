@@ -14,8 +14,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.16.1
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.30.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.51.1
-	github.com/fatih/color v1.15.0
-	github.com/gocql/gocql v1.6.0
+	github.com/fatih/color v1.19.0
+	github.com/gocql/gocql v1.6.0 // indirect
 	github.com/klauspost/compress v1.18.2
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/mashingan/smapping v0.1.19
@@ -51,12 +51,11 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/kr/text v0.2.0 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
 	github.com/toorop/go-dkim v0.0.0-20201103131630-e1cd1a0a5208 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
-	github.com/viant/xreflect v0.0.0-20230303201326-f50afb0feb0d // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/sys v0.42.0 // indirect
@@ -70,16 +69,20 @@ require (
 	github.com/aws/smithy-go v1.20.1
 	github.com/bytedance/sonic v1.15.0
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
+	github.com/ivanjoz/colbin v0.0.0-20260720041505-3f9040cb9613
+	github.com/ivanjoz/genix-orm v0.0.0
 	github.com/kr/pretty v0.3.1
 	github.com/mitchellh/hashstructure/v2 v2.0.2
-	github.com/viant/xunsafe v0.10.3
+	github.com/viant/xunsafe v0.11.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/x448/float16 v0.8.4
 	github.com/xhit/go-simple-mail/v2 v2.16.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/net v0.52.0
-	golang.org/x/sync v0.20.0
+	golang.org/x/sync v0.22.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 replace github.com/gocql/gocql v1.6.0 => github.com/scylladb/gocql v1.13.0
+
+replace github.com/ivanjoz/genix-orm => ./genix-orm

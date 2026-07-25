@@ -2,7 +2,7 @@ package webpage
 
 import (
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	s "app/webpage/types"
 )
 
@@ -42,7 +42,7 @@ func GetWebpagePublic(req *core.HandlerArgs) core.HandlerResponse {
 	result.Config = seoConfig
 
 	rows := []s.EcommercePageContent{}
-	query := db.Query(&rows)
+	query := scylla.Query(&rows)
 	query.Select().CompanyID.Equals(companyID)
 	query.PageID.Equals(pageID)
 	if err := query.Exec(); err != nil {

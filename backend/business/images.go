@@ -2,7 +2,7 @@ package business
 
 import (
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"fmt"
 )
 
@@ -16,7 +16,7 @@ func GetImageIdCounter(req *core.HandlerArgs) core.HandlerResponse {
 		configDigit = imageConfigDigitFull
 	}
 
-	autoincrement, err := db.GetAutoincrementID(fmt.Sprintf("images_%v", req.User.CompanyID), 1)
+	autoincrement, err := scylla.GetAutoincrementID(fmt.Sprintf("images_%v", req.User.CompanyID), 1)
 	if err != nil {
 		return req.MakeErr("Error al reservar el id de imagen:", err)
 	}

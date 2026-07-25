@@ -1,7 +1,7 @@
 package security
 
 import (
-	"app/libs/colbin"
+	"github.com/ivanjoz/colbin"
 	"app/cloud"
 	"app/core"
 	coretypes "app/core/types"

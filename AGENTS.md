@@ -45,7 +45,7 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 
 ### Backend Documentation
 - **backend/README.md** - Brief overview of the Go backend for Genix
-- **backend/db/ORM_INTERNALS.md** - Deep dive into ORM internals: memory model, reflection engine, and query optimization
+- **backend/genix-orm/scylla/ORM_INTERNALS.md** - Deep dive into ORM internals: memory model, reflection engine, and query optimization
 - **backend/docs/CREATE_API_HANDLERS.md** - API handler development guide, MUST read before creating APIs. Key concepts: "updated" parameter for delta responses, query examples, conventions.
 - **backend/docs/ORM_DATABASE_QUERY.md** - Comprehensive ScyllaDB ORM documentation covering model definitions, CRUD operations, query building
 

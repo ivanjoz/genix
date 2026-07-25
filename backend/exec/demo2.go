@@ -5,7 +5,7 @@ import (
 	// sales "app/sales/types"
 	businessTypes "app/business/types"
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"app/libs"
 	"app/sales"
 	salesTypes "app/sales/types"
@@ -20,7 +20,7 @@ type InnerStruct struct {
 }
 
 type DemoStruct struct {
-	db.TableStruct[DemoStructTable, DemoStruct]
+	scylla.TableStruct[DemoStructTable, DemoStruct]
 	CompanyID   int32    `db:"empresa_id,pk"`
 	ID          int32    `db:"id,pk"`
 	ListID      int32    `db:"lista_id,view,view.1,view.2"`
@@ -35,27 +35,27 @@ type DemoStruct struct {
 }
 
 type DemoStructTable struct {
-	db.TableStruct[DemoStructTable, DemoStruct]
-	CompanyID   db.Col[DemoStructTable, int32]
-	ID          db.Col[DemoStructTable, int32]
-	ListID      db.Col[DemoStructTable, int32]
-	Name        db.Col[DemoStructTable, string]
-	Images      db.ColSlice[DemoStructTable, string]
-	Description db.Col[DemoStructTable, string]
-	DemoColumn  db.Col[DemoStructTable, InnerStruct]
-	Status      db.Col[DemoStructTable, int8]
-	Updated     db.Col[DemoStructTable, int64]
-	UpdatedBy   db.Col[DemoStructTable, int32]
+	scylla.TableStruct[DemoStructTable, DemoStruct]
+	CompanyID   scylla.Col[DemoStructTable, int32]
+	ID          scylla.Col[DemoStructTable, int32]
+	ListID      scylla.Col[DemoStructTable, int32]
+	Name        scylla.Col[DemoStructTable, string]
+	Images      scylla.ColSlice[DemoStructTable, string]
+	Description scylla.Col[DemoStructTable, string]
+	DemoColumn  scylla.Col[DemoStructTable, InnerStruct]
+	Status      scylla.Col[DemoStructTable, int8]
+	Updated     scylla.Col[DemoStructTable, int64]
+	UpdatedBy   scylla.Col[DemoStructTable, int32]
 }
 
-func (e DemoStructTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e DemoStructTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:      "zz_demo_struct",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.ID),
-		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.ListID.Int32(), e.Status.DecimalSize(2))},
-			{Type: db.TypeView, Keys: db.Cols(e.ListID, e.Updated.DecimalSize(10))},
+		Keys:      scylla.Cols(e.ID),
+		Indexes: []scylla.Index{
+			{Type: scylla.TypeView, Keys: scylla.Cols(e.ListID.Int32(), e.Status.DecimalSize(2))},
+			{Type: scylla.TypeView, Keys: scylla.Cols(e.ListID, e.Updated.DecimalSize(10))},
 		},
 	}
 }
@@ -79,7 +79,7 @@ func Test38(args *core.ExecArgs) core.FuncResponse {
 
 		// Insertarndo registros
 		fmt.Println("Insertando Registros...")
-		err := db.Insert(&[]DemoStruct{record})
+		err := scylla.Insert(&[]DemoStruct{record})
 		if err != nil {
 			panic(err)
 		}
@@ -88,7 +88,7 @@ func Test38(args *core.ExecArgs) core.FuncResponse {
 	// Obteniendo registros
 	fmt.Println("Obteniendo Registros...")
 	recordsGetted := []DemoStruct{}
-	query := db.Query(&recordsGetted)
+	query := scylla.Query(&recordsGetted)
 	err = query.Exclude(query.ListID).ID.Equals(1).Exec()
 	if err != nil {
 		panic(err)
@@ -112,7 +112,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 	/*
 		records := []businessTypes.SharedListRecord{}
 
-		query := db.Query(&records)
+		query := scylla.Query(&records)
 		err := query.CompanyID.Equals(1).Exec()
 		if err != nil {
 			panic(err)
@@ -124,7 +124,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 			records[i].Updated = core.SUnixTime()
 		}
 
-		err = db.Update(&records, query.ListaID, query.Updated, query.Status)
+		err = scylla.Update(&records, query.ListaID, query.Updated, query.Status)
 		if err != nil {
 			panic(err)
 		}
@@ -132,7 +132,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 	/*
 		records := []businessTypes.CityLocation{}
 
-		query := db.Query(&records)
+		query := scylla.Query(&records)
 		err := query.Exec()
 		if err != nil {
 			panic(err)
@@ -144,7 +144,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 			records[i].Updated = core.SUnixTime()
 		}
 
-		err = db.Update(&records, query.Updated)
+		err = scylla.Update(&records, query.Updated)
 		if err != nil {
 			panic(err)
 		}
@@ -152,7 +152,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 
 	records := []businessTypes.Product{}
 
-	query := db.Query(&records)
+	query := scylla.Query(&records)
 	err := query.Select(query.ID).Exec()
 	if err != nil {
 		panic(err)
@@ -165,7 +165,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 		records[i].Created = core.SUnixTime()
 	}
 
-	err = db.Update(&records, query.Updated, query.Created)
+	err = scylla.Update(&records, query.Updated, query.Created)
 	if err != nil {
 		panic(err)
 	}

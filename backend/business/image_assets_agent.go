@@ -2,7 +2,7 @@ package business
 
 import (
 	businessTypes "app/business/types"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"net/url"
 	"strconv"
 	"strings"
@@ -38,13 +38,13 @@ func FindImageCandidates(keywords string, limit int) ([]AgentImageCandidate, err
 		// Image assets share one group partition and have no Status column, so
 		// they index into status group 0. SearchText hydrates `assets` ordered
 		// by relevance (best match first).
-		if _, err := db.SearchText[businessTypes.ImageAsset](&assets, imageAssetCategoryGroupID, keywords, 0, limit); err != nil {
+		if _, err := scylla.SearchText[businessTypes.ImageAsset](&assets, imageAssetCategoryGroupID, keywords, 0, limit); err != nil {
 			return nil, err
 		}
 	}
 	if len(assets) == 0 {
 		// Fallback: return any images so find_image never comes back empty.
-		query := db.Query(&assets)
+		query := scylla.Query(&assets)
 		if err := query.GroupID.Equals(imageAssetCategoryGroupID).Limit(int32(limit)).Exec(); err != nil {
 			return nil, err
 		}
@@ -70,7 +70,7 @@ func FindImageCandidates(keywords string, limit int) ([]AgentImageCandidate, err
 // imageCategoryNames loads the CategoryID→Name map used to build public URLs.
 func imageCategoryNames() (map[int16]string, error) {
 	categories := []businessTypes.ImageAssetCategory{}
-	query := db.Query(&categories)
+	query := scylla.Query(&categories)
 	if err := query.Select(query.ID, query.Name).GroupID.Equals(imageAssetCategoryGroupID).Exec(); err != nil {
 		return nil, err
 	}

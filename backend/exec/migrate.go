@@ -2,17 +2,17 @@ package exec
 
 import (
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"fmt"
 )
 
 // makeDBController creates a ScyllaController for db2 package types using generics.
 // This function automatically handles queries for any db2 table type using the
 // TableQueryInterface for clean, simple query building.
-func makeDBController[T db.TableBaseInterface[E, T], E db.TableSchemaInterface[E]]() db.ScyllaControllerInterface {
+func makeDBController[T scylla.TableBaseInterface[E, T], E scylla.TableSchemaInterface[E]]() scylla.ScyllaControllerInterface {
 	// Get the table struct instance
-	schema := db.MakeSchema[T]()
-	scyllaTable := db.MakeScyllaTable[T]()
+	schema := scylla.MakeSchema[T]()
+	scyllaTable := scylla.MakeScyllaTable[T]()
 
 	// Get table name and keyspace
 	tableName := schema.Name
@@ -22,7 +22,7 @@ func makeDBController[T db.TableBaseInterface[E, T], E db.TableSchemaInterface[E
 	}
 	fullTableName := fmt.Sprintf("%s.%s", keyspace, tableName)
 
-	contoller := db.ScyllaController[T, E]{
+	contoller := scylla.ScyllaController[T, E]{
 		TableName: fullTableName,
 		Table:     scyllaTable,
 		Schema:    schema,

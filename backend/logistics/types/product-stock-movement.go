@@ -1,14 +1,14 @@
 package types
 
 import (
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 )
 
 // WarehouseProductMovement is the append-only movement ledger.
 // LotID (0 = no lot) and SerialNumber (empty = no serial) together tell whether
 // the movement targets a ProductStockDetail row or the plain ProductStockV2.Quantity bucket.
 type WarehouseProductMovement struct {
-	db.TableStruct[WarehouseProductMovementTable, WarehouseProductMovement]
+	scylla.TableStruct[WarehouseProductMovementTable, WarehouseProductMovement]
 	CompanyID int32 `json:",omitempty"`
 	// ID packs Date(5)+WarehouseID(5)+Autoincrement(3) into an int64.
 	ID                   int64
@@ -32,66 +32,66 @@ type WarehouseProductMovement struct {
 }
 
 type WarehouseProductMovementTable struct {
-	db.TableStruct[WarehouseProductMovementTable, WarehouseProductMovement]
-	CompanyID            db.Col[WarehouseProductMovementTable, int32]
-	ID                   db.Col[WarehouseProductMovementTable, int64]
-	SerialNumber         db.Col[WarehouseProductMovementTable, string]
-	LotID                db.Col[WarehouseProductMovementTable, int32]
-	WarehouseID          db.Col[WarehouseProductMovementTable, int32]
-	WarehouseRefID       db.Col[WarehouseProductMovementTable, int32]
-	WarehouseRefQuantity db.Col[WarehouseProductMovementTable, int32]
-	DocumentID           db.Col[WarehouseProductMovementTable, int64]
-	ProductID            db.Col[WarehouseProductMovementTable, int32]
-	PresentationID       db.Col[WarehouseProductMovementTable, int16]
-	Quantity             db.Col[WarehouseProductMovementTable, int32]
-	WarehouseQuantity    db.Col[WarehouseProductMovementTable, int32]
-	SubQuantity          db.Col[WarehouseProductMovementTable, int32]
-	Type                 db.Col[WarehouseProductMovementTable, int8]
-	Created              db.Col[WarehouseProductMovementTable, int32]
-	MonetaryValue        db.Col[WarehouseProductMovementTable, int32]
-	CreatedBy            db.Col[WarehouseProductMovementTable, int32]
-	Date                 db.Col[WarehouseProductMovementTable, int16]
-	UpdateCounter        db.Col[WarehouseProductMovementTable, int32]
+	scylla.TableStruct[WarehouseProductMovementTable, WarehouseProductMovement]
+	CompanyID            scylla.Col[WarehouseProductMovementTable, int32]
+	ID                   scylla.Col[WarehouseProductMovementTable, int64]
+	SerialNumber         scylla.Col[WarehouseProductMovementTable, string]
+	LotID                scylla.Col[WarehouseProductMovementTable, int32]
+	WarehouseID          scylla.Col[WarehouseProductMovementTable, int32]
+	WarehouseRefID       scylla.Col[WarehouseProductMovementTable, int32]
+	WarehouseRefQuantity scylla.Col[WarehouseProductMovementTable, int32]
+	DocumentID           scylla.Col[WarehouseProductMovementTable, int64]
+	ProductID            scylla.Col[WarehouseProductMovementTable, int32]
+	PresentationID       scylla.Col[WarehouseProductMovementTable, int16]
+	Quantity             scylla.Col[WarehouseProductMovementTable, int32]
+	WarehouseQuantity    scylla.Col[WarehouseProductMovementTable, int32]
+	SubQuantity          scylla.Col[WarehouseProductMovementTable, int32]
+	Type                 scylla.Col[WarehouseProductMovementTable, int8]
+	Created              scylla.Col[WarehouseProductMovementTable, int32]
+	MonetaryValue        scylla.Col[WarehouseProductMovementTable, int32]
+	CreatedBy            scylla.Col[WarehouseProductMovementTable, int32]
+	Date                 scylla.Col[WarehouseProductMovementTable, int16]
+	UpdateCounter        scylla.Col[WarehouseProductMovementTable, int32]
 }
 
-func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e WarehouseProductMovementTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:      "warehouse_product_movement",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.ID),
-		KeyIntPacking: db.Cols(
+		Keys:      scylla.Cols(e.ID),
+		KeyIntPacking: scylla.Cols(
 			e.Date.DecimalSize(5), e.WarehouseID.DecimalSize(5), e.Autoincrement(3),
 		),
 		AutoincrementPart: e.Date,
-		Indexes: []db.Index{
+		Indexes: []scylla.Index{
 			{
-				Type: db.TypeInheritFromKey, Keys: db.Cols(e.Date), UseIndexGroup: true,
+				Type: scylla.TypeInheritFromKey, Keys: scylla.Cols(e.Date), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeInheritFromKey, Keys: db.Cols(e.Date, e.WarehouseID), UseIndexGroup: true,
+				Type: scylla.TypeInheritFromKey, Keys: scylla.Cols(e.Date, e.WarehouseID), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: db.Cols(e.SerialNumber),
+				Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.SerialNumber),
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: db.Cols(e.LotID), UseIndexGroup: true,
+				Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.LotID), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: db.Cols(e.DocumentID), UseIndexGroup: true,
+				Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.DocumentID), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: db.Cols(e.Date, e.Type), UseIndexGroup: true,
+				Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.Date, e.Type), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: db.Cols(e.Date, e.Type, e.WarehouseID), UseIndexGroup: true,
+				Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.Date, e.Type, e.WarehouseID), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: db.Cols(e.Date, e.ProductID), UseIndexGroup: true,
+				Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.Date, e.ProductID), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeView,
-				Keys: db.Cols(e.Date, e.ProductID.DecimalSize(9), e.Type.DecimalSize(1)),
-				Cols: db.Cols(e.Quantity),
+				Type: scylla.TypeView,
+				Keys: scylla.Cols(e.Date, e.ProductID.DecimalSize(9), e.Type.DecimalSize(1)),
+				Cols: scylla.Cols(e.Quantity),
 			},
 		},
 	}

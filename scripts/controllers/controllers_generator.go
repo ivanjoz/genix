@@ -21,10 +21,14 @@ const controllersOutputPath = "backend/exec/controllers.generated.go"
 // without a qualifier in the generated controller list.
 const controllersOutputPackage = "app/exec"
 
-// tableEntry describes one base struct (the X in db.TableStruct[XTable, X]) discovered
+// The ORM package, imported by every generated controller list. It lives in the
+// genix-orm submodule (backend/genix-orm), not in the app module.
+const ormPackage = "github.com/ivanjoz/genix-orm/scylla"
+
+// tableEntry describes one base struct (the X in scylla.TableStruct[XTable, X]) discovered
 // during the AST scan. PackagePath is the full import path (e.g. "app/logistica/types").
 // SchemaName is the Scylla table name read from XTable.GetSchema(), used to build the
-// runtime name -> table registry that db.QueryCachedGenericByIDs resolves against.
+// runtime name -> table registry that scylla.QueryCachedGenericByIDs resolves against.
 type tableEntry struct {
 	TypeName    string
 	PackagePath string
@@ -79,8 +83,8 @@ func findProjectRootDir() (string, error) {
 }
 
 // scanTableStructs walks backend/ and returns one entry per struct that embeds
-// db.TableStruct[XTable, X] (or, when inside the db package itself, TableStruct[XTable, X])
-// AND whose own type name equals the second type argument. That second-arg check is what
+// scylla.TableStruct[XTable, X] AND whose own type name equals the second type argument.
+// The ORM's own tables are not scanned (genix-orm is skipped). That second-arg check is what
 // distinguishes the "base" struct from its companion "Table" struct, since both embed the
 // same TableStruct generic.
 func scanTableStructs(backendDir string) ([]tableEntry, error) {
@@ -95,13 +99,13 @@ func scanTableStructs(backendDir string) ([]tableEntry, error) {
 		}
 		if entry.IsDir() {
 			name := entry.Name()
-			// Skip vendor / VCS / dependency trees plus app/db itself — ORM-internal tables
-			// (Increment, CacheVersion) are bootstrapped by db.Init() and must not appear in
-			// MakeScyllaControllers().
+			// Skip vendor / VCS / dependency trees plus the genix-orm submodule — it is a
+			// separate Go module, and its ORM-internal tables (Increment, CacheVersion) are
+			// bootstrapped by scylla.Init() and must not appear in MakeScyllaControllers().
 			if name == "vendor" || name == "node_modules" || name == ".git" {
 				return filepath.SkipDir
 			}
-			if path == filepath.Join(backendDir, "db") {
+			if path == filepath.Join(backendDir, "genix-orm") {
 				return filepath.SkipDir
 			}
 			return nil
@@ -176,7 +180,7 @@ func scanTableStructs(backendDir string) ([]tableEntry, error) {
 }
 
 // extractSchemaName reads the receiver type name and the literal `Name:` value out of a
-// `func (e XTable) GetSchema() db.TableSchema { return db.TableSchema{Name: "x", ...} }`.
+// `func (e XTable) GetSchema() scylla.TableSchema { return scylla.TableSchema{Name: "x", ...} }`.
 func extractSchemaName(funcDecl *ast.FuncDecl) (receiverName string, schemaName string, found bool) {
 	if funcDecl.Name.Name != "GetSchema" || funcDecl.Recv == nil || len(funcDecl.Recv.List) != 1 {
 		return "", "", false
@@ -226,7 +230,7 @@ func extractSchemaName(funcDecl *ast.FuncDecl) (receiverName string, schemaName 
 }
 
 // isBaseTableStruct returns true when the first field of a struct is an embedded
-// db.TableStruct[XTable, X] AND the second type argument matches the struct's own name.
+// scylla.TableStruct[XTable, X] AND the second type argument matches the struct's own name.
 // That second-arg match is what selects the "base" struct of each pair (the X), never
 // the companion XTable struct (which embeds the same generic).
 func isBaseTableStruct(firstField *ast.Field, ownTypeName string) bool {
@@ -247,7 +251,7 @@ func isBaseTableStruct(firstField *ast.Field, ownTypeName string) bool {
 		return false
 	}
 	packageIdent, ok := selector.X.(*ast.Ident)
-	if !ok || packageIdent.Name != "db" || selector.Sel.Name != "TableStruct" {
+	if !ok || packageIdent.Name != "scylla" || selector.Sel.Name != "TableStruct" {
 		return false
 	}
 
@@ -334,8 +338,8 @@ func renderControllersFile(entries []tableEntry, aliases map[string]string) ([]b
 		buffer.WriteString(")\n\n")
 	}
 
-	buffer.WriteString("func MakeScyllaControllers() []db.ScyllaControllerInterface {\n")
-	buffer.WriteString("\treturn []db.ScyllaControllerInterface{\n")
+	buffer.WriteString("func MakeScyllaControllers() []scylla.ScyllaControllerInterface {\n")
+	buffer.WriteString("\treturn []scylla.ScyllaControllerInterface{\n")
 	for _, entry := range entries {
 		fmt.Fprintf(&buffer, "\t\tmakeDBController[%s](),\n", qualifiedReference(entry, aliases))
 	}
@@ -344,11 +348,11 @@ func renderControllersFile(entries []tableEntry, aliases map[string]string) ([]b
 
 	// Registering lazy factories lets db resolve a table from a name string (which generics cannot
 	// do). Only closures are built at init; a ScyllaTable is compiled when a name is first used.
-	buffer.WriteString("// Resolves table names for db.QueryCachedGenericByIDs.\n")
+	buffer.WriteString("// Resolves table names for scylla.QueryCachedGenericByIDs.\n")
 	buffer.WriteString("func init() {\n")
 	for _, entry := range entries {
 		fmt.Fprintf(&buffer,
-			"\tdb.RegisterTableFactory(%q, func() db.ScyllaTable { return db.MakeScyllaTable[%s]() })\n",
+			"\tscylla.RegisterTableFactory(%q, func() scylla.ScyllaTable { return scylla.MakeScyllaTable[%s]() })\n",
 			entry.SchemaName, qualifiedReference(entry, aliases))
 	}
 	buffer.WriteString("}\n")
@@ -361,10 +365,10 @@ func renderControllersFile(entries []tableEntry, aliases map[string]string) ([]b
 	return formatted, nil
 }
 
-// buildImportLines emits the import block lines, always including app/db (the return
-// type's package) even when no scanned entries live there.
+// buildImportLines emits the import block lines, always including the ORM package (the
+// return type's package) even when no scanned entries live there.
 func buildImportLines(entries []tableEntry, aliases map[string]string) []string {
-	requiredPackages := map[string]bool{"app/db": true}
+	requiredPackages := map[string]bool{ormPackage: true}
 	for _, entry := range entries {
 		if entry.PackagePath == controllersOutputPackage {
 			continue
@@ -382,11 +386,11 @@ func buildImportLines(entries []tableEntry, aliases map[string]string) []string 
 	for _, packagePath := range packagePaths {
 		alias := aliases[packagePath]
 		if alias == "" {
-			// app/db has no scanned entries so it has no alias entry; fall through to bare import.
+			// The ORM package has no scanned entries so it has no alias entry; fall through to bare import.
 			alias = deriveAliasForPackage(packagePath)
 		}
 		// Use bare import (no alias prefix) when the alias already matches the trailing segment —
-		// keeps the file readable for simple packages like "app/db", "app/core".
+		// keeps the file readable for the ORM package and simple ones like "app/core".
 		segments := strings.Split(packagePath, "/")
 		if alias == segments[len(segments)-1] {
 			lines = append(lines, fmt.Sprintf("%q", packagePath))

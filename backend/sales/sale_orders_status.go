@@ -3,7 +3,7 @@ package sales
 import (
 	"app/sales/types"
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -41,7 +41,7 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 	for resultIndex, currentOrderStatus := range orderStatusToQuery {
 
 		queryGroup.Go(func() error {
-			query := db.Query(&saleOrdersByStatus[resultIndex]).Limit(5000).OrderDesc()
+			query := scylla.Query(&saleOrdersByStatus[resultIndex]).Limit(5000).OrderDesc()
 			query.Exclude(query.CompanyID)
 
 			query.CompanyID.Equals(req.User.CompanyID).
@@ -61,7 +61,7 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 			queryGroup.Go(func() error {
 				idsToSave := &saleOrdersToRemoveIDsGroups[resultIndex]
 
-				query := db.Query(&[]types.SaleOrder{})
+				query := scylla.Query(&[]types.SaleOrder{})
 				query.Select(query.ID)
 
 				query.CompanyID.Equals(req.User.CompanyID).

@@ -3,7 +3,7 @@ package sales
 import (
 	"app/sales/types"
 	"app/core"
-	"app/db"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"app/libs"
 	"slices"
 )
@@ -94,7 +94,7 @@ func loadSaleSummaryRowsByProducts(companyID int32, date int16, summaryChanges [
 	}
 
 	summaries := []types.ProductSaleSummary{}
-	query := db.Query(&summaries)
+	query := scylla.Query(&summaries)
 	query.CompanyID.Equals(companyID).Date.Equals(date).ProductID.In(productIDs...)
 	if err := query.Exec(); err != nil {
 		return nil, core.Err("error querying sale summary rows:", err)
@@ -111,7 +111,7 @@ func loadSaleSummaryRowsByProducts(companyID int32, date int16, summaryChanges [
 
 func loadSaleSummaryRowsByDay(companyID int32, date int16) ([]types.ProductSaleSummary, error) {
 	summaries := []types.ProductSaleSummary{}
-	query := db.Query(&summaries)
+	query := scylla.Query(&summaries)
 	query.CompanyID.Equals(companyID).Date.Equals(date)
 	if err := query.Exec(); err != nil {
 		return nil, core.Err("error querying daily sale summary rows:", err)
@@ -236,7 +236,7 @@ func applyChangesToSaleSumary(companyID int32, date int16, changes []ProductSumm
 	})
 
 	core.Log("applyChangesToSaleSumary saving rows", "companyID", companyID, "date", date, "rows", len(summaryRows), "replaceCurrentValues", replaceCurrentValues)
-	if err := db.Insert(&summaryRows); err != nil {
+	if err := scylla.Insert(&summaryRows); err != nil {
 		return core.Err("error saving sale summary rows:", err)
 	}
 	return nil

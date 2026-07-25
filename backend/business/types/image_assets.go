@@ -1,9 +1,9 @@
 package types
 
-import "app/db"
+import "github.com/ivanjoz/genix-orm/scylla"
 
 type ImageAsset struct {
-	db.TableStruct[ImageAssetTable, ImageAsset]
+	scylla.TableStruct[ImageAssetTable, ImageAsset]
 	GroupID            int32    `json:"-"`
 	ID                 int32    `json:",omitempty"`
 	CategoryID         int16    `json:",omitempty" db:"category_id"`
@@ -17,29 +17,29 @@ type ImageAsset struct {
 }
 
 type ImageAssetTable struct {
-	db.TableStruct[ImageAssetTable, ImageAsset]
-	GroupID            db.Col[ImageAssetTable, int32]
-	ID                 db.Col[ImageAssetTable, int32]
-	CategoryID         db.Col[ImageAssetTable, int16]
-	Description        db.Col[ImageAssetTable, string]
-	SpanishDescription db.Col[ImageAssetTable, string]
-	Keywords           db.Col[ImageAssetTable, string]
-	SpanishKeywords    db.ColSlice[ImageAssetTable, string]
-	Bigrams            db.ColSlice[ImageAssetTable, int8]
-	Ratio              db.Col[ImageAssetTable, float32]
-	Updated            db.Col[ImageAssetTable, int32]
+	scylla.TableStruct[ImageAssetTable, ImageAsset]
+	GroupID            scylla.Col[ImageAssetTable, int32]
+	ID                 scylla.Col[ImageAssetTable, int32]
+	CategoryID         scylla.Col[ImageAssetTable, int16]
+	Description        scylla.Col[ImageAssetTable, string]
+	SpanishDescription scylla.Col[ImageAssetTable, string]
+	Keywords           scylla.Col[ImageAssetTable, string]
+	SpanishKeywords    scylla.ColSlice[ImageAssetTable, string]
+	Bigrams            scylla.ColSlice[ImageAssetTable, int8]
+	Ratio              scylla.Col[ImageAssetTable, float32]
+	Updated            scylla.Col[ImageAssetTable, int32]
 }
 
-func (e ImageAssetTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
+func (e ImageAssetTable) GetSchema() scylla.TableSchema {
+	return scylla.TableSchema{
 		Name:      "image_assets",
 		Partition: e.GroupID,
 		// Keywords holds the deduplicated English text indexed by the Sonic AI search.
 		TextSearchColumn: e.Keywords,
-		Keys:             db.Cols(e.ID),
-		Indexes: []db.Index{
+		Keys:             scylla.Cols(e.ID),
+		Indexes: []scylla.Index{
 			// Keep Updated as the first clustering column for global frontend deltas.
-			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
+			{Type: scylla.TypeView, Keys: scylla.Cols(e.Updated)},
 		},
 	}
 }
