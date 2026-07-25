@@ -23,12 +23,17 @@ const controllersOutputPackage = "app/exec"
 
 // The ORM package, imported by every generated controller list. It lives in the
 // genix-orm submodule (backend/genix-orm), not in the app module.
-const ormPackage = "github.com/ivanjoz/genix-orm/scylla"
+const ormPackage = "app/db"
 
-// tableEntry describes one base struct (the X in scylla.TableStruct[XTable, X]) discovered
+// ormPackageSelector is the identifier tables reference the ORM through, derived from
+// ormPackage so pointing that constant elsewhere does not silently stop matching —
+// which is exactly what a hardcoded package name would do.
+var ormPackageSelector = ormPackage[strings.LastIndexByte(ormPackage, '/')+1:]
+
+// tableEntry describes one base struct (the X in db.TableStruct[XTable, X]) discovered
 // during the AST scan. PackagePath is the full import path (e.g. "app/logistica/types").
 // SchemaName is the Scylla table name read from XTable.GetSchema(), used to build the
-// runtime name -> table registry that scylla.QueryCachedGenericByIDs resolves against.
+// runtime name -> table registry that db.QueryCachedGenericByIDs resolves against.
 type tableEntry struct {
 	TypeName    string
 	PackagePath string
@@ -83,7 +88,7 @@ func findProjectRootDir() (string, error) {
 }
 
 // scanTableStructs walks backend/ and returns one entry per struct that embeds
-// scylla.TableStruct[XTable, X] AND whose own type name equals the second type argument.
+// db.TableStruct[XTable, X] AND whose own type name equals the second type argument.
 // The ORM's own tables are not scanned (genix-orm is skipped). That second-arg check is what
 // distinguishes the "base" struct from its companion "Table" struct, since both embed the
 // same TableStruct generic.
@@ -101,7 +106,7 @@ func scanTableStructs(backendDir string) ([]tableEntry, error) {
 			name := entry.Name()
 			// Skip vendor / VCS / dependency trees plus the genix-orm submodule — it is a
 			// separate Go module, and its ORM-internal tables (Increment, CacheVersion) are
-			// bootstrapped by scylla.Init() and must not appear in MakeScyllaControllers().
+			// bootstrapped by the driver's Init() and must not appear in MakeScyllaControllers().
 			if name == "vendor" || name == "node_modules" || name == ".git" {
 				return filepath.SkipDir
 			}
@@ -180,7 +185,7 @@ func scanTableStructs(backendDir string) ([]tableEntry, error) {
 }
 
 // extractSchemaName reads the receiver type name and the literal `Name:` value out of a
-// `func (e XTable) GetSchema() scylla.TableSchema { return scylla.TableSchema{Name: "x", ...} }`.
+// `func (e XTable) GetSchema() db.TableSchema { return db.TableSchema{Name: "x", ...} }`.
 func extractSchemaName(funcDecl *ast.FuncDecl) (receiverName string, schemaName string, found bool) {
 	if funcDecl.Name.Name != "GetSchema" || funcDecl.Recv == nil || len(funcDecl.Recv.List) != 1 {
 		return "", "", false
@@ -230,7 +235,7 @@ func extractSchemaName(funcDecl *ast.FuncDecl) (receiverName string, schemaName 
 }
 
 // isBaseTableStruct returns true when the first field of a struct is an embedded
-// scylla.TableStruct[XTable, X] AND the second type argument matches the struct's own name.
+// db.TableStruct[XTable, X] AND the second type argument matches the struct's own name.
 // That second-arg match is what selects the "base" struct of each pair (the X), never
 // the companion XTable struct (which embeds the same generic).
 func isBaseTableStruct(firstField *ast.Field, ownTypeName string) bool {
@@ -251,7 +256,7 @@ func isBaseTableStruct(firstField *ast.Field, ownTypeName string) bool {
 		return false
 	}
 	packageIdent, ok := selector.X.(*ast.Ident)
-	if !ok || packageIdent.Name != "scylla" || selector.Sel.Name != "TableStruct" {
+	if !ok || packageIdent.Name != ormPackageSelector || selector.Sel.Name != "TableStruct" {
 		return false
 	}
 
@@ -338,8 +343,8 @@ func renderControllersFile(entries []tableEntry, aliases map[string]string) ([]b
 		buffer.WriteString(")\n\n")
 	}
 
-	buffer.WriteString("func MakeScyllaControllers() []scylla.ScyllaControllerInterface {\n")
-	buffer.WriteString("\treturn []scylla.ScyllaControllerInterface{\n")
+	buffer.WriteString("func MakeScyllaControllers() []db.Controller {\n")
+	buffer.WriteString("\treturn []db.Controller{\n")
 	for _, entry := range entries {
 		fmt.Fprintf(&buffer, "\t\tmakeDBController[%s](),\n", qualifiedReference(entry, aliases))
 	}
@@ -347,12 +352,13 @@ func renderControllersFile(entries []tableEntry, aliases map[string]string) ([]b
 	buffer.WriteString("}\n\n")
 
 	// Registering lazy factories lets db resolve a table from a name string (which generics cannot
-	// do). Only closures are built at init; a ScyllaTable is compiled when a name is first used.
-	buffer.WriteString("// Resolves table names for scylla.QueryCachedGenericByIDs.\n")
+	// do). Only closures are built at init; the table is compiled when a name is first used.
+	// The factory returns db.Table, the driver-agnostic compiled-table interface.
+	buffer.WriteString("// Resolves table names for db.QueryCachedGenericByIDs.\n")
 	buffer.WriteString("func init() {\n")
 	for _, entry := range entries {
 		fmt.Fprintf(&buffer,
-			"\tscylla.RegisterTableFactory(%q, func() scylla.ScyllaTable { return scylla.MakeScyllaTable[%s]() })\n",
+			"\tdb.RegisterTableFactory(%q, func() db.Table { return db.MakeTable[%s]() })\n",
 			entry.SchemaName, qualifiedReference(entry, aliases))
 	}
 	buffer.WriteString("}\n")

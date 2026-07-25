@@ -1,7 +1,7 @@
 package types
 
 import (
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 )
 
 // AgentMessage stores chat history for the in-app agent (the widget that lets
@@ -15,7 +15,7 @@ import (
 // partition. AttachedContent is reserved for future use (page snapshot or
 // screenshot ref) and is written empty for now.
 type AgentMessage struct {
-	scylla.TableStruct[AgentMessageTable, AgentMessage]
+	db.TableStruct[AgentMessageTable, AgentMessage]
 	CompanyUserID   int64  `db:"company_user_id,pk" col:"company_user_id,pk"`
 	SessionID       int64  `db:"session_id,pk" col:"session_id,pk"`
 	Timestamp       int64  `db:"timestamp,pk" col:"timestamp,pk,sk"`
@@ -38,25 +38,25 @@ func (e *AgentMessage) PrepareCloudSync() {
 }
 
 type AgentMessageTable struct {
-	scylla.TableStruct[AgentMessageTable, AgentMessage]
-	CompanyUserID   scylla.Col[AgentMessageTable, int64]
-	SessionID       scylla.Col[AgentMessageTable, int64]
-	Timestamp       scylla.Col[AgentMessageTable, int64]
-	CompanyID       scylla.Col[AgentMessageTable, int32]
-	UserID          scylla.Col[AgentMessageTable, int32]
-	Role            scylla.Col[AgentMessageTable, int8]
-	Message         scylla.Col[AgentMessageTable, string]
-	AttachedContent scylla.Col[AgentMessageTable, string]
-	Summary         scylla.Col[AgentMessageTable, string]
-	TokensUsed      scylla.Col[AgentMessageTable, int32]
-	Status          scylla.Col[AgentMessageTable, int8]
-	Updated         scylla.Col[AgentMessageTable, int32]
+	db.TableStruct[AgentMessageTable, AgentMessage]
+	CompanyUserID   db.Col[AgentMessageTable, int64]
+	SessionID       db.Col[AgentMessageTable, int64]
+	Timestamp       db.Col[AgentMessageTable, int64]
+	CompanyID       db.Col[AgentMessageTable, int32]
+	UserID          db.Col[AgentMessageTable, int32]
+	Role            db.Col[AgentMessageTable, int8]
+	Message         db.Col[AgentMessageTable, string]
+	AttachedContent db.Col[AgentMessageTable, string]
+	Summary         db.Col[AgentMessageTable, string]
+	TokensUsed      db.Col[AgentMessageTable, int32]
+	Status          db.Col[AgentMessageTable, int8]
+	Updated         db.Col[AgentMessageTable, int32]
 }
 
-func (e AgentMessageTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e AgentMessageTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "agent_messages",
 		Partition: e.CompanyUserID,
-		Keys:      scylla.Cols(e.SessionID, e.Timestamp),
+		Keys:      db.Cols(e.SessionID, e.Timestamp),
 	}
 }

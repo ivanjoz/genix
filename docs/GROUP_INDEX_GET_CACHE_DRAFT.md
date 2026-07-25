@@ -2,7 +2,7 @@
 
 ## Goal
 
-Implement `GETWithGroupCache(route, uriParams)` for endpoints backed by `scylla.QueryIndexGroup`.
+Implement `GETWithGroupCache(route, uriParams)` for endpoints backed by `db.QueryIndexGroup`.
 
 The client keeps grouped query partitions in IndexedDB and sends their freshness metadata to the backend as:
 
@@ -13,7 +13,7 @@ The backend uses those values with `query.IncludeCachedGroup(groupHash, updateCo
 
 ## Backend Contract
 
-`scylla.RecordGroup[T]` already returns the metadata needed by the client:
+`db.RecordGroup[T]` already returns the metadata needed by the client:
 
 ```go
 type RecordGroup[T any] struct {
@@ -42,11 +42,11 @@ Frontend must persist:
 Draft fix:
 
 ```go
-func ExtractGroupIndexCacheValues(req *HandlerArgs) ([]scylla.GroupIndexCache, error) {
+func ExtractGroupIndexCacheValues(req *HandlerArgs) ([]db.GroupIndexCache, error) {
 	groupHashes := parseConcatenatedInts(req.GetQuery("cc-gh"))
 	updateCounters := parseConcatenatedInts(req.GetQuery("cc-upc"))
 
-	records := make([]scylla.GroupIndexCache, 0, len(groupHashes))
+	records := make([]db.GroupIndexCache, 0, len(groupHashes))
 	for index, encodedGroupHash := range groupHashes {
 		if index >= len(updateCounters) {
 			continue
@@ -54,7 +54,7 @@ func ExtractGroupIndexCacheValues(req *HandlerArgs) ([]scylla.GroupIndexCache, e
 
 		// The client sends int32 hashes through uint32 packing; this conversion restores the sign.
 		groupHash := int32(uint32(encodedGroupHash))
-		records = append(records, scylla.GroupIndexCache{
+		records = append(records, db.GroupIndexCache{
 			GroupHash:     groupHash,
 			UpdateCounter: int32(updateCounters[index]),
 		})

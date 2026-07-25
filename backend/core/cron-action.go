@@ -1,9 +1,9 @@
 package core
 
-import "github.com/ivanjoz/genix-orm/scylla"
+import "app/db"
 
 type CronAction struct {
-	scylla.TableStruct[CronActionTable, CronAction]
+	db.TableStruct[CronActionTable, CronAction]
 	ID               int64    `json:",omitempty"`
 	UnixMinutesFrame int32    `json:",omitempty"`
 	CompanyID        int32    `json:",omitempty"`
@@ -15,21 +15,21 @@ type CronAction struct {
 }
 
 type CronActionTable struct {
-	scylla.TableStruct[CronActionTable, CronAction]
-	UnixMinutesFrame scylla.Col[CronActionTable, int32]
-	CompanyID        scylla.Col[CronActionTable, int32]
-	ID               scylla.Col[CronActionTable, int64]
-	ActionID         scylla.Col[CronActionTable, int16]
-	Params           scylla.Col[CronActionTable, ExecArgs]
-	Updated          scylla.Col[CronActionTable, int32]
-	Status           scylla.Col[CronActionTable, int8]
-	InvocationCount  scylla.Col[CronActionTable, int16]
+	db.TableStruct[CronActionTable, CronAction]
+	UnixMinutesFrame db.Col[CronActionTable, int32]
+	CompanyID        db.Col[CronActionTable, int32]
+	ID               db.Col[CronActionTable, int64]
+	ActionID         db.Col[CronActionTable, int16]
+	Params           db.Col[CronActionTable, ExecArgs]
+	Updated          db.Col[CronActionTable, int32]
+	Status           db.Col[CronActionTable, int8]
+	InvocationCount  db.Col[CronActionTable, int16]
 }
 
-func (cronActionTable CronActionTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (cronActionTable CronActionTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:                 "cron_actions",
-		Keys:                 scylla.Cols(cronActionTable.UnixMinutesFrame, cronActionTable.ID),
+		Keys:                 db.Cols(cronActionTable.UnixMinutesFrame, cronActionTable.ID),
 		DisableUpdateCounter: true,
 	}
 }

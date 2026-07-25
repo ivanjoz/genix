@@ -71,6 +71,7 @@ require (
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
 	github.com/ivanjoz/colbin v0.0.0-20260720041505-3f9040cb9613
 	github.com/ivanjoz/genix-orm v0.0.0
+	github.com/ivanjoz/genix-orm/db v0.0.0
 	github.com/kr/pretty v0.3.1
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/viant/xunsafe v0.11.0
@@ -86,3 +87,5 @@ require (
 replace github.com/gocql/gocql v1.6.0 => github.com/scylladb/gocql v1.13.0
 
 replace github.com/ivanjoz/genix-orm => ./genix-orm
+
+replace github.com/ivanjoz/genix-orm/db => ./genix-orm/db

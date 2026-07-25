@@ -3,7 +3,7 @@ package business
 import (
 	businessTypes "app/business/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	"encoding/base64"
 
 	"golang.org/x/sync/errgroup"
@@ -40,7 +40,7 @@ func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
 	queryGroup := errgroup.Group{}
 	queryGroup.Go(func() error {
 		storedAssets := []businessTypes.ImageAsset{}
-		query := scylla.Query(&storedAssets)
+		query := db.Query(&storedAssets)
 		query.Select(query.ID, query.CategoryID, query.Bigrams, query.Updated).
 			GroupID.Equals(imageAssetCategoryGroupID)
 		if imagesUpdated > 0 {
@@ -63,7 +63,7 @@ func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
 	})
 	queryGroup.Go(func() error {
 		storedCategories := []businessTypes.ImageAssetCategory{}
-		query := scylla.Query(&storedCategories)
+		query := db.Query(&storedCategories)
 		query.Select(query.ID, query.Name, query.Updated).
 			GroupID.Equals(imageAssetCategoryGroupID)
 		if categoriesUpdated > 0 {
@@ -106,7 +106,7 @@ func GetImageAssetTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Image assets share the single group partition and carry no Status column,
 	// so they index into status group 0.
-	matches, err := scylla.SearchTextIDs[businessTypes.ImageAsset](imageAssetCategoryGroupID, query, 0, limit)
+	matches, err := db.SearchTextIDs[businessTypes.ImageAsset](imageAssetCategoryGroupID, query, 0, limit)
 	if err != nil {
 		return req.MakeErr("Error en la búsqueda de imágenes:", err)
 	}

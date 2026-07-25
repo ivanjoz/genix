@@ -3,7 +3,7 @@ package business
 import (
 	businessTypes "app/business/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	textsearch "app/libs/text-search"
 	"bufio"
 	"fmt"
@@ -125,11 +125,11 @@ func syncImageAssets(fetchText imageAssetTextFetcher) (ImageAssetSyncResult, err
 		core.Log("SyncImageAssets no new records:", "categories skipped", result.CategoriesSkipped)
 		return result, nil
 	}
-	if err := scylla.Insert(&recordsToInsert); err != nil {
+	if err := db.Insert(&recordsToInsert); err != nil {
 		return result, fmt.Errorf("insert image assets: %w", err)
 	}
-	categoryTable := scylla.Table[businessTypes.ImageAssetCategory]()
-	if err := scylla.Update(&categoriesToUpdate, categoryTable.MaxID, categoryTable.Updated); err != nil {
+	categoryTable := db.TableOf[businessTypes.ImageAssetCategory]()
+	if err := db.Update(&categoriesToUpdate, categoryTable.MaxID, categoryTable.Updated); err != nil {
 		return result, fmt.Errorf("update image asset category watermarks: %w", err)
 	}
 	result.RecordsInserted = len(recordsToInsert)
@@ -139,7 +139,7 @@ func syncImageAssets(fetchText imageAssetTextFetcher) (ImageAssetSyncResult, err
 
 func syncImageAssetCategories(categorySummaries []imageAssetCategorySummary) (map[string]businessTypes.ImageAssetCategory, int, error) {
 	storedCategories := []businessTypes.ImageAssetCategory{}
-	query := scylla.Query(&storedCategories)
+	query := db.Query(&storedCategories)
 	if err := query.GroupID.Equals(imageAssetCategoryGroupID).Exec(); err != nil {
 		return nil, 0, fmt.Errorf("query image asset categories: %w", err)
 	}
@@ -173,7 +173,7 @@ func syncImageAssetCategories(categorySummaries []imageAssetCategorySummary) (ma
 	}
 
 	core.Log("SyncImageAssets inserting categories:", len(categoriesToInsert))
-	if err := scylla.Insert(&categoriesToInsert); err != nil {
+	if err := db.Insert(&categoriesToInsert); err != nil {
 		return nil, 0, fmt.Errorf("insert image asset categories: %w", err)
 	}
 	for _, category := range categoriesToInsert {

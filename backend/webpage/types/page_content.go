@@ -1,7 +1,7 @@
 package types
 
 import (
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 )
 
 // TextLine mirrors the frontend ITextLine (renderer-types.ts): one editable line
@@ -98,7 +98,7 @@ type SectionContent struct {
 // computed server-side so unchanged sections are skipped on save. Removed
 // positions are soft-deleted (Status=0) since the ORM has no hard delete.
 type EcommercePageContent struct {
-	scylla.TableStruct[EcommercePageContentTable, EcommercePageContent]
+	db.TableStruct[EcommercePageContentTable, EcommercePageContent]
 	CompanyID int32          `json:",omitempty"`
 	PageID    int16          `json:",omitempty"`
 	SectionID int16          `json:",omitempty"`
@@ -117,25 +117,25 @@ type EcommercePageContent struct {
 }
 
 type EcommercePageContentTable struct {
-	scylla.TableStruct[EcommercePageContentTable, EcommercePageContent]
-	CompanyID scylla.Col[EcommercePageContentTable, int32]
-	PageID    scylla.Col[EcommercePageContentTable, int16]
-	SectionID scylla.Col[EcommercePageContentTable, int16]
-	Route     scylla.Col[EcommercePageContentTable, string]
-	Content   scylla.Col[EcommercePageContentTable, SectionContent]
-	Css       scylla.Col[EcommercePageContentTable, string]
-	Hash      scylla.Col[EcommercePageContentTable, int64]
-	Status    scylla.Col[EcommercePageContentTable, int8]
-	Updated   scylla.Col[EcommercePageContentTable, int32]
-	UpdatedBy scylla.Col[EcommercePageContentTable, int32]
+	db.TableStruct[EcommercePageContentTable, EcommercePageContent]
+	CompanyID db.Col[EcommercePageContentTable, int32]
+	PageID    db.Col[EcommercePageContentTable, int16]
+	SectionID db.Col[EcommercePageContentTable, int16]
+	Route     db.Col[EcommercePageContentTable, string]
+	Content   db.Col[EcommercePageContentTable, SectionContent]
+	Css       db.Col[EcommercePageContentTable, string]
+	Hash      db.Col[EcommercePageContentTable, int64]
+	Status    db.Col[EcommercePageContentTable, int8]
+	Updated   db.Col[EcommercePageContentTable, int32]
+	UpdatedBy db.Col[EcommercePageContentTable, int32]
 }
 
-func (e EcommercePageContentTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e EcommercePageContentTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "ecommerce_page_content",
 		Partition: e.CompanyID,
 		// (CompanyID, PageID, SectionID) is the PK. SectionID is the section's
 		// 1-based position on the page, recomputed on every save.
-		Keys: scylla.Cols(e.PageID, e.SectionID),
+		Keys: db.Cols(e.PageID, e.SectionID),
 	}
 }

@@ -3,7 +3,7 @@ package business
 import (
 	s "app/business/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	"encoding/json"
 	"net/mail"
 	"regexp"
@@ -24,7 +24,7 @@ func GetClientProviders(req *core.HandlerArgs) core.HandlerResponse {
 	core.Log("GetClientProviders params:", "empresa_id=", req.User.CompanyID, "type=", requestedClientProviderType, "updated_since=", updatedSince)
 
 	clientProviders := []s.ClientProvider{}
-	clientProvidersQuery := scylla.Query(&clientProviders)
+	clientProvidersQuery := db.Query(&clientProviders)
 	clientProvidersQuery.Select().
 		CompanyID.Equals(req.User.CompanyID).
 		Type.Equals(int8(requestedClientProviderType))
@@ -55,7 +55,7 @@ func GetClientProvidersByIDs(req *core.HandlerArgs) core.HandlerResponse {
 
 	clientProviders := []s.ClientProvider{}
 	// Query only stale or missing cached rows using the cache-version payload provided by the frontend.
-	if queryError := scylla.QueryCachedIDs(&clientProviders, clientProviderCachedIDs); queryError != nil {
+	if queryError := db.QueryCachedIDs(&clientProviders, clientProviderCachedIDs); queryError != nil {
 		core.Log("GetClientProvidersByIDs query error:", queryError)
 		return req.MakeErr("Error al obtener clientes/proveedores.", queryError)
 	}
@@ -154,7 +154,7 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, companyID i
 	// Resolve existing IDs before Merge so equal identities update instead of inserting duplicates.
 	existingByRegistryNumber := []s.ClientProvider{}
 	if !clientProviderRegistryNumbers.IsEmpty() {
-		q := scylla.Query(&existingByRegistryNumber).AllowFilter()
+		q := db.Query(&existingByRegistryNumber).AllowFilter()
 		err := q.Select(q.RegistryNumber, q.ID).
 			CompanyID.Equals(companyID).
 			RegistryNumber.In(clientProviderRegistryNumbers.Values...).Exec()
@@ -169,7 +169,7 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, companyID i
 
 	existingByHash := []s.ClientProvider{}
 	if !clientProviderHashes.IsEmpty() {
-		q := scylla.Query(&existingByHash).AllowFilter()
+		q := db.Query(&existingByHash).AllowFilter()
 		err := q.Select(q.NameRegistryHash, q.ID).
 			CompanyID.Equals(companyID).
 			NameRegistryHash.In(clientProviderHashes.Values...).Exec()
@@ -199,9 +199,9 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, companyID i
 	}
 
 	core.Log("saveClientProviders merge start:", "payload_count=", len(*clientProvidersPayload))
-	clientProviderTable := scylla.Table[s.ClientProvider]()
-	if mergeError := scylla.Merge(clientProvidersPayload,
-		scylla.Cols(clientProviderTable.Created, clientProviderTable.CreatedBy),
+	clientProviderTable := db.TableOf[s.ClientProvider]()
+	if mergeError := db.Merge(clientProvidersPayload,
+		db.Cols(clientProviderTable.Created, clientProviderTable.CreatedBy),
 		func(_ *s.ClientProvider, currentClientProvider *s.ClientProvider) bool {
 			return !onlyInsert || currentClientProvider.ID <= 0
 		},

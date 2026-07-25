@@ -2,13 +2,13 @@ package finance
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	financeTypes "app/finance/types"
 )
 
 func GetCaja(companyID, cashBankID int32) (financeTypes.CashBank, error) {
 	cajas := []financeTypes.CashBank{}
-	query := scylla.Query(&cajas)
+	query := db.Query(&cajas)
 	query.Select().
 		CompanyID.Equals(companyID).
 		ID.Equals(cashBankID)

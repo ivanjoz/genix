@@ -6,7 +6,7 @@ import (
 	configTypes "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	logisticsTypes "app/logistics/types"
 	"app/serialize"
 	"bufio"
@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"github.com/ivanjoz/genix-orm/scylla"
 	"log"
 	"os"
 	"os/exec"
@@ -54,7 +55,7 @@ func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 		},
 	}
 
-	if err := scylla.Insert(&usuarios); err != nil {
+	if err := db.Insert(&usuarios); err != nil {
 		core.Log("Error inserting user:", err)
 		panic(err)
 	}
@@ -634,7 +635,7 @@ func Test30(args *core.ExecArgs) core.FuncResponse {
 	// Migrated to db2
 	errGroup.Go(func() error {
 		registros := []businessTypes.SharedListRecord{}
-		query := scylla.Query(&registros)
+		query := db.Query(&registros)
 		query.Select().
 			CompanyID.Equals(1).
 			ListID.In(listasIDs...)
@@ -725,7 +726,7 @@ type DemoTable5 struct {
 	*/
 }
 
-func (e *DemoTable4[T]) Query(statements ...scylla.ColumnStatement) []T {
+func (e *DemoTable4[T]) Query(statements ...db.ColumnStatement) []T {
 
 	return []T{}
 }
@@ -801,7 +802,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Insertando registro...")
 
-	err := scylla.Insert(&[]businessTypes.SharedListRecord{recordToInsert})
+	err := db.Insert(&[]businessTypes.SharedListRecord{recordToInsert})
 	if err != nil {
 		fmt.Println("Error al insertar::", err)
 		panic(err)
@@ -823,8 +824,8 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Actualizando registros....")
 
-	q1 := scylla.Table[businessTypes.SharedListRecord]()
-	err = scylla.Update(&[]businessTypes.SharedListRecord{recordToUpdate},
+	q1 := db.TableOf[businessTypes.SharedListRecord]()
+	err = db.Update(&[]businessTypes.SharedListRecord{recordToUpdate},
 		q1.Status, q1.ListID, q1.Name, q1.Images, q1.Description, q1.Updated)
 	if err != nil {
 		fmt.Println("Error al actualizar::", err)
@@ -834,7 +835,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 	fmt.Println("registro actualizado!")
 
 	// Example 1: Simple query with chaining
-	query := scylla.Query(&registros)
+	query := db.Query(&registros)
 	query.Select().
 		CompanyID.Equals(1).ListID.Equals(2).Status.Equals(1).
 		AllowFilter()

@@ -3,7 +3,7 @@ package exec
 import (
 	businessTypes "app/business/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	financeTypes "app/finance/types"
 	logisticsTypes "app/logistics/types"
 	sales "app/sales/types"
@@ -14,8 +14,8 @@ import (
 func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	var err error
 
-	traceSales := []scylla.RecordGroup[sales.SaleOrder]{}
-	query := scylla.QueryIndexGroup(&traceSales)
+	traceSales := []db.RecordGroup[sales.SaleOrder]{}
+	query := db.QueryIndexGroup(&traceSales)
 
 	query.IncludeCachedGroup(12340001, 1001)
 	query.IncludeCachedGroup(12340002, 1002)
@@ -35,7 +35,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	// 6. Test bucket query CONTAINS + "RANGE" with hash index
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
 	recordSalesOrders := []sales.SaleOrder{}
-	q6 := scylla.Query(&recordSalesOrders)
+	q6 := db.Query(&recordSalesOrders)
 	err = q6.CompanyID.Equals(1).
 		DetailProductsIDs.Contains(3372).
 		Date.Between(20530, 20540). //.AllowFilter().
@@ -51,7 +51,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("\n--- Test 7: Range query in int packet column local index ---")
 	recordSalesOrders2 := []sales.SaleOrder{}
-	q7 := scylla.Query(&recordSalesOrders2)
+	q7 := db.Query(&recordSalesOrders2)
 	err = q7.CompanyID.Equals(1).
 		Status.Equals(1).
 		Updated.Between(385298000, 385299000).AllowFilter().
@@ -67,7 +67,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	// This should trigger a range query on the 'id' column because it's the first column of KeyConcatenated.
 	fmt.Println("\n--- Test 1: AlmacenProducto (Smart ORM for KeyConcatenated) ---")
 	productos := []logisticsTypes.ProductStock{}
-	q1 := scylla.Query(&productos)
+	q1 := db.Query(&productos)
 	err = q1.CompanyID.Equals(1).
 		WarehouseID.Equals(1). // This is the first column in KeyConcatenated for AlmacenProducto
 		Limit(5).Exec()
@@ -81,7 +81,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	// 2. Test AlmacenProducto with multiple prefix columns
 	fmt.Println("\n--- Test 2: AlmacenProducto (Multiple prefix columns) ---")
 	productos2 := []logisticsTypes.ProductStock{}
-	q2 := scylla.Query(&productos2)
+	q2 := db.Query(&productos2)
 	err = q2.CompanyID.Equals(1).
 		WarehouseID.Equals(1).
 		ProductID.GreaterEqual(8).
@@ -94,9 +94,9 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	// New test
-	fmt.Println("\n--- Test 21: AlmacenProducto. Using view: scylla.Cols(e.WarehouseID, e.Status, e.Updated) ---")
+	fmt.Println("\n--- Test 21: AlmacenProducto. Using view: db.Cols(e.WarehouseID, e.Status, e.Updated) ---")
 	productos21 := []logisticsTypes.ProductStock{}
-	q21 := scylla.Query(&productos21)
+	q21 := db.Query(&productos21)
 	err = q21.CompanyID.Equals(1).
 		WarehouseID.Equals(1).Status.Equals(1).Updated.GreaterEqual(1000).
 		Limit(5).Exec()
@@ -110,7 +110,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	// 3. Test SharedListRecord with complex view concatenation
 	fmt.Println("\n--- Test 3: SharedListRecord (Complex View/Concatenation) ---")
 	registros := []businessTypes.SharedListRecord{}
-	q3 := scylla.Query(&registros)
+	q3 := db.Query(&registros)
 	// This query should use a view that concatenates ListaID and Status or Updated
 	err = q3.CompanyID.Equals(1).
 		ListID.Equals(1).
@@ -126,7 +126,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	// 4. Test CashBankMovement with View
 	fmt.Println("\n--- Test 4: CashBankMovement (Query using View) ---")
 	movimientos := []financeTypes.CashBankMovement{}
-	q4 := scylla.Query(&movimientos)
+	q4 := db.Query(&movimientos)
 	err = q4.CompanyID.Equals(1).
 		DocumentID.Equals(12345). // This uses a view defined in CashBankMovementTable
 		Exec()
@@ -140,7 +140,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	// 5. Test with range query (Between)
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
 	recordRegistrosListas := []businessTypes.SharedListRecord{}
-	q5 := scylla.Query(&recordRegistrosListas)
+	q5 := db.Query(&recordRegistrosListas)
 	err = q5.CompanyID.Equals(1).
 		ListID.Equals(1).
 		Updated.Between(1000000000, 2000000000).
@@ -161,7 +161,7 @@ func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 
 	movimientos := []logisticsTypes.WarehouseProductMovement{}
 
-	query := scylla.Query(&movimientos).
+	query := db.Query(&movimientos).
 		CompanyID.Equals(1).
 		Date.GreaterEqual(1827)
 
@@ -172,7 +172,7 @@ func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 	// 3. Test SharedListRecord with complex view concatenation
 	fmt.Println("\n--- Test 3: SharedListRecord (Complex View/Concatenation) ---")
 	registros := []businessTypes.SharedListRecord{}
-	q3 := scylla.Query(&registros)
+	q3 := db.Query(&registros)
 	// This query should use a view that concatenates ListaID and Status or Updated
 	err = q3.CompanyID.Equals(1).
 		ListID.Equals(1).
@@ -188,7 +188,7 @@ func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 	// 5. Test with range query (Between)
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
 	recordRegistrosListas := []businessTypes.SharedListRecord{}
-	q5 := scylla.Query(&recordRegistrosListas)
+	q5 := db.Query(&recordRegistrosListas)
 	err = q5.CompanyID.Equals(1).
 		ListID.Equals(1).
 		Updated.Between(1000000000, 2000000000).

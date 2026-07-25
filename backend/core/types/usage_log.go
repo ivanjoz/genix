@@ -1,9 +1,9 @@
 package types
 
-import "github.com/ivanjoz/genix-orm/scylla"
+import "app/db"
 
 type UsageLog struct {
-	scylla.TableStruct[UsageLogTable, UsageLog]
+	db.TableStruct[UsageLogTable, UsageLog]
 	CompanyID              int32   `json:",omitempty"`
 	ID                     int32   `json:",omitempty"`
 	GetBandwith            int32   `json:",omitempty"`
@@ -18,29 +18,29 @@ type UsageLog struct {
 }
 
 type UsageLogTable struct {
-	scylla.TableStruct[UsageLogTable, UsageLog]
-	CompanyID              scylla.Col[UsageLogTable, int32]
-	ID                     scylla.Col[UsageLogTable, int32]
-	GetBandwith            scylla.Col[UsageLogTable, int32]
-	PostBandwith           scylla.Col[UsageLogTable, int32]
-	GetCpuTimeUsage        scylla.Col[UsageLogTable, int32]
-	PostCpuTimeUsage       scylla.Col[UsageLogTable, int32]
-	DetailUserID           scylla.Col[UsageLogTable, []int32]
-	DetailGetBandwith      scylla.Col[UsageLogTable, []int32]
-	DetailPostBandwith     scylla.Col[UsageLogTable, []int32]
-	DetailGetCpuTimeUsage  scylla.Col[UsageLogTable, []int32]
-	DetailPostCpuTimeUsage scylla.Col[UsageLogTable, []int32]
+	db.TableStruct[UsageLogTable, UsageLog]
+	CompanyID              db.Col[UsageLogTable, int32]
+	ID                     db.Col[UsageLogTable, int32]
+	GetBandwith            db.Col[UsageLogTable, int32]
+	PostBandwith           db.Col[UsageLogTable, int32]
+	GetCpuTimeUsage        db.Col[UsageLogTable, int32]
+	PostCpuTimeUsage       db.Col[UsageLogTable, int32]
+	DetailUserID           db.Col[UsageLogTable, []int32]
+	DetailGetBandwith      db.Col[UsageLogTable, []int32]
+	DetailPostBandwith     db.Col[UsageLogTable, []int32]
+	DetailGetCpuTimeUsage  db.Col[UsageLogTable, []int32]
+	DetailPostCpuTimeUsage db.Col[UsageLogTable, []int32]
 }
 
-func (usageLogTable UsageLogTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (usageLogTable UsageLogTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:                 "usage_log",
 		Partition:            usageLogTable.CompanyID,
-		Keys:                 scylla.Cols(usageLogTable.ID),
+		Keys:                 db.Cols(usageLogTable.ID),
 		DisableUpdateCounter: true,
-		Indexes: []scylla.Index{
+		Indexes: []db.Index{
 			// Partitioned by ID so a single log row is readable without knowing the company.
-			{Type: scylla.TypeView, Keys: scylla.Cols(usageLogTable.ID), Partition: usageLogTable.ID},
+			{Type: db.TypeView, Keys: db.Cols(usageLogTable.ID), Partition: usageLogTable.ID},
 		},
 	}
 }

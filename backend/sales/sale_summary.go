@@ -1,10 +1,10 @@
 package sales
 
 import (
-	"app/sales/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	"app/libs"
+	"app/sales/types"
 	"slices"
 )
 
@@ -94,7 +94,7 @@ func loadSaleSummaryRowsByProducts(companyID int32, date int16, summaryChanges [
 	}
 
 	summaries := []types.ProductSaleSummary{}
-	query := scylla.Query(&summaries)
+	query := db.Query(&summaries)
 	query.CompanyID.Equals(companyID).Date.Equals(date).ProductID.In(productIDs...)
 	if err := query.Exec(); err != nil {
 		return nil, core.Err("error querying sale summary rows:", err)
@@ -111,7 +111,7 @@ func loadSaleSummaryRowsByProducts(companyID int32, date int16, summaryChanges [
 
 func loadSaleSummaryRowsByDay(companyID int32, date int16) ([]types.ProductSaleSummary, error) {
 	summaries := []types.ProductSaleSummary{}
-	query := scylla.Query(&summaries)
+	query := db.Query(&summaries)
 	query.CompanyID.Equals(companyID).Date.Equals(date)
 	if err := query.Exec(); err != nil {
 		return nil, core.Err("error querying daily sale summary rows:", err)
@@ -194,7 +194,7 @@ func applyChangesToSaleSumary(companyID int32, date int16, changes []ProductSumm
 		if !exists {
 			currentRow = types.ProductSaleSummary{
 				CompanyID: companyID,
-				Date:     date,
+				Date:      date,
 				ProductID: summaryChange.productID,
 			}
 		}
@@ -230,13 +230,13 @@ func applyChangesToSaleSumary(companyID int32, date int16, changes []ProductSumm
 	// Persist one sentinel row per date so clients can query date=-1 and discover which day buckets changed.
 	summaryRows = append(summaryRows, types.ProductSaleSummary{
 		CompanyID: companyID,
-		Date:     -1,
+		Date:      -1,
 		ProductID: int32(date),
 		Updated:   summaryUpdated,
 	})
 
 	core.Log("applyChangesToSaleSumary saving rows", "companyID", companyID, "date", date, "rows", len(summaryRows), "replaceCurrentValues", replaceCurrentValues)
-	if err := scylla.Insert(&summaryRows); err != nil {
+	if err := db.Insert(&summaryRows); err != nil {
 		return core.Err("error saving sale summary rows:", err)
 	}
 	return nil

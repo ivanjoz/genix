@@ -45,9 +45,11 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 
 ### Backend Documentation
 - **backend/README.md** - Brief overview of the Go backend for Genix
-- **backend/genix-orm/scylla/ORM_INTERNALS.md** - Deep dive into ORM internals: memory model, reflection engine, and query optimization
+- **backend/db/** - The project's single ORM entry point. ALL application code imports `app/db` and never a database driver. `db/driver.go` holds the one declaration that names a database; pointing it at another driver switches the whole project.
+- **backend/genix-orm/db/** - Driver-agnostic ORM layer shared by every driver: schema declaration, columns, predicates, the accessor engine, the `Executor` contract
+- **backend/genix-orm/scylla/ORM_INTERNALS.md** - Deep dive into ScyllaDB driver internals: memory model, reflection engine, and query optimization
 - **backend/docs/CREATE_API_HANDLERS.md** - API handler development guide, MUST read before creating APIs. Key concepts: "updated" parameter for delta responses, query examples, conventions.
-- **backend/docs/ORM_DATABASE_QUERY.md** - Comprehensive ScyllaDB ORM documentation covering model definitions, CRUD operations, query building
+- **backend/docs/ORM_DATABASE_QUERY.md** - Comprehensive ORM documentation covering model definitions, CRUD operations, query building
 
 ### Frontend Documentation
 - **frontend/FRONTEND.md** - Monorepo architecture with independent ecommerce app, directory structure, package system, development workflow

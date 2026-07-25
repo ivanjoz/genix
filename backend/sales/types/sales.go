@@ -2,7 +2,7 @@ package types
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 )
 
 type SaleOrderClientInfo struct {
@@ -12,7 +12,7 @@ type SaleOrderClientInfo struct {
 }
 
 type SaleOrder struct {
-	scylla.TableStruct[SaleOrderTable, SaleOrder]
+	db.TableStruct[SaleOrderTable, SaleOrder]
 	CompanyID   int32 `json:",omitempty"`
 	Date        int16 `json:",omitempty"`
 	WarehouseID int32 `json:",omitempty"`
@@ -69,67 +69,67 @@ func (e *SaleOrder) AddStatus(orderState int8) error {
 }
 
 type SaleOrderTable struct {
-	scylla.TableStruct[SaleOrderTable, SaleOrder]
-	CompanyID                  scylla.Col[SaleOrderTable, int32]
-	ID                         scylla.Col[SaleOrderTable, int64]
-	Date                       scylla.Col[SaleOrderTable, int16]
-	WarehouseID                scylla.Col[SaleOrderTable, int32]
-	LastPaymentCajaID          scylla.Col[SaleOrderTable, int32]
-	DetailProductsIDs          scylla.Col[SaleOrderTable, []int32]
-	DetailPrices               scylla.Col[SaleOrderTable, []int32]
-	DetailQuantities           scylla.Col[SaleOrderTable, []int32]
-	DetailProductSkus          scylla.Col[SaleOrderTable, []string]
-	DetailProductLotIDs        scylla.Col[SaleOrderTable, []int32]
-	DetailProductPresentations scylla.Col[SaleOrderTable, []int16]
-	TotalAmount                scylla.Col[SaleOrderTable, int32]
-	TaxAmount                  scylla.Col[SaleOrderTable, int32]
-	DebtAmount                 scylla.Col[SaleOrderTable, int32]
-	Created                    scylla.Col[SaleOrderTable, int32]
-	ClientID                   scylla.Col[SaleOrderTable, int32]
-	Updated                    scylla.Col[SaleOrderTable, int32]
-	UpdateCounter              scylla.Col[SaleOrderTable, int32]
-	UpdatedBy                  scylla.Col[SaleOrderTable, int32]
-	Status                     scylla.Col[SaleOrderTable, int8]
-	LastPaymentTime            scylla.Col[SaleOrderTable, int32]
-	LastPaymentUser            scylla.Col[SaleOrderTable, int32]
-	DeliveryTime               scylla.Col[SaleOrderTable, int32]
-	DeliveryUser               scylla.Col[SaleOrderTable, int32]
-	PaymentDueDate             scylla.Col[SaleOrderTable, int16]
+	db.TableStruct[SaleOrderTable, SaleOrder]
+	CompanyID                  db.Col[SaleOrderTable, int32]
+	ID                         db.Col[SaleOrderTable, int64]
+	Date                       db.Col[SaleOrderTable, int16]
+	WarehouseID                db.Col[SaleOrderTable, int32]
+	LastPaymentCajaID          db.Col[SaleOrderTable, int32]
+	DetailProductsIDs          db.Col[SaleOrderTable, []int32]
+	DetailPrices               db.Col[SaleOrderTable, []int32]
+	DetailQuantities           db.Col[SaleOrderTable, []int32]
+	DetailProductSkus          db.Col[SaleOrderTable, []string]
+	DetailProductLotIDs        db.Col[SaleOrderTable, []int32]
+	DetailProductPresentations db.Col[SaleOrderTable, []int16]
+	TotalAmount                db.Col[SaleOrderTable, int32]
+	TaxAmount                  db.Col[SaleOrderTable, int32]
+	DebtAmount                 db.Col[SaleOrderTable, int32]
+	Created                    db.Col[SaleOrderTable, int32]
+	ClientID                   db.Col[SaleOrderTable, int32]
+	Updated                    db.Col[SaleOrderTable, int32]
+	UpdateCounter              db.Col[SaleOrderTable, int32]
+	UpdatedBy                  db.Col[SaleOrderTable, int32]
+	Status                     db.Col[SaleOrderTable, int8]
+	LastPaymentTime            db.Col[SaleOrderTable, int32]
+	LastPaymentUser            db.Col[SaleOrderTable, int32]
+	DeliveryTime               db.Col[SaleOrderTable, int32]
+	DeliveryUser               db.Col[SaleOrderTable, int32]
+	PaymentDueDate             db.Col[SaleOrderTable, int16]
 }
 
-func (e SaleOrderTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e SaleOrderTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "sale_order",
 		Partition: e.CompanyID,
-		Keys:      scylla.Cols(e.ID.Autoincrement(2)),
-		Indexes: []scylla.Index{
+		Keys:      db.Cols(e.ID.Autoincrement(2)),
+		Indexes: []db.Index{
 			{
-				Type: scylla.TypeLocalIndex,
-				Keys: scylla.Cols(e.Updated),
+				Type: db.TypeLocalIndex,
+				Keys: db.Cols(e.Updated),
 			},
 			{
-				Keys:          scylla.Cols(e.Date),
+				Keys:          db.Cols(e.Date),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          scylla.Cols(e.Date.StoreAsWeek(), e.Status),
+				Keys:          db.Cols(e.Date.StoreAsWeek(), e.Status),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          scylla.Cols(e.Date.StoreAsWeek(), e.ClientID),
+				Keys:          db.Cols(e.Date.StoreAsWeek(), e.ClientID),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          scylla.Cols(e.Date.StoreAsWeek(), e.ClientID, e.DetailProductsIDs),
+				Keys:          db.Cols(e.Date.StoreAsWeek(), e.ClientID, e.DetailProductsIDs),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          scylla.Cols(e.Date.StoreAsWeek(), e.DetailProductsIDs),
+				Keys:          db.Cols(e.Date.StoreAsWeek(), e.DetailProductsIDs),
 				UseIndexGroup: true,
 			},
 			{
-				Type: scylla.TypeView,
-				Keys: scylla.Cols(e.Status.Int32(), e.UpdateCounter.DecimalSize(8)),
+				Type: db.TypeView,
+				Keys: db.Cols(e.Status.Int32(), e.UpdateCounter.DecimalSize(8)),
 			},
 		},
 	}
@@ -137,7 +137,7 @@ func (e SaleOrderTable) GetSchema() scylla.TableSchema {
 
 // Table to save the summary per day
 type SaleSummary struct {
-	scylla.TableStruct[SaleSummaryTable, SaleSummary]
+	db.TableStruct[SaleSummaryTable, SaleSummary]
 	CompanyID int32 `json:",omitempty"`
 	Date      int16 `json:",omitempty"`
 	// Single int32 representation keeps the summary format simple and stable.
@@ -151,23 +151,23 @@ type SaleSummary struct {
 }
 
 type SaleSummaryTable struct {
-	scylla.TableStruct[SaleSummaryTable, SaleSummary]
-	CompanyID               scylla.Col[SaleSummaryTable, int32]
-	Date                    scylla.Col[SaleSummaryTable, int16]
-	ProductIDs              scylla.Col[SaleSummaryTable, []int32]
-	Quantity                scylla.Col[SaleSummaryTable, []int32]
-	QuantityPendingDelivery scylla.Col[SaleSummaryTable, []int32]
-	TotalAmount             scylla.Col[SaleSummaryTable, []int32]
-	TotalDebtAmount         scylla.Col[SaleSummaryTable, []int32]
-	Updated                 scylla.Col[SaleSummaryTable, int32]
-	ReprocessUpdated        scylla.Col[SaleSummaryTable, int32]
+	db.TableStruct[SaleSummaryTable, SaleSummary]
+	CompanyID               db.Col[SaleSummaryTable, int32]
+	Date                    db.Col[SaleSummaryTable, int16]
+	ProductIDs              db.Col[SaleSummaryTable, []int32]
+	Quantity                db.Col[SaleSummaryTable, []int32]
+	QuantityPendingDelivery db.Col[SaleSummaryTable, []int32]
+	TotalAmount             db.Col[SaleSummaryTable, []int32]
+	TotalDebtAmount         db.Col[SaleSummaryTable, []int32]
+	Updated                 db.Col[SaleSummaryTable, int32]
+	ReprocessUpdated        db.Col[SaleSummaryTable, int32]
 }
 
-func (e SaleSummaryTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e SaleSummaryTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "sale_summary",
 		Partition: e.CompanyID,
-		Keys:      scylla.Cols(e.Date),
+		Keys:      db.Cols(e.Date),
 	}
 }
 
@@ -180,7 +180,7 @@ type SaleOrderProductStats struct {
 }
 
 type ProductSaleSummary struct {
-	scylla.TableStruct[ProductSaleSummaryTable, ProductSaleSummary]
+	db.TableStruct[ProductSaleSummaryTable, ProductSaleSummary]
 	CompanyID int32  `json:",omitempty"`
 	Date      int16  `json:",omitempty"`
 	ProductID int32  `json:",omitempty"`
@@ -189,19 +189,19 @@ type ProductSaleSummary struct {
 }
 
 type ProductSaleSummaryTable struct {
-	scylla.TableStruct[ProductSaleSummaryTable, ProductSaleSummary]
-	CompanyID scylla.Col[ProductSaleSummaryTable, int32]
-	Date      scylla.Col[ProductSaleSummaryTable, int16]
-	ProductID scylla.Col[ProductSaleSummaryTable, int32]
-	Stats     scylla.Col[ProductSaleSummaryTable, []byte]
-	Updated   scylla.Col[ProductSaleSummaryTable, int32]
+	db.TableStruct[ProductSaleSummaryTable, ProductSaleSummary]
+	CompanyID db.Col[ProductSaleSummaryTable, int32]
+	Date      db.Col[ProductSaleSummaryTable, int16]
+	ProductID db.Col[ProductSaleSummaryTable, int32]
+	Stats     db.Col[ProductSaleSummaryTable, []byte]
+	Updated   db.Col[ProductSaleSummaryTable, int32]
 }
 
-func (e ProductSaleSummaryTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e ProductSaleSummaryTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:                 "product_sale_summary",
 		Partition:            e.CompanyID,
-		Keys:                 scylla.Cols(e.Date, e.ProductID),
+		Keys:                 db.Cols(e.Date, e.ProductID),
 		DisableUpdateCounter: true,
 	}
 }

@@ -2,7 +2,7 @@ package types
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 )
 
 const (
@@ -20,7 +20,7 @@ const (
 )
 
 type ClientProvider struct {
-	scylla.TableStruct[ClientProviderTable, ClientProvider]
+	db.TableStruct[ClientProviderTable, ClientProvider]
 	CompanyID        int32  `json:",omitempty"`
 	ID               int32  `json:",omitempty"`
 	Type             int8   `json:",omitempty"`
@@ -40,45 +40,45 @@ type ClientProvider struct {
 }
 
 type ClientProviderTable struct {
-	scylla.TableStruct[ClientProviderTable, ClientProvider]
-	CompanyID        scylla.Col[ClientProviderTable, int32]
-	ID               scylla.Col[ClientProviderTable, int32]
-	Type             scylla.Col[ClientProviderTable, int8]
-	Name             scylla.Col[ClientProviderTable, string]
-	RegistryNumber   scylla.Col[ClientProviderTable, string]
-	NameRegistryHash scylla.Col[ClientProviderTable, int64]
-	PersonType       scylla.Col[ClientProviderTable, int8]
-	Email            scylla.Col[ClientProviderTable, string]
-	CountryID        scylla.Col[ClientProviderTable, int16]
-	CityID           scylla.Col[ClientProviderTable, string]
-	Created          scylla.Col[ClientProviderTable, int32]
-	CreatedBy        scylla.Col[ClientProviderTable, int32]
-	Status           scylla.Col[ClientProviderTable, int8]
-	Updated          scylla.Col[ClientProviderTable, int32]
-	UpdatedBy        scylla.Col[ClientProviderTable, int32]
+	db.TableStruct[ClientProviderTable, ClientProvider]
+	CompanyID        db.Col[ClientProviderTable, int32]
+	ID               db.Col[ClientProviderTable, int32]
+	Type             db.Col[ClientProviderTable, int8]
+	Name             db.Col[ClientProviderTable, string]
+	RegistryNumber   db.Col[ClientProviderTable, string]
+	NameRegistryHash db.Col[ClientProviderTable, int64]
+	PersonType       db.Col[ClientProviderTable, int8]
+	Email            db.Col[ClientProviderTable, string]
+	CountryID        db.Col[ClientProviderTable, int16]
+	CityID           db.Col[ClientProviderTable, string]
+	Created          db.Col[ClientProviderTable, int32]
+	CreatedBy        db.Col[ClientProviderTable, int32]
+	Status           db.Col[ClientProviderTable, int8]
+	Updated          db.Col[ClientProviderTable, int32]
+	UpdatedBy        db.Col[ClientProviderTable, int32]
 }
 
 func (e *ClientProvider) SelfParse() {
 	e.NameRegistryHash = core.HashInt64(e.RegistryNumber, core.NormalizeStringT(e.Name))
 }
 
-func (t ClientProviderTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (t ClientProviderTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:             "client_provider",
 		Partition:        t.CompanyID,
 		SaveCacheVersion: true,
 		// RegistryNumber (RUC/DNI) disambiguates homonyms; Type separates clients from providers.
-		GenericRecord: scylla.GenericRecordSchema{
+		GenericRecord: db.GenericRecordSchema{
 			Name: t.Name, S1: t.RegistryNumber, N1: t.Type,
 		},
-		Keys: scylla.Cols(t.ID.Autoincrement(0)),
-		Indexes: []scylla.Index{
-			{Type: scylla.TypeLocalIndex, Keys: scylla.Cols(t.RegistryNumber)},
-			{Type: scylla.TypeLocalIndex, Keys: scylla.Cols(t.NameRegistryHash)},
+		Keys: db.Cols(t.ID.Autoincrement(0)),
+		Indexes: []db.Index{
+			{Type: db.TypeLocalIndex, Keys: db.Cols(t.RegistryNumber)},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(t.NameRegistryHash)},
 			// Keep GET client-provider efficient for delta sync filtered by type.
-			{Type: scylla.TypeView, Keys: scylla.Cols(t.Type.Int32(), t.Updated.DecimalSize(8))},
+			{Type: db.TypeView, Keys: db.Cols(t.Type.Int32(), t.Updated.DecimalSize(8))},
 			// Keep initial sync efficient by filtering active rows for each type.
-			{Type: scylla.TypeView, Keys: scylla.Cols(t.Type.Int32(), t.Status.DecimalSize(1))},
+			{Type: db.TypeView, Keys: db.Cols(t.Type.Int32(), t.Status.DecimalSize(1))},
 		},
 	}
 }

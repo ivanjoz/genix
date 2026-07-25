@@ -3,7 +3,7 @@ package config
 import (
 	configTypes "app/config/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	"encoding/json"
 )
 
@@ -15,7 +15,7 @@ func GetParametros(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	records := []configTypes.Parameters{}
-	q := scylla.Query(&records)
+	q := db.Query(&records)
 	err := q.Exclude(q.UpdatedBy).Exec()
 	if err != nil {
 		return req.MakeErr("Error al obtener los parámetros.", err)
@@ -41,7 +41,7 @@ func PostParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Debe enviar al menos 1 grupo, no mayor a 1 grupo")
 	}
 
-	if err = scylla.Insert(&records); err != nil {
+	if err = db.Insert(&records); err != nil {
 		return req.MakeErr("Error al insertar los registros", err)
 	}
 

@@ -35,7 +35,7 @@ The `create` command generates a single `.go` file containing all necessary boil
 
 Automates the creation of:
 1. **Base Struct (`MyType`)**: Contains the actual data fields with `json` and `db` tags
-2. **Table Struct (`MyTypeTable`)**: Defines columns using `scylla.Col` and `scylla.ColSlice` for type-safe query building
+2. **Table Struct (`MyTypeTable`)**: Defines columns using `db.Col` and `db.ColSlice` for type-safe query building
 3. **`GetSchema()` Method**: A method on the table struct that defines the table's name, partition key, and clustering keys
 
 ### Mandatory Fields
@@ -92,7 +92,7 @@ For a given table name and field definition, the script:
 
 1. **Searches the codebase** for the table file (typically in `backend/types/`)
 2. **Adds the field** to the base struct with proper `json` and `db` tags
-3. **Adds the field** to the table struct with `scylla.Col` or `scylla.ColSlice` for type-safe query building
+3. **Adds the field** to the table struct with `db.Col` or `db.ColSlice` for type-safe query building
 4. **Updates the GetSchema() method** if the field is marked as a clustering key
 5. **Reformats the file** to maintain code quality
 
@@ -156,7 +156,7 @@ Both commands use the same field format: `fieldName:type[:key]`
 
 ### Type Handling
 
-- The script automatically chooses between `scylla.Col` and `scylla.ColSlice` based on whether the field is a slice type.
+- The script automatically chooses between `db.Col` and `db.ColSlice` based on whether the field is a slice type.
 - Slice fields (e.g., `[]string`) are stored as sets in ScyllaDB.
 - All standard Go types are supported (string, int32, int64, float64, bool, etc.).
 

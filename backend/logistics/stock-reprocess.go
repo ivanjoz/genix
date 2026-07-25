@@ -2,7 +2,7 @@ package logistics
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	logisticsTypes "app/logistics/types"
 )
 
@@ -26,12 +26,12 @@ func RecalcProductStockByMovements(companyID int32) error {
 	stockByID := map[int64]*logisticsTypes.ProductStock{}
 	detailByKey := map[string]*logisticsTypes.ProductStockDetail{}
 	detailKey := func(stockID int64, lotID int32, serial string) string {
-		return scylla.MakeKeyConcat(stockID, lotID, serial)
+		return db.MakeKeyConcat(stockID, lotID, serial)
 	}
 
 	{
 		existing := []logisticsTypes.ProductStock{}
-		q := scylla.Query(&existing)
+		q := db.Query(&existing)
 		q.Exclude(q.Created, q.CreatedBy).CompanyID.Equals(companyID)
 		if err := q.Exec(); err != nil {
 			return core.Err("Error al obtener stock V2 previo:", err)
@@ -46,7 +46,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 	}
 	{
 		existing := []logisticsTypes.ProductStockDetail{}
-		q := scylla.Query(&existing)
+		q := db.Query(&existing)
 		q.Exclude(q.Created, q.CreatedBy, q.Updated, q.UpdatedBy).CompanyID.Equals(companyID)
 		if err := q.Exec(); err != nil {
 			return core.Err("Error al obtener detalle de stock previo:", err)
@@ -96,7 +96,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 		detail.SubQuantity += subQuantity
 	}
 
-	query := scylla.Query(&[]logisticsTypes.WarehouseProductMovement{})
+	query := db.Query(&[]logisticsTypes.WarehouseProductMovement{})
 	query.CompanyID.Equals(companyID)
 	if err := query.ExecScan(func(movement *logisticsTypes.WarehouseProductMovement) bool {
 		accumulate(movement.WarehouseID, movement.Quantity, movement.SubQuantity, movement)
@@ -137,10 +137,10 @@ func RecalcProductStockByMovements(companyID int32) error {
 	core.Log("RecalcProductStockByMovements writes:", "stocks", len(stocks), "details", len(details))
 
 	if len(stocks) > 0 {
-		stockTable := scylla.Table[logisticsTypes.ProductStock]()
-		if err := scylla.InsertUpdateInclude(&stocks,
+		stockTable := db.TableOf[logisticsTypes.ProductStock]()
+		if err := db.InsertUpdateInclude(&stocks,
 			func(e *logisticsTypes.ProductStock) bool { return e.Created > 0 },
-			scylla.Cols(
+			db.Cols(
 				stockTable.Quantity, stockTable.SubQuantity,
 				stockTable.DetailQuantity, stockTable.DetailSubQuantity,
 				stockTable.Updated, stockTable.Status,
@@ -151,10 +151,10 @@ func RecalcProductStockByMovements(companyID int32) error {
 	}
 
 	if len(details) > 0 {
-		detailTable := scylla.Table[logisticsTypes.ProductStockDetail]()
-		if err := scylla.InsertUpdateInclude(&details,
+		detailTable := db.TableOf[logisticsTypes.ProductStockDetail]()
+		if err := db.InsertUpdateInclude(&details,
 			func(e *logisticsTypes.ProductStockDetail) bool { return e.Created > 0 },
-			scylla.Cols(
+			db.Cols(
 				detailTable.Quantity, detailTable.SubQuantity,
 				detailTable.Updated, detailTable.Status,
 			),

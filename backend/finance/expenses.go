@@ -2,7 +2,7 @@ package finance
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	financeTypes "app/finance/types"
 	"encoding/json"
 	"sort"
@@ -98,7 +98,7 @@ func GetExpenses(req *core.HandlerArgs) core.HandlerResponse {
 	expensesByStatus := make([][]financeTypes.Expense, len(statusToQuery))
 	for resultIndex, currentStatus := range statusToQuery {
 		queryGroup.Go(func() error {
-			query := scylla.Query(&expensesByStatus[resultIndex]).OrderDesc()
+			query := db.Query(&expensesByStatus[resultIndex]).OrderDesc()
 			if limit > 0 {
 				query.Limit(limit)
 			}
@@ -117,7 +117,7 @@ func GetExpenses(req *core.HandlerArgs) core.HandlerResponse {
 			queryGroup.Go(func() error {
 				idsToSave := &expensesToRemoveIDsGroups[resultIndex]
 
-				query := scylla.Query(&[]financeTypes.Expense{})
+				query := db.Query(&[]financeTypes.Expense{})
 				query.Select(query.ID)
 				query.CompanyID.Equals(req.User.CompanyID).
 					Status.Equals(currentStatus).
@@ -183,12 +183,12 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 		body.Created = nowTime
 		body.CreatedBy = req.User.ID
 		(*records)[0] = body
-		err = scylla.Insert(records)
+		err = db.Insert(records)
 	} else {
 		// Lock rule (server-authoritative, never trust the client): a fully-paid expense
 		// (Status == 2) cannot be edited. Load the current Status to enforce it.
 		existing := []financeTypes.Expense{}
-		eq := scylla.Query(&existing)
+		eq := db.Query(&existing)
 		eq.Select(eq.Status).CompanyID.Equals(req.User.CompanyID).ID.Equals(body.ID)
 		if err := eq.Exec(); err != nil {
 			return req.MakeErr("Error al obtener el gasto:", err)
@@ -203,8 +203,8 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 		// PostExpensePayment) instead of the client's. Status shares a composite view index with
 		// Updated, so it must be written together — only PaidAmount/Created/CreatedBy are excluded.
 		(*records)[0].Status = existing[0].Status
-		q := scylla.Table[financeTypes.Expense]()
-		err = scylla.UpdateExclude(records, q.PaidAmount, q.Created, q.CreatedBy)
+		q := db.TableOf[financeTypes.Expense]()
+		err = db.UpdateExclude(records, q.PaidAmount, q.Created, q.CreatedBy)
 	}
 	if err != nil {
 		return req.MakeErr("Error al guardar el gasto:", err)
@@ -226,7 +226,7 @@ func GetExpensesScheduled(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	for _, statusCode := range status {
-		query := scylla.Query(&records)
+		query := db.Query(&records)
 		query.CompanyID.Equals(req.User.CompanyID).
 			Status.Equals(statusCode).
 			Updated.GreaterThan(updated) // updated=0 on initial → matches all rows
@@ -276,10 +276,10 @@ func PostExpensesScheduled(req *core.HandlerArgs) core.HandlerResponse {
 		body.Created = nowTime
 		body.CreatedBy = req.User.ID
 		(*records)[0] = body
-		err = scylla.Insert(records)
+		err = db.Insert(records)
 	} else {
-		q := scylla.Table[financeTypes.ExpenseScheduled]()
-		err = scylla.UpdateExclude(records, q.Created, q.CreatedBy)
+		q := db.TableOf[financeTypes.ExpenseScheduled]()
+		err = db.UpdateExclude(records, q.Created, q.CreatedBy)
 	}
 	if err != nil {
 		return req.MakeErr("Error al guardar el gasto programado:", err)
@@ -351,7 +351,7 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 1. Load the schedule (multi-tenant scoped).
 	schedules := []financeTypes.ExpenseScheduled{}
-	sq := scylla.Query(&schedules)
+	sq := db.Query(&schedules)
 	sq.Select().CompanyID.Equals(req.User.CompanyID).ID.Equals(scheduleID)
 	if err := sq.Exec(); err != nil {
 		return req.MakeErr("Error al obtener el gasto programado:", err)
@@ -363,7 +363,7 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 2. Load existing periods for this schedule (local index on ExpenseScheduledID).
 	periods := []financeTypes.Expense{}
-	pq := scylla.Query(&periods)
+	pq := db.Query(&periods)
 	pq.Select().CompanyID.Equals(req.User.CompanyID).ExpenseScheduledID.Equals(scheduleID)
 	if err := pq.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los periodos del gasto:", err)
@@ -403,7 +403,7 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if len(newPeriods) > 0 {
-		if err := scylla.Insert(&newPeriods); err != nil {
+		if err := db.Insert(&newPeriods); err != nil {
 			return req.MakeErr("Error al generar los periodos del gasto:", err)
 		}
 		periods = append(periods, newPeriods...)
@@ -436,7 +436,7 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 1. Load the expense being paid.
 	expenses := []financeTypes.Expense{}
-	eq := scylla.Query(&expenses)
+	eq := db.Query(&expenses)
 	eq.Select().CompanyID.Equals(req.User.CompanyID).ID.Equals(body.ExpenseID)
 	if err := eq.Exec(); err != nil {
 		return req.MakeErr("Error al obtener el gasto:", err)
@@ -487,7 +487,7 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 5. Recompute PaidAmount = Σ |movement.Amount| over this expense's movements.
 	movements := []financeTypes.CashBankMovement{}
-	mq := scylla.Query(&movements)
+	mq := db.Query(&movements)
 	mq.Select().CompanyID.Equals(req.User.CompanyID).DocumentID.Equals(int64(expense.ID))
 	if err := mq.Exec(); err != nil {
 		return req.MakeErr("Error al recalcular el monto pagado:", err)
@@ -508,8 +508,8 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 	expense.Updated = core.SUnixTime()
 	expense.UpdatedBy = req.User.ID
 
-	q := scylla.Table[financeTypes.Expense]()
-	if err := scylla.Update(&[]financeTypes.Expense{expense}, q.PaidAmount, q.Status, q.Updated, q.UpdatedBy); err != nil {
+	q := db.TableOf[financeTypes.Expense]()
+	if err := db.Update(&[]financeTypes.Expense{expense}, q.PaidAmount, q.Status, q.Updated, q.UpdatedBy); err != nil {
 		return req.MakeErr("Error al actualizar el gasto:", err)
 	}
 

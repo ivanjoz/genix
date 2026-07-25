@@ -1,6 +1,6 @@
 # Generate Controllers Script
 
-Regenerates `backend/exec/controllers.generated.go` by scanning the backend for every base struct that embeds `scylla.TableStruct[XTable, X]`.
+Regenerates `backend/exec/controllers.generated.go` by scanning the backend for every base struct that embeds `db.TableStruct[XTable, X]`.
 
 ## Why
 
@@ -17,9 +17,9 @@ The script runs automatically as part of `deploy.sh` option **[5] Recrear Tablas
 ## What It Does
 
 1. Walks `backend/` recursively, parsing every `.go` file with `go/parser`.
-2. For each struct declaration, checks whether its first field is an embedded `scylla.TableStruct[XTable, X]` **and** the second type argument matches the struct's own name. That match selects only the "base" half of each `X` / `XTable` pair.
+2. For each struct declaration, checks whether its first field is an embedded `db.TableStruct[XTable, X]` **and** the second type argument matches the struct's own name. That match selects only the "base" half of each `X` / `XTable` pair.
 3. Emits one `makeDBController[<Type>]()` entry per detected base struct, sorted alphabetically by the qualified reference (`alias.TypeName`).
-3b. Reads the literal `Name:` out of each `XTable.GetSchema()` and emits an `init()` block of `scylla.RegisterTableFactory("<table_name>", ...)` calls. This is the runtime *name → table* registry that `scylla.QueryCachedGenericByIDs` resolves against, since generics cannot resolve a table from a string. Only closures are registered, so cold start stays cheap. A table whose schema `Name` is not a plain string literal makes the generator **fail** rather than silently drop out of the registry.
+3b. Reads the literal `Name:` out of each `XTable.GetSchema()` and emits an `init()` block of `db.RegisterTableFactory("<table_name>", ...)` calls. This is the runtime *name → table* registry that `db.QueryCachedGenericByIDs` resolves against, since generics cannot resolve a table from a string. Only closures are registered, so cold start stays cheap. A table whose schema `Name` is not a plain string literal makes the generator **fail** rather than silently drop out of the registry.
 4. Builds a standardized import block:
    - Packages ending in `/types` get a `<parentDir>Types` alias (e.g. `app/configuracion/types` → `configuracionTypes`).
    - `app/types` gets `appTypes`.

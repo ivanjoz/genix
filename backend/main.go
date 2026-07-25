@@ -4,11 +4,12 @@ import (
 	"app/agent"
 	"app/business"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
-	"github.com/ivanjoz/genix-orm/scylla/text_search"
+	"app/db"
 	"app/exec"
 	"context"
 	"fmt"
+	"github.com/ivanjoz/genix-orm/scylla"
+	"github.com/ivanjoz/genix-orm/scylla/text_search"
 	"io"
 	"log"
 	"net"
@@ -215,15 +216,15 @@ func main() {
 	// resolved environment: LOGS_FULL → level 2 (verbose), IS_LOCAL → level
 	// 1 (basic), otherwise silent.
 	dbLogLevel := 0
-	/* 
-	if core.Env.IS_LOCAL {
-		dbLogLevel = 1
-	}
-	if core.Env.LOGS_FULL {
-		dbLogLevel = 2
-	}
+	/*
+		if core.Env.IS_LOCAL {
+			dbLogLevel = 1
+		}
+		if core.Env.LOGS_FULL {
+			dbLogLevel = 2
+		}
 	*/
-	scylla.SetDebugLogging(dbLogLevel)
+	db.SetDebugLogging(dbLogLevel)
 
 	// Create project-local tmp/promps once so per-call prompt writes can skip
 	// the parent-dir check. Local-only; no-op in serverless/prod.

@@ -2,7 +2,7 @@ package finance
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	financeTypes "app/finance/types"
 )
 
@@ -82,7 +82,7 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []financeTypes.Int
 		cashBankMap[m.CashBankID] = cashBank
 	}
 
-	if err := scylla.Insert(&records); err != nil {
+	if err := db.Insert(&records); err != nil {
 		return core.Err("Error al insertar movimientos de cashBank:", err)
 	}
 
@@ -90,8 +90,8 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []financeTypes.Int
 		cashBanksToUpdate = append(cashBanksToUpdate, cashBankMap[id])
 	}
 
-	q := scylla.Table[financeTypes.CashBank]()
-	if err := scylla.Update(&cashBanksToUpdate, q.CurrentAmount, q.Updated, q.UpdatedBy); err != nil {
+	q := db.TableOf[financeTypes.CashBank]()
+	if err := db.Update(&cashBanksToUpdate, q.CurrentAmount, q.Updated, q.UpdatedBy); err != nil {
 		return core.Err("Error al actualizar saldo de las cajas:", err)
 	}
 

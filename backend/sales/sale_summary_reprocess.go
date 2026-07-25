@@ -1,15 +1,15 @@
 package sales
 
 import (
-	"app/sales/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
+	"app/sales/types"
 )
 
 func SaleOrderReprocess(companyID int32, date int16) {
 	// Load every persisted sale state for the requested scope so the rebuild ignores transient action history.
 	sales := []types.SaleOrder{}
-	query := scylla.Query(&sales)
+	query := db.Query(&sales)
 	query.Select(query.ID, query.Status, query.Date, query.DetailProductsIDs, query.DetailPrices, query.DetailQuantities).
 		CompanyID.Equals(companyID)
 

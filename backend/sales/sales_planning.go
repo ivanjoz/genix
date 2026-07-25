@@ -2,7 +2,7 @@ package sales
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	s "app/sales/types"
 	"encoding/json"
 )
@@ -20,7 +20,7 @@ func GetSalesPlanning(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	for _, status := range statuses {
-		query := scylla.Query(&records)
+		query := db.Query(&records)
 		query.CompanyID.Equals(req.User.CompanyID).
 			Status.Equals(status).
 			Updated.GreaterThan(updated) // updated=0 on initial → matches all rows
@@ -51,8 +51,8 @@ func PostSalesPlanning(req *core.HandlerArgs) core.HandlerResponse {
 
 	nowTime := core.SUnixTime()
 	t := s.SalesPlanningTable{}
-	err := scylla.Merge(&payload,
-		scylla.Cols(t.Created),
+	err := db.Merge(&payload,
+		db.Cols(t.Created),
 		func(prev, current *s.SalesPlanning) bool {
 			current.CompanyID = req.User.CompanyID
 			current.Created = prev.Created
@@ -90,7 +90,7 @@ func GetSeasonalityCurve(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	for _, status := range statuses {
-		query := scylla.Query(&records)
+		query := db.Query(&records)
 		query.CompanyID.Equals(req.User.CompanyID).
 			Status.Equals(status).
 			Updated.GreaterThan(updated) // updated=0 on initial → matches all rows
@@ -120,8 +120,8 @@ func PostSeasonalityCurve(req *core.HandlerArgs) core.HandlerResponse {
 
 	nowTime := core.SUnixTime()
 	t := s.SeasonalityCurveTable{}
-	err := scylla.Merge(&payload,
-		scylla.Cols(t.Created),
+	err := db.Merge(&payload,
+		db.Cols(t.Created),
 		func(prev, current *s.SeasonalityCurve) bool {
 			current.CompanyID = req.User.CompanyID
 			current.Created = prev.Created

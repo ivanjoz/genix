@@ -2,7 +2,7 @@ package exec
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	"time"
 )
 
@@ -26,7 +26,7 @@ func FlushUsageLogs() {
 	}
 
 	core.Log("Saving usage logs:", len(usageLogsToSave))
-	if insertErr := scylla.Insert(&usageLogsToSave); insertErr != nil {
+	if insertErr := db.Insert(&usageLogsToSave); insertErr != nil {
 		core.Log("Error saving usage logs:", insertErr.Error())
 		core.RestoreUsageLogs(usageLogsToSave)
 		return

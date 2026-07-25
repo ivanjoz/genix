@@ -1,9 +1,9 @@
 package types
 
-import "github.com/ivanjoz/genix-orm/scylla"
+import "app/db"
 
 type Parameters struct {
-	scylla.TableStruct[ParametersTable, Parameters]
+	db.TableStruct[ParametersTable, Parameters]
 	CompanyID int32
 	Group     int32
 	Key       string
@@ -16,24 +16,24 @@ type Parameters struct {
 }
 
 type ParametersTable struct {
-	scylla.TableStruct[ParametersTable, Parameters]
-	CompanyID scylla.Col[ParametersTable, int32]
-	Group     scylla.Col[ParametersTable, int32]
-	Key       scylla.Col[ParametersTable, string]
-	Value     scylla.Col[ParametersTable, string]
-	ValueInt  scylla.Col[ParametersTable, int32]
-	Values    scylla.ColSlice[ParametersTable, int32]
-	Status    scylla.Col[ParametersTable, int8]
-	Updated   scylla.Col[ParametersTable, int32]
-	UpdatedBy scylla.Col[ParametersTable, int32]
+	db.TableStruct[ParametersTable, Parameters]
+	CompanyID db.Col[ParametersTable, int32]
+	Group     db.Col[ParametersTable, int32]
+	Key       db.Col[ParametersTable, string]
+	Value     db.Col[ParametersTable, string]
+	ValueInt  db.Col[ParametersTable, int32]
+	Values    db.ColSlice[ParametersTable, int32]
+	Status    db.Col[ParametersTable, int8]
+	Updated   db.Col[ParametersTable, int32]
+	UpdatedBy db.Col[ParametersTable, int32]
 }
 
-func (e ParametersTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e ParametersTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:         "parameters",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         scylla.Cols(e.Group, e.Key),
-		Indexes:      []scylla.Index{},
+		Keys:         db.Cols(e.Group, e.Key),
+		Indexes:      []db.Index{},
 	}
 }

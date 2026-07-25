@@ -3,7 +3,7 @@ package webpage
 import (
 	businessTypes "app/business/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	s "app/webpage/types"
 	"encoding/json"
 	"strings"
@@ -26,7 +26,7 @@ func GetWebpages(req *core.HandlerArgs) core.HandlerResponse {
 	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
 
 	pages := []s.Webpage{}
-	query := scylla.Query(&pages).CompanyID.Equals(req.User.CompanyID)
+	query := db.Query(&pages).CompanyID.Equals(req.User.CompanyID)
 	if updated > 0 {
 		query.Updated.GreaterThan(updated) // delta: include Status=0 rows so the client can evict them
 	} else {
@@ -60,7 +60,7 @@ func PostWebpage(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Load current stored pages to validate route uniqueness and compute the next ID.
 	currentPages := []s.Webpage{}
-	currentQuery := scylla.Query(&currentPages).CompanyID.Equals(req.User.CompanyID)
+	currentQuery := db.Query(&currentPages).CompanyID.Equals(req.User.CompanyID)
 	if err := currentQuery.Exec(); err != nil {
 		return req.MakeErr("Error al leer las páginas actuales:", err)
 	}
@@ -120,7 +120,7 @@ func PostWebpage(req *core.HandlerArgs) core.HandlerResponse {
 		routeOwnerID[page.Route] = page.ID
 	}
 
-	if err := scylla.Insert(&incomingPages); err != nil {
+	if err := db.Insert(&incomingPages); err != nil {
 		return req.MakeErr("Error al guardar las páginas:", err)
 	}
 

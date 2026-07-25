@@ -27,7 +27,7 @@ Approach:
 - `cc-ver` for cached versions aligned by index with `cc-ids`.
 4. Frontend sends request with `cmp` (empresa/partition id).
 5. Backend handler calls `ExtractCacheVersionValues`.
-6. Backend handler calls `scylla.QueryCachedIDs`.
+6. Backend handler calls `db.QueryCachedIDs`.
 7. ORM checks `cache_version` state and fetches only mismatched IDs.
 8. Backend returns only changed/new rows.
 9. Frontend merges server rows, refreshes timestamps for unchanged cached rows, and persists updates.
@@ -74,7 +74,7 @@ Main parser: `backend/core/cache.go` -> `ExtractCacheVersionValues(req)`.
 
 Behavior:
 - Reads `ids`, `cc-ids`, `cc-ver`, `cmp`.
-- Builds `[]scylla.IDCacheVersion`.
+- Builds `[]db.IDCacheVersion`.
 - For each `ids` value: append with `CacheVersion=0`.
 - For each `cc-ids` value: append with aligned `cc-ver`, default `0` if missing.
 - Returns combined list to one ORM call.
@@ -86,7 +86,7 @@ Used by:
 Typical handler pattern:
 1. Parse request with `ExtractCacheVersionValues`.
 2. Validate non-empty IDs.
-3. Call `scylla.QueryCachedIDs(&records, cachedIDs)`.
+3. Call `db.QueryCachedIDs(&records, cachedIDs)`.
 4. Return fetched rows.
 
 ## 6. ORM feature: `SaveCacheVersion: true`
@@ -244,7 +244,7 @@ Backend steps:
 2. Enable `SaveCacheVersion: true` in schema.
 3. Add GET by IDs handler:
 - parse with `ExtractCacheVersionValues`
-- query with `scylla.QueryCachedIDs`
+- query with `db.QueryCachedIDs`
 4. Ensure response includes at least `ID`, `ss`, `ccv`.
 
 Frontend steps:

@@ -1,9 +1,9 @@
 package sales
 
 import (
-	"app/sales/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
+	"app/sales/types"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -41,7 +41,7 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 	for resultIndex, currentOrderStatus := range orderStatusToQuery {
 
 		queryGroup.Go(func() error {
-			query := scylla.Query(&saleOrdersByStatus[resultIndex]).Limit(5000).OrderDesc()
+			query := db.Query(&saleOrdersByStatus[resultIndex]).Limit(5000).OrderDesc()
 			query.Exclude(query.CompanyID)
 
 			query.CompanyID.Equals(req.User.CompanyID).
@@ -54,21 +54,21 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 
 	saleOrdersToRemoveIDsGroups := make([][]int64, len(orderStatusToRemove))
 	core.Log("orderStatusToRemove:", orderStatusToRemove)
-	
+
 	if updateCounter > 0 {
 		for resultIndex, currentOrderStatus := range orderStatusToRemove {
 
 			queryGroup.Go(func() error {
 				idsToSave := &saleOrdersToRemoveIDsGroups[resultIndex]
 
-				query := scylla.Query(&[]types.SaleOrder{})
+				query := db.Query(&[]types.SaleOrder{})
 				query.Select(query.ID)
 
 				query.CompanyID.Equals(req.User.CompanyID).
 					Status.Equals(currentOrderStatus).
 					UpdateCounter.GreaterEqual(updateCounter)
 
-				if err := query.ExecScan(func(record *types.SaleOrder) bool {					
+				if err := query.ExecScan(func(record *types.SaleOrder) bool {
 					(*idsToSave) = append((*idsToSave), record.ID)
 					// Skip storing the decoded row because this query only needs the IDs.
 					return true
@@ -93,9 +93,9 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 	for _, idsToRemove := range saleOrdersToRemoveIDsGroups {
 		saleOrdersToRemoveIDs = append(saleOrdersToRemoveIDs, idsToRemove...)
 	}
-	
-	core.Log("saleOrdersToRemoveIDs::",saleOrdersToRemoveIDsGroups)
-	
+
+	core.Log("saleOrdersToRemoveIDs::", saleOrdersToRemoveIDsGroups)
+
 	response := map[string]any{
 		"records":             &saleOrders,
 		"records_IDsToRemove": &saleOrdersToRemoveIDs,

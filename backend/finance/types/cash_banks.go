@@ -1,9 +1,9 @@
 package types
 
-import "github.com/ivanjoz/genix-orm/scylla"
+import "app/db"
 
 type CashBank struct {
-	scylla.TableStruct[CashBankTable, CashBank]
+	db.TableStruct[CashBankTable, CashBank]
 	CompanyID            int32
 	ID                   int32
 	Type                 int32
@@ -23,39 +23,39 @@ type CashBank struct {
 }
 
 type CashBankTable struct {
-	scylla.TableStruct[CashBankTable, CashBank]
-	CompanyID            scylla.Col[CashBankTable, int32]
-	ID                   scylla.Col[CashBankTable, int32]
-	Type                 scylla.Col[CashBankTable, int32]
-	SiteID               scylla.Col[CashBankTable, int32]
-	Name                 scylla.Col[CashBankTable, string]
-	Description          scylla.Col[CashBankTable, string]
-	CurrencyType         scylla.Col[CashBankTable, int8]
-	ReconciliationDate   scylla.Col[CashBankTable, int32]
-	ReconciliationAmount scylla.Col[CashBankTable, int32]
-	CurrentAmount        scylla.Col[CashBankTable, int32]
-	Status               scylla.Col[CashBankTable, int8]
-	Updated              scylla.Col[CashBankTable, int32]
-	UpdatedBy            scylla.Col[CashBankTable, int32]
-	Created              scylla.Col[CashBankTable, int32]
-	CreatedBy            scylla.Col[CashBankTable, int32]
+	db.TableStruct[CashBankTable, CashBank]
+	CompanyID            db.Col[CashBankTable, int32]
+	ID                   db.Col[CashBankTable, int32]
+	Type                 db.Col[CashBankTable, int32]
+	SiteID               db.Col[CashBankTable, int32]
+	Name                 db.Col[CashBankTable, string]
+	Description          db.Col[CashBankTable, string]
+	CurrencyType         db.Col[CashBankTable, int8]
+	ReconciliationDate   db.Col[CashBankTable, int32]
+	ReconciliationAmount db.Col[CashBankTable, int32]
+	CurrentAmount        db.Col[CashBankTable, int32]
+	Status               db.Col[CashBankTable, int8]
+	Updated              db.Col[CashBankTable, int32]
+	UpdatedBy            db.Col[CashBankTable, int32]
+	Created              db.Col[CashBankTable, int32]
+	CreatedBy            db.Col[CashBankTable, int32]
 }
 
-func (e CashBankTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e CashBankTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:         "cash_banks",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         scylla.Cols(e.ID.Autoincrement(0)),
-		Indexes: []scylla.Index{
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.Status)},
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.Updated)},
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: db.Cols(e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }
 
 type CashBankMovement struct {
-	scylla.TableStruct[CashBankMovementTable, CashBankMovement]
+	db.TableStruct[CashBankMovementTable, CashBankMovement]
 	CompanyID     int32 `json:",omitempty"`
 	ID            int64
 	CashBankID    int32
@@ -71,41 +71,41 @@ type CashBankMovement struct {
 }
 
 type CashBankMovementTable struct {
-	scylla.TableStruct[CashBankMovementTable, CashBankMovement]
-	CompanyID     scylla.Col[CashBankMovementTable, int32]
-	ID            scylla.Col[CashBankMovementTable, int64]
-	CashBankID    scylla.Col[CashBankMovementTable, int32]
-	CashBankRefID scylla.Col[CashBankMovementTable, int32]
-	DocumentID    scylla.Col[CashBankMovementTable, int64]
-	ReferenceID   scylla.Col[CashBankMovementTable, int32]
-	Date          scylla.Col[CashBankMovementTable, int16]
-	Type          scylla.Col[CashBankMovementTable, int8]
-	FinalAmount   scylla.Col[CashBankMovementTable, int32]
-	Amount        scylla.Col[CashBankMovementTable, int32]
-	Created       scylla.Col[CashBankMovementTable, int32]
-	CreatedBy     scylla.Col[CashBankMovementTable, int32]
+	db.TableStruct[CashBankMovementTable, CashBankMovement]
+	CompanyID     db.Col[CashBankMovementTable, int32]
+	ID            db.Col[CashBankMovementTable, int64]
+	CashBankID    db.Col[CashBankMovementTable, int32]
+	CashBankRefID db.Col[CashBankMovementTable, int32]
+	DocumentID    db.Col[CashBankMovementTable, int64]
+	ReferenceID   db.Col[CashBankMovementTable, int32]
+	Date          db.Col[CashBankMovementTable, int16]
+	Type          db.Col[CashBankMovementTable, int8]
+	FinalAmount   db.Col[CashBankMovementTable, int32]
+	Amount        db.Col[CashBankMovementTable, int32]
+	Created       db.Col[CashBankMovementTable, int32]
+	CreatedBy     db.Col[CashBankMovementTable, int32]
 }
 
-func (e CashBankMovementTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e CashBankMovementTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "cash_bank_movements",
 		Partition: e.CompanyID,
-		Keys:      scylla.Cols(e.ID),
-		KeyIntPacking: scylla.Cols(
+		Keys:      db.Cols(e.ID),
+		KeyIntPacking: db.Cols(
 			//TODO: decrease to e.Autoincrement(2) in the future
 			e.CashBankID.DecimalSize(5), e.Date.DecimalSize(5), e.Autoincrement(3),
 		),
 		AutoincrementPart: e.Date,
-		Indexes: []scylla.Index{
-			{Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.DocumentID)},
-			{Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.ReferenceID)},
-			{Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.CreatedBy)},
+		Indexes: []db.Index{
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.DocumentID)},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.ReferenceID)},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.CreatedBy)},
 		},
 	}
 }
 
 type CashReconciliation struct {
-	scylla.TableStruct[CashReconciliationTable, CashReconciliation]
+	db.TableStruct[CashReconciliationTable, CashReconciliation]
 	CompanyID        int32 `json:",omitempty"`
 	ID               int64 `json:",omitempty"`
 	CashBankID       int32 `json:",omitempty"`
@@ -119,26 +119,26 @@ type CashReconciliation struct {
 }
 
 type CashReconciliationTable struct {
-	scylla.TableStruct[CashReconciliationTable, CashReconciliation]
-	CompanyID        scylla.Col[CashReconciliationTable, int32]
-	ID               scylla.Col[CashReconciliationTable, int64]
-	CashBankID       scylla.Col[CashReconciliationTable, int32]
-	Type             scylla.Col[CashReconciliationTable, int8]
-	MovementID       scylla.Col[CashReconciliationTable, int64]
-	SystemAmount     scylla.Col[CashReconciliationTable, int32]
-	ActualAmount     scylla.Col[CashReconciliationTable, int32]
-	DifferenceAmount scylla.Col[CashReconciliationTable, int32]
-	Created          scylla.Col[CashReconciliationTable, int32]
-	CreatedBy        scylla.Col[CashReconciliationTable, int32]
+	db.TableStruct[CashReconciliationTable, CashReconciliation]
+	CompanyID        db.Col[CashReconciliationTable, int32]
+	ID               db.Col[CashReconciliationTable, int64]
+	CashBankID       db.Col[CashReconciliationTable, int32]
+	Type             db.Col[CashReconciliationTable, int8]
+	MovementID       db.Col[CashReconciliationTable, int64]
+	SystemAmount     db.Col[CashReconciliationTable, int32]
+	ActualAmount     db.Col[CashReconciliationTable, int32]
+	DifferenceAmount db.Col[CashReconciliationTable, int32]
+	Created          db.Col[CashReconciliationTable, int32]
+	CreatedBy        db.Col[CashReconciliationTable, int32]
 }
 
-func (e CashReconciliationTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e CashReconciliationTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "cash_reconciliations",
 		Partition: e.CompanyID,
-		Keys:      scylla.Cols(e.ID),
-		Indexes: []scylla.Index{
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.CreatedBy)},
+		Keys:      db.Cols(e.ID),
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: db.Cols(e.CreatedBy)},
 		},
 	}
 }

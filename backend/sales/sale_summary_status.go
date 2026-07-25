@@ -1,9 +1,9 @@
 package sales
 
 import (
-	"app/sales/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
+	"app/sales/types"
 	"slices"
 	"time"
 )
@@ -13,9 +13,9 @@ func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
 	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
 	dateInicio := req.GetQueryInt16("date-inicio")
 	if dateInicio == 0 {
-		dateInicio = core.TimeToFechaUnix(time.Now()) - (8*7)
+		dateInicio = core.TimeToFechaUnix(time.Now()) - (8 * 7)
 	}
-	
+
 	dateFin := req.GetQueryInt16("date-fin")
 	if dateFin == 0 {
 		dateFin = core.TimeToFechaUnix(time.Now())
@@ -37,7 +37,7 @@ func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
 	} else {
 		// Delta sync resolves changed dates from sentinel rows stored at date=-1.
 		metadataRows := []types.ProductSaleSummary{}
-		query := scylla.Query(&metadataRows)
+		query := db.Query(&metadataRows)
 		query.CompanyID.Equals(req.User.CompanyID).Date.Equals(-1).Updated.GreaterThan(updated)
 		if dateInicio > 0 && dateFin > 0 {
 			query.ProductID.Between(int32(dateInicio), int32(dateFin))
@@ -52,7 +52,7 @@ func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
 			if date <= 0 {
 				continue
 			}
-			if !slices.Contains(datesToInclude,date) {
+			if !slices.Contains(datesToInclude, date) {
 				datesToInclude = append(datesToInclude, date)
 			}
 		}
@@ -63,13 +63,13 @@ func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	productRows := []types.ProductSaleSummary{}
-	query := scylla.Query(&productRows)
+	query := db.Query(&productRows)
 	query.CompanyID.Equals(req.User.CompanyID).Date.In(datesToInclude...)
-	
+
 	if updated > 0 {
 		query.Updated.GreaterEqual(updated).AllowFilter()
 	}
-	
+
 	if err := query.Exec(); err != nil {
 		core.Log("GetSaleSummary query error:", err)
 		return req.MakeErr("Error al obtener el resumen de ventas.", err)
@@ -100,7 +100,7 @@ func buildSaleSummariesFromProductRows(productRows []types.ProductSaleSummary) [
 		if summary == nil {
 			summary = &types.SaleSummary{
 				CompanyID: productRow.CompanyID,
-				Date:     productRow.Date,
+				Date:      productRow.Date,
 			}
 			summaryByFecha[productRow.Date] = summary
 			orderedFechas = append(orderedFechas, productRow.Date)

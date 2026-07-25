@@ -2,7 +2,7 @@ package logistics
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	logisticsTypes "app/logistics/types"
 	"encoding/json"
 	"fmt"
@@ -78,10 +78,10 @@ func GetProductStockLotsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// ProductStockLot.ID is int32; cache-version values come in as int64.
-	lotIDs := core.Map(lotIDRecords, func(e scylla.IDCacheVersion) int32 { return int32(e.ID) })
+	lotIDs := core.Map(lotIDRecords, func(e db.IDCacheVersion) int32 { return int32(e.ID) })
 
 	lots := []logisticsTypes.ProductStockLot{}
-	query := scylla.Query(&lots)
+	query := db.Query(&lots)
 	if err := query.CompanyID.Equals(req.User.CompanyID).ID.In(lotIDs...).Exec(); err != nil {
 		return req.MakeErr("Error al obtener los lotes.", err)
 	}
@@ -105,7 +105,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
 	if lotCode != "" {
 		lots := []logisticsTypes.ProductStockLot{}
-		query := scylla.Query(&lots).CompanyID.Equals(req.User.CompanyID)
+		query := db.Query(&lots).CompanyID.Equals(req.User.CompanyID)
 
 		if err := query.Select(query.ID).Name.Equals(lotCode).Exec(); err != nil {
 			return req.MakeErr("Error al buscar el lote:", err)
@@ -118,13 +118,13 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	movimientos := []scylla.RecordGroup[logisticsTypes.WarehouseProductMovement]{}
+	movimientos := []db.RecordGroup[logisticsTypes.WarehouseProductMovement]{}
 
 	// Direct-lookup path: SerialNumber / lotIDs / DocumentID target non-grouped local indexes,
 	// so plain Query applies and the Date range is ignored.
 	if serialNumber != "" || len(lotIDs) > 0 || documentID > 0 {
 		flat := []logisticsTypes.WarehouseProductMovement{}
-		query := scylla.Query(&flat)
+		query := db.Query(&flat)
 		query.CompanyID.Equals(req.User.CompanyID)
 		switch {
 		case serialNumber != "":
@@ -138,7 +138,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("Error al obtener los movimientos:", err)
 		}
 		if len(flat) > 0 {
-			movimientos = append(movimientos, scylla.RecordGroup[logisticsTypes.WarehouseProductMovement]{
+			movimientos = append(movimientos, db.RecordGroup[logisticsTypes.WarehouseProductMovement]{
 				IndexID: -1,
 				Records: flat,
 			})
@@ -161,7 +161,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
-	query := scylla.QueryIndexGroup(&movimientos).
+	query := db.QueryIndexGroup(&movimientos).
 		CompanyID.Equals(req.User.CompanyID)
 
 	for _, cacheGroup := range cacheGroupHashes {
@@ -222,7 +222,7 @@ func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
 		records := make([]logisticsTypes.ProductStock, 0)
 		for _, status := range statuses {
 			statusRecords := []logisticsTypes.ProductStock{}
-			query := scylla.Query(&statusRecords)
+			query := db.Query(&statusRecords)
 			query.Select().
 				CompanyID.Equals(req.User.CompanyID).
 				WarehouseID.Equals(warehouseID).
@@ -243,7 +243,7 @@ func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
 		records := make([]logisticsTypes.ProductStockDetail, 0)
 		for _, status := range statuses {
 			statusRecords := []logisticsTypes.ProductStockDetail{}
-			query := scylla.Query(&statusRecords)
+			query := db.Query(&statusRecords)
 			query.Select().
 				CompanyID.Equals(req.User.CompanyID).
 				WarehouseID.Equals(warehouseID).
@@ -278,7 +278,7 @@ func GetProductsStock(req *core.HandlerArgs) core.HandlerResponse {
 	productsStock := []logisticsTypes.ProductStock{}
 
 	for _, status := range statuses {
-		query := scylla.Query(&productsStock)
+		query := db.Query(&productsStock)
 		query.Select().
 			CompanyID.Equals(req.User.CompanyID).
 			Status.Equals(status).
@@ -398,13 +398,13 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 	stockByID := map[int64]*logisticsTypes.ProductStock{}
 	detailByKey := map[string]*logisticsTypes.ProductStockDetail{}
 	detailKey := func(stockID int64, lotID int32, serial string) string {
-		return scylla.MakeKeyConcat(stockID, lotID, serial)
+		return db.MakeKeyConcat(stockID, lotID, serial)
 	}
 
 	preloadGroup := errgroup.Group{}
 	preloadGroup.Go(func() error {
 		existing := []logisticsTypes.ProductStock{}
-		q := scylla.Query(&existing)
+		q := db.Query(&existing)
 		q.Exclude(q.Created, q.CreatedBy).
 			CompanyID.Equals(companyID).
 			ID.In(stockIDSet.Values...)
@@ -419,7 +419,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 	if !stockIDsWithDetails.IsEmpty() {
 		preloadGroup.Go(func() error {
 			existing := []logisticsTypes.ProductStockDetail{}
-			q := scylla.Query(&existing)
+			q := db.Query(&existing)
 			q.Exclude(q.Created, q.CreatedBy, q.Updated, q.UpdatedBy).
 				CompanyID.Equals(companyID).
 				ProductStockID.In(stockIDsWithDetails.Values...)
@@ -593,10 +593,10 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 	writeGroup := errgroup.Group{}
 	if len(stocks) > 0 {
 		writeGroup.Go(func() error {
-			stockTable := scylla.Table[logisticsTypes.ProductStock]()
-			if err := scylla.InsertUpdateInclude(&stocks,
+			stockTable := db.TableOf[logisticsTypes.ProductStock]()
+			if err := db.InsertUpdateInclude(&stocks,
 				func(e *logisticsTypes.ProductStock) bool { return e.Created > 0 },
-				scylla.Cols(
+				db.Cols(
 					// Keep the materialized view tuple consistent on updates.
 					stockTable.WarehouseID,
 					stockTable.Quantity, stockTable.SubQuantity,
@@ -612,10 +612,10 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 	}
 	if len(details) > 0 {
 		writeGroup.Go(func() error {
-			detailTable := scylla.Table[logisticsTypes.ProductStockDetail]()
-			if err := scylla.InsertUpdateInclude(&details,
+			detailTable := db.TableOf[logisticsTypes.ProductStockDetail]()
+			if err := db.InsertUpdateInclude(&details,
 				func(e *logisticsTypes.ProductStockDetail) bool { return e.Created > 0 },
-				scylla.Cols(
+				db.Cols(
 					// Keep the materialized view tuple consistent on updates.
 					detailTable.WarehouseID,
 					detailTable.Quantity, detailTable.SubQuantity,
@@ -628,7 +628,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 		})
 	}
 	writeGroup.Go(func() error {
-		if err := scylla.Insert(&warehouseMovements); err != nil {
+		if err := db.Insert(&warehouseMovements); err != nil {
 			return core.Err("Error al guardar los movimientos:", err)
 		}
 		return nil
@@ -653,7 +653,7 @@ func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*logisticsType
 		if mov.LotID != 0 || mov.LotName == "" {
 			continue
 		}
-		hash := scylla.MakeKeyConcat(lotDate, mov.SupplierID, mov.LotName)
+		hash := db.MakeKeyConcat(lotDate, mov.SupplierID, mov.LotName)
 		movementsByHash[hash] = append(movementsByHash[hash], mov)
 		hashToKey[hash] = lotLookupKey{hash: hash, supplierID: mov.SupplierID, name: mov.LotName}
 	}
@@ -668,7 +668,7 @@ func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*logisticsType
 
 	// Look up existing lots by the dedup hash index.
 	existingLots := []logisticsTypes.ProductStockLot{}
-	q := scylla.Query(&existingLots)
+	q := db.Query(&existingLots)
 	q.Select().
 		CompanyID.Equals(req.User.CompanyID).
 		Hash.In(hashes...)
@@ -699,7 +699,7 @@ func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*logisticsType
 		insertedHashOrder = append(insertedHashOrder, hash)
 	}
 	if len(lotsToInsert) > 0 {
-		if err := scylla.Insert(&lotsToInsert); err != nil {
+		if err := db.Insert(&lotsToInsert); err != nil {
 			return core.Err("Error al crear lotes:", err)
 		}
 		for i, hash := range insertedHashOrder {

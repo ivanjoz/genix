@@ -6,12 +6,13 @@ import (
 	configTypes "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
-	"github.com/ivanjoz/genix-orm/scylla"
-	"github.com/ivanjoz/genix-orm/scylla/text_search"
+	"app/db"
 	securityTypes "app/security/types"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"github.com/ivanjoz/genix-orm/scylla"
+	"github.com/ivanjoz/genix-orm/scylla/text_search"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -106,7 +107,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	// Seed companies in ScyllaDB first so the relational source of truth is ready.
-	if err := scylla.Insert(&empresas); err != nil {
+	if err := db.Insert(&empresas); err != nil {
 		panic("Error al crear las empresas iniciales en ScyllaDB. " + err.Error())
 	}
 	if err := cloud.Insert(empresas); err != nil {
@@ -119,7 +120,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	// Seed admin/system users in ScyllaDB so delta-cache and ID-based reads stay consistent.
-	if err := scylla.Insert(&usuarios); err != nil {
+	if err := db.Insert(&usuarios); err != nil {
 		panic("Error al crear los usuarios iniciales en ScyllaDB. " + err.Error())
 	}
 	if err := cloud.Insert(usuarios); err != nil {
@@ -203,7 +204,7 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 	recordsImported := core.MapToSliceT(recordsMap)
 	// core.Log(recordsImported)
 
-	err = scylla.Insert(&recordsImported)
+	err = db.Insert(&recordsImported)
 	if err != nil {
 		panic(err)
 	}
@@ -215,7 +216,7 @@ func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	// ciudades de Peru
 	ciudades := []businessTypes.CityLocation{}
-	q1 := scylla.Query(&ciudades)
+	q1 := db.Query(&ciudades)
 	err := q1.Select(q1.ID, q1.Name, q1.ParentID, q1.Hierarchy).
 		CountryID.Equals(604).Exec()
 

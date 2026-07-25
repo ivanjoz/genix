@@ -1,6 +1,6 @@
 package types
 
-import "github.com/ivanjoz/genix-orm/scylla"
+import "app/db"
 
 const (
 	PurchaseOrderStatusCanceled  int8 = 0
@@ -10,7 +10,7 @@ const (
 )
 
 type PurchaseOrder struct {
-	scylla.TableStruct[PurchaseOrderTable, PurchaseOrder]
+	db.TableStruct[PurchaseOrderTable, PurchaseOrder]
 	ID           int32
 	CompanyID    int32 `json:",omitempty"`
 	ProviderID   int32 `json:",omitempty"`
@@ -45,65 +45,65 @@ type PurchaseOrder struct {
 }
 
 type PurchaseOrderTable struct {
-	scylla.TableStruct[PurchaseOrderTable, PurchaseOrder]
-	CompanyID                    scylla.Col[PurchaseOrderTable, int32]
-	ID                           scylla.Col[PurchaseOrderTable, int32]
-	ProviderID                   scylla.Col[PurchaseOrderTable, int32]
-	WarehouseID                  scylla.Col[PurchaseOrderTable, int32]
-	Date                         scylla.Col[PurchaseOrderTable, int16]
-	Week                         scylla.Col[PurchaseOrderTable, int16]
-	DeliveryDate                 scylla.Col[PurchaseOrderTable, int16]
-	PaymentDate                  scylla.Col[PurchaseOrderTable, int16]
-	DetailProductIDs             scylla.Col[PurchaseOrderTable, []int32]
-	DetailProductQuantity        scylla.Col[PurchaseOrderTable, []int32]
-	DetailProductPrice           scylla.Col[PurchaseOrderTable, []int32]
-	DetailProductPresentationIDs scylla.Col[PurchaseOrderTable, []int32]
-	DetailSupplyIDs              scylla.Col[PurchaseOrderTable, []int32]
-	DetailSupplyQuantity         scylla.Col[PurchaseOrderTable, []int32]
-	DetailSupplyPrice            scylla.Col[PurchaseOrderTable, []int32]
-	TotalAmount                  scylla.Col[PurchaseOrderTable, int32]
-	TaxAmount                    scylla.Col[PurchaseOrderTable, int32]
-	DebtAmount                   scylla.Col[PurchaseOrderTable, int32]
-	DifferenceQuantity           scylla.Col[PurchaseOrderTable, int32]
-	DifferenceValue              scylla.Col[PurchaseOrderTable, int32]
-	InvoiceNumber                scylla.Col[PurchaseOrderTable, string]
-	Notes                        scylla.Col[PurchaseOrderTable, string]
-	Created                      scylla.Col[PurchaseOrderTable, int32]
-	CreatedBy                    scylla.Col[PurchaseOrderTable, int32]
-	Updated                      scylla.Col[PurchaseOrderTable, int32]
-	UpdatedBy                    scylla.Col[PurchaseOrderTable, int32]
-	Status                       scylla.Col[PurchaseOrderTable, int8]
+	db.TableStruct[PurchaseOrderTable, PurchaseOrder]
+	CompanyID                    db.Col[PurchaseOrderTable, int32]
+	ID                           db.Col[PurchaseOrderTable, int32]
+	ProviderID                   db.Col[PurchaseOrderTable, int32]
+	WarehouseID                  db.Col[PurchaseOrderTable, int32]
+	Date                         db.Col[PurchaseOrderTable, int16]
+	Week                         db.Col[PurchaseOrderTable, int16]
+	DeliveryDate                 db.Col[PurchaseOrderTable, int16]
+	PaymentDate                  db.Col[PurchaseOrderTable, int16]
+	DetailProductIDs             db.Col[PurchaseOrderTable, []int32]
+	DetailProductQuantity        db.Col[PurchaseOrderTable, []int32]
+	DetailProductPrice           db.Col[PurchaseOrderTable, []int32]
+	DetailProductPresentationIDs db.Col[PurchaseOrderTable, []int32]
+	DetailSupplyIDs              db.Col[PurchaseOrderTable, []int32]
+	DetailSupplyQuantity         db.Col[PurchaseOrderTable, []int32]
+	DetailSupplyPrice            db.Col[PurchaseOrderTable, []int32]
+	TotalAmount                  db.Col[PurchaseOrderTable, int32]
+	TaxAmount                    db.Col[PurchaseOrderTable, int32]
+	DebtAmount                   db.Col[PurchaseOrderTable, int32]
+	DifferenceQuantity           db.Col[PurchaseOrderTable, int32]
+	DifferenceValue              db.Col[PurchaseOrderTable, int32]
+	InvoiceNumber                db.Col[PurchaseOrderTable, string]
+	Notes                        db.Col[PurchaseOrderTable, string]
+	Created                      db.Col[PurchaseOrderTable, int32]
+	CreatedBy                    db.Col[PurchaseOrderTable, int32]
+	Updated                      db.Col[PurchaseOrderTable, int32]
+	UpdatedBy                    db.Col[PurchaseOrderTable, int32]
+	Status                       db.Col[PurchaseOrderTable, int8]
 }
 
-func (e PurchaseOrderTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e PurchaseOrderTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:             "purchase_order",
 		Partition:        e.CompanyID,
 		UseListAsDefault: true,
-		Keys:             scylla.Cols(e.ID.Autoincrement(0)),
-		Indexes: []scylla.Index{
+		Keys:             db.Cols(e.ID.Autoincrement(0)),
+		Indexes: []db.Index{
 			{
-				Type: scylla.TypeView,
-				Keys: scylla.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
+				Type: db.TypeView,
+				Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
 			},
 			{
-				Keys:          scylla.Cols(e.Week),
+				Keys:          db.Cols(e.Week),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          scylla.Cols(e.Week, e.DetailProductIDs),
+				Keys:          db.Cols(e.Week, e.DetailProductIDs),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          scylla.Cols(e.Week, e.Status, e.DetailProductIDs),
+				Keys:          db.Cols(e.Week, e.Status, e.DetailProductIDs),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          scylla.Cols(e.Week, e.ProviderID),
+				Keys:          db.Cols(e.Week, e.ProviderID),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          scylla.Cols(e.Week, e.Status, e.ProviderID),
+				Keys:          db.Cols(e.Week, e.Status, e.ProviderID),
 				UseIndexGroup: true,
 			},
 		},

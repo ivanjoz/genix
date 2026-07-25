@@ -12,9 +12,9 @@ The script ensures that for every data model, its corresponding "base" struct an
 
 2.  **Field Consistency**: Every field defined in the table struct must also exist in the base struct.
 
-3.  **Type Mapping Rules**: It enforces the correct usage of `scylla.Col` and `scylla.ColSlice` based on the field's type in the base struct:
-    *   **Non-Slice Fields**: Must use `scylla.Col[TableType, FieldType]`.
-    *   **Primitive Slices** (`[]string`, `[]int`, etc.): Must use `scylla.ColSlice[TableType, ElementType]`.
-    *   **Complex Slices** (e.g., slices of structs): Must use `scylla.Col[TableType, SliceType]`.
+3.  **Type Mapping Rules**: It enforces the correct usage of `db.Col` and `db.ColSlice` based on the field's type in the base struct:
+    *   **Non-Slice Fields**: Must use `db.Col[TableType, FieldType]`.
+    *   **Primitive Slices** (`[]string`, `[]int`, etc.): Must use `db.ColSlice[TableType, ElementType]`.
+    *   **Complex Slices** (e.g., slices of structs): Must use `db.Col[TableType, SliceType]`.
 
 If any of these rules are violated, the script prints a detailed error message, specifying the structs and field where the inconsistency occurred.

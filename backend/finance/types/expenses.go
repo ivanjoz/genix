@@ -1,11 +1,11 @@
 package types
 
-import "github.com/ivanjoz/genix-orm/scylla"
+import "app/db"
 
 // ExpenseScheduled is the recurring template. It only describes the cadence and the
 // default amount; per-period payment state lives in the generated Expense rows.
 type ExpenseScheduled struct {
-	scylla.TableStruct[ExpenseScheduledTable, ExpenseScheduled]
+	db.TableStruct[ExpenseScheduledTable, ExpenseScheduled]
 	CompanyID    int32  `json:",omitempty"`
 	ID           int32  `json:",omitempty"`
 	Name         string `json:",omitempty"`
@@ -25,34 +25,34 @@ type ExpenseScheduled struct {
 }
 
 type ExpenseScheduledTable struct {
-	scylla.TableStruct[ExpenseScheduledTable, ExpenseScheduled]
-	CompanyID    scylla.Col[ExpenseScheduledTable, int32]
-	ID           scylla.Col[ExpenseScheduledTable, int32]
-	Name         scylla.Col[ExpenseScheduledTable, string]
-	Description  scylla.Col[ExpenseScheduledTable, string]
-	CategoryID   scylla.Col[ExpenseScheduledTable, int8]
-	SupplierID   scylla.Col[ExpenseScheduledTable, int32]
-	CurrencyType scylla.Col[ExpenseScheduledTable, int8]
-	Amount       scylla.Col[ExpenseScheduledTable, int32]
-	Frequency    scylla.Col[ExpenseScheduledTable, int16]
-	StartDate    scylla.Col[ExpenseScheduledTable, int16]
-	EndDate      scylla.Col[ExpenseScheduledTable, int16]
-	Status       scylla.Col[ExpenseScheduledTable, int8]
-	Updated      scylla.Col[ExpenseScheduledTable, int32]
-	UpdatedBy    scylla.Col[ExpenseScheduledTable, int32]
-	Created      scylla.Col[ExpenseScheduledTable, int32]
-	CreatedBy    scylla.Col[ExpenseScheduledTable, int32]
+	db.TableStruct[ExpenseScheduledTable, ExpenseScheduled]
+	CompanyID    db.Col[ExpenseScheduledTable, int32]
+	ID           db.Col[ExpenseScheduledTable, int32]
+	Name         db.Col[ExpenseScheduledTable, string]
+	Description  db.Col[ExpenseScheduledTable, string]
+	CategoryID   db.Col[ExpenseScheduledTable, int8]
+	SupplierID   db.Col[ExpenseScheduledTable, int32]
+	CurrencyType db.Col[ExpenseScheduledTable, int8]
+	Amount       db.Col[ExpenseScheduledTable, int32]
+	Frequency    db.Col[ExpenseScheduledTable, int16]
+	StartDate    db.Col[ExpenseScheduledTable, int16]
+	EndDate      db.Col[ExpenseScheduledTable, int16]
+	Status       db.Col[ExpenseScheduledTable, int8]
+	Updated      db.Col[ExpenseScheduledTable, int32]
+	UpdatedBy    db.Col[ExpenseScheduledTable, int32]
+	Created      db.Col[ExpenseScheduledTable, int32]
+	CreatedBy    db.Col[ExpenseScheduledTable, int32]
 }
 
-func (e ExpenseScheduledTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e ExpenseScheduledTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:         "expenses_scheduled",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         scylla.Cols(e.ID.Autoincrement(0)),
-		Indexes: []scylla.Index{
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
+		Indexes: []db.Index{
 			// Delta-cache view: frontend syncs active schedules by watermark.
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
+			{Type: db.TypeView, Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
 		},
 	}
 }
@@ -61,7 +61,7 @@ func (e ExpenseScheduledTable) GetSchema() scylla.TableSchema {
 // single materialized period of a schedule, carrying its own (possibly adjusted)
 // amount plus payment state.
 type Expense struct {
-	scylla.TableStruct[ExpenseTable, Expense]
+	db.TableStruct[ExpenseTable, Expense]
 	CompanyID          int32  `json:",omitempty"`
 	ID                 int32  `json:",omitempty"`
 	ExpenseScheduledID int32  `json:",omitempty"` // 0 = one-time; otherwise → ExpenseScheduled.ID.
@@ -83,38 +83,38 @@ type Expense struct {
 }
 
 type ExpenseTable struct {
-	scylla.TableStruct[ExpenseTable, Expense]
-	CompanyID          scylla.Col[ExpenseTable, int32]
-	ID                 scylla.Col[ExpenseTable, int32]
-	ExpenseScheduledID scylla.Col[ExpenseTable, int32]
-	PeriodDate         scylla.Col[ExpenseTable, int16]
-	Name               scylla.Col[ExpenseTable, string]
-	Description        scylla.Col[ExpenseTable, string]
-	CategoryID         scylla.Col[ExpenseTable, int8]
-	SupplierID         scylla.Col[ExpenseTable, int32]
-	CurrencyType       scylla.Col[ExpenseTable, int8]
-	Date               scylla.Col[ExpenseTable, int16]
-	DueDate            scylla.Col[ExpenseTable, int16]
-	Amount             scylla.Col[ExpenseTable, int32]
-	PaidAmount         scylla.Col[ExpenseTable, int32]
-	Status             scylla.Col[ExpenseTable, int8]
-	Updated            scylla.Col[ExpenseTable, int32]
-	UpdatedBy          scylla.Col[ExpenseTable, int32]
-	Created            scylla.Col[ExpenseTable, int32]
-	CreatedBy          scylla.Col[ExpenseTable, int32]
+	db.TableStruct[ExpenseTable, Expense]
+	CompanyID          db.Col[ExpenseTable, int32]
+	ID                 db.Col[ExpenseTable, int32]
+	ExpenseScheduledID db.Col[ExpenseTable, int32]
+	PeriodDate         db.Col[ExpenseTable, int16]
+	Name               db.Col[ExpenseTable, string]
+	Description        db.Col[ExpenseTable, string]
+	CategoryID         db.Col[ExpenseTable, int8]
+	SupplierID         db.Col[ExpenseTable, int32]
+	CurrencyType       db.Col[ExpenseTable, int8]
+	Date               db.Col[ExpenseTable, int16]
+	DueDate            db.Col[ExpenseTable, int16]
+	Amount             db.Col[ExpenseTable, int32]
+	PaidAmount         db.Col[ExpenseTable, int32]
+	Status             db.Col[ExpenseTable, int8]
+	Updated            db.Col[ExpenseTable, int32]
+	UpdatedBy          db.Col[ExpenseTable, int32]
+	Created            db.Col[ExpenseTable, int32]
+	CreatedBy          db.Col[ExpenseTable, int32]
 }
 
-func (e ExpenseTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e ExpenseTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:         "expenses",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         scylla.Cols(e.ID.Autoincrement(0)),
-		Indexes: []scylla.Index{
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
+		Indexes: []db.Index{
 			// Delta-cache view for the Register list.
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
+			{Type: db.TypeView, Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
 			// Fetch all periods belonging to a schedule (lazy generation + period listing).
-			{Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.ExpenseScheduledID)},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.ExpenseScheduledID)},
 		},
 	}
 }

@@ -2,7 +2,7 @@ package types
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 )
 
 type WarehouseStockMin struct {
@@ -22,7 +22,7 @@ type ProductPresentation struct {
 }
 
 type Product struct {
-	scylla.TableStruct[ProductTable, Product]
+	db.TableStruct[ProductTable, Product]
 	CompanyID     int32   `json:",omitempty"`
 	ID            int32   `db:"id,pk"`
 	TempID        int32   `json:",omitempty"`
@@ -81,44 +81,44 @@ func (e *Product) GetTextSearchIndex() string {
 }
 
 type ProductTable struct {
-	scylla.TableStruct[ProductTable, Product]
-	CompanyID           scylla.Col[ProductTable, int32]
-	ID                  scylla.Col[ProductTable, int32]
-	Name                scylla.Col[ProductTable, string]
-	Description         scylla.Col[ProductTable, string]
-	ContentHTML         scylla.Col[ProductTable, string]
-	CategoryIDs         scylla.ColSlice[ProductTable, int32] `db:"category_ids"`
-	BrandID             scylla.Col[ProductTable, int32]
-	Params              scylla.ColSlice[ProductTable, int8] `db:"params_ids"`
-	Price               scylla.Col[ProductTable, int32]
-	CurrencyID          scylla.Col[ProductTable, int16]
-	UnitID              scylla.Col[ProductTable, int16]
-	Discount            scylla.Col[ProductTable, float32]
-	FinalPrice          scylla.Col[ProductTable, int32]
-	Weight              scylla.Col[ProductTable, float32]
-	Volume              scylla.Col[ProductTable, float32]
-	SbuQuantity         scylla.Col[ProductTable, int32]
-	SbuUnit             scylla.Col[ProductTable, string]
-	SbuPrice            scylla.Col[ProductTable, int32]
-	SbuDiscount         scylla.Col[ProductTable, float32]
-	SbuFinalPrice       scylla.Col[ProductTable, int32]
-	SKU                 scylla.Col[ProductTable, string]
-	NameHash            scylla.Col[ProductTable, int32]
-	Properties          scylla.Col[ProductTable, []ProductProperties]
-	Presentations       scylla.Col[ProductTable, []ProductPresentation]
-	ImageMain           scylla.Col[ProductTable, int32]
-	ImageIDs            scylla.ColSlice[ProductTable, int32]
-	ImageDescriptions   scylla.ColSlice[ProductTable, string]
-	Stock               scylla.Col[ProductTable, []WarehouseStockMin]
-	ReservedStock       scylla.Col[ProductTable, []WarehouseStockMin]
-	StockStatus         scylla.Col[ProductTable, int8]
-	NameUpdated         scylla.Col[ProductTable, int32]
-	Status              scylla.Col[ProductTable, int8]
-	Updated             scylla.Col[ProductTable, int32]
-	UpdatedBy           scylla.Col[ProductTable, int32]
-	Created             scylla.Col[ProductTable, int32]
-	CreatedBy           scylla.Col[ProductTable, int32]
-	CategoriesWithStock scylla.ColSlice[ProductTable, int32]
+	db.TableStruct[ProductTable, Product]
+	CompanyID           db.Col[ProductTable, int32]
+	ID                  db.Col[ProductTable, int32]
+	Name                db.Col[ProductTable, string]
+	Description         db.Col[ProductTable, string]
+	ContentHTML         db.Col[ProductTable, string]
+	CategoryIDs         db.ColSlice[ProductTable, int32] `db:"category_ids"`
+	BrandID             db.Col[ProductTable, int32]
+	Params              db.ColSlice[ProductTable, int8] `db:"params_ids"`
+	Price               db.Col[ProductTable, int32]
+	CurrencyID          db.Col[ProductTable, int16]
+	UnitID              db.Col[ProductTable, int16]
+	Discount            db.Col[ProductTable, float32]
+	FinalPrice          db.Col[ProductTable, int32]
+	Weight              db.Col[ProductTable, float32]
+	Volume              db.Col[ProductTable, float32]
+	SbuQuantity         db.Col[ProductTable, int32]
+	SbuUnit             db.Col[ProductTable, string]
+	SbuPrice            db.Col[ProductTable, int32]
+	SbuDiscount         db.Col[ProductTable, float32]
+	SbuFinalPrice       db.Col[ProductTable, int32]
+	SKU                 db.Col[ProductTable, string]
+	NameHash            db.Col[ProductTable, int32]
+	Properties          db.Col[ProductTable, []ProductProperties]
+	Presentations       db.Col[ProductTable, []ProductPresentation]
+	ImageMain           db.Col[ProductTable, int32]
+	ImageIDs            db.ColSlice[ProductTable, int32]
+	ImageDescriptions   db.ColSlice[ProductTable, string]
+	Stock               db.Col[ProductTable, []WarehouseStockMin]
+	ReservedStock       db.Col[ProductTable, []WarehouseStockMin]
+	StockStatus         db.Col[ProductTable, int8]
+	NameUpdated         db.Col[ProductTable, int32]
+	Status              db.Col[ProductTable, int8]
+	Updated             db.Col[ProductTable, int32]
+	UpdatedBy           db.Col[ProductTable, int32]
+	Created             db.Col[ProductTable, int32]
+	CreatedBy           db.Col[ProductTable, int32]
+	CategoriesWithStock db.ColSlice[ProductTable, int32]
 }
 
 func (e *Product) FillCategoriesWithStock() {
@@ -134,24 +134,24 @@ func (e *Product) SelfParse() {
 	e.NameHash = core.BasicHashInt(core.NormalizeString(&e.Name))
 }
 
-func (e ProductTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e ProductTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:             "products",
 		Partition:        e.CompanyID,
 		TextSearchColumn: e.Name,
 		SaveCacheVersion: true,
 		// Label lookups resolve name + SKU + price/brand without shipping the whole product row.
-		GenericRecord: scylla.GenericRecordSchema{
+		GenericRecord: db.GenericRecordSchema{
 			Name: e.Name, S1: e.SKU, N1: e.FinalPrice, N2: e.BrandID,
 		},
-		Keys: scylla.Cols(e.ID.Autoincrement(0)),
-		Indexes: []scylla.Index{
-			{Type: scylla.TypeGlobalIndex, Keys: scylla.Cols(e.CategoriesWithStock)},
-			{Type: scylla.TypeLocalIndex, Keys: scylla.Cols(e.NameUpdated)},
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.NameHash), Cols: scylla.Cols(e.ID, e.Status)},
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.Status)},
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.StockStatus)},
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.Updated)},
+		Keys: db.Cols(e.ID.Autoincrement(0)),
+		Indexes: []db.Index{
+			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.CategoriesWithStock)},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.NameUpdated)},
+			{Type: db.TypeView, Keys: db.Cols(e.NameHash), Cols: db.Cols(e.ID, e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.StockStatus)},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }
@@ -171,7 +171,7 @@ type ProductProperties struct {
 }
 
 type Warehouse struct {
-	scylla.TableStruct[WarehouseTable, Warehouse]
+	db.TableStruct[WarehouseTable, Warehouse]
 	CompanyID   int32
 	ID          int32
 	SiteID      int32
@@ -188,29 +188,29 @@ type Warehouse struct {
 }
 
 type WarehouseTable struct {
-	scylla.TableStruct[WarehouseTable, Warehouse]
-	CompanyID   scylla.Col[WarehouseTable, int32]
-	ID          scylla.Col[WarehouseTable, int32]
-	SiteID      scylla.Col[WarehouseTable, int32]
-	Name        scylla.Col[WarehouseTable, string]
-	Description scylla.Col[WarehouseTable, string]
-	Layout      scylla.Col[WarehouseTable, []WarehouseLayout]
-	Status      scylla.Col[WarehouseTable, int8]
-	Updated     scylla.Col[WarehouseTable, int32]
-	UpdatedBy   scylla.Col[WarehouseTable, int32]
-	Created     scylla.Col[WarehouseTable, int32]
-	CreatedBy   scylla.Col[WarehouseTable, int32]
+	db.TableStruct[WarehouseTable, Warehouse]
+	CompanyID   db.Col[WarehouseTable, int32]
+	ID          db.Col[WarehouseTable, int32]
+	SiteID      db.Col[WarehouseTable, int32]
+	Name        db.Col[WarehouseTable, string]
+	Description db.Col[WarehouseTable, string]
+	Layout      db.Col[WarehouseTable, []WarehouseLayout]
+	Status      db.Col[WarehouseTable, int8]
+	Updated     db.Col[WarehouseTable, int32]
+	UpdatedBy   db.Col[WarehouseTable, int32]
+	Created     db.Col[WarehouseTable, int32]
+	CreatedBy   db.Col[WarehouseTable, int32]
 }
 
-func (e WarehouseTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e WarehouseTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:         "warehouses",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         scylla.Cols(e.ID.Autoincrement(0)),
-		Indexes: []scylla.Index{
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.Status)},
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.Updated)},
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: db.Cols(e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }
@@ -230,7 +230,7 @@ type WarehouseLayoutBlock struct {
 }
 
 type Site struct {
-	scylla.TableStruct[SiteTable, Site]
+	db.TableStruct[SiteTable, Site]
 	CompanyID   int32  `db:"empresa_id,pk"`
 	ID          int32  `db:"id,pk"`
 	Name        string `db:"nombre"`
@@ -246,29 +246,29 @@ type Site struct {
 }
 
 type SiteTable struct {
-	scylla.TableStruct[SiteTable, Site]
-	CompanyID   scylla.Col[SiteTable, int32]
-	ID          scylla.Col[SiteTable, int32]
-	Name        scylla.Col[SiteTable, string]
-	Description scylla.Col[SiteTable, string]
-	Address     scylla.Col[SiteTable, string]
-	CityID      scylla.Col[SiteTable, int32] `db:"pais_ciudad_id"`
-	Status      scylla.Col[SiteTable, int8]
-	Updated     scylla.Col[SiteTable, int32]
-	UpdatedBy   scylla.Col[SiteTable, int32]
-	Created     scylla.Col[SiteTable, int32]
-	CreatedBy   scylla.Col[SiteTable, int32]
+	db.TableStruct[SiteTable, Site]
+	CompanyID   db.Col[SiteTable, int32]
+	ID          db.Col[SiteTable, int32]
+	Name        db.Col[SiteTable, string]
+	Description db.Col[SiteTable, string]
+	Address     db.Col[SiteTable, string]
+	CityID      db.Col[SiteTable, int32] `db:"pais_ciudad_id"`
+	Status      db.Col[SiteTable, int8]
+	Updated     db.Col[SiteTable, int32]
+	UpdatedBy   db.Col[SiteTable, int32]
+	Created     db.Col[SiteTable, int32]
+	CreatedBy   db.Col[SiteTable, int32]
 }
 
-func (e SiteTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e SiteTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:         "sites",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         scylla.Cols(e.ID.Autoincrement(0)),
-		Indexes: []scylla.Index{
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.Status)},
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.Updated)},
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: db.Cols(e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }

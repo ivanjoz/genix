@@ -2,7 +2,7 @@ package config
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 )
 
 type ActionRegistered struct {
@@ -16,9 +16,9 @@ func GetCronActionsScheduled(req *core.HandlerArgs) core.HandlerResponse {
 	if updated == 0 {
 		updated = core.SUnixTime() - int32((7*24*60*60)/2) // Last 7 days
 	}
-	
+
 	cronActions := []core.CronAction{}
-	cronActionsQuery := scylla.Query(&cronActions).Updated.GreaterThan(updated)
+	cronActionsQuery := db.Query(&cronActions).Updated.GreaterThan(updated)
 
 	core.Log("GetCronActionsScheduled query:", "updated", updated)
 
@@ -28,11 +28,11 @@ func GetCronActionsScheduled(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	actionsIDs := core.SliceSet[int16]{}
-	
+
 	for _, e := range cronActions {
 		actionsIDs.Add(e.ActionID)
 	}
-	
+
 	registeredActionHandlers := core.GetRegisteredActionHandlers(actionsIDs.Values...)
 
 	response := map[string]any{
@@ -40,6 +40,6 @@ func GetCronActionsScheduled(req *core.HandlerArgs) core.HandlerResponse {
 		"actionsRegistered": registeredActionHandlers,
 	}
 
-	core.Log("GetCronActionsScheduled response count:", len(cronActions),"|",len(registeredActionHandlers))
+	core.Log("GetCronActionsScheduled response count:", len(cronActions), "|", len(registeredActionHandlers))
 	return req.MakeResponse(response)
 }

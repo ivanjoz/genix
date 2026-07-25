@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"app/db"
 	"github.com/ivanjoz/genix-orm/scylla"
 	"testing"
 )
@@ -22,9 +23,13 @@ func TestGenericRecordSchemasResolveThroughTheNameRegistry(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.tableName, func(t *testing.T) {
-			scyllaTable, err := scylla.ResolveTableByName(testCase.tableName)
+			resolvedTable, err := db.ResolveTableByName(testCase.tableName)
 			if err != nil {
 				t.Fatalf("table %q is not registered: %v", testCase.tableName, err)
+			}
+			scyllaTable, ok := resolvedTable.(scylla.ScyllaTable)
+			if !ok {
+				t.Fatalf("table %q was not compiled by the scylla driver", testCase.tableName)
 			}
 			if projection := scyllaTable.GenericRecordProjection(); projection != testCase.expectedProjection {
 				t.Fatalf("projection mismatch for %q\n got: %v\nwant: %v",
@@ -37,9 +42,13 @@ func TestGenericRecordSchemasResolveThroughTheNameRegistry(t *testing.T) {
 // Tables that never declared GenericRecord must stay unexposed even though they are registered.
 func TestTablesWithoutGenericRecordAreNotExposed(t *testing.T) {
 	for _, tableName := range []string{"warehouses", "sale_order", "expenses"} {
-		scyllaTable, err := scylla.ResolveTableByName(tableName)
+		resolvedTable, err := db.ResolveTableByName(tableName)
 		if err != nil {
 			t.Fatalf("table %q is not registered: %v", tableName, err)
+		}
+		scyllaTable, ok := resolvedTable.(scylla.ScyllaTable)
+		if !ok {
+			t.Fatalf("table %q was not compiled by the scylla driver", tableName)
 		}
 		if projection := scyllaTable.GenericRecordProjection(); projection != "" {
 			t.Fatalf("table %q must not expose generic records, got projection: %v", tableName, projection)

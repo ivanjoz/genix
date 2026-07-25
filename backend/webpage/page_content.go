@@ -3,7 +3,7 @@ package webpage
 import (
 	"app/cloud"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	"app/serialize"
 	s "app/webpage/types"
 	"encoding/json"
@@ -75,7 +75,7 @@ func GetPageContent(req *core.HandlerArgs) core.HandlerResponse {
 	pageID := resolvePageID(req)
 
 	rows := []s.EcommercePageContent{}
-	query := scylla.Query(&rows)
+	query := db.Query(&rows)
 	query.Select().CompanyID.Equals(req.User.CompanyID)
 	query.PageID.Equals(pageID)
 	if err := query.Exec(); err != nil {
@@ -108,9 +108,9 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Load current rows for this page to compare hashes and detect removed positions.
 	currentRows := []s.EcommercePageContent{}
-	currentQuery := scylla.Query(&currentRows)
+	currentQuery := db.Query(&currentRows)
 	currentQuery.Select().CompanyID.Equals(req.User.CompanyID).PageID.Equals(pageID)
-	
+
 	if err := currentQuery.Exec(); err != nil {
 		return req.MakeErr("Error al leer el contenido actual:", err)
 	}
@@ -178,13 +178,13 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if len(sectionsToWrite) > 0 {
-		if err := scylla.Insert(&sectionsToWrite); err != nil {
+		if err := db.Insert(&sectionsToWrite); err != nil {
 			return req.MakeErr("Error al guardar las secciones:", err)
 		}
 	}
 	if len(sectionsToDelete) > 0 {
-		table := scylla.Table[s.EcommercePageContent]()
-		if err := scylla.Update(&sectionsToDelete, table.Status, table.Updated, table.UpdatedBy); err != nil {
+		table := db.TableOf[s.EcommercePageContent]()
+		if err := db.Update(&sectionsToDelete, table.Status, table.Updated, table.UpdatedBy); err != nil {
 			return req.MakeErr("Error al eliminar las secciones removidas:", err)
 		}
 	}

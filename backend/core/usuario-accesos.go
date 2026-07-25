@@ -1,13 +1,13 @@
 package core
 
 import (
-	"github.com/ivanjoz/colbin"
 	coretypes "app/core/types"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"github.com/ivanjoz/colbin"
 	"slices"
 	"strings"
 	"sync"
@@ -191,7 +191,7 @@ func loadUsuarioAccesosComputed(companyID, userID int32) ([]uint16, error) {
 
 	if !cacheIsFresh {
 		usuarios := []coretypes.User{}
-		usuarioQuery := scylla.Query(&usuarios)
+		usuarioQuery := db.Query(&usuarios)
 		usuarioQuery.Select(usuarioQuery.CompanyID, usuarioQuery.ID, usuarioQuery.AccesosComputed).
 			CompanyID.Equals(companyID).ID.Equals(userID).Limit(1)
 

@@ -69,7 +69,7 @@ func parseColumns(model interface{}) ([]ColumnMeta, string, string) {
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 
-		// Embedded helper structs like scylla.TableStruct are not persisted by the cloud ORM.
+		// Embedded helper structs like db.TableStruct are not persisted by the cloud ORM.
 		if field.Anonymous {
 			continue
 		}

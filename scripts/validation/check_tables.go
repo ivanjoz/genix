@@ -61,11 +61,23 @@ func CheckTables() {
 							fieldTypes[field.Name()] = field.Type()
 
 							if field.Embedded() {
-								if named, ok := field.Type().(*types.Named); ok {
-									if named.Obj().Pkg().Path() == "github.com/ivanjoz/genix-orm/scylla" && named.Obj().Name() == "TableStruct" {
-										if typeArgs := named.TypeArgs(); typeArgs.Len() == 2 {
-											tableType := typeArgs.At(0).(*types.Named).Obj()
-											baseType := typeArgs.At(1).(*types.Named).Obj()
+								// Drivers export TableStruct as a generic alias, and Go 1.23+ models
+								// aliases as *types.Alias — so this must unalias before asserting,
+								// or the embedded field never matches at all.
+								if named, ok := types.Unalias(field.Type()).(*types.Named); ok {
+									// A table embeds TableStruct through a driver alias, so the resolved
+									// type is db.TableStruct[Driver, XTable, XRecord]. Read the table and
+									// record from the LAST two type arguments so the check keeps working
+									// however many leading driver parameters the alias supplies.
+									pkgPath := named.Obj().Pkg().Path()
+									isTableStruct := named.Obj().Name() == "TableStruct" &&
+										(pkgPath == "github.com/ivanjoz/genix-orm/db" ||
+											pkgPath == "github.com/ivanjoz/genix-orm/scylla")
+									if isTableStruct {
+										typeArgs := named.TypeArgs()
+										if argCount := typeArgs.Len(); argCount >= 2 {
+											tableType := typeArgs.At(argCount - 2).(*types.Named).Obj()
+											baseType := typeArgs.At(argCount - 1).(*types.Named).Obj()
 											baseToTable[baseType] = tableType
 										}
 									}
@@ -142,7 +154,7 @@ func CheckTables() {
 						}
 					} else if !isPrimitive {
 						if !isCol {
-							fmt.Printf("Error: Field '%s.%s' is a complex slice. Use scylla.Col in table struct '%s', not scylla.ColSlice.\n", base.Name(), fieldName, table.Name())
+							fmt.Printf("Error: Field '%s.%s' is a complex slice. Use db.Col in table struct '%s', not db.ColSlice.\n", base.Name(), fieldName, table.Name())
 							continue
 						}
 						colType := named.TypeArgs().At(1)
@@ -152,7 +164,7 @@ func CheckTables() {
 					}
 				} else {
 					if isColSlice {
-						fmt.Printf("Error: Field '%s.%s' is not a slice, but table struct '%s' uses scylla.ColSlice. Use scylla.Col instead.\n", base.Name(), fieldName, table.Name())
+						fmt.Printf("Error: Field '%s.%s' is not a slice, but table struct '%s' uses db.ColSlice. Use db.Col instead.\n", base.Name(), fieldName, table.Name())
 						continue
 					}
 					colType := named.TypeArgs().At(1)

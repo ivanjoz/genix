@@ -2,7 +2,7 @@ package sales
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	s "app/sales/types"
 	"encoding/json"
 	"strconv"
@@ -12,7 +12,7 @@ func GetShippingCosts(req *core.HandlerArgs) core.HandlerResponse {
 	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
 
 	shippingCosts := []s.ShippingCost{}
-	query := scylla.Query(&shippingCosts)
+	query := db.Query(&shippingCosts)
 	query.CompanyID.Equals(req.User.CompanyID)
 	if updated > 0 {
 		query.Updated.GreaterThan(updated)
@@ -66,9 +66,9 @@ func PostShippingCosts(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeResponse(recordsToSave)
 	}
 
-	shippingCostTable := scylla.Table[s.ShippingCost]()
-	if err := scylla.Merge(&recordsToSave,
-		scylla.Cols(shippingCostTable.Created, shippingCostTable.CreatedBy),
+	shippingCostTable := db.TableOf[s.ShippingCost]()
+	if err := db.Merge(&recordsToSave,
+		db.Cols(shippingCostTable.Created, shippingCostTable.CreatedBy),
 		func(prev, current *s.ShippingCost) bool {
 			// Merge avoids write churn; unchanged cost rows keep their previous Updated watermark.
 			current.Created = prev.Created

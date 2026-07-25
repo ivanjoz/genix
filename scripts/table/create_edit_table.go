@@ -125,7 +125,7 @@ func generateSourceCode(tableNameCamel, tableNameSnake string, userFields []Fiel
 	var sb strings.Builder
 
 	sb.WriteString("package types\n\n")
-	sb.WriteString("import \"github.com/ivanjoz/genix-orm/scylla\"\n\n")
+	sb.WriteString("import \"app/db\"\n\n")
 
 	// --- Base Struct ---
 	sb.WriteString(fmt.Sprintf("type %s struct {\n", tableNameCamel))
@@ -152,8 +152,8 @@ func generateSourceCode(tableNameCamel, tableNameSnake string, userFields []Fiel
 	sb.WriteString("}\n\n")
 
 	// --- GetSchema Method ---
-	sb.WriteString(fmt.Sprintf("func (e %sTable) GetSchema() scylla.TableSchema {\n", tableNameCamel))
-	sb.WriteString("\treturn scylla.TableSchema{\n")
+	sb.WriteString(fmt.Sprintf("func (e %sTable) GetSchema() db.TableSchema {\n", tableNameCamel))
+	sb.WriteString("\treturn db.TableSchema{\n")
 	sb.WriteString(fmt.Sprintf("\t\tName:      \"%s\",\n", tableNameSnake))
 	sb.WriteString("\t\tPartition: e.EmpresaID,\n")
 
@@ -163,7 +163,7 @@ func generateSourceCode(tableNameCamel, tableNameSnake string, userFields []Fiel
 			keyFields = append(keyFields, "e."+f.Name)
 		}
 	}
-	sb.WriteString(fmt.Sprintf("\t\tKeys:      scylla.Cols(%s),\n", strings.Join(keyFields, ", ")))
+	sb.WriteString(fmt.Sprintf("\t\tKeys:      db.Cols(%s),\n", strings.Join(keyFields, ", ")))
 
 	sb.WriteString("\t}\n")
 	sb.WriteString("}\n")
@@ -195,7 +195,7 @@ func buildTableFieldString(name, typeName string, isSlice bool, sliceEType, tabl
 		colType = "ColSlice"
 		elemType = sliceEType
 	}
-	return fmt.Sprintf("\t%s scylla.%s[%sTable, %s]\n", name, colType, tableCamelName, elemType)
+	return fmt.Sprintf("\t%s db.%s[%sTable, %s]\n", name, colType, tableCamelName, elemType)
 }
 
 // NewTableColumn adds a new column to an existing database table.
@@ -376,7 +376,7 @@ func buildTableFieldAST(field Field, tableName string) *ast.Field {
 		elemType = field.TypeName
 	}
 
-	// Build scylla.Col[TableType, FieldType] or scylla.ColSlice[TableType, ElementType]
+	// Build db.Col[TableType, FieldType] or db.ColSlice[TableType, ElementType]
 	fieldType := &ast.IndexListExpr{
 		X: &ast.SelectorExpr{
 			X:   ast.NewIdent("db"),

@@ -3,7 +3,7 @@ package webpage
 import (
 	"app/cloud"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	s "app/webpage/types"
 	"encoding/json"
 	"fmt"
@@ -60,7 +60,7 @@ func PostWebpageShowcaseImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Reserve a per-company image autoincrement; the last digit 0 marks a single
 	// image (the product upload uses 7 for its multi-resolution set).
-	autoincrement, err := scylla.GetAutoincrementID(fmt.Sprintf("images_%v", req.User.CompanyID), 1)
+	autoincrement, err := db.GetAutoincrementID(fmt.Sprintf("images_%v", req.User.CompanyID), 1)
 	if err != nil {
 		return req.MakeErr("Error al reservar el id de imagen:", err)
 	}
@@ -80,7 +80,7 @@ func PostWebpageShowcaseImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Load the existing page row to update its Image without wiping Name/Route.
 	pages := []s.Webpage{}
-	query := scylla.Query(&pages).CompanyID.Equals(req.User.CompanyID)
+	query := db.Query(&pages).CompanyID.Equals(req.User.CompanyID)
 	query.ID.Equals(pageID)
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al leer la página:", err)
@@ -103,7 +103,7 @@ func PostWebpageShowcaseImage(req *core.HandlerArgs) core.HandlerResponse {
 	page.Updated = core.SUnixTime()
 	page.UpdatedBy = req.User.ID
 
-	if err := scylla.Insert(&[]s.Webpage{page}); err != nil {
+	if err := db.Insert(&[]s.Webpage{page}); err != nil {
 		return req.MakeErr("Error al actualizar la página:", err)
 	}
 

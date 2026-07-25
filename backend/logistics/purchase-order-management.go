@@ -2,7 +2,7 @@ package logistics
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	"app/finance"
 	financeTypes "app/finance/types"
 	logisticsTypes "app/logistics/types"
@@ -64,7 +64,7 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Obtener la OC para validar estado y mapear precios pedidos.
 	existing := []logisticsTypes.PurchaseOrder{}
-	if err := scylla.Query(&existing).
+	if err := db.Query(&existing).
 		CompanyID.Equals(req.User.CompanyID).
 		ID.Equals(payload.PurchaseOrderID).Limit(1).Exec(); err != nil {
 		return req.MakeErr("Error al obtener la orden de compra.", err)
@@ -168,8 +168,8 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 	order.Updated = now
 	order.UpdatedBy = req.User.ID
 
-	q := scylla.Table[logisticsTypes.PurchaseOrder]()
-	if err := scylla.Update(&[]logisticsTypes.PurchaseOrder{order},
+	q := db.TableOf[logisticsTypes.PurchaseOrder]()
+	if err := db.Update(&[]logisticsTypes.PurchaseOrder{order},
 		q.Status, q.DifferenceQuantity, q.DifferenceValue, q.Updated, q.UpdatedBy,
 	); err != nil {
 		return req.MakeErr("Error al actualizar la orden de compra.", err)
@@ -197,7 +197,7 @@ func GetPurchaseOrders(req *core.HandlerArgs) core.HandlerResponse {
 
 		group.Go(func() error {
 			recordsForStatus := []logisticsTypes.PurchaseOrder{}
-			query := scylla.Query(&recordsForStatus)
+			query := db.Query(&recordsForStatus)
 			query.CompanyID.Equals(req.User.CompanyID).
 				Status.Equals(currentStatus).
 				Updated.GreaterThan(updated)
@@ -293,7 +293,7 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	records := []logisticsTypes.PurchaseOrder{record}
-	if err := scylla.Merge(&records, nil,
+	if err := db.Merge(&records, nil,
 		func(prev, curr *logisticsTypes.PurchaseOrder) bool {
 			curr.CompanyID = req.User.CompanyID
 			curr.Created = prev.Created
@@ -333,7 +333,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Obtener la orden actual para validar su estado antes de modificarla
 	existing := []logisticsTypes.PurchaseOrder{}
-	if err := scylla.Query(&existing).
+	if err := db.Query(&existing).
 		CompanyID.Equals(req.User.CompanyID).
 		ID.Equals(orderID).Limit(1).Exec(); err != nil {
 		return req.MakeErr("Error al obtener la orden de compra.", err)
@@ -344,7 +344,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	orderCurrent := existing[0]
 	now := core.SUnixTime()
-	q := scylla.Table[logisticsTypes.PurchaseOrder]()
+	q := db.TableOf[logisticsTypes.PurchaseOrder]()
 
 	switch action {
 	case PurchaseOrderActionConfirm:
@@ -356,7 +356,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := scylla.Update(&[]logisticsTypes.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy); err != nil {
+		if err := db.Update(&[]logisticsTypes.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy); err != nil {
 			return req.MakeErr("Error al actualizar la orden de compra.", err)
 		}
 		return req.MakeResponse(orderCurrent)
@@ -384,7 +384,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := scylla.Update(&[]logisticsTypes.PurchaseOrder{orderCurrent},
+		if err := db.Update(&[]logisticsTypes.PurchaseOrder{orderCurrent},
 			q.WarehouseID, q.DeliveryDate, q.PaymentDate, q.InvoiceNumber, q.Notes, q.Updated, q.UpdatedBy, q.Status,
 		); err != nil {
 			return req.MakeErr("Error al actualizar la orden de compra.", err)
@@ -427,7 +427,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := scylla.Update(&[]logisticsTypes.PurchaseOrder{orderCurrent}, q.Status, q.DebtAmount, q.Updated, q.UpdatedBy); err != nil {
+		if err := db.Update(&[]logisticsTypes.PurchaseOrder{orderCurrent}, q.Status, q.DebtAmount, q.Updated, q.UpdatedBy); err != nil {
 			return req.MakeErr("Error al actualizar la deuda de la orden de compra.", err)
 		}
 		return req.MakeResponse(orderCurrent)
@@ -443,7 +443,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := scylla.Update(&[]logisticsTypes.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy); err != nil {
+		if err := db.Update(&[]logisticsTypes.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy); err != nil {
 			return req.MakeErr("Error al anular la orden de compra.", err)
 		}
 		return req.MakeResponse(orderCurrent)

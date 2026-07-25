@@ -4,7 +4,7 @@ import (
 	businessTypes "app/business/types"
 	"app/cloud"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -20,7 +20,7 @@ func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
-		query := scylla.Query(&productos).CompanyID.Equals(req.User.CompanyID)
+		query := db.Query(&productos).CompanyID.Equals(req.User.CompanyID)
 
 		query.Exclude(query.Stock, query.StockStatus, query.CompanyID, query.Created, query.CreatedBy, query.NameHash)
 
@@ -60,7 +60,7 @@ func GetProductTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Active products live in status group 1. Return only ids + weights (no
 	// record bodies) — the client resolves names from its by-id cache.
-	matches, err := scylla.SearchTextIDs[businessTypes.Product](companyID, query, 1, limit)
+	matches, err := db.SearchTextIDs[businessTypes.Product](companyID, query, 1, limit)
 	if err != nil {
 		return req.MakeErr("Error en la búsqueda de texto de productos:", err)
 	}
@@ -76,7 +76,7 @@ func GetProductsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	productos := []businessTypes.Product{}
-	err := scylla.QueryCachedIDs(&productos, cachedIDs)
+	err := db.QueryCachedIDs(&productos, cachedIDs)
 	if err != nil {
 		return req.MakeErr("Error al obtener los productos.", err)
 	}
@@ -85,7 +85,7 @@ func GetProductsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
-	// scylla.SetDebugLogging(2)
+	// db.SetDebugLogging(2)
 
 	productos := []businessTypes.Product{}
 	if err := json.Unmarshal([]byte(*req.Body), &productos); err != nil {
@@ -125,7 +125,7 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	existingProducts := []businessTypes.Product{}
-	query := scylla.Query(&existingProducts)
+	query := db.Query(&existingProducts)
 	query.Select(query.NameHash, query.ID, query.Status).
 		CompanyID.Equals(req.User.CompanyID).
 		NameHash.In(nameHashesToValidate...)
@@ -203,8 +203,8 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	sunixTime := core.SUnixTime()
 
 	// Merge resolves insert/update per primary key and applies only required writes.
-	err = scylla.Merge(&productos,
-		scylla.Cols(t.Stock, t.ReservedStock, t.StockStatus, t.CategoriesWithStock, t.Created, t.CreatedBy, t.ImageMain, t.ImageIDs, t.ImageDescriptions),
+	err = db.Merge(&productos,
+		db.Cols(t.Stock, t.ReservedStock, t.StockStatus, t.CategoriesWithStock, t.Created, t.CreatedBy, t.ImageMain, t.ImageIDs, t.ImageDescriptions),
 		func(prev, current *businessTypes.Product) bool {
 			current.CompanyID = req.User.CompanyID
 			current.Created = prev.Created
@@ -269,7 +269,7 @@ func getProductBrandNames(companyID int32, productos []businessTypes.Product) (m
 	}
 
 	brands := []businessTypes.SharedListRecord{}
-	query := scylla.Query(&brands)
+	query := db.Query(&brands)
 	query.Select(query.ID, query.Name).
 		CompanyID.Equals(companyID).ID.In(brandIDs.Values...)
 
@@ -317,7 +317,7 @@ func PostProductImage(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	productos := []businessTypes.Product{}
-	query := scylla.Query(&productos)
+	query := db.Query(&productos)
 	query.Select().
 		CompanyID.Equals(req.User.CompanyID).
 		ID.Equals(image.ProductID)
@@ -411,7 +411,7 @@ func PostProductImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Print(product)
 
-	err = scylla.Insert(&[]businessTypes.Product{product})
+	err = db.Insert(&[]businessTypes.Product{product})
 
 	if err != nil {
 		return req.MakeErr("Error al actualizar el product:", err)

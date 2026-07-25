@@ -1,9 +1,9 @@
 package sales
 
 import (
-	"app/sales/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
+	"app/sales/types"
 )
 
 func SaleOrderQuery(req *core.HandlerArgs) core.HandlerResponse {
@@ -28,8 +28,8 @@ func SaleOrderQuery(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
-	saleOrders := []scylla.RecordGroup[types.SaleOrder]{}
-	query := scylla.QueryIndexGroup(&saleOrders).
+	saleOrders := []db.RecordGroup[types.SaleOrder]{}
+	query := db.QueryIndexGroup(&saleOrders).
 		CompanyID.Equals(req.User.CompanyID)
 
 	for _, cacheGroup := range saleOrderCacheGroupHashes {

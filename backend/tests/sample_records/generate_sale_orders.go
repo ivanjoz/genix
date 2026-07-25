@@ -1,16 +1,16 @@
 package sample_records
 
 import (
-	"app/sales"
-	salesTypes "app/sales/types"
+	"app/business"
+	businessTypes "app/business/types"
 	"app/core"
 	coreTypes "app/core/types"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	financeTypes "app/finance/types"
 	"app/logistics"
 	logisticsTypes "app/logistics/types"
-	"app/business"
-	businessTypes "app/business/types"
+	"app/sales"
+	salesTypes "app/sales/types"
 	_ "embed"
 	"encoding/json"
 	mrand "math/rand"
@@ -22,15 +22,15 @@ import (
 )
 
 const (
-	sampleCompanyID         int32 = 1
-	sampleUserID            int32 = 1
-	sampleWarehouseID       int32 = 1
-	saleOrdersProgressPath        = "/tmp/genix_generate_sale_orders_unixday.txt"
-	selectedProductsCount         = 100
-	stockSeedBatchSize            = 90
-	historicalDaysCount           = 30
-	dailyOrdersMin                = 300
-	dailyOrdersMax                = 600
+	sampleCompanyID        int32 = 1
+	sampleUserID           int32 = 1
+	sampleWarehouseID      int32 = 1
+	saleOrdersProgressPath       = "/tmp/genix_generate_sale_orders_unixday.txt"
+	selectedProductsCount        = 100
+	stockSeedBatchSize           = 90
+	historicalDaysCount          = 30
+	dailyOrdersMin               = 300
+	dailyOrdersMax               = 600
 )
 
 //go:embed sale_order_clients.json
@@ -55,8 +55,8 @@ type stockLedgerRecord struct {
 }
 
 type saleOrderGenerator struct {
-	random                *mrand.Rand
-	timeHelper            core.TimeHelper
+	random               *mrand.Rand
+	timeHelper           core.TimeHelper
 	userToken            core.UsuarioToken
 	selectedCajaID       int32
 	availableClientIDs   []int32
@@ -184,7 +184,7 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 			"companyID":      sampleCompanyID,
 			"userID":         sampleUserID,
 			"warehouseID":    sampleWarehouseID,
-			"cashBankID":         generator.selectedCajaID,
+			"cashBankID":     generator.selectedCajaID,
 			"ordersCreated":  createdOrders,
 			"remainingUnits": generator.totalRemainingUnits,
 		},
@@ -194,7 +194,7 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 // validateContext ensures the fixed sample references already exist in DB before generating data.
 func (generator *saleOrderGenerator) validateContext() error {
 	users := []coreTypes.User{}
-	userQuery := scylla.Query(&users)
+	userQuery := db.Query(&users)
 	userQuery.Select(userQuery.ID, userQuery.Status).
 		CompanyID.Equals(sampleCompanyID).
 		ID.Equals(sampleUserID).
@@ -207,7 +207,7 @@ func (generator *saleOrderGenerator) validateContext() error {
 	}
 
 	warehouses := []businessTypes.Warehouse{}
-	warehouseQuery := scylla.Query(&warehouses)
+	warehouseQuery := db.Query(&warehouses)
 	warehouseQuery.Select(warehouseQuery.ID, warehouseQuery.Status).
 		CompanyID.Equals(sampleCompanyID).
 		ID.Equals(sampleWarehouseID).
@@ -231,7 +231,7 @@ func (generator *saleOrderGenerator) validateContext() error {
 // resolveActiveCajaID picks the lowest active cashBank ID so the sample generator can run in seeded environments without assuming ID=1.
 func (generator *saleOrderGenerator) resolveActiveCajaID() (int32, error) {
 	activeCajas := []financeTypes.CashBank{}
-	cajaQuery := scylla.Query(&activeCajas)
+	cajaQuery := db.Query(&activeCajas)
 	cajaQuery.Select(cajaQuery.ID, cajaQuery.Status).
 		CompanyID.Equals(sampleCompanyID).
 		Status.Equals(1)
@@ -337,7 +337,7 @@ func (generator *saleOrderGenerator) loadAvailableClients() error {
 func (generator *saleOrderGenerator) loadWarehouseStock() ([]logisticsTypes.ProductStock, error) {
 	query := map[string]string{
 		"warehouse-id": strconv.Itoa(int(sampleWarehouseID)),
-		"updated":    "0",
+		"updated":      "0",
 	}
 	request := generator.makeRequest("GET.productos-stock", query, "", 0)
 	response := logistics.GetWarehouseProductStock(&request)
@@ -372,7 +372,7 @@ func (generator *saleOrderGenerator) selectProducts(stocks []logisticsTypes.Prod
 	}
 
 	products := []businessTypes.Product{}
-	productQuery := scylla.Query(&products)
+	productQuery := db.Query(&products)
 	productQuery.Select(productQuery.ID, productQuery.Status).
 		CompanyID.Equals(sampleCompanyID).
 		Status.Equals(1)
@@ -403,7 +403,7 @@ func (generator *saleOrderGenerator) selectProducts(stocks []logisticsTypes.Prod
 // loadProductCatalog resolves names and prices once so every generated line uses the persisted product price.
 func (generator *saleOrderGenerator) loadProductCatalog() error {
 	products := []businessTypes.Product{}
-	query := scylla.Query(&products)
+	query := db.Query(&products)
 	query.Select(query.ID, query.Name, query.Price, query.FinalPrice, query.Status).
 		CompanyID.Equals(sampleCompanyID).
 		ID.In(generator.selectedProductIDs...)
@@ -778,7 +778,7 @@ func (generator *saleOrderGenerator) makeRequest(route string, query map[string]
 		Query:          query,
 		Route:          route,
 		Method:         method,
-		User:        &generator.userToken,
+		User:           &generator.userToken,
 		HistoricalUnix: historicalUnix,
 	}
 }

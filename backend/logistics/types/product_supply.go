@@ -1,6 +1,6 @@
 package types
 
-import "github.com/ivanjoz/genix-orm/scylla"
+import "app/db"
 
 type ProductSupplyProviderRow struct {
 	ProviderID   int32 `json:",omitempty"`
@@ -10,7 +10,7 @@ type ProductSupplyProviderRow struct {
 }
 
 type ProductSupply struct {
-	scylla.TableStruct[ProductSupplyTable, ProductSupply]
+	db.TableStruct[ProductSupplyTable, ProductSupply]
 	CompanyID            int32                      `json:",omitempty"`
 	ProductID            int32                      `json:",omitempty"`
 	MinimunStock         int32                      `json:",omitempty"`
@@ -22,25 +22,25 @@ type ProductSupply struct {
 }
 
 type ProductSupplyTable struct {
-	scylla.TableStruct[ProductSupplyTable, ProductSupply]
-	CompanyID            scylla.Col[ProductSupplyTable, int32]
-	ProductID            scylla.Col[ProductSupplyTable, int32]
-	MinimunStock         scylla.Col[ProductSupplyTable, int32]
-	SalesPerDayEstimated scylla.Col[ProductSupplyTable, int32]
-	ProviderSupply       scylla.Col[ProductSupplyTable, []ProductSupplyProviderRow]
-	Status               scylla.Col[ProductSupplyTable, int8]
-	Updated              scylla.Col[ProductSupplyTable, int32]
-	UpdatedBy            scylla.Col[ProductSupplyTable, int32]
+	db.TableStruct[ProductSupplyTable, ProductSupply]
+	CompanyID            db.Col[ProductSupplyTable, int32]
+	ProductID            db.Col[ProductSupplyTable, int32]
+	MinimunStock         db.Col[ProductSupplyTable, int32]
+	SalesPerDayEstimated db.Col[ProductSupplyTable, int32]
+	ProviderSupply       db.Col[ProductSupplyTable, []ProductSupplyProviderRow]
+	Status               db.Col[ProductSupplyTable, int8]
+	Updated              db.Col[ProductSupplyTable, int32]
+	UpdatedBy            db.Col[ProductSupplyTable, int32]
 }
 
-func (productSupplyTable ProductSupplyTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (productSupplyTable ProductSupplyTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "product_supply",
 		Partition: productSupplyTable.CompanyID,
-		Keys:      scylla.Cols(productSupplyTable.ProductID),
-		Indexes: []scylla.Index{
-			{Type: scylla.TypeView, Keys: scylla.Cols(productSupplyTable.Status)},
-			{Type: scylla.TypeView, Keys: scylla.Cols(productSupplyTable.Updated)},
+		Keys:      db.Cols(productSupplyTable.ProductID),
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: db.Cols(productSupplyTable.Status)},
+			{Type: db.TypeView, Keys: db.Cols(productSupplyTable.Updated)},
 		},
 	}
 }

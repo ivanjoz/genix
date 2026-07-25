@@ -2,7 +2,7 @@ package logistics
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	logisticsTypes "app/logistics/types"
 	"encoding/json"
 )
@@ -15,7 +15,7 @@ func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
 	updatedWatermark := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
 
 	supplyMaterialRecords := []logisticsTypes.SupplyMaterial{}
-	supplyMaterialQuery := scylla.Query(&supplyMaterialRecords)
+	supplyMaterialQuery := db.Query(&supplyMaterialRecords)
 	supplyMaterialQuery.Select().CompanyID.Equals(req.User.CompanyID)
 
 	if updatedWatermark > 0 {
@@ -99,15 +99,15 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if len(toInsert) > 0 {
-		if insertError := scylla.Insert(&toInsert); insertError != nil {
+		if insertError := db.Insert(&toInsert); insertError != nil {
 			core.Log("PostSupplyMaterial insert error:", insertError)
 			return req.MakeErr("Error al guardar los insumos.", insertError)
 		}
 	}
 	if len(toUpdate) > 0 {
-		supplyMaterialTable := scylla.Table[logisticsTypes.SupplyMaterial]()
+		supplyMaterialTable := db.TableOf[logisticsTypes.SupplyMaterial]()
 		// Protect immutable creation fields from being overwritten on update.
-		if updateError := scylla.UpdateExclude(&toUpdate, supplyMaterialTable.Created, supplyMaterialTable.CreatedBy); updateError != nil {
+		if updateError := db.UpdateExclude(&toUpdate, supplyMaterialTable.Created, supplyMaterialTable.CreatedBy); updateError != nil {
 			core.Log("PostSupplyMaterial update error:", updateError)
 			return req.MakeErr("Error al actualizar los insumos.", updateError)
 		}

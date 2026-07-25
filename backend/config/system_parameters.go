@@ -3,7 +3,7 @@ package config
 import (
 	configTypes "app/config/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	"encoding/json"
 )
 
@@ -12,7 +12,7 @@ func GetSystemParameters(req *core.HandlerArgs) core.HandlerResponse {
 	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
 
 	records := []configTypes.SystemParameters{}
-	q := scylla.Query(&records)
+	q := db.Query(&records)
 	q.CompanyID.Equals(companyID)
 
 	if updated > 0 {
@@ -52,7 +52,7 @@ func PostSystemParameters(req *core.HandlerArgs) core.HandlerResponse {
 		e.UpdatedBy = req.User.ID
 	}
 
-	if err = scylla.Insert(&records); err != nil {
+	if err = db.Insert(&records); err != nil {
 		return req.MakeErr("Error al insertar los registros", err)
 	}
 

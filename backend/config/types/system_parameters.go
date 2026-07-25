@@ -1,9 +1,9 @@
 package types
 
-import "github.com/ivanjoz/genix-orm/scylla"
+import "app/db"
 
 type SystemParameters struct {
-	scylla.TableStruct[SystemParametersTable, SystemParameters]
+	db.TableStruct[SystemParametersTable, SystemParameters]
 	ID        int32   `json:",omitempty" db:"parameter_id,pk"`
 	ValueText string  `json:",omitempty" db:"value_text"`
 	ValueInts []int32 `json:",omitempty" db:"value_ints"`
@@ -14,23 +14,23 @@ type SystemParameters struct {
 }
 
 type SystemParametersTable struct {
-	scylla.TableStruct[SystemParametersTable, SystemParameters]
-	CompanyID scylla.Col[SystemParametersTable, int32]
-	ID        scylla.Col[SystemParametersTable, int32]
-	ValueText scylla.Col[SystemParametersTable, string]
-	ValueInts scylla.ColSlice[SystemParametersTable, int32]
-	Value     scylla.Col[SystemParametersTable, int32]
-	Updated   scylla.Col[SystemParametersTable, int32]
-	UpdatedBy scylla.Col[SystemParametersTable, int32]
+	db.TableStruct[SystemParametersTable, SystemParameters]
+	CompanyID db.Col[SystemParametersTable, int32]
+	ID        db.Col[SystemParametersTable, int32]
+	ValueText db.Col[SystemParametersTable, string]
+	ValueInts db.ColSlice[SystemParametersTable, int32]
+	Value     db.Col[SystemParametersTable, int32]
+	Updated   db.Col[SystemParametersTable, int32]
+	UpdatedBy db.Col[SystemParametersTable, int32]
 }
 
-func (e SystemParametersTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e SystemParametersTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "system_parameters",
 		Partition: e.CompanyID,
-		Keys:      scylla.Cols(e.ID),
-		Indexes: []scylla.Index{
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.Updated)},
+		Keys:      db.Cols(e.ID),
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }

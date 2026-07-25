@@ -2,7 +2,7 @@ package logistics
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	logisticsTypes "app/logistics/types"
 )
 
@@ -37,8 +37,8 @@ func GetPurchaseOrdersQuery(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
-	records := []scylla.RecordGroup[logisticsTypes.PurchaseOrder]{}
-	query := scylla.QueryIndexGroup(&records).
+	records := []db.RecordGroup[logisticsTypes.PurchaseOrder]{}
+	query := db.QueryIndexGroup(&records).
 		CompanyID.Equals(req.User.CompanyID)
 
 	for _, cacheGroup := range cacheGroupHashes {

@@ -4,7 +4,7 @@ import (
 	"app/cloud"
 	"app/config/types"
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	"encoding/json"
 	"fmt"
 )
@@ -22,7 +22,7 @@ func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
 
 	body.Updated = core.SUnixTime()
 	empresasToSave := []types.Company{body}
-	if err = scylla.Insert(&empresasToSave); err != nil {
+	if err = db.Insert(&empresasToSave); err != nil {
 		return req.MakeErr("Error guardar la company en ScyllaDB.", err)
 	}
 
@@ -90,7 +90,7 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 
 	record.Updated = core.SUnixTime()
 	empresasToSave := []types.Company{record}
-	if err = scylla.Insert(&empresasToSave); err != nil {
+	if err = db.Insert(&empresasToSave); err != nil {
 		return req.MakeErr("Error al guardar el registro de la company en ScyllaDB:", err)
 	}
 

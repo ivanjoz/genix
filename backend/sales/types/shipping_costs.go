@@ -1,9 +1,9 @@
 package types
 
-import "github.com/ivanjoz/genix-orm/scylla"
+import "app/db"
 
 type ShippingCost struct {
-	scylla.TableStruct[ShippingCostTable, ShippingCost]
+	db.TableStruct[ShippingCostTable, ShippingCost]
 	CompanyID int32   `json:",omitempty"`
 	CityID    int32   `json:",omitempty"`
 	FlatCost  float64 `json:",omitempty"`
@@ -17,25 +17,25 @@ type ShippingCost struct {
 }
 
 type ShippingCostTable struct {
-	scylla.TableStruct[ShippingCostTable, ShippingCost]
-	CompanyID scylla.Col[ShippingCostTable, int32]
-	CityID    scylla.Col[ShippingCostTable, int32]
-	FlatCost  scylla.Col[ShippingCostTable, float64]
-	CostPerKg scylla.Col[ShippingCostTable, float64]
-	Updated   scylla.Col[ShippingCostTable, int32]
-	UpdatedBy scylla.Col[ShippingCostTable, int32]
-	Created   scylla.Col[ShippingCostTable, int32]
-	CreatedBy scylla.Col[ShippingCostTable, int32]
+	db.TableStruct[ShippingCostTable, ShippingCost]
+	CompanyID db.Col[ShippingCostTable, int32]
+	CityID    db.Col[ShippingCostTable, int32]
+	FlatCost  db.Col[ShippingCostTable, float64]
+	CostPerKg db.Col[ShippingCostTable, float64]
+	Updated   db.Col[ShippingCostTable, int32]
+	UpdatedBy db.Col[ShippingCostTable, int32]
+	Created   db.Col[ShippingCostTable, int32]
+	CreatedBy db.Col[ShippingCostTable, int32]
 }
 
-func (e ShippingCostTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e ShippingCostTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:      "shipping_costs",
 		Partition: e.CompanyID,
-		Keys:      scylla.Cols(e.CityID),
-		Indexes: []scylla.Index{
+		Keys:      db.Cols(e.CityID),
+		Indexes: []db.Index{
 			// Delta-cache fetches query by company partition and updated watermark.
-			{Type: scylla.TypeView, Keys: scylla.Cols(e.Updated)},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }

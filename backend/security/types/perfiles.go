@@ -1,12 +1,12 @@
 package types
 
 import (
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 	"fmt"
 )
 
 type Profile struct {
-	scylla.TableStruct[ProfileTable, Profile]
+	db.TableStruct[ProfileTable, Profile]
 	CompanyID           int32   `db:"empresa_id,pk" col:"empresa_id,pk"`
 	ID                  int32   `db:"id,pk" col:"id,pk,sk"`
 	Name                string  `db:"nombre" col:"nombre"`
@@ -26,22 +26,22 @@ func (e *Profile) PrepareCloudSync() {
 }
 
 type ProfileTable struct {
-	scylla.TableStruct[ProfileTable, Profile]
-	ID          scylla.Col[ProfileTable, int32]
-	CompanyID   scylla.Col[ProfileTable, int32]
-	Name        scylla.Col[ProfileTable, string]
-	Description scylla.Col[ProfileTable, string]
-	Modules     scylla.ColSlice[ProfileTable, int16] `db:"modulos_ids"`
-	Accesos     scylla.ColSlice[ProfileTable, int32] `db:"accesos"`
-	Status      scylla.Col[ProfileTable, int8]
-	Updated     scylla.Col[ProfileTable, int32]
+	db.TableStruct[ProfileTable, Profile]
+	ID          db.Col[ProfileTable, int32]
+	CompanyID   db.Col[ProfileTable, int32]
+	Name        db.Col[ProfileTable, string]
+	Description db.Col[ProfileTable, string]
+	Modules     db.ColSlice[ProfileTable, int16] `db:"modulos_ids"`
+	Accesos     db.ColSlice[ProfileTable, int32] `db:"accesos"`
+	Status      db.Col[ProfileTable, int8]
+	Updated     db.Col[ProfileTable, int32]
 }
 
-func (e ProfileTable) GetSchema() scylla.TableSchema {
-	return scylla.TableSchema{
+func (e ProfileTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
 		Name:         "profiles",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         scylla.Cols(e.ID.Autoincrement(0)),
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
 	}
 }
