@@ -50,7 +50,13 @@ The data mirror only holds auth & tenant master tables (users, companies, profil
 Components developed in-house for Genix. Each is implemented (not a stub) unless noted.
 
 ### Custom ScyllaDB ORM
-A reflection-optimized ORM for ScyllaDB/Cassandra (`backend/genix-orm/scylla/`):
+A reflection-optimized ORM for ScyllaDB/Cassandra, developed in its own repo
+([genix-orm](https://github.com/ivanjoz/genix-orm)) and consumed here as a git submodule at
+`backend/genix-orm/`. Clone with `--recurse-submodules` (or run `git submodule update --init`
+afterwards), otherwise the backend will not build — `backend/go.mod` resolves the ORM through a
+`replace` pointing at that directory, so local ORM edits apply without a publish cycle.
+
+The `scylla` package (`backend/genix-orm/scylla/`) provides:
 - **Two-struct `TableStruct` pattern** — each entity is a `XRecord` (persisted fields) + `XRecordTable` (typed fluent query columns), giving a **compile-time-safe query API** (`Equals`, `In`, `Between`, `Contains`, `GroupBy`, `Select`, `ExecScan`, …). Schema is declared in Go via `GetSchema()`.
 - **Reflection elimination in hot paths** — per-column getter/setter function pointers compiled once (via `viant/xunsafe` + pointer arithmetic) instead of `reflect` in loops; cached per type.
 - **Capability-based query routing** — normalized predicate signatures are matched at compile time to the best base key / secondary index / materialized view, avoiding accidental `ALLOW FILTERING`.
