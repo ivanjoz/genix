@@ -392,13 +392,19 @@ Important:
 // Rationale: Duplicate data intentionally for read patterns you must optimize.
 Indexes: []db.Index{
     {
-        Type:     db.TypeView,
-        Keys:     db.Cols(e.CustomerID, e.Status),
-        KeepPart: true,
+        Type: db.TypeView,
+        Keys: db.Cols(e.CustomerID, e.Status),
     },
     {
         Type: db.TypeView,
         Keys: db.Cols(e.StoreID.Int32(), e.Updated.DecimalSize(10)),
+    },
+    // Partition overrides the view partition; without it the view keeps the
+    // table partition (company_id) as its own, which is what you normally want.
+    {
+        Type:      db.TypeView,
+        Keys:      db.Cols(e.ID),
+        Partition: e.ID,
     },
 }
 ```

@@ -77,14 +77,12 @@ func (e ProductStockTable) GetSchema() db.TableSchema {
 		),
 		Indexes: []db.Index{
 			{
-				Type:     db.TypeView,
-				Keys:     db.Cols(e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)),
-				KeepPart: true,
+				Type: db.TypeView,
+				Keys: db.Cols(e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)),
 			},
 			{
-				Type:     db.TypeView,
-				Keys:     db.Cols(e.Status, e.Updated.DecimalSize(8)),
-				KeepPart: true,
+				Type: db.TypeView,
+				Keys: db.Cols(e.Status, e.Updated.DecimalSize(8)),
 			},
 		},
 	}
@@ -140,9 +138,8 @@ func (e ProductStockDetailTable) GetSchema() db.TableSchema {
 		Indexes: []db.Index{
 			// Hash index for dedup lookups when resolving LotID from (Date, SupplierID, Name).
 			{
-				Type:     db.TypeView,
-				Keys:     db.Cols(e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)),
-				KeepPart: true,
+				Type: db.TypeView,
+				Keys: db.Cols(e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)),
 			},
 		},
 	}
@@ -191,7 +188,7 @@ func (e ProductStockLotTable) GetSchema() db.TableSchema {
 		Keys:      db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
 			// Hash index for dedup lookups when resolving LotID from (Date, SupplierID, Name).
-			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.Hash), KeepPart: true},
+			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.Hash)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.Name)},
 		},
 	}

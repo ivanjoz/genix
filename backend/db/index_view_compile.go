@@ -7,9 +7,35 @@ import (
 	"unsafe"
 )
 
+// indexPartitionColumnName returns the name of the partition override declared on an
+// index, or "" when the index keeps the base table partition.
+func indexPartitionColumnName(indexCfg Index) string {
+	if indexCfg.Partition == nil {
+		return ""
+	}
+	return indexCfg.Partition.GetInfo().Name
+}
+
+// resolveIndexPartitionColumn resolves the Partition override against the base table.
+// Returns nil when no override is declared, meaning the view keeps the base partition.
+func resolveIndexPartitionColumn(dbTable *ScyllaTable, viewCfg Index) IColInfo {
+	partitionColumnName := indexPartitionColumnName(viewCfg)
+	if partitionColumnName == "" {
+		return nil
+	}
+	column := dbTable.columnsMap[partitionColumnName]
+	if column == nil || column.IsNil() {
+		panic(fmt.Sprintf(`Table "%v": Partition column "%v" was not found`, dbTable.name, partitionColumnName))
+	}
+	if column.GetInfo().IsVirtual || column.GetType().IsComplexType || column.GetType().IsSlice {
+		panic(fmt.Sprintf(`Table "%v": Partition column "%v" cannot be virtual, a slice or a struct`, dbTable.name, column.GetName()))
+	}
+	return column
+}
+
 func compileSchemaViewTable(dbTable *ScyllaTable, viewCfg Index) {
-	if !viewCfg.KeepPart {
-		panic(fmt.Sprintf(`Table "%v": ViewTables requires KeepPart = true to preserve the base partition`, dbTable.name))
+	if indexPartitionColumnName(viewCfg) != "" {
+		panic(fmt.Sprintf(`Table "%v": ViewTables always keep the base partition; remove Partition`, dbTable.name))
 	}
 	if viewCfg.UseHash {
 		panic(fmt.Sprintf(`Table "%v": ViewTables does not support UseHash`, dbTable.name))
@@ -257,8 +283,17 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 	}
 
 	isRangeView := len(viewCfg.Keys) > 1 && packedViewHintFound
-	if isRangeView {
-		viewCfg.KeepPart = true
+
+	// Views keep the base table partition unless the schema declares another column.
+	basePartCol := dbTable.GetPartKey()
+	if basePartCol != nil && basePartCol.IsNil() {
+		basePartCol = nil
+	}
+	viewPartCol := resolveIndexPartitionColumn(dbTable, viewCfg)
+	keepsBasePart := viewPartCol == nil ||
+		(basePartCol != nil && viewPartCol.GetName() == basePartCol.GetName())
+	if viewPartCol == nil {
+		viewPartCol = basePartCol
 	}
 
 	for _, colInfo := range viewCfg.Keys {
@@ -276,15 +311,25 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 	isSingleDeclaredSimpleView := declaredColumnCount == 1 && !isRangeView
 
 	colNamesJoined := strings.Join(colNames, "_")
-	pk := dbTable.GetPartKey()
-	if pk != nil && !pk.IsNil() {
-		if viewCfg.KeepPart {
-			colNames = append([]string{pk.GetName()}, colNames...)
+	if viewPartCol != nil {
+		if keepsBasePart {
+			colNames = append([]string{viewPartCol.GetName()}, colNames...)
 			colNamesJoined = "pk_" + colNamesJoined
-		} else if !isSingleDeclaredSimpleView {
-			colNames = append([]string{pk.GetName()}, colNames...)
-			colNamesJoined = pk.GetName() + "_" + colNamesJoined
-			columns = append([]IColInfo{pk}, columns...)
+		} else {
+			// The override leads the view key; it must not be repeated as a clustering column.
+			partColName := viewPartCol.GetName()
+			if isRangeView && slices.Contains(colNames, partColName) {
+				panic(fmt.Sprintf(`Table "%v": the Partition column "%v" cannot also be a packed view key`,
+					dbTable.name, partColName))
+			}
+			clusteringColNames := make([]string, 0, len(colNames))
+			for _, colName := range colNames {
+				if colName != partColName {
+					clusteringColNames = append(clusteringColNames, colName)
+				}
+			}
+			colNames = append([]string{partColName}, clusteringColNames...)
+			colNamesJoined = strings.Join(colNames, "_")
 		}
 	}
 	if isRangeView {
@@ -315,9 +360,6 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 
 	if isSingleDeclaredSimpleView {
 		view.column = declaredColumns[0]
-		if !viewCfg.KeepPart {
-			view.columns = colNamesNoPart
-		}
 		view.getStatementPrepared = func(statements ...ColumnStatement) []boundWhereClause {
 			// Simple MVs keep their source columns, so predicates bind without key rewriting.
 			sourceClauses := buildRemainingWhereClauses(statements)
@@ -427,7 +469,7 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 		}
 
 		viewPtr := view
-		viewCfgPtr := &viewCfg
+		viewPartColPtr := viewPartCol
 		view.getStatementPrepared = func(statements ...ColumnStatement) []boundWhereClause {
 			statementsMap := map[string]statementRangeGroup{}
 			useBeetween := false
@@ -448,11 +490,8 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 			}
 
 			var partStatement *ColumnStatement
-			if viewCfgPtr.KeepPart {
-				pk := dbTable.GetPartKey()
-				if pk != nil && !pk.IsNil() {
-					partStatement = statementsMap[pk.GetName()].from
-				}
+			if viewPartColPtr != nil {
+				partStatement = statementsMap[viewPartColPtr.GetName()].from
 			}
 
 			getValuesGroups := func() ([][]int64, []IColInfo) {
@@ -464,7 +503,7 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 						stRange = statementRangeGroup{from: &ColumnStatement{Value: int64(0)}}
 					}
 					st := stRange.from
-					if st.Col == dbTable.GetPartKey().GetName() && viewCfgPtr.KeepPart {
+					if viewPartColPtr != nil && st.Col == viewPartColPtr.GetName() {
 						continue
 					}
 					if len(rangeColumns) > 0 || slices.Contains(rangeOperators, st.Operator) {
@@ -515,12 +554,9 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 					Values: []any{makeValue(valuesFrom), makeValue(valuesTo) + 1},
 				}
 				if partStatement != nil {
-					pk := dbTable.GetPartKey()
-					if pk != nil && !pk.IsNil() {
-						whereStatement = boundWhereClause{
-							Clause: fmt.Sprintf("%v = ? AND %v", pk.GetName(), whereStatement.Clause),
-							Values: append([]any{convertToInt64(partStatement.Value)}, whereStatement.Values...),
-						}
+					whereStatement = boundWhereClause{
+						Clause: fmt.Sprintf("%v = ? AND %v", viewPartColPtr.GetName(), whereStatement.Clause),
+						Values: append([]any{convertToInt64(partStatement.Value)}, whereStatement.Values...),
 					}
 				}
 				return []boundWhereClause{whereStatement}
@@ -557,13 +593,10 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 			}
 
 			if partStatement != nil {
-				pk := dbTable.GetPartKey()
-				if pk != nil && !pk.IsNil() {
-					for i, ws := range whereStatements {
-						whereStatements[i] = boundWhereClause{
-							Clause: fmt.Sprintf("%v = ? AND %v", pk.GetName(), ws.Clause),
-							Values: append([]any{convertToInt64(partStatement.Value)}, ws.Values...),
-						}
+				for i, ws := range whereStatements {
+					whereStatements[i] = boundWhereClause{
+						Clause: fmt.Sprintf("%v = ? AND %v", viewPartColPtr.GetName(), ws.Clause),
+						Values: append([]any{convertToInt64(partStatement.Value)}, ws.Values...),
 					}
 				}
 			}
@@ -571,7 +604,7 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 		}
 	} else {
 		viewPtr := view
-		viewCfgPtr := &viewCfg
+		viewPartColPtr := viewPartCol
 		viewCols := columns
 		view.Operators = []string{"=", "IN"}
 		view.Type = 7
@@ -631,17 +664,14 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 				}
 			}
 
-			if viewCfgPtr.KeepPart {
-				pk := dbTable.GetPartKey()
-				if pk != nil && !pk.IsNil() {
-					for _, st := range statements {
-						if st.Col == pk.GetName() {
-							statement = boundWhereClause{
-								Clause: fmt.Sprintf("%v = ? AND %v", st.Col, statement.Clause),
-								Values: append([]any{st.Value}, statement.Values...),
-							}
-							break
+			if viewPartColPtr != nil {
+				for _, st := range statements {
+					if st.Col == viewPartColPtr.GetName() {
+						statement = boundWhereClause{
+							Clause: fmt.Sprintf("%v = ? AND %v", st.Col, statement.Clause),
+							Values: append([]any{st.Value}, statement.Values...),
 						}
+						break
 					}
 				}
 			}
@@ -673,10 +703,9 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 			selectableColumns = appendUniqueColumn(selectableColumns, baseColumn)
 		}
 	} else {
-		partKeyColumn := dbTable.GetPartKey()
-		if partKeyColumn != nil && !partKeyColumn.IsNil() {
-			selectableColumns = appendUniqueColumn(selectableColumns, partKeyColumn)
-		}
+		selectableColumns = appendUniqueColumn(selectableColumns, basePartCol)
+		// A relocated partition column must always travel with the projected view.
+		selectableColumns = appendUniqueColumn(selectableColumns, viewPartCol)
 		if view.Type == 6 {
 			for _, declaredViewColumn := range declaredColumns {
 				selectableColumns = appendUniqueColumn(selectableColumns, declaredViewColumn)
@@ -706,18 +735,18 @@ func compileSchemaView(dbTable *ScyllaTable, viewCfg Index) {
 		} else {
 			whereCols = appendUniqueColumn(whereCols, viewPtr.column)
 		}
-		var wherePartCol IColInfo
-
-		pk_ := dbTable.GetPartKey()
-		if pk_ != nil && !pk_.IsNil() {
-			if viewCfg.KeepPart {
-				wherePartCol = pk_
-			} else {
-				whereCols = appendUniqueColumn(whereCols, pk_)
-			}
+		wherePartCol := viewPartCol
+		if !keepsBasePart {
+			// The base partition becomes a clustering column of the relocated view.
+			whereCols = appendUniqueColumn(whereCols, basePartCol)
 		}
 		for _, keyColumn := range dbTable.keys {
 			whereCols = appendUniqueColumn(whereCols, keyColumn)
+		}
+		if wherePartCol != nil {
+			whereCols = slices.DeleteFunc(whereCols, func(column IColInfo) bool {
+				return column.GetName() == wherePartCol.GetName()
+			})
 		}
 
 		keyNames := []string{}

@@ -116,7 +116,7 @@ func (e ExpenseScheduledTable) GetSchema() db.TableSchema {
         Keys:         db.Cols(e.ID.Autoincrement(0)),
         Indexes: []db.Index{
             // Delta-cache view: frontend syncs active schedules by watermark.
-            {Type: db.TypeView, Keys: db.Cols(e.Status.DecimalSize(1), e.Updated.DecimalSize(10)), KeepPart: true},
+            {Type: db.TypeView, Keys: db.Cols(e.Status.DecimalSize(1), e.Updated.DecimalSize(10))},
         },
     }
 }
@@ -167,7 +167,7 @@ func (e ExpenseTable) GetSchema() db.TableSchema {
         Keys:         db.Cols(e.ID.Autoincrement(0)),
         Indexes: []db.Index{
             // Delta-cache view for the Register list.
-            {Type: db.TypeView, Keys: db.Cols(e.Status.DecimalSize(1), e.Updated.DecimalSize(10)), KeepPart: true},
+            {Type: db.TypeView, Keys: db.Cols(e.Status.DecimalSize(1), e.Updated.DecimalSize(10))},
             // Fetch all periods belonging to a schedule.
             {Type: db.TypeLocalIndex, Keys: db.Cols(e.ExpenseScheduledID)},
         },

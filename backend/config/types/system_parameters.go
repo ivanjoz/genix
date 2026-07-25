@@ -30,7 +30,7 @@ func (e SystemParametersTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }

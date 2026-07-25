@@ -42,8 +42,8 @@ func (e WebpageTable) GetSchema() db.TableSchema {
 		Indexes: []db.Index{
 			// Two narrow views: the initial fetch filters by Status only, the delta
 			// fetch by Updated only — never ANDed — so each gets its own view.
-			{Type: db.TypeView, Keys: db.Cols(e.Status), KeepPart: true},
-			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }

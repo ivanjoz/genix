@@ -30,7 +30,7 @@ The page `ID` becomes the `PageID` used by `EcommercePageContent`.
 | UpdatedBy | int32 | user id = "UserUpdated" on the card |
 
 - `Partition: e.CompanyID`, `Keys: db.Cols(e.ID.Autoincrement(0))`.
-- Delta-cache view index: `{TypeView, Keys:[Status.DecimalSize(1), Updated.DecimalSize(10)], KeepPart:true}`.
+- Delta-cache view index: `{TypeView, Keys:[Status.DecimalSize(1), Updated.DecimalSize(10)]}`.
 - **Reserved-ID concern:** autoincrement starts at 1. To guarantee user pages land at ≥11
   I'll handle this in the POST handler: reject/clamp so the first stored row uses ID 11
   (seed the sequence). Simplest robust approach: in `PostWebpage`, if a *new* page would

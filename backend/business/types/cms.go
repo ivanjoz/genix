@@ -28,8 +28,8 @@ func (e GalleryImageTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.Image),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.Status), KeepPart: true},
-			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }

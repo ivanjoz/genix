@@ -128,9 +128,8 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 				UseIndexGroup: true,
 			},
 			{
-				Type:     db.TypeView,
-				Keys:     db.Cols(e.Status.Int32(), e.UpdateCounter.DecimalSize(8)),
-				KeepPart: true,
+				Type: db.TypeView,
+				Keys: db.Cols(e.Status.Int32(), e.UpdateCounter.DecimalSize(8)),
 			},
 		},
 	}

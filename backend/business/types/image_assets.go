@@ -39,7 +39,7 @@ func (e ImageAssetTable) GetSchema() db.TableSchema {
 		Keys:             db.Cols(e.ID),
 		Indexes: []db.Index{
 			// Keep Updated as the first clustering column for global frontend deltas.
-			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }

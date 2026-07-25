@@ -34,7 +34,7 @@ func (e CityLocationTable) GetSchema() db.TableSchema {
 		Partition: e.CountryID,
 		Keys:      db.Cols(e.ID),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }

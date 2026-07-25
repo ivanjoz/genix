@@ -76,9 +76,9 @@ func (t ClientProviderTable) GetSchema() db.TableSchema {
 			{Type: db.TypeLocalIndex, Keys: db.Cols(t.RegistryNumber)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(t.NameRegistryHash)},
 			// Keep GET client-provider efficient for delta sync filtered by type.
-			{Type: db.TypeView, Keys: db.Cols(t.Type.Int32(), t.Updated.DecimalSize(8)), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(t.Type.Int32(), t.Updated.DecimalSize(8))},
 			// Keep initial sync efficient by filtering active rows for each type.
-			{Type: db.TypeView, Keys: db.Cols(t.Type.Int32(), t.Status.DecimalSize(1)), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(t.Type.Int32(), t.Status.DecimalSize(1))},
 		},
 	}
 }

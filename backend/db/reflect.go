@@ -410,6 +410,10 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable {
 		if indexCfg.Type == TypeInheritFromKey && !indexCfg.UseIndexGroup {
 			panic(fmt.Sprintf(`Table "%v": TypeInheritFromKey requires UseIndexGroup: true`, dbTable.name))
 		}
+		// Only views materialize their own partition, so an override is meaningless elsewhere.
+		if indexPartitionColumnName(indexCfg) != "" && resolveSchemaIndexType(indexCfg) != TypeView {
+			panic(fmt.Sprintf(`Table "%v": Partition is only supported on TypeView indexes`, dbTable.name))
+		}
 		if indexCfg.UseIndexGroup {
 			registerIndexGroup(&dbTable, &idxCount, indexCfg)
 			continue

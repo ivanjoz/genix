@@ -32,12 +32,12 @@ func (e partitionedRangeViewSchema) GetSchema() TableSchema {
 		Keys:      Cols(e.ID),
 		Indexes: []Index{
 			// Keep the fixed group partition and sort globally by the delta watermark.
-			{Type: TypeView, Keys: Cols(e.Updated), KeepPart: true},
+			{Type: TypeView, Keys: Cols(e.Updated)},
 		},
 	}
 }
 
-func TestSingleColumnKeepPartViewRoutesRangeQueryToView(t *testing.T) {
+func TestSingleColumnPartitionedViewRoutesRangeQueryToView(t *testing.T) {
 	resetORMTableCachesForTesting()
 
 	scyllaTable := MakeScyllaTable[partitionedRangeViewRecord, partitionedRangeViewSchema]()
@@ -77,6 +77,80 @@ func TestSingleColumnKeepPartViewRoutesRangeQueryToView(t *testing.T) {
 	}
 	if !strings.Contains(boundPlan.Statements[0].QueryStr, " WHERE group_id = ? AND updated > ?") {
 		t.Fatalf("expected partition and range predicates on the view, got %q", boundPlan.Statements[0].QueryStr)
+	}
+}
+
+type relocatedPartitionViewRecord struct {
+	TableStruct[relocatedPartitionViewSchema, relocatedPartitionViewRecord]
+	CompanyID int32  `db:"company_id"`
+	ID        int32  `db:"id"`
+	Payload   string `db:"payload"`
+}
+
+type relocatedPartitionViewSchema struct {
+	TableStruct[relocatedPartitionViewSchema, relocatedPartitionViewRecord]
+	CompanyID Col[relocatedPartitionViewSchema, int32]
+	ID        Col[relocatedPartitionViewSchema, int32]
+	Payload   Col[relocatedPartitionViewSchema, string]
+}
+
+func (e relocatedPartitionViewSchema) GetSchema() TableSchema {
+	return TableSchema{
+		Name:      "relocated_partition_records",
+		Partition: e.CompanyID,
+		Keys:      Cols(e.ID),
+		Indexes: []Index{
+			// Partition by ID so a row is readable without knowing its company.
+			{Type: TypeView, Keys: Cols(e.ID), Partition: e.ID},
+		},
+	}
+}
+
+func TestPartitionOverrideMovesViewPartition(t *testing.T) {
+	resetORMTableCachesForTesting()
+
+	scyllaTable := MakeScyllaTable[relocatedPartitionViewRecord, relocatedPartitionViewSchema]()
+	scyllaTable.keyspace = "genix_test"
+
+	records := []relocatedPartitionViewRecord{}
+	query := Query[relocatedPartitionViewRecord, relocatedPartitionViewSchema](&records)
+	query.Select(query.CompanyID, query.ID, query.Payload)
+	query.ID.Equals(int32(42))
+
+	compiledStatement, err := tryGetOrCompileSelectStatement(query.GetTableInfo(), scyllaTable)
+	if err != nil {
+		t.Fatalf("unexpected compile error: %v", err)
+	}
+	if compiledStatement.route != selectRouteViewStatements {
+		t.Fatalf("expected a view-backed route, got %d", compiledStatement.route)
+	}
+	if compiledStatement.sourceView == nil {
+		t.Fatal("expected the compiled statement to keep the selected view")
+	}
+	if !slices.Equal(compiledStatement.sourceView.columns, []string{"id"}) {
+		t.Fatalf("expected the view to be keyed by id alone, got %v", compiledStatement.sourceView.columns)
+	}
+	if !strings.Contains(compiledStatement.queryTemplate, "FROM genix_test.relocated_partition_records__id_view") {
+		t.Fatalf("expected query to target the id view, got %q", compiledStatement.queryTemplate)
+	}
+
+	createScript := compiledStatement.sourceView.getCreateScript()
+	if !strings.Contains(createScript, "PRIMARY KEY ((id), company_id)") {
+		t.Fatalf("expected id partition with the base partition as clustering key, got %q", createScript)
+	}
+	if !strings.Contains(createScript, "WHERE id IS NOT NULL AND company_id IS NOT NULL") {
+		t.Fatalf("expected both key columns to be filtered as not null, got %q", createScript)
+	}
+
+	boundPlan, err := compiledStatement.Compute(query.GetTableInfo(), scyllaTable)
+	if err != nil {
+		t.Fatalf("unexpected bind error: %v", err)
+	}
+	if len(boundPlan.Statements) != 1 {
+		t.Fatalf("expected one bound statement, got %d", len(boundPlan.Statements))
+	}
+	if !strings.Contains(boundPlan.Statements[0].QueryStr, " WHERE id = ?") {
+		t.Fatalf("expected the id predicate to bind on the view, got %q", boundPlan.Statements[0].QueryStr)
 	}
 }
 

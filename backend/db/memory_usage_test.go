@@ -105,9 +105,8 @@ func (e mediumSchema) GetSchema() TableSchema {
 			{Type: TypeLocalIndex, Keys: Cols(e.SKU)},
 			{Type: TypeLocalIndex, Keys: Cols(e.CategoryID)},
 			{
-				Type:     TypeView,
-				Keys:     Cols(e.CategoryID, e.Status),
-				KeepPart: true,
+				Type: TypeView,
+				Keys: Cols(e.CategoryID, e.Status),
 			},
 		},
 	}
@@ -187,19 +186,16 @@ func (e complexSchema) GetSchema() TableSchema {
 			{Type: TypeLocalIndex, Keys: Cols(e.SupplierID)},
 			{Type: TypeLocalIndex, Keys: Cols(e.BrandID)},
 			{
-				Type:     TypeView,
-				Keys:     Cols(e.CategoryID, e.Status),
-				KeepPart: true,
+				Type: TypeView,
+				Keys: Cols(e.CategoryID, e.Status),
 			},
 			{
-				Type:     TypeView,
-				Keys:     Cols(e.WarehouseID, e.Updated),
-				KeepPart: true,
+				Type: TypeView,
+				Keys: Cols(e.WarehouseID, e.Updated),
 			},
 			{
-				Type:     TypeView,
-				Keys:     Cols(e.SupplierID, e.Active),
-				KeepPart: true,
+				Type: TypeView,
+				Keys: Cols(e.SupplierID, e.Active),
 			},
 		},
 	}
@@ -311,29 +307,24 @@ func (e veryComplexSchema) GetSchema() TableSchema {
 			{Type: TypeLocalIndex, Keys: Cols(e.BrandID)},
 			{Type: TypeLocalIndex, Keys: Cols(e.LocationID)},
 			{
-				Type:     TypeView,
-				Keys:     Cols(e.CategoryID, e.Status),
-				KeepPart: true,
+				Type: TypeView,
+				Keys: Cols(e.CategoryID, e.Status),
 			},
 			{
-				Type:     TypeView,
-				Keys:     Cols(e.WarehouseID, e.Updated),
-				KeepPart: true,
+				Type: TypeView,
+				Keys: Cols(e.WarehouseID, e.Updated),
 			},
 			{
-				Type:     TypeView,
-				Keys:     Cols(e.SupplierID, e.Active),
-				KeepPart: true,
+				Type: TypeView,
+				Keys: Cols(e.SupplierID, e.Active),
 			},
 			{
-				Type:     TypeView,
-				Keys:     Cols(e.ZoneID, e.Quantity),
-				KeepPart: true,
+				Type: TypeView,
+				Keys: Cols(e.ZoneID, e.Quantity),
 			},
 			{
-				Type:     TypeView,
-				Keys:     Cols(e.RegionID, e.Price),
-				KeepPart: true,
+				Type: TypeView,
+				Keys: Cols(e.RegionID, e.Price),
 			},
 		},
 	}

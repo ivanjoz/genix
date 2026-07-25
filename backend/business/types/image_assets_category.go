@@ -29,7 +29,7 @@ func (e ImageAssetCategoryTable) GetSchema() db.TableSchema {
 		Indexes: []db.Index{
 			// Category names are stable repository slugs used to resolve existing IDs.
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.Name)},
-			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }

@@ -83,9 +83,8 @@ func (e PurchaseOrderTable) GetSchema() db.TableSchema {
 		Keys:             db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
 			{
-				Type:     db.TypeView,
-				Keys:     db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
-				KeepPart: true,
+				Type: db.TypeView,
+				Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
 			},
 			{
 				Keys:          db.Cols(e.Week),

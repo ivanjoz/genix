@@ -50,9 +50,9 @@ func (e SupplyMaterialTable) GetSchema() db.TableSchema {
 		Keys:      db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
 			// Status view → list active supplies cheaply.
-			{Type: db.TypeView, Keys: db.Cols(e.Status.DecimalSize(1)), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Status.DecimalSize(1))},
 			// Updated view → delta-cache watermark sync from the frontend.
-			{Type: db.TypeView, Keys: db.Cols(e.Updated.DecimalSize(10)), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated.DecimalSize(10))},
 			// SKU lookup within a company (e.g. dedup during create).
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.SKU)},
 		},

@@ -34,7 +34,7 @@ func (e groupedMovementSchema) GetSchema() TableSchema {
 		Keys:      Cols(e.ID),
 		Indexes: []Index{
 			// Keep the packed grouping view minimal: partition + packed key + aggregated payload column.
-			{Type: TypeView, Keys: Cols(e.Date, e.ProductID.DecimalSize(10)), Cols: Cols(e.Cantidad), KeepPart: true},
+			{Type: TypeView, Keys: Cols(e.Date, e.ProductID.DecimalSize(10)), Cols: Cols(e.Cantidad)},
 		},
 	}
 }
@@ -64,7 +64,7 @@ func (e fullViewSchema) GetSchema() TableSchema {
 		Keys:      Cols(e.ID),
 		Indexes: []Index{
 			// No Cols means the MV keeps the full base payload with an explicit non-virtual projection.
-			{Type: TypeView, Keys: Cols(e.Status, e.Updated.DecimalSize(9)), KeepPart: true},
+			{Type: TypeView, Keys: Cols(e.Status, e.Updated.DecimalSize(9))},
 		},
 	}
 }
@@ -99,7 +99,7 @@ func (e hashIndexedFullViewSchema) GetSchema() TableSchema {
 		Indexes: []Index{
 			{Keys: Cols(e.ProductIDs, e.Date.CompositeBucketing(2, 6))},
 			// Full-payload packed view should keep only its own view key virtual column.
-			{Type: TypeView, Keys: Cols(e.Status.Int32(), e.Updated.DecimalSize(8)), KeepPart: true},
+			{Type: TypeView, Keys: Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
 		},
 	}
 }
@@ -127,7 +127,7 @@ func (e int32PackedViewSchema) GetSchema() TableSchema {
 		Keys:      Cols(e.ID),
 		Indexes: []Index{
 			// Match the sale-order status trace view: a small enum prefix packed with an 8-digit updated slot.
-			{Type: TypeView, Keys: Cols(e.StatusTrace.Int32(), e.Updated.DecimalSize(8)), KeepPart: true},
+			{Type: TypeView, Keys: Cols(e.StatusTrace.Int32(), e.Updated.DecimalSize(8))},
 		},
 	}
 }

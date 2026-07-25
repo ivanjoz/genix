@@ -48,8 +48,8 @@ func (e CashBankTable) GetSchema() db.TableSchema {
 		UseSequences: true,
 		Keys:         db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.Status), KeepPart: true},
-			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }
@@ -138,7 +138,7 @@ func (e CashReconciliationTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.CreatedBy), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.CreatedBy)},
 		},
 	}
 }

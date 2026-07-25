@@ -148,10 +148,10 @@ func (e ProductTable) GetSchema() db.TableSchema {
 		Indexes: []db.Index{
 			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.CategoriesWithStock)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.NameUpdated)},
-			{Type: db.TypeView, Keys: db.Cols(e.NameHash), Cols: db.Cols(e.ID, e.Status), KeepPart: true},
-			{Type: db.TypeView, Keys: db.Cols(e.Status), KeepPart: true},
-			{Type: db.TypeView, Keys: db.Cols(e.StockStatus), KeepPart: true},
-			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.NameHash), Cols: db.Cols(e.ID, e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.StockStatus)},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }
@@ -209,8 +209,8 @@ func (e WarehouseTable) GetSchema() db.TableSchema {
 		UseSequences: true,
 		Keys:         db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.Status), KeepPart: true},
-			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }
@@ -267,8 +267,8 @@ func (e SiteTable) GetSchema() db.TableSchema {
 		UseSequences: true,
 		Keys:         db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.Status), KeepPart: true},
-			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }

@@ -35,7 +35,7 @@ func (e ShippingCostTable) GetSchema() db.TableSchema {
 		Keys:      db.Cols(e.CityID),
 		Indexes: []db.Index{
 			// Delta-cache fetches query by company partition and updated watermark.
-			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 		},
 	}
 }

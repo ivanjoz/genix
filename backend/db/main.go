@@ -259,10 +259,11 @@ type Index struct {
 	Keys []Coln
 	// Cols declares the non-key payload columns to keep in the MV.
 	// When empty, the ORM keeps the previous SELECT * behavior.
-	// Keep the original table partition in the created view.
-	// Example: key = (part_col) new_col, pk_col
-	Cols     []Coln
-	KeepPart bool
+	Cols []Coln
+	// Partition overrides the partition column of the generated view.
+	// When empty the view keeps the base table partition, which is what
+	// almost every schema wants: key = (part_col) new_col, pk_col
+	Partition Coln
 	// Create a hash for use with IN operators
 	UseHash       bool
 	UseIndexGroup bool
