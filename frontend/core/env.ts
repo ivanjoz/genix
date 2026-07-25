@@ -141,8 +141,6 @@ export const Env = {
   counterID: 1,
   useTopMinimalMenu: false,
   fetchID: 1000,
-  imageWorker: null as unknown as Worker,
-  ImageWorkerClass: null as any,
   zoneOffset: (new Date()).getTimezoneOffset() * 60,
   dexieVersion: 1,
   cache: {} as {[e: string]: any},
@@ -169,9 +167,6 @@ export const Env = {
   useLiveProductSearch: false,
   // Route-cache verification is expensive on mobile, so keep it opt-in from the client.
   DELTA_CACHE_VERIFY_ROUTE_MEMORY: false,
-  clearAccesos: null as (() => void) | null,
-  getToken: () => "",
-  canUserAccessRoute: (_routeValue?: string | null) => true,
   navigate: goto,
   setSelectedApiEndpoint: (selectedRoute: string) => {
     const selectedEndpointOption = getSelectedApiEndpoint(selectedRoute)

@@ -1,5 +1,6 @@
 <script lang="ts">
-	import Popover2 from '$components/popover2/Popover2.svelte';
+	import Popover from '$components/misc/Popover.svelte';
+	import '$components/misc/popover.css';
 
 	let button1: HTMLElement | null = $state(null);
 	let button2: HTMLElement | null = $state(null);
@@ -31,13 +32,13 @@
 			Click me (inside overflow:hidden)
 		</button>
 
-		<Popover2
+		<Popover
 			referenceElement={button1}
 			open={show1}
 			placement="bottom"
 		>
-			<div class="popover2-container">
-				<div class="popover2-content">
+			<div class="popover-container">
+				<div class="popover-content">
 					<strong>✅ Success!</strong>
 					<br />
 					This popover is rendered in the document.body, so it escapes the overflow:hidden parent.
@@ -50,7 +51,7 @@
 					</button>
 				</div>
 			</div>
-		</Popover2>
+		</Popover>
 	</div>
 
 	<!-- Nested overflow containers -->
@@ -75,13 +76,13 @@
 				Deeply nested button
 			</button>
 
-			<Popover2
+			<Popover
 				referenceElement={button2}
 				open={show2}
 				placement="right"
 			>
-				<div class="popover2-container">
-					<div class="popover2-content">
+				<div class="popover-container">
+					<div class="popover-content">
 						<strong>✅ Portal Magic!</strong>
 						<br />
 						This button is inside 2 levels of overflow:hidden, but the popover still renders perfectly in the body.
@@ -94,7 +95,7 @@
 					</button>
 					</div>
 				</div>
-			</Popover2>
+			</Popover>
 		</div>
 	</div>
 

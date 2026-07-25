@@ -3,7 +3,7 @@ import { editorStore } from '../stores/editor.svelte';
 import BuilderSectionRender from './BuilderSectionRender.svelte';
 import Header from '$ecommerce/components/Header.svelte';
 import { provideUi } from '@genix/ui';
-import { createGenixUiRuntime } from '$core/ui-runtime';
+import { genixUiRuntime } from '$libs/ui-runtime.svelte';
 
   interface Props {
     // Palette CSS custom properties, forwarded reactively from the parent so a
@@ -12,8 +12,8 @@ import { createGenixUiRuntime } from '$core/ui-runtime';
   }
 
   let { paletteStyles }: Props = $props();
-  // A fresh mount tree does not inherit the admin layout context.
-  provideUi(createGenixUiRuntime());
+  // The iframe mount receives the same application runtime through its own context.
+  provideUi(genixUiRuntime);
 </script>
 
 <!-- Root mounted into the preview iframe's <body>. It reads the same shared

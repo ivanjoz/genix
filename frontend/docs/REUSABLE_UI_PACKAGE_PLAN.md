@@ -7,7 +7,7 @@ singletons imported across the boundary).
 
 **Status:** reusable UI extraction implemented. The former `ui-components/**` tree,
 `SideMenu`, `MobileMenu`, `HTMLEditor`, page/layout UI state, initial utilities, charts,
-Excel, the generic HTTP transport, Typed-IDB, cache engines, and service-worker transport
+Excel, the generic HTTP transport, cache engines, and service-worker transport
 now live in `genix-ui`. Genix business infrastructure is connected through thin host
 adapters. Authentication policy and agent transport remain host concerns.
 
@@ -24,7 +24,7 @@ adapters. Authentication policy and agent transport remain host concerns.
 | UI runtime | page metadata, device/layout state, header settings, i18n adapter | Created per component tree |
 | Generic agent UI | `genix-ui/agent/registry.ts` | Complete |
 | Domain renderers | refactored `SideMenu`, `MobileMenu`, `HTMLEditor` | See §4 |
-| Generic stores | in-memory images and notifications | Persistence receives an explicit namespace |
+| Generic stores | host-owned in-memory images and field persistence | Notifications remain an injected visual adapter |
 | Generic caches | delta, records-by-ID, group, route, and IndexedDB caches | Tenant GET/navigation are injected |
 | Excel | workbook import/export and fluent builder | WASM URL and translation are injected |
 | HTTP transport | GET, POST, PUT, and upload client | Auth, routes, cache IO, and reporting are injected |
@@ -39,8 +39,7 @@ adapters. Authentication policy and agent transport remain host concerns.
 - `Core.module`, `Core.ecommerce`, and storefront `mainMenuOptions`.
 - The Genix agent bridge: `core/agent/commands.ts`, `sse.ts`, models, backend routes, and
   security-aware menu commands. Reusable agent UI can be extracted later through props.
-- HTTP authentication/access policy, `GetHandler`, group-cache orchestration, DOM progress
-  rendering, and application-specific worker build/output policy.
+- HTTP authentication/access policy and DOM progress rendering.
 
 ## 2. Corrected dependency findings
 
@@ -48,8 +47,9 @@ The reusable seam is wider than three imports:
 
 ```text
 genix-ui components ─▶ injected UI runtime capabilities + internal agent registry
-genix-ui cache ─▶ injected tenant identity + GET/navigation adapters
-genix-ui HTTP ───▶ injected auth + API routes + cache IO + request reporting
+genix-ui host ───▶ one injected auth + tenant + route + worker/reporting configuration
+genix-ui cache ─▶ host-derived tenant identity + GET/navigation adapters
+genix-ui HTTP ───▶ host-derived auth + API routes + cache IO + request reporting
 core/agent ─────▶ Genix security + menus + API routes + backend wire protocol
 SideMenu ───────▶ menu declarations + access policy + SvelteKit router + UI renderer
 MobileMenu ─────▶ storefront actions + LoginForm + drawer/grid UI
@@ -94,10 +94,10 @@ State that stays host-owned:
 - Authentication/access readiness and application initialization.
 - Tenant, endpoint, token, CDN, and service-worker configuration.
 
-Both root layouts call `provideUi(createUiRuntime(...))`. Every fresh `mount()` tree
-creates and sets its own runtime because Svelte context does not cross mount roots.
+Root layouts provide the application runtime with `provideUi(ui)`. Fresh `mount()` trees
+must provide that runtime again because Svelte context does not cross mount roots.
 `UiProvider` is also exported for consumers that prefer component-based composition.
-Stateful components require a runtime context; there is no module-level fallback singleton.
+Stateful components require a runtime context; there is no implicit fallback.
 
 `Page.svelte` stays local. It continues to own authentication, redirect, route-scoped tab
 persistence, and cleanup. It sets `ui.state.pageTitle/pageOptions/useTopMinimalMenu` and
@@ -212,7 +212,7 @@ The worker request contract also lives beside the cache implementation.
 
 These utilities remain valid extraction candidates:
 
-- Remaining host `GetHandler`, group-cache orchestration, and service-worker lifecycle policy.
+- Remaining service-worker lifecycle policy.
 - Worker modules with application-specific build/output contracts.
 - Notifications and chat history after database names receive an application namespace.
 - Agent chat UI after transport, model loading, and command execution become injected.
@@ -229,10 +229,10 @@ They may become subpath exports or separate packages such as `@genix/data` and
 3. **Page host migration — complete** — keep `Page.svelte` local while moving its page
    metadata to the UI runtime; migrate consumers of `Core.pageOptionSelected`.
 4. **Leaf extraction — in progress** — parsers, unmarshalling, date/week conversion, and
-   compact object mapping now ship from `@genix/ui/utilities`; the attributed Typed-IDB
-   source ships from `@genix/ui/typed-idb`; canvas and compact cell charts ship from
-   `@genix/ui/charts`; the data-driven AST `Renderer` ships from the root export. The
-   unused billboard wrapper was removed because its API was obsolete. All former
+   compact object mapping now ship from `@genix/ui/utilities`; canvas and compact cell
+   charts ship from `@genix/ui/charts`; the data-driven AST `Renderer` ships from the root
+   export. The unused billboard wrapper and the never-imported vendored Typed-IDB adapter
+   were removed because their APIs were obsolete and superseded by Dexie. All former
    `ui-components` groups, assets, and the agent registry now live in the package.
 5. **Initial component splits — complete** — refactor/extract `SideMenu`, `MobileMenu`,
    and `HTMLEditor`; retain thin Genix wrappers for policies and business content.
@@ -244,8 +244,16 @@ They may become subpath exports or separate packages such as `@genix/data` and
    UI reporting are injected.
 8. **Excel/HTTP transport extraction — complete** — Excel receives an explicit WASM and
    translation runtime; the HTTP client receives auth, routing, cache, notification, and
-   activity adapters. Genix retains `GetHandler`, group-cache policy, and DOM progress UI.
-9. **Consumer documentation and smoke test** — install the submodule into a second minimal
+   activity adapters.
+9. **Cached service extraction — complete** — the Svelte 5 `GetHandler`, grouped-cache
+   orchestration, and stable name normalization live in the package. Genix injects access
+   policy, authenticated transport, record-by-ID resolution, and notifications through a
+   thin zero-argument adapter. DOM progress UI remains host-owned.
+10. **Unified runtime composition — complete** — `createUiRuntime` accepts routing, auth,
+   tenant identity, service-worker URL, reporting, and process notifications once, then
+   returns UI state, HTTP, cache, worker, `GetHandler`, uploads, in-memory images, field
+   persistence, and record resolution as one flat runtime.
+11. **Consumer documentation and smoke test** — install the submodule into a second minimal
    Svelte app and verify package exports, styling, and runtime isolation.
 
 Verification after every phase:
@@ -266,4 +274,5 @@ Verification after every phase:
 - UI runtime migration touches many page imports; complete it in one coherent phase because
   this pre-alpha project does not require compatibility shims.
 - Fresh Svelte `mount()` trees do not inherit parent context and require their own provider.
-- Vendored `typed-idb` retains its upstream README and MIT license beside its package source.
+- IndexedDB access uses Dexie everywhere; the vendored `typed-idb` adapter was never imported
+  and was dropped rather than carried into the package.

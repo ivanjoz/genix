@@ -14,12 +14,12 @@ import SearchCard from '$components/cards/SearchCard.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import { Core, tr } from '$core/store.svelte';
-import { inMemoryImages } from '$core/inMemoryImages.svelte';
 import T from '$components/misc/T.svelte';
 import Page from '$domain/Page.svelte';
 import { ConfirmWarn, formatN, Loading, Notify } from '$libs/helpers';
 import { POST } from '$libs/http.svelte';
-import type { ExcelTableColumn } from '$libs/excel/excelBuilder';
+import { genixUiRuntime } from '$libs/ui-runtime.svelte';
+import type { ExcelTableColumn } from '@genix/ui/excel';
 import type { Component } from 'svelte';
 import Atributos from './Attributes.svelte';
 import CategoriasMarcas from './CategoriesBrands.svelte';
@@ -456,7 +456,7 @@ import {
   // product gets its real ID assigned in place by postAndSync before we get here.
   const flushPendingProductImages = async () => {
     for (const imageID of productoForm.ImageIDs || []) {
-      const pendingImage = inMemoryImages.get(productImageName(imageID));
+      const pendingImage = genixUiRuntime.images.get(productImageName(imageID));
       if (pendingImage?.upload) {
         // Supply the now-known real ProductID (it was 0 at confirm time for a new product).
         // On failure the header process tray keeps the entry with a retry; don't block the save.

@@ -3,7 +3,7 @@
   import TableStream from '$components/vTable/TableStream.svelte';
   import type { ITableColumn } from '$components/vTable/types';
   import { Env } from '$core/env';
-  import { getToken } from '$core/security';
+  import { security } from '$libs/ui-runtime.svelte';
   import { SSEClient, type SSEClientEvent } from '$libs/sse-client';
   import { onDestroy, onMount } from 'svelte';
 
@@ -179,7 +179,7 @@
     streamError = '';
     streamConnected = false;
 
-    const userToken = getToken(true);
+    const userToken = security.getToken(true);
     if (!userToken) {
       streamError = 'No se encontró un token válido de sesión.';
       appendConsoleLine(streamError, 'error');

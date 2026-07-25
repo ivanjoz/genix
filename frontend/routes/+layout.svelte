@@ -5,7 +5,7 @@
 	import TopLayerSelector from '$components/layers/TopLayerSelector.svelte';
 	import { Env } from '$core/env';
 	import Modules from '$core/modules';
-	import { canUserAccessRoute, checkIsLogin } from '$core/security';
+	import { security } from '$libs/ui-runtime.svelte';
 	import { Core, getDeviceType, tr } from '$core/store.svelte';
 	import T from '$components/misc/T.svelte';
 	import AppHeader from '$domain/AppHeader.svelte';
@@ -14,11 +14,10 @@
 	import SideMenu from '$domain/SideMenu.svelte';
 	import { Notify } from '$libs/helpers';
 	import { doInitServiceWorker } from '@genix/ui/service-worker';
-	import ImageWorker from '@genix/ui/workers/image-worker?worker';
 	import { onMount } from 'svelte';
 	import { startAgentBridge } from '$core/agent/sse';
 	import { provideUi } from '@genix/ui';
-	import { createGenixUiRuntime } from '$core/ui-runtime';
+	import { genixUiRuntime } from '$libs/ui-runtime.svelte';
 	import './app.css';
 	import { fetchAccessListCatalog, getAccessEntriesForRoute } from './security/access-profiles/access-list-catalog';
 	import './tailwind.css';
@@ -26,19 +25,15 @@
 	// ≤749px remap wins the cascade. Same file the storefront uses.
 	import '../styles/fonts.css';
 
+	// Registered here, not in the runtime options: this layout is the authenticated app, so
+	// the catalog (and backend/access_list.yml with it) stays out of the storefront bundle.
+	security.setRouteAccessResolver(getAccessEntriesForRoute);
+
 	let { children } = $props();
-	const ui = provideUi(createGenixUiRuntime());
+	const ui = provideUi(genixUiRuntime);
 	ui.state.deviceType = getDeviceType();
 
 	if(browser){
-		console.log('🔧 Initializing image worker...')
-		try {
-			Env.ImageWorkerClass = ImageWorker
-			Env.imageWorker = new ImageWorker()
-			console.log('✅ Image worker initialized successfully')
-		} catch (error) {
-			console.error('❌ Failed to initialize image worker:', error)
-		}
 		// Local-only: open a websocket so the Go backend can drive the page as an agent.
 		startAgentBridge()
 	}
@@ -55,7 +50,7 @@
 		if(["/login"].includes(page.url.pathname)){
 			return false
 		}
-		return checkIsLogin() !== 2
+		return security.checkIsLogin() !== 2
 	})
 
 	let lastDeniedRoute = $state('')
@@ -90,7 +85,6 @@
 
 	$effect(() => {
 		Core.module = Modules[0]
-		console.log("imageWorker",Env, Env.imageWorker)
 
 		window.addEventListener('resize', () => {
 			const newDeviceType = getDeviceType()
@@ -107,7 +101,7 @@
 		if (!browser || redirectsToLogin || !accessCatalogReady) { return }
 
 		const currentPath = page.url.pathname
-		if (canUserAccessRoute(currentPath)) {
+		if (security.canAccessRoute(currentPath)) {
 			lastDeniedRoute = ''
 			return
 		}

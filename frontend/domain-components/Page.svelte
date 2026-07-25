@@ -1,5 +1,5 @@
 <script lang="ts">
-import { checkIsLogin } from '$core/security';
+import { security } from '$libs/ui-runtime.svelte';
 import { onDestroy, onMount, untrack } from "svelte";
 import { Core } from '$core/store.svelte';
 import { browser, Env, LocalStorage } from '$core/env';
@@ -20,7 +20,7 @@ import { useUI } from '@genix/ui';
   } = $props();
   const ui = useUI()
 
-  const isLogged = $derived(checkIsLogin() === 2)
+  const isLogged = $derived(security.checkIsLogin() === 2)
   let hasRestoredPageOptionSelection = $state(false)
   const pageOptions = $derived(options || [])
 

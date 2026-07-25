@@ -13,7 +13,7 @@ import { productoMonedaOptions } from '$core/products-lists';
 import { Core, tr } from '$core/store.svelte';
 import T from '$components/misc/T.svelte';
 import Page from '$domain/Page.svelte';
-import type { ExcelTableColumn } from '$libs/excel/excelBuilder';
+import type { ExcelTableColumn } from '@genix/ui/excel';
 import { ConfirmWarn, formatN, Loading, Notify } from '$libs/helpers';
 import { SharedListsService } from '$services/business/shared-lists.svelte';
 import { ClientProviderService, ClientProviderType } from '../../business/customers/customers.svelte';

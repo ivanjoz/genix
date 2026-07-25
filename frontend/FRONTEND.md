@@ -39,11 +39,16 @@ The build process merges both applications into a single static directory struct
 
 ### Shared Packages (Level-based Hierarchy)
 - `libs/`: (Level 0) Thin Genix adapters and remaining technical utilities.
-    - `http.svelte.ts`: Binds `@genix/ui/http` to Genix auth, cache, and request reporting.
-    - `excel/excelBuilder.ts`: Binds `@genix/ui/excel` to the Genix WASM URL and translator.
+    - `ui-runtime.svelte.ts`: The single configuration entry for `@genix/ui`. One
+      `createUiRuntime` call sets routing, tenant, translation, notifications, request
+      reporting, and session/access policy (`security`), and exports `genixUiRuntime`
+      plus `security`. The admin layout registers the access catalog on top of it.
+    - `http.svelte.ts`: Binds that runtime's transport to `GET`/`POST`/`GetHandler`.
 - `packages/genix-ui/`: (Level 1) reusable UI atoms in root-level source folders.
     - Inputs, tables, modals, Excel, HTTP transport, caches, assets, and UI automation.
-    - Host capabilities are injected through `core/ui-runtime.ts`; package source must not import Genix aliases.
+    - Excel owns its WASM asset; Svelte/Vite emits the fingerprinted file automatically.
+    - HTTP, cache, UI state, images, conversion, and persistence are composed once through
+      `createUiRuntime`.
 - `core/`: (Level 2) Infrastructure and global state.
     - `store.svelte.ts`: Shared reactive state.
     - `env.ts`: Runtime environment variables.
@@ -138,8 +143,8 @@ Aliases are configured in `svelte.config.js` and `tsconfig.json`.
 ### Common Issues
 - **CORS/Proxy Errors**: Ensure both dev servers are running before starting the proxy.
 - **Circular Dependencies**: Package source must not import app infrastructure
-  (`services`, `domain-components`, security, or route modules). Inject host capabilities
-  through `core/ui-runtime.ts`.
+  (`services`, `domain-components`, or route modules). Inject host capabilities
+  through `libs/ui-runtime.svelte.ts`.
 - **Build Mismatch**: If the store doesn't reflect changes, rebuild specifically using `bun run build:store`.
 
 ### Best Practices

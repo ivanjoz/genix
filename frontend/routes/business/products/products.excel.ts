@@ -3,7 +3,7 @@ import {
   ExcelBuilder,
   type ResolvedLeafColumn,
   type ExcelTableColumn,
-} from '$libs/excel/excelBuilder';
+} from '@genix/ui/excel';
 import {
   getOptionByName,
   PRODUCT_OPTION_LIST_MONEDA_ID,
@@ -12,7 +12,8 @@ import {
   PRODUCT_SHARED_LIST_MARCA_ID,
 } from '$core/products-lists';
 import type { ISharedListRecord, SharedListsService } from '$services/business/shared-lists.svelte';
-import { normalizeComparableValue, normalizeStringN } from '$libs/helpers';
+import { normalizeStringN } from '@genix/ui/utilities';
+import { normalizeComparableValue } from '$libs/helpers';
 import type { IProduct, ProductsService } from './products.svelte';
 
 // Centralizes Productos Excel export so the page only triggers the action.

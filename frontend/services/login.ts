@@ -1,5 +1,5 @@
 import { GET, POST } from '$libs/http.svelte';
-import { accessHelper, checkIsLogin, registerReloadLogin } from '$core/security';
+import { security } from '$libs/ui-runtime.svelte';
 import type { IUser, ILoginResult } from '$core/types/common';
 import { Env } from '$core/env';
 
@@ -35,12 +35,12 @@ export const sendUserLogin = async (data: ILogin): Promise<any> => {
 	console.log("loginInfo", loginInfo)
 
   try {
-		await accessHelper.parseAccesos(loginInfo, data.CipherKey)
-		const hasValidToken = accessHelper.isTokenValid()
+		await security.parseLogin(loginInfo, data.CipherKey)
+		const hasValidToken = security.isTokenValid()
 		console.log("hasValidToken", hasValidToken)
 		
 		if (!hasValidToken) {
-      Env.clearAccesos?.()
+      security.clearSession()
     } else {
       Env.navigate("/")
     }
@@ -67,9 +67,9 @@ export const reloadLogin = async (): Promise<any> => {
   }
 
   try {
-    await accessHelper.parseAccesos(loginInfo, CipherKey)
-    if(!accessHelper.isTokenValid()){
-      Env.clearAccesos?.()
+    await security.parseLogin(loginInfo, CipherKey)
+    if(!security.isTokenValid()){
+      security.clearSession()
     }
   } catch (error) {
     console.log("error encriptando::")
@@ -80,7 +80,7 @@ export const reloadLogin = async (): Promise<any> => {
 }
 
 // Register the reload function with core to avoid circular dependency
-registerReloadLogin(reloadLogin);
+security.setSessionRefresher(reloadLogin);
 
 export const handleLogin = (login: ILoginResult) => {
   // Additional login handling if needed

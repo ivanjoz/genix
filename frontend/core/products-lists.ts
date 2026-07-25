@@ -1,4 +1,4 @@
-import { normalizeStringN } from "$libs/helpers"
+import { normalizeStringN } from '@genix/ui/utilities'
 
 export const PRODUCT_OPTION_LIST_MONEDA_ID = 1
 export const PRODUCT_OPTION_LIST_UNIDAD_ID = 2

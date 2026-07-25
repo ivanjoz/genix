@@ -4,7 +4,7 @@
   import SearchSelect from '$components/form/SearchSelect.svelte';
   import { Notify } from '$libs/helpers';
   import { sendUserLogin, type ILogin } from '$services/login';
-  import { checkIsLogin } from '$core/security';
+  import { security } from '$libs/ui-runtime.svelte';
   import { Env, type IApiEndpointOption } from '$core/env';
   import { tr } from '$core/store.svelte';
   import T from '$components/misc/T.svelte';
@@ -50,7 +50,7 @@
 
   onMount(() => {
     syncApiEndpointSelector()
-    if(checkIsLogin() === 2){
+    if(security.checkIsLogin() === 2){
       Env.navigate("/")
     }
   })

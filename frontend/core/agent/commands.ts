@@ -6,7 +6,7 @@
 
 import { goto } from "$app/navigation";
 import { Core } from "$core/store.svelte";
-import { canUserAccessRoute } from "$core/security";
+import { security } from "$libs/ui-runtime.svelte";
 import { tick } from "svelte";
 import { Agent, agentHandles, type AgentHandle, type AgentListFilter, type AgentMethodName } from "$components/agent/registry";
 import { captureDomScreenshot, captureScreenshot, releaseScreenStream } from "./screenshot";
@@ -206,7 +206,7 @@ const getMenu = (): MenuGroup[] => {
         .filter((option) => {
           const route = String(option.route || "").trim();
           if (!route) { return false; }
-          return canUserAccessRoute(option.route);
+          return security.canAccessRoute(option.route);
         })
         .map((option) => ({ Name: option.name, Route: option.route || "" })),
     }))

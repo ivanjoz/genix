@@ -1,4 +1,4 @@
-import { Params } from '$core/security'
+import { getFechaUnix } from '@genix/ui/utilities'
 import { decodeFromBase62 } from '$libs/helpers'
 import { GetHandler, POST } from '$libs/http.svelte'
 import type { IProductStock } from '../products-stock/stock-movement'
@@ -276,7 +276,7 @@ export class AlmacenMovimientosGroupedService extends GetHandler {
 			this.productoCurrentStock.set(productoID, (e.Quantity||0) + currentStock)
 		}
 		
-		const dateCurrent = Params.getFechaUnix()
+		const dateCurrent = getFechaUnix()
 		const productoFechaRangeMap: Map<number, [number, number]> = new Map()
 		
     const groupedMovementRecords = (response.movimientos || []).map((groupedMovementRecord) => ({

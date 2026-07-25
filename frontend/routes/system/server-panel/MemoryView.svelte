@@ -3,7 +3,7 @@
   import TableStream from '$components/vTable/TableStream.svelte';
   import type { ITableColumn } from '$components/vTable/types';
   import { Env } from '$core/env';
-  import { getToken } from '$core/security';
+  import { security } from '$libs/ui-runtime.svelte';
   import { onDestroy, onMount } from 'svelte';
 
   interface MemoryPackagesTableRow {
@@ -49,7 +49,7 @@
   const refreshMemoryPackages = async () => {
     if (!browser || memoryRefreshInProgress) return;
 
-    const userToken = getToken(true);
+    const userToken = security.getToken(true);
     if (!userToken) {
       memoryRefreshError = 'No se encontró un token válido de sesión.';
       return;

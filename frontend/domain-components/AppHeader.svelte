@@ -3,7 +3,7 @@ import { fetchOnCourse } from '$core/store.svelte';
 import T from '$components/misc/T.svelte';
 import { Agent } from '$components/agent/registry';
 import AgentChat from '$core/agent/AgentChat.svelte';
-import { isLogged } from '$core/security';
+import { security } from '$libs/ui-runtime.svelte';
 import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
 import HeaderConfig from '$domain/HeaderConfig.svelte';
 import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
@@ -125,7 +125,7 @@ import { useUI } from '@genix/ui';
 	<!-- Agent Chat Widget — pill input centered in the header. Only rendered
 	     while the user is logged in; mount triggers nothing (WS opens lazily
 	     on first user interaction inside the widget). -->
-	{#if isLogged()}
+	{#if security.isLogged()}
 		<div class="flex-1 flex justify-center px-16 min-w-0">
 			<AgentChat />
 		</div>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { canUserAccessRoute } from '$core/security';
+  import { security } from '$libs/ui-runtime.svelte';
   import { Core, tr } from '$core/store.svelte';
   import { SideMenu, useUI, type MenuGroup } from '@genix/ui';
 
@@ -33,7 +33,7 @@
   );
 
   const canAccessMenuItem = (item: MenuGroup['options'][number]) =>
-    !String(item.route || '').trim() || canUserAccessRoute(item.route);
+    !String(item.route || '').trim() || security.canAccessRoute(item.route);
 </script>
 
 <!-- Genix owns menu declaration, access policy, routing, branding, and agent visibility. -->

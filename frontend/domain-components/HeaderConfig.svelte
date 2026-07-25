@@ -6,7 +6,7 @@ import SearchSelect from '$components/form/SearchSelect.svelte';
 import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
 import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import TableGrid from '$components/vTable/TableGrid.svelte';
-import { accessHelper } from '$core/security';
+import { security } from '$libs/ui-runtime.svelte';
 import { Core, setLanguaje, type ILanguaje } from '$core/store.svelte';
 import { Env } from '$core/env';
 import type { ICacheDebugRow } from '@genix/ui/cache';
@@ -61,9 +61,9 @@ import { useUI } from '@genix/ui';
 		window.location.href = '/login';
 	}
 
-  let userInfo = $state(accessHelper.getUserInfo())
+  let userInfo = $state(security.getUserInfo())
   $effect(() => {
-    if(selected === 1){ userInfo = userInfo = accessHelper.getUserInfo()}
+    if(selected === 1){ userInfo = security.getUserInfo()}
   })
 
   $effect(() => {
@@ -253,6 +253,8 @@ import { useUI } from '@genix/ui';
   })
 
   const saveUsuario = async () => {
+    // getUserInfo() is null until a session exists, so the form has nothing to save.
+    if(!userInfo){ return }
     if(userInfo.Password && userInfo.Password !== userInfo.Password2){
       Notify.failure("Los password no coinciden.")
     }
@@ -266,7 +268,7 @@ import { useUI } from '@genix/ui';
       return
     }
     Loading.remove()
-    accessHelper.setUserInfo(userInfo)
+    security.setUserInfo(userInfo)
     console.log("usuario result::", result)
   }
 
@@ -293,6 +295,7 @@ import { useUI } from '@genix/ui';
     </button>
   </div>
   <div class="grid grid-cols-24 w-full gap-10">
+  {#if userInfo}
     <Input label="Nombres" css="col-span-12"
       saveOn={userInfo} save="FirstName"
     />
@@ -317,6 +320,7 @@ import { useUI } from '@genix/ui';
     <Input label="Repetir Password" css="col-span-12"
       saveOn={userInfo} save="Password2" type="password"
     />
+  {/if}
   </div>
 {/if}
 {#if selected === 2}
