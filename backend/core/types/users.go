@@ -7,12 +7,12 @@ import (
 
 type User struct { // DynamoDB + ScyllaDB
 	db.TableStruct[UserTable, User]
-	CompanyID          int32    `json:",omitempty" col:"empresa_id,pk"`
-	ID                 int32    `json:",omitempty" col:"id,pk,sk"`
-	User               string   `json:",omitempty" col:"user,index"`
-	LastName           string   `json:",omitempty" col:"last_name"`
-	FirstName          string   `json:",omitempty" col:"first_name"`
-	ProfileIDs         []int32  `json:",omitempty" col:"profile_ids"`
+	CompanyID  int32   `json:",omitempty" col:"empresa_id,pk"`
+	ID         int32   `json:",omitempty" col:"id,pk,sk"`
+	User       string  `json:",omitempty" col:"user,index"`
+	LastName   string  `json:",omitempty" col:"last_name"`
+	FirstName  string  `json:",omitempty" col:"first_name"`
+	ProfileIDs []int32 `json:",omitempty" col:"profile_ids"`
 	// AccesoID * 10 + Nivel
 	AccessLevelIDs     []int32  `json:",omitempty" col:"access_level_ids"`
 	AccesosComputed    []uint16 `json:",omitempty" col:"accesos_computed"`
@@ -64,6 +64,11 @@ func (usuarioTable UserTable) GetSchema() db.TableSchema {
 		Partition:        usuarioTable.CompanyID,
 		UseSequences:     true,
 		SaveCacheVersion: true,
-		Keys:             db.Cols(usuarioTable.ID.Autoincrement(0)),
+		// Users have no single display column, so the login handle is the label and the client
+		// composes the full name from S1/S2. Email and DocumentNumber stay out: a label doesn't need them.
+		GenericRecord: db.GenericRecordSchema{
+			Name: usuarioTable.User, S1: usuarioTable.FirstName, S2: usuarioTable.LastName,
+		},
+		Keys: db.Cols(usuarioTable.ID.Autoincrement(0)),
 	}
 }

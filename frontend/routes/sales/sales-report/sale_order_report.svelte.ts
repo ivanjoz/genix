@@ -1,4 +1,4 @@
-import { GETWithGroupCache } from '$libs/http.svelte';
+import { GETWithGroupCache } from '$libs/ui-runtime.svelte';
 import { Notify } from '$libs/helpers';
 
 export interface ISaleOrder {

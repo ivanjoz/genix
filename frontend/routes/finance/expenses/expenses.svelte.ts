@@ -1,4 +1,4 @@
-import { GetHandler, POST, GET } from '$libs/http.svelte'
+import { GetHandler, POST, GET } from '$libs/ui-runtime.svelte'
 import { Notify } from '$libs/helpers'
 import { tr } from '$core/store.svelte'
 

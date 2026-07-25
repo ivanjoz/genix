@@ -11,14 +11,14 @@ const (
 
 type PurchaseOrder struct {
 	db.TableStruct[PurchaseOrderTable, PurchaseOrder]
-	ID                    int32
-	CompanyID             int32   `json:",omitempty"`
-	ProviderID            int32   `json:",omitempty"`
-	WarehouseID           int32   `json:",omitempty"`
-	Date                  int16   `json:",omitempty"`
-	Week                  int16   `json:",omitempty"`
-	DeliveryDate          int16   `json:",omitempty"`
-	PaymentDate           int16   `json:",omitempty"`
+	ID           int32
+	CompanyID    int32 `json:",omitempty"`
+	ProviderID   int32 `json:",omitempty"`
+	WarehouseID  int32 `json:",omitempty"`
+	Date         int16 `json:",omitempty"`
+	Week         int16 `json:",omitempty"`
+	DeliveryDate int16 `json:",omitempty"`
+	PaymentDate  int16 `json:",omitempty"`
 	// Producto: parallel arrays in the same order — one row per product line.
 	DetailProductIDs             []int32 `json:",omitempty"`
 	DetailProductQuantity        []int32 `json:",omitempty"`
@@ -29,13 +29,13 @@ type PurchaseOrder struct {
 	DetailSupplyIDs      []int32 `json:",omitempty"`
 	DetailSupplyQuantity []int32 `json:",omitempty"`
 	DetailSupplyPrice    []int32 `json:",omitempty"`
-	TotalAmount           int32   `json:",omitempty"`
-	TaxAmount             int32   `json:",omitempty"`
-	DebtAmount            int32   `json:",omitempty"`
-	DifferenceQuantity    int32   `json:",omitempty"`
-	DifferenceValue       int32   `json:",omitempty"`
-	InvoiceNumber         string  `json:",omitempty"`
-	Notes                 string  `json:",omitempty"`
+	TotalAmount          int32   `json:",omitempty"`
+	TaxAmount            int32   `json:",omitempty"`
+	DebtAmount           int32   `json:",omitempty"`
+	DifferenceQuantity   int32   `json:",omitempty"`
+	DifferenceValue      int32   `json:",omitempty"`
+	InvoiceNumber        string  `json:",omitempty"`
+	Notes                string  `json:",omitempty"`
 
 	Created   int32 `json:",omitempty"`
 	CreatedBy int32 `json:",omitempty"`
@@ -46,14 +46,14 @@ type PurchaseOrder struct {
 
 type PurchaseOrderTable struct {
 	db.TableStruct[PurchaseOrderTable, PurchaseOrder]
-	CompanyID             db.Col[PurchaseOrderTable, int32]
-	ID                    db.Col[PurchaseOrderTable, int32]
-	ProviderID            db.Col[PurchaseOrderTable, int32]
-	WarehouseID           db.Col[PurchaseOrderTable, int32]
-	Date                  db.Col[PurchaseOrderTable, int16]
-	Week                  db.Col[PurchaseOrderTable, int16]
-	DeliveryDate          db.Col[PurchaseOrderTable, int16]
-	PaymentDate           db.Col[PurchaseOrderTable, int16]
+	CompanyID                    db.Col[PurchaseOrderTable, int32]
+	ID                           db.Col[PurchaseOrderTable, int32]
+	ProviderID                   db.Col[PurchaseOrderTable, int32]
+	WarehouseID                  db.Col[PurchaseOrderTable, int32]
+	Date                         db.Col[PurchaseOrderTable, int16]
+	Week                         db.Col[PurchaseOrderTable, int16]
+	DeliveryDate                 db.Col[PurchaseOrderTable, int16]
+	PaymentDate                  db.Col[PurchaseOrderTable, int16]
 	DetailProductIDs             db.Col[PurchaseOrderTable, []int32]
 	DetailProductQuantity        db.Col[PurchaseOrderTable, []int32]
 	DetailProductPrice           db.Col[PurchaseOrderTable, []int32]
@@ -61,18 +61,18 @@ type PurchaseOrderTable struct {
 	DetailSupplyIDs              db.Col[PurchaseOrderTable, []int32]
 	DetailSupplyQuantity         db.Col[PurchaseOrderTable, []int32]
 	DetailSupplyPrice            db.Col[PurchaseOrderTable, []int32]
-	TotalAmount           db.Col[PurchaseOrderTable, int32]
-	TaxAmount             db.Col[PurchaseOrderTable, int32]
-	DebtAmount            db.Col[PurchaseOrderTable, int32]
-	DifferenceQuantity    db.Col[PurchaseOrderTable, int32]
-	DifferenceValue       db.Col[PurchaseOrderTable, int32]
-	InvoiceNumber         db.Col[PurchaseOrderTable, string]
-	Notes                 db.Col[PurchaseOrderTable, string]
-	Created               db.Col[PurchaseOrderTable, int32]
-	CreatedBy             db.Col[PurchaseOrderTable, int32]
-	Updated               db.Col[PurchaseOrderTable, int32]
-	UpdatedBy             db.Col[PurchaseOrderTable, int32]
-	Status                db.Col[PurchaseOrderTable, int8]
+	TotalAmount                  db.Col[PurchaseOrderTable, int32]
+	TaxAmount                    db.Col[PurchaseOrderTable, int32]
+	DebtAmount                   db.Col[PurchaseOrderTable, int32]
+	DifferenceQuantity           db.Col[PurchaseOrderTable, int32]
+	DifferenceValue              db.Col[PurchaseOrderTable, int32]
+	InvoiceNumber                db.Col[PurchaseOrderTable, string]
+	Notes                        db.Col[PurchaseOrderTable, string]
+	Created                      db.Col[PurchaseOrderTable, int32]
+	CreatedBy                    db.Col[PurchaseOrderTable, int32]
+	Updated                      db.Col[PurchaseOrderTable, int32]
+	UpdatedBy                    db.Col[PurchaseOrderTable, int32]
+	Status                       db.Col[PurchaseOrderTable, int8]
 }
 
 func (e PurchaseOrderTable) GetSchema() db.TableSchema {

@@ -1,4 +1,4 @@
-import { GetHandler, POST, GET } from '$libs/http.svelte';
+import { GetHandler, POST, GET } from '$libs/ui-runtime.svelte';
 import { GETCached } from '@genix/ui/cache';
 import { formatTime } from '$libs/helpers';
 import { Notify } from '$libs/helpers';

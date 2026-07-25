@@ -1,4 +1,4 @@
-import { GetHandler } from '$libs/http.svelte';
+import { GetHandler } from '$libs/ui-runtime.svelte';
 import { Env } from '$core/env';
 import type { ImageSource } from '$components/files/ImageUploader.svelte';
 

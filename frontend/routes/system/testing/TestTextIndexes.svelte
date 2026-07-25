@@ -1,5 +1,5 @@
 <script lang="ts">
-import { GET } from '$libs/http.svelte';
+import { GET } from '$libs/ui-runtime.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import FilterInput from '$components/form/FilterInput.svelte';

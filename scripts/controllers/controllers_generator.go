@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -22,9 +23,12 @@ const controllersOutputPackage = "app/exec"
 
 // tableEntry describes one base struct (the X in db.TableStruct[XTable, X]) discovered
 // during the AST scan. PackagePath is the full import path (e.g. "app/logistica/types").
+// SchemaName is the Scylla table name read from XTable.GetSchema(), used to build the
+// runtime name -> table registry that db.QueryCachedGenericByIDs resolves against.
 type tableEntry struct {
 	TypeName    string
 	PackagePath string
+	SchemaName  string
 }
 
 func main() {
@@ -81,6 +85,9 @@ func findProjectRootDir() (string, error) {
 // same TableStruct generic.
 func scanTableStructs(backendDir string) ([]tableEntry, error) {
 	var entries []tableEntry
+	// GetSchema() is declared on the companion XTable struct, sometimes in another file of the
+	// same package, so schema names are collected across the whole walk and matched afterwards.
+	schemaNamesByTableStruct := map[string]string{}
 
 	err := filepath.WalkDir(backendDir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -118,6 +125,13 @@ func scanTableStructs(backendDir string) ([]tableEntry, error) {
 		}
 
 		for _, declaration := range parsedFile.Decls {
+			if funcDecl, ok := declaration.(*ast.FuncDecl); ok {
+				if receiverName, schemaName, found := extractSchemaName(funcDecl); found {
+					schemaNamesByTableStruct[receiverName] = schemaName
+				}
+				continue
+			}
+
 			genericDecl, ok := declaration.(*ast.GenDecl)
 			if !ok || genericDecl.Tok != token.TYPE {
 				continue
@@ -145,7 +159,70 @@ func scanTableStructs(backendDir string) ([]tableEntry, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Fail loudly rather than silently dropping a table out of the name registry.
+	for index := range entries {
+		tableStructName := entries[index].TypeName + "Table"
+		schemaName, found := schemaNamesByTableStruct[tableStructName]
+		if !found {
+			return nil, fmt.Errorf(
+				"%s.GetSchema(): could not read a literal Name from the schema; the table name registry needs it",
+				tableStructName)
+		}
+		entries[index].SchemaName = schemaName
+	}
+
 	return entries, nil
+}
+
+// extractSchemaName reads the receiver type name and the literal `Name:` value out of a
+// `func (e XTable) GetSchema() db.TableSchema { return db.TableSchema{Name: "x", ...} }`.
+func extractSchemaName(funcDecl *ast.FuncDecl) (receiverName string, schemaName string, found bool) {
+	if funcDecl.Name.Name != "GetSchema" || funcDecl.Recv == nil || len(funcDecl.Recv.List) != 1 {
+		return "", "", false
+	}
+
+	// Receivers are always by value in the ORM contract, but tolerate a pointer receiver.
+	receiverType := funcDecl.Recv.List[0].Type
+	if starExpr, isPointer := receiverType.(*ast.StarExpr); isPointer {
+		receiverType = starExpr.X
+	}
+	receiverIdent, ok := receiverType.(*ast.Ident)
+	if !ok || funcDecl.Body == nil {
+		return "", "", false
+	}
+
+	for _, statement := range funcDecl.Body.List {
+		returnStatement, ok := statement.(*ast.ReturnStmt)
+		if !ok || len(returnStatement.Results) != 1 {
+			continue
+		}
+		compositeLit, ok := returnStatement.Results[0].(*ast.CompositeLit)
+		if !ok {
+			continue
+		}
+		for _, element := range compositeLit.Elts {
+			keyValue, ok := element.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			keyIdent, ok := keyValue.Key.(*ast.Ident)
+			if !ok || keyIdent.Name != "Name" {
+				continue
+			}
+			nameLiteral, ok := keyValue.Value.(*ast.BasicLit)
+			if !ok || nameLiteral.Kind != token.STRING {
+				continue
+			}
+			unquoted, err := strconv.Unquote(nameLiteral.Value)
+			if err != nil {
+				continue
+			}
+			return receiverIdent.Name, unquoted, true
+		}
+	}
+
+	return "", "", false
 }
 
 // isBaseTableStruct returns true when the first field of a struct is an embedded
@@ -263,6 +340,17 @@ func renderControllersFile(entries []tableEntry, aliases map[string]string) ([]b
 		fmt.Fprintf(&buffer, "\t\tmakeDBController[%s](),\n", qualifiedReference(entry, aliases))
 	}
 	buffer.WriteString("\t}\n")
+	buffer.WriteString("}\n\n")
+
+	// Registering lazy factories lets db resolve a table from a name string (which generics cannot
+	// do). Only closures are built at init; a ScyllaTable is compiled when a name is first used.
+	buffer.WriteString("// Resolves table names for db.QueryCachedGenericByIDs.\n")
+	buffer.WriteString("func init() {\n")
+	for _, entry := range entries {
+		fmt.Fprintf(&buffer,
+			"\tdb.RegisterTableFactory(%q, func() db.ScyllaTable { return db.MakeScyllaTable[%s]() })\n",
+			entry.SchemaName, qualifiedReference(entry, aliases))
+	}
 	buffer.WriteString("}\n")
 
 	formatted, err := format.Source(buffer.Bytes())

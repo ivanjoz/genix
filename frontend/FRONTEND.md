@@ -42,8 +42,9 @@ The build process merges both applications into a single static directory struct
     - `ui-runtime.svelte.ts`: The single configuration entry for `@genix/ui`. One
       `createUiRuntime` call sets routing, tenant, translation, notifications, request
       reporting, and session/access policy (`security`), and exports `genixUiRuntime`
-      plus `security`. The admin layout registers the access catalog on top of it.
-    - `http.svelte.ts`: Binds that runtime's transport to `GET`/`POST`/`GetHandler`.
+      plus `security`, and binds that runtime's transport to `GET`/`POST`/`GetHandler`
+      and its image conversion helpers. The admin layout registers the access catalog
+      on top of it.
 - `packages/genix-ui/`: (Level 1) reusable UI atoms in root-level source folders.
     - Inputs, tables, modals, Excel, HTTP transport, caches, assets, and UI automation.
     - Excel owns its WASM asset; Svelte/Vite emits the fingerprinted file automatically.

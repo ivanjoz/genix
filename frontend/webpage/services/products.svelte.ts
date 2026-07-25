@@ -17,7 +17,7 @@
 //                          never fetched twice.
 import { browser } from '$app/environment';
 import { arrayToMapN } from '$libs/helpers';
-import { buildHeaders } from '$libs/http.svelte';
+import { buildHeaders } from '$libs/ui-runtime.svelte';
 import { Env } from '$core/env';
 import { parsePsvResponse, fetchDeltaCache, readDeltaCacheSubObject } from '@genix/ui/cache';
 import type { serviceHttpProps } from '@genix/ui/cache';

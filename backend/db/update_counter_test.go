@@ -51,7 +51,7 @@ type indexGroupRecord struct {
 	TableStruct[indexGroupSchema, indexGroupRecord]
 	CompanyID  int32   `db:"empresa_id"`
 	ID         int64   `db:"id"`
-	Date      int16   `db:"date"`
+	Date       int16   `db:"date"`
 	ClientID   int32   `db:"client_id"`
 	ProductIDs []int32 `db:"product_ids,list"`
 }
@@ -60,7 +60,7 @@ type indexGroupSchema struct {
 	TableStruct[indexGroupSchema, indexGroupRecord]
 	CompanyID  Col[indexGroupSchema, int32]
 	ID         Col[indexGroupSchema, int64]
-	Date      Col[indexGroupSchema, int16]
+	Date       Col[indexGroupSchema, int16]
 	ClientID   Col[indexGroupSchema, int32]
 	ProductIDs Col[indexGroupSchema, []int32]
 }
@@ -69,7 +69,7 @@ type weekIndexGroupRecord struct {
 	TableStruct[weekIndexGroupSchema, weekIndexGroupRecord]
 	CompanyID int32 `db:"empresa_id"`
 	ID        int64 `db:"id"`
-	Date     int16 `db:"date"`
+	Date      int16 `db:"date"`
 	Status    int8  `db:"status"`
 }
 
@@ -77,7 +77,7 @@ type weekIndexGroupSchema struct {
 	TableStruct[weekIndexGroupSchema, weekIndexGroupRecord]
 	CompanyID Col[weekIndexGroupSchema, int32]
 	ID        Col[weekIndexGroupSchema, int64]
-	Date     Col[weekIndexGroupSchema, int16]
+	Date      Col[weekIndexGroupSchema, int16]
 	Status    Col[weekIndexGroupSchema, int8]
 }
 
@@ -489,8 +489,8 @@ func TestAllocateIndexGroupIDAvoidsHashCollisions(t *testing.T) {
 		collisionStart = 1
 	}
 	scyllaTable.indexGroupIDs = map[int16]string{
-		collisionStart:   "occupied_a",
-		collisionStart+1: "occupied_b",
+		collisionStart:     "occupied_a",
+		collisionStart + 1: "occupied_b",
 	}
 
 	nextID := allocateIndexGroupID(scyllaTable, []string{"new_group"})
@@ -507,7 +507,7 @@ func TestAppendIndexUpdatedRowsForRecordKeepsMaxUpdateCounterPerHash(t *testing.
 	record := indexGroupRecord{
 		CompanyID:  7,
 		ID:         1,
-		Date:      18754,
+		Date:       18754,
 		ClientID:   5,
 		ProductIDs: []int32{11, 17},
 	}

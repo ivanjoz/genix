@@ -210,20 +210,19 @@ func Test46(args *core.ExecArgs) core.FuncResponse {
 	if err != nil {
 		fmt.Println(err)
 	}
-	
+
 	return core.FuncResponse{}
 }
 
 func Test51(args *core.ExecArgs) core.FuncResponse {
 
-
 	controller := makeDBController[webpageTypes.Webpage]()
 
- //	controller.RecalcVirtualColumns(1)
+	//	controller.RecalcVirtualColumns(1)
 	controller.DeleteViewsAndIndexes()
 	// controller.RecalcVirtualColumns(1)
-	
-//	controller2 := makeDBController[logisticsTypes.ProductStockV2]()
+
+	//	controller2 := makeDBController[logisticsTypes.ProductStockV2]()
 	// controller2.DeleteViewsAndIndexes()
 
 	return core.FuncResponse{}

@@ -14,7 +14,7 @@ type SaleOrderClientInfo struct {
 type SaleOrder struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
 	CompanyID   int32 `json:",omitempty"`
-	Date       int16 `json:",omitempty"`
+	Date        int16 `json:",omitempty"`
 	WarehouseID int32 `json:",omitempty"`
 	ID          int64
 
@@ -72,7 +72,7 @@ type SaleOrderTable struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
 	CompanyID                  db.Col[SaleOrderTable, int32]
 	ID                         db.Col[SaleOrderTable, int64]
-	Date                      db.Col[SaleOrderTable, int16]
+	Date                       db.Col[SaleOrderTable, int16]
 	WarehouseID                db.Col[SaleOrderTable, int32]
 	LastPaymentCajaID          db.Col[SaleOrderTable, int32]
 	DetailProductsIDs          db.Col[SaleOrderTable, []int32]
@@ -140,7 +140,7 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 type SaleSummary struct {
 	db.TableStruct[SaleSummaryTable, SaleSummary]
 	CompanyID int32 `json:",omitempty"`
-	Date     int16 `json:",omitempty"`
+	Date      int16 `json:",omitempty"`
 	// Single int32 representation keeps the summary format simple and stable.
 	ProductIDs              []int32 `json:",omitempty" db:",list"`
 	Quantity                []int32 `json:",omitempty" db:",list"`
@@ -154,7 +154,7 @@ type SaleSummary struct {
 type SaleSummaryTable struct {
 	db.TableStruct[SaleSummaryTable, SaleSummary]
 	CompanyID               db.Col[SaleSummaryTable, int32]
-	Date                   db.Col[SaleSummaryTable, int16]
+	Date                    db.Col[SaleSummaryTable, int16]
 	ProductIDs              db.Col[SaleSummaryTable, []int32]
 	Quantity                db.Col[SaleSummaryTable, []int32]
 	QuantityPendingDelivery db.Col[SaleSummaryTable, []int32]
@@ -183,7 +183,7 @@ type SaleOrderProductStats struct {
 type ProductSaleSummary struct {
 	db.TableStruct[ProductSaleSummaryTable, ProductSaleSummary]
 	CompanyID int32  `json:",omitempty"`
-	Date     int16  `json:",omitempty"`
+	Date      int16  `json:",omitempty"`
 	ProductID int32  `json:",omitempty"`
 	Updated   int32  `json:",omitempty"`
 	Stats     []byte `json:",omitempty"`
@@ -192,7 +192,7 @@ type ProductSaleSummary struct {
 type ProductSaleSummaryTable struct {
 	db.TableStruct[ProductSaleSummaryTable, ProductSaleSummary]
 	CompanyID db.Col[ProductSaleSummaryTable, int32]
-	Date     db.Col[ProductSaleSummaryTable, int16]
+	Date      db.Col[ProductSaleSummaryTable, int16]
 	ProductID db.Col[ProductSaleSummaryTable, int32]
 	Stats     db.Col[ProductSaleSummaryTable, []byte]
 	Updated   db.Col[ProductSaleSummaryTable, int32]

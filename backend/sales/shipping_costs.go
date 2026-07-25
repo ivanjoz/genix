@@ -1,9 +1,9 @@
 package sales
 
 import (
-	s "app/sales/types"
 	"app/core"
 	"app/db"
+	s "app/sales/types"
 	"encoding/json"
 	"strconv"
 )

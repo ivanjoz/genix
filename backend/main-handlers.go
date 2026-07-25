@@ -134,6 +134,12 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 			return prepareResponse(args, &handlerResponse)
 		}
 
+		// Las rutas privadas siempre se limitan a la company del token. Se descarta cualquier "cmp"
+		// enviado por el cliente para que un query param no pueda apuntar a la partición de otra
+		// company; los handlers caen entonces a args.User.CompanyID. Las rutas públicas ("p-") sí
+		// necesitan leer "cmp", por eso esto vive solo en esta rama.
+		delete(args.Query, "cmp")
+
 		accessInfos, _ := accessHelper.GetAccesosByRoute(funcPath)
 		//GET routes are allow by default, POST / PUT routes require setted access
 		hasAllowedAccess := core.If(args.Method == "GET", true, false)

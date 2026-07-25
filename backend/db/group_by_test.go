@@ -9,22 +9,22 @@ import (
 
 type groupedMovementRecord struct {
 	TableStruct[groupedMovementSchema, groupedMovementRecord]
-	CompanyID  int32   `db:"empresa_id"`
-	ID         int64   `db:"id"`
+	CompanyID int32   `db:"empresa_id"`
+	ID        int64   `db:"id"`
 	Date      int16   `db:"date"`
 	ProductID int32   `db:"producto_id"`
-	Cantidad   int32   `db:"cantidad"`
-	Promedio   float64 `db:"promedio"`
+	Cantidad  int32   `db:"cantidad"`
+	Promedio  float64 `db:"promedio"`
 }
 
 type groupedMovementSchema struct {
 	TableStruct[groupedMovementSchema, groupedMovementRecord]
-	CompanyID  Col[groupedMovementSchema, int32]
-	ID         Col[groupedMovementSchema, int64]
+	CompanyID Col[groupedMovementSchema, int32]
+	ID        Col[groupedMovementSchema, int64]
 	Date      Col[groupedMovementSchema, int16]
 	ProductID Col[groupedMovementSchema, int32]
-	Cantidad   Col[groupedMovementSchema, int32]
-	Promedio   Col[groupedMovementSchema, float64]
+	Cantidad  Col[groupedMovementSchema, int32]
+	Promedio  Col[groupedMovementSchema, float64]
 }
 
 func (e groupedMovementSchema) GetSchema() TableSchema {
@@ -75,7 +75,7 @@ type hashIndexedFullViewRecord struct {
 	ID         int64   `db:"id"`
 	Status     int8    `db:"status"`
 	Updated    int32   `db:"updated"`
-	Date      int16   `db:"date"`
+	Date       int16   `db:"date"`
 	ProductIDs []int32 `db:",list"`
 	Nombre     string  `db:"nombre"`
 }
@@ -86,7 +86,7 @@ type hashIndexedFullViewSchema struct {
 	ID         Col[hashIndexedFullViewSchema, int64]
 	Status     Col[hashIndexedFullViewSchema, int8]
 	Updated    Col[hashIndexedFullViewSchema, int32]
-	Date      Col[hashIndexedFullViewSchema, int16]
+	Date       Col[hashIndexedFullViewSchema, int16]
 	ProductIDs Col[hashIndexedFullViewSchema, []int32]
 	Nombre     Col[hashIndexedFullViewSchema, string]
 }

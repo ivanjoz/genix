@@ -107,20 +107,20 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 //   - If LotID == 0 and LotName == "" and SerialNumber == "": treated as "no-detail",
 //     mutating ProductStockV2.Quantity only.
 type InternalMovement struct {
-	ProductID      int32
-	PresentationID int16
+	ProductID       int32
+	PresentationID  int16
 	ReplaceQuantity bool
-	Type           int8
-	SerialNumber   string
-	LotName        string
-	LotID          int32
-	SupplierID     int32
-	WarehouseID    int32
+	Type            int8
+	SerialNumber    string
+	LotName         string
+	LotID           int32
+	SupplierID      int32
+	WarehouseID     int32
 	DestWarehouseID int32
-	Quantity       int32
-	SubQuantity    int32
-	Price          int32
-	DocumentID     int64
+	Quantity        int32
+	SubQuantity     int32
+	Price           int32
+	DocumentID      int64
 }
 
 // HasDetail reports whether the movement targets a ProductStockDetail row

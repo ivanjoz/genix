@@ -75,3 +75,7 @@ scripts/app
 tmp/*
 .claude/skills/
 .claude/skills
+
+frontend/static/sw.js.map
+frontend/webpage/static/sw.js
+frontend/webpage/static/sw.js.map

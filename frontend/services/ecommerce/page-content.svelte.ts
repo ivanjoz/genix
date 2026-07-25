@@ -1,4 +1,4 @@
-import { GET, POST } from '$libs/http.svelte';
+import { GET, POST } from '$libs/ui-runtime.svelte';
 import { Env } from '$core/env';
 import { unmarshall } from '@genix/ui/utilities';
 import { collectTokens, generateCss, normalizeRuntimeCss } from '$ecommerce/stores/uno-generator';

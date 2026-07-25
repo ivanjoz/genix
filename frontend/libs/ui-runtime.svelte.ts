@@ -3,6 +3,10 @@ import { Env } from '$core/env';
 import { fetchEvent, tr, Core } from '$core/store.svelte';
 import { addProcess, updateProcess } from '$core/notifications.svelte';
 import { createUiRuntime } from '@genix/ui';
+import {
+  GetHandler as ReusableGetHandler,
+  type GetHandlerRecord,
+} from '@genix/ui/http';
 import { formatN, Notify } from '$libs/helpers';
 import type { IUser } from '$core/types/common';
 
@@ -107,3 +111,24 @@ export const genixUiRuntime = createUiRuntime<IUser>({
 
 // Session and access control for the whole app.
 export const security = genixUiRuntime.security
+
+export const {
+  buildHeaders,
+  GET,
+  GETWithGroupCache,
+  POST,
+  PUT,
+  POST_XMLHR,
+} = genixUiRuntime.http
+
+export const {
+  fileToImage,
+  bitmapToImage,
+} = genixUiRuntime.imageConverter
+
+// Genix services keep a zero-argument base class while the package receives host policy explicitly.
+export class GetHandler<T extends GetHandlerRecord = any> extends ReusableGetHandler<T> {
+  constructor() {
+    super(genixUiRuntime.getHandlerRuntime)
+  }
+}

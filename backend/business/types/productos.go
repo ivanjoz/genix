@@ -140,7 +140,11 @@ func (e ProductTable) GetSchema() db.TableSchema {
 		Partition:        e.CompanyID,
 		TextSearchColumn: e.Name,
 		SaveCacheVersion: true,
-		Keys:             db.Cols(e.ID.Autoincrement(0)),
+		// Label lookups resolve name + SKU + price/brand without shipping the whole product row.
+		GenericRecord: db.GenericRecordSchema{
+			Name: e.Name, S1: e.SKU, N1: e.FinalPrice, N2: e.BrandID,
+		},
+		Keys: db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
 			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.CategoriesWithStock)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.NameUpdated)},

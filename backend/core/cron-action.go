@@ -8,7 +8,7 @@ type CronAction struct {
 	UnixMinutesFrame int32    `json:",omitempty"`
 	CompanyID        int32    `json:",omitempty"`
 	ActionID         int16    `json:",omitempty"`
-	Updated          int32    `json:"upd,omitempty"` 
+	Updated          int32    `json:"upd,omitempty"`
 	Status           int8     `json:"ss,omitempty"`
 	InvocationCount  int16    `json:",omitempty"`
 	Params           ExecArgs `json:",omitempty"`
@@ -28,8 +28,8 @@ type CronActionTable struct {
 
 func (cronActionTable CronActionTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name: "cron_actions",
-		Keys: db.Cols(cronActionTable.UnixMinutesFrame, cronActionTable.ID),
+		Name:                 "cron_actions",
+		Keys:                 db.Cols(cronActionTable.UnixMinutesFrame, cronActionTable.ID),
 		DisableUpdateCounter: true,
 	}
 }

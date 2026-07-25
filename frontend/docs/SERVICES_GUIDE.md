@@ -7,16 +7,16 @@ In this project, **Services** act as the glue between the Svelte frontend and th
 ### Service vs. Connector
 While they are technically "connectors," the project convention is to name them `*Service` (e.g., `ProductosService`, `CajasService`). They are typically co-located with their respective routes or placed in `pkg-services/` if shared across multiple modules.
 
-### HTTP Utilities (`$libs/http.svelte`)
+### HTTP Utilities (`$libs/ui-runtime.svelte`)
 
 The reusable transport lives in `@genix/ui/http`. `$libs/ui-runtime.svelte` configures it
 once (authentication, routing, notifications, service-worker cache IO, request activity)
-and `$libs/http.svelte` re-exports the resulting callers.
+and `$libs/ui-runtime.svelte` re-exports the resulting callers.
 - **`GetHandler`**: A base class for services that need automated caching and synchronization (Delta Cache). Best for master data.
 - **`GET`**: A functional wrapper for fetching data. It can be used for one-off requests or reports. If `useCache` is provided, it will utilize the Service Worker cache.
 - **`POST`**: Used for creating or updating records. It includes a `refreshRoutes` feature to invalidate caches.
 
-`GetHandler` is implemented in `@genix/ui/http`; `$libs/http.svelte.ts` exposes the Genix
+`GetHandler` is implemented in `@genix/ui/http`; `$libs/ui-runtime.svelte.ts` exposes the Genix
 subclass bound to the runtime built in `$libs/ui-runtime.svelte.ts` (authentication, access
 policy, service-worker cache IO, notifications). Services keep importing the adapter so they
 do not need to construct the runtime individually.
@@ -31,7 +31,7 @@ Cached services are used for "Master Data" (Productos, Sedes, Almacenes) that ch
 These services extend `GetHandler` and implement the `handler` method.
 
 ```typescript
-import { GetHandler } from '$libs/http.svelte';
+import { GetHandler } from '$libs/ui-runtime.svelte';
 
 export class MyService extends GetHandler {
   route = "my-entity"
@@ -74,7 +74,7 @@ Report services are used for complex queries, historical data (e.g., sales repor
 Used for data that must always be fresh or uses dynamic filters.
 
 ```typescript
-import { GET } from '$libs/http.svelte';
+import { GET } from '$libs/ui-runtime.svelte';
 
 export const getMyReport = async (filters: LogFilters): Promise<ILog[]> => {
   let route = `my-report?start=${filters.start}&end=${filters.end}`
@@ -93,7 +93,7 @@ export const getMyReport = async (filters: LogFilters): Promise<ILog[]> => {
 Useful for data that doesn't need a full class/state management but benefits from caching.
 
 ```typescript
-import { GET } from '$core/http.svelte';
+import { GET } from '$libs/ui-runtime.svelte';
 
 export const getStaticConfig = () => {
   return GET({ 
@@ -110,7 +110,7 @@ export const getStaticConfig = () => {
 When updating data, it is critical to keep the cached services in sync.
 
 ```typescript
-import { POST } from '$core/http.svelte';
+import { POST } from '$libs/ui-runtime.svelte';
 
 export const saveEntity = (data: IEntity) => {
   return POST({

@@ -1,9 +1,9 @@
 package business
 
 import (
+	s "app/business/types"
 	"app/core"
 	"app/db"
-	s "app/business/types"
 	"encoding/json"
 	"net/mail"
 	"regexp"

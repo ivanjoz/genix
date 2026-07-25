@@ -1,4 +1,4 @@
-import { GetHandler, POST } from '$libs/http.svelte';
+import { GetHandler, POST } from '$libs/ui-runtime.svelte';
 
 export interface ISite {
   ID: number,

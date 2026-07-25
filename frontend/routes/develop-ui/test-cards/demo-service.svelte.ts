@@ -1,4 +1,4 @@
-import { GetHandler } from '$libs/http.svelte';
+import { GetHandler } from '$libs/ui-runtime.svelte';
 
 export class DemoService extends GetHandler {
 

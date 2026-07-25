@@ -568,6 +568,8 @@ func makeTable[T TableSchemaInterface[T]](structType *T) ScyllaTable {
 
 	// Initializes and validates cache-version metadata once per table build, not per query/write call.
 	configureCacheVersionFields(structType, &dbTable)
+	// Precompiles the generic by-IDs access plan; depends on the cache-version metadata above.
+	configureGenericRecordFields(&dbTable, schema)
 
 	return dbTable
 }

@@ -1,6 +1,5 @@
 import { Notify } from '$libs/helpers';
-import { GetHandler } from '$libs/http.svelte';
-import { POST } from '$libs/http.svelte';
+import { GetHandler, POST } from '$libs/ui-runtime.svelte';
 
 export interface ISaleOrderTopProduct {
 	ProductID: number;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
   import { Env } from "$core/env";
-  import { GET } from "$libs/http.svelte";
+  import { GET } from "$libs/ui-runtime.svelte";
   import { preloadProductSearch } from "$core/product-search/product-search-runtime";
   import type { ProductSearch } from "$core/product-search/product-search";
   import ProductCard from "./ProductCard.svelte";

@@ -449,6 +449,47 @@ Requirements:
 - one partition field and one key field resolvable by ORM
 - response model includes cache-version output field (`uint8`) if you expose it to client
 
+### 8.1 Generic By-ID Reads (`QueryCachedGenericByIDs`)
+
+When the caller only needs a **display label** — not the whole record — a table can opt into a
+table-agnostic read resolved by table *name*, so one endpoint serves every table instead of one
+handler plus one full-record payload each.
+
+Declare the mapping in `GetSchema()`:
+
+```go
+// Purpose: expose this table's label fields through the shared generic by-IDs endpoint.
+// Rationale: a product reference only needs name/SKU/price, not the full row.
+GenericRecord: db.GenericRecordSchema{
+    Name: e.Name, S1: e.SKU, N1: e.FinalPrice, N2: e.BrandID,
+},
+```
+
+- `Name` is required and must be a `string` column. `S1`/`S2` are optional strings; `N1`/`N2` are
+  optional integers of any width.
+- `ID` and `Status` are **not** declared — they are always the table's single key column and its
+  `status` column, resolved automatically.
+- `GenericRecord` **requires** `SaveCacheVersion: true` (panics at table build otherwise), which is
+  also what guarantees the key is a single integer column.
+
+Query it by name:
+
+```go
+records, err := db.QueryCachedGenericByIDs("products", cachedIDs)
+// -> []db.GenericRecord{{ID, Name, S1, S2, N1, N2, Status, CacheVersion}}
+```
+
+Cache-version filtering is identical to `QueryCachedIDs`: IDs whose client `ccv` still matches the
+server are never read from the table.
+
+Notes:
+- A table with no `GenericRecord` is **rejected** — the config is the exposure allowlist.
+- Name resolution uses a registry populated by generated code. After adding a table, run
+  `./app.sh generate_controllers`.
+- Column lookup, the SELECT projection and the per-column scan/assign closures are precompiled once
+  per table, so the read loop does no reflection or type switching per row.
+- HTTP route: `GET records-by-ids?table=<name>&ids=…&cc-ids=…&cc-ver=…` (authenticated only).
+
 ---
 
 ## 9. Merge and Upsert Helpers

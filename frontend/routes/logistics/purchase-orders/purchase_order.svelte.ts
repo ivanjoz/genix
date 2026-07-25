@@ -1,4 +1,4 @@
-import { GetHandler, GETWithGroupCache, POST, PUT } from '$libs/http.svelte'
+import { GetHandler, GETWithGroupCache, POST, PUT } from '$libs/ui-runtime.svelte'
 import { Notify } from '$libs/helpers'
 
 // Backend status codes for purchase orders.

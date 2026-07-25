@@ -1,4 +1,5 @@
-import { GetHandler, POST, type INewIDToID as IBaseNewIDToID } from '$libs/http.svelte';
+import { GetHandler, POST } from '$libs/ui-runtime.svelte';
+import type { INewIDToID as IBaseNewIDToID } from '@genix/ui/http';
 
 export interface ISharedListRecord {
   ID: number;

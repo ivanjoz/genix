@@ -1,5 +1,5 @@
 import { Notify } from '$libs/helpers';
-import { GET, GetHandler, POST } from '$libs/http.svelte';
+import { GET, GetHandler, POST } from '$libs/ui-runtime.svelte';
 
 export const makeStockID = (e: Pick<IProductStock, 'WarehouseID' | 'ProductID' | 'PresentationID'>): number =>
   // Mirrors backend/logistics/product-stock-movement.go::packProductStockID.

@@ -1,4 +1,4 @@
-import { POST } from '$libs/http.svelte';
+import { POST } from '$libs/ui-runtime.svelte';
 import { type IProduct } from '$routes/business/products/products.svelte';
 import { type IProductStock, type IProductStockDetail } from '$routes/logistics/products-stock/stock-movement';
 import { Loading, Notify } from '$libs/helpers';

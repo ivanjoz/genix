@@ -1,4 +1,4 @@
-import { GetHandler } from '$libs/http.svelte';
+import { GetHandler } from '$libs/ui-runtime.svelte';
 import type { IUser, IProfile } from '$core/types/common';
 export { postUser, postOwnUser } from '$services/services/users.svelte';
 

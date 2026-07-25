@@ -1,38 +1,37 @@
 package exec
 
 import (
-	sales "app/sales/types"
+	businessTypes "app/business/types"
 	"app/core"
 	"app/db"
 	financeTypes "app/finance/types"
 	logisticsTypes "app/logistics/types"
-	businessTypes "app/business/types"
+	sales "app/sales/types"
 	"fmt"
 )
 
 // TestSelects demonstrates complex select queries including the new KeyConcatenated smart logic.
 func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	var err error
-	
+
 	traceSales := []db.RecordGroup[sales.SaleOrder]{}
 	query := db.QueryIndexGroup(&traceSales)
-	
+
 	query.IncludeCachedGroup(12340001, 1001)
 	query.IncludeCachedGroup(12340002, 1002)
-	
+
 	query.CompanyID.Equals(1).DetailProductsIDs.Contains(3372).Date.Between(20500, 20558)
 
-	
 	if err := query.Exec(); err != nil {
 		fmt.Println("Error in Test 6:", err)
 	} else {
 		fmt.Printf("Found %d traceSales in range\n", len(traceSales))
 	}
-	
+
 	for _, e := range traceSales {
-		fmt.Println(e.GroupHash,"|",e.IndexGroupValues,"| Records:",len(e.Records))
+		fmt.Println(e.GroupHash, "|", e.IndexGroupValues, "| Records:", len(e.Records))
 	}
-		
+
 	// 6. Test bucket query CONTAINS + "RANGE" with hash index
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
 	recordSalesOrders := []sales.SaleOrder{}
@@ -49,7 +48,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	// return core.FuncResponse{}
-	
+
 	fmt.Println("\n--- Test 7: Range query in int packet column local index ---")
 	recordSalesOrders2 := []sales.SaleOrder{}
 	q7 := db.Query(&recordSalesOrders2)
@@ -156,7 +155,6 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	return core.FuncResponse{}
 }
 
-
 // TestSelects demonstrates complex select queries including the new KeyConcatenated smart logic.
 func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 	var err error
@@ -170,7 +168,7 @@ func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 	if err := query.GroupBy(query.Date, query.ProductID, query.Type, query.Quantity.Sum()).Exec(); err != nil {
 		panic(err)
 	}
-	
+
 	// 3. Test SharedListRecord with complex view concatenation
 	fmt.Println("\n--- Test 3: SharedListRecord (Complex View/Concatenation) ---")
 	registros := []businessTypes.SharedListRecord{}

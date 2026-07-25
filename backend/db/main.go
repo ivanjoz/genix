@@ -47,19 +47,23 @@ type ScyllaTable struct {
 	cacheVersionFieldIndex   []int
 	cacheVersionPartitionCol IColInfo
 	cacheVersionKeyCol       IColInfo
-	keysIdx                  []int16
-	columns                  []IColInfo
-	columnsMap               map[string]IColInfo
-	columnsIdxMap            map[int16]IColInfo
-	indexes                  map[string]*viewInfo
-	views                    map[string]*viewInfo
-	hasTableBackedViews      bool
-	indexViews               []*viewInfo
-	ViewsExcluded            []string
-	useSequences             bool
-	sequencePartCol          IColInfo
-	keyConcatenated          []IColInfo
-	keyIntPacking            []IColInfo
+	// genericRecordPlan is nil unless the schema declares GenericRecord. Column resolution, the
+	// SELECT projection and the per-column scan/assign closures are all precompiled here once per
+	// table, so QueryCachedGenericByIDs does no reflection or type switching per row.
+	genericRecordPlan   *genericRecordPlan
+	keysIdx             []int16
+	columns             []IColInfo
+	columnsMap          map[string]IColInfo
+	columnsIdxMap       map[int16]IColInfo
+	indexes             map[string]*viewInfo
+	views               map[string]*viewInfo
+	hasTableBackedViews bool
+	indexViews          []*viewInfo
+	ViewsExcluded       []string
+	useSequences        bool
+	sequencePartCol     IColInfo
+	keyConcatenated     []IColInfo
+	keyIntPacking       []IColInfo
 	// packedIndexes stores metadata for packed indexes declared in schema (local and global).
 	packedIndexes     []*packedIndexInfo
 	autoincrementPart IColInfo
@@ -201,19 +205,22 @@ type ColumnStatement struct {
 type TableSchema struct {
 	Keyspace string
 	// StructType    T
-	Name                 string
-	Keys                 []Coln
-	Partition            Coln
-	TextSearchColumn     Coln
-	Indexes              []Index
-	SequenceColumn       Coln
-	CounterColumn        Coln
-	UseSequences         bool
-	SequencePartCol      Coln
-	KeyConcatenated      []Coln
-	KeyIntPacking        []Coln
-	AutoincrementPart    Coln
-	SaveCacheVersion     bool
+	Name              string
+	Keys              []Coln
+	Partition         Coln
+	TextSearchColumn  Coln
+	Indexes           []Index
+	SequenceColumn    Coln
+	CounterColumn     Coln
+	UseSequences      bool
+	SequencePartCol   Coln
+	KeyConcatenated   []Coln
+	KeyIntPacking     []Coln
+	AutoincrementPart Coln
+	SaveCacheVersion  bool
+	// GenericRecord maps this table's columns onto the flat shape returned by
+	// QueryCachedGenericByIDs, so a single endpoint can resolve labels for any table by name.
+	GenericRecord        GenericRecordSchema
 	UseUpdateCounter     Coln
 	DisableUpdateCounter bool
 	// UseListAsDefault makes slice columns map to list<...> instead of set<...> when no explicit

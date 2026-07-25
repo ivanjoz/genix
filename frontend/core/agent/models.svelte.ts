@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { Env } from '$core/env';
-import { GetHandler } from '$libs/http.svelte';
+import { GetHandler } from '$libs/ui-runtime.svelte';
 
 export interface IAgentModelOption {
 	ID: string;

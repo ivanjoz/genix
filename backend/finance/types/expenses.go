@@ -70,11 +70,11 @@ type Expense struct {
 	Description        string `json:",omitempty"`
 	CategoryID         int8   `json:",omitempty"`
 	SupplierID         int32  `json:",omitempty"`
-	CurrencyType       int8   `json:",omitempty"` // 1 = PEN, 2 = USD.
-	Date               int16  `json:",omitempty"` // UnixDay the expense was incurred.
-	DueDate            int16  `json:",omitempty"` // UnixDay payment is due.
-	Amount             int32  `json:",omitempty"` // Total owed for this expense/period, in cents.
-	PaidAmount         int32  `json:",omitempty"` // Positive running sum of payments applied (server-maintained).
+	CurrencyType       int8   `json:",omitempty"`   // 1 = PEN, 2 = USD.
+	Date               int16  `json:",omitempty"`   // UnixDay the expense was incurred.
+	DueDate            int16  `json:",omitempty"`   // UnixDay payment is due.
+	Amount             int32  `json:",omitempty"`   // Total owed for this expense/period, in cents.
+	PaidAmount         int32  `json:",omitempty"`   // Positive running sum of payments applied (server-maintained).
 	Status             int8   `json:"ss,omitempty"` // Payment lifecycle: 0 removed · 1 created/pending · 2 fully paid.
 	Updated            int32  `json:"upd,omitempty"`
 	UpdatedBy          int32  `json:",omitempty"`

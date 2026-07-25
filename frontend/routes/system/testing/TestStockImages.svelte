@@ -1,5 +1,5 @@
 <script lang="ts">
-import { GET } from '$libs/http.svelte';
+import { GET } from '$libs/ui-runtime.svelte';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
 import { ImageAssetsService } from '$services/business/image-assets.svelte';

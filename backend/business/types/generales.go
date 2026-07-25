@@ -41,7 +41,7 @@ func (e CityLocationTable) GetSchema() db.TableSchema {
 
 type SharedListRecord struct {
 	db.TableStruct[SharedListRecordTable, SharedListRecord]
-	CompanyID   int32    `json:",omitempty"`
+	CompanyID   int32 `json:",omitempty"`
 	ID          int32
 	ListID      int32    `json:",omitempty"`
 	Name        string   `json:",omitempty"`

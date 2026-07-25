@@ -15,4 +15,5 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.system-parameters":     PostSystemParameters,
 	"GET.system-metrics-stream":  GetSystemMetricsStream,
 	"GET.system-memory-packages": GetSystemMemoryPackages,
+	"GET.records-by-ids":    GetTableRecordsByIDs,
 }

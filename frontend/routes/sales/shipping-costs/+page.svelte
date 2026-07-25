@@ -7,7 +7,7 @@
   import TableTree, { type TableTreeNode } from '$components/vTable/TableTree.svelte'
   import type { ITableColumn } from '$components/vTable/types'
   import Page from '$domain/Page.svelte'
-  import { GetHandler, POST } from '$libs/http.svelte'
+  import { GetHandler, POST } from '$libs/ui-runtime.svelte'
   import { formatN, Loading } from '$libs/helpers'
   import { tr } from '$core/store.svelte'
   import T from '$components/misc/T.svelte'

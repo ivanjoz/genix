@@ -67,7 +67,11 @@ func (t ClientProviderTable) GetSchema() db.TableSchema {
 		Name:             "client_provider",
 		Partition:        t.CompanyID,
 		SaveCacheVersion: true,
-		Keys:             db.Cols(t.ID.Autoincrement(0)),
+		// RegistryNumber (RUC/DNI) disambiguates homonyms; Type separates clients from providers.
+		GenericRecord: db.GenericRecordSchema{
+			Name: t.Name, S1: t.RegistryNumber, N1: t.Type,
+		},
+		Keys: db.Cols(t.ID.Autoincrement(0)),
 		Indexes: []db.Index{
 			{Type: db.TypeLocalIndex, Keys: db.Cols(t.RegistryNumber)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(t.NameRegistryHash)},

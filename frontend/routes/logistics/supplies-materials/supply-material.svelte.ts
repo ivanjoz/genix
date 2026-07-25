@@ -1,4 +1,4 @@
-import { GetHandler } from '$libs/http.svelte';
+import { GetHandler } from '$libs/ui-runtime.svelte';
 import type { IProductSupplyProviderRow } from '../purchase-management/supply-management.svelte';
 
 // Mirror of backend logisticaTypes.SupplyMaterial. Field names/casing must match
