@@ -67,14 +67,14 @@ func (t ClientProviderTable) GetSchema() db.TableSchema {
 		Name:             "client_provider",
 		Partition:        t.CompanyID,
 		SaveCacheVersion: true,
-		Keys:             []db.Coln{t.ID.Autoincrement(0)},
+		Keys:             db.Cols(t.ID.Autoincrement(0)),
 		Indexes: []db.Index{
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{t.RegistryNumber}},
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{t.NameRegistryHash}},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(t.RegistryNumber)},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(t.NameRegistryHash)},
 			// Keep GET client-provider efficient for delta sync filtered by type.
-			{Type: db.TypeView, Keys: []db.Coln{t.Type.Int32(), t.Updated.DecimalSize(8)}, KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(t.Type.Int32(), t.Updated.DecimalSize(8)), KeepPart: true},
 			// Keep initial sync efficient by filtering active rows for each type.
-			{Type: db.TypeView, Keys: []db.Coln{t.Type.Int32(), t.Status.DecimalSize(1)}, KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(t.Type.Int32(), t.Status.DecimalSize(1)), KeepPart: true},
 		},
 	}
 }

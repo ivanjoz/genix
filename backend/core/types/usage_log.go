@@ -36,10 +36,10 @@ func (usageLogTable UsageLogTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:                 "usage_log",
 		Partition:            usageLogTable.CompanyID,
-		Keys:                 []db.Coln{usageLogTable.ID},
+		Keys:                 db.Cols(usageLogTable.ID),
 		DisableUpdateCounter: true,
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: []db.Coln{usageLogTable.ID}, KeepPart: false},
+			{Type: db.TypeView, Keys: db.Cols(usageLogTable.ID), KeepPart: false},
 		},
 	}
 }

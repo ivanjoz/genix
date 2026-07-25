@@ -113,10 +113,10 @@ func (e ExpenseScheduledTable) GetSchema() db.TableSchema {
         Name:         "expenses_scheduled",
         Partition:    e.CompanyID,
         UseSequences: true,
-        Keys:         []db.Coln{e.ID.Autoincrement(0)},
+        Keys:         db.Cols(e.ID.Autoincrement(0)),
         Indexes: []db.Index{
             // Delta-cache view: frontend syncs active schedules by watermark.
-            {Type: db.TypeView, Keys: []db.Coln{e.Status.DecimalSize(1), e.Updated.DecimalSize(10)}, KeepPart: true},
+            {Type: db.TypeView, Keys: db.Cols(e.Status.DecimalSize(1), e.Updated.DecimalSize(10)), KeepPart: true},
         },
     }
 }
@@ -164,12 +164,12 @@ func (e ExpenseTable) GetSchema() db.TableSchema {
         Name:         "expenses",
         Partition:    e.CompanyID,
         UseSequences: true,
-        Keys:         []db.Coln{e.ID.Autoincrement(0)},
+        Keys:         db.Cols(e.ID.Autoincrement(0)),
         Indexes: []db.Index{
             // Delta-cache view for the Register list.
-            {Type: db.TypeView, Keys: []db.Coln{e.Status.DecimalSize(1), e.Updated.DecimalSize(10)}, KeepPart: true},
+            {Type: db.TypeView, Keys: db.Cols(e.Status.DecimalSize(1), e.Updated.DecimalSize(10)), KeepPart: true},
             // Fetch all periods belonging to a schedule.
-            {Type: db.TypeLocalIndex, Keys: []db.Coln{e.ExpenseScheduledID}},
+            {Type: db.TypeLocalIndex, Keys: db.Cols(e.ExpenseScheduledID)},
         },
     }
 }

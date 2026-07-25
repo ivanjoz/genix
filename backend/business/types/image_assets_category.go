@@ -25,11 +25,11 @@ func (e ImageAssetCategoryTable) GetSchema() db.TableSchema {
 		Name:         "image_assets_category",
 		Partition:    e.GroupID,
 		UseSequences: true,
-		Keys:         []db.Coln{e.ID.Autoincrement(0)},
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
 			// Category names are stable repository slugs used to resolve existing IDs.
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.Name}},
-			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.Name)},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
 		},
 	}
 }

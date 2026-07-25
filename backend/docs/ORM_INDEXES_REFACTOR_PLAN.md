@@ -138,13 +138,13 @@ Example target schema:
 ```go
 Indexes: []db.Index{
     // Single-column entry: ORM infers a local index and enables index-group tracking.
-    {Keys: []db.Coln{e.Fecha}, UseIndexGroup: true},
+    {Keys: db.Cols(e.Fecha), UseIndexGroup: true},
     // Multi-column scalar entry: ORM generates a virtual hash column plus tracked hashes.
-    {Keys: []db.Coln{e.Fecha.StoreAsWeek(), e.Status}, UseIndexGroup: true},
+    {Keys: db.Cols(e.Fecha.StoreAsWeek(), e.Status), UseIndexGroup: true},
     // Multi-column scalar entry: same index-group strategy, different source tuple.
-    {Keys: []db.Coln{e.Fecha.StoreAsWeek(), e.ClientID}, UseIndexGroup: true},
+    {Keys: db.Cols(e.Fecha.StoreAsWeek(), e.ClientID), UseIndexGroup: true},
     // Slice-backed entry: ORM generates set<int> storage and tracked hash fanout.
-    {Keys: []db.Coln{e.Fecha.StoreAsWeek(), e.ClientID, e.DetailProductsIDs}, UseIndexGroup: true},
+    {Keys: db.Cols(e.Fecha.StoreAsWeek(), e.ClientID, e.DetailProductsIDs), UseIndexGroup: true},
 }
 ```
 
@@ -175,15 +175,15 @@ Indexes: []db.Index{
     // Explicit MV because it has projected columns and MV semantics.
     {
         Type: db.TypeView,
-        Keys: []db.Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)},
-        Cols: []db.Coln{e.ClientID, e.Updated, e.DetailProductsIDs, e.Status},
+        Keys: db.Cols(e.StatusTrace.Int32(), e.Updated.DecimalSize(8)),
+        Cols: db.Cols(e.ClientID, e.Updated, e.DetailProductsIDs, e.Status),
         KeepPart: true,
     },
     // Explicit table-backed view because maintenance semantics differ from MV.
     {
         Type: db.TypeViewTable,
-        Keys: []db.Coln{e.DetailProductsIDs, e.Fecha},
-        Cols: []db.Coln{e.Updated},
+        Keys: db.Cols(e.DetailProductsIDs, e.Fecha),
+        Cols: db.Cols(e.Updated),
         KeepPart: true,
     },
 }
@@ -360,22 +360,22 @@ Compile result:
 return db.TableSchema{
     Name:         "sale_order",
     Partition:    e.CompanyID,
-    Keys:         []db.Coln{e.ID.Autoincrement(2)},
-    LocalIndexes: []db.Coln{e.Updated},
+    Keys:         db.Cols(e.ID.Autoincrement(2)),
+    LocalIndexes: db.Cols(e.Updated),
     Views: []db.Index{
-        {Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
+        {Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)), KeepPart: true},
     },
     ViewTables: []db.Index{
         {
-            Keys: []db.Coln{e.DetailProductsIDs, e.Fecha},
-            Cols: []db.Coln{e.Updated},
+            Keys: db.Cols(e.DetailProductsIDs, e.Fecha),
+            Cols: db.Cols(e.Updated),
             KeepPart: true,
         },
     },
-    IndexGroups: [][]db.Coln{
+    IndexGroups: []db.Cols(
         {e.Fecha},
         {e.Fecha.StoreAsWeek(), e.Status},
-    },
+    ),
 }
 ```
 
@@ -385,21 +385,21 @@ return db.TableSchema{
 return db.TableSchema{
     Name:      "sale_order",
     Partition: e.CompanyID,
-    Keys:      []db.Coln{e.ID.Autoincrement(2)},
+    Keys:      db.Cols(e.ID.Autoincrement(2)),
     Indexes: []db.Index{
         // Direct local index.
-        {Type: db.TypeLocalIndex, Keys: []db.Coln{e.Updated}},
+        {Type: db.TypeLocalIndex, Keys: db.Cols(e.Updated)},
         // Inferred local index + index-group tracking.
-        {Keys: []db.Coln{e.Fecha}, UseIndexGroup: true},
+        {Keys: db.Cols(e.Fecha), UseIndexGroup: true},
         // Inferred tracked virtual hash index.
-        {Keys: []db.Coln{e.Fecha.StoreAsWeek(), e.Status}, UseIndexGroup: true},
+        {Keys: db.Cols(e.Fecha.StoreAsWeek(), e.Status), UseIndexGroup: true},
         // Explicit MV.
-        {Type: db.TypeView, Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
+        {Type: db.TypeView, Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)), KeepPart: true},
         // Explicit table-backed view.
         {
             Type: db.TypeViewTable,
-            Keys: []db.Coln{e.DetailProductsIDs, e.Fecha},
-            Cols: []db.Coln{e.Updated},
+            Keys: db.Cols(e.DetailProductsIDs, e.Fecha),
+            Cols: db.Cols(e.Updated),
             KeepPart: true,
         },
     },

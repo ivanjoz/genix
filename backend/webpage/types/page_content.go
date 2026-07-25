@@ -136,6 +136,6 @@ func (e EcommercePageContentTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		// (CompanyID, PageID, SectionID) is the PK. SectionID is the section's
 		// 1-based position on the page, recomputed on every save.
-		Keys: []db.Coln{e.PageID, e.SectionID},
+		Keys: db.Cols(e.PageID, e.SectionID),
 	}
 }

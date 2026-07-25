@@ -36,10 +36,10 @@ func (e ImageAssetTable) GetSchema() db.TableSchema {
 		Partition: e.GroupID,
 		// Keywords holds the deduplicated English text indexed by the Sonic AI search.
 		TextSearchColumn: e.Keywords,
-		Keys:             []db.Coln{e.ID},
+		Keys:             db.Cols(e.ID),
 		Indexes: []db.Index{
 			// Keep Updated as the first clustering column for global frontend deltas.
-			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
 		},
 	}
 }

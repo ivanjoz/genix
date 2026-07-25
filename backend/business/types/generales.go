@@ -32,9 +32,9 @@ func (e CityLocationTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "city_locations",
 		Partition: e.CountryID,
-		Keys:      []db.Coln{e.ID},
+		Keys:      db.Cols(e.ID),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
 		},
 	}
 }
@@ -73,11 +73,11 @@ func (e SharedListRecordTable) GetSchema() db.TableSchema {
 		Name:         "shared_list_records",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         []db.Coln{e.ID.Autoincrement(0)},
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.NameHash}},
-			{Type: db.TypeView, Keys: []db.Coln{e.ListID.Int32(), e.Status.DecimalSize(2)}},
-			{Type: db.TypeView, Keys: []db.Coln{e.ListID, e.Updated.DecimalSize(10)}},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.NameHash)},
+			{Type: db.TypeView, Keys: db.Cols(e.ListID.Int32(), e.Status.DecimalSize(2))},
+			{Type: db.TypeView, Keys: db.Cols(e.ListID, e.Updated.DecimalSize(10))},
 		},
 	}
 }

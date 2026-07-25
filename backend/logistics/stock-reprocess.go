@@ -140,11 +140,11 @@ func RecalcProductStockByMovements(companyID int32) error {
 		stockTable := db.Table[logisticsTypes.ProductStock]()
 		if err := db.InsertUpdateInclude(&stocks,
 			func(e *logisticsTypes.ProductStock) bool { return e.Created > 0 },
-			[]db.Coln{
+			db.Cols(
 				stockTable.Quantity, stockTable.SubQuantity,
 				stockTable.DetailQuantity, stockTable.DetailSubQuantity,
 				stockTable.Updated, stockTable.Status,
-			},
+			),
 		); err != nil {
 			return core.Err("Error al guardar stock V2 recalculado:", err)
 		}
@@ -154,10 +154,10 @@ func RecalcProductStockByMovements(companyID int32) error {
 		detailTable := db.Table[logisticsTypes.ProductStockDetail]()
 		if err := db.InsertUpdateInclude(&details,
 			func(e *logisticsTypes.ProductStockDetail) bool { return e.Created > 0 },
-			[]db.Coln{
+			db.Cols(
 				detailTable.Quantity, detailTable.SubQuantity,
 				detailTable.Updated, detailTable.Status,
-			},
+			),
 		); err != nil {
 			return core.Err("Error al guardar detalle de stock recalculado:", err)
 		}

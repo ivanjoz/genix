@@ -33,7 +33,7 @@ Current draft has mismatches. Correct it to the paired-struct convention:
 - `GlobalCache` embeds `db.TableStruct[GlobalCacheTable, GlobalCache]`.
 - `GroupID` type unified to `int16` in **both** struct and table (matches the col + the `int16` group ids 1/2/3).
 - `GlobalCacheTable` embeds `db.TableStruct[GlobalCacheTable, GlobalCache]`.
-- `GetSchema()` keeps `Name: "cache_global"`, `Partition: e.GroupID`, `Keys: []db.Coln{e.ID}` (GroupID is partition → lets the cron scan all companies in a group; ID = companyID is the clustering key).
+- `GetSchema()` keeps `Name: "cache_global"`, `Partition: e.GroupID`, `Keys: db.Cols(e.ID)` (GroupID is partition → lets the cron scan all companies in a group; ID = companyID is the clustering key).
 - Run `static-project-validation` afterwards.
 
 ### 2.2 Cache helpers — `backend/core/cache.go`

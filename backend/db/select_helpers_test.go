@@ -29,10 +29,10 @@ func (e partitionedRangeViewSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Name:      "partitioned_range_records",
 		Partition: e.GroupID,
-		Keys:      []Coln{e.ID},
+		Keys:      Cols(e.ID),
 		Indexes: []Index{
 			// Keep the fixed group partition and sort globally by the delta watermark.
-			{Type: TypeView, Keys: []Coln{e.Updated}, KeepPart: true},
+			{Type: TypeView, Keys: Cols(e.Updated), KeepPart: true},
 		},
 	}
 }

@@ -57,6 +57,6 @@ func (e AgentMessageTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "agent_messages",
 		Partition: e.CompanyUserID,
-		Keys:      []db.Coln{e.SessionID, e.Timestamp},
+		Keys:      db.Cols(e.SessionID, e.Timestamp),
 	}
 }

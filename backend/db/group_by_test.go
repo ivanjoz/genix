@@ -31,10 +31,10 @@ func (e groupedMovementSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Name:      "grouped_movements",
 		Partition: e.CompanyID,
-		Keys:      []Coln{e.ID},
+		Keys:      Cols(e.ID),
 		Indexes: []Index{
 			// Keep the packed grouping view minimal: partition + packed key + aggregated payload column.
-			{Type: TypeView, Keys: []Coln{e.Date, e.ProductID.DecimalSize(10)}, Cols: []Coln{e.Cantidad}, KeepPart: true},
+			{Type: TypeView, Keys: Cols(e.Date, e.ProductID.DecimalSize(10)), Cols: Cols(e.Cantidad), KeepPart: true},
 		},
 	}
 }
@@ -61,10 +61,10 @@ func (e fullViewSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Name:      "full_view_records",
 		Partition: e.CompanyID,
-		Keys:      []Coln{e.ID},
+		Keys:      Cols(e.ID),
 		Indexes: []Index{
 			// No Cols means the MV keeps the full base payload with an explicit non-virtual projection.
-			{Type: TypeView, Keys: []Coln{e.Status, e.Updated.DecimalSize(9)}, KeepPart: true},
+			{Type: TypeView, Keys: Cols(e.Status, e.Updated.DecimalSize(9)), KeepPart: true},
 		},
 	}
 }
@@ -95,11 +95,11 @@ func (e hashIndexedFullViewSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Name:      "hash_indexed_full_view_records",
 		Partition: e.CompanyID,
-		Keys:      []Coln{e.ID},
+		Keys:      Cols(e.ID),
 		Indexes: []Index{
-			{Keys: []Coln{e.ProductIDs, e.Date.CompositeBucketing(2, 6)}},
+			{Keys: Cols(e.ProductIDs, e.Date.CompositeBucketing(2, 6))},
 			// Full-payload packed view should keep only its own view key virtual column.
-			{Type: TypeView, Keys: []Coln{e.Status.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
+			{Type: TypeView, Keys: Cols(e.Status.Int32(), e.Updated.DecimalSize(8)), KeepPart: true},
 		},
 	}
 }
@@ -124,10 +124,10 @@ func (e int32PackedViewSchema) GetSchema() TableSchema {
 	return TableSchema{
 		Name:      "int32_packed_view_records",
 		Partition: e.CompanyID,
-		Keys:      []Coln{e.ID},
+		Keys:      Cols(e.ID),
 		Indexes: []Index{
 			// Match the sale-order status trace view: a small enum prefix packed with an 8-digit updated slot.
-			{Type: TypeView, Keys: []Coln{e.StatusTrace.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
+			{Type: TypeView, Keys: Cols(e.StatusTrace.Int32(), e.Updated.DecimalSize(8)), KeepPart: true},
 		},
 	}
 }

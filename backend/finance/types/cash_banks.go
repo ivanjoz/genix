@@ -46,10 +46,10 @@ func (e CashBankTable) GetSchema() db.TableSchema {
 		Name:         "cash_banks",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         []db.Coln{e.ID.Autoincrement(0)},
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: []db.Coln{e.Status}, KeepPart: true},
-			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Status), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
 		},
 	}
 }
@@ -90,16 +90,16 @@ func (e CashBankMovementTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "cash_bank_movements",
 		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID},
-		KeyIntPacking: []db.Coln{
+		Keys:      db.Cols(e.ID),
+		KeyIntPacking: db.Cols(
 			//TODO: decrease to e.Autoincrement(2) in the future
 			e.CashBankID.DecimalSize(5), e.Date.DecimalSize(5), e.Autoincrement(3),
-		},
+		),
 		AutoincrementPart: e.Date,
 		Indexes: []db.Index{
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.DocumentID}},
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.ReferenceID}},
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.CreatedBy}},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.DocumentID)},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.ReferenceID)},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.CreatedBy)},
 		},
 	}
 }
@@ -136,9 +136,9 @@ func (e CashReconciliationTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "cash_reconciliations",
 		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID},
+		Keys:      db.Cols(e.ID),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: []db.Coln{e.CreatedBy}, KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.CreatedBy), KeepPart: true},
 		},
 	}
 }

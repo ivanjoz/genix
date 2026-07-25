@@ -32,7 +32,7 @@ func (e CacheTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "cache",
 		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID},
+		Keys:      db.Cols(e.ID),
 	}
 }
 
@@ -192,7 +192,7 @@ func (e GlobalCacheTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "cache_global",
 		Partition: e.GroupID,
-		Keys:      []db.Coln{e.ID},
+		Keys:      db.Cols(e.ID),
 	}
 }
 

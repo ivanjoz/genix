@@ -67,23 +67,23 @@ func (e ProductStockTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:                 "warehouse_product_stock",
 		Partition:            e.CompanyID,
-		Keys:                 []db.Coln{e.ID},
+		Keys:                 db.Cols(e.ID),
 		DisableUpdateCounter: true,
 		// ID packs (WarehouseID, ProductID, PresentationID) into the single int64 key.
-		KeyIntPacking: []db.Coln{
+		KeyIntPacking: db.Cols(
 			e.WarehouseID.DecimalSize(5),
 			e.ProductID.DecimalSize(9),
 			e.PresentationID.DecimalSize(4),
-		},
+		),
 		Indexes: []db.Index{
 			{
 				Type:     db.TypeView,
-				Keys:     []db.Coln{e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)},
+				Keys:     db.Cols(e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)),
 				KeepPart: true,
 			},
 			{
 				Type:     db.TypeView,
-				Keys:     []db.Coln{e.Status, e.Updated.DecimalSize(8)},
+				Keys:     db.Cols(e.Status, e.Updated.DecimalSize(8)),
 				KeepPart: true,
 			},
 		},
@@ -136,12 +136,12 @@ func (e ProductStockDetailTable) GetSchema() db.TableSchema {
 		Partition:            e.CompanyID,
 		DisableUpdateCounter: true,
 		// One detail row per stock-record + lot + serial.
-		Keys: []db.Coln{e.ProductStockID, e.LotID, e.SerialNumber},
+		Keys: db.Cols(e.ProductStockID, e.LotID, e.SerialNumber),
 		Indexes: []db.Index{
 			// Hash index for dedup lookups when resolving LotID from (Date, SupplierID, Name).
 			{
 				Type:     db.TypeView,
-				Keys:     []db.Coln{e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)},
+				Keys:     db.Cols(e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)),
 				KeepPart: true,
 			},
 		},
@@ -188,11 +188,11 @@ func (e ProductStockLotTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "product_stock_lot",
 		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID.Autoincrement(0)},
+		Keys:      db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
 			// Hash index for dedup lookups when resolving LotID from (Date, SupplierID, Name).
-			{Type: db.TypeGlobalIndex, Keys: []db.Coln{e.Hash}, KeepPart: true},
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.Name}},
+			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.Hash), KeepPart: true},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.Name)},
 		},
 	}
 }
@@ -235,9 +235,9 @@ func (e DeliveryOrderNoteTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "delivery_order_note",
 		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID.Autoincrement(0)},
+		Keys:      db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
-			{Type: db.TypeGlobalIndex, Keys: []db.Coln{e.Hash}},
+			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.Hash)},
 		},
 	}
 }

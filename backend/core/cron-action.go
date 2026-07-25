@@ -29,7 +29,7 @@ type CronActionTable struct {
 func (cronActionTable CronActionTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name: "cron_actions",
-		Keys: []db.Coln{cronActionTable.UnixMinutesFrame, cronActionTable.ID},
+		Keys: db.Cols(cronActionTable.UnixMinutesFrame, cronActionTable.ID),
 		DisableUpdateCounter: true,
 	}
 }

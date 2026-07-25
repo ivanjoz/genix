@@ -206,7 +206,7 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Merge resolves insert/update per primary key and applies only required writes.
 	err = db.Merge(&productos,
-		[]db.Coln{t.Stock, t.ReservedStock, t.StockStatus, t.CategoriesWithStock, t.Created, t.CreatedBy, t.ImageMain, t.ImageIDs, t.ImageDescriptions},
+		db.Cols(t.Stock, t.ReservedStock, t.StockStatus, t.CategoriesWithStock, t.Created, t.CreatedBy, t.ImageMain, t.ImageIDs, t.ImageDescriptions),
 		func(prev, current *businessTypes.Product) bool {
 			current.CompanyID = req.User.CompanyID
 			current.Created = prev.Created

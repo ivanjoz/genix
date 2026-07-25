@@ -38,12 +38,12 @@ func (e WebpageTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "webpages",
 		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID.Autoincrement(0)},
+		Keys:      db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
 			// Two narrow views: the initial fetch filters by Status only, the delta
 			// fetch by Updated only — never ANDed — so each gets its own view.
-			{Type: db.TypeView, Keys: []db.Coln{e.Status}, KeepPart: true},
-			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Status), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
 		},
 	}
 }

@@ -95,7 +95,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	// New test
-	fmt.Println("\n--- Test 21: AlmacenProducto. Using view: []db.Coln{e.WarehouseID, e.Status, e.Updated} ---")
+	fmt.Println("\n--- Test 21: AlmacenProducto. Using view: db.Cols(e.WarehouseID, e.Status, e.Updated) ---")
 	productos21 := []logisticsTypes.ProductStock{}
 	q21 := db.Query(&productos21)
 	err = q21.CompanyID.Equals(1).

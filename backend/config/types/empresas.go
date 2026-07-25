@@ -50,7 +50,7 @@ func (e CompanyTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:         "companies",
 		UseSequences: true,
-		Keys:         []db.Coln{e.ID.Autoincrement(0)},
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
 	}
 }
 

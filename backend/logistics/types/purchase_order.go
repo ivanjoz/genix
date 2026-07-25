@@ -80,31 +80,31 @@ func (e PurchaseOrderTable) GetSchema() db.TableSchema {
 		Name:             "purchase_order",
 		Partition:        e.CompanyID,
 		UseListAsDefault: true,
-		Keys:             []db.Coln{e.ID.Autoincrement(0)},
+		Keys:             db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
 			{
 				Type:     db.TypeView,
-				Keys:     []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)},
+				Keys:     db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
 				KeepPart: true,
 			},
 			{
-				Keys:          []db.Coln{e.Week},
+				Keys:          db.Cols(e.Week),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          []db.Coln{e.Week, e.DetailProductIDs},
+				Keys:          db.Cols(e.Week, e.DetailProductIDs),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          []db.Coln{e.Week, e.Status, e.DetailProductIDs},
+				Keys:          db.Cols(e.Week, e.Status, e.DetailProductIDs),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          []db.Coln{e.Week, e.ProviderID},
+				Keys:          db.Cols(e.Week, e.ProviderID),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          []db.Coln{e.Week, e.Status, e.ProviderID},
+				Keys:          db.Cols(e.Week, e.Status, e.ProviderID),
 				UseIndexGroup: true,
 			},
 		},

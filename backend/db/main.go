@@ -313,6 +313,11 @@ type Coln interface {
 	GetName() string
 }
 
+// Cols returns columns as the slice required by schema declarations.
+func Cols(columns ...Coln) []Coln {
+	return columns
+}
+
 type ColumnSetInfo interface {
 	SetName(string)
 	SetTableInfo(*TableInfo)
@@ -856,7 +861,7 @@ type IncrementTable struct {
 func (e IncrementTable) GetSchema() TableSchema {
 	return TableSchema{
 		Name:           "sequences",
-		Keys:           []Coln{e.Name},
+		Keys:           Cols(e.Name),
 		SequenceColumn: &e.CurrentValue,
 	}
 }
@@ -934,6 +939,6 @@ type CacheVersionTable struct {
 func (e CacheVersionTable) GetSchema() TableSchema {
 	return TableSchema{
 		Name: "cache_version",
-		Keys: []Coln{e.PackedID},
+		Keys: Cols(e.PackedID),
 	}
 }

@@ -47,14 +47,14 @@ func (e SupplyMaterialTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "supply_material",
 		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID.Autoincrement(0)},
+		Keys:      db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
 			// Status view → list active supplies cheaply.
-			{Type: db.TypeView, Keys: []db.Coln{e.Status.DecimalSize(1)}, KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Status.DecimalSize(1)), KeepPart: true},
 			// Updated view → delta-cache watermark sync from the frontend.
-			{Type: db.TypeView, Keys: []db.Coln{e.Updated.DecimalSize(10)}, KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated.DecimalSize(10)), KeepPart: true},
 			// SKU lookup within a company (e.g. dedup during create).
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.SKU}},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.SKU)},
 		},
 	}
 }

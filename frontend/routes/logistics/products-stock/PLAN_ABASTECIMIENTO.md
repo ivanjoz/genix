@@ -78,7 +78,7 @@ Crear en backend:
 
 - `Name: "product_supply"`
 - `Partition: EmpresaID`
-- `Keys: []db.Coln{ProductID}`
+- `Keys: db.Cols(ProductID)`
 
 ### Vistas mínimas recomendadas
 

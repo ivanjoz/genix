@@ -86,7 +86,7 @@ func (e updateCounterSchema) GetSchema() TableSchema {
 		Keyspace:  "test_keyspace",
 		Name:      "update_counter_records",
 		Partition: e.CompanyID,
-		Keys:      []Coln{e.ID},
+		Keys:      Cols(e.ID),
 	}
 }
 
@@ -95,7 +95,7 @@ func (e updateCounterDisabledSchema) GetSchema() TableSchema {
 		Keyspace:             "test_keyspace",
 		Name:                 "update_counter_records_disabled",
 		Partition:            e.CompanyID,
-		Keys:                 []Coln{e.ID},
+		Keys:                 Cols(e.ID),
 		DisableUpdateCounter: true,
 	}
 }
@@ -105,14 +105,14 @@ func (e indexGroupSchema) GetSchema() TableSchema {
 		Keyspace:  "test_keyspace",
 		Name:      "index_group_records",
 		Partition: e.CompanyID,
-		Keys:      []Coln{e.ID},
+		Keys:      Cols(e.ID),
 		Indexes: []Index{
 			{
-				Keys:          []Coln{e.Date},
+				Keys:          Cols(e.Date),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          []Coln{e.Date.StoreAsWeek(), e.ClientID, e.ProductIDs},
+				Keys:          Cols(e.Date.StoreAsWeek(), e.ClientID, e.ProductIDs),
 				UseIndexGroup: true,
 			},
 		},
@@ -124,10 +124,10 @@ func (e weekIndexGroupSchema) GetSchema() TableSchema {
 		Keyspace:  "test_keyspace",
 		Name:      "week_index_group_records",
 		Partition: e.CompanyID,
-		Keys:      []Coln{e.ID},
+		Keys:      Cols(e.ID),
 		Indexes: []Index{
 			{
-				Keys:          []Coln{e.Date.StoreAsWeek(), e.Status},
+				Keys:          Cols(e.Date.StoreAsWeek(), e.Status),
 				UseIndexGroup: true,
 			},
 		},

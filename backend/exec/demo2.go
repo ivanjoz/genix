@@ -52,10 +52,10 @@ func (e DemoStructTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "zz_demo_struct",
 		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID},
+		Keys:      db.Cols(e.ID),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: []db.Coln{e.ListID.Int32(), e.Status.DecimalSize(2)}},
-			{Type: db.TypeView, Keys: []db.Coln{e.ListID, e.Updated.DecimalSize(10)}},
+			{Type: db.TypeView, Keys: db.Cols(e.ListID.Int32(), e.Status.DecimalSize(2))},
+			{Type: db.TypeView, Keys: db.Cols(e.ListID, e.Updated.DecimalSize(10))},
 		},
 	}
 }

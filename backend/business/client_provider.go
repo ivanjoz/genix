@@ -201,7 +201,7 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, companyID i
 	core.Log("saveClientProviders merge start:", "payload_count=", len(*clientProvidersPayload))
 	clientProviderTable := db.Table[s.ClientProvider]()
 	if mergeError := db.Merge(clientProvidersPayload,
-		[]db.Coln{clientProviderTable.Created, clientProviderTable.CreatedBy},
+		db.Cols(clientProviderTable.Created, clientProviderTable.CreatedBy),
 		func(_ *s.ClientProvider, currentClientProvider *s.ClientProvider) bool {
 			return !onlyInsert || currentClientProvider.ID <= 0
 		},

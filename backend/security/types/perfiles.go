@@ -42,6 +42,6 @@ func (e ProfileTable) GetSchema() db.TableSchema {
 		Name:         "profiles",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         []db.Coln{e.ID.Autoincrement(0)},
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
 	}
 }

@@ -68,7 +68,7 @@ func PostShippingCosts(req *core.HandlerArgs) core.HandlerResponse {
 
 	shippingCostTable := db.Table[s.ShippingCost]()
 	if err := db.Merge(&recordsToSave,
-		[]db.Coln{shippingCostTable.Created, shippingCostTable.CreatedBy},
+		db.Cols(shippingCostTable.Created, shippingCostTable.CreatedBy),
 		func(prev, current *s.ShippingCost) bool {
 			// Merge avoids write churn; unchanged cost rows keep their previous Updated watermark.
 			current.Created = prev.Created

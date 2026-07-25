@@ -140,14 +140,14 @@ func (e ProductTable) GetSchema() db.TableSchema {
 		Partition:        e.CompanyID,
 		TextSearchColumn: e.Name,
 		SaveCacheVersion: true,
-		Keys:             []db.Coln{e.ID.Autoincrement(0)},
+		Keys:             db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
-			{Type: db.TypeGlobalIndex, Keys: []db.Coln{e.CategoriesWithStock}},
-			{Type: db.TypeLocalIndex, Keys: []db.Coln{e.NameUpdated}},
-			{Type: db.TypeView, Keys: []db.Coln{e.NameHash}, Cols: []db.Coln{e.ID, e.Status}, KeepPart: true},
-			{Type: db.TypeView, Keys: []db.Coln{e.Status}, KeepPart: true},
-			{Type: db.TypeView, Keys: []db.Coln{e.StockStatus}, KeepPart: true},
-			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
+			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.CategoriesWithStock)},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.NameUpdated)},
+			{Type: db.TypeView, Keys: db.Cols(e.NameHash), Cols: db.Cols(e.ID, e.Status), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Status), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.StockStatus), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
 		},
 	}
 }
@@ -203,10 +203,10 @@ func (e WarehouseTable) GetSchema() db.TableSchema {
 		Name:         "warehouses",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         []db.Coln{e.ID.Autoincrement(0)},
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: []db.Coln{e.Status}, KeepPart: true},
-			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Status), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
 		},
 	}
 }
@@ -261,10 +261,10 @@ func (e SiteTable) GetSchema() db.TableSchema {
 		Name:         "sites",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         []db.Coln{e.ID.Autoincrement(0)},
+		Keys:         db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: []db.Coln{e.Status}, KeepPart: true},
-			{Type: db.TypeView, Keys: []db.Coln{e.Updated}, KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Status), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(e.Updated), KeepPart: true},
 		},
 	}
 }

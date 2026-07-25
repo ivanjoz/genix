@@ -101,35 +101,35 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "sale_order",
 		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID.Autoincrement(2)},
+		Keys:      db.Cols(e.ID.Autoincrement(2)),
 		Indexes: []db.Index{
 			{
 				Type: db.TypeLocalIndex,
-				Keys: []db.Coln{e.Updated},
+				Keys: db.Cols(e.Updated),
 			},
 			{
-				Keys:          []db.Coln{e.Date},
+				Keys:          db.Cols(e.Date),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          []db.Coln{e.Date.StoreAsWeek(), e.Status},
+				Keys:          db.Cols(e.Date.StoreAsWeek(), e.Status),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          []db.Coln{e.Date.StoreAsWeek(), e.ClientID},
+				Keys:          db.Cols(e.Date.StoreAsWeek(), e.ClientID),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          []db.Coln{e.Date.StoreAsWeek(), e.ClientID, e.DetailProductsIDs},
+				Keys:          db.Cols(e.Date.StoreAsWeek(), e.ClientID, e.DetailProductsIDs),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          []db.Coln{e.Date.StoreAsWeek(), e.DetailProductsIDs},
+				Keys:          db.Cols(e.Date.StoreAsWeek(), e.DetailProductsIDs),
 				UseIndexGroup: true,
 			},
 			{
 				Type:     db.TypeView,
-				Keys:     []db.Coln{e.Status.Int32(), e.UpdateCounter.DecimalSize(8)},
+				Keys:     db.Cols(e.Status.Int32(), e.UpdateCounter.DecimalSize(8)),
 				KeepPart: true,
 			},
 		},
@@ -168,7 +168,7 @@ func (e SaleSummaryTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "sale_summary",
 		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.Date},
+		Keys:      db.Cols(e.Date),
 	}
 }
 
@@ -202,7 +202,7 @@ func (e ProductSaleSummaryTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:                 "product_sale_summary",
 		Partition:            e.CompanyID,
-		Keys:                 []db.Coln{e.Date, e.ProductID},
+		Keys:                 db.Cols(e.Date, e.ProductID),
 		DisableUpdateCounter: true,
 	}
 }

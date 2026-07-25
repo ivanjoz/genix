@@ -64,6 +64,6 @@ func (usuarioTable UserTable) GetSchema() db.TableSchema {
 		Partition:        usuarioTable.CompanyID,
 		UseSequences:     true,
 		SaveCacheVersion: true,
-		Keys:             []db.Coln{usuarioTable.ID.Autoincrement(0)},
+		Keys:             db.Cols(usuarioTable.ID.Autoincrement(0)),
 	}
 }

@@ -68,7 +68,7 @@ func (e ProductTable) GetSchema() db.TableSchema {
     return db.TableSchema{
         Name:      "product",
         Partition: e.EmpresaID,
-        Keys:      []db.Coln{e.ID},
+        Keys:      db.Cols(e.ID),
 
         // Optional: enable per-record cache-version support.
         SaveCacheVersion: true,
@@ -300,12 +300,12 @@ func (e MovementTable) GetSchema() db.TableSchema {
     return db.TableSchema{
         Name:      "movement",
         Partition: e.EmpresaID,
-        Keys:      []db.Coln{e.ID},
-        KeyIntPacking: []db.Coln{
+        Keys:      db.Cols(e.ID),
+        KeyIntPacking: db.Cols(
             e.StoreID.DecimalSize(5),
             e.DayCode.DecimalSize(5),
             e.Autoincrement(3),
-        },
+        ),
         AutoincrementPart: e.DayCode,
     }
 }
@@ -328,8 +328,8 @@ func (e InvoiceTable) GetSchema() db.TableSchema {
     return db.TableSchema{
         Name:          "invoice",
         Partition:     e.EmpresaID,
-        Keys:          []db.Coln{e.ID}, // string key field
-        KeyConcatenated: []db.Coln{e.CustomerID, e.Year, e.Serial},
+        Keys:          db.Cols(e.ID), // string key field
+        KeyConcatenated: db.Cols(e.CustomerID, e.Year, e.Serial),
     }
 }
 ```
@@ -345,10 +345,10 @@ func (e OrderTable) GetSchema() db.TableSchema {
     return db.TableSchema{
         Name:      "sale_order",
         Partition: e.EmpresaID,
-        Keys:      []db.Coln{e.ID},
+        Keys:      db.Cols(e.ID),
         Indexes: []db.Index{
             {
-                Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)},
+                Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
             },
         },
     }
@@ -365,7 +365,7 @@ Use for cross-partition equality lookups.
 Indexes: []db.Index{
     {
         Type: db.TypeGlobalIndex,
-        Keys: []db.Coln{e.Email},
+        Keys: db.Cols(e.Email),
     },
 }
 ```
@@ -376,7 +376,7 @@ Indexes: []db.Index{
 Indexes: []db.Index{
     {
         Type: db.TypeGlobalIndex,
-        Keys: []db.Coln{e.Status.Int32(), e.Updated.DecimalSize(8)},
+        Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
     },
 }
 ```
@@ -393,12 +393,12 @@ Important:
 Indexes: []db.Index{
     {
         Type:     db.TypeView,
-        Keys:     []db.Coln{e.CustomerID, e.Status},
+        Keys:     db.Cols(e.CustomerID, e.Status),
         KeepPart: true,
     },
     {
         Type: db.TypeView,
-        Keys: []db.Coln{e.StoreID.Int32(), e.Updated.DecimalSize(10)},
+        Keys: db.Cols(e.StoreID.Int32(), e.Updated.DecimalSize(10)),
     },
 }
 ```
@@ -413,11 +413,11 @@ Use for range + multi-field membership scenarios over numeric dimensions.
 Indexes: []db.Index{
     {
         Type: db.TypeGlobalIndex,
-        Keys: []db.Coln{
+        Keys: db.Cols(
             e.ProductID,
             e.ChannelID,
             e.WeekCode.CompositeBucketing(1, 2, 4).StoreAsWeek(),
-        },
+        ),
     },
 }
 ```
@@ -462,7 +462,7 @@ q := db.Table[Product]()
 err := db.InsertOrUpdate(
     &rows,
     func(r *Product) bool { return r.ID <= 0 },
-    []db.Coln{q.Updated},
+    db.Cols(q.Updated),
 )
 ```
 
@@ -474,7 +474,7 @@ err := db.InsertOrUpdate(
 q := db.Table[Product]()
 err := db.Merge(
     &rows,
-    []db.Coln{q.Updated},
+    db.Cols(q.Updated),
     func(prev, cur *Product) bool { return prev.Nombre != cur.Nombre || prev.Status != cur.Status },
     func(r *Product) { r.Updated = time.Now().Unix() },
 )

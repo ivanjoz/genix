@@ -29,7 +29,7 @@ The page `ID` becomes the `PageID` used by `EcommercePageContent`.
 | Updated | int32 `upd` | `core.SUnixTime()` |
 | UpdatedBy | int32 | user id = "UserUpdated" on the card |
 
-- `Partition: e.CompanyID`, `Keys: []db.Coln{e.ID.Autoincrement(0)}`.
+- `Partition: e.CompanyID`, `Keys: db.Cols(e.ID.Autoincrement(0))`.
 - Delta-cache view index: `{TypeView, Keys:[Status.DecimalSize(1), Updated.DecimalSize(10)], KeepPart:true}`.
 - **Reserved-ID concern:** autoincrement starts at 1. To guarantee user pages land at ≥11
   I'll handle this in the POST handler: reject/clamp so the first stored row uses ID 11

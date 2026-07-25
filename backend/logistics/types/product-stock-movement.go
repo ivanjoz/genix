@@ -58,40 +58,40 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "warehouse_product_movement",
 		Partition: e.CompanyID,
-		Keys:      []db.Coln{e.ID},
-		KeyIntPacking: []db.Coln{
+		Keys:      db.Cols(e.ID),
+		KeyIntPacking: db.Cols(
 			e.Date.DecimalSize(5), e.WarehouseID.DecimalSize(5), e.Autoincrement(3),
-		},
+		),
 		AutoincrementPart: e.Date,
 		Indexes: []db.Index{
 			{
-				Type: db.TypeInheritFromKey, Keys: []db.Coln{e.Date}, UseIndexGroup: true,
+				Type: db.TypeInheritFromKey, Keys: db.Cols(e.Date), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeInheritFromKey, Keys: []db.Coln{e.Date, e.WarehouseID}, UseIndexGroup: true,
+				Type: db.TypeInheritFromKey, Keys: db.Cols(e.Date, e.WarehouseID), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: []db.Coln{e.SerialNumber},
+				Type: db.TypeLocalIndex, Keys: db.Cols(e.SerialNumber),
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: []db.Coln{e.LotID}, UseIndexGroup: true,
+				Type: db.TypeLocalIndex, Keys: db.Cols(e.LotID), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: []db.Coln{e.DocumentID}, UseIndexGroup: true,
+				Type: db.TypeLocalIndex, Keys: db.Cols(e.DocumentID), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Date, e.Type}, UseIndexGroup: true,
+				Type: db.TypeLocalIndex, Keys: db.Cols(e.Date, e.Type), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Date, e.Type, e.WarehouseID}, UseIndexGroup: true,
+				Type: db.TypeLocalIndex, Keys: db.Cols(e.Date, e.Type, e.WarehouseID), UseIndexGroup: true,
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: []db.Coln{e.Date, e.ProductID}, UseIndexGroup: true,
+				Type: db.TypeLocalIndex, Keys: db.Cols(e.Date, e.ProductID), UseIndexGroup: true,
 			},
 			{
 				Type: db.TypeView,
-				Keys: []db.Coln{e.Date, e.ProductID.DecimalSize(9), e.Type.DecimalSize(1)},
-				Cols: []db.Coln{e.Quantity},
+				Keys: db.Cols(e.Date, e.ProductID.DecimalSize(9), e.Type.DecimalSize(1)),
+				Cols: db.Cols(e.Quantity),
 			},
 		},
 	}

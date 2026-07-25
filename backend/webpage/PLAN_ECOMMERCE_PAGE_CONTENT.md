@@ -84,7 +84,7 @@ func (e EcommercePageContentTable) GetSchema() db.TableSchema {
     return db.TableSchema{
         Name:      "ecommerce_page_content",
         Partition: e.CompanyID,
-        Keys:      []db.Coln{e.PageID, e.SectionID},   // (CompanyID,PageID,SectionID) PK
+        Keys:      db.Cols(e.PageID, e.SectionID),   // (CompanyID,PageID,SectionID) PK
     }
 }
 ```

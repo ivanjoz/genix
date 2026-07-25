@@ -37,10 +37,10 @@ func (productSupplyTable ProductSupplyTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		Name:      "product_supply",
 		Partition: productSupplyTable.CompanyID,
-		Keys:      []db.Coln{productSupplyTable.ProductID},
+		Keys:      db.Cols(productSupplyTable.ProductID),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: []db.Coln{productSupplyTable.Status}, KeepPart: true},
-			{Type: db.TypeView, Keys: []db.Coln{productSupplyTable.Updated}, KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(productSupplyTable.Status), KeepPart: true},
+			{Type: db.TypeView, Keys: db.Cols(productSupplyTable.Updated), KeepPart: true},
 		},
 	}
 }

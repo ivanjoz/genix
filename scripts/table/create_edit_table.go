@@ -163,7 +163,7 @@ func generateSourceCode(tableNameCamel, tableNameSnake string, userFields []Fiel
 			keyFields = append(keyFields, "e."+f.Name)
 		}
 	}
-	sb.WriteString(fmt.Sprintf("\t\tKeys:      []db.Coln{%s},\n", strings.Join(keyFields, ", ")))
+	sb.WriteString(fmt.Sprintf("\t\tKeys:      db.Cols(%s),\n", strings.Join(keyFields, ", ")))
 
 	sb.WriteString("\t}\n")
 	sb.WriteString("}\n")

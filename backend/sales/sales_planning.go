@@ -52,7 +52,7 @@ func PostSalesPlanning(req *core.HandlerArgs) core.HandlerResponse {
 	nowTime := core.SUnixTime()
 	t := s.SalesPlanningTable{}
 	err := db.Merge(&payload,
-		[]db.Coln{t.Created},
+		db.Cols(t.Created),
 		func(prev, current *s.SalesPlanning) bool {
 			current.CompanyID = req.User.CompanyID
 			current.Created = prev.Created
@@ -121,7 +121,7 @@ func PostSeasonalityCurve(req *core.HandlerArgs) core.HandlerResponse {
 	nowTime := core.SUnixTime()
 	t := s.SeasonalityCurveTable{}
 	err := db.Merge(&payload,
-		[]db.Coln{t.Created},
+		db.Cols(t.Created),
 		func(prev, current *s.SeasonalityCurve) bool {
 			current.CompanyID = req.User.CompanyID
 			current.Created = prev.Created

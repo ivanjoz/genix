@@ -59,7 +59,7 @@ and a matching schema entry like:
 
 ```go
 {
-    Keys:          []db.Coln{e.Fecha.StoreAsWeek(), e.DetailProductsIDs},
+    Keys:          db.Cols(e.Fecha.StoreAsWeek(), e.DetailProductsIDs),
     UseIndexGroup: true,
 }
 ```
