@@ -238,6 +238,9 @@ input[type='number'] {
 .bx-purple.round,
 .bnr-gray.round {
 	border-radius: 50%;
+	/* The base .bx-* rule sets min-width: 46px, which would win over width: 38px and
+	   stretch the button into a 46x38 ellipse. Reset it so the box stays square. */
+	min-width: 38px;
 	width: 38px;
 	height: 38px;
 	padding: 0;

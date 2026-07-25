@@ -53,16 +53,16 @@ import T from '$components/misc/T.svelte';
         <div class="w-full flex items-center justify-between px-8 py-8">
           <div class="flex items-center">
             <Input bind:saveOn={layouts[idx]} save="Name"
-              css="shadow-small bg-solid no-border w-220 mr-12" inputCss="text-sm" required={true}
+              css="w-220 mr-12" inputCss="text-sm" required={true}
             />
             <span class="ff-bold text-slate-600"><T text="Rows|Filas" /></span>
             <Input bind:saveOn={layouts[idx]} save="RowCant"
-              css="shadow-small bg-solid no-border w-60 mx-4" inputCss="text-sm" type="number"
+              css="w-60 mx-4" inputCss="text-sm" type="number"
               onChange={updateLayout}
             />
             <span class="ff-bold text-slate-600"><T text="Levels|Niveles" /></span>
             <Input bind:saveOn={layouts[idx]} save="ColCant"
-              css="shadow-small bg-solid no-border w-60 mx-4" inputCss="text-sm" type="number"
+              css="w-60 mx-4" inputCss="text-sm" type="number"
               onChange={updateLayout}
             />
           </div>
@@ -90,7 +90,7 @@ import T from '$components/misc/T.svelte';
                 {#each heads as col}
                   <td class="relative py-2 px-2" style="height: 2.6rem">
                     <Input label="" bind:saveOn={layouts[idx]} save={`xy_${row}_${col}`}
-                      css="shadow-small bg-solid no-border w-full" inputCss="text-sm text-center"
+                      css="w-full" inputCss="text-sm text-center"
                     />
                   </td>
                 {/each}
