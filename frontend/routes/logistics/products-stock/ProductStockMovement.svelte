@@ -171,7 +171,8 @@ const getLotDisplay = (stockDetail: IProductStockDetailRow): string => {
 
 const getCantPrevia = (record: { Quantity: number, _cantidadPrev?: number }) => {
   if (record._cantidadPrev === -1) { return 0 }
-  return typeof record._cantidadPrev === 'number' && record._cantidadPrev !== -1 ? record._cantidadPrev : record.Quantity
+  // Always resolve to a number: an absent Quantity would render as the literal "undefined" in the diff arrow.
+  return typeof record._cantidadPrev === 'number' && record._cantidadPrev !== -1 ? record._cantidadPrev : (record.Quantity || 0)
 }
 
 const hasPendingDetailContent = (stockDetail: IProductStockDetailRow) => {

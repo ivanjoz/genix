@@ -69,13 +69,17 @@ export interface ISaleOrder {
   montoVuelto: number
 }
 
+// Backend `ActionsIncluded` codes: the payment action posts a cash-bank movement, the delivery action moves stock.
+export const SALE_ACTION_PAYMENT = 2
+export const SALE_ACTION_DELIVERY = 3
+
 export class SaleOrderState {
   // State
   productosStock = $state([] as IProductStock[])
   form = $state({
-    ID: 0, CompanyID: 0, WarehouseID: 0, LastPaymentCajaID: 1, ClientID: 0, // Default payment caja; UI can overwrite.
+    ID: 0, CompanyID: 0, WarehouseID: 0, LastPaymentCajaID: 0, ClientID: 0, // No payment caja until one is loaded/picked.
     TotalAmount: 0, TaxAmount: 0, DebtAmount: 0,
-    ActionsIncluded: [2, 3],
+    ActionsIncluded: [SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY],
     DetailProductsIDs: [], DetailPrices: [], DetailQuantities: [],
     DetailProductSkus: [], DetailProductPresentations: [],
     montoRecibido: 0, montoVuelto: 0
@@ -184,9 +188,14 @@ export class SaleOrderState {
       return false
     }
 
-    if (this.form.WarehouseID === 0) {	
+    if (this.form.WarehouseID === 0) {
       Notify.failure("Seleccione un almacén.")
       return false
+    }
+
+    // A payment always books a cash-bank movement, so the "Pagado" action can never travel without a caja.
+    if (!this.form.LastPaymentCajaID) {
+      this.form.ActionsIncluded = this.form.ActionsIncluded.filter((actionID) => actionID !== SALE_ACTION_PAYMENT)
     }
 
     Loading.standard("Procesando venta...")

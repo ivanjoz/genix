@@ -274,7 +274,7 @@ import { useUI } from '@genix/ui';
 
 </script>
 
-<div class="flex items-center mb-6">
+<div class="flex items-center mb-10">
   <OptionsStrip options={options} keyId="id" keyName="name"
     selected={selected} onSelect={e => selected = e.id}
   />

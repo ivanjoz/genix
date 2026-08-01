@@ -94,6 +94,10 @@ export const getWarehouseProductStock = async (almacenID: number): Promise<IProd
     } else {
       const stockDetailsByStockID = new Map<number, IProductStockDetail[]>()
       for (const stockDetail of normalizedResponse.ProductStockDetail || []) {
+        // The backend tags every number with `json:",omitempty"`, so a zero quantity arrives absent.
+        // Restoring it keeps every consumer doing plain arithmetic instead of guarding for undefined.
+        stockDetail.Quantity = stockDetail.Quantity || 0
+        stockDetail.SubQuantity = stockDetail.SubQuantity || 0
         const stockDetails = stockDetailsByStockID.get(stockDetail.ProductStockID)
         if (stockDetails) {
           stockDetails.push(stockDetail)
@@ -103,7 +107,10 @@ export const getWarehouseProductStock = async (almacenID: number): Promise<IProd
       }
 
       records = normalizedResponse.ProductStock || []
-      for (const productStockRecord of normalizedResponse.ProductStock || []) {
+      for (const productStockRecord of records) {
+        // Same omitempty normalization as the detail rows: a product with 0 stock has no Quantity field.
+        productStockRecord.Quantity = productStockRecord.Quantity || 0
+        productStockRecord.SubQuantity = productStockRecord.SubQuantity || 0
         // Attach the matching detail rows directly to each backend stock row.
         productStockRecord.StockDetails = stockDetailsByStockID.get(productStockRecord.ID) || []
       }

@@ -22,7 +22,7 @@ import { WarehousesService } from "../../business/branches-warehouses/branches-w
 import ProductoVentaCard from './SaleProductCard.svelte';
 import type { ProductoVenta } from "./sale_order.svelte";
 import { useUI } from '@genix/ui';
-import { SaleOrderState } from "./sale_order.svelte";
+import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sale_order.svelte";
     import DateInput from '$components/form/DateInput.svelte';
 
   // Helpers
@@ -53,6 +53,13 @@ import { SaleOrderState } from "./sale_order.svelte";
     { ID: 1, Name: "Selecionar Cliente" },
     { ID: 2, Name: "Registrar Cliente" },
   ];
+  // Payments book a cash-bank movement, so without a registered caja the "Pagado" action must not be offered.
+  const hasCashBankRegistered = $derived(cajas.isReady > 0 && cajas.Cajas.length > 0);
+  const missingCashBankWarning = $derived(cajas.isReady > 0 && cajas.Cajas.length === 0);
+  const saleActionOptions = $derived([
+    ...(hasCashBankRegistered ? [{ id: SALE_ACTION_PAYMENT, name: "Pagado" }] : []),
+    { id: SALE_ACTION_DELIVERY, name: "Recibido" },
+  ]);
   const clientOptions = $derived.by(() => {
     // Build a combined label so the selector matches by name and registry number with the shared SearchSelect component.
     return clientesService.records.map((clientRecord) => ({
@@ -83,6 +90,10 @@ import { SaleOrderState } from "./sale_order.svelte";
   $effect(() => {
 	  if(cajas.isReady && cajas.Cajas.length > 0){
 	  	ventasState.form.LastPaymentCajaID = cajas.Cajas[0].ID
+	  } else if(cajas.isReady){
+	  	// No caja exists: drop the payment action so the order is generated as unpaid.
+	  	ventasState.form.LastPaymentCajaID = 0
+	  	ventasState.form.ActionsIncluded = ventasState.form.ActionsIncluded.filter((actionID) => actionID !== SALE_ACTION_PAYMENT)
 	  }
   });
   
@@ -427,21 +438,29 @@ import { SaleOrderState } from "./sale_order.svelte";
         <div class="w-full px-12 mt-6 mb-6">
 	        <div class="col-span-2">
 	      	  <CheckboxOptions type="multiple"
-	     			  options={[ { id: 2, name: "Pagado" }, { id: 3, name: "Recibido" } ]}
+	     			  options={saleActionOptions}
 	       		  keyId="id" keyName="name" save="ActionsIncluded"
 	       		  saveOn={ventasState.form}
 	       	  />
 	        </div>
+	        {#if missingCashBankWarning}
+	          <div class="mt-6 flex items-center gap-6 rounded-md border border-amber-200 bg-amber-50 px-8 py-6 text-sm text-amber-700">
+	            <i class="icon-[fa--exclamation-triangle] shrink-0"></i>
+	            <span>Necesitas registrar una caja para aceptar pagos.</span>
+	          </div>
+	        {/if}
         </div>
         <div class="grid w-full grid-cols-2 gap-8 px-12 py-6 md:flex md:items-center" aria-label="Sale order payment and client options">
-        	<SearchSelect
-           css="w-[30%] md:order-1"
-	            label="" save="LastPaymentCajaID"
-	            keyId="ID"
-	            keyName="Name" saveOn={ventasState.form}
-	            options={cajas?.Cajas||[]}
-	            placeholder="CAJA"
-	          />
+        	{#if hasCashBankRegistered}
+	        	<SearchSelect
+	             css="w-[30%] md:order-1"
+		            label="" save="LastPaymentCajaID"
+		            keyId="ID"
+		            keyName="Name" saveOn={ventasState.form}
+		            options={cajas.Cajas}
+		            placeholder="CAJA"
+		          />
+        	{/if}
           <DateInput
             css="md:w-[30%] md:order-2"
             label="" save="PaymentDueDate"
